@@ -1,9 +1,9 @@
 /* VOCAL.zip media library: cloud-first, no iPhone download required. */
 (()=>{'use strict';
-const archive=document.querySelector('#archive');if(!archive)return;
+const archive=document.querySelector('#media');if(!archive)return;
 const card=document.createElement('div');card.className='card';card.id='vzip-media-hub';
 card.innerHTML='<h2>🎬 내 녹음·영상</h2><p class="muted">파일을 올리면 바로 이곳에서 재생하고 곡·날짜를 지정할 수 있어요. 곡을 지정하면 아래 성장 비교에도 표시돼요.</p><div class="vzip-hub-buttons"><label class="btn" for="vzip-hub-upload">＋ 녹음·영상 업로드</label><input id="vzip-hub-upload" type="file" accept="audio/*,video/*,.mov,.mp4,.m4a,.mp3,.wav" multiple hidden><button class="btn secondary" id="vzip-hub-reload" type="button">↻ 목록 새로고침</button></div><p class="muted" id="vzip-hub-status" role="status"></p><div id="vzip-hub-list"></div>';
-archive.insertBefore(card,archive.firstChild);
+archive.append(card);
 const $=s=>card.querySelector(s),status=$('#vzip-hub-status'),list=$('#vzip-hub-list');
 const key='vocal-zip_mvp_v1',dbName='vocalzip_media_v1';let items=[],activeUrl=null,activeEl=null;
 const songs=()=>{try{return JSON.parse(localStorage.getItem(key)||'{}').songs||[]}catch{return []}};
@@ -27,7 +27,7 @@ list.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.
 $('#vzip-hub-upload').onchange=async e=>{const files=[...e.target.files];if(!files.length)return;e.target.disabled=true;let ok=0,fail=0;for(const file of files){status.textContent='업로드 '+(ok+fail+1)+'/'+files.length+' · '+file.name;try{if(!file.type.startsWith('audio/')&&!file.type.startsWith('video/')&&!/\.(mp3|wav|m4a|mp4|mov|webm)$/i.test(file.name))throw Error('지원하지 않는 형식');const name=file.name.replace(/\.[^.]+$/,'');if(window.vzipCloudSignedIn?.()){if(!window.vzipCloudImport)throw Error('클라우드 업로드 준비 중');await window.vzipCloudImport(file,{name,type:file.type},p=>status.textContent='☁️ '+file.name+' '+p+'%')}else{await localPut({id:crypto.randomUUID(),name,created:file.lastModified||Date.now(),type:file.type||'application/octet-stream',song:'',songId:'',blob:file})}ok++}catch(err){fail++;status.textContent=file.name+' 실패: '+err.message}}e.target.value='';e.target.disabled=false;await refresh();status.textContent='업로드 '+ok+'개 완료'+(fail?' · '+fail+'개 실패':'')+'. 곡과 날짜를 지정하면 성장 비교에 바로 표시돼요.'};
 window.addEventListener('vzip:cloud-media-changed',()=>{clearTimeout(window.__vzipHubTimer);window.__vzipHubTimer=setTimeout(refresh,200)});
 window.addEventListener('vzip:media-saved',()=>setTimeout(refresh,300));
-document.querySelector('button[data-tab="archive"]')?.addEventListener('click',refresh);
+document.querySelector('button[data-tab="media"]')?.addEventListener('click',refresh);
 window.addEventListener('vzip:auth-changed',refresh);
 window.addEventListener('pagehide',clearPlayer);
 setTimeout(refresh,900);
