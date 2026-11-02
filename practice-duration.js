@@ -42,6 +42,17 @@
       });
     } finally { db.close(); }
   }
+  window.vzipStorePracticeMedia = async item => {
+    // Materialize Files before storing: WebKit may retain a temporary file handle.
+    const bytes = await item.blob.arrayBuffer();
+    const local = {...item, blob:new Blob([bytes], {type:typeOf(item)})};
+    try { await transaction('readwrite', store => store.put(local)); }
+    catch (error) {
+      if (error.name !== 'DataCloneError' && !/Blob|File data/i.test(error.message || '')) throw error;
+      const fallback = {...local, bytes}; delete fallback.blob;
+      await transaction('readwrite', store => store.put(fallback));
+    }
+  };
   window.vzipReadMedia = () => transaction('readonly', store => store.getAll());
   window.vzipMediaBlob = blobOf; window.vzipMediaType = typeOf;
   const clock = value => {
@@ -127,7 +138,7 @@
           const seconds = await duration(file), id = crypto.randomUUID();
           const item = {id, name:file.name, type, blob:blobOf({...file, name:file.name, type, blob:file}),
             created:Date.now(), source:'practice', songId:form.elements.song?.value || '', durationSeconds:seconds};
-          await transaction('readwrite', store => store.put(item));
+          await window.vzipStorePracticeMedia(item);
           linked.set(id, {seconds}); calculate();
           row.textContent = '✓ ' + file.name + ' · 보관함 저장 완료 · ' +
             (seconds ? clock(seconds) : '길이 미확인: 시간을 직접 입력해 주세요.');
