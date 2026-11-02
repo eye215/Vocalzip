@@ -1,0 +1,41 @@
+{
+  "id": "/",
+  "name": "VOCAL.zip — 보컬 기록",
+  "short_name": "VOCAL.zip",
+  "start_url": "/?source=home",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#17132c",
+  "theme_color": "#17132c",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "share_target": {
+    "action": "/share-inbox",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            "audio/*",
+            ".m4a",
+            ".mp3",
+            ".wav",
+            ".caf",
+            ".mp4",
+            ".mov"
+          ]
+        }
+      ]
+    }
+  }
+}
