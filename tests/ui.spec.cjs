@@ -337,3 +337,58 @@ test('Deleting a practice keeps its recording available in the library',async({p
   await page.locator('#vzip-hub-list [data-action="play"]').click();
   await expect.poll(()=>page.locator('#vzip-hub-list audio').evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
 });
+
+test('Growth periods aggregate stored totals without double-counting media or classifying legacy records',async({page},testInfo)=>{
+  await page.clock.setFixedTime(new Date('2026-11-02T12:00:00Z'));
+  await page.evaluate(()=>{
+    const state=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}');
+    state.songs=[{id:'song-one',title:'성장 확인 곡'}];
+    state.practices=[
+      {id:'training',date:'2026-11-02',practiceMode:'training',minutes:15,manualMinutes:10,mediaSeconds:300,
+        rating:4,technique:[{name:'립트릴',minutes:10}],completed:['a','a']},
+      {id:'song',date:'2026-11-01',practiceMode:'song',songId:'song-one',minutes:20,rating:2,completed:['a','b']},
+      {id:'legacy',date:'2026-10-26',songId:'song-one',minutes:7},
+      {id:'older',date:'2026-10-01',practiceMode:'song',minutes:100,rating:5},
+      {id:'future',date:'2026-11-03',practiceMode:'song',minutes:999,rating:5},
+      {id:'invalid-values',date:'2026-11-02',minutes:-10,rating:99}
+    ];
+    localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify(state));
+  });
+  await page.locator('.nav [data-tab="archive"]').click();
+  await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('42분');
+  await expect(page.locator('[data-metric="rating"] strong')).toHaveText('3 / 5');
+  await expect(page.locator('[data-metric="homework"] strong')).toHaveText('3회');
+  await expect(page.locator('[data-metric="homework"] small')).toHaveText('2개 숙제에 수행 기록');
+  await expect(page.locator('#vzip-growth-modes')).toContainText('보컬 트레이닝15분');
+  await expect(page.locator('#vzip-growth-modes')).toContainText('곡 연습20분');
+  await expect(page.locator('#vzip-growth-modes')).toContainText('미분류 · 이전 기록7분');
+  await expect(page.locator('#vzip-growth-techniques')).toContainText('립트릴10분');
+  await expect(page.locator('#vzip-growth-songs')).toContainText('성장 확인 곡27분');
+  await expect(page.locator('#vzip-growth-weeks tr').filter({hasText:'2026-10-26'})).toContainText('27분');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+  await testInfo.attach('growth-insights',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+  await page.locator('#vzip-growth-period').selectOption('week');
+  await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('15분');
+  await expect(page.locator('[data-metric="rating"] strong')).toHaveText('4 / 5');
+  await page.locator('#vzip-growth-period').selectOption('all');
+  await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('142분');
+  await expect(page.locator('[data-metric="rating"] strong')).toHaveText('3.7 / 5');
+});
+test('Growth empty state has no invented score and updates when a practice is saved',async({page})=>{
+  await page.locator('.nav [data-tab="archive"]').click();
+  await expect(page.locator('#vzip-growth-empty')).toBeVisible();
+  await expect(page.locator('[data-metric="rating"] strong')).toHaveText('—');
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('[data-mode="song"]').click();
+  await page.locator('#practice-form [name="minutes"]').fill('10');
+  await page.locator('#practice-form [name="rating"]').selectOption('5');
+  await page.locator('#practice-form>button:not([type])').click();
+  await page.locator('.nav [data-tab="archive"]').click();
+  await expect(page.locator('#vzip-growth-empty')).toBeHidden();
+  await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('10분');
+  await expect(page.locator('[data-metric="rating"] strong')).toHaveText('5 / 5');
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="archive"]').click();
+  await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('10분');
+});
