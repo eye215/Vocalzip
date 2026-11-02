@@ -23,3 +23,11 @@
 #lesson-form .wizard-record-note p{font-size:12px;color:#c0c7db;line-height:1.7;margin:7px 0 0}
 @keyframes wizardIn{from{opacity:.3;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:490px){#lesson-form .wizard-progress{gap:4px}#lesson-form .wizard-progress-item{font-size:10px;padding:9px 2px}#lesson-form .wizard-heading h3{font-size:21px}#lesson-form .wizard-summary-row{grid-template-columns:88px minmax(0,1fr);gap:8px;font-size:12px}}
+
+/* v0.9: drafts and inline review corrections */
+#lesson-form .wizard-draft-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:3px 0 16px;padding:10px 13px;background:rgba(137,221,211,.07);border:1px solid rgba(153,221,218,.17);border-radius:12px;color:#b9e6e1;font-size:12px}
+#lesson-form .wizard-clear{background:transparent;border:0;color:#c4b7f5;text-decoration:underline;text-underline-offset:3px;font-size:12px;white-space:nowrap;padding:4px}
+#lesson-form .wizard-review-edit{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 14px}
+#lesson-form .wizard-review-edit .smallbtn{font-size:12px;padding:9px 10px}
+#lesson-form .wizard-actions{position:sticky;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:5;padding:10px 0 2px;background:linear-gradient(180deg,transparent,rgba(22,22,50,.92) 26%,rgba(22,22,50,.96));border-radius:14px}
+@media(min-width:721px){#lesson-form .wizard-actions{position:static;background:none;padding:0}}
