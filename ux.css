@@ -59,3 +59,12 @@ html{scroll-padding-bottom:105px}
 .vzip-editor-card .buttons{display:grid;grid-template-columns:1fr 1fr;margin-top:22px}
 .vzip-editor-card .btn{min-height:48px}
 @media(min-width:721px){.vzip-editor{align-items:center}}
+
+/* v1.2: bulk media import */
+.vzip-import-box{margin:20px 0 16px;padding:18px;border:1px dashed rgba(174,229,224,.38);border-radius:17px;background:rgba(85,183,184,.075)}
+.vzip-import-box h3{font-size:16px;margin:0 0 8px;color:#e7fbf8}
+.vzip-import-box .muted{font-size:12px;line-height:1.6}
+.vzip-import-box label:not(.vzip-file-picker){display:block;margin:14px 0 7px;color:#e4e0f4;font-size:12px}
+.vzip-import-box select{min-height:48px}
+.vzip-file-picker{display:block!important;text-align:center;cursor:pointer;margin:15px 0 10px!important;padding:14px!important}
+#vzip-import-status{margin-bottom:0;overflow-wrap:anywhere}
