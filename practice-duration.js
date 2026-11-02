@@ -1,6 +1,6 @@
 /* VOCAL.zip practice duration: manual minutes + selected audio/video running times. */
 (()=>{'use strict';
-const form=document.querySelector('#practice-form'),input=document.querySelector('#media'),preview=document.querySelector('#media-preview'),saved=document.querySelector('#practice-saved-media'),summary=document.querySelector('#practice-time-summary');if(!form)return;
+const form=document.querySelector('#practice-form'),input=document.querySelector('#practice-attachments'),preview=document.querySelector('#media-preview'),saved=document.querySelector('#practice-saved-media'),summary=document.querySelector('#practice-time-summary');if(!form)return;
 const manual=form.elements.minutes;let selected=[],attachments=[],token=0;
 function clock(s){const n=Math.max(0,Math.round(s));return Math.floor(n/60)+'분 '+String(n%60).padStart(2,'0')+'초'}
 function calculate(){const m=Math.max(0,Number(manual.value)||0),seconds=attachments.reduce((n,x)=>n+x.seconds,0)+selected.reduce((n,x)=>n+x.seconds,0);const total=m+seconds/60;form.dataset.mediaSeconds=String(Math.round(seconds));form.dataset.totalMinutes=String(Math.round(total*100)/100);form.dataset.mediaIds=JSON.stringify(selected.map(x=>x.id));summary.textContent='직접 연습 '+m+'분 + 녹음·영상 '+clock(seconds)+' = 총 '+clock(total*60);summary.setAttribute('aria-live','polite')}
