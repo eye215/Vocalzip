@@ -1,0 +1,103 @@
+/* VOCAL.zip v5.0 — unified iPhone-first product UI */
+:root{
+ --bg:#0b0d20;--surface:#171a36;--surface-2:#202345;--line:rgba(218,213,255,.14);
+ --text:#f7f5ff;--sub:#b8b6d0;--muted:#8f8da9;--violet:#9b7af0;--violet-2:#765bd2;
+ --mint:#8fe4dc;--danger:#ff9aab;--radius:22px;
+ color-scheme:dark;
+}
+html{background:var(--bg);scroll-padding-top:18px;scroll-padding-bottom:calc(112px + env(safe-area-inset-bottom))}
+body{background:radial-gradient(ellipse at 85% -5%,rgba(111,91,196,.24),transparent 36%),radial-gradient(ellipse at 0% 48%,rgba(53,126,143,.10),transparent 35%),var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+.app{width:min(100%,760px);padding:22px 18px calc(128px + env(safe-area-inset-bottom));margin:0 auto}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 2px 22px}
+.top h1{font-size:clamp(26px,7vw,32px);font-weight:850;letter-spacing:-1.5px;line-height:1.1}
+.top .muted{font-size:12px;margin-top:6px;color:var(--sub)}
+.vzip-top-actions{display:flex;align-items:center;gap:8px}
+#vzip-open-settings{width:44px;height:44px;border:1px solid var(--line);border-radius:15px;background:var(--surface);color:var(--text);font-size:20px}
+.tag{border:1px solid rgba(185,158,255,.24);background:rgba(145,113,224,.14);color:#d8caff;padding:7px 10px;font-weight:750}
+.nav{position:fixed!important;z-index:1000!important;left:50%!important;right:auto!important;bottom:calc(9px + env(safe-area-inset-bottom,0px))!important;top:auto!important;transform:translateX(-50%);width:min(560px,calc(100% - 24px))!important;max-width:560px!important;min-height:70px!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important;padding:7px!important;margin:0!important;border:1px solid rgba(214,207,255,.18)!important;border-radius:23px!important;background:rgba(22,23,49,.92)!important;box-shadow:0 14px 48px rgba(0,0,0,.42)!important;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+.nav button{min-width:0!important;min-height:54px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:4px!important;padding:5px 2px!important;border:0!important;border-radius:16px!important;background:transparent!important;color:#a9a5c3!important;font-size:11px!important;font-weight:650!important;line-height:1.15!important;white-space:nowrap}
+.nav button.active{background:linear-gradient(145deg,rgba(158,126,239,.34),rgba(113,91,192,.22))!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(203,184,255,.24)}
+.nav-icon{font-size:20px!important;line-height:1.1}
+.nav .vzip-settings-nav{display:none!important}
+section{min-width:0;animation:vzipSectionIn .2s ease both}
+@keyframes vzipSectionIn{from{opacity:.6;transform:translateY(4px)}to{opacity:1;transform:none}}
+section:not(#home):before{display:block;white-space:pre-line;margin:4px 3px 18px;color:#dcd5f7;font-size:25px;font-weight:820;letter-spacing:-.8px;line-height:1.25}
+#lessons:before{content:"YOUR LESSONS\A레슨 기록"}
+#practice:before{content:"DAILY PRACTICE\A개인 연습"}
+#media:before{content:"YOUR LIBRARY\A보관함"}
+#archive:before{content:"VOICE JOURNEY\A성장 아카이브"}
+#manage:before{content:"PREFERENCES\A설정"}
+.card{min-width:0;margin:13px 0 16px;padding:21px;border:1px solid var(--line);border-radius:var(--radius);background:linear-gradient(155deg,rgba(31,34,70,.92),rgba(19,22,47,.94));box-shadow:0 12px 34px rgba(0,0,0,.13)}
+.card h2{margin:0 0 10px;color:var(--text);font-size:18px;font-weight:780;letter-spacing:-.35px}
+.card p{line-height:1.65}
+.muted,.form-intro{color:var(--sub)!important;font-size:13px;line-height:1.65}
+.empty{padding:17px;border:1px dashed rgba(215,207,255,.17);border-radius:15px;background:rgba(255,255,255,.035);color:var(--sub)}
+.item{padding:15px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.itemtitle{font-size:15px;font-weight:750;color:var(--text)}
+.mini{font-size:12px;color:var(--sub);line-height:1.6;white-space:pre-wrap}
+.pill{background:rgba(158,130,235,.16);color:#d9ccff;border:1px solid rgba(188,163,255,.15);padding:5px 9px}
+.stats{gap:9px}
+.stat{padding:15px 8px;border:1px solid rgba(193,177,255,.12);border-radius:16px;background:rgba(149,125,223,.10)}
+.stat strong{font-size:25px;color:#d2c0ff}
+.stat .muted{font-size:11px}
+label{display:block;margin:16px 0 7px;color:#e9e5f8;font-size:13px;font-weight:700}
+input,select,textarea{width:100%;max-width:100%;min-width:0;min-height:48px;padding:12px 14px;border:1px solid rgba(209,201,255,.19);border-radius:14px;background:rgba(9,12,34,.62);color:var(--text);font:inherit;font-size:16px;line-height:1.4;box-shadow:none}
+input::placeholder,textarea::placeholder{color:#8886a5;opacity:1}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid rgba(176,148,255,.82);outline-offset:2px}
+input[type=date]{min-height:50px;color-scheme:dark}
+input[type=file]{font-size:14px;min-height:48px;padding:10px}
+input[type=checkbox]{width:22px;height:22px;min-height:22px;accent-color:var(--violet);flex:0 0 auto}
+textarea{min-height:104px;resize:vertical}
+button,.btn,.smallbtn{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:46px;padding:12px 16px;border:1px solid transparent;border-radius:14px;background:linear-gradient(135deg,var(--violet),var(--violet-2));color:white;font-size:14px;font-weight:750;line-height:1.3}
+.btn.secondary,.smallbtn{border:1px solid rgba(208,197,255,.19);background:rgba(148,128,213,.14);color:#e2dcfa}
+.btn.danger{background:rgba(216,84,112,.16);border-color:rgba(255,150,170,.2);color:#ffc1cc}
+.smallbtn{min-height:40px;padding:9px 12px;border-radius:11px;font-size:12px}
+.buttons{display:flex;flex-wrap:wrap;gap:9px}
+.buttons>*{min-width:0}
+.two{display:flex;gap:10px;min-width:0}
+.two>*{flex:1;min-width:0}
+.row{gap:10px;min-width:0}
+.row>*{min-width:0}
+.hero{position:relative;overflow:hidden;display:flex;align-items:center;min-height:260px;margin:6px 0 17px;padding:27px 23px;border:1px solid rgba(205,188,255,.2);border-radius:27px;background:radial-gradient(ellipse at 95% 8%,rgba(160,127,245,.35),transparent 45%),linear-gradient(145deg,#28244e,#171b3d 72%);box-shadow:0 18px 44px rgba(0,0,0,.2)}
+.hero-copy{position:relative;z-index:1;max-width:440px}
+.hero-eyebrow{font-size:10px;letter-spacing:2px;font-weight:800;color:var(--mint)}
+.hero h2{margin:12px 0;font-size:clamp(26px,7vw,35px);line-height:1.23;letter-spacing:-1.2px}
+.hero h2 em{font-style:normal;color:#c5adff}
+.hero p{font-size:13px;line-height:1.7;color:#c6c1df}
+.hero-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+.hero-actions button{min-height:45px;padding:11px 14px;border-radius:13px;font-size:13px;font-weight:750}
+.hero-actions .primary{background:linear-gradient(130deg,#a181f2,#795fd1);color:#fff;border:0}
+.hero-actions .ghost{background:rgba(255,255,255,.08);border:1px solid var(--line);color:#eee9ff}
+.hero-wave{opacity:.18;right:12px;bottom:20px}
+#vzip-recorder .buttons{align-items:center}
+#vzip-recorder .buttons .btn{width:auto!important;flex:1}
+#vzip-recorder video{width:100%;max-height:280px;object-fit:contain}
+audio,video{width:100%;max-width:100%;border-radius:13px}
+.vzip-editor{padding:12px 12px calc(14px + env(safe-area-inset-bottom))}
+.vzip-editor-card{border-radius:24px;max-height:88dvh;padding:22px;background:linear-gradient(155deg,#29264f,#171b39);border-color:var(--line)}
+[hidden]{display:none!important}
+#cloud-status{color:var(--sub);line-height:1.55}
+.footer{color:var(--muted)}
+/* Keep controls clear of the iOS home indicator and avoid Safari's input zoom. */
+@media(max-width:720px){
+ .app{padding:18px 15px calc(126px + env(safe-area-inset-bottom))}
+ .top{margin-bottom:17px}
+ .card{padding:19px 17px;border-radius:20px}
+ .hero{min-height:245px;padding:24px 20px}
+ .hero-wave{right:-18px;opacity:.12}
+ .two{gap:8px}
+ #lesson-form .wizard-progress{gap:5px}
+ #lesson-form .wizard-progress-item{padding:9px 2px;font-size:10px}
+}
+@media(max-width:390px){
+ .app{padding-left:12px;padding-right:12px}
+ .card{padding:17px 15px}
+ .nav{width:calc(100% - 18px)!important}
+ .nav button{font-size:10px!important}
+ .hero{padding:21px 17px}
+ .stats{gap:6px}
+ .stat strong{font-size:22px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
