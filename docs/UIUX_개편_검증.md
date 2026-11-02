@@ -67,7 +67,7 @@ GitHub Actions UI browser checks는 Node 22에서 구문 검사와 Playwright �
 | 실제 로그인·클라우드 동기화 | 미검증 |
 | 영상 .mov, 음성 .m4a, 권한 거부·저장 공간 부족 | 미검증 |
 
-Playwright는 인증 SDK를 테스트 대역으로 대체하고 실제 Supabase 요청을 막습니다. 따라서 로그인/클라우드 검증 근거가 아닙니다. Chromium 녹음 테스트는 가상 장치를 사용하며 실제 아이폰 마이크·카메라 검증이 아닙니다. WebKit 데스크톱 실행도 실제 iPhone Safari와 구분해야 합니다.
+Playwright는 인증 SDK를 테스트 대역으로 대체하고 실제 Supabase 요청을 막습니다. 재접속 후에도 인증 대역을 일관되게 적용하도록 테스트 컨텍스트의 Service Worker를 차단하며 공유 수신 기능은 이 테스트의 검증 범위가 아닙니다. 따라서 로그인/클라우드 검증 근거가 아닙니다. Chromium 녹음 테스트는 가상 장치를 사용하며 실제 아이폰 마이크·카메라 검증이 아닙니다. WebKit 데스크톱 실행도 실제 iPhone Safari와 구분해야 합니다.
 
 ## 남은 작업과 우선순위
 
