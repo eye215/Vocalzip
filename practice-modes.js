@@ -37,7 +37,7 @@ function moveLabelAndControl(label,control,parent){if(label&&label.parentElement
 const songSlot=songPanel.querySelector('.vzip-song-select');moveLabelAndControl(songLabel,song,songSlot);
 const timeWrap=document.createElement('div');timeWrap.className='vzip-field vzip-manual-time';timeWrap.append(minutesLabel,minutes);
 const intro=form.querySelector('.form-intro');if(intro){intro.insertAdjacentElement('afterend',dateWrap);dateWrap.insertAdjacentElement('afterend',switcher);switcher.after(training,songPanel,timeWrap)}else{form.prepend(dateWrap,switcher,training,songPanel,timeWrap)}
-if(dateLabel&&dateLabel.parentElement!==dateWrap)dateWrap.prepend(dateLabel);
+
 if(minutesLabel)minutesLabel.textContent='직접 연습한 시간 (분)';
 if(catLabel)catLabel.hidden=true;category?.closest('.two')?.setAttribute('hidden','');form.querySelector('.inline-category-tools')?.setAttribute('hidden','');
 const oldSongContainer=songLabel?.parentElement;if(oldSongContainer&&oldSongContainer!==songSlot&&oldSongContainer!==songPanel)oldSongContainer.hidden=true;
