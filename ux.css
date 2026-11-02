@@ -1,0 +1,50 @@
+/* VOCAL.zip v0.7 — mobile-first UX polish, loaded after glass.css */
+:root{--ux-surface:rgba(25,26,57,.74)}
+body{overflow-x:hidden}
+.app{max-width:760px}
+.top{margin-bottom:20px}
+.top h1{letter-spacing:-1.4px}
+.tag{white-space:nowrap}
+.card{border-radius:22px;padding:23px}
+.card h2{font-size:19px;margin-bottom:12px}
+.form-intro{font-size:13px;color:#bdbbd4;line-height:1.55;margin:0 0 22px}
+.card form label{margin:20px 0 8px;font-size:13px}
+.card form .two{gap:12px}
+.card form input,.card form select,.card form textarea{min-height:50px;border-radius:13px;padding:12px 14px;font-size:15px}
+.card form textarea{min-height:112px}
+.card form button.btn{min-height:50px}
+.card form button.btn:not(.secondary){width:100%;margin-top:22px!important}
+.inline-category-tools{margin:12px 0 10px;border:1px solid rgba(182,160,250,.23);border-radius:13px;background:rgba(153,131,242,.075);padding:0}
+.inline-category-tools summary{list-style:none;display:flex;align-items:center;justify-content:space-between;min-height:45px;padding:12px 14px;color:#d9d1ff;font-weight:700;font-size:13px;cursor:pointer}
+.inline-category-tools summary::-webkit-details-marker{display:none}
+.inline-category-tools summary:after{content:"⌄";font-size:20px;line-height:1}
+.inline-category-tools[open] summary:after{transform:rotate(180deg)}
+.inline-tool-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 12px 8px}
+.inline-tool-row .smallbtn{min-height:43px;text-align:center;white-space:normal;font-size:12px;border-radius:10px;padding:8px}
+.inline-category-tools>.muted{margin:2px 12px 14px;font-size:11px}
+.nav{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.nav button{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;white-space:nowrap}
+.nav-icon{font-size:20px;line-height:1.1;font-weight:500}
+#carryover-panel{margin-top:12px}
+#homework-checks label{margin:8px 0}
+#lesson-form .muted,#practice-form .muted{line-height:1.6}
+#vzip-recorder .two{gap:12px}
+#vzip-recorder .buttons .btn{width:auto!important}
+@media(min-width:721px){.nav button{flex-direction:row;gap:9px}.nav-icon{font-size:18px}}
+@media(max-width:720px){
+html{scroll-padding-bottom:105px}
+.app{width:100%;padding:24px 16px calc(120px + env(safe-area-inset-bottom,0px))}
+.top{padding:0 3px}
+.nav{position:fixed!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;grid-template-rows:1fr!important;flex-wrap:nowrap!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;top:auto!important;left:12px!important;right:12px!important;width:calc(100% - 24px)!important;max-width:560px!important;margin:0 auto!important;padding:6px!important;border-radius:21px!important;min-height:68px!important;background:rgba(25,24,53,.92)!important;backdrop-filter:blur(28px)!important;-webkit-backdrop-filter:blur(28px)!important}
+.nav button{min-height:55px!important;padding:7px 0!important;border-radius:15px!important;font-size:11px!important;line-height:1.2!important;letter-spacing:0!important}
+.nav button.active{background:rgba(163,134,248,.25)!important}
+.nav-icon{font-size:21px}
+.card{padding:21px 19px;margin:14px 0}
+.card form .two{flex-direction:column;gap:0}
+.card form label{margin:17px 0 7px}
+.card form .two>div label{margin-top:16px}
+.card form .two>div:first-child label{margin-top:17px}
+.card form input,.card form select{min-height:50px}
+.card form textarea{min-height:100px}
+}
+@media(max-width:390px){.app{padding-left:12px;padding-right:12px}.card{padding:18px 15px}.nav{left:8px!important;right:8px!important;width:calc(100% - 16px)!important}.nav button{font-size:10px!important}.nav-icon{font-size:19px}.top h1{font-size:27px}}
