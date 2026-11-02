@@ -66,6 +66,11 @@ window.vzipCloudImport=async function(file,info,onProgress){
  if(error)throw Error('영상 업로드 완료, 기록 연결 실패: '+error.message);
  return metadata;
 };
+
+window.vzipCloudMediaList=async()=>{if(!user)return [];const {data,error}=await client.from('vocal_media').select('id,metadata').eq('user_id',user.id).order('updated_at',{ascending:false});if(error)throw error;return (data||[]).map(x=>({...x.metadata,id:x.id,cloud:true}))};
+window.vzipCloudMediaUrl=async item=>{if(!user||!item?.path)throw Error('클라우드 파일 경로가 없어요.');const {data,error}=await client.storage.from('vocal-recordings').createSignedUrl(item.path,3600);if(error)throw error;return data.signedUrl};
+window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const metadata={...item,...changes};delete metadata.cloud;delete metadata.blob;const {error}=await client.from('vocal_media').update({metadata,updated_at:new Date().toISOString()}).eq('id',item.id).eq('user_id',user.id);if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'));return metadata};
+window.vzipCloudMediaDelete=async item=>{if(!user)throw Error('로그인이 필요해요.');if(item.path){const {error}=await client.storage.from('vocal-recordings').remove([item.path]);if(error)throw error}const {error}=await client.from('vocal_media').delete().eq('id',item.id).eq('user_id',user.id);if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'))};
 window.vzipCloudSignedIn=()=>!!user;
 function showUser(){const logged=!!user;$('#cloud-signed-in').hidden=!logged;updateAuthScreen();if(logged){$('#cloud-user').textContent='🔒 '+(user.email||'로그인됨');ready=localStorage.getItem('vzip_cloud_linked_user')===user.id;say(ready?'연결됨 · 기록을 수정하면 자동으로 서버에 저장돼요.':'로그인 완료! 먼저 이 기기 기록을 업로드하거나 클라우드 기록을 가져와 주세요.')}else{ready=false;say('로그인하면 다른 기기에서도 기록을 불러올 수 있어요.')}}
 async function boot(){if(!window.supabase?.createClient){say('서버 연결 라이브러리를 불러오지 못했어요. 새로고침해 주세요.');return}client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data}=await client.auth.getUser();user=data?.user||null;showUser();client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;showUser()});const credentials=()=>({email:$('#cloud-email').value.trim(),password:$('#cloud-password').value});
