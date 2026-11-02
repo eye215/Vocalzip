@@ -147,3 +147,16 @@ a{color:#7652d4}
 .vzip-notice{background:rgba(255,255,255,.96);color:#403060;border-color:#e6dbf8;box-shadow:0 8px 30px rgba(88,61,152,.15)}
 .vzip-insight-metric{background:rgba(249,246,255,.78);border-color:#e8dff6}
 #practice-form #vzip-practice-capture .buttons .btn{background:linear-gradient(125deg,#9b80ee,#7955e2);color:white}
+
+/* Tablet / narrow desktop: use sidebar to prevent bottom bar covering interactive forms. */
+@media(min-width:700px) and (max-width:1023px){
+ .app{max-width:1100px!important;margin:0 auto!important;padding:28px 24px 70px 230px!important}
+ .nav{
+   left:12px!important;right:auto!important;top:110px!important;bottom:auto!important;
+   width:188px!important;max-width:188px!important;min-height:0!important;
+   display:flex!important;flex-direction:column!important;gap:5px!important;padding:8px!important;
+   transform:none!important;border-radius:20px!important
+ }
+ .nav button{width:100%!important;flex-direction:row!important;justify-content:flex-start!important;min-height:48px!important;font-size:13px!important;padding:11px!important}
+ .nav .vzip-settings-nav{display:flex!important}
+}
