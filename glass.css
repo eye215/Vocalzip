@@ -100,3 +100,16 @@ audio,video{max-width:100%;border-radius:13px}
 .nav button{font-size:11px;letter-spacing:-.05em}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Song archive v0.6 */
+.nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+.archive-timeline{position:relative;padding-left:12px}
+.archive-event{display:grid;grid-template-columns:105px minmax(0,1fr);gap:16px;padding:15px 0;border-bottom:1px solid rgba(255,255,255,.11)}
+.archive-event:last-child{border-bottom:0}
+.archive-date{color:#c8b8fa;font-size:12px;font-weight:750;padding-top:6px}
+.archive-event-body{min-width:0;line-height:1.6;overflow-wrap:anywhere}
+.archive-event-body b{display:block;margin:9px 0 4px}
+.archive-event-body p{white-space:pre-wrap;color:#d0cce6;font-size:13px;margin:4px 0}
+#archive-player-a video,#archive-player-b video{max-height:300px}
+@media(max-width:720px){.nav button{font-size:11px;padding:10px 2px}}
+@media(max-width:490px){.nav{gap:2px;padding:5px}.nav button{font-size:10px;min-height:50px;padding:9px 1px}.archive-event{grid-template-columns:78px minmax(0,1fr);gap:9px}.archive-date{font-size:11px}}
