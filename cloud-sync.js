@@ -21,7 +21,7 @@ document.body.appendChild(authScreen);
 authScreen.querySelector('#vzip-auth-fields').appendChild(root.querySelector('#cloud-signed-out'));
 // After moving the form into the full-screen login, query it from its actual location.
 const authField=selector=>authScreen.querySelector(selector);
-function updateAuthScreen(){document.getElementById('vzip-boot-cover')?.remove();const signedIn=!!user;authScreen.hidden=signedIn;document.body.classList.toggle('vzip-auth-locked',!signedIn);$('#cloud-signed-out').hidden=signedIn;}
+function updateAuthScreen(){document.getElementById('vzip-boot-cover')?.remove();const signedIn=!!user;authScreen.hidden=signedIn;document.body.classList.toggle('vzip-auth-locked',!signedIn);const form=document.getElementById('cloud-signed-out');if(form)form.hidden=signedIn;}
 
 const status=$('#cloud-status');let client,user=null,ready=false,uploadTimer=null,busy=false;
 function say(message){status.textContent=message;const a=document.querySelector('#vzip-auth-message');if(a)a.textContent=message}
