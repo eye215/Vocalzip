@@ -10,7 +10,7 @@ function dbOpen(){return new Promise((resolve,reject)=>{const req=indexedDB.open
 async function getMedia(){const db=await dbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction('recordings','readonly'),req=tx.objectStore('recordings').getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);tx.oncomplete=()=>db.close()})}
 function setOptions(el,items,placeholder){const prev=el.value;el.replaceChildren();el.add(new Option(placeholder,''));for(const item of items)el.add(new Option(item.label,item.id));if(items.some(i=>i.id===prev))el.value=prev}
 function clearPlayers(){urls.forEach(URL.revokeObjectURL);urls=[];for(const id of ['#archive-player-a','#archive-player-b'])$(id).replaceChildren()}
-function play(which){const target=$(which==='a'?'#archive-player-a':'#archive-player-b'),id=(which==='a'?a:b).value;target.replaceChildren();const item=media.find(m=>m.id===id);if(!item?.blob)return;const el=document.createElement(item.type?.startsWith('video/')?'video':'audio');el.controls=true;el.playsInline=true;el.preload='metadata';el.style.width='100%';el.style.marginTop='12px';const url=URL.createObjectURL(item.blob);urls.push(url);el.src=url;target.append(el)}
+async function play(which){const target=$(which==='a'?'#archive-player-a':'#archive-player-b'),id=(which==='a'?a:b).value;target.replaceChildren();const item=media.find(m=>m.id===id);if(!item)return;const el=document.createElement(item.type?.startsWith('video/')?'video':'audio');el.controls=true;el.playsInline=true;el.preload='metadata';el.style.width='100%';el.style.marginTop='12px';if(item.blob){const url=URL.createObjectURL(item.blob);urls.push(url);el.src=url}else if(item.path&&window.vzipCloudMediaUrl){try{el.src=await window.vzipCloudMediaUrl(item)}catch(e){target.textContent='클라우드 재생 실패: '+e.message;return}}else return;target.append(el)}
 function render(){const db=read(),songs=db.songs||[];const previous=songSelect.value;setOptions(songSelect,songs.map(s=>({id:s.id,label:s.title+(s.show?' — '+s.show:'')})),'곡을 선택해 주세요');if(previous&&songs.some(s=>s.id===previous))songSelect.value=previous;
 const song=songs.find(s=>s.id===songSelect.value),stats=$('#archive-stats'),timeline=$('#archive-timeline');
 clearPlayers();
@@ -23,12 +23,12 @@ const options=recordings.map(m=>({id:m.id,label:formatDate(m.created)+' · '+(m.
 const entries=[...lessons.map(l=>({date:l.date,type:'레슨',body:'<b>선생님 피드백</b><p>'+safe(l.feedback||'피드백 없음')+'</p><p>'+safe(l.memo||'')+'</p>'})),...practices.map(p=>({date:p.date,type:'개인 연습',body:'<b>'+safe(p.minutes)+'분 연습 · 만족도 '+safe(p.rating)+'/5</b><p>'+safe(p.memo||'연습 메모 없음')+'</p>'})),...recordings.map(m=>({date:new Date(m.created).toLocaleDateString('sv-SE'),time:m.created,type:m.type?.startsWith('video/')?'영상':'녹음',body:'<b>'+safe(m.name)+'</b><p>비교 영역에서 재생할 수 있어요.</p>'}))].sort((x,y)=>x.date.localeCompare(y.date)||(x.time||0)-(y.time||0));
 timeline.innerHTML=entries.length?entries.map(x=>'<article class="archive-event"><div class="archive-date">'+safe(x.date)+'</div><div class="archive-event-body"><span class="pill">'+safe(x.type)+'</span>'+x.body+'</div></article>').join(''):'<div class="empty">아직 이 곡의 기록이 없어요. 레슨이나 개인 연습을 저장해 보세요.</div>';
 }
-async function refresh(){try{media=await getMedia()}catch{media=[]}render()}
+async function refresh(){let local=[];try{local=await getMedia()}catch{}let cloud=[];try{if(window.vzipCloudSignedIn?.()&&window.vzipCloudMediaList)cloud=await window.vzipCloudMediaList()}catch{}const combined=new Map(local.map(m=>[m.id,m]));cloud.forEach(m=>combined.set(m.id,{...combined.get(m.id),...m}));media=[...combined.values()];render()}
 songSelect.addEventListener('change',render);
 a.addEventListener('change',()=>{clearPlayers();play('a');play('b')});
 b.addEventListener('change',()=>{clearPlayers();play('a');play('b')});
 document.querySelector('button[data-tab="archive"]')?.addEventListener('click',refresh);
 document.addEventListener('click',e=>{if(e.target.closest('[data-go-tab="archive"]'))setTimeout(refresh,30)});
-window.addEventListener('vzip:media-updated',refresh);window.addEventListener('vzip:media-saved',refresh);window.addEventListener('pagehide',clearPlayers);
+window.addEventListener('vzip:cloud-media-changed',refresh);window.addEventListener('vzip:hub-refreshed',refresh);window.addEventListener('vzip:auth-changed',refresh);window.addEventListener('vzip:media-updated',refresh);window.addEventListener('vzip:media-saved',refresh);window.addEventListener('pagehide',clearPlayers);
 refresh();
 })();
