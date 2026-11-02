@@ -10,7 +10,7 @@ const showTab=tab=>{nav?.querySelector('button[data-tab="'+tab+'"]')?.click();ro
 function go(tab,sub){showTab(tab);if(sub){const btn=sections[tab]?.querySelector('[data-ia-open="'+sub+'"]');btn?.click()}}
 const home=sections.home;const homeCards=[...home.querySelectorAll(':scope > .card')];const backup=homeCards.find(x=>x.querySelector('#export'));if(backup){backup.classList.add('vzip-settings-backup');sections.manage.append(backup)}
 home.prepend(head('TODAY · VOCAL.zip','오늘의 보컬','오늘은 어떤 목소리를 남길까요?'));
-const shortcuts=document.createElement('div');shortcuts.className='vzip-shortcuts';shortcuts.append(action('🎤 연습 기록',()=>go('practice','new')),action('📖 레슨 기록',()=>go('lessons','new')),action('🎵 녹음 올리기',()=>go('media'),'secondary'),action('📈 성장 확인',()=>go('archive'),'secondary'));home.querySelector('.vzip-page-head').after(shortcuts);
+const shortcuts=document.createElement('div');shortcuts.className='vzip-shortcuts';shortcuts.append(action('🎤 연습 기록',()=>go('practice','new')),action('📖 레슨 기록',()=>go('lessons','new')),action('🎵 기존 파일 올리기',()=>{go('media');setTimeout(()=>$('#vzip-hub-upload')?.click(),100)},'secondary'),action('📈 성장 확인',()=>go('archive'),'secondary'));home.querySelector('.vzip-page-head').after(shortcuts);
 const hero=home.querySelector('.hero');if(hero)hero.classList.add('vzip-home-hero');
 const manage=sections.manage;
 manage.prepend(head('SETTINGS','설정','계정, 곡, 연습 항목과 백업을 관리해요.'));
