@@ -100,3 +100,6 @@ html{scroll-padding-bottom:105px}
 
 /* v1.9 account UX */
 #vzip-cloud-root .vzip-password-row{display:grid;grid-template-columns:minmax(0,1fr) 66px;align-items:center;gap:8px}#vzip-cloud-root .vzip-password-row input{min-width:0}#vzip-cloud-root .vzip-password-row button{min-height:49px}#vzip-cloud-root #cloud-signed-out .cloud-actions{margin:10px 0 14px}#vzip-cloud-root #cloud-reset{min-height:43px;margin:4px 0 12px}
+
+/* v2.4 media hub */
+#vzip-media-hub .vzip-hub-buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}#vzip-media-hub .vzip-hub-buttons .btn{display:inline-flex;align-items:center;justify-content:center;text-align:center;min-height:44px;font-size:13px}#vzip-media-hub .vzip-hub-item{padding:15px 0;border-top:1px solid #ffffff24;overflow-wrap:anywhere}#vzip-media-hub .vzip-hub-item strong{font-size:15px}#vzip-media-hub .vzip-hub-item .muted{margin:6px 0}#vzip-media-hub .vzip-hub-item .smallbtn{min-height:39px;padding:9px 11px}#vzip-media-hub video{max-height:330px;border-radius:12px;background:#080b18}
