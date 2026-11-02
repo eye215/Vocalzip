@@ -89,3 +89,11 @@ html{scroll-padding-bottom:105px}
 #lesson-form .vzip-date-help{font-size:12px;color:#acaac8;margin:8px 0 18px}
 .vzip-import-box .vzip-file-picker{touch-action:manipulation;min-height:50px}
 @media(max-width:490px){#lesson-form .vzip-date-row{grid-template-columns:minmax(0,1fr) 64px}#lesson-form input[type="date"]{font-size:16px!important}}
+
+/* v1.8: practice time calculation */
+.vzip-time-summary{margin:14px 0;padding:15px 14px;border-radius:14px;background:rgba(126,228,215,.12);border:1px solid rgba(126,228,215,.3);color:#b8fff0;font-weight:700;font-size:14px;line-height:1.65}
+.vzip-duration-list{max-height:240px;overflow-y:auto;display:grid;gap:7px;margin:10px 0}
+.vzip-duration-item{display:flex!important;gap:10px;align-items:center;min-height:46px;padding:10px;border-radius:10px;background:rgba(255,255,255,.055);margin:0!important;cursor:pointer}
+.vzip-duration-item input{width:19px!important;height:19px!important;flex:0 0 19px;margin:0!important}
+.vzip-duration-item span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px}
+.vzip-duration-file{padding:8px 0;overflow-wrap:anywhere;font-size:13px}
