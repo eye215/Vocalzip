@@ -1,10 +1,10 @@
 const {test, expect} = require('@playwright/test');
-const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.supabase={createClient:()=>({
+const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.__cloudUpdates=[];window.supabase={createClient:()=>({
  auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),
  onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
- storage:{from:()=>({upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
+ storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/fixture-audio.wav'},error:null}),upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
  from:table=>{const chain={};for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
- chain[method]=(...args)=>{if(method==='upsert')window.__cloudMetadata.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:[],error:null});return chain;}
+ chain[method]=(...args)=>{if(method==='upsert')window.__cloudMetadata.push({table,payload:args[0]});if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(window.__cloudRows||[]):[],error:null});return chain;}
 })};`;
 test.beforeEach(async ({page}) => {
   page.__vzipErrors=[];page.on('pageerror',error=>page.__vzipErrors.push(error.message));
@@ -219,7 +219,121 @@ test('Legacy ArrayBuffer audio decodes after reload and backup preserves its met
   await page.locator('#cloud-media-upload').click();
   await expect(page.locator('#cloud-status')).toContainText('백업 1개 성공');
   const uploaded=await page.evaluate(()=>({files:window.__cloudUploads,meta:window.__cloudMetadata}));
-  expect(uploaded.files[0].size).toBe(bytes.length);
+  expect(uploaded.files[0].size).toBe(bytes.length);expect(uploaded.files[0].path).toMatch(/\\.wav$/);
   const metadata=uploaded.meta.find(row=>row.table==='vocal_media').payload.metadata;
   expect(metadata.source).toBe('practice');expect(metadata.durationSeconds).toBe(1);
+  await page.evaluate(()=>{window.__cloudRows=[{id:'legacy-a',metadata:{id:'legacy-a',path:'ui-test-user/legacy-a.webm'}}]});
+  await page.locator('#cloud-media-upload').click();
+  await expect.poll(()=>page.evaluate(()=>window.__cloudUploads.length)).toBe(2);
+  expect(await page.evaluate(()=>window.__cloudUploads[1].path)).toBe('ui-test-user/legacy-a.webm');
+});
+
+async function cloudFiles(page, rows) {
+  await page.route('**/fixture-audio.wav',route=>route.fulfill({contentType:'audio/wav',body:wav()}));
+  await page.addInitScript(rows=>{window.__cloudRows=rows},rows);
+  await page.evaluate(rows=>{window.__cloudRows=rows;window.dispatchEvent(new Event('vzip:cloud-media-changed'))},rows);
+}
+function cloudRow(id,name,durationSeconds=1) {
+  return {id,metadata:{id,name,type:'audio/wav',source:'practice',created:Date.now(),durationSeconds,path:'ui-test-user/'+id+'.wav'}};
+}
+test('Cloud-only media links once beside its local duplicate and plays after reload',async({page})=>{
+  await page.evaluate(async bytes=>window.vzipStorePracticeMedia({
+    id:'shared',name:'기기와 클라우드 공통',type:'audio/wav',created:Date.now(),
+    source:'practice',durationSeconds:1,blob:new Blob([new Uint8Array(bytes)],{type:'audio/wav'})
+  }),[...wav()]);
+  await cloudFiles(page,[cloudRow('shared','기기와 클라우드 공통'),cloudRow('remote-only','클라우드 전용 녹음',61)]);
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await expect(page.locator('#practice-saved-media input')).toHaveCount(2);
+  await page.locator('#practice-saved-media input[value="remote-only"]').check();
+  await expect.poll(()=>page.locator('#practice-form').getAttribute('data-media-seconds')).toBe('61');
+  await page.locator('#practice-form>button:not([type])').click();
+  const record=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0]);
+  expect(record.mediaIds).toEqual(['remote-only']);
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="practice"]').click();
+  await page.locator('.vzip-practice-files summary').click();
+  await expect.poll(()=>page.locator('.vzip-practice-files audio').evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
+});
+test('Library media controls do not open comparison and filters stop playback with an empty state',async({page})=>{
+  await cloudFiles(page,[cloudRow('controls','재생 조작 확인')]);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('[data-id="controls"] [data-action="play"]').click();
+  const audio=page.locator('[data-id="controls"] audio');
+  await expect.poll(()=>audio.evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
+  await page.evaluate(()=>{
+    window.__compareCount=0;window.addEventListener('vzip:compare-open',()=>window.__compareCount++);
+    window.__previousAudio=document.querySelector('#vzip-hub-list audio');
+    window.__previousAudio.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  });
+  expect(await page.evaluate(()=>window.__compareCount)).toBe(0);
+  await page.locator('#vzip-media-hub [data-filter="video"]').click();
+  await expect(page.locator('#vzip-hub-list')).toContainText('선택한 조건에 맞는 파일이 없어요');
+  await expect(page.locator('[data-filter="video"]')).toHaveAttribute('aria-pressed','true');
+  expect(await page.evaluate(()=>({paused:window.__previousAudio.paused,src:window.__previousAudio.getAttribute('src')})))
+    .toEqual({paused:true,src:null});
+});
+test('Late signed playback URLs cannot replace newer playback or survive leaving the library',async({page})=>{
+  await cloudFiles(page,[cloudRow('older','첫 파일'),cloudRow('newer','두 번째 파일')]);
+  await page.locator('.nav [data-tab="media"]').click();
+  await expect(page.locator('#vzip-hub-list [data-action="play"]')).toHaveCount(2);
+  await page.evaluate(()=>{
+    window.__pendingPlay={};
+    window.vzipCloudMediaUrl=item=>new Promise(resolve=>{window.__pendingPlay[item.id]=()=>resolve('/fixture-audio.wav')});
+  });
+  await page.locator('[data-id="older"] [data-action="play"]').click();
+  await expect.poll(()=>page.evaluate(()=>typeof window.__pendingPlay.older)).toBe('function');
+  await page.locator('[data-id="newer"] [data-action="play"]').click();
+  await expect.poll(()=>page.evaluate(()=>typeof window.__pendingPlay.newer)).toBe('function');
+  await page.evaluate(()=>window.__pendingPlay.newer());
+  await expect(page.locator('[data-id="newer"] audio')).toHaveCount(1);
+  await page.evaluate(()=>window.__pendingPlay.older());
+  await expect(page.locator('#vzip-hub-list audio')).toHaveCount(1);
+  await expect(page.locator('[data-id="older"] audio')).toHaveCount(0);
+  await page.locator('[data-id="older"] [data-action="play"]').click();
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.evaluate(()=>window.__pendingPlay.older());
+  await expect(page.locator('#vzip-hub-list audio')).toHaveCount(0);
+});
+test('Media edit is keyboard accessible and never sends local binary data as cloud metadata',async({page})=>{
+  await cloudFiles(page,[cloudRow('metadata','정보 수정 파일')]);
+  await page.locator('.nav [data-tab="media"]').click();
+  const edit=page.locator('[data-id="metadata"] [data-action="edit"]');
+  await edit.click();
+  const name=page.locator('.vzip-media-edit-sheet [name="name"]');
+  await expect(name).toBeFocused();
+  await name.press('Shift+Tab');
+  await expect(page.locator('.vzip-media-edit-sheet [data-save]')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.vzip-media-edit-sheet')).toHaveCount(0);
+  await expect(edit).toBeFocused();
+  await page.evaluate(async()=>{
+    await window.vzipCloudMediaUpdate({id:'metadata',path:'ui-test-user/metadata.wav',name:'원본',
+      type:'audio/wav',source:'practice',durationSeconds:12,local:true,cloud:true,
+      bytes:new Uint8Array([1,2]).buffer,blob:new Blob(['binary'])},{name:'수정 제목'});
+  });
+  const metadata=await page.evaluate(()=>window.__cloudUpdates.at(-1).payload.metadata);
+  expect(metadata.name).toBe('수정 제목');expect(metadata.durationSeconds).toBe(12);
+  for(const key of ['local','cloud','blob','bytes'])expect(metadata).not.toHaveProperty(key);
+});
+test('Cloud import infers an empty MIME from m4a without pretending to test real m4a decoding',async({page})=>{
+  await page.evaluate(async()=>{
+    window.tus={Upload:class {constructor(file,options){this.options=options;window.__tusMetadata=options.metadata}
+      start(){this.options.onSuccess()}}};
+    window.__importedMetadata=await window.vzipCloudImport(new File(['fixture'],'empty-type.m4a',{type:''}),{name:'빈 MIME'});
+  });
+  const result=await page.evaluate(()=>({upload:window.__tusMetadata,item:window.__importedMetadata}));
+  expect(result.upload.contentType).toBe('audio/mp4');
+  expect(result.item.type).toBe('audio/mp4');
+});
+test('Deleting a practice keeps its recording available in the library',async({page})=>{
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles({name:'keep-after-delete.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  await page.locator('#practice-form>button:not([type])').click();
+  await page.locator('#practice-list [data-delete="practice"]').click();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices.length)).toBe(0);
+  await page.locator('.nav [data-tab="media"]').click();
+  await expect(page.locator('#vzip-hub-list')).toContainText('keep-after-delete.wav');
+  await page.locator('#vzip-hub-list [data-action="play"]').click();
+  await expect.poll(()=>page.locator('#vzip-hub-list audio').evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
 });

@@ -94,18 +94,36 @@
   async function loadSaved() {
     const run = ++listRun;
     try {
-      const items = (await window.vzipReadMedia()).sort((a,b) => b.created-a.created);
+      let warning = '';
+      const map = new Map();
+      try { (await window.vzipReadMedia()).forEach(item => map.set(item.id, {...item, local:true})); }
+      catch (error) { warning = '기기 파일 확인 실패: ' + error.message; }
+      if (window.vzipCloudSignedIn?.() && window.vzipCloudMediaList) {
+        try {
+          (await window.vzipCloudMediaList()).forEach(item =>
+            map.set(item.id, {...map.get(item.id), ...item, cloud:true}));
+        } catch (error) { warning += (warning ? ' · ' : '') + '클라우드 목록 확인 실패: ' + error.message; }
+      }
+      const items = [...map.values()].sort((a,b) => b.created-a.created);
       if (run !== listRun) return;
       saved.replaceChildren();
       const heading = document.createElement('p');
       heading.className = 'muted'; heading.textContent = '이번 연습에 연결할 보관함 파일을 선택하세요. 같은 파일은 한 번만 합산해요.';
       saved.append(heading);
+      if (warning) {
+        const message = document.createElement('p'); message.className = 'muted'; message.setAttribute('role','status');
+        message.textContent = warning + ' · 다시 열면 재시도해요.'; saved.append(message);
+      }
+      if (!items.length) {
+        const empty = document.createElement('p'); empty.className = 'empty';
+        empty.textContent = '연결할 파일이 없어요. 위에서 녹음하거나 파일을 가져오세요.'; saved.append(empty);
+      }
       const list = document.createElement('div'); list.className = 'vzip-duration-list'; saved.append(list);
       for (const item of items) {
         const label = document.createElement('label'); label.className = 'vzip-duration-item';
         const check = document.createElement('input');
         check.type = 'checkbox'; check.value = item.id; check.checked = linked.has(item.id);
-        const name = document.createElement('span'); name.textContent = item.name;
+        const name = document.createElement('span'); name.textContent = (item.name || '제목 없음') + (item.cloud ? ' · 클라우드' : ' · 이 기기');
         label.append(check, name); list.append(label);
         check.onchange = async () => {
           check.disabled = true; busy('select:' + item.id, true);
@@ -153,6 +171,8 @@
     }
     loadSaved();
   });
+  for (const event of ['vzip:cloud-media-changed', 'vzip:media-updated', 'vzip:auth-changed'])
+    window.addEventListener(event, loadSaved);
   form.elements.minutes.addEventListener('input', calculate);
   window.addEventListener('vzip:practice-reset', () => {
     linked.clear(); input.value = ''; preview.textContent = '가져온 파일은 보관함에 저장하고 이번 연습에 연결해요.';
