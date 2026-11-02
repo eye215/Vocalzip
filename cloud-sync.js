@@ -4,7 +4,7 @@ const root=document.querySelector('#vzip-cloud-root');if(!root)return;
 const url='https://chxnbtiyuyhiywzeshis.supabase.co';
 const key='sb_publishable_GGxY7HzmyaYGG1Ho9Ir67A_SXXLzRFT';
 const dataKey='vocal-zip_mvp_v1',mediaDb='vocalzip_media_v1';
-const $=s=>root.querySelector(s);
+const $=s=>document.querySelector(s);
 root.insertAdjacentHTML('beforeend',`<div class="cloud-controls">
 <div id="cloud-signed-out"><label for="cloud-email">이메일</label><input id="cloud-email" type="email" autocomplete="email" placeholder="이메일 주소"><label for="cloud-password">비밀번호 (8자 이상)</label><div class="vzip-password-row"><input id="cloud-password" type="password" autocomplete="current-password" minlength="8" placeholder="비밀번호 입력"><button type="button" class="smallbtn" id="cloud-show-password" aria-label="비밀번호 표시">보기</button></div><div class="cloud-actions"><button class="btn" type="button" id="cloud-login">로그인</button><button class="btn secondary" type="button" id="cloud-signup">처음 가입하기</button></div><p class="muted">이미 이메일 링크로 가입했다면 비밀번호 재설정을 이용해 비밀번호를 만들 수 있어요.</p><button class="smallbtn" type="button" id="cloud-reset">비밀번호 재설정 메일 받기</button></div>
 <div id="cloud-signed-in" hidden><p id="cloud-user" class="muted"></p><p class="muted">처음 연결할 때는 어느 데이터를 사용할지 직접 선택해 주세요. 자동으로 기존 기록을 덮어쓰지 않아요.</p><div class="cloud-actions"><button type="button" class="btn" id="cloud-upload">이 기기 기록 → 클라우드</button><button type="button" class="btn secondary" id="cloud-download">클라우드 기록 → 이 기기</button><button type="button" class="btn secondary" id="cloud-media-upload">녹음·영상 클라우드 백업</button><button type="button" class="btn secondary" id="cloud-media-download">클라우드 녹음·영상 가져오기</button><button type="button" class="smallbtn" id="cloud-logout">로그아웃</button></div></div>
@@ -18,7 +18,9 @@ const authScreen=document.createElement('div');
 authScreen.id='vzip-auth-screen';
 authScreen.innerHTML='<div class="vzip-auth-wrap"><div class="vzip-auth-logo">VOCAL<span>.zip ♫</span></div><p class="vzip-auth-sub">나의 보컬 성장 기록</p><div class="vzip-auth-card"><h2>다시 만나서 반가워요 💜</h2><p class="vzip-auth-note">로그인하면 레슨과 연습 기록을 이어서 관리할 수 있어요.</p><div id="vzip-auth-fields"></div><p id="vzip-auth-message" role="status">로그인 상태를 확인하고 있어요…</p></div></div>';
 document.body.appendChild(authScreen);
-authScreen.querySelector('#vzip-auth-fields').appendChild($('#cloud-signed-out'));
+authScreen.querySelector('#vzip-auth-fields').appendChild(root.querySelector('#cloud-signed-out'));
+// After moving the form into the full-screen login, query it from its actual location.
+const authField=selector=>authScreen.querySelector(selector);
 function updateAuthScreen(){document.getElementById('vzip-boot-cover')?.remove();const signedIn=!!user;authScreen.hidden=signedIn;document.body.classList.toggle('vzip-auth-locked',!signedIn);$('#cloud-signed-out').hidden=signedIn;}
 
 const status=$('#cloud-status');let client,user=null,ready=false,uploadTimer=null,busy=false;
