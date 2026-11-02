@@ -61,7 +61,7 @@ window.vzipCloudImport=async function(file,info,onProgress){
   });
   upload.start();
  });
- const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),song:info.song||'',songId:info.songId||'',created:file.lastModified||Date.now(),type:file.type||'video/mp4',path,size:file.size};
+ const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),song:info.song||'',songId:info.songId||'',created:file.lastModified||Date.now(),type:file.type||info.type||'video/mp4',source:info.source||'import',path,size:file.size};
  const {error}=await client.from('vocal_media').upsert({id,user_id:user.id,metadata});
  if(error)throw Error('영상 업로드 완료, 기록 연결 실패: '+error.message);
  return metadata;
