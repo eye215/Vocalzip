@@ -2,7 +2,7 @@
 (()=>{'use strict';
 const root=document.querySelector('#vzip-cloud-root');if(!root)return;
 const url='https://chxnbtiyuyhiywzeshis.supabase.co';
-const key='sb_publishable_GGxY7HzmyaYGG1Ho9Ir67A_SXXLzRFT';
+const key='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E';
 const dataKey='vocal-zip_mvp_v1',mediaDb='vocalzip_media_v1';
 const $=s=>document.querySelector(s);
 root.insertAdjacentHTML('beforeend',`<div class="cloud-controls">
