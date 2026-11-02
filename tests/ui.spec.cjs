@@ -1,9 +1,10 @@
 const {test, expect} = require('@playwright/test');
-const cloudStub = `window.supabase={createClient:()=>({
+const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.supabase={createClient:()=>({
  auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),
  onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
- from:()=>{const chain={};for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
- chain[method]=()=>chain;chain.then=resolve=>resolve({data:[],error:null});return chain;}
+ storage:{from:()=>({upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
+ from:table=>{const chain={};for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
+ chain[method]=(...args)=>{if(method==='upsert')window.__cloudMetadata.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:[],error:null});return chain;}
 })};`;
 test.beforeEach(async ({page}) => {
   page.__vzipErrors=[];page.on('pageerror',error=>page.__vzipErrors.push(error.message));
@@ -108,4 +109,116 @@ test('Chromium fake-device capture waits for storage and links media', async ({p
   await save.click();
   const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0]);
   expect(stored.mediaIds).toHaveLength(1);expect(stored.mediaSeconds).toBeGreaterThan(0);
+});
+
+test('Camera capture saves playable video and releases preview tracks',async({page,browserName})=>{
+  test.skip(browserName!=='chromium','Uses Chromium virtual camera; not real iPhone hardware.');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#vzip-practice-capture [data-kind="video"]').click();
+  await page.locator('#vzip-capture-start').click();
+  await expect(page.locator('#vzip-capture-preview')).toBeVisible();
+  await expect(page.locator('#vzip-capture-stop')).toBeEnabled();
+  await page.waitForTimeout(1200);await page.locator('#vzip-capture-stop').click();
+  await expect(page.locator('#vzip-capture-status')).toContainText('저장 완료');
+  expect(await page.locator('#vzip-capture-preview').evaluate(el=>el.srcObject===null)).toBe(true);
+  await page.locator('#practice-form>button:not([type])').click();
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="practice"]').click();
+  await page.locator('.vzip-practice-files summary').click();
+  const video=page.locator('.vzip-practice-files video');await expect(video).toBeVisible();
+  await expect.poll(()=>video.evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
+});
+test('Denied permission restores controls and preserves practice input',async({page})=>{
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name="memo"]').fill('권한 거부 후 입력 유지');
+  await page.evaluate(()=>{navigator.mediaDevices.getUserMedia=async()=>{throw new DOMException('denied','NotAllowedError')}});
+  await page.locator('#vzip-capture-start').click();
+  await expect(page.locator('#vzip-capture-status')).toContainText('권한');
+  await expect(page.locator('#vzip-capture-start')).toBeEnabled();
+  await expect(page.locator('#practice-form>button:not([type])')).toBeEnabled();
+  await expect(page.locator('#practice-form [name="memo"]')).toHaveValue('권한 거부 후 입력 유지');
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+});
+test('Failed capture stays recoverable and retries with one attachment',async({page,browserName})=>{
+  test.skip(browserName!=='chromium','Requires virtual microphone.');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.evaluate(()=>{
+    const original=window.vzipStorePracticeMedia;let failed=false;
+    window.vzipStorePracticeMedia=async item=>{if(!failed){failed=true;throw new DOMException('disk full','QuotaExceededError')}return original(item)};
+  });
+  await page.locator('#vzip-capture-start').click();
+  await expect(page.locator('#vzip-capture-stop')).toBeEnabled();await page.waitForTimeout(1100);
+  await page.locator('#vzip-capture-stop').click();
+  await expect(page.locator('#vzip-capture-status')).toContainText('기기 저장 실패');
+  await expect(page.locator('#practice-form>button:not([type])')).toBeDisabled();
+  await expect(page.locator('#vzip-capture-recovery a[download]')).toBeVisible();
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+  await page.locator('#vzip-capture-retry').click();
+  await expect(page.locator('#vzip-capture-status')).toContainText('저장 완료');
+  await page.locator('#practice-form>button:not([type])').click();
+  const records=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices);
+  expect(records).toHaveLength(1);expect(records[0].mediaIds).toHaveLength(1);
+});
+test('Record storage failure keeps the form and rolls back the new record',async({page})=>{
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name="memo"]').fill('저장 실패 후 복구할 메모');
+  await page.evaluate(()=>{
+    window.__originalSet=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){if(key==='vocal-zip_mvp_v1')throw new DOMException('full','QuotaExceededError');return window.__originalSet.call(this,key,value)};
+  });
+  await page.locator('#practice-form>button:not([type])').click();
+  await expect(page.locator('#practice-form')).toBeVisible();
+  await expect(page.locator('#practice-form [name="memo"]')).toHaveValue('저장 실패 후 복구할 메모');
+  await page.evaluate(()=>{Storage.prototype.setItem=window.__originalSet});
+  await page.locator('#practice-form>button:not([type])').click();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices.length)).toBe(1);
+});
+test('Pending file storage blocks keyboard submission until attachment is durable',async({page})=>{
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.evaluate(()=>{
+    const original=window.vzipStorePracticeMedia;
+    window.vzipStorePracticeMedia=item=>new Promise((resolve,reject)=>{
+      window.__finishImport=()=>original(item).then(resolve,reject);
+    });
+  });
+  await page.locator('#practice-attachments').setInputFiles({name:'pending.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect.poll(()=>page.evaluate(()=>typeof window.__finishImport)).toBe('function');
+  await expect(page.locator('#practice-form>button:not([type])')).toBeDisabled();
+  await page.evaluate(()=>document.querySelector('#practice-form').requestSubmit());
+  expect(await page.evaluate(()=>(JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}').practices||[]).length)).toBe(0);
+  await page.evaluate(()=>window.__finishImport());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  await page.locator('#practice-form>button:not([type])').click();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0].mediaIds.length)).toBe(1);
+});
+test('Legacy ArrayBuffer audio decodes after reload and backup preserves its metadata',async({page})=>{
+  const bytes=[...wav()];
+  await page.evaluate(async bytes=>{
+    const db=await new Promise((resolve,reject)=>{
+      const request=indexedDB.open('vocalzip_media_v1',1);
+      request.onupgradeneeded=()=>request.result.createObjectStore('recordings',{keyPath:'id'});
+      request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+    });
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction('recordings','readwrite');
+      tx.objectStore('recordings').put({id:'legacy-a',name:'기존 녹음.wav',type:'audio/wav',source:'practice',
+        created:Date.now(),durationSeconds:1,bytes:new Uint8Array(bytes).buffer});
+      tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+    });db.close();
+  },bytes);
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vzip:media-saved',{detail:{id:'legacy-a',source:'practice',attachToPractice:true,durationSeconds:1}})));
+  await page.locator('#practice-form>button:not([type])').click();
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="practice"]').click();
+  await page.locator('.vzip-practice-files summary').click();
+  await expect.poll(()=>page.locator('.vzip-practice-files audio').evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
+  await page.locator('#vzip-open-settings').click();
+  await page.locator('#manage [data-ia-open="account"]').click();
+  await page.locator('#cloud-media-upload').click();
+  await expect(page.locator('#cloud-status')).toContainText('백업 1개 성공');
+  const uploaded=await page.evaluate(()=>({files:window.__cloudUploads,meta:window.__cloudMetadata}));
+  expect(uploaded.files[0].size).toBe(bytes.length);
+  const metadata=uploaded.meta.find(row=>row.table==='vocal_media').payload.metadata;
+  expect(metadata.source).toBe('practice');expect(metadata.durationSeconds).toBe(1);
 });
