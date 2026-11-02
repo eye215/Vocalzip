@@ -160,3 +160,18 @@ a{color:#7652d4}
  .nav button{width:100%!important;flex-direction:row!important;justify-content:flex-start!important;min-height:48px!important;font-size:13px!important;padding:11px!important}
  .nav .vzip-settings-nav{display:flex!important}
 }
+
+/* Desktop uses an in-flow glass tab bar; no fixed overlay over form controls. */
+@media(min-width:700px){
+ .app{max-width:840px!important;padding:30px 24px 90px!important}
+ .nav{
+  position:relative!important;top:auto!important;bottom:auto!important;left:auto!important;right:auto!important;
+  width:100%!important;max-width:none!important;min-height:0!important;transform:none!important;
+  display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  flex-direction:row!important;margin:0 0 24px!important;padding:7px!important;gap:4px!important;
+  background:rgba(250,248,255,.90)!important;border:1px solid rgba(255,255,255,.95)!important;
+  border-radius:20px!important
+ }
+ .nav button{width:auto!important;min-height:52px!important;flex-direction:column!important;justify-content:center!important;padding:7px 3px!important;font-size:12px!important}
+ .nav .vzip-settings-nav{display:none!important}
+}
