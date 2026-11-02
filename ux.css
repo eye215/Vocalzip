@@ -48,3 +48,14 @@ html{scroll-padding-bottom:105px}
 .card form textarea{min-height:100px}
 }
 @media(max-width:390px){.app{padding-left:12px;padding-right:12px}.card{padding:18px 15px}.nav{left:8px!important;right:8px!important;width:calc(100% - 16px)!important}.nav button{font-size:10px!important}.nav-icon{font-size:19px}.top h1{font-size:27px}}
+
+/* v1.1 — mobile recording metadata editor */
+.vzip-editor[hidden]{display:none!important}
+.vzip-editor{position:fixed;inset:0;z-index:999;display:flex;align-items:flex-end;justify-content:center;background:rgba(3,4,17,.78);padding:14px 14px calc(18px + env(safe-area-inset-bottom,0px));-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.vzip-editor-card{width:100%;max-width:500px;max-height:90dvh;overflow-y:auto;border:1px solid rgba(215,202,255,.27);border-radius:24px;background:linear-gradient(160deg,#302a58,#171b37);padding:24px;box-shadow:0 28px 80px rgba(0,0,0,.5)}
+.vzip-editor-card h3{margin:0 0 18px;font-size:21px;color:#fff}
+.vzip-editor-card label{display:block;margin:15px 0 7px;font-size:13px;color:#eeeaff}
+.vzip-editor-card input,.vzip-editor-card select{width:100%;min-height:50px;font-size:16px}
+.vzip-editor-card .buttons{display:grid;grid-template-columns:1fr 1fr;margin-top:22px}
+.vzip-editor-card .btn{min-height:48px}
+@media(min-width:721px){.vzip-editor{align-items:center}}
