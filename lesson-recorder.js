@@ -1,8 +1,9 @@
 /* One recorder shared between lesson and practice, without duplicate IDs. */
 (()=>{'use strict';
 const $=s=>document.querySelector(s),rec=$('#vzip-recorder'),lesson=$('#lessons'),practice=$('#practice');if(!rec||!lesson||!practice)return;
-const lessonSlot=$('#vzip-lesson-recorder-slot'),practiceForm=$('#practice-form');
-if(!lessonSlot||!practiceForm)return;
+let lessonSlot=$('#vzip-lesson-recorder-slot');const practiceForm=$('#practice-form');
+if(!practiceForm)return;
+if(!lessonSlot){lessonSlot=document.createElement('div');lessonSlot.id='vzip-lesson-recorder-slot';const lessonForm=$('#lesson-form');if(lessonForm)lessonForm.prepend(lessonSlot);else lesson.prepend(lessonSlot)}
 const practiceHost=document.createElement('div');practiceHost.id='vzip-practice-recorder-slot';practiceForm.prepend(practiceHost);
 const oldLibrary=rec.querySelector('#vzip-library')?.closest('.item');const oldImport=rec.querySelector('.vzip-import-box');if(oldImport)oldImport.hidden=true;if(oldLibrary)oldLibrary.hidden=true;
 const move=tab=>{const target=tab==='lessons'?lessonSlot:practiceHost;if(rec.parentElement!==target)target.append(rec);rec.hidden=false;target.hidden=false;rec.style.display='block';rec.querySelector('h2').textContent=tab==='lessons'?'🎙️ 레슨 녹음 · 녹화':'🎙️ 연습 녹음 · 녹화'};
