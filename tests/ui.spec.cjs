@@ -128,12 +128,13 @@ test('Camera capture saves playable video and releases preview tracks',async({pa
   const video=page.locator('.vzip-practice-files video');await expect(video).toBeVisible();
   await expect.poll(()=>video.evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
 });
-test('Denied permission restores controls and preserves practice input',async({page})=>{
+test('Denied or unavailable capture preserves controls and practice input',async({page})=>{
   await page.locator('.hero [data-go-tab="practice"]').click();
   await page.locator('#practice-form [name="memo"]').fill('권한 거부 후 입력 유지');
+  const supported=await page.evaluate(()=>!!window.MediaRecorder);
   await page.evaluate(()=>{navigator.mediaDevices.getUserMedia=async()=>{throw new DOMException('denied','NotAllowedError')}});
   await page.locator('#vzip-capture-start').click();
-  await expect(page.locator('#vzip-capture-status')).toContainText('권한');
+  await expect(page.locator('#vzip-capture-status')).toContainText(supported?'권한':'지원하지');
   await expect(page.locator('#vzip-capture-start')).toBeEnabled();
   await expect(page.locator('#practice-form>button:not([type])')).toBeEnabled();
   await expect(page.locator('#practice-form [name="memo"]')).toHaveValue('권한 거부 후 입력 유지');
