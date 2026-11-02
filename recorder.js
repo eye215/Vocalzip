@@ -43,7 +43,39 @@ async function refresh(){try{const items=(await all()).sort((a,b)=>b.created-a.c
 const importInput=$('#vzip-import-files'),videoInput=$('#vzip-import-videos'),importSong=$('#vzip-import-song'),importStatus=$('#vzip-import-status');
 function updateImportSongs(){const current=importSong.value;const songs=songCatalog().songs||[];importSong.replaceChildren(new Option('곡 미지정 · 나중에 연결',''));songs.forEach(song=>importSong.add(new Option(song.title+(song.show?' — '+song.show:''),song.id)));if(songs.some(song=>song.id===current))importSong.value=current}
 importSong.addEventListener('focus',updateImportSongs);
-async function importSelected(input){const files=[...(input.files||[])];if(!files.length)return;const allowed=files.filter(f=>f.type.startsWith('audio/')||f.type.startsWith('video/')||/\\.(m4a|mp3|wav|mp4|mov|webm|aac|ogg|flac)$/i.test(f.name));const skipped=files.length-allowed.length;if(!allowed.length){importStatus.textContent='오디오 또는 영상 파일을 선택해 주세요.';input.value='';return}const songs=songCatalog().songs||[],song=songs.find(x=>x.id===importSong.value);let success=0,failed=0;input.disabled=true;importStatus.textContent=allowed.length+'개 파일 저장 중…';for(const file of allowed){try{const ext=file.name.split('.').pop()?.toLowerCase();const type=file.type||(ext==='mov'?'video/quicktime':ext==='mp4'?'video/mp4':ext==='m4a'?'audio/mp4':ext==='mp3'?'audio/mpeg':ext==='wav'?'audio/wav':ext==='webm'?'audio/webm':'application/octet-stream');await put({id:crypto.randomUUID?.()||String(Date.now())+'-'+success,name:safeName(file.name.replace(/\\.[^.]+$/,'')),created:file.lastModified||Date.now(),importedAt:Date.now(),songId:song?.id||'',song:song?(song.title+(song.show?' — '+song.show:'')):'',type,blob:file});success++}catch(e){failed++;importStatus.textContent='저장 중: '+success+'/'+allowed.length+'개 · 실패 '+failed+'개 ('+e.message+')'}if(success%3===0)importStatus.textContent='저장 중… '+(success+failed)+'/'+allowed.length+'개'}input.disabled=false;input.value='';importStatus.textContent='✓ '+success+'개 저장 완료'+(failed?' · 실패 '+failed+'개 (저장 공간 확인 필요)':'')+(skipped?' · 지원하지 않는 형식 '+skipped+'개 제외':'')+'. 곡명은 보관함에서 개별 수정할 수 있어요.';await refresh()}
+async function importSelected(input){
+ const files=Array.from(input.files||[]);if(!files.length)return;
+ const allowed=files.filter(f=>f.type.startsWith('audio/')||f.type.startsWith('video/')||/\.(m4a|mp3|wav|mp4|mov|webm|aac|ogg|flac)$/i.test(f.name));
+ const skipped=files.length-allowed.length;
+ if(!allowed.length){importStatus.textContent='음성 또는 동영상 파일을 선택해 주세요.';input.value='';return}
+ const songs=songCatalog().songs||[],song=songs.find(x=>x.id===importSong.value);
+ const cloud=!!window.vzipCloudSignedIn?.();
+ if(!cloud&&allowed.some(f=>f.type.startsWith('video/')||/\.(mov|mp4|webm)$/i.test(f.name))){
+  if(!confirm('클라우드에 로그인하지 않았어요. 동영상을 이 아이폰 브라우저에만 저장할까요? 큰 영상은 저장 공간 부족으로 실패할 수 있어요.\n\n취소하면 관리 탭에서 로그인한 뒤 클라우드로 바로 업로드할 수 있어요.')){input.value='';return}
+ }
+ let success=0,failed=0,errors=[];input.disabled=true;
+ try{
+  for(const file of allowed){
+   const n=success+failed+1;
+   importStatus.textContent='파일 '+n+'/'+allowed.length+' · '+file.name+' 준비 중…';
+   try{
+    const ext=(file.name.split('.').pop()||'').toLowerCase();
+    const type=file.type||(ext==='mov'?'video/quicktime':ext==='mp4'?'video/mp4':ext==='m4a'?'audio/mp4':ext==='mp3'?'audio/mpeg':ext==='wav'?'audio/wav':'application/octet-stream');
+    const name=safeName(file.name.replace(/\.[^.]+$/,''));
+    if(cloud){
+     await window.vzipCloudImport(file,{name,songId:song?.id||'',song:song?(song.title+(song.show?' — '+song.show:'')):'',type},percent=>{
+      importStatus.textContent='☁️ '+n+'/'+allowed.length+' · '+file.name+' '+percent+'% 업로드 중…';
+     });
+    }else{
+     await put({id:crypto.randomUUID?.()||String(Date.now())+'-'+n,name,created:file.lastModified||Date.now(),importedAt:Date.now(),songId:song?.id||'',song:song?(song.title+(song.show?' — '+song.show:'')):'',type,blob:file});
+    }
+    success++;
+   }catch(e){failed++;errors.push(file.name+': '+e.message);importStatus.textContent='실패 '+failed+'개 · '+e.message}
+  }
+ }finally{input.disabled=false;input.value=''}
+ importStatus.textContent='✓ '+success+'개 '+(cloud?'클라우드 업로드':'기기 저장')+' 완료'+(failed?' · 실패 '+failed+'개: '+errors.slice(0,2).join(' / '):'')+(skipped?' · 형식 제외 '+skipped+'개':'')+(cloud?' · 관리 → 클라우드 녹음·영상 가져오기로 이 기기 보관함에 내려받을 수 있어요.':'');
+ await refresh();
+}
 importInput.addEventListener('change',()=>importSelected(importInput));
 videoInput.addEventListener('change',()=>importSelected(videoInput));
 updateImportSongs();
