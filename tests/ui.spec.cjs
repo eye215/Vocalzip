@@ -219,7 +219,7 @@ test('Legacy ArrayBuffer audio decodes after reload and backup preserves its met
   await page.locator('#cloud-media-upload').click();
   await expect(page.locator('#cloud-status')).toContainText('백업 1개 성공');
   const uploaded=await page.evaluate(()=>({files:window.__cloudUploads,meta:window.__cloudMetadata}));
-  expect(uploaded.files[0].size).toBe(bytes.length);expect(uploaded.files[0].path).toMatch(/\\.wav$/);
+  expect(uploaded.files[0].size).toBe(bytes.length);expect(uploaded.files[0].path).toBe('ui-test-user/legacy-a.wav');
   const metadata=uploaded.meta.find(row=>row.table==='vocal_media').payload.metadata;
   expect(metadata.source).toBe('practice');expect(metadata.durationSeconds).toBe(1);
   await page.evaluate(()=>{window.__cloudRows=[{id:'legacy-a',metadata:{id:'legacy-a',path:'ui-test-user/legacy-a.webm'}}]});
