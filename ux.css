@@ -68,3 +68,13 @@ html{scroll-padding-bottom:105px}
 .vzip-import-box select{min-height:48px}
 .vzip-file-picker{display:block!important;text-align:center;cursor:pointer;margin:15px 0 10px!important;padding:14px!important}
 #vzip-import-status{margin-bottom:0;overflow-wrap:anywhere}
+
+/* v1.3 — cloud account and synchronization */
+#vzip-cloud-root{border:1px solid rgba(148,229,224,.25)}
+#vzip-cloud-root .cloud-controls{margin-top:16px}
+#vzip-cloud-root #cloud-signed-out[hidden],#vzip-cloud-root #cloud-signed-in[hidden]{display:none!important}
+#vzip-cloud-root input{width:100%;min-height:49px;font-size:16px;margin:8px 0 12px}
+#vzip-cloud-root .cloud-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
+#vzip-cloud-root .cloud-actions .btn{min-width:0;min-height:50px;font-size:12px;white-space:normal;line-height:1.5;padding:11px 8px}
+#vzip-cloud-root .cloud-actions .smallbtn{grid-column:span 2}
+#cloud-status{padding:12px;border-radius:12px;background:rgba(125,206,205,.08);border:1px solid rgba(125,206,205,.16);overflow-wrap:anywhere}
