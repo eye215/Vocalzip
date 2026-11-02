@@ -19,7 +19,7 @@ authScreen.id='vzip-auth-screen';
 authScreen.innerHTML='<div class="vzip-auth-wrap"><div class="vzip-auth-logo">VOCAL<span>.zip ♫</span></div><p class="vzip-auth-sub">나의 보컬 성장 기록</p><div class="vzip-auth-card"><h2>다시 만나서 반가워요 💜</h2><p class="vzip-auth-note">로그인하면 레슨과 연습 기록을 이어서 관리할 수 있어요.</p><div id="vzip-auth-fields"></div><p id="vzip-auth-message" role="status">로그인 상태를 확인하고 있어요…</p></div></div>';
 document.body.appendChild(authScreen);
 authScreen.querySelector('#vzip-auth-fields').appendChild($('#cloud-signed-out'));
-function updateAuthScreen(){const signedIn=!!user;authScreen.hidden=signedIn;document.body.classList.toggle('vzip-auth-locked',!signedIn);$('#cloud-signed-out').hidden=signedIn;}
+function updateAuthScreen(){document.getElementById('vzip-boot-cover')?.remove();const signedIn=!!user;authScreen.hidden=signedIn;document.body.classList.toggle('vzip-auth-locked',!signedIn);$('#cloud-signed-out').hidden=signedIn;}
 
 const status=$('#cloud-status');let client,user=null,ready=false,uploadTimer=null,busy=false;
 function say(message){status.textContent=message;const a=document.querySelector('#vzip-auth-message');if(a)a.textContent=message}
@@ -73,5 +73,5 @@ $('#cloud-signup').onclick=async()=>{const {email,password}=credentials();if(!em
 $('#cloud-reset').onclick=async()=>{const email=$('#cloud-email').value.trim();if(!email)return say('먼저 이메일을 입력해 주세요.');say('비밀번호 재설정 메일 요청 중…');const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});say(error?'재설정 메일 발송 실패: '+error.message:'✓ 비밀번호 재설정 메일을 확인해 주세요.')};
 client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){setTimeout(async()=>{const password=prompt('새 비밀번호를 8자 이상 입력해 주세요.');if(!password)return;if(password.length<8){say('비밀번호는 8자 이상이어야 해요.');return}const {error}=await client.auth.updateUser({password});say(error?'비밀번호 변경 실패: '+error.message:'✓ 비밀번호가 설정됐어요. 다음부터 이메일과 비밀번호로 로그인하세요.')},200)}});
 $('#cloud-logout').onclick=async()=>{await client.auth.signOut();localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=async()=>{if(!confirm('이 기기 레슨·연습 기록을 클라우드에 저장할까요? 클라우드의 기존 기록이 있다면 덮어씁니다.'))return;await upload()};$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',()=>{if(!ready||!user)return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>upload(true),900)});}
-boot().catch(e=>say('연결 오류: '+e.message));
+boot().catch(e=>{say('연결 오류: '+e.message);document.getElementById('vzip-boot-cover')?.remove()});
 })();
