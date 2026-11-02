@@ -10,6 +10,8 @@ document.querySelectorAll('[data-go-tab]').forEach(button=>{
     window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   });
 });
+const settingsButton=document.querySelector('#vzip-open-settings');
+if(settingsButton){settingsButton.addEventListener('click',()=>{const settingsTab=document.querySelector('.nav button[data-tab=\"manage\"]');if(settingsTab){settingsTab.click();window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}});}
 const nav=document.querySelector('.nav');
 if(nav){
   nav.setAttribute('aria-label','VOCAL.zip 주요 메뉴');
