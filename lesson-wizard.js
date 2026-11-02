@@ -18,7 +18,7 @@ const categoryLabel=children[children.indexOf(category.parentElement)-1];
 if(categoryLabel?.tagName==='LABEL'){steps[0].nodes=children.slice(0,children.indexOf(categoryLabel));steps[2].nodes=children.slice(children.indexOf(categoryLabel),children.indexOf(save))}
 const wrapper=document.createElement('div');wrapper.className='lesson-wizard';
 const progress=document.createElement('div');progress.className='wizard-progress';progress.setAttribute('aria-label','레슨 기록 진행 단계');
-const panels=steps.map((step,i)=>{const p=document.createElement('section');p.className='wizard-panel';p.dataset.step=i;p.setAttribute('aria-label',step.title);const head=document.createElement('div');head.className='wizard-heading';head.innerHTML='<span class="wizard-count">STEP '+(i+1)+' / 4</span><h3>'+step.title+'</h3><p>'+step.hint+'</p>';p.append(head);step.nodes.forEach(n=>p.append(n));return p});
+const panels=steps.map((step,i)=>{const p=document.createElement('div');p.className='wizard-panel';p.dataset.step=i;p.setAttribute('aria-label',step.title);const head=document.createElement('div');head.className='wizard-heading';head.innerHTML='<span class="wizard-count">STEP '+(i+1)+' / 4</span><h3>'+step.title+'</h3><p>'+step.hint+'</p>';p.append(head);step.nodes.forEach(n=>p.append(n));return p});
 const foot=document.createElement('div');foot.className='wizard-actions';const prev=document.createElement('button');prev.type='button';prev.className='btn secondary';prev.textContent='← 이전';const next=document.createElement('button');next.type='button';next.className='btn';next.textContent='다음 단계 →';foot.append(prev,next);const summary=document.createElement('div');summary.className='wizard-summary';panels[3].append(summary,save);form.append(progress,wrapper,foot);panels.forEach(p=>wrapper.append(p));
 const recorder=document.createElement('div');recorder.className='wizard-record-note';recorder.innerHTML='<b>🎙️ 레슨 녹음·녹화</b><p>이 단계에서 여러 번 녹음하고 종료하면 각각 자동 저장돼요. 녹음 파일은 보관함에서도 확인할 수 있어요.</p><div id="vzip-lesson-recorder-slot"></div>';panels[1].append(recorder);
 let index=0;
@@ -52,6 +52,7 @@ next.onclick=()=>{if(index===0&&!date.value){date.reportValidity();return}show(i
 const editButtons=document.createElement('div');editButtons.className='wizard-review-edit';
 [['기본 정보 수정',0],['녹음 확인',1],['레슨 내용·숙제 수정',2]].forEach(([label,n])=>{const button=document.createElement('button');button.type='button';button.className='smallbtn';button.textContent='✎ '+label;button.onclick=()=>{show(n);queueDraft()};editButtons.append(button)});
 panels[3].insertBefore(editButtons,summary);
-form.addEventListener('submit',e=>{if(index!==3){e.preventDefault();e.stopImmediatePropagation();show(3);return}clearTimeout(draftTimer);sessionStorage.removeItem(draftKey);setTimeout(()=>{draftText.textContent='작성 내용은 자동 임시 저장돼요';show(0)},0)},true);
+form.addEventListener('submit',e=>{if(index!==3){e.preventDefault();e.stopImmediatePropagation();show(3);return}},true);
+window.addEventListener('vzip:lesson-saved',()=>{clearTimeout(draftTimer);sessionStorage.removeItem(draftKey);draftText.textContent='작성 내용은 자동 임시 저장돼요';show(0)});
 const restored=restoreDraft();show(restored===false?0:restored);
 })();

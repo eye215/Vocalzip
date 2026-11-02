@@ -1,43 +1,171 @@
-/* VOCAL.zip v3 — real information architecture; existing forms/data untouched. */
-(()=>{'use strict';
-const $=s=>document.querySelector(s), nav=$('.nav');
-const sections={home:$('#home'),lessons:$('#lessons'),practice:$('#practice'),media:$('#media'),archive:$('#archive'),manage:$('#manage')};
-let route='home';
-const head=(eyebrow,title,desc)=>{const el=document.createElement('div');el.className='vzip-page-head';el.innerHTML='<div class="vzip-page-eyebrow">'+eyebrow+'</div><h2>'+title+'</h2><p>'+desc+'</p>';return el};
-const action=(label,fn,kind='primary')=>{const b=document.createElement('button');b.type='button';b.className='vzip-ia-action '+kind;b.textContent=label;b.addEventListener('click',fn);return b};
-const panel=(title,subtitle)=>{const d=document.createElement('div');d.className='vzip-ia-panel';d.innerHTML='<h3>'+title+'</h3><p>'+subtitle+'</p>';return d};
-const showTab=tab=>{nav?.querySelector('button[data-tab="'+tab+'"]')?.click();route=tab;document.body.dataset.vzipPage=tab;window.scrollTo(0,0)};
-function go(tab,sub){showTab(tab);if(sub){const btn=sections[tab]?.querySelector('[data-ia-open="'+sub+'"]');btn?.click()}}
-const home=sections.home;const homeCards=[...home.querySelectorAll(':scope > .card')];const backup=homeCards.find(x=>x.querySelector('#export'));if(backup){backup.classList.add('vzip-settings-backup');sections.manage.append(backup)}
-home.prepend(head('TODAY · VOCAL.zip','오늘의 보컬','오늘은 어떤 목소리를 남길까요?'));
-const shortcuts=document.createElement('div');shortcuts.className='vzip-shortcuts';shortcuts.append(action('🎤 연습 기록',()=>go('practice','new')),action('📖 레슨 기록',()=>go('lessons','new')),action('🎵 기존 파일 올리기',()=>{go('media');setTimeout(()=>$('#vzip-hub-upload')?.click(),100)},'secondary'),action('📈 성장 확인',()=>go('archive'),'secondary'));home.querySelector('.vzip-page-head').after(shortcuts);
-const hero=home.querySelector('.hero');if(hero)hero.classList.add('vzip-home-hero');
-const manage=sections.manage;
-manage.prepend(head('SETTINGS','설정','계정, 곡, 연습 항목과 백업을 관리해요.'));
-const settingsCards=[...manage.querySelectorAll(':scope > .card')];const config=[
-{key:'account',label:'👤 계정 · 클라우드',desc:'로그인 상태, 동기화 및 녹음 백업',find:el=>!!el.querySelector('#vzip-cloud-root')||el.id==='vzip-cloud-root'},
-{key:'songs',label:'🎼 연습곡 관리',desc:'곡 추가 및 목록 관리',find:el=>!!el.querySelector('#song-form')},
-{key:'categories',label:'🎯 연습 항목 관리',desc:'발성 · 세부 연습 항목 수정',find:el=>!!el.querySelector('#manage-category')},
-{key:'backup',label:'📦 데이터 백업',desc:'기록 내보내기 · 복원',find:el=>!!el.querySelector('#export')}];
-const settingsMenu=document.createElement('div');settingsMenu.className='vzip-ia-menu';manage.querySelector('.vzip-page-head').after(settingsMenu);
-const settingsDetail=document.createElement('div');settingsDetail.className='vzip-ia-detail';settingsMenu.after(settingsDetail);
-function settingsOpen(key){settingsMenu.hidden=true;settingsDetail.hidden=false;settingsDetail.replaceChildren();settingsDetail.append(action('← 설정 목록',settingsList,'back'));const cfg=config.find(c=>c.key===key);if(!cfg)return;settingsDetail.append(head('SETTINGS',cfg.label,cfg.desc));const match=[...manage.querySelectorAll(':scope > .card'),...manage.querySelectorAll('.vzip-settings-fold')].find(x=>cfg.find(x)||!!x.querySelector(cfg.key==='account'?'#vzip-cloud-root':cfg.key==='songs'?'#song-form':cfg.key==='categories'?'#manage-category':'#export'));if(match){if(match.tagName==='DETAILS')match.open=true;settingsDetail.append(match)}else{const original=settingsCards.find(cfg.find);if(original)settingsDetail.append(original)}window.scrollTo(0,0)}
-function settingsList(){settingsDetail.hidden=true;settingsMenu.hidden=false;window.scrollTo(0,0)}
-for(const cfg of config){const b=document.createElement('button');b.type='button';b.className='vzip-ia-menu-row';b.innerHTML='<span><strong>'+cfg.label+'</strong><small>'+cfg.desc+'</small></span><b>›</b>';b.dataset.iaOpen=cfg.key;b.onclick=()=>settingsOpen(cfg.key);settingsMenu.append(b)}settingsList();
-const topSettings=$('#vzip-open-settings');topSettings?.addEventListener('click',()=>{showTab('manage');settingsList()});
-nav?.querySelector('button[data-tab="manage"]')?.addEventListener('click',settingsList);
-for(const tab of ['lessons','practice']){const section=sections[tab];section.prepend(head(tab==='lessons'?'LESSON JOURNAL':'PRACTICE JOURNAL',tab==='lessons'?'레슨':'연습',tab==='lessons'?'배운 내용과 숙제를 한곳에서 관리해요.':'연습 시간과 달라진 점을 기록해요.'));const formCard=section.querySelector(':scope > .card');const history=[...section.querySelectorAll(':scope > .card')].filter(x=>x!==formCard);const controls=document.createElement('div');controls.className='vzip-ia-segment';controls.append(action('기록 보기',()=>toggle(false),'segment'),action(tab==='lessons'?'＋ 레슨 작성':'＋ 연습 작성',()=>toggle(true),'segment'));section.querySelector('.vzip-page-head').after(controls);function toggle(edit){formCard.hidden=!edit;history.forEach(x=>x.hidden=edit);[...controls.children].forEach((b,i)=>b.classList.toggle('is-active',i===(edit?1:0)));window.scrollTo(0,0)}toggle(false);controls.children[1].dataset.iaOpen='new';section.querySelector('form')?.addEventListener('submit',()=>setTimeout(()=>toggle(false),250))}
-const media=sections.media;media.prepend(head('YOUR LIBRARY','보관함','녹음·영상 업로드, 재생, 개별 관리. 파일을 누르면 비교를 시작해요.'));const oldMediaIntro=$('#vzip-media-page-head');if(oldMediaIntro)oldMediaIntro.remove();
-const archive=sections.archive;archive.prepend(head('GROWTH','성장','목소리의 변화를 비교하고 기록으로 남겨요.'));
-const oldCompare=archive.querySelector('.vzip-legacy-compare');if(oldCompare)oldCompare.hidden=true;
-const saved=$('#vzip-saved-reports')?.closest('.card');const growthTimeline=archive.querySelector('#archive-timeline')?.closest('.card');const growthArchive=archive.querySelector('#archive-song')?.closest('.card');
-const reportPage=document.createElement('div');reportPage.id='vzip-ia-reports';reportPage.hidden=true;archive.append(reportPage);if(saved)reportPage.append(saved);
-const growthMain=document.createElement('div');growthMain.id='vzip-ia-growth-main';archive.querySelector('.vzip-page-head').after(growthMain);const growthActions=panel('나의 성장','녹음을 비교하거나 저장한 결과를 확인하세요.');growthActions.classList.add('vzip-growth-actions');growthActions.append(action('🎧 새 비교 시작',()=>go('media')),action('📊 저장된 리포트',()=>openReports(),'secondary'));growthMain.append(growthActions);if(growthArchive)growthMain.append(growthArchive);if(growthTimeline)growthMain.append(growthTimeline);
-function openReports(){growthMain.hidden=true;reportPage.hidden=false;archive.querySelector('.vzip-page-head').hidden=true;if(!reportPage.querySelector('.vzip-report-back'))reportPage.prepend(action('← 성장으로',closeReports,'back'));window.scrollTo(0,0)}
-function closeReports(){growthMain.hidden=false;reportPage.hidden=true;archive.querySelector('.vzip-page-head').hidden=false;window.scrollTo(0,0)}
-window.vzipOpenReports=openReports;
-const cloudRoot=$('#vzip-cloud-root');if(cloudRoot){const oldFold=cloudRoot.closest('.vzip-settings-fold');if(oldFold){oldFold.open=true;oldFold.querySelector('summary')?.remove()}}
-nav?.querySelectorAll('button[data-tab]').forEach(b=>b.addEventListener('click',()=>{route=b.dataset.tab;document.body.dataset.vzipPage=route;if(route==='manage')settingsList();if(route==='archive')closeReports();window.scrollTo(0,0)}));
-document.querySelectorAll('[data-go-tab]').forEach(b=>b.addEventListener('click',()=>{const tab=b.dataset.goTab;if(tab==='lessons'||tab==='practice')setTimeout(()=>sections[tab]?.querySelector('[data-ia-open="new"]')?.click(),0)}));
-document.body.dataset.vzipPage='home';
+/* Screen structure. Existing forms stay mounted to preserve their values and handlers. */
+(() => {
+  'use strict';
+  const $ = selector => document.querySelector(selector);
+  const data = () => { try { return JSON.parse(localStorage.getItem('vocal-zip_mvp_v1') || '{}'); } catch { return {}; } };
+  const make = (tag, className, text) => {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+  };
+  function heading(section, eyebrow, title, description) {
+    const head = make('div', 'vzip-page-head');
+    const h2 = make('h2', '', title); h2.tabIndex = -1;
+    h2.id = section.id + '-heading'; section.setAttribute('aria-labelledby', h2.id);
+    head.append(make('div', 'vzip-page-eyebrow', eyebrow), h2, make('p', '', description));
+    section.prepend(head); return head;
+  }
+  function button(text, run, className = 'secondary') {
+    const element = make('button', 'vzip-ia-action ' + className, text);
+    element.type = 'button'; element.addEventListener('click', run); return element;
+  }
+  const home = $('#home'), manage = $('#manage');
+  const backup = $('#export')?.closest('.card');
+  if (backup) manage.append(backup);
+  heading(home, 'MY VOCAL JOURNAL', '오늘의 연습', '작은 연습을 쌓아, 나만의 목소리로.');
+  const hero = home.querySelector('.hero');
+  if (hero) {
+    const title = hero.querySelector('h2');
+    title.textContent = '오늘도, 한 소절 더.';
+    hero.querySelector('.hero-eyebrow').textContent = 'DAILY PRACTICE';
+    hero.querySelector('p').textContent = '녹음부터 연습 메모까지 한 번에 남겨보세요.';
+    hero.querySelector('.primary').textContent = '＋ 연습 시작하기';
+    hero.querySelector('.ghost').textContent = '레슨 기록하기';
+    hero.querySelector('.hero-wave')?.setAttribute('aria-hidden', 'true');
+  }
+  const insight = make('div', 'card vzip-weekly');
+  insight.append(make('h2', '', '이번 주 연습'));
+  const chart = make('div', 'vzip-week-bars'); chart.setAttribute('aria-label', '이번 주 날짜별 연습 시간');
+  const weekText = make('p', 'muted');
+  insight.append(weekText, chart);
+  home.querySelector('#recent')?.closest('.card')?.before(insight);
+  function updateWeek() {
+    const state = data(), records = state.practices || [], now = new Date();
+    $('#recent')?.classList.toggle('empty', !(records.length || state.lessons?.length));
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const days = Array.from({length: 7}, (_, index) => {
+      const date = new Date(start); date.setDate(start.getDate() + index);
+      const key = date.toLocaleDateString('sv-SE');
+      const minutes = records.filter(record => record.date === key).reduce((sum, record) =>
+        sum + (Number.isFinite(Number(record.minutes)) ? Math.max(0, Number(record.minutes)) : 0), 0);
+      return {date, minutes};
+    });
+    const total = days.reduce((sum, day) => sum + day.minutes, 0);
+    weekText.textContent = Math.round(total) + '분 · ' + days.filter(day => day.minutes > 0).length + '일의 기록';
+    const maximum = Math.max(30, ...days.map(day => day.minutes));
+    chart.replaceChildren();
+    days.forEach(({date, minutes}, index) => {
+      const column = make('div', 'vzip-week-day');
+      column.setAttribute('aria-label', date.toLocaleDateString('ko-KR') + ' ' + minutes + '분');
+      const bar = make('div', 'vzip-week-bar');
+      bar.style.setProperty('--level', String(Math.max(0, minutes / maximum)));
+      bar.classList.toggle('is-empty', minutes === 0);
+      column.append(make('span', 'vzip-week-value', minutes ? String(Math.round(minutes)) : '—'),
+        bar, make('span', '', ['월', '화', '수', '목', '금', '토', '일'][index]));
+      chart.append(column);
+    });
+  }
+  const journalStates = {};
+  for (const [tab, title, description] of [
+    ['lessons', '레슨 노트', '배운 내용과 다음 연습의 과제를 정리해요.'],
+    ['practice', '연습 기록', '보컬 트레이닝과 곡 연습을 차곡차곡 남겨요.']
+  ]) {
+    const section = $('#' + tab), form = $('#' + (tab === 'lessons' ? 'lesson' : 'practice') + '-form');
+    const formCard = form.closest('.card');
+    heading(section, tab === 'lessons' ? 'LESSON NOTES' : 'PRACTICE LOG', title, description);
+    const history = make('div', 'vzip-journal-history');
+    [...section.querySelectorAll(':scope > .card')].filter(card =>
+      card !== formCard && card.id !== 'vzip-recorder').forEach(card => history.append(card));
+    section.append(history);
+    const controls = make('div', 'vzip-ia-segment');
+    const list = button('기록 목록', () => show(false));
+    const write = button(tab === 'lessons' ? '＋ 레슨 작성' : '＋ 연습 작성', () => show(true));
+    write.dataset.iaOpen = 'new'; controls.append(list, write);
+    section.querySelector('.vzip-page-head').after(controls);
+    const back = button('← 기록 목록으로', () => show(false), 'back');
+    back.dataset.iaBack = tab; formCard.prepend(back);
+    function show(edit) {
+      formCard.hidden = !edit; history.hidden = edit;
+      list.setAttribute('aria-pressed', String(!edit)); write.setAttribute('aria-pressed', String(edit));
+      list.classList.toggle('is-active', !edit); write.classList.toggle('is-active', edit);
+      if (edit) {
+        formCard.scrollIntoView({block: 'start'});
+        formCard.querySelector('h2')?.setAttribute('tabindex', '-1');
+        formCard.querySelector('h2')?.focus({preventScroll: true});
+      }
+    }
+    journalStates[tab] = show;
+    window.addEventListener(tab === 'lessons' ? 'vzip:lesson-saved' : 'vzip:practice-saved', () => show(false));
+    show(false);
+  }
+  heading(manage, 'YOUR WORKSPACE', '설정', '계정과 동기화, 곡과 백업을 관리해요.');
+  const menu = make('div', 'vzip-ia-menu'), detail = make('div', 'vzip-ia-detail');
+  manage.querySelector('.vzip-page-head').after(menu, detail);
+  const cards = [...manage.querySelectorAll(':scope > .card')];
+  const settings = [
+    ['account', '계정 · 클라우드', '로그인, 기록 동기화와 미디어 백업', card => card.id === 'vzip-cloud-root'],
+    ['songs', '연습곡', '곡 목록을 추가하고 관리하기', card => !!card.querySelector('#song-form')],
+    ['categories', '연습 항목', '발성·호흡과 세부 항목 관리', card => !!card.querySelector('#manage-category')],
+    ['backup', '백업 · 복원', '기록 내보내기와 백업 불러오기', card => !!card.querySelector('#export')]
+  ];
+  const panels = new Map();
+  const settingsBack = button('← 설정 목록으로', settingsList, 'back');
+  detail.append(settingsBack);
+  settings.forEach(([key, title, description, match]) => {
+    const card = cards.find(match);
+    if (!card) return;
+    card.hidden = true; detail.append(card); panels.set(key, card);
+    const row = button('', () => {
+      menu.hidden = true; detail.hidden = false;
+      panels.forEach((panel, id) => { panel.hidden = id !== key; });
+      settingsBack.focus({preventScroll: true});
+    }, 'vzip-ia-menu-row');
+    const label = make('span');
+    label.append(make('strong', '', title), make('small', '', description));
+    row.append(label, make('span', 'vzip-menu-arrow', '›')); row.dataset.iaOpen = key; menu.append(row);
+  });
+  function settingsList() { menu.hidden = false; detail.hidden = true; }
+  settingsList();
+  window.addEventListener('vzip:route-change', event => { if (event.detail.tab === 'manage') settingsList(); });
+  const media = $('#media');
+  heading(media, 'MEDIA LIBRARY', '보관함', '레슨과 연습에서 남긴 목소리를 다시 들어보세요.');
+  $('#vzip-media-page-head')?.remove();
+  const hub = $('#vzip-media-hub');
+  if (hub) {
+    const count = make('p', 'muted'); count.id = 'vzip-library-count';
+    hub.querySelector('#vzip-hub-list')?.before(count);
+    hub.querySelector('h2').textContent = '내 파일';
+    hub.querySelector('p').textContent = '재생·정보 수정은 버튼으로, 두 파일 비교는 카드를 눌러 시작해요.';
+    hub.querySelector('[for="vzip-hub-upload"]').textContent = '＋ 파일 가져오기';
+  }
+  const archive = $('#archive');
+  heading(archive, 'YOUR PROGRESS', '성장 기록', '같은 곡의 기록을 돌아보고 달라진 점을 발견해요.');
+  const reports = $('#vzip-saved-reports')?.closest('.card');
+  const reportPage = make('div'); reportPage.id = 'vzip-ia-reports'; reportPage.hidden = true;
+  const main = make('div'); main.id = 'vzip-ia-growth-main';
+  archive.querySelector('.vzip-page-head').after(main);
+  const actions = make('div', 'card vzip-growth-actions');
+  actions.append(make('h2', '', '목소리의 변화를 들어보세요'),
+    make('p', 'muted', '파일 두 개를 비교하고 느낀 변화를 메모로 남겨요.'),
+    button('새 비교 시작', () => window.vzipNavigate('media'), 'primary'),
+    button('저장한 리포트', () => openReports()));
+  main.append(actions);
+  [...archive.querySelectorAll(':scope > .card, :scope > .vzip-legacy-compare')].forEach(card => {
+    if (card !== reports) main.append(card);
+  });
+  archive.append(reportPage);
+  reportPage.append(button('← 성장 기록으로', closeReports, 'back'));
+  if (reports) reportPage.append(reports);
+  function openReports() { main.hidden = true; reportPage.hidden = false; }
+  function closeReports() { main.hidden = false; reportPage.hidden = true; }
+  window.vzipOpenReports = openReports;
+  window.addEventListener('vzip:route-change', event => { if (event.detail.tab === 'archive') closeReports(); });
+  window.addEventListener('vzip:data-changed', updateWeek);
+  window.addEventListener('vzip:hub-refreshed', event => {
+    const status = document.querySelector('#vzip-library-count');
+    if (status) status.textContent = '보관함 전체 ' + (event.detail.items || []).length + '개';
+  });
+  updateWeek();
 })();
