@@ -78,3 +78,14 @@ html{scroll-padding-bottom:105px}
 #vzip-cloud-root .cloud-actions .btn{min-width:0;min-height:50px;font-size:12px;white-space:normal;line-height:1.5;padding:11px 8px}
 #vzip-cloud-root .cloud-actions .smallbtn{grid-column:span 2}
 #cloud-status{padding:12px;border-radius:12px;background:rgba(125,206,205,.08);border:1px solid rgba(125,206,205,.16);overflow-wrap:anywhere}
+
+/* v1.5: date picker and touch usability */
+#lesson-form,#lesson-form .wizard-panel,#lesson-form .vzip-date-row{min-width:0;max-width:100%}
+#lesson-form .vzip-date-row{display:grid;grid-template-columns:minmax(0,1fr) 70px;gap:9px;align-items:center}
+#lesson-form input[type="date"]{display:block;width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box;min-height:54px;padding:10px 12px!important;font-size:16px!important;line-height:1.4;color-scheme:dark;-webkit-appearance:none;appearance:none}
+#lesson-form input[type="date"]::-webkit-date-and-time-value{text-align:left;min-width:0}
+#lesson-form input[type="date"]::-webkit-calendar-picker-indicator{opacity:.85;cursor:pointer}
+#lesson-today{min-height:52px!important;padding:8px!important;font-size:13px!important}
+#lesson-form .vzip-date-help{font-size:12px;color:#acaac8;margin:8px 0 18px}
+.vzip-import-box .vzip-file-picker{touch-action:manipulation;min-height:50px}
+@media(max-width:490px){#lesson-form .vzip-date-row{grid-template-columns:minmax(0,1fr) 64px}#lesson-form input[type="date"]{font-size:16px!important}}
