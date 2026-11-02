@@ -3,7 +3,7 @@
 const $=s=>document.querySelector(s),rec=$('#vzip-recorder'),lesson=$('#lessons'),practice=$('#practice');if(!rec||!lesson||!practice)return;
 const lessonSlot=$('#vzip-lesson-recorder-slot'),practiceForm=$('#practice-form');
 if(!lessonSlot||!practiceForm)return;
-const practiceHost=document.createElement('div');practiceHost.id='vzip-practice-recorder-slot';const practiceMode=practiceForm.querySelector('.vzip-practice-block');if(practiceMode)practiceMode.after(practiceHost);else practiceForm.querySelector('#practice-attachments')?.before(practiceHost);
+const practiceHost=document.createElement('div');practiceHost.id='vzip-practice-recorder-slot';practiceForm.prepend(practiceHost);
 const oldLibrary=rec.querySelector('#vzip-library')?.closest('.item');const oldImport=rec.querySelector('.vzip-import-box');if(oldImport)oldImport.hidden=true;if(oldLibrary)oldLibrary.hidden=true;
 const move=tab=>{const target=tab==='lessons'?lessonSlot:practiceHost;if(rec.parentElement!==target)target.append(rec);rec.hidden=false;target.hidden=false;rec.style.display='block';rec.querySelector('h2').textContent=tab==='lessons'?'🎙️ 레슨 녹음 · 녹화':'🎙️ 연습 녹음 · 녹화'};
 const isRecording=()=>!!rec.querySelector('#vzip-stop:not(:disabled)');
