@@ -97,3 +97,6 @@ html{scroll-padding-bottom:105px}
 .vzip-duration-item input{width:19px!important;height:19px!important;flex:0 0 19px;margin:0!important}
 .vzip-duration-item span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px}
 .vzip-duration-file{padding:8px 0;overflow-wrap:anywhere;font-size:13px}
+
+/* v1.9 account UX */
+#vzip-cloud-root .vzip-password-row{display:grid;grid-template-columns:minmax(0,1fr) 66px;align-items:center;gap:8px}#vzip-cloud-root .vzip-password-row input{min-width:0}#vzip-cloud-root .vzip-password-row button{min-height:49px}#vzip-cloud-root #cloud-signed-out .cloud-actions{margin:10px 0 14px}#vzip-cloud-root #cloud-reset{min-height:43px;margin:4px 0 12px}
