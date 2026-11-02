@@ -6,6 +6,7 @@ const byName=name=>form.querySelector('[name="'+name+'"]');
 const date=byName('date'),song=byName('song'),category=byName('category'),feedback=byName('feedback'),memo=byName('memo'),homework=byName('homework');
 const tools=form.querySelector('[data-inline-tools]'),carry=form.querySelector('#carryover-panel'),save=children.find(x=>x.tagName==='BUTTON'&&x.type!=='button');
 if(!date||!song||!category||!feedback||!memo||!homework||!tools||!carry||!save)return;
+const todayBtn=document.querySelector('#lesson-today');if(todayBtn)todayBtn.onclick=()=>{date.value=new Date().toLocaleDateString('sv-SE');date.dispatchEvent(new Event('change',{bubbles:true}))};
 const steps=[
  {title:'기본 정보',hint:'언제, 어떤 곡을 배웠나요?',nodes:children.slice(0,children.indexOf(category.parentElement))},
  {title:'레슨 내용',hint:'오늘 배운 핵심과 선생님의 피드백을 남겨요.',nodes:children.slice(children.indexOf(category.parentElement),children.indexOf(carry))},
