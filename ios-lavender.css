@@ -121,3 +121,29 @@ a{color:#7652d4}
  .nav{width:calc(100% - 18px);bottom:calc(6px + env(safe-area-inset-bottom))}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+/* Overrides for earlier !important navigation layout: keep bottom bar inside iPhone viewport. */
+@media(max-width:1023px){
+  .nav{
+    position:fixed!important;top:auto!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;
+    left:12px!important;right:12px!important;transform:none!important;
+    width:calc(100% - 24px)!important;max-width:700px!important;margin:0 auto!important;
+    min-height:66px!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    background:rgba(250,248,255,.90)!important;border:1px solid rgba(255,255,255,.96)!important;
+    border-radius:22px!important;box-shadow:0 10px 35px rgba(69,44,133,.13)!important;
+    -webkit-backdrop-filter:blur(24px) saturate(160%)!important;backdrop-filter:blur(24px) saturate(160%)!important;
+  }
+  .nav button{color:#887ca3!important;background:transparent!important}
+  .nav button.active{color:#7048c7!important;background:rgba(231,220,255,.86)!important}
+}
+@media(min-width:1024px){
+  .nav{transform:none!important;left:max(20px,calc(50% - 540px))!important;right:auto!important;top:112px!important;bottom:auto!important;width:184px!important;max-width:184px!important;display:flex!important;flex-direction:column!important;background:rgba(250,248,255,.9)!important;border-color:rgba(255,255,255,.9)!important}
+  .nav button{color:#807495!important}
+  .nav button.active{background:#e8ddff!important;color:#6b49bf!important}
+  .app{max-width:1120px}
+}
+.vzip-practice-files{background:rgba(255,255,255,.6);border-color:#e7dff5}
+.vzip-practice-files>summary{color:#694baf}
+.vzip-notice{background:rgba(255,255,255,.96);color:#403060;border-color:#e6dbf8;box-shadow:0 8px 30px rgba(88,61,152,.15)}
+.vzip-insight-metric{background:rgba(249,246,255,.78);border-color:#e8dff6}
+#practice-form #vzip-practice-capture .buttons .btn{background:linear-gradient(125deg,#9b80ee,#7955e2);color:white}
