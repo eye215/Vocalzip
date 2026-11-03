@@ -837,3 +837,12 @@ test('Metadata failure after transport never attaches a missing recording and re
   await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds))).toHaveLength(1);
 });
+
+
+test('Missing recording dates stay unknown in the library and comparison',async({page})=>{
+ const a=cloudRow('missing','날짜 없는 녹음'),b=cloudRow('dated','날짜 있는 녹음');delete a.metadata.created;
+ await cloudFiles(page,[a,b]);await page.locator('.nav [data-tab="media"]').click();
+ await expect(page.locator('[data-id="missing"]')).toContainText('날짜 미상');
+ await page.locator('[data-id="missing"] [data-action="compare"]').click();await page.locator('.vzip-choice[data-id="dated"]').click();await page.locator('#vzip-compare-start').click();
+ await expect(page.locator('#vzip-report-content')).toContainText('날짜 기록 부족');
+});
