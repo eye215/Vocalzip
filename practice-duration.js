@@ -8,11 +8,23 @@
   const saved = document.querySelector('#practice-saved-media');
   const summary = document.querySelector('#practice-time-summary');
   const linked = new Map();
+  const localImportLimit=25*1024*1024,maxImportLimit=500*1024*1024;
+  input.multiple=false;
+  input.accept='.mp4,.mov,.m4v,.m4a,.mp3,.wav,.webm,.aac,.ogg,.flac,video/mp4,video/quicktime,audio/mp4,audio/mpeg,audio/wav';
+  const importHint=document.createElement('p');importHint.className='muted';
+  importHint.textContent='파일은 한 번에 하나씩 가져와요. 25MB 초과 파일은 로그인 후 클라우드에 저장하며, 원본 길이 대신 연습 시간을 직접 입력해 주세요.';
+  input.after(importHint);
+  const cancelImport=document.createElement('button');cancelImport.type='button';cancelImport.className='btn secondary';
+  cancelImport.id='vzip-practice-import-cancel';cancelImport.textContent='업로드 취소';cancelImport.hidden=true;
+  importHint.after(cancelImport);
+  let importController=null;
+  cancelImport.onclick=()=>importController?.abort();
+  window.addEventListener('pagehide',()=>importController?.abort());
   let listRun = 0;
   const busy = (key, value) => window.vzipSetPracticeBusy?.(key, value);
   const typeOf = file => {
     if (file.type?.startsWith('audio/') || file.type?.startsWith('video/')) return file.type;
-    return ({mov:'video/quicktime',mp4:'video/mp4',m4a:'audio/mp4',mp3:'audio/mpeg',
+    return ({mov:'video/quicktime',mp4:'video/mp4',m4v:'video/mp4',m4a:'audio/mp4',mp3:'audio/mpeg',
       wav:'audio/wav',aac:'audio/aac',ogg:'audio/ogg',webm:'video/webm',flac:'audio/flac'})[
       (file.name || '').split('.').pop().toLowerCase()] || 'application/octet-stream';
   };
@@ -143,27 +155,42 @@
     } catch (error) { saved.textContent = '보관함을 불러오지 못했어요: ' + error.message; }
   }
   input.onchange = async () => {
-    const files = Array.from(input.files || []);
-    if (!files.length) return;
-    busy('import', true); input.disabled = true; preview.replaceChildren();
-    try {
-      for (const file of files) {
-        const row = document.createElement('p'); row.className = 'vzip-duration-file';
-        row.textContent = file.name + ' · 저장 중…'; preview.append(row);
-        try {
-          const type = typeOf(file);
-          if (!/^(audio|video)\//.test(type)) throw Error('음성·영상 파일을 선택해 주세요.');
-          const seconds = await duration(file), id = crypto.randomUUID();
-          const item = {id, name:file.name, type, blob:blobOf({...file, name:file.name, type, blob:file}),
-            created:Date.now(), source:'practice', songId:form.elements.song?.value || '', durationSeconds:seconds};
-          await window.vzipStorePracticeMedia(item);
-          linked.set(id, {seconds}); calculate();
-          row.textContent = '✓ ' + file.name + ' · 보관함 저장 완료 · ' +
-            (seconds ? clock(seconds) : '길이 미확인: 시간을 직접 입력해 주세요.');
-          window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id,source:'practice'}}));
-        } catch (error) { row.textContent = file.name + ' 저장 실패: ' + error.message + ' · 원본을 다시 선택해 주세요.'; }
+    let file=input.files?.[0];if(!file||input.disabled)return;
+    busy('import',true);input.disabled=true;preview.replaceChildren();
+    const row=document.createElement('p');row.className='vzip-duration-file';preview.append(row);
+    const fileName=file.name,songId=form.elements.song?.value||'';
+    row.textContent=fileName+' · 저장 중…';
+    importController=new AbortController();
+    try{
+      const type=typeOf(file);
+      if(!/^(audio|video)\//.test(type))throw Error('음성·영상 파일을 선택해 주세요.');
+      if(!file.size)throw Error('빈 파일은 가져올 수 없어요.');
+      if(file.size>maxImportLimit)throw Error('파일당 최대 500MB까지 가져올 수 있어요.');
+      let id,seconds=0,cloud=false;
+      if(file.size>localImportLimit){
+        if(!window.vzipCloudSignedIn?.())throw Error('25MB 초과 파일은 클라우드 로그인이 필요해요.');
+        cancelImport.hidden=false;row.textContent=fileName+' · 클라우드에 분할 업로드 중…';
+        const metadata=await window.vzipCloudImport(file,{name:fileName,type,source:'practice',songId},
+          progress=>{row.textContent=fileName+' · 업로드 '+progress+'%'},
+          {signal:importController.signal,onCommit:()=>{cancelImport.hidden=true;row.textContent=fileName+' · 보관함 연결 중…'}});
+        id=metadata.id;seconds=Number(metadata.durationSeconds)||0;cloud=true;
+      }else{
+        seconds=await duration(file);id=crypto.randomUUID();
+        const item={id,name:fileName,type,blob:blobOf({name:fileName,type,blob:file}),
+          created:Date.now(),source:'practice',songId,durationSeconds:seconds};
+        await window.vzipStorePracticeMedia(item);
       }
-    } finally { input.value = ''; input.disabled = false; busy('import', false); loadSaved(); }
+      linked.set(id,{seconds});calculate();
+      row.textContent='✓ '+fileName+' · 보관함 저장 완료'+(cloud?' (클라우드)':'')+' · '+
+        (seconds?clock(seconds):'길이 미확인: 시간을 직접 입력해 주세요.');
+      window.dispatchEvent(new CustomEvent('vzip:media-saved',{detail:{id,source:'practice'}}));
+    }catch(error){
+      row.textContent=error.name==='AbortError'?'업로드를 취소했어요. 파일을 연결하지 않았어요.':
+        fileName+' 저장 실패: '+error.message+' · 원본을 다시 선택해 주세요.';
+    }finally{
+      file=null;input.value='';input.disabled=false;cancelImport.hidden=true;importController=null;
+      busy('import',false);loadSaved();
+    }
   };
   window.addEventListener('vzip:media-saved', event => {
     if (event.detail?.attachToPractice && event.detail.id) {
