@@ -5,7 +5,7 @@ const card=document.createElement('div');card.className='card';card.id='vzip-med
 card.innerHTML='<h2>내 파일</h2><p class="muted">설정 없이 바로 올리고 확인해요. 파일을 누르면 비교할 수 있어요.</p><div class="vzip-hub-buttons"><label class="btn" for="vzip-hub-upload">＋ 기존 파일 가져오기</label><input id="vzip-hub-upload" type="file" accept=".mp4,.mov,.m4v,.m4a,.mp3,.wav,.webm,.aac,.ogg,.flac,video/mp4,video/quicktime,audio/mp4,audio/mpeg,audio/wav" hidden><button class="btn secondary" id="vzip-hub-reload" type="button">↻ 새로고침</button></div><div class="vzip-hub-filters" role="group" aria-label="파일 필터"><button type="button" class="active" data-filter="all">전체</button><button type="button" data-filter="audio">🎤 음성</button><button type="button" data-filter="video">🎬 영상</button></div><p class="muted" id="vzip-hub-status" role="status"></p><div id="vzip-hub-list"></div>';
 archive.append(card);const originFilters=document.createElement('div');originFilters.className='vzip-hub-filters';originFilters.setAttribute('role','group');originFilters.setAttribute('aria-label','녹음 출처');originFilters.innerHTML='<button type="button" class="active" data-origin="all">전체 출처</button><button type="button" data-origin="lesson">🎓 레슨</button><button type="button" data-origin="practice">🎼 연습</button><button type="button" data-origin="import">📂 가져온 파일</button>';card.querySelector('.vzip-hub-filters')?.after(originFilters);
 const $=s=>card.querySelector(s),status=$('#vzip-hub-status'),list=$('#vzip-hub-list');
-const key='vocal-zip_mvp_v1',dbName='vocalzip_media_v1';let items=[],activeUrl=null,activeEl=null,filter='all',origin='all',refreshRun=0,playRun=0;
+const key='vocal-zip_mvp_v1',dbName='vocalzip_media_v1';let items=[],activeUrl=null,activeEl=null,filter='all',origin='all',groupBySong=false,refreshRun=0,playRun=0;
 const songs=()=>{try{return JSON.parse(localStorage.getItem(key)||'{}').songs||[]}catch{return []}};
 function openDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(dbName,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('recordings'))req.result.createObjectStore('recordings',{keyPath:'id'})};req.onerror=()=>reject(req.error);req.onsuccess=()=>resolve(req.result)})}
 async function localAll(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction('recordings','readonly'),req=tx.objectStore('recordings').getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);tx.oncomplete=()=>db.close()})}
@@ -13,10 +13,23 @@ async function localChange(id,fn){const db=await openDb();return new Promise((re
 function date(n){const d=new Date(n||Date.now());return Number.isNaN(+d)?'날짜 미상':d.toLocaleDateString('ko-KR')}
 function escape(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function refresh(){clearTimeout(window.__vzipHubTimer);const run=++refreshRun;status.textContent='녹음·영상 목록 불러오는 중…';try{const local=await localAll();let remote=[];if(window.vzipCloudSignedIn?.()&&window.vzipCloudMediaList){remote=await window.vzipCloudMediaList()}if(run!==refreshRun)return;const map=new Map();local.forEach(x=>map.set(x.id,{...x,local:true}));remote.forEach(x=>map.set(x.id,{...map.get(x.id),...x,cloud:true}));items=[...map.values()].sort((a,b)=>(b.created||0)-(a.created||0));render();status.textContent=items.length+'개 파일 · '+remote.length+'개 클라우드 저장'+(remote.length?' · 기기에 다운로드하지 않아도 재생 가능':'');window.dispatchEvent(new CustomEvent('vzip:hub-refreshed',{detail:{items}}))}catch(e){if(run!==refreshRun)return;status.textContent='클라우드 목록 확인 실패: '+e.message+' · 기기 파일을 표시해요.';try{const local=await localAll();if(run!==refreshRun)return;items=local.map(x=>({...x,local:true}));render()}catch(error){if(run===refreshRun)status.textContent='파일 목록 확인 실패: '+error.message}}}
+const groupControl=document.createElement('button');groupControl.type='button';groupControl.className='btn secondary';groupControl.textContent='♫ 곡별 묶어보기';groupControl.setAttribute('aria-pressed','false');groupControl.style.margin='10px 0';list.before(groupControl);
+groupControl.onclick=()=>{groupBySong=!groupBySong;groupControl.setAttribute('aria-pressed',String(groupBySong));groupControl.textContent=groupBySong?'☷ 최신순으로 보기':'♫ 곡별 묶어보기';render()};
 function render(){clearPlayer();list.replaceChildren();if(!items.length){list.innerHTML='<p class="empty">아직 녹음·영상이 없어요. 위에서 파일을 업로드해 보세요.</p>';return}
 const visible=items.filter(x=>(filter==='all'||(filter==='video'?x.type?.startsWith('video/'):!x.type?.startsWith('video/')))&&(origin==='all'||(origin==='import'?!['lesson','practice'].includes(x.source):x.source===origin)));
 if(!visible.length){list.innerHTML='<p class="empty">선택한 조건에 맞는 파일이 없어요. 다른 필터를 선택해 주세요.</p>';return}
-for(const item of visible){const row=document.createElement('article');row.className='vzip-hub-item';row.dataset.id=item.id;row.setAttribute('aria-label',item.name||'제목 없는 파일');
+const ordered=groupBySong?[...visible].sort((a,b)=>{
+ const an=(a.song||'곡 미지정').toLocaleLowerCase('ko'),bn=(b.song||'곡 미지정').toLocaleLowerCase('ko');
+ return an.localeCompare(bn,'ko')||((b.created||0)-(a.created||0));
+}):visible;
+let lastSong=null;
+for(const item of ordered){
+ if(groupBySong){const current=item.song||'곡 미지정';if(current!==lastSong){
+  const heading=document.createElement('h3');heading.className='vzip-song-group-title';heading.style.cssText='margin:24px 0 8px;padding:0 2px;font-size:17px';
+  const count=ordered.filter(x=>(x.song||'곡 미지정')===current).length;
+  heading.textContent=current+' · '+count+'개 녹음';list.append(heading);lastSong=current;
+ }}
+ const row=document.createElement('article');row.className='vzip-hub-item';row.dataset.id=item.id;row.setAttribute('aria-label',item.name||'제목 없는 파일');
 const head=document.createElement('div');head.innerHTML='<strong>'+escape(item.type?.startsWith('video/')?'🎬 ':'🎤 ')+escape(item.name||'제목 없음')+'</strong><div class="muted">'+escape(date(item.created))+' · '+escape(item.song||'곡 미지정')+' · '+escape(item.source==='lesson'?'🎓 레슨':item.source==='practice'?'🎼 연습':'📂 가져온 파일')+' · '+(item.cloud?'☁️ 클라우드':'📱 기기')+'</div>';row.append(head);
 if(item.rating||item.review){const review=document.createElement('div');review.className='vzip-media-review-summary';const score=item.rating?'💜 '+escape(item.rating)+'/5 · ':'';review.textContent=score+(item.review||'');row.append(review)}
 const buttons=document.createElement('div');buttons.className='vzip-hub-buttons';for(const [action,label] of [['play','▶ 재생'],['edit','✎ 곡·감상 기록'],['compare','비교 선택'],['delete','🗑 삭제']]){const b=document.createElement('button');b.type='button';b.className='smallbtn';b.dataset.action=action;b.textContent=label;buttons.append(b)}row.append(buttons);list.append(row)}}
