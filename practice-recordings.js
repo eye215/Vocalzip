@@ -70,7 +70,7 @@
           player.controls = true; player.playsInline = true; player.preload = 'metadata'; player.src = src;
           const failure = document.createElement('p'); failure.className = 'muted'; failure.setAttribute('role', 'status');
           player.onerror = () => { failure.textContent = '파일을 재생하지 못했어요. 원본 형식과 네트워크를 확인해 주세요.'; };
-          row.append(player, failure);
+          row.append(player, failure); window.vzipEnhancePlayer?.(player,item);
         } catch (problem) { row.append(document.createTextNode('재생 준비 실패: ' + problem.message)); }
       }
     } catch (error) { if (current()) host.textContent = '파일 확인 실패: ' + error.message; }

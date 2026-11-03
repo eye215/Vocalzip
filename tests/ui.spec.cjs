@@ -73,13 +73,13 @@ test('Imported audio links to saved practice, decodes after reload, and appears 
   await page.locator('.nav [data-tab="practice"]').click();
   await page.locator('.vzip-practice-files summary').click();
   const audio=page.locator('.vzip-practice-files audio');
-  await expect(audio).toBeVisible();
+  await expect(audio).toBeAttached();
   await expect.poll(()=>audio.evaluate(element=>element.readyState)).toBeGreaterThanOrEqual(1);
   await page.locator('.nav [data-tab="media"]').click();
   await page.locator('[data-origin="practice"]').click();
   await expect(page.locator('#vzip-hub-list')).toContainText('vocal-ui-test.wav');
   await page.locator('#vzip-hub-list [data-action="play"]').click();
-  await expect(page.locator('#vzip-hub-list audio')).toBeVisible();
+  await expect(page.locator('#vzip-hub-list .vzip-player-controls')).toBeVisible();
   await testInfo.attach('library',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });
 test('Lesson wizard keeps fields in form and stores homework', async ({page}) => {
@@ -886,4 +886,58 @@ test('Cloud importer accepts the configured 50MB boundary and rejects larger fil
   return {size:item.size,error,calls:window.__uploadCalls.length};
  });
  expect(result.size).toBe(50*1024*1024);expect(result.error).toContain('50MB');expect(result.calls).toBe(1);
+});
+
+
+test('Recorder pause excludes paused time and mark preserves memo', async ({page,browserName},testInfo) => {
+  test.skip(browserName !== 'chromium', 'Uses Chromium fake microphone, not a real iPhone.');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name=memo]').fill('기존 메모');
+  await page.locator('#vzip-capture-start').click();
+  await expect(page.locator('#vzip-capture-pause')).toBeVisible();
+  await page.waitForTimeout(1100);
+  await page.locator('#vzip-capture-mark').click();
+  expect(await page.locator('#practice-form [name=memo]').inputValue()).toMatch(/기존 메모\n\[00:0[1-9]\] 다시 듣기/);
+  await page.locator('#vzip-capture-pause').click();
+  await page.waitForTimeout(600);
+  await testInfo.attach('recorder-paused',{body:await page.screenshot({fullPage:false}),contentType:'image/png'});
+  const frozen = await page.locator('#vzip-capture-clock').textContent();
+  await page.waitForTimeout(1200);
+  await expect(page.locator('#vzip-capture-clock')).toHaveText(frozen);
+  await expect(page.locator('#vzip-capture-mark')).toBeDisabled();
+  await page.locator('#vzip-capture-stop').click();
+  await expect(page.locator('#vzip-capture-status')).toContainText('저장 완료');
+  await expect(page.locator('#vzip-capture-start')).toBeVisible();
+  const items = await page.evaluate(() => window.vzipReadMedia());
+  expect(items[0].waveform.length).toBeGreaterThan(0);
+  expect(items[0].waveform.length).toBeLessThanOrEqual(512);
+  expect(items[0].durationSeconds).toBeGreaterThan(0);
+  expect(items[0].durationSeconds).toBeLessThan(3);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-list [data-action=play]').click();
+  await expect(page.locator('.vzip-player-wave')).toBeVisible();
+  await page.locator('.vzip-player-wave').click();
+  await expect(page.locator('.vzip-player-wave')).toBeVisible();
+  await testInfo.attach('recorded-waveform-player',{body:await page.screenshot({fullPage:false}),contentType:'image/png'});
+
+});
+
+test('Player card seeks, toggles playback and exposes native fallback', async ({page,browserName},testInfo) => {
+  test.skip(browserName === 'webkit' && process.platform === 'win32', 'Windows WebKit WAV codec unavailable.');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles({name:'player-test.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-list [data-action=play]').click();
+  const card = page.locator('#vzip-hub-list .vzip-player'), media = card.locator('audio');
+  await expect(card.locator('input[type=range]')).toBeEnabled();
+  await media.evaluate(el => el.pause());
+  await card.getByRole('slider').fill('0.5');
+  expect(await media.evaluate(el => el.currentTime)).toBeCloseTo(.5, 1);
+  await card.getByRole('button',{name:'재생',exact:true}).click();
+  await expect.poll(() => media.evaluate(el => el.paused)).toBe(false);
+  await card.locator('summary').click();
+  await expect(media).toBeVisible();
+  await card.locator('summary').click();
+  await testInfo.attach('player-card',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });
