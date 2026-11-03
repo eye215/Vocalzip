@@ -840,7 +840,7 @@ test('Metadata failure after transport never attaches a missing recording and re
 
 
 test('Missing recording dates stay unknown in the library and comparison',async({page})=>{
- const a=cloudRow('missing','날짜 없는 녹음'),b=cloudRow('dated','날짜 있는 녹음');delete a.metadata.created;
+ const a=cloudRow('missing','날짜 없는 녹음'),b=cloudRow('dated','날짜 있는 녹음');a.metadata.created=null;
  await cloudFiles(page,[a,b]);await page.locator('.nav [data-tab="media"]').click();
  await expect(page.locator('[data-id="missing"]')).toContainText('날짜 미상');
  await page.locator('[data-id="missing"] [data-action="compare"]').click();await page.locator('.vzip-choice[data-id="dated"]').click();await page.locator('#vzip-compare-start').click();
