@@ -8,11 +8,11 @@
   const saved = document.querySelector('#practice-saved-media');
   const summary = document.querySelector('#practice-time-summary');
   const linked = new Map();
-  const localImportLimit=25*1024*1024,maxImportLimit=500*1024*1024;
+  const localImportLimit=25*1024*1024,maxImportLimit=50*1024*1024;
   input.multiple=false;
   input.accept='.mp4,.mov,.m4v,.m4a,.mp3,.wav,.webm,.aac,.ogg,.flac,video/mp4,video/quicktime,audio/mp4,audio/mpeg,audio/wav';
   const importHint=document.createElement('p');importHint.className='muted';
-  importHint.textContent='파일은 한 번에 하나씩 가져와요. 25MB 초과 파일은 로그인 후 클라우드에 저장하며, 원본 길이 대신 연습 시간을 직접 입력해 주세요.';
+  importHint.textContent='파일은 한 번에 하나씩, 최대 50MB까지 가져와요. 25MB 초과 파일은 로그인 후 클라우드에 저장하며, 원본 길이 대신 연습 시간을 직접 입력해 주세요.';
   input.after(importHint);
   const cancelImport=document.createElement('button');cancelImport.type='button';cancelImport.className='btn secondary';
   cancelImport.id='vzip-practice-import-cancel';cancelImport.textContent='업로드 취소';cancelImport.hidden=true;
@@ -165,7 +165,7 @@
       const type=typeOf(file);
       if(!/^(audio|video)\//.test(type))throw Error('음성·영상 파일을 선택해 주세요.');
       if(!file.size)throw Error('빈 파일은 가져올 수 없어요.');
-      if(file.size>maxImportLimit)throw Error('파일당 최대 500MB까지 가져올 수 있어요.');
+      if(file.size>maxImportLimit)throw Error('파일당 최대 50MB까지 가져올 수 있어요.');
       let id,seconds=0,cloud=false;
       if(file.size>localImportLimit){
         if(!window.vzipCloudSignedIn?.())throw Error('25MB 초과 파일은 클라우드 로그인이 필요해요.');

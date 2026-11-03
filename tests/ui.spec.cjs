@@ -1,10 +1,10 @@
 const {test, expect} = require('@playwright/test');
 const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.__cloudUpdates=[];window.supabase={createClient:()=>({
  auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),
- onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
+ onAuthStateChange:callback=>{(window.__authCallbacks||=[]).push(callback);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/fixture-audio.wav'},error:null}),upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
  from:table=>{const chain={};for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
- chain[method]=(...args)=>{if(method==='upsert')window.__cloudMetadata.push({table,payload:args[0]});if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(window.__cloudRows||[]):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
+ chain[method]=(...args)=>{if(method==='upsert'){window.__cloudMetadata.push({table,payload:args[0]});if(table==='vocal_media')window.__onMetadataWrite?.()}if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(window.__cloudRows||[]):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
 })};`;
 test.beforeEach(async ({page}) => {
   page.__vzipErrors=[];page.on('pageerror',error=>page.__vzipErrors.push(error.message));
@@ -397,7 +397,7 @@ test('Large video import sends original bytes via resumable cloud importer',asyn
   await page.locator('.nav [data-tab="media"]').click();
   await page.evaluate(()=>{
     window.__vzipOptimized=false;
-    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?101*1024*1024:1024}});
+    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?40*1024*1024:1024}});
     window.vzipCloudSignedIn=()=>true;
     window.vzipOptimizeVideo=async(file,progress)=>{
       window.__vzipOptimized=true;progress(100);
@@ -412,14 +412,14 @@ test('Large video import sends original bytes via resumable cloud importer',asyn
     name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(1024,1)
   });
   await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
-  await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(101*1024*1024);
+  await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(40*1024*1024);
   expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
   expect(await page.evaluate(()=>window.__vzipUpload.type)).toBe('video/quicktime');
   expect(page.__vzipErrors).toEqual([]);
 });
 test('Large video import without cloud login explains required sign in',async({page})=>{
   await page.locator('.nav [data-tab="media"]').click();
-  await page.evaluate(()=>{Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?101*1024*1024:1024}});window.vzipCloudSignedIn=()=>false;window.__vzipOptimized=false;window.vzipOptimizeVideo=async()=>{window.__vzipOptimized=true}});
+  await page.evaluate(()=>{Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?40*1024*1024:1024}});window.vzipCloudSignedIn=()=>false;window.__vzipOptimized=false;window.vzipOptimizeVideo=async()=>{window.__vzipOptimized=true}});
   await page.locator('#vzip-hub-upload').setInputFiles({name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(1024,1)});
   await expect(page.locator('#vzip-hub-status')).toContainText('클라우드 로그인이 필요');
   expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
@@ -603,7 +603,7 @@ async function installUploadProbe(page, mode='hold') {
     const originalSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size').get;
     Object.defineProperty(File.prototype,'size',{configurable:true,get(){
       if(this.name==='large.mov')return 26*1024*1024;
-      if(this.name==='oversized.mov')return 501*1024*1024;
+      if(this.name==='oversized.mov')return 51*1024*1024;
       return originalSize.call(this);
     }});
     const arrayBuffer=Blob.prototype.arrayBuffer;
@@ -620,7 +620,7 @@ async function installUploadProbe(page, mode='hold') {
     window.vzipStorePracticeMedia=item=>{window.__localImportWrites++;return store(item)};
     window.tus={Upload:class{
       constructor(file,options){
-        this.options=options;
+        this.options=options;window.__uploadOptions=options;
         window.__uploadCalls.push({name:file.name,size:file.size,chunkSize:options.chunkSize,
           creation:options.uploadDataDuringCreation,fingerprint:options.storeFingerprintForResuming});
       }
@@ -712,11 +712,11 @@ test('Oversized files are rejected in both import forms before allocation or upl
   await page.locator('.hero [data-go-tab="practice"]').click();
   await expect(page.locator('#practice-attachments')).not.toHaveAttribute('multiple');
   await page.locator('#practice-attachments').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
-  await expect(page.locator('#media-preview')).toContainText('500MB');
+  await expect(page.locator('#media-preview')).toContainText('50MB');
   await page.locator('.nav [data-tab="media"]').click();
   await expect(page.locator('#vzip-hub-upload')).not.toHaveAttribute('multiple');
   await page.locator('#vzip-hub-upload').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
-  await expect(page.locator('#vzip-hub-status')).toContainText('500MB');
+  await expect(page.locator('#vzip-hub-status')).toContainText('50MB');
   const result=await page.evaluate(()=>({calls:window.__uploadCalls.length,reads:window.__fullFileReads,
     previews:window.__largeFilePreviews,local:window.__localImportWrites}));
   expect(result).toEqual({calls:0,reads:0,previews:0,local:0});
@@ -845,4 +845,45 @@ test('Missing recording dates stay unknown in the library and comparison',async(
  await expect(page.locator('[data-id="missing"]')).toContainText('날짜 미상');
  await page.locator('[data-id="missing"] [data-action="compare"]').click();await page.locator('.vzip-choice[data-id="dated"]').click();await page.locator('#vzip-compare-start').click();
  await expect(page.locator('#vzip-report-content')).toContainText('날짜 기록 부족');
+});
+
+
+for(const location of ['practice','library'])test('Upload progress and synthetic pagehide cancellation ignore late callbacks: '+location,async({page})=>{
+ await installUploadProbe(page);
+ if(location==='practice')await page.locator('.hero [data-go-tab="practice"]').click();else await page.locator('.nav [data-tab="media"]').click();
+ const input=page.locator(location==='practice'?'#practice-attachments':'#vzip-hub-upload');
+ const status=page.locator(location==='practice'?'#media-preview':'#vzip-hub-status');
+ await input.setInputFiles(largeUpload());if(location==='library')await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+ await page.evaluate(()=>window.__uploadOptions.onProgress(13,26));await expect(status).toContainText('50%');
+ await page.evaluate(()=>{window.__lateUpload=window.__uploadOptions;window.dispatchEvent(new Event('pagehide'))});
+ await expect(status).toContainText('취소');await expect(input).toBeEnabled();
+ await page.evaluate(()=>{window.__lateUpload.onProgress(26,26);window.__lateUpload.onSuccess();window.__lateUpload.onError(Error('late network callback'))});
+ await expect(status).toContainText('취소');
+ expect(await page.evaluate(()=>window.__cloudMetadata.filter(x=>x.table==='vocal_media'))).toHaveLength(0);
+ expect(await page.evaluate(()=>window.__uploadAborts)).toBe(1);
+ await page.evaluate(()=>{window.__uploadMode='success'});await input.setInputFiles(largeUpload());
+ if(location==='library')await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+ await expect(status).toContainText('보관함 저장 완료');
+});
+
+test('Account change during metadata commit never attaches the previous account file',async({page})=>{
+ await installUploadProbe(page,'success');await page.locator('.hero [data-go-tab="practice"]').click();
+ await page.evaluate(()=>{window.__onMetadataWrite=()=>window.__authCallbacks.forEach(callback=>callback('SIGNED_IN',{user:{id:'other-user',email:'other@example.invalid'}}))});
+ await page.locator('#practice-attachments').setInputFiles(largeUpload());
+ await expect(page.locator('#media-preview')).toContainText('로그인이 변경');
+ expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+ expect(await page.evaluate(()=>window.__cloudMetadata.find(x=>x.table==='vocal_media').payload.user_id)).toBe('ui-test-user');
+ await expect(page.locator('#practice-attachments')).toBeEnabled();
+});
+
+test('Cloud importer accepts the configured 50MB boundary and rejects larger files before transport',async({page})=>{
+ await installUploadProbe(page,'success');
+ const result=await page.evaluate(async()=>{
+  const file=new File(['test'],'boundary.mov',{type:'video/quicktime'});Object.defineProperty(file,'size',{value:50*1024*1024});
+  const item=await window.vzipCloudImport(file);const tooLarge=new File(['test'],'too-large.mov',{type:'video/quicktime'});Object.defineProperty(tooLarge,'size',{value:50*1024*1024+1});
+  let error='';try{await window.vzipCloudImport(tooLarge)}catch(e){error=e.message}
+  return {size:item.size,error,calls:window.__uploadCalls.length};
+ });
+ expect(result.size).toBe(50*1024*1024);expect(result.error).toContain('50MB');expect(result.calls).toBe(1);
 });

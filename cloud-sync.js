@@ -49,7 +49,7 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
  aborted();
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
  if(!file||file.size<=0)throw Error('빈 파일은 업로드할 수 없어요.');
- if(file.size>500*1024*1024)throw Error('현재 파일당 최대 500MB까지 업로드할 수 있어요.');
+ if(file.size>50*1024*1024)throw Error('현재 파일당 최대 50MB까지 업로드할 수 있어요.');
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요. 완료하거나 취소한 뒤 다시 선택해 주세요.');
  mediaImportActive=true;
  const owner=user.id;
@@ -96,6 +96,7 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
    source:info.source||'import',path,size:file.size};
   const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata});
   if(error)throw Error('파일 전송은 끝났지만 보관함 연결에 실패했어요: '+error.message);
+  if(user?.id!==owner)throw Error('로그인이 변경되어 현재 화면에 파일을 연결하지 않았어요. 업로드를 시작한 계정의 보관함에서 확인해 주세요.');
   window.dispatchEvent(new Event('vzip:cloud-media-changed'));
   return metadata;
  }finally{mediaImportActive=false}
