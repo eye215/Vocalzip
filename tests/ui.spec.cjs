@@ -424,3 +424,22 @@ test('Large video import without cloud login explains required sign in',async({p
   expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
   expect(page.__vzipErrors).toEqual([]);
 });
+
+test('Each recording saves its own song, satisfaction and listening notes',async({page})=>{
+  await cloudFiles(page,[cloudRow('take-a','첫 번째 테이크'),cloudRow('take-b','두 번째 테이크')]);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('[data-id="take-a"] [data-action="edit"]').click();
+  await page.locator('.vzip-media-edit-sheet [name="customSong"]').fill('The Winner Takes It All');
+  await page.locator('.vzip-media-edit-sheet [name="rating"]').selectOption('4');
+  await page.locator('.vzip-media-edit-sheet [name="review"]').fill('저음 안정적, 후렴 호흡 아쉬움');
+  await page.locator('.vzip-media-edit-sheet [data-save]').click();
+  await expect.poll(()=>page.evaluate(()=>window.__cloudUpdates.length)).toBeGreaterThan(0);
+  const updated=await page.evaluate(()=>window.__cloudUpdates.at(-1).payload.metadata);
+  expect(updated.song).toBe('The Winner Takes It All');
+  expect(updated.rating).toBe(4);
+  expect(updated.review).toBe('저음 안정적, 후렴 호흡 아쉬움');
+  expect(updated.id).toBe('take-a');
+  await page.locator('[data-id="take-b"] [data-action="edit"]').click();
+  await expect(page.locator('.vzip-media-edit-sheet [name="rating"]')).toHaveValue('');
+  await expect(page.locator('.vzip-media-edit-sheet [name="review"]')).toHaveValue('');
+});
