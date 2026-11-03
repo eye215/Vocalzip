@@ -460,7 +460,7 @@ test('Media date field stays within edit sheet at iPhone width',async({page})=>{
 
 test('Practice date input itself stays within its card on iPhone',async({page})=>{
  await page.setViewportSize({width:390,height:844});
- await page.locator('.nav [data-tab="practice"]').click();
+ await page.locator('.hero [data-go-tab="practice"]').click();
  const date=page.locator('#practice-form input[type="date"]');
  await expect(date).toBeVisible();
  const m=await date.evaluate(el=>{const a=el.getBoundingClientRect(),p=el.closest('.card').getBoundingClientRect(),css=getComputedStyle(el);return {left:a.left,right:a.right,cardLeft:p.left,cardRight:p.right,width:a.width,height:a.height,box:css.boxSizing}});
