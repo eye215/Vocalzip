@@ -56,10 +56,11 @@ window.vzipCloudImport=async function(file,info,onProgress){
   const upload=new window.tus.Upload(file,{
    endpoint:'https://chxnbtiyuyhiywzeshis.storage.supabase.co/storage/v1/upload/resumable',
    headers:{authorization:'Bearer '+session.session.access_token,apikey:key},
-   uploadDataDuringCreation:true,
+   uploadDataDuringCreation:false,
    removeFingerprintOnSuccess:true,
    chunkSize:6*1024*1024,
    retryDelays:[0,1000,3000,5000,10000],
+   storeFingerprintForResuming:false,
    metadata:{bucketName:'vocal-recordings',objectName:path,contentType:type,cacheControl:'3600'},
    onError:reject,onSuccess:resolve,
    onProgress:(sent,total)=>onProgress?.(Math.round(sent/total*100))
