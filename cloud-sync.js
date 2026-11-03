@@ -45,7 +45,7 @@ window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e
 /* Large imports go directly to private Storage, without first filling Safari IndexedDB. */
 window.vzipCloudImport=async function(file,info,onProgress){
  if(!client||!user)throw Error('먼저 관리 탭에서 이메일 로그인해 주세요.');
- if(file.size>100*1024*1024)throw Error('현재 파일당 100MB 제한이에요. 더 큰 영상은 별도 설정이 필요해요.');
+ if(file.size>500*1024*1024)throw Error('현재 파일당 최대 500MB까지 업로드할 수 있어요.');
  const type=window.vzipMediaType?.(file)||file.type||info.type||'application/octet-stream';
  const id=crypto.randomUUID(),ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'');
  const path=user.id+'/'+id+'.'+ext;

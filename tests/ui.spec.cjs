@@ -393,7 +393,7 @@ test('Growth empty state has no invented score and updates when a practice is sa
   await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('10분');
 });
 
-test('Large video import invokes optimization and uploads optimized bytes without storing original',async({page})=>{
+test('Large video import sends original bytes via resumable cloud importer',async({page})=>{
   await page.locator('.nav [data-tab="media"]').click();
   await page.evaluate(()=>{
     window.__vzipOptimized=false;
@@ -411,9 +411,9 @@ test('Large video import invokes optimization and uploads optimized bytes withou
   await page.locator('#vzip-hub-upload').setInputFiles({
     name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(1024,1)
   });
-  await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(1024);
-  expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(true);
-  expect(await page.evaluate(()=>window.__vzipUpload.type)).toBe('video/webm');
+  await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(101*1024*1024);
+  expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
+  expect(await page.evaluate(()=>window.__vzipUpload.type)).toBe('video/quicktime');
   expect(page.__vzipErrors).toEqual([]);
 });
 test('Large video import without cloud login explains required sign in',async({page})=>{
