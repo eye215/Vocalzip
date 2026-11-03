@@ -36,3 +36,15 @@ Source: right-hand calendar in codex-clipboard-2970792b-57fc-4a16-b283-718b4c0b9
 - Assets: official Phosphor icons; activity dots encode actual record presence. No synthetic activity.
 - Copy/data: valid real calendar dates replace the reference's invalid day numbers; lessons/practices/performed homework derive from stored records. No date mutation or migration.
 Calendar component result: passed. Full-board completion remains pending homework/detail screens.
+
+
+## Homework iteration — 2026-11-03
+Compared user codex-clipboard-0dea53d8-91ab-4df0-8d90-41e59568b462.png with IAB 390×844 capture in outputs/homework-comparison.png (source and implementation together).
+- Preserved selected lavender tab, white rounded task rows, outlined checkbox, completed disclosure and primary add action.
+- Removed repeated brand header and outer card frame; retained settings access and original lesson-write entry.
+- Typography: 22px centered title, 16px section heading, 13px task, 12px helper text. Existing Korean font retained.
+- Spacing: 44px checkbox interaction, wrapping titles/notes, collapsed history and completed sections, scrollable long lists.
+- Color/icons: original palette; official Phosphor outline/check icons, visible keyboard focus.
+- Content: real active/completed counts; fixture has one task versus reference's three. No placeholder tasks shipped. Existing carried lesson links and performed notes retained.
+- Added edit control and expandable history intentionally preserve existing product capability. Development-only fixture banner is not shipped.
+Homework component result: passed. Independent practice detail page remains next.

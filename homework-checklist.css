@@ -1,0 +1,15 @@
+.vzip-homework-card>h2{display:none}.vzip-homework-active h3{font-size:16px;margin:4px 0 14px}.vzip-homework-card .vzip-task-item{padding:12px 10px;margin:0 0 10px;border:1px solid #eee6fa;border-radius:18px;background:#ffffffb8;box-shadow:0 4px 12px #7860a807}
+.vzip-task-main{display:flex;align-items:center;gap:8px}.vzip-task-check,.vzip-task-edit{flex:none;width:44px;height:44px;background:transparent;border:0;display:grid;place-items:center;color:#a08bbb;cursor:pointer;padding:0;font-size:23px}.vzip-task-check[aria-checked=true]{color:#9468e5}.vzip-task-edit{font-size:19px;width:36px}
+.vzip-task-copy{min-width:0;flex:1}.vzip-task-copy b{font-size:13px;line-height:1.5;overflow-wrap:anywhere}.vzip-task-copy .muted{font-size:12px;line-height:1.5;margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere}
+.vzip-task-history{margin:5px 0 0 52px;font-size:11px;color:#827696}.vzip-task-history summary{cursor:pointer;min-height:30px;padding-top:6px}.vzip-homework-completed>summary{min-height:44px;cursor:pointer;font-weight:700;font-size:15px;padding:14px 0;margin:12px 0}
+.vzip-task-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.vzip-homework-add{display:block;width:100%;margin:24px 0 4px;min-height:48px;border-radius:26px}.vzip-homework-editor{padding:16px 0}.vzip-homework-editor[hidden]{display:none}.vzip-homework-editor [role=status]{font-size:13px;color:#8a4773}
+.vzip-homework-card button:focus-visible,.vzip-homework-card summary:focus-visible{outline:3px solid #7950ce;outline-offset:2px}
+#lessons .vzip-ia-segment{display:flex;gap:4px}#lessons .vzip-ia-segment button{flex:1;padding:12px 6px;font-size:13px}
+
+body[data-vzip-page="lessons"] .app>.top{display:flex;position:absolute;right:16px;top:18px;width:44px;height:44px;margin:0;padding:0;z-index:2}
+body[data-vzip-page="lessons"] .app>.top>div:first-child,body[data-vzip-page="lessons"] .app>.top .tag{display:none}
+#lessons>.vzip-page-head{text-align:center;margin:0 0 14px!important;padding:4px 0!important}
+#lessons>.vzip-page-head h2{font-size:22px!important;margin:6px 0!important}
+#lessons>.vzip-page-head p,#lessons>.vzip-page-head .vzip-page-eyebrow{display:none}
+#lessons .vzip-homework-card{background:transparent!important;border:0!important;box-shadow:none!important;padding:12px 0!important}

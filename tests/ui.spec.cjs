@@ -989,3 +989,39 @@ test('Calendar empty and invalid-date records never invent activity',async({page
   await expect(page.locator('.vzip-calendar-records')).toContainText('이날 남긴 기록이 없어요');
   await expect(page.locator('#practice-list')).toContainText('기존 날짜 기록');
 });
+
+
+test('Standalone homework keeps failed input, retries once and completes without losing its note',async({page})=>{
+  await page.locator('.nav [data-tab=lessons]').click();await page.locator('[data-homework-tab]').click();
+  await page.getByRole('button',{name:'＋ 숙제 추가',exact:true}).click();
+  const editor=page.locator('.vzip-homework-editor');
+  await editor.getByLabel('숙제 내용').fill('프레이즈 호흡 유지');await editor.getByLabel('연습할 때 기억할 점').fill('목에 힘을 주지 않기');
+  await failRecordWrites(page);await editor.getByRole('button',{name:'숙제 저장',exact:true}).click();
+  await expect(editor.getByRole('status')).toContainText('입력은 유지');await expect(editor.getByLabel('숙제 내용')).toHaveValue('프레이즈 호흡 유지');
+  await restoreRecordWrites(page);await editor.getByRole('button',{name:'숙제 저장',exact:true}).click();
+  await expect(editor).toBeHidden();
+  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')));expect(state.assignments).toHaveLength(1);expect(state.assignments[0].lessonIds).toEqual([]);
+  await page.getByRole('checkbox',{name:'프레이즈 호흡 유지 완료 처리',exact:true}).click();
+  await expect(page.locator('.vzip-homework-completed summary').first()).toContainText('완료된 숙제 1');
+  await page.locator('.vzip-homework-completed>summary').click();
+  await expect(page.getByRole('checkbox',{name:'프레이즈 호흡 유지 다시 진행',exact:true})).toBeChecked();
+  await expect(page.locator('.vzip-homework-completed')).toContainText('목에 힘을 주지 않기');
+  await page.getByRole('checkbox',{name:'프레이즈 호흡 유지 다시 진행',exact:true}).click();
+  await expect(page.locator('.vzip-homework-active')).toContainText('프레이즈 호흡 유지');
+});
+
+test('Homework editing and filter navigation preserve links, history and drafts',async({page})=>{
+  await seedHistory(page,{lessons:[{id:'l1',date:'2026-11-03',memo:'보존할 레슨'}],assignments:[{id:'t1',title:'기존 숙제',note:'기존 안내',status:'active',lessonId:'l1',lessonIds:['l1','l2']}],practices:[{id:'p1',date:'2026-11-03',minutes:5,completed:['t1'],assignmentNotes:{t1:'수행 메모'}}]});
+  await page.locator('.nav [data-tab=lessons]').click();await page.locator('[data-homework-tab]').click();
+  await expect(page.locator('#lesson-list')).toBeHidden();await page.locator('[data-edit-task=t1]').click();
+  const editor=page.locator('.vzip-homework-editor');await editor.getByLabel('숙제 내용').fill('취소할 내용');await editor.getByRole('button',{name:'취소',exact:true}).click();
+  await expect(page.locator('.vzip-homework-active')).toContainText('기존 숙제');
+  await page.locator('[data-edit-task=t1]').click();await editor.getByLabel('숙제 내용').fill('수정 숙제');
+  await page.locator('.nav [data-tab=practice]').click();await page.locator('.nav [data-tab=lessons]').click();
+  await expect(editor.getByLabel('숙제 내용')).toHaveValue('수정 숙제');
+  await editor.getByRole('button',{name:'숙제 저장',exact:true}).click();
+  const data=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')));
+  expect(data.assignments[0].lessonIds).toEqual(['l1','l2']);expect(data.assignments[0].title).toBe('수정 숙제');expect(data.practices[0].assignmentNotes.t1).toBe('수행 메모');
+  await page.locator('.vzip-task-history summary').click();await expect(page.locator('.vzip-task-history')).toContainText('수행 메모');
+  await page.locator('#lessons .vzip-ia-segment').getByRole('button',{name:'전체',exact:true}).click();await expect(page.locator('#lesson-list')).toBeVisible();
+});
