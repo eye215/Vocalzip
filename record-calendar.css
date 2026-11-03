@@ -16,7 +16,8 @@
 .vzip-calendar-empty{font-size:13px;color:#827696;padding:20px 12px;text-align:center;line-height:1.7}
 .vzip-calendar button:focus-visible,.vzip-calendar-heading label:focus-within{outline:3px solid #7950ce;outline-offset:2px}
 
-body[data-vzip-page="practice"] .app>.top{display:none}
+body[data-vzip-page="practice"] .app>.top{display:flex;position:absolute;right:16px;top:18px;width:44px;height:44px;margin:0;padding:0;z-index:2}
+body[data-vzip-page="practice"] .app>.top>div:first-child,body[data-vzip-page="practice"] .app>.top .tag{display:none}
 #practice>.vzip-page-head{text-align:center;margin:0 0 14px!important;padding:4px 0!important}
 #practice>.vzip-page-head h2{font-size:22px!important;margin:6px 0!important}
 #practice>.vzip-page-head p,#practice>.vzip-page-head .vzip-page-eyebrow{display:none}
