@@ -18,16 +18,17 @@ groupControl.onclick=()=>{groupBySong=!groupBySong;groupControl.setAttribute('ar
 function render(){clearPlayer();list.replaceChildren();if(!items.length){list.innerHTML='<p class="empty">아직 녹음·영상이 없어요. 위에서 파일을 업로드해 보세요.</p>';return}
 const visible=items.filter(x=>(filter==='all'||(filter==='video'?x.type?.startsWith('video/'):!x.type?.startsWith('video/')))&&(origin==='all'||(origin==='import'?!['lesson','practice'].includes(x.source):x.source===origin)));
 if(!visible.length){list.innerHTML='<p class="empty">선택한 조건에 맞는 파일이 없어요. 다른 필터를 선택해 주세요.</p>';return}
+const groupKey=item=>item.songId?'id:'+item.songId:item.song?'legacy:'+item.song:'unassigned';
 const ordered=groupBySong?[...visible].sort((a,b)=>{
- const an=(a.song||'곡 미지정').toLocaleLowerCase('ko'),bn=(b.song||'곡 미지정').toLocaleLowerCase('ko');
- return an.localeCompare(bn,'ko')||((b.created||0)-(a.created||0));
+ return groupKey(a).localeCompare(groupKey(b),'ko')||((b.created||0)-(a.created||0));
 }):visible;
 let lastSong=null;
 for(const item of ordered){
- if(groupBySong){const current=item.song||'곡 미지정';if(current!==lastSong){
+ if(groupBySong){const current=groupKey(item);if(current!==lastSong){
   const heading=document.createElement('h3');heading.className='vzip-song-group-title';heading.style.cssText='margin:24px 0 8px;padding:0 2px;font-size:17px';
-  const count=ordered.filter(x=>(x.song||'곡 미지정')===current).length;
-  heading.textContent=current+' · '+count+'개 녹음';list.append(heading);lastSong=current;
+  const count=ordered.filter(x=>groupKey(x)===current).length;
+  heading.dataset.songKey=current;
+  heading.textContent=(songs().find(x=>x.id===item.songId)?.title||item.song||'곡 미지정')+' · '+count+'개 녹음';list.append(heading);lastSong=current;
  }}
  const row=document.createElement('article');row.className='vzip-hub-item';row.dataset.id=item.id;row.setAttribute('aria-label',item.name||'제목 없는 파일');
 const head=document.createElement('div');head.innerHTML='<strong>'+escape(item.type?.startsWith('video/')?'🎬 ':'🎤 ')+escape(item.name||'제목 없음')+'</strong><div class="muted">'+escape(date(item.created))+' · '+escape(item.song||'곡 미지정')+' · '+escape(item.source==='lesson'?'🎓 레슨':item.source==='practice'?'🎼 연습':'📂 가져온 파일')+' · '+(item.cloud?'☁️ 클라우드':'📱 기기')+'</div>';row.append(head);
@@ -66,7 +67,7 @@ modal.addEventListener('keydown',event=>{
  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
 });
 name.focus();modal.querySelector('[data-cancel]').onclick=close;modal.addEventListener('click',e=>{if(e.target===modal)close()});
-modal.querySelector('[data-save]').onclick=async()=>{if(!name.value.trim()){err.textContent='파일 이름을 입력해 주세요.';return}const d=new Date(dateInput.value+'T12:00:00');if(!dateInput.value||Number.isNaN(+d)){err.textContent='날짜를 확인해 주세요.';return}let selected=songs().find(x=>x.id===song.value);if(!selected&&song.value===item.songId&&item.song)selected={id:item.songId,title:item.song,show:''};const typed=customSong.value.trim();if(typed){const catalog=JSON.parse(localStorage.getItem(key)||'{}');catalog.songs=catalog.songs||[];selected=catalog.songs.find(x=>x.title.trim().toLowerCase()===typed.toLowerCase());if(!selected){selected={id:crypto.randomUUID?.()||String(Date.now()),title:typed,show:''};catalog.songs.push(selected);try{localStorage.setItem(key,JSON.stringify(catalog))}catch(e){err.textContent='곡 목록 저장 실패: '+e.message;return}}}const changes={name:name.value.trim(),songId:selected?.id||'',song:selected?(selected.title+(selected.show?' — '+selected.show:'')):'',created:d.getTime(),rating:ratingInput.value?Number(ratingInput.value):null,review:reviewInput.value.trim()};const button=modal.querySelector('[data-save]');button.disabled=true;try{if(item.cloud)await window.vzipCloudMediaUpdate(item,changes);if(item.local)await localChange(item.id,x=>({...x,...changes}));window.dispatchEvent(new Event('vzip:media-updated'));close();await refresh()}catch(e){err.textContent='수정 실패: '+e.message;button.disabled=false}};
+modal.querySelector('[data-save]').onclick=async()=>{if(!name.value.trim()){err.textContent='파일 이름을 입력해 주세요.';return}const d=new Date(dateInput.value+'T12:00:00');if(!dateInput.value||Number.isNaN(+d)){err.textContent='날짜를 확인해 주세요.';return}let selected=songs().find(x=>x.id===song.value);if(!selected&&song.value===item.songId&&item.song)selected={id:item.songId,title:item.song,show:''};const typed=customSong.value.trim();if(typed){const catalog=JSON.parse(localStorage.getItem(key)||'{}');catalog.songs=catalog.songs||[];selected=catalog.songs.find(x=>x.title.trim().toLowerCase()===typed.toLowerCase());if(!selected){selected={id:crypto.randomUUID?.()||String(Date.now()),title:typed,show:''};catalog.songs.push(selected);try{localStorage.setItem(key,JSON.stringify(catalog));window.dispatchEvent(new Event('vzip:data-changed'))}catch(e){err.textContent='곡 목록 저장 실패: '+e.message;return}}}const changes={name:name.value.trim(),songId:selected?.id||'',song:selected?(selected.title+(selected.show?' — '+selected.show:'')):'',created:d.getTime(),rating:ratingInput.value?Number(ratingInput.value):null,review:reviewInput.value.trim()};const button=modal.querySelector('[data-save]');button.disabled=true;try{if(item.cloud)await window.vzipCloudMediaUpdate(item,changes);if(item.local)await localChange(item.id,x=>({...x,...changes}));window.dispatchEvent(new Event('vzip:media-updated'));close();await refresh()}catch(e){err.textContent='수정 실패: '+e.message;button.disabled=false}};
 }
 async function remove(item){if(!confirm('이 녹음·영상을 영구 삭제할까요? 클라우드와 이 기기에 모두 있으면 둘 다 삭제됩니다.'))return;try{if(item.cloud)await window.vzipCloudMediaDelete(item);if(item.local)await localChange(item.id,()=>null);clearPlayer();window.dispatchEvent(new Event('vzip:media-updated'));await refresh()}catch(e){status.textContent='삭제 실패: '+e.message}}
 list.addEventListener('click',async e=>{const b=e.target.closest('button[data-action]');if(!b){if(e.target.closest('audio,video,input,select,textarea,a,label,button'))return;const row=e.target.closest('.vzip-hub-item');if(row)window.dispatchEvent(new CustomEvent('vzip:compare-open',{detail:{id:row.dataset.id}}));return;}const item=items.find(x=>x.id===b.closest('[data-id]')?.dataset.id);if(!item)return;if(b.dataset.action==='compare')window.dispatchEvent(new CustomEvent('vzip:compare-open',{detail:{id:item.id}}));if(b.dataset.action==='play')await play(item,b.closest('.vzip-hub-item'));if(b.dataset.action==='edit')await edit(item,b);if(b.dataset.action==='delete')await remove(item)});
@@ -85,6 +86,7 @@ function chooseUploadSong(fileName){
   overlay.className='vzip-edit-overlay';
   overlay.style.cssText='position:fixed;inset:0;z-index:100002;background:#0b0b23bd;display:flex;align-items:flex-end;justify-content:center';
   const sheet=document.createElement('div');
+  sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-label','업로드 곡 선택');
   sheet.style.cssText='background:#fff;color:#292439;width:100%;max-width:600px;max-height:85dvh;overflow:auto;border-radius:22px 22px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom))';
   const title=document.createElement('h2');title.textContent='이 파일은 어떤 곡인가요?';
   const file=document.createElement('p');file.className='muted';file.textContent=fileName;
@@ -104,7 +106,9 @@ function chooseUploadSong(fileName){
   const finish=value=>{if(done)return;done=true;overlay.remove();previous?.focus?.();resolve(value)};
   cancel.onclick=()=>finish(null);
   overlay.onclick=e=>{if(e.target===overlay)finish(null)};
-  overlay.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();finish(null)}};
+  overlay.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();finish(null)}
+   if(e.key==='Tab'){if(e.shiftKey&&document.activeElement===select){e.preventDefault();start.focus()}else if(!e.shiftKey&&document.activeElement===start){e.preventDefault();select.focus()}}
+  };
   start.onclick=()=>{
    const typed=custom.value.trim();let selected=songs().find(x=>x.id===select.value);
    if(typed){let catalog;try{catalog=JSON.parse(localStorage.getItem(key)||'{}')}catch{catalog={}}
@@ -123,15 +127,15 @@ function chooseUploadSong(fileName){
 $('#vzip-hub-upload').onchange=async e=>{
  const input=e.target;let file=input.files?.[0];if(!file||input.disabled)return;
  input.disabled=true;const fileName=file.name;let outcome;
- const chosen=await chooseUploadSong(fileName);
- if(!chosen){file=null;input.value='';input.disabled=false;return}
- importController=new AbortController();
  try{
   const type=window.vzipMediaType(file);
   if(!/^(audio|video)\//.test(type))throw Error('지원하지 않는 형식이에요.');
   if(!file.size)throw Error('빈 파일은 가져올 수 없어요.');
   if(file.size>500*1024*1024)throw Error('파일당 최대 500MB까지 가져올 수 있어요.');
   if(file.size>25*1024*1024&&!window.vzipCloudSignedIn?.())throw Error('25MB 초과 파일은 클라우드 로그인이 필요해요.');
+  const chosen=await chooseUploadSong(fileName);
+  if(!chosen){outcome='파일 가져오기를 취소했어요.';return}
+  importController=new AbortController();
   const name=fileName.replace(/\.[^.]+$/,'');status.textContent=fileName+' · 가져오는 중…';
   if(window.vzipCloudSignedIn?.()){
    if(!window.vzipCloudImport)throw Error('클라우드 업로드 준비 중이에요.');
