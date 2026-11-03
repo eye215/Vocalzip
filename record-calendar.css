@@ -1,0 +1,26 @@
+.vzip-calendar{padding:12px 6px 24px;margin-bottom:20px;color:#302247}
+.vzip-calendar-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 20px}
+.vzip-calendar-heading>button{border:0;background:transparent;color:#584274;min-width:44px;min-height:44px;font-size:22px;cursor:pointer}
+.vzip-calendar-heading label{position:relative;margin:0;display:flex;align-items:center;justify-content:center;min-height:44px;font-size:19px;font-weight:750;cursor:pointer}
+.vzip-calendar-heading input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;min-width:0}
+.vzip-calendar-week,.vzip-calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+.vzip-calendar-week{font-size:12px;color:#827696;margin-bottom:10px}.vzip-calendar-days{row-gap:4px}
+.vzip-calendar-day{position:relative;justify-self:center;width:100%;max-width:46px;min-height:44px;border:0;background:transparent;color:#302247;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;border-radius:50%}
+.vzip-calendar-day[aria-current=date]{background:#eee4fb}.vzip-calendar-day[aria-pressed=true]{background:#9768e8;color:white;box-shadow:0 3px 9px #9768e82b}
+.vzip-calendar-day.has-records:after{content:'';position:absolute;width:4px;height:4px;bottom:4px;left:calc(50% - 2px);background:currentColor;border-radius:50%}
+.vzip-calendar-footer{display:flex;justify-content:space-between;align-items:center;margin:12px 0 18px;font-size:11px;color:#827696}.vzip-calendar-footer button{border:0;background:white;color:#7751ba;border-radius:16px;padding:10px 16px;min-height:44px;cursor:pointer}
+.vzip-calendar-selected{border-top:1px solid #e8dff5;padding-top:18px}.vzip-calendar-selected h3{font-size:16px;margin:0 0 12px}
+.vzip-calendar-record{display:flex;align-items:center;gap:12px;text-align:left;width:100%;padding:14px 12px;margin:0 0 9px;background:#ffffffb8;border:1px solid #eee6fa;border-radius:18px;box-shadow:0 4px 12px #7860a807;color:#302247;cursor:pointer}
+.vzip-calendar-record>i:first-child{font-size:23px;color:#9668e6;background:#f1eaff;padding:10px;border-radius:50%}.vzip-calendar-record>i:last-child:not(:first-child){font-size:18px;color:#8c74ad}
+.vzip-calendar-record-text{display:flex;flex:1;min-width:0;flex-direction:column;gap:5px}.vzip-calendar-record-text strong{font-size:13px;line-height:1.4;overflow-wrap:anywhere}.vzip-calendar-record-text>span{font-size:12px;color:#827696;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.vzip-calendar-empty{font-size:13px;color:#827696;padding:20px 12px;text-align:center;line-height:1.7}
+.vzip-calendar button:focus-visible,.vzip-calendar-heading label:focus-within{outline:3px solid #7950ce;outline-offset:2px}
+
+body[data-vzip-page="practice"] .app>.top{display:flex;position:absolute;right:16px;top:18px;width:44px;height:44px;margin:0;padding:0;z-index:2}
+body[data-vzip-page="practice"] .app>.top>div:first-child,body[data-vzip-page="practice"] .app>.top .tag{display:none}
+#practice>.vzip-page-head{text-align:center;margin:0 0 14px!important;padding:4px 0!important}
+#practice>.vzip-page-head h2{font-size:22px!important;margin:6px 0!important}
+#practice>.vzip-page-head p,#practice>.vzip-page-head .vzip-page-eyebrow{display:none}
+#practice>.vzip-ia-segment{margin-bottom:12px!important}
+.vzip-calendar-heading .vzip-calendar-month-label{font-size:19px!important;color:#302247;font-weight:750}
+.vzip-calendar-heading{margin-bottom:10px}.vzip-calendar{padding-top:0}.vzip-calendar-footer{margin:6px 0 10px}
