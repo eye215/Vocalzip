@@ -469,3 +469,18 @@ test('Practice date input itself stays within its card on iPhone',async({page})=
  expect(m.height).toBeLessThanOrEqual(52);
  expect(m.box).toBe('border-box');
 });
+
+test('iPhone practice date has isolated clipped full-width layout',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.locator('.hero [data-go-tab="practice"]').click();
+ const frame=page.locator('#practice-form .vzip-practice-date-frame');
+ const date=frame.locator('input[type="date"]');
+ await expect(date).toBeVisible();
+ const m=await date.evaluate(el=>{const a=el.getBoundingClientRect(),f=el.parentElement.getBoundingClientRect(),c=el.closest('.card').getBoundingClientRect(),n=document.querySelector('#practice-minutes').getBoundingClientRect();return {left:a.left,right:a.right,frameLeft:f.left,frameRight:f.right,cardRight:c.right,frameTop:f.top,frameBottom:f.bottom,minutesTop:n.top,overflow:getComputedStyle(el.parentElement).overflow}});
+ expect(m.right).toBeLessThanOrEqual(m.frameRight+1);
+ expect(m.frameRight).toBeLessThanOrEqual(m.cardRight+1);
+ expect(m.overflow).toBe('hidden');
+ expect(m.minutesTop).toBeGreaterThanOrEqual(m.frameBottom);
+ await date.fill('2026-11-03');
+ await expect(date).toHaveValue('2026-11-03');
+});
