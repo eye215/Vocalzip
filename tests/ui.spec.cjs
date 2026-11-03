@@ -486,7 +486,7 @@ test('iPhone practice date has isolated clipped full-width layout',async({page})
 
 async function seedHistory(page, patch) {
   await page.evaluate(patch=>{
-    const state=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}');
+    const state={categories:[{id:'c1',name:'발성',items:['립트릴']}],songs:[],lessons:[],assignments:[],practices:[],...JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}')};
     localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify({...state,...patch}));
   },patch);
   await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
