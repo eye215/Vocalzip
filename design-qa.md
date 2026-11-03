@@ -24,3 +24,15 @@ Full selected-screen fidelity gate: pending calendar, homework and detail layout
 final result: blocked
 
 Blocker is incomplete full-screen design QA, not permission or missing access. Do not present this iteration as a completed recreation of all selected screens.
+
+
+## Calendar iteration — 2026-11-03
+Source: right-hand calendar in codex-clipboard-2970792b-57fc-4a16-b283-718b4c0b9bd6.png. IAB 390×844 capture and side-by-side comparison: workspace outputs/calendar-preview.png and outputs/calendar-comparison.png.
+- P2 fixed: nested section inherited app screen hiding; selected-day region now uses a div with region role.
+- P2 fixed: repeated brand/page explanation pushed calendar below the fold; record route now uses a compact centered title.
+- Typography: existing system Korean font, 19px month, 14px days, 13px record titles and 12px secondary metadata.
+- Spacing: retained 44px date targets and existing write/list switch; these intentionally make the real calendar taller than the reference. Daily cards continue below and remain reachable by scrolling. The local development-only banner is not shipped.
+- Color: existing lavender palette and white cards preserved, selected date clearly highlighted.
+- Assets: official Phosphor icons; activity dots encode actual record presence. No synthetic activity.
+- Copy/data: valid real calendar dates replace the reference's invalid day numbers; lessons/practices/performed homework derive from stored records. No date mutation or migration.
+Calendar component result: passed. Full-board completion remains pending homework/detail screens.

@@ -942,3 +942,50 @@ test('Player card seeks, toggles playback and exposes native fallback', async ({
   await card.locator('summary').click();
   await testInfo.attach('player-card',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });
+
+
+test('Calendar respects leap days, month rollover and selection without changing data',async({page})=>{
+  await page.locator('.nav [data-tab=practice]').click();
+  const before=await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1'));
+  const month=page.getByLabel('기록 월 선택');
+  await month.fill('2024-02');
+  await expect(page.locator('.vzip-calendar-day')).toHaveCount(29);
+  await page.locator('[data-date="2024-02-29"]').click();
+  await page.getByRole('button',{name:'다음 달',exact:true}).click();
+  await expect(month).toHaveValue('2024-03');
+  await expect(page.locator('.vzip-calendar-day[aria-pressed=true]')).toHaveAttribute('data-date','2024-03-29');
+  await month.fill('2025-02');
+  await expect(page.locator('.vzip-calendar-day')).toHaveCount(28);
+  await expect(page.locator('.vzip-calendar-day[aria-pressed=true]')).toHaveAttribute('data-date','2025-02-28');
+  await month.fill('2025-12');
+  await page.getByRole('button',{name:'다음 달',exact:true}).click();
+  await expect(month).toHaveValue('2026-01');
+  expect(await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1'))).toBe(before);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('Calendar combines same-day practice, lesson and performed homework with working record links',async({page})=>{
+  await seedHistory(page,{songs:[{id:'s1',title:'같은 곡'}],assignments:[{id:'t1',title:'호흡 유지',status:'active',lessonId:'l1'}],
+    lessons:[{id:'l1',date:'2024-02-29',songId:'s1',feedback:'프레이즈 연결',memo:'레슨 메모'}],
+    practices:[{id:'p1',date:'2024-02-29',songId:'s1',minutes:12,rating:4,memo:'연습 메모',completed:['t1'],mediaIds:[]}]});
+  await page.locator('.nav [data-tab=practice]').click();
+  await page.getByLabel('기록 월 선택').fill('2024-02');
+  await page.locator('[data-date="2024-02-29"]').click();
+  const daily=page.locator('.vzip-calendar-records');
+  await expect(daily).toContainText('같은 곡');await expect(daily).toContainText('12분');await expect(daily).toContainText('만족도 4/5');
+  await expect(daily).toContainText('프레이즈 연결');await expect(daily).toContainText('호흡 유지');
+  await daily.locator('[data-record-id=p1]').click();
+  await expect(page.locator('#practice-list .item')).toBeFocused();
+  await daily.locator('[data-record-id=l1]').click();
+  await expect(page.locator('#lessons')).toBeVisible();await expect(page.locator('#lesson-list .item')).toBeFocused();
+  await page.locator('.nav [data-tab=practice]').click();
+  await expect(page.locator('[data-date="2024-02-29"]')).toHaveAttribute('aria-pressed','true');
+});
+
+test('Calendar empty and invalid-date records never invent activity',async({page})=>{
+  await seedHistory(page,{lessons:[],practices:[{id:'legacy',date:'2024-02-31',minutes:1,memo:'기존 날짜 기록',completed:[]}]});
+  await page.locator('.nav [data-tab=practice]').click();await page.getByLabel('기록 월 선택').fill('2024-02');
+  await expect(page.locator('.vzip-calendar-day.has-records')).toHaveCount(0);
+  await expect(page.locator('.vzip-calendar-records')).toContainText('이날 남긴 기록이 없어요');
+  await expect(page.locator('#practice-list')).toContainText('기존 날짜 기록');
+});
