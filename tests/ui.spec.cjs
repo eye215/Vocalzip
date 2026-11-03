@@ -483,3 +483,114 @@ test('iPhone practice date has isolated clipped full-width layout',async({page})
  await date.fill('2026-11-03');
  await expect(date).toHaveValue('2026-11-03');
 });
+
+async function seedHistory(page, patch) {
+  await page.evaluate(patch=>{
+    const state=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}');
+    localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify({...state,...patch}));
+  },patch);
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+}
+async function failRecordWrites(page) {
+  await page.evaluate(()=>{
+    window.__restoreWrites=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){
+      if(key==='vocal-zip_mvp_v1')throw new DOMException('test quota failure','QuotaExceededError');
+      return window.__restoreWrites.call(this,key,value);
+    };
+  });
+}
+async function restoreRecordWrites(page) {
+  await page.evaluate(()=>{Storage.prototype.setItem=window.__restoreWrites});
+}
+async function addSimplePractice(page,memo) {
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name="memo"]').fill(memo);
+  await page.locator('#practice-form>button:not([type])').click();
+}
+test('Deleting an originating lesson preserves carried homework and its practice history',async({page})=>{
+  await seedHistory(page,{
+    lessons:[{id:'first',date:'2026-10-01',feedback:'첫 레슨'},{id:'second',date:'2026-10-08',feedback:'이어간 레슨'}],
+    assignments:[
+      {id:'carried',lessonId:'first',lessonIds:['first','second'],title:'계속할 숙제',status:'active'},
+      {id:'unpracticed',lessonId:'first',lessonIds:['first'],title:'아직 연습 안 한 숙제',status:'active'},
+      {id:'practiced',lessonId:'first',lessonIds:['first'],title:'수행 이력 있는 숙제',status:'active'}
+    ],
+    practices:[{id:'history',date:'2026-10-02',minutes:10,rating:3,completed:['practiced'],assignmentNotes:{practiced:'남겨야 할 숙제 메모'}}]
+  });
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await page.locator('#lesson-list [data-id="first"]').click();
+  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')));
+  expect(state.lessons.map(item=>item.id)).toEqual(['second']);
+  expect(state.assignments).toHaveLength(3);
+  expect(state.assignments.find(item=>item.id==='carried').lessonIds).toEqual(['second']);
+  expect(state.assignments.find(item=>item.id==='practiced').lessonIds).toEqual([]);
+  expect(state.practices[0].assignmentNotes.practiced).toBe('남겨야 할 숙제 메모');
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await expect(page.locator('#lesson-list')).toContainText('계속할 숙제');
+  await expect(page.locator('#assignment-history')).toContainText('아직 연습 안 한 숙제');
+  await expect(page.locator('#assignment-history')).toContainText('남겨야 할 숙제 메모');
+});
+test('Failed practice deletion cannot leak into a later successful save',async({page})=>{
+  await addSimplePractice(page,'삭제 실패 때 남겨야 하는 연습');
+  await failRecordWrites(page);
+  await page.locator('#practice-list [data-delete="practice"]').click();
+  await expect(page.locator('#practice-list')).toContainText('삭제 실패 때 남겨야 하는 연습');
+  await restoreRecordWrites(page);
+  await addSimplePractice(page,'다음 저장');
+  const practices=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices);
+  expect(practices).toHaveLength(2);
+  expect(practices.some(item=>item.memo.includes('삭제 실패 때 남겨야 하는 연습'))).toBe(true);
+});
+test('Failed homework completion rolls back and successful completion survives reload',async({page})=>{
+  await seedHistory(page,{assignments:[{id:'task',lessonId:'prior',lessonIds:['prior'],title:'숙제 상태 복구',status:'active'}]});
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await failRecordWrites(page);
+  await page.locator('[data-status="done"][data-id="task"]').click();
+  await expect(page.locator('[data-status="done"][data-id="task"]')).toBeVisible();
+  await restoreRecordWrites(page);
+  await addSimplePractice(page,'다른 저장 후 숙제 상태 확인');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).assignments[0].status)).toBe('active');
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await page.locator('[data-status="done"][data-id="task"]').click();
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await expect(page.locator('[data-status="active"][data-id="task"]')).toHaveText('다시 진행');
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await expect(page.locator('#homework-checks input[value="task"]')).toHaveCount(0);
+});
+test('Failed lesson save preserves homework and retries without duplicate lessons or tasks',async({page})=>{
+  await seedHistory(page,{lessons:[{id:'prior',date:'2026-10-01',feedback:'이전 레슨'}],
+    assignments:[{id:'carry',lessonId:'prior',lessonIds:['prior'],title:'기존 숙제',status:'active'}]});
+  await page.locator('.hero [data-go-tab="lessons"]').click();
+  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+  await page.locator('#lesson-form [name="feedback"]').fill('저장 실패 후 유지할 피드백');
+  await page.locator('#lesson-form [name="homework"]').fill('추가 숙제');
+  await page.locator('#carryover-checks input[value="carry"]').check();
+  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+  await failRecordWrites(page);
+  await page.getByRole('button',{name:'레슨 및 숙제 저장',exact:true}).click();
+  await expect(page.locator('#lesson-form')).toBeVisible();
+  await expect(page.locator('.wizard-summary')).toContainText('저장 실패 후 유지할 피드백');
+  await restoreRecordWrites(page);
+  await page.getByRole('button',{name:'레슨 및 숙제 저장',exact:true}).click();
+  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')));
+  expect(state.lessons).toHaveLength(2);expect(state.assignments).toHaveLength(2);
+  expect(state.assignments.find(item=>item.id==='carry').lessonIds).toHaveLength(2);
+});
+test('Song input survives quota failure and retry creates one catalog entry',async({page})=>{
+  await page.locator('#vzip-open-settings').click();
+  await page.locator('#manage [data-ia-open="songs"]').click();
+  await page.locator('#song-form [name="title"]').fill('실패 후 다시 저장할 곡');
+  await failRecordWrites(page);
+  await page.locator('#song-form button').click();
+  await expect(page.locator('#song-form [name="title"]')).toHaveValue('실패 후 다시 저장할 곡');
+  await restoreRecordWrites(page);
+  await page.locator('#song-form button').click();
+  const songs=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs);
+  expect(songs).toHaveLength(1);expect(songs[0].title).toBe('실패 후 다시 저장할 곡');
+});
