@@ -397,7 +397,7 @@ test('Large video import invokes optimization and uploads optimized bytes withou
   await page.locator('.nav [data-tab="media"]').click();
   await page.evaluate(()=>{
     window.__vzipOptimized=false;
-    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?101*1024*1024:Blob.prototype.size.get?.call(this)||1024}});
+    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?101*1024*1024:1024}});
     window.vzipCloudSignedIn=()=>true;
     window.vzipOptimizeVideo=async(file,progress)=>{
       window.__vzipOptimized=true;progress(100);
