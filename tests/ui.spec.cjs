@@ -392,3 +392,34 @@ test('Growth empty state has no invented score and updates when a practice is sa
   await page.locator('.nav [data-tab="archive"]').click();
   await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('10분');
 });
+
+test('Large video import invokes optimization and uploads optimized bytes without storing original',async({page})=>{
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.evaluate(()=>{
+    window.__vzipOptimized=false;
+    window.vzipCloudSignedIn=()=>true;
+    window.vzipOptimizeVideo=async(file,progress)=>{
+      window.__vzipOptimized=true;progress(100);
+      return new File([new Uint8Array(1024)],'optimized.webm',{type:'video/webm'});
+    };
+    window.vzipCloudImport=async(file,info,progress)=>{
+      window.__vzipUpload={size:file.size,type:file.type,name:info.name};
+      progress(100);return {id:'large-test'};
+    };
+  });
+  await page.locator('#vzip-hub-upload').setInputFiles({
+    name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(101*1024*1024,1)
+  });
+  await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(1024);
+  expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(true);
+  expect(await page.evaluate(()=>window.__vzipUpload.type)).toBe('video/webm');
+  expect(page.__vzipErrors).toEqual([]);
+});
+test('Large video import without cloud login explains required sign in',async({page})=>{
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false;window.__vzipOptimized=false;window.vzipOptimizeVideo=async()=>{window.__vzipOptimized=true}});
+  await page.locator('#vzip-hub-upload').setInputFiles({name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(101*1024*1024,1)});
+  await expect(page.locator('#vzip-hub-status')).toContainText('클라우드 로그인이 필요');
+  expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
+  expect(page.__vzipErrors).toEqual([]);
+});
