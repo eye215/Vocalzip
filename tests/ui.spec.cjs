@@ -1,10 +1,10 @@
 const {test, expect} = require('@playwright/test');
 const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.__cloudUpdates=[];window.supabase={createClient:()=>({
  auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),
- onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
+ onAuthStateChange:callback=>{(window.__authCallbacks||=[]).push(callback);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/fixture-audio.wav'},error:null}),upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
  from:table=>{const chain={};for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
- chain[method]=(...args)=>{if(method==='upsert')window.__cloudMetadata.push({table,payload:args[0]});if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(window.__cloudRows||[]):[],error:null});return chain;}
+ chain[method]=(...args)=>{if(method==='upsert'){window.__cloudMetadata.push({table,payload:args[0]});if(table==='vocal_media')window.__onMetadataWrite?.()}if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(window.__cloudRows||[]):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
 })};`;
 test.beforeEach(async ({page}) => {
   page.__vzipErrors=[];page.on('pageerror',error=>page.__vzipErrors.push(error.message));
@@ -73,13 +73,13 @@ test('Imported audio links to saved practice, decodes after reload, and appears 
   await page.locator('.nav [data-tab="practice"]').click();
   await page.locator('.vzip-practice-files summary').click();
   const audio=page.locator('.vzip-practice-files audio');
-  await expect(audio).toBeVisible();
+  await expect(audio).toBeAttached();
   await expect.poll(()=>audio.evaluate(element=>element.readyState)).toBeGreaterThanOrEqual(1);
   await page.locator('.nav [data-tab="media"]').click();
   await page.locator('[data-origin="practice"]').click();
   await expect(page.locator('#vzip-hub-list')).toContainText('vocal-ui-test.wav');
   await page.locator('#vzip-hub-list [data-action="play"]').click();
-  await expect(page.locator('#vzip-hub-list audio')).toBeVisible();
+  await expect(page.locator('#vzip-hub-list .vzip-player-controls')).toBeVisible();
   await testInfo.attach('library',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });
 test('Lesson wizard keeps fields in form and stores homework', async ({page}) => {
@@ -132,7 +132,7 @@ test('Denied or unavailable capture preserves controls and practice input',async
   await page.locator('.hero [data-go-tab="practice"]').click();
   await page.locator('#practice-form [name="memo"]').fill('권한 거부 후 입력 유지');
   const supported=await page.evaluate(()=>!!window.MediaRecorder);
-  await page.evaluate(()=>{navigator.mediaDevices.getUserMedia=async()=>{throw new DOMException('denied','NotAllowedError')}});
+  await page.evaluate(()=>{if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=async()=>{throw new DOMException('denied','NotAllowedError')}});
   await page.locator('#vzip-capture-start').click();
   await expect(page.locator('#vzip-capture-status')).toContainText(supported?'권한':'지원하지');
   await expect(page.locator('#vzip-capture-start')).toBeEnabled();
@@ -203,7 +203,7 @@ test('Legacy ArrayBuffer audio decodes after reload and backup preserves its met
     await new Promise((resolve,reject)=>{
       const tx=db.transaction('recordings','readwrite');
       tx.objectStore('recordings').put({id:'legacy-a',name:'기존 녹음.wav',type:'audio/wav',source:'practice',
-        created:Date.now(),durationSeconds:1,bytes:new Uint8Array(bytes).buffer});
+        created:Date.now(),durationSeconds:1,rating:4,review:'기존 감상 유지',bytes:new Uint8Array(bytes).buffer});
       tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
     });db.close();
   },bytes);
@@ -221,7 +221,7 @@ test('Legacy ArrayBuffer audio decodes after reload and backup preserves its met
   const uploaded=await page.evaluate(()=>({files:window.__cloudUploads,meta:window.__cloudMetadata}));
   expect(uploaded.files[0].size).toBe(bytes.length);expect(uploaded.files[0].path).toBe('ui-test-user/legacy-a.wav');
   const metadata=uploaded.meta.find(row=>row.table==='vocal_media').payload.metadata;
-  expect(metadata.source).toBe('practice');expect(metadata.durationSeconds).toBe(1);
+  expect(metadata.source).toBe('practice');expect(metadata.durationSeconds).toBe(1);expect(metadata.rating).toBe(4);expect(metadata.review).toBe('기존 감상 유지');
   await page.evaluate(()=>{window.__cloudRows=[{id:'legacy-a',metadata:{id:'legacy-a',path:'ui-test-user/legacy-a.webm'}}]});
   await page.locator('#cloud-media-upload').click();
   await expect.poll(()=>page.evaluate(()=>window.__cloudUploads.length)).toBe(2);
@@ -397,7 +397,7 @@ test('Large video import sends original bytes via resumable cloud importer',asyn
   await page.locator('.nav [data-tab="media"]').click();
   await page.evaluate(()=>{
     window.__vzipOptimized=false;
-    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?101*1024*1024:1024}});
+    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?40*1024*1024:1024}});
     window.vzipCloudSignedIn=()=>true;
     window.vzipOptimizeVideo=async(file,progress)=>{
       window.__vzipOptimized=true;progress(100);
@@ -411,14 +411,15 @@ test('Large video import sends original bytes via resumable cloud importer',asyn
   await page.locator('#vzip-hub-upload').setInputFiles({
     name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(1024,1)
   });
-  await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(101*1024*1024);
+  await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(40*1024*1024);
   expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
   expect(await page.evaluate(()=>window.__vzipUpload.type)).toBe('video/quicktime');
   expect(page.__vzipErrors).toEqual([]);
 });
 test('Large video import without cloud login explains required sign in',async({page})=>{
   await page.locator('.nav [data-tab="media"]').click();
-  await page.evaluate(()=>{Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?101*1024*1024:1024}});window.vzipCloudSignedIn=()=>false;window.__vzipOptimized=false;window.vzipOptimizeVideo=async()=>{window.__vzipOptimized=true}});
+  await page.evaluate(()=>{Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?40*1024*1024:1024}});window.vzipCloudSignedIn=()=>false;window.__vzipOptimized=false;window.vzipOptimizeVideo=async()=>{window.__vzipOptimized=true}});
   await page.locator('#vzip-hub-upload').setInputFiles({name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(1024,1)});
   await expect(page.locator('#vzip-hub-status')).toContainText('클라우드 로그인이 필요');
   expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
@@ -482,4 +483,462 @@ test('iPhone practice date has isolated clipped full-width layout',async({page})
  expect(m.overflow).toBe('hidden');
  await date.fill('2026-11-03');
  await expect(date).toHaveValue('2026-11-03');
+});
+
+async function seedHistory(page, patch) {
+  await page.evaluate(patch=>{
+    const state={categories:[{id:'c1',name:'발성',items:['립트릴']}],songs:[],lessons:[],assignments:[],practices:[],...JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}')};
+    localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify({...state,...patch}));
+  },patch);
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+}
+async function failRecordWrites(page) {
+  await page.evaluate(()=>{
+    window.__restoreWrites=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){
+      if(key==='vocal-zip_mvp_v1')throw new DOMException('test quota failure','QuotaExceededError');
+      return window.__restoreWrites.call(this,key,value);
+    };
+  });
+}
+async function restoreRecordWrites(page) {
+  await page.evaluate(()=>{Storage.prototype.setItem=window.__restoreWrites});
+}
+async function addSimplePractice(page,memo) {
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name="memo"]').fill(memo);
+  await page.locator('#practice-form>button:not([type])').click();
+}
+test('Deleting an originating lesson preserves carried homework and its practice history',async({page})=>{
+  await seedHistory(page,{
+    lessons:[{id:'first',date:'2026-10-01',feedback:'첫 레슨'},{id:'second',date:'2026-10-08',feedback:'이어간 레슨'}],
+    assignments:[
+      {id:'carried',lessonId:'first',lessonIds:['first','second'],title:'계속할 숙제',status:'active'},
+      {id:'unpracticed',lessonId:'first',lessonIds:['first'],title:'아직 연습 안 한 숙제',status:'active'},
+      {id:'practiced',lessonId:'first',lessonIds:['first'],title:'수행 이력 있는 숙제',status:'active'}
+    ],
+    practices:[{id:'history',date:'2026-10-02',minutes:10,rating:3,completed:['practiced'],assignmentNotes:{practiced:'남겨야 할 숙제 메모'}}]
+  });
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await page.locator('#lesson-list [data-id="first"]').click();
+  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')));
+  expect(state.lessons.map(item=>item.id)).toEqual(['second']);
+  expect(state.assignments).toHaveLength(3);
+  expect(state.assignments.find(item=>item.id==='carried').lessonIds).toEqual(['second']);
+  expect(state.assignments.find(item=>item.id==='practiced').lessonIds).toEqual([]);
+  expect(state.practices[0].assignmentNotes.practiced).toBe('남겨야 할 숙제 메모');
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await expect(page.locator('#lesson-list')).toContainText('계속할 숙제');
+  await expect(page.locator('#assignment-history')).toContainText('아직 연습 안 한 숙제');
+  await expect(page.locator('#assignment-history')).toContainText('남겨야 할 숙제 메모');
+});
+test('Failed practice deletion cannot leak into a later successful save',async({page})=>{
+  await addSimplePractice(page,'삭제 실패 때 남겨야 하는 연습');
+  await failRecordWrites(page);
+  await page.locator('#practice-list [data-delete="practice"]').click();
+  await expect(page.locator('#practice-list')).toContainText('삭제 실패 때 남겨야 하는 연습');
+  await restoreRecordWrites(page);
+  await addSimplePractice(page,'다음 저장');
+  const practices=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices);
+  expect(practices).toHaveLength(2);
+  expect(practices.some(item=>item.memo.includes('삭제 실패 때 남겨야 하는 연습'))).toBe(true);
+});
+test('Failed homework completion rolls back and successful completion survives reload',async({page})=>{
+  await seedHistory(page,{assignments:[{id:'task',lessonId:'prior',lessonIds:['prior'],title:'숙제 상태 복구',status:'active'}]});
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await failRecordWrites(page);
+  await page.locator('[data-status="done"][data-id="task"]').click();
+  await expect(page.locator('[data-status="done"][data-id="task"]')).toBeVisible();
+  await restoreRecordWrites(page);
+  await addSimplePractice(page,'다른 저장 후 숙제 상태 확인');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).assignments[0].status)).toBe('active');
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await page.locator('[data-status="done"][data-id="task"]').click();
+  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.locator('.nav [data-tab="lessons"]').click();
+  await expect(page.locator('[data-status="active"][data-id="task"]')).toHaveText('다시 진행');
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await expect(page.locator('#homework-checks input[value="task"]')).toHaveCount(0);
+});
+test('Failed lesson save preserves homework and retries without duplicate lessons or tasks',async({page})=>{
+  await seedHistory(page,{lessons:[{id:'prior',date:'2026-10-01',feedback:'이전 레슨'}],
+    assignments:[{id:'carry',lessonId:'prior',lessonIds:['prior'],title:'기존 숙제',status:'active'}]});
+  await page.locator('.hero [data-go-tab="lessons"]').click();
+  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+  await page.locator('#lesson-form [name="feedback"]').fill('저장 실패 후 유지할 피드백');
+  await page.locator('#lesson-form [name="homework"]').fill('추가 숙제');
+  await page.locator('#carryover-checks input[value="carry"]').check();
+  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+  await failRecordWrites(page);
+  await page.getByRole('button',{name:'레슨 및 숙제 저장',exact:true}).click();
+  await expect(page.locator('#lesson-form')).toBeVisible();
+  await expect(page.locator('.wizard-summary')).toContainText('저장 실패 후 유지할 피드백');
+  await restoreRecordWrites(page);
+  await page.getByRole('button',{name:'레슨 및 숙제 저장',exact:true}).click();
+  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')));
+  expect(state.lessons).toHaveLength(2);expect(state.assignments).toHaveLength(2);
+  expect(state.assignments.find(item=>item.id==='carry').lessonIds).toHaveLength(2);
+});
+test('Song input survives quota failure and retry creates one catalog entry',async({page})=>{
+  await page.locator('#vzip-open-settings').click();
+  await page.locator('#manage [data-ia-open="songs"]').click();
+  await page.locator('#song-form [name="title"]').fill('실패 후 다시 저장할 곡');
+  await failRecordWrites(page);
+  await page.locator('#song-form button').click();
+  await expect(page.locator('#song-form [name="title"]')).toHaveValue('실패 후 다시 저장할 곡');
+  await restoreRecordWrites(page);
+  await page.locator('#song-form button').click();
+  const songs=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs);
+  expect(songs).toHaveLength(1);expect(songs[0].title).toBe('실패 후 다시 저장할 곡');
+});
+
+async function installUploadProbe(page, mode='hold') {
+  await page.evaluate(mode=>{
+    window.__uploadMode=mode;window.__uploadCalls=[];window.__uploadAborts=0;
+    window.__fullFileReads=0;window.__largeFilePreviews=0;window.__localImportWrites=0;
+    const originalSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size').get;
+    Object.defineProperty(File.prototype,'size',{configurable:true,get(){
+      if(this.name==='large.mov')return 26*1024*1024;
+      if(this.name==='oversized.mov')return 51*1024*1024;
+      return originalSize.call(this);
+    }});
+    const arrayBuffer=Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer=function(){
+      if(this instanceof File&&this.size>25*1024*1024){window.__fullFileReads++;throw Error('large file read into memory')}
+      return arrayBuffer.call(this);
+    };
+    const objectURL=URL.createObjectURL;
+    URL.createObjectURL=function(blob){
+      if(blob instanceof File&&blob.size>25*1024*1024){window.__largeFilePreviews++;throw Error('large video decoded before upload')}
+      return objectURL.call(URL,blob);
+    };
+    const store=window.vzipStorePracticeMedia;
+    window.vzipStorePracticeMedia=item=>{window.__localImportWrites++;return store(item)};
+    window.tus={Upload:class{
+      constructor(file,options){
+        this.options=options;window.__uploadOptions=options;
+        window.__uploadCalls.push({name:file.name,size:file.size,chunkSize:options.chunkSize,
+          creation:options.uploadDataDuringCreation,fingerprint:options.storeFingerprintForResuming});
+      }
+      start(){
+        if(window.__uploadMode==='hold')return;
+        this.timer=setTimeout(()=>{
+          if(window.__uploadMode==='error')this.options.onError(Error('test network interruption'));
+          else{this.options.onProgress(26,26);this.options.onSuccess()}
+        },20);
+      }
+      abort(){window.__uploadAborts++;clearTimeout(this.timer);return Promise.resolve()}
+    }};
+  },mode);
+}
+const largeUpload=()=>({name:'large.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+test('Large practice import streams to cloud without local allocation or preview and links only after success',async({page})=>{
+  await installUploadProbe(page,'success');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('[data-mode="song"]').click();
+  await page.locator('#practice-form [name="minutes"]').fill('7');
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료 (클라우드)');
+  await page.locator('#practice-form>button:not([type])').click();
+  const result=await page.evaluate(()=>({
+    record:JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0],
+    meta:window.__cloudMetadata.find(row=>row.table==='vocal_media').payload.metadata,
+    reads:window.__fullFileReads,previews:window.__largeFilePreviews,local:window.__localImportWrites,calls:window.__uploadCalls
+  }));
+  expect(result.reads).toBe(0);expect(result.previews).toBe(0);expect(result.local).toBe(0);
+  expect(result.record.mediaIds).toEqual([result.meta.id]);expect(result.record.minutes).toBe(7);
+  expect(result.meta.source).toBe('practice');expect(result.meta.type).toBe('video/quicktime');
+  expect(result.calls).toHaveLength(1);expect(result.calls[0].chunkSize).toBe(6*1024*1024);
+  expect(result.calls[0].creation).toBe(false);expect(result.calls[0].fingerprint).toBe(false);
+});
+test('Cancelling a practice upload aborts transport, clears the input and permits a new upload',async({page})=>{
+  await installUploadProbe(page);
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+  await expect(page.locator('#practice-form>button:not([type])')).toBeDisabled();
+  await page.locator('#vzip-practice-import-cancel').click();
+  await expect(page.locator('#media-preview')).toContainText('취소');
+  await expect(page.locator('#practice-attachments')).toBeEnabled();
+  expect(await page.locator('#practice-attachments').inputValue()).toBe('');
+  expect(await page.evaluate(()=>window.__uploadAborts)).toBe(1);
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+  expect(await page.evaluate(()=>window.__cloudMetadata.filter(row=>row.table==='vocal_media').length)).toBe(0);
+  await page.evaluate(()=>{window.__uploadMode='success'});
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds))).toHaveLength(1);
+});
+test('Failed cloud import never attaches a missing file and can be selected again',async({page})=>{
+  await installUploadProbe(page,'error');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('test network interruption');
+  await expect(page.locator('#practice-attachments')).toBeEnabled();
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+  await page.evaluate(()=>{window.__uploadMode='success'});
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(2);
+});
+test('Library and practice cannot run concurrent large uploads and library cancel releases the lock',async({page})=>{
+  await installUploadProbe(page);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-upload').setInputFiles(largeUpload());
+  await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('다른 파일을 업로드');
+  expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-upload-cancel').click();
+  await expect(page.locator('#vzip-hub-status')).toContainText('취소');
+  await expect(page.locator('#vzip-hub-upload')).toBeEnabled();
+  expect(await page.locator('#vzip-hub-upload').inputValue()).toBe('');
+  await page.evaluate(()=>{window.__uploadMode='success'});
+  await page.locator('#vzip-hub-upload').setInputFiles(largeUpload());
+  await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+  await expect(page.locator('#vzip-hub-status')).toContainText('보관함 저장 완료');
+  expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(2);
+});
+test('Oversized files are rejected in both import forms before allocation or upload',async({page})=>{
+  await installUploadProbe(page);
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await expect(page.locator('#practice-attachments')).not.toHaveAttribute('multiple');
+  await page.locator('#practice-attachments').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+  await expect(page.locator('#media-preview')).toContainText('50MB');
+  await page.locator('.nav [data-tab="media"]').click();
+  await expect(page.locator('#vzip-hub-upload')).not.toHaveAttribute('multiple');
+  await page.locator('#vzip-hub-upload').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+  await expect(page.locator('#vzip-hub-status')).toContainText('50MB');
+  const result=await page.evaluate(()=>({calls:window.__uploadCalls.length,reads:window.__fullFileReads,
+    previews:window.__largeFilePreviews,local:window.__localImportWrites}));
+  expect(result).toEqual({calls:0,reads:0,previews:0,local:0});
+});
+test('Large practice import without login keeps the draft and explains cloud requirement',async({page})=>{
+  await installUploadProbe(page);
+  await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false});
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name="memo"]').fill('가져오기 실패 후 보존');
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('클라우드 로그인이 필요');
+  await expect(page.locator('#practice-form [name="memo"]')).toHaveValue('가져오기 실패 후 보존');
+  await expect(page.locator('#practice-form>button:not([type])')).toBeEnabled();
+  expect(await page.evaluate(()=>window.__fullFileReads+window.__largeFilePreviews+window.__localImportWrites)).toBe(0);
+});
+
+test('Upload song choices persist independently and survive a later practice save',async({page})=>{
+  await seedHistory(page,{songs:[{id:'s1',title:'같은 제목'},{id:'s2',title:'같은 제목'}]});
+  await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false});
+  await page.locator('.nav [data-tab="media"]').click();
+  const upload=()=>page.locator('#vzip-hub-upload').setInputFiles({name:'take.wav',mimeType:'audio/wav',buffer:wav()});
+  await upload();await page.getByLabel('업로드할 곡').selectOption('s1');
+  await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+  await expect(page.locator('.vzip-hub-item')).toHaveCount(1);
+  await upload();await page.getByPlaceholder('목록에 없는 곡명 입력',{exact:true}).last().fill('새로 등록한 곡');
+  await failRecordWrites(page);await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'업로드 곡 선택'})).toContainText('곡 저장 실패');
+  await restoreRecordWrites(page);await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+  await expect(page.locator('.vzip-hub-item')).toHaveCount(2);
+  await upload();await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+  await expect(page.locator('.vzip-hub-item')).toHaveCount(3);
+  await upload();await page.getByRole('dialog',{name:'업로드 곡 선택'}).getByRole('button',{name:'취소',exact:true}).click();
+  await expect(page.locator('#vzip-hub-upload')).toBeEnabled();
+  await expect(page.locator('.vzip-hub-item')).toHaveCount(3);
+  await expect(page.locator('#practice-song option')).toContainText(['곡 선택 안 함','같은 제목','같은 제목','새로 등록한 곡']);
+  await addSimplePractice(page,'곡 등록 이후 저장');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs.map(x=>x.title))).toContain('새로 등록한 곡');
+  await page.reload();await page.locator('.nav [data-tab="media"]').click();
+  await expect(page.locator('.vzip-hub-item')).toHaveCount(3);
+  await page.getByRole('button',{name:'♫ 곡별 묶어보기',exact:true}).click();
+  await expect(page.locator('.vzip-song-group-title')).toHaveCount(3);
+  await expect(page.locator('[data-song-key="unassigned"]')).toContainText('1개 녹음');
+});
+
+test('Song grouping uses stable ids and keeps legacy and unassigned recordings separate',async({page})=>{
+  const rows=[['a','s1','같은 제목'],['b','s2','같은 제목'],['c','s1','이전 제목'],['d','',''],['e','','같은 제목']].map(([id,songId,song])=>{
+    const row=cloudRow(id,id);Object.assign(row.metadata,{songId,song,rating:3,review:id+' 감상'});return row;
+  });
+  await cloudFiles(page,rows);await page.locator('.nav [data-tab="media"]').click();
+  await expect(page.locator('.vzip-hub-item')).toHaveCount(5);
+  await page.getByRole('button',{name:'♫ 곡별 묶어보기',exact:true}).click();
+  await expect(page.locator('.vzip-song-group-title')).toHaveCount(4);
+  await expect(page.locator('[data-song-key="id:s1"]')).toContainText('2개 녹음');
+  await expect(page.locator('[data-song-key="id:s2"]')).toContainText('1개 녹음');
+  await expect(page.locator('[data-id="a"]')).toContainText('a 감상');
+  await page.getByRole('button',{name:'☷ 최신순으로 보기',exact:true}).click();
+  await expect(page.locator('.vzip-song-group-title')).toHaveCount(0);
+});
+
+test('Comparison prioritizes song ids, preserves drafts on failure and reopens ratings and goals',async({page},testInfo)=>{
+  await seedHistory(page,{songs:[{id:'s',title:'비교 곡'}]});
+  const rows=[['older','s',2,'이전 감상',1000],['newer','s',4,'최근 감상',2000],['other','other',5,'다른 곡',3000]].map(([id,songId,rating,review,created])=>{const row=cloudRow(id,id);Object.assign(row.metadata,{songId,song:'비교 곡',rating,review,created});return row});
+  await cloudFiles(page,rows);await page.locator('.nav [data-tab="media"]').click();
+  await expect(page.locator('.vzip-hub-item')).toHaveCount(3);
+  await page.locator('[data-id="newer"] [data-action="compare"]').click();
+  expect(await page.locator('.vzip-choice').evaluateAll(nodes=>nodes.map(n=>n.dataset.id))).toEqual(['newer','older','other']);
+  await page.locator('.vzip-choice[data-id="older"]').click();await page.locator('#vzip-compare-start').click();
+  await expect(page.locator('#vzip-report-content')).toContainText('이전 감상');
+  await expect(page.locator('#vzip-report-content')).toContainText('4/5');
+  await page.locator('#vzip-rp-notes').fill('호흡 유지가 좋아짐');await page.locator('#vzip-rp-goal').fill('긴 프레이즈 연습');
+  await page.screenshot({path:testInfo.outputPath('comparison.png'),fullPage:true});
+  await failRecordWrites(page);await page.locator('#vzip-rp-save').click();
+  await expect(page.locator('#vzip-rp-status')).toContainText('저장 실패');await expect(page.locator('#vzip-rp-goal')).toHaveValue('긴 프레이즈 연습');
+  await restoreRecordWrites(page);await page.locator('#vzip-rp-save').click();
+  await expect(page.locator('#vzip-rp-status')).toContainText('저장 완료');
+  await addSimplePractice(page,'비교 저장 후 연습');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).comparisonReports)).toHaveLength(1);
+  await page.reload();await page.locator('.nav [data-tab="archive"]').click();
+  await page.getByRole('button',{name:'저장한 리포트',exact:true}).click();
+  await page.locator('[data-report-action="view"]').click();await expect(page.locator('#vzip-rp-goal')).toHaveValue('긴 프레이즈 연습');
+});
+
+test('Song growth counts only linked records and shows real ratings, goals and empty states',async({page},testInfo)=>{
+  await seedHistory(page,{songs:[{id:'s',title:'성장 곡'},{id:'empty',title:'빈 곡'}],practices:[{id:'p',date:'2026-11-01',songId:'s',minutes:15},{id:'q',date:'2026-11-02',songId:'s',minutes:5},{id:'x',date:'2026-11-01',songId:'other',minutes:99}],comparisonReports:[{id:'r',songId:'s',notes:'호흡 개선',goal:'프레이즈 연습'}]});
+  const rows=[cloudRow('old','이전'),cloudRow('new','최근')];rows.forEach((r,i)=>Object.assign(r.metadata,{songId:'s',song:'성장 곡',created:1000+i*86400000,rating:i?4:2}));
+  await cloudFiles(page,rows);await page.locator('.nav [data-tab="media"]').click();await expect(page.locator('.vzip-hub-item')).toHaveCount(2);
+  await page.locator('.nav [data-tab="archive"]').click();await page.locator('#vzip-growth-song').selectOption('s');
+  const body=page.locator('#vzip-song-growth-content');await expect(body).toContainText('연습 2회 · 누적 20분 · 녹음 2개');await expect(body).toContainText('2 / 5');await expect(body).toContainText('프레이즈 연습');
+  await page.screenshot({path:testInfo.outputPath('song-growth.png'),fullPage:true});
+  await body.getByRole('button').click();await expect(page.locator('#vzip-report-content')).toContainText('성장 곡');
+  await page.locator('#vzip-report-back').click();await page.locator('#vzip-growth-song').selectOption('empty');await expect(body).toContainText('연습 시간 기록 없음');await expect(body).toContainText('아직 이 곡에 연결된 녹음이 없어요');
+});
+
+test('Lesson edit cancel and failed save preserve recordings, carried homework and practice notes',async({page},testInfo)=>{
+  const lesson={id:'lesson-edit',date:'2026-11-01',songId:'s',feedback:'원본 피드백',memo:'원본 메모',recordings:['media-keep']};
+  await seedHistory(page,{songs:[{id:'s',title:'원래 곡'},{id:'next',title:'다음 곡'}],lessons:[lesson],assignments:[{id:'task',title:'원본 숙제',lessonId:'lesson-edit',lessonIds:['lesson-edit','other'],status:'active'}],practices:[{id:'p',date:'2026-11-02',completed:['task'],assignmentNotes:{task:'수행 메모'},minutes:10}]});
+  await page.locator('.nav [data-tab="lessons"]').click();await page.locator('[data-edit-lesson]').click();const dialog=page.getByRole('dialog',{name:'레슨 수정'});
+  await dialog.locator('[name="memo"]').fill('취소 메모');await dialog.getByRole('button',{name:'취소',exact:true}).click();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).lessons[0])).toEqual(lesson);
+  await page.locator('[data-edit-lesson]').click();await dialog.locator('[name="date"]').fill('2026-11-03');await dialog.locator('[name="song"]').selectOption('next');await dialog.locator('[name="feedback"]').fill('수정 피드백');await dialog.locator('[name="memo"]').fill('수정 메모');await dialog.getByLabel('숙제 내용').fill('수정 숙제');await dialog.getByLabel('숙제 상태').selectOption('done');
+  await page.screenshot({path:testInfo.outputPath('lesson-edit.png'),fullPage:true});
+  await failRecordWrites(page);await dialog.getByRole('button',{name:'수정 저장'}).click();await expect(dialog).toContainText('입력은 유지');await expect(dialog.locator('[name="memo"]')).toHaveValue('수정 메모');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).lessons[0])).toEqual(lesson);
+  await restoreRecordWrites(page);await dialog.getByRole('button',{name:'수정 저장'}).click();await expect(dialog).toHaveCount(0);
+  await page.reload();const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')));
+  expect(state.lessons[0]).toMatchObject({date:'2026-11-03',songId:'next',memo:'수정 메모',feedback:'수정 피드백',recordings:['media-keep']});expect(state.assignments[0]).toMatchObject({id:'task',title:'수정 숙제',status:'done',lessonIds:['lesson-edit','other']});expect(state.practices[0].assignmentNotes.task).toBe('수행 메모');
+});
+
+
+test('Metadata failure after transport never attaches a missing recording and retry succeeds',async({page})=>{
+  await installUploadProbe(page,'success');await page.evaluate(()=>{window.__failMetadata=true});
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('metadata save failed');
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+  await page.evaluate(()=>{window.__failMetadata=false});
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds))).toHaveLength(1);
+});
+
+
+test('Missing recording dates stay unknown in the library and comparison',async({page})=>{
+ const a=cloudRow('missing','날짜 없는 녹음'),b=cloudRow('dated','날짜 있는 녹음');a.metadata.created=null;
+ await cloudFiles(page,[a,b]);await page.locator('.nav [data-tab="media"]').click();
+ await expect(page.locator('[data-id="missing"]')).toContainText('날짜 미상');
+ await page.locator('[data-id="missing"] [data-action="compare"]').click();await page.locator('.vzip-choice[data-id="dated"]').click();await page.locator('#vzip-compare-start').click();
+ await expect(page.locator('#vzip-report-content')).toContainText('날짜 기록 부족');
+});
+
+
+for(const location of ['practice','library'])test('Upload progress and synthetic pagehide cancellation ignore late callbacks: '+location,async({page})=>{
+ await installUploadProbe(page);
+ if(location==='practice')await page.locator('.hero [data-go-tab="practice"]').click();else await page.locator('.nav [data-tab="media"]').click();
+ const input=page.locator(location==='practice'?'#practice-attachments':'#vzip-hub-upload');
+ const status=page.locator(location==='practice'?'#media-preview':'#vzip-hub-status');
+ await input.setInputFiles(largeUpload());if(location==='library')await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+ await page.evaluate(()=>window.__uploadOptions.onProgress(13,26));await expect(status).toContainText('50%');
+ await page.evaluate(()=>{window.__lateUpload=window.__uploadOptions;window.dispatchEvent(new Event('pagehide'))});
+ await expect(status).toContainText('취소');await expect(input).toBeEnabled();
+ await page.evaluate(()=>{window.__lateUpload.onProgress(26,26);window.__lateUpload.onSuccess();window.__lateUpload.onError(Error('late network callback'))});
+ await expect(status).toContainText('취소');
+ expect(await page.evaluate(()=>window.__cloudMetadata.filter(x=>x.table==='vocal_media'))).toHaveLength(0);
+ expect(await page.evaluate(()=>window.__uploadAborts)).toBe(1);
+ await page.evaluate(()=>{window.__uploadMode='success'});await input.setInputFiles(largeUpload());
+ if(location==='library')await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+ await expect(status).toContainText('보관함 저장 완료');
+});
+
+test('Account change during metadata commit never attaches the previous account file',async({page})=>{
+ await installUploadProbe(page,'success');await page.locator('.hero [data-go-tab="practice"]').click();
+ await page.evaluate(()=>{window.__onMetadataWrite=()=>window.__authCallbacks.forEach(callback=>callback('SIGNED_IN',{user:{id:'other-user',email:'other@example.invalid'}}))});
+ await page.locator('#practice-attachments').setInputFiles(largeUpload());
+ await expect(page.locator('#media-preview')).toContainText('로그인이 변경');
+ expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+ expect(await page.evaluate(()=>window.__cloudMetadata.find(x=>x.table==='vocal_media').payload.user_id)).toBe('ui-test-user');
+ await expect(page.locator('#practice-attachments')).toBeEnabled();
+});
+
+test('Cloud importer accepts the configured 50MB boundary and rejects larger files before transport',async({page})=>{
+ await installUploadProbe(page,'success');
+ const result=await page.evaluate(async()=>{
+  const file=new File(['test'],'boundary.mov',{type:'video/quicktime'});Object.defineProperty(file,'size',{value:50*1024*1024});
+  const item=await window.vzipCloudImport(file);const tooLarge=new File(['test'],'too-large.mov',{type:'video/quicktime'});Object.defineProperty(tooLarge,'size',{value:50*1024*1024+1});
+  let error='';try{await window.vzipCloudImport(tooLarge)}catch(e){error=e.message}
+  return {size:item.size,error,calls:window.__uploadCalls.length};
+ });
+ expect(result.size).toBe(50*1024*1024);expect(result.error).toContain('50MB');expect(result.calls).toBe(1);
+});
+
+
+test('Recorder pause excludes paused time and mark preserves memo', async ({page,browserName},testInfo) => {
+  test.skip(browserName !== 'chromium', 'Uses Chromium fake microphone, not a real iPhone.');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name=memo]').fill('기존 메모');
+  await page.locator('#vzip-capture-start').click();
+  await expect(page.locator('#vzip-capture-pause')).toBeVisible();
+  await page.waitForTimeout(1100);
+  await page.locator('#vzip-capture-mark').click();
+  expect(await page.locator('#practice-form [name=memo]').inputValue()).toMatch(/기존 메모\n\[00:0[1-9]\] 다시 듣기/);
+  await page.locator('#vzip-capture-pause').click();
+  await page.waitForTimeout(600);
+  await testInfo.attach('recorder-paused',{body:await page.screenshot({fullPage:false}),contentType:'image/png'});
+  const frozen = await page.locator('#vzip-capture-clock').textContent();
+  await page.waitForTimeout(1200);
+  await expect(page.locator('#vzip-capture-clock')).toHaveText(frozen);
+  await expect(page.locator('#vzip-capture-mark')).toBeDisabled();
+  await page.locator('#vzip-capture-stop').click();
+  await expect(page.locator('#vzip-capture-status')).toContainText('저장 완료');
+  await expect(page.locator('#vzip-capture-start')).toBeVisible();
+  const items = await page.evaluate(() => window.vzipReadMedia());
+  expect(items[0].waveform.length).toBeGreaterThan(0);
+  expect(items[0].waveform.length).toBeLessThanOrEqual(512);
+  expect(items[0].durationSeconds).toBeGreaterThan(0);
+  expect(items[0].durationSeconds).toBeLessThan(3);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-list [data-action=play]').click();
+  await expect(page.locator('.vzip-player-wave')).toBeVisible();
+  await expect(page.locator('.vzip-player input[type=range]')).toBeEnabled();
+  await page.locator('.vzip-player-wave').click();
+  await expect(page.locator('.vzip-player-wave')).toBeVisible();
+  await testInfo.attach('recorded-waveform-player',{body:await page.screenshot({fullPage:false}),contentType:'image/png'});
+
+});
+
+test('Player card seeks, toggles playback and exposes native fallback', async ({page,browserName},testInfo) => {
+  test.skip(browserName === 'webkit' && process.platform === 'win32', 'Windows WebKit WAV codec unavailable.');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles({name:'player-test.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-list [data-action=play]').click();
+  const card = page.locator('#vzip-hub-list .vzip-player'), media = card.locator('audio');
+  await expect(card.locator('input[type=range]')).toBeEnabled();
+  await media.evaluate(el => el.pause());
+  await card.getByRole('slider').fill('0.5');
+  expect(await media.evaluate(el => el.currentTime)).toBeCloseTo(.5, 1);
+  await card.getByRole('button',{name:'재생',exact:true}).click();
+  await expect.poll(() => media.evaluate(el => el.paused)).toBe(false);
+  await card.locator('summary').click();
+  await expect(media).toBeVisible();
+  await card.locator('summary').click();
+  await testInfo.attach('player-card',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });

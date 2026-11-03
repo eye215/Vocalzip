@@ -71,6 +71,47 @@
    tr.append(th,node('td',fmt(bucket.minutes)+'분'),node('td',bucket.rating));weeks.append(tr);
   }
  }
+
+ const songCard=node('div',undefined,'card');songCard.id='vzip-song-growth';
+ const songSelect=node('select');songSelect.id='vzip-growth-song';
+ const songLabel=node('label','곡별 성장 리포트');songLabel.htmlFor=songSelect.id;
+ const songBody=node('div');songBody.id='vzip-song-growth-content';
+ songCard.append(songLabel,songSelect,songBody);card.after(songCard);
+ let media=[];
+ function renderSong(){
+  let state;try{state=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}')}catch{state={}}
+  const catalog=new Map((state.songs||[]).map(s=>[s.id,s.title]));
+  media.forEach(m=>{if(m.songId&&!catalog.has(m.songId))catalog.set(m.songId,m.song||'이전 곡')});
+  (state.practices||[]).forEach(p=>{if(p.songId&&!catalog.has(p.songId))catalog.set(p.songId,'이전 곡')});
+  const selected=songSelect.value;songSelect.replaceChildren(new Option('곡을 선택하세요',''));
+  for(const [id,title] of catalog)songSelect.add(new Option(title,id));
+  if(catalog.has(selected))songSelect.value=selected;
+  songBody.replaceChildren();const id=songSelect.value;
+  if(!id){songBody.append(node('p','곡을 선택하면 저장된 연습과 녹음의 변화를 볼 수 있어요.','muted'));return}
+  const records=(state.practices||[]).filter(p=>p.songId===id);
+  const recordings=media.filter(m=>m.songId===id).sort((a,b)=>(a.created||0)-(b.created||0));
+  songBody.append(node('p','전체 기록 · 연습 '+records.length+'회 · '+(records.some(p=>amount(p.minutes))?'누적 '+fmt(sum(records))+'분':'연습 시간 기록 없음')+' · 녹음 '+recordings.length+'개'));
+  if(!recordings.length)songBody.append(node('p','아직 이 곡에 연결된 녹음이 없어요. 보관함에서 곡을 지정해 주세요.','empty'));
+  for(const item of recordings){
+   const row=node('div',undefined,'vzip-insight-row');
+   const when=Number.isFinite(item.created)?new Date(item.created).toLocaleDateString('ko-KR'):'날짜 미상';
+   row.append(node('span',when+' · '+(item.name||'녹음')),node('strong',item.rating>=1&&item.rating<=5?item.rating+' / 5':'평가 없음'));songBody.append(row);
+  }
+  if(recordings.length>=2){const compare=node('button','이전 녹음과 최근 녹음 비교','btn secondary');compare.type='button';compare.onclick=()=>window.dispatchEvent(new CustomEvent('vzip:compare-pair',{detail:{firstId:recordings[recordings.length-2].id,secondId:recordings[recordings.length-1].id}}));songBody.append(compare)}
+  else songBody.append(node('p','비교하려면 같은 곡의 녹음이 2개 이상 필요해요.','muted'));
+  const reports=(state.comparisonReports||[]).filter(r=>r.songId===id);
+  for(const [field,title] of [['notes','기록한 변화·개선점'],['goal','다음 연습 목표']]){
+   songBody.append(node('h3',title));const counts=new Map();
+   reports.forEach(r=>String(r[field]||'').split('\n').map(t=>t.trim()).filter(Boolean).forEach(t=>counts.set(t,(counts.get(t)||0)+1)));
+   if(!counts.size)songBody.append(node('p','아직 작성한 기록이 없어요.','muted'));
+   [...counts].sort((a,b)=>b[1]-a[1]).slice(0,5).forEach(([text,count])=>songBody.append(node('p',text+' · '+count+'회 기록')));
+  }
+ }
+ songSelect.addEventListener('change',renderSong);
+ window.addEventListener('vzip:hub-refreshed',event=>{media=event.detail.items||[];renderSong()});
+ window.addEventListener('vzip:data-changed',renderSong);
+ window.addEventListener('vzip:route-change',event=>{if(event.detail.tab==='archive')renderSong()});
+ renderSong();
  period.addEventListener('change',render);
  window.addEventListener('vzip:data-changed',render);
  window.addEventListener('storage',event=>{if(event.key==='vocal-zip_mvp_v1')render()});

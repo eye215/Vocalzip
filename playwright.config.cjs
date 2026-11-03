@@ -10,6 +10,6 @@ module.exports = defineConfig({
     {name:'chromium-desktop',use:{browserName:'chromium',viewport:{width:1280,height:900},
       launchOptions:{args:['--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream']}}}
   ],
-  webServer: {command:'python3 -m http.server 4173 --bind 127.0.0.1',url:'http://127.0.0.1:4173',
-    reuseExistingServer:!process.env.CI}
+  webServer: {command:(process.platform==='win32'?'python':'python3')+' -m http.server 4173 --bind 127.0.0.1',url:'http://127.0.0.1:4173',
+    stderr:'ignore',reuseExistingServer:!process.env.CI}
 });
