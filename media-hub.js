@@ -66,9 +66,53 @@ cancelUpload.id='vzip-hub-upload-cancel';cancelUpload.textContent='업로드 취
 let importController=null;
 cancelUpload.onclick=()=>importController?.abort();
 window.addEventListener('pagehide',()=>importController?.abort());
+function chooseUploadSong(fileName){
+ return new Promise(resolve=>{
+  const overlay=document.createElement('div');
+  overlay.className='vzip-edit-overlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:100002;background:#0b0b23bd;display:flex;align-items:flex-end;justify-content:center';
+  const sheet=document.createElement('div');
+  sheet.style.cssText='background:#fff;color:#292439;width:100%;max-width:600px;max-height:85dvh;overflow:auto;border-radius:22px 22px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom))';
+  const title=document.createElement('h2');title.textContent='이 파일은 어떤 곡인가요?';
+  const file=document.createElement('p');file.className='muted';file.textContent=fileName;
+  const label=document.createElement('label');label.textContent='곡 선택 (선택사항)';
+  const select=document.createElement('select');select.setAttribute('aria-label','업로드할 곡');
+  select.add(new Option('나중에 지정하기',''));
+  songs().forEach(x=>select.add(new Option(x.title+(x.show?' — '+x.show:''),x.id)));
+  const newLabel=document.createElement('label');newLabel.textContent='새 곡 등록 (선택사항)';
+  const custom=document.createElement('input');custom.placeholder='목록에 없는 곡명 입력';custom.maxLength=150;
+  select.addEventListener('change',()=>{if(select.value)custom.value=''});
+  const error=document.createElement('p');error.className='error';error.setAttribute('role','alert');
+  const actions=document.createElement('div');actions.className='buttons';
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='btn secondary';cancel.textContent='취소';
+  const start=document.createElement('button');start.type='button';start.className='btn';start.textContent='이 파일 업로드';
+  actions.append(cancel,start);sheet.append(title,file,label,select,newLabel,custom,error,actions);overlay.append(sheet);document.body.append(overlay);
+  const previous=document.activeElement;let done=false;
+  const finish=value=>{if(done)return;done=true;overlay.remove();previous?.focus?.();resolve(value)};
+  cancel.onclick=()=>finish(null);
+  overlay.onclick=e=>{if(e.target===overlay)finish(null)};
+  overlay.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();finish(null)}};
+  start.onclick=()=>{
+   const typed=custom.value.trim();let selected=songs().find(x=>x.id===select.value);
+   if(typed){let catalog;try{catalog=JSON.parse(localStorage.getItem(key)||'{}')}catch{catalog={}}
+    catalog.songs=catalog.songs||[];
+    selected=catalog.songs.find(x=>x.title?.trim().toLowerCase()===typed.toLowerCase());
+    if(!selected){selected={id:crypto.randomUUID(),title:typed,show:''};catalog.songs.push(selected);
+     try{localStorage.setItem(key,JSON.stringify(catalog));window.dispatchEvent(new Event('vzip:data-changed'))}
+     catch(e){error.textContent='곡 저장 실패: '+e.message;return}
+    }
+   }
+   finish({songId:selected?.id||'',song:selected?(selected.title+(selected.show?' — '+selected.show:'')):''});
+  };
+  select.focus();
+ });
+}
 $('#vzip-hub-upload').onchange=async e=>{
  const input=e.target;let file=input.files?.[0];if(!file||input.disabled)return;
- input.disabled=true;const fileName=file.name;importController=new AbortController();let outcome;
+ input.disabled=true;const fileName=file.name;let outcome;
+ const chosen=await chooseUploadSong(fileName);
+ if(!chosen){file=null;input.value='';input.disabled=false;return}
+ importController=new AbortController();
  try{
   const type=window.vzipMediaType(file);
   if(!/^(audio|video)\//.test(type))throw Error('지원하지 않는 형식이에요.');
@@ -79,12 +123,12 @@ $('#vzip-hub-upload').onchange=async e=>{
   if(window.vzipCloudSignedIn?.()){
    if(!window.vzipCloudImport)throw Error('클라우드 업로드 준비 중이에요.');
    cancelUpload.hidden=false;
-   await window.vzipCloudImport(file,{name,type},
+   await window.vzipCloudImport(file,{name,type,songId:chosen.songId,song:chosen.song},
     progress=>{status.textContent=fileName+' · 업로드 '+progress+'%'},
     {signal:importController.signal,onCommit:()=>{cancelUpload.hidden=true;status.textContent=fileName+' · 보관함 연결 중…'}});
   }else{
    await window.vzipStorePracticeMedia({id:crypto.randomUUID(),name,created:file.lastModified||Date.now(),
-    type,source:'import',song:'',songId:'',blob:file});
+    type,source:'import',song:chosen.song,songId:chosen.songId,blob:file});
    window.dispatchEvent(new Event('vzip:media-updated'));
   }
   outcome='✓ '+fileName+' · 보관함 저장 완료';
