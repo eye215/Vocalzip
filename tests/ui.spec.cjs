@@ -751,6 +751,7 @@ test('Upload song choices persist independently and survive a later practice sav
   await upload();await page.getByRole('dialog',{name:'업로드 곡 선택'}).getByRole('button',{name:'취소',exact:true}).click();
   await expect(page.locator('#vzip-hub-upload')).toBeEnabled();
   await expect(page.locator('.vzip-hub-item')).toHaveCount(3);
+  await expect(page.locator('#practice-song option')).toContainText(['곡 선택 안 함','같은 제목','같은 제목','새로 등록한 곡']);
   await addSimplePractice(page,'곡 등록 이후 저장');
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs.map(x=>x.title))).toContain('새로 등록한 곡');
   await page.reload();await page.locator('.nav [data-tab="media"]').click();
