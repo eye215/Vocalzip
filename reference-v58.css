@@ -85,3 +85,10 @@ section:not(#home) .btn{min-height:41px}
 #practice-form input[type="date"]::-webkit-date-and-time-value,#lesson-form input[type="date"]::-webkit-date-and-time-value{text-align:left!important;min-height:24px!important;line-height:24px!important}
 #practice-form input[type="date"]::-webkit-datetime-edit,#lesson-form input[type="date"]::-webkit-datetime-edit{display:inline-flex!important;align-items:center!important;padding:0!important;font-size:16px!important;line-height:24px!important}
 #practice-form input[type="date"]::-webkit-calendar-picker-indicator,#lesson-form input[type="date"]::-webkit-calendar-picker-indicator{max-width:22px!important}
+
+/* iPhone date: isolated full-width row, clipped native WebKit intrinsic size. */
+#practice-form .vzip-practice-date-field,#practice-form .vzip-practice-minutes-field{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box!important;margin-bottom:14px!important}
+#practice-form .vzip-practice-date-frame{display:block!important;position:relative!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow:hidden!important;border-radius:13px!important;box-sizing:border-box!important}
+#practice-form .vzip-practice-date-frame>input[type="date"]{display:block!important;position:relative!important;box-sizing:border-box!important;max-width:100%!important;width:100%!important;min-width:0!important;height:50px!important;min-height:50px!important;margin:0!important;padding:10px 14px!important;overflow:hidden!important;font-size:16px!important;line-height:24px!important;border-radius:13px!important}
+#practice-form .vzip-practice-date-frame>input[type="date"]::-webkit-date-and-time-value{min-width:0!important;text-align:left!important}
+#practice-form .vzip-practice-minutes-field>input{box-sizing:border-box!important;max-width:100%!important}
