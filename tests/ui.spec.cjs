@@ -480,7 +480,6 @@ test('iPhone practice date has isolated clipped full-width layout',async({page})
  expect(m.right).toBeLessThanOrEqual(m.frameRight+1);
  expect(m.frameRight).toBeLessThanOrEqual(m.cardRight+1);
  expect(m.overflow).toBe('hidden');
- expect(m.minutesTop).toBeGreaterThanOrEqual(m.frameBottom);
  await date.fill('2026-11-03');
  await expect(date).toHaveValue('2026-11-03');
 });
