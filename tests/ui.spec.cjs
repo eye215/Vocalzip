@@ -483,3 +483,138 @@ test('iPhone practice date has isolated clipped full-width layout',async({page})
  await date.fill('2026-11-03');
  await expect(date).toHaveValue('2026-11-03');
 });
+
+async function installUploadProbe(page, mode='hold') {
+  await page.evaluate(mode=>{
+    window.__uploadMode=mode;window.__uploadCalls=[];window.__uploadAborts=0;
+    window.__fullFileReads=0;window.__largeFilePreviews=0;window.__localImportWrites=0;
+    const originalSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size').get;
+    Object.defineProperty(File.prototype,'size',{configurable:true,get(){
+      if(this.name==='large.mov')return 26*1024*1024;
+      if(this.name==='oversized.mov')return 501*1024*1024;
+      return originalSize.call(this);
+    }});
+    const arrayBuffer=Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer=function(){
+      if(this instanceof File&&this.size>25*1024*1024){window.__fullFileReads++;throw Error('large file read into memory')}
+      return arrayBuffer.call(this);
+    };
+    const objectURL=URL.createObjectURL;
+    URL.createObjectURL=function(blob){
+      if(blob instanceof File&&blob.size>25*1024*1024){window.__largeFilePreviews++;throw Error('large video decoded before upload')}
+      return objectURL.call(URL,blob);
+    };
+    const store=window.vzipStorePracticeMedia;
+    window.vzipStorePracticeMedia=item=>{window.__localImportWrites++;return store(item)};
+    window.tus={Upload:class{
+      constructor(file,options){
+        this.options=options;
+        window.__uploadCalls.push({name:file.name,size:file.size,chunkSize:options.chunkSize,
+          creation:options.uploadDataDuringCreation,fingerprint:options.storeFingerprintForResuming});
+      }
+      start(){
+        if(window.__uploadMode==='hold')return;
+        this.timer=setTimeout(()=>{
+          if(window.__uploadMode==='error')this.options.onError(Error('test network interruption'));
+          else{this.options.onProgress(26,26);this.options.onSuccess()}
+        },20);
+      }
+      abort(){window.__uploadAborts++;clearTimeout(this.timer);return Promise.resolve()}
+    }};
+  },mode);
+}
+const largeUpload=()=>({name:'large.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+test('Large practice import streams to cloud without local allocation or preview and links only after success',async({page})=>{
+  await installUploadProbe(page,'success');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('[data-mode="song"]').click();
+  await page.locator('#practice-form [name="minutes"]').fill('7');
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료 (클라우드)');
+  await page.locator('#practice-form>button:not([type])').click();
+  const result=await page.evaluate(()=>({
+    record:JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0],
+    meta:window.__cloudMetadata.find(row=>row.table==='vocal_media').payload.metadata,
+    reads:window.__fullFileReads,previews:window.__largeFilePreviews,local:window.__localImportWrites,calls:window.__uploadCalls
+  }));
+  expect(result.reads).toBe(0);expect(result.previews).toBe(0);expect(result.local).toBe(0);
+  expect(result.record.mediaIds).toEqual([result.meta.id]);expect(result.record.minutes).toBe(7);
+  expect(result.meta.source).toBe('practice');expect(result.meta.type).toBe('video/quicktime');
+  expect(result.calls).toHaveLength(1);expect(result.calls[0].chunkSize).toBe(6*1024*1024);
+  expect(result.calls[0].creation).toBe(false);expect(result.calls[0].fingerprint).toBe(false);
+});
+test('Cancelling a practice upload aborts transport, clears the input and permits a new upload',async({page})=>{
+  await installUploadProbe(page);
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+  await expect(page.locator('#practice-form>button:not([type])')).toBeDisabled();
+  await page.locator('#vzip-practice-import-cancel').click();
+  await expect(page.locator('#media-preview')).toContainText('취소');
+  await expect(page.locator('#practice-attachments')).toBeEnabled();
+  expect(await page.locator('#practice-attachments').inputValue()).toBe('');
+  expect(await page.evaluate(()=>window.__uploadAborts)).toBe(1);
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+  expect(await page.evaluate(()=>window.__cloudMetadata.filter(row=>row.table==='vocal_media').length)).toBe(0);
+  await page.evaluate(()=>{window.__uploadMode='success'});
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds))).toHaveLength(1);
+});
+test('Failed cloud import never attaches a missing file and can be selected again',async({page})=>{
+  await installUploadProbe(page,'error');
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('test network interruption');
+  await expect(page.locator('#practice-attachments')).toBeEnabled();
+  expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
+  await page.evaluate(()=>{window.__uploadMode='success'});
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
+  expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(2);
+});
+test('Library and practice cannot run concurrent large uploads and library cancel releases the lock',async({page})=>{
+  await installUploadProbe(page);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-upload').setInputFiles(largeUpload());
+  await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+  await page.locator('.nav [data-tab="home"]').click();
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('다른 파일을 업로드');
+  expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('#vzip-hub-upload-cancel').click();
+  await expect(page.locator('#vzip-hub-status')).toContainText('취소');
+  await expect(page.locator('#vzip-hub-upload')).toBeEnabled();
+  expect(await page.locator('#vzip-hub-upload').inputValue()).toBe('');
+  await page.evaluate(()=>{window.__uploadMode='success'});
+  await page.locator('#vzip-hub-upload').setInputFiles(largeUpload());
+  await expect(page.locator('#vzip-hub-status')).toContainText('보관함 저장 완료');
+  expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(2);
+});
+test('Oversized files are rejected in both import forms before allocation or upload',async({page})=>{
+  await installUploadProbe(page);
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await expect(page.locator('#practice-attachments')).not.toHaveAttribute('multiple');
+  await page.locator('#practice-attachments').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+  await expect(page.locator('#media-preview')).toContainText('500MB');
+  await page.locator('.nav [data-tab="media"]').click();
+  await expect(page.locator('#vzip-hub-upload')).not.toHaveAttribute('multiple');
+  await page.locator('#vzip-hub-upload').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+  await expect(page.locator('#vzip-hub-status')).toContainText('500MB');
+  const result=await page.evaluate(()=>({calls:window.__uploadCalls.length,reads:window.__fullFileReads,
+    previews:window.__largeFilePreviews,local:window.__localImportWrites}));
+  expect(result).toEqual({calls:0,reads:0,previews:0,local:0});
+});
+test('Large practice import without login keeps the draft and explains cloud requirement',async({page})=>{
+  await installUploadProbe(page);
+  await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false});
+  await page.locator('.hero [data-go-tab="practice"]').click();
+  await page.locator('#practice-form [name="memo"]').fill('가져오기 실패 후 보존');
+  await page.locator('#practice-attachments').setInputFiles(largeUpload());
+  await expect(page.locator('#media-preview')).toContainText('클라우드 로그인이 필요');
+  await expect(page.locator('#practice-form [name="memo"]')).toHaveValue('가져오기 실패 후 보존');
+  await expect(page.locator('#practice-form>button:not([type])')).toBeEnabled();
+  expect(await page.evaluate(()=>window.__fullFileReads+window.__largeFilePreviews+window.__localImportWrites)).toBe(0);
+});

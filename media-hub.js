@@ -2,7 +2,7 @@
 (()=>{'use strict';
 const archive=document.querySelector('#media');if(!archive)return;
 const card=document.createElement('div');card.className='card';card.id='vzip-media-hub';
-card.innerHTML='<h2>내 파일</h2><p class="muted">설정 없이 바로 올리고 확인해요. 파일을 누르면 비교할 수 있어요.</p><div class="vzip-hub-buttons"><label class="btn" for="vzip-hub-upload">＋ 기존 파일 가져오기</label><input id="vzip-hub-upload" type="file" accept=".mp4,.mov,.m4v,.m4a,.mp3,.wav,video/mp4,video/quicktime,audio/mp4,audio/mpeg,audio/wav" hidden><button class="btn secondary" id="vzip-hub-reload" type="button">↻ 새로고침</button></div><div class="vzip-hub-filters" role="group" aria-label="파일 필터"><button type="button" class="active" data-filter="all">전체</button><button type="button" data-filter="audio">🎤 음성</button><button type="button" data-filter="video">🎬 영상</button></div><p class="muted" id="vzip-hub-status" role="status"></p><div id="vzip-hub-list"></div>';
+card.innerHTML='<h2>내 파일</h2><p class="muted">설정 없이 바로 올리고 확인해요. 파일을 누르면 비교할 수 있어요.</p><div class="vzip-hub-buttons"><label class="btn" for="vzip-hub-upload">＋ 기존 파일 가져오기</label><input id="vzip-hub-upload" type="file" accept=".mp4,.mov,.m4v,.m4a,.mp3,.wav,.webm,.aac,.ogg,.flac,video/mp4,video/quicktime,audio/mp4,audio/mpeg,audio/wav" hidden><button class="btn secondary" id="vzip-hub-reload" type="button">↻ 새로고침</button></div><div class="vzip-hub-filters" role="group" aria-label="파일 필터"><button type="button" class="active" data-filter="all">전체</button><button type="button" data-filter="audio">🎤 음성</button><button type="button" data-filter="video">🎬 영상</button></div><p class="muted" id="vzip-hub-status" role="status"></p><div id="vzip-hub-list"></div>';
 archive.append(card);const originFilters=document.createElement('div');originFilters.className='vzip-hub-filters';originFilters.setAttribute('role','group');originFilters.setAttribute('aria-label','녹음 출처');originFilters.innerHTML='<button type="button" class="active" data-origin="all">전체 출처</button><button type="button" data-origin="lesson">🎓 레슨</button><button type="button" data-origin="practice">🎼 연습</button><button type="button" data-origin="import">📂 가져온 파일</button>';card.querySelector('.vzip-hub-filters')?.after(originFilters);
 const $=s=>card.querySelector(s),status=$('#vzip-hub-status'),list=$('#vzip-hub-list');
 const key='vocal-zip_mvp_v1',dbName='vocalzip_media_v1';let items=[],activeUrl=null,activeEl=null,filter='all',origin='all',refreshRun=0,playRun=0;
@@ -58,7 +58,45 @@ modal.querySelector('[data-save]').onclick=async()=>{if(!name.value.trim()){err.
 async function remove(item){if(!confirm('이 녹음·영상을 영구 삭제할까요? 클라우드와 이 기기에 모두 있으면 둘 다 삭제됩니다.'))return;try{if(item.cloud)await window.vzipCloudMediaDelete(item);if(item.local)await localChange(item.id,()=>null);clearPlayer();window.dispatchEvent(new Event('vzip:media-updated'));await refresh()}catch(e){status.textContent='삭제 실패: '+e.message}}
 list.addEventListener('click',async e=>{const b=e.target.closest('button[data-action]');if(!b){if(e.target.closest('audio,video,input,select,textarea,a,label,button'))return;const row=e.target.closest('.vzip-hub-item');if(row)window.dispatchEvent(new CustomEvent('vzip:compare-open',{detail:{id:row.dataset.id}}));return;}const item=items.find(x=>x.id===b.closest('[data-id]')?.dataset.id);if(!item)return;if(b.dataset.action==='compare')window.dispatchEvent(new CustomEvent('vzip:compare-open',{detail:{id:item.id}}));if(b.dataset.action==='play')await play(item,b.closest('.vzip-hub-item'));if(b.dataset.action==='edit')await edit(item,b);if(b.dataset.action==='delete')await remove(item)});
 $('#vzip-hub-reload').onclick=refresh;
-$('#vzip-hub-upload').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;const files=[file];e.target.disabled=true;let ok=0,fail=0,errors=[];status.textContent='선택한 파일을 업로드할게요. 화면을 유지해 주세요.';for(const file of files){status.textContent='업로드 '+(ok+fail+1)+'/'+files.length+' · '+file.name;try{let uploadFile=file;if(file.size>100*1024*1024){if(!window.vzipCloudSignedIn?.())throw Error('100MB 초과 영상은 클라우드 로그인이 필요해요. 설정에서 로그인 후 다시 시도해 주세요.');status.textContent='☁️ 원본 영상을 안전하게 분할 전송할게요. 앱을 열어 두세요.'}if(!file.type.startsWith('audio/')&&!file.type.startsWith('video/')&&!/\.(mp3|wav|m4a|mp4|mov|webm)$/i.test(file.name))throw Error('지원하지 않는 형식');const name=file.name.replace(/\.[^.]+$/,'');if(window.vzipCloudSignedIn?.()){if(!window.vzipCloudImport)throw Error('클라우드 업로드 준비 중');await window.vzipCloudImport(uploadFile,{name,type:uploadFile.type},p=>status.textContent='☁️ '+file.name+' 업로드 '+p+'%')}else{await window.vzipStorePracticeMedia({id:crypto.randomUUID(),name,created:file.lastModified||Date.now(),type:window.vzipMediaType(file),source:'import',song:'',songId:'',blob:uploadFile});window.dispatchEvent(new Event('vzip:media-updated'))}ok++}catch(err){fail++;errors.push(file.name+': '+err.message);status.textContent=file.name+' 실패: '+err.message}}e.target.value='';e.target.disabled=false;await refresh();status.textContent='✓ '+ok+'개 목록에 추가 완료'+(fail?' · '+fail+'개 실패: '+errors.slice(0,2).join(' / '):'')+'. 아래에서 바로 재생하거나 정보 수정할 수 있어요.';list.scrollIntoView({behavior:'smooth',block:'start'})};
+const importHint=document.createElement('p');importHint.className='muted';
+importHint.textContent='한 번에 파일 하나씩 가져와요. 25MB 초과 파일은 클라우드 로그인이 필요해요. 업로드 중에는 화면을 유지해 주세요.';
+$('#vzip-hub-upload').closest('.vzip-hub-buttons').after(importHint);
+const cancelUpload=document.createElement('button');cancelUpload.type='button';cancelUpload.className='btn secondary';
+cancelUpload.id='vzip-hub-upload-cancel';cancelUpload.textContent='업로드 취소';cancelUpload.hidden=true;importHint.after(cancelUpload);
+let importController=null;
+cancelUpload.onclick=()=>importController?.abort();
+window.addEventListener('pagehide',()=>importController?.abort());
+$('#vzip-hub-upload').onchange=async e=>{
+ const input=e.target;let file=input.files?.[0];if(!file||input.disabled)return;
+ input.disabled=true;const fileName=file.name;importController=new AbortController();let outcome;
+ try{
+  const type=window.vzipMediaType(file);
+  if(!/^(audio|video)\//.test(type))throw Error('지원하지 않는 형식이에요.');
+  if(!file.size)throw Error('빈 파일은 가져올 수 없어요.');
+  if(file.size>500*1024*1024)throw Error('파일당 최대 500MB까지 가져올 수 있어요.');
+  if(file.size>25*1024*1024&&!window.vzipCloudSignedIn?.())throw Error('25MB 초과 파일은 클라우드 로그인이 필요해요.');
+  const name=fileName.replace(/\.[^.]+$/,'');status.textContent=fileName+' · 가져오는 중…';
+  if(window.vzipCloudSignedIn?.()){
+   if(!window.vzipCloudImport)throw Error('클라우드 업로드 준비 중이에요.');
+   cancelUpload.hidden=false;
+   await window.vzipCloudImport(file,{name,type},
+    progress=>{status.textContent=fileName+' · 업로드 '+progress+'%'},
+    {signal:importController.signal,onCommit:()=>{cancelUpload.hidden=true;status.textContent=fileName+' · 보관함 연결 중…'}});
+  }else{
+   await window.vzipStorePracticeMedia({id:crypto.randomUUID(),name,created:file.lastModified||Date.now(),
+    type,source:'import',song:'',songId:'',blob:file});
+   window.dispatchEvent(new Event('vzip:media-updated'));
+  }
+  outcome='✓ '+fileName+' · 보관함 저장 완료';
+ }catch(error){
+  outcome=error.name==='AbortError'?'업로드를 취소했어요. 다시 가져오려면 원본 파일을 선택해 주세요.':
+   fileName+' 가져오기 실패: '+error.message+' · 원본을 다시 선택해 주세요.';
+ }finally{
+  file=null;input.value='';input.disabled=false;cancelUpload.hidden=true;importController=null;
+  await refresh();status.textContent=outcome;
+ }
+};
+
 window.addEventListener('vzip:cloud-media-changed',()=>{clearTimeout(window.__vzipHubTimer);window.__vzipHubTimer=setTimeout(refresh,200)});
 window.addEventListener('vzip:media-saved',()=>{clearTimeout(window.__vzipHubTimer);window.__vzipHubTimer=setTimeout(refresh,300)});
 document.querySelector('button[data-tab="media"]')?.addEventListener('click',refresh);
