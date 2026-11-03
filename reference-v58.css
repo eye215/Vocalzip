@@ -67,3 +67,13 @@ section:not(#home) .btn{min-height:41px}
 #media .vzip-hub-buttons label{margin:0!important}
 #archive .archive-timeline{color:#5d4479!important}
 #lessons .card,#practice .card,#media .card,#archive .card,#manage .card{background:rgba(255,255,255,.72)!important}
+
+/* iOS Safari native date controls can expand beyond their field and inherit
+   oversized browser typography. Keep the entire picker inside the edit sheet. */
+.vzip-media-edit-sheet{box-sizing:border-box!important;max-width:min(600px,100vw)!important;overflow-x:hidden!important}
+.vzip-media-edit-sheet label{min-width:0!important}
+.vzip-media-edit-sheet input[type="date"]{display:block!important;box-sizing:border-box!important;width:100%!important;max-width:100%!important;min-width:0!important;min-height:48px!important;height:50px!important;padding:10px 14px!important;margin-top:8px!important;border-radius:12px!important;font-size:16px!important;line-height:24px!important;text-align:left!important;-webkit-appearance:none!important;appearance:none!important;color:#51366f!important;background:#fff!important;overflow:hidden!important}
+.vzip-media-edit-sheet input[type="date"]::-webkit-date-and-time-value{text-align:left!important;min-height:24px!important;line-height:24px!important}
+.vzip-media-edit-sheet input[type="date"]::-webkit-datetime-edit{display:inline-flex!important;align-items:center!important;padding:0!important;font-size:16px!important;line-height:24px!important}
+.vzip-media-edit-sheet input[type="date"]::-webkit-calendar-picker-indicator{opacity:.8;max-width:24px!important}
+.vzip-media-edit-sheet textarea{display:block;box-sizing:border-box;width:100%;max-width:100%;margin-top:8px;font-size:16px;resize:vertical}

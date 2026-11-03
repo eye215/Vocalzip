@@ -443,3 +443,17 @@ test('Each recording saves its own song, satisfaction and listening notes',async
   await expect(page.locator('.vzip-media-edit-sheet [name="rating"]')).toHaveValue('');
   await expect(page.locator('.vzip-media-edit-sheet [name="review"]')).toHaveValue('');
 });
+
+test('Media date field stays within edit sheet at iPhone width',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await cloudFiles(page,[cloudRow('ios-date','아이폰 날짜 확인')]);
+  await page.locator('.nav [data-tab="media"]').click();
+  await page.locator('[data-id="ios-date"] [data-action="edit"]').click();
+  const date=page.locator('.vzip-media-edit-sheet input[type="date"]');
+  await expect(date).toBeVisible();
+  const bounds=await date.evaluate(el=>{const a=el.getBoundingClientRect(),b=el.closest('.vzip-media-edit-sheet').getBoundingClientRect(),css=getComputedStyle(el);return {left:a.left,right:a.right,sheetLeft:b.left,sheetRight:b.right,height:a.height,font:parseFloat(css.fontSize)}});
+  expect(bounds.left).toBeGreaterThanOrEqual(bounds.sheetLeft);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.sheetRight+1);
+  expect(bounds.height).toBeLessThanOrEqual(52);
+  expect(bounds.font).toBe(16);
+});
