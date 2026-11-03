@@ -916,6 +916,7 @@ test('Recorder pause excludes paused time and mark preserves memo', async ({page
   await page.locator('.nav [data-tab="media"]').click();
   await page.locator('#vzip-hub-list [data-action=play]').click();
   await expect(page.locator('.vzip-player-wave')).toBeVisible();
+  await expect(page.locator('.vzip-player input[type=range]')).toBeEnabled();
   await page.locator('.vzip-player-wave').click();
   await expect(page.locator('.vzip-player-wave')).toBeVisible();
   await testInfo.attach('recorded-waveform-player',{body:await page.screenshot({fullPage:false}),contentType:'image/png'});

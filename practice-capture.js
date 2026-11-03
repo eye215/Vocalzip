@@ -5,7 +5,7 @@ const box=document.createElement('div');box.className='card';box.id='vzip-practi
 const form=root.querySelector('#practice-form');if(form)form.prepend(box);else root.insertBefore(box,root.firstElementChild);
 const $=s=>box.querySelector(s),start=$('#vzip-capture-start'),stop=$('#vzip-capture-stop'),status=$('#vzip-capture-status'),clock=$('#vzip-capture-clock'),preview=$('#vzip-capture-preview');
 const pause=$('#vzip-capture-pause'),mark=$('#vzip-capture-mark'),wave=$('#vzip-capture-wave');
-let audioContext,animation,sampleLevel=()=>0;
+let audioContext,animation,sampleLevel=()=>null;
 let kind='audio',state='idle',stream=null,recorder=null,tick,token=0,recoveryURL;
 const recovery=document.createElement('div');recovery.id='vzip-capture-recovery';recovery.hidden=true;box.append(recovery);
 function setState(next){
@@ -17,7 +17,7 @@ function setState(next){
   window.vzipSetPracticeBusy?.('capture',next!=='idle');
 }
 function releaseTracks(){
-  clearInterval(tick);sampleLevel=()=>0;cancelAnimationFrame(animation);if(audioContext){audioContext.close().catch(()=>{});audioContext=null}wave.getContext('2d').clearRect(0,0,wave.width,wave.height);if(stream)stream.getTracks().forEach(track=>track.stop());
+  clearInterval(tick);sampleLevel=()=>null;cancelAnimationFrame(animation);if(audioContext){audioContext.close().catch(()=>{});audioContext=null}wave.getContext('2d').clearRect(0,0,wave.width,wave.height);if(stream)stream.getTracks().forEach(track=>track.stop());
   stream=null;preview.srcObject=null;preview.hidden=true;
 }
 function clearRecovery(){
@@ -96,7 +96,7 @@ start.onclick=async()=>{
       const draw=()=>{ctx.clearRect(0,0,wave.width,wave.height);if(state==='recording'){analyser.getByteTimeDomainData(data);ctx.strokeStyle='#a279e9';ctx.lineWidth=4;ctx.beginPath();data.forEach((value,index)=>{const x=index/(data.length-1)*wave.width,y=value/255*wave.height;index?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()}animation=requestAnimationFrame(draw)};draw();
     }catch{if(audioContext){audioContext.close().catch(()=>{});audioContext=null}}
 
-    tick=setInterval(()=>{if(state==='recording'){peakMax=Math.max(peakMax,sampleLevel());if(++peakCount>=peakSpan){peaks.push(peakMax);peakCount=0;peakMax=0;if(peaks.length>=512){peaks=peaks.filter((_,i)=>i%2===0).map((value,i)=>Math.max(value,peaks[i*2+1]));peakSpan*=2}}}const seconds=Math.floor(elapsed());clock.textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')},500);
+    tick=setInterval(()=>{if(state==='recording'&&sampleLevel()!==null){peakMax=Math.max(peakMax,sampleLevel());if(++peakCount>=peakSpan){peaks.push(peakMax);peakCount=0;peakMax=0;if(peaks.length>=512){peaks=peaks.filter((_,i)=>i%2===0).map((value,i)=>Math.max(value,peaks[i*2+1]));peakSpan*=2}}}const seconds=Math.floor(elapsed());clock.textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')},500);
     status.textContent='● 녹음 중이에요. 종료하고 저장을 눌러주세요.';
   }catch(error){
     releaseTracks();setState('idle');

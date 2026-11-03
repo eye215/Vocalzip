@@ -24,7 +24,8 @@
     }
     const button = card.querySelector('button'), range = card.querySelector('input'), message = card.querySelector('[role=status]');
     const update = () => {
-      const duration = media.duration, valid = Number.isFinite(duration) && duration > 0;
+      const duration = Number.isFinite(media.duration) && media.duration > 0 ? media.duration : Number(item.durationSeconds);
+      const valid = Number.isFinite(duration) && duration > 0 && media.readyState >= 1;
       range.disabled = !valid; range.max = valid ? duration : 100;
       range.value = media.currentTime || 0;
       range.setAttribute('aria-valuetext', time(media.currentTime) + ' / ' + time(duration));
