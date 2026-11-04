@@ -52,3 +52,14 @@ test('Default pass is first-in-first-out among passes with a full session left',
  state=run(state,'deduction.save',{passId:first,date:'2026-11-01',status:'completed',units:100});
  assert.equal(P.defaultPass(state,C.totals(state)),second);
 });
+test('Imported dates are converted automatically, including times written in the date cell',()=>{
+ for(const [value,date,start,end] of [
+  ['2026년 10월 7일 오후 7:00 → 8:00','2026-10-07','19:00','20:00'],
+  ['October 14, 2026 7:30 PM → 8:30 PM','2026-10-14','19:30','20:30'],
+  ['2026/11/04 19:00 → 2026/11/04 20:00','2026-11-04','19:00','20:00'],
+  ['2026. 11. 4.','2026-11-04','',''],['26.11.04','2026-11-04','',''],['2026-11-04T09:15:00+09:00','2026-11-04','09:15','']]){
+  assert.equal(C.date(value),date,value);assert.deepEqual(C.timeRange(value),{start,end},value);
+ }
+ assert.equal(C.time('오후 12:30'),'12:30');assert.equal(C.time('오전 12:05'),'00:05');assert.equal(C.time('7시 30분'),'07:30');
+ assert.throws(()=>C.date('지난주'),/YYYY-MM-DD/);assert.throws(()=>C.time('저녁'),/HH:MM/);
+});
