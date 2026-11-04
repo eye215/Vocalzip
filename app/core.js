@@ -129,6 +129,8 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
     sheets.splice(sheets.indexOf(api), 1);
     document.body.style.overflow = sheets.length ? 'hidden' : '';
     onClose?.(); if (previous?.isConnected) previous.focus();
+    // A refresh that waited for this sheet runs now.
+    if (!sheets.length && VZ.pendingRender) setTimeout(() => VZ.softRender(), 50);
   };
   const api = {el, close};
   back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) close(); });

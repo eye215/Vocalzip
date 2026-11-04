@@ -52,8 +52,12 @@ window.vzipImportBatch=async(files,options)=>{
   const row=document.createElement('article');row.className='vzip-upload-progress';
   const status=document.createElement('p');status.setAttribute('role','status');status.textContent=file.name+' · 대기 중';
   const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='이 파일 다시 시도';retry.hidden=true;
-  row.append(status,retry);host.append(row);return {file,name:file.name,choice:{...choices[i],id:crypto.randomUUID()},status,retry,state:'pending',prepared:null};
+  row.append(status,retry);host.append(row);return {file,name:file.name,choice:{...choices[i],id:crypto.randomUUID()},row,status,retry,state:'pending',prepared:null};
  });
+ // Finished files leave the list; one line keeps the count so only pending/failed rows stay visible.
+ host.querySelectorAll('.vzip-upload-done').forEach(node=>node.remove());
+ const doneLine=document.createElement('p');doneLine.className='vzip-upload-done';doneLine.setAttribute('role','status');doneLine.hidden=true;host.prepend(doneLine);
+ const markDone=entry=>{entry.row.remove();const n=rows.filter(x=>x.state==='done').length;doneLine.hidden=false;const dates=[...new Set(rows.filter(x=>x.state==='done'&&x.savedDate).map(x=>x.savedDate))];doneLine.textContent='✓ 보관함 저장 완료 '+n+'개'+(dates.length?' · '+dates.slice(0,3).join(', ')+(dates.length>3?' 외':''):'')+(n===rows.length?'':' · 남은 파일 '+(rows.length-n)+'개');};
  let running=false,controller;
  host.vzipDisposeUploads=async()=>{if(running)return;await Promise.all(rows.map(async entry=>{await entry.prepared?.dispose();entry.prepared=null;entry.file=null}))};
  const summary=()=>onSummary?.((rows.some(x=>x.state==='done')?'보관함 저장 완료 '+rows.filter(x=>x.state==='done').length+'개':'저장된 파일 없음')+' · 실패/취소 '+rows.filter(x=>['failed','cancelled'].includes(x.state)).length+'개'+(rows.find(x=>['failed','cancelled'].includes(x.state))?' · '+rows.find(x=>['failed','cancelled'].includes(x.state)).status.textContent:''));
@@ -76,8 +80,8 @@ window.vzipImportBatch=async(files,options)=>{
      const date=selection.recordedDate?' · '+selection.recordedDate+(selection.dateSource==='metadata'?' (메타데이터)':selection.dateSource==='file-modified'?' (파일 수정일)':' (가져온 날짜)'):'';
      window.dispatchEvent(new CustomEvent('vzip:media-imported',{detail:{id:selection.id,date:selection.recordedDate}}));
      if(entry.prepared){await entry.prepared.dispose();entry.prepared=null}
-     entry.savedSizes=sizes+date;
-     entry.state='done';entry.file=null;entry.status.textContent='✓ '+entry.name+' · 보관함 저장 완료'+(entry.savedSizes||'');
+     entry.savedSizes=sizes+date;entry.savedDate=date.replace(/^ · /,'');
+     entry.state='done';entry.file=null;entry.status.textContent='✓ '+entry.name+' · 보관함 저장 완료'+(entry.savedSizes||'');markDone(entry);
     }catch(error){
      entry.state=error.name==='AbortError'?'cancelled':'failed';
      entry.status.textContent=entry.name+' · '+(entry.state==='cancelled'?'업로드 취소':'저장 실패: '+error.message);
