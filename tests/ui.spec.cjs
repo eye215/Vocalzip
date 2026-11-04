@@ -995,7 +995,7 @@ for(const target of ['library','practice'])test('Multiple files choose independe
  await page.evaluate(()=>{
   window.__batchCalls=[];window.__batchFailed=false;
   window.vzipCloudImport=async(file,info,progress)=>{
-   window.__batchCalls.push({name:file.name,...info});progress(55);
+   window.__batchCalls.push({fileName:file.name,...info});progress(55);
    if(file.name==='second.wav'&&!window.__batchFailed){window.__batchFailed=true;throw Error('일시적인 전송 오류')}
    return {id:'saved-'+file.name,durationSeconds:0};
   };
@@ -1014,7 +1014,7 @@ for(const target of ['library','practice'])test('Multiple files choose independe
  await expect(host.locator('article')).toHaveCount(2);
  await expect(host.locator('article').nth(1)).toContainText('보관함 저장 완료');
  const calls=await page.evaluate(()=>window.__batchCalls);
- expect(calls.map(x=>[x.name,x.songId])).toEqual([['first.wav','s1'],['second.wav','s2'],['second.wav','s2']]);
+ expect(calls.map(x=>[x.fileName,x.songId])).toEqual([['first.wav','s1'],['second.wav','s2'],['second.wav','s2']]);
  if(target==='practice')expect(await page.locator('#practice-form').evaluate(f=>JSON.parse(f.dataset.mediaIds))).toEqual(['saved-first.wav','saved-second.wav']);
 });
 test('201MiB original is sliced into independent objects and committed once',async({page},testInfo)=>{
@@ -1092,4 +1092,27 @@ test('Lost metadata response retries the same file ID without uploading a duplic
   return {id:item.id,calls:window.__uploadCalls.length,rows:window.__cloudRows.length,pending:JSON.parse(localStorage.getItem('vzip_pending_media_parts_v1'))};
  });
  expect(result).toEqual({id:'stable-retry-id',calls:1,rows:1,pending:[]});
+});
+
+test('Another tab cannot clean up or overwrite an active upload',async({page,context})=>{
+ test.skip(!await page.evaluate(()=>!!navigator.locks?.request),'Web Locks is unavailable in this browser.');
+ await installUploadProbe(page);
+ await page.evaluate(()=>{
+  window.__heldController=new AbortController();
+  window.__heldImport=window.vzipCloudImport(new File(['original'],'held.wav',{type:'audio/wav'}),{},undefined,{signal:window.__heldController.signal}).catch(e=>{window.__heldError=e.message});
+ });
+ await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+ const other=await context.newPage();
+ await other.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:cloudStub}));
+ await other.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
+ await other.route('**/*.supabase.co/**',route=>route.abort());
+ await other.goto('/');await expect(other.locator('#vzip-auth-screen')).toBeHidden();
+ await installUploadProbe(other,'success');
+ const blocked=await other.evaluate(async()=>{try{await window.vzipCloudImport(new File(['other'],'other.wav',{type:'audio/wav'}))}catch(e){return {error:e.message,calls:window.__uploadCalls.length,removed:window.__removedPaths||[]}}});
+ expect(blocked.error).toContain('다른 파일을 업로드');expect(blocked.calls).toBe(0);expect(blocked.removed).toEqual([]);
+ await page.evaluate(()=>window.__heldController.abort());
+ await expect.poll(()=>page.evaluate(()=>window.__heldError||'')).toContain('취소');
+ await other.evaluate(()=>window.vzipCloudImport(new File(['other'],'other.wav',{type:'audio/wav'})));
+ expect(await other.evaluate(()=>window.__uploadCalls.length)).toBe(1);
+ await other.close();
 });

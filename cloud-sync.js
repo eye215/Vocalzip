@@ -44,6 +44,7 @@ window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e
 
 /* Each >50MiB original is stored as independent <=24MiB objects, one metadata row. */
 let mediaImportActive=false;
+const mediaPageId=crypto.randomUUID();
 const pendingKey='vzip_pending_media_parts_v1';
 function pendingUploads(){try{return JSON.parse(localStorage.getItem(pendingKey)||'[]')}catch{return []}}
 function journal(entry){
@@ -53,6 +54,7 @@ function journal(entry){
 function forget(id){localStorage.setItem(pendingKey,JSON.stringify(pendingUploads().filter(x=>x.id!==id)))}
 async function cleanupPending(owner){
  for(const entry of pendingUploads().filter(x=>x.owner===owner)){
+  if(!navigator.locks?.request&&entry.page!==mediaPageId)continue;
   const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',entry.id).maybeSingle();
   if(error||user?.id!==owner)continue;
   // A committed row wins after a lost response or a page close during commit.
@@ -61,7 +63,7 @@ async function cleanupPending(owner){
   if(!removeError)forget(entry.id);
  }
 }
-window.vzipCloudImport=async function(file,info={},onProgress,options={}){
+async function importMedia(file,info={},onProgress,options={}){
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
  if(!file||file.size<=0)throw Error('빈 파일은 업로드할 수 없어요.');
  if(file.size>VzipChunks.MAX_SIZE)throw Error('파일당 최대 1GB까지 업로드할 수 있어요.');
@@ -89,7 +91,7 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
    path:owner+'/'+id+'/part-'+String(index).padStart(4,'0'),
    size:Math.min(VzipChunks.PART_SIZE,file.size-index*VzipChunks.PART_SIZE)
   })):[{path:owner+'/'+id+'.'+ext,size:file.size}];
-  journal({id,owner,paths:parts.map(x=>x.path),created:Date.now()});
+  journal({id,owner,page:mediaPageId,paths:parts.map(x=>x.path),created:Date.now()});
   if(!window.tus?.Upload)throw Error('업로드 모듈을 불러오지 못했어요. 새로고침해 주세요.');
   let offset=0;
   for(const part of parts){
@@ -150,6 +152,13 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
   options.signal?.removeEventListener('abort',cancel);window.removeEventListener('vzip:auth-changed',authChanged);
   mediaImportActive=false;
  }
+};
+window.vzipCloudImport=(...args)=>{
+ if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
+  if(!lock)throw Error('다른 파일을 업로드하고 있어요. 다른 탭의 업로드를 완료하거나 취소한 뒤 다시 선택해 주세요.');
+  return importMedia(...args);
+ });
+ return importMedia(...args);
 };
 window.vzipCloudMediaList=async()=>{if(!user)return [];const {data,error}=await client.from('vocal_media').select('id,metadata').eq('user_id',user.id).order('updated_at',{ascending:false});if(error)throw error;return (data||[]).map(x=>({...x.metadata,id:x.id,cloud:true}))};
 window.vzipCloudMediaUrl=async item=>{
