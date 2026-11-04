@@ -28,7 +28,7 @@ function enhance(input){
  input.addEventListener('input',()=>{
   const raw=native.get.call(input);
   // Typing or pasting digits: keep the YYYY/MM/DD shape. Pasted text (e.g. "January 26, 2026") is converted on blur.
-  if(/^[\d/.\- ]*$/.test(raw)){const next=shape(raw);if(next!==raw)native.set.call(input,next)}
+  if(/^[\d/.\- ]*$/.test(raw)){const complete=/^(?:\d{4}[-/.]\d{2}[-/.]\d{2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4}|\d{8})$/.test(raw);const parsed=complete?show(raw):raw;const next=/^\d{4}\/\d{2}\/\d{2}$/.test(parsed)?parsed:shape(raw);if(next!==raw)native.set.call(input,next)}
   else{const next=show(raw);if(/^\d{4}\/\d{2}\/\d{2}$/.test(next))native.set.call(input,next)}
   input.removeAttribute('aria-invalid');
  });
