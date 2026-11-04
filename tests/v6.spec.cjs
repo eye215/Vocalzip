@@ -472,3 +472,30 @@ test('Practice records can be edited, including unlinking files that no longer e
   expect(p).toMatchObject({minutes:45, rating:5, memo:'고음 안정, 브릿지 호흡', mediaIds:[], completed:['a1'], assignmentNotes:{a1:'3회 반복'}});
   expect((await media(page)).some(m => m.id === 'm1')).toBe(true); // unlinking never deletes the file
 });
+
+test('Practice time adds recording/import lengths once and fills missing lengths', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const day = 864e5, read = async id => (await window.vzipReadMedia()).find(m => m.id === id);
+    // m2: a 10-minute practice recording not linked to any record → counts.
+    await window.vzipStorePracticeMedia({...(await read('m2')), durationSeconds:600});
+    // m3: an import saved before lengths were kept (no duration) → measured and counted.
+    await window.vzipStorePracticeMedia({id:'m3', name:'SODA_1', created:Date.now() - day, recordedDate:'', type:'audio/wav', source:'import', songId:'s2', blob:new Blob([window.__wav], {type:'audio/wav'})});
+    window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m3'}}));
+  });
+  await page.goto('/#/growth');
+  await page.getByRole('button', {name:'전체'}).click();
+  // p1 (30분, already includes linked m1) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('40분');
+  await expect(page.locator('[data-file-time]')).toContainText('녹음·파일 10분 포함');
+  await expect.poll(async () => Math.round((await page.evaluate(() => window.vzipReadMedia())).find(m => m.id === 'm3').durationSeconds)).toBe(1);
+  await expect(page.locator('.bars')).toContainText('This Is the Moment');
+  await expect(page.getByText(/기록에 연결되지 않은 녹음·파일 2개/)).toBeVisible();
+  // Song list/detail use the same rule.
+  await page.goto('/#/song/s1');
+  await expect(page.locator('[data-summary]')).toContainText('연습 40분');
+  // Linking m2 into a practice record moves its time inside that record (no double count).
+  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds.push('m2'); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
+  await page.goto('/#/growth');
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('30분');
+});

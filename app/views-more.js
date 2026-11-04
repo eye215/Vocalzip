@@ -104,6 +104,8 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
   main.querySelector('[data-song]').onchange = e => { lib.song = e.target.value; draw(); };
   main.querySelector('[data-q]').oninput = e => { lib.q = e.target.value; draw(); };
   media = await M.list().catch(() => []); if (l.isConnected) draw();
+  // Show filled lengths, but never close a player the user has open.
+  if (await M.fillDurations(media) && l.isConnected && !l.querySelector('.media-open:not([hidden])')) draw();
 }});
 
 /* ---------- 비교 ---------- */
@@ -187,37 +189,41 @@ VZ.route('growth', {title:'성장', render() {
     const from = period === 'week' ? VZ.ymd(monday) : period === '28' ? VZ.ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 27)) : '';
     const inP = d => !!d && (!from || d >= from) && d <= t;
     const ps = db.practices.filter(p => inP(p.date));
-    const total = ps.reduce((a, p) => a + VZ.practiceMinutes(p), 0);
-    const days = new Set(ps.map(p => p.date)).size;
+    // Practice records + recording/import lengths not already counted in a record.
+    const all = VZ.timeEntries(media), es = all.filter(e => inP(e.date));
+    const total = VZ.sumMinutes(es), fileTotal = VZ.sumMinutes(es.filter(e => e.kind === 'recording'));
+    const days = new Set(es.map(e => e.date)).size;
     const recs = media.filter(m => inP(M.dateOf(m)));
     const doneTasks = db.assignments.filter(x => x.status === 'done' && (period === 'all' || (x.doneAt && inP(VZ.ymd(new Date(x.doneAt))))));
     const rated = ps.filter(p => p.rating > 0), avg = rated.length ? (rated.reduce((a, p) => a + p.rating, 0) / rated.length).toFixed(1) : '–';
-    const allTotal = db.practices.reduce((a, p) => a + VZ.practiceMinutes(p), 0);
+    const allTotal = VZ.sumMinutes(all);
     // per-song minutes
-    const songMin = new Map(); ps.forEach(p => { const k = p.practiceMode === 'training' ? '__train' : p.songId || '__none'; songMin.set(k, (songMin.get(k) || 0) + VZ.practiceMinutes(p)); });
+    const songMin = new Map(); es.forEach(e => { const k = e.training ? '__train' : e.songId || '__none'; songMin.set(k, (songMin.get(k) || 0) + e.minutes); });
     const songRows = [...songMin.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
     const max = Math.max(1, ...songRows.map(x => x[1]));
     // last 7 days or 8 weeks bars
     const cols = [];
-    if (period === 'week') for (let i = 0; i < 7; i++) { const d = VZ.ymd(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)); cols.push([['월', '화', '수', '목', '금', '토', '일'][i], db.practices.filter(p => p.date === d).reduce((a, p) => a + VZ.practiceMinutes(p), 0)]); }
-    else for (let i = 7; i >= 0; i--) { const s = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - i * 7), e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6); const a = VZ.ymd(s), b = VZ.ymd(e); cols.push([(s.getMonth() + 1) + '/' + s.getDate(), db.practices.filter(p => p.date >= a && p.date <= b).reduce((x, p) => x + VZ.practiceMinutes(p), 0)]); }
+    if (period === 'week') for (let i = 0; i < 7; i++) { const d = VZ.ymd(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)); cols.push([['월', '화', '수', '목', '금', '토', '일'][i], VZ.sumMinutes(all.filter(e => e.date === d))]); }
+    else for (let i = 7; i >= 0; i--) { const s = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - i * 7), e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6); const a = VZ.ymd(s), b = VZ.ymd(e); cols.push([(s.getMonth() + 1) + '/' + s.getDate(), VZ.sumMinutes(all.filter(e => e.date >= a && e.date <= b))]); }
     const cmax = Math.max(1, ...cols.map(c => c[1]));
     const trend = db.practices.filter(p => p.rating > 0 && inP(p.date)).sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
     const label = {week:'이번 주', '28':'최근 28일', all:'전체'}[period];
-    host.innerHTML = '<div class="stats"><div class="stat"><b>' + VZ.minutes(total) + '</b><span>' + label + ' 연습 시간</span></div><div class="stat"><b>' + days + '일</b><span>연습한 날</span></div><div class="stat"><b>' + recs.length + '개</b><span>녹음</span></div><div class="stat"><b>' + doneTasks.length + '개</b><span>완료한 숙제</span></div><div class="stat"><b>' + avg + '</b><span>평균 만족도</span></div><div class="stat"><b>' + VZ.minutes(allTotal) + '</b><span>누적 연습 시간</span></div></div>' +
+    host.innerHTML = '<div class="stats"><div class="stat"><b>' + VZ.minutes(total) + '</b><span>' + label + ' 연습 시간</span>' + (fileTotal ? '<span class="small muted" data-file-time style="display:block">녹음·파일 ' + VZ.minutes(fileTotal) + ' 포함</span>' : '') + '</div><div class="stat"><b>' + days + '일</b><span>연습한 날</span></div><div class="stat"><b>' + recs.length + '개</b><span>녹음</span></div><div class="stat"><b>' + doneTasks.length + '개</b><span>완료한 숙제</span></div><div class="stat"><b>' + avg + '</b><span>평균 만족도</span></div><div class="stat"><b>' + VZ.minutes(allTotal) + '</b><span>누적 연습 시간</span></div></div>' +
       '<h2 class="sec">' + (period === 'week' ? '요일별 연습' : '주별 연습 (최근 8주)') + '</h2><div class="card"><div class="week">' + cols.map(([k, v]) => '<div title="' + VZ.minutes(v) + '"><span style="font-size:10px">' + (v ? Math.round(v) : '') + '</span><span class="col' + (v ? '' : ' zero') + '" style="height:' + Math.max(3, Math.round(v / cmax * 80)) + 'px"></span>' + k + '</div>').join('') + '</div></div>' +
       '<h2 class="sec">곡별 연습량</h2>' + (songRows.length ? '<div class="card bars">' + songRows.map(([k, v]) => '<div class="bar"><span class="ellipsis">' + esc(k === '__train' ? '보컬 트레이닝' : k === '__none' ? '곡 미지정' : VZ.songTitle(k) || '삭제된 곡') + '</span><span class="track"><span class="fill" style="width:' + Math.round(v / max * 100) + '%;display:block"></span></span><span>' + VZ.minutes(v) + '</span></div>').join('') + '</div>' : VZ.empty('chart-bar', label + ' 연습 기록이 없어요.', '<button type="button" class="btn sm" data-log>연습 기록하기</button>')) +
       '<h2 class="sec">만족도 추이</h2>' + (trend.length >= 2 ? '<div class="card"><div class="week" style="grid-template-columns:repeat(' + trend.length + ',1fr);height:90px">' + trend.map(p => '<div title="' + esc(p.date) + ' ★' + p.rating + '"><span class="col" style="height:' + p.rating * 14 + 'px;background:#f2b31b"></span>' + VZ.parseYmd(p.date).getDate() + '</div>').join('') + '</div></div>' : '<p class="small muted" style="margin:0 4px">만족도를 기록한 연습이 2개 이상이면 추이를 보여 드려요.</p>') +
-      '<h2 class="sec">기록 요약</h2><div class="card small" style="display:grid;gap:6px">' + summary(ps, recs, doneTasks, label) + '</div>' +
+      '<h2 class="sec">기록 요약</h2><div class="card small" style="display:grid;gap:6px">' + summary(ps, recs, doneTasks, label, es) + '</div>' +
       '<div class="btn-row" style="margin-top:16px"><a class="btn secondary" href="#/compare"><i class="ph ph-arrows-left-right"></i>녹음 비교</a><a class="btn secondary" href="#/library"><i class="ph ph-waveform"></i>보관함</a></div>';
     host.querySelector('[data-log]')?.addEventListener('click', () => VZ.practiceSheet());
   };
-  function summary(ps, recs, tasks, label) {
+  function summary(ps, recs, tasks, label, es) {
     if (!ps.length && !recs.length) return '<span class="muted">' + label + ' 기록이 아직 없어요. 녹음하거나 연습을 기록하면 요약이 생겨요.</span>';
     const lines = [];
     const train = ps.filter(p => p.practiceMode === 'training').reduce((a, p) => a + VZ.practiceMinutes(p), 0), song = ps.filter(p => p.practiceMode !== 'training').reduce((a, p) => a + VZ.practiceMinutes(p), 0);
     if (ps.length) lines.push(label + ' ' + ps.length + '번 연습했어요 (곡 연습 ' + VZ.minutes(song) + ', 트레이닝 ' + VZ.minutes(train) + ').');
-    const top = [...ps.reduce((m, p) => p.songId ? m.set(p.songId, (m.get(p.songId) || 0) + VZ.practiceMinutes(p)) : m, new Map())].sort((a, b) => b[1] - a[1])[0];
+    const files = es.filter(e => e.kind === 'recording');
+    if (files.length) lines.push('기록에 연결되지 않은 녹음·파일 ' + files.length + '개, ' + VZ.minutes(VZ.sumMinutes(files)) + '을 연습 시간에 더했어요.');
+    const top = [...es.reduce((m, e) => e.songId ? m.set(e.songId, (m.get(e.songId) || 0) + e.minutes) : m, new Map())].sort((a, b) => b[1] - a[1])[0];
     if (top && VZ.songTitle(top[0])) lines.push('가장 많이 연습한 곡은 “' + VZ.songTitle(top[0]) + '”이에요.');
     if (recs.length) lines.push('녹음 ' + recs.length + '개를 남겼어요.');
     const open = VZ.db.assignments.filter(x => x.status !== 'done').length;
@@ -227,6 +233,7 @@ VZ.route('growth', {title:'성장', render() {
   }
   draw(M.cached());
   const media = await M.list().catch(() => []); if (host.isConnected) draw(media);
+  if (await M.fillDurations(media) && host.isConnected) draw(media);
 }});
 
 /* ---------- 설정 ---------- */

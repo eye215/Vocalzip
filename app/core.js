@@ -70,6 +70,20 @@ VZ.nextLesson = () => db.lessons.filter(l => VZ.lessonStatus(l) === 'scheduled' 
 VZ.taskLessons = t => t.lessonIds || (t.lessonId ? [t.lessonId] : []);
 VZ.taskSongId = t => t.songId || VZ.taskLessons(t).map(id => db.lessons.find(l => l.id === id)?.songId).find(Boolean) || '';
 VZ.practiceMinutes = p => Number(p.minutes) || 0;
+/** Practice time = practice records + recordings/imports that are not already inside a
+ * practice record (its minutes cover them) or a lesson (lesson time is not practice). */
+VZ.timeEntries = (media = []) => {
+  const inPractice = new Set(db.practices.flatMap(p => p.mediaIds || []));
+  const inLesson = new Set(db.lessons.flatMap(l => (l.recordings || []).map(r => r.id)));
+  const out = db.practices.map(p => ({date:p.date, minutes:VZ.practiceMinutes(p), songId:p.practiceMode === 'training' ? '' : p.songId || '', training:p.practiceMode === 'training', kind:'practice', ref:p}));
+  for (const m of media) {
+    if (inPractice.has(m.id) || inLesson.has(m.id) || m.source === 'lesson') continue;
+    const seconds = Number(m.durationSeconds) || 0, date = VZ.media?.dateOf(m);
+    if (seconds > 0 && date) out.push({date, minutes:seconds / 60, songId:m.songId || '', training:false, kind:'recording', ref:m});
+  }
+  return out;
+};
+VZ.sumMinutes = entries => entries.reduce((a, e) => a + e.minutes, 0);
 VZ.addSong = (title, show = '') => {
   title = String(title || '').trim();
   if (!title) return null;
@@ -216,7 +230,7 @@ VZ.rerender = () => VZ.render();
 VZ.softRender = () => {
   const main = document.getElementById('view');
   const typing = main?.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
-  if (VZ.isBusy?.() || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
+  if (VZ.isBusy?.() || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
   VZ.pendingRender = false; VZ.render();
 };
 document.addEventListener('input', e => { const main = document.getElementById('view'); if (main?.contains(e.target) && !e.target.matches('[type=search],[data-q]')) main.dataset.dirty = '1'; });
