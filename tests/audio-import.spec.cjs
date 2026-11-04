@@ -2,6 +2,7 @@ const {test,expect}=require('@playwright/test'),path=require('node:path');
 test.beforeEach(async({page})=>{
  page.__errors=[];page.on('pageerror',error=>page.__errors.push(error.message));
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));
+ await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
  await page.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
  if(process.env.VZ_MEDIABUNNY)await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs',route=>route.fulfill({path:process.env.VZ_MEDIABUNNY,contentType:'text/javascript'}));
  await page.goto('/legacy.html');

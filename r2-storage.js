@@ -68,10 +68,21 @@ async function stat(key) {
   await res.body?.cancel();
   return {size:Number.isFinite(total) && total > 0 ? total : Number(res.headers.get('content-length')), etag:res.headers.get('etag')};
 }
+/** R2 is used only after the Worker accepted this user's sign-in once; otherwise the app keeps
+ * the existing storage (e.g. the Worker still needs SUPABASE_JWT_SECRET). Re-checked every 10 min. */
+let check = {token:'', ok:false, reason:'', until:0};
+async function ready() {
+  if (!endpoint() || !window.vzipCloudSignedIn?.()) return false;
+  let t; try { t = await token(); } catch { return false; }
+  if (check.token === t && check.until > Date.now()) return check.ok;
+  try { await api('/v1/me'); check = {token:t, ok:true, reason:'', until:Date.now() + 600000}; }
+  catch (e) { check = {token:t, ok:false, reason:e.status === 401 ? 'auth' : e.status ? 'http ' + e.status : 'network', until:Date.now() + (e.status ? 600000 : 60000)}; }
+  return check.ok;
+}
 async function usage() { return api('/v1/usage'); }
 async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, remove, stat, usage, health, extOf};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, remove, stat, usage, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();

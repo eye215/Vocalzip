@@ -46,7 +46,8 @@ async function draw(main = document.querySelector('[data-storage]')?.parentNode)
   const host = main?.querySelector('[data-storage]'); if (!host) return;
   const list = await M.list(true), g = VZ.storageGroups(list), signed = !!window.vzipCloudSignedIn?.();
   const configured = !!R2()?.configured(), health = configured ? await R2().health() : {ok:false};
-  let usage = null; if (configured && health.ok && signed) { try { usage = await R2().usage(); } catch {} }
+  const accepted = configured && health.ok && signed && await R2().ready();
+  let usage = null; if (accepted) { try { usage = await R2().usage(); } catch {} }
   const row = (icon, title, items, note) => '<div class="item"><i class="ph ph-' + icon + '"></i><span class="item-main"><span class="item-title">' + title + '</span><span class="item-sub">' + items.length + '개 · ' + mb(items.reduce((s, m) => s + sizeOf(m), 0)) + (note ? ' · ' + note : '') + '</span></span></div>';
   const todo = [...g.device, ...g.supabase];
   host.innerHTML =
@@ -58,6 +59,7 @@ async function draw(main = document.querySelector('[data-storage]')?.parentNode)
       (!configured ? '<p class="small muted" style="margin:0">아직 R2가 설정되지 않았어요. 설정 전까지는 지금처럼 기존 저장소를 그대로 써요. Cloudflare에서 저장소를 만든 뒤 주소를 연결하면 여기서 옮길 수 있어요.</p>'
         : !health.ok ? '<p class="small" style="margin:0;color:var(--danger)">R2 저장소에 연결하지 못했어요: ' + esc(health.reason || '') + '</p>'
         : !signed ? '<p class="small muted" style="margin:0">로그인하면 R2로 옮길 수 있어요.</p>'
+        : !accepted ? '<p class="small" style="margin:0;color:var(--danger)">' + (R2().lastCheck().reason === 'auth' ? 'R2 저장소가 이 로그인을 확인하지 못했어요. Worker에 Supabase JWT 설정(SUPABASE_JWT_SECRET)이 필요할 수 있어요.' : 'R2 저장소에 연결하지 못했어요 (' + esc(R2().lastCheck().reason) + ').') + ' 그동안 새 파일은 기존 저장소에 안전하게 저장돼요.</p>'
         : '<p class="small muted" style="margin:0">R2 연결됨. 새로 가져오는 파일은 R2에 저장돼요. 기존 파일은 아래 버튼을 눌러야 옮겨져요. 옮겨도 파일 이름·날짜·곡·레슨·연습 연결은 그대로예요.</p>' +
           (run && !run.finished ? '<p class="small" data-run style="margin:0">' + esc(runText()) + '</p><button type="button" class="btn ghost" data-stop>멈추기</button>'
             : todo.length ? '<button type="button" class="btn" data-move>남은 ' + todo.length + '개 파일 R2로 옮기기</button>' : '<p class="small" style="margin:0">✓ 모든 파일이 R2에 있어요.</p>') +

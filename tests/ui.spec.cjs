@@ -9,6 +9,7 @@ const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.__c
 test.beforeEach(async ({page}) => {
   page.__vzipErrors=[];page.on('pageerror',error=>page.__vzipErrors.push(error.message));
   await page.route('**/supabase.min.js', route => route.fulfill({contentType:'application/javascript',body:cloudStub}));
+  await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
   await page.route('**/tus.min.js', route => route.fulfill({contentType:'application/javascript',body:'window.tus={};'}));
   await page.route('**/*.supabase.co/**', route => route.abort());
   page.on('dialog', dialog => dialog.accept());
@@ -1111,6 +1112,7 @@ test('Another tab cannot clean up or overwrite an active upload',async({page,con
  await expect.poll(()=>page.evaluate(()=>window.__uploadCalls.length)).toBe(1);
  const other=await context.newPage();
  await other.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:cloudStub}));
+ await other.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
  await other.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
  await other.route('**/*.supabase.co/**',route=>route.abort());
  await other.goto('/legacy.html');await expect(other.locator('#vzip-auth-screen')).toBeHidden();
