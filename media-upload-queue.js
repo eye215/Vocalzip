@@ -54,7 +54,7 @@ window.vzipImportBatch=async(files,options)=>{
   row.append(status,retry);host.append(row);return {file,name:file.name,choice:{...choices[i],id:crypto.randomUUID()},status,retry,state:'pending'};
  });
  let running=false,controller;
- const summary=()=>onSummary?.('보관함 저장 완료 '+rows.filter(x=>x.state==='done').length+'개 · 실패/취소 '+rows.filter(x=>['failed','cancelled'].includes(x.state)).length+'개'+(rows.find(x=>['failed','cancelled'].includes(x.state))?' · '+rows.find(x=>['failed','cancelled'].includes(x.state)).status.textContent:''));
+ const summary=()=>onSummary?.((rows.some(x=>x.state==='done')?'보관함 저장 완료 '+rows.filter(x=>x.state==='done').length+'개':'저장된 파일 없음')+' · 실패/취소 '+rows.filter(x=>['failed','cancelled'].includes(x.state)).length+'개'+(rows.find(x=>['failed','cancelled'].includes(x.state))?' · '+rows.find(x=>['failed','cancelled'].includes(x.state)).status.textContent:''));
  const process=async entries=>{
   if(running)return;running=true;onBusy?.(true);controller=new AbortController();
   cancelButton.hidden=false;cancelButton.disabled=false;cancelButton.onclick=()=>controller.abort();

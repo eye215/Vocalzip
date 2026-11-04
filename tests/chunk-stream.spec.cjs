@@ -5,7 +5,8 @@ function wav(){
 }
 test('Real service worker serves private cross-part ranges, reloads and native playback',async({page,context,browserName})=>{
  test.skip(browserName!=='chromium','Playwright intercepts worker network requests on Chromium; pure stream contracts run separately for all byte paths.');
- const bytes=wav(),cut=16000,requests=[],diagnostics=[];
+ let bytes=wav(),cut=16000;const requests=[],diagnostics=[];
+ const cdp=await context.newCDPSession(page);await cdp.send('ServiceWorker.enable');cdp.on('ServiceWorker.workerErrorReported',error=>diagnostics.push(error));
  context.on('requestfailed',request=>diagnostics.push({url:request.url(),failure:request.failure()}));
  context.on('console',message=>diagnostics.push(message.text()));
  await context.route('https://chxnbtiyuyhiywzeshis.supabase.co/storage/v1/object/sign/vocal-recordings/**',async route=>{
@@ -20,6 +21,7 @@ test('Real service worker serves private cross-part ranges, reloads and native p
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));
  await page.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
  await page.goto('/');
+ await page.evaluate(()=>{window.__streamErrors=[];navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='vzip-stream-error')window.__streamErrors.push(event.data.message)})});
  const src=await page.evaluate(async({size,cut})=>{
   const item={storageVersion:2,type:'audio/wav',size,parts:[{path:'owner/part-0',size:cut},{path:'owner/part-1',size:size-cut}]};
   return window.vzipChunkMediaURL(item,async path=>'https://chxnbtiyuyhiywzeshis.supabase.co/storage/v1/object/sign/vocal-recordings/'+path+'?token=test');
@@ -27,7 +29,7 @@ test('Real service worker serves private cross-part ranges, reloads and native p
  const slice=await page.evaluate(async src=>{
   const response=await fetch(src,{headers:{Range:'bytes=15998-16002'}});
   return {status:response.status,range:response.headers.get('content-range'),bytes:Array.from(new Uint8Array(await response.arrayBuffer()))};
- },src).catch(error=>{throw Error(JSON.stringify({error:error.message,requests,diagnostics}))});
+ },src).catch(async error=>{await page.waitForTimeout(100);throw Error(JSON.stringify({error:error.message,requests,diagnostics,worker:await page.evaluate(()=>window.__streamErrors)}))});
  expect(slice).toEqual({status:206,range:'bytes 15998-16002/'+bytes.length,bytes:[...bytes.subarray(15998,16003)]});
  await page.reload();
  await page.evaluate(src=>{const media=document.createElement('audio');media.id='stream-fixture';media.controls=true;media.src=src;document.body.append(media)},src);

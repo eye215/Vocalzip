@@ -41,7 +41,7 @@ self.addEventListener('fetch',event=>{
    if(!session||session.expires<=Date.now())return new Response('재생 시간이 만료됐어요. 파일의 재생 버튼을 다시 눌러 주세요.',{status:410,headers:{'Cache-Control':'no-store'}});
    return VzipChunks.response(session.item,event.request,(part,start,end,signal)=>fetch(part.url,{
     headers:{Range:'bytes='+start+'-'+end},signal,cache:'no-store',credentials:'omit'
-   }));
+   }),error=>{self.clients.get(event.clientId).then(client=>client?.postMessage({type:'vzip-stream-error',message:error.message})).catch(()=>{})});
   })().catch(()=>new Response('재생 준비 실패',{status:502})));
  }else if(u.pathname===scope.pathname+'share-inbox'&&event.request.method==='POST'){
   event.respondWith((async()=>{try{const form=await event.request.formData();const files=form.getAll('files').filter(x=>x instanceof File);if(!files.length)throw Error('No files');await store(files);return Response.redirect(scope.href+'?shared=1',303)}catch{return Response.redirect(scope.href+'?share_error=1',303)}})());

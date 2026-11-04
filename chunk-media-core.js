@@ -21,7 +21,7 @@ function range(header,size){
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||start>=size||end<start||(!m[1]&&Number(m[2])<=0))return null;
  return {start,end,status:206};
 }
-function response(item,request,fetchPart){
+function response(item,request,fetchPart,report=()=>{}){
  validate(item);
  const selected=range(request.headers.get('range'),item.size);
  const headers={'Accept-Ranges':'bytes','Cache-Control':'no-store','Content-Type':/^(audio|video)\/[\w.+-]+(?:;[^\r\n]*)?$/.test(item.type||'')?item.type:'application/octet-stream','X-Content-Type-Options':'nosniff'};
@@ -57,7 +57,7 @@ function response(item,request,fetchPart){
      if(partRemaining===0){await reader.cancel();reader=null}
      if(count)return;
     }
-   }catch(error){abort.abort();try{await reader?.cancel()}catch{}if(!cancelled)controller.error(error)}
+   }catch(error){report(error);abort.abort();try{await reader?.cancel()}catch{}if(!cancelled)controller.error(error)}
   },
   async cancel(){cancelled=true;abort.abort();try{await reader?.cancel()}catch{}}
  });
