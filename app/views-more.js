@@ -14,7 +14,7 @@ VZ.importSheet = ({songId = ''} = {}) => {
     onMount:(el, close) => {
       const wrap = el.parentNode, step2 = el.querySelector('[data-step2]'), foot = wrap.querySelector('[data-foot]');
       let rows = [];
-      const songOpts = v => '<option value="">곡 미지정</option>' + VZ.db.songs.map(s => '<option value="' + esc(s.id) + '"' + (s.id === v ? ' selected' : '') + '>' + esc(VZ.songLabel(s)) + '</option>').join('');
+      const songOpts = v => '<option value="">곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (s.id === v ? ' selected' : '') + '>' + esc(VZ.songLabel(s)) + '</option>').join('');
       el.querySelector('[data-file]').onchange = e => {
         const files = [...e.target.files]; e.target.value = '';
         if (!files.length) return;
@@ -91,7 +91,7 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
   const chip = (k, v, label) => '<button type="button" class="chip" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + label + '</button>';
   return '<div class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·메모 검색" aria-label="보관함 검색" data-q value="' + esc(lib.q) + '"></div>' +
     '<div class="chips" style="margin-bottom:8px">' + chip('kind', 'all', '전체') + chip('kind', 'audio', '음성') + chip('kind', 'video', '영상') + '<span style="width:8px;flex:none"></span>' + chip('origin', 'all', '모든 출처') + chip('origin', 'practice', '녹음') + chip('origin', 'lesson', '레슨') + chip('origin', 'import', '가져옴') + '</div>' +
-    '<select aria-label="곡 필터" data-song style="margin-bottom:12px;min-height:44px"><option value="">모든 곡</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.db.songs.map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select>' +
+    '<select aria-label="곡 필터" data-song style="margin-bottom:12px;min-height:44px"><option value="">모든 곡</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select>' +
     '<p class="small muted" data-count style="margin:0 4px 8px"></p><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   document.querySelector('[data-imp]').onclick = () => VZ.importSheet();
@@ -134,7 +134,7 @@ VZ.route('compare', {title:'녹음 비교', back:true, tab:'growth', noAutoRefre
     pa?.destroy(); pb?.destroy();
     const saved = a && b ? reports.find(x => (x.firstId === a.id && x.secondId === b.id)) : null;
     const side = (tag, m) => '<div class="side' + (active === tag ? ' active' : '') + '" data-side="' + tag + '"><div class="row between" style="margin-bottom:8px"><div class="grow" style="min-width:0"><span class="tag">' + tag + '</span><strong>' + esc(m ? M.label(m) : '녹음 선택') + '</strong>' + (m ? '<div class="small muted">' + esc(VZ.dateLabel(M.dateOf(m)) + (m.rating ? ' · ★' + m.rating : '')) + '</div>' : '') + '</div><button type="button" class="btn sm ghost" data-pick="' + tag + '">변경</button></div>' + (m ? '<div data-p></div>' + (m.review ? '<p class="small muted" style="white-space:pre-wrap;margin:6px 0 0">' + esc(m.review) + '</p>' : '') : '') + '</div>';
-    host.innerHTML = '<select aria-label="곡" data-song-f style="margin-bottom:10px;min-height:44px"><option value="">모든 곡</option>' + VZ.db.songs.map(s => '<option value="' + esc(s.id) + '"' + (s.id === songId ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select>' +
+    host.innerHTML = '<select aria-label="곡" data-song-f style="margin-bottom:10px;min-height:44px"><option value="">모든 곡</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (s.id === songId ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select>' +
       (pool().length >= 2 ? '<button type="button" class="btn sm secondary" data-first-last style="margin-bottom:10px"><i class="ph ph-lightning"></i>처음 vs 최근 바로 비교</button>' : '') +
       '<div class="ab">' + side('A', a) + side('B', b) + '</div>' +
       (a && b ? '<button type="button" class="btn block" data-switch style="margin-top:10px"><i class="ph ph-swap"></i>A/B 전환 (같은 위치에서)</button><div class="chips" style="margin-top:10px" role="group" aria-label="재생 속도">' + [0.5, 0.75, 1, 1.25].map(s => '<button type="button" class="chip" data-rate="' + s + '" aria-pressed="' + (s === 1) + '">' + s + '×</button>').join('') + '</div>' +

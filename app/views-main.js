@@ -316,7 +316,7 @@ VZ.songSheet = (song, onSaved) => {
         if (!title) return;
         if (!song && VZ.db.songs.some(s => s.title.trim().toLowerCase() === title.toLowerCase() && (s.show || '') === show)) { VZ.toast('이미 같은 곡이 있어요.', 'error'); return; }
         let id = song?.id;
-        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), {title, show}); else { id = VZ.uid(); d.songs.push({id, title, show}); } });
+        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), {title, show}); else { id = VZ.uid(); d.songs.push({id, title, show, created:Date.now()}); } });
         if (ok) { close(); VZ.toast(song ? '곡을 수정했어요.' : '곡을 추가했어요.'); onSaved?.(id); }
       };
     }});

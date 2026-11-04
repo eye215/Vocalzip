@@ -515,6 +515,23 @@ test('Changing a recording\'s song renames it to song + recording day, numbered 
   await expect(sheet(page).locator('[name=name]')).toHaveValue('브릿지만');
 });
 
+test('Song pickers list the most recently registered song first', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/songs');
+  await page.locator('[data-add-song]').click();
+  await sheet(page).locator('[name=title]').fill('Defying Gravity');
+  await sheet(page).getByRole('button', {name:'곡 추가'}).click();
+  expect((await data(page)).songs.at(-1).created).toBeGreaterThan(0);
+  await page.goto('/#/library');
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await page.locator('[data-media="m1"]').getByRole('button', {name:/정보 수정/}).click();
+  const options = await sheet(page).locator('[name=song] option').allTextContents();
+  // Legacy songs have no created time: save order decides (s2 was added after s1).
+  expect(options.slice(1, 4)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment — 지킬 앤 하이드']);
+  await sheet(page).getByRole('button', {name:'닫기'}).click();
+  expect((await page.locator('[data-song] option').allTextContents()).slice(2, 5)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment']);
+});
+
 test('A list read that overlaps a login or file change is re-read, and a failed cloud read is retried', async ({page}) => {
   await boot(page);
   const reads = await page.evaluate(async () => {

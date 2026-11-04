@@ -59,6 +59,8 @@ VZ.timeRange = l => [l.startTime, l.endTime].filter(Boolean).join(' – ');
 /* ---------- domain ---------- */
 VZ.song = id => db.songs.find(s => s.id === id);
 VZ.songTitle = id => { const s = VZ.song(id); return s ? s.title : ''; };
+/** Newest registered first: by created time when known, otherwise by save order (new songs are appended). */
+VZ.songsNewest = () => db.songs.map((s, i) => [s, i]).sort((a, b) => (b[0].created || 0) - (a[0].created || 0) || b[1] - a[1]).map(x => x[0]);
 VZ.songLabel = s => s ? s.title + (s.show ? ' — ' + s.show : '') : '';
 /** Legacy lessons were written after the lesson happened, so a missing status means completed. */
 VZ.lessonStatus = l => l.status || 'done';
@@ -75,7 +77,7 @@ VZ.addSong = (title, show = '') => {
   if (!title) return null;
   const existing = db.songs.find(s => s.title.trim().toLowerCase() === title.toLowerCase() && (s.show || '') === show);
   if (existing) return existing;
-  const song = {id: VZ.uid(), title, show: String(show || '').trim()};
+  const song = {id: VZ.uid(), title, show: String(show || '').trim(), created: Date.now()};
   return VZ.change(d => d.songs.push(song), {silent:true}) ? song : null;
 };
 /** Last activity per song id across practices, recordings and lessons. */
@@ -149,7 +151,7 @@ VZ.empty = (icon, text, action = '') => '<div class="empty"><i class="ph ph-' + 
 
 /** Song <select> with "새 곡 추가" option; returns html. Use VZ.readSong(form, name) to resolve. */
 VZ.songSelect = (name, value = '', {label = '곡', none = '곡 미지정'} = {}) => {
-  const opts = [...db.songs].sort((a, b) => a.title.localeCompare(b.title, 'ko')).map(s => '<option value="' + VZ.esc(s.id) + '"' + (s.id === value ? ' selected' : '') + '>' + VZ.esc(VZ.songLabel(s)) + '</option>').join('');
+  const opts = VZ.songsNewest().map(s => '<option value="' + VZ.esc(s.id) + '"' + (s.id === value ? ' selected' : '') + '>' + VZ.esc(VZ.songLabel(s)) + '</option>').join('');
   const orphan = value && !VZ.song(value) ? '<option value="' + VZ.esc(value) + '" selected>이전에 연결된 곡</option>' : '';
   return '<label class="field"><span>' + VZ.esc(label) + '</span><select name="' + name + '" data-song-select><option value="">' + VZ.esc(none) + '</option>' + opts + orphan + '<option value="__new">+ 새 곡 추가</option></select><input type="text" name="' + name + '__new" placeholder="새 곡 제목" maxlength="150" hidden></label>';
 };

@@ -89,7 +89,7 @@ VZ.lessonSheet = ({lesson, date} = {}) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
       let status = st;
       const drawSongs = () => {
-        songsHost.innerHTML = VZ.db.songs.map(s => '<button type="button" class="chip" data-song="' + esc(s.id) + '" aria-pressed="' + selected.has(s.id) + '">' + esc(s.title) + '</button>').join('') + '<button type="button" class="chip" data-new-song><i class="ph ph-plus"></i> 새 곡</button>';
+        songsHost.innerHTML = VZ.songsNewest().map(s => '<button type="button" class="chip" data-song="' + esc(s.id) + '" aria-pressed="' + selected.has(s.id) + '">' + esc(s.title) + '</button>').join('') + '<button type="button" class="chip" data-new-song><i class="ph ph-plus"></i> 새 곡</button>';
       };
       songsHost.onclick = e => {
         const b = e.target.closest('button'); if (!b) return;
