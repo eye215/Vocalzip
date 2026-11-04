@@ -177,6 +177,12 @@ test('Songs: add, search, detail tabs, delete keeps records', async ({page}) => 
   await page.goto('/#/songs');
   await page.getByLabel('곡 검색').fill('moment');
   await expect(page.locator('.list .item')).toHaveCount(1);
+  // A background media refresh keeps the search.
+  await page.getByLabel('곡 검색').blur();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m1'}})));
+  await page.waitForTimeout(700);
+  await expect(page.getByLabel('곡 검색')).toHaveValue('moment');
+  await expect(page.locator('.list .item')).toHaveCount(1);
   await page.locator('.list .item').click();
   await expect(page.locator('[data-summary]')).toContainText('녹음 2개');
   await page.getByRole('tab', {name:'녹음'}).click();
@@ -249,6 +255,10 @@ test('Denied microphone explains the problem and keeps the recorder usable', asy
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw Object.assign(new Error('denied'), {name:'NotAllowedError'}); }; window.MediaRecorder ||= function () {}; });
   await page.goto('/#/record');
   await page.getByRole('button', {name:'녹음 시작'}).click();
+  await expect(page.locator('[data-status]')).toContainText('마이크 권한이 거부됐어요');
+  // A background media refresh must not wipe the explanation.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m1'}})));
+  await page.waitForTimeout(700);
   await expect(page.locator('[data-status]')).toContainText('마이크 권한이 거부됐어요');
   await expect(page.getByRole('button', {name:'녹음 시작'})).toBeEnabled();
 });

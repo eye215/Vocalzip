@@ -215,7 +215,8 @@ VZ.rerender = () => VZ.render();
 /** Background refresh: never wipe what the user is typing or interrupt playback. */
 VZ.softRender = () => {
   const main = document.getElementById('view');
-  if (VZ.isBusy?.() || document.querySelector('.sheet-back') || main?.dataset.dirty || VZ.media?.playing?.()) { VZ.pendingRender = true; return; }
+  const typing = main?.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
+  if (VZ.isBusy?.() || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
   VZ.pendingRender = false; VZ.render();
 };
 document.addEventListener('input', e => { const main = document.getElementById('view'); if (main?.contains(e.target) && !e.target.matches('[type=search],[data-q]')) main.dataset.dirty = '1'; });

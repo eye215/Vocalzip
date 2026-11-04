@@ -102,7 +102,7 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
 }});
 
 /* ---------- 비교 ---------- */
-VZ.route('compare', {title:'녹음 비교', back:true, tab:'growth', render() {
+VZ.route('compare', {title:'녹음 비교', back:true, tab:'growth', noAutoRefresh:true, render() {
   return '<div data-c><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main, r) {
   const host = main.querySelector('[data-c]');
@@ -225,7 +225,7 @@ VZ.route('growth', {title:'성장', render() {
 }});
 
 /* ---------- 설정 ---------- */
-VZ.route('settings', {title:'설정', back:true, tab:'home', render() {
+VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true, render() {
   return '<h2 class="sec" style="margin-top:4px">메뉴</h2><div class="list"><a class="item" href="#/library"><i class="ph ph-waveform"></i><span class="item-main">전체 음원 보관함</span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/lessons"><i class="ph ph-chalkboard-teacher"></i><span class="item-main">레슨 기록</span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/homework"><i class="ph ph-check-square"></i><span class="item-main">숙제 관리</span><i class="ph ph-caret-right chev"></i></a><a class="item" href="billing/" data-billing><i class="ph ph-receipt"></i><span class="item-main">레슨비 정산</span><i class="ph ph-arrow-square-out chev"></i></a><button type="button" class="item" data-cats><i class="ph ph-tag"></i><span class="item-main">트레이닝 항목 관리</span><i class="ph ph-caret-right chev"></i></button></div>' +
     '<h2 class="sec">계정 · 클라우드 동기화</h2><div class="card" data-cloud></div>' +
     '<h2 class="sec">데이터</h2><div class="list"><button type="button" class="item" data-export><i class="ph ph-download-simple"></i><span class="item-main"><span class="item-title">기록 백업 (JSON)</span><span class="item-sub">음성·영상 원본은 포함되지 않아요</span></span></button><label class="item" style="cursor:pointer"><i class="ph ph-upload-simple"></i><span class="item-main"><span class="item-title">백업 불러오기</span><span class="item-sub">현재 기록을 백업 파일로 바꿔요</span></span><input type="file" accept="application/json,.json" class="sr-only" data-import-json></label></div>' +

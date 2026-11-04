@@ -163,7 +163,7 @@ VZ.route('home', {title:'홈', render() {
 /* ---------- 녹음 ---------- */
 let rec = null; // {session, state, result, video}
 VZ.isBusy = () => !!(rec?.session || (rec?.result && !rec.saved));
-VZ.route('record', {title:'녹음', tab:'record', render(r) {
+VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) {
   const songId = r.query.get('song') || rec?.songId || '';
   const lessonId = r.query.get('lesson') || '';
   return '<div class="stack">' +
@@ -298,8 +298,9 @@ VZ.songSheet = (song, onSaved) => {
       };
     }});
 };
+let songQ = '';
 VZ.route('songs', {title:'내 곡', actions:() => '<button type="button" class="icon-btn" data-add-song aria-label="곡 추가"><i class="ph ph-plus"></i></button>', render() {
-  return '<div class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="곡 검색" aria-label="곡 검색" data-q></div><div class="chips" style="margin-bottom:12px" role="group" aria-label="정렬"><button type="button" class="chip" data-sort="recent" aria-pressed="true">최근 연습순</button><button type="button" class="chip" data-sort="name" aria-pressed="false">이름순</button></div><div data-l></div>';
+  return '<div class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="곡 검색" aria-label="곡 검색" data-q value="' + esc(songQ) + '"></div><div class="chips" style="margin-bottom:12px" role="group" aria-label="정렬"><button type="button" class="chip" data-sort="recent" aria-pressed="true">최근 연습순</button><button type="button" class="chip" data-sort="name" aria-pressed="false">이름순</button></div><div data-l></div>';
 }, async mount(main, r) {
   document.querySelector('[data-add-song]').onclick = () => VZ.songSheet(null, id => VZ.nav('#/song/' + id));
   if (r.query.get('add')) { history.replaceState(null, '', '#/songs'); VZ.songSheet(null, id => VZ.nav('#/song/' + id)); }
@@ -316,7 +317,7 @@ VZ.route('songs', {title:'내 곡', actions:() => '<button type="button" class="
       return '<a class="item" href="#/song/' + esc(s.id) + '"><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-title">' + esc(s.title) + '</span><span class="item-sub">' + esc([s.show, act.get(s.id) ? '마지막 ' + VZ.relDay(act.get(s.id)) : '기록 없음', n ? '녹음 ' + n : '', minutes ? VZ.minutes(minutes) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></a>';
     }).join('') + '</div>';
   };
-  q.oninput = draw;
+  q.oninput = () => { songQ = q.value; draw(); };
   main.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { sort = b.dataset.sort; main.querySelectorAll('[data-sort]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); });
   draw();
   media = await M.list().catch(() => []); if (l.isConnected) draw();
