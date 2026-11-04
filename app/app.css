@@ -278,7 +278,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .growth-shell .bar>*{min-width:0}
 .growth-shell .bar>span:last-child{max-width:95px;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .growth-shell .week{height:126px;gap:4px;grid-auto-flow:column}
-.growth-shell .week>div{min-width:0;grid-template-rows:18px auto 18px;align-items:end;overflow-wrap:anywhere;text-align:center}
+.growth-shell .week>div{min-width:0;align-items:end;overflow-wrap:anywhere;text-align:center}
+.growth-shell [data-growth-chart]>div{grid-template-rows:18px auto 18px}
 .growth-shell .week .col{max-width:28px}
 .growth-metric{max-width:360px}
 @media(max-width:360px){.growth-shell .growth-period{grid-template-columns:repeat(2,minmax(0,1fr))}.growth-shell .stat{padding:12px}.growth-shell .bar{grid-template-columns:minmax(0,1fr) minmax(32px,.45fr) minmax(40px,auto);gap:5px}}
