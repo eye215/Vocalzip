@@ -22,7 +22,7 @@ function date(value,{date1904=false}={}){
  return [y,String(m).padStart(2,'0'),String(d).padStart(2,'0')].join('-');
 }
 function time(value){const text=str(value);if(!text)return '';if(typeof value==='number'&&value>=0&&value<1){const minutes=Math.round(value*1440)%1440;return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0')}if(!/^([01]?\d|2[0-3]):[0-5]\d$/.test(text))fail('시간은 HH:MM 형식으로 입력해 주세요.');return text.padStart(5,'0')}
-const statuses={scheduled:'scheduled',예정:'scheduled',완료:'completed',completed:'completed',취소:'cancelled',cancelled:'cancelled',canceled:'cancelled','당일 취소':'noshow',당일취소:'noshow',noshow:'noshow',무료:'free',무료레슨:'free',free:'free'};
+const statuses={done:'completed',scheduled:'scheduled',예정:'scheduled',완료:'completed',completed:'completed',취소:'cancelled',cancelled:'cancelled',canceled:'cancelled','당일 취소':'noshow',당일취소:'noshow',noshow:'noshow',무료:'free',무료레슨:'free',free:'free'};
 const status=value=>statuses[str(value).toLowerCase()]||'unconfirmed';
 function empty(owner='local'){return {schemaVersion:1,owner,revision:0,passes:[],payments:[],deductions:[],adjustments:[],imports:[],importRows:[],history:[]}}
 function validateState(state){if(!state||state.schemaVersion!==1||!Number.isSafeInteger(state.revision)||!['passes','payments','deductions','adjustments','imports','importRows','history'].every(key=>Array.isArray(state[key])))fail('지원하지 않는 정산 데이터 형식이에요.');return state}

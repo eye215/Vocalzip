@@ -119,3 +119,40 @@ test('manual adjustment and deduction cancellation/restore keep audited totals',
  await tab(page,'attendance');await page.locator('#deduction-list').getByRole('button',{name:'복구',exact:true}).click();await expect(page.locator('#message')).toContainText('복구했어요');await total(page,'usedAmount','40,000원');
  const data=await ledger(page);expect(data.adjustments).toHaveLength(1);expect(data.history.at(-1).action).toBe('entity.restore');
 });
+test('app lessons waiting for settlement: one-tap deduction, status-less confirmation, restore after app cancel',async({page})=>{
+ const appData={lessons:[
+  {id:'v6-done',date:'2026-11-01',startTime:'19:00',endTime:'20:00',place:'강남',status:'done',feedback:'피드백'},
+  {id:'legacy-nostatus',date:'2026-10-20',feedback:'예전 레슨'},
+  {id:'v6-future',date:'2999-01-01',startTime:'10:00',status:'scheduled'}],practices:[],songs:[]};
+ await page.addInitScript(data=>{if(!localStorage.getItem('vocal-zip_mvp_v1'))localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify(data))},appData);
+ await open(page);
+ const before=await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1'));
+ await expect(page.locator('#pending-summary')).toContainText('정산 대기 2건');
+ await pass(page);
+ await tab(page,'attendance');
+ const pending=page.locator('#pending-lessons');
+ await expect(pending).toContainText('2026-11-01 · 19:00–20:00 · 강남');
+ await expect(pending).not.toContainText('2999-01-01');
+ await pending.locator('li').filter({hasText:'2026-11-01'}).getByRole('button',{name:'1회 차감'}).click();
+ await expect(page.locator('#message')).toContainText('1회 차감했어요');
+ await pending.locator('li').filter({hasText:'2026-10-20'}).getByRole('button',{name:'수강 안 함 · 0회'}).click();
+ await expect(pending).toContainText('정산할 앱 레슨이 없어요');
+ let data=await ledger(page);
+ const charged=data.deductions.find(row=>row.lessonId==='v6-done');
+ expect(charged).toMatchObject({status:'completed',units:100,start:'19:00',end:'20:00'});
+ expect(data.deductions.find(row=>row.lessonId==='legacy-nostatus')).toMatchObject({status:'cancelled',units:0});
+ await total(page,'usedUnits','1회');await total(page,'usedAmount','30,000원');
+ // The lesson is cancelled later in the main app: offer to restore the charge.
+ await page.evaluate(()=>{const d=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1'));d.lessons[0].status='cancelled';localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify(d))});
+ await page.reload();await expect(page.locator('#message')).toContainText('불러왔어요');
+ await tab(page,'attendance');
+ await pending.getByRole('button',{name:'차감 취소(복구)'}).click();
+ await expect(page.locator('#message')).toContainText('차감을 취소했어요');
+ await total(page,'usedUnits','0회');
+ data=await ledger(page);
+ expect(data.deductions.find(row=>row.lessonId==='v6-done').voidedAt).toBeTruthy();
+ // Billing never writes the main app's lesson data (apart from this test's own edit above).
+ const after=JSON.parse(await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1')));
+ const expected=JSON.parse(before);expected.lessons[0].status='cancelled';
+ expect(after).toEqual(expected);
+});

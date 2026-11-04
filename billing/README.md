@@ -7,6 +7,7 @@
 - 레슨권 등록/수정, 단가 계산, 사용 이력 있는 레슨권의 정산 영향 확인
 - 결제·분할 결제·환불, 결제 중복 의심 확인, 거래 번호, 수정 전후 이력
 - 기존 Lesson ID 연결 또는 날짜만 있는 과거 수강 등록, 차감 수정/취소/복구
+- **앱 레슨 정산 대기**(수강·조정 상단, 정산 현황 요약): 앱에서 완료한 레슨(`done`/`completed`)은 한 번에 1회 차감, 상태 없는 기존 레슨은 수강함(1회)/수강 안 함(0회)/직접 입력으로 확인, 차감 후 앱에서 취소·예정으로 바뀐 레슨은 차감 취소(복구) 또는 당일 취소 등으로 수정. 기본 레슨권은 잔여 1회 이상인 가장 먼저 등록한 레슨권(선택 변경 가능). 미래 레슨은 대기 목록에 넣지 않음
 - 예정/취소/무료 0회, 완료 기본 1회, 당일 취소·연속 레슨 수동 횟수
 - 레슨권별·전체 정산, 별도 금액/횟수 조정 거래
 - CSV/XLSX/노션 CSV: 컬럼 자동 매핑, 시트 선택, 행별 수정·검증·선택, 등록 전후 정산 미리보기
@@ -30,7 +31,7 @@
 
 객체: LessonPass(`passes`), Payment(`payments`), LessonDeduction(`deductions`), BalanceAdjustment(`adjustments`), ImportBatch(`imports`), ImportRow(`importRows`), AuditEvent(`history`).
 
-기존 앱의 `vocal-zip_mvp_v1`에서 `lessons[].id/date/status`를 읽어 `lesson_id/lesson_date/lesson_status`만 제공하며 쓰지 않습니다. 상태 없는 기존 레슨은 사용자가 실제 수강 상태를 확인해야 합니다. 과거 업로드는 별도 차감 이력만 만들고 기존 Lesson을 생성하거나 수정하지 않습니다. 기존 레슨 상태를 자동 변경하거나 상태 변경을 자동 차감하는 구독 기능은 없습니다. 정산 화면에서 확인·저장합니다.
+기존 앱의 `vocal-zip_mvp_v1`에서 `lessons[].id/date/status`를 읽어 `lesson_id/lesson_date/lesson_status`만 제공하며 쓰지 않습니다. 앱 v6(프로젝트 A)는 완료를 `done`으로 저장하므로 `completed`와 같이 취급합니다(`docs/레슨데이터_연동계약.md`). 표시용으로 `startTime/endTime/place/teacher`도 읽기만 합니다. 상태 없는 기존 레슨은 사용자가 실제 수강 상태를 확인해야 합니다. 과거 업로드는 별도 차감 이력만 만들고 기존 Lesson을 생성하거나 수정하지 않습니다. 기존 레슨 상태를 자동 변경하거나 상태 변경을 자동 차감하는 구독 기능은 없습니다. 정산 화면에서 확인·저장합니다.
 
 정산은 IndexedDB `vocalzip_billing_v1/documents`에 저장합니다. 현재 Supabase 세션의 사용자 ID별 문서를 사용하며 미로그인은 `device`입니다. 로그인 전 데이터의 자동 계정 이전은 하지 않습니다. 계정 전환 시 새로고침해야 합니다. 동일 계정의 다른 탭은 revision 검사로 덮어쓰기를 차단합니다.
 

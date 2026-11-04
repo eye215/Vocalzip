@@ -3,3 +3,6 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 
 #transfer-comparison{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}#transfer-status.error{color:#a12741}
+
+.pending{margin:0 0 18px}.pending h4{margin:16px 0 6px;font-size:15px}.pending-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}.pending-list li{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e6e1ed;border-radius:12px;background:#fbfaff}.pending-list li span{font-weight:600;overflow-wrap:anywhere}.pending-summary{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:#fff6e0;color:#6b4a00;border-radius:12px;padding:10px 14px}
+.pending-list li .actions button:first-child{background:#6245aa;color:#fff;border-color:#6245aa}
