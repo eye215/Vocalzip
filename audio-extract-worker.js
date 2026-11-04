@@ -5,7 +5,7 @@ self.onmessage=event=>{
  if(event.data?.type==='prepare')prepare(event.data).catch(error=>self.postMessage({type:'error',name:stopped?'AbortError':error.name,message:stopped?'가져오기를 취소했어요.':error.message}));
 };
 const check=()=>{if(stopped)throw new DOMException('가져오기를 취소했어요.','AbortError')};
-async function prepare({file,id,videoHint}){
+async function prepare({file,id,videoHint,inspect}){
  let input,resultInput,directory,handle,access,buffered,closed=false,output,success=false;
  const iterators=[];
  const progress=message=>self.postMessage({type:'progress',message});
@@ -19,8 +19,10 @@ async function prepare({file,id,videoHint}){
   input=new b.Input({source:new b.BlobSource(file,{maxCacheSize:4*1024*1024,useStreamReader:false}),formats:b.ALL_FORMATS});
   let tags={},videos,audios;
   try{tags=await input.getMetadataTags();videos=await input.getVideoTracks();audios=await input.getAudioTracks()}
-  catch(error){if(videoHint)throw Error('영상의 음성 정보를 읽지 못했어요. 음원 파일로 가져와 주세요.');success=true;self.postMessage({type:'done',metadata:fallback});return}
+  catch(error){if(videoHint)throw Error('영상의 음성 정보를 읽지 못했어요. 음원 파일로 가져와 주세요.');success=true;self.postMessage({type:'done',metadata:fallback,inspect:{duration:null,readable:false}});return}
   const metadata=self.VzipMediaDates.pick(tags,file.lastModified);
+  // Inspect only: date and length for the import filter, without extracting or writing anything.
+  if(inspect){let duration=null;try{duration=await input.computeDuration()}catch{}success=true;self.postMessage({type:'done',metadata,inspect:{duration:Number.isFinite(duration)?Math.round(duration*10)/10:null,hasVideo:videos.length>0,hasAudio:audios.length>0,readable:true}});return}
   if(!videos.length&&!videoHint){success=true;self.postMessage({type:'done',metadata});return}
   self.postMessage({type:'detected-video'});
   if(!audios.length)throw Error('음성이 없는 영상은 음원으로 가져올 수 없어요.');

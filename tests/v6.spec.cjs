@@ -753,3 +753,82 @@ test('Large song library uses compact selects for lesson multi-selection and rec
   await sheet(page).getByRole('button',{name:'선택 완료',exact:true}).click();
   await expect(page.locator('[data-song-name]')).toContainText('추가 곡 199');
 });
+
+test('Import hub filters by date and length, flags duplicates and missing dates, and makes one practice per confirmed file', async ({page}) => {
+  test.setTimeout(120000);
+  const wav = (sec, tone = 8) => { const sr = 4000, n = Math.round(sr * sec), b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+    for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / tone) * 6000), 44 + i * 2); return b; };
+  const seed = legacy(); seed.songs.push({id:'s3', title:'One Day More', show:'레미제라블', aliases:['원데이모어']});
+  await boot(page, {seed, media:false});
+  await page.goto('/#/settings');
+  await page.getByRole('link', {name:/기존 자료 가져오기/}).click();
+  await expect(page.locator('#top h1')).toHaveText('기존 자료 가져오기');
+  await page.getByRole('button', {name:/음성 메모/}).click();
+  // Voice memo defaults: 2025-07-24 → today, 0:30 – 8:00 (both ends included).
+  await expect(page.locator('[data-c="start"]')).toHaveValue('2025-07-24');
+  await expect(page.locator('[data-c="min"]')).toHaveValue('0:30');
+  await expect(page.locator('[data-c="max"]')).toHaveValue('8:00');
+  const first = wav(30);
+  await page.locator('[data-files]').setInputFiles([
+    {name:'This Is the Moment 2026-03-05.wav', mimeType:'audio/wav', buffer:first},          // exactly 0:30, date in name, song by title
+    {name:'복사본 2026-03-05.wav', mimeType:'audio/wav', buffer:first},                        // same bytes → duplicate
+    {name:'원데이모어 20260401.wav', mimeType:'audio/wav', buffer:wav(480, 9)},                 // exactly 8:00, song by alias
+    {name:'the moment take.wav', mimeType:'audio/wav', buffer:wav(40, 10)},                  // no date → needs-date, weak suggestion
+    {name:'너무 짧음 2026-02-01.wav', mimeType:'audio/wav', buffer:wav(29, 11)},              // 0:29 → out
+    {name:'긴 녹음 2026-02-02.wav', mimeType:'audio/wav', buffer:wav(481, 12)},               // 8:01 → out
+    {name:'옛날 2025-01-01.wav', mimeType:'audio/wav', buffer:wav(35, 13)},                   // before start → out
+  ]);
+  await expect(page.getByRole('button', {name:/^조건 충족 2/})).toBeVisible({timeout:60000});
+  await expect(page.getByRole('button', {name:/^중복 의심 1/})).toBeVisible();
+  await expect(page.getByRole('button', {name:/^날짜 확인 필요 1/})).toBeVisible();
+  await expect(page.getByRole('button', {name:/^조건 밖 3/})).toBeVisible();
+  const row = name => page.locator('.hub-row').filter({has:page.locator('.hub-name', {hasText:name})});
+  await expect(row('너무 짧음')).toContainText('길이 0:29');
+  await expect(row('긴 녹음')).toContainText('길이 8:01');
+  await expect(row('옛날')).toContainText('기간 밖');
+  await expect(row('복사본')).toContainText('선택한 파일끼리 같아요');
+  // Strong matches (title / alias) are prefilled; a weak one waits for approval.
+  await expect(row('This Is the Moment').locator('[data-song]')).toHaveValue('s1');
+  await expect(row('원데이모어').locator('[data-song]')).toHaveValue('s3');
+  await expect(row('the moment take').locator('[data-song]')).toHaveValue('');
+  await row('the moment take').getByRole('button', {name:/추천: This Is the Moment 승인/}).click();
+  await expect(row('the moment take').locator('[data-song]')).toHaveValue('s1');
+  // Only confirmed files are selected; an undated file must get a date first.
+  await expect(page.getByRole('button', {name:'선택한 2개 가져오기'})).toBeVisible();
+  await row('the moment take').locator('[data-sel]').check();
+  await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
+  await expect(page.locator('.toast').last()).toContainText('날짜를 확인하지 않은 파일 1개');
+  await row('the moment take').locator('[data-date]').fill('2026-05-10');
+  // Setting the date re-checks the row; it now meets the conditions and leaves the "needs date" filter.
+  await expect(page.getByRole('button', {name:/^날짜 확인 필요/})).toHaveCount(0);
+  await page.locator('[data-f="all"]').click();
+  await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
+  await expect(page.getByText('가져오기 완료')).toBeVisible({timeout:60000});
+  await expect(page.locator('[data-hub]')).toContainText('저장 3개 · 연습 기록 3개 생성');
+  const items = (await media(page)).filter(m => m.source === 'import');
+  expect(items).toHaveLength(3);
+  const take = items.find(m => m.originalFilename === 'the moment take.wav');
+  expect(take).toMatchObject({sourceType:'voice-memo', recordedDate:'2026-05-10', recordedAtSource:'user', songId:'s1'});
+  expect(take.fileHash).toMatch(/^[0-9a-f]{32}$/);
+  expect(items.find(m => m.originalFilename === '원데이모어 20260401.wav')).toMatchObject({recordedDate:'2026-04-01', recordedAtSource:'filename', songId:'s3'});
+  const made = (await data(page)).practices.filter(p => p.importedFrom === 'voice-memo');
+  expect(made).toHaveLength(3);
+  expect(made.find(p => p.mediaIds[0] === take.id)).toMatchObject({date:'2026-05-10', songId:'s1', confirmedSongId:'s1', suggestedSongId:'s1'});
+  expect(made.find(p => p.songId === 's3').minutes).toBe(8);
+  // Picking the same files again finds them in the library and makes no second practice record.
+  await page.getByRole('button', {name:'다른 자료 가져오기'}).click();
+  await page.getByRole('button', {name:/음성 메모/}).click();
+  await page.locator('[data-files]').setInputFiles([{name:'This Is the Moment 2026-03-05.wav', mimeType:'audio/wav', buffer:first}]);
+  await expect(row('This Is the Moment')).toContainText('보관함에 이미 있어요', {timeout:30000});
+  await expect(page.getByRole('button', {name:'선택한 0개 가져오기'})).toBeDisabled();
+  expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(3);
+});
+
+test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(() => VZ.songSheet(VZ.song('s2')));
+  await sheet(page).getByLabel('별칭 (쉼표로 구분)').fill('온마이오운, On my own , 온마이오운');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  expect((await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
+  expect(await page.evaluate(() => VZ.suggestSongs('온마이오운_0412.m4a')[0])).toMatchObject({id:'s2'});
+});
