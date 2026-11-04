@@ -1,6 +1,7 @@
 (()=>{'use strict';
 const C=window.VzipBilling,I=window.VzipBillingImport,F=window.VzipBillingFiles,S=window.VzipBillingStore;
 const $=s=>document.querySelector(s),money=n=>new Intl.NumberFormat('ko-KR').format(n)+'원',sessions=n=>new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(n/100)+'회';
+const hours=n=>new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(n/100)+'시간';
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const statusLabels={unconfirmed:'확인 필요',scheduled:'예정',completed:'완료',cancelled:'취소',noshow:'당일 취소',free:'무료'};
 let showDeleted=false;
@@ -41,6 +42,16 @@ function makeForm(kind,fields,flagItems=[]){
  $('#'+kind+'-form-slot').append(form);forms[kind]=form;resetForm(form);return form;
 }
 function resetForm(form){form.reset();form.elements.id.value='';form.elements.version.value='';form.elements.legacyRef.value='';if(form.elements.date)form.elements.date.value=today();form.querySelector('[data-impact]').textContent='';form.querySelector('[type=submit]').textContent='저장'}
+const rateForm=$('#hourly-rate-form');
+rateForm.onsubmit=async event=>{
+ event.preventDefault();
+ const rate=Number(rateForm.elements.hourlyRate.value);
+ if(!Number.isSafeInteger(rate)||rate<=0){notify('시간당 금액을 확인해 주세요.',true);return}
+ if(state?.hourlyRate&&state.hourlyRate!==rate&&(C.active(state.payments).length||C.active(state.deductions).length)){
+  if(!await window.VzipBillingDialog.ask({title:'단가 변경 확인',message:'과거 결제·수강 전체에 새 단가가 적용됩니다. 기존 단가가 다른 기간이 있었다면 변경하지 마세요.',ok:'변경',cancel:'취소',danger:true}))return;
+ }
+ try{await persist({type:'hourly-rate.save',payload:{hourlyRate:rate},options:{ackImpact:true}},null,'시간당 단가를 저장했어요.')}catch{}
+};
 const impactFlags=[['ackImpact','이력이 있는 레슨권의 단가·과거 사용 금액 변경을 확인했습니다.'],['allowOverdraw','잔여 횟수 초과를 확인했습니다.']];
 makeForm('pass',[['name','레슨권 이름','text'],['totalUnits','총 횟수','number'],['amount','레슨권 금액 (원)','number'],['teacher','선생님','text'],['expires','유효기간','date'],['memo','메모','textarea']],impactFlags);
 makeForm('payment',[['passId','연결 레슨권','pass'],['date','결제일','date'],['kind','유형','select',[['payment','결제'],['refund','환불']]],['amount','금액 (원)','number'],['method','결제 방법','text'],['reference','거래 번호 (선택)','text'],['memo','메모','textarea']],[['allowDuplicate','중복 의심 기록과 다른 결제임을 확인했습니다.']]);
@@ -88,7 +99,17 @@ function rowActions(collection,kind,row){const box=el('div',undefined,'actions')
 /** Records list newest date first; same day: most recently saved first. */
 function newestFirst(rows){return rows.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')))}
 function render(){
- if(!state)return;const result=C.totals(state),labels={chargedUnits:'총 충전 횟수',usedUnits:'총 사용 횟수',remainingUnits:'잔여 횟수',amount:'총 레슨권 금액',paid:'실제 결제금액',refunded:'환불 금액',netPaid:'순결제금액',usedAmount:'사용 금액',unusedAmount:'미사용 금액',unpaid:'미납 금액'};
+ if(!state)return;
+ const h=C.hourlyTotals(state),area=$('#hourly-summary');
+ rateForm.elements.hourlyRate.value=state.hourlyRate||'';
+ if(h.rate){
+  const values=[['시간당 단가',money(h.rate)],['충전 시간',hours(h.purchasedUnits)],['수강 시간',hours(h.usedUnits)],['잔여 시간',hours(h.remainingUnits)],['순결제',money(h.netPaid)],['사용 금액',money(h.usedAmount)],['선불 잔액',money(h.prepaid)],['미납 금액',money(h.owed)]];
+  area.replaceChildren(...values.map(([label,value])=>{const box=el('div',undefined,'metric');box.append(el('span',label),el('strong',value,((label==='잔여 시간'&&h.remainingUnits<0)||(label==='미납 금액'&&h.owed>0))?'negative':''));return box}));
+  $('#hourly-hint').textContent='차감 1회 = 레슨 1시간. 모든 과거 기록에 동일한 시간당 단가를 적용합니다.';
+ }else{
+  area.replaceChildren(el('p','시간당 단가를 입력하면 Notion 방식의 잔여 수업 시간과 선불 잔액을 계산해요. 기존 거래는 수정하지 않습니다.','help'));
+ }
+ const result=C.totals(state),labels={chargedUnits:'총 충전 횟수',usedUnits:'총 사용 횟수',remainingUnits:'잔여 횟수',amount:'총 레슨권 금액',paid:'실제 결제금액',refunded:'환불 금액',netPaid:'순결제금액',usedAmount:'사용 금액',unusedAmount:'미사용 금액',unpaid:'미납 금액'};
  $('#totals').replaceChildren(...Object.entries(labels).map(([key,label])=>{const box=el('div',undefined,'metric');box.dataset.total=key;box.append(el('span',label),el('strong',key.endsWith('Units')?sessions(result.total[key]):money(result.total[key]),result.total[key]<0?'negative':''));return box}));
  $('#balances').replaceChildren(table(['레슨권','충전','사용','잔여','레슨권 금액','회당 금액','순결제','사용 금액','미사용','미납'],result.passes.map(row=>[row.name,sessions(row.chargedUnits),sessions(row.usedUnits),sessions(row.remainingUnits),money(row.amount),new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(row.rate)+'원',money(row.netPaid),money(row.usedAmount),money(row.unusedAmount),money(row.unpaid)])));
  for(const select of document.querySelectorAll('[data-pass-select]')){const previous=select.value;selectOptions(select,baseOptions(),previous||((C.active(state.passes).length===1)?C.active(state.passes)[0].id:''))}
