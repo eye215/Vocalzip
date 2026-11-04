@@ -1,0 +1,17 @@
+# Cloudflare Worker for VOCAL.zip media (R2). See docs/R2_설정_가이드.md.
+name = "vocalzip-media"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "vocalzip-media"
+
+[vars]
+SUPABASE_URL = "https://chxnbtiyuyhiywzeshis.supabase.co"
+ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
+# MAX_FILE_BYTES = "2147483648"
+
+# Secrets are NOT written here. Set them once with:
+#   npx wrangler secret put SIGNING_SECRET
+#   npx wrangler secret put SUPABASE_JWT_SECRET   (only if the project still uses the legacy JWT secret)
