@@ -1,0 +1,26 @@
+name: R2 media worker
+on:
+  pull_request:
+    paths:
+      - 'r2-worker/**'
+      - '.github/workflows/r2-worker.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: r2-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: r2-worker/package-lock.json
+      - run: npm ci
+      - name: Worker tests (Miniflare, in-memory R2)
+        run: npm test

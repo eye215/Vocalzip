@@ -62,7 +62,7 @@ M.list = async (force) => {
     let failed = '';
     try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch (e) { console.error(e); failed = '이 기기의 파일을 읽지 못했어요.'; }
     if (window.vzipCloudSignedIn?.()) {
-      try { (await window.vzipCloudMediaList()).forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion})); }
+      try { (await window.vzipCloudMediaList()).forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion, storageProvider:x.storageProvider, r2Key:x.r2Key, legacyStorage:x.legacyStorage})); }
       catch (e) { failed = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
     }
     // Newest recording day first (the file's own date), then newest saved.
