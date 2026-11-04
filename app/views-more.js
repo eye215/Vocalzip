@@ -96,7 +96,9 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
     const q = lib.q.trim().toLowerCase();
     const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || (lib.origin === 'practice' ? !['lesson', 'import'].includes(m.source) : m.source === lib.origin)) &&
       (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
-    main.querySelector('[data-count]').textContent = (M.cloudError() ? M.cloudError() + ' · ' : '') + list.length + '개 파일';
+    const local = M.localOnly(media).length, b = M.backupStatus();
+    main.querySelector('[data-count]').textContent = (M.cloudError() ? M.cloudError() + ' · ' : '') + list.length + '개 파일' +
+      (b.running ? ' · 클라우드 백업 중 ' + (b.done + b.failed) + '/' + b.total : local ? ' · 기기에만 있는 파일 ' + local + '개' + (window.vzipCloudSignedIn?.() ? ' (곧 자동 백업)' : ' · 로그인하면 클라우드에 자동 백업돼요') : window.vzipCloudSignedIn?.() && media.length ? ' · 모두 클라우드에 백업됨' : '');
     l.innerHTML = list.length ? '<div class="list">' + list.map(VZ.mediaRow).join('') + '</div>' : VZ.empty('waveform', media.length ? '조건에 맞는 파일이 없어요.' : '아직 저장된 녹음이 없어요.', media.length ? '' : '<a class="btn sm" href="#/record">녹음하기</a>');
     if (list.length) VZ.wireMedia(l.firstChild, list);
   };
@@ -104,6 +106,9 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
   main.querySelector('[data-song]').onchange = e => { lib.song = e.target.value; draw(); };
   main.querySelector('[data-q]').oninput = e => { lib.q = e.target.value; draw(); };
   media = await M.list().catch(() => []); if (l.isConnected) draw();
+  const onBackup = async () => { if (!l.isConnected) { window.removeEventListener('vzip:v6-backup', onBackup); return; } if (!M.backupStatus().running) media = await M.list().catch(() => media); if (l.isConnected && !l.querySelector('.media-open:not([hidden])')) draw(); };
+  window.addEventListener('vzip:v6-backup', onBackup);
+  if (M.localOnly(media).length) M.scheduleBackup(500);
 }});
 
 /* ---------- 비교 ---------- */
