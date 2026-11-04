@@ -117,6 +117,8 @@ M.importFile = async (file, choice, onProgress, signal) => {
   const prepared = await window.vzipPrepareMedia(typed, {signal, onProgress:msg => onProgress?.(msg)});
   try {
     const out = prepared.file, meta = {...prepared.metadata};
+    // Keep the length so practice time can include imported files.
+    if (!(Number(meta.durationSeconds) > 0)) meta.durationSeconds = await M.measure({blob:out, type:out.type || typeOf(out), name:out.name}, 8000);
     if (choice.date) {
       const d = VZ.parseYmd(choice.date), keep = new Date(meta.created || file.lastModified || Date.now());
       Object.assign(meta, {created:new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime(), recordedDate:choice.date, dateSource:'manual'});
@@ -143,13 +145,39 @@ M.importFile = async (file, choice, onProgress, signal) => {
     return {...saved, originalSize:file.size, savedSize:out.size, extracted:!!meta.audioExtraction};
   } finally { await prepared.dispose(); }
 };
-M.update = async (item, changes) => {
+M.update = async (item, changes, {quiet = false} = {}) => {
   if (item.cloud) await window.vzipCloudMediaUpdate(item, changes);
   if (item.local) {
     const stored = (await window.vzipReadMedia()).find(x => x.id === item.id);
     if (stored) await tx('readwrite', s => s.put({...stored, ...changes}));
   }
-  window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:item.id}}));
+  if (!quiet) window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:item.id}}));
+};
+/* ---------- durations ---------- */
+/** Read a file's length from its metadata only (no full download/decode). */
+M.measure = (item, timeout = 15000) => new Promise(async resolve => {
+  let src = null, el = null, timer = null;
+  const done = value => { clearTimeout(timer); if (el) { el.removeAttribute('src'); el.load?.(); } if (src?.revoke) URL.revokeObjectURL(src.url); resolve(value); };
+  try { src = await M.src(item); } catch { done(0); return; }
+  el = document.createElement('audio'); el.preload = 'metadata'; el.muted = true;
+  el.onloadedmetadata = () => done(Number.isFinite(el.duration) && el.duration > 0 ? Math.round(el.duration * 10) / 10 : 0);
+  el.onerror = () => done(0);
+  timer = setTimeout(() => done(0), timeout);
+  el.src = src.url;
+});
+const measured = new Set();
+/** Fill missing durations (imports before this change were saved without one). Returns how many were filled. */
+M.fillDurations = async items => {
+  let filled = 0;
+  for (const item of items) {
+    if (Number(item.durationSeconds) > 0 || measured.has(item.id)) continue;
+    measured.add(item.id);
+    const seconds = await M.measure(item);
+    if (!seconds) continue;
+    try { await M.update(item, {durationSeconds:seconds}, {quiet:true}); item.durationSeconds = seconds; filled++; } catch {}
+  }
+  if (filled) { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-media')); }
+  return filled;
 };
 M.remove = async item => {
   if (item.cloud) await window.vzipCloudMediaDelete(item);
