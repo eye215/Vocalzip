@@ -40,6 +40,8 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
     await window.vzipStorePracticeMedia({id:'m2', name:'연습 녹음', created:Date.now() - 864e5, type:'audio/wav', source:'practice', songId:'s1', song:'', blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:1});
     window.dispatchEvent(new Event('vzip:media-updated'));
   });
+  // Let the media refresh this seeding triggers finish before the test starts tapping.
+  if (media) await page.waitForTimeout(600);
 }
 const data = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const media = page => page.evaluate(() => window.vzipReadMedia());
@@ -272,7 +274,7 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await boot(page);
   await page.goto('/#/library');
   await page.locator('[data-imp]').click();
-  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.name === 'b' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
+  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.songId === 's2' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
   const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
   const buffer = Buffer.from(wav);
   await sheet(page).locator('[data-file]').setInputFiles([
@@ -290,12 +292,14 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await expect(sheet(page).locator('.up-row:visible')).toHaveCount(1); // only the skipped .txt remains
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(2);
-  expect(items.find(m => m.name === 'a').songId).toBe('s1');
-  const b = items.find(m => m.name === 'b');
+  // Files with a song are named "song + recording day".
+  const a = items.find(m => m.songId === 's1'), b = items.find(m => m.songId === 's2');
+  expect(a.name).toMatch(/^This Is the Moment \d{4}\.\d{2}\.\d{2}$/);
+  expect(b.name).toBe('On My Own 2026.01.15');
   expect(b.songId).toBe('s2');
   expect(b.type).toBe('audio/mp4');
   expect(b).toMatchObject({recordedDate:'2026-01-15', dateSource:'manual'});
-  expect(items.find(m => m.name === 'a').dateSource).not.toBe('manual');
+  expect(a.dateSource).not.toBe('manual');
   expect(new Date(b.created).getFullYear() + '-' + (new Date(b.created).getMonth() + 1) + '-' + new Date(b.created).getDate()).toBe('2026-1-15');
   expect(await page.evaluate(() => window.__calls)).toBe(3);
   await page.goto('/#/calendar');
@@ -338,11 +342,11 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await boot(page);
   await page.goto('/#/calendar');
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="' + day(-1) + '"]').click();
+  await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('30분');
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(1);
   if (day(-7).slice(0, 7) !== day(-1).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="' + day(-7) + '"]').click();
+  await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
   await page.getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
@@ -426,7 +430,11 @@ test('Billing is only linked, and editing a legacy lesson never stamps a status 
 
 test('Library actually plays device and cloud-only audio (time advances)', async ({page}) => {
   await boot(page);
-  await page.route('**/cloud-audio.wav', async r => r.fulfill({contentType:'audio/wav', body:Buffer.from(await page.evaluate(() => [...new Uint8Array(window.__wav)]))}));
+  // A 4s clip so a replay is still playing when checked (1s ended too fast in WebKit).
+  const sr = 8000, n = sr * 4, wav = Buffer.alloc(44 + n * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 8) * 6000), 44 + i * 2);
+  await page.route('**/cloud-audio.wav', r => r.fulfill({contentType:'audio/wav', body:wav}));
   await page.evaluate(() => {
     window.vzipCloudSignedIn = () => true;
     window.vzipCloudMediaList = async () => [{id:'c1', name:'클라우드 음원', type:'audio/wav', path:'ui-test-user/c1.wav', created:Date.now(), songId:'', cloud:true}];
@@ -440,8 +448,9 @@ test('Library actually plays device and cloud-only audio (time advances)', async
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }
-  // After the 1s clip ends, one tap on the already-loaded source plays it again.
+  // Pause, then one tap on the already-loaded source plays it again.
   const row = page.locator('[data-media="c1"]');
+  await row.getByRole('button', {name:'일시정지'}).click();
   await expect(row.getByRole('button', {name:'재생', exact:true})).toBeVisible({timeout:5000});
   await row.getByRole('button', {name:'재생', exact:true}).click();
   await expect(row.getByRole('button', {name:'일시정지'})).toBeVisible();
@@ -471,4 +480,30 @@ test('Practice records can be edited, including unlinking files that no longer e
   p = (await data(page)).practices[0];
   expect(p).toMatchObject({minutes:45, rating:5, memo:'고음 안정, 브릿지 호흡', mediaIds:[], completed:['a1'], assignmentNotes:{a1:'3회 반복'}});
   expect((await media(page)).some(m => m.id === 'm1')).toBe(true); // unlinking never deletes the file
+});
+
+test('Changing a recording\'s song renames it to song + recording day, numbered on clashes', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/library');
+  const open = async id => { await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
+  await open('m1');
+  await sheet(page).locator('[name=date]').fill('2026-11-02');
+  await sheet(page).locator('[name=song]').selectOption('s2');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.02');
+  // Changing the day follows while the name is still the automatic one.
+  await sheet(page).locator('[name=date]').fill('2026-11-03');
+  await sheet(page).locator('[name=date]').dispatchEvent('change');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').name).toBe('On My Own 2026.11.03');
+  // Same song and day on another file gets a number.
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await open('m2');
+  await sheet(page).locator('[name=date]').fill('2026-11-03');
+  await sheet(page).locator('[name=song]').selectOption('s2');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03 2');
+  // A typed name is never overwritten.
+  await sheet(page).locator('[name=name]').fill('브릿지만');
+  await sheet(page).locator('[name=song]').selectOption('s1');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('브릿지만');
 });
