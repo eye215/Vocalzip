@@ -16,7 +16,7 @@ async function get(url,options={}){
  assert.equal(sha(html.body),sha(fs.readFileSync('index.html','utf8')),'Published HTML differs from the release under test');
  const references=[...html.body.matchAll(/(?:src|href)="([^"]+\.(?:js|css)(?:\?[^"]*)?)"/g)]
   .map(match=>match[1]).filter(path=>!/^https?:/.test(path));
- references.push('share-worker.js','chunk-media-core.js','chunk-media.js','manifest.webmanifest');
+ references.push('share-worker.js','chunk-media-core.js','chunk-media.js','manifest.webmanifest','audio-extract-worker.js','bounded-byte-writer.js');
  for(const path of [...new Set(references)]){
   const localPath=path.split('?')[0];
   if(!fs.existsSync(localPath))throw Error('Missing local reference: '+localPath);

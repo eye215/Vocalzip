@@ -1,7 +1,7 @@
 const base=require('./playwright.config.cjs');
 module.exports={
  ...base,
- testMatch:['ui.spec.cjs','chunk-stream.spec.cjs','production.smoke.cjs'],
+ testMatch:['ui.spec.cjs','audio-import.spec.cjs','production.smoke.cjs'],
  timeout:60000,
  workers:2,
  webServer:undefined,

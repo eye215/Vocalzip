@@ -12,12 +12,14 @@ test('Published app boots with the real authentication SDK and a fresh signed-ou
   sdk:typeof window.supabase?.createClient,
   tus:typeof window.tus?.Upload,
   importer:typeof window.vzipCloudImport,
+  prepare:typeof window.vzipPrepareMedia,
+  cameraButtons:document.querySelectorAll('#vzip-practice-capture [data-kind=video],#vzip-lesson-capture [data-kind=video]').length,
   chunks:typeof window.VzipChunks?.response,
   lessonControls:document.querySelectorAll('#vzip-lesson-capture [data-kind]').length,
   practiceMultiple:document.querySelector('#practice-attachments')?.multiple,
   libraryMultiple:document.querySelector('#vzip-hub-upload')?.multiple
  }));
- expect(modules).toEqual({sdk:'function',tus:'function',importer:'function',chunks:'function',lessonControls:2,practiceMultiple:true,libraryMultiple:true});
+ expect(modules).toEqual({sdk:'function',tus:'function',importer:'function',prepare:'function',cameraButtons:0,chunks:'function',lessonControls:1,practiceMultiple:true,libraryMultiple:true});
  expect(errors).toEqual([]);expect(failed).toEqual([]);
  await testInfo.attach('published-login',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });

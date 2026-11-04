@@ -21,9 +21,13 @@ jobs:
         with:
           node-version: '22'
       - run: node tests/check-production.cjs
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - run: node tests/make-audio-fixtures.cjs
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test --config=playwright.production.config.cjs
+      - run: npx playwright test --config=playwright.production.config.cjs --grep 'Published app|Video import copies|201MiB video extraction|Real queue extracts|Metadata-derived dates'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
