@@ -59,6 +59,18 @@ function passBalance(state,pass){
  return {id:pass.id,name:pass.name,chargedUnits,usedUnits,remainingUnits:chargedUnits-usedUnits,amount,paid,refunded,netPaid:paid-refunded,usedAmount,unusedAmount:amount-usedAmount,unpaid:amount-paid+refunded,rate:chargedUnits?amount*100/chargedUnits:0};
 }
 function totals(state){const passes=active(state.passes).map(pass=>passBalance(state,pass)),total={chargedUnits:0,usedUnits:0,remainingUnits:0,amount:0,paid:0,refunded:0,netPaid:0,usedAmount:0,unusedAmount:0,unpaid:0};for(const pass of passes)for(const key of Object.keys(total))total[key]+=pass[key];return {passes,total}}
+// Notion-style account ledger. One deduction unit is one lesson hour (100 ticks).
+function hourlyTotals(state){
+ const rate=state.hourlyRate||0,ids=new Set(active(state.passes).map(p=>p.id));
+ const p=active(state.payments).filter(x=>ids.has(x.passId)),d=active(state.deductions).filter(x=>ids.has(x.passId));
+ const paid=p.filter(x=>x.kind==='payment').reduce((s,x)=>s+x.amount,0);
+ const refunded=p.filter(x=>x.kind==='refund').reduce((s,x)=>s+x.amount,0);
+ const netPaid=paid-refunded,usedUnits=d.reduce((s,x)=>s+x.units,0);
+ const purchasedUnits=rate?rounded(BigInt(netPaid)*100n,BigInt(rate)):0;
+ const usedAmount=rate?rounded(BigInt(rate)*BigInt(usedUnits),100):0;
+ const balance=netPaid-usedAmount;
+ return {rate,netPaid,usedUnits,purchasedUnits,remainingUnits:purchasedUnits-usedUnits,usedAmount,prepaid:Math.max(0,balance),owed:Math.max(0,-balance)};
+}
 function fingerprint(kind,row){const fields=kind==='payment'?['passId','date','kind','amount','method','memo','student']:['passId','date','start','end','status','units','memo','student'];return JSON.stringify(fields.map(key=>str(row[key])))}
 function check(state,allowOverdraw=false){
  const balances=totals(state);for(const balance of balances.passes){
@@ -110,6 +122,13 @@ function reduce(original,command,context={}){
  if(command.type==='pass.save')passWrite(payload);
  else if(command.type==='payment.save')paymentWrite(payload);
  else if(command.type==='deduction.save')deductionWrite(payload);
+ else if(command.type==='hourly-rate.save'){
+  const rate=integer(payload.hourlyRate,'시간당 레슨비');
+  if(rate<=0)fail('시간당 레슨비는 0보다 커야 해요.');
+  if(state.hourlyRate&&state.hourlyRate!==rate&&[...active(state.payments),...active(state.deductions)].length&&!opts.ackImpact)fail('과거 기록 재계산 영향을 확인해 주세요.');
+  const before={id:'hourly-rate',rate:state.hourlyRate||0};state.hourlyRate=rate;
+  audit('settings',before,{id:'hourly-rate',rate},'hourly-rate.save');
+ }
  else if(command.type==='adjustment.create'){
   findPass(payload.passId);integer(payload.unitsDelta,'조정 횟수',{negative:true,max:100000000});integer(payload.amountDelta,'조정 금액',{negative:true});
   if(!str(payload.memo)||(!payload.unitsDelta&&!payload.amountDelta))fail('조정 값과 사유를 입력해 주세요.');
@@ -155,5 +174,5 @@ function reduce(original,command,context={}){
  }
  state.revision++;return state;
 }
-return {empty,validateState,reduce,totals,passBalance,fingerprint,money,units,date,time,timeRange,status,active,check};
+return {empty,validateState,reduce,totals,hourlyTotals,passBalance,fingerprint,money,units,date,time,timeRange,status,active,check};
 });
