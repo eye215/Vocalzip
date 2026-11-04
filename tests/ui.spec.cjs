@@ -3,8 +3,8 @@ const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.__c
  auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),
  onAuthStateChange:callback=>{(window.__authCallbacks||=[]).push(callback);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
  storage:{from:()=>({remove:async paths=>{(window.__removedPaths||=[]).push(...paths);return {error:null}},createSignedUrl:async()=>({data:{signedUrl:'/fixture-audio.wav'},error:null}),upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
- from:table=>{const chain={};for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
- chain[method]=(...args)=>{if(method==='upsert'){window.__cloudMetadata.push({table,payload:args[0]});if(table==='vocal_media')window.__onMetadataWrite?.()}if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(window.__cloudRows||[]):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
+ from:table=>{const chain={};let selectedId,maybe=false;for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
+ chain[method]=(...args)=>{if(method==='eq'&&args[0]==='id')selectedId=args[1];if(method==='maybeSingle')maybe=true;if(method==='upsert'){window.__cloudMetadata.push({table,payload:args[0]});if(table==='vocal_media'&&window.__storeCloudMetadata)(window.__cloudRows||=[]).push({id:args[0].id,metadata:args[0].metadata});if(table==='vocal_media')window.__onMetadataWrite?.()}if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(maybe?(window.__cloudRows||[]).find(row=>row.id===selectedId)||null:(window.__cloudRows||[])):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
 })};`;
 test.beforeEach(async ({page}) => {
   page.__vzipErrors=[];page.on('pageerror',error=>page.__vzipErrors.push(error.message));
@@ -1079,4 +1079,17 @@ test('Lesson uses the same capture controls, pauses, marks and saves its own rec
  expect(result.lesson.recordings).toHaveLength(1);
  expect(result.lesson.recordings[0]).toMatchObject({id:result.media[0].id,note:'레슨 녹음별 메모'});
  expect(result.media[0].source).toBe('lesson');expect(result.lesson.memo).toContain('다시 듣기');
+});
+
+test('Lost metadata response retries the same file ID without uploading a duplicate',async({page})=>{
+ await installUploadProbe(page,'success');
+ const result=await page.evaluate(async()=>{
+  const file=new File(['original'],'lost-response.wav',{type:'audio/wav'}),info={id:'stable-retry-id'};
+  window.__storeCloudMetadata=true;window.__failMetadata=true;
+  try{await window.vzipCloudImport(file,info)}catch{}
+  window.__failMetadata=false;
+  const item=await window.vzipCloudImport(file,info);
+  return {id:item.id,calls:window.__uploadCalls.length,rows:window.__cloudRows.length,pending:JSON.parse(localStorage.getItem('vzip_pending_media_parts_v1'))};
+ });
+ expect(result).toEqual({id:'stable-retry-id',calls:1,rows:1,pending:[]});
 });

@@ -17,9 +17,6 @@
   const cancelImport=document.createElement('button');cancelImport.type='button';cancelImport.className='btn secondary';
   cancelImport.id='vzip-practice-import-cancel';cancelImport.textContent='업로드 취소';cancelImport.hidden=true;
   importHint.after(cancelImport);
-  let importController=null;
-  cancelImport.onclick=()=>importController?.abort();
-  window.addEventListener('pagehide',()=>importController?.abort());
   let listRun = 0;
   const busy = (key, value) => window.vzipSetPracticeBusy?.(key, value);
   const typeOf = file => {
@@ -179,7 +176,7 @@
           }else{
             progress('기기에 저장 중…');seconds=await duration(file);
             if(signal.aborted)throw new DOMException('취소','AbortError');
-            id=crypto.randomUUID();
+            id=chosen.id;
             await window.vzipStorePracticeMedia({id,name:file.name,type,blob:blobOf({name:file.name,type,blob:file}),
               created:Date.now(),source:'practice',...chosen,durationSeconds:seconds});
           }

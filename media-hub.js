@@ -77,9 +77,6 @@ importHint.textContent='여러 파일을 선택하고 파일별 곡을 지정하
 $('#vzip-hub-upload').closest('.vzip-hub-buttons').after(importHint);
 const cancelUpload=document.createElement('button');cancelUpload.type='button';cancelUpload.className='btn secondary';
 cancelUpload.id='vzip-hub-upload-cancel';cancelUpload.textContent='업로드 취소';cancelUpload.hidden=true;importHint.after(cancelUpload);
-let importController=null;
-cancelUpload.onclick=()=>importController?.abort();
-window.addEventListener('pagehide',()=>importController?.abort());
 function chooseUploadSong(fileName){
  return new Promise(resolve=>{
   const overlay=document.createElement('div');
@@ -153,7 +150,7 @@ $('#vzip-hub-upload').onchange=async event=>{
       {signal,onCommit:()=>progress('보관함 연결 중…')});
     }else{
      if(signal.aborted)throw new DOMException('취소','AbortError');
-     await window.vzipStorePracticeMedia({id:crypto.randomUUID(),name,created:file.lastModified||Date.now(),
+     await window.vzipStorePracticeMedia({id:chosen.id,name,created:file.lastModified||Date.now(),
       type,source:'import',...chosen,blob:file});
      window.dispatchEvent(new Event('vzip:media-updated'));
     }

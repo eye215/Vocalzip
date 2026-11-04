@@ -51,7 +51,7 @@ window.vzipImportBatch=async(files,options)=>{
   const row=document.createElement('article');row.className='vzip-upload-progress';
   const status=document.createElement('p');status.setAttribute('role','status');status.textContent=file.name+' · 대기 중';
   const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='이 파일 다시 시도';retry.hidden=true;
-  row.append(status,retry);host.append(row);return {file,name:file.name,choice:choices[i],status,retry,state:'pending'};
+  row.append(status,retry);host.append(row);return {file,name:file.name,choice:{...choices[i],id:crypto.randomUUID()},status,retry,state:'pending'};
  });
  let running=false,controller;
  const summary=()=>onSummary?.('보관함 저장 완료 '+rows.filter(x=>x.state==='done').length+'개 · 실패/취소 '+rows.filter(x=>['failed','cancelled'].includes(x.state)).length+'개'+(rows.find(x=>['failed','cancelled'].includes(x.state))?' · '+rows.find(x=>['failed','cancelled'].includes(x.state)).status.textContent:''));

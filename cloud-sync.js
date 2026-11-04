@@ -77,6 +77,12 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
   await cleanupPending(owner);aborted();
   const type=window.vzipMediaType?.(file)||file.type||info.type||'application/octet-stream';
   id=info.id||crypto.randomUUID();
+  if(!/^[a-z0-9_-]{1,200}$/i.test(id))throw Error('잘못된 파일 ID예요.');
+  if(info.id){
+   const {data:existing,error:lookupError}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle();
+   if(lookupError)throw lookupError;aborted();
+   if(existing?.metadata){onProgress?.(100);return existing.metadata}
+  }
   const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
   const multipart=file.size>50*1024*1024;
   const parts=multipart?Array.from({length:Math.ceil(file.size/VzipChunks.PART_SIZE)},(_,index)=>({
@@ -84,11 +90,11 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
    size:Math.min(VzipChunks.PART_SIZE,file.size-index*VzipChunks.PART_SIZE)
   })):[{path:owner+'/'+id+'.'+ext,size:file.size}];
   journal({id,owner,paths:parts.map(x=>x.path),created:Date.now()});
-  const {data:session,error:sessionError}=await client.auth.getSession();aborted();
-  if(sessionError||!session?.session?.access_token)throw Error('로그인이 만료됐어요. 다시 로그인해 주세요.');
   if(!window.tus?.Upload)throw Error('업로드 모듈을 불러오지 못했어요. 새로고침해 주세요.');
   let offset=0;
   for(const part of parts){
+  const {data:session,error:sessionError}=await client.auth.getSession();aborted();
+  if(sessionError||!session?.session?.access_token)throw Error('로그인이 만료됐어요. 다시 로그인해 주세요.');
    aborted();
    const path=part.path,piece=multipart?file.slice(offset,offset+part.size,type):file;
   await new Promise((resolve,reject)=>{
@@ -115,7 +121,7 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
      storeFingerprintForResuming:false,
      metadata:{bucketName:'vocal-recordings',objectName:path,contentType:type,cacheControl:'3600'},
      onError:error=>finish(error),onSuccess:()=>finish(),
-     onProgress:(sent,total)=>{if(!settled&&total>0)onProgress?.(Math.min(99,Math.round((offset+sent)/file.size*100)))}
+     onProgress:(sent,total)=>{if(!settled&&total>0)onProgress?.(Math.min(99,Math.round((offset+(sent/total)*part.size)/file.size*100)))}
     });
     upload.start();
    }catch(error){finish(error)}
