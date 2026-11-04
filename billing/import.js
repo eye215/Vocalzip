@@ -7,15 +7,17 @@ const fields={
 const labels={date:'날짜',amount:'결제금액',charged:'충전 횟수',passAmount:'레슨권 금액',passName:'레슨권 이름',kind:'결제/환불',method:'결제 방법',memo:'메모',student:'수강생',reference:'외부 거래/기록 ID',start:'시작 시간',end:'종료 시간',status:'진행 상태',units:'차감 횟수',lessonId:'기존 Lesson ID'};
 const norm=value=>String(value??'').toLowerCase().replace(/[\s_\-().]/g,'');
 function autoMap(headers,kind){const mapping={};for(const [field,names] of Object.entries(fields[kind]))mapping[field]=headers.findIndex(header=>names.some(name=>norm(header)===norm(name)));return mapping}
+/** Show dates already converted (YYYY-MM-DD) in the preview; unreadable values stay for manual fixing. */
+function normalDate(value,settings){if(value===''||value==null)return value;try{return C.date(value,{date1904:settings.date1904})}catch{return value}}
 function drafts(rows,mapping,settings,state){
  const get=(row,key)=>mapping[key]>=0?(row[mapping[key]]??''):'';
  return rows.slice(1).map((raw,index)=>{
   const name=String(get(raw,'passName')).trim(),found=C.active(state.passes).filter(pass=>pass.name===name);
   const row={sourceRow:index+2,raw:raw.slice(),selected:true,sourceKey:settings.hash+':'+settings.sheet+':'+(index+2),
-   date:get(raw,'date'),passId:found.length===1?found[0].id:(settings.passId||''),memo:get(raw,'memo'),student:get(raw,'student'),reference:get(raw,'reference')};
+   date:normalDate(get(raw,'date'),settings),passId:found.length===1?found[0].id:(settings.passId||''),memo:get(raw,'memo'),student:get(raw,'student'),reference:get(raw,'reference')};
   if(settings.kind==='payment')Object.assign(row,{amount:get(raw,'amount'),kind:/환불|refund/i.test(get(raw,'kind'))?'refund':'payment',method:get(raw,'method'),
    newPass:settings.mode==='new',passName:name||String(get(raw,'date'))+' 레슨권',charged:get(raw,'charged'),passAmount:get(raw,'passAmount')});
-  else{const status=C.status(get(raw,'status'));Object.assign(row,{status,start:get(raw,'start'),end:get(raw,'end'),units:get(raw,'units')!==''?get(raw,'units'):(status==='completed'?'1':'0'),lessonId:String(get(raw,'lessonId')).trim()})}
+  else{const status=C.status(get(raw,'status')),inDate=C.timeRange(get(raw,'date'));Object.assign(row,{status,start:get(raw,'start')||inDate.start,end:get(raw,'end')||inDate.end,units:get(raw,'units')!==''?get(raw,'units'):(status==='completed'?'1':'0'),lessonId:String(get(raw,'lessonId')).trim()})}
   return row;
  });
 }
