@@ -1,0 +1,36 @@
+name: Billing checks
+on:
+  pull_request:
+    paths:
+      - 'billing/**'
+      - '.github/workflows/billing-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  billing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Ledger and import unit tests
+        run: node --test billing/tests/core.test.cjs
+      - name: JavaScript syntax
+        run: |
+          for file in billing/*.js; do node --check "$file"; done
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Billing browser tests
+        run: npx playwright test --config=billing/playwright.config.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: billing-test-results
+          path: |
+            billing-report
+            billing-results
+          retention-days: 14

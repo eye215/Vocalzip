@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>레슨비 정산 · VOCAL.zip</title><link rel="stylesheet" href="billing.css">
+<script src="core.js" defer></script><script src="files.js" defer></script><script src="import.js" defer></script><script src="store.js" defer></script><script src="app.js" defer></script></head>
+<body><main class="billing">
+<header><div><a href="../">← VOCAL.zip</a><h1>레슨비 정산</h1><p id="account-label"></p></div><div class="actions"><button type="button" id="reload">다시 불러오기</button><button type="button" id="export">정산 JSON 백업</button></div></header>
+<p class="notice">정산 데이터는 이 브라우저의 별도 저장소에 보관됩니다. 기존 레슨·녹음·연습은 변경하지 않습니다. 기기를 바꾸거나 브라우저 데이터를 지우기 전 JSON 백업을 보관해 주세요.</p>
+<p id="message" role="status" aria-live="polite"></p>
+<nav aria-label="정산 메뉴"><button data-panel="dashboard" aria-pressed="true">정산 현황</button><button data-panel="passes">레슨권</button><button data-panel="payments">결제·환불</button><button data-panel="attendance">수강·조정</button><button data-panel="imports">일괄 업로드</button><button data-panel="history">변경 이력</button></nav>
+<section id="dashboard"><h2>정산 현황</h2><div id="totals" class="metrics"></div><p class="help">차감은 0.01회 단위, 금액은 원 단위입니다. 사용 금액은 레슨권별 합산 후 반올림합니다. 환불은 순결제금액에 반영하며, 레슨권 금액·횟수 변경은 별도 수동 조정으로 기록합니다.</p><div id="balances"></div></section>
+<section id="passes" hidden><h2>레슨권 등록·수정</h2><div id="pass-form-slot"></div><div id="pass-list"></div></section>
+<section id="payments" hidden><h2>결제·분할 결제·환불</h2><p class="help">분할 결제는 같은 레슨권으로 각각 등록하세요. 환불은 원래 결제를 지우지 않고 별도 거래로 남깁니다.</p><div id="payment-form-slot"></div><div id="payment-list"></div></section>
+<section id="attendance" hidden><h2>수강과 차감</h2><p class="help">기존 Lesson ID는 읽기만 합니다. 날짜만 있는 과거 수강도 별도 이력으로 남길 수 있습니다. 완료 취소는 상태를 취소로 변경하거나 차감 기록을 취소하세요.</p><div id="deduction-form-slot"></div><div id="deduction-list"></div><h2>잔액·횟수 수동 조정</h2><p class="help">조정은 별도 거래입니다. 조정 후 레슨권 금액 ÷ 충전 횟수로 단가와 과거 사용 금액을 다시 계산합니다. 사유를 남기고 미리보기를 확인하세요.</p><div id="adjustment-form-slot"></div><div id="adjustment-list"></div></section>
+<section id="imports" hidden><h2>CSV · XLSX · 노션 CSV 가져오기</h2>
+<div class="card"><div class="form-grid"><label>데이터 유형<select id="import-kind"><option value="payment">결제 내역</option><option value="deduction">수강 내역</option></select></label><label>파일 (10MB · 최대 2,000행)<input id="import-file" type="file" accept=".csv,.xlsx"></label><label>CSV 문자 인코딩<select id="import-encoding"><option value="auto">자동 (UTF-8 / CP949)</option value="utf-8">UTF-8</option><option value="euc-kr">CP949 / EUC-KR</option><option value="utf-16le">UTF-16 LE</option></select></label><label>시트<select id="import-sheet"></select></label><label>기본 연결 레슨권<select id="import-pass" data-pass-select></select></label><label>결제 행의 레슨권 처리<select id="import-mode"><option value="existing">기존 레슨권에 연결</option><option value="new">행마다 새 레슨권 (충전 횟수 필요)</option></select></label></div>
+<p class="help">같은 날짜의 여러 수강은 허용합니다. 날짜만으로 자동 중복 처리하지 않습니다. 분할 결제는 새 레슨권을 여러 개 만들지 말고 기존 레슨권에 연결하세요. 파일의 수강생 열은 출처 정보로 보존되며 다른 계정으로 전송되지 않습니다.</p><div id="mapping"></div><button id="preview-import" type="button" disabled>매핑 적용 · 미리보기 만들기</button></div>
+<div id="import-preview" hidden><h3>등록할 행 확인</h3><div class="actions"><button id="select-valid" type="button">정상 행 선택</button><button id="select-none" type="button">모두 해제</button><button id="remap" type="button">매핑 다시 하기</button></div>
+<p id="import-summary" role="status"></p><div id="preview-rows"></div><div class="actions"><button id="page-prev" type="button">이전 20행</button><span id="page-label"></span><button id="page-next" type="button">다음 20행</button></div>
+<label class="check"><input id="confirm-attendance" type="checkbox">수강 상태·차감 횟수와 연결 레슨권을 확인했습니다.</label>
+<label class="check"><input id="confirm-duplicates" type="checkbox">선택한 중복 의심 행이 별도 거래/수강임을 확인했습니다.</label>
+<label class="check"><input id="confirm-overdraw" type="checkbox">선택한 기록으로 잔여 횟수가 음수가 되는 경우를 확인했습니다.</label>
+<p id="reconciliation" role="status"></p><button id="commit-import" type="button" disabled>선택 행 일괄 등록</button></div>
+<h3>업로드 이력</h3><p class="help">되돌리기는 해당 작업에서 만든 데이터만 취소합니다. 이후 수정되거나 다른 이력이 연결된 경우에는 안전을 위해 차단합니다.</p><div id="batch-list"></div></section>
+<section id="history" hidden><h2>변경 이력</h2><p class="help">결제 수정, 차감 변경·취소·복구, 수동 조정의 변경 전후 값을 보존합니다.</p><div id="audit-list"></div></section>
+</main></body></html>
