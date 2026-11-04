@@ -36,30 +36,61 @@ function localMedia(){return new Promise((resolve,reject)=>{const req=indexedDB.
 async function remoteData(){const {data,error}=await client.from('vocal_data').select('payload,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
 async function upload(silent=false){if(!user||busy)return;const data=localData();if(!data)return say('이 기기에 저장된 기록이 없어요.');busy=true;try{const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload:data,updated_at:new Date().toISOString()});if(error)throw error;localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;say('✓ 클라우드에 레슨·연습 기록 '+count(data)+'건 저장 완료'+(silent?' (자동 동기화)':''))}catch(e){say('동기화 실패: '+e.message)}finally{busy=false}}
 async function download(){if(!user||busy)return;busy=true;try{const row=await remoteData();if(!row?.payload)return say('클라우드에 저장된 기록이 아직 없어요.');const data=row.payload;if(!Array.isArray(data.lessons)||!Array.isArray(data.practices)||!Array.isArray(data.songs)||!Array.isArray(data.categories)||!Array.isArray(data.assignments))throw Error('클라우드 기록 형식이 올바르지 않아요.');const existing=localData();if(!confirm('클라우드 기록 '+count(data)+'건을 이 기기로 가져올까요?\n현재 기기 기록 '+count(existing)+'건은 별도 백업 없이 덮어쓰게 됩니다.'))return;const backup='vzip_before_cloud_'+Date.now();if(existing)localStorage.setItem(backup,JSON.stringify(existing));localStorage.setItem(dataKey,JSON.stringify(data));localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;say('✓ 클라우드 기록을 가져왔어요. 화면을 새로고침합니다.');setTimeout(()=>location.reload(),650)}catch(e){say('가져오기 실패: '+e.message)}finally{busy=false}}
-async function uploadMedia(){if(!user||busy)return;busy=true;try{const items=await localMedia();if(!items.length)return say('이 기기에 녹음·영상이 없어요.');if(!confirm(items.length+'개 파일을 비공개 클라우드 저장소에 백업할까요? 영상은 용량에 따라 시간이 걸릴 수 있어요.'))return;const remotePaths=new Map((await window.vzipCloudMediaList()).map(item=>[item.id,item.path]));let ok=0,fail=0;for(const item of items){say('녹음·영상 업로드 '+(ok+fail+1)+'/'+items.length+'…');try{item.blob=window.vzipMediaBlob(item);if(!item.blob)throw Error('원본 파일이 없어요.');const ext=mediaExtension(item.blob.type||item.type);const path=remotePaths.get(item.id)||user.id+'/'+encodeURIComponent(item.id)+'.'+ext;const {error}=await client.storage.from('vocal-recordings').upload(path,item.blob,{upsert:true,contentType:item.blob.type||item.type||'application/octet-stream'});if(error)throw error;const meta={id:item.id,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,type:item.blob.type||item.type,source:item.source||'import',durationSeconds:item.durationSeconds||0,rating:item.rating??null,review:item.review||'',path};const {error:metaError}=await client.from('vocal_media').upsert({user_id:user.id,id:item.id,metadata:meta});if(metaError)throw metaError;ok++;window.dispatchEvent(new Event('vzip:cloud-media-changed'))}catch(e){fail++;say('업로드 오류: '+e.message)}}say('✓ 녹음·영상 백업 '+ok+'개 성공'+(fail?', '+fail+'개 실패':'')+'. 원본은 이 기기에 남아 있어요.')}catch(e){say('녹음 백업 실패: '+e.message)}finally{busy=false}}
-async function downloadMedia(){if(!user||busy)return;busy=true;try{const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',user.id);if(error)throw error;if(!data?.length)return say('클라우드에 백업된 녹음이 없어요.');const existing=new Set((await localMedia()).map(x=>x.id));const missing=data.map(x=>x.metadata).filter(x=>!existing.has(x.id));if(!missing.length)return say('이 기기에 모든 녹음이 이미 있어요.');if(!confirm(missing.length+'개 녹음·영상을 이 기기에 다운로드해 보관할까요?'))return;let ok=0,fail=0;for(const meta of missing){say('녹음 가져오는 중 '+(ok+fail+1)+'/'+missing.length);try{const {data:blob,error:err}=await client.storage.from('vocal-recordings').download(meta.path);if(err)throw err;await window.vzipStorePracticeMedia({...meta,blob});ok++}catch{fail++}}say('✓ '+ok+'개 가져오기 완료'+(fail?', '+fail+'개 실패':'')+'. 보관함을 다시 열어 확인해 주세요.')}catch(e){say('녹음 가져오기 실패: '+e.message)}finally{busy=false}}
-async function autoUploadMedia(id){if(!user||!ready)return;try{const item=(await localMedia()).find(x=>x.id===id);if(!item)return;const blob=window.vzipMediaBlob(item);if(!blob)throw Error('원본 파일이 없어요.');const ext=mediaExtension(blob.type);const existing=(await window.vzipCloudMediaList()).find(remote=>remote.id===item.id);const path=existing?.path||user.id+'/'+encodeURIComponent(item.id)+'.'+ext;const {error}=await client.storage.from('vocal-recordings').upload(path,blob,{upsert:true,contentType:blob.type||'application/octet-stream'});if(error)throw error;const {error:metaError}=await client.from('vocal_media').upsert({user_id:user.id,id:item.id,metadata:{id:item.id,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,type:blob.type,source:item.source||'import',durationSeconds:item.durationSeconds||0,rating:item.rating??null,review:item.review||'',path}});if(metaError)throw metaError;window.dispatchEvent(new Event('vzip:cloud-media-changed'));say('✓ 새 녹음이 이 기기와 클라우드에 저장됐어요.')}catch(e){say('녹음은 이 기기에 저장됐지만 클라우드 백업 실패: '+e.message+'. 다시 백업해 주세요.')}}
+async function uploadMedia(){if(!user||busy)return;busy=true;try{const items=await localMedia();if(!items.length)return say('이 기기에 녹음·영상이 없어요.');if(!confirm(items.length+'개 파일을 비공개 클라우드 저장소에 백업할까요? 영상은 용량에 따라 시간이 걸릴 수 있어요.'))return;const remotePaths=new Map((await window.vzipCloudMediaList()).map(item=>[item.id,item.path]));let ok=0,fail=0;for(const item of items){say('녹음·영상 업로드 '+(ok+fail+1)+'/'+items.length+'…');try{item.blob=window.vzipMediaBlob(item);if(!item.blob)throw Error('원본 파일이 없어요.');if(item.blob.size>50*1024*1024){await window.vzipCloudImport(new File([item.blob],item.name+'.'+mediaExtension(item.type),{type:item.type}),{...item,id:item.id},p=>say('대용량 백업 '+p+'%'));ok++;continue}const ext=mediaExtension(item.blob.type||item.type);const path=remotePaths.get(item.id)||user.id+'/'+encodeURIComponent(item.id)+'.'+ext;const {error}=await client.storage.from('vocal-recordings').upload(path,item.blob,{upsert:true,contentType:item.blob.type||item.type||'application/octet-stream'});if(error)throw error;const meta={id:item.id,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,type:item.blob.type||item.type,source:item.source||'import',durationSeconds:item.durationSeconds||0,rating:item.rating??null,review:item.review||'',path};const {error:metaError}=await client.from('vocal_media').upsert({user_id:user.id,id:item.id,metadata:meta});if(metaError)throw metaError;ok++;window.dispatchEvent(new Event('vzip:cloud-media-changed'))}catch(e){fail++;say('업로드 오류: '+e.message)}}say('✓ 녹음·영상 백업 '+ok+'개 성공'+(fail?', '+fail+'개 실패':'')+'. 원본은 이 기기에 남아 있어요.')}catch(e){say('녹음 백업 실패: '+e.message)}finally{busy=false}}
+async function downloadMedia(){if(!user||busy)return;busy=true;try{const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',user.id);if(error)throw error;if(!data?.length)return say('클라우드에 백업된 녹음이 없어요.');const existing=new Set((await localMedia()).map(x=>x.id));const missing=data.map(x=>x.metadata).filter(x=>!existing.has(x.id)&&x.storageVersion!==2);if(!missing.length)return say('이 기기에 모든 녹음이 이미 있어요.');if(!confirm(missing.length+'개 녹음·영상을 이 기기에 다운로드해 보관할까요?'))return;let ok=0,fail=0;for(const meta of missing){say('녹음 가져오는 중 '+(ok+fail+1)+'/'+missing.length);try{const {data:blob,error:err}=await client.storage.from('vocal-recordings').download(meta.path);if(err)throw err;await window.vzipStorePracticeMedia({...meta,blob});ok++}catch{fail++}}say('✓ '+ok+'개 가져오기 완료'+(fail?', '+fail+'개 실패':'')+'. 보관함을 다시 열어 확인해 주세요.')}catch(e){say('녹음 가져오기 실패: '+e.message)}finally{busy=false}}
+async function autoUploadMedia(id){if(!user||!ready)return;try{const item=(await localMedia()).find(x=>x.id===id);if(!item)return;const blob=window.vzipMediaBlob(item);if(!blob)throw Error('원본 파일이 없어요.');if(blob.size>50*1024*1024){await window.vzipCloudImport(new File([blob],item.name+'.'+mediaExtension(item.type),{type:item.type}),{...item,id:item.id});return}const ext=mediaExtension(blob.type);const existing=(await window.vzipCloudMediaList()).find(remote=>remote.id===item.id);const path=existing?.path||user.id+'/'+encodeURIComponent(item.id)+'.'+ext;const {error}=await client.storage.from('vocal-recordings').upload(path,blob,{upsert:true,contentType:blob.type||'application/octet-stream'});if(error)throw error;const {error:metaError}=await client.from('vocal_media').upsert({user_id:user.id,id:item.id,metadata:{id:item.id,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,type:blob.type,source:item.source||'import',durationSeconds:item.durationSeconds||0,rating:item.rating??null,review:item.review||'',path}});if(metaError)throw metaError;window.dispatchEvent(new Event('vzip:cloud-media-changed'));say('✓ 새 녹음이 이 기기와 클라우드에 저장됐어요.')}catch(e){say('녹음은 이 기기에 저장됐지만 클라우드 백업 실패: '+e.message+'. 다시 백업해 주세요.')}}
 window.addEventListener('vzip:media-updated',async e=>{if(!user||!e.detail?.id)return;try{const item=(await localMedia()).find(x=>x.id===e.detail.id);if(!item)return;const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',user.id).eq('id',item.id).maybeSingle();if(error||!data)return;const metadata={...data.metadata,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,type:item.type,rating:item.rating??null,review:item.review||''};const {error:err}=await client.from('vocal_media').update({metadata,updated_at:new Date().toISOString()}).eq('id',item.id).eq('user_id',user.id);if(err)throw err}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
 window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e.detail.id)});
 
-/* Stream the original File through TUS. One active import across all forms. */
+/* Each >50MiB original is stored as independent <=24MiB objects, one metadata row. */
 let mediaImportActive=false;
+const pendingKey='vzip_pending_media_parts_v1';
+function pendingUploads(){try{return JSON.parse(localStorage.getItem(pendingKey)||'[]')}catch{return []}}
+function journal(entry){
+ const entries=pendingUploads().filter(x=>x.id!==entry.id);entries.push(entry);
+ localStorage.setItem(pendingKey,JSON.stringify(entries));
+}
+function forget(id){localStorage.setItem(pendingKey,JSON.stringify(pendingUploads().filter(x=>x.id!==id)))}
+async function cleanupPending(owner){
+ for(const entry of pendingUploads().filter(x=>x.owner===owner)){
+  const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',entry.id).maybeSingle();
+  if(error||user?.id!==owner)continue;
+  // A committed row wins after a lost response or a page close during commit.
+  if(data?.metadata){forget(entry.id);continue}
+  const {error:removeError}=await client.storage.from('vocal-recordings').remove(entry.paths);
+  if(!removeError)forget(entry.id);
+ }
+}
 window.vzipCloudImport=async function(file,info={},onProgress,options={}){
- const signal=options.signal,aborted=()=>{if(signal?.aborted)throw new DOMException('업로드를 취소했어요.','AbortError')};
- aborted();
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
  if(!file||file.size<=0)throw Error('빈 파일은 업로드할 수 없어요.');
- if(file.size>50*1024*1024)throw Error('현재 파일당 최대 50MB까지 업로드할 수 있어요.');
+ if(file.size>VzipChunks.MAX_SIZE)throw Error('파일당 최대 1GB까지 업로드할 수 있어요.');
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요. 완료하거나 취소한 뒤 다시 선택해 주세요.');
- mediaImportActive=true;
- const owner=user.id;
+ const owner=user.id,controller=new AbortController(),signal=controller.signal;
+ const cancel=()=>controller.abort(),authChanged=()=>{if(user?.id!==owner)controller.abort()};
+ const aborted=()=>{if(signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');if(user?.id!==owner)throw Error('로그인이 변경되었어요. 다시 로그인해 주세요.')};
+ if(options.signal?.aborted)cancel();options.signal?.addEventListener('abort',cancel);
+ window.addEventListener('vzip:auth-changed',authChanged);
+ mediaImportActive=true;let id,committing=false,committed=false;
  try{
+  aborted();
+  await cleanupPending(owner);aborted();
   const type=window.vzipMediaType?.(file)||file.type||info.type||'application/octet-stream';
-  const id=crypto.randomUUID(),ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
-  const path=owner+'/'+id+'.'+ext;
+  id=info.id||crypto.randomUUID();
+  const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const multipart=file.size>50*1024*1024;
+  const parts=multipart?Array.from({length:Math.ceil(file.size/VzipChunks.PART_SIZE)},(_,index)=>({
+   path:owner+'/'+id+'/part-'+String(index).padStart(4,'0'),
+   size:Math.min(VzipChunks.PART_SIZE,file.size-index*VzipChunks.PART_SIZE)
+  })):[{path:owner+'/'+id+'.'+ext,size:file.size}];
+  journal({id,owner,paths:parts.map(x=>x.path),created:Date.now()});
   const {data:session,error:sessionError}=await client.auth.getSession();aborted();
-  if(sessionError||!session?.session?.access_token||user?.id!==owner)throw Error('로그인이 변경되었어요. 다시 로그인해 주세요.');
+  if(sessionError||!session?.session?.access_token)throw Error('로그인이 만료됐어요. 다시 로그인해 주세요.');
   if(!window.tus?.Upload)throw Error('업로드 모듈을 불러오지 못했어요. 새로고침해 주세요.');
+  let offset=0;
+  for(const part of parts){
+   aborted();
+   const path=part.path,piece=multipart?file.slice(offset,offset+part.size,type):file;
   await new Promise((resolve,reject)=>{
    let upload=null,settled=false;
    const finish=(error)=>{
@@ -76,7 +107,7 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
    signal?.addEventListener('abort',cancel,{once:true});
    if(signal?.aborted){cancel();return}
    try{
-    upload=new window.tus.Upload(file,{
+    upload=new window.tus.Upload(piece,{
      endpoint:'https://chxnbtiyuyhiywzeshis.storage.supabase.co/storage/v1/upload/resumable',
      headers:{authorization:'Bearer '+session.session.access_token,apikey:key},
      uploadDataDuringCreation:false,removeFingerprintOnSuccess:true,
@@ -84,29 +115,64 @@ window.vzipCloudImport=async function(file,info={},onProgress,options={}){
      storeFingerprintForResuming:false,
      metadata:{bucketName:'vocal-recordings',objectName:path,contentType:type,cacheControl:'3600'},
      onError:error=>finish(error),onSuccess:()=>finish(),
-     onProgress:(sent,total)=>{if(!settled&&total>0)onProgress?.(Math.round(sent/total*100))}
+     onProgress:(sent,total)=>{if(!settled&&total>0)onProgress?.(Math.min(99,Math.round((offset+sent)/file.size*100)))}
     });
     upload.start();
    }catch(error){finish(error)}
   });
-  aborted();if(user?.id!==owner)throw Error('로그인이 변경되어 파일 연결을 중단했어요. 원래 계정으로 다시 로그인해 주세요.');
-  options.onCommit?.();
+   offset+=part.size;
+  }
+  aborted();
+  options.onCommit?.();committing=true;
   const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),song:info.song||'',songId:info.songId||'',
    created:file.lastModified||Date.now(),type,durationSeconds:Number(info.durationSeconds)||0,
-   source:info.source||'import',path,size:file.size};
+   source:info.source||'import',size:file.size,
+   ...(multipart?{storageVersion:2,parts}:{path:parts[0].path})};
   const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata});
-  if(error)throw Error('파일 전송은 끝났지만 보관함 연결에 실패했어요: '+error.message);
-  if(user?.id!==owner)throw Error('로그인이 변경되어 현재 화면에 파일을 연결하지 않았어요. 업로드를 시작한 계정의 보관함에서 확인해 주세요.');
-  window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+  if(error)throw Error('보관함 연결에 실패했어요: '+error.message);
+  committed=true;forget(id);
+  if(user?.id!==owner)throw Error('로그인이 변경되어 현재 화면에 파일을 연결하지 않았어요. 원래 계정의 보관함에서 확인해 주세요.');
+  onProgress?.(100);window.dispatchEvent(new Event('vzip:cloud-media-changed'));
   return metadata;
- }finally{mediaImportActive=false}
+ }catch(error){
+  // Keep the journal if commit outcome is uncertain; next upload checks the row first.
+  if(id&&!committing&&!committed&&user?.id===owner){
+   try{await cleanupPending(owner)}catch{}
+  }
+  throw error;
+ }finally{
+  options.signal?.removeEventListener('abort',cancel);window.removeEventListener('vzip:auth-changed',authChanged);
+  mediaImportActive=false;
+ }
 };
 window.vzipCloudMediaList=async()=>{if(!user)return [];const {data,error}=await client.from('vocal_media').select('id,metadata').eq('user_id',user.id).order('updated_at',{ascending:false});if(error)throw error;return (data||[]).map(x=>({...x.metadata,id:x.id,cloud:true}))};
-window.vzipCloudMediaUrl=async item=>{if(!user||!item?.path)throw Error('클라우드 파일 경로가 없어요.');const {data,error}=await client.storage.from('vocal-recordings').createSignedUrl(item.path,3600);if(error)throw error;return data.signedUrl};
+window.vzipCloudMediaUrl=async item=>{
+ if(!user)throw Error('로그인이 필요해요.');
+ const owner=user.id;
+ const sign=async path=>{
+  if(!path.startsWith(owner+'/')||path.includes('..'))throw Error('다른 계정의 파일은 재생할 수 없어요.');
+  const {data,error}=await client.storage.from('vocal-recordings').createSignedUrl(path,3600);
+  if(error)throw error;if(user?.id!==owner)throw Error('로그인이 변경되었어요.');
+  return data.signedUrl;
+ };
+ if(item?.storageVersion===2)return window.vzipChunkMediaURL(item,sign);
+ if(!item?.path)throw Error('클라우드 파일 경로가 없어요.');
+ return sign(item.path);
+};
 window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const metadata={...item,...changes};delete metadata.cloud;delete metadata.local;delete metadata.blob;delete metadata.bytes;const {error}=await client.from('vocal_media').update({metadata,updated_at:new Date().toISOString()}).eq('id',item.id).eq('user_id',user.id);if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'));return metadata};
-window.vzipCloudMediaDelete=async item=>{if(!user)throw Error('로그인이 필요해요.');if(item.path){const {error}=await client.storage.from('vocal-recordings').remove([item.path]);if(error)throw error}const {error}=await client.from('vocal_media').delete().eq('id',item.id).eq('user_id',user.id);if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'))};
+window.vzipCloudMediaDelete=async item=>{
+ if(!user)throw Error('로그인이 필요해요.');
+ const owner=user.id;
+ const paths=item.storageVersion===2?VzipChunks.validate(item).parts.map(x=>x.path):(item.path?[item.path]:[]);
+ if(paths.some(path=>!path.startsWith(owner+'/')||path.includes('..')))throw Error('다른 계정의 파일은 삭제할 수 없어요.');
+ if(paths.length){const {error}=await client.storage.from('vocal-recordings').remove(paths);if(error)throw error}
+ if(user?.id!==owner)throw Error('로그인이 변경되었어요.');
+ const {error}=await client.from('vocal_media').delete().eq('id',item.id).eq('user_id',owner);
+ if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+};
 window.vzipCloudAccessToken=async()=>{if(!client||!user)return null;const {data}=await client.auth.getSession();return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user;
-function showUser(){window.dispatchEvent(new Event('vzip:auth-changed'));const logged=!!user;$('#cloud-signed-in').hidden=!logged;updateAuthScreen();if(logged){$('#cloud-user').textContent='🔒 '+(user.email||'로그인됨');ready=localStorage.getItem('vzip_cloud_linked_user')===user.id;say(ready?'연결됨 · 기록을 수정하면 자동으로 서버에 저장돼요.':'로그인 완료! 먼저 이 기기 기록을 업로드하거나 클라우드 기록을 가져와 주세요.')}else{ready=false;say('로그인하면 다른 기기에서도 기록을 불러올 수 있어요.')}}
+let streamOwner=null;
+function showUser(){if(streamOwner&&streamOwner!==user?.id)window.vzipRevokeChunkMedia?.();streamOwner=user?.id||null;window.dispatchEvent(new Event('vzip:auth-changed'));const logged=!!user;$('#cloud-signed-in').hidden=!logged;updateAuthScreen();if(logged){$('#cloud-user').textContent='🔒 '+(user.email||'로그인됨');ready=localStorage.getItem('vzip_cloud_linked_user')===user.id;say(ready?'연결됨 · 기록을 수정하면 자동으로 서버에 저장돼요.':'로그인 완료! 먼저 이 기기 기록을 업로드하거나 클라우드 기록을 가져와 주세요.')}else{ready=false;say('로그인하면 다른 기기에서도 기록을 불러올 수 있어요.')}}
 async function boot(){if(!window.supabase?.createClient){say('서버 연결 라이브러리를 불러오지 못했어요. 새로고침해 주세요.');return}client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data}=await client.auth.getUser();user=data?.user||null;showUser();client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;showUser()});const credentials=()=>({email:$('#cloud-email').value.trim(),password:$('#cloud-password').value});
 $('#cloud-show-password').onclick=()=>{const el=$('#cloud-password');el.type=el.type==='password'?'text':'password';$('#cloud-show-password').textContent=el.type==='password'?'보기':'숨기기'};
 $('#cloud-login').onclick=async()=>{const {email,password}=credentials();if(!email||!password)return say('이메일과 비밀번호를 입력해 주세요.');say('로그인 중…');const {error}=await client.auth.signInWithPassword({email,password});say(error?'로그인 실패: '+(error.message==='Invalid login credentials'?'이메일 또는 비밀번호가 맞지 않아요. 기존 이메일 링크 계정이면 비밀번호 재설정을 눌러 주세요.':error.message):'✓ 로그인 완료!')};

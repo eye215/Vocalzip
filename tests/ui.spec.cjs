@@ -2,7 +2,7 @@ const {test, expect} = require('@playwright/test');
 const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.__cloudUpdates=[];window.supabase={createClient:()=>({
  auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),
  onAuthStateChange:callback=>{(window.__authCallbacks||=[]).push(callback);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
- storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/fixture-audio.wav'},error:null}),upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
+ storage:{from:()=>({remove:async paths=>{(window.__removedPaths||=[]).push(...paths);return {error:null}},createSignedUrl:async()=>({data:{signedUrl:'/fixture-audio.wav'},error:null}),upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
  from:table=>{const chain={};for(const method of ['select','eq','order','upsert','update','delete','maybeSingle'])
  chain[method]=(...args)=>{if(method==='upsert'){window.__cloudMetadata.push({table,payload:args[0]});if(table==='vocal_media')window.__onMetadataWrite?.()}if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(window.__cloudRows||[]):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
 })};`;
@@ -603,7 +603,7 @@ async function installUploadProbe(page, mode='hold') {
     const originalSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size').get;
     Object.defineProperty(File.prototype,'size',{configurable:true,get(){
       if(this.name==='large.mov')return 26*1024*1024;
-      if(this.name==='oversized.mov')return 51*1024*1024;
+      if(this.name==='oversized.mov')return 1024*1024*1024+1;
       return originalSize.call(this);
     }});
     const arrayBuffer=Blob.prototype.arrayBuffer;
@@ -642,7 +642,7 @@ test('Large practice import streams to cloud without local allocation or preview
   await page.locator('[data-mode="song"]').click();
   await page.locator('#practice-form [name="minutes"]').fill('7');
   await page.locator('#practice-attachments').setInputFiles(largeUpload());
-  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료 (클라우드)');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   await page.locator('#practice-form>button:not([type])').click();
   const result=await page.evaluate(()=>({
     record:JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0],
@@ -710,13 +710,13 @@ test('Library and practice cannot run concurrent large uploads and library cance
 test('Oversized files are rejected in both import forms before allocation or upload',async({page})=>{
   await installUploadProbe(page);
   await page.locator('.hero [data-go-tab="practice"]').click();
-  await expect(page.locator('#practice-attachments')).not.toHaveAttribute('multiple');
+  await expect(page.locator('#practice-attachments')).toHaveAttribute('multiple','');
   await page.locator('#practice-attachments').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
-  await expect(page.locator('#media-preview')).toContainText('50MB');
+  await expect(page.locator('#media-preview')).toContainText('1GB');
   await page.locator('.nav [data-tab="media"]').click();
-  await expect(page.locator('#vzip-hub-upload')).not.toHaveAttribute('multiple');
+  await expect(page.locator('#vzip-hub-upload')).toHaveAttribute('multiple','');
   await page.locator('#vzip-hub-upload').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
-  await expect(page.locator('#vzip-hub-status')).toContainText('50MB');
+  await expect(page.locator('#vzip-hub-status')).toContainText('1GB');
   const result=await page.evaluate(()=>({calls:window.__uploadCalls.length,reads:window.__fullFileReads,
     previews:window.__largeFilePreviews,local:window.__localImportWrites}));
   expect(result).toEqual({calls:0,reads:0,previews:0,local:0});
@@ -877,15 +877,15 @@ test('Account change during metadata commit never attaches the previous account 
  await expect(page.locator('#practice-attachments')).toBeEnabled();
 });
 
-test('Cloud importer accepts the configured 50MB boundary and rejects larger files before transport',async({page})=>{
+test('Cloud importer preserves the single-object 50MB boundary and rejects over 1GB before transport',async({page})=>{
  await installUploadProbe(page,'success');
  const result=await page.evaluate(async()=>{
   const file=new File(['test'],'boundary.mov',{type:'video/quicktime'});Object.defineProperty(file,'size',{value:50*1024*1024});
-  const item=await window.vzipCloudImport(file);const tooLarge=new File(['test'],'too-large.mov',{type:'video/quicktime'});Object.defineProperty(tooLarge,'size',{value:50*1024*1024+1});
+  const item=await window.vzipCloudImport(file);const tooLarge=new File(['test'],'too-large.mov',{type:'video/quicktime'});Object.defineProperty(tooLarge,'size',{value:1024*1024*1024+1});
   let error='';try{await window.vzipCloudImport(tooLarge)}catch(e){error=e.message}
   return {size:item.size,error,calls:window.__uploadCalls.length};
  });
- expect(result.size).toBe(50*1024*1024);expect(result.error).toContain('50MB');expect(result.calls).toBe(1);
+ expect(result.size).toBe(50*1024*1024);expect(result.error).toContain('1GB');expect(result.calls).toBe(1);
 });
 
 
@@ -988,4 +988,95 @@ test('Calendar empty and invalid-date records never invent activity',async({page
   await expect(page.locator('.vzip-calendar-day.has-records')).toHaveCount(0);
   await expect(page.locator('.vzip-calendar-records')).toContainText('이날 남긴 기록이 없어요');
   await expect(page.locator('#practice-list')).toContainText('기존 날짜 기록');
+});
+
+for(const target of ['library','practice'])test('Multiple files choose independent songs and retry only the failed file: '+target,async({page})=>{
+ await seedHistory(page,{songs:[{id:'s1',title:'첫 곡'},{id:'s2',title:'둘째 곡'}]});
+ await page.evaluate(()=>{
+  window.__batchCalls=[];window.__batchFailed=false;
+  window.vzipCloudImport=async(file,info,progress)=>{
+   window.__batchCalls.push({name:file.name,...info});progress(55);
+   if(file.name==='second.wav'&&!window.__batchFailed){window.__batchFailed=true;throw Error('일시적인 전송 오류')}
+   return {id:'saved-'+file.name,durationSeconds:0};
+  };
+  if(location)Object.defineProperty(File.prototype,'size',{configurable:true,get(){return 30*1024*1024}});
+ });
+ if(target==='practice')await page.locator('.hero [data-go-tab=practice]').click();else await page.locator('.nav [data-tab=media]').click();
+ const input=page.locator(target==='practice'?'#practice-attachments':'#vzip-hub-upload');
+ await input.setInputFiles([{name:'first.wav',mimeType:'audio/wav',buffer:wav()},{name:'second.wav',mimeType:'audio/wav',buffer:wav()}]);
+ const dialog=page.getByRole('dialog',{name:'파일별 곡 선택'});
+ await dialog.getByLabel('first.wav 곡',{exact:true}).selectOption('s1');
+ await dialog.getByLabel('second.wav 곡',{exact:true}).selectOption('s2');
+ await dialog.getByRole('button',{name:'선택한 2개 업로드'}).click();
+ const host=page.locator(target==='practice'?'#media-preview':'#vzip-hub-upload-queue');
+ await expect(host).toContainText('일시적인 전송 오류');
+ await host.getByRole('button',{name:'이 파일 다시 시도'}).click();
+ await expect(host.locator('article')).toHaveCount(2);
+ await expect(host.locator('article').nth(1)).toContainText('보관함 저장 완료');
+ const calls=await page.evaluate(()=>window.__batchCalls);
+ expect(calls.map(x=>[x.name,x.songId])).toEqual([['first.wav','s1'],['second.wav','s2'],['second.wav','s2']]);
+ if(target==='practice')expect(await page.locator('#practice-form').evaluate(f=>JSON.parse(f.dataset.mediaIds))).toEqual(['saved-first.wav','saved-second.wav']);
+});
+test('201MiB original is sliced into independent objects and committed once',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chromium-desktop','Large real byte fixture runs once; other projects cover queue UI and stream contracts.');
+ const result=await page.evaluate(async()=>{
+  const one=new Uint8Array(1024*1024).fill(1),last=new Uint8Array(1024*1024).fill(7);
+  const file=new File([...Array(200).fill(one),last],'real-201MiB.mov',{type:'video/quicktime'});
+  file.arrayBuffer=()=>{throw Error('must not load full original')};
+  const calls=[];let active=0,maxActive=0;
+  window.tus={Upload:class{
+   constructor(piece,options){this.piece=piece;this.options=options}
+   start(){active++;maxActive=Math.max(maxActive,active);(async()=>{
+    calls.push({size:this.piece.size,path:this.options.metadata.objectName,
+     first:new Uint8Array(await this.piece.slice(0,1).arrayBuffer())[0],
+     last:new Uint8Array(await this.piece.slice(-1).arrayBuffer())[0]});
+    active--;this.options.onProgress(this.piece.size,this.piece.size);this.options.onSuccess();
+   })().catch(this.options.onError)}
+  }};
+  const item=await window.vzipCloudImport(file,{songId:'s1',song:'큰 영상 곡'});
+  return {item,calls,maxActive,commits:window.__cloudMetadata.filter(x=>x.table==='vocal_media').length};
+ });
+ expect(result.item).toMatchObject({storageVersion:2,size:201*1024*1024,songId:'s1'});
+ expect(result.item.parts).toHaveLength(9);expect(result.commits).toBe(1);expect(result.maxActive).toBe(1);
+ expect(result.calls.every(x=>x.size<=24*1024*1024)).toBe(true);
+ expect(result.calls[0].first).toBe(1);expect(result.calls.at(-1).last).toBe(7);
+ expect(new Set(result.calls.map(x=>x.path)).size).toBe(9);
+});
+test('Multipart metadata failure is recovered before retry and delete removes every object',async({page})=>{
+ await page.evaluate(()=>{window.tus={Upload:class{constructor(piece,options){this.options=options}start(){this.options.onSuccess()}}}});
+ const result=await page.evaluate(async()=>{
+  const file=new File([new Uint8Array(51*1024*1024)],'parts.mov',{type:'video/quicktime'});
+  window.__failMetadata=true;try{await window.vzipCloudImport(file)}catch{}
+  const pending=JSON.parse(localStorage.getItem('vzip_pending_media_parts_v1'));
+  window.__failMetadata=false;
+  const item=await window.vzipCloudImport(file);await window.vzipCloudMediaDelete(item);
+  return {pending,remaining:JSON.parse(localStorage.getItem('vzip_pending_media_parts_v1')),removed:window.__removedPaths,item};
+ });
+ expect(result.pending).toHaveLength(1);expect(result.remaining).toHaveLength(0);
+ for(const part of [...result.pending[0].paths,...result.item.parts.map(x=>x.path)])expect(result.removed).toContain(part);
+});
+test('Lesson uses the same capture controls, pauses, marks and saves its own recording association',async({page,browserName},testInfo)=>{
+ test.skip(browserName!=='chromium','Fake hardware capture requires Chromium.');
+ await page.locator('.hero [data-go-tab=lessons]').click();
+ await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+ const box=page.locator('#vzip-lesson-capture');
+ await expect(box.locator('[data-kind=video]')).toBeVisible();
+ await page.locator('#vzip-lesson-capture-start').click();
+ await expect(page.locator('#vzip-lesson-capture-stop')).toBeEnabled();
+ await page.waitForTimeout(1100);
+ await page.locator('#vzip-lesson-capture-mark').click();
+ await page.locator('#vzip-lesson-capture-pause').click();
+ await expect(page.locator('#vzip-lesson-capture-pause')).toContainText('계속 녹음');
+ await testInfo.attach('lesson-recorder',{body:await page.screenshot(),contentType:'image/png'});
+ await page.locator('#vzip-lesson-capture-stop').click();
+ await expect(page.locator('#vzip-lesson-capture-status')).toContainText('저장 완료');
+ await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+ await expect(page.locator('#vzip-lesson-media-items textarea')).toHaveCount(1);
+ await page.locator('#vzip-lesson-media-items textarea').fill('레슨 녹음별 메모');
+ await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+ await page.getByRole('button',{name:'레슨 및 숙제 저장',exact:true}).click();
+ const result=await page.evaluate(async()=>({lesson:JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).lessons[0],media:await window.vzipReadMedia()}));
+ expect(result.lesson.recordings).toHaveLength(1);
+ expect(result.lesson.recordings[0]).toMatchObject({id:result.media[0].id,note:'레슨 녹음별 메모'});
+ expect(result.media[0].source).toBe('lesson');expect(result.lesson.memo).toContain('다시 듣기');
 });

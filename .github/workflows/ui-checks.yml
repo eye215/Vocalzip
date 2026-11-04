@@ -15,6 +15,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
+      - run: node --test tests/chunk-media.test.cjs
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:ui
       - uses: actions/upload-artifact@v4

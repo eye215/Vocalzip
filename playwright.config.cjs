@@ -1,6 +1,6 @@
 const {defineConfig} = require('@playwright/test');
 module.exports = defineConfig({
-  testDir: './tests', testMatch: 'ui.spec.cjs', timeout: 30000,
+  testDir: './tests', testMatch: '*.spec.cjs', timeout: 30000,
   reporter: [['list'], ['html', {open: 'never'}]],
   use: {serviceWorkers:'block',baseURL: 'http://127.0.0.1:4173', trace: 'retain-on-failure', screenshot: 'only-on-failure'},
   projects: [
