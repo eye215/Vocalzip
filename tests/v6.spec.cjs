@@ -1,5 +1,6 @@
 // VOCAL.zip v6 UI: main user flows, data compatibility with v5 records, and mobile layout.
 const {test, expect} = require('@playwright/test');
+const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
@@ -20,6 +21,8 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
   await page.route('**/tus.min.js', r => r.fulfill({contentType:'application/javascript', body:'window.tus={}'}));
   await page.route('**/*.supabase.co/**', r => r.abort());
+  // Sandboxes without CDN access can point the pinned Mediabunny bundle at a local copy.
+  if (process.env.VZ_MEDIABUNNY) await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs', r => r.fulfill({path:process.env.VZ_MEDIABUNNY, contentType:'text/javascript'}));
   page.on('dialog', d => d.accept());
   if (seed) await page.addInitScript(([k, s]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, s); sessionStorage.setItem('seeded', '1'); } }, [KEY, JSON.stringify(seed)]);
   await page.goto('/#/home');
@@ -195,6 +198,7 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   await boot(page);
   await page.goto('/#/record?song=s2');
   await expect(page.locator('[data-song-name]')).toHaveText('On My Own');
+  await expect(page.getByRole('button', {name:/영상/})).toHaveCount(0); // audio-only recording
   // First save fails once.
   await page.evaluate(() => { const real = window.vzipStorePracticeMedia; let fail = true; window.vzipStorePracticeMedia = async item => { if (fail) { fail = false; throw Error('테스트 저장 실패'); } return real(item); }; });
   await page.getByRole('button', {name:'녹음 시작'}).click();
@@ -273,8 +277,15 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   const b = items.find(m => m.name === 'b');
   expect(b.songId).toBe('s2');
   expect(b.type).toBe('audio/mp4');
+  expect(b).toMatchObject({recordedDate:'2026-01-15', dateSource:'manual'});
+  expect(items.find(m => m.name === 'a').dateSource).not.toBe('manual');
   expect(new Date(b.created).getFullYear() + '-' + (new Date(b.created).getMonth() + 1) + '-' + new Date(b.created).getDate()).toBe('2026-1-15');
   expect(await page.evaluate(() => window.__calls)).toBe(3);
+  await page.goto('/#/calendar');
+  await page.getByRole('button', {name:'다음 달'}).click();
+  for (let i = 0; i < 24 && !(await page.locator('[data-d="2026-01-15"]').count()); i++) await page.getByRole('button', {name:'이전 달'}).click();
+  await page.locator('[data-d="2026-01-15"]').click();
+  await expect(page.locator('[data-day] [data-media]')).toHaveCount(1);
 });
 
 test('Library filters, edit and play; compare A/B with memo saved in v5 report schema', async ({page}) => {
@@ -357,4 +368,41 @@ test('Sheets fit the iPhone width and inputs do not overflow', async ({page}) =>
     expect(b.height).toBeGreaterThanOrEqual(44);
   }
   expect(await sheet(page).evaluate(el => getComputedStyle(el.querySelector('input')).fontSize)).toBe('16px');
+});
+
+test('Video import keeps only the original audio and files it under the capture date', async ({page}) => {
+  const fixture = path.resolve('tests/fixtures/dated-video.mp4');
+  test.skip(!fs.existsSync(fixture), 'Run node tests/make-audio-fixtures.cjs (needs ffmpeg).');
+  test.setTimeout(90000);
+  await boot(page, {media:false});
+  await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles(fixture);
+  await expect(sheet(page).getByText('영상 → 음성만 저장')).toBeVisible();
+  await page.getByRole('button', {name:'가져오기', exact:true}).click();
+  await expect(sheet(page).locator('.up-row.done')).toHaveCount(1, {timeout:60000});
+  await expect(sheet(page).locator('.up-row.done')).toContainText('(파일 속 날짜)');
+  const [item] = await media(page);
+  expect(item.type).toBe('audio/mp4');
+  expect(item).toMatchObject({recordedDate:'2024-03-01', dateSource:'metadata', source:'import'});
+  expect(item.audioExtraction.audioPacketCopyVerified).toBe(true);
+});
+
+test('Billing is only linked, and editing a legacy lesson never stamps a status on it', async ({page}) => {
+  await boot(page, {media:false});
+  await page.goto('/#/settings');
+  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  await page.goto('/#/lessons');
+  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  await page.goto('/#/lesson/l1');
+  await page.locator('[data-edit-lesson]').click();
+  await sheet(page).locator('[name=teacher]').fill('박선생');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  const l1 = (await data(page)).lessons.find(l => l.id === 'l1');
+  expect(l1.teacher).toBe('박선생');
+  expect('status' in l1).toBe(false);
+  expect(l1.date).toBe(day(-7));
+  // An explicit user choice is recorded.
+  await page.getByRole('button', {name:'예정으로 되돌리기'}).click();
+  expect((await data(page)).lessons.find(l => l.id === 'l1').status).toBe('scheduled');
 });

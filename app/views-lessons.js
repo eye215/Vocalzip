@@ -105,6 +105,9 @@ VZ.lessonSheet = ({lesson, date} = {}) => {
         if (form.end.value && form.start.value && form.end.value <= form.start.value) { VZ.toast('종료 시간은 시작 시간보다 늦어야 해요.', 'error'); return; }
         const songIds = [...selected];
         const fields = {date:form.date.value, startTime:form.start.value, endTime:form.end.value, place:form.place.value.trim(), teacher:form.teacher.value.trim(), songIds, songId:songIds[0] || '', prepMemo:form.prep.value, status};
+        // Never stamp a status onto a legacy lesson unless the user changed it:
+        // billing asks the user before deducting lessons that have no status.
+        if (l && !l.status && status === st) delete fields.status;
         let id = l?.id;
         const ok = VZ.change(d => {
           if (l) { const x = d.lessons.find(y => y.id === l.id); if (x) { Object.assign(x, fields); if (!songIds.length && l.songId && !(l.songIds || []).length) x.songId = ''; } }
@@ -119,7 +122,7 @@ VZ.lessonRow = l => {
   return '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="avatar" style="flex-direction:column;font-size:11px;line-height:1.1;font-weight:700"><span>' + (VZ.parseYmd(l.date)?.getMonth() + 1 || '?') + '월</span><span style="font-size:16px">' + (VZ.parseYmd(l.date)?.getDate() || '') + '</span></span><span class="item-main"><span class="item-title">' + esc([VZ.timeRange(l) || '시간 미정', l.place].filter(Boolean).join(' · ')) + ' ' + VZ.statusBadge(st) + '</span><span class="item-sub">' + esc([songs.join(', '), st === 'done' ? (l.feedback ? l.feedback.slice(0, 50) : '피드백 미작성') : l.prepMemo || ''].filter(Boolean).join(' · ') || '연습 곡 미정') + '</span></span><i class="ph ph-caret-right chev"></i></a>';
 };
 let lessonTab = 'upcoming';
-VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<button type="button" class="icon-btn" data-add-lesson aria-label="레슨 일정 추가"><i class="ph ph-plus"></i></button>', render() {
+VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<a class="icon-btn" href="billing/" aria-label="레슨비 정산"><i class="ph ph-receipt"></i></a><button type="button" class="icon-btn" data-add-lesson aria-label="레슨 일정 추가"><i class="ph ph-plus"></i></button>', render() {
   const all = VZ.db.lessons, today = VZ.today();
   const groups = {
     upcoming:all.filter(l => VZ.lessonStatus(l) === 'scheduled').sort(VZ.lessonSort),
@@ -216,10 +219,10 @@ async function linkMediaSheet(l) {
   const linked = new Set((l.recordings || []).map(x => x.id));
   const songIds = VZ.lessonSongIds(l);
   const sorted = [...media].sort((a, b) => {
-    const near = m => Math.abs(VZ.daysBetween(l.date, m.created ? VZ.ymd(new Date(m.created)) : '1970-01-01')) - (songIds.includes(m.songId) ? 3 : 0);
+    const near = m => Math.abs(VZ.daysBetween(l.date, M.dateOf(m) || '1970-01-01')) - (songIds.includes(m.songId) ? 3 : 0);
     return near(a) - near(b);
   }).slice(0, 60);
-  VZ.sheet({title:'녹음 연결', body:sorted.length ? '<p class="small muted" style="margin-top:0">레슨 날짜와 가까운 녹음부터 보여요.</p><div class="list">' + sorted.map(m => '<label class="item"><input type="checkbox" value="' + esc(m.id) + '"' + (linked.has(m.id) ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(VZ.msLabel(m.created) + ' · ' + (VZ.songTitle(m.songId) || '곡 미지정')) + '</span></span></label>').join('') + '</div>' : VZ.empty('waveform', '보관함에 녹음이 없어요.'),
+  VZ.sheet({title:'녹음 연결', body:sorted.length ? '<p class="small muted" style="margin-top:0">레슨 날짜와 가까운 녹음부터 보여요.</p><div class="list">' + sorted.map(m => '<label class="item"><input type="checkbox" value="' + esc(m.id) + '"' + (linked.has(m.id) ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(VZ.dateLabel(M.dateOf(m)) + ' · ' + (VZ.songTitle(m.songId) || '곡 미지정')) + '</span></span></label>').join('') + '</div>' : VZ.empty('waveform', '보관함에 녹음이 없어요.'),
     foot:sorted.length ? '<button type="button" class="btn block" data-save>연결 저장</button>' : '',
     onMount:(el, close) => {
       el.parentNode.querySelector('[data-save]')?.addEventListener('click', () => {
@@ -248,7 +251,7 @@ VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href
   let media = M.cached();
   const byDay = () => {
     const map = new Map(), add = (d, k, x) => { if (!d) return; if (!map.has(d)) map.set(d, {l:[], p:[], r:[]}); map.get(d)[k].push(x); };
-    VZ.db.lessons.forEach(l => add(l.date, 'l', l)); VZ.db.practices.forEach(p => add(p.date, 'p', p)); media.forEach(m => m.created && add(VZ.ymd(new Date(m.created)), 'r', m));
+    VZ.db.lessons.forEach(l => add(l.date, 'l', l)); VZ.db.practices.forEach(p => add(p.date, 'p', p)); media.forEach(m => add(M.dateOf(m), 'r', m));
     return map;
   };
   const draw = () => {

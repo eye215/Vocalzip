@@ -85,7 +85,7 @@ VZ.songActivity = (media = []) => {
   const bump = (id, date) => { if (!id || !date || date > today) return; if (!map.has(id) || map.get(id) < date) map.set(id, date); };
   db.practices.forEach(p => bump(p.songId, p.date));
   db.lessons.filter(l => VZ.lessonStatus(l) === 'done').forEach(l => VZ.lessonSongIds(l).forEach(id => bump(id, l.date)));
-  media.forEach(m => bump(m.songId, m.created ? VZ.ymd(new Date(m.created)) : ''));
+  media.forEach(m => bump(m.songId, VZ.media?.dateOf(m) || ''));
   return map;
 };
 

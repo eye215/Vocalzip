@@ -4,7 +4,7 @@
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
 
 /* ---------- shared: media list ---------- */
-const mediaSub = m => [VZ.msLabel(m.created), m.durationSeconds ? VZ.clock(m.durationSeconds) : '', VZ.songTitle(m.songId) || '', M.sourceLabel(m.source), m.rating ? '★' + m.rating : '', m.cloud && !m.local ? '클라우드' : ''].filter(Boolean).join(' · ');
+const mediaSub = m => [VZ.dateLabel(M.dateOf(m)), m.durationSeconds ? VZ.clock(m.durationSeconds) : '', VZ.songTitle(m.songId) || '', M.sourceLabel(m.source), m.rating ? '★' + m.rating : '', m.cloud && !m.local ? '클라우드' : ''].filter(Boolean).join(' · ');
 VZ.mediaRow = m => '<div data-media="' + esc(m.id) + '"><button type="button" class="item" data-toggle aria-expanded="false"><span class="avatar ' + (M.isVideo(m) ? 'video' : '') + '"><i class="ph ph-' + (M.isVideo(m) ? 'video-camera' : 'waveform') + '"></i></span><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(mediaSub(m)) + '</span></span><i class="ph ph-caret-down chev"></i></button><div class="media-open" hidden style="padding:0 16px 14px"></div></div>';
 /** Wire tap-to-play rows inside host. */
 VZ.wireMedia = (host, items) => {
@@ -32,10 +32,10 @@ VZ.wireMedia = (host, items) => {
   });
 };
 VZ.editMedia = item => {
-  const created = item.created ? VZ.ymd(new Date(item.created)) : '';
+  const created = M.dateOf(item);
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + (item.rating >= n) + '">★</button>').join('');
   VZ.sheet({title:'녹음 정보', body:'<form id="media-edit"><label class="field"><span>제목</span><input type="text" name="name" maxlength="150" required value="' + esc(M.label(item)) + '"></label>' + VZ.songSelect('song', item.songId || '') +
-    '<label class="field"><span>날짜</span><input type="date" name="date" value="' + created + '"></label><fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset><label class="field"><span>감상 메모</span><textarea name="review" maxlength="3000" placeholder="잘된 점, 고칠 점">' + esc(item.review || '') + '</textarea></label></form>',
+    '<label class="field"><span>녹음 날짜</span><input type="date" name="date" value="' + created + '"><span class="small muted">' + ({metadata:'파일 속 촬영·녹음 날짜예요.', 'file-modified':'날짜 정보가 없어 파일 수정일을 썼어요.', manual:'직접 지정한 날짜예요.'}[item.dateSource] || '') + '</span></label><fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset><label class="field"><span>감상 메모</span><textarea name="review" maxlength="3000" placeholder="잘된 점, 고칠 점">' + esc(item.review || '') + '</textarea></label></form>',
     foot:'<button type="submit" form="media-edit" class="btn block">저장</button>',
     onMount:(el, close) => {
       let rating = item.rating || null;
@@ -48,6 +48,7 @@ VZ.editMedia = item => {
         const d = VZ.parseYmd(date);
         const changes = {name:form.name.value.trim() || M.label(item), songId, song:VZ.songLabel(VZ.song(songId)), rating, review:form.review.value,
           created:d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime() : item.created};
+        if (d && date !== M.dateOf(item)) Object.assign(changes, {recordedDate:date, dateSource:'manual'});
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;
         try { await M.update(item, changes); Object.assign(item, changes); close(); VZ.toast('저장했어요.'); }
         catch (err) { btn.disabled = false; VZ.toast('저장하지 못했어요: ' + err.message + ' · 입력은 유지돼요.', 'error'); }
@@ -89,7 +90,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
       const selected = new Set(p?.mediaIds || mediaIds);
       const drawPick = async () => {
         const all = await M.list(); const day = form.date.value;
-        const items = all.filter(m => selected.has(m.id) || (m.created && VZ.ymd(new Date(m.created)) === day)).slice(0, 12);
+        const items = all.filter(m => selected.has(m.id) || M.dateOf(m) === day).slice(0, 12);
         pickHost.innerHTML = items.length ? '<fieldset class="field" style="border:0;padding:0"><legend>연결할 녹음 <span class="small muted">(시간은 합산하지 않아요)</span></legend><div class="list">' + items.map(m => '<label class="item"><input type="checkbox" name="media" value="' + esc(m.id) + '"' + (selected.has(m.id) ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(mediaSub(m)) + '</span></span></label>').join('') + '</div></fieldset>' : '';
         pickHost.querySelectorAll('input').forEach(i => i.onchange = () => i.checked ? selected.add(i.value) : selected.delete(i.value));
       };
@@ -168,32 +169,29 @@ VZ.route('record', {title:'녹음', tab:'record', render(r) {
   return '<div class="stack">' +
     (lessonId ? '<div class="badge accent" style="justify-self:start">레슨 녹음 · ' + esc(VZ.dateLabel(VZ.db.lessons.find(l => l.id === lessonId)?.date)) + '</div>' : '') +
     '<button type="button" class="card flat item" data-pick-song style="min-height:56px"><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-sub">곡 (선택)</span><span class="item-title" data-song-name>' + esc(VZ.songTitle(songId) || '곡 미지정') + '</span></span><i class="ph ph-caret-down chev"></i></button>' +
-    '<div class="seg" role="group" aria-label="녹음 종류"><button type="button" data-kind="audio" aria-pressed="true"><i class="ph ph-microphone"></i> 음성</button><button type="button" data-kind="video" aria-pressed="false"><i class="ph ph-video-camera"></i> 영상</button></div>' +
-    '<section class="rec-stage" aria-label="녹음기"><video class="rec-video" muted playsinline hidden></video><div class="rec-time" aria-live="off">0:00</div><canvas class="rec-wave" aria-hidden="true"></canvas>' +
+    '<section class="rec-stage" aria-label="녹음기"><div class="rec-time" aria-live="off">0:00</div><canvas class="rec-wave" aria-hidden="true"></canvas>' +
     '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph-fill ph-microphone"></i></button><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
     '<div class="rec-status" role="status" data-status>버튼을 누르면 바로 녹음이 시작돼요.</div></section>' +
     '<div data-review hidden></div>' +
-    '<button type="button" class="btn ghost block" data-import><i class="ph ph-upload-simple"></i> 파일 가져오기 (음성·영상)</button></div>';
+    '<button type="button" class="btn ghost block" data-import><i class="ph ph-upload-simple"></i> 파일 가져오기</button><p class="small muted" style="margin:0 4px">영상 파일은 음성만 추출해 원음 그대로 저장해요.</p></div>';
 }, leave() { if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
   const lessonId = r.query.get('lesson') || '';
   const state = {songId:r.query.get('song') || '', video:false, session:null, result:null, waveLive:[]};
   rec = state;
   const $ = s => main.querySelector(s);
-  const status = $('[data-status]'), timeEl = $('.rec-time'), wave = $('.rec-wave'), preview = $('.rec-video');
+  const status = $('[data-status]'), timeEl = $('.rec-time'), wave = $('.rec-wave');
   const mainBtn = $('[data-main]'), pauseBtn = $('[data-pause]'), cancelBtn = $('[data-cancel]'), review = $('[data-review]');
   $('[data-import]').onclick = () => VZ.importSheet({songId:state.songId});
   $('[data-pick-song]').onclick = () => VZ.pickSong(state.songId, id => { state.songId = id; $('[data-song-name]').textContent = VZ.songTitle(id) || '곡 미지정'; });
-  main.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => { if (state.session || state.result) return; state.video = b.dataset.kind === 'video'; main.querySelectorAll('[data-kind]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); mainBtn.innerHTML = '<i class="ph-fill ph-' + (state.video ? 'video-camera' : 'microphone') + '"></i>'; });
   VZ.setGuard(() => state.session ? '녹음 중이에요. 이동하면 이번 녹음이 사라져요. 이동할까요?' : state.result && !state.saved ? '저장하지 않은 녹음이 있어요. 이동하면 사라져요. 이동할까요?' : '');
   M.drawWave(wave, []);
   const setUI = phase => {
     const recording = phase === 'recording' || phase === 'paused';
     mainBtn.classList.toggle('recording', recording);
-    mainBtn.innerHTML = recording ? '<i class="ph-fill ph-stop"></i>' : '<i class="ph-fill ph-' + (state.video ? 'video-camera' : 'microphone') + '"></i>';
+    mainBtn.innerHTML = recording ? '<i class="ph-fill ph-stop"></i>' : '<i class="ph-fill ph-microphone"></i>';
     mainBtn.setAttribute('aria-label', recording ? '녹음 종료' : '녹음 시작');
     pauseBtn.disabled = !recording; cancelBtn.disabled = !recording;
     pauseBtn.innerHTML = phase === 'paused' ? '<i class="ph ph-play"></i><span>계속</span>' : '<i class="ph ph-pause"></i><span>일시정지</span>';
-    main.querySelectorAll('[data-kind]').forEach(b => b.disabled = phase !== 'idle');
     mainBtn.hidden = phase === 'review';
     main.querySelector('.rec-controls').hidden = phase === 'review';
   };
@@ -202,8 +200,7 @@ VZ.route('record', {title:'녹음', tab:'record', render(r) {
     if (state.session) return stop();
     mainBtn.disabled = true; status.textContent = '마이크 준비 중…';
     try {
-      state.session = await M.capture({video:state.video, onTick:s => { timeEl.textContent = VZ.clock(s); }, onLevel:v => { state.waveLive.push(v); if (state.waveLive.length > 400) state.waveLive.shift(); M.drawWave(wave, state.waveLive); }});
-      if (state.video) { preview.srcObject = state.session.stream; preview.hidden = false; preview.play().catch(() => {}); }
+      state.session = await M.capture({onTick:s => { timeEl.textContent = VZ.clock(s); }, onLevel:v => { state.waveLive.push(v); if (state.waveLive.length > 400) state.waveLive.shift(); M.drawWave(wave, state.waveLive); }});
       state.session.start(); setUI('recording');
       status.innerHTML = '<span class="rec-dot"></span>녹음 중 · 다시 누르면 종료';
     } catch (e) { state.session = null; status.textContent = e.message; VZ.toast(e.message, 'error'); setUI('idle'); }
@@ -216,12 +213,12 @@ VZ.route('record', {title:'녹음', tab:'record', render(r) {
   };
   cancelBtn.onclick = async () => {
     if (!await VZ.confirm('녹음 취소', '이번 녹음을 버릴까요?', {ok:'버리기', danger:true})) return;
-    state.session?.cancel(); state.session = null; preview.hidden = true; preview.srcObject = null; reset();
+    state.session?.cancel(); state.session = null; reset();
   };
   async function stop() {
     const s = state.session; state.session = null; mainBtn.disabled = true; status.textContent = '녹음 마무리 중…';
     try { state.result = await s.stop(); } catch (e) { status.textContent = e.message; VZ.toast(e.message, 'error'); reset(); return; }
-    finally { mainBtn.disabled = false; preview.hidden = true; preview.srcObject = null; }
+    finally { mainBtn.disabled = false; }
     showReview();
   }
   function showReview() {
@@ -239,7 +236,7 @@ VZ.route('record', {title:'녹음', tab:'record', render(r) {
   async function save(pl) {
     const res = state.result, btn = review.querySelector('[data-save]'), fail = review.querySelector('[data-fail]');
     const id = state.savedId ||= VZ.uid();
-    const item = {id, name:review.querySelector('[name=name]').value.trim() || '녹음', created:Date.now(), type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
+    const item = {id, name:review.querySelector('[name=name]').value.trim() || '녹음', created:Date.now(), recordedDate:VZ.today(), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
     btn.disabled = true; btn.textContent = '저장 중…'; fail.hidden = true;
     try {
       await M.saveBlob(item, p => { btn.textContent = '클라우드 저장 ' + p + '%'; });
@@ -352,7 +349,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
     const body = main.querySelector('[data-body]');
     let media = M.cached().filter(m => m.songId === s.id);
     main.querySelector('[data-quick-compare]').onclick = () => {
-      const recs = media.filter(m => m.created).sort((a, b) => a.created - b.created);
+      const recs = media.filter(m => M.dateOf(m)).sort((a, b) => M.dateOf(a).localeCompare(M.dateOf(b)) || (a.created || 0) - (b.created || 0));
       if (recs.length < 2) { VZ.toast('비교하려면 이 곡의 녹음이 2개 이상 필요해요.', 'error'); return; }
       VZ.nav('#/compare?song=' + encodeURIComponent(s.id) + '&a=' + encodeURIComponent(recs[0].id) + '&b=' + encodeURIComponent(recs.at(-1).id));
     };
@@ -377,7 +374,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
         body.querySelector('[data-log2]')?.addEventListener('click', () => VZ.practiceSheet({songId:s.id}));
       } else {
         const ev = [
-          ...media.map(m => ({date:m.created ? VZ.ymd(new Date(m.created)) : '', kind:'media', html:'<strong>' + esc(M.label(m)) + '</strong><div class="small muted">녹음 · ' + VZ.clock(m.durationSeconds) + (m.rating ? ' · ★' + m.rating : '') + (m.review ? ' · ' + esc(m.review.slice(0, 60)) : '') + '</div>', id:m.id})),
+          ...media.map(m => ({date:M.dateOf(m), kind:'media', html:'<strong>' + esc(M.label(m)) + '</strong><div class="small muted">녹음 · ' + VZ.clock(m.durationSeconds) + (m.rating ? ' · ★' + m.rating : '') + (m.review ? ' · ' + esc(m.review.slice(0, 60)) : '') + '</div>', id:m.id})),
           ...practices.map(p => ({date:p.date, kind:'practice', html:'<strong>연습 ' + VZ.minutes(VZ.practiceMinutes(p)) + '</strong>' + (p.rating ? ' <span class="small muted">★' + p.rating + '</span>' : '') + (p.memo ? '<div class="small muted">' + esc(p.memo.slice(0, 80)) + '</div>' : '')})),
           ...lessons.map(l => ({date:l.date, kind:'lesson', html:'<a href="#/lesson/' + esc(l.id) + '" style="color:inherit"><strong>레슨</strong></a> ' + VZ.statusBadge(VZ.lessonStatus(l)) + (fb(l) ? '<div class="small muted">' + esc(fb(l).slice(0, 100)) + '</div>' : '')}))
         ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));

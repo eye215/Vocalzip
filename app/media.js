@@ -68,6 +68,8 @@ M.list = async (force) => {
   try { return await loading; } finally { loading = null; }
 };
 M.cached = () => cache || [];
+/** Calendar day of a recording: explicit recordedDate (metadata or manual) wins over the timestamp. */
+M.dateOf = item => /^\d{4}-\d{2}-\d{2}$/.test(item?.recordedDate || '') ? item.recordedDate : Number(item?.created) > 0 ? VZ.ymd(new Date(Number(item.created))) : '';
 M.isVideo = item => typeOf(item).startsWith('video/');
 M.label = item => item.name || '이름 없는 녹음';
 M.sourceLabel = s => ({practice:'녹음', record:'녹음', lesson:'레슨', import:'가져옴'})[s] || '녹음';
@@ -88,27 +90,37 @@ M.saveBlob = async (item, onProgress, signal) => {
   window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:saved.id, source:item.source, durationSeconds:item.durationSeconds}}));
   return saved;
 };
-/** Import a picked File. created/songId/song come from the user's choice. */
+/** Import a picked File. Videos become their original audio (vzipPrepareMedia, from main);
+ * the capture date comes from file metadata unless the user picked one (choice.date). */
 M.importFile = async (file, choice, onProgress, signal) => {
   const type = typeOf(file);
   if (!/^(audio|video)\//.test(type)) throw Error('지원하지 않는 형식이에요.');
   if (!file.size) throw Error('빈 파일은 가져올 수 없어요.');
   if (file.size > (window.VzipChunks?.MAX_SIZE || 1073741824)) throw Error('파일당 최대 1GB까지 가져올 수 있어요.');
-  const name = (choice.name || file.name).replace(/\.[^.]+$/, '');
-  const created = choice.created || file.lastModified || Date.now();
-  if (window.vzipCloudSignedIn?.()) {
-    // new File([file]) references the original bytes lazily: no full read into memory.
-    const wrapped = new File([file], file.name, {type, lastModified:created});
-    const meta = await window.vzipCloudImport(wrapped, {id:choice.id, name, type, songId:choice.songId, song:choice.song, source:'import'}, onProgress, {signal});
-    return meta;
-  }
-  if (file.size > LOCAL_LIMIT) throw Error('25MB 초과 파일은 로그인 후 가져올 수 있어요.');
-  if (signal?.aborted) throw new DOMException('취소', 'AbortError');
-  const item = {id:choice.id, name, created, type, source:'import', songId:choice.songId || '', song:choice.song || '', blob:file, importedAt:Date.now()};
-  await window.vzipStorePracticeMedia(item);
-  onProgress?.(100);
-  window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:item.id, source:'import'}}));
-  return item;
+  if (!window.vzipPrepareMedia) throw Error('가져오기 모듈을 불러오지 못했어요. 새로고침해 주세요.');
+  const typed = file.type === type ? file : new File([file], file.name, {type, lastModified:file.lastModified});
+  const prepared = await window.vzipPrepareMedia(typed, {signal, onProgress:msg => onProgress?.(msg)});
+  try {
+    const out = prepared.file, meta = {...prepared.metadata};
+    if (choice.date) {
+      const d = VZ.parseYmd(choice.date), keep = new Date(meta.created || file.lastModified || Date.now());
+      Object.assign(meta, {created:new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime(), recordedDate:choice.date, dateSource:'manual'});
+    }
+    const info = {...meta, id:choice.id, name:(choice.name || file.name).replace(/\.[^.]+$/, ''), type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
+    let saved;
+    if (window.vzipCloudSignedIn?.()) {
+      saved = await window.vzipCloudImport(out, info, p => onProgress?.(p), {signal});
+    } else {
+      if (out.size > LOCAL_LIMIT) throw Error('25MB 초과 음원은 로그인 후 가져올 수 있어요.');
+      if (signal?.aborted) throw new DOMException('취소', 'AbortError');
+      saved = {...info, blob:out, importedAt:Date.now()};
+      await window.vzipStorePracticeMedia(saved);
+      window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:saved.id, source:'import'}}));
+    }
+    window.dispatchEvent(new CustomEvent('vzip:media-imported', {detail:{id:info.id, date:info.recordedDate}}));
+    onProgress?.(100);
+    return {...saved, originalSize:file.size, savedSize:out.size, extracted:!!meta.audioExtraction};
+  } finally { await prepared.dispose(); }
 };
 M.update = async (item, changes) => {
   if (item.cloud) await window.vzipCloudMediaUpdate(item, changes);
@@ -196,7 +208,8 @@ const pickMime = video => {
 };
 M.canRecord = () => !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 /** Creates a capture session. Callbacks: onLevel(0..1), onTick(seconds). */
-M.capture = async ({video, onLevel, onTick}) => {
+M.capture = async ({onLevel, onTick}) => {
+  const video = false; // Camera capture was removed in v5.8 (audio-only product decision).
   if (!M.canRecord()) throw Object.assign(Error('이 브라우저는 녹음을 지원하지 않아요. 최신 Safari 또는 Chrome을 사용해 주세요.'), {code:'unsupported'});
   let stream;
   try {
