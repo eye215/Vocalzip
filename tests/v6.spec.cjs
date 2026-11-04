@@ -272,7 +272,7 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await boot(page);
   await page.goto('/#/library');
   await page.locator('[data-imp]').click();
-  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.name === 'b' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
+  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.songId === 's2' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
   const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
   const buffer = Buffer.from(wav);
   await sheet(page).locator('[data-file]').setInputFiles([
@@ -290,12 +290,14 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await expect(sheet(page).locator('.up-row:visible')).toHaveCount(1); // only the skipped .txt remains
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(2);
-  expect(items.find(m => m.name === 'a').songId).toBe('s1');
-  const b = items.find(m => m.name === 'b');
+  // Files with a song are named "song + recording day".
+  const a = items.find(m => m.songId === 's1'), b = items.find(m => m.songId === 's2');
+  expect(a.name).toMatch(/^This Is the Moment \d{4}\.\d{2}\.\d{2}$/);
+  expect(b.name).toBe('On My Own 2026.01.15');
   expect(b.songId).toBe('s2');
   expect(b.type).toBe('audio/mp4');
   expect(b).toMatchObject({recordedDate:'2026-01-15', dateSource:'manual'});
-  expect(items.find(m => m.name === 'a').dateSource).not.toBe('manual');
+  expect(a.dateSource).not.toBe('manual');
   expect(new Date(b.created).getFullYear() + '-' + (new Date(b.created).getMonth() + 1) + '-' + new Date(b.created).getDate()).toBe('2026-1-15');
   expect(await page.evaluate(() => window.__calls)).toBe(3);
   await page.goto('/#/calendar');
@@ -471,4 +473,30 @@ test('Practice records can be edited, including unlinking files that no longer e
   p = (await data(page)).practices[0];
   expect(p).toMatchObject({minutes:45, rating:5, memo:'고음 안정, 브릿지 호흡', mediaIds:[], completed:['a1'], assignmentNotes:{a1:'3회 반복'}});
   expect((await media(page)).some(m => m.id === 'm1')).toBe(true); // unlinking never deletes the file
+});
+
+test('Changing a recording\'s song renames it to song + recording day, numbered on clashes', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/library');
+  const open = async id => { await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
+  await open('m1');
+  await sheet(page).locator('[name=date]').fill('2026-11-02');
+  await sheet(page).locator('[name=song]').selectOption('s2');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.02');
+  // Changing the day follows while the name is still the automatic one.
+  await sheet(page).locator('[name=date]').fill('2026-11-03');
+  await sheet(page).locator('[name=date]').dispatchEvent('change');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').name).toBe('On My Own 2026.11.03');
+  // Same song and day on another file gets a number.
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await open('m2');
+  await sheet(page).locator('[name=date]').fill('2026-11-03');
+  await sheet(page).locator('[name=song]').selectOption('s2');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03 2');
+  // A typed name is never overwritten.
+  await sheet(page).locator('[name=name]').fill('브릿지만');
+  await sheet(page).locator('[name=song]').selectOption('s1');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('브릿지만');
 });
