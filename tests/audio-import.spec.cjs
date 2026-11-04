@@ -3,6 +3,7 @@ test.beforeEach(async({page})=>{
  page.__errors=[];page.on('pageerror',error=>page.__errors.push(error.message));
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));
  await page.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
+ if(process.env.VZ_MEDIABUNNY)await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs',route=>route.fulfill({path:process.env.VZ_MEDIABUNNY,contentType:'text/javascript'}));
  await page.goto('/legacy.html');
 });
 test.afterEach(async({page})=>expect(page.__errors).toEqual([]));
@@ -46,4 +47,12 @@ test('Real queue extracts audio before cloud transport and stores capture metada
  await expect(page.locator('#vzip-hub-upload-queue')).toContainText('보관함 저장 완료',{timeout:90000});
  const sent=await page.evaluate(()=>window.__sent);expect(sent.type).toBe('audio/mp4');expect(sent.size).toBeLessThan(1024*1024);
  expect(sent.info.recordedDate).toBe('2024-03-01');expect(sent.info.audioExtraction.audioPacketCopyVerified).toBe(true);
+});
+test('iPhone spatial-audio MOV keeps the copyable AAC mix and skips the extra track',async({page})=>{
+ test.setTimeout(90000);await selected(page,'spatial-audio.mov');
+ const result=await page.evaluate(async()=>{const prepared=await vzipPrepareMedia(document.querySelector('#vzip-hub-upload').files[0]);try{return {type:prepared.file.type,metadata:prepared.metadata}}finally{await prepared.dispose()}});
+ expect(result.type).toBe('audio/mp4');
+ expect(result.metadata.audioExtraction).toMatchObject({audioPacketCopyVerified:true,audioTracks:1});
+ expect(result.metadata.audioExtraction.skippedAudioTracks).toHaveLength(1);
+ expect(result.metadata.recordedDate).toBe('2026-11-02');
 });

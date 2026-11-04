@@ -59,6 +59,8 @@ VZ.timeRange = l => [l.startTime, l.endTime].filter(Boolean).join(' – ');
 /* ---------- domain ---------- */
 VZ.song = id => db.songs.find(s => s.id === id);
 VZ.songTitle = id => { const s = VZ.song(id); return s ? s.title : ''; };
+/** Newest registered first: by created time when known, otherwise by save order (new songs are appended). */
+VZ.songsNewest = () => db.songs.map((s, i) => [s, i]).sort((a, b) => (b[0].created || 0) - (a[0].created || 0) || b[1] - a[1]).map(x => x[0]);
 VZ.songLabel = s => s ? s.title + (s.show ? ' — ' + s.show : '') : '';
 /** Legacy lessons were written after the lesson happened, so a missing status means completed. */
 VZ.lessonStatus = l => l.status || 'done';
@@ -70,12 +72,26 @@ VZ.nextLesson = () => db.lessons.filter(l => VZ.lessonStatus(l) === 'scheduled' 
 VZ.taskLessons = t => t.lessonIds || (t.lessonId ? [t.lessonId] : []);
 VZ.taskSongId = t => t.songId || VZ.taskLessons(t).map(id => db.lessons.find(l => l.id === id)?.songId).find(Boolean) || '';
 VZ.practiceMinutes = p => Number(p.minutes) || 0;
+/** Practice time = practice records + recordings/imports that are not already inside a
+ * practice record (its minutes cover them) or a lesson (lesson time is not practice). */
+VZ.timeEntries = (media = []) => {
+  const inPractice = new Set(db.practices.flatMap(p => p.mediaIds || []));
+  const inLesson = new Set(db.lessons.flatMap(l => (l.recordings || []).map(r => r.id)));
+  const out = db.practices.map(p => ({date:p.date, minutes:VZ.practiceMinutes(p), songId:p.practiceMode === 'training' ? '' : p.songId || '', training:p.practiceMode === 'training', kind:'practice', ref:p}));
+  for (const m of media) {
+    if (inPractice.has(m.id) || inLesson.has(m.id) || m.source === 'lesson') continue;
+    const seconds = Number(m.durationSeconds) || 0, date = VZ.media?.dateOf(m);
+    if (seconds > 0 && date) out.push({date, minutes:seconds / 60, songId:m.songId || '', training:false, kind:'recording', ref:m});
+  }
+  return out;
+};
+VZ.sumMinutes = entries => entries.reduce((a, e) => a + e.minutes, 0);
 VZ.addSong = (title, show = '') => {
   title = String(title || '').trim();
   if (!title) return null;
   const existing = db.songs.find(s => s.title.trim().toLowerCase() === title.toLowerCase() && (s.show || '') === show);
   if (existing) return existing;
-  const song = {id: VZ.uid(), title, show: String(show || '').trim()};
+  const song = {id: VZ.uid(), title, show: String(show || '').trim(), created: Date.now()};
   return VZ.change(d => d.songs.push(song), {silent:true}) ? song : null;
 };
 /** Last activity per song id across practices, recordings and lessons. */
@@ -149,7 +165,7 @@ VZ.empty = (icon, text, action = '') => '<div class="empty"><i class="ph ph-' + 
 
 /** Song <select> with "새 곡 추가" option; returns html. Use VZ.readSong(form, name) to resolve. */
 VZ.songSelect = (name, value = '', {label = '곡', none = '곡 미지정'} = {}) => {
-  const opts = [...db.songs].sort((a, b) => a.title.localeCompare(b.title, 'ko')).map(s => '<option value="' + VZ.esc(s.id) + '"' + (s.id === value ? ' selected' : '') + '>' + VZ.esc(VZ.songLabel(s)) + '</option>').join('');
+  const opts = VZ.songsNewest().map(s => '<option value="' + VZ.esc(s.id) + '"' + (s.id === value ? ' selected' : '') + '>' + VZ.esc(VZ.songLabel(s)) + '</option>').join('');
   const orphan = value && !VZ.song(value) ? '<option value="' + VZ.esc(value) + '" selected>이전에 연결된 곡</option>' : '';
   return '<label class="field"><span>' + VZ.esc(label) + '</span><select name="' + name + '" data-song-select><option value="">' + VZ.esc(none) + '</option>' + opts + orphan + '<option value="__new">+ 새 곡 추가</option></select><input type="text" name="' + name + '__new" placeholder="새 곡 제목" maxlength="150" hidden></label>';
 };
@@ -218,7 +234,7 @@ VZ.rerender = () => VZ.render();
 VZ.softRender = () => {
   const main = document.getElementById('view');
   const typing = main?.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
-  if (VZ.isBusy?.() || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
+  if (VZ.isBusy?.() || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
   VZ.pendingRender = false; VZ.render();
 };
 document.addEventListener('input', e => { const main = document.getElementById('view'); if (main?.contains(e.target) && !e.target.matches('[type=search],[data-q]')) main.dataset.dirty = '1'; });
