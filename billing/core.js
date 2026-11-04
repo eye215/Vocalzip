@@ -115,9 +115,10 @@ function reduce(original,command,context={}){
   if(!str(payload.memo)||(!payload.unitsDelta&&!payload.amountDelta))fail('조정 값과 사유를 입력해 주세요.');
   put('adjustments',{passId:payload.passId,date:date(payload.date),unitsDelta:payload.unitsDelta,amountDelta:payload.amountDelta,memo:str(payload.memo)},'adjustment.create');
  }else if(command.type==='entity.void'||command.type==='entity.restore'){
-  if(!['payments','deductions','adjustments'].includes(payload.collection))fail('취소할 수 없는 기록이에요.');
+  if(!['passes','payments','deductions','adjustments'].includes(payload.collection))fail('취소할 수 없는 기록이에요.');
   const row=state[payload.collection].find(item=>item.id===payload.id);if(!row)fail('기록을 찾지 못했어요.');
-  if(command.type==='entity.restore')findPass(row.passId);
+  if(payload.collection==='passes'&&command.type==='entity.void'&&active([...state.payments,...state.deductions,...state.adjustments]).some(item=>item.passId===row.id))fail('연결된 결제·수강·조정을 먼저 삭제해 주세요.');
+  if(command.type==='entity.restore'&&payload.collection!=='passes')findPass(row.passId);
   if(command.type==='entity.restore'&&payload.collection==='deductions'&&active(state.deductions).some(other=>other.id!==row.id&&((row.lessonId&&other.lessonId===row.lessonId)||(row.legacyRef&&other.legacyRef===row.legacyRef))))fail('동일 레슨에 다른 차감이 있어 복구할 수 없어요.');
   if(command.type==='entity.restore'&&payload.collection==='payments'&&active(state.payments).some(other=>other.id!==row.id&&fingerprint('payment',other)===fingerprint('payment',row))&&!opts.allowDuplicate)fail('동일 결제가 있어 복구할 수 없어요.');
   put(payload.collection,{id:row.id,expectedVersion:payload.expectedVersion,voidedAt:command.type==='entity.void'?now:null},command.type);

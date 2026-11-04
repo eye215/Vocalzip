@@ -49,7 +49,13 @@ const acknowledge=(remoteRevision,sentRevision)=>transaction(true,({state,meta,s
  if(!Number.isSafeInteger(sentRevision)||sentRevision>state.revision)throw Error('기기 버전을 확인해 주세요.');
  sync.put({...meta,remoteRevision,syncedLocalRevision:sentRevision});return state;
 });
+const clear=revision=>transaction(true,({state,documents,sync,recovery})=>{
+ expected(state,revision);
+ const next={...C.empty(initialAccount.id),revision:state.revision+1};
+ documents.put(next);sync.delete(initialAccount.id);recovery.delete(initialAccount.id);
+ return next;
+});
 const recoveryData=()=>transaction(false,({previous})=>previous?.state||null);
-window.VzipBillingStore={account:initialAccount,session,lessons,load,status,save,replace,acknowledge,recoveryData,ensureAccount};
+window.VzipBillingStore={account:initialAccount,session,lessons,load,status,save,clear,replace,acknowledge,recoveryData,ensureAccount};
 window.addEventListener('storage',event=>{if((event.key===AUTH_KEY||event.key===null)&&account().id!==initialAccount.id)window.dispatchEvent(new Event('billing:account-changed'))});
 })();

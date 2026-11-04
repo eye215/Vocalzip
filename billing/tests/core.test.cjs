@@ -127,3 +127,16 @@ test('Explicit new-pass import mode never silently attaches to the default pass'
  const rows=I.drafts([headers,['2026-11-04',10000,1]],I.autoMap(headers,'payment'),settings,state);
  assert.equal(rows[0].newPass,true);assert.equal(I.inspect(rows,settings,state)[0].newPass.totalUnits,100);
 });
+
+test('Pass deletion requires removing active links and supports ordered restoration',()=>{
+ let {state,passId}=setup();state=run(state,'payment.save',{passId,date:'2026-11-01',amount:10000});
+ const removePass=()=>run(state,'entity.void',{collection:'passes',id:passId,expectedVersion:state.passes[0].version});
+ const before=JSON.stringify(state);assert.throws(removePass,/먼저 삭제/);assert.equal(JSON.stringify(state),before);
+ state=run(state,'entity.void',{collection:'payments',id:state.payments[0].id,expectedVersion:1});
+ state=removePass();assert.equal(C.totals(state).total.amount,0);
+ assert.throws(()=>run(state,'entity.restore',{collection:'payments',id:state.payments[0].id,expectedVersion:2}),/레슨권/);
+ assert.throws(()=>run(state,'entity.restore',{collection:'passes',id:passId,expectedVersion:1}),/다른 곳/);
+ state=run(state,'entity.restore',{collection:'passes',id:passId,expectedVersion:2});
+ state=run(state,'entity.restore',{collection:'payments',id:state.payments[0].id,expectedVersion:2});
+ assert.equal(C.totals(state).total.paid,10000);assert.equal(C.totals(state).total.amount,300000);
+});

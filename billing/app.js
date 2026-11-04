@@ -3,6 +3,8 @@ const C=window.VzipBilling,I=window.VzipBillingImport,F=window.VzipBillingFiles,
 const $=s=>document.querySelector(s),money=n=>new Intl.NumberFormat('ko-KR').format(n)+'원',sessions=n=>new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(n/100)+'회';
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const statusLabels={unconfirmed:'확인 필요',scheduled:'예정',completed:'완료',cancelled:'취소',noshow:'당일 취소',free:'무료'};
+let showDeleted=false;
+const visibleRows=rows=>showDeleted?rows:C.active(rows);
 let state=null,pending=false,auditLimit=100,workbook=null,fileName='',sourceRows=[],draftRows=[],settings=null,page=0,parseRun=0;
 const forms={};
 function el(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node}
@@ -79,10 +81,10 @@ function edit(kind,row){
  show(kind==='pass'?'passes':kind==='payment'?'payments':'attendance');previewForm(kind);f.scrollIntoView({block:'start'});f.elements[kind==='pass'?'name':'date']?.focus();
 }
 async function toggle(collection,row){
- const restore=!!row.voidedAt;if(!await window.VzipBillingDialog.ask({title:restore?'기록을 복구할까요?':'기록을 취소할까요?',message:'정산 합계에 바로 반영되고, 변경 이력은 그대로 남아요.',ok:restore?'복구':'기록 취소',cancel:'닫기',danger:!restore}))return;
- try{await persist({type:restore?'entity.restore':'entity.void',payload:{collection,id:row.id,expectedVersion:row.version}},null,'기록을 '+(restore?'복구':'취소')+'했어요.')}catch{}
+ const restore=!!row.voidedAt;if(!await window.VzipBillingDialog.ask({title:restore?'기록을 복구할까요?':'기록을 삭제할까요?',message:'삭제하면 목록과 정산 합계에서 제외돼요. 삭제 내역 보기에서 복구할 수 있고, 변경 이력은 보존돼요. 연결된 앱 레슨은 삭제되지 않아요. 레슨권은 연결된 결제·수강·조정을 먼저 삭제해 주세요.',ok:restore?'복구':'삭제',cancel:'닫기',danger:!restore}))return;
+ try{await persist({type:restore?'entity.restore':'entity.void',payload:{collection,id:row.id,expectedVersion:row.version}},()=>{for(const form of Object.values(forms))if(form.elements.id.value===row.id)resetForm(form)},'기록을 '+(restore?'복구':'삭제')+'했어요.')}catch{}
 }
-function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'취소',()=>toggle(collection,row)));return box}
+function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'삭제',()=>toggle(collection,row)));return box}
 /** Records list newest date first; same day: most recently saved first. */
 function newestFirst(rows){return rows.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')))}
 function render(){
@@ -91,10 +93,10 @@ function render(){
  $('#balances').replaceChildren(table(['레슨권','충전','사용','잔여','레슨권 금액','회당 금액','순결제','사용 금액','미사용','미납'],result.passes.map(row=>[row.name,sessions(row.chargedUnits),sessions(row.usedUnits),sessions(row.remainingUnits),money(row.amount),new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(row.rate)+'원',money(row.netPaid),money(row.usedAmount),money(row.unusedAmount),money(row.unpaid)])));
  for(const select of document.querySelectorAll('[data-pass-select]')){const previous=select.value;selectOptions(select,baseOptions(),previous||((C.active(state.passes).length===1)?C.active(state.passes)[0].id:''))}
  selectOptions(deduction.elements.lessonId,[['','날짜로 과거 수강 등록'],...S.lessons().map(row=>[row.lesson_id,[row.lesson_date,row.lesson_start,row.lesson_label||row.lesson_id.slice(0,8),statusLabels[row.lesson_status]].filter(Boolean).join(' · ')])]);
- $('#pass-list').replaceChildren(table(['레슨권','총 횟수','금액','선생님','유효기간','관리'],C.active(state.passes).map(row=>[row.name,sessions(row.totalUnits),money(row.amount),row.teacher,row.expires,button('수정',()=>edit('pass',row))])));
- $('#payment-list').replaceChildren(table(['날짜','레슨권','유형','금액','방법','메모','관리'],newestFirst(state.payments).map(row=>[row.date,passName(row.passId),(row.voidedAt?'취소됨 · ':'')+(row.kind==='refund'?'환불':'결제'),money(row.amount),row.method,row.memo,rowActions('payments','payment',row)])));
- $('#deduction-list').replaceChildren(table(['날짜','시간','레슨권','상태','차감','메모','관리'],newestFirst(state.deductions).map(row=>[row.date,[row.start,row.end].filter(Boolean).join('–'),passName(row.passId),(row.voidedAt?'취소됨 · ':'')+statusLabels[row.status],sessions(row.units),row.memo,rowActions('deductions','deduction',row)])));
- $('#adjustment-list').replaceChildren(table(['날짜','레슨권','횟수 증감','금액 증감','사유','관리'],newestFirst(state.adjustments).map(row=>[row.date,passName(row.passId),sessions(row.unitsDelta),money(row.amountDelta),(row.voidedAt?'취소됨 · ':'')+row.memo,rowActions('adjustments',null,row)])));
+ $('#pass-list').replaceChildren(table(['레슨권','총 횟수','금액','선생님','유효기간','관리'],visibleRows(state.passes).map(row=>[(row.voidedAt?'삭제됨 · ':'')+row.name,sessions(row.totalUnits),money(row.amount),row.teacher,row.expires,rowActions('passes','pass',row)])));
+ $('#payment-list').replaceChildren(table(['날짜','레슨권','유형','금액','방법','메모','관리'],newestFirst(visibleRows(state.payments)).map(row=>[row.date,passName(row.passId),(row.voidedAt?'삭제됨 · ':'')+(row.kind==='refund'?'환불':'결제'),money(row.amount),row.method,row.memo,rowActions('payments','payment',row)])));
+ $('#deduction-list').replaceChildren(table(['날짜','시간','레슨권','상태','차감','메모','관리'],newestFirst(visibleRows(state.deductions)).map(row=>[row.date,[row.start,row.end].filter(Boolean).join('–'),passName(row.passId),(row.voidedAt?'삭제됨 · ':'')+statusLabels[row.status],sessions(row.units),row.memo,rowActions('deductions','deduction',row)])));
+ $('#adjustment-list').replaceChildren(table(['날짜','레슨권','횟수 증감','금액 증감','사유','관리'],newestFirst(visibleRows(state.adjustments)).map(row=>[row.date,passName(row.passId),sessions(row.unitsDelta),money(row.amountDelta),(row.voidedAt?'삭제됨 · ':'')+row.memo,rowActions('adjustments',null,row)])));
  renderBatches();renderAudit();
  window.VzipBillingPending?.render({state,lessons:S.lessons(),C,today:today(),app:pendingApp});
 }
@@ -104,6 +106,7 @@ const pendingApp={
  edit:row=>edit('deduction',row),
  prefill:id=>{show('attendance');deduction.elements.lessonId.value=id;deduction.elements.lessonId.dispatchEvent(new Event('change'));deduction.scrollIntoView({block:'start'})}
 };
+$('#show-deleted').onchange=event=>{showDeleted=event.target.checked;render()};
 function show(id){for(const section of document.querySelectorAll('main>section'))section.hidden=section.id!==id;for(const tab of document.querySelectorAll('[data-panel]'))tab.setAttribute('aria-pressed',String(tab.dataset.panel===id))}
 for(const tab of document.querySelectorAll('[data-panel]'))tab.onclick=()=>show(tab.dataset.panel);
 function renderAudit(){
@@ -113,13 +116,27 @@ function renderAudit(){
  if(rows.length>auditLimit)host.append(button('이력 100개 더 보기',()=>{auditLimit+=100;renderAudit()}));
 }
 function renderBatches(){
- $('#batch-list').replaceChildren(table(['파일','업로드일','유형','성공/실패/중복 의심','작업 ID','관리'],state.imports.slice().reverse().map(batch=>{
+ $('#batch-list').replaceChildren(table(['파일','업로드일','유형','성공/실패/중복 의심','작업 ID','관리'],state.imports.filter(batch=>showDeleted||batch.status==='applied').slice().reverse().map(batch=>{
  const details=el('details');details.append(el('summary','행별 결과'));
  const rows=state.importRows.filter(row=>row.batchId===batch.id);details.append(el('pre',rows.map(row=>row.sourceRow+'행 · '+row.status+(row.errors?.length?' · '+row.errors.join(', '):'')).join('\n')));
- const controls=el('div');controls.append(details);if(batch.status==='applied')controls.append(button('이 업로드 되돌리기',async()=>{if(!await window.VzipBillingDialog.ask({title:'업로드를 되돌릴까요?',message:'이 업로드로 새로 만든 '+batch.success+'행만 취소해요. 이후 수정되거나 다른 기록과 연결된 경우에는 안전을 위해 되돌리지 않아요.',ok:'되돌리기',cancel:'닫기',danger:true}))return;try{await persist({type:'import.undo',payload:{id:batch.id}},null,'업로드를 되돌렸어요.')}catch{}}));else controls.append(el('span','되돌림 완료'));
+ const controls=el('div');controls.append(details);if(batch.status==='applied')controls.append(button('업로드한 내역 삭제',async()=>{if(!await window.VzipBillingDialog.ask({title:'업로드한 내역을 삭제할까요?',message:'이 업로드로 새로 만든 '+batch.success+'행을 목록과 정산 합계에서 제외해요. 이후 수정되거나 다른 기록과 연결된 경우 결제·수강 목록에서 개별 삭제해 주세요.',ok:'삭제',cancel:'닫기',danger:true}))return;try{await persist({type:'import.undo',payload:{id:batch.id}},null,'업로드한 내역을 삭제했어요.')}catch{}}));else controls.append(el('span','삭제 완료'));
  return [batch.fileName,batch.at,batch.kind==='payment'?'결제':'수강',batch.success+' / '+batch.failed+' / '+batch.duplicates,batch.id,controls];
  })));
 }
+$('#clear-ledger').onclick=async()=>{
+ if(pending||!state)return;
+ if(!await window.VzipBillingDialog.ask({title:'이 기기의 정산을 모두 삭제할까요?',message:'현재 계정의 레슨권·결제·수강 차감·조정·업로드·변경 이력과 기기 복구본을 모두 지워요. 되돌릴 수 없어요. 앱 레슨·녹음과 클라우드 정산은 유지돼요.',ok:'정산 전체 삭제',cancel:'닫기',danger:true}))return;
+ pending=true;
+ try{
+  state=await S.clear(state.revision);
+  for(const form of Object.values(forms))resetForm(form);
+  clearPreview();workbook=null;sourceRows=[];fileName='';parseRun++;
+  $('#import-file').value='';$('#mapping').replaceChildren();$('#preview-import').disabled=true;
+  render();notify('이 기기의 정산 데이터를 모두 삭제했어요.');
+  window.dispatchEvent(new Event('billing:changed'));
+  channel?.postMessage({owner:state.owner,revision:state.revision});
+ }catch(error){notify(error.message,true)}finally{pending=false}
+};
 $('#reload').onclick=async()=>{try{state=await S.load();render();notify('정산 데이터를 다시 불러왔어요. 작성 중인 입력은 확인 후 저장해 주세요.')}catch(error){notify(error.message,true)}};
 $('#export').onclick=()=>{if(!state)return;const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'})),link=el('a');link.href=url;link.download='vocalzip-billing-'+today()+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 let channel=null;try{channel=new BroadcastChannel('vocalzip-billing');channel.onmessage=event=>{if(event.data.owner===state?.owner&&event.data.revision!==state.revision)notify('다른 정산 탭에서 변경했어요. 다시 불러오기를 눌러 확인해 주세요.',true)}}catch{}
