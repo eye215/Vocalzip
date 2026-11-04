@@ -50,6 +50,7 @@ const M = VZ.media = {typeOf, blobOf, LOCAL_LIMIT};
 let cache = null, loading = null, generation = 0, cloudError = '';
 M.cloudError = () => cloudError;
 /** Any change (login, upload, edit) starts a new generation; results of older reads are never cached. */
+M.typeOf = typeOf;
 M.invalidate = () => { cache = null; generation++; };
 /** Local + cloud items merged by id, newest first. */
 M.list = async (force) => {
@@ -138,7 +139,8 @@ M.importFile = async (file, choice, onProgress, signal) => {
     const day = /^\d{4}-\d{2}-\d{2}$/.test(meta.recordedDate || '') ? meta.recordedDate : VZ.ymd(new Date(meta.created || file.lastModified || Date.now()));
     const title = choice.songId ? VZ.songTitle(choice.songId) : '';
     const name = title ? M.autoName(title, day) : (choice.name || file.name).replace(/\.[^.]+$/, '');
-    const info = {...meta, id:choice.id, name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
+    // choice.extra carries import facts (source type, original file name, hash, imported time) kept with the file.
+    const info = {...meta, ...(choice.extra || {}), id:choice.id, name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
     let saved;
     if (window.vzipCloudSignedIn?.()) {
       saved = {...await window.vzipCloudImport(out, info, p => onProgress?.(p), {signal}), cloud:true};
@@ -260,6 +262,14 @@ M.scheduleBackup = (delay = 3000) => { clearTimeout(backupTimer); backupTimer = 
 window.addEventListener('vzip:auth-changed', () => { if (window.vzipCloudSignedIn?.()) M.scheduleBackup(4000); });
 window.addEventListener('vzip:media-saved', () => M.scheduleBackup(2500));
 
+/* ---------- import helpers ---------- */
+/** Cheap fingerprint for duplicate checks: size + first/last 256KB (never reads the whole file). */
+M.fingerprint = async file => {
+  const edge = 256 * 1024, parts = [new TextEncoder().encode(String(file.size)), new Uint8Array(await file.slice(0, edge).arrayBuffer())];
+  if (file.size > edge * 2) parts.push(new Uint8Array(await file.slice(file.size - edge).arrayBuffer()));
+  const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let at = 0; for (const p of parts) { all.set(p, at); at += p.length; }
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', all)), b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+};
 /* ---------- player ---------- */
 const players = new Set();
 M.playing = () => [...players].some(p => !p.el.paused);

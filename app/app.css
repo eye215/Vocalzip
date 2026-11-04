@@ -291,3 +291,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .lesson-song-picker select{min-width:0;max-width:100%}
 .lesson-song-selected{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
 .lesson-song-selected .chip{max-width:100%;white-space:normal;overflow-wrap:anywhere;min-height:44px}
+/* 기존 자료 가져오기 (import hub) */
+.hub-row{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--surface);min-width:0}
+.hub-check{flex:none;display:flex;align-items:center;justify-content:center;width:32px;height:32px}
+.hub-check input{width:22px;height:22px;accent-color:var(--accent)}
+.hub-main{flex:1;min-width:0;display:grid;gap:6px}
+.hub-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.hub-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.hub-main .badge{white-space:normal;max-width:100%}
+.hub-date{display:grid;gap:4px;min-width:0}
+.hub-date input,.hub-song select{width:100%;min-width:0;max-width:100%;min-height:40px}
+.hub-song{display:grid;gap:6px;min-width:0}
+.hub-song .chip{justify-self:start;max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left}
+.hub-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}

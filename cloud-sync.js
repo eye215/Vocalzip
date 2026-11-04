@@ -166,6 +166,8 @@ async function importMedia(file,info={},onProgress,options={}){
   const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),song:info.song||'',songId:info.songId||'',
    created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
    source:info.source||'import',size:file.size,
+   // Import facts from the import hub (source, original name, fingerprint) stay with the file.
+   ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]])),
    ...(multipart?{storageVersion:2,parts}:{path:parts[0].path})};
   const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata});
   if(error)throw Error('보관함 연결에 실패했어요: '+error.message);
