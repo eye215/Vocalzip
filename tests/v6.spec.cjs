@@ -285,7 +285,9 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await expect(sheet(page).getByText('실패: 네트워크 오류')).toBeVisible();
   await expect(sheet(page).locator('[data-summary]')).toContainText('저장 1개');
   await sheet(page).getByRole('button', {name:'다시 시도'}).click();
-  await expect(sheet(page).locator('.up-row.done')).toHaveCount(2);
+  // Finished files leave the list; one line keeps the count.
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 2개');
+  await expect(sheet(page).locator('.up-row:visible')).toHaveCount(1); // only the skipped .txt remains
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(2);
   expect(items.find(m => m.name === 'a').songId).toBe('s1');
@@ -395,8 +397,8 @@ test('Video import keeps only the original audio and files it under the capture 
   await sheet(page).locator('[data-file]').setInputFiles(fixture);
   await expect(sheet(page).getByText('영상 → 음성만 저장')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
-  await expect(sheet(page).locator('.up-row.done')).toHaveCount(1, {timeout:60000});
-  await expect(sheet(page).locator('.up-row.done')).toContainText('(파일 속 날짜)');
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:60000});
+  await expect(sheet(page).locator('[data-done]')).toContainText('(파일 속 날짜)');
   const [item] = await media(page);
   expect(item.type).toBe('audio/mp4');
   expect(item).toMatchObject({recordedDate:'2024-03-01', dateSource:'metadata', source:'import'});
@@ -444,4 +446,29 @@ test('Library actually plays device and cloud-only audio (time advances)', async
   await row.getByRole('button', {name:'재생', exact:true}).click();
   await expect(row.getByRole('button', {name:'일시정지'})).toBeVisible();
   await expect(row.locator('[data-msg]')).toHaveText('');
+});
+
+test('Practice records can be edited, including unlinking files that no longer exist', async ({page}) => {
+  await boot(page);
+  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
+  await page.goto('/#/song/s1');
+  await page.getByRole('tab', {name:'연습'}).click();
+  await page.locator('[data-practice="p1"]').click();
+  await expect(sheet(page)).toContainText('20분');
+  await expect(sheet(page)).toContainText('찾을 수 없는 녹음 2개');
+  await sheet(page).getByRole('button', {name:'연결 해제'}).click();
+  await page.locator('.sheet').last().getByRole('button', {name:'연결 해제'}).click();
+  let p = (await data(page)).practices[0];
+  expect(p.mediaIds).toEqual(['m1']);
+  // Edit time, rating and memo; unlink the remaining file from the edit sheet.
+  await page.locator('[data-practice="p1"]').click();
+  await page.locator('.sheet-foot').getByRole('button', {name:'수정'}).click();
+  await sheet(page).locator('[name=minutes]').fill('45');
+  await sheet(page).getByRole('button', {name:'만족도 5'}).click();
+  await sheet(page).locator('[name=memo]').fill('고음 안정, 브릿지 호흡');
+  await sheet(page).locator('label.item').filter({hasText:'레슨 시범'}).locator('input').uncheck();
+  await page.getByRole('button', {name:'수정 저장'}).click();
+  p = (await data(page)).practices[0];
+  expect(p).toMatchObject({minutes:45, rating:5, memo:'고음 안정, 브릿지 호흡', mediaIds:[], completed:['a1'], assignmentNotes:{a1:'3회 반복'}});
+  expect((await media(page)).some(m => m.id === 'm1')).toBe(true); // unlinking never deletes the file
 });

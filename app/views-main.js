@@ -90,8 +90,12 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
       const selected = new Set(p?.mediaIds || mediaIds);
       const drawPick = async () => {
         const all = await M.list(); const day = form.date.value;
-        const items = all.filter(m => selected.has(m.id) || M.dateOf(m) === day).slice(0, 12);
-        pickHost.innerHTML = items.length ? '<fieldset class="field" style="border:0;padding:0"><legend>연결할 녹음 <span class="small muted">(시간은 합산하지 않아요)</span></legend><div class="list">' + items.map(m => '<label class="item"><input type="checkbox" name="media" value="' + esc(m.id) + '"' + (selected.has(m.id) ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(mediaSub(m)) + '</span></span></label>').join('') + '</div></fieldset>' : '';
+        const linked = all.filter(m => selected.has(m.id)), known = new Set(all.map(m => m.id));
+        const items = [...linked, ...all.filter(m => !selected.has(m.id) && M.dateOf(m) === day).slice(0, 12)];
+        // Links whose file is gone (deleted, or only on another device) can be removed here.
+        const missing = [...selected].filter(id => !known.has(id));
+        const box = (id, title, sub) => '<label class="item"><input type="checkbox" name="media" value="' + esc(id) + '"' + (selected.has(id) ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc(sub) + '</span></span></label>';
+        pickHost.innerHTML = items.length || missing.length ? '<fieldset class="field" style="border:0;padding:0"><legend>연결할 녹음 <span class="small muted">(체크를 풀면 연결만 해제돼요 · 시간은 합산하지 않아요)</span></legend><div class="list">' + items.map(m => box(m.id, M.label(m), mediaSub(m))).join('') + missing.map(id => box(id, '찾을 수 없는 녹음', '삭제됐거나 다른 기기에만 있어요')).join('') + '</div></fieldset>' : '';
         pickHost.querySelectorAll('input').forEach(i => i.onchange = () => i.checked ? selected.add(i.value) : selected.delete(i.value));
       };
       form.date.addEventListener('change', drawPick); drawPick();
@@ -131,8 +135,14 @@ VZ.practiceDetail = id => {
       const items = (await M.list()).filter(m => (p.mediaIds || []).includes(m.id));
       const host = el.querySelector('[data-list]');
       const missing = (p.mediaIds || []).length - items.length;
-      host.innerHTML = items.map(VZ.mediaRow).join('') + (missing > 0 ? '<div class="item small muted">찾을 수 없는 녹음 ' + missing + '개 (삭제됐거나 다른 기기에만 있어요)</div>' : '');
-      if (!host.innerHTML) host.remove(); else VZ.wireMedia(host, items);
+      host.innerHTML = items.map(VZ.mediaRow).join('') + (missing > 0 ? '<div class="item small"><span class="item-main muted">찾을 수 없는 녹음 ' + missing + '개 (삭제됐거나 다른 기기에만 있어요)</span><button type="button" class="btn sm ghost" data-unlink-missing>연결 해제</button></div>' : '');
+      if (!host.innerHTML) { host.remove(); return; }
+      VZ.wireMedia(host, items);
+      host.querySelector('[data-unlink-missing]')?.addEventListener('click', async () => {
+        if (!await VZ.confirm('연결 해제', '찾을 수 없는 녹음 ' + missing + '개를 이 연습 기록에서 빼요. 연습 시간과 메모는 그대로예요.', {ok:'연결 해제'})) return;
+        const keep = new Set(items.map(m => m.id));
+        if (VZ.change(d => { const x = d.practices.find(y => y.id === p.id); if (x) x.mediaIds = (x.mediaIds || []).filter(mid => keep.has(mid)); })) { close(); VZ.toast('찾을 수 없는 녹음 연결을 해제했어요.'); }
+      });
     }});
 };
 document.addEventListener('click', e => { const b = e.target.closest('[data-practice]'); if (b) VZ.practiceDetail(b.dataset.practice); });

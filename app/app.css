@@ -245,3 +245,4 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
   .quick button,.quick a{min-height:96px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.up-done{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:var(--ok-soft);color:var(--ok);font-weight:600;font-size:14px}
