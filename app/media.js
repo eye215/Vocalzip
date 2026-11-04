@@ -64,7 +64,8 @@ M.list = async (force) => {
       try { (await window.vzipCloudMediaList()).forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion})); }
       catch (e) { failed = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
     }
-    const list = [...map.values()].sort((a, b) => (b.created || 0) - (a.created || 0));
+    // Newest recording day first (the file's own date), then newest saved.
+    const list = [...map.values()].sort((a, b) => (M.dateOf(b) || '').localeCompare(M.dateOf(a) || '') || (b.created || 0) - (a.created || 0));
     // A read that started before a login/change, or that missed a source, is shown but not kept.
     if (generation === mine) { cloudError = failed; if (!failed) cache = list; }
     return list;
@@ -87,7 +88,17 @@ M.reserveName = name => { usedNames.add(name); };
 M.dateOf = item => /^\d{4}-\d{2}-\d{2}$/.test(item?.recordedDate || '') ? item.recordedDate : Number(item?.created) > 0 ? VZ.ymd(new Date(Number(item.created))) : '';
 M.isVideo = item => typeOf(item).startsWith('video/');
 M.label = item => item.name || '이름 없는 녹음';
-M.sourceLabel = s => ({practice:'녹음', record:'녹음', lesson:'레슨', import:'가져옴'})[s] || '녹음';
+M.sourceLabel = s => ({practice:'연습', record:'연습', lesson:'레슨', import:'가져옴'})[s] || '연습';
+/** Recordings belong to a lesson or a practice: the record they are linked to, else their origin.
+ * Files not linked anywhere count as practice (like their time does). */
+M.owner = item => {
+  const db = VZ.db, id = item.id;
+  const lesson = db.lessons.find(l => (l.recordings || []).some(r => r.id === id));
+  const practice = db.practices.find(p => (p.mediaIds || []).includes(id));
+  if (lesson) return {kind:'lesson', lesson, practice};
+  if (practice) return {kind:'practice', practice};
+  return {kind:item.source === 'lesson' ? 'lesson' : 'practice'};
+};
 const changed = () => { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-media')); };
 ['vzip:cloud-media-changed', 'vzip:media-saved', 'vzip:media-updated', 'vzip:auth-changed'].forEach(n => window.addEventListener(n, changed));
 

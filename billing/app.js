@@ -83,6 +83,8 @@ async function toggle(collection,row){
  try{await persist({type:restore?'entity.restore':'entity.void',payload:{collection,id:row.id,expectedVersion:row.version}},null,'기록을 '+(restore?'복구':'취소')+'했어요.')}catch{}
 }
 function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'취소',()=>toggle(collection,row)));return box}
+/** Records list newest date first; same day: most recently saved first. */
+function newestFirst(rows){return rows.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')))}
 function render(){
  if(!state)return;const result=C.totals(state),labels={chargedUnits:'총 충전 횟수',usedUnits:'총 사용 횟수',remainingUnits:'잔여 횟수',amount:'총 레슨권 금액',paid:'실제 결제금액',refunded:'환불 금액',netPaid:'순결제금액',usedAmount:'사용 금액',unusedAmount:'미사용 금액',unpaid:'미납 금액'};
  $('#totals').replaceChildren(...Object.entries(labels).map(([key,label])=>{const box=el('div',undefined,'metric');box.dataset.total=key;box.append(el('span',label),el('strong',key.endsWith('Units')?sessions(result.total[key]):money(result.total[key]),result.total[key]<0?'negative':''));return box}));
@@ -90,9 +92,9 @@ function render(){
  for(const select of document.querySelectorAll('[data-pass-select]')){const previous=select.value;selectOptions(select,baseOptions(),previous||((C.active(state.passes).length===1)?C.active(state.passes)[0].id:''))}
  selectOptions(deduction.elements.lessonId,[['','날짜로 과거 수강 등록'],...S.lessons().map(row=>[row.lesson_id,[row.lesson_date,row.lesson_start,row.lesson_label||row.lesson_id.slice(0,8),statusLabels[row.lesson_status]].filter(Boolean).join(' · ')])]);
  $('#pass-list').replaceChildren(table(['레슨권','총 횟수','금액','선생님','유효기간','관리'],C.active(state.passes).map(row=>[row.name,sessions(row.totalUnits),money(row.amount),row.teacher,row.expires,button('수정',()=>edit('pass',row))])));
- $('#payment-list').replaceChildren(table(['날짜','레슨권','유형','금액','방법','메모','관리'],state.payments.slice().reverse().map(row=>[row.date,passName(row.passId),(row.voidedAt?'취소됨 · ':'')+(row.kind==='refund'?'환불':'결제'),money(row.amount),row.method,row.memo,rowActions('payments','payment',row)])));
- $('#deduction-list').replaceChildren(table(['날짜','시간','레슨권','상태','차감','메모','관리'],state.deductions.slice().reverse().map(row=>[row.date,[row.start,row.end].filter(Boolean).join('–'),passName(row.passId),(row.voidedAt?'취소됨 · ':'')+statusLabels[row.status],sessions(row.units),row.memo,rowActions('deductions','deduction',row)])));
- $('#adjustment-list').replaceChildren(table(['날짜','레슨권','횟수 증감','금액 증감','사유','관리'],state.adjustments.slice().reverse().map(row=>[row.date,passName(row.passId),sessions(row.unitsDelta),money(row.amountDelta),(row.voidedAt?'취소됨 · ':'')+row.memo,rowActions('adjustments',null,row)])));
+ $('#payment-list').replaceChildren(table(['날짜','레슨권','유형','금액','방법','메모','관리'],newestFirst(state.payments).map(row=>[row.date,passName(row.passId),(row.voidedAt?'취소됨 · ':'')+(row.kind==='refund'?'환불':'결제'),money(row.amount),row.method,row.memo,rowActions('payments','payment',row)])));
+ $('#deduction-list').replaceChildren(table(['날짜','시간','레슨권','상태','차감','메모','관리'],newestFirst(state.deductions).map(row=>[row.date,[row.start,row.end].filter(Boolean).join('–'),passName(row.passId),(row.voidedAt?'취소됨 · ':'')+statusLabels[row.status],sessions(row.units),row.memo,rowActions('deductions','deduction',row)])));
+ $('#adjustment-list').replaceChildren(table(['날짜','레슨권','횟수 증감','금액 증감','사유','관리'],newestFirst(state.adjustments).map(row=>[row.date,passName(row.passId),sessions(row.unitsDelta),money(row.amountDelta),(row.voidedAt?'취소됨 · ':'')+row.memo,rowActions('adjustments',null,row)])));
  renderBatches();renderAudit();
  window.VzipBillingPending?.render({state,lessons:S.lessons(),C,today:today(),app:pendingApp});
 }

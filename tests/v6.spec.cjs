@@ -187,10 +187,14 @@ test('Songs: add, search, detail tabs, delete keeps records', async ({page}) => 
   await expect(page.locator('.list .item')).toHaveCount(1);
   await page.locator('.list .item').click();
   await expect(page.locator('[data-summary]')).toContainText('녹음 2개');
-  await page.getByRole('tab', {name:'녹음'}).click();
-  await expect(page.locator('[data-media]')).toHaveCount(2);
-  await page.getByRole('tab', {name:'레슨·숙제'}).click();
+  // Recordings live inside lessons and practices.
+  await expect(page.getByRole('tab', {name:'녹음'})).toHaveCount(0);
+  await page.getByRole('tab', {name:'연습'}).click();
+  await expect(page.locator('[data-body] [data-media]')).toHaveCount(1);
+  await expect(page.locator('[data-body]')).toContainText('연습 녹음');
+  await page.getByRole('tab', {name:'레슨'}).click();
   await expect(page.getByText('호흡 길게')).toBeVisible();
+  await expect(page.locator('[data-body] [data-media]')).toHaveCount(1);
   await page.locator('[data-song-menu]').click();
   await page.getByRole('button', {name:'곡 삭제'}).click();
   await sheet(page).getByRole('button', {name:'삭제'}).click();
@@ -232,7 +236,7 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   // Recording alone does not create a practice session (no double-count).
   expect((await data(page)).practices).toHaveLength(1);
   await page.getByRole('link', {name:'On My Own 곡 보기'}).click();
-  await page.getByRole('tab', {name:'녹음'}).click();
+  await page.getByRole('tab', {name:'연습'}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
 });
 
@@ -351,10 +355,14 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('30분');
-  await expect(page.locator('[data-day] [data-media]')).toHaveCount(1);
+  // The practice shows its linked recording underneath; an unlinked recording appears as a practice recording.
+  await expect(page.locator('[data-day] .cal-owner').first().locator('[data-practice]')).toHaveCount(1);
+  await expect(page.locator('[data-day] [data-media]')).toHaveCount(2);
+  await expect(page.locator('[data-day]')).toContainText('연습 녹음 · 기록과 연결되지 않은 녹음');
   if (day(-7).slice(0, 7) !== day(-1).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
+  await expect(page.locator('[data-day] .cal-owner [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
   await page.getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
   await sheet(page).getByRole('button', {name:'닫기'}).click();
@@ -653,4 +661,16 @@ test('Device-only files are backed up to the cloud automatically once signed in 
   await page.evaluate(() => VZ.media.backupLocal());
   expect(await page.evaluate(() => window.__imports.length)).toBe(2);
   expect((await media(page)).map(m => m.id).sort()).toEqual(['m1', 'm2']);
+});
+
+test('Library lists recordings by their recording day, newest first', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    // Saved just now, but recorded long ago: must sort by its recording day, not its save time.
+    await window.vzipStorePracticeMedia({id:'old', name:'예전 녹음', created:Date.now(), recordedDate:'2025-01-05', dateSource:'metadata', type:'audio/wav', source:'import', blob:new Blob([window.__wav], {type:'audio/wav'})});
+    window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'old'}}));
+  });
+  await page.goto('/#/library');
+  await expect(page.locator('[data-media]')).toHaveCount(3);
+  expect(await page.locator('[data-media]').evaluateAll(rows => rows.map(r => r.dataset.media))).toEqual(['m2', 'm1', 'old']);
 });
