@@ -201,6 +201,10 @@ test('dates are typed as digits and shown as YYYY/MM/DD, including uploaded Noti
  // A pasted English date with trailing text becomes YYYY/MM/DD.
  await date.fill('January 26, 2026 7:00 PM (GMT+9)');await date.blur();
  await expect(date).toHaveValue('2026/01/26');
+ await date.fill('1/26/2026');await date.blur();
+ await expect(date).toHaveValue('2026/01/26');
+ await date.fill('2026-01-26');await date.blur();
+ await expect(date).toHaveValue('2026/01/26');
  // Uploaded rows: Notion English dates show as YYYY/MM/DD in the preview and after saving.
  await csv(page,'수강생,레슨날짜,레슨내용,진행상태\n학생,"January 26, 2026 7:00 PM",호흡,완료\n학생,26 January 2026,발성,완료\n','deduction');
  await expect(page.getByLabel('2행 날짜',{exact:true})).toHaveValue('2026/01/26');
