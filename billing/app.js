@@ -131,7 +131,26 @@ function mappingUI(){
  host.append(el('p','첫 행을 머리글로 읽었습니다. 날짜·금액·횟수·수강생 매핑을 확인하세요.','help'),grid);$('#preview-import').disabled=false;
 }
 async function loadSheet(){const run=++parseRun;clearPreview();$('#preview-import').disabled=true;try{const rows=await workbook.readSheet(Number($('#import-sheet').value||0));if(run!==parseRun)return;sourceRows=rows;mappingUI();notify((sourceRows.length-1)+'행을 읽었어요. 아직 등록하지 않았습니다.')}catch(error){if(run!==parseRun)return;sourceRows=[];$('#mapping').replaceChildren();notify(error.message,true)}}
-$('#import-file').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;clearPreview();$('#preview-import').disabled=true;event.target.disabled=true;try{fileName=file.name;workbook=await F.open(file,$('#import-encoding').value);selectOptions($('#import-sheet'),workbook.sheets.map((name,index)=>[String(index),name]),'0');await loadSheet()}catch(error){workbook=null;sourceRows=[];$('#mapping').replaceChildren();notify(error.message,true)}finally{event.target.disabled=false}};
+$('#import-file').onchange=async event=>{const files=[...(event.target.files||[])];
+ if(!files.length)return;clearPreview();$('#preview-import').disabled=true;event.target.disabled=true;
+ try{
+  if(files.length===1){fileName=files[0].name;workbook=await F.open(files[0],$('#import-encoding').value);$('#import-sheet').disabled=false;selectOptions($('#import-sheet'),workbook.sheets.map((name,index)=>[String(index),name]),'0');await loadSheet();return}
+  // Several files (e.g. one Notion CSV per month): read each first sheet and stack the rows,
+  // matching columns by header name and keeping the source file name on every row.
+  const books=[];for(const file of files)books.push({name:file.name,book:await F.open(file,$('#import-encoding').value)});
+  const tables=[];for(const item of books)tables.push({name:item.name,rows:await item.book.readSheet(0)});
+  const key=text=>String(text??'').replace(/\s+/g,'').toLowerCase(),header=[],index=new Map();
+  for(const table of tables)for(const cell of table.rows[0]||[]){const k=key(cell);if(k&&!index.has(k)){index.set(k,header.length);header.push(String(cell).trim())}}
+  header.push('원본 파일');const fileColumn=header.length-1,rows=[header];
+  for(const table of tables){const map=(table.rows[0]||[]).map(cell=>index.get(key(cell)));for(const source of table.rows.slice(1)){if(!source.some(cell=>String(cell??'').trim()))continue;const row=new Array(header.length).fill('');source.forEach((cell,i)=>{if(map[i]!=null)row[map[i]]=cell});row[fileColumn]=table.name;rows.push(row)}}
+  if(rows.length-1>2000)throw Error('여러 파일을 합쳐 최대 2,000행까지 가져올 수 있어요. 파일을 나눠서 올려 주세요.');
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(books.map(item=>item.book.hash).join(':')));
+  const hash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+  fileName=files.length+'개 파일 · '+files.map(file=>file.name).join(', ').slice(0,180);
+  workbook={sheets:[files.length+'개 파일 합침'],date1904:books[0].book.date1904,hash,readSheet:async()=>rows};
+  selectOptions($('#import-sheet'),[['0',workbook.sheets[0]]],'0');$('#import-sheet').disabled=true;
+  await loadSheet();notify(files.length+'개 파일에서 '+(rows.length-1)+'행을 합쳤어요. 아직 등록하지 않았습니다.');
+ }catch(error){workbook=null;sourceRows=[];$('#mapping').replaceChildren();notify(error.message,true)}finally{event.target.disabled=false}};
 $('#import-encoding').onchange=()=>{if($('#import-file').files?.length)$('#import-file').dispatchEvent(new Event('change'))};
 $('#import-sheet').onchange=()=>{if(workbook)loadSheet()};
 $('#import-kind').onchange=()=>{if(sourceRows.length)mappingUI();$('#import-mode').disabled=$('#import-kind').value!=='payment'};

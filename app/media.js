@@ -47,27 +47,42 @@ window.vzipReadMedia = () => tx('readonly', s => s.getAll());
 window.vzipMediaBlob = blobOf; window.vzipMediaType = typeOf;
 
 const M = VZ.media = {typeOf, blobOf, LOCAL_LIMIT};
-let cache = null, loading = null, cloudError = '';
+let cache = null, loading = null, generation = 0, cloudError = '';
 M.cloudError = () => cloudError;
-M.invalidate = () => { cache = null; };
+/** Any change (login, upload, edit) starts a new generation; results of older reads are never cached. */
+M.invalidate = () => { cache = null; generation++; };
 /** Local + cloud items merged by id, newest first. */
 M.list = async (force) => {
   if (cache && !force) return cache;
-  if (loading) return loading;
-  loading = (async () => {
+  const mine = generation;
+  if (loading && loading.generation === mine) return loading.promise;
+  const promise = (async () => {
     const map = new Map();
-    try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch (e) { console.error(e); }
-    cloudError = '';
+    let failed = '';
+    try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch (e) { console.error(e); failed = '이 기기의 파일을 읽지 못했어요.'; }
     if (window.vzipCloudSignedIn?.()) {
       try { (await window.vzipCloudMediaList()).forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion})); }
-      catch (e) { cloudError = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
+      catch (e) { failed = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
     }
-    cache = [...map.values()].sort((a, b) => (b.created || 0) - (a.created || 0));
-    return cache;
+    const list = [...map.values()].sort((a, b) => (b.created || 0) - (a.created || 0));
+    // A read that started before a login/change, or that missed a source, is shown but not kept.
+    if (generation === mine) { cloudError = failed; if (!failed) cache = list; }
+    return list;
   })();
-  try { return await loading; } finally { loading = null; }
+  loading = {generation:mine, promise};
+  try { return await promise; } finally { if (loading?.promise === promise) loading = null; }
 };
 M.cached = () => cache || [];
+/** File name from song + recording day ("곡 2026.11.02"); numbered when that name is taken. */
+const usedNames = new Set();
+M.autoName = (songTitle, ymd, exceptId = '', list = cache || []) => {
+  const base = (String(songTitle || '').trim() || '녹음') + (ymd ? ' ' + ymd.replace(/-/g, '.') : '');
+  const taken = new Set([...list.filter(m => m.id !== exceptId).map(m => M.label(m)), ...usedNames]);
+  let name = base, n = 2;
+  while (taken.has(name)) name = base + ' ' + n++;
+  return name;
+};
+M.reserveName = name => { usedNames.add(name); };
 /** Calendar day of a recording: explicit recordedDate (metadata or manual) wins over the timestamp. */
 M.dateOf = item => /^\d{4}-\d{2}-\d{2}$/.test(item?.recordedDate || '') ? item.recordedDate : Number(item?.created) > 0 ? VZ.ymd(new Date(Number(item.created))) : '';
 M.isVideo = item => typeOf(item).startsWith('video/');
@@ -106,7 +121,11 @@ M.importFile = async (file, choice, onProgress, signal) => {
       const d = VZ.parseYmd(choice.date), keep = new Date(meta.created || file.lastModified || Date.now());
       Object.assign(meta, {created:new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime(), recordedDate:choice.date, dateSource:'manual'});
     }
-    const info = {...meta, id:choice.id, name:(choice.name || file.name).replace(/\.[^.]+$/, ''), type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
+    // A file given a song is named after the song and its recording day.
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(meta.recordedDate || '') ? meta.recordedDate : VZ.ymd(new Date(meta.created || file.lastModified || Date.now()));
+    const title = choice.songId ? VZ.songTitle(choice.songId) : '';
+    const name = title ? M.autoName(title, day) : (choice.name || file.name).replace(/\.[^.]+$/, '');
+    const info = {...meta, id:choice.id, name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
     let saved;
     if (window.vzipCloudSignedIn?.()) {
       saved = {...await window.vzipCloudImport(out, info, p => onProgress?.(p), {signal}), cloud:true};
@@ -117,6 +136,8 @@ M.importFile = async (file, choice, onProgress, signal) => {
       await window.vzipStorePracticeMedia(saved);
       window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:saved.id, source:'import'}}));
     }
+    // Only a saved file claims its name, so a failed attempt retries under the same name.
+    if (title) M.reserveName(name);
     window.dispatchEvent(new CustomEvent('vzip:media-imported', {detail:{id:info.id, date:info.recordedDate}}));
     onProgress?.(100);
     return {...saved, originalSize:file.size, savedSize:out.size, extracted:!!meta.audioExtraction};

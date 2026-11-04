@@ -13,15 +13,34 @@ function date(value,{date1904=false}={}){
   const offset=date1904?Date.UTC(1904,0,1):Date.UTC(1899,11,serial<60?31:30);
   return new Date(offset+Math.floor(serial)*86400000).toISOString().slice(0,10);
  }
- let text=str(value).replace(/년\s*/g,'-').replace(/월\s*/g,'-').replace(/일$/,'').replace(/[./]/g,'-');
- let match=text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ]\d{2}:\d{2}.*)?$/);
- if(!match){const names=['january','february','march','april','may','june','july','august','september','october','november','december'];const en=text.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);if(en){const month=names.findIndex(name=>name===en[1].toLowerCase()||name.slice(0,3)===en[1].toLowerCase())+1;if(month)match=[text,en[3],String(month),en[2]]}}
+ // Auto-convert common export formats: Notion/Korean/English dates, ranges and trailing times.
+ const raw=str(value).split(/\s*(?:→|~|–)\s*/)[0];
+ let match=raw.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?/)||raw.match(/(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/);
+ if(!match){const names=['january','february','march','april','may','june','july','august','september','october','november','december'];const en=raw.match(/([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/);if(en){const month=names.findIndex(name=>name===en[1].toLowerCase()||name.slice(0,3)===en[1].toLowerCase().slice(0,3))+1;if(month)match=[raw,en[3],String(month),en[2]]}}
+ if(!match){const short=raw.match(/^(\d{2})[-./](\d{1,2})[-./](\d{1,2})\.?$/);if(short)match=[raw,'20'+short[1],short[2],short[3]]}
  if(!match)fail('날짜는 YYYY-MM-DD 형식으로 확인해 주세요.');
  const [y,m,d]=match.slice(1).map(Number),result=new Date(Date.UTC(y,m-1,d));
  if(y<1900||y>9999||result.getUTCFullYear()!==y||result.getUTCMonth()+1!==m||result.getUTCDate()!==d)fail('존재하지 않는 날짜예요.');
  return [y,String(m).padStart(2,'0'),String(d).padStart(2,'0')].join('-');
 }
-function time(value){const text=str(value);if(!text)return '';if(typeof value==='number'&&value>=0&&value<1){const minutes=Math.round(value*1440)%1440;return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0')}if(!/^([01]?\d|2[0-3]):[0-5]\d$/.test(text))fail('시간은 HH:MM 형식으로 입력해 주세요.');return text.padStart(5,'0')}
+const pad2=n=>String(n).padStart(2,'0');
+/** "19:00", "7:05 PM", "오후 7:00", "7시 30분" → "HH:MM"; null when there is no clock time. */
+function clock(text,meridiem=''){
+ const m=/(오전|오후|AM|PM)?\s*(\d{1,2})(?:\s*:\s*(\d{2})|\s*시(?:\s*(\d{1,2})\s*분)?)(?::\d{2})?\s*(AM|PM|오전|오후)?/i.exec(text);
+ if(!m)return null;
+ let h=Number(m[2]);const min=Number(m[3]??m[4]??0),mer=(m[1]||m[5]||meridiem||'').toLowerCase();
+ if(mer==='오후'||mer==='pm'){if(h<12)h+=12}else if((mer==='오전'||mer==='am')&&h===12)h=0;
+ if(h>23||min>59)return null;return {value:pad2(h)+':'+pad2(min),meridiem:(m[1]||m[5]||'')};
+}
+function time(value){const text=str(value);if(!text)return '';if(typeof value==='number'&&value>=0&&value<1){const minutes=Math.round(value*1440)%1440;return pad2(Math.floor(minutes/60))+':'+pad2(minutes%60)}const c=clock(text);if(!c)fail('시간은 HH:MM 형식으로 입력해 주세요.');return c.value}
+/** Start/end clock times written inside a date cell ("2024년 3월 1일 오후 7:00 → 8:00"). */
+function timeRange(value){
+ if(typeof value==='number')return {start:'',end:''};
+ const [first='',second='']=str(value).split(/\s*(?:→|~|–)\s*/);
+ const a=clock(first.replace(/^.*?(\d{4}\s*[-./년]\s*\d{1,2}\s*[-./월]\s*\d{1,2}\s*일?\.?|[A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,''));
+ const b=second?clock(second.replace(/^.*?(\d{4}\s*[-./년]\s*\d{1,2}\s*[-./월]\s*\d{1,2}\s*일?\.?|[A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,''),a?.meridiem||''):null;
+ return {start:a?.value||'',end:b?.value||''};
+}
 const statuses={done:'completed',scheduled:'scheduled',예정:'scheduled',완료:'completed',completed:'completed',취소:'cancelled',cancelled:'cancelled',canceled:'cancelled','당일 취소':'noshow',당일취소:'noshow',noshow:'noshow',무료:'free',무료레슨:'free',free:'free'};
 const status=value=>statuses[str(value).toLowerCase()]||'unconfirmed';
 function empty(owner='local'){return {schemaVersion:1,owner,revision:0,passes:[],payments:[],deductions:[],adjustments:[],imports:[],importRows:[],history:[]}}
@@ -131,5 +150,5 @@ function reduce(original,command,context={}){
  }
  state.revision++;return state;
 }
-return {empty,validateState,reduce,totals,passBalance,fingerprint,money,units,date,time,status,active,check};
+return {empty,validateState,reduce,totals,passBalance,fingerprint,money,units,date,time,timeRange,status,active,check};
 });
