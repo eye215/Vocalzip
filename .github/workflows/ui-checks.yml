@@ -17,6 +17,9 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
       - run: node tests/make-compression-fixtures.cjs
       - run: node --test tests/chunk-media.test.cjs
       - run: npx playwright install --with-deps chromium webkit
