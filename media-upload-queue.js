@@ -45,37 +45,48 @@ window.vzipChooseUploadSongs=(files,defaultSongId='')=>new Promise(resolve=>{
 });
 window.vzipImportBatch=async(files,options)=>{
  const {host,cancelButton,importFile,onBusy,onSummary,choose}=options;
+ await host.vzipDisposeUploads?.();
  const choices=await choose(files);
  if(!choices){onSummary?.('파일 가져오기를 취소했어요.');return}
  const rows=files.map((file,i)=>{
   const row=document.createElement('article');row.className='vzip-upload-progress';
   const status=document.createElement('p');status.setAttribute('role','status');status.textContent=file.name+' · 대기 중';
   const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='이 파일 다시 시도';retry.hidden=true;
-  row.append(status,retry);host.append(row);return {file,name:file.name,choice:{...choices[i],id:crypto.randomUUID()},status,retry,state:'pending'};
+  row.append(status,retry);host.append(row);return {file,name:file.name,choice:{...choices[i],id:crypto.randomUUID()},status,retry,state:'pending',prepared:null};
  });
  let running=false,controller;
+ host.vzipDisposeUploads=async()=>{if(running)return;await Promise.all(rows.map(async entry=>{await entry.prepared?.dispose();entry.prepared=null;entry.file=null}))};
  const summary=()=>onSummary?.((rows.some(x=>x.state==='done')?'보관함 저장 완료 '+rows.filter(x=>x.state==='done').length+'개':'저장된 파일 없음')+' · 실패/취소 '+rows.filter(x=>['failed','cancelled'].includes(x.state)).length+'개'+(rows.find(x=>['failed','cancelled'].includes(x.state))?' · '+rows.find(x=>['failed','cancelled'].includes(x.state)).status.textContent:''));
  const process=async entries=>{
   if(running)return;running=true;onBusy?.(true);controller=new AbortController();
   cancelButton.hidden=false;cancelButton.disabled=false;cancelButton.onclick=()=>controller.abort();
-  rows.forEach(x=>x.retry.disabled=true);
+  rows.forEach(x=>{x.retry.disabled=true;});
   try{
    for(const entry of entries){
     entry.retry.hidden=true;
     if(controller.signal.aborted){entry.state='cancelled';entry.status.textContent=entry.name+' · 업로드 취소';entry.retry.hidden=false;continue}
     entry.state='uploading';
     try{
-     await importFile(entry.file,entry.choice,value=>{entry.status.textContent=entry.name+' · '+value},controller.signal);
-     entry.state='done';entry.file=null;entry.status.textContent='✓ '+entry.name+' · 보관함 저장 완료';
+     const update=value=>{entry.status.textContent=entry.name+' · '+value};
+     if(!entry.prepared)entry.prepared=await window.vzipPrepareMedia(entry.file,{signal:controller.signal,onProgress:update});
+     const uploadFile=entry.prepared.file;
+     const selection={...entry.choice,...entry.prepared.metadata};
+     await importFile(uploadFile,selection,update,controller.signal);
+     const sizes=entry.prepared.metadata.audioExtraction?' · '+(entry.file.size/1048576).toFixed(1)+'MB → '+(uploadFile.size/1048576).toFixed(1)+'MB · 음성 원본 확인':'';
+     const date=selection.recordedDate?' · '+selection.recordedDate+(selection.dateSource==='metadata'?' (메타데이터)':selection.dateSource==='file-modified'?' (파일 수정일)':' (가져온 날짜)'):'';
+     window.dispatchEvent(new CustomEvent('vzip:media-imported',{detail:{id:selection.id,date:selection.recordedDate}}));
+     if(entry.prepared){await entry.prepared.dispose();entry.prepared=null}
+     entry.savedSizes=sizes+date;
+     entry.state='done';entry.file=null;entry.status.textContent='✓ '+entry.name+' · 보관함 저장 완료'+(entry.savedSizes||'');
     }catch(error){
      entry.state=error.name==='AbortError'?'cancelled':'failed';
      entry.status.textContent=entry.name+' · '+(entry.state==='cancelled'?'업로드 취소':'저장 실패: '+error.message);
      entry.retry.hidden=false;
     }
    }
-  }finally{running=false;cancelButton.hidden=true;onBusy?.(false);rows.forEach(x=>x.retry.disabled=false);summary()}
+  }finally{running=false;cancelButton.hidden=true;onBusy?.(false);rows.forEach(x=>{x.retry.disabled=false;});summary()}
  };
- rows.forEach(entry=>entry.retry.onclick=()=>process([entry]));
+ rows.forEach(entry=>{entry.retry.onclick=()=>process([entry])});
  const abandon=()=>controller?.abort();window.addEventListener('pagehide',abandon,{once:true});
  await process(rows);
 };
