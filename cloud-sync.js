@@ -7,7 +7,7 @@ const dataKey='vocal-zip_mvp_v1',mediaDb='vocalzip_media_v1';
 const $=s=>document.querySelector(s);
 root.insertAdjacentHTML('beforeend',`<div class="cloud-controls">
 <div id="cloud-signed-out"><label for="cloud-email">이메일</label><input id="cloud-email" type="email" autocomplete="email" placeholder="이메일 주소"><label for="cloud-password">비밀번호 (8자 이상)</label><div class="vzip-password-row"><input id="cloud-password" type="password" autocomplete="current-password" minlength="8" placeholder="비밀번호 입력"><button type="button" class="smallbtn" id="cloud-show-password" aria-label="비밀번호 표시">보기</button></div><div class="cloud-actions"><button class="btn" type="button" id="cloud-login">로그인</button><button class="btn secondary" type="button" id="cloud-signup">처음 가입하기</button></div><p class="muted">이미 이메일 링크로 가입했다면 비밀번호 재설정을 이용해 비밀번호를 만들 수 있어요.</p><button class="smallbtn" type="button" id="cloud-reset">비밀번호 재설정 메일 받기</button></div>
-<div id="cloud-signed-in" hidden><p id="cloud-user" class="muted"></p><p class="muted">처음 연결할 때는 어느 데이터를 사용할지 직접 선택해 주세요. 자동으로 기존 기록을 덮어쓰지 않아요.</p><div class="cloud-actions"><button type="button" class="btn" id="cloud-upload">이 기기 기록 → 클라우드</button><button type="button" class="btn secondary" id="cloud-download">클라우드 기록 → 이 기기</button><button type="button" class="btn secondary" id="cloud-media-upload">음원 클라우드 백업</button><button type="button" class="btn secondary" id="cloud-media-download">클라우드 음원 가져오기</button><button type="button" class="smallbtn" id="cloud-logout">로그아웃</button></div></div>
+<div id="cloud-signed-in" hidden><p id="cloud-user" class="muted"></p><p class="muted">기기와 클라우드의 기록을 항목별로 합쳐 저장해요. 어느 쪽 기록도 덮어쓰거나 지우지 않아요.</p><div class="cloud-actions"><button type="button" class="btn" id="cloud-upload">지금 동기화 (기기·클라우드 합치기)</button><button type="button" class="btn secondary" id="cloud-download">클라우드 기록 합쳐서 불러오기</button><button type="button" class="btn secondary" id="cloud-media-upload">음원 클라우드 백업</button><button type="button" class="btn secondary" id="cloud-media-download">클라우드 음원 가져오기</button><button type="button" class="smallbtn" id="cloud-logout">로그아웃</button></div></div>
 <p id="cloud-status" role="status" class="muted">연결 확인 중…</p></div>`);
 
 // Dedicated full-screen authentication view. Keep local data untouched.
@@ -34,8 +34,30 @@ function mediaExtension(type){
 }
 function localMedia(){return new Promise((resolve,reject)=>{const req=indexedDB.open(mediaDb,1);req.onupgradeneeded=()=>req.result.createObjectStore('recordings',{keyPath:'id'});req.onerror=()=>reject(req.error);req.onsuccess=()=>{const db=req.result,tx=db.transaction('recordings','readonly'),get=tx.objectStore('recordings').getAll();get.onsuccess=()=>resolve(get.result||[]);get.onerror=()=>reject(get.error);tx.oncomplete=()=>db.close()}})}
 async function remoteData(){const {data,error}=await client.from('vocal_data').select('payload,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
-async function upload(silent=false){if(!user||busy)return;const data=localData();if(!data)return say('이 기기에 저장된 기록이 없어요.');busy=true;try{const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload:data,updated_at:new Date().toISOString()});if(error)throw error;localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;say('✓ 클라우드에 레슨·연습 기록 '+count(data)+'건 저장 완료'+(silent?' (자동 동기화)':''))}catch(e){say('동기화 실패: '+e.message)}finally{busy=false}}
-async function download(){if(!user||busy)return;busy=true;try{const row=await remoteData();if(!row?.payload)return say('클라우드에 저장된 기록이 아직 없어요.');const data=row.payload;if(!Array.isArray(data.lessons)||!Array.isArray(data.practices)||!Array.isArray(data.songs)||!Array.isArray(data.categories)||!Array.isArray(data.assignments))throw Error('클라우드 기록 형식이 올바르지 않아요.');const existing=localData();if(!confirm('클라우드 기록 '+count(data)+'건을 이 기기로 가져올까요?\n현재 기기 기록 '+count(existing)+'건은 별도 백업 없이 덮어쓰게 됩니다.'))return;const backup='vzip_before_cloud_'+Date.now();if(existing)localStorage.setItem(backup,JSON.stringify(existing));localStorage.setItem(dataKey,JSON.stringify(data));localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;say('✓ 클라우드 기록을 가져왔어요. 화면을 새로고침합니다.');setTimeout(()=>location.reload(),650)}catch(e){say('가져오기 실패: '+e.message)}finally{busy=false}}
+/* Sync merges device and cloud records by id (data-merge.js): nothing on either side is lost;
+   only records deleted on purpose (tombstones) disappear. The device copy before any local
+   rewrite is kept as vzip_before_cloud_<time> (last 5). */
+const Merge=window.VzipDataMerge;
+let syncAgain=false;
+function snapshot(data){if(!data)return;try{localStorage.setItem('vzip_before_cloud_'+Date.now(),JSON.stringify(data));const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^vzip_before_cloud_\d+$/.test(k||''))keys.push(k)}keys.sort().slice(0,-5).forEach(k=>localStorage.removeItem(k))}catch{}}
+async function sync({silent=false,reload=false}={}){
+ if(!user)return;if(busy){syncAgain=true;return}
+ const local=localData();busy=true;
+ try{
+  const row=await remoteData(),remote=row?.payload&&Merge.valid(row.payload)?row.payload:null;
+  if(!local&&!remote){say('아직 저장된 기록이 없어요.');return}
+  const merged=remote?Merge.merge(local||{},remote).data:local;
+  if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
+  if(!local||!Merge.same(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}))}
+  if(!remote||!Merge.same(merged,remote)){const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload:merged,updated_at:new Date().toISOString()});if(error)throw error}
+  localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;
+  say('✓ 이 기기와 클라우드 기록을 합쳐 저장했어요 · '+Merge.count(merged)+'건'+(silent?' (자동 동기화)':''));
+  if(reload&&local&&!Merge.same(merged,local))setTimeout(()=>location.reload(),650);
+ }catch(e){say('동기화 실패: '+e.message+' · 기록은 그대로 있어요.')}
+ finally{busy=false;if(syncAgain){syncAgain=false;setTimeout(()=>sync({silent:true}),300)}}
+}
+async function upload(silent=false){return sync({silent})}
+async function download(){return sync({reload:true})}
 async function backupVideoAudio(item,blob,onProgress){
  const prepared=await window.vzipPrepareMedia(new File([blob],item.name+'.'+mediaExtension(item.type),{type:item.type,lastModified:item.created||Date.now()}));
  try{
@@ -196,13 +218,13 @@ window.vzipCloudMediaDelete=async item=>{
 };
 window.vzipCloudAccessToken=async()=>{if(!client||!user)return null;const {data}=await client.auth.getSession();return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user;
 let streamOwner=null;
-function showUser(){if(streamOwner&&streamOwner!==user?.id)window.vzipRevokeChunkMedia?.();streamOwner=user?.id||null;window.dispatchEvent(new Event('vzip:auth-changed'));const logged=!!user;$('#cloud-signed-in').hidden=!logged;updateAuthScreen();if(logged){$('#cloud-user').textContent='🔒 '+(user.email||'로그인됨');ready=localStorage.getItem('vzip_cloud_linked_user')===user.id;say(ready?'연결됨 · 기록을 수정하면 자동으로 서버에 저장돼요.':'로그인 완료! 먼저 이 기기 기록을 업로드하거나 클라우드 기록을 가져와 주세요.')}else{ready=false;say('로그인하면 다른 기기에서도 기록을 불러올 수 있어요.')}}
+function showUser(){if(streamOwner&&streamOwner!==user?.id)window.vzipRevokeChunkMedia?.();streamOwner=user?.id||null;window.dispatchEvent(new Event('vzip:auth-changed'));const logged=!!user;$('#cloud-signed-in').hidden=!logged;updateAuthScreen();if(logged){$('#cloud-user').textContent='🔒 '+(user.email||'로그인됨');ready=localStorage.getItem('vzip_cloud_linked_user')===user.id;say(ready?'연결됨 · 기록을 수정하면 자동으로 서버에 저장돼요.':'로그인 완료! 이 기기와 클라우드 기록을 합치는 중…');sync({silent:true})}else{ready=false;say('로그인하면 다른 기기에서도 기록을 불러올 수 있어요.')}}
 async function boot(){if(!window.supabase?.createClient){say('서버 연결 라이브러리를 불러오지 못했어요. 새로고침해 주세요.');return}client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data}=await client.auth.getUser();user=data?.user||null;showUser();client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;showUser()});const credentials=()=>({email:$('#cloud-email').value.trim(),password:$('#cloud-password').value});
 $('#cloud-show-password').onclick=()=>{const el=$('#cloud-password');el.type=el.type==='password'?'text':'password';$('#cloud-show-password').textContent=el.type==='password'?'보기':'숨기기'};
 $('#cloud-login').onclick=async()=>{const {email,password}=credentials();if(!email||!password)return say('이메일과 비밀번호를 입력해 주세요.');say('로그인 중…');const {error}=await client.auth.signInWithPassword({email,password});say(error?'로그인 실패: '+(error.message==='Invalid login credentials'?'이메일 또는 비밀번호가 맞지 않아요. 기존 이메일 링크 계정이면 비밀번호 재설정을 눌러 주세요.':error.message):'✓ 로그인 완료!')};
 $('#cloud-signup').onclick=async()=>{const {email,password}=credentials();if(!email||password.length<8)return say('이메일과 8자 이상의 비밀번호를 입력해 주세요.');if(!confirm('이 이메일로 새 계정을 만들까요? 이미 가입했다면 비밀번호 재설정을 이용해 주세요.'))return;say('계정 생성 중…');const {data,error}=await client.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});say(error?'가입 실패: '+error.message:data.session?'✓ 가입 및 로그인 완료!':'가입 요청 완료. 이메일 인증이 필요할 수 있어요. 이메일이 오지 않으면 발송 제한이 풀린 뒤 다시 확인해 주세요.')};
 $('#cloud-reset').onclick=async()=>{const email=$('#cloud-email').value.trim();if(!email)return say('먼저 이메일을 입력해 주세요.');say('비밀번호 재설정 메일 요청 중…');const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});say(error?'재설정 메일 발송 실패: '+error.message:'✓ 비밀번호 재설정 메일을 확인해 주세요.')};
 client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){setTimeout(async()=>{const password=prompt('새 비밀번호를 8자 이상 입력해 주세요.');if(!password)return;if(password.length<8){say('비밀번호는 8자 이상이어야 해요.');return}const {error}=await client.auth.updateUser({password});say(error?'비밀번호 변경 실패: '+error.message:'✓ 비밀번호가 설정됐어요. 다음부터 이메일과 비밀번호로 로그인하세요.')},200)}});
-$('#cloud-logout').onclick=async()=>{await client.auth.signOut();localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=async()=>{if(!confirm('이 기기 레슨·연습 기록을 클라우드에 저장할까요? 클라우드의 기존 기록이 있다면 덮어씁니다.'))return;await upload()};$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',()=>{if(!ready||!user)return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>upload(true),900)});}
+$('#cloud-logout').onclick=async()=>{await client.auth.signOut();localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=()=>sync();$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',e=>{if(!ready||!user||e.detail?.source==='cloud-merge')return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>upload(true),900)});}
 boot().catch(e=>{say('연결 오류: '+e.message);document.getElementById('vzip-boot-cover')?.remove()});
 })();

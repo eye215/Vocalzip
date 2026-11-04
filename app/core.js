@@ -18,10 +18,28 @@ let db = read();
 Object.defineProperty(VZ, 'db', {get: () => db});
 let writing = false;
 /** Apply a mutation; on storage failure restore the previous state and report false. */
+/** Mark changed records with updatedAt and remember deliberately removed ids, so a cloud
+ * merge (data-merge.js) never brings back what the user deleted nor drops what they added. */
+const TRACKED = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports'];
+function stamp(before, after) {
+  const now = Date.now();
+  for (const k of TRACKED) {
+    const old = new Map((before[k] || []).filter(x => x && x.id != null).map(x => [String(x.id), JSON.stringify(x)]));
+    const ids = new Set();
+    for (const x of after[k] || []) {
+      if (!x || x.id == null) continue;
+      ids.add(String(x.id));
+      if (old.get(String(x.id)) !== JSON.stringify(x)) x.updatedAt = now;
+    }
+    const removed = [...old.keys()].filter(id => !ids.has(id));
+    if (removed.length) { after.deleted ||= {}; after.deleted[k] = [...new Set([...(after.deleted[k] || []), ...removed])].slice(-5000); }
+  }
+}
 VZ.change = (mutate, {silent} = {}) => {
   const previous = structuredClone(db);
   try {
     mutate(db);
+    stamp(previous, db);
     localStorage.setItem(KEY, JSON.stringify(db));
   } catch (error) {
     db = previous;
@@ -199,7 +217,8 @@ function parse() {
 VZ.render = () => {
   const r = parse(), def = routes[r.name];
   const main = document.getElementById('view');
-  if (!main) return;
+  // Views register after core; a data event during page load must not render too early.
+  if (!main || !def) return;
   const scroll = current && current.name === r.name && current.key === location.hash ? window.scrollY : 0;
   if (current?.def.leave && current.key !== location.hash) current.def.leave();
   current = {name:r.name, def, key:location.hash};
@@ -242,4 +261,35 @@ document.addEventListener('input', e => { const main = document.getElementById('
 const hideIcons = root => root.querySelectorAll?.('i[class*="ph"]:not([aria-hidden])').forEach(i => i.setAttribute('aria-hidden', 'true'));
 new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) { if (n.matches('i[class*="ph"]')) n.setAttribute('aria-hidden', 'true'); hideIcons(n); } }))).observe(document.documentElement, {childList:true, subtree:true});
 document.addEventListener('DOMContentLoaded', () => hideIcons(document));
+})();
+
+/* ---------- recovery of songs lost to an old overwrite-style sync ---------- */
+(() => {
+  const VZ = window.VZ;
+  /** Bring back songs that are referenced but missing: from snapshots this browser kept before a
+   * cloud import (vzip_before_cloud_*, vzip_before_import_*) and from song names stored on files. */
+  VZ.recoverSongs = (media = []) => {
+    const db = VZ.db, have = new Set(db.songs.map(s => String(s.id))), gone = new Set(db.deleted?.songs || []);
+    const found = new Map();
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!/^vzip_before_(cloud|import)_/.test(key || '')) continue;
+        let snap; try { snap = JSON.parse(localStorage.getItem(key)); } catch { continue; }
+        for (const s of Array.isArray(snap?.songs) ? snap.songs : []) if (s?.id != null && s.title && !have.has(String(s.id)) && !gone.has(String(s.id))) found.set(String(s.id), {...s});
+      }
+    } catch {}
+    for (const m of media) {
+      const id = m.songId && String(m.songId), label = String(m.song || '').trim();
+      if (!id || !label || have.has(id) || gone.has(id) || found.has(id)) continue;
+      const [title, ...show] = label.split(' — ');
+      found.set(id, {id, title:title.trim(), show:show.join(' — ').trim(), restored:true});
+    }
+    if (!found.size) return 0;
+    if (VZ.change(d => { for (const s of found.values()) if (!d.songs.some(x => String(x.id) === String(s.id))) d.songs.push(s); }, {silent:true})) {
+      VZ.toast('사라졌던 곡 ' + found.size + '개를 되살렸어요.');
+      return found.size;
+    }
+    return 0;
+  };
 })();

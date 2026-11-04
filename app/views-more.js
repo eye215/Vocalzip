@@ -245,7 +245,7 @@ VZ.route('growth', {title:'성장', render() {
 VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true, render() {
   return '<h2 class="sec" style="margin-top:4px">메뉴</h2><div class="list"><a class="item" href="#/library"><i class="ph ph-waveform"></i><span class="item-main">전체 음원 보관함</span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/lessons"><i class="ph ph-chalkboard-teacher"></i><span class="item-main">레슨 기록</span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/homework"><i class="ph ph-check-square"></i><span class="item-main">숙제 관리</span><i class="ph ph-caret-right chev"></i></a><a class="item" href="billing/" data-billing><i class="ph ph-receipt"></i><span class="item-main">레슨비 정산</span><i class="ph ph-arrow-square-out chev"></i></a><button type="button" class="item" data-cats><i class="ph ph-tag"></i><span class="item-main">트레이닝 항목 관리</span><i class="ph ph-caret-right chev"></i></button></div>' +
     '<h2 class="sec">계정 · 클라우드 동기화</h2><div class="card" data-cloud></div>' +
-    '<h2 class="sec">데이터</h2><div class="list"><button type="button" class="item" data-export><i class="ph ph-download-simple"></i><span class="item-main"><span class="item-title">기록 백업 (JSON)</span><span class="item-sub">음성·영상 원본은 포함되지 않아요</span></span></button><label class="item" style="cursor:pointer"><i class="ph ph-upload-simple"></i><span class="item-main"><span class="item-title">백업 불러오기</span><span class="item-sub">현재 기록을 백업 파일로 바꿔요</span></span><input type="file" accept="application/json,.json" class="sr-only" data-import-json></label></div>' +
+    '<h2 class="sec">데이터</h2><div class="list"><button type="button" class="item" data-export><i class="ph ph-download-simple"></i><span class="item-main"><span class="item-title">기록 백업 (JSON)</span><span class="item-sub">음성·영상 원본은 포함되지 않아요</span></span></button><label class="item" style="cursor:pointer"><i class="ph ph-upload-simple"></i><span class="item-main"><span class="item-title">백업 불러오기</span><span class="item-sub">백업 파일의 기록을 현재 기록과 합쳐요</span></span><input type="file" accept="application/json,.json" class="sr-only" data-import-json></label></div>' +
     '<p class="small muted" style="margin:16px 4px">VOCAL.zip v' + VZ.version + ' · 기록은 이 기기에 저장되고, 로그인·연결하면 클라우드에 자동 백업돼요.</p>';
 }, mount(main) {
   const root = document.getElementById('vzip-cloud-root');
@@ -259,9 +259,10 @@ VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true,
     try {
       const data = JSON.parse(await file.text());
       if (!['lessons', 'practices', 'assignments', 'categories', 'songs'].every(k => Array.isArray(data[k]))) throw Error('VOCAL.zip 백업 형식이 아니에요.');
-      if (!await VZ.confirm('백업 불러오기', '현재 기록(레슨 ' + VZ.db.lessons.length + '·연습 ' + VZ.db.practices.length + ')을 백업 파일의 기록(레슨 ' + data.lessons.length + '·연습 ' + data.practices.length + ')으로 바꿀까요? 현재 기록은 이 기기에 별도 보관돼요.', {ok:'불러오기', danger:true})) return;
+      if (!await VZ.confirm('백업 불러오기', '백업 파일의 기록(레슨 ' + data.lessons.length + '·연습 ' + data.practices.length + '·곡 ' + data.songs.length + ')을 현재 기록과 합칠까요? 어느 쪽 기록도 지우지 않아요.', {ok:'합치기'})) return;
       localStorage.setItem('vzip_before_import_' + Date.now(), JSON.stringify(VZ.db));
-      if (VZ.change(d => { Object.keys(d).forEach(k => delete d[k]); Object.assign(d, data); })) VZ.toast('백업을 불러왔어요.');
+      const merged = window.VzipDataMerge.merge(VZ.db, data).data;
+      if (VZ.change(d => { Object.assign(d, merged); })) VZ.toast('백업을 합쳤어요.');
     } catch (err) { VZ.toast('불러오지 못했어요: ' + err.message, 'error'); }
   };
   main.querySelector('[data-cats]').onclick = categorySheet;
