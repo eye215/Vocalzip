@@ -41,6 +41,19 @@ VZ.editMedia = item => {
       let rating = item.rating || null;
       el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating >= +x.dataset.star))); });
       const form = el.querySelector('form');
+      // Changing the song (or its day) renames the file to "song + recording day" unless the user typed a name.
+      let typed = false, lastAuto = '', known = M.cached();
+      M.list().then(all => { known = all; }).catch(() => {});
+      form.name.addEventListener('input', () => { typed = true; });
+      const rename = () => {
+        if (typed) return;
+        const sel = form.song.value, title = sel === '__new' ? form.song__new.value.trim() : VZ.songTitle(sel);
+        if (!title) return;
+        lastAuto = form.name.value = M.autoName(title, form.date.value || M.dateOf(item), item.id, known);
+      };
+      form.song.addEventListener('change', rename);
+      form.song__new.addEventListener('input', rename);
+      form.date.addEventListener('change', () => { if (form.name.value === lastAuto) rename(); });
       form.onsubmit = async e => {
         e.preventDefault();
         const songId = VZ.readSong(form, 'song'); if (songId === null) return;
@@ -50,7 +63,7 @@ VZ.editMedia = item => {
           created:d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime() : item.created};
         if (d && date !== M.dateOf(item)) Object.assign(changes, {recordedDate:date, dateSource:'manual'});
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;
-        try { await M.update(item, changes); Object.assign(item, changes); close(); VZ.toast('저장했어요.'); }
+        try { await M.update(item, changes); M.reserveName(changes.name); Object.assign(item, changes); close(); VZ.toast('저장했어요.'); }
         catch (err) { btn.disabled = false; VZ.toast('저장하지 못했어요: ' + err.message + ' · 입력은 유지돼요.', 'error'); }
       };
     }});
@@ -239,7 +252,7 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
   }
   function showReview() {
     const res = state.result, now = new Date();
-    const defName = (VZ.songTitle(state.songId) || (lessonId ? '레슨 녹음' : '녹음')) + ' ' + (now.getMonth() + 1) + '.' + now.getDate() + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const defName = state.songId ? M.autoName(VZ.songTitle(state.songId), VZ.today()) : (lessonId ? '레슨 녹음' : '녹음') + ' ' + (now.getMonth() + 1) + '.' + now.getDate() + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     setUI('review'); status.textContent = '미리 듣고 저장하세요.';
     M.drawWave(wave, res.waveform);
     review.hidden = false;

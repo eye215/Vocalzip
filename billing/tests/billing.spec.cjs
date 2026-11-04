@@ -169,3 +169,21 @@ test('confirmation sheet matches the app tone: closing it changes nothing, Escap
  const data=await ledger(page);expect(data.payments[0].voidedAt).toBeFalsy();
  await total(page,'paid','100,000원');
 });
+test('several Notion CSVs can be selected at once and their dates/times are converted automatically',async({page})=>{
+ await open(page);await pass(page);
+ await tab(page,'imports');await page.locator('#import-kind').selectOption('deduction');
+ const oct='수강생,레슨날짜,레슨내용,진행상태\n학생,2026년 10월 7일 오후 7:00 → 8:00,호흡,완료\n학생,"October 14, 2026 7:30 PM → 8:30 PM",발성,완료\n';
+ const nov='레슨날짜,수강생,진행상태,레슨내용\n2026/11/04 19:00 → 2026/11/04 20:00,학생,완료,고음\n';
+ await page.locator('#import-file').setInputFiles([{name:'10월.csv',mimeType:'text/csv',buffer:Buffer.from(oct)},{name:'11월.csv',mimeType:'text/csv',buffer:Buffer.from(nov)}]);
+ await expect(page.locator('#message')).toContainText('2개 파일에서 3행을 합쳤어요');
+ await expect(page.locator('#import-sheet')).toBeDisabled();
+ await expect(page.locator('#preview-import')).toBeEnabled();await page.locator('#preview-import').click();
+ await expect(page.locator('#import-summary')).toContainText('오류 0행');
+ await commit(page);
+ const data=await ledger(page),rows=data.deductions.map(row=>[row.date,row.start,row.end,row.memo]).sort((a,b)=>a[0].localeCompare(b[0]));
+ expect(rows).toEqual([['2026-10-07','19:00','20:00','호흡'],['2026-10-14','19:30','20:30','발성'],['2026-11-04','19:00','20:00','고음']]);
+ expect(data.imports[0].fileName).toContain('10월.csv');expect(data.imports[0].fileName).toContain('11월.csv');
+ // The source file name stays with every imported row.
+ expect(data.importRows.filter(row=>row.status==='imported').map(row=>row.raw.at(-1)).sort()).toEqual(['10월.csv','10월.csv','11월.csv']);
+ await total(page,'usedUnits','3회');
+});
