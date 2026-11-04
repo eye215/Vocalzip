@@ -278,11 +278,11 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
   const buffer = Buffer.from(wav);
   await sheet(page).locator('[data-file]').setInputFiles([
-    {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
+    {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
   await expect(sheet(page).getByText('지원하지 않는 형식이에요. (건너뜀)')).toBeVisible();
   await sheet(page).locator('[data-bulk]').selectOption('s2');
   await sheet(page).getByLabel('a.wav 곡').selectOption('s1');
-  await sheet(page).getByLabel('b.m4a 날짜').fill('2026-01-15');
+  await sheet(page).getByLabel('b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a 날짜').fill('2026-01-15');
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).getByText('실패: 네트워크 오류')).toBeVisible();
   await expect(sheet(page).locator('[data-summary]')).toContainText('저장 1개');
@@ -290,6 +290,13 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   // Finished files leave the list; one line keeps the count.
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 2개');
   await expect(sheet(page).locator('.up-row:visible')).toHaveCount(1); // only the skipped .txt remains
+  // Saved files are listed with a player right in the sheet.
+  const saved = sheet(page).locator('[data-saved] [data-media]');
+  await expect(saved).toHaveCount(2);
+  await saved.first().locator('[data-toggle]').click();
+  await expect(saved.first().locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
+  // Nothing in the sheet is wider than the phone.
+  expect(await sheet(page).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(2);
   // Files with a song are named "song + recording day".
