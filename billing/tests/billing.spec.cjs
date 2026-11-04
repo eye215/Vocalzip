@@ -187,6 +187,13 @@ test('several Notion CSVs can be selected at once and their dates/times are conv
  expect(data.importRows.filter(row=>row.status==='imported').map(row=>row.raw.at(-1)).sort()).toEqual(['10월.csv','10월.csv','11월.csv']);
  await total(page,'usedUnits','3회');
 });
+test('payments, deductions and adjustments list the newest date first',async({page})=>{
+ await open(page);await pass(page);
+ for(const date of ['2026-01-01','2026-03-01','2026-02-01'])await payment(page,'10000',date);
+ const dates=await page.locator('#payment-list tbody tr td:first-child').allTextContents();
+ expect(dates).toEqual(['2026/03/01','2026/02/01','2026/01/01']);
+});
+
 test('dates are typed as digits and shown as YYYY/MM/DD, including uploaded Notion dates',async({page})=>{
  await open(page);await pass(page);
  await tab(page,'payments');

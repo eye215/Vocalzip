@@ -245,13 +245,15 @@ VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href
   const today = VZ.today();
   calDay ||= today;
   calMonth ||= today.slice(0, 7);
-  return '<div class="card"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="legend"><span><i style="background:var(--accent)"></i>레슨</span><span><i style="background:var(--ok)"></i>연습</span><span><i style="background:#f2b31b"></i>녹음</span><button type="button" class="chip" data-today style="margin-left:auto;min-height:32px">오늘</button></div></div><div data-day></div>';
+  return '<div class="card"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="legend"><span><i style="background:var(--accent)"></i>레슨</span><span><i style="background:var(--ok)"></i>연습</span><span class="muted">녹음은 레슨·연습 안에 있어요</span><button type="button" class="chip" data-today style="margin-left:auto;min-height:32px">오늘</button></div></div><div data-day></div>';
 }, async mount(main) {
   const grid = main.querySelector('[data-grid]'), dayHost = main.querySelector('[data-day]');
   let media = M.cached();
   const byDay = () => {
-    const map = new Map(), add = (d, k, x) => { if (!d) return; if (!map.has(d)) map.set(d, {l:[], p:[], r:[]}); map.get(d)[k].push(x); };
-    VZ.db.lessons.forEach(l => add(l.date, 'l', l)); VZ.db.practices.forEach(p => add(p.date, 'p', p)); media.forEach(m => add(M.dateOf(m), 'r', m));
+    const map = new Map(), add = (d, k, x) => { if (!d) return; if (!map.has(d)) map.set(d, {l:[], p:[], rl:[], rp:[]}); map.get(d)[k].push(x); };
+    VZ.db.lessons.forEach(l => add(l.date, 'l', l)); VZ.db.practices.forEach(p => add(p.date, 'p', p));
+    // Only recordings that are not inside a lesson/practice record stand on their own day (as lesson or practice recordings).
+    media.forEach(m => { const o = M.owner(m); if (!o.lesson && !o.practice) add(M.dateOf(m), o.kind === 'lesson' ? 'rl' : 'rp', m); });
     return map;
   };
   const draw = () => {
@@ -262,21 +264,23 @@ VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href
     for (let i = 0; i < 42; i++) {
       const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), key = VZ.ymd(d), e = map.get(key);
       if (i >= 35 && d.getMonth() !== m - 1) break;
-      const active = e?.l.filter(l => VZ.lessonStatus(l) !== 'cancelled');
-      html += '<button type="button" class="cal-day' + (d.getMonth() !== m - 1 ? ' out' : '') + (key === today ? ' today' : '') + '" data-d="' + key + '" aria-pressed="' + (key === calDay) + '" aria-label="' + esc(VZ.dateLabel(key)) + (e ? ' 기록 있음' : '') + '"><span>' + d.getDate() + '</span><span class="dots">' + (active?.length ? '<i class="l"></i>' : '') + (e?.p.length ? '<i class="p"></i>' : '') + (e?.r.length ? '<i class="r"></i>' : '') + '</span></button>';
+      const active = e?.l.filter(l => VZ.lessonStatus(l) !== 'cancelled'), lessonDot = active?.length || e?.rl.length, practiceDot = e?.p.length || e?.rp.length;
+      html += '<button type="button" class="cal-day' + (d.getMonth() !== m - 1 ? ' out' : '') + (key === today ? ' today' : '') + '" data-d="' + key + '" aria-pressed="' + (key === calDay) + '" aria-label="' + esc(VZ.dateLabel(key)) + (e ? ' 기록 있음' : '') + '"><span>' + d.getDate() + '</span><span class="dots">' + (lessonDot ? '<i class="l"></i>' : '') + (practiceDot ? '<i class="p"></i>' : '') + '</span></button>';
     }
     grid.innerHTML = html;
-    const e = map.get(calDay) || {l:[], p:[], r:[]};
+    const e = map.get(calDay) || {l:[], p:[], rl:[], rp:[]}, all = new Map(media.map(m => [m.id, m])), wired = [];
+    // Each lesson/practice shows its own recordings underneath it.
+    const block = (row, ids) => { const items = ids.map(id => all.get(id)).filter(Boolean); wired.push(...items); return '<div class="list cal-owner">' + row + (items.length ? '<div class="nested" data-r>' + items.map(VZ.mediaRow).join('') + '</div>' : '') + '</div>'; };
+    const loose = (title, items) => { if (!items.length) return ''; wired.push(...items); return '<div class="list cal-owner"><div class="item small muted">' + title + ' · 기록과 연결되지 않은 녹음</div><div class="nested" data-r>' + items.map(VZ.mediaRow).join('') + '</div></div>'; };
+    const lessonsHtml = e.l.sort(VZ.lessonSort).map(l => block(VZ.lessonRow(l), (l.recordings || []).map(r => r.id))).join('') + loose('레슨 녹음', e.rl);
+    const practiceHtml = e.p.map(p => block(VZ.practiceRow(p), p.mediaIds || [])).join('') + loose('연습 녹음', e.rp);
     dayHost.innerHTML = '<h2 class="sec">' + esc(VZ.dateLabel(calDay)) + '</h2>' +
       '<div class="btn-row" style="margin-bottom:12px"><button type="button" class="btn sm secondary" data-add-l><i class="ph ph-calendar-plus"></i>레슨 일정</button><button type="button" class="btn sm secondary" data-add-p><i class="ph ph-timer"></i>연습 기록</button></div>' +
-      (e.l.length + e.p.length + e.r.length ? '<div class="stack">' +
-        (e.l.length ? '<div class="list">' + e.l.sort(VZ.lessonSort).map(VZ.lessonRow).join('') + '</div>' : '') +
-        (e.p.length ? '<div class="list">' + e.p.map(VZ.practiceRow).join('') + '</div>' : '') +
-        (e.r.length ? '<div class="list" data-r>' + e.r.map(VZ.mediaRow).join('') + '</div>' : '') + '</div>'
+      (lessonsHtml || practiceHtml ? '<div class="stack">' + (lessonsHtml ? '<h3 class="cal-group">레슨</h3>' + lessonsHtml : '') + (practiceHtml ? '<h3 class="cal-group">연습</h3>' + practiceHtml : '') + '</div>'
         : '<p class="small muted" style="margin:0 4px">이 날 기록이 없어요.</p>');
     dayHost.querySelector('[data-add-l]').onclick = () => VZ.lessonSheet({date:calDay});
     dayHost.querySelector('[data-add-p]').onclick = () => VZ.practiceSheet({date:calDay});
-    const r = dayHost.querySelector('[data-r]'); if (r) VZ.wireMedia(r, e.r);
+    dayHost.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, wired));
   };
   grid.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; calDay = b.dataset.d; if (calDay.slice(0, 7) !== calMonth) calMonth = calDay.slice(0, 7); draw(); };
   main.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + Number(b.dataset.mv), 1); calMonth = VZ.ymd(d).slice(0, 7); draw(); });

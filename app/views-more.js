@@ -90,7 +90,7 @@ const lib = {kind:'all', origin:'all', song:'', q:''};
 VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-upload-simple"></i></button>', render() {
   const chip = (k, v, label) => '<button type="button" class="chip" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + label + '</button>';
   return '<div class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·메모 검색" aria-label="보관함 검색" data-q value="' + esc(lib.q) + '"></div>' +
-    '<div class="chips" style="margin-bottom:8px">' + chip('kind', 'all', '전체') + chip('kind', 'audio', '음성') + chip('kind', 'video', '영상') + '<span style="width:8px;flex:none"></span>' + chip('origin', 'all', '모든 출처') + chip('origin', 'practice', '녹음') + chip('origin', 'lesson', '레슨') + chip('origin', 'import', '가져옴') + '</div>' +
+    '<div class="chips" style="margin-bottom:8px">' + chip('kind', 'all', '전체') + chip('kind', 'audio', '음성') + chip('kind', 'video', '영상') + '<span style="width:8px;flex:none"></span>' + chip('origin', 'all', '레슨·연습') + chip('origin', 'lesson', '레슨') + chip('origin', 'practice', '연습') + '</div>' +
     '<select aria-label="곡 필터" data-song style="margin-bottom:12px;min-height:44px"><option value="">모든 곡</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select>' +
     '<p class="small muted" data-count style="margin:0 4px 8px"></p><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
@@ -99,7 +99,7 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
   let media = [];
   const draw = () => {
     const q = lib.q.trim().toLowerCase();
-    const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || (lib.origin === 'practice' ? !['lesson', 'import'].includes(m.source) : m.source === lib.origin)) &&
+    const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || M.owner(m).kind === lib.origin) &&
       (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
     const local = M.localOnly(media).length, b = M.backupStatus();
     main.querySelector('[data-count]').textContent = (M.cloudError() ? M.cloudError() + ' · ' : '') + list.length + '개 파일' +

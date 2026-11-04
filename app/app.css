@@ -257,3 +257,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .up-date span{font-size:13px;font-weight:600;color:var(--ink-2)}
 .up-date em{font-style:normal;font-weight:500;color:var(--ink-3);margin-left:4px}
 .up-saved{margin:0 0 12px}
+.cal-group{margin:4px 4px 0;font-size:14px;color:var(--ink-2)}
+.cal-owner .nested{border-top:1px dashed var(--line);padding-left:20px;background:var(--surface-2)}
+.cal-owner .nested>*+*{border-top:1px solid var(--line)}
