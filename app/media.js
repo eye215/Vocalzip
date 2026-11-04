@@ -196,6 +196,59 @@ M.download = async item => {
   if (revoke) setTimeout(() => URL.revokeObjectURL(url), 4000);
 };
 
+/* ---------- automatic cloud backup ---------- */
+/* While signed in, copy device-only files to the user's cloud so they survive a cleared browser,
+ * another app context (Safari / home-screen app / in-app browser) or a new phone. Additive only:
+ * nothing is overwritten or deleted, and an existing cloud copy with the same id is kept. */
+const extOf = type => ({'audio/mp4':'m4a','video/mp4':'mp4','video/quicktime':'mov','audio/mpeg':'mp3','audio/wav':'wav','audio/x-wav':'wav','audio/aac':'aac','audio/ogg':'ogg','audio/flac':'flac','audio/webm':'webm','video/webm':'webm'})[String(type || '').split(';')[0]] || 'bin';
+const backup = {running:false, total:0, done:0, failed:0, waiting:false};
+M.backupStatus = () => ({...backup});
+M.localOnly = items => items.filter(m => m.local && !m.cloud && blobOf(m));
+M.backupLocal = async () => {
+  if (backup.running || !window.vzipCloudSignedIn?.() || !window.vzipCloudImport) return backup;
+  backup.running = true; backup.waiting = false;
+  const notify = () => window.dispatchEvent(new Event('vzip:v6-backup'));
+  try {
+    const pending = M.localOnly(await M.list(true));
+    Object.assign(backup, {total:pending.length, done:0, failed:0}); notify();
+    for (const item of pending) {
+      if (!window.vzipCloudSignedIn?.()) break;
+      let prepared = null;
+      try {
+        let blob = blobOf(item), info = {...item};
+        delete info.blob; delete info.bytes; delete info.local; delete info.cloud;
+        // The cloud keeps audio only; device videos (older camera recordings) upload their original audio.
+        if (M.isVideo(item)) {
+          if (!window.vzipPrepareMedia) throw Error('영상 음원 추출을 사용할 수 없어요.');
+          prepared = await window.vzipPrepareMedia(new File([blob], M.label(item) + '.' + extOf(item.type), {type:typeOf(item), lastModified:item.created || Date.now()}));
+          blob = prepared.file; info = {...info, ...prepared.metadata, created:item.created, recordedDate:item.recordedDate || prepared.metadata.recordedDate, dateSource:item.dateSource || prepared.metadata.dateSource, type:prepared.file.type};
+        }
+        const type = blob.type || typeOf(item);
+        const file = new File([blob], M.label(item) + '.' + extOf(type), {type, lastModified:item.created || Date.now()});
+        const meta = await window.vzipCloudImport(file, {...info, id:item.id, name:M.label(item), type, source:item.source || 'practice'});
+        // Fields the importer does not carry (rating, review, waveform) follow in one update.
+        const extra = {}; for (const k of ['rating', 'review', 'waveform', 'importedAt']) if (item[k] != null) extra[k] = item[k];
+        if (Object.keys(extra).length) await window.vzipCloudMediaUpdate({...meta, id:item.id}, extra);
+        backup.done++;
+      } catch (e) {
+        backup.failed++;
+        // Another upload holds the lock: try again shortly instead of counting it lost.
+        if (/다른 파일을 업로드/.test(e.message || '')) backup.waiting = true;
+        console.warn('backup failed', item.id, e);
+      } finally { await prepared?.dispose?.(); notify(); }
+    }
+  } finally {
+    backup.running = false; M.invalidate(); notify();
+    window.dispatchEvent(new Event('vzip:v6-media'));
+    if (backup.waiting) setTimeout(() => M.backupLocal(), 15000);
+  }
+  return backup;
+};
+let backupTimer = null;
+M.scheduleBackup = (delay = 3000) => { clearTimeout(backupTimer); backupTimer = setTimeout(() => M.backupLocal().catch(() => {}), delay); };
+window.addEventListener('vzip:auth-changed', () => { if (window.vzipCloudSignedIn?.()) M.scheduleBackup(4000); });
+window.addEventListener('vzip:media-saved', () => M.scheduleBackup(2500));
+
 /* ---------- player ---------- */
 const players = new Set();
 M.playing = () => [...players].some(p => !p.el.paused);
