@@ -20,7 +20,7 @@ test('Real service worker serves private cross-part ranges, reloads and native p
  });
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));
  await page.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
- await page.goto('/');
+ await page.goto('/legacy.html');
  await page.evaluate(()=>{window.__streamErrors=[];navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='vzip-stream-error')window.__streamErrors.push(event.data.message)})});
  const src=await page.evaluate(async({size,cut})=>{
   const item={storageVersion:2,type:'audio/wav',size,parts:[{path:'owner/part-0',size:cut},{path:'owner/part-1',size:size-cut}]};

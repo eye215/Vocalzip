@@ -3,7 +3,7 @@ test.beforeEach(async({page})=>{
  page.__errors=[];page.on('pageerror',error=>page.__errors.push(error.message));
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));
  await page.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
- await page.goto('/');
+ await page.goto('/legacy.html');
 });
 test.afterEach(async({page})=>expect(page.__errors).toEqual([]));
 async function selected(page,name,queue=false){if(!queue)await page.evaluate(()=>document.querySelector('#vzip-hub-upload').onchange=null);await page.locator('#vzip-hub-upload').setInputFiles(path.resolve('tests/fixtures/'+name))}
