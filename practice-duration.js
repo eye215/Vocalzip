@@ -14,6 +14,8 @@
   const importHint=document.createElement('p');importHint.className='muted';
   importHint.textContent='여러 파일을 선택하고 파일별 곡을 지정할 수 있어요. 파일당 최대 1GB, 25MB 초과 파일은 클라우드에 저장해요. 큰 파일의 연습 시간은 직접 입력해 주세요.';
   input.after(importHint);
+  const compression=window.vzipVideoCompressionOption?.({name:'선택한 영상.mp4',type:'video/mp4'});
+  if(compression){compression.element.id='vzip-practice-compression';importHint.after(compression.element)}
   const cancelImport=document.createElement('button');cancelImport.type='button';cancelImport.className='btn secondary';
   cancelImport.id='vzip-practice-import-cancel';cancelImport.textContent='업로드 취소';cancelImport.hidden=true;
   importHint.after(cancelImport);
@@ -159,7 +161,7 @@
       await window.vzipImportBatch(files,{
         host:preview,cancelButton:cancelImport,
         choose:batch=>batch.length>1?window.vzipChooseUploadSongs(batch,form.elements.song?.value||''):
-          Promise.resolve([{songId:form.elements.song?.value||'',song:form.elements.song?.value?form.elements.song.selectedOptions[0].textContent:''}]),
+          Promise.resolve([{songId:form.elements.song?.value||'',song:form.elements.song?.value?form.elements.song.selectedOptions[0].textContent:'',compressVideo:compression?.selected||false}]),
         onBusy:value=>{input.disabled=value;busy('import',value)},
         onSummary:()=>loadSaved(),
         importFile:async(file,chosen,progress,signal)=>{
@@ -196,7 +198,7 @@
     window.addEventListener(event, loadSaved);
   form.elements.minutes.addEventListener('input', calculate);
   window.addEventListener('vzip:practice-reset', () => {
-    linked.clear(); input.value = ''; preview.textContent = '가져온 파일은 보관함에 저장하고 이번 연습에 연결해요.';
+    preview.vzipDisposeUploads?.();linked.clear(); input.value = ''; preview.textContent = '가져온 파일은 보관함에 저장하고 이번 연습에 연결해요.';
     calculate(); loadSaved();
   });
   document.querySelector('[data-tab="practice"]')?.addEventListener('click', loadSaved);

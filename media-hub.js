@@ -77,7 +77,8 @@ importHint.textContent='여러 파일을 선택하고 파일별 곡을 지정하
 $('#vzip-hub-upload').closest('.vzip-hub-buttons').after(importHint);
 const cancelUpload=document.createElement('button');cancelUpload.type='button';cancelUpload.className='btn secondary';
 cancelUpload.id='vzip-hub-upload-cancel';cancelUpload.textContent='업로드 취소';cancelUpload.hidden=true;importHint.after(cancelUpload);
-function chooseUploadSong(fileName){
+function chooseUploadSong(selectedFile){
+ const fileName=selectedFile.name;
  return new Promise(resolve=>{
   const overlay=document.createElement('div');
   overlay.className='vzip-edit-overlay';
@@ -98,7 +99,8 @@ function chooseUploadSong(fileName){
   const actions=document.createElement('div');actions.className='buttons';
   const cancel=document.createElement('button');cancel.type='button';cancel.className='btn secondary';cancel.textContent='취소';
   const start=document.createElement('button');start.type='button';start.className='btn';start.textContent='이 파일 업로드';
-  actions.append(cancel,start);sheet.append(title,file,label,select,newLabel,custom,error,actions);overlay.append(sheet);document.body.append(overlay);
+  const compression=window.vzipVideoCompressionOption?.(selectedFile);
+  actions.append(cancel,start);sheet.append(title,file,label,select,newLabel,custom);if(compression)sheet.append(compression.element);sheet.append(error,actions);overlay.append(sheet);document.body.append(overlay);
   const previous=document.activeElement;let done=false;
   const finish=value=>{if(done)return;done=true;overlay.remove();previous?.focus?.();resolve(value)};
   cancel.onclick=()=>finish(null);
@@ -116,7 +118,7 @@ function chooseUploadSong(fileName){
      catch(e){error.textContent='곡 저장 실패: '+e.message;return}
     }
    }
-   finish({songId:selected?.id||'',song:selected?(selected.title+(selected.show?' — '+selected.show:'')):''});
+   finish({songId:selected?.id||'',song:selected?(selected.title+(selected.show?' — '+selected.show:'')):'',compressVideo:compression?.selected||false});
   };
   select.focus();
  });
@@ -135,7 +137,7 @@ $('#vzip-hub-upload').onchange=async event=>{
   }
   await window.vzipImportBatch(files,{
    host:queue,cancelButton:cancelUpload,
-   choose:async batch=>batch.length>1?window.vzipChooseUploadSongs(batch):((chosen)=>chosen?[chosen]:null)(await chooseUploadSong(batch[0].name)),
+   choose:async batch=>batch.length>1?window.vzipChooseUploadSongs(batch):((chosen)=>chosen?[chosen]:null)(await chooseUploadSong(batch[0])),
    onBusy:value=>input.disabled=value,
    onSummary:message=>{uploadMessage=message;status.textContent=message;refresh()},
    importFile:async(file,chosen,progress,signal)=>{

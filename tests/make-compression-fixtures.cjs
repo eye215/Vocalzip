@@ -1,0 +1,10 @@
+const fs=require('node:fs');
+const {execFileSync}=require('node:child_process');
+fs.mkdirSync('tests/fixtures',{recursive:true});
+const file='tests/fixtures/compress-source.mp4';
+execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','testsrc2=size=1920x1080:rate=30','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','3','-c:v','libx264','-preset','ultrafast','-b:v','12M','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',file],{stdio:'inherit'});
+const large='tests/fixtures/compress-201MiB.mp4';fs.copyFileSync(file,large);
+const target=201*1024*1024,initial=fs.statSync(large).size,padding=target-initial;
+const fd=fs.openSync(large,'r+'),header=Buffer.alloc(8);header.writeUInt32BE(padding);header.write('free',4);
+fs.writeSync(fd,header,0,8,initial);fs.ftruncateSync(fd,target);fs.closeSync(fd);
+console.log(JSON.stringify({smallBytes:fs.statSync(file).size,largeBytes:fs.statSync(large).size}));

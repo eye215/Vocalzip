@@ -134,7 +134,7 @@ async function importMedia(file,info={},onProgress,options={}){
   options.onCommit?.();committing=true;
   const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),song:info.song||'',songId:info.songId||'',
    created:file.lastModified||Date.now(),type,durationSeconds:Number(info.durationSeconds)||0,
-   source:info.source||'import',size:file.size,
+   source:info.source||'import',size:file.size,...(info.compression?{compression:info.compression}:{}),
    ...(multipart?{storageVersion:2,parts}:{path:parts[0].path})};
   const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata});
   if(error)throw Error('보관함 연결에 실패했어요: '+error.message);

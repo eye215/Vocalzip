@@ -1,46 +1,57 @@
-/* In-browser streaming video optimizer. Uses <video> decode + canvas and MediaRecorder;
-   never reads the original file into an ArrayBuffer. On unsupported devices it fails
-   safely with a useful message rather than crashing the page. */
-(()=>{'use strict';
-const MB=1024*1024, LIMIT=100*MB;
-window.vzipOptimizeVideo=async function(file,progress=()=>{}){
- if(file.size<=LIMIT)return file;
- if(!(/video\//.test(file.type)||/\.(mov|mp4|webm|m4v)$/i.test(file.name)))throw Error('100MB를 초과하는 음성 파일은 압축할 수 없어요.');
- if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream)throw Error('이 브라우저는 자동 영상 압축을 지원하지 않아요. iPhone Safari 최신 버전에서 다시 시도해 주세요.');
- const url=URL.createObjectURL(file),video=document.createElement('video'),canvas=document.createElement('canvas');
- let context=null,stream=null,recorder=null,timer=null,raf=null,finished=false;
- const cleanup=()=>{finished=true;clearInterval(timer);cancelAnimationFrame(raf);try{recorder?.state==='recording'&&recorder.stop()}catch{};try{video.pause();video.removeAttribute('src');video.load()}catch{};try{stream?.getTracks().forEach(t=>t.stop())}catch{};try{context?.close()}catch{};URL.revokeObjectURL(url)};
- try{
-  video.src=url;video.preload='metadata';video.playsInline=true;video.muted=false;
-  await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('영상 정보를 읽지 못했어요. 파일 형식을 확인해 주세요.')),20000);video.onloadedmetadata=()=>{clearTimeout(timeout);resolve()};video.onerror=()=>{clearTimeout(timeout);reject(Error('영상 디코딩을 지원하지 않아요.'))}});
-  const duration=video.duration;
-  if(!Number.isFinite(duration)||duration<=0)throw Error('영상 길이를 확인할 수 없어요.');
-  const width=video.videoWidth,height=video.videoHeight;
-  if(!width||!height)throw Error('영상 해상도를 읽지 못했어요.');
-  const ratio=Math.min(1,1280/Math.max(width,height));canvas.width=Math.max(2,Math.round(width*ratio/2)*2);canvas.height=Math.max(2,Math.round(height*ratio/2)*2);
-  const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw Error('영상 변환 메모리를 확보하지 못했어요.');
-  stream=canvas.captureStream(24);
-  // Route original audio into the output stream when supported.
-  const AC=window.AudioContext||window.webkitAudioContext;
-  if(AC){try{context=new AC();const source=context.createMediaElementSource(video),dest=context.createMediaStreamDestination();source.connect(dest);dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));await context.resume()}catch(e){throw Error('원본 음성을 보존할 수 없어 압축을 중단했어요. '+e.message)}}
-  else throw Error('음성을 보존하는 압축을 지원하지 않는 브라우저예요.');
-  const mime=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
-  if(!mime)throw Error('지원되는 영상 인코딩 형식이 없어요.');
-  const targetBits=Math.max(350000,Math.min(2200000,Math.floor((LIMIT*.83*8/duration)-128000)));
-  if(targetBits<=350000&&duration>900)throw Error('영상이 너무 길어 음질을 유지하면서 100MB 이하로 만들기 어려워요.');
-  const chunks=[];recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:targetBits,audioBitsPerSecond:128000});
-  const result=new Promise((resolve,reject)=>{recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};recorder.onerror=e=>reject(Error(e.error?.message||'영상 인코딩에 실패했어요.'));recorder.onstop=()=>resolve(new Blob(chunks,{type:mime.split(';')[0]}))});
-  const draw=()=>{if(finished)return;try{ctx.drawImage(video,0,0,canvas.width,canvas.height)}catch{};raf=requestAnimationFrame(draw)};
-  video.currentTime=0;await video.play().catch(()=>{throw Error('브라우저에서 영상 재생이 차단됐어요. Safari에서 직접 업로드를 다시 시도해 주세요.')});
-  draw();recorder.start(2000);progress(0);
-  timer=setInterval(()=>{progress(Math.min(99,Math.round(video.currentTime/duration*100)));if(video.ended&&recorder.state==='recording')recorder.stop()},350);
-  video.addEventListener('ended',()=>{if(recorder.state==='recording')recorder.stop()},{once:true});
-  const blob=await result;
-  if(!blob.size)throw Error('압축된 영상이 비어 있어요.');
-  if(blob.size>LIMIT)throw Error('압축 후에도 100MB를 초과해요. 영상을 나누거나 길이를 줄여 주세요.');
-  progress(100);
-  const ext=mime.includes('mp4')?'mp4':'webm';
-  return new File([blob],file.name.replace(/\.[^.]+$/,'')+'-optimized.'+ext,{type:blob.type,lastModified:file.lastModified});
- }finally{cleanup()}
+/* Optional video-only compression. The worker copies and verifies every encoded audio packet. */
+(()=>{
+'use strict';
+let active=false;const resources=new Set();
+window.vzipCanCompressVideo=()=>typeof Worker==='function'&&typeof VideoEncoder==='function'&&typeof VideoDecoder==='function'&&!!navigator.storage?.getDirectory;
+window.vzipVideoCompressionOption=(file,initial=false)=>{
+ const host=document.createElement('label');host.className='vzip-compression-option';
+ const input=document.createElement('input');input.type='checkbox';input.checked=initial&&window.vzipCanCompressVideo();
+ input.disabled=!window.vzipCanCompressVideo();
+ const text=document.createElement('span');text.textContent='영상만 압축 · 음성 원본 유지 (720p)';
+ const hint=document.createElement('small');hint.textContent=input.disabled?'이 브라우저에서는 원본 업로드를 이용해 주세요.':'영상 화질을 낮춰 전송량을 줄여요. 압축 중에도 화면을 유지해 주세요.';
+ host.append(input,text,hint);host.hidden=!/^(video\/)|\.(mov|mp4|m4v|webm)$/i.test((file.type||'')+' '+(file.name||''));
+ return {element:host,get selected(){return !host.hidden&&input.checked&&!input.disabled}};
 };
+async function remove(id){for(let attempt=0;attempt<5;attempt++){try{const root=await navigator.storage.getDirectory(),directory=await root.getDirectoryHandle('vzip-video-temp-v1');await directory.removeEntry(id);return}catch(error){if(error.name==='NotFoundError')return;await new Promise(resolve=>setTimeout(resolve,100))}}}
+async function compress(file,{signal,onProgress=()=>{}}={}){
+ if(active)throw Error('다른 영상을 압축 중이에요. 완료한 뒤 다시 시도해 주세요.');
+ if(!window.vzipCanCompressVideo())throw Error('이 브라우저에서는 영상 압축을 지원하지 않아요. 원본 업로드를 선택해 주세요.');
+ if(file.size>1024*1024*1024)throw Error('압축할 원본은 최대 1GB까지 선택할 수 있어요.');
+ if(signal?.aborted)throw new DOMException('압축을 취소했어요.','AbortError');
+ active=true;
+ const id=Date.now()+'-'+crypto.randomUUID();let worker;
+ try{worker=new Worker(new URL('video-compress-worker.js?v=1',location.href),{type:'module'})}catch(error){active=false;throw Error('압축 기능을 시작하지 못했어요. 원본 업로드를 선택해 주세요.')}
+ let disposed=false;
+ const dispose=async()=>{if(disposed)return;disposed=true;resources.delete(dispose);worker.terminate();await remove(id)};
+ resources.add(dispose);
+ try{
+  return await new Promise((resolve,reject)=>{
+   let settled=false;
+   const finish=async(error,result)=>{
+    if(settled)return;settled=true;signal?.removeEventListener('abort',cancel);
+    active=false;
+    if(error){await dispose();reject(error)}else{worker.terminate();resolve({...result,dispose})}
+   };
+   const cancel=()=>{worker.postMessage({type:'cancel'});finish(new DOMException('압축을 취소했어요.','AbortError'))};
+   signal?.addEventListener('abort',cancel,{once:true});
+   worker.onmessage=event=>{
+    const data=event.data;
+    if(data.type==='progress'){if(!settled)onProgress(data.value,data.message)}
+    else if(data.type==='done')finish(null,{file:data.file,proof:data.proof});
+    else if(data.type==='error'){const error=Error(data.message);error.name=data.name||'Error';finish(error)}
+   };
+   worker.onerror=event=>{event.preventDefault();finish(Error('압축 모듈을 실행하지 못했어요. 원본 업로드를 선택해 주세요.'))};
+   if(signal?.aborted){cancel();return}
+   worker.postMessage({type:'compress',file,id});
+  });
+ }catch(error){active=false;await dispose();throw error}
+}
+window.vzipCompressVideo=(file,options={})=>{
+ if(navigator.locks?.request)return navigator.locks.request('vzip-video-compression',{ifAvailable:true},lock=>{
+  if(!lock)throw Error('다른 탭에서 영상을 압축 중이에요. 완료 후 다시 시도해 주세요.');
+  return compress(file,options);
+ });
+ return compress(file,options);
+};
+window.addEventListener('pagehide',()=>{for(const dispose of [...resources])dispose()});
 })();
