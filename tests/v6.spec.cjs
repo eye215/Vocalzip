@@ -428,7 +428,11 @@ test('Billing is only linked, and editing a legacy lesson never stamps a status 
 
 test('Library actually plays device and cloud-only audio (time advances)', async ({page}) => {
   await boot(page);
-  await page.route('**/cloud-audio.wav', async r => r.fulfill({contentType:'audio/wav', body:Buffer.from(await page.evaluate(() => [...new Uint8Array(window.__wav)]))}));
+  // A 4s clip so a replay is still playing when checked (1s ended too fast in WebKit).
+  const sr = 8000, n = sr * 4, wav = Buffer.alloc(44 + n * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 8) * 6000), 44 + i * 2);
+  await page.route('**/cloud-audio.wav', r => r.fulfill({contentType:'audio/wav', body:wav}));
   await page.evaluate(() => {
     window.vzipCloudSignedIn = () => true;
     window.vzipCloudMediaList = async () => [{id:'c1', name:'클라우드 음원', type:'audio/wav', path:'ui-test-user/c1.wav', created:Date.now(), songId:'', cloud:true}];
@@ -442,8 +446,9 @@ test('Library actually plays device and cloud-only audio (time advances)', async
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }
-  // After the 1s clip ends, one tap on the already-loaded source plays it again.
+  // Pause, then one tap on the already-loaded source plays it again.
   const row = page.locator('[data-media="c1"]');
+  await row.getByRole('button', {name:'일시정지'}).click();
   await expect(row.getByRole('button', {name:'재생', exact:true})).toBeVisible({timeout:5000});
   await row.getByRole('button', {name:'재생', exact:true}).click();
   await expect(row.getByRole('button', {name:'일시정지'})).toBeVisible();
