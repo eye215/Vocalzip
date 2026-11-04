@@ -252,7 +252,12 @@ test('Recording from a lesson links the file to that lesson', async ({page, brow
 
 test('Denied microphone explains the problem and keeps the recorder usable', async ({page}) => {
   await boot(page);
-  await page.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw Object.assign(new Error('denied'), {name:'NotAllowedError'}); }; window.MediaRecorder ||= function () {}; });
+  await page.evaluate(() => {
+    const deny = async () => { throw Object.assign(new Error('denied'), {name:'NotAllowedError'}); };
+    if (window.MediaDevices) MediaDevices.prototype.getUserMedia = deny;
+    Object.defineProperty(navigator, 'mediaDevices', {configurable:true, value:{getUserMedia:deny}});
+    window.MediaRecorder ||= function () {};
+  });
   await page.goto('/#/record');
   await page.getByRole('button', {name:'녹음 시작'}).click();
   await expect(page.locator('[data-status]')).toContainText('마이크 권한이 거부됐어요');

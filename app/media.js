@@ -225,7 +225,13 @@ M.capture = async ({onLevel, onTick}) => {
   if (!M.canRecord()) throw Object.assign(Error('이 브라우저는 녹음을 지원하지 않아요. 최신 Safari 또는 Chrome을 사용해 주세요.'), {code:'unsupported'});
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia(video ? {audio:true, video:{facingMode:'user', width:{ideal:1280}, height:{ideal:720}}} : {audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    const md = navigator.mediaDevices;
+    try { stream = await md.getUserMedia({audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}}); }
+    catch (first) {
+      // Some engines reject raw-voice constraints ("Invalid constraint"); fall back to defaults.
+      if (first.name !== 'OverconstrainedError' && first.name !== 'TypeError' && !/constraint/i.test(first.message || '')) throw first;
+      stream = await md.getUserMedia({audio:true});
+    }
   } catch (e) {
     const denied = e.name === 'NotAllowedError' || e.name === 'SecurityError';
     throw Object.assign(Error(denied ? (video ? '카메라·마이크' : '마이크') + ' 권한이 거부됐어요. 브라우저 설정에서 권한을 허용한 뒤 다시 시도해 주세요.' : e.name === 'NotFoundError' ? '사용할 수 있는 ' + (video ? '카메라' : '마이크') + '가 없어요.' : '녹음을 시작하지 못했어요: ' + e.message), {code:denied ? 'denied' : 'device'});
