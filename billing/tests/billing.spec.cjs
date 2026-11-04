@@ -7,6 +7,7 @@ async function open(page){
  await page.goto('/billing/');await expect(page.locator('#message')).toContainText('불러왔어요');
  page.on('dialog',dialog=>dialog.accept());
 }
+const confirmSheet=async page=>{const sheet=page.locator('.bd-sheet');await expect(sheet).toBeVisible();await sheet.locator('[data-ok]').click();await expect(sheet).toHaveCount(0)};
 const tab=(page,name)=>page.locator('[data-panel="'+name+'"]').click();
 async function pass(page,name='기본 10회권',count='10',amount='300000'){
  await tab(page,'passes');await page.locator('#pass-name').fill(name);await page.locator('#pass-totalUnits').fill(count);await page.locator('#pass-amount').fill(amount);
@@ -49,7 +50,7 @@ test('Notion payment CSV imports only valid rows, detects reimport, and safely u
  await csv(page,content,'payment','new');await expect(page.locator('#import-summary')).toContainText('선택 1행 · 오류 1행');
  await commit(page);await total(page,'remainingUnits','10회');await total(page,'paid','300,000원');
  await csv(page,content,'payment','new');await expect(page.locator('#import-summary')).toContainText('중복 의심 1행');await expect(page.locator('#commit-import')).toBeDisabled();
- await page.locator('#batch-list').getByRole('button',{name:'이 업로드 되돌리기'}).click();await expect(page.locator('#message')).toContainText('되돌렸어요');
+ await page.locator('#batch-list').getByRole('button',{name:'이 업로드 되돌리기'}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('되돌렸어요');
  await total(page,'chargedUnits','0회');const data=await ledger(page);expect(data.imports[0].status).toBe('undone');expect(data.importRows.map(row=>row.status)).toEqual(['undone','failed']);
 });
 test('Notion date-only attendance requires explicit status review and allows same-day records',async({page})=>{
@@ -85,7 +86,7 @@ test('compressed XLSX supports shared strings, cached formulas and the 1904 date
 test('undo blocks imported records edited after upload',async({page})=>{
  await open(page);await pass(page);await csv(page,'결제일,금액\n2026-11-04,100000');await commit(page);
  await tab(page,'payments');await page.locator('#payment-list').getByRole('button',{name:'수정',exact:true}).click();await page.locator('#payment-amount').fill('110000');await page.locator('#payment-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
- await tab(page,'imports');await page.locator('#batch-list').getByRole('button',{name:'이 업로드 되돌리기'}).click();await expect(page.locator('#message')).toContainText('수정된 기록');
+ await tab(page,'imports');await page.locator('#batch-list').getByRole('button',{name:'이 업로드 되돌리기'}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('수정된 기록');
  expect((await ledger(page)).payments[0].amount).toBe(110000);
 });
 test('storage failure preserves form values and original ledger',async({page})=>{
@@ -115,8 +116,8 @@ test('manual adjustment and deduction cancellation/restore keep audited totals',
  await open(page);await pass(page);await tab(page,'attendance');await page.locator('#deduction-status').selectOption('completed');await page.locator('#deduction-units').fill('2');await page.locator('#deduction-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
  await page.locator('#adjustment-unitsDelta').fill('10');await page.locator('#adjustment-amountDelta').fill('100000');await page.locator('#adjustment-memo').fill('추가 충전');await page.locator('#adjustment-form [name=ackImpact]').check();await page.locator('#adjustment-form [type=submit]').click();
  await total(page,'chargedUnits','20회');await total(page,'usedAmount','40,000원');
- await tab(page,'attendance');await page.locator('#deduction-list').getByRole('button',{name:'취소',exact:true}).click();await expect(page.locator('#message')).toContainText('취소했어요');await total(page,'usedUnits','0회');
- await tab(page,'attendance');await page.locator('#deduction-list').getByRole('button',{name:'복구',exact:true}).click();await expect(page.locator('#message')).toContainText('복구했어요');await total(page,'usedAmount','40,000원');
+ await tab(page,'attendance');await page.locator('#deduction-list').getByRole('button',{name:'취소',exact:true}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('취소했어요');await total(page,'usedUnits','0회');
+ await tab(page,'attendance');await page.locator('#deduction-list').getByRole('button',{name:'복구',exact:true}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('복구했어요');await total(page,'usedAmount','40,000원');
  const data=await ledger(page);expect(data.adjustments).toHaveLength(1);expect(data.history.at(-1).action).toBe('entity.restore');
 });
 test('app lessons waiting for settlement: one-tap deduction, status-less confirmation, restore after app cancel',async({page})=>{
@@ -146,7 +147,7 @@ test('app lessons waiting for settlement: one-tap deduction, status-less confirm
  await page.evaluate(()=>{const d=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1'));d.lessons[0].status='cancelled';localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify(d))});
  await page.reload();await expect(page.locator('#message')).toContainText('불러왔어요');
  await tab(page,'attendance');
- await pending.getByRole('button',{name:'차감 취소(복구)'}).click();
+ await pending.getByRole('button',{name:'차감 취소(복구)'}).click();await confirmSheet(page);
  await expect(page.locator('#message')).toContainText('차감을 취소했어요');
  await total(page,'usedUnits','0회');
  data=await ledger(page);
@@ -155,4 +156,16 @@ test('app lessons waiting for settlement: one-tap deduction, status-less confirm
  const after=JSON.parse(await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1')));
  const expected=JSON.parse(before);expected.lessons[0].status='cancelled';
  expect(after).toEqual(expected);
+});
+test('confirmation sheet matches the app tone: closing it changes nothing, Escape cancels',async({page})=>{
+ await open(page);await pass(page);await payment(page,'100000');
+ await tab(page,'payments');
+ await page.locator('#payment-list').getByRole('button',{name:'취소',exact:true}).click();
+ const sheet=page.locator('.bd-sheet');
+ await expect(sheet).toBeVisible();await expect(sheet.getByRole('heading')).toHaveText('기록을 취소할까요?');
+ await sheet.getByRole('button',{name:'닫기'}).click();await expect(sheet).toHaveCount(0);
+ await page.locator('#payment-list').getByRole('button',{name:'취소',exact:true}).click();
+ await page.keyboard.press('Escape');await expect(sheet).toHaveCount(0);
+ const data=await ledger(page);expect(data.payments[0].voidedAt).toBeFalsy();
+ await total(page,'paid','100,000원');
 });

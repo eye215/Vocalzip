@@ -6,7 +6,7 @@ const statusLabels={unconfirmed:'확인 필요',scheduled:'예정',completed:'�
 let state=null,pending=false,auditLimit=100,workbook=null,fileName='',sourceRows=[],draftRows=[],settings=null,page=0,parseRun=0;
 const forms={};
 function el(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node}
-function notify(text,error=false){$('#message').textContent=text;$('#message').className=error?'error':''}
+function notify(text,error=false){const box=$('#message');box.textContent=text;box.className=(error?'error ':'')+'show';clearTimeout(notify.timer);notify.timer=setTimeout(()=>box.classList.remove('show'),error?6000:3200)}
 function button(text,fn){const b=el('button',text);b.type='button';b.onclick=fn;return b}
 function selectOptions(select,options,previous=select.value){select.replaceChildren();for(const [value,label]of options)select.add(new Option(label,value));if(options.some(([value])=>value===previous))select.value=previous}
 function passName(id){return state?.passes.find(row=>row.id===id)?.name||'레슨권 없음'}
@@ -15,7 +15,7 @@ function table(headers,rows,empty='아직 기록이 없어요.'){
  if(!rows.length)return el('p',empty,'empty');
  const wrap=el('div',undefined,'table-wrap'),table=el('table'),head=el('thead'),tr=el('tr');
  for(const name of headers){const th=el('th',name);th.scope='col';tr.append(th)}head.append(tr);table.append(head);
- const body=el('tbody');for(const values of rows){const row=el('tr');for(const value of values){const td=el('td');if(value instanceof Node)td.append(value);else td.textContent=String(value??'');row.append(td)}body.append(row)}table.append(body);wrap.append(table);return wrap;
+ const body=el('tbody');for(const values of rows){const row=el('tr');for(const [index,value] of values.entries()){const td=el('td');if(headers[index])td.dataset.label=headers[index];if(value instanceof Node)td.append(value);else td.textContent=String(value??'');row.append(td)}body.append(row)}table.append(body);wrap.append(table);return wrap;
 }
 function flags(form,names){
  for(const [name,label]of names){const wrapper=el('label',undefined,'check'),input=el('input');input.type='checkbox';input.name=name;wrapper.append(input,document.createTextNode(label));form.append(wrapper)}
@@ -79,7 +79,7 @@ function edit(kind,row){
  show(kind==='pass'?'passes':kind==='payment'?'payments':'attendance');previewForm(kind);f.scrollIntoView({block:'start'});f.elements[kind==='pass'?'name':'date']?.focus();
 }
 async function toggle(collection,row){
- const restore=!!row.voidedAt;if(!confirm((restore?'복구':'취소')+'할까요? 변경 이력은 보존됩니다.'))return;
+ const restore=!!row.voidedAt;if(!await window.VzipBillingDialog.ask({title:restore?'기록을 복구할까요?':'기록을 취소할까요?',message:'정산 합계에 바로 반영되고, 변경 이력은 그대로 남아요.',ok:restore?'복구':'기록 취소',cancel:'닫기',danger:!restore}))return;
  try{await persist({type:restore?'entity.restore':'entity.void',payload:{collection,id:row.id,expectedVersion:row.version}},null,'기록을 '+(restore?'복구':'취소')+'했어요.')}catch{}
 }
 function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'취소',()=>toggle(collection,row)));return box}
@@ -114,7 +114,7 @@ function renderBatches(){
  $('#batch-list').replaceChildren(table(['파일','업로드일','유형','성공/실패/중복 의심','작업 ID','관리'],state.imports.slice().reverse().map(batch=>{
  const details=el('details');details.append(el('summary','행별 결과'));
  const rows=state.importRows.filter(row=>row.batchId===batch.id);details.append(el('pre',rows.map(row=>row.sourceRow+'행 · '+row.status+(row.errors?.length?' · '+row.errors.join(', '):'')).join('\n')));
- const controls=el('div');controls.append(details);if(batch.status==='applied')controls.append(button('이 업로드 되돌리기',async()=>{if(!confirm('이 업로드가 새로 만든 '+batch.success+'행을 되돌릴까요? 이후 수정/연결된 기록이 있으면 차단됩니다.'))return;try{await persist({type:'import.undo',payload:{id:batch.id}},null,'업로드를 되돌렸어요.')}catch{}}));else controls.append(el('span','되돌림 완료'));
+ const controls=el('div');controls.append(details);if(batch.status==='applied')controls.append(button('이 업로드 되돌리기',async()=>{if(!await window.VzipBillingDialog.ask({title:'업로드를 되돌릴까요?',message:'이 업로드로 새로 만든 '+batch.success+'행만 취소해요. 이후 수정되거나 다른 기록과 연결된 경우에는 안전을 위해 되돌리지 않아요.',ok:'되돌리기',cancel:'닫기',danger:true}))return;try{await persist({type:'import.undo',payload:{id:batch.id}},null,'업로드를 되돌렸어요.')}catch{}}));else controls.append(el('span','되돌림 완료'));
  return [batch.fileName,batch.at,batch.kind==='payment'?'결제':'수강',batch.success+' / '+batch.failed+' / '+batch.duplicates,batch.id,controls];
  })));
 }

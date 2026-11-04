@@ -51,7 +51,7 @@ function render(ctx){
   summary.replaceChildren();
   if(count){
    const p=document.createElement('p');p.className='pending-summary';
-   p.textContent='앱 레슨 정산 대기 '+count+'건 (차감 '+groups.toDeduct.length+' · 확인 필요 '+groups.toConfirm.length+' · 복구 확인 '+groups.toRestore.length+') ';
+   p.textContent='앱 레슨 정산 대기 '+count+'건 · '+[['차감',groups.toDeduct.length],['수강 확인',groups.toConfirm.length],['복구 확인',groups.toRestore.length]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · ')+' ';
    const go=document.createElement('button');go.type='button';go.textContent='수강·조정에서 처리';go.onclick=()=>app.show('attendance');
    p.append(go);summary.append(p);
   }
@@ -81,7 +81,7 @@ function render(ctx){
  };
  list('완료 · 차감 대기',groups.toDeduct,lesson=>[['1회 차감',()=>need()&&app.persist(deductionFor(lesson,chosenPass),lesson.lesson_date+' 레슨을 1회 차감했어요.')],['직접 입력',()=>app.prefill(lesson.lesson_id)]]);
  list('상태 없음 · 수강 확인',groups.toConfirm,lesson=>[['수강함 · 1회 차감',()=>need()&&app.persist(deductionFor(lesson,chosenPass),lesson.lesson_date+' 레슨을 수강으로 확인하고 1회 차감했어요.')],['수강 안 함 · 0회',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{status:'cancelled',units:0}),lesson.lesson_date+' 레슨을 차감 없이 기록했어요.')],['직접 입력',()=>app.prefill(lesson.lesson_id)]]);
- list('앱에서 취소·예정으로 바뀐 차감',groups.toRestore,({lesson,deduction})=>[['차감 취소(복구)',()=>{if(confirm(lesson.lesson_date+' 레슨의 차감을 취소할까요? 변경 이력은 보존됩니다.'))app.persist({type:'entity.void',payload:{collection:'deductions',id:deduction.id,expectedVersion:deduction.version}},'차감을 취소했어요.')}],['당일 취소 등으로 수정',()=>app.edit(deduction)]]);
+ list('앱에서 취소·예정으로 바뀐 차감',groups.toRestore,({lesson,deduction})=>[['차감 취소(복구)',async()=>{if(await window.VzipBillingDialog.ask({title:'차감을 취소할까요?',message:lesson.lesson_date+' 레슨이 앱에서 취소·예정으로 바뀌었어요. 차감을 취소하면 잔여 횟수가 1회 돌아와요. 변경 이력은 남아요.',ok:'차감 취소',cancel:'닫기',danger:true}))app.persist({type:'entity.void',payload:{collection:'deductions',id:deduction.id,expectedVersion:deduction.version}},'차감을 취소했어요.')}],['당일 취소 등으로 수정',()=>app.edit(deduction)]]);
  host.append(box);
  if(passes.length&&!chosenPass){const warn=document.createElement('p');warn.className='help error';warn.textContent='잔여 1회 이상인 레슨권이 없어요. 새 레슨권을 등록하거나 직접 선택해 주세요.';box.insertBefore(warn,box.querySelector('h4'))}
 }
