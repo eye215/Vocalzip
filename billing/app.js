@@ -255,7 +255,7 @@ function editCell(row,key,type='text',options){
  input.setAttribute('aria-label',row.sourceRow+'행 '+(I.labels[key]||key));input.onchange=()=>{
   const target=draftRows.find(item=>item.sourceRow===row.sourceRow);target[key]=input.value;
   if(key==='status')target.units=input.value==='completed'?'1':'0';
-  if(key==='passId'){target.newPass=input.value==='__new__';if(target.newPass)target.passId=''}
+  if(key==='passId'){target.passMatchWarning='직접 선택한 레슨권입니다.';target.newPass=input.value==='__new__';if(target.newPass)target.passId=''}
   renderPreview();
  };return input;
 }
