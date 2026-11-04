@@ -524,3 +524,32 @@ test('Song pickers list the most recently registered song first', async ({page})
   await sheet(page).getByRole('button', {name:'닫기'}).click();
   expect((await page.locator('[data-song] option').allTextContents()).slice(2, 5)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment']);
 });
+
+test('A list read that overlaps a login or file change is re-read, and a failed cloud read is retried', async ({page}) => {
+  await boot(page);
+  const reads = await page.evaluate(async () => {
+    const real = window.vzipReadMedia; let calls = 0, release;
+    const gate = new Promise(r => { release = r; });
+    window.vzipReadMedia = async () => { calls++; if (calls === 1) await gate; return real(); };
+    VZ.media.invalidate();
+    const early = VZ.media.list();   // in flight…
+    VZ.media.invalidate();           // …when a login/upload/edit happens
+    release(); await early;
+    await VZ.media.list();           // must read again, not reuse the overlapped result
+    window.vzipReadMedia = real;
+    return calls;
+  });
+  expect(reads).toBe(2);
+  // A failed cloud read is shown as an error and retried next time instead of hiding cloud files.
+  const retried = await page.evaluate(async () => {
+    let calls = 0;
+    window.vzipCloudSignedIn = () => true;
+    window.vzipCloudMediaList = async () => { if (++calls === 1) throw Error('network'); return [{id:'cloud-b', name:'b', type:'audio/wav', path:'u/b.wav', created:Date.now(), cloud:true}]; };
+    VZ.media.invalidate();
+    const first = await VZ.media.list(), error = VZ.media.cloudError();
+    const second = await VZ.media.list();
+    return {first:first.some(m => m.id === 'cloud-b'), error, second:second.some(m => m.id === 'cloud-b')};
+  });
+  expect(retried).toMatchObject({first:false, second:true});
+  expect(retried.error).toContain('클라우드 목록을 불러오지 못했어요');
+});
