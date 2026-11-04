@@ -71,7 +71,7 @@ modal.querySelector('[data-save]').onclick=async()=>{if(!name.value.trim()){err.
 }
 async function remove(item){if(!confirm('이 녹음·영상을 영구 삭제할까요? 클라우드와 이 기기에 모두 있으면 둘 다 삭제됩니다.'))return;try{if(item.cloud)await window.vzipCloudMediaDelete(item);if(item.local)await localChange(item.id,()=>null);clearPlayer();window.dispatchEvent(new Event('vzip:media-updated'));await refresh()}catch(e){status.textContent='삭제 실패: '+e.message}}
 list.addEventListener('click',async e=>{const b=e.target.closest('button[data-action]');if(!b){if(e.target.closest('.vzip-player,audio,video,input,select,textarea,a,label,button'))return;const row=e.target.closest('.vzip-hub-item');if(row)window.dispatchEvent(new CustomEvent('vzip:compare-open',{detail:{id:row.dataset.id}}));return;}const item=items.find(x=>x.id===b.closest('[data-id]')?.dataset.id);if(!item)return;if(b.dataset.action==='compare')window.dispatchEvent(new CustomEvent('vzip:compare-open',{detail:{id:item.id}}));if(b.dataset.action==='play')await play(item,b.closest('.vzip-hub-item'));if(b.dataset.action==='edit')await edit(item,b);if(b.dataset.action==='delete')await remove(item)});
-$('#vzip-hub-reload').onclick=refresh;
+$('#vzip-hub-reload').onclick=()=>{uploadMessage='';refresh()};
 const importHint=document.createElement('p');importHint.className='muted';
 importHint.textContent='여러 파일을 선택하고 파일별 곡을 지정하세요. 파일당 최대 1GB, 25MB 초과 파일은 클라우드 로그인이 필요해요. 업로드 중에는 화면을 유지해 주세요.';
 $('#vzip-hub-upload').closest('.vzip-hub-buttons').after(importHint);

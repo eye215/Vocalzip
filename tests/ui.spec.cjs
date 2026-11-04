@@ -1061,6 +1061,11 @@ test('Lesson uses the same capture controls, pauses, marks and saves its own rec
  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
  const box=page.locator('#vzip-lesson-capture');
  await expect(box.locator('[data-kind=video]')).toBeVisible();
+ const styles=await page.evaluate(()=>{
+  const style=id=>{const el=document.getElementById(id),s=getComputedStyle(el);return {width:s.width,height:s.height,background:s.backgroundColor,radius:s.borderRadius}};
+  return {lesson:style('vzip-lesson-capture-start'),practice:style('vzip-capture-start'),host:getComputedStyle(document.getElementById('vzip-recorder')).backgroundColor};
+ });
+ expect(styles.lesson).toEqual(styles.practice);expect(styles.host).toBe('rgba(0, 0, 0, 0)');
  await page.locator('#vzip-lesson-capture-start').click();
  await expect(page.locator('#vzip-lesson-capture-stop')).toBeEnabled();
  await page.waitForTimeout(1100);

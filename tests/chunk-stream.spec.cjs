@@ -38,6 +38,30 @@ test('Real service worker serves private cross-part ranges, reloads and native p
  expect(await media.evaluate(el=>el.duration)).toBeCloseTo(2,1);
  await media.evaluate(async el=>{el.currentTime=1;await el.play()});
  await expect.poll(()=>media.evaluate(el=>el.currentTime)).toBeGreaterThan(1);
+ await media.evaluate(el=>{el.pause();el.removeAttribute('src');el.load();el.remove()});
+ // Generate a real short video with virtual hardware, then play its original bytes through two objects.
+ const videoBytes=await page.evaluate(async()=>{
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:true});
+  try{
+   const recorder=new MediaRecorder(stream,{mimeType:'video/webm'}),chunks=[];
+   recorder.ondataavailable=event=>{if(event.data.size)chunks.push(event.data)};
+   const stopped=new Promise(resolve=>recorder.onstop=resolve);recorder.start(100);
+   await new Promise(resolve=>setTimeout(resolve,1200));recorder.stop();await stopped;
+   return Array.from(new Uint8Array(await new Blob(chunks).arrayBuffer()));
+  }finally{stream.getTracks().forEach(track=>track.stop())}
+ });
+ bytes=Buffer.from(videoBytes);cut=Math.floor(bytes.length/2);
+ const videoSrc=await page.evaluate(async({size,cut})=>{
+  const item={storageVersion:2,type:'video/webm',size,parts:[{path:'owner/part-0',size:cut},{path:'owner/part-1',size:size-cut}]};
+  return window.vzipChunkMediaURL(item,async path=>'https://chxnbtiyuyhiywzeshis.supabase.co/storage/v1/object/sign/vocal-recordings/'+path+'?token=video');
+ },{size:bytes.length,cut});
+ await page.evaluate(src=>{const video=document.createElement('video');video.id='video-stream-fixture';video.playsInline=true;video.controls=true;video.src=src;document.body.append(video)},videoSrc);
+ const video=page.locator('#video-stream-fixture');
+ await expect.poll(()=>video.evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
+ await video.evaluate(el=>el.play());
+ await expect.poll(()=>video.evaluate(el=>el.currentTime)).toBeGreaterThan(0);
+ await video.evaluate(el=>{el.pause();el.currentTime=.3});
+ await expect.poll(()=>video.evaluate(el=>el.currentTime)).toBeCloseTo(.3,1);
  await page.evaluate(()=>window.vzipRevokeChunkMedia());
  await expect.poll(()=>page.evaluate(async src=>(await fetch(src)).status,src)).toBe(410);
  expect(requests.length).toBeGreaterThanOrEqual(2);

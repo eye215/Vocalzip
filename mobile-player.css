@@ -30,3 +30,6 @@
 .vzip-upload-song-row strong,.vzip-upload-progress p{overflow-wrap:anywhere}
 .vzip-upload-progress [hidden]{display:none!important}
 .vzip-media-edit-sheet{max-height:88dvh;overflow:auto}
+
+#lesson-form #vzip-recorder,#lesson-form .wizard-record-note{background:transparent;border:0;box-shadow:none;padding:0}
+#lesson-form .wizard-record-note>b,#lesson-form .wizard-record-note>p{display:none}
