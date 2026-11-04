@@ -47,25 +47,30 @@ window.vzipReadMedia = () => tx('readonly', s => s.getAll());
 window.vzipMediaBlob = blobOf; window.vzipMediaType = typeOf;
 
 const M = VZ.media = {typeOf, blobOf, LOCAL_LIMIT};
-let cache = null, loading = null, cloudError = '';
+let cache = null, loading = null, generation = 0, cloudError = '';
 M.cloudError = () => cloudError;
-M.invalidate = () => { cache = null; };
+/** Any change (login, upload, edit) starts a new generation; results of older reads are never cached. */
+M.invalidate = () => { cache = null; generation++; };
 /** Local + cloud items merged by id, newest first. */
 M.list = async (force) => {
   if (cache && !force) return cache;
-  if (loading) return loading;
-  loading = (async () => {
+  const mine = generation;
+  if (loading && loading.generation === mine) return loading.promise;
+  const promise = (async () => {
     const map = new Map();
-    try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch (e) { console.error(e); }
-    cloudError = '';
+    let failed = '';
+    try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch (e) { console.error(e); failed = '이 기기의 파일을 읽지 못했어요.'; }
     if (window.vzipCloudSignedIn?.()) {
       try { (await window.vzipCloudMediaList()).forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion})); }
-      catch (e) { cloudError = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
+      catch (e) { failed = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
     }
-    cache = [...map.values()].sort((a, b) => (b.created || 0) - (a.created || 0));
-    return cache;
+    const list = [...map.values()].sort((a, b) => (b.created || 0) - (a.created || 0));
+    // A read that started before a login/change, or that missed a source, is shown but not kept.
+    if (generation === mine) { cloudError = failed; if (!failed) cache = list; }
+    return list;
   })();
-  try { return await loading; } finally { loading = null; }
+  loading = {generation:mine, promise};
+  try { return await promise; } finally { if (loading?.promise === promise) loading = null; }
 };
 M.cached = () => cache || [];
 /** File name from song + recording day ("곡 2026.11.02"); numbered when that name is taken. */
