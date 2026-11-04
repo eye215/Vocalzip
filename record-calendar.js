@@ -68,7 +68,7 @@
       const content=make('span','vzip-calendar-record-text'), song=(db.songs||[]).find(song=>song.id===record.songId);
       content.append(make('strong','',kind==='media'?(record.name||'녹음 파일'):kind==='lesson'?'레슨 기록':song?.title||'자유 연습'));
       const minutes=Number(record.minutes), duration=Number.isFinite(minutes)&&minutes>=0?`${Math.round(minutes*10)/10}분`:'시간 미기록';
-      content.append(make('span','',kind==='media'?`녹음 · ${record.song||song?.title||'곡 미지정'}${record.dateSource==='metadata'?' · 원본 날짜':record.dateSource==='file-modified'?' · 파일 수정일':''}`:kind==='lesson'?(record.feedback||record.memo||song?.title||'레슨 메모 보기'):`연습 · ${duration}${record.rating?' · 만족도 '+record.rating+'/5':''}`));
+      content.append(make('span','',kind==='media'?`녹음 · ${record.song||song?.title||'곡 미지정'}${record.dateSource==='metadata'?' · 메타데이터 날짜':record.dateSource==='file-modified'?' · 파일 수정일':''}`:kind==='lesson'?(record.feedback||record.memo||song?.title||'레슨 메모 보기'):`연습 · ${duration}${record.rating?' · 만족도 '+record.rating+'/5':''}`));
       const arrow=make('i','ph ph-caret-right');arrow.setAttribute('aria-hidden','true');row.append(icon,content,arrow);
       row.onclick=()=>openRecord(kind,record.id);list.append(row);
       if (kind==='practice' && record.completed?.length) {
