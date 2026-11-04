@@ -8,18 +8,15 @@
   const saved = document.querySelector('#practice-saved-media');
   const summary = document.querySelector('#practice-time-summary');
   const linked = new Map();
-  const localImportLimit=25*1024*1024,maxImportLimit=50*1024*1024;
-  input.multiple=false;
+  const localImportLimit=25*1024*1024,maxImportLimit=1024*1024*1024;
+  input.multiple=true;
   input.accept='.mp4,.mov,.m4v,.m4a,.mp3,.wav,.webm,.aac,.ogg,.flac,video/mp4,video/quicktime,audio/mp4,audio/mpeg,audio/wav';
   const importHint=document.createElement('p');importHint.className='muted';
-  importHint.textContent='파일은 한 번에 하나씩, 최대 50MB까지 가져와요. 25MB 초과 파일은 로그인 후 클라우드에 저장하며, 원본 길이 대신 연습 시간을 직접 입력해 주세요.';
+  importHint.textContent='여러 파일을 선택하고 파일별 곡을 지정할 수 있어요. 파일당 최대 1GB, 25MB 초과 파일은 클라우드에 저장해요. 큰 파일의 연습 시간은 직접 입력해 주세요.';
   input.after(importHint);
   const cancelImport=document.createElement('button');cancelImport.type='button';cancelImport.className='btn secondary';
   cancelImport.id='vzip-practice-import-cancel';cancelImport.textContent='업로드 취소';cancelImport.hidden=true;
   importHint.after(cancelImport);
-  let importController=null;
-  cancelImport.onclick=()=>importController?.abort();
-  window.addEventListener('pagehide',()=>importController?.abort());
   let listRun = 0;
   const busy = (key, value) => window.vzipSetPracticeBusy?.(key, value);
   const typeOf = file => {
@@ -56,6 +53,7 @@
   }
   window.vzipStorePracticeMedia = async item => {
     // Materialize Files before storing: WebKit may retain a temporary file handle.
+    if(item.blob.size>25*1024*1024){await transaction('readwrite', store => store.put(item));return}
     const bytes = await item.blob.arrayBuffer();
     const local = {...item, blob:new Blob([bytes], {type:typeOf(item)})};
     try { await transaction('readwrite', store => store.put(local)); }
@@ -155,42 +153,38 @@
     } catch (error) { saved.textContent = '보관함을 불러오지 못했어요: ' + error.message; }
   }
   input.onchange = async () => {
-    let file=input.files?.[0];if(!file||input.disabled)return;
-    busy('import',true);input.disabled=true;preview.replaceChildren();
-    const row=document.createElement('p');row.className='vzip-duration-file';preview.append(row);
-    const fileName=file.name,songId=form.elements.song?.value||'';
-    row.textContent=fileName+' · 저장 중…';
-    importController=new AbortController();
+    const files=Array.from(input.files||[]);if(!files.length||input.disabled)return;
+    input.disabled=true;busy('import',true);preview.replaceChildren();
     try{
-      const type=typeOf(file);
-      if(!/^(audio|video)\//.test(type))throw Error('음성·영상 파일을 선택해 주세요.');
-      if(!file.size)throw Error('빈 파일은 가져올 수 없어요.');
-      if(file.size>maxImportLimit)throw Error('파일당 최대 50MB까지 가져올 수 있어요.');
-      let id,seconds=0,cloud=false;
-      if(file.size>localImportLimit){
-        if(!window.vzipCloudSignedIn?.())throw Error('25MB 초과 파일은 클라우드 로그인이 필요해요.');
-        cancelImport.hidden=false;row.textContent=fileName+' · 클라우드에 분할 업로드 중…';
-        const metadata=await window.vzipCloudImport(file,{name:fileName,type,source:'practice',songId},
-          progress=>{row.textContent=fileName+' · 업로드 '+progress+'%'},
-          {signal:importController.signal,onCommit:()=>{cancelImport.hidden=true;row.textContent=fileName+' · 보관함 연결 중…'}});
-        id=metadata.id;seconds=Number(metadata.durationSeconds)||0;cloud=true;
-      }else{
-        seconds=await duration(file);id=crypto.randomUUID();
-        const item={id,name:fileName,type,blob:blobOf({name:fileName,type,blob:file}),
-          created:Date.now(),source:'practice',songId,durationSeconds:seconds};
-        await window.vzipStorePracticeMedia(item);
-      }
-      linked.set(id,{seconds});calculate();
-      row.textContent='✓ '+fileName+' · 보관함 저장 완료'+(cloud?' (클라우드)':'')+' · '+
-        (seconds?clock(seconds):'길이 미확인: 시간을 직접 입력해 주세요.');
-      window.dispatchEvent(new CustomEvent('vzip:media-saved',{detail:{id,source:'practice'}}));
-    }catch(error){
-      row.textContent=error.name==='AbortError'?'업로드를 취소했어요. 파일을 연결하지 않았어요.':
-        fileName+' 저장 실패: '+error.message+' · 원본을 다시 선택해 주세요.';
-    }finally{
-      file=null;input.value='';input.disabled=false;cancelImport.hidden=true;importController=null;
-      busy('import',false);loadSaved();
-    }
+      await window.vzipImportBatch(files,{
+        host:preview,cancelButton:cancelImport,
+        choose:batch=>batch.length>1?window.vzipChooseUploadSongs(batch,form.elements.song?.value||''):
+          Promise.resolve([{songId:form.elements.song?.value||'',song:form.elements.song?.value?form.elements.song.selectedOptions[0].textContent:''}]),
+        onBusy:value=>{input.disabled=value;busy('import',value)},
+        onSummary:()=>loadSaved(),
+        importFile:async(file,chosen,progress,signal)=>{
+          const type=typeOf(file);
+          if(!/^(audio|video)\//.test(type))throw Error('음성·영상 파일을 선택해 주세요.');
+          if(!file.size)throw Error('빈 파일은 가져올 수 없어요.');
+          if(file.size>maxImportLimit)throw Error('파일당 최대 1GB까지 가져올 수 있어요.');
+          let id,seconds=0;
+          if(file.size>localImportLimit){
+            if(!window.vzipCloudSignedIn?.())throw Error('25MB 초과 파일은 클라우드 로그인이 필요해요.');
+            const meta=await window.vzipCloudImport(file,{name:file.name,type,source:'practice',...chosen},
+              value=>progress('업로드 '+value+'%'),{signal,onCommit:()=>progress('보관함 연결 중…')});
+            id=meta.id;seconds=Number(meta.durationSeconds)||0;
+          }else{
+            progress('기기에 저장 중…');seconds=await duration(file);
+            if(signal.aborted)throw new DOMException('취소','AbortError');
+            id=chosen.id;
+            await window.vzipStorePracticeMedia({id,name:file.name,type,blob:blobOf({name:file.name,type,blob:file}),
+              created:Date.now(),source:'practice',...chosen,durationSeconds:seconds});
+          }
+          linked.set(id,{seconds});calculate();
+          window.dispatchEvent(new CustomEvent('vzip:media-saved',{detail:{id,source:'practice'}}));
+        }
+      });
+    }finally{input.value='';input.disabled=false;busy('import',false);loadSaved()}
   };
   window.addEventListener('vzip:media-saved', event => {
     if (event.detail?.attachToPractice && event.detail.id) {

@@ -8,6 +8,8 @@ jobs:
   ui:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,7 +17,9 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
+      - run: node --test tests/chunk-media.test.cjs
       - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Real service worker|Lesson uses the same capture'
       - run: npm run test:ui
       - uses: actions/upload-artifact@v4
         if: always()

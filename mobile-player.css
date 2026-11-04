@@ -4,23 +4,32 @@
 .vzip-player-track{flex:1;min-width:0}.vzip-player-track input{width:100%;height:44px;margin:0;padding:0;accent-color:#9768e8;cursor:pointer}
 .vzip-player-times{display:flex;justify-content:space-between;font-size:12px;font-variant-numeric:tabular-nums;color:#75628e}
 .vzip-player-message:empty{display:none}.vzip-player-message{font-size:13px;color:#75628e}.vzip-player-native{margin-top:12px;font-size:12px;color:#75628e}.vzip-player-native summary{min-height:30px;cursor:pointer}.vzip-player-native audio{width:100%}
-.vzip-player video{width:100%;border-radius:14px}.vzip-player button:focus-visible,#vzip-practice-capture button:focus-visible{outline:3px solid #614298;outline-offset:4px}
-#vzip-practice-capture{padding:24px 16px;text-align:center;border:0;background:transparent;box-shadow:none}
-#vzip-practice-capture h2{font-size:18px}#vzip-practice-capture>p:first-of-type{font-size:12px;line-height:1.6}
-#vzip-practice-capture .two{display:flex;gap:8px}#vzip-practice-capture [data-kind]{flex:1;border-radius:28px;min-height:46px;font-size:14px}#vzip-practice-capture [data-kind][aria-pressed=true]{background:#9468e5;color:white}
-#vzip-capture-clock{display:block;font-size:42px;letter-spacing:-1px;font-weight:700;font-variant-numeric:tabular-nums;color:#55407e;margin:30px 0 8px}
-#vzip-capture-wave{display:block;width:100%;height:78px;margin:12px 0 22px}
-#vzip-practice-capture .vzip-capture-actions{display:flex;align-items:center;justify-content:center;gap:22px;margin:20px 0 30px}
-#vzip-practice-capture .vzip-capture-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:0;background:white;color:#765caa;border-radius:50%;width:58px;height:58px;font-size:11px;cursor:pointer}
-#vzip-practice-capture .vzip-capture-actions button i{font-size:23px}#vzip-practice-capture .vzip-capture-actions .vzip-capture-primary{width:82px;height:82px;background:#966ae5;color:white;box-shadow:0 6px 18px #a488d84d}
-#vzip-practice-capture button:disabled{opacity:.4;cursor:default}#vzip-practice-capture button[hidden]{display:none}#vzip-capture-status{min-height:38px;font-size:12px;line-height:1.6}#vzip-practice-capture>label{text-align:left}#vzip-practice-capture>input{background:rgba(255,255,255,.7)}
+.vzip-player video{width:100%;border-radius:14px}.vzip-player button:focus-visible,.vzip-capture button:focus-visible{outline:3px solid #614298;outline-offset:4px}
+.vzip-capture{padding:24px 16px;text-align:center;border:0;background:transparent;box-shadow:none}
+.vzip-capture h2{font-size:18px}.vzip-capture>p:first-of-type{font-size:12px;line-height:1.6}
+.vzip-capture .two{display:flex;gap:8px}.vzip-capture [data-kind]{flex:1;border-radius:28px;min-height:46px;font-size:14px}.vzip-capture [data-kind][aria-pressed=true]{background:#9468e5;color:white}
+:is(#vzip-capture-clock,#vzip-lesson-capture-clock){display:block;font-size:42px;letter-spacing:-1px;font-weight:700;font-variant-numeric:tabular-nums;color:#55407e;margin:30px 0 8px}
+:is(#vzip-capture-wave,#vzip-lesson-capture-wave){display:block;width:100%;height:78px;margin:12px 0 22px}
+.vzip-capture .vzip-capture-actions{display:flex;align-items:center;justify-content:center;gap:22px;margin:20px 0 30px}
+.vzip-capture .vzip-capture-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:0;background:white;color:#765caa;border-radius:50%;width:58px;height:58px;font-size:11px;cursor:pointer}
+.vzip-capture .vzip-capture-actions button i{font-size:23px}.vzip-capture .vzip-capture-actions .vzip-capture-primary{width:82px;height:82px;background:#966ae5;color:white;box-shadow:0 6px 18px #a488d84d}
+.vzip-capture button:disabled{opacity:.4;cursor:default}.vzip-capture button[hidden]{display:none}:is(#vzip-capture-status,#vzip-lesson-capture-status){min-height:38px;font-size:12px;line-height:1.6}.vzip-capture>label{text-align:left}.vzip-capture>input{background:rgba(255,255,255,.7)}
 
-#vzip-practice-capture .vzip-capture-actions button{padding:0;white-space:nowrap;flex-shrink:0}#vzip-practice-capture .vzip-capture-actions{gap:18px}#vzip-capture-wave{height:60px;margin:8px 0 16px}
+.vzip-capture .vzip-capture-actions button{padding:0;white-space:nowrap;flex-shrink:0}.vzip-capture .vzip-capture-actions{gap:18px}:is(#vzip-capture-wave,#vzip-lesson-capture-wave){height:60px;margin:8px 0 16px}
 
 .vzip-player-wave{display:block;width:100%;height:48px}
 
-#practice-form #vzip-practice-capture{padding:8px 0 16px!important;background:transparent!important;border:0!important;box-shadow:none!important}
-#vzip-practice-capture>h2,#vzip-practice-capture>p:first-of-type{display:none}
-#vzip-practice-capture .vzip-capture-name{text-align:left;font-size:13px;color:#75628e;margin-top:12px}
-#vzip-practice-capture .vzip-capture-name summary{padding:12px;cursor:pointer;border-radius:14px;background:#ffffff99}
-#vzip-practice-capture .vzip-capture-name input{width:100%}
+#practice-form .vzip-capture{padding:8px 0 16px!important;background:transparent!important;border:0!important;box-shadow:none!important}
+.vzip-capture>h2,.vzip-capture>p:first-of-type{display:none}
+.vzip-capture .vzip-capture-name{text-align:left;font-size:13px;color:#75628e;margin-top:12px}
+.vzip-capture .vzip-capture-name summary{padding:12px;cursor:pointer;border-radius:14px;background:#ffffff99}
+.vzip-capture .vzip-capture-name input{width:100%}
+
+#lesson-form .vzip-capture{padding:8px 0 16px!important;background:transparent!important;border:0!important;box-shadow:none!important}
+.vzip-upload-song-row,.vzip-upload-progress{padding:14px 0;border-bottom:1px solid #e8def5;text-align:left}
+.vzip-upload-song-row strong,.vzip-upload-progress p{overflow-wrap:anywhere}
+.vzip-upload-progress [hidden]{display:none!important}
+.vzip-media-edit-sheet{max-height:88dvh;overflow:auto}
+
+#lesson-form #vzip-recorder,#lesson-form .wizard-record-note{background:transparent;border:0;box-shadow:none;padding:0}
+#lesson-form .wizard-record-note>b,#lesson-form .wizard-record-note>p{display:none}
