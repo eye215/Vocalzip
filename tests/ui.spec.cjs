@@ -12,7 +12,7 @@ test.beforeEach(async ({page}) => {
   await page.route('**/tus.min.js', route => route.fulfill({contentType:'application/javascript',body:'window.tus={};'}));
   await page.route('**/*.supabase.co/**', route => route.abort());
   page.on('dialog', dialog => dialog.accept());
-  await page.goto('/');
+  await page.goto('/legacy.html');
   await expect(page.locator('#vzip-auth-screen')).toBeHidden();
   await page.evaluate(()=>{window.vzipPrepareMedia=async file=>({file,metadata:VzipMediaDates.pick({},file.lastModified),dispose:async()=>{}})});
 });
@@ -1112,7 +1112,7 @@ test('Another tab cannot clean up or overwrite an active upload',async({page,con
  await other.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:cloudStub}));
  await other.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
  await other.route('**/*.supabase.co/**',route=>route.abort());
- await other.goto('/');await expect(other.locator('#vzip-auth-screen')).toBeHidden();
+ await other.goto('/legacy.html');await expect(other.locator('#vzip-auth-screen')).toBeHidden();
  await installUploadProbe(other,'success');
  const blocked=await other.evaluate(async()=>{try{await window.vzipCloudImport(new File(['other'],'other.wav',{type:'audio/wav'}))}catch(e){return {error:e.message,calls:window.__uploadCalls.length,removed:window.__removedPaths||[]}}});
  expect(blocked.error).toContain('다른 파일을 업로드');expect(blocked.calls).toBe(0);expect(blocked.removed).toEqual([]);

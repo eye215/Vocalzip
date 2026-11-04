@@ -1,8 +1,9 @@
 const fs = require('node:fs');
 const vm = require('node:vm');
-for (const file of fs.readdirSync('.').filter(name => name.endsWith('.js'))) {
-  new vm.Script(fs.readFileSync(file, 'utf8'), {filename:file});
+const files = [...fs.readdirSync('.').filter(name => name.endsWith('.js')), ...fs.readdirSync('app').filter(name => name.endsWith('.js')).map(name => 'app/' + name)];
+for (const file of files) new vm.Script(fs.readFileSync(file, 'utf8'), {filename:file});
+for (const page of ['index.html', 'legacy.html']) {
+  const html = fs.readFileSync(page, 'utf8');
+  for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(match[1], {filename:page});
 }
-const html = fs.readFileSync('index.html','utf8');
-for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 console.log('Application JavaScript syntax checks passed');
