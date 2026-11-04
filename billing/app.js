@@ -69,7 +69,7 @@ function previewForm(kind){
 }
 async function persist(command,after,message){
  if(pending||!state)return;pending=true;const disabled=[...document.querySelectorAll('button,input,select,textarea')].map(node=>[node,node.disabled]);disabled.forEach(([node])=>node.disabled=true);
- try{state=await S.save(command,state.revision);after?.();render();notify(message);channel?.postMessage({owner:state.owner,revision:state.revision});}
+ try{state=await S.save(command,state.revision);after?.();render();notify(message);window.dispatchEvent(new Event('billing:changed'));channel?.postMessage({owner:state.owner,revision:state.revision});}
  catch(error){notify(error.message,true);throw error}
  finally{disabled.forEach(([node,value])=>{if(node.isConnected)node.disabled=value});pending=false;updateImportSummary()}
 }
@@ -191,6 +191,7 @@ $('#commit-import').onclick=async()=>{
    '일괄 등록 완료 · '+command.payload.rows.length+'행. 정산 현황과 업로드 이력에서 합계를 확인해 주세요.');
  }catch(error){notify(error.message,true)}
 };
+window.addEventListener('billing:replaced',()=>{S.load().then(data=>{state=data;for(const form of Object.values(forms))resetForm(form);clearPreview();render();channel?.postMessage({owner:state.owner,revision:state.revision})}).catch(error=>notify(error.message,true))});
 $('#account-label').textContent=S.account.label+' · 정산 전용 저장소';
 S.load().then(data=>{state=data;render();notify('정산 데이터를 불러왔어요.')}).catch(error=>notify('불러오기 실패: '+error.message,true));
 })();

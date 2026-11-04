@@ -1,6 +1,6 @@
 const {defineConfig}=require('@playwright/test');
 module.exports=defineConfig({
- testDir:'./tests',testMatch:'billing.spec.cjs',fullyParallel:true,forbidOnly:!!process.env.CI,
+ testDir:'./tests',testMatch:'*.spec.cjs',fullyParallel:true,forbidOnly:!!process.env.CI,
  retries:0,workers:2,timeout:45000,expect:{timeout:7000},
  reporter:[['list'],['html',{outputFolder:'billing-report',open:'never'}]],outputDir:'billing-results',
  use:{baseURL:'http://127.0.0.1:4173',trace:'retain-on-failure',screenshot:'only-on-failure'},
