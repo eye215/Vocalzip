@@ -480,7 +480,7 @@ test('Practice time adds recording/import lengths once and fills missing lengths
   await page.evaluate(async () => {
     const day = 864e5, read = async id => (await window.vzipReadMedia()).find(m => m.id === id);
     // m2: a 10-minute practice recording not linked to any record → counts.
-    await window.vzipStorePracticeMedia({...(await read('m2')), durationSeconds:600});
+    const m2 = await read('m2'); delete m2.bytes; await window.vzipStorePracticeMedia({...m2, blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:600}); // WebKit may have stored bytes
     // m3: an import saved before lengths were kept (no duration) → measured and counted.
     await window.vzipStorePracticeMedia({id:'m3', name:'SODA_1', created:Date.now() - day, recordedDate:'', type:'audio/wav', source:'import', songId:'s2', blob:new Blob([window.__wav], {type:'audio/wav'})});
     window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m3'}}));
