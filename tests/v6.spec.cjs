@@ -687,6 +687,8 @@ test('Growth month filters, file-count units and every-week horizontal chart rem
     for (const [id,songId,recordedDate,durationSeconds] of [['gm1','s1',pd,600],['gm2','s1',pd,120],['gm3','s2',pd,300],['gm4','s2',current+'-01',60]]) {
       await window.vzipStorePracticeMedia({id,name:id,songId,recordedDate,created:new Date(recordedDate+'T12:00:00').getTime(),durationSeconds,type:'audio/wav',source:'import',blob:new Blob(['test'],{type:'audio/wav'})});
     }
+    window.VZ.media.invalidate();
+    await window.VZ.media.list();
   },{pd,current});
   await page.goto('/#/growth');
   await page.getByRole('button',{name:'월별',exact:true}).click();
