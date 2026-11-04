@@ -13,7 +13,7 @@ async function token() {
 }
 async function api(path, {method = 'GET', body, headers = {}, signal} = {}) {
   const init = {method, signal, headers:{authorization:'Bearer ' + await token(), ...headers}};
-  if (body instanceof Blob) init.body = body;
+  if (body instanceof Blob) init.body = await body.arrayBuffer(); // one part (≤8MiB); a buffer is sent the same way by every browser
   else if (body !== undefined) { init.body = JSON.stringify(body); init.headers['content-type'] = 'application/json'; }
   const res = await fetch(endpoint() + path, init);
   if (!res.ok) {
