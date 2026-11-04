@@ -2,19 +2,36 @@
 'use strict';
 const fields={
  payment:{date:['결제일','결제날짜','paymentdate','date'],amount:['결제금액','금액','amount'],charged:['충전횟수','레슨횟수충전','총횟수','sessions'],passAmount:['레슨권금액','계약금액'],passName:['레슨권','레슨권이름','상품'],kind:['결제유형','유형','kind'],method:['결제방법','결제수단','method'],memo:['메모','비고','내용','note'],student:['수강생','사용자','student'],reference:['결제번호','거래번호','reference']},
- deduction:{date:['레슨날짜','레슨일','수강일','날짜','date'],start:['시작시간','시작','start'],end:['종료시간','종료','end'],status:['진행상태','레슨상태','상태','status'],units:['차감횟수','차감','횟수','deduction'],memo:['레슨내용','레슨메모','메모','내용','note'],student:['수강생','사용자','student'],passName:['레슨권','레슨권이름','상품'],lessonId:['lesson_id','레슨id','기존레슨id'],reference:['외부id','notionid','기록id']}
+ deduction:{date:['레슨날짜','레슨일','수강일','날짜','date'],start:['시작시간','시작','start'],end:['종료시간','종료','end'],status:['진행상태','레슨상태','상태','status'],units:['차감횟수','차감','횟수','deduction'],memo:['레슨내용','레슨메모','메모','내용','note'],student:['수강생','사용자','student'],passName:['레슨권','레슨권이름','연결레슨권','상품'],passDate:['레슨권결제일','레슨권날짜','결제일','결제날짜','충전일'],lessonId:['lesson_id','레슨id','기존레슨id'],reference:['외부id','notionid','기록id']}
 };
-const labels={date:'날짜',amount:'결제금액',charged:'충전 횟수',passAmount:'레슨권 금액',passName:'레슨권 이름',kind:'결제/환불',method:'결제 방법',memo:'메모',student:'수강생',reference:'외부 거래/기록 ID',start:'시작 시간',end:'종료 시간',status:'진행 상태',units:'차감 횟수',lessonId:'기존 Lesson ID'};
+const labels={date:'날짜',amount:'결제금액',charged:'충전 횟수',passAmount:'레슨권 금액',passName:'레슨권 이름',passDate:'레슨권 결제일',kind:'결제/환불',method:'결제 방법',memo:'메모',student:'수강생',reference:'외부 거래/기록 ID',start:'시작 시간',end:'종료 시간',status:'진행 상태',units:'차감 횟수',lessonId:'기존 Lesson ID'};
 const norm=value=>String(value??'').toLowerCase().replace(/[\s_\-().]/g,'');
 function autoMap(headers,kind){const mapping={};for(const [field,names] of Object.entries(fields[kind]))mapping[field]=headers.findIndex(header=>names.some(name=>norm(header)===norm(name)));return mapping}
 /** Show dates already converted (YYYY-MM-DD) in the preview; unreadable values stay for manual fixing. */
 function normalDate(value,settings){if(value===''||value==null)return value;try{return C.date(value,{date1904:settings.date1904})}catch{return value}}
+// Match names first; only explicitly mapped pass dates can resolve a payment date.
+function passKey(value){
+ const name=String(value??'').normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase();
+ const raw=name.replace(/\s*레슨권\s*$/,'').trim();
+ const numeric=/^(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{8}|\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일?|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})$/;
+ const english=/^(?:[a-z]{3,}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[a-z]{3,}\.?\s+\d{4})$/;
+ if(numeric.test(raw)||english.test(raw)){try{return 'date:'+C.date(raw)}catch{}}
+ return 'name:'+name;
+}
+function resolvePass(state,name,passDate,defaultId){
+ const passes=C.active(state.passes);let matches=[],reason='';
+ if(name){matches=passes.filter(p=>p.name.trim()===name);if(!matches.length)matches=passes.filter(p=>passKey(p.name)===passKey(name));reason='레슨권 이름';}
+ if(!matches.length&&passDate){try{const date=C.date(passDate),paid=new Set(C.active(state.payments).filter(p=>p.kind==='payment'&&p.date===date).map(p=>p.passId));matches=passes.filter(p=>paid.has(p.id)||passKey(p.name)==='date:'+date);reason='레슨권 결제일';}catch{return {passId:defaultId||'',passMatchWarning:'레슨권 결제일 형식을 확인해 주세요.'}}}
+ if(matches.length===1)return {passId:matches[0].id,passMatchWarning:reason+'로 연결: '+matches[0].name};
+ if(defaultId)return {passId:defaultId,passMatchWarning:(name||passDate?'일치하는 레슨권을 하나로 확정하지 못해 ':'')+'직접 선택한 기본 레슨권을 적용했어요. 각 행을 확인해 주세요.'};
+ return {passId:'',passMatchWarning:matches.length>1?'같은 '+reason+'의 레슨권이 '+matches.length+'개예요. 이 행의 레슨권을 선택해 주세요.':name||passDate?'일치하는 레슨권을 찾지 못했어요. 이름·결제일 또는 기본 연결 레슨권을 확인해 주세요.':'레슨 날짜만으로 레슨권을 확정하지 않아요. 레슨권 이름·결제일 열을 매핑하거나 기본 연결 레슨권을 선택해 주세요.'};
+}
 function drafts(rows,mapping,settings,state){
  const get=(row,key)=>mapping[key]>=0?(row[mapping[key]]??''):'';
  return rows.slice(1).map((raw,index)=>{
-  const name=String(get(raw,'passName')).trim(),found=C.active(state.passes).filter(pass=>pass.name===name);
+  const name=String(get(raw,'passName')).trim(),connection=resolvePass(state,name,get(raw,'passDate'),settings.passId);
   const row={sourceRow:index+2,raw:raw.slice(),selected:true,sourceKey:settings.hash+':'+settings.sheet+':'+(index+2),
-   date:normalDate(get(raw,'date'),settings),passId:found.length===1?found[0].id:(settings.passId||''),memo:get(raw,'memo'),student:get(raw,'student'),reference:get(raw,'reference')};
+   date:normalDate(get(raw,'date'),settings),...connection,memo:get(raw,'memo'),student:get(raw,'student'),reference:get(raw,'reference')};
   if(settings.kind==='payment')Object.assign(row,{amount:get(raw,'amount'),kind:/환불|refund/i.test(get(raw,'kind'))?'refund':'payment',method:get(raw,'method'),
    newPass:settings.mode==='new',passName:name||String(get(raw,'date'))+' 레슨권',charged:get(raw,'charged'),passAmount:get(raw,'passAmount')});
   else{const status=C.status(get(raw,'status')),inDate=C.timeRange(get(raw,'date'));Object.assign(row,{status,start:get(raw,'start')||inDate.start,end:get(raw,'end')||inDate.end,units:get(raw,'units')!==''?get(raw,'units'):(status==='completed'?'1':'0'),lessonId:String(get(raw,'lessonId')).trim()})}
@@ -24,7 +41,7 @@ function drafts(rows,mapping,settings,state){
 function inspect(rows,settings,state,lessons=[]){
  const seen=new Set(),knownLessons=new Set(lessons.map(row=>row.lesson_id));
  return rows.map(row=>{
-  const result={...row,errors:[],warnings:[],suspected:false,newPass:null};
+  const result={...row,errors:[],warnings:!row.newPass&&row.passMatchWarning?[row.passMatchWarning]:[],suspected:false,newPass:null};
   try{
    const data={passId:row.passId,date:C.date(row.date,{date1904:settings.date1904}),memo:String(row.memo||''),student:String(row.student||'')};
    if(settings.kind==='payment'){
@@ -56,5 +73,5 @@ function inspect(rows,settings,state,lessons=[]){
   return result;
  });
 }
-return {fields,labels,autoMap,drafts,inspect};
+return {fields,labels,autoMap,drafts,inspect,passKey,resolvePass};
 });

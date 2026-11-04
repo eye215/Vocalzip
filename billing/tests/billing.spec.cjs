@@ -220,3 +220,22 @@ test('dates are typed as digits and shown as YYYY/MM/DD, including uploaded Noti
  await expect(page.locator('#deduction-list')).toContainText('2026/01/26');
  expect((await ledger(page)).deductions.map(row=>row.date)).toEqual(['2026-01-26','2026-01-26']);
 });
+
+test('Historical attendance resolves equivalent pass dates, while multiple same-day passes need selection',async({page})=>{
+ await open(page);await pass(page,'2026/01/26');await pass(page,'별도 레슨권');
+ const before=await ledger(page),first=before.passes.find(p=>p.name==='2026/01/26').id;
+ await tab(page,'imports');await page.locator('#import-pass').selectOption('');
+ await csv(page,'레슨날짜,레슨권,진행상태\n2026/02/01,2026-01-26,완료\n','deduction');
+ await expect(page.getByLabel('2행 passId',{exact:true})).toHaveValue(first);
+ await commit(page);expect((await ledger(page)).deductions[0].passId).toBe(first);
+ await pass(page,'2026-01-26 레슨권');
+ await tab(page,'imports');await page.locator('#import-pass').selectOption('');
+ await csv(page,'레슨날짜,레슨권,진행상태\n2026/02/02,2026년 1월 26일,완료\n','deduction');
+ await expect(page.getByLabel('2행 passId',{exact:true})).toHaveValue('');
+ await expect(page.locator('#preview-rows')).toContainText('2개');
+ await expect(page.getByRole('checkbox',{name:'2행 선택',exact:true})).toBeDisabled();
+ await page.getByLabel('2행 passId',{exact:true}).selectOption(first);
+ await page.getByRole('checkbox',{name:'2행 선택',exact:true}).check();
+ await commit(page);
+ expect((await ledger(page)).deductions.map(d=>d.passId)).toEqual([first,first]);
+});
