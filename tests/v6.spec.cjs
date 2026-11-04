@@ -76,8 +76,8 @@ test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never
   await s.locator('[name=end]').fill('20:00');
   await s.locator('[name=place]').fill('강남 연습실');
   await s.locator('[name=teacher]').fill('김선생');
-  await s.getByRole('button', {name:'This Is the Moment'}).click();
-  await s.getByRole('button', {name:'On My Own'}).click();
+  await s.getByRole('combobox', {name:'레슨 곡 추가'}).selectOption('s1');
+  await s.getByRole('combobox', {name:'레슨 곡 추가'}).selectOption('s2');
   await s.locator('[name=prep]').fill('고음 질문');
   await page.locator('.sheet-foot').getByRole('button', {name:'일정 추가'}).click();
   await expect(page.locator('#top h1')).toHaveText('레슨');
@@ -673,4 +673,81 @@ test('Library lists recordings by their recording day, newest first', async ({pa
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(3);
   expect(await page.locator('[data-media]').evaluateAll(rows => rows.map(r => r.dataset.media))).toEqual(['m2', 'm1', 'old']);
+});
+
+
+test('Growth month filters, file-count units and every-week horizontal chart remain readable', async ({page}) => {
+  const now = new Date(), month = offset => { const d = new Date(now.getFullYear(), now.getMonth() + offset, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0'); };
+  const previous = month(-1), current = month(0), old = month(-6), pd = previous + '-10';
+  const seed = {categories:[], lessons:[], comparisonReports:[], songs:[{id:'s1',title:'아주 긴 곡 이름 '.repeat(20)},{id:'s2',title:'두 번째 곡'}],
+    assignments:[{id:'done',title:'완료 숙제',status:'done',doneAt:new Date(pd+'T12:00:00').getTime()}],
+    practices:[{id:'prev',date:pd,minutes:30,mediaIds:['gm1'],songId:'s1',rating:4},{id:'current',date:current+'-01',minutes:20,songId:'s2',rating:2},{id:'old',date:old+'-01',minutes:10,songId:'s1'}]};
+  await boot(page,{seed,media:false});
+  await page.evaluate(async ({pd,current}) => {
+    for (const [id,songId,recordedDate,durationSeconds] of [['gm1','s1',pd,600],['gm2','s1',pd,120],['gm3','s2',pd,300],['gm4','s2',current+'-01',60]]) {
+      await window.vzipStorePracticeMedia({id,name:id,songId,recordedDate,created:new Date(recordedDate+'T12:00:00').getTime(),durationSeconds,type:'audio/wav',source:'import',blob:new Blob(['test'],{type:'audio/wav'})});
+    }
+  },{pd,current});
+  await page.goto('/#/growth');
+  await page.getByRole('button',{name:'월별',exact:true}).click();
+  await page.getByRole('combobox',{name:'조회 월'}).selectOption(previous);
+  await expect(page.locator('.stat').filter({hasText:'연습 시간'}).first()).toContainText('37분');
+  await expect(page.locator('.stat').filter({hasText:'평균 만족도'})).toContainText('4.0');
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('32분');
+  await page.getByRole('button',{name:'횟수(파일 수)',exact:true}).click();
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회');
+  await expect(page.locator('[data-song-stat="s2"]')).toContainText('1회');
+  await page.getByRole('button',{name:'다음 달 통계',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'조회 월'})).toHaveValue(current);
+  await expect(page.locator('[data-song-stat="s1"]')).toHaveCount(0);
+  await expect(page.locator('[data-song-stat="s2"]')).toContainText('1회');
+  await expect(page.getByRole('button',{name:'다음 달 통계',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'전체',exact:true}).click();
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회'); // practice records aren't file counts
+  await expect(page.locator('[data-growth-chart]>div')).not.toHaveCount(8);
+  const chart = await page.locator('[data-chart-scroll]').evaluate(el => ({count:el.firstElementChild.children.length,scroll:el.scrollLeft,width:el.clientWidth,total:el.scrollWidth,bottoms:[...el.firstElementChild.children].map(x=>Math.round(x.getBoundingClientRect().bottom))}));
+  expect(chart.count).toBeGreaterThan(20);
+  expect(chart.total).toBeGreaterThan(chart.width);
+  expect(chart.scroll).toBeGreaterThan(0);
+  expect(Math.max(...chart.bottoms)-Math.min(...chart.bottoms)).toBeLessThanOrEqual(1);
+  await page.getByRole('button',{name:'이전 주 보기',exact:true}).click();
+  await expect.poll(()=>page.locator('[data-chart-scroll]').evaluate(el=>el.scrollLeft)).toBeLessThan(chart.scroll);
+  for (const width of [320,390]) {
+    await page.setViewportSize({width,height:844});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  }
+  await page.getByRole('button',{name:'분',exact:true}).click();
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('42분');
+  await page.getByRole('button',{name:'월별',exact:true}).click();
+  await page.getByRole('button',{name:'이전 달 통계',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'조회 월'})).toHaveValue(previous);
+  expect((await data(page)).practices).toEqual(seed.practices);
+});
+
+test('Large song library uses compact selects for lesson multi-selection and recorder selection', async ({page})=>{
+  const seed=legacy();seed.songs.push(...Array.from({length:200},(_,i)=>({id:'extra'+i,title:'추가 곡 '+i+' 긴 이름'.repeat(5)})));
+  await boot(page,{seed,media:false});
+  await page.locator('.quick [data-add-lesson]').click();
+  const s=sheet(page),select=s.getByRole('combobox',{name:'레슨 곡 추가'});
+  await expect(select.locator('option')).toHaveCount(204); // 202 songs + prompt + new
+  await expect(s.locator('[data-remove-song]')).toHaveCount(0);
+  await select.selectOption('s1');await select.selectOption('extra199');
+  await expect(s.locator('[data-remove-song]')).toHaveCount(2);
+  await expect(select.locator('option[value=s1]')).toHaveCount(0);
+  await s.getByRole('button',{name:'This Is the Moment 선택 해제',exact:true}).click();
+  await expect(s.locator('[data-remove-song]')).toHaveCount(1);
+  await select.selectOption('s1');
+  await s.locator('[name=start]').fill('19:00');
+  await s.getByRole('button',{name:'일정 추가',exact:true}).click();
+  const lesson=(await data(page)).lessons.find(l=>l.songIds?.includes('extra199'));
+  expect(lesson.songIds).toEqual(['extra199','s1']);
+  await page.locator('[data-edit-lesson]').click();
+  await expect(sheet(page).locator('[data-remove-song]')).toHaveCount(2);
+  await sheet(page).getByRole('button',{name:'닫기',exact:true}).click();
+  await page.goto('/#/record');
+  await page.locator('[data-pick-song]').click();
+  await expect(sheet(page).locator('select[name=song]')).toBeVisible();
+  await sheet(page).locator('select[name=song]').selectOption('extra199');
+  await sheet(page).getByRole('button',{name:'선택 완료',exact:true}).click();
+  await expect(page.locator('[data-song-name]')).toContainText('추가 곡 199');
 });
