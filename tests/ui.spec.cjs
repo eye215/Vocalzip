@@ -1121,3 +1121,15 @@ test('Another tab cannot clean up or overwrite an active upload',async({page,con
  expect(await other.evaluate(()=>window.__uploadCalls.length)).toBe(1);
  await other.close();
 });
+
+test('Song timeline resolves versioned cloud recordings without a single-object path',async({page})=>{
+ await seedHistory(page,{songs:[{id:'stream-song',title:'분할 파일 곡'}]});
+ await page.evaluate(()=>{window.vzipChunkMediaURL=async item=>{window.__timelineStreamed=item.id;return '/fixture-audio.wav'}});
+ const row=cloudRow('timeline-parts','분할 녹음');delete row.metadata.path;
+ Object.assign(row.metadata,{songId:'stream-song',song:'분할 파일 곡',storageVersion:2,size:wav().length,parts:[{path:'ui-test-user/part-0',size:wav().length}]});
+ await cloudFiles(page,[row]);
+ await expect.poll(()=>page.locator('#archive-song option').count()).toBe(2);
+ await page.locator('#archive-song').evaluate(el=>{el.value='stream-song';el.dispatchEvent(new Event('change'))});
+ await expect(page.locator('#archive-player-a audio')).toBeAttached();
+ expect(await page.evaluate(()=>window.__timelineStreamed)).toBe('timeline-parts');
+});
