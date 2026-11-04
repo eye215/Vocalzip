@@ -35,12 +35,18 @@ async function prepare({file,id,videoHint}){
    await import('./bounded-byte-writer.js?v=1');
    buffered=self.VzipBoundedBytes.create();
   }
-  const codecs=await Promise.all(audios.map(track=>track.getCodec()));
+  let codecs=await Promise.all(audios.map(track=>track.getCodec()));
   const candidates=[
    {format:new b.Mp4OutputFormat({fastStart:false,metadataFormat:'mdta'}),type:'audio/mp4',extension:'.m4a'},
    {format:new b.WavOutputFormat(),type:'audio/wav',extension:'.wav'},
    {format:new b.WebMOutputFormat(),type:'audio/webm',extension:'.webm'}
   ];
+  // iPhone spatial-audio videos carry an extra APAC track next to the stereo AAC mix. Tracks that cannot be
+  // copied bit-for-bit are skipped; the copyable ones (the AAC mix) are kept unchanged and verified as before.
+  const copyable=codec=>!!codec&&candidates.some(({format})=>format.getSupportedAudioCodecs().includes(codec));
+  const skippedCodecs=codecs.filter(codec=>!copyable(codec)).map(codec=>codec||'unknown');
+  let skipped=[];
+  if(skippedCodecs.length&&skippedCodecs.length<codecs.length){skipped=skippedCodecs;const keep=codecs.map(copyable);audios=audios.filter((track,i)=>keep[i]);codecs=codecs.filter((codec,i)=>keep[i])}
   const selected=candidates.find(({format})=>codecs.every(codec=>codec&&format.getSupportedAudioCodecs().includes(codec))&&(audios.length===1||format.getSupportedTrackCounts().audio.max>=audios.length));
   if(!selected)throw Error('원본 음질을 유지할 수 없는 음성 형식이에요. 음원 파일로 가져와 주세요.');
   const writable=new WritableStream({
@@ -85,7 +91,7 @@ async function prepare({file,id,videoHint}){
     packets++;bytes+=p.data.length;if(packets%250===0)await new Promise(resolve=>setTimeout(resolve,0));
    }
   }
-  const proof={version:1,originalName:file.name,originalBytes:file.size,outputBytes:extracted.size,audioPacketCopyVerified:true,audioTracks:audios.length,audioPackets:packets,audioBytes:bytes,maximumInputRead,storageMode:buffered?'bounded-memory':'opfs'};
+  const proof={version:1,originalName:file.name,originalBytes:file.size,outputBytes:extracted.size,audioPacketCopyVerified:true,audioTracks:audios.length,audioPackets:packets,audioBytes:bytes,maximumInputRead,storageMode:buffered?'bounded-memory':'opfs',skippedAudioTracks:skipped};
   const resultFile=new File([extracted],file.name.replace(/\.[^.]+$/,'')+selected.extension,{type:selected.type,lastModified:metadata.created});
   success=true;self.postMessage({type:'done',file:resultFile,metadata:{...metadata,originalMedia:{name:file.name,type:file.type,size:file.size,created:metadata.created,recordedDate:metadata.recordedDate},audioExtraction:proof}});
  }finally{

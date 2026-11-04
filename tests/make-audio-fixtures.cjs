@@ -6,3 +6,5 @@ fs.copyFileSync(target,'tests/fixtures/dated-201MiB.mp4');
 const fd=fs.openSync('tests/fixtures/dated-201MiB.mp4','r+'),size=fs.fstatSync(fd).size,full=201*1024*1024,header=Buffer.alloc(8);
 header.writeUInt32BE(full-size);header.write('free',4);fs.writeSync(fd,header,0,8,size);fs.ftruncateSync(fd,full);fs.closeSync(fd);
 execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','testsrc2=size=320x240:rate=10','-t','1','-an','-c:v','libx264','tests/fixtures/silent-video.mp4'],{stdio:'inherit'});
+// iPhone spatial-audio style: an AAC stereo mix plus a track that cannot be copied (ALAC stands in for APAC).
+execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','lavfi','-i','testsrc2=size=320x240:rate=10','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-f','lavfi','-i','sine=frequency=660:sample_rate=48000:duration=3','-t','3','-map','0:v','-map','1:a','-map','2:a','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a:0','aac','-b:a:0','128k','-c:a:1','alac','-metadata','creation_time=2026-11-02T10:00:00Z','-t','3','tests/fixtures/spatial-audio.mov'],{stdio:'inherit'});
