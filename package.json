@@ -1,7 +1,7 @@
 {
   "name": "vocalzip",
   "private": true,
-  "version": "5.7.0",
+  "version": "6.0.0",
   "scripts": {
     "test:ui": "playwright test",
     "test:syntax": "node tests/check-syntax.cjs"
