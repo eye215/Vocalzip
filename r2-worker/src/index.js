@@ -13,6 +13,7 @@
  *   HEAD   /v1/media/<key>
  *   DELETE /v1/media/<key>
  *   GET    /v1/usage                                → {objects, bytes}
+ *   GET    /v1/me                                   → {user}   (sign-in check, no storage access)
  *
  * Bindings (wrangler.toml / dashboard):
  *   MEDIA                 R2 bucket
@@ -109,6 +110,7 @@ async function route(request, env) {
     try { await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).abort(); } catch {}
     return json({ok: true});
   }
+  if (path === '/v1/me' && method === 'GET') return json({user: uid});
   if (path === '/v1/sign' && method === 'POST') {
     const body = await readJson(request), key = ownKey(uid, body.key);
     const ttl = Math.min(Math.max(Number(body.ttl) || 3600, 60), 6 * 3600), exp = Math.floor(Date.now() / 1000) + ttl;

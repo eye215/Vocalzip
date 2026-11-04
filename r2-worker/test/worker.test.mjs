@@ -55,6 +55,7 @@ test('health needs no sign-in; everything else does', async () => {
 
 test('tokens are checked: signature, issuer, expiry, role (ES256 via JWKS and legacy HS256)', async () => {
   assert.equal((await call('/v1/usage', {auth:await token(ALICE)})).status, 200);
+  assert.deepEqual(await (await call('/v1/me', {auth:await token(ALICE)})).json(), {user:ALICE});
   assert.ok(jwksHits >= 1);
   assert.equal((await call('/v1/usage', {auth:await token(ALICE, {alg:'HS256'})})).status, 200);
   assert.equal((await call('/v1/usage', {auth:await token(ALICE, {iss:'https://other.supabase.co/auth/v1'})})).status, 401);

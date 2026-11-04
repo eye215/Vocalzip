@@ -19,6 +19,7 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
   page.__errors = [];
   page.on('pageerror', e => page.__errors.push(e.message));
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
+  await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
   await page.route('**/tus.min.js', r => r.fulfill({contentType:'application/javascript', body:'window.tus={}'}));
   await page.route('**/*.supabase.co/**', r => r.abort());
   // Sandboxes without CDN access can point the pinned Mediabunny bundle at a local copy.
@@ -603,6 +604,7 @@ test('Login merges device and cloud records instead of overwriting either side',
     from:table=>{const c={};let single=false;for(const m of ['select','eq','order','update','delete'])c[m]=()=>c;c.maybeSingle=()=>{single=true;return c};c.upsert=row=>{window.__upserts.push({table,row});return c};c.then=r=>r({data:table==='vocal_data'&&single?{payload:${JSON.stringify(remote)},updated_at:'x'}:[],error:null});return c}})};`;
   page.on('pageerror', e => { throw e; });
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
+  await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
   await page.route('**/tus.min.js', r => r.fulfill({contentType:'application/javascript', body:'window.tus={}'}));
   await page.addInitScript(([k, s]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, s); sessionStorage.setItem('seeded', '1'); } }, [KEY, JSON.stringify(legacy())]);
   await page.goto('/#/songs');

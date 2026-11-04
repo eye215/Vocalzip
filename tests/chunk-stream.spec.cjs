@@ -19,6 +19,7 @@ test('Real service worker serves private cross-part ranges, reloads and native p
   await route.fulfill({status:206,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'Content-Range','Content-Range':'bytes '+start+'-'+end+'/'+part.length,'Content-Type':'application/octet-stream'},body:part.subarray(start,end+1)});
  });
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));
+ await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
  await page.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
  await page.goto('/legacy.html');
  await page.evaluate(()=>{window.__streamErrors=[];navigator.serviceWorker.addEventListener('message',event=>{if(event.data?.type==='vzip-stream-error')window.__streamErrors.push(event.data.message)})});

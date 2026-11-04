@@ -18,7 +18,7 @@ function wav(seconds = 2, sr = 8000) {
   for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / 7) * 5000), 44 + i * 2);
   return b;
 }
-async function fakeR2(page) {
+async function fakeR2(page, reject = {}) {
   const store = new Map(), uploads = new Map(), calls = [];
   await page.route(R2 + '/**', async route => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname, method = req.method();
@@ -26,7 +26,8 @@ async function fakeR2(page) {
     const json = (body, status = 200) => route.fulfill({status, contentType:'application/json', headers:{'access-control-allow-origin':'*'}, body:JSON.stringify(body)});
     if (method === 'OPTIONS') return route.fulfill({status:204, headers:{'access-control-allow-origin':'*', 'access-control-allow-headers':'authorization, content-type, range', 'access-control-allow-methods':'GET, HEAD, POST, PUT, DELETE'}});
     if (p === '/health') return json({ok:true, bucket:true});
-    if (req.headers().authorization !== 'Bearer tok' && !url.searchParams.has('sig')) return json({error:'sign in required'}, 401);
+    if ((reject.auth || req.headers().authorization !== 'Bearer tok') && !url.searchParams.has('sig')) return json({error:'sign in required'}, 401);
+    if (p === '/v1/me') return json({user:'ui-test-user'});
     if (p === '/v1/uploads' && method === 'POST') {
       const b = req.postDataJSON(), key = 'u/ui-test-user/' + b.mediaId + '/original.' + b.ext, id = 'up' + uploads.size;
       uploads.set(id, {key, type:b.contentType, parts:new Map()});
@@ -50,7 +51,7 @@ async function fakeR2(page) {
     if (p === '/v1/usage') return json({objects:store.size, bytes:[...store.values()].reduce((s, o) => s + o.bytes.length, 0)});
     return json({error:'not found'}, 404);
   });
-  return {store, calls};
+  return {store, calls, reject};
 }
 async function boot(page, {endpoint = R2} = {}) {
   page.__errors = [];
@@ -129,4 +130,15 @@ test('Storage screen moves existing files to R2 only when asked, keeps ids, and 
   await page.getByRole('button', {name:'예전 클라우드 사본 정리…'}).click();
   await expect.poll(() => page.evaluate(() => window.__removed)).toEqual(['ui-test-user/old-1.wav']);
   expect(await page.evaluate(() => window.__rows['old-1'].legacyStorage)).toBeUndefined();
+});
+
+test('If the Worker does not accept the sign-in, R2 stays off and new files keep using the existing storage', async ({page}) => {
+  const r2 = await fakeR2(page, {auth:true});
+  await boot(page);
+  expect(await page.evaluate(() => window.VzipR2.ready())).toBe(false);
+  expect(await page.evaluate(() => window.VzipR2.lastCheck())).toEqual({ok:false, reason:'auth'});
+  await page.goto('/#/storage');
+  await expect(page.getByText(/이 로그인을 확인하지 못했어요/)).toBeVisible();
+  await expect(page.getByRole('button', {name:/R2로 옮기기/})).toHaveCount(0);
+  expect(r2.calls.filter(c => c.startsWith('POST /v1/uploads'))).toEqual([]);
 });
