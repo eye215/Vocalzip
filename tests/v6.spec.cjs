@@ -588,6 +588,49 @@ test('A list read that overlaps a login or file change is re-read, and a failed 
   expect(retried.error).toContain('클라우드 목록을 불러오지 못했어요');
 });
 
+test('Login merges device and cloud records instead of overwriting either side', async ({page}) => {
+  const remote = {categories:[], songs:[{id:'s1', title:'This Is the Moment'}, {id:'cloud-song', title:'Cloud only song'}], lessons:[{id:'cloud-lesson', date:'2026-10-01', status:'done'}], assignments:[], practices:[]};
+  const stub = `window.__upserts=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'t@e.x'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
+    storage:{from:()=>({})},
+    from:table=>{const c={};let single=false;for(const m of ['select','eq','order','update','delete'])c[m]=()=>c;c.maybeSingle=()=>{single=true;return c};c.upsert=row=>{window.__upserts.push({table,row});return c};c.then=r=>r({data:table==='vocal_data'&&single?{payload:${JSON.stringify(remote)},updated_at:'x'}:[],error:null});return c}})};`;
+  page.on('pageerror', e => { throw e; });
+  await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
+  await page.route('**/tus.min.js', r => r.fulfill({contentType:'application/javascript', body:'window.tus={}'}));
+  await page.addInitScript(([k, s]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, s); sessionStorage.setItem('seeded', '1'); } }, [KEY, JSON.stringify(legacy())]);
+  await page.goto('/#/songs');
+  await expect(page.getByText('Cloud only song')).toBeVisible({timeout:10000});
+  const d = await data(page);
+  expect(d.songs.map(s => s.id).sort()).toEqual(['cloud-song', 's1', 's2']);
+  expect(d.lessons.map(l => l.id).sort()).toEqual(['cloud-lesson', 'l-over', 'l1']);
+  const up = await page.evaluate(() => window.__upserts.filter(x => x.table === 'vocal_data').at(-1).row.payload);
+  expect(up.songs.map(s => s.id).sort()).toEqual(['cloud-song', 's1', 's2']);
+  expect(await page.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('vzip_before_cloud_')))).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem('vzip_cloud_linked_user'))).toBe('ui-test-user');
+});
+
+test('Songs dropped by an old overwrite come back from snapshots and file names; deleted songs stay deleted', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async k => {
+    localStorage.setItem('vzip_before_cloud_1', JSON.stringify({songs:[{id:'old-1', title:'Every story is love story'}], lessons:[], practices:[], assignments:[], categories:[]}));
+    await window.vzipStorePracticeMedia({id:'m9', name:'x', created:Date.now(), type:'audio/wav', source:'import', songId:'old-2', song:'Out here on my own — Fame', blob:new Blob([window.__wav], {type:'audio/wav'})});
+    const d = JSON.parse(localStorage.getItem(k)); d.deleted = {songs:['old-3']}; localStorage.setItem(k, JSON.stringify(d));
+    await window.vzipStorePracticeMedia({id:'m10', name:'y', created:Date.now(), type:'audio/wav', source:'import', songId:'old-3', song:'Deleted on purpose', blob:new Blob([window.__wav], {type:'audio/wav'})});
+    window.dispatchEvent(new Event('vzip:data-changed'));
+    VZ.media.invalidate();
+    return VZ.recoverSongs(await VZ.media.list());
+  }, KEY);
+  const songs = (await data(page)).songs;
+  expect(songs.find(s => s.id === 'old-1')).toMatchObject({title:'Every story is love story'});
+  expect(songs.find(s => s.id === 'old-2')).toMatchObject({title:'Out here on my own', show:'Fame'});
+  expect(songs.some(s => s.id === 'old-3')).toBe(false);
+  // Deleting a song now leaves a tombstone so a sync or recovery never brings it back.
+  await page.goto('/#/song/s2');
+  await page.locator('[data-song-menu]').click();
+  await page.getByRole('button', {name:'곡 삭제'}).click();
+  await sheet(page).getByRole('button', {name:'삭제'}).click();
+  expect((await data(page)).deleted.songs).toContain('s2');
+});
+
 test('Device-only files are backed up to the cloud automatically once signed in (additive, no duplicates)', async ({page}) => {
   await boot(page);
   await page.evaluate(async () => {

@@ -6,6 +6,10 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register(new URL('shar
 if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/home');
 VZ.render();
 VZ.receiveShared?.();
+// Restore songs an old overwrite-style cloud import may have dropped (once the file list is known).
+VZ.recoverSongs?.();
+VZ.media.list().then(media => VZ.recoverSongs(media)).catch(() => {});
+window.addEventListener('vzip:auth-changed', () => setTimeout(() => VZ.media.list().then(media => VZ.recoverSongs(media)).catch(() => {}), 1500));
 // If the auth library never loads, do not leave the user behind a permanent cover.
 setTimeout(() => {
   const cover = document.getElementById('vzip-boot-cover');
