@@ -246,12 +246,12 @@ async function linkMediaSheet(l) {
 }
 
 /* ---------- 캘린더 ---------- */
-let calMonth = null, calDay = null;
+let calMonth = null, calDay = null, calMetric = 'minutes', calExpanded = false;
 VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render() {
   const today = VZ.today();
   calDay ||= today;
   calMonth ||= today.slice(0, 7);
-  return '<div class="card"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="legend"><span><i style="background:var(--accent)"></i>레슨</span><span><i style="background:var(--ok)"></i>연습</span><span class="muted">녹음은 레슨·연습 안에 있어요</span><button type="button" class="chip" data-today style="margin-left:auto;min-height:32px">오늘</button></div></div><div data-day></div>';
+  return '<div data-calendar-summary></div><div class="card"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="legend"><span><i style="background:var(--accent)"></i>레슨</span><span><i style="background:var(--ok)"></i>연습</span><span class="muted">녹음은 레슨·연습 안에 있어요</span><button type="button" class="chip" data-today style="margin-left:auto;min-height:32px">오늘</button></div></div><div data-day></div>';
 }, async mount(main) {
   const grid = main.querySelector('[data-grid]'), dayHost = main.querySelector('[data-day]');
   let media = M.cached();
@@ -265,6 +265,12 @@ VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href
   const draw = () => {
     const map = byDay(), [y, m] = calMonth.split('-').map(Number), first = new Date(y, m - 1, 1), today = VZ.today();
     main.querySelector('[data-title]').textContent = y + '년 ' + m + '월';
+    VZ.calendarSummary.render(main.querySelector('[data-calendar-summary]'), {
+      db:VZ.db,media,month:calMonth,dateOf:M.dateOf,titleOf:VZ.songTitle,esc,metric:calMetric,
+      onMetric:value=>{calMetric=value;draw();main.querySelector('[data-cs-metric="'+value+'"]')?.focus();},
+      expanded:calExpanded,onExpand:value=>{calExpanded=value;draw();main.querySelector('[data-cs-expand]')?.focus();},
+      error:M.cloudError()
+    });
     let html = ['일', '월', '화', '수', '목', '금', '토'].map(d => '<div class="dow">' + d + '</div>').join('');
     const start = new Date(y, m - 1, 1 - first.getDay());
     for (let i = 0; i < 42; i++) {

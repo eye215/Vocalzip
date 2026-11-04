@@ -1,0 +1,48 @@
+/* Scoped calendar dashboard; independent of the media management screens. */
+.calendar-summary{margin-bottom:12px}
+.cs-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cs-heading h2,.cs-heading h3{margin:0;font-size:15px}
+.cs-heading>span{font-size:12px;color:var(--ink-3)}
+.cs-totals{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;margin:14px 0 18px}
+.cs-totals>div{display:flex;flex-direction:column;gap:4px}
+.cs-totals strong{font-size:25px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.cs-totals span{font-size:12px;color:var(--ink-3)}
+.cs-toggle{display:flex;gap:2px}
+.cs-toggle button{min-height:44px;padding:0 10px;border:0;border-radius:12px;background:transparent;color:var(--ink-3);font-size:12px}
+.cs-toggle button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.cs-ranking{list-style:none;margin:6px 0 0;padding:0}
+.cs-ranking li{display:flex;align-items:center;gap:10px;min-height:44px;border-bottom:1px solid var(--line);font-size:13px}
+.cs-ranking li:last-child{border-bottom:0}
+.cs-rank{flex:0 0 20px;text-align:center;color:var(--accent);font-weight:750}
+.cs-ranking a,.cs-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-ranking a{color:var(--ink);text-decoration:none;display:flex;align-items:center;min-height:44px}
+.cs-values{flex:none;display:flex;gap:8px;align-items:center;font-variant-numeric:tabular-nums;font-size:12px}
+.cs-values>span{color:var(--ink-3)}
+.cs-help{font-size:11px;color:var(--ink-3);margin-top:8px}
+.cs-help summary{cursor:pointer;min-height:32px;display:flex;align-items:center}
+.cs-help p{line-height:1.6;margin:0}
+.cs-empty,.cs-error{font-size:12px;line-height:1.6;color:var(--ink-3);margin:12px 0}
+.cs-error{color:var(--danger)}
+/* Today has its own purple text rule; selected dates must override that child color. */
+.cal-day[aria-pressed="true"]>span:first-child{color:var(--accent-ink,#fff)}
+
+/* Compact default: one-line totals and three ranking rows. */
+.calendar-summary{padding:12px 14px}
+.cs-heading h2,.cs-heading h3{font-size:12px}
+.cs-heading h2 small{font-size:10px;font-weight:400;color:var(--ink-3);margin-left:4px}
+.cs-totals{display:flex;gap:8px;margin:6px 0 2px;align-items:baseline}
+.cs-totals strong{font-size:18px;letter-spacing:-.3px}
+.cs-totals span{font-size:12px}
+.cs-ranking{margin-top:0}
+.cs-ranking li{gap:6px;font-size:12px}
+.cs-values{font-size:11px}
+.cs-help{margin-top:0}
+.cs-help summary{min-height:28px}
+.cs-more{border:0;background:none;color:var(--accent);font-size:11px;min-height:44px;padding:0 4px}
+
+.cs-totals{margin:0;flex:none}
+.cs-ranking li{min-height:26px}
+.cs-footer{display:flex;gap:12px;align-items:flex-start;margin-top:2px}
+.cs-help{flex:1}
+.cs-more,.cs-help summary{min-height:32px}
+.cs-more{flex:none}
