@@ -260,3 +260,34 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .cal-group{margin:4px 4px 0;font-size:14px;color:var(--ink-2)}
 .cal-owner .nested{border-top:1px dashed var(--line);padding-left:20px;background:var(--surface-2)}
 .cal-owner .nested>*+*{border-top:1px solid var(--line)}
+
+/* Growth only: charts stay on one row; long totals and song names cannot widen cards. */
+.growth-shell{min-width:0}
+.growth-shell .growth-period{margin-bottom:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.growth-shell .growth-period button{min-width:0;padding:8px 2px}
+.growth-month{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:end;margin-bottom:14px}
+.growth-month[hidden]{display:none}
+.growth-month .field{margin:0;min-width:0}
+.growth-month .btn{padding:0}
+.growth-month select{min-width:0;width:100%;max-width:100%}
+.growth-shell .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+.growth-shell .stat{min-width:0}
+.growth-shell .stat b{font-size:clamp(19px,5.5vw,24px);overflow-wrap:anywhere}
+.growth-shell .card,.growth-shell .bars{min-width:0}
+.growth-shell .bar{grid-template-columns:minmax(0,1fr) minmax(36px,.65fr) minmax(44px,auto)}
+.growth-shell .bar>*{min-width:0}
+.growth-shell .bar>span:last-child{max-width:95px;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.growth-shell .week{height:126px;gap:4px;grid-auto-flow:column}
+.growth-shell .week>div{min-width:0;align-items:end;overflow-wrap:anywhere;text-align:center}
+.growth-shell [data-growth-chart]>div{grid-template-rows:18px auto 18px}
+.growth-shell .week .col{max-width:28px}
+.growth-metric{max-width:360px}
+@media(max-width:360px){.growth-shell .growth-period{grid-template-columns:repeat(2,minmax(0,1fr))}.growth-shell .stat{padding:12px}.growth-shell .bar{grid-template-columns:minmax(0,1fr) minmax(32px,.45fr) minmax(40px,auto);gap:5px}}
+
+.growth-chart-scroll{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+.growth-chart-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.growth-chart-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.lesson-song-picker{display:grid;gap:8px;min-width:0}
+.lesson-song-picker select{min-width:0;max-width:100%}
+.lesson-song-selected{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.lesson-song-selected .chip{max-width:100%;white-space:normal;overflow-wrap:anywhere;min-height:44px}

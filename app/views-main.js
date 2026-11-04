@@ -288,26 +288,9 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
   if (!M.canRecord()) { status.textContent = '이 브라우저는 녹음을 지원하지 않아요. 파일 가져오기를 이용해 주세요.'; mainBtn.disabled = true; }
 }});
 VZ.pickSong = (value, onPick) => {
-  const songs = [...VZ.db.songs], act = VZ.songActivity(M.cached());
-  songs.sort((a, b) => (act.get(b.id) || '').localeCompare(act.get(a.id) || '') || a.title.localeCompare(b.title, 'ko'));
-  VZ.sheet({title:'곡 선택', body:'<div class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="곡 검색 또는 새 곡 제목" aria-label="곡 검색" data-q></div><div class="list" data-l></div>',
-    onMount:(el, close) => {
-      const q = el.querySelector('[data-q]'), l = el.querySelector('[data-l]');
-      const draw = () => {
-        const term = q.value.trim().toLowerCase();
-        const list = songs.filter(s => !term || (s.title + ' ' + (s.show || '')).toLowerCase().includes(term));
-        l.innerHTML = '<button type="button" class="item" data-id=""><span class="item-main"><span class="item-title">곡 미지정</span></span>' + (!value ? '<i class="ph ph-check" style="color:var(--accent)"></i>' : '') + '</button>' +
-          list.map(s => '<button type="button" class="item" data-id="' + esc(s.id) + '"><span class="item-main"><span class="item-title">' + esc(s.title) + '</span>' + (s.show ? '<span class="item-sub">' + esc(s.show) + '</span>' : '') + '</span>' + (s.id === value ? '<i class="ph ph-check" style="color:var(--accent)"></i>' : '') + '</button>').join('') +
-          (term && !songs.some(s => s.title.toLowerCase() === term) ? '<button type="button" class="item" data-new><span class="avatar"><i class="ph ph-plus"></i></span><span class="item-main"><span class="item-title">"' + esc(q.value.trim()) + '" 새 곡으로 추가</span></span></button>' : '');
-      };
-      q.oninput = draw; draw();
-      l.onclick = e => {
-        const b = e.target.closest('button'); if (!b) return;
-        if (b.hasAttribute('data-new')) { const s = VZ.addSong(q.value); if (!s) return; onPick(s.id); }
-        else onPick(b.dataset.id);
-        close();
-      };
-    }});
+  VZ.sheet({title:'곡 선택', body:'<form id="pick-song-form">' + VZ.songSelect('song', value) + '</form>',
+    foot:'<button type="submit" form="pick-song-form" class="btn block">선택 완료</button>',
+    onMount:(el, close) => { const form = el.querySelector('form'); form.onsubmit = e => { e.preventDefault(); const id = VZ.readSong(form, 'song'); if (id === null) return; onPick(id); close(); }; }});
 };
 
 /* ---------- 내 곡 ---------- */

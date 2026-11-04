@@ -81,7 +81,7 @@ VZ.lessonSheet = ({lesson, date} = {}) => {
     '<label class="field"><span>레슨 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(l?.date || date || VZ.today()) + '"></label>' +
     '<div class="two"><label class="field"><span>시작 시간' + (l ? '' : ' <span class="req">*</span>') + '</span><input type="time" name="start" ' + (l ? '' : 'required') + ' value="' + esc(l?.startTime || '') + '"></label><label class="field"><span>종료 시간</span><input type="time" name="end" value="' + esc(l?.endTime || '') + '"></label></div>' +
     '<div class="two"><label class="field"><span>장소</span><input type="text" name="place" maxlength="100" value="' + esc(l ? l.place || '' : last?.place || '') + '"></label><label class="field"><span>선생님</span><input type="text" name="teacher" maxlength="60" value="' + esc(l ? l.teacher || '' : last?.teacher || '') + '"></label></div>' +
-    '<fieldset class="field" style="border:0;padding:0"><legend>연습 곡</legend><div class="chips" style="flex-wrap:wrap" data-songs></div></fieldset>' +
+    '<fieldset class="field" style="border:0;padding:0"><legend>연습 곡</legend><div class="lesson-song-picker" data-songs></div></fieldset>' +
     '<label class="field"><span>준비 메모</span><textarea name="prep" rows="2" maxlength="2000" placeholder="레슨 전에 준비할 것, 질문할 것" style="min-height:64px">' + esc(l?.prepMemo || '') + '</textarea></label>' +
     (l ? '<fieldset class="field" style="border:0;padding:0"><legend>상태</legend><div class="seg" data-status>' + ['scheduled', 'done', 'cancelled'].map(s => '<button type="button" data-st="' + s + '" aria-pressed="' + (st === s) + '">' + VZ.statusLabel[s] + '</button>').join('') + '</div></fieldset>' : '') + '</form>',
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
@@ -89,13 +89,19 @@ VZ.lessonSheet = ({lesson, date} = {}) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
       let status = st;
       const drawSongs = () => {
-        songsHost.innerHTML = VZ.songsNewest().map(s => '<button type="button" class="chip" data-song="' + esc(s.id) + '" aria-pressed="' + selected.has(s.id) + '">' + esc(s.title) + '</button>').join('') + '<button type="button" class="chip" data-new-song><i class="ph ph-plus"></i> 새 곡</button>';
+        songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song><option value="">곡을 선택해 추가하세요</option>' +
+          VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
+          '<option value="__new">+ 새 곡 추가</option></select><div class="lesson-song-selected" aria-label="선택한 곡">' +
+          [...selected].map(id => '<button type="button" class="chip" data-remove-song="' + esc(id) + '" aria-label="' + esc(VZ.songTitle(id) || '이전에 연결된 곡') + ' 선택 해제">' + esc(VZ.songTitle(id) || '이전에 연결된 곡') + ' ×</button>').join('') + '</div>';
+      };
+      songsHost.onchange = e => {
+        const pick = e.target.closest('[data-lesson-song]'); if (!pick?.value) return;
+        if (pick.value === '__new') { pick.value = ''; VZ.songSheet(null, id => { selected.add(id); drawSongs(); }); return; }
+        selected.add(pick.value); drawSongs(); songsHost.querySelector('select').focus();
       };
       songsHost.onclick = e => {
-        const b = e.target.closest('button'); if (!b) return;
-        if (b.hasAttribute('data-new-song')) { VZ.songSheet(null, id => { selected.add(id); drawSongs(); }); return; }
-        selected.has(b.dataset.song) ? selected.delete(b.dataset.song) : selected.add(b.dataset.song);
-        b.setAttribute('aria-pressed', String(selected.has(b.dataset.song)));
+        const button = e.target.closest('[data-remove-song]'); if (!button) return;
+        selected.delete(button.dataset.removeSong); drawSongs(); songsHost.querySelector('select').focus();
       };
       drawSongs();
       el.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { status = b.dataset.st; el.querySelectorAll('[data-st]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
