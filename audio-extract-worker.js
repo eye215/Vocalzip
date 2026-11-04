@@ -6,7 +6,7 @@ self.onmessage=event=>{
 };
 const check=()=>{if(stopped)throw new DOMException('가져오기를 취소했어요.','AbortError')};
 async function prepare({file,id,videoHint}){
- let input,resultInput,directory,access,closed=false,output,success=false;
+ let input,resultInput,directory,handle,access,buffered,closed=false,output,success=false;
  const iterators=[];
  const progress=message=>self.postMessage({type:'progress',message});
  try{
@@ -25,11 +25,16 @@ async function prepare({file,id,videoHint}){
   self.postMessage({type:'detected-video'});
   if(!audios.length)throw Error('음성이 없는 영상은 음원으로 가져올 수 없어요.');
   progress('영상에서 원본 음성 추출 중…');check();
-  if(!navigator.storage?.getDirectory)throw Error('이 브라우저에서는 음원 파일로 가져와 주세요.');
-  directory=await (await navigator.storage.getDirectory()).getDirectoryHandle('vzip-audio-temp-v1',{create:true});
-  const handle=await directory.getFileHandle(id,{create:true});
-  if(!handle.createSyncAccessHandle)throw Error('이 브라우저는 영상의 음원 추출을 지원하지 않아요. 음원 파일로 가져와 주세요.');
-  access=await handle.createSyncAccessHandle();
+  try{
+   if(!navigator.storage?.getDirectory)throw Error('OPFS unavailable');
+   directory=await (await navigator.storage.getDirectory()).getDirectoryHandle('vzip-audio-temp-v1',{create:true});
+   handle=await directory.getFileHandle(id,{create:true});
+   if(!handle.createSyncAccessHandle)throw Error('OPFS unavailable');
+   access=await handle.createSyncAccessHandle();
+  }catch{
+   await import('./bounded-byte-writer.js?v=1');
+   buffered=self.VzipBoundedBytes.create();
+  }
   const codecs=await Promise.all(audios.map(track=>track.getCodec()));
   const candidates=[
    {format:new b.Mp4OutputFormat({fastStart:false}),type:'audio/mp4',extension:'.m4a'},
@@ -39,9 +44,9 @@ async function prepare({file,id,videoHint}){
   const selected=candidates.find(({format})=>codecs.every(codec=>codec&&format.getSupportedAudioCodecs().includes(codec))&&(audios.length===1||format.getSupportedTrackCounts().audio.max>=audios.length));
   if(!selected)throw Error('원본 음질을 유지할 수 없는 음성 형식이에요. 음원 파일로 가져와 주세요.');
   const writable=new WritableStream({
-   write(chunk){check();let at=0;while(at<chunk.data.byteLength){const count=access.write(chunk.data.subarray(at),{at:chunk.position+at});if(!count)throw Error('음원 임시 저장 공간이 부족해요.');at+=count}},
-   close(){if(!closed){access.flush();access.close();closed=true}},
-   abort(){if(!closed){access.close();closed=true}}
+   write(chunk){check();if(buffered){buffered.write(chunk);return}let at=0;while(at<chunk.data.byteLength){const count=access.write(chunk.data.subarray(at),{at:chunk.position+at});if(!count)throw Error('음원 임시 저장 공간이 부족해요.');at+=count}},
+   close(){if(!closed){if(access){access.flush();access.close()}closed=true}},
+   abort(){if(!closed){if(access)access.close();closed=true}}
   });
   output=new b.Output({format:selected.format,target:new b.StreamTarget(writable,{chunked:true,chunkSize:1024*1024})});
   output.setMetadataTags({creationTime:new Date(metadata.created)});
@@ -60,7 +65,7 @@ async function prepare({file,id,videoHint}){
   };
   for(let until=1;pumps.some(value=>!value.done);until++){check();await Promise.all(pumps.map(value=>pump(value,until)));if(until%3===0){progress('음성 추출 '+until+'초 구간 처리 중');await new Promise(resolve=>setTimeout(resolve,0))}}
   await output.finalize();check();
-  const extracted=await handle.getFile();
+  const extracted=buffered?new File(buffered.parts(),id,{type:selected.type}):await handle.getFile();
   resultInput=new b.Input({source:new b.BlobSource(extracted,{maxCacheSize:4*1024*1024,useStreamReader:false}),formats:b.ALL_FORMATS});
   const resultAudios=await resultInput.getAudioTracks();if((await resultInput.getVideoTracks()).length||resultAudios.length!==audios.length)throw Error('음원 변환 결과를 확인하지 못했어요.');
   progress('추출한 음성이 원본과 같은지 확인 중…');
@@ -78,7 +83,7 @@ async function prepare({file,id,videoHint}){
     packets++;bytes+=p.data.length;if(packets%250===0)await new Promise(resolve=>setTimeout(resolve,0));
    }
   }
-  const proof={version:1,originalName:file.name,originalBytes:file.size,outputBytes:extracted.size,audioPacketCopyVerified:true,audioTracks:audios.length,audioPackets:packets,audioBytes:bytes,maximumInputRead};
+  const proof={version:1,originalName:file.name,originalBytes:file.size,outputBytes:extracted.size,audioPacketCopyVerified:true,audioTracks:audios.length,audioPackets:packets,audioBytes:bytes,maximumInputRead,storageMode:buffered?'bounded-memory':'opfs'};
   const resultFile=new File([extracted],file.name.replace(/\.[^.]+$/,'')+selected.extension,{type:selected.type,lastModified:metadata.created});
   success=true;self.postMessage({type:'done',file:resultFile,metadata:{...metadata,originalMedia:{name:file.name,type:file.type,size:file.size,created:metadata.created,recordedDate:metadata.recordedDate},audioExtraction:proof}});
  }finally{
@@ -86,6 +91,7 @@ async function prepare({file,id,videoHint}){
   input?.dispose();resultInput?.dispose();
   if(output&&output.state!=='finalized')try{await output.cancel()}catch{}
   if(access&&!closed)try{access.close()}catch{}
-  if(directory&&!success)try{await directory.removeEntry(id)}catch{}
+  buffered?.clear();
+  if(directory&&(!success||buffered))try{await directory.removeEntry(id)}catch{}
  }
 }

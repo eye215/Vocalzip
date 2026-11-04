@@ -3,7 +3,7 @@
 'use strict';
 let active=false;const resources=new Set();
 const video=file=>file.type?.startsWith('audio/')?false:file.type?.startsWith('video/')||/\.(mov|mp4|m4v|webm)$/i.test(file.name||'');
-async function remove(id){for(let n=0;n<5;n++)try{const folder=await(await navigator.storage.getDirectory()).getDirectoryHandle('vzip-audio-temp-v1');await folder.removeEntry(id);return}catch(error){if(error.name==='NotFoundError')return;await new Promise(resolve=>setTimeout(resolve,100))}}
+async function remove(id){if(!navigator.storage?.getDirectory)return;for(let n=0;n<5;n++)try{const folder=await(await navigator.storage.getDirectory()).getDirectoryHandle('vzip-audio-temp-v1');await folder.removeEntry(id);return}catch(error){if(error.name==='NotFoundError')return;await new Promise(resolve=>setTimeout(resolve,100))}}
 window.vzipPrepareMedia=async(file,{signal,onProgress=()=>{}}={})=>{
  if(!file?.size)throw Error('빈 파일은 가져올 수 없어요.');
  if(file.size>1024*1024*1024)throw Error('원본 파일은 최대 1GB까지 선택할 수 있어요.');

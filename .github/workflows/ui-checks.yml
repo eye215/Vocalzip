@@ -21,9 +21,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
       - run: node tests/make-audio-fixtures.cjs
-      - run: node --test tests/chunk-media.test.cjs tests/media-date.test.cjs
+      - run: node --test tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Video import copies|Real queue extracts|Metadata-derived dates'
+      - run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Video import copies|201MiB video extraction|Real queue extracts|Metadata-derived dates'
       - run: npm run test:ui
       - uses: actions/upload-artifact@v4
         if: always()

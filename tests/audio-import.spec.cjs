@@ -6,7 +6,7 @@ test.beforeEach(async({page})=>{
  await page.goto('/');
 });
 test.afterEach(async({page})=>expect(page.__errors).toEqual([]));
-async function selected(page,name){await page.locator('#vzip-hub-upload').setInputFiles(path.resolve('tests/fixtures/'+name))}
+async function selected(page,name,queue=false){if(!queue)await page.evaluate(()=>document.querySelector('#vzip-hub-upload').onchange=null);await page.locator('#vzip-hub-upload').setInputFiles(path.resolve('tests/fixtures/'+name))}
 test('Video import copies exact original AAC into audio-only output and keeps capture date',async({page})=>{
  test.setTimeout(90000);await selected(page,'dated-video.mp4');
  const result=await page.evaluate(async()=>{
@@ -41,7 +41,7 @@ test('Real queue extracts audio before cloud transport and stores capture metada
   document.querySelector('#vzip-auth-screen').remove();document.body.classList.remove('vzip-auth-locked');
   window.vzipCloudSignedIn=()=>true;window.vzipCloudImport=async(file,info)=>{window.__sent={type:file.type,size:file.size,info};return {id:info.id}};
  });
- await page.locator('.nav [data-tab=media]').click();await selected(page,'dated-video.mp4');
+ await page.locator('.nav [data-tab=media]').click();await selected(page,'dated-video.mp4',true);
  await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
  await expect(page.locator('#vzip-hub-upload-queue')).toContainText('보관함 저장 완료',{timeout:90000});
  const sent=await page.evaluate(()=>window.__sent);expect(sent.type).toBe('audio/mp4');expect(sent.size).toBeLessThan(1024*1024);

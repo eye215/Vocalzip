@@ -14,3 +14,8 @@ test('Missing, incomplete, invalid and zero metadata never invent capture dates'
  const fallback=dates.pick({},0,now);assert.equal(fallback.dateSource,'upload-time');assert.equal(fallback.created,now);
  assert.equal(dates.parse('2024-02-31',now),null);
 });
+
+test('Repeated date tags preserve full dates and do not turn year-only tags into January 1',()=>{
+ assert.equal(dates.pick({raw:{TDRC:['2024-02-29']}},now,now).recordedDate,'2024-02-29');
+ assert.equal(dates.pick({raw:{TDRC:['2024']},date:new Date('2024-01-01')},now,now).dateSource,'file-modified');
+});
