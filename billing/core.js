@@ -18,6 +18,10 @@ function date(value,{date1904=false}={}){
  let match=raw.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?/)||raw.match(/(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/);
  if(!match){const names=['january','february','march','april','may','june','july','august','september','october','november','december'];const en=raw.match(/([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/);if(en){const month=names.findIndex(name=>name===en[1].toLowerCase()||name.slice(0,3)===en[1].toLowerCase().slice(0,3))+1;if(month)match=[raw,en[3],String(month),en[2]]}}
  if(!match){const short=raw.match(/^(\d{2})[-./](\d{1,2})[-./](\d{1,2})\.?$/);if(short)match=[raw,'20'+short[1],short[2],short[3]]}
+ // "20260126" typed as digits, "26 January 2026", and US "1/26/2026" (month first when the year is last).
+ if(!match){const digits=raw.match(/^(\d{4})(\d{2})(\d{2})$/);if(digits)match=digits}
+ if(!match){const names=['january','february','march','april','may','june','july','august','september','october','november','december'];const dm=raw.match(/(\d{1,2})\s+([A-Za-z]{3,})\.?,?\s+(\d{4})/);if(dm){const month=names.findIndex(name=>name.slice(0,3)===dm[2].toLowerCase().slice(0,3))+1;if(month)match=[raw,dm[3],String(month),dm[1]]}}
+ if(!match){const us=raw.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\b/);if(us)match=[raw,us[3],us[1],us[2]]}
  if(!match)fail('날짜는 YYYY-MM-DD 형식으로 확인해 주세요.');
  const [y,m,d]=match.slice(1).map(Number),result=new Date(Date.UTC(y,m-1,d));
  if(y<1900||y>9999||result.getUTCFullYear()!==y||result.getUTCMonth()+1!==m||result.getUTCDate()!==d)fail('존재하지 않는 날짜예요.');

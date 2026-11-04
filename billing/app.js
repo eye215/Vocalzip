@@ -15,7 +15,7 @@ function table(headers,rows,empty='아직 기록이 없어요.'){
  if(!rows.length)return el('p',empty,'empty');
  const wrap=el('div',undefined,'table-wrap'),table=el('table'),head=el('thead'),tr=el('tr');
  for(const name of headers){const th=el('th',name);th.scope='col';tr.append(th)}head.append(tr);table.append(head);
- const body=el('tbody');for(const values of rows){const row=el('tr');for(const [index,value] of values.entries()){const td=el('td');if(headers[index])td.dataset.label=headers[index];if(value instanceof Node)td.append(value);else td.textContent=String(value??'');row.append(td)}body.append(row)}table.append(body);wrap.append(table);return wrap;
+ const body=el('tbody');for(const values of rows){const row=el('tr');for(const [index,value] of values.entries()){const td=el('td');if(headers[index])td.dataset.label=headers[index];if(value instanceof Node)td.append(value);else td.textContent=/^\d{4}-\d{2}-\d{2}$/.test(String(value??''))?window.VzipBillingDate.show(value):String(value??'');row.append(td)}body.append(row)}table.append(body);wrap.append(table);return wrap;
 }
 function flags(form,names){
  for(const [name,label]of names){const wrapper=el('label',undefined,'check'),input=el('input');input.type='checkbox';input.name=name;wrapper.append(input,document.createTextNode(label));form.append(wrapper)}
@@ -25,7 +25,7 @@ function makeForm(kind,fields,flagItems=[]){
  for(const [name,label,type,options]of fields){
   const wrap=el('label',label);let control;
   if(type==='select'||type==='pass'||type==='lesson'){control=el('select');if(type==='pass')control.dataset.passSelect='';if(options)selectOptions(control,options)}
-  else{control=el(type==='textarea'?'textarea':'input');if(type!=='textarea')control.type=type;if(type==='number'){control.step=name.toLowerCase().includes('units')?'0.01':'1';if(!name.endsWith('Delta'))control.min='0'}}
+  else{control=el(type==='textarea'?'textarea':'input');if(type!=='textarea')control.type=type;if(type==='date')window.VzipBillingDate.enhance(control);if(type==='number'){control.step=name.toLowerCase().includes('units')?'0.01':'1';if(!name.endsWith('Delta'))control.min='0'}}
   control.name=name;control.id=kind+'-'+name;wrap.htmlFor=control.id;
   if(['name','date','passId','amount','totalUnits'].includes(name))control.required=true;
   wrap.append(control);grid.append(wrap);
@@ -164,7 +164,7 @@ $('#preview-import').onclick=()=>{
 };
 function inspected(){return settings?I.inspect(draftRows,settings,state,S.lessons()):[]}
 function editCell(row,key,type='text',options){
- const input=el(options?'select':'input');if(options)selectOptions(input,options,String(row[key]??''));else{input.type=type;input.value=row[key]??''}
+ const input=el(options?'select':'input');if(options)selectOptions(input,options,String(row[key]??''));else{input.type=type;if(type==='date'||key==='date')window.VzipBillingDate.enhance(input);input.value=row[key]??''}
  input.setAttribute('aria-label',row.sourceRow+'행 '+(I.labels[key]||key));input.onchange=()=>{
   const target=draftRows.find(item=>item.sourceRow===row.sourceRow);target[key]=input.value;
   if(key==='status')target.units=input.value==='completed'?'1':'0';

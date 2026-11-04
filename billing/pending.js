@@ -69,7 +69,7 @@ function render(ctx){
  for(const pass of passes)select.append(new Option(pass.name+' · 잔여 '+new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format((remain.get(pass.id)||0)/100)+'회',pass.id));
  select.value=chosenPass;select.onchange=()=>{chosenPass=select.value};label.append(select);box.append(label);
  const need=()=>{if(!chosenPass){app.notify('차감할 레슨권을 선택해 주세요.',true);select.focus();return false}return true};
- const lessonText=lesson=>[lesson.lesson_date,[lesson.lesson_start,lesson.lesson_end].filter(Boolean).join('–'),lesson.lesson_label].filter(Boolean).join(' · ');
+ const lessonText=lesson=>[window.VzipBillingDate?.show(lesson.lesson_date)||lesson.lesson_date,[lesson.lesson_start,lesson.lesson_end].filter(Boolean).join('–'),lesson.lesson_label].filter(Boolean).join(' · ');
  const list=(title,rows,actions)=>{
   if(!rows.length)return;
   const sub=document.createElement('h4');sub.textContent=title+' '+rows.length+'건';box.append(sub);

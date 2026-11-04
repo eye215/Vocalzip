@@ -132,11 +132,11 @@ test('app lessons waiting for settlement: one-tap deduction, status-less confirm
  await pass(page);
  await tab(page,'attendance');
  const pending=page.locator('#pending-lessons');
- await expect(pending).toContainText('2026-11-01 · 19:00–20:00 · 강남');
+ await expect(pending).toContainText('2026/11/01 · 19:00–20:00 · 강남');
  await expect(pending).not.toContainText('2999-01-01');
- await pending.locator('li').filter({hasText:'2026-11-01'}).getByRole('button',{name:'1회 차감'}).click();
+ await pending.locator('li').filter({hasText:'2026/11/01'}).getByRole('button',{name:'1회 차감'}).click();
  await expect(page.locator('#message')).toContainText('1회 차감했어요');
- await pending.locator('li').filter({hasText:'2026-10-20'}).getByRole('button',{name:'수강 안 함 · 0회'}).click();
+ await pending.locator('li').filter({hasText:'2026/10/20'}).getByRole('button',{name:'수강 안 함 · 0회'}).click();
  await expect(pending).toContainText('정산할 앱 레슨이 없어요');
  let data=await ledger(page);
  const charged=data.deductions.find(row=>row.lessonId==='v6-done');
@@ -186,4 +186,26 @@ test('several Notion CSVs can be selected at once and their dates/times are conv
  // The source file name stays with every imported row.
  expect(data.importRows.filter(row=>row.status==='imported').map(row=>row.raw.at(-1)).sort()).toEqual(['10월.csv','10월.csv','11월.csv']);
  await total(page,'usedUnits','3회');
+});
+test('dates are typed as digits and shown as YYYY/MM/DD, including uploaded Notion dates',async({page})=>{
+ await open(page);await pass(page);
+ await tab(page,'payments');
+ const date=page.locator('#payment-date');
+ await expect(date).toHaveAttribute('inputmode','numeric');
+ await date.fill('');await date.pressSequentially('20260126');
+ await expect(date).toHaveValue('2026/01/26');
+ await page.locator('#payment-amount').fill('150000');
+ await page.locator('#payment-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
+ expect((await ledger(page)).payments[0].date).toBe('2026-01-26');
+ await expect(page.locator('#payment-list')).toContainText('2026/01/26');
+ // A pasted English date with trailing text becomes YYYY/MM/DD.
+ await date.fill('January 26, 2026 7:00 PM (GMT+9)');await date.blur();
+ await expect(date).toHaveValue('2026/01/26');
+ // Uploaded rows: Notion English dates show as YYYY/MM/DD in the preview and after saving.
+ await csv(page,'수강생,레슨날짜,레슨내용,진행상태\n학생,"January 26, 2026 7:00 PM",호흡,완료\n학생,26 January 2026,발성,완료\n','deduction');
+ await expect(page.getByLabel('2행 날짜',{exact:true})).toHaveValue('2026/01/26');
+ await commit(page);
+ await tab(page,'attendance');
+ await expect(page.locator('#deduction-list')).toContainText('2026/01/26');
+ expect((await ledger(page)).deductions.map(row=>row.date)).toEqual(['2026-01-26','2026-01-26']);
 });
