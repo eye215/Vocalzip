@@ -1012,8 +1012,9 @@ for(const target of ['library','practice'])test('Multiple files choose independe
  const host=page.locator(target==='practice'?'#media-preview':'#vzip-hub-upload-queue');
  await expect(host).toContainText('일시적인 전송 오류');
  await host.getByRole('button',{name:'이 파일 다시 시도'}).click();
- await expect(host.locator('article')).toHaveCount(2);
- await expect(host.locator('article').nth(1)).toContainText('보관함 저장 완료');
+ // Finished files leave the list; only a count line remains.
+ await expect(host.locator('article.vzip-upload-progress')).toHaveCount(0);
+ await expect(host.locator('.vzip-upload-done')).toContainText('✓ 보관함 저장 완료 2개');
  const calls=await page.evaluate(()=>window.__batchCalls);
  expect(calls.map(x=>[x.fileName,x.songId])).toEqual([['first.wav','s1'],['second.wav','s2'],['second.wav','s2']]);
  if(target==='practice')expect(await page.locator('#practice-form').evaluate(f=>JSON.parse(f.dataset.mediaIds))).toEqual(['saved-first.wav','saved-second.wav']);

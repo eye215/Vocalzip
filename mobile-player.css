@@ -33,3 +33,4 @@
 
 #lesson-form #vzip-recorder,#lesson-form .wizard-record-note{background:transparent;border:0;box-shadow:none;padding:0}
 #lesson-form .wizard-record-note>b,#lesson-form .wizard-record-note>p{display:none}
+.vzip-upload-done{margin:10px 0;padding:10px 14px;border-radius:12px;background:#e3f4ec;color:#1d5a40;font-weight:600}
