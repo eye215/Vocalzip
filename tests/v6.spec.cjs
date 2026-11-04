@@ -40,6 +40,8 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
     await window.vzipStorePracticeMedia({id:'m2', name:'연습 녹음', created:Date.now() - 864e5, type:'audio/wav', source:'practice', songId:'s1', song:'', blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:1});
     window.dispatchEvent(new Event('vzip:media-updated'));
   });
+  // Let the media refresh this seeding triggers finish before the test starts tapping.
+  if (media) await page.waitForTimeout(600);
 }
 const data = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const media = page => page.evaluate(() => window.vzipReadMedia());
@@ -340,11 +342,11 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await boot(page);
   await page.goto('/#/calendar');
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="' + day(-1) + '"]').click();
+  await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('30분');
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(1);
   if (day(-7).slice(0, 7) !== day(-1).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="' + day(-7) + '"]').click();
+  await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
   await page.getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
