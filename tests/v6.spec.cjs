@@ -630,3 +630,27 @@ test('Songs dropped by an old overwrite come back from snapshots and file names;
   await sheet(page).getByRole('button', {name:'삭제'}).click();
   expect((await data(page)).deleted.songs).toContain('s2');
 });
+
+test('Device-only files are backed up to the cloud automatically once signed in (additive, no duplicates)', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const stored = new Map();
+    window.__imports = []; window.__updates = [];
+    window.vzipCloudImport = async (file, info) => { window.__imports.push({id:info.id, name:file.name, type:file.type, size:file.size, source:info.source, recordedDate:info.recordedDate}); const meta = {...info, path:'u/' + info.id, size:file.size}; stored.set(info.id, meta); return meta; };
+    window.vzipCloudMediaUpdate = async (item, changes) => { window.__updates.push({id:item.id, ...changes}); stored.set(item.id, {...stored.get(item.id), ...changes}); };
+    window.vzipCloudMediaList = async () => [...stored.values()].map(m => ({...m, cloud:true}));
+    const m1 = (await window.vzipReadMedia()).find(m => m.id === 'm1'); delete m1.bytes;
+    await window.vzipStorePracticeMedia({...m1, blob:new Blob([window.__wav], {type:'audio/wav'}), rating:4, review:'고음 괜찮음'});
+    window.vzipCloudSignedIn = () => true;
+  });
+  await page.goto('/#/library');
+  await expect(page.locator('[data-count]')).toContainText('모두 클라우드에 백업됨', {timeout:15000});
+  const first = await page.evaluate(() => ({imports:window.__imports, updates:window.__updates}));
+  expect(first.imports.map(x => x.id).sort()).toEqual(['m1', 'm2']);
+  expect(first.imports.every(x => x.type === 'audio/wav' && x.size > 0 && x.name.endsWith('.wav'))).toBe(true);
+  expect(first.updates.find(x => x.id === 'm1')).toMatchObject({rating:4, review:'고음 괜찮음'});
+  // Device copies stay; running again uploads nothing new.
+  await page.evaluate(() => VZ.media.backupLocal());
+  expect(await page.evaluate(() => window.__imports.length)).toBe(2);
+  expect((await media(page)).map(m => m.id).sort()).toEqual(['m1', 'm2']);
+});
