@@ -406,3 +406,27 @@ test('Billing is only linked, and editing a legacy lesson never stamps a status 
   await page.getByRole('button', {name:'예정으로 되돌리기'}).click();
   expect((await data(page)).lessons.find(l => l.id === 'l1').status).toBe('scheduled');
 });
+
+test('Library actually plays device and cloud-only audio (time advances)', async ({page}) => {
+  await boot(page);
+  await page.route('**/cloud-audio.wav', async r => r.fulfill({contentType:'audio/wav', body:Buffer.from(await page.evaluate(() => [...new Uint8Array(window.__wav)]))}));
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn = () => true;
+    window.vzipCloudMediaList = async () => [{id:'c1', name:'클라우드 음원', type:'audio/wav', path:'ui-test-user/c1.wav', created:Date.now(), songId:'', cloud:true}];
+    window.vzipCloudMediaUrl = async () => { await new Promise(r => setTimeout(r, 300)); return '/cloud-audio.wav'; };
+    window.dispatchEvent(new Event('vzip:auth-changed'));
+  });
+  await page.goto('/#/library');
+  for (const id of ['m2', 'c1']) {
+    const row = page.locator('[data-media="' + id + '"]');
+    await row.locator('[data-toggle]').click();
+    await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
+    await expect(row.locator('[data-msg]')).toHaveText('');
+  }
+  // After the 1s clip ends, one tap on the already-loaded source plays it again.
+  const row = page.locator('[data-media="c1"]');
+  await expect(row.getByRole('button', {name:'재생', exact:true})).toBeVisible({timeout:5000});
+  await row.getByRole('button', {name:'재생', exact:true}).click();
+  await expect(row.getByRole('button', {name:'일시정지'})).toBeVisible();
+  await expect(row.locator('[data-msg]')).toHaveText('');
+});

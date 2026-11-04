@@ -174,7 +174,18 @@ M.player = (host, item, opts = {}) => {
     .catch(e => { msg.textContent = '재생할 수 없어요: ' + e.message; ready = null; throw e; });
   const api = {
     el, item,
-    async play() { try { await load(); M.stopAll(api); await el.play(); } catch (e) { if (e?.name !== 'AbortError' && !msg.textContent) msg.textContent = '재생할 수 없어요. 이 브라우저가 지원하지 않는 형식일 수 있어요.'; } },
+    /* iOS Safari only allows play() inside the tap. When the source is ready, call it
+     * synchronously; otherwise fetch it first and ask for one more tap if blocked. */
+    play() {
+      M.stopAll(api);
+      const run = () => el.play().then(() => { msg.textContent = ''; }).catch(e => {
+        if (e?.name === 'NotAllowedError') msg.textContent = '재생 버튼을 한 번 더 눌러 주세요.';
+        else if (e?.name !== 'AbortError' && !msg.textContent) msg.textContent = '재생할 수 없어요. 이 브라우저가 지원하지 않는 형식일 수 있어요.';
+      });
+      if (url) return run();
+      msg.textContent = item.cloud && !blobOf(item) ? '클라우드에서 불러오는 중…' : '';
+      return load().then(() => { if (!dead) return run(); }, () => {});
+    },
     pause() { el.pause(); },
     seek(t) { el.currentTime = Math.max(0, Math.min(t, duration() || t)); paint(); },
     setRate(r) { el.playbackRate = r; const b = root.querySelector('[data-speed]'); if (b) b.textContent = '속도 ' + r.toFixed(2).replace(/0$/, '') + '×'; },
@@ -187,7 +198,7 @@ M.player = (host, item, opts = {}) => {
   el.onpause = el.onended = () => { btn.innerHTML = '<i class="ph-fill ph-play"></i>'; btn.setAttribute('aria-label', '재생'); };
   el.ontimeupdate = () => { if (loopA != null && loopB != null && el.currentTime >= loopB) el.currentTime = loopA; paint(); };
   el.onloadedmetadata = el.ondurationchange = paint;
-  el.onerror = () => { msg.textContent = '재생할 수 없어요. 형식을 지원하지 않거나 파일이 손상됐을 수 있어요.'; };
+  el.onerror = () => { const t = typeOf(item); msg.textContent = /webm|ogg/.test(t) && /iP(hone|ad)|Safari/.test(navigator.userAgent) && !/Chrome|Android/.test(navigator.userAgent) ? '이 기기의 Safari는 ' + t.split('/')[1].toUpperCase() + ' 형식을 재생하지 못할 수 있어요. 파일을 내려받아 다른 앱에서 열어 주세요.' : '재생할 수 없어요. 형식을 지원하지 않거나 파일이 손상됐을 수 있어요.'; };
   range.oninput = () => { const d = duration(); if (d) el.currentTime = range.value / 1000 * d; paint(); };
   if (opts.tools) {
     const speeds = [1, 1.25, 0.5, 0.75];
@@ -197,7 +208,8 @@ M.player = (host, item, opts = {}) => {
     b.onclick = () => { if (el.currentTime <= loopA) { msg.textContent = 'B 지점은 A 지점보다 뒤여야 해요.'; return; } loopB = el.currentTime; b.textContent = 'B ' + VZ.clock(loopB); b.setAttribute('aria-pressed', 'true'); msg.textContent = '구간 반복 중'; el.currentTime = loopA; };
     clear.onclick = () => { loopA = loopB = null; a.textContent = 'A 지점'; b.textContent = 'B 지점'; b.disabled = true; clear.hidden = true; a.removeAttribute('aria-pressed'); b.removeAttribute('aria-pressed'); msg.textContent = ''; };
   }
-  if (video) load().catch(() => {});
+  // Prefetch so a later tap can start playback synchronously (needed on iOS).
+  if (video || opts.prefetch !== false) load().catch(() => {});
   return api;
 };
 
