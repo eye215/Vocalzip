@@ -13,11 +13,11 @@ test('Video import copies exact original AAC into audio-only output and keeps ca
   const prepared=await vzipPrepareMedia(document.querySelector('#vzip-hub-upload').files[0]);window.__prepared=prepared;
   const b=await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');
   const input=new b.Input({source:new b.BlobSource(prepared.file),formats:b.ALL_FORMATS});
-  try{return {metadata:prepared.metadata,type:prepared.file.type,name:prepared.file.name,videoTracks:(await input.getVideoTracks()).length,audioTracks:(await input.getAudioTracks()).length,seconds:await input.computeDuration()}}finally{input.dispose()}
+  try{const reimport=await vzipPrepareMedia(prepared.file);return {reimportDate:reimport.metadata.recordedDate,metadata:prepared.metadata,type:prepared.file.type,name:prepared.file.name,videoTracks:(await input.getVideoTracks()).length,audioTracks:(await input.getAudioTracks()).length,seconds:await input.computeDuration()}}finally{input.dispose()}
  });
  expect(result.type).toBe('audio/mp4');expect(result.name).toMatch(/\.m4a$/);expect(result.videoTracks).toBe(0);expect(result.audioTracks).toBe(1);
  expect(result.metadata.audioExtraction.audioPacketCopyVerified).toBe(true);expect(result.metadata.audioExtraction.audioPackets).toBeGreaterThan(10);
- expect(result.metadata.recordedDate).toBe('2024-03-01');expect(result.metadata.dateSource).toBe('metadata');expect(result.seconds).toBeGreaterThan(2.8);expect(result.seconds).toBeLessThan(3.2);
+ expect(result.reimportDate).toBe('2024-03-01');expect(result.metadata.recordedDate).toBe('2024-03-01');expect(result.metadata.dateSource).toBe('metadata');expect(result.seconds).toBeGreaterThan(2.8);expect(result.seconds).toBeLessThan(3.2);
  await page.evaluate(()=>window.__prepared.dispose());
 });
 test('201MiB video extraction reads bounded sections and sends only the small audio',async({page},testInfo)=>{

@@ -37,7 +37,7 @@ async function prepare({file,id,videoHint}){
   }
   const codecs=await Promise.all(audios.map(track=>track.getCodec()));
   const candidates=[
-   {format:new b.Mp4OutputFormat({fastStart:false}),type:'audio/mp4',extension:'.m4a'},
+   {format:new b.Mp4OutputFormat({fastStart:false,metadataFormat:'mdta'}),type:'audio/mp4',extension:'.m4a'},
    {format:new b.WavOutputFormat(),type:'audio/wav',extension:'.wav'},
    {format:new b.WebMOutputFormat(),type:'audio/webm',extension:'.webm'}
   ];
@@ -49,7 +49,9 @@ async function prepare({file,id,videoHint}){
    abort(){if(!closed){if(access)access.close();closed=true}}
   });
   output=new b.Output({format:selected.format,target:new b.StreamTarget(writable,{chunked:true,chunkSize:1024*1024})});
-  output.setMetadataTags({creationTime:new Date(metadata.created)});
+  const recordedTag=typeof tags.raw?.['com.apple.quicktime.creationdate']==='string'?tags.raw['com.apple.quicktime.creationdate']:metadata.recordedDate;
+  const rawDate=selected.extension==='.m4a'?{'com.apple.quicktime.creationdate':recordedTag,recorded_date:metadata.recordedDate}:selected.extension==='.wav'?{ICRD:metadata.recordedDate}:{DATE:metadata.recordedDate};
+  output.setMetadataTags({creationTime:new Date(metadata.created),raw:rawDate});
   const pumps=[];
   for(let i=0;i<audios.length;i++){
    const track=audios[i],config=await track.getDecoderConfig();if(!config)throw Error('원본 음성 정보를 확인하지 못했어요.');
