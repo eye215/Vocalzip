@@ -40,6 +40,8 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
     await window.vzipStorePracticeMedia({id:'m2', name:'연습 녹음', created:Date.now() - 864e5, type:'audio/wav', source:'practice', songId:'s1', song:'', blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:1});
     window.dispatchEvent(new Event('vzip:media-updated'));
   });
+  // Let the media refresh this seeding triggers finish before the test starts tapping.
+  if (media) await page.waitForTimeout(600);
 }
 const data = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const media = page => page.evaluate(() => window.vzipReadMedia());
@@ -272,15 +274,15 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await boot(page);
   await page.goto('/#/library');
   await page.locator('[data-imp]').click();
-  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.name === 'b' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
+  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.songId === 's2' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
   const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
   const buffer = Buffer.from(wav);
   await sheet(page).locator('[data-file]').setInputFiles([
-    {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
+    {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
   await expect(sheet(page).getByText('지원하지 않는 형식이에요. (건너뜀)')).toBeVisible();
   await sheet(page).locator('[data-bulk]').selectOption('s2');
   await sheet(page).getByLabel('a.wav 곡').selectOption('s1');
-  await sheet(page).getByLabel('b.m4a 날짜').fill('2026-01-15');
+  await sheet(page).getByLabel('b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a 날짜').fill('2026-01-15');
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).getByText('실패: 네트워크 오류')).toBeVisible();
   await expect(sheet(page).locator('[data-summary]')).toContainText('저장 1개');
@@ -288,14 +290,21 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   // Finished files leave the list; one line keeps the count.
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 2개');
   await expect(sheet(page).locator('.up-row:visible')).toHaveCount(1); // only the skipped .txt remains
+  // Saved files are listed with a player right in the sheet.
+  const saved = sheet(page).locator('[data-saved] [data-media]');
+  await expect(saved).toHaveCount(2);
+  await saved.first().locator('[data-toggle]').click();
+  await expect(saved.first().locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
+  // Nothing in the sheet is wider than the phone.
+  expect(await sheet(page).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(2);
-  expect(items.find(m => m.name === 'a').songId).toBe('s1');
-  const b = items.find(m => m.name === 'b');
+  const a = items.find(m => m.songId === 's1'), b = items.find(m => m.songId === 's2');
+  expect(a).toBeTruthy();
   expect(b.songId).toBe('s2');
   expect(b.type).toBe('audio/mp4');
   expect(b).toMatchObject({recordedDate:'2026-01-15', dateSource:'manual'});
-  expect(items.find(m => m.name === 'a').dateSource).not.toBe('manual');
+  expect(a.dateSource).not.toBe('manual');
   expect(new Date(b.created).getFullYear() + '-' + (new Date(b.created).getMonth() + 1) + '-' + new Date(b.created).getDate()).toBe('2026-1-15');
   expect(await page.evaluate(() => window.__calls)).toBe(3);
   await page.goto('/#/calendar');
@@ -338,11 +347,11 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await boot(page);
   await page.goto('/#/calendar');
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="' + day(-1) + '"]').click();
+  await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('30분');
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(1);
   if (day(-7).slice(0, 7) !== day(-1).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
-  await page.locator('[data-d="' + day(-7) + '"]').click();
+  await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
   await page.getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));

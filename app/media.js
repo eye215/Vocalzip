@@ -109,11 +109,11 @@ M.importFile = async (file, choice, onProgress, signal) => {
     const info = {...meta, id:choice.id, name:(choice.name || file.name).replace(/\.[^.]+$/, ''), type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
     let saved;
     if (window.vzipCloudSignedIn?.()) {
-      saved = await window.vzipCloudImport(out, info, p => onProgress?.(p), {signal});
+      saved = {...await window.vzipCloudImport(out, info, p => onProgress?.(p), {signal}), cloud:true};
     } else {
       if (out.size > LOCAL_LIMIT) throw Error('25MB 초과 음원은 로그인 후 가져올 수 있어요.');
       if (signal?.aborted) throw new DOMException('취소', 'AbortError');
-      saved = {...info, blob:out, importedAt:Date.now()};
+      saved = {...info, blob:out, importedAt:Date.now(), local:true};
       await window.vzipStorePracticeMedia(saved);
       window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:saved.id, source:'import'}}));
     }

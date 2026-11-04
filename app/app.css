@@ -246,3 +246,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 .up-done{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:var(--ok-soft);color:var(--ok);font-weight:600;font-size:14px}
+/* Import sheet: keep long names and fields inside the phone width. */
+.sheet{overflow-x:hidden}
+.up-row,.up-row>*{min-width:0}
+.up-head{display:flex;align-items:baseline;gap:8px;min-width:0}
+.up-head strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up-head span{flex:none}
+.up-row select,.up-row input{min-width:0;width:100%;max-width:100%}
+.up-date{display:grid;gap:4px;min-width:0}
+.up-date span{font-size:13px;font-weight:600;color:var(--ink-2)}
+.up-date em{font-style:normal;font-weight:500;color:var(--ink-3);margin-left:4px}
+.up-saved{margin:0 0 12px}
