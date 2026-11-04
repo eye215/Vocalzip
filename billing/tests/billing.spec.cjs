@@ -134,8 +134,8 @@ test('app lessons waiting for settlement: one-tap deduction, status-less confirm
  const pending=page.locator('#pending-lessons');
  await expect(pending).toContainText('2026/11/01 · 19:00–20:00 · 강남');
  await expect(pending).not.toContainText('2999-01-01');
- await pending.locator('li').filter({hasText:'2026/11/01'}).getByRole('button',{name:'1회 차감'}).click();
- await expect(page.locator('#message')).toContainText('1회 차감했어요');
+ await pending.locator('li').filter({hasText:'2026/11/01'}).getByRole('button',{name:'1시간',exact:true}).click();
+ await expect(page.locator('#message')).toContainText('1시간 차감');
  await pending.locator('li').filter({hasText:'2026/10/20'}).getByRole('button',{name:'수강 안 함 · 0회'}).click();
  await expect(pending).toContainText('정산할 앱 레슨이 없어요');
  let data=await ledger(page);
