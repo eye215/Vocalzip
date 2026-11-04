@@ -14,7 +14,7 @@ function drafts(rows,mapping,settings,state){
   const row={sourceRow:index+2,raw:raw.slice(),selected:true,sourceKey:settings.hash+':'+settings.sheet+':'+(index+2),
    date:get(raw,'date'),passId:found.length===1?found[0].id:(settings.passId||''),memo:get(raw,'memo'),student:get(raw,'student'),reference:get(raw,'reference')};
   if(settings.kind==='payment')Object.assign(row,{amount:get(raw,'amount'),kind:/환불|refund/i.test(get(raw,'kind'))?'refund':'payment',method:get(raw,'method'),
-   newPass:settings.mode==='new'&&!row.passId,passName:name||String(get(raw,'date'))+' 레슨권',charged:get(raw,'charged'),passAmount:get(raw,'passAmount')});
+   newPass:settings.mode==='new',passName:name||String(get(raw,'date'))+' 레슨권',charged:get(raw,'charged'),passAmount:get(raw,'passAmount')});
   else{const status=C.status(get(raw,'status'));Object.assign(row,{status,start:get(raw,'start'),end:get(raw,'end'),units:get(raw,'units')!==''?get(raw,'units'):(status==='completed'?'1':'0'),lessonId:String(get(raw,'lessonId')).trim()})}
   return row;
  });

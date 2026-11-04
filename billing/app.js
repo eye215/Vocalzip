@@ -123,8 +123,9 @@ function mappingUI(){
  for(const key of Object.keys(I.fields[kind])){const label=el('label',I.labels[key]),select=el('select');select.dataset.mapping=key;selectOptions(select,[['-1','사용 안 함'],...headers.map((text,index)=>[String(index),text||'빈 머리글 '+(index+1)])],String(mapping[key]));label.append(select);grid.append(label)}
  host.append(el('p','첫 행을 머리글로 읽었습니다. 날짜·금액·횟수·수강생 매핑을 확인하세요.','help'),grid);$('#preview-import').disabled=false;
 }
-async function loadSheet(){const run=++parseRun;try{sourceRows=await workbook.readSheet(Number($('#import-sheet').value||0));if(run!==parseRun)return;mappingUI();notify((sourceRows.length-1)+'행을 읽었어요. 아직 등록하지 않았습니다.')}catch(error){notify(error.message,true)}}
+async function loadSheet(){const run=++parseRun;clearPreview();$('#preview-import').disabled=true;try{const rows=await workbook.readSheet(Number($('#import-sheet').value||0));if(run!==parseRun)return;sourceRows=rows;mappingUI();notify((sourceRows.length-1)+'행을 읽었어요. 아직 등록하지 않았습니다.')}catch(error){if(run!==parseRun)return;sourceRows=[];$('#mapping').replaceChildren();notify(error.message,true)}}
 $('#import-file').onchange=async event=>{const file=event.target.files?.[0];if(!file)return;clearPreview();$('#preview-import').disabled=true;event.target.disabled=true;try{fileName=file.name;workbook=await F.open(file,$('#import-encoding').value);selectOptions($('#import-sheet'),workbook.sheets.map((name,index)=>[String(index),name]),'0');await loadSheet()}catch(error){workbook=null;sourceRows=[];$('#mapping').replaceChildren();notify(error.message,true)}finally{event.target.disabled=false}};
+$('#import-encoding').onchange=()=>{if($('#import-file').files?.length)$('#import-file').dispatchEvent(new Event('change'))};
 $('#import-sheet').onchange=()=>{if(workbook)loadSheet()};
 $('#import-kind').onchange=()=>{if(sourceRows.length)mappingUI();$('#import-mode').disabled=$('#import-kind').value!=='payment'};
 for(const id of ['import-pass','import-mode'])$('#'+id).onchange=clearPreview;

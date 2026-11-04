@@ -94,6 +94,7 @@ function reduce(original,command,context={}){
  }else if(command.type==='entity.void'||command.type==='entity.restore'){
   if(!['payments','deductions','adjustments'].includes(payload.collection))fail('취소할 수 없는 기록이에요.');
   const row=state[payload.collection].find(item=>item.id===payload.id);if(!row)fail('기록을 찾지 못했어요.');
+  if(command.type==='entity.restore')findPass(row.passId);
   if(command.type==='entity.restore'&&payload.collection==='deductions'&&active(state.deductions).some(other=>other.id!==row.id&&((row.lessonId&&other.lessonId===row.lessonId)||(row.legacyRef&&other.legacyRef===row.legacyRef))))fail('동일 레슨에 다른 차감이 있어 복구할 수 없어요.');
   if(command.type==='entity.restore'&&payload.collection==='payments'&&active(state.payments).some(other=>other.id!==row.id&&fingerprint('payment',other)===fingerprint('payment',row))&&!opts.allowDuplicate)fail('동일 결제가 있어 복구할 수 없어요.');
   put(payload.collection,{id:row.id,expectedVersion:payload.expectedVersion,voidedAt:command.type==='entity.void'?now:null},command.type);
@@ -124,7 +125,11 @@ function reduce(original,command,context={}){
   for(const record of batch.created)put(record.collection,{id:record.id,expectedVersion:record.version,voidedAt:now},'import.undo',batch.id);
   batch.status='undone';batch.undoneAt=now;state.importRows.filter(row=>row.batchId===batch.id&&row.status==='imported').forEach(row=>row.status='undone');
  }else fail('지원하지 않는 정산 작업이에요.');
- check(state,opts.allowOverdraw);state.revision++;return state;
+ const balances=check(state,true);
+ if(!opts.allowOverdraw){const before=new Map(totals(original).passes.map(pass=>[pass.id,pass.remainingUnits]));
+  if(balances.passes.some(pass=>pass.remainingUnits<Math.min(0,before.get(pass.id)||0)))fail('잔여 횟수를 초과해요. 차감/조정 값을 확인하거나 초과 사용을 명시적으로 확인해 주세요.');
+ }
+ state.revision++;return state;
 }
 return {empty,validateState,reduce,totals,passBalance,fingerprint,money,units,date,time,status,active,check};
 });

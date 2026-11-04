@@ -109,3 +109,21 @@ test('Fractional use never drifts under a sequence of edits and reversals',()=>{
  for(const initial of state.deductions.slice(0,10))state=run(state,'entity.void',{collection:'deductions',id:initial.id,expectedVersion:initial.version});
  const total=C.totals(state).total;assert.equal(total.usedUnits,250);assert.equal(total.usedAmount,25000);assert.equal(total.usedAmount+total.unusedAmount,total.amount);
 });
+
+test('Existing acknowledged overdraw does not prevent payments or partial recovery',()=>{
+ let {state,passId}=setup(1000,100);state=run(state,'deduction.save',{passId,date:'2026-11-04',status:'completed',units:300},{allowOverdraw:true});
+ state=run(state,'payment.save',{passId,date:'2026-11-04',amount:1000});
+ const deduction=state.deductions[0];state=run(state,'deduction.save',{...deduction,expectedVersion:deduction.version,units:200});
+ assert.equal(C.totals(state).total.remainingUnits,-100);assert.equal(C.totals(state).total.paid,1000);
+ assert.throws(()=>run(state,'deduction.save',{passId,date:'2026-11-04',status:'completed'}),/잔여 횟수/);
+});
+test('Records belonging to an undone new pass cannot be restored invisibly',()=>{
+ let state=run(C.empty('test'),'import.commit',{batchId:'batch',kind:'payment',rows:[{...paymentRow('new'),newPass:{name:'신규',amount:1000,totalUnits:100}}]});
+ state=run(state,'import.undo',{id:'batch'});const row=state.payments[0];
+ assert.throws(()=>run(state,'entity.restore',{collection:'payments',id:row.id,expectedVersion:row.version}),/레슨권/);
+});
+test('Explicit new-pass import mode never silently attaches to the default pass',()=>{
+ const {state,passId}=setup(),settings={kind:'payment',passId,mode:'new',hash:'new',sheet:'0'},headers=['결제일','금액','충전횟수'];
+ const rows=I.drafts([headers,['2026-11-04',10000,1]],I.autoMap(headers,'payment'),settings,state);
+ assert.equal(rows[0].newPass,true);assert.equal(I.inspect(rows,settings,state)[0].newPass.totalUnits,100);
+});
