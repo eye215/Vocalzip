@@ -4,7 +4,7 @@ let activeCapture=null;
 function mount(source){
 const lesson=source==='lesson',prefix=lesson?'vzip-lesson-capture-':'vzip-capture-';
 const root=document.querySelector(lesson?'#lessons':'#practice');if(!root)return;
-const box=document.createElement('div');box.className='card vzip-capture';box.id=lesson?'vzip-lesson-capture':'vzip-practice-capture';box.innerHTML=`<h2>연습 녹음</h2><p class="muted">종료하면 보관함에 저장하고 지금 작성하는 연습에 연결해요.</p><div class="two"><button type="button" class="btn secondary" data-kind="audio" aria-pressed="true"><i class="ph ph-microphone" aria-hidden="true"></i> 음성 녹음</button><button type="button" class="btn secondary" data-kind="video" aria-pressed="false"><i class="ph ph-video-camera" aria-hidden="true"></i> 영상 녹화</button></div><strong id="vzip-capture-clock" aria-live="off">00:00</strong><canvas id="vzip-capture-wave" width="600" height="156" aria-label="실시간 마이크 파형"></canvas><div class="vzip-capture-actions"><button type="button" id="vzip-capture-mark" disabled><i class="ph ph-flag" aria-hidden="true"></i>마크</button><button type="button" class="vzip-capture-primary" id="vzip-capture-start"><i class="ph ph-microphone" aria-hidden="true"></i>시작</button><button type="button" class="vzip-capture-primary" id="vzip-capture-pause" hidden><i class="ph ph-pause" aria-hidden="true"></i><span>일시정지</span></button><button type="button" id="vzip-capture-stop" disabled><i class="ph ph-stop" aria-hidden="true"></i>종료·저장</button></div><video id="vzip-capture-preview" playsinline muted autoplay hidden style="width:100%;max-height:300px"></video><p id="vzip-capture-status" class="muted" role="status">시작하면 마이크 또는 카메라 사용 권한을 요청해요.</p><details class="vzip-capture-name"><summary>녹음 이름 (선택)</summary><label for="vzip-capture-name">이름</label><input id="vzip-capture-name" placeholder="입력하지 않아도 저장할 수 있어요"></details>`;
+const box=document.createElement('div');box.className='card vzip-capture';box.id=lesson?'vzip-lesson-capture':'vzip-practice-capture';box.innerHTML=`<h2>연습 녹음</h2><p class="muted">종료하면 보관함에 저장하고 지금 작성하는 연습에 연결해요.</p><div class="two"><button type="button" class="btn secondary" data-kind="audio" aria-pressed="true"><i class="ph ph-microphone" aria-hidden="true"></i> 음성 녹음</button></div><strong id="vzip-capture-clock" aria-live="off">00:00</strong><canvas id="vzip-capture-wave" width="600" height="156" aria-label="실시간 마이크 파형"></canvas><div class="vzip-capture-actions"><button type="button" id="vzip-capture-mark" disabled><i class="ph ph-flag" aria-hidden="true"></i>마크</button><button type="button" class="vzip-capture-primary" id="vzip-capture-start"><i class="ph ph-microphone" aria-hidden="true"></i>시작</button><button type="button" class="vzip-capture-primary" id="vzip-capture-pause" hidden><i class="ph ph-pause" aria-hidden="true"></i><span>일시정지</span></button><button type="button" id="vzip-capture-stop" disabled><i class="ph ph-stop" aria-hidden="true"></i>종료·저장</button></div><p id="vzip-capture-status" class="muted" role="status">시작하면 마이크 사용 권한을 요청해요.</p><details class="vzip-capture-name"><summary>녹음 이름 (선택)</summary><label for="vzip-capture-name">이름</label><input id="vzip-capture-name" placeholder="입력하지 않아도 저장할 수 있어요"></details>`;
 if(lesson)box.innerHTML=box.innerHTML.replace(/(id|for)="vzip-capture-/g,'$1="'+prefix).replaceAll('연습','레슨');
 const form=root.querySelector(lesson?'#lesson-form':'#practice-form');
 if(lesson)document.querySelector('#vzip-recorder')?.append(box);else if(form)form.prepend(box);
@@ -19,7 +19,7 @@ if(lesson){
  form.addEventListener('submit',event=>{if(lessonBusy.size){event.preventDefault();event.stopImmediatePropagation()}},true);
  form.addEventListener('reset',event=>{if(lessonBusy.size)event.preventDefault()});
 }
-const $=s=>box.querySelector(s.replaceAll('vzip-capture-',prefix)),start=$('#vzip-capture-start'),stop=$('#vzip-capture-stop'),status=$('#vzip-capture-status'),clock=$('#vzip-capture-clock'),preview=$('#vzip-capture-preview');
+const $=s=>box.querySelector(s.replaceAll('vzip-capture-',prefix)),start=$('#vzip-capture-start'),stop=$('#vzip-capture-stop'),status=$('#vzip-capture-status'),clock=$('#vzip-capture-clock');
 const pause=$('#vzip-capture-pause'),mark=$('#vzip-capture-mark'),wave=$('#vzip-capture-wave');
 let audioContext,animation,sampleLevel=()=>null;
 let kind='audio',state='idle',stream=null,recorder=null,tick,token=0,recoveryURL;
@@ -34,7 +34,7 @@ function setState(next){
 }
 function releaseTracks(){
   clearInterval(tick);sampleLevel=()=>null;cancelAnimationFrame(animation);if(audioContext){audioContext.close().catch(()=>{});audioContext=null}wave.getContext('2d').clearRect(0,0,wave.width,wave.height);if(stream)stream.getTracks().forEach(track=>track.stop());
-  stream=null;preview.srcObject=null;preview.hidden=true;
+  stream=null;
 }
 function clearRecovery(){
   if(recoveryURL)URL.revokeObjectURL(recoveryURL);
@@ -78,16 +78,15 @@ start.onclick=async()=>{
   if(activeCapture&&activeCapture!==box){status.textContent='다른 메뉴에서 진행 중인 녹음을 먼저 종료해 주세요.';return}
   if(!window.isSecureContext){status.textContent='HTTPS 환경에서만 녹음할 수 있어요.';return}
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){status.textContent='현재 브라우저에서 녹음 기능을 지원하지 않아요.';return}
-  const run=++token,captureKind=kind;
+  const run=++token,captureKind='audio';
   const songSelect=document.querySelector(lesson?'#lesson-song':'#practice-song');
   const selectedSong={songId:songSelect?.value||'',song:songSelect?.value?songSelect.selectedOptions[0].textContent:''};
   activeCapture=box;setState('requesting');
   try{
-    const acquired=await navigator.mediaDevices.getUserMedia(captureKind==='video'?{audio:true,video:{facingMode:'user'}}:{audio:true});
+    const acquired=await navigator.mediaDevices.getUserMedia({audio:true});
     if(run!==token){acquired.getTracks().forEach(track=>track.stop());return}
     stream=acquired;
-    if(captureKind==='video'){preview.hidden=false;preview.srcObject=stream;preview.play().catch(()=>{})}
-    const types=captureKind==='video'?['video/mp4','video/webm;codecs=vp8,opus','video/webm']:['audio/mp4','audio/webm;codecs=opus','audio/webm'];
+    const types=['audio/mp4','audio/webm;codecs=opus','audio/webm'];
     const mime=types.find(type=>MediaRecorder.isTypeSupported?.(type));
     const current=new MediaRecorder(stream,mime?{mimeType:mime}:undefined),chunks=[];
     let peaks=[],peakSpan=1,peakCount=0,peakMax=0;
@@ -124,7 +123,7 @@ start.onclick=async()=>{
     status.textContent='● 녹음 중이에요. 종료하고 저장을 눌러주세요.';
   }catch(error){
     releaseTracks();setState('idle');
-    status.textContent=error.name==='NotAllowedError'?'마이크·카메라 권한이 거부됐어요. Safari 웹사이트 권한을 확인해 주세요.':'녹음을 시작하지 못했어요: '+error.message;
+    status.textContent=error.name==='NotAllowedError'?'마이크 권한이 거부됐어요. Safari 웹사이트 권한을 확인해 주세요.':'녹음을 시작하지 못했어요: '+error.message;
   }
 };
 stop.onclick=()=>{

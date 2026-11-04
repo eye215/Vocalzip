@@ -1,6 +1,33 @@
-(()=>{'use strict';if('serviceWorker'in navigator)navigator.serviceWorker.register(new URL('share-worker.js',location.href),{scope:new URL('./',location.href).pathname}).catch(()=>{});
+(()=>{
+'use strict';
+if('serviceWorker'in navigator)navigator.serviceWorker.register(new URL('share-worker.js',location.href),{scope:new URL('./',location.href).pathname}).catch(()=>{});
 const query=new URLSearchParams(location.search);if(!query.has('shared')&&!query.has('share_error'))return;
-function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open('vzip_share_inbox_v1',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('files'))r.result.createObjectStore('files',{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function receive(){const db=await openDb();const files=await new Promise((resolve,reject)=>{const tx=db.transaction('files','readonly'),r=tx.objectStore('files').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)});if(!files.length){db.close();return}const mediaDb=await new Promise((resolve,reject)=>{const r=indexedDB.open('vocalzip_media_v1',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('recordings'))r.result.createObjectStore('recordings',{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});let count=0;for(const f of files){try{const item={id:crypto.randomUUID(),name:f.name.replace(/\.[^.]+$/,''),created:f.lastModified||Date.now(),type:f.type||'audio/mp4',song:'',songId:'',blob:f.blob};await new Promise((resolve,reject)=>{const tx=mediaDb.transaction('recordings','readwrite');tx.objectStore('recordings').put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});await new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(f.id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});count++}catch(e){alert('공유 파일 저장 실패: '+e.message);break}}mediaDb.close();db.close();document.querySelector('.nav button[data-tab="media"]')?.click();window.dispatchEvent(new Event('vzip:media-saved'));alert('음성 메모 '+count+'개를 보관함에 가져왔어요.');}
-window.addEventListener('load',()=>setTimeout(()=>{if(query.has('shared'))receive().catch(e=>alert('공유 파일을 불러오지 못했어요: '+e.message));else if(query.has('share_error'))alert('공유 파일을 받을 수 없어요. 파일 앱에 저장한 뒤 보관함에서 가져와 주세요.');history.replaceState({},'',location.pathname)},1300));
+function openDb(){return new Promise((resolve,reject)=>{const request=indexedDB.open('vzip_share_inbox_v1',1);request.onupgradeneeded=()=>request.result.createObjectStore('files',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})}
+async function receive(){
+ const db=await openDb();let count=0;
+ try{
+  const files=await new Promise((resolve,reject)=>{const request=db.transaction('files').objectStore('files').getAll();request.onsuccess=()=>resolve(request.result||[]);request.onerror=()=>reject(request.error)});
+  for(const entry of files){
+   let prepared;
+   try{
+    const type=window.vzipMediaType({name:entry.name,type:entry.type});
+    prepared=await window.vzipPrepareMedia(new File([entry.blob],entry.name,{type,lastModified:entry.lastModified}));
+    const file=prepared.file,metadata={...prepared.metadata,name:file.name.replace(/\.[^.]+$/,''),type:file.type||type,source:'import',song:'',songId:''};
+    let id=crypto.randomUUID();
+    if(file.size>25*1024*1024){if(!window.vzipCloudSignedIn?.())throw Error('25MB 초과 음원은 로그인 후 가져와 주세요.');id=(await window.vzipCloudImport(file,{...metadata,id})).id}
+    else await window.vzipStorePracticeMedia({...metadata,id,blob:file});
+    await new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(entry.id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});
+    window.dispatchEvent(new CustomEvent('vzip:media-saved',{detail:{id,source:'import'}}));
+    window.dispatchEvent(new CustomEvent('vzip:media-imported',{detail:{id,date:metadata.recordedDate}}));count++;
+   }finally{await prepared?.dispose()}
+  }
+ }finally{db.close()}
+ document.querySelector('.nav button[data-tab=media]')?.click();
+ if(count)window.vzipNotice?.('음원 '+count+'개를 원본 날짜로 가져왔어요.');
+}
+window.addEventListener('load',()=>setTimeout(async()=>{
+ try{if(query.has('shared'))await receive();else alert('공유 파일을 받을 수 없어요. 보관함에서 가져와 주세요.')}
+ catch(error){alert('공유 파일 가져오기 실패: '+error.message)}
+ finally{history.replaceState({},'',location.pathname)}
+},1300));
 })();

@@ -14,10 +14,12 @@
   const importHint=document.createElement('p');importHint.className='muted';
   importHint.textContent='여러 파일을 선택하고 파일별 곡을 지정할 수 있어요. 파일당 최대 1GB, 25MB 초과 파일은 클라우드에 저장해요. 큰 파일의 연습 시간은 직접 입력해 주세요.';
   input.after(importHint);
+  const dateHint=document.createElement('p');dateHint.className='muted';dateHint.textContent='영상은 음성만 추출해요. 메타데이터 날짜로 자동 정리하며, 저장 후 날짜를 수정할 수 있어요.';importHint.after(dateHint);
   const cancelImport=document.createElement('button');cancelImport.type='button';cancelImport.className='btn secondary';
   cancelImport.id='vzip-practice-import-cancel';cancelImport.textContent='업로드 취소';cancelImport.hidden=true;
   importHint.after(cancelImport);
-  let listRun = 0;
+  let listRun = 0,dateTouched=false,dateProgrammatic=false;
+  for(const event of ['input','change'])form.elements.date?.addEventListener(event,()=>{if(!dateProgrammatic)dateTouched=true});
   const busy = (key, value) => window.vzipSetPracticeBusy?.(key, value);
   const typeOf = file => {
     if (file.type?.startsWith('audio/') || file.type?.startsWith('video/')) return file.type;
@@ -178,8 +180,9 @@
             if(signal.aborted)throw new DOMException('취소','AbortError');
             id=chosen.id;
             await window.vzipStorePracticeMedia({id,name:file.name,type,blob:blobOf({name:file.name,type,blob:file}),
-              created:Date.now(),source:'practice',...chosen,durationSeconds:seconds});
+              created:chosen.created||file.lastModified||Date.now(),source:'practice',...chosen,durationSeconds:seconds});
           }
+          if(files.length===1&&linked.size===0&&!dateTouched&&chosen.recordedDate){dateProgrammatic=true;form.elements.date.value=chosen.recordedDate;form.elements.date.dispatchEvent(new Event('change',{bubbles:true}));dateProgrammatic=false}
           linked.set(id,{seconds});calculate();
           window.dispatchEvent(new CustomEvent('vzip:media-saved',{detail:{id,source:'practice'}}));
         }
@@ -196,7 +199,7 @@
     window.addEventListener(event, loadSaved);
   form.elements.minutes.addEventListener('input', calculate);
   window.addEventListener('vzip:practice-reset', () => {
-    linked.clear(); input.value = ''; preview.textContent = '가져온 파일은 보관함에 저장하고 이번 연습에 연결해요.';
+    dateTouched=false;preview.vzipDisposeUploads?.();linked.clear(); input.value = ''; preview.textContent = '가져온 음원은 원본 날짜로 정리하고 이번 연습에 연결해요. 영상은 음성만 저장해요.';
     calculate(); loadSaved();
   });
   document.querySelector('[data-tab="practice"]')?.addEventListener('click', loadSaved);

@@ -9,20 +9,30 @@
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
     const d = new Date(value + 'T12:00:00'); return !Number.isNaN(d.valueOf()) && key(d) === value;
   };
+  let importedMedia=[],mediaRun=0;
+  const slim=item=>({id:item.id,name:item.name,songId:item.songId,song:item.song,created:item.created,recordedDate:item.recordedDate,durationSeconds:item.durationSeconds,dateSource:item.dateSource});
+  async function refreshMedia(){const run=++mediaRun;const map=new Map();try{(await window.vzipReadMedia?.()||[]).forEach(item=>map.set(item.id,slim(item)))}catch{}try{(await window.vzipCloudMediaList?.()||[]).forEach(item=>map.set(item.id,slim(item)))}catch{}if(run===mediaRun){importedMedia=[...map.values()];render()}}
   let selected = key(new Date()), month = selected.slice(0,7);
   const card = document.createElement('div'); card.className = 'vzip-calendar';
   card.innerHTML = `<div class="vzip-calendar-heading"><button type="button" data-month-step="-1" aria-label="이전 달"><i class="ph ph-caret-left" aria-hidden="true"></i></button><label><span class="vzip-calendar-month-label"></span><input type="month" aria-label="기록 월 선택"></label><button type="button" data-month-step="1" aria-label="다음 달"><i class="ph ph-caret-right" aria-hidden="true"></i></button></div><div class="vzip-calendar-week" aria-hidden="true"><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span><span>일</span></div><div class="vzip-calendar-days" role="group" aria-label="기록 날짜 선택"></div><div class="vzip-calendar-footer"><span>점이 있는 날에 기록이 있어요</span><button type="button" data-today>오늘</button></div><div role="region" class="vzip-calendar-selected" aria-label="선택한 날짜 기록"><h3></h3><div class="vzip-calendar-records"></div></div>`;
   history.prepend(card);
   const heading = document.querySelector('#practice-heading'); if (heading) heading.textContent = '기록';
-  const description = document.querySelector('#practice .vzip-page-head p'); if (description) description.textContent = '날짜별로 연습과 레슨, 수행한 숙제를 돌아봐요.';
+  const description = document.querySelector('#practice .vzip-page-head p'); if (description) description.textContent = '날짜별로 녹음과 연습, 레슨, 수행한 숙제를 돌아봐요.';
   const navLabel = document.querySelector('.nav [data-tab=practice] span:last-child'); if (navLabel) navLabel.textContent = '기록';
   const monthInput = card.querySelector('input'), grid = card.querySelector('.vzip-calendar-days');
   const make = (tag, cls, text) => { const el = document.createElement(tag); el.className = cls; if (text !== undefined) el.textContent = text; return el; };
   function entries(db) {
     return [...(db.practices || []).map(record => ({kind:'practice',record})),
-      ...(db.lessons || []).map(record => ({kind:'lesson',record}))].filter(entry => validDate(entry.record.date));
+      ...(db.lessons || []).map(record => ({kind:'lesson',record})),
+      ...importedMedia.map(item=>({kind:'media',record:{...item,date:validDate(item.recordedDate)?item.recordedDate:(Number.isFinite(Number(item.created))&&Number(item.created)>0?key(new Date(Number(item.created))):'')}}))].filter(entry => validDate(entry.record.date));
   }
   function openRecord(kind, id) {
+    if(kind==='media'){
+      window.vzipNavigate?.('media');
+      const play=()=>{const row=[...document.querySelectorAll('.vzip-hub-item')].find(row=>row.dataset.id===id);if(!row)return false;row.querySelector('[data-action=play]')?.click();row.tabIndex=-1;row.scrollIntoView({block:'center'});row.focus();return true};
+      if(!play()){window.addEventListener('vzip:hub-refreshed',play,{once:true});document.querySelector('#vzip-hub-reload')?.click()}
+      return;
+    }
     const tab = kind === 'lesson' ? 'lessons' : 'practice';
     window.vzipNavigate?.(tab);
     document.querySelector(`#${tab} .vzip-ia-segment button:not([data-ia-open])`)?.click();
@@ -56,9 +66,9 @@
       const row=make('button','vzip-calendar-record');row.type='button';row.dataset.recordId=record.id;
       const icon=make('i','ph ph-'+(kind==='lesson'?'graduation-cap':'microphone'));icon.setAttribute('aria-hidden','true');
       const content=make('span','vzip-calendar-record-text'), song=(db.songs||[]).find(song=>song.id===record.songId);
-      content.append(make('strong','',kind==='lesson'?'레슨 기록':song?.title||'자유 연습'));
+      content.append(make('strong','',kind==='media'?(record.name||'녹음 파일'):kind==='lesson'?'레슨 기록':song?.title||'자유 연습'));
       const minutes=Number(record.minutes), duration=Number.isFinite(minutes)&&minutes>=0?`${Math.round(minutes*10)/10}분`:'시간 미기록';
-      content.append(make('span','',kind==='lesson'?(record.feedback||record.memo||song?.title||'레슨 메모 보기'):`연습 · ${duration}${record.rating?' · 만족도 '+record.rating+'/5':''}`));
+      content.append(make('span','',kind==='media'?`녹음 · ${record.song||song?.title||'곡 미지정'}${record.dateSource==='metadata'?' · 원본 날짜':record.dateSource==='file-modified'?' · 파일 수정일':''}`:kind==='lesson'?(record.feedback||record.memo||song?.title||'레슨 메모 보기'):`연습 · ${duration}${record.rating?' · 만족도 '+record.rating+'/5':''}`));
       const arrow=make('i','ph ph-caret-right');arrow.setAttribute('aria-hidden','true');row.append(icon,content,arrow);
       row.onclick=()=>openRecord(kind,record.id);list.append(row);
       if (kind==='practice' && record.completed?.length) {
@@ -80,5 +90,8 @@
   monthInput.min='1900-01';monthInput.max='9998-12';monthInput.onchange=()=>chooseMonth(monthInput.value);
   card.querySelectorAll('[data-month-step]').forEach(button=>button.onclick=()=>{const [y,m]=month.split('-').map(Number);const d=new Date(y,m-1+Number(button.dataset.monthStep),1);chooseMonth(key(d).slice(0,7));});
   card.querySelector('[data-today]').onclick=()=>{selected=key(new Date());month=selected.slice(0,7);render();};
-  window.addEventListener('vzip:data-changed',render);render();
+  window.addEventListener('vzip:hub-refreshed',event=>{mediaRun++;importedMedia=(event.detail?.items||[]).map(slim);render()});
+  for(const event of ['vzip:media-saved','vzip:media-updated','vzip:cloud-media-changed','vzip:auth-changed'])window.addEventListener(event,refreshMedia);
+  window.addEventListener('vzip:media-imported',event=>{if(validDate(event.detail?.date)){selected=event.detail.date;month=selected.slice(0,7)}refreshMedia()});
+  window.addEventListener('vzip:data-changed',render);render();refreshMedia();
 })();

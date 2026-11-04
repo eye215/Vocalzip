@@ -14,6 +14,7 @@ test.beforeEach(async ({page}) => {
   page.on('dialog', dialog => dialog.accept());
   await page.goto('/');
   await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+  await page.evaluate(()=>{window.vzipPrepareMedia=async file=>({file,metadata:VzipMediaDates.pick({},file.lastModified),dispose:async()=>{}})});
 });
 test.afterEach(async ({page}) => { expect(page.__vzipErrors).toEqual([]); });
 test('Navigation preserves the form, keeps recorder inside it, and fits the viewport', async ({page}, testInfo) => {
@@ -111,22 +112,22 @@ test('Chromium fake-device capture waits for storage and links media', async ({p
   expect(stored.mediaIds).toHaveLength(1);expect(stored.mediaSeconds).toBeGreaterThan(0);
 });
 
-test('Camera capture saves playable video and releases preview tracks',async({page,browserName})=>{
-  test.skip(browserName!=='chromium','Uses Chromium virtual camera; not real iPhone hardware.');
-  await page.locator('.hero [data-go-tab="practice"]').click();
-  await page.locator('#vzip-practice-capture [data-kind="video"]').click();
-  await page.locator('#vzip-capture-start').click();
-  await expect(page.locator('#vzip-capture-preview')).toBeVisible();
-  await expect(page.locator('#vzip-capture-stop')).toBeEnabled();
-  await page.waitForTimeout(1200);await page.locator('#vzip-capture-stop').click();
-  await expect(page.locator('#vzip-capture-status')).toContainText('저장 완료');
-  expect(await page.locator('#vzip-capture-preview').evaluate(el=>el.srcObject===null)).toBe(true);
-  await page.locator('#practice-form>button:not([type])').click();
-  await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
-  await page.locator('.nav [data-tab="practice"]').click();
-  await page.locator('.vzip-practice-files summary').click();
-  const video=page.locator('.vzip-practice-files video');await expect(video).toBeVisible();
-  await expect.poll(()=>video.evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(1);
+test('Practice and lesson recording never request camera access',async({page,browserName})=>{
+ test.skip(browserName!=='chromium','Uses a virtual microphone.');
+ await page.evaluate(()=>{
+  window.__constraints=[];const get=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia=constraints=>{window.__constraints.push(constraints);return get(constraints)};
+ });
+ await page.locator('.hero [data-go-tab=practice]').click();
+ await expect(page.locator('#vzip-practice-capture [data-kind=video]')).toHaveCount(0);
+ await page.locator('#vzip-capture-start').click();await expect(page.locator('#vzip-capture-stop')).toBeEnabled();
+ await page.waitForTimeout(500);await page.locator('#vzip-capture-stop').click();await expect(page.locator('#vzip-capture-status')).toContainText('저장 완료');
+ await page.locator('.nav [data-tab=home]').click();await page.locator('.hero [data-go-tab=lessons]').click();
+ await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
+ await expect(page.locator('#vzip-lesson-capture [data-kind=video]')).toHaveCount(0);
+ await page.locator('#vzip-lesson-capture-start').click();await expect(page.locator('#vzip-lesson-capture-stop')).toBeEnabled();
+ await page.waitForTimeout(500);await page.locator('#vzip-lesson-capture-stop').click();await expect(page.locator('#vzip-lesson-capture-status')).toContainText('저장 완료');
+ expect(await page.evaluate(()=>window.__constraints)).toEqual([{audio:true},{audio:true}]);
 });
 test('Denied or unavailable capture preserves controls and practice input',async({page})=>{
   await page.locator('.hero [data-go-tab="practice"]').click();
@@ -266,9 +267,9 @@ test('Library media controls do not open comparison and filters stop playback wi
     window.__previousAudio.dispatchEvent(new MouseEvent('click',{bubbles:true}));
   });
   expect(await page.evaluate(()=>window.__compareCount)).toBe(0);
-  await page.locator('#vzip-media-hub [data-filter="video"]').click();
+  await page.locator('#vzip-media-hub [data-origin="lesson"]').click();
   await expect(page.locator('#vzip-hub-list')).toContainText('선택한 조건에 맞는 파일이 없어요');
-  await expect(page.locator('[data-filter="video"]')).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('[data-origin="lesson"]')).toHaveAttribute('aria-pressed','true');
   expect(await page.evaluate(()=>({paused:window.__previousAudio.paused,src:window.__previousAudio.getAttribute('src')})))
     .toEqual({paused:true,src:null});
 });
@@ -393,11 +394,11 @@ test('Growth empty state has no invented score and updates when a practice is sa
   await expect(page.locator('[data-metric="minutes"] strong')).toHaveText('10분');
 });
 
-test('Large video import sends original bytes via resumable cloud importer',async({page})=>{
+test('Large audio import sends original bytes via resumable cloud importer',async({page})=>{
   await page.locator('.nav [data-tab="media"]').click();
   await page.evaluate(()=>{
     window.__vzipOptimized=false;
-    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?40*1024*1024:1024}});
+    Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.m4a'?40*1024*1024:1024}});
     window.vzipCloudSignedIn=()=>true;
     window.vzipOptimizeVideo=async(file,progress)=>{
       window.__vzipOptimized=true;progress(100);
@@ -409,18 +410,18 @@ test('Large video import sends original bytes via resumable cloud importer',asyn
     };
   });
   await page.locator('#vzip-hub-upload').setInputFiles({
-    name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(1024,1)
+    name:'lesson.m4a',mimeType:'audio/mp4',buffer:Buffer.alloc(1024,1)
   });
   await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>window.__vzipUpload?.size)).toBe(40*1024*1024);
   expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
-  expect(await page.evaluate(()=>window.__vzipUpload.type)).toBe('video/quicktime');
+  expect(await page.evaluate(()=>window.__vzipUpload.type)).toBe('audio/mp4');
   expect(page.__vzipErrors).toEqual([]);
 });
-test('Large video import without cloud login explains required sign in',async({page})=>{
+test('Large audio import without cloud login explains required sign in',async({page})=>{
   await page.locator('.nav [data-tab="media"]').click();
-  await page.evaluate(()=>{Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.mov'?40*1024*1024:1024}});window.vzipCloudSignedIn=()=>false;window.__vzipOptimized=false;window.vzipOptimizeVideo=async()=>{window.__vzipOptimized=true}});
-  await page.locator('#vzip-hub-upload').setInputFiles({name:'lesson.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(1024,1)});
+  await page.evaluate(()=>{Object.defineProperty(File.prototype,'size',{configurable:true,get(){return this.name==='lesson.m4a'?40*1024*1024:1024}});window.vzipCloudSignedIn=()=>false;window.__vzipOptimized=false;window.vzipOptimizeVideo=async()=>{window.__vzipOptimized=true}});
+  await page.locator('#vzip-hub-upload').setInputFiles({name:'lesson.m4a',mimeType:'audio/mp4',buffer:Buffer.alloc(1024,1)});
   await expect(page.locator('#vzip-hub-status')).toContainText('클라우드 로그인이 필요');
   expect(await page.evaluate(()=>window.__vzipOptimized)).toBe(false);
   expect(page.__vzipErrors).toEqual([]);
@@ -602,8 +603,8 @@ async function installUploadProbe(page, mode='hold') {
     window.__fullFileReads=0;window.__largeFilePreviews=0;window.__localImportWrites=0;
     const originalSize=Object.getOwnPropertyDescriptor(Blob.prototype,'size').get;
     Object.defineProperty(File.prototype,'size',{configurable:true,get(){
-      if(this.name==='large.mov')return 26*1024*1024;
-      if(this.name==='oversized.mov')return 1024*1024*1024+1;
+      if(this.name==='large.m4a')return 26*1024*1024;
+      if(this.name==='oversized.m4a')return 1024*1024*1024+1;
       return originalSize.call(this);
     }});
     const arrayBuffer=Blob.prototype.arrayBuffer;
@@ -613,7 +614,7 @@ async function installUploadProbe(page, mode='hold') {
     };
     const objectURL=URL.createObjectURL;
     URL.createObjectURL=function(blob){
-      if(blob instanceof File&&blob.size>25*1024*1024){window.__largeFilePreviews++;throw Error('large video decoded before upload')}
+      if(blob instanceof File&&blob.size>25*1024*1024){window.__largeFilePreviews++;throw Error('large audio decoded before upload')}
       return objectURL.call(URL,blob);
     };
     const store=window.vzipStorePracticeMedia;
@@ -635,7 +636,7 @@ async function installUploadProbe(page, mode='hold') {
     }};
   },mode);
 }
-const largeUpload=()=>({name:'large.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+const largeUpload=()=>({name:'large.m4a',mimeType:'audio/mp4',buffer:Buffer.alloc(32)});
 test('Large practice import streams to cloud without local allocation or preview and links only after success',async({page})=>{
   await installUploadProbe(page,'success');
   await page.locator('.hero [data-go-tab="practice"]').click();
@@ -651,7 +652,7 @@ test('Large practice import streams to cloud without local allocation or preview
   }));
   expect(result.reads).toBe(0);expect(result.previews).toBe(0);expect(result.local).toBe(0);
   expect(result.record.mediaIds).toEqual([result.meta.id]);expect(result.record.minutes).toBe(7);
-  expect(result.meta.source).toBe('practice');expect(result.meta.type).toBe('video/quicktime');
+  expect(result.meta.source).toBe('practice');expect(result.meta.type).toBe('audio/mp4');
   expect(result.calls).toHaveLength(1);expect(result.calls[0].chunkSize).toBe(6*1024*1024);
   expect(result.calls[0].creation).toBe(false);expect(result.calls[0].fingerprint).toBe(false);
 });
@@ -711,11 +712,11 @@ test('Oversized files are rejected in both import forms before allocation or upl
   await installUploadProbe(page);
   await page.locator('.hero [data-go-tab="practice"]').click();
   await expect(page.locator('#practice-attachments')).toHaveAttribute('multiple','');
-  await page.locator('#practice-attachments').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+  await page.locator('#practice-attachments').setInputFiles({name:'oversized.m4a',mimeType:'audio/mp4',buffer:Buffer.alloc(32)});
   await expect(page.locator('#media-preview')).toContainText('1GB');
   await page.locator('.nav [data-tab="media"]').click();
   await expect(page.locator('#vzip-hub-upload')).toHaveAttribute('multiple','');
-  await page.locator('#vzip-hub-upload').setInputFiles({name:'oversized.mov',mimeType:'video/quicktime',buffer:Buffer.alloc(32)});
+  await page.locator('#vzip-hub-upload').setInputFiles({name:'oversized.m4a',mimeType:'audio/mp4',buffer:Buffer.alloc(32)});
   await expect(page.locator('#vzip-hub-status')).toContainText('1GB');
   const result=await page.evaluate(()=>({calls:window.__uploadCalls.length,reads:window.__fullFileReads,
     previews:window.__largeFilePreviews,local:window.__localImportWrites}));
@@ -880,8 +881,8 @@ test('Account change during metadata commit never attaches the previous account 
 test('Cloud importer preserves the single-object 50MB boundary and rejects over 1GB before transport',async({page})=>{
  await installUploadProbe(page,'success');
  const result=await page.evaluate(async()=>{
-  const file=new File(['test'],'boundary.mov',{type:'video/quicktime'});Object.defineProperty(file,'size',{value:50*1024*1024});
-  const item=await window.vzipCloudImport(file);const tooLarge=new File(['test'],'too-large.mov',{type:'video/quicktime'});Object.defineProperty(tooLarge,'size',{value:1024*1024*1024+1});
+  const file=new File(['test'],'boundary.m4a',{type:'audio/mp4'});Object.defineProperty(file,'size',{value:50*1024*1024});
+  const item=await window.vzipCloudImport(file);const tooLarge=new File(['test'],'too-large.m4a',{type:'audio/mp4'});Object.defineProperty(tooLarge,'size',{value:1024*1024*1024+1});
   let error='';try{await window.vzipCloudImport(tooLarge)}catch(e){error=e.message}
   return {size:item.size,error,calls:window.__uploadCalls.length};
  });
@@ -1021,7 +1022,7 @@ test('201MiB original is sliced into independent objects and committed once',asy
  test.skip(testInfo.project.name!=='chromium-desktop','Large real byte fixture runs once; other projects cover queue UI and stream contracts.');
  const result=await page.evaluate(async()=>{
   const one=new Uint8Array(1024*1024).fill(1),last=new Uint8Array(1024*1024).fill(7);
-  const file=new File([...Array(200).fill(one),last],'real-201MiB.mov',{type:'video/quicktime'});
+  const file=new File([...Array(200).fill(one),last],'real-201MiB.m4a',{type:'audio/mp4'});
   file.arrayBuffer=()=>{throw Error('must not load full original')};
   const calls=[];let active=0,maxActive=0;
   window.tus={Upload:class{
@@ -1045,7 +1046,7 @@ test('201MiB original is sliced into independent objects and committed once',asy
 test('Multipart metadata failure is recovered before retry and delete removes every object',async({page})=>{
  await page.evaluate(()=>{window.tus={Upload:class{constructor(piece,options){this.options=options}start(){this.options.onSuccess()}}}});
  const result=await page.evaluate(async()=>{
-  const file=new File([new Uint8Array(51*1024*1024)],'parts.mov',{type:'video/quicktime'});
+  const file=new File([new Uint8Array(51*1024*1024)],'parts.m4a',{type:'audio/mp4'});
   window.__failMetadata=true;try{await window.vzipCloudImport(file)}catch{}
   const pending=JSON.parse(localStorage.getItem('vzip_pending_media_parts_v1'));
   window.__failMetadata=false;
@@ -1060,7 +1061,7 @@ test('Lesson uses the same capture controls, pauses, marks and saves its own rec
  await page.locator('.hero [data-go-tab=lessons]').click();
  await page.getByRole('button',{name:'다음 단계 →',exact:true}).click();
  const box=page.locator('#vzip-lesson-capture');
- await expect(box.locator('[data-kind=video]')).toBeVisible();
+ await expect(box.locator('[data-kind=video]')).toHaveCount(0);
  const styles=await page.evaluate(()=>{
   const style=id=>{const el=document.getElementById(id),s=getComputedStyle(el);return {width:s.width,height:s.height,background:s.backgroundColor,radius:s.borderRadius}};
   return {lesson:style('vzip-lesson-capture-start'),practice:style('vzip-capture-start'),host:getComputedStyle(document.getElementById('vzip-recorder')).backgroundColor};
@@ -1132,4 +1133,39 @@ test('Song timeline resolves versioned cloud recordings without a single-object 
  await page.locator('#archive-song').evaluate(el=>{el.value='stream-song';el.dispatchEvent(new Event('change'))});
  await expect(page.locator('#archive-player-a audio')).toBeAttached();
  expect(await page.evaluate(()=>window.__timelineStreamed)).toBe('timeline-parts');
+});
+
+test('Metadata-derived dates remain editable and move imported audio in the calendar after reload',async({page})=>{
+ await page.evaluate(()=>{
+  window.vzipCloudSignedIn=()=>false;
+  window.vzipPrepareMedia=async file=>({file,metadata:{created:new Date('2024-02-29T12:00:00').getTime(),recordedDate:'2024-02-29',dateSource:'metadata'},dispose:async()=>{}});
+ });
+ await page.locator('.nav [data-tab=media]').click();
+ await page.locator('#vzip-hub-upload').setInputFiles({name:'dated-recording.wav',mimeType:'audio/wav',buffer:wav()});
+ await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+ await expect(page.locator('.vzip-hub-item')).toContainText('2024-02-29');
+ await page.locator('.nav [data-tab=practice]').click();
+ await expect(page.getByLabel('기록 월 선택')).toHaveValue('2024-02');
+ await expect(page.locator('.vzip-calendar-records')).toContainText('dated-recording');
+ await page.locator('.vzip-calendar-records [data-record-id]').click();
+ await expect(page.locator('#media')).toBeVisible();
+ await page.locator('.vzip-hub-item [data-action=edit]').click();
+ const dialog=page.getByRole('dialog',{name:'🎧 이 녹음의 감상 기록'});
+ await expect(dialog.locator('[name=date]')).toHaveValue('2024-02-29');
+ await expect(dialog).toContainText('메타데이터');
+ await dialog.locator('[name=date]').fill('2024-03-02');await dialog.locator('[data-save]').click();
+ await expect(page.locator('.vzip-hub-item')).toContainText('2024-03-02');
+ await page.reload();await page.evaluate(()=>window.vzipCloudSignedIn=()=>false);
+ await page.locator('.nav [data-tab=practice]').click();await page.getByLabel('기록 월 선택').fill('2024-03');
+ await page.locator('[data-date="2024-03-02"]').click();await expect(page.locator('.vzip-calendar-records')).toContainText('dated-recording');
+ await page.getByLabel('기록 월 선택').fill('2024-02');await page.locator('[data-date="2024-02-29"]').click();await expect(page.locator('.vzip-calendar-records')).not.toContainText('dated-recording');
+ const stored=await page.evaluate(()=>window.vzipReadMedia());expect(stored[0]).toMatchObject({recordedDate:'2024-03-02',dateSource:'manual'});
+});
+test('An explicitly selected practice date survives an imported metadata date',async({page})=>{
+ await page.evaluate(()=>{window.vzipPrepareMedia=async file=>({file,metadata:{created:1709208000000,recordedDate:'2024-02-29',dateSource:'metadata'},dispose:async()=>{}})});
+ await page.locator('.hero [data-go-tab=practice]').click();
+ await page.locator('#practice-form [name=date]').fill('2026-10-20');
+ await page.locator('#practice-attachments').setInputFiles({name:'old-recording.wav',mimeType:'audio/wav',buffer:wav()});
+ await expect(page.locator('#media-preview')).toContainText('2024-02-29');
+ await expect(page.locator('#practice-form [name=date]')).toHaveValue('2026-10-20');
 });
