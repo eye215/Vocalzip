@@ -187,9 +187,9 @@ VZ.route('compare', {title:'녹음 비교', back:true, tab:'growth', noAutoRefre
 VZ.anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E';
 
 /* ---------- 성장 ---------- */
-let period = 'week';
+let period = 'week', growthMonth = VZ.today().slice(0, 7), songMetric = 'minutes';
 VZ.route('growth', {title:'성장', render() {
-  return '<div class="seg" style="margin-bottom:12px">' + [['week', '이번 주'], ['28', '최근 28일'], ['all', '전체']].map(([k, v]) => '<button type="button" data-pd="' + k + '" aria-pressed="' + (period === k) + '">' + v + '</button>').join('') + '</div><div data-g></div>';
+  return '<div class="growth-shell"><div class="seg growth-period" role="group" aria-label="통계 기간">' + [['week', '이번 주'], ['28', '최근 28일'], ['all', '전체'], ['month', '월별']].map(([k, v]) => '<button type="button" data-pd="' + k + '" aria-pressed="' + (period === k) + '">' + v + '</button>').join('') + '</div><div data-month-controls class="growth-month"' + (period === 'month' ? '' : ' hidden') + '><button type="button" class="btn sm secondary" data-month-prev aria-label="이전 달 통계">←</button><label class="field"><span>조회 월</span><select aria-label="조회 월" data-growth-month></select></label><button type="button" class="btn sm secondary" data-month-next aria-label="다음 달 통계">→</button></div><div data-g></div></div>';
 }, async mount(main) {
   main.querySelectorAll('[data-pd]').forEach(b => b.onclick = () => { period = b.dataset.pd; VZ.render(); });
   const host = main.querySelector('[data-g]');
@@ -197,33 +197,71 @@ VZ.route('growth', {title:'성장', render() {
     const db = VZ.db, today = new Date(), t = VZ.today();
     const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
     const from = period === 'week' ? VZ.ymd(monday) : period === '28' ? VZ.ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 27)) : '';
-    const inP = d => !!d && (!from || d >= from) && d <= t;
+    const inP = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') && (period === 'month' ? d.slice(0, 7) === growthMonth : (!from || d >= from)) && d <= t;
+    const monthSelect = main.querySelector('[data-growth-month]');
+    const oldest = [...db.practices.map(p => p.date), ...media.map(M.dateOf)].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') && d.slice(0, 7) <= t.slice(0, 7)).sort()[0]?.slice(0, 7) || t.slice(0, 7);
+    const first = [oldest, growthMonth].sort()[0], monthOptions = [];
+    for (let y = today.getFullYear(), m = today.getMonth(); y >= 1900; m--) { if (m < 0) { y--; m = 11; } const value = y + '-' + String(m + 1).padStart(2, '0'); if (value < first) break; monthOptions.push('<option value="' + value + '"' + (value === growthMonth ? ' selected' : '') + '>' + y + '년 ' + (m + 1) + '월</option>'); }
+    monthSelect.innerHTML = monthOptions.join('');
+    monthSelect.onchange = e => { growthMonth = e.target.value; draw(media); };
+    const moveMonth = delta => { const [y, m] = growthMonth.split('-').map(Number); growthMonth = VZ.ymd(new Date(y, m - 1 + delta, 1)).slice(0, 7); draw(media); };
+    main.querySelector('[data-month-prev]').onclick = () => moveMonth(-1);
+    main.querySelector('[data-month-prev]').disabled = growthMonth <= '1900-01';
+    main.querySelector('[data-month-next]').onclick = () => moveMonth(1);
+    main.querySelector('[data-month-next]').disabled = growthMonth >= t.slice(0, 7);
     const ps = db.practices.filter(p => inP(p.date));
     // Practice records + recording/import lengths not already counted in a record.
     const all = VZ.timeEntries(media), es = all.filter(e => inP(e.date));
     const total = VZ.sumMinutes(es), fileTotal = VZ.sumMinutes(es.filter(e => e.kind === 'recording'));
     const days = new Set(es.map(e => e.date)).size;
-    const recs = media.filter(m => inP(M.dateOf(m)));
+    const recs = [...new Map(media.filter(m => inP(M.dateOf(m))).map(m => [m.id, m])).values()];
     const doneTasks = db.assignments.filter(x => x.status === 'done' && (period === 'all' || (x.doneAt && inP(VZ.ymd(new Date(x.doneAt))))));
     const rated = ps.filter(p => p.rating > 0), avg = rated.length ? (rated.reduce((a, p) => a + p.rating, 0) / rated.length).toFixed(1) : '–';
     const allTotal = VZ.sumMinutes(all);
     // per-song minutes
     const songMin = new Map(); es.forEach(e => { const k = e.training ? '__train' : e.songId || '__none'; songMin.set(k, (songMin.get(k) || 0) + e.minutes); });
-    const songRows = [...songMin.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const fileCounts = new Map(); recs.forEach(m => { const k = m.songId || '__none'; fileCounts.set(k, (fileCounts.get(k) || 0) + 1); });
+    const songRows = [...(songMetric === 'files' ? fileCounts : songMin).entries()].sort((a, b) => b[1] - a[1]);
     const max = Math.max(1, ...songRows.map(x => x[1]));
-    // last 7 days or 8 weeks bars
+    // Keep every bar inside the selected period and use an explicit column count.
     const cols = [];
-    if (period === 'week') for (let i = 0; i < 7; i++) { const d = VZ.ymd(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)); cols.push([['월', '화', '수', '목', '금', '토', '일'][i], VZ.sumMinutes(all.filter(e => e.date === d))]); }
-    else for (let i = 7; i >= 0; i--) { const s = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - i * 7), e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6); const a = VZ.ymd(s), b = VZ.ymd(e); cols.push([(s.getMonth() + 1) + '/' + s.getDate(), VZ.sumMinutes(all.filter(e => e.date >= a && e.date <= b))]); }
+    let chartTitle;
+    if (period === 'week') {
+      chartTitle = '요일별 연습';
+      for (let i = 0; i < 7; i++) { const d = VZ.ymd(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)); cols.push([['월', '화', '수', '목', '금', '토', '일'][i], VZ.sumMinutes(es.filter(e => e.date === d))]); }
+    } else if (period === 'month') {
+      chartTitle = '선택한 달의 주간 연습';
+      const [year, month] = growthMonth.split('-').map(Number), last = new Date(year, month, 0).getDate();
+      for (let day = 1; day <= last; day += 7) { const end = Math.min(last, day + 6); cols.push([day + '–' + end + '일', VZ.sumMinutes(es.filter(e => { const d = Number(e.date.slice(8)); return d >= day && d <= end; }))]); }
+    } else if (period === '28') {
+      chartTitle = '최근 28일 · 7일 단위';
+      for (let i = 0; i < 4; i++) { const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 27 + i * 7), end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6), a = VZ.ymd(start), b = VZ.ymd(end); cols.push([(start.getMonth() + 1) + '/' + start.getDate(), VZ.sumMinutes(es.filter(e => e.date >= a && e.date <= b))]); }
+    } else {
+      chartTitle = '전체 주별 연습';
+      const firstDate = es.map(e => e.date).sort()[0] || VZ.ymd(monday);
+      const earliest = VZ.parseYmd(firstDate) || monday;
+      const cursor = new Date(earliest.getFullYear(), earliest.getMonth(), earliest.getDate() - ((earliest.getDay() + 6) % 7));
+      const sums = new Map();
+      es.forEach(entry => { const d = VZ.parseYmd(entry.date); if (!d) return; const key = VZ.ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))); sums.set(key, (sums.get(key) || 0) + entry.minutes); });
+      while (cursor <= monday) { const key = VZ.ymd(cursor); cols.push([(cursor.getMonth() + 1) + '/' + cursor.getDate(), sums.get(key) || 0, key]); cursor.setDate(cursor.getDate() + 7); }
+
+    }
     const cmax = Math.max(1, ...cols.map(c => c[1]));
     const trend = db.practices.filter(p => p.rating > 0 && inP(p.date)).sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
-    const label = {week:'이번 주', '28':'최근 28일', all:'전체'}[period];
+    const label = period === 'month' ? growthMonth.replace('-', '년 ') + '월' : {week:'이번 주', '28':'최근 28일', all:'전체'}[period];
+    const previousChart = host.querySelector('[data-chart-scroll]');
+    const previousScroll = previousChart && previousChart.scrollWidth > previousChart.clientWidth && previousChart.scrollLeft < previousChart.scrollWidth - previousChart.clientWidth - 2 ? previousChart.scrollLeft : undefined;
     host.innerHTML = '<div class="stats"><div class="stat"><b>' + VZ.minutes(total) + '</b><span>' + label + ' 연습 시간</span>' + (fileTotal ? '<span class="small muted" data-file-time style="display:block">녹음·파일 ' + VZ.minutes(fileTotal) + ' 포함</span>' : '') + '</div><div class="stat"><b>' + days + '일</b><span>연습한 날</span></div><div class="stat"><b>' + recs.length + '개</b><span>녹음</span></div><div class="stat"><b>' + doneTasks.length + '개</b><span>완료한 숙제</span></div><div class="stat"><b>' + avg + '</b><span>평균 만족도</span></div><div class="stat"><b>' + VZ.minutes(allTotal) + '</b><span>누적 연습 시간</span></div></div>' +
-      '<h2 class="sec">' + (period === 'week' ? '요일별 연습' : '주별 연습 (최근 8주)') + '</h2><div class="card"><div class="week">' + cols.map(([k, v]) => '<div title="' + VZ.minutes(v) + '"><span style="font-size:10px">' + (v ? Math.round(v) : '') + '</span><span class="col' + (v ? '' : ' zero') + '" style="height:' + Math.max(3, Math.round(v / cmax * 80)) + 'px"></span>' + k + '</div>').join('') + '</div></div>' +
-      '<h2 class="sec">곡별 연습량</h2>' + (songRows.length ? '<div class="card bars">' + songRows.map(([k, v]) => '<div class="bar"><span class="ellipsis">' + esc(k === '__train' ? '보컬 트레이닝' : k === '__none' ? '곡 미지정' : VZ.songTitle(k) || '삭제된 곡') + '</span><span class="track"><span class="fill" style="width:' + Math.round(v / max * 100) + '%;display:block"></span></span><span>' + VZ.minutes(v) + '</span></div>').join('') + '</div>' : VZ.empty('chart-bar', label + ' 연습 기록이 없어요.', '<button type="button" class="btn sm" data-log>연습 기록하기</button>')) +
+      '<h2 class="sec">' + chartTitle + '</h2>' + (period === 'all' ? '<div class="growth-chart-nav"><button type="button" class="btn sm secondary" data-chart-prev aria-label="이전 주 보기">←</button><span class="small muted">좌우로 밀어 모든 주 보기</span><button type="button" class="btn sm secondary" data-chart-next aria-label="다음 주 보기">→</button></div>' : '') + '<div class="card growth-chart"><div class="growth-chart-scroll" data-chart-scroll tabindex="0" role="region" aria-label="주별 연습 그래프"><div class="week" data-growth-chart style="grid-template-columns:repeat(' + cols.length + ',minmax(0,1fr));' + (period === 'all' ? 'min-width:' + Math.max(1, cols.length) * 48 + 'px' : '') + '">' + cols.map(([k, v, date]) => '<div title="' + esc((date ? date + ' 주 · ' : '') + VZ.minutes(v)) + '"><span style="font-size:10px">' + (v ? Math.round(v) : '') + '</span><span class="col' + (v ? '' : ' zero') + '" style="height:' + Math.max(3, Math.round(v / cmax * 80)) + 'px"></span>' + k + '</div>').join('') + '</div></div></div>' +
+      '<h2 class="sec">곡별 연습량</h2><div class="seg growth-metric" role="group" aria-label="곡별 연습량 기준"><button type="button" data-song-metric="minutes" aria-pressed="' + (songMetric === 'minutes') + '">분</button><button type="button" data-song-metric="files" aria-pressed="' + (songMetric === 'files') + '">횟수(파일 수)</button></div><p class="small muted">' + (songMetric === 'files' ? '저장된 음원 파일 1개를 1회로 계산해요. 레슨·연습에 연결된 파일도 한 번만 세어요.' : '연습 기록과 아직 기록에 포함되지 않은 파일 길이를 합산해요.') + '</p>' + (songRows.length ? '<div class="card bars">' + songRows.map(([k, v]) => '<div class="bar" data-song-stat="' + esc(k) + '"><span class="ellipsis" title="' + esc(k === '__train' ? '보컬 트레이닝' : k === '__none' ? '곡 미지정' : VZ.songTitle(k) || '삭제된 곡') + '">' + esc(k === '__train' ? '보컬 트레이닝' : k === '__none' ? '곡 미지정' : VZ.songTitle(k) || '삭제된 곡') + '</span><span class="track"><span class="fill" style="width:' + Math.round(v / max * 100) + '%;display:block"></span></span><span>' + (songMetric === 'files' ? v + '회' : new Intl.NumberFormat('ko-KR', {maximumFractionDigits:1}).format(v) + '분') + '</span></div>').join('') + '</div>' : VZ.empty('chart-bar', label + ' 연습 기록이 없어요.', '<button type="button" class="btn sm" data-log>연습 기록하기</button>')) +
       '<h2 class="sec">만족도 추이</h2>' + (trend.length >= 2 ? '<div class="card"><div class="week" style="grid-template-columns:repeat(' + trend.length + ',1fr);height:90px">' + trend.map(p => '<div title="' + esc(p.date) + ' ★' + p.rating + '"><span class="col" style="height:' + p.rating * 14 + 'px;background:#f2b31b"></span>' + VZ.parseYmd(p.date).getDate() + '</div>').join('') + '</div></div>' : '<p class="small muted" style="margin:0 4px">만족도를 기록한 연습이 2개 이상이면 추이를 보여 드려요.</p>') +
       '<h2 class="sec">기록 요약</h2><div class="card small" style="display:grid;gap:6px">' + summary(ps, recs, doneTasks, label, es) + '</div>' +
       '<div class="btn-row" style="margin-top:16px"><a class="btn secondary" href="#/compare"><i class="ph ph-arrows-left-right"></i>녹음 비교</a><a class="btn secondary" href="#/library"><i class="ph ph-waveform"></i>보관함</a></div>';
+    const scroll = host.querySelector('[data-chart-scroll]');
+    if (period === 'all') scroll.scrollLeft = previousScroll ?? scroll.scrollWidth;
+    host.querySelector('[data-chart-prev]')?.addEventListener('click', () => scroll.scrollBy({left:-Math.max(144, scroll.clientWidth * .8), behavior:'smooth'}));
+    host.querySelector('[data-chart-next]')?.addEventListener('click', () => scroll.scrollBy({left:Math.max(144, scroll.clientWidth * .8), behavior:'smooth'}));
+    host.querySelectorAll('[data-song-metric]').forEach(button => button.onclick = () => { songMetric = button.dataset.songMetric; draw(media); });
     host.querySelector('[data-log]')?.addEventListener('click', () => VZ.practiceSheet());
   };
   function summary(ps, recs, tasks, label, es) {
