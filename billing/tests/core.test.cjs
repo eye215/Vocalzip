@@ -140,3 +140,17 @@ test('Pass deletion requires removing active links and supports ordered restorat
  state=run(state,'entity.restore',{collection:'payments',id:state.payments[0].id,expectedVersion:2});
  assert.equal(C.totals(state).total.paid,10000);assert.equal(C.totals(state).total.amount,300000);
 });
+
+test('Notion hourly reconciliation: 1 deduction = 1 hour, no duplicate credit from pass',()=>{
+ let {state,passId}=setup(30000,100);
+ state=run(state,'payment.save',{passId,date:'2026-10-23',amount:2310000,kind:'payment'});
+ state=run(state,'deduction.save',{passId,date:'2026-10-24',status:'completed',lessonId:'lesson-71',units:7100},{allowOverdraw:true});
+ const original=JSON.stringify(state.payments)+JSON.stringify(state.deductions);
+ state=run(state,'hourly-rate.save',{hourlyRate:30000});
+ const h=C.hourlyTotals(state);
+ assert.deepEqual([h.purchasedUnits,h.usedUnits,h.remainingUnits,h.usedAmount,h.prepaid,h.owed],[7700,7100,600,2130000,180000,0]);
+ assert.equal(JSON.stringify(state.payments)+JSON.stringify(state.deductions),original);
+ assert.throws(()=>run(state,'hourly-rate.save',{hourlyRate:35000}),/영향/);
+ state=run(state,'hourly-rate.save',{hourlyRate:35000},{ackImpact:true});
+ assert.equal(C.hourlyTotals(state).rate,35000);
+});
