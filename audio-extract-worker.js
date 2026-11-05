@@ -118,7 +118,9 @@ async function toFlac(b,input,audios,file,metadata,progress,iterators){
  if(audios.length!==1)return null;
  const codec=await audios[0].getCodec();
  if(codec!=='pcm-s16'&&codec!=='pcm-s24')return null;
- if(!(await b.canDecodeAudio('flac')))return {error:'이 브라우저는 FLAC 확인을 지원하지 않아 WAV 그대로 저장했어요.'};
+ // Safari/WebKit (every iPhone browser) cannot decode FLAC to check it, so it keeps the WAV without trying.
+ const webkit=/AppleWebKit/i.test(navigator.userAgent)&&!/Chrome|Chromium|Edg/i.test(navigator.userAgent)||/iPhone|iPad|iPod/i.test(navigator.userAgent);
+ if(webkit||!(await b.canDecodeAudio('flac')))return {error:'이 브라우저는 FLAC 확인을 지원하지 않아 WAV 그대로 저장했어요.'};
  progress('WAV를 FLAC으로 무손실 압축 중…');check();
  await import('./flac-encode.js?v=1');
  const encoded=await self.VzipFlac.encodeWav(file,{date:metadata.recordedDate,check,onProgress:value=>progress('FLAC 압축 '+Math.round(value*100)+'%')});
@@ -130,18 +132,24 @@ async function toFlac(b,input,audios,file,metadata,progress,iterators){
  try{
   const [result]=await check2.getAudioTracks(),a=await audios[0].getDecoderConfig(),c=await result.getDecoderConfig();
   if(!result||a.sampleRate!==c.sampleRate||a.numberOfChannels!==c.numberOfChannels)throw Error('FLAC 형식이 원본과 달라 WAV 그대로 저장했어요.');
-  const left=new b.AudioSampleSink(audios[0]).samples(),right=new b.AudioSampleSink(result).samples();iterators.push(left,right);
-  const next=async it=>{while(true){const r=await it.next();if(r.done)return null;const sample=r.value,size=sample.allocationSize({format:'f32',planeIndex:0})/4,data=new Float32Array(size);sample.copyTo(data,{format:'f32',planeIndex:0});sample.close();if(size)return data}};
-  let A=await next(left),B=await next(right),i=0,j=0,values=0,blocks=0;
+  // Compare with the WAV's own integers. Decoders turn integers into decimals as x/2^(n-1), or (Chromium) positives as
+  // x/(2^(n-1)-1); the scale is fixed per decoder, so it is set by the first sample that tells them apart and every
+  // decoded value must then equal exactly what the original integer gives.
+  const wav=encoded.info,S=2**(wav.bits-1);let mode=0;
+  const same=(x,v)=>{const sym=Math.fround(x/S),asym=x>0?Math.fround(x/(S-1)):sym;if(mode===1)return v===sym;if(mode===2)return v===asym;if(sym!==asym){if(v===sym){mode=1;return true}if(v===asym){mode=2;return true}return false}return v===sym};
+  const left=self.VzipFlac.pcmChunks(file,wav),right=new b.AudioSampleSink(result).samples();iterators.push(right);
+  const nextLeft=async()=>{const r=await left.next();return r.done?null:r.value};
+  const nextRight=async()=>{while(true){const r=await right.next();if(r.done)return null;const sample=r.value,size=sample.allocationSize({format:'f32',planeIndex:0})/4,data=new Float32Array(size);sample.copyTo(data,{format:'f32',planeIndex:0});sample.close();if(size)return data}};
+  let A=await nextLeft(),B=await nextRight(),i=0,j=0,values=0,blocks=0;
   while(A&&B){
    check();const n=Math.min(A.length-i,B.length-j);
-   for(let k=0;k<n;k++)if(A[i+k]!==B[j+k])throw Error('FLAC 소리가 원본과 달라 WAV 그대로 저장했어요.');
+   for(let k=0;k<n;k++)if(!same(A[i+k],B[j+k]))throw Error('FLAC 소리가 원본과 달라 WAV 그대로 저장했어요.');
    i+=n;j+=n;values+=n;
-   if(i>=A.length){A=await next(left);i=0}
-   if(j>=B.length){B=await next(right);j=0}
+   if(i>=A.length){A=await nextLeft();i=0}
+   if(j>=B.length){B=await nextRight();j=0}
    if(++blocks%200===0)await new Promise(resolve=>setTimeout(resolve,0));
   }
   if(A||B)throw Error('FLAC 길이가 원본과 달라 WAV 그대로 저장했어요.');
-  return {file:flacFile,proof:{version:1,codec:'flac',originalCodec:codec,originalBytes:file.size,outputBytes:flacFile.size,channels:a.numberOfChannels,sampleRate:a.sampleRate,frames:values/a.numberOfChannels,samplesVerified:true}};
+  return {file:flacFile,proof:{version:1,codec:'flac',originalCodec:codec,originalBytes:file.size,outputBytes:flacFile.size,channels:a.numberOfChannels,sampleRate:a.sampleRate,frames:values/a.numberOfChannels,samplesVerified:true,decoderScale:mode===2?'asymmetric':'symmetric'}};
  }finally{check2.dispose()}
 }

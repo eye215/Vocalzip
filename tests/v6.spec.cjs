@@ -1031,7 +1031,8 @@ test('Import hub suggests linking a file to that day\'s lesson, and links only w
   expect(d.practices.some(p => (p.mediaIds || []).includes(linked.id))).toBe(false);
 });
 
-test('Import hub takes a whole computer folder (subfolders too) and skips non-media files', async ({page}) => {
+test('Import hub takes a whole computer folder (subfolders too) and skips non-media files', async ({page, browserName}) => {
+  test.skip(browserName === 'webkit', 'Folder picking is a desktop feature (iPhone/iPad Safari cannot pick folders).');
   test.setTimeout(90000);
   const os = require('node:os');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vzip-folder-')), sub = path.join(dir, '2026-03');

@@ -158,7 +158,17 @@ async function encodeWav(file, {onProgress, check, date} = {}) {
   }
   return {blob:new Blob(chunks, {type:'audio/flac'}), info};
 }
-const api = {encodeWav, wavInfo};
+/** Original samples straight from the WAV bytes, as interleaved integers, in chunks. */
+async function* pcmChunks(file, info, frames = 1 << 16) {
+  const bytesPer = info.bits / 8;
+  for (let start = 0; start < info.frames; start += frames) {
+    const count = Math.min(frames, info.frames - start), view = new DataView(await file.slice(info.offset + start * info.align, info.offset + (start + count) * info.align).arrayBuffer());
+    const out = new Int32Array(count * info.channels);
+    for (let i = 0; i < out.length; i++) { const at = i * bytesPer; out[i] = info.bits === 16 ? view.getInt16(at, true) : (view.getUint8(at) | (view.getUint8(at + 1) << 8) | (view.getInt8(at + 2) << 16)); }
+    yield out;
+  }
+}
+const api = {encodeWav, wavInfo, pcmChunks};
 root.VzipFlac = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

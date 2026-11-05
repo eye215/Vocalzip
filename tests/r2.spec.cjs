@@ -95,7 +95,7 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   expect(meta.r2Key).toMatch(new RegExp('^u/ui-test-user/' + meta.id + '/original\\.(wav|flac)$'));
   expect(meta.path).toBeUndefined();
   expect(r2.store.get(meta.r2Key).bytes.length).toBe(meta.size);
-  const kept = (await page.evaluate(async () => [...new Uint8Array(await (await window.vzipReadMedia())[0].blob.arrayBuffer())]));
+  const kept = (await page.evaluate(async () => { const x = (await window.vzipReadMedia())[0]; return [...new Uint8Array(x.blob ? await x.blob.arrayBuffer() : x.bytes)]; }));
   expect(r2.store.get(meta.r2Key).bytes.equals(Buffer.from(kept))).toBe(true);
   // Playback asks the Worker for a signed link.
   const url = await page.evaluate(m => window.vzipCloudMediaUrl(m), meta);
