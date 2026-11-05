@@ -378,3 +378,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 #vzip-cloud-root #cloud-status{font-size:13px;line-height:1.55;color:var(--ink-2);margin:10px 0 0}
 #vzip-cloud-root .cloud-more{margin:12px 0 0}
 #vzip-cloud-root #cloud-logout{display:block;width:auto;min-height:36px;margin:8px 0 -6px auto;padding:0 4px;font-size:13px;font-weight:600;color:var(--ink-3)}
+/* 연습 기록의 숙제 체크: 했어요/안 했어요 → 횟수 · 메모 */
+.hw-ask .list{overflow:visible}
+.hw-item{padding:12px 14px}
+.hw-seg{flex:none;padding:3px}
+.hw-seg button{min-height:34px;padding:0 10px;font-size:13px;white-space:nowrap;flex:none}
+.hw-seg [data-hw-did="1"][aria-pressed="true"]{background:var(--accent);color:#fff}
+.hw-item .icon-btn.sm{width:36px;height:36px;font-size:18px;background:var(--surface-2)}
+.hw-item [data-hw-reps]{min-height:36px;padding:0 6px}

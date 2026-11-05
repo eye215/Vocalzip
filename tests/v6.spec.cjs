@@ -160,6 +160,46 @@ test('Vocal training has three levels and each can add a new entry that is offer
   expect((await data(page)).practices.length).toBe(d.practices.length);
 });
 
+test('Homework has a period; each practice in it asks whether it was done, how many times and how it went', async ({page}) => {
+  await boot(page, {media:false, seed:{categories:[], songs:[{id:'s1', title:'곡'}], lessons:[], assignments:[], practices:[], comparisonReports:[]}});
+  await page.goto('/#/homework');
+  await page.locator('[data-add-task]').click();
+  await sheet(page).locator('[name=title]').fill('립트릴 스케일');
+  await sheet(page).locator('[name=startDate]').fill(day(-3));
+  await sheet(page).locator('[name=dueDate]').fill(day(3));
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  const task = (await data(page)).assignments[0];
+  expect(task).toMatchObject({title:'립트릴 스케일', startDate:day(-3), dueDate:day(3), status:'active'});
+  // A practice inside the period asks about it.
+  await page.goto('/#/home'); await page.locator('[data-log]').click();
+  const ask = sheet(page).locator('.hw-ask');
+  await expect(ask).toContainText('이번 연습에서 숙제 했나요?');
+  await expect(ask).toContainText('립트릴 스케일');
+  await ask.getByRole('button', {name:'했어요', exact:true}).click();
+  await ask.getByRole('button', {name:'횟수 늘리기'}).click(); await ask.getByRole('button', {name:'횟수 늘리기'}).click();
+  await ask.locator('[data-hw-note]').fill('세 번째에 고음이 편해짐');
+  await sheet(page).locator('[name=minutes]').fill('20');
+  await sheet(page).getByRole('button', {name:'연습 기록 저장'}).click();
+  let p = (await data(page)).practices[0];
+  expect(p).toMatchObject({completed:[task.id], assignmentReps:{[task.id]:3}, assignmentNotes:{[task.id]:'세 번째에 고음이 편해짐'}});
+  // "안 했어요" records nothing; outside the period it is not asked.
+  await page.locator('[data-log]').click();
+  await ask.getByRole('button', {name:'안 했어요'}).click();
+  await sheet(page).locator('[name=minutes]').fill('10');
+  await sheet(page).getByRole('button', {name:'연습 기록 저장'}).click();
+  expect((await data(page)).practices.at(-1).completed).toEqual([]);
+  await page.locator('[data-log]').click();
+  await sheet(page).locator('[name=date]').fill(day(10)); await sheet(page).locator('[name=date]').dispatchEvent('change');
+  await expect(sheet(page).locator('.hw-ask')).toHaveCount(0);
+  await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
+  // The homework shows the period, the total and each time with its memo.
+  await page.goto('/#/homework');
+  await expect(page.locator('[data-task="' + task.id + '"]')).toContainText('3회 했어요');
+  await page.locator('[data-task="' + task.id + '"]').click();
+  await expect(sheet(page)).toContainText('연습 1번 · 3회');
+  await expect(sheet(page)).toContainText('세 번째에 고음이 편해짐');
+});
+
 test('A past scheduled lesson can be recorded as done or cancelled from home in one tap', async ({page}) => {
   await boot(page, {media:false});
   const card = page.locator('[data-overdue]');
@@ -202,7 +242,7 @@ test('Homework: add with song, complete from home, practice log records it separ
   await s.locator('[name=song]').selectOption('s2');
   await s.locator('[name=minutes]').fill('15');
   await s.getByRole('button', {name:'만족도 4'}).click();
-  await s.locator('label.item').filter({hasText:'On My Own 브릿지 10번'}).locator('input').check();
+  await s.locator('[data-hw-id]').filter({hasText:'On My Own 브릿지 10번'}).getByRole('button', {name:'했어요', exact:true}).click();
   await page.getByRole('button', {name:'연습 기록 저장'}).click();
   let d = await data(page);
   const task = d.assignments.find(a => a.title === 'On My Own 브릿지 10번');
