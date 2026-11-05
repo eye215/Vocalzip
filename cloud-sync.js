@@ -172,8 +172,14 @@ async function importMedia(file,info={},onProgress,options={}){
    ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]])),
    ...(r2?{storageProvider:'r2',r2Key:r2.key}:multipart?{storageVersion:2,parts}:{path:parts[0].path})};
   const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata});
-  if(error&&r2){committing=false;await window.VzipR2.remove(r2.key).catch(()=>{});r2=null}
-  if(error)throw Error('보관함 연결에 실패했어요: '+error.message);
+  // Success means the row is really there: a lost reply may hide a write that went through, and a reported success is checked.
+  const {data:check,error:checkError}=await client.from('vocal_media').select('id').eq('user_id',owner).eq('id',id).maybeSingle();
+  if(checkError||!check){
+   // Never delete the uploaded file here: it is kept and noted so it can be linked again later without uploading.
+   if(r2)orphan({id,key:r2.key,size:file.size,name:metadata.name,fileHash:metadata.fileHash||'',reason:(error||checkError)?.message||'row missing'});
+   committing=false;r2=null;
+   throw Error('보관함 연결을 확인하지 못했어요'+(error?': '+error.message:'')+'. 올린 파일은 지우지 않았어요.');
+  }
   committed=true;forget(id);
   if(user?.id!==owner)throw Error('로그인이 변경되어 현재 화면에 파일을 연결하지 않았어요. 원래 계정의 보관함에서 확인해 주세요.');
   onProgress?.(100);window.dispatchEvent(new Event('vzip:cloud-media-changed'));
@@ -183,13 +189,16 @@ async function importMedia(file,info={},onProgress,options={}){
   if(id&&!committing&&!committed&&user?.id===owner){
    try{await cleanupPending(owner)}catch{}
   }
-  if(r2&&!committing&&!committed)window.VzipR2.remove(r2.key).catch(()=>{});
+  if(r2&&!committing&&!committed)orphan({id,key:r2.key,size:file.size,name:info.name||file.name,fileHash:info.fileHash||'',reason:error?.message||'stopped'});
   throw error;
  }finally{
   options.signal?.removeEventListener('abort',cancel);window.removeEventListener('vzip:auth-changed',authChanged);
   mediaImportActive=false;
  }
 };
+/** Files that reached R2 but whose library row could not be confirmed: kept (never deleted) for re-linking. */
+function orphan(entry){try{const k='vzip_r2_orphans_v1',all=JSON.parse(localStorage.getItem(k)||'[]').filter(x=>x.id!==entry.id);all.push({...entry,owner:user?.id||'',at:Date.now()});localStorage.setItem(k,JSON.stringify(all.slice(-5000)))}catch{}}
+window.vzipR2Orphans=()=>{try{return JSON.parse(localStorage.getItem('vzip_r2_orphans_v1')||'[]')}catch{return []}};
 window.vzipCloudImport=(...args)=>{
  if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
   if(!lock)throw Error('다른 파일을 업로드하고 있어요. 다른 탭의 업로드를 완료하거나 취소한 뒤 다시 선택해 주세요.');
@@ -197,7 +206,19 @@ window.vzipCloudImport=(...args)=>{
  });
  return importMedia(...args);
 };
-window.vzipCloudMediaList=async()=>{if(!user)return [];const {data,error}=await client.from('vocal_media').select('id,metadata').eq('user_id',user.id).order('updated_at',{ascending:false});if(error)throw error;return (data||[]).map(x=>({...x.metadata,id:x.id,cloud:true}))};
+/** All of the user's rows, page by page (the server returns at most 1,000 rows per request). */
+async function allRows(columns){
+ const owner=user?.id;if(!owner)return [];const out=[];
+ for(let from=0;;from+=1000){
+  const {data,error}=await client.from('vocal_media').select(columns).eq('user_id',owner).order('updated_at',{ascending:false}).order('id').range(from,from+999);
+  if(error)throw error;if(user?.id!==owner)throw Error('로그인이 변경됐어요.');
+  out.push(...(data||[]));if(!data||data.length<1000)return out;
+ }
+}
+window.vzipCloudMediaList=async()=>(await allRows('id,metadata')).map(x=>({...x.metadata,id:x.id,cloud:true}));
+/** Read-only rows with server times, for the upload check (설정 → 저장 공간 관리 → 업로드 상태 진단). */
+window.vzipCloudMediaRows=async()=>allRows('id,metadata,updated_at');
+window.vzipCloudUserId=()=>user?.id||'';
 window.vzipCloudMediaUrl=async item=>{
  if(!user)throw Error('로그인이 필요해요.');
  const owner=user.id;

@@ -19,6 +19,8 @@ VZ.importSheet = ({songId = ''} = {}) => {
       el.querySelector('[data-file]').onchange = e => {
         const files = [...e.target.files]; e.target.value = '';
         if (!files.length) return;
+        // Many files go to the bulk uploader: one at a time, server-confirmed, resumable, no device copies.
+        if (files.length > 20) { close(); VZ.toast(files.length + '개 파일은 대량 업로드 화면에서 하나씩 확인하며 올려요.'); VZ.openImportHub({files}); return; }
         rows = files.map(file => {
           const type = M.typeOf(file);
           let error = '';
@@ -61,7 +63,8 @@ VZ.importSheet = ({songId = ''} = {}) => {
               ui(r).hidden = true;
               const doneRows = rows.filter(x => x.state === 'done'), dates = [...new Set(doneRows.map(x => x.savedDate))];
               const line = step2.querySelector('[data-done]'); line.hidden = false;
-              line.textContent = '✓ 저장 완료 ' + doneRows.length + '개 · ' + dates.slice(0, 3).join(', ') + (dates.length > 3 ? ' 외' : '');
+              const waiting = savedItems.concat(saved).some(x => x.pendingUpload);
+              line.textContent = (waiting ? '✓ 이 기기에 저장 ' : '✓ 저장 완료 ') + doneRows.length + '개' + (waiting ? ' (클라우드 업로드는 이어서 진행돼요)' : '') + ' · ' + dates.slice(0, 3).join(', ') + (dates.length > 3 ? ' 외' : '');
               // Saved files can be played right here (tap to open a player).
               savedItems.push(saved);
               const list = step2.querySelector('[data-saved]'); list.hidden = false;
@@ -80,7 +83,7 @@ VZ.importSheet = ({songId = ''} = {}) => {
           if (savedItems.some(x => x.pendingUpload)) step2.querySelector('[data-summary]').textContent += ' · 이 기기에 먼저 저장했어요. 클라우드 업로드는 자동으로 이어져요(다른 앱을 쓰다 와도 이어서 올라가요).';
           start.hidden = true;
           if (done) M.invalidate();
-          if (!bad && done) VZ.toast(done + '개 파일을 보관함에 저장했어요.');
+          if (!bad && done) VZ.toast(savedItems.some(x => x.pendingUpload) ? done + '개 파일을 이 기기에 저장했어요. 클라우드 업로드는 위쪽 표시줄에서 확인할 수 있어요.' : done + '개 파일을 보관함에 저장했어요.');
         }
       };
       wrap.querySelector('[data-start]').onclick = () => run(rows.filter(r => r.state === 'ready'));

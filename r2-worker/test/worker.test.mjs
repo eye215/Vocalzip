@@ -136,3 +136,19 @@ test('rejects non-media types, bad ids and oversized parts; delete removes the f
   assert.equal((await call('/v1/media/' + up.key, {method:'DELETE', auth})).status, 200);
   assert.equal((await call('/v1/media/' + up.key, {auth})).status, 404);
 });
+
+test('objects lists only the caller\'s own files, read-only, page by page', async () => {
+  const alice = await token(ALICE), bob = await token(BOB);
+  await upload(alice, 'list-a1', new Uint8Array(10).fill(1));
+  await upload(bob, 'list-b1', new Uint8Array(12).fill(2));
+  const res = await call('/v1/objects', {auth:alice});
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(body.objects.length >= 1);
+  assert.ok(body.objects.every(o => o.key.startsWith('u/' + ALICE + '/')));
+  const mine = body.objects.find(o => o.mediaId === 'list-a1');
+  assert.equal(mine.size, 10); assert.equal(mine.key, 'u/' + ALICE + '/list-a1/original.m4a'); assert.ok(mine.uploaded);
+  assert.equal(body.cursor, null);
+  assert.equal((await call('/v1/objects')).status, 401);
+  assert.equal((await call('/v1/objects', {method:'POST', auth:alice})).status, 404);
+});

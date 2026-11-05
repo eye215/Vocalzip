@@ -4,7 +4,7 @@ const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
- from:()=>{const c={};for(const m of ['select','eq','order','upsert','update','delete','maybeSingle'])c[m]=(...a)=>{if(m==='upsert')window.__up.push(a[0]);return c};c.then=r=>r({data:[],error:null});return c}})};`;
+ from:()=>{const c={};for(const m of ['select','eq','order','range','upsert','update','delete','maybeSingle'])c[m]=(...a)=>{if(m==='upsert')window.__up.push(a[0]);return c};c.then=r=>r({data:[],error:null});return c}})};`;
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const legacy = () => ({
   categories:[{id:'c1', name:'발성', items:['립트릴', '허밍']}],
@@ -198,6 +198,63 @@ test('Homework has a period; each practice in it asks whether it was done, how m
   await page.locator('[data-task="' + task.id + '"]').click();
   await expect(sheet(page)).toContainText('연습 1번 · 3회');
   await expect(sheet(page)).toContainText('세 번째에 고음이 편해짐');
+});
+
+test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pauses on expired login, retries only failures, resumable', async ({page}) => {
+  test.setTimeout(180000);
+  await boot(page, {media:false});
+  await page.evaluate(() => {
+    window.__uploaded = []; window.__expireOnce = true; window.__badFails = true; const rows = [];
+    window.vzipCloudSignedIn = () => true; window.vzipCloudUserId = () => 'ui-test-user';
+    window.vzipCloudMediaList = async () => rows.map(r => ({...r, cloud:true}));
+    window.vzipCloudImport = async (file, info) => {
+      if (/expire/.test(file.name + info.originalFilename) && window.__expireOnce) { window.__expireOnce = false; throw Error('로그인이 만료됐어요. 다시 로그인해 주세요.'); }
+      if (/bad/.test(info.originalFilename) && window.__badFails) throw Error('지원하지 않는 형식이에요.');
+      const meta = {...info, id:info.id, size:file.size, storageProvider:'r2', r2Key:'u/ui-test-user/' + info.id + '/original.wav'};
+      rows.push(meta); window.__uploaded.push(info.originalFilename); return meta;
+    };
+  });
+  const wav = tone => { const sr = 4000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
+  const files = Array.from({length:21}, (_, i) => ({name:'2026-11-01_10-00-' + String(i).padStart(2, '0') + (i === 3 ? ' expire' : i === 7 ? ' bad' : '') + '.wav', mimeType:'audio/wav', buffer:wav(i)}));
+  files.push({name:'2026-11-01_11-00-00 copy.wav', mimeType:'audio/wav', buffer:wav(0)}); // same content as the first file
+  // More than 20 files from 파일 가져오기 go to the bulk uploader.
+  await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles(files);
+  await expect(page.locator('.toast').last()).toContainText('22개 파일은 대량 업로드 화면에서');
+  await expect(page.getByRole('button', {name:/^전체 22/})).toBeVisible({timeout:90000});
+  await page.getByRole('button', {name:'전체 선택'}).click();
+  await page.getByRole('button', {name:'선택한 22개 가져오기'}).click();
+  const dash = page.locator('[data-dash]'), n = k => dash.locator('[data-count="' + k + '"] b');
+  // The expired login pauses the queue; nothing is counted as failed for it.
+  await expect(dash).toContainText('로그인이 만료됐어요', {timeout:30000});
+  await expect(dash.getByRole('button', {name:'이어서 올리기'})).toBeVisible();
+  const queued = await page.evaluate(() => JSON.parse(localStorage.getItem('vzip_upload_queue_v1')));
+  expect(queued.items).toHaveLength(22);
+  expect(queued.items.every(i => i.hash && i.size)).toBe(true);
+  await dash.getByRole('button', {name:'이어서 올리기'}).click();
+  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
+  await expect(n('done')).toHaveText('20');
+  await expect(n('failed')).toHaveText('1');
+  await expect(n('dup')).toHaveText('1');
+  await expect(page.locator('[data-hub]')).toContainText('지원하지 않는 형식이에요');
+  // Only the failure is retried.
+  await page.evaluate(() => { window.__badFails = false; });
+  const before = await page.evaluate(() => window.__uploaded.length);
+  await dash.getByRole('button', {name:'실패한 1개만 다시'}).click();
+  await expect(n('failed')).toHaveText('0', {timeout:30000});
+  await expect(n('done')).toHaveText('21');
+  expect(await page.evaluate(() => window.__uploaded.length)).toBe(before + 1);
+  const names = await page.evaluate(() => window.__uploaded);
+  expect(new Set(names).size).toBe(names.length); // nothing uploaded twice
+  expect(names.some(x => /copy/.test(x))).toBe(false); // the duplicate never went up
+  expect(await page.evaluate(async () => (await window.vzipReadMedia()).length)).toBe(0); // no device copies
+  // Queue state survives a reload; a stopped queue is shown with what is left.
+  await page.evaluate(() => { const q = JSON.parse(localStorage.getItem('vzip_upload_queue_v1')); q.items[0].state = 'waiting'; localStorage.setItem('vzip_upload_queue_v1', JSON.stringify(q)); });
+  await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.goto('/#/import-hub');
+  await expect(page.locator('[data-stopped]')).toContainText('전체 22개 · 완료 20 · 남음 1');
+  await expect(page.locator('[data-stopped]')).toContainText('원본 파일을 다시 선택');
 });
 
 test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imports can be moved in one tap', async ({page}) => {
@@ -730,7 +787,7 @@ test('Login merges device and cloud records instead of overwriting either side',
   const remote = {categories:[], songs:[{id:'s1', title:'This Is the Moment'}, {id:'cloud-song', title:'Cloud only song'}], lessons:[{id:'cloud-lesson', date:'2026-10-01', status:'done'}], assignments:[], practices:[]};
   const stub = `window.__upserts=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'t@e.x'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
     storage:{from:()=>({})},
-    from:table=>{const c={};let single=false;for(const m of ['select','eq','order','update','delete'])c[m]=()=>c;c.maybeSingle=()=>{single=true;return c};c.upsert=row=>{window.__upserts.push({table,row});return c};c.then=r=>r({data:table==='vocal_data'&&single?{payload:${JSON.stringify(remote)},updated_at:'x'}:[],error:null});return c}})};`;
+    from:table=>{const c={};let single=false;for(const m of ['select','eq','order','range','update','delete'])c[m]=()=>c;c.maybeSingle=()=>{single=true;return c};c.upsert=row=>{window.__upserts.push({table,row});return c};c.then=r=>r({data:table==='vocal_data'&&single?{payload:${JSON.stringify(remote)},updated_at:'x'}:[],error:null});return c}})};`;
   page.on('pageerror', e => { throw e; });
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
   await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
@@ -936,8 +993,9 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   // A file marked 공연 is imported but makes no practice record.
   await row('원데이모어').locator('[data-occ-row]').selectOption('performance');
   await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
-  await expect(page.getByText('가져오기 완료')).toBeVisible({timeout:60000});
-  await expect(page.locator('[data-hub]')).toContainText('저장 3개 · 연습 기록 2개 생성');
+  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
+  await expect(page.locator('[data-dash] [data-count="done"] b')).toHaveText('3');
+  await expect(page.locator('[data-hub]')).toContainText('연습 기록 2개 생성');
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(3);
   const take = items.find(m => m.originalFilename === 'the moment take.wav');
@@ -1060,7 +1118,7 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
   await page.locator('[data-imp]').click();
   await sheet(page).locator('[data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
-  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
   await expect(sheet(page).locator('[data-summary]')).toContainText('클라우드 업로드는 자동으로 이어져요');
   // Saved on the device right away, marked for upload.
   const [local] = await media(page);
@@ -1150,7 +1208,7 @@ test('Import hub suggests linking a file to that day\'s lesson, and links only w
   await expect(row('class').locator('[data-occ-row]')).toHaveValue('lesson');
   await expect(row('class').locator('[data-song]')).toHaveValue('s2'); // the lesson's only song
   await page.getByRole('button', {name:/선택한 2개 가져오기/}).click();
-  await expect(page.getByText('가져오기 완료')).toBeVisible({timeout:60000});
+  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
   await expect(page.locator('[data-hub]')).toContainText('레슨 녹음 1개 연결');
   const d = await data(page), items = await media(page);
   const linked = items.find(m => m.originalFilename === 'class 2026-03-05.wav');

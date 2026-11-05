@@ -4,13 +4,14 @@ const {test, expect} = require('@playwright/test');
 const KEY = 'vocal-zip_mvp_v1', R2 = 'https://r2.vocalzip.test';
 const stub = `window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'tok'}}})},
  storage:{from:()=>({createSignedUrl:async p=>({data:{signedUrl:'/legacy/'+p},error:null}),upload:async()=>({error:null}),remove:async p=>{window.__removed.push(...p);return {error:null}}})},
- from:()=>{const c={q:{}};for(const m of ['select','order','delete'])c[m]=()=>c;c.eq=(k,v)=>{c.q[k]=v;return c};
-  c.upsert=row=>{window.__up.push(row);const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata)window.__rows[x.id]=x.metadata;return c};
+ from:()=>{const c={q:{}};for(const m of ['select','order','delete'])c[m]=()=>c;c.range=(a,b)=>{c.r=[a,b];return c};c.eq=(k,v)=>{c.q[k]=v;return c};
+  c.upsert=row=>{window.__up.push(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata)window.__rows[x.id]=x.metadata;return c};
   c.update=row=>{c.pendingUpdate=row;return c};
   c.maybeSingle=()=>c;c.single=()=>c;
-  c.then=r=>{if(c.pendingUpdate&&c.q.id){window.__rows[c.q.id]=c.pendingUpdate.metadata;return r({data:null,error:null})}
+  c.then=r=>{if(c.err)return r({data:null,error:c.err});if(c.pendingUpdate&&c.q.id){window.__rows[c.q.id]=c.pendingUpdate.metadata;return r({data:null,error:null})}
    if(c.q.id)return r({data:window.__rows[c.q.id]?{metadata:window.__rows[c.q.id]}:null,error:null});
-   return r({data:[],error:null})};return c}})};`;
+   // Like the server: at most 1,000 rows per request, pages by range.
+   const all=Object.entries(window.__rows).map(([id,metadata])=>({id,metadata,updated_at:'2026-11-05T09:00:00Z'}));const [a,b]=c.r||[0,999];return r({data:all.slice(a,Math.min(b+1,a+1000)),error:null})};return c}})};`;
 
 function wav(seconds = 2, sr = 8000) {
   const n = sr * seconds, b = Buffer.alloc(44 + n * 2);
@@ -49,6 +50,7 @@ async function fakeR2(page, reject = {}) {
       return route.fulfill({status:200, contentType:o.type, headers:{'access-control-allow-origin':'*', 'accept-ranges':'bytes'}, body:o.bytes});
     }
     if (p === '/v1/usage') return json({objects:store.size, bytes:[...store.values()].reduce((s, o) => s + o.bytes.length, 0)});
+    if (p === '/v1/objects' && !reject.list) return json({objects:[...store.entries()].map(([key, o]) => ({key, size:o.bytes.length, uploaded:'2026-11-05T10:00:00.000Z', mediaId:key.split('/')[2]})), cursor:null});
     return json({error:'not found'}, 404);
   });
   return {store, calls, reject};
@@ -86,7 +88,7 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   await page.locator('[data-imp]').click();
   await page.locator('.sheet [data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:wav()});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
-  await expect(page.locator('.sheet [data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
+  await expect(page.locator('.sheet [data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
   // Saved on the device first; the upload to R2 follows from that copy.
   await expect.poll(() => page.evaluate(() => Object.keys(window.__rows).length), {timeout:20000}).toBe(1);
   const meta = await page.evaluate(() => Object.values(window.__rows)[0]);
@@ -146,4 +148,49 @@ test('If the Worker does not accept the sign-in, R2 stays off and new files keep
   await expect(page.getByText(/이 로그인을 확인하지 못했어요/)).toBeVisible();
   await expect(page.getByRole('button', {name:/R2로 옮기기/})).toHaveCount(0);
   expect(r2.calls.filter(c => c.startsWith('POST /v1/uploads'))).toEqual([]);
+});
+
+test('A file stored in R2 whose library row cannot be written is kept (not deleted), noted, and found by the upload check', async ({page}) => {
+  test.setTimeout(90000);
+  const r2 = await fakeR2(page);
+  await boot(page);
+  await page.evaluate(() => { window.__failUpsert = true; });
+  // Bulk path: straight from the picked file (no device copy), done only when the server confirms the row.
+  const id = await page.evaluate(async b => {
+    const file = new File([new Uint8Array(b)], 'take.wav', {type:'audio/wav'});
+    try { await VZ.media.importFile(file, {id:'bulk-1', direct:true, extra:{fileHash:'abc'}}); return 'saved'; } catch (e) { return e.message; }
+  }, [...wav()]);
+  expect(id).toContain('보관함 연결을 확인하지 못했어요');
+  expect(id).toContain('올린 파일은 지우지 않았어요');
+  const key = 'u/ui-test-user/bulk-1/original.' + [...r2.store.keys()][0].split('.').pop();
+  expect(r2.store.has(key)).toBe(true); // kept in R2
+  expect(r2.calls.some(c => c.startsWith('DELETE'))).toBe(false); // nothing deleted
+  expect(await page.evaluate(() => window.vzipR2Orphans().map(o => [o.id, o.key, o.fileHash]))).toEqual([['bulk-1', key, 'abc']]);
+  expect(await page.evaluate(async () => (await window.vzipReadMedia()).length)).toBe(0); // no device copy
+  // The read-only check sees it: in R2, no library row, details kept → recoverable.
+  await page.goto('/#/storage');
+  await page.getByRole('link', {name:/업로드 상태 진단/}).click();
+  await page.getByRole('button', {name:'진단 시작'}).click();
+  const uc = page.locator('.uc');
+  await expect(uc).toContainText('진단 결과');
+  await expect(uc.locator('.uc-row', {hasText:'R2 파일'}).first()).toContainText('1 ·');
+  await expect(uc.locator('.uc-row', {hasText:'R2에는 있는데 보관함 기록이 없는 파일'})).toContainText('1');
+  await expect(uc.locator('.uc-row', {hasText:'복구 가능'})).toContainText('1');
+  expect(r2.calls).toContain('GET /v1/objects');
+  // A successful upload with the row confirmed is "done" and also leaves no device copy.
+  await page.evaluate(() => { window.__failUpsert = false; });
+  const ok = await page.evaluate(async b => { const s = await VZ.media.importFile(new File([new Uint8Array(b)], 'take2.wav', {type:'audio/wav'}), {id:'bulk-2', direct:true}); return [s.cloud, s.storageProvider]; }, [...wav(1)]);
+  expect(ok).toEqual([true, 'r2']);
+  expect(await page.evaluate(() => window.__rows['bulk-2']?.storageProvider)).toBe('r2');
+  expect(await page.evaluate(async () => (await window.vzipReadMedia()).length)).toBe(0);
+});
+
+test('The library reads every row even past the server\'s 1,000-row page limit', async ({page}) => {
+  await fakeR2(page);
+  await boot(page);
+  const count = await page.evaluate(async () => {
+    for (let i = 0; i < 1234; i++) window.__rows['row-' + i] = {id:'row-' + i, name:'녹음 ' + i, storageProvider:'r2', r2Key:'u/ui-test-user/row-' + i + '/original.m4a', created:Date.now(), recordedDate:'2026-11-01'};
+    VZ.media.invalidate(); return (await VZ.media.list(true)).filter(m => m.cloud).length;
+  });
+  expect(count).toBe(1234);
 });
