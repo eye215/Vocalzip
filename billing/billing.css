@@ -3,8 +3,19 @@
  --bg:#f6f4fb;--surface:#fff;--surface-2:#f1edfa;--ink:#1e1b2e;--ink-2:#5f5a74;--ink-3:#8d88a3;--line:#e8e3f3;
  --accent:#7552d9;--accent-soft:#ece6fc;--ok:#23855c;--ok-soft:#e3f4ec;--warn:#9a5b00;--warn-soft:#fff3dc;--danger:#c93a3a;--danger-soft:#fdeaea;
  --radius:16px;--shadow:0 1px 2px rgba(40,24,90,.05),0 4px 16px rgba(40,24,90,.05);
- font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,sans-serif;color:var(--ink);background:var(--bg);color-scheme:light;
+ font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,sans-serif;color:var(--ink);background:var(--bg);--nav-bg:rgba(246,244,251,.94);--ok-ink:#1d5a40;color-scheme:light;
  -webkit-text-size-adjust:100%;text-size-adjust:100%
+}
+/* 다크 모드: 앱의 화면 모드(기기 설정·라이트·다크)를 그대로 따라요. */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+ --bg:#121019;--surface:#1c1927;--surface-2:#272238;--ink:#eeeaf7;--ink-2:#b9b3cf;--ink-3:#8c86a5;--line:#2f2a43;
+ --accent:#8f70ee;--accent-soft:#2c2450;--ok:#52c48e;--ok-soft:#163327;--warn:#f0a83a;--warn-soft:#3a2a10;--danger:#f07a7a;--danger-soft:#3d1d21;
+ --shadow:0 1px 2px rgba(0,0,0,.3);--nav-bg:rgba(18,16,25,.94);--ok-ink:#9be0bd;color-scheme:dark
+}}
+:root[data-theme="dark"]{
+ --bg:#121019;--surface:#1c1927;--surface-2:#272238;--ink:#eeeaf7;--ink-2:#b9b3cf;--ink-3:#8c86a5;--line:#2f2a43;
+ --accent:#8f70ee;--accent-soft:#2c2450;--ok:#52c48e;--ok-soft:#163327;--warn:#f0a83a;--warn-soft:#3a2a10;--danger:#f07a7a;--danger-soft:#3d1d21;
+ --shadow:0 1px 2px rgba(0,0,0,.3);--nav-bg:rgba(18,16,25,.94);--ok-ink:#9be0bd;color-scheme:dark
 }
 *{box-sizing:border-box}[hidden]{display:none!important}
 body{margin:0;background:var(--bg);-webkit-font-smoothing:antialiased}
@@ -44,10 +55,10 @@ header button.ghost{min-height:36px;padding:0 10px;font-size:13px;border-radius:
 .help{color:var(--ink-2);font-size:13px;margin:4px 0 12px}
 
 /* Tabs: one scrollable row, sticky */
-nav{position:sticky;top:0;z-index:20;display:flex;gap:6px;overflow-x:auto;margin:0 -16px 12px;padding:10px 16px;background:rgba(246,244,251,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);scrollbar-width:none}
+nav{position:sticky;top:0;z-index:20;display:flex;gap:6px;overflow-x:auto;margin:0 -16px 12px;padding:10px 16px;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);scrollbar-width:none}
 nav::-webkit-scrollbar{display:none}
 nav button{flex:none;min-height:38px;padding:0 14px;border-radius:999px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);font-size:14px;font-weight:600}
-nav button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#fff}
+nav button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 
 /* Sections & cards */
 section{min-width:0}
@@ -80,7 +91,7 @@ input[type=checkbox]{display:inline-block;width:22px;height:22px;min-height:22px
 .metric[data-total=remainingUnits] .negative{color:#ffe1e1}
 
 /* Messages */
-#message{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));z-index:80;transform:translate(-50%,12px);width:max-content;max-width:calc(100% - 32px);margin:0;padding:12px 16px;border-radius:14px;background:var(--ink);color:#fff;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#message{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));z-index:80;transform:translate(-50%,12px);width:max-content;max-width:calc(100% - 32px);margin:0;padding:12px 16px;border-radius:14px;background:var(--ink);color:var(--bg);font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 #message.show{opacity:1;transform:translate(-50%,0)}
 #message.error{background:var(--danger)}
 #message:empty{display:none}
@@ -89,7 +100,7 @@ input[type=checkbox]{display:inline-block;width:22px;height:22px;min-height:22px
 .muted{color:var(--ink-3)}
 .empty{padding:16px;color:var(--ink-2);background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);text-align:center;font-size:14px}
 .voided{opacity:.55}
-#reconciliation{white-space:pre-line;background:var(--ok-soft);color:#1d5a40;padding:14px;border-radius:12px;font-size:14px}
+#reconciliation{white-space:pre-line;background:var(--ok-soft);color:var(--ok-ink);padding:14px;border-radius:12px;font-size:14px}
 #reconciliation:empty{display:none}
 form .impact{white-space:pre-line}
 #transfer-comparison{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:14px;line-height:1.7;background:var(--surface-2);padding:12px;border-radius:12px}

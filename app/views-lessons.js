@@ -123,9 +123,23 @@ VZ.lessonSheet = ({lesson, date} = {}) => {
       };
     }});
 };
+/** Scheduled lessons whose date has passed: their result (완료/취소) was never recorded. */
+VZ.overdueLessons = () => VZ.db.lessons.filter(l => VZ.lessonStatus(l) === 'scheduled' && l.date && l.date < VZ.today()).sort(VZ.lessonSort);
+/** Card that lets the user record those results in one tap (완료 → 레슨비 정산 자동 차감도 따라와요). */
+VZ.overdueCard = (max = 3) => {
+  const list = VZ.overdueLessons(); if (!list.length) return '';
+  return '<div class="card stack overdue-card" data-overdue><div class="row" style="gap:8px"><i class="ph ph-warning-circle" style="font-size:20px;color:var(--warn)"></i><strong class="grow">지난 레슨 결과를 기록해 주세요</strong>' + (list.length > max ? '<a class="small" href="#/lessons">전체 ' + list.length + '</a>' : '') + '</div>' +
+    list.slice(0, max).map(l => { const songs = VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean); return '<div class="row overdue-row" style="gap:8px"><a class="grow" href="#/lesson/' + esc(l.id) + '" style="color:inherit;text-decoration:none;min-width:0"><span style="display:block;font-weight:650">' + esc(VZ.dateLabel(l.date)) + (l.startTime ? ' ' + esc(VZ.timeRange(l)) : '') + '</span><span class="small muted ellipsis" style="display:block">' + esc([songs.join(', '), l.place, l.teacher].filter(Boolean).join(' · ') || '레슨') + '</span></a><button type="button" class="btn sm" data-resolve="done" data-id="' + esc(l.id) + '">완료</button><button type="button" class="btn sm ghost" data-resolve="cancelled" data-id="' + esc(l.id) + '">취소</button></div>'; }).join('') + '</div>';
+};
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-resolve]'); if (!b) return;
+  const to = b.dataset.resolve, id = b.dataset.id;
+  if (VZ.change(d => { const x = d.lessons.find(y => y.id === id); if (!x) return; x.status = to; if (to === 'done') x.completedAt = Date.now(); }))
+    VZ.toast(to === 'done' ? '레슨을 완료로 기록했어요.' : '레슨을 취소로 기록했어요.');
+});
 VZ.lessonRow = l => {
-  const st = VZ.lessonStatus(l), songs = VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean);
-  return '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="avatar" style="flex-direction:column;font-size:11px;line-height:1.1;font-weight:700"><span>' + (VZ.parseYmd(l.date)?.getMonth() + 1 || '?') + '월</span><span style="font-size:16px">' + (VZ.parseYmd(l.date)?.getDate() || '') + '</span></span><span class="item-main"><span class="item-title">' + esc([VZ.timeRange(l) || '시간 미정', l.place].filter(Boolean).join(' · ')) + ' ' + VZ.statusBadge(st) + '</span><span class="item-sub">' + esc([songs.join(', '), st === 'done' ? (l.feedback ? l.feedback.slice(0, 50) : '피드백 미작성') : l.prepMemo || ''].filter(Boolean).join(' · ') || '연습 곡 미정') + '</span></span><i class="ph ph-caret-right chev"></i></a>';
+  const st = VZ.lessonStatus(l), songs = VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean), late = st === 'scheduled' && l.date && l.date < VZ.today();
+  return '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="avatar" style="flex-direction:column;font-size:11px;line-height:1.1;font-weight:700"><span>' + (VZ.parseYmd(l.date)?.getMonth() + 1 || '?') + '월</span><span style="font-size:16px">' + (VZ.parseYmd(l.date)?.getDate() || '') + '</span></span><span class="item-main"><span class="item-title">' + esc([VZ.timeRange(l) || '시간 미정', l.place].filter(Boolean).join(' · ')) + ' ' + (late ? '<span class="badge warn">결과 미기록</span>' : VZ.statusBadge(st)) + '</span><span class="item-sub">' + esc([songs.join(', '), st === 'done' ? (l.feedback ? l.feedback.slice(0, 50) : '피드백 미작성') : l.prepMemo || ''].filter(Boolean).join(' · ') || '연습 곡 미정') + '</span></span><i class="ph ph-caret-right chev"></i></a>';
 };
 let lessonTab = 'upcoming';
 VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<a class="icon-btn" href="billing/" aria-label="레슨비 정산"><i class="ph ph-receipt"></i></a><button type="button" class="icon-btn" data-add-lesson aria-label="레슨 일정 추가"><i class="ph ph-plus"></i></button>', render() {
@@ -138,7 +152,7 @@ VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<
   const overdue = groups.upcoming.filter(l => l.date < today).length;
   const list = groups[lessonTab];
   return '<div data-billing-banner></div><div class="seg" style="margin-bottom:12px"><button type="button" data-lt="upcoming" aria-pressed="' + (lessonTab === 'upcoming') + '">예정 ' + groups.upcoming.length + '</button><button type="button" data-lt="past" aria-pressed="' + (lessonTab === 'past') + '">완료 ' + groups.past.length + '</button><button type="button" data-lt="cancelled" aria-pressed="' + (lessonTab === 'cancelled') + '">취소 ' + groups.cancelled.length + '</button></div>' +
-    (lessonTab === 'upcoming' && overdue ? '<p class="small" style="color:var(--warn);margin:0 4px 10px">날짜가 지난 예정 레슨 ' + overdue + '개 · 레슨을 열어 완료 또는 취소로 바꿔 주세요.</p>' : '') +
+    (lessonTab === 'upcoming' && overdue ? '<div style="margin-bottom:12px">' + VZ.overdueCard(5) + '</div>' : '') +
     (list.length ? '<div class="list">' + list.map(VZ.lessonRow).join('') + '</div>' : VZ.empty('calendar-blank', {upcoming:'예정된 레슨이 없어요.', past:'완료한 레슨이 없어요.', cancelled:'취소한 레슨이 없어요.'}[lessonTab], lessonTab === 'upcoming' ? '<button type="button" class="btn sm" data-add-lesson2>레슨 일정 추가</button>' : ''));
 }, mount(main) {
   document.querySelector('[data-add-lesson]').onclick = () => VZ.lessonSheet();

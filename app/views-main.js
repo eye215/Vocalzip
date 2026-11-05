@@ -173,22 +173,24 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-prac
 VZ.route('home', {title:'홈', render() {
   const db = VZ.db, next = VZ.nextLesson();
   const songs = (next ? VZ.lessonSongIds(next) : []).map(VZ.songTitle).filter(Boolean);
-  const nextHtml = next ? '<a class="card accent lesson-hero" href="#/lesson/' + esc(next.id) + '" style="text-decoration:none"><div class="row between"><span class="small" style="font-weight:700;opacity:.9">다음 레슨</span><span class="dday">' + VZ.dday(next.date) + '</span></div><div class="when">' + esc(VZ.dateLabel(next.date)) + (next.startTime ? ' ' + esc(VZ.timeRange(next)) : '') + '</div><div class="meta muted">' + (next.place ? '<span><i class="ph ph-map-pin"></i>' + esc(next.place) + '</span>' : '') + (next.teacher ? '<span><i class="ph ph-user"></i>' + esc(next.teacher) + '</span>' : '') + (songs.length ? '<span><i class="ph ph-music-note"></i>' + esc(songs.join(', ')) + '</span>' : '') + '</div>' + (next.prepMemo ? '<div class="small muted ellipsis">준비: ' + esc(next.prepMemo) + '</div>' : '') + '</a>'
+  const nextHtml = next ? '<a class="card accent lesson-hero" href="#/lesson/' + esc(next.id) + '" style="text-decoration:none"><div class="row between"><span class="small" style="font-weight:700;opacity:.9">다음 레슨</span><span class="dday">' + VZ.dday(next.date) + '</span></div><div class="when">' + esc(VZ.dateLabel(next.date)) + (next.startTime ? ' ' + esc(VZ.timeRange(next)) : '') + '</div><div class="meta muted">' + (next.place ? '<span><i class="ph ph-map-pin"></i>' + esc(next.place) + '</span>' : '') + (next.teacher ? '<span><i class="ph ph-user"></i>' + esc(next.teacher) + '</span>' : '') + (songs.length ? '<span><i class="ph ph-music-note"></i>' + esc(songs.join(', ')) + '</span>' : '') + '</div>' + (next.prepMemo ? '<div class="small muted ellipsis">준비: ' + esc(next.prepMemo) + '</div>' : '') + '<div data-billing-left></div></a>'
     : '<div class="empty compact"><span>예정된 레슨이 없어요</span><button type="button" class="btn sm secondary" data-add-lesson>일정 추가</button></div>';
   const tasks = db.assignments.filter(t => t.status !== 'done');
   const taskHtml = tasks.length ? '<h2 class="sec">해야 할 숙제 <a href="#/homework">전체 ' + tasks.length + '</a></h2><div class="list">' + tasks.slice(0, 4).map(VZ.taskRow).join('') + '</div>' : '<p class="small muted" style="margin:16px 4px 0"><i class="ph ph-check-circle"></i> 남은 숙제가 없어요 · <a href="#/homework">숙제 관리</a></p>';
   return '<div class="quick" style="grid-template-columns:repeat(4,1fr)"><a href="#/record"><i class="ph-fill ph-microphone"></i>녹음</a><button type="button" data-log><i class="ph ph-timer"></i>연습 기록</button><button type="button" data-add-lesson><i class="ph ph-calendar-plus"></i>레슨 일정</button><button type="button" data-import><i class="ph ph-upload-simple"></i>가져오기</button></div>' +
+    (VZ.overdueLessons?.().length ? '<div style="margin-top:16px">' + VZ.overdueCard() + '</div>' : '') +
     '<h2 class="sec">다음 레슨 <a href="#/calendar">캘린더</a></h2>' + nextHtml + taskHtml +
     '<h2 class="sec">최근 연습한 곡 <a href="#/songs">내 곡</a></h2><div data-recent><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   main.querySelectorAll('[data-add-lesson]').forEach(b => b.onclick = () => VZ.lessonSheet());
   main.querySelector('[data-log]').onclick = () => VZ.practiceSheet();
   main.querySelector('[data-import]').onclick = () => VZ.importSheet();
+  VZ.billingLeftChip?.(main.querySelector('[data-billing-left]'));
   const media = await M.list().catch(() => []);
   const host = main.querySelector('[data-recent]'); if (!host?.isConnected) return;
   const act = VZ.songActivity(media);
   const recent = [...act.entries()].filter(([id]) => VZ.song(id)).sort((a, b) => b[1].localeCompare(a[1])).slice(0, 3);
-  host.innerHTML = recent.length ? '<div class="list">' + recent.map(([id, date]) => '<div class="item"><a href="#/song/' + esc(id) + '" class="item-main" style="color:inherit;text-decoration:none"><span class="item-title">' + esc(VZ.songTitle(id)) + '</span><span class="item-sub">마지막 연습 ' + esc(VZ.relDay(date)) + ' · 녹음 ' + media.filter(m => m.songId === id).length + '개</span></a><a class="btn sm secondary" href="#/record?song=' + esc(id) + '" aria-label="' + esc(VZ.songTitle(id)) + ' 이어서 연습"><i class="ph-fill ph-microphone"></i>이어서</a></div>').join('') + '</div>'
+  host.innerHTML = recent.length ? '<div class="list">' + recent.map(([id, date]) => '<div class="item"><a href="#/song/' + esc(id) + '" class="item-main" style="color:inherit;text-decoration:none"><span class="item-title">' + esc(VZ.songTitle(id)) + '</span><span class="item-sub">' + esc(['마지막 연습 ' + VZ.relDay(date), (n => n ? '녹음 ' + n + '개' : '')(media.filter(m => m.songId === id).length)].filter(Boolean).join(' · ')) + '</span></a><a class="btn sm secondary" href="#/record?song=' + esc(id) + '" aria-label="' + esc(VZ.songTitle(id)) + ' 이어서 연습"><i class="ph-fill ph-microphone"></i>이어서</a></div>').join('') + '</div>'
     : VZ.empty('music-notes', '아직 연습한 곡이 없어요.', '<a class="btn sm" href="#/songs?add=1">곡 추가하기</a>');
 }});
 

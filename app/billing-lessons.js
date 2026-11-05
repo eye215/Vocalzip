@@ -128,6 +128,21 @@ const units = d => (Number(d.units) || 0) / 100 + '회';
 const badge = st => st.kind === 'deducted'
   ? '<span class="badge" data-billing-badge><i class="ph ph-receipt"></i>' + (st.deduction.status === 'noshow' ? '당일 취소 ' : '정산 ') + units(st.deduction) + '</span>'
   : st.kind === 'pending' ? '<span class="badge warn" data-billing-badge><i class="ph ph-receipt"></i>정산 대기</span>' : '';
+/** Sessions left over all active passes (100 = 1회), or null when there is no pass. Same math as billing's passBalance. */
+VZ.billingRemaining = doc => {
+  const live = rows => (rows || []).filter(r => !r.voidedAt), passes = live(doc?.passes);
+  if (!passes.length) return null;
+  const ids = new Set(passes.map(p => p.id)), sum = (rows, key) => live(rows).filter(r => ids.has(r.passId)).reduce((n, r) => n + (Number(r[key]) || 0), 0);
+  return passes.reduce((n, p) => n + (Number(p.totalUnits) || 0), 0) + sum(doc.adjustments, 'unitsDelta') - sum(doc.deductions, 'units');
+};
+/** "레슨권 남은 N회" on the home lesson card (warns at 1회 or less). */
+VZ.billingLeftChip = async host => {
+  if (!host) return;
+  const left = VZ.billingRemaining(await VZ.billingLedger());
+  if (left === null || !host.isConnected) return;
+  const n = Math.round(left) / 100;
+  host.innerHTML = '<span class="dday" style="' + (left <= 100 ? 'background:var(--warn-soft);color:var(--warn)' : '') + '"><i class="ph ph-receipt"></i> ' + (left <= 0 ? '레슨권 횟수를 다 썼어요' : '레슨권 남은 ' + n + '회' + (left <= 100 ? ' · 곧 소진' : '')) + '</span>';
+};
 /** Adds a small 정산 badge to each lesson row under host (lesson list). */
 VZ.billingDecorateLessons = async host => {
   if (!host) return;

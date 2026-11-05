@@ -107,10 +107,11 @@ test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never
   expect(d.lessons.find(l => l.id === created.id)).toMatchObject({status:'done', feedback:'전체적으로 좋아짐', songFeedback:{s1:'2절 턱 힘 빼기'}});
   // Past scheduled lesson stays scheduled and is flagged.
   await page.goto('/#/lessons');
-  await expect(page.getByText('날짜가 지난 예정 레슨 1개')).toBeVisible();
+  await expect(page.locator('[data-overdue]')).toContainText('지난 레슨 결과를 기록해 주세요');
+  await expect(page.locator('a.item[href="#/lesson/l-over"] .badge')).toHaveText('결과 미기록');
   expect((await data(page)).lessons.find(l => l.id === 'l-over').status).toBe('scheduled');
   // Cancel it.
-  await page.locator('a[href="#/lesson/l-over"]').click();
+  await page.locator('a.item[href="#/lesson/l-over"]').click();
   await page.getByRole('button', {name:'레슨 취소'}).click();
   expect((await data(page)).lessons.find(l => l.id === 'l-over').status).toBe('cancelled');
   // Legacy lesson without status shows as completed and keeps legacy fields after edit.
@@ -120,6 +121,17 @@ test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never
   await sheet(page).locator('[name=place]').fill('홍대');
   await sheet(page).getByRole('button', {name:'저장'}).click();
   expect((await data(page)).lessons.find(l => l.id === 'l1')).toMatchObject({categoryId:'c1', detail:'립트릴', feedback:'호흡 길게', recordings:[{id:'m1', note:'시범'}], place:'홍대'});
+});
+
+test('A past scheduled lesson can be recorded as done or cancelled from home in one tap', async ({page}) => {
+  await boot(page, {media:false});
+  const card = page.locator('[data-overdue]');
+  await expect(card).toContainText('지난 레슨 결과를 기록해 주세요');
+  await card.locator('[data-resolve="done"][data-id="l-over"]').click();
+  await expect(page.locator('.toast').last()).toContainText('레슨을 완료로 기록했어요');
+  await expect(card).toHaveCount(0);
+  const l = (await data(page)).lessons.find(x => x.id === 'l-over');
+  expect(l.status).toBe('done'); expect(l.completedAt).toBeGreaterThan(0);
 });
 
 test('Lesson delete keeps homework and practice history; legacy page still reads v6 data', async ({page}) => {
@@ -902,7 +914,14 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await boot(page, {media:false});
   await page.goto('/#/settings');
   const headings = await page.locator('h2.sec').allTextContents();
-  expect(headings.map(h => h.trim())).toEqual(['계정 · 클라우드 동기화', '음원', '기록 관리', '데이터', '앱 정보']);
+  expect(headings.map(h => h.trim())).toEqual(['계정 · 클라우드 동기화', '음원', '기록 관리', '데이터', '화면 모드', '앱 정보']);
+  // 화면 모드: dark is kept on this device and applied before the page draws.
+  await page.locator('[data-theme-v="dark"]').click();
+  expect(await page.evaluate(() => [document.documentElement.dataset.theme, localStorage.getItem('vzip_theme'), getComputedStyle(document.body).backgroundColor])).toEqual(['dark', 'dark', 'rgb(18, 16, 25)']);
+  await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark');
+  await page.locator('[data-theme-v=""]').click();
+  expect(await page.evaluate(() => [document.documentElement.dataset.theme ?? null, localStorage.getItem('vzip_theme')])).toEqual([null, null]);
   await expect(page.locator('#cloud-upload')).toBeVisible();
   await expect(page.locator('#cloud-logout')).toBeVisible();
   await expect(page.locator('#cloud-media-upload')).toBeHidden();
