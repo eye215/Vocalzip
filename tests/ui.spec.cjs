@@ -998,8 +998,8 @@ for(const target of ['library','practice'])test('Multiple files choose independe
   window.__batchCalls=[];window.__batchFailed=false;
   window.vzipCloudImport=async(file,info,progress)=>{
    window.__batchCalls.push({fileName:file.name,...info});progress(55);
-   if(file.name==='second.wav'&&!window.__batchFailed){window.__batchFailed=true;throw Error('일시적인 전송 오류')}
-   return {id:'saved-'+file.name,durationSeconds:0};
+   if(/^second\./.test(file.name)&&!window.__batchFailed){window.__batchFailed=true;throw Error('일시적인 전송 오류')}
+   return {id:'saved-'+file.name.replace(/\.flac$/,'.wav'),durationSeconds:0};
   };
   if(location)Object.defineProperty(File.prototype,'size',{configurable:true,get(){return 30*1024*1024}});
  });
@@ -1017,7 +1017,7 @@ for(const target of ['library','practice'])test('Multiple files choose independe
  await expect(host.locator('article.vzip-upload-progress')).toHaveCount(0);
  await expect(host.locator('.vzip-upload-done')).toContainText('✓ 보관함 저장 완료 2개');
  const calls=await page.evaluate(()=>window.__batchCalls);
- expect(calls.map(x=>[x.fileName,x.songId])).toEqual([['first.wav','s1'],['second.wav','s2'],['second.wav','s2']]);
+ expect(calls.map(x=>[x.fileName.replace(/\.flac$/,'.wav'),x.songId])).toEqual([['first.wav','s1'],['second.wav','s2'],['second.wav','s2']]);
  if(target==='practice')expect(await page.locator('#practice-form').evaluate(f=>JSON.parse(f.dataset.mediaIds))).toEqual(['saved-first.wav','saved-second.wav']);
 });
 test('201MiB original is sliced into independent objects and committed once',async({page},testInfo)=>{
