@@ -351,7 +351,24 @@ async function appAction(){
  return null;
 }
 const report=data=>{if(autoOnly&&window.parent!==window)window.parent.postMessage({type:'vzip-billing-auto',...data},location.origin)};
-S.load().then(async data=>{state=data;render();notify('정산 데이터를 불러왔어요.');
+/* Records saved under another owner on this device (e.g. while signed out): offer to bring them in. */
+async function checkOthers(){
+ if(autoOnly||!S.others)return;
+ const found=await S.others(state).catch(()=>[]);let box=$('#other-ledgers');
+ if(!found.length){box?.remove();return}
+ if(!box){box=el('div',undefined,'card other-ledgers');box.id='other-ledgers';$('#pending-summary').before(box)}
+ box.replaceChildren();
+ for(const other of found){
+  const row=el('div',undefined,'row');
+  row.append(el('span','이 기기의 '+other.label+'에 지금 화면에 없는 정산 기록 '+other.missing+'건이 있어요.','grow'));
+  row.append(button('합치기',async()=>{
+   if(!await window.VzipBillingDialog.ask({title:'정산 기록 합치기',message:other.label+'의 기록 '+other.missing+'건을 지금 정산에 더해요. 지우는 기록은 없고, 합치기 전 상태는 백업·동기화의 복구에서 되돌릴 수 있어요.',ok:'합치기',cancel:'닫기'}))return;
+   try{state=await S.mergeFrom(state,other.state);render();notify('정산 기록 '+other.missing+'건을 합쳤어요.');checkOthers()}catch(error){notify('합치지 못했어요: '+error.message,true)}
+  }));
+  box.append(row);
+ }
+}
+S.load().then(async data=>{state=data;render();notify('정산 데이터를 불러왔어요.');checkOthers();
  let action=null;try{action=await appAction()}catch(error){action={ok:false,message:error.message}}
  const n=await autoDeduct().catch(()=>0);
  // Opened in the background by the app: report back.
