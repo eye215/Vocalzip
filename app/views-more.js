@@ -56,7 +56,9 @@ VZ.importSheet = ({songId = ''} = {}) => {
             const u = ui(r), sid = u.querySelector('[data-song]').value, date = u.querySelector('[data-date]').value;
             r.state = 'uploading'; setRow(r, '준비 중…', 2);
             try {
-              const saved = await M.importFile(r.file, {id:r.id, songId:sid, song:VZ.songLabel(VZ.song(sid)), date, extra:{occasion}}, p => typeof p === 'number' ? setRow(r, '업로드 ' + p + '%', p) : setRow(r, String(p)), abort.signal);
+              // The original name and a content fingerprint go with the file, so a later bulk upload can skip it.
+              const fileHash = await M.fingerprint(r.file).catch(() => '');
+              const saved = await M.importFile(r.file, {id:r.id, songId:sid, song:VZ.songLabel(VZ.song(sid)), date, extra:{occasion, originalFilename:r.file.name, fileHash, importedAt:Date.now()}}, p => typeof p === 'number' ? setRow(r, '업로드 ' + p + '%', p) : setRow(r, String(p)), abort.signal);
               r.state = 'done'; r.file = null;
               r.savedDate = VZ.dateLabel(M.dateOf(saved)) + ({metadata:' (파일 속 날짜)', 'file-modified':' (파일 수정일)', manual:' (직접 지정)'}[saved.dateSource] || '');
               // Finished files leave the list; one line keeps the count and dates.

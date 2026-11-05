@@ -204,7 +204,9 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   test.setTimeout(180000);
   await boot(page, {media:false});
   await page.evaluate(() => {
-    window.__uploaded = []; window.__expireOnce = true; window.__badFails = true; const rows = [];
+    window.__uploaded = []; window.__expireOnce = true; window.__badFails = true;
+    // Already on the server from an earlier quick import: only its name (no extension) and size are known.
+    const rows = [{id:'old-quick', name:'2026-11-01_10-00-05', size:8044, storageProvider:'r2', r2Key:'u/ui-test-user/old-quick/original.wav', created:Date.now()}];
     window.vzipCloudSignedIn = () => true; window.vzipCloudUserId = () => 'ui-test-user';
     window.vzipCloudMediaList = async () => rows.map(r => ({...r, cloud:true}));
     window.vzipCloudImport = async (file, info) => {
@@ -234,16 +236,17 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   expect(queued.items.every(i => i.hash && i.size)).toBe(true);
   await dash.getByRole('button', {name:'이어서 올리기'}).click();
   await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
-  await expect(n('done')).toHaveText('20');
+  await expect(n('done')).toHaveText('19');
   await expect(n('failed')).toHaveText('1');
-  await expect(n('dup')).toHaveText('1');
+  await expect(n('dup')).toHaveText('2'); // the copy picked twice, and the file already up from a quick import
   await expect(page.locator('[data-hub]')).toContainText('지원하지 않는 형식이에요');
   // Only the failure is retried.
   await page.evaluate(() => { window.__badFails = false; });
   const before = await page.evaluate(() => window.__uploaded.length);
   await dash.getByRole('button', {name:'실패한 1개만 다시'}).click();
   await expect(n('failed')).toHaveText('0', {timeout:30000});
-  await expect(n('done')).toHaveText('21');
+  await expect(n('done')).toHaveText('20');
+  expect(await page.evaluate(() => window.__uploaded.some(x => /10-00-05/.test(x)))).toBe(false);
   expect(await page.evaluate(() => window.__uploaded.length)).toBe(before + 1);
   const names = await page.evaluate(() => window.__uploaded);
   expect(new Set(names).size).toBe(names.length); // nothing uploaded twice
@@ -253,7 +256,7 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   await page.evaluate(() => { const q = JSON.parse(localStorage.getItem('vzip_upload_queue_v1')); q.items[0].state = 'waiting'; localStorage.setItem('vzip_upload_queue_v1', JSON.stringify(q)); });
   await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   await page.goto('/#/import-hub');
-  await expect(page.locator('[data-stopped]')).toContainText('전체 22개 · 완료 20 · 남음 1');
+  await expect(page.locator('[data-stopped]')).toContainText('전체 22개 · 완료 19 · 남음 1');
   await expect(page.locator('[data-stopped]')).toContainText('원본 파일을 다시 선택');
 });
 
