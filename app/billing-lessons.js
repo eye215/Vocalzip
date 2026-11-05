@@ -102,6 +102,7 @@ VZ.billingAutoSync = () => {
     try {
       const r = await runBilling();
       if (r.deducted) { VZ.toast('레슨비 정산에서 ' + r.deducted + '회 차감했어요.'); changed(); }
+      else if (r.waiting) VZ.toast('남은 횟수가 있는 레슨권이 없어요. 레슨비 정산의 정산 대기에 남겨 뒀어요.');
     } finally { syncing = false; }
   }, 1200);
 };

@@ -307,19 +307,21 @@ $('#commit-import').onclick=async()=>{
 window.addEventListener('billing:replaced',()=>{S.load().then(data=>{state=data;for(const form of Object.values(forms))resetForm(form);clearPreview();render();channel?.postMessage({owner:state.owner,revision:state.revision})}).catch(error=>notify(error.message,true))});
 $('#account-label').textContent=S.account.label+' · 정산 전용 저장소';
 /* ---------- 앱 레슨 자동 차감 ---------- */
-const AUTO_KEY='vzip_billing_auto_deduct_v1',P=window.VzipBillingPending;
+// The first run can be the app's background check, opened just after the lesson was saved: include the last few minutes.
+const AUTO_GRACE=10*60*1000,AUTO_KEY='vzip_billing_auto_deduct_v1',P=window.VzipBillingPending;
 function autoSetting(){
- try{const all=JSON.parse(localStorage.getItem(AUTO_KEY)||'{}');let v=all[S.account.id];if(!v){v={on:true,since:Date.now()};all[S.account.id]=v;localStorage.setItem(AUTO_KEY,JSON.stringify(all))}return v}
+ try{const all=JSON.parse(localStorage.getItem(AUTO_KEY)||'{}');let v=all[S.account.id];if(!v||!v.grace){v=v?{...v,since:v.since-AUTO_GRACE,grace:1}:{on:true,since:Date.now()-AUTO_GRACE,grace:1};all[S.account.id]=v;localStorage.setItem(AUTO_KEY,JSON.stringify(all))}return v}
  catch{return {on:false,since:Date.now()}}
 }
-function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AUTO_KEY)||'{}'),v=autoSetting();all[S.account.id]={on,since:on&&!v.on?Date.now():v.since};localStorage.setItem(AUTO_KEY,JSON.stringify(all));notify(on?'앱에서 완료한 레슨을 자동으로 차감할게요.':'자동 차감을 껐어요. 정산 대기에서 직접 차감해 주세요.');render();if(on)autoDeduct()}catch{}}
-let autoRunning=false;
+function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AUTO_KEY)||'{}'),v=autoSetting();all[S.account.id]={on,since:on&&!v.on?Date.now():v.since,grace:1};localStorage.setItem(AUTO_KEY,JSON.stringify(all));notify(on?'앱에서 완료한 레슨을 자동으로 차감할게요.':'자동 차감을 껐어요. 정산 대기에서 직접 차감해 주세요.');render();if(on)autoDeduct()}catch{}}
+let autoRunning=false,autoWaiting=0;
 async function autoDeduct(){
  if(autoRunning||pending||!state||!P?.autoCandidates)return 0;const cfg=autoSetting();if(!cfg.on)return 0;
  autoRunning=true;let n=0;
  try{
-  for(const {lesson,units} of P.autoCandidates(S.lessons(),state,today(),cfg.since)){
-   const passId=P.defaultPass(state,C.totals(state));if(!passId)break; // no pass with sessions left: stays in 정산 대기
+  const todo=P.autoCandidates(S.lessons(),state,today(),cfg.since);autoWaiting=0;
+  for(const [i,{lesson,units}] of todo.entries()){
+   const passId=P.defaultPass(state,C.totals(state));if(!passId){autoWaiting=todo.length-i;break} // no pass with sessions left: stays in 정산 대기
    try{await persist(P.deductionFor(lesson,passId,{units}),null,'앱 레슨 자동 차감');n++}catch{break}
   }
  }finally{autoRunning=false}
@@ -353,7 +355,7 @@ S.load().then(async data=>{state=data;render();notify('정산 데이터를 불�
  let action=null;try{action=await appAction()}catch(error){action={ok:false,message:error.message}}
  const n=await autoDeduct().catch(()=>0);
  // Opened in the background by the app: report back.
- report({deducted:n,action});
+ report({deducted:n,waiting:autoWaiting,action});
 }).catch(error=>{notify('불러오기 실패: '+error.message,true);report({deducted:0,error:error.message,action:params.get('do')?{ok:false,message:'레슨비 정산을 열지 못했어요: '+error.message}:null})});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoDeduct()});
 // File picker: show what was chosen (the native control is hidden); the sheet choice only matters for multi-sheet XLSX.
