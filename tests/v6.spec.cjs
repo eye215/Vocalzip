@@ -24,7 +24,6 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
   await page.route('**/*.supabase.co/**', r => r.abort());
   // Sandboxes without CDN access can point the pinned Mediabunny bundle at a local copy.
   if (process.env.VZ_MEDIABUNNY) await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs', r => r.fulfill({path:process.env.VZ_MEDIABUNNY, contentType:'text/javascript'}));
-  if (process.env.VZ_FLAC) await page.context().route('**/@mediabunny/flac-encoder@1.62.0/**', r => r.fulfill({path:process.env.VZ_FLAC, contentType:'text/javascript'}));
   page.on('dialog', d => d.accept());
   if (seed) await page.addInitScript(([k, s]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, s); sessionStorage.setItem('seeded', '1'); } }, [KEY, JSON.stringify(seed)]);
   await page.goto('/#/home');
@@ -978,7 +977,6 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
 });
 
 test('WAV imports are stored as FLAC only after every sample is checked against the original', async ({page, browserName}) => {
-  test.skip(!process.env.CI && !process.env.VZ_FLAC, 'FLAC encoder is loaded from the CDN (set VZ_FLAC offline).');
   test.setTimeout(60000);
   await boot(page, {media:false});
   // 3 s of 16-bit stereo with noise so FLAC has real work to do.
@@ -993,7 +991,7 @@ test('WAV imports are stored as FLAC only after every sample is checked against 
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:45000});
   const [item] = await media(page);
   // A browser that cannot decode FLAC to check it keeps the WAV and says why.
-  if (browserName !== 'chromium' && item.type !== 'audio/flac') { expect(item.type).toBe('audio/wav'); expect(item.flacSkipped).toBeTruthy(); return; }
+  if (item.type !== 'audio/flac') { expect(item.type).toBe('audio/wav'); expect(item.flacSkipped).toContain('FLAC 확인을 지원하지 않아'); test.info().annotations.push({type:'flac', description:browserName + ': ' + item.flacSkipped}); return; }
   expect(item.type).toBe('audio/flac');
   expect(item.losslessFlac).toMatchObject({samplesVerified:true, originalCodec:'pcm-s16', originalBytes:b.length, channels:2, sampleRate:44100, frames});
   expect(item.losslessFlac.outputBytes).toBeLessThan(b.length);

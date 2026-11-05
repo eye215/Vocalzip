@@ -61,7 +61,6 @@ async function boot(page, {endpoint = R2} = {}) {
   await page.route('**/*.supabase.co/**', r => r.abort());
   await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:'window.VZIP_R2_ENDPOINT=' + JSON.stringify(endpoint) + ';'}));
   if (process.env.VZ_MEDIABUNNY) await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs', r => r.fulfill({path:process.env.VZ_MEDIABUNNY, contentType:'text/javascript'}));
-  if (process.env.VZ_FLAC) await page.context().route('**/@mediabunny/flac-encoder@1.62.0/**', r => r.fulfill({path:process.env.VZ_FLAC, contentType:'text/javascript'}));
   page.on('dialog', d => d.accept());
   await page.addInitScript(([k]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, JSON.stringify({categories:[], songs:[{id:'s1', title:'Defying Gravity'}], lessons:[], assignments:[], practices:[], comparisonReports:[]})); sessionStorage.setItem('seeded', '1'); } }, [KEY]);
   await page.goto('/#/home');

@@ -114,31 +114,16 @@ async function prepare({file,id,videoHint,inspect}){
 }
 
 /* ---------- WAV → FLAC (lossless, verified sample by sample) ---------- */
-const MEDIABUNNY='https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs';
-const FLAC_ENCODER='https://cdn.jsdelivr.net/npm/@mediabunny/flac-encoder@1.62.0/dist/bundles/mediabunny-flac-encoder.min.mjs';
-let flacEncoder=null;
-// The encoder package imports "mediabunny"; point it at the exact module this worker already uses so both share one registry.
-const loadFlacEncoder=b=>flacEncoder||=(async()=>{
- if(await b.canEncodeAudio('flac'))return;
- const response=await fetch(FLAC_ENCODER);if(!response.ok)throw Error('FLAC 인코더를 불러오지 못했어요.');
- const code=(await response.text()).replaceAll('from"mediabunny"','from"'+MEDIABUNNY+'"');
- const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
- try{(await import(url)).registerFlacEncoder()}finally{URL.revokeObjectURL(url)}
-})().catch(error=>{flacEncoder=null;throw error});
 async function toFlac(b,input,audios,file,metadata,progress,iterators){
- if(audios.length!==1||file.size>512*1024*1024)return null;
+ if(audios.length!==1)return null;
  const codec=await audios[0].getCodec();
  if(codec!=='pcm-s16'&&codec!=='pcm-s24')return null;
  if(!(await b.canDecodeAudio('flac')))return {error:'이 브라우저는 FLAC 확인을 지원하지 않아 WAV 그대로 저장했어요.'};
  progress('WAV를 FLAC으로 무손실 압축 중…');check();
- await loadFlacEncoder(b);check();
- const output=new b.Output({format:new b.FlacOutputFormat(),target:new b.BufferTarget()});
- const conversion=await b.Conversion.init({input,output,showWarnings:false,audio:{codec:'flac',forceTranscode:true},
-  tags:{...(metadata.recordedDate?{raw:{DATE:metadata.recordedDate}}:{}),creationTime:new Date(metadata.created)}});
- if(!conversion.isValid)return {error:'FLAC으로 바꿀 수 없는 WAV라 그대로 저장했어요.'};
- conversion.onProgress=value=>progress('FLAC 압축 '+Math.round(value*100)+'%');
- await conversion.execute();check();
- const flacFile=new File([output.target.buffer],file.name.replace(/\.[^.]+$/,'')+'.flac',{type:'audio/flac',lastModified:metadata.created});
+ await import('./flac-encode.js?v=1');
+ const encoded=await self.VzipFlac.encodeWav(file,{date:metadata.recordedDate,check,onProgress:value=>progress('FLAC 압축 '+Math.round(value*100)+'%')});
+ if(!encoded)return null;check();
+ const flacFile=new File([encoded.blob],file.name.replace(/\.[^.]+$/,'')+'.flac',{type:'audio/flac',lastModified:metadata.created});
  if(flacFile.size>=file.size)return {error:'FLAC으로 줄어들지 않아 WAV 그대로 저장했어요.'};
  progress('FLAC이 원본 WAV와 같은 소리인지 확인 중…');
  const check2=new b.Input({source:new b.BlobSource(flacFile),formats:b.ALL_FORMATS});
