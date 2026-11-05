@@ -31,7 +31,7 @@ function saveQueue(now) {
   const write = () => { qTimer = null; try {
     const rows = hub.rows.filter(r => r.queued);
     if (!rows.length) return;
-    localStorage.setItem(QKEY, JSON.stringify({id:hub.batch, source:hub.source, startedAt:hub.startedAt, updatedAt:Date.now(), user:window.vzipCloudUserId?.() || '',
+    localStorage.setItem(QKEY, JSON.stringify({id:hub.batch, source:hub.source, startedAt:hub.startedAt, updatedAt:Date.now(), user:window.vzipCloudUserId?.() || '', pendingCount:hub.pendingFiles?.length || 0, total:hub.totalFiles || rows.length,
       items:rows.map(r => ({id:r.id, name:r.name, size:r.size, hash:r.hash || '', state:r.state, error:r.state === 'failed' ? r.msg || '' : '', doneAt:r.doneAt || 0}))}));
   } catch {} };
   if (now) { clearTimeout(qTimer); write(); } else if (!qTimer) qTimer = setTimeout(write, 1500);
@@ -95,45 +95,90 @@ VZ.suggestSongs = name => {
 };
 
 /* ---------- analysis ---------- */
-async function analyze(files) {
-  hub.phase = 'analyzing'; hub.rows = []; draw();
+/** What the library already has (fresh from the server) and what a stopped upload already finished. */
+async function knownFiles() {
   const existing = await M.list(true).catch(() => []); // fresh: what the server has now decides what is a duplicate
-  const known = {hash:new Set(existing.map(m => m.fileHash).filter(Boolean)), nameSize:new Set(existing.map(m => (m.originalMedia?.name || m.originalFilename || '') + '|' + (m.originalMedia?.size || m.size || '')))};
+  const known = {hash:new Set(existing.map(m => m.fileHash).filter(Boolean)), nameSize:new Set(existing.map(m => (m.originalMedia?.name || m.originalFilename || '') + '|' + (m.originalMedia?.size || m.size || ''))), seen:new Map()};
   // Files saved through the quick 파일 가져오기 kept no fingerprint or original name: their name (the file name without the
   // extension, when no song was chosen) plus the exact size still identifies them.
-  const baseKey = (name, size) => String(name || '').replace(/\.[^.]+$/, '').trim().toLowerCase() + '|' + size;
   known.baseSize = new Set(existing.filter(m => m.size).map(m => baseKey(m.name, m.size)));
   // Files a stopped upload already finished count as already in the library (by content fingerprint and name+size).
   for (const q of loadQueue()?.items || []) if (q.state === 'done') { if (q.hash) known.hash.add(q.hash); known.nameSize.add(q.name + '|' + q.size); }
-  const seenHash = new Map();
+  return known;
+}
+const baseKey = (name, size) => String(name || '').replace(/\.[^.]+$/, '').trim().toLowerCase() + '|' + size;
+/** Read one picked file's date, length and fingerprint (nothing is uploaded) and flag duplicates. */
+async function inspectFile(file, known) {
+  const row = {id:VZ.uid(), file, name:file.name, size:file.size, type:M.typeOf(file), state:'pending', song:'', approved:false, occasion:hub.occasion || 'practice'};
+  try {
+    const info = await window.vzipInspectMedia(file);
+    row.readable = info.readable !== false;
+    row.duration = info.duration ?? (await M.measure({blob:file, type:row.type, name:file.name}, 8000) || null);
+    row.video = info.hasVideo || row.type.startsWith('video/');
+    const meta = info.metadata || {};
+    const fromName = dateFromName(file.name), named = window.VzipMediaDates?.fromName?.(file.name);
+    // A full yyyy-MM-dd_HH-mm-ss name is the user's own label and wins; then the file's own capture/recording date;
+    // a date-only name next; anything else waits for the user.
+    if (named) Object.assign(row, {date:named.recordedDate, dateSource:'filename', dateOk:true});
+    else if (meta.dateSource === 'metadata') Object.assign(row, {date:meta.recordedDate, dateSource:'metadata', dateOk:true});
+    else if (fromName) Object.assign(row, {date:fromName, dateSource:'filename', dateOk:true});
+    else Object.assign(row, {date:meta.recordedDate || '', dateSource:'unconfirmed', dateOk:false});
+    row.hash = await M.fingerprint(file);
+  } catch (e) { row.error = e.message; }
+  if (!/^(audio|video)\//.test(row.type)) row.error = '지원하지 않는 형식이에요.';
+  row.dup = known.hash.has(row.hash) || known.nameSize.has(file.name + '|' + file.size) || known.baseSize.has(baseKey(file.name, file.size)) ? '보관함에 이미 있어요' : known.seen.has(row.hash) ? '선택한 파일끼리 같아요' : '';
+  if (row.hash && !known.seen.has(row.hash)) known.seen.set(row.hash, row);
+  const sug = VZ.suggestSongs(file.name);
+  row.suggestions = sug; if (sug[0]?.score >= 0.9) row.song = sug[0].id;
+  evaluate(row);
+  row.selected = row.status === 'ok';
+  return row;
+}
+async function analyze(files) {
+  hub.phase = 'analyzing'; hub.rows = []; draw();
+  const known = await knownFiles();
   for (const [i, file] of files.entries()) {
     hub.progress = '파일 확인 중 ' + (i + 1) + '/' + files.length + ' · ' + file.name; drawProgress();
-    const row = {id:VZ.uid(), file, name:file.name, size:file.size, type:M.typeOf(file), state:'pending', song:'', approved:false, occasion:hub.occasion || 'practice'};
-    try {
-      const info = await window.vzipInspectMedia(file);
-      row.readable = info.readable !== false;
-      row.duration = info.duration ?? (await M.measure({blob:file, type:row.type, name:file.name}, 8000) || null);
-      row.video = info.hasVideo || row.type.startsWith('video/');
-      const meta = info.metadata || {};
-      const fromName = dateFromName(file.name), named = window.VzipMediaDates?.fromName?.(file.name);
-      // A full yyyy-MM-dd_HH-mm-ss name is the user's own label and wins; then the file's own capture/recording date;
-      // a date-only name next; anything else waits for the user.
-      if (named) Object.assign(row, {date:named.recordedDate, dateSource:'filename', dateOk:true});
-      else if (meta.dateSource === 'metadata') Object.assign(row, {date:meta.recordedDate, dateSource:'metadata', dateOk:true});
-      else if (fromName) Object.assign(row, {date:fromName, dateSource:'filename', dateOk:true});
-      else Object.assign(row, {date:meta.recordedDate || '', dateSource:'unconfirmed', dateOk:false});
-      row.hash = await M.fingerprint(file);
-    } catch (e) { row.error = e.message; }
-    if (!/^(audio|video)\//.test(row.type)) row.error = '지원하지 않는 형식이에요.';
-    row.dup = known.hash.has(row.hash) || known.nameSize.has(file.name + '|' + file.size) || known.baseSize.has(baseKey(file.name, file.size)) ? '보관함에 이미 있어요' : seenHash.has(row.hash) ? '선택한 파일끼리 같아요' : '';
-    if (!seenHash.has(row.hash)) seenHash.set(row.hash, row);
-    const sug = VZ.suggestSongs(file.name);
-    row.suggestions = sug; if (sug[0]?.score >= 0.9) row.song = sug[0].id;
-    evaluate(row);
-    row.selected = row.status === 'ok';
-    hub.rows.push(row);
+    hub.rows.push(await inspectFile(file, known));
   }
   hub.phase = 'review'; hub.progress = ''; draw();
+}
+/* ---------- automatic batches (many files from 파일 가져오기) ----------
+ * No review step: files are checked and uploaded 250 at a time, one batch after another. Duplicates are left out,
+ * unreadable files are listed as failed, and a file without any date keeps the date the file itself carries
+ * (file modified) — it can be changed later in the library. Pausing keeps the remaining files for "이어서 올리기". */
+const BATCH = () => window.__vzipBatchSize || 250; // tests use small batches
+async function runAuto(files) {
+  if (hub.running || hub.autoRunning) return;
+  if (!window.vzipCloudSignedIn?.()) { VZ.toast('여러 파일을 한꺼번에 올리려면 먼저 로그인해 주세요. 로그인 후 다시 선택하면 돼요.', 'error'); if (files) { hub = fresh(); draw(); } return; }
+  if (files) { hub.pendingFiles = files.slice(); hub.totalFiles = files.length; hub.batchCount = Math.ceil(files.length / BATCH()); hub.batchNo = 0; }
+  hub.auto = true; hub.phase = 'importing'; hub.paused = false; hub.notice = ''; hub.batch ||= VZ.uid(); hub.startedAt ||= Date.now(); hub.autoRunning = true;
+  M.keepAwake(true); draw();
+  try { await autoLoop(); } finally { hub.autoRunning = false; M.keepAwake(false); hub.stage = ''; saveQueue(true); if (host()) draw(); }
+}
+async function autoLoop() {
+  hub.known ||= await knownFiles();
+  // Files left waiting from a paused batch go first.
+  const leftover = hub.rows.filter(r => r.queued && (r.state === 'waiting' || r.state === 'uploading'));
+  if (leftover.length) { await runImport(leftover, {more:true}); if (hub.paused) return; }
+  while (hub.pendingFiles?.length && !hub.paused) {
+    const part = hub.pendingFiles.splice(0, BATCH()); hub.batchNo++;
+    const rows = [];
+    for (const [i, file] of part.entries()) {
+      if (hub.paused) { hub.pendingFiles.unshift(...part.slice(i)); hub.batchNo--; break; }
+      hub.stage = '묶음 ' + hub.batchNo + '/' + hub.batchCount + ' · 파일 확인 중 ' + (i + 1) + '/' + part.length; drawRow({});
+      const row = await inspectFile(file, hub.known);
+      if (row.error) Object.assign(row, {queued:true, state:'failed', msg:'실패: ' + row.error, file:null});
+      hub.rows.push(row); rows.push(row);
+    }
+    if (hub.paused) { // files already checked in this batch wait in the queue for "이어서 올리기"
+      for (const r of rows) if (!r.error) Object.assign(r, {queued:true, state:r.dup ? 'dup' : 'waiting', msg:r.dup ? '중복 제외 · ' + r.dup : ''});
+      saveQueue(true); break;
+    }
+    hub.stage = '묶음 ' + hub.batchNo + '/' + hub.batchCount + ' · 올리는 중';
+    await runImport(rows.filter(r => !r.error), {more:!!hub.pendingFiles.length});
+  }
+  if (!hub.paused && !hub.pendingFiles?.length && hub.phase !== 'done') { hub.phase = 'done'; M.invalidate(); }
 }
 /** ok | dup | needs-date | out | error */
 function evaluate(row) {
@@ -147,8 +192,9 @@ function evaluate(row) {
 }
 
 /* ---------- import ---------- */
-async function runImport(rows) {
+async function runImport(rows, {more = false} = {}) {
   if (hub.running) return;
+  hub.more = more;
   if (!window.vzipCloudSignedIn?.() && rows.length > 20) { VZ.toast('파일이 많으면 로그인한 뒤 올려 주세요. 기기 저장 공간이 부족해질 수 있어요.', 'error'); return; }
   hub.batch ||= VZ.uid(); hub.startedAt ||= Date.now();
   // Same content already in the library, or picked twice: never uploaded again.
@@ -169,7 +215,7 @@ async function importRows(rows) {
     try {
       const song = VZ.song(row.song);
       const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
-      const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' ? '' : row.date, extra, direct},
+      const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
       row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
     } catch (e) {
@@ -199,6 +245,7 @@ async function importRows(rows) {
   // Files approved as that day's lesson recording go into the lesson (once).
   const toLesson = rows.filter(r => r.state === 'done' && r.lessonId).filter(r => { const l = VZ.db.lessons.find(x => x.id === r.lessonId); return l && !(l.recordings || []).some(x => x.id === r.id); });
   if (toLesson.length && VZ.change(d => { for (const r of toLesson) { const l = d.lessons.find(x => x.id === r.lessonId); if (l && !(l.recordings || []).some(x => x.id === r.id)) { l.recordings ||= []; l.recordings.push({id:r.id, note:''}); } } }, {silent:true})) hub.linked = (hub.linked || 0) + toLesson.length;
+  if (hub.more) { M.invalidate(); return; } // the next batch follows
   hub.phase = 'done'; M.invalidate(); draw();
 }
 
@@ -215,7 +262,8 @@ function draw() {
   const h = host(); if (!h) return;
   if (hub.phase === 'source') {
     // A bulk upload that stopped (Safari closed, logged out…) is shown with its counts; picking the files again skips the done ones.
-    const q = loadQueue(), qc = q ? counts(q.items) : null, left = qc ? qc.waiting + qc.uploading + qc.failed : 0;
+    const q = loadQueue(), qc = q ? counts(q.items) : null, left = qc ? qc.waiting + qc.uploading + qc.failed + (q.pendingCount || 0) : 0;
+    if (qc && q.total) qc.total = Math.max(q.total, qc.total);
     const stopped = q && left ? '<div class="card stack" style="margin-bottom:12px;border:1px solid var(--warn-soft)" data-stopped><strong>중단된 업로드가 있어요</strong>' +
       '<p class="small" style="margin:0">전체 ' + qc.total + '개 · 완료 ' + qc.done + ' · 남음 ' + left + (qc.failed ? ' (실패 ' + qc.failed + ')' : '') + (qc.dup ? ' · 중복 제외 ' + qc.dup : '') + ' · ' + esc(new Date(q.updatedAt).toLocaleString('ko-KR')) + '</p>' +
       '<p class="small muted" style="margin:0">브라우저가 닫히면 원본 파일을 다시 선택해야 해요. 같은 파일들을 다시 고르면 이미 올라간 파일은 자동으로 빠지고 남은 것만 올려요.</p>' +
@@ -300,15 +348,19 @@ function draw() {
 /* ---------- upload progress / result ---------- */
 function dashHtml() {
   const q = hub.rows.filter(r => r.queued), c = counts(q), failed = c.failed, cur = hub.current;
+  const unchecked = (hub.pendingFiles?.length || 0) + (hub.autoRunning ? hub.rows.filter(r => !r.queued).length : 0);
+  c.waiting += unchecked; c.total += unchecked;
+  const running = (hub.running || hub.autoRunning) && !hub.paused;
   const pct = c.total ? Math.round((c.done + c.failed + c.dup) / c.total * 100) : 0, importing = hub.phase === 'importing';
-  return '<div class="card stack up-dash" data-dash><div class="row between"><strong>' + (importing ? (hub.running && !hub.paused ? '올리는 중…' : '일시정지됨') : '업로드 결과') + '</strong><span class="small muted">전체 ' + c.total + '개</span></div>' +
+  return '<div class="card stack up-dash" data-dash><div class="row between"><strong>' + (importing ? (running ? '올리는 중…' : hub.paused && (hub.running || hub.autoRunning) ? '멈추는 중…' : '일시정지됨') : '업로드 결과') + '</strong><span class="small muted">전체 ' + c.total + '개</span></div>' +
     '<div class="up-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div>' +
     '<div class="up-counts">' + [['done', '완료', c.done], ['uploading', '업로드 중', c.uploading], ['waiting', '대기', c.waiting], ['failed', '실패', c.failed], ['dup', '중복 제외', c.dup]].map(([k, t, n]) => '<div data-count="' + k + '"><b>' + n + '</b><span>' + t + '</span></div>').join('') + '</div>' +
+    (hub.stage ? '<p class="small" style="margin:0;font-weight:600">' + esc(hub.stage) + '</p>' : '') +
     (cur ? '<p class="small ellipsis" style="margin:0" data-current>지금: ' + esc(cur.name) + ' · ' + esc(cur.msg || '') + '</p>' : '') +
     (hub.notice ? '<p class="small" style="margin:0;color:var(--warn)">' + esc(hub.notice) + '</p>' : '') +
     '<p class="small muted" style="margin:0">완료는 서버에 저장된 것을 확인한 파일만 세요. 멈추거나 중단돼도 완료된 파일은 그대로예요.</p>' +
-    '<div class="btn-row">' + (importing ? (hub.running && !hub.paused ? '<button type="button" class="btn secondary" data-pause>일시정지</button>' : '<button type="button" class="btn" data-resume>이어서 올리기</button>') : '') +
-      (failed && !hub.running ? '<button type="button" class="btn secondary" data-retry>실패한 ' + failed + '개만 다시</button>' : '') + '</div>' +
+    '<div class="btn-row">' + (importing ? (running ? '<button type="button" class="btn secondary" data-pause>일시정지</button>' : hub.running || hub.autoRunning ? '' : '<button type="button" class="btn" data-resume>이어서 올리기</button>') : '') +
+      (failed && !hub.running && !hub.autoRunning && !hub.pendingFiles?.length ? '<button type="button" class="btn secondary" data-retry>실패한 ' + failed + '개만 다시</button>' : '') + '</div>' +
     (hub.phase === 'done' ? '<div class="btn-row"><a class="btn" href="#/library">보관함 보기</a><button type="button" class="btn secondary" data-report>결과 보고서 저장</button></div>' + (hub.made ? '<p class="small muted" style="margin:0">연습 기록 ' + hub.made + '개 생성</p>' : '') + (hub.linked ? '<p class="small muted" style="margin:0">레슨 녹음 ' + hub.linked + '개 연결</p>' : '') + '<button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button>' : '') + '</div>';
 }
 function listsHtml() {
@@ -325,7 +377,7 @@ function report() {
 }
 function wireDash(h) {
   h.querySelector('[data-pause]')?.addEventListener('click', () => { hub.paused = true; hub.notice = '지금 올리는 파일까지 마치고 멈춰요.'; draw(); });
-  h.querySelector('[data-resume]')?.addEventListener('click', () => { hub.notice = ''; runImport(hub.rows.filter(r => r.queued && (r.state === 'waiting' || r.state === 'uploading'))); });
+  h.querySelector('[data-resume]')?.addEventListener('click', () => { hub.notice = ''; if (hub.auto) runAuto(); else runImport(hub.rows.filter(r => r.queued && (r.state === 'waiting' || r.state === 'uploading'))); });
   h.querySelector('[data-retry]')?.addEventListener('click', () => runImport(hub.rows.filter(r => r.queued && r.state === 'failed')));
   h.querySelector('[data-report]')?.addEventListener('click', report);
   h.querySelector('[data-more]')?.addEventListener('click', () => { hub = fresh(); draw(); });
@@ -382,7 +434,12 @@ VZ.openImportHub = ({files} = {}) => {
   if (hub.phase === 'importing') { VZ.nav('#/import-hub'); return; }
   hub = fresh();
   // Files handed over from 파일 가져오기 (many files): no date or length filter, so nothing is left out silently.
-  if (files?.length) { hub.source = 'drive'; hub.cond = {start:'', end:'', min:0, max:24 * 3600}; VZ.nav('#/import-hub'); setTimeout(() => pickFiles(files), 0); return; }
+  if (files?.length) {
+    hub.source = 'drive'; hub.cond = {start:'', end:'', min:0, max:24 * 3600}; VZ.nav('#/import-hub');
+    const media = mediaOnly(files), skipped = files.length - media.length;
+    if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 건너뛰었어요.');
+    setTimeout(() => runAuto(media), 0); return;
+  }
   VZ.nav('#/import-hub');
 };
 })();

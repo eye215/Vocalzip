@@ -219,20 +219,20 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   const wav = tone => { const sr = 4000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
   const files = Array.from({length:21}, (_, i) => ({name:'2026-11-01_10-00-' + String(i).padStart(2, '0') + (i === 3 ? ' expire' : i === 7 ? ' bad' : '') + '.wav', mimeType:'audio/wav', buffer:wav(i)}));
   files.push({name:'2026-11-01_11-00-00 copy.wav', mimeType:'audio/wav', buffer:wav(0)}); // same content as the first file
-  // More than 20 files from 파일 가져오기 go to the bulk uploader.
+  // More than 20 files from 파일 가져오기 go to the bulk uploader, which checks and uploads them batch by batch by itself.
+  await page.evaluate(() => { window.__vzipBatchSize = 10; });
   await page.goto('/#/library');
   await page.locator('[data-imp]').click();
   await sheet(page).locator('[data-file]').setInputFiles(files);
   await expect(page.locator('.toast').last()).toContainText('22개 파일은 대량 업로드 화면에서');
-  await expect(page.getByRole('button', {name:/^전체 22/})).toBeVisible({timeout:90000});
-  await page.getByRole('button', {name:'전체 선택'}).click();
-  await page.getByRole('button', {name:'선택한 22개 가져오기'}).click();
   const dash = page.locator('[data-dash]'), n = k => dash.locator('[data-count="' + k + '"] b');
+  await expect(dash).toContainText('전체 22개');
   // The expired login pauses the queue; nothing is counted as failed for it.
   await expect(dash).toContainText('로그인이 만료됐어요', {timeout:30000});
   await expect(dash.getByRole('button', {name:'이어서 올리기'})).toBeVisible();
   const queued = await page.evaluate(() => JSON.parse(localStorage.getItem('vzip_upload_queue_v1')));
-  expect(queued.items).toHaveLength(22);
+  expect(queued.items.length + queued.pendingCount).toBe(22); // the first batch is queued, the rest not checked yet
+  expect(queued.total).toBe(22);
   expect(queued.items.every(i => i.hash && i.size)).toBe(true);
   await dash.getByRole('button', {name:'이어서 올리기'}).click();
   await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
