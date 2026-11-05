@@ -79,6 +79,16 @@ function render(ctx){
    li.append(text,act);ul.append(li)}
   box.append(ul);
  };
+ if(groups.toDeduct.length>1){
+  const bulk=document.createElement('button');bulk.type='button';bulk.className='pending-bulk';bulk.textContent='완료 레슨 '+groups.toDeduct.length+'건 모두 1시간 차감';
+  bulk.onclick=async()=>{
+   if(!need())return;
+   const rows=groups.toDeduct.slice(),pass=passes.find(p=>p.id===chosenPass);
+   if(!await window.VzipBillingDialog.ask({title:rows.length+'건을 1시간씩 차감할까요?',message:(pass?pass.name:'선택한 레슨권')+'에서 '+rows.length+'시간이 차감돼요. 2시간·보강 레슨이 섞여 있다면 그 레슨만 먼저 처리한 뒤 사용해 주세요. 차감은 나중에 개별 취소할 수 있어요.',ok:rows.length+'건 차감',cancel:'닫기'}))return;
+   for(const lesson of rows)await app.persist(deductionFor(lesson,chosenPass,{units:100}),lesson.lesson_date+' 1시간 차감');
+  };
+  box.append(bulk);
+ }
  list('완료 · 차감 대기',groups.toDeduct,lesson=>[['1시간',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:100}),lesson.lesson_date+' 1시간 차감')],['2시간',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:200}),lesson.lesson_date+' 2시간 차감')],['0시간(보강)',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:0}),lesson.lesson_date+' 0시간 차감')],['직접 입력',()=>app.prefill(lesson.lesson_id)]]);
  list('상태 없음 · 수강 확인',groups.toConfirm,lesson=>[['1시간 수강',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:100}),lesson.lesson_date+' 1시간 차감')],['2시간 수강',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:200}),lesson.lesson_date+' 2시간 차감')],['수강 안 함 · 0회',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{status:'cancelled',units:0}),lesson.lesson_date+' 레슨을 차감 없이 기록했어요.')],['직접 입력',()=>app.prefill(lesson.lesson_id)]]);
  list('앱에서 취소·예정으로 바뀐 차감',groups.toRestore,({lesson,deduction})=>[['차감 취소(복구)',async()=>{if(await window.VzipBillingDialog.ask({title:'차감을 취소할까요?',message:lesson.lesson_date+' 레슨이 앱에서 취소·예정으로 바뀌었어요. 차감을 취소하면 기록한 시간만큼 복구돼요. 변경 이력은 남아요.',ok:'차감 취소',cancel:'닫기',danger:true}))app.persist({type:'entity.void',payload:{collection:'deductions',id:deduction.id,expectedVersion:deduction.version}},'차감을 취소했어요.')}],['당일 취소 등으로 수정',()=>app.edit(deduction)]]);
