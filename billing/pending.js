@@ -13,8 +13,9 @@ function classify(lessons,state,today){
  const toDeduct=[],toConfirm=[],toRestore=[];
  for(const lesson of lessons){
   const id=lesson.lesson_id,existing=byLesson.get(id),date=lesson.lesson_date||'';
-  // A lesson the app created from this ledger's own attendance record is already settled.
-  if(lesson.billing_deduction_id&&activeIds.has(lesson.billing_deduction_id))continue;
+  // A lesson the app created from this ledger's own attendance record is settled by that record. If the record is gone
+  // (deleted, or the ledger was rebuilt), it is still not asked again: deducting it would count the same lesson twice.
+  if(lesson.billing_deduction_id)continue;
   if(existing){
    // Only plain completed charges; a manual same-day-cancel (noshow) charge is intentional.
    if(existing.status==='completed'&&existing.units>0&&['scheduled','cancelled'].includes(lesson.lesson_status))toRestore.push({lesson,deduction:existing});
