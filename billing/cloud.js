@@ -54,5 +54,55 @@ async function commit(plan){
  if(!result||!B.same(result.payload,plan.payload))throw Error('클라우드 저장 응답이 달라요. 다시 확인해 주세요.');
  return S.acknowledge(result.revision,plan.localRevision);
 }
-window.VzipBillingCloud={read,preview,commit};
+/* ---------- automatic sync ----------
+ * Uses the same revision checks as the manual transfer. Only one side changed since the last sync: it is copied
+ * (upload, or download that keeps the previous ledger in recovery). Both changed and different: nothing is written;
+ * the user chooses (merge, cloud, this device). Off per account in 백업·동기화. */
+const AKEY='vzip_billing_autosync_v1';
+function autoOn(){try{return JSON.parse(localStorage.getItem(AKEY)||'{}')[S.account.id]!==false}catch{return true}}
+function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(on)delete all[S.account.id];else all[S.account.id]=false;localStorage.setItem(AKEY,JSON.stringify(all))}catch{}}
+const empty=state=>!['passes','payments','deductions','adjustments'].some(key=>(state[key]||[]).length);
+async function push(state,expected){
+ const payload=B.parse(JSON.stringify(state));
+ const result=envelope(await request('/rest/v1/rpc/vocal_billing_save',{p_expected_revision:expected,p_payload:payload,p_request_id:crypto.randomUUID()}));
+ if(!result||!B.same(result.payload,payload))throw Error('클라우드 저장 응답이 달라요. 다시 확인해 주세요.');
+ await S.acknowledge(result.revision,state.revision);return result;
+}
+let syncing=null;
+function sync(){
+ return syncing||=(async()=>{try{
+  credentials();
+  const local=await S.status(),state=local.state,meta=local.meta,remote=await read();
+  const remoteRevision=remote?.revision||0,localChanged=meta.syncedLocalRevision!==state.revision,remoteChanged=remoteRevision!==meta.remoteRevision;
+  if(!remote){if(empty(state))return {action:'none'};await push(state,0);return {action:'upload'}}
+  if(!localChanged&&!remoteChanged)return {action:'none'};
+  if(localChanged&&!remoteChanged){await push(state,remoteRevision);return {action:'upload'}}
+  if(B.same(B.parse(JSON.stringify(state)),remote.payload)){await S.acknowledge(remoteRevision,state.revision);return {action:'none'}}
+  if(!localChanged||empty(state)){await S.replace(remote.payload,state.revision,{reason:'cloud.auto',remoteRevision});return {action:'download'}}
+  return {action:'conflict',remote};
+ }finally{syncing=null}})();
+}
+/** Both ledgers' records: same record id → the higher version (edits and deletions raise it); everything else is kept. */
+function mergeStates(mine,theirs){
+ const next=JSON.parse(JSON.stringify(mine));
+ for(const key of ['passes','payments','deductions','adjustments','imports','importRows','history']){
+  const at=new Map(next[key].map((row,i)=>[row.id,i]));
+  for(const row of theirs[key]||[]){
+   if(!at.has(row.id)){at.set(row.id,next[key].length);next[key].push(row);continue}
+   const i=at.get(row.id);if(Number(row.version||0)>Number(next[key][i].version||0))next[key][i]=row;
+  }
+ }
+ if(!next.hourlyRate&&theirs.hourlyRate)next.hourlyRate=theirs.hourlyRate;
+ return next;
+}
+/** After a conflict: 'merge' (both, then upload), 'cloud' (take the cloud's), 'device' (send this device's). */
+async function resolve(choice){
+ credentials();const local=await S.status(),state=local.state,remote=await read();
+ if(!remote)return push(state,0);
+ if(choice==='cloud')return S.replace(remote.payload,state.revision,{reason:'cloud.conflict.cloud',remoteRevision:remote.revision});
+ if(choice==='device')return push(state,remote.revision);
+ const merged=await S.replace(mergeStates(state,remote.payload),state.revision,{reason:'cloud.conflict.merge'});
+ return push(merged,remote.revision);
+}
+window.VzipBillingCloud={read,preview,commit,sync,resolve,autoOn,setAuto,mergeStates};
 })();

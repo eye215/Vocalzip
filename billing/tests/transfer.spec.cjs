@@ -2,6 +2,8 @@ const {test,expect}=require('@playwright/test'),C=require('../core.js');
 const USER='11111111-1111-4111-8111-111111111111',OTHER='22222222-2222-4222-8222-222222222222',AUTH='sb-chxnbtiyuyhiywzeshis-auth-token';
 function fixture(owner='device',name='복원할 권'){return C.reduce(C.empty(owner),{type:'pass.save',payload:{name,totalUnits:500,amount:150000}})}
 async function open(page,{login=false}={}){
+ // These tests cover the manual transfer; automatic sync (autosync.spec.cjs) is off here.
+ await page.addInitScript(({u,o})=>localStorage.setItem('vzip_billing_autosync_v1',JSON.stringify({['user:'+u]:false,['user:'+o]:false,device:false})),{u:USER,o:OTHER});
  if(login)await page.addInitScript(({key,id})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify({access_token:'fixture-token',expires_at:4102444800,user:{id,email:'fixture@example.invalid'}}))},{key:AUTH,id:USER});
  await page.goto('/billing/');await expect(page.locator('#message')).toContainText('불러왔어요');
  await page.locator('[data-panel=transfer]').click();
