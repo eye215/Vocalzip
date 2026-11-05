@@ -296,6 +296,18 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   await expect(fix).toBeEmpty();
 });
 
+test('Saved comparisons show the two recording days (2026.08.12 → 2026.10.20)', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(async () => {
+    const mk = (id, day) => window.vzipStorePracticeMedia({id, name:'Rizzo ' + day, type:'audio/wav', blob:new Blob(['x'], {type:'audio/wav'}), created:Date.now(), recordedDate:day, dateSource:'manual', songId:'s1', source:'import'});
+    await mk('cmp-a', '2026-08-12'); await mk('cmp-b', '2026-10-20');
+    VZ.media.invalidate();
+    VZ.change(d => { d.comparisonReports = [{id:'r1', firstId:'cmp-a', secondId:'cmp-b', firstName:'Rizzo 2026-08-12', secondName:'Rizzo 2026-10-20', firstDate:Date.now(), secondDate:Date.now(), song:'This Is the Moment', notes:'', created:Date.now()}]; }, {silent:true});
+  });
+  await page.goto('/#/compare');
+  await expect(page.locator('a.item[href*="cmp-a"] .item-sub')).toHaveText('2026.08.12 → 2026.10.20');
+});
+
 test('A past scheduled lesson can be recorded as done or cancelled from home in one tap', async ({page}) => {
   await boot(page, {media:false});
   const card = page.locator('[data-overdue]');
