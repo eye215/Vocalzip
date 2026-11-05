@@ -3,7 +3,7 @@ const S=window.VzipBillingStore,B=window.VzipBillingBackup,Cloud=window.VzipBill
 let plan=null,busy=false;
 const say=(message,error=false)=>{$('transfer-status').textContent=message;$('transfer-status').className=error?'error':''};
 const money=n=>new Intl.NumberFormat('ko-KR').format(n)+'원';
-function describe(summary){return summary?'레슨권 '+summary.passes+'개 · 결제 '+summary.payments+'건 · 수강 '+summary.deductions+'건\n잔여 '+summary.remainingUnits/100+'회 · 순결제 '+money(summary.netPaid)+' · 미납 '+money(summary.unpaid):'저장된 정산 없음'}
+function describe(summary){return summary?'레슨권 '+summary.passes+'개 · 결제 '+summary.payments+'건 · 수강 '+summary.deductions+'건\n잔여 '+summary.remainingUnits/100+(summary.unit||'회')+' · 순결제 '+money(summary.netPaid)+' · 미납 '+money(summary.unpaid):'저장된 정산 없음'}
 async function refresh(message){
  const info=await S.status();$('recovery-status').textContent=info.recovery?info.recovery.at+' · '+describe(info.recovery.summary):'교체 전 기록이 아직 없어요.';
  for(const id of ['recovery-preview','recovery-export'])$(id).disabled=!info.recovery||busy;
