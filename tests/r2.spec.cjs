@@ -4,14 +4,18 @@ const {test, expect} = require('@playwright/test');
 const KEY = 'vocal-zip_mvp_v1', R2 = 'https://r2.vocalzip.test';
 const stub = `window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'tok'}}})},
  storage:{from:()=>({createSignedUrl:async p=>({data:{signedUrl:'/legacy/'+p},error:null}),upload:async()=>({error:null}),remove:async p=>{window.__removed.push(...p);return {error:null}}})},
- from:()=>{const c={q:{}};for(const m of ['select','order','delete'])c[m]=()=>c;c.range=(a,b)=>{c.r=[a,b];return c};c.eq=(k,v)=>{c.q[k]=v;return c};
-  c.upsert=row=>{window.__up.push(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata)window.__rows[x.id]=x.metadata;return c};
+ from:()=>{const c={q:{}};for(const m of ['order','delete'])c[m]=()=>c;c.range=(a,b)=>{c.r=[a,b];return c};c.select=cols=>{c.cols=cols||'*';return c};c.in=(k,v)=>{c.ins=v;return c};window.__upd=window.__upd||{};c.eq=(k,v)=>{c.q[k]=v;return c};
+  c.upsert=row=>{window.__up.push(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata){window.__rows[x.id]=x.metadata;window.__upd[x.id]=x.updated_at||new Date().toISOString()}return c};
   c.update=row=>{c.pendingUpdate=row;return c};
   c.maybeSingle=()=>c;c.single=()=>c;
   c.then=r=>{if(c.err)return r({data:null,error:c.err});if(c.pendingUpdate&&c.q.id){window.__rows[c.q.id]=c.pendingUpdate.metadata;return r({data:null,error:null})}
    if(c.q.id)return r({data:window.__rows[c.q.id]?{metadata:window.__rows[c.q.id]}:null,error:null});
    // Like the server: at most 1,000 rows per request, pages by range.
-   const all=Object.entries(window.__rows).map(([id,metadata])=>({id,metadata,updated_at:'2026-11-05T09:00:00Z'}));const [a,b]=c.r||[0,999];return r({data:all.slice(a,Math.min(b+1,a+1000)),error:null})};return c}})};`;
+   let all=Object.entries(window.__rows).map(([id,metadata])=>({id,metadata,updated_at:window.__upd[id]||'2026-11-05T09:00:00Z'}));
+   if(c.ins)all=all.filter(x=>c.ins.includes(x.id));
+   (window.__sel||=[]).push(String(c.cols||'*')+(c.ins?' in:'+c.ins.length:''));
+   if(c.cols&&!/metadata/.test(c.cols))all=all.map(x=>({id:x.id,updated_at:x.updated_at}));
+   const [a,b]=c.r||[0,999];return r({data:all.slice(a,Math.min(b+1,a+1000)),error:null})};return c}})};`;
 
 function wav(seconds = 2, sr = 8000) {
   const n = sr * seconds, b = Buffer.alloc(44 + n * 2);
@@ -40,7 +44,9 @@ async function fakeR2(page, reject = {}) {
       const u = uploads.get(m[1]), bytes = Buffer.concat([...u.parts.entries()].sort((a, b) => a[0] - b[0]).map(x => x[1]));
       store.set(u.key, {bytes, type:u.type}); return json({key:u.key, size:bytes.length, etag:'"x"'});
     }
-    if (p === '/v1/sign') { const {key} = req.postDataJSON(); return json({url:R2 + '/v1/media/' + key + '?exp=9999999999&sig=s', expires:9999999999}); }
+    if (p === '/v1/sign') { const b = req.postDataJSON(), exp = Math.floor(Date.now() / 1000) + 3 * 3600;
+      if (Array.isArray(b.keys)) { calls.push('BATCH ' + b.keys.length); return json({urls:Object.fromEntries(b.keys.map(k => [k, R2 + '/v1/media/' + k + '?exp=' + exp + '&sig=s'])), expires:exp}); }
+      return json({url:R2 + '/v1/media/' + b.key + '?exp=' + exp + '&sig=s', expires:exp}); }
     if (p.startsWith('/v1/media/')) {
       const key = decodeURIComponent(p.slice(10)), o = store.get(key);
       if (method === 'DELETE') { store.delete(key); return json({ok:true}); }
@@ -193,4 +199,44 @@ test('The library reads every row even past the server\'s 1,000-row page limit',
     VZ.media.invalidate(); return (await VZ.media.list(true)).filter(m => m.cloud).length;
   });
   expect(count).toBe(1234);
+  // The library draws 60 rows at first and the rest as it scrolls; all are reachable.
+  await page.goto('/#/library');
+  await expect(page.locator('[data-count]')).toContainText('1234개');
+  await expect(page.locator('[data-l] [data-media]')).toHaveCount(60);
+  for (let i = 0; i < 60 && await page.locator('[data-l] [data-media]').count() < 1234; i++) { await page.locator('[data-l] [data-media]').last().scrollIntoViewIfNeeded(); await page.waitForTimeout(50); }
+  await expect(page.locator('[data-l] [data-media]')).toHaveCount(1234);
+});
+
+test('The library list is kept on the device: later reads fetch only ids/times and the rows that changed', async ({page}) => {
+  await fakeR2(page);
+  await boot(page);
+  await page.evaluate(async () => {
+    for (const i of [1, 2, 3]) window.__rows['k' + i] = {id:'k' + i, name:'녹음 ' + i, storageProvider:'r2', r2Key:'u/ui-test-user/k' + i + '/original.m4a', created:Date.now(), recordedDate:'2026-11-0' + i};
+    VZ.media.invalidate(); await VZ.media.list(true);
+  });
+  const names = await page.evaluate(async () => {
+    window.__sel = [];
+    window.__rows.k2 = {...window.__rows.k2, name:'바뀐 이름'}; window.__upd.k2 = '2026-11-06T00:00:00Z'; delete window.__rows.k3;
+    VZ.media.invalidate(); return (await VZ.media.list(true)).filter(m => m.cloud).map(m => m.name).sort();
+  });
+  expect(names).toEqual(['녹음 1', '바뀐 이름']); // changed row refreshed, deleted row gone
+  const sel = await page.evaluate(() => window.__sel);
+  expect(sel.filter(x => x.startsWith('id,updated_at')).length).toBeGreaterThan(0);
+  expect(sel.filter(x => / in:/.test(x))).toEqual(['id,metadata,updated_at in:1']); // only the changed row in full
+});
+
+test('Playback links are signed ahead in one request for the rows shown, kept across reloads, and a tap needs no extra request', async ({page}) => {
+  const r2 = await fakeR2(page);
+  await boot(page);
+  await page.evaluate(() => { for (let i = 0; i < 5; i++) window.__rows['p' + i] = {id:'p' + i, name:'재생 ' + i, type:'audio/wav', storageProvider:'r2', r2Key:'u/ui-test-user/p' + i + '/original.wav', created:Date.now(), recordedDate:'2026-11-05', durationSeconds:2}; VZ.media.invalidate(); });
+  await page.goto('/#/library');
+  await expect(page.locator('[data-l] [data-media]')).toHaveCount(5);
+  await expect.poll(() => r2.calls.filter(c => c === 'BATCH 5').length).toBe(1);
+  expect(await page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true);
+  const signs = () => r2.calls.filter(c => c === 'POST /v1/sign').length, before = signs();
+  await page.locator('[data-l] [data-media="p2"] [data-toggle]').click();
+  await expect(page.locator('[data-l] [data-media="p2"] .media-open')).toBeVisible();
+  expect(signs()).toBe(before); // the tap used the link already here
+  await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  expect(await page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true); // kept across reloads
 });

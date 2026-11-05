@@ -152,3 +152,17 @@ test('objects lists only the caller\'s own files, read-only, page by page', asyn
   assert.equal((await call('/v1/objects')).status, 401);
   assert.equal((await call('/v1/objects', {method:'POST', auth:alice})).status, 404);
 });
+
+test('sign: links are stable within the hour and many files can be signed in one request (own files only)', async () => {
+  const alice = await token(ALICE), bob = await token(BOB);
+  const a = await upload(alice, 'sign-a', new Uint8Array(20).fill(3)), b = await upload(alice, 'sign-b', new Uint8Array(30).fill(4));
+  const one = await (await call('/v1/sign', {method:'POST', auth:alice, body:{key:a.key, ttl:3600}})).json();
+  const again = await (await call('/v1/sign', {method:'POST', auth:alice, body:{key:a.key, ttl:3600}})).json();
+  assert.equal(one.url, again.url); assert.equal(one.expires % 3600, 0); assert.ok(one.expires * 1000 > Date.now() + 3600 * 1000 - 1000);
+  const many = await (await call('/v1/sign', {method:'POST', auth:alice, body:{keys:[a.key, b.key], ttl:3600}})).json();
+  assert.equal(many.urls[a.key], one.url);
+  const res = await mf.dispatchFetch(many.urls[b.key], {headers:{range:'bytes=0-9'}});
+  assert.equal(res.status, 206); assert.equal(res.headers.get('content-range'), 'bytes 0-9/30');
+  assert.equal((await call('/v1/sign', {method:'POST', auth:bob, body:{keys:[a.key]}})).status, 403);
+  assert.equal((await call('/v1/sign', {method:'POST', auth:alice, body:{keys:Array(101).fill(a.key)}})).status, 400);
+});

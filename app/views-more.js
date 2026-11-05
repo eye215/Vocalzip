@@ -107,7 +107,7 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
   document.querySelector('[data-imp]').onclick = () => VZ.importSheet();
   document.querySelector('[data-hub-open]').onclick = () => VZ.openImportHub();
   const l = main.querySelector('[data-l]');
-  let media = [];
+  let media = [], drawn = [];
   const draw = () => {
     const q = lib.q.trim().toLowerCase();
     const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || M.occasion(m) === lib.origin) &&
@@ -120,14 +120,39 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
     // Newest recording month first; each month shows how many files and how long.
     const groups = new Map();
     for (const m of list) { const k = (M.dateOf(m) || '').slice(0, 7); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
-    l.innerHTML = '<div class="lib-groups">' + [...groups].map(([k, items]) => { const sec = items.reduce((a, m) => a + (Number(m.durationSeconds) || 0), 0); return '<section class="lib-month" data-month="' + (k || 'none') + '"><h3><span>' + monthTitle(k) + '</span><span class="small muted">' + items.length + '개' + (sec >= 60 ? ' · ' + VZ.minutes(sec / 60) : '') + '</span></h3><div class="list">' + items.map(VZ.mediaRow).join('') + '</div></section>'; }).join('') + '</div>';
-    VZ.wireMedia(l.firstChild, list);
+    // Rows are drawn 60 at a time as the list scrolls: 1,000+ files stay light on a phone (month headers keep full counts).
+    const head = k => { const items = groups.get(k), sec = items.reduce((a, m) => a + (Number(m.durationSeconds) || 0), 0); return '<section class="lib-month" data-month="' + (k || 'none') + '"><h3><span>' + monthTitle(k) + '</span><span class="small muted">' + items.length + '개' + (sec >= 60 ? ' · ' + VZ.minutes(sec / 60) : '') + '</span></h3><div class="list"></div></section>'; };
+    const order = [...groups].flatMap(([k, items]) => items.map(m => [k, m]));
+    l.innerHTML = '<div class="lib-groups"></div><div class="lib-more" data-more aria-hidden="true"></div>';
+    const root = l.firstChild; let shown = 0, lastKey = null;
+    VZ.wireMedia(root, list);
+    const more = n => {
+      const end = Math.min(order.length, shown + n);
+      while (shown < end) {
+        const k = order[shown][0]; let html = '';
+        if (k !== lastKey) { root.insertAdjacentHTML('beforeend', head(k)); lastKey = k; }
+        while (shown < end && order[shown][0] === k) html += VZ.mediaRow(order[shown++][1]);
+        root.lastElementChild.querySelector('.list').insertAdjacentHTML('beforeend', html);
+      }
+      root.vzPrefetch?.();
+      if (shown >= order.length) { io?.disconnect(); l.querySelector('[data-more]')?.remove(); }
+    };
+    l._io?.disconnect();
+    const io = l._io = window.IntersectionObserver ? new IntersectionObserver(es => { if (es.some(x => x.isIntersecting)) more(120); }, {rootMargin:'800px'}) : null;
+    more(60);
+    if (shown < order.length) { if (io) io.observe(l.querySelector('[data-more]')); else more(order.length); }
+    drawn = list;
   };
   main.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { lib[b.dataset.f] = b.dataset.v; main.querySelectorAll('[data-f="' + b.dataset.f + '"]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); M.stopAll(); draw(); });
   main.querySelector('[data-kind]').onchange = e => { lib.kind = e.target.value; M.stopAll(); draw(); };
   main.querySelector('[data-song]').onchange = e => { lib.song = e.target.value; M.stopAll(); draw(); };
   main.querySelector('[data-q]').oninput = e => { lib.q = e.target.value; draw(); };
-  media = await M.list().catch(() => []); if (l.isConnected) draw();
+  // The list kept on this device is drawn at once; the fresh one replaces it only if something changed and no player is open.
+  const sig = list => list.map(m => [m.id, m.name, M.dateOf(m), m.durationSeconds, m.songId, m.occasion, m.cloud ? 1 : 0].join(':')).join('|');
+  const peek = await M.peek().catch(() => null);
+  if (peek?.length && l.isConnected) { media = peek; draw(); }
+  const fresh = await M.list().catch(() => media);
+  if (l.isConnected && (!peek?.length || sig(fresh) !== sig(media)) && !l.querySelector('.media-open:not([hidden])')) { media = fresh; draw(); } else media = fresh;
   // Recordings named yyyy-MM-dd_HH-mm-ss that sit on another date (imported before names were read): one tap moves them.
   const nameHost = main.querySelector('[data-name-dates]');
   const drawNameFix = () => {
@@ -156,7 +181,7 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
   window.addEventListener('vzip:v6-backup', onBackup);
   if (M.localOnly(media).length) M.scheduleBackup(500);
   // Show filled lengths, but never close a player the user has open.
-  if (await M.fillDurations(media) && l.isConnected && !l.querySelector('.media-open:not([hidden])')) draw();
+  if (await M.fillDurations(drawn.slice(0, 60)) && l.isConnected && !l.querySelector('.media-open:not([hidden])')) draw();
 }});
 
 /* ---------- 비교 ---------- */

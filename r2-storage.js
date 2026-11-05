@@ -49,15 +49,43 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal} = {}
     throw e;
   }
 }
-/** A playback URL usable in <audio src> (signed, about an hour). */
+/* Playback links: kept on this device until shortly before they expire (also across reloads), asked for once per file
+ * even when several screens want it at the same time, and signed in batches for the rows on screen. A link already here
+ * lets a tap start playback right away (iPhone Safari only plays inside the tap). */
+const SKEY = 'vzip_r2_links_v1', TTL = 3 * 3600, MARGIN = 300;
+try { const saved = JSON.parse(localStorage.getItem(SKEY) || '{}'), now = Date.now(); for (const [k, v] of Object.entries(saved)) if (v?.until > now) signed.set(k, v); } catch {}
+let saveTimer = null;
+const persist = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { const now = Date.now(), out = {}; for (const [k, v] of signed) if (v.until > now) out[k] = v; localStorage.setItem(SKEY, JSON.stringify(out)); } catch {} }, 300); };
+const keep = (key, link, expires) => { signed.set(key, {url:link, until:(expires - MARGIN) * 1000}); persist(); };
+/** A valid link already on this device, or '' (synchronous). */
+function cachedUrl(key) { const hit = signed.get(key); return hit && hit.until > Date.now() ? hit.url : ''; }
+const asking = new Map();
+const single = key => api('/v1/sign', {method:'POST', body:{key, ttl:TTL}}).then(r => { keep(key, r.url, r.expires); return r.url; });
+/** A playback URL usable in <audio src> (signed for a few hours). */
 async function url(key) {
-  const hit = signed.get(key);
-  if (hit && hit.until > Date.now()) return hit.url;
-  const r = await api('/v1/sign', {method:'POST', body:{key, ttl:3600}});
-  signed.set(key, {url:r.url, until:(r.expires - 120) * 1000});
-  return r.url;
+  const hit = cachedUrl(key); if (hit) return hit;
+  if (asking.has(key)) return asking.get(key);
+  const p = single(key); asking.set(key, p);
+  try { return await p; } finally { if (asking.get(key) === p) asking.delete(key); }
 }
-async function remove(key) { signed.delete(key); await api('/v1/media/' + key.split('/').map(encodeURIComponent).join('/'), {method:'DELETE'}); }
+let batchOff = false;
+/** Sign the given files ahead of a tap (100 per request). Quietly does nothing if the Worker cannot batch yet. */
+async function prefetch(keys) {
+  if (batchOff || !endpoint() || !window.vzipCloudSignedIn?.()) return;
+  const todo = [...new Set(keys.filter(k => k && !cachedUrl(k) && !asking.has(k)))];
+  for (let i = 0; i < todo.length && !batchOff; i += 100) {
+    const part = todo.slice(i, i + 100);
+    const batch = api('/v1/sign', {method:'POST', body:{keys:part, ttl:TTL}}).then(r => {
+      if (!r?.urls) { batchOff = true; return {}; }
+      for (const k of part) if (r.urls[k]) keep(k, r.urls[k], r.expires);
+      return r.urls;
+    }, e => { if (e.status === 400 || e.status === 404) batchOff = true; return {}; });
+    // A tap during the batch waits for it; a file the batch did not sign is asked for on its own.
+    for (const k of part) { const p = batch.then(urls => urls[k] || single(k)); asking.set(k, p); p.catch(() => {}).finally(() => { if (asking.get(k) === p) asking.delete(k); }); }
+    await batch;
+  }
+}
+async function remove(key) { signed.delete(key); persist(); await api('/v1/media/' + key.split('/').map(encodeURIComponent).join('/'), {method:'DELETE'}); }
 /** Size of a stored file, or null when it is missing. */
 async function stat(key) {
   // One byte with Range: the reply's Content-Range carries the full size (no download).
@@ -92,5 +120,5 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, remove, stat, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, cachedUrl, prefetch, remove, stat, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();
