@@ -97,8 +97,12 @@ VZ.suggestSongs = name => {
 /* ---------- analysis ---------- */
 async function analyze(files) {
   hub.phase = 'analyzing'; hub.rows = []; draw();
-  const existing = await M.list().catch(() => []);
+  const existing = await M.list(true).catch(() => []); // fresh: what the server has now decides what is a duplicate
   const known = {hash:new Set(existing.map(m => m.fileHash).filter(Boolean)), nameSize:new Set(existing.map(m => (m.originalMedia?.name || m.originalFilename || '') + '|' + (m.originalMedia?.size || m.size || '')))};
+  // Files saved through the quick 파일 가져오기 kept no fingerprint or original name: their name (the file name without the
+  // extension, when no song was chosen) plus the exact size still identifies them.
+  const baseKey = (name, size) => String(name || '').replace(/\.[^.]+$/, '').trim().toLowerCase() + '|' + size;
+  known.baseSize = new Set(existing.filter(m => m.size).map(m => baseKey(m.name, m.size)));
   // Files a stopped upload already finished count as already in the library (by content fingerprint and name+size).
   for (const q of loadQueue()?.items || []) if (q.state === 'done') { if (q.hash) known.hash.add(q.hash); known.nameSize.add(q.name + '|' + q.size); }
   const seenHash = new Map();
@@ -121,7 +125,7 @@ async function analyze(files) {
       row.hash = await M.fingerprint(file);
     } catch (e) { row.error = e.message; }
     if (!/^(audio|video)\//.test(row.type)) row.error = '지원하지 않는 형식이에요.';
-    row.dup = known.hash.has(row.hash) || known.nameSize.has(file.name + '|' + file.size) ? '보관함에 이미 있어요' : seenHash.has(row.hash) ? '선택한 파일끼리 같아요' : '';
+    row.dup = known.hash.has(row.hash) || known.nameSize.has(file.name + '|' + file.size) || known.baseSize.has(baseKey(file.name, file.size)) ? '보관함에 이미 있어요' : seenHash.has(row.hash) ? '선택한 파일끼리 같아요' : '';
     if (!seenHash.has(row.hash)) seenHash.set(row.hash, row);
     const sug = VZ.suggestSongs(file.name);
     row.suggestions = sug; if (sug[0]?.score >= 0.9) row.song = sug[0].id;
