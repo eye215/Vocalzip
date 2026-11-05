@@ -17,10 +17,14 @@ VZ.importSheet = ({songId = ''} = {}) => {
       let rows = [];
       const songOpts = v => '<option value="">곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (s.id === v ? ' selected' : '') + '>' + esc(VZ.songLabel(s)) + '</option>').join('');
       el.querySelector('[data-file]').onchange = e => {
-        const files = [...e.target.files]; e.target.value = '';
-        if (!files.length) return;
+        // Only audio and video files are taken (text, images, documents, hidden system files are left out quietly).
+        const picked = [...e.target.files]; e.target.value = '';
+        const files = picked.filter(f => /^(audio|video)\//.test(M.typeOf(f)) && !/^\./.test(f.name)), skipped = picked.length - files.length;
+        const note = skipped ? ' (음성·영상이 아닌 파일 ' + skipped + '개는 뺐어요)' : '';
+        if (!files.length) { if (picked.length) VZ.toast('고른 파일 중에 음성·영상 파일이 없어요.', 'error'); return; }
         // Many files go to the bulk uploader: one at a time, server-confirmed, resumable, no device copies.
-        if (files.length > 20) { close(); VZ.toast(files.length + '개 파일은 대량 업로드 화면에서 하나씩 확인하며 올려요.'); VZ.openImportHub({files}); return; }
+        if (files.length > 20) { close(); VZ.toast(files.length + '개 파일은 대량 업로드 화면에서 하나씩 확인하며 올려요.' + note); VZ.openImportHub({files}); return; }
+        if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 뺐어요.');
         rows = files.map(file => {
           const type = M.typeOf(file);
           let error = '';
