@@ -359,7 +359,7 @@ VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true,
 }});
 function categorySheet() {
   const draw = el => {
-    el.querySelector('[data-cl]').innerHTML = VZ.db.categories.map(c => '<div class="card flat" style="margin-bottom:8px"><div class="row between"><strong>' + esc(c.name) + '</strong></div><div class="chips" style="flex-wrap:wrap;margin:8px 0">' + (c.items || []).map(i => '<span class="badge">' + esc(i) + '</span>').join('') + '</div><form class="row" data-add-item="' + esc(c.id) + '"><input type="text" maxlength="60" placeholder="세부 항목 추가" aria-label="' + esc(c.name) + ' 세부 항목" style="min-height:44px"><button type="submit" class="btn sm secondary">추가</button></form></div>').join('');
+    el.querySelector('[data-cl]').innerHTML = VZ.db.categories.map(c => '<div class="card flat" style="margin-bottom:8px"><div class="row between"><strong>' + esc(c.name) + '</strong></div><div class="chips" style="flex-wrap:wrap;margin:8px 0">' + (c.items || []).map(i => '<span class="badge">' + esc(i + (c.sub?.[i]?.length ? ' › ' + c.sub[i].join(', ') : '')) + '</span>').join('') + '</div><form class="row" data-add-item="' + esc(c.id) + '"><input type="text" maxlength="60" placeholder="세부 항목 추가" aria-label="' + esc(c.name) + ' 세부 항목" style="min-height:44px"><button type="submit" class="btn sm secondary">추가</button></form></div>').join('');
   };
   VZ.sheet({title:'트레이닝 항목', body:'<div data-cl></div><form class="row" data-add-cat style="margin-top:8px"><input type="text" maxlength="40" placeholder="새 분류 (예: 고음)" aria-label="새 분류" style="min-height:44px"><button type="submit" class="btn sm">분류 추가</button></form>',
     onMount:el => {

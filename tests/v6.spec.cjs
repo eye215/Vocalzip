@@ -123,6 +123,43 @@ test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never
   expect((await data(page)).lessons.find(l => l.id === 'l1')).toMatchObject({categoryId:'c1', detail:'립트릴', feedback:'호흡 길게', recordings:[{id:'m1', note:'시범'}], place:'홍대'});
 });
 
+test('Vocal training has three levels and each can add a new entry that is offered next time', async ({page}) => {
+  await boot(page, {media:false});
+  const open = async () => { await page.goto('/#/home'); await page.locator('[data-log]').click(); await sheet(page).locator('[data-mode="training"]').click(); };
+  await open();
+  const f = sheet(page);
+  // Level 1: a new 분류 → its 세부 항목 starts empty, so add one there too, and a level-3 entry.
+  await f.locator('select[name=category]').selectOption('__new');
+  await expect(f.locator('[name=category__new]')).toBeVisible();
+  await f.locator('[name=category__new]').fill('고음');
+  await f.locator('select[name=detail]').selectOption('__new'); await f.locator('[name=detail__new]').fill('믹스보이스');
+  await f.locator('select[name=detail2]').selectOption('__new'); await f.locator('[name=detail2__new]').fill('도 레 미');
+  await f.locator('[name=minutes]').fill('15');
+  await f.getByRole('button', {name:'연습 기록 저장'}).click();
+  await expect(page.locator('.toast').last()).toContainText('연습 기록을 저장했어요');
+  let d = await data(page);
+  const cat = d.categories.find(c => c.name === '고음');
+  expect(cat).toMatchObject({items:['믹스보이스'], sub:{'믹스보이스':['도 레 미']}});
+  expect(d.practices.at(-1)).toMatchObject({practiceMode:'training', categoryId:cat.id, categoryLabel:'고음', detail:'믹스보이스', detail2:'도 레 미'});
+  // Next time all three are choices; a level-3 entry added under an existing 세부 항목 is kept too.
+  await open();
+  await f.locator('select[name=category]').selectOption({label:'고음'});
+  await expect(f.locator('select[name=detail] option', {hasText:'믹스보이스'})).toHaveCount(1);
+  await f.locator('select[name=detail]').selectOption('믹스보이스');
+  await expect(f.locator('select[name=detail2] option', {hasText:'도 레 미'})).toHaveCount(1);
+  await f.locator('select[name=detail2]').selectOption('__new'); await f.locator('[name=detail2__new]').fill('솔 라 시');
+  await f.locator('[name=minutes]').fill('10');
+  await f.getByRole('button', {name:'연습 기록 저장'}).click();
+  d = await data(page);
+  expect(d.categories.find(c => c.name === '고음').sub['믹스보이스']).toEqual(['도 레 미', '솔 라 시']);
+  // An empty new name is not saved.
+  await open();
+  await f.locator('select[name=category]').selectOption('__new'); await f.locator('[name=minutes]').fill('5');
+  await f.getByRole('button', {name:'연습 기록 저장'}).click();
+  await expect(page.locator('.toast').last()).toContainText('새 분류 이름을 입력해 주세요');
+  expect((await data(page)).practices.length).toBe(d.practices.length);
+});
+
 test('A past scheduled lesson can be recorded as done or cancelled from home in one tap', async ({page}) => {
   await boot(page, {media:false});
   const card = page.locator('[data-overdue]');
