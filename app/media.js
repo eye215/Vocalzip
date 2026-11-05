@@ -142,8 +142,15 @@ M.importFile = async (file, choice, onProgress, signal) => {
     // choice.extra carries import facts (source type, original file name, hash, imported time) kept with the file.
     const info = {...meta, ...(choice.extra || {}), id:choice.id, name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
     let saved;
-    if (window.vzipCloudSignedIn?.()) {
+    if (window.vzipCloudSignedIn?.() && out.size > LOCAL_LIMIT) {
       saved = {...await window.vzipCloudImport(out, info, p => onProgress?.(p), {signal}), cloud:true};
+    } else if (window.vzipCloudSignedIn?.()) {
+      // Signed in: keep the file on this device first, then the cloud upload runs from that copy.
+      // iOS pauses web apps in the background; the upload resumes on return and nothing is lost.
+      if (signal?.aborted) throw new DOMException('취소', 'AbortError');
+      saved = {...info, blob:out, importedAt:Date.now(), local:true, pendingUpload:true};
+      await window.vzipStorePracticeMedia(saved);
+      window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:saved.id, source:'import'}}));
     } else {
       if (out.size > LOCAL_LIMIT) throw Error('25MB 초과 음원은 로그인 후 가져올 수 있어요.');
       if (signal?.aborted) throw new DOMException('취소', 'AbortError');
@@ -219,7 +226,7 @@ M.backupStatus = () => ({...backup});
 M.localOnly = items => items.filter(m => m.local && !m.cloud && blobOf(m));
 M.backupLocal = async () => {
   if (backup.running || !window.vzipCloudSignedIn?.() || !window.vzipCloudImport) return backup;
-  backup.running = true; backup.waiting = false;
+  backup.running = true; backup.waiting = false; M.keepAwake(true);
   const notify = () => window.dispatchEvent(new Event('vzip:v6-backup'));
   try {
     const pending = M.localOnly(await M.list(true));
@@ -251,12 +258,31 @@ M.backupLocal = async () => {
       } finally { await prepared?.dispose?.(); notify(); }
     }
   } finally {
-    backup.running = false; M.invalidate(); notify();
+    backup.running = false; M.keepAwake(false); M.invalidate(); notify();
     window.dispatchEvent(new Event('vzip:v6-media'));
     if (backup.waiting) setTimeout(() => M.backupLocal(), 15000);
+    // Uploads cut off by leaving the app (or a weak connection) are retried with a growing pause.
+    else if (backup.failed) { backup.retries = (backup.retries || 0) + 1; M.scheduleBackup(Math.min(600000, 15000 * 2 ** Math.min(backup.retries, 6))); }
+    else backup.retries = 0;
   }
   return backup;
 };
+/** Keep the screen on while files are being saved or uploaded (where the browser allows it). */
+let awake = 0, lock = null;
+const relock = async () => { if (awake > 0 && !lock && document.visibilityState === 'visible' && navigator.wakeLock) { try { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } catch {} } };
+M.keepAwake = on => { awake = Math.max(0, awake + (on ? 1 : -1)); if (awake) relock(); else { lock?.release?.().catch(() => {}); lock = null; } };
+// Coming back to the app (or getting a connection back) picks up any upload that was left over.
+const resume = () => { if (document.visibilityState !== 'visible') return; relock(); if (window.vzipCloudSignedIn?.() && !backup.running) { backup.retries = 0; M.scheduleBackup(800); } };
+document.addEventListener('visibilitychange', resume);
+window.addEventListener('online', resume);
+window.addEventListener('pageshow', resume);
+/* Upload indicator on every screen while the cloud upload runs. */
+window.addEventListener('vzip:v6-backup', () => {
+  let pill = document.getElementById('vz-upload-pill');
+  if (!backup.running || !backup.total) { pill?.remove(); return; }
+  if (!pill) { pill = document.createElement('a'); pill.id = 'vz-upload-pill'; pill.href = '#/library'; pill.setAttribute('role', 'status'); document.body.append(pill); }
+  pill.textContent = '☁ 클라우드 업로드 중 ' + Math.min(backup.total, backup.done + backup.failed + 1) + '/' + backup.total + ' · 다른 앱을 쓰다 와도 이어서 올라가요';
+});
 let backupTimer = null;
 M.scheduleBackup = (delay = 3000) => { clearTimeout(backupTimer); backupTimer = setTimeout(() => M.backupLocal().catch(() => {}), delay); };
 window.addEventListener('vzip:auth-changed', () => { if (window.vzipCloudSignedIn?.()) M.scheduleBackup(4000); });

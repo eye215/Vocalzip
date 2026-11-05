@@ -43,7 +43,7 @@ VZ.importSheet = ({songId = ''} = {}) => {
       const setRow = (r, text, pct) => { const u = ui(r); u.querySelector('[data-st]').textContent = text; if (pct != null) u.querySelector('.bar-mini i').style.width = pct + '%'; u.classList.toggle('failed', r.state === 'failed' || r.state === 'cancelled'); u.classList.toggle('done', r.state === 'done'); u.querySelector('[data-retry]').hidden = !['failed', 'cancelled'].includes(r.state); };
       const run = async list => {
         if (importRunning) return;
-        importRunning = true; abort = new AbortController();
+        importRunning = true; abort = new AbortController(); M.keepAwake(true);
         const start = wrap.querySelector('[data-start]'), cancel = wrap.querySelector('[data-cancel]');
         start.disabled = true; cancel.textContent = '업로드 중지';
         step2.querySelectorAll('[data-song],[data-date],[data-bulk],[data-retry]').forEach(x => { x.disabled = true; });
@@ -72,10 +72,11 @@ VZ.importSheet = ({songId = ''} = {}) => {
             }
           }
         } finally {
-          importRunning = false; cancel.textContent = '닫기';
+          importRunning = false; M.keepAwake(false); cancel.textContent = '닫기';
           step2.querySelectorAll('[data-song],[data-date],[data-bulk],[data-retry]').forEach(x => { x.disabled = false; });
           const done = rows.filter(r => r.state === 'done').length, bad = rows.filter(r => ['failed', 'cancelled'].includes(r.state)).length;
           step2.querySelector('[data-summary]').textContent = '저장 ' + done + '개' + (bad ? ' · 실패/취소 ' + bad + '개 — 실패한 파일만 다시 시도할 수 있어요.' : '');
+          if (savedItems.some(x => x.pendingUpload)) step2.querySelector('[data-summary]').textContent += ' · 이 기기에 먼저 저장했어요. 클라우드 업로드는 자동으로 이어져요(다른 앱을 쓰다 와도 이어서 올라가요).';
           start.hidden = true;
           if (done) M.invalidate();
           if (!bad && done) VZ.toast(done + '개 파일을 보관함에 저장했어요.');

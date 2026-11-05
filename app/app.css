@@ -344,3 +344,5 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 #vzip-cloud-root .cloud-more summary::-webkit-details-marker{display:none}
 #vzip-cloud-root .cloud-more summary::after{content:'펼치기 ▾';font-size:13px;font-weight:500;color:var(--ink-3)}
 #vzip-cloud-root .cloud-more[open] summary::after{content:'접기 ▴'}
+/* 업로드 진행 표시 */
+#vz-upload-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + var(--safe-b) + 10px);z-index:40;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:var(--ink);color:#fff;font-size:12px;font-weight:600;text-decoration:none;box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

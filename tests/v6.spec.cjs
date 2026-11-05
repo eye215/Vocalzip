@@ -912,3 +912,32 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await page.goto('/#/home'); await page.goto('/#/settings');
   await expect(page.locator('.cloud-more')).toHaveCount(1);
 });
+
+test('Signed-in imports are kept on the device first and the cloud upload resumes after leaving the app', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  await page.evaluate(() => {
+    window.__imports = []; window.__failNext = true; const rows = new Map();
+    window.vzipCloudSignedIn = () => true;
+    // The first upload is cut off (as when iOS pauses the app); later ones go through.
+    window.vzipCloudImport = async (file, info) => { if (window.__failNext) { window.__failNext = false; throw Error('네트워크 연결이 끊겼어요.'); } window.__imports.push({id:info.id, size:file.size}); rows.set(info.id, {...info, size:file.size}); return {...info, size:file.size}; };
+    window.vzipCloudMediaList = async () => [...rows.values()].map(m => ({...m, cloud:true}));
+    window.vzipCloudMediaUpdate = async () => {};
+  });
+  const sr = 8000, n = sr * 2, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:b});
+  await page.getByRole('button', {name:'가져오기', exact:true}).click();
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
+  await expect(sheet(page).locator('[data-summary]')).toContainText('클라우드 업로드는 자동으로 이어져요');
+  // Saved on the device right away, marked for upload.
+  const [local] = await media(page);
+  expect(local).toMatchObject({source:'import', pendingUpload:true});
+  // The first background attempt fails; coming back to the app retries it without picking the file again.
+  await expect.poll(() => page.evaluate(() => window.__failNext)).toBe(false);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => page.evaluate(() => window.__imports.map(x => x.id)), {timeout:15000}).toEqual([local.id]);
+  expect((await page.evaluate(() => window.__imports))[0].size).toBe(b.length);
+  await expect(page.locator('#vz-upload-pill')).toHaveCount(0);
+});
