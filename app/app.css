@@ -346,3 +346,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 #vzip-cloud-root .cloud-more[open] summary::after{content:'접기 ▴'}
 /* 업로드 진행 표시 */
 #vz-upload-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + var(--safe-b) + 10px);z-index:40;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:var(--ink);color:#fff;font-size:12px;font-weight:600;text-decoration:none;box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 공연 · 레슨 · 연습 */
+.timeline .t.performance:before{background:#e0742c}
+.hub-song{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+.hub-song .chip{grid-column:1/-1}

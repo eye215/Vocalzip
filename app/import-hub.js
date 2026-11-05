@@ -18,7 +18,7 @@ const SOURCES = {
 const KEY = 'vzip_import_hub_conditions_v1';
 const SOURCE_TYPE = {photos:'photos', drive:'icloud-drive', memo:'voice-memo'};
 let hub = fresh();
-function fresh() { return {source:null, phase:'source', rows:[], filter:'all', group:false, autoPractice:true, progress:'', cond:null}; }
+function fresh() { return {source:null, phase:'source', rows:[], filter:'all', group:false, autoPractice:true, progress:'', cond:null, occasion:'practice'}; }
 function conditionsFor(source) {
   let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}')[source] || {}; } catch {}
   const s = SOURCES[source];
@@ -54,7 +54,7 @@ async function analyze(files) {
   const seenHash = new Map();
   for (const [i, file] of files.entries()) {
     hub.progress = '파일 확인 중 ' + (i + 1) + '/' + files.length + ' · ' + file.name; drawProgress();
-    const row = {id:VZ.uid(), file, name:file.name, size:file.size, type:M.typeOf(file), state:'pending', song:'', approved:false};
+    const row = {id:VZ.uid(), file, name:file.name, size:file.size, type:M.typeOf(file), state:'pending', song:'', approved:false, occasion:hub.occasion || 'practice'};
     try {
       const info = await window.vzipInspectMedia(file);
       row.readable = info.readable !== false;
@@ -101,7 +101,7 @@ async function importRows(rows) {
     row.state = 'uploading'; row.msg = '준비 중…'; drawRow(row);
     try {
       const song = VZ.song(row.song);
-      const extra = {sourceType:SOURCE_TYPE[hub.source], originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
+      const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source], originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
       const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' ? '' : row.date, extra},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
       row.state = 'done'; row.msg = '✓ 저장됨'; row.saved = saved; row.file = null;
@@ -112,7 +112,7 @@ async function importRows(rows) {
   let made = 0;
   if (hub.autoPractice) {
     const linked = new Set(VZ.db.practices.flatMap(p => p.mediaIds || []));
-    const todo = rows.filter(r => r.state === 'done' && r.song && !linked.has(r.id));
+    const todo = rows.filter(r => r.state === 'done' && r.song && r.occasion === 'practice' && !linked.has(r.id));
     if (todo.length) VZ.change(d => { for (const r of todo) {
       const minutes = Math.max(0.1, Math.round((Number(r.saved?.durationSeconds || r.duration) || 0) / 6) / 10);
       d.practices.push({id:VZ.uid(), date:M.dateOf(r.saved) || r.date, minutes, manualMinutes:minutes, mediaSeconds:0, mediaIds:[r.id], practiceMode:'song', technique:[], songId:r.song, categoryId:'', categoryLabel:'', detail:'', rating:0,
@@ -175,7 +175,7 @@ function draw() {
       '<div class="hub-top"><strong>' + (r.dateOk ? esc(VZ.dateLabel(r.date)) : '날짜 미확인') + '</strong><span class="small muted">' + mmss(r.duration) + (r.video ? ' · 영상→음성' : '') + '</span></div>' +
       '<div class="small muted hub-name" title="' + esc(r.name) + '">' + esc(r.name) + '</div>' + (badge ? '<div>' + badge + '</div>' : '') +
       (r.status === 'needs-date' || r.dateSource === 'filename' ? '<label class="hub-date"><span class="small">녹음 날짜' + (r.dateSource === 'filename' ? ' (파일명)' : r.date ? ' · 파일 수정일 ' + esc(r.date) + '을 넣어 뒀어요' : '') + '</span><input type="date" data-date value="' + esc(r.date || '') + '"></label>' : '') +
-      '<div class="hub-song"><select data-song aria-label="' + esc(r.name) + ' 곡">' + songOpts(r.song) + '</select>' + (sugSong && r.song !== sug.id ? '<button type="button" class="chip" data-approve>추천: ' + esc(sugSong.title) + ' 승인</button>' : '') + '</div>' +
+      '<div class="hub-song"><select data-occ-row aria-label="' + esc(r.name) + ' 종류">' + M.OCCASIONS.map(([k, v]) => '<option value="' + k + '"' + (r.occasion === k ? ' selected' : '') + '>' + v + '</option>').join('') + '</select><select data-song aria-label="' + esc(r.name) + ' 곡">' + songOpts(r.song) + '</select>' + (sugSong && r.song !== sug.id ? '<button type="button" class="chip" data-approve>추천: ' + esc(sugSong.title) + ' 승인</button>' : '') + '</div>' +
       '<div class="hub-actions"><button type="button" class="chip" data-play><i class="ph ph-play"></i> 들어보기</button><span class="small" data-msg>' + esc(r.msg || '') + '</span></div><div data-p></div></div></div>';
   };
   let list;
@@ -188,8 +188,9 @@ function draw() {
     h.innerHTML = '<div class="row" style="margin-bottom:8px"><span class="avatar"><i class="ph ph-' + s.icon + '"></i></span><strong class="grow">' + esc(s.title) + ' 분석 결과</strong><button type="button" class="btn sm ghost" data-again>다시 선택</button></div>' +
       '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px">' + chips.map(([k, label]) => '<button type="button" class="chip" data-f="' + k + '" aria-pressed="' + (hub.filter === k) + '">' + label + '</button>').join('') + '</div>' +
       '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px"><button type="button" class="chip" data-all>전체 선택</button><button type="button" class="chip" data-none>선택 해제</button><button type="button" class="chip" data-nodup>중복 제외</button><button type="button" class="chip" data-approve-all>추천곡 일괄 승인</button><button type="button" class="chip" data-group aria-pressed="' + hub.group + '">곡별 묶어 보기</button></div>' +
+      '<label class="field"><span>선택한 파일의 종류 한 번에 지정</span><select data-bulk-occ><option value="">선택…</option>' + M.OCCASIONS.map(([k, v]) => '<option value="' + k + '">' + v + '</option>').join('') + '</select></label>' +
       '<label class="field"><span>선택한 파일의 곡 한 번에 지정</span><select data-bulk><option value="">선택…</option>' + songOpts('').replace('<option value="">곡 미지정</option>', '<option value="__none">곡 미지정</option>') + '</select></label>' +
-      '<label class="item" style="padding:0 0 10px"><input type="checkbox" data-auto' + (hub.autoPractice ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main small">곡을 정한 파일은 그 날짜의 연습 기록으로 만들기 (같은 파일은 한 번만)</span></label>' +
+      '<label class="item" style="padding:0 0 10px"><input type="checkbox" data-auto' + (hub.autoPractice ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main small">곡을 정한 "연습" 파일은 그 날짜의 연습 기록으로 만들기 (같은 파일은 한 번만)</span></label>' +
       '<div class="stack" data-list>' + (list || '<p class="small muted">이 조건에 해당하는 파일이 없어요.</p>') + '</div>' +
       '<div class="sheet-foot" style="position:sticky;bottom:calc(var(--nav-h) + var(--safe-b));margin:16px -16px 0;padding:12px 16px"><button type="button" class="btn block" data-import' + (selected.length ? '' : ' disabled') + '>선택한 ' + selected.length + '개 가져오기</button></div>';
     wireReview(h);
@@ -228,6 +229,8 @@ function wireReview(h) {
   h.querySelector('[data-bulk]').onchange = e => { const v = e.target.value; if (!v) return; hub.rows.forEach(r => { if (r.selected) r.song = v === '__none' ? '' : v; }); draw(); };
   h.querySelectorAll('[data-sel]').forEach(c => c.onchange = () => { const r = byRow(c); r.selected = c.checked; draw(); });
   h.querySelectorAll('[data-song]').forEach(sel => sel.onchange = () => { byRow(sel).song = sel.value; });
+  h.querySelectorAll('[data-occ-row]').forEach(sel => sel.onchange = () => { byRow(sel).occasion = sel.value; });
+  h.querySelector('[data-bulk-occ]').onchange = e => { const v = e.target.value; if (!v) return; hub.occasion = v; hub.rows.forEach(r => { if (r.selected) r.occasion = v; }); draw(); };
   h.querySelectorAll('[data-approve]').forEach(b => b.onclick = () => { const r = byRow(b); r.song = r.suggestions[0].id; draw(); });
   h.querySelectorAll('[data-date]').forEach(inp => inp.onchange = () => {
     const r = byRow(inp); if (!inp.value) return;
