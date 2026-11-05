@@ -1091,6 +1091,23 @@ test('Billing attendance records can be added to 레슨 기록 (00:00–01:00 / 
   expect(ledger.revision).toBe(3);
 });
 
+test('The first lesson completed after the update is deducted even if 레슨비 정산 was never opened since', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  await page.evaluate(() => localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token', JSON.stringify({user:{id:'ui-test-user', email:'test@example.invalid'}})));
+  await page.goto('/billing/');
+  await expect(page.locator('#message')).toContainText('불러왔어요');
+  await page.locator('[data-panel="passes"]').click();await page.locator('[data-open-form="pass"]').click();
+  await page.locator('#pass-name').fill('10회권');await page.locator('#pass-totalUnits').fill('10');await page.locator('#pass-amount').fill('500000');
+  await page.locator('#pass-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
+  await page.goto('/#/lessons');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  // As on a device where billing was last opened before auto-deduction existed.
+  await page.evaluate(() => localStorage.removeItem('vzip_billing_auto_deduct_v1'));
+  await page.locator('[data-resolve="done"][data-id="l-over"]').click();
+  await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+});
+
 test('Saving a lesson as completed deducts it in 레슨비 정산 in the background', async ({page}) => {
   test.setTimeout(60000);
   await boot(page, {media:false});
