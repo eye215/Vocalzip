@@ -963,5 +963,14 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await page.getByRole('tab', {name:'공연'}).click();
   await expect(page.locator('[data-body] [data-media="m2"]')).toHaveCount(1);
   const minutes = await page.evaluate(async () => VZ.timeEntries(await VZ.media.list()).filter(e => e.kind === 'recording').map(e => e.ref.id));
-  expect(minutes).not.toContain('m2');
+  expect(minutes).not.toContain('m2');  // The calendar shows performances as their own group and dot.
+  const m2day = await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(m => m.id === 'm2')));
+  await page.goto('/#/calendar');
+  await expect(page.locator('.legend')).toContainText('공연');
+  for (let i = 0; i < 3 && !(await page.locator('[data-d="' + m2day + '"]').count()); i++) await page.getByRole('button', {name:'이전 달'}).click();
+  await page.locator('[data-d="' + m2day + '"]').click();
+  await expect(page.locator('[data-d="' + m2day + '"] .dots .s')).toHaveCount(1);
+  await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연');
+  await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상 · 기록과 연결되지 않은 녹음');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });

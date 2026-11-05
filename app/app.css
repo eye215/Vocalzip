@@ -350,3 +350,5 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .timeline .t.performance:before{background:#e0742c}
 .hub-song{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
 .hub-song .chip{grid-column:1/-1}
+.dots .s{background:#e0742c}
+.legend{flex-wrap:wrap}
