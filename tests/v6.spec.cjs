@@ -1310,6 +1310,24 @@ test('Billing attendance records go into 레슨 기록 and the calendar by thems
   expect(ledger.revision).toBe(3);
 });
 
+test('Rebuilding 레슨비 정산 does not double the calendar: lessons made from old records re-link to the new ones', async ({page}) => {
+  await boot(page, {media:false});
+  const put = deductions => page.evaluate(async ds => {
+    const db = await new Promise((res, rej) => { const r = indexedDB.open('vocalzip_billing_v1', 2); r.onupgradeneeded = () => { for (const n of ['documents', 'sync', 'recovery']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n, {keyPath:'owner'}); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    await new Promise(res => { const t = db.transaction('documents', 'readwrite'); t.objectStore('documents').put({owner:'user:ui-test-user', schemaVersion:1, revision:5, passes:[{id:'p1', name:'레슨권'}], payments:[], adjustments:[], imports:[], importRows:[], history:[], deductions:ds}); t.oncomplete = res; });
+    db.close();
+  }, deductions);
+  await put([{id:'old1', passId:'p1', date:'2026-10-01', status:'completed', units:100}, {id:'old2', passId:'p1', date:'2026-10-04', status:'completed', units:200}]);
+  await page.evaluate(() => VZ.billingImportLessons());
+  expect((await data(page)).lessons.filter(l => l.importedFrom === 'billing').map(l => [l.id, l.billingDeductionId]).sort()).toEqual([['bill-old1', 'old1'], ['bill-old2', 'old2']]);
+  // The ledger is cleared and imported again: same days, new record ids.
+  await put([{id:'new1', passId:'p1', date:'2026-10-01', status:'completed', units:100}, {id:'new2', passId:'p1', date:'2026-10-04', status:'completed', units:200}, {id:'new3', passId:'p1', date:'2026-10-08', status:'completed', units:100}]);
+  await page.evaluate(() => VZ.billingImportLessons());
+  const lessons = (await data(page)).lessons.filter(l => l.importedFrom === 'billing');
+  expect(lessons.map(l => [l.date, l.billingDeductionId]).sort()).toEqual([['2026-10-01', 'new1'], ['2026-10-04', 'new2'], ['2026-10-08', 'new3']]);
+  expect(lessons.filter(l => l.date === '2026-10-01')).toHaveLength(1);
+});
+
 test('레슨비 정산 keeps one ledger when the login session drops, and offers to merge records saved apart on this device', async ({page}) => {
   test.setTimeout(60000);
   await boot(page, {media:false});

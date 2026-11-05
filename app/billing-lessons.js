@@ -81,14 +81,18 @@ VZ.billingImportLessons = () => importing ||= (async () => {
     const claimed = new Set(active.map(d => d.lessonId).filter(Boolean)); // app lessons a record already points at
     const passes = new Map((doc.passes || []).map(p => [p.id, p]));
     const add = [], link = [], taken = new Set();
+    // A lesson made from a record that is no longer in the ledger (deleted, or the ledger was rebuilt) is re-linked to a
+    // record of the same day instead of getting a second copy on the calendar.
+    const known = new Set((doc.deductions || []).map(d => d.id));
+    const stale = l => l.importedFrom === 'billing' && l.billingDeductionId && !known.has(l.billingDeductionId);
     for (const d of active) {
       if ((d.lessonId && (ids.has(d.lessonId) || gone.has(String(d.lessonId)))) || linked.has(d.id) || ids.has(billLessonId(d)) || gone.has(billLessonId(d))) continue;
-      const same = lessons.find(l => l.date === d.date && !l.billingDeductionId && !claimed.has(l.id) && !taken.has(l.id));
+      const same = lessons.find(l => l.date === d.date && (!l.billingDeductionId || stale(l)) && !claimed.has(l.id) && !taken.has(l.id));
       if (same) { taken.add(same.id); link.push([same.id, d.id]); } else add.push(d);
     }
     if (!add.length && !link.length) return 0;
     const ok = VZ.change(db => {
-      for (const [id, dId] of link) { const l = db.lessons.find(x => x.id === id); if (l && !l.billingDeductionId) l.billingDeductionId = dId; }
+      for (const [id, dId] of link) { const l = db.lessons.find(x => x.id === id); if (l && (!l.billingDeductionId || stale(l))) l.billingDeductionId = dId; }
       for (const d of add) if (!db.lessons.some(l => l.id === billLessonId(d))) db.lessons.push(lessonFrom({deduction:d, pass:passes.get(d.passId), start:'00:00', end:endTime(d.units), status:statusOf(d.status)}, billLessonId(d)));
     }, {silent:true});
     if (!ok) return 0;
