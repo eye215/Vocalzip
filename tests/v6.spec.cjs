@@ -1175,7 +1175,7 @@ test('Import hub takes a whole computer folder (subfolders too) and skips non-me
   fs.rmSync(dir, {recursive:true, force:true});
 });
 
-test('Billing attendance records can be added to 레슨 기록 (00:00–01:00 / 00:00–02:00), once, after picking them', async ({page}) => {
+test('Billing attendance records go into 레슨 기록 and the calendar by themselves (00:00–01:00 / 00:00–02:00), once', async ({page}) => {
   await boot(page, {media:false});
   const l1 = (await data(page)).lessons.find(l => l.id === 'l1').date;
   await page.evaluate(async sameDay => {
@@ -1185,20 +1185,31 @@ test('Billing attendance records can be added to 레슨 기록 (00:00–01:00 / 
         {id:'d4', passId:'p1', date:sameDay, status:'completed', units:100}, {id:'d5', passId:'p1', date:'2026-10-09', status:'completed', units:100, voidedAt:'2026-11-01T00:00:00Z'}]}); t.oncomplete = res; t.onerror = () => rej(t.error); });
     db.close();
   }, l1);
+  // Opening the lesson list (or just starting the app) brings them in; nothing to tap.
   await page.goto('/#/lessons');
-  await expect(page.locator('[data-billing-banner]')).toContainText('수강 내역 4개');
-  await page.getByRole('button', {name:'보기'}).click();
-  await expect(sheet(page).locator('[data-pick]:checked')).toHaveCount(3); // the same-day one starts unchecked
-  await expect(sheet(page)).toContainText('같은 날 레슨이 이미 있어요 (1)');
-  await sheet(page).getByRole('button', {name:'선택한 3개 레슨 추가'}).click();
-  const added = (await data(page)).lessons.filter(l => l.importedFrom === 'billing').sort((a, b) => a.date.localeCompare(b.date));
-  expect(added.map(l => [l.date, l.startTime, l.endTime, l.status, l.billingDeductionId])).toEqual([
-    ['2026-10-01', '00:00', '01:00', 'done', 'd1'], ['2026-10-04', '00:00', '02:00', 'done', 'd2'], ['2026-10-07', '00:00', '01:00', 'cancelled', 'd3']]);
+  await expect(page.locator('.toast').last()).toContainText('레슨비 정산의 수강 3건을 레슨 기록·캘린더에 넣었어요');
+  let d = await data(page);
+  const added = d.lessons.filter(l => l.importedFrom === 'billing').sort((a, b) => a.date.localeCompare(b.date));
+  expect(added.map(l => [l.id, l.date, l.startTime, l.endTime, l.status, l.billingDeductionId])).toEqual([
+    ['bill-d1', '2026-10-01', '00:00', '01:00', 'done', 'd1'], ['bill-d2', '2026-10-04', '00:00', '02:00', 'done', 'd2'], ['bill-d3', '2026-10-07', '00:00', '01:00', 'cancelled', 'd3']]);
   expect(added[0]).toMatchObject({memo:'호흡', teacher:'김쌤'});
   expect(added[2].memo).toBe('당일 취소');
-  // Only the same-day record is left; nothing is added twice.
+  // The lesson already on the same day is linked, not doubled; the deleted record (d5) stays out.
+  expect(d.lessons.find(l => l.id === 'l1').billingDeductionId).toBe('d4');
+  expect(d.lessons.filter(l => l.date === l1)).toHaveLength(1);
+  expect(d.lessons.some(l => l.date === '2026-10-09')).toBe(false);
+  // They are on the calendar.
+  await page.goto('/#/calendar');
+  for (let i = 0; i < 24 && !(await page.locator('.cal-day[data-d="2026-10-04"]').count()); i++) await page.locator('[data-mv="' + (new Date() > new Date(2026, 9, 31) ? -1 : 1) + '"]').click();
+  await expect(page.locator('.cal-day[data-d="2026-10-04"] .dots i.l')).toHaveCount(1);
+  await page.locator('.cal-day[data-d="2026-10-04"]').click();
+  await expect(page.getByText('00:00 – 02:00').or(page.getByText('00:00–02:00')).first()).toBeVisible();
+  // Nothing is added twice, and a lesson the user deletes does not come back.
+  await page.evaluate(() => VZ.change(db => { db.lessons = db.lessons.filter(l => l.id !== 'bill-d2'); }));
   await page.goto('/#/home'); await page.goto('/#/lessons');
-  await expect(page.locator('[data-billing-banner]')).toContainText('수강 내역 1개');
+  await page.evaluate(() => VZ.billingImportLessons());
+  d = await data(page);
+  expect(d.lessons.filter(l => l.importedFrom === 'billing').map(l => l.id).sort()).toEqual(['bill-d1', 'bill-d3']);
   // The billing ledger itself is unchanged.
   const ledger = await page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('device'); q.onsuccess = () => r(q.result); }); db.close(); return doc; });
   expect(ledger.revision).toBe(3);

@@ -38,9 +38,9 @@ VZ.billingLessonCandidates = async () => {
   const byDate = (a, b) => a.deduction.date.localeCompare(b.deduction.date);
   return {add:add.sort(byDate), sameDay:sameDay.sort(byDate)};
 };
-function lessonFrom({deduction:d, pass, start, end, status}) {
+function lessonFrom({deduction:d, pass, start, end, status}, id = VZ.uid()) {
   const memo = [d.status === 'noshow' ? '당일 취소' : '', d.memo || ''].filter(Boolean).join(' · ');
-  return {id:VZ.uid(), date:d.date, startTime:start, endTime:end, place:'', teacher:pass?.teacher || '', songIds:[], songId:'', prepMemo:'', status,
+  return {id, date:d.date, startTime:start, endTime:end, place:'', teacher:pass?.teacher || '', songIds:[], songId:'', prepMemo:'', status,
     feedback:'', memo, recordings:[], created:Date.now(), billingDeductionId:d.id, importedFrom:'billing'};
 }
 const hoursText = row => (Number(row.deduction.units) || 0) / 100 + '회';
@@ -65,6 +65,42 @@ VZ.billingLessonSheet = async () => {
       };
     }});
 };
+/* 정산의 수강 내역 → 레슨 기록·캘린더 (자동). Every attendance record in the ledger becomes a lesson on its date
+ * (00:00–01:00 for 1회, 00:00–02:00 for 2회). A lesson the app already has on that day is linked instead of doubled.
+ * The lesson id comes from the record ('bill-<id>'), so two devices make the same lesson and the cloud merge keeps one;
+ * a lesson the user deleted is not brought back. The billing ledger itself is never changed here. */
+const billLessonId = d => 'bill-' + d.id;
+let importing = null;
+VZ.billingImportLessons = () => importing ||= (async () => {
+  try {
+    const doc = await ledger().catch(() => null); if (!doc) return 0;
+    const lessons = VZ.db.lessons, ids = new Set(lessons.map(l => l.id)), linked = new Set(lessons.map(l => l.billingDeductionId).filter(Boolean));
+    const gone = new Set((VZ.db.deleted?.lessons || []).map(String));
+    const active = (doc.deductions || []).filter(d => !d.voidedAt && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')).sort((a, b) => a.date.localeCompare(b.date));
+    const claimed = new Set(active.map(d => d.lessonId).filter(Boolean)); // app lessons a record already points at
+    const passes = new Map((doc.passes || []).map(p => [p.id, p]));
+    const add = [], link = [], taken = new Set();
+    for (const d of active) {
+      if ((d.lessonId && (ids.has(d.lessonId) || gone.has(String(d.lessonId)))) || linked.has(d.id) || ids.has(billLessonId(d)) || gone.has(billLessonId(d))) continue;
+      const same = lessons.find(l => l.date === d.date && !l.billingDeductionId && !claimed.has(l.id) && !taken.has(l.id));
+      if (same) { taken.add(same.id); link.push([same.id, d.id]); } else add.push(d);
+    }
+    if (!add.length && !link.length) return 0;
+    const ok = VZ.change(db => {
+      for (const [id, dId] of link) { const l = db.lessons.find(x => x.id === id); if (l && !l.billingDeductionId) l.billingDeductionId = dId; }
+      for (const d of add) if (!db.lessons.some(l => l.id === billLessonId(d))) db.lessons.push(lessonFrom({deduction:d, pass:passes.get(d.passId), start:'00:00', end:endTime(d.units), status:statusOf(d.status)}, billLessonId(d)));
+    }, {silent:true});
+    if (!ok) return 0;
+    if (/^#\/(home|calendar|lessons?|song)/.test(location.hash)) VZ.render();
+    if (add.length) VZ.toast('레슨비 정산의 수강 ' + add.length + '건을 레슨 기록·캘린더에 넣었어요.');
+    return add.length;
+  } finally { importing = null; }
+})();
+const importSoon = (ms = 2500) => setTimeout(() => VZ.billingImportLessons().catch(() => {}), ms);
+importSoon(); // after start-up (and the cloud merge that follows sign-in)
+window.addEventListener('vzip:auth-changed', () => importSoon(3000));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') importSoon(800); });
+window.addEventListener('pageshow', e => { if (e.persisted) importSoon(800); }); // back from 레슨비 정산
 /* 레슨 화면 위쪽 안내: 정산에만 있는 수강 내역이 있을 때만 */
 VZ.billingLessonBanner = async host => {
   if (!host) return;
