@@ -1049,3 +1049,55 @@ test('Import hub takes a whole computer folder (subfolders too) and skips non-me
   await expect(page.locator('.hub-name')).toHaveText(['nested 2026-03-02.wav', 'top 2026-03-01.wav']);
   fs.rmSync(dir, {recursive:true, force:true});
 });
+
+test('Billing attendance records can be added to 레슨 기록 (00:00–01:00 / 00:00–02:00), once, after picking them', async ({page}) => {
+  await boot(page, {media:false});
+  const l1 = (await data(page)).lessons.find(l => l.id === 'l1').date;
+  await page.evaluate(async sameDay => {
+    const db = await new Promise((res, rej) => { const r = indexedDB.open('vocalzip_billing_v1', 2); r.onupgradeneeded = () => { for (const n of ['documents', 'sync', 'recovery']) r.result.createObjectStore(n, {keyPath:'owner'}); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    await new Promise((res, rej) => { const t = db.transaction('documents', 'readwrite'); t.objectStore('documents').put({owner:'device', schemaVersion:1, revision:3, passes:[{id:'p1', name:'10회권', teacher:'김쌤'}], payments:[], adjustments:[], imports:[], importRows:[], history:[],
+      deductions:[{id:'d1', passId:'p1', date:'2026-10-01', status:'completed', units:100, memo:'호흡'}, {id:'d2', passId:'p1', date:'2026-10-04', status:'completed', units:200}, {id:'d3', passId:'p1', date:'2026-10-07', status:'noshow', units:100},
+        {id:'d4', passId:'p1', date:sameDay, status:'completed', units:100}, {id:'d5', passId:'p1', date:'2026-10-09', status:'completed', units:100, voidedAt:'2026-11-01T00:00:00Z'}]}); t.oncomplete = res; t.onerror = () => rej(t.error); });
+    db.close();
+  }, l1);
+  await page.goto('/#/lessons');
+  await expect(page.locator('[data-billing-banner]')).toContainText('수강 내역 4개');
+  await page.getByRole('button', {name:'보기'}).click();
+  await expect(sheet(page).locator('[data-pick]:checked')).toHaveCount(3); // the same-day one starts unchecked
+  await expect(sheet(page)).toContainText('같은 날 레슨이 이미 있어요 (1)');
+  await sheet(page).getByRole('button', {name:'선택한 3개 레슨 추가'}).click();
+  const added = (await data(page)).lessons.filter(l => l.importedFrom === 'billing').sort((a, b) => a.date.localeCompare(b.date));
+  expect(added.map(l => [l.date, l.startTime, l.endTime, l.status, l.billingDeductionId])).toEqual([
+    ['2026-10-01', '00:00', '01:00', 'done', 'd1'], ['2026-10-04', '00:00', '02:00', 'done', 'd2'], ['2026-10-07', '00:00', '01:00', 'cancelled', 'd3']]);
+  expect(added[0]).toMatchObject({memo:'호흡', teacher:'김쌤'});
+  expect(added[2].memo).toBe('당일 취소');
+  // Only the same-day record is left; nothing is added twice.
+  await page.goto('/#/home'); await page.goto('/#/lessons');
+  await expect(page.locator('[data-billing-banner]')).toContainText('수강 내역 1개');
+  // The billing ledger itself is unchanged.
+  const ledger = await page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('device'); q.onsuccess = () => r(q.result); }); db.close(); return doc; });
+  expect(ledger.revision).toBe(3);
+});
+
+test('Saving a lesson as completed deducts it in 레슨비 정산 in the background', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  // The app is signed in as ui-test-user (stub); billing reads the same account from the Supabase session.
+  await page.evaluate(() => localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token', JSON.stringify({user:{id:'ui-test-user', email:'test@example.invalid'}})));
+  await page.goto('/billing/');
+  await expect(page.locator('#message')).toContainText('불러왔어요');
+  await page.locator('[data-panel="passes"]').click();await page.locator('[data-open-form="pass"]').click();
+  await page.locator('#pass-name').fill('10회권');await page.locator('#pass-totalUnits').fill('10');await page.locator('#pass-amount').fill('500000');
+  await page.locator('#pass-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
+  await page.goto('/#/home');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.evaluate(() => VZ.change(d => { d.lessons.push({id:'done-now', date:VZ.today(), startTime:'19:00', endTime:'20:00', status:'done', songIds:[], songId:'', feedback:'', memo:'', recordings:[], created:Date.now()}); }));
+  await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+  await expect(page.locator('iframe')).toHaveCount(0);
+  const ledger = () => page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('user:ui-test-user'); q.onsuccess = () => r(q.result); }); db.close(); return doc.deductions.map(d => [d.lessonId, d.units]); });
+  expect(await ledger()).toEqual([['done-now', 100]]);
+  // Saving the same lesson again does not deduct twice.
+  await page.evaluate(() => VZ.change(d => { d.lessons.find(l => l.id === 'done-now').memo = '메모'; }));
+  await page.waitForTimeout(4000);
+  expect(await ledger()).toEqual([['done-now', 100]]);
+});

@@ -9,12 +9,15 @@ async function open(page){
 }
 const confirmSheet=async page=>{const sheet=page.locator('.bd-sheet');await expect(sheet).toBeVisible();await sheet.locator('[data-ok]').click();await expect(sheet).toHaveCount(0)};
 const tab=(page,name)=>page.locator('[data-panel="'+name+'"]').click();
+// 등록·수정 forms open as a layer popup from the section's add button.
+const openForm=(page,kind)=>page.locator('[data-open-form="'+kind+'"]').click();
+const closeForm=page=>page.keyboard.press('Escape');
 async function pass(page,name='기본 10회권',count='10',amount='300000'){
- await tab(page,'passes');await page.locator('#pass-name').fill(name);await page.locator('#pass-totalUnits').fill(count);await page.locator('#pass-amount').fill(amount);
+ await tab(page,'passes');await openForm(page,'pass');await page.locator('#pass-name').fill(name);await page.locator('#pass-totalUnits').fill(count);await page.locator('#pass-amount').fill(amount);
  await page.locator('#pass-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
 }
 async function payment(page,amount,date='2026-11-04',kind='payment'){
- await tab(page,'payments');await page.locator('#payment-amount').fill(amount);await page.locator('#payment-date').fill(date);await page.locator('#payment-kind').selectOption(kind);
+ await tab(page,'payments');await openForm(page,'payment');await page.locator('#payment-amount').fill(amount);await page.locator('#payment-date').fill(date);await page.locator('#payment-kind').selectOption(kind);
  await page.locator('#payment-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
 }
 async function ledger(page){return page.evaluate(()=>VzipBillingStore.load())}
@@ -27,11 +30,11 @@ async function csv(page,content,kind='payment',mode='existing'){
 async function commit(page){await page.locator('#confirm-attendance').check();await page.locator('#commit-import').click();await expect(page.locator('#message')).toContainText('일괄 등록 완료')}
 test('installments, refund, linked lesson, cancellation and reload preserve Project A',async({page})=>{
  await open(page);await pass(page);await payment(page,'100000','2026-11-01');await payment(page,'200000','2026-11-02');await payment(page,'50000','2026-11-03','refund');
- await tab(page,'attendance');await page.locator('#deduction-lessonId').selectOption('lesson-existing');await expect(page.locator('#deduction-units')).toHaveValue('1');
+ await tab(page,'attendance');await openForm(page,'deduction');await page.locator('#deduction-lessonId').selectOption('lesson-existing');await expect(page.locator('#deduction-units')).toHaveValue('1');
  await page.locator('#deduction-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
  await total(page,'remainingUnits','9회');await total(page,'unpaid','50,000원');await total(page,'usedAmount','30,000원');
  await page.reload();await expect(page.locator('[data-total=remainingUnits] strong')).toHaveText('9회');
- await tab(page,'attendance');await page.locator('#deduction-lessonId').selectOption('lesson-existing');
+ await tab(page,'attendance');await openForm(page,'deduction');await page.locator('#deduction-lessonId').selectOption('lesson-existing');
  await expect(page.locator('#deduction-form [type=submit]')).toHaveText('수정 저장');
  await page.locator('#deduction-status').selectOption('cancelled');await page.locator('#deduction-form [type=submit]').click();
  await total(page,'remainingUnits','10회');const data=await ledger(page);expect(data.deductions).toHaveLength(1);expect(data.history.at(-1).before.units).toBe(100);
@@ -39,9 +42,9 @@ test('installments, refund, linked lesson, cancellation and reload preserve Proj
 });
 test('duplicate payment stays unsaved and pass price edits require acknowledgement',async({page})=>{
  await open(page);await pass(page);await payment(page,'100000');
- await page.locator('#payment-amount').fill('100000');await page.locator('#payment-date').fill('2026-11-04');await page.locator('#payment-form [type=submit]').click();
+ await openForm(page,'payment');await page.locator('#payment-amount').fill('100000');await page.locator('#payment-date').fill('2026-11-04');await page.locator('#payment-form [type=submit]').click();
  await expect(page.locator('#message')).toContainText('동일한 결제');expect((await ledger(page)).payments).toHaveLength(1);
- await tab(page,'passes');await page.locator('#pass-list').getByRole('button',{name:'수정',exact:true}).click();await page.locator('#pass-amount').fill('400000');await page.locator('#pass-form [type=submit]').click();
+ await closeForm(page);await tab(page,'passes');await page.locator('#pass-list').getByRole('button',{name:'수정',exact:true}).click();await page.locator('#pass-amount').fill('400000');await page.locator('#pass-form [type=submit]').click();
  await expect(page.locator('#message')).toContainText('영향');await page.locator('#pass-form [name=ackImpact]').check();await page.locator('#pass-form [type=submit]').click();
  await total(page,'amount','400,000원');
 });
@@ -90,16 +93,16 @@ test('undo blocks imported records edited after upload',async({page})=>{
  expect((await ledger(page)).payments[0].amount).toBe(110000);
 });
 test('storage failure preserves form values and original ledger',async({page})=>{
- await open(page);await pass(page);await tab(page,'payments');await page.locator('#payment-amount').fill('50000');
+ await open(page);await pass(page);await tab(page,'payments');await openForm(page,'payment');await page.locator('#payment-amount').fill('50000');
  await page.evaluate(()=>{const original=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){if(this.name==='documents'){IDBObjectStore.prototype.put=original;throw new DOMException('저장 공간 부족','QuotaExceededError')}return original.apply(this,args)}});
  await page.locator('#payment-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장 공간 부족');await expect(page.locator('#payment-amount')).toHaveValue('50000');expect((await ledger(page)).payments).toHaveLength(0);
  await page.locator('#payment-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');expect((await ledger(page)).payments).toHaveLength(1);
 });
 test('concurrent tabs cannot overwrite a newer ledger',async({page,context})=>{
  await open(page);await pass(page);const second=await context.newPage();await second.goto('/billing/');await expect(second.locator('#message')).toContainText('불러왔어요');
- await payment(page,'100000');await tab(second,'payments');await second.locator('#payment-amount').fill('50000');await second.locator('#payment-form [type=submit]').click();
+ await payment(page,'100000');await tab(second,'payments');await openForm(second,'payment');await second.locator('#payment-amount').fill('50000');await second.locator('#payment-form [type=submit]').click();
  await expect(second.locator('#message')).toContainText('다른 정산 탭');expect((await ledger(page)).payments).toHaveLength(1);
- await second.locator('#reload').click();await expect(second.locator('#message')).toContainText('다시 불러왔어요');await second.locator('#payment-form [type=submit]').click();await expect(second.locator('#message')).toContainText('저장했어요');expect((await ledger(page)).payments).toHaveLength(2);
+ await closeForm(second);await second.locator('#reload').click();await expect(second.locator('#message')).toContainText('다시 불러왔어요');await openForm(second,'payment');await expect(second.locator('#payment-amount')).toHaveValue('50000');await second.locator('#payment-form [type=submit]').click();await expect(second.locator('#message')).toContainText('저장했어요');expect((await ledger(page)).payments).toHaveLength(2);
 });
 test('account storage is isolated and mobile layout stays within viewport',async({page})=>{
  await open(page);await pass(page);for(const section of ['dashboard','passes','payments','attendance','imports','history']){await tab(page,section);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true)}
@@ -113,8 +116,8 @@ test('CSV notes are rendered as inert text',async({page})=>{
 });
 
 test('manual adjustment and deduction cancellation/restore keep audited totals',async({page})=>{
- await open(page);await pass(page);await tab(page,'attendance');await page.locator('#deduction-status').selectOption('completed');await page.locator('#deduction-units').fill('2');await page.locator('#deduction-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
- await page.locator('#adjustment-unitsDelta').fill('10');await page.locator('#adjustment-amountDelta').fill('100000');await page.locator('#adjustment-memo').fill('추가 충전');await page.locator('#adjustment-form [name=ackImpact]').check();await page.locator('#adjustment-form [type=submit]').click();
+ await open(page);await pass(page);await tab(page,'attendance');await openForm(page,'deduction');await page.locator('#deduction-status').selectOption('completed');await page.locator('#deduction-units').fill('2');await page.locator('#deduction-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
+ await openForm(page,'adjustment');await page.locator('#adjustment-unitsDelta').fill('10');await page.locator('#adjustment-amountDelta').fill('100000');await page.locator('#adjustment-memo').fill('추가 충전');await page.locator('#adjustment-form [name=ackImpact]').check();await page.locator('#adjustment-form [type=submit]').click();
  await total(page,'chargedUnits','20회');await total(page,'usedAmount','40,000원');
  await tab(page,'attendance');await page.locator('#deduction-list').getByRole('button',{name:'삭제',exact:true}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('삭제했어요');await total(page,'usedUnits','0회');
  await tab(page,'attendance');await page.locator('#show-deleted').check();await page.locator('#deduction-list').getByRole('button',{name:'복구',exact:true}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('복구했어요');await total(page,'usedAmount','40,000원');
@@ -196,7 +199,7 @@ test('payments, deductions and adjustments list the newest date first',async({pa
 
 test('dates are typed as digits and shown as YYYY/MM/DD, including uploaded Notion dates',async({page})=>{
  await open(page);await pass(page);
- await tab(page,'payments');
+ await tab(page,'payments');await openForm(page,'payment');
  const date=page.locator('#payment-date');
  await expect(date).toHaveAttribute('inputmode','numeric');
  await date.fill('');await date.pressSequentially('20260126');
@@ -205,13 +208,14 @@ test('dates are typed as digits and shown as YYYY/MM/DD, including uploaded Noti
  await page.locator('#payment-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
  expect((await ledger(page)).payments[0].date).toBe('2026-01-26');
  await expect(page.locator('#payment-list')).toContainText('2026/01/26');
- // A pasted English date with trailing text becomes YYYY/MM/DD.
- await date.fill('January 26, 2026 7:00 PM (GMT+9)');await date.blur();
+ // A pasted English date with trailing text becomes YYYY/MM/DD (the saved form closed; open a new one).
+ await openForm(page,'payment');await date.fill('January 26, 2026 7:00 PM (GMT+9)');await date.blur();
  await expect(date).toHaveValue('2026/01/26');
  await date.fill('1/26/2026');await date.blur();
  await expect(date).toHaveValue('2026/01/26');
  await date.fill('2026-01-26');await date.blur();
  await expect(date).toHaveValue('2026/01/26');
+ await closeForm(page);
  // Uploaded rows: Notion English dates show as YYYY/MM/DD in the preview and after saving.
  await csv(page,'수강생,레슨날짜,레슨내용,진행상태\n학생,"January 26, 2026 7:00 PM",호흡,완료\n학생,26 January 2026,발성,완료\n','deduction');
  await expect(page.getByLabel('2행 날짜',{exact:true})).toHaveValue('2026/01/26');
