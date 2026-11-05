@@ -7,7 +7,7 @@ const initialAccount=account();
 function ensureAccount(){if(account().id!==initialAccount.id)throw Error('로그인 계정이 변경됐어요. 새로고침 후 계속해 주세요.')}
 function lessons(){
  try{const linked=localStorage.getItem('vzip_cloud_linked_user');if(linked&&initialAccount.id!=='user:'+linked)return [];
- const data=JSON.parse(localStorage.getItem(APP_KEY)||'{}');return (Array.isArray(data.lessons)?data.lessons:[]).filter(row=>row?.id).map(row=>({lesson_id:String(row.id),lesson_date:row.date||'',lesson_status:C.status(row.lesson_status||row.status),lesson_start:typeof row.startTime==='string'?row.startTime:'',lesson_end:typeof row.endTime==='string'?row.endTime:'',lesson_label:[row.place,row.teacher].filter(item=>typeof item==='string'&&item).join(' · ')}))}catch{return []}
+ const data=JSON.parse(localStorage.getItem(APP_KEY)||'{}');return (Array.isArray(data.lessons)?data.lessons:[]).filter(row=>row?.id).map(row=>({lesson_id:String(row.id),lesson_date:row.date||'',lesson_status:C.status(row.lesson_status||row.status),lesson_start:typeof row.startTime==='string'?row.startTime:'',lesson_end:typeof row.endTime==='string'?row.endTime:'',lesson_label:[row.place,row.teacher].filter(item=>typeof item==='string'&&item).join(' · '),billing_deduction_id:typeof row.billingDeductionId==='string'?row.billingDeductionId:''}))}catch{return []}
 }
 function open(){return new Promise((resolve,reject)=>{const request=indexedDB.open('vocalzip_billing_v1',2);let blocked=false;
  request.onupgradeneeded=()=>{for(const name of ['documents','sync','recovery'])if(!request.result.objectStoreNames.contains(name))request.result.createObjectStore(name,{keyPath:'owner'})};

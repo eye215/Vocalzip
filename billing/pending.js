@@ -8,11 +8,13 @@ const activeRows=rows=>rows.filter(row=>!row.voidedAt);
  * lessons without a deduction (toConfirm), and active charged deductions whose lesson is
  * now scheduled/cancelled in the app (toRestore). Future lessons are never pending. */
 function classify(lessons,state,today){
- const deductions=activeRows(state.deductions||[]),byLesson=new Map();
+ const deductions=activeRows(state.deductions||[]),byLesson=new Map(),activeIds=new Set(deductions.map(row=>row.id));
  for(const row of deductions)if(row.lessonId)byLesson.set(row.lessonId,row);
  const toDeduct=[],toConfirm=[],toRestore=[];
  for(const lesson of lessons){
   const id=lesson.lesson_id,existing=byLesson.get(id),date=lesson.lesson_date||'';
+  // A lesson the app created from this ledger's own attendance record is already settled.
+  if(lesson.billing_deduction_id&&activeIds.has(lesson.billing_deduction_id))continue;
   if(existing){
    // Only plain completed charges; a manual same-day-cancel (noshow) charge is intentional.
    if(existing.status==='completed'&&existing.units>0&&['scheduled','cancelled'].includes(lesson.lesson_status))toRestore.push({lesson,deduction:existing});

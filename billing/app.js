@@ -14,9 +14,9 @@ function button(text,fn){const b=el('button',text);b.type='button';b.onclick=fn;
 function selectOptions(select,options,previous=select.value){select.replaceChildren();for(const [value,label]of options)select.add(new Option(label,value));if(options.some(([value])=>value===previous))select.value=previous}
 function passName(id){return state?.passes.find(row=>row.id===id)?.name||'레슨권 없음'}
 function baseOptions(){return [['','레슨권 선택'],...C.active(state.passes).map(pass=>[pass.id,pass.name])]}
-function table(headers,rows,empty='아직 기록이 없어요.'){
+function table(headers,rows,empty='아직 기록이 없어요.',cls=''){
  if(!rows.length)return el('p',empty,'empty');
- const wrap=el('div',undefined,'table-wrap'),table=el('table'),head=el('thead'),tr=el('tr');
+ const wrap=el('div',undefined,'table-wrap'+(cls?' cards '+cls:'')),table=el('table'),head=el('thead'),tr=el('tr');
  for(const name of headers){const th=el('th',name);th.scope='col';tr.append(th)}head.append(tr);table.append(head);
  const body=el('tbody');for(const values of rows){const row=el('tr');for(const [index,value] of values.entries()){const td=el('td');if(headers[index])td.dataset.label=headers[index];if(value instanceof Node)td.append(value);else td.textContent=/^\d{4}-\d{2}-\d{2}$/.test(String(value??''))?window.VzipBillingDate.show(value):String(value??'');if(!(value instanceof Node)&&String(value??'').trim()==='')td.classList.add('empty');row.append(td)}body.append(row)}table.append(body);wrap.append(table);return wrap;
 }
@@ -38,10 +38,25 @@ function makeForm(kind,fields,flagItems=[]){
  const impact=el('p','','help impact');impact.dataset.impact='';form.append(impact);
  const actions=el('div',undefined,'actions form-actions'),save=el('button','저장');save.type='submit';actions.append(save,button('새로 입력',()=>resetForm(form)));form.append(actions);
  form.addEventListener('input',()=>previewForm(kind));form.addEventListener('change',()=>previewForm(kind));
- form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;try{await persist(commandFor(kind),()=>resetForm(form),'정산 기록을 저장했어요.')}catch(error){notify(error.message,true)}};
+ form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;try{await persist(commandFor(kind),()=>{resetForm(form);closeForm(kind)},'정산 기록을 저장했어요.')}catch(error){notify(error.message,true)}};
  $('#'+kind+'-form-slot').append(form);forms[kind]=form;resetForm(form);return form;
 }
-function resetForm(form){form.reset();form.elements.id.value='';form.elements.version.value='';form.elements.legacyRef.value='';if(form.elements.date)form.elements.date.value=today();form.querySelector('[data-impact]').textContent='';form.querySelector('[type=submit]').textContent='저장'}
+/* ---------- 등록·수정 layer popups ---------- */
+const layerTitles={pass:['레슨권 등록','레슨권 수정'],payment:['결제·환불 등록','결제·환불 수정'],deduction:['수강 기록 등록','수강 기록 수정'],adjustment:['수동 조정 등록','수동 조정 수정']};
+function layerTitle(kind){const t=document.getElementById(kind+'-layer-title');if(t&&layerTitles[kind])t.textContent=layerTitles[kind][forms[kind]?.elements.id.value?1:0]}
+// Saving clears the form; closing keeps a draft. The add button only clears an edit left open (a new entry starts fresh).
+function openForm(kind,{reset=true}={}){
+ const layer=document.getElementById(kind+'-layer');if(!layer)return;if(reset&&forms[kind].elements.id.value)resetForm(forms[kind]);
+ layer.hidden=false;layer.querySelector('.form-layer-panel').scrollTop=0;document.body.classList.add('layer-open');layerTitle(kind);previewForm(kind);
+}
+function closeForm(kind){const layer=document.getElementById(kind+'-layer');if(layer)layer.hidden=true;if(!document.querySelector('.form-layer:not([hidden])'))document.body.classList.remove('layer-open')}
+for(const b of document.querySelectorAll('[data-open-form]'))b.onclick=()=>openForm(b.dataset.openForm);
+for(const layer of document.querySelectorAll('.form-layer')){const kind=layer.id.replace('-layer','');layer.querySelector('[data-close-form]').onclick=()=>closeForm(kind);layer.addEventListener('click',e=>{if(e.target===layer)closeForm(kind)})}
+document.addEventListener('keydown',e=>{if(e.key!=='Escape'||document.querySelector('.bd-sheet'))return;const open=document.querySelector('.form-layer:not([hidden])');if(open)closeForm(open.id.replace('-layer',''))});
+function resetForm(form){form.reset();form.elements.id.value='';form.elements.version.value='';form.elements.legacyRef.value='';if(form.elements.date)form.elements.date.value=today();form.querySelector('[data-impact]').textContent='';form.querySelector('[type=submit]').textContent='저장';
+ // A reset form keeps the only pass preselected, as the page does after saving.
+ if(state){const only=C.active(state.passes);if(only.length===1)for(const select of form.querySelectorAll('[data-pass-select]'))if(!select.value)select.value=only[0].id}
+ layerTitle(form.getAttribute('id').replace('-form',''))}
 const rateForm=$('#hourly-rate-form');
 rateForm.onsubmit=async event=>{
  event.preventDefault();
@@ -89,7 +104,7 @@ async function persist(command,after,message){
 function edit(kind,row){
  const f=forms[kind];resetForm(f);for(const [key,value]of Object.entries(row)){if(!f.elements[key])continue;f.elements[key].value=['totalUnits','units'].includes(key)?value/100:(value??'')}
  f.elements.version.value=row.version;f.querySelector('[type=submit]').textContent='수정 저장';
- show(kind==='pass'?'passes':kind==='payment'?'payments':'attendance');previewForm(kind);f.scrollIntoView({block:'start'});f.elements[kind==='pass'?'name':'date']?.focus();
+ show(kind==='pass'?'passes':kind==='payment'?'payments':'attendance');openForm(kind,{reset:false});
 }
 async function toggle(collection,row){
  const restore=!!row.voidedAt;if(!await window.VzipBillingDialog.ask({title:restore?'기록을 복구할까요?':'기록을 삭제할까요?',message:'삭제하면 목록과 정산 합계에서 제외돼요. 삭제 내역 보기에서 복구할 수 있고, 변경 이력은 보존돼요. 연결된 앱 레슨은 삭제되지 않아요. 레슨권은 연결된 결제·수강·조정을 먼저 삭제해 주세요.',ok:restore?'복구':'삭제',cancel:'닫기',danger:!restore}))return;
@@ -106,9 +121,23 @@ function render(){
  // Open until a rate exists; afterwards it stays a one-line summary that opens to change it.
  if(!state.hourlyRate)$('#rate-box').open=true;
  if(h.rate){
-  // What matters first: hours left, then money ahead/behind; the inputs behind them follow.
-  const values=[['잔여 시간',hours(h.remainingUnits)],['선불 잔액',money(h.prepaid)],['미납 금액',money(h.owed)],['수강 시간',hours(h.usedUnits)],['충전 시간',hours(h.purchasedUnits)],['순결제',money(h.netPaid)],['사용 금액',money(h.usedAmount)]]; // the rate itself is the one-line card below
-  area.replaceChildren(...values.map(([label,value])=>{const box=el('div',undefined,'metric');if(label==='잔여 시간')box.classList.add('hero');box.append(el('span',label),el('strong',value,((label==='잔여 시간'&&h.remainingUnits<0)||(label==='미납 금액'&&h.owed>0))?'negative':''));return box}));
+  // Counts (1회 = 1시간) are easier to read than hours: lessons left first, then money ahead/behind, then recent activity.
+  const left=h.remainingUnits,bought=h.purchasedUnits,used=h.usedUnits,pct=bought>0?Math.max(0,Math.min(100,Math.round(used/bought*100))):0;
+  const hero=el('div',undefined,'metric hero');
+  hero.append(el('span','남은 레슨'),el('strong',sessions(left),left<0?'negative':''),el('p','결제한 '+sessions(bought)+' 중 '+sessions(used)+' 수강','metric-sub'));
+  const bar=el('div',undefined,'meter');const fill=el('i');fill.style.width=pct+'%';bar.append(fill);hero.append(bar);
+  const owed=h.owed>0,cash=el('div',undefined,'metric money '+(owed?'warn':'ok'));
+  cash.append(el('span',owed?'미납 금액':'선불 잔액'),el('strong',money(owed?h.owed:h.prepaid),owed?'negative':''),el('p','총 결제 '+money(h.netPaid)+' · 수강 금액 '+money(h.usedAmount)+' · 1회 '+money(h.rate),'metric-sub'));
+  const quick=el('div',undefined,'quick');
+  quick.append(button('+ 결제 등록',()=>{show('payments');openForm('payment')}),button('+ 수강 등록',()=>{show('attendance');openForm('deduction')}));
+  const recent=el('div',undefined,'metric recent'),events=[
+   ...C.active(state.payments).map(row=>({date:row.date,at:row.createdAt,text:(row.kind==='refund'?'환불 ':'결제 ')+money(row.amount),kind:row.kind==='refund'?'refund':'pay'})),
+   ...C.active(state.deductions).map(row=>({date:row.date,at:row.createdAt,text:'수강 '+sessions(row.units)+(row.status==='completed'?'':' · '+statusLabels[row.status]),kind:'lesson'}))
+  ].sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.at||'').localeCompare(String(a.at||''))).slice(0,5);
+  recent.append(el('span','최근 기록'));
+  if(events.length){const ul=el('ul');for(const e of events){const li=el('li',undefined,e.kind);li.append(el('time',window.VzipBillingDate.show(e.date)),el('b',e.text));ul.append(li)}recent.append(ul)}
+  else recent.append(el('p','아직 결제·수강 기록이 없어요.','metric-sub'));
+  area.replaceChildren(hero,cash,quick,recent);
   $('#hourly-hint').textContent='차감 1회 = 레슨 1시간. 모든 과거 기록에 동일한 시간당 단가를 적용합니다.';
  }else{
   area.replaceChildren(el('p','시간당 단가를 입력하면 Notion 방식의 잔여 수업 시간과 선불 잔액을 계산해요. 기존 거래는 수정하지 않습니다.','help'));
@@ -118,10 +147,10 @@ function render(){
  $('#balances').replaceChildren(table(['레슨권','충전','사용','잔여','레슨권 금액','회당 금액','순결제','사용 금액','미사용','미납'],result.passes.map(row=>[row.name,sessions(row.chargedUnits),sessions(row.usedUnits),sessions(row.remainingUnits),money(row.amount),new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(row.rate)+'원',money(row.netPaid),money(row.usedAmount),money(row.unusedAmount),money(row.unpaid)])));
  for(const select of document.querySelectorAll('[data-pass-select]')){const previous=select.value;selectOptions(select,baseOptions(),previous||((C.active(state.passes).length===1)?C.active(state.passes)[0].id:''))}
  selectOptions(deduction.elements.lessonId,[['','날짜로 과거 수강 등록'],...S.lessons().map(row=>[row.lesson_id,[row.lesson_date,row.lesson_start,row.lesson_label||row.lesson_id.slice(0,8),statusLabels[row.lesson_status]].filter(Boolean).join(' · ')])]);
- $('#pass-list').replaceChildren(table(['레슨권','총 횟수','금액','선생님','유효기간','관리'],visibleRows(state.passes).map(row=>[(row.voidedAt?'삭제됨 · ':'')+row.name,sessions(row.totalUnits),money(row.amount),row.teacher,row.expires,rowActions('passes','pass',row)])));
- $('#payment-list').replaceChildren(table(['날짜','레슨권','유형','금액','방법','메모','관리'],newestFirst(visibleRows(state.payments)).map(row=>[row.date,passName(row.passId),(row.voidedAt?'삭제됨 · ':'')+(row.kind==='refund'?'환불':'결제'),money(row.amount),row.method,row.memo,rowActions('payments','payment',row)])));
- $('#deduction-list').replaceChildren(table(['날짜','시간','레슨권','상태','차감','메모','관리'],newestFirst(visibleRows(state.deductions)).map(row=>[row.date,[row.start,row.end].filter(Boolean).join('–'),passName(row.passId),(row.voidedAt?'삭제됨 · ':'')+statusLabels[row.status],sessions(row.units),row.memo,rowActions('deductions','deduction',row)])));
- $('#adjustment-list').replaceChildren(table(['날짜','레슨권','횟수 증감','금액 증감','사유','관리'],newestFirst(visibleRows(state.adjustments)).map(row=>[row.date,passName(row.passId),sessions(row.unitsDelta),money(row.amountDelta),(row.voidedAt?'삭제됨 · ':'')+row.memo,rowActions('adjustments',null,row)])));
+ $('#pass-list').replaceChildren(table(['레슨권','총 횟수','금액','선생님','유효기간','관리'],visibleRows(state.passes).map(row=>[(row.voidedAt?'삭제됨 · ':'')+row.name,sessions(row.totalUnits),money(row.amount),row.teacher,row.expires,rowActions('passes','pass',row)]),undefined,'cards-pass'));
+ $('#payment-list').replaceChildren(table(['날짜','레슨권','유형','금액','방법','메모','관리'],newestFirst(visibleRows(state.payments)).map(row=>[row.date,passName(row.passId),(row.voidedAt?'삭제됨 · ':'')+(row.kind==='refund'?'환불':'결제'),money(row.amount),row.method,row.memo,rowActions('payments','payment',row)]),undefined,'cards-payment'));
+ $('#deduction-list').replaceChildren(table(['날짜','시간','레슨권','상태','차감','메모','관리'],newestFirst(visibleRows(state.deductions)).map(row=>[row.date,[row.start,row.end].filter(Boolean).join('–'),passName(row.passId),(row.voidedAt?'삭제됨 · ':'')+statusLabels[row.status],sessions(row.units),row.memo,rowActions('deductions','deduction',row)]),undefined,'cards-deduction'));
+ $('#adjustment-list').replaceChildren(table(['날짜','레슨권','횟수 증감','금액 증감','사유','관리'],newestFirst(visibleRows(state.adjustments)).map(row=>[row.date,passName(row.passId),sessions(row.unitsDelta),money(row.amountDelta),(row.voidedAt?'삭제됨 · ':'')+row.memo,rowActions('adjustments',null,row)]),undefined,'cards-adjustment'));
  renderBatches();renderAudit();
  window.VzipBillingPending?.render({state,lessons:S.lessons(),C,today:today(),app:pendingApp});
 }
@@ -129,14 +158,28 @@ const pendingApp={
  persist:(command,message)=>persist(command,null,message).catch(()=>{}),
  notify,show:id=>show(id),
  edit:row=>edit('deduction',row),
- prefill:id=>{show('attendance');deduction.elements.lessonId.value=id;deduction.elements.lessonId.dispatchEvent(new Event('change'));deduction.scrollIntoView({block:'start'})}
+ prefill:id=>{show('attendance');openForm('deduction');deduction.elements.lessonId.value=id;deduction.elements.lessonId.dispatchEvent(new Event('change'))}
 };
 $('#show-deleted').onchange=event=>{showDeleted=event.target.checked;render()};
 function show(id){for(const section of document.querySelectorAll('main>section'))section.hidden=section.id!==id;for(const tab of document.querySelectorAll('[data-panel]'))tab.setAttribute('aria-pressed',String(tab.dataset.panel===id))}
 for(const tab of document.querySelectorAll('[data-panel]'))tab.onclick=()=>show(tab.dataset.panel);
+const auditNames={'pass.save':'레슨권','payment.save':'결제·환불','deduction.save':'수강','adjustment.create':'수동 조정','entity.void':'삭제','entity.restore':'복구','import.commit':'일괄 업로드','import.undo':'업로드 취소','hourly-rate.save':'시간당 단가'};
+const collectionNames={passes:'레슨권',payments:'결제',deductions:'수강',adjustments:'조정'};
+function auditText(row){
+ const a=row.after||{},b=row.before,d=a.date?window.VzipBillingDate.show(a.date):'';
+ const what=auditNames[row.action]||row.action,verb=row.action.endsWith('.save')?(b?' 수정':' 등록'):'';
+ const target=row.collection==='payments'?[(a.kind==='refund'?'환불 ':'')+money(a.amount||0),d]:row.collection==='deductions'?[d,sessions(a.units||0),statusLabels[a.status]||'']:row.collection==='passes'?[a.name]:row.collection==='adjustments'?[d,a.memo]:a.hourlyRate?[money(a.hourlyRate)]:[];
+ const scope=['entity.void','entity.restore'].includes(row.action)?collectionNames[row.collection]+' ':'';
+ return {title:scope+what+verb,detail:target.filter(Boolean).join(' · ')};
+}
+const auditTime=iso=>{const t=new Date(iso);return isNaN(t)?String(iso||''):(t.getMonth()+1)+'월 '+t.getDate()+'일 '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')};
 function renderAudit(){
  const rows=state.history.slice().reverse(),host=$('#audit-list');host.replaceChildren();
- for(const row of rows.slice(0,auditLimit)){const details=el('details',undefined,'audit'),summary=el('summary',row.at+' · '+row.action+' · '+row.entityId.slice(0,8));details.append(summary,el('pre',JSON.stringify({before:row.before,after:row.after},null,2)));host.append(details)}
+ for(const row of rows.slice(0,auditLimit)){
+  const {title,detail}=auditText(row),details=el('details',undefined,'audit'),summary=el('summary');
+  summary.append(el('time',auditTime(row.at)),el('b',title),el('span',detail));
+  details.append(summary,el('p','변경 전후 원본 데이터','help'),el('pre',JSON.stringify({before:row.before,after:row.after},null,2)));host.append(details);
+ }
  if(!rows.length)host.append(el('p','변경 이력이 없어요.','empty'));
  if(rows.length>auditLimit)host.append(button('이력 100개 더 보기',()=>{auditLimit+=100;renderAudit()}));
 }
@@ -264,4 +307,7 @@ $('#commit-import').onclick=async()=>{
 window.addEventListener('billing:replaced',()=>{S.load().then(data=>{state=data;for(const form of Object.values(forms))resetForm(form);clearPreview();render();channel?.postMessage({owner:state.owner,revision:state.revision})}).catch(error=>notify(error.message,true))});
 $('#account-label').textContent=S.account.label+' · 정산 전용 저장소';
 S.load().then(data=>{state=data;render();notify('정산 데이터를 불러왔어요.')}).catch(error=>notify('불러오기 실패: '+error.message,true));
+// File picker: show what was chosen (the native control is hidden); the sheet choice only matters for multi-sheet XLSX.
+$('#import-file').addEventListener('change',e=>{const files=[...(e.target.files||[])];$('#import-file-name').textContent=files.length?files.map(f=>f.name).join(', '):'선택한 파일 없음 · 파일당 10MB · 합쳐서 최대 2,000행'});
+new MutationObserver(()=>{$('#import-sheet-field').hidden=$('#import-sheet').options.length<2}).observe($('#import-sheet'),{childList:true});
 })();

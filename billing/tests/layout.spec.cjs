@@ -24,11 +24,11 @@ test('dashboard leads with hours left; the hourly rate folds into one line once 
  await expect(page.locator('#rate-box')).not.toHaveAttribute('open','');
  await expect(page.locator('#rate-current')).toHaveText('50,000원');
  await expect(page.locator('#hourly-summary .metric').first()).toHaveClass(/hero/);
- await expect(page.locator('#hourly-summary .metric').first()).toContainText('잔여 시간');
+ await expect(page.locator('#hourly-summary .metric').first()).toContainText('남은 레슨');
 });
 test('all completed app lessons can be deducted at once (1 hour each) after confirming',async({page})=>{
  await open(page);
- await tab(page,'passes');await page.locator('#pass-name').fill('10회권');await page.locator('#pass-totalUnits').fill('10');await page.locator('#pass-amount').fill('500000');
+ await tab(page,'passes');await page.locator('[data-open-form="pass"]').click();await page.locator('#pass-name').fill('10회권');await page.locator('#pass-totalUnits').fill('10');await page.locator('#pass-amount').fill('500000');
  await page.locator('#pass-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
  await tab(page,'attendance');
  const pending=page.locator('#pending-lessons');
