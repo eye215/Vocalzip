@@ -87,6 +87,8 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   await page.locator('.sheet [data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:wav()});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(page.locator('.sheet [data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
+  // Saved on the device first; the upload to R2 follows from that copy.
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__rows).length), {timeout:20000}).toBe(1);
   const meta = await page.evaluate(() => Object.values(window.__rows)[0]);
   expect(meta).toMatchObject({storageProvider:'r2', size:wav().length, source:'import'});
   expect(meta.r2Key).toBe('u/ui-test-user/' + meta.id + '/original.wav');

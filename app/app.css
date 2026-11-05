@@ -304,3 +304,5 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .hub-song{display:grid;gap:6px;min-width:0}
 .hub-song .chip{justify-self:start;max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left}
 .hub-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+/* 업로드 진행 표시 */
+#vz-upload-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + var(--safe-b) + 10px);z-index:40;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:var(--ink);color:#fff;font-size:12px;font-weight:600;text-decoration:none;box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
