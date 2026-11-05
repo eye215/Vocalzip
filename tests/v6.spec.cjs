@@ -914,14 +914,7 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await boot(page, {media:false});
   await page.goto('/#/settings');
   const headings = await page.locator('h2.sec').allTextContents();
-  expect(headings.map(h => h.trim())).toEqual(['계정 · 클라우드 동기화', '음원', '기록 관리', '데이터', '화면 모드', '앱 정보']);
-  // 화면 모드: dark is kept on this device and applied before the page draws.
-  await page.locator('[data-theme-v="dark"]').click();
-  expect(await page.evaluate(() => [document.documentElement.dataset.theme, localStorage.getItem('vzip_theme'), getComputedStyle(document.body).backgroundColor])).toEqual(['dark', 'dark', 'rgb(18, 16, 25)']);
-  await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
-  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark');
-  await page.locator('[data-theme-v=""]').click();
-  expect(await page.evaluate(() => [document.documentElement.dataset.theme ?? null, localStorage.getItem('vzip_theme')])).toEqual([null, null]);
+  expect(headings.map(h => h.trim())).toEqual(['계정 · 클라우드 동기화', '음원', '기록 관리', '데이터', '앱 정보']);
   await expect(page.locator('#cloud-upload')).toBeVisible();
   await expect(page.locator('#cloud-logout')).toBeVisible();
   await expect(page.locator('#cloud-media-upload')).toBeHidden();
