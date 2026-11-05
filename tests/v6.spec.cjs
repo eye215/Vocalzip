@@ -200,6 +200,34 @@ test('Homework has a period; each practice in it asks whether it was done, how m
   await expect(sheet(page)).toContainText('세 번째에 고음이 편해짐');
 });
 
+test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imports can be moved in one tap', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles({name:'2025-08-08_22-09-00.wav', mimeType:'audio/wav', buffer:b});
+  await page.getByRole('button', {name:'가져오기', exact:true}).click();
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
+  const [saved] = await media(page);
+  expect(saved).toMatchObject({recordedDate:'2025-08-08', dateSource:'filename'});
+  expect(await page.evaluate(t => { const d = new Date(t); return [d.getHours(), d.getMinutes()]; }, saved.created)).toEqual([22, 9]);
+  // A recording imported earlier on its download day is offered a one-tap move; a date set by hand is left alone.
+  await page.evaluate(async () => {
+    await window.vzipStorePracticeMedia({id:'old-dl', name:'2025-07-01_09-30-00', type:'audio/wav', blob:new Blob(['x'], {type:'audio/wav'}), created:Date.now(), recordedDate:'2026-11-01', dateSource:'file-modified', source:'import'});
+    await window.vzipStorePracticeMedia({id:'by-hand', name:'2025-07-02_09-30-00', type:'audio/wav', blob:new Blob(['x'], {type:'audio/wav'}), created:Date.now(), recordedDate:'2026-11-02', dateSource:'manual', source:'import'});
+  });
+  await page.keyboard.press('Escape'); await page.goto('/#/home'); await page.goto('/#/library');
+  const fix = page.locator('[data-name-dates]');
+  await expect(fix).toContainText('1개');
+  await fix.getByRole('button', {name:'이름대로 맞추기'}).click();
+  await page.locator('.sheet [data-ok]').click();
+  await expect(page.locator('.toast').last()).toContainText('1개 녹음을 파일 이름 날짜로 옮겼어요');
+  const all = await media(page);
+  expect(all.find(m => m.id === 'old-dl')).toMatchObject({recordedDate:'2025-07-01', dateSource:'filename'});
+  expect(all.find(m => m.id === 'by-hand').recordedDate).toBe('2026-11-02');
+  await expect(fix).toBeEmpty();
+});
+
 test('A past scheduled lesson can be recorded as done or cancelled from home in one tap', async ({page}) => {
   await boot(page, {media:false});
   const card = page.locator('[data-overdue]');

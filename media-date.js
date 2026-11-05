@@ -25,5 +25,15 @@ function pick(tags={},lastModified,now=Date.now()){
  const modified=typeof lastModified==='number'&&lastModified>0&&parse(new Date(lastModified),now);
  return {...(modified||parse(new Date(now),now)),dateSource:modified?'file-modified':'upload-time',dateTag:modified?'lastModified':'uploadedAt'};
 }
-const api={parse,pick,local};root.VzipMediaDates=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+/** A recording time written in the file name as yyyy-MM-dd_HH-mm-ss (e.g. 2025-08-08_22-09-00.m4a; '_', ' ' or 'T'
+ * between date and time, '-', '.' or ':' inside the time). The user names files this way on purpose, so it wins over the
+ * file's own tags, which often hold the download or export time. Returns null for anything else. */
+function fromName(name,now=Date.now()){
+ const m=/(?:^|[^\d])((?:19|20)\d{2})-(\d{2})-(\d{2})[_ T](\d{2})[-.:](\d{2})[-.:](\d{2})(?!\d)/.exec(String(name||''));
+ if(!m)return null;
+ const [y,mo,d,h,mi,se]=m.slice(1).map(Number);if(h>23||mi>59||se>59)return null;
+ const date=new Date(y,mo-1,d,h,mi,se);if(date.getFullYear()!==y||date.getMonth()!==mo-1||date.getDate()!==d)return null;
+ const result=parse(date,now);return result?{...result,dateSource:'filename',dateTag:'name'}:null;
+}
+const api={parse,pick,local,fromName};root.VzipMediaDates=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);

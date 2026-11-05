@@ -85,9 +85,11 @@ async function analyze(files) {
       row.duration = info.duration ?? (await M.measure({blob:file, type:row.type, name:file.name}, 8000) || null);
       row.video = info.hasVideo || row.type.startsWith('video/');
       const meta = info.metadata || {};
-      const fromName = dateFromName(file.name);
-      // Only the file's own capture/recording date is trusted; anything else waits for the user.
-      if (meta.dateSource === 'metadata') Object.assign(row, {date:meta.recordedDate, dateSource:'metadata', dateOk:true});
+      const fromName = dateFromName(file.name), named = window.VzipMediaDates?.fromName?.(file.name);
+      // A full yyyy-MM-dd_HH-mm-ss name is the user's own label and wins; then the file's own capture/recording date;
+      // a date-only name next; anything else waits for the user.
+      if (named) Object.assign(row, {date:named.recordedDate, dateSource:'filename', dateOk:true});
+      else if (meta.dateSource === 'metadata') Object.assign(row, {date:meta.recordedDate, dateSource:'metadata', dateOk:true});
       else if (fromName) Object.assign(row, {date:fromName, dateSource:'filename', dateOk:true});
       else Object.assign(row, {date:meta.recordedDate || '', dateSource:'unconfirmed', dateOk:false});
       row.hash = await M.fingerprint(file);
