@@ -1100,4 +1100,23 @@ test('Saving a lesson as completed deducts it in 레슨비 정산 in the backgro
   await page.evaluate(() => VZ.change(d => { d.lessons.find(l => l.id === 'done-now').memo = '메모'; }));
   await page.waitForTimeout(4000);
   expect(await ledger()).toEqual([['done-now', 100]]);
+  // The lesson list and the lesson page show it; cancelling and deducting again work from the lesson page.
+  await page.goto('/#/lessons'); await page.locator('[data-lt="past"]').click();
+  await expect(page.locator('a[href="#/lesson/done-now"] [data-billing-badge]')).toHaveText('정산 1회');
+  await page.goto('/#/lesson/done-now');
+  const card = page.locator('[data-billing-status]');
+  await expect(card).toContainText('1회 차감됨10회권');
+  await card.locator('[data-billing-do="void"]').click(); await page.locator('.sheet [data-ok]').click();
+  await expect(page.locator('.toast').last()).toContainText('차감을 취소했어요 · 10회권 남은 10회', {timeout:20000});
+  await expect(card).toContainText('아직 차감하지 않았어요');
+  const active = () => page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('user:ui-test-user'); q.onsuccess = () => r(q.result); }); db.close(); return doc.deductions.filter(d => !d.voidedAt).map(d => [d.lessonId, d.units]); });
+  expect(await active()).toEqual([]); // a deduction cancelled on purpose is not auto-deducted again
+  await page.goto('/#/lessons');
+  await expect(page.locator('a[href="#/lesson/done-now"] [data-billing-badge]')).toHaveText('정산 대기');
+  await page.goto('/#/lesson/done-now');
+  await card.locator('[data-billing-do="deduct"]').click(); await page.locator('.sheet [data-ok]').click();
+  await expect(page.locator('.toast').last()).toContainText('1회 차감했어요 · 10회권 남은 9회', {timeout:20000});
+  await expect(card).toContainText('1회 차감됨');
+  expect(await active()).toEqual([['done-now', 100]]);
+  await expect(page.locator('iframe')).toHaveCount(0);
 });

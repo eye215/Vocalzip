@@ -145,6 +145,7 @@ VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<
   main.querySelector('[data-add-lesson2]')?.addEventListener('click', () => VZ.lessonSheet());
   main.querySelectorAll('[data-lt]').forEach(b => b.onclick = () => { lessonTab = b.dataset.lt; VZ.render(); });
   VZ.billingLessonBanner?.(main.querySelector('[data-billing-banner]'));
+  VZ.billingDecorateLessons?.(main);
 }});
 
 /* ---------- 레슨 상세 ---------- */
@@ -160,7 +161,7 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
     const perSong = songIds.some(id => l.songFeedback?.[id]);
     return '<div class="card stack" style="margin-bottom:12px"><div class="row between"><strong style="font-size:19px">' + esc(VZ.dateLabel(l.date)) + '</strong>' + VZ.statusBadge(st) + '</div>' +
       '<div class="small muted" style="display:grid;gap:4px">' + [VZ.timeRange(l) && '<span><i class="ph ph-clock"></i> ' + esc(VZ.timeRange(l)) + '</span>', l.place && '<span><i class="ph ph-map-pin"></i> ' + esc(l.place) + '</span>', l.teacher && '<span><i class="ph ph-user"></i> ' + esc(l.teacher) + '</span>', songIds.length && '<span><i class="ph ph-music-note"></i> ' + songIds.map(id => '<a href="#/song/' + esc(id) + '">' + esc(VZ.songTitle(id) || '삭제된 곡') + '</a>').join(', ') + '</span>', l.categoryLabel && '<span><i class="ph ph-tag"></i> ' + esc([l.categoryLabel, l.detail].filter(Boolean).join(' · ')) + '</span>'].filter(Boolean).join('') + '</div>' +
-      (l.prepMemo ? '<div class="small" style="white-space:pre-wrap;background:var(--surface-2);padding:10px 12px;border-radius:10px">준비: ' + esc(l.prepMemo) + '</div>' : '') + statusActions + '</div>' +
+      (l.prepMemo ? '<div class="small" style="white-space:pre-wrap;background:var(--surface-2);padding:10px 12px;border-radius:10px">준비: ' + esc(l.prepMemo) + '</div>' : '') + statusActions + '<div data-billing-status></div></div>' +
       (st === 'cancelled' ? '' :
       '<h2 class="sec">피드백 <button type="button" data-fb>' + (l.feedback || l.memo || perSong ? '수정' : '작성') + '</button></h2>' +
       (l.feedback || l.memo || perSong ? '<div class="card stack">' + (l.feedback ? '<div style="white-space:pre-wrap">' + esc(l.feedback) + '</div>' : '') + songIds.filter(id => l.songFeedback?.[id]).map(id => '<div><div class="small" style="font-weight:700;color:var(--accent)">' + esc(VZ.songTitle(id)) + '</div><div style="white-space:pre-wrap">' + esc(l.songFeedback[id]) + '</div></div>').join('') + (l.memo ? '<div class="small muted" style="white-space:pre-wrap">메모: ' + esc(l.memo) + '</div>' : '') + '</div>'
@@ -177,6 +178,7 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
       if (VZ.change(d => { const x = d.lessons.find(y => y.id === id); x.status = to; if (to === 'done') x.completedAt = Date.now(); }))
         VZ.toast({done:'레슨을 완료로 표시했어요. 피드백을 남겨 보세요.', cancelled:'레슨을 취소로 표시했어요.', scheduled:'예정으로 되돌렸어요.'}[to]);
     });
+    VZ.billingLessonCard?.(main.querySelector('[data-billing-status]'), l);
     main.querySelectorAll('[data-fb],[data-fb2]').forEach(b => b.onclick = () => feedbackSheet(l));
     main.querySelector('[data-add-task]')?.addEventListener('click', () => VZ.taskSheet({lessonId:id, songId:VZ.lessonSongIds(l)[0] || ''}));
     main.querySelector('[data-del-lesson]').onclick = async () => {

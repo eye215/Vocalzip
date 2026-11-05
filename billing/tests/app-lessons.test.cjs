@@ -21,3 +21,11 @@ test('auto-deduction takes only lessons completed after it was turned on, with n
  assert.deepEqual(P.autoCandidates(ls,st,'2026-11-05',since).map(x=>[x.lesson.lesson_id,x.units]),[['two',200],['one',100]]);
  assert.equal(P.unitsFor({lesson_start:'10:00',lesson_end:'11:30'}),150);
 });
+
+test('a lesson whose deduction was deleted in billing waits in 정산 대기 and is not auto-deducted again',()=>{
+ const since=new Date('2026-11-05T09:00:00').getTime(),later=since+60000;
+ const st={deductions:[{id:'undone',lessonId:'again',date:'2026-11-04',status:'completed',units:100,voidedAt:'2026-11-05T10:00:00Z'}]};
+ const ls=[{lesson_id:'again',lesson_date:'2026-11-04',lesson_status:'completed',lesson_touched:later}];
+ assert.deepEqual(P.classify(ls,st,'2026-11-05').toDeduct.map(l=>l.lesson_id),['again']);
+ assert.deepEqual(P.autoCandidates(ls,st,'2026-11-05',since),[]);
+});
