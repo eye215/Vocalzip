@@ -8,7 +8,8 @@ const id=value=>{text(value,'ID');if(!value||value.length>256)fail('ID');return 
 const integer=(n,label,negative=false,max=1000000000000)=>{if(!Number.isSafeInteger(n)||Math.abs(n)>max||(!negative&&n<0))fail(label)};
 function validate(input){
  const state=JSON.parse(JSON.stringify(input));C.validateState(state);id(state.owner);integer(state.revision,'버전',false,Number.MAX_SAFE_INTEGER-1);
- for(const key of Object.keys(state))if(!['schemaVersion','owner','revision',...collections].includes(key))fail('알 수 없는 최상위 필드: '+key);
+ for(const key of Object.keys(state))if(!['schemaVersion','owner','revision','hourlyRate',...collections].includes(key))fail('알 수 없는 최상위 필드: '+key);
+ if(state.hourlyRate!==undefined){integer(state.hourlyRate,'시간당 레슨비');if(!state.hourlyRate)fail('시간당 레슨비는 0보다 커야 해요.')}
  const maps={};let count=0;
  for(const key of collections){maps[key]=new Map();count+=state[key].length;if(count>100000)fail('기록은 최대 100,000개예요.');
   for(const row of state[key]){if(!object(row))fail(key+' 기록');id(row.id);if(maps[key].has(row.id))fail('중복 ID');maps[key].set(row.id,row);
@@ -44,11 +45,17 @@ function validate(input){
  }
  for(const row of state.importRows){if(!maps.imports.has(row.batchId)||!['imported','undone','failed','skipped'].includes(row.status))fail('업로드 행 이력');
   if(['imported','undone'].includes(row.status)&&(!['payments','deductions'].includes(row.collection)||!maps[row.collection].has(row.entityId)))fail('업로드 행 참조')}
- for(const row of state.history){if(!['passes','payments','deductions','adjustments','ledger'].includes(row.collection))fail('변경 이력 유형');id(row.entityId);text(row.action,'변경 작업');if(!Number.isFinite(Date.parse(row.at)))fail('변경 시각')}
- C.check(state,true);return state;
+ for(const row of state.history){if(!['passes','payments','deductions','adjustments','ledger','settings'].includes(row.collection))fail('변경 이력 유형');id(row.entityId);text(row.action,'변경 작업');if(!Number.isFinite(Date.parse(row.at)))fail('변경 시각')}
+ for(const row of state.history.filter(row=>row.collection==='settings')){
+  if(row.entityId!=='hourly-rate'||row.action!=='hourly-rate.save'||!object(row.before)||!object(row.after)||row.before.id!=='hourly-rate'||row.after.id!=='hourly-rate')fail('시간당 레슨비 변경 이력');
+  integer(row.before.rate,'변경 전 시간당 레슨비');integer(row.after.rate,'변경 후 시간당 레슨비');if(!row.after.rate)fail('변경 후 시간당 레슨비');
+ }
+ C.check(state,true);
+ if(state.hourlyRate)for(const value of Object.values(C.hourlyTotals(state)))if(!Number.isSafeInteger(value))fail('시간 정산 계산 범위');
+ return state;
 }
 function parse(source){if(typeof source!=='string'||new TextEncoder().encode(source).length>LIMIT)fail('파일은 8MB 이하로 나눠 주세요.');let data;try{data=JSON.parse(source)}catch{fail('JSON 형식이 올바르지 않아요.')}return validate(data)}
-function summary(state){const totals=C.totals(state).total;return {owner:state.owner,passes:C.active(state.passes).length,payments:C.active(state.payments).length,deductions:C.active(state.deductions).length,remainingUnits:totals.remainingUnits,netPaid:totals.netPaid,unpaid:totals.unpaid}}
+function summary(state){const hourly=state.hourlyRate?C.hourlyTotals(state):null,totals=hourly||C.totals(state).total;return {owner:state.owner,passes:C.active(state.passes).length,payments:C.active(state.payments).length,deductions:C.active(state.deductions).length,remainingUnits:totals.remainingUnits,netPaid:totals.netPaid,unpaid:hourly?hourly.owed:totals.unpaid,unit:hourly?'시간':'회'}}
 function canonical(value){if(Array.isArray(value))return value.map(canonical);if(object(value))return Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])]));return value}
 function same(a,b){return JSON.stringify(canonical({...a,revision:0}))===JSON.stringify(canonical({...b,revision:0}))}
 return {LIMIT,validate,parse,summary,same};
