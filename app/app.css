@@ -386,3 +386,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .hw-seg [data-hw-did="1"][aria-pressed="true"]{background:var(--accent);color:#fff}
 .hw-item .icon-btn.sm{width:36px;height:36px;font-size:18px;background:var(--surface-2)}
 .hw-item [data-hw-reps]{min-height:36px;padding:0 6px}
+/* 캘린더 날짜 보기: 그룹마다 카드 하나, 기록 아래 녹음은 얇은 ▶ 줄 */
+.cal-list .cal-own>.item{min-height:56px}
+.cal-list .minis{padding:0 16px 8px 68px;margin-top:-6px}
+.cal-list .mini-row{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:0;border:0;background:none;text-align:left;color:var(--ink-2);font-size:14px}
+.cal-list .mini-row>.ph-fill{font-size:20px;color:var(--accent);flex:none}
+.cal-list .mini-row .chev{font-size:14px;color:var(--ink-3)}
+.cal-list .mini-row[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.cal-list .cal-loose{padding:12px 16px 4px}
+.cal-list .cal-loose+.minis{padding-left:16px;margin-top:0}
