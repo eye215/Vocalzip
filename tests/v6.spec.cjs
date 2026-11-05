@@ -219,12 +219,14 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   const wav = tone => { const sr = 4000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
   const files = Array.from({length:21}, (_, i) => ({name:'2026-11-01_10-00-' + String(i).padStart(2, '0') + (i === 3 ? ' expire' : i === 7 ? ' bad' : '') + '.wav', mimeType:'audio/wav', buffer:wav(i)}));
   files.push({name:'2026-11-01_11-00-00 copy.wav', mimeType:'audio/wav', buffer:wav(0)}); // same content as the first file
+  files.push({name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('not audio')}, {name:'cover.pdf', mimeType:'application/pdf', buffer:Buffer.from('%PDF')}); // left out quietly
   // More than 20 files from 파일 가져오기 go to the bulk uploader, which checks and uploads them batch by batch by itself.
   await page.evaluate(() => { window.__vzipBatchSize = 10; });
   await page.goto('/#/library');
   await page.locator('[data-imp]').click();
   await sheet(page).locator('[data-file]').setInputFiles(files);
   await expect(page.locator('.toast').last()).toContainText('22개 파일은 대량 업로드 화면에서');
+  await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
   const dash = page.locator('[data-dash]'), n = k => dash.locator('[data-count="' + k + '"] b');
   await expect(dash).toContainText('전체 22개');
   // The expired login pauses the queue; nothing is counted as failed for it.
@@ -258,6 +260,22 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   await page.goto('/#/import-hub');
   await expect(page.locator('[data-stopped]')).toContainText('전체 22개 · 완료 19 · 남음 1');
   await expect(page.locator('[data-stopped]')).toContainText('원본 파일을 다시 선택');
+});
+
+test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles([{name:'take.wav', mimeType:'audio/wav', buffer:b}, {name:'가사.txt', mimeType:'text/plain', buffer:Buffer.from('가사')}, {name:'._take.wav', mimeType:'audio/wav', buffer:Buffer.from('x')}]);
+  await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
+  await expect(sheet(page).locator('.up-row')).toHaveCount(1);
+  await expect(sheet(page)).not.toContainText('가사.txt');
+  // Only non-media picked: nothing to import.
+  await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles({name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')});
+  await expect(page.locator('.toast').last()).toContainText('고른 파일 중에 음성·영상 파일이 없어요');
 });
 
 test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imports can be moved in one tap', async ({page}) => {
@@ -481,7 +499,8 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   const buffer = Buffer.from(wav);
   await sheet(page).locator('[data-file]').setInputFiles([
     {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
-  await expect(sheet(page).getByText('지원하지 않는 형식이에요. (건너뜀)')).toBeVisible();
+  await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 1개는 뺐어요'); // left out, not listed
+  await expect(sheet(page)).not.toContainText('notes.txt');
   await sheet(page).locator('[data-bulk]').selectOption('s2');
   await sheet(page).getByLabel('a.wav 곡').selectOption('s1');
   await sheet(page).getByLabel('b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a 날짜').fill('2026-01-15');
@@ -491,7 +510,7 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await sheet(page).getByRole('button', {name:'다시 시도'}).click();
   // Finished files leave the list; one line keeps the count.
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 2개');
-  await expect(sheet(page).locator('.up-row:visible')).toHaveCount(1); // only the skipped .txt remains
+  await expect(sheet(page).locator('.up-row:visible')).toHaveCount(0); // both saved; the .txt was never listed
   // Saved files are listed with a player right in the sheet.
   const saved = sheet(page).locator('[data-saved] [data-media]');
   await expect(saved).toHaveCount(2);
