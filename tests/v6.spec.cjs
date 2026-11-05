@@ -654,7 +654,7 @@ test('Device-only files are backed up to the cloud automatically once signed in 
     window.vzipCloudSignedIn = () => true;
   });
   await page.goto('/#/library');
-  await expect(page.locator('[data-count]')).toContainText('모두 클라우드에 백업됨', {timeout:15000});
+  await expect(page.locator('[data-backup]')).toContainText('모두 클라우드에 백업됨', {timeout:15000});
   const first = await page.evaluate(() => ({imports:window.__imports, updates:window.__updates}));
   expect(first.imports.map(x => x.id).sort()).toEqual(['m1', 'm2']);
   expect(first.imports.every(x => x.type === 'audio/wav' && x.size > 0 && x.name.endsWith('.wav'))).toBe(true);
@@ -833,6 +833,84 @@ test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
   await sheet(page).getByRole('button', {name:'저장'}).click();
   expect((await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
   expect(await page.evaluate(() => VZ.suggestSongs('온마이오운_0412.m4a')[0])).toMatchObject({id:'s2'});
+});
+
+test('Library groups files by recording month with counts, and filters fit on a phone', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    await window.vzipStorePracticeMedia({id:'old', name:'예전 녹음', created:Date.now(), recordedDate:'2025-01-05', dateSource:'metadata', type:'audio/wav', source:'import', songId:'s1', blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:125});
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/library');
+  await expect(page.locator('.lib-month')).toHaveCount(await page.evaluate(() => new Set([0, 1].map(n => { const d = new Date(Date.now() - (n ? 7 : 1) * 864e5); return d.getFullYear() * 100 + d.getMonth(); })).size + 1));
+  await expect(page.locator('.lib-month').last()).toContainText('2025년 1월');
+  await expect(page.locator('.lib-month').last()).toContainText('1개 · 2분');
+  await expect(page.locator('[data-count]')).toContainText('3개');
+  // Filters: lesson/practice segment, then format + song selects side by side.
+  await page.getByRole('button', {name:'레슨', exact:true}).click();
+  await expect(page.locator('[data-media]')).toHaveCount(1);
+  await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
+  await page.getByRole('button', {name:'전체', exact:true}).click();
+  await page.getByLabel('형식 필터').selectOption('video');
+  await expect(page.getByText('조건에 맞는 파일이 없어요.')).toBeVisible();
+  await page.getByRole('button', {name:'필터 초기화'}).click();
+  await expect(page.locator('[data-media]')).toHaveCount(3);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({width, height:844});
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+});
+
+test('Growth leads with this period\'s time compared with the same days before, and song rows open the song', async ({page}) => {
+  const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  const songs = Array.from({length:10}, (_, i) => ({id:'g' + i, title:'곡 ' + i}));
+  const practices = [{id:'now', date:d(0), minutes:50, songId:'g0', rating:4}, {id:'lastweek', date:d(-7), minutes:20, songId:'g1', rating:2},
+    ...songs.slice(1).map((s, i) => ({id:'p' + i, date:d(0), minutes:i + 1, songId:s.id}))];
+  await boot(page, {seed:{categories:[], songs, lessons:[], assignments:[], practices, comparisonReports:[]}, media:false});
+  await page.goto('/#/growth');
+  await page.getByRole('button', {name:'최근 28일', exact:true}).click();
+  const hero = page.locator('.stat-hero');
+  await expect(hero).toContainText('최근 28일 연습 시간');
+  await expect(hero).toContainText('1시간 55분'); // 50 + 20 + (1..9 = 45)
+  await expect(hero.locator('.growth-delta')).toContainText('이전 28일 0분 · +1시간 55분');
+  await page.getByRole('button', {name:'이번 주', exact:true}).click();
+  await expect(hero.locator('.growth-delta')).toContainText('지난주 같은 요일까지');
+  // Top 8 songs first; the rest behind a button. Rows link to the song.
+  await expect(page.locator('.bars .bar:visible')).toHaveCount(8);
+  await page.getByRole('button', {name:/나머지 \d+곡 더 보기/}).click();
+  await expect(page.locator('.bars .bar:visible')).toHaveCount(await page.locator('.bars .bar').count());
+  await page.locator('[data-song-stat="g0"]').click();
+  await expect(page).toHaveURL(/#\/song\/g0$/);
+});
+
+test('Song page shows this song\'s growth: recent time, days, rating, six months, first recording', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/song/s1');
+  const card = page.locator('.song-growth');
+  await expect(card).toContainText('이 곡의 성장');
+  await expect(card).toContainText('최근 30일');
+  await expect(card.locator('.song-growth-chart > div')).toHaveCount(6);
+  await expect(card).toContainText('첫 녹음');
+  await expect(card).toContainText('★4.0'); // p1 rating 4
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
+test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
+  await boot(page, {media:false});
+  await page.goto('/#/settings');
+  const headings = await page.locator('h2.sec').allTextContents();
+  expect(headings.map(h => h.trim())).toEqual(['계정 · 클라우드 동기화', '음원', '기록 관리', '데이터', '앱 정보']);
+  await expect(page.locator('#cloud-upload')).toBeVisible();
+  await expect(page.locator('#cloud-logout')).toBeVisible();
+  await expect(page.locator('#cloud-media-upload')).toBeHidden();
+  await page.getByText('수동 백업·복원').click();
+  await expect(page.locator('#cloud-media-upload')).toBeVisible();
+  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  await expect(page.locator('[data-storage-status]')).not.toHaveText('확인 중…');
+  await expect(page.getByRole('button', {name:/최신 버전으로 새로고침/})).toBeVisible();
+  // Leaving and coming back doesn't wrap the tools twice.
+  await page.goto('/#/home'); await page.goto('/#/settings');
+  await expect(page.locator('.cloud-more')).toHaveCount(1);
 });
 
 test('Signed-in imports are kept on the device first and the cloud upload resumes after leaving the app', async ({page}) => {
