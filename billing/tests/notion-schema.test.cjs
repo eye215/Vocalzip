@@ -27,3 +27,14 @@ test('Whitespace variations in Notion headers preserve zero values',()=>{
  const {state,settings}=setup(),head=['레슨날짜','상태','레슨횟수차감','비고'],rows=I.drafts([head,['2026-10-01','완료','0','0회']],I.autoMap(head,'deduction'),settings,state);
  assert.equal(I.inspect(rows,settings,state)[0].data.units,0);
 });
+
+test('A re-export with corrected deductions flags existing records instead of selecting duplicates',()=>{
+ let {state,settings}=setup();state=C.reduce(state,{type:'deduction.save',payload:{passId:settings.passId,date:'2026-10-01',status:'completed',units:100,student:'A',memo:'원본 메모'}},context);
+ const rows=I.drafts([headers,['A','2026-10-01','완료',2,'원본 메모','','']],I.autoMap(headers,'deduction'),{...settings,hash:'new-export'},state);
+ const result=I.inspect(rows,settings,state)[0];assert.equal(result.suspected,true);assert.match(result.warnings.join(),/차감값이 다른/);assert.equal(result.data.units,200);assert.equal(state.deductions[0].units,100);
+});
+test('Stable source references report quantity differences without permitting a second deduction',()=>{
+ let {state,settings}=setup();state=C.reduce(state,{type:'deduction.save',payload:{passId:settings.passId,date:'2026-10-01',status:'completed',units:100,legacyRef:'stable-source'}},context);
+ const head=[...headers,'외부id'],rows=I.drafts([head,['A','2026-10-01','완료',0,'','','','stable-source']],I.autoMap(head,'deduction'),settings,state);
+ const result=I.inspect(rows,settings,state)[0];assert.match(result.errors.join(),/기존 차감 1 → 원본 0/);assert.equal(state.deductions.length,1);
+});

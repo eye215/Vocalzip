@@ -45,13 +45,18 @@ function inspect(rows,settings,state,lessons=[]){
     if(['scheduled','cancelled','free'].includes(data.status)&&data.units!==0)throw Error('예정·취소·무료는 0회예요.');
     if(data.start&&data.end&&data.end<=data.start)throw Error('시작·종료 시간을 확인해 주세요.');
     if(data.lessonId&&!knownLessons.has(data.lessonId))throw Error('기존 Lesson ID를 찾지 못했어요.');
-    if(C.active(state.deductions).some(item=>(data.lessonId&&item.lessonId===data.lessonId)||(!data.lessonId&&item.legacyRef===data.legacyRef)))throw Error('이미 연결된 수강 기록이에요. 기존 이력에서 수정해 주세요.');
+    const linked=C.active(state.deductions).find(item=>(data.lessonId&&item.lessonId===data.lessonId)||(!data.lessonId&&item.legacyRef===data.legacyRef));
+    if(linked)throw Error('이미 연결된 수강 기록이에요.'+(linked.units!==data.units?' 기존 차감 '+linked.units/100+' → 원본 '+data.units/100+'로 달라요.':'')+' 기존 이력에서 수정하거나 원래 업로드를 검토해 주세요.');
     if(!data.start&&!data.end)result.warnings.push('날짜만 있는 과거 기록 · 같은 날짜의 다른 수강도 등록 가능');
    }
    if(!result.newPass&&!C.active(state.passes).some(pass=>pass.id===data.passId))throw Error('연결 레슨권을 선택해 주세요.');
    const compareData=result.newPass?{...data,passId:'new:'+result.newPass.name+':'+result.newPass.totalUnits+':'+result.newPass.amount}:data;
    const key=C.fingerprint(settings.kind,compareData),existing=settings.kind==='payment'?C.active(state.payments):C.active(state.deductions);
    result.suspected=seen.has(key)||existing.some(item=>{if(!result.newPass)return C.fingerprint(settings.kind,item)===key;const pass=state.passes.find(pass=>pass.id===item.passId);return pass?.name===result.newPass.name&&pass?.totalUnits===result.newPass.totalUnits&&pass?.amount===result.newPass.amount&&C.fingerprint(settings.kind,item)===C.fingerprint(settings.kind,{...data,passId:item.passId})})||(settings.kind==='payment'&&data.reference&&existing.some(item=>item.reference===data.reference))||state.importRows.some(item=>item.sourceKey===row.sourceKey&&item.status==='imported');
+   if(settings.kind==='deduction'){
+    const changed=existing.filter(item=>item.units!==data.units&&C.fingerprint('deduction',{...item,units:data.units})===key);
+    if(changed.length){result.suspected=true;result.warnings.push('차감값이 다른 기존 수강 후보가 있어요 ('+[...new Set(changed.map(item=>item.units/100))].join(', ')+' → '+data.units/100+'). 중복 추가하지 말고 기존 이력과 대조해 주세요.')}
+   }
    seen.add(key);if(result.suspected)result.warnings.push('중복 의심 · 별도 기록인지 확인 후 선택하세요.');
    result.data=data;
   }catch(error){result.errors.push(error.message)}
