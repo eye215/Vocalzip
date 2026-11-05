@@ -29,8 +29,16 @@ function classify(lessons,state,today){
  return {toDeduct,toConfirm,toRestore};
 }
 
-/** First-registered active pass that still has at least one full session left (FIFO). */
-function defaultPass(state,balances){
+/** Pass for a new deduction. With an hourly rate (hourly = VzipBilling.hourlyTotals(state)) lessons left come from
+ * payments, so: the pass of the latest payment while at least one paid session is left. Otherwise the
+ * first-registered active pass that still has at least one full session left (FIFO). */
+function defaultPass(state,balances,hourly){
+ if(state.hourlyRate&&hourly){
+  if(hourly.remainingUnits<100)return '';
+  const live=activeRows(state.passes||[]),ids=new Set(live.map(pass=>pass.id));
+  const paid=activeRows(state.payments||[]).filter(row=>row.kind==='payment'&&ids.has(row.passId)).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.createdAt||'').localeCompare(String(b.createdAt||''))).at(-1);
+  return paid?.passId||live.slice().sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||''))).at(-1)?.id||'';
+ }
  const remaining=new Map(balances.passes.map(row=>[row.id,row.remainingUnits]));
  const passes=activeRows(state.passes||[]).slice().sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
  return passes.find(pass=>(remaining.get(pass.id)||0)>=100)?.id||'';
@@ -63,7 +71,7 @@ function render(ctx){
  const {state,lessons,C,today,app}=ctx,host=document.querySelector('#pending-lessons'),summary=document.querySelector('#pending-summary');
  if(!host||!state)return;
  const balances=C.totals(state),groups=classify(lessons,state,today),passes=activeRows(state.passes);
- if(!passes.some(pass=>pass.id===chosenPass))chosenPass=defaultPass(state,balances);
+ if(!passes.some(pass=>pass.id===chosenPass))chosenPass=defaultPass(state,balances,C.hourlyTotals?.(state));
  const count=groups.toDeduct.length+groups.toConfirm.length+groups.toRestore.length;
  if(summary){
   summary.replaceChildren();

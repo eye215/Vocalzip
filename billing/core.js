@@ -169,8 +169,12 @@ function reduce(original,command,context={}){
   batch.status='undone';batch.undoneAt=now;state.importRows.filter(row=>row.batchId===batch.id&&row.status==='imported').forEach(row=>row.status='undone');
  }else fail('지원하지 않는 정산 작업이에요.');
  const balances=check(state,true);
- if(!opts.allowOverdraw){const before=new Map(totals(original).passes.map(pass=>[pass.id,pass.remainingUnits]));
-  if(balances.passes.some(pass=>pass.remainingUnits<Math.min(0,before.get(pass.id)||0)))fail('잔여 횟수를 초과해요. 차감/조정 값을 확인하거나 초과 사용을 명시적으로 확인해 주세요.');
+ if(!opts.allowOverdraw){
+  // With an hourly rate, lessons left = payments ÷ rate − lessons taken (what the dashboard shows); each pass's own count is only a
+  // container. Only new lessons past what was paid need confirming; refunds and rate changes are facts and stay allowed.
+  if(state.hourlyRate){const b=hourlyTotals(original),a=hourlyTotals(state);if(a.usedUnits>b.usedUnits&&a.remainingUnits<Math.min(0,b.remainingUnits))fail('결제한 횟수를 넘어요. 결제를 먼저 등록하거나 초과 사용을 명시적으로 확인해 주세요.')}
+  else{const before=new Map(totals(original).passes.map(pass=>[pass.id,pass.remainingUnits]));
+  if(balances.passes.some(pass=>pass.remainingUnits<Math.min(0,before.get(pass.id)||0)))fail('잔여 횟수를 초과해요. 차감/조정 값을 확인하거나 초과 사용을 명시적으로 확인해 주세요.');}
  }
  state.revision++;return state;
 }

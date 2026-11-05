@@ -154,3 +154,19 @@ test('Notion hourly reconciliation: 1 deduction = 1 hour, no duplicate credit fr
  state=run(state,'hourly-rate.save',{hourlyRate:35000},{ackImpact:true});
  assert.equal(C.hourlyTotals(state).rate,35000);
 });
+
+test('With an hourly rate, lessons left come from payments: a used-up pass still takes deductions while paid sessions remain',()=>{
+ const P=require('../pending.js');
+ let {state,passId}=setup(30000,100);
+ state=run(state,'payment.save',{passId,date:'2026-10-23',amount:2310000,kind:'payment'});
+ state=run(state,'deduction.save',{passId,date:'2026-10-24',status:'completed',lessonId:'lesson-71',units:7100},{allowOverdraw:true});
+ state=run(state,'hourly-rate.save',{hourlyRate:30000});
+ // The pass itself (1회) is far over, but 6 paid sessions are left: no overdraw confirmation needed.
+ assert.equal(P.defaultPass(state,C.totals(state),C.hourlyTotals(state)),passId);
+ state=run(state,'deduction.save',{passId,date:'2026-11-05',status:'completed',lessonId:'lesson-72',units:100});
+ assert.equal(C.hourlyTotals(state).remainingUnits,500);
+ state=run(state,'deduction.save',{passId,date:'2026-11-06',status:'completed',lessonId:'lesson-73',units:500});
+ assert.equal(C.hourlyTotals(state).remainingUnits,0);
+ assert.equal(P.defaultPass(state,C.totals(state),C.hourlyTotals(state)),'');
+ assert.throws(()=>run(state,'deduction.save',{passId,date:'2026-11-07',status:'completed',lessonId:'lesson-74',units:100}),/결제한 횟수를 넘어요/);
+});

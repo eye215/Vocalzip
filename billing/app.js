@@ -321,7 +321,7 @@ async function autoDeduct(){
  try{
   const todo=P.autoCandidates(S.lessons(),state,today(),cfg.since);autoWaiting=0;
   for(const [i,{lesson,units}] of todo.entries()){
-   const passId=P.defaultPass(state,C.totals(state));if(!passId){autoWaiting=todo.length-i;break} // no pass with sessions left: stays in 정산 대기
+   const passId=P.defaultPass(state,C.totals(state),C.hourlyTotals(state));if(!passId){autoWaiting=todo.length-i;break} // no pass with sessions left: stays in 정산 대기
    try{await persist(P.deductionFor(lesson,passId,{units}),null,'앱 레슨 자동 차감');n++}catch{break}
   }
  }finally{autoRunning=false}
@@ -329,7 +329,7 @@ async function autoDeduct(){
  return n;
 }
 const params=new URLSearchParams(location.search),autoOnly=params.has('auto');
-const left=passId=>{const pass=state.passes.find(row=>row.id===passId),bal=C.totals(state).passes.find(row=>row.id===passId);return (pass?.name||'레슨권')+' 남은 '+sessions(bal?.remainingUnits||0)};
+const left=passId=>{if(state.hourlyRate)return '남은 레슨 '+sessions(C.hourlyTotals(state).remainingUnits);const pass=state.passes.find(row=>row.id===passId),bal=C.totals(state).passes.find(row=>row.id===passId);return (pass?.name||'레슨권')+' 남은 '+sessions(bal?.remainingUnits||0)};
 /** One change the app asked for from a lesson screen (the user confirmed it there). */
 async function appAction(){
  const kind=params.get('do');if(!kind)return null;
@@ -337,7 +337,7 @@ async function appAction(){
   const lesson=S.lessons().find(row=>row.lesson_id===params.get('lesson'));
   if(!lesson)return {ok:false,message:'레슨비 정산에서 이 레슨을 찾지 못했어요. 로그인 계정을 확인해 주세요.'};
   if(C.active(state.deductions).some(row=>row.lessonId===lesson.lesson_id)||(lesson.billing_deduction_id&&C.active(state.deductions).some(row=>row.id===lesson.billing_deduction_id)))return {ok:true,message:'이미 레슨비 정산에 차감돼 있어요.'};
-  const passId=P.defaultPass(state,C.totals(state));if(!passId)return {ok:false,message:'남은 횟수가 있는 레슨권이 없어요. 레슨비 정산에서 레슨권을 추가해 주세요.'};
+  const passId=P.defaultPass(state,C.totals(state),C.hourlyTotals(state));if(!passId)return {ok:false,message:(state.hourlyRate?'결제한 횟수를 다 썼어요. 레슨비 정산에서 결제를 먼저 등록해 주세요.':'남은 횟수가 있는 레슨권이 없어요. 레슨비 정산에서 레슨권을 추가해 주세요.')};
   const units=P.unitsFor(lesson);
   await persist(P.deductionFor(lesson,passId,{units}),null,'앱 레슨 차감');
   return {ok:true,message:sessions(units)+' 차감했어요 · '+left(passId)};

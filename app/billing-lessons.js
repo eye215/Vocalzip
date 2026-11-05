@@ -133,6 +133,12 @@ const badge = st => st.kind === 'deducted'
 VZ.billingRemaining = doc => {
   const live = rows => (rows || []).filter(r => !r.voidedAt), passes = live(doc?.passes);
   if (!passes.length) return null;
+  if (doc.hourlyRate > 0) { // 시간당 단가: 결제 금액 ÷ 단가 − 수강 (정산 현황의 '남은 레슨'과 같은 계산)
+    const ids = new Set(passes.map(p => p.id)), pay = live(doc.payments).filter(r => ids.has(r.passId));
+    const net = pay.reduce((n, r) => n + (r.kind === 'refund' ? -1 : r.kind === 'payment' ? 1 : 0) * (Number(r.amount) || 0), 0);
+    const used = live(doc.deductions).filter(r => ids.has(r.passId)).reduce((n, r) => n + (Number(r.units) || 0), 0);
+    return Math.round(net * 100 / doc.hourlyRate) - used;
+  }
   const ids = new Set(passes.map(p => p.id)), sum = (rows, key) => live(rows).filter(r => ids.has(r.passId)).reduce((n, r) => n + (Number(r[key]) || 0), 0);
   return passes.reduce((n, p) => n + (Number(p.totalUnits) || 0), 0) + sum(doc.adjustments, 'unitsDelta') - sum(doc.deductions, 'units');
 };
@@ -142,7 +148,7 @@ VZ.billingLeftChip = async host => {
   const left = VZ.billingRemaining(await VZ.billingLedger());
   if (left === null || !host.isConnected) return;
   const n = Math.round(left) / 100;
-  host.innerHTML = '<span class="dday" style="' + (left <= 100 ? 'background:var(--warn-soft);color:var(--warn)' : '') + '"><i class="ph ph-receipt"></i> ' + (left <= 0 ? '레슨권 횟수를 다 썼어요' : '레슨권 남은 ' + n + '회' + (left <= 100 ? ' · 곧 소진' : '')) + '</span>';
+  host.innerHTML = '<span class="dday" style="' + (left <= 100 ? 'background:var(--warn-soft);color:var(--warn)' : '') + '"><i class="ph ph-receipt"></i> ' + (left <= 0 ? '결제한 횟수를 다 썼어요' : '남은 레슨 ' + n + '회' + (left <= 100 ? ' · 곧 소진' : '')) + '</span>';
 };
 /** Adds a small 정산 badge to each lesson row under host (lesson list). */
 VZ.billingDecorateLessons = async host => {

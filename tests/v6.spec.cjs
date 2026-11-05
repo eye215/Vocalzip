@@ -1108,6 +1108,15 @@ test('The first lesson completed after the update is deducted even if 레슨비 
   await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
 });
 
+test('Home shows lessons left the way 레슨비 정산 counts them (payments ÷ hourly rate)', async ({page}) => {
+  await boot(page, {media:false});
+  // Like a real ledger: a 1회 pass used as a container, 2,310,000원 paid at 30,000원/h, 71회 taken → 6회 left.
+  await page.evaluate(() => new Promise(res => { const q = indexedDB.open('vocalzip_billing_v1', 2); q.onupgradeneeded = () => { for (const n of ['documents', 'sync', 'recovery']) q.result.createObjectStore(n, {keyPath:'owner'}); }; q.onsuccess = () => { const tx = q.result.transaction('documents', 'readwrite'); tx.objectStore('documents').put({owner:'device', hourlyRate:30000, passes:[{id:'p', name:'기존', totalUnits:100, amount:30000}], payments:[{id:'pay', passId:'p', kind:'payment', amount:2310000, date:'2026-10-23'}], deductions:[{id:'d', passId:'p', units:7100, date:'2026-10-15', status:'completed'}], adjustments:[]}); tx.oncomplete = () => { q.result.close(); res(); }; }; }));
+  await page.evaluate(() => VZ.change(d => { d.lessons.push({id:'next', date:'2099-01-01', startTime:'20:00', endTime:'21:00', status:'scheduled', songIds:[], songId:'', feedback:'', memo:'', recordings:[]}); }));
+  await page.goto('/#/songs'); await page.goto('/#/home');
+  await expect(page.locator('[data-billing-left]')).toHaveText(/남은 레슨 6회/);
+});
+
 test('Saving a lesson as completed deducts it in 레슨비 정산 in the background', async ({page}) => {
   test.setTimeout(60000);
   await boot(page, {media:false});
