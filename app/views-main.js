@@ -78,13 +78,15 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
   const mode = p?.practiceMode || (songId || !p ? 'song' : 'training');
   const tasks = db.assignments.filter(t => t.status !== 'done' || p?.completed?.includes(t.id));
   const cats = db.categories;
-  const catOpts = cats.map(c => '<option value="' + esc(c.id) + '"' + (p?.categoryId === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('');
+  const catOpts = cats.map(c => '<option value="' + esc(c.id) + '"' + (p?.categoryId === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '<option value="__new">+ 새 분류 추가</option>';
+  // 트레이닝 분류 3단계: 분류 › 세부 항목 › 세부 항목 2. Each level can add a new entry that is kept for next time.
+  const level = (label, name, opts, placeholder) => '<label class="field"><span>' + label + '</span><select name="' + name + '" data-level>' + opts + '</select><input type="text" name="' + name + '__new" maxlength="40" placeholder="' + placeholder + '" hidden style="margin-top:8px"></label>';
   const quick = [10, 20, 30, 60].map(n => '<button type="button" class="chip" data-min="' + n + '">' + n + '분</button>').join('');
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + ((p?.rating || 0) >= n) + '">★</button>').join('');
   VZ.sheet({title:p ? '연습 기록 수정' : '연습 기록', body:'<form id="practice-log">' +
     '<div class="seg" role="group" aria-label="연습 종류" style="margin-bottom:14px"><button type="button" data-mode="song" aria-pressed="' + (mode === 'song') + '">곡 연습</button><button type="button" data-mode="training" aria-pressed="' + (mode === 'training') + '">보컬 트레이닝</button></div>' +
     '<div data-song-part>' + VZ.songSelect('song', p?.songId || songId) + '</div>' +
-    '<div data-train-part class="two"><label class="field"><span>분류</span><select name="category">' + catOpts + '</select></label><label class="field"><span>세부 항목</span><select name="detail"></select></label></div>' +
+    '<div data-train-part><div class="two">' + level('분류', 'category', catOpts, '새 분류 이름 (예: 고음)') + level('세부 항목', 'detail', '', '새 세부 항목 (예: 립트릴)') + '</div>' + level('세부 항목 2 <span class="small muted">(선택)</span>', 'detail2', '', '새 항목 (예: 저음 5도)') + '</div>' +
     '<div class="two"><label class="field"><span>날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(p?.date || date) + '"></label><label class="field"><span>연습 시간(분) <span class="req">*</span></span><input type="number" name="minutes" inputmode="numeric" min="1" max="1440" required value="' + (p ? VZ.practiceMinutes(p) : '') + '" placeholder="30"></label></div>' +
     '<div class="chips" style="margin:-6px 0 14px">' + quick + '</div>' +
     '<fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset>' +
@@ -97,8 +99,24 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
       let current = mode, rating = p?.rating || null;
       const setMode = m => { current = m; el.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m))); el.querySelector('[data-song-part]').hidden = m !== 'song'; el.querySelector('[data-train-part]').hidden = m !== 'training'; };
       el.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode)); setMode(mode);
-      const fillDetail = () => { const c = cats.find(x => x.id === form.category.value); form.detail.innerHTML = (c?.items || []).map(i => '<option' + (p?.detail === i ? ' selected' : '') + '>' + esc(i) + '</option>').join('') || '<option value="">세부 항목 없음</option>'; };
-      form.category.onchange = fillDetail; fillDetail();
+      const opt = (v, t, sel) => '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(t) + '</option>';
+      const showNew = sel => { const input = form.elements[sel.name + '__new']; input.hidden = sel.value !== '__new'; if (!input.hidden && document.activeElement === sel) input.focus(); };
+      const fillDetail2 = () => {
+        const c = cats.find(x => x.id === form.category.value), mine = p?.categoryId === c?.id && p?.detail === form.detail.value;
+        const list = [...new Set([...(c?.sub?.[form.detail.value] || []), ...(mine && p?.detail2 ? [p.detail2] : [])])];
+        form.detail2.innerHTML = opt('', '선택 안 함') + list.map(i => opt(i, i, mine && p?.detail2 === i)).join('') + opt('__new', '+ 새 항목 추가');
+        showNew(form.detail2);
+      };
+      const fillDetail = () => {
+        const c = cats.find(x => x.id === form.category.value), items = [...new Set([...(c?.items || []), ...(p?.detail && p?.categoryId === c?.id ? [p.detail] : [])])];
+        form.detail.innerHTML = (items.length ? '' : opt('', '선택 안 함')) + items.map(i => opt(i, i, p?.detail === i && p?.categoryId === c?.id)).join('') + opt('__new', '+ 새 세부 항목 추가');
+        showNew(form.detail); fillDetail2();
+      };
+      form.category.onchange = () => { showNew(form.category); fillDetail(); };
+      form.detail.onchange = () => { showNew(form.detail); fillDetail2(); };
+      form.detail2.onchange = () => showNew(form.detail2);
+      if (!cats.length) form.category.value = '__new';
+      showNew(form.category); fillDetail();
       el.querySelectorAll('[data-min]').forEach(b => b.onclick = () => { form.minutes.value = b.dataset.min; });
       el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating >= +x.dataset.star))); });
       // Offer recordings from the same day to link (recordings never add to practice time).
@@ -127,25 +145,40 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         if (!(minutes > 0)) { VZ.toast('연습 시간을 1분 이상 입력해 주세요.', 'error'); form.minutes.focus(); return; }
         let sid = '';
         if (current === 'song') { sid = VZ.readSong(form, 'song'); if (sid === null) return; }
-        const cat = cats.find(c => c.id === form.category.value);
+        // New 분류 / 세부 항목 typed here are added to the lists (reusing an existing one with the same name).
+        const typed = name => form.elements[name].value === '__new' ? form.elements[name + '__new'].value.trim() : null;
+        const newCat = current === 'training' ? typed('category') : null, newDetail = current === 'training' ? typed('detail') : null, newDetail2 = current === 'training' ? typed('detail2') : null;
+        for (const [v, name, what] of [[newCat, 'category', '분류'], [newDetail, 'detail', '세부 항목'], [newDetail2, 'detail2', '세부 항목 2']]) if (v === '') { VZ.toast('새 ' + what + ' 이름을 입력해 주세요.', 'error'); form.elements[name + '__new'].focus(); return; }
+        let catId = current === 'training' ? form.category.value : '';
+        if (newCat !== null) catId = cats.find(c => c.name === newCat)?.id || VZ.uid();
+        const detail = current === 'training' ? (newDetail ?? form.detail.value) : '', detail2 = current === 'training' && detail ? (newDetail2 ?? form.detail2.value) : '';
+        const catName = newCat ?? cats.find(c => c.id === catId)?.name ?? '';
+        const learn = d => {
+          if (current !== 'training' || !catId) return;
+          let c = d.categories.find(x => x.id === catId);
+          if (!c) { c = {id:catId, name:catName, items:[]}; d.categories.push(c); }
+          c.items ||= []; if (detail && !c.items.includes(detail)) c.items.push(detail);
+          if (detail && detail2) { c.sub ||= {}; c.sub[detail] ||= []; if (!c.sub[detail].includes(detail2)) c.sub[detail].push(detail2); }
+        };
+        const cat = {name:catName};
         const completed = [...form.querySelectorAll('[name=task]:checked')].map(i => i.value);
         const entry = {date:form.date.value, minutes, manualMinutes:minutes, mediaSeconds:p?.mediaSeconds && p.minutes === minutes ? p.mediaSeconds : 0, mediaIds:[...selected], practiceMode:current,
-          technique:current === 'training' && form.detail.value ? [{name:form.detail.value, minutes}] : [], songId:sid,
-          categoryId:current === 'training' ? form.category.value : '', categoryLabel:current === 'training' ? cat?.name || '' : '', detail:current === 'training' ? form.detail.value : '',
+          technique:detail ? [{name:[detail, detail2].filter(Boolean).join(' · '), minutes}] : [], songId:sid,
+          categoryId:current === 'training' ? catId : '', categoryLabel:current === 'training' ? cat.name : '', detail, detail2,
           rating:rating || 0, memo:form.memo.value, completed, assignmentNotes:p?.assignmentNotes || {}};
-        const ok = VZ.change(d => { if (p) Object.assign(d.practices.find(x => x.id === p.id) || {}, entry); else d.practices.push({id:VZ.uid(), ...entry}); });
+        const ok = VZ.change(d => { learn(d); if (p) Object.assign(d.practices.find(x => x.id === p.id) || {}, entry); else d.practices.push({id:VZ.uid(), ...entry}); });
         if (ok) { close(); VZ.toast(p ? '연습 기록을 수정했어요.' : '연습 기록을 저장했어요.'); window.dispatchEvent(new Event('vzip:practice-saved')); }
       };
     }});
 };
 VZ.practiceRow = p => {
-  const title = p.practiceMode === 'training' ? [p.categoryLabel, p.detail].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || (p.practiceMode === 'song' ? '곡 연습' : [p.categoryLabel, p.detail].filter(Boolean).join(' · ') || '연습');
+  const title = p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || (p.practiceMode === 'song' ? '곡 연습' : [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '연습');
   return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-' + (p.practiceMode === 'training' ? 'wind' : 'music-notes') + '"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([VZ.dateLabel(p.date), VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
 };
 VZ.practiceDetail = id => {
   const p = VZ.db.practices.find(x => x.id === id); if (!p) return;
   const tasks = (p.completed || []).map(t => VZ.db.assignments.find(a => a.id === t)?.title).filter(Boolean);
-  VZ.sheet({title:VZ.dateLabel(p.date) + ' 연습', body:'<div class="stack"><div class="card flat"><div class="row between"><strong>' + esc(p.practiceMode === 'training' ? [p.categoryLabel, p.detail].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || '곡 연습') + '</strong><span class="badge">' + VZ.minutes(VZ.practiceMinutes(p)) + '</span></div>' + (p.rating ? '<p class="small muted">만족도 ' + '★'.repeat(p.rating) + '</p>' : '') + (p.memo ? '<p style="white-space:pre-wrap;margin:8px 0 0">' + esc(p.memo) + '</p>' : '') + (tasks.length ? '<p class="small muted">한 숙제: ' + esc(tasks.join(', ')) + '</p>' : '') + '</div><div class="list" data-list></div></div>',
+  VZ.sheet({title:VZ.dateLabel(p.date) + ' 연습', body:'<div class="stack"><div class="card flat"><div class="row between"><strong>' + esc(p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || '곡 연습') + '</strong><span class="badge">' + VZ.minutes(VZ.practiceMinutes(p)) + '</span></div>' + (p.rating ? '<p class="small muted">만족도 ' + '★'.repeat(p.rating) + '</p>' : '') + (p.memo ? '<p style="white-space:pre-wrap;margin:8px 0 0">' + esc(p.memo) + '</p>' : '') + (tasks.length ? '<p class="small muted">한 숙제: ' + esc(tasks.join(', ')) + '</p>' : '') + '</div><div class="list" data-list></div></div>',
     foot:'<div class="btn-row"><button type="button" class="btn danger" data-del>삭제</button><button type="button" class="btn secondary" data-edit>수정</button></div>',
     onMount:async (el, close) => {
       const wrap = el.parentNode;
