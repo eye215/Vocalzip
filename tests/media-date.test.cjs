@@ -25,3 +25,10 @@ test('File names written yyyy-MM-dd_HH-mm-ss give the exact recording time; anyt
  assert.equal(dates.fromName('보컬 2025-08-08 22.09.00.wav',now).recordedDate,'2025-08-08');
  for(const name of ['2025-02-30_10-00-00.m4a','2025-08-08_24-00-00.m4a','2025-08-08.m4a','take.m4a','12025-08-08_22-09-00.m4a',''])assert.equal(dates.fromName(name,now),null);
 });
+test('Names starting with month-day and no year take the most recent such day that is not ahead',()=>{
+ const ref=new Date(2026,10,10,20).getTime();
+ for(const [name,day] of [['11-3 scale.m4a','2026-11-03'],['11-5 #20-2.m4a','2026-11-05'],['11-9 #4.m4a','2026-11-09'],['12-25 carol.m4a','2025-12-25']]){
+  const r=dates.fromName(name,ref);assert.equal(r.recordedDate,day,name);assert.equal(r.timeless,true);
+ }
+ for(const name of ['2-30 x.m4a','take 11-3.m4a','113 scale.m4a','13-1 x.m4a'])assert.equal(dates.fromName(name,ref),null,name);
+});

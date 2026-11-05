@@ -137,7 +137,10 @@ M.importFile = async (file, choice, onProgress, signal) => {
     if (!(Number(meta.durationSeconds) > 0)) meta.durationSeconds = await M.measure({blob:out, type:out.type || typeOf(out), name:out.name}, 8000);
     // A file named yyyy-MM-dd_HH-mm-ss keeps that exact time (also when the chosen date is the same day).
     const named = window.VzipMediaDates?.fromName?.(file.name);
-    if (named && (!choice.date || choice.date === named.recordedDate)) Object.assign(meta, named);
+    if (named?.timeless && (!choice.date || choice.date === named.recordedDate)) {
+      // Month-day names ("11-5 #10.m4a") give the day; the file's own time is kept when it is on that day.
+      if (meta.recordedDate !== named.recordedDate) { const d = VZ.parseYmd(named.recordedDate), keep = new Date(meta.created || file.lastModified || Date.now()); Object.assign(meta, {created:new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime(), recordedDate:named.recordedDate, dateSource:'filename'}); }
+    } else if (named && (!choice.date || choice.date === named.recordedDate)) Object.assign(meta, named);
     else if (choice.date) {
       const d = VZ.parseYmd(choice.date), keep = new Date(meta.created || file.lastModified || Date.now());
       Object.assign(meta, {created:new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime(), recordedDate:choice.date, dateSource:'manual'});

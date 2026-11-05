@@ -211,6 +211,14 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   const [saved] = await media(page);
   expect(saved).toMatchObject({recordedDate:'2025-08-08', dateSource:'filename'});
   expect(await page.evaluate(t => { const d = new Date(t); return [d.getHours(), d.getMinutes()]; }, saved.created)).toEqual([22, 9]);
+  // "11-3 scale.m4a" style: month-day at the start, the most recent such day.
+  const expected = require('../media-date.js').fromName('11-3 scale.wav').recordedDate;
+  await page.keyboard.press('Escape'); await page.goto('/#/home'); await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles({name:'11-3 scale.wav', mimeType:'audio/wav', buffer:b});
+  await page.getByRole('button', {name:'가져오기', exact:true}).click();
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
+  expect((await media(page)).find(m => m.id !== saved.id)).toMatchObject({recordedDate:expected, dateSource:'filename'});
   // A recording imported earlier on its download day is offered a one-tap move; a date set by hand is left alone.
   await page.evaluate(async () => {
     await window.vzipStorePracticeMedia({id:'old-dl', name:'2025-07-01_09-30-00', type:'audio/wav', blob:new Blob(['x'], {type:'audio/wav'}), created:Date.now(), recordedDate:'2026-11-01', dateSource:'file-modified', source:'import'});
@@ -218,7 +226,7 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   });
   await page.keyboard.press('Escape'); await page.goto('/#/home'); await page.goto('/#/library');
   const fix = page.locator('[data-name-dates]');
-  await expect(fix).toContainText('1개');
+  await expect(fix).toContainText('1개'); // the two imports above are already on their days
   await fix.getByRole('button', {name:'이름대로 맞추기'}).click();
   await page.locator('.sheet [data-ok]').click();
   await expect(page.locator('.toast').last()).toContainText('1개 녹음을 파일 이름 날짜로 옮겼어요');
