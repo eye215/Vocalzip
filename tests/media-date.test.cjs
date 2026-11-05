@@ -19,3 +19,9 @@ test('Repeated date tags preserve full dates and do not turn year-only tags into
  assert.equal(dates.pick({raw:{TDRC:['2024-02-29']}},now,now).recordedDate,'2024-02-29');
  assert.equal(dates.pick({raw:{TDRC:['2024']},date:new Date('2024-01-01')},now,now).dateSource,'file-modified');
 });
+test('File names written yyyy-MM-dd_HH-mm-ss give the exact recording time; anything else is ignored',()=>{
+ const r=dates.fromName('2025-08-08_22-09-00.m4a',now);
+ assert.equal(r.recordedDate,'2025-08-08');assert.equal(r.created,new Date(2025,7,8,22,9,0).getTime());assert.equal(r.dateSource,'filename');
+ assert.equal(dates.fromName('보컬 2025-08-08 22.09.00.wav',now).recordedDate,'2025-08-08');
+ for(const name of ['2025-02-30_10-00-00.m4a','2025-08-08_24-00-00.m4a','2025-08-08.m4a','take.m4a','12025-08-08_22-09-00.m4a',''])assert.equal(dates.fromName(name,now),null);
+});

@@ -175,7 +175,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
 VZ.closeSheets = () => [...sheets].forEach(s => s.close());
 VZ.confirm = (title, message, {ok = '확인', danger} = {}) => new Promise(resolve => {
   let result = false;
-  VZ.sheet({title, label:title, body:'<p class="muted">' + VZ.esc(message) + '</p>',
+  VZ.sheet({title, label:title, body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',
     foot:'<div class="btn-row"><button type="button" class="btn ghost" data-close>취소</button><button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-ok>' + VZ.esc(ok) + '</button></div>',
     onMount:(el, close) => el.parentNode.querySelector('[data-ok]').onclick = () => { result = true; close(); },
     onClose:() => resolve(result)});
