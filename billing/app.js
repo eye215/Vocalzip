@@ -326,11 +326,35 @@ async function autoDeduct(){
  if(n)notify('앱에서 완료한 레슨 '+n+'건을 자동으로 차감했어요.');
  return n;
 }
-const autoOnly=new URLSearchParams(location.search).has('auto');
-S.load().then(async data=>{state=data;render();notify('정산 데이터를 불러왔어요.');const n=await autoDeduct().catch(()=>0);
- // Opened in the background by the app after a lesson was saved: report back.
- if(autoOnly&&window.parent!==window)window.parent.postMessage({type:'vzip-billing-auto',deducted:n},location.origin);
-}).catch(error=>{notify('불러오기 실패: '+error.message,true);if(autoOnly&&window.parent!==window)window.parent.postMessage({type:'vzip-billing-auto',deducted:0,error:error.message},location.origin)});
+const params=new URLSearchParams(location.search),autoOnly=params.has('auto');
+const left=passId=>{const pass=state.passes.find(row=>row.id===passId),bal=C.totals(state).passes.find(row=>row.id===passId);return (pass?.name||'레슨권')+' 남은 '+sessions(bal?.remainingUnits||0)};
+/** One change the app asked for from a lesson screen (the user confirmed it there). */
+async function appAction(){
+ const kind=params.get('do');if(!kind)return null;
+ if(kind==='deduct'){
+  const lesson=S.lessons().find(row=>row.lesson_id===params.get('lesson'));
+  if(!lesson)return {ok:false,message:'레슨비 정산에서 이 레슨을 찾지 못했어요. 로그인 계정을 확인해 주세요.'};
+  if(C.active(state.deductions).some(row=>row.lessonId===lesson.lesson_id)||(lesson.billing_deduction_id&&C.active(state.deductions).some(row=>row.id===lesson.billing_deduction_id)))return {ok:true,message:'이미 레슨비 정산에 차감돼 있어요.'};
+  const passId=P.defaultPass(state,C.totals(state));if(!passId)return {ok:false,message:'남은 횟수가 있는 레슨권이 없어요. 레슨비 정산에서 레슨권을 추가해 주세요.'};
+  const units=P.unitsFor(lesson);
+  await persist(P.deductionFor(lesson,passId,{units}),null,'앱 레슨 차감');
+  return {ok:true,message:sessions(units)+' 차감했어요 · '+left(passId)};
+ }
+ if(kind==='void'){
+  const row=C.active(state.deductions).find(item=>item.id===params.get('deduction'));
+  if(!row)return {ok:true,message:'이미 차감이 취소돼 있어요.'};
+  await persist({type:'entity.void',payload:{collection:'deductions',id:row.id,expectedVersion:row.version}},null,'앱에서 차감 취소');
+  return {ok:true,message:'차감을 취소했어요 · '+left(row.passId)};
+ }
+ return null;
+}
+const report=data=>{if(autoOnly&&window.parent!==window)window.parent.postMessage({type:'vzip-billing-auto',...data},location.origin)};
+S.load().then(async data=>{state=data;render();notify('정산 데이터를 불러왔어요.');
+ let action=null;try{action=await appAction()}catch(error){action={ok:false,message:error.message}}
+ const n=await autoDeduct().catch(()=>0);
+ // Opened in the background by the app: report back.
+ report({deducted:n,action});
+}).catch(error=>{notify('불러오기 실패: '+error.message,true);report({deducted:0,error:error.message,action:params.get('do')?{ok:false,message:'레슨비 정산을 열지 못했어요: '+error.message}:null})});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoDeduct()});
 // File picker: show what was chosen (the native control is hidden); the sheet choice only matters for multi-sheet XLSX.
 $('#import-file').addEventListener('change',e=>{const files=[...(e.target.files||[])];$('#import-file-name').textContent=files.length?files.map(f=>f.name).join(', '):'선택한 파일 없음 · 파일당 10MB · 합쳐서 최대 2,000행'});

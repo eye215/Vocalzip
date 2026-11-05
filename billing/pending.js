@@ -51,7 +51,9 @@ function unitsFor(lesson){
 function autoCandidates(lessons,state,today,since){
  const d=new Date(since-7*86400000),from=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
  const dated=new Set(activeRows(state.deductions||[]).map(row=>row.date));
- return classify(lessons,state,today).toDeduct.filter(l=>(l.lesson_date||'')>=from&&(Number(l.lesson_touched)||0)>=since&&!dated.has(l.lesson_date)).map(lesson=>({lesson,units:unitsFor(lesson)}));
+  // A lesson whose deduction was deleted in billing was undone on purpose: it waits in 정산 대기, never re-deducted automatically.
+ const undone=new Set((state.deductions||[]).filter(row=>row.voidedAt&&row.lessonId).map(row=>row.lessonId));
+ return classify(lessons,state,today).toDeduct.filter(l=>!undone.has(l.lesson_id)&&(l.lesson_date||'')>=from&&(Number(l.lesson_touched)||0)>=since&&!dated.has(l.lesson_date)).map(lesson=>({lesson,units:unitsFor(lesson)}));
 }
 
 /* ---------- browser UI ---------- */
