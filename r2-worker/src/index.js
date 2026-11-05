@@ -122,6 +122,12 @@ async function route(request, env) {
     await env.MEDIA.delete(key);
     return json({ok: true});
   }
+  // Read-only list of the caller's own objects (for the app's upload check). Never lists another user's prefix.
+  if (path === '/v1/objects' && method === 'GET') {
+    const page = await env.MEDIA.list({prefix: 'u/' + uid + '/', cursor: url.searchParams.get('cursor') || undefined, limit: 1000, include: ['customMetadata']});
+    return json({objects: page.objects.map(o => ({key: o.key, size: o.size, uploaded: o.uploaded?.toISOString?.() || null, mediaId: o.customMetadata?.mediaId || o.key.split('/')[2] || ''})),
+      cursor: page.truncated ? page.cursor : null});
+  }
   if (path === '/v1/usage' && method === 'GET') {
     let cursor, objects = 0, bytes = 0;
     do {

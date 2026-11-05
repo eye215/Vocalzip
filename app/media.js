@@ -152,7 +152,9 @@ M.importFile = async (file, choice, onProgress, signal) => {
     // choice.extra carries import facts (source type, original file name, hash, imported time) kept with the file.
     const info = {...meta, ...(choice.extra || {}), id:choice.id, name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
     let saved;
-    if (window.vzipCloudSignedIn?.() && out.size > LOCAL_LIMIT) {
+    // Large files, and bulk imports (choice.direct), go straight to the cloud from the picked file: no device copy, so a
+    // thousand files never fill Safari's storage. "Done" then means the server confirmed the row (see vzipCloudImport).
+    if (window.vzipCloudSignedIn?.() && (out.size > LOCAL_LIMIT || choice.direct)) {
       saved = {...await window.vzipCloudImport(out, info, p => onProgress?.(p), {signal}), cloud:true};
     } else if (window.vzipCloudSignedIn?.()) {
       // Signed in: keep the file on this device first, then the cloud upload runs from that copy.
@@ -234,7 +236,11 @@ const extOf = type => ({'audio/mp4':'m4a','video/mp4':'mp4','video/quicktime':'m
 const backup = {running:false, total:0, done:0, failed:0, waiting:false};
 M.backupStatus = () => ({...backup});
 M.localOnly = items => items.filter(m => m.local && !m.cloud && blobOf(m));
+/** A bulk upload holds the single upload slot; the background backup waits until it ends. */
+let held = 0;
+M.holdBackup = on => { held = Math.max(0, held + (on ? 1 : -1)); if (!held) M.scheduleBackup(3000); };
 M.backupLocal = async () => {
+  if (held) return backup;
   if (backup.running || !window.vzipCloudSignedIn?.() || !window.vzipCloudImport) return backup;
   backup.running = true; backup.waiting = false; M.keepAwake(true);
   const notify = () => window.dispatchEvent(new Event('vzip:v6-backup'));
@@ -242,7 +248,7 @@ M.backupLocal = async () => {
     const pending = M.localOnly(await M.list(true));
     Object.assign(backup, {total:pending.length, done:0, failed:0}); notify();
     for (const item of pending) {
-      if (!window.vzipCloudSignedIn?.()) break;
+      if (!window.vzipCloudSignedIn?.() || held) break;
       let prepared = null;
       try {
         let blob = blobOf(item), info = {...item};

@@ -80,9 +80,17 @@ async function ready() {
   return check.ok;
 }
 async function usage() { return api('/v1/usage'); }
+/** Every object under the user's own folder (read-only; the Worker lists only u/<user>/). */
+async function objects() {
+  const out = [];
+  for (let cursor = ''; ;) {
+    const page = await api('/v1/objects' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''));
+    out.push(...(page.objects || [])); if (!page.cursor) return out; cursor = page.cursor;
+  }
+}
 async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, remove, stat, usage, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, remove, stat, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();
