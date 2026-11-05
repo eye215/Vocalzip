@@ -483,13 +483,16 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('30분');
   // The practice shows its linked recording underneath; an unlinked recording appears as a practice recording.
-  await expect(page.locator('[data-day] .cal-owner').first().locator('[data-practice]')).toHaveCount(1);
+  await expect(page.locator('[data-day] .cal-own').first().locator('[data-practice]')).toHaveCount(1);
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(2);
-  await expect(page.locator('[data-day]')).toContainText('연습 녹음 · 기록과 연결되지 않은 녹음');
+  await page.locator('[data-day] .mini-row').first().click(); // a slim ▶ line opens the same player
+  await expect(page.locator('[data-day] .media-open:not([hidden])')).toHaveCount(1);
+  await page.locator('[data-day] .mini-row').first().click();
+  await expect(page.locator('[data-day]')).toContainText('기록에 연결되지 않은 연습 녹음');
   if (day(-7).slice(0, 7) !== day(-1).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
-  await expect(page.locator('[data-day] .cal-owner [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
+  await expect(page.locator('[data-day] .cal-own [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
   await page.getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
   await sheet(page).getByRole('button', {name:'닫기'}).click();
@@ -1097,7 +1100,7 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await page.locator('[data-d="' + m2day + '"]').click();
   await expect(page.locator('[data-d="' + m2day + '"] .dots .s')).toHaveCount(1);
   await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연');
-  await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상 · 기록과 연결되지 않은 녹음');
+  await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 

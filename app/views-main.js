@@ -7,6 +7,8 @@ const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
 // Day · length · kind first (they get cut last); the song only when the title doesn't already say it.
 const mediaSub = m => { const song = VZ.songTitle(m.songId) || '', label = M.label(m); return [VZ.dateLabel(M.dateOf(m)), m.durationSeconds ? VZ.clock(m.durationSeconds) : '', M.occasionLabel(M.occasion(m)) + (m.source === 'import' ? '·가져옴' : ''), m.rating ? '★' + m.rating : '', song && !label.includes(song) ? song : '', m.cloud && !m.local ? '클라우드' : ''].filter(Boolean).join(' · '); };
 VZ.mediaRow = m => '<div data-media="' + esc(m.id) + '"><button type="button" class="item" data-toggle aria-expanded="false"><span class="avatar ' + (M.isVideo(m) ? 'video' : '') + '"><i class="ph ph-' + (M.isVideo(m) ? 'video-camera' : 'waveform') + '"></i></span><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(mediaSub(m)) + '</span></span><i class="ph ph-caret-down chev"></i></button><div class="media-open" hidden style="padding:0 16px 14px"></div></div>';
+/** A slim recording line (▶ title · length) for lists where the recording sits under its record; same tap-to-open player. */
+VZ.mediaMini = m => '<div data-media="' + esc(m.id) + '" class="mini"><button type="button" class="mini-row" data-toggle aria-expanded="false"><i class="ph-fill ph-' + (M.isVideo(m) ? 'video' : 'play-circle') + '"></i><span class="grow ellipsis">' + esc(M.label(m)) + '</span><span class="small muted">' + (Number(m.durationSeconds) > 0 ? esc(VZ.clock(m.durationSeconds)) : '') + '</span><i class="ph ph-caret-down chev"></i></button><div class="media-open" hidden style="padding:4px 0 10px"></div></div>';
 /** Wire tap-to-play rows inside host. */
 VZ.wireMedia = (host, items) => {
   host.addEventListener('click', async e => {
@@ -211,9 +213,10 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
       };
     }});
 };
-VZ.practiceRow = p => {
+VZ.practiceRow = (p, opts) => {
+  const day = !!opts?.day; // inside a day view: no date, recordings are listed underneath
   const title = p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || (p.practiceMode === 'song' ? '곡 연습' : [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '연습');
-  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-' + (p.practiceMode === 'training' ? 'wind' : 'music-notes') + '"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([VZ.dateLabel(p.date), VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
+  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-' + (p.practiceMode === 'training' ? 'wind' : 'music-notes') + '"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([day ? '' : VZ.dateLabel(p.date), VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', !day && (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
 };
 VZ.practiceDetail = id => {
   const p = VZ.db.practices.find(x => x.id === id); if (!p) return;

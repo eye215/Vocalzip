@@ -319,11 +319,14 @@ VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href
     grid.innerHTML = html;
     const e = map.get(calDay) || {l:[], p:[], rl:[], rp:[], rs:[]}, all = new Map(media.map(m => [m.id, m])), wired = [];
     // Each lesson/practice shows its own recordings underneath it.
-    const block = (row, ids) => { const items = ids.map(id => all.get(id)).filter(Boolean); wired.push(...items); return '<div class="list cal-owner">' + row + (items.length ? '<div class="nested" data-r>' + items.map(VZ.mediaRow).join('') + '</div>' : '') + '</div>'; };
-    const loose = (title, items) => { if (!items.length) return ''; wired.push(...items); return '<div class="list cal-owner"><div class="item small muted">' + title + ' · 기록과 연결되지 않은 녹음</div><div class="nested" data-r>' + items.map(VZ.mediaRow).join('') + '</div></div>'; };
-    const lessonsHtml = e.l.sort(VZ.lessonSort).map(l => block(VZ.lessonRow(l), (l.recordings || []).map(r => r.id))).join('') + loose('레슨 녹음', e.rl);
-    const practiceHtml = e.p.map(p => block(VZ.practiceRow(p), p.mediaIds || [])).join('') + loose('연습 녹음', e.rp);
-    const stageHtml = loose('공연 녹음·영상', e.rs);
+    // One card per group; each record is a row with its recordings as slim ▶ lines underneath (no repeated date).
+    const minis = ids => { const items = ids.map(id => all.get(id)).filter(Boolean); wired.push(...items); return items.length ? '<div class="minis" data-r>' + items.map(VZ.mediaMini).join('') + '</div>' : ''; };
+    const owner = (row, ids) => '<div class="cal-own">' + row + minis(ids) + '</div>';
+    const loose = (title, items) => items.length ? '<div class="cal-own"><div class="cal-loose small muted">' + title + '</div>' + minis(items.map(m => m.id)) + '</div>' : '';
+    const group = rows => rows ? '<div class="list cal-list">' + rows + '</div>' : '';
+    const lessonsHtml = group(e.l.sort(VZ.lessonSort).map(l => owner(VZ.lessonRow(l), (l.recordings || []).map(r => r.id))).join('') + loose('기록에 연결되지 않은 레슨 녹음', e.rl));
+    const practiceHtml = group(e.p.map(p => owner(VZ.practiceRow(p, {day:true}), p.mediaIds || [])).join('') + loose('기록에 연결되지 않은 연습 녹음', e.rp));
+    const stageHtml = group(loose('공연 녹음·영상', e.rs));
     dayHost.innerHTML = '<h2 class="sec">' + esc(VZ.dateLabel(calDay)) + '</h2>' +
       '<div class="btn-row" style="margin-bottom:12px"><button type="button" class="btn sm secondary" data-add-l><i class="ph ph-calendar-plus"></i>레슨 일정</button><button type="button" class="btn sm secondary" data-add-p><i class="ph ph-timer"></i>연습 기록</button></div>' +
       (lessonsHtml || practiceHtml || stageHtml ? '<div class="stack">' + (stageHtml ? '<h3 class="cal-group">공연</h3>' + stageHtml : '') + (lessonsHtml ? '<h3 class="cal-group">레슨</h3>' + lessonsHtml : '') + (practiceHtml ? '<h3 class="cal-group">연습</h3>' + practiceHtml : '') + '</div>'
