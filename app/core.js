@@ -97,7 +97,8 @@ VZ.timeEntries = (media = []) => {
   const inLesson = new Set(db.lessons.flatMap(l => (l.recordings || []).map(r => r.id)));
   const out = db.practices.map(p => ({date:p.date, minutes:VZ.practiceMinutes(p), songId:p.practiceMode === 'training' ? '' : p.songId || '', training:p.practiceMode === 'training', kind:'practice', ref:p}));
   for (const m of media) {
-    if (inPractice.has(m.id) || inLesson.has(m.id) || m.source === 'lesson') continue;
+    // Lesson and performance recordings are not practice time (unless placed inside a practice record).
+    if (inPractice.has(m.id) || inLesson.has(m.id) || m.source === 'lesson' || m.occasion === 'lesson' || m.occasion === 'performance') continue;
     const seconds = Number(m.durationSeconds) || 0, date = VZ.media?.dateOf(m);
     if (seconds > 0 && date) out.push({date, minutes:seconds / 60, songId:m.songId || '', training:false, kind:'recording', ref:m});
   }

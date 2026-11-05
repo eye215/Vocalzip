@@ -804,9 +804,11 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   // Setting the date re-checks the row; it now meets the conditions and leaves the "needs date" filter.
   await expect(page.getByRole('button', {name:/^날짜 확인 필요/})).toHaveCount(0);
   await page.locator('[data-f="all"]').click();
+  // A file marked 공연 is imported but makes no practice record.
+  await row('원데이모어').locator('[data-occ-row]').selectOption('performance');
   await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
   await expect(page.getByText('가져오기 완료')).toBeVisible({timeout:60000});
-  await expect(page.locator('[data-hub]')).toContainText('저장 3개 · 연습 기록 3개 생성');
+  await expect(page.locator('[data-hub]')).toContainText('저장 3개 · 연습 기록 2개 생성');
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(3);
   const take = items.find(m => m.originalFilename === 'the moment take.wav');
@@ -814,16 +816,16 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   expect(take.fileHash).toMatch(/^[0-9a-f]{32}$/);
   expect(items.find(m => m.originalFilename === '원데이모어 20260401.wav')).toMatchObject({recordedDate:'2026-04-01', recordedAtSource:'filename', songId:'s3'});
   const made = (await data(page)).practices.filter(p => p.importedFrom === 'voice-memo');
-  expect(made).toHaveLength(3);
+  expect(made).toHaveLength(2);
+  expect(items.find(m => m.originalFilename === '원데이모어 20260401.wav').occasion).toBe('performance');
   expect(made.find(p => p.mediaIds[0] === take.id)).toMatchObject({date:'2026-05-10', songId:'s1', confirmedSongId:'s1', suggestedSongId:'s1'});
-  expect(made.find(p => p.songId === 's3').minutes).toBe(8);
   // Picking the same files again finds them in the library and makes no second practice record.
   await page.getByRole('button', {name:'다른 자료 가져오기'}).click();
   await page.getByRole('button', {name:/음성 메모/}).click();
   await page.locator('[data-files]').setInputFiles([{name:'This Is the Moment 2026-03-05.wav', mimeType:'audio/wav', buffer:first}]);
   await expect(row('This Is the Moment')).toContainText('보관함에 이미 있어요', {timeout:30000});
   await expect(page.getByRole('button', {name:'선택한 0개 가져오기'})).toBeDisabled();
-  expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(3);
+  expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(2);
 });
 
 test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
@@ -940,4 +942,35 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
   await expect.poll(() => page.evaluate(() => window.__imports.map(x => x.id)), {timeout:15000}).toEqual([local.id]);
   expect((await page.evaluate(() => window.__imports))[0].size).toBe(b.length);
   await expect(page.locator('#vz-upload-pill')).toHaveCount(0);
+});
+
+test('Recordings can be marked 공연·레슨·연습; performances are filtered and not counted as practice time', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/library');
+  await expect(page.getByRole('button', {name:'공연', exact:true})).toBeVisible();
+  // m2 is an unlinked practice recording (counts as practice time until it is marked a performance).
+  await page.locator('[data-media="m2"] [data-toggle]').click();
+  await page.locator('[data-media="m2"]').getByRole('button', {name:/정보 수정/}).click();
+  await expect(sheet(page).getByRole('radio', {name:'연습'})).toHaveAttribute('aria-checked', 'true');
+  await sheet(page).getByRole('radio', {name:'공연'}).click();
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  await expect.poll(async () => (await media(page)).find(m => m.id === 'm2').occasion).toBe('performance');
+  await page.goto('/#/library');
+  await page.getByRole('button', {name:'공연', exact:true}).click();
+  await expect(page.locator('[data-media]')).toHaveCount(1);
+  await expect(page.locator('[data-media="m2"] .item-sub')).toContainText('공연');
+  await page.goto('/#/song/s1');
+  await page.getByRole('tab', {name:'공연'}).click();
+  await expect(page.locator('[data-body] [data-media="m2"]')).toHaveCount(1);
+  const minutes = await page.evaluate(async () => VZ.timeEntries(await VZ.media.list()).filter(e => e.kind === 'recording').map(e => e.ref.id));
+  expect(minutes).not.toContain('m2');  // The calendar shows performances as their own group and dot.
+  const m2day = await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(m => m.id === 'm2')));
+  await page.goto('/#/calendar');
+  await expect(page.locator('.legend')).toContainText('공연');
+  for (let i = 0; i < 3 && !(await page.locator('[data-d="' + m2day + '"]').count()); i++) await page.getByRole('button', {name:'이전 달'}).click();
+  await page.locator('[data-d="' + m2day + '"]').click();
+  await expect(page.locator('[data-d="' + m2day + '"] .dots .s')).toHaveCount(1);
+  await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연');
+  await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상 · 기록과 연결되지 않은 녹음');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });

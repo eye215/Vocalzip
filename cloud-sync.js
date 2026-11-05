@@ -169,7 +169,7 @@ async function importMedia(file,info={},onProgress,options={}){
    created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
    source:info.source||'import',size:file.size,
    // Import facts from the import hub (source, original name, fingerprint) stay with the file.
-   ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]])),
+   ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]])),
    ...(r2?{storageProvider:'r2',r2Key:r2.key}:multipart?{storageVersion:2,parts}:{path:parts[0].path})};
   const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata});
   if(error&&r2){committing=false;await window.VzipR2.remove(r2.key).catch(()=>{});r2=null}

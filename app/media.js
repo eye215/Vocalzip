@@ -100,6 +100,10 @@ M.owner = item => {
   if (practice) return {kind:'practice', practice};
   return {kind:item.source === 'lesson' ? 'lesson' : 'practice'};
 };
+/** 공연 / 레슨 / 연습: the user's own choice wins; otherwise where the file is linked or came from. */
+M.OCCASIONS = [['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']];
+M.occasion = item => ['performance', 'lesson', 'practice'].includes(item?.occasion) ? item.occasion : M.owner(item).kind;
+M.occasionLabel = k => ({performance:'공연', lesson:'레슨', practice:'연습'})[k] || '연습';
 const changed = () => { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-media')); };
 ['vzip:cloud-media-changed', 'vzip:media-saved', 'vzip:media-updated', 'vzip:auth-changed'].forEach(n => window.addEventListener(n, changed));
 
@@ -247,7 +251,7 @@ M.backupLocal = async () => {
         const file = new File([blob], M.label(item) + '.' + extOf(type), {type, lastModified:item.created || Date.now()});
         const meta = await window.vzipCloudImport(file, {...info, id:item.id, name:M.label(item), type, source:item.source || 'practice'});
         // Fields the importer does not carry (rating, review, waveform) follow in one update.
-        const extra = {}; for (const k of ['rating', 'review', 'waveform', 'importedAt']) if (item[k] != null) extra[k] = item[k];
+        const extra = {}; for (const k of ['rating', 'review', 'waveform', 'importedAt', 'occasion']) if (item[k] != null) extra[k] = item[k];
         if (Object.keys(extra).length) await window.vzipCloudMediaUpdate({...meta, id:item.id}, extra);
         backup.done++;
       } catch (e) {
