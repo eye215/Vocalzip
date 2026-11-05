@@ -18,7 +18,7 @@ function table(headers,rows,empty='아직 기록이 없어요.'){
  if(!rows.length)return el('p',empty,'empty');
  const wrap=el('div',undefined,'table-wrap'),table=el('table'),head=el('thead'),tr=el('tr');
  for(const name of headers){const th=el('th',name);th.scope='col';tr.append(th)}head.append(tr);table.append(head);
- const body=el('tbody');for(const values of rows){const row=el('tr');for(const [index,value] of values.entries()){const td=el('td');if(headers[index])td.dataset.label=headers[index];if(value instanceof Node)td.append(value);else td.textContent=/^\d{4}-\d{2}-\d{2}$/.test(String(value??''))?window.VzipBillingDate.show(value):String(value??'');row.append(td)}body.append(row)}table.append(body);wrap.append(table);return wrap;
+ const body=el('tbody');for(const values of rows){const row=el('tr');for(const [index,value] of values.entries()){const td=el('td');if(headers[index])td.dataset.label=headers[index];if(value instanceof Node)td.append(value);else td.textContent=/^\d{4}-\d{2}-\d{2}$/.test(String(value??''))?window.VzipBillingDate.show(value):String(value??'');if(!(value instanceof Node)&&String(value??'').trim()==='')td.classList.add('empty');row.append(td)}body.append(row)}table.append(body);wrap.append(table);return wrap;
 }
 function flags(form,names){
  for(const [name,label]of names){const wrapper=el('label',undefined,'check'),input=el('input');input.type='checkbox';input.name=name;wrapper.append(input,document.createTextNode(label));form.append(wrapper)}
@@ -50,7 +50,7 @@ rateForm.onsubmit=async event=>{
  if(state?.hourlyRate&&state.hourlyRate!==rate&&(C.active(state.payments).length||C.active(state.deductions).length)){
   if(!await window.VzipBillingDialog.ask({title:'단가 변경 확인',message:'과거 결제·수강 전체에 새 단가가 적용됩니다. 기존 단가가 다른 기간이 있었다면 변경하지 마세요.',ok:'변경',cancel:'취소',danger:true}))return;
  }
- try{await persist({type:'hourly-rate.save',payload:{hourlyRate:rate},options:{ackImpact:true}},null,'시간당 단가를 저장했어요.')}catch{}
+ try{await persist({type:'hourly-rate.save',payload:{hourlyRate:rate},options:{ackImpact:true}},null,'시간당 단가를 저장했어요.');$('#rate-box').open=false}catch{}
 };
 const impactFlags=[['ackImpact','이력이 있는 레슨권의 단가·과거 사용 금액 변경을 확인했습니다.'],['allowOverdraw','잔여 횟수 초과를 확인했습니다.']];
 makeForm('pass',[['name','레슨권 이름','text'],['totalUnits','총 횟수','number'],['amount','레슨권 금액 (원)','number'],['teacher','선생님','text'],['expires','유효기간','date'],['memo','메모','textarea']],impactFlags);
@@ -102,9 +102,13 @@ function render(){
  if(!state)return;
  const h=C.hourlyTotals(state),area=$('#hourly-summary');
  rateForm.elements.hourlyRate.value=state.hourlyRate||'';
+ $('#rate-current').textContent=state.hourlyRate?money(state.hourlyRate):'미설정';
+ // Open until a rate exists; afterwards it stays a one-line summary that opens to change it.
+ if(!state.hourlyRate)$('#rate-box').open=true;
  if(h.rate){
-  const values=[['시간당 단가',money(h.rate)],['충전 시간',hours(h.purchasedUnits)],['수강 시간',hours(h.usedUnits)],['잔여 시간',hours(h.remainingUnits)],['순결제',money(h.netPaid)],['사용 금액',money(h.usedAmount)],['선불 잔액',money(h.prepaid)],['미납 금액',money(h.owed)]];
-  area.replaceChildren(...values.map(([label,value])=>{const box=el('div',undefined,'metric');box.append(el('span',label),el('strong',value,((label==='잔여 시간'&&h.remainingUnits<0)||(label==='미납 금액'&&h.owed>0))?'negative':''));return box}));
+  // What matters first: hours left, then money ahead/behind; the inputs behind them follow.
+  const values=[['잔여 시간',hours(h.remainingUnits)],['선불 잔액',money(h.prepaid)],['미납 금액',money(h.owed)],['수강 시간',hours(h.usedUnits)],['충전 시간',hours(h.purchasedUnits)],['순결제',money(h.netPaid)],['사용 금액',money(h.usedAmount)]]; // the rate itself is the one-line card below
+  area.replaceChildren(...values.map(([label,value])=>{const box=el('div',undefined,'metric');if(label==='잔여 시간')box.classList.add('hero');box.append(el('span',label),el('strong',value,((label==='잔여 시간'&&h.remainingUnits<0)||(label==='미납 금액'&&h.owed>0))?'negative':''));return box}));
   $('#hourly-hint').textContent='차감 1회 = 레슨 1시간. 모든 과거 기록에 동일한 시간당 단가를 적용합니다.';
  }else{
   area.replaceChildren(el('p','시간당 단가를 입력하면 Notion 방식의 잔여 수업 시간과 선불 잔액을 계산해요. 기존 거래는 수정하지 않습니다.','help'));
