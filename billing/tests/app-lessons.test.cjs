@@ -29,3 +29,10 @@ test('a lesson whose deduction was deleted in billing waits in 정산 대기 and
  assert.deepEqual(P.classify(ls,st,'2026-11-05').toDeduct.map(l=>l.lesson_id),['again']);
  assert.deepEqual(P.autoCandidates(ls,st,'2026-11-05',since),[]);
 });
+
+test('a lesson the app made from a ledger record that was later deleted is not auto-deducted',()=>{
+ const since=new Date('2026-11-05T09:00:00').getTime(),later=since+60000;
+ const st={deductions:[{id:'gone',lessonId:'',date:'2026-11-04',status:'completed',units:100,voidedAt:'2026-11-05T10:00:00Z'}]};
+ const ls=[{lesson_id:'bill-gone',lesson_date:'2026-11-04',lesson_status:'completed',billing_deduction_id:'gone',lesson_touched:later}];
+ assert.deepEqual(P.autoCandidates(ls,st,'2026-11-05',since),[]);
+});

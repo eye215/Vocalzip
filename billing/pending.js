@@ -61,7 +61,9 @@ function autoCandidates(lessons,state,today,since){
  const dated=new Set(activeRows(state.deductions||[]).map(row=>row.date));
   // A lesson whose deduction was deleted in billing was undone on purpose: it waits in 정산 대기, never re-deducted automatically.
  const undone=new Set((state.deductions||[]).filter(row=>row.voidedAt&&row.lessonId).map(row=>row.lessonId));
- return classify(lessons,state,today).toDeduct.filter(l=>!undone.has(l.lesson_id)&&(l.lesson_date||'')>=from&&(Number(l.lesson_touched)||0)>=since&&!dated.has(l.lesson_date)).map(lesson=>({lesson,units:unitsFor(lesson)}));
+ // Lessons the app made from a ledger record that was later deleted: also an undo, never re-deducted.
+ const voided=new Set((state.deductions||[]).filter(row=>row.voidedAt).map(row=>row.id));
+ return classify(lessons,state,today).toDeduct.filter(l=>!undone.has(l.lesson_id)&&!voided.has(l.billing_deduction_id)&&(l.lesson_date||'')>=from&&(Number(l.lesson_touched)||0)>=since&&!dated.has(l.lesson_date)).map(lesson=>({lesson,units:unitsFor(lesson)}));
 }
 
 /* ---------- browser UI ---------- */
