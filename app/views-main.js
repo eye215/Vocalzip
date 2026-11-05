@@ -377,7 +377,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       const lessons = db.lessons.filter(l => VZ.lessonSongIds(l).includes(s.id) || l.songFeedback?.[s.id]).sort((a, b) => VZ.lessonSort(b, a));
       const tasks = db.assignments.filter(t => VZ.taskSongId(t) === s.id);
       const minutes = VZ.sumMinutes(VZ.timeEntries(media).filter(e => e.songId === s.id && !e.training));
-      main.querySelector('[data-summary]').textContent = ['연습 ' + VZ.minutes(minutes), '기록 ' + practices.length + '회', '녹음 ' + media.length + '개', '레슨 ' + lessons.filter(l => VZ.lessonStatus(l) === 'done').length + '회'].join(' · ');
+      main.querySelector('[data-summary]').textContent = [minutes ? '연습 ' + VZ.minutes(minutes) : '', practices.length ? '기록 ' + practices.length + '회' : '', media.length ? '녹음 ' + media.length + '개' : '', (n => n ? '레슨 ' + n + '회' : '')(lessons.filter(l => VZ.lessonStatus(l) === 'done').length)].filter(Boolean).join(' · ') || '아직 기록이 없어요';
       songGrowth(main.querySelector('[data-song-growth]'), s, media, practices);
       main.querySelectorAll('[data-tab]').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.tab === songTab)); b.setAttribute('aria-selected', String(b.dataset.tab === songTab)); });
       const fb = l => l.songFeedback?.[s.id] || l.feedback || '';
@@ -398,12 +398,17 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       else if (songTab === 'performance') body.innerHTML = '<h2 class="sec" style="margin-top:4px">공연 녹음·영상 ' + stageMedia.length + '</h2>' + recList(stageMedia, '이 곡의 공연 녹음이 없어요. 녹음의 "정보 수정"에서 종류를 공연으로 바꿀 수 있어요.');
       if (songTab !== 'timeline') { body.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, media)); return; }
       {
+        // One entry: title (+ badge/rating on the right), date · details, then a short note. Lessons and practices open.
         const ev = [
-          ...media.map(m => ({date:M.dateOf(m), kind:M.occasion(m), html:'<strong>' + esc(M.label(m)) + '</strong><div class="small muted">' + M.occasionLabel(M.occasion(m)) + ' 녹음' + ' · ' + VZ.clock(m.durationSeconds) + (m.rating ? ' · ★' + m.rating : '') + (m.review ? ' · ' + esc(m.review.slice(0, 60)) : '') + '</div>', id:m.id})),
-          ...practices.map(p => ({date:p.date, kind:'practice', html:'<strong>연습 ' + VZ.minutes(VZ.practiceMinutes(p)) + '</strong>' + (p.rating ? ' <span class="small muted">★' + p.rating + '</span>' : '') + (p.memo ? '<div class="small muted">' + esc(p.memo.slice(0, 80)) + '</div>' : '')})),
-          ...lessons.map(l => ({date:l.date, kind:'lesson', html:'<a href="#/lesson/' + esc(l.id) + '" style="color:inherit"><strong>레슨</strong></a> ' + VZ.statusBadge(VZ.lessonStatus(l)) + (fb(l) ? '<div class="small muted">' + esc(fb(l).slice(0, 100)) + '</div>' : '')}))
+          ...media.map(m => ({date:M.dateOf(m), kind:M.occasion(m), title:M.label(m), side:m.rating ? '<span class="t-side">★' + m.rating + '</span>' : '', sub:[M.occasionLabel(M.occasion(m)) + ' 녹음', VZ.clock(m.durationSeconds)], note:m.review})),
+          ...practices.map(p => ({date:p.date, kind:'practice', title:'연습 ' + VZ.minutes(VZ.practiceMinutes(p)), side:p.rating ? '<span class="t-side">★' + p.rating + '</span>' : '', sub:[(p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length + '개' : ''], note:p.memo, attr:' data-practice="' + esc(p.id) + '"'})),
+          ...lessons.map(l => ({date:l.date, kind:'lesson', title:'레슨' + (VZ.timeRange(l) ? ' · ' + VZ.timeRange(l) : ''), side:VZ.statusBadge(VZ.lessonStatus(l)), sub:[l.place, l.teacher], note:fb(l), href:'#/lesson/' + l.id}))
         ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        body.innerHTML = ev.length ? '<div class="timeline">' + ev.map(e => '<div class="t ' + e.kind + '"><div class="small muted">' + esc(VZ.dateLabel(e.date)) + '</div>' + e.html + '</div>').join('') + '</div>' : VZ.empty('path', '녹음·연습·레슨을 기록하면 이 곡의 성장 과정이 여기에 쌓여요.');
+        const entry = e => {
+          const inner = '<span class="t-head"><strong>' + esc(e.title) + '</strong>' + e.side + '</span><span class="t-date">' + esc([VZ.dateLabel(e.date), ...e.sub].filter(Boolean).join(' · ')) + '</span>' + (e.note ? '<span class="t-note">' + esc(String(e.note).slice(0, 100)) + '</span>' : '');
+          return '<div class="t ' + e.kind + '">' + (e.href ? '<a class="t-body" href="' + esc(e.href) + '">' + inner + '</a>' : e.attr ? '<button type="button" class="t-body"' + e.attr + '>' + inner + '</button>' : '<div class="t-body">' + inner + '</div>') + '</div>';
+        };
+        body.innerHTML = ev.length ? '<div class="timeline">' + ev.map(entry).join('') + '</div>' : VZ.empty('path', '녹음·연습·레슨을 기록하면 이 곡의 성장 과정이 여기에 쌓여요.');
       }
     };
     main.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { songTab = b.dataset.tab; draw(); });

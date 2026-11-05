@@ -51,7 +51,7 @@ async function draw(main = document.querySelector('[data-storage]')?.parentNode)
   const row = (icon, title, items, note) => '<div class="item"><i class="ph ph-' + icon + '"></i><span class="item-main"><span class="item-title">' + title + '</span><span class="item-sub">' + items.length + '개 · ' + mb(items.reduce((s, m) => s + sizeOf(m), 0)) + (note ? ' · ' + note : '') + '</span></span></div>';
   const todo = [...g.device, ...g.supabase];
   host.innerHTML =
-    '<h2 class="sec" style="margin-top:4px">파일 위치</h2><div class="list">' +
+    '<h2 class="sec" style="margin-top:4px">파일 위치</h2><div class="list icons">' +
       row('device-mobile', '이 기기에만 있음', g.device, g.device.length ? '기기를 바꾸거나 브라우저 데이터를 지우면 사라질 수 있어요' : '') +
       row('cloud', '기존 클라우드 (Supabase)', g.supabase) +
       row('hard-drives', 'R2 저장소', g.r2, usage ? '서버 기준 ' + usage.objects + '개 · ' + mb(usage.bytes) : '') + '</div>' +
