@@ -990,8 +990,8 @@ test('WAV imports are stored as FLAC only after every sample is checked against 
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:45000});
   const [item] = await media(page);
-  // A browser that cannot decode FLAC to check it keeps the WAV and says why.
-  if (item.type !== 'audio/flac') { expect(item.type).toBe('audio/wav'); expect(item.flacSkipped).toContain('FLAC 확인을 지원하지 않아'); test.info().annotations.push({type:'flac', description:browserName + ': ' + item.flacSkipped}); return; }
+  // Safari/WebKit (iPhone) keeps the WAV on purpose; other browsers must produce a verified FLAC.
+  if (browserName === 'webkit') { expect(item.type).toBe('audio/wav'); expect(item.flacSkipped).toContain('Safari'); return; }
   expect(item.type).toBe('audio/flac');
   expect(item.losslessFlac).toMatchObject({samplesVerified:true, originalCodec:'pcm-s16', originalBytes:b.length, channels:2, sampleRate:44100, frames});
   expect(item.losslessFlac.outputBytes).toBeLessThan(b.length);

@@ -168,7 +168,79 @@ async function* pcmChunks(file, info, frames = 1 << 16) {
     yield out;
   }
 }
-const api = {encodeWav, wavInfo, pcmChunks};
+/* ---------- decoder for the frames this encoder writes (used to verify before keeping a FLAC) ---------- */
+class Reader {
+  constructor(bytes) { this.b = bytes; this.pos = 0; this.bit = 0; }
+  read(n) { // n <= 32
+    let v = 0;
+    while (n > 0) {
+      if (this.pos >= this.b.length) throw Error('FLAC ends early');
+      const avail = 8 - this.bit, take = Math.min(avail, n), byte = this.b[this.pos];
+      v = v * (1 << take) + ((byte >> (avail - take)) & ((1 << take) - 1));
+      this.bit += take; n -= take; if (this.bit === 8) { this.bit = 0; this.pos++; }
+    }
+    return v;
+  }
+  signed(n) { const v = this.read(n); return v >= 2 ** (n - 1) ? v - 2 ** n : v; }
+  unary() { let q = 0; while (this.read(1) === 0) { if (++q > 1 << 26) throw Error('bad unary'); } return q; }
+  align() { if (this.bit) { this.bit = 0; this.pos++; } }
+}
+/** Decode `flac` (a Blob written by encodeWav) and compare every sample with the WAV's own integers. */
+async function verify(flac, file, info, {check} = {}) {
+  const bytes = new Uint8Array(await flac.arrayBuffer()), r = new Reader(bytes);
+  if (r.read(32) !== 0x664c6143) throw Error('not FLAC');
+  let last = 0, bps = 0, ch = 0, total = 0;
+  while (!last) {
+    last = r.read(1); const type = r.read(7), len = r.read(24), start = r.pos;
+    if (type === 0) { r.read(16); r.read(16); r.read(24); r.read(24); r.read(20); ch = r.read(3) + 1; bps = r.read(5) + 1; total = r.read(4) * 2 ** 32 + r.read(32); }
+    r.pos = start + len; r.bit = 0;
+  }
+  if (bps !== info.bits || ch !== info.channels || total !== info.frames) throw Error('FLAC header differs');
+  const source = pcmChunks(file, info); let A = null, ai = 0, frames = 0, frameNo = 0;
+  const x = Array.from({length:ch}, () => new Int32Array(BLOCK)), res = new Int32Array(BLOCK);
+  while (frames < total) {
+    check?.();
+    const frameStart = r.pos;
+    if (r.read(16) !== 0xfff8) throw Error('lost frame sync');
+    const bsCode = r.read(4); r.read(4); if (r.read(4) !== ch - 1) throw Error('channel layout'); r.read(3); r.read(1);
+    let fn = r.read(8); if (fn >= 0x80) { let extra = 0; for (let m = 0x40; fn & m; m >>= 1) extra++; fn &= (0x3f >> extra); for (let i = 0; i < extra; i++) fn = fn * 64 + (r.read(8) & 0x3f); }
+    if (fn !== frameNo) throw Error('frame number');
+    if (bsCode !== 7) throw Error('block size code');
+    const n = r.read(16) + 1;
+    let crc = 0; for (let i = frameStart; i < r.pos; i++) crc = CRC8[crc ^ bytes[i]];
+    if (r.read(8) !== crc) throw Error('frame header CRC');
+    for (let c = 0; c < ch; c++) {
+      if (r.read(1)) throw Error('subframe pad'); const type = r.read(6); if (r.read(1)) throw Error('wasted bits'); const out = x[c];
+      if (type === 0) { const v = r.signed(bps); out.fill(v, 0, n); }
+      else if (type === 1) { for (let i = 0; i < n; i++) out[i] = r.signed(bps); }
+      else if (type >= 8 && type <= 12) {
+        const order = type - 8; for (let i = 0; i < order; i++) out[i] = r.signed(bps);
+        const method = r.read(2), pbits = method ? 5 : 4, esc = method ? 31 : 15, p = r.read(4), size = n >> p; let k = 0;
+        for (let j = 0; j < (1 << p); j++) {
+          const len = j ? size : size - order, param = r.read(pbits);
+          if (param === esc) { const raw = r.read(5); for (let i = 0; i < len; i++) res[k++] = raw ? r.signed(raw) : 0; }
+          else { const d = 2 ** param; for (let i = 0; i < len; i++) { const u = r.unary() * d + (param ? r.read(param) : 0); res[k++] = u % 2 ? -(u + 1) / 2 : u / 2; } }
+        }
+        for (let i = order; i < n; i++) {
+          const e = res[i - order];
+          out[i] = order === 0 ? e : order === 1 ? e + out[i - 1] : order === 2 ? e + 2 * out[i - 1] - out[i - 2] : order === 3 ? e + 3 * out[i - 1] - 3 * out[i - 2] + out[i - 3] : e + 4 * out[i - 1] - 6 * out[i - 2] + 4 * out[i - 3] - out[i - 4];
+        }
+      } else throw Error('subframe type');
+    }
+    r.align();
+    let c16 = 0; for (let i = frameStart; i < r.pos; i++) c16 = ((c16 << 8) & 0xffff) ^ CRC16[(c16 >> 8) ^ bytes[i]];
+    if (r.read(16) !== c16) throw Error('frame CRC');
+    for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) {
+      if (!A || ai >= A.length) { const next = await source.next(); if (next.done) throw Error('FLAC longer than WAV'); A = next.value; ai = 0; }
+      if (A[ai++] !== x[c][i]) throw Error('sample differs');
+    }
+    frames += n; frameNo++;
+    if (frameNo % 64 === 0) await new Promise(res => setTimeout(res, 0));
+  }
+  if ((A && ai < A.length) || !(await source.next()).done) throw Error('FLAC shorter than WAV');
+  return {frames};
+}
+const api = {encodeWav, wavInfo, pcmChunks, verify};
 root.VzipFlac = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

@@ -2,7 +2,7 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), {execFileSync} = require('node:child_process');
-const {encodeWav} = require('../flac-encode.js');
+const {encodeWav, verify} = require('../flac-encode.js');
 const hasFfmpeg = (() => { try { execFileSync('ffmpeg', ['-version'], {stdio:'ignore'}); return true; } catch { return false; } })();
 function wav({rate = 44100, channels = 2, bits = 16, frames = 10000, fn}) {
   const align = channels * bits / 8, b = Buffer.alloc(44 + frames * align);
@@ -33,4 +33,17 @@ for (const c of cases) test(c.name, {skip:!hasFfmpeg && 'ffmpeg not installed'},
   else { for (let i = 0; i < c.frames * c.channels; i++) assert.equal(pcm.readInt32LE(i * 4) >> 8, src.readIntLE(44 + i * 3, 3)); }
   assert.equal(tags, '2026-03-05');
   if (!c.name.includes('noise')) assert.ok(blob.size < src.length, 'FLAC should be smaller');
+});
+
+test('verify() accepts every encoded case and rejects any changed byte or sample', async () => {
+  for (const c of cases) {
+    const src = wav(c), file = asFile(src), {blob, info} = await encodeWav(file, {});
+    assert.deepEqual(await verify(blob, file, info), {frames:c.frames});
+    // A flipped bit inside the audio data must be caught (CRC or sample comparison).
+    const bytes = new Uint8Array(await blob.arrayBuffer()); bytes[Math.floor(bytes.length * 0.6)] ^= 0x10;
+    await assert.rejects(verify(new Blob([bytes]), file, info));
+    // A different original must not pass either.
+    const other = Buffer.from(src); other.writeInt16LE((other.readInt16LE(44 + 200) + 1) & 0x7fff, 44 + 200);
+    await assert.rejects(verify(blob, asFile(other), info));
+  }
 });
