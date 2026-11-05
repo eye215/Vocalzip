@@ -5,8 +5,10 @@ const fields={
  deduction:{date:['레슨날짜','레슨일','수강일','날짜','date'],start:['시작시간','시작','start'],end:['종료시간','종료','end'],status:['진행상태','레슨상태','상태','status'],units:['차감횟수','차감','횟수','deduction'],memo:['레슨내용','레슨메모','메모','내용','note'],student:['수강생','사용자','student'],passName:['레슨권','레슨권이름','상품'],lessonId:['lesson_id','레슨id','기존레슨id'],reference:['외부id','notionid','기록id']}
 };
 const labels={date:'날짜',amount:'결제금액',charged:'충전 횟수',passAmount:'레슨권 금액',passName:'레슨권 이름',kind:'결제/환불',method:'결제 방법',memo:'메모',student:'수강생',reference:'외부 거래/기록 ID',start:'시작 시간',end:'종료 시간',status:'진행 상태',units:'차감 횟수',lessonId:'기존 Lesson ID'};
+// Aliases observed in the Notion settlement schema; keep pass matching independent.
+const notionAliases={deduction:{units:['레슨횟수 차감'],memo:['비고']}};
 const norm=value=>String(value??'').toLowerCase().replace(/[\s_\-().]/g,'');
-function autoMap(headers,kind){const mapping={};for(const [field,names] of Object.entries(fields[kind]))mapping[field]=headers.findIndex(header=>names.some(name=>norm(header)===norm(name)));return mapping}
+function autoMap(headers,kind){const mapping={};for(const [field,names] of Object.entries(fields[kind]))mapping[field]=headers.findIndex(header=>[...names,...(notionAliases[kind]?.[field]||[])].some(name=>norm(header)===norm(name)));return mapping}
 /** Show dates already converted (YYYY-MM-DD) in the preview; unreadable values stay for manual fixing. */
 function normalDate(value,settings){if(value===''||value==null)return value;try{return C.date(value,{date1904:settings.date1904})}catch{return value}}
 function drafts(rows,mapping,settings,state){
@@ -17,7 +19,7 @@ function drafts(rows,mapping,settings,state){
    date:normalDate(get(raw,'date'),settings),passId:found.length===1?found[0].id:(settings.passId||''),memo:get(raw,'memo'),student:get(raw,'student'),reference:get(raw,'reference')};
   if(settings.kind==='payment')Object.assign(row,{amount:get(raw,'amount'),kind:/환불|refund/i.test(get(raw,'kind'))?'refund':'payment',method:get(raw,'method'),
    newPass:settings.mode==='new',passName:name||String(get(raw,'date'))+' 레슨권',charged:get(raw,'charged'),passAmount:get(raw,'passAmount')});
-  else{const status=C.status(get(raw,'status')),inDate=C.timeRange(get(raw,'date'));Object.assign(row,{status,start:get(raw,'start')||inDate.start,end:get(raw,'end')||inDate.end,units:get(raw,'units')!==''?get(raw,'units'):(status==='completed'?'1':'0'),lessonId:String(get(raw,'lessonId')).trim()})}
+  else{const status=C.status(get(raw,'status')),inDate=C.timeRange(get(raw,'date'));Object.assign(row,{status,start:get(raw,'start')||inDate.start,end:get(raw,'end')||inDate.end,units:mapping.units>=0?get(raw,'units'):(status==='completed'?'1':'0'),lessonId:String(get(raw,'lessonId')).trim()})}
   return row;
  });
 }
