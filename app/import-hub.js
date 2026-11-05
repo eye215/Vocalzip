@@ -12,11 +12,13 @@ const SOURCES = {
     tip:'파일 앱에서 폴더를 열고 여러 파일을 선택하세요.'},
   memo:{icon:'microphone', title:'음성 메모', sub:'노래 연습 녹음', accept:'audio/*,.m4a,.mp3,.wav,.aac,.caf', start:'2025-07-24', end:'today',
     tip:'음성 메모 앱에서 녹음을 선택 → 공유 → "파일에 저장"으로 한 폴더에 모은 뒤, 여기서 그 폴더의 파일을 여러 개 선택하세요.'},
+  folder:{icon:'folder-open', title:'컴퓨터 폴더', sub:'맥·PC 브라우저에서 폴더째', accept:'audio/*,video/*', start:'', end:'', folder:true,
+    tip:'폴더를 고르거나 이 화면에 끌어다 놓으면 하위 폴더까지 음성·영상 파일만 골라 분석해요. 아이폰·아이패드에서는 폴더 선택이 안 돼요.'},
   vocalzip:{icon:'archive', title:'기존 Vocalzip', sub:'저장된 파일 이전', accept:'', disabled:true,
     tip:'Cloudflare R2 저장소를 설정하면 기존 파일을 옮길 수 있어요. 지금은 기존 저장소(기기·클라우드)에 그대로 안전하게 보관돼요.'}
 };
 const KEY = 'vzip_import_hub_conditions_v1';
-const SOURCE_TYPE = {photos:'photos', drive:'icloud-drive', memo:'voice-memo'};
+const SOURCE_TYPE = {photos:'photos', drive:'icloud-drive', memo:'voice-memo', folder:'computer-folder'};
 let hub = fresh();
 function fresh() { return {source:null, phase:'source', rows:[], filter:'all', group:false, autoPractice:true, progress:'', cond:null, occasion:'practice'}; }
 function conditionsFor(source) {
@@ -28,6 +30,28 @@ function saveConditions() { try { const all = JSON.parse(localStorage.getItem(KE
 const mmss = sec => sec == null ? '—' : VZ.clock(sec);
 const parseMmss = text => { const m = String(text).trim().match(/^(\d+)(?::(\d{1,2}))?$/); return m ? Number(m[1]) * (m[2] != null ? 60 : 1) + Number(m[2] || 0) : null; };
 const dateFromName = name => { const m = String(name).match(/(20\d{2})[-._ ]?(0[1-9]|1[0-2])[-._ ]?(0[1-9]|[12]\d|3[01])/); return m ? m[1] + '-' + m[2] + '-' + m[3] : ''; };
+
+/* ---------- lessons and folders ---------- */
+const lessonsOn = date => date ? VZ.db.lessons.filter(l => l.date === date && VZ.lessonStatus(l) !== 'cancelled') : [];
+const mediaOnly = files => files.filter(f => !/^\.|^__MACOSX$/.test(f.name) && !/(^|\/)(\.|__MACOSX)/.test(f.webkitRelativePath || '') && /^(audio|video)\//.test(M.typeOf(f)));
+/** Files dropped on the page, including everything inside dropped folders. */
+async function droppedFiles(dt) {
+  const entries = [...(dt.items || [])].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
+  if (!entries.length) return [...(dt.files || [])];
+  const out = [];
+  const walk = async entry => {
+    if (entry.isFile) { out.push(await new Promise((res, rej) => entry.file(res, rej))); return; }
+    const reader = entry.createReader();
+    for (let batch; (batch = await new Promise((res, rej) => reader.readEntries(res, rej))).length;) for (const e of batch) await walk(e);
+  };
+  for (const e of entries) await walk(e);
+  return out;
+}
+function pickFiles(all) {
+  const files = mediaOnly(all), skipped = all.length - files.length;
+  if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 건너뛰었어요.');
+  if (files.length) analyze(files); else if (all.length) VZ.toast('가져올 음성·영상 파일이 없어요.', 'error');
+}
 
 /* ---------- song suggestion (file name / title / show / aliases; no transcription yet) ---------- */
 const norm = t => String(t || '').toLowerCase().normalize('NFC').replace(/\.[a-z0-9]{2,4}$/, '').replace(/[^0-9a-z가-힣]+/g, ' ').trim();
@@ -120,6 +144,9 @@ async function importRows(rows) {
       made++; } }, {silent:true});
   }
   hub.made = (hub.made || 0) + made;
+  // Files approved as that day's lesson recording go into the lesson (once).
+  const toLesson = rows.filter(r => r.state === 'done' && r.lessonId).filter(r => { const l = VZ.db.lessons.find(x => x.id === r.lessonId); return l && !(l.recordings || []).some(x => x.id === r.id); });
+  if (toLesson.length && VZ.change(d => { for (const r of toLesson) { const l = d.lessons.find(x => x.id === r.lessonId); if (l && !(l.recordings || []).some(x => x.id === r.id)) { l.recordings ||= []; l.recordings.push({id:r.id, note:''}); } } }, {silent:true})) hub.linked = (hub.linked || 0) + toLesson.length;
   hub.phase = 'done'; M.invalidate(); draw();
 }
 
@@ -152,7 +179,9 @@ function draw() {
       '<div class="two"><label class="field" style="margin:0"><span>최소 길이 (분:초)</span><input type="text" inputmode="numeric" data-c="min" value="' + mmss(c.min) + '"></label><label class="field" style="margin:0"><span>최대 길이 (분:초)</span><input type="text" inputmode="numeric" data-c="max" value="' + mmss(c.max) + '"></label></div>' +
       '<p class="small muted" style="margin:0">날짜는 파일 속 촬영·녹음일 기준이에요. 길이는 최소·최대 값을 포함해요. 원본 날짜가 없는 파일은 "날짜 확인 필요"로 따로 보여 드려요.</p></div>' +
       '<p class="small muted">' + esc(s.tip) + '</p>' +
-      '<label class="btn block" style="cursor:pointer"><i class="ph ph-folder-open"></i>파일 여러 개 선택<input type="file" multiple accept="' + esc(s.accept) + '" class="sr-only" data-files></label>';
+      (s.folder ? '<label class="btn block" style="cursor:pointer;margin-bottom:8px"><i class="ph ph-folder-open"></i>폴더 통째로 선택<input type="file" webkitdirectory directory multiple class="sr-only" data-folder></label>' : '') +
+      '<label class="btn block' + (s.folder ? ' secondary' : '') + '" style="cursor:pointer"><i class="ph ph-' + (s.folder ? 'files' : 'folder-open') + '"></i>파일 여러 개 선택<input type="file" multiple accept="' + esc(s.accept) + '" class="sr-only" data-files></label>' +
+      '<div class="hub-drop" data-drop>여기에 파일이나 폴더를 끌어다 놓아도 돼요 (컴퓨터)</div>';
     h.querySelector('[data-reset]').onclick = () => { hub = fresh(); draw(); };
     h.querySelectorAll('[data-c]').forEach(inp => inp.onchange = () => {
       const k = inp.dataset.c;
@@ -160,7 +189,12 @@ function draw() {
       else c[k] = inp.value;
       saveConditions();
     });
-    h.querySelector('[data-files]').onchange = e => { const files = [...e.target.files]; e.target.value = ''; if (files.length) analyze(files); };
+    h.querySelector('[data-files]').onchange = e => { const files = [...e.target.files]; e.target.value = ''; if (files.length) pickFiles(files); };
+    h.querySelector('[data-folder]')?.addEventListener('change', e => { const files = [...e.target.files]; e.target.value = ''; pickFiles(files); });
+    const drop = h.querySelector('[data-drop]');
+    drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+    drop.ondragleave = () => drop.classList.remove('over');
+    drop.ondrop = async e => { e.preventDefault(); drop.classList.remove('over'); try { pickFiles(await droppedFiles(e.dataTransfer)); } catch (err) { VZ.toast('끌어다 놓은 파일을 읽지 못했어요: ' + err.message, 'error'); } };
     return;
   }
   if (hub.phase === 'analyzing') { h.innerHTML = '<div class="card stack"><strong>파일 분석 중</strong><p class="small muted" data-progress style="margin:0">' + esc(hub.progress) + '</p><p class="small muted" style="margin:0">파일을 올리지 않고 날짜·길이만 읽고 있어요.</p></div>'; return; }
@@ -176,6 +210,9 @@ function draw() {
       '<div class="small muted hub-name" title="' + esc(r.name) + '">' + esc(r.name) + '</div>' + (badge ? '<div>' + badge + '</div>' : '') +
       (r.status === 'needs-date' || r.dateSource === 'filename' ? '<label class="hub-date"><span class="small">녹음 날짜' + (r.dateSource === 'filename' ? ' (파일명)' : r.date ? ' · 파일 수정일 ' + esc(r.date) + '을 넣어 뒀어요' : '') + '</span><input type="date" data-date value="' + esc(r.date || '') + '"></label>' : '') +
       '<div class="hub-song"><select data-occ-row aria-label="' + esc(r.name) + ' 종류">' + M.OCCASIONS.map(([k, v]) => '<option value="' + k + '"' + (r.occasion === k ? ' selected' : '') + '>' + v + '</option>').join('') + '</select><select data-song aria-label="' + esc(r.name) + ' 곡">' + songOpts(r.song) + '</select>' + (sugSong && r.song !== sug.id ? '<button type="button" class="chip" data-approve>추천: ' + esc(sugSong.title) + ' 승인</button>' : '') + '</div>' +
+      (() => { const ls = r.dateOk ? lessonsOn(r.date) : [], linked = r.lessonId && VZ.db.lessons.find(l => l.id === r.lessonId);
+        if (linked) return '<div class="hub-lesson"><span class="badge ok">✓ ' + esc(VZ.dateLabel(linked.date)) + ' 레슨 녹음으로 연결</span><button type="button" class="chip" data-lesson-off>연결 안 함</button></div>';
+        return ls.length ? '<div class="hub-lesson"><button type="button" class="chip" data-lesson-on="' + esc(ls[0].id) + '"><i class="ph ph-chalkboard-teacher"></i> 이 날 레슨' + (VZ.lessonSongIds(ls[0]).length ? ' (' + esc(VZ.lessonSongIds(ls[0]).map(VZ.songTitle).filter(Boolean).join(', ')) + ')' : '') + ' 녹음으로 연결</button></div>' : ''; })() +
       '<div class="hub-actions"><button type="button" class="chip" data-play><i class="ph ph-play"></i> 들어보기</button><span class="small" data-msg>' + esc(r.msg || '') + '</span></div><div data-p></div></div></div>';
   };
   let list;
@@ -187,7 +224,7 @@ function draw() {
   if (hub.phase === 'review') {
     h.innerHTML = '<div class="row" style="margin-bottom:8px"><span class="avatar"><i class="ph ph-' + s.icon + '"></i></span><strong class="grow">' + esc(s.title) + ' 분석 결과</strong><button type="button" class="btn sm ghost" data-again>다시 선택</button></div>' +
       '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px">' + chips.map(([k, label]) => '<button type="button" class="chip" data-f="' + k + '" aria-pressed="' + (hub.filter === k) + '">' + label + '</button>').join('') + '</div>' +
-      '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px"><button type="button" class="chip" data-all>전체 선택</button><button type="button" class="chip" data-none>선택 해제</button><button type="button" class="chip" data-nodup>중복 제외</button><button type="button" class="chip" data-approve-all>추천곡 일괄 승인</button><button type="button" class="chip" data-group aria-pressed="' + hub.group + '">곡별 묶어 보기</button></div>' +
+      '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px"><button type="button" class="chip" data-all>전체 선택</button><button type="button" class="chip" data-none>선택 해제</button><button type="button" class="chip" data-nodup>중복 제외</button><button type="button" class="chip" data-approve-all>추천곡 일괄 승인</button><button type="button" class="chip" data-approve-lessons>레슨 연결 일괄 승인</button><button type="button" class="chip" data-group aria-pressed="' + hub.group + '">곡별 묶어 보기</button></div>' +
       '<label class="field"><span>선택한 파일의 종류 한 번에 지정</span><select data-bulk-occ><option value="">선택…</option>' + M.OCCASIONS.map(([k, v]) => '<option value="' + k + '">' + v + '</option>').join('') + '</select></label>' +
       '<label class="field"><span>선택한 파일의 곡 한 번에 지정</span><select data-bulk><option value="">선택…</option>' + songOpts('').replace('<option value="">곡 미지정</option>', '<option value="__none">곡 미지정</option>') + '</select></label>' +
       '<label class="item" style="padding:0 0 10px"><input type="checkbox" data-auto' + (hub.autoPractice ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main small">곡을 정한 "연습" 파일은 그 날짜의 연습 기록으로 만들기 (같은 파일은 한 번만)</span></label>' +
@@ -197,7 +234,7 @@ function draw() {
     return;
   }
   const done = rows.filter(r => r.state === 'done').length, failed = rows.filter(r => r.state === 'failed');
-  h.innerHTML = '<div class="card stack"><strong>' + (hub.phase === 'importing' ? '가져오는 중…' : '가져오기 완료') + '</strong><p class="small muted" style="margin:0">저장 ' + done + '개' + (failed.length ? ' · 실패 ' + failed.length + '개' : '') + (hub.phase === 'done' && hub.made ? ' · 연습 기록 ' + hub.made + '개 생성' : '') + '</p>' +
+  h.innerHTML = '<div class="card stack"><strong>' + (hub.phase === 'importing' ? '가져오는 중…' : '가져오기 완료') + '</strong><p class="small muted" style="margin:0">저장 ' + done + '개' + (failed.length ? ' · 실패 ' + failed.length + '개' : '') + (hub.phase === 'done' && hub.made ? ' · 연습 기록 ' + hub.made + '개 생성' : '') + (hub.phase === 'done' && hub.linked ? ' · 레슨 녹음 ' + hub.linked + '개 연결' : '') + '</p>' +
     (rows.some(r => r.saved?.pendingUpload) ? '<p class="small muted" style="margin:0">이 기기에 먼저 저장했어요. 클라우드 업로드는 자동으로 이어져요. 다른 앱을 쓰다가 돌아와도 이어서 올라가요.</p>' : '') +
     (hub.phase === 'done' ? '<div class="btn-row">' + (failed.length ? '<button type="button" class="btn secondary" data-retry>실패한 ' + failed.length + '개 다시 시도</button>' : '') + '<a class="btn" href="#/library">보관함 보기</a></div><button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button>' : '') + '</div>' +
     '<div class="stack" data-list style="margin-top:12px">' + rows.filter(r => r.state !== 'pending').map(rowHtml).join('') + '</div>';
@@ -229,7 +266,11 @@ function wireReview(h) {
   h.querySelector('[data-bulk]').onchange = e => { const v = e.target.value; if (!v) return; hub.rows.forEach(r => { if (r.selected) r.song = v === '__none' ? '' : v; }); draw(); };
   h.querySelectorAll('[data-sel]').forEach(c => c.onchange = () => { const r = byRow(c); r.selected = c.checked; draw(); });
   h.querySelectorAll('[data-song]').forEach(sel => sel.onchange = () => { byRow(sel).song = sel.value; });
-  h.querySelectorAll('[data-occ-row]').forEach(sel => sel.onchange = () => { byRow(sel).occasion = sel.value; });
+  h.querySelectorAll('[data-occ-row]').forEach(sel => sel.onchange = () => { const r = byRow(sel); r.occasion = sel.value; if (r.occasion !== 'lesson') r.lessonId = ''; draw(); });
+  const linkLesson = (r, id) => { const l = VZ.db.lessons.find(x => x.id === id); if (!l) return; r.lessonId = id; r.occasion = 'lesson'; const songs = VZ.lessonSongIds(l); if (!r.song && songs.length === 1) r.song = songs[0]; };
+  h.querySelectorAll('[data-lesson-on]').forEach(b => b.onclick = () => { linkLesson(byRow(b), b.dataset.lessonOn); draw(); });
+  h.querySelectorAll('[data-lesson-off]').forEach(b => b.onclick = () => { const r = byRow(b); r.lessonId = ''; r.occasion = 'practice'; draw(); });
+  h.querySelector('[data-approve-lessons]').onclick = () => { let n = 0; hub.rows.forEach(r => { const l = r.dateOk && !r.lessonId && lessonsOn(r.date)[0]; if (l && r.state !== 'done') { linkLesson(r, l.id); n++; } }); VZ.toast(n ? n + '개 파일을 그날 레슨 녹음으로 연결할게요.' : '같은 날 레슨이 있는 파일이 없어요.'); draw(); };
   h.querySelector('[data-bulk-occ]').onchange = e => { const v = e.target.value; if (!v) return; hub.occasion = v; hub.rows.forEach(r => { if (r.selected) r.occasion = v; }); draw(); };
   h.querySelectorAll('[data-approve]').forEach(b => b.onclick = () => { const r = byRow(b); r.song = r.suggestions[0].id; draw(); });
   h.querySelectorAll('[data-date]').forEach(inp => inp.onchange = () => {

@@ -90,10 +90,13 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   // Saved on the device first; the upload to R2 follows from that copy.
   await expect.poll(() => page.evaluate(() => Object.keys(window.__rows).length), {timeout:20000}).toBe(1);
   const meta = await page.evaluate(() => Object.values(window.__rows)[0]);
-  expect(meta).toMatchObject({storageProvider:'r2', size:wav().length, source:'import'});
-  expect(meta.r2Key).toBe('u/ui-test-user/' + meta.id + '/original.wav');
+  expect(meta).toMatchObject({storageProvider:'r2', source:'import'});
+  // A WAV may be stored as its lossless FLAC; the object in R2 is exactly the file the app kept.
+  expect(meta.r2Key).toMatch(new RegExp('^u/ui-test-user/' + meta.id + '/original\\.(wav|flac)$'));
   expect(meta.path).toBeUndefined();
-  expect(r2.store.get(meta.r2Key).bytes.equals(wav())).toBe(true);
+  expect(r2.store.get(meta.r2Key).bytes.length).toBe(meta.size);
+  const kept = (await page.evaluate(async () => { const x = (await window.vzipReadMedia())[0]; return [...new Uint8Array(x.blob ? await x.blob.arrayBuffer() : x.bytes)]; }));
+  expect(r2.store.get(meta.r2Key).bytes.equals(Buffer.from(kept))).toBe(true);
   // Playback asks the Worker for a signed link.
   const url = await page.evaluate(m => window.vzipCloudMediaUrl(m), meta);
   expect(url).toContain(R2 + '/v1/media/' + meta.r2Key);

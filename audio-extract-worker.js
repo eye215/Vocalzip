@@ -23,7 +23,14 @@ async function prepare({file,id,videoHint,inspect}){
   const metadata=self.VzipMediaDates.pick(tags,file.lastModified);
   // Inspect only: date and length for the import filter, without extracting or writing anything.
   if(inspect){let duration=null;try{duration=await input.computeDuration()}catch{}success=true;self.postMessage({type:'done',metadata,inspect:{duration:Number.isFinite(duration)?Math.round(duration*10)/10:null,hasVideo:videos.length>0,hasAudio:audios.length>0,readable:true}});return}
-  if(!videos.length&&!videoHint){success=true;self.postMessage({type:'done',metadata});return}
+  if(!videos.length&&!videoHint){
+   // Uncompressed WAV becomes FLAC (lossless) only when decoding both gives the very same samples.
+   let flac=null;try{flac=await toFlac(b,input,audios,file,metadata,progress,iterators)}catch(error){flac={error:error.message}}
+   success=true;
+   if(flac?.file)self.postMessage({type:'done',file:flac.file,metadata:{...metadata,originalMedia:{name:file.name,type:file.type,size:file.size,created:metadata.created,recordedDate:metadata.recordedDate},losslessFlac:flac.proof}});
+   else self.postMessage({type:'done',metadata:flac?.error?{...metadata,flacSkipped:flac.error}:metadata});
+   return;
+  }
   self.postMessage({type:'detected-video'});
   if(!audios.length)throw Error('음성이 없는 영상은 음원으로 가져올 수 없어요.');
   progress('영상에서 원본 음성 추출 중…');check();
@@ -104,4 +111,26 @@ async function prepare({file,id,videoHint,inspect}){
   buffered?.clear();
   if(directory&&(!success||buffered))try{await directory.removeEntry(id)}catch{}
  }
+}
+
+/* ---------- WAV → FLAC (lossless, verified sample by sample) ---------- */
+async function toFlac(b,input,audios,file,metadata,progress,iterators){
+ if(audios.length!==1)return null;
+ const codec=await audios[0].getCodec();
+ if(codec!=='pcm-s16'&&codec!=='pcm-s24')return null;
+ // iPhone/iPad and Safari (WebKit) keep the WAV: FLAC playback there is not something this app can confirm.
+ const webkit=/AppleWebKit/i.test(navigator.userAgent)&&!/Chrome|Chromium|Edg/i.test(navigator.userAgent)||/iPhone|iPad|iPod/i.test(navigator.userAgent);
+ if(webkit)return {error:'이 브라우저(Safari)에서는 FLAC 대신 WAV 그대로 저장했어요.'};
+ if(file.size>400*1024*1024)return {error:'400MB가 넘는 WAV는 그대로 저장했어요.'};
+ progress('WAV를 FLAC으로 무손실 압축 중…');check();
+ await import('./flac-encode.js?v=2');
+ const encoded=await self.VzipFlac.encodeWav(file,{date:metadata.recordedDate,check,onProgress:value=>progress('FLAC 압축 '+Math.round(value*100)+'%')});
+ if(!encoded)return null;check();
+ if(encoded.blob.size>=file.size)return {error:'FLAC으로 줄어들지 않아 WAV 그대로 저장했어요.'};
+ // Decode the FLAC again and compare every sample with the WAV's own integers before keeping it.
+ progress('FLAC이 원본 WAV와 같은 소리인지 확인 중…');
+ try{await self.VzipFlac.verify(encoded.blob,file,encoded.info,{check})}catch(error){if(error.name==='AbortError')throw error;return {error:'FLAC 확인에 실패해 WAV 그대로 저장했어요. ('+error.message+')'}}
+ const flacFile=new File([encoded.blob],file.name.replace(/\.[^.]+$/,'')+'.flac',{type:'audio/flac',lastModified:metadata.created});
+ const i=encoded.info;
+ return {file:flacFile,proof:{version:2,codec:'flac',originalCodec:codec,originalBytes:file.size,outputBytes:flacFile.size,channels:i.channels,sampleRate:i.rate,frames:i.frames,samplesVerified:true}};
 }
