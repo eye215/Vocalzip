@@ -61,6 +61,7 @@ async function boot(page, {endpoint = R2} = {}) {
   await page.route('**/*.supabase.co/**', r => r.abort());
   await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:'window.VZIP_R2_ENDPOINT=' + JSON.stringify(endpoint) + ';'}));
   if (process.env.VZ_MEDIABUNNY) await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs', r => r.fulfill({path:process.env.VZ_MEDIABUNNY, contentType:'text/javascript'}));
+  if (process.env.VZ_FLAC) await page.context().route('**/@mediabunny/flac-encoder@1.62.0/**', r => r.fulfill({path:process.env.VZ_FLAC, contentType:'text/javascript'}));
   page.on('dialog', d => d.accept());
   await page.addInitScript(([k]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, JSON.stringify({categories:[], songs:[{id:'s1', title:'Defying Gravity'}], lessons:[], assignments:[], practices:[], comparisonReports:[]})); sessionStorage.setItem('seeded', '1'); } }, [KEY]);
   await page.goto('/#/home');
@@ -90,10 +91,13 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   // Saved on the device first; the upload to R2 follows from that copy.
   await expect.poll(() => page.evaluate(() => Object.keys(window.__rows).length), {timeout:20000}).toBe(1);
   const meta = await page.evaluate(() => Object.values(window.__rows)[0]);
-  expect(meta).toMatchObject({storageProvider:'r2', size:wav().length, source:'import'});
-  expect(meta.r2Key).toBe('u/ui-test-user/' + meta.id + '/original.wav');
+  expect(meta).toMatchObject({storageProvider:'r2', source:'import'});
+  // A WAV may be stored as its lossless FLAC; the object in R2 is exactly the file the app kept.
+  expect(meta.r2Key).toMatch(new RegExp('^u/ui-test-user/' + meta.id + '/original\\.(wav|flac)$'));
   expect(meta.path).toBeUndefined();
-  expect(r2.store.get(meta.r2Key).bytes.equals(wav())).toBe(true);
+  expect(r2.store.get(meta.r2Key).bytes.length).toBe(meta.size);
+  const kept = (await page.evaluate(async () => [...new Uint8Array(await (await window.vzipReadMedia())[0].blob.arrayBuffer())]));
+  expect(r2.store.get(meta.r2Key).bytes.equals(Buffer.from(kept))).toBe(true);
   // Playback asks the Worker for a signed link.
   const url = await page.evaluate(m => window.vzipCloudMediaUrl(m), meta);
   expect(url).toContain(R2 + '/v1/media/' + meta.r2Key);

@@ -24,6 +24,7 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
   await page.route('**/*.supabase.co/**', r => r.abort());
   // Sandboxes without CDN access can point the pinned Mediabunny bundle at a local copy.
   if (process.env.VZ_MEDIABUNNY) await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs', r => r.fulfill({path:process.env.VZ_MEDIABUNNY, contentType:'text/javascript'}));
+  if (process.env.VZ_FLAC) await page.context().route('**/@mediabunny/flac-encoder@1.62.0/**', r => r.fulfill({path:process.env.VZ_FLAC, contentType:'text/javascript'}));
   page.on('dialog', d => d.accept());
   if (seed) await page.addInitScript(([k, s]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, s); sessionStorage.setItem('seeded', '1'); } }, [KEY, JSON.stringify(seed)]);
   await page.goto('/#/home');
@@ -309,7 +310,8 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   expect(a.name).toMatch(/^This Is the Moment \d{4}\.\d{2}\.\d{2}$/);
   expect(b.name).toBe('On My Own 2026.01.15');
   expect(b.songId).toBe('s2');
-  expect(b.type).toBe('audio/mp4');
+  // WAV content (whatever the extension) is stored as lossless FLAC when the encoder is available.
+  expect(['audio/mp4', 'audio/flac']).toContain(b.type);
   expect(b).toMatchObject({recordedDate:'2026-01-15', dateSource:'manual'});
   expect(a.dateSource).not.toBe('manual');
   expect(new Date(b.created).getFullYear() + '-' + (new Date(b.created).getMonth() + 1) + '-' + new Date(b.created).getDate()).toBe('2026-1-15');
@@ -940,7 +942,7 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
   await expect.poll(() => page.evaluate(() => window.__failNext)).toBe(false);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => page.evaluate(() => window.__imports.map(x => x.id)), {timeout:15000}).toEqual([local.id]);
-  expect((await page.evaluate(() => window.__imports))[0].size).toBe(b.length);
+  expect((await page.evaluate(() => window.__imports))[0].size).toBe(await page.evaluate(async () => { const x = (await window.vzipReadMedia())[0]; return x.blob ? x.blob.size : x.bytes.byteLength; })); // the device copy (WAV or its FLAC) is what goes up
   await expect(page.locator('#vz-upload-pill')).toHaveCount(0);
 });
 
@@ -973,4 +975,78 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연');
   await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상 · 기록과 연결되지 않은 녹음');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
+test('WAV imports are stored as FLAC only after every sample is checked against the original', async ({page, browserName}) => {
+  test.skip(!process.env.CI && !process.env.VZ_FLAC, 'FLAC encoder is loaded from the CDN (set VZ_FLAC offline).');
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  // 3 s of 16-bit stereo with noise so FLAC has real work to do.
+  const sr = 44100, frames = sr * 3, ch = 2, b = Buffer.alloc(44 + frames * ch * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + frames * ch * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(ch, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * ch * 2, 28); b.writeUInt16LE(ch * 2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(frames * ch * 2, 40);
+  let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(Math.sin(i / (20 + c * 3)) * 9000 + (rnd() - 0.5) * 600))), 44 + (i * ch + c) * 2);
+  await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles({name:'warmup.wav', mimeType:'audio/wav', buffer:b});
+  await expect(sheet(page).getByText('WAV → FLAC 무손실 압축')).toBeVisible();
+  await page.getByRole('button', {name:'가져오기', exact:true}).click();
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:45000});
+  const [item] = await media(page);
+  // A browser that cannot decode FLAC to check it keeps the WAV and says why.
+  if (browserName !== 'chromium' && item.type !== 'audio/flac') { expect(item.type).toBe('audio/wav'); expect(item.flacSkipped).toBeTruthy(); return; }
+  expect(item.type).toBe('audio/flac');
+  expect(item.losslessFlac).toMatchObject({samplesVerified:true, originalCodec:'pcm-s16', originalBytes:b.length, channels:2, sampleRate:44100, frames});
+  expect(item.losslessFlac.outputBytes).toBeLessThan(b.length);
+  expect(item.originalMedia).toMatchObject({name:'warmup.wav', size:b.length});
+  // Decoding the stored FLAC gives exactly the original 16-bit samples.
+  const same = await page.evaluate(async original => {
+    const ctx = new OfflineAudioContext(2, 44100 * 3, 44100), stored = (await window.vzipReadMedia())[0];
+    const audio = await ctx.decodeAudioData(await stored.blob.arrayBuffer()), view = new DataView(new Uint8Array(original).buffer);
+    for (let c = 0; c < 2; c++) { const d = audio.getChannelData(c); for (let i = 0; i < d.length; i += 997) if (Math.round(d[i] * 32768) !== view.getInt16(44 + (i * 2 + c) * 2, true)) return false; }
+    return audio.length === 44100 * 3;
+  }, [...b]);
+  expect(same).toBe(true);
+});
+
+test('Import hub suggests linking a file to that day\'s lesson, and links only what was approved', async ({page}) => {
+  test.setTimeout(90000);
+  const wav = sec => { const sr = 4000, n = sr * sec, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (7 + sec)) * 5000), 44 + i * 2); return b; };
+  const seed = legacy(); seed.lessons.push({id:'lx', date:'2026-03-05', startTime:'19:00', songIds:['s2'], songId:'s2', status:'done', feedback:'', memo:'', recordings:[]});
+  await boot(page, {seed, media:false});
+  await page.goto('/#/import-hub');
+  await page.getByRole('button', {name:/iCloud Drive/}).click();
+  await page.locator('[data-files]').setInputFiles([{name:'class 2026-03-05.wav', mimeType:'audio/wav', buffer:wav(40)}, {name:'other 2026-03-06.wav', mimeType:'audio/wav', buffer:wav(41)}]);
+  const row = name => page.locator('.hub-row').filter({has:page.locator('.hub-name', {hasText:name})});
+  await expect(row('class').getByRole('button', {name:/이 날 레슨 \(On My Own\) 녹음으로 연결/})).toBeVisible({timeout:60000});
+  await expect(row('other').locator('[data-lesson-on]')).toHaveCount(0);
+  await row('class').getByRole('button', {name:/녹음으로 연결/}).click();
+  await expect(row('class')).toContainText('레슨 녹음으로 연결');
+  await expect(row('class').locator('[data-occ-row]')).toHaveValue('lesson');
+  await expect(row('class').locator('[data-song]')).toHaveValue('s2'); // the lesson's only song
+  await page.getByRole('button', {name:/선택한 2개 가져오기/}).click();
+  await expect(page.getByText('가져오기 완료')).toBeVisible({timeout:60000});
+  await expect(page.locator('[data-hub]')).toContainText('레슨 녹음 1개 연결');
+  const d = await data(page), items = await media(page);
+  const linked = items.find(m => m.originalFilename === 'class 2026-03-05.wav');
+  expect(d.lessons.find(l => l.id === 'lx').recordings.map(r => r.id)).toEqual([linked.id]);
+  expect(linked.occasion).toBe('lesson');
+  expect(d.practices.some(p => (p.mediaIds || []).includes(linked.id))).toBe(false);
+});
+
+test('Import hub takes a whole computer folder (subfolders too) and skips non-media files', async ({page}) => {
+  test.setTimeout(90000);
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vzip-folder-')), sub = path.join(dir, '2026-03');
+  fs.mkdirSync(sub);
+  const sr = 4000, n = sr * 35, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  fs.writeFileSync(path.join(dir, 'top 2026-03-01.wav'), b); fs.writeFileSync(path.join(sub, 'nested 2026-03-02.wav'), b);
+  fs.writeFileSync(path.join(dir, 'notes.txt'), 'x'); fs.writeFileSync(path.join(sub, '.DS_Store'), 'x');
+  await boot(page, {media:false});
+  await page.goto('/#/import-hub');
+  await page.getByRole('button', {name:/컴퓨터 폴더/}).click();
+  await page.locator('[data-folder]').setInputFiles(dir);
+  await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 건너뛰었어요.');
+  await expect(page.locator('.hub-row')).toHaveCount(2, {timeout:60000});
+  await expect(page.locator('.hub-name')).toHaveText(['nested 2026-03-02.wav', 'top 2026-03-01.wav']);
+  fs.rmSync(dir, {recursive:true, force:true});
 });

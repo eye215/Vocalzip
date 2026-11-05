@@ -352,3 +352,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .hub-song .chip{grid-column:1/-1}
 .dots .s{background:#e0742c}
 .legend{flex-wrap:wrap}
+.hub-lesson{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.hub-lesson .chip{max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left}
+.hub-drop{margin-top:10px;padding:16px;border:2px dashed var(--line);border-radius:14px;text-align:center;font-size:13px;color:var(--ink-3)}
+.hub-drop.over{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+@media (pointer:coarse){.hub-drop{display:none}}

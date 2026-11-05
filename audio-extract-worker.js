@@ -23,7 +23,14 @@ async function prepare({file,id,videoHint,inspect}){
   const metadata=self.VzipMediaDates.pick(tags,file.lastModified);
   // Inspect only: date and length for the import filter, without extracting or writing anything.
   if(inspect){let duration=null;try{duration=await input.computeDuration()}catch{}success=true;self.postMessage({type:'done',metadata,inspect:{duration:Number.isFinite(duration)?Math.round(duration*10)/10:null,hasVideo:videos.length>0,hasAudio:audios.length>0,readable:true}});return}
-  if(!videos.length&&!videoHint){success=true;self.postMessage({type:'done',metadata});return}
+  if(!videos.length&&!videoHint){
+   // Uncompressed WAV becomes FLAC (lossless) only when decoding both gives the very same samples.
+   let flac=null;try{flac=await toFlac(b,input,audios,file,metadata,progress,iterators)}catch(error){flac={error:error.message}}
+   success=true;
+   if(flac?.file)self.postMessage({type:'done',file:flac.file,metadata:{...metadata,originalMedia:{name:file.name,type:file.type,size:file.size,created:metadata.created,recordedDate:metadata.recordedDate},losslessFlac:flac.proof}});
+   else self.postMessage({type:'done',metadata:flac?.error?{...metadata,flacSkipped:flac.error}:metadata});
+   return;
+  }
   self.postMessage({type:'detected-video'});
   if(!audios.length)throw Error('음성이 없는 영상은 음원으로 가져올 수 없어요.');
   progress('영상에서 원본 음성 추출 중…');check();
@@ -104,4 +111,52 @@ async function prepare({file,id,videoHint,inspect}){
   buffered?.clear();
   if(directory&&(!success||buffered))try{await directory.removeEntry(id)}catch{}
  }
+}
+
+/* ---------- WAV → FLAC (lossless, verified sample by sample) ---------- */
+const MEDIABUNNY='https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs';
+const FLAC_ENCODER='https://cdn.jsdelivr.net/npm/@mediabunny/flac-encoder@1.62.0/dist/bundles/mediabunny-flac-encoder.min.mjs';
+let flacEncoder=null;
+// The encoder package imports "mediabunny"; point it at the exact module this worker already uses so both share one registry.
+const loadFlacEncoder=b=>flacEncoder||=(async()=>{
+ if(await b.canEncodeAudio('flac'))return;
+ const response=await fetch(FLAC_ENCODER);if(!response.ok)throw Error('FLAC 인코더를 불러오지 못했어요.');
+ const code=(await response.text()).replaceAll('from"mediabunny"','from"'+MEDIABUNNY+'"');
+ const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+ try{(await import(url)).registerFlacEncoder()}finally{URL.revokeObjectURL(url)}
+})().catch(error=>{flacEncoder=null;throw error});
+async function toFlac(b,input,audios,file,metadata,progress,iterators){
+ if(audios.length!==1||file.size>512*1024*1024)return null;
+ const codec=await audios[0].getCodec();
+ if(codec!=='pcm-s16'&&codec!=='pcm-s24')return null;
+ if(!(await b.canDecodeAudio('flac')))return {error:'이 브라우저는 FLAC 확인을 지원하지 않아 WAV 그대로 저장했어요.'};
+ progress('WAV를 FLAC으로 무손실 압축 중…');check();
+ await loadFlacEncoder(b);check();
+ const output=new b.Output({format:new b.FlacOutputFormat(),target:new b.BufferTarget()});
+ const conversion=await b.Conversion.init({input,output,showWarnings:false,audio:{codec:'flac',forceTranscode:true},
+  tags:{...(metadata.recordedDate?{raw:{DATE:metadata.recordedDate}}:{}),creationTime:new Date(metadata.created)}});
+ if(!conversion.isValid)return {error:'FLAC으로 바꿀 수 없는 WAV라 그대로 저장했어요.'};
+ conversion.onProgress=value=>progress('FLAC 압축 '+Math.round(value*100)+'%');
+ await conversion.execute();check();
+ const flacFile=new File([output.target.buffer],file.name.replace(/\.[^.]+$/,'')+'.flac',{type:'audio/flac',lastModified:metadata.created});
+ if(flacFile.size>=file.size)return {error:'FLAC으로 줄어들지 않아 WAV 그대로 저장했어요.'};
+ progress('FLAC이 원본 WAV와 같은 소리인지 확인 중…');
+ const check2=new b.Input({source:new b.BlobSource(flacFile),formats:b.ALL_FORMATS});
+ try{
+  const [result]=await check2.getAudioTracks(),a=await audios[0].getDecoderConfig(),c=await result.getDecoderConfig();
+  if(!result||a.sampleRate!==c.sampleRate||a.numberOfChannels!==c.numberOfChannels)throw Error('FLAC 형식이 원본과 달라 WAV 그대로 저장했어요.');
+  const left=new b.AudioSampleSink(audios[0]).samples(),right=new b.AudioSampleSink(result).samples();iterators.push(left,right);
+  const next=async it=>{while(true){const r=await it.next();if(r.done)return null;const sample=r.value,size=sample.allocationSize({format:'f32',planeIndex:0})/4,data=new Float32Array(size);sample.copyTo(data,{format:'f32',planeIndex:0});sample.close();if(size)return data}};
+  let A=await next(left),B=await next(right),i=0,j=0,values=0,blocks=0;
+  while(A&&B){
+   check();const n=Math.min(A.length-i,B.length-j);
+   for(let k=0;k<n;k++)if(A[i+k]!==B[j+k])throw Error('FLAC 소리가 원본과 달라 WAV 그대로 저장했어요.');
+   i+=n;j+=n;values+=n;
+   if(i>=A.length){A=await next(left);i=0}
+   if(j>=B.length){B=await next(right);j=0}
+   if(++blocks%200===0)await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(A||B)throw Error('FLAC 길이가 원본과 달라 WAV 그대로 저장했어요.');
+  return {file:flacFile,proof:{version:1,codec:'flac',originalCodec:codec,originalBytes:file.size,outputBytes:flacFile.size,channels:a.numberOfChannels,sampleRate:a.sampleRate,frames:values/a.numberOfChannels,samplesVerified:true}};
+ }finally{check2.dispose()}
 }

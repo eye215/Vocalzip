@@ -166,7 +166,7 @@ M.importFile = async (file, choice, onProgress, signal) => {
     if (title) M.reserveName(name);
     window.dispatchEvent(new CustomEvent('vzip:media-imported', {detail:{id:info.id, date:info.recordedDate}}));
     onProgress?.(100);
-    return {...saved, originalSize:file.size, savedSize:out.size, extracted:!!meta.audioExtraction};
+    return {...saved, originalSize:file.size, savedSize:out.size, extracted:!!meta.audioExtraction, flac:!!meta.losslessFlac};
   } finally { await prepared.dispose(); }
 };
 M.update = async (item, changes, {quiet = false} = {}) => {
