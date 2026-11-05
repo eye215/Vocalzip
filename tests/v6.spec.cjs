@@ -1183,7 +1183,7 @@ test('Billing attendance records go into 레슨 기록 and the calendar by thems
   const l1 = (await data(page)).lessons.find(l => l.id === 'l1').date;
   await page.evaluate(async sameDay => {
     const db = await new Promise((res, rej) => { const r = indexedDB.open('vocalzip_billing_v1', 2); r.onupgradeneeded = () => { for (const n of ['documents', 'sync', 'recovery']) r.result.createObjectStore(n, {keyPath:'owner'}); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-    await new Promise((res, rej) => { const t = db.transaction('documents', 'readwrite'); t.objectStore('documents').put({owner:'device', schemaVersion:1, revision:3, passes:[{id:'p1', name:'10회권', teacher:'김쌤'}], payments:[], adjustments:[], imports:[], importRows:[], history:[],
+    await new Promise((res, rej) => { const t = db.transaction('documents', 'readwrite'); t.objectStore('documents').put({owner:'user:ui-test-user', schemaVersion:1, revision:3, passes:[{id:'p1', name:'10회권', teacher:'김쌤'}], payments:[], adjustments:[], imports:[], importRows:[], history:[],
       deductions:[{id:'d1', passId:'p1', date:'2026-10-01', status:'completed', units:100, memo:'호흡'}, {id:'d2', passId:'p1', date:'2026-10-04', status:'completed', units:200}, {id:'d3', passId:'p1', date:'2026-10-07', status:'noshow', units:100},
         {id:'d4', passId:'p1', date:sameDay, status:'completed', units:100}, {id:'d5', passId:'p1', date:'2026-10-09', status:'completed', units:100, voidedAt:'2026-11-01T00:00:00Z'}]}); t.oncomplete = res; t.onerror = () => rej(t.error); });
     db.close();
@@ -1214,8 +1214,40 @@ test('Billing attendance records go into 레슨 기록 and the calendar by thems
   d = await data(page);
   expect(d.lessons.filter(l => l.importedFrom === 'billing').map(l => l.id).sort()).toEqual(['bill-d1', 'bill-d3']);
   // The billing ledger itself is unchanged.
-  const ledger = await page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('device'); q.onsuccess = () => r(q.result); }); db.close(); return doc; });
+  const ledger = await page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('user:ui-test-user'); q.onsuccess = () => r(q.result); }); db.close(); return doc; });
   expect(ledger.revision).toBe(3);
+});
+
+test('레슨비 정산 keeps one ledger when the login session drops, and offers to merge records saved apart on this device', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  const AUTH = 'sb-chxnbtiyuyhiywzeshis-auth-token';
+  // Records once saved while fully signed out went to the device-only ledger.
+  await page.evaluate(k => { localStorage.removeItem(k); localStorage.removeItem('vzip_cloud_linked_user'); }, AUTH);
+  await page.goto('/billing/');
+  await expect(page.locator('#account-label')).toContainText('이 기기 전용');
+  await page.locator('[data-panel="passes"]').click(); await page.locator('[data-open-form="pass"]').click();
+  await page.locator('#pass-name').fill('기기에 남은 10회권'); await page.locator('#pass-totalUnits').fill('10'); await page.locator('#pass-amount').fill('300000');
+  await page.locator('#pass-form [type=submit]').click(); await expect(page.locator('#message')).toContainText('저장했어요');
+  // Signed in again: the account ledger offers to bring them in.
+  await page.evaluate(k => { localStorage.setItem(k, JSON.stringify({user:{id:'ui-test-user', email:'test@example.invalid'}})); localStorage.setItem('vzip_cloud_linked_user', 'ui-test-user'); }, AUTH);
+  await page.goto('/billing/');
+  await expect(page.locator('#account-label')).toContainText('test@example.invalid');
+  const box = page.locator('#other-ledgers');
+  await expect(box).toContainText('이 기기 전용 저장소');
+  await expect(box).toContainText('1건');
+  await box.getByRole('button', {name:'합치기'}).click();
+  await page.locator('.bd-sheet [data-ok]').click();
+  await expect(page.locator('#message')).toContainText('합쳤어요');
+  await expect(box).toHaveCount(0);
+  await page.locator('[data-panel="passes"]').click();
+  await expect(page.locator('#pass-list')).toContainText('기기에 남은 10회권');
+  // The session expires but the app still knows the account: same ledger, nothing "disappears".
+  await page.evaluate(k => localStorage.removeItem(k), AUTH);
+  await page.goto('/billing/');
+  await expect(page.locator('#account-label')).toContainText('로그인 계정');
+  await page.locator('[data-panel="passes"]').click();
+  await expect(page.locator('#pass-list')).toContainText('기기에 남은 10회권');
 });
 
 test('The first lesson completed after the update is deducted even if 레슨비 정산 was never opened since', async ({page}) => {
@@ -1238,7 +1270,7 @@ test('The first lesson completed after the update is deducted even if 레슨비 
 test('Home shows lessons left the way 레슨비 정산 counts them (payments ÷ hourly rate)', async ({page}) => {
   await boot(page, {media:false});
   // Like a real ledger: a 1회 pass used as a container, 2,310,000원 paid at 30,000원/h, 71회 taken → 6회 left.
-  await page.evaluate(() => new Promise(res => { const q = indexedDB.open('vocalzip_billing_v1', 2); q.onupgradeneeded = () => { for (const n of ['documents', 'sync', 'recovery']) q.result.createObjectStore(n, {keyPath:'owner'}); }; q.onsuccess = () => { const tx = q.result.transaction('documents', 'readwrite'); tx.objectStore('documents').put({owner:'device', hourlyRate:30000, passes:[{id:'p', name:'기존', totalUnits:100, amount:30000}], payments:[{id:'pay', passId:'p', kind:'payment', amount:2310000, date:'2026-10-23'}], deductions:[{id:'d', passId:'p', units:7100, date:'2026-10-15', status:'completed'}], adjustments:[]}); tx.oncomplete = () => { q.result.close(); res(); }; }; }));
+  await page.evaluate(() => new Promise(res => { const q = indexedDB.open('vocalzip_billing_v1', 2); q.onupgradeneeded = () => { for (const n of ['documents', 'sync', 'recovery']) q.result.createObjectStore(n, {keyPath:'owner'}); }; q.onsuccess = () => { const tx = q.result.transaction('documents', 'readwrite'); tx.objectStore('documents').put({owner:'user:ui-test-user', hourlyRate:30000, passes:[{id:'p', name:'기존', totalUnits:100, amount:30000}], payments:[{id:'pay', passId:'p', kind:'payment', amount:2310000, date:'2026-10-23'}], deductions:[{id:'d', passId:'p', units:7100, date:'2026-10-15', status:'completed'}], adjustments:[]}); tx.oncomplete = () => { q.result.close(); res(); }; }; }));
   await page.evaluate(() => VZ.change(d => { d.lessons.push({id:'next', date:'2099-01-01', startTime:'20:00', endTime:'21:00', status:'scheduled', songIds:[], songId:'', feedback:'', memo:'', recordings:[]}); }));
   await page.goto('/#/songs'); await page.goto('/#/home');
   await expect(page.locator('[data-billing-left]')).toHaveText(/남은 레슨 6회/);

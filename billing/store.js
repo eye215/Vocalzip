@@ -2,7 +2,10 @@
 (()=>{'use strict';
 const C=window.VzipBilling,B=window.VzipBillingBackup,APP_KEY='vocal-zip_mvp_v1',AUTH_KEY='sb-chxnbtiyuyhiywzeshis-auth-token';
 function session(){try{const data=JSON.parse(localStorage.getItem(AUTH_KEY)||'null');return data?.currentSession||data}catch{return null}}
-function account(){const user=session()?.user;return user?.id?{id:'user:'+user.id,label:user.email||'로그인 계정'}:{id:'device',label:'이 기기 전용'}}
+// While the app still remembers the signed-in account (vzip_cloud_linked_user), an expired or momentarily missing session
+// keeps using that account's ledger. Otherwise entries made then went to a separate '이 기기 전용' ledger and looked lost.
+function linkedUser(){try{return localStorage.getItem('vzip_cloud_linked_user')||''}catch{return ''}}
+function account(){const user=session()?.user;if(user?.id)return {id:'user:'+user.id,label:user.email||'로그인 계정'};const linked=linkedUser();return linked?{id:'user:'+linked,label:'로그인 계정 (다시 로그인하면 클라우드도 사용할 수 있어요)'}:{id:'device',label:'이 기기 전용'}}
 const initialAccount=account();
 function ensureAccount(){if(account().id!==initialAccount.id)throw Error('로그인 계정이 변경됐어요. 새로고침 후 계속해 주세요.')}
 function lessons(){
@@ -56,6 +59,26 @@ const clear=revision=>transaction(true,({state,documents,sync,recovery})=>{
  return next;
 });
 const recoveryData=()=>transaction(false,({previous})=>previous?.state||null);
-window.VzipBillingStore={account:initialAccount,session,lessons,load,status,save,clear,replace,acknowledge,recoveryData,ensureAccount};
+const ROWS=['passes','payments','deductions','adjustments','imports','importRows','history'];
+/** Ledgers on this device saved under another owner (e.g. '이 기기 전용' while signed out) with records the current one lacks. */
+async function others(current){
+ const db=await open();
+ try{
+  const all=await new Promise((resolve,reject)=>{const q=db.transaction('documents','readonly').objectStore('documents').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)});
+  return all.filter(doc=>doc?.owner&&doc.owner!==initialAccount.id).map(doc=>{
+   const have=key=>new Set((current[key]||[]).map(row=>row.id));
+   const missing=['passes','payments','deductions','adjustments'].reduce((n,key)=>{const ids=have(key);return n+(doc[key]||[]).filter(row=>!row.voidedAt&&!ids.has(row.id)).length},0);
+   return {owner:doc.owner,label:doc.owner==='device'?'이 기기 전용 저장소':'다른 로그인 계정 저장소',missing,state:doc};
+  }).filter(x=>x.missing>0);
+ }finally{db.close()}
+}
+/** Add the records of another ledger on this device to the current one (nothing is removed; the previous state stays restorable). */
+function mergeFrom(current,other){
+ const next=JSON.parse(JSON.stringify(current));
+ for(const key of ROWS){const ids=new Set(next[key].map(row=>row.id));for(const row of other[key]||[])if(!ids.has(row.id))next[key].push(row)}
+ if(!next.hourlyRate&&other.hourlyRate)next.hourlyRate=other.hourlyRate;
+ return replace(next,current.revision,{reason:'merge.'+other.owner,allowOwnerChange:true});
+}
+window.VzipBillingStore={account:initialAccount,session,lessons,load,status,save,clear,replace,acknowledge,recoveryData,ensureAccount,others,mergeFrom};
 window.addEventListener('storage',event=>{if((event.key===AUTH_KEY||event.key===null)&&account().id!==initialAccount.id)window.dispatchEvent(new Event('billing:account-changed'))});
 })();

@@ -8,7 +8,8 @@ const VZ = window.VZ, esc = VZ.esc;
 const AUTH_KEY = 'sb-chxnbtiyuyhiywzeshis-auth-token';
 const pad = n => String(n).padStart(2, '0');
 function owner() {
-  try { const data = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'), user = (data?.currentSession || data)?.user; return user?.id ? 'user:' + user.id : 'device'; } catch { return 'device'; }
+  // Same rule as 레슨비 정산 (billing/store.js): the session's account, else the account the app remembers, else this device.
+  try { const data = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'), user = (data?.currentSession || data)?.user; if (user?.id) return 'user:' + user.id; const linked = localStorage.getItem('vzip_cloud_linked_user'); return linked ? 'user:' + linked : 'device'; } catch { return 'device'; }
 }
 /** The billing ledger for this account, or null when billing was never used here. */
 async function ledger() {
