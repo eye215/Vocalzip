@@ -10,7 +10,7 @@ async function prepare({file,id,videoHint,inspect}){
  const iterators=[];
  const progress=message=>self.postMessage({type:'progress',message});
  try{
-  await import('./media-date.js?v=2');
+  await import('./media-date.js?v=3');
   const fallback=self.VzipMediaDates.pick({},file.lastModified);
   const b=await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');check();
   let maximumInputRead=0;

@@ -30,10 +30,21 @@ function pick(tags={},lastModified,now=Date.now()){
  * file's own tags, which often hold the download or export time. Returns null for anything else. */
 function fromName(name,now=Date.now()){
  const m=/(?:^|[^\d])((?:19|20)\d{2})-(\d{2})-(\d{2})[_ T](\d{2})[-.:](\d{2})[-.:](\d{2})(?!\d)/.exec(String(name||''));
- if(!m)return null;
+ if(!m)return monthDay(name,now);
  const [y,mo,d,h,mi,se]=m.slice(1).map(Number);if(h>23||mi>59||se>59)return null;
  const date=new Date(y,mo-1,d,h,mi,se);if(date.getFullYear()!==y||date.getMonth()!==mo-1||date.getDate()!==d)return null;
  const result=parse(date,now);return result?{...result,dateSource:'filename',dateTag:'name'}:null;
+}
+/** A name that starts with month-day and no year, like "11-3 scale.m4a" or "11-5 #20-2.m4a": that day in the most recent
+ * year that is not in the future. No time is known (timeless), so the caller keeps the file's own time on that day. */
+function monthDay(name,now=Date.now()){
+ const m=/^\s*(\d{1,2})[-.](\d{1,2})(?=$|[\s_#(.)-])/.exec(String(name||''));if(!m)return null;
+ const mo=Number(m[1]),d=Number(m[2]);if(mo<1||mo>12||d<1||d>31)return null;
+ const today=new Date(now);let y=today.getFullYear();
+ const at=year=>new Date(year,mo-1,d,12,0,0);
+ if(at(y).getTime()>now+86400000)y--; // a day still ahead this year means last year's
+ const date=at(y);if(date.getMonth()!==mo-1||date.getDate()!==d)return null;
+ return {created:date.getTime(),recordedDate:local(date),dateSource:'filename',dateTag:'name-month-day',timeless:true};
 }
 const api={parse,pick,local,fromName};root.VzipMediaDates=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);
