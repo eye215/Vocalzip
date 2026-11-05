@@ -97,7 +97,7 @@ function previewForm(kind){
 }
 async function persist(command,after,message){
  if(pending||!state)return;pending=true;const disabled=[...document.querySelectorAll('button,input,select,textarea')].map(node=>[node,node.disabled]);disabled.forEach(([node])=>node.disabled=true);
- try{state=await S.save(command,state.revision);after?.();render();notify(message);window.dispatchEvent(new Event('billing:changed'));channel?.postMessage({owner:state.owner,revision:state.revision});}
+ try{state=await S.save(command,state.revision);after?.();render();notify(message);window.dispatchEvent(new Event('billing:changed'));channel?.postMessage({owner:state.owner,revision:state.revision});if(!autoOnly)scheduleSync();}
  catch(error){notify(error.message,true);throw error}
  finally{disabled.forEach(([node,value])=>{if(node.isConnected)node.disabled=value});pending=false;updateImportSummary()}
 }
@@ -368,13 +368,54 @@ async function checkOthers(){
   box.append(row);
  }
 }
+/* ---------- automatic cloud sync (billing/cloud.js) ---------- */
+const Cloud=()=>window.VzipBillingCloud;
+let syncTimer=null,lastSync='';
+function syncLine(text,warn){let p=$('#sync-line');if(!p){p=el('p',undefined,'sync-line');p.id='sync-line';$('#account-label').after(p)}p.textContent=text;p.classList.toggle('warn',!!warn)}
+const canSync=()=>S.account.id.startsWith('user:')&&!!S.session()?.access_token&&Cloud()?.autoOn();
+let waitCloud=0;
+async function runSync(){
+ if(!Cloud()){if(waitCloud++<50)return new Promise(r=>setTimeout(()=>r(runSync()),100));return} // cloud.js loads right after this file
+ if(!S.account.id.startsWith('user:'))return syncLine('이 기기에만 저장돼요 · VOCAL.zip에 로그인하면 다른 기기와 자동으로 맞춰요');
+ if(!Cloud().autoOn())return syncLine('자동 동기화 꺼짐 · 백업·동기화에서 켤 수 있어요');
+ if(!S.session()?.access_token)return syncLine('로그인이 만료돼 자동 동기화를 쉬고 있어요 · 기록은 이 기기에 저장돼요',true);
+ if(pending){scheduleSync(1500);return}
+ try{
+  const r=await Cloud().sync();$('#sync-conflict')?.remove();
+  if(r.action==='download'){state=await S.load();render();notify('다른 기기에서 고친 정산을 받아왔어요.')}
+  if(r.action==='conflict'){showConflict(r.remote);return syncLine('다른 기기에서도 고쳐서 자동 동기화를 멈췄어요 · 위에서 골라 주세요',true)}
+  lastSync=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  syncLine('다른 기기와 자동으로 맞춰져요 · '+lastSync+' 확인');
+ }catch(error){syncLine('자동 동기화를 잠시 못 했어요 · 기록은 이 기기에 그대로예요 ('+error.message+')',true)}
+}
+function scheduleSync(ms=1500){clearTimeout(syncTimer);syncTimer=setTimeout(runSync,ms)}
+function showConflict(remote){
+ // Shown above every panel (it needs a decision whatever tab is open).
+ let box=$('#sync-conflict');if(!box){box=el('div',undefined,'card other-ledgers');box.id='sync-conflict';const nav=$('main nav');if(nav)nav.after(box);else $('main').prepend(box)}
+ box.replaceChildren(el('strong','다른 기기에서도 정산을 고쳤어요'),el('p','이 기기와 클라우드가 서로 다르게 바뀌어서 덮어쓰지 않고 멈췄어요. 어떻게 할까요? 바뀌기 전 기록은 복구에서 되돌릴 수 있어요.','small'));
+ const row=el('div',undefined,'row');
+ const pick=(label,choice,message)=>button(label,async()=>{
+  if(!await window.VzipBillingDialog.ask({title:label,message,ok:label,cancel:'닫기'}))return;
+  try{await Cloud().resolve(choice);state=await S.load();render();box.remove();notify('정산 기록을 맞췄어요.');runSync()}catch(error){notify('맞추지 못했어요: '+error.message,true)}
+ });
+ row.append(pick('두 기록 합치기','merge','이 기기와 클라우드의 기록을 모두 남겨요. 같은 기록을 양쪽에서 고쳤다면 더 나중에 고친 쪽을 써요.'),
+  pick('클라우드 기록 쓰기','cloud','이 기기 기록을 클라우드 기록으로 바꿔요. 지금 기록은 복구에서 되돌릴 수 있어요.'),
+  pick('이 기기 기록 쓰기','device','클라우드를 이 기기 기록으로 바꿔요. 클라우드의 직전 기록은 서버에 한 번 보관돼요.'));
+ box.append(row);
+}
 S.load().then(async data=>{state=data;render();notify('정산 데이터를 불러왔어요.');checkOthers();
+ // Get what other devices changed first (bounded, so a slow network never blocks the lesson deduction), then deduct, then send.
+ const bounded=ms=>Promise.race([runSync(),new Promise(r=>setTimeout(r,ms))]);
+ await bounded(autoOnly?5000:8000);
  let action=null;try{action=await appAction()}catch(error){action={ok:false,message:error.message}}
  const n=await autoDeduct().catch(()=>0);
+ if(autoOnly&&(n||action?.ok)&&canSync())await bounded(6000);
  // Opened in the background by the app: report back.
  report({deducted:n,waiting:autoWaiting,action});
 }).catch(error=>{notify('불러오기 실패: '+error.message,true);report({deducted:0,error:error.message,action:params.get('do')?{ok:false,message:'레슨비 정산을 열지 못했어요: '+error.message}:null})});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoDeduct()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){autoDeduct();scheduleSync(300)}});
+// The on/off switch for automatic sync (per account) sits at the top of 백업·동기화.
+{const t=$('#transfer h2');if(t){const l=el('label',undefined,'auto-sync');const c=el('input');c.type='checkbox';c.id='auto-sync';c.checked=window.VzipBillingCloud?.autoOn?.()!==false;c.onchange=()=>{window.VzipBillingCloud?.setAuto(c.checked);runSync()};l.append(c,el('span','저장할 때마다 클라우드와 자동으로 맞추기 (다른 기기에서도 같은 정산이 보여요)'));t.after(l)}}
 // File picker: show what was chosen (the native control is hidden); the sheet choice only matters for multi-sheet XLSX.
 $('#import-file').addEventListener('change',e=>{const files=[...(e.target.files||[])];$('#import-file-name').textContent=files.length?files.map(f=>f.name).join(', '):'선택한 파일 없음 · 파일당 10MB · 합쳐서 최대 2,000행'});
 new MutationObserver(()=>{$('#import-sheet-field').hidden=$('#import-sheet').options.length<2}).observe($('#import-sheet'),{childList:true});
