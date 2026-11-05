@@ -74,4 +74,29 @@ VZ.billingLessonBanner = async host => {
   host.innerHTML = '<div class="card row" style="gap:10px;margin-bottom:12px"><i class="ph ph-receipt" style="font-size:22px;color:var(--accent)"></i><span class="grow small">레슨비 정산에만 있는 수강 내역 <strong>' + n + '개</strong>를 레슨 기록에 올릴 수 있어요.</span><button type="button" class="btn sm" data-billing-lessons>보기</button></div>';
   host.querySelector('[data-billing-lessons]').onclick = () => VZ.billingLessonSheet();
 };
+/* 레슨을 완료로 저장하면 레슨비 정산이 뒤에서 열려 자동 차감해요 (정산 화면의 자동 차감 설정을 따라요). */
+let syncTimer = null, frame = null;
+VZ.billingAutoSync = () => {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    if (frame) return;
+    frame = document.createElement('iframe');
+    frame.hidden = true; frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1; frame.title = '레슨비 정산 자동 차감';
+    const done = () => { window.removeEventListener('message', onMessage); clearTimeout(timer); frame?.remove(); frame = null; };
+    const onMessage = e => {
+      if (e.origin !== location.origin || e.data?.type !== 'vzip-billing-auto' || e.source !== frame?.contentWindow) return;
+      if (e.data.deducted) VZ.toast('레슨비 정산에서 ' + e.data.deducted + '회 차감했어요.');
+      done();
+    };
+    const timer = setTimeout(done, 20000);
+    window.addEventListener('message', onMessage);
+    frame.src = 'billing/?auto=1';
+    document.body.append(frame);
+  }, 1200);
+};
+window.addEventListener('vzip:data-changed', () => {
+  const now = Date.now(), today = VZ.today();
+  // Only right after a lesson was saved as completed (explicit status, not one imported from billing).
+  if (VZ.db.lessons.some(l => l.status === 'done' && !l.billingDeductionId && (l.date || '') <= today && now - (Number(l.updatedAt) || Number(l.created) || 0) < 15000)) VZ.billingAutoSync();
+});
 })();

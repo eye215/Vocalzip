@@ -40,6 +40,20 @@ function deductionFor(lesson,passId,{status='completed',units=100}={}){
  return {type:'deduction.save',payload:{passId,lessonId:lesson.lesson_id,date:lesson.lesson_date,status,units,start:lesson.lesson_start||'',end:lesson.lesson_end||'',memo:''}};
 }
 
+/** Lessons to deduct automatically: completed in the app after auto-deduction was turned on (and dated at most a
+ * week before that), with no attendance record of any kind on that date (a date-only record may be the same lesson,
+ * so that stays a manual decision). Units follow the lesson's own time: 1 hour = 1회, 2 hours = 2회 (default 1회). */
+function unitsFor(lesson){
+ const m=t=>/^\d{2}:\d{2}$/.test(t||'')?Number(t.slice(0,2))*60+Number(t.slice(3)):null,a=m(lesson.lesson_start),b=m(lesson.lesson_end);
+ if(a===null||b===null||b<=a)return 100;
+ return Math.max(50,Math.round((b-a)/30)*50);
+}
+function autoCandidates(lessons,state,today,since){
+ const d=new Date(since-7*86400000),from=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+ const dated=new Set(activeRows(state.deductions||[]).map(row=>row.date));
+ return classify(lessons,state,today).toDeduct.filter(l=>(l.lesson_date||'')>=from&&(Number(l.lesson_touched)||0)>=since&&!dated.has(l.lesson_date)).map(lesson=>({lesson,units:unitsFor(lesson)}));
+}
+
 /* ---------- browser UI ---------- */
 let chosenPass='';
 function render(ctx){
@@ -61,6 +75,11 @@ function render(ctx){
  host.replaceChildren();
  const box=document.createElement('div');box.className='card pending';
  const h=document.createElement('h3');h.textContent='앱 레슨 정산 대기';box.append(h);
+ if(ctx.auto){
+  const row=document.createElement('label');row.className='check auto-deduct';const input=document.createElement('input');input.type='checkbox';input.checked=!!ctx.auto.on;input.id='auto-deduct';
+  const d=new Date(ctx.auto.since);row.append(input,document.createTextNode('앱에서 완료한 레슨은 자동으로 차감 ('+(d.getMonth()+1)+'/'+d.getDate()+' 이후 완료한 레슨부터 · 1시간 = 1회)'));
+  input.onchange=()=>ctx.auto.set(input.checked);box.append(row);
+ }
  if(!count){const p=document.createElement('p');p.className='help';p.textContent='정산할 앱 레슨이 없어요. 앱에서 완료한 레슨이 여기에 표시돼요.';box.append(p);host.append(box);return}
  const help=document.createElement('p');help.className='help';
  help.textContent='차감 1회는 레슨 1시간이에요. 실제 수강 시간(0·1·2시간)을 선택해 주세요. 앱 레슨 기록 자체는 변경하지 않아요.';box.append(help);
@@ -97,5 +116,5 @@ function render(ctx){
  host.append(box);
  if(passes.length&&!chosenPass){const warn=document.createElement('p');warn.className='help error';warn.textContent='잔여 1회 이상인 레슨권이 없어요. 새 레슨권을 등록하거나 직접 선택해 주세요.';box.insertBefore(warn,box.querySelector('h4'))}
 }
-return {classify,defaultPass,deductionFor,render};
+return {classify,defaultPass,deductionFor,autoCandidates,unitsFor,render};
 });

@@ -152,7 +152,7 @@ function render(){
  $('#deduction-list').replaceChildren(table(['날짜','시간','레슨권','상태','차감','메모','관리'],newestFirst(visibleRows(state.deductions)).map(row=>[row.date,[row.start,row.end].filter(Boolean).join('–'),passName(row.passId),(row.voidedAt?'삭제됨 · ':'')+statusLabels[row.status],sessions(row.units),row.memo,rowActions('deductions','deduction',row)]),undefined,'cards-deduction'));
  $('#adjustment-list').replaceChildren(table(['날짜','레슨권','횟수 증감','금액 증감','사유','관리'],newestFirst(visibleRows(state.adjustments)).map(row=>[row.date,passName(row.passId),sessions(row.unitsDelta),money(row.amountDelta),(row.voidedAt?'삭제됨 · ':'')+row.memo,rowActions('adjustments',null,row)]),undefined,'cards-adjustment'));
  renderBatches();renderAudit();
- window.VzipBillingPending?.render({state,lessons:S.lessons(),C,today:today(),app:pendingApp});
+ window.VzipBillingPending?.render({state,lessons:S.lessons(),C,today:today(),app:pendingApp,auto:{...autoSetting(),set:setAuto}});
 }
 const pendingApp={
  persist:(command,message)=>persist(command,null,message).catch(()=>{}),
@@ -306,7 +306,32 @@ $('#commit-import').onclick=async()=>{
 };
 window.addEventListener('billing:replaced',()=>{S.load().then(data=>{state=data;for(const form of Object.values(forms))resetForm(form);clearPreview();render();channel?.postMessage({owner:state.owner,revision:state.revision})}).catch(error=>notify(error.message,true))});
 $('#account-label').textContent=S.account.label+' · 정산 전용 저장소';
-S.load().then(data=>{state=data;render();notify('정산 데이터를 불러왔어요.')}).catch(error=>notify('불러오기 실패: '+error.message,true));
+/* ---------- 앱 레슨 자동 차감 ---------- */
+const AUTO_KEY='vzip_billing_auto_deduct_v1',P=window.VzipBillingPending;
+function autoSetting(){
+ try{const all=JSON.parse(localStorage.getItem(AUTO_KEY)||'{}');let v=all[S.account.id];if(!v){v={on:true,since:Date.now()};all[S.account.id]=v;localStorage.setItem(AUTO_KEY,JSON.stringify(all))}return v}
+ catch{return {on:false,since:Date.now()}}
+}
+function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AUTO_KEY)||'{}'),v=autoSetting();all[S.account.id]={on,since:on&&!v.on?Date.now():v.since};localStorage.setItem(AUTO_KEY,JSON.stringify(all));notify(on?'앱에서 완료한 레슨을 자동으로 차감할게요.':'자동 차감을 껐어요. 정산 대기에서 직접 차감해 주세요.');render();if(on)autoDeduct()}catch{}}
+let autoRunning=false;
+async function autoDeduct(){
+ if(autoRunning||pending||!state||!P?.autoCandidates)return 0;const cfg=autoSetting();if(!cfg.on)return 0;
+ autoRunning=true;let n=0;
+ try{
+  for(const {lesson,units} of P.autoCandidates(S.lessons(),state,today(),cfg.since)){
+   const passId=P.defaultPass(state,C.totals(state));if(!passId)break; // no pass with sessions left: stays in 정산 대기
+   try{await persist(P.deductionFor(lesson,passId,{units}),null,'앱 레슨 자동 차감');n++}catch{break}
+  }
+ }finally{autoRunning=false}
+ if(n)notify('앱에서 완료한 레슨 '+n+'건을 자동으로 차감했어요.');
+ return n;
+}
+const autoOnly=new URLSearchParams(location.search).has('auto');
+S.load().then(async data=>{state=data;render();notify('정산 데이터를 불러왔어요.');const n=await autoDeduct().catch(()=>0);
+ // Opened in the background by the app after a lesson was saved: report back.
+ if(autoOnly&&window.parent!==window)window.parent.postMessage({type:'vzip-billing-auto',deducted:n},location.origin);
+}).catch(error=>{notify('불러오기 실패: '+error.message,true);if(autoOnly&&window.parent!==window)window.parent.postMessage({type:'vzip-billing-auto',deducted:0,error:error.message},location.origin)});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoDeduct()});
 // File picker: show what was chosen (the native control is hidden); the sheet choice only matters for multi-sheet XLSX.
 $('#import-file').addEventListener('change',e=>{const files=[...(e.target.files||[])];$('#import-file-name').textContent=files.length?files.map(f=>f.name).join(', '):'선택한 파일 없음 · 파일당 10MB · 합쳐서 최대 2,000행'});
 new MutationObserver(()=>{$('#import-sheet-field').hidden=$('#import-sheet').options.length<2}).observe($('#import-sheet'),{childList:true});

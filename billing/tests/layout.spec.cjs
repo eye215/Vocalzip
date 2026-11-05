@@ -38,3 +38,22 @@ test('all completed app lessons can be deducted at once (1 hour each) after conf
  const state=await page.evaluate(()=>VzipBillingStore.load());
  expect(state.deductions.filter(d=>!d.voidedAt).map(d=>[d.lessonId,d.units]).sort()).toEqual([['L0',100],['L1',100],['L2',100]]);
 });
+test('lessons completed in the app after auto-deduction is on are deducted by their length; older ones wait',async({page})=>{
+ const now=Date.now(),ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),yesterday=ymd(new Date(now-864e5)),before=ymd(new Date(now-2*864e5));
+ await page.addInitScript(([y,b,n])=>{if(localStorage.getItem('vocal-zip_mvp_v1'))return;
+  localStorage.setItem('vzip_billing_auto_deduct_v1',JSON.stringify({device:{on:true,since:n-60000}}));
+  localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify({practices:[],songs:[],lessons:[
+   {id:'new2h',date:y,status:'done',startTime:'19:00',endTime:'21:00',created:n},{id:'old',date:b,status:'done',created:n-864e5*30,updatedAt:n-864e5*30}]}))},[yesterday,before,now]);
+ page.on('dialog',d=>d.accept());
+ await page.goto('/billing/');await expect(page.locator('#message')).toContainText('불러왔어요');
+ // No pass yet: nothing can be deducted.
+ expect((await page.evaluate(()=>VzipBillingStore.load())).deductions).toHaveLength(0);
+ await tab(page,'passes');await page.locator('[data-open-form="pass"]').click();await page.locator('#pass-name').fill('10회권');await page.locator('#pass-totalUnits').fill('10');await page.locator('#pass-amount').fill('500000');
+ await page.locator('#pass-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
+ await page.reload();await expect(page.locator('#message')).toContainText('자동으로 차감했어요');
+ const rows=(await page.evaluate(()=>VzipBillingStore.load())).deductions.map(d=>[d.lessonId,d.units,d.status]);
+ expect(rows).toEqual([['new2h',200,'completed']]);
+ await tab(page,'attendance');
+ await expect(page.locator('#pending-lessons')).toContainText(new Date(now-2*864e5).getFullYear()+'/'); // the older lesson still waits
+ await expect(page.locator('#auto-deduct')).toBeChecked();
+});
