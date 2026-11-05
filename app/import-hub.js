@@ -92,7 +92,10 @@ function evaluate(row) {
 
 /* ---------- import ---------- */
 async function runImport(rows) {
-  hub.phase = 'importing'; draw();
+  hub.phase = 'importing'; draw(); M.keepAwake(true);
+  try { await importRows(rows); } finally { M.keepAwake(false); }
+}
+async function importRows(rows) {
   for (const row of rows) {
     if (row.state === 'done') continue;
     row.state = 'uploading'; row.msg = '준비 중…'; drawRow(row);
@@ -194,6 +197,7 @@ function draw() {
   }
   const done = rows.filter(r => r.state === 'done').length, failed = rows.filter(r => r.state === 'failed');
   h.innerHTML = '<div class="card stack"><strong>' + (hub.phase === 'importing' ? '가져오는 중…' : '가져오기 완료') + '</strong><p class="small muted" style="margin:0">저장 ' + done + '개' + (failed.length ? ' · 실패 ' + failed.length + '개' : '') + (hub.phase === 'done' && hub.made ? ' · 연습 기록 ' + hub.made + '개 생성' : '') + '</p>' +
+    (rows.some(r => r.saved?.pendingUpload) ? '<p class="small muted" style="margin:0">이 기기에 먼저 저장했어요. 클라우드 업로드는 자동으로 이어져요. 다른 앱을 쓰다가 돌아와도 이어서 올라가요.</p>' : '') +
     (hub.phase === 'done' ? '<div class="btn-row">' + (failed.length ? '<button type="button" class="btn secondary" data-retry>실패한 ' + failed.length + '개 다시 시도</button>' : '') + '<a class="btn" href="#/library">보관함 보기</a></div><button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button>' : '') + '</div>' +
     '<div class="stack" data-list style="margin-top:12px">' + rows.filter(r => r.state !== 'pending').map(rowHtml).join('') + '</div>';
   h.querySelector('[data-retry]')?.addEventListener('click', () => runImport(failed));
