@@ -62,11 +62,10 @@ M.list = async (force) => {
     let failed = '';
     try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch (e) { console.error(e); failed = '이 기기의 파일을 읽지 못했어요.'; }
     if (window.vzipCloudSignedIn?.()) {
-      try { (await window.vzipCloudMediaList()).forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion, storageProvider:x.storageProvider, r2Key:x.r2Key, legacyStorage:x.legacyStorage})); }
+      try { mergeCloud(map, await window.vzipCloudMediaList()); }
       catch (e) { failed = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
     }
-    // Newest recording day first (the file's own date), then newest saved.
-    const list = [...map.values()].sort((a, b) => (M.dateOf(b) || '').localeCompare(M.dateOf(a) || '') || (b.created || 0) - (a.created || 0));
+    const list = sortList(map);
     // A read that started before a login/change, or that missed a source, is shown but not kept.
     if (generation === mine) { cloudError = failed; if (!failed) cache = list; }
     return list;
@@ -75,6 +74,26 @@ M.list = async (force) => {
   try { return await promise; } finally { if (loading?.promise === promise) loading = null; }
 };
 M.cached = () => cache || [];
+function mergeCloud(map, items) { items.forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion, storageProvider:x.storageProvider, r2Key:x.r2Key, legacyStorage:x.legacyStorage})); }
+// Newest recording day first (the file's own date), then newest saved.
+const sortList = map => [...map.values()].sort((a, b) => (M.dateOf(b) || '').localeCompare(M.dateOf(a) || '') || (b.created || 0) - (a.created || 0));
+/** The list as last kept on this device (no network), to draw a screen at once while M.list() refreshes. Null if none. */
+M.peek = async () => {
+  if (cache) return cache;
+  if (!window.vzipCloudSignedIn?.()) return null;
+  let cloud = null; try { cloud = await window.vzipCloudMediaCached?.(); } catch {}
+  if (!cloud) return null;
+  const map = new Map(); try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch {}
+  mergeCloud(map, cloud); return sortList(map);
+};
+/** Sign ahead the R2 files about to be shown, so a tap can play at once (one request per 100 files). */
+M.prefetch = items => { const keys = items.filter(m => m.storageProvider === 'r2' && m.r2Key && !blobOf(m)).map(m => m.r2Key); if (keys.length) window.VzipR2?.prefetch?.(keys).catch?.(() => {}); };
+/** A source that is ready without waiting (device file, or an R2 link already here), else null. */
+M.srcNow = item => {
+  const blob = blobOf(item); if (blob) return {url:URL.createObjectURL(blob), revoke:true};
+  const link = item.cloud && item.storageProvider === 'r2' && item.r2Key ? window.VzipR2?.cachedUrl?.(item.r2Key) : '';
+  return link ? {url:link, revoke:false} : null;
+};
 /** File name from song + recording day ("곡 2026.11.02"); numbered when that name is taken. */
 const usedNames = new Set();
 M.autoName = (songTitle, ymd, exceptId = '', list = cache || []) => {
@@ -199,10 +218,12 @@ M.measure = (item, timeout = 15000) => new Promise(async resolve => {
 });
 const measured = new Set();
 /** Fill missing durations (imports before this change were saved without one). Returns how many were filled. */
-M.fillDurations = async items => {
-  let filled = 0;
+M.fillDurations = async (items, {limit = 10} = {}) => {
+  // A few at a time: each one reads the start of the file, and hundreds would crowd out playback on a phone.
+  let filled = 0, tried = 0;
   for (const item of items) {
     if (Number(item.durationSeconds) > 0 || measured.has(item.id)) continue;
+    if (tried++ >= limit) break;
     measured.add(item.id);
     const seconds = await M.measure(item);
     if (!seconds) continue;
@@ -242,6 +263,9 @@ M.holdBackup = on => { held = Math.max(0, held + (on ? 1 : -1)); if (!held) M.sc
 M.backupLocal = async () => {
   if (held) return backup;
   if (backup.running || !window.vzipCloudSignedIn?.() || !window.vzipCloudImport) return backup;
+  // Only device files can need uploading: with none on this device there is nothing to ask the server (and no list refresh).
+  try { if (!(await window.vzipReadMedia()).length) return backup; } catch {}
+  if (backup.running) return backup;
   backup.running = true; backup.waiting = false; M.keepAwake(true);
   const notify = () => window.dispatchEvent(new Event('vzip:v6-backup'));
   try {
@@ -335,6 +359,9 @@ M.player = (host, item, opts = {}) => {
     if (!range.matches(':active')) range.value = d ? Math.round(el.currentTime / d * 1000) : 0;
     time.textContent = VZ.clock(el.currentTime) + ' / ' + VZ.clock(d);
   };
+  // A source already here is set right away, so play() runs inside the tap (iPhone Safari blocks it later).
+  const now = M.srcNow(item);
+  if (now) { url = now.url; revoke = now.revoke; el.src = url; range.disabled = false; ready = Promise.resolve(); }
   const load = () => ready ||= M.src(item).then(r => { if (dead) { if (r.revoke) URL.revokeObjectURL(r.url); return; } url = r.url; revoke = r.revoke; el.src = url; range.disabled = false; })
     .catch(e => { msg.textContent = '재생할 수 없어요: ' + e.message; ready = null; throw e; });
   const api = {

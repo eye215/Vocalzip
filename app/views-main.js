@@ -11,6 +11,11 @@ VZ.mediaRow = m => '<div data-media="' + esc(m.id) + '"><button type="button" cl
 VZ.mediaMini = m => '<div data-media="' + esc(m.id) + '" class="mini"><button type="button" class="mini-row" data-toggle aria-expanded="false"><i class="ph-fill ph-' + (M.isVideo(m) ? 'video' : 'play-circle') + '"></i><span class="grow ellipsis">' + esc(M.label(m)) + '</span><span class="small muted">' + (Number(m.durationSeconds) > 0 ? esc(VZ.clock(m.durationSeconds)) : '') + '</span><i class="ph ph-caret-down chev"></i></button><div class="media-open" hidden style="padding:4px 0 10px"></div></div>';
 /** Wire tap-to-play rows inside host. */
 VZ.wireMedia = (host, items) => {
+  // Sign ahead the files shown here (one request), and the one a finger lands on, so the tap can play at once.
+  const shown = () => { const ids = new Set([...host.querySelectorAll('[data-media]')].map(r => r.dataset.media)); return items.filter(m => ids.has(m.id)); };
+  M.prefetch(shown());
+  host.addEventListener('pointerdown', e => { const row = e.target.closest('[data-media]'); const item = row && items.find(x => x.id === row.dataset.media); if (item) M.prefetch([item]); }, {passive:true});
+  host.vzPrefetch = () => M.prefetch(shown());
   host.addEventListener('click', async e => {
     const row = e.target.closest('[data-media]'); if (!row || !host.contains(row)) return;
     const item = items.find(x => x.id === row.dataset.media); if (!item) return;

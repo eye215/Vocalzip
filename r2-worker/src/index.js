@@ -112,10 +112,18 @@ async function route(request, env) {
   }
   if (path === '/v1/me' && method === 'GET') return json({user: uid});
   if (path === '/v1/sign' && method === 'POST') {
-    const body = await readJson(request), key = ownKey(uid, body.key);
-    const ttl = Math.min(Math.max(Number(body.ttl) || 3600, 60), 6 * 3600), exp = Math.floor(Date.now() / 1000) + ttl;
-    const sig = await hmac(env, key + '\n' + exp);
-    return json({url: new URL('/v1/media/' + key.split('/').map(encodeURIComponent).join('/') + '?exp=' + exp + '&sig=' + sig, url).href, expires: exp});
+    // Expiry is rounded up to the next hour, so a file gets the same link all hour and the browser can reuse what it
+    // already downloaded. {keys:[…]} signs up to 100 files in one request (the list screen prefetches visible ones).
+    const body = await readJson(request), ttl = Math.min(Math.max(Number(body.ttl) || 3600, 60), 6 * 3600);
+    const exp = Math.ceil((Math.floor(Date.now() / 1000) + ttl) / 3600) * 3600;
+    const link = async key => new URL('/v1/media/' + key.split('/').map(encodeURIComponent).join('/') + '?exp=' + exp + '&sig=' + await hmac(env, key + '\n' + exp), url).href;
+    if (Array.isArray(body.keys)) {
+      if (!body.keys.length || body.keys.length > 100) fail(400, '1–100 keys');
+      const urls = {};
+      for (const k of body.keys) urls[k] = await link(ownKey(uid, k));
+      return json({urls, expires: exp});
+    }
+    return json({url: await link(ownKey(uid, body.key)), expires: exp});
   }
   if (path.startsWith('/v1/media/') && method === 'DELETE') {
     const key = ownKey(uid, decodeURIComponent(path.slice('/v1/media/'.length)));
