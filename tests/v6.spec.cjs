@@ -443,8 +443,9 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   await expect(page.locator('[data-media="rv1"]')).toContainText('곡 확인 필요');
   // The server sorts rv1 while the app is open: the change arrives live and the library shows it.
   await page.evaluate(async () => {
-    const all = await window.vzipReadMedia(), rec = all.find(x => x.id === 'rv1');
-    await window.vzipStorePracticeMedia({...rec, songId:'s2', song:'On My Own', songSource:'ai'});
+    // Stand-in for the server's write (Safari stores file bytes differently, so go through the app's own update).
+    const rec = (await VZ.media.list(true)).find(x => x.id === 'rv1');
+    await VZ.media.update(rec, {songId:'s2', song:'On My Own', songSource:'ai'}, {quiet:true});
     window.__jobs.rows = window.__jobs.rows.map(j => j.media_id === 'rv1' ? {...j, status:'done'} : j); window.__jobs.review = [];
     window.__live.onJobs(); window.__live.onMedia();
   });
