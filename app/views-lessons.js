@@ -109,7 +109,7 @@ VZ.lessonSheet = ({lesson, date} = {}) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
       let status = st;
       const drawSongs = () => {
-        songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song><option value="">곡을 선택해 추가하세요</option>' +
+        songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song data-pick="song"><option value="">곡을 선택해 추가하세요</option>' +
           VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
           '<option value="__new">+ 새 곡 추가</option></select><div class="lesson-song-selected" aria-label="선택한 곡">' +
           [...selected].map(id => '<button type="button" class="chip" data-remove-song="' + esc(id) + '" aria-label="' + esc(VZ.songTitle(id) || '이전에 연결된 곡') + ' 선택 해제">' + esc(VZ.songTitle(id) || '이전에 연결된 곡') + ' ×</button>').join('') + '</div>';

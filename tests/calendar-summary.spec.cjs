@@ -23,7 +23,7 @@ test('compact calendar summary follows month, sorting, expansion and data update
  await expect(card.locator('[data-month-minutes]')).toHaveText('47分'.replace('分','분'));
  await expect(card.locator('[data-month-count]')).toHaveText('7회');
  await expect(card.locator('li')).toHaveCount(3);
- expect((await card.boundingBox()).height).toBeLessThan(240);
+ expect((await card.boundingBox()).height).toBeLessThan(300); // compact, with 44pt tap rows (v0.6)
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await card.getByRole('button',{name:'횟수순'}).click();await expect(card.locator('li').first()).toHaveAttribute('data-cs-song','b');
  await card.getByRole('button',{name:'TOP 5 더 보기'}).click();await expect(card.locator('li')).toHaveCount(4);

@@ -1,6 +1,6 @@
 # Phase 8C — Musical repertoire and performance archive
 
-Started from 30f01baee738aedd78ebeb962a6e6b55540c2898; integrated main bb8efab7ea2ef5127a7f8efd0c4abeb6a47949de including Phase 8A scores and Phase 8B practice tips. Branch: codex/phase8c-repertoire-performances.
+Started from 30f01baee738aedd78ebeb962a6e6b55540c2898; integrated main 8230e04f78abdf35c3f6e75a87cd14c31ec51fa9 including Phase 8A scores, Phase 8B practice tips and Phase 10 sheet/picker foundations. Branch: codex/phase8c-repertoire-performances.
 
 ## Ownership / integration contract
 

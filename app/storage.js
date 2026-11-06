@@ -88,7 +88,7 @@ async function start(items) {
   await draw();
 }
 async function cleanup(items) {
-  if (!confirm('R2로 옮긴 ' + items.length + '개 파일의 예전 클라우드(Supabase) 사본을 삭제할까요?\n\nR2에 같은 크기로 저장된 것을 다시 확인한 파일만 지워요. 되돌릴 수 없어요.')) return;
+  if (!await VZ.confirm('예전 사본 삭제', 'R2로 옮긴 ' + items.length + '개 파일의 예전 클라우드(Supabase) 사본을 삭제할까요?\n\nR2에 같은 크기로 저장된 것을 다시 확인한 파일만 지워요. 되돌릴 수 없어요.', {ok:'삭제', danger:true})) return;
   let ok = 0, failed = 0;
   for (const item of items) { try { await window.vzipCloudLegacyCleanup(item); ok++; } catch { failed++; } }
   M.invalidate();

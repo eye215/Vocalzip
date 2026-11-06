@@ -8,23 +8,23 @@
 .cs-totals{display:flex;gap:4px;align-items:baseline;flex:none;color:var(--ink-3);font-size:12px}
 .cs-totals strong{font-size:18px;font-weight:750;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .cs-toggle{display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--surface-2)}
-.cs-toggle button{min-height:28px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--ink-3);font-size:12px;font-weight:600}
+.cs-toggle button{position:relative;min-height:32px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--ink-3);font-size:12px;font-weight:600}
 .cs-toggle button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .cs-ranking{list-style:none;margin:4px 0 0;padding:0}
-.cs-ranking li{display:flex;align-items:center;gap:10px;min-height:34px;font-size:14px}
+.cs-ranking li{display:flex;align-items:center;gap:10px;min-height:44px;font-size:14px}
 .cs-ranking li+li{border-top:1px solid var(--line)}
 .cs-rank{flex:0 0 22px;height:22px;display:grid;place-items:center;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:750}
 .cs-ranking a,.cs-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}
-.cs-ranking a{color:var(--ink);text-decoration:none;display:flex;align-items:center;min-height:34px}
+.cs-ranking a{color:var(--ink);text-decoration:none;display:flex;align-items:center;min-height:44px}
 .cs-values{flex:none;display:flex;gap:8px;align-items:baseline;font-variant-numeric:tabular-nums;font-size:13px}
 .cs-values>span{color:var(--ink-3);font-size:12px}
 .cs-footer{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:0}
 .cs-help{flex:1;font-size:12px;color:var(--ink-3)}
-.cs-help summary{cursor:pointer;min-height:32px;display:inline-flex;align-items:center;gap:4px;list-style:none}
+.cs-help summary{cursor:pointer;min-height:44px;display:inline-flex;align-items:center;gap:4px;list-style:none}
 .cs-help summary::-webkit-details-marker{display:none}
 .cs-help summary::before{content:"ⓘ";font-size:13px}
 .cs-help p{line-height:1.6;margin:0 0 6px}
-.cs-more{flex:none;order:2;border:0;background:none;color:var(--accent);font-size:12px;font-weight:650;min-height:32px;padding:0 4px}
+.cs-more{flex:none;order:2;border:0;background:none;color:var(--accent);font-size:12px;font-weight:650;min-height:44px;padding:0 4px}
 .cs-empty,.cs-error{font-size:13px;line-height:1.6;color:var(--ink-3);margin:12px 0 4px}
 .cs-error{color:var(--danger)}
 /* Today has its own purple text rule; selected dates must override that child color. */
