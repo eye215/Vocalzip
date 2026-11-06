@@ -60,16 +60,17 @@ test('database quota exhaustion and failures never issue paid model requests',as
 });
 function browser(){
  let owner='alice',paid=0,excerpts=0;const events={},storage=new Map();
- const window={VZ:{media:{},route(){},db:{songs:[]},toast(){}},vzipCloudUserId:()=>owner,
+ const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,list:async()=>[]},route(){},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id},vzipCloudUserId:()=>owner,
   vzipCloudSignedIn:()=>true,vzipCloudAccessToken:async()=> 'fake',
   VzipR2:{clip:async()=>{excerpts++;throw Error('unexpected extraction')}},dispatchEvent(){},addEventListener:(n,f)=>events[n]=f};
  const element=()=>({style:{},setAttribute(){},append(){},add(){},replaceChildren(){},querySelector:()=>element(),querySelectorAll:()=>[]});
- const context={window,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},
+ const context={window,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
   fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
  const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo};})();');
+  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference};})();');
  vm.runInNewContext(code,context);
+ window.test.state.cloudReady=true;
  return {api:window.test,window,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
 }
 test('disabled STT is checked before any R2 extraction',async()=>{
@@ -90,7 +91,7 @@ test('account changes invalidate a pending operation and clear in-memory suggest
 });
 test('retry of manually unassigned cached result still requests paid consent',async()=>{
  const b=browser(),item={id:'m'};let confirmations=0;
- b.localStorage.setItem('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}]));
+ b.api.state.referenceRows=[{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}];
  b.api.state.items=[item];b.api.state.chosen.add('m');b.api.setResult(item,{candidate:null,status:'미분류'});
  b.window.VZ.confirm=async()=>{confirmations++;return false};
  await b.api.analyze({querySelector:()=>({})});assert.equal(confirmations,1);assert.equal(b.counts().paid,0);
@@ -134,9 +135,79 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
 });
 test('bulk paid analysis must be reduced to one selected recording',async()=>{
  const b=browser(),errors=[];
- b.localStorage.setItem('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}]));
+ b.api.state.referenceRows=[{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}];
  b.window.VZ.toast=message=>errors.push(message);
  b.api.state.items=[{id:'a'},{id:'b'}];b.api.state.chosen.add('a');b.api.state.chosen.add('b');
  await b.api.analyze({querySelector:()=>({})});
  assert.match(errors.join(' '),/1개/);assert.equal(b.counts().paid,0);
+});
+
+test('browser-only references safely migrate to cloud and hydrate on another device',async()=>{
+ const rows=new Map(),writes=[];
+ const a=browser();
+ a.storage.set('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'song1',transcript:'이 기준 음성은 첫 번째 브라우저에서 저장한 가사 테스트입니다'}]));
+ const endpoint={
+  list:async()=>[...rows.values()],
+  save:async row=>{writes.push(row);const key=row.kind+':'+row.recordId;if(!rows.has(key)||!row.onlyIfMissing)rows.set(key,{kind:row.kind,record_id:row.recordId,transcript:row.transcript})},
+  remove:async(kind,id)=>{const key=kind+':'+id;rows.set(key,{...rows.get(key),deleted_at:'2026-11-06T00:00:00Z'})}
+ };
+ a.window.vzipCloudSongTextList=endpoint.list;
+ a.window.vzipCloudSongTextSave=endpoint.save;
+ a.window.vzipCloudSongTextDelete=endpoint.remove;
+ await a.api.loadCloudTexts();
+ assert.equal(a.api.references().length,1);
+ assert.equal(a.storage.has('vzip_song_stt_references_v1:alice'),false);
+ assert.equal(writes[0].onlyIfMissing,true);
+ const b=browser();b.window.vzipCloudSongTextList=endpoint.list;b.window.vzipCloudSongTextSave=endpoint.save;b.window.vzipCloudSongTextDelete=endpoint.remove;
+ await b.api.loadCloudTexts();
+ assert.equal(b.api.references()[0].transcript,a.api.references()[0].transcript);
+ await b.api.removeReference('song1');assert.equal(b.api.references().length,0);
+ await a.api.loadCloudTexts();assert.equal(a.api.references().length,0);
+ // A third device still holding a stale local reference must NOT resurrect a cloud tombstone.
+ const c=browser();c.storage.set('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'song1',transcript:'오프라인 구형 기기의 오래된 가사입니다'}]));
+ c.window.vzipCloudSongTextList=endpoint.list;c.window.vzipCloudSongTextSave=endpoint.save;
+ const writesBefore=writes.length;await c.api.loadCloudTexts();
+ assert.equal(writes.length,writesBefore);assert.equal(c.api.references().length,0);
+});
+test('remote reference is never overwritten by stale browser backup',async()=>{
+ const b=browser();
+ b.storage.set('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'song1',transcript:'오래된 브라우저 가사입니다 추가 텍스트입니다'}]));
+ const rows=[{kind:'reference',record_id:'song1',transcript:'최신 클라우드 가사입니다 변경된 데이터가 있습니다'}];let writes=0;
+ b.window.vzipCloudSongTextList=async()=>rows;
+ b.window.vzipCloudSongTextSave=async()=>{writes++};
+ await b.api.loadCloudTexts();
+ assert.equal(writes,0);
+ assert.equal(b.api.references()[0].transcript,rows[0].transcript);
+});
+test('failed cloud import never erases legacy browser text or allows paid STT',async()=>{
+ const b=browser(),key='vzip_song_stt_references_v1:alice';
+ b.storage.set(key,JSON.stringify([{songId:'s1',transcript:'브라우저에 남아 있는 데이터가 삭제되면 안 됩니다'}]));
+ b.window.vzipCloudSongTextList=async()=>[];
+ b.window.vzipCloudSongTextSave=async()=>{throw Error('offline')};
+ await assert.rejects(b.api.loadCloudTexts(),/offline/);
+ assert.equal(b.storage.has(key),true);assert.equal(b.api.state.cloudReady,false);
+ await assert.rejects(b.api.stt({id:'m'},new AbortController().signal),/동기화/);
+ assert.equal(b.counts().paid,0);
+});
+test('already-paid STT cache migrates without a second transcription',async()=>{
+ const b=browser(),item={id:'media1',name:'take.m4a',size:100,r2Key:'x.m4a'};
+ b.api.state.items=[item];
+ b.api.setResult(item,{method:'stt',candidate:null,transcript:'이전에 유료 인식한 음성 텍스트를 재사용합니다',status:'식별 불가'});
+ let calls=0;const rows=[];
+ b.window.vzipCloudSongTextList=async()=>rows;
+ b.window.vzipCloudSongTextSave=async(row)=>{rows.push({kind:row.kind,record_id:row.recordId,transcript:row.transcript});calls++};
+ await b.api.loadCloudTexts();
+ assert.equal(calls,1);
+ assert.equal(b.api.state.recognitions.get(item.id),'이전에 유료 인식한 음성 텍스트를 재사용합니다');
+ assert.equal(b.counts().paid,0);
+});
+
+test('song lyric sheet already synced by VZ cloud takes priority over STT reference',()=>{
+ const b=browser();
+ b.window.VZ.db.songs=[{id:'song-a',title:'Song A',lyrics:'곡 상세에 등록한 원문 가사가 우선하여 유지되는 테스트 가사입니다'}];
+ b.api.state.referenceRows=[{songId:'song-a',transcript:'오래된 녹음으로 만들어진 기준 내용입니다'},{songId:'song-b',transcript:'다른 곡의 기준 가사 내용입니다'}];
+ const refs=b.api.references();
+ assert.equal(refs.length,2);
+ assert.equal(refs.find(x=>x.songId==='song-a').source,'lyrics');
+ assert.match(refs.find(x=>x.songId==='song-a').transcript,/곡 상세/);
 });
