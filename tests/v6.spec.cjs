@@ -1873,7 +1873,8 @@ test('Every control on the main screens answers a 44pt tap (iPhone)', async ({pa
 
 
 test('Recommended practice checklist: home practice saves separately from teacher homework, restores and unchecks', async ({page}) => {
-  await boot(page, {media:false});await seedTipTakes(page);await page.goto('/#/songs');await page.goto('/#/home');
+  const seed=legacy();seed.assignments.forEach(t=>Object.assign(t,{startDate:day(-1),dueDate:day(1)}));
+  await boot(page, {seed,media:false});await seedTipTakes(page);await page.goto('/#/songs');await page.goto('/#/home');
   await page.locator('.quick [data-log]').click();
   const form=page.locator('#practice-log'),tips=form.locator('[data-practice-tips]');
   await expect(tips).toContainText('오늘의 추천 연습');
@@ -1886,7 +1887,7 @@ test('Recommended practice checklist: home practice saves separately from teache
   let state=await data(page),p=state.practices.find(p=>p.recommendedExercises?.length);
   expect(p.recommendedExercises[0]).toMatchObject({key:'into',name:'음정 정확도 연습',minutes:10});
   expect(p.completed).toEqual(['a1']);expect(p.assignmentReps).toEqual({a1:3});expect(p.assignmentNotes).toEqual({a1:'선생님 피드백 따라 연습'});
-  expect(p.memo).toBe('별도 개인 메모');expect(state.assignments).toEqual(legacy().assignments);expect(state.lessons).toEqual(legacy().lessons);
+  expect(p.memo).toBe('별도 개인 메모');expect(state.assignments).toEqual(seed.assignments);expect(state.lessons).toEqual(seed.lessons);
   await page.reload();await expect(page.locator('[data-tip]')).toContainText('오늘 했어요');
   await page.evaluate(id=>VZ.practiceDetail(id),p.id);
   await expect(page.locator('[data-practiced-tips]')).toContainText('음정 정확도 연습');
