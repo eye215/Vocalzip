@@ -68,6 +68,15 @@ Deno.serve(async (req:Request) => {
     let songs: Array<{id:string;title:string;show?:string}>=[];
     try{const parsed=JSON.parse(raw);if(Array.isArray(parsed)) songs=parsed.slice(0,MAX_SONGS).filter(s=>s&&typeof s.id==='string'&&typeof s.title==='string').map(s=>({id:s.id.slice(0,100),title:s.title.slice(0,140),show:String(s.show||'').slice(0,120)}))}catch{}
     if(!songs.length)return reply(req,400,{error:'등록된 곡이 없어요. 내 곡에 곡을 먼저 등록해 주세요.'});
+    // Reserve an attempt atomically in Postgres BEFORE any paid OpenAI request.
+    // Fail closed if migration/function is missing, quota is exceeded, or DB is unavailable.
+    const authenticatedDb=createClient(SUPABASE_URL,ANON,{
+      auth:{persistSession:false,autoRefreshToken:false},
+      global:{headers:{Authorization:'Bearer '+token}}
+    });
+    const {data:reserved,error:quotaError}=await authenticatedDb.rpc('vzip_song_stt_reserve');
+    if(quotaError)return reply(req,503,{error:'AI 분석 사용량 보호 설정을 확인할 수 없어 중단했어요. 관리자에게 문의해 주세요.'});
+    if(reserved!==true)return reply(req,429,{error:'AI 분석 안전 한도(하루 3개 / 전체 15개)에 도달했어요.'});
     const audioForm=new FormData();
     audioForm.set('model',STT_MODEL);audioForm.set('file',file,file.name);
     const transcribed=await fetch('https://api.openai.com/v1/audio/transcriptions',{
