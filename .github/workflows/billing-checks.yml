@@ -69,6 +69,10 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f billing/migrations/20261104_billing_cloud.sql
       - name: Apply history migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106_keep_history.sql
+      - name: Apply private song text migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106_song_text_cloud_sync.sql
+      - name: Song reference and STT RLS, per-user cross-device reads
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/song-text-cloud.sql
       - name: RLS, RPC privileges and optimistic revisions
         run: psql -v ON_ERROR_STOP=1 -f billing/tests/cloud.sql
       - name: Concurrent cloud writes
