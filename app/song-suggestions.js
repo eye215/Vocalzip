@@ -9,7 +9,13 @@ const cachePrefix='vzip_song_suggest_v1:';
 const backupPrefix='vzip_song_assignment_backup:';
 const backupPointer='vzip_song_assignment_last';
 const MAX_BYTES=12*1024*1024, PAGE_SIZE=40;
-const state={items:[],chosen:new Set(),results:new Map(),running:false,cancel:false,shown:PAGE_SIZE};
+// Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
+const MAX_DURATION_SECONDS=80, MAX_PCM_BYTES=32*1024*1024;
+const checkpointKey='vzip_song_suggest_checkpoint_v2';
+const state={items:[],chosen:new Set(),results:new Map(),running:false,cancel:false,shown:PAGE_SIZE,controller:null};
+const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
+function saveCheckpoint(){try{localStorage.setItem(checkpointKey,JSON.stringify({ids:[...state.chosen],at:Date.now()}))}catch{}}
+function loadCheckpoint(){try{const saved=JSON.parse(localStorage.getItem(checkpointKey)||'null');return Array.isArray(saved?.ids)?saved.ids:[]}catch{return []}}
 const plain=s=>String(s||'').toLocaleLowerCase().normalize('NFKC')
  .replace(/20\d\d[-_. ](?:0?[1-9]|1[0-2])[-_. ](?:[0-2]?\d|3[01])/g,' ')
  .replace(/\.(?:m4a|wav|mp3|aac|flac|ogg|mp4)$/i,' ')
@@ -27,22 +33,46 @@ function writeCache(item,result){try{localStorage.setItem(cacheKey(item),JSON.st
 function fmt(item){return M.label(item)+' · '+(M.dateOf(item)||'날짜 없음');}
 function resultFor(item){return state.results.get(item.id)||readCache(item)|| (freeMatch(item)?{status:'후보',candidate:freeMatch(item),method:'filename'}:null)}
 function eligible(item){return !item.songId&&!item.song && !M.isVideo(item);}
-function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);}
-async function getAudio(item){
- // Use the media API used by the existing library: returns a signed R2 URL or local blob URL.
- // Never re-upload or modify the original file.
+function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);saveCheckpoint();}
+function durationOf(url,signal){
+ return new Promise((resolve,reject)=>{
+  const el=document.createElement('audio');el.preload='metadata';el.muted=true;
+  const timer=setTimeout(()=>finish(Error('음원 길이를 확인하지 못했어요.')),12000);
+  function finish(error,duration){
+   clearTimeout(timer);signal?.removeEventListener('abort',abort);
+   el.onloadedmetadata=null;el.onerror=null;el.removeAttribute('src');el.load();
+   error?reject(error):resolve(duration);
+  }
+  function abort(){finish(new DOMException('분석 중단','AbortError'))}
+  signal?.addEventListener('abort',abort,{once:true});
+  if(signal?.aborted)return abort();
+  el.onloadedmetadata=()=>finish(null,el.duration);
+  el.onerror=()=>finish(Error('음원 메타데이터를 읽지 못했어요.'));
+  el.src=url;
+ });
+}
+async function getAudioBytes(item,signal){
+ // VZ.media.src returns signed R2 URL or local blob URL. Only read-only requests.
  const source=await M.src(item);
  try {
-  const response=await fetch(source.url,{cache:'no-store'});
+  // HTML audio metadata requests are typically byte-ranged by the browser.
+  // Do NOT blindly fetch first 3-5MB: M4A moov atoms may live at the end.
+  const seconds=await durationOf(source.url,signal);
+  if(!Number.isFinite(seconds)||seconds<=0)
+   throw Error('길이가 확인되지 않는 파일은 전체 디코딩하지 않아요. Mac 분석 도구를 이용해 주세요.');
+  if(seconds>MAX_DURATION_SECONDS)
+   throw Error('아이폰 메모리 보호: '+Math.ceil(seconds)+'초 음원은 Mac의 구간 STT 도구에서 분석해 주세요 (80초 제한).');
+  const estimatedPcm=seconds*48000*2*4;
+  if(estimatedPcm>MAX_PCM_BYTES)
+   throw Error('압축 해제 예상 용량이 커서 아이폰 분석을 건너뛰었어요.');
+  const response=await fetch(source.url,{cache:'no-store',signal});
   if(!response.ok)throw Error('음원을 불러오지 못했어요: '+response.status);
   const size=Number(response.headers.get('content-length')||0);
-  if(size>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 바로 분석하지 않아요. Mac 분석 도구를 이용해 주세요.');
-  const blob=await response.blob();
-  if(blob.size>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 바로 분석하지 않아요. Mac 분석 도구를 이용해 주세요.');
-  return blob;
- } finally {
-  if(source.revoke)URL.revokeObjectURL(source.url);
- }
+  if(size>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 분석하지 않아요.');
+  const bytes=await response.arrayBuffer();
+  if(bytes.byteLength>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 분석하지 않아요.');
+  return bytes;
+ }finally{if(source.revoke)URL.revokeObjectURL(source.url)}
 }
 function wavBytes(buffer, offsetSec=20, seconds=30){
  const sr=16000, from=Math.min(buffer.length-1,Math.max(0,Math.floor(offsetSec*buffer.sampleRate)));
@@ -64,21 +94,27 @@ function wavBytes(buffer, offsetSec=20, seconds=30){
  }
  return new Blob([bytes],{type:'audio/wav'});
 }
-async function clip(item){
- const raw=await getAudio(item), audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+async function clip(item,signal){
+ let bytes=await getAudioBytes(item,signal);
+ const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
  try{
-  const decoded=await audioCtx.decodeAudioData(await raw.arrayBuffer());
+  // decodeAudioData can expand a small AAC file into many MB of PCM.
+  const decoded=await audioCtx.decodeAudioData(bytes);
+  bytes=null; // release reference before allocating excerpt WAV
+  if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
+  const actualPcm=decoded.length*decoded.numberOfChannels*4;
+  if(actualPcm>MAX_PCM_BYTES)throw Error('실제 디코딩 음원이 32MB를 초과해 분석을 중단했어요.');
   const start=Math.max(0,Math.min(20,decoded.duration-32));
   return wavBytes(decoded,start,30);
- }finally{audioCtx.close().catch(()=>{})}
+ }finally{bytes=null;await audioCtx.close().catch(()=>{})}
 }
-async function stt(item){
+async function stt(item,signal){
  if(!window.vzipCloudSignedIn?.())throw Error('로그인이 필요해요.');
  const token=await window.vzipCloudAccessToken?.();
  if(!token)throw Error('로그인 세션이 만료됐어요.');
- const form=new FormData();form.append('file',await clip(item),'vocal-clip.wav');
+ const form=new FormData();form.append('file',await clip(item,signal),'vocal-clip.wav');
  form.append('songs',JSON.stringify(songs().map(s=>({id:s.id,title:s.title,show:s.show||''})).slice(0,250)));
- const res=await fetch(API,{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
+ const res=await fetch(API,{method:'POST',headers:{Authorization:'Bearer '+token},body:form,signal});
  const data=await res.json().catch(()=>({}));
  if(!res.ok)throw Error(data.error||'STT 서버 응답 오류 ('+res.status+')');
  const found=songs().find(s=>s.id===data.songId);
@@ -103,7 +139,7 @@ function draw(main){
   const result=resultFor(item);
   const card=document.createElement('article');card.className='card';card.style.cssText='margin-bottom:8px;padding:12px';
   const box=document.createElement('input');box.type='checkbox';box.checked=state.chosen.has(item.id);box.setAttribute('aria-label',M.label(item)+' 선택');
-  box.onchange=()=>{box.checked?state.chosen.add(item.id):state.chosen.delete(item.id);controls(main)};
+  box.onchange=()=>{box.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   const label=document.createElement('span');label.className='small';label.style.cssText='overflow-wrap:anywhere;margin-left:8px';label.textContent=fmt(item);
   const top=document.createElement('div');top.className='row';top.append(box,label);card.append(top);
   const sub=document.createElement('p');sub.className='small muted';
@@ -127,14 +163,14 @@ async function analyze(main){
  const targets=state.items.filter(m=>state.chosen.has(m.id));
  const paid=targets.filter(m=>!resultFor(m)?.candidate&&!readCache(m)).length;
  if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 유료 STT를 호출할 수 있어요. 파일당 최대 30초를 보내며, API 과금이 발생합니다. 원본을 변경하지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
- state.running=true;state.cancel=false;controls(main);
+ state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  let success=0,failed=0,seen=0;
  try{
   for(const m of targets){
-   if(state.cancel)break;
+   if(state.cancel||!main.isConnected||state.controller.signal.aborted)break;
    seen++;root.querySelector('[data-progress]').textContent=seen+'/'+targets.length+' · '+M.label(m);
    const cached=readCache(m);if(resultFor(m)?.candidate){const f=resultFor(m);state.results.set(m.id,f);success++;continue}if(cached?.method==='stt'){state.results.set(m.id,cached);failed++;continue}
-   try{const result=await stt(m);setResult(m,result);result.candidate?success++:failed++}
+   try{const result=await stt(m,state.controller.signal);setResult(m,result);result.candidate?success++:failed++}
    catch(error){
      const text=String(error.message||error);
      // Cache only successful recognition; failed queries are retryable.
@@ -142,8 +178,10 @@ async function analyze(main){
      if(/API 키 미설정|비활성화|사용 한도|not configured|STT_DISABLED|503/.test(text)){state.cancel=true}
    }
    if(main.isConnected)draw(main);
+   // Allow UI to paint and the browser a chance to reclaim decoded audio between files.
+   await pause();
   }
- }finally{state.running=false;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
+ }finally{state.running=false;state.controller=null;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
 }
 async function undo(main){
  let backup;try{backup=JSON.parse(localStorage.getItem(localStorage.getItem(backupPointer)||'')||'null')}catch{}
@@ -192,14 +230,15 @@ async function apply(main){
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
  return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석하고, 선택한 음원만 30초 STT를 실행해요. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
-  const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.running=false;state.cancel=false;state.shown=PAGE_SIZE;
+  const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.running=false;state.cancel=false;state.controller=null;state.shown=PAGE_SIZE;
   state.items=(await M.list(true).catch(()=>[])).filter(eligible);
   if(!main.isConnected)return;
-  root.querySelector('[data-progress]').textContent=state.items.length+'개 곡 미지정 음원';
-  root.querySelector('[data-select-all]').onclick=()=>{state.chosen=new Set(state.items.map(x=>x.id));draw(main)};
-  root.querySelector('[data-clear]').onclick=()=>{state.chosen.clear();draw(main)};
+  const previous=new Set(loadCheckpoint());state.chosen=new Set(state.items.filter(m=>previous.has(m.id)).map(m=>m.id));
+  root.querySelector('[data-progress]').textContent=state.items.length+'개 곡 미지정 음원'+(state.chosen.size?' · 이전 선택 '+state.chosen.size+'개 복원':'');
+  root.querySelector('[data-select-all]').onclick=()=>{state.chosen=new Set(state.items.map(x=>x.id));saveCheckpoint();draw(main)};
+  root.querySelector('[data-clear]').onclick=()=>{state.chosen.clear();saveCheckpoint();draw(main)};
   root.querySelector('[data-more]').onclick=()=>{state.shown+=PAGE_SIZE;draw(main)};
-  root.querySelector('[data-stop]').onclick=()=>{state.cancel=true;root.querySelector('[data-progress]').textContent='현재 분석이 끝나면 중단합니다.'};
+  root.querySelector('[data-stop]').onclick=()=>{state.cancel=true;state.controller?.abort();root.querySelector('[data-progress]').textContent='분석을 중단합니다.'};
   root.querySelector('[data-analyze]').onclick=()=>analyze(main);
   root.querySelector('[data-apply]').onclick=()=>apply(main);
   root.querySelector('[data-undo]').onclick=()=>undo(main);
