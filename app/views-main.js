@@ -25,12 +25,13 @@ VZ.wireMedia = (host, items) => {
       host.querySelectorAll('.media-open:not([hidden])').forEach(p => { if (p !== panel) { p.hidden = true; p.previousSibling.setAttribute('aria-expanded', 'false'); p._player?.destroy(); } });
       panel.hidden = !open; btn.setAttribute('aria-expanded', String(open));
       if (open) {
-        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<div class="chips" style="margin-top:8px"><button type="button" class="chip" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" class="chip" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" class="chip" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" class="chip" data-delete><i class="ph ph-trash"></i> 삭제</button></div>';
+        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<div class="chips" style="margin-top:8px"><button type="button" class="chip" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" class="chip" data-analyze><i class="ph ph-chart-line"></i> 분석</button><button type="button" class="chip" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" class="chip" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" class="chip" data-delete><i class="ph ph-trash"></i> 삭제</button></div>';
         panel._player = M.player(panel.querySelector('[data-p]'), item, {tools:true});
         panel._player.play();
       } else panel._player?.destroy();
     }
     if (e.target.closest('[data-edit]')) VZ.editMedia(item);
+    if (e.target.closest('[data-analyze]')) { row.querySelector('.media-open')._player?.destroy(); VZ.nav('#/analysis/' + encodeURIComponent(item.id)); }
     if (e.target.closest('[data-compare]')) VZ.nav('#/compare?a=' + encodeURIComponent(item.id) + (item.songId ? '&song=' + encodeURIComponent(item.songId) : ''));
     if (e.target.closest('[data-download]')) M.download(item).catch(err => VZ.toast('저장하지 못했어요: ' + err.message, 'error'));
     if (e.target.closest('[data-delete]')) {

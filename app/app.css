@@ -409,3 +409,31 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .uc-row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:14px;padding:4px 0;border-bottom:1px solid var(--line)}
 .uc-row small{display:block;font-size:12px;color:var(--ink-3)}
 .uc-row b{flex:none;font-variant-numeric:tabular-nums}
+/* 보컬 분석 */
+.ana-bar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin:10px 0}
+.ana-bar span{display:block;height:100%;background:var(--accent);transition:width .2s}
+.ana-chart{position:relative;margin:14px 0 4px;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:8px 0 8px 34px}
+.ana-labels{position:absolute;left:0;top:8px;width:34px;height:200px;pointer-events:none}
+.ana-labels span{position:absolute;left:6px;font-size:11px;color:var(--ink-3)}
+.ana-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.ana-scroll svg{display:block}
+.ana-scroll .g{stroke:var(--line);stroke-width:1}
+.ana-scroll .g-c{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:2 3}
+.ana-scroll .curve{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.ana-scroll .n{stroke-width:4;stroke-linecap:round;opacity:.75}
+.ana-scroll .n.ok,.ana-legend .k.ok{stroke:var(--ok);background:var(--ok)}
+.ana-scroll .n.warn,.ana-legend .k.warn{stroke:var(--warn);background:var(--warn)}
+.ana-scroll .n.bad,.ana-legend .k.bad{stroke:var(--danger);background:var(--danger)}
+.ana-scroll .head{stroke:var(--ink);stroke-width:1.5}
+.ana-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.ana-legend>span{white-space:nowrap}
+.ana-legend .k{display:inline-block;width:12px;height:4px;border-radius:2px;margin-left:4px}
+.ana-note{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:12px;font-size:14px;margin:10px 0}
+.ana-note i{font-size:18px;flex:none;margin-top:1px}
+.ana-note.ok{background:var(--ok-soft);color:var(--ok)}
+.ana-note.warn{background:var(--warn-soft);color:var(--warn)}
+.ana-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.ana-card{display:flex;flex-direction:column;gap:4px;padding:14px}
+.ana-k{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2);font-weight:600}
+.ana-k i{color:var(--accent);font-size:16px}
+.ana-v{font-size:18px;font-weight:700;color:var(--ink);line-height:1.3}
