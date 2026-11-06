@@ -294,3 +294,63 @@ test('inline playback is lazy, same page shows TOP3 and redraw releases media',(
  assert.equal(made.length,1,'choosing another candidate never triggers audio replay or paid STT');
  assert.equal(b.counts().paid,0);
 });
+
+test('30-item pages do not accumulate and keep existing selections between pages',()=>{
+ const b=browser();
+ b.window.VZ.media.dateOf=()=> '2026-11-06';
+ const doc=b.document;
+ function node(tag='div'){
+  return {tag,children:[],style:{},hidden:false,disabled:false,
+   setAttribute(){},append(...xs){this.children.push(...xs)},replaceChildren(...xs){this.children=[...xs]},
+   add(child){this.children.push(child)},querySelector(){return null},querySelectorAll(){return []}
+  };
+ }
+ doc.createElement=node;
+ const listing=node(),nodes=new Map();
+ for(const key of ['[data-suggest-list]','[data-more]','[data-prev]','[data-page-count]',
+  '[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]'])
+  nodes.set(key,key==='[data-suggest-list]'?listing:node());
+ const root=node();root.querySelector=key=>nodes.get(key)||null;
+ const main={isConnected:true,querySelector:key=>key==='[data-suggest]'?root:null};
+ b.api.state.items=Array.from({length:75},(_,i)=>({id:'m'+i,name:'Take '+i+'.m4a'}));
+ b.api.state.page=0;
+ b.api.draw(main);
+ assert.equal(listing.children.length,30);
+ assert.match(nodes.get('[data-page-count]').textContent,/1–30 \/ 전체 75개/);
+ assert.equal(nodes.get('[data-prev]').hidden,true);
+ assert.equal(nodes.get('[data-more]').hidden,false);
+ listing.children[0].children[0].children[0].checked=true;
+ listing.children[0].children[0].children[0].onchange();
+ assert.equal(b.api.state.chosen.has('m0'),true);
+ b.api.state.page=1;b.api.draw(main);
+ assert.equal(listing.children.length,30,'second page replaces first page');
+ assert.match(nodes.get('[data-page-count]').textContent,/31–60 \/ 전체 75개/);
+ assert.equal(b.api.state.chosen.has('m0'),true,'selection from page 1 is preserved');
+ b.api.state.page=2;b.api.draw(main);
+ assert.equal(listing.children.length,15);
+ assert.equal(nodes.get('[data-more]').hidden,true);
+ assert.match(nodes.get('[data-page-count]').textContent,/61–75 \/ 전체 75개/);
+});
+test('selection is limited to thirty across pages even when the list contains hundreds',()=>{
+ const b=browser();b.window.VZ.media.dateOf=()=> '';
+ function node(){
+  return {children:[],style:{},hidden:false,disabled:false,setAttribute(){},append(...xs){this.children.push(...xs)},
+   replaceChildren(...xs){this.children=[...xs]},add(x){this.children.push(x)},querySelectorAll(){return []}
+  };
+ }
+ b.document.createElement=node;
+ const listing=node(),root=node(),nodes=new Map();
+ for(const key of ['[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]','[data-more]','[data-prev]','[data-page-count]'])
+  nodes.set(key,node());
+ nodes.set('[data-suggest-list]',listing);
+ root.querySelector=x=>nodes.get(x);
+ const main={isConnected:true,querySelector:x=>x==='[data-suggest]'?root:null};
+ b.api.state.items=Array.from({length:62},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
+ b.api.state.chosen=new Set(b.api.state.items.slice(0,30).map(x=>x.id));
+ b.api.state.page=1;
+ b.api.draw(main);
+ const checkbox=listing.children[0].children[0].children[0];
+ checkbox.checked=true;checkbox.onchange();
+ assert.equal(checkbox.checked,false,'cannot select 31st file');
+ assert.equal(b.api.state.chosen.size,30);
+});
