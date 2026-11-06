@@ -1808,3 +1808,58 @@ test('A measurement ⓘ opens what it measures and how to read it', async ({page
   expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
   expect(page.__errors).toEqual([]);
 });
+
+test('Offline notice, a change sent at once when the app goes to the background, and a song tab bar that stays on screen', async ({page, context}) => {
+  const seed = legacy(); seed.practices.push(...Array.from({length:30}, (_, i) => ({id:'px' + i, date:day(-i - 2), minutes:20, songId:'s1', practiceMode:'song', technique:[], memo:'연습 ' + i})));
+  await boot(page, {seed, media:false});
+  await context.setOffline(true);
+  await expect(page.locator('#vz-offline')).toContainText('오프라인');
+  await context.setOffline(false);
+  await expect(page.locator('#vz-offline')).toHaveCount(0);
+  // A record changed right before the app is hidden is sent without waiting for the 0.9 s pause.
+  await expect.poll(() => page.evaluate(() => window.__up.length)).toBeGreaterThan(0); // first sync after sign-in
+  const before = await page.evaluate(() => window.__up.length);
+  await page.evaluate(k => {
+    const d = JSON.parse(localStorage.getItem(k)); d.songs.push({id:'s9', title:'방금 추가'}); localStorage.setItem(k, JSON.stringify(d));
+    window.dispatchEvent(new Event('vzip:data-changed'));
+    Object.defineProperty(document, 'visibilityState', {configurable:true, get:() => 'hidden'});
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, KEY);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => window.__up.length)).toBeGreaterThan(before);
+  await page.evaluate(() => { delete document.visibilityState; });
+  // Song page: the 전체·가사·악보… bar sticks; a tab chosen down the page starts right under it.
+  await page.goto('/#/song/s1');
+  const bar = page.locator('.song-tabs');
+  await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+  await expect.poll(async () => Math.round((await bar.boundingBox()).y)).toBeLessThan(40);
+  await bar.getByRole('tab', {name:'레슨'}).click();
+  const gap = await page.evaluate(() => document.querySelector('[data-body]').getBoundingClientRect().top - document.querySelector('.song-tabs').getBoundingClientRect().bottom);
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThan(40);
+  expect(page.__errors).toEqual([]);
+});
+
+test('Every control on the main screens answers a 44pt tap (iPhone)', async ({page}) => {
+  test.setTimeout(120000);
+  await boot(page);
+  const routes = ['home', 'record', 'lessons', 'lesson/l1', 'calendar', 'homework', 'songs', 'song/s1', 'library', 'growth', 'analysis', 'settings', 'import-hub', 'storage', 'song-suggest', 'compare'];
+  const bad = {};
+  for (const r of routes) {
+    await page.goto('/#/' + r); await page.waitForTimeout(500);
+    const found = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('main a[href], main button, main select, main input, main [role=button], main summary, nav a, header button, header a')) {
+        const b = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        if (!b.width || !b.height || cs.visibility === 'hidden') continue;
+        if (el.matches('.pick-native,.sr-only,input[type=checkbox],input[type=radio],input[type=hidden]')) continue;
+        if (el.tagName === 'A' && cs.display === 'inline') continue; // a link inside a sentence
+        const hit = parseFloat(getComputedStyle(el, '::before').height) || 0; // a wider invisible tap area
+        if (Math.round(Math.max(b.height, hit)) < 44) out.push((el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 20) + ' ' + Math.round(b.height) + 'px');
+      }
+      return out;
+    });
+    if (found.length) bad[r] = found;
+  }
+  expect(bad).toEqual({});
+});

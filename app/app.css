@@ -169,7 +169,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .player{display:grid;gap:8px}
 .player-row{display:flex;align-items:center;gap:10px}
 .player-btn{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:20px}
-.player input[type=range]{flex:1;accent-color:var(--accent);min-height:32px}
+.player input[type=range]{flex:1;accent-color:var(--accent);min-height:44px}
 .player .time{font:600 12px ui-monospace,Menlo,monospace;color:var(--ink-2);min-width:84px;text-align:right;font-variant-numeric:tabular-nums}
 .player video{width:100%;border-radius:12px;background:#000;max-height:50dvh}
 .player .tools{display:flex;flex-wrap:wrap;gap:6px}
@@ -537,3 +537,14 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{f
 .info-btn{position:relative;display:inline-grid;place-items:center;width:22px;height:22px;margin-left:4px;padding:0;border:0;border-radius:50%;background:none;color:var(--ink-3);font-size:16px;vertical-align:-3px}
 .info-btn::before{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
 .metric-help ul li+li{margin-top:4px}
+/* Song page (10-4): the 전체·가사·악보… tab bar stays reachable while the page scrolls. */
+.song-tabs{position:sticky;top:calc(var(--safe-t) + 6px);z-index:6;margin-bottom:12px;background:rgba(241,237,250,.86);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);box-shadow:0 4px 14px rgba(40,24,90,.06)}
+/* iPhone: messages stay above the selection bar; landscape keeps clear of the notch. */
+body:has(.sel-bar) .toast{bottom:calc(var(--nav-h) + var(--safe-b) + 140px)}
+.v-app{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+#vz-offline{position:fixed;left:50%;top:calc(var(--safe-t) + 8px);transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:6px;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:rgba(30,27,46,.88);color:#fff;font-size:13px;font-weight:600;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);box-shadow:0 6px 18px rgba(20,16,40,.2)}
+/* 10-7 touch audit leftovers: section-header actions and chart rows that are links answer a 44pt tap too. */
+h2.sec a,h2.sec button{display:inline-flex;align-items:center;justify-content:flex-end;min-width:44px}
+.bars a.bar{min-height:44px}
+/* Row links made of two text lines: WebKit renders them at 43.5px, so they get an explicit 44pt floor. */
+main a.grow,main a.item-main{display:flex;flex-direction:column;justify-content:center;min-height:44px}
