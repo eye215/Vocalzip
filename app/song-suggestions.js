@@ -77,8 +77,8 @@ async function loadCloudTexts(){
  if(legacy.length)localStorage.removeItem(scoped(referenceKey));
  rows=await window.vzipCloudSongTextList();
  if(uid!==owner())throw Error('계정이 변경되어 동기화를 중단했어요.');
- state.referenceRows=rows.filter(r=>r.kind==='reference').map(r=>({songId:r.record_id,transcript:r.transcript,at:r.updated_at}));
- state.recognitions=new Map(rows.filter(r=>r.kind==='recognition').map(r=>[r.record_id,r.transcript]));
+ state.referenceRows=rows.filter(r=>r.kind==='reference'&&!r.deleted_at).map(r=>({songId:r.record_id,transcript:r.transcript,at:r.updated_at}));
+ state.recognitions=new Map(rows.filter(r=>r.kind==='recognition'&&!r.deleted_at).map(r=>[r.record_id,r.transcript]));
  for(const item of state.items){
   if(state.recognitions.has(item.id)&&!readCache(item))
    writeCache(item,{status:'식별 불가',candidate:null,transcript:state.recognitions.get(item.id),method:'stt'});
