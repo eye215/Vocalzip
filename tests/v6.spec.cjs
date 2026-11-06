@@ -1740,3 +1740,25 @@ test('Video file deletion and a cloud failure retain the correct records',async(
  expect((await media(page)).map(x=>x.id)).toContain('m1');
  expect((await data(page)).practices[0].mediaIds).toContain('m1');
 });
+
+test('Song choices open as a searchable sheet; the page under a sheet stays where it was', async ({page}) => {
+  const seed = legacy(); seed.songs.push(...Array.from({length:30}, (_, i) => ({id:'x' + i, title:'추가 곡 ' + i, show:i % 3 ? '' : '레미제라블'})));
+  await boot(page, {seed, media:false});
+  await page.goto('/#/library');
+  await page.getByRole('button', {name:/^곡 필터, /}).click();
+  const sheet = page.getByRole('dialog', {name:'곡 필터'});
+  await sheet.locator('[data-pick-q]').fill('레미');
+  await expect(sheet.getByRole('option', {name:/추가 곡 1\b/})).toBeHidden();
+  await expect(sheet.getByRole('option', {name:'모든 곡'})).toBeVisible();
+  await sheet.getByRole('option', {name:/추가 곡 3/}).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.locator('select[data-song]')).toHaveValue('x3');
+  await expect(page.getByRole('button', {name:'곡 필터, 추가 곡 3'})).toBeVisible();
+  await page.goto('/#/home'); await page.evaluate(() => scrollTo(0, 300)); const y = await page.evaluate(() => scrollY);
+  await page.evaluate(() => { VZ.confirm('확인 창', '내용'); });
+  await expect(page.locator('body')).toHaveClass(/sheet-lock/);
+  await page.getByRole('dialog', {name:'확인 창'}).getByRole('button', {name:'취소'}).click();
+  await expect(page.locator('body')).not.toHaveClass(/sheet-lock/);
+  expect(await page.evaluate(() => scrollY)).toBe(y);
+  expect(page.__errors).toEqual([]);
+});

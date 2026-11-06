@@ -137,6 +137,22 @@ window.vzipNotice = m => VZ.toast(m);
 window.vzipSetPracticeBusy = () => {};
 
 const sheets = [];
+/* iOS Safari scrolls the page behind a sheet unless the body is pinned; the scroll position comes back on close.
+ * The on-screen keyboard shrinks the visual viewport: sheets get that much bottom room (--kb) so fields stay visible. */
+let lockedY = 0;
+const lockPage = () => {
+  if (document.body.classList.contains('sheet-lock')) return;
+  lockedY = scrollY; document.body.style.top = -lockedY + 'px'; document.body.classList.add('sheet-lock');
+};
+const unlockPage = () => {
+  if (!document.body.classList.contains('sheet-lock')) return;
+  document.body.classList.remove('sheet-lock'); document.body.style.top = ''; scrollTo(0, lockedY);
+};
+const vv = window.visualViewport;
+if (vv) {
+  const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h > 80 ? h + 'px' : '0px'); };
+  vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
+}
 /** Bottom sheet. body: html string. Returns {el, close}. onClose fires once. */
 VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
   const previous = document.activeElement;
@@ -148,7 +164,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
   const close = () => {
     if (closed) return; closed = true; back.remove();
     sheets.splice(sheets.indexOf(api), 1);
-    document.body.style.overflow = sheets.length ? 'hidden' : '';
+    if (!sheets.length) unlockPage();
     onClose?.(); if (previous?.isConnected) previous.focus();
     // A refresh that waited for this sheet runs now.
     if (!sheets.length && VZ.pendingRender) setTimeout(() => VZ.softRender(), 50);
@@ -164,7 +180,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
       else if (!e.shiftKey && document.activeElement === nodes.at(-1)) { e.preventDefault(); nodes[0].focus(); }
     }
   });
-  document.body.append(back); document.body.style.overflow = 'hidden';
+  document.body.append(back); lockPage();
   sheets.push(api);
   onMount?.(el, close);
   // Keep a focused field above the iOS keyboard.
@@ -242,7 +258,12 @@ VZ.render = () => {
 window.addEventListener('hashchange', () => {
   if (guard) {
     const message = guard();
-    if (message && !confirm(message)) { history.replaceState(null, '', lastHash || '#/home'); return; }
+    if (message) {
+      // Stay on this screen and ask in the app's own popup; leaving clears the guard and goes on.
+      const target = location.hash; history.replaceState(null, '', lastHash || '#/home');
+      VZ.confirm('나가기', message, {ok:'나가기', danger:true}).then(ok => { if (ok) { guard = null; location.hash = target; } });
+      return;
+    }
   }
   guard = null; lastHash = location.hash; VZ.closeSheets(); VZ.render();
 });
