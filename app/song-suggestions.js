@@ -20,6 +20,11 @@ const inlinePlayers=new Map();
 function destroyPlayers(){for(const player of inlinePlayers.values())player.destroy();inlinePlayers.clear()}
 window.addEventListener('hashchange',destroyPlayers);
 window.addEventListener('pagehide',destroyPlayers);
+// Top-1 is picked by default (still applied only after the user confirms), but never below this lyric
+// similarity: under it the best match is noise, and a bulk "추천대로 곡 지정" would assign wrong songs.
+const AUTO_PICK_MIN=0.12;
+function topPick(match){if(match?.candidate)return match.candidate;const top=match?.matches?.[0];return top&&top.score>=AUTO_PICK_MIN?top.songId:null}
+const pickReason=(match,why)=>match?.candidate?why:'유사도 1위 자동 선택 ('+Math.round((match?.matches?.[0]?.score||0)*100)+'%) · 확인 필요';
 function candidateMatches(match){return match.matches.map(x=>({songId:x.songId,score:Math.round(x.score*1000)/1000})).slice(0,3)}
 const state={items:[],referenceItems:[],chosen:new Set(),results:new Map(),recognitions:new Map(),referenceRows:[],cloudReady:false,running:false,cancel:false,page:0,controller:null};
 const owner=()=>window.vzipCloudUserId?.()||'device';
@@ -133,7 +138,14 @@ function readCache(item){try{
 }catch{return null}}
 function writeCache(item,result){try{localStorage.setItem(cacheKey(item),JSON.stringify({...result,version:1}))}catch{}}
 function fmt(item){return M.label(item)+' · '+(M.dateOf(item)||'날짜 없음');}
-function resultFor(item){return state.results.get(item.id)||readCache(item)|| (freeMatch(item)?{status:'후보',candidate:freeMatch(item),method:'filename'}:null)}
+function resultFor(item){
+ const result=state.results.get(item.id)||readCache(item)|| (freeMatch(item)?{status:'후보',candidate:freeMatch(item),method:'filename'}:null);
+ if(result&&!result.candidate&&!result.userSelected&&result.matches?.length&&result.matches[0].score>=AUTO_PICK_MIN){
+  const song=songs().find(s=>s.id===result.matches[0].songId);
+  if(song)return {...result,status:'후보',candidate:{id:song.id,title:VZ.songLabel(song),reason:'유사도 1위 자동 선택 ('+Math.round(result.matches[0].score*100)+'%) · 확인 필요',level:'확인 필요'}};
+ }
+ return result;
+}
 function eligible(item){return !item.songId&&!item.song && !M.isVideo(item);}
 function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);saveCheckpoint();}
 function durationOf(url,signal){
@@ -237,9 +249,9 @@ async function stt(item,signal,{reference=false}={}){
  if(previous){
   if(reference)return {transcript:previous};
   const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
-  const match=matchTranscripts(previous,references()),found=songs().find(s=>s.id===match.candidate);
+  const match=matchTranscripts(previous,references()),found=songs().find(s=>s.id===topPick(match));
   return {status:found?'후보':'식별 불가',transcript:previous,
-   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,method:'stt',reason:match.reason,matches:candidateMatches(match)};
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,method:'stt',reason:match.reason,matches:candidateMatches(match)};
  }
  if(!window.vzipCloudSignedIn?.())throw Error('로그인이 필요해요.');
  const token=await window.vzipCloudAccessToken?.();
@@ -274,9 +286,9 @@ async function stt(item,signal,{reference=false}={}){
  if(reference)return {transcript};
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
  const match=matchTranscripts(transcript,references());
- const found=songs().find(s=>s.id===match.candidate);
+ const found=songs().find(s=>s.id===topPick(match));
  return {status:found?'후보':'식별 불가',transcript,
-  candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
+  candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,
   method:'stt',reason:match.reason,matches:candidateMatches(match)};
 }
 function controls(main){
@@ -286,7 +298,7 @@ function controls(main){
  root.querySelector('[data-analyze]').disabled=state.running||!count;
  root.querySelector('[data-apply]').disabled=state.running||!done;
  root.querySelector('[data-undo]').disabled=state.running;
- for(const el of root.querySelectorAll('input,select,[data-select-all],[data-clear],[data-prev],[data-more]'))el.disabled=state.running;
+ for(const el of root.querySelectorAll('input,select,[data-select-all],[data-clear],[data-prev],[data-more],[data-file-delete]'))el.disabled=state.running;
  root.querySelector('[data-stop]').hidden=!state.running;
 }
 function draw(main){
@@ -325,7 +337,18 @@ function draw(main){
     inlinePlayers.get(item.id)?.pause();playerHost.hidden=true;listen.textContent='▶ 녹음 듣기';
    }
   };
-  playWrap.append(listen,playerHost);card.append(playWrap);
+  const remove=document.createElement('button');remove.type='button';remove.className='btn ghost';
+  remove.textContent='파일 삭제';remove.setAttribute('aria-label',M.label(item)+' 파일 삭제');remove.setAttribute('data-file-delete','');remove.disabled=state.running;
+  remove.onclick=()=>exclusive(main,async(_main,check)=>{
+   if(state.running||!await M.confirmRemove(item))return;check();remove.disabled=true;
+   try{
+    await M.remove(item);check();
+    state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);state.results.delete(item.id);state.recognitions.delete(item.id);
+    saveCheckpoint();draw(main);VZ.toast('파일을 삭제했어요. 연습·레슨 기록은 남아 있어요.');
+   }finally{remove.disabled=false}
+  });
+  const actions=document.createElement('div');actions.className='btn-row';actions.append(listen,remove);
+  playWrap.append(actions,playerHost);card.append(playWrap);
   const sub=document.createElement('p');sub.className='small muted';
   sub.textContent=result?.error?'분석 실패: '+result.error:result?.candidate?'🎵 '+result.candidate.title+' · '+result.candidate.reason+' ('+result.candidate.level+')':result?.status||'분석 전';
   card.append(sub);
@@ -343,7 +366,7 @@ function draw(main){
     choose.setAttribute('aria-label',VZ.songLabel(song)+' 수동 선택');
     choose.onclick=()=>{
      const current=resultFor(item);
-     setResult(item,{...current,status:'후보',candidate:{id:song.id,title:VZ.songLabel(song),reason:'사용자가 유사도 후보 중 선택',level:'사용자 확인 필요'}});
+     setResult(item,{...current,userSelected:true,status:'후보',candidate:{id:song.id,title:VZ.songLabel(song),reason:'사용자가 유사도 후보 중 선택',level:'사용자 확인 필요'}});
      draw(main);
     };
     row.append(name,choose);rank.append(row);
@@ -357,7 +380,7 @@ function draw(main){
   for(const song of songs())picker.add(new Option(VZ.songLabel(song),song.id));
   picker.value=result?.candidate?.id||'';
   picker.onchange=()=>{const selected=songs().find(s=>s.id===picker.value);
-    setResult(item,{...(result||{}),status:selected?'후보':'미분류',candidate:selected?{id:selected.id,title:VZ.songLabel(selected),reason:'직접 선택',level:'사용자 지정'}:null});
+    setResult(item,{...(result||{}),userSelected:true,status:selected?'후보':'미분류',candidate:selected?{id:selected.id,title:VZ.songLabel(selected),reason:'직접 선택',level:'사용자 지정'}:null});
     controls(main);
   };card.append(picker);
   list.append(card);
@@ -373,10 +396,6 @@ function showReferenceControls(main){
  const select=main.querySelector('[data-ref-picker]'),summary=main.querySelector('[data-ref-list]');
  if(!select||!summary)return;
  const last=select.value;
- const manual=main.querySelector('[data-ref-song]'),oldSong=manual.value;
- manual.replaceChildren(new Option('기준 가사를 등록할 곡 선택',''));
- for(const song of songs())manual.add(new Option(VZ.songLabel(song),song.id));
- manual.value=oldSong||'';
  select.replaceChildren(new Option('곡 지정된 기준 녹음 선택',''));
  for(const item of state.referenceItems){
   const song=songs().find(s=>s.id===(item.songId||item.song));
@@ -384,25 +403,26 @@ function showReferenceControls(main){
  }
  select.value=last||'';
  const stored=references();
- summary.textContent='모든 기기에서 사용 가능한 기준: '+stored.length+'곡 (내 곡 가사 우선 + Supabase 기준 녹음)';
- main.querySelector('[data-ref-clear]').disabled=!state.referenceRows.length;
+ summary.textContent='모든 기기에서 사용 가능한 기준: '+stored.length+'곡 (내 곡 가사 우선 + 추가 가사 기준)';
+ const selected=state.referenceItems.find(m=>m.id===select.value);
+ main.querySelector('[data-ref-clear]').disabled=state.running||!state.referenceRows.some(r=>r.songId===(selected?.songId||selected?.song));
 }
 async function rematchCached(main){
  const refs=references();if(!refs.length||!state.items.some(m=>{
-  const c=readCache(m);return c?.transcript&&c.method==='stt'&&!['직접 선택','사용자가 유사도 후보 중 선택'].includes(c.candidate?.reason)
+  const c=readCache(m);return c?.transcript&&!c.userSelected&&c.method==='stt'&&!['직접 선택','사용자가 유사도 후보 중 선택'].includes(c.candidate?.reason)
  }))return;
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
  let changed=0;
  for(const item of state.items){
   const previous=readCache(item);
-  if(!previous?.transcript||previous.method!=='stt'||['직접 선택','사용자가 유사도 후보 중 선택'].includes(previous.candidate?.reason))continue;
-  const match=matchTranscripts(previous.transcript,refs),found=songs().find(s=>s.id===match.candidate);
+  if(!previous?.transcript||previous.userSelected||previous.method!=='stt'||['직접 선택','사용자가 유사도 후보 중 선택'].includes(previous.candidate?.reason))continue;
+  const match=matchTranscripts(previous.transcript,refs),found=songs().find(s=>s.id===topPick(match));
   const nextMatches=candidateMatches(match);
   const same=JSON.stringify(previous.matches||[])===JSON.stringify(nextMatches) &&
    (previous.candidate?.id||'')===(found?.id||'');
   if(same)continue;
   setResult(item,{...previous,status:found?'후보':'식별 불가',
-   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,
    matches:nextMatches});
   changed++;
  }
@@ -422,17 +442,9 @@ async function indexReference(main,check=()=>{}){
   VZ.toast('곡별 기준이 저장됐어요. 다음부터 비교는 무료예요.');
  }finally{state.running=false;state.controller=null;showReferenceControls(main);controls(main)}
 }
-async function saveManualReference(main,check=()=>{}){
- const songId=main.querySelector('[data-ref-song]').value;
- const input=main.querySelector('[data-ref-text]'),value=input.value.trim();
- if(!songId||!songs().some(s=>s.id===songId))throw Error('기준 가사를 입력할 곡을 선택해 주세요.');
- if(value.length<30||value.length>1600)throw Error('기준 가사는 30~1600자를 입력해 주세요.');
- if(!await VZ.confirm('기준 가사 무료 저장','텍스트만 저장하며 유료 STT나 GPT를 호출하지 않아요. Supabase에 계정별로 기준을 저장할까요?',{ok:'무료 저장'}))return;
- check();await saveReference(songId,value);input.value='';
- await rematchCached(main);showReferenceControls(main);VZ.toast('기준 가사가 무료로 저장됐어요.');
-}
 async function deleteReference(main){
- const songId=main.querySelector('[data-ref-song]').value;
+ const item=state.referenceItems.find(m=>m.id===main.querySelector('[data-ref-picker]').value);
+ const songId=item?.songId||item?.song;
  if(!songId||!state.referenceRows.some(r=>r.songId===songId))throw Error('이 곡의 별도 기준이 없어요. 내 곡의 원문 가사는 곡 상세 → 가사에서 수정해 주세요.');
  if(!await VZ.confirm('기준 삭제','로그인 계정의 모든 기기에서 선택 곡의 기준 가사를 삭제할까요?',{ok:'삭제'}))return;
  await removeReference(songId);showReferenceControls(main);
@@ -530,7 +542,7 @@ async function apply(main,check=()=>{}){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted">💰 비용 절약: 내 곡 → 가사 탭에 원문을 입력하면 무료 기준으로 사용해요. 가사가 없는 곡은 녹음 STT 또는 직접 입력한 기준을 Supabase에 저장해 모든 기기에서 재사용합니다. 미분류 음원 STT에는 별도 요금이 발생할 수 있어요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted">기준 가사 일부를 직접 입력하면 최초 STT 비용도 없이 무료로 기준을 만들 수 있어요.</p><select data-ref-song aria-label="기준 곡 선택"></select><textarea data-ref-text rows="3" maxlength="1600" placeholder="기준 가사 일부를 직접 입력"></textarea><button class="btn secondary" data-ref-manual type="button">가사 기준 무료 저장</button><p class="small muted" data-ref-list></p><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><nav class="btn-row" aria-label="미분류 녹음 페이지 이동"><button class="btn ghost" type="button" data-prev hidden>← 이전 30개</button><span class="small muted" data-page-count aria-live="polite"></span><button class="btn ghost" type="button" data-more hidden>다음 30개 보기 →</button></nav></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명으로 먼저 찾고, 필요할 때만 녹음 일부를 분석해요. 유사도 1위 곡을 자동 선택해요. 확인 후 ‘추천대로 곡 지정’을 누르면 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted"><a href="#/songs">가사는 곡 상세의 가사 탭에서 입력 →</a></p><details class="reference-options"><summary>가사 없는 곡용 기준 만들기 (고급)</summary><p class="small muted">가사를 입력하기 어려운 곡만 녹음으로 기준을 만들어요. 최초 음성 변환에 비용이 발생해요. 이미 저장한 기준은 계속 매칭에 사용돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted" data-ref-list></p></details><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><nav class="btn-row" aria-label="미분류 녹음 페이지 이동"><button class="btn ghost" type="button" data-prev hidden>← 이전 30개</button><span class="small muted" data-page-count aria-live="polite"></span><button class="btn ghost" type="button" data-more hidden>다음 30개 보기 →</button></nav></section>';
  },async mount(main){
   if(busy){main.textContent='이전 작업을 마무리하고 있어요. 잠시 후 다시 열어 주세요.';return}
   viewOwner=owner();
@@ -558,7 +570,7 @@ VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
   root.querySelector('[data-apply]').onclick=()=>exclusive(main,apply);
   root.querySelector('[data-undo]').onclick=()=>exclusive(main,undo);
   root.querySelector('[data-ref-add]').onclick=()=>exclusive(main,indexReference);
-  root.querySelector('[data-ref-manual]').onclick=()=>exclusive(main,saveManualReference);
+  root.querySelector('[data-ref-picker]').onchange=()=>showReferenceControls(main);
   root.querySelector('[data-ref-clear]').onclick=()=>exclusive(main,deleteReference);
   showReferenceControls(main);
   draw(main);

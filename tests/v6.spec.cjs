@@ -1565,3 +1565,66 @@ test('Saving a lesson as completed deducts it in 레슨비 정산 in the backgro
   expect(await active()).toEqual([['done-now', 100]]);
   await expect(page.locator('iframe')).toHaveCount(0);
 });
+
+
+test('File deletion cancels safely, deletes one file and preserves linked practice and lesson', async ({page}) => {
+ await boot(page);
+ await page.goto('/#/library');
+ const row=page.locator('[data-media="m1"]').first();
+ await row.locator('[data-toggle]').click();
+ await row.locator('[data-delete]').click();
+ await expect(sheet(page)).toContainText('연습·레슨 기록, 메모와 연습 시간은 남아요');
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/delete-confirmation.png'});
+ await sheet(page).getByRole('button',{name:'취소',exact:true}).click();
+ expect((await media(page)).map(x=>x.id)).toContain('m1');
+ await row.locator('[data-delete]').click();
+ await sheet(page).getByRole('button',{name:'파일 영구 삭제',exact:true}).click();
+ await expect.poll(async()=> (await media(page)).map(x=>x.id)).not.toContain('m1');
+ const db=await data(page);
+ expect(db.practices[0].mediaIds).toEqual([]);expect(db.practices[0].minutes).toBe(30);
+ expect(db.lessons.find(x=>x.id==='l1').recordings).toEqual([]);
+ expect(db.lessons.find(x=>x.id==='l1').memo).toBe('m');
+ expect((await media(page)).map(x=>x.id)).toContain('m2');
+ await page.reload();await expect(page.locator('[data-media="m1"]')).toHaveCount(0);
+});
+
+test('Song reference settings start collapsed and suggestion cards expose individual deletion', async ({page}) => {
+ await boot(page);
+ await page.evaluate(async()=>{
+  window.vzipCloudSignedIn=()=>true;
+  window.vzipCloudSongTextList=async()=>[];window.vzipCloudSongTextSave=async()=>{};window.vzipCloudMediaDelete=async()=>{};
+  await window.vzipStorePracticeMedia({id:'unassigned',name:'미분류 파일',created:Date.now(),type:'audio/wav',source:'import',blob:new Blob([window.__wav],{type:'audio/wav'})});
+  VZ.media.invalidate();
+ });
+ await page.goto('/#/song-suggest');
+ await expect(page.locator('.reference-options')).toBeVisible();
+ await expect(page.locator('[data-ref-song],[data-ref-text],[data-ref-manual]')).toHaveCount(0);
+ await expect(page.getByRole('link',{name:'가사는 곡 상세의 가사 탭에서 입력 →'})).toHaveAttribute('href','#/songs');
+ await expect(page.locator('[data-ref-picker]')).toBeHidden();
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/recording-simplified.png',fullPage:true});
+ await page.locator('.reference-options > summary').click();
+ await expect(page.locator('[data-ref-picker]')).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.getByRole('button',{name:'미분류 파일 파일 삭제',exact:true}).click();
+ await sheet(page).getByRole('button',{name:'파일 영구 삭제',exact:true}).click();
+ await expect(page.getByRole('button',{name:'미분류 파일 파일 삭제',exact:true})).toHaveCount(0);
+});
+
+
+
+test('Video file deletion and a cloud failure retain the correct records',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  await window.vzipStorePracticeMedia({id:'video',name:'업로드 영상',type:'video/mp4',source:'import',blob:new Blob(['fixture'],{type:'video/mp4'})});
+  await VZ.media.remove({id:'video',local:true});
+ });
+ expect((await media(page)).map(x=>x.id)).not.toContain('video');
+ const failure=await page.evaluate(async()=>{
+  window.vzipCloudSignedIn=()=>true;
+  window.vzipCloudMediaDelete=async()=>{throw Error('연결 끊김')};
+  try{await VZ.media.remove({id:'m1',local:true,cloud:true})}catch(e){return e.message}
+ });
+ expect(failure).toBe('연결 끊김');
+ expect((await media(page)).map(x=>x.id)).toContain('m1');
+ expect((await data(page)).practices[0].mediaIds).toContain('m1');
+});

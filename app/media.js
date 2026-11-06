@@ -253,10 +253,21 @@ M.fillDurations = async (items, {limit = 10} = {}) => {
   if (filled) { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-media')); }
   return filled;
 };
+const removing = new Set();
+M.confirmRemove = item => VZ.confirm('파일 영구 삭제', '“' + M.label(item) + '” 파일을 삭제할까요?\n\n이 기기와 클라우드의 파일 및 연결을 삭제해요. 연습·레슨 기록, 메모와 연습 시간은 남아요. 다른 기기에 따로 내려받은 사본은 남을 수 있어요. 파일은 복구할 수 없어요.', {ok:'파일 영구 삭제', danger:true});
 M.remove = async item => {
-  if (item.cloud) await window.vzipCloudMediaDelete(item);
-  if (item.local) await tx('readwrite', s => s.delete(item.id));
-  changed();
+  if (removing.has(item.id)) throw Error('이미 삭제 중이에요.');
+  if (backup.running) throw Error('자동 백업이 끝난 뒤 삭제해 주세요.');
+  removing.add(item.id); M.holdBackup(true);
+  try {
+    // A list snapshot can predate automatic backup. Resolve the cloud copy again.
+    if (item.cloud || window.vzipCloudSignedIn?.()) await window.vzipCloudMediaDelete(item);
+    // Save the unlink intent before removing local bytes; a failed write remains retryable.
+    if (!VZ.change(d => window.VzipDataMerge.deleteMedia(d, item.id), {silent:true})) throw Error('파일 연결 정리를 저장하지 못했어요. 다시 시도해 주세요.');
+    for (const player of players) if (player.item.id === item.id) player.destroy();
+    await tx('readwrite', s => s.delete(item.id));
+    changed();
+  } finally { removing.delete(item.id); M.holdBackup(false); }
 };
 M.src = async item => {
   const blob = blobOf(item);
@@ -277,7 +288,7 @@ M.download = async item => {
 const extOf = type => ({'audio/mp4':'m4a','video/mp4':'mp4','video/quicktime':'mov','audio/mpeg':'mp3','audio/wav':'wav','audio/x-wav':'wav','audio/aac':'aac','audio/ogg':'ogg','audio/flac':'flac','audio/webm':'webm','video/webm':'webm'})[String(type || '').split(';')[0]] || 'bin';
 const backup = {running:false, total:0, done:0, failed:0, waiting:false};
 M.backupStatus = () => ({...backup});
-M.localOnly = items => items.filter(m => m.local && !m.cloud && blobOf(m));
+M.localOnly = items => items.filter(m => m.local && !m.cloud && blobOf(m) && !(VZ.db.deleted?.media || []).includes(m.id));
 /** A bulk upload holds the single upload slot; the background backup waits until it ends. */
 let held = 0;
 M.holdBackup = on => { held = Math.max(0, held + (on ? 1 : -1)); if (!held) M.scheduleBackup(3000); };

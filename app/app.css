@@ -437,6 +437,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .ana-k{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2);font-weight:600}
 .ana-k i{color:var(--accent);font-size:16px}
 .ana-v{font-size:18px;font-weight:700;color:var(--ink);line-height:1.3}
+
+/* Optional song matching controls stay compact on narrow Safari screens. */
+.reference-options {margin:12px 0; border-top:1px solid var(--line); padding-top:8px;}
+.reference-options summary {cursor:pointer; min-height:44px; padding:12px 0; font-weight:600;}
+.reference-options details {margin-top:12px;}
+.reference-options select,.reference-options textarea {width:100%; min-width:0; font-size:16px;}
 /* 곡별 보컬 측정 변화 */
 .vg{margin-bottom:12px}
 .vg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}

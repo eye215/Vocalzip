@@ -116,8 +116,16 @@ async function cleanupPending(owner){
   if(!removeError)forget(entry.id);
  }
 }
+/** Ids of files deleted on any device (vocal_data.payload.deleted.media), read as a single JSON path. */
+async function deletedMediaIds(){const {data,error}=await client.from('vocal_data').select('ids:payload->deleted->media').eq('user_id',user.id).maybeSingle();if(error)throw error;return Array.isArray(data?.ids)?data.ids:[]}
 async function importMedia(file,info={},onProgress,options={}){
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
+ if(info.id){
+  // Only the deleted-file list is read (not the whole record payload): this runs for every file of a bulk upload.
+  const account=user.id,deletedIds=await deletedMediaIds();
+  if(user?.id!==account)throw Error('로그인 계정이 변경됐어요.');
+  if(deletedIds.includes(info.id))throw Error('삭제한 파일은 자동 백업하지 않아요. 다시 가져오려면 새 파일로 등록해 주세요.');
+ }
  if(!file||file.size<=0)throw Error('빈 파일은 업로드할 수 없어요.');
  if((window.vzipMediaType?.(file)||file.type||'').startsWith('video/'))throw Error('영상은 음원으로 추출한 뒤 저장해 주세요.');
  if(file.size>VzipChunks.MAX_SIZE)throw Error('파일당 최대 1GB까지 업로드할 수 있어요.');
@@ -341,17 +349,62 @@ window.vzipCloudMediaAssignSong=async(item,changes,{expectedSongId='',expectedSo
  return {updatedAt,metadata};
 };
 window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];const saved=await patchMedia(item.id,meta=>({...meta,...clean}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
-window.vzipCloudMediaDelete=async item=>{
+async function unlinkCloudMedia(owner,id){
+ for(let attempt=0;attempt<5;attempt++){
+  if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');
+  const {data:row,error}=await client.from('vocal_data').select('payload,updated_at').eq('user_id',owner).maybeSingle();
+  if(error)throw error;
+  if(!row){
+   const payload=Merge.deleteMedia({categories:[],songs:[],lessons:[],assignments:[],practices:[]},id);
+   const {error:createError}=await client.from('vocal_data').insert({user_id:owner,payload,updated_at:new Date().toISOString()});
+   if(createError?.code==='23505')continue;
+   if(createError)throw createError;
+   return;
+  }
+  if(!Merge.valid(row.payload))throw Error('클라우드 기록 형식을 확인하지 못했어요.');
+  const payload=Merge.deleteMedia(structuredClone(row.payload),id);
+  const {data:written,error:writeError}=await sameVersion(client.from('vocal_data').update({payload,updated_at:new Date().toISOString()}).eq('user_id',owner),row.updated_at).select('user_id');
+  if(writeError)throw writeError;
+  if(written?.length)return;
+ }
+ throw Error('기록이 다른 기기에서 수정 중이에요. 삭제를 다시 시도해 주세요.');
+}
+async function deleteCloudMedia(item){
  if(!user)throw Error('로그인이 필요해요.');
  const owner=user.id;
- const old=item.storageProvider==='r2'?(item.legacyStorage||{}):item;
+ const {data:row,error:readError}=await client.from('vocal_media').select('metadata,updated_at').eq('id',item.id).eq('user_id',owner).maybeSingle();
+ if(readError)throw readError;
+ if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');
+ // Only server-owned metadata determines which objects are deleted, never a stale UI path.
+ const current=row?.metadata||{};
+ const old=current.storageProvider==='r2'?(current.legacyStorage||{}):current;
  const paths=old.storageVersion===2?VzipChunks.validate(old).parts.map(x=>x.path):(old.path?[old.path]:[]);
  if(paths.some(path=>!path.startsWith(owner+'/')||path.includes('..')))throw Error('다른 계정의 파일은 삭제할 수 없어요.');
- if(item.storageProvider==='r2'&&item.r2Key)await window.VzipR2.remove(item.r2Key);
+ if(current.storageProvider==='r2'&&current.r2Key){
+  if(!current.r2Key.startsWith('u/'+owner+'/')||current.r2Key.includes('..'))throw Error('다른 계정의 파일은 삭제할 수 없어요.');
+  await window.VzipR2.remove(current.r2Key);
+ }
  if(paths.length){const {error}=await client.storage.from('vocal-recordings').remove(paths);if(error)throw error}
  if(user?.id!==owner)throw Error('로그인이 변경되었어요.');
- const {error}=await client.from('vocal_media').delete().eq('id',item.id).eq('user_id',owner);
- if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+ // Keep the media row until all cleanup succeeds: partial failures can be retried.
+ await unlinkCloudMedia(owner,item.id);
+ const {error:textError}=await client.from('vocal_song_texts').update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('user_id',owner).eq('kind','recognition').eq('record_id',item.id);
+ if(textError)throw textError;
+ if(user?.id!==owner)throw Error('로그인이 변경되었어요.');
+ if(row){
+  const {data:removed,error}=await sameVersion(client.from('vocal_media').delete().eq('id',item.id).eq('user_id',owner),row.updated_at).select('id');
+  if(error)throw error;
+  if(!removed?.length)throw Error('다른 기기에서 파일 정보가 변경됐어요. 삭제를 다시 시도해 주세요.');
+ }
+ const cached=await listCache(owner);if(cached)await listCache(owner,{...cached,rows:cached.rows.filter(r=>r.id!==item.id)});
+ window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+}
+window.vzipCloudMediaDelete=item=>{
+ if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
+  if(!lock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');
+  return deleteCloudMedia(item);
+ });
+ return deleteCloudMedia(item);
 };
 /* ---------- R2 move (storage screen) ---------- */
 /** The original bytes of a cloud file (Supabase, single or multi-part). */
