@@ -150,11 +150,13 @@ export async function decode(bytes, {seconds = MAX_SECONDS, rate = 16000} = {}) 
   try {
     await writeFile(file, bytes);
     return await new Promise((resolve, reject) => {
-      const ff = spawn('ffmpeg', ['-v', 'error', '-i', file, '-t', String(seconds), '-vn', '-ac', '1', '-ar', String(rate), '-f', 'f32le', 'pipe:1']);
+      const ff = spawn(env.FFMPEG_PATH || 'ffmpeg', ['-v', 'error', '-i', file, '-t', String(seconds), '-vn', '-ac', '1', '-ar', String(rate), '-f', 'f32le', 'pipe:1']);
       const out = [];
       ff.stdout.on('data', d => out.push(d)); ff.stderr.resume();
-      ff.on('error', reject);
+      const kill = setTimeout(() => ff.kill('SIGKILL'), 5 * 60000); // a stuck decode never holds the whole run
+      ff.on('error', e => { clearTimeout(kill); reject(e); });
       ff.on('close', code => {
+        clearTimeout(kill);
         if (code !== 0) return reject(new Error('could not decode the audio'));
         const buf = Buffer.concat(out);
         resolve(Float32Array.from(new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.length / 4))));
@@ -258,7 +260,7 @@ export async function kindsFor(db) {
   const {rows:[t]} = await db.query("select to_regclass('public.vocal_song_texts') is not null and to_regclass('public.vzip_song_stt_quota') is not null as ok");
   return t.ok ? ['vocal', 'song'] : ['vocal'];
 }
-export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 45 * 60000, maxJobs = Number(env.WORKER_MAX_JOBS) || 400, log = console.log, verbose = env.WORKER_VERBOSE === '1'} = {}) {
+export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 40 * 60000, maxJobs = Number(env.WORKER_MAX_JOBS) || 400, log = console.log, verbose = env.WORKER_VERBOSE === '1'} = {}) {
   const only = clean(env.WORKER_KINDS).split(',').map(clean).filter(Boolean);
   const started = Date.now(), kinds = (await kindsFor(db)).filter(k => !only.length || only.includes(k)), stats = {done:0, review:0, skipped:0, failed:0, retry:0}, errors = {};
   let streak = 0, stopped = false; // consecutive failures: the same problem for every file (settings, network) stops the run
@@ -269,6 +271,7 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
     if (!jobs.length) break;
     // UPDATE … RETURNING has no order: oldest first (song identification before measurements, as claimed).
     jobs.sort((a, b) => (b.kind === 'song') - (a.kind === 'song') || Number(a.id) - Number(b.id));
+    if (taken && taken % 50 < jobs.length) log('analysis worker progress: ' + taken + ' · ' + JSON.stringify(stats));
     for (const [i, job] of jobs.entries()) {
       if (stopped) {
         // Not tried in this run: back to the queue without using up an attempt.

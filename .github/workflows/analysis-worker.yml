@@ -37,7 +37,7 @@ jobs:
   work:
     if: github.repository == 'eye215/Vocalzip'
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 60
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -50,11 +50,28 @@ jobs:
       - name: Anything waiting?
         id: peek
         run: node worker/analysis-worker.mjs --peek
+      # A pinned prebuilt ffmpeg (npm ffmpeg-static), cached between runs: apt mirrors once took 38 minutes.
+      - name: Cache ffmpeg
+        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures
+        uses: actions/cache@v4
+        with:
+          path: ~/ffmpeg-static
+          key: ffmpeg-static-5.2.0-${{ runner.os }}
       - name: Install ffmpeg
         if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures
-        run: command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
+        timeout-minutes: 8
+        run: |
+          if [ ! -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
+            npm install --prefix ~/ffmpeg-static --no-save --no-audit --no-fund ffmpeg-static@5.2.0 || true
+          fi
+          if [ -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
+            echo "FFMPEG_PATH=$HOME/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg" >> "$GITHUB_ENV"
+          else
+            command -v ffmpeg || timeout 300 sudo apt-get install -y -q --no-install-recommends ffmpeg
+          fi
       - name: Analyze
         if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures
+        timeout-minutes: 48
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
