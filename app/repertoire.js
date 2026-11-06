@@ -11,7 +11,7 @@ const info=s=>s.repertoire?.ownerId===owner()?s.repertoire:{};
 const opt=(obj,v,none='선택 안 함')=>'<option value="">'+none+'</option>'+Object.entries(obj).map(([k,n])=>'<option value="'+E(k)+'"'+(k===v?' selected':'')+'>'+E(n)+'</option>').join('');
 const field=(label,name,value='',type='text',required=false)=>'<label class="field"><span>'+E(label)+'</span><input name="'+name+'" type="'+type+'" value="'+E(value)+'"'+(required?' required':'')+' maxlength="200"></label>';
 const area=(label,name,value='')=>'<label class="field"><span>'+E(label)+'</span><textarea name="'+name+'" maxlength="8000">'+E(value)+'</textarea></label>';
-const select=(label,name,choices,value)=>'<label class="field"><span>'+E(label)+'</span><select name="'+name+'">'+opt(choices,value)+'</select></label>';
+const select=(label,name,choices,value)=>'<label class="field"><span>'+E(label)+'</span><select name="'+name+'" aria-label="'+E(label)+'">'+opt(choices,value)+'</select></label>';
 function message(error){V.toast(error.message||String(error),'error')}
 function save(fn){if(!owner())throw Error('로그인 후 저장해 주세요.');if(!V.change(fn,{silent:true}))throw Error('저장하지 못했어요. 입력은 화면에 남아 있어요.');V.softRender()}
 function panel(title,body,onSave,{wide=false,submit='저장'}={}){
