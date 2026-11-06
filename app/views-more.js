@@ -106,7 +106,7 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
     seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분') +
     '<div class="lib-selects"><select aria-label="형식 필터" data-kind><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>음성·영상</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select>' +
     '<select aria-label="곡 필터" data-song><option value="">모든 곡</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select></div>' +
-    '<div data-name-dates></div><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
+    '<div class="btn-row" style="margin:10px 0"><a class="btn secondary" href="#/song-suggest">🎵 미분류 AI 곡 추천</a></div><div data-name-dates></div><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   document.querySelector('[data-imp]').onclick = () => VZ.importSheet();
   document.querySelector('[data-hub-open]').onclick = () => VZ.openImportHub();

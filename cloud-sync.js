@@ -314,6 +314,31 @@ async function patchMedia(id,mutate,owner=user?.id){
 }
 window.vzipCloudMediaPatch=patchMedia;
 /** Save only `changes` onto the newest cloud copy; `item` may be an older snapshot and is not written back. */
+/** Song-only optimistic update. Fetch current cloud metadata, preserve unrelated fields,
+ * and refuse stale writes via updated_at. Never overwrite a newer device's review/date. */
+window.vzipCloudMediaAssignSong=async(item,changes,{expectedSongId='',expectedSong='',expectedUpdatedAt=null}={})=>{
+ if(!user)throw Error('로그인이 필요해요.');
+ const owner=user.id;
+ const table=()=>client.from('vocal_media');
+ const {data:row,error:readError}=await table().select('metadata,updated_at').eq('id',item.id).eq('user_id',owner).maybeSingle();
+ if(readError)throw readError;
+ if(!row?.metadata)throw Error('원본 클라우드 기록을 찾지 못했어요.');
+ const current=row.metadata;
+ if((current.songId||'')!==expectedSongId||(current.song||'')!==expectedSong)
+  throw Error('다른 기기에서 곡이 변경됐어요. 새로고침 후 확인해 주세요.');
+ if(expectedUpdatedAt&&row.updated_at!==expectedUpdatedAt)
+  throw Error('곡 지정 후 다른 기기에서 기록을 수정했어요. 자동 되돌리기를 중단합니다.');
+ if(!row.updated_at)throw Error('수정 버전을 확인할 수 없어요.');
+ if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');
+ const updatedAt=new Date(Math.max(Date.now(),Date.parse(row.updated_at)+1)).toISOString();
+ const metadata={...current,songId:String(changes.songId||''),song:String(changes.song||'')};
+ const {data:written,error}=await table().update({metadata,updated_at:updatedAt})
+  .eq('id',item.id).eq('user_id',owner).eq('updated_at',row.updated_at).select('id').maybeSingle();
+ if(error)throw error;
+ if(!written||user?.id!==owner)throw Error('다른 기기의 수정과 충돌했어요. 기록을 새로고침해 주세요.');
+ window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+ return {updatedAt,metadata};
+};
 window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];const saved=await patchMedia(item.id,meta=>({...meta,...clean}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
 window.vzipCloudMediaDelete=async item=>{
  if(!user)throw Error('로그인이 필요해요.');

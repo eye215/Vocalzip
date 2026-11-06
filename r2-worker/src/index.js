@@ -77,6 +77,41 @@ async function route(request, env) {
   }
 
   const uid = await user(request, env);
+  // Short audio preview for opt-in STT. Reads only the caller's R2 object and
+  // transforms the excerpt at Cloudflare, avoiding whole-file decoding on iOS.
+  if (path.startsWith('/v1/clip/') && method === 'GET') {
+    const key = ownKey(uid, decodeURIComponent(path.slice('/v1/clip/'.length)));
+    if (env.STT_CLIP_ENABLED !== 'true') fail(503, 'STT clip extraction is disabled');
+    const allowed = String(env.STT_CLIP_ALLOWED_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!allowed.includes(uid)) fail(403, 'STT clip extraction is not allowed');
+    if (!env.MEDIA_TRANSFORM) fail(503, 'media transformations binding is not enabled');
+    if (!/\.(m4a|mp4)$/i.test(key)) fail(415, 'only M4A/MP4 clips are supported');
+    const time = Number(url.searchParams.get('time') ?? '20');
+    const duration = Number(url.searchParams.get('duration') ?? '30');
+    if (!Number.isInteger(time) || time < 0 || time > 570 || duration !== 30 || time + duration > 600)
+      fail(400, 'invalid clip interval');
+    const obj = await env.MEDIA.get(key);
+    if (!obj?.body) fail(404, 'audio not found');
+    if (obj.size > 100 * 1024 * 1024) fail(413, 'audio too large for transform');
+    try {
+      const transformed = await env.MEDIA_TRANSFORM.input(obj.body).output({
+        mode:'audio', time: time + 's', duration:'30s', format:'m4a'
+      }).response();
+      if (!transformed.ok || !transformed.body) fail(422, 'audio clip transformation failed');
+      const headers = new Headers({
+        'content-type':'audio/mp4',
+        'content-disposition':'attachment; filename="vocalzip-stt-clip.m4a"',
+        'cache-control':'no-store',
+        'x-content-type-options':'nosniff'
+      });
+      // Prevent playback/cache of an untrusted upstream error body.
+      return new Response(transformed.body, {status:200, headers});
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      console.error('audio clip transform', error);
+      fail(422, 'audio clip transformation unavailable for this format');
+    }
+  }
   let m;
   if (path === '/v1/uploads' && method === 'POST') {
     const body = await readJson(request);
