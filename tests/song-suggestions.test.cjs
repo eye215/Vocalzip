@@ -135,7 +135,7 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
 });
 test('bulk paid analysis must be reduced to one selected recording',async()=>{
  const b=browser(),errors=[];
- b.localStorage.setItem('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}]));
+ b.api.state.referenceRows=[{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}];
  b.window.VZ.toast=message=>errors.push(message);
  b.api.state.items=[{id:'a'},{id:'b'}];b.api.state.chosen.add('a');b.api.state.chosen.add('b');
  await b.api.analyze({querySelector:()=>({})});
