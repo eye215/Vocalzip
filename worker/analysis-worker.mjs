@@ -56,6 +56,7 @@ export function signV4({method, path, query = '', headers, payloadHash, region, 
   return 'AWS4-HMAC-SHA256 Credential=' + accessKey + '/' + scope + ', SignedHeaders=' + signed + ', Signature=' + createHmac('sha256', key).update(toSign).digest('hex');
 }
 const clean = v => String(v ?? '').trim();
+const NEEDS_KEY = 'needs SUPABASE_SERVICE_ROLE_KEY (older Supabase Storage file)';
 /** R2 endpoint from R2_ACCOUNT_ID: the 32-character account id, or the S3 endpoint URL pasted whole. */
 export function r2Endpoint(id = env.R2_ACCOUNT_ID, override = env.R2_ENDPOINT) {
   if (override) return clean(override);
@@ -103,7 +104,7 @@ async function getR2(key) {
 }
 /** Older recordings kept in Supabase Storage (single file or parts). */
 async function getStorage(path) {
-  if (!env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('older Supabase Storage file: SUPABASE_SERVICE_ROLE_KEY is not set');
+  if (!clean(env.SUPABASE_SERVICE_ROLE_KEY)) throw Object.assign(new Error(NEEDS_KEY), {setup:true});
   const base = env.STORAGE_ENDPOINT || (env.SUPABASE_URL || 'https://chxnbtiyuyhiywzeshis.supabase.co') + '/storage/v1';
   return download(base + '/object/vocal-recordings/' + encodePath(path), {authorization:'Bearer ' + env.SUPABASE_SERVICE_ROLE_KEY, apikey:env.SUPABASE_SERVICE_ROLE_KEY});
 }
@@ -296,6 +297,12 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
         streak = 0;
       } catch (e) {
         await db.query('rollback').catch(() => {});
+        if (e.setup) {
+          // A missing setting, not a broken file: set aside without using up an attempt or stopping the run,
+          // and not counted against max_jobs. Queued again once the setting exists (see --requeue).
+          await db.query("update public.vocal_analysis_jobs set status = 'failed', attempts = greatest(0, attempts - 1), last_error = $2, locked_at = null, locked_by = null, updated_at = now() where id = $1", [job.id, e.message]);
+          stats.setup = (stats.setup || 0) + 1; taken--; continue;
+        }
         const last = job.attempts >= 3, message = String(e.message || e).slice(0, 300);
         // A retry waits 30 minutes (held as a fresh lock), so one bad moment does not use up every attempt in one run.
         await db.query("update public.vocal_analysis_jobs set status = $2, last_error = $3, locked_at = case when $2 = 'running' then now() else null end, locked_by = case when $2 = 'running' then 'retry-wait' else null end, updated_at = now() where id = $1",
@@ -347,8 +354,8 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       else {
         if (env.WORKER_REQUEUE_NETWORK === '1') {
           // Jobs that only failed because the file could not be reached go back to the queue, attempts reset.
-          const {rowCount} = await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now() where status in ('queued', 'running', 'failed') and (last_error = 'fetch failed' or last_error like 'download network error%')");
-          console.log('analysis worker: ' + rowCount + ' job(s) that failed on the network are queued again');
+          const {rowCount} = await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now() where status in ('queued', 'running', 'failed') and (last_error = 'fetch failed' or last_error like 'download network error%' or (last_error = $1 and $2))", [NEEDS_KEY, !!clean(env.SUPABASE_SERVICE_ROLE_KEY)]);
+          console.log('analysis worker: ' + rowCount + ' job(s) that failed on the network (or waited for a setting now present) are queued again');
         }
         await run({db});
       }
