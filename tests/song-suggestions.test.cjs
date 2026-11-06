@@ -331,7 +331,7 @@ test('30-item pages do not accumulate and keep existing selections between pages
  assert.equal(nodes.get('[data-more]').hidden,true);
  assert.match(nodes.get('[data-page-count]').textContent,/61–75 \/ 전체 75개/);
 });
-test('selection is limited to thirty across pages even when the list contains hundreds',()=>{
+test('selection is limited to one hundred across pages even when the list contains hundreds',()=>{
  const b=browser();b.window.VZ.media.dateOf=()=> '';
  function node(){
   return {children:[],style:{},hidden:false,disabled:false,setAttribute(){},append(...xs){this.children.push(...xs)},
@@ -345,12 +345,12 @@ test('selection is limited to thirty across pages even when the list contains hu
  nodes.set('[data-suggest-list]',listing);
  root.querySelector=x=>nodes.get(x);
  const main={isConnected:true,querySelector:x=>x==='[data-suggest]'?root:null};
- b.api.state.items=Array.from({length:62},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
- b.api.state.chosen=new Set(b.api.state.items.slice(0,30).map(x=>x.id));
- b.api.state.page=1;
+ b.api.state.items=Array.from({length:230},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
+ b.api.state.chosen=new Set(b.api.state.items.slice(0,100).map(x=>x.id));
+ b.api.state.page=4; // files 120-149: none selected yet
  b.api.draw(main);
  const checkbox=listing.children[0].children[0].children[0];
  checkbox.checked=true;checkbox.onchange();
- assert.equal(checkbox.checked,false,'cannot select 31st file');
- assert.equal(b.api.state.chosen.size,30);
+ assert.equal(checkbox.checked,false,'cannot select the 101st file');
+ assert.equal(b.api.state.chosen.size,100);
 });
