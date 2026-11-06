@@ -2,7 +2,8 @@
 (()=>{
 'use strict';
 const V=window.VZ,A=window.VzipArchive,M=V.media,E=V.esc;
-const owner=()=>window.vzipCloudUserId?.()||'';
+// Before sign-in is confirmed (app just opened, offline) the account this device last synced with is used.
+const owner=()=>window.vzipCloudUserId?.()||(()=>{try{return localStorage.getItem('vzip_cloud_linked_user')||''}catch{return ''}})();
 const mine=p=>p.ownerId===owner()&&!!owner();
 const shows=()=> (V.db.performances||[]).filter(mine);
 const get=id=>shows().find(p=>p.id===id);
@@ -46,10 +47,22 @@ async function chooseTake(id){
  panel('대표 테이크 선택',select('기존 녹음','takeId',Object.fromEntries(media.map(m=>[m.id,M.label(m)+' · '+(M.dateOf(m)||'날짜 미상')])),info(s).takeId)+'<p class="small muted">곡 미연결 파일은 보관함에서 먼저 곡을 지정해 주세요. 선택 안 함으로 해제할 수 있어요.</p>',v=>{if(v.takeId&&!media.some(m=>m.id===v.takeId))throw Error('녹음을 다시 선택해 주세요.');updateSong(id,v)});
  }catch(e){message(e)}
 }
+/* A production's days: its sessions, or start~end when no session is entered yet (at most 120 days). */
+function days(p){
+ const set=new Set((p.sessions||[]).map(s=>s.date).filter(Boolean));
+ if(!set.size&&p.start){const a=new Date(p.start+'T12:00:00'),b=new Date((p.end||p.start)+'T12:00:00');for(let d=a,i=0;d<=b&&i<120;d=new Date(d.getTime()+864e5),i++)set.add(V.ymd(d))}
+ return set;
+}
+/* Library recordings marked 공연 on one of the production's days. */
+const stageMedia=(p,media)=>{const d=days(p);return media.filter(m=>M.occasion(m)==='performance'&&d.has(M.dateOf(m))&&!V.db.deleted?.media?.includes(m.id))};
 let filter='';
 V.repertoire={
  toolbar:()=>'<div class="archive-toolbar"><a class="btn secondary" href="#/performances">나의 공연</a><label class="field"><span>레퍼토리 상태</span><select data-rep-filter aria-label="레퍼토리 상태">'+opt(A.states,filter,'전체')+'</select></label></div>',
  matches:s=>!filter||info(s).status===filter,
+ // For the calendar and the song page: this account's productions on a day / with a song.
+ showsOn:date=>shows().filter(p=>p.status!=='cancelled'&&days(p).has(date)),
+ showsForSong:id=>shows().filter(p=>(p.songLinks||[]).some(l=>l.songId===id)),
+ showCard:p=>showCard(p),
  role:s=>info(s).role||'',
  score:s=>A.proficiency({repertoire:info(s)})||0,
  card:s=>{const r=info(s),score=A.proficiency({repertoire:r});return '<span class="archive-card-meta">'+E([r.role,A.states[r.status],score?'숙련도 '+score.toFixed(1)+'/5':''].filter(Boolean).join(' · '))+'</span>'},
@@ -103,7 +116,7 @@ V.route('performances',{title:'나의 공연',tab:'songs',back:true,actions:()=>
  },mount(main){document.querySelector('[data-add-show]').onclick=()=>editShow();main.querySelector('[data-new-show]').onclick=()=>editShow();main.querySelector('[name=year]').onchange=e=>{year=e.target.value;V.render()};V.archiveAssets?.posters(main,shows())}});
 V.route('show',{title:r=>get(r.params[0])?.title||'공연',tab:'songs',back:true,render(r){
  const p=get(r.params[0]);if(!p)return V.empty('mask-happy','공연을 찾을 수 없어요. 로그인 계정을 확인해 주세요.');
- return '<div class="archive-page"><div class="card"><p>'+E([p.start,p.end].filter(Boolean).join(' ~ '))+'</p><p>'+E([p.venue,p.company,p.role,p.casting,p.team,A.stages[p.status]].filter(Boolean).join(' · '))+'</p><p class="archive-note">'+E(p.memo)+'</p><div class="btn-row"><button class="btn secondary" data-edit-show>공연 수정</button><button class="btn ghost" data-delete-show>공연 삭제</button></div></div><h2 class="sec">공연 회차 <button data-add-session>회차 추가</button></h2><div class="list">'+(p.sessions||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time)).map(s=>'<div class="item"><div class="item-main"><b>'+E(s.date+' '+s.time+' '+s.number)+'</b><div class="small">'+E([s.appeared?'출연함':'미출연 / 예정',s.role,s.memo].filter(Boolean).join(' · '))+'</div></div><button class="btn sm ghost" data-edit-session="'+E(s.id)+'">수정</button><button class="btn sm ghost" data-delete-session="'+E(s.id)+'">삭제</button></div>').join('')+'</div><h2 class="sec">공연곡 <button data-link-songs>곡 연결</button></h2><div class="list">'+(p.songLinks||[]).map(l=>'<div class="item"><span class="item-main">'+(l.songId&&V.song(l.songId)?'<a href="#/song/'+E(l.songId)+'">'+E(V.songTitle(l.songId))+'</a>':'<b>'+E(l.title)+' (연결 해제됨)</b>')+'<span class="item-sub">'+E([A.kinds[l.kind],l.key&&'공연키 '+l.key].filter(Boolean).join(' · '))+'</span></span><button class="btn sm ghost" data-edit-link="'+E(l.id)+'">수정</button><button class="btn sm ghost" data-unlink="'+E(l.id)+'">해제</button></div>').join('')+'</div><h2 class="sec">공연 자료</h2><div data-show-assets></div></div>';
+ return '<div class="archive-page"><div class="card"><p>'+E([p.start,p.end].filter(Boolean).join(' ~ '))+'</p><p>'+E([p.venue,p.company,p.role,p.casting,p.team,A.stages[p.status]].filter(Boolean).join(' · '))+'</p><p class="archive-note">'+E(p.memo)+'</p><div class="btn-row"><button class="btn secondary" data-edit-show>공연 수정</button><button class="btn ghost" data-delete-show>공연 삭제</button></div></div><h2 class="sec">공연 회차 <button data-add-session>회차 추가</button></h2><div class="list">'+(p.sessions||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time)).map(s=>'<div class="item"><div class="item-main"><b>'+E(s.date+' '+s.time+' '+s.number)+'</b><div class="small">'+E([s.appeared?'출연함':'미출연 / 예정',s.role,s.memo].filter(Boolean).join(' · '))+'</div></div><button class="btn sm ghost" data-edit-session="'+E(s.id)+'">수정</button><button class="btn sm ghost" data-delete-session="'+E(s.id)+'">삭제</button></div>').join('')+'</div><h2 class="sec">공연곡 <button data-link-songs>곡 연결</button></h2><div class="list">'+(p.songLinks||[]).map(l=>'<div class="item"><span class="item-main">'+(l.songId&&V.song(l.songId)?'<a href="#/song/'+E(l.songId)+'">'+E(V.songTitle(l.songId))+'</a>':'<b>'+E(l.title)+' (연결 해제됨)</b>')+'<span class="item-sub">'+E([A.kinds[l.kind],l.key&&'공연키 '+l.key].filter(Boolean).join(' · '))+'</span></span><button class="btn sm ghost" data-edit-link="'+E(l.id)+'">수정</button><button class="btn sm ghost" data-unlink="'+E(l.id)+'">해제</button></div>').join('')+'</div><h2 class="sec">공연 녹음·영상</h2><div data-show-media><p class="small muted">불러오는 중…</p></div><h2 class="sec">공연 자료</h2><div data-show-assets></div></div>';
  },mount(main,r){
  const id=r.params[0],p=get(id);if(!p)return;
  main.querySelector('[data-edit-show]').onclick=()=>editShow(id);main.querySelector('[data-delete-show]').onclick=()=>removeShow(id);main.querySelector('[data-add-session]').onclick=()=>editSession(id);main.querySelector('[data-link-songs]').onclick=()=>linkSongs(id);
@@ -112,6 +125,16 @@ V.route('show',{title:r=>get(r.params[0])?.title||'공연',tab:'songs',back:true
  main.querySelectorAll('[data-unlink]').forEach(b=>b.onclick=async()=>{if(await V.confirm('공연곡 연결 해제','공연에서 이 곡의 연결만 해제할까요?',{ok:'해제'}))try{save(db=>{const item=writable(db,id);item.songLinks=item.songLinks.filter(l=>l.id!==b.dataset.unlink)})}catch(e){message(e)}});
  main.querySelectorAll('[data-edit-link]').forEach(b=>b.onclick=()=>{const l=p.songLinks.find(x=>x.id===b.dataset.editLink);panel('공연곡 정보',select('구분','kind',A.kinds,l.kind)+field('공연 당시 키','key',l.key),v=>save(db=>{const row=writable(db,id).songLinks.find(x=>x.id===l.id);if(!row)throw Error('연결을 찾지 못했어요.');row.kind=v.kind||'solo';row.key=v.key.trim()}))});
  V.archiveAssets?.mount(main.querySelector('[data-show-assets]'),p);
+ // Recordings marked 공연 on this production's days (from the library), and a one-tap link of their songs.
+ const host=main.querySelector('[data-show-media]');
+ M.list().catch(()=>M.cached?.()||[]).then(media=>{
+  if(!host.isConnected)return;const list=stageMedia(p,media),linked=new Set((p.songLinks||[]).map(l=>l.songId));
+  const missing=[...new Set(list.map(m=>m.songId).filter(id=>id&&V.song(id)&&!linked.has(id)))];
+  host.innerHTML=(list.length?'<div class="list" data-r>'+list.map(V.mediaRow).join('')+'</div>':'<p class="small muted">공연 날짜('+E([...days(p)].sort().slice(0,3).join(', ')+(days(p).size>3?' …':''))+')에 "공연"으로 지정한 녹음이 없어요. 보관함에서 녹음의 종류를 공연으로, 날짜를 공연 날로 맞추면 여기 모여요.</p>')+
+   (missing.length?'<button type="button" class="btn sm secondary" data-link-found>이 녹음들의 곡 '+missing.length+'개를 공연곡으로 연결</button>':'');
+  if(list.length)V.wireMedia(host.querySelector('[data-r]'),list);
+  host.querySelector('[data-link-found]')?.addEventListener('click',()=>{try{save(db=>{const row=writable(db,id);for(const sid of missing){const s=V.song(sid);if(s&&!row.songLinks.some(l=>l.songId===sid))row.songLinks.push({id:V.uid(),songId:sid,title:s.title,show:s.show||'',kind:'solo',key:''})}});V.toast('공연곡 '+missing.length+'개를 연결했어요.')}catch(e){message(e)}});
+ });
  }});
 V.archiveUI={owner,get,shows,save,panel};
 })();
