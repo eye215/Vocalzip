@@ -204,15 +204,21 @@ export async function kindsFor(db) {
   return t.ok ? ['vocal', 'song'] : ['vocal'];
 }
 export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 45 * 60000, maxJobs = 400, log = console.log} = {}) {
-  const started = Date.now(), kinds = await kindsFor(db), stats = {done:0, review:0, skipped:0, failed:0, retry:0};
+  const started = Date.now(), kinds = await kindsFor(db), stats = {done:0, review:0, skipped:0, failed:0, retry:0}, errors = {};
+  let streak = 0, stopped = false; // consecutive failures: the same problem for every file (settings, network) stops the run
   await db.query('select public.vzip_fail_abandoned_jobs()');
   let cached = null; // the decoded file is shared by the song and vocal jobs of the same recording
-  for (let taken = 0; taken < maxJobs && Date.now() - started < budgetMs;) {
+  for (let taken = 0; !stopped && taken < maxJobs && Date.now() - started < budgetMs;) {
     const {rows:jobs} = await db.query('select * from public.vzip_claim_analysis_jobs($1, $2, $3)', [worker, 5, kinds]);
     if (!jobs.length) break;
     // UPDATE … RETURNING has no order: oldest first (song identification before measurements, as claimed).
     jobs.sort((a, b) => (b.kind === 'song') - (a.kind === 'song') || Number(a.id) - Number(b.id));
-    for (const job of jobs) {
+    for (const [i, job] of jobs.entries()) {
+      if (stopped) {
+        // Not tried in this run: back to the queue without using up an attempt.
+        await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = greatest(0, attempts - 1), locked_at = null, locked_by = null, updated_at = now() where id = $1", [job.id]);
+        continue;
+      }
       taken++;
       try {
         const {rows:[row]} = await db.query('select metadata from public.vocal_media where id = $1 and user_id = $2', [job.media_id, job.user_id]);
@@ -224,15 +230,23 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
         await (job.kind === 'vocal' ? vocalJob : songJob)(db, job, row.metadata, audio);
         const {rows:[after]} = await db.query('select status from public.vocal_analysis_jobs where id = $1', [job.id]);
         stats[after.status === 'done' ? 'done' : after.status === 'review' ? 'review' : 'skipped']++;
+        streak = 0;
       } catch (e) {
         await db.query('rollback').catch(() => {});
-        const last = job.attempts >= 3;
-        await finish(db, job, last ? 'failed' : 'queued', null, String(e.message || e).slice(0, 300));
+        const last = job.attempts >= 3, message = String(e.message || e).slice(0, 300);
+        // A retry waits 30 minutes (held as a fresh lock), so one bad moment does not use up every attempt in one run.
+        await db.query("update public.vocal_analysis_jobs set status = $2, last_error = $3, locked_at = case when $2 = 'running' then now() else null end, locked_by = case when $2 = 'running' then 'retry-wait' else null end, updated_at = now() where id = $1",
+          [job.id, last ? 'failed' : 'running', message]);
         stats[last ? 'failed' : 'retry']++;
+        const kind = message.replace(/["'][^"']*["']/g, '…').slice(0, 80); errors[kind] = (errors[kind] || 0) + 1; // own messages, no file names
+        if (++streak >= 8) stopped = true;
       }
     }
   }
   log('analysis worker: ' + JSON.stringify(stats) + ' in ' + Math.round((Date.now() - started) / 1000) + 's');
+  if (Object.keys(errors).length) log('analysis worker errors: ' + JSON.stringify(errors));
+  if (stopped) log('analysis worker: stopped early after 8 failures in a row (same problem for every file?)');
+  stats.errors = errors; stats.stopped = stopped;
   return stats;
 }
 
