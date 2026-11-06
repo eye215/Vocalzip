@@ -116,12 +116,15 @@ async function cleanupPending(owner){
   if(!removeError)forget(entry.id);
  }
 }
+/** Ids of files deleted on any device (vocal_data.payload.deleted.media), read as a single JSON path. */
+async function deletedMediaIds(){const {data,error}=await client.from('vocal_data').select('ids:payload->deleted->media').eq('user_id',user.id).maybeSingle();if(error)throw error;return Array.isArray(data?.ids)?data.ids:[]}
 async function importMedia(file,info={},onProgress,options={}){
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
  if(info.id){
-  const account=user.id,remote=await remoteData();
+  // Only the deleted-file list is read (not the whole record payload): this runs for every file of a bulk upload.
+  const account=user.id,deletedIds=await deletedMediaIds();
   if(user?.id!==account)throw Error('로그인 계정이 변경됐어요.');
-  if(remote?.payload?.deleted?.media?.includes(info.id))throw Error('삭제한 파일은 자동 백업하지 않아요. 다시 가져오려면 새 파일로 등록해 주세요.');
+  if(deletedIds.includes(info.id))throw Error('삭제한 파일은 자동 백업하지 않아요. 다시 가져오려면 새 파일로 등록해 주세요.');
  }
  if(!file||file.size<=0)throw Error('빈 파일은 업로드할 수 없어요.');
  if((window.vzipMediaType?.(file)||file.type||'').startsWith('video/'))throw Error('영상은 음원으로 추출한 뒤 저장해 주세요.');

@@ -358,11 +358,22 @@ test('selection is limited to one hundred across pages even when the list contai
 test('rank one is preselected, manual override and explicit unassigned are preserved',()=>{
  const b=browser(),item={id:'top',name:'take'};
  b.window.VZ.db.songs=[{id:'a',title:'A'},{id:'b',title:'B'}];
- b.api.setResult(item,{candidate:null,matches:[{songId:'a',score:0.1},{songId:'b',score:0.1}]});
+ b.api.setResult(item,{candidate:null,matches:[{songId:'a',score:0.3},{songId:'b',score:0.2}]});
  assert.equal(b.api.resultFor(item).candidate.id,'a');
  b.api.setResult(item,{userSelected:true,candidate:{id:'b'},matches:[{songId:'a',score:0.9}]});
  assert.equal(b.api.resultFor(item).candidate.id,'b');
  b.api.setResult(item,{userSelected:true,candidate:null,matches:[{songId:'a',score:0.9}]});
  assert.equal(b.api.resultFor(item).candidate,null);
  b.api.setResult(item,{candidate:null,matches:[]});assert.equal(b.api.resultFor(item).candidate,null);
+});
+test('top-1 is picked by default only when the lyrics are actually similar; noise is never auto-picked', () => {
+ const b = browser();
+ b.window.VZ.db.songs = [{id:'s1', title:'A'}, {id:'s2', title:'B'}];
+ b.api.state.results.set('weak', {status:'식별 불가', candidate:null, method:'stt', matches:[{songId:'s1', score:0.05}, {songId:'s2', score:0.04}]});
+ b.api.state.results.set('close', {status:'식별 불가', candidate:null, method:'stt', matches:[{songId:'s2', score:0.2}, {songId:'s1', score:0.18}]});
+ b.api.state.results.set('mine', {status:'미분류', candidate:null, userSelected:true, method:'stt', matches:[{songId:'s1', score:0.9}]});
+ assert.equal(b.api.resultFor({id:'weak'}).candidate, null);
+ const close = b.api.resultFor({id:'close'}).candidate;
+ assert.equal(close.id, 's2'); assert.match(close.reason, /20%/); assert.equal(close.level, '확인 필요');
+ assert.equal(b.api.resultFor({id:'mine'}).candidate, null); // the user's own "no song" choice stays
 });

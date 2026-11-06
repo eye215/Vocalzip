@@ -20,6 +20,11 @@ const inlinePlayers=new Map();
 function destroyPlayers(){for(const player of inlinePlayers.values())player.destroy();inlinePlayers.clear()}
 window.addEventListener('hashchange',destroyPlayers);
 window.addEventListener('pagehide',destroyPlayers);
+// Top-1 is picked by default (still applied only after the user confirms), but never below this lyric
+// similarity: under it the best match is noise, and a bulk "추천대로 곡 지정" would assign wrong songs.
+const AUTO_PICK_MIN=0.12;
+function topPick(match){if(match?.candidate)return match.candidate;const top=match?.matches?.[0];return top&&top.score>=AUTO_PICK_MIN?top.songId:null}
+const pickReason=(match,why)=>match?.candidate?why:'유사도 1위 자동 선택 ('+Math.round((match?.matches?.[0]?.score||0)*100)+'%) · 확인 필요';
 function candidateMatches(match){return match.matches.map(x=>({songId:x.songId,score:Math.round(x.score*1000)/1000})).slice(0,3)}
 const state={items:[],referenceItems:[],chosen:new Set(),results:new Map(),recognitions:new Map(),referenceRows:[],cloudReady:false,running:false,cancel:false,page:0,controller:null};
 const owner=()=>window.vzipCloudUserId?.()||'device';
@@ -135,9 +140,9 @@ function writeCache(item,result){try{localStorage.setItem(cacheKey(item),JSON.st
 function fmt(item){return M.label(item)+' · '+(M.dateOf(item)||'날짜 없음');}
 function resultFor(item){
  const result=state.results.get(item.id)||readCache(item)|| (freeMatch(item)?{status:'후보',candidate:freeMatch(item),method:'filename'}:null);
- if(result&&!result.candidate&&!result.userSelected&&result.matches?.length){
+ if(result&&!result.candidate&&!result.userSelected&&result.matches?.length&&result.matches[0].score>=AUTO_PICK_MIN){
   const song=songs().find(s=>s.id===result.matches[0].songId);
-  if(song)return {...result,status:'후보',candidate:{id:song.id,title:VZ.songLabel(song),reason:'유사도 1위 자동 선택',level:'확인 필요'}};
+  if(song)return {...result,status:'후보',candidate:{id:song.id,title:VZ.songLabel(song),reason:'유사도 1위 자동 선택 ('+Math.round(result.matches[0].score*100)+'%) · 확인 필요',level:'확인 필요'}};
  }
  return result;
 }
@@ -244,9 +249,9 @@ async function stt(item,signal,{reference=false}={}){
  if(previous){
   if(reference)return {transcript:previous};
   const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
-  const match=matchTranscripts(previous,references()),found=songs().find(s=>s.id===(match.matches?.[0]?.songId||match.candidate));
+  const match=matchTranscripts(previous,references()),found=songs().find(s=>s.id===topPick(match));
   return {status:found?'후보':'식별 불가',transcript:previous,
-   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,method:'stt',reason:match.reason,matches:candidateMatches(match)};
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,method:'stt',reason:match.reason,matches:candidateMatches(match)};
  }
  if(!window.vzipCloudSignedIn?.())throw Error('로그인이 필요해요.');
  const token=await window.vzipCloudAccessToken?.();
@@ -281,9 +286,9 @@ async function stt(item,signal,{reference=false}={}){
  if(reference)return {transcript};
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
  const match=matchTranscripts(transcript,references());
- const found=songs().find(s=>s.id===(match.matches?.[0]?.songId||match.candidate));
+ const found=songs().find(s=>s.id===topPick(match));
  return {status:found?'후보':'식별 불가',transcript,
-  candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
+  candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,
   method:'stt',reason:match.reason,matches:candidateMatches(match)};
 }
 function controls(main){
@@ -411,13 +416,13 @@ async function rematchCached(main){
  for(const item of state.items){
   const previous=readCache(item);
   if(!previous?.transcript||previous.userSelected||previous.method!=='stt'||['직접 선택','사용자가 유사도 후보 중 선택'].includes(previous.candidate?.reason))continue;
-  const match=matchTranscripts(previous.transcript,refs),found=songs().find(s=>s.id===(match.matches?.[0]?.songId||match.candidate));
+  const match=matchTranscripts(previous.transcript,refs),found=songs().find(s=>s.id===topPick(match));
   const nextMatches=candidateMatches(match);
   const same=JSON.stringify(previous.matches||[])===JSON.stringify(nextMatches) &&
    (previous.candidate?.id||'')===(found?.id||'');
   if(same)continue;
   setResult(item,{...previous,status:found?'후보':'식별 불가',
-   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,
    matches:nextMatches});
   changed++;
  }
