@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'app/song-suggestions.js'
+      - 'song-text-match.mjs'
+      - 'tests/song-text-match.test.mjs'
       - 'stt-clip-browser.mjs'
       - 'tests/stt-clip-browser.test.mjs'
       - 'supabase/functions/vzip-song-stt/**'
@@ -19,6 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/song-suggestions.test.cjs tests/stt-clip-browser.test.mjs
+      - run: node --test tests/song-suggestions.test.cjs tests/stt-clip-browser.test.mjs tests/song-text-match.test.mjs
       - run: node --check stt-clip-browser.mjs
       - run: python3 -m unittest discover -s tools -p test_song_suggestions.py
