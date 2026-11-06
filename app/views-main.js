@@ -429,7 +429,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
   render(r) {
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
-    const tabs = [['timeline', '타임라인'], ['lessons', '레슨'], ['practice', '연습'], ['performance', '공연']];
+    const tabs = [['timeline', '타임라인'], ['lyrics', '가사'], ['lessons', '레슨'], ['practice', '연습'], ['performance', '공연']];
     return '<div class="song-head">' + (s.show ? '<div class="muted">' + esc(s.show) + '</div>' : '') + '<div class="small muted" data-summary></div></div>' +
       '<div class="btn-row" style="margin-bottom:16px"><a class="btn" href="#/record?song=' + esc(s.id) + '"><i class="ph-fill ph-microphone"></i>녹음</a><button type="button" class="btn secondary" data-log><i class="ph ph-timer"></i>기록</button><button type="button" class="btn secondary" data-quick-compare><i class="ph ph-arrows-left-right"></i>비교</button></div>' +
       '<div data-song-growth></div><div class="seg" role="tablist" style="margin-bottom:12px">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
@@ -467,7 +467,28 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       const lessonMedia = media.filter(m => M.occasion(m) === 'lesson'), practiceMedia = media.filter(m => M.occasion(m) === 'practice'), stageMedia = media.filter(m => M.occasion(m) === 'performance');
       const recList = (items, empty) => items.length ? '<div class="list" data-r>' + items.map(VZ.mediaRow).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">' + empty + '</p>';
       if (songTab === 'media') songTab = 'practice';
-      if (songTab === 'lessons') {
+      if (songTab === 'lyrics') {
+        const current = VZ.song(s.id) || s;
+        body.innerHTML = '<div class="card"><div class="row between"><h2 style="margin:0">가사 노트</h2><span class="small muted">곡당 1개 · 자동 저장 아님</span></div>' +
+          '<p class="small muted">직접 붙여넣은 원문은 미분류 파일의 STT 곡 추천에 기준으로 사용돼요. 가사가 없는 곡은 기존 기준 녹음을 사용합니다.</p>' +
+          '<form data-lyrics-form class="stack"><label class="field"><span>가사 원문</span><textarea name="lyrics" rows="11" maxlength="30000" placeholder="이 곡의 가사를 직접 입력하거나 붙여넣기"></textarea></label>' +
+          '<label class="field"><span>한글 해석 / 번역</span><textarea name="translation" rows="6" maxlength="30000" placeholder="직접 번역한 내용을 입력"></textarea></label>' +
+          '<label class="field"><span>발음 · 호흡 · 감정 메모</span><textarea name="lyricNotes" rows="5" maxlength="12000" placeholder="구간별로 연습할 내용"></textarea></label>' +
+          '<button class="btn block" type="submit">가사 저장</button></form></div>';
+        const form = body.querySelector('[data-lyrics-form]');
+        form.elements.lyrics.value = current.lyrics || '';
+        form.elements.translation.value = current.translation || '';
+        form.elements.lyricNotes.value = current.lyricNotes || '';
+        form.onsubmit = e => {
+          e.preventDefault();
+          const lyrics = form.elements.lyrics.value.trim(), translation = form.elements.translation.value.trim(), lyricNotes = form.elements.lyricNotes.value.trim();
+          if (VZ.change(d => {
+            const song = d.songs.find(x => x.id === s.id);
+            if (!song) throw Error('곡을 찾을 수 없어요.');
+            Object.assign(song, {lyrics, translation, lyricNotes});
+          })) VZ.toast('가사를 저장했어요. 이제 미분류 STT 비교에도 사용돼요.');
+        };
+      } else if (songTab === 'lessons') {
         body.innerHTML = '<h2 class="sec" style="margin-top:4px">레슨 피드백</h2>' + (lessons.length ? '<div class="list">' + lessons.map(l => '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="item-main"><span class="item-title">' + esc(VZ.dateLabel(l.date)) + ' ' + VZ.statusBadge(VZ.lessonStatus(l)) + '</span><span class="item-sub">' + esc(fb(l) || '피드백 미작성') + '</span></span><i class="ph ph-caret-right chev"></i></a>').join('') + '</div>' : VZ.empty('chalkboard-teacher', '이 곡과 연결된 레슨이 없어요.')) +
           '<h2 class="sec">레슨 녹음 ' + lessonMedia.length + '</h2>' + recList(lessonMedia, '이 곡의 레슨 녹음이 없어요.') +
           '<h2 class="sec">숙제 <button type="button" data-add-task>+ 숙제 추가</button></h2>' + (tasks.length ? '<div class="list">' + tasks.map(VZ.taskRow).join('') + '</div>' : VZ.empty('check-square', '이 곡의 숙제가 없어요.'));
