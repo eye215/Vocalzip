@@ -236,11 +236,26 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
   return stats;
 }
 
+/** What is wrong with a connection string, without printing it (logs are public): never the password. */
+export function describeDbUrl(raw) {
+  const notes = [];
+  let u; try { u = new URL(raw.trim()); } catch { return 'not a valid URL (it should start with postgresql://)'; }
+  const host = u.hostname, user = decodeURIComponent(u.username), pass = u.password;
+  const pooler = /\.pooler\.supabase\.com$/.test(host), direct = /^db\.[a-z0-9]+\.supabase\.co$/.test(host);
+  notes.push('host=' + (pooler ? 'session/transaction pooler' : direct ? 'DIRECT (use the Session pooler address instead)' : 'other'));
+  notes.push('port=' + (u.port || '5432') + (pooler && u.port === '6543' ? ' (transaction pooler: use Session pooler, port 5432)' : ''));
+  notes.push('user=' + (/^postgres\.[a-z0-9]{20}$/.test(user) ? 'postgres.<project>' : user === 'postgres' ? 'postgres (the pooler needs postgres.<project>)' : 'unexpected form'));
+  notes.push('password=' + (!pass ? 'missing' : /\[|\]|YOUR-PASSWORD/i.test(decodeURIComponent(pass)) ? 'still has [ ] or YOUR-PASSWORD' : 'length ' + decodeURIComponent(pass).length));
+  if (raw !== raw.trim()) notes.push('spaces around the value');
+  if ((raw.match(/@/g) || []).length > 1) notes.push('more than one @: a special character in the password must be written as %40 etc.');
+  return notes.join(', ');
+}
 // CLI: `node worker/analysis-worker.mjs` (work) or `--peek` (writes jobs=<n> for the workflow to skip setup when idle).
 if (import.meta.url === 'file://' + process.argv[1]) {
   if (!env.SUPABASE_DB_URL) { console.log('analysis worker: SUPABASE_DB_URL is not set, nothing to do'); process.exit(0); }
   const db = new pg.Client({connectionString:env.SUPABASE_DB_URL, ssl:env.SUPABASE_DB_SSL === 'off' ? false : {rejectUnauthorized:false}});
-  await db.connect();
+  try { await db.connect(); }
+  catch (e) { console.log('analysis worker: cannot connect to the database (' + e.message + ')'); console.log('check: ' + describeDbUrl(env.SUPABASE_DB_URL)); process.exit(1); }
   try {
     if (process.argv.includes('--peek')) {
       const kinds = await kindsFor(db);
