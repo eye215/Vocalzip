@@ -5,7 +5,7 @@ const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
 
 /* ---------- shared: media list ---------- */
 // Day · length · kind first (they get cut last); the song only when the title doesn't already say it.
-const mediaSub = m => { const song = VZ.songTitle(m.songId) || '', label = M.label(m); return [VZ.dateLabel(M.dateOf(m)), m.durationSeconds ? VZ.clock(m.durationSeconds) : '', M.occasionLabel(M.occasion(m)) + (m.source === 'import' ? '·가져옴' : ''), m.rating ? '★' + m.rating : '', song && !label.includes(song) ? song : '', m.cloud && !m.local ? '클라우드' : ''].filter(Boolean).join(' · '); };
+const mediaSub = m => { const song = VZ.songTitle(m.songId) || '', label = M.label(m); return [VZ.dateLabel(M.dateOf(m)), m.durationSeconds ? VZ.clock(m.durationSeconds) : '', M.occasionLabel(M.occasion(m)) + (m.source === 'import' ? '·가져옴' : ''), m.rating ? '★' + m.rating : '', song && !label.includes(song) ? song : '', m.cloud && !m.local ? '클라우드' : '', m.songSource === 'ai' ? 'AI 곡 지정' : '', !m.songId && VZ.serverReview?.(m.id) ? '곡 확인 필요' : ''].filter(Boolean).join(' · '); };
 VZ.mediaRow = m => '<div data-media="' + esc(m.id) + '"><button type="button" class="item" data-toggle aria-expanded="false"><span class="avatar ' + (M.isVideo(m) ? 'video' : '') + '"><i class="ph ph-' + (M.isVideo(m) ? 'video-camera' : 'waveform') + '"></i></span><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(mediaSub(m)) + '</span></span><i class="ph ph-caret-down chev"></i></button><div class="media-open" hidden style="padding:0 16px 14px"></div></div>';
 /** A slim recording line (▶ title · length) for lists where the recording sits under its record; same tap-to-open player. */
 VZ.mediaMini = m => '<div data-media="' + esc(m.id) + '" class="mini"><button type="button" class="mini-row" data-toggle aria-expanded="false"><i class="ph-fill ph-' + (M.isVideo(m) ? 'video' : 'play-circle') + '"></i><span class="grow ellipsis">' + esc(M.label(m)) + '</span><span class="small muted">' + (Number(m.durationSeconds) > 0 ? esc(VZ.clock(m.durationSeconds)) : '') + '</span><i class="ph ph-caret-down chev"></i></button><div class="media-open" hidden style="padding:4px 0 10px"></div></div>';
@@ -79,6 +79,7 @@ VZ.editMedia = item => {
         const changes = {name:form.name.value.trim() || M.label(item), songId, song:VZ.songLabel(VZ.song(songId)), rating, review:form.review.value, occasion,
           created:d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime() : item.created};
         if (d && date !== M.dateOf(item)) Object.assign(changes, {recordedDate:date, dateSource:'manual'});
+        if (songId !== (item.songId || '')) changes.songSource = 'user'; // the server never changes a user's choice
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;
         try { await M.update(item, changes); M.reserveName(changes.name); Object.assign(item, changes); close(); VZ.toast('저장했어요.'); }
         catch (err) { btn.disabled = false; VZ.toast('저장하지 못했어요: ' + err.message + ' · 입력은 유지돼요.', 'error'); }

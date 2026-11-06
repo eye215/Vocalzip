@@ -1,0 +1,48 @@
+# VOCAL.zip server analysis worker: analyzes new recordings and sorts them into songs after upload, even
+# when the app is closed. Free on GitHub-hosted runners for this public repository.
+# Needs repository secrets (Settings → Secrets and variables → Actions); without SUPABASE_DB_URL it does nothing:
+#   SUPABASE_DB_URL        Supabase → Connect → Session pooler URI (IPv4), with the database password
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY   Cloudflare R2 API token, Object Read only
+#   OPENAI_API_KEY         for song identification (without it only the vocal measurements run)
+#   SUPABASE_SERVICE_ROLE_KEY   optional: older recordings still kept in Supabase Storage
+# Logs show counts only (this repository is public).
+name: Analysis worker
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [analyze]
+permissions:
+  contents: read
+concurrency:
+  group: analysis-worker
+  cancel-in-progress: false
+jobs:
+  work:
+    if: github.repository == 'eye215/Vocalzip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Anything waiting?
+        id: peek
+        run: node worker/analysis-worker.mjs --peek
+      - name: Install ffmpeg
+        if: steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0'
+        run: command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
+      - name: Analyze
+        if: steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node worker/analysis-worker.mjs

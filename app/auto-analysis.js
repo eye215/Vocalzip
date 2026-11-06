@@ -26,6 +26,7 @@ const order = list => list.filter(needs).sort((a, b) => (!!b.songId - !!a.songId
 function idle() {
   if (!enabled() || document.visibilityState !== 'visible' || !VZ.analyzeRecording) return false;
   if (navigator.webdriver && !window.__vzipAutoAnalysis) return false; // automated UI tests opt in explicitly
+  if (VZ.serverAnalysisOn?.()) return false; // the server worker analyzes uploads (app/server-analysis.js)
   if (VZ.isBusy?.() || M.playing?.() || M.backupStatus?.().running || VZ.vocalBatchRunning?.()) return false;
   if (BUSY_ROUTES.test(location.hash) || document.querySelector('.sheet-back')) return false;
   return true;

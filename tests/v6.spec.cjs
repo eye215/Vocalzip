@@ -413,6 +413,49 @@ test('자동 보컬 분석: unmeasured recordings are analyzed in the background
   await expect(page.locator('[data-song-vocal]')).toContainText('분석 3/4개');
 });
 
+test('서버 자동 분석: progress card, AI / needs-a-look labels, live refresh when the server saves, browser analysis stands down', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(async () => {
+    const wav = new Blob([new Uint8Array(64)], {type:'audio/wav'});
+    await window.vzipStorePracticeMedia({id:'ai1', name:'자동 지정된 녹음', created:Date.now(), type:'audio/wav', source:'import', songId:'s1', song:'This Is the Moment — 지킬 앤 하이드', songSource:'ai', blob:wav});
+    await window.vzipStorePracticeMedia({id:'rv1', name:'확인 필요한 녹음', created:Date.now() - 1000, type:'audio/wav', source:'import', blob:wav});
+    window.__jobs = {rows:[
+      {media_id:'ai1', kind:'vocal', status:'done'}, {media_id:'ai1', kind:'song', status:'done'},
+      {media_id:'rv1', kind:'vocal', status:'running'}, {media_id:'rv1', kind:'song', status:'review'},
+      {media_id:'x1', kind:'vocal', status:'failed'}],
+      review:[{media_id:'rv1', result:{top3:[{songId:'s2', score:0.31, title:'On My Own'}], transcript:'on my own pretending he is beside me'}}]};
+    window.vzipCloudUserId = () => 'ui-test-user';
+    window.vzipAnalysisEnqueue = async () => 0;
+    window.vzipAnalysisJobs = async () => JSON.parse(JSON.stringify(window.__jobs));
+    window.vzipAnalysisLive = (onMedia, onJobs) => { window.__live = {onMedia, onJobs}; return () => {}; };
+    VZ.media.invalidate();
+    window.dispatchEvent(new Event('vzip:auth-changed'));
+  });
+  await expect.poll(() => page.evaluate(() => VZ.serverAnalysisOn())).toBe(true);
+  await page.goto('/#/library');
+  const card = page.locator('[data-server-analysis] .srv');
+  await expect(card).toContainText('서버 자동 분석');
+  await expect(card).toContainText('1/3');                      // vocal: 1 done of 3
+  await expect(card).toContainText('곡 자동 지정');
+  await expect(card).toContainText('분석 실패 1건');
+  await expect(card.locator('a[href="#/song-suggest"]')).toContainText('1');
+  await expect(page.locator('[data-media="ai1"]')).toContainText('AI 곡 지정');
+  await expect(page.locator('[data-media="rv1"]')).toContainText('곡 확인 필요');
+  // The server sorts rv1 while the app is open: the change arrives live and the library shows it.
+  await page.evaluate(async () => {
+    // Stand-in for the server's write (Safari stores file bytes differently, so go through the app's own update).
+    const rec = (await VZ.media.list(true)).find(x => x.id === 'rv1');
+    await VZ.media.update(rec, {songId:'s2', song:'On My Own', songSource:'ai'}, {quiet:true});
+    window.__jobs.rows = window.__jobs.rows.map(j => j.media_id === 'rv1' ? {...j, status:'done'} : j); window.__jobs.review = [];
+    window.__live.onJobs(); window.__live.onMedia();
+  });
+  await expect(page.locator('[data-media="rv1"]')).toContainText('On My Own', {timeout:5000});
+  await expect(page.locator('[data-media="rv1"]')).not.toContainText('곡 확인 필요');
+  await expect(card).toContainText('2/3');
+  // The browser's own background analysis leaves the work to the server.
+  expect(await page.evaluate(() => { window.__vzipAutoAnalysis = true; return VZ.autoAnalysisStatus().enabled && VZ.serverAnalysisOn(); })).toBe(true);
+});
+
 test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
