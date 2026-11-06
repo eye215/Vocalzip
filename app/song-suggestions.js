@@ -112,7 +112,18 @@ async function stt(item,signal){
  if(!window.vzipCloudSignedIn?.())throw Error('로그인이 필요해요.');
  const token=await window.vzipCloudAccessToken?.();
  if(!token)throw Error('로그인 세션이 만료됐어요.');
- const form=new FormData();form.append('file',await clip(item,signal),'vocal-clip.wav');
+ const form=new FormData();
+ // For 3–5 minute M4A recordings in R2: Cloudflare extracts 30 seconds
+ // before anything is downloaded to Safari. Never decode the full recording.
+ let excerpt;
+ if(item.storageProvider==='r2' && item.r2Key){
+  if(!window.VzipR2?.clip)throw Error('30초 R2 구간 추출 기능이 배포되지 않았어요.');
+  excerpt=await window.VzipR2.clip(item.r2Key,{time:20,duration:30,signal});
+ } else {
+  // Small local/legacy files keep the existing memory-bounded decoder path.
+  excerpt=new File([await clip(item,signal)],'vocal-clip.wav',{type:'audio/wav'});
+ }
+ form.append('file',excerpt,excerpt.name);
  form.append('songs',JSON.stringify(songs().map(s=>({id:s.id,title:s.title,show:s.show||''})).slice(0,250)));
  const res=await fetch(API,{method:'POST',headers:{Authorization:'Bearer '+token},body:form,signal});
  const data=await res.json().catch(()=>({}));
@@ -228,7 +239,7 @@ async function apply(main){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석하고, 선택한 음원만 30초 STT를 실행해요. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 3~5분 녹음도 Cloudflare에서 30초만 추출해 STT에 전송해요. 미지원 파일은 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
   const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.running=false;state.cancel=false;state.controller=null;state.shown=PAGE_SIZE;
   state.items=(await M.list(true).catch(()=>[])).filter(eligible);
