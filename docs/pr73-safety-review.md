@@ -1,6 +1,6 @@
 # PR #73 safety review — 2026-11-06
 
-Decision: keep Draft, do not merge or activate paid analysis yet.\n\n## 2026-11-06 additional safeguards\n\n- Added `vzipCloudMediaAssignSong` to fetch current cloud metadata, preserve unrelated fields, and compare-and-swap the `updated_at` revision on each song-only write.\n- Added local-first compatibility in `M.assignSongSafe` with explicit song preconditions. Apply now records confirmed successful writes and the post-write version; undo rejects later modifications rather than relying only on matching song ID.\n- Limited each manual analysis action to one paid candidate in the browser; **this is not a secure server-side daily quota or hard dollar limit**.\n- The updated browser and backend integration must pass fresh CI. Before rollout, add durable server-enforced usage reservations/quotas and validate R2 transformations on actual devices.\n
+Decision: keep Draft, do not merge or activate paid analysis yet.\n\n## 2026-11-06 additional safeguards\n\n- Added `vzipCloudMediaAssignSong` to fetch current cloud metadata, preserve unrelated fields, and compare-and-swap the `updated_at` revision on each song-only write.\n- Added local-first compatibility in `M.assignSongSafe` with explicit song preconditions. Apply now records confirmed successful writes and the post-write version; undo rejects later modifications rather than relying only on matching song ID.\n- Limited each manual analysis action to one paid candidate in the browser; **this is not a secure server-side daily quota or hard dollar limit**.\n- Server-side atomic quota is now present: 3 requests/day and 15 total per account. The migration `vzip_song_stt_quota` was successfully applied to VOCAL.zip Supabase on 2026-11-06 and verified to deny table SELECT for authenticated/anon while permitting authenticated-only RPC invocation. The function was deployed as `vzip-song-stt` v8 (JWT validation on). This is a call-count cap, **not** a dollar limit.\n- Keep `STT_ENABLED=false` until the full PR passes UI/browser CI and real Cloudflare excerpt tests; verify the switch in the Supabase dashboard because secrets cannot be read back.\n
 
 ## Fixed in this review
 
@@ -19,7 +19,7 @@ Decision: keep Draft, do not merge or activate paid analysis yet.\n\n## 2026-11-
 - R2 Worker suite: 13 passed, including ownership, default-off gates and successful mocked M4A extraction.
 - Python suite: 4 passed. JavaScript syntax and whitespace checks passed.
 - Original PR head `67bdc2524d11bd4d08e870bafc310d037803f3fd`: UI, Billing and R2 GitHub Actions succeeded. These original runs do not validate the new review commit; inspect its fresh CI separately.
-- No live paid API call, remote transform, deployment, migration, billing-data edit, backup restore or deletion occurred. Live secret/deployment state was not verified.
+- No live paid API call, remote transform, billing-data edit, backup restore or deletion occurred. Later in this task the new quota migration was applied and Supabase Edge Function v8 deployed; secret values remain unreadable.
 
 ## Billing and backup interaction
 
@@ -31,7 +31,7 @@ Decision: keep Draft, do not merge or activate paid analysis yet.\n\n## 2026-11-
 ## Remaining release blockers
 
 1. Review and verify the new account-bound song-only optimistic updates and applied-only undo on real cloud/local devices, including partial cloud/local failures; add integration tests. A crash between successful cloud write and local backup status update still needs recovery support.
-2. Verify actual audio format and duration server-side before paid transcription. Filename/MIME/6 MiB checks do not prove a 30-second excerpt. Add durable request metering/rate limits and an enforceable spending cap; an allowlist alone does not bound repeated/concurrent spending.
+2. Verify actual audio format and duration server-side before paid transcription. Filename/MIME/6 MiB checks do not prove a 30-second excerpt. Atomic request-count limits are now deployed (3 per UTC day / 15 total), but a true monetary cap and robust media-duration validation remain to be implemented; an allowlist alone is not sufficient.
 3. Verify audio-only M4A input through the real Cloudflare transform service and actual iPhone Safari behavior, then assignment/sync/undo against disposable data. Mocks prove our routing and options, not service compatibility or device memory use. Keep paid services off until separately authorized.
 4. Run all checks on the final integration with current main. Local browser tests were not rerun; GitHub Actions covers them. Check deployment compatibility for the new authenticated GET endpoint before any rollout.
 5. Existing R2 development dependencies have three high-severity npm audit entries (Miniflare via sharp/undici). These predate this change and are development tooling, not imported Worker runtime code. Resolve in a controlled dependency update; do not blindly apply the suggested breaking downgrade.
