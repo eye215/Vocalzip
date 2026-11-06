@@ -6,6 +6,8 @@ if (!VZ || !M) return;
 const esc=VZ.esc;
 const API='https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vzip-song-stt';
 const cachePrefix='vzip_song_suggest_v1:';
+const backupPrefix='vzip_song_assignment_backup:';
+const backupPointer='vzip_song_assignment_last';
 const MAX_BYTES=12*1024*1024, PAGE_SIZE=40;
 const state={items:[],chosen:new Set(),results:new Map(),running:false,cancel:false,shown:PAGE_SIZE};
 const plain=s=>String(s||'').toLocaleLowerCase().normalize('NFKC')
@@ -139,6 +141,23 @@ async function analyze(main){
   }
  }finally{state.running=false;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
 }
+async function undo(main){
+ let backup;try{backup=JSON.parse(localStorage.getItem(localStorage.getItem(backupPointer)||'')||'null')}catch{}
+ if(!backup?.rows?.length){VZ.toast('되돌릴 일괄 지정 기록이 없어요.','error');return}
+ if(!await VZ.confirm('곡 지정 되돌리기',backup.rows.length+'개 중 이번 일괄 지정 내용과 같은 곡이 연결된 파일만 이전 상태로 복구합니다.',{ok:'되돌리기'}))return;
+ state.running=true;controls(main);
+ let undone=0,skipped=0,failed=0;
+ try{
+  const fresh=await M.list(true);
+  for(const row of backup.rows){
+   const m=fresh.find(item=>item.id===row.id);
+   if(!m||m.songId!==row.assignedId){skipped++;continue}
+   try{await M.update(m,{songId:row.oldId||'',song:row.oldSong||''},{quiet:true});undone++}catch{failed++}
+  }
+  M.invalidate();window.dispatchEvent(new Event('vzip:media-updated'));
+  state.items=(await M.list(true)).filter(eligible);
+ }finally{state.running=false;main.querySelector('[data-progress]').textContent='되돌림 '+undone+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개';draw(main)}
+}
 async function apply(main){
  const approved=state.items.filter(m=>state.chosen.has(m.id)&&state.results.get(m.id)?.candidate);
  if(!approved.length)return;
@@ -147,6 +166,11 @@ async function apply(main){
  let done=0,skipped=0,failed=0;
  try{
   const fresh=await M.list(true);
+  const changes=approved.map(previous=>({old:fresh.find(x=>x.id===previous.id),newSong:state.results.get(previous.id)?.candidate})).filter(x=>x.old&&eligible(x.old)&&x.newSong&&songs().some(s=>s.id===x.newSong.id));
+  const backup={at:new Date().toISOString(),rows:changes.map(x=>({id:x.old.id,oldId:x.old.songId||'',oldSong:x.old.song||'',assignedId:x.newSong.id}))};
+  if(!backup.rows.length){VZ.toast('지정할 녹음이 없어요.');return}
+  try{const key=backupPrefix+Date.now();localStorage.setItem(key,JSON.stringify(backup));localStorage.setItem(backupPointer,key)}
+  catch{throw Error('변경 전 백업을 저장하지 못했어요. 안전을 위해 곡 지정을 중단합니다.')}
   for(const previous of approved){
    const item=fresh.find(x=>x.id===previous.id),candidate=state.results.get(previous.id)?.candidate;
    if(!item||!eligible(item)||!songs().some(s=>s.id===candidate?.id)){skipped++;continue}
@@ -162,7 +186,7 @@ async function apply(main){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석하고, 선택한 음원만 30초 STT를 실행해요. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석하고, 선택한 음원만 30초 STT를 실행해요. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
   const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.running=false;state.cancel=false;state.shown=PAGE_SIZE;
   state.items=(await M.list(true).catch(()=>[])).filter(eligible);
@@ -174,6 +198,7 @@ VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
   root.querySelector('[data-stop]').onclick=()=>{state.cancel=true;root.querySelector('[data-progress]').textContent='현재 분석이 끝나면 중단합니다.'};
   root.querySelector('[data-analyze]').onclick=()=>analyze(main);
   root.querySelector('[data-apply]').onclick=()=>apply(main);
+  root.querySelector('[data-undo]').onclick=()=>undo(main);
   draw(main);
  }});
 })();
