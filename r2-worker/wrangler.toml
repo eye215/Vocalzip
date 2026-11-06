@@ -15,3 +15,8 @@ ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
 # Secrets are NOT written here. Set them once with:
 #   npx wrangler secret put SIGNING_SECRET
 #   npx wrangler secret put SUPABASE_JWT_SECRET   (only if the project still uses the legacy JWT secret)
+
+# Cloudflare Media Transformations beta; not the R2 bucket binding above.
+# Requires Cloudflare account-level Media Transformations support.
+[media]
+binding = "MEDIA_TRANSFORM"
