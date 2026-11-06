@@ -14,10 +14,13 @@
 (function (root) {
 'use strict';
 const VERSION = 1;
-const SR = 16000, WIN = 1024, NFFT = 2048, HOP = 160, FPS = SR / HOP;   // 64 ms window, 10 ms hop
+// 8 kHz is plenty for the voice (fundamentals ≤ 1.1 kHz, harmonics used up to 3.8 kHz) and makes the
+// analysis ~4× lighter than 16 kHz on a phone. Same 64 ms window and 10 ms steps.
+const SR = 8000, WIN = 512, NFFT = 1024, HOP = 80, FPS = SR / HOP;
 const FMIN = 75, FMAX = 1100, PER_SEMI = 10;
 const NB = Math.ceil(12 * PER_SEMI * Math.log2(FMAX / FMIN)) + 1;
-const H = 10, ALPHA = 0.8, PEAKS = 30, K = 6;
+const H = 8, ALPHA = 0.8, PEAKS = 20, K = 6, SPREAD = 6; // harmonics, peaks and vote spread (bins) per frame
+const LOGH = Array.from({length:H + 1}, (_, h) => h ? Math.log(h) : 0);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 const binOf = f => 12 * PER_SEMI * Math.log2(f / FMIN);
@@ -77,34 +80,38 @@ function track(x, onProgress) {
   const t = fftSetup(NFFT), hann = new Float64Array(WIN);
   for (let i = 0; i < WIN; i++) hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (WIN - 1));
   const re = new Float64Array(NFFT), im = new Float64Array(NFFT), mag = new Float64Array(NFFT / 2 + 1);
-  const sal = new Float64Array(NB), weight = [];
-  for (let d = -PER_SEMI; d <= PER_SEMI; d++) weight.push(Math.cos(Math.PI / 2 * d / PER_SEMI) ** 2);
+  const sal = new Float64Array(NB), weight = [], alphaPow = Array.from({length:H + 1}, (_, h) => ALPHA ** Math.max(0, h - 1)), LOGB = 12 * PER_SEMI / Math.LN2, LOGMIN = Math.log(FMIN);
+  for (let d = -SPREAD; d <= SPREAD; d++) weight.push(Math.cos(Math.PI / 2 * d / SPREAD) ** 2);
   const cand = new Array(frames), peaksOf = new Array(frames), energy = new Float64Array(frames);
   for (let f = 0; f < frames; f++) {
-    re.fill(0); im.fill(0); let e = 0;
-    for (let i = 0; i < WIN; i++) { const v = x[f * HOP + i]; e += v * v; re[i] = v * hann[i]; }
+    let e = 0;
+    for (let i = 0; i < WIN; i++) { const v = x[f * HOP + i]; e += v * v; }
     energy[f] = e / WIN;
+    // Silence (gaps, breaths, fade-outs) has nothing to follow: no FFT, no vote.
+    if (energy[f] < 1e-7) { peaksOf[f] = new Float32Array(0); cand[f] = []; continue; }
+    re.fill(0); im.fill(0);
+    for (let i = 0; i < WIN; i++) re[i] = x[f * HOP + i] * hann[i];
     fft(re, im, t);
     let max = 0;
-    for (let k = 0; k <= NFFT / 2; k++) { mag[k] = Math.hypot(re[k], im[k]); if (mag[k] > max) max = mag[k]; }
+    for (let k = 0; k <= NFFT / 2; k++) { const m = Math.sqrt(re[k] * re[k] + im[k] * im[k]); mag[k] = m; if (m > max) max = m; } // (Math.hypot is slow)
     // Spectral peaks within 40 dB of the frame's loudest, with quadratic (log) interpolation.
     const peaks = [], floor = max * 0.01;
     for (let k = 2; k < NFFT / 2 - 1; k++) {
       const m = mag[k]; if (m < floor || m < mag[k - 1] || m <= mag[k + 1]) continue;
       const a = Math.log(mag[k - 1] + 1e-12), b = Math.log(m + 1e-12), c = Math.log(mag[k + 1] + 1e-12), den = a - 2 * b + c;
       const d = den ? 0.5 * (a - c) / den : 0;
-      const hz = (k + d) * SR / NFFT; if (hz < FMIN || hz > 5000) continue;
+      const hz = (k + d) * SR / NFFT; if (hz < FMIN || hz > 3800) continue;
       peaks.push({hz, amp:Math.exp(b - 0.25 * (a - c) * d)});
     }
     peaks.sort((p, q) => q.amp - p.amp); peaks.length = Math.min(peaks.length, PEAKS);
     const packed = new Float32Array(peaks.length * 2); peaks.forEach((p, i) => { packed[2 * i] = p.hz; packed[2 * i + 1] = p.amp; });
     peaksOf[f] = packed; // typed: a 5-minute song keeps ~7 MB of peaks instead of a million objects
     sal.fill(0);
-    for (const p of peaks) for (let h = 1; h <= H; h++) {
+    for (const p of peaks) { const lp = Math.log(p.hz); for (let h = 1; h <= H; h++) {
       const f0 = p.hz / h; if (f0 < FMIN) break; if (f0 > FMAX) continue;
-      const b = Math.round(binOf(f0)), w = ALPHA ** (h - 1) * p.amp;
-      for (let d = -PER_SEMI; d <= PER_SEMI; d++) { const j = b + d; if (j >= 0 && j < NB) sal[j] += w * weight[d + PER_SEMI]; }
-    }
+      const b = Math.round((lp - LOGH[h] - LOGMIN) * LOGB), w = alphaPow[h] * p.amp;
+      for (let d = -SPREAD; d <= SPREAD; d++) { const j = b + d; if (j >= 0 && j < NB) sal[j] += w * weight[d + SPREAD]; }
+    } }
     // Keep the strongest few local maxima as this frame's candidates.
     const c = [];
     for (let j = 1; j < NB - 1; j++) if (sal[j] > 0 && sal[j] >= sal[j - 1] && sal[j] > sal[j + 1]) c.push([j, sal[j]]);

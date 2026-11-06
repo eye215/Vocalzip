@@ -347,7 +347,7 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   await page.goto('/#/song/s1');
   const card = page.locator('[data-song-vocal]');
   await expect(card).toContainText('분석 0/4개');
-  await card.getByRole('button', {name:/녹음 4개 분석하기/}).click();
+  await card.getByRole('button', {name:/지금 4개 분석하기/}).click();
   await expect(card).toContainText('분석 4/4개', {timeout:120000});
   await expect(card.locator('.vg-chart')).toHaveCount(4);
   // 음정 오차 goes 30 → 5: improved; the MR-only take is hollow and left out.
@@ -374,6 +374,43 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   await page.goto('/#/song/s1');
   await page.locator('[data-song-vocal] .vg-chart').first().locator('a').last().click();
   await expect(page).toHaveURL(/#\/analysis\/t3$/);
+});
+
+test('자동 보컬 분석: unmeasured recordings are analyzed in the background, never during a busy screen, and it can be switched off', async ({page}) => {
+  test.setTimeout(180000);
+  const {synth} = require('./synth-vocal.cjs');
+  const wavOf = ({samples, sr}) => { const b = Buffer.alloc(44 + samples.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 2, 40); for (let i = 0; i < samples.length; i++) b.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(samples[i] * 20000))), 44 + i * 2); return b; };
+  await page.route('**/__take.wav', r => r.fulfill({contentType:'audio/wav', body:wavOf(synth({sr:22050}))}));
+  await page.addInitScript(() => { window.__vzipAutoAnalysis = true; window.__vzipAutoAnalysisDelay = 300; });
+  await boot(page, {media:false});
+  const store = (id, date) => page.evaluate(async ([id, date]) => {
+    await window.vzipStorePracticeMedia({id, name:'연습 ' + id, created:new Date(date + 'T20:00:00').getTime(), recordedDate:date, dateSource:'metadata', type:'audio/wav', source:'practice', songId:'s1', blob:await (await fetch('/__take.wav')).blob(), durationSeconds:20});
+    VZ.media.invalidate(); window.dispatchEvent(new Event('vzip:media-saved'));
+  }, [id, date]);
+  const measured = () => page.evaluate(async () => (await window.vzipReadMedia()).filter(x => x.analysis?.v).map(x => x.id).sort());
+  await store('a1', '2026-10-01'); await store('a2', '2026-11-01');
+  await page.goto('/#/settings');
+  const row = page.locator('[data-auto-analysis]');
+  await expect(row).toContainText('모든 녹음을 분석했어요', {timeout:60000});
+  expect(await measured()).toEqual(['a1', 'a2']);
+  // A busy screen (recording) holds it; leaving it lets it continue.
+  await page.goto('/#/record');
+  await store('a3', '2026-11-05');
+  await page.waitForTimeout(2500);
+  expect(await measured()).toEqual(['a1', 'a2']);
+  await page.goto('/#/home');
+  await expect.poll(measured, {timeout:60000}).toEqual(['a1', 'a2', 'a3']);
+  // Switched off: nothing more is analyzed, and the choice is remembered.
+  await page.goto('/#/settings');
+  await row.locator('[data-auto-toggle]').click();
+  await expect(row.locator('[data-auto-toggle]')).toHaveAttribute('aria-checked', 'false');
+  await store('a4', '2026-11-06');
+  await page.goto('/#/home'); await page.waitForTimeout(2500);
+  expect(await measured()).toEqual(['a1', 'a2', 'a3']);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vzip_auto_analysis_v1')).on)).toBe(false);
+  // The song page shows the background results without pressing anything.
+  await page.goto('/#/song/s1');
+  await expect(page.locator('[data-song-vocal]')).toContainText('분석 3/4개');
 });
 
 test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {

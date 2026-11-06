@@ -13,7 +13,15 @@ const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 const fresh = new Map();          // analyses saved in this session, shown before the library list refreshes
 const batch = {songId:'', running:false, stop:false, done:0, total:0, failed:0, current:''};
-window.addEventListener('vzip:analysis-saved', e => { if (e.detail?.id) fresh.set(e.detail.id, e.detail.analysis); });
+let repaint = null;
+let cmpOpen = false; // the first-vs-latest panel stays open across redraws
+window.addEventListener('vzip:analysis-saved', e => {
+  if (!e.detail?.id) return;
+  fresh.set(e.detail.id, e.detail.analysis);
+  // Redraw only when the result belongs to the song on screen (background analysis runs through every song).
+  if (last?.media.some(m => m.id === e.detail.id)) { clearTimeout(repaint); repaint = setTimeout(() => paint(), 300); }
+});
+VZ.vocalBatchRunning = () => batch.running; // the background analyzer waits for it
 
 /* What is measured, how to read it, and which way is "better" (+1 higher, −1 lower, 0 neither). */
 const METRICS = [
@@ -75,6 +83,7 @@ async function runBatch(song, todo) {
   try {
     for (const m of todo) {
       if (batch.stop) break;
+      if (fresh.has(m.id)) { batch.done++; continue; } // already done in the background
       batch.current = M.label(m); paint();
       try { await VZ.analyzeRecording(m); } catch { batch.failed++; }
       batch.done++; paint();
@@ -100,7 +109,7 @@ VZ.songVocalGrowth = (host, song, media) => {
     body += '<div class="vg-grid">' + METRICS.map(m => spark(m, pts)).join('') + '</div>';
     if (reliable.length >= 2) {
       const first = reliable[0], latest = reliable.at(-1);
-      body += '<details class="vg-cmp"><summary>처음 vs 최근 측정값 비교</summary>' + VZ.measureTable(first.m, latest.m) +
+      body += '<details class="vg-cmp"' + (cmpOpen ? ' open' : '') + '><summary>처음 vs 최근 측정값 비교</summary>' + VZ.measureTable(first.m, latest.m) +
         '<div class="btn-row"><a class="btn sm secondary" href="#/compare?song=' + encodeURIComponent(song.id) + '&a=' + encodeURIComponent(first.m.id) + '&b=' + encodeURIComponent(latest.m.id) + '"><i class="ph ph-headphones"></i>두 녹음 들어 보기</a><button type="button" class="btn sm" data-vg-save><i class="ph ph-floppy-disk"></i>이 비교 저장</button></div></details>';
     }
     const left = pts.length - reliable.length;
@@ -108,7 +117,7 @@ VZ.songVocalGrowth = (host, song, media) => {
   } else body += '<p class="small muted" style="margin:4px 0 0">아직 분석한 녹음이 없어요. 녹음을 분석하면 날짜별로 음정·흔들림·최고음·프레이즈가 어떻게 변했는지 보여 드려요.</p>';
   const action = running
     ? '<div class="vg-run"><span>분석 중 ' + Math.min(batch.done + 1, batch.total) + '/' + batch.total + ' · ' + esc(batch.current) + '</span><button type="button" class="btn sm ghost" data-vg-stop>멈추기</button></div><div class="ana-bar"><span style="width:' + Math.round(batch.done / Math.max(1, batch.total) * 100) + '%"></span></div>'
-    : todo.length ? '<button type="button" class="btn sm secondary block" data-vg-run' + (batch.running ? ' disabled' : '') + '><i class="ph ph-chart-line-up"></i>녹음 ' + todo.length + '개 분석하기 (이 기기에서 · 무료)</button>' : '';
+    : todo.length ? (VZ.autoAnalysisStatus?.().enabled ? '<p class="small muted" style="margin:0 0 6px">앱을 켜 두면 자동으로 하나씩 분석해요. 바로 보려면:</p>' : '') + '<button type="button" class="btn sm secondary block" data-vg-run' + (batch.running ? ' disabled' : '') + '><i class="ph ph-chart-line-up"></i>지금 ' + todo.length + '개 분석하기 (이 기기에서 · 무료)</button>' : '';
   host.innerHTML = '<div class="card vg"><div class="row between"><strong>보컬 측정 변화</strong><span class="small muted">분석 ' + pts.length + '/' + audio.length + '개</span></div>' + body +
     (action ? '<div style="margin-top:10px">' + action + '</div>' : '') +
     '<p class="small muted vg-note">점을 누르면 그 녹음의 음높이 곡선을 볼 수 있어요. 시험판 측정값이라 실제 녹음으로 확인 중이에요.</p></div>';
@@ -117,6 +126,7 @@ VZ.songVocalGrowth = (host, song, media) => {
     runBatch(song, todo);
   });
   host.querySelector('[data-vg-stop]')?.addEventListener('click', () => { batch.stop = true; });
+  host.querySelector('.vg-cmp')?.addEventListener('toggle', e => { cmpOpen = e.target.open; });
   host.querySelector('[data-vg-save]')?.addEventListener('click', () => {
     const first = reliable[0].m, latest = reliable.at(-1).m;
     const entry = {firstId:first.id, secondId:latest.id, firstName:M.label(first), secondName:M.label(latest), firstDate:first.created, secondDate:latest.created, song:song.title, songId:song.id,
