@@ -81,7 +81,7 @@ before(async () => {
   await admin.query('create database ' + dbName);
   db = new pg.Client({connectionString:DB.replace(/\/[^/]*$/, '/' + dbName)}); await db.connect();
   for (const f of ['billing/tests/sql-setup.sql', 'supabase/tests/app-tables.sql', 'billing/migrations/20261104_billing_cloud.sql', 'supabase/migrations/20261106_keep_history.sql', 'supabase/migrations/20261106_song_text_cloud_sync.sql', 'supabase/migrations/20261106_song_text_tombstones.sql',
-    'supabase/migrations/20261106_vzip_song_stt_quota.sql', 'supabase/migrations/20261108_vzip_song_stt_no_limit_usage.sql', 'supabase/migrations/20261109_server_analysis_jobs.sql', 'supabase/migrations/20261110_wake_analysis_worker.sql'])
+    'supabase/migrations/20261106_vzip_song_stt_quota.sql', 'supabase/migrations/20261108_vzip_song_stt_no_limit_usage.sql', 'supabase/migrations/20261109_server_analysis_jobs.sql', 'supabase/migrations/20261110_wake_analysis_worker.sql', 'supabase/migrations/20261111_recheck_review_songs.sql'])
     // Roles are server-wide: a second local run must not fail on "already exists".
     await db.query(readFileSync(ROOT + f, 'utf8').replace(/create role (anon|authenticated) nologin;/g, (_, r) => "do $$ begin if not exists (select 1 from pg_roles where rolname = '" + r + "') then create role " + r + " nologin; end if; end $$;"));
   await db.query("update public.vocal_data set payload = $1 where user_id = $2", [JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}, {id:'s2', title:'Defying Gravity', lyrics:LYRICS_B}], lessons:[], practices:[], assignments:[], categories:[]}), U1]);
@@ -259,6 +259,57 @@ test('An unreachable speech-recognition service is recorded with its cause, and 
   try { await work(); } finally { process.env.OPENAI_BASE = keep; }
   const j = (await jobs('sttnet')).song;
   assert.equal(j.last_error, 'speech recognition network error: connection refused'); assert.equal(Number(j.cost_usd), 0);
+});
+
+test('"곡 확인 필요" is matched again only after lyrics change: no new STT charge, no-singing files left alone', {skip}, async () => {
+  const LYRICS_C = 'Moonlight on the water silver on the sea I can hear you calling softly back to me hold me till the morning let the night be long';
+  const recheck = async (force = false) => (await db.query('select public.vzip_recheck_review_jobs($1) as n', [force])).rows[0].n;
+  const age = () => db.query("update public.vocal_analysis_jobs set updated_at = now() - interval '1 hour' where kind = 'song' and status = 'review'");
+  files.set(key(U1, 'rc1', 'wav'), wav({}));
+  files.set(key(U1, 'rc2', 'wav'), wav({withVoice:false}));
+  await media('rc1', {name:'아직 모르는 곡', storageProvider:'r2', r2Key:key(U1, 'rc1', 'wav'), analysis:{v:1}});
+  await media('rc2', {name:'반주만', storageProvider:'r2', r2Key:key(U1, 'rc2', 'wav'), analysis:{v:1}});
+  await db.query("insert into public.vocal_song_texts (user_id, kind, record_id, transcript, source) values ($1, 'recognition', 'rc1', 'moonlight on the water silver on the sea I can hear you calling softly', 'stt')", [U1]);
+  await work();
+  assert.equal((await jobs('rc1')).song.status, 'review');
+  assert.equal((await jobs('rc2')).song.status, 'review');
+  assert.equal((await jobs('rc2')).song.result.reason, 'no singing found');
+  const sig = (await db.query("select refs_sig from public.vocal_analysis_jobs where media_id = 'rc1' and kind = 'song'")).rows[0].refs_sig;
+  assert.match(sig, /^[0-9a-f]{32}$/, 'the worker remembers what it compared with');
+
+  // Nothing changed: nothing is queued again, however long it waits.
+  await age();
+  assert.equal(await recheck(), 0);
+  // New lyrics, but just now edited jobs rest first (30 minutes).
+  const {rows:[d]} = await db.query('select payload from public.vocal_data where user_id = $1', [U1]);
+  d.payload.songs.push({id:'s3', title:'Moonlight', lyrics:LYRICS_C});
+  await db.query('update public.vocal_data set payload = $2 where user_id = $1', [U1, JSON.stringify(d.payload)]);
+  await db.query("update public.vocal_analysis_jobs set updated_at = now() where media_id = 'rc1' and kind = 'song'");
+  const before = await recheck();
+  assert.equal((await jobs('rc1')).song.status, 'review', 'rested less than 30 minutes');
+  await age();
+  assert.ok(await recheck() + before >= 1);
+  assert.equal((await jobs('rc1')).song.status, 'queued');
+  assert.equal((await jobs('rc2')).song.status, 'review', 'no singing: the audio has not changed, so neither would the answer');
+
+  const paid = sttCalls;
+  await work();
+  assert.equal(sttCalls, paid, 'the saved transcript is reused');
+  const after = await jobs('rc1');
+  assert.equal(after.song.status, 'done');
+  assert.equal((await row('rc1')).songId, 's3');
+  assert.equal((await db.query("select rechecks from public.vocal_analysis_jobs where media_id = 'rc1' and kind = 'song'")).rows[0].rechecks, 1);
+
+  // A recording the user sorted meanwhile is never queued again; force re-queues the rest once.
+  await age();
+  assert.equal(await recheck(), 0, 'fingerprints are current again');
+  const forced = await recheck(true);
+  assert.ok(forced >= 0);
+  assert.equal((await jobs('rc2')).song.status, 'review');
+  // The app cannot call either function.
+  const {rows:[perm]} = await db.query("select has_function_privilege('authenticated', 'public.vzip_recheck_review_jobs(boolean, integer)', 'execute') as r, has_function_privilege('authenticated', 'public.vzip_song_refs_sig(uuid)', 'execute') as s");
+  assert.deepEqual(perm, {r:false, s:false});
+  await db.query("update public.vocal_analysis_jobs set status = 'review', locked_at = null, locked_by = null where status = 'queued' and kind = 'song'");
 });
 
 test('Supabase wakes the GitHub worker only when recordings wait, no worker is busy and none was just started', {skip}, async () => {

@@ -191,7 +191,20 @@ async function transcribe(wav) {
 }
 
 /* ---------- jobs ---------- */
+// Lyrics and references are read once per owner for a short while: a re-check of hundreds of 'review' jobs of
+// one account then reads the account's data once, not once per recording.
+const refsCache = new Map(), REFS_TTL_MS = 60000;
 async function references(db, owner) {
+  const hit = refsCache.get(owner);
+  if (hit && Date.now() - hit.at < REFS_TTL_MS) return hit.value;
+  // Fingerprint first: if lyrics change while they are being read, the stored fingerprint is the older one and the
+  // job is simply matched once more later (never the other way round).
+  const sig = await db.query('select public.vzip_song_refs_sig($1) as s', [owner]).then(r => r.rows[0]?.s ?? null, () => null);
+  const value = {...await readReferences(db, owner), sig};
+  refsCache.set(owner, {at:Date.now(), value});
+  return value;
+}
+async function readReferences(db, owner) {
   const {rows:[data]} = await db.query('select payload from public.vocal_data where user_id = $1', [owner]);
   const payload = data?.payload || {}, gone = new Set(payload.deleted?.songs || []);
   const songs = (payload.songs || []).filter(s => s?.id && !gone.has(s.id));
@@ -221,7 +234,10 @@ async function songJob(db, job, meta, audio) {
   // 1–2. A transcript paid for before (by the app or an earlier attempt) is reused: never paid twice.
   const saved = await db.query("select transcript from public.vocal_song_texts where user_id = $1 and kind = 'recognition' and record_id = $2 and deleted_at is null", [owner, job.media_id]).catch(() => ({rows:[]}));
   let transcript = saved.rows[0]?.transcript ?? job.result?.transcript ?? null, cost = 0;
-  const {songs, refs} = await references(db, owner);
+  const {songs, refs, sig} = await references(db, owner);
+  // Remember what this job was matched with; a later change of lyrics or references queues it again
+  // (vzip_recheck_review_jobs). Without the column (migration not run yet) nothing changes.
+  if (sig) await db.query('update public.vocal_analysis_jobs set refs_sig = $2 where id = $1', [job.id, sig]).catch(() => {});
   if (!refs.length) return finish(db, job, 'review', {reason:'no lyrics to compare', transcript});
   if (transcript == null) {
     if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
@@ -264,6 +280,7 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
   const only = clean(env.WORKER_KINDS).split(',').map(clean).filter(Boolean);
   const started = Date.now(), kinds = (await kindsFor(db)).filter(k => !only.length || only.includes(k)), stats = {done:0, review:0, skipped:0, failed:0, retry:0}, errors = {};
   let streak = 0, stopped = false; // consecutive failures: the same problem for every file (settings, network) stops the run
+  refsCache.clear(); // each run reads the lyrics fresh
   await db.query('select public.vzip_fail_abandoned_jobs()');
   let cached = null; // the decoded file is shared by the song and vocal jobs of the same recording
   for (let taken = 0; !stopped && taken < maxJobs && Date.now() - started < budgetMs;) {
