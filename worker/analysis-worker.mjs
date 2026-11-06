@@ -55,13 +55,50 @@ export function signV4({method, path, query = '', headers, payloadHash, region, 
   const key = hmac(hmac(hmac(hmac('AWS4' + secretKey, day), region), service), 'aws4_request');
   return 'AWS4-HMAC-SHA256 Credential=' + accessKey + '/' + scope + ', SignedHeaders=' + signed + ', Signature=' + createHmac('sha256', key).update(toSign).digest('hex');
 }
+const clean = v => String(v ?? '').trim();
+/** R2 endpoint from R2_ACCOUNT_ID: the 32-character account id, or the S3 endpoint URL pasted whole. */
+export function r2Endpoint(id = env.R2_ACCOUNT_ID, override = env.R2_ENDPOINT) {
+  if (override) return clean(override);
+  const v = clean(id);
+  if (/^[0-9a-f]{32}$/i.test(v)) return 'https://' + v.toLowerCase() + '.r2.cloudflarestorage.com';
+  const m = /^(?:https?:\/\/)?([0-9a-f]{32})\.(?:[a-z]+\.)?r2\.cloudflarestorage\.com\b/i.exec(v);
+  if (m) return 'https://' + m[1].toLowerCase() + '.r2.cloudflarestorage.com';
+  throw new Error('R2_ACCOUNT_ID should be the 32-character account id (' + describeSecret(v) + ')');
+}
+/** The shape of a secret, never its value (logs are public). */
+export function describeSecret(v) {
+  const s = String(v ?? '');
+  if (!s) return 'missing';
+  const kinds = [s.length + ' chars'];
+  if (s !== s.trim()) kinds.push('spaces or line breaks around it');
+  if (/^https?:\/\//i.test(s.trim())) kinds.push('starts with http');
+  if (/\s/.test(s.trim())) kinds.push('spaces inside');
+  if (/^[0-9a-f]+$/i.test(s.trim())) kinds.push('hex');
+  return kinds.join(', ');
+}
+/** Checks the settings before any job is touched; returns notes for the log (shapes only). */
+export function preflight() {
+  const notes = [], problems = [];
+  if (!env.R2_ENDPOINT) {
+    try { const host = new URL(r2Endpoint()).host; notes.push('R2 endpoint host ok (' + host.replace(/^[0-9a-f]{32}/, '<account>') + ')'); }
+    catch (e) { problems.push(e.message); }
+    for (const [name, len] of [['R2_ACCESS_KEY_ID', 32], ['R2_SECRET_ACCESS_KEY', 64]]) {
+      const v = clean(env[name]);
+      if (!v) problems.push(name + ' is missing');
+      else if (v.length !== len) notes.push(name + ': ' + describeSecret(env[name]) + ' (R2 keys are usually ' + len + ')');
+      else notes.push(name + ' set (' + len + ' chars)');
+    }
+  }
+  notes.push('OPENAI_API_KEY ' + (clean(env.OPENAI_API_KEY) ? 'set' : 'missing (song identification off)'));
+  return {notes, problems};
+}
 async function getR2(key) {
   if (!/^u\/[0-9a-f-]{36}\//.test(key) || key.includes('..')) throw new Error('R2 key is outside a user folder');
-  const base = env.R2_ENDPOINT || 'https://' + env.R2_ACCOUNT_ID + '.r2.cloudflarestorage.com';
+  const base = r2Endpoint();
   const url = new URL(base), path = '/' + (env.R2_BUCKET || 'vocalzip-media') + '/' + encodePath(key);
   const amzDate = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
   const headers = {host:url.host, 'x-amz-content-sha256':'UNSIGNED-PAYLOAD', 'x-amz-date':amzDate};
-  const authorization = signV4({method:'GET', path, headers, payloadHash:'UNSIGNED-PAYLOAD', region:'auto', service:'s3', accessKey:env.R2_ACCESS_KEY_ID, secretKey:env.R2_SECRET_ACCESS_KEY});
+  const authorization = signV4({method:'GET', path, headers, payloadHash:'UNSIGNED-PAYLOAD', region:'auto', service:'s3', accessKey:clean(env.R2_ACCESS_KEY_ID), secretKey:clean(env.R2_SECRET_ACCESS_KEY)});
   return download(url.origin + path, {...headers, authorization});
 }
 /** Older recordings kept in Supabase Storage (single file or parts). */
@@ -70,8 +107,23 @@ async function getStorage(path) {
   const base = env.STORAGE_ENDPOINT || (env.SUPABASE_URL || 'https://chxnbtiyuyhiywzeshis.supabase.co') + '/storage/v1';
   return download(base + '/object/vocal-recordings/' + encodePath(path), {authorization:'Bearer ' + env.SUPABASE_SERVICE_ROLE_KEY, apikey:env.SUPABASE_SERVICE_ROLE_KEY});
 }
+/** "fetch failed" says nothing: name the cause (DNS, refused, reset, timeout, TLS, bad URL). */
+export function networkCause(e) {
+  // Node nests the real error: cause, cause.cause, or AggregateError.errors (one per address tried).
+  const find = x => x && (x.code || find(x.cause) || (x.errors || []).map(find).find(Boolean));
+  const c = e?.cause, code = String(find(c) || e?.code || '');
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError' || /TIMEOUT/i.test(code)) return 'timeout' + (code ? ' ' + code : '');
+  if (/ENOTFOUND|EAI_AGAIN/.test(code)) return 'DNS ' + code + ' (host name not found: check R2_ACCOUNT_ID)';
+  if (/ECONNREFUSED/.test(code)) return 'connection refused';
+  if (/ECONNRESET|UND_ERR_SOCKET/.test(code)) return 'connection reset ' + code;
+  if (/CERT|SSL|TLS|SIGNATURE|VERIFY/i.test(code + ' ' + (c?.message || ''))) return 'TLS ' + code;
+  if (/Invalid URL|ERR_INVALID_URL/i.test(code + ' ' + (c?.message || e?.message || ''))) return 'invalid URL';
+  return (code || c?.name || e?.name || 'unknown').toString().slice(0, 40);
+}
 async function download(url, headers) {
-  const res = await fetch(url, {headers, signal:AbortSignal.timeout(120000)});
+  let res;
+  try { res = await fetch(url, {headers, signal:AbortSignal.timeout(120000)}); }
+  catch (e) { throw new Error('download network error: ' + networkCause(e)); }
   if (!res.ok) throw new Error('download failed (' + res.status + ')');
   if (Number(res.headers.get('content-length')) > MAX_BYTES) throw new Error('file too large');
   const bytes = Buffer.from(await res.arrayBuffer());
@@ -203,13 +255,14 @@ export async function kindsFor(db) {
   const {rows:[t]} = await db.query("select to_regclass('public.vocal_song_texts') is not null and to_regclass('public.vzip_song_stt_quota') is not null as ok");
   return t.ok ? ['vocal', 'song'] : ['vocal'];
 }
-export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 45 * 60000, maxJobs = 400, log = console.log} = {}) {
-  const started = Date.now(), kinds = await kindsFor(db), stats = {done:0, review:0, skipped:0, failed:0, retry:0}, errors = {};
+export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 45 * 60000, maxJobs = Number(env.WORKER_MAX_JOBS) || 400, log = console.log, verbose = env.WORKER_VERBOSE === '1'} = {}) {
+  const only = clean(env.WORKER_KINDS).split(',').map(clean).filter(Boolean);
+  const started = Date.now(), kinds = (await kindsFor(db)).filter(k => !only.length || only.includes(k)), stats = {done:0, review:0, skipped:0, failed:0, retry:0}, errors = {};
   let streak = 0, stopped = false; // consecutive failures: the same problem for every file (settings, network) stops the run
   await db.query('select public.vzip_fail_abandoned_jobs()');
   let cached = null; // the decoded file is shared by the song and vocal jobs of the same recording
   for (let taken = 0; !stopped && taken < maxJobs && Date.now() - started < budgetMs;) {
-    const {rows:jobs} = await db.query('select * from public.vzip_claim_analysis_jobs($1, $2, $3)', [worker, 5, kinds]);
+    const {rows:jobs} = await db.query('select * from public.vzip_claim_analysis_jobs($1, $2, $3)', [worker, Math.min(5, maxJobs - taken), kinds]);
     if (!jobs.length) break;
     // UPDATE … RETURNING has no order: oldest first (song identification before measurements, as claimed).
     jobs.sort((a, b) => (b.kind === 'song') - (a.kind === 'song') || Number(a.id) - Number(b.id));
@@ -224,11 +277,21 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
         const {rows:[row]} = await db.query('select metadata from public.vocal_media where id = $1 and user_id = $2', [job.media_id, job.user_id]);
         if (!row) { await finish(db, job, 'skipped', {reason:'recording deleted'}); stats.skipped++; continue; }
         const audio = async () => {
-          if (cached?.key !== job.user_id + '/' + job.media_id) cached = {key:job.user_id + '/' + job.media_id, samples:await decode(await readMedia(row.metadata, job.user_id))};
+          if (cached?.key !== job.user_id + '/' + job.media_id) {
+            const bytes = await readMedia(row.metadata, job.user_id);
+            if (verbose) log('  read ok: ' + (bytes.length / 1048576).toFixed(1) + ' MB from ' + (row.metadata.storageProvider === 'r2' ? 'R2' : 'Supabase Storage'));
+            const samples = await decode(bytes);
+            if (verbose) log('  decoded: ' + (samples.length / 16000).toFixed(1) + ' s of audio');
+            cached = {key:job.user_id + '/' + job.media_id, samples};
+          }
           return cached.samples;
         };
         await (job.kind === 'vocal' ? vocalJob : songJob)(db, job, row.metadata, audio);
         const {rows:[after]} = await db.query('select status from public.vocal_analysis_jobs where id = $1', [job.id]);
+        if (verbose) {
+          const {rows:[m]} = await db.query("select (metadata -> 'analysis' ->> 'v') is not null as measured, coalesce(metadata ->> 'songId', '') <> '' as has_song from public.vocal_media where id = $1 and user_id = $2", [job.media_id, job.user_id]);
+          log('  ' + job.kind + ' job → ' + after.status + ' · saved in Supabase: measurement ' + (m.measured ? 'yes' : 'no') + ', song ' + (m.has_song ? 'yes' : 'no'));
+        }
         stats[after.status === 'done' ? 'done' : after.status === 'review' ? 'review' : 'skipped']++;
         streak = 0;
       } catch (e) {
@@ -276,6 +339,19 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       const {rows:[r]} = await db.query("select count(*)::int as n from public.vocal_analysis_jobs where attempts < 3 and kind = any($1) and (status = 'queued' or (status = 'running' and locked_at < now() - interval '30 minutes'))", [kinds]);
       console.log('analysis worker: ' + r.n + ' job(s) waiting');
       if (env.GITHUB_OUTPUT) (await import('node:fs')).appendFileSync(env.GITHUB_OUTPUT, 'jobs=' + r.n + '\n');
-    } else await run({db});
+    } else {
+      // Settings first: with a broken R2 setting no job is touched (nothing used up, nothing marked failed).
+      const {notes, problems} = preflight();
+      for (const n of notes) console.log('settings: ' + n);
+      if (problems.length) { for (const p of problems) console.log('settings problem: ' + p); process.exitCode = 1; }
+      else {
+        if (env.WORKER_REQUEUE_NETWORK === '1') {
+          // Jobs that only failed because the file could not be reached go back to the queue, attempts reset.
+          const {rowCount} = await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now() where status in ('queued', 'running', 'failed') and (last_error = 'fetch failed' or last_error like 'download network error%')");
+          console.log('analysis worker: ' + rowCount + ' job(s) that failed on the network are queued again');
+        }
+        await run({db});
+      }
+    }
   } finally { await db.end(); }
 }
