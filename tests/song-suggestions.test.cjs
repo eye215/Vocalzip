@@ -68,7 +68,7 @@ function browser(){
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
   fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
  const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers};})();');
+  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor};})();');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
  return {api:window.test,window,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
@@ -271,9 +271,9 @@ test('inline playback is lazy, same page shows TOP3 and redraw releases media',(
   matches:[{songId:'a',score:0.88},{songId:'b',score:0.65},{songId:'c',score:0.31}]});
  b.api.draw(main);
  assert.equal(made.length,0,'player must not fetch/decode media on drawing 40 items');
- const card=listing.children[0],playWrap=card.children.find(x=>x.children?.[0]?.textContent==='▶ 녹음 듣기');
+ const card=listing.children[0],playWrap=card.children.find(x=>x.children?.[0]?.children?.[0]?.textContent==='▶ 녹음 듣기');
  assert.ok(playWrap,'inline listen toggle should be present');
- const listen=playWrap.children[0],host=playWrap.children[1];
+ const listen=playWrap.children[0].children[0],host=playWrap.children[1];
  assert.equal(host.hidden,true);
  listen.onclick();
  assert.equal(made.length,1);
@@ -353,4 +353,16 @@ test('selection is limited to one hundred across pages even when the list contai
  checkbox.checked=true;checkbox.onchange();
  assert.equal(checkbox.checked,false,'cannot select the 101st file');
  assert.equal(b.api.state.chosen.size,100);
+});
+
+test('rank one is preselected, manual override and explicit unassigned are preserved',()=>{
+ const b=browser(),item={id:'top',name:'take'};
+ b.window.VZ.db.songs=[{id:'a',title:'A'},{id:'b',title:'B'}];
+ b.api.setResult(item,{candidate:null,matches:[{songId:'a',score:0.1},{songId:'b',score:0.1}]});
+ assert.equal(b.api.resultFor(item).candidate.id,'a');
+ b.api.setResult(item,{userSelected:true,candidate:{id:'b'},matches:[{songId:'a',score:0.9}]});
+ assert.equal(b.api.resultFor(item).candidate.id,'b');
+ b.api.setResult(item,{userSelected:true,candidate:null,matches:[{songId:'a',score:0.9}]});
+ assert.equal(b.api.resultFor(item).candidate,null);
+ b.api.setResult(item,{candidate:null,matches:[]});assert.equal(b.api.resultFor(item).candidate,null);
 });

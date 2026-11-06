@@ -33,11 +33,32 @@ function merge(primary, secondary) {
     if (gone.size) deleted[k] = [...gone].slice(-5000);
     added[k] = fromSecondary;
   }
+  const media = [...new Set([...(a.deleted?.media || []), ...(b.deleted?.media || [])])];
+  if (media.length) deleted.media = media;
   out.deleted = deleted;
+  unlinkMedia(out, media);
   return {data:out, added};
 }
+/** File deletion removes links, never lesson/practice text, minutes or comparison snapshots. */
+function unlinkMedia(data, ids) {
+  if (!ids.length) return data;
+  const gone = new Set(ids);
+  if (data.practices) data.practices = data.practices.map(p => p.mediaIds ? {...p, mediaIds:p.mediaIds.filter(id => !gone.has(id))} : p);
+  if (data.lessons) data.lessons = data.lessons.map(l => l.recordings ? {...l, recordings:l.recordings.filter(r => !gone.has(r.id))} : l);
+  if (data.comparisonReports) data.comparisonReports = data.comparisonReports.map(original => {
+    const r = {...original};
+    for (const key of ['firstId', 'secondId']) if (gone.has(r[key])) r[key] = '';
+    return r;
+  });
+  return data;
+}
+function deleteMedia(data, id) {
+  data.deleted ||= {};
+  data.deleted.media = [...new Set([...(data.deleted.media || []), id])];
+  return unlinkMedia(data, [id]);
+}
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
-const api = {COLLECTIONS, merge, valid, count, same};
+const api = {COLLECTIONS, merge, valid, count, same, deleteMedia};
 root.VzipDataMerge = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

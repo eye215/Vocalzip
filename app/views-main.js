@@ -25,7 +25,7 @@ VZ.wireMedia = (host, items) => {
       host.querySelectorAll('.media-open:not([hidden])').forEach(p => { if (p !== panel) { p.hidden = true; p.previousSibling.setAttribute('aria-expanded', 'false'); p._player?.destroy(); } });
       panel.hidden = !open; btn.setAttribute('aria-expanded', String(open));
       if (open) {
-        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<div class="chips" style="margin-top:8px"><button type="button" class="chip" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" class="chip" data-analyze><i class="ph ph-chart-line"></i> 분석</button><button type="button" class="chip" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" class="chip" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" class="chip" data-delete><i class="ph ph-trash"></i> 삭제</button></div>';
+        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<div class="chips" style="margin-top:8px"><button type="button" class="chip" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" class="chip" data-analyze><i class="ph ph-chart-line"></i> 분석</button><button type="button" class="chip" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" class="chip" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" class="chip" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div>';
         panel._player = M.player(panel.querySelector('[data-p]'), item, {tools:true});
         panel._player.play();
       } else panel._player?.destroy();
@@ -35,8 +35,14 @@ VZ.wireMedia = (host, items) => {
     if (e.target.closest('[data-compare]')) VZ.nav('#/compare?a=' + encodeURIComponent(item.id) + (item.songId ? '&song=' + encodeURIComponent(item.songId) : ''));
     if (e.target.closest('[data-download]')) M.download(item).catch(err => VZ.toast('저장하지 못했어요: ' + err.message, 'error'));
     if (e.target.closest('[data-delete]')) {
-      if (!await VZ.confirm('파일 삭제', '"' + M.label(item) + '"을(를) 기기와 클라우드에서 영구 삭제할까요? 연결된 연습·레슨 기록에서도 재생할 수 없게 돼요.', {ok:'영구 삭제', danger:true})) return;
-      try { row.querySelector('.media-open')._player?.destroy(); await M.remove(item); VZ.toast('삭제했어요.'); } catch (err) { VZ.toast('삭제하지 못했어요: ' + err.message, 'error'); }
+      const button = e.target.closest('[data-delete]');
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        if (!await M.confirmRemove(item)) return;
+        await M.remove(item); row.remove(); VZ.toast('파일을 삭제했어요. 연습·레슨 기록은 남아 있어요.');
+      } catch (err) { VZ.toast('삭제를 완료하지 못했어요: ' + err.message + ' 다시 시도해 주세요.', 'error'); }
+      finally { button.disabled = false; }
     }
   });
 };
