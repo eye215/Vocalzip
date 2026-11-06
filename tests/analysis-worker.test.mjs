@@ -235,3 +235,17 @@ test('An unreachable R2 address is recorded as a network error with its cause', 
     assert.equal((await jobs('net1')).vocal.last_error, 'download network error: connection refused');
   } finally { process.env.R2_ENDPOINT = keep; }
 });
+
+test('Older Supabase Storage files without the service key are set aside (no attempt used, run continues to R2 files)', {skip}, async () => {
+  const user = '22222222-2222-4222-8222-222222222222';
+  await db.query("update public.vocal_analysis_jobs set status = 'done' where user_id = $1", [user]); // earlier test's jobs out of the way
+  await media('old1', {name:'x', path:user + '/old1.wav', songId:'s1'}, user);
+  files.set(key(user, 'new1', 'wav'), wav({}));
+  await media('new1', {name:'y', storageProvider:'r2', r2Key:key(user, 'new1', 'wav'), songId:'s1'}, user);
+  const keep = process.env.WORKER_MAX_JOBS; process.env.WORKER_MAX_JOBS = '1';
+  try { const stats = await work(); assert.equal(stats.setup, 1); assert.equal(stats.done, 1); }
+  finally { if (keep == null) delete process.env.WORKER_MAX_JOBS; else process.env.WORKER_MAX_JOBS = keep; }
+  const o = (await jobs('old1')).vocal, n = (await jobs('new1')).vocal;
+  assert.deepEqual([o.status, o.attempts, o.last_error], ['failed', 0, 'needs SUPABASE_SERVICE_ROLE_KEY (older Supabase Storage file)']);
+  assert.equal(n.status, 'done');
+});
