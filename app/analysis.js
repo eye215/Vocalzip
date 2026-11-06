@@ -78,7 +78,8 @@ function chart(r) {
   return '<div class="ana-chart"><div class="ana-labels">' + labels + '</div><div class="ana-scroll" data-scroll><svg width="' + w + '" height="' + H + '" viewBox="0 0 ' + w + ' ' + H + '" role="img" aria-label="시간에 따른 음높이 곡선">' + grid + '<path d="' + d + '" class="curve"/>' + dots + '<line class="head" data-head x1="0" x2="0" y1="0" y2="' + H + '"/></svg></div></div>' +
     '<p class="small muted ana-legend"><span><span class="k ok"></span>±20</span><span><span class="k warn"></span>±35</span><span><span class="k bad"></span>그 밖 (cent)</span><span>· 곡선을 누르면 그 위치부터 재생</span></p>';
 }
-const card = (icon, title, value, sub, help) => '<div class="card ana-card"><div class="ana-k"><i class="ph ph-' + icon + '"></i>' + title + '</div><div class="ana-v">' + value + '</div>' + (sub ? '<div class="small">' + sub + '</div>' : '') + (help ? '<div class="small muted">' + help + '</div>' : '') + '</div>';
+const HELP_KEY = {'음정 정확도':'into', '지속음 흔들림':'wob', '비브라토':'vib', '음역':'range', '프레이즈 길이':'phr'};
+const card = (icon, title, value, sub, help) => '<div class="card ana-card"><div class="ana-k"><i class="ph ph-' + icon + '"></i>' + title + (HELP_KEY[title] && VZ.metricInfo ? VZ.metricInfo(HELP_KEY[title], title) : '') + '</div><div class="ana-v">' + value + '</div>' + (sub ? '<div class="small">' + sub + '</div>' : '') + (help ? '<div class="small muted">' + help + '</div>' : '') + '</div>';
 function cards(r) {
   const m = r.metrics, out = [];
   const i = m.intonation;

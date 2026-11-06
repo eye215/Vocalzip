@@ -1762,3 +1762,49 @@ test('Song choices open as a searchable sheet; the page under a sheet stays wher
   expect(await page.evaluate(() => scrollY)).toBe(y);
   expect(page.__errors).toEqual([]);
 });
+
+test('Library select mode sets the song and kind of several recordings at once; rows tick instead of opening', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/library');
+  await expect(page.locator('[data-media]')).toHaveCount(2);
+  await page.getByRole('button', {name:'선택', exact:true}).click();
+  const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
+  await expect(bar).toContainText('0개 선택');
+  await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await expect(page.locator('[data-media="m1"] .media-open')).toBeHidden(); // ticked, not opened
+  await expect(bar).toContainText('1개 선택');
+  await bar.getByRole('button', {name:'전체 선택'}).click();
+  await expect(bar).toContainText('2개 선택');
+  await bar.getByRole('button', {name:/곡 지정/}).click();
+  const pick = page.getByRole('dialog', {name:'곡 지정'});
+  await pick.getByRole('option', {name:'On My Own'}).click();
+  const ask = page.getByRole('dialog', {name:'곡 지정'});
+  await expect(ask).toContainText('2개 녹음');
+  await ask.getByRole('button', {name:'바꾸기'}).click();
+  await expect(bar).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id + ':' + m.songId).sort().join(','))).toBe('m1:s2,m2:s2');
+  // Kind for one recording.
+  await page.getByRole('button', {name:'선택', exact:true}).click();
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
+  await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
+  await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
+  // Leaving the screen ends select mode.
+  await page.getByRole('button', {name:'선택', exact:true}).click();
+  await page.goto('/#/home');
+  await expect(page.locator('.sel-bar')).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test('A measurement ⓘ opens what it measures and how to read it', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(() => { document.querySelector('main').insertAdjacentHTML('afterbegin', '<p>음정 오차' + VZ.metricInfo('into', '음정 오차') + '</p>'); });
+  await page.getByRole('button', {name:'음정 오차 설명'}).click();
+  const sheet = page.getByRole('dialog', {name:'음정 정확도 (음정 오차)'});
+  await expect(sheet).toContainText('반음 하나 = 100 cent');
+  await expect(sheet).toContainText('판정하지 않아요');
+  const box = await page.getByRole('button', {name:'닫기'}).boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(page.__errors).toEqual([]);
+});
