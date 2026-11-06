@@ -1,6 +1,6 @@
 # PR #73 safety review — 2026-11-06
 
-Decision: keep Draft, do not merge or activate paid analysis yet.
+Decision: keep Draft, do not merge or activate paid analysis yet.\n\n## 2026-11-06 additional safeguards\n\n- Added `vzipCloudMediaAssignSong` to fetch current cloud metadata, preserve unrelated fields, and compare-and-swap the `updated_at` revision on each song-only write.\n- Added local-first compatibility in `M.assignSongSafe` with explicit song preconditions. Apply now records confirmed successful writes and the post-write version; undo rejects later modifications rather than relying only on matching song ID.\n- Limited each manual analysis action to one paid candidate in the browser; **this is not a secure server-side daily quota or hard dollar limit**.\n- The updated browser and backend integration must pass fresh CI. Before rollout, add durable server-enforced usage reservations/quotas and validate R2 transformations on actual devices.\n
 
 ## Fixed in this review
 
@@ -30,7 +30,7 @@ Decision: keep Draft, do not merge or activate paid analysis yet.
 
 ## Remaining release blockers
 
-1. Implement and test atomic, account-bound song-only updates with optimistic concurrency, including partial cloud/local failures. Undo must record confirmed successful writes and compare the exact assigned version; the current song-ID-only comparison can undo a later same-song edit. This needs a reviewed persistence/API contract, beyond the UI-level lock added here.
+1. Review and verify the new account-bound song-only optimistic updates and applied-only undo on real cloud/local devices, including partial cloud/local failures; add integration tests. A crash between successful cloud write and local backup status update still needs recovery support.
 2. Verify actual audio format and duration server-side before paid transcription. Filename/MIME/6 MiB checks do not prove a 30-second excerpt. Add durable request metering/rate limits and an enforceable spending cap; an allowlist alone does not bound repeated/concurrent spending.
 3. Verify audio-only M4A input through the real Cloudflare transform service and actual iPhone Safari behavior, then assignment/sync/undo against disposable data. Mocks prove our routing and options, not service compatibility or device memory use. Keep paid services off until separately authorized.
 4. Run all checks on the final integration with current main. Local browser tests were not rerun; GitHub Actions covers them. Check deployment compatibility for the new authenticated GET endpoint before any rollout.
