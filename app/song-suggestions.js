@@ -12,10 +12,14 @@ const MAX_BYTES=12*1024*1024, PAGE_SIZE=40;
 // Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
 const MAX_DURATION_SECONDS=80, MAX_PCM_BYTES=32*1024*1024;
 const checkpointKey='vzip_song_suggest_checkpoint_v2';
-const state={items:[],chosen:new Set(),results:new Map(),running:false,cancel:false,shown:PAGE_SIZE,controller:null};
+const referenceKey='vzip_song_stt_references_v1';
+const state={items:[],referenceItems:[],chosen:new Set(),results:new Map(),running:false,cancel:false,shown:PAGE_SIZE,controller:null};
 const owner=()=>window.vzipCloudUserId?.()||'device';
 let viewOwner=owner(), busy=false, authGeneration=0;
 const scoped=key=>key+':'+viewOwner;
+function references(){try{const data=JSON.parse(localStorage.getItem(scoped(referenceKey))||'[]');return Array.isArray(data)?data.filter(r=>r?.songId&&r?.transcript):[]}catch{return []}}
+function saveReference(songId,transcript){const next=references().filter(r=>r.songId!==songId);next.push({songId,transcript:String(transcript).slice(0,1600),at:Date.now()});localStorage.setItem(scoped(referenceKey),JSON.stringify(next))}
+function removeReference(songId){localStorage.setItem(scoped(referenceKey),JSON.stringify(references().filter(r=>r.songId!==songId)))}
 window.addEventListener('vzip:auth-changed',()=>{
  if(owner()===viewOwner)return;
  authGeneration++;state.cancel=true;state.controller?.abort();state.results.clear();state.chosen.clear();
@@ -122,7 +126,7 @@ async function clip(item,signal){
   return wavBytes(decoded,start,30);
  }finally{bytes=null;await audioCtx.close().catch(()=>{})}
 }
-async function stt(item,signal){
+async function stt(item,signal,{reference=false}={}){
  if(!window.vzipCloudSignedIn?.())throw Error('로그인이 필요해요.');
  const token=await window.vzipCloudAccessToken?.();
  if(!token)throw Error('로그인 세션이 만료됐어요.');
@@ -163,14 +167,19 @@ async function stt(item,signal){
   excerpt=new File([await clip(item,signal)],'vocal-clip.wav',{type:'audio/wav'});
  }
  form.append('file',excerpt,excerpt.name);
+ form.set('mode','transcript-only');
  form.append('songs',JSON.stringify(songs().map(s=>({id:s.id,title:s.title,show:s.show||''})).slice(0,250)));
  const res=await fetch(API,{method:'POST',headers:{Authorization:'Bearer '+token},body:form,signal});
  const data=await res.json().catch(()=>({}));
  if(!res.ok)throw Error(data.error||'STT 서버 응답 오류 ('+res.status+')');
- const found=songs().find(s=>s.id===data.songId);
- return {status:found?'후보':'식별 불가',transcript:String(data.transcript||'').slice(0,250),
-  candidate:found?{id:found.id,title:VZ.songLabel(found),reason:data.reason||'가사 단서 분석',level:data.level||'확인 필요'}:null,
-  method:'stt'};
+ const transcript=String(data.transcript||'').slice(0,1600);
+ if(reference)return {transcript};
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const match=matchTranscripts(transcript,references());
+ const found=songs().find(s=>s.id===match.candidate);
+ return {status:found?'후보':'식별 불가',transcript:transcript.slice(0,250),
+  candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
+  method:'stt',reason:match.reason};
 }
 function controls(main){
  const root=main.querySelector('[data-suggest]');
@@ -210,13 +219,50 @@ function draw(main){
  const more=root.querySelector('[data-more]');if(more){more.hidden=state.shown>=rows.length;more.textContent='더 보기 ('+Math.min(state.shown,rows.length)+'/'+rows.length+')'}
  controls(main);
 }
+
+function showReferenceControls(main){
+ const select=main.querySelector('[data-ref-picker]'),summary=main.querySelector('[data-ref-list]');
+ if(!select||!summary)return;
+ const last=select.value;
+ select.replaceChildren(new Option('곡 지정된 기준 녹음 선택',''));
+ for(const item of state.referenceItems){
+  const song=songs().find(s=>s.id===(item.songId||item.song));
+  if(song)select.add(new Option(VZ.songLabel(song)+' · '+M.label(item),item.id));
+ }
+ select.value=last||'';
+ const stored=references();
+ summary.textContent='현재 브라우저에 저장된 기준: '+stored.length+'곡';
+ main.querySelector('[data-ref-clear]').disabled=!stored.length;
+}
+async function indexReference(main,check=()=>{}){
+ const item=state.referenceItems.find(m=>m.id===main.querySelector('[data-ref-picker]').value);
+ const songId=item?.songId||item?.song;
+ if(!item||!songs().some(s=>s.id===songId))throw Error('곡이 지정된 녹음을 선택해 주세요.');
+ if(!await VZ.confirm('곡별 기준 녹음 만들기','선택한 녹음을 처음 한 번 유료 STT로 변환해 기준 가사로 저장합니다. 이후 비교는 무료이고 결과는 이 브라우저에만 저장됩니다.\\n\\n진행할까요?',{ok:'기준 만들기'}))return;
+ check();state.running=true;state.controller=new AbortController();controls(main);
+ try{
+  const result=await stt(item,state.controller.signal,{reference:true});check();
+  if(result.transcript.trim().length<12)throw Error('인식된 가사가 부족해 다른 녹음이 필요해요.');
+  saveReference(songId,result.transcript);
+  VZ.toast('곡별 기준이 저장됐어요. 다음부터 비교는 무료예요.');
+ }finally{state.running=false;state.controller=null;showReferenceControls(main);controls(main)}
+}
+async function deleteReference(main){
+ const item=state.referenceItems.find(m=>m.id===main.querySelector('[data-ref-picker]').value);
+ const songId=item?.songId||item?.song;
+ if(!songId||!references().some(r=>r.songId===songId))throw Error('삭제할 곡의 기준 녹음을 선택해 주세요.');
+ if(!await VZ.confirm('기준 삭제','이 브라우저에서 선택 곡의 기준 가사를 삭제할까요?',{ok:'삭제'}))return;
+ removeReference(songId);showReferenceControls(main);
+}
+
 async function analyze(main,check=()=>{}){
  const root=main.querySelector('[data-suggest]');
  const targets=state.items.filter(m=>state.chosen.has(m.id));
+ if(targets.some(m=>!resultFor(m)?.candidate)&&!references().length){VZ.toast('비교할 기준 녹음이 없어요. 먼저 아래에서 등록곡의 기준 녹음을 만들어 주세요.','error');return}
  const paid=targets.filter(m=>!resultFor(m)?.candidate&&readCache(m)?.method!=='stt').length;
  // Until a durable server quota is in place, limit each manual action to one paid request.
  if(paid>1){VZ.toast('안전한 테스트를 위해 유료 음성 분석은 한 번에 1개만 선택해 주세요.','error');return}
- if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 유료 STT를 호출할 수 있어요. 파일당 최대 30초를 보내며, API 과금이 발생합니다. 원본을 변경하지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
+ if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 STT만 사용해요(GPT 비용 없음). 파일당 최대 30초 API 과금이 발생하며, 기준 텍스트와의 비교는 무료예요. 원본을 변경하지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  let success=0,failed=0,seen=0;
  try{
@@ -297,12 +343,14 @@ async function apply(main,check=()=>{}){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted">💰 비용 절약: 등록곡의 기준 녹음을 처음 한 번만 STT로 변환합니다. 이후 텍스트 비교는 무료이며 GPT를 호출하지 않습니다. 기준은 이 브라우저에만 보관돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted" data-ref-list></p><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
   if(busy){main.textContent='이전 작업을 마무리하고 있어요. 잠시 후 다시 열어 주세요.';return}
   viewOwner=owner();
   const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.running=false;state.cancel=false;state.controller=null;state.shown=PAGE_SIZE;
-  state.items=(await M.list(true).catch(()=>[])).filter(eligible);
+  const mediaItems=await M.list(true).catch(()=>[]);
+  state.items=mediaItems.filter(eligible);
+  state.referenceItems=mediaItems.filter(m=>!!(m.songId||m.song)&&!M.isVideo(m));
   if(!main.isConnected)return;
   const previous=new Set(loadCheckpoint());state.chosen=new Set(state.items.filter(m=>previous.has(m.id)).map(m=>m.id));
   root.querySelector('[data-progress]').textContent=state.items.length+'개 곡 미지정 음원'+(state.chosen.size?' · 이전 선택 '+state.chosen.size+'개 복원':'');
@@ -313,6 +361,9 @@ VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
   root.querySelector('[data-analyze]').onclick=()=>exclusive(main,analyze);
   root.querySelector('[data-apply]').onclick=()=>exclusive(main,apply);
   root.querySelector('[data-undo]').onclick=()=>exclusive(main,undo);
+  root.querySelector('[data-ref-add]').onclick=()=>exclusive(main,indexReference);
+  root.querySelector('[data-ref-clear]').onclick=()=>exclusive(main,deleteReference);
+  showReferenceControls(main);
   draw(main);
  }});
 })();
