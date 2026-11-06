@@ -1839,3 +1839,27 @@ test('Offline notice, a change sent at once when the app goes to the background,
   expect(gap).toBeLessThan(40);
   expect(page.__errors).toEqual([]);
 });
+
+test('Every control on the main screens answers a 44pt tap (iPhone)', async ({page}) => {
+  test.setTimeout(120000);
+  await boot(page);
+  const routes = ['home', 'record', 'lessons', 'lesson/l1', 'calendar', 'homework', 'songs', 'song/s1', 'library', 'growth', 'analysis', 'settings', 'import-hub', 'storage', 'song-suggest', 'compare'];
+  const bad = {};
+  for (const r of routes) {
+    await page.goto('/#/' + r); await page.waitForTimeout(500);
+    const found = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('main a[href], main button, main select, main input, main [role=button], main summary, nav a, header button, header a')) {
+        const b = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        if (!b.width || !b.height || cs.visibility === 'hidden') continue;
+        if (el.matches('.pick-native,.sr-only,input[type=checkbox],input[type=radio],input[type=hidden]')) continue;
+        if (el.tagName === 'A' && cs.display === 'inline') continue; // a link inside a sentence
+        const hit = parseFloat(getComputedStyle(el, '::before').height) || 0; // a wider invisible tap area
+        if (Math.round(Math.max(b.height, hit)) < 44) out.push((el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 20) + ' ' + Math.round(b.height) + 'px');
+      }
+      return out;
+    });
+    if (found.length) bad[r] = found;
+  }
+  expect(bad).toEqual({});
+});
