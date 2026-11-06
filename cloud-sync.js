@@ -390,9 +390,18 @@ window.vzipCloudLegacyCleanup=async item=>{
 const songTextTable=()=>{if(!client||!user)throw Error('Supabase 로그인이 필요해요.');return client.from('vocal_song_texts')};
 window.vzipCloudSongTextList=async()=>{
  const owner=user?.id;if(!owner)throw Error('로그인 정보가 없어요.');
- const {data,error}=await songTextTable().select('kind,record_id,transcript,source,updated_at,deleted_at').eq('user_id',owner).order('updated_at',{ascending:false}).limit(2000);
- if(error)throw Error('기준 가사 클라우드 조회 실패: '+error.message);
- return data||[];
+ const result=[];
+ // PostgREST has a default 1,000-row response cap; page through all prior STT
+ // results or a paid transcript could be falsely considered missing.
+ for(let offset=0;offset<100000;offset+=1000){
+  const {data,error}=await songTextTable().select('kind,record_id,transcript,source,updated_at,deleted_at')
+   .eq('user_id',owner).order('kind').order('record_id').range(offset,offset+999);
+  if(error)throw Error('기준 가사 클라우드 조회 실패: '+error.message);
+  result.push(...(data||[]));
+  if(!data||data.length<1000)break;
+  if(user?.id!==owner)throw Error('계정 변경으로 기록 조회를 중단했어요.');
+ }
+ return result;
 };
 window.vzipCloudSongTextSave=async({kind,recordId,transcript,source='manual',onlyIfMissing=false})=>{
  const owner=user?.id;
