@@ -202,7 +202,8 @@ M.update = async (item, changes, {quiet = false} = {}) => {
     const stored = (await window.vzipReadMedia()).find(x => x.id === item.id);
     if (stored) await tx('readwrite', s => s.put({...stored, ...changes}));
   }
-  if (!quiet) window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:item.id}}));
+  // Only the changed fields travel; cloudDone tells the sync layer the cloud row is already saved.
+  if (!quiet) window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:item.id, changes, cloudDone:!!item.cloud}}));
 };
 /* ---------- durations ---------- */
 /** Read a file's length from its metadata only (no full download/decode). */

@@ -40,19 +40,38 @@ async function remoteData(){const {data,error}=await client.from('vocal_data').s
 const Merge=window.VzipDataMerge;
 let syncAgain=false;
 function snapshot(data){if(!data)return;try{localStorage.setItem('vzip_before_cloud_'+Date.now(),JSON.stringify(data));const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^vzip_before_cloud_\d+$/.test(k||''))keys.push(k)}keys.sort().slice(0,-5).forEach(k=>localStorage.removeItem(k))}catch{}}
+/* Conditional writes: the server copy is replaced only if nobody saved it since it was read (same
+   updated_at). Otherwise it is read again and merged again, so a save from another device in between
+   is never dropped. */
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function sameVersion(query,at){return at==null?query.is('updated_at',null):query.eq('updated_at',at)}
 async function sync({silent=false,reload=false}={}){
  if(!user)return;if(busy){syncAgain=true;return}
- const local=localData();busy=true;
+ busy=true;let local=null,merged=null,changedLocal=false;
  try{
-  const row=await remoteData(),remote=row?.payload&&Merge.valid(row.payload)?row.payload:null;
-  if(!local&&!remote){say('아직 저장된 기록이 없어요.');return}
-  const merged=remote?Merge.merge(local||{},remote).data:local;
-  if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
-  if(!local||!Merge.same(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}))}
-  if(!remote||!Merge.same(merged,remote)){const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload:merged,updated_at:new Date().toISOString()});if(error)throw error}
+  for(let attempt=0;;attempt++){
+   const row=await remoteData(),remote=row?.payload&&Merge.valid(row.payload)?row.payload:null;
+   // The device copy is read only now, right before it may be rewritten: an edit made while
+   // waiting for the server is merged too, never overwritten.
+   local=localData();
+   if(!local&&!remote){say('아직 저장된 기록이 없어요.');return}
+   merged=remote?Merge.merge(local||{},remote).data:local;
+   if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
+   if(!local||!Merge.same(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));changedLocal=true;window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}))}
+   if(remote&&Merge.same(merged,remote))break;
+   const stamp=new Date().toISOString();
+   if(row&&'payload' in row){
+    const {data,error}=await sameVersion(client.from('vocal_data').update({payload:merged,updated_at:stamp}).eq('user_id',user.id),row.updated_at).select('user_id');
+    if(error)throw error;
+    if(!Array.isArray(data)||data.length)break;
+    // Another device saved first: read its copy and merge again.
+    if(attempt>=4)throw Error('다른 기기에서 동시에 저장하고 있어요. 다음 저장 때 다시 합쳐요.');
+    await wait(150*(attempt+1)+Math.random()*150);
+   }else{const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload:merged,updated_at:stamp});if(error)throw error;break}
+  }
   localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;
   say('✓ 이 기기와 클라우드 기록을 합쳐 저장했어요 · '+Merge.count(merged)+'건'+(silent?' (자동 동기화)':''));
-  if(reload&&local&&!Merge.same(merged,local))setTimeout(()=>location.reload(),650);
+  if(reload&&local&&changedLocal)setTimeout(()=>location.reload(),650);
  }catch(e){say('동기화 실패: '+e.message+' · 기록은 그대로 있어요.')}
  finally{busy=false;if(syncAgain){syncAgain=false;setTimeout(()=>sync({silent:true}),300)}}
 }
@@ -69,7 +88,10 @@ async function backupVideoAudio(item,blob,onProgress){
 async function uploadMedia(){if(!user||busy)return;busy=true;try{const items=await localMedia();if(!items.length)return say('이 기기에 음원이 없어요.');if(!confirm(items.length+'개 파일을 비공개 클라우드 저장소에 백업할까요? 영상은 용량에 따라 시간이 걸릴 수 있어요.'))return;const remotePaths=new Map((await window.vzipCloudMediaList()).map(item=>[item.id,item.path]));let ok=0,fail=0;for(const item of items){say('음원 업로드 '+(ok+fail+1)+'/'+items.length+'…');try{item.blob=window.vzipMediaBlob(item);if(!item.blob)throw Error('원본 파일이 없어요.');if((item.type||item.blob.type).startsWith('video/')){await backupVideoAudio(item,item.blob,p=>say('음원 백업 '+p+'%'));ok++;continue}if(item.blob.size>50*1024*1024||window.VzipR2?.enabled()){await window.vzipCloudImport(new File([item.blob],item.name+'.'+mediaExtension(item.type),{type:item.type}),{...item,id:item.id},p=>say('대용량 백업 '+p+'%'));ok++;continue}const ext=mediaExtension(item.blob.type||item.type);const path=remotePaths.get(item.id)||user.id+'/'+encodeURIComponent(item.id)+'.'+ext;const {error}=await client.storage.from('vocal-recordings').upload(path,item.blob,{upsert:true,contentType:item.blob.type||item.type||'application/octet-stream'});if(error)throw error;const meta={id:item.id,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,recordedDate:item.recordedDate||'',dateSource:item.dateSource||'',originalMedia:item.originalMedia||null,audioExtraction:item.audioExtraction||null,type:item.blob.type||item.type,source:item.source||'import',durationSeconds:item.durationSeconds||0,rating:item.rating??null,review:item.review||'',path};const {error:metaError}=await client.from('vocal_media').upsert({user_id:user.id,id:item.id,metadata:meta,updated_at:new Date().toISOString()});if(metaError)throw metaError;ok++;window.dispatchEvent(new Event('vzip:cloud-media-changed'))}catch(e){fail++;say('업로드 오류: '+e.message)}}say('✓ 음원 백업 '+ok+'개 성공'+(fail?', '+fail+'개 실패':'')+'. 원본은 이 기기에 남아 있어요.')}catch(e){say('녹음 백업 실패: '+e.message)}finally{busy=false}}
 async function downloadMedia(){if(!user||busy)return;busy=true;try{const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',user.id);if(error)throw error;if(!data?.length)return say('클라우드에 백업된 녹음이 없어요.');const existing=new Set((await localMedia()).map(x=>x.id));const remoteMissing=data.map(x=>x.metadata).filter(x=>!existing.has(x.id));const missing=remoteMissing.filter(x=>x.storageVersion!==2);if(!missing.length)return say(remoteMissing.length?'대용량 파일은 보관함에서 바로 스트리밍으로 재생할 수 있어요.':'이 기기에 모든 녹음이 이미 있어요.');if(!confirm(missing.length+'개 음원을 이 기기에 다운로드해 보관할까요?'))return;let ok=0,fail=0;for(const meta of missing){say('녹음 가져오는 중 '+(ok+fail+1)+'/'+missing.length);try{const {data:blob,error:err}=await client.storage.from('vocal-recordings').download(meta.path);if(err)throw err;await window.vzipStorePracticeMedia({...meta,blob});ok++}catch{fail++}}say('✓ '+ok+'개 가져오기 완료'+(fail?', '+fail+'개 실패':'')+'. 보관함을 다시 열어 확인해 주세요.')}catch(e){say('녹음 가져오기 실패: '+e.message)}finally{busy=false}}
 async function autoUploadMedia(id){if(!user||!ready)return;if(window.VZ?.media?.backupLocal)return;/* the v6 app uploads device files itself (resumable queue) */try{const item=(await localMedia()).find(x=>x.id===id);if(!item)return;const blob=window.vzipMediaBlob(item);if(!blob)throw Error('원본 파일이 없어요.');if((item.type||blob.type).startsWith('video/')){await backupVideoAudio(item,blob);return}if(blob.size>50*1024*1024||window.VzipR2?.enabled()){await window.vzipCloudImport(new File([blob],item.name+'.'+mediaExtension(item.type),{type:item.type}),{...item,id:item.id});return}const ext=mediaExtension(blob.type);const existing=(await window.vzipCloudMediaList()).find(remote=>remote.id===item.id);const path=existing?.path||user.id+'/'+encodeURIComponent(item.id)+'.'+ext;const {error}=await client.storage.from('vocal-recordings').upload(path,blob,{upsert:true,contentType:blob.type||'application/octet-stream'});if(error)throw error;const {error:metaError}=await client.from('vocal_media').upsert({user_id:user.id,id:item.id,metadata:{id:item.id,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,recordedDate:item.recordedDate||'',dateSource:item.dateSource||'',originalMedia:item.originalMedia||null,audioExtraction:item.audioExtraction||null,type:blob.type,source:item.source||'import',durationSeconds:item.durationSeconds||0,rating:item.rating??null,review:item.review||'',path},updated_at:new Date().toISOString()});if(metaError)throw metaError;window.dispatchEvent(new Event('vzip:cloud-media-changed'));say('✓ 새 녹음이 이 기기와 클라우드에 저장됐어요.')}catch(e){say('녹음은 이 기기에 저장됐지만 클라우드 백업 실패: '+e.message+'. 다시 백업해 주세요.')}}
-window.addEventListener('vzip:media-updated',async e=>{if(!user||!e.detail?.id)return;try{const item=(await localMedia()).find(x=>x.id===e.detail.id);if(!item)return;const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',user.id).eq('id',item.id).maybeSingle();if(error||!data)return;const metadata={...data.metadata,name:item.name,song:item.song||'',songId:item.songId||'',created:item.created,recordedDate:item.recordedDate||'',dateSource:item.dateSource||'',type:item.type,rating:item.rating??null,review:item.review||''};const {error:err}=await client.from('vocal_media').update({metadata,updated_at:new Date().toISOString()}).eq('id',item.id).eq('user_id',user.id);if(err)throw err}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
+// A device-file edit sends only the fields that changed, onto the newest cloud row: the other
+// fields keep what other devices saved. Edits the app already wrote to the cloud are skipped.
+const EDITABLE=['name','song','songId','created','recordedDate','dateSource','type','rating','review'];
+window.addEventListener('vzip:media-updated',async e=>{const d=e.detail||{};if(!user||!d.id||d.cloudDone)return;try{const item=(await localMedia()).find(x=>x.id===d.id);if(!item)return;const keys=d.changes?Object.keys(d.changes).filter(k=>EDITABLE.includes(k)):EDITABLE;if(!keys.length)return;const pick=Object.fromEntries(keys.map(k=>[k,d.changes&&k in d.changes?d.changes[k]:item[k]]));await patchMedia(item.id,meta=>({...meta,...pick}))}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
 window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e.detail.id)});
 
 /* Each >50MiB original is stored as independent <=24MiB objects, one metadata row. */
@@ -273,7 +295,26 @@ window.vzipCloudMediaUrl=async item=>{
  if(!item?.path)throw Error('클라우드 파일 경로가 없어요.');
  return sign(item.path);
 };
-window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const metadata={...item,...changes};delete metadata.cloud;delete metadata.local;delete metadata.blob;delete metadata.bytes;const {error}=await client.from('vocal_media').update({metadata,updated_at:new Date().toISOString()}).eq('id',item.id).eq('user_id',user.id);if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'));return metadata};
+/** Change one library row safely: mutate() gets the newest server copy and returns the next one
+ * (or null for no change). The write only lands if the row was not saved in between; otherwise it
+ * is read and applied again. Returns the saved metadata, or null when the row does not exist. */
+async function patchMedia(id,mutate,owner=user?.id){
+ if(!owner)throw Error('로그인이 필요해요.');
+ for(let attempt=0;attempt<5;attempt++){
+  const {data:row,error}=await client.from('vocal_media').select('metadata,updated_at').eq('user_id',owner).eq('id',id).maybeSingle();
+  if(error)throw error;if(!row?.metadata)return null;
+  const next=mutate({...row.metadata});
+  if(!next||JSON.stringify(next)===JSON.stringify(row.metadata))return row.metadata;
+  const {data,error:writeError}=await sameVersion(client.from('vocal_media').update({metadata:next,updated_at:new Date().toISOString()}).eq('user_id',owner).eq('id',id),row.updated_at).select('id');
+  if(writeError)throw writeError;
+  if(!Array.isArray(data)||data.length){window.dispatchEvent(new Event('vzip:cloud-media-changed'));return next}
+  await wait(120*(attempt+1)+Math.random()*120);
+ }
+ throw Error('다른 기기에서 같은 파일을 동시에 수정하고 있어요. 잠시 후 다시 시도해 주세요.');
+}
+window.vzipCloudMediaPatch=patchMedia;
+/** Save only `changes` onto the newest cloud copy; `item` may be an older snapshot and is not written back. */
+window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];const saved=await patchMedia(item.id,meta=>({...meta,...clean}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
 window.vzipCloudMediaDelete=async item=>{
  if(!user)throw Error('로그인이 필요해요.');
  const owner=user.id;
@@ -294,13 +335,15 @@ window.vzipCloudMediaBlob=async(item,signal)=>{const res=await fetch(await windo
 window.vzipCloudR2Attach=async(item,{key,size,type})=>{
  if(!user)throw Error('로그인이 필요해요.');
  const owner=user.id;if(!String(key).startsWith('u/'+owner+'/'))throw Error('다른 계정의 저장 위치예요.');
- const {data:row,error:readError}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',item.id).maybeSingle();
- if(readError)throw readError;
- const base={...(row?.metadata||item)};
- for(const k of ['blob','bytes','local','cloud','path','parts','storageVersion','storageProvider','r2Key','legacyStorage'])delete base[k];
- const prev=row?.metadata;
- const legacy=prev&&prev.storageProvider!=='r2'&&(prev.path||prev.storageVersion===2)?{path:prev.path,storageVersion:prev.storageVersion,parts:prev.parts,size:prev.size}:prev?.legacyStorage;
- const metadata={...base,id:item.id,type:type||base.type,size,storageProvider:'r2',r2Key:key,movedToR2At:Date.now(),...(legacy?{legacyStorage:Object.fromEntries(Object.entries(legacy).filter(([,v])=>v!==undefined))}:{})};
+ const build=prev=>{
+  const base={...(prev||item)};
+  for(const k of ['blob','bytes','local','cloud','path','parts','storageVersion','storageProvider','r2Key','legacyStorage'])delete base[k];
+  const legacy=prev&&prev.storageProvider!=='r2'&&(prev.path||prev.storageVersion===2)?{path:prev.path,storageVersion:prev.storageVersion,parts:prev.parts,size:prev.size}:prev?.legacyStorage;
+  return {...base,id:item.id,type:type||base.type,size,storageProvider:'r2',r2Key:key,movedToR2At:Date.now(),...(legacy?{legacyStorage:Object.fromEntries(Object.entries(legacy).filter(([,v])=>v!==undefined))}:{})};
+ };
+ // An existing row keeps every field other devices saved; only the storage fields change.
+ const saved=await patchMedia(item.id,build,owner);if(saved)return saved;
+ const metadata=build(null);
  const {error}=await client.from('vocal_media').upsert({id:item.id,user_id:owner,metadata,updated_at:new Date().toISOString()});
  if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'));return metadata;
 };
@@ -316,9 +359,7 @@ window.vzipCloudLegacyCleanup=async item=>{
  const old=meta.legacyStorage,paths=old.storageVersion===2?VzipChunks.validate(old).parts.map(x=>x.path):(old.path?[old.path]:[]);
  if(paths.some(path=>!path.startsWith(owner+'/')||path.includes('..')))throw Error('다른 계정의 파일은 삭제할 수 없어요.');
  if(paths.length){const {error}=await client.storage.from('vocal-recordings').remove(paths);if(error)throw error}
- const next={...meta};delete next.legacyStorage;
- const {error}=await client.from('vocal_media').update({metadata:next,updated_at:new Date().toISOString()}).eq('id',item.id).eq('user_id',owner);
- if(error)throw error;window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+ await patchMedia(item.id,m=>{if(!m.legacyStorage)return null;const next={...m};delete next.legacyStorage;return next},owner);
 };
 window.vzipCloudAccessToken=async()=>{if(!client||!user)return null;const {data}=await client.auth.getSession();return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user;
 let streamOwner=null;
