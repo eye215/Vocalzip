@@ -181,7 +181,9 @@ export function wav16(samples, rate) {
 async function transcribe(wav) {
   const form = new FormData();
   form.set('model', STT_MODEL); form.set('file', new Blob([wav], {type:'audio/wav'}), 'clip.wav');
-  const res = await fetch((env.OPENAI_BASE || 'https://api.openai.com/v1') + '/audio/transcriptions', {method:'POST', headers:{authorization:'Bearer ' + env.OPENAI_API_KEY}, body:form, signal:AbortSignal.timeout(90000)});
+  let res;
+  try { res = await fetch((env.OPENAI_BASE || 'https://api.openai.com/v1') + '/audio/transcriptions', {method:'POST', headers:{authorization:'Bearer ' + clean(env.OPENAI_API_KEY)}, body:form, signal:AbortSignal.timeout(90000)}); }
+  catch (e) { throw new Error('speech recognition network error: ' + networkCause(e)); }
   if (!res.ok) throw new Error('speech recognition failed (' + res.status + ')');
   return String((await res.json()).text || '').slice(0, 1600);
 }

@@ -249,3 +249,14 @@ test('Older Supabase Storage files without the service key are set aside (no att
   assert.deepEqual([o.status, o.attempts, o.last_error], ['failed', 0, 'needs SUPABASE_SERVICE_ROLE_KEY (older Supabase Storage file)']);
   assert.equal(n.status, 'done');
 });
+
+test('An unreachable speech-recognition service is recorded with its cause, and nothing is counted as paid', {skip}, async () => {
+  const keep = process.env.OPENAI_BASE, user = '22222222-2222-4222-8222-222222222222';
+  await db.query("insert into public.vocal_data (user_id, payload) values ($1, $2) on conflict (user_id) do update set payload = excluded.payload", [user, JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}]})]);
+  files.set(key(user, 'sttnet', 'wav'), wav({}));
+  await media('sttnet', {name:'x', storageProvider:'r2', r2Key:key(user, 'sttnet', 'wav'), analysis:{v:1}}, user);
+  process.env.OPENAI_BASE = 'http://127.0.0.1:59998';
+  try { await work(); } finally { process.env.OPENAI_BASE = keep; }
+  const j = (await jobs('sttnet')).song;
+  assert.equal(j.last_error, 'speech recognition network error: connection refused'); assert.equal(Number(j.cost_usd), 0);
+});
