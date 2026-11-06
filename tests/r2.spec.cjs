@@ -142,6 +142,11 @@ test('Storage screen moves existing files to R2 only when asked, keeps ids, and 
   // The device copy stays too.
   expect(await page.evaluate(async () => (await window.vzipReadMedia()).map(x => x.id))).toEqual(['dev-1']);
   await page.getByRole('button', {name:'예전 클라우드 사본 정리…'}).click();
+  // Asked in the app's own popup; nothing is removed before 삭제.
+  const ask = page.getByRole('dialog', {name:'예전 사본 삭제'});
+  await expect(ask).toContainText('되돌릴 수 없어요');
+  expect(await page.evaluate(() => window.__removed)).toEqual([]);
+  await ask.getByRole('button', {name:'삭제'}).click();
   await expect.poll(() => page.evaluate(() => window.__removed)).toEqual(['ui-test-user/old-1.wav']);
   expect(await page.evaluate(() => window.__rows['old-1'].legacyStorage)).toBeUndefined();
 });
