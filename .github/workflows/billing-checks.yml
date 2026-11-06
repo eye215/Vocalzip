@@ -4,7 +4,13 @@ on:
     paths:
       - 'billing/**'
       - 'supabase/**'
+      - 'worker/**'
+      - 'tests/analysis-worker.test.mjs'
+      - 'app/vocal-analysis.js'
+      - 'song-text-match.mjs'
+      - 'package.json'
       - '.github/workflows/billing-checks.yml'
+      - '.github/workflows/analysis-worker.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -88,3 +94,15 @@ jobs:
         run: node billing/tests/concurrency.cjs
       - name: History keeps every version, deletions included, read-only and per account
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/history.sql
+      - name: Apply server analysis queue migration twice (safe to re-run)
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109_server_analysis_jobs.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261109_server_analysis_jobs.sql
+      - name: Server analysis worker end to end (real Postgres + ffmpeg, stand-in R2 and STT)
+        env:
+          VZ_TEST_DB: postgres://postgres:billing_ci_only@localhost:5432/postgres
+          SUPABASE_DB_SSL: 'off'
+        run: |
+          npm ci --omit=dev --ignore-scripts
+          command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
+          node --test tests/analysis-worker.test.mjs

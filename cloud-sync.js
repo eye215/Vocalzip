@@ -472,6 +472,28 @@ window.vzipCloudSongTextDelete=async(kind,recordId)=>{
  const {error}=await songTextTable().update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('user_id',owner).eq('kind',kind).eq('record_id',recordId);
  if(error)throw Error('기준 가사 클라우드 삭제 실패: '+error.message);
 };
+/* ---------- server analysis (worker/analysis-worker.mjs) ---------- */
+/** Queue this account's recordings that still need work; null when the server queue is not installed. */
+window.vzipAnalysisEnqueue=async()=>{if(!client?.rpc||!user)return null;const {data,error}=await client.rpc('vzip_enqueue_my_media');return error?null:Number(data)||0};
+/** Own jobs (RLS): kind, status and, for songs needing a look, the top 3. */
+window.vzipAnalysisJobs=async()=>{
+ if(!client||!user)return null;const owner=user.id,rows=[];
+ for(let from=0;from<50000;from+=1000){
+  const {data,error}=await client.from('vocal_analysis_jobs').select('media_id,kind,status,updated_at').eq('user_id',owner).order('id').range(from,from+999);
+  if(error)return null;rows.push(...(data||[]));if(!data||data.length<1000)break;
+ }
+ const {data:review}=await client.from('vocal_analysis_jobs').select('media_id,result').eq('user_id',owner).eq('kind','song').eq('status','review').limit(2000);
+ return {rows,review:review||[]};
+};
+/** Live changes to own recordings and jobs while the app is open; returns a stop function. */
+window.vzipAnalysisLive=(onMedia,onJobs)=>{
+ if(!client||!user||!client.channel)return()=>{};
+ const ch=client.channel('vzip-analysis-'+user.id)
+  .on('postgres_changes',{event:'*',schema:'public',table:'vocal_media',filter:'user_id=eq.'+user.id},()=>onMedia())
+  .on('postgres_changes',{event:'*',schema:'public',table:'vocal_analysis_jobs',filter:'user_id=eq.'+user.id},()=>onJobs())
+  .subscribe();
+ return()=>{try{client.removeChannel(ch)}catch{}};
+};
 /** Paid STT calls so far for this account ({total, today}); null when signed out or the usage function is missing. */
 window.vzipSttUsage=async()=>{if(!client||!user)return null;const {data,error}=await client.rpc('vzip_song_stt_usage');if(error)return null;const row=Array.isArray(data)?data[0]:data;return {total:Number(row?.used_total)||0,today:Number(row?.used_today)||0}};
 window.vzipCloudAccessToken=async()=>{if(!client||!user)return null;const {data}=await client.auth.getSession();return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user;

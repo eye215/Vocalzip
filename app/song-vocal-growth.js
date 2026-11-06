@@ -117,7 +117,7 @@ VZ.songVocalGrowth = (host, song, media) => {
   } else body += '<p class="small muted" style="margin:4px 0 0">아직 분석한 녹음이 없어요. 녹음을 분석하면 날짜별로 음정·흔들림·최고음·프레이즈가 어떻게 변했는지 보여 드려요.</p>';
   const action = running
     ? '<div class="vg-run"><span>분석 중 ' + Math.min(batch.done + 1, batch.total) + '/' + batch.total + ' · ' + esc(batch.current) + '</span><button type="button" class="btn sm ghost" data-vg-stop>멈추기</button></div><div class="ana-bar"><span style="width:' + Math.round(batch.done / Math.max(1, batch.total) * 100) + '%"></span></div>'
-    : todo.length ? (VZ.autoAnalysisStatus?.().enabled ? '<p class="small muted" style="margin:0 0 6px">앱을 켜 두면 자동으로 하나씩 분석해요. 바로 보려면:</p>' : '') + '<button type="button" class="btn sm secondary block" data-vg-run' + (batch.running ? ' disabled' : '') + '><i class="ph ph-chart-line-up"></i>지금 ' + todo.length + '개 분석하기 (이 기기에서 · 무료)</button>' : '';
+    : todo.length ? (VZ.serverAnalysisOn?.() ? '<p class="small muted" style="margin:0 0 6px">서버에서 자동으로 분석하고 있어요(앱을 닫아도 계속). 바로 보려면:</p>' : VZ.autoAnalysisStatus?.().enabled ? '<p class="small muted" style="margin:0 0 6px">앱을 켜 두면 자동으로 하나씩 분석해요. 바로 보려면:</p>' : '') + '<button type="button" class="btn sm secondary block" data-vg-run' + (batch.running ? ' disabled' : '') + '><i class="ph ph-chart-line-up"></i>지금 ' + todo.length + '개 분석하기 (이 기기에서 · 무료)</button>' : '';
   host.innerHTML = '<div class="card vg"><div class="row between"><strong>보컬 측정 변화</strong><span class="small muted">분석 ' + pts.length + '/' + audio.length + '개</span></div>' + body +
     (action ? '<div style="margin-top:10px">' + action + '</div>' : '') +
     '<p class="small muted vg-note">점을 누르면 그 녹음의 음높이 곡선을 볼 수 있어요. 시험판 측정값이라 실제 녹음으로 확인 중이에요.</p></div>';
