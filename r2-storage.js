@@ -26,8 +26,8 @@ async function api(path, {method = 'GET', body, headers = {}, signal} = {}) {
 const extOf = (file, type) => (String(file.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1] || ({'audio/mp4':'m4a', 'audio/x-m4a':'m4a', 'audio/mpeg':'mp3', 'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/aac':'aac', 'audio/ogg':'ogg', 'audio/flac':'flac', 'audio/webm':'webm', 'video/mp4':'mp4', 'video/quicktime':'mov', 'video/webm':'webm'})[type] || 'bin').toLowerCase();
 
 /** Upload a file as parts (resumable per part, 3 tries each). Returns {key, size, etag}. */
-async function upload(file, {mediaId, type = file.type, onProgress, signal} = {}) {
-  const start = await api('/v1/uploads', {method:'POST', signal, body:{mediaId, contentType:type, size:file.size, ext:extOf(file, type)}});
+async function upload(file, {mediaId, type = file.type, onProgress, signal, purpose} = {}) {
+  const start = await api('/v1/uploads', {method:'POST', signal, body:{mediaId, contentType:type, size:file.size, ext:extOf(file, type), ...(purpose ? {purpose} : {})}});
   const q = '?key=' + encodeURIComponent(start.key), base = '/v1/uploads/' + encodeURIComponent(start.uploadId);
   const parts = [];
   try {

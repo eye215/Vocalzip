@@ -47,7 +47,7 @@ VZ.uploadCheckCompare = ({local = [], rows = [], objects = null, orphans = [], q
   };
   if (objects) {
     const byKey = new Map(objects.map(o => [o.key, o]));
-    for (const o of objects) if (!r2Keys.has(o.key) && !rowById.has(String(o.mediaId))) out.r2NoRow.push(o);
+    for (const o of objects) if (!String(o.mediaId).startsWith('performance-') && !r2Keys.has(o.key) && !rowById.has(String(o.mediaId))) out.r2NoRow.push(o);
     for (const o of out.r2NoRow) {
       // Recoverable only with the original details (name, date…) kept somewhere: this device, the kept-file note, or the upload queue.
       const src = localById.get(String(o.mediaId)) || orphanById.get(String(o.mediaId)) || queueById.get(String(o.mediaId));

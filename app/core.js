@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const KEY = 'vocal-zip_mvp_v1';
-const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports'];
+const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances'];
 const DEFAULTS = {categories:[{id:'c1',name:'발성',items:['립트릴','허밍','패사지오']},{id:'c2',name:'호흡',items:['복식호흡','호흡 유지']},{id:'c3',name:'곡 연습',items:['음정 교정','프레이징','감정 표현']}],songs:[],lessons:[],assignments:[],practices:[],comparisonReports:[]};
 const VZ = window.VZ = {version:'6.0'};
 
@@ -20,7 +20,7 @@ let writing = false;
 /** Apply a mutation; on storage failure restore the previous state and report false. */
 /** Mark changed records with updatedAt and remember deliberately removed ids, so a cloud
  * merge (data-merge.js) never brings back what the user deleted nor drops what they added. */
-const TRACKED = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports'];
+const TRACKED = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances'];
 function stamp(before, after) {
   const now = Date.now();
   for (const k of TRACKED) {
@@ -39,6 +39,7 @@ VZ.change = (mutate, {silent} = {}) => {
   const previous = structuredClone(db);
   try {
     mutate(db);
+    window.VzipArchive?.reconcile(db);
     stamp(previous, db);
     localStorage.setItem(KEY, JSON.stringify(db));
   } catch (error) {

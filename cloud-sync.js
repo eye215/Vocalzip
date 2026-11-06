@@ -53,7 +53,7 @@ async function sync({silent=false,reload=false}={}){
    const row=await remoteData(),remote=row?.payload&&Merge.valid(row.payload)?row.payload:null;
    // The device copy is read only now, right before it may be rewritten: an edit made while
    // waiting for the server is merged too, never overwritten.
-   local=localData();
+   local=window.VzipArchive?window.VzipArchive.forOwner(localData(),user.id):localData();
    if(!local&&!remote){say('아직 저장된 기록이 없어요.');return}
    merged=remote?Merge.merge(local||{},remote).data:local;
    if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');

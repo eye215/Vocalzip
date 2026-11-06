@@ -4,7 +4,7 @@
  * `updatedAt` wins; without timestamps the first argument (this device) wins. */
 ((root) => {
 'use strict';
-const COLLECTIONS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports'];
+const COLLECTIONS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances'];
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
 function valid(data) { return isObj(data) && ['lessons', 'practices', 'assignments', 'categories', 'songs'].every(k => Array.isArray(data[k])); }
 function count(data) { return valid(data) ? (data.songs.length + data.lessons.length + data.practices.length + data.assignments.length) : 0; }
@@ -37,12 +37,15 @@ function merge(primary, secondary) {
   if (media.length) deleted.media = media;
   out.deleted = deleted;
   unlinkMedia(out, media);
+  const removedSongs = new Set(out.deleted.songs || []);
+  if (out.performances) out.performances = out.performances.map(p => ({...p, songLinks:(p.songLinks || []).map(l => removedSongs.has(l.songId) ? {...l,songId:'',unlinked:true} : l)}));
   return {data:out, added};
 }
 /** File deletion removes links, never lesson/practice text, minutes or comparison snapshots. */
 function unlinkMedia(data, ids) {
   if (!ids.length) return data;
   const gone = new Set(ids);
+  if (data.songs) data.songs = data.songs.map(s => gone.has(s.repertoire?.takeId) ? {...s,repertoire:{...s.repertoire,takeId:''}} : s);
   if (data.practices) data.practices = data.practices.map(p => p.mediaIds ? {...p, mediaIds:p.mediaIds.filter(id => !gone.has(id))} : p);
   if (data.lessons) data.lessons = data.lessons.map(l => l.recordings ? {...l, recordings:l.recordings.filter(r => !gone.has(r.id))} : l);
   if (data.comparisonReports) data.comparisonReports = data.comparisonReports.map(original => {

@@ -179,3 +179,18 @@ test('30-second clip endpoint is owner-only, rejects invalid intervals and is sa
   // Authentication checks must happen even when the optional transform binding is absent.
   assert.equal((await call('/v1/clip/'+up.key.replace(/original\.m4a$/,'original.wav'),{auth:bob})).status,403);
 });
+
+test('performance attachments use private R2 and reject active content',async()=>{
+ const alice=await token(ALICE),bob=await token(BOB),bytes=new TextEncoder().encode('%PDF-1.4 archive');
+ const res=await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-test',contentType:'application/pdf',size:bytes.length,ext:'pdf',purpose:'performance'}});
+ assert.equal(res.status,200);const start=await res.json(),q='?key='+encodeURIComponent(start.key);
+ const part=await (await call('/v1/uploads/'+start.uploadId+'/parts/1'+q,{method:'PUT',auth:alice,body:bytes})).json();
+ assert.equal((await call('/v1/uploads/'+start.uploadId+'/complete'+q,{method:'POST',auth:alice,body:{parts:[part]}})).status,200);
+ for(const method of ['GET','DELETE'])assert.equal((await call('/v1/media/'+start.key,{method,auth:bob})).status,403);
+ assert.equal((await call('/v1/sign',{method:'POST',auth:bob,body:{key:start.key}})).status,403);
+ const own=await call('/v1/media/'+start.key,{auth:alice});assert.equal(own.status,200);assert.equal(own.headers.get('content-disposition'),'attachment');assert.equal(own.headers.get('x-content-type-options'),'nosniff');
+ for(const contentType of ['text/html','image/svg+xml','application/javascript'])assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-bad',purpose:'performance',contentType,size:10,ext:'bin'}})).status,400);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'regular',purpose:'performance',contentType:'image/png',size:10,ext:'png'}})).status,400);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-no-purpose',contentType:'image/png',size:10,ext:'png'}})).status,400);
+ assert.equal((await call('/v1/media/'+start.key,{method:'DELETE',auth:alice})).status,200);
+});

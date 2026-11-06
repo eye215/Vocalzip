@@ -1,0 +1,78 @@
+const {test,expect}=require('@playwright/test');
+const KEY='vocal-zip_mvp_v1';
+const initial=()=>({categories:[],songs:[{id:'song1',title:'This Is the Moment',show:'지킬 앤 하이드',lyrics:'보존할 가사'},{id:'song2',title:'On My Own',show:'레미제라블'}],lessons:[{id:'lesson1',date:'2026-11-01',songId:'song1',feedback:'기존 피드백'}],practices:[{id:'practice1',date:'2026-11-01',songId:'song1',minutes:30,memo:'기존 연습'}],assignments:[],comparisonReports:[]});
+const sdk="window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'archive-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'test-token'}}})},from:()=>{const c={};for(const k of ['select','eq','is','order','range','upsert','update','delete','maybeSingle'])c[k]=()=>c;c.then=r=>r({data:[],error:null});return c},storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/file.wav'}})})}})};";
+async function boot(page){
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));page._archiveErrors=errors;
+ await page.route('**/supabase.min.js',r=>r.fulfill({contentType:'application/javascript',body:sdk}));
+ await page.route('**/r2-config.js*',r=>r.fulfill({contentType:'application/javascript',body:"window.VZIP_R2_ENDPOINT='';"}));
+ await page.route('**/tus.min.js',r=>r.fulfill({contentType:'application/javascript',body:'window.tus={}'}));await page.route('**/*.supabase.co/**',r=>r.abort());
+ await page.addInitScript(([key,data])=>{if(!sessionStorage.getItem('archiveSeed')){localStorage.setItem(key,JSON.stringify(data));sessionStorage.setItem('archiveSeed','1')}},[KEY,initial()]);
+ await page.goto('/#/songs');await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await expect(page.getByRole('link',{name:'나의 공연',exact:true})).toBeVisible();
+}
+const db=page=>page.evaluate(k=>JSON.parse(localStorage.getItem(k)),KEY);
+const dialog=page=>page.locator('.archive-sheet');
+async function save(page){await dialog(page).getByRole('button',{name:'저장',exact:true}).click();await expect(dialog(page)).toHaveCount(0)}
+async function newShow(page,title='지킬 앤 하이드'){
+ await page.goto('/#/performances');await page.locator('[data-new-show]').click();
+ await dialog(page).getByLabel('작품명',{exact:true}).fill(title);await dialog(page).getByLabel('공연 시작일',{exact:true}).fill('2026-11-01');await dialog(page).getByLabel('배역',{exact:true}).fill('지킬');
+ await save(page);await expect(page.locator('[data-add-session]')).toBeVisible();return (await db(page)).performances.at(-1).id;
+}
+async function addSession(page,time,number){
+ await page.locator('[data-add-session]').click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill(time);await dialog(page).getByLabel('공연 회차',{exact:true}).fill(number);await dialog(page).getByLabel('해당 회차 출연',{exact:true}).selectOption('yes');await save(page);
+}
+test.afterEach(async({page})=>expect(page._archiveErrors||[]).toEqual([]));
+test('Repertoire persists metadata ratings keys and filters without rewriting original records',async({page})=>{
+ await boot(page);await page.goto('/#/song/song1');await page.locator('[data-rep=status]').click();await dialog(page).getByLabel('상태',{exact:true}).selectOption('ready');await save(page);
+ await page.locator('[data-rep=info]').click();await dialog(page).getByLabel('배역',{exact:true}).fill('지킬');await dialog(page).getByLabel('원어',{exact:true}).fill('영어');await dialog(page).getByLabel('구분',{exact:true}).selectOption('solo');await save(page);
+ await page.locator('[data-rep=skills]').click();await dialog(page).getByLabel('가사 암보',{exact:true}).selectOption('5');await dialog(page).getByLabel('전체 완성도',{exact:true}).selectOption('4');await save(page);
+ await page.locator('[data-rep=keys]').click();await dialog(page).getByLabel('원키',{exact:true}).fill('Db');await dialog(page).getByLabel('연습키',{exact:true}).fill('C');await save(page);
+ await page.reload();await expect(page.locator('[data-repertoire]')).toContainText('4.5/5');await expect(page.locator('[data-repertoire]')).toContainText('원키 Db');
+ const data=await db(page);expect(data.songs[0].id).toBe('song1');expect(data.songs[0].lyrics).toBe('보존할 가사');expect(data.practices).toEqual(initial().practices);expect(data.lessons).toEqual(initial().lessons);
+ await page.goto('/#/songs');await page.getByRole('combobox',{name:'레퍼토리 상태'}).selectOption('ready');await expect(page.locator('[data-l] a')).toHaveCount(1);
+ await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await expect(page.locator('[data-l]')).toContainText('This Is the Moment');
+ await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
+});
+test('Performance CRUD, distinct sessions, bidirectional song links and safe deletion',async({page})=>{
+ await boot(page);const id=await newShow(page);await addSession(page,'14:00','1');await addSession(page,'19:00','2');
+ await page.locator('[data-link-songs]').click();await dialog(page).getByRole('searchbox',{name:'공연곡 검색'}).fill('moment');await dialog(page).getByLabel('연결할 기존 곡',{exact:true}).selectOption('song1');await dialog(page).getByLabel('공연 당시 키',{exact:true}).fill('D');await save(page);
+ await page.reload();expect((await db(page)).performances[0].sessions).toHaveLength(2);
+ await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('지킬 앤 하이드');
+ const id2=await newShow(page,'두 번째 공연');await page.locator('[data-link-songs]').click();await dialog(page).getByLabel('연결할 기존 곡',{exact:true}).selectOption('song1');await save(page);
+ expect((await db(page)).songs).toHaveLength(2);
+ await page.goto('/#/show/'+id);await page.locator('[data-edit-show]').click();await dialog(page).getByLabel('공연 후기·개인 메모',{exact:true}).fill('첫 무대');await save(page);
+ await page.goto('/#/performances');await expect(page.locator('.archive-page')).toContainText('실제 출연 2회');
+ await page.goto('/#/show/'+id2);await page.locator('[data-delete-show]').click();await page.locator('.sheet [data-ok]').click();await expect(page.locator('[data-new-show]')).toBeVisible();
+ const state=await db(page);expect(state.performances).toHaveLength(1);expect(state.songs).toHaveLength(2);expect(state.lessons).toEqual(initial().lessons);
+ await page.goto('/#/song/song1');await page.locator('[data-song-menu]').click();await page.locator('[data-d]').click();await page.locator('.sheet [data-ok]').click();
+ await page.goto('/#/show/'+id);await expect(page.locator('.archive-page')).toContainText('This Is the Moment (연결 해제됨)');expect((await db(page)).practices).toEqual(initial().practices);
+});
+test('Representative take references the original file and deletion clears only its reference',async({page})=>{
+ await boot(page);await page.evaluate(async()=>{
+  await window.vzipStorePracticeMedia({id:'take1',name:'대표 녹음',songId:'song1',type:'audio/wav',durationSeconds:1,created:Date.now(),blob:new Blob(['wav'],{type:'audio/wav'})});VZ.media.invalidate();
+ });
+ await page.goto('/#/song/song1');await page.locator('[data-take]').click();await dialog(page).getByLabel('기존 녹음',{exact:true}).selectOption('take1');await save(page);
+ await expect(page.locator('[data-take-player]')).toContainText('대표 녹음');expect((await page.evaluate(()=>vzipReadMedia())).length).toBe(1);
+ await page.evaluate(()=>VZ.change(d=>VzipDataMerge.deleteMedia(d,'take1')));
+ expect((await db(page)).songs[0].repertoire.takeId).toBe('');expect((await db(page)).songs[0].lyrics).toBe('보존할 가사');
+});
+test('Performance upload retries preserve video bytes and isolate metadata from recordings',async({page})=>{
+ await boot(page);const id=await newShow(page);await page.evaluate(()=>{
+  window.__archiveUploads=[];let attempt=0;
+  window.VzipR2={configured:()=>true,ready:async()=>true,upload:async(file,opts)=>{window.__archiveUploads.push({name:file.name,type:opts.type,purpose:opts.purpose,size:file.size});if(++attempt===1)throw Error('테스트 네트워크 중단');return {key:'u/archive-user/'+opts.mediaId+'/original.mp4',size:file.size}},remove:async()=>{},url:async()=>'/test-poster'};
+ });
+ await page.getByRole('button',{name:'자료 업로드',exact:true}).click();await dialog(page).locator('[data-files]').setInputFiles({name:'공연.mp4',mimeType:'video/mp4',buffer:Buffer.from('original video bytes')});
+ await dialog(page).locator('[data-upload]').click();await expect(dialog(page)).toContainText('네트워크 중단');await dialog(page).locator('[data-upload]').click();await expect(dialog(page)).toContainText('저장 완료');
+ await dialog(page).getByRole('button',{name:'닫기',exact:true}).click();await expect(page.locator('[data-show-assets]')).toContainText('공연.mp4');
+ const data=await db(page);expect(data.performances[0].assets[0].type).toBe('video/mp4');expect(await page.evaluate(()=>vzipReadMedia())).toHaveLength(0);
+ expect(await page.evaluate(()=>window.__archiveUploads.at(-1))).toMatchObject({type:'video/mp4',purpose:'performance',size:20});
+ await page.getByRole('button',{name:'자료 삭제',exact:true}).click();await page.locator('.sheet [data-ok]').click();await expect(page.locator('.archive-asset')).toHaveCount(0);
+ await page.evaluate(()=>{window.vzipCloudUserId=()=> 'another-user';VZ.render()});await expect(page.locator('#view')).toContainText('로그인 계정을 확인');expect((await db(page)).performances[0].id).toBe(id);
+});
+test('Archive sheets preserve unsaved inputs and fit phone width',async({page})=>{
+ await boot(page);await page.goto('/#/performances');await page.locator('[data-new-show]').click();await dialog(page).getByLabel('작품명',{exact:true}).fill('저장 전 제목');
+ page.once('dialog',d=>d.dismiss());await dialog(page).getByRole('button',{name:'닫기',exact:true}).click();await expect(dialog(page).getByLabel('작품명',{exact:true})).toHaveValue('저장 전 제목');
+ for(const width of [320,390]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);expect(await dialog(page).evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true)}
+ page.once('dialog',d=>d.accept());await dialog(page).getByRole('button',{name:'닫기',exact:true}).click();await expect(dialog(page)).toHaveCount(0);expect((await db(page)).performances||[]).toHaveLength(0);
+});
