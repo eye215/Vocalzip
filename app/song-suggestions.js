@@ -192,6 +192,8 @@ async function analyze(main,check=()=>{}){
  const root=main.querySelector('[data-suggest]');
  const targets=state.items.filter(m=>state.chosen.has(m.id));
  const paid=targets.filter(m=>!resultFor(m)?.candidate&&readCache(m)?.method!=='stt').length;
+ // Until a durable server quota is in place, limit each manual action to one paid request.
+ if(paid>1){VZ.toast('안전한 테스트를 위해 유료 음성 분석은 한 번에 1개만 선택해 주세요.','error');return}
  if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 유료 STT를 호출할 수 있어요. 파일당 최대 30초를 보내며, API 과금이 발생합니다. 원본을 변경하지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  let success=0,failed=0,seen=0;
@@ -215,18 +217,22 @@ async function analyze(main,check=()=>{}){
 }
 async function undo(main,check=()=>{}){
  let backup;try{backup=JSON.parse(localStorage.getItem(localStorage.getItem(scoped(backupPointer))||'')||'null')}catch{}
- if(!backup?.rows?.length){VZ.toast('되돌릴 일괄 지정 기록이 없어요.','error');return}
- if(!await VZ.confirm('곡 지정 되돌리기',backup.rows.length+'개 중 이번 일괄 지정 내용과 같은 곡이 연결된 파일만 이전 상태로 복구합니다.',{ok:'되돌리기'}))return;
+ if(!backup?.rows?.some(row=>row.applied)){VZ.toast('되돌릴 성공 기록이 없어요.','error');return}
+ if(!await VZ.confirm('곡 지정 되돌리기',backup.rows.filter(row=>row.applied).length+'개 중 다른 기기에서 수정되지 않은 녹음만 복구합니다.',{ok:'되돌리기'}))return;
  check();state.running=true;controls(main);
  let undone=0,skipped=0,failed=0;
  try{
   const fresh=await M.list(true);
   check();
-  for(const row of backup.rows){
+  for(const row of backup.rows.filter(row=>row.applied)){
    check();
    const m=fresh.find(item=>item.id===row.id);
-   if(!m||m.songId!==row.assignedId){skipped++;continue}
-   try{await M.update(m,{songId:row.oldId||'',song:row.oldSong||''},{quiet:true});undone++}catch{failed++}
+   if(!m||m.songId!==row.assignedId||m.song!==row.assignedSong){skipped++;continue}
+   try{
+    await M.assignSongSafe(m,{songId:row.oldId||'',song:row.oldSong||''},
+      {expectedSongId:row.assignedId,expectedSong:row.assignedSong,expectedUpdatedAt:row.updatedAt||null});
+    undone++;
+   }catch{failed++}
   }
   M.invalidate();window.dispatchEvent(new Event('vzip:media-updated'));
   state.items=(await M.list(true)).filter(eligible);
@@ -243,16 +249,22 @@ async function apply(main,check=()=>{}){
   const fresh=await M.list(true);
   check();
   const changes=approved.map(previous=>({old:fresh.find(x=>x.id===previous.id),newSong:previous.candidate})).filter(x=>x.old&&eligible(x.old)&&x.newSong&&songs().some(s=>s.id===x.newSong.id));
-  const backup={at:new Date().toISOString(),rows:changes.map(x=>({id:x.old.id,oldId:x.old.songId||'',oldSong:x.old.song||'',assignedId:x.newSong.id}))};
+  const backup={at:new Date().toISOString(),rows:changes.map(x=>({id:x.old.id,oldId:x.old.songId||'',oldSong:x.old.song||'',assignedId:x.newSong.id,assignedSong:x.newSong.title,applied:false,updatedAt:null}))};
   if(!backup.rows.length){VZ.toast('지정할 녹음이 없어요.');return}
-  try{const key=scoped(backupPrefix)+':'+Date.now();localStorage.setItem(key,JSON.stringify(backup));localStorage.setItem(scoped(backupPointer),key)}
+  let backupKey;
+  try{backupKey=scoped(backupPrefix)+':'+Date.now();localStorage.setItem(backupKey,JSON.stringify(backup));localStorage.setItem(scoped(backupPointer),backupKey)}
   catch{throw Error('변경 전 백업을 저장하지 못했어요. 안전을 위해 곡 지정을 중단합니다.')}
   for(const previous of approved){
    check();
    const item=fresh.find(x=>x.id===previous.id),candidate=previous.candidate;
    if(!item||!eligible(item)||!songs().some(s=>s.id===candidate?.id)){skipped++;continue}
-   try{await M.update(item,{songId:candidate.id,song:candidate.title},{quiet:true});done++;state.chosen.delete(item.id)}
-   catch{failed++}
+   try{
+     const written=await M.assignSongSafe(item,{songId:candidate.id,song:candidate.title},
+       {expectedSongId:item.songId||'',expectedSong:item.song||''});
+     const row=backup.rows.find(r=>r.id===item.id);
+     if(row){row.applied=true;row.updatedAt=written.updatedAt||null;localStorage.setItem(backupKey,JSON.stringify(backup))}
+     done++;state.chosen.delete(item.id);
+   }catch{failed++}
   }
   M.invalidate();window.dispatchEvent(new Event('vzip:media-updated'));
   state.items=(await M.list(true)).filter(eligible);
