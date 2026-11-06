@@ -53,21 +53,23 @@ async function sync({silent=false,reload=false}={}){
    const row=await remoteData(),remote=row?.payload&&Merge.valid(row.payload)?row.payload:null;
    // The device copy is read only now, right before it may be rewritten: an edit made while
    // waiting for the server is merged too, never overwritten.
-   local=window.VzipArchive?window.VzipArchive.forOwner(localData(),user.id):localData();
+   local=localData();
    if(!local&&!remote){say('아직 저장된 기록이 없어요.');return}
    merged=remote?Merge.merge(local||{},remote).data:local;
    if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
    if(!local||!Merge.same(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));changedLocal=true;window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}))}
-   if(remote&&Merge.same(merged,remote))break;
+   // Keep other accounts' unsynced archive data on this device; scope only the outbound payload.
+   const payload=window.VzipArchive?window.VzipArchive.forOwner(merged,user.id):merged;
+   if(remote&&Merge.same(payload,remote))break;
    const stamp=new Date().toISOString();
    if(row&&'payload' in row){
-    const {data,error}=await sameVersion(client.from('vocal_data').update({payload:merged,updated_at:stamp}).eq('user_id',user.id),row.updated_at).select('user_id');
+    const {data,error}=await sameVersion(client.from('vocal_data').update({payload,updated_at:stamp}).eq('user_id',user.id),row.updated_at).select('user_id');
     if(error)throw error;
     if(!Array.isArray(data)||data.length)break;
     // Another device saved first: read its copy and merge again.
     if(attempt>=4)throw Error('다른 기기에서 동시에 저장하고 있어요. 다음 저장 때 다시 합쳐요.');
     await wait(150*(attempt+1)+Math.random()*150);
-   }else{const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload:merged,updated_at:stamp});if(error)throw error;break}
+   }else{const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload,updated_at:stamp});if(error)throw error;break}
   }
   localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;
   say('✓ 이 기기와 클라우드 기록을 합쳐 저장했어요 · '+Merge.count(merged)+'건'+(silent?' (자동 동기화)':''));

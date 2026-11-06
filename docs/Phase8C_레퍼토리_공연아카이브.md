@@ -1,6 +1,6 @@
 # Phase 8C — Musical repertoire and performance archive
 
-Base: 30f01baee738aedd78ebeb962a6e6b55540c2898. Branch: codex/phase8c-repertoire-performances.
+Started from 30f01baee738aedd78ebeb962a6e6b55540c2898; integrated main bb8efab7ea2ef5127a7f8efd0c4abeb6a47949de including Phase 8A scores and Phase 8B practice tips. Branch: codex/phase8c-repertoire-performances.
 
 ## Ownership / integration contract
 
@@ -9,7 +9,7 @@ Base: 30f01baee738aedd78ebeb962a6e6b55540c2898. Branch: codex/phase8c-repertoire
 - app/performance-assets.js: existing VzipR2 transport, private originals, metadata retry journal. No new media server, new library or AI job.
 - Song IDs stay unchanged. song.repertoire stores status, role, kind, language, memo, manual skills, keys and takeId; song.title/show remain the canonical title/work.
 - performances is an optional array in the existing vocal_data JSON payload, tracked/merged by ID using the existing version-aware cloud sync and history. A production embeds sessions, songLinks and assets. No statistics tables or new database migration.
-- Records have ownerId. Repertoire writes require the current logged-in identity; archive lists filter by that owner. Cloud upload projects out another account's performances and repertoire fields. Existing vocal_data RLS remains the server-side boundary; it is not replaced by client filtering.
+- Records have ownerId. Repertoire writes require the current logged-in identity; archive lists filter by that owner. Only the outbound cloud payload projects out another account's performances and repertoire fields; merging remote rows preserves the other account's unsynced local archive copy. Existing vocal_data RLS remains the server-side boundary; it is not replaced by client filtering.
 - For parallel Claude work: preserve optional VZ.repertoire hooks in views-main.js, the performances collection in core/data-merge, and scripts in index.html. No AI server/queue changes. Before merge, compare latest main and resolve shared-file conflicts explicitly.
 
 ## Policies
@@ -34,6 +34,6 @@ Worker changes must be deployed through the existing R2 deployment process befor
 - npx playwright test tests/repertoire.spec.cjs
 - cd r2-worker && npm ci && npm test
 
-Tests cover validation, field preservation, multi-device merge/tombstones and account projection; repertoire save/filter/keys/skills, sessions, cross-linked songs, take references, archive CRUD, upload retries and 320/390px sheets; Miniflare checks private attachment ownership and unsafe MIME rejection. Browser auth/R2 is mocked. Real iPhone/PWA, real login and two physical-device cloud round trips are not implied by these checks. Latest CI results are recorded on the PR.
+Tests include a mocked cloud merge/upload round trip that keeps foreign unsynced archives on the device and excludes them from the current account's payload. Tests cover validation, field preservation, multi-device merge/tombstones and account projection; repertoire save/filter/keys/skills, sessions, cross-linked songs, take references, archive CRUD, upload retries and 320/390px sheets; Miniflare checks private attachment ownership and unsafe MIME rejection. Browser auth/R2 is mocked. Real iPhone/PWA, real login and two physical-device cloud round trips are not implied by these checks. Latest CI results are recorded on the PR.
 
 P2 animation/gallery refinements are omitted. Existing cloud sync uses record-level conflict resolution: concurrent edits to the same production follow its updatedAt policy, not field-level collaboration.

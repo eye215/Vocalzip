@@ -1,13 +1,13 @@
 const {test,expect}=require('@playwright/test');
 const KEY='vocal-zip_mvp_v1';
 const initial=()=>({categories:[],songs:[{id:'song1',title:'This Is the Moment',show:'지킬 앤 하이드',lyrics:'보존할 가사'},{id:'song2',title:'On My Own',show:'레미제라블'}],lessons:[{id:'lesson1',date:'2026-11-01',songId:'song1',feedback:'기존 피드백'}],practices:[{id:'practice1',date:'2026-11-01',songId:'song1',minutes:30,memo:'기존 연습'}],assignments:[],comparisonReports:[]});
-const sdk="window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'archive-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'test-token'}}})},from:()=>{const c={};for(const k of ['select','eq','is','order','range','limit','in','upsert','update','delete','maybeSingle'])c[k]=()=>c;c.then=r=>r({data:[],error:null});return c},storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/file.wav'}})})}})};";
-async function boot(page){
+const sdk="window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'archive-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'test-token'}}})},from:table=>{const c={};let method='select';for(const k of ['select','eq','is','order','range','limit','in','upsert','update','delete','maybeSingle'])c[k]=()=>c;for(const k of ['upsert','update'])c[k]=v=>{method=k;if(table==='vocal_data'){(window.__archiveWrites||=[]).push(v.payload);window.__archiveRemote=v.payload}return c};c.then=r=>r({data:table==='vocal_data'&&method==='select'&&window.__archiveRemote?{payload:window.__archiveRemote,updated_at:null}:method==='update'?[{user_id:'archive-user'}]:[],error:null});return c},storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/file.wav'}})})}})};";
+async function boot(page,{seed=initial(),remote=null}={}){
  const errors=[];page.on('pageerror',e=>errors.push(e.message));page._archiveErrors=errors;
  await page.route('**/supabase.min.js',r=>r.fulfill({contentType:'application/javascript',body:sdk}));
  await page.route('**/r2-config.js*',r=>r.fulfill({contentType:'application/javascript',body:"window.VZIP_R2_ENDPOINT='';"}));
  await page.route('**/tus.min.js',r=>r.fulfill({contentType:'application/javascript',body:'window.tus={}'}));await page.route('**/*.supabase.co/**',r=>r.abort());
- await page.addInitScript(([key,data])=>{if(!sessionStorage.getItem('archiveSeed')){localStorage.setItem(key,JSON.stringify(data));sessionStorage.setItem('archiveSeed','1')}},[KEY,initial()]);
+ await page.addInitScript(([key,data,remote])=>{window.__archiveRemote=remote;if(!sessionStorage.getItem('archiveSeed')){localStorage.setItem(key,JSON.stringify(data));sessionStorage.setItem('archiveSeed','1')}},[KEY,seed,remote]);
  await page.goto('/#/songs');await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  await expect(page.getByRole('link',{name:'나의 공연',exact:true})).toBeVisible();
 }
@@ -89,4 +89,18 @@ test('Changing account while deletion confirmation is open preserves the origina
  await page.evaluate(()=>{window.vzipCloudUserId=()=> 'another-user'});
  await page.locator('.sheet [data-ok]').click();
  expect((await db(page)).performances[0].sessions).toHaveLength(1);
+});
+
+test('Cloud writes exclude another account archive while preserving its unsynced device copy',async({page})=>{
+ const seed=initial(),remote=initial();
+ seed.performances=[{id:'foreign-show',ownerId:'another-user',title:'비공개 미동기화 공연',start:'2026-10-01',sessions:[],songLinks:[],assets:[]}];
+ seed.songs[0].repertoire={ownerId:'another-user',status:'ready',memo:'기기 보관'};
+ remote.performances=[{id:'remote-show',ownerId:'archive-user',title:'원격 공연',start:'2026-11-01',sessions:[],songLinks:[],assets:[]}];
+ await boot(page,{seed,remote});
+ await expect.poll(()=>page.evaluate(()=>window.__archiveWrites?.length||0)).toBeGreaterThan(0);
+ const local=await db(page),out=await page.evaluate(()=>window.__archiveWrites.at(-1));
+ expect(local.performances.map(p=>p.id).sort()).toEqual(['foreign-show','remote-show']);
+ expect(local.songs[0].repertoire.memo).toBe('기기 보관');
+ expect(out.performances.map(p=>p.id)).toEqual(['remote-show']);expect(out.songs[0].repertoire).toBeUndefined();
+ await page.goto('/#/performances');await expect(page.locator('#view')).toContainText('원격 공연');await expect(page.locator('#view')).not.toContainText('비공개 미동기화 공연');
 });
