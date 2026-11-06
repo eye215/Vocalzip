@@ -61,7 +61,58 @@ VZ.practiceTips = (media, {songId = ''} = {}) => {
   }).filter(Boolean).sort((a, b) => b.score - a.score);
   return {enough:true, count:takes.length, range, tips};
 };
-const doneToday = tip => VZ.db.practices.some(p => p.date === VZ.today() && String(p.memo || '').includes('[추천 연습] ' + tip.name));
+// The home card also recommends five minutes of comfortable long tones when all metrics are steady.
+const recordableTips = result => !result.enough ? [] : result.tips.length ? result.tips : [{
+  key:'maintenance', name:'롱톤 유지 연습', metric:'유지 연습', value:'5분', minutes:5,
+  reason:'측정값이 고르게 안정적이에요. 편한 음역에서 롱톤 5분으로 유지해 보세요.',
+  goal:'편안한 음역에서 안정적으로 유지',
+  steps:['편한 음역' + (result.range ? '(' + result.range + ')' : '') + '에서 무리하지 않고 롱톤 연습']
+}];
+// Store what was practiced, not a live pointer to a recommendation that may change tomorrow.
+const snapshot = tip => ({key:tip.key, name:tip.name, goal:tip.goal || '', minutes:Number(tip.minutes) || 0,
+  steps:Array.isArray(tip.steps) ? tip.steps.map(String) : []});
+VZ.completedPracticeTips = practice => {
+  if (Array.isArray(practice?.recommendedExercises)) return practice.recommendedExercises.filter(t => t?.key && t?.name).map(snapshot);
+  // Read old records without rewriting their memo; an explicit [] always means unchecked.
+  return RULES.filter(t => String(practice?.memo || '').includes('[추천 연습] ' + t.name)).map(snapshot);
+};
+const doneToday = tip => VZ.db.practices.some(p => p.date === VZ.today() && VZ.completedPracticeTips(p).some(t => t.key === tip.key));
+/** Independent of lesson homework. Returns a synchronous reader so saving never waits on a media request. */
+VZ.practiceTipChecklist = (host, {practice, preset} = {}) => {
+  const entries = new Map(), checked = new Set();
+  const add = tip => { if (tip?.key && tip?.name && !entries.has(tip.key)) entries.set(tip.key, snapshot(tip)); };
+  for (const tip of VZ.completedPracticeTips(practice)) { add(tip); checked.add(tip.key); }
+  add(preset?.recommendedExercise);
+  let loading = true;
+  const draw = () => {
+    if (!host.isConnected) return;
+    host.innerHTML = '<fieldset class="field" style="border:0;padding:0"><legend>오늘의 추천 연습</legend>' +
+      '<p class="small muted" style="margin:0 0 8px">내 녹음을 참고한 추천이에요. 선생님 피드백·숙제와 따로 체크해요.</p>' +
+      (entries.size ? '<div class="list">' + [...entries.values()].map(t => '<div>' +
+        '<label class="item" style="min-height:48px;gap:12px"><input type="checkbox" data-practice-tip="' + esc(t.key) + '" aria-label="' + esc(t.name) + '"' + (checked.has(t.key) ? ' checked' : '') + ' style="width:22px;height:22px;flex:none;accent-color:var(--accent)">' +
+        '<span class="item-main"><span class="item-title">' + esc(t.name) + '</span><span class="item-sub">' + esc([t.goal, t.minutes ? '권장 ' + t.minutes + '분' : ''].filter(Boolean).join(' · ')) + '</span></span></label>' +
+        (t.steps.length ? '<details class="small" style="padding:0 16px 8px"><summary style="min-height:44px;display:flex;align-items:center;cursor:pointer">연습 방법 보기</summary><ol>' + t.steps.map(step => '<li>' + esc(step) + '</li>').join('') + '</ol></details>' : '') + '</div>').join('') + '</div>' :
+        '<p class="small muted" role="status">' + (loading ? '추천 연습을 불러오는 중…' : '아직 체크할 추천 연습이 없어요. 믿을 만한 녹음 분석이 쌓이면 표시돼요.') + '</p>') + '</fieldset>';
+  };
+  host.addEventListener('change', e => {
+    const key = e.target.dataset.practiceTip;
+    if (!entries.has(key)) return;
+    e.target.checked ? checked.add(key) : checked.delete(key);
+  });
+  draw();
+  Promise.resolve().then(() => M.list()).catch(() => M.cached?.() || []).then(media => {
+    if (!host.isConnected) return;
+    // Same overall recommendations as the home card, with saved/started tips kept even if the analysis changed.
+    for (const tip of recordableTips(VZ.practiceTips(media))) add(tip);
+    loading = false; draw();
+  }).catch(() => { loading = false; draw(); });
+  return {read:() => [...checked].filter(key => entries.has(key)).map(key => snapshot(entries.get(key)))};
+};
+VZ.practiceTipSummary = practice => {
+  const tips = VZ.completedPracticeTips(practice);
+  return tips.length ? '<div class="small" data-practiced-tips style="margin-top:12px"><strong>오늘의 추천 연습 · 실천 기록</strong>' +
+    tips.map(t => '<div class="muted">✓ ' + esc(t.name) + '</div>').join('') + '</div>' : '';
+};
 const card = (tip, songId) => '<div class="card tip" data-tip-key="' + esc(tip.key) + '"><div class="row between"><span class="tip-k">🎯 ' + (songId ? '이 곡 추천 연습' : '오늘의 추천 연습') + '</span><span class="badge accent">' + esc(tip.metric) + ' ' + esc(tip.value) + '</span></div>' +
   '<h3 class="tip-name">' + esc(tip.name) + '</h3><p class="small" style="margin:0 0 6px">' + esc(tip.reason) + '</p>' +
   '<ol class="tip-steps">' + tip.steps.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>' +
@@ -77,12 +128,12 @@ VZ.renderTips = async (host, {songId = '', limit = 1} = {}) => {
     host.innerHTML = r.count || !songId ? '<p class="small muted tip-empty">' + (songId ? '이 곡의' : '') + ' 분석된 녹음이 ' + MIN_TAKES + '개 이상 모이면 맞춤 연습을 추천해요 (지금 ' + r.count + '개).</p>' : '';
     return;
   }
-  const tips = r.tips.slice(0, limit);
+  const tips = recordableTips(r).slice(0, limit);
   host.innerHTML = (tips.length ? tips.map(t => card(t, songId)).join('') : '<div class="card tip"><span class="tip-k">🎯 ' + (songId ? '이 곡' : '오늘의') + ' 추천 연습</span><p class="small" style="margin:6px 0 0">측정값이 고르게 안정적이에요 👍 편한 음역' + (r.range ? '(' + esc(r.range) + ')' : '') + '에서 롱톤 5분으로 유지해 보세요.</p></div>') +
     '<p class="small muted tip-note">측정값을 참고한 일반 연습 가이드예요. 통증이나 쉰 목소리가 있으면 쉬어 주세요.</p>';
   host.querySelectorAll('[data-tip-start]').forEach(b => b.onclick = () => {
     const tip = tips.find(t => t.key === b.closest('[data-tip-key]').dataset.tipKey);
-    VZ.practiceSheet({songId, preset:{minutes:tip.minutes, memo:'[추천 연습] ' + tip.name + ' — ' + tip.steps.join(' / ')}});
+    VZ.practiceSheet({songId, preset:{minutes:tip.minutes, recommendedExercise:snapshot(tip)}});
   });
 };
 })();
