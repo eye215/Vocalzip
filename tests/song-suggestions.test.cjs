@@ -68,7 +68,7 @@ function browser(){
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
   fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
  const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference};})();');
+  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart};})();');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
  return {api:window.test,window,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
@@ -133,13 +133,32 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
  await b.api.apply(b.main);assert.equal(b.writes.length,0);
  await b.api.undo(b.main);assert.equal(b.writes.length,0);
 });
-test('bulk paid analysis must be reduced to one selected recording',async()=>{
+test('one run of paid analysis is capped at 30 recordings (the server quota is the real limit)',async()=>{
  const b=browser(),errors=[];
  b.api.state.referenceRows=[{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}];
  b.window.VZ.toast=message=>errors.push(message);
- b.api.state.items=[{id:'a'},{id:'b'}];b.api.state.chosen.add('a');b.api.state.chosen.add('b');
+ b.api.state.items=Array.from({length:31},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
  await b.api.analyze({querySelector:()=>({})});
- assert.match(errors.join(' '),/1개/);assert.equal(b.counts().paid,0);
+ assert.match(errors.join(' '),/30개/);assert.equal(b.counts().paid,0);
+});
+test('the 30 paid seconds are where the singing is, found on the device for free',async()=>{
+ const b=browser(),fps=20,curve=new Array(120*fps).fill(null);
+ for(let i=40*fps;i<80*fps;i++)curve[i]=6000; // MR intro, singing from 0:40 to 1:20
+ let seen=null;b.window.VZ.analyzeSamples=async(samples,rate)=>{seen=[samples.length,rate];return {curve,fps}};
+ const start=await b.api.singingStart(new Float32Array(16000*120),16000);
+ assert.equal(start,39.5); // half a second of lead-in before the first sung frame
+ assert.deepEqual(seen,[16000*120,16000]);
+});
+test('no singing found: nothing is sent and nothing is paid',async()=>{
+ const b=browser();
+ b.window.VZ.analyzeSamples=async()=>({curve:new Array(2400).fill(null),fps:20});
+ await assert.rejects(b.api.singingStart(new Float32Array(16000*120),16000),/노래 구간을 찾지 못했어요/);
+ assert.equal(b.counts().paid,0);
+});
+test('without the analyzer the old fixed 20-second start is kept',async()=>{
+ const b=browser();
+ assert.equal(await b.api.singingStart(new Float32Array(16000*100),16000),20);
+ assert.equal(await b.api.singingStart(new Float32Array(16000*35),16000),5);
 });
 
 test('browser-only references safely migrate to cloud and hydrate on another device',async()=>{

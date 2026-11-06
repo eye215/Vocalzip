@@ -77,7 +77,7 @@ Deno.serve(async (req:Request) => {
     });
     const {data:reserved,error:quotaError}=await authenticatedDb.rpc('vzip_song_stt_reserve');
     if(quotaError)return reply(req,503,{error:'AI 분석 사용량 보호 설정을 확인할 수 없어 중단했어요. 관리자에게 문의해 주세요.'});
-    if(reserved!==true)return reply(req,429,{error:'AI 분석 안전 한도(하루 3개 / 전체 15개)에 도달했어요.'});
+    if(reserved!==true)return reply(req,429,{error:'AI 분석 안전 한도에 도달했어요. 내일 다시 시도하거나 관리자에게 한도 조정을 요청해 주세요.'});
     const audioForm=new FormData();
     audioForm.set('model',STT_MODEL);audioForm.set('file',file,file.name);
     const transcribed=await fetch('https://api.openai.com/v1/audio/transcriptions',{

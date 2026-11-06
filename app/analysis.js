@@ -37,6 +37,9 @@ function runWorker(samples, sampleRate, onProgress) {
   });
 }
 
+/** Analyze raw mono samples in the worker (used by the song finder to locate the singing). The array is transferred. */
+VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}) => runWorker(samples, sampleRate, onProgress);
+
 /* ---------- drawing ---------- */
 const PX_PER_S = 36, H = 200, PAD = 30;
 function chart(r) {

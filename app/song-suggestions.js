@@ -9,6 +9,9 @@ const cachePrefix='vzip_song_suggest_v2:';
 const backupPrefix='vzip_song_assignment_backup:';
 const backupPointer='vzip_song_assignment_last';
 const MAX_BYTES=12*1024*1024, PAGE_SIZE=40;
+// Paid STT per tap. The server quota (vzip_song_stt_reserve) is the real cap; this keeps one run reviewable.
+const MAX_PAID_PER_RUN=30, COST_PER_CLIP_USD=0.0015; // gpt-4o-mini-transcribe ≈ $0.003/min × 30 s
+const SEARCH_SECONDS=120, MIN_SUNG_SECONDS=4;
 // Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
 const MAX_DURATION_SECONDS=80, MAX_PCM_BYTES=32*1024*1024;
 const checkpointKey='vzip_song_suggest_checkpoint_v2';
@@ -188,6 +191,24 @@ function wavBytes(buffer, offsetSec=20, seconds=30){
  }
  return new Blob([bytes],{type:'audio/wav'});
 }
+/** Where the singing is: the on-device vocal analysis (app/analysis.js) follows the voice over the
+ * MR, then the 30 seconds with the most singing are chosen. Free — and a clip with no singing is
+ * never paid for. Without the analyzer, the old fixed 20-second start is used. */
+async function singingStart(samples,rate,signal){
+ const total=samples.length/rate,fallback=Math.max(0,Math.min(20,total-30));
+ if(!VZ.analyzeSamples)return fallback;
+ const r=await VZ.analyzeSamples(samples,rate);
+ if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
+ const c=r.curve||[],fps=r.fps||20,win=Math.min(c.length,30*fps);
+ let sum=0,best=-1,at=0;
+ for(let i=0;i<c.length;i++){
+  sum+=c[i]!=null?1:0;if(i>=win)sum-=c[i-win]!=null?1:0;
+  if(i>=win-1&&sum>best){best=sum;at=i-win+1}
+ }
+ if(best/fps<MIN_SUNG_SECONDS)throw Error('노래 구간을 찾지 못했어요 (반주만 있거나 목소리가 작게 녹음됨). 비용은 들지 않았어요.');
+ // Start half a second early so the first word is not cut.
+ return Math.max(0,Math.min(at/fps-0.5,total-30));
+}
 async function clip(item,signal){
  let bytes=await getAudioBytes(item,signal);
  const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
@@ -198,7 +219,10 @@ async function clip(item,signal){
   if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
   const actualPcm=decoded.length*decoded.numberOfChannels*4;
   if(actualPcm>MAX_PCM_BYTES)throw Error('실제 디코딩 음원이 32MB를 초과해 분석을 중단했어요.');
-  const start=Math.max(0,Math.min(20,decoded.duration-32));
+  // Mono copy of the first two minutes for the singing finder (the decoded buffer stays as is).
+  const n=Math.min(decoded.length,Math.floor(SEARCH_SECONDS*decoded.sampleRate)),mono=new Float32Array(n);
+  for(let c=0;c<decoded.numberOfChannels;c++){const d=decoded.getChannelData(c);for(let i=0;i<n;i++)mono[i]+=d[i]/decoded.numberOfChannels}
+  const start=await singingStart(mono,decoded.sampleRate,signal);
   return wavBytes(decoded,start,30);
  }finally{bytes=null;await audioCtx.close().catch(()=>{})}
 }
@@ -219,34 +243,17 @@ async function stt(item,signal,{reference=false}={}){
  if(!status.ok){const data=await status.json().catch(()=>({}));throw Error(data.error||'STT_DISABLED ('+status.status+')')}
  if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
  const form=new FormData();
- // For 3–5 minute M4A recordings in R2: Cloudflare extracts 30 seconds
- // before anything is downloaded to Safari. Never decode the full recording.
  let excerpt;
  if(item.storageProvider==='r2' && item.r2Key){
-  const browserClip=async()=>{
-   // Sparse authenticated ranges: the device decodes ONLY the 30-second section,
-   // not the entire 3-5 minute file. Original R2 data is never modified.
-   if(!window.VzipR2?.url)throw Error('클라우드 음원 주소를 가져올 수 없어요.');
-   const signedUrl=await window.VzipR2.url(item.r2Key);
-   const {extractR2AudioClip}=await import('../stt-clip-browser.mjs?v=1');
-   return extractR2AudioClip(signedUrl,{time:20,duration:30,signal});
-  };
-  const ext=(item.r2Key.split('.').pop()||'').toLowerCase();
-  // Stored source formats vary: iPhone Voice Memos AAC/M4A, video-extracted
-  // AAC/M4A, MP3, WAV, FLAC, and recording formats offered by MediaRecorder.
-  if(ext!=='mp4')excerpt=await browserClip();
-  else{
-   try{
-    if(!window.VzipR2?.clip)throw Object.assign(Error('서버 추출 기능을 사용할 수 없어요.'),{status:422});
-    excerpt=await window.VzipR2.clip(item.r2Key,{time:20,duration:30,signal});
-   }catch(error){
-    // Cloudflare Media Transformations documents VIDEO inputs. Audio-only M4A
-    // may be rejected with 422. Only fall back for unsupported-format errors;
-    // never bypass disabled, auth, or quota protection.
-    if(![415,422].includes(error.status))throw error;
-    excerpt=await browserClip();
-   }
-  }
+  // Sparse authenticated range reads: only the first two minutes are decoded on the device (never the
+  // whole file, never on a server), the singing is found in them, and only those 30 s are sent.
+  // Works for Voice Memos M4A, video-extracted audio, MP3, WAV, FLAC. Original R2 data is never modified.
+  if(!window.VzipR2?.url)throw Error('클라우드 음원 주소를 가져올 수 없어요.');
+  const signedUrl=await window.VzipR2.url(item.r2Key);
+  const {extractR2AudioPcm,clipFromPcm}=await import('../stt-clip-browser.mjs?v=2');
+  const {pcm,rate}=await extractR2AudioPcm(signedUrl,{time:0,seconds:SEARCH_SECONDS,signal});
+  const offset=await singingStart(Float32Array.from(pcm,v=>v/32768),rate,signal);
+  excerpt=clipFromPcm(pcm,offset);
  } else {
   // Small local/legacy files keep the existing memory-bounded decoder path.
   excerpt=new File([await clip(item,signal)],'vocal-clip.wav',{type:'audio/wav'});
@@ -377,8 +384,8 @@ async function analyze(main,check=()=>{}){
  if(targets.some(m=>!resultFor(m)?.candidate)&&!references().length){VZ.toast('비교할 기준 가사가 없어요. 내 곡의 가사 탭에 입력하거나 아래에서 기준을 등록해 주세요.','error');return}
  const paid=targets.filter(m=>!resultFor(m)?.candidate&&!state.recognitions.has(m.id)&&!readCache(m)?.transcript).length;
  // Until a durable server quota is in place, limit each manual action to one paid request.
- if(paid>1){VZ.toast('안전한 테스트를 위해 유료 음성 분석은 한 번에 1개만 선택해 주세요.','error');return}
- if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 STT만 사용해요(GPT 비용 없음). 파일당 최대 30초 API 과금이 발생하며, 기준 텍스트와의 비교는 무료예요. 원본을 변경하지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
+ if(paid>MAX_PAID_PER_RUN){VZ.toast('유료 음성 분석은 한 번에 '+MAX_PAID_PER_RUN+'개까지 선택해 주세요.','error');return}
+ if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 STT만 사용해요(GPT 비용 없음). 파일마다 노래가 나오는 30초만 보내요. 예상 비용 약 $'+(paid*COST_PER_CLIP_USD).toFixed(3)+' (30초당 약 $'+COST_PER_CLIP_USD+'). 노래 구간이 없는 파일은 보내지 않아 비용이 없어요. 기준 텍스트와의 비교는 무료이고 원본은 바뀌지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  let success=0,failed=0,seen=0;
  try{
@@ -391,7 +398,7 @@ async function analyze(main,check=()=>{}){
      const text=String(error.message||error);
      // Cache only successful recognition; failed queries are retryable.
      state.results.set(m.id,{status:'실패',error:text});failed++;
-     if(/API 키 미설정|비활성화|사용 한도|not configured|STT_DISABLED|503/.test(text)){state.cancel=true}
+     if(/API 키 미설정|비활성화|한도|not configured|STT_DISABLED|503|429/.test(text)){state.cancel=true}
    }
    if(main.isConnected)draw(main);
    // Allow UI to paint and the browser a chance to reclaim decoded audio between files.

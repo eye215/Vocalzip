@@ -296,3 +296,29 @@ test('A device file edit sends only what changed: older device values never over
   expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
   expect(rows.local).toMatchObject({song:'Defying Gravity'});
 });
+
+test('A song picked by the AI suggestion for a file on this device changes only the song: other devices\' edits stay, and undo still works', async ({page}) => {
+  await fakeR2(page);
+  await boot(page);
+  const out = await page.evaluate(async () => {
+    VZ.media.holdBackup(true);
+    window.__rows.s9 = {id:'s9', name:'미분류 녹음', storageProvider:'r2', r2Key:'u/ui-test-user/s9/original.wav', created:Date.now(), type:'audio/wav', review:'다른 기기 메모', rating:5, recordedDate:'2026-10-01', song:'', songId:''};
+    window.__upd.s9 = '2026-11-06T01:00:00.000Z';
+    await window.vzipStorePracticeMedia({id:'s9', name:'미분류 녹음', created:Date.now(), type:'audio/wav', source:'import', review:'옛 메모', rating:1, recordedDate:'2026-09-01', blob:new Blob([new Uint8Array(64)], {type:'audio/wav'})});
+    VZ.media.invalidate(); const item = (await VZ.media.list(true)).find(m => m.id === 's9');
+    const written = await VZ.media.assignSongSafe(item, {songId:'s1', song:'Defying Gravity'}, {expectedSongId:'', expectedSong:''});
+    await new Promise(r => setTimeout(r, 400)); // let any sync listener run
+    const afterAssign = {...window.__rows.s9}, versionAfter = window.__upd.s9;
+    // Undo (as the suggestion screen does) must still find the version it wrote.
+    VZ.media.invalidate(); const again = (await VZ.media.list(true)).find(m => m.id === 's9');
+    let undoError = null;
+    try { await VZ.media.assignSongSafe(again, {songId:'', song:''}, {expectedSongId:'s1', expectedSong:'Defying Gravity', expectedUpdatedAt:written.updatedAt}); } catch (e) { undoError = e.message; }
+    await new Promise(r => setTimeout(r, 400));
+    VZ.media.holdBackup(false);
+    return {afterAssign, sameVersion:versionAfter === written.updatedAt, undoError, afterUndo:window.__rows.s9};
+  });
+  expect(out.afterAssign).toMatchObject({songId:'s1', song:'Defying Gravity', review:'다른 기기 메모', rating:5, recordedDate:'2026-10-01'});
+  expect(out.sameVersion).toBe(true);
+  expect(out.undoError).toBeNull();
+  expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모', rating:5});
+});
