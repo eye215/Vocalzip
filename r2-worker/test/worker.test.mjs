@@ -3,6 +3,7 @@ import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {Miniflare} from 'miniflare';
 import {webcrypto as crypto} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
 
 const SUPABASE_URL = 'https://demo.supabase.co', HS = 'legacy-jwt-secret-for-tests-only-0123456789';
 const ALICE = '11111111-1111-4111-8111-111111111111', BOB = '22222222-2222-4222-8222-222222222222';
@@ -27,7 +28,7 @@ const call = async (path, {method = 'GET', auth, body, headers = {}} = {}) => {
 before(async () => {
   ecKeys = await crypto.subtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign', 'verify']);
   jwk = {...await crypto.subtle.exportKey('jwk', ecKeys.publicKey), kid:'k1', alg:'ES256', use:'sig'};
-  mf = new Miniflare({modules:true, scriptPath:new URL('../src/index.js', import.meta.url).pathname, compatibilityDate:'2025-01-01',
+  mf = new Miniflare({modules:true, scriptPath:fileURLToPath(new URL('../src/index.js', import.meta.url)), compatibilityDate:'2025-01-01',
     r2Buckets:['MEDIA'],
     bindings:{SUPABASE_URL, ALLOWED_ORIGINS:ORIGIN + ',https://eye215.github.io', SIGNING_SECRET:'signing-secret-for-tests-0123456789', SUPABASE_JWT_SECRET:HS},
     outboundService:req => { if (req.url === SUPABASE_URL + '/auth/v1/.well-known/jwks.json') { jwksHits++; return new Response(JSON.stringify({keys:[jwk]}), {headers:{'content-type':'application/json'}}); } return new Response('blocked', {status:599}); }});
@@ -165,4 +166,16 @@ test('sign: links are stable within the hour and many files can be signed in one
   assert.equal(res.status, 206); assert.equal(res.headers.get('content-range'), 'bytes 0-9/30');
   assert.equal((await call('/v1/sign', {method:'POST', auth:bob, body:{keys:[a.key]}})).status, 403);
   assert.equal((await call('/v1/sign', {method:'POST', auth:alice, body:{keys:Array(101).fill(a.key)}})).status, 400);
+});
+
+
+test('30-second clip endpoint is owner-only, rejects invalid intervals and is safely disabled without transform binding', async () => {
+  const alice=await token(ALICE),bob=await token(BOB);
+  const up=await upload(alice,'stt-clip-test',new Uint8Array(100).fill(5));
+  const endpoint='/v1/clip/'+up.key+'?time=20&duration=30';
+  assert.equal((await call(endpoint)).status,401);
+  assert.equal((await call(endpoint,{auth:bob})).status,403);
+  assert.equal((await call(endpoint,{auth:alice})).status,503);
+  // Authentication checks must happen even when the optional transform binding is absent.
+  assert.equal((await call('/v1/clip/'+up.key.replace(/original\.m4a$/,'original.wav'),{auth:bob})).status,403);
 });

@@ -15,3 +15,13 @@ ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
 # Secrets are NOT written here. Set them once with:
 #   npx wrangler secret put SIGNING_SECRET
 #   npx wrangler secret put SUPABASE_JWT_SECRET   (only if the project still uses the legacy JWT secret)
+
+# Cloudflare Media Transformations beta; not the R2 bucket binding above.
+# Requires Cloudflare account-level Media Transformations support.
+# The MEDIA_TRANSFORM binding has been added in the Cloudflare Production dashboard.
+# Mirror it here so future wrangler deployments preserve the same binding.
+# This binding alone does NOT activate extraction. The Worker additionally requires
+# STT_CLIP_ENABLED=true and STT_CLIP_ALLOWED_USER_IDS with an exact user UUID.
+# Keep STT_CLIP_ENABLED unset/false until a disposable audio-only M4A clip is verified.
+[media]
+binding = "MEDIA_TRANSFORM"

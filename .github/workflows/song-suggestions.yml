@@ -1,0 +1,21 @@
+name: Song suggestion safety
+on:
+  pull_request:
+    paths:
+      - 'app/song-suggestions.js'
+      - 'supabase/functions/vzip-song-stt/**'
+      - 'tests/song-suggestions.test.cjs'
+      - 'tools/*song_suggestions*'
+      - '.github/workflows/song-suggestions.yml'
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/song-suggestions.test.cjs
+      - run: python3 -m unittest discover -s tools -p test_song_suggestions.py
