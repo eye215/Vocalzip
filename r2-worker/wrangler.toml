@@ -18,7 +18,10 @@ ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
 
 # Cloudflare Media Transformations beta; not the R2 bucket binding above.
 # Requires Cloudflare account-level Media Transformations support.
-# Deliberately opt-in: do not provision a remote transform through a normal deploy.
-# [media]
-# binding = "MEDIA_TRANSFORM"
-# Also requires STT_CLIP_ENABLED=true and STT_CLIP_ALLOWED_USER_IDS (server secrets).
+# The MEDIA_TRANSFORM binding has been added in the Cloudflare Production dashboard.
+# Mirror it here so future wrangler deployments preserve the same binding.
+# This binding alone does NOT activate extraction. The Worker additionally requires
+# STT_CLIP_ENABLED=true and STT_CLIP_ALLOWED_USER_IDS with an exact user UUID.
+# Keep STT_CLIP_ENABLED unset/false until a disposable audio-only M4A clip is verified.
+[media]
+binding = "MEDIA_TRANSFORM"
