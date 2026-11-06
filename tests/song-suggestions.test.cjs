@@ -133,13 +133,13 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
  await b.api.apply(b.main);assert.equal(b.writes.length,0);
  await b.api.undo(b.main);assert.equal(b.writes.length,0);
 });
-test('one run of paid analysis is capped at 30 recordings (the server quota is the real limit)',async()=>{
+test('one run of paid analysis is capped at 100 recordings (the server quota is the real limit)',async()=>{
  const b=browser(),errors=[];
  b.api.state.referenceRows=[{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}];
  b.window.VZ.toast=message=>errors.push(message);
- b.api.state.items=Array.from({length:31},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
+ b.api.state.items=Array.from({length:101},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
  await b.api.analyze({querySelector:()=>({})});
- assert.match(errors.join(' '),/30개/);assert.equal(b.counts().paid,0);
+ assert.match(errors.join(' '),/100개/);assert.equal(b.counts().paid,0);
 });
 test('the 30 paid seconds are where the singing is, found on the device for free',async()=>{
  const b=browser(),fps=20,curve=new Array(120*fps).fill(null);
@@ -331,7 +331,7 @@ test('30-item pages do not accumulate and keep existing selections between pages
  assert.equal(nodes.get('[data-more]').hidden,true);
  assert.match(nodes.get('[data-page-count]').textContent,/61–75 \/ 전체 75개/);
 });
-test('selection is limited to thirty across pages even when the list contains hundreds',()=>{
+test('selection is limited to one hundred across pages even when the list contains hundreds',()=>{
  const b=browser();b.window.VZ.media.dateOf=()=> '';
  function node(){
   return {children:[],style:{},hidden:false,disabled:false,setAttribute(){},append(...xs){this.children.push(...xs)},
@@ -345,12 +345,12 @@ test('selection is limited to thirty across pages even when the list contains hu
  nodes.set('[data-suggest-list]',listing);
  root.querySelector=x=>nodes.get(x);
  const main={isConnected:true,querySelector:x=>x==='[data-suggest]'?root:null};
- b.api.state.items=Array.from({length:62},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
- b.api.state.chosen=new Set(b.api.state.items.slice(0,30).map(x=>x.id));
- b.api.state.page=1;
+ b.api.state.items=Array.from({length:230},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
+ b.api.state.chosen=new Set(b.api.state.items.slice(0,100).map(x=>x.id));
+ b.api.state.page=4; // files 120-149: none selected yet
  b.api.draw(main);
  const checkbox=listing.children[0].children[0].children[0];
  checkbox.checked=true;checkbox.onchange();
- assert.equal(checkbox.checked,false,'cannot select 31st file');
- assert.equal(b.api.state.chosen.size,30);
+ assert.equal(checkbox.checked,false,'cannot select the 101st file');
+ assert.equal(b.api.state.chosen.size,100);
 });
