@@ -127,7 +127,7 @@ async function analyze(main){
   for(const m of targets){
    if(state.cancel)break;
    seen++;root.querySelector('[data-progress]').textContent=seen+'/'+targets.length+' · '+M.label(m);
-   if(resultFor(m)?.candidate){const f=resultFor(m);state.results.set(m.id,f);success++;continue}
+   const cached=readCache(m);if(resultFor(m)?.candidate){const f=resultFor(m);state.results.set(m.id,f);success++;continue}if(cached?.method==='stt'){state.results.set(m.id,cached);failed++;continue}
    try{const result=await stt(m);setResult(m,result);result.candidate?success++:failed++}
    catch(error){
      const text=String(error.message||error);
