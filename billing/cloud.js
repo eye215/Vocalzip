@@ -104,5 +104,22 @@ async function resolve(choice){
  const merged=await S.replace(mergeStates(state,remote.payload),state.revision,{reason:'cloud.conflict.merge'});
  return push(merged,remote.revision);
 }
-window.VzipBillingCloud={read,preview,commit,sync,resolve,autoOn,setAuto,mergeStates};
+/* ---------- versions kept on the server (supabase/migrations/20261106_keep_history.sql) ---------- */
+/** Saved versions of this account's ledger, newest first (id, time, revision). Null when the server has no history yet. */
+async function versions(){
+ const {userId}=credentials();
+ try{
+  const rows=await request('/rest/v1/vocal_history?select=id,op,at,rev:data->>revision&source=eq.vocal_billing_documents&user_id=eq.'+encodeURIComponent(userId)+'&order=at.desc,id.desc&limit=60');
+  return Array.isArray(rows)?rows:[];
+ }catch(error){if(/\(404\)|\(400\)/.test(error.message))return null;throw error}
+}
+async function version(id){
+ const {userId}=credentials(),rows=await request('/rest/v1/vocal_history?select=data&source=eq.vocal_billing_documents&user_id=eq.'+encodeURIComponent(userId)+'&id=eq.'+encodeURIComponent(id));
+ const payload=rows?.[0]?.data?.payload;if(!payload)throw Error('그 버전을 찾지 못했어요.');
+ const parsed=B.parse(JSON.stringify(payload));if(parsed.owner!==S.account.id)throw Error('다른 계정의 기록이에요.');
+ return parsed;
+}
+/** Make a kept version the ledger on this device (the current one stays restorable); automatic sync then sends it. */
+async function restoreVersion(id){const payload=await version(id),local=await S.status();return S.replace(payload,local.state.revision,{reason:'cloud.history'})}
+window.VzipBillingCloud={read,preview,commit,sync,resolve,autoOn,setAuto,mergeStates,versions,version,restoreVersion};
 })();

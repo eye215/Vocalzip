@@ -278,3 +278,7 @@ details.audit{border:0!important;margin:0!important;padding:0!important;backgrou
 #sync-conflict .row{flex-wrap:wrap}
 .auto-sync{display:flex;gap:10px;align-items:flex-start;margin:0 0 12px;font-size:14px}
 .auto-sync input{width:20px;height:20px;flex:none;accent-color:var(--accent)}
+.cloud-versions{margin:0 0 12px}
+.cloud-versions summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
+.cloud-versions .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.cloud-versions .grow{flex:1}
