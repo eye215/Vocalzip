@@ -292,7 +292,7 @@ test('A stopped upload resumes from its card: pick the same files again, finishe
 
 test('보컬 분석: a recording sung over an MR gets a pitch curve and measurements on the device, saved on the recording', async ({page}) => {
   test.setTimeout(120000);
-  const {synth} = require('./fixtures/synth-vocal.cjs');
+  const {synth} = require('./synth-vocal.cjs');
   const wavOf = ({samples, sr}) => { const b = Buffer.alloc(44 + samples.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 2, 40); for (let i = 0; i < samples.length; i++) b.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(samples[i] * 20000))), 44 + i * 2); return b; };
   await page.route('**/__song.wav', r => r.fulfill({contentType:'audio/wav', body:wavOf(synth({sr:22050}))}));
   await page.route('**/__mr.wav', r => r.fulfill({contentType:'audio/wav', body:wavOf(synth({sr:22050, withVoice:false}))}));

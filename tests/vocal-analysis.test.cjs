@@ -1,6 +1,6 @@
 // Vocal analysis against synthetic "singing over an MR" recordings with known answers.
 const test = require('node:test'), assert = require('node:assert/strict');
-const A = require('../app/vocal-analysis.js'), {synth} = require('./fixtures/synth-vocal.cjs');
+const A = require('../app/vocal-analysis.js'), {synth} = require('./synth-vocal.cjs');
 const run = opt => { const s = synth(opt); return A.analyze(s.samples, s.sr); };
 
 test('Finds every sung note over the MR, with range, intonation, vibrato and phrases', () => {
