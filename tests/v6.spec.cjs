@@ -65,7 +65,7 @@ test('Bottom navigation reaches the five main screens without horizontal overflo
   await expect(page.locator('[data-recent]').getByText('This Is the Moment')).toBeVisible();
   // Touch targets in nav are at least 44px.
   const box = await nav.getByRole('link', {name:'내 곡'}).boundingBox();
-  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
 });
 
 test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never auto-complete', async ({page}) => {
@@ -1805,6 +1805,6 @@ test('A measurement ⓘ opens what it measures and how to read it', async ({page
   await expect(sheet).toContainText('반음 하나 = 100 cent');
   await expect(sheet).toContainText('판정하지 않아요');
   const box = await page.getByRole('button', {name:'닫기'}).boundingBox();
-  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
   expect(page.__errors).toEqual([]);
 });
