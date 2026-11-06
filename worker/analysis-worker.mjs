@@ -362,7 +362,10 @@ if (import.meta.url === 'file://' + process.argv[1]) {
           const {rowCount} = await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now() where status in ('queued', 'running', 'failed') and (last_error = 'fetch failed' or last_error like 'download network error%' or (last_error = $1 and $2))", [NEEDS_KEY, !!clean(env.SUPABASE_SERVICE_ROLE_KEY)]);
           console.log('analysis worker: ' + rowCount + ' job(s) that failed on the network (or waited for a setting now present) are queued again');
         }
-        await run({db});
+        const s = await run({db});
+        // For the workflow: did this run get anywhere (then it may start the next run while work is left)?
+        const processed = ['done', 'review', 'skipped', 'failed', 'retry'].reduce((a, k) => a + (s[k] || 0), 0);
+        if (env.GITHUB_OUTPUT) (await import('node:fs')).appendFileSync(env.GITHUB_OUTPUT, 'processed=' + processed + '\nstopped=' + !!s.stopped + '\n');
       }
     }
   } finally { await db.end(); }

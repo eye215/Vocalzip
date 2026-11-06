@@ -30,6 +30,7 @@ on:
     types: [analyze]
 permissions:
   contents: read
+  actions: write # only to start the next run of this workflow while recordings are still waiting
 concurrency:
   group: analysis-worker
   cancel-in-progress: false
@@ -70,6 +71,7 @@ jobs:
             command -v ffmpeg || timeout 300 sudo apt-get install -y -q --no-install-recommends ffmpeg
           fi
       - name: Analyze
+        id: analyze
         if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures
         timeout-minutes: 48
         env:
@@ -82,3 +84,13 @@ jobs:
           WORKER_VERBOSE: ${{ inputs.verbose && '1' || '' }}
           WORKER_REQUEUE_NETWORK: ${{ inputs.requeue_network_failures && '1' || '' }}
         run: node worker/analysis-worker.mjs
+      # GitHub's 10-minute schedule can lag for hours. A run that got through recordings (and did not stop on repeated
+      # failures) starts the next run itself while more are waiting; single-file checks (max_jobs) never chain.
+      - name: Continue while recordings wait
+        if: success() && steps.analyze.outputs.processed != '' && steps.analyze.outputs.processed != '0' && steps.analyze.outputs.stopped != 'true' && inputs.max_jobs == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(GITHUB_OUTPUT=/dev/null node worker/analysis-worker.mjs --peek | sed -n 's/.*: \([0-9]*\) job(s) waiting.*/\1/p')
+          echo "waiting after this run: ${n:-0}"
+          if [ "${n:-0}" -gt 0 ]; then gh workflow run analysis-worker.yml --ref "${{ github.ref_name }}" -R "$GITHUB_REPOSITORY" && echo "started the next run"; fi
