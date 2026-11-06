@@ -5,7 +5,7 @@ const VZ=window.VZ, M=VZ?.media;
 if (!VZ || !M) return;
 const esc=VZ.esc;
 const API='https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vzip-song-stt';
-const cachePrefix='vzip_song_suggest_v1:';
+const cachePrefix='vzip_song_suggest_v2:';
 const backupPrefix='vzip_song_assignment_backup:';
 const backupPointer='vzip_song_assignment_last';
 const MAX_BYTES=12*1024*1024, PAGE_SIZE=40;
@@ -177,7 +177,7 @@ async function stt(item,signal,{reference=false}={}){
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
  const match=matchTranscripts(transcript,references());
  const found=songs().find(s=>s.id===match.candidate);
- return {status:found?'후보':'식별 불가',transcript:transcript.slice(0,250),
+ return {status:found?'후보':'식별 불가',transcript,
   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
   method:'stt',reason:match.reason};
 }
@@ -234,6 +234,21 @@ function showReferenceControls(main){
  summary.textContent='현재 브라우저에 저장된 기준: '+stored.length+'곡';
  main.querySelector('[data-ref-clear]').disabled=!stored.length;
 }
+async function rematchCached(main){
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const refs=references();if(!refs.length)return;
+ let changed=0;
+ for(const item of state.items){
+  const previous=readCache(item);
+  if(!previous?.transcript||previous?.candidate||previous.method!=='stt')continue;
+  const match=matchTranscripts(previous.transcript,refs);
+  const found=songs().find(s=>s.id===match.candidate);
+  if(!found)continue;
+  setResult(item,{...previous,status:'후보',candidate:{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}});
+  changed++;
+ }
+ if(changed&&main.isConnected)draw(main);
+}
 async function indexReference(main,check=()=>{}){
  const item=state.referenceItems.find(m=>m.id===main.querySelector('[data-ref-picker]').value);
  const songId=item?.songId||item?.song;
@@ -244,6 +259,7 @@ async function indexReference(main,check=()=>{}){
   const result=await stt(item,state.controller.signal,{reference:true});check();
   if(result.transcript.trim().length<12)throw Error('인식된 가사가 부족해 다른 녹음이 필요해요.');
   saveReference(songId,result.transcript);
+  await rematchCached(main);
   VZ.toast('곡별 기준이 저장됐어요. 다음부터 비교는 무료예요.');
  }finally{state.running=false;state.controller=null;showReferenceControls(main);controls(main)}
 }
@@ -257,6 +273,7 @@ async function deleteReference(main){
 
 async function analyze(main,check=()=>{}){
  const root=main.querySelector('[data-suggest]');
+ await rematchCached(main);
  const targets=state.items.filter(m=>state.chosen.has(m.id));
  if(targets.some(m=>!resultFor(m)?.candidate)&&!references().length){VZ.toast('비교할 기준 녹음이 없어요. 먼저 아래에서 등록곡의 기준 녹음을 만들어 주세요.','error');return}
  const paid=targets.filter(m=>!resultFor(m)?.candidate&&readCache(m)?.method!=='stt').length;
