@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {writeWav16,encodeBufferRange,extractR2AudioClip} from '../stt-clip-browser.mjs';
+import {writeWav16,encodeBufferRange,extractR2AudioClip,extractR2AudioPcm,clipFromPcm} from '../stt-clip-browser.mjs';
 
 test('range decoder WAV output is mono PCM16 at 16kHz, with correct RIFF sizes',()=>{
  const samples=new Int16Array(32000);samples[0]=1000;samples[1]=-2000;
@@ -56,4 +56,20 @@ test('sparse 3-minute audio clip requests only 20-50 seconds, yields 30s WAV',as
  assert.equal(bytes.getUint32(24,true),16000);
  assert.equal(bytes.getUint32(40,true),960000);
  assert.equal(bytes.getInt16(44,true),8192);
+});
+
+test('singing search reads only the first two minutes by range, and the paid clip is cut from them',async()=>{
+ let requested=null;
+ const media={ALL_FORMATS:['fake'],UrlSource:class{},
+  Input:class{async getPrimaryAudioTrack(){return {canDecode:async()=>true,computeDuration:async()=>300}}dispose(){}},
+  AudioBufferSink:class{async *buffers(start,end){requested=[start,end];
+   for(let sec=start;sec<end;sec++){const v=new Float32Array(16000).fill(sec/1000);yield {timestamp:sec,buffer:{sampleRate:16000,numberOfChannels:1,length:16000,getChannelData:()=>v}}}}}};
+ const {pcm,start,duration,rate}=await extractR2AudioPcm('https://r2.example.test/a.m4a?sig=t',{time:0,seconds:120,media});
+ assert.deepEqual(requested,[0,120]); // never the whole 5-minute file
+ assert.equal(pcm.length,120*16000);assert.equal(start,0);assert.equal(duration,300);assert.equal(rate,16000);
+ const clip=clipFromPcm(pcm,39.5);
+ assert.equal(clip.size,44+30*16000*2);
+ const first=new DataView(await clip.arrayBuffer()).getInt16(44,true);
+ assert.equal(first,Math.round(39/1000*32767)); // 39.5 s falls inside the 39th second's samples
+ await assert.rejects(extractR2AudioPcm('https://x.test/a',{seconds:121,media}),/구간/);
 });

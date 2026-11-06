@@ -221,7 +221,8 @@ M.assignSongSafe=async(item,changes,{expectedSongId='',expectedSong='',expectedU
   cloudResult=await window.vzipCloudMediaAssignSong(item,selected,{expectedSongId,expectedSong,expectedUpdatedAt});
  }
  if(item.local&&existing)await tx('readwrite',s=>s.put({...existing,...selected}));
- window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id}}));
+ // Only the song changed; the cloud row (if any) is already written: the sync layer must not re-send device fields.
+ window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:selected,cloudDone:!!item.cloud}}));
  return cloudResult||{updatedAt:null};
 };
 /* ---------- durations ---------- */

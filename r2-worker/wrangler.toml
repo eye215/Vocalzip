@@ -10,7 +10,7 @@ bucket_name = "vocalzip-media"
 [vars]
 SUPABASE_URL = "https://chxnbtiyuyhiywzeshis.supabase.co"
 ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
-STT_CLIP_ENABLED = "true"
+STT_CLIP_ENABLED = "false"
 # MAX_FILE_BYTES = "2147483648"
 
 # Secrets are NOT written here. Set them once with:
@@ -23,8 +23,7 @@ STT_CLIP_ENABLED = "true"
 # Mirror it here so future wrangler deployments preserve the same binding.
 # This binding alone does NOT activate extraction. The Worker additionally requires
 # STT_CLIP_ENABLED=true and STT_CLIP_ALLOWED_USER_IDS with an exact user UUID.
-# STT_CLIP_ENABLED is temporarily enabled for a single-user integration test.
-# Keep STT_CLIP_ALLOWED_USER_IDS set to the authorized UUID in Cloudflare secrets.
-# Set STT_CLIP_ENABLED back to "false" after testing.
+# STT_CLIP_ENABLED is off: the app reads the needed audio ranges itself (stt-clip-browser.mjs) for every
+# format, so the server-side clip endpoint (and any Media Transformations usage) is not needed.
 [media]
 binding = "MEDIA_TRANSFORM"
