@@ -68,10 +68,10 @@ function browser(){
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
   fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
  const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart};})();');
+  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers};})();');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
- return {api:window.test,window,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
+ return {api:window.test,window,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
 }
 test('disabled STT is checked before any R2 extraction',async()=>{
  const b=browser();await assert.rejects(b.api.stt({storageProvider:'r2',r2Key:'test'},new AbortController().signal),/STT_DISABLED/);
@@ -229,4 +229,128 @@ test('song lyric sheet already synced by VZ cloud takes priority over STT refere
  assert.equal(refs.length,2);
  assert.equal(refs.find(x=>x.songId==='song-a').source,'lyrics');
  assert.match(refs.find(x=>x.songId==='song-a').transcript,/곡 상세/);
+});
+
+test('TOP3 matcher displays sorted scores even if match is too ambiguous to auto-assign',()=>{
+ const b=browser();
+ const matches=b.api.candidateMatches({matches:[
+  {songId:'a',score:0.86543},{songId:'b',score:0.58134},{songId:'c',score:0.32149},{songId:'d',score:0.12011}
+ ]});
+ assert.equal(matches.length,3);
+ assert.equal(matches[0].songId,'a');
+ assert.equal(matches[0].score,0.865);
+ assert.equal(matches[2].songId,'c');
+});
+test('inline playback is lazy, same page shows TOP3 and redraw releases media',()=>{
+ const b=browser(),item={id:'media-1',name:'Take 1.m4a',durationSeconds:76};
+ const songs=[{id:'a',title:'Song A'},{id:'b',title:'Song B'},{id:'c',title:'Song C'}];
+ b.window.VZ.db.songs=songs;
+ b.window.VZ.media.dateOf=()=> '2026-11-06';
+ const made=[],destroyed=[],paused=[];
+ b.window.VZ.media.player=(host,row,options)=>{
+  made.push({host,row,options});
+  return {pause(){paused.push(row.id)},destroy(){destroyed.push(row.id)}};
+ };
+ function node(tag='div'){
+  return {tag,children:[],style:{},attributes:{},hidden:false,
+   setAttribute(name,value){this.attributes[name]=value},
+   append(...children){this.children.push(...children)},
+   replaceChildren(...children){this.children=[...children]},
+   add(child){this.children.push(child)},
+   querySelector(){return null},querySelectorAll(){return []}
+  };
+ }
+ const listing=node(),widgets=new Map();
+ for(const key of ['[data-suggest-list]','[data-more]','[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]'])
+  widgets.set(key,key==='[data-suggest-list]'?listing:node());
+ const root=node();root.querySelector=key=>widgets.get(key)||null;
+ const main={isConnected:true,querySelector:key=>key==='[data-suggest]'?root:null};
+ b.document.createElement=node;
+ b.api.state.items=[item];b.api.state.chosen.add(item.id);
+ b.api.setResult(item,{status:'식별 불가',method:'stt',transcript:'some text',candidate:null,
+  matches:[{songId:'a',score:0.88},{songId:'b',score:0.65},{songId:'c',score:0.31}]});
+ b.api.draw(main);
+ assert.equal(made.length,0,'player must not fetch/decode media on drawing 40 items');
+ const card=listing.children[0],playWrap=card.children.find(x=>x.children?.[0]?.textContent==='▶ 녹음 듣기');
+ assert.ok(playWrap,'inline listen toggle should be present');
+ const listen=playWrap.children[0],host=playWrap.children[1];
+ assert.equal(host.hidden,true);
+ listen.onclick();
+ assert.equal(made.length,1);
+ assert.equal(made[0].row.id,item.id);
+ assert.equal(made[0].options.prefetch,false,'must avoid network prefetch for offscreen audio');
+ assert.equal(made[0].options.tools,true,'player retains seek and speed controls');
+ assert.equal(host.hidden,false);
+ listen.onclick();assert.deepEqual(paused,['media-1']);assert.equal(host.hidden,true);
+ const ranking=card.children.find(x=>x.children?.[0]?.textContent==='가사 유사도 TOP 3 · 참고 점수');
+ assert.ok(ranking);
+ assert.match(ranking.children[1].children[0].textContent,/88%/);
+ assert.match(ranking.children[2].children[0].textContent,/65%/);
+ assert.match(ranking.children[3].children[0].textContent,/31%/);
+ assert.match(ranking.children[4].textContent,/확률은 아니에요/);
+ ranking.children[2].children[1].onclick();
+ assert.equal(b.api.readCache(item).candidate.id,'b','user can select 2nd candidate without applying song immediately');
+ assert.deepEqual(destroyed,['media-1'],'redraw should close and revoke audio resources');
+ assert.equal(made.length,1,'choosing another candidate never triggers audio replay or paid STT');
+ assert.equal(b.counts().paid,0);
+});
+
+test('30-item pages do not accumulate and keep existing selections between pages',()=>{
+ const b=browser();
+ b.window.VZ.media.dateOf=()=> '2026-11-06';
+ const doc=b.document;
+ function node(tag='div'){
+  return {tag,children:[],style:{},hidden:false,disabled:false,
+   setAttribute(){},append(...xs){this.children.push(...xs)},replaceChildren(...xs){this.children=[...xs]},
+   add(child){this.children.push(child)},querySelector(){return null},querySelectorAll(){return []}
+  };
+ }
+ doc.createElement=node;
+ const listing=node(),nodes=new Map();
+ for(const key of ['[data-suggest-list]','[data-more]','[data-prev]','[data-page-count]',
+  '[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]'])
+  nodes.set(key,key==='[data-suggest-list]'?listing:node());
+ const root=node();root.querySelector=key=>nodes.get(key)||null;
+ const main={isConnected:true,querySelector:key=>key==='[data-suggest]'?root:null};
+ b.api.state.items=Array.from({length:75},(_,i)=>({id:'m'+i,name:'Take '+i+'.m4a'}));
+ b.api.state.page=0;
+ b.api.draw(main);
+ assert.equal(listing.children.length,30);
+ assert.match(nodes.get('[data-page-count]').textContent,/1–30 \/ 전체 75개/);
+ assert.equal(nodes.get('[data-prev]').hidden,true);
+ assert.equal(nodes.get('[data-more]').hidden,false);
+ listing.children[0].children[0].children[0].checked=true;
+ listing.children[0].children[0].children[0].onchange();
+ assert.equal(b.api.state.chosen.has('m0'),true);
+ b.api.state.page=1;b.api.draw(main);
+ assert.equal(listing.children.length,30,'second page replaces first page');
+ assert.match(nodes.get('[data-page-count]').textContent,/31–60 \/ 전체 75개/);
+ assert.equal(b.api.state.chosen.has('m0'),true,'selection from page 1 is preserved');
+ b.api.state.page=2;b.api.draw(main);
+ assert.equal(listing.children.length,15);
+ assert.equal(nodes.get('[data-more]').hidden,true);
+ assert.match(nodes.get('[data-page-count]').textContent,/61–75 \/ 전체 75개/);
+});
+test('selection is limited to thirty across pages even when the list contains hundreds',()=>{
+ const b=browser();b.window.VZ.media.dateOf=()=> '';
+ function node(){
+  return {children:[],style:{},hidden:false,disabled:false,setAttribute(){},append(...xs){this.children.push(...xs)},
+   replaceChildren(...xs){this.children=[...xs]},add(x){this.children.push(x)},querySelectorAll(){return []}
+  };
+ }
+ b.document.createElement=node;
+ const listing=node(),root=node(),nodes=new Map();
+ for(const key of ['[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]','[data-more]','[data-prev]','[data-page-count]'])
+  nodes.set(key,node());
+ nodes.set('[data-suggest-list]',listing);
+ root.querySelector=x=>nodes.get(x);
+ const main={isConnected:true,querySelector:x=>x==='[data-suggest]'?root:null};
+ b.api.state.items=Array.from({length:62},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
+ b.api.state.chosen=new Set(b.api.state.items.slice(0,30).map(x=>x.id));
+ b.api.state.page=1;
+ b.api.draw(main);
+ const checkbox=listing.children[0].children[0].children[0];
+ checkbox.checked=true;checkbox.onchange();
+ assert.equal(checkbox.checked,false,'cannot select 31st file');
+ assert.equal(b.api.state.chosen.size,30);
 });
