@@ -3,8 +3,8 @@ const cloudStub = `window.__cloudUploads=[];window.__cloudMetadata=[];window.__c
  auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),
  onAuthStateChange:callback=>{(window.__authCallbacks||=[]).push(callback);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'ui-test'}}})},
  storage:{from:()=>({remove:async paths=>{(window.__removedPaths||=[]).push(...paths);return {error:null}},createSignedUrl:async()=>({data:{signedUrl:'/fixture-audio.wav'},error:null}),upload:async(path,blob,options)=>{window.__cloudUploads.push({path,size:blob.size,type:blob.type,options});return {error:null}}})},
- from:table=>{const chain={};let selectedId,maybe=false;for(const method of ['select','eq','order','range','upsert','update','delete','maybeSingle'])
- chain[method]=(...args)=>{if(method==='eq'&&args[0]==='id')selectedId=args[1];if(method==='maybeSingle')maybe=true;if(method==='upsert'){window.__cloudMetadata.push({table,payload:args[0]});if(table==='vocal_media'&&window.__storeCloudMetadata)(window.__cloudRows||=[]).push({id:args[0].id,metadata:args[0].metadata});if(table==='vocal_media'&&!window.__failMetadata)(window.__cloudWritten||={})[args[0].id]={id:args[0].id,metadata:args[0].metadata};if(table==='vocal_media')window.__onMetadataWrite?.()}if(method==='update')window.__cloudUpdates.push({table,payload:args[0]});return chain;};chain.then=resolve=>resolve({data:table==='vocal_media'?(maybe?(window.__cloudRows||[]).find(row=>row.id===selectedId)||(window.__cloudWritten||{})[selectedId]||null:(window.__cloudRows||[])):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
+ from:table=>{const chain={};let selectedId,maybe=false;let updating=false;for(const method of ['select','eq','is','order','range','upsert','update','delete','maybeSingle'])
+ chain[method]=(...args)=>{if(method==='eq'&&args[0]==='id')selectedId=args[1];if(method==='maybeSingle')maybe=true;if(method==='upsert'){window.__cloudMetadata.push({table,payload:args[0]});if(table==='vocal_media'&&window.__storeCloudMetadata)(window.__cloudRows||=[]).push({id:args[0].id,metadata:args[0].metadata});if(table==='vocal_media'&&!window.__failMetadata)(window.__cloudWritten||={})[args[0].id]={id:args[0].id,metadata:args[0].metadata};if(table==='vocal_media')window.__onMetadataWrite?.()}if(method==='update'){updating=true;window.__cloudUpdates.push({table,payload:args[0]});}return chain;};chain.then=resolve=>resolve({data:updating?[{id:selectedId}]:table==='vocal_media'?(maybe?(window.__cloudRows||[]).find(row=>row.id===selectedId)||(window.__cloudWritten||{})[selectedId]||null:(window.__cloudRows||[])):[],error:table==='vocal_media'&&window.__failMetadata?{message:'metadata save failed'}:null});return chain;}
 })};`;
 test.beforeEach(async ({page}) => {
   page.__vzipErrors=[];page.on('pageerror',error=>page.__vzipErrors.push(error.message));
@@ -296,7 +296,7 @@ test('Late signed playback URLs cannot replace newer playback or survive leaving
   await page.evaluate(()=>window.__pendingPlay.older());
   await expect(page.locator('#vzip-hub-list audio')).toHaveCount(0);
 });
-test('Media edit is keyboard accessible and never sends local binary data as cloud metadata',async({page})=>{
+test('Media edit is keyboard accessible, writes only the change and never sends local binary data as cloud metadata',async({page})=>{
   await cloudFiles(page,[cloudRow('metadata','정보 수정 파일')]);
   await page.locator('.nav [data-tab="media"]').click();
   const edit=page.locator('[data-id="metadata"] [data-action="edit"]');
@@ -314,7 +314,8 @@ test('Media edit is keyboard accessible and never sends local binary data as clo
       bytes:new Uint8Array([1,2]).buffer,blob:new Blob(['binary'])},{name:'수정 제목'});
   });
   const metadata=await page.evaluate(()=>window.__cloudUpdates.at(-1).payload.metadata);
-  expect(metadata.name).toBe('수정 제목');expect(metadata.durationSeconds).toBe(12);
+  // Only the change is written, onto the server copy: the caller's older snapshot (12s) does not overwrite it.
+  expect(metadata.name).toBe('수정 제목');expect(metadata.durationSeconds).toBe(1);
   for(const key of ['local','cloud','blob','bytes'])expect(metadata).not.toHaveProperty(key);
 });
 test('Cloud import infers an empty MIME from m4a without pretending to test real m4a decoding',async({page})=>{

@@ -4,12 +4,12 @@ const {test, expect} = require('@playwright/test');
 const KEY = 'vocal-zip_mvp_v1', R2 = 'https://r2.vocalzip.test';
 const stub = `window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'tok'}}})},
  storage:{from:()=>({createSignedUrl:async p=>({data:{signedUrl:'/legacy/'+p},error:null}),upload:async()=>({error:null}),remove:async p=>{window.__removed.push(...p);return {error:null}}})},
- from:()=>{const c={q:{}};for(const m of ['order','delete'])c[m]=()=>c;c.range=(a,b)=>{c.r=[a,b];return c};c.select=cols=>{c.cols=cols||'*';return c};c.in=(k,v)=>{c.ins=v;return c};window.__upd=window.__upd||{};c.eq=(k,v)=>{c.q[k]=v;return c};
+ from:()=>{const c={q:{}};for(const m of ['order','delete'])c[m]=()=>c;c.range=(a,b)=>{c.r=[a,b];return c};c.select=cols=>{c.cols=cols||'*';return c};c.in=(k,v)=>{c.ins=v;return c};window.__upd=window.__upd||{};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=(k,v)=>{c.q[k]=v;return c};
   c.upsert=row=>{window.__up.push(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata){window.__rows[x.id]=x.metadata;window.__upd[x.id]=x.updated_at||new Date().toISOString()}return c};
   c.update=row=>{c.pendingUpdate=row;return c};
   c.maybeSingle=()=>c;c.single=()=>c;
-  c.then=r=>{if(c.err)return r({data:null,error:c.err});if(c.pendingUpdate&&c.q.id){window.__rows[c.q.id]=c.pendingUpdate.metadata;return r({data:null,error:null})}
-   if(c.q.id)return r({data:window.__rows[c.q.id]?{metadata:window.__rows[c.q.id]}:null,error:null});
+  c.then=r=>{if(c.err)return r({data:null,error:c.err});if(c.pendingUpdate&&c.q.id){window.__beforeWrite?.(c.q.id);const now=window.__upd[c.q.id]||null;if('updated_at' in c.q&&c.q.updated_at!==now){(window.__conflicts||=[]).push(c.q.id);return r({data:[],error:null})}window.__rows[c.q.id]=c.pendingUpdate.metadata;window.__upd[c.q.id]=c.pendingUpdate.updated_at;(window.__writes||=[]).push({id:c.q.id,metadata:c.pendingUpdate.metadata});return r({data:[{id:c.q.id}],error:null})}
+   if(c.q.id)return r({data:window.__rows[c.q.id]?{metadata:window.__rows[c.q.id],updated_at:window.__upd[c.q.id]||null}:null,error:null});
    // Like the server: at most 1,000 rows per request, pages by range.
    let all=Object.entries(window.__rows).map(([id,metadata])=>({id,metadata,updated_at:window.__upd[id]||'2026-11-05T09:00:00Z'}));
    if(c.ins)all=all.filter(x=>c.ins.includes(x.id));
@@ -239,4 +239,60 @@ test('Playback links are signed ahead in one request for the rows shown, kept ac
   expect(signs()).toBe(before); // the tap used the link already here
   await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   expect(await page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true); // kept across reloads
+});
+
+test('Editing a recording saves only the changed fields onto the newest cloud copy: other devices\' edits stay', async ({page}) => {
+  await fakeR2(page);
+  await boot(page);
+  const row = await page.evaluate(async () => {
+    window.__rows.c1 = {id:'c1', name:'녹음', storageProvider:'r2', r2Key:'u/ui-test-user/c1/original.m4a', created:Date.now(), song:'', review:''};
+    window.__upd.c1 = '2026-11-06T01:00:00.000Z';
+    VZ.media.invalidate(); const item = (await VZ.media.list(true)).find(m => m.id === 'c1');
+    // Another device saves a memo and rating after this device loaded its list.
+    window.__rows.c1 = {...window.__rows.c1, review:'다른 기기 메모', rating:5}; window.__upd.c1 = '2026-11-06T01:05:00.000Z';
+    await VZ.media.update(item, {song:'Defying Gravity', songId:'s1'});
+    return window.__rows.c1;
+  });
+  expect(row).toMatchObject({song:'Defying Gravity', songId:'s1', review:'다른 기기 메모', rating:5, r2Key:'u/ui-test-user/c1/original.m4a'});
+});
+
+test('When another device saves between reading and writing, the write is refused, re-read and applied again', async ({page}) => {
+  await fakeR2(page);
+  await boot(page);
+  const out = await page.evaluate(async () => {
+    window.__rows.c2 = {id:'c2', name:'녹음 2', storageProvider:'r2', r2Key:'u/ui-test-user/c2/original.m4a', created:Date.now(), review:''};
+    window.__upd.c2 = '2026-11-06T01:00:00.000Z';
+    VZ.media.invalidate(); const item = (await VZ.media.list(true)).find(m => m.id === 'c2');
+    let once = false;
+    window.__beforeWrite = id => { if (once || id !== 'c2') return; once = true; window.__rows.c2 = {...window.__rows.c2, review:'동시에 저장한 메모'}; window.__upd.c2 = '2026-11-06T02:00:00.000Z'; };
+    window.__conflicts = [];
+    await VZ.media.update(item, {rating:3});
+    window.__beforeWrite = null;
+    return {row:window.__rows.c2, conflicts:window.__conflicts};
+  });
+  expect(out.conflicts).toEqual(['c2']);
+  expect(out.row).toMatchObject({rating:3, review:'동시에 저장한 메모'});
+});
+
+test('A device file edit sends only what changed: older device values never overwrite the cloud copy', async ({page}) => {
+  await fakeR2(page);
+  await boot(page);
+  const rows = await page.evaluate(async () => {
+    VZ.media.holdBackup(true);
+    window.__rows.d1 = {id:'d1', name:'기기 녹음', storageProvider:'r2', r2Key:'u/ui-test-user/d1/original.wav', created:Date.now(), type:'audio/wav', review:'새 메모 (다른 기기)', rating:5};
+    window.__upd.d1 = '2026-11-06T01:00:00.000Z';
+    await window.vzipStorePracticeMedia({id:'d1', name:'기기 녹음', created:Date.now(), type:'audio/wav', source:'import', review:'옛 메모', rating:1, blob:new Blob([new Uint8Array(64)], {type:'audio/wav'})});
+    VZ.media.invalidate(); const item = (await VZ.media.list(true)).find(m => m.id === 'd1');
+    await VZ.media.update(item, {song:'Defying Gravity', songId:'s1'});
+    await new Promise(r => setTimeout(r, 300));
+    const afterApp = {...window.__rows.d1};
+    // An older screen that announces only an id + changed fields.
+    window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'d1', changes:{name:'새 이름'}}}));
+    await new Promise(r => setTimeout(r, 300));
+    VZ.media.holdBackup(false);
+    return {afterApp, afterEvent:window.__rows.d1, local:(await window.vzipReadMedia()).find(x => x.id === 'd1')};
+  });
+  expect(rows.afterApp).toMatchObject({song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
+  expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
+  expect(rows.local).toMatchObject({song:'Defying Gravity'});
 });

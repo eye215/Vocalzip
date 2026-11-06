@@ -5,6 +5,13 @@ const remotePass=(name,rev=1)=>{let s=C.reduce(C.empty('user:'+USER),{type:'pass
 async function mockCloud(page,initial=null){
  const cloud={row:initial,writes:0,reads:0};
  await page.route('https://chxnbtiyuyhiywzeshis.supabase.co/rest/v1/**',async route=>{
+  const url=new URL(route.request().url());
+  if(url.pathname.endsWith('/vocal_history')){
+   if(!cloud.history)return route.fulfill({status:404,json:{code:'PGRST205',message:'not found'}});
+   const id=(url.searchParams.get('id')||'').replace('eq.','');
+   if(id)return route.fulfill({json:cloud.history.filter(h=>String(h.id)===id).map(h=>({data:{payload:h.payload}}))});
+   return route.fulfill({json:cloud.history.map(h=>({id:h.id,op:h.op,at:h.at,rev:String(h.payload.revision)}))});
+  }
   if(route.request().method()==='GET'){cloud.reads++;return route.fulfill({json:cloud.row?[cloud.row]:[]})}
   const body=route.request().postDataJSON();cloud.writes++;
   if((cloud.row?.revision||0)!==body.p_expected_revision)return route.fulfill({status:409,json:{code:'PT409'}});
@@ -64,4 +71,26 @@ test('the cloud copy can be taken instead after a conflict, and auto sync can be
  await page.locator('[data-panel=transfer]').click();await page.locator('#auto-sync').uncheck();
  await expect(page.locator('#sync-line')).toContainText('자동 동기화 꺼짐');
  const writes=cloud.writes;await addPass(page,'꺼진 뒤 권');await page.waitForTimeout(2500);expect(cloud.writes).toBe(writes);
+});
+
+test('versions kept on the server can be listed and one brought back (the current ledger stays restorable)',async({page})=>{
+ const cloud=await mockCloud(page);await open(page);await addPass(page,'처음 권');await expect.poll(()=>cloud.writes).toBe(1);
+ const first=JSON.parse(JSON.stringify(cloud.row.payload));
+ await addPass(page,'나중 권');await expect.poll(()=>cloud.writes).toBe(2);
+ cloud.history=[{id:2,op:'update',at:'2026-11-06T05:10:00Z',payload:cloud.row.payload},{id:1,op:'insert',at:'2026-11-06T05:00:00Z',payload:first}];
+ await page.locator('[data-panel=transfer]').click();
+ await page.locator('#cloud-versions summary').click();
+ const rows=page.locator('#cloud-versions .row');await expect(rows).toHaveCount(2);
+ await rows.nth(1).getByRole('button',{name:'되돌리기'}).click();
+ await expect(page.locator('.bd-sheet')).toContainText('레슨권 1개');
+ await page.locator('.bd-sheet [data-ok]').click();
+ await expect(page.locator('#message')).toContainText('그 버전으로 되돌렸어요');
+ expect((await ledger(page)).state.passes.map(p=>p.name)).toEqual(['처음 권']);
+ expect(await page.evaluate(()=>VzipBillingStore.recoveryData().then(r=>r.passes.length))).toBe(2);
+ await expect.poll(()=>cloud.row.payload.passes.length).toBe(1); // auto sync sends the restored ledger
+});
+test('without the server history set up, the versions panel says so',async({page})=>{
+ await mockCloud(page);await open(page);
+ await page.locator('[data-panel=transfer]').click();await page.locator('#cloud-versions summary').click();
+ await expect(page.locator('#cloud-versions')).toContainText('서버 보관 기능이 아직 설정되지 않았어요');
 });

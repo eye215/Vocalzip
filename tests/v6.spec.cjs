@@ -4,7 +4,7 @@ const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
- from:()=>{const c={};for(const m of ['select','eq','order','range','upsert','update','delete','maybeSingle'])c[m]=(...a)=>{if(m==='upsert')window.__up.push(a[0]);return c};c.then=r=>r({data:[],error:null});return c}})};`;
+ from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle'])c[m]=(...a)=>{if(m==='upsert')window.__up.push(a[0]);return c};c.then=r=>r({data:[],error:null});return c}})};`;
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const legacy = () => ({
   categories:[{id:'c1', name:'발성', items:['립트릴', '허밍']}],
@@ -821,7 +821,7 @@ test('Login merges device and cloud records instead of overwriting either side',
   const remote = {categories:[], songs:[{id:'s1', title:'This Is the Moment'}, {id:'cloud-song', title:'Cloud only song'}], lessons:[{id:'cloud-lesson', date:'2026-10-01', status:'done'}], assignments:[], practices:[]};
   const stub = `window.__upserts=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'t@e.x'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
     storage:{from:()=>({})},
-    from:table=>{const c={};let single=false;for(const m of ['select','eq','order','range','update','delete'])c[m]=()=>c;c.maybeSingle=()=>{single=true;return c};c.upsert=row=>{window.__upserts.push({table,row});return c};c.then=r=>r({data:table==='vocal_data'&&single?{payload:${JSON.stringify(remote)},updated_at:'x'}:[],error:null});return c}})};`;
+    from:table=>{const c={};let single=false,updating=false;for(const m of ['select','eq','is','order','range','delete'])c[m]=()=>c;c.maybeSingle=()=>{single=true;return c};c.upsert=row=>{window.__upserts.push({table,row});return c};c.update=row=>{updating=true;window.__upserts.push({table,row});return c};c.then=r=>r({data:updating?[{user_id:'ui-test-user'}]:table==='vocal_data'&&single?{payload:${JSON.stringify(remote)},updated_at:'x'}:[],error:null});return c}})};`;
   page.on('pageerror', e => { throw e; });
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
   await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"})); // R2 is covered by r2.spec.cjs
@@ -836,6 +836,30 @@ test('Login merges device and cloud records instead of overwriting either side',
   expect(up.songs.map(s => s.id).sort()).toEqual(['cloud-song', 's1', 's2']);
   expect(await page.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('vzip_before_cloud_')))).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('vzip_cloud_linked_user'))).toBe('ui-test-user');
+});
+
+test('Saving app records never drops a save another device made in between: the newer copy is merged again', async ({page}) => {
+  const remote = {categories:[], songs:[{id:'s1', title:'This Is the Moment'}], lessons:[{id:'cloud-lesson', date:'2026-10-01', status:'done'}], assignments:[], practices:[]};
+  const stub = `window.__server={payload:${JSON.stringify(remote)},updated_at:'2026-11-06T01:00:00.000Z'};window.__vd=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'t@e.x'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
+    storage:{from:()=>({})},
+    from:table=>{const c={q:{}};let single=false,upd=null;for(const m of ['select','order','range','delete','upsert'])c[m]=()=>c;c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>{single=true;return c};c.update=row=>{upd=row;return c};
+     c.then=r=>{if(table!=='vocal_data')return r({data:[],error:null});
+      if(upd){if(window.__beforeWrite){const f=window.__beforeWrite;window.__beforeWrite=null;f()}
+       if(c.q.updated_at!==window.__server.updated_at){window.__vd.push('conflict');return r({data:[],error:null})}
+       window.__server={payload:upd.payload,updated_at:upd.updated_at};window.__vd.push('saved');return r({data:[{user_id:'ui-test-user'}],error:null})}
+      return r({data:single?JSON.parse(JSON.stringify(window.__server)):[],error:null})};return c}})};
+    window.__beforeWrite=()=>{const p=window.__server.payload;window.__server={payload:{...p,lessons:[...p.lessons,{id:'other-device-lesson',date:'2026-11-05',status:'done',updatedAt:Date.now()}]},updated_at:'2026-11-06T01:05:00.000Z'}};`;
+  page.on('pageerror', e => { throw e; });
+  await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
+  await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"}));
+  await page.route('**/tus.min.js', r => r.fulfill({contentType:'application/javascript', body:'window.tus={}'}));
+  await page.addInitScript(([k, s]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, JSON.stringify(s)); sessionStorage.setItem('seeded', '1'); } }, [KEY, legacy()]);
+  await page.goto('/#/songs');
+  await expect.poll(() => page.evaluate(() => window.__vd.includes('saved')), {timeout:10000}).toBe(true);
+  expect(await page.evaluate(() => window.__vd.slice(0, 2))).toEqual(['conflict', 'saved']);
+  const server = await page.evaluate(() => window.__server.payload);
+  expect(server.lessons.map(l => l.id).sort()).toEqual(['cloud-lesson', 'l-over', 'l1', 'other-device-lesson']);
+  await expect.poll(async () => (await data(page)).lessons.map(l => l.id).sort()).toEqual(['cloud-lesson', 'l-over', 'l1', 'other-device-lesson']);
 });
 
 test('Songs dropped by an old overwrite come back from snapshots and file names; deleted songs stay deleted', async ({page}) => {
