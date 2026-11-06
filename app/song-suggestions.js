@@ -10,7 +10,13 @@ const backupPrefix='vzip_song_assignment_backup:';
 const backupPointer='vzip_song_assignment_last';
 const MAX_BYTES=12*1024*1024, PAGE_SIZE=30;
 // Paid STT per tap. The server quota (vzip_song_stt_reserve) is the real cap; this keeps one run reviewable.
-const MAX_PAID_PER_RUN=100, COST_PER_CLIP_USD=0.0015; // gpt-4o-mini-transcribe ≈ $0.003/min × 30 s
+// No per-run limit: spending is bounded by the OpenAI account budget. What has been spent so far is shown
+// instead (server count of paid STT calls × ≈ $0.0015 per 30-second clip, gpt-4o-mini-transcribe ≈ $0.003/min).
+const MAX_PAID_PER_RUN=Infinity, COST_PER_CLIP_USD=0.0015;
+const spend={total:null,today:null};
+const usd=n=>'$'+(n*COST_PER_CLIP_USD).toFixed(n*COST_PER_CLIP_USD<1?3:2);
+function showSpend(main){const el=main?.querySelector?.('[data-spend]');if(!el)return;el.hidden=spend.total==null;if(spend.total!=null)el.textContent='지금까지 쓴 금액: 약 '+usd(spend.total)+' · 음성 분석 '+spend.total.toLocaleString()+'회'+(spend.today?' (오늘 '+spend.today+'회 · 약 '+usd(spend.today)+')':'')}
+async function loadSpend(main){try{const u=await window.vzipSttUsage?.();if(u){spend.total=u.total;spend.today=u.today}}catch{}showSpend(main)}
 const SEARCH_SECONDS=120, MIN_SUNG_SECONDS=4;
 // Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
 const MAX_DURATION_SECONDS=80, MAX_PCM_BYTES=32*1024*1024;
@@ -281,6 +287,7 @@ async function stt(item,signal,{reference=false}={}){
  const res=await fetch(API,{method:'POST',headers:{Authorization:'Bearer '+token},body:form,signal});
  const data=await res.json().catch(()=>({}));
  if(!res.ok)throw Error(data.error||'STT 서버 응답 오류 ('+res.status+')');
+ if(spend.total!=null){spend.total++;spend.today=(spend.today||0)+1}
  const transcript=String(data.transcript||'').slice(0,1600);
  if(transcript.trim())await saveRecognition(item,transcript);
  if(reference)return {transcript};
@@ -458,8 +465,7 @@ async function analyze(main,check=()=>{}){
  if(targets.some(m=>!resultFor(m)?.candidate)&&!references().length){VZ.toast('비교할 기준 가사가 없어요. 내 곡의 가사 탭에 입력하거나 아래에서 기준을 등록해 주세요.','error');return}
  const paid=targets.filter(m=>!resultFor(m)?.candidate&&!state.recognitions.has(m.id)&&!readCache(m)?.transcript).length;
  // Until a durable server quota is in place, limit each manual action to one paid request.
- if(paid>MAX_PAID_PER_RUN){VZ.toast('유료 음성 분석은 한 번에 '+MAX_PAID_PER_RUN+'개까지 선택해 주세요.','error');return}
- if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 STT만 사용해요(GPT 비용 없음). 파일마다 노래가 나오는 30초만 보내요. 예상 비용 약 $'+(paid*COST_PER_CLIP_USD).toFixed(3)+' (30초당 약 $'+COST_PER_CLIP_USD+'). 노래 구간이 없는 파일은 보내지 않아 비용이 없어요. 기준 텍스트와의 비교는 무료이고 원본은 바뀌지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
+ if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 STT만 사용해요(GPT 비용 없음). 파일마다 노래가 나오는 30초만 보내요. 예상 비용 약 $'+(paid*COST_PER_CLIP_USD).toFixed(3)+' (30초당 약 $'+COST_PER_CLIP_USD+')'+(spend.total!=null?' · 지금까지 약 '+usd(spend.total):'')+'. 노래 구간이 없는 파일은 보내지 않아 비용이 없어요. 기준 텍스트와의 비교는 무료이고 원본은 바뀌지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  // Up to 100 files take ~10 minutes: keep the screen awake so iOS does not suspend the run.
  M.keepAwake?.(true);
@@ -480,7 +486,7 @@ async function analyze(main,check=()=>{}){
    // Allow UI to paint and the browser a chance to reclaim decoded audio between files.
    await pause();
   }
- }finally{M.keepAwake?.(false);state.running=false;state.controller=null;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
+ }finally{M.keepAwake?.(false);loadSpend(main);state.running=false;state.controller=null;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
 }
 async function undo(main,check=()=>{}){
  let backup;try{backup=JSON.parse(localStorage.getItem(localStorage.getItem(scoped(backupPointer))||'')||'null')}catch{}
@@ -542,10 +548,11 @@ async function apply(main,check=()=>{}){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명으로 먼저 찾고, 필요할 때만 녹음 일부를 분석해요. 유사도 1위 곡을 자동 선택해요. 확인 후 ‘추천대로 곡 지정’을 누르면 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted"><a href="#/songs">가사는 곡 상세의 가사 탭에서 입력 →</a></p><details class="reference-options"><summary>가사 없는 곡용 기준 만들기 (고급)</summary><p class="small muted">가사를 입력하기 어려운 곡만 녹음으로 기준을 만들어요. 최초 음성 변환에 비용이 발생해요. 이미 저장한 기준은 계속 매칭에 사용돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted" data-ref-list></p></details><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><nav class="btn-row" aria-label="미분류 녹음 페이지 이동"><button class="btn ghost" type="button" data-prev hidden>← 이전 30개</button><span class="small muted" data-page-count aria-live="polite"></span><button class="btn ghost" type="button" data-more hidden>다음 30개 보기 →</button></nav></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명으로 먼저 찾고, 필요할 때만 녹음 일부를 분석해요. 유사도 1위 곡을 자동 선택해요. 확인 후 ‘추천대로 곡 지정’을 누르면 저장돼요.</p><p class="small" data-spend hidden></p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted"><a href="#/songs">가사는 곡 상세의 가사 탭에서 입력 →</a></p><details class="reference-options"><summary>가사 없는 곡용 기준 만들기 (고급)</summary><p class="small muted">가사를 입력하기 어려운 곡만 녹음으로 기준을 만들어요. 최초 음성 변환에 비용이 발생해요. 이미 저장한 기준은 계속 매칭에 사용돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted" data-ref-list></p></details><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><nav class="btn-row" aria-label="미분류 녹음 페이지 이동"><button class="btn ghost" type="button" data-prev hidden>← 이전 30개</button><span class="small muted" data-page-count aria-live="polite"></span><button class="btn ghost" type="button" data-more hidden>다음 30개 보기 →</button></nav></section>';
  },async mount(main){
   if(busy){main.textContent='이전 작업을 마무리하고 있어요. 잠시 후 다시 열어 주세요.';return}
   viewOwner=owner();
+  loadSpend(main);
   const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.cloudReady=false;state.running=false;state.cancel=false;state.controller=null;state.page=0;
   const mediaItems=await M.list(true).catch(()=>[]);
   state.items=mediaItems.filter(eligible);
