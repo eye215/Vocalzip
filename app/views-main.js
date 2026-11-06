@@ -436,7 +436,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
   render(r) {
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
-    const tabs = [['timeline', '타임라인'], ['lyrics', '가사'], ['lessons', '레슨'], ['practice', '연습'], ['performance', '공연']];
+    const tabs = [['timeline', '전체'], ['lyrics', '가사'], ['scores', '악보'], ['lessons', '레슨'], ['practice', '연습'], ['performance', '공연']];
     return '<div class="song-head">' + (s.show ? '<div class="muted">' + esc(s.show) + '</div>' : '') + '<div class="small muted" data-summary></div></div>' +
       '<div class="btn-row" style="margin-bottom:16px"><a class="btn" href="#/record?song=' + esc(s.id) + '"><i class="ph-fill ph-microphone"></i>녹음</a><button type="button" class="btn secondary" data-log><i class="ph ph-timer"></i>기록</button><button type="button" class="btn secondary" data-quick-compare><i class="ph ph-arrows-left-right"></i>비교</button></div>' +
       '<div data-song-growth></div><div data-song-vocal></div><div class="seg" role="tablist" style="margin-bottom:12px">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
@@ -475,7 +475,8 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       const lessonMedia = media.filter(m => M.occasion(m) === 'lesson'), practiceMedia = media.filter(m => M.occasion(m) === 'practice'), stageMedia = media.filter(m => M.occasion(m) === 'performance');
       const recList = (items, empty) => items.length ? '<div class="list" data-r>' + items.map(VZ.mediaRow).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">' + empty + '</p>';
       if (songTab === 'media') songTab = 'practice';
-      if (songTab === 'lyrics') {
+      if (songTab === 'scores') VZ.renderScores ? VZ.renderScores(body, s) : (body.innerHTML = '');
+      else if (songTab === 'lyrics') {
         const current = VZ.song(s.id) || s;
         body.innerHTML = '<div class="card"><div class="row between"><h2 style="margin:0">가사 노트</h2><span class="small muted">곡당 1개 · 자동 저장 아님</span></div>' +
           '<p class="small muted">직접 붙여넣은 원문은 미분류 파일의 STT 곡 추천에 기준으로 사용돼요. 가사가 없는 곡은 기존 기준 녹음을 사용합니다.</p>' +

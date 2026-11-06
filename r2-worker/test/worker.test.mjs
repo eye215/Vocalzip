@@ -126,6 +126,9 @@ test('a user can never read, sign, upload into or delete another user\'s files',
 test('rejects non-media types, bad ids and oversized parts; delete removes the file', async () => {
   const auth = await token(ALICE);
   assert.equal((await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'a', contentType:'text/html', size:3, ext:'html'}})).status, 400);
+  // PDF scores are accepted, in the caller's own folder like recordings.
+  const pdf = await (await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'score-1', contentType:'application/pdf', size:3, ext:'pdf'}})).json();
+  assert.match(pdf.key, /^u\/[^/]+\/score-1\/original\.pdf$/);
   assert.equal((await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'../x', contentType:'audio/mp4', size:3, ext:'m4a'}})).status, 400);
   assert.equal((await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'a', contentType:'audio/mp4', size:0, ext:'m4a'}})).status, 413);
   const start = await (await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'big', contentType:'audio/wav', size:20e6, ext:'wav'}})).json();
