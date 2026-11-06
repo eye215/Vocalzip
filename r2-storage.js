@@ -107,6 +107,27 @@ async function ready() {
   catch (e) { check = {token:t, ok:false, reason:e.status === 401 ? 'auth' : e.status ? 'http ' + e.status : 'network', until:Date.now() + (e.status ? 600000 : 60000)}; }
   return check.ok;
 }
+/** Download only a transformed 30-second excerpt of an R2 M4A/MP4 audio file.
+ * Never decodes/downloads the entire original on iPhone; the Worker enforces ownership.
+ * Requires the optional Cloudflare Media Transformations binding on the deployed Worker. */
+async function clip(key, {time=20, duration=30, signal}={}) {
+  if (!Number.isInteger(time) || time<0 || time>570 || duration!==30) throw Error('잘못된 분석 구간이에요.');
+  const target=endpoint()+'/v1/clip/'+String(key).split('/').map(encodeURIComponent).join('/')+
+    '?time='+time+'&duration=30';
+  const res=await fetch(target,{headers:{authorization:'Bearer '+await token()},cache:'no-store',signal});
+  if(!res.ok){
+    let message='';try{message=(await res.json()).error||''}catch{}
+    const error=Error(res.status===503?'30초 서버 추출이 아직 배포되지 않았어요.':
+      res.status===422?'해당 녹음 형식은 30초 구간 추출을 지원하지 않아요.':
+      '음원 구간 추출 실패 ('+res.status+(message?': '+message:'')+')');
+    error.status=res.status;throw error;
+  }
+  const mime=(res.headers.get('content-type')||'').split(';')[0];
+  if(mime!=='audio/mp4')throw Error('분석용 음원 형식이 올바르지 않아요.');
+  const body=await res.blob();
+  if(!body.size||body.size>6*1024*1024)throw Error('30초 음원 크기를 확인해 주세요.');
+  return new File([body],'vocalzip-stt-clip.m4a',{type:'audio/mp4'});
+}
 async function usage() { return api('/v1/usage'); }
 /** Every object under the user's own folder (read-only; the Worker lists only u/<user>/). */
 async function objects() {
@@ -120,5 +141,5 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, cachedUrl, prefetch, remove, stat, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();
