@@ -1932,7 +1932,7 @@ test('Recommended practice checklist: old memo records remain readable and expli
 test('Recommended practice checklist: the steady-voice long-tone recommendation is also checkable', async ({page}) => {
   await boot(page,{media:false});await seedTipTakes(page);
   await page.evaluate(async()=>{
-    for(const m of await window.vzipReadMedia()){m.analysis.metrics.intonation.meanAbsCents=5;await window.vzipStorePracticeMedia(m)}
+    for(const m of await window.vzipReadMedia()){m.analysis.metrics.intonation.meanAbsCents=5;await window.vzipStorePracticeMedia({...m,blob:window.vzipMediaBlob(m)})}
     VZ.media.invalidate();
   });
   await page.goto('/#/songs');await page.goto('/#/home');
