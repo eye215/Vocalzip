@@ -456,10 +456,7 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   expect(await page.evaluate(() => { window.__vzipAutoAnalysis = true; return VZ.autoAnalysisStatus().enabled && VZ.serverAnalysisOn(); })).toBe(true);
 });
 
-test('맞춤 연습 추천: measured intonation drift leads to a pitch exercise; starting it pre-fills a practice record; too few takes gives a plain notice', async ({page}) => {
-  await boot(page, {media:false});
-  await page.goto('/#/home');
-  await expect(page.locator('[data-tip]')).toContainText('3개 이상 모이면');   // nothing measured yet: no advice invented
+async function seedTipTakes(page) {
   await page.evaluate(async () => {
     const wav = new Blob([new Uint8Array(64)], {type:'audio/wav'});
     for (let i = 0; i < 4; i++) await window.vzipStorePracticeMedia({id:'t' + i, name:'take ' + i, created:Date.now() - i * 864e5, recordedDate:VZ.ymd(new Date(Date.now() - i * 864e5)), type:'audio/wav', source:'practice', songId:'s1', blob:wav,
@@ -467,6 +464,13 @@ test('맞춤 연습 추천: measured intonation drift leads to a pitch exercise;
         vibrato:{share:40, rateHz:5.6, extentCents:40, regularity:0.9, notes:10}, range:{lowCents:5700, highCents:7200, low:'A3', high:'C5', peak:'C5'}, breath:{phrases:10, medianPhrase:4.5, longestPhrase:7}}}});
     VZ.media.invalidate();
   });
+}
+
+test('맞춤 연습 추천: measured intonation drift leads to a pitch exercise; starting it pre-fills a practice record; too few takes gives a plain notice', async ({page}) => {
+  await boot(page, {media:false});
+  await page.goto('/#/home');
+  await expect(page.locator('[data-tip]')).toContainText('3개 이상 모이면');   // nothing measured yet: no advice invented
+  await seedTipTakes(page);
   await page.goto('/#/songs'); await page.goto('/#/home');
   const tip = page.locator('[data-tip] .tip');
   await expect(tip).toContainText('음정 정확도 연습');
@@ -479,9 +483,12 @@ test('맞춤 연습 추천: measured intonation drift leads to a pitch exercise;
   await expect(songTip).toContainText('음정 정확도 연습');
   await songTip.getByRole('button', {name:'연습 시작'}).click();
   await expect(page.locator('.sheet input[name=minutes]')).toHaveValue('10');
-  await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(/\[추천 연습\] 음정 정확도 연습/);
+  await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue('');
+  const check = page.locator('[data-practice-tips]').getByRole('checkbox', {name:'음정 정확도 연습', exact:true});
+  await expect(check).not.toBeChecked(); // Starting an exercise does not claim it was completed.
+  await check.check();
   await page.locator('.sheet-foot .btn').last().click();
-  await expect.poll(() => page.evaluate(k => JSON.parse(localStorage.getItem(k)).practices.some(p => String(p.memo).startsWith('[추천 연습] 음정 정확도 연습')), KEY)).toBe(true);
+  await expect.poll(() => page.evaluate(k => JSON.parse(localStorage.getItem(k)).practices.some(p => p.recommendedExercises?.some(t => t.key === 'into')), KEY)).toBe(true);
   await page.goto('/#/home');
   await expect(page.locator('[data-tip] .tip')).toContainText('오늘 했어요');
   // Homework is untouched by the advice.
@@ -1862,4 +1869,61 @@ test('Every control on the main screens answers a 44pt tap (iPhone)', async ({pa
     if (found.length) bad[r] = found;
   }
   expect(bad).toEqual({});
+});
+
+
+test('Recommended practice checklist: home practice saves separately from teacher homework, restores and unchecks', async ({page}) => {
+  await boot(page, {media:false});await seedTipTakes(page);await page.goto('/#/songs');await page.goto('/#/home');
+  await page.locator('.quick [data-log]').click();
+  const form=page.locator('#practice-log'),tips=form.locator('[data-practice-tips]');
+  await expect(tips).toContainText('오늘의 추천 연습');
+  await tips.getByRole('checkbox',{name:'음정 정확도 연습',exact:true}).check();
+  const hw=form.locator('[data-hw-id="a1"]');
+  await hw.getByRole('button',{name:'했어요',exact:true}).click();
+  await hw.locator('[data-hw-reps]').fill('3');await hw.locator('[data-hw-note]').fill('선생님 피드백 따라 연습');
+  await form.locator('[name=minutes]').fill('12');await form.locator('[name=memo]').fill('별도 개인 메모');
+  await page.locator('[form=practice-log]').click();await expect(form).toHaveCount(0);
+  let state=await data(page),p=state.practices.find(p=>p.recommendedExercises?.length);
+  expect(p.recommendedExercises[0]).toMatchObject({key:'into',name:'음정 정확도 연습',minutes:10});
+  expect(p.completed).toEqual(['a1']);expect(p.assignmentReps).toEqual({a1:3});expect(p.assignmentNotes).toEqual({a1:'선생님 피드백 따라 연습'});
+  expect(p.memo).toBe('별도 개인 메모');expect(state.assignments).toEqual(legacy().assignments);expect(state.lessons).toEqual(legacy().lessons);
+  await page.reload();await expect(page.locator('[data-tip]')).toContainText('오늘 했어요');
+  await page.evaluate(id=>VZ.practiceDetail(id),p.id);
+  await expect(page.locator('[data-practiced-tips]')).toContainText('음정 정확도 연습');
+  await expect(sheet(page)).toContainText('한 숙제');await sheet(page).locator('[data-edit]').click();
+  const saved=page.locator('[data-practice-tips]').getByRole('checkbox',{name:'음정 정확도 연습',exact:true});
+  await expect(saved).toBeChecked();await saved.uncheck();await page.locator('[form=practice-log]').click();
+  state=await data(page);const edited=state.practices.find(x=>x.id===p.id);
+  expect(edited.recommendedExercises).toEqual([]);expect(edited.completed).toEqual(p.completed);
+  expect(edited.assignmentReps).toEqual(p.assignmentReps);expect(edited.assignmentNotes).toEqual(p.assignmentNotes);expect(edited.memo).toBe(p.memo);
+  await expect(page.locator('[data-tip]')).not.toContainText('오늘 했어요');
+});
+
+test('Recommended practice checklist: historical snapshots survive changed advice, cancellation and failed saves', async ({page}) => {
+  const seed=legacy();seed.practices[0].recommendedExercises=[{key:'into',name:'과거 추천 제목',goal:'당시 목표',minutes:7,steps:['당시 연습 방법']}];
+  await boot(page,{seed,media:false});await seedTipTakes(page);
+  const original=JSON.parse(JSON.stringify((await data(page)).practices[0]));
+  const edit=()=>page.evaluate(()=>VZ.practiceSheet({practice:VZ.db.practices[0]}));
+  await edit();const check=page.locator('[data-practice-tips]').getByRole('checkbox',{name:'과거 추천 제목',exact:true});
+  await expect(check).toBeChecked();await expect(page.locator('[data-practice-tips]')).toContainText('당시 목표');
+  await check.uncheck();await sheet(page).getByRole('button',{name:'닫기',exact:true}).click();
+  expect((await data(page)).practices[0]).toEqual(original);
+  await edit();await check.uncheck();
+  await page.evaluate(()=>{window.__tipsChange=VZ.change;VZ.change=()=>false});
+  await page.locator('[form=practice-log]').click();
+  await expect(sheet(page)).toBeVisible();await expect(check).not.toBeChecked();expect((await data(page)).practices[0]).toEqual(original);
+  await page.evaluate(()=>{VZ.change=window.__tipsChange});await sheet(page).getByRole('button',{name:'닫기',exact:true}).click();
+});
+
+test('Recommended practice checklist: old memo records remain readable and explicit uncheck overrides the legacy marker', async ({page}) => {
+  const seed=legacy();seed.practices[0].date=day(0);seed.practices[0].memo='[추천 연습] 음정 정확도 연습 — 예전 안내';
+  await boot(page,{seed,media:false});await seedTipTakes(page);await page.goto('/#/songs');await page.goto('/#/home');
+  await expect(page.locator('[data-tip]')).toContainText('오늘 했어요');
+  await page.evaluate(()=>VZ.practiceSheet({practice:VZ.db.practices[0]}));
+  const check=page.locator('[data-practice-tips]').getByRole('checkbox',{name:'음정 정확도 연습',exact:true});
+  await expect(check).toBeChecked();await check.uncheck();await page.locator('[form=practice-log]').click();
+  const p=(await data(page)).practices[0];expect(p.recommendedExercises).toEqual([]);expect(p.memo).toBe(seed.practices[0].memo);
+  await expect(page.locator('[data-tip]')).not.toContainText('오늘 했어요');
+  await page.evaluate(()=>VZ.practiceSheet({practice:VZ.db.practices[0]}));await expect(check).not.toBeChecked();
+  await sheet(page).getByRole('button',{name:'닫기',exact:true}).click();
 });
