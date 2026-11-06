@@ -414,8 +414,9 @@ VZ.route('songs', {title:'내 곡', actions:() => '<button type="button" class="
   let sort = 'recent', media = M.cached();
   const draw = () => {
     const db = VZ.db, act = VZ.songActivity(media), term = q.value.trim().toLowerCase(), entries = VZ.timeEntries(media);
+    const newest = sort === 'created' ? new Map(VZ.songsNewest().map((s,i)=>[s.id,i])) : null;
     const list = db.songs.filter(s => (!term || (s.title + ' ' + (s.show || '') + ' ' + (VZ.repertoire?.role(s) || '')).toLowerCase().includes(term)) && (!VZ.repertoire || VZ.repertoire.matches(s)));
-    list.sort(sort === 'skill' ? (a,b) => (VZ.repertoire?.score(b)||0)-(VZ.repertoire?.score(a)||0) : sort === 'created' ? (a,b) => VZ.songsNewest().findIndex(x=>x.id===a.id)-VZ.songsNewest().findIndex(x=>x.id===b.id) : sort === 'name' ? (a, b) => a.title.localeCompare(b.title, 'ko') : (a, b) => (act.get(b.id) || '').localeCompare(act.get(a.id) || '') || a.title.localeCompare(b.title, 'ko'));
+    list.sort(sort === 'skill' ? (a,b) => (VZ.repertoire?.score(b)||0)-(VZ.repertoire?.score(a)||0) : sort === 'created' ? (a,b) => newest.get(a.id)-newest.get(b.id) : sort === 'name' ? (a, b) => a.title.localeCompare(b.title, 'ko') : (a, b) => (act.get(b.id) || '').localeCompare(act.get(a.id) || '') || a.title.localeCompare(b.title, 'ko'));
     if (!db.songs.length) { l.innerHTML = VZ.empty('music-notes', '곡을 추가하면 녹음·레슨·숙제를 곡별로 모아볼 수 있어요.', '<button type="button" class="btn sm" data-add-first>첫 곡 추가</button>'); l.querySelector('[data-add-first]').onclick = () => VZ.songSheet(null, id => VZ.nav('#/song/' + id)); return; }
     if (!list.length) { l.innerHTML = VZ.empty('magnifying-glass', '"' + q.value + '"와 일치하는 곡이 없어요.'); return; }
     l.innerHTML = '<div class="list">' + list.map(s => {

@@ -1,7 +1,7 @@
 const {test,expect}=require('@playwright/test');
 const KEY='vocal-zip_mvp_v1';
 const initial=()=>({categories:[],songs:[{id:'song1',title:'This Is the Moment',show:'지킬 앤 하이드',lyrics:'보존할 가사'},{id:'song2',title:'On My Own',show:'레미제라블'}],lessons:[{id:'lesson1',date:'2026-11-01',songId:'song1',feedback:'기존 피드백'}],practices:[{id:'practice1',date:'2026-11-01',songId:'song1',minutes:30,memo:'기존 연습'}],assignments:[],comparisonReports:[]});
-const sdk="window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'archive-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'test-token'}}})},from:()=>{const c={};for(const k of ['select','eq','is','order','range','upsert','update','delete','maybeSingle'])c[k]=()=>c;c.then=r=>r({data:[],error:null});return c},storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/file.wav'}})})}})};";
+const sdk="window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'archive-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'test-token'}}})},from:()=>{const c={};for(const k of ['select','eq','is','order','range','limit','in','upsert','update','delete','maybeSingle'])c[k]=()=>c;c.then=r=>r({data:[],error:null});return c},storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/file.wav'}})})}})};";
 async function boot(page){
  const errors=[];page.on('pageerror',e=>errors.push(e.message));page._archiveErrors=errors;
  await page.route('**/supabase.min.js',r=>r.fulfill({contentType:'application/javascript',body:sdk}));
@@ -36,6 +36,7 @@ test('Repertoire persists metadata ratings keys and filters without rewriting or
 });
 test('Performance CRUD, distinct sessions, bidirectional song links and safe deletion',async({page})=>{
  await boot(page);const id=await newShow(page);await addSession(page,'14:00','1');await addSession(page,'19:00','2');
+ await page.locator('[data-edit-session]').first().click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill('15:00');await save(page);expect((await db(page)).performances[0].sessions.some(s=>s.time==='15:00')).toBe(true);
  await page.locator('[data-link-songs]').click();await dialog(page).getByRole('searchbox',{name:'공연곡 검색'}).fill('moment');await dialog(page).getByLabel('연결할 기존 곡',{exact:true}).selectOption('song1');await dialog(page).getByLabel('공연 당시 키',{exact:true}).fill('D');await save(page);
  await page.reload();expect((await db(page)).performances[0].sessions).toHaveLength(2);
  await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('지킬 앤 하이드');
@@ -50,10 +51,15 @@ test('Performance CRUD, distinct sessions, bidirectional song links and safe del
 });
 test('Representative take references the original file and deletion clears only its reference',async({page})=>{
  await boot(page);await page.evaluate(async()=>{
-  await window.vzipStorePracticeMedia({id:'take1',name:'대표 녹음',songId:'song1',type:'audio/wav',durationSeconds:1,created:Date.now(),blob:new Blob(['wav'],{type:'audio/wav'})});VZ.media.invalidate();
+  const bytes=new Uint8Array(44+16000*2*3),view=new DataView(bytes.buffer),write=(at,value)=>{for(let i=0;i<value.length;i++)bytes[at+i]=value.charCodeAt(i)};
+  write(0,'RIFF');view.setUint32(4,bytes.length-8,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,bytes.length-44,true);
+  await window.vzipStorePracticeMedia({id:'take1',name:'대표 녹음',songId:'song1',type:'audio/wav',durationSeconds:3,created:Date.now(),blob:new Blob([bytes],{type:'audio/wav'})});VZ.media.invalidate();
  });
  await page.goto('/#/song/song1');await page.locator('[data-take]').click();await dialog(page).getByLabel('기존 녹음',{exact:true}).selectOption('take1');await save(page);
  await expect(page.locator('[data-take-player]')).toContainText('대표 녹음');expect((await page.evaluate(()=>vzipReadMedia())).length).toBe(1);
+ await page.locator('[data-take-player] [data-toggle]').click();
+ await expect.poll(()=>page.locator('[data-take-player] .media-open').evaluate(el=>el._player?.el?.currentTime||0)).toBeGreaterThan(0);
+ await page.locator('[data-take-player] [data-toggle]').click();
  await page.evaluate(()=>VZ.change(d=>VzipDataMerge.deleteMedia(d,'take1')));
  expect((await db(page)).songs[0].repertoire.takeId).toBe('');expect((await db(page)).songs[0].lyrics).toBe('보존할 가사');
 });
@@ -75,4 +81,12 @@ test('Archive sheets preserve unsaved inputs and fit phone width',async({page})=
  page.once('dialog',d=>d.dismiss());await dialog(page).getByRole('button',{name:'닫기',exact:true}).click();await expect(dialog(page).getByLabel('작품명',{exact:true})).toHaveValue('저장 전 제목');
  for(const width of [320,390]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);expect(await dialog(page).evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true)}
  page.once('dialog',d=>d.accept());await dialog(page).getByRole('button',{name:'닫기',exact:true}).click();await expect(dialog(page)).toHaveCount(0);expect((await db(page)).performances||[]).toHaveLength(0);
+});
+
+test('Changing account while deletion confirmation is open preserves the original session',async({page})=>{
+ await boot(page);await newShow(page);await addSession(page,'14:00','1');
+ await page.locator('[data-delete-session]').click();
+ await page.evaluate(()=>{window.vzipCloudUserId=()=> 'another-user'});
+ await page.locator('.sheet [data-ok]').click();
+ expect((await db(page)).performances[0].sessions).toHaveLength(1);
 });

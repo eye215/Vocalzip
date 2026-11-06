@@ -6,6 +6,7 @@ const owner=()=>window.vzipCloudUserId?.()||'';
 const mine=p=>p.ownerId===owner()&&!!owner();
 const shows=()=> (V.db.performances||[]).filter(mine);
 const get=id=>shows().find(p=>p.id===id);
+const writable=(db,id)=>{const row=db.performances?.find(p=>p.id===id);if(!row||!mine(row))throw Error('공연 또는 로그인 계정이 변경됐어요.');return row};
 const info=s=>s.repertoire?.ownerId===owner()?s.repertoire:{};
 const opt=(obj,v,none='선택 안 함')=>'<option value="">'+none+'</option>'+Object.entries(obj).map(([k,n])=>'<option value="'+E(k)+'"'+(k===v?' selected':'')+'>'+E(n)+'</option>').join('');
 const field=(label,name,value='',type='text',required=false)=>'<label class="field"><span>'+E(label)+'</span><input name="'+name+'" type="'+type+'" value="'+E(value)+'"'+(required?' required':'')+' maxlength="200"></label>';
@@ -75,7 +76,7 @@ function editSession(pid,sid){
  panel(s?'회차 수정':'공연 회차 추가',field('공연 날짜','date',s?.date||p.start,'date',true)+field('시작 시간','time',s?.time,'time')+field('공연 회차','number',s?.number)+select('해당 회차 출연','appeared',{yes:'출연함',no:'미출연 / 예정'},s?.appeared?'yes':'no')+field('해당 회차 배역','role',s?.role||p.role)+area('회차 메모','memo',s?.memo),v=>{
   const current=get(pid);if(!current)throw Error('공연을 찾을 수 없어요.');
   const next=A.session({...v,id:sid||V.uid(),appeared:v.appeared==='yes'},current.sessions);
-  save(db=>{const item=db.performances.find(x=>x.id===pid);item.sessions=[...(item.sessions||[]).filter(x=>x.id!==sid),next]});
+  save(db=>{const item=writable(db,pid);item.sessions=[...(item.sessions||[]).filter(x=>x.id!==sid),next]});
  });
 }
 function linkSongs(pid){
@@ -83,7 +84,7 @@ function linkSongs(pid){
  const api=panel('공연곡 연결','<label class="field"><span>곡 검색</span><input type="search" data-search aria-label="공연곡 검색"></label><div data-results></div>'+select('솔로·듀엣·앙상블','kind',A.kinds,'solo')+field('공연 당시 키','key',''),(v,form)=>{
   const id=form.querySelector('[name=songId]')?.value,song=V.song(id);if(!song)throw Error('기존 곡을 선택해 주세요.');
   if(!get(pid))throw Error('공연이 삭제됐어요.');
-  save(db=>{const p=db.performances.find(p=>p.id===pid);if(p.songLinks.some(l=>l.songId===id))throw Error('이미 연결된 곡이에요.');p.songLinks.push({id:V.uid(),songId:id,title:song.title,show:song.show||'',kind:v.kind||'solo',key:v.key.trim()})});
+  save(db=>{const p=writable(db,pid);if(p.songLinks.some(l=>l.songId===id))throw Error('이미 연결된 곡이에요.');p.songLinks.push({id:V.uid(),songId:id,title:song.title,show:song.show||'',kind:v.kind||'solo',key:v.key.trim()})});
  });
  const form=api.el.querySelector('form'),q=form.querySelector('[data-search]'),draw=()=>{
  const candidates=V.db.songs.filter(s=>!existing.has(s.id)&&(!q.value||(s.title+' '+s.show).toLowerCase().includes(q.value.toLowerCase())));
@@ -93,7 +94,7 @@ function linkSongs(pid){
 async function removeShow(id){
  const p=get(id);if(!p)return;
  if(!await V.confirm('공연 삭제','공연과 회차·공연곡 연결을 삭제할까요? 기존 곡·녹음·레슨·연습은 보존됩니다. 첨부 파일이 있다면 먼저 자료 목록에서 삭제해 주세요.',{ok:'삭제',danger:true}))return;
- try{if(p.assets?.length)throw Error('공연 자료를 먼저 삭제해 주세요. 파일이 남은 채 공연만 지우지 않아요.');save(db=>{db.performances=db.performances.filter(p=>p.id!==id)});V.nav('#/performances')}catch(e){message(e)}
+ try{const current=get(id);if(!current)throw Error('공연 또는 로그인 계정이 변경됐어요.');if(current.assets?.length)throw Error('공연 자료를 먼저 삭제해 주세요. 파일이 남은 채 공연만 지우지 않아요.');save(db=>{writable(db,id);db.performances=db.performances.filter(p=>p.id!==id)});V.nav('#/performances')}catch(e){message(e)}
 }
 let year='';
 V.route('performances',{title:'나의 공연',tab:'songs',back:true,actions:()=>'<button class="icon-btn" data-add-show aria-label="공연 등록"><i class="ph ph-plus"></i></button>',render(){
@@ -107,9 +108,9 @@ V.route('show',{title:r=>get(r.params[0])?.title||'공연',tab:'songs',back:true
  const id=r.params[0],p=get(id);if(!p)return;
  main.querySelector('[data-edit-show]').onclick=()=>editShow(id);main.querySelector('[data-delete-show]').onclick=()=>removeShow(id);main.querySelector('[data-add-session]').onclick=()=>editSession(id);main.querySelector('[data-link-songs]').onclick=()=>linkSongs(id);
  main.querySelectorAll('[data-edit-session]').forEach(b=>b.onclick=()=>editSession(id,b.dataset.editSession));
- main.querySelectorAll('[data-delete-session]').forEach(b=>b.onclick=async()=>{if(await V.confirm('회차 삭제','이 회차를 삭제할까요?',{ok:'삭제',danger:true}))try{save(db=>{const item=db.performances.find(p=>p.id===id);item.sessions=item.sessions.filter(s=>s.id!==b.dataset.deleteSession)})}catch(e){message(e)}});
- main.querySelectorAll('[data-unlink]').forEach(b=>b.onclick=async()=>{if(await V.confirm('공연곡 연결 해제','공연에서 이 곡의 연결만 해제할까요?',{ok:'해제'}))try{save(db=>{const item=db.performances.find(p=>p.id===id);item.songLinks=item.songLinks.filter(l=>l.id!==b.dataset.unlink)})}catch(e){message(e)}});
- main.querySelectorAll('[data-edit-link]').forEach(b=>b.onclick=()=>{const l=p.songLinks.find(x=>x.id===b.dataset.editLink);panel('공연곡 정보',select('구분','kind',A.kinds,l.kind)+field('공연 당시 키','key',l.key),v=>save(db=>{const row=db.performances.find(p=>p.id===id).songLinks.find(x=>x.id===l.id);if(!row)throw Error('연결을 찾지 못했어요.');row.kind=v.kind||'solo';row.key=v.key.trim()}))});
+ main.querySelectorAll('[data-delete-session]').forEach(b=>b.onclick=async()=>{if(await V.confirm('회차 삭제','이 회차를 삭제할까요?',{ok:'삭제',danger:true}))try{save(db=>{const item=writable(db,id);item.sessions=item.sessions.filter(s=>s.id!==b.dataset.deleteSession)})}catch(e){message(e)}});
+ main.querySelectorAll('[data-unlink]').forEach(b=>b.onclick=async()=>{if(await V.confirm('공연곡 연결 해제','공연에서 이 곡의 연결만 해제할까요?',{ok:'해제'}))try{save(db=>{const item=writable(db,id);item.songLinks=item.songLinks.filter(l=>l.id!==b.dataset.unlink)})}catch(e){message(e)}});
+ main.querySelectorAll('[data-edit-link]').forEach(b=>b.onclick=()=>{const l=p.songLinks.find(x=>x.id===b.dataset.editLink);panel('공연곡 정보',select('구분','kind',A.kinds,l.kind)+field('공연 당시 키','key',l.key),v=>save(db=>{const row=writable(db,id).songLinks.find(x=>x.id===l.id);if(!row)throw Error('연결을 찾지 못했어요.');row.kind=v.kind||'solo';row.key=v.key.trim()}))});
  V.archiveAssets?.mount(main.querySelector('[data-show-assets]'),p);
  }});
 V.archiveUI={owner,get,shows,save,panel};

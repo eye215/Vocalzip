@@ -23,6 +23,7 @@ jobs:
       - run: node tests/make-audio-fixtures.cjs
       - run: node --test tests/repertoire-model.test.cjs tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs tests/data-merge.test.cjs tests/media-delete.test.cjs tests/flac-encode.test.cjs tests/vocal-analysis.test.cjs
       - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/repertoire.spec.cjs --workers=2
       - run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Video import copies|201MiB video extraction|Real queue extracts|Metadata-derived dates'
       - run: npm run test:ui
       - uses: actions/upload-artifact@v4

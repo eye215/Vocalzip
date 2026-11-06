@@ -9,6 +9,9 @@ const ownedKey=(asset,account)=>asset.ownerId===account&&asset.key.startsWith('u
 function attach(p,asset,account){alive(p,account);U.save(db=>{const row=db.performances.find(x=>x.id===p.id);if(!row||row.ownerId!==account)throw Error('공연을 찾을 수 없어요.');if(!(row.assets||[]).some(x=>x.id===asset.id))row.assets=[...(row.assets||[]),asset]})}
 function uploadSheet(p){
  const account=U.owner(),journal='vzip_performance_pending:'+account;let rows=[],running=false,abort;
+ const unsaved=()=>running||rows.some(r=>!r.done);
+ const unload=e=>{if(unsaved()){e.preventDefault();e.returnValue=''}};
+ window.addEventListener('beforeunload',unload);V.setGuard(()=>unsaved()?'아직 저장하지 않은 공연 자료가 있어요. 이동할까요?':'');
  const pending=()=>{try{return JSON.parse(localStorage.getItem(journal)||'[]')}catch{return []}};
  const keep=asset=>localStorage.setItem(journal,JSON.stringify([...pending().filter(x=>x.asset.id!==asset.id),{performanceId:p.id,asset}]));
  const forget=id=>localStorage.setItem(journal,JSON.stringify(pending().filter(x=>x.asset.id!==id)));
@@ -28,9 +31,9 @@ function uploadSheet(p){
    }catch(e){r.status=e.message||'실패'}finally{running=false;el.querySelector('[data-files]').disabled=false;draw()}
   }
   draw();
-  const stop=e=>{if(!running)return;if(e.type==='keydown'&&e.key!=='Escape')return;if(e.type==='click'&&e.target!==el.parentNode&&!e.target.closest('[data-close]'))return;if(!confirm('업로드를 중지하고 닫을까요?')){e.preventDefault();e.stopImmediatePropagation();return}abort?.abort()};
+  const stop=e=>{if(!unsaved())return;if(e.type==='keydown'&&e.key!=='Escape')return;if(e.type==='click'&&e.target!==el.parentNode&&!e.target.closest('[data-close]'))return;if(!confirm('저장하지 않은 파일 선택을 닫을까요? 진행 중인 업로드는 중지됩니다.')){e.preventDefault();e.stopImmediatePropagation();return}abort?.abort()};
   el.parentNode.addEventListener('click',stop,true);el.parentNode.addEventListener('keydown',stop,true);
- },onClose:()=>{abort?.abort();V.softRender()}});
+ },onClose:()=>{abort?.abort();V.setGuard(null);window.removeEventListener('beforeunload',unload);V.softRender()}});
 }
 V.archiveAssets={
  mount(host,p){
