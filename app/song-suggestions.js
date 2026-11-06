@@ -224,6 +224,10 @@ function showReferenceControls(main){
  const select=main.querySelector('[data-ref-picker]'),summary=main.querySelector('[data-ref-list]');
  if(!select||!summary)return;
  const last=select.value;
+ const manual=main.querySelector('[data-ref-song]'),oldSong=manual.value;
+ manual.replaceChildren(new Option('기준 가사를 등록할 곡 선택',''));
+ for(const song of songs())manual.add(new Option(VZ.songLabel(song),song.id));
+ manual.value=oldSong||'';
  select.replaceChildren(new Option('곡 지정된 기준 녹음 선택',''));
  for(const item of state.referenceItems){
   const song=songs().find(s=>s.id===(item.songId||item.song));
@@ -263,10 +267,18 @@ async function indexReference(main,check=()=>{}){
   VZ.toast('곡별 기준이 저장됐어요. 다음부터 비교는 무료예요.');
  }finally{state.running=false;state.controller=null;showReferenceControls(main);controls(main)}
 }
+async function saveManualReference(main,check=()=>{}){
+ const songId=main.querySelector('[data-ref-song]').value;
+ const input=main.querySelector('[data-ref-text]'),value=input.value.trim();
+ if(!songId||!songs().some(s=>s.id===songId))throw Error('기준 가사를 입력할 곡을 선택해 주세요.');
+ if(value.length<30||value.length>1600)throw Error('기준 가사는 30~1600자를 입력해 주세요.');
+ if(!await VZ.confirm('기준 가사 무료 저장','텍스트만 저장하며 유료 STT나 GPT를 호출하지 않아요. 이 브라우저에 기준을 저장할까요?',{ok:'무료 저장'}))return;
+ check();saveReference(songId,value);input.value='';
+ await rematchCached(main);showReferenceControls(main);VZ.toast('기준 가사가 무료로 저장됐어요.');
+}
 async function deleteReference(main){
- const item=state.referenceItems.find(m=>m.id===main.querySelector('[data-ref-picker]').value);
- const songId=item?.songId||item?.song;
- if(!songId||!references().some(r=>r.songId===songId))throw Error('삭제할 곡의 기준 녹음을 선택해 주세요.');
+ const songId=main.querySelector('[data-ref-song]').value;
+ if(!songId||!references().some(r=>r.songId===songId))throw Error('삭제할 기준 곡을 먼저 선택해 주세요.');
  if(!await VZ.confirm('기준 삭제','이 브라우저에서 선택 곡의 기준 가사를 삭제할까요?',{ok:'삭제'}))return;
  removeReference(songId);showReferenceControls(main);
 }
@@ -360,7 +372,7 @@ async function apply(main,check=()=>{}){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted">💰 비용 절약: 등록곡의 기준 녹음을 처음 한 번만 STT로 변환합니다. 이후 텍스트 비교는 무료이며 GPT를 호출하지 않습니다. 기준은 이 브라우저에만 보관돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted" data-ref-list></p><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted">💰 비용 절약: 등록곡의 기준 녹음을 처음 한 번만 STT로 변환합니다. 이후 텍스트 비교는 무료이며 GPT를 호출하지 않습니다. 기준은 이 브라우저에만 보관돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted">기준 가사 일부를 직접 입력하면 최초 STT 비용도 없이 무료로 기준을 만들 수 있어요.</p><select data-ref-song aria-label="기준 곡 선택"></select><textarea data-ref-text rows="3" maxlength="1600" placeholder="기준 가사 일부를 직접 입력"></textarea><button class="btn secondary" data-ref-manual type="button">가사 기준 무료 저장</button><p class="small muted" data-ref-list></p><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
   if(busy){main.textContent='이전 작업을 마무리하고 있어요. 잠시 후 다시 열어 주세요.';return}
   viewOwner=owner();
@@ -379,6 +391,7 @@ VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
   root.querySelector('[data-apply]').onclick=()=>exclusive(main,apply);
   root.querySelector('[data-undo]').onclick=()=>exclusive(main,undo);
   root.querySelector('[data-ref-add]').onclick=()=>exclusive(main,indexReference);
+  root.querySelector('[data-ref-manual]').onclick=()=>exclusive(main,saveManualReference);
   root.querySelector('[data-ref-clear]').onclick=()=>exclusive(main,deleteReference);
   showReferenceControls(main);
   draw(main);
