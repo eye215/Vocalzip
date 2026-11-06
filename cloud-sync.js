@@ -390,7 +390,7 @@ window.vzipCloudLegacyCleanup=async item=>{
 const songTextTable=()=>{if(!client||!user)throw Error('Supabase 로그인이 필요해요.');return client.from('vocal_song_texts')};
 window.vzipCloudSongTextList=async()=>{
  const owner=user?.id;if(!owner)throw Error('로그인 정보가 없어요.');
- const {data,error}=await songTextTable().select('kind,record_id,transcript,source,updated_at').eq('user_id',owner).order('updated_at',{ascending:false}).limit(2000);
+ const {data,error}=await songTextTable().select('kind,record_id,transcript,source,updated_at,deleted_at').eq('user_id',owner).order('updated_at',{ascending:false}).limit(2000);
  if(error)throw Error('기준 가사 클라우드 조회 실패: '+error.message);
  return data||[];
 };
@@ -399,13 +399,14 @@ window.vzipCloudSongTextSave=async({kind,recordId,transcript,source='manual',onl
  if(!owner||!['reference','recognition'].includes(kind)||typeof recordId!=='string'||!recordId||recordId.length>128||
   typeof transcript!=='string'||!transcript.trim()||transcript.length>1600||!['manual','stt','legacy'].includes(source))
   throw Error('기준 가사 저장 정보가 올바르지 않아요.');
- const row={user_id:owner,kind,record_id:recordId,transcript,source,updated_at:new Date().toISOString()};
+ const row={user_id:owner,kind,record_id:recordId,transcript,source,deleted_at:null,updated_at:new Date().toISOString()};
  const {error}=await songTextTable().upsert(row,{onConflict:'user_id,kind,record_id',ignoreDuplicates:onlyIfMissing});
  if(error)throw Error('기준 가사 클라우드 저장 실패: '+error.message);
 };
 window.vzipCloudSongTextDelete=async(kind,recordId)=>{
  const owner=user?.id;if(!owner||!['reference','recognition'].includes(kind)||!recordId)throw Error('로그인이 필요해요.');
- const {error}=await songTextTable().delete().eq('user_id',owner).eq('kind',kind).eq('record_id',recordId);
+ // Tombstone keeps the key so offline old devices cannot resurrect deleted lyrics.
+ const {error}=await songTextTable().update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('user_id',owner).eq('kind',kind).eq('record_id',recordId);
  if(error)throw Error('기준 가사 클라우드 삭제 실패: '+error.message);
 };
 window.vzipCloudAccessToken=async()=>{if(!client||!user)return null;const {data}=await client.auth.getSession();return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user;
