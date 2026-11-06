@@ -38,7 +38,7 @@ async function remoteData(){const {data,error}=await client.from('vocal_data').s
    only records deleted on purpose (tombstones) disappear. The device copy before any local
    rewrite is kept as vzip_before_cloud_<time> (last 5). */
 const Merge=window.VzipDataMerge;
-let syncAgain=false;
+let syncAgain=false,syncFailed=false;
 function snapshot(data){if(!data)return;try{localStorage.setItem('vzip_before_cloud_'+Date.now(),JSON.stringify(data));const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^vzip_before_cloud_\d+$/.test(k||''))keys.push(k)}keys.sort().slice(0,-5).forEach(k=>localStorage.removeItem(k))}catch{}}
 /* Conditional writes: the server copy is replaced only if nobody saved it since it was read (same
    updated_at). Otherwise it is read again and merged again, so a save from another device in between
@@ -71,10 +71,10 @@ async function sync({silent=false,reload=false}={}){
     await wait(150*(attempt+1)+Math.random()*150);
    }else{const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload,updated_at:stamp});if(error)throw error;break}
   }
-  localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;
+  localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;syncFailed=false;
   say('✓ 이 기기와 클라우드 기록을 합쳐 저장했어요 · '+Merge.count(merged)+'건'+(silent?' (자동 동기화)':''));
   if(reload&&local&&changedLocal)setTimeout(()=>location.reload(),650);
- }catch(e){say('동기화 실패: '+e.message+' · 기록은 그대로 있어요.')}
+ }catch(e){syncFailed=true;say('동기화 실패: '+e.message+' · 기록은 그대로 있어요.')}
  finally{busy=false;if(syncAgain){syncAgain=false;setTimeout(()=>sync({silent:true}),300)}}
 }
 async function upload(silent=false){return sync({silent})}
@@ -507,6 +507,12 @@ $('#cloud-login').onclick=async()=>{const {email,password}=credentials();if(!ema
 $('#cloud-signup').onclick=async()=>{const {email,password}=credentials();if(!email||password.length<8)return say('이메일과 8자 이상의 비밀번호를 입력해 주세요.');if(!confirm('이 이메일로 새 계정을 만들까요? 이미 가입했다면 비밀번호 재설정을 이용해 주세요.'))return;say('계정 생성 중…');const {data,error}=await client.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});say(error?'가입 실패: '+error.message:data.session?'✓ 가입 및 로그인 완료!':'가입 요청 완료. 이메일 인증이 필요할 수 있어요. 이메일이 오지 않으면 발송 제한이 풀린 뒤 다시 확인해 주세요.')};
 $('#cloud-reset').onclick=async()=>{const email=$('#cloud-email').value.trim();if(!email)return say('먼저 이메일을 입력해 주세요.');say('비밀번호 재설정 메일 요청 중…');const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});say(error?'재설정 메일 발송 실패: '+error.message:'✓ 비밀번호 재설정 메일을 확인해 주세요.')};
 client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){setTimeout(async()=>{const password=prompt('새 비밀번호를 8자 이상 입력해 주세요.');if(!password)return;if(password.length<8){say('비밀번호는 8자 이상이어야 해요.');return}const {error}=await client.auth.updateUser({password});say(error?'비밀번호 변경 실패: '+error.message:'✓ 비밀번호가 설정됐어요. 다음부터 이메일과 비밀번호로 로그인하세요.')},200)}});
-$('#cloud-logout').onclick=async()=>{await client.auth.signOut();localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=()=>sync();$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',e=>{if(!ready||!user||e.detail?.source==='cloud-merge')return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>upload(true),900)});}
+$('#cloud-logout').onclick=async()=>{await client.auth.signOut();localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=()=>sync();$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',e=>{if(!ready||!user||e.detail?.source==='cloud-merge')return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>{uploadTimer=null;upload(true)},900)});
+ /* A change saved just before the app goes to the background is sent at once (iOS may suspend the page before the
+  * 0.9 s wait ends); a save that failed offline is sent again when the network or the app comes back. */
+ const flush=()=>{if(!ready||!user)return;if(uploadTimer){clearTimeout(uploadTimer);uploadTimer=null;upload(true)}};
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush();else if(syncFailed&&ready&&user)upload(true)});
+ window.addEventListener('pagehide',flush);
+ window.addEventListener('online',()=>{if(ready&&user&&(syncFailed||uploadTimer)){clearTimeout(uploadTimer);uploadTimer=null;upload(true)}});}
 boot().catch(e=>{say('연결 오류: '+e.message);document.getElementById('vzip-boot-cover')?.remove()});
 })();

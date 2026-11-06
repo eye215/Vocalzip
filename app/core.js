@@ -316,3 +316,16 @@ document.addEventListener('DOMContentLoaded', () => hideIcons(document));
     return 0;
   };
 })();
+/* Offline notice (10-6): records keep saving on this device; the cloud copy catches up when the network is back. */
+(() => {
+  const show = () => {
+    let el = document.getElementById('vz-offline');
+    if (navigator.onLine !== false) { el?.remove(); return; }
+    if (el) return;
+    el = document.createElement('div'); el.id = 'vz-offline'; el.setAttribute('role', 'status');
+    el.innerHTML = '<i class="ph ph-wifi-slash"></i>오프라인 · 기록은 이 기기에 저장되고 연결되면 자동으로 올라가요';
+    document.body.append(el);
+  };
+  addEventListener('online', show); addEventListener('offline', show);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
+})();

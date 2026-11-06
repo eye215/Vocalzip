@@ -65,7 +65,7 @@ test('Bottom navigation reaches the five main screens without horizontal overflo
   await expect(page.locator('[data-recent]').getByText('This Is the Moment')).toBeVisible();
   // Touch targets in nav are at least 44px.
   const box = await nav.getByRole('link', {name:'내 곡'}).boundingBox();
-  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
 });
 
 test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never auto-complete', async ({page}) => {
@@ -1761,4 +1761,105 @@ test('Song choices open as a searchable sheet; the page under a sheet stays wher
   await expect(page.locator('body')).not.toHaveClass(/sheet-lock/);
   expect(await page.evaluate(() => scrollY)).toBe(y);
   expect(page.__errors).toEqual([]);
+});
+
+test('Library select mode sets the song and kind of several recordings at once; rows tick instead of opening', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/library');
+  await expect(page.locator('[data-media]')).toHaveCount(2);
+  await page.getByRole('button', {name:'선택', exact:true}).click();
+  const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
+  await expect(bar).toContainText('0개 선택');
+  await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await expect(page.locator('[data-media="m1"] .media-open')).toBeHidden(); // ticked, not opened
+  await expect(bar).toContainText('1개 선택');
+  await bar.getByRole('button', {name:'전체 선택'}).click();
+  await expect(bar).toContainText('2개 선택');
+  await bar.getByRole('button', {name:/곡 지정/}).click();
+  const pick = page.getByRole('dialog', {name:'곡 지정'});
+  await pick.getByRole('option', {name:'On My Own'}).click();
+  const ask = page.getByRole('dialog', {name:'곡 지정'});
+  await expect(ask).toContainText('2개 녹음');
+  await ask.getByRole('button', {name:'바꾸기'}).click();
+  await expect(bar).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id + ':' + m.songId).sort().join(','))).toBe('m1:s2,m2:s2');
+  // Kind for one recording.
+  await page.getByRole('button', {name:'선택', exact:true}).click();
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
+  await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
+  await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
+  // Leaving the screen ends select mode.
+  await page.getByRole('button', {name:'선택', exact:true}).click();
+  await page.goto('/#/home');
+  await expect(page.locator('.sel-bar')).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test('A measurement ⓘ opens what it measures and how to read it', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(() => { document.querySelector('main').insertAdjacentHTML('afterbegin', '<p>음정 오차' + VZ.metricInfo('into', '음정 오차') + '</p>'); });
+  await page.getByRole('button', {name:'음정 오차 설명'}).click();
+  const sheet = page.getByRole('dialog', {name:'음정 정확도 (음정 오차)'});
+  await expect(sheet).toContainText('반음 하나 = 100 cent');
+  await expect(sheet).toContainText('판정하지 않아요');
+  const box = await page.getByRole('button', {name:'닫기'}).boundingBox();
+  expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
+  expect(page.__errors).toEqual([]);
+});
+
+test('Offline notice, a change sent at once when the app goes to the background, and a song tab bar that stays on screen', async ({page, context}) => {
+  const seed = legacy(); seed.practices.push(...Array.from({length:30}, (_, i) => ({id:'px' + i, date:day(-i - 2), minutes:20, songId:'s1', practiceMode:'song', technique:[], memo:'연습 ' + i})));
+  await boot(page, {seed, media:false});
+  await context.setOffline(true);
+  await expect(page.locator('#vz-offline')).toContainText('오프라인');
+  await context.setOffline(false);
+  await expect(page.locator('#vz-offline')).toHaveCount(0);
+  // A record changed right before the app is hidden is sent without waiting for the 0.9 s pause.
+  await expect.poll(() => page.evaluate(() => window.__up.length)).toBeGreaterThan(0); // first sync after sign-in
+  const before = await page.evaluate(() => window.__up.length);
+  await page.evaluate(k => {
+    const d = JSON.parse(localStorage.getItem(k)); d.songs.push({id:'s9', title:'방금 추가'}); localStorage.setItem(k, JSON.stringify(d));
+    window.dispatchEvent(new Event('vzip:data-changed'));
+    Object.defineProperty(document, 'visibilityState', {configurable:true, get:() => 'hidden'});
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, KEY);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => window.__up.length)).toBeGreaterThan(before);
+  await page.evaluate(() => { delete document.visibilityState; });
+  // Song page: the 전체·가사·악보… bar sticks; a tab chosen down the page starts right under it.
+  await page.goto('/#/song/s1');
+  const bar = page.locator('.song-tabs');
+  await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+  await expect.poll(async () => Math.round((await bar.boundingBox()).y)).toBeLessThan(40);
+  await bar.getByRole('tab', {name:'레슨'}).click();
+  const gap = await page.evaluate(() => document.querySelector('[data-body]').getBoundingClientRect().top - document.querySelector('.song-tabs').getBoundingClientRect().bottom);
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThan(40);
+  expect(page.__errors).toEqual([]);
+});
+
+test('Every control on the main screens answers a 44pt tap (iPhone)', async ({page}) => {
+  test.setTimeout(120000);
+  await boot(page);
+  const routes = ['home', 'record', 'lessons', 'lesson/l1', 'calendar', 'homework', 'songs', 'song/s1', 'library', 'growth', 'analysis', 'settings', 'import-hub', 'storage', 'song-suggest', 'compare'];
+  const bad = {};
+  for (const r of routes) {
+    await page.goto('/#/' + r); await page.waitForTimeout(500);
+    const found = await page.evaluate(() => {
+      const out = [];
+      for (const el of document.querySelectorAll('main a[href], main button, main select, main input, main [role=button], main summary, nav a, header button, header a')) {
+        const b = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        if (!b.width || !b.height || cs.visibility === 'hidden') continue;
+        if (el.matches('.pick-native,.sr-only,input[type=checkbox],input[type=radio],input[type=hidden]')) continue;
+        if (el.tagName === 'A' && cs.display === 'inline') continue; // a link inside a sentence
+        const hit = parseFloat(getComputedStyle(el, '::before').height) || 0; // a wider invisible tap area
+        if (Math.round(Math.max(b.height, hit)) < 44) out.push((el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 20) + ' ' + Math.round(b.height) + 'px');
+      }
+      return out;
+    });
+    if (found.length) bad[r] = found;
+  }
+  expect(bad).toEqual({});
 });
