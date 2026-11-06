@@ -170,3 +170,33 @@ test('With an hourly rate, lessons left come from payments: a used-up pass still
  assert.equal(P.defaultPass(state,C.totals(state),C.hourlyTotals(state)),'');
  assert.throws(()=>run(state,'deduction.save',{passId,date:'2026-11-07',status:'completed',lessonId:'lesson-74',units:100}),/결제한 횟수를 넘어요/);
 });
+
+test('Imported pass names match equivalent date formats and harmless spacing',()=>{
+ let {state,passId}=setup();state.passes[0].name='2026-01-26 레슨권';
+ const settings={kind:'deduction',hash:'dates',sheet:'0'};
+ for(const name of ['2026/01/26','2026년 1월 26일','January 26, 2026','20260126']){
+  const source=[['레슨날짜','레슨권','진행상태'],['2026-02-01',name,'완료']];
+  const draft=I.drafts(source,I.autoMap(source[0],'deduction'),settings,state);
+  assert.equal(draft[0].passId,passId);assert.equal(I.inspect(draft,settings,state)[0].errors.length,0);
+ }
+ state.passes[0].name='  기본   레슨권 ';
+ assert.equal(I.resolvePass(state,'기본 레슨권','','').passId,passId);
+});
+test('Explicit payment-date mapping finds one pass, never guesses using lesson date',()=>{
+ let {state,passId}=setup();state=run(state,'payment.save',{passId,date:'2026-01-26',amount:10000});
+ const source=[['레슨날짜','결제날짜','진행상태'],['2026-02-01','2026/01/26','완료']],settings={kind:'deduction',hash:'payment-date',sheet:'0'};
+ const draft=I.drafts(source,I.autoMap(source[0],'deduction'),settings,state);
+ assert.equal(draft[0].passId,passId);
+ assert.equal(I.resolvePass(state,'','','').passId,'');
+ const noColumn=[['레슨날짜','진행상태'],['2026-01-26','완료']];
+ assert.equal(I.drafts(noColumn,I.autoMap(noColumn[0],'deduction'),settings,state)[0].passId,'');
+});
+test('Ambiguous date-based pass matches need a manual selection and refunds are excluded',()=>{
+ let {state,passId}=setup();state=run(state,'payment.save',{passId,date:'2026-01-26',amount:10000});
+ state=run(state,'pass.save',{name:'다른 레슨권',amount:50000,totalUnits:100});const other=state.passes[1].id;
+ state=run(state,'payment.save',{passId:other,date:'2026-01-26',amount:10000});
+ const result=I.resolvePass(state,'','2026-01-26','');assert.equal(result.passId,'');assert.match(result.passMatchWarning,/2개/);
+ assert.equal(I.resolvePass(state,'','2026-01-26',other).passId,other);
+ state=run(state,'payment.save',{passId,date:'2026-01-27',amount:100,kind:'refund'});
+ assert.equal(I.resolvePass(state,'','2026-01-27','').passId,'');
+});
