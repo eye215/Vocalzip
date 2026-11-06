@@ -149,7 +149,7 @@ test('browser-only references safely migrate to cloud and hydrate on another dev
  const endpoint={
   list:async()=>[...rows.values()],
   save:async row=>{writes.push(row);const key=row.kind+':'+row.recordId;if(!rows.has(key)||!row.onlyIfMissing)rows.set(key,{kind:row.kind,record_id:row.recordId,transcript:row.transcript})},
-  remove:async(kind,id)=>rows.delete(kind+':'+id)
+  remove:async(kind,id)=>{const key=kind+':'+id;rows.set(key,{...rows.get(key),deleted_at:'2026-11-06T00:00:00Z'})}
  };
  a.window.vzipCloudSongTextList=endpoint.list;
  a.window.vzipCloudSongTextSave=endpoint.save;
@@ -163,6 +163,11 @@ test('browser-only references safely migrate to cloud and hydrate on another dev
  assert.equal(b.api.references()[0].transcript,a.api.references()[0].transcript);
  await b.api.removeReference('song1');assert.equal(b.api.references().length,0);
  await a.api.loadCloudTexts();assert.equal(a.api.references().length,0);
+ // A third device still holding a stale local reference must NOT resurrect a cloud tombstone.
+ const c=browser();c.storage.set('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'song1',transcript:'오프라인 구형 기기의 오래된 가사입니다'}]));
+ c.window.vzipCloudSongTextList=endpoint.list;c.window.vzipCloudSongTextSave=endpoint.save;
+ const writesBefore=writes.length;await c.api.loadCloudTexts();
+ assert.equal(writes.length,writesBefore);assert.equal(c.api.references().length,0);
 });
 test('remote reference is never overwritten by stale browser backup',async()=>{
  const b=browser();
