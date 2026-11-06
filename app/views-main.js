@@ -513,7 +513,8 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
           '<h2 class="sec">연습 녹음 ' + practiceMedia.length + ' <a href="#/record?song=' + esc(s.id) + '">+ 녹음</a></h2>' + recList(practiceMedia, '이 곡의 연습 녹음이 없어요.');
         body.querySelector('[data-log2]')?.addEventListener('click', () => VZ.practiceSheet({songId:s.id}));
       }
-      else if (songTab === 'performance') body.innerHTML = '<h2 class="sec" style="margin-top:4px">공연 녹음·영상 ' + stageMedia.length + '</h2>' + recList(stageMedia, '이 곡의 공연 녹음이 없어요. 녹음의 "정보 수정"에서 종류를 공연으로 바꿀 수 있어요.');
+      else if (songTab === 'performance') body.innerHTML = (shows => shows.length ? '<h2 class="sec" style="margin-top:4px">나의 공연 ' + shows.length + '</h2><div class="list">' + shows.map(VZ.repertoire.showCard).join('') + '</div>' : '')(VZ.repertoire?.showsForSong?.(s.id) || []) +
+        '<h2 class="sec" style="margin-top:4px">공연 녹음·영상 ' + stageMedia.length + '</h2>' + recList(stageMedia, '이 곡의 공연 녹음이 없어요. 녹음의 "정보 수정"에서 종류를 공연으로 바꿀 수 있어요.');
       if (songTab !== 'timeline') { body.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, media)); return; }
       {
         // One entry: title (+ badge/rating on the right), date · details, then a short note. Lessons and practices open.

@@ -104,3 +104,19 @@ test('Cloud writes exclude another account archive while preserving its unsynced
  expect(out.performances.map(p=>p.id)).toEqual(['remote-show']);expect(out.songs[0].repertoire).toBeUndefined();
  await page.goto('/#/performances');await expect(page.locator('#view')).toContainText('원격 공연');await expect(page.locator('#view')).not.toContainText('비공개 미동기화 공연');
 });
+test('A production connects to the rest of the app: its day on the calendar, 공연 recordings of that day, their songs, the song page, and before sign-in is confirmed',async({page})=>{
+ await boot(page);const id=await newShow(page,'맘마미아');await addSession(page,'19:00','1');
+ await page.evaluate(async()=>{window.vzipCloudSignedIn=()=>false;
+  await window.vzipStorePracticeMedia({id:'stage1',name:'Dancing Queen 공연',type:'audio/wav',blob:new Blob(['x'],{type:'audio/wav'}),created:new Date('2026-11-01T20:00:00').getTime(),recordedDate:'2026-11-01',dateSource:'manual',source:'import',occasion:'performance',songId:'song2',song:'On My Own'});
+  window.VZ.media.invalidate?.();window.dispatchEvent(new Event('vzip:media-updated'))});
+ await page.goto('/#/show/'+id);
+ const rec=page.locator('[data-show-media]');await expect(rec).toContainText('Dancing Queen 공연');
+ await rec.getByRole('button',{name:/곡 1개를 공연곡으로 연결/}).click();
+ await expect.poll(async()=>(await db(page)).performances.find(p=>p.id===id).songLinks.map(l=>l.songId)).toEqual(['song2']);
+ await page.goto('/#/calendar');await page.locator('[data-d="2026-11-01"]').click();
+ await expect(page.locator('[data-day]')).toContainText('맘마미아');
+ await page.goto('/#/song/song2');await page.getByRole('tab',{name:'공연'}).click();await expect(page.locator('[data-body]')).toContainText('맘마미아');
+ // App just opened / offline: the account this device last synced with still sees its productions.
+ await page.evaluate(()=>{localStorage.setItem('vzip_cloud_linked_user','archive-user');window.vzipCloudUserId=()=>''});
+ await page.goto('/#/performances');await expect(page.locator('.archive-page')).toContainText('맘마미아');
+});
