@@ -17,9 +17,19 @@ const state={items:[],referenceItems:[],chosen:new Set(),results:new Map(),runni
 const owner=()=>window.vzipCloudUserId?.()||'device';
 let viewOwner=owner(), busy=false, authGeneration=0;
 const scoped=key=>key+':'+viewOwner;
-function references(){try{const data=JSON.parse(localStorage.getItem(scoped(referenceKey))||'[]');return Array.isArray(data)?data.filter(r=>r?.songId&&r?.transcript):[]}catch{return []}}
-function saveReference(songId,transcript){const next=references().filter(r=>r.songId!==songId);next.push({songId,transcript:String(transcript).slice(0,1600),at:Date.now()});localStorage.setItem(scoped(referenceKey),JSON.stringify(next))}
-function removeReference(songId){localStorage.setItem(scoped(referenceKey),JSON.stringify(references().filter(r=>r.songId!==songId)))}
+function references(){
+ // Song-level lyrics sync with the existing VZ cloud data, unlike old device-only references.
+ // Prefer the pasted original lyrics. Never compare translated text or practice notes.
+ let legacy=[];
+ try {const data=JSON.parse(localStorage.getItem(scoped(referenceKey))||'[]');legacy=Array.isArray(data)?data.filter(r=>r?.songId&&r?.transcript):[]} catch {}
+ const typed=songs().filter(song=>String(song.lyrics||'').trim().length>=12)
+  .map(song=>({songId:song.id,transcript:String(song.lyrics).trim().slice(0,16000),source:'lyrics'}));
+ const typedIds=new Set(typed.map(r=>r.songId));
+ return [...typed,...legacy.filter(r=>!typedIds.has(r.songId))];
+}
+function legacyReferences(){try{const data=JSON.parse(localStorage.getItem(scoped(referenceKey))||'[]');return Array.isArray(data)?data.filter(r=>r?.songId&&r?.transcript):[]}catch{return []}}
+function saveReference(songId,transcript){const next=legacyReferences().filter(r=>r.songId!==songId);next.push({songId,transcript:String(transcript).slice(0,1600),at:Date.now()});localStorage.setItem(scoped(referenceKey),JSON.stringify(next))}
+function removeReference(songId){localStorage.setItem(scoped(referenceKey),JSON.stringify(legacyReferences().filter(r=>r.songId!==songId)))}
 window.addEventListener('vzip:auth-changed',()=>{
  if(owner()===viewOwner)return;
  authGeneration++;state.cancel=true;state.controller?.abort();state.results.clear();state.chosen.clear();
@@ -246,8 +256,8 @@ function showReferenceControls(main){
  }
  select.value=last||'';
  const stored=references();
- summary.textContent='현재 브라우저에 저장된 기준: '+stored.length+'곡';
- main.querySelector('[data-ref-clear]').disabled=!stored.length;
+ summary.textContent='사용 가능한 기준: '+stored.length+'곡 (곡 상세 가사 우선 · 기존 브라우저 기준 보조)';
+ main.querySelector('[data-ref-clear]').disabled=!legacyReferences().length;
 }
 async function rematchCached(main){
  const refs=references();if(!refs.length||!state.items.some(m=>{const c=readCache(m);return c?.transcript&&!c.candidate&&c.method==='stt'}))return;
@@ -289,7 +299,7 @@ async function saveManualReference(main,check=()=>{}){
 }
 async function deleteReference(main){
  const songId=main.querySelector('[data-ref-song]').value;
- if(!songId||!references().some(r=>r.songId===songId))throw Error('삭제할 기준 곡을 먼저 선택해 주세요.');
+ if(!songId||!legacyReferences().some(r=>r.songId===songId))throw Error('삭제할 브라우저 기준이 없어요. 곡 상세 가사는 해당 곡의 가사 탭에서 수정하거나 지워 주세요.');
  if(!await VZ.confirm('기준 삭제','이 브라우저에서 선택 곡의 기준 가사를 삭제할까요?',{ok:'삭제'}))return;
  removeReference(songId);showReferenceControls(main);
 }
@@ -383,7 +393,7 @@ async function apply(main,check=()=>{}){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted">💰 비용 절약: 등록곡의 기준 녹음을 처음 한 번만 STT로 변환합니다. 이후 텍스트 비교는 무료이며 GPT를 호출하지 않습니다. 기준은 이 브라우저에만 보관돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted">기준 가사 일부를 직접 입력하면 최초 STT 비용도 없이 무료로 기준을 만들 수 있어요.</p><select data-ref-song aria-label="기준 곡 선택"></select><textarea data-ref-text rows="3" maxlength="1600" placeholder="기준 가사 일부를 직접 입력"></textarea><button class="btn secondary" data-ref-manual type="button">가사 기준 무료 저장</button><p class="small muted" data-ref-list></p><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted">💰 비용 절약: 곡 상세 → 가사 탭에 원문을 입력하면 STT 비교 기준으로 무료 사용해요. 미분류 음원의 STT에는 별도 비용이 발생할 수 있어요. 기존 기준 녹음은 가사가 없는 곡에만 보조로 사용돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted">기준 가사 일부를 직접 입력하면 최초 STT 비용도 없이 무료로 기준을 만들 수 있어요.</p><select data-ref-song aria-label="기준 곡 선택"></select><textarea data-ref-text rows="3" maxlength="1600" placeholder="기준 가사 일부를 직접 입력"></textarea><button class="btn secondary" data-ref-manual type="button">가사 기준 무료 저장</button><p class="small muted" data-ref-list></p><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
   if(busy){main.textContent='이전 작업을 마무리하고 있어요. 잠시 후 다시 열어 주세요.';return}
   viewOwner=owner();
