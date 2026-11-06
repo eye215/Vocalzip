@@ -8,7 +8,7 @@ function edge(env={},user='alice'){
  const code=fs.readFileSync('supabase/functions/vzip-song-stt/index.ts','utf8').replace(/^import .*;$/m,'');
  const context={Request,Response,Blob,File,FormData,Uint8Array,AbortSignal,console:{error(){}},
   Deno:{env:{get:k=>env[k]},serve:fn=>handler=fn},
-  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})}}),
+  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async()=>({data:true,error:null})}),
   fetch:async()=>{calls++;return Response.json({text:''})}};
  vm.runInNewContext(stripTypeScriptTypes(code),context);
  return {call:handler,calls:()=>calls};
