@@ -117,7 +117,7 @@ async function clip(key, {time=20, duration=30, signal}={}) {
   const res=await fetch(target,{headers:{authorization:'Bearer '+await token()},cache:'no-store',signal});
   if(!res.ok){
     let message='';try{message=(await res.json()).error||''}catch{}
-    const error=Error(res.status===503?'30초 서버 추출이 아직 배포되지 않았어요.':
+    const error=Error(res.status===503?(message==='STT clip extraction is disabled'?'Cloudflare STT_CLIP_ENABLED가 false예요. 테스트하려면 true로 변경해 주세요.':message==='media transformations binding is not enabled'?'Cloudflare MEDIA_TRANSFORM 바인딩이 현재 배포에 없어요.':message||'Cloudflare 서버에서 추출 기능을 사용할 수 없어요 (503).'):
       res.status===422?'해당 녹음 형식은 30초 구간 추출을 지원하지 않아요.':
       '음원 구간 추출 실패 ('+res.status+(message?': '+message:'')+')');
     error.status=res.status;throw error;
