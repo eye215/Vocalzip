@@ -386,6 +386,28 @@ window.vzipCloudLegacyCleanup=async item=>{
  if(paths.length){const {error}=await client.storage.from('vocal-recordings').remove(paths);if(error)throw error}
  await patchMedia(item.id,m=>{if(!m.legacyStorage)return null;const next={...m};delete next.legacyStorage;return next},owner);
 };
+// Private account-scoped lyrics / paid STT cache. RLS enforces auth.uid() on each row.
+const songTextTable=()=>{if(!client||!user)throw Error('Supabase 로그인이 필요해요.');return client.from('vocal_song_texts')};
+window.vzipCloudSongTextList=async()=>{
+ const owner=user?.id;if(!owner)throw Error('로그인 정보가 없어요.');
+ const {data,error}=await songTextTable().select('kind,record_id,transcript,source,updated_at').eq('user_id',owner).order('updated_at',{ascending:false}).limit(2000);
+ if(error)throw Error('기준 가사 클라우드 조회 실패: '+error.message);
+ return data||[];
+};
+window.vzipCloudSongTextSave=async({kind,recordId,transcript,source='manual',onlyIfMissing=false})=>{
+ const owner=user?.id;
+ if(!owner||!['reference','recognition'].includes(kind)||typeof recordId!=='string'||!recordId||recordId.length>128||
+  typeof transcript!=='string'||!transcript.trim()||transcript.length>1600||!['manual','stt','legacy'].includes(source))
+  throw Error('기준 가사 저장 정보가 올바르지 않아요.');
+ const row={user_id:owner,kind,record_id:recordId,transcript,source,updated_at:new Date().toISOString()};
+ const {error}=await songTextTable().upsert(row,{onConflict:'user_id,kind,record_id',ignoreDuplicates:onlyIfMissing});
+ if(error)throw Error('기준 가사 클라우드 저장 실패: '+error.message);
+};
+window.vzipCloudSongTextDelete=async(kind,recordId)=>{
+ const owner=user?.id;if(!owner||!['reference','recognition'].includes(kind)||!recordId)throw Error('로그인이 필요해요.');
+ const {error}=await songTextTable().delete().eq('user_id',owner).eq('kind',kind).eq('record_id',recordId);
+ if(error)throw Error('기준 가사 클라우드 삭제 실패: '+error.message);
+};
 window.vzipCloudAccessToken=async()=>{if(!client||!user)return null;const {data}=await client.auth.getSession();return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user;
 let streamOwner=null;
 function showUser(){if(streamOwner&&streamOwner!==user?.id)window.vzipRevokeChunkMedia?.();streamOwner=user?.id||null;window.dispatchEvent(new Event('vzip:auth-changed'));const logged=!!user;$('#cloud-signed-in').hidden=!logged;updateAuthScreen();if(logged){$('#cloud-user').textContent=user.email||'로그인됨';ready=localStorage.getItem('vzip_cloud_linked_user')===user.id;say(ready?'연결됨 · 기록을 수정하면 자동으로 서버에 저장돼요.':'로그인 완료! 이 기기와 클라우드 기록을 합치는 중…');sync({silent:true})}else{ready=false;say('로그인하면 다른 기기에서도 기록을 불러올 수 있어요.')}}

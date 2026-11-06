@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'app/song-suggestions.js'
+      - 'cloud-sync.js'
+      - 'supabase/migrations/*song_text*'
       - 'song-text-match.mjs'
       - 'tests/song-text-match.test.mjs'
       - 'stt-clip-browser.mjs'
@@ -23,4 +25,6 @@ jobs:
           node-version: '22'
       - run: node --test tests/song-suggestions.test.cjs tests/stt-clip-browser.test.mjs tests/song-text-match.test.mjs
       - run: node --check stt-clip-browser.mjs
+      - run: node --check cloud-sync.js
+      - run: node --check app/song-suggestions.js
       - run: python3 -m unittest discover -s tools -p test_song_suggestions.py
