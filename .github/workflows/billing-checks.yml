@@ -73,11 +73,12 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106_song_text_cloud_sync.sql
       - name: Apply account-scoped song text tombstone migration
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106_song_text_tombstones.sql
-      - name: Apply paid STT quota migrations (test limits, then raised limits)
+      - name: Apply paid STT quota migrations (test limits, raised limits, then no limit + usage)
         run: |
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261106_vzip_song_stt_quota.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261107_vzip_song_stt_quota_raise.sql
-      - name: Paid STT reservation limits
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261108_vzip_song_stt_no_limit_usage.sql
+      - name: Paid STT calls counted without a limit; per-account usage
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/stt-quota.sql
       - name: Song reference and STT RLS, per-user cross-device reads
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/song-text-cloud.sql

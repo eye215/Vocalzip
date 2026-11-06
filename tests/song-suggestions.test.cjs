@@ -68,7 +68,7 @@ function browser(){
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
   fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
  const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor};})();');
+  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend};})();');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
  return {api:window.test,window,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
@@ -133,13 +133,23 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
  await b.api.apply(b.main);assert.equal(b.writes.length,0);
  await b.api.undo(b.main);assert.equal(b.writes.length,0);
 });
-test('one run of paid analysis is capped at 100 recordings (the server quota is the real limit)',async()=>{
- const b=browser(),errors=[];
+test('no per-run cap on paid analysis: 150 recordings go straight to the cost confirmation',async()=>{
+ const b=browser(),errors=[];let asked='';
  b.api.state.referenceRows=[{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}];
- b.window.VZ.toast=message=>errors.push(message);
- b.api.state.items=Array.from({length:101},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
+ b.window.VZ.toast=message=>errors.push(message);b.window.VZ.confirm=async(title,text)=>{asked=text;return false};
+ b.api.state.items=Array.from({length:150},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
  await b.api.analyze({querySelector:()=>({})});
- assert.match(errors.join(' '),/100개/);assert.equal(b.counts().paid,0);
+ assert.equal(errors.filter(e=>/까지/.test(e)).length,0);assert.match(asked,/150개/);assert.match(asked,/\$0\.225/);assert.equal(b.counts().paid,0);
+});
+test('what has been spent so far is shown from the server count',async()=>{
+ const b=browser(),line={hidden:true,textContent:''};
+ b.window.vzipSttUsage=async()=>({total:200,today:3});
+ await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
+ assert.equal(line.hidden,false);
+ assert.equal(line.textContent,'지금까지 쓴 금액: 약 $0.300 · 음성 분석 200회 (오늘 3회 · 약 $0.005)');
+ b.window.vzipSttUsage=async()=>null; b.api.spend.total=null;
+ await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
+ assert.equal(line.hidden,true); // signed out or the usage function not installed yet: nothing invented
 });
 test('the 30 paid seconds are where the singing is, found on the device for free',async()=>{
  const b=browser(),fps=20,curve=new Array(120*fps).fill(null);
@@ -331,7 +341,7 @@ test('30-item pages do not accumulate and keep existing selections between pages
  assert.equal(nodes.get('[data-more]').hidden,true);
  assert.match(nodes.get('[data-page-count]').textContent,/61–75 \/ 전체 75개/);
 });
-test('selection is limited to one hundred across pages even when the list contains hundreds',()=>{
+test('selection has no cap across pages even when the list contains hundreds',()=>{
  const b=browser();b.window.VZ.media.dateOf=()=> '';
  function node(){
   return {children:[],style:{},hidden:false,disabled:false,setAttribute(){},append(...xs){this.children.push(...xs)},
@@ -351,8 +361,8 @@ test('selection is limited to one hundred across pages even when the list contai
  b.api.draw(main);
  const checkbox=listing.children[0].children[0].children[0];
  checkbox.checked=true;checkbox.onchange();
- assert.equal(checkbox.checked,false,'cannot select the 101st file');
- assert.equal(b.api.state.chosen.size,100);
+ assert.equal(checkbox.checked,true,'the 101st file can be selected');
+ assert.equal(b.api.state.chosen.size,101);
 });
 
 test('rank one is preselected, manual override and explicit unassigned are preserved',()=>{
