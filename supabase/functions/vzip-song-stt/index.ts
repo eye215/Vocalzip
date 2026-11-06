@@ -7,7 +7,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const ANON = Deno.env.get('SUPABASE_ANON_KEY') || '';
 const API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
 const ORIGINS = new Set(['https://vocalzip.yullul.com', 'https://eye215.github.io', 'http://localhost:3000']);
-const MAX_AUDIO = 1_100_000; // 30 sec, mono 16 kHz, 16-bit PCM WAV
+const MAX_AUDIO = 6 * 1024 * 1024; // max authenticated 30-second WAV/M4A excerpt
 const MAX_SONGS = 250;
 const STT_MODEL = 'gpt-4o-mini-transcribe';
 const MATCH_MODEL = 'gpt-4o-mini';
@@ -42,13 +42,14 @@ Deno.serve(async (req:Request) => {
     const allowed=(Deno.env.get('STT_ALLOWED_USER_IDS')||'').split(',').map(s=>s.trim()).filter(Boolean);
     if(!allowed.includes(data.user.id))return reply(req,403,{error:'일회성 STT 사용 권한이 없어요.'});
     const declared=Number(req.headers.get('content-length')||0);
-    if(declared>1_500_000)return reply(req,413,{error:'30초 음원만 전송할 수 있어요.'});
+    if(declared>7*1024*1024)return reply(req,413,{error:'30초 음원만 전송할 수 있어요.'});
     const form=await req.formData();
     const file=form.get('file');
     if(!(file instanceof File)||file.size<512||file.size>MAX_AUDIO)
-      return reply(req,400,{error:'30초 이하의 WAV 음원만 지원해요.'});
-    if(!/\.wav$/i.test(file.name)||!['audio/wav','audio/x-wav','application/octet-stream'].includes(file.type))
-      return reply(req,415,{error:'WAV 파일 형식을 확인해 주세요.'});
+      return reply(req,400,{error:'30초 분석 클립의 크기가 올바르지 않아요.'});
+    const wav=/\.wav$/i.test(file.name)&&['audio/wav','audio/x-wav','application/octet-stream'].includes(file.type);
+    const m4a=/\.m4a$/i.test(file.name)&&['audio/mp4','audio/x-m4a','application/octet-stream'].includes(file.type);
+    if(!wav&&!m4a)return reply(req,415,{error:'30초 WAV/M4A 클립만 지원해요.'});
     const raw=String(form.get('songs')||'');
     if(raw.length>40_000)return reply(req,400,{error:'곡 목록이 너무 커요.'});
     let songs: Array<{id:string;title:string;show?:string}>=[];
