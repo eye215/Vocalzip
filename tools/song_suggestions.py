@@ -18,7 +18,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 STOPWORDS = {"m4a", "mp3", "wav", "flac", "audio", "recording", "녹음", "레슨", "연습", "take"}
-DATE = re.compile(r"(?:20\d\d)[-_./ ]?(?:0?[1-9]|1[0-2])[-_./ ]?(?:[0-2]?\d|3[01])")
+DATE = re.compile(r"(?<!\d)(?:20\d\d)[-_./ ]?(?:1[0-2]|0?[1-9])[-_./ ]?(?:3[01]|[12]\d|0?[1-9])(?!\d)")
 EXT = re.compile(r"\.(?:m4a|mp3|wav|flac|aac|ogg)$", re.I)
 NUMBER = re.compile(r"\b(?:20\d\d|\d{1,2})\b")
 

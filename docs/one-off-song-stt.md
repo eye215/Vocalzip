@@ -74,3 +74,14 @@ GitHub 브랜치 `feat/stt-song-suggestions-poc` / 초안 PR #73. JS 구문 파�
 ### 주의
 
 Cloudflare media transform API 자체도 무료라고 단정하지 마세요. 베타 제한, 계정 플랜, 트랜스폼 사용량에 따라 과금 정책이 변경될 수 있습니다. **API 키 설정·실파일 검증·Worker 배포 전까지 실제 STT 기능은 사용 불가**.
+# 2026-11-06 safety review — activation remains blocked
+
+The activation instructions below describe the prototype, not approval to enable it.
+See `docs/pr73-safety-review.md` for unresolved release blockers. This review did not
+deploy anything, inspect secrets, enable a paid service, or change production data.
+
+The Worker transform binding is now commented out by default. Extraction additionally
+requires `STT_CLIP_ENABLED=true` and a nonempty `STT_CLIP_ALLOWED_USER_IDS` allowlist;
+neither is configured by this PR. The browser first performs a free authenticated GET
+against the STT function before reading/transforming audio. Deploying only the browser
+without the updated function fails closed (the old function rejects GET).

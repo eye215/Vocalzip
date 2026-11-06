@@ -81,8 +81,11 @@ async function route(request, env) {
   // transforms the excerpt at Cloudflare, avoiding whole-file decoding on iOS.
   if (path.startsWith('/v1/clip/') && method === 'GET') {
     const key = ownKey(uid, decodeURIComponent(path.slice('/v1/clip/'.length)));
+    if (env.STT_CLIP_ENABLED !== 'true') fail(503, 'STT clip extraction is disabled');
+    const allowed = String(env.STT_CLIP_ALLOWED_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!allowed.includes(uid)) fail(403, 'STT clip extraction is not allowed');
     if (!env.MEDIA_TRANSFORM) fail(503, 'media transformations binding is not enabled');
-    if (!/\\.(m4a|mp4)$/i.test(key)) fail(415, 'only M4A/MP4 clips are supported');
+    if (!/\.(m4a|mp4)$/i.test(key)) fail(415, 'only M4A/MP4 clips are supported');
     const time = Number(url.searchParams.get('time') ?? '20');
     const duration = Number(url.searchParams.get('duration') ?? '30');
     if (!Number.isInteger(time) || time < 0 || time > 570 || duration !== 30 || time + duration > 600)

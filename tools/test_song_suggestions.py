@@ -23,6 +23,8 @@ class SongSuggestionTests(unittest.TestCase):
 
     def test_normalization(self):
         self.assertEqual(normalize("2026-11-05 My_song.M4A"), "my song")
+        self.assertEqual(normalize("20261125 My_song.M4A"), "my song")
+        self.assertEqual(normalize("2026-12-31 My_song.M4A"), "my song")
 
 
 if __name__ == "__main__":

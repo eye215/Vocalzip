@@ -18,5 +18,7 @@ ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
 
 # Cloudflare Media Transformations beta; not the R2 bucket binding above.
 # Requires Cloudflare account-level Media Transformations support.
-[media]
-binding = "MEDIA_TRANSFORM"
+# Deliberately opt-in: do not provision a remote transform through a normal deploy.
+# [media]
+# binding = "MEDIA_TRANSFORM"
+# Also requires STT_CLIP_ENABLED=true and STT_CLIP_ALLOWED_USER_IDS (server secrets).

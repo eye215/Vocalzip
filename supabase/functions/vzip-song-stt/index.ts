@@ -16,7 +16,7 @@ function cors(req: Request) {
   const origin = req.headers.get('Origin') || '';
   return origin && ORIGINS.has(origin) ? {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'OPTIONS, POST',
+    'Access-Control-Allow-Methods': 'OPTIONS, GET, POST',
     'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
     'Vary':'Origin',
     'Cache-Control':'no-store'
@@ -27,7 +27,7 @@ function reply(req:Request,status:number,data:Record<string,unknown>) {
 }
 Deno.serve(async (req:Request) => {
   if (req.method === 'OPTIONS') return new Response(null,{status:204,headers:cors(req)});
-  if (req.method !== 'POST') return reply(req,405,{error:'POST만 지원해요.'});
+  if (!['GET','POST'].includes(req.method)) return reply(req,405,{error:'GET/POST만 지원해요.'});
   if (req.headers.get('Origin') && !ORIGINS.has(req.headers.get('Origin')!)) return reply(req,403,{error:'허용되지 않은 사이트예요.'});
   if (Deno.env.get('STT_ENABLED') !== 'true' || !API_KEY)
     return reply(req,503,{error:'STT 비활성화 또는 API 키 미설정. 관리자가 일시적으로 활성화해야 해요.'});
@@ -41,9 +41,22 @@ Deno.serve(async (req:Request) => {
     // Mandatory owner allowlist prevents unbounded public spending; no default.
     const allowed=(Deno.env.get('STT_ALLOWED_USER_IDS')||'').split(',').map(s=>s.trim()).filter(Boolean);
     if(!allowed.includes(data.user.id))return reply(req,403,{error:'일회성 STT 사용 권한이 없어요.'});
+    // Check authorization before the browser downloads or transforms any audio.
+    if(req.method==='GET')return reply(req,200,{enabled:true});
     const declared=Number(req.headers.get('content-length')||0);
     if(declared>7*1024*1024)return reply(req,413,{error:'30초 음원만 전송할 수 있어요.'});
-    const form=await req.formData();
+    // Content-Length is optional and untrusted: enforce the limit while streaming.
+    const reader=req.body?.getReader();
+    if(!reader)return reply(req,400,{error:'음원이 없어요.'});
+    const chunks: Uint8Array[]=[];let received=0;
+    try{
+      while(true){const {done,value}=await reader.read();if(done)break;
+        received+=value.byteLength;
+        if(received>7*1024*1024){await reader.cancel();return reply(req,413,{error:'음원 요청이 너무 커요.'})}
+        chunks.push(value);
+      }
+    }finally{reader.releaseLock()}
+    const form=await new Response(new Blob(chunks),{headers:{'Content-Type':req.headers.get('content-type')||''}}).formData();
     const file=form.get('file');
     if(!(file instanceof File)||file.size<512||file.size>MAX_AUDIO)
       return reply(req,400,{error:'30초 분석 클립의 크기가 올바르지 않아요.'});
@@ -53,15 +66,14 @@ Deno.serve(async (req:Request) => {
     const raw=String(form.get('songs')||'');
     if(raw.length>40_000)return reply(req,400,{error:'곡 목록이 너무 커요.'});
     let songs: Array<{id:string;title:string;show?:string}>=[];
-    try{const parsed=JSON.parse(raw);if(Array.isArray(parsed)) songs=parsed.slice(0,MAX_SONGS).filter(s=>typeof s.id==='string'&&typeof s.title==='string').map(s=>({id:s.id.slice(0,100),title:s.title.slice(0,140),show:String(s.show||'').slice(0,120)}))}catch{}
+    try{const parsed=JSON.parse(raw);if(Array.isArray(parsed)) songs=parsed.slice(0,MAX_SONGS).filter(s=>s&&typeof s.id==='string'&&typeof s.title==='string').map(s=>({id:s.id.slice(0,100),title:s.title.slice(0,140),show:String(s.show||'').slice(0,120)}))}catch{}
     if(!songs.length)return reply(req,400,{error:'등록된 곡이 없어요. 내 곡에 곡을 먼저 등록해 주세요.'});
     const audioForm=new FormData();
     audioForm.set('model',STT_MODEL);audioForm.set('file',file,file.name);
     const transcribed=await fetch('https://api.openai.com/v1/audio/transcriptions',{
       method:'POST',headers:{Authorization:'Bearer '+API_KEY},body:audioForm,signal:AbortSignal.timeout(55000)});
     if(!transcribed.ok){
-      const err=await transcribed.text();
-      console.error('STT failure',transcribed.status,err.slice(0,300));
+      console.error('STT failure',transcribed.status);
       return reply(req,502,{error:'음성 인식 요청에 실패했어요 ('+transcribed.status+').'});
     }
     const stt=await transcribed.json();
@@ -86,7 +98,7 @@ Deno.serve(async (req:Request) => {
       reason:String(parsed.reason||'가사 단서와 곡 목록 비교').slice(0,120),
       level:matched&&['높음','확인 필요'].includes(String(parsed.level))?parsed.level:'식별 불가'});
   } catch(error){
-    console.error('song STT error',error);
+    console.error('song STT error');
     return reply(req,500,{error:'음성 분석 중 오류가 발생했어요. 다시 시도해 주세요.'});
   }
 });
