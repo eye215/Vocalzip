@@ -46,7 +46,18 @@ function freeMatch(item){
  return candidates.length===1?{id:candidates[0].id,title:candidates[0].display,reason:'파일명에 곡명 포함',level:'높음'}:null;
 }
 function cacheKey(item){return scoped(cachePrefix)+':'+item.id+':'+(item.size||0)+':'+(item.r2Key||'')+':'+(item.originalFilename||item.name||'');}
-function readCache(item){try{const r=JSON.parse(localStorage.getItem(cacheKey(item))||'null');return r&&r.version===1?r:null}catch{return null}}
+function readCache(item){try{
+ const key=cacheKey(item),current=JSON.parse(localStorage.getItem(key)||'null');
+ if(current?.version===1)return current;
+ // Reuse STT text that the user ALREADY paid for under the earlier GPT-matcher.
+ // Its old guessed song is deliberately discarded, not automatically applied.
+ const legacy=JSON.parse(localStorage.getItem(key.replace(cachePrefix,'vzip_song_suggest_v1:'))||'null');
+ if(legacy?.version===1&&legacy.method==='stt'&&legacy.transcript){
+  const migrated={version:1,method:'stt',status:'식별 불가',candidate:null,transcript:String(legacy.transcript).slice(0,1600)};
+  localStorage.setItem(key,JSON.stringify(migrated));return migrated;
+ }
+ return null;
+}catch{return null}}
 function writeCache(item,result){try{localStorage.setItem(cacheKey(item),JSON.stringify({...result,version:1}))}catch{}}
 function fmt(item){return M.label(item)+' · '+(M.dateOf(item)||'날짜 없음');}
 function resultFor(item){return state.results.get(item.id)||readCache(item)|| (freeMatch(item)?{status:'후보',candidate:freeMatch(item),method:'filename'}:null)}
