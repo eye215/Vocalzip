@@ -73,7 +73,7 @@ function paint() {
       (s.review ? '<a href="#/song-suggest"><b>' + s.review + '</b><span>곡 확인 필요 ›</span></a>' : '<div><b>0</b><span>곡 확인 필요</span></div>') +
     '</div>' +
     (v.fail + s.fail ? '<p class="small" style="margin:8px 0 0;color:var(--danger)">분석 실패 ' + (v.fail + s.fail) + '건 · 원본은 그대로예요. 파일 형식을 읽지 못했거나 서버 설정이 필요할 수 있어요.</p>' : '') +
-    (running ? '<p class="small muted" style="margin:8px 0 0">서버는 10분마다 확인해요. 끝나면 곡 이름과 측정값이 자동으로 바뀌어요.</p>' : '') + '</div>';
+    (running ? '<p class="small muted" style="margin:8px 0 0">서버는 몇 분 안에 시작해요. 끝나면 곡 이름과 측정값이 자동으로 바뀌어요.</p>' : '') + '</div>';
 }
 VZ.serverAnalysisCard = el => { host = el; paint(); if (state.on) load(); };
 })();
