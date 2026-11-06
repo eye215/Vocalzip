@@ -11,6 +11,21 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
+    inputs:
+      max_jobs:
+        description: 'How many jobs at most (1 = single-file check)'
+        default: ''
+      kinds:
+        description: 'vocal, song or both (empty = both)'
+        default: ''
+      verbose:
+        description: 'Log each step (sizes and statuses only)'
+        type: boolean
+        default: false
+      requeue_network_failures:
+        description: 'Queue again the jobs that failed only because the file could not be reached'
+        type: boolean
+        default: false
   repository_dispatch:
     types: [analyze]
 permissions:
@@ -36,13 +51,17 @@ jobs:
         id: peek
         run: node worker/analysis-worker.mjs --peek
       - name: Install ffmpeg
-        if: steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0'
+        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures
         run: command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
       - name: Analyze
-        if: steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0'
+        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WORKER_MAX_JOBS: ${{ inputs.max_jobs }}
+          WORKER_KINDS: ${{ inputs.kinds }}
+          WORKER_VERBOSE: ${{ inputs.verbose && '1' || '' }}
+          WORKER_REQUEUE_NETWORK: ${{ inputs.requeue_network_failures && '1' || '' }}
         run: node worker/analysis-worker.mjs

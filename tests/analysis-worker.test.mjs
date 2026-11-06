@@ -10,7 +10,7 @@ import {createServer} from 'node:http';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import pg from 'pg';
-import {signV4, decide, AUTO, describeDbUrl} from '../worker/analysis-worker.mjs';
+import {signV4, decide, AUTO, describeDbUrl, r2Endpoint, describeSecret, networkCause} from '../worker/analysis-worker.mjs';
 
 const require = createRequire(import.meta.url);
 const {synth} = require('./synth-vocal.cjs');
@@ -40,6 +40,22 @@ test('A wrong database address is explained without ever printing the password',
   assert.match(direct, /DIRECT/); assert.match(direct, /needs postgres\.<project>/); assert.match(direct, /YOUR-PASSWORD/);
   const special = describeDbUrl('postgresql://postgres.abcdefghijklmnopqrst:pa@ss@aws-0-x.pooler.supabase.com:5432/postgres');
   assert.match(special, /%40/); assert.doesNotMatch(special, /pa@ss/);
+});
+
+test('R2_ACCOUNT_ID: the bare id or a pasted endpoint URL both work; anything else is explained without its value', () => {
+  const id = '0123456789abcdef0123456789abcdef', url = 'https://' + id + '.r2.cloudflarestorage.com';
+  for (const v of [id, ' ' + id + '\n', url, url + '/vocalzip-media', id.toUpperCase(), 'https://' + id + '.eu.r2.cloudflarestorage.com']) assert.equal(r2Endpoint(v, ''), url, JSON.stringify(v));
+  assert.throws(() => r2Endpoint('my-account', ''), e => /32-character/.test(e.message) && !e.message.includes('my-account'));
+  assert.throws(() => r2Endpoint('', ''), /missing/);
+  assert.match(describeSecret(' abc\n'), /spaces or line breaks/); assert.doesNotMatch(describeSecret('s3cr3t'), /s3cr3t/);
+});
+test('"fetch failed" is named: DNS, refused, timeout, TLS', () => {
+  const err = code => Object.assign(new TypeError('fetch failed'), {cause:{code}});
+  assert.match(networkCause(err('ENOTFOUND')), /DNS ENOTFOUND.*R2_ACCOUNT_ID/);
+  assert.equal(networkCause(err('ECONNREFUSED')), 'connection refused');
+  assert.match(networkCause(err('UND_ERR_CONNECT_TIMEOUT')), /timeout/);
+  assert.match(networkCause(Object.assign(new Error('x'), {name:'TimeoutError'})), /timeout/);
+  assert.match(networkCause(err('UNABLE_TO_VERIFY_LEAF_SIGNATURE')), /^TLS/);
 });
 
 const DB = process.env.VZ_TEST_DB;
@@ -208,4 +224,14 @@ test('The same problem for every file stops the run early and keeps the untried 
   assert.deepEqual(Object.keys(stats.errors), ['download failed (404)']);
   const {rows} = await db.query("select status, attempts, count(*)::int n from public.vocal_analysis_jobs where user_id = $1 group by 1, 2 order by 1, 2", [user]);
   assert.deepEqual(rows, [{status:'queued', attempts:0, n:7}, {status:'running', attempts:1, n:8}]); // 7 untouched, 8 waiting to retry
+});
+
+test('An unreachable R2 address is recorded as a network error with its cause', {skip}, async () => {
+  const keep = process.env.R2_ENDPOINT;
+  process.env.R2_ENDPOINT = 'http://127.0.0.1:59999'; // nothing listens there
+  try {
+    await media('net1', {name:'x', storageProvider:'r2', r2Key:key(U1, 'net1', 'wav'), songId:'s1'});
+    await work();
+    assert.equal((await jobs('net1')).vocal.last_error, 'download network error: connection refused');
+  } finally { process.env.R2_ENDPOINT = keep; }
 });
