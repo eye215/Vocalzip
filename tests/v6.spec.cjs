@@ -456,6 +456,38 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   expect(await page.evaluate(() => { window.__vzipAutoAnalysis = true; return VZ.autoAnalysisStatus().enabled && VZ.serverAnalysisOn(); })).toBe(true);
 });
 
+test('맞춤 연습 추천: measured intonation drift leads to a pitch exercise; starting it pre-fills a practice record; too few takes gives a plain notice', async ({page}) => {
+  await boot(page, {media:false});
+  await page.goto('/#/home');
+  await expect(page.locator('[data-tip]')).toContainText('3개 이상 모이면');   // nothing measured yet: no advice invented
+  await page.evaluate(async () => {
+    const wav = new Blob([new Uint8Array(64)], {type:'audio/wav'});
+    for (let i = 0; i < 4; i++) await window.vzipStorePracticeMedia({id:'t' + i, name:'take ' + i, created:Date.now() - i * 864e5, recordedDate:VZ.ymd(new Date(Date.now() - i * 864e5)), type:'audio/wav', source:'practice', songId:'s1', blob:wav,
+      analysis:{v:1, at:Date.now(), seconds:180, confidence:{voiceOverMrDb:18}, metrics:{voicedSeconds:90, intonation:{meanAbsCents:22 + i, within20:40, notes:20}, stability:{wobbleCents:5, notes:12},
+        vibrato:{share:40, rateHz:5.6, extentCents:40, regularity:0.9, notes:10}, range:{lowCents:5700, highCents:7200, low:'A3', high:'C5', peak:'C5'}, breath:{phrases:10, medianPhrase:4.5, longestPhrase:7}}}});
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/songs'); await page.goto('/#/home');
+  const tip = page.locator('[data-tip] .tip');
+  await expect(tip).toContainText('음정 정확도 연습');
+  await expect(tip).toContainText('±23.5 cent');                 // the median of the measured takes
+  await expect(tip).toContainText('A3~C5');                      // practice inside the measured range
+  await expect(page.locator('[data-tip]')).toContainText('통증이나 쉰 목소리가 있으면 쉬어 주세요');
+  // From the song page: start → the existing practice record, pre-filled; saving marks it done today.
+  await page.goto('/#/song/s1');
+  const songTip = page.locator('[data-song-tips] .tip').first();
+  await expect(songTip).toContainText('음정 정확도 연습');
+  await songTip.getByRole('button', {name:'연습 시작'}).click();
+  await expect(page.locator('.sheet input[name=minutes]')).toHaveValue('10');
+  await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(/\[추천 연습\] 음정 정확도 연습/);
+  await page.locator('.sheet-foot .btn').last().click();
+  await expect.poll(() => page.evaluate(k => JSON.parse(localStorage.getItem(k)).practices.some(p => String(p.memo).startsWith('[추천 연습] 음정 정확도 연습')), KEY)).toBe(true);
+  await page.goto('/#/home');
+  await expect(page.locator('[data-tip] .tip')).toContainText('오늘 했어요');
+  // Homework is untouched by the advice.
+  expect(await page.evaluate(k => JSON.parse(localStorage.getItem(k)).assignments.map(a => a.id).sort(), KEY)).toEqual(['a1', 'a2']);
+});
+
 test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);

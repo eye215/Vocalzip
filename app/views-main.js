@@ -88,7 +88,7 @@ VZ.editMedia = item => {
 };
 
 /* ---------- shared: practice log sheet ---------- */
-VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = null} = {}) => {
+VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = null, preset = null} = {}) => {
   const db = VZ.db, p = practice;
   const mode = p?.practiceMode || (songId || !p ? 'song' : 'training');
   // 숙제 체크: homework whose period covers the practice date (plus any this record already has) is asked about.
@@ -104,12 +104,12 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
     '<div class="seg" role="group" aria-label="연습 종류" style="margin-bottom:14px"><button type="button" data-mode="song" aria-pressed="' + (mode === 'song') + '">곡 연습</button><button type="button" data-mode="training" aria-pressed="' + (mode === 'training') + '">보컬 트레이닝</button></div>' +
     '<div data-song-part>' + VZ.songSelect('song', p?.songId || songId) + '</div>' +
     '<div data-train-part><div class="two">' + level('분류', 'category', catOpts, '새 분류 이름 (예: 고음)') + level('세부 항목', 'detail', '', '새 세부 항목 (예: 립트릴)') + '</div>' + level('세부 항목 2 <span class="small muted">(선택)</span>', 'detail2', '', '새 항목 (예: 저음 5도)') + '</div>' +
-    '<div class="two"><label class="field"><span>날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(p?.date || date) + '"></label><label class="field"><span>연습 시간(분) <span class="req">*</span></span><input type="number" name="minutes" inputmode="numeric" min="1" max="1440" required value="' + (p ? VZ.practiceMinutes(p) : '') + '" placeholder="30"></label></div>' +
+    '<div class="two"><label class="field"><span>날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(p?.date || date) + '"></label><label class="field"><span>연습 시간(분) <span class="req">*</span></span><input type="number" name="minutes" inputmode="numeric" min="1" max="1440" required value="' + (p ? VZ.practiceMinutes(p) : preset?.minutes || '') + '" placeholder="30"></label></div>' +
     '<div class="chips" style="margin:-6px 0 14px">' + quick + '</div>' +
     '<fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset>' +
     '<div data-hw-host></div>' +
     '<div data-media-pick></div>' +
-    '<label class="field"><span>메모</span><textarea name="memo" maxlength="5000" placeholder="오늘 연습한 내용, 느낀 점">' + esc(p?.memo || '') + '</textarea></label></form>',
+    '<label class="field"><span>메모</span><textarea name="memo" maxlength="5000" placeholder="오늘 연습한 내용, 느낀 점">' + esc(p?.memo || preset?.memo || '') + '</textarea></label></form>',
     foot:'<button type="submit" form="practice-log" class="btn block">' + (p ? '수정 저장' : '연습 기록 저장') + '</button>',
     onMount:async (el, close) => {
       const form = el.querySelector('form');
@@ -267,12 +267,14 @@ VZ.route('home', {title:'홈', render() {
   const tasks = db.assignments.filter(t => t.status !== 'done');
   const taskHtml = tasks.length ? '<h2 class="sec">해야 할 숙제 <a href="#/homework">전체 ' + tasks.length + '</a></h2><div class="list">' + tasks.slice(0, 4).map(VZ.taskRow).join('') + '</div>' : '<p class="small muted" style="margin:16px 4px 0"><i class="ph ph-check-circle"></i> 남은 숙제가 없어요 · <a href="#/homework">숙제 관리</a></p>';
   return '<div class="quick" style="grid-template-columns:repeat(4,1fr)"><a href="#/record"><i class="ph-fill ph-microphone"></i>녹음</a><button type="button" data-log><i class="ph ph-timer"></i>연습 기록</button><button type="button" data-add-lesson><i class="ph ph-calendar-plus"></i>레슨 일정</button><button type="button" data-import><i class="ph ph-upload-simple"></i>가져오기</button></div>' +
+    '<div data-tip style="margin-top:16px"></div>' +
     (VZ.overdueLessons?.().length ? '<div style="margin-top:16px">' + VZ.overdueCard() + '</div>' : '') +
     '<h2 class="sec">다음 레슨 <a href="#/calendar">캘린더</a></h2>' + nextHtml + taskHtml +
     '<h2 class="sec">최근 연습한 곡 <a href="#/songs">내 곡</a></h2><div data-recent><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   main.querySelectorAll('[data-add-lesson]').forEach(b => b.onclick = () => VZ.lessonSheet());
   main.querySelector('[data-log]').onclick = () => VZ.practiceSheet();
+  VZ.renderTips?.(main.querySelector('[data-tip]'), {limit:1}); // app/practice-tips.js
   main.querySelector('[data-import]').onclick = () => VZ.importSheet();
   VZ.billingLeftChip?.(main.querySelector('[data-billing-left]'));
   const media = await M.list().catch(() => []);
@@ -439,7 +441,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
     const tabs = [['timeline', '전체'], ['lyrics', '가사'], ['scores', '악보'], ['lessons', '레슨'], ['practice', '연습'], ['performance', '공연']];
     return '<div class="song-head">' + (s.show ? '<div class="muted">' + esc(s.show) + '</div>' : '') + '<div class="small muted" data-summary></div></div>' +
       '<div class="btn-row" style="margin-bottom:16px"><a class="btn" href="#/record?song=' + esc(s.id) + '"><i class="ph-fill ph-microphone"></i>녹음</a><button type="button" class="btn secondary" data-log><i class="ph ph-timer"></i>기록</button><button type="button" class="btn secondary" data-quick-compare><i class="ph ph-arrows-left-right"></i>비교</button></div>' +
-      '<div data-song-growth></div><div data-song-vocal></div><div class="seg" role="tablist" style="margin-bottom:12px">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
+      '<div data-song-growth></div><div data-song-vocal></div><div data-song-tips></div><div class="seg" role="tablist" style="margin-bottom:12px">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
     const s = VZ.song(r.params[0]); if (!s) return;
@@ -469,6 +471,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       main.querySelector('[data-summary]').textContent = [minutes ? '연습 ' + VZ.minutes(minutes) : '', practices.length ? '기록 ' + practices.length + '회' : '', media.length ? '녹음 ' + media.length + '개' : '', (n => n ? '레슨 ' + n + '회' : '')(lessons.filter(l => VZ.lessonStatus(l) === 'done').length)].filter(Boolean).join(' · ') || '아직 기록이 없어요';
       songGrowth(main.querySelector('[data-song-growth]'), s, media, practices);
       VZ.songVocalGrowth?.(main.querySelector('[data-song-vocal]'), s, media); // app/song-vocal-growth.js
+      VZ.renderTips?.(main.querySelector('[data-song-tips]'), {songId:s.id, limit:2});
       main.querySelectorAll('[data-tab]').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.tab === songTab)); b.setAttribute('aria-selected', String(b.dataset.tab === songTab)); });
       const fb = l => l.songFeedback?.[s.id] || l.feedback || '';
       // Recordings live inside lessons and practices: each tab lists its records with their recordings.
