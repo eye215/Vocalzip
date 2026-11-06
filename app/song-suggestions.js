@@ -21,7 +21,7 @@ function freeMatch(item){
    hit:plain(s.title).length>=5 && name.includes(plain(s.title))})).filter(s=>s.hit);
  return candidates.length===1?{id:candidates[0].id,title:candidates[0].display,reason:'파일명에 곡명 포함',level:'높음'}:null;
 }
-function cacheKey(item){return cachePrefix+item.id+':'+(item.size||0)+':'+(item.updated_at||item.updatedAt||'');}
+function cacheKey(item){return cachePrefix+item.id+':'+(item.size||0)+':'+(item.r2Key||'')+':'+(item.originalFilename||item.name||'');}
 function readCache(item){try{const r=JSON.parse(localStorage.getItem(cacheKey(item))||'null');return r&&r.version===1?r:null}catch{return null}}
 function writeCache(item,result){try{localStorage.setItem(cacheKey(item),JSON.stringify({...result,version:1}))}catch{}}
 function fmt(item){return M.label(item)+' · '+(M.dateOf(item)||'날짜 없음');}
@@ -29,16 +29,20 @@ function resultFor(item){return state.results.get(item.id)||readCache(item)|| (f
 function eligible(item){return !item.songId&&!item.song && !M.isVideo(item);}
 function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);}
 async function getAudio(item){
- let blob=M.blobOf(item);
- if(!blob){
-  if(!item.cloud)throw Error('클라우드에 없는 파일이에요.');
-  const url=await window.vzipCloudMediaUrl(item);
-  const response=await fetch(url);
+ // Use the media API used by the existing library: returns a signed R2 URL or local blob URL.
+ // Never re-upload or modify the original file.
+ const source=await M.src(item);
+ try {
+  const response=await fetch(source.url,{cache:'no-store'});
   if(!response.ok)throw Error('음원을 불러오지 못했어요: '+response.status);
-  blob=await response.blob();
+  const size=Number(response.headers.get('content-length')||0);
+  if(size>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 바로 분석하지 않아요. Mac 분석 도구를 이용해 주세요.');
+  const blob=await response.blob();
+  if(blob.size>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 바로 분석하지 않아요. Mac 분석 도구를 이용해 주세요.');
+  return blob;
+ } finally {
+  if(source.revoke)URL.revokeObjectURL(source.url);
  }
- if(blob.size>MAX_BYTES)throw Error('12MB 초과 음원은 현재 아이폰 STT 대상에서 제외했어요.');
- return blob;
 }
 function wavBytes(buffer, offsetSec=20, seconds=30){
  const sr=16000, from=Math.min(buffer.length-1,Math.max(0,Math.floor(offsetSec*buffer.sampleRate)));
@@ -84,7 +88,7 @@ async function stt(item){
 }
 function controls(main){
  const root=main.querySelector('[data-suggest]');
- const count=state.chosen.size,done=[...state.chosen].filter(id=>state.results.get(id)?.status==='후보').length;
+ const count=state.chosen.size,done=state.items.filter(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate).length;
  root.querySelector('[data-counter]').textContent=state.running?'분석 중 · '+count+'개 선택':count+'개 선택 · 추천 '+done+'개';
  root.querySelector('[data-analyze]').disabled=state.running||!count;
  root.querySelector('[data-apply]').disabled=state.running||!done;
@@ -159,20 +163,20 @@ async function undo(main){
  }finally{state.running=false;main.querySelector('[data-progress]').textContent='되돌림 '+undone+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개';draw(main)}
 }
 async function apply(main){
- const approved=state.items.filter(m=>state.chosen.has(m.id)&&state.results.get(m.id)?.candidate);
+ const approved=state.items.filter(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate);
  if(!approved.length)return;
  if(!await VZ.confirm('추천 결과 일괄 지정',approved.length+'개 녹음의 곡을 선택된 추천대로 지정할까요? 기존 곡이 연결된 파일은 변경하지 않아요. 원본 음원도 그대로입니다.',{ok:'네, 지정할게요'}))return;
  state.running=true;controls(main);
  let done=0,skipped=0,failed=0;
  try{
   const fresh=await M.list(true);
-  const changes=approved.map(previous=>({old:fresh.find(x=>x.id===previous.id),newSong:state.results.get(previous.id)?.candidate})).filter(x=>x.old&&eligible(x.old)&&x.newSong&&songs().some(s=>s.id===x.newSong.id));
+  const changes=approved.map(previous=>({old:fresh.find(x=>x.id===previous.id),newSong:resultFor(previous)?.candidate})).filter(x=>x.old&&eligible(x.old)&&x.newSong&&songs().some(s=>s.id===x.newSong.id));
   const backup={at:new Date().toISOString(),rows:changes.map(x=>({id:x.old.id,oldId:x.old.songId||'',oldSong:x.old.song||'',assignedId:x.newSong.id}))};
   if(!backup.rows.length){VZ.toast('지정할 녹음이 없어요.');return}
   try{const key=backupPrefix+Date.now();localStorage.setItem(key,JSON.stringify(backup));localStorage.setItem(backupPointer,key)}
   catch{throw Error('변경 전 백업을 저장하지 못했어요. 안전을 위해 곡 지정을 중단합니다.')}
   for(const previous of approved){
-   const item=fresh.find(x=>x.id===previous.id),candidate=state.results.get(previous.id)?.candidate;
+   const item=fresh.find(x=>x.id===previous.id),candidate=resultFor(previous)?.candidate;
    if(!item||!eligible(item)||!songs().some(s=>s.id===candidate?.id)){skipped++;continue}
    try{await M.update(item,{songId:candidate.id,song:candidate.title},{quiet:true});done++;state.chosen.delete(item.id)}
    catch{failed++}
