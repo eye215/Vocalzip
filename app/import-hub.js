@@ -266,11 +266,18 @@ function draw() {
     if (qc && q.total) qc.total = Math.max(q.total, qc.total);
     const stopped = q && left ? '<div class="card stack" style="margin-bottom:12px;border:1px solid var(--warn-soft)" data-stopped><strong>중단된 업로드가 있어요</strong>' +
       '<p class="small" style="margin:0">전체 ' + qc.total + '개 · 완료 ' + qc.done + ' · 남음 ' + left + (qc.failed ? ' (실패 ' + qc.failed + ')' : '') + (qc.dup ? ' · 중복 제외 ' + qc.dup : '') + ' · ' + esc(new Date(q.updatedAt).toLocaleString('ko-KR')) + '</p>' +
-      '<p class="small muted" style="margin:0">브라우저가 닫히면 원본 파일을 다시 선택해야 해요. 같은 파일들을 다시 고르면 이미 올라간 파일은 자동으로 빠지고 남은 것만 올려요.</p>' +
+      '<p class="small muted" style="margin:0">브라우저가 닫히면 원본 파일을 다시 선택해야 해요. 아래 버튼으로 같은 파일들을 다시 고르면 이미 올라간 파일은 자동으로 빠지고 남은 것만 올려요. 더 많이 골라도 괜찮아요.</p>' +
+      '<label class="btn block" style="cursor:pointer"><i class="ph ph-arrow-clockwise"></i>같은 파일 다시 골라 이어 올리기<input type="file" multiple accept="' + esc(SOURCES.drive.accept) + '" class="sr-only" data-q-resume></label>' +
       '<div class="btn-row"><button type="button" class="btn secondary" data-q-report>기록 저장</button><button type="button" class="btn ghost" data-q-clear>기록 지우기</button></div></div>' : '';
     h.innerHTML = stopped + '<p class="muted" style="margin-top:0">어디에 있는 자료를 가져올까요? 선택한 파일은 가져오기를 누르기 전까지 올라가지 않아요.</p><div class="stack">' +
       Object.entries(SOURCES).map(([k, s]) => '<button type="button" class="card item" data-src="' + k + '"' + (s.disabled ? ' aria-disabled="true"' : '') + '><span class="avatar"><i class="ph ph-' + s.icon + '"></i></span><span class="item-main"><span class="item-title">' + esc(s.title) + '</span><span class="item-sub">' + esc(s.sub) + (s.disabled ? ' · R2 설정 후' : '') + '</span></span><i class="ph ph-caret-right chev"></i></button>').join('') + '</div>';
     h.querySelector('[data-q-report]')?.addEventListener('click', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({app:'VOCAL.zip', kind:'upload-queue', ...loadQueue()}, null, 2)], {type:'application/json'})); a.download = 'vocalzip-upload-queue-' + VZ.today() + '.json'; a.click(); });
+    // Picking the files again resumes: already uploaded ones are found by content and skipped.
+    h.querySelector('[data-q-resume]')?.addEventListener('change', e => {
+      const all = [...e.target.files]; e.target.value = ''; if (!all.length) return;
+      if (!mediaOnly(all).length) { VZ.toast('가져올 음성·영상 파일이 없어요.', 'error'); return; }
+      VZ.openImportHub({files:all});
+    });
     h.querySelector('[data-q-clear]')?.addEventListener('click', async () => { if (!await VZ.confirm('중단된 업로드 기록', '진행 상태 기록만 지워요. 이미 올라간 파일과 보관함은 그대로예요.', {ok:'기록 지우기'})) return; try { localStorage.removeItem(QKEY); } catch {} draw(); });
     h.querySelectorAll('[data-src]').forEach(b => b.onclick = () => {
       const k = b.dataset.src;
