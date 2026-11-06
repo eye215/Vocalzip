@@ -3,12 +3,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const {stripTypeScriptTypes}=require('node:module');
 
-function edge(env={},user='alice'){
+function edge(env={},user='alice',quota={data:true,error:null}){
  let handler,calls=0;
  const code=fs.readFileSync('supabase/functions/vzip-song-stt/index.ts','utf8').replace(/^import .*;$/m,'');
  const context={Request,Response,Blob,File,FormData,Uint8Array,AbortSignal,console:{error(){}},
   Deno:{env:{get:k=>env[k]},serve:fn=>handler=fn},
-  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async()=>({data:true,error:null})}),
+  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async()=>quota}),
   fetch:async()=>{calls++;return Response.json({text:''})}};
  vm.runInNewContext(stripTypeScriptTypes(code),context);
  return {call:handler,calls:()=>calls};
@@ -33,6 +33,19 @@ test('null catalog entries do not discard valid songs',async()=>{
  assert.equal((await e.call(request('POST',form))).status,200);assert.equal(e.calls(),1);
 });
 
+test('database quota exhaustion and failures never issue paid model requests',async()=>{
+ for(const [quota,expectedStatus] of [
+  [{data:false,error:null},429],
+  [{data:null,error:{message:'quota migration missing'}},503]
+ ]){
+  const e=edge(enabled,'alice',quota),form=new FormData();
+  form.set('file',new File([new Uint8Array(1024)],'clip.wav',{type:'audio/wav'}));
+  form.set('songs',JSON.stringify([{id:'s1',title:'Song one'}]));
+  const response=await e.call(request('POST',form));
+  assert.equal(response.status,expectedStatus);
+  assert.equal(e.calls(),0);
+ }
+});
 function browser(){
  let owner='alice',paid=0,excerpts=0;const events={},storage=new Map();
  const window={VZ:{media:{},route(){},db:{songs:[]},toast(){}},vzipCloudUserId:()=>owner,
