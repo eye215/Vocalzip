@@ -26,7 +26,8 @@
 const PART_SIZE = 8 * 1024 * 1024; // R2 needs ≥5 MiB for every part but the last.
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const EXT = /^[a-z0-9]{1,8}$/;
-const TYPE = /^(audio|video)\/[A-Za-z0-9.+-]{1,60}$/;
+// Recordings, plus PDF scores kept with a song (still only in the caller's own folder).
+const TYPE = /^(?:(audio|video)\/[A-Za-z0-9.+-]{1,60}|application\/pdf)$/;
 const enc = new TextEncoder();
 
 export default {
@@ -116,7 +117,7 @@ async function route(request, env) {
   if (path === '/v1/uploads' && method === 'POST') {
     const body = await readJson(request);
     if (!ID.test(String(body.mediaId || ''))) fail(400, 'invalid mediaId');
-    if (!TYPE.test(String(body.contentType || ''))) fail(400, 'only audio or video files');
+    if (!TYPE.test(String(body.contentType || ''))) fail(400, 'only audio, video or PDF files');
     const size = Number(body.size), max = Number(env.MAX_FILE_BYTES) || 2 * 1024 ** 3;
     if (!(size > 0) || size > max) fail(413, 'file is empty or too large');
     const ext = String(body.ext || 'bin').toLowerCase();

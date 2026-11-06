@@ -74,7 +74,7 @@ async function runCheck(host) {
   say('R2 저장소의 파일을 확인하는 중');
   result.objects = null;
   if (window.VzipR2?.configured?.() && window.vzipCloudSignedIn?.()) {
-    try { result.objects = await window.VzipR2.objects(); }
+    try { result.objects = (await window.VzipR2.objects()).filter(o => !/\.pdf$/i.test(o.key || '')); } // PDF scores live with songs, not the library
     catch (e) {
       result.errors.push(e.status === 404 ? 'R2 파일 목록 기능이 아직 서버(Worker)에 배포되지 않았어요. 개수만 확인했어요.' : 'R2 목록: ' + e.message);
       try { result.r2Usage = await window.VzipR2.usage(); } catch {}

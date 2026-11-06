@@ -323,3 +323,40 @@ test('A song picked by the AI suggestion for a file on this device changes only 
   expect(out.undoError).toBeNull();
   expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모', rating:5});
 });
+
+test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, can be renamed, survives a reload, and deletes its file', async ({page}) => {
+  const r2 = await fakeR2(page);
+  await boot(page);
+  await page.goto('/#/song/s1');
+  await page.getByRole('tab', {name:'악보'}).click();
+  await page.getByRole('button', {name:/PDF 올리기/}).click();
+  const sheet = page.locator('.sheet');
+  await sheet.locator('input[name=file]').setInputFiles({name:'Defying Gravity vocal.pdf', mimeType:'application/pdf', buffer:Buffer.from('%PDF-1.4\n% test score\n%%EOF')});
+  await sheet.locator('select[name=originalKey]').selectOption('C#/Db');
+  await sheet.locator('select[name=practiceKey]').selectOption('C');
+  await page.locator('.sheet-foot [data-go]').click();
+  const row = page.locator('[data-score]');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('Defying Gravity vocal');
+  await expect(row).toContainText('원키 C#/Db · 연습 C');
+  const saved = await page.evaluate(k => JSON.parse(localStorage.getItem(k)).songs.find(s => s.id === 's1').scores, KEY);
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({songId:'s1', fileName:'Defying Gravity vocal.pdf', originalKey:'C#/Db', practiceKey:'C'});
+  expect(saved[0].r2Key).toMatch(/^u\/ui-test-user\/score-[0-9a-f-]+\/original\.pdf$/);
+  expect(r2.store.get(saved[0].r2Key).bytes.toString()).toContain('%PDF');
+  // A signed link is ready before the tap (iOS opens it directly).
+  await expect(row.locator('[data-open]')).toHaveAttribute('href', new RegExp('/v1/media/' + saved[0].r2Key.replace(/[/.]/g, '\\$&')));
+  // Rename in a sheet.
+  await row.locator('[data-edit]').click();
+  await page.locator('.sheet input[name=title]').fill('Defying Gravity (2막)');
+  await page.locator('.sheet-foot .btn').click();
+  await expect(row).toContainText('Defying Gravity (2막)');
+  await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.goto('/#/song/s1'); await page.getByRole('tab', {name:'악보'}).click();
+  await expect(page.locator('[data-score]')).toContainText('Defying Gravity (2막)');
+  // Delete: confirmation, the R2 file goes too.
+  await page.locator('[data-score] [data-del]').click();
+  await page.locator('.sheet [data-ok], .sheet-foot [data-ok]').first().click();
+  await expect(page.locator('[data-score]')).toHaveCount(0);
+  expect(r2.store.has(saved[0].r2Key)).toBe(false);
+});
