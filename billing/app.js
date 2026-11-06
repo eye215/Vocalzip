@@ -414,6 +414,29 @@ S.load().then(async data=>{state=data;render();notify('정산 데이터를 불�
  report({deducted:n,waiting:autoWaiting,action});
 }).catch(error=>{notify('불러오기 실패: '+error.message,true);report({deducted:0,error:error.message,action:params.get('do')?{ok:false,message:'레슨비 정산을 열지 못했어요: '+error.message}:null})});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){autoDeduct();scheduleSync(300)}});
+/* 클라우드에 보관된 이전 버전: every saved version of the ledger is kept on the server; any can be brought back. */
+{const t=$('#transfer h2');if(t){
+ const box=el('details',undefined,'card cloud-versions');box.id='cloud-versions';box.append(el('summary','클라우드에 보관된 이전 버전'));
+ const body=el('div');body.append(el('p','정산을 저장할 때마다 서버에 버전이 쌓여요 (최근 3일은 전부, 그 뒤엔 시간·날짜별 마지막 버전). 지운 기록도 여기서 되돌릴 수 있어요.','small'));
+ const list=el('div',undefined,'list');body.append(list);box.append(body);t.after(box);
+ const fmt=at=>new Date(at).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+ box.addEventListener('toggle',async()=>{
+  if(!box.open)return;list.replaceChildren(el('p','불러오는 중…','small'));
+  try{
+   const rows=await Cloud()?.versions();
+   if(rows===null){list.replaceChildren(el('p','서버 보관 기능이 아직 설정되지 않았어요 (Supabase에 supabase/migrations/20261106_keep_history.sql 실행 필요).','small'));return}
+   if(!rows.length){list.replaceChildren(el('p','아직 보관된 버전이 없어요. 정산을 한 번 저장하면 생겨요.','small'));return}
+   list.replaceChildren(...rows.map(r=>{const row=el('div',undefined,'row');row.append(el('span',fmt(r.at)+' · 버전 '+(r.rev||'?')+({snapshot:' · 시작 시점',delete:' · 삭제 직전'}[r.op]||''),'grow'));
+    row.append(button('되돌리기',async()=>{
+     try{
+      const v=await Cloud().version(r.id),sum=window.VzipBillingBackup.summary(v),units=n=>n/100+'회';
+      if(!await window.VzipBillingDialog.ask({title:'이 버전으로 되돌릴까요?',message:fmt(r.at)+' 버전: 레슨권 '+sum.passes+'개 · 결제 '+sum.payments+'건 · 수강 '+sum.deductions+'건 · 남은 '+units(sum.remainingUnits)+'. 지금 기록은 복구에서 되돌릴 수 있어요.',ok:'되돌리기',cancel:'닫기'}))return;
+      await Cloud().restoreVersion(r.id);state=await S.load();render();notify('그 버전으로 되돌렸어요. 클라우드에도 곧 저장돼요.');scheduleSync(500);
+     }catch(error){notify('되돌리지 못했어요: '+error.message,true)}
+    }));return row}));
+  }catch(error){list.replaceChildren(el('p','불러오지 못했어요: '+error.message,'small'))}
+ });
+}}
 // The on/off switch for automatic sync (per account) sits at the top of 백업·동기화.
 {const t=$('#transfer h2');if(t){const l=el('label',undefined,'auto-sync');const c=el('input');c.type='checkbox';c.id='auto-sync';c.checked=window.VzipBillingCloud?.autoOn?.()!==false;c.onchange=()=>{window.VzipBillingCloud?.setAuto(c.checked);runSync()};l.append(c,el('span','저장할 때마다 클라우드와 자동으로 맞추기 (다른 기기에서도 같은 정산이 보여요)'));t.after(l)}}
 // File picker: show what was chosen (the native control is hidden); the sheet choice only matters for multi-sheet XLSX.
