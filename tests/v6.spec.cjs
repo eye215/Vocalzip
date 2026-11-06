@@ -290,6 +290,47 @@ test('A stopped upload resumes from its card: pick the same files again, finishe
   await expect(page.locator('[data-stopped]')).toHaveCount(0); // nothing left: the card is gone
 });
 
+test('보컬 분석: a recording sung over an MR gets a pitch curve and measurements on the device, saved on the recording', async ({page}) => {
+  test.setTimeout(120000);
+  const {synth} = require('./synth-vocal.cjs');
+  const wavOf = ({samples, sr}) => { const b = Buffer.alloc(44 + samples.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 2, 40); for (let i = 0; i < samples.length; i++) b.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(samples[i] * 20000))), 44 + i * 2); return b; };
+  await page.route('**/__song.wav', r => r.fulfill({contentType:'audio/wav', body:wavOf(synth({sr:22050}))}));
+  await page.route('**/__mr.wav', r => r.fulfill({contentType:'audio/wav', body:wavOf(synth({sr:22050, withVoice:false}))}));
+  await boot(page, {media:false});
+  await page.evaluate(async () => {
+    for (const [id, url] of [['song', '/__song.wav'], ['mr', '/__mr.wav']]) await window.vzipStorePracticeMedia({id, name:id === 'song' ? '노래 + MR' : 'MR만', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', blob:await (await fetch(url)).blob(), durationSeconds:20});
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/library');
+  const row = page.locator('[data-media="song"]');
+  await row.locator('[data-toggle]').click();
+  await row.getByRole('button', {name:'분석'}).click();
+  await expect(page).toHaveURL(/#\/analysis\/song$/);
+  const out = page.locator('[data-out]');
+  await expect(out.locator('.ana-grid')).toBeVisible({timeout:60000});
+  await expect(out).toContainText('A3 ~ C5');
+  await expect(out).toContainText('음정 정확도');
+  await expect(out).toContainText('초당 5.5회');
+  await expect(out).toContainText('반주와 잘 구분됐어요');
+  await expect(out.locator('svg path.curve')).toHaveCount(1);
+  await expect(out.locator('svg line.n')).toHaveCount(9);
+  await expect(out.locator('[data-saved]')).toContainText('저장했어요');
+  const saved = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'song').analysis);
+  expect(saved.v).toBe(1);
+  expect(saved.metrics.range).toMatchObject({low:'A3', high:'C5'});
+  expect(saved.metrics.intonation.meanAbsCents).toBeLessThan(12);
+  expect(saved).not.toHaveProperty('curve'); // only the summary is kept with the recording
+  // Tapping the curve moves playback there.
+  const svg = out.locator('svg');
+  const box = await svg.boundingBox();
+  await page.locator('[data-scroll]').evaluate(el => { el.scrollLeft = 0; });
+  await svg.click({position:{x:Math.min(box.width - 5, 10 * 36), y:100}});
+  await expect.poll(() => out.locator('[data-head]').evaluate(l => +l.getAttribute('x1'))).toBeGreaterThan(9 * 36 * 0.9);
+  // Accompaniment only: no voice is invented.
+  await page.goto('/#/analysis/mr');
+  await expect(page.locator('[data-out]')).toContainText('목소리를 찾지 못했어요', {timeout:60000});
+});
+
 test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
