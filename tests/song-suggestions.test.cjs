@@ -201,3 +201,13 @@ test('already-paid STT cache migrates without a second transcription',async()=>{
  assert.equal(b.api.state.recognitions.get(item.id),'이전에 유료 인식한 음성 텍스트를 재사용합니다');
  assert.equal(b.counts().paid,0);
 });
+
+test('song lyric sheet already synced by VZ cloud takes priority over STT reference',()=>{
+ const b=browser();
+ b.window.VZ.db.songs=[{id:'song-a',title:'Song A',lyrics:'곡 상세에 등록한 원문 가사가 우선하여 유지되는 테스트 가사입니다'}];
+ b.api.state.referenceRows=[{songId:'song-a',transcript:'오래된 녹음으로 만들어진 기준 내용입니다'},{songId:'song-b',transcript:'다른 곡의 기준 가사 내용입니다'}];
+ const refs=b.api.references();
+ assert.equal(refs.length,2);
+ assert.equal(refs.find(x=>x.songId==='song-a').source,'lyrics');
+ assert.match(refs.find(x=>x.songId==='song-a').transcript,/곡 상세/);
+});
