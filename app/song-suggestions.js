@@ -235,8 +235,8 @@ function showReferenceControls(main){
  main.querySelector('[data-ref-clear]').disabled=!stored.length;
 }
 async function rematchCached(main){
+ const refs=references();if(!refs.length||!state.items.some(m=>{const c=readCache(m);return c?.transcript&&!c.candidate&&c.method==='stt'}))return;
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
- const refs=references();if(!refs.length)return;
  let changed=0;
  for(const item of state.items){
   const previous=readCache(item);
