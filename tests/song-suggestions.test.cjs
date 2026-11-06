@@ -74,7 +74,11 @@ function assignment(){
  b.window.VZ.db.songs=[{id:'s1',title:'Song one'},{id:'s2',title:'Song two'}];
  b.window.VZ.songLabel=s=>s.title;b.window.VZ.confirm=async()=>true;
  Object.assign(b.window.VZ.media,{label:m=>m.name,dateOf:()=>'',isVideo:()=>false,invalidate(){},list:async()=>[item],
-  update:async(m,patch)=>{writes.push({...patch});Object.assign(m,patch)}});
+  assignSongSafe:async(m,patch,opts)=>{
+    if((m.songId||'')!==(opts.expectedSongId||'')||(m.song||'')!==(opts.expectedSong||''))throw Error('song changed');
+    writes.push({...patch});Object.assign(m,patch);
+    return {updatedAt:'2026-11-06T01:00:00.000Z'};
+  }});
  b.api.state.items=[item];b.api.state.chosen.add(item.id);
  b.api.setResult(item,{candidate:{id:'s1',title:'Song one'}});
  return {...b,item,writes};
@@ -82,8 +86,11 @@ function assignment(){
 test('apply snapshots approved choices, backs up before write and undo restores only song fields',async()=>{
  const b=assignment();
  b.window.VZ.confirm=async()=>{b.api.setResult(b.item,{candidate:{id:'s2',title:'Song two'}});return true};
- const update=b.window.VZ.media.update;
- b.window.VZ.media.update=async(m,p)=>{assert.ok([...b.storage.keys()].some(k=>k.startsWith('vzip_song_assignment_backup:')));await update(m,p)};
+ const update=b.window.VZ.media.assignSongSafe;
+ b.window.VZ.media.assignSongSafe=async(m,p,opts)=>{
+   assert.ok([...b.storage.keys()].some(k=>k.startsWith('vzip_song_assignment_backup:')));
+   return update(m,p,opts);
+ };
  await b.api.apply(b.main);assert.deepEqual(b.writes,[{songId:'s1',song:'Song one'}]);assert.equal(b.item.review,'keep this');
  await b.api.undo(b.main);assert.deepEqual(b.writes[1],{songId:'',song:''});assert.equal(b.item.review,'keep this');
 });
@@ -91,4 +98,18 @@ test('backup failure stops assignment; a newly classified recording is skipped',
  const b=assignment();b.localStorage.setItem=()=>{throw Error('quota')};
  await assert.rejects(b.api.apply(b.main),/백업/);assert.equal(b.writes.length,0);
  const c=assignment();c.item.songId='other';await c.api.apply(c.main);assert.equal(c.writes.length,0);
+});
+
+test('undo skips failed writes instead of modifying an unconfirmed assignment',async()=>{
+ const b=assignment();
+ b.window.VZ.media.assignSongSafe=async()=>{throw Error('write failed')};
+ await b.api.apply(b.main);assert.equal(b.writes.length,0);
+ await b.api.undo(b.main);assert.equal(b.writes.length,0);
+});
+test('bulk paid analysis must be reduced to one selected recording',async()=>{
+ const b=browser(),errors=[];
+ b.window.VZ.toast=message=>errors.push(message);
+ b.api.state.items=[{id:'a'},{id:'b'}];b.api.state.chosen.add('a');b.api.state.chosen.add('b');
+ await b.api.analyze({querySelector:()=>({})});
+ assert.match(errors.join(' '),/1개/);assert.equal(b.counts().paid,0);
 });
