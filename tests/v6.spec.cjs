@@ -262,6 +262,34 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   await expect(page.locator('[data-stopped]')).toContainText('원본 파일을 다시 선택');
 });
 
+test('A stopped upload resumes from its card: pick the same files again, finished ones are skipped and only the rest go up', async ({page}) => {
+  test.setTimeout(120000);
+  await boot(page, {media:false});
+  const wav = tone => { const sr = 4000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
+  const files = Array.from({length:5}, (_, i) => ({name:'11-5 #' + (i + 1) + '.m4a.wav', mimeType:'audio/wav', buffer:wav(i)}));
+  await page.evaluate(sizes => {
+    window.__uploaded = []; const rows = [];
+    window.vzipCloudSignedIn = () => true; window.vzipCloudUserId = () => 'ui-test-user';
+    window.vzipCloudMediaList = async () => rows.map(r => ({...r, cloud:true}));
+    window.vzipCloudImport = async (file, info) => { const meta = {...info, id:info.id, size:file.size, storageProvider:'r2', r2Key:'u/ui-test-user/' + info.id + '/original.wav'}; rows.push(meta); window.__uploaded.push(info.originalFilename); return meta; };
+    // Safari was closed after 3 of 5 files: the queue remembers them, but not the files themselves.
+    localStorage.setItem('vzip_upload_queue_v1', JSON.stringify({total:5, pendingCount:0, updatedAt:Date.now(), items:sizes.map((size, i) => ({id:'q' + i, name:'11-5 #' + (i + 1) + '.m4a.wav', size, hash:'', state:i < 3 ? 'done' : 'waiting'}))}));
+  }, files.map(f => f.buffer.length));
+  await page.evaluate(() => { location.hash = '#/import-hub'; });
+  const card = page.locator('[data-stopped]');
+  await expect(card).toContainText('완료 3 · 남음 2');
+  await card.locator('[data-q-resume]').setInputFiles([...files, {name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
+  await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 1개는 건너뛰었어요');
+  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
+  const n = k => page.locator('[data-dash] [data-count="' + k + '"] b');
+  await expect(n('done')).toHaveText('2');
+  await expect(n('dup')).toHaveText('3');
+  await expect(n('failed')).toHaveText('0');
+  expect((await page.evaluate(() => window.__uploaded)).sort()).toEqual(['11-5 #4.m4a.wav', '11-5 #5.m4a.wav']);
+  await page.evaluate(() => { location.hash = '#/home'; }); await page.evaluate(() => { location.hash = '#/import-hub'; });
+  await expect(page.locator('[data-stopped]')).toHaveCount(0); // nothing left: the card is gone
+});
+
 test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
