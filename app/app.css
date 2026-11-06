@@ -481,3 +481,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .srv-grid span{font-size:11px;color:var(--ink-2);line-height:1.25}
 .srv-grid a{background:var(--warn-soft)}
 .srv-grid a b,.srv-grid a span{color:var(--warn)}
+/* 악보 */
+.score-row{align-items:center}
+.score-actions{display:flex;gap:2px;flex:none}
+.score-actions .icon-btn{width:40px;height:40px}

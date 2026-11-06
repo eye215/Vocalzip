@@ -26,7 +26,8 @@
 const PART_SIZE = 8 * 1024 * 1024; // R2 needs ≥5 MiB for every part but the last.
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const EXT = /^[a-z0-9]{1,8}$/;
-const TYPE = /^(audio|video)\/[A-Za-z0-9.+-]{1,60}$/;
+// Recordings and song PDF scores retain their existing upload contract.
+const TYPE = /^(?:(audio|video)\/[A-Za-z0-9.+-]{1,60}|application\/pdf)$/;
 const ARCHIVE_TYPES = new Set(['image/jpeg','image/png','image/webp','image/gif','image/heic','application/pdf','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document']);
 const enc = new TextEncoder();
 
