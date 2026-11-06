@@ -16,6 +16,11 @@ const SEARCH_SECONDS=120, MIN_SUNG_SECONDS=4;
 const MAX_DURATION_SECONDS=80, MAX_PCM_BYTES=32*1024*1024;
 const checkpointKey='vzip_song_suggest_checkpoint_v2';
 const referenceKey='vzip_song_stt_references_v1';
+const inlinePlayers=new Map();
+function destroyPlayers(){for(const player of inlinePlayers.values())player.destroy();inlinePlayers.clear()}
+window.addEventListener('hashchange',destroyPlayers);
+window.addEventListener('pagehide',destroyPlayers);
+function candidateMatches(match){return match.matches.map(x=>({songId:x.songId,score:Math.round(x.score*1000)/1000})).slice(0,3)}
 const state={items:[],referenceItems:[],chosen:new Set(),results:new Map(),recognitions:new Map(),referenceRows:[],cloudReady:false,running:false,cancel:false,shown:PAGE_SIZE,controller:null};
 const owner=()=>window.vzipCloudUserId?.()||'device';
 let viewOwner=owner(), busy=false, authGeneration=0;
@@ -90,7 +95,7 @@ async function loadCloudTexts(){
 }
 window.addEventListener('vzip:auth-changed',()=>{
  if(owner()===viewOwner)return;
- authGeneration++;state.cancel=true;state.controller?.abort();state.results.clear();state.chosen.clear();state.referenceRows=[];state.recognitions.clear();state.cloudReady=false;
+ authGeneration++;state.cancel=true;state.controller?.abort();destroyPlayers();state.results.clear();state.chosen.clear();state.referenceRows=[];state.recognitions.clear();state.cloudReady=false;
 });
 async function exclusive(main,action){
  if(busy||owner()!==viewOwner)return;
@@ -234,7 +239,7 @@ async function stt(item,signal,{reference=false}={}){
   const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
   const match=matchTranscripts(previous,references()),found=songs().find(s=>s.id===match.candidate);
   return {status:found?'후보':'식별 불가',transcript:previous,
-   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,method:'stt',reason:match.reason};
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,method:'stt',reason:match.reason,matches:candidateMatches(match)};
  }
  if(!window.vzipCloudSignedIn?.())throw Error('로그인이 필요해요.');
  const token=await window.vzipCloudAccessToken?.();
@@ -272,7 +277,7 @@ async function stt(item,signal,{reference=false}={}){
  const found=songs().find(s=>s.id===match.candidate);
  return {status:found?'후보':'식별 불가',transcript,
   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
-  method:'stt',reason:match.reason};
+  method:'stt',reason:match.reason,matches:candidateMatches(match)};
 }
 function controls(main){
  const root=main.querySelector('[data-suggest]');
@@ -288,6 +293,7 @@ function draw(main){
  const root=main.querySelector('[data-suggest]'),list=root.querySelector('[data-suggest-list]');
  if(!list)return;
  const rows=state.items;
+ destroyPlayers();
  list.replaceChildren();
  for(const item of rows.slice(0,state.shown)){
   const result=resultFor(item);
@@ -296,9 +302,48 @@ function draw(main){
   box.onchange=()=>{box.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   const label=document.createElement('span');label.className='small';label.style.cssText='overflow-wrap:anywhere;margin-left:8px';label.textContent=fmt(item);
   const top=document.createElement('div');top.className='row';top.append(box,label);card.append(top);
+  const playWrap=document.createElement('div');playWrap.style.cssText='margin:8px 0';
+  const listen=document.createElement('button');listen.type='button';listen.className='btn ghost';
+  listen.textContent='▶ 녹음 듣기';listen.setAttribute('aria-label',M.label(item)+' 녹음 듣기');
+  const playerHost=document.createElement('div');playerHost.hidden=true;
+  listen.onclick=()=>{
+   if(playerHost.hidden){
+    playerHost.hidden=false;listen.textContent='▴ 플레이어 접기';
+    if(!inlinePlayers.has(item.id)){
+     try{inlinePlayers.set(item.id,M.player(playerHost,item,{prefetch:false,tools:true}))}
+     catch(error){playerHost.textContent='재생할 수 없어요: '+String(error.message||error)}
+    }
+   }else{
+    inlinePlayers.get(item.id)?.pause();playerHost.hidden=true;listen.textContent='▶ 녹음 듣기';
+   }
+  };
+  playWrap.append(listen,playerHost);card.append(playWrap);
   const sub=document.createElement('p');sub.className='small muted';
   sub.textContent=result?.error?'분석 실패: '+result.error:result?.candidate?'🎵 '+result.candidate.title+' · '+result.candidate.reason+' ('+result.candidate.level+')':result?.status||'분석 전';
   card.append(sub);
+  const matches=Array.isArray(result?.matches)?result.matches.slice(0,3):[];
+  if(matches.length){
+   const rank=document.createElement('div');rank.className='small';
+   rank.style.cssText='margin:10px 0;padding:10px;border:1px solid var(--line,#ddd);border-radius:12px';
+   const title=document.createElement('strong');title.textContent='가사 유사도 TOP '+matches.length+' · 참고 점수';
+   rank.append(title);
+   for(const [i,match] of matches.entries()){
+    const song=songs().find(x=>x.id===match.songId);if(!song)continue;
+    const row=document.createElement('div');row.className='row';row.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px';
+    const name=document.createElement('span');name.textContent=(i+1)+'위 '+VZ.songLabel(song)+' · '+Math.round(Math.max(0,Math.min(1,match.score))*100)+'%';
+    const choose=document.createElement('button');choose.className='btn ghost';choose.type='button';choose.textContent='이 곡 선택';
+    choose.setAttribute('aria-label',VZ.songLabel(song)+' 수동 선택');
+    choose.onclick=()=>{
+     const current=resultFor(item);
+     setResult(item,{...current,status:'후보',candidate:{id:song.id,title:VZ.songLabel(song),reason:'사용자가 유사도 후보 중 선택',level:'사용자 확인 필요'}});
+     draw(main);
+    };
+    row.append(name,choose);rank.append(row);
+   }
+   const note=document.createElement('p');note.className='muted';note.style.cssText='font-size:12px;margin:8px 0 0';
+   note.textContent='문자 유사도 점수로, 곡이 맞을 확률은 아니에요. 직접 들어본 뒤 곡 지정을 확정해 주세요.';
+   rank.append(note);card.append(rank);
+  }
   const picker=document.createElement('select');picker.setAttribute('aria-label',M.label(item)+' 추천 곡 검토');
   picker.add(new Option('곡 미지정 (변경 안 함)',''));
   for(const song of songs())picker.add(new Option(VZ.songLabel(song),song.id));
@@ -332,16 +377,22 @@ function showReferenceControls(main){
  main.querySelector('[data-ref-clear]').disabled=!state.referenceRows.length;
 }
 async function rematchCached(main){
- const refs=references();if(!refs.length||!state.items.some(m=>{const c=readCache(m);return c?.transcript&&!c.candidate&&c.method==='stt'}))return;
+ const refs=references();if(!refs.length||!state.items.some(m=>{
+  const c=readCache(m);return c?.transcript&&c.method==='stt'&&!['직접 선택','사용자가 유사도 후보 중 선택'].includes(c.candidate?.reason)
+ }))return;
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
  let changed=0;
  for(const item of state.items){
   const previous=readCache(item);
-  if(!previous?.transcript||previous?.candidate||previous.method!=='stt')continue;
-  const match=matchTranscripts(previous.transcript,refs);
-  const found=songs().find(s=>s.id===match.candidate);
-  if(!found)continue;
-  setResult(item,{...previous,status:'후보',candidate:{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}});
+  if(!previous?.transcript||previous.method!=='stt'||['직접 선택','사용자가 유사도 후보 중 선택'].includes(previous.candidate?.reason))continue;
+  const match=matchTranscripts(previous.transcript,refs),found=songs().find(s=>s.id===match.candidate);
+  const nextMatches=candidateMatches(match);
+  const same=JSON.stringify(previous.matches||[])===JSON.stringify(nextMatches) &&
+   (previous.candidate?.id||'')===(found?.id||'');
+  if(same)continue;
+  setResult(item,{...previous,status:found?'후보':'식별 불가',
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:match.reason,level:'확인 필요'}:null,
+   matches:nextMatches});
   changed++;
  }
  if(changed&&main.isConnected)draw(main);
