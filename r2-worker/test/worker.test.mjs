@@ -166,3 +166,15 @@ test('sign: links are stable within the hour and many files can be signed in one
   assert.equal((await call('/v1/sign', {method:'POST', auth:bob, body:{keys:[a.key]}})).status, 403);
   assert.equal((await call('/v1/sign', {method:'POST', auth:alice, body:{keys:Array(101).fill(a.key)}})).status, 400);
 });
+
+
+test('30-second clip endpoint is owner-only, rejects invalid intervals and is safely disabled without transform binding', async () => {
+  const alice=await token(ALICE),bob=await token(BOB);
+  const up=await upload(alice,'stt-clip-test',new Uint8Array(100).fill(5));
+  const endpoint='/v1/clip/'+up.key+'?time=20&duration=30';
+  assert.equal((await call(endpoint)).status,401);
+  assert.equal((await call(endpoint,{auth:bob})).status,403);
+  assert.equal((await call(endpoint,{auth:alice})).status,503);
+  // Authentication checks must happen even when the optional transform binding is absent.
+  assert.equal((await call('/v1/clip/'+up.key.replace(/original\.m4a$/,'original.wav'),{auth:bob})).status,403);
+});
