@@ -134,8 +134,30 @@ async function stt(item,signal){
  // before anything is downloaded to Safari. Never decode the full recording.
  let excerpt;
  if(item.storageProvider==='r2' && item.r2Key){
-  if(!window.VzipR2?.clip)throw Error('30초 R2 구간 추출 기능이 배포되지 않았어요.');
-  excerpt=await window.VzipR2.clip(item.r2Key,{time:20,duration:30,signal});
+  const browserClip=async()=>{
+   // Sparse authenticated ranges: the device decodes ONLY the 30-second section,
+   // not the entire 3-5 minute file. Original R2 data is never modified.
+   if(!window.VzipR2?.url)throw Error('클라우드 음원 주소를 가져올 수 없어요.');
+   const signedUrl=await window.VzipR2.url(item.r2Key);
+   const {extractR2AudioClip}=await import('../stt-clip-browser.mjs?v=1');
+   return extractR2AudioClip(signedUrl,{time:20,duration:30,signal});
+  };
+  const ext=(item.r2Key.split('.').pop()||'').toLowerCase();
+  // Stored source formats vary: iPhone Voice Memos AAC/M4A, video-extracted
+  // AAC/M4A, MP3, WAV, FLAC, and recording formats offered by MediaRecorder.
+  if(ext!=='mp4')excerpt=await browserClip();
+  else{
+   try{
+    if(!window.VzipR2?.clip)throw Object.assign(Error('서버 추출 기능을 사용할 수 없어요.'),{status:422});
+    excerpt=await window.VzipR2.clip(item.r2Key,{time:20,duration:30,signal});
+   }catch(error){
+    // Cloudflare Media Transformations documents VIDEO inputs. Audio-only M4A
+    // may be rejected with 422. Only fall back for unsupported-format errors;
+    // never bypass disabled, auth, or quota protection.
+    if(![415,422].includes(error.status))throw error;
+    excerpt=await browserClip();
+   }
+  }
  } else {
   // Small local/legacy files keep the existing memory-bounded decoder path.
   excerpt=new File([await clip(item,signal)],'vocal-clip.wav',{type:'audio/wav'});
@@ -275,7 +297,7 @@ async function apply(main,check=()=>{}){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. 긴 R2 녹음의 30초 추출은 서버에서 지원되는 파일만 가능하며, 현재 일부 오디오 형식은 확인 중이에요. 미지원 파일은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석해요. R2의 M4A·MP3·WAV·FLAC 등은 필요한 30초 구간만 읽어 분석하고, 영상 MP4는 서버 추출을 우선 시도해요. 브라우저에서 해독할 수 없는 코덱은 과금 전에 건너뜁니다. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><button class="btn ghost" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
   if(busy){main.textContent='이전 작업을 마무리하고 있어요. 잠시 후 다시 열어 주세요.';return}
   viewOwner=owner();
