@@ -204,6 +204,25 @@ M.update = async (item, changes, {quiet = false} = {}) => {
   }
   if (!quiet) window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:item.id}}));
 };
+/** Conservative song-only change for bulk suggestions.
+ * Cloud metadata is merged under a database compare-and-swap, not overwritten from a list snapshot. */
+M.assignSongSafe=async(item,changes,{expectedSongId='',expectedSong='',expectedUpdatedAt=null}={})=>{
+ const selected={songId:String(changes.songId||''),song:String(changes.song||'')};
+ let existing=null;
+ if(item.local){
+  existing=(await window.vzipReadMedia()).find(x=>x.id===item.id);
+  if(existing&&((existing.songId||'')!==expectedSongId||(existing.song||'')!==expectedSong))
+   throw Error('이 기기에서 곡이 변경됐어요. 목록을 새로고침해 주세요.');
+ }
+ let cloudResult=null;
+ if(item.cloud){
+  if(!window.vzipCloudMediaAssignSong)throw Error('곡 전용 안전 저장 기능을 확인할 수 없어요.');
+  cloudResult=await window.vzipCloudMediaAssignSong(item,selected,{expectedSongId,expectedSong,expectedUpdatedAt});
+ }
+ if(item.local&&existing)await tx('readwrite',s=>s.put({...existing,...selected}));
+ window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id}}));
+ return cloudResult||{updatedAt:null};
+};
 /* ---------- durations ---------- */
 /** Read a file's length from its metadata only (no full download/decode). */
 M.measure = (item, timeout = 15000) => new Promise(async resolve => {
