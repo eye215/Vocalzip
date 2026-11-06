@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
-const WORKER = 'app/vocal-analysis.js?v=1', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=2', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0;
@@ -21,7 +21,9 @@ async function decode(item, onStage) {
   onStage('소리 꺼내는 중…');
   const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!Ctx) throw Error('이 브라우저는 오디오 분석을 지원하지 않아요.');
-  let ctx; try { ctx = new Ctx(1, 16000, 16000); } catch { ctx = new Ctx(1, 44100, 44100); }
+  // Decode straight to 8 kHz (the analyzer's rate): less memory on the phone. Older engines refuse low rates.
+  let ctx = null; for (const rate of [8000, 16000, 44100]) { try { ctx = new Ctx(1, rate, rate); break; } catch {} }
+  if (!ctx) throw Error('이 브라우저는 오디오 분석을 지원하지 않아요.');
   const buf = await new Promise((resolve, reject) => { const p = ctx.decodeAudioData(bytes, resolve, reject); if (p?.then) p.then(resolve, reject); });
   const n = Math.min(buf.length, Math.floor(MAX_SECONDS * buf.sampleRate)), mono = new Float32Array(n);
   for (let ch = 0; ch < buf.numberOfChannels; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < n; i++) mono[i] += d[i] / buf.numberOfChannels; }
