@@ -2,6 +2,14 @@
 
 Decision: keep Draft, do not merge or activate paid analysis yet.\n\n## 2026-11-06 additional safeguards\n\n- Added `vzipCloudMediaAssignSong` to fetch current cloud metadata, preserve unrelated fields, and compare-and-swap the `updated_at` revision on each song-only write.\n- Added local-first compatibility in `M.assignSongSafe` with explicit song preconditions. Apply now records confirmed successful writes and the post-write version; undo rejects later modifications rather than relying only on matching song ID.\n- Limited each manual analysis action to one paid candidate in the browser; **this is not a secure server-side daily quota or hard dollar limit**.\n- Server-side atomic quota is now present: 3 requests/day and 15 total per account. The migration `vzip_song_stt_quota` was successfully applied to VOCAL.zip Supabase on 2026-11-06 and verified to deny table SELECT for authenticated/anon while permitting authenticated-only RPC invocation. The function was deployed as `vzip-song-stt` v8 (JWT validation on). This is a call-count cap, **not** a dollar limit.\n- Keep `STT_ENABLED=false` until the full PR passes UI/browser CI and real Cloudflare excerpt tests; verify the switch in the Supabase dashboard because secrets cannot be read back.\n
 
+## Cloudflare Media Transformations release finding (2026-11-06)
+
+- Cloudflare's current documentation supports the Media Transformations binding in public beta, `audio` output to AAC/M4A, and processing private R2 inputs. However **official input guidance is MP4 video with H.264 + AAC/MP3**; standalone Voice Memos `.m4a` input is **not guaranteed**. Never promise 3–5 minute audio-only M4A trimming without a real test.
+- The binding `[media] binding = "MEDIA_TRANSFORM"` remains commented out and the R2 Worker is not deployed with the new `/v1/clip/` endpoint. Enabling the binding or remote Worker is a separate Cloudflare account action, not achieved by GitHub CI. Cloudflare connectivity cannot be verified through existing GitHub/Supabase connectors.
+- Cloudflare docs state binding transformations are not billed **during public beta**, with potential charges after beta. Do not interpret this as an unconditional forever-free feature. Media Transformations may have separate limits.
+- The UI no longer claims audio-only M4A works automatically. If live audio-only M4A fails, build/test a separate audio-trimming mechanism before activating any paid STT path.
+- Source: https://developers.cloudflare.com/stream/transform-videos/bindings/ and https://developers.cloudflare.com/stream/pricing/
+
 ## Fixed in this review
 
 - Corrected the Worker extension regex which rejected normal M4A/MP4 keys.
