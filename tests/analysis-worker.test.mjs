@@ -155,7 +155,12 @@ test('Uploads are queued by the database and worked on without any app: songs so
 
 test('A file that cannot be read is retried and then marked failed; a paid transcript survives a later failure', {skip}, async () => {
   await media('x1', {name:'사라진 파일', storageProvider:'r2', r2Key:key(U1, 'x1', 'wav')});
-  for (let i = 0; i < 3; i++) await work();
+  // A failed job waits 30 minutes before the next try (not retried inside the same run).
+  await work();
+  assert.equal((await jobs('x1')).vocal.attempts, 1);
+  await work();
+  assert.equal((await jobs('x1')).vocal.attempts, 1, 'not retried while waiting');
+  for (let i = 0; i < 2; i++) { await db.query("update public.vocal_analysis_jobs set locked_at = now() - interval '31 minutes' where media_id = 'x1'"); await work(); }
   const x = await jobs('x1');
   assert.equal(x.vocal.status, 'failed'); assert.equal(x.vocal.attempts, 3); assert.match(x.vocal.last_error, /download failed \(404\)/);
   assert.equal(x.song.status, 'failed');
@@ -193,4 +198,14 @@ test('100 uploads, two workers at once: every recording done exactly once, one p
   assert.deepEqual(m, {sorted:100, measured:100});
   const {rows:[c]} = await db.query('select sum(cost_usd)::float cost from public.vocal_analysis_jobs where user_id = $1', [user]);
   assert.equal(Math.round(c.cost * 1e4) / 1e4, 0.15);                                     // cost tracked per job
+});
+
+test('The same problem for every file stops the run early and keeps the untried files queued', {skip}, async () => {
+  const user = '22222222-2222-4222-8222-222222222222';
+  for (let i = 0; i < 15; i++) await media('bad' + i, {name:'x', storageProvider:'r2', r2Key:key(user, 'bad' + i, 'wav'), songId:'s1', analysis:undefined}, user); // no such files in R2
+  const stats = await work();
+  assert.equal(stats.stopped, true); assert.equal(stats.retry, 8);
+  assert.deepEqual(Object.keys(stats.errors), ['download failed (404)']);
+  const {rows} = await db.query("select status, attempts, count(*)::int n from public.vocal_analysis_jobs where user_id = $1 group by 1, 2 order by 1, 2", [user]);
+  assert.deepEqual(rows, [{status:'queued', attempts:0, n:7}, {status:'running', attempts:1, n:8}]); // 7 untouched, 8 waiting to retry
 });
