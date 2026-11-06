@@ -548,3 +548,13 @@ h2.sec a,h2.sec button{display:inline-flex;align-items:center;justify-content:fl
 .bars a.bar{min-height:44px}
 /* Row links made of two text lines: WebKit renders them at 43.5px, so they get an explicit 44pt floor. */
 main a.grow,main a.item-main{display:flex;flex-direction:column;justify-content:center;min-height:44px}
+
+/* Structure (v0.7): the 캘린더 tab switches between calendar, lessons and homework. */
+.subnav{margin-bottom:14px}
+.subnav a{flex:1;display:grid;place-items:center;min-height:44px;border-radius:10px;color:var(--ink-2);font-weight:600;font-size:14px;text-decoration:none}
+.subnav a[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.week-card{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto auto;align-items:center;margin-top:16px;text-decoration:none;color:inherit;min-height:44px}
+.week-card .week-k{grid-column:1;font-size:13px;font-weight:650;color:var(--ink-2)}
+.week-card .week-v{grid-column:1;font-size:22px;font-weight:750;letter-spacing:-.02em;color:var(--accent)}
+.week-card .week-sub{grid-column:1}
+.week-card .chev{grid-column:2;grid-row:1/4;color:var(--ink-3);font-size:20px}

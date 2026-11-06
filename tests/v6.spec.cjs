@@ -52,12 +52,22 @@ test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
   await boot(page);
   const nav = page.locator('.v-nav');
-  for (const [label, heading] of [['내 곡', '내 곡'], ['녹음', '녹음'], ['캘린더', '캘린더'], ['성장', '성장'], ['홈', null]]) {
+  for (const [label, heading] of [['내 곡', '내 곡'], ['녹음', '녹음'], ['보관함', '음원 보관함'], ['캘린더', '캘린더'], ['홈', null]]) {
     await nav.getByRole('link', {name:label, exact:true}).click();
     if (heading) await expect(page.locator('#top h1')).toHaveText(heading);
     await expect(nav.getByRole('link', {name:label, exact:true})).toHaveAttribute('aria-current', 'page');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   }
+  // 캘린더 tab switches between calendar, lessons and homework; 성장 opens from the home week card.
+  await nav.getByRole('link', {name:'캘린더', exact:true}).click();
+  const sw = page.getByRole('navigation', {name:'캘린더 보기'});
+  await sw.getByRole('link', {name:'레슨'}).click(); await expect(page.locator('#top h1')).toHaveText('레슨');
+  await expect(nav.getByRole('link', {name:'캘린더', exact:true})).toHaveAttribute('aria-current', 'page');
+  await sw.getByRole('link', {name:'숙제'}).click(); await expect(page.locator('#top h1')).toHaveText('숙제');
+  await nav.getByRole('link', {name:'홈', exact:true}).click();
+  await expect(page.locator('[data-week-v]')).not.toHaveText('…');
+  await page.locator('[data-week]').click(); await expect(page.locator('#top h1')).toHaveText('성장');
+  await nav.getByRole('link', {name:'홈', exact:true}).click();
   // Home: quick actions first, then next lesson / homework / recent songs.
   await expect(page.locator('.quick').getByText('녹음')).toBeVisible();
   await expect(page.getByText('예정된 레슨이 없어요')).toBeVisible();

@@ -267,6 +267,7 @@ VZ.route('home', {title:'홈', render() {
   const tasks = db.assignments.filter(t => t.status !== 'done');
   const taskHtml = tasks.length ? '<h2 class="sec">해야 할 숙제 <a href="#/homework">전체 ' + tasks.length + '</a></h2><div class="list">' + tasks.slice(0, 4).map(VZ.taskRow).join('') + '</div>' : '<p class="small muted" style="margin:16px 4px 0"><i class="ph ph-check-circle"></i> 남은 숙제가 없어요 · <a href="#/homework">숙제 관리</a></p>';
   return '<div class="quick" style="grid-template-columns:repeat(4,1fr)"><a href="#/record"><i class="ph-fill ph-microphone"></i>녹음</a><button type="button" data-log><i class="ph ph-timer"></i>연습 기록</button><button type="button" data-add-lesson><i class="ph ph-calendar-plus"></i>레슨 일정</button><button type="button" data-import><i class="ph ph-upload-simple"></i>가져오기</button></div>' +
+    '<a class="card week-card" href="#/growth" data-week aria-label="이번 주 연습 · 성장 보기"><span class="week-k">이번 주 연습</span><span class="week-v" data-week-v>…</span><span class="week-sub small muted" data-week-sub></span><i class="ph ph-caret-right chev"></i></a>' +
     '<div data-tip style="margin-top:16px"></div>' +
     (VZ.overdueLessons?.().length ? '<div style="margin-top:16px">' + VZ.overdueCard() + '</div>' : '') +
     '<h2 class="sec">다음 레슨 <a href="#/calendar">캘린더</a></h2>' + nextHtml + taskHtml +
@@ -279,6 +280,11 @@ VZ.route('home', {title:'홈', render() {
   VZ.billingLeftChip?.(main.querySelector('[data-billing-left]'));
   const media = await M.list().catch(() => []);
   const host = main.querySelector('[data-recent]'); if (!host?.isConnected) return;
+  // 이번 주 (Monday to today, same as 성장) at a glance; the card opens 성장.
+  { const t = new Date(), monday = VZ.ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() - (t.getDay() + 6) % 7)), today = VZ.today();
+    const week = VZ.timeEntries(media).filter(e => e.date >= monday && e.date <= today), mins = VZ.sumMinutes(week), days = new Set(week.map(e => e.date)).size;
+    main.querySelector('[data-week-v]').textContent = mins ? VZ.minutes(mins) : '아직 없어요';
+    main.querySelector('[data-week-sub]').textContent = (days ? days + '일 연습 · ' : '') + '성장 보기'; }
   const act = VZ.songActivity(media);
   const recent = [...act.entries()].filter(([id]) => VZ.song(id)).sort((a, b) => b[1].localeCompare(a[1])).slice(0, 3);
   host.innerHTML = recent.length ? '<div class="list">' + recent.map(([id, date]) => '<div class="item"><a href="#/song/' + esc(id) + '" class="item-main" style="color:inherit;text-decoration:none"><span class="item-title">' + esc(VZ.songTitle(id)) + '</span><span class="item-sub">' + esc(['마지막 연습 ' + VZ.relDay(date), (n => n ? '녹음 ' + n + '개' : '')(media.filter(m => m.songId === id).length)].filter(Boolean).join(' · ')) + '</span></a><a class="btn sm secondary" href="#/record?song=' + esc(id) + '" aria-label="' + esc(VZ.songTitle(id)) + ' 이어서 연습"><i class="ph-fill ph-microphone"></i>이어서</a></div>').join('') + '</div>'

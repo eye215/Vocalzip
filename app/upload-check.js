@@ -126,7 +126,7 @@ function draw(host) {
   };
 }
 
-VZ.route('upload-check', {title:'업로드 상태 진단', back:true, tab:'home', noAutoRefresh:true,
+VZ.route('upload-check', {title:'업로드 상태 진단', back:true, tab:'library', noAutoRefresh:true,
   render() { return '<div data-uc></div>'; },
   mount(main) { draw(main.querySelector('[data-uc]')); }});
 })();
