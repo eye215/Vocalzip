@@ -39,6 +39,20 @@ function runWorker(samples, sampleRate, onProgress) {
 
 /** Analyze raw mono samples in the worker (used by the song finder to locate the singing). The array is transferred. */
 VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}) => runWorker(samples, sampleRate, onProgress);
+/** The summary kept with a recording (no curve: it would make every library row heavy). */
+const summaryOf = result => ({v:result.version, at:Date.now(), seconds:result.seconds, metrics:result.metrics, confidence:result.confidence});
+/** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).
+ * Used by the analysis screen and the song page's "analyze all". Returns the full result (with curve). */
+VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, save = true} = {}) => {
+  const {samples, sampleRate, cut} = await decode(item, onStage);
+  onStage('목소리 찾는 중… (반주와 구분)');
+  const result = await runWorker(samples, sampleRate, onProgress);
+  result.cut = cut; result.summary = summaryOf(result);
+  if (save) { await M.update(item, {analysis:result.summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:result.summary}})); }
+  return result;
+};
+/** Whether a saved summary is trustworthy enough to chart (enough singing, voice not drowned by the MR). */
+VZ.analysisReliable = a => !!a?.metrics?.voicedSeconds && a.metrics.voicedSeconds >= 10 && (a.confidence?.voiceOverMrDb == null || a.confidence.voiceOverMrDb >= 3);
 
 /* ---------- drawing ---------- */
 const PX_PER_S = 36, H = 200, PAD = 30;
@@ -101,11 +115,7 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
     const out = host.querySelector('[data-out]'), stage = t => { const s = out.querySelector('[data-stage]'); if (s) s.textContent = t; }, bar = p => { const b = out.querySelector('[data-bar]'); if (b) b.style.width = Math.round(p * 100) + '%'; };
     let result;
     try {
-      const {samples, sampleRate, cut} = await decode(item, stage);
-      if (!alive()) return;
-      stage('목소리 찾는 중… (반주와 구분)');
-      result = await runWorker(samples, sampleRate, p => { if (alive()) bar(p); });
-      result.cut = cut;
+      result = await VZ.analyzeRecording(item, {onStage:stage, onProgress:p => { if (alive()) bar(p); }, save:false});
     } catch (e) {
       if (alive()) out.innerHTML = '<div class="ana-note warn"><i class="ph ph-warning"></i><span>분석하지 못했어요: ' + esc(e.message) + '</span></div>';
       return;
@@ -129,8 +139,8 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
       svg.addEventListener('click', e => { const box = svg.getBoundingClientRect(), t = (e.clientX - box.left) / box.width * secs; player.el.currentTime = Math.max(0, t); paint(); if (player.el.paused) player.play(); });
     }
     // Keep the summary with the recording (only this field changes; other devices' edits stay).
-    const summary = {v:result.version, at:Date.now(), seconds:result.seconds, metrics:result.metrics, confidence:result.confidence};
-    try { await M.update(item, {analysis:summary}, {quiet:true}); if (alive()) out.querySelector('[data-saved]').textContent = '분석 결과를 이 녹음에 저장했어요.'; }
+    const summary = result.summary;
+    try { await M.update(item, {analysis:summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:summary}})); if (alive()) out.querySelector('[data-saved]').textContent = '분석 결과를 이 녹음에 저장했어요.'; }
     catch (e) { if (alive()) out.querySelector('[data-saved]').textContent = '결과를 저장하지 못했어요: ' + e.message; }
   },
   leave() { job++; }

@@ -331,6 +331,51 @@ test('보컬 분석: a recording sung over an MR gets a pitch curve and measurem
   await expect(page.locator('[data-out]')).toContainText('목소리를 찾지 못했어요', {timeout:60000});
 });
 
+test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the device and charted by date; first vs latest is compared and saved', async ({page}) => {
+  test.setTimeout(180000);
+  const {synth} = require('./synth-vocal.cjs');
+  const wavOf = ({samples, sr}) => { const b = Buffer.alloc(44 + samples.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 2, 40); for (let i = 0; i < samples.length; i++) b.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(samples[i] * 20000))), 44 + i * 2); return b; };
+  // Three takes of one song, each more in tune (30 → 15 → 5 cents off), and one take where only the MR was caught.
+  const takes = [['t1', '2026-08-01', -30], ['t2', '2026-09-15', -15], ['t3', '2026-11-01', -5]];
+  for (const [id, , detune] of takes) await page.route('**/__' + id + '.wav', r => r.fulfill({contentType:'audio/wav', body:wavOf(synth({sr:22050, detune}))}));
+  await page.route('**/__t0.wav', r => r.fulfill({contentType:'audio/wav', body:wavOf(synth({sr:22050, withVoice:false}))}));
+  await boot(page, {media:false});
+  await page.evaluate(async rows => {
+    for (const [id, date] of rows) await window.vzipStorePracticeMedia({id, name:'연습 ' + date, created:new Date(date + 'T20:00:00').getTime(), recordedDate:date, dateSource:'metadata', type:'audio/wav', source:'practice', songId:'s1', song:'This Is the Moment', blob:await (await fetch('/__' + id + '.wav')).blob(), durationSeconds:20});
+    VZ.media.invalidate();
+  }, [['t0', '2026-07-01'], ...takes]);
+  await page.goto('/#/song/s1');
+  const card = page.locator('[data-song-vocal]');
+  await expect(card).toContainText('분석 0/4개');
+  await card.getByRole('button', {name:/녹음 4개 분석하기/}).click();
+  await expect(card).toContainText('분석 4/4개', {timeout:120000});
+  await expect(card.locator('.vg-chart')).toHaveCount(4);
+  // 음정 오차 goes 30 → 5: improved; the MR-only take is hollow and left out.
+  const into = card.locator('.vg-chart').filter({hasText:'음정 오차'});
+  await expect(into).toContainText('좋아짐');
+  await expect(into.locator('circle')).toHaveCount(3);
+  await expect(card.locator('circle.weak')).toHaveCount(0); // the MR-only take has no measurements to plot
+  await expect(card).toContainText('녹음 1개는 노래가 짧거나 반주가 커서 변화 계산에서 뺐어요.');
+  await expect(card.locator('.vg-chart').filter({hasText:'최고음'})).toContainText('비슷함'); // C5 each time, a few cents apart
+  await card.getByText('처음 vs 최근 측정값 비교').click();
+  const table = card.locator('.vg-table');
+  await expect(table).toContainText('8월 1일');
+  await expect(table).toContainText('11월 1일');
+  await card.getByRole('button', {name:'이 비교 저장'}).click();
+  const report = await page.evaluate(k => JSON.parse(localStorage.getItem(k)).comparisonReports.find(r => r.firstId === 't1' && r.secondId === 't3'), KEY);
+  expect(report.songId).toBe('s1');
+  expect(report.measures.first.metrics.intonation.meanAbsCents).toBeGreaterThan(report.measures.second.metrics.intonation.meanAbsCents + 15);
+  const saved = await page.evaluate(async () => (await window.vzipReadMedia()).filter(x => x.analysis).map(x => x.id).sort());
+  expect(saved).toEqual(['t0', 't1', 't2', 't3']); // every take keeps its summary, so it is never analyzed twice
+  // The 녹음 비교 page shows the same measurements for the two takes.
+  await page.goto('/#/compare?song=s1&a=t1&b=t3');
+  await expect(page.locator('.vg-table')).toContainText('음정 오차');
+  // A dot opens that take's pitch curve.
+  await page.goto('/#/song/s1');
+  await page.locator('[data-song-vocal] .vg-chart').first().locator('a').last().click();
+  await expect(page).toHaveURL(/#\/analysis\/t3$/);
+});
+
 test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
