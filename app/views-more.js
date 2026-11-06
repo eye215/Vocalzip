@@ -164,10 +164,10 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
     const off = media.map(m => ({m, named:window.VzipMediaDates?.fromName?.(m.originalFilename || m.name)}))
       .filter(({m, named}) => named && m.dateSource !== 'manual' && (M.dateOf(m) !== named.recordedDate || (!named.timeless && Math.abs((Number(m.created) || 0) - named.created) > 60000)));
     if (!off.length) { nameHost.innerHTML = ''; return; }
-    nameHost.innerHTML = '<div class="card row" style="gap:10px;margin-bottom:12px"><i class="ph ph-calendar-check" style="font-size:22px;color:var(--accent)"></i><span class="grow small">파일 이름에 녹음 시각이 있는 녹음 <strong>' + off.length + '개</strong>가 다른 날짜로 들어가 있어요.</span><button type="button" class="btn sm" data-name-fix>이름대로 맞추기</button></div>';
+    nameHost.innerHTML = '<div class="card row" style="gap:10px;margin-bottom:12px"><i class="ph ph-calendar-check" style="font-size:22px;color:var(--accent)"></i><span class="grow small">파일 이름에 녹음 날짜가 있는 녹음 <strong>' + off.length + '개</strong>가 다른 날짜로 들어가 있어요.</span><button type="button" class="btn sm" data-name-fix>이름대로 맞추기</button></div>';
     nameHost.querySelector('[data-name-fix]').onclick = async e => {
       const sample = off.slice(0, 3).map(({m, named}) => '· ' + M.label(m) + ': ' + (M.dateOf(m) || '날짜 없음') + ' → ' + named.recordedDate).join('\n');
-      if (!await VZ.confirm('파일 이름 날짜로 맞추기', off.length + '개 녹음의 날짜를 파일 이름대로 바꿔요 (2025-08-08_22-09-00 → 그 시각, 11-5 #10 → 가장 최근 11월 5일). 파일과 곡·메모는 그대로예요. 직접 고친 날짜는 건드리지 않아요.\n\n' + sample + (off.length > 3 ? '\n…' : ''), {ok:'맞추기'})) return;
+      if (!await VZ.confirm('파일 이름 날짜로 맞추기', off.length + '개 녹음의 날짜를 파일 이름대로 바꿔요 (2025-08-08_22-09-00 → 그 시각, 2025-10-19 #21 → 그날, 11-5 #10 → 가장 최근 11월 5일). 파일과 곡·메모는 그대로예요. 직접 고친 날짜는 건드리지 않아요.\n\n' + sample + (off.length > 3 ? '\n…' : ''), {ok:'맞추기'})) return;
       e.target.disabled = true; let n = 0, failed = 0;
       for (const {m, named} of off) {
         // A month-day name gives only the day: keep the recording's own time of day.
