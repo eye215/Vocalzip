@@ -10,7 +10,7 @@ import {createServer} from 'node:http';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import pg from 'pg';
-import {signV4, decide, AUTO} from '../worker/analysis-worker.mjs';
+import {signV4, decide, AUTO, describeDbUrl} from '../worker/analysis-worker.mjs';
 
 const require = createRequire(import.meta.url);
 const {synth} = require('./synth-vocal.cjs');
@@ -31,6 +31,15 @@ test('Auto-assign only on a clearly strong, well-separated match with enough wor
   assert.equal(decide('this is the moment this is the day when I send', {candidate:'s1', matches:[{songId:'s1', score:0.36}, {songId:'s2', score:0.05}]}).auto, false, 'below ' + AUTO.minScore);
   assert.equal(decide('this is the moment this is the day when I send', {candidate:'s1', matches:[{songId:'s1', score:0.55}, {songId:'s2', score:0.47}]}).auto, false, 'runner-up too close');
   assert.equal(decide('this is the moment this is the day when I send', {candidate:null, matches:[{songId:'s1', score:0.9}]}).auto, false, 'matcher itself unsure');
+});
+
+test('A wrong database address is explained without ever printing the password', () => {
+  const ok = describeDbUrl('postgresql://postgres.abcdefghijklmnopqrst:Secret123@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres');
+  assert.match(ok, /pooler/); assert.match(ok, /postgres\.<project>/); assert.doesNotMatch(ok, /Secret123/);
+  const direct = describeDbUrl('postgresql://postgres:[YOUR-PASSWORD]@db.abcdefghijklmnopqrst.supabase.co:5432/postgres');
+  assert.match(direct, /DIRECT/); assert.match(direct, /needs postgres\.<project>/); assert.match(direct, /YOUR-PASSWORD/);
+  const special = describeDbUrl('postgresql://postgres.abcdefghijklmnopqrst:pa@ss@aws-0-x.pooler.supabase.com:5432/postgres');
+  assert.match(special, /%40/); assert.doesNotMatch(special, /pa@ss/);
 });
 
 const DB = process.env.VZ_TEST_DB;
