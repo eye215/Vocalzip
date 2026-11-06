@@ -6,6 +6,7 @@ create table if not exists public.vocal_song_texts (
  record_id text not null check (length(record_id) between 1 and 128),
  transcript text not null check (length(transcript) between 1 and 1600),
  source text not null default 'manual' check (source in ('manual','stt','legacy')),
+ deleted_at timestamptz,
  updated_at timestamptz not null default now(),
  primary key (user_id, kind, record_id)
 );
