@@ -61,6 +61,13 @@ VZ.practiceTips = (media, {songId = ''} = {}) => {
   }).filter(Boolean).sort((a, b) => b.score - a.score);
   return {enough:true, count:takes.length, range, tips};
 };
+// The home card also recommends five minutes of comfortable long tones when all metrics are steady.
+const recordableTips = result => !result.enough ? [] : result.tips.length ? result.tips : [{
+  key:'maintenance', name:'롱톤 유지 연습', metric:'유지 연습', value:'5분', minutes:5,
+  reason:'측정값이 고르게 안정적이에요. 편한 음역에서 롱톤 5분으로 유지해 보세요.',
+  goal:'편안한 음역에서 안정적으로 유지',
+  steps:['편한 음역' + (result.range ? '(' + result.range + ')' : '') + '에서 무리하지 않고 롱톤 연습']
+}];
 // Store what was practiced, not a live pointer to a recommendation that may change tomorrow.
 const snapshot = tip => ({key:tip.key, name:tip.name, goal:tip.goal || '', minutes:Number(tip.minutes) || 0,
   steps:Array.isArray(tip.steps) ? tip.steps.map(String) : []});
@@ -96,7 +103,7 @@ VZ.practiceTipChecklist = (host, {practice, preset} = {}) => {
   Promise.resolve().then(() => M.list()).catch(() => M.cached?.() || []).then(media => {
     if (!host.isConnected) return;
     // Same overall recommendations as the home card, with saved/started tips kept even if the analysis changed.
-    for (const tip of VZ.practiceTips(media).tips) add(tip);
+    for (const tip of recordableTips(VZ.practiceTips(media))) add(tip);
     loading = false; draw();
   }).catch(() => { loading = false; draw(); });
   return {read:() => [...checked].filter(key => entries.has(key)).map(key => snapshot(entries.get(key)))};
@@ -121,7 +128,7 @@ VZ.renderTips = async (host, {songId = '', limit = 1} = {}) => {
     host.innerHTML = r.count || !songId ? '<p class="small muted tip-empty">' + (songId ? '이 곡의' : '') + ' 분석된 녹음이 ' + MIN_TAKES + '개 이상 모이면 맞춤 연습을 추천해요 (지금 ' + r.count + '개).</p>' : '';
     return;
   }
-  const tips = r.tips.slice(0, limit);
+  const tips = recordableTips(r).slice(0, limit);
   host.innerHTML = (tips.length ? tips.map(t => card(t, songId)).join('') : '<div class="card tip"><span class="tip-k">🎯 ' + (songId ? '이 곡' : '오늘의') + ' 추천 연습</span><p class="small" style="margin:6px 0 0">측정값이 고르게 안정적이에요 👍 편한 음역' + (r.range ? '(' + esc(r.range) + ')' : '') + '에서 롱톤 5분으로 유지해 보세요.</p></div>') +
     '<p class="small muted tip-note">측정값을 참고한 일반 연습 가이드예요. 통증이나 쉰 목소리가 있으면 쉬어 주세요.</p>';
   host.querySelectorAll('[data-tip-start]').forEach(b => b.onclick = () => {

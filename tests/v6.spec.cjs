@@ -1928,3 +1928,19 @@ test('Recommended practice checklist: old memo records remain readable and expli
   await page.evaluate(()=>VZ.practiceSheet({practice:VZ.db.practices[0]}));await expect(check).not.toBeChecked();
   await sheet(page).getByRole('button',{name:'닫기',exact:true}).click();
 });
+
+test('Recommended practice checklist: the steady-voice long-tone recommendation is also checkable', async ({page}) => {
+  await boot(page,{media:false});await seedTipTakes(page);
+  await page.evaluate(async()=>{
+    for(const m of await window.vzipReadMedia()){m.analysis.metrics.intonation.meanAbsCents=5;await window.vzipStorePracticeMedia(m)}
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/songs');await page.goto('/#/home');
+  const card=page.locator('[data-tip] .tip');
+  await expect(card).toContainText('롱톤 유지 연습');await card.getByRole('button',{name:'연습 시작'}).click();
+  await expect(sheet(page).locator('[name=minutes]')).toHaveValue('5');
+  await page.locator('[data-practice-tips]').getByRole('checkbox',{name:'롱톤 유지 연습',exact:true}).check();
+  await page.locator('[form=practice-log]').click();
+  expect((await data(page)).practices.at(-1).recommendedExercises[0].key).toBe('maintenance');
+  await expect(page.locator('[data-tip]')).toContainText('오늘 했어요');
+});
