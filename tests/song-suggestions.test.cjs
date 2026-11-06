@@ -133,13 +133,13 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
  await b.api.apply(b.main);assert.equal(b.writes.length,0);
  await b.api.undo(b.main);assert.equal(b.writes.length,0);
 });
-test('one run of paid analysis is capped at 30 recordings (the server quota is the real limit)',async()=>{
+test('one run of paid analysis is capped at 100 recordings (the server quota is the real limit)',async()=>{
  const b=browser(),errors=[];
  b.api.state.referenceRows=[{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}];
  b.window.VZ.toast=message=>errors.push(message);
- b.api.state.items=Array.from({length:31},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
+ b.api.state.items=Array.from({length:101},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
  await b.api.analyze({querySelector:()=>({})});
- assert.match(errors.join(' '),/30개/);assert.equal(b.counts().paid,0);
+ assert.match(errors.join(' '),/100개/);assert.equal(b.counts().paid,0);
 });
 test('the 30 paid seconds are where the singing is, found on the device for free',async()=>{
  const b=browser(),fps=20,curve=new Array(120*fps).fill(null);

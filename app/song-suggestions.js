@@ -10,7 +10,7 @@ const backupPrefix='vzip_song_assignment_backup:';
 const backupPointer='vzip_song_assignment_last';
 const MAX_BYTES=12*1024*1024, PAGE_SIZE=40;
 // Paid STT per tap. The server quota (vzip_song_stt_reserve) is the real cap; this keeps one run reviewable.
-const MAX_PAID_PER_RUN=30, COST_PER_CLIP_USD=0.0015; // gpt-4o-mini-transcribe ≈ $0.003/min × 30 s
+const MAX_PAID_PER_RUN=100, COST_PER_CLIP_USD=0.0015; // gpt-4o-mini-transcribe ≈ $0.003/min × 30 s
 const SEARCH_SECONDS=120, MIN_SUNG_SECONDS=4;
 // Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
 const MAX_DURATION_SECONDS=80, MAX_PCM_BYTES=32*1024*1024;
@@ -387,6 +387,8 @@ async function analyze(main,check=()=>{}){
  if(paid>MAX_PAID_PER_RUN){VZ.toast('유료 음성 분석은 한 번에 '+MAX_PAID_PER_RUN+'개까지 선택해 주세요.','error');return}
  if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 STT만 사용해요(GPT 비용 없음). 파일마다 노래가 나오는 30초만 보내요. 예상 비용 약 $'+(paid*COST_PER_CLIP_USD).toFixed(3)+' (30초당 약 $'+COST_PER_CLIP_USD+'). 노래 구간이 없는 파일은 보내지 않아 비용이 없어요. 기준 텍스트와의 비교는 무료이고 원본은 바뀌지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
+ // Up to 100 files take ~10 minutes: keep the screen awake so iOS does not suspend the run.
+ M.keepAwake?.(true);
  let success=0,failed=0,seen=0;
  try{
   for(const m of targets){
@@ -404,7 +406,7 @@ async function analyze(main,check=()=>{}){
    // Allow UI to paint and the browser a chance to reclaim decoded audio between files.
    await pause();
   }
- }finally{state.running=false;state.controller=null;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
+ }finally{M.keepAwake?.(false);state.running=false;state.controller=null;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
 }
 async function undo(main,check=()=>{}){
  let backup;try{backup=JSON.parse(localStorage.getItem(localStorage.getItem(scoped(backupPointer))||'')||'null')}catch{}
