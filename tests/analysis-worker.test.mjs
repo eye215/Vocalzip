@@ -81,7 +81,7 @@ before(async () => {
   await admin.query('create database ' + dbName);
   db = new pg.Client({connectionString:DB.replace(/\/[^/]*$/, '/' + dbName)}); await db.connect();
   for (const f of ['billing/tests/sql-setup.sql', 'supabase/tests/app-tables.sql', 'billing/migrations/20261104_billing_cloud.sql', 'supabase/migrations/20261106_keep_history.sql', 'supabase/migrations/20261106_song_text_cloud_sync.sql', 'supabase/migrations/20261106_song_text_tombstones.sql',
-    'supabase/migrations/20261106_vzip_song_stt_quota.sql', 'supabase/migrations/20261108_vzip_song_stt_no_limit_usage.sql', 'supabase/migrations/20261109_server_analysis_jobs.sql'])
+    'supabase/migrations/20261106_vzip_song_stt_quota.sql', 'supabase/migrations/20261108_vzip_song_stt_no_limit_usage.sql', 'supabase/migrations/20261109_server_analysis_jobs.sql', 'supabase/migrations/20261110_wake_analysis_worker.sql'])
     // Roles are server-wide: a second local run must not fail on "already exists".
     await db.query(readFileSync(ROOT + f, 'utf8').replace(/create role (anon|authenticated) nologin;/g, (_, r) => "do $$ begin if not exists (select 1 from pg_roles where rolname = '" + r + "') then create role " + r + " nologin; end if; end $$;"));
   await db.query("update public.vocal_data set payload = $1 where user_id = $2", [JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}, {id:'s2', title:'Defying Gravity', lyrics:LYRICS_B}], lessons:[], practices:[], assignments:[], categories:[]}), U1]);
@@ -259,4 +259,42 @@ test('An unreachable speech-recognition service is recorded with its cause, and 
   try { await work(); } finally { process.env.OPENAI_BASE = keep; }
   const j = (await jobs('sttnet')).song;
   assert.equal(j.last_error, 'speech recognition network error: connection refused'); assert.equal(Number(j.cost_usd), 0);
+});
+
+test('Supabase wakes the GitHub worker only when recordings wait, no worker is busy and none was just started', {skip}, async () => {
+  // Stand-ins for Supabase's pg_net and Vault (plain Postgres has neither).
+  await db.query(`create schema if not exists vault; create schema if not exists net;
+    create table if not exists net.calls (id bigserial primary key, url text, body jsonb, headers jsonb);
+    create table if not exists net._http_response (id bigint, status_code int, content text, error_msg text);
+    create or replace function net.http_post(url text, body jsonb, headers jsonb) returns bigint language sql as $f$ insert into net.calls (url, body, headers) values (url, body, headers) returning id $f$;
+    create table if not exists vault.stub (name text, decrypted_secret text);
+    create or replace view vault.decrypted_secrets as select * from vault.stub;`);
+  await db.query("update public.vocal_analysis_jobs set status = 'done', locked_at = null, locked_by = null");
+  const wake = async () => (await db.query('select public.vzip_wake_worker() as r')).rows[0].r;
+  const calls = async () => (await db.query('select * from net.calls order by id')).rows;
+  assert.equal(await wake(), 'idle');
+  await media('wake-1', {name:'새 녹음', r2Key:'u/' + U1 + '/wake-1/original.wav', type:'audio/wav'});
+  assert.equal(await wake(), 'no github_actions_token in Vault');
+  assert.equal((await calls()).length, 0);
+  await db.query("insert into vault.stub values ('github_actions_token', 'gh-test-token')");
+  assert.match(await wake(), /^started \(\d+ waiting\)$/);
+  const [call] = await calls();
+  assert.equal(call.url, 'https://api.github.com/repos/eye215/Vocalzip/actions/workflows/analysis-worker.yml/dispatches');
+  assert.deepEqual(call.body, {ref:'main'});
+  assert.equal(call.headers.Authorization, 'Bearer gh-test-token');
+  assert.equal(await wake(), 'recently started'); // no second request within 15 minutes
+  await db.query("update public.vzip_worker_wake set last_at = now() - interval '20 minutes'");
+  await db.query("update public.vocal_analysis_jobs set status = 'running', locked_at = now(), locked_by = 'gh-run' where media_id = 'wake-1' and kind = 'vocal'");
+  assert.equal(await wake(), 'busy'); // a worker is on it
+  await db.query("update public.vocal_analysis_jobs set locked_by = 'retry-wait' where media_id = 'wake-1' and kind = 'vocal'");
+  assert.match(await wake(), /^started/); // a file waiting to retry is not a busy worker
+  assert.equal((await calls()).length, 2);
+  // The status shows GitHub's answer for the last request.
+  await db.query('insert into net._http_response (id, status_code) select last_request, 204 from public.vzip_worker_wake');
+  const {rows:[st]} = await db.query('select * from public.vzip_wake_worker_status()');
+  assert.equal(st.github_status, 204);
+  assert.match(st.last_result, /^started/);
+  // The app's roles cannot call it or read the table.
+  const {rows:[perm]} = await db.query("select has_function_privilege('authenticated', 'public.vzip_wake_worker(boolean)', 'execute') as f, has_table_privilege('authenticated', 'public.vzip_worker_wake', 'select') as t");
+  assert.deepEqual(perm, {f:false, t:false});
 });
