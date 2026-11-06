@@ -90,6 +90,7 @@ test('account changes invalidate a pending operation and clear in-memory suggest
 });
 test('retry of manually unassigned cached result still requests paid consent',async()=>{
  const b=browser(),item={id:'m'};let confirmations=0;
+ b.localStorage.setItem('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}]));
  b.api.state.items=[item];b.api.state.chosen.add('m');b.api.setResult(item,{candidate:null,status:'미분류'});
  b.window.VZ.confirm=async()=>{confirmations++;return false};
  await b.api.analyze({querySelector:()=>({})});assert.equal(confirmations,1);assert.equal(b.counts().paid,0);
@@ -133,6 +134,7 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
 });
 test('bulk paid analysis must be reduced to one selected recording',async()=>{
  const b=browser(),errors=[];
+ b.localStorage.setItem('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}]));
  b.window.VZ.toast=message=>errors.push(message);
  b.api.state.items=[{id:'a'},{id:'b'}];b.api.state.chosen.add('a');b.api.state.chosen.add('b');
  await b.api.analyze({querySelector:()=>({})});
