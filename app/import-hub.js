@@ -250,7 +250,7 @@ async function importRows(rows) {
 }
 
 /* ---------- view ---------- */
-VZ.route('import-hub', {title:'기존 자료 가져오기', back:true, tab:'record', noAutoRefresh:true,
+VZ.route('import-hub', {title:'기존 자료 가져오기', back:true, tab:'library', noAutoRefresh:true,
   render() { return '<div data-hub></div>'; },
   mount(main) {
     VZ.setGuard(() => hub.phase === 'review' && hub.rows.some(r => r.selected) ? '분석한 파일을 아직 가져오지 않았어요. 나가면 선택이 사라져요. 나갈까요?' : hub.phase === 'importing' ? '가져오는 중이에요. 나가면 남은 파일은 가져오지 않아요. 나갈까요?' : '');

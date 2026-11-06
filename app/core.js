@@ -190,6 +190,8 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
   return api;
 };
 VZ.closeSheets = () => [...sheets].forEach(s => s.close());
+/** 캘린더 tab: one switch between the calendar, the lesson list and homework. */
+VZ.calendarSwitch = current => '<nav class="seg subnav" aria-label="캘린더 보기">' + [['calendar', '캘린더'], ['lessons', '레슨'], ['homework', '숙제']].map(([k, t]) => '<a href="#/' + k + '"' + (k === current ? ' aria-current="page"' : '') + '>' + t + '</a>').join('') + '</nav>';
 VZ.confirm = (title, message, {ok = '확인', danger} = {}) => new Promise(resolve => {
   let result = false;
   VZ.sheet({title, label:title, body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',

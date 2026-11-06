@@ -103,7 +103,7 @@ function confidence(r) {
 }
 
 /* ---------- view ---------- */
-VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefresh:true,
+VZ.route('analysis', {title:'보컬 분석', back:true, tab:'library', noAutoRefresh:true,
   render() { return '<div data-ana><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>'; },
   async mount(main, r) {
     const id = r.params[0], my = ++job, host = main.querySelector('[data-ana]');
