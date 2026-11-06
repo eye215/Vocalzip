@@ -1863,3 +1863,32 @@ test('Every control on the main screens answers a 44pt tap (iPhone)', async ({pa
   }
   expect(bad).toEqual({});
 });
+
+test('A practice record made by an import follows its file: new day and song move it, 공연 asks to take it out of practice time', async ({page}) => {
+  const seed = legacy();
+  seed.practices.push({id:'auto-m2', date:day(-1), minutes:3, manualMinutes:3, mediaSeconds:0, mediaIds:['m2'], practiceMode:'song', technique:[], songId:'s1', rating:0, memo:'', completed:[], importedFrom:'files'});
+  await boot(page, {seed});
+  const practice = id => page.evaluate(i => VZ.db.practices.find(p => p.id === i) || null, id);
+  await page.evaluate(async () => { const m = (await VZ.media.list()).find(x => x.id === 'm2'); VZ.editMedia(m); });
+  const sheet = page.getByRole('dialog', {name:'녹음 정보'});
+  await sheet.locator('input[name="date"]').fill('2026-01-24');
+  await sheet.locator('select[name="song"]').selectOption('s2');
+  await sheet.getByRole('radio', {name:'공연'}).click();
+  await sheet.getByRole('button', {name:'저장'}).click();
+  await expect.poll(async () => (await practice('auto-m2'))?.date).toBe('2026-01-24');
+  expect((await practice('auto-m2')).songId).toBe('s2');
+  const ask = page.getByRole('dialog', {name:'연습 기록도 정리할까요?'});
+  await expect(ask).toContainText('녹음 1개');
+  await ask.getByRole('button', {name:'연습 기록 지우기'}).click();
+  await expect.poll(() => practice('auto-m2')).toBeNull();
+  expect(await practice('p1')).not.toBeNull(); // a record the user made is never touched
+  expect(page.__errors).toEqual([]);
+});
+
+test('Files edited before the follow rule existed are lined up once after start', async ({page}) => {
+  const seed = legacy();
+  seed.practices.push({id:'auto-old', date:'2026-11-07', minutes:3, mediaIds:['m2'], practiceMode:'song', technique:[], songId:'s1', rating:0, memo:'', completed:[], importedFrom:'hub'});
+  await boot(page, {seed});
+  await expect.poll(() => page.evaluate(() => VZ.db.practices.find(p => p.id === 'auto-old').date), {timeout:8000}).toBe(await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(x => x.id === 'm2'))));
+  expect(page.__errors).toEqual([]);
+});
