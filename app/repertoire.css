@@ -1,0 +1,10 @@
+/* Scoped Phase 8C styles; no changes to common design tokens. */
+.archive-toolbar{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin-bottom:12px}
+.archive-toolbar .field{margin:0;min-width:0}.archive-card-meta{display:block;font-size:12px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:4px}
+.archive-song{margin-bottom:14px}.archive-song p:empty{display:none}.archive-actions{display:flex;flex-wrap:wrap;gap:6px}.archive-note{white-space:pre-wrap;overflow-wrap:anywhere}
+.archive-page{min-width:0}.archive-page .item-main{overflow-wrap:anywhere}.archive-page select,.archive-form input,.archive-form select{max-width:100%;min-width:0}
+.archive-page>.btn{margin-top:12px}.archive-sheet{padding-bottom:calc(20px + env(safe-area-inset-bottom));overscroll-behavior:contain}
+.archive-full{height:92dvh}.archive-form{min-width:0}.archive-form .two{grid-template-columns:repeat(2,minmax(0,1fr))}.archive-error{color:var(--danger);white-space:pre-wrap}
+.archive-performance .avatar img{width:40px;height:40px;border-radius:10px;object-fit:cover}.archive-asset{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.archive-asset strong{overflow-wrap:anywhere}.archive-asset .archive-actions{grid-column:1/-1}.archive-page .btn,.archive-song .btn,.archive-form button,.archive-page .sec button{min-height:44px;min-width:44px}.archive-page video,.archive-page img{max-width:100%;max-height:50vh;object-fit:contain}
+@media(max-width:360px){.archive-toolbar{grid-template-columns:1fr}.archive-page .item{flex-wrap:wrap}.archive-page .item-main{flex-basis:100%}}

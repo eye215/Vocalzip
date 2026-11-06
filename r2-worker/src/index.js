@@ -26,8 +26,9 @@
 const PART_SIZE = 8 * 1024 * 1024; // R2 needs ≥5 MiB for every part but the last.
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const EXT = /^[a-z0-9]{1,8}$/;
-// Recordings, plus PDF scores kept with a song (still only in the caller's own folder).
+// Recordings and song PDF scores retain their existing upload contract.
 const TYPE = /^(?:(audio|video)\/[A-Za-z0-9.+-]{1,60}|application\/pdf)$/;
+const ARCHIVE_TYPES = new Set(['image/jpeg','image/png','image/webp','image/gif','image/heic','application/pdf','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document']);
 const enc = new TextEncoder();
 
 export default {
@@ -117,13 +118,15 @@ async function route(request, env) {
   if (path === '/v1/uploads' && method === 'POST') {
     const body = await readJson(request);
     if (!ID.test(String(body.mediaId || ''))) fail(400, 'invalid mediaId');
-    if (!TYPE.test(String(body.contentType || ''))) fail(400, 'only audio, video or PDF files');
+    const archive = body.purpose === 'performance';
+    if (!TYPE.test(String(body.contentType || '')) && !(archive && ARCHIVE_TYPES.has(body.contentType))) fail(400, 'unsupported file type');
+    if (archive && !String(body.mediaId).startsWith('performance-')) fail(400, 'invalid performance asset id');
     const size = Number(body.size), max = Number(env.MAX_FILE_BYTES) || 2 * 1024 ** 3;
     if (!(size > 0) || size > max) fail(413, 'file is empty or too large');
     const ext = String(body.ext || 'bin').toLowerCase();
     if (!EXT.test(ext)) fail(400, 'invalid extension');
     const key = 'u/' + uid + '/' + body.mediaId + '/original.' + ext;
-    const upload = await env.MEDIA.createMultipartUpload(key, {httpMetadata: {contentType: body.contentType}, customMetadata: {owner: uid, mediaId: body.mediaId, size: String(size)}});
+    const upload = await env.MEDIA.createMultipartUpload(key, {httpMetadata: {contentType: body.contentType}, customMetadata: {owner: uid, mediaId: body.mediaId, size: String(size), ...(archive ? {purpose:'performance'} : {})}});
     return json({key, uploadId: upload.uploadId, partSize: PART_SIZE});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)\/parts\/(\d{1,5})$/)) && method === 'PUT') {
@@ -222,6 +225,8 @@ async function serve(request, env, key) {
 function baseHeaders(obj, length) {
   const h = new Headers();
   obj.writeHttpMetadata?.(h);
+  h.set('x-content-type-options', 'nosniff');
+  if (obj.customMetadata?.purpose === 'performance' && !/^(image|video|audio)\//.test(h.get('content-type') || '')) h.set('content-disposition', 'attachment');
   h.set('etag', obj.httpEtag); h.set('accept-ranges', 'bytes'); h.set('content-length', String(length));
   h.set('cache-control', 'private, max-age=3600');
   return h;

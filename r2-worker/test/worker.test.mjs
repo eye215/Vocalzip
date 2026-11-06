@@ -126,7 +126,7 @@ test('a user can never read, sign, upload into or delete another user\'s files',
 test('rejects non-media types, bad ids and oversized parts; delete removes the file', async () => {
   const auth = await token(ALICE);
   assert.equal((await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'a', contentType:'text/html', size:3, ext:'html'}})).status, 400);
-  // PDF scores are accepted, in the caller's own folder like recordings.
+  // Song PDF uploads remain supported alongside performance attachments.
   const pdf = await (await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'score-1', contentType:'application/pdf', size:3, ext:'pdf'}})).json();
   assert.match(pdf.key, /^u\/[^/]+\/score-1\/original\.pdf$/);
   assert.equal((await call('/v1/uploads', {method:'POST', auth, body:{mediaId:'../x', contentType:'audio/mp4', size:3, ext:'m4a'}})).status, 400);
@@ -181,4 +181,19 @@ test('30-second clip endpoint is owner-only, rejects invalid intervals and is sa
   assert.equal((await call(endpoint,{auth:alice})).status,503);
   // Authentication checks must happen even when the optional transform binding is absent.
   assert.equal((await call('/v1/clip/'+up.key.replace(/original\.m4a$/,'original.wav'),{auth:bob})).status,403);
+});
+
+test('performance attachments use private R2 and reject active content',async()=>{
+ const alice=await token(ALICE),bob=await token(BOB),bytes=new TextEncoder().encode('%PDF-1.4 archive');
+ const res=await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-test',contentType:'application/pdf',size:bytes.length,ext:'pdf',purpose:'performance'}});
+ assert.equal(res.status,200);const start=await res.json(),q='?key='+encodeURIComponent(start.key);
+ const part=await (await call('/v1/uploads/'+start.uploadId+'/parts/1'+q,{method:'PUT',auth:alice,body:bytes})).json();
+ assert.equal((await call('/v1/uploads/'+start.uploadId+'/complete'+q,{method:'POST',auth:alice,body:{parts:[part]}})).status,200);
+ for(const method of ['GET','DELETE'])assert.equal((await call('/v1/media/'+start.key,{method,auth:bob})).status,403);
+ assert.equal((await call('/v1/sign',{method:'POST',auth:bob,body:{key:start.key}})).status,403);
+ const own=await call('/v1/media/'+start.key,{auth:alice});assert.equal(own.status,200);assert.equal(own.headers.get('content-disposition'),'attachment');assert.equal(own.headers.get('x-content-type-options'),'nosniff');
+ for(const contentType of ['text/html','image/svg+xml','application/javascript'])assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-bad',purpose:'performance',contentType,size:10,ext:'bin'}})).status,400);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'regular',purpose:'performance',contentType:'image/png',size:10,ext:'png'}})).status,400);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-no-purpose',contentType:'image/png',size:10,ext:'png'}})).status,400);
+ assert.equal((await call('/v1/media/'+start.key,{method:'DELETE',auth:alice})).status,200);
 });
