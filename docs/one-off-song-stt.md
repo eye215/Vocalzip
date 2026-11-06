@@ -51,3 +51,26 @@ GitHub 브랜치 `feat/stt-song-suggestions-poc` / 초안 PR #73. JS 구문 파�
 - M4A의 앞 3~5MB를 무조건 Range로 자르지 않음. 컨테이너 인덱스 구조에 따라 오히려 재생 오류가 날 수 있음.
 - 1개씩 순차 처리, 요청 취소용 AbortController, 파일 간 UI 양보, AudioContext 종료·blob URL revoke, 로컬 완료 결과 캐시 및 선택 목록 체크포인트 추가.
 - **제약:** 이 경로는 짧은 파일에 대해서는 여전히 전체 디코딩을 수행함. 실기기 메모리 프로파일·20개 연속 분석 테스트는 남아 있으며, **5분 녹음의 30초 서버 구간 추출 기능은 구현하지 않음**. 대량 마이그레이션 전 해당 분기 개선 또는 Mac 실행이 필요.
+
+
+## 3~5분 R2 녹음: Cloudflare 서버에서 30초 구간만 추출 (추가 구현)
+
+**개발 코드:** `r2-worker/src/index.js`의 인증된 `GET /v1/clip/u/<uid>/<mediaId>/original.m4a?time=20&duration=30` 엔드포인트. `r2-worker/wrangler.toml`에 `[media] binding = "MEDIA_TRANSFORM"` 추가. 기존 R2 바인딩 `MEDIA`와는 다른 별도 바인딩.
+
+- Worker가 사용자 JWT를 검증한 뒤 해당 사용자 소유 R2 원본을 **읽기만 함**.
+- Cloudflare Media Transformations의 `input(...).output({mode:"audio",time:"20s",duration:"30s",format:"m4a"})`를 통해 **Cloudflare 쪽에서 30초 M4A를 생성**, 브라우저에는 30초짜리 파일만 반환.
+- 앱 `r2-storage.js`의 `VzipR2.clip(key)`가 bearer token으로 클립을 요청. `app/song-suggestions.js`가 `storageProvider:'r2'` 파일에서는 클립을 그대로 Supabase STT 함수로 전송함. **Safari에서 3분 파일 전체 다운로드/PCM 디코딩 안 함.**
+- Supabase `vzip-song-stt` 함수는 WAV와 M4A를 모두 받도록 수정했고, 버전 2로 배포됨. **키가 없으면 비활성화/무과금** 상태임.
+- 비-R2 또는 Cloudflare 변환을 지원하지 않는 파일은 자동으로 원본 전체 STT에 보내지 않음. (현행 80초/메모리 제한, 실패 표시.)
+
+### 운영 준비
+
+1. Cloudflare 계정에서 **Media Transformations beta binding** 지원 여부와 요금/사용량 확인.
+2. 별도 브랜치를 검토해 Worker를 배포해야 `/v1/clip/`이 실제 사용 가능함. **GitHub PR만 만든 상태로는 Worker가 자동 배포되지 않음**. GitHub `.github/workflows/r2-worker.yml`은 현재 테스트 워크플로이며 배포가 아님.
+3. 아이폰 Safari에서 실제 **3분짜리 M4A** 1개를 선택해 클립 다운로드 정상 여부 검증. Cloudflare Media Transformations 문서의 기본 지원 입력은 영상 MP4이며, **오디오 전용 M4A 변환은 실기기 검증 필요**. 미지원이면 서버 FFmpeg 기반 별도 변환이 필요함.
+4. 3~5개 실파일로 가사 인식 및 기존 곡 후보 품질 검증, 20개 연속 안정성 테스트.
+5. OpenAI 별도 API 프로젝트와 사용 한도, 서버 Secret 세팅 후 사용자 승인한 파일만 STT 실행. 완료 시 `STT_ENABLED=false`.
+
+### 주의
+
+Cloudflare media transform API 자체도 무료라고 단정하지 마세요. 베타 제한, 계정 플랜, 트랜스폼 사용량에 따라 과금 정책이 변경될 수 있습니다. **API 키 설정·실파일 검증·Worker 배포 전까지 실제 STT 기능은 사용 불가**.
