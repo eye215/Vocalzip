@@ -63,11 +63,12 @@ Deno.serve(async (req:Request) => {
     const wav=/\.wav$/i.test(file.name)&&['audio/wav','audio/x-wav','application/octet-stream'].includes(file.type);
     const m4a=/\.m4a$/i.test(file.name)&&['audio/mp4','audio/x-m4a','application/octet-stream'].includes(file.type);
     if(!wav&&!m4a)return reply(req,415,{error:'30초 WAV/M4A 클립만 지원해요.'});
+    const transcriptOnly=String(form.get('mode')||'')==='transcript-only';
     const raw=String(form.get('songs')||'');
     if(raw.length>40_000)return reply(req,400,{error:'곡 목록이 너무 커요.'});
     let songs: Array<{id:string;title:string;show?:string}>=[];
     try{const parsed=JSON.parse(raw);if(Array.isArray(parsed)) songs=parsed.slice(0,MAX_SONGS).filter(s=>s&&typeof s.id==='string'&&typeof s.title==='string').map(s=>({id:s.id.slice(0,100),title:s.title.slice(0,140),show:String(s.show||'').slice(0,120)}))}catch{}
-    if(!songs.length)return reply(req,400,{error:'등록된 곡이 없어요. 내 곡에 곡을 먼저 등록해 주세요.'});
+    if(!transcriptOnly&&!songs.length)return reply(req,400,{error:'등록된 곡이 없어요. 내 곡에 곡을 먼저 등록해 주세요.'});
     // Reserve an attempt atomically in Postgres BEFORE any paid OpenAI request.
     // Fail closed if migration/function is missing, quota is exceeded, or DB is unavailable.
     const authenticatedDb=createClient(SUPABASE_URL,ANON,{
@@ -87,6 +88,9 @@ Deno.serve(async (req:Request) => {
     }
     const stt=await transcribed.json();
     const transcript=String(stt.text||'').slice(0,1600);
+    // Cost-saving mode: only one transcription call. Matching happens on-device
+    // against previously approved reference transcripts; no GPT request at all.
+    if(transcriptOnly)return reply(req,200,{transcript,mode:'transcript-only'});
     if(transcript.trim().length<9)return reply(req,200,{transcript,songId:null,reason:'식별할 만큼 가사가 인식되지 않았어요.',level:'식별 불가'});
     const candidateList=songs.map(s=>({id:s.id,title:s.title,show:s.show}));
     // Closed-catalog identification; do not invent titles or return full copyrighted lyrics.

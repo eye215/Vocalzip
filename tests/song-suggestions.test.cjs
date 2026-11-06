@@ -3,13 +3,13 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const {stripTypeScriptTypes}=require('node:module');
 
-function edge(env={},user='alice',quota={data:true,error:null}){
+function edge(env={},user='alice',quota={data:true,error:null},apiText=''){
  let handler,calls=0;
  const code=fs.readFileSync('supabase/functions/vzip-song-stt/index.ts','utf8').replace(/^import .*;$/m,'');
  const context={Request,Response,Blob,File,FormData,Uint8Array,AbortSignal,console:{error(){}},
   Deno:{env:{get:k=>env[k]},serve:fn=>handler=fn},
   createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async()=>quota}),
-  fetch:async()=>{calls++;return Response.json({text:''})}};
+  fetch:async()=>{calls++;return Response.json({text:apiText})}};
  vm.runInNewContext(stripTypeScriptTypes(code),context);
  return {call:handler,calls:()=>calls};
 }
@@ -33,6 +33,18 @@ test('null catalog entries do not discard valid songs',async()=>{
  assert.equal((await e.call(request('POST',form))).status,200);assert.equal(e.calls(),1);
 });
 
+test('transcript-only matches free local pipeline and NEVER calls GPT',async()=>{
+ const e=edge(enabled,'alice',{data:true,error:null},'오늘 밤 저 별빛 아래서 너와 춤추고 싶어');
+ const form=new FormData();
+ form.set('file',new File([new Uint8Array(1024)],'clip.wav',{type:'audio/wav'}));
+ form.set('mode','transcript-only');
+ const response=await e.call(request('POST',form));
+ assert.equal(response.status,200);
+ const json=await response.json();
+ assert.equal(json.mode,'transcript-only');
+ assert.equal(json.transcript,'오늘 밤 저 별빛 아래서 너와 춤추고 싶어');
+ assert.equal(e.calls(),1);
+});
 test('database quota exhaustion and failures never issue paid model requests',async()=>{
  for(const [quota,expectedStatus] of [
   [{data:false,error:null},429],
@@ -78,6 +90,7 @@ test('account changes invalidate a pending operation and clear in-memory suggest
 });
 test('retry of manually unassigned cached result still requests paid consent',async()=>{
  const b=browser(),item={id:'m'};let confirmations=0;
+ b.localStorage.setItem('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}]));
  b.api.state.items=[item];b.api.state.chosen.add('m');b.api.setResult(item,{candidate:null,status:'미분류'});
  b.window.VZ.confirm=async()=>{confirmations++;return false};
  await b.api.analyze({querySelector:()=>({})});assert.equal(confirmations,1);assert.equal(b.counts().paid,0);
@@ -121,6 +134,7 @@ test('undo skips failed writes instead of modifying an unconfirmed assignment',a
 });
 test('bulk paid analysis must be reduced to one selected recording',async()=>{
  const b=browser(),errors=[];
+ b.localStorage.setItem('vzip_song_stt_references_v1:alice',JSON.stringify([{songId:'s1',transcript:'첫 기준 가사 열다섯 글자 이상의 내용입니다'}]));
  b.window.VZ.toast=message=>errors.push(message);
  b.api.state.items=[{id:'a'},{id:'b'}];b.api.state.chosen.add('a');b.api.state.chosen.add('b');
  await b.api.analyze({querySelector:()=>({})});
