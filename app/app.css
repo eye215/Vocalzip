@@ -485,3 +485,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .score-row{align-items:center}
 .score-actions{display:flex;gap:2px;flex:none}
 .score-actions .icon-btn{width:40px;height:40px}
+/* 맞춤 연습 추천 */
+.tip{margin-bottom:8px;background:linear-gradient(135deg,var(--surface),var(--accent-soft))}
+.tip-k{font-size:13px;font-weight:700;color:var(--accent)}
+.tip-name{margin:8px 0 4px;font-size:18px}
+.tip-steps{margin:0 0 10px;padding-left:20px;font-size:14px;line-height:1.5;color:var(--ink-2)}
+.tip-note,.tip-empty{margin:4px 4px 12px}
