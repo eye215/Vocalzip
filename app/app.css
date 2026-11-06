@@ -546,3 +546,5 @@ body:has(.sel-bar) .toast{bottom:calc(var(--nav-h) + var(--safe-b) + 140px)}
 /* 10-7 touch audit leftovers: section-header actions and chart rows that are links answer a 44pt tap too. */
 h2.sec a,h2.sec button{display:inline-flex;align-items:center;justify-content:flex-end;min-width:44px}
 .bars a.bar{min-height:44px}
+/* Row links made of two text lines: WebKit renders them at 43.5px, so they get an explicit 44pt floor. */
+main a.grow,main a.item-main{display:flex;flex-direction:column;justify-content:center;min-height:44px}
