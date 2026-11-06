@@ -6,8 +6,8 @@ if (!VZ || !M) return;
 const esc=VZ.esc;
 const API='https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vzip-song-stt';
 const cachePrefix='vzip_song_suggest_v1:';
-const MAX_BYTES=12*1024*1024, MAX_BATCH=120;
-const state={items:[],chosen:new Set(),results:new Map(),running:false,cancel:false};
+const MAX_BYTES=12*1024*1024, PAGE_SIZE=40;
+const state={items:[],chosen:new Set(),results:new Map(),running:false,cancel:false,shown:PAGE_SIZE};
 const plain=s=>String(s||'').toLocaleLowerCase().normalize('NFKC')
  .replace(/20\d\d[-_. ](?:0?[1-9]|1[0-2])[-_. ](?:[0-2]?\d|3[01])/g,' ')
  .replace(/\.(?:m4a|wav|mp3|aac|flac|ogg|mp4)$/i,' ')
@@ -93,7 +93,7 @@ function draw(main){
  if(!list)return;
  const rows=state.items;
  list.replaceChildren();
- for(const item of rows){
+ for(const item of rows.slice(0,state.shown)){
   const result=resultFor(item);
   const card=document.createElement('article');card.className='card';card.style.cssText='margin-bottom:8px;padding:12px';
   const box=document.createElement('input');box.type='checkbox';box.checked=state.chosen.has(item.id);box.setAttribute('aria-label',M.label(item)+' 선택');
@@ -113,6 +113,7 @@ function draw(main){
   };card.append(picker);
   list.append(card);
  }
+ const more=root.querySelector('[data-more]');if(more){more.hidden=state.shown>=rows.length;more.textContent='더 보기 ('+Math.min(state.shown,rows.length)+'/'+rows.length+')'}
  controls(main);
 }
 async function analyze(main){
@@ -161,14 +162,15 @@ async function apply(main){
  }
 }
 VZ.route('song-suggest',{title:'AI 곡 추천',back:true,tab:'record',render(){
- return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석하고, 선택한 음원만 30초 STT를 실행해요. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div></section>';
+ return '<section data-suggest><div class="card"><h2>🎵 미분류 녹음 곡 추천</h2><p class="small muted">파일명은 무료로 분석하고, 선택한 음원만 30초 STT를 실행해요. 노래 인식은 틀릴 수 있으니 확인한 뒤에만 저장돼요.</p><p class="small muted" data-counter></p><div class="btn-row"><button class="btn ghost" type="button" data-select-all>전체 선택</button><button class="btn ghost" type="button" data-clear>선택 해제</button></div><div class="btn-row"><button class="btn" type="button" data-analyze>AI 분석 시작</button><button class="btn secondary" type="button" data-apply>추천대로 곡 지정</button></div><button class="btn ghost" type="button" data-stop hidden>분석 중단</button><p role="status" class="small muted" data-progress>목록 확인 중…</p></div><div data-suggest-list></div><button class="btn ghost block" type="button" data-more hidden>더 보기</button></section>';
  },async mount(main){
-  const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.running=false;state.cancel=false;
+  const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.running=false;state.cancel=false;state.shown=PAGE_SIZE;
   state.items=(await M.list(true).catch(()=>[])).filter(eligible);
   if(!main.isConnected)return;
   root.querySelector('[data-progress]').textContent=state.items.length+'개 곡 미지정 음원';
-  root.querySelector('[data-select-all]').onclick=()=>{state.chosen=new Set(state.items.slice(0,MAX_BATCH).map(x=>x.id));draw(main);if(state.items.length>MAX_BATCH)VZ.toast('한 번에 최대 '+MAX_BATCH+'개를 선택해요.')};
+  root.querySelector('[data-select-all]').onclick=()=>{state.chosen=new Set(state.items.map(x=>x.id));draw(main)};
   root.querySelector('[data-clear]').onclick=()=>{state.chosen.clear();draw(main)};
+  root.querySelector('[data-more]').onclick=()=>{state.shown+=PAGE_SIZE;draw(main)};
   root.querySelector('[data-stop]').onclick=()=>{state.cancel=true;root.querySelector('[data-progress]').textContent='현재 분석이 끝나면 중단합니다.'};
   root.querySelector('[data-analyze]').onclick=()=>analyze(main);
   root.querySelector('[data-apply]').onclick=()=>apply(main);
