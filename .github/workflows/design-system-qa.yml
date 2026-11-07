@@ -1,0 +1,45 @@
+name: VOCAL.zip design system visual QA
+on:
+  pull_request:
+    paths:
+      - 'design-system/**'
+      - 'tests/design-system*.spec.cjs'
+      - 'app/views-main.js'
+      - 'app/app.css'
+      - 'index.html'
+      - '.github/workflows/design-system-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  design-system:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - name: Verify design tokens and Figma manifest
+        run: node design-system/check-figma-manifest.mjs
+      - name: Install Playwright Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Test widget responsive matrix (320, 390, 430px)
+        run: npx playwright test tests/design-system.spec.cjs --project=chromium-mobile --project=webkit-mobile --workers=2
+      - name: Test Phase 19 pilot when present
+        shell: bash
+        run: |
+          if [[ -f tests/design-system-pilot.spec.cjs ]]; then
+            npx playwright test tests/design-system-pilot.spec.cjs --project=chromium-mobile --project=webkit-mobile --workers=2
+          else
+            echo "Phase 19 pilot tests not present on this branch"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: design-system-viewport-screenshots-and-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
