@@ -31,7 +31,13 @@ export function createHeroCard({ title = "다가오는 무대", event = "뮤지�
   const copy = el("div");
   textRow(copy,"h2","vz-hero__title",event);
   textRow(copy,"p","vz-hero__subtitle",song);
-  main.append(copy,textRow(el("div"),"strong","vz-hero__count","D-" + Math.max(0,daysLeft)));
+  const visual=el("div","vz-hero__visual");
+  const jewel=el("div","vz-hero__jewel");
+  const glyph=el("i","ph-fill ph-microphone");
+  glyph.setAttribute("aria-hidden","true");
+  jewel.append(glyph);
+  visual.append(jewel,textRow(el("div"),"strong","vz-hero__count","D-" + Math.max(0,daysLeft)));
+  main.append(copy,visual);
   card.append(main);
   const sub=el("div","vz-hero__subrow");
   textRow(sub,"span","",lesson);
