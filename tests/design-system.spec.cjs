@@ -38,7 +38,7 @@ test.describe('VOCAL.zip design-system standalone preview',()=>{
     await page.getByRole('button',{name:'첫 진입 목표 설정'}).click();
     await expect(page.getByRole('dialog',{name:'오늘의 목표를 설정하세요'})).toBeVisible();
     await page.getByRole('dialog').getByRole('button',{name:'오늘은 쉴래요'}).click();
-    await expect(page.getByText('오늘은 쉬어가는 날')).toBeVisible();
+    await expect(page.locator('.vz-goal-card').getByText('오늘은 쉬어가는 날')).toBeVisible();
     await page.getByRole('button',{name:'첫 진입 목표 설정'}).click();
     await page.getByRole('dialog').getByRole('button',{name:'나중에 정할게요'}).click();
     await expect(page.getByText('나중에 오늘의 목표를 정해보세요.')).toBeVisible();
