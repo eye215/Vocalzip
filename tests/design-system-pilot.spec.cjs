@@ -3,7 +3,7 @@ const KEY='vocal-zip_mvp_v1';
 const seed=()=>({
   categories:[],
   songs:[{id:'song-next',title:'Defying Gravity',show:'Wicked'}],
-  lessons:[{id:'lesson-next',date:'2099-11-10',startTime:'15:00',endTime:'16:00',teacher:'보컬 선생님',place:'제1연습실',songId:'song-next',feedback:''}],
+  lessons:[{id:'lesson-next',status:'scheduled',date:'2099-11-10',startTime:'15:00',endTime:'16:00',teacher:'보컬 선생님',place:'제1연습실',songId:'song-next',feedback:''}],
   practices:[],assignments:[],comparisonReports:[]
 });
 const sdk="window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'archive-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'test-token'}}})},from:table=>{const c={};let method='select';for(const k of ['select','eq','is','order','range','limit','in','upsert','update','delete','maybeSingle'])c[k]=()=>c;for(const k of ['upsert','update'])c[k]=v=>{method=k;if(table==='vocal_data'){(window.__archiveWrites||=[]).push(v.payload);window.__archiveRemote=v.payload}return c};c.then=r=>r({data:table==='vocal_data'&&method==='select'&&window.__archiveRemote?{payload:window.__archiveRemote,updated_at:null}:method==='update'?[{user_id:'archive-user'}]:[],error:null});return c},storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/file.wav'}})})}})};";
