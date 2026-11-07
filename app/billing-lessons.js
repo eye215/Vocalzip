@@ -8,18 +8,26 @@ const VZ = window.VZ, esc = VZ.esc;
 const AUTH_KEY = 'sb-chxnbtiyuyhiywzeshis-auth-token';
 const pad = n => String(n).padStart(2, '0');
 function owner() {
+  if(window.VzipAccountScope)return window.vzipCloudSignedIn?.()?'user:'+window.VzipAccountScope.owner:'';
   // Same rule as 레슨비 정산 (billing/store.js): the session's account, else the account the app remembers, else this device.
   try { const data = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'), user = (data?.currentSession || data)?.user; if (user?.id) return 'user:' + user.id; const linked = localStorage.getItem('vzip_cloud_linked_user'); return linked ? 'user:' + linked : 'device'; } catch { return 'device'; }
 }
 /** The billing ledger for this account, or null when billing was never used here. */
 async function ledger() {
-  if (!window.indexedDB) return null;
-  if (indexedDB.databases) { try { if (!(await indexedDB.databases()).some(d => d.name === 'vocalzip_billing_v1')) return null; } catch {} }
-  const db = await new Promise((res, rej) => { const r = indexedDB.open('vocalzip_billing_v1'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(Error('blocked')); });
-  try {
-    if (!db.objectStoreNames.contains('documents')) return null;
-    return await new Promise((res, rej) => { const q = db.transaction('documents', 'readonly').objectStore('documents').get(owner()); q.onsuccess = () => res(q.result || null); q.onerror = () => rej(q.error); });
-  } finally { db.close(); }
+  if(!window.indexedDB)return null;
+  const account=owner(),scope=window.VzipAccountScope;
+  if(scope&&(!account||scope.leaving))return null;
+  async function read(name){
+    if(indexedDB.databases){try{if(!(await indexedDB.databases()).some(d=>d.name===name))return null;}catch{}}
+    const db=await new Promise((res,rej)=>{const r=indexedDB.open(name);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);r.onblocked=()=>rej(Error('blocked'));});
+    try{
+      if(!db.objectStoreNames.contains('documents'))return null;
+      return await new Promise((res,rej)=>{const q=db.transaction('documents').objectStore('documents').get(account);q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error);});
+    }finally{db.close();}
+  }
+  const document=scope?await read(scope.billingDb())||await read('vocalzip_billing_v1'):await read('vocalzip_billing_v1');
+  if(scope&&(!window.vzipCloudSignedIn?.()||scope.leaving||owner()!==account))return null;
+  return document?.owner===account?document:null;
 }
 const endTime = units => { const minutes = Math.max(60, Math.round((Number(units) || 0) / 100 * 60)), m = Math.min(minutes, 23 * 60 + 59); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
 const statusOf = s => ({completed:'done', free:'done', unconfirmed:'done', scheduled:'scheduled', cancelled:'cancelled', noshow:'cancelled'})[s] || 'done';
@@ -119,6 +127,7 @@ VZ.billingLessonBanner = async host => {
  * (billing/?auto=1, optionally with do=deduct|void) and it reports back. One frame at a time. */
 let queue = Promise.resolve();
 function runBilling(query = '') {
+  if(window.VzipAccountScope&&!window.vzipCloudSignedIn?.())return Promise.resolve({deducted:0,error:'not-authenticated'});
   const run = () => new Promise(resolve => {
     const frame = document.createElement('iframe');
     frame.hidden = true; frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1; frame.title = '레슨비 정산';

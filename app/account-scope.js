@@ -21,6 +21,7 @@ const mediaDb=()=> 'vocalzip_media_v1_account_'+encodeURIComponent(owner||'uncla
 const protect=()=>protection ||= Promise.all([...hooks].map(fn=>Promise.resolve().then(fn))).catch(e=>{protection=null;throw e;});
 const scope=window.VzipAccountScope={
  owner,storage,key,mediaDb,
+ billingDb:()=> 'vocalzip_billing_v1_account_'+encodeURIComponent('user:'+owner),
  get leaving(){return leaving;},
  beforeLeave(fn){hooks.add(fn);return()=>hooks.delete(fn);},
  async switchTo(next){

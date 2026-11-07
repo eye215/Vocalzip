@@ -1,5 +1,6 @@
 /* Manual, revision-checked cloud transfer. Never writes the app's auth or data keys. */
 (()=>{'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
 const S=window.VzipBillingStore,B=window.VzipBillingBackup;
 const URL='https://chxnbtiyuyhiywzeshis.supabase.co',KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E";
 function credentials(){
@@ -59,8 +60,8 @@ async function commit(plan){
  * (upload, or download that keeps the previous ledger in recovery). Both changed and different: nothing is written;
  * the user chooses (merge, cloud, this device). Off per account in 백업·동기화. */
 const AKEY='vzip_billing_autosync_v1';
-function autoOn(){try{return JSON.parse(localStorage.getItem(AKEY)||'{}')[S.account.id]!==false}catch{return true}}
-function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(on)delete all[S.account.id];else all[S.account.id]=false;localStorage.setItem(AKEY,JSON.stringify(all))}catch{}}
+function autoOn(){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(window.VzipAccountScope&&!Object.hasOwn(all,S.account.id))return JSON.parse(window.localStorage.getItem(AKEY)||'{}')[S.account.id]!==false;return all[S.account.id]!==false;}catch{return true}}
+function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(window.VzipAccountScope)all[S.account.id]=!!on;else if(on)delete all[S.account.id];else all[S.account.id]=false;localStorage.setItem(AKEY,JSON.stringify(all))}catch{}}
 const empty=state=>!['passes','payments','deductions','adjustments'].some(key=>(state[key]||[]).length);
 async function push(state,expected){
  const payload=B.parse(JSON.stringify(state));

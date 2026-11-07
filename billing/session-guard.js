@@ -32,7 +32,8 @@ async function check(){
   if(!response.ok||data?.user_id!==owner||data?.allowed!==true||!data.playback_token){
    lock('이 로그인의 정산 접근이 종료됐거나 아직 등록되지 않았어요. VOCAL.zip에서 확인해 주세요.');return;
   }
-  if(raw()?.access_token!==session.access_token||scope.leaving)return;
+  if(scope.leaving)return;
+  if(raw()?.access_token!==session.access_token){setTimeout(()=>{void check();},0);return;}
   verifiedOwner=owner;active=true;main.inert=false;gate.hidden=true;document.documentElement.classList.remove('billing-session-locked');settle(true);
  }catch{lock('로그인을 확인하지 못했어요. 기기 자료와 입력은 그대로 두었습니다. 연결 후 다시 확인해 주세요.');}
  finally{checking=false;}
@@ -41,5 +42,5 @@ gate.querySelector('button').onclick=()=>{void check();};
 main.inert=true;
 void check();setInterval(()=>{void check();},20000);
 window.addEventListener('focus',()=>{void check();});
-window.addEventListener('storage',e=>{if(e.key===AUTH||e.key===null){lock('로그인이 바뀌었어요. 계정을 다시 확인하고 있어요…');void check();}});
+window.addEventListener('storage',e=>{if(e.key===AUTH||e.key==='vzip_account_scope_owner_v1'||e.key===null){lock('로그인이 바뀌었어요. 계정을 다시 확인하고 있어요…');void check();}});
 })();

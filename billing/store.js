@@ -22,7 +22,7 @@ let migrated=null;
 async function open(){
  if(window.VzipBillingSession)await window.VzipBillingSession.ready;
  ensureAccount();
- const scoped=!!window.VzipAccountScope,name=scoped?'vocalzip_billing_v1_account_'+encodeURIComponent(initialAccount.id):'vocalzip_billing_v1';
+ const scoped=!!window.VzipAccountScope,name=scoped?window.VzipAccountScope.billingDb():'vocalzip_billing_v1';
  const db=await openNamed(name);
  if(scoped){
   try{
