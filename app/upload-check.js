@@ -30,6 +30,43 @@ function localScan() {
   });
 }
 
+/** Read-only scan of older recording stores, including unclaimed sessions.
+ * Aborting upgrades avoids creating a database when none exists. */
+function inspectOldMediaStore(name) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(name, 1);
+    let missing = false;
+    req.onupgradeneeded = () => { missing = true; req.transaction.abort(); };
+    req.onerror = () => missing && req.error?.name === 'AbortError'
+      ? resolve({exists:false, files:[]})
+      : reject(req.error || Error('이전 녹음 저장소를 열지 못했어요.'));
+    req.onblocked = () => reject(Error('다른 탭이 저장소를 사용하고 있어요.'));
+    req.onsuccess = () => {
+      const db = req.result, files = [];
+      if (!db.objectStoreNames.contains('recordings')) { db.close(); resolve({exists:true, files, missingStore:true}); return; }
+      try {
+        const transaction = db.transaction('recordings', 'readonly');
+        const cursor = transaction.objectStore('recordings').openCursor();
+        cursor.onsuccess = () => {
+          if (!cursor.result) return;
+          const item = cursor.result.value || {};
+          files.push({id:String(item.id || ''),name:String(item.name || ''),
+            recordedDate:String(item.recordedDate || ''),created:Number(item.created || 0),
+            durationSeconds:Number(item.durationSeconds || 0),
+            size:Number(item.blob?.size || item.bytes?.byteLength || item.size || 0),
+            hasData:!!(item.blob || item.bytes)});
+          cursor.result.continue();
+        };
+        transaction.oncomplete = () => { db.close(); resolve({exists:true, files}); };
+        transaction.onerror = transaction.onabort = () => {
+          const error = transaction.error || Error('이전 녹음 저장소 검사 실패');
+          db.close(); reject(error);
+        };
+      } catch (error) { db.close(); reject(error); }
+    };
+  });
+}
+
 /** Pure comparison (also used by tests): counts and lists, no side effects. */
 VZ.uploadCheckCompare = ({local = [], rows = [], objects = null, orphans = [], queue = null, today = VZ.today()}) => {
   const rowById = new Map(rows.map(r => [String(r.id), r])), meta = r => r.metadata || {};
@@ -82,6 +119,18 @@ async function runCheck(host) {
       try { result.r2Usage = await window.VzipR2.usage(); } catch {}
     }
   }
+  // These two device-local namespaces are invisible to the normal account scanner.
+  // Never delete, copy, upload, or rewrite files while inspecting.
+  result.oldStores = {};
+  for (const [label, name] of [['unclaimed', 'vocalzip_media_v1_account_unclaimed'], ['legacy', 'vocalzip_media_v1']]) {
+    try {
+      say(label === 'unclaimed' ? '로그인 전 임시 녹음 공간 확인 중' : '예전 녹음 저장 공간 확인 중');
+      result.oldStores[label] = await inspectOldMediaStore(name);
+    } catch (e) {
+      result.oldStores[label] = {exists:null, files:[], error:e.message};
+      result.errors.push(label + ' 저장소 검사: ' + e.message);
+    }
+  }
   result.orphans = window.vzipR2Orphans?.() || [];
   try { result.queue = JSON.parse(localStorage.getItem('vzip_upload_queue_v1') || 'null'); } catch { result.queue = null; }
   result.summary = VZ.uploadCheckCompare(result);
@@ -99,6 +148,8 @@ function draw(host) {
   const s = last.summary, n = v => v == null ? '확인 불가' : v.toLocaleString('ko-KR');
   const row = (label, value, note = '') => '<div class="uc-row"><span>' + esc(label) + (note ? '<small>' + esc(note) + '</small>' : '') + '</span><b>' + value + '</b></div>';
   const list = (title, items, fmt) => items.length ? '<details class="up-list"><summary>' + esc(title) + ' ' + items.length + '개</summary><div class="list">' + items.slice(0, 200).map(x => '<div class="item small">' + esc(fmt(x)) + '</div>').join('') + (items.length > 200 ? '<div class="item small muted">200개까지만 보여요. 전체는 JSON에 있어요.</div>' : '') + '</div></details>' : '';
+  const old = last.oldStores || {};
+  const oldCount = label => old[label]?.error || old[label]?.exists == null ? '확인 불가' : n(old[label].files.length);
   const q = s.queueCounts;
   host.innerHTML = '<div class="card stack uc"><div class="row between"><strong>진단 결과</strong><span class="small muted">' + esc(new Date(last.checkedAt).toLocaleString('ko-KR')) + '</span></div>' +
     (last.errors.length ? '<div class="small" style="color:var(--warn)">' + last.errors.map(e => '· ' + esc(e)).join('<br>') + '</div>' : '') +
@@ -112,6 +163,9 @@ function draw(host) {
     row('보관함 기록은 있는데 R2 파일이 없음', s.objects == null ? '확인 불가' : n(s.rowsNoObject.length), '재생이 안 되는 기록') +
     '<h3 class="cal-group" style="margin:4px 0 0">이 기기</h3>' +
     row('이 기기에 저장된 파일', n(s.local) + ' · ' + mb(s.localBytes)) + row('· 아직 서버에 없는 파일', n(s.localOnly.length), '이 기기에만 있어요. 업로드하면 올라가요.') +
+    '<h3 class="cal-group" style="margin:4px 0 0">숨겨진 이전 저장소 (읽기 전용)</h3>' +
+    row('로그인 전 미연결 공간', oldCount('unclaimed'), '계정 보관함에 보이지 않을 수 있는 녹음') +
+    row('옛날 앱 저장 공간', oldCount('legacy'), '이전 앱에서 저장한 녹음') +
     (q ? '<h3 class="cal-group" style="margin:4px 0 0">마지막 대량 업로드 기록</h3>' + row('전체', n(Object.values(q).reduce((a, b) => a + b, 0))) + Object.entries({done:'완료', failed:'실패', waiting:'대기', uploading:'업로드 중이었음', dup:'중복 제외'}).filter(([k]) => q[k]).map(([k, t]) => row('· ' + t, n(q[k]))).join('') : '') +
     row('같은 파일이 여러 번 올라간 묶음', n(s.dupGroups.length)) +
     '<p class="small muted" style="margin:0">여기서는 아무것도 바꾸지 않았어요. 복구가 필요하면 결과 파일을 보내 주세요. 복구할 대상과 방법을 먼저 알려 드리고 승인받은 뒤 진행해요.</p>' +
@@ -120,6 +174,8 @@ function draw(host) {
     list('R2에만 있고 원래 정보가 없는 파일', s.r2NoRowUnknown, o => o.key + ' · ' + mb(o.size)) +
     list('R2 파일이 없는 보관함 기록', s.rowsNoObject, r => r.name || r.id) +
     list('이 기기에만 있는 파일', s.localOnly, l => (l.name || l.originalFilename || l.id) + ' · ' + mb(l.size) + (l.hasData ? '' : ' · 파일 데이터 없음')) +
+    list('로그인 전 저장 공간의 녹음', old.unclaimed?.files || [], f => (f.recordedDate || (f.created ? new Date(f.created).toLocaleDateString('ko-KR') : '날짜 미상')) + ' · ' + (f.name || f.id) + ' · ' + mb(f.size)) +
+    list('예전 저장 공간의 녹음', old.legacy?.files || [], f => (f.recordedDate || (f.created ? new Date(f.created).toLocaleDateString('ko-KR') : '날짜 미상')) + ' · ' + (f.name || f.id) + ' · ' + mb(f.size)) +
     list('같은 파일 묶음', s.dupGroups, g => g.map(x => x.name || x.original || x.id).join(' / '));
   host.querySelector('[data-uc-run]').onclick = () => runCheck(host);
   host.querySelector('[data-uc-save]').onclick = () => {
