@@ -7,6 +7,8 @@
 }
 .vz-home-mode, body.vz-student-preview {
   background:
+    radial-gradient(ellipse 105% 54% at -8% -22%,transparent 64%,rgba(255,255,255,.56) 65%,rgba(255,255,255,.10) 66.5%,transparent 69%),
+    radial-gradient(ellipse 88% 52% at 112% 28%,transparent 62%,rgba(255,255,255,.38) 63%,rgba(255,255,255,.08) 65%,transparent 68%),
     radial-gradient(ellipse 70% 34% at 10% 14%,rgba(198,166,239,.8),transparent 90%),
     radial-gradient(ellipse 72% 34% at 98% 8%,rgba(235,203,245,.95),transparent 90%),
     radial-gradient(ellipse 98% 55% at 15% 90%,rgba(201,213,250,.92),transparent 78%),
@@ -39,20 +41,22 @@
 .vz-student-home .vz-home-card, .vz-student-home .vz-home-song, .vz-student-home .vz-home-quick {
   min-width:0; padding:var(--vz-card-padding);border-radius:var(--vz-radius-card);
   background:var(--vz-color-glass);border:1px solid var(--vz-color-glass-border);
-  box-shadow:var(--vz-shadow-card);backdrop-filter:var(--vz-blur-card);-webkit-backdrop-filter:var(--vz-blur-card);
+  box-shadow:var(--vz-shadow-card),inset 1px 0 12px rgba(255,255,255,.17),inset 0 -1px 1px rgba(255,255,255,.27);backdrop-filter:var(--vz-blur-card);-webkit-backdrop-filter:var(--vz-blur-card);
 }
-.vz-home-card-head {display:flex;align-items:center;gap:6px;justify-content:space-between;min-height:24px;margin-bottom:10px;}
-.vz-home-heading {margin:0;display:flex;align-items:center;gap:6px;font-size:16px;line-height:1.3;font-weight:600;color:var(--vz-color-heading);letter-spacing:-.035em;min-width:0;}
+.vz-home-card-head {display:flex;flex-wrap:wrap;align-items:center;gap:6px;justify-content:space-between;min-height:24px;margin-bottom:10px;}
+.vz-home-heading {margin:0;display:flex;align-items:center;gap:6px;overflow-wrap:anywhere;font-size:16px;line-height:1.3;font-weight:600;color:var(--vz-color-heading);letter-spacing:-.035em;min-width:0;}
 .vz-student-home .vz-home-heading .vz-home-icon {font-size:18px;}
 .vz-home-text-button, .vz-home-icon-button {display:flex;align-items:center;justify-content:center;gap:2px;min-height:44px;border:0;background:transparent;color:var(--vz-color-heading)!important;padding:0;font-size:12px!important;margin:-10px 0;flex:none;}
 .vz-home-icon-button {min-width:44px;margin-right:-8px;}
 .vz-home-text-button .vz-home-icon {font-size:15px;}
 .vz-home-stage {overflow:hidden;}
-.vz-home-stage-content {position:relative;display:flex;min-height:81px;align-items:center;}
+.vz-student-home .vz-home-stage {padding-top:14px;padding-bottom:12px;}
+.vz-home-stage>.vz-home-card-head {margin-bottom:6px;}
+.vz-home-stage-content {position:relative;display:flex;min-height:72px;align-items:center;}
 .vz-home-stage-detail {display:block;text-align:left;width:100%;padding:0;border:0;background:transparent;}
 .vz-home-stage-copy {position:relative;z-index:2;max-width:100%;width:100%;}
-.vz-home-stage-title {display:flex;gap:8px;align-items:center;padding-right:40px;}
-.vz-home-stage-title h3 {margin:0;font-size:20px;font-weight:600;color:var(--vz-color-heading-strong);letter-spacing:-.035em;overflow-wrap:anywhere;}
+.vz-home-stage-title {display:flex;flex-wrap:wrap;min-width:0;gap:8px;align-items:center;padding-right:40px;}
+.vz-home-stage-title h3 {margin:0;min-width:0;flex:0 1 auto;font-size:20px;font-weight:600;color:var(--vz-color-heading-strong);letter-spacing:-.035em;overflow-wrap:anywhere;}
 .vz-home-dday {font-size:19px;font-weight:600;color:var(--vz-color-day-accent);border-radius:20px;background:rgba(255,255,255,.38);padding:4px 9px;white-space:nowrap;}
 .vz-home-stage-song {font-size:13px;margin:3px 0 0;max-width:75%;overflow-wrap:anywhere;}
 .vz-home-stage-date {font-size:12px;display:flex;gap:6px;align-items:center;margin:7px 0 5px;color:var(--vz-color-ink);}
@@ -63,29 +67,29 @@
 .vz-home-curtain--right {right:-4px;transform:scaleX(-1) rotate(16deg);}
 .vz-home-stage-light {position:absolute;left:40%;top:8px;width:45px;height:90px;background:linear-gradient(transparent,rgba(255,255,255,.88));clip-path:polygon(48% 0,53% 0,100% 100%,0 100%);filter:blur(4px);}
 .vz-home-stage-floor {position:absolute;bottom:0;left:12px;width:112px;height:16px;border-radius:50%;background:rgba(224,187,250,.78);border-top:2px solid rgba(255,255,255,.75);box-shadow:0 4px 9px rgba(139,82,195,.12);}
-.vz-home-lesson {display:flex;gap:8px;align-items:center;width:100%;padding:9px 0 0;margin-top:7px;border:0;border-top:1px solid rgba(255,255,255,.28);background:transparent;text-align:left;min-height:44px;font-size:12px!important;color:var(--vz-color-heading)!important;}
+.vz-home-lesson {display:flex;flex-wrap:wrap;row-gap:6px;gap:8px;align-items:center;width:100%;padding:9px 0 0;margin-top:5px;border:0;border-top:1px solid rgba(255,255,255,.28);background:transparent;text-align:left;min-height:44px;font-size:12px!important;color:var(--vz-color-heading)!important;}
 .vz-home-lesson>strong {font-weight:600;white-space:nowrap;}
-.vz-home-lesson-date {padding-left:9px;border-left:1px solid var(--vz-color-check-border);min-width:0;flex:1;}
+.vz-home-lesson-date {padding-left:9px;border-left:1px solid var(--vz-color-check-border);min-width:0;flex:1 1 9ch;overflow-wrap:anywhere;}
 .vz-home-lesson-dday {background:rgba(255,255,255,.3);border-radius:20px;padding:2px 9px;color:var(--vz-color-accent);font-weight:600;white-space:nowrap;}
 .vz-home-lesson .vz-home-icon {font-size:17px;}
 .vz-home-stage-empty {display:flex;gap:8px;align-items:center;min-height:50px;border:0;background:transparent;text-align:left;padding:4px 0;font-size:14px!important;}
 .vz-home-goal-body {display:grid;grid-template-columns:114px minmax(0,1fr);gap:14px;align-items:center;min-height:105px;}
 .vz-home-goal-summary {display:flex;align-items:center;justify-content:center;min-height:96px;}
-.vz-home-gauge {position:relative;width:106px;height:90px;text-align:center;padding-top:1px;flex:none;}
-.vz-home-gauge svg {display:block;width:106px;height:57px;overflow:visible;}
+.vz-home-gauge {position:relative;width:106px;min-height:90px;height:auto;text-align:center;padding-top:26px;flex:none;}
+.vz-home-gauge svg {position:absolute;left:0;top:0;display:block;width:106px;height:57px;overflow:visible;}
 .vz-home-gauge-track,.vz-home-gauge-progress {fill:none;stroke-width:7;stroke-linecap:round;}
 .vz-home-gauge-track {stroke:var(--vz-color-progress-track);}
 .vz-home-gauge-progress {stroke:var(--vz-color-accent);}
-.vz-home-gauge-value {position:absolute;left:0;right:0;top:26px;font-size:24px;line-height:1.3;color:var(--vz-color-accent);font-weight:600;}
+.vz-home-gauge-value {position:relative;display:block;font-size:24px;line-height:1.3;color:var(--vz-color-accent);font-weight:600;}
 .vz-home-gauge-detail {display:block;color:var(--vz-color-heading-strong);font-size:12px;margin-top:5px;}
-.vz-student-home .vz-home-goal-list {height:132px;max-height:132px;overflow-y:auto;overscroll-behavior-y:contain;padding:0 2px 0 14px;border-left:1px solid var(--vz-color-check-border);mask-image:none;scrollbar-width:thin;scrollbar-color:var(--vz-color-check-fill) rgba(183,139,231,.14);}
-.vz-student-home .vz-home-goal-row {display:flex;gap:10px;align-items:center;min-height:44px;width:100%;margin:0;padding:4px 0;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--vz-color-ink);cursor:pointer;}
-.vz-home-goal-check {appearance:none;-webkit-appearance:none;width:22px;height:22px;min-width:22px;flex:none;margin:0;border:1px solid var(--vz-color-check-border);border-radius:6px;background:rgba(255,255,255,.18);display:grid;place-content:center;cursor:pointer;}
+.vz-student-home .vz-home-goal-list {height:120px;max-height:120px;overflow-y:auto;overscroll-behavior-y:contain;padding:0 2px 0 14px;border-left:1px solid var(--vz-color-check-border);mask-image:none;scrollbar-width:thin;scrollbar-color:var(--vz-color-check-fill) rgba(183,139,231,.14);}
+.vz-student-home .vz-home-goal-row {display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;min-height:44px;width:100%;margin:0;padding:4px 0;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--vz-color-ink);cursor:pointer;}
+.vz-home-goal-check {align-self:flex-start;appearance:none;-webkit-appearance:none;width:22px;height:22px;min-width:22px;flex:none;margin:0;border:1px solid var(--vz-color-check-border);border-radius:6px;background:rgba(255,255,255,.18);display:grid;place-content:center;cursor:pointer;}
 .vz-home-goal-check:checked {border-color:var(--vz-color-check-fill);background:var(--vz-color-check-fill);}
 .vz-home-goal-check:checked::after {content:"";width:10px;height:6px;border-bottom:2px solid #fff;border-left:2px solid #fff;transform:rotate(-45deg) translateY(-1px);}
 .vz-home-goal-check:disabled {cursor:progress;opacity:.65;}
-.vz-home-goal-title {font-size:14px;font-weight:400;line-height:1.35;overflow-wrap:anywhere;flex:1;min-width:0;}
-.vz-home-goal-source {font-size:11px;white-space:nowrap;color:var(--vz-color-ink-secondary);flex:none;}
+.vz-home-goal-title {font-size:14px;font-weight:400;line-height:1.35;overflow-wrap:anywhere;flex:1 1 6ch;min-width:0;}
+.vz-home-goal-source {align-self:flex-start;max-width:100%;font-size:11px;white-space:nowrap;color:var(--vz-color-ink-secondary);flex:none;}
 .vz-home-goal-row[aria-busy="true"] .vz-home-goal-source {opacity:.5;}
 .vz-home-empty-action {min-height:88px;display:flex;align-items:center;gap:5px;border:0;background:transparent;padding:0;text-align:left;font-size:13px!important;}
 .vz-home-goal-status {font-size:11px;line-height:1.3;color:var(--vz-color-ink-secondary);margin:0;}
@@ -94,7 +98,7 @@
 .vz-student-home .vz-home-streak .vz-home-icon {font-size:16px;color:var(--vz-color-flame);background:none;-webkit-text-fill-color:var(--vz-color-flame);}
 .vz-home-week-grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;}
 .vz-home-week-day {display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;}
-.vz-home-day-label {font-size:12px;line-height:20px;min-height:20px;min-width:28px;text-align:center;color:var(--vz-color-ink);}
+.vz-home-day-label {font-size:12px;line-height:1.4;min-height:20px;min-width:0;max-width:100%;overflow-wrap:anywhere;text-align:center;color:var(--vz-color-ink);}
 .vz-home-day-label.is-today {background:var(--vz-color-today);border-radius:20px;color:#fff;padding:0 5px;}
 .vz-home-flower {width:36px;height:36px;display:block;color:var(--vz-color-practice-low);}
 .vz-home-flower svg {width:100%;height:100%;overflow:visible;}
@@ -105,16 +109,16 @@
 .vz-home-flower[data-level="empty"] .vz-home-flower-shape,.vz-home-flower[data-level="unplanned"] .vz-home-flower-shape {fill:rgba(221,199,243,.22);stroke:var(--vz-color-check-border);stroke-width:1;}
 .vz-home-flower-today {fill:none;stroke:var(--vz-color-icon-start);stroke-width:1.1;transform:translate(-3px,-3px) scale(1.15);}
 .vz-home-flower-check {fill:none;stroke:#fff;stroke-width:3.3;stroke-linecap:round;stroke-linejoin:round;}
-.vz-home-day-time {font-size:12px;color:var(--vz-color-ink);white-space:nowrap;}
-.vz-home-week-summary {display:flex;justify-content:center;align-items:baseline;white-space:nowrap;gap:3px;border-top:1px solid rgba(255,255,255,.28);margin:10px 0 0;padding-top:8px;font-size:12px;}
+.vz-home-day-time {font-size:12px;color:var(--vz-color-ink);max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:center;}
+.vz-home-week-summary {display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;white-space:normal;max-width:100%;overflow-wrap:anywhere;gap:3px;border-top:1px solid rgba(255,255,255,.28);margin:10px 0 0;padding-top:8px;font-size:12px;}
 .vz-home-week-summary strong {color:var(--vz-color-accent);font-size:15px;font-weight:600;}
 .vz-home-summary-compact {display:none;}
 .vz-home-no-week {font-size:13px;color:var(--vz-color-ink-secondary);}
 .vz-home-bottom-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch;}
-.vz-student-home .vz-home-song {aspect-ratio:1;width:100%;min-height:0;position:relative;display:block;overflow:hidden;padding:12px;}
-.vz-home-song-detail {width:100%;height:100%;padding:0;display:flex;align-items:center;flex-direction:column;border:0;background:transparent;text-align:center;justify-content:space-between;gap:5px;}
+.vz-student-home .vz-home-song {aspect-ratio:1;width:100%;min-height:min-content;position:relative;display:block;overflow:hidden;padding:12px;}
+.vz-home-song-detail {width:100%;height:auto;min-height:100%;padding:0;display:flex;align-items:center;flex-direction:column;border:0;background:transparent;text-align:center;justify-content:space-between;gap:5px;}
 .vz-home-song-heading {display:flex;justify-content:space-between;gap:2px;align-items:center;width:100%;}
-.vz-home-song-heading .vz-home-heading {font-size:15px;white-space:nowrap;gap:3px;}
+.vz-home-song-heading .vz-home-heading {font-size:15px;white-space:normal;gap:3px;}
 .vz-home-song-heading>.vz-home-icon {font-size:16px;}
 .vz-home-song-cover {position:relative;display:grid;place-items:center;width:78px;max-width:63%;aspect-ratio:1;border-radius:18px;background:radial-gradient(circle at 32% 65%,rgba(239,178,231,.95),transparent 34%),radial-gradient(circle at 60% 24%,#CFCCFA,transparent 40%),radial-gradient(circle at 75% 74%,#D498EA,transparent 40%),linear-gradient(120deg,#9DBAF8,#E8B1E7);overflow:hidden;flex:1;max-height:79px;}
 .vz-student-home .vz-home-song-cover .vz-home-icon {font-size:28px;color:#fff;background:none;-webkit-text-fill-color:#fff;}
@@ -124,7 +128,7 @@
 .vz-home-play {position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);min-width:44px;min-height:44px;border:0;border-radius:50%;background:transparent;padding:0;}
 .vz-student-home .vz-home-play .vz-home-icon {font-size:30px;color:#fff;background:none;-webkit-text-fill-color:#fff;}
 .vz-home-quick-stack {display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:10px;min-height:0;}
-.vz-student-home .vz-home-quick {width:100%;display:flex;align-items:center;gap:7px;padding:12px;min-height:44px;text-align:left;color:var(--vz-color-heading);font-size:15px;font-weight:600;}
+.vz-student-home .vz-home-quick {width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:12px;min-height:44px;text-align:left;color:var(--vz-color-heading);font-size:15px;font-weight:600;}
 .vz-home-quick>.vz-home-icon:first-child {font-size:25px;}
 .vz-home-quick>.vz-home-icon:last-child {font-size:16px;margin-left:auto;}
 .vz-approved-dock, .vz-home-mode .v-nav {
@@ -245,3 +249,10 @@ body.vz-home-mode .v-nav ul>li>a.rec i {
 }
 body.vz-home-mode .v-nav ul>li>a.rec span {color:#fff;font-size:11px;font-weight:400;}
 
+
+/* Intrinsic text sizes must remain shrinkable after browser text enlargement.
+ * No clipping is used to conceal horizontal overflow. */
+.vz-home-card-head>.vz-home-heading {flex:1 1 auto;}
+.vz-home-heading>span,.vz-home-song-heading,.vz-home-quick>span {min-width:0;overflow-wrap:anywhere;}
+.vz-home-streak {max-width:100%;white-space:normal;flex-wrap:wrap;}
+.vz-home-week-summary>span {min-width:0;max-width:100%;}
