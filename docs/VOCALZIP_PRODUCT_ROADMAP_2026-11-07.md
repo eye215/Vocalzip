@@ -1,84 +1,110 @@
-# VOCAL.zip Product Roadmap — 2026-11-07 (proposal v2)
-> **Shared source for Claude, Codex, and ChatGPT.** This is the newly agreed PRODUCT plan, not a claim that historic Phase numbers matched. Update only after auditing actual repo and product decisions. No production data mutation authorized.
+# VOCAL.zip 통합 제품 로드맵 — 2026-11-07 (제안 v2)
 
-## Release strategy
-- **Release 1.0: complete student experience**, iOS release. Teacher participation is not required; student records their own lessons/teacher names/homework. Secure optional **read-only expiring media share link** may be implemented without a teacher account.
-- **Release 2.0: teacher mode**, N:M student-teacher relationships, private 1:1 lessons, 1:N group lessons, optional co-instructors, reservations, feedback, homework, attendance, and billing. One account can be both student and teacher.
-- **Do NOT build an incomplete student MVP just to ship early**. Deliver a polished, tested 1.0 then extend. Phases are planning units, not necessarily sequential sprints.
-- The number **30 is a draft grouping, not a fixed requirement**; split/merge as audit demands. Legacy phases and PR labels are not renumbered or marked complete by this file.
+> **Claude Code·Codex·ChatGPT가 함께 참고하는 공통 기획서.**
+> 이 문서는 새로 합의한 **제품 개발 로드맵**이며, 과거 개발 당시의 Phase 번호와 일치한다고 주장하는 문서가 아니다. 기존 코드와 문서를 전수 조사한 뒤 실제 상태를 갱신한다. **운영 데이터 수정·삭제·이전 작업은 승인되지 않았다.**
 
-## Planned phases / required scope
-| ID | Area | Scope | Release |
+## 1. 출시 전략
+
+- **Release 1.0: 학생용 전체 기능 정식 출시.** 학생이 선생님 계정 없이도 곡·녹음·연습·개인 레슨 기록·숙제·성장·공연·유효성이 검증된 AI 기능을 사용할 수 있도록 한다. iOS 실기기에서 검증한다.
+- **Release 2.0: 선생님 기능 출시.** 학생과 선생님의 N:M 연결, 1:1 개인 레슨, 1:N 그룹 레슨, 복수 강사, 예약·출석·피드백·숙제·수강권 및 레슨비 관리를 추가한다.
+- 학생 기능을 미완성 MVP로 급하게 출시하지 않는다. 학생용 1.0을 하나의 **완성된 상품**으로 검증한 후 선생님 기능을 확장한다.
+- 개발 단위는 **30개 Phase 초안**이다. 30이라는 숫자는 고정되지 않으며, 실제 코드 조사 결과에 따라 병합·분리한다.
+- 과거 Phase와 PR 번호를 이 문서 기준으로 소급 변경하거나, 문서만 보고 완료 처리하지 않는다.
+
+## 2. 전체 개발 Phase
+
+| 번호 | 개발 영역 | 개발 범위 | 출시 |
 |---|---|---|---|
-| 01 | Existing-state audit | repository, behavior, tests, data inventory, risks, historic phase mapping | 1 |
-| 02 | Architecture | modularization, cross-platform/iOS strategy, ownership boundaries | 1 |
-| 03 | DB & migration design | ERD, IDs/FKs, RLS, staged non-destructive migration; teacher/group extensibility | 1 |
-| 04 | Authentication | Apple/Kakao/email as supported, identity linking, account lifecycle | 1 |
-| 05 | Sync & recovery | local/remote merge, concurrency, offline queue, backup/restore | 1 |
-| 06 | Media infrastructure | Cloudflare R2 plan, signed access, chunk uploads, resume, playback, compression with audio fidelity, quotas | 1 |
-| 07 | Songs & repertoire | metadata, lyrics, PDF score, reference audio, filters, song history | 1 |
-| 08 | Recording & library | record, import, M4A/MOV, metadata dates, player, retry, sharing | 1 |
-| 09 | Practice | vocal training vs song practice, time, satisfaction, goals, checklist, media linking | 1 |
-| 10 | Student lesson log | date/time/place/teacher name, songs, feedback, media, schedule status | 1 |
-| 11 | Self-managed homework | linked to lessons/songs/practice, completion and carry-over | 1 |
-| 12 | A/B comparisons | same-song clips, segments, playback speed, reports | 1 |
-| 13 | Growth dashboard | valid statistics, goals, trend, comparison | 1 |
-| 14 | Performance & audition | repertoire, roles, events, rehearsal, archive | 1 |
-| 15 | AI transcription & song matching | source-aware transcription, suggestion + user confirmation, usage control | 1 |
-| 16 | AI voice analysis | validate pitch/rhythm/range methods and uncertainty before promising metrics | 1 |
-| 17 | AI practice coach | grounded recommendations, compare outcomes, cost/privacy controls | 1 |
-| 18 | Imports & owner migration | general user file selection; one account's legacy/iCloud/Voice Memos import as separate guarded migration | 1 |
-| 19 | Student IA/UX | home / songs / record / calendar / growth, secondary screens, accessibility | 1 |
-| 20 | Subscription/product | Free/Plus/Pro pricing TBD, storage and AI quotas, IAP/expiry/export | 1 |
-| 21 | Operations/security | monitoring, RLS, media access, deletion, export, notices, support | 1 |
-| 22 | iOS integration | native requirements, audio, Files/Share Sheet, offline, notifications, store compliance | 1 |
-| 23 | **Student 1.0 release gate** | real-device E2E, subscriptions, multiuser security, recovery, store review | **1** |
-| 24 | Teacher roles & links | mode switch, invitations, teacher-student N:M, grant/revoke access | 2 |
-| 25 | Private/group lessons | 1:1, 1:N, optional co-instructors, group membership vs attendance | 2 |
-| 26 | Booking | availability, invite links, approvals, recurring lessons, makeup/cancellation | 2 |
-| 27 | Collaborative feedback/homework | common + individual visibility, voice feedback, submissions | 2 |
-| 28 | Lesson packages & billing | individual enrollments, per-student ledger, attendance-adjusted credits, refunds | 2 |
-| 29 | Teacher AI & pricing | lesson summaries requiring teacher approval, operational tools, Teacher plans | 2 |
-| 30 | **Teacher 2.0 release gate** | N:M, group permissions, attendance, billing & end-to-end QA | **2** |
+| **01** | 기존 시스템 전수 조사 | 저장소·기능·테스트·데이터 현황, 위험 요소, 과거 Phase 매핑 | 1.0 |
+| **02** | 서비스 아키텍처 | 모듈 구조, iOS 구현 방식, 역할 및 데이터 책임 경계 | 1.0 |
+| **03** | DB·마이그레이션 설계 | ERD, 식별자·관계, RLS, 비파괴 데이터 이전, 선생님·그룹 확장성 | 1.0 |
+| **04** | 로그인·계정 | Apple·카카오·이메일 로그인, 계정 연결, 세션·탈퇴 관리 | 1.0 |
+| **05** | 동기화·복구 | 로컬↔클라우드 동기화, 충돌 처리, 오프라인 대기열, 백업·복원 | 1.0 |
+| **06** | 미디어 인프라 | R2 전환 검토, 접근 제어, 분할 업로드·재시도·재생·압축·용량 | 1.0 |
+| **07** | 곡·레퍼토리 | 곡 정보, 가사, PDF 악보, 참고 음원, 검색·분류·이력 | 1.0 |
+| **08** | 녹음·보관함 | 녹음, 파일 가져오기, M4A·MOV, 날짜, 재생, 실패 재시도, 공유 | 1.0 |
+| **09** | 연습 기록 | 발성 훈련·곡 연습, 시간·만족도·목표·체크리스트·미디어 연결 | 1.0 |
+| **10** | 학생용 레슨 기록 | 날짜·시간·장소·선생님 이름, 곡·피드백·녹음·상태 | 1.0 |
+| **11** | 학생용 숙제 | 레슨·곡·연습 연결, 완료·이월·이력 | 1.0 |
+| **12** | 녹음 A/B 비교 | 동일 곡 녹음 2개 비교, 구간·속도·비교 메모 | 1.0 |
+| **13** | 성장 대시보드 | 정확한 통계, 목표·추세·녹음 비교·이력 | 1.0 |
+| **14** | 공연·오디션 | 배역·공연곡·행사·리허설·아카이브 | 1.0 |
+| **15** | AI 전사·곡 매칭 | 녹음 전사, 곡 후보 추천, 사용자 승인, 사용량 관리 | 1.0 |
+| **16** | AI 음성 분석 | 음정·박자·음역 등 정확도 검증 후 분석 기능 제공 | 1.0 |
+| **17** | AI 연습 코치 | 실제 데이터 기반 추천, 개선 결과 비교, 비용·개인정보 통제 | 1.0 |
+| **18** | 자료 가져오기·개인 데이터 이전 | 일반 파일 선택, 소유자 1개 계정에 한정된 기존·iCloud·음성 메모 이전 | 1.0 |
+| **19** | 학생 IA·UI/UX | 홈·내 곡·녹음·캘린더·성장, 부가 화면, 접근성·사용성 | 1.0 |
+| **20** | 학생 상품·구독 | Free·Plus·Pro, 가격 검토, 저장 공간·AI 사용량, 구독 결제 | 1.0 |
+| **21** | 운영·보안 | 모니터링, RLS, 미디어 권한, 내보내기·삭제·알림·고객지원 | 1.0 |
+| **22** | iOS 앱 구현 | 네이티브 기능, 오디오, 파일 앱·공유 시트, 오프라인·알림·심사 | 1.0 |
+| **23** | **학생 1.0 출시 관문** | 실기기 E2E, 구독, 사용자 격리, 복구, 앱스토어 검증 | **1.0** |
+| **24** | 선생님 모드·연결 | 역할 전환, 초대, 학생·선생님 N:M, 접근 승인·회수 | 2.0 |
+| **25** | 개인·그룹 레슨 | 1:1, 1:N, 공동 강사, 그룹 멤버와 회차별 출석 구분 | 2.0 |
+| **26** | 예약 관리 | 가능 시간·초대 링크·승인·반복·취소·보강 | 2.0 |
+| **27** | 피드백·숙제 협업 | 공통·개별 공개 범위, 음성 피드백, 학생 제출·검토 | 2.0 |
+| **28** | 수강권·레슨비 | 학생별 수강권·차감 원장·결제·결석·환불 조정 | 2.0 |
+| **29** | 선생님 AI·요금제 | 승인형 레슨 요약, 운영 자동화, 선생님 상품 | 2.0 |
+| **30** | **선생님 2.0 출시 관문** | N:M·그룹 권한·출석·정산·전체 시나리오 검증 | **2.0** |
 
-## IA snapshot
-Student bottom navigation: **Home / Songs / Record / Calendar / Growth**.
-Student secondary flows: songs→lyrics/scores/recordings/lessons/homework; record→library/import/A-B; calendar→lessons/practice/homework/performance; settings→storage/subscription/export.
-Teacher navigation (2.0): **Home / Students / Calendar / Feedback / Management**.
-Teacher flow: group→session→participants & attendance→common lesson note→private individual feedback→group/individual homework→student-specific credit treatment.
-App login is shared. A user can activate both modes; default to last-used mode.
+## 3. 학생용 1.0 정보구조(IA)
 
-## Conceptual data graph (not SQL or assertion of deployed schema)
-- auth.users → profiles (user id), user_roles (user id, role).
-- teacher_student_links (teacher id, student id, status), groups / group_members.
-- lessons (id, optional group id, starts/ends, state), lesson_instructors, lesson_participants (attendance, billing status).
-- songs / song_aliases / song_scores / song_lyrics.
-- practices / practice_media, assignments / assignment_recipients, feedback (author, target student, visibility).
-- media_files (owner id), media_variants, storage_objects (provider/object key/chunks), media_access_grants (principal, permission, expiry). **A share does not transfer ownership or duplicate storage quota**.
-- lesson_packages / enrollments / credit_transactions / lesson_payments **separate from** app plans / subscriptions / usage events.
-- ai_jobs / transcriptions / ai_analyses / ai_usage; performance / performance_participants / performance_songs.
-- Referential integrity, RLS, audit/versioning and exact tables must be established in phase 03; do not blindly create all future tables in 1.0.
+하단 메뉴: **홈 / 내 곡 / 녹음 / 캘린더 / 성장**
 
-## Invariants and decisions
-1. Never reset existing user data, overwrite binary originals, or delete legacy media to do a refactor.
-2. Legacy localStorage `vocal-zip_mvp_v1`, IndexedDB `vocalzip_media_v1`/`recordings`, Supabase `vocal_data.payload` and the separate `billing/` contract must be assessed before migration.
-3. Recording ≠ practice session; attaching media does not count additional practice time. Deleting a lesson should not delete its original audio/homework.
-4. A recorded teacher name in student 1.0 is **not** an authenticated teacher identity and cannot later acquire access automatically.
-5. Group lesson common information is visible to participants; individual feedback, recordings and financial data are **private** by default. Group membership ≠ session attendance. Lesson marked complete ≠ blanket credit debit.
-6. Supabase for structured metadata/auth; R2 is a **planned** media architecture, not an assertion it's deployed. Validate actual infra and auth before changes.
-7. Original media/date/ID provenance is preserved. Audio fidelity prioritized; video can use lower-resolution derivatives, original preserved under policy.
-8. Personal migration scope: only explicitly allowlisted owner's account. Video candidates 2025-12-31..2026-09-13, Voice Memos 2025-07-24..import date, 30s..8min, require review. Web cannot silently access full iPhone Voice Memos library.
-9. Tentative plans/prices: student Free 1GB / Plus 20GB 4,900 KRW / Pro 100GB 9,900 KRW; teacher plans TBD. These are **not approved production prices**.
-10. Discussed cancellation behavior: 29-day grace following actual paid expiry, consider excess-media cleanup starting day 30 with notice and export. **Not an authorization to implement destructive deletion until product/legal review**.
-11. AI audio pitch/breath/voice quality measurement is not considered complete. Validate models/metrics and report uncertainty.
-12. No public secrets, tokens, user recordings, personal data, or service-role credentials in Git.
+- **홈:** 빠른 녹음, 다음 레슨, 미완료 숙제, 최근 연습곡, 오늘의 연습.
+- **내 곡:** 곡 목록·검색 → 곡 상세 → 가사·악보·녹음·레슨·숙제·연습 이력.
+- **녹음:** 녹음 → 미리 듣기 → 저장 → 보관함·파일 가져오기·A/B 비교.
+- **캘린더:** 레슨·연습·녹음·숙제·공연 일정과 날짜별 기록.
+- **성장:** 연습 시간·횟수·달성률·곡별 통계·비교·검증된 AI 분석.
+- **설정/보조:** 계정·저장 용량·구독·자료 내보내기·개인 데이터 이전(소유자 한정).
 
-## Source-of-truth and current evidence
-- `README.md`: current v6 documented feature behavior and links.
-- `docs/UIUX_v6_개편_2026-11-04.md`: view architecture and compatibility.
-- `docs/VOCALzip_Codex_인수인계_2026-11-03.md`: older historical phase mapping and known issues; may be stale.
-- `docs/운영검증_2026-11-04.md`: automatic tests versus real-device and production gaps.
-- Old phase titles are inconsistent across docs and PRs; phase 01 **must reconcile** history. A file/PR existing never means production verified.
+선생님용 2.0 하단 메뉴: **홈 / 학생 / 일정 / 피드백 / 관리**
 
-## Collaboration rule
-Claude/Codex should **read this roadmap + Phase 01 audit brief + repo README first**, then investigate actual code before recommending edits. Record: evidence (paths/commit), verified status, outstanding QA, risks, next tasks. Avoid changing current production app while performing read-only Phase 01.
+선생님 대표 흐름: 그룹 선택 → 수업 회차 → 참여 학생·출석 → 공통 수업 기록 → 학생별 비공개 피드백 → 공통·개별 숙제 → 학생별 수강권 처리.
+
+한 계정에서 학생·선생님 역할을 모두 활성화할 수 있으며, 마지막으로 사용한 모드를 기본으로 표시한다.
+
+## 4. 개념 데이터 구조(운영 DB 스키마 아님)
+
+- **사용자:** 인증 사용자 → 프로필, 사용자 역할.
+- **관계:** 선생님·학생 연결(N:M), 그룹·그룹 구성원.
+- **레슨:** 레슨 회차, 담당 강사, 참여 학생(개별 출석·정산 상태).
+- **학습:** 곡·곡 별칭·가사·악보, 연습·연습 미디어, 숙제·학생별 수행, 피드백·공개 범위.
+- **미디어:** 소유자, 원본·파생본, 실제 저장 객체(청크), 접근 허용 대상·만료. **공유는 소유권 이전이나 사용량 중복 차감이 아니다.**
+- **AI:** 전사·곡 추천·분석·작업 상태·사용량.
+- **정산:** 선생님 레슨 상품·학생별 수강권·차감 원장·결제 기록과, 앱 구독 상품·사용량 기록을 별도 관리한다.
+- **공연:** 공연·출연진·공연곡·미디어 연결.
+
+실제 PK·FK·제약·RLS·감사 이력은 Phase 03에서 확정한다. **미래 기능 테이블을 1.0 시점에 전부 미리 만들 필요는 없다.**
+
+## 5. 반드시 지킬 정책
+
+1. 리팩터링을 이유로 기존 사용자 기록을 초기화하거나 원본 파일을 덮어쓰고 삭제하지 않는다.
+2. 기존 계약을 확인한다: localStorage `vocal-zip_mvp_v1`, IndexedDB `vocalzip_media_v1/recordings`, Supabase `vocal_data.payload`, 별도 정산 프로젝트 `billing/`.
+3. **녹음 파일과 연습 기록은 별개**다. 녹음을 연습에 연결해도 연습 시간을 추가하지 않는다. 레슨 삭제 시 원본 녹음·숙제는 보존한다.
+4. 학생이 직접 입력한 **선생님 이름 문자열**은 인증된 선생님 계정이 아니다. 나중에 가입했다는 이유로 권한을 자동 부여하지 않는다.
+5. 그룹의 공통 수업 정보만 참여 학생에게 공유한다. 개인 피드백·녹음·결제는 기본 비공개다. **그룹 가입 ≠ 해당 회차 출석**, **수업 완료 ≠ 모든 학생 일괄 차감**.
+6. Supabase는 구조화된 데이터·인증, R2는 **계획된** 미디어 저장소다. 실제 연동 여부는 조사 후 판단한다.
+7. 원본 미디어의 식별자·촬영/녹음 날짜·출처를 보존한다. 음질이 최우선이며 영상 압축본을 만들 때도 원본 보존 여부를 명확히 안내한다.
+8. 개인 데이터 이전은 명시적으로 허용한 사용자 1개 계정에만 제공한다. 영상 후보: **2025-12-31~2026-09-13**, 음성 메모 후보: **2025-07-24~가져오기 실행일**, 길이 **30초~8분**. 검토·승인 후 가져온다. 웹앱은 아이폰 음성 메모 전체를 몰래 읽을 수 없다.
+9. **학생 요금제 가격·용량은 가안**이다: Free 1GB, Plus 20GB/월 4,900원, Pro 100GB/월 9,900원. 선생님 요금제 미확정.
+10. 구독 만료 후 **29일 유예, 30일 차 초과 미디어 정리**는 논의된 정책일 뿐이다. 법률·고지·동의·내보내기·복구 검토 전 자동 삭제를 구현하지 않는다.
+11. AI 음정·호흡·발성 진단이 이미 완성됐다고 표시하지 않는다. 지표·모델·불확실성을 검증한다.
+12. GitHub에 비밀키·토큰·개인 녹음·민감한 사용자 데이터를 올리지 않는다.
+
+## 6. 확인된 기존 참고 자료
+
+- `README.md` — v6 기능 설명과 화면 구조.
+- `docs/UIUX_v6_개편_2026-11-04.md` — UI 아키텍처 및 데이터 호환.
+- `docs/VOCALzip_Codex_인수인계_2026-11-03.md` — 과거 개발 현황, 잠재 결함(일부 오래된 내용).
+- `docs/운영검증_2026-11-04.md` — 자동 테스트와 실제 기기·운영 미검증 구분.
+- `docs/레슨데이터_연동계약.md` — 앱과 별도 정산 서비스 간 ID·날짜·상태 계약.
+
+과거 Phase 번호와 PR 제목은 서로 다를 수 있다. **Phase 01에서 실제 코드·커밋·테스트 근거로 재매핑**한다.
+
+## 7. Claude·Codex 협업 원칙
+
+Claude와 Codex는 먼저 이 로드맵, Phase 01 조사 지시서, README 및 최신 운영 검증 자료를 읽는다.
+
+모든 결과에 **실제 파일 경로·커밋·테스트 근거**, 구현 상태, 미검증 사항, 위험 요소, 다음 작업을 표시한다.
+
+Phase 01은 **읽기 전용 조사**다. 운영 앱 코드를 고치거나 운영 데이터를 수정하지 않는다.
