@@ -115,6 +115,25 @@ end $$;
 revoke all on function public.vzip_save_snapshot(bigint,jsonb,uuid) from public,anon;
 grant execute on function public.vzip_save_snapshot(bigint,jsonb,uuid) to authenticated;
 
+
+-- Explicit read contract avoids converting a PostgreSQL bigint through JS Number.
+-- A missing RPC/schema is a setup error; opt-in clients must never fall back to a blind write.
+create or replace function public.vzip_load_snapshot()
+returns jsonb language plpgsql stable security definer set search_path=''
+as $$
+declare r public.vocal_data;
+begin
+ perform public.vzip_assert_session();
+ if not public.vzip_session_is_active() then
+  raise exception 'registered session required' using errcode='42501';
+ end if;
+ select * into r from public.vocal_data where user_id=auth.uid();
+ if not found then return jsonb_build_object('exists',false,'revision','0','payload',null,'updated_at',null); end if;
+ return jsonb_build_object('exists',true,'revision',r.revision::text,'payload',r.payload,'updated_at',r.updated_at);
+end $$;
+revoke all on function public.vzip_load_snapshot() from public,anon;
+grant execute on function public.vzip_load_snapshot() to authenticated;
+
 comment on table public.vzip_data_write_requests is
  'Phase 03 proposal: successful snapshot-write receipts only; no payload copies. Production activation requires client/legacy bridge and retention/deletion policy.';
 commit;

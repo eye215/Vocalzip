@@ -38,7 +38,7 @@ function mediaExtension(type){
  'audio/webm':'webm','video/webm':'webm'})[(type||'').split(';')[0].toLowerCase()]||'bin';
 }
 function localMedia(){return new Promise((resolve,reject)=>{const req=indexedDB.open(mediaDb,1);req.onupgradeneeded=()=>req.result.createObjectStore('recordings',{keyPath:'id'});req.onerror=()=>reject(req.error);req.onsuccess=()=>{const db=req.result,tx=db.transaction('recordings','readonly'),get=tx.objectStore('recordings').getAll();get.onsuccess=()=>resolve(get.result||[]);get.onerror=()=>reject(get.error);tx.oncomplete=()=>db.close()}})}
-async function remoteData(){const {data,error}=await client.from('vocal_data').select('payload,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
+async function remoteData(){const transport=snapshotClient();if(transport)return transport.load();const {data,error}=await client.from('vocal_data').select('payload,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
 window.vzipAccountImportBaseline=async()=>{
  const owner=user?.id;
  if(!owner||!sessionVerified||owner!==window.VzipAccountScope?.owner)throw Error('로그인을 확인한 뒤 이전해 주세요.');
@@ -50,6 +50,22 @@ window.vzipAccountImportBaseline=async()=>{
    only records deleted on purpose (tombstones) disappear. The device copy before any local
    rewrite is kept as vzip_before_cloud_<time> (last 5). */
 const Merge=window.VzipDataMerge;
+
+/* Disabled until the server/client/legacy-field bridge rollout is approved and prepared.
+   Opt-in failures are fail-closed: no direct-table fallback after an unknown RPC outcome. */
+let snapshotConnection=null;
+function snapshotClient(){
+ if(window.VZIP_SNAPSHOT_RPC_ENABLED!==true)return null;
+ const owner=user?.id,session=activeSessionId,scope=window.VzipAccountScope;
+ if(!owner||!session||!sessionVerified||!scope||!window.VzipSnapshotSync)throw Error('서버 저장 연결을 준비하지 못했어요. 기록은 이 기기에 남아 있어요.');
+ if(!snapshotConnection||snapshotConnection.owner!==owner||snapshotConnection.session!==session){
+  const api=window.VzipSnapshotSync.create({rpc:(name,args)=>client.rpc(name,args),storage:scope.storage,owner,session,valid:Merge.valid,
+   isCurrent:()=>user?.id===owner&&activeSessionId===session&&sessionVerified&&!scope.leaving});
+  snapshotConnection={owner,session,api};
+ }
+ return snapshotConnection.api;
+}
+
 let syncAgain=false,syncFailed=false;
 function snapshot(data){if(!data)return;try{localStorage.setItem('vzip_before_cloud_'+Date.now(),JSON.stringify(data));const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^vzip_before_cloud_\d+$/.test(k||''))keys.push(k)}keys.sort().slice(0,-5).forEach(k=>localStorage.removeItem(k))}catch{}}
 /* Conditional writes: the server copy is replaced only if nobody saved it since it was read (same
@@ -64,6 +80,8 @@ async function sync({silent=false,reload=false}={}){
  const syncOwner=user.id,checkOwner=()=>{if(user?.id!==syncOwner||(window.VzipAccountScope&&!sessionVerified))throw Error('계정이 변경되어 동기화를 중단했어요.');};
  busy=true;let local=null,merged=null,changedLocal=false;
  try{
+  const transport=snapshotClient();
+  if(transport){await transport.resume();checkOwner();}
   for(let attempt=0;;attempt++){
    const row=await remoteData();checkOwner();
    if(row&&'payload' in row&&!Merge.valid(row.payload))throw Error('클라우드 기록 형식을 확인하지 못했어요. 동기화를 중단합니다.');
@@ -78,6 +96,7 @@ async function sync({silent=false,reload=false}={}){
    // Keep other accounts' unsynced archive data on this device; scope only the outbound payload.
    checkOwner();const payload=window.VzipArchive?window.VzipArchive.forOwner(merged,user.id):merged;
    if(remote&&Merge.same(payload,remote))break;
+   if(transport){await transport.save(row?.revision||'0',payload);checkOwner();break;}
    const stamp=nextVersion(row?.updated_at);
    // On an empty account, ON CONFLICT DO NOTHING is essential: a second first-save
    // must not overwrite the row another session just created.
