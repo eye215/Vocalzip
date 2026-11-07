@@ -1,90 +1,130 @@
-# VOCAL.zip — Student Release 1.0 PRD (draft, pending Phase 01 audit)
-Version: 2026-11-07 / v0.1 / planning only. **Not approved for implementation or deployment.**
-Related: [roadmap](../VOCALZIP_PRODUCT_ROADMAP_2026-11-07.md), [Phase 01 audit](../VOCALZIP_PHASE01_AUDIT_PLAN.md), [IA](STUDENT_1_0_IA_DRAFT.md), [data guardrails](DATA_CONTRACTS_AND_V2_EXTENSIBILITY_DRAFT.md).
+# VOCAL.zip — 학생용 Release 1.0 제품 요구사항 정의서(PRD)
 
-## Goal and release boundary
-Release 1.0 is a **fully usable student product** for private songs, recordings, practice, personal lesson notes/homework, growth, repertoire, and validated AI capabilities, with iOS-ready reliability, paid plans, privacy and data export. A teacher account or teacher enrollment is not a prerequisite. Release 2.0 adds teacher mode, bookings, N:M relationships, group classes and their billing workflows.
+버전: 2026-11-07 / v0.1 **초안**
+상태: **Phase 01 전수 조사 전 제안서 / 구현·배포 승인 아님**
 
-This specification describes **target behavior**, not necessarily existing behavior. Phase 01 must label each item: Existing verified / Existing unverified / Partial / New / Blocked / Deferred. Do not equate passing mocked Playwright tests with iPhone validation.
+관련 문서: [전체 로드맵](../VOCALZIP_PRODUCT_ROADMAP_2026-11-07.md) · [Phase 01 조사](../VOCALZIP_PHASE01_AUDIT_PLAN.md) · [학생 IA](STUDENT_1_0_IA_DRAFT.md) · [데이터 설계](DATA_CONTRACTS_AND_V2_EXTENSIBILITY_DRAFT.md)
 
-## Primary jobs to be done
-A. “I have a recording or video; I want it saved safely, dated correctly, and connected to the song I am learning.”
-B. “I want to enter what I learned in my lesson, track homework, and know what to practice before my next lesson.”
-C. “I want to revisit earlier takes, compare them, and understand meaningful improvement without inaccurate AI claims.”
-D. “I want to move between iPhone and another device without losing records or media.”
-E. “I want the app to be fast for recording and easy to understand without mandatory metadata entry.”
+## 1. 제품 목표와 출시 범위
 
-## Functional requirements
-| ID | Area | Required user-facing behavior | Critical acceptance test |
+**Release 1.0은 학생 혼자서도 온전히 사용할 수 있는 보컬 성장 기록 서비스**이다.
+
+핵심 범위:
+- 곡·레퍼토리, 녹음, 미디어 보관함, 연습, 개인 레슨 기록, 숙제, 성장, 공연·오디션
+- 검증된 AI 분석·전사·곡 추천
+- iOS에서 안정적인 녹음·미디어 재생·기록·백업·동기화
+- 계정, 결제·구독, 개인정보·데이터 내보내기
+
+학생이 선생님 계정과 연결되지 않아도 사용 가능해야 한다.
+
+**Release 2.0에서 추가할 기능**
+선생님 모드, 선생님·학생 N:M 관계, 개인·그룹 레슨 운영, 예약, 공통·개인별 피드백과 숙제, 출석, 선생님 수강권·레슨비 정산.
+
+본 문서는 **목표 동작**을 설명한다. 현재 구현됐다고 단정하지 않는다. Phase 01에서 각 항목에 **구현 확인 / 미검증 / 일부 구현 / 신규 개발 / 차단 / 이관** 상태를 부여한다.
+
+## 2. 핵심 사용자 문제
+
+**① 녹음·영상 보관**
+“이미 가지고 있는 녹음이나 영상을 안전하게 보관하고 정확한 날짜에 정리해서 연습 중인 곡과 연결하고 싶다.”
+
+**② 레슨과 연습 연결**
+“레슨에서 배운 내용과 숙제를 기록하고 다음 레슨 전까지 무엇을 연습할지 알고 싶다.”
+
+**③ 성장 체감**
+“과거 녹음을 다시 듣고 지금과 비교하고 싶다. AI 분석은 과장 없이 믿을 수 있어야 한다.”
+
+**④ 기기 변경과 복구**
+“아이폰과 다른 기기에서 들어와도 기록과 음원이 모두 남아 있어야 한다.”
+
+**⑤ 기록 진입 편의성**
+“녹음하려고 복잡하게 입력하고 싶지 않다. 먼저 녹음하고 곡·메모는 나중에 연결해도 좋다.”
+
+## 3. 상세 기능 요구사항
+
+| 기능 ID | 영역 | 필수 기능·사용자 동작 | 핵심 검증 조건 |
 |---|---|---|---|
-| AUTH-01 | Account | Apple, Kakao and a feasible email authentication method; verified session, recovery, logout | New/existing sign-in; logout hides private content; cross-account isolation |
-| AUTH-02 | Consent & lifecycle | Terms, privacy, optional AI consent; export and account deletion controls | Explain/export own data; withdrawal/closure honored |
-| HOME-01 | Home | Next lesson, due homework, recently practiced songs, one-tap recording and record practice | Empty and populated states work; one-tap capture does not create fake practice time |
-| SONG-01 | Song library | Add/edit/search/filter song; associate aliases, artist/musical, optional reference material | Duplicate titles permitted per user; search does not destroy existing IDs |
-| SONG-02 | Song detail | Unified timeline of practice, lessons, homework, audio, score/lyrics, comparisons | Navigating from any item returns to song context |
-| MEDIA-01 | Record | Start/pause/resume/finish, preview, title optional, choose or defer song | Save successful once; if save fails recover/download the original bytes |
-| MEDIA-02 | Library | Unified local/cloud library, filter/edit title/date/song, play, repeat range, speed | Reopen, seek, relog and play all supported media; no duplicated displayed assets |
-| MEDIA-03 | Import | Select multiple M4A/MP3/WAV/MOV as supported; captured date from metadata with provenance and override | A filename or modified date does not silently replace valid captured date |
-| MEDIA-04 | Large upload | Progress, cancellation, failed-only retry, durable association to original media ID | 200MB-class upload interruption must be recoverable without silent loss; define resume limits |
-| MEDIA-05 | Video policy | **Decision needed**: full video preservation/playback and quality-managed derivatives in 1.0 vs audio-only MOV extraction | Clearly label stored format and original retention; test audio fidelity |
-| MEDIA-06 | Storage | Auth-protected media access, user-based ownership, quota, export/download | Another account cannot enumerate/play user media |
-| PRACT-01 | Practice entry | Vocal training vs song practice, time, goals/checklist, satisfaction, memo, attachments | Attaching recording does not increase practice duration |
-| PRACT-02 | History | Review/edit/delete practice; reliable statistics; optionally link a recording | Deleting record doesn't delete owned original media |
-| LESSON-01 | Personal lesson | Student enters date/time/place/teacher display name, songs, prep notes, feedback | Future lesson stays scheduled until explicitly completed; legacy status handled |
-| LESSON-02 | Connections | Link lesson to homework, songs and media without ownership transfer | Legacy lesson ID/date/status compatibility retained for billing |
-| HW-01 | Homework | Enter homework linked to lesson/song, mark complete and carry forward | Completion state is separate from checkboxes in a practice entry |
-| CAL-01 | Calendar | Lessons/practice/recordings/homework/performance on correct local dates | Imported media uses recorded local date; manual corrections move calendar entry |
-| COMP-01 | Comparisons | Same-song take A/B, repeat/seek/speed, save comparison notes | Original recordings remain unchanged |
-| GROW-01 | Growth | Practice hours/days, song distribution, satisfaction trend, homework count | Aggregates match source records; no double counting |
-| PERF-01 | Performance | Performance/audition date, role, repertoire, rehearsal notes, archive links | May create event without external publishing |
-| AI-01 | Transcription | Consent-based transcribe and timestamp, job state/retry | AI failures do not block recording; no invented transcripts |
-| AI-02 | Song matching | Suggest candidate from existing user's songs with confidence; ask user to confirm | No automatic irreversible song relinking |
-| AI-03 | Voice analysis | Pitch/rhythm/range/other metrics only after accuracy evaluation; uncertainty and scope shown | Audio-only signal cannot be presented as a reliable clinical assessment of breath technique |
-| AI-04 | Recommendations | Ground suggestions in own material, allow reject/edit, usage quota | No fabricated “teacher feedback” or guaranteed performance scores |
-| SHARE-01 | Optional sharing | Expiring protected playback link, optionally revoke; no teacher signup necessary | Default private; link access constrained, auditable and time-limited |
-| PLAN-01 | Plans | Free/Plus/Pro quota and optional AI limits; cancellation, restore, receipt handling | Backend enforces entitlements, not only UI flags |
-| DATA-01 | Backup/export | Export records AND media as distinct deliverables; transparent progress and completeness | JSON backup is explicitly NOT misrepresented as original-media backup |
-| DATA-02 | Owner import | Explicit allowlisted owner-only migration; preview/dedup/date provenance/checksum; reversible | Every old ID remains traceable; standard users cannot access owner migration |
-| OPS-01 | Reliability | Error states, progress, notifications, monitoring, safe retries, performance | Real iPhone sign-in→record→reload→play→cloud recover tested |
-| IOS-01 | App release | Native media permissions, iOS Files/Share Sheet integration, subscription compliance | On-device tests with real audio/video, permission denial and backgrounding |
+| **AUTH-01** | 인증 | Apple·카카오·실현 가능한 이메일 로그인, 세션 관리·복구·로그아웃 | 신규/기존 로그인, 로그아웃 후 개인 정보 숨김, 계정 간 데이터 분리 |
+| **AUTH-02** | 동의·계정 | 약관·개인정보·선택적 AI 이용 동의, 데이터 내보내기, 탈퇴 | 내 데이터만 내보내기·삭제 요청 가능 |
+| **HOME-01** | 홈 | 다음 레슨, 미완료 숙제, 최근 곡, 원터치 녹음·연습 기록 | 기록 없음/있음 상태, 녹음만으로 가짜 연습 시간 미생성 |
+| **SONG-01** | 곡 목록 | 곡 추가·수정·검색·필터·별칭·가수·뮤지컬·자료 | 동일 곡명 허용, 기존 곡 ID 보존 |
+| **SONG-02** | 곡 상세 | 곡 중심으로 연습·레슨·숙제·녹음·악보·비교 기록 | 어디서 진입해도 곡 상세로 돌아오기 |
+| **MEDIA-01** | 녹음 | 시작·일시정지·재개·종료, 미리 듣기, 제목·곡 선택 | 중복 저장 없음, 저장 실패 시 원본 재시도·다운로드 |
+| **MEDIA-02** | 보관함 | 로컬·클라우드 통합 목록, 곡/제목/날짜 수정, 구간 반복·배속 | 재접속·탐색·재로그인 후 재생, 중복 표시 없음 |
+| **MEDIA-03** | 가져오기 | 지원되는 M4A·MP3·WAV·MOV 등 다중 선택, 녹음 날짜 자동 추출·수정 | 파일명이나 수정일이 정상 촬영 날짜를 덮어쓰지 않음 |
+| **MEDIA-04** | 대용량 업로드 | 진행률·취소·실패 항목만 재시도·기존 미디어 ID 유지 | 200MB급 파일 중단 시 데이터 유실 없이 복구 가능, 재개 한계 명시 |
+| **MEDIA-05** | 영상 정책 | **결정 필요:** 영상 원본 보존·재생·저화질 파생본 vs MOV 음성만 추출 | 실제 보관 형식 고지, 원본 유지 정책, 음질 검증 |
+| **MEDIA-06** | 저장 공간 | 인증된 사용자별 파일 소유권·재생 권한·용량·내보내기 | 다른 계정이 개인 미디어 목록·재생 접근 불가 |
+| **PRACT-01** | 연습 입력 | 보컬 트레이닝/곡 연습, 시간·목표·체크리스트·만족도·메모·녹음 연결 | 녹음 연결 시 연습 시간 중복 계산 안 됨 |
+| **PRACT-02** | 연습 이력 | 조회·수정·삭제, 정확한 통계와 미디어 연결 | 기록 삭제가 파일 원본 삭제로 이어지지 않음 |
+| **LESSON-01** | 개인 레슨 | 학생이 날짜·시간·장소·선생님 이름·곡·준비·피드백 직접 기록 | 과거 예정 레슨 자동 완료 금지, 기존 상태 값 호환 |
+| **LESSON-02** | 레슨 연결 | 레슨↔곡·녹음·숙제 연계, 소유권 독립 | 기존 정산 ID·날짜·상태 계약 유지 |
+| **HW-01** | 숙제 | 레슨·곡별 숙제 작성, 완료·이월·연습 연결 | 연습 체크와 실제 숙제 완료 상태 분리 |
+| **CAL-01** | 캘린더 | 레슨·연습·녹음·숙제·공연을 실제 날짜에 표시 | 가져온 파일의 촬영/녹음 날짜·직접 수정 날짜 정확히 표시 |
+| **COMP-01** | A/B 비교 | 같은 곡 녹음 2개 선택, 구간 반복·속도·메모 | 원본 파일 무변경 |
+| **GROW-01** | 성장 | 연습 일수·시간·곡별 분포·만족도·숙제·비교 | 원본 기록과 집계 일치, 중복 시간 없음 |
+| **PERF-01** | 공연·오디션 | 일정·배역·레퍼토리·리허설·아카이브 | 외부 공개 없이 개인 공연 기록 생성 가능 |
+| **AI-01** | 전사 | 동의 기반 녹음 전사, 시간 구간, 작업·재시도 상태 | AI 실패 시 녹음 저장 영향 없음, 가짜 전사 결과 금지 |
+| **AI-02** | 곡 매칭 | 기존 개인 곡에서 후보 검색·추천, 사용자 확인 후 연결 | 검토 없이 기존 곡 연결을 되돌릴 수 없게 변경하지 않음 |
+| **AI-03** | 음성 분석 | 음정·박자·음역 및 기타 지표 정확도 검증 후 제공 | 오디오만으로 호흡·발성 상태를 과학적으로 확정한 것처럼 표현 금지 |
+| **AI-04** | 연습 추천 | 내 기록을 근거로 추천·수정·거절, 이용량 제한 | 선생님이 하지 않은 피드백이나 절대적 실력 점수 조작 금지 |
+| **SHARE-01** | 제한적 공유 | 선택 사항: 만료·취소 가능한 보호된 재생 링크, 선생님 가입 불필요 | 기본 비공개, 링크 접근 제한·만료·권한 회수 |
+| **PLAN-01** | 요금제 | Free·Plus·Pro, 저장 공간/AI 한도, 갱신·해지·복원·영수증 | 화면뿐 아니라 서버에서 구독 권한 검증 |
+| **DATA-01** | 백업·내보내기 | 기록과 원본 미디어를 구분하여 내보내기, 진행률·누락 표시 | JSON 기록 백업을 원본 파일까지 포함한 백업으로 오인하지 않음 |
+| **DATA-02** | 소유자 이전 | 승인된 소유자 1계정에만 기존 자료 가져오기, 미리보기·중복 검사·대조 | 기존 ID 추적 가능, 일반 사용자 접근 차단 |
+| **OPS-01** | 안정성 | 오류 메시지·진행률·재시도·알림·모니터링·속도 | 실제 iPhone 녹음→재접속→재생→클라우드 복구 검증 |
+| **IOS-01** | iOS 출시 | 네이티브 마이크·미디어 권한, 파일 앱·공유 시트, 결제 준수 | 권한 거부·백그라운드·실제 영상/음성 실기기 테스트 |
 
-## The minimum complete student journey (critical path)
-1. Sign in or reopen existing account.
-2. Add a song (optional for initial recording).
-3. Record 10 seconds OR import an existing audio/video file.
-4. Preview, store locally without loss, then back up to authenticated cloud.
-5. View in library, change captured date with provenance, attach to song/practice/lesson.
-6. Create personal lesson with date/time, teacher display name, song, feedback.
-7. Create homework and complete via actual practice log (no false automatic elapsed time).
-8. Check calendar and growth metrics, listen to earlier recording, compare two takes.
-9. Sign in on another device and confirm records **and media** remain retrievable.
-10. Export data, verify account isolation, and handle quota/cancel states safely.
+## 4. 학생 핵심 사용자 여정
 
-## Priority gates (not a reduction of promised 1.0 scope)
-- **G0 Data safety and correctness:** import/save/play/reopen/cloud sync, verified accounts and permissions, data integrity, recovery.
-- **G1 Daily workflow completeness:** song→record→practice→lesson→homework→calendar→growth, excellent mobile UX.
-- **G2 Full student feature set:** PDF scores, performance archive, sharing, validated AI, subscriptions, real iOS support.
-- **Release** only once all approved 1.0 requirements and real-device QA pass.
+1. 계정으로 로그인하거나 기존 세션을 재개한다.
+2. 곡을 추가한다. **처음 녹음할 때 곡 지정은 선택 사항**이다.
+3. 10초 직접 녹음 또는 음성·영상 파일을 가져온다.
+4. 미리 듣기 후 로컬에 안전하게 저장하고 로그인된 계정으로 클라우드 백업한다.
+5. 보관함에서 재생하고 원본 날짜·날짜 출처를 확인·수정한다. 곡·연습·레슨과 연결한다.
+6. 레슨 날짜·시간·선생님 이름·곡·피드백을 작성한다.
+7. 숙제를 등록하고 실제 연습 기록으로 수행 과정을 남긴다. 연습 시간은 중복 계산하지 않는다.
+8. 캘린더·성장 기록을 확인하고 두 녹음을 비교한다.
+9. 다른 기기에서 로그인해 **기록과 실제 미디어 모두** 조회·재생되는지 확인한다.
+10. 내보내기, 사용자별 데이터 격리, 저장 한도, 구독 만료 상태를 확인한다.
 
-## Current implementation evidence to reconcile in Phase 01
-- Current v6 README: 5-tab student navigation, audio-only recording, MOV import extracts audio (does **not** preserve video), localStorage + IndexedDB + cloud payload sync, chunked upload, lesson and homework, growth; AI is text-memo assistance and not actual pitch/breath analysis.
-- Billing remains independent under `billing/` and the UI reads its link. Do not merge teacher commerce into student v1 incidentally.
-- `docs/운영검증_2026-11-04.md` records mocked automated checks; actual iPhone and live cloud validation still outstanding in that snapshot.
+## 5. 우선순위 게이트 — 출시 범위 축소 아님
 
-## Open product decisions (owner + engineering to resolve, not silently assume)
-1. Video in 1.0: archived 720p transcoded version plus original retained, or keep audio-only imports? Original request favors video support, existing implementation is audio-only extraction.
-2. Student 1.0 plans: initial Free 1GB / Plus 20GB KRW 4,900 / Pro 100GB KRW 9,900 **tentative**; benchmark cost, IAP and quotas.
-3. Public vs authenticated media share link and whether comments/feedback are allowed pre-teacher release.
-4. AI scope: validated reliable metrics by launch, unsupported dimensions hidden or labeled experimental.
-5. 29-day post-expiry grace, day-30 excess-media disposal **proposal only**. Legal/consent/notification/restore/export decisions first.
-6. Which native iOS framework and video conversion jobs; decide after auditing current web app.
+- **G0. 데이터 안전·정확성:** 가져오기/저장/재생/재접속/동기화, 계정 분리, 무손실·복구.
+- **G1. 일상 사용 흐름:** 곡→녹음→연습→레슨→숙제→캘린더→성장, 우수한 모바일 UX.
+- **G2. 학생 전체 범위:** 악보 PDF, 공연 아카이브, 공유, 검증된 AI, 구독, iOS 실기기.
+- **Release 1.0 출시:** 확정된 학생용 요구사항 및 실기기 QA 통과 후.
 
-## Non-functional requirements
-- All mutations versioned/audited where data loss or financial ledger impact matters.
-- Accessible touch targets, keyboard/safe-area handling, explicit loading/empty/error/offline states.
-- Server-authorized media links and RLS; never embed privileged keys client-side.
-- Performance budget to be set after baseline measurement rather than invented.
-- No actual personal recordings in GitHub, screenshots, or test fixtures.
+## 6. 현행 코드와 대조할 내용
 
-## Handoff
-The Phase 01 audit must annotate this PRD with evidence and gaps. Phase 02 resolves open UX/architecture questions, Phase 03 provides concrete SQL contracts and migration plan; no blind production schema changes.
+현재 v6 문서상 구현/동작으로 설명된 범위:
+- 하단 메뉴 5개(홈·내 곡·녹음·캘린더·성장), 음성 녹음, 곡/레슨/숙제/연습/성장, 일부 녹음 비교.
+- MOV 가져오기는 **영상 트랙 보존이 아니라 음성 추출**.
+- localStorage·IndexedDB·Supabase 동기화 및 분할 업로드.
+- AI는 비교 **텍스트 메모 정리** 중심. 음정·호흡 음성 분석이 완성된 상태가 아님.
+- 레슨비 정산은 `billing/` 별도 프로젝트. 학생 1.0에 선생님 수납 원장을 임의 통합하지 않는다.
+- 자동 브라우저 테스트와 **실제 iPhone·운영 클라우드 검증은 구분**한다.
+
+## 7. 미확정 제품 정책
+
+1. **영상 저장:** 영상 원본과 720p 파생본을 함께 보존할지, 기존처럼 음성 추출만 유지할지. 기존 사용자 요구는 영상 보관도 포함하지만 현행 코드는 음성 추출 중심이다.
+2. **가격:** Free 1GB / Plus 20GB 4,900원 / Pro 100GB 9,900원은 가안. 저장·AI·iOS 결제 수수료를 검증한다.
+3. **공유 링크:** 익명 재생 링크 또는 인증 필수 여부와 1.0에서 댓글·피드백 허용 여부.
+4. **AI:** 정확도 검증된 지표만 제공. 검증이 어려운 요소는 실험적 표시 또는 미제공.
+5. **구독 만료:** 29일 유예·30일 차 초과 미디어 폐기는 **아직 제안 단계**. 고지·동의·내보내기·복구·법률 검토 후 결정한다.
+6. **iOS 기술:** 현재 웹앱 유지 방식과 네이티브 전환 범위, 영상 변환 작업 방식은 코드 조사 후 확정한다.
+
+## 8. 비기능 요구사항
+
+- 데이터 손실 위험이 있는 변경과 정산은 버전·이력 관리 및 검증 절차를 제공한다.
+- 터치 영역, 큰 글자, 화면 키보드, Safe Area, 로딩·빈 상태·오류·오프라인 상태를 지원한다.
+- 사용자 권한은 서버에서 검증하며 미디어 접근은 인증된 서명 URL을 사용한다.
+- 성능 목표는 실제 측정 뒤 정한다. 검증되지 않은 숫자를 임의로 약속하지 않는다.
+- 실제 개인 녹음·계정 데이터는 GitHub나 테스트 파일에 업로드하지 않는다.
+
+## 9. 다음 작업 연결
+
+Phase 01에서 이 PRD를 현재 코드와 대조해 구현·검증 상태를 표시한다.
+
+Phase 02에서 주요 UX와 기술 방향을 정하고, Phase 03에서 실제 SQL 스키마와 호환성 있는 데이터 이전 계획을 작성한다.
+
+**Phase 01 완료 전 운영 코드·DB·미디어를 변경하지 않는다.**
