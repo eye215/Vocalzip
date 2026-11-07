@@ -95,7 +95,7 @@
 .vz-home-no-week {font-size:13px;color:var(--vz-color-ink-secondary);}
 .vz-home-bottom-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;align-items:stretch;}
 .vz-student-home .vz-home-song {aspect-ratio:1.15;width:100%;min-height:min-content;position:relative;display:block;overflow:hidden;padding:11px;}
-.vz-home-song-detail {width:100%;height:auto;min-height:100%;padding:0;display:flex;align-items:center;flex-direction:column;border:0;background:transparent;text-align:center;justify-content:space-between;gap:4px;}
+.vz-home-song-detail {width:100%;height:auto;min-height:0;padding:0;display:flex;align-items:center;flex-direction:column;border:0;background:transparent;text-align:center;justify-content:space-between;gap:4px;}
 .vz-home-song-heading {display:flex;justify-content:space-between;gap:2px;align-items:center;width:100%;}
 .vz-home-song-heading .vz-home-heading {font-size:16px;white-space:normal;gap:3px;}
 .vz-home-song-heading>.vz-home-icon {font-size:16px;}
