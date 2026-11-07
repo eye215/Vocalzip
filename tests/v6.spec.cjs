@@ -687,6 +687,37 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   await expect(page.locator('[data-media]')).toHaveCount(1);
 });
 
+
+test('New recording after save gets a fresh ID and preserves both takes', async ({page, browserName}) => {
+  test.skip(browserName !== 'chromium', 'Fake microphone capture is Chromium-only.');
+  await boot(page, {media:false});
+  await page.goto('/#/record');
+
+  const take = async () => {
+    await page.getByRole('button', {name:'녹음 시작'}).click();
+    await expect(page.getByRole('button', {name:'녹음 종료'})).toBeVisible();
+    await page.waitForTimeout(950);
+    await page.getByRole('button', {name:'녹음 종료'}).click();
+    await expect(page.locator('[data-review] [data-save]')).toBeVisible();
+    await page.locator('[data-review] [data-save]').click();
+    await expect(page.getByText('저장했어요', {exact:true})).toBeVisible();
+  };
+
+  await take();
+  const first = await media(page);
+  expect(first).toHaveLength(1);
+  const firstId = first[0].id;
+
+  await page.getByRole('button', {name:'새 녹음'}).click();
+  await take();
+
+  const allSaved = await media(page);
+  expect(allSaved).toHaveLength(2);
+  expect(new Set(allSaved.map(m => m.id)).size).toBe(2);
+  expect(allSaved.some(m => m.id === firstId)).toBe(true);
+  expect(allSaved.every(m => m.durationSeconds >= 0.8)).toBe(true);
+});
+
 test('Recording from a lesson links the file to that lesson', async ({page, browserName}) => {
   test.skip(browserName !== 'chromium', 'Fake capture devices are Chromium-only.');
   await boot(page);
