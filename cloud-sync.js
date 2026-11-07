@@ -553,7 +553,7 @@ async function enterAccount(){
   button.onclick=async()=>{
    if(!window.vzipCloudSignedIn())return;
    const approved=await window.VZ.confirm('이전 자료 소유 계정 확인','이 기기의 이전 녹음과 기록이 현재 로그인 계정의 자료인가요? 확인한 경우에만 복사합니다. 이전 원본은 지우지 않고, 같은 ID의 현재 자료는 덮어쓰지 않습니다.',{ok:'내 자료를 이 계정으로 복사'});
-   if(!approved||!current())return;
+   if(!approved||user?.id!==scope.owner||!sessionVerified)return;
    button.disabled=true;
    try{const result=await scope.importLegacy();window.VZ.toast('기록 '+result.records+'건·파일 '+result.files+'개 복사, 충돌/기존 항목 '+result.conflicts+'건 보존');window.VZ.media.invalidate();await sync({silent:true});}
    catch(e){window.VZ.toast(e.message,'error');}finally{button.disabled=false;}

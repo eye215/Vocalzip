@@ -68,12 +68,12 @@ test('separate account namespaces and media databases survive account switch wit
   localStorage.setItem('__test_user','B');
   window.__changeAuth('SIGNED_IN',{user:{id:'B',email:'B@test.invalid'}});
  });
- await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner)).toBe('B');
+ await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('B');
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  expect(await page.evaluate(async()=>({files:await vzipReadMedia(),queue:VzipAccountScope.storage.getItem('vzip_upload_queue_v1'),songs:VZ.db.songs.map(x=>x.id)}))).toEqual({files:[],queue:null,songs:['song-B']});
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs[0].id)).toBe('legacy');
  await page.evaluate(()=>{localStorage.setItem('__test_user','A');window.__changeAuth('SIGNED_IN',{user:{id:'A'}});});
- await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner)).toBe('A');
+ await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('A');
  expect(await page.evaluate(async()=>({ids:(await vzipReadMedia()).map(x=>x.id),queue:VzipAccountScope.storage.getItem('vzip_upload_queue_v1')}))).toEqual({ids:['private-A'],queue:'A-only-queue'});
 });
 
@@ -120,7 +120,7 @@ test('legacy copy preserves source bytes and IDs and never overwrites current da
  expect(report.currentTitle).toBe('현재 계정이 수정한 제목');expect(report.first.conflicts).toBeGreaterThan(0);
  expect(report.first.files).toBe(1);expect(report.second.files).toBe(0);
  await page.evaluate(()=>{localStorage.setItem('__test_user','B');window.__changeAuth('SIGNED_IN',{user:{id:'B'}});});
- await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner)).toBe('B');
+ await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('B');
  expect(await page.evaluate(()=>VzipAccountScope.canImportLegacy())).toBe(false);
 });
 

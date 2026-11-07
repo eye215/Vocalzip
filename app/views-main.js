@@ -299,7 +299,7 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
     '<div class="rec-status" role="status" data-status>버튼을 누르면 바로 녹음이 시작돼요.</div></section>' +
     '<div data-review hidden></div>' +
     '<button type="button" class="btn ghost block" data-import><i class="ph ph-upload-simple"></i> 파일 가져오기</button><p class="small muted" style="margin:0 4px">영상 파일은 음성만 추출해 원음 그대로 저장해요.</p></div>';
-}, leave() { if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
+}, leave() { rec?.result?.releaseProtection?.();if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
   const lessonId = r.query.get('lesson') || '';
   const state = {songId:r.query.get('song') || '', video:false, session:null, result:null, waveLive:[]};
   rec = state;
