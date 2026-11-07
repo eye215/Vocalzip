@@ -143,8 +143,8 @@ export function createDock({ active="home", onNavigate=()=>{} }={}){
     ["home","홈","ph ph-house"],
     ["songs","내 곡","ph ph-music-notes"],
     ["record","녹음","ph-fill ph-microphone"],
-    ["calendar","캘린더","ph ph-calendar-blank"],
-    ["growth","성장","ph ph-chart-line-up"]
+    ["library","보관함","ph ph-archive-box"],
+    ["calendar","일정","ph ph-calendar-blank"]
   ];
   for(const [id,label,iconClass] of links){
     const b=el("button","vz-dock__item"+(id==="record"?" vz-dock__item--record":""));
