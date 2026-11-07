@@ -1,0 +1,81 @@
+/* Approved student-home handoff tokens. Not loaded by the app.
+ * Merge into existing DS #120; do not add a second active global token layer.
+ * Colors/geometry are implementation starting values, subject to rendered QA. */
+[data-vz-theme="student"][data-vz-design="approved-home-v1"] {
+  --vz-color-canvas: #D8C7F7;
+  --vz-color-canvas-violet: #C6A6EF;
+  --vz-color-canvas-pink: #EBCBF5;
+  --vz-color-canvas-blue: #C9D5FA;
+  --vz-color-ink: #3F2858;
+  --vz-color-ink-secondary: #78668C;
+  --vz-color-heading: #9864CC;
+  --vz-color-heading-strong: #8050AC;
+  --vz-color-icon-start: #B78BE7;
+  --vz-color-icon-end: #9258CA;
+  --vz-color-accent: #8F42DA;
+  --vz-color-accent-ink: #FFFFFF;
+  --vz-color-practice-low: #DDC7F3;
+  --vz-color-practice-met: #A470DE;
+  --vz-color-practice-high: #7434BC;
+  --vz-color-today: #7900DF;
+  --vz-color-day-accent: #ED38B2;
+  --vz-color-nav-label: #9B88B3;
+  --vz-color-check-border: #BE9EDB;
+  --vz-color-check-fill: #A879DC;
+  --vz-color-progress-track: #D8C5EF;
+  --vz-color-glass: rgba(255,255,255,.30);
+  --vz-color-glass-border: rgba(255,255,255,.48);
+  --vz-color-glass-fallback: #EDE2F9;
+  --vz-color-focus: #7137B1;
+  --vz-color-flame: #F59C48;
+  --vz-font-family: -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+  --vz-font-greeting-size: 24px;
+  --vz-font-greeting-weight: 600;
+  --vz-font-heading-size: 16px;
+  --vz-font-heading-weight: 600;
+  --vz-font-quick-title-size: 15px;
+  --vz-font-event-size: 20px;
+  --vz-font-body-size: 15px;
+  --vz-font-meta-size: 12px;
+  --vz-font-nav-size: 12px;
+  --vz-space-1: 4px;
+  --vz-space-2: 8px;
+  --vz-space-3: 12px;
+  --vz-space-4: 16px;
+  --vz-space-5: 20px;
+  --vz-space-6: 24px;
+  --vz-space-grid-gap: 12px;
+  --vz-space-page-gutter: 16px;
+  --vz-space-card-padding: 16px;
+  --vz-radius-card: 28px;
+  --vz-radius-check: 6px;
+  --vz-radius-pill: 999px;
+  --vz-radius-dock: 30px;
+  --vz-size-touch-min: 44px;
+  --vz-size-check: 22px;
+  --vz-size-practice-badge: 32px;
+  --vz-size-icon-title: 18px;
+  --vz-size-icon-action: 24px;
+  --vz-size-record: 56px;
+  --vz-size-gauge-width: 98px;
+  --vz-size-gauge-track-height: 49px;
+  --vz-size-gauge-stroke: 7px;
+  --vz-effect-blur: 24px;
+  --vz-effect-saturate: 135%;
+  --vz-effect-shadow-card: 0 8px 24px rgba(100,62,159,.12),inset 0 1px 0 rgba(255,255,255,.5);
+  --vz-effect-shadow-dock: 0 10px 28px rgba(100,62,159,.14),inset 0 1px 0 rgba(255,255,255,.5);
+  --vz-effect-shadow-greeting: 0 1px 3px rgba(71,35,118,.20);
+  --vz-motion-fast: 150ms;
+  --vz-motion-normal: 220ms;
+}
+@media (max-width: 359px) {
+  [data-vz-theme="student"][data-vz-design="approved-home-v1"] {
+    --vz-space-page-gutter: 12px; --vz-space-card-padding: 12px; --vz-space-grid-gap: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-vz-theme="student"][data-vz-design="approved-home-v1"] { --vz-motion-fast: 0ms; --vz-motion-normal: 0ms; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-vz-theme="student"][data-vz-design="approved-home-v1"] { --vz-color-glass: var(--vz-color-glass-fallback); --vz-effect-blur: 0px; }
+}
