@@ -256,3 +256,6 @@ body.vz-home-mode .v-nav ul>li>a.rec span {color:#fff;font-size:11px;font-weight
 .vz-home-heading>span,.vz-home-song-heading,.vz-home-quick>span {min-width:0;overflow-wrap:anywhere;}
 .vz-home-streak {max-width:100%;white-space:normal;flex-wrap:wrap;}
 .vz-home-week-summary>span {min-width:0;max-width:100%;}
+
+/* A lesson without a stage has no empty stage body or divider. */
+.vz-home-stage--lesson-only .vz-home-lesson {margin-top:0;padding-top:0;border-top:0;}
