@@ -77,9 +77,9 @@ async function browserSmoke(user,sessions){
    check(await page.evaluate(()=>document.querySelector('#vzip-auth-screen').hidden),'browser login gate');
    check(await page.evaluate(()=>window.VzipAccountScope?.owner)===user.id,'browser account boundary');
    await page.goto('http://127.0.0.1:8765/billing/');
-   await page.waitForFunction(()=>window.VzipBillingSession?.active===true,{},{timeout:30000});
+   await page.waitForFunction(()=>window.VzipBillingSession?.active===true&&!!window.VzipBillingStore,{},{timeout:30000});
    check(await page.evaluate(()=>!document.querySelector('main.billing').inert),'billing gate');
-   check(await page.evaluate(()=>window.VzipBillingStore.account.id)==='user:'+user.id,'billing owner');
+   check(await page.evaluate(async()=>(await window.VzipBillingStore.load()).owner)==='user:'+user.id,'billing owner and scoped store');
   }
   console.log('Browser smoke: two independent sessions and billing verified');
  }finally{await browser.close();server.kill();server=null;}
@@ -175,6 +175,9 @@ try{
  db=new pg.Client({connectionString:env.SUPABASE_DB_URL,ssl:{rejectUnauthorized:false}});await db.connect();
  await db.query("select pg_advisory_lock(hashtext('vzip_device_session_release'))");
  if(plan.mode==='prepare'){
+  mark('Auth admin credential check');
+  const adminCheck=await api('/auth/v1/admin/users/00000000-0000-0000-0000-000000000000',{admin:true});
+  check(adminCheck.status===404,'Auth admin credential status');
   mark('Auth cascade and RPC prerequisites');
   const fk=await db.query("select count(*)::int as n from pg_constraint where contype='f' and conrelid='auth.refresh_tokens'::regclass and confrelid='auth.sessions'::regclass and confdeltype='c'");
   check(fk.rows[0].n>0,'Auth refresh token cascade');

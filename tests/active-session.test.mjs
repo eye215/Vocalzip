@@ -233,4 +233,7 @@ test('expired Auth session rows cannot authorize requests or consume a login slo
  assert.equal(await active(U,A),false);
  assert.equal((await db.query('select public.vzip_playback_owner($1) as r',[token])).rows[0].r,null);
  await assert.rejects(register(U,A),/valid authenticated session required/);
+ assert.equal((await register(U,B)).status,'active');
+ assert.equal((await register(U,C)).status,'active');
+ assert.equal((await listing(U,B)).sessions.length,2);
 });
