@@ -48,14 +48,18 @@ const scope=window.VzipAccountScope={
   // Claim first: a partially completed copy is only resumable by the same account.
   raw.setItem(CLAIM,owner);
   const ensure=()=>{if(raw.getItem(CLAIM)!==owner||raw.getItem(MARKER)!==owner||leaving)throw Error('계정이 변경되어 이전을 중단했어요. 원본은 남아 있어요.');};
+  if(!window.vzipAccountImportBaseline)throw Error('클라우드 자료 확인 기능을 불러오지 못했어요.');
+  const baseline=await window.vzipAccountImportBaseline();ensure();
+  const cloudIds=new Set(baseline.mediaIds);
   if(data){
    const legacy=JSON.parse(data), current=JSON.parse(storage.getItem('vocal-zip_mvp_v1')||'{}');
    for(const k of ['categories','songs','lessons','assignments','practices','comparisonReports','performances']){
-    current[k] ||= [];const ids=new Set(current[k].map(x=>String(x.id)));
-    const deleted=new Set([...(current.deleted?.[k]||[]),...(legacy.deleted?.[k]||[])].map(String));
+    current[k] ||= [];const ids=new Set(current[k].map(x=>String(x.id))),remoteIds=new Set((baseline.payload[k]||[]).map(x=>String(x.id)));
+    const deleted=new Set([...(current.deleted?.[k]||[]),...(legacy.deleted?.[k]||[]),...(baseline.payload.deleted?.[k]||[])].map(String));
     for(const row of legacy[k]||[]){
      if(row.ownerId&&row.ownerId!==owner){summary.conflicts++;continue;}
      if(deleted.has(String(row.id)))continue;
+     if(remoteIds.has(String(row.id))){summary.conflicts++;continue;}
      if(ids.has(String(row.id))){if(JSON.stringify(current[k].find(x=>String(x.id)===String(row.id)))!==JSON.stringify(row))summary.conflicts++;continue;}
      current[k].push(row);ids.add(String(row.id));summary.records++;
     }
@@ -73,6 +77,7 @@ const scope=window.VzipAccountScope={
    const ids=await new Promise((resolve,reject)=>{const t=source.transaction('recordings'),r=t.objectStore('recordings').getAllKeys();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
    for(const id of ids){
     ensure();
+    if(cloudIds.has(String(id))){summary.conflicts++;continue;}
     let file=await new Promise((resolve,reject)=>{const r=source.transaction('recordings').objectStore('recordings').get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
     if(!file)continue;
     if(file.accountOwner&&file.accountOwner!==owner){summary.conflicts++;continue;}

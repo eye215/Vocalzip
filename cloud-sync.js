@@ -38,6 +38,13 @@ function mediaExtension(type){
 }
 function localMedia(){return new Promise((resolve,reject)=>{const req=indexedDB.open(mediaDb,1);req.onupgradeneeded=()=>req.result.createObjectStore('recordings',{keyPath:'id'});req.onerror=()=>reject(req.error);req.onsuccess=()=>{const db=req.result,tx=db.transaction('recordings','readonly'),get=tx.objectStore('recordings').getAll();get.onsuccess=()=>resolve(get.result||[]);get.onerror=()=>reject(get.error);tx.oncomplete=()=>db.close()}})}
 async function remoteData(){const {data,error}=await client.from('vocal_data').select('payload,updated_at').eq('user_id',user.id).maybeSingle();if(error)throw error;return data}
+window.vzipAccountImportBaseline=async()=>{
+ const owner=user?.id;
+ if(!owner||!sessionVerified||owner!==window.VzipAccountScope?.owner)throw Error('로그인을 확인한 뒤 이전해 주세요.');
+ const row=await remoteData(),media=await window.vzipCloudMediaList();
+ if(user?.id!==owner||!sessionVerified||window.VzipAccountScope.leaving)throw Error('계정이 변경되어 이전을 중단했어요.');
+ return {payload:row?.payload||{},mediaIds:media.map(x=>String(x.id))};
+};
 /* Sync merges device and cloud records by id (data-merge.js): nothing on either side is lost;
    only records deleted on purpose (tombstones) disappear. The device copy before any local
    rewrite is kept as vzip_before_cloud_<time> (last 5). */

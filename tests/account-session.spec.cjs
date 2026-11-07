@@ -159,3 +159,18 @@ test('server-revoked session locks controls and token access without reclaiming 
  await expect(page.locator('#vzip-auth-screen')).toBeVisible();
  expect(await page.evaluate(async()=>({signed:vzipCloudSignedIn(),token:await vzipCloudAccessToken(),inert:document.querySelector('.v-app').inert,active:localStorage.getItem('__test_active')}))).toEqual({signed:false,token:null,inert:true,active:'other'});
 });
+
+test('legacy import skips IDs already in cloud and cloud tombstones even without a local mirror',async({page})=>{
+ await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ const result=await page.evaluate(async()=>{
+  VzipAccountScope.storage.setItem('vocal-zip_mvp_v1',JSON.stringify({songs:[]}));
+  localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify({songs:[{id:'legacy',title:'이전 제목'},{id:'gone',title:'삭제됐던 곡'}]}));
+  window.vzipAccountImportBaseline=async()=>({payload:{songs:[{id:'legacy',title:'서버 최신 제목'}],deleted:{songs:['gone']}},mediaIds:['cloud-file']});
+  const request=indexedDB.open('vocalzip_media_v1',1);
+  const db=await new Promise((resolve,reject)=>{request.onupgradeneeded=()=>request.result.createObjectStore('recordings',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+  await new Promise((resolve,reject)=>{const tx=db.transaction('recordings','readwrite');tx.objectStore('recordings').put({id:'cloud-file',name:'과거 사본',bytes:new Uint8Array([1,2,3]).buffer,type:'audio/wav'});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+  const before=localStorage.getItem('vocal-zip_mvp_v1'),summary=await VzipAccountScope.importLegacy();
+  return{summary,songs:JSON.parse(VzipAccountScope.storage.getItem('vocal-zip_mvp_v1')).songs,files:(await vzipReadMedia()).map(x=>x.id),source:localStorage.getItem('vocal-zip_mvp_v1')===before};
+ });
+ expect(result.summary.records).toBe(0);expect(result.summary.files).toBe(0);expect(result.summary.conflicts).toBe(2);expect(result.songs).toEqual([]);expect(result.files).toEqual([]);expect(result.source).toBe(true);
+});
