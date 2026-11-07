@@ -174,3 +174,21 @@ test('legacy import skips IDs already in cloud and cloud tombstones even without
  });
  expect(result.summary.records).toBe(0);expect(result.summary.files).toBe(0);expect(result.summary.conflicts).toBe(2);expect(result.songs).toEqual([]);expect(result.files).toEqual([]);expect(result.source).toBe(true);
 });
+
+test('reclaiming a session waits for in-flight recording protection before reloading',async({page})=>{
+ await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await page.evaluate(()=>{
+  window.__protectionHeld=true;
+  VzipAccountScope.beforeLeave(()=>new Promise(resolve=>{window.__finishProtection=()=>{VzipAccountScope.storage.setItem('protected-before-reclaim','yes');resolve();};}));
+  localStorage.setItem('__test_active','other');window.dispatchEvent(new Event('focus'));
+ });
+ await expect(page.locator('#vzip-auth-screen')).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>typeof window.__finishProtection)).toBe('function');
+ await page.evaluate(()=>window.__changeAuth('SIGNED_IN',{user:{id:'A',email:'A@test.invalid'}}));
+ await page.getByRole('dialog',{name:'로그인 기기 인계'}).getByRole('button',{name:'여기서 로그인'}).click();
+ await expect.poll(()=>page.evaluate(()=>localStorage.getItem('__test_active'))).toBe('here');
+ expect(await page.evaluate(()=>window.__protectionHeld)).toBe(true);
+ await Promise.all([page.waitForEvent('load'),page.evaluate(()=>window.__finishProtection())]);
+ await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ expect(await page.evaluate(()=>VzipAccountScope.storage.getItem('protected-before-reclaim'))).toBe('yes');
+});

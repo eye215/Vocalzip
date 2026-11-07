@@ -552,7 +552,7 @@ async function enterAccount(){
   if(error)throw Error(error.message);
  }
  if(data?.status!=='active')throw Error('다른 로그인 요청으로 상태가 바뀌었어요. 다시 로그인해 주세요.');
- if(scope.leaving){location.reload();return;}
+ if(scope.leaving){await scope.lock();if(current())location.reload();return;}
  sessionVerified=true;paintUser();
  let button=document.getElementById('vzip-legacy-import');
  if(!button&&scope.canImportLegacy()){
@@ -579,6 +579,7 @@ async function checkActiveSession(){
    sessionVerified=false;ready=false;clearTimeout(uploadTimer);
    updateAuthScreen();window.vzipRevokeChunkMedia?.();window.dispatchEvent(new Event('vzip:auth-changed'));
    await window.VzipAccountScope.lock();
+   if(generation!==authGeneration)return;
    say('다른 기기로 로그인이 인계됐어요. 미전송 녹음은 이 계정의 기기 저장 공간에 보존됐습니다. 다시 로그인해 주세요.');
   }
  }finally{sessionChecking=false;}
