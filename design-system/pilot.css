@@ -1,0 +1,68 @@
+/* Phase 19 pilot: applies ONLY to the existing Next Lesson card on student home.
+ * Uses the shared v1 token layer. No route, content, save, media, or state mutations.
+ * Style fallback remains via existing class "lesson-hero" when this file is not loaded.
+ */
+.vz-scope.vz-lesson-hero.lesson-hero {
+  display:grid;
+  gap:10px;
+  background:linear-gradient(132deg,var(--vz-color-glass-raised),var(--vz-color-accent-soft));
+  color:var(--vz-color-ink);
+  border:1px solid var(--vz-color-glass-border);
+  border-radius:var(--vz-radius-hero);
+  padding:24px 22px;
+  box-shadow:var(--vz-shadow-card);
+  -webkit-backdrop-filter:var(--vz-blur-card);
+  backdrop-filter:var(--vz-blur-card);
+  text-decoration:none;
+  min-width:0;
+}
+.vz-lesson-hero.lesson-hero .row.between {
+  align-items:center;
+}
+.vz-lesson-hero.lesson-hero .row.between .small {
+  font-size:var(--vz-text-sm);
+  color:var(--vz-color-accent-strong);
+}
+.vz-lesson-hero.lesson-hero .dday {
+  border-radius:var(--vz-radius-pill);
+  background:var(--vz-color-accent-soft);
+  color:var(--vz-color-accent-strong);
+  min-height:30px;
+  padding:5px 10px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.vz-lesson-hero.lesson-hero .when {
+  font-size:clamp(19px,5vw,25px);
+  letter-spacing:-.04em;
+  line-height:var(--vz-leading-tight);
+  font-weight:800;
+  overflow-wrap:anywhere;
+}
+.vz-lesson-hero.lesson-hero .meta {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 14px;
+  font-size:var(--vz-text-sm);
+}
+.vz-lesson-hero.lesson-hero .meta,
+.vz-lesson-hero.lesson-hero .muted {
+  color:var(--vz-color-ink-secondary);
+}
+.vz-lesson-hero.lesson-hero .meta span { min-width:0; overflow-wrap:anywhere; }
+.vz-lesson-hero.lesson-hero [data-billing-left]:empty { display:none; }
+@media (max-width:359px) {
+  .vz-scope.vz-lesson-hero.lesson-hero { padding:20px 16px; }
+  .vz-lesson-hero.lesson-hero .meta { font-size:12px; gap:6px 10px; }
+}
+@media (prefers-reduced-transparency:reduce) {
+  .vz-scope.vz-lesson-hero.lesson-hero {
+    background:var(--vz-color-glass-fallback);
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  .vz-scope.vz-lesson-hero.lesson-hero { background:var(--vz-color-glass-fallback); }
+}
