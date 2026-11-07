@@ -193,3 +193,13 @@ test('reclaiming a session waits for in-flight recording protection before reloa
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  expect(await page.evaluate(()=>VzipAccountScope.storage.getItem('protected-before-reclaim'))).toBe('yes');
 });
+
+test('direct resumable uploads carry the same account protocol header as SDK requests',async({page})=>{
+ await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ const headers=await page.evaluate(async()=>{
+  window.tus={Upload:class{constructor(file,options){this.options=options;window.__transportHeaders=options.headers;}start(){this.options.onError(new Error('isolated transport probe'));}abort(){return Promise.resolve();}}};
+  try{await vzipCloudImport(new File([new Uint8Array(1024)],'probe.wav',{type:'audio/wav'}),{id:'protocol-probe'});}catch{}
+  return window.__transportHeaders;
+ });
+ expect(headers['X-Client-Info']).toBe('vocalzip-account-session-v1');expect(headers.authorization).toBe('Bearer test-token');
+});

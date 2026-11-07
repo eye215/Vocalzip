@@ -196,7 +196,7 @@ async function importMedia(file,info={},onProgress,options={}){
    try{
     upload=new window.tus.Upload(piece,{
      endpoint:'https://chxnbtiyuyhiywzeshis.storage.supabase.co/storage/v1/upload/resumable',
-     headers:{authorization:'Bearer '+session.session.access_token,apikey:key},
+     headers:{authorization:'Bearer '+session.session.access_token,apikey:key,...(window.VzipAccountScope?{'X-Client-Info':'vocalzip-account-session-v1'}:{})},
      uploadDataDuringCreation:false,removeFingerprintOnSuccess:true,
      chunkSize:6*1024*1024,retryDelays:[0,1000,3000,5000,10000],
      storeFingerprintForResuming:false,

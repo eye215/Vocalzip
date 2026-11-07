@@ -5,7 +5,7 @@
 ## 구현
 
 - account-config.js의 VZIP_SINGLE_SESSION_ENABLED는 기본 false. 검증·서버 준비 전 기존 운영 동작을 바꾸지 않는다. true일 때 서버 RPC 실패를 기존 무제한 로그인으로 우회하지 않는다.
-- app/account-scope.js가 계정별 localStorage와 별도 IndexedDB를 제공한다. 이전 vocal-zip_mvp_v1/vocalzip_media_v1은 그대로 두며 자동 병합/삭제하지 않는다. 큐·스냅샷·R2 URL 캐시도 계정별 공간을 쓴다.
+- app/account-scope.js가 학생 앱의 계정별 localStorage와 별도 IndexedDB를 제공한다. 이전 vocal-zip_mvp_v1/vocalzip_media_v1은 그대로 두며 자동 병합/삭제하지 않는다. 큐·스냅샷·R2 URL 캐시도 계정별 공간을 쓴다.
 - 계정이 바뀌면 이전 계정 문맥을 계속 쓰지 않고 보호 콜백 완료 후 새 페이지로 전환한다. 모든 이전 비동기 클로저는 원래 공간에 묶여 있다. 다른 탭의 계정 변경도 보호 후 새로 연다.
 - 녹음 중이거나 아직 저장하지 않은 미리듣기 결과는 계정 전환/인계 중 원래 계정 DB에 보호 파일로 저장한다. 저장 실패면 전환을 진행하지 않는다. 기존 파일/Blob/ArrayBuffer 호환을 유지한다.
 - 새 클라이언트는 X-Client-Info: vocalzip-account-session-v1을 전송한다. 서버 세션 가드는 이 헤더가 없는 구버전 클라이언트의 직접 DB/Storage 접근도 거절해, 같은 브라우저에서 공유된 새 JWT만으로 이전 탭이 자동 병합하는 것을 막는다. Supabase가 이미 허용하는 표준 SDK 헤더를 사용해 별도 Auth CORS 변경을 요구하지 않는다. 이 헤더는 인증 수단이 아니며 검증 JWT·활성 세션 검사와 함께 쓴다.
@@ -21,7 +21,7 @@
 
 ## 운영 활성화 전 남은 필수 항목
 
-1. 기존 SECURITY DEFINER 사용자 RPC·Edge Function의 service-role 경로를 목록화하고 현재 세션 검사를 연결해야 한다. 직접 DB RLS 검증만으로 모든 우회가 차단됐다고 주장하지 않는다.
+1. 별도 billing 클라이언트도 계정 격리·프로토콜을 연결해야 한다. 기존 SECURITY DEFINER 사용자 RPC·Edge Function의 service-role 경로를 목록화하고 현재 세션 검사를 연결해야 한다. 직접 DB RLS 검증만으로 모든 우회가 차단됐다고 주장하지 않는다.
 2. R2 Worker의 활성 세션·클라이언트 프로토콜 검사와 CORS, 기발급 PUT 완료 검증 및 signed GET 권한 철회 계약이 필요하다. RLS는 R2에 적용되지 않는다.
 3. 실제 Supabase auth.sessions·JWT session_id·OAuth/계정 재인증·동일 계정 두 기기 인계·물리 iPhone 중단/저용량/오프라인을 검증해야 한다.
 4. 명시적 운영 승인 후 서버·클라이언트의 일치하는 버전과 캐시 버전을 제한된 환경에서 활성화한다. SQL만 먼저 운영에 적용하면 기존 앱 접근이 차단되므로 금지한다.
