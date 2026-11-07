@@ -11,6 +11,7 @@ on:
       - 'design-system/**'
       - 'docs/design/student-home-v1/**'
       - 'tests/student-home*'
+      - 'tools/student-home-reference-colors.cjs'
       - 'tests/v6.spec.cjs'
       - 'tests/legacy-session-mode.cjs'
       - '.github/workflows/student-home-check.yml'

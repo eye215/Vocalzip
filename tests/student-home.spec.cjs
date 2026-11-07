@@ -163,6 +163,8 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
         return{stage:box('.vz-home-stage'),goals:box('.vz-home-goals'),week:box('.vz-home-week'),recent:box('.vz-home-song'),dock:box('.vz-approved-dock'),heading:box('.vz-home-heading'),greeting:box('.vz-home-greeting'),icon:box('.vz-home-heading .vz-home-icon')};
       });
       console.log('REFERENCE_GEOMETRY '+JSON.stringify(geometry));
+      const target={stage:[13,108,365,153],goals:[13,267,365,150],week:[13,423,365,152],recent:[13,581,179,156],dock:[11,749,368,80]};
+      for(const[name,values]of Object.entries(target))for(const[key,index]of [['x',0],['y',1],['width',2],['height',3]])expect(Math.abs(geometry[name][key]-values[index])).toBeLessThanOrEqual(4);
       expect(geometry.recent.y+geometry.recent.height+6).toBeLessThanOrEqual(geometry.dock.y);
     }
   }

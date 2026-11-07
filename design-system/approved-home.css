@@ -1,7 +1,7 @@
 
 /* Approved student home v1. Import after components.css and application skins. */
 .vz-student-home {box-sizing:border-box;width:100%;min-width:0;max-width:480px;margin:0 auto;padding:calc(30px + env(safe-area-inset-top)) var(--vz-page-gutter) calc(114px + env(safe-area-inset-bottom));color:var(--vz-color-ink);font-family:var(--vz-font);font-size:15px;line-height:1.35;}
-.vz-home-mode, body.vz-student-preview {background:radial-gradient(ellipse at 82% 8%,#e7c8f6,transparent 55%),radial-gradient(ellipse at 15% 68%,#bfcafa,transparent 65%),linear-gradient(145deg,#d5c0f5,#d5c7f8 60%,#e7c9f2);background-attachment:fixed;}
+.vz-home-mode, body.vz-student-preview {background:radial-gradient(ellipse 65% 20% at 105% -3%,transparent 70%,rgba(255,244,255,.42) 71%,rgba(225,234,255,.22) 73%,transparent 76%),radial-gradient(ellipse 78% 18% at 8% -2%,transparent 71%,rgba(255,235,252,.36) 72%,transparent 75%),radial-gradient(ellipse at 82% 8%,#e7c8f6,transparent 55%),radial-gradient(ellipse at 38% 28%,#bdc8fb,transparent 60%),radial-gradient(ellipse at 15% 68%,#bfcafa,transparent 65%),linear-gradient(145deg,#d5c0f5,#d5c7f8 60%,#e7c9f2);background-attachment:fixed;}
 .vz-student-home *, .vz-approved-dock * {box-sizing:border-box;}
 .vz-student-home button, .vz-approved-dock button {font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 .vz-student-home button {color:inherit;}
@@ -30,7 +30,7 @@
 .vz-home-text-button .vz-home-icon {font-size:15px;}
 .vz-home-stage {overflow:hidden;}
 .vz-student-home .vz-home-stage {padding-top:16px;padding-bottom:2px;}
-.vz-home-stage>.vz-home-card-head {margin-bottom:1px;}
+.vz-home-stage>.vz-home-card-head {position:relative;z-index:3;margin-bottom:1px;}
 .vz-home-stage-content {position:relative;display:flex;min-height:64px;align-items:center;}
 .vz-home-stage-detail {display:block;text-align:left;width:100%;padding:0;border:0;background:transparent;}
 .vz-home-stage-copy {position:relative;z-index:2;max-width:100%;width:100%;}
@@ -40,7 +40,7 @@
 .vz-home-stage-song {font-size:14px;line-height:1.25;color:var(--vz-color-ink);margin:2px 0 0;max-width:55%;overflow-wrap:anywhere;}
 .vz-home-stage-date {font-size:12px;display:flex;gap:6px;align-items:center;margin:2px 0 0;color:var(--vz-color-ink);}
 .vz-home-stage-date .vz-home-icon {font-size:17px;}
-.vz-home-stage-art {position:absolute;right:3px;top:-12px;width:83px;height:83px;opacity:1;overflow:hidden;border-radius:12px;pointer-events:none;background-image:url("./assets/approved-reference.jpeg");background-size:472.6667% 1024%;background-position:90.3399% 18.0375%;background-repeat:no-repeat;mask-image:linear-gradient(90deg,transparent,#000 18%);}
+.vz-home-stage-art {position:absolute;right:3px;top:-12px;width:83px;height:83px;opacity:1;overflow:hidden;border-radius:12px;pointer-events:none;background-image:url("./assets/approved-reference.jpeg");background-size:472.6667% 1024%;background-position:90.3399% 18.0375%;background-repeat:no-repeat;mask-image:radial-gradient(ellipse at 65% 68%,#000 35%,transparent 82%);}
 .vz-home-curtain {position:absolute;top:0;width:42px;height:90px;background:repeating-linear-gradient(95deg,rgba(142,77,203,.45),rgba(231,173,249,.55) 11px,rgba(142,77,203,.45) 18px);border-radius:0 0 60% 20%;}
 .vz-home-curtain--left {left:5px;transform:rotate(16deg);}
 .vz-home-curtain--right {right:-4px;transform:scaleX(-1) rotate(16deg);}
@@ -273,3 +273,11 @@ body.vz-home-mode .v-nav ul>li>a.rec i {width:26px;height:26px;font-size:26px;}
 
 .vz-home-brand>span:last-child {transform:translateY(-2px);}
 .vz-student-home .vz-home-sun {width:23px;height:25px;margin-left:4px;}
+
+.vz-student-home .vz-home-goal-list.is-overflowing {
+ background-image:linear-gradient(var(--vz-color-check-border),var(--vz-color-check-border)),linear-gradient(#e7b9f9,#ce98e9),linear-gradient(rgba(204,163,233,.12),rgba(204,163,233,.12));
+ background-size:1px calc(100% - 20px),4px var(--vz-scroll-thumb,0px),4px calc(100% - 12px);
+ background-position:left center,right var(--vz-scroll-offset,6px),right center;
+ scrollbar-width:none;
+}
+.vz-home-goal-list.is-overflowing::-webkit-scrollbar {display:none;}
