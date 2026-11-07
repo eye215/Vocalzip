@@ -48,7 +48,7 @@ test.describe('Phase 19: migrate only next lesson card',()=>{
       expect(dims.left).toBeGreaterThanOrEqual(-1);
       expect(dims.right).toBeLessThanOrEqual(width+1);
       expect(dims.scroll).toBeLessThanOrEqual(width+1);
-      await page.screenshot({path:'test-results/pilot-'+testInfo.project.name+'-'+width+'x844.png',fullPage:true,animations:'disabled'});
+      await page.screenshot({path:'test-results/pilot-'+testInfo.project.name+'-'+width+'x844.png',fullPage:false,animations:'disabled'});
     });
   }
 });
