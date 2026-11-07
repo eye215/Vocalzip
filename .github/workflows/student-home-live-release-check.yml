@@ -12,10 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9c3d5418aaea20450d94b43ca76acda5f7994e19
+          ref: a80d0946542b4aaa0a246ee305e336096053acb7
       - name: Read public production assets and verify release bytes
         env:
-          RELEASE_SHA: 9c3d5418aaea20450d94b43ca76acda5f7994e19
+          RELEASE_SHA: a80d0946542b4aaa0a246ee305e336096053acb7
         run: |
           python3 - <<'PY'
           import hashlib, os, pathlib, time, urllib.request
@@ -23,7 +23,10 @@ jobs:
           paths = ['index.html', 'app/core.js', 'data-merge.js',
                    'app/student-home-model.js', 'design-system/student-home-app.js',
                    'design-system/components.js', 'design-system/approved-home.css',
-                   'design-system/components.css', 'design-system/tokens.css']
+                   'design-system/components.css', 'design-system/tokens.css',
+                   'design-system/assets/home-lavender-light.svg',
+                   'design-system/assets/home-stage.svg',
+                   'design-system/assets/home-recent-cover.svg']
           pending = set(paths)
           deadline = time.monotonic() + 180
           results = {}
@@ -53,5 +56,5 @@ jobs:
               summary.write('\nOnly unauthenticated public GET requests were made. No user data, database, or media writes. Physical iPhone/PWA remains unverified.\n')
           if pending:
               raise SystemExit('Release mismatch: ' + repr({name: results.get(name) for name in sorted(pending)}))
-          print('Verified all 9 public release assets. No user data was accessed.', flush=True)
+          print('Verified all 12 public release assets. No user data was accessed.', flush=True)
           PY
