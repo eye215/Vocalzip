@@ -281,3 +281,7 @@ body.vz-home-mode .v-nav ul>li>a.rec i {width:26px;height:26px;font-size:26px;}
  scrollbar-width:none;
 }
 .vz-home-goal-list.is-overflowing::-webkit-scrollbar {display:none;}
+
+/* A user-owned poster is never cropped or cut by the reference-art mask. */
+.vz-home-stage-art.has-user-poster {background:none;mask-image:none;width:83px;height:83px;right:3px;top:-12px;border-radius:12px;}
+.vz-home-stage-art.has-user-poster img {display:block;width:100%;height:100%;object-fit:cover;}

@@ -107,7 +107,9 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
      delete main.dataset.dirty;
     }});
    host.replaceChildren(root);applyTheme();
-   V.archiveAssets?.posters(root,s.stage?[s.stage]:[]);
+   Promise.resolve(V.archiveAssets?.posters(root,s.stage?[s.stage]:[])).then(()=>{
+    if(root.isConnected)root.querySelectorAll(".vz-home-stage-art").forEach(slot=>slot.classList.toggle("has-user-poster",!!slot.querySelector("img")));
+   }).catch(()=>{});
    const media=await V.media.list().catch(()=>[]);
    if(!host.isConnected)return;
    // Reuse the same real records; this region alone changes after media metadata arrives.
