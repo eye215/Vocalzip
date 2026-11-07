@@ -89,7 +89,7 @@ test.describe('responsive visual QA snapshot matrix',()=>{
         expect(box.right,box.name+' right bound').toBeLessThanOrEqual(width+1);
       }
       const fileName='ds-'+testInfo.project.name+'-'+width+'x844.png';
-      await page.screenshot({path:'test-results/'+fileName,fullPage:true,animations:'disabled'});
+      await page.screenshot({path:'test-results/'+fileName,fullPage:false,animations:'disabled'});
       await testInfo.attach('screen-'+width,{path:'test-results/'+fileName,contentType:'image/png'});
     });
   }
