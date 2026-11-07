@@ -21,7 +21,7 @@
 .vz-home-greeting {margin:0;max-width:calc(100% - 74px);color:#fff;font-size:23px;font-weight:600;line-height:1.2;letter-spacing:-.055em;text-shadow:0 2px 3px rgba(83,33,127,.28);overflow-wrap:anywhere;}
 .vz-home-greeting-sub {font-size:13px;font-weight:500;line-height:17px;margin:2px 0 0;color:#fff;text-shadow:var(--vz-shadow-greeting);}
 .vz-home-stack {display:grid;gap:7px;}
-.vz-student-home .vz-home-card, .vz-student-home .vz-home-song, .vz-student-home .vz-home-quick {width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:12px;min-height:44px;text-align:left;color:var(--vz-color-heading);font-size:16px;font-weight:650;}
+.vz-student-home .vz-home-card, .vz-student-home .vz-home-song, .vz-student-home .vz-home-quick {min-width:0;padding:var(--vz-card-padding);border-radius:var(--vz-radius-card);background:radial-gradient(ellipse at 97% 100%,rgba(248,209,249,.32),transparent 48%),linear-gradient(128deg,rgba(255,255,255,.44),rgba(255,255,255,.19) 48%,rgba(255,255,255,.35));border:1px solid rgba(255,255,255,.62);box-shadow:var(--vz-shadow-card);backdrop-filter:var(--vz-blur-card);-webkit-backdrop-filter:var(--vz-blur-card);}
 .vz-home-card-head {display:flex;flex-wrap:wrap;align-items:center;gap:6px;justify-content:space-between;min-height:24px;margin-bottom:4px;}
 .vz-home-heading {margin:0;display:flex;align-items:center;gap:6px;overflow-wrap:anywhere;font-size:18px;line-height:1.3;font-weight:650;color:var(--vz-color-heading);letter-spacing:-.04em;min-width:0;}
 .vz-student-home .vz-home-heading .vz-home-icon {font-size:23px;}
@@ -34,9 +34,9 @@
 .vz-home-stage-content {position:relative;display:flex;min-height:64px;align-items:center;}
 .vz-home-stage-detail {display:block;text-align:left;width:100%;padding:0;border:0;background:transparent;}
 .vz-home-stage-copy {position:relative;z-index:2;max-width:100%;width:100%;}
-.vz-home-stage-title {display:block;position:relative;min-width:0;min-height:27px;padding-right:0;}
-.vz-home-stage-title h3 {margin:0;min-width:0;max-width:50%;font-size:22px;line-height:1.2;font-weight:700;color:var(--vz-color-heading-strong);letter-spacing:-.045em;overflow-wrap:anywhere;}
-.vz-home-dday {position:absolute;top:5px;right:72px;font-size:22px;line-height:1.25;font-weight:650;color:var(--vz-color-day-accent);border-radius:20px;background:linear-gradient(145deg,rgba(255,255,255,.6),rgba(255,255,255,.29));box-shadow:inset 0 1px 4px rgba(255,255,255,.65),0 2px 8px rgba(187,100,210,.1);padding:5px 12px;white-space:nowrap;}
+.vz-home-stage-title {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;min-width:0;min-height:27px;padding-right:72px;}
+.vz-home-stage-title h3 {margin:0;min-width:0;max-width:none;font-size:22px;line-height:1.2;font-weight:700;color:var(--vz-color-heading-strong);letter-spacing:-.045em;overflow-wrap:anywhere;}
+.vz-home-dday {position:static;align-self:start;margin-top:3px;font-size:22px;line-height:1.25;font-weight:650;color:var(--vz-color-day-accent);border-radius:20px;background:linear-gradient(145deg,rgba(255,255,255,.6),rgba(255,255,255,.29));box-shadow:inset 0 1px 4px rgba(255,255,255,.65),0 2px 8px rgba(187,100,210,.1);padding:5px 12px;white-space:nowrap;}
 .vz-home-stage-song {font-size:14px;line-height:1.25;color:var(--vz-color-ink);margin:2px 0 0;max-width:64%;overflow-wrap:anywhere;}
 .vz-home-stage-date {font-size:12px;display:flex;gap:6px;align-items:center;margin:4px 0 2px;color:var(--vz-color-ink);}
 .vz-home-stage-date .vz-home-icon {font-size:17px;}
@@ -107,7 +107,7 @@
 .vz-home-play {position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);min-width:44px;min-height:44px;border:0;border-radius:50%;background:transparent;padding:0;}
 .vz-student-home .vz-home-play .vz-home-icon {font-size:30px;color:#fff;background:none;-webkit-text-fill-color:#fff;}
 .vz-home-quick-stack {display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:10px;min-height:0;}
-.vz-student-home .vz-home-quick {width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:12px;min-height:44px;text-align:left;color:var(--vz-color-heading);font-size:15px;font-weight:600;}
+.vz-student-home .vz-home-quick {width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:12px;min-height:44px;text-align:left;color:var(--vz-color-heading);font-size:16px;font-weight:650;}
 .vz-home-quick>.vz-home-icon:first-child {font-size:29px;}
 .vz-home-quick>.vz-home-icon:last-child {font-size:16px;margin-left:auto;}
 .vz-approved-dock, .vz-home-mode .v-nav {box-sizing:border-box;position:fixed;z-index:30;right:auto;bottom:calc(12px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(calc(100% - 26px),454px);height:auto;min-height:80px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;padding:6px 8px;border:1px solid rgba(255,255,255,.55);border-radius:30px;background:radial-gradient(ellipse at 75% 100%,rgba(250,207,248,.5),transparent 65%),linear-gradient(130deg,rgba(255,255,255,.48),rgba(255,255,255,.25));box-shadow:var(--vz-shadow-dock);backdrop-filter:var(--vz-blur-card);-webkit-backdrop-filter:var(--vz-blur-card);}
@@ -231,8 +231,10 @@ body.vz-home-mode .v-nav i>.vz-nav-art {display:block;width:100%;height:100%;fon
   .vz-home-header {padding-left:8px;padding-right:8px;}
   .vz-home-brand {font-size:20px;}
   .vz-home-greeting {font-size:21px;max-width:calc(100% - 72px);}
-  .vz-home-stage-title h3 {max-width:54%;font-size:20px;}
-  .vz-home-dday {right:45px;font-size:19px;padding:5px 9px;}
+  .vz-home-stage-title {padding-right:45px;}
+  .vz-home-stage-title h3 {max-width:none;font-size:20px;}
+  .vz-home-dday {font-size:19px;padding:5px 9px;}
+  .vz-home-song-cover {width:62px;max-height:62px;}
   .vz-home-stage-art {right:-14px;width:144px;opacity:.72;}
   .vz-home-heading {font-size:17px;}
   .vz-student-home .vz-home-heading .vz-home-icon {font-size:21px;}
