@@ -186,7 +186,7 @@ test('reading real home preserves source records; checked goal persists across r
   await page.reload();
   await ready(page);
   await expect(page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true})).toBeChecked();
-  await expect(page.locator('.vz-home-gauge[role=img], .vz-home-gauge [role=img]')).toHaveAccessibleName(/2.*3.*67%|67%.*2.*3/);
+  await expect(page.locator('.vz-home-gauge[role=img], .vz-home-gauge [role=img]')).toHaveAccessibleName(/2.*3.*67(?:%|퍼센트)|67(?:%|퍼센트).*2.*3/);
   await page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true}).focus();
   await page.keyboard.press('Space');
   await expect(page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true})).not.toBeChecked();
@@ -237,7 +237,7 @@ test('900 goals keep one scroll list, order, and scroll position after a check',
   await expect(goals(page).nth(visibleIndex)).toBeChecked();
   expect(Math.abs(await list.evaluate(el=>el.scrollTop)-before)).toBeLessThanOrEqual(1);
   expect((await db(page)).dailyGoals.map(g=>g.id)).toEqual(value.dailyGoals.map(g=>g.id));
-  await expect(page.locator('.vz-home-gauge[role=img], .vz-home-gauge [role=img]')).toHaveAccessibleName(/1.*900.*0%|0%.*1.*900/);
+  await expect(page.locator('.vz-home-gauge[role=img], .vz-home-gauge [role=img]')).toHaveAccessibleName(/1.*900.*0(?:%|퍼센트)|0(?:%|퍼센트).*1.*900/);
   await screenshot(page,testInfo,'student-home-900-goals.png');
 });
 
