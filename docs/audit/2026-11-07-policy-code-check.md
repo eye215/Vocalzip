@@ -102,3 +102,41 @@
    - 30일 휴지통 (녹음 원본은 즉시 지우지 않고 휴지통 표식 → 30일 뒤 정리)
    - 레슨 삭제 시 "녹음도 함께" 선택지
    - 분석 이름에 추정 표시
+
+## 운영 보안 점검 실제 결과 — 2026-11-07
+- 방법: GitHub Actions **Ops audit** (`tools/ops-audit.mjs`), run `42329332614`, `main` @ `e639dbc`
+- 범위: 읽기 전용 트랜잭션 + 외부 방문자 시도. 데이터와 시크릿 값은 출력하지 않았다.
+
+### 확인됨 ✅
+- **DB 표**
+  - 운영 DB의 public 표 8개(`vocal_data`, `vocal_media`, `vocal_history`, `vocal_song_texts`, `vocal_analysis_jobs`, `vocal_billing_documents`, `vzip_song_stt_quota`, `vzip_worker_wake`) 모두 **RLS 켜짐**.
+  - 모든 정책이 `auth.uid() = user_id` 본인 한정임. `vocal_data`는 삭제 정책이 없어 앱에서 지울 수 없음.
+  - 기본 키 모두 있음 (`vocal_data`=user_id, `vocal_media`=id 등).
+- **Storage**: `vocal-recordings` 버킷 **비공개**(500MB 한도). 정책은 본인 폴더(`<uid>/…`)만 허용.
+- **함수**: 서버용 함수(작업 가져가기·깨우기·재확인)는 앱 역할이 실행 불가. 사용자 함수는 로그인 사용자만 실행 가능.
+- **외부 방문자(공개 anon 키) 시도**
+  - 8개 표 모두 0행 또는 401.
+  - 함수 호출 401.
+  - Storage 목록 0개.
+- **R2 Worker**
+  - 로그인 없이 `/v1/me`, `/v1/usage`, `/v1/objects`, `/v1/sign`, `/v1/media/…` 모두 401.
+  - 가짜 토큰 401.
+  - 다른 사이트 origin 403.
+
+### 주의 ⚠️ (결정 필요)
+1. **회원가입 공개 + 이메일 확인 자동 통과(`mailer_autoconfirm: true`)**
+   - 누구나 이메일 확인 없이 가입할 수 있음.
+   - 가입한 사람이 녹음을 올리면 대기열 트리거가 서버 분석을 예약함 → 서버 STT 비용이 생김 (정책 §6·§10 위반 가능).
+   - 공개 전까지 Supabase → Authentication → Sign In / Providers에서 **가입 막기** 또는 **이메일 확인 켜기**를 권장.
+2. **서버 자동 분석이 지금 켜져 있음**
+   - Vault에 `github_actions_token`이 **있음**. 예약 작업 `vzip-wake-analysis-worker`(5분마다)가 활성 상태라서 새 업로드에 STT가 자동 실행됨.
+   - 정책 §6(사용자 요청형)과 충돌함. 요청형 전환(P0-3) 전까지 유지할지, 예약 작업을 잠시 끌지 결정 필요.
+3. 예약 작업 `vzip-recheck-review-songs`(30분마다, `supabase/migrations/20261111_recheck_review_songs.sql`)
+   - 가사가 바뀐 계정의 '확인 필요' 곡 작업을 다시 대기열에 넣음.
+   - 저장된 전사를 재사용하는지, 비용이 다시 드는지는 코드 검토로 확인 필요.
+4. `vocal_data`·`vocal_media`에 앱 역할의 기본 권한(TRUNCATE·TRIGGER·REFERENCES)이 남아 있음 (Supabase 기본값).
+   - API로는 쓸 수 없지만, 강화하려면 회수를 권장함 (운영 변경이라 승인 필요).
+
+### 확인 못 함 (미검증)
+- R2 공개 도메인(r2.dev)·수명 주기·저장량: Cloudflare API 권한이 필요함. 서명 없는 버킷 직접 요청 점검은 네트워크 오류로 결과 없음.
+- 실제 비용 청구, 실기기(iPhone·테스트 계정 2개).
