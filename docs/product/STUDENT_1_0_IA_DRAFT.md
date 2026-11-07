@@ -1,80 +1,211 @@
-# VOCAL.zip — Student 1.0 IA and screen inventory (draft)
-Version: 2026-11-07 / v0.1 / **pending actual UI audit**. Preserve current v6 5-tab mental model unless usability tests justify change.
+# VOCAL.zip — 학생용 Release 1.0 정보구조(IA) 및 화면 목록
 
-## Global navigation and hierarchy
-- Bottom tabs: **Home · Songs · Record · Calendar · Growth**.
-- Global entry: profile/settings, notifications, search where relevant.
-- Context entry: lesson detail, homework, media library, import, comparisons, performance archive.
-- Primary capture button should always be reachable with minimal steps. Recording and media import are different actions.
-- User can access song-based information without being locked to a lesson or teacher.
+버전: 2026-11-07 / v0.1 초안  
+상태: **현행 UI 조사·검증 전 설계안**
 
-## Screen registry
-| Screen ID | Route / area (conceptual, not implemented URL) | Primary purpose | Core actions | Required states |
+현재 v6의 **홈·내 곡·녹음·캘린더·성장**이라는 5개 하단 탭을 우선 유지한다. 다만 사용성 검증에서 문제가 확인되면 조정할 수 있다.
+
+## 1. 공통 정보구조
+
+### 하단 내비게이션
+- **홈**
+- **내 곡**
+- **녹음**
+- **캘린더**
+- **성장**
+
+### 보조/전역 메뉴
+- 프로필·설정
+- 알림
+- 관련 화면의 검색
+- 레슨 상세, 숙제 관리, 보관함, 파일 가져오기, 녹음 비교, 공연 아카이브
+- 저장 공간·구독·데이터 내보내기·계정 관리
+
+### 기본 UX 원칙
+- 어느 주요 화면에서든 **빠른 녹음** 진입이 쉬워야 한다.
+- **직접 녹음**과 **기존 파일 가져오기**는 서로 다른 동작으로 명확히 표시한다.
+- 곡 등록이나 선생님 연결 없이도 녹음을 시작할 수 있다.
+- 학생은 선생님 관리 기능을 사용하지 않아도 내 모든 학습 자료를 확인할 수 있다.
+
+## 2. 전체 IA 트리
+
+```text
+VOCAL.zip 학생용 1.0
+│
+├── 시작하기
+│   ├── 서비스 소개
+│   ├── 로그인·회원가입
+│   ├── 이용약관·개인정보 동의
+│   └── 초기 설정·권한 안내
+│
+├── 1. 홈
+│   ├── 오늘의 연습
+│   ├── 빠른 녹음
+│   ├── 다음 레슨
+│   ├── 해야 할 숙제
+│   ├── 최근 연습곡
+│   └── 최근 성장 요약
+│
+├── 2. 내 곡
+│   ├── 곡 목록
+│   │   ├── 검색·정렬·필터
+│   │   └── 곡 추가
+│   └── 곡 상세
+│       ├── 곡 정보·수정
+│       ├── 가사·악보·참고 음원
+│       ├── 연결된 녹음·영상
+│       ├── 연습 기록·타임라인
+│       ├── 레슨·피드백
+│       ├── 숙제
+│       └── 녹음 A/B 비교
+│
+├── 3. 녹음
+│   ├── 직접 녹음
+│   ├── 저장 전 확인
+│   ├── 미디어 보관함
+│   │   └── 재생·날짜/제목 수정·곡 연결
+│   ├── 여러 파일 가져오기
+│   └── 녹음 비교
+│
+├── 4. 캘린더
+│   ├── 월별 보기
+│   ├── 날짜별 기록
+│   ├── 레슨 목록·추가·상세
+│   ├── 연습 기록·추가·상세
+│   ├── 숙제 목록·추가·상세
+│   └── 공연·오디션 일정
+│
+├── 5. 성장
+│   ├── 연습 일수·시간·횟수
+│   ├── 곡별 연습량
+│   ├── 숙제 수행·목표 달성
+│   ├── 기간별 비교
+│   ├── 녹음 A/B
+│   └── AI 분석·성장 리포트
+│
+└── 프로필·설정
+    ├── 내 정보·로그인 관리
+    ├── 접근 권한·알림
+    ├── 저장 용량·구독
+    ├── 파일 공유·회수
+    ├── 기록·미디어 백업·내보내기
+    ├── 계정 탈퇴
+    ├── 고객지원
+    └── 소유자 전용 기존 데이터 이전
+```
+
+## 3. 화면 ID 목록
+
+화면 ID는 설계용 식별자다. **실제 웹 라우트는 Phase 01에서 확인**한다.
+
+| 화면 ID | 화면명 | 목적 | 주요 동작 | 반드시 구현할 상태 |
 |---|---|---|---|---|
-| A01 | Welcome | Describe app & start | Sign in/sign up | returning, guest info |
-| A02 | Auth | Authenticate | Apple, Kakao, email | loading, denied, expired |
-| A03 | Profile & permissions | Consent/settings | account, mic, privacy | permission-denied |
-| H01 | Home | Today’s focus | quick record, next lesson, homework, last song | empty, active, loading, offline |
-| H02 | Quick actions | One-tap progress | record, practice, lesson, import | mic denied, no connection |
-| S01 | Songs list | Search repertoire | add, sort, search, select | no songs, results empty |
-| S02 | Add/edit song | Song metadata | save, cancel | validation, unsaved |
-| S03 | Song detail | Song-centered timeline | play, attach, practice, lesson, compare | no attachments |
-| S04 | Lyrics & score | Reference materials | PDF reader, notes | missing file, offline |
-| R01 | Recorder | Capture audio | start, pause, stop, preview | permission denied, interrupt, failure |
-| R02 | Save recording | Title/song/date | save, retry, download original | pending upload, duplicate save |
-| R03 | Media library | Find assets | filter, play, edit, attach, export | local-only/cloud-only/missing |
-| R04 | Media detail | Playback & provenance | seek, repeat, speed, edit date | unsupported codec, expired auth |
-| R05 | Import queue | Multiple items | pick, assign song, retry failures | unsupported, oversized, cancelled |
-| R06 | Comparison | Two recordings | A/B, segments, notes | 0/1 take, mismatch |
-| C01 | Calendar | Time-based overview | month switch, date select | empty month, timezone |
-| C02 | Day details | What happened | open lesson/practice/recording | multiple entries |
-| L01 | Lessons list | Personal lesson history | add, filter | scheduled/done/cancelled |
-| L02 | Lesson form | Student adds lesson | date, time, place, teacher name, songs | legacy status, unsaved |
-| L03 | Lesson detail | Revisit a lesson | feedback, media, homework, status | deleted media association |
-| P01 | Practice form | Log actual practice | training or song, time, targets, media | save pending |
-| P02 | Practice detail | Inspect/edit session | edit, media play, delete | orphaned attachments |
-| W01 | Homework list | Track tasks | add, check, open | due, overdue, done |
-| W02 | Homework detail | Lesson/song linkage | edit, link practice | carried over |
-| G01 | Growth | Patterns & habits | period switch, drill into songs | no practice, incomplete data |
-| G02 | Report/analysis | Interpret change | compare, note, dismiss | AI unavailable, confidence low |
-| F01 | Performance list | Performances & auditions | add/view | empty, upcoming/past |
-| F02 | Performance detail | Role and materials | edit, link songs and media | private/public boundaries |
-| U01 | Storage & subscription | Quota and plan | upgrade, manage, restore | offline, expired, grace |
-| U02 | Backup/export | Leave with data | export metadata/media | partial export and retry |
-| U03 | Share settings | Grant media access | create/revoke expiring link | invalid/expired/revoked |
-| U04 | Account lifecycle | Manage personal data | delete account, export | verification, cooldown |
-| O01 | Owner-only migration | Existing user import | preview, map, dedupe, verify | forbidden for other users |
+| **A01** | 환영·시작 | 서비스 소개·진입 | 로그인·가입 | 재방문, 가입 전 |
+| **A02** | 로그인·회원가입 | 사용자 인증 | Apple·카카오·이메일 | 로딩·거부·세션 만료 |
+| **A03** | 권한·프로필 설정 | 동의·기본 설정 | 개인정보·마이크 권한 | 거부·재설정 |
+| **H01** | 홈 | 오늘의 학습 상황 | 빠른 녹음·다음 레슨·숙제·최근 곡 | 빈 상태·로딩·오프라인 |
+| **H02** | 빠른 실행 | 최소 단계 입력 | 녹음·연습·레슨·가져오기 | 마이크 거부·네트워크 오류 |
+| **S01** | 내 곡 목록 | 레퍼토리 탐색 | 검색·정렬·추가·선택 | 곡 없음·검색 결과 없음 |
+| **S02** | 곡 추가·수정 | 곡 정보 작성 | 저장·취소 | 유효성 검사·미저장 변경 |
+| **S03** | 곡 상세 | 곡 중심 기록 | 재생·첨부·연습·레슨·비교 | 자료 없음·연결 해제 |
+| **S04** | 가사·악보 | 참고 자료 확인 | PDF 보기·메모 | 자료 없음·오프라인 |
+| **R01** | 녹음기 | 음성 캡처 | 시작·일시정지·종료·미리 듣기 | 권한 거부·중단·녹음 실패 |
+| **R02** | 녹음 저장 | 제목·곡·날짜 확인 | 저장·재시도·원본 다운로드 | 업로드 중·중복 저장 방지 |
+| **R03** | 미디어 보관함 | 저장 파일 관리 | 필터·재생·수정·연결·내보내기 | 로컬만 있음·클라우드만 있음·누락 |
+| **R04** | 미디어 상세 | 재생과 출처 확인 | 탐색·구간 반복·속도·날짜 수정 | 미지원 코덱·인증 만료 |
+| **R05** | 파일 가져오기 | 다중 업로드 | 선택·곡 지정·실패 재시도 | 미지원·대용량·취소·중단 |
+| **R06** | A/B 비교 | 이전·현재 녹음 비교 | 두 파일 선택·구간·메모 | 0~1개 파일·형식 불일치 |
+| **C01** | 캘린더 | 날짜 기준 통합 | 월 이동·날짜 선택 | 기록 없음·시간대 |
+| **C02** | 날짜별 상세 | 해당 날짜의 기록 | 레슨·연습·녹음 열기 | 같은 날짜 여러 기록 |
+| **L01** | 레슨 목록 | 내 개인 레슨 이력 | 추가·상태별 조회 | 예정·완료·취소 |
+| **L02** | 레슨 추가·수정 | 학생이 수업 기록 | 날짜·시간·장소·선생님·곡 | 기존 데이터 상태값·미저장 |
+| **L03** | 레슨 상세 | 수업 내용 확인 | 피드백·녹음·숙제·상태 변경 | 미디어 연결 끊김 |
+| **P01** | 연습 작성 | 실제 연습 기록 | 훈련/곡 구분·시간·목표·파일 | 저장 중·연결 오류 |
+| **P02** | 연습 상세 | 조회·수정 | 편집·재생·삭제 | 연결 미디어 없음 |
+| **W01** | 숙제 목록 | 할 일 관리 | 추가·체크·상세 | 예정·기한 초과·완료 |
+| **W02** | 숙제 상세 | 레슨·곡·연습 연계 | 수정·수행·이월 | 반복 이월 |
+| **G01** | 성장 대시보드 | 학습 습관 확인 | 기간 변경·곡 상세 이동 | 기록 없음·일부 데이터 |
+| **G02** | 분석·리포트 | 변화 해석 | 비교·메모·리포트 | AI 실패·신뢰도 낮음 |
+| **F01** | 공연·오디션 목록 | 개인 공연 이력 | 일정 추가·조회 | 예정·종료·빈 상태 |
+| **F02** | 공연 상세 | 역할·자료 기록 | 수정·곡·미디어 연결 | 비공개/공개 경계 |
+| **U01** | 용량·구독 | 요금제·사용량 | 업그레이드·복원·관리 | 오프라인·만료·유예 |
+| **U02** | 백업·내보내기 | 데이터 안전 | 기록·미디어 내보내기 | 부분 실패·재시도 |
+| **U03** | 파일 공유 설정 | 제한적 재생 권한 | 기간 링크 생성·회수 | 링크 만료·회수·무효 |
+| **U04** | 계정 관리 | 개인정보 보호 | 데이터 내보내기·탈퇴 | 재인증·유예·오류 |
+| **O01** | 소유자 전용 데이터 이전 | 과거 본인 기록 이전 | 미리보기·매핑·중복 검사·검증 | 타 계정 차단 |
 
-## Core navigation sequences
-- Fast capture: Home→R01→R02→R03; if song opened first, prepopulate the song ID.
-- Song work: S01→S03→P01 or L02 or R03; song deletion unlinks but keeps original records/media.
-- Lesson preparation: H01→L01→L03→W01→P01; entering a scheduled past lesson **does not** automatically complete it.
-- Import: Home/Library→R05→status per file→R03; failure does not remove local original.
-- Growth: G01→S03→R06 and back.
-- Personal performance: C01→F02→S03; no teacher connection required.
-- Profile: Account→U01, U02, U04; user can manage plan and data independently.
+## 4. 핵심 화면 이동 흐름
 
-## UX and interaction constraints
-1. **One primary action per screen.** Short forms by default; optional song and memo. No mandatory upload before an offline capture.
-2. Editing recorded date makes an explicit override; preserve date source and timezone where available.
-3. Display upload progress per file and aggregate; clearly distinguish local save vs cloud backup confirmed.
-4. Non-destructive delete/remove association. Explicit warning and confirmation for actual file deletion.
-5. No duplicate UI entrypoints that confuse users; keep quick actions contextual.
-6. Dynamic Type/large text, VoiceOver labels, touch targets and safe-area/keyboard tested on physical iPhone.
-7. Record playback failures must not drop associated metadata; provide fallback/download.
-8. Privacy labels clearly show private vs shared media; no implied teacher access from entering name.
-9. Unsaved notes or lesson changes survive accidental sheet dismissal where technically feasible.
-10. Empty-state CTA goes to appropriate first action; avoid large blank statistic widgets without records.
+### 빠른 녹음
+`홈(H01) → 녹음(R01) → 저장 확인(R02) → 보관함(R03)`
 
-## What is deliberately absent in Student 1.0
-- Teacher dashboard, managed student roster, invitations granting ongoing teacher access, teacher-authored lessons, group attendance, booking inventory, teacher billing packages.
-- A **single student can record having attended a group lesson** in their personal lesson notes if desired, but this is not 2.0 group management or shared attendance.
+곡 상세에서 녹음에 진입했다면 곡 ID를 미리 지정한다.
 
-## Screens needing actual code crosswalk after Phase 01
-- Legacy v5 views and current v6 tabs, where records and homework are currently in settings/more, and actual hash routing.
-- Whether media library has true video files or only extracted audio.
-- Which screens are actually linked, reachable, tested and accessible.
-- Final screen IDs/routes should be added by Claude/Codex when code mappings are known.
+### 곡 중심 학습
+`내 곡(S01) → 곡 상세(S03) → 연습(P01) / 레슨(L02) / 녹음(R01) / 비교(R06)`
 
-## Proposed screen-level definition-of-done
-For every screen: entry/exit, visible elements, actions, loading/empty/error states, privacy permissions, changes to data, undo/retry, a11y test, iPhone QA, analytics/telemetry where authorized.
+곡을 삭제하더라도 이미 존재하는 연습 기록·미디어 원본은 유지한다.
+
+### 레슨·숙제
+`홈(H01) → 레슨 목록(L01) → 레슨 상세(L03) → 숙제(W01) → 연습(P01)`
+
+지난 날짜의 예정 레슨을 자동 완료하지 않는다.
+
+### 파일 가져오기
+`홈·보관함 → 가져오기(R05) → 파일별 결과·재시도 → 보관함(R03)`
+
+실패한 파일이 있어도 원본은 유지한다.
+
+### 성장 비교
+`성장(G01) → 곡 상세(S03) → 녹음 비교(R06) → 성장(G01)`
+
+### 공연
+`캘린더(C01) → 공연 상세(F02) → 관련 곡(S03)`
+
+### 계정
+`프로필·설정 → 용량/구독(U01) · 백업(U02) · 탈퇴(U04)`
+
+## 5. UI/UX 세부 원칙
+
+1. 한 화면에 핵심 동작 하나를 강조한다. 곡·메모 등은 가능한 한 선택 입력으로 한다.
+2. 녹음한 날짜를 직접 고쳤다면 원본 추출 날짜와 **수정 출처**를 구분해 기록한다.
+3. **기기에 저장됨**과 **클라우드 백업 완료**를 다른 상태로 보여준다.
+4. 기록에서 연결만 해제하는 동작과 실제 **원본 파일 삭제**를 명확히 구별한다.
+5. 불필요하게 중복된 진입 버튼은 줄인다. 맥락에 맞는 빠른 실행을 제공한다.
+6. 아이폰의 큰 글자, VoiceOver, 터치 크기, 화면 하단 안전 영역, 키보드를 실기기로 검증한다.
+7. 파일 재생 실패가 메타데이터 유실로 이어지지 않도록 한다. 가능한 경우 다시 받기·대체 재생을 안내한다.
+8. 비공개/공유 상태를 명시한다. 선생님 이름을 적었다는 이유로 선생님 계정에 접근 권한을 부여하지 않는다.
+9. 작성 중 시트를 닫아도 입력이 사라지지 않도록 자동 임시저장 등 복구 정책을 검토한다.
+10. 빈 화면은 최초 행동으로 자연스럽게 안내한다. 의미 없는 빈 통계 카드로 공간을 채우지 않는다.
+
+## 6. 학생 1.0에 포함하지 않는 기능
+
+- 선생님 전용 대시보드
+- 학생 명단·선생님 초대 및 상시 공유 연결
+- 선생님이 작성·배포하는 수업과 그룹별 출석 관리
+- 선생님 예약 가능 시간 및 예약 서비스
+- 선생님 수강권·레슨비 정산
+
+단, 학생은 **본인이 참여한 그룹 수업의 개인 기록**을 레슨 메모로 남길 수 있다. 이것이 여러 학생의 공통 출석·정산 관리 기능을 의미하지는 않는다.
+
+## 7. Phase 01에서 실코드와 대조할 사항
+
+- 실제 v6 해시 라우팅과 v5·v6 화면 차이
+- 레슨 기록·숙제가 현재 설정/더보기 화면에 어떻게 진입되는지
+- 보관함에 진짜 영상 파일이 남는지, 음원만 추출되는지
+- 각 화면의 실제 진입 가능성·테스트 여부·접근성
+- 실제 코드에 맞춘 확정 화면 ID와 라우트
+
+## 8. 화면별 완료 조건
+
+각 화면별로 다음 항목을 확인하고 완료 처리한다.
+
+- 진입·이탈 경로
+- 표시할 데이터와 빈 상태
+- 버튼·입력·저장 동작
+- 로딩·오류·오프라인·재시도 상태
+- 데이터 생성·수정·삭제 영향
+- 사용자 접근 권한
+- 되돌리기·원본 보존
+- 접근성·실제 iPhone 검증
+- 필요한 경우 개인정보를 침해하지 않는 사용 로그
