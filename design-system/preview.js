@@ -22,6 +22,7 @@ const suggested=[
 const copyInitial=()=>initialGoals.map(g=>({...g}));
 const state={theme:"student",status:"planned",goals:copyInitial(),practicedMinutes:15,targetMinutes:30};
 const root=document.getElementById("preview-root");
+if(new URLSearchParams(location.search).get("visual")==="1")document.body.classList.add("vz-visual-only");
 const make=(tag,cls="",text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 
 function toast(message){
