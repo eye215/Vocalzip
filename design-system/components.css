@@ -100,7 +100,7 @@
 .vz-button--block { width:100%; }
 .vz-pill { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:var(--vz-radius-pill); background:var(--vz-color-accent-soft); color:var(--vz-color-accent-strong); font-size:var(--vz-text-xs); font-weight:730; }
 .vz-dock { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:3px; align-items:center; position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:min(calc(100% - 32px),420px); padding:9px 7px; border-radius:var(--vz-radius-dock); border:1px solid var(--vz-color-glass-border); background:var(--vz-color-glass-raised); box-shadow:var(--vz-shadow-dock); -webkit-backdrop-filter:var(--vz-blur-dock); backdrop-filter:var(--vz-blur-dock); z-index:30; }
-.vz-dock__item { border:0; min-height:50px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; border-radius:20px; background:transparent; color:var(--vz-color-ink-secondary); font-size:10px; text-decoration:none; font-weight:650; }
+.vz-dock__item { border:0; padding:0 2px; white-space:nowrap; line-height:1.15; min-height:50px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; border-radius:20px; background:transparent; color:var(--vz-color-ink-secondary); font-size:10px; text-decoration:none; font-weight:650; }
 .vz-dock__item[aria-current="page"] { background:var(--vz-color-accent-soft); color:var(--vz-color-accent-strong); }
 .vz-dock__icon { font-size:22px; line-height:1.3; }
 .vz-dock__item--record { width:62px; height:62px; min-height:62px; border-radius:22px; margin:-12px auto -4px; background:var(--vz-color-accent); color:#fff; box-shadow:0 9px 18px rgba(111,70,190,.25); font-size:10px; }
