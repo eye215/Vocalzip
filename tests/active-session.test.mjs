@@ -57,10 +57,10 @@ before(async()=>{
   await db.query(`insert into public.${table} values ('test',$1,'{"keep":true}')`,[U]);
  }
  await db.query(`
- create function public.vocal_billing_save(p_expected_revision bigint,p_payload jsonb,p_request_id uuid) returns jsonb language plpgsql security definer as $ begin update public.vocal_billing_documents set payload=p_payload where user_id=auth.uid(); return p_payload; end $;
- create function public.vzip_enqueue_my_media() returns integer language sql security definer as $ select 1 $;
- create function public.vzip_song_stt_reserve() returns boolean language sql security definer as $ select true $;
- create function public.vzip_song_stt_usage() returns table(used_total integer,used_today integer) language sql security definer as $ select 0,0 $;
+ create function public.vocal_billing_save(p_expected_revision bigint,p_payload jsonb,p_request_id uuid) returns jsonb language plpgsql security definer as $$ begin update public.vocal_billing_documents set payload=p_payload where user_id=auth.uid(); return p_payload; end $$;
+ create function public.vzip_enqueue_my_media() returns integer language sql security definer as $$ select 1 $$;
+ create function public.vzip_song_stt_reserve() returns boolean language sql security definer as $$ select true $$;
+ create function public.vzip_song_stt_usage() returns table(used_total integer,used_today integer) language sql security definer as $$ select 0,0 $$;
  `);
  await db.query(migration);await db.query(migration);
 });

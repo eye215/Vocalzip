@@ -20,6 +20,19 @@ alter table public.vzip_device_sessions enable row level security;
 revoke all on public.vzip_account_session_state,public.vzip_device_sessions from public,anon,authenticated;
 
 -- Identity comes from verified JWT + auth.sessions, never a client-supplied current session.
+create or replace function public.vzip_authenticated_session()
+returns uuid language plpgsql stable security definer set search_path=''
+as $$
+declare u uuid:=auth.uid(); s uuid;
+begin
+ if u is null then return null; end if;
+ begin s:=nullif(auth.jwt()->>'session_id','')::uuid;
+ exception when invalid_text_representation then return null; end;
+ if s is null or not exists(select 1 from auth.sessions a where a.id=s and a.user_id=u and (a.not_after is null or a.not_after>now())) then return null; end if;
+ return s;
+end $$;
+revoke all on function public.vzip_authenticated_session() from public,anon,authenticated;
+
 create or replace function public.vzip_request_session()
 returns uuid language plpgsql stable security definer set search_path=''
 as $$
@@ -79,7 +92,7 @@ grant execute on function public.vzip_assert_session() to authenticated;
 create or replace function public.vzip_session_context()
 returns jsonb language sql stable security definer set search_path=''
 as $$
- select jsonb_build_object('allowed',public.vzip_session_access_allowed(),
+ select jsonb_build_object('user_id',auth.uid(),'allowed',public.vzip_session_access_allowed(),
   'required',coalesce((select enforced from public.vzip_session_rollout where singleton),true)
    or exists(select 1 from public.vzip_account_session_state where user_id=auth.uid()),
   'playback_token',(select playback_token from public.vzip_device_sessions
@@ -231,8 +244,21 @@ begin
   execute 'create policy vzip_active_session_guard on storage.objects as restrictive for all to authenticated using (bucket_id <> ''vocal-recordings'' or (select public.vzip_session_access_allowed())) with check (bucket_id <> ''vocal-recordings'' or (select public.vzip_session_access_allowed()))';
  end if;
 end $$;
+-- The existing server STT Edge Function forwards the verified user JWT but not the
+-- browser protocol header. Validate its actual Auth/registry session, not an SDK label.
+create or replace function public.vzip_server_session_allowed()
+returns boolean language sql stable security definer set search_path=''
+as $$
+ select auth.uid() is not null and (
+  (not coalesce((select enforced from public.vzip_session_rollout where singleton),true)
+   and not exists(select 1 from public.vzip_account_session_state where user_id=auth.uid()))
+  or exists(select 1 from public.vzip_device_sessions
+   where user_id=auth.uid() and session_id=public.vzip_authenticated_session() and revoked_at is null));
+$$;
+revoke all on function public.vzip_server_session_allowed() from public,anon,authenticated;
+
 -- Preserve original RPC bodies under non-callable implementation names.
-do $
+do $$
 declare f text; signature text; impl text;
 begin
  foreach f in array array['vocal_billing_save','vzip_enqueue_my_media','vzip_song_stt_reserve','vzip_song_stt_usage'] loop
@@ -247,19 +273,19 @@ begin
  if to_regprocedure('public.vzip_queue_new_media()') is not null then
   revoke all on function public.vzip_queue_new_media() from public,anon,authenticated;
  end if;
-end $;
+end $$;
 create or replace function public.vocal_billing_save(p_expected_revision bigint,p_payload jsonb,p_request_id uuid)
 returns jsonb language plpgsql security definer set search_path=''
-as $ begin perform public.vzip_assert_session(); return public.vocal_billing_save_session_impl(p_expected_revision,p_payload,p_request_id); end $;
+as $$ begin perform public.vzip_assert_session(); return public.vocal_billing_save_session_impl(p_expected_revision,p_payload,p_request_id); end $$;
 create or replace function public.vzip_enqueue_my_media()
 returns integer language plpgsql security definer set search_path=''
-as $ begin perform public.vzip_assert_session(); return public.vzip_enqueue_my_media_session_impl(); end $;
+as $$ begin perform public.vzip_assert_session(); return public.vzip_enqueue_my_media_session_impl(); end $$;
 create or replace function public.vzip_song_stt_reserve()
 returns boolean language plpgsql security definer set search_path=''
-as $ begin perform public.vzip_assert_session(); return public.vzip_song_stt_reserve_session_impl(); end $;
+as $$ begin if not public.vzip_server_session_allowed() then raise exception 'current login session is not active' using errcode='42501'; end if; return public.vzip_song_stt_reserve_session_impl(); end $$;
 create or replace function public.vzip_song_stt_usage()
 returns table(used_total integer,used_today integer) language plpgsql stable security definer set search_path=''
-as $ begin perform public.vzip_assert_session(); return query select * from public.vzip_song_stt_usage_session_impl(); end $;
+as $$ begin perform public.vzip_assert_session(); return query select * from public.vzip_song_stt_usage_session_impl(); end $$;
 revoke all on function public.vocal_billing_save(bigint,jsonb,uuid),public.vzip_enqueue_my_media(),public.vzip_song_stt_reserve(),public.vzip_song_stt_usage() from public,anon;
 grant execute on function public.vocal_billing_save(bigint,jsonb,uuid),public.vzip_enqueue_my_media(),public.vzip_song_stt_reserve(),public.vzip_song_stt_usage() to authenticated;
 
