@@ -273,8 +273,9 @@ export function createStudentHeader({greeting="반가워요,",name="",subtitle="
   return header;
 }
 export function createUpcomingStage({stage=null,lesson=null,onOpen=()=>{},onStage=onOpen,onLesson=onOpen}={}) {
-  const {card,head}=homeCard("다가오는 무대","mask-happy");
+  const {card,head}=homeCard(stage?"다가오는 무대":"다가오는 레슨",stage?"mask-happy":"calendar-blank");
   card.classList.add("vz-home-stage");
+  if(!stage)card.classList.add("vz-home-stage--lesson-only");
   const open=homeButton("전체 일정 보기","caret-right",onOpen,"vz-home-text-button");
   open.prepend(el("span","","전체보기"));head.append(open);
   if(stage){
@@ -289,14 +290,14 @@ export function createUpcomingStage({stage=null,lesson=null,onOpen=()=>{},onStag
     const art=el("div","vz-home-stage-art");art.setAttribute("aria-hidden","true");if(stage.id!=null)art.dataset.poster=String(stage.id);
     art.append(el("span","vz-home-curtain vz-home-curtain--left"),el("span","vz-home-curtain vz-home-curtain--right"),el("span","vz-home-stage-light"),el("span","vz-home-stage-floor"));
     content.append(copy,art);const detail=homeButton("무대 상세 보기",null,onStage,"vz-home-stage-detail"); detail.append(content);card.append(detail);
-  }else{
-    const empty=homeButton("다가오는 무대 일정 확인","calendar-blank",onOpen,"vz-home-stage-empty");
-    empty.append(el("span","","다가오는 무대를 준비해 보세요"));card.append(empty);
   }
-  const strip=homeButton(lesson?"다음 레슨 보기":"레슨 일정 확인","calendar-blank",onLesson,"vz-home-lesson");
-  strip.append(el("strong","","다음 레슨"),el("span","vz-home-lesson-date",lesson?(lesson.dateLabel||lesson.subtitle||lesson.title||"일정 확인"):"레슨 일정 확인"));
-  if(lesson&&homeDayLabel(lesson.daysLeft))strip.append(el("span","vz-home-lesson-dday",homeDayLabel(lesson.daysLeft)));
-  strip.append(homeIcon("caret-right"));card.append(strip);return card;
+  if(lesson){
+    const strip=homeButton("다음 레슨 보기","calendar-blank",onLesson,"vz-home-lesson");
+    strip.append(el("strong","","다음 레슨"),el("span","vz-home-lesson-date",lesson.dateLabel||lesson.subtitle||lesson.title||"일정 확인"));
+    if(homeDayLabel(lesson.daysLeft))strip.append(el("span","vz-home-lesson-dday",homeDayLabel(lesson.daysLeft)));
+    strip.append(homeIcon("caret-right"));card.append(strip);
+  }
+  return card;
 }
 export function createGoalProgress({completed=0,total=0}={}) {
   const pct=percent(completed,total);
@@ -412,8 +413,8 @@ export function createStudentHome({greeting,name,subtitle,stage,lesson,goals=[],
   const home=el("div","vz-student-home");home.dataset.vzTheme="student";home.dataset.vzDesign="approved-home-v1";
   home.append(createStudentHeader({greeting,name,subtitle,onNotifications,onProfile}));
   const stack=el("div","vz-home-stack");
-  stack.append(createUpcomingStage({stage,lesson,onOpen:onCalendar||onLessons,onStage,onLesson}),
-    createGoalChecklist({goals,onGoals,onGoalToggle}),
+  if(stage||lesson)stack.append(createUpcomingStage({stage,lesson,onOpen:onCalendar||onLessons,onStage,onLesson}));
+  stack.append(createGoalChecklist({goals,onGoals,onGoalToggle}),
     createWeeklyPractice({...week,onGrowth}),
     createRecentSongActions({recent,onPlay,onRecent,onLessons,onPractice}));
   home.append(stack);return home;

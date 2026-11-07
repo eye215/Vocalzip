@@ -246,6 +246,8 @@ test('900 goals keep one scroll list, order, and scroll position after a check',
 test('empty and missing optional data never save marketing examples', async ({page}) => {
   const value={categories:[],songs:[],lessons:[],assignments:[],practices:[],performances:[],comparisonReports:[]};
   await boot(page,value);
+  await expect(page.locator('.vz-home-stage')).toHaveCount(0);
+  await expect(page.locator('.vz-home-lesson')).toHaveCount(0);
   await expect(goals(page)).toHaveCount(0);
   await expect(page.locator('.vz-student-home')).toContainText(/목표.*없|목표.*설정/);
   expect((await db(page)).dailyGoals || []).toEqual([]);
