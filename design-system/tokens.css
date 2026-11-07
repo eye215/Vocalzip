@@ -115,21 +115,21 @@
   --vz-color-canvas-violet:#C6A6EF;
   --vz-color-canvas-pink:#EBCBF5;
   --vz-color-canvas-blue:#C9D5FA;
-  --vz-color-ink:#3F2858;
-  --vz-color-ink-secondary:#78668C;
+  --vz-color-ink:#281537;
+  --vz-color-ink-secondary:#856594;
   --vz-color-ink-muted:#8C729F;
-  --vz-color-heading:#9864CC;
-  --vz-color-heading-strong:#8050AC;
+  --vz-color-heading:#873FBC;
+  --vz-color-heading-strong:#7732AE;
   --vz-color-icon-start:#B78BE7;
   --vz-color-icon-end:#9258CA;
-  --vz-color-accent:#8F42DA;
+  --vz-color-accent:#8300DC;
   --vz-color-accent-strong:#8050AC;
   --vz-color-accent-soft:rgba(183,139,231,.16);
   --vz-color-practice-low:#DDC7F3;
   --vz-color-practice-met:#A470DE;
   --vz-color-practice-high:#7434BC;
   --vz-color-today:#7900DF;
-  --vz-color-day-accent:#ED38B2;
+  --vz-color-day-accent:#ED3AD9;
   --vz-color-nav-label:#8A719F;
   --vz-color-check-border:#BE9EDB;
   --vz-color-check-fill:#A879DC;
@@ -140,12 +140,12 @@
   --vz-color-glass-fallback:#EDE2F9;
   --vz-color-focus:#7137B1;
   --vz-color-flame:#F59C48;
-  --vz-shadow-card:0 8px 24px rgba(100,62,159,.12),inset 0 1px 0 rgba(255,255,255,.5);
-  --vz-shadow-dock:0 10px 28px rgba(100,62,159,.14),inset 0 1px 0 rgba(255,255,255,.5);
+  --vz-shadow-card:inset 2px 2px 8px rgba(255,255,255,.72),inset -2px -2px 6px rgba(255,255,255,.46),0 5px 17px rgba(101,57,159,.13);
+  --vz-shadow-dock:inset 2px 2px 8px rgba(255,255,255,.7),inset -2px -2px 8px rgba(255,255,255,.45),0 7px 24px rgba(104,58,161,.15);
   --vz-shadow-greeting:0 1px 3px rgba(71,35,118,.20);
   --vz-radius-card:28px;
-  --vz-page-gutter:16px;
-  --vz-card-padding:16px;
+  --vz-page-gutter:13px;
+  --vz-card-padding:12px;
   --vz-blur-card:blur(24px) saturate(135%);
 }
 @media (max-width:359px) {

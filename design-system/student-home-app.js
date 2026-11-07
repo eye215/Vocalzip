@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions} from './components.js?v=2';
+import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=3';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -14,6 +14,11 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   document.body.classList.toggle('vz-home-mode',home);
   document.body.dataset.vzTheme='student';document.body.dataset.vzDesign='approved-home-v1';
   document.querySelector('.v-nav')?.classList.add('vz-home-dock');
+  const icons={home:"house",songs:"music-notes",record:"microphone",library:"archive-box",calendar:"calendar-blank"};
+  document.querySelectorAll('.v-nav [data-nav]').forEach(link=>{
+   const icon=link.querySelector('i');
+   if(icon&&!icon.querySelector('.vz-nav-art')&&icons[link.dataset.nav])icon.append(createHomeIcon(icons[link.dataset.nav],"vz-nav-art"));
+  });
   if(meta)meta.content=home?'#D8C7F7':originalTheme;
   // The existing library controller used the record tab before it had its own dock entry.
   const route=location.hash.replace(/^#\/?/,'').split(/[/?]/)[0];
