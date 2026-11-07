@@ -139,8 +139,8 @@ async function importMedia(file,info={},onProgress,options={}){
  if(file.size>VzipChunks.MAX_SIZE)throw Error('파일당 최대 1GB까지 업로드할 수 있어요.');
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요. 완료하거나 취소한 뒤 다시 선택해 주세요.');
  const owner=user.id,controller=new AbortController(),signal=controller.signal;
- const cancel=()=>controller.abort(),authChanged=()=>{if(user?.id!==owner)controller.abort()};
- const aborted=()=>{if(signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');if(user?.id!==owner)throw Error('로그인이 변경되었어요. 다시 로그인해 주세요.')};
+ const cancel=()=>controller.abort(),authChanged=()=>{if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))controller.abort()};
+ const aborted=()=>{if(signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))throw Error('로그인이 변경되었어요. 다시 로그인해 주세요.')};
  if(options.signal?.aborted)cancel();options.signal?.addEventListener('abort',cancel);
  window.addEventListener('vzip:auth-changed',authChanged);
  mediaImportActive=true;let id,committing=false,committed=false,r2=null;

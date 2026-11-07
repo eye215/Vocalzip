@@ -68,12 +68,12 @@ test('separate account namespaces and media databases survive account switch wit
   localStorage.setItem('__test_user','B');
   window.__changeAuth('SIGNED_IN',{user:{id:'B',email:'B@test.invalid'}});
  });
- await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('B');
+ await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope?.owner||null).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('B');
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  expect(await page.evaluate(async()=>({files:await vzipReadMedia(),queue:VzipAccountScope.storage.getItem('vzip_upload_queue_v1'),songs:VZ.db.songs.map(x=>x.id)}))).toEqual({files:[],queue:null,songs:['song-B']});
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs[0].id)).toBe('legacy');
  await page.evaluate(()=>{localStorage.setItem('__test_user','A');window.__changeAuth('SIGNED_IN',{user:{id:'A'}});});
- await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('A');
+ await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope?.owner||null).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('A');
  expect(await page.evaluate(async()=>({ids:(await vzipReadMedia()).map(x=>x.id),queue:VzipAccountScope.storage.getItem('vzip_upload_queue_v1')}))).toEqual({ids:['private-A'],queue:'A-only-queue'});
 });
 
@@ -120,7 +120,7 @@ test('legacy copy preserves source bytes and IDs and never overwrites current da
  expect(report.currentTitle).toBe('현재 계정이 수정한 제목');expect(report.first.conflicts).toBeGreaterThan(0);
  expect(report.first.files).toBe(1);expect(report.second.files).toBe(0);
  await page.evaluate(()=>{localStorage.setItem('__test_user','B');window.__changeAuth('SIGNED_IN',{user:{id:'B'}});});
- await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope.owner).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('B');
+ await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope?.owner||null).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('B');
  expect(await page.evaluate(()=>VzipAccountScope.canImportLegacy())).toBe(false);
 });
 
@@ -150,4 +150,12 @@ test('a stopped recording preview is also preserved before account switch',async
   return(await vzipReadMedia()).some(x=>x.recovered);
  });
  expect(result).toBe(true);
+});
+
+test('server-revoked session locks controls and token access without reclaiming automatically',async({page})=>{
+ await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await page.evaluate(()=>{localStorage.setItem('__test_active','other');window.dispatchEvent(new Event('focus'));});
+ await expect(page.locator('#vzip-auth-message')).toContainText('다른 기기로 로그인이 인계');
+ await expect(page.locator('#vzip-auth-screen')).toBeVisible();
+ expect(await page.evaluate(async()=>({signed:vzipCloudSignedIn(),token:await vzipCloudAccessToken(),inert:document.querySelector('.v-app').inert,active:localStorage.getItem('__test_active')}))).toEqual({signed:false,token:null,inert:true,active:'other'});
 });
