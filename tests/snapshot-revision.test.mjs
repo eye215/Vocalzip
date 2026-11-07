@@ -13,6 +13,7 @@ const base=id=>({categories:[],songs:id?[{id,title:id}]:[],lessons:[],assignment
 let admin,db,name,conn;
 const proposal=readFileSync(new URL('../supabase/proposals/20261113_snapshot_revision.sql',import.meta.url),'utf8');
 const sessions=readFileSync(new URL('../supabase/migrations/20261112_device_session_contract.sql',import.meta.url),'utf8');
+const history=readFileSync(new URL('../supabase/migrations/20261106_keep_history.sql',import.meta.url),'utf8');
 async function as(u,s,fn,c=db){
  await c.query('begin');
  try{
@@ -40,6 +41,8 @@ before(async()=>{
  alter table public.vocal_data enable row level security;
  grant select,insert,update,delete on public.vocal_data to authenticated;
  create policy own on public.vocal_data for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+ create table public.vocal_media(id text primary key,user_id uuid,metadata jsonb,updated_at timestamptz);
+ create table public.vocal_billing_documents(user_id uuid primary key,payload jsonb,previous_payload jsonb,previous_revision bigint,updated_at timestamptz);
  create function public.vocal_billing_save(bigint,jsonb,uuid) returns jsonb language sql as $$select $2$$;
  create function public.vzip_enqueue_my_media() returns integer language sql as $$select 0$$;
  create function public.vzip_song_stt_reserve() returns boolean language sql as $$select false$$;
@@ -47,7 +50,7 @@ before(async()=>{
  `);
  await db.query('insert into auth.users values ($1),($2)',[U,V]);
  const legacy=base('legacy-id-not-uuid');await db.query("insert into public.vocal_data values($1,$2,'2099-01-01T00:00:00Z')",[U,legacy]);
- await db.query(sessions);await db.query(proposal);await db.query(proposal);
+ await db.query(history);await db.query(sessions);await db.query(proposal);await db.query(proposal);
  const row=(await db.query('select payload,revision from public.vocal_data where user_id=$1',[U])).rows[0];
  assert.deepEqual(row.payload,legacy);assert.equal(row.revision,'0');
  // First update of a legacy future-clock row must also advance the real DB token.
@@ -57,7 +60,7 @@ before(async()=>{
 });
 beforeEach(async()=>{
  if(skip)return;
- await db.query('truncate public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state');
+ await db.query('truncate public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
  await db.query('delete from auth.sessions');
  for(const s of [A,B,D])await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[s,U]);
  await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[C,V]);
@@ -143,6 +146,7 @@ test('receipt insertion failure rolls back the whole snapshot mutation',{skip},a
  try{
   await assert.rejects(save(),/test_receipt_failure/);
   assert.equal((await db.query('select * from public.vocal_data')).rowCount,0);
+  assert.equal((await db.query('select * from public.vocal_history')).rowCount,0);
  }finally{await db.query('alter table public.vzip_data_write_requests drop constraint test_receipt_failure')}
 });
 for(const payload of [null,[],{songs:[]},{...base(),lessons:'bad'}]){
@@ -154,4 +158,24 @@ for(const payload of [null,[],{songs:[]},{...base(),lessons:'bad'}]){
 test('null request id and negative revision do not write',{skip},async()=>{
  await assert.rejects(save(U,A,0,base(),null),/request id/);await assert.rejects(save(U,A,-1),/nonnegative/);
  assert.equal((await db.query('select * from public.vocal_data')).rowCount,0);
+});
+
+test('existing history captures server revisions and retry receipts add no versions',{skip},async()=>{
+ const id=randomUUID();
+ await save(U,A,0,base('original'),id);
+ await save(U,A,0,base('original'),id);
+ await save(U,B,1,base('next'));
+ const rows=await as(U,A,c=>c.query("select op,data from public.vocal_history where source='vocal_data' order by id"));
+ assert.equal(rows.rowCount,2);
+ assert.deepEqual(rows.rows.map(x=>[x.op,String(x.data.revision),x.data.payload.songs[0].id]),[['insert','1','original'],['update','2','next']]);
+ assert.equal(rows.rows[0].data.user_id,U);
+});
+test('history and receipts are unreadable across owners and after session revocation',{skip},async()=>{
+ await save(U,A,0,base('private-A'));await save(V,C,0,base('private-V'));
+ const own=await as(U,A,c=>c.query('select data from public.vocal_history'));
+ assert.equal(own.rowCount,1);assert.equal(own.rows[0].data.user_id,U);
+ const state=await as(U,B,async c=>(await c.query('select public.vzip_list_sessions() r')).rows[0].r);
+ await as(U,B,c=>c.query('select public.vzip_revoke_sessions($1,false,$2)',[A,state.revision]));
+ assert.equal((await as(U,A,c=>c.query('select * from public.vocal_history'))).rowCount,0);
+ assert.equal((await as(U,A,c=>c.query('select * from public.vzip_data_write_requests'))).rowCount,0);
 });
