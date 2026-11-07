@@ -18,7 +18,7 @@ as $$
 declare u uuid := auth.uid(); s uuid;
 begin
  if u is null then return null; end if;
- if coalesce(nullif(current_setting('request.headers',true),'')::jsonb->>'x-vzip-client-protocol','')<>'account-session-v1' then return null; end if;
+ if coalesce(nullif(current_setting('request.headers',true),'')::jsonb->>'x-client-info','')<>'vocalzip-account-session-v1' then return null; end if;
  begin s := nullif(auth.jwt()->>'session_id','')::uuid;
  exception when invalid_text_representation then return null; end;
  if s is null or not exists(select 1 from auth.sessions a where a.id=s and a.user_id=u) then return null; end if;

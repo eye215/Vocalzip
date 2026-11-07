@@ -14,7 +14,7 @@ async function as(user,session,fn,connection=db) {
  try {
   await connection.query('set local role authenticated');
   await connection.query("select set_config('request.jwt.claim.sub',$1,true),set_config('request.jwt.claims',$2,true)",[user,JSON.stringify({sub:user,session_id:session})]);
-  await connection.query("select set_config('request.headers',$1,true)",[JSON.stringify({'x-vzip-client-protocol':'account-session-v1'})]);
+  await connection.query("select set_config('request.headers',$1,true)",[JSON.stringify({'x-client-info':'vocalzip-account-session-v1'})]);
   const result=await fn(connection); await connection.query('commit'); return result;
  } catch(e){await connection.query('rollback');throw e;}
 }

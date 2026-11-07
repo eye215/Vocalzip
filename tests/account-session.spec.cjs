@@ -83,7 +83,7 @@ test('takeover requires a visible confirmation and approval precedes opening the
  await expect(dialog).toBeVisible();
  expect(await page.evaluate(()=>vzipCloudSignedIn())).toBe(false);
  expect(await page.evaluate(()=>window.__writes)).toEqual([]);
- expect(await page.evaluate(()=>window.__clientOptions.global.headers['x-vzip-client-protocol'])).toBe('account-session-v1');
+ expect(await page.evaluate(()=>window.__clientOptions.global.headers['X-Client-Info'])).toBe('vocalzip-account-session-v1');
  await dialog.getByRole('button',{name:'여기서 로그인'}).click();
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  expect(await page.evaluate(()=>window.__claims)).toEqual([{expected_previous:null},{expected_previous:'old-session'}]);
