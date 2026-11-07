@@ -1,6 +1,7 @@
 /* Screen structure. Existing forms stay mounted to preserve their values and handlers. */
 (() => {
   'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
   const $ = selector => document.querySelector(selector);
   const data = () => { try { return JSON.parse(localStorage.getItem('vocal-zip_mvp_v1') || '{}'); } catch { return {}; } };
   const make = (tag, className, text) => {

@@ -1,6 +1,7 @@
 /* Linked recordings belong to saved practices. Playback never changes app data. */
 (() => {
   'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
   const root = document.querySelector('#practice-list');
   if (!root) return;
   const players = new Map(), runs = new WeakMap();

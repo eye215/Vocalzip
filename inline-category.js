@@ -1,5 +1,6 @@
 /* VOCAL.zip: Inline two-level category creation and editing */
 (()=>{'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
 const key='vocal-zip_mvp_v1';
 function read(){try{return JSON.parse(localStorage.getItem(key))}catch{return null}}
 function persist(mutator){const data=read();if(!data?.categories){alert('항목 데이터를 불러오지 못했어요.');return false}const ok=mutator(data);if(!ok)return false;try{localStorage.setItem(key,JSON.stringify(data))}catch(e){alert('저장에 실패했어요: '+e.message);return false}return true}

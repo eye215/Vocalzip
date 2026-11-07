@@ -1,5 +1,6 @@
 /* VOCAL.zip: comparison picker and saved reports. */
 (()=>{'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
 const $=s=>document.querySelector(s),key='vocal-zip_mvp_v1';let items=[],first='',second='',players=[];
 const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=n=>n==null||n===''||Number.isNaN(+new Date(n))?'날짜 미상':new Date(n).toLocaleDateString('ko-KR');

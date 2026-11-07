@@ -1,6 +1,7 @@
 /* Calendar is a read-only projection of existing records; dates use local calendar days. */
 (() => {
   'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
   const history = document.querySelector('#practice .vzip-journal-history');
   if (!history) return;
   const read = () => { try { return JSON.parse(localStorage.getItem('vocal-zip_mvp_v1') || '{}'); } catch { return {}; } };

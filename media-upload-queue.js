@@ -1,6 +1,8 @@
 /* Keep File handles only; upload one file at a time and release each successful handle. */
 (()=>{
 'use strict';
+const localStorage = window.VzipAccountScope?.storage || window.localStorage;
+
 const catalog=()=>{try{return JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}').songs||[]}catch{return []}};
 window.vzipChooseUploadSongs=(files,defaultSongId='')=>new Promise(resolve=>{
  const overlay=document.createElement('div');overlay.className='vzip-media-edit-backdrop';

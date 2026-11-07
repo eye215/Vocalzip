@@ -1,6 +1,8 @@
 /* VOCAL.zip v6 views: 보관함, 가져오기, 비교, 성장, 설정. */
 (() => {
 'use strict';
+const localStorage = window.VzipAccountScope?.storage || window.localStorage;
+
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
 
 /* ---------- 가져오기 ---------- */

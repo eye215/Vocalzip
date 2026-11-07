@@ -4,6 +4,8 @@
  * existing storage until the owner has set R2 up. */
 (() => {
 'use strict';
+const localStorage = window.VzipAccountScope?.storage || window.localStorage;
+
 const endpoint = () => String(window.VZIP_R2_ENDPOINT || '').replace(/\/+$/, '');
 const signed = new Map(); // key → {url, until}
 async function token() {

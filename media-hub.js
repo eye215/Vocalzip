@@ -1,11 +1,12 @@
 /* VOCAL.zip media library: cloud-first, no iPhone download required. */
 (()=>{'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
 const archive=document.querySelector('#media');if(!archive)return;
 const card=document.createElement('div');card.className='card';card.id='vzip-media-hub';
 card.innerHTML='<h2>내 음원</h2><p class="muted">설정 없이 바로 올리고 확인해요. 파일을 누르면 비교할 수 있어요.</p><div class="vzip-hub-buttons"><label class="btn" for="vzip-hub-upload">＋ 음원·영상 가져오기</label><input id="vzip-hub-upload" type="file" multiple accept=".mp4,.mov,.m4v,.m4a,.mp3,.wav,.webm,.aac,.ogg,.flac,video/mp4,video/quicktime,audio/mp4,audio/mpeg,audio/wav" hidden><button class="btn secondary" id="vzip-hub-reload" type="button">↻ 새로고침</button></div><div class="vzip-hub-filters" role="group" aria-label="파일 필터"><button type="button" class="active" data-filter="all">전체</button><button type="button" data-filter="audio">🎤 음성</button></div><p class="muted" id="vzip-hub-status" role="status"></p><div id="vzip-hub-list"></div>';
 archive.append(card);const originFilters=document.createElement('div');originFilters.className='vzip-hub-filters';originFilters.setAttribute('role','group');originFilters.setAttribute('aria-label','녹음 출처');originFilters.innerHTML='<button type="button" class="active" data-origin="all">전체 출처</button><button type="button" data-origin="lesson">🎓 레슨</button><button type="button" data-origin="practice">🎼 연습</button><button type="button" data-origin="import">📂 가져온 파일</button>';card.querySelector('.vzip-hub-filters')?.after(originFilters);
 const $=s=>card.querySelector(s),status=$('#vzip-hub-status'),list=$('#vzip-hub-list');
-const key='vocal-zip_mvp_v1',dbName='vocalzip_media_v1';let items=[],activeUrl=null,activeEl=null,filter='all',origin='all',groupBySong=false,refreshRun=0,playRun=0,uploadMessage='';
+const key='vocal-zip_mvp_v1',dbName=window.VzipAccountScope?.mediaDb()||'vocalzip_media_v1';let items=[],activeUrl=null,activeEl=null,filter='all',origin='all',groupBySong=false,refreshRun=0,playRun=0,uploadMessage='';
 const songs=()=>{try{return JSON.parse(localStorage.getItem(key)||'{}').songs||[]}catch{return []}};
 function openDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(dbName,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('recordings'))req.result.createObjectStore('recordings',{keyPath:'id'})};req.onerror=()=>reject(req.error);req.onsuccess=()=>resolve(req.result)})}
 async function localAll(){const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction('recordings','readonly'),req=tx.objectStore('recordings').getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);tx.oncomplete=()=>db.close()})}

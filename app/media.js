@@ -13,7 +13,7 @@ const blobOf = item => item.blob instanceof Blob ? (item.blob.type === typeOf(it
   : item.bytes instanceof ArrayBuffer || ArrayBuffer.isView(item.bytes) ? new Blob([item.bytes], {type:typeOf(item)}) : null;
 async function tx(mode, action) {
   const db = await new Promise((resolve, reject) => {
-    const req = indexedDB.open('vocalzip_media_v1', 1);
+    const req = indexedDB.open(window.VzipAccountScope?.mediaDb()||'vocalzip_media_v1', 1);
     let blocked = false;
     req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('recordings')) req.result.createObjectStore('recordings', {keyPath:'id'}); };
     req.onsuccess = () => { if (blocked) req.result.close(); else resolve(req.result); };
@@ -31,6 +31,10 @@ async function tx(mode, action) {
 const quota = e => e?.name === 'QuotaExceededError' || /quota|space/i.test(e?.message || '') ? Error('기기 저장 공간이 부족해요. 공간을 확보하거나 클라우드에 저장해 주세요.') : e;
 /** Globals relied on by cloud-sync.js. */
 window.vzipStorePracticeMedia = async item => {
+  if(window.VzipAccountScope){
+    if(item.accountOwner&&item.accountOwner!==window.VzipAccountScope.owner)throw Error('다른 계정의 녹음은 저장할 수 없어요.');
+    item={...item,accountOwner:window.VzipAccountScope.owner};
+  }
   try {
     if (item.blob.size > LOCAL_LIMIT) { await tx('readwrite', s => s.put(item)); return; }
     const bytes = await item.blob.arrayBuffer();
@@ -48,6 +52,7 @@ window.vzipMediaBlob = blobOf; window.vzipMediaType = typeOf;
 
 const M = VZ.media = {typeOf, blobOf, LOCAL_LIMIT};
 let cache = null, loading = null, generation = 0, cloudError = '';
+window.VzipAccountScope?.beforeLeave(()=>{M.invalidate();document.querySelectorAll('audio,video').forEach(el=>{el.pause();el.removeAttribute('src');el.load();});});
 M.cloudError = () => cloudError;
 /** Any change (login, upload, edit) starts a new generation; results of older reads are never cached. */
 M.typeOf = typeOf;
@@ -67,7 +72,8 @@ M.list = async (force) => {
     }
     const list = sortList(map);
     // A read that started before a login/change, or that missed a source, is shown but not kept.
-    if (generation === mine) { cloudError = failed; if (!failed) cache = list; }
+    if (generation === mine && !window.VzipAccountScope?.leaving) { cloudError = failed; if (!failed) cache = list; }
+    if(window.VzipAccountScope?.leaving)return [];
     return list;
   })();
   loading = {generation:mine, promise};
@@ -128,6 +134,7 @@ const changed = () => { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-
 
 /** Save a freshly captured or imported blob. Large blobs go to the cloud when signed in. */
 M.saveBlob = async (item, onProgress, signal) => {
+  if(window.VzipAccountScope?.leaving)throw Error('계정이 변경되고 있어요. 녹음은 원래 계정 공간에 보존돼요.');
   let saved = item;
   if (item.blob.size > LOCAL_LIMIT) {
     if (!window.vzipCloudSignedIn?.()) throw Error('25MB 초과 파일은 로그인 후 클라우드에 저장할 수 있어요.');
@@ -143,6 +150,7 @@ M.saveBlob = async (item, onProgress, signal) => {
 /** Import a picked File. Videos become their original audio (vzipPrepareMedia, from main);
  * the capture date comes from file metadata unless the user picked one (choice.date). */
 M.importFile = async (file, choice, onProgress, signal) => {
+  if(window.VzipAccountScope?.leaving)throw Error('계정이 변경되고 있어요.');
   const type = typeOf(file);
   if (!/^(audio|video)\//.test(type)) throw Error('지원하지 않는 형식이에요.');
   if (!file.size) throw Error('빈 파일은 가져올 수 없어요.');
@@ -151,6 +159,7 @@ M.importFile = async (file, choice, onProgress, signal) => {
   const typed = file.type === type ? file : new File([file], file.name, {type, lastModified:file.lastModified});
   const prepared = await window.vzipPrepareMedia(typed, {signal, onProgress:msg => onProgress?.(msg)});
   try {
+    if(window.VzipAccountScope?.leaving)throw Error('계정이 변경되어 가져오기를 중단했어요.');
     const out = prepared.file, meta = {...prepared.metadata};
     // Keep the length so practice time can include imported files.
     if (!(Number(meta.durationSeconds) > 0)) meta.durationSeconds = await M.measure({blob:out, type:out.type || typeOf(out), name:out.name}, 8000);
@@ -465,6 +474,8 @@ M.capture = async ({onLevel, onTick}) => {
   try { recorder = new MediaRecorder(stream, mime ? {mimeType:mime} : undefined); }
   catch (e) { stream.getTracks().forEach(t => t.stop()); throw Error('녹음 형식을 준비하지 못했어요: ' + e.message); }
   const chunks = [], peaks = [];
+  const captureOwner=window.VzipAccountScope?.owner||'',captureId=VZ.uid(),captureCreated=Date.now();
+  let stopPromise=null,removeProtection=()=>{};
   let ctx, analyser, raf, timer, elapsed = 0, startedAt = 0, frame = 0;
   try {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -491,7 +502,7 @@ M.capture = async ({onLevel, onTick}) => {
     get state() { return recorder.state; },
     seconds,
     stop() {
-      return new Promise((resolve, reject) => {
+      return stopPromise ||= new Promise((resolve, reject) => {
         const total = seconds();
         recorder.onstop = () => {
           release();
@@ -501,13 +512,18 @@ M.capture = async ({onLevel, onTick}) => {
           // Downsample peaks to ≤512 values for the waveform summary.
           const step = Math.max(1, Math.ceil(peaks.length / 512)), wave = [];
           for (let i = 0; i < peaks.length; i += step) wave.push(Math.max(...peaks.slice(i, i + step)));
-          resolve({blob, type, durationSeconds:Math.round(total * 10) / 10, waveform:wave});
+          resolve({blob, type, durationSeconds:Math.round(total * 10) / 10, waveform:wave, accountOwner:captureOwner, releaseProtection:()=>removeProtection()});
         };
         try { recorder.state === 'inactive' ? recorder.onstop() : recorder.stop(); } catch (e) { release(); reject(e); }
       });
     },
-    cancel() { try { recorder.onstop = null; if (recorder.state !== 'inactive') recorder.stop(); } catch {} release(); }
+    cancel() { removeProtection();try { recorder.onstop = null; if (recorder.state !== 'inactive') recorder.stop(); } catch {} release(); }
   };
+  if(window.VzipAccountScope)removeProtection=window.VzipAccountScope.beforeLeave(async()=>{
+    if(recorder.state==='inactive'&&!chunks.length)return;
+    const saved=await session.stop();
+    await window.vzipStorePracticeMedia({...saved,id:captureId,accountOwner:captureOwner,name:'계정 전환 전 보호된 녹음',created:captureCreated,source:'record',pendingUpload:true,recovered:true});
+  });
   return session;
 };
 M.drawWave = (canvas, values, color = '#7552d9') => {
