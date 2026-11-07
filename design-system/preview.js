@@ -36,10 +36,17 @@ function render(){
   const page=make("main","vz-page");
   const header=make("header","vz-preview-header");
   const logo=make("div");
-  const name=make("h1","vz-preview-logo");name.append("VOCAL",Object.assign(make("span"),{textContent:"."}),"zip");
-  logo.append(name,make("p","vz-preview-sub","나만의 보컬 연습 공간"));
-  header.append(logo,make("span","vz-pill","STUDENT 1.0"));
-  page.append(header,make("p","vz-section-label","SATURDAY · NOVEMBER 07"),make("h2","vz-page-title","오늘도 나답게 노래해요 ✦"));
+  const name=make("h1","vz-preview-logo");name.append("♫ ",Object.assign(make("span"),{textContent:"Vocalzip"}));
+  logo.append(name);
+  const shortcuts=make("div","vz-preview-head-actions");
+  for(const [icon,label] of [["ph ph-bell","알림"],["ph ph-user","프로필"]]){
+    const button=make("button","vz-preview-head-btn");
+    button.type="button";button.setAttribute("aria-label",label);
+    const glyph=make("i",icon);glyph.setAttribute("aria-hidden","true");button.append(glyph);
+    button.addEventListener("click",()=>toast(label+" · 데모"));shortcuts.append(button);
+  }
+  header.append(logo,shortcuts);
+  page.append(header,make("h2","vz-page-title","좋은 오후예요 ☀️"),make("p","vz-greeting-sub","오늘도 즐겁게 노래해요!"));
   const stack=make("div","vz-stack");
   stack.append(createHeroCard({
     title:"다가오는 무대",event:"뮤지컬 오디션",song:"Wicked · Defying Gravity",daysLeft:12,
