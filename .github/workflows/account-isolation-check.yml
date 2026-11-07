@@ -1,4 +1,4 @@
-name: Account isolation and takeover checks
+name: Account isolation and device-session checks
 on:
   push:
     branches: [codex/account-isolation-takeover]
@@ -6,11 +6,13 @@ on:
     paths:
       - 'account-config.js'
       - 'app/account-scope.js'
+      - 'app/device-sessions.js'
+      - 'tests/active-session.test.mjs'
       - 'cloud-sync.js'
       - 'app/core.js'
       - 'app/media.js'
       - 'tests/account-session.spec.cjs'
-      - 'supabase/migrations/20261112_active_session_contract.sql'
+      - 'supabase/migrations/20261112_device_session_contract.sql'
       - '.github/workflows/account-isolation-check.yml'
 concurrency:
   group: account-isolation-${{ github.event.pull_request.head.ref || github.ref_name }}

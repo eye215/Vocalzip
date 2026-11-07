@@ -2,7 +2,7 @@
 (()=>{'use strict';
 const localStorage = window.VzipAccountScope?.storage || window.localStorage;
 
-if(window.VZIP_SINGLE_SESSION_ENABLED&&!window.VzipAccountScope)return;
+if(window.VZIP_DEVICE_SESSIONS_ENABLED&&!window.VzipAccountScope)return;
 const root=document.querySelector('#vzip-cloud-root');if(!root)return;
 const url='https://chxnbtiyuyhiywzeshis.supabase.co';
 const key='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E';
@@ -196,7 +196,7 @@ async function importMedia(file,info={},onProgress,options={}){
    try{
     upload=new window.tus.Upload(piece,{
      endpoint:'https://chxnbtiyuyhiywzeshis.storage.supabase.co/storage/v1/upload/resumable',
-     headers:{authorization:'Bearer '+session.session.access_token,apikey:key,...(window.VzipAccountScope?{'X-Client-Info':'vocalzip-account-session-v1'}:{})},
+     headers:{authorization:'Bearer '+session.session.access_token,apikey:key,...(window.VzipAccountScope?{'X-Client-Info':'vocalzip-device-session-v2'}:{})},
      uploadDataDuringCreation:false,removeFingerprintOnSuccess:true,
      chunkSize:6*1024*1024,retryDelays:[0,1000,3000,5000,10000],
      storeFingerprintForResuming:false,
@@ -518,19 +518,49 @@ function showUser(){
  paintUser();
 }
 function paintUser(){if(streamOwner&&streamOwner!==user?.id)window.vzipRevokeChunkMedia?.();streamOwner=user?.id||null;window.dispatchEvent(new Event('vzip:auth-changed'));const logged=window.vzipCloudSignedIn();$('#cloud-signed-in').hidden=!logged;updateAuthScreen();if(logged){$('#cloud-user').textContent=user.email||'로그인됨';ready=localStorage.getItem('vzip_cloud_linked_user')===user.id;say(ready?'연결됨 · 기록을 수정하면 자동으로 서버에 저장돼요.':'로그인 완료! 이 기기와 클라우드 기록을 합치는 중…');sync({silent:true})}else{ready=false;say('로그인하면 다른 기기에서도 기록을 불러올 수 있어요.')}}
-let cancelTakeover=null;
-function askTakeover(){
- return new Promise(resolve=>{
-  const box=document.createElement('section');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label','로그인 기기 인계');
-  box.innerHTML='<h2>다른 기기에서 로그인 중</h2><p class="vzip-auth-note">기존 기기에서 로그아웃하고 여기서 로그인할까요? 미전송 녹음은 이전 기기에 보존됩니다.</p><div class="cloud-actions"><button type="button" class="btn secondary" data-cancel>취소</button><button type="button" class="btn" data-approve>여기서 로그인</button></div>';
-  const finish=value=>{box.remove();if(cancelTakeover===cancel)cancelTakeover=null;resolve(value);};
-  const cancel=()=>finish(false);cancelTakeover=cancel;
-  box.querySelector('[data-cancel]').onclick=cancel;box.querySelector('[data-approve]').onclick=()=>finish(true);
-  authScreen.querySelector('.vzip-auth-card').appendChild(box);box.querySelector('[data-cancel]').focus();
- });
+function deviceLabel(){
+ const ua=navigator.userAgent,installed=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+ const device=/iPad/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1)?'iPad':/iPhone/.test(ua)?'iPhone':/Android/.test(ua)?'Android':'컴퓨터';
+ return device+' · '+(installed?'설치형 웹앱':/Firefox/.test(ua)?'Firefox':/Edg/.test(ua)?'Edge':/Chrome|CriOS/.test(ua)?'Chrome':'Safari/브라우저');
+}
+async function endThisSession(all=false,revision=null){
+ const generation=authGeneration;
+ sessionVerified=false;ready=false;clearTimeout(uploadTimer);updateAuthScreen();
+ window.vzipRevokeChunkMedia?.();window.dispatchEvent(new Event('vzip:auth-changed'));
+ // Freeze first and persist all pending captures before revoking this login.
+ await window.VzipAccountScope.lock();
+ if(generation!==authGeneration)throw Error('로그인이 변경됐어요. 다시 확인해 주세요.');
+ const {data,error}=all
+  ?await client.rpc('vzip_revoke_sessions',{p_session_id:null,p_all:true,p_expected_revision:revision})
+  :await client.rpc('vzip_release_session');
+ if(error)throw Error('로그아웃을 확인하지 못했어요. 녹음은 보존됩니다. 다시 로그인해 확인해 주세요. '+error.message);
+ if(all&&data?.status==='sessions_changed'){say('로그인 목록이 바뀌었어요. 보존한 자료를 다시 확인합니다.');location.reload();return data;}
+ if(generation!==authGeneration)return null;
+ const {error:signOutError}=await client.auth.signOut({scope:'local'});
+ if(signOutError)throw Error('서버 접근은 차단됐어요. 이 기기 로그인 정리에 실패했으니 다시 확인해 주세요.');
+ localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser();
+ return data;
+}
+async function openSessionManager(){
+ const generation=authGeneration,owner=user?.id;
+ const current=()=>generation===authGeneration&&user?.id===owner&&sessionVerified;
+ const refresh=async()=>{const {data,error}=await client.rpc('vzip_list_sessions');if(error)throw Error(error.message);if(!current())throw Error('로그인이 변경됐어요.');return data;};
+ try{
+  if(!current())return;
+  const snapshot=await refresh();
+  await window.VzipDeviceSessions.manage(snapshot,{
+   isCurrent:current,refresh,
+   revoke:async(id,revision)=>{
+    if(!current())throw Error('로그인이 변경됐어요.');
+    if(!id||id===snapshot.current_session)return endThisSession(!id,revision);
+    const {data,error}=await client.rpc('vzip_revoke_sessions',{p_session_id:id,p_all:false,p_expected_revision:revision});
+    if(error)throw Error(error.message);if(!current())throw Error('로그인이 변경됐어요.');return data;
+   }
+  });
+ }catch(e){say('로그인 기기 확인 실패: '+e.message);}
 }
 async function enterAccount(){
- cancelTakeover?.();
+ window.VzipDeviceSessions?.close();
  const generation=++authGeneration,candidate=user,owner=candidate?.id||'',scope=window.VzipAccountScope;
  sessionVerified=false;ready=false;clearTimeout(uploadTimer);updateAuthScreen();
  if(scope.owner!==owner){
@@ -539,21 +569,28 @@ async function enterAccount(){
  }
  if(!candidate){paintUser();return;}
  const current=()=>generation===authGeneration&&user?.id===owner;
- say('활성 로그인 기기를 확인하고 있어요…');
- let {data,error}=await client.rpc('vzip_claim_session',{expected_previous:null});
- if(!current())return;
- if(error)throw Error('서버 단일 로그인 설정을 확인할 수 없어요. '+error.message);
- if(data?.status==='confirmation_required'){
-  const approved=await askTakeover();
+ say('이 계정의 로그인 세션을 확인하고 있어요…');
+ let {data,error}=await client.rpc('vzip_register_session',{p_label:deviceLabel(),p_replace_session:null,p_expected_revision:null});
+ for(let attempt=0;current()&&!error&&['device_limit','sessions_changed'].includes(data?.status);attempt++){
+  if(attempt>=3)throw Error('로그인 목록이 계속 바뀌고 있어요. 다시 로그인해 주세요.');
+  if(!window.VzipDeviceSessions)throw Error('로그인 기기 관리 화면을 불러오지 못했어요.');
+  const selected=await window.VzipDeviceSessions.chooseReplacement(data);
   if(!current())return;
-  if(!approved){user=null;await client.auth.signOut({scope:'local'});if(generation===authGeneration){paintUser();say('로그인을 취소했어요. 기존 기기의 로그인은 유지됩니다.');}return;}
-  ({data,error}=await client.rpc('vzip_claim_session',{expected_previous:data.expected_previous}));
-  if(!current())return;
-  if(error)throw Error(error.message);
+  if(!selected){
+   user=null;await client.auth.signOut({scope:'local'});
+   if(generation===authGeneration){paintUser();say('로그인을 취소했어요. 기존 기기들의 로그인은 유지됩니다.');}
+   return;
+  }
+  ({data,error}=await client.rpc('vzip_register_session',{p_label:deviceLabel(),p_replace_session:selected.session_id,p_expected_revision:selected.revision}));
  }
- if(data?.status!=='active')throw Error('다른 로그인 요청으로 상태가 바뀌었어요. 다시 로그인해 주세요.');
+ if(!current())return;
+ if(error)throw Error('서버 다중 기기 로그인 설정을 확인할 수 없어요. '+error.message);
+ if(data?.status==='revoked')throw Error('이 로그인은 종료됐어요. 다시 인증해 주세요.');
+ if(data?.status!=='active')throw Error('로그인 세션 상태를 확인하지 못했어요. 다시 로그인해 주세요.');
  if(scope.leaving){await scope.lock();if(current())location.reload();return;}
  sessionVerified=true;paintUser();
+ let manager=document.getElementById('vzip-device-manage');
+ if(!manager){manager=document.createElement('button');manager.id='vzip-device-manage';manager.className='btn ghost';manager.textContent='로그인 기기 관리';manager.onclick=openSessionManager;document.getElementById('cloud-signed-in').appendChild(manager);}
  let button=document.getElementById('vzip-legacy-import');
  if(!button&&scope.canImportLegacy()){
   button=document.createElement('button');button.id='vzip-legacy-import';button.className='btn ghost';button.textContent='이 기기의 이전 자료 확인·가져오기';
@@ -580,7 +617,8 @@ async function checkActiveSession(){
    updateAuthScreen();window.vzipRevokeChunkMedia?.();window.dispatchEvent(new Event('vzip:auth-changed'));
    await window.VzipAccountScope.lock();
    if(generation!==authGeneration)return;
-   say('다른 기기로 로그인이 인계됐어요. 미전송 녹음은 이 계정의 기기 저장 공간에 보존됐습니다. 다시 로그인해 주세요.');
+   window.VzipDeviceSessions?.close();
+   say('이 기기의 로그인이 종료됐어요. 미전송 녹음은 이 계정의 기기 저장 공간에 보존됐습니다. 다시 인증해 주세요.');
   }
  }finally{sessionChecking=false;}
 }
@@ -589,13 +627,13 @@ if(window.VzipAccountScope){
  window.addEventListener('focus',()=>checkActiveSession().catch(()=>{}));
 }
 
-async function boot(){if(!window.supabase?.createClient){say('서버 연결 라이브러리를 불러오지 못했어요. 새로고침해 주세요.');return}client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true},...(window.VzipAccountScope?{global:{headers:{'X-Client-Info':'vocalzip-account-session-v1'}}}:{})});const {data}=await client.auth.getUser();user=data?.user||null;showUser();client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;showUser()});const credentials=()=>({email:$('#cloud-email').value.trim(),password:$('#cloud-password').value});
+async function boot(){if(!window.supabase?.createClient){say('서버 연결 라이브러리를 불러오지 못했어요. 새로고침해 주세요.');return}client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true},...(window.VzipAccountScope?{global:{headers:{'X-Client-Info':'vocalzip-device-session-v2'}}}:{})});const {data}=await client.auth.getUser();user=data?.user||null;showUser();client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;showUser()});const credentials=()=>({email:$('#cloud-email').value.trim(),password:$('#cloud-password').value});
 $('#cloud-show-password').onclick=()=>{const el=$('#cloud-password');el.type=el.type==='password'?'text':'password';$('#cloud-show-password').textContent=el.type==='password'?'보기':'숨기기'};
 $('#cloud-login').onclick=async()=>{const {email,password}=credentials();if(!email||!password)return say('이메일과 비밀번호를 입력해 주세요.');say('로그인 중…');const {error}=await client.auth.signInWithPassword({email,password});say(error?'로그인 실패: '+(error.message==='Invalid login credentials'?'이메일 또는 비밀번호가 맞지 않아요. 기존 이메일 링크 계정이면 비밀번호 재설정을 눌러 주세요.':error.message):'✓ 로그인 완료!')};
 $('#cloud-signup').onclick=async()=>{const {email,password}=credentials();if(!email||password.length<8)return say('이메일과 8자 이상의 비밀번호를 입력해 주세요.');if(!confirm('이 이메일로 새 계정을 만들까요? 이미 가입했다면 비밀번호 재설정을 이용해 주세요.'))return;say('계정 생성 중…');const {data,error}=await client.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});say(error?'가입 실패: '+error.message:data.session?'✓ 가입 및 로그인 완료!':'가입 요청 완료. 이메일 인증이 필요할 수 있어요. 이메일이 오지 않으면 발송 제한이 풀린 뒤 다시 확인해 주세요.')};
 $('#cloud-reset').onclick=async()=>{const email=$('#cloud-email').value.trim();if(!email)return say('먼저 이메일을 입력해 주세요.');say('비밀번호 재설정 메일 요청 중…');const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});say(error?'재설정 메일 발송 실패: '+error.message:'✓ 비밀번호 재설정 메일을 확인해 주세요.')};
 client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){setTimeout(async()=>{const password=prompt('새 비밀번호를 8자 이상 입력해 주세요.');if(!password)return;if(password.length<8){say('비밀번호는 8자 이상이어야 해요.');return}const {error}=await client.auth.updateUser({password});say(error?'비밀번호 변경 실패: '+error.message:'✓ 비밀번호가 설정됐어요. 다음부터 이메일과 비밀번호로 로그인하세요.')},200)}});
-$('#cloud-logout').onclick=async()=>{if(window.VzipAccountScope&&sessionVerified){const {error}=await client.rpc('vzip_release_session');if(error){say('로그아웃 확인 실패: '+error.message);return;}}sessionVerified=false;await client.auth.signOut({scope:'local'});localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=()=>sync();$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',e=>{if(!ready||!user||e.detail?.source==='cloud-merge')return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>{uploadTimer=null;upload(true)},900)});
+$('#cloud-logout').onclick=async()=>{if(window.VzipAccountScope){try{await endThisSession();}catch(e){say(e.message);}return;}await client.auth.signOut({scope:'local'});localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=()=>sync();$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',e=>{if(!ready||!user||e.detail?.source==='cloud-merge')return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>{uploadTimer=null;upload(true)},900)});
  /* A change saved just before the app goes to the background is sent at once (iOS may suspend the page before the
   * 0.9 s wait ends); a save that failed offline is sent again when the network or the app comes back. */
  const flush=()=>{if(!ready||!user)return;if(uploadTimer){clearTimeout(uploadTimer);uploadTimer=null;upload(true)}};
