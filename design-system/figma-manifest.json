@@ -1,0 +1,455 @@
+{
+  "name": "VOCAL.zip DS v1 Figma token sync manifest",
+  "status": "ready-for-figma-import-not-synced",
+  "source": "design-system/tokens.css",
+  "collections": [
+    {
+      "name": "VOCAL.zip / Semantic Color",
+      "modes": [
+        "Student",
+        "Teacher"
+      ],
+      "variables": [
+        {
+          "name": "color/canvas",
+          "cssName": "--vz-color-canvas",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-canvas)",
+          "values": {
+            "Student": "#f6f3ff",
+            "Teacher": "#eff5ff"
+          }
+        },
+        {
+          "name": "color/canvas-end",
+          "cssName": "--vz-color-canvas-end",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-canvas-end)",
+          "values": {
+            "Student": "#f9f7ff",
+            "Teacher": "#f7faff"
+          }
+        },
+        {
+          "name": "color/text/primary",
+          "cssName": "--vz-color-ink",
+          "type": "COLOR",
+          "scopes": [
+            "TEXT_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-ink)",
+          "values": {
+            "Student": "#252142",
+            "Teacher": "#1d304c"
+          }
+        },
+        {
+          "name": "color/text/secondary",
+          "cssName": "--vz-color-ink-secondary",
+          "type": "COLOR",
+          "scopes": [
+            "TEXT_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-ink-secondary)",
+          "values": {
+            "Student": "#625d7c",
+            "Teacher": "#556984"
+          }
+        },
+        {
+          "name": "color/text/muted",
+          "cssName": "--vz-color-ink-muted",
+          "type": "COLOR",
+          "scopes": [
+            "TEXT_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-ink-muted)",
+          "values": {
+            "Student": "#77718d",
+            "Teacher": "#667991"
+          }
+        },
+        {
+          "name": "color/brand/accent",
+          "cssName": "--vz-color-accent",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL",
+            "TEXT_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-accent)",
+          "values": {
+            "Student": "#7954e7",
+            "Teacher": "#386ccb"
+          }
+        },
+        {
+          "name": "color/brand/strong",
+          "cssName": "--vz-color-accent-strong",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL",
+            "TEXT_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-accent-strong)",
+          "values": {
+            "Student": "#6239cf",
+            "Teacher": "#2255b6"
+          }
+        },
+        {
+          "name": "color/brand/soft",
+          "cssName": "--vz-color-accent-soft",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-accent-soft)",
+          "values": {
+            "Student": "#ede7ff",
+            "Teacher": "#e4eeff"
+          }
+        },
+        {
+          "name": "color/progress/track",
+          "cssName": "--vz-color-progress-track",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-progress-track)",
+          "values": {
+            "Student": "#e9e1f7",
+            "Teacher": "#d9e7fb"
+          }
+        },
+        {
+          "name": "color/state/success",
+          "cssName": "--vz-color-success",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL",
+            "TEXT_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-success)",
+          "values": {
+            "Student": "#28785c",
+            "Teacher": "#257b67"
+          }
+        },
+        {
+          "name": "color/state/danger",
+          "cssName": "--vz-color-danger",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL",
+            "TEXT_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-danger)",
+          "values": {
+            "Student": "#a23f56",
+            "Teacher": "#a43f57"
+          }
+        },
+        {
+          "name": "color/focus",
+          "cssName": "--vz-color-focus",
+          "type": "COLOR",
+          "scopes": [
+            "STROKE_COLOR"
+          ],
+          "codeSyntax": "var(--vz-color-focus)",
+          "values": {
+            "Student": "#5d37c7",
+            "Teacher": "#2157c7"
+          }
+        },
+        {
+          "name": "color/glass/fallback",
+          "cssName": "--vz-color-glass-fallback",
+          "type": "COLOR",
+          "scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ],
+          "codeSyntax": "var(--vz-color-glass-fallback)",
+          "values": {
+            "Student": "#fdfbff",
+            "Teacher": "#f8fbff"
+          }
+        }
+      ]
+    },
+    {
+      "name": "VOCAL.zip / Spacing",
+      "modes": [
+        "Value"
+      ],
+      "variables": [
+        {
+          "name": "spacing/1",
+          "cssName": "--vz-space-1",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-1)",
+          "values": {
+            "Value": 4
+          }
+        },
+        {
+          "name": "spacing/2",
+          "cssName": "--vz-space-2",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-2)",
+          "values": {
+            "Value": 8
+          }
+        },
+        {
+          "name": "spacing/3",
+          "cssName": "--vz-space-3",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-3)",
+          "values": {
+            "Value": 12
+          }
+        },
+        {
+          "name": "spacing/4",
+          "cssName": "--vz-space-4",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-4)",
+          "values": {
+            "Value": 16
+          }
+        },
+        {
+          "name": "spacing/5",
+          "cssName": "--vz-space-5",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-5)",
+          "values": {
+            "Value": 20
+          }
+        },
+        {
+          "name": "spacing/6",
+          "cssName": "--vz-space-6",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-6)",
+          "values": {
+            "Value": 24
+          }
+        },
+        {
+          "name": "spacing/8",
+          "cssName": "--vz-space-8",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-8)",
+          "values": {
+            "Value": 32
+          }
+        },
+        {
+          "name": "spacing/10",
+          "cssName": "--vz-space-10",
+          "type": "FLOAT",
+          "scopes": [
+            "GAP",
+            "WIDTH_HEIGHT"
+          ],
+          "codeSyntax": "var(--vz-space-10)",
+          "values": {
+            "Value": 40
+          }
+        }
+      ]
+    },
+    {
+      "name": "VOCAL.zip / Radius",
+      "modes": [
+        "Value"
+      ],
+      "variables": [
+        {
+          "name": "radius/control",
+          "cssName": "--vz-radius-control",
+          "type": "FLOAT",
+          "scopes": [
+            "CORNER_RADIUS"
+          ],
+          "codeSyntax": "var(--vz-radius-control)",
+          "values": {
+            "Value": 14
+          }
+        },
+        {
+          "name": "radius/tile",
+          "cssName": "--vz-radius-tile",
+          "type": "FLOAT",
+          "scopes": [
+            "CORNER_RADIUS"
+          ],
+          "codeSyntax": "var(--vz-radius-tile)",
+          "values": {
+            "Value": 20
+          }
+        },
+        {
+          "name": "radius/card",
+          "cssName": "--vz-radius-card",
+          "type": "FLOAT",
+          "scopes": [
+            "CORNER_RADIUS"
+          ],
+          "codeSyntax": "var(--vz-radius-card)",
+          "values": {
+            "Value": 28
+          }
+        },
+        {
+          "name": "radius/hero",
+          "cssName": "--vz-radius-hero",
+          "type": "FLOAT",
+          "scopes": [
+            "CORNER_RADIUS"
+          ],
+          "codeSyntax": "var(--vz-radius-hero)",
+          "values": {
+            "Value": 32
+          }
+        },
+        {
+          "name": "radius/dock",
+          "cssName": "--vz-radius-dock",
+          "type": "FLOAT",
+          "scopes": [
+            "CORNER_RADIUS"
+          ],
+          "codeSyntax": "var(--vz-radius-dock)",
+          "values": {
+            "Value": 30
+          }
+        }
+      ]
+    }
+  ],
+  "componentInventory": [
+    {
+      "name": "GlassCard",
+      "variants": [
+        "Default",
+        "Hero",
+        "Song",
+        "Quick"
+      ]
+    },
+    {
+      "name": "GoalCard",
+      "variants": [
+        "Unplanned",
+        "Planned",
+        "Completed",
+        "Rest",
+        "Deferred"
+      ]
+    },
+    {
+      "name": "ProgressRing",
+      "variants": [
+        "Unset",
+        "Partial",
+        "Complete"
+      ]
+    },
+    {
+      "name": "GoalRow",
+      "variants": [
+        "Unchecked",
+        "Checked",
+        "NeedsRecord"
+      ]
+    },
+    {
+      "name": "WeekDay",
+      "variants": [
+        "Empty",
+        "Partial",
+        "Met",
+        "Rest",
+        "Future"
+      ]
+    },
+    {
+      "name": "Button",
+      "variants": [
+        "Primary",
+        "Secondary",
+        "Quiet"
+      ]
+    },
+    {
+      "name": "FloatingDock",
+      "variants": [
+        "Home",
+        "Songs",
+        "Record",
+        "Calendar",
+        "Growth"
+      ]
+    },
+    {
+      "name": "GoalPlanSheet",
+      "variants": [
+        "Recommendations",
+        "Empty"
+      ]
+    }
+  ],
+  "notes": [
+    "Actual Figma variables should alias semantic color variables to color primitives.",
+    "Do not claim tokens or components are synced until editable Figma file and planKey are verified.",
+    "Student/Teacher themes use same geometry and different semantic color modes."
+  ]
+}
