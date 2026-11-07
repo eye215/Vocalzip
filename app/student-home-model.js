@@ -1,0 +1,133 @@
+/* Student home: pure selectors and explicit plan mutations. No storage, DOM, media or network access. */
+(function(root,factory){
+  const api=factory();
+  root.VzipStudentHomeModel=api;
+  if(typeof module==='object'&&module.exports)module.exports=api;
+})(typeof window==='object'?window:globalThis,function(){
+'use strict';
+const list=v=>Array.isArray(v)?v:[];
+const copy=v=>v==null?v:JSON.parse(JSON.stringify(v));
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const labels=['일','월','화','수','목','금','토'];
+const has=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
+function parse(date){
+  if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
+  const [y,m,d]=date.split('-').map(Number), value=new Date(0);
+  value.setFullYear(y,m-1,d);value.setHours(12,0,0,0);
+  return ymd(value)===date?value:null;
+}
+function shift(date,n){const d=parse(date);d.setDate(d.getDate()+n);return ymd(d)}
+function monday(date){const d=parse(date);return shift(date,-((d.getDay()+6)%7))}
+function dayDifference(a,b){
+  // Rounding local-noon differences removes the DST hour; dates are never parsed as UTC strings.
+  return Math.round((parse(b)-parse(a))/86400000);
+}
+function minutes(value){
+  if(value==null||typeof value==='boolean'||(typeof value==='string'&&!value.trim()))return null;
+  const n=Number(value);return Number.isFinite(n)&&n>=0?n:null;
+}
+function practiceMinutes(p){return minutes(p.manualMinutes)??minutes(p.minutes)??0}
+function unique(records){
+  const out=[],index=new Map();
+  for(const r of list(records)){
+    if(!r||typeof r!=='object')continue;
+    if(r.id==null||r.id===''){out.push(r);continue}
+    const id=String(r.id);
+    if(!index.has(id)){index.set(id,out.length);out.push(r)}
+    else if((Number(r.updatedAt)||0)>(Number(out[index.get(id)].updatedAt)||0))out[index.get(id)]=r;
+  }
+  return out;
+}
+function target(plans,period,date){
+  const p=plans.find(p=>p.id===period+':'+date&&p.period===period&&p.date===date);
+  return p?minutes(p.targetMinutes):null;
+}
+function nextStage(db,today){
+  const candidates=[];
+  for(const p of unique(db.performances)){
+    if((p.status||'preparing')!=='preparing')continue;
+    const sessions=list(p.sessions).filter(s=>s&&parse(s.date)&&s.date>=today&&s.status!=='cancelled'&&s.status!=='completed'&&!s.appeared)
+      .slice().sort((a,b)=>a.date.localeCompare(b.date)||String(a.time||'').localeCompare(String(b.time||'')));
+    const session=sessions[0]||null;
+    const date=session?.date||(parse(p.start)&&p.start>=today?p.start:'');
+    if(!date)continue;
+    const songTitles=list(p.songLinks).map(link=>list(db.songs).find(s=>s.id===link.songId)?.title||link.title||'').filter(Boolean);
+    candidates.push({...copy(p),date,time:session?.time||'',session:copy(session),daysUntil:dayDifference(today,date),songTitles});
+  }
+  return candidates.sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time))[0]||null;
+}
+function nextLesson(db,today){
+  return copy(unique(db.lessons).filter(l=>(l.status||'done')==='scheduled'&&parse(l.date)&&l.date>=today)
+    .sort((a,b)=>a.date.localeCompare(b.date)||String(a.startTime||'').localeCompare(String(b.startTime||'')))[0]||null);
+}
+function recentSong(db,practices,today){
+  const ordered=practices.filter(p=>parse(p.date)&&p.date<=today&&p.songId&&p.practiceMode!=='training')
+    .slice().sort((a,b)=>b.date.localeCompare(a.date)||(Number(b.created)||0)-(Number(a.created)||0));
+  for(const p of ordered){const song=list(db.songs).find(s=>s&&s.id===p.songId);if(song)return {song:copy(song),practice:copy(p),date:p.date}}
+  return null;
+}
+function build(db={},options={}){
+  const today=options.today||ymd(options.now==null?new Date():new Date(options.now));
+  if(!parse(today))throw Error('올바른 오늘 날짜가 필요해요.');
+  const start=monday(today),plans=unique(db.practicePlans),practices=unique(db.practices),totals=new Map();
+  for(const p of practices){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+practiceMinutes(p))}
+  const days=Array.from({length:7},(_,i)=>{
+    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date),ratio=goal>0?actual/goal*100:null;
+    const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';
+    return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today};
+  });
+  let targetMinutes=target(plans,'week',start);
+  if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
+  const actualMinutes=days.reduce((n,d)=>n+d.minutes,0);
+  let cursor=(totals.get(today)||0)>0?today:shift(today,-1),streak=0;
+  while((totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
+  const goals=unique(db.dailyGoals).filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i}))
+    .sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||a._index-b._index).map(g=>{delete g._index;return g});
+  const completed=goals.filter(g=>g.completed===true).length;
+  const recommendationCandidates=unique(db.assignments).filter(t=>t.status!=='done'&&(!t.startDate||today>=t.startDate)&&(!t.dueDate||today<=t.dueDate))
+    .map(t=>({title:String(t.title||''),source:'homework',sourceId:t.id}));
+  return {today,goals,goalProgress:{total:goals.length,completed,ratio:goals.length?completed/goals.length*100:null},
+    week:{start,end:shift(start,6),days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
+    stage:nextStage(db,today),lesson:nextLesson(db,today),recent:recentSong(db,practices,today),recommendationCandidates};
+}
+/** Call mutations inside VZ.change. updatedAt and tombstones belong to core/data-merge. */
+function setGoal(db,id,completed){
+  if(typeof completed!=='boolean')throw Error('완료 상태를 확인해 주세요.');
+  const goal=list(db.dailyGoals).find(g=>g&&g.id===id);
+  if(!goal)return false;
+  goal.completed=completed;return true;
+}
+function planMinutes(value){const n=minutes(value);if(value==null||value==='')return null;if(n==null)throw Error('목표 시간을 확인해 주세요.');return n}
+function savePlan(db,input){
+  const date=input?.date;
+  if(!parse(date))throw Error('목표 날짜를 확인해 주세요.');
+  let goals=list(db.dailyGoals),plans=list(db.practicePlans);
+  if(has(input,'goals')){
+    if(!Array.isArray(input.goals))throw Error('목표 목록을 확인해 주세요.');
+    const previous=new Map(goals.filter(g=>g.date===date).map(g=>[g.id,g])),seen=new Set();
+    const otherIds=new Set(goals.filter(g=>g.date!==date).map(g=>g.id));
+    let nextOrder=Math.max(-1,...[...previous.values()].map(g=>Number(g.order)||0))+1;
+    const next=input.goals.map(g=>{
+      if(!g||typeof g.id!=='string'||!g.id||seen.has(g.id)||otherIds.has(g.id))throw Error('서로 다른 목표 ID가 필요해요.');
+      seen.add(g.id);
+      const old=previous.get(g.id),title=String(g.title??old?.title??'').trim(),source=g.source||old?.source||'personal';
+      if(!title||!['homework','personal','recommendation'].includes(source))throw Error('목표 내용과 출처를 확인해 주세요.');
+      return {...old,id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
+        completed:typeof g.completed==='boolean'?g.completed:old?.completed===true,order:old?Number(old.order)||0:nextOrder++};
+    });
+    goals=goals.filter(g=>g.date!==date).concat(next);
+  }
+  for(const [key,period,planDate] of [['targetMinutes','day',date],['weekTargetMinutes','week',monday(date)]]){
+    if(!has(input,key))continue;
+    const id=period+':'+planDate,old=plans.find(p=>p.id===id);
+    const plan={...old,id,period,date:planDate,targetMinutes:planMinutes(input[key])};
+    plans=plans.filter(p=>p.id!==id).concat(plan);
+  }
+  // Validate the complete request before publishing either array.
+  if(has(input,'goals'))db.dailyGoals=goals;
+  if(has(input,'targetMinutes')||has(input,'weekTargetMinutes'))db.practicePlans=plans;
+  return true;
+}
+return {build,setGoal,savePlan};
+});

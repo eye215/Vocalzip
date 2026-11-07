@@ -31,3 +31,12 @@ test('Without timestamps the device version wins and other fields are kept', () 
   assert.deepEqual(data.comparisonReports, [{id:'r1'}]);
   assert.ok(M.valid(data));
 });
+
+test('Daily goal checks from different devices and explicit plan deletions survive sync',()=>{
+ const a={...base(),dailyGoals:[{id:'a',date:'2026-11-07',completed:true,updatedAt:20},{id:'b',completed:false,updatedAt:1}],practicePlans:[{id:'day:2026-11-07',targetMinutes:30}],deleted:{practicePlans:['week:2026-11-02']}};
+ const b={...base(),dailyGoals:[{id:'a',completed:false,updatedAt:1},{id:'b',completed:true,updatedAt:30}],practicePlans:[{id:'week:2026-11-02',targetMinutes:180}]};
+ const out=M.merge(a,b).data;
+ assert.deepEqual(out.dailyGoals.map(g=>[g.id,g.completed]),[['a',true],['b',true]]);
+ assert.deepEqual(out.practicePlans.map(p=>p.id),['day:2026-11-07']);
+ assert.deepEqual(out.deleted.practicePlans,['week:2026-11-02']);
+});
