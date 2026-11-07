@@ -521,7 +521,7 @@ M.capture = async ({onLevel, onTick}) => {
   };
   if(window.VzipAccountScope)removeProtection=window.VzipAccountScope.beforeLeave(async()=>{
     if(recorder.state==='inactive'&&!chunks.length)return;
-    const saved=await session.stop();
+    const {releaseProtection,...saved}=await session.stop();
     await window.vzipStorePracticeMedia({...saved,id:captureId,accountOwner:captureOwner,name:'계정 전환 전 보호된 녹음',created:captureCreated,source:'record',pendingUpload:true,recovered:true});
   });
   return session;

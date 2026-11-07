@@ -6,7 +6,7 @@ window.supabase={createClient:()=>({
  auth:{
   getUser:async()=>({data:{user:sessionUser()==='out'?null:{id:sessionUser(),email:sessionUser()+'@test.invalid'}}}),
   getSession:async()=>({data:{session:{access_token:'test-token'}}}),
-  onAuthStateChange:fn=>{window.__changeAuth=fn;return{data:{subscription:{unsubscribe(){}}}}},
+  onAuthStateChange:fn=>{window.__authListeners ||= [];window.__authListeners.push(fn);window.__changeAuth=(event,session)=>window.__authListeners.forEach(f=>f(event,session));return{data:{subscription:{unsubscribe(){}}}}},
   signOut:async()=>{localStorage.setItem('__test_user','out');window.__changeAuth?.('SIGNED_OUT',null);return{error:null}},
   signInWithPassword:async()=>({error:null})
  },
@@ -108,7 +108,7 @@ test('legacy copy preserves source bytes and IDs and never overwrites current da
  const report=await page.evaluate(async()=>{
   const request=indexedDB.open('vocalzip_media_v1',1);
   const db=await new Promise((resolve,reject)=>{request.onupgradeneeded=()=>request.result.createObjectStore('recordings',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
-  await new Promise((resolve,reject)=>{const t=db.transaction('recordings','readwrite');t.objectStore('recordings').put({id:'old-file',blob:new Blob(['original']),name:'old',type:'audio/wav'});t.oncomplete=resolve;t.onerror=()=>reject(t.error);});db.close();
+  await new Promise((resolve,reject)=>{const t=db.transaction('recordings','readwrite');t.objectStore('recordings').put({id:'old-file',bytes:new TextEncoder().encode('original').buffer,name:'old',type:'audio/wav'});t.oncomplete=resolve;t.onerror=()=>reject(t.error);});db.close();
   const current=JSON.parse(VzipAccountScope.storage.getItem('vocal-zip_mvp_v1'));current.songs.push({id:'legacy',title:'현재 계정이 수정한 제목'});VzipAccountScope.storage.setItem('vocal-zip_mvp_v1',JSON.stringify(current));
   const before=localStorage.getItem('vocal-zip_mvp_v1');
   const first=await VzipAccountScope.importLegacy(), second=await VzipAccountScope.importLegacy();

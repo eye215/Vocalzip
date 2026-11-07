@@ -73,8 +73,10 @@ const scope=window.VzipAccountScope={
    const ids=await new Promise((resolve,reject)=>{const t=source.transaction('recordings'),r=t.objectStore('recordings').getAllKeys();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
    for(const id of ids){
     ensure();
-    const file=await new Promise((resolve,reject)=>{const r=source.transaction('recordings').objectStore('recordings').get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+    let file=await new Promise((resolve,reject)=>{const r=source.transaction('recordings').objectStore('recordings').get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
     if(!file)continue;
+    if(file.accountOwner&&file.accountOwner!==owner){summary.conflicts++;continue;}
+    if(file.blob instanceof Blob&&file.blob.size<=25*1024*1024){file={...file,bytes:await file.blob.arrayBuffer()};delete file.blob;}
     const dest=await open(mediaDb());
     try{
      await new Promise((resolve,reject)=>{

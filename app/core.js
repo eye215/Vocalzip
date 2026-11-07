@@ -46,8 +46,8 @@ VZ.change = (mutate, {silent} = {}) => {
     mutate(db);
     window.VzipArchive?.reconcile(db);
     stamp(previous, db);
-    localStorage.setItem(KEY, JSON.stringify(db));
     if(window.VzipAccountScope)localStorage.setItem('vzip_account_dirty','1');
+    localStorage.setItem(KEY, JSON.stringify(db));
   } catch (error) {
     db = previous;
     VZ.toast('저장하지 못했어요. 저장 공간을 확인하고 다시 시도해 주세요.', 'error');

@@ -17,7 +17,7 @@ permissions:
 jobs:
   browser:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,6 +27,8 @@ jobs:
       - run: npm run test:syntax
       - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test tests/account-session.spec.cjs --workers=2
+      - name: Existing UI regression with rollout disabled by default
+        run: npm run test:ui
       - uses: actions/upload-artifact@v4
         if: always()
         with:
