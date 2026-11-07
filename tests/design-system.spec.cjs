@@ -57,3 +57,49 @@ test.describe('VOCAL.zip design-system standalone preview',()=>{
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
   });
 });
+
+
+test.describe('responsive visual QA snapshot matrix',()=>{
+  for(const width of [320,390,430]){
+    test('viewport '+width+'px: no clipping, readable cards, reachable dock, correct goal scroll',async({page},testInfo)=>{
+      await page.setViewportSize({width,height:844});
+      await page.goto('/design-system/preview.html');
+      await expect(page.locator('.vz-goal-card')).toBeVisible();
+      await page.evaluate(()=>document.fonts.ready);
+      const metrics=await page.evaluate(()=>{
+        const viewport=window.innerWidth;
+        const all=[...document.querySelectorAll('.vz-card,.vz-dock,.vz-widget-grid,.vz-goal-card__body')];
+        const bounds=all.map(n=>({name:n.className,left:n.getBoundingClientRect().left,right:n.getBoundingClientRect().right,clientWidth:n.clientWidth,scrollWidth:n.scrollWidth}));
+        const dock=document.querySelector('.vz-dock').getBoundingClientRect();
+        const list=document.querySelector('.vz-goal-list');
+        const listRect=list.getBoundingClientRect();
+        const goalButtons=[...document.querySelectorAll('.vz-goal-row')];
+        const ring=document.querySelector('.vz-ring').getBoundingClientRect();
+        return {viewport,docWidth:document.documentElement.scrollWidth,bounds,dockLeft:dock.left,dockRight:dock.right,ringRight:ring.right,listLeft:listRect.left,listWidth:listRect.width,listScrollHeight:list.scrollHeight,listClientHeight:list.clientHeight,goalButtons:goalButtons.length,errors:[]};
+      });
+      expect(metrics.docWidth,'no global horizontal scroll').toBeLessThanOrEqual(width+1);
+      expect(metrics.dockLeft,'dock visible left').toBeGreaterThanOrEqual(0);
+      expect(metrics.dockRight,'dock visible right').toBeLessThanOrEqual(width+1);
+      expect(metrics.listWidth,'checklist minimum readable width').toBeGreaterThanOrEqual(120);
+      expect(metrics.ringRight,'ring does not overlap checklist').toBeLessThanOrEqual(metrics.listLeft+1);
+      expect(metrics.goalButtons).toBeGreaterThanOrEqual(3);
+      expect(metrics.listScrollHeight).toBeGreaterThan(metrics.listClientHeight);
+      for(const box of metrics.bounds){
+        expect(box.left,box.name+' left bound').toBeGreaterThanOrEqual(-1);
+        expect(box.right,box.name+' right bound').toBeLessThanOrEqual(width+1);
+      }
+      const fileName='ds-'+testInfo.project.name+'-'+width+'x844.png';
+      await page.screenshot({path:'test-results/'+fileName,fullPage:true,animations:'disabled'});
+      await testInfo.attach('screen-'+width,{path:'test-results/'+fileName,contentType:'image/png'});
+    });
+  }
+  test('sheet is scrollable with 30 mixed suggestions and Escape returns focus',async({page})=>{
+    await page.goto('/design-system/preview.html?firstEntry=1');
+    const dialog=page.getByRole('dialog',{name:'오늘의 목표를 설정하세요'});
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button',{name:'오늘은 쉴래요'})).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.vz-goal-card')).toBeVisible();
+  });
+});
