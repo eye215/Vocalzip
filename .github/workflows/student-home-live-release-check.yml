@@ -12,10 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 5c91710f37dfaa850125cfa84deb832969387cce
+          ref: 9c3d5418aaea20450d94b43ca76acda5f7994e19
       - name: Read public production assets and verify release bytes
         env:
-          RELEASE_SHA: 5c91710f37dfaa850125cfa84deb832969387cce
+          RELEASE_SHA: 9c3d5418aaea20450d94b43ca76acda5f7994e19
         run: |
           python3 - <<'PY'
           import hashlib, os, pathlib, time, urllib.request
