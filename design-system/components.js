@@ -233,7 +233,7 @@ export function createHomeIcon(name,className="") {
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
   svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("focusable","false");
   const id="vz-glyph-"+(++homeGlyphId);
-  const colors=name==="fire"?["#ffe9ab","#ffb15a","#f18437"]:["#d9a2ff","#ac62e4","#8330c8"];
+  const colors=name==="fire"?["#ffe9ab","#ffb15a","#f18437"]:["#B78BE7","#A775D8","#9258CA"];
   // Only these local vector constants enter markup. User text still uses textContent.
   svg.innerHTML='<defs><linearGradient id="'+id+'" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="'+colors[0]+'"/><stop offset=".44" stop-color="'+colors[1]+'"/><stop offset="1" stop-color="'+colors[2]+'"/></linearGradient></defs><g fill="url(#'+id+')" stroke-linejoin="round">'+(homeGlyphs[name]||homeGlyphs.sparkle)+'</g>';
   svg.querySelectorAll("[data-stroke]").forEach(path=>path.setAttribute("stroke","url(#"+id+")"));
@@ -331,7 +331,8 @@ export function createGoalProgress({completed=0,total=0}={}) {
 }
 export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}}={}) {
   const {card,head}=homeCard("오늘의 목표","sparkle");card.classList.add("vz-home-goals");
-  const edit=homeButton("오늘의 목표 설정","caret-right",onGoals,"vz-home-icon-button");head.append(edit);
+  const heading=head.querySelector("h2"),edit=homeButton("오늘의 목표 설정",null,onGoals,"vz-home-heading-action");
+  edit.append(...heading.childNodes);heading.append(edit);
   const body=el("div","vz-home-goal-body");
   // Clone state: optimistic UI must never mutate application records.
   const items=goals.map(goal=>({...goal,completed:Boolean(goal.completed)}));
@@ -366,17 +367,17 @@ export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}
   }
   body.append(list);card.append(body,status);return card;
 }
-const flowerPath="M20 3 C24 -1 29 2 29 7 C35 5 39 10 36 15 C42 18 41 24 36 27 C39 33 34 37 29 35 C27 41 21 41 18 36 C13 40 8 36 9 31 C3 32 0 26 4 22 C-1 18 2 12 8 12 C7 6 13 2 17 6 C17 4 18 3 20 3 Z";
+const flowerPath="M20 0.4C20.624 0.4 21.29 0.649 21.872 0.99C22.454 1.331 22.996 1.939 23.492 2.444C23.988 2.949 24.396 3.59 24.847 4.021C25.298 4.453 25.695 4.824 26.199 5.033C26.704 5.242 27.247 5.26 27.871 5.274C28.496 5.288 29.237 5.123 29.945 5.117C30.653 5.11 31.466 5.063 32.118 5.234C32.771 5.405 33.418 5.699 33.859 6.141C34.301 6.582 34.595 7.229 34.766 7.882C34.937 8.534 34.89 9.347 34.883 10.055C34.877 10.763 34.712 11.504 34.726 12.129C34.74 12.753 34.758 13.296 34.967 13.801C35.176 14.305 35.547 14.702 35.979 15.153C36.41 15.604 37.051 16.012 37.556 16.508C38.061 17.004 38.669 17.546 39.01 18.128C39.351 18.71 39.6 19.376 39.6 20C39.6 20.624 39.351 21.29 39.01 21.872C38.669 22.454 38.061 22.996 37.556 23.492C37.051 23.988 36.41 24.396 35.979 24.847C35.547 25.298 35.176 25.695 34.967 26.199C34.758 26.704 34.74 27.247 34.726 27.871C34.712 28.496 34.877 29.237 34.883 29.945C34.89 30.653 34.937 31.466 34.766 32.118C34.595 32.771 34.301 33.418 33.859 33.859C33.418 34.301 32.771 34.595 32.118 34.766C31.466 34.937 30.653 34.89 29.945 34.883C29.237 34.877 28.496 34.712 27.871 34.726C27.247 34.74 26.704 34.758 26.199 34.967C25.695 35.176 25.298 35.547 24.847 35.979C24.396 36.41 23.988 37.051 23.492 37.556C22.996 38.061 22.454 38.669 21.872 39.01C21.29 39.351 20.624 39.6 20 39.6C19.376 39.6 18.71 39.351 18.128 39.01C17.546 38.669 17.004 38.061 16.508 37.556C16.012 37.051 15.604 36.41 15.153 35.979C14.702 35.547 14.305 35.176 13.801 34.967C13.296 34.758 12.753 34.74 12.129 34.726C11.504 34.712 10.763 34.877 10.055 34.883C9.347 34.89 8.534 34.937 7.882 34.766C7.229 34.595 6.582 34.301 6.141 33.859C5.699 33.418 5.405 32.771 5.234 32.118C5.063 31.466 5.11 30.653 5.117 29.945C5.123 29.237 5.288 28.496 5.274 27.871C5.26 27.247 5.242 26.704 5.033 26.199C4.824 25.695 4.453 25.298 4.021 24.847C3.59 24.396 2.949 23.988 2.444 23.492C1.939 22.996 1.331 22.454 0.99 21.872C0.649 21.29 0.4 20.624 0.4 20C0.4 19.376 0.649 18.71 0.99 18.128C1.331 17.546 1.939 17.004 2.444 16.508C2.949 16.012 3.59 15.604 4.021 15.153C4.453 14.702 4.824 14.305 5.033 13.801C5.242 13.296 5.26 12.753 5.274 12.129C5.288 11.504 5.123 10.763 5.117 10.055C5.11 9.347 5.063 8.534 5.234 7.882C5.405 7.229 5.699 6.582 6.141 6.141C6.582 5.699 7.229 5.405 7.882 5.234C8.534 5.063 9.347 5.11 10.055 5.117C10.763 5.123 11.504 5.288 12.129 5.274C12.753 5.26 13.296 5.242 13.801 5.033C14.305 4.824 14.702 4.453 15.153 4.021C15.604 3.59 16.012 2.949 16.508 2.444C17.004 1.939 17.546 1.331 18.128 0.99C18.71 0.649 19.376 0.4 20 0.4Z";
 function homeFlower({state,ratio,minutes,today}) {
   const flower=el("span","vz-home-flower");
   const hasTarget=ratio!=null;
   const level=state==="future"?"future":!hasTarget?"unplanned":!minutes?"empty":ratio>120?"high":ratio>=100?"met":"low";
   flower.dataset.level=level;flower.dataset.hasMinutes=String(minutes>0);
   if(today)flower.classList.add("is-today");
-  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","-4 -4 48 48");svg.setAttribute("aria-hidden","true");
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","-1 -1 42 42");svg.setAttribute("aria-hidden","true");
   const fillId="vz-flower-"+(++homeGlyphId),defs=document.createElementNS(svg.namespaceURI,"defs");
   defs.innerHTML='<linearGradient id="'+fillId+'" x2=".7" y2="1"><stop stop-color="#ead0ff" stop-opacity=".85"/><stop offset=".5" stop-color="currentColor"/><stop offset="1" stop-color="currentColor"/></linearGradient>';svg.append(defs);flower.style.setProperty("--vz-flower-fill","url(#"+fillId+")");
-  if(today){const outline=document.createElementNS(svg.namespaceURI,"path");outline.setAttribute("d",flowerPath);outline.setAttribute("class","vz-home-flower-today");svg.append(outline);}
+  if(today)for(const name of ["outer","inner"]){const outline=document.createElementNS(svg.namespaceURI,"path");outline.setAttribute("d",flowerPath);outline.setAttribute("class","vz-home-flower-today vz-home-flower-today--"+name);svg.append(outline);}
   const shape=document.createElementNS(svg.namespaceURI,"path");shape.setAttribute("d",flowerPath);shape.setAttribute("class","vz-home-flower-shape");svg.append(shape);
   if(hasTarget&&ratio>=100&&state!=="future"){
     const check=document.createElementNS(svg.namespaceURI,"path");check.setAttribute("d","M11 20 L17 26 L29 13");check.setAttribute("class","vz-home-flower-check");svg.append(check);
@@ -385,8 +386,8 @@ function homeFlower({state,ratio,minutes,today}) {
 }
 export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null,ratio=null,streak=0,onGrowth}={}) {
   const {card,head}=homeCard("이번 주 연습","chart-bar");card.classList.add("vz-home-week");
-  const streakLabel=el("span","vz-home-streak");streakLabel.append(homeIcon("fire"),el("span","",homeNumber(streak)+"일 연속"));head.append(streakLabel);
-  if(onGrowth){const growth=homeButton("성장 기록 보기","caret-right",onGrowth,"vz-home-icon-button");head.append(growth);}
+  const streakLabel=el("span","vz-home-streak");streakLabel.append(homeIcon("fire"),el("span","",homeNumber(streak)+"일 연속"));
+  if(onGrowth){const growth=homeButton("성장 기록 보기",null,onGrowth,"vz-home-streak-action");growth.append(streakLabel);head.append(growth);}else head.append(streakLabel);
   const grid=el("div","vz-home-week-grid");
   for(const item of days.slice(0,7)){
     const minutes=homeNumber(item.minutes);
@@ -402,14 +403,14 @@ export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null
   if(!days.length)textRow(card,"p","vz-home-no-week","이번 주 연습 기록이 아직 없어요.");
   const pct=Number(targetMinutes)>0?homeNumber(actualMinutes)/Number(targetMinutes)*100:ratio;
   const footer=el("p","vz-home-week-summary");
-  textRow(footer,"span","vz-home-summary-full","실제 "+homeDuration(actualMinutes)+" · 목표 "+(targetMinutes==null?"미설정":homeDuration(targetMinutes))+" · 달성률 ");
+  const full=el("span","vz-home-summary-full");full.append("실제 ");textRow(full,"strong","vz-home-summary-duration",homeDuration(actualMinutes));full.append(" · 목표 ");textRow(full,"strong","vz-home-summary-duration",targetMinutes==null?"미설정":homeDuration(targetMinutes));full.append(" · 달성률 ");footer.append(full);
   textRow(footer,"span","vz-home-summary-compact","실제 "+homeCompactDuration(actualMinutes)+" · 목표 "+(targetMinutes==null?"미설정":homeCompactDuration(targetMinutes))+" · ");
   textRow(footer,"strong","",pct==null?"—":Math.round(homeNumber(pct))+"%");
   card.append(footer);return card;
 }
 export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPlay,onLessons=()=>{},onPractice=()=>{}}={}) {
   const grid=el("div","vz-home-bottom-grid vz-recent-region");
-  const song=el("article","vz-card vz-home-song vz-song-tile");
+  const song=el("article","vz-card vz-home-song vz-song-tile");if(recent?.canPlay)song.classList.add("has-representative-media");
   const songDetail=homeButton(recent?"최근 연습곡 "+recent.title+" 열기":"내 곡 선택",null,onRecent,"vz-home-song-detail");
   const head=el("div","vz-home-song-heading");head.append(homeHeading("최근 연습곡","music-notes"),homeIcon("caret-right"));songDetail.append(head);
   const cover=el("span","vz-home-song-cover");cover.setAttribute("aria-hidden","true");

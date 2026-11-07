@@ -141,7 +141,9 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
     const quick = await page.locator('.vz-quick-actions').boundingBox();
     expect(song).not.toBeNull();
     expect(quick).not.toBeNull();
-    expect(Math.abs(song.width-song.height)).toBeLessThanOrEqual(1);
+    // The user's reaffirmed reference uses a 1.15:1 tile; 320px may grow for readable text.
+    if(width>=390)expect(Math.abs(song.width/1.15-song.height)).toBeLessThanOrEqual(1);
+    else expect(song.height).toBeGreaterThanOrEqual(song.width/1.15-1);
     expect(Math.abs(song.height-quick.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(song.y-quick.y)).toBeLessThanOrEqual(1);
     expect(song.x+song.width).toBeLessThanOrEqual(quick.x+1);
@@ -155,6 +157,14 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
     await page.setViewportSize({width,height:844});
     await noOverflow(page);
     await screenshot(page,testInfo,'student-home-preview-'+width+'.png');
+    if(width===390){
+      const geometry=await page.evaluate(()=>{
+        const box=selector=>{const el=document.querySelector(selector),r=el.getBoundingClientRect(),s=getComputedStyle(el);return{x:r.x,y:r.y,width:r.width,height:r.height,font:s.fontSize,weight:s.fontWeight,color:s.color};};
+        return{stage:box('.vz-home-stage'),goals:box('.vz-home-goals'),week:box('.vz-home-week'),recent:box('.vz-home-song'),dock:box('.vz-approved-dock'),heading:box('.vz-home-heading'),greeting:box('.vz-home-greeting'),icon:box('.vz-home-heading .vz-home-icon')};
+      });
+      console.log('REFERENCE_GEOMETRY '+JSON.stringify(geometry));
+      expect(geometry.recent.y+geometry.recent.height+6).toBeLessThanOrEqual(geometry.dock.y);
+    }
   }
 });
 
