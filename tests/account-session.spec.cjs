@@ -131,7 +131,7 @@ test('fourth login selects exactly one session and approval precedes opening the
 });
 test('cancel at the login limit preserves every existing session and performs no cloud writes',async({page})=>{
  await setup(page,{active:'full'});
- await page.getByRole('dialog',{name:'로그인 세션 한도'}).getByRole('button',{name:'취소'}).click();
+ await Promise.all([page.waitForEvent('load'),page.getByRole('dialog',{name:'로그인 세션 한도'}).getByRole('button',{name:'취소'}).click()]);
  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('vzip_account_scope_owner_v1')).catch(()=>null)).toBe('');
  await expect(page.locator('#vzip-auth-screen')).toBeVisible();
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).length)).toBe(3);
@@ -298,7 +298,7 @@ test('all-device logout waits for local capture protection and requires confirma
  await dialog.getByRole('button',{name:'로그아웃 확인',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>typeof window.__finishLogout)).toBe('function');
  expect(await page.evaluate(()=>window.__revokes||[])).toEqual([]);
- await page.evaluate(()=>window.__finishLogout());
+ await Promise.all([page.waitForEvent('load'),page.evaluate(()=>window.__finishLogout())]);
  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('vzip_account_scope_owner_v1')).catch(()=>null)).toBe('');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).every(s=>s.revoked))).toBe(true);
  expect(await page.evaluate(()=>localStorage.getItem('vzip_account_v1:A:logout-protected'))).toBe('yes');
