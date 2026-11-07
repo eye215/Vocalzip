@@ -1,0 +1,25 @@
+name: Snapshot catalog preflight
+on:
+  push:
+    branches: [codex/phase03-schema-preflight]
+    paths:
+      - 'tools/snapshot-schema-preflight.mjs'
+      - '.github/workflows/snapshot-schema-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  catalog:
+    if: github.repository == 'eye215/Vocalzip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - run: node --check tools/snapshot-schema-preflight.mjs
+      - name: Read-only catalog query; no user records or media
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node tools/snapshot-schema-preflight.mjs
