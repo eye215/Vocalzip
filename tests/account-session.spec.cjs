@@ -2,7 +2,7 @@ const {test,expect}=require('@playwright/test');
 const stub=`
 window.__writes=[];
 const sessionUser=()=>localStorage.getItem('__test_user')||'A';
-window.supabase={createClient:()=>({
+window.supabase={createClient:(url,key,options)=>(window.__clientOptions=options,{
  auth:{
   getUser:async()=>({data:{user:sessionUser()==='out'?null:{id:sessionUser(),email:sessionUser()+'@test.invalid'}}}),
   getSession:async()=>({data:{session:{access_token:'test-token'}}}),
@@ -83,6 +83,7 @@ test('takeover requires a visible confirmation and approval precedes opening the
  await expect(dialog).toBeVisible();
  expect(await page.evaluate(()=>vzipCloudSignedIn())).toBe(false);
  expect(await page.evaluate(()=>window.__writes)).toEqual([]);
+ expect(await page.evaluate(()=>window.__clientOptions.global.headers['x-vzip-client-protocol'])).toBe('account-session-v1');
  await dialog.getByRole('button',{name:'여기서 로그인'}).click();
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  expect(await page.evaluate(()=>window.__claims)).toEqual([{expected_previous:null},{expected_previous:'old-session'}]);

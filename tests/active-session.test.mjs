@@ -14,6 +14,7 @@ async function as(user,session,fn,connection=db) {
  try {
   await connection.query('set local role authenticated');
   await connection.query("select set_config('request.jwt.claim.sub',$1,true),set_config('request.jwt.claims',$2,true)",[user,JSON.stringify({sub:user,session_id:session})]);
+  await connection.query("select set_config('request.headers',$1,true)",[JSON.stringify({'x-vzip-client-protocol':'account-session-v1'})]);
   const result=await fn(connection); await connection.query('commit'); return result;
  } catch(e){await connection.query('rollback');throw e;}
 }
@@ -111,4 +112,16 @@ test('current logout releases only its own row; revoked auth sessions never pass
  const answer=await claim(U,next,active.session_id);assert.equal(answer.status,'active');
  assert.equal((await as(U,next,q=>q.query('select public.vzip_release_session() as r'))).rows[0].r,true);
  assert.equal((await as(U,next,q=>q.query('select public.vzip_session_is_active() as r'))).rows[0].r,false);
+});
+
+test('legacy clients cannot reuse the active token without the account isolation protocol',{skip},async()=>{
+ const {rows:[r]}=await db.query('select id from auth.sessions where user_id=$1 limit 1',[U]);
+ await claim(U,r.id);
+ await as(U,r.id,async q=>{
+  await q.query("select set_config('request.headers','{}',true)");
+  assert.equal((await q.query('select public.vzip_session_is_active() as r')).rows[0].r,false);
+  assert.equal((await q.query('select * from public.vocal_data')).rowCount,0);
+  assert.equal((await q.query("update public.vocal_data set payload='{}' returning *")).rowCount,0);
+  await assert.rejects(q.query('select public.vzip_claim_session(null)'),/valid authenticated session required/);
+ }).catch(e=>{if(!/current transaction is aborted/.test(e.message))throw e;});
 });
