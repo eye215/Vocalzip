@@ -15,6 +15,7 @@
 - [README](README.md)
 - [UI/UX v6 구조](docs/UIUX_v6_개편_2026-11-04.md)
 - [운영 검증 현황](docs/운영검증_2026-11-04.md)
+- **[최신 제품 정책 확정본](docs/product/PRODUCT_DECISIONS_2026-11-07.md) — AI 한도·선생님 공유·30일 휴지통·구독 고지·운영 검증 상태. 기존 초안과 충돌하면 최신 정책을 우선**
 - [학생용 1.0 PRD 초안](docs/product/STUDENT_1_0_PRD_DRAFT.md)
 - [학생용 1.0 IA 초안](docs/product/STUDENT_1_0_IA_DRAFT.md)
 - [데이터 호환·선생님 확장 설계](docs/product/DATA_CONTRACTS_AND_V2_EXTENSIBILITY_DRAFT.md)
