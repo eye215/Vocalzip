@@ -107,6 +107,10 @@ test('separate account namespaces and media databases survive account switch wit
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs[0].id)).toBe('legacy');
  await page.evaluate(()=>{localStorage.setItem('__test_user','A');window.__changeAuth('SIGNED_IN',{user:{id:'A'}});});
  await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope?.owner||null).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('A');
+ // The account scope loads before the media scripts during a full reload (notably WebKit).
+ // Wait for verified sign-in, as above for B, before reading the account media API.
+ await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>typeof window.vzipReadMedia)).toBe('function');
  expect(await page.evaluate(async()=>({ids:(await vzipReadMedia()).map(x=>x.id),queue:VzipAccountScope.storage.getItem('vzip_upload_queue_v1')}))).toEqual({ids:['private-A'],queue:'A-only-queue'});
 });
 
