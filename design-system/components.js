@@ -293,10 +293,10 @@ export function createUpcomingStage({stage=null,lesson=null,onOpen=()=>{},onStag
     const content=el("div","vz-home-stage-content");
     const copy=el("div","vz-home-stage-copy");
     const title=el("div","vz-home-stage-title");
-    title.append(el("h3","",stage.title||"다가오는 무대"));
+    const name=el("h3","",stage.title||"다가오는 무대");name.title=stage.title||"다가오는 무대";title.append(name);
     if(homeDayLabel(stage.daysLeft))title.append(el("strong","vz-home-dday",homeDayLabel(stage.daysLeft)));
     copy.append(title);
-    if(stage.subtitle)textRow(copy,"p","vz-home-stage-song",stage.subtitle);
+    if(stage.subtitle){const subtitle=textRow(copy,"p","vz-home-stage-song",stage.subtitle);subtitle.title=stage.subtitle;}
     if(stage.dateLabel){const date=el("p","vz-home-stage-date");date.append(homeIcon("calendar-blank"),el("span","",stage.dateLabel));copy.append(date);}
     const art=el("div","vz-home-stage-art");art.setAttribute("aria-hidden","true");if(stage.id!=null)art.dataset.poster=String(stage.id);
     // Decorative stage art is a vector background; real poster references are preserved.
