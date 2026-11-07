@@ -1,80 +1,210 @@
-# VOCAL.zip — Data contracts and Teacher 2.0 extensibility (draft)
-Date: 2026-11-07 / **design notes, not deployed schema or migration SQL**.
-This is for Phase 01 evidence gathering and Phase 03 schema design, **not permission to change production data**.
+# VOCAL.zip — 데이터 호환 계약 및 선생님 2.0 확장 설계
 
-## Current contract documented in repo (confirm against code)
-| Layer | Existing name / location | Constraint |
+작성일: 2026-11-07  
+상태: **Phase 01 조사를 위한 설계 초안**  
+주의: **현재 운영 DB 스키마 또는 실행 가능한 마이그레이션 SQL이 아니다. 운영 데이터 변경 승인도 아니다.**
+
+## 1. 기존 데이터 저장 계약
+
+실제 코드·DB와 일치하는지 Phase 01에서 재확인해야 한다.
+
+| 계층 | 현재 문서상 저장 위치 | 반드시 지킬 조건 |
 |---|---|---|
-| Student domain JSON | localStorage key: `vocal-zip_mvp_v1` | Do not reset, rename or discard; snapshots first |
-| Local media | IndexedDB `vocalzip_media_v1`, store `recordings` | May contain Blob or ArrayBuffer bytes; normalize read-compatible |
-| Cloud metadata | Supabase `vocal_data.payload` | Existing merge uses per-ID updatedAt and tombstones; may lose concurrent edits without server-level versioning |
-| Chunk media | Supabase media table and Storage objects (verify exact names) | Preserve object parts and byte-range streaming; signed access |
-| Billing subsystem | `billing/`, `docs/레슨데이터_연동계약.md` | Separate ledger and persistence; app reads billing link only |
-| R2 | Desired target | **Do not assert it is currently deployed** |
+| 학생 학습 기록 | localStorage 키 `vocal-zip_mvp_v1` | 초기화·무단 이름 변경 금지, 스냅샷 우선 |
+| 기기 미디어 | IndexedDB `vocalzip_media_v1` / `recordings` | Blob/ArrayBuffer 양쪽 저장 형식의 읽기 호환 |
+| 클라우드 메타데이터 | Supabase `vocal_data.payload` | 현재 ID별 updatedAt·삭제 표식 병합 구조를 검증 |
+| 분할 미디어 | Supabase 미디어 메타데이터와 Storage 파일 | 부분 객체·바이트 구간 재생·서명 접근 유지 |
+| 레슨비 정산 | `billing/`, `docs/레슨데이터_연동계약.md` | 별도 원장·데이터 보존, 앱과의 읽기 계약 준수 |
+| Cloudflare R2 | 향후 미디어 저장 목표 | 운영 적용 여부를 단정하지 말 것 |
 
-### Existing lesson linkage: compatibility invariants
-- `lessons[].id`: stable opaque string, may be legacy, should not regenerate during import.
-- `lessons[].date`: local `YYYY-MM-DD`, distinct from UTC instant. Editing is permitted.
-- `lessons[].status`: `scheduled` / `done` / `cancelled` / **missing**. Missing means *display as completed in v6*, not automatically persist a new status or debit a credit.
-- Existing optional: `startTime`, `endTime`, `place`, `teacher` (free text), `songIds[]`, `songFeedback`, `prepMemo`, `completedAt`, `created`.
-- Lesson deletion today may be a hard delete with only associations removed; billing could retain old `lesson_id` references. Migration needs explicit tombstone/ledger handling instead of assumption.
-- Keep all v6/v5 cross-compatibility tests until deprecation is confirmed.
+### 현재 데이터 동기화의 잠재 한계
 
-## Student 1.0 conceptual entities
-Identity: authenticated user, profile, auth provider identities and consents.
-Learning: song, song alias, lyrics, score, practice, practice-media link, personal lesson note, homework, performance, comparison report, growth aggregates (prefer derived).
-Media: media identity, original metadata/provenance, owned storage objects, optional audio/video derivative, local-to-cloud upload ledger, access grants, access logs.
-AI: analysis/transcription/match suggestion job, result, version, model, status, quota usage.
-Commerce: plan, entitlement, user subscription, quota/usage, export/deletion workflow.
-**Proposed entity names are NOT a directive to create tables now.** Audit first whether JSON payload can migrate safely, in stages.
+현재 문서상 동일 레코드는 ID와 수정 시각을 기준으로 병합한다. **서버의 버전 충돌 방지 없는 다중 기기 동시 편집**에서 정보가 덮어써질 수 있다. 최신 실제 구현을 분석하고 충돌 검증·복구 정책을 정한다.
 
-## Future Teacher 2.0 entities
-- `user_roles` with role memberships, not one permanent account type.
-- `teacher_student_links`: teacher user, student user, state/invitation, explicit accepted access; N:M.
-- `lesson_groups` and `group_members`: ongoing class membership.
-- `lessons` and `lesson_participants`: actual individual session and per-student attendance, optional `lesson_instructors` for co-teaching.
-- `feedback` with author, target student or common, explicit visibility.
-- `assignments` + per-recipient state, distinct from student self-homework.
-- `lesson_packages`, enrollments, credit ledger, payment records, independent of *app subscriptions*.
+## 2. 기존 레슨 데이터 호환 정책
 
-## Relationship design (conceptual, no concrete PK types asserted)
-- User 1→N owned songs, practices, lessons/notes, media records.
-- Song 1→N practice/media/lesson-song links (many-to-many where needed).
-- Media owned by exactly one principal/account billing context; sharing grants additional access only; one binary object may be referenced from multiple records.
-- Teacher 1→N teaching links; Student 1→N teaching links; therefore N:M.
-- Group 1→N membership and group 1→N sessions. Membership is NOT session attendance.
-- Session 1→N participants and 1→N instructors; participant has independent attendance and credit ledger decision.
-- A completed session does NOT imply all participants attended or had credits deducted.
-- Common feedback can be visible to class participants; individual feedback/recordings and finances default private.
+### 기본 필드
+- `lessons[].id`: 기존 ID를 유지한다. 문자열이며 UUID 외 과거 형식이 존재할 수 있다.
+- `lessons[].date`: 기기 현지 날짜의 `YYYY-MM-DD` 형식. UTC 시각과 다르게 취급한다.
+- `lessons[].status`: `scheduled` / `done` / `cancelled` / **필드 없음**.
+- `startTime`, `endTime`, `place`, `teacher`, `songIds[]`, `songFeedback`, `prepMemo`, `completedAt`, `created` 등은 현행 v6 선택 필드다.
 
-## Required server-side authorization rules
-1. Auth user can only access owned private learning records unless a precise valid grant exists.
-2. Media signed URLs require short-lived authorization to owner or explicit recipient. No public R2 bucket access by guessable file path.
-3. Student entering teacher name (string) is not proof of identity or consent; do not automatically turn it into `teacher_id` on a later signup.
-4. Transferring class, unlinking a teacher, exiting a group or expiring a share must revoke relevant access while preserving record ownership.
-5. Restrict owner-only migration to exact allowlisted account ID server-side, never just a hidden frontend button.
-6. Partition app subscription quotas from teacher lesson payments/ledger; never directly mutate credit balances without ledger transaction.
-7. RLS policies and SQL permissions must be designed/tested for ordinary, shared, revoked, and cross-account scenarios.
+### 상태 처리 원칙
+- v5에서 작성한 일부 레슨에는 `status`가 없을 수 있다.
+- v6는 이러한 기록을 화면에서 **완료로 표시**할 수 있지만, 저장값에 자동으로 `done`을 넣거나 수강권을 자동 차감하지 않는다.
+- 예정 레슨은 날짜가 지났다고 자동 완료되지 않는다.
+- 레슨 상태는 사용자가 변경할 수 있으므로 정산 시스템은 완료 취소·되돌리기를 처리해야 한다.
 
-## Migration planning (before any production writes)
-1. Inventory production schema via read-only access, agree current commit and environment.
-2. Create **complete metadata snapshot and verified binary inventory** (JSON export alone misses media originals).
-3. Choose stable ID mapping; preserve legacy ids as `legacy_id` where new UUIDs are necessary.
-4. Test on synthetic and sanitized staging clones; produce row counts, checksum comparisons, referential integrity report, rollback procedure.
-5. Implement backward-compatible dual-read or versioned adapter before switching canonical writes.
-6. Confirm real iPhone offline→online, two-device conflicts and old app versions behavior.
-7. Obtain explicit authorization for the selected migration; monitor canary, then transition.
+### 삭제·정산 참조 위험
+- 현행 레슨 삭제는 레슨 본문을 하드 삭제하고 연결을 해제하는 방식일 수 있다.
+- 정산 시스템의 `lesson_id` 참조가 남을 수 있으므로 차감 원장과 삭제 표식·취소 정책을 정한다.
+- 기존 v5/v6 호환 테스트는 제거 결정과 데이터 이전 검증이 완료될 때까지 유지한다.
 
-## Media and retention rules — not yet operationalized
-- Original recording fidelity is a priority. If video transcoding is chosen, explicitly distinguish original and 720p derivative plus retained or exportable audio.
-- Preserve original `recorded_at` and local calendar date separately, including metadata provenance and manual overrides.
-- One owned object may be shared without double charging storage usage.
-- Proposed subscription policy: 29-day grace from actual plan expiry, possible disposal of **excess** media starting day 30; this requires clear notice, user choice/export, order, retention confirmation, legal review and a safe preview mode **before** implementing any deletion job.
+## 3. 학생 1.0 개념 엔터티
 
-## Phase 03 deliverables after Phase 01
-- Exact ERD including PK/FK/cardinalities, immutable IDs, soft-delete/tombstones and version columns.
-- SQL DDL/migrations for selected 1.0 entities only, rollback and integrity audit queries.
-- RLS policy/test matrix for owner, granted access, expired/revoked grants, instructor, group member, administrator.
-- DTO and endpoint contracts, compatibility adapter from current JSON payload.
-- Upload, object-part, playback authorization and usage event flow including retry idempotency.
-- Staging migration and production deployment checklist. **No destructive changes** without explicit owner approval.
+**아래 엔터티 이름은 설계상의 구분이며 즉시 DB 테이블을 만들라는 지시가 아니다.**
+
+### 인증·사용자
+- 인증 사용자
+- 사용자 프로필
+- 인증 공급자 연동
+- 약관·개인정보·AI 동의 상태
+
+### 학생 학습
+- 곡, 곡 별칭, 가사, 악보 PDF
+- 연습 기록, 연습-미디어 관계
+- 개인 레슨 기록, 레슨-곡 관계
+- 개인 숙제
+- 공연·오디션
+- 녹음 A/B 비교 리포트
+- 성장 집계(가능하면 원본 기록에서 계산)
+
+### 미디어
+- 미디어 기본 ID와 소유자
+- 원본 파일 출처·날짜·시간대·파일 크기
+- 영상/음성 파생본
+- 실제 저장 객체 또는 분할 객체
+- 로컬→클라우드 업로드 작업 원장
+- 공유 접근 권한과 접근 로그
+
+### AI
+- 전사·음정 분석·곡 추천 작업
+- 분석 결과, 모델 버전, 생성 시점
+- 작업 상태 및 오류
+- 사용자별 AI 사용량
+
+### 상품·운영
+- 요금제
+- 사용자 구독
+- 실제 사용 권한
+- 저장 용량·AI 사용량
+- 파일 내보내기·탈퇴·폐기 요청
+
+## 4. 선생님 2.0 확장 엔터티
+
+| 영역 | 개념 엔터티 | 목적 |
+|---|---|---|
+| 사용자 역할 | `user_roles` | 하나의 계정에 학생·선생님 역할 동시 부여 |
+| 학생·선생님 관계 | `teacher_student_links` | 초대·승인·해제·N:M 관계 |
+| 수업 그룹 | `lesson_groups` | 정기 그룹·개인반 구분 |
+| 그룹 구성원 | `group_members` | 그룹에 속한 학생 이력 |
+| 실제 수업 회차 | `lessons` | 특정 날짜/시간의 수업 |
+| 수업 참여 학생 | `lesson_participants` | 회차별 출석·결석·정산 상태 |
+| 담당 선생님 | `lesson_instructors` | 주강사·보조강사 |
+| 피드백 | `feedback` | 작성자·학생 대상·공개 범위 |
+| 숙제 배포 | `assignments` / 학생별 수신 관계 | 공통 숙제 1번 작성, 학생별 수행 상태 |
+| 레슨 상품 | `lesson_packages` | 4회권·8회권·월 정액 등 |
+| 수강권 등록 | 수강권 구매·등록 관계 | 학생별 상품·유효기간 |
+| 수강권 원장 | 횟수 차감·복구 거래 | 출석·보강·취소 이력 보존 |
+| 수강료 기록 | 레슨비 결제 내역 | 실제 결제/단순 수납 기록 구분 |
+
+## 5. 관계 구조
+
+```text
+사용자
+ ├── 곡
+ │    ├── 가사·악보
+ │    ├── 연습
+ │    │    └── 연결된 녹음
+ │    └── 레슨 기록
+ │         └── 숙제
+ ├── 소유한 미디어
+ │    ├── 원본
+ │    ├── 파생본(음원·압축 영상 등)
+ │    ├── 실제 저장 객체·청크
+ │    └── 공유 접근 권한
+ ├── AI 분석·전사·곡 추천
+ └── 앱 구독·사용량
+
+2.0 추가
+선생님 사용자 ─┐
+               ├── 선생님·학생 연결(N:M)
+학생 사용자 ───┘
+                │
+              레슨 그룹
+                ├── 그룹 구성원
+                └── 실제 레슨 회차
+                     ├── 담당 선생님(복수 가능)
+                     ├── 참여 학생별 출석
+                     ├── 공통 수업 기록
+                     ├── 학생별 비공개 피드백
+                     ├── 공통/개인 숙제
+                     └── 학생별 수강권 처리
+```
+
+### 중요 관계 원칙
+1. 한 학생은 여러 선생님과 연결될 수 있고, 한 선생님도 여러 학생을 관리할 수 있다(N:M).
+2. 그룹 구성원 목록과 **그날 실제 수업 참여자**는 구분한다.
+3. 수업 완료 ≠ 전체 학생 출석 ≠ 전체 수강권 차감.
+4. 공통 수업 내용은 참여자에게 공유할 수 있지만 개인 피드백·녹음·결제 정보는 기본 비공개다.
+5. 미디어 한 파일은 하나의 명확한 소유/과금 계정에 연결한다. 여러 기록·사용자에게 공유해도 실제 원본을 불필요하게 복제하지 않는다.
+6. 그룹 탈퇴·선생님 연결 해제·공유 기한 만료 시 권한을 회수하되, 원 소유자의 데이터는 보존한다.
+
+## 6. 서버 접근 제어(RLS·미디어)
+
+다음 규칙을 실제 정책·테스트로 입증해야 한다.
+
+1. 인증 사용자는 본인이 소유한 개인 기록만 기본 조회·수정할 수 있다.
+2. 명시적이고 유효한 권한이 있는 경우에만 예외적으로 다른 사람의 미디어를 재생한다.
+3. R2/Supabase 파일 URL은 충분히 짧은 유효기간의 인증된 서명 URL 등을 사용하며, 예측 가능한 파일 경로만으로 접근하지 못하게 한다.
+4. 학생이 입력한 **선생님 이름 문자열**은 계정 ID·초대 승인·공유 동의가 아니다.
+5. 선생님과 연결 해제하거나 그룹을 나가거나 공유 기한이 끝났다면 해당 범위의 접근 권한을 철회한다.
+6. 소유자 전용 데이터 이전은 버튼 숨김만으로 보호하지 않는다. 서버에서 허용된 **정확한 계정 ID**를 확인한다.
+7. 앱 구독료·저장 용량과 선생님 레슨비·수강권 원장은 엄격히 분리한다.
+8. 수강권 잔여 횟수는 단순 숫자 덮어쓰기가 아니라 원장 거래로 기록한다.
+9. 타 계정, 공유 허가, 공유 만료, 권한 철회, 그룹 구성원, 선생님, 운영자 접근별 테스트를 만든다.
+
+## 7. 운영 마이그레이션 전 필수 절차
+
+**운영 데이터에 쓰기 작업을 하기 전에 모두 수행한다.**
+
+1. 최신 브랜치·배포 버전·DB 구조를 읽기 전용으로 조사한다.
+2. **메타데이터 전체 스냅샷**과 **실제 원본 미디어 객체 목록**을 각각 생성해 복구 가능성을 확인한다. JSON 백업만으로는 미디어 원본이 보존되지 않는다.
+3. 과거 ID를 유지하거나, 새 ID가 필요하면 `legacy_id`와의 매핑을 저장한다.
+4. 가짜 데이터 및 개인정보 제거된 테스트 데이터에서 이전을 검증한다.
+5. 행 수·해시·참조 무결성·누락·중복·돌아가기(롤백) 절차를 보고한다.
+6. 기존과 새로운 형식을 함께 읽는 호환 계층 또는 버전별 어댑터를 먼저 도입한다.
+7. 실제 iPhone의 오프라인→온라인 전환, 두 기기 동시 수정, 옛 앱 버전과의 관계를 테스트한다.
+8. 운영 반영을 별도로 승인받고 제한 범위 적용·모니터링 후 확장한다.
+
+## 8. 미디어 품질·날짜 보존 정책
+
+- **음질 보존이 최우선.** 영상 압축을 선택하면 원본·720p 파생본·추출 음원의 차이와 유지/다운로드 정책을 명시한다.
+- 원본에 있는 촬영·녹음 시각(`recorded_at`), 현지 날짜, 시간대와 날짜 추출 출처를 별도 보존한다.
+- 사용자가 날짜를 바꾸면 **직접 수정한 날짜**임을 기록한다.
+- 동일 미디어 공유 때문에 사용자 저장량을 중복 차감하지 않는다.
+- AI 분석용 복사본·압축본의 용량을 유료 한도에 포함할지 운영 정책으로 확정한다.
+
+## 9. 구독 만료·파일 보관(아직 미확정)
+
+기존에 논의한 정책:
+- 구독 유효기간 종료
+- **29일 유예**
+- **30일 차부터 무료 용량을 초과한 미디어 정리 가능성**
+
+이는 아직 실제 자동 삭제 정책이 아니다.
+
+**구현 전에 결정해야 할 항목**
+- 실제 만료 시점과 재구독 확인
+- 삭제 전 명확한 고지와 동의
+- 파일 내보내기 기회
+- 초과 미디어 선택·정리 순서
+- 삭제 미리보기
+- 복구 가능성과 보관 의무
+- 법률·앱스토어 정책 검토
+
+위 결정 전에는 실제 삭제 작업이나 예약된 파괴적 배치를 구현하지 않는다.
+
+## 10. Phase 03 산출물
+
+Phase 01 조사 결과가 나온 후 다음을 작성한다.
+
+- 정확한 ERD(PK/FK/관계 수/중복 제약·버전·삭제 표식)
+- **학생 1.0에서 실제 필요한 테이블만** 대상 SQL·DB 마이그레이션 초안
+- 복구·무결성 점검 SQL 및 테스트
+- 소유자·권한 부여 대상·만료·회수·선생님·그룹·운영자 RLS 테스트 표
+- 기존 JSON 데이터와 신규 구조 사이의 데이터 변환·호환 계약
+- 업로드 청크/재생/용량 차감/실패 재시도의 멱등성 보장
+- 테스트 환경 이전과 운영 반영 체크리스트
+
+**운영 DB·미디어는 명시적 승인 없이 변경하지 않는다.**
