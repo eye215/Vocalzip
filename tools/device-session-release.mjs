@@ -14,8 +14,8 @@ const created=[],run=env.GITHUB_RUN_ID||randomBytes(8).toString('hex');
 const mark=value=>{step=value;console.log('STEP '+value);};
 const check=(value,label)=>{if(!value)throw Error(label);};
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-async function api(path,{token,body,method=body?'POST':'GET',admin=false,protocol=true}={}){
- const res=await fetch(ROOT+path,{method,headers:{apikey:admin?env.SUPABASE_SERVICE_ROLE_KEY:PUBLIC,Authorization:'Bearer '+(admin?env.SUPABASE_SERVICE_ROLE_KEY:token||PUBLIC),...(protocol?{'X-Client-Info':PROTOCOL}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+async function api(path,{token,body,method=body?'POST':'GET',admin=false,protocol=true,headers={}}={}){
+ const res=await fetch(ROOT+path,{method,headers:{apikey:admin?env.SUPABASE_SERVICE_ROLE_KEY:PUBLIC,Authorization:'Bearer '+(admin?env.SUPABASE_SERVICE_ROLE_KEY:token||PUBLIC),...(protocol?{'X-Client-Info':PROTOCOL}:{}),...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
  let data=null;try{data=await res.json();}catch{}
  return{status:res.status,ok:res.ok,data};
 }
@@ -120,7 +120,7 @@ async function exercise({withWorker=false,activate=false,browser=false}={}){
  check((await requireRpc(otherSession,'vzip_register_session',{p_label:'foreign fixture'})).status==='active','foreign registration');
  const payload={songs:[],lessons:[],practices:[],assignments:[],categories:[]};
  for(const [owner,session]of[[a.id,first],[b.id,otherSession]]){
-  const row=await api('/rest/v1/vocal_data',{token:session.access_token,body:{user_id:owner,payload}});
+  const row=await api('/rest/v1/vocal_data',{token:session.access_token,body:{user_id:owner,payload},headers:{Prefer:'resolution=merge-duplicates'}});
   check(row.ok,'fixture-only data creation');
  }
  const foreign=await api('/rest/v1/vocal_data?select=user_id&user_id=eq.'+b.id,{token:first.access_token});
@@ -168,6 +168,7 @@ try{
  const allChecks=(await checkResponse.json()).check_runs,latest=new Map();
  for(const c of allChecks)if(!latest.has(c.name)||latest.get(c.name).id<c.id)latest.set(c.name,c);
  for(const name of ['session-db','browser','billing','database','ui','safety','worker'])check(latest.get(name)?.conclusion==='success','source check '+name);
+ for(const c of latest.values())if(c.conclusion!=='cancelled')check(c.conclusion==='success','source check '+c.name);
  check(env.SUPABASE_DB_URL&&env.SUPABASE_SERVICE_ROLE_KEY,'release credentials');
  const dbUrl=new URL(env.SUPABASE_DB_URL);
  check(dbUrl.hostname.includes(PROJECT)||decodeURIComponent(dbUrl.username).endsWith('.'+PROJECT),'database project mismatch');
