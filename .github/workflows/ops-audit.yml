@@ -1,0 +1,25 @@
+# VOCAL.zip operations security check — READ ONLY, run by hand (Actions → Ops audit → Run workflow).
+# tools/ops-audit.mjs: database rules in a read-only transaction, then what an anonymous visitor can reach
+# (Supabase with the app's public key, the R2 Worker without sign-in). Prints names, yes/no and status codes only:
+# no user data and no secret values (this repository's logs are public).
+name: Ops audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'eye215/Vocalzip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Read-only security check
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: node tools/ops-audit.mjs
