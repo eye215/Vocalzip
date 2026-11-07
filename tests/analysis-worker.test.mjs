@@ -1,6 +1,6 @@
 // Server analysis worker against a real Postgres (the CI database job, or VZ_TEST_DB locally), real ffmpeg
-// decoding, and local stand-ins for Cloudflare R2 and the STT API. Checks the queue, song auto-assignment,
-// protection of user edits, no double STT charge, retries and failure.
+// decoding, and local stand-ins for Cloudflare R2 and the STT API. Checks zero automatic paid calls,
+// approval-only cached candidates, protection of user edits, retries and failure.
 import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, mkdtempSync, rmSync} from 'node:fs';
@@ -24,9 +24,11 @@ test('Signature V4 matches the AWS S3 GET example', () => {
     payloadHash:'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', region:'us-east-1', service:'s3', accessKey:'AKIAIOSFODNN7EXAMPLE', secretKey:'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'});
   assert.equal(auth, 'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41');
 });
-test('Auto-assign only on a clearly strong, well-separated match with enough words', () => {
+test('Even a strong match requires user approval; confidence is separate from assignment', () => {
   const strong = {candidate:'s1', matches:[{songId:'s1', score:0.62}, {songId:'s2', score:0.08}]};
-  assert.equal(decide('this is the moment this is the day when I send', strong).auto, true);
+  assert.equal(decide('this is the moment this is the day when I send', strong).auto, false);
+  assert.equal(decide('this is the moment this is the day when I send', strong).songId, null);
+  assert.equal(decide('this is the moment this is the day when I send', strong).confident, true);
   assert.equal(decide('the moment', strong).auto, false, 'too few words');
   assert.equal(decide('this is the moment this is the day when I send', {candidate:'s1', matches:[{songId:'s1', score:0.36}, {songId:'s2', score:0.05}]}).auto, false, 'below ' + AUTO.minScore);
   assert.equal(decide('this is the moment this is the day when I send', {candidate:'s1', matches:[{songId:'s1', score:0.55}, {songId:'s2', score:0.47}]}).auto, false, 'runner-up too close');
@@ -106,7 +108,7 @@ after(async () => {
   await admin.query('drop database if exists ' + dbName); await admin.end();
 });
 
-test('Uploads are queued by the database and worked on without any app: songs sorted, measurements saved, user edits kept, STT paid once', {skip}, async () => {
+test('Uploads keep free measurements and cached candidates, never pay or auto-assign', {skip}, async () => {
   const sung = wav({}), mr = wav({withVoice:false});
   files.set(key(U1, 'a1', 'm4a'), m4a(sung));               // real AAC in M4A, as from Voice Memos
   files.set(key(U1, 'a2', 'wav'), sung);
@@ -131,37 +133,40 @@ test('Uploads are queued by the database and worked on without any app: songs so
   // The user picks a song for a5 before the server gets to it.
   await db.query("update public.vocal_media set metadata = metadata || '{\"songId\":\"s2\",\"song\":\"Defying Gravity\"}' where id = 'a5'");
 
+  // Existing text can be reused; neither an upload nor an API key authorizes new paid inference.
+  for (const [id, text] of [['a1', 'this is the moment this is the day when I send all my doubts away'], ['a2', 'la la la oh yeah baby tonight']])
+    await db.query("insert into public.vocal_song_texts (user_id, kind, record_id, transcript, source) values ($1, 'recognition', $2, $3, 'stt')", [U1, id, text]);
   const stats = await work();
   const broken = (await db.query("select media_id, kind, last_error from public.vocal_analysis_jobs where status in ('failed', 'queued')")).rows;
   assert.deepEqual(broken, []);
   assert.equal(stats.failed, 0);
   const a1 = await row('a1'), j1 = await jobs('a1');
-  assert.equal(a1.songId, 's1'); assert.equal(a1.song, 'This Is the Moment'); assert.equal(a1.songSource, 'ai');
+  assert.equal(a1.songId, undefined); assert.equal(a1.song, undefined); assert.equal(a1.songSource, undefined);
   assert.equal(a1.review, '좋았음'); assert.equal(a1.name, '11-5 #3');                     // other fields untouched
   assert.equal(a1.analysis.v, 1); assert.equal(a1.analysis.by, 'server');
   assert.deepEqual([a1.analysis.metrics.range.low, a1.analysis.metrics.range.high], ['A3', 'C5']);  // decoded from AAC
-  assert.equal(j1.song.status, 'done'); assert.equal(j1.song.result.auto, true); assert.equal(Number(j1.song.cost_usd), 0.0015);
+  assert.equal(j1.song.status, 'review'); assert.equal(j1.song.result.requiresApproval, true); assert.equal(j1.song.result.top3[0].songId, 's1'); assert.equal(Number(j1.song.cost_usd), 0);
   const j2 = await jobs('a2');
   assert.equal(j2.song.status, 'review'); assert.equal((await row('a2')).songId, undefined);   // stays unsorted, top 3 kept
   assert.equal(j2.song.result.top3.length, 2); assert.ok(j2.song.result.top3[0].title);
   assert.equal((await jobs('a3')).vocal.status, 'done');
   const j4 = await jobs('a4');
-  assert.equal(j4.song.status, 'review'); assert.equal(j4.song.result.reason, 'no singing found');  // nothing paid for an MR-only take
+  assert.equal(j4.song.status, 'review'); assert.equal(j4.song.result.requiresRequest, true);  // nothing paid for an MR-only take
   assert.equal((await row('a4')).analysis.metrics.voicedSeconds, 0);
   const j5 = await jobs('a5'), a5 = await row('a5');
   assert.equal(j5.song.status, 'skipped'); assert.equal(a5.songId, 's2'); assert.equal(a5.songSource, undefined); // the user's choice stands
   const a6 = await row('a6');
-  assert.equal(a6.songId, 's2'); assert.equal(Number((await jobs('a6')).song.cost_usd), 0);       // saved transcript reused, not paid
-  assert.equal(sttCalls, 2);                                                                       // a1 and a2 only
+  assert.equal(a6.songId, undefined); assert.equal((await jobs('a6')).song.result.top3[0].songId, 's2'); assert.equal(Number((await jobs('a6')).song.cost_usd), 0);       // saved transcript reused, not paid
+  assert.equal(sttCalls, 0);                                                                       // no upload authorizes paid inference
   const {rows:[q]} = await db.query('select used_total from public.vzip_song_stt_quota where user_id = $1', [U1]);
-  assert.equal(q.used_total, 2);                                                                   // counted with the app's spend display
+  assert.equal(q, undefined);                                                                   // no quota row is created by automatic work
   const {rows:[saved]} = await db.query("select count(*)::int n from public.vocal_song_texts where user_id = $1 and kind = 'recognition'", [U1]);
   assert.equal(saved.n, 3);
 
   // A second run finds nothing to do: no duplicate analysis, no second charge.
   const again = await work();
   assert.deepEqual([again.done, again.review, again.skipped], [0, 0, 0]);
-  assert.equal(sttCalls, 2);
+  assert.equal(sttCalls, 0);
   // Existing recordings can be queued by their owner only (RLS-style function).
   await media('b1', {name:'old', storageProvider:'r2', r2Key:key(U1, 'b1', 'wav'), analysis:{v:1}, songId:'s1'});
   await db.query('begin'); await db.query('set local role authenticated'); await db.query("select set_config('request.jwt.claim.sub', $1, true)", [U2]);
@@ -179,13 +184,13 @@ test('A file that cannot be read is retried and then marked failed; a paid trans
   for (let i = 0; i < 2; i++) { await db.query("update public.vocal_analysis_jobs set locked_at = now() - interval '31 minutes' where media_id = 'x1'"); await work(); }
   const x = await jobs('x1');
   assert.equal(x.vocal.status, 'failed'); assert.equal(x.vocal.attempts, 3); assert.match(x.vocal.last_error, /download failed \(404\)/);
-  assert.equal(x.song.status, 'failed');
+  assert.equal(x.song.status, 'review'); assert.equal(x.song.result.requiresRequest, true);
   // A song job that already paid for its transcript (earlier attempt) uses it instead of paying again.
   files.set(key(U1, 'y1', 'wav'), wav({}));
   await media('y1', {name:'재시도', storageProvider:'r2', r2Key:key(U1, 'y1', 'wav')});
   await db.query("update public.vocal_analysis_jobs set result = jsonb_build_object('transcript', 'this is the moment this is the day when I send all my doubts away'), attempts = 1 where media_id = 'y1' and kind = 'song'");
   const before = sttCalls; await work();
-  assert.equal(sttCalls, before); assert.equal((await row('y1')).songId, 's1');
+  assert.equal(sttCalls, before); assert.equal((await row('y1')).songId, undefined); assert.equal((await jobs('y1')).song.result.top3[0].songId, 's1');
   // Nothing an app user can do changes jobs: no insert/update rights, and only own rows are visible.
   await db.query('begin'); await db.query('set local role authenticated'); await db.query("select set_config('request.jwt.claim.sub', $1, true)", [U2]);
   const {rows:[seen]} = await db.query('select count(*)::int n from public.vocal_analysis_jobs');
@@ -197,7 +202,7 @@ test('A file that cannot be read is retried and then marked failed; a paid trans
   await db.query('rollback');
 });
 
-test('100 uploads, two workers at once: every recording done exactly once, one paid transcription each', {skip}, async () => {
+test('100 uploads, two workers at once: measurements once, paid API calls and assignments zero', {skip}, async () => {
   const take = wav({}), user = '33333333-3333-4333-8333-333333333333';
   await db.query("insert into public.vocal_data (user_id, payload) values ($1, $2) on conflict (user_id) do update set payload = excluded.payload", [user, JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}, {id:'s2', title:'Defying Gravity', lyrics:LYRICS_B}]})]);
   for (let i = 0; i < 100; i++) { files.set(key(user, 'h' + i, 'wav'), take); await media('h' + i, {name:'take ' + i, storageProvider:'r2', r2Key:key(user, 'h' + i, 'wav')}, user); }
@@ -206,14 +211,14 @@ test('100 uploads, two workers at once: every recording done exactly once, one p
   const second = new pg.Client({connectionString:DB.replace(/\/[^/]*$/, '/' + dbName)}); await second.connect();
   try { await Promise.all([run({db, worker:'w1', log:() => {}}), run({db:second, worker:'w2', log:() => {}})]); } finally { await second.end(); }
   const {rows} = await db.query("select kind, status, count(*)::int n, sum(attempts)::int tries from public.vocal_analysis_jobs where user_id = $1 group by kind, status order by kind", [user]);
-  assert.deepEqual(rows, [{kind:'song', status:'done', n:100, tries:100}, {kind:'vocal', status:'done', n:100, tries:100}]);
-  assert.equal(sttCalls - before, 100);                                                   // one paid call per recording
+  assert.deepEqual(rows, [{kind:'song', status:'review', n:100, tries:100}, {kind:'vocal', status:'done', n:100, tries:100}]);
+  assert.equal(sttCalls - before, 0);                                                   // API key presence does not authorize spending
   const {rows:[q]} = await db.query('select used_total from public.vzip_song_stt_quota where user_id = $1', [user]);
-  assert.equal(q.used_total, 100);
+  assert.equal(q, undefined);
   const {rows:[m]} = await db.query("select count(*) filter (where metadata ->> 'songId' = 's1')::int sorted, count(*) filter (where metadata -> 'analysis' ->> 'v' = '1')::int measured from public.vocal_media where user_id = $1", [user]);
-  assert.deepEqual(m, {sorted:100, measured:100});
+  assert.deepEqual(m, {sorted:0, measured:100});
   const {rows:[c]} = await db.query('select sum(cost_usd)::float cost from public.vocal_analysis_jobs where user_id = $1', [user]);
-  assert.equal(Math.round(c.cost * 1e4) / 1e4, 0.15);                                     // cost tracked per job
+  assert.equal(Number(c.cost), 0);                                     // automatic work incurred no STT cost
 });
 
 test('The same problem for every file stops the run early and keeps the untried files queued', {skip}, async () => {
@@ -250,7 +255,7 @@ test('Older Supabase Storage files without the service key are set aside (no att
   assert.equal(n.status, 'done');
 });
 
-test('An unreachable speech-recognition service is recorded with its cause, and nothing is counted as paid', {skip}, async () => {
+test('Uncached jobs never contact speech recognition even when an API key is configured', {skip}, async () => {
   const keep = process.env.OPENAI_BASE, user = '22222222-2222-4222-8222-222222222222';
   await db.query("insert into public.vocal_data (user_id, payload) values ($1, $2) on conflict (user_id) do update set payload = excluded.payload", [user, JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}]})]);
   files.set(key(user, 'sttnet', 'wav'), wav({}));
@@ -258,7 +263,7 @@ test('An unreachable speech-recognition service is recorded with its cause, and 
   process.env.OPENAI_BASE = 'http://127.0.0.1:59998';
   try { await work(); } finally { process.env.OPENAI_BASE = keep; }
   const j = (await jobs('sttnet')).song;
-  assert.equal(j.last_error, 'speech recognition network error: connection refused'); assert.equal(Number(j.cost_usd), 0);
+  assert.equal(j.last_error, null); assert.equal(j.status, 'review'); assert.equal(j.result.requiresRequest, true); assert.equal(Number(j.cost_usd), 0);
 });
 
 test('"곡 확인 필요" is matched again only after lyrics change: no new STT charge, no-singing files left alone', {skip}, async () => {
@@ -273,7 +278,9 @@ test('"곡 확인 필요" is matched again only after lyrics change: no new STT 
   await work();
   assert.equal((await jobs('rc1')).song.status, 'review');
   assert.equal((await jobs('rc2')).song.status, 'review');
-  assert.equal((await jobs('rc2')).song.result.reason, 'no singing found');
+  assert.equal((await jobs('rc2')).song.result.requiresRequest, true);
+  // Legacy no-singing jobs still remain excluded by the unchanged recheck SQL.
+  await db.query("update public.vocal_analysis_jobs set result = jsonb_build_object('reason', 'no singing found') where media_id = 'rc2' and kind = 'song'");
   const sig = (await db.query("select refs_sig from public.vocal_analysis_jobs where media_id = 'rc1' and kind = 'song'")).rows[0].refs_sig;
   assert.match(sig, /^[0-9a-f]{32}$/, 'the worker remembers what it compared with');
 
@@ -292,12 +299,15 @@ test('"곡 확인 필요" is matched again only after lyrics change: no new STT 
   assert.equal((await jobs('rc1')).song.status, 'queued');
   assert.equal((await jobs('rc2')).song.status, 'review', 'no singing: the audio has not changed, so neither would the answer');
 
-  const paid = sttCalls;
-  await work();
+  const paid = sttCalls, apiKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try { await work(); } finally { process.env.OPENAI_API_KEY = apiKey; }
   assert.equal(sttCalls, paid, 'the saved transcript is reused');
   const after = await jobs('rc1');
-  assert.equal(after.song.status, 'done');
-  assert.equal((await row('rc1')).songId, 's3');
+  assert.equal(after.song.status, 'review');
+  assert.equal(after.song.result.requiresApproval, true);
+  assert.equal(after.song.result.top3[0].songId, 's3');
+  assert.equal((await row('rc1')).songId, undefined);
   assert.equal((await db.query("select rechecks from public.vocal_analysis_jobs where media_id = 'rc1' and kind = 'song'")).rows[0].rechecks, 1);
 
   // A recording the user sorted meanwhile is never queued again; force re-queues the rest once.

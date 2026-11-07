@@ -3,10 +3,10 @@
 // the recording (Cloudflare R2, read-only token; or the older Supabase Storage copy), decodes it with
 // ffmpeg and
 //   'vocal' → runs the same measurements as the app (app/vocal-analysis.js) and stores metadata.analysis;
-//   'song'  → reuses the saved transcript or transcribes the 30 sung seconds once (OpenAI STT), compares
-//             it with the user's lyrics (song-text-match.mjs) and assigns the song only when the match is
-//             clearly strong and the recording still has no song; otherwise keeps the top 3 for review.
-// Original files are only read. Writes touch one JSON key (or song fields while still empty) on the
+//   'song'  → reuses a saved transcript (no new paid STT), compares
+//             it with the user's lyrics (song-text-match.mjs), and keeps candidates for user approval.
+//             New paid transcriptions are blocked until request/entitlement/budget enforcement is implemented.
+// Original files are only read. Writes touch one analysis JSON key or the job result on the
 // current row, so edits made meanwhile are never overwritten. Logs carry counts only (public repo).
 import pg from 'pg';
 import {createRequire} from 'node:module';
@@ -21,22 +21,17 @@ const require = createRequire(import.meta.url);
 const VA = require('../app/vocal-analysis.js');
 const env = process.env;
 export const COST_PER_CLIP_USD = 0.0015;            // gpt-4o-mini-transcribe ≈ $0.003/min × 30 s
-const STT_MODEL = 'gpt-4o-mini-transcribe';
 const MAX_BYTES = 300 * 1024 * 1024, MAX_SECONDS = 15 * 60, CLIP = 30, SEARCH = 120, MIN_SUNG = 4;
 
-/* ---------- auto-assign policy ----------
- * Lyric similarity is not a probability of being right. A song is assigned without asking only when the
- * matcher itself is confident (its own threshold and margin) AND the match is much stronger than that, the
- * runner-up is far behind, and enough words were recognized. Everything else goes to "확인 필요" with
- * the top 3. These numbers are deliberately strict until they are tuned on real recordings. */
+/* Match confidence is a recommendation signal, never permission to change a song. */
 export const AUTO = {minScore:0.40, minMargin:0.12, minChars:30};
 export function decide(transcript, match) {
   const top = match.matches?.[0], second = match.matches?.[1];
   const chars = normalizeText(transcript).replace(/\s+/g, '').length;
   const margin = top ? top.score - (second && second.songId !== top.songId ? second.score : 0) : 0;
-  const auto = !!match.candidate && !!top && top.songId === match.candidate &&
+  const confident = !!match.candidate && !!top && top.songId === match.candidate &&
     top.score >= AUTO.minScore && margin >= AUTO.minMargin && chars >= AUTO.minChars;
-  return {auto, songId:auto ? top.songId : null, score:top?.score ?? 0, margin, chars,
+  return {auto:false, songId:null, confident, score:top?.score ?? 0, margin, chars,
     top3:(match.matches || []).slice(0, 3).map(m => ({songId:m.songId, score:Math.round(m.score * 1000) / 1000}))};
 }
 
@@ -90,7 +85,7 @@ export function preflight() {
       else notes.push(name + ' set (' + len + ' chars)');
     }
   }
-  notes.push('OPENAI_API_KEY ' + (clean(env.OPENAI_API_KEY) ? 'set' : 'missing (song identification off)'));
+  notes.push('paid STT disabled; cached song candidates require user approval');
   return {notes, problems};
 }
 async function getR2(key) {
@@ -180,15 +175,6 @@ export function wav16(samples, rate) {
   for (let i = 0; i < samples.length; i++) { const v = Math.max(-1, Math.min(1, samples[i])); b.writeInt16LE(Math.round(v < 0 ? v * 32768 : v * 32767), 44 + i * 2); }
   return b;
 }
-async function transcribe(wav) {
-  const form = new FormData();
-  form.set('model', STT_MODEL); form.set('file', new Blob([wav], {type:'audio/wav'}), 'clip.wav');
-  let res;
-  try { res = await fetch((env.OPENAI_BASE || 'https://api.openai.com/v1') + '/audio/transcriptions', {method:'POST', headers:{authorization:'Bearer ' + clean(env.OPENAI_API_KEY)}, body:form, signal:AbortSignal.timeout(90000)}); }
-  catch (e) { throw new Error('speech recognition network error: ' + networkCause(e)); }
-  if (!res.ok) throw new Error('speech recognition failed (' + res.status + ')');
-  return String((await res.json()).text || '').slice(0, 1600);
-}
 
 /* ---------- jobs ---------- */
 // Lyrics and references are read once per owner for a short while: a re-check of hundreds of 'review' jobs of
@@ -240,40 +226,21 @@ async function songJob(db, job, meta, audio) {
   if (sig) await db.query('update public.vocal_analysis_jobs set refs_sig = $2 where id = $1', [job.id, sig]).catch(() => {});
   if (!refs.length) return finish(db, job, 'review', {reason:'no lyrics to compare', transcript});
   if (transcript == null) {
-    if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
-    // 3. The 30 sung seconds (found on the server for free); nothing is paid when there is no singing.
-    const samples = await audio(), {start, sung} = singingWindow(samples, 16000);
-    if (sung < MIN_SUNG) return finish(db, job, 'review', {reason:'no singing found'});
-    // 4. One paid transcription; it is saved before anything else can fail, and counted with the app's usage.
-    transcript = await transcribe(wav16(samples.subarray(Math.floor(start * 16000), Math.floor((start + CLIP) * 16000)), 16000));
-    // Kept on the job at once (own statement): whatever fails next, a retry reuses it instead of paying again.
-    await db.query("update public.vocal_analysis_jobs set result = jsonb_build_object('transcript', $2::text), cost_usd = cost_usd + $3 where id = $1", [job.id, transcript, COST_PER_CLIP_USD]);
-    await db.query('begin');
-    try {
-      if (transcript.trim()) await db.query("insert into public.vocal_song_texts (user_id, kind, record_id, transcript, source) values ($1, 'recognition', $2, $3, 'stt') on conflict do nothing", [owner, job.media_id, transcript]);
-      await db.query("insert into public.vzip_song_stt_quota as q (user_id, usage_date, used_today, used_total) values ($1, (timezone('utc', now()))::date, 1, 1) on conflict (user_id) do update set usage_date = excluded.usage_date, used_today = case when q.usage_date = excluded.usage_date then q.used_today + 1 else 1 end, used_total = q.used_total + 1", [owner]);
-      await db.query('commit');
-    } catch (e) { await db.query('rollback'); throw e; }
+    // A queued job, API key, workflow input or cron is NOT user consent or a budget reservation.
+    // Fail closed without decoding/uploading audio or calling any paid service.
+    return finish(db, job, 'review', {reason:'paid transcription requires an authorized user request', requiresRequest:true});
   }
-  // 5–7. Compare with the lyrics; assign only a clearly strong match, and only while the file has no song.
+  // Reuse existing text for recommendations only. Never update the recording's song fields.
   const d = decide(transcript, matchTranscripts(transcript, refs));
   // Same label the app writes (VZ.songLabel): "title — show".
   const title = id => { const s = songs.find(x => x.id === id); return s ? s.title + (s.show ? ' — ' + s.show : '') : ''; };
   const top3 = d.top3.map(m => ({...m, title:title(m.songId)}));
-  if (d.auto) {
-    const {rowCount} = await db.query(
-      "update public.vocal_media set metadata = metadata || jsonb_build_object('songId', $3::text, 'song', $4::text, 'songSource', 'ai', 'aiSong', $5::jsonb), updated_at = now() where id = $1 and user_id = $2 and coalesce(metadata ->> 'songId', '') = '' and coalesce(metadata ->> 'song', '') = ''",
-      [job.media_id, owner, d.songId, title(d.songId), JSON.stringify({score:Math.round(d.score * 1000) / 1000, at:Date.now()})]);
-    if (!rowCount) return finish(db, job, 'skipped', {reason:'assigned by the user meanwhile', transcript, top3});
-    return finish(db, job, 'done', {songId:d.songId, title:title(d.songId), score:d.score, auto:true, transcript, top3}, null, cost);
-  }
-  return finish(db, job, 'review', {transcript, top3, score:d.score, margin:d.margin}, null, cost);
+  return finish(db, job, 'review', {transcript, top3, score:d.score, margin:d.margin, auto:false, requiresApproval:true}, null, cost);
 }
 
-/** Song identification needs an STT key and the lyrics / usage tables; otherwise only measurements run. */
+/** Cached text can be matched without an API key. Paid inference is never enabled by this worker. */
 export async function kindsFor(db) {
-  if (!env.OPENAI_API_KEY) return ['vocal'];
-  const {rows:[t]} = await db.query("select to_regclass('public.vocal_song_texts') is not null and to_regclass('public.vzip_song_stt_quota') is not null as ok");
+  const {rows:[t]} = await db.query("select to_regclass('public.vocal_song_texts') is not null as ok");
   return t.ok ? ['vocal', 'song'] : ['vocal'];
 }
 export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 40 * 60000, maxJobs = Number(env.WORKER_MAX_JOBS) || 400, log = console.log, verbose = env.WORKER_VERBOSE === '1'} = {}) {

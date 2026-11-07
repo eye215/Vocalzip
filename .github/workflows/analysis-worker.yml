@@ -1,9 +1,9 @@
-# VOCAL.zip server analysis worker: analyzes new recordings and sorts them into songs after upload, even
+# VOCAL.zip server analysis worker: analyzes new recordings and suggests song candidates from cached transcripts, even
 # when the app is closed. Free on GitHub-hosted runners for this public repository.
 # Needs repository secrets (Settings → Secrets and variables → Actions); without SUPABASE_DB_URL it does nothing:
 #   SUPABASE_DB_URL        Supabase → Connect → Session pooler URI (IPv4), with the database password
 #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY   Cloudflare R2 API token, Object Read only
-#   OPENAI_API_KEY         for song identification (without it only the vocal measurements run)
+# Paid STT is disabled in this worker; existing transcripts are reused for candidates only.
 #   SUPABASE_SERVICE_ROLE_KEY   optional: older recordings still kept in Supabase Storage
 # Logs show counts only (this repository is public).
 name: Analysis worker
@@ -41,7 +41,6 @@ jobs:
     timeout-minutes: 60
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
