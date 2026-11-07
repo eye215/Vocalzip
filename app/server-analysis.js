@@ -65,7 +65,7 @@ function paint() {
   const c = counts(), v = c.vocal, s = c.song;
   if (!v.total && !s.total) { host.innerHTML = ''; return; }
   const running = v.wait + s.wait;
-  host.innerHTML = '<div class="card srv"><div class="row between"><strong><i class="ph ph-cloud-check"></i> 서버 자동 분석</strong><span class="small muted">' + (running ? '진행 중 · 앱을 닫아도 계속돼요' : '모두 처리됨') + '</span></div>' +
+  host.innerHTML = '<div class="card srv"><div class="row between"><strong><i class="ph ph-cloud-check"></i> 서버 자동 분석</strong><span class="small muted">' + (running ? '진행 중 · 앱을 닫아도 계속돼요' : s.review ? '분석 완료 · 확인 대기 ' + s.review + '개' : '모두 처리됨') + '</span></div>' +
     '<div class="srv-grid">' +
       '<div><b>' + v.done + '<small>/' + v.total + '</small></b><span>보컬 측정 완료</span></div>' +
       '<div><b>' + s.auto + '</b><span>곡 자동 지정</span></div>' +
@@ -73,7 +73,9 @@ function paint() {
       (s.review ? '<a href="#/song-suggest"><b>' + s.review + '</b><span>곡 확인 필요 ›</span></a>' : '<div><b>0</b><span>곡 확인 필요</span></div>') +
     '</div>' +
     (v.fail + s.fail ? '<p class="small" style="margin:8px 0 0;color:var(--danger)">분석 실패 ' + (v.fail + s.fail) + '건 · 원본은 그대로예요. 파일 형식을 읽지 못했거나 서버 설정이 필요할 수 있어요.</p>' : '') +
-    (running ? '<p class="small muted" style="margin:8px 0 0">서버는 몇 분 안에 시작해요. 끝나면 곡 이름과 측정값이 자동으로 바뀌어요.</p>' : '') + '</div>';
+    (running ? '<p class="small muted" style="margin:8px 0 0">서버는 몇 분 안에 시작해요. 끝나면 곡 이름과 측정값이 자동으로 바뀌어요.</p>' : '') +
+    // Matched again by the server when lyrics change (vzip_recheck_review_jobs): say so, so nobody waits for a timer.
+    (s.review && !running ? '<p class="small muted" style="margin:8px 0 0">곡 가사를 입력하거나 고치면 확인이 필요한 녹음을 서버가 다시 맞춰봐요.</p>' : '') + '</div>';
 }
 VZ.serverAnalysisCard = el => { host = el; paint(); if (state.on) load(); };
 })();
