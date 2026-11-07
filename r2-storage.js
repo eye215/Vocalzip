@@ -4,6 +4,8 @@
  * existing storage until the owner has set R2 up. */
 (() => {
 'use strict';
+const localStorage = window.VzipAccountScope?.storage || window.localStorage;
+
 const endpoint = () => String(window.VZIP_R2_ENDPOINT || '').replace(/\/+$/, '');
 const signed = new Map(); // key → {url, until}
 async function token() {
@@ -12,7 +14,7 @@ async function token() {
   return t;
 }
 async function api(path, {method = 'GET', body, headers = {}, signal} = {}) {
-  const init = {method, signal, headers:{authorization:'Bearer ' + await token(), ...headers}};
+  const init = {method, signal, headers:{authorization:'Bearer ' + await token(), ...(window.VzipAccountScope?{'X-Client-Info':'vocalzip-device-session-v2'}:{}), ...headers}};
   if (body instanceof Blob) init.body = await body.arrayBuffer(); // one part (≤8MiB); a buffer is sent the same way by every browser
   else if (body !== undefined) { init.body = JSON.stringify(body); init.headers['content-type'] = 'application/json'; }
   const res = await fetch(endpoint() + path, init);
@@ -52,13 +54,14 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal, purp
 /* Playback links: kept on this device until shortly before they expire (also across reloads), asked for once per file
  * even when several screens want it at the same time, and signed in batches for the rows on screen. A link already here
  * lets a tap start playback right away (iPhone Safari only plays inside the tap). */
-const SKEY = 'vzip_r2_links_v1', TTL = 3 * 3600, MARGIN = 300;
+const SKEY = window.VzipAccountScope?'vzip_r2_links_v2':'vzip_r2_links_v1', TTL = 3 * 3600, MARGIN = 300;
 try { const saved = JSON.parse(localStorage.getItem(SKEY) || '{}'), now = Date.now(); for (const [k, v] of Object.entries(saved)) if (v?.until > now) signed.set(k, v); } catch {}
 let saveTimer = null;
 const persist = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { const now = Date.now(), out = {}; for (const [k, v] of signed) if (v.until > now) out[k] = v; localStorage.setItem(SKEY, JSON.stringify(out)); } catch {} }, 300); };
-const keep = (key, link, expires) => { signed.set(key, {url:link, until:(expires - MARGIN) * 1000}); persist(); };
+const keep = (key, link, expires) => { if(window.VzipAccountScope&&!new URL(link,location.href).searchParams.get('cap'))throw Error('저장소의 로그인 세션 업데이트를 기다리고 있어요. 잠시 후 다시 시도해 주세요.');signed.set(key, {url:link, until:(expires - MARGIN) * 1000}); persist(); };
 /** A valid link already on this device, or '' (synchronous). */
-function cachedUrl(key) { const hit = signed.get(key); return hit && hit.until > Date.now() ? hit.url : ''; }
+window.addEventListener('vzip:auth-changed',()=>{if(!window.VzipAccountScope)return;const next=window.vzipCloudSessionId?.()||'',old=localStorage.getItem('vzip_r2_link_session_v2')||'';if(old!==next||!next){signed.clear();localStorage.removeItem(SKEY);localStorage.setItem('vzip_r2_link_session_v2',next);}});
+function cachedUrl(key) { if(window.VzipAccountScope&&!window.vzipCloudSignedIn?.())return '';const hit = signed.get(key); return hit && hit.until > Date.now() ? hit.url : ''; }
 const asking = new Map();
 const single = key => api('/v1/sign', {method:'POST', body:{key, ttl:TTL}}).then(r => { keep(key, r.url, r.expires); return r.url; });
 /** A playback URL usable in <audio src> (signed for a few hours). */

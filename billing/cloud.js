@@ -1,5 +1,6 @@
 /* Manual, revision-checked cloud transfer. Never writes the app's auth or data keys. */
 (()=>{'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
 const S=window.VzipBillingStore,B=window.VzipBillingBackup;
 const URL='https://chxnbtiyuyhiywzeshis.supabase.co',KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E";
 function credentials(){
@@ -11,7 +12,7 @@ function credentials(){
 async function request(path,body){
  const auth=credentials(),controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
  try{
-  const response=await fetch(URL+path,{method:body?'POST':'GET',headers:{apikey:KEY,Authorization:'Bearer '+auth.token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:controller.signal,cache:'no-store'});
+  const response=await fetch(URL+path,{method:body?'POST':'GET',headers:{apikey:KEY,Authorization:'Bearer '+auth.token,...(window.VzipAccountScope?{'X-Client-Info':'vocalzip-device-session-v2'}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:controller.signal,cache:'no-store'});
   const data=await response.json();S.ensureAccount();
   if(!response.ok){
    if(response.status===401||response.status===403)throw Error('로그인 또는 정산 접근 권한을 확인해 주세요. VOCAL.zip에서 다시 로그인할 수 있어요.');
@@ -59,8 +60,8 @@ async function commit(plan){
  * (upload, or download that keeps the previous ledger in recovery). Both changed and different: nothing is written;
  * the user chooses (merge, cloud, this device). Off per account in 백업·동기화. */
 const AKEY='vzip_billing_autosync_v1';
-function autoOn(){try{return JSON.parse(localStorage.getItem(AKEY)||'{}')[S.account.id]!==false}catch{return true}}
-function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(on)delete all[S.account.id];else all[S.account.id]=false;localStorage.setItem(AKEY,JSON.stringify(all))}catch{}}
+function autoOn(){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(window.VzipAccountScope&&!Object.hasOwn(all,S.account.id))return JSON.parse(window.localStorage.getItem(AKEY)||'{}')[S.account.id]!==false;return all[S.account.id]!==false;}catch{return true}}
+function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(window.VzipAccountScope)all[S.account.id]=!!on;else if(on)delete all[S.account.id];else all[S.account.id]=false;localStorage.setItem(AKEY,JSON.stringify(all))}catch{}}
 const empty=state=>!['passes','payments','deductions','adjustments'].some(key=>(state[key]||[]).length);
 async function push(state,expected){
  const payload=B.parse(JSON.stringify(state));

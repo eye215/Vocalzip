@@ -1,0 +1,24 @@
+name: Device session deployment preflight
+on:
+  push:
+    branches: [codex/account-isolation-takeover]
+    paths:
+      - '.github/workflows/device-session-preflight.yml'
+      - 'tools/device-session-preflight.mjs'
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Read-only production catalog inspection
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node tools/device-session-preflight.mjs

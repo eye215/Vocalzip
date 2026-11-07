@@ -299,7 +299,7 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
     '<div class="rec-status" role="status" data-status>버튼을 누르면 바로 녹음이 시작돼요.</div></section>' +
     '<div data-review hidden></div>' +
     '<button type="button" class="btn ghost block" data-import><i class="ph ph-upload-simple"></i> 파일 가져오기</button><p class="small muted" style="margin:0 4px">영상 파일은 음성만 추출해 원음 그대로 저장해요.</p></div>';
-}, leave() { if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
+}, leave() { rec?.result?.releaseProtection?.();if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
   const lessonId = r.query.get('lesson') || '';
   const state = {songId:r.query.get('song') || '', video:false, session:null, result:null, waveLive:[]};
   rec = state;
@@ -320,7 +320,7 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
     mainBtn.hidden = phase === 'review';
     main.querySelector('.rec-controls').hidden = phase === 'review';
   };
-  const reset = () => { state.result = null; state.saved = false; review.hidden = true; review.innerHTML = ''; timeEl.textContent = '0:00'; state.waveLive = []; M.drawWave(wave, []); setUI('idle'); status.textContent = '버튼을 누르면 바로 녹음이 시작돼요.'; };
+  const reset = () => { state.result?.releaseProtection?.();state.result = null; state.saved = false; review.hidden = true; review.innerHTML = ''; timeEl.textContent = '0:00'; state.waveLive = []; M.drawWave(wave, []); setUI('idle'); status.textContent = '버튼을 누르면 바로 녹음이 시작돼요.'; };
   mainBtn.onclick = async () => {
     if (state.session) return stop();
     mainBtn.disabled = true; status.textContent = '마이크 준비 중…';
@@ -361,12 +361,12 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
   async function save(pl) {
     const res = state.result, btn = review.querySelector('[data-save]'), fail = review.querySelector('[data-fail]');
     const id = state.savedId ||= VZ.uid();
-    const item = {id, name:review.querySelector('[name=name]').value.trim() || '녹음', created:Date.now(), recordedDate:VZ.today(), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
+    const item = {id, ...(window.VzipAccountScope?{accountOwner:res.accountOwner}:{}), name:review.querySelector('[name=name]').value.trim() || '녹음', created:Date.now(), recordedDate:VZ.today(), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
     btn.disabled = true; btn.textContent = '저장 중…'; fail.hidden = true;
     try {
       await M.saveBlob(item, p => { btn.textContent = '클라우드 저장 ' + p + '%'; });
       if (lessonId) VZ.change(d => { const l = d.lessons.find(x => x.id === lessonId); if (l) { l.recordings ||= []; if (!l.recordings.some(x => x.id === id)) l.recordings.push({id, note:item.review || ''}); } }, {silent:true});
-      state.saved = true; pl.destroy();
+      res.releaseProtection?.();state.saved = true; pl.destroy();
       review.innerHTML = '<div class="card stack"><div class="row"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-check"></i></span><div class="grow"><strong>저장했어요</strong><div class="small muted">' + esc(item.name) + ' · ' + VZ.clock(item.durationSeconds) + (window.vzipCloudSignedIn?.() ? ' · 클라우드 백업 진행' : '') + '</div></div></div><div class="btn-row">' +
         (lessonId ? '<a class="btn secondary" href="#/lesson/' + esc(lessonId) + '">레슨으로</a>' : '<button type="button" class="btn secondary" data-log>연습 기록</button>') + '<button type="button" class="btn" data-again>새 녹음</button></div>' +
         (state.songId ? '<a class="btn ghost" href="#/song/' + esc(state.songId) + '">' + esc(VZ.songTitle(state.songId)) + ' 곡 보기</a>' : '') + '</div>';

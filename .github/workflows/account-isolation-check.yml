@@ -1,0 +1,65 @@
+name: Account isolation and device-session checks
+on:
+  push:
+    branches: [codex/account-isolation-takeover]
+  pull_request:
+    paths:
+      - 'account-config.js'
+      - 'app/account-scope.js'
+      - 'app/device-sessions.js'
+      - 'tests/active-session.test.mjs'
+      - 'cloud-sync.js'
+      - 'app/core.js'
+      - 'app/media.js'
+      - 'tests/account-session.spec.cjs'
+      - 'supabase/migrations/20261112_device_session_contract.sql'
+      - '.github/workflows/account-isolation-check.yml'
+concurrency:
+  group: account-isolation-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:syntax
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/account-session.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: account-isolation-browser
+          path: |
+            playwright-report/
+            test-results/
+  session-db:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: session_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Session contract in disposable database
+        env:
+          VZ_SESSION_TEST_DB: postgres://postgres:session_ci_only@localhost:5432/postgres
+        run: node --test tests/active-session.test.mjs

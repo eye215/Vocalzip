@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test'),C=require('../core.js');
+require('../../tests/legacy-session-mode.cjs')(test);
 const USER='11111111-1111-4111-8111-111111111111',AUTH='sb-chxnbtiyuyhiywzeshis-auth-token';
 function fixture(owner='device'){
  const run=(state,type,payload)=>C.reduce(state,{type,payload});

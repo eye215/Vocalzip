@@ -1,6 +1,7 @@
 /* Read-only practice insights. Existing records are never rewritten. */
 (() => {
  'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
  const root=document.querySelector('#vzip-ia-growth-main');if(!root)return;
  const card=document.createElement('div');card.className='card vzip-insights';card.id='vzip-growth-insights';
  card.innerHTML='<div class="vzip-insights-head"><div><h2>연습의 흐름</h2><p class="muted">기록한 시간과 만족도를 함께 돌아보세요.</p></div><label for="vzip-growth-period">조회 기간<select id="vzip-growth-period"><option value="week">이번 주</option><option value="28" selected>최근 28일</option><option value="all">전체 기록</option></select></label></div><p class="muted" id="vzip-growth-range"></p><div id="vzip-growth-totals" class="vzip-insight-grid" aria-live="polite"></div><p id="vzip-growth-empty" class="empty" hidden>이 기간에는 연습 기록이 없어요. 첫 연습을 남겨보세요.</p><div class="vzip-insight-columns"><div><h3>연습 종류별 시간</h3><div id="vzip-growth-modes"></div></div><div><h3>자주 연습한 곡 · 상위 5</h3><div id="vzip-growth-songs"></div></div></div><h3>주별 시간과 만족도</h3><p class="muted">선택한 기간의 최근 8주까지 표시해요. 만족도는 점수가 있는 기록의 평균이에요.</p><div class="vzip-insight-table-wrap"><table><caption class="sr-only">주 시작일별 연습 시간과 평균 만족도</caption><thead><tr><th scope="col">주 시작일</th><th scope="col">시간</th><th scope="col">만족도</th></tr></thead><tbody id="vzip-growth-weeks"></tbody></table></div><h3>보컬 트레이닝 항목</h3><p class="muted">항목에 직접 입력한 시간만 집계해요. 녹음 시간은 위의 전체 시간에 포함돼요.</p><div id="vzip-growth-techniques"></div>';
@@ -114,7 +115,7 @@
  renderSong();
  period.addEventListener('change',render);
  window.addEventListener('vzip:data-changed',render);
- window.addEventListener('storage',event=>{if(event.key==='vocal-zip_mvp_v1')render()});
+ window.addEventListener('storage',event=>{if(event.key===(window.VzipAccountScope?.key('vocal-zip_mvp_v1')||'vocal-zip_mvp_v1'))render()});
  window.addEventListener('vzip:route-change',event=>{if(event.detail.tab==='archive')render()});
  render();
 })();

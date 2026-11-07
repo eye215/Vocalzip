@@ -1,0 +1,30 @@
+name: Two-session production release
+on:
+  push:
+    branches: [codex/account-isolation-takeover]
+    paths: ['ops/device-session-release.json']
+permissions:
+  contents: read
+  checks: read
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: vocalzip-session-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Apply only the explicit verified release plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node tools/device-session-release.mjs

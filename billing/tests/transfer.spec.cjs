@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test'),C=require('../core.js');
+require('../../tests/legacy-session-mode.cjs')(test);
 const USER='11111111-1111-4111-8111-111111111111',OTHER='22222222-2222-4222-8222-222222222222',AUTH='sb-chxnbtiyuyhiywzeshis-auth-token';
 function fixture(owner='device',name='복원할 권'){return C.reduce(C.empty(owner),{type:'pass.save',payload:{name,totalUnits:500,amount:150000}})}
 async function open(page,{login=false}={}){

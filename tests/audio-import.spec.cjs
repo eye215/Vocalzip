@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test'),path=require('node:path');
+require('./legacy-session-mode.cjs')(test);
 test.beforeEach(async({page})=>{
  page.__errors=[];page.on('pageerror',error=>page.__errors.push(error.message));
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));

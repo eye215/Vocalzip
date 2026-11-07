@@ -1,6 +1,7 @@
 /* One association map for imported, captured and selected practice media. */
 (() => {
   'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
   const form = document.querySelector('#practice-form');
   if (!form) return;
   const input = document.querySelector('#practice-attachments');
@@ -33,7 +34,7 @@
       new Blob([item.bytes], {type:typeOf(item)}) : null;
   async function transaction(mode, action) {
     const db = await new Promise((resolve, reject) => {
-      const request = indexedDB.open('vocalzip_media_v1', 1);
+      const request = indexedDB.open(window.VzipAccountScope?.mediaDb()||'vocalzip_media_v1', 1);
       let blocked = false;
       request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains('recordings')) request.result.createObjectStore('recordings', {keyPath:'id'});

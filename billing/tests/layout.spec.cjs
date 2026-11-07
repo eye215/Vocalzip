@@ -1,6 +1,7 @@
 // Phone layout of the billing screen: every tab reachable, hours left first, rate as a one-line card,
 // and one action to deduct all completed app lessons.
 const {test,expect}=require('@playwright/test');
+require('../../tests/legacy-session-mode.cjs')(test);
 const lessons=['2026-10-01','2026-10-04','2026-10-07'].map((date,i)=>({id:'L'+i,date,status:'done'}));
 async function open(page){
  await page.addInitScript(d=>{if(!localStorage.getItem('vocal-zip_mvp_v1'))localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify(d))},{lessons,practices:[],songs:[]});

@@ -4,6 +4,8 @@
  * can be saved as JSON (a backup of the lists before any recovery). Recovery itself is a separate, approved step. */
 (() => {
 'use strict';
+const localStorage = window.VzipAccountScope?.storage || window.localStorage;
+
 const VZ = window.VZ, esc = VZ.esc;
 const mb = n => n >= 1024 ** 3 ? (n / 1024 ** 3).toFixed(2) + 'GB' : (n / 1024 ** 2).toFixed(1) + 'MB';
 let last = null, running = false;
@@ -11,7 +13,7 @@ let last = null, running = false;
 /** Device files without loading them all at once (one record at a time through a cursor). */
 function localScan() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('vocalzip_media_v1', 1);
+    const req = indexedDB.open(window.VzipAccountScope?.mediaDb()||'vocalzip_media_v1', 1);
     req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('recordings')) req.result.createObjectStore('recordings', {keyPath:'id'}); };
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {

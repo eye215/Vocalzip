@@ -1,6 +1,8 @@
 /* VOCAL.zip v6 core: data store (same localStorage schema as v5), helpers, sheet/toast, router. */
 (() => {
 'use strict';
+const localStorage = window.VzipAccountScope?.storage || window.localStorage;
+
 const KEY = 'vocal-zip_mvp_v1';
 const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances'];
 const DEFAULTS = {categories:[{id:'c1',name:'발성',items:['립트릴','허밍','패사지오']},{id:'c2',name:'호흡',items:['복식호흡','호흡 유지']},{id:'c3',name:'곡 연습',items:['음정 교정','프레이징','감정 표현']}],songs:[],lessons:[],assignments:[],practices:[],comparisonReports:[]};
@@ -17,6 +19,8 @@ function read() {
 let db = read();
 Object.defineProperty(VZ, 'db', {get: () => db});
 let writing = false;
+let accountFrozen=false;
+window.VzipAccountScope?.beforeLeave(()=>{accountFrozen=true;});
 /** Apply a mutation; on storage failure restore the previous state and report false. */
 /** Mark changed records with updatedAt and remember deliberately removed ids, so a cloud
  * merge (data-merge.js) never brings back what the user deleted nor drops what they added. */
@@ -36,11 +40,13 @@ function stamp(before, after) {
   }
 }
 VZ.change = (mutate, {silent} = {}) => {
+  if(accountFrozen)return false;
   const previous = structuredClone(db);
   try {
     mutate(db);
     window.VzipArchive?.reconcile(db);
     stamp(previous, db);
+    if(window.VzipAccountScope)localStorage.setItem('vzip_account_dirty','1');
     localStorage.setItem(KEY, JSON.stringify(db));
   } catch (error) {
     db = previous;
@@ -55,7 +61,7 @@ VZ.change = (mutate, {silent} = {}) => {
 };
 function reload() { db = read(); VZ.softRender(); }
 window.addEventListener('vzip:data-changed', () => { if (!writing) reload(); });
-window.addEventListener('storage', e => { if (e.key === KEY) reload(); });
+window.addEventListener('storage', e => { if (e.key === (window.VzipAccountScope?.key(KEY)||KEY)) reload(); });
 
 /* ---------- helpers ---------- */
 VZ.uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
@@ -289,6 +295,7 @@ document.addEventListener('DOMContentLoaded', () => hideIcons(document));
 /* ---------- recovery of songs lost to an old overwrite-style sync ---------- */
 (() => {
   const VZ = window.VZ;
+  const localStorage=window.VzipAccountScope?.storage||window.localStorage;
   /** Bring back songs that are referenced but missing: from snapshots this browser kept before a
    * cloud import (vzip_before_cloud_*, vzip_before_import_*) and from song names stored on files. */
   VZ.recoverSongs = (media = []) => {

@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test');
+require('../../tests/legacy-session-mode.cjs')(test);
 const {deflateRawSync}=require('node:zlib');
 const {crc32}=require('../files.js');
 const legacy={lessons:[{id:'lesson-existing',date:'2026-11-04',status:'completed',feedback:'원래 피드백'}],practices:[{id:'practice-untouched'}],songs:[{id:'song-untouched'}]};

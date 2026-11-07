@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test');
+require('../../tests/legacy-session-mode.cjs')(test);
 test('Notion CSV preserves explicit zero/double deductions and notes through save/reload',async({page})=>{
  await page.goto('/billing/');await expect(page.locator('#message')).toContainText('불러왔어요');
  await page.evaluate(async()=>{const s=await VzipBillingStore.load();await VzipBillingStore.save({type:'pass.save',payload:{name:'가져오기 검증용',totalUnits:1000,amount:500000}},s.revision)});

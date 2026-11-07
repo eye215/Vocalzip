@@ -1,12 +1,13 @@
 /* VOCAL.zip — song growth archive v0.6 */
 (()=>{'use strict';
+const localStorage=window.VzipAccountScope?.storage||window.localStorage;
 const $=s=>document.querySelector(s),key='vocal-zip_mvp_v1';
 const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 const read=()=>{try{return JSON.parse(localStorage.getItem(key))||{}}catch{return {}}};
 const songSelect=$('#archive-song'),a=$('#archive-a'),b=$('#archive-b');
 let media=[],urls=[];
 const formatDate=n=>new Date(n).toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit'});
-function dbOpen(){return new Promise((resolve,reject)=>{const req=indexedDB.open('vocalzip_media_v1',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('recordings'))req.result.createObjectStore('recordings',{keyPath:'id'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+function dbOpen(){return new Promise((resolve,reject)=>{const req=indexedDB.open(window.VzipAccountScope?.mediaDb()||'vocalzip_media_v1',1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('recordings'))req.result.createObjectStore('recordings',{keyPath:'id'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
 async function getMedia(){const db=await dbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction('recordings','readonly'),req=tx.objectStore('recordings').getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);tx.oncomplete=()=>db.close()})}
 function setOptions(el,items,placeholder){const prev=el.value;el.replaceChildren();el.add(new Option(placeholder,''));for(const item of items)el.add(new Option(item.label,item.id));if(items.some(i=>i.id===prev))el.value=prev}
 function clearPlayers(){urls.forEach(URL.revokeObjectURL);urls=[];for(const id of ['#archive-player-a','#archive-player-b'])$(id).replaceChildren()}

@@ -4,6 +4,8 @@
  * then import only what the user confirmed. Nothing is uploaded before the user presses import. */
 (() => {
 'use strict';
+const localStorage = window.VzipAccountScope?.storage || window.localStorage;
+
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
 const SOURCES = {
   photos:{icon:'images', title:'사진 앱 / iCloud 사진', sub:'노래·레슨 영상', accept:'video/*,.mov,.mp4,.m4v', start:'2025-12-31', end:'2026-09-13',
