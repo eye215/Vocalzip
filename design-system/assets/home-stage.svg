@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="220" viewBox="0 0 300 220">
+<defs>
+ <radialGradient id="space" cx=".62" cy=".63"><stop stop-color="#fbceff"/><stop offset=".25" stop-color="#d48aff"/><stop offset=".58" stop-color="#9760e6"/><stop offset="1" stop-color="#bd9eed" stop-opacity="0"/></radialGradient>
+ <linearGradient id="fold"><stop stop-color="#ad67e3"/><stop offset=".17" stop-color="#f5b1f6"/><stop offset=".31" stop-color="#b063df"/><stop offset=".43" stop-color="#efb4fa"/><stop offset=".58" stop-color="#a963dc"/><stop offset=".74" stop-color="#e49df1"/><stop offset=".89" stop-color="#9c5ed4"/><stop offset="1" stop-color="#c68ce9"/></linearGradient>
+ <linearGradient id="beam" x2="0" y2="1"><stop stop-color="#fff" stop-opacity="0"/><stop offset=".7" stop-color="#fff2ff" stop-opacity=".75"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+ <linearGradient id="floor" x2="0" y2="1"><stop stop-color="#fff4ff"/><stop offset=".35" stop-color="#e8beff"/><stop offset=".7" stop-color="#b87eea"/><stop offset="1" stop-color="#e9c9fa" stop-opacity="0"/></linearGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="3"/></filter>
+</defs>
+<ellipse cx="180" cy="105" rx="150" ry="105" fill="url(#space)"/>
+<path d="M176 24L111 184h118z" fill="url(#beam)" opacity=".9"/>
+<path d="M185 31L148 179h76z" fill="url(#beam)" opacity=".7" filter="url(#glow)"/>
+<path d="M183 75v86M167 151h34M176 141h14M157 165h56" stroke="#fff3ff" opacity=".48" stroke-width="3" filter="url(#glow)"/>
+<path d="M35 0h72C91 47 91 82 70 108S45 154 16 162C48 110 26 51 35 0z" fill="url(#fold)"/>
+<path d="M27 3C28 54 40 91 23 137M49 2C47 53 60 85 34 145M73 3C62 48 70 79 46 121" fill="none" stroke="#ffe4ff" stroke-width="3" opacity=".4"/>
+<path d="M235 0h65v163C267 152 250 135 243 108S236 48 235 0z" fill="url(#fold)"/>
+<path d="M251 0C247 55 256 112 288 146M270 0C260 49 276 104 299 133" fill="none" stroke="#ffe6ff" stroke-width="4" opacity=".45"/>
+<path d="M37 99L69 104M243 105L276 98" stroke="#efc2ff" stroke-width="5" opacity=".7"/>
+<ellipse cx="181" cy="185" rx="103" ry="20" fill="url(#floor)"/>
+<ellipse cx="181" cy="180" rx="95" ry="13" fill="#f4dcff" opacity=".75"/>
+<ellipse cx="181" cy="177" rx="75" ry="7" fill="#fff4ff" opacity=".8" filter="url(#glow)"/>
+<path d="M83 194c62 20 135 18 196-2" fill="none" stroke="#fbe7ff" opacity=".7"/>
+</svg>

@@ -226,10 +226,20 @@ export function openPlanSheet({ suggestions=[], targetMinutes=30, onSave=()=>{},
  * Time, date, streak and goal eligibility are calculated by the caller.
  * ratios are percentages (100 = 100%). All user supplied text uses textContent.
  */
-function homeIcon(name, className="") {
-  const icon=el("i","ph-fill ph-"+name+" vz-home-icon "+className);
-  icon.setAttribute("aria-hidden","true"); return icon;
+let homeGlyphId=0;
+const homeGlyphs={"house":"<path data-solid fill-rule=\"evenodd\" d=\"M2.5 10.5 12 2l9.5 8.5v10a1.5 1.5 0 0 1-1.5 1.5H15v-7H9v7H4a1.5 1.5 0 0 1-1.5-1.5z\"/>","music-notes":"<path data-solid d=\"M10 4v12.3A4.2 4.2 0 1 0 13 20V9l7-2v6.3a4.2 4.2 0 1 0 3 3.7V1z\" transform=\"translate(-1 0) scale(.96)\"/>","bell":"<path data-solid d=\"M5 10a7 7 0 0 1 5-6.7V2a2 2 0 0 1 4 0v1.3a7 7 0 0 1 5 6.7v4l2 3v2H3v-2l2-3z\"/><path data-solid d=\"M9 20h6a3 3 0 0 1-6 0z\"/>","user":"<circle data-solid cx=\"12\" cy=\"6\" r=\"5\"/><path data-solid d=\"M3 23v-4a9 9 0 0 1 18 0v4z\"/>","mask-happy":"<path data-solid d=\"M1 4c5 2 8 2 12 0v9c0 5-4 7-6 8-3-1-6-3-6-8z\"/><path data-solid d=\"M12 1c4 2 7 2 11 0v9c0 5-4 7-6 8-3-1-5-4-5-8z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.3\" stroke-linecap=\"round\" d=\"m4 9 1.5.5M8 9l1.5.5M4 14q3 3 5 0M15 6l1-.5M19 6l1-.5M15 11q3 3 5-1\"/>","sparkle":"<path data-solid d=\"m12 1 3.2 7.8L23 12l-7.8 3.2L12 23l-3.2-7.8L1 12l7.8-3.2z\"/><path data-solid d=\"m3 0 .9 2.1L6 3l-2.1.9L3 6l-.9-2.1L0 3l2.1-.9z\"/>","chart-bar":"<rect data-solid x=\"2\" y=\"12\" width=\"5\" height=\"11\" rx=\"2.5\"/><rect data-solid x=\"9.5\" y=\"6\" width=\"5\" height=\"17\" rx=\"2.5\"/><rect data-solid x=\"17\" y=\"1\" width=\"5\" height=\"22\" rx=\"2.5\"/>","calendar-blank":"<rect data-solid x=\"2\" y=\"4\" width=\"20\" height=\"19\" rx=\"3\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"2\" stroke-linecap=\"round\" d=\"M7 2v5m10-5v5M5 10h14\"/><rect fill=\"#f3e7ff\" x=\"6\" y=\"13\" width=\"12\" height=\"7\" rx=\"1.3\"/>","archive-box":"<path data-solid d=\"M2 2h20v5H2zm1 7h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.8\" stroke-linecap=\"round\" d=\"M9 12h6\"/>","notebook":"<rect data-solid x=\"3\" y=\"2\" width=\"19\" height=\"21\" rx=\"3\"/><path fill=\"#e9d0ff\" d=\"M16 2h3v10l-1.5-1.5L16 12z\"/><path fill=\"none\" stroke=\"#f9eaff\" stroke-width=\"1.6\" stroke-linecap=\"round\" d=\"M1 7h4m-4 5h4m-4 5h4m4-2h7m-7 4h7\"/>","clock-counter-clockwise":"<path data-solid d=\"M12 1a11 11 0 1 1-9.6 5.6L0 8V1l6 3-2.2 1.2A10 10 0 0 1 12 1z\"/><path fill=\"none\" stroke=\"#f9eaff\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.8\" d=\"M12 5v7l4 2\"/>","microphone":"<rect data-solid x=\"8\" y=\"1\" width=\"8\" height=\"14\" rx=\"4\"/><path data-stroke fill=\"none\" stroke-width=\"1.8\" stroke-linecap=\"round\" d=\"M5 10v2a7 7 0 0 0 14 0v-2M12 19v4m-4 0h8\"/>","caret-right":"<path data-solid d=\"m8 3 9 9-9 9-3-3 6-6-6-6z\"/>","play":"<path data-solid d=\"M6 2.6a1.5 1.5 0 0 1 2.2-1.3L23 10.7a1.5 1.5 0 0 1 0 2.6L8.2 22.7A1.5 1.5 0 0 1 6 21.4z\"/>","fire":"<path data-solid d=\"M13 0c1 6 8 8 8 15a9 9 0 1 1-18 0c0-5 3-7 5-10 0 4 1 5 2 5 3-2 3-6 3-10z\"/><path fill=\"#fff2bb\" d=\"M12 10c1 4 5 5 5 9a5 5 0 1 1-10 0c0-3 3-4 5-9z\"/>","sun":"<circle data-stroke fill=\"none\" cx=\"12\" cy=\"12\" r=\"5\" stroke-width=\"1.4\"/><path data-stroke fill=\"none\" stroke-width=\"1.4\" stroke-linecap=\"round\" d=\"M12 0v3m0 18v3M0 12h3m18 0h3M3.5 3.5l2 2m13 13 2 2m-17 0 2-2m13-13 2-2\"/>"};
+export function createHomeIcon(name,className="") {
+  const icon=el("span","vz-home-icon "+className);icon.setAttribute("aria-hidden","true");
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("focusable","false");
+  const id="vz-glyph-"+(++homeGlyphId);
+  const colors=name==="fire"?["#ffe9ab","#ffb15a","#f18437"]:["#d9a2ff","#ac62e4","#8330c8"];
+  // Only these local vector constants enter markup. User text still uses textContent.
+  svg.innerHTML='<defs><linearGradient id="'+id+'" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="'+colors[0]+'"/><stop offset=".44" stop-color="'+colors[1]+'"/><stop offset="1" stop-color="'+colors[2]+'"/></linearGradient></defs><g fill="url(#'+id+')" stroke-linejoin="round">'+(homeGlyphs[name]||homeGlyphs.sparkle)+'</g>';
+  svg.querySelectorAll("[data-stroke]").forEach(path=>path.setAttribute("stroke","url(#"+id+")"));
+  icon.append(svg);return icon;
 }
+const homeIcon=createHomeIcon;
 function homeButton(label, icon, callback, className="") {
   const button=el("button",className); button.type="button";
   button.setAttribute("aria-label",label);
@@ -268,7 +278,8 @@ export function createStudentHeader({greeting="반가워요,",name="",subtitle="
   // A notification dot is only rendered when the caller has supplied a count/state.
   actions.append(notification,homeButton("프로필","user",onProfile,"vz-home-round"));
   header.append(actions);
-  textRow(header,"h1","vz-home-greeting",greeting+(name?" "+name+"님":""));
+  const hello=textRow(header,"h1","vz-home-greeting",greeting+(name?" "+name+"님":""));
+  hello.append(homeIcon("sun","vz-home-sun"));
   textRow(header,"p","vz-home-greeting-sub",subtitle);
   return header;
 }
@@ -288,7 +299,7 @@ export function createUpcomingStage({stage=null,lesson=null,onOpen=()=>{},onStag
     if(stage.subtitle)textRow(copy,"p","vz-home-stage-song",stage.subtitle);
     if(stage.dateLabel){const date=el("p","vz-home-stage-date");date.append(homeIcon("calendar-blank"),el("span","",stage.dateLabel));copy.append(date);}
     const art=el("div","vz-home-stage-art");art.setAttribute("aria-hidden","true");if(stage.id!=null)art.dataset.poster=String(stage.id);
-    art.append(el("span","vz-home-curtain vz-home-curtain--left"),el("span","vz-home-curtain vz-home-curtain--right"),el("span","vz-home-stage-light"),el("span","vz-home-stage-floor"));
+    // Decorative stage art is a vector background; real poster references are preserved.
     content.append(copy,art);const detail=homeButton("무대 상세 보기",null,onStage,"vz-home-stage-detail"); detail.append(content);card.append(detail);
   }
   if(lesson){
@@ -306,11 +317,14 @@ export function createGoalProgress({completed=0,total=0}={}) {
   gauge.setAttribute("aria-label",pct==null?"목표 없음":"오늘의 목표 "+completed+"/"+total+"개 완료, "+pct+"퍼센트");
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
   svg.setAttribute("viewBox","0 0 106 57");svg.setAttribute("aria-hidden","true");
+  const gradientId="vz-gauge-"+(++homeGlyphId);
+  const defs=document.createElementNS(svg.namespaceURI,"defs");
+  defs.innerHTML='<linearGradient id="'+gradientId+'" x2=".8" y2="1"><stop stop-color="#ba73f5"/><stop offset=".55" stop-color="#962deb"/><stop offset="1" stop-color="#7900d9"/></linearGradient>';svg.append(defs);
   for(const kind of ["track","progress"]){
     const path=document.createElementNS("http://www.w3.org/2000/svg","path");
     path.setAttribute("d","M 4 53 A 49 49 0 0 1 102 53");path.setAttribute("class","vz-home-gauge-"+kind);
     path.setAttribute("pathLength","100");
-    if(kind==="progress"){path.setAttribute("stroke-dasharray",clamp(pct??0,0,100)+" 100");if(!pct)path.setAttribute("visibility","hidden");}
+    if(kind==="progress"){path.style.stroke="url(#"+gradientId+")";path.setAttribute("stroke-dasharray",clamp(pct??0,0,100)+" 100");if(!pct)path.setAttribute("visibility","hidden");}
     svg.append(path);
   }
   gauge.append(svg,el("strong","vz-home-gauge-value",pct==null?"—":pct+"%"),el("span","vz-home-gauge-detail",pct==null?"목표 없음":completed+"/"+total+" 완료"));return gauge;
@@ -357,9 +371,11 @@ function homeFlower({state,ratio,minutes,today}) {
   const flower=el("span","vz-home-flower");
   const hasTarget=ratio!=null;
   const level=state==="future"?"future":!hasTarget?"unplanned":!minutes?"empty":ratio>120?"high":ratio>=100?"met":"low";
-  flower.dataset.level=level;
+  flower.dataset.level=level;flower.dataset.hasMinutes=String(minutes>0);
   if(today)flower.classList.add("is-today");
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","-4 -4 48 48");svg.setAttribute("aria-hidden","true");
+  const fillId="vz-flower-"+(++homeGlyphId),defs=document.createElementNS(svg.namespaceURI,"defs");
+  defs.innerHTML='<linearGradient id="'+fillId+'" x2=".7" y2="1"><stop stop-color="#ead0ff" stop-opacity=".85"/><stop offset=".5" stop-color="currentColor"/><stop offset="1" stop-color="currentColor"/></linearGradient>';svg.append(defs);flower.style.setProperty("--vz-flower-fill","url(#"+fillId+")");
   if(today){const outline=document.createElementNS(svg.namespaceURI,"path");outline.setAttribute("d",flowerPath);outline.setAttribute("class","vz-home-flower-today");svg.append(outline);}
   const shape=document.createElementNS(svg.namespaceURI,"path");shape.setAttribute("d",flowerPath);shape.setAttribute("class","vz-home-flower-shape");svg.append(shape);
   if(hasTarget&&ratio>=100&&state!=="future"){
@@ -397,6 +413,7 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   const songDetail=homeButton(recent?"최근 연습곡 "+recent.title+" 열기":"내 곡 선택",null,onRecent,"vz-home-song-detail");
   const head=el("div","vz-home-song-heading");head.append(homeHeading("최근 연습곡","music-notes"),homeIcon("caret-right"));songDetail.append(head);
   const cover=el("span","vz-home-song-cover");cover.setAttribute("aria-hidden","true");
+  cover.classList.toggle("vz-home-song-cover--playable",Boolean(recent?.canPlay));
   cover.append(homeIcon("music-notes"));songDetail.append(cover);
   const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail);
   if(recent?.canPlay){const play=homeButton("최근 곡 녹음 재생","play",onPlay,"vz-home-play");song.append(play);}

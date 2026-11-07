@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="709" height="1536" viewBox="0 0 709 1536">
+<defs>
+ <linearGradient id="base" x2=".8" y2="1"><stop stop-color="#d5bbf6"/><stop offset=".38" stop-color="#c4b5f7"/><stop offset=".7" stop-color="#cfcbfc"/><stop offset="1" stop-color="#e9c9f4"/></linearGradient>
+ <radialGradient id="pink"><stop stop-color="#f8b9f2" stop-opacity=".9"/><stop offset="1" stop-color="#edb6f4" stop-opacity="0"/></radialGradient>
+ <radialGradient id="blue"><stop stop-color="#a9c9ff" stop-opacity=".95"/><stop offset="1" stop-color="#abc5ff" stop-opacity="0"/></radialGradient>
+ <radialGradient id="lav"><stop stop-color="#a87ff1" stop-opacity=".5"/><stop offset="1" stop-color="#c9a8f5" stop-opacity="0"/></radialGradient>
+ <linearGradient id="iridescent"><stop stop-color="#fbe4ff" stop-opacity="0"/><stop offset=".33" stop-color="#fff1fc"/><stop offset=".49" stop-color="#d8f3ff"/><stop offset=".68" stop-color="#ffdef8"/><stop offset="1" stop-color="#e2c9ff" stop-opacity="0"/></linearGradient>
+ <filter id="b"><feGaussianBlur stdDeviation="15"/></filter>
+ <filter id="s"><feGaussianBlur stdDeviation="3"/></filter>
+</defs>
+<path fill="url(#base)" d="M0 0h709v1536H0z"/>
+<ellipse fill="url(#pink)" cx="655" cy="85" rx="330" ry="410"/>
+<ellipse fill="url(#blue)" cx="365" cy="390" rx="460" ry="370"/>
+<ellipse fill="url(#lav)" cx="50" cy="580" rx="400" ry="650"/>
+<ellipse fill="url(#pink)" cx="665" cy="1040" rx="350" ry="590"/>
+<ellipse fill="url(#blue)" cx="25" cy="1450" rx="390" ry="400"/>
+<g fill="none" stroke="url(#iridescent)">
+ <path d="M-120 188C93 238 286 139 395 15S583-80 795-25" stroke-width="42" opacity=".5" filter="url(#b)"/>
+ <path d="M-120 188C93 238 286 139 395 15S583-80 795-25" stroke-width="4" opacity=".9" filter="url(#s)"/>
+ <path d="M240 330C374 112 661 220 744 82" stroke-width="34" opacity=".65" filter="url(#b)"/>
+ <path d="M240 330C374 112 661 220 744 82" stroke-width="3" opacity=".9" filter="url(#s)"/>
+ <path d="M-48 876C129 705 357 826 540 689S668 471 796 453" stroke-width="34" opacity=".34" filter="url(#b)"/>
+ <path d="M-57 1355C205 1146 435 1437 763 1157" stroke-width="42" opacity=".65" filter="url(#b)"/>
+ <path d="M-57 1355C205 1146 435 1437 763 1157" stroke-width="2" opacity=".75" filter="url(#s)"/>
+</g></svg>
