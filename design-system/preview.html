@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko" data-vz-theme="student">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f3ff">
+  <title>VOCAL.zip — Design System 1.0</title>
+  <link rel="stylesheet" href="../vendor/phosphor/style.css">
+  <link rel="stylesheet" href="../vendor/phosphor/fill.css">
+  <link rel="stylesheet" href="./tokens.css">
+  <link rel="stylesheet" href="./components.css">
+  <style>
+    body { margin:0; }
+    .vz-preview-tools { width:min(100% - 32px,720px); margin:16px auto 0; display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+    .vz-preview-tools button { padding:8px 12px; font-size:12px; }
+    .vz-preview-caption { max-width:450px; margin:4px auto 16px; text-align:center; font-size:12px; color:var(--vz-color-ink-secondary); }
+    .vz-preview-header { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:6px 0 14px; }
+    .vz-preview-logo { margin:0; font-size:19px; font-weight:850; letter-spacing:-.05em; }
+    .vz-preview-logo span { color:var(--vz-color-accent); }
+    .vz-preview-sub { margin:0; font-size:12px; color:var(--vz-color-ink-secondary); }
+    .vz-preview-toast { position:fixed; top:22px; left:50%; transform:translateX(-50%); background:var(--vz-color-ink); color:white; padding:12px 16px; border-radius:16px; max-width:calc(100% - 32px); z-index:99; font-size:13px; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+    .vz-preview-docs { max-width:440px; margin:14px auto 60px; padding:0 var(--vz-page-gutter); color:var(--vz-color-ink-secondary); font-size:12px; }
+    .vz-preview-docs p { margin:6px 0; }
+    .vz-preview-docs a { color:var(--vz-color-accent-strong); }
+    @media (max-width:410px) { .vz-preview-tools { gap:6px; } .vz-preview-tools button { font-size:11px; padding:7px 10px; } }
+  </style>
+</head>
+<body class="vz-scope vz-screen">
+  <div class="vz-preview-tools" aria-label="디자인 시스템 테스트 도구">
+    <button class="vz-button vz-button--secondary" id="toggle-theme" type="button">선생님 테마 보기</button>
+    <button class="vz-button vz-button--secondary" id="open-planner" type="button">첫 진입 목표 설정</button>
+    <button class="vz-button vz-button--quiet" id="toggle-rest" type="button">휴식 상태 보기</button>
+    <button class="vz-button vz-button--quiet" id="reset-demo" type="button">초기화</button>
+  </div>
+  <p class="vz-preview-caption">독립형 디자인 시스템 프리뷰 · 실제 계정/DB에 저장되지 않습니다.</p>
+  <div id="preview-root" aria-live="off"></div>
+  <script type="module" src="./preview.js"></script>
+</body>
+</html>
