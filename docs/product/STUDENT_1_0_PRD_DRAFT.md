@@ -3,7 +3,7 @@
 버전: 2026-11-07 / v0.1 **초안**
 상태: **Phase 01 전수 조사 전 제안서 / 구현·배포 승인 아님**
 
-> **최신 확정 정책:** [제품 정책 확정본(2026-11-07)](PRODUCT_DECISIONS_2026-11-07.md)을 먼저 읽을 것. 특히 **영상 소유자 전용 / 10분 / 저장 형식 선택 / 레슨·녹음 삭제 30일 휴지통 / AI 요금제·요청 한도 / 선생님 공유·수정 제안 / 구독 만료 반복 고지**는 해당 문서가 우선한다.
+> **최신 확정 정책:** [제품 정책 v1.2](PRODUCT_DECISIONS_V1_2_2026-11-07.md)를 가장 먼저 읽을 것. **휴지통 없음·직접 즉시 영구 삭제·레슨↔정산 양방향 삭제 선택·계정당 한 기기 로그인·트레이닝 녹음·연습 목표 체크·PDF→MusicXML OMR**가 새 확정 사항. [기존 v1.1](PRODUCT_DECISIONS_2026-11-07.md)의 변경 없는 AI 요금제·선생님 공유·구독 알림 등은 유지.
 
 관련 문서: [전체 로드맵](../VOCALZIP_PRODUCT_ROADMAP_2026-11-07.md) · [Phase 01 조사](../VOCALZIP_PHASE01_AUDIT_PLAN.md) · [학생 IA](STUDENT_1_0_IA_DRAFT.md) · [데이터 설계](DATA_CONTRACTS_AND_V2_EXTENSIBILITY_DRAFT.md)
 
