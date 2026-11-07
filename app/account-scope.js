@@ -2,6 +2,8 @@
 (() => {
 'use strict';
 if (!window.VZIP_SINGLE_SESSION_ENABLED) return;
+// Hide cached account content from keyboard/assistive navigation before async auth resolves.
+document.querySelectorAll('.v-app,.v-nav').forEach(el=>{el.inert=true;});
 const raw=window.localStorage, MARKER='vzip_account_scope_owner_v1', CLAIM='vzip_legacy_claim_owner_v1';
 const owner=raw.getItem(MARKER)||'';
 const namespace='vzip_account_v1:'+encodeURIComponent(owner||'unclaimed')+':';

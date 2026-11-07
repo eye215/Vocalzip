@@ -4,7 +4,7 @@ window.__writes=[];
 const sessionUser=()=>localStorage.getItem('__test_user')||'A';
 window.supabase={createClient:(url,key,options)=>(window.__clientOptions=options,{
  auth:{
-  getUser:async()=>({data:{user:sessionUser()==='out'?null:{id:sessionUser(),email:sessionUser()+'@test.invalid'}}}),
+  getUser:async()=>{if(window.__holdAuth)await new Promise(resolve=>{window.__releaseAuth=resolve;});return{data:{user:sessionUser()==='out'?null:{id:sessionUser(),email:sessionUser()+'@test.invalid'}}};},
   getSession:async()=>({data:{session:{access_token:'test-token'}}}),
   onAuthStateChange:fn=>{window.__authListeners ||= [];window.__authListeners.push(fn);window.__changeAuth=(event,session)=>window.__authListeners.forEach(f=>f(event,session));return{data:{subscription:{unsubscribe(){}}}}},
   signOut:async()=>{localStorage.setItem('__test_user','out');window.__changeAuth?.('SIGNED_OUT',null);return{error:null}},
@@ -202,4 +202,17 @@ test('direct resumable uploads carry the same account protocol header as SDK req
   return window.__transportHeaders;
  });
  expect(headers['X-Client-Info']).toBe('vocalzip-account-session-v1');expect(headers.authorization).toBe('Bearer test-token');
+});
+
+test('cached account content stays inert while initial authentication is unresolved',async({page})=>{
+ await page.addInitScript(()=>{window.__holdAuth=true;});
+ // Setup waits for the boot cover only after showUser; start setup and release auth explicitly.
+ const booting=setup(page);
+ await page.waitForURL('**/#/home');
+ await expect.poll(()=>page.evaluate(()=>typeof window.__releaseAuth).catch(()=>null)).toBe('function');
+ expect(await page.evaluate(()=>[document.querySelector('.v-app').inert,document.querySelector('.v-nav').inert])).toEqual([true,true]);
+ await page.evaluate(()=>{window.__holdAuth=false;window.__releaseAuth();});
+ await booting;
+ await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ expect(await page.evaluate(()=>document.querySelector('.v-app').inert)).toBe(false);
 });
