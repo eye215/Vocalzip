@@ -40,7 +40,7 @@
 .vz-home-stage-song {font-size:14px;line-height:1.25;color:var(--vz-color-ink);margin:2px 0 0;max-width:55%;overflow-wrap:anywhere;}
 .vz-home-stage-date {font-size:12px;display:flex;gap:6px;align-items:center;margin:2px 0 0;color:var(--vz-color-ink);}
 .vz-home-stage-date .vz-home-icon {font-size:17px;}
-.vz-home-stage-art {position:absolute;right:3px;top:-12px;width:83px;height:83px;opacity:1;overflow:hidden;border-radius:12px;pointer-events:none;background-image:url("./assets/approved-reference.jpeg");background-size:472.6667% 1024%;background-position:90.3399% 18.0375%;background-repeat:no-repeat;mask-image:radial-gradient(ellipse at 65% 68%,#000 35%,transparent 82%);}
+.vz-home-stage-art {position:absolute;right:1px;top:-14px;width:162.3px;height:85.8px;opacity:1;overflow:hidden;pointer-events:none;background-image:url("./assets/approved-reference.jpeg");background-size:240.3389% 984.6154%;background-position:88.1643% 17.8261%;background-repeat:no-repeat;mask-image:url("./assets/reference-stage-mask.svg");mask-size:100% 100%;mask-repeat:no-repeat;}
 .vz-home-curtain {position:absolute;top:0;width:42px;height:90px;background:repeating-linear-gradient(95deg,rgba(142,77,203,.45),rgba(231,173,249,.55) 11px,rgba(142,77,203,.45) 18px);border-radius:0 0 60% 20%;}
 .vz-home-curtain--left {left:5px;transform:rotate(16deg);}
 .vz-home-curtain--right {right:-4px;transform:scaleX(-1) rotate(16deg);}
@@ -260,7 +260,7 @@ body.vz-home-mode .v-nav ul>li>a.rec i {width:26px;height:26px;font-size:26px;}
  .vz-home-stage-title {padding-right:55px;}
  .vz-home-stage-title h3 {font-size:20px;}
  .vz-home-dday {font-size:19px;}
- .vz-home-stage-art {width:72px;height:72px;right:-2px;top:-8px;opacity:1;}
+ .vz-home-stage-art {width:140px;height:74px;right:-2px;top:-8px;opacity:1;}
  .vz-home-goal-body {grid-template-columns:106px minmax(0,1fr);}
  .vz-home-goal-summary {padding-left:0;}
  .vz-student-home .vz-home-goal-list {padding-left:10px;padding-right:3px;}
