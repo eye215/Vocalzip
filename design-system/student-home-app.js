@@ -7,6 +7,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const owner=()=>window.vzipCloudUserId?.()||window.VzipAccountScope?.owner||'';
  const state=()=>M.build({...V.db,performances:(V.db.performances||[]).filter(p=>p.ownerId===owner()&&owner())},{today:today()});
  const dayLabel=date=>date?V.dateLabel(date):'';
+ const lessonDay=date=>{const d=V.parseYmd(date);return d?(d.getMonth()+1)+'.'+d.getDate()+' ('+'일월화수목금토'[d.getDay()]+')':'';};
  const meta=document.querySelector('meta[name="theme-color"]'),originalTheme=meta?.content;
  function applyTheme(){
   const home=!!document.querySelector('[data-approved-home-host]');
@@ -29,7 +30,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const stage=s.stage?{id:s.stage.id,title:s.stage.title,subtitle:s.stage.songTitles.join(' · '),
    dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
   const l=s.lesson,lesson=l?{id:l.id,title:'다음 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
-   dateLabel:dayLabel(l.date)+(l.startTime?' '+V.timeRange(l):''),daysLeft:V.daysBetween(today(),l.date)}:null;
+   dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
   return {stage,lesson};
  }
  function recentData(recent,files=[]){
@@ -46,7 +47,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  function play(file){
   let player;
   V.sheet({title:file.name||'최근 녹음',body:'<div data-home-player></div>',
-   onMount:(el)=>{player=V.media.player(el.querySelector('[data-home-player]'),file,{tools:true});player.play();},
+   onMount:(el)=>{const host=el.querySelector('[data-home-player]');player=V.media.player(host,file,{tools:true});host._player=player;player.play();},
    onClose:()=>player?.destroy()});
  }
  function notices(){

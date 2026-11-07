@@ -358,3 +358,27 @@ test('goal settings store only user entered plans and personal goals', async ({p
   expect(saved.assignments).toEqual(seed().assignments);
   expect(saved.practices).toEqual(seed().practices);
 });
+
+test('recent recording uses the existing player and closing stops playback without changing practice time',async({page})=>{
+ await boot(page);
+ await page.evaluate(async date=>{
+  window.vzipCloudSignedIn=()=>false;
+  const rate=16000,frames=rate*3,bytes=new Uint8Array(44+frames*2),view=new DataView(bytes.buffer);
+  const text=(at,s)=>{for(let i=0;i<s.length;i++)bytes[at+i]=s.charCodeAt(i);};
+  text(0,'RIFF');view.setUint32(4,bytes.length-8,true);text(8,'WAVE');text(12,'fmt ');
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+  view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+  text(36,'data');view.setUint32(40,frames*2,true);
+  for(let i=0;i<frames;i++)view.setInt16(44+i*2,Math.sin(i/rate*440*Math.PI*2)*4000,true);
+  await window.vzipStorePracticeMedia({id:'file1',name:'최근 연습 녹음',songId:'s1',source:'practice',type:'audio/wav',recordedDate:date,dateSource:'manual',created:Date.now(),durationSeconds:3,blob:new Blob([bytes],{type:'audio/wav'})});
+  VZ.media.invalidate();VZ.render();
+ },TODAY);
+ const before=await db(page);
+ await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
+ await expect.poll(()=>page.locator('[data-home-player]').evaluate(host=>host._player?.el?.currentTime||0)).toBeGreaterThan(0);
+ await page.evaluate(()=>{window.__homeAudio=document.querySelector('[data-home-player]')._player.el;});
+ await page.getByRole('dialog',{name:'최근 연습 녹음',exact:true}).getByRole('button',{name:'닫기',exact:true}).click();
+ await expect(page.locator('[data-home-player]')).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__homeAudio.paused)).toBe(true);
+ expect((await db(page)).practices).toEqual(before.practices);
+});
