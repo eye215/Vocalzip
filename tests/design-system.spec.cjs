@@ -63,7 +63,7 @@ test.describe('responsive visual QA snapshot matrix',()=>{
   for(const width of [320,390,430]){
     test('viewport '+width+'px: no clipping, readable cards, reachable dock, correct goal scroll',async({page},testInfo)=>{
       await page.setViewportSize({width,height:844});
-      await page.goto('/design-system/preview.html');
+      await page.goto('/design-system/preview.html?visual=1');
       await expect(page.locator('.vz-goal-card')).toBeVisible();
       await page.evaluate(()=>document.fonts.ready);
       const metrics=await page.evaluate(()=>{
