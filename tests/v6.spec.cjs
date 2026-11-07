@@ -414,7 +414,7 @@ test('자동 보컬 분석: unmeasured recordings are analyzed in the background
   await expect(page.locator('[data-song-vocal]')).toContainText('분석 3/4개');
 });
 
-test('서버 자동 분석: progress card, AI / needs-a-look labels, live refresh when the server saves, browser analysis stands down', async ({page}) => {
+test('서버 분석: progress card, approval-only guidance, legacy AI labels and live refresh', async ({page}) => {
   await boot(page, {media:false});
   await page.evaluate(async () => {
     const wav = new Blob([new Uint8Array(64)], {type:'audio/wav'});
@@ -435,18 +435,30 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   await expect.poll(() => page.evaluate(() => VZ.serverAnalysisOn())).toBe(true);
   await page.goto('/#/library');
   const card = page.locator('[data-server-analysis] .srv');
-  await expect(card).toContainText('서버 자동 분석');
+  await expect(card).toContainText('서버 분석');
   await expect(card).toContainText('1/3');                      // vocal: 1 done of 3
-  await expect(card).toContainText('곡 자동 지정');
+  await expect(card).toContainText('이전 자동 지정');
+  await expect(card).toContainText('보컬 측정을 진행하고 결과를 자동으로 저장해요');
+  await expect(card).toContainText('곡 후보는 확인 후 직접 지정해 주세요');
+  await expect(card).not.toContainText('곡 이름과 측정값이 자동으로 바뀌어요');
   await expect(card).toContainText('분석 실패 1건');
   await expect(card.locator('a[href="#/song-suggest"]')).toContainText('1');
   await expect(page.locator('[data-media="ai1"]')).toContainText('AI 곡 지정');
   await expect(page.locator('[data-media="rv1"]')).toContainText('곡 확인 필요');
-  // The server sorts rv1 while the app is open: the change arrives live and the library shows it.
+  // Completing vocal measurements leaves the cached song candidate awaiting the user's choice.
+  await page.evaluate(() => {
+    window.__jobs.rows = window.__jobs.rows.map(j => j.media_id === 'rv1' && j.kind === 'vocal' ? {...j, status:'done'} : j);
+    window.__live.onJobs();
+  });
+  await expect(card).toContainText('2/3');
+  await expect(card).toContainText('녹음에서 이미 인식한 가사');
+  await expect(card).toContainText('음성 인식 기록이 없는 녹음은 ‘AI 곡 추천’에서 비용을 확인하고 분석을 요청해 주세요');
+  await expect(page.locator('[data-media="rv1"]')).toContainText('곡 확인 필요');
+  // A subsequent song selection arrives live and the library shows it.
   await page.evaluate(async () => {
-    // Stand-in for the server's write (Safari stores file bytes differently, so go through the app's own update).
+    // Stand-in for the user's song selection (use the app's update for Safari file storage).
     const rec = (await VZ.media.list(true)).find(x => x.id === 'rv1');
-    await VZ.media.update(rec, {songId:'s2', song:'On My Own', songSource:'ai'}, {quiet:true});
+    await VZ.media.update(rec, {songId:'s2', song:'On My Own'}, {quiet:true});
     window.__jobs.rows = window.__jobs.rows.map(j => j.media_id === 'rv1' ? {...j, status:'done'} : j); window.__jobs.review = [];
     window.__live.onJobs(); window.__live.onMedia();
   });
