@@ -166,7 +166,7 @@ try{
  const checkResponse=await fetch('https://api.github.com/repos/'+env.GITHUB_REPOSITORY+'/commits/'+plan.sourceSha+'/check-runs?per_page=100',{headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,Accept:'application/vnd.github+json'}});
  check(checkResponse.ok,'CI status access');
  const allChecks=(await checkResponse.json()).check_runs,latest=new Map();
- for(const c of allChecks)if(!latest.has(c.name)||latest.get(c.name).id<c.id)latest.set(c.name,c);
+ for(const c of allChecks)if(c.conclusion!=='cancelled'&&(!latest.has(c.name)||latest.get(c.name).id<c.id))latest.set(c.name,c);
  for(const name of ['session-db','browser','billing','database','ui','safety','worker'])check(latest.get(name)?.conclusion==='success','source check '+name);
  for(const c of latest.values())if(c.conclusion!=='cancelled')check(c.conclusion==='success','source check '+c.name);
  check(env.SUPABASE_DB_URL&&env.SUPABASE_SERVICE_ROLE_KEY,'release credentials');

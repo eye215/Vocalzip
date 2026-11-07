@@ -147,6 +147,9 @@ test('local logout is idempotent and never logs out other devices',{skip},async(
  for(const expected of [true,false])assert.equal((await as(U,A,q=>q.query('select public.vzip_release_session() as r'))).rows[0].r,expected);
  assert.equal(await active(U,A),false);assert.equal(await active(U,B),true);
  await assert.rejects(register(U,A),/valid authenticated session required/);
+ assert.equal((await register(U,B)).status,'active');
+ assert.equal((await register(U,C)).status,'active');
+ assert.equal((await listing(U,B)).sessions.length,2);
 });
 test('account ownership and registry privileges remain restrictive',{skip},async()=>{
  await register(U,A);await register(V,F);
@@ -223,7 +226,7 @@ test('user SECURITY DEFINER entry points enforce session state and hide their im
  ])await assert.rejects(as(U,A,q=>q.query(sql)),/permission denied/);
  assert.equal((await as(U,A,q=>q.query('select public.vzip_enqueue_my_media() as r'))).rows[0].r,1);
 });
-test('expired Auth session rows cannot authorize new app or playback requests',{skip},async()=>{
+test('expired Auth session rows cannot authorize requests or consume a login slot',{skip},async()=>{
  await register(U,A);
  const token=(await as(U,A,q=>q.query('select public.vzip_session_context() as r'))).rows[0].r.playback_token;
  await db.query("update auth.sessions set not_after=now()-interval '1 second' where id=$1",[A]);

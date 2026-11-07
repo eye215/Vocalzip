@@ -180,12 +180,12 @@ begin
   return public.vzip_session_snapshot()||jsonb_build_object('status','sessions_changed');
  end if;
  select count(*) into n from public.vzip_device_sessions x where x.user_id=u and x.revoked_at is null
-  and exists(select 1 from auth.sessions a where a.id=x.session_id and a.user_id=u);
+  and exists(select 1 from auth.sessions a where a.id=x.session_id and a.user_id=u and (a.not_after is null or a.not_after>now()));
  if n>=st.max_sessions then
   if p_replace_session is null then return public.vzip_session_snapshot()||jsonb_build_object('status','device_limit'); end if;
   update public.vzip_device_sessions set revoked_at=now()
    where user_id=u and session_id=p_replace_session and revoked_at is null
-    and exists(select 1 from auth.sessions a where a.id=p_replace_session and a.user_id=u);
+    and exists(select 1 from auth.sessions a where a.id=p_replace_session and a.user_id=u and (a.not_after is null or a.not_after>now()));
   if not found then return public.vzip_session_snapshot()||jsonb_build_object('status','sessions_changed'); end if;
   delete from auth.sessions where user_id=u and id=p_replace_session;
  end if;
