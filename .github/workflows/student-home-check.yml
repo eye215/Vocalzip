@@ -11,6 +11,8 @@ on:
       - 'design-system/**'
       - 'docs/design/student-home-v1/**'
       - 'tests/student-home*'
+      - 'tests/v6.spec.cjs'
+      - 'tests/legacy-session-mode.cjs'
       - '.github/workflows/student-home-check.yml'
   workflow_dispatch:
 permissions:
@@ -35,6 +37,8 @@ jobs:
         run: node --test tests/student-home-model.test.cjs
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
+      - name: Approved dock regression
+        run: npx playwright test tests/v6.spec.cjs --grep 'Bottom navigation reaches' --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
       - name: Check out pinned original home
         uses: actions/checkout@v4
         with:

@@ -1,6 +1,6 @@
 // VOCAL.zip v6 UI: main user flows, data compatibility with v5 records, and mobile layout.
 const {test, expect} = require('@playwright/test');
-require('./legacy-session-mode.cjs')(test);
+require('./legacy-session-mode.cjs')(test,{approvedHome:info=>info.title==='Bottom navigation reaches the five main screens without horizontal overflow'});
 const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -53,20 +53,24 @@ test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
   await boot(page);
   const nav = page.locator('.v-nav');
-  for (const [label, heading] of [['내 곡', '내 곡'], ['녹음', '녹음'], ['캘린더', '캘린더'], ['성장', '성장'], ['홈', null]]) {
+  for (const [label, heading] of [['내 곡', '내 곡'], ['녹음', '녹음'], ['보관함', '음원 보관함'], ['일정', '캘린더'], ['홈', null]]) {
     await nav.getByRole('link', {name:label, exact:true}).click();
     if (heading) await expect(page.locator('#top h1')).toHaveText(heading);
     await expect(nav.getByRole('link', {name:label, exact:true})).toHaveAttribute('aria-current', 'page');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   }
-  // Home: quick actions first, then next lesson / homework / recent songs.
-  await expect(page.locator('.quick').getByText('녹음')).toBeVisible();
-  await expect(page.getByText('예정된 레슨이 없어요')).toBeVisible();
-  await expect(page.getByText('립트릴 5분')).toBeVisible();
-  await expect(page.locator('[data-recent]').getByText('This Is the Moment')).toBeVisible();
+  // This navigation contract uses the approved home; the remaining legacy flows
+  // retain their original home fixture until they are migrated independently.
+  await expect(page.locator('.vz-student-home')).toBeVisible();
+  await expect(page.locator('.vz-home-goals')).toContainText('오늘의 목표를 정해보세요');
+  await expect(page.locator('.vz-home-song')).toContainText('This Is the Moment');
   // Touch targets in nav are at least 44px.
   const box = await nav.getByRole('link', {name:'내 곡'}).boundingBox();
   expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
+  // Growth remains reachable from the weekly summary after leaving the dock.
+  await page.getByRole('button',{name:'성장 기록 보기',exact:true}).click();
+  await expect(page.locator('#top h1')).toHaveText('성장');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
 test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never auto-complete', async ({page}) => {
