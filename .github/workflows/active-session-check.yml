@@ -1,0 +1,37 @@
+name: Active session contract checks
+on:
+  push:
+    branches: [codex/active-session-server-contract]
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261112_active_session_contract.sql'
+      - 'tests/active-session.test.mjs'
+      - '.github/workflows/active-session-check.yml'
+permissions:
+  contents: read
+jobs:
+  session:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: session_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - run: node --check tests/active-session.test.mjs
+      - name: Isolated session takeover and RLS checks
+        env:
+          VZ_SESSION_TEST_DB: postgres://postgres:session_ci_only@localhost:5432/postgres
+        run: node --test tests/active-session.test.mjs
