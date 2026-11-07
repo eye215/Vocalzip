@@ -1,0 +1,31 @@
+name: Snapshot transport checks
+on:
+  pull_request:
+    paths:
+      - 'app/snapshot-sync.js'
+      - 'data-merge.js'
+      - 'tests/snapshot-sync.test.cjs'
+      - '.github/workflows/snapshot-transport-check.yml'
+  push:
+    branches:
+      - 'codex/snapshot-rpc-transport-tests'
+    paths:
+      - 'app/snapshot-sync.js'
+      - 'data-merge.js'
+      - 'tests/snapshot-sync.test.cjs'
+      - '.github/workflows/snapshot-transport-check.yml'
+permissions:
+  contents: read
+jobs:
+  snapshot-transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check transport syntax
+        run: node --check app/snapshot-sync.js
+      - name: Test snapshot RPC transport
+        run: node --test tests/snapshot-sync.test.cjs
