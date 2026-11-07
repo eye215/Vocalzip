@@ -63,12 +63,13 @@
 
 ## 이번 SYNC-05-00 범위와 검증
 
-- 파일: cloud-sync.js, tests/cloud-sync.test.cjs, 기존 공통 UI fixture의 쓰기 반환값 1곳, 독립 cloud-sync-check workflow, 이 실행 원장.
+- 파일: cloud-sync.js, tests/cloud-sync.test.cjs, 기존 UI fixture의 쓰기 반환값 2곳 및 삭제 시험의 CAS helper 연결, 독립 cloud-sync-check workflow, 이 실행 원장.
 - 기존 payload/곡/녹음 ID, RLS, 계정 2세션, 정산 DB·파일, 실제 미디어는 변경하지 않는다. DB 마이그레이션 없음.
 - 최초 생성은 중복 무시 upsert+행 반환으로 확인하며, 충돌한 쪽은 클라우드를 다시 읽어 기존 ID 병합 후 CAS로 저장한다.
 - 수정 토큰은 읽은 updated_at보다 반드시 커야 한다. 브라우저 시계가 멈추거나 뒤여도 같은 CAS 토큰을 재사용하지 않는다.
 - 알려진 한계: 레코드 단위 updatedAt 병합은 동일 레코드의 다른 필드 수정까지 보장하지 않는다. tombstone 5,000개 보관 상한도 장기 삭제 부활 위험이 있어 서버 revision/삭제 워터마크 설계에서 해결한다.
-- 자동 검증: PR Actions 결과 기록 예정. 가짜 PostgREST·두 독립 기기 컨텍스트 경합 시험은 실제 운영 PostgreSQL/iPhone 시험과 구분한다.
+- 자동 검증: 전용 안전 시험 28개, 계정 브라우저 55개(2 skip), 세션 PostgreSQL 15개, 워커 안전 시험 39개 통과. 최종 전체 UI 결과·배포 여부는 #124 본문/Actions에 기록한다. 가짜 PostgREST 경합 시험은 실제 운영 PostgreSQL/iPhone 시험과 구분한다.
+- 후속 #125: 서버 snapshot revision/요청 멱등 SQL 제안과 필드 초안/lease 계약 작성, 임시 PostgreSQL 17개 통과. proposals 경로이며 앱 연동/운영 DB 적용은 하지 않았다.
 - 이 PR만으로 필드 초안/lease·악보 필기·일일 목표 구현을 완료 처리하지 않는다.
 
 ## 충돌 방지 및 담당
