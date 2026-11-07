@@ -74,7 +74,7 @@ function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  if(!clean)store.setItem('vzip_account_dirty','1');
  const context=vm.createContext({...window,window,document,localStorage:store,Date:FixedDate,
   navigator:{userAgent:'test',maxTouchPoints:0},matchMedia:()=>({matches:false}),location:{href:'https://test.invalid/',reload(){},origin:'https://test.invalid',pathname:'/'},
-  URL,structuredClone,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
+  URL,structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
   Event:class{constructor(type){this.type=type}},setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,10)),clearTimeout,setInterval(){},
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
