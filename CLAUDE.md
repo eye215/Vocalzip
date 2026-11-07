@@ -1,30 +1,56 @@
-# VOCAL.zip — AI developer handoff
-This file is read by Claude Code and is also the shared working contract for Codex/ChatGPT.
+# VOCAL.zip — AI 개발자 공통 인수인계
 
-## Product priorities
-1. **Student Release 1.0 first**, fully functional and validated on real iOS devices.
-2. **Teacher Release 2.0 later**, including N:M teacher/student connections and 1:N group lessons.
-3. Product phases are a **proposed 30-phase plan**, not fixed historical numbering. Verify actual implementation and old PRs before claiming done.
+이 파일은 Claude Code를 포함한 모든 개발 AI(Claude·Codex·ChatGPT)가 참고하는 **공통 작업 지침**이다.
 
-## Read first
-- [Product roadmap](docs/VOCALZIP_PRODUCT_ROADMAP_2026-11-07.md)
-- [Phase 01 audit kickoff](docs/VOCALZIP_PHASE01_AUDIT_PLAN.md)
+## 1. 제품 개발 우선순위
+
+1. **학생용 Release 1.0을 먼저 완성하여 출시한다.** 실제 iOS 기기에서 전체 사용자 흐름을 검증한다.
+2. **선생님용 Release 2.0을 이후 출시한다.** 학생·선생님 N:M 연결과 1:N 그룹 레슨을 포함한다.
+3. 현재 로드맵은 **30개 Phase 제안안**으로 확정된 과거 번호가 아니다. 실제 코드·PR·문서를 확인하기 전에는 완료된 작업으로 판단하지 않는다.
+
+## 2. 작업 전 필독 문서
+
+- [전체 제품 로드맵](docs/VOCALZIP_PRODUCT_ROADMAP_2026-11-07.md)
+- [Phase 01 전수 조사 지시서](docs/VOCALZIP_PHASE01_AUDIT_PLAN.md)
 - [README](README.md)
-- [UI/UX v6 architecture](docs/UIUX_v6_개편_2026-11-04.md)
-- [Operating verification](docs/운영검증_2026-11-04.md)
+- [UI/UX v6 구조](docs/UIUX_v6_개편_2026-11-04.md)
+- [운영 검증 현황](docs/운영검증_2026-11-04.md)
+- [학생용 1.0 PRD 초안](docs/product/STUDENT_1_0_PRD_DRAFT.md)
+- [학생용 1.0 IA 초안](docs/product/STUDENT_1_0_IA_DRAFT.md)
+- [데이터 호환·선생님 확장 설계](docs/product/DATA_CONTRACTS_AND_V2_EXTENSIBILITY_DRAFT.md)
 
-## NEXT TASK: Phase 01 READ-ONLY AUDIT
-Inspect existing implementation and data architecture, compare roadmap vs code, create evidence-based docs listed in Phase 01. Do **not** begin rewriting, migrating DB, moving media, deploying, deleting files, or modifying production data. Preserve current storage schemas and existing billing project. Use safe synthetic test data only.
+## 3. 바로 진행할 작업: Phase 01 — 읽기 전용 전수 조사
 
-## Hard rules
-- No destructive changes, no data loss. Snapshot and reversible migration plan required before future changes.
-- Current `localStorage: vocal-zip_mvp_v1`, `IndexedDB: vocalzip_media_v1/recordings`, Supabase payload and `billing/` must be treated as existing compatibility contracts until verified.
-- v6 currently records audio; according to its docs, importing MOV extracts audio. Do not assume retained original video, deployed R2, or verified audio AI analysis.
-- A recorded teacher name is not an authenticated teacher account. No automatic access on later signup.
-- Share media by authorized grants; never expose other students' private data or duplicate ownership storage by sharing.
-- Separate student personal lesson expense records from teacher billing ledgers and app subscription.
-- No secrets, tokens, real personal records, or private audio in commits or logs.
-- Report what was inspected, verified, unverified, and tested; mocked test success ≠ production or iPhone validation.
+기존 기능과 코드, 데이터 구조를 분석하고 새로운 로드맵에 매핑한다. Phase 01 문서에 정의된 분석 결과를 작성한다.
 
-## Suggested response to owner
-Summarize: (a) what exists, (b) what is broken/missing, (c) real-data risks, (d) prioritized first safe PRs and acceptance tests. Ask for explicit approval before destructive or production-affecting operations.
+**이번 단계에서 금지하는 작업**
+- 실제 기능 코드 재작성, 구조 변경, 운영 배포
+- 운영 DB 스키마 변경·마이그레이션
+- 실제 미디어 이동·삭제
+- 사용자 기록 삭제·초기화·덮어쓰기
+
+분석에는 가짜 테스트 데이터를 사용하고, 실제 데이터 접근이 필요한 검증은 읽기 전용·최소 권한으로 실시한다.
+
+## 4. 절대 지켜야 하는 원칙
+
+1. **데이터 무손실.** 기존 데이터 보존, 스냅샷, 이전 검증, 복구 절차 없이 파괴적인 수정을 진행하지 않는다.
+2. 다음 저장 계약을 기존 호환 대상으로 취급한다.
+   - localStorage: `vocal-zip_mvp_v1`
+   - IndexedDB: `vocalzip_media_v1` / `recordings`
+   - Supabase: `vocal_data.payload`
+   - 별도 레슨비 정산: `billing/`
+3. 현재 v6 문서 기준 녹음은 음성 중심이며, MOV 가져오기는 영상 보관이 아닌 **음성 추출**이다. 실제 영상 보관, R2 운영 연동, 음성의 음정 분석이 완료됐다고 가정하지 않는다.
+4. 학생이 입력한 선생님 **이름**은 인증된 선생님 **계정**이 아니다. 계정 가입 시 자동 접근 권한을 부여하지 않는다.
+5. 공유는 허가된 권한으로만 제공한다. 다른 학생의 개인 피드백·미디어·수강료를 노출하지 않는다. 공유 때문에 소유권·용량 차감이 중복되지 않도록 한다.
+6. 학생 개인 레슨비 기록, 선생님 수강권 정산 원장, Vocalzip 자체 구독 결제는 구분한다.
+7. GitHub·로그에 비밀키, 토큰, 실제 개인 녹음 및 개인정보를 기록하지 않는다.
+8. **코드 구현 / 자동 테스트 통과 / 실제 운영 검증** 상태를 별도로 보고한다. 모의 API 테스트 성공을 실제 iPhone·클라우드 검증으로 대체하지 않는다.
+
+## 5. Phase 01 결과 보고 형식
+
+- **이미 구현된 것:** 파일 경로·코드·커밋과 함께 표시
+- **고장·미완성·불명확한 것:** 재현 경로 또는 조사 필요 근거 표시
+- **데이터 손실·보안 위험:** 심각도와 영향 설명
+- **최초 개발 PR 후보:** 우선순위, 의존성, 완료 기준, 테스트 방법
+
+**운영 데이터에 영향을 주는 변경은 별도 승인 후 진행한다.**
