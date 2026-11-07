@@ -1,55 +1,150 @@
-# PHASE 01 — Current-state audit and safe kickoff (Claude / Codex)
-Date: 2026-11-07 | Status: **READY TO START / READ-ONLY**
-Related: [Product roadmap](VOCALZIP_PRODUCT_ROADMAP_2026-11-07.md)
+# Phase 01 — 현행 시스템 전수 조사 및 안전한 개발 착수
 
-## Mission
-Create an evidence-based current-state map before refactoring or adding features. Target: **Student Release 1.0 first, Teacher Release 2.0 second**. Preserve user data. Audit is not an instruction to implement or deploy code.
+작성일: 2026-11-07  
+상태: **진행 준비 완료 / 읽기 전용 조사**  
+참고: [전체 개발 로드맵](VOCALZIP_PRODUCT_ROADMAP_2026-11-07.md)
 
-## Order of operations
-1. Record inspected branch, HEAD SHA, deploy/environment assumptions and docs read. Resolve README vs older docs vs code when mismatched.
-2. Map app entrypoints, runtime modules, dependencies, build/test/deploy workflow and status of `legacy.html`.
-3. Walk **student E2E**: sign-in → song create → record/import → local save → cloud backup → library playback → attach to practice → lesson/homework → calendar/growth → re-login. Annotate each step with source paths and test evidence.
-4. Inspect current **localStorage schema** (`vocal-zip_mvp_v1`), IndexedDB (`vocalzip_media_v1/recordings`), Supabase `vocal_data.payload`, media/chunk refs and billing's separate data contract. Read-only inspection; no production query requiring secrets in output. Note dates, IDs, deleted markers, concurrency.
-5. Verify actual use of Supabase Storage vs Cloudflare R2; identify upload, byte-range playback, chunks, cache, retry, offline behavior and access grants. **Do not assume R2 is configured**.
-6. Evaluate auth/RLS/data tenancy (multiple users, logout, tokens, ownership), secure media sharing and missing validations. Never log secrets or user data.
-7. Inspect `billing/` as separate project and contracts; do not merge it into UI or alter the payment ledger.
-8. Crosswalk historic phase docs/PRs with the new **30-phase proposal**. Provide verified statuses: implemented/partial/not present/untested. Don't conflate legacy phase IDs with new ones.
-9. Run available static/unit/browser tests in isolation with safe fake data; tests mocking Supabase or virtual media **do not prove** real iPhone or production cloud functionality.
-10. Prepare risks, dependencies, and a small first implementation backlog. No schema migrations, production writes, deletion, destructive cleanup or deployment.
+## 1. 작업 목적
 
-## Initial files to inspect
+기존 코드를 전면 수정하기 전에 **현재 구현 상태를 증거 기반으로 파악**한다.
+
+출시 전략은 **학생 Release 1.0 먼저 → 선생님 Release 2.0 이후**이다. 이번 Phase는 기능 개발이나 배포가 아닌 **현황 조사**이다.
+
+## 2. 조사 순서
+
+### 01-1. 현재 기준 고정
+- 조사 브랜치·HEAD 커밋 SHA 기록
+- 실제 배포 주소·환경 가정 확인
+- README, 구조 문서, 운영 검증 현황 읽기
+- 문서와 실제 코드가 다르면 실제 근거에 따라 차이를 기록
+
+### 01-2. 애플리케이션 구조 분석
+- 진입 파일 및 화면 라우팅
+- 모듈·의존성
+- 빌드, 자동 테스트, 배포 방식
+- `legacy.html` 유지 이유와 제거 가능성
+- 화면 개편과 데이터/클라우드 코드의 결합도
+
+### 01-3. 학생 핵심 사용자 흐름 점검
+다음 순서의 코드 경로와 테스트 근거를 모두 기록한다.
+
+로그인 → 곡 생성 → 녹음 또는 파일 가져오기 → 로컬 저장 → 클라우드 백업 → 보관함 재생 → 연습 기록 연결 → 레슨/숙제 → 캘린더/성장 → 재로그인 및 기기 변경
+
+각 단계는 **구현됨 / 부분 구현 / 미구현 / 테스트만 있음 / 실제 실기기 미검증**을 구분한다.
+
+### 01-4. 데이터 구조 분석
+다음을 읽기 전용으로 확인한다.
+
+- localStorage: `vocal-zip_mvp_v1`
+- IndexedDB: `vocalzip_media_v1` / `recordings`
+- Supabase: `vocal_data.payload`
+- 미디어·분할 파일 참조
+- `billing/` 정산 데이터 계약
+
+특히 레거시 ID, 녹음 날짜, 삭제 표식, 데이터 병합·충돌 처리, 같은 파일의 중복 생성 위험을 조사한다. 비밀키나 개인정보를 보고서에 넣지 않는다.
+
+### 01-5. 미디어 인프라 점검
+- 현재 실제 저장소가 Supabase Storage인지 R2인지 확인
+- 업로드·다운로드·분할·범위 요청 재생
+- 스트리밍·서비스 워커·캐시
+- 실패·취소·재시도·새로고침 시 복구
+- 음원 추출과 영상 보존 여부
+- 공유 권한과 접근 제어
+
+**R2가 이미 운영 적용됐다고 가정하지 않는다.**
+
+### 01-6. 인증·개인정보·사용자 격리
+- 로그인·세션·로그아웃
+- 사용자별 데이터 분리
+- Supabase RLS와 서버 측 접근 검증
+- 서명된 미디어 URL
+- 계정 변경 시 이전 사용자 캐시/정보 노출 가능성
+- 인증/공유/구독 관련 누락된 검증
+
+### 01-7. 기존 레슨비 정산 구조
+- `billing/` 별도 프로젝트 조사
+- 레슨 ID·날짜·상태 연동 계약 확인
+- 차감 이력과 레슨 삭제·상태 변경 간 위험
+- 학생용 1.0과 선생님 2.0에서 필요한 계약 구분
+
+**정산 프로젝트를 학생 UI와 임의로 합치거나 원장을 수정하지 않는다.**
+
+### 01-8. 기존 Phase ↔ 신규 Phase 매핑
+과거 개발 문서와 PR·커밋을 분석해 신규 30개 Phase(제안안)와 연결한다.
+
+상태 구분:
+- 구현 확인
+- 부분 구현
+- 미구현
+- 자동 테스트 확인
+- 실기기/운영 검증 안 됨
+- 조사 필요
+
+과거 Phase의 번호가 현재 로드맵의 번호와 같다고 가정하지 않는다.
+
+### 01-9. 자동 테스트
+- 가능하면 코드 문법·단위·브라우저 테스트를 안전한 가짜 데이터로 실행
+- 테스트 결과, 건너뜀, 실패를 구분
+- 모의 Supabase API와 가상 녹음 장치는 운영 클라우드나 실물 iPhone 검증이 아님을 명시
+- 운영 데이터를 변경하거나 비밀키를 출력하는 테스트는 수행하지 않음
+
+### 01-10. 위험 및 다음 개발 목록
+- 데이터 손실 위험
+- 개인정보 노출 위험
+- 주요 사용자 흐름의 실패 지점
+- 기술 부채
+- 최소한의 안전한 수정 순서
+- 작업별 완료 기준과 회귀 테스트
+
+## 3. 우선 조사할 파일
+
 - `README.md`
 - `docs/UIUX_v6_개편_2026-11-04.md`
 - `docs/VOCALzip_Codex_인수인계_2026-11-03.md`
 - `docs/운영검증_2026-11-04.md`
 - `docs/레슨데이터_연동계약.md`
-- `index.html`, `legacy.html`, `app/core.js`, `app/media.js`, `app/views-main.js`, `app/views-lessons.js`, `app/views-more.js`, `cloud-sync.js`, `chunk-media-core.js`, `share-worker.js`, `billing/`, `tests/`, GitHub Actions workflows.
+- `index.html`, `legacy.html`
+- `app/core.js`, `app/media.js`
+- `app/views-main.js`, `app/views-lessons.js`, `app/views-more.js`
+- `cloud-sync.js`, `chunk-media-core.js`, `share-worker.js`
+- `billing/`, `tests/`, GitHub Actions 설정
 
-## Questions the report must answer
-- Which 1.0 features exist **in code**, which have tests, and which work on a physical iPhone?
-- What are the live/legacy DB fields, media object shapes, media IDs, and associated contracts?
-- Is cloud auto-backup actually durable and safe across concurrent clients?
-- Where can data be lost, orphaned, duplicated, silently overwritten, or cross-user exposed?
-- Is the current app architecture fit for student 1.0 expansion and future teacher 2.0? What is the smallest safe improvement?
-- Are video imports intentionally audio-only right now? What is required to support actual video preservation?
-- Which planned AI features are real inference versus memo summarization?
-- What historical roadmap items have been implemented or abandoned?
-- What additional access or manual real-device QA is required?
+## 4. 반드시 답해야 할 질문
 
-## Deliverables (commit docs only, after audit)
-1. `docs/audit/2026-11-07-current-state.md`: architecture diagram, data flow, dependencies, file references and tested facts.
-2. `docs/audit/2026-11-07-phase-mapping.md`: legacy → proposed phases, evidence, gaps.
-3. `docs/audit/2026-11-07-risks-and-test-plan.md`: prioritized issues, test matrix, production verification prerequisites.
-4. `docs/audit/2026-11-07-next-actions.md`: P0/P1/P2 tasks with acceptance criteria, smallest safe PR order, no speculative ETAs.
+1. 학생용 1.0 기능 중 **코드에 존재하는 기능**과 **검증된 기능**은 각각 무엇인가?
+2. 실제 로컬·클라우드 DB와 미디어의 필드, ID, 연결 방식은 무엇인가?
+3. 자동 백업은 실제로 안전한가? 동일 데이터의 다중 기기 수정 시 문제가 없는가?
+4. 데이터가 유실·중복·고아 데이터화되거나 다른 사용자에게 노출될 위험은 어디인가?
+5. 현재 구조에서 학생 1.0과 미래 선생님 2.0을 지원하려면 어떤 부분을 먼저 바꿔야 하는가?
+6. 현재 영상 가져오기는 음성 추출 전용인가? 실제 영상 보관을 위해 필요한 것은 무엇인가?
+7. 실제 AI 오디오 분석과 단순 메모 요약 기능은 어떻게 구분되는가?
+8. 과거 Phase 계획 중 구현·변경·중단된 항목은 무엇인가?
+9. 어떤 항목은 추가 운영 접근 권한이나 실물 iPhone 검증이 필요한가?
 
-## First implementation candidate **after audit approval**
-- Resolve critical student path failures without redesign: record/import → save → library playback → practice/lesson attachment → cross-device recovery.
-- Respect v6 UI contracts; clarify video import behavior (current v6 docs say MOV video is **audio-extracted**, not video preserved).
-- Add regression tests for failed save, retry, duplicate IDs, removal, missing cloud, multiuser read protection.
-- Only after these are stable, decide R2 adapter and migration approach.
+## 5. 산출물
 
-## Acceptance criteria for Phase 01
-- Every important claim has file path/commit/test evidence.
-- Unknowns explicitly marked unverified.
-- Current live code and data remain unchanged.
-- A developer who did not join the chat can understand exactly what to inspect/build next.
+조사 결과를 다음 파일에 기록한다. **분석 완료 후 문서만 별도 커밋**한다.
+
+1. `docs/audit/2026-11-07-current-state.md` — 현행 아키텍처·데이터 흐름·의존성·근거
+2. `docs/audit/2026-11-07-phase-mapping.md` — 기존 Phase와 신규 Phase 매핑, 검증 상태
+3. `docs/audit/2026-11-07-risks-and-test-plan.md` — 위험, 우선순위, 테스트 계획
+4. `docs/audit/2026-11-07-next-actions.md` — P0/P1/P2 작업, 선행 조건, 완료 기준
+
+## 6. 조사 후 첫 개발 후보
+
+**조사 결과 승인 이후에만 착수**
+
+녹음/가져오기 → 저장 → 보관함 재생 → 연습·레슨 연결 → 기기 변경 후 복구를 우선 안정화한다.
+
+현행 v6 계약을 보존하며, 영상 가져오기 정책(현재 문서상 음성 추출)을 별도 결정한다.
+
+저장 실패, 재시도, ID 중복, 레슨 삭제, 클라우드 미연결, 다른 사용자 열람 방지 등의 회귀 테스트를 추가한다.
+
+그다음 R2 저장소 어댑터와 이전 방식을 확정한다.
+
+## 7. Phase 01 완료 조건
+
+- 모든 주요 판단에 파일 경로·커밋·테스트 근거가 있다.
+- 확인하지 못한 항목을 **미검증**으로 표시한다.
+- 기존 운영 코드와 실제 사용자 데이터가 변경되지 않는다.
+- 새 개발자나 AI가 과거 대화 없이도 다음 작업을 이해할 수 있다.
