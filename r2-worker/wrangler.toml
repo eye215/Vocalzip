@@ -8,6 +8,9 @@ binding = "MEDIA"
 bucket_name = "vocalzip-media"
 
 [vars]
+SESSION_GUARD_ENABLED = "true"
+# Public browser key, not a service credential.
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E"
 SUPABASE_URL = "https://chxnbtiyuyhiywzeshis.supabase.co"
 ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
 STT_CLIP_ENABLED = "false"

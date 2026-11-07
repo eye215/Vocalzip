@@ -27,7 +27,8 @@ const authField=selector=>authScreen.querySelector(selector);
 function updateAuthScreen(){document.getElementById('vzip-boot-cover')?.remove();const signedIn=!!user&&(!window.VzipAccountScope||sessionVerified);authScreen.hidden=signedIn;if(window.VzipAccountScope)document.querySelectorAll('.v-app,.v-nav,.sheet-back').forEach(el=>{el.inert=!signedIn;});document.body.classList.toggle('vzip-auth-locked',!signedIn);const form=document.getElementById('cloud-signed-out');if(form)form.hidden=signedIn;}
 
 const status=$('#cloud-status');let client,user=null,ready=false,uploadTimer=null,busy=false;
-let sessionVerified=false,authGeneration=0,sessionChecking=false;
+let sessionVerified=false,authGeneration=0,sessionChecking=false,activeSessionId=null;
+window.vzipCloudSessionId=()=>sessionVerified?activeSessionId:null;
 function say(message){status.textContent=message;const a=document.querySelector('#vzip-auth-message');if(a)a.textContent=message}
 function localData(){try{return JSON.parse(localStorage.getItem(dataKey)||'null')}catch{return null}}
 function count(data){return (data?.lessons?.length||0)+(data?.practices?.length||0)+(data?.assignments?.length||0)}
@@ -588,7 +589,14 @@ async function enterAccount(){
  if(data?.status==='revoked')throw Error('이 로그인은 종료됐어요. 다시 인증해 주세요.');
  if(data?.status!=='active')throw Error('로그인 세션 상태를 확인하지 못했어요. 다시 로그인해 주세요.');
  if(scope.leaving){await scope.lock();if(current())location.reload();return;}
- sessionVerified=true;paintUser();
+ if(activeSessionId&&activeSessionId!==data.current_session)window.vzipRevokeChunkMedia?.();
+ activeSessionId=data.current_session;sessionVerified=true;
+ if(new URL(location.href).searchParams.get('return')==='billing'){
+  await sync({silent:true});
+  if(current())location.replace(new URL('billing/',location.href).href);
+  return;
+ }
+ paintUser();
  let manager=document.getElementById('vzip-device-manage');
  if(!manager){manager=document.createElement('button');manager.id='vzip-device-manage';manager.className='btn ghost';manager.textContent='로그인 기기 관리';manager.onclick=openSessionManager;document.getElementById('cloud-signed-in').appendChild(manager);}
  let button=document.getElementById('vzip-legacy-import');

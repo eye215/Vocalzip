@@ -11,7 +11,7 @@ function credentials(){
 async function request(path,body){
  const auth=credentials(),controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
  try{
-  const response=await fetch(URL+path,{method:body?'POST':'GET',headers:{apikey:KEY,Authorization:'Bearer '+auth.token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:controller.signal,cache:'no-store'});
+  const response=await fetch(URL+path,{method:body?'POST':'GET',headers:{apikey:KEY,Authorization:'Bearer '+auth.token,...(window.VzipAccountScope?{'X-Client-Info':'vocalzip-device-session-v2'}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:controller.signal,cache:'no-store'});
   const data=await response.json();S.ensureAccount();
   if(!response.ok){
    if(response.status===401||response.status===403)throw Error('로그인 또는 정산 접근 권한을 확인해 주세요. VOCAL.zip에서 다시 로그인할 수 있어요.');

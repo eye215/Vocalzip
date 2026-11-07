@@ -66,6 +66,27 @@ insert into public.vzip_session_rollout(singleton) values(true) on conflict(sing
 alter table public.vzip_session_rollout enable row level security;
 revoke all on public.vzip_session_rollout from public,anon,authenticated;
 
+-- The existing server STT Edge Function forwards the verified user JWT but not the
+-- browser protocol header. Validate its actual Auth/registry session, not an SDK label.
+create or replace function public.vzip_server_session_allowed()
+returns boolean language sql stable security definer set search_path=''
+as $$
+ select auth.uid() is not null and (
+  (not coalesce((select enforced from public.vzip_session_rollout where singleton),true)
+   and not exists(select 1 from public.vzip_account_session_state where user_id=auth.uid()))
+  or exists(select 1 from public.vzip_device_sessions
+   where user_id=auth.uid() and session_id=public.vzip_authenticated_session() and revoked_at is null));
+$$;
+revoke all on function public.vzip_server_session_allowed() from public,anon,authenticated;
+
+-- Realtime has verified JWT claims but no browser HTTP header. Reads still require
+-- an active Auth/registry session; protocol version is enforced on writes.
+create or replace function public.vzip_session_read_allowed()
+returns boolean language sql stable security definer set search_path=''
+as $$ select public.vzip_server_session_allowed(); $$;
+revoke all on function public.vzip_session_read_allowed() from public,anon;
+grant execute on function public.vzip_session_read_allowed() to authenticated;
+
 create or replace function public.vzip_session_access_allowed()
 returns boolean language sql stable security definer set search_path=''
 as $$
@@ -228,34 +249,44 @@ end $$;
 revoke all on function public.vzip_release_session() from public,anon;
 grant execute on function public.vzip_release_session() to authenticated;
 
--- Restrictive AND policies preserve existing owner RLS. Definer/service-role/R2 need integration.
+-- Restrictive AND policies preserve owner RLS. Separate read policy supports Realtime.
 do $$
-declare t text;
+declare t text; op text; name text; allowed text;
 begin
  foreach t in array array['vocal_data','vocal_media','vocal_history','vocal_song_texts',
   'vocal_analysis_jobs','vocal_billing_documents','vzip_song_stt_quota','vzip_worker_wake'] loop
   if to_regclass('public.'||t) is not null then
    execute format('drop policy if exists vzip_active_session_guard on public.%I',t);
-   execute format('create policy vzip_active_session_guard on public.%I as restrictive for all to authenticated using ((select public.vzip_session_access_allowed())) with check ((select public.vzip_session_access_allowed()))',t);
+   foreach op in array array['select','insert','update','delete'] loop
+    name:='vzip_session_'||op||'_guard';
+    allowed:=case when op='select' then 'vzip_session_read_allowed' else 'vzip_session_access_allowed' end;
+    execute format('drop policy if exists %I on public.%I',name,t);
+    if op='insert' then
+     execute format('create policy %I on public.%I as restrictive for insert to authenticated with check ((select public.%I()))',name,t,allowed);
+    elsif op='update' then
+     execute format('create policy %I on public.%I as restrictive for update to authenticated using ((select public.%I())) with check ((select public.%I()))',name,t,allowed,allowed);
+    else
+     execute format('create policy %I on public.%I as restrictive for %s to authenticated using ((select public.%I()))',name,t,op,allowed);
+    end if;
+   end loop;
   end if;
  end loop;
  if to_regclass('storage.objects') is not null then
-  execute 'drop policy if exists vzip_active_session_guard on storage.objects';
-  execute 'create policy vzip_active_session_guard on storage.objects as restrictive for all to authenticated using (bucket_id <> ''vocal-recordings'' or (select public.vzip_session_access_allowed())) with check (bucket_id <> ''vocal-recordings'' or (select public.vzip_session_access_allowed()))';
+  drop policy if exists vzip_active_session_guard on storage.objects;
+  foreach op in array array['select','insert','update','delete'] loop
+   name:='vzip_session_'||op||'_guard';
+   allowed:=case when op='select' then 'vzip_session_read_allowed' else 'vzip_session_access_allowed' end;
+   execute format('drop policy if exists %I on storage.objects',name);
+   if op='insert' then
+    execute format('create policy %I on storage.objects as restrictive for insert to authenticated with check (bucket_id <> ''vocal-recordings'' or (select public.%I()))',name,allowed);
+   elsif op='update' then
+    execute format('create policy %I on storage.objects as restrictive for update to authenticated using (bucket_id <> ''vocal-recordings'' or (select public.%I())) with check (bucket_id <> ''vocal-recordings'' or (select public.%I()))',name,allowed,allowed);
+   else
+    execute format('create policy %I on storage.objects as restrictive for %s to authenticated using (bucket_id <> ''vocal-recordings'' or (select public.%I()))',name,op,allowed);
+   end if;
+  end loop;
  end if;
 end $$;
--- The existing server STT Edge Function forwards the verified user JWT but not the
--- browser protocol header. Validate its actual Auth/registry session, not an SDK label.
-create or replace function public.vzip_server_session_allowed()
-returns boolean language sql stable security definer set search_path=''
-as $$
- select auth.uid() is not null and (
-  (not coalesce((select enforced from public.vzip_session_rollout where singleton),true)
-   and not exists(select 1 from public.vzip_account_session_state where user_id=auth.uid()))
-  or exists(select 1 from public.vzip_device_sessions
-   where user_id=auth.uid() and session_id=public.vzip_authenticated_session() and revoked_at is null));
-$$;
-revoke all on function public.vzip_server_session_allowed() from public,anon,authenticated;
 
 -- Preserve original RPC bodies under non-callable implementation names.
 do $$

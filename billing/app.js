@@ -362,7 +362,7 @@ async function checkOthers(){
   const row=el('div',undefined,'row');
   row.append(el('span','이 기기의 '+other.label+'에 지금 화면에 없는 정산 기록 '+other.missing+'건이 있어요.','grow'));
   row.append(button('합치기',async()=>{
-   if(!await window.VzipBillingDialog.ask({title:'정산 기록 합치기',message:other.label+'의 기록 '+other.missing+'건을 지금 정산에 더해요. 지우는 기록은 없고, 합치기 전 상태는 백업·동기화의 복구에서 되돌릴 수 있어요.',ok:'합치기',cancel:'닫기'}))return;
+   if(!await window.VzipBillingDialog.ask({title:'정산 기록 합치기',message:(window.VzipAccountScope?'이 기록이 현재 로그인 계정 본인의 자료임을 확인했나요? 확인한 자료만 복사하며 이전 원본은 보존합니다. ':'')+other.label+'의 기록 '+other.missing+'건을 지금 정산에 더해요. 지우는 기록은 없고, 합치기 전 상태는 백업·동기화의 복구에서 되돌릴 수 있어요.',ok:'합치기',cancel:'닫기'}))return;
    try{state=await S.mergeFrom(state,other.state);render();notify('정산 기록 '+other.missing+'건을 합쳤어요.');checkOthers()}catch(error){notify('합치지 못했어요: '+error.message,true)}
   }));
   box.append(row);

@@ -320,3 +320,41 @@ test('two independent authenticated tabs coexist and only a remotely revoked ses
   expect(second.__errors).toEqual([]);
  }finally{await second.close();}
 });
+
+async function billingFixture(page){
+ let allowed=true;
+ await page.route('**/rest/v1/rpc/vzip_session_context',route=>{
+  const b=route.request().headers().authorization?.endsWith('billing-B');
+  return route.fulfill({contentType:'application/json',body:JSON.stringify({user_id:b?'B':'A',allowed,required:true,playback_token:'cccccccc-cccc-4ccc-8ccc-cccccccccccc'})});
+ });
+ await page.addScriptTag({url:'/billing/core.js'});
+ await page.evaluate(async()=>{
+  localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token',JSON.stringify({access_token:'billing-A',expires_at:4102444800,user:{id:'A'}}));
+  VzipAccountScope.storage.setItem('vocal-zip_mvp_v1',JSON.stringify({songs:[],lessons:[{id:'lesson-A',date:'2026-11-07',status:'completed'}]}));
+  const request=indexedDB.open('vocalzip_billing_v1',2);
+  const db=await new Promise((resolve,reject)=>{request.onupgradeneeded=()=>{for(const name of ['documents','sync','recovery'])if(!request.result.objectStoreNames.contains(name))request.result.createObjectStore(name,{keyPath:'owner'});};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+  await new Promise((resolve,reject)=>{const tx=db.transaction('documents','readwrite');for(const [owner,rate]of[['user:A',50000],['user:B',99000]])tx.objectStore('documents').put({...VzipBilling.empty(owner),hourlyRate:rate});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+ });
+ return{revoke:()=>{allowed=false;}};
+}
+test('billing copies only the verified owners legacy ledger and isolates account switches',async({page})=>{
+ await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();await billingFixture(page);
+ await page.goto('/billing/');
+ await expect.poll(()=>page.evaluate(()=>window.VzipBillingSession?.active)).toBe(true);
+ expect(await page.evaluate(async()=>({owner:VzipBillingStore.account.id,rate:(await VzipBillingStore.load()).hourlyRate,lessons:VzipBillingStore.lessons().map(l=>l.lesson_id),others:await VzipBillingStore.others(await VzipBillingStore.load())}))).toEqual({owner:'user:A',rate:50000,lessons:['lesson-A'],others:[]});
+ await page.evaluate(()=>{localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token',JSON.stringify({access_token:'billing-B',expires_at:4102444800,user:{id:'B'}}));window.dispatchEvent(new Event('focus'));});
+ await expect.poll(()=>page.evaluate(()=>VzipAccountScope?.owner).catch(()=>null)).toBe('B');
+ await expect.poll(()=>page.evaluate(()=>window.VzipBillingSession?.active)).toBe(true);
+ expect(await page.evaluate(async()=>({owner:VzipBillingStore.account.id,rate:(await VzipBillingStore.load()).hourlyRate,lessons:VzipBillingStore.lessons()}))).toEqual({owner:'user:B',rate:99000,lessons:[]});
+});
+test('billing locks local writes after remote revoke while retaining the existing ledger',async({page})=>{
+ await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();const server=await billingFixture(page);
+ await page.goto('/billing/');await expect.poll(()=>page.evaluate(()=>window.VzipBillingSession?.active)).toBe(true);
+ expect(await page.evaluate(async()=>(await VzipBillingStore.load()).hourlyRate)).toBe(50000);
+ server.revoke();await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(page.locator('#billing-session-gate')).toBeVisible();
+ expect(await page.evaluate(async()=>{
+  try{await VzipBillingStore.clear(0);return false;}catch(e){return e.message.includes('로그인');}
+ })).toBe(true);
+ expect(await page.evaluate(()=>document.querySelector('main.billing').inert)).toBe(true);
+});

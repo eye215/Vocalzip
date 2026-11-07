@@ -4,19 +4,56 @@ const C=window.VzipBilling,B=window.VzipBillingBackup,APP_KEY='vocal-zip_mvp_v1'
 function session(){try{const data=JSON.parse(localStorage.getItem(AUTH_KEY)||'null');return data?.currentSession||data}catch{return null}}
 // While the app still remembers the signed-in account (vzip_cloud_linked_user), an expired or momentarily missing session
 // keeps using that account's ledger. Otherwise entries made then went to a separate '이 기기 전용' ledger and looked lost.
-function linkedUser(){try{return localStorage.getItem('vzip_cloud_linked_user')||''}catch{return ''}}
+const appStorage=window.VzipAccountScope?.storage||window.localStorage;
+function linkedUser(){try{return appStorage.getItem('vzip_cloud_linked_user')||''}catch{return ''}}
 function account(){const user=session()?.user;if(user?.id)return {id:'user:'+user.id,label:user.email||'로그인 계정'};const linked=linkedUser();return linked?{id:'user:'+linked,label:'로그인 계정 (다시 로그인하면 클라우드도 사용할 수 있어요)'}:{id:'device',label:'이 기기 전용'}}
 const initialAccount=account();
-function ensureAccount(){if(account().id!==initialAccount.id)throw Error('로그인 계정이 변경됐어요. 새로고침 후 계속해 주세요.')}
+function ensureAccount(){window.VzipBillingSession?.assert();if(account().id!==initialAccount.id)throw Error('로그인 계정이 변경됐어요. 새로고침 후 계속해 주세요.')}
 function lessons(){
- try{const linked=localStorage.getItem('vzip_cloud_linked_user');if(linked&&initialAccount.id!=='user:'+linked)return [];
- const data=JSON.parse(localStorage.getItem(APP_KEY)||'{}');return (Array.isArray(data.lessons)?data.lessons:[]).filter(row=>row?.id).map(row=>({lesson_id:String(row.id),lesson_date:row.date||'',lesson_status:C.status(row.lesson_status||row.status),lesson_start:typeof row.startTime==='string'?row.startTime:'',lesson_end:typeof row.endTime==='string'?row.endTime:'',lesson_label:[row.place,row.teacher].filter(item=>typeof item==='string'&&item).join(' · '),billing_deduction_id:typeof row.billingDeductionId==='string'?row.billingDeductionId:'',lesson_touched:Math.max(Number(row.created)||0,Number(row.updatedAt)||0)}))}catch{return []}
+ try{if(window.VzipBillingSession&&!window.VzipBillingSession.active)return [];const linked=appStorage.getItem('vzip_cloud_linked_user');if(linked&&initialAccount.id!=='user:'+linked)return [];
+ const data=JSON.parse(appStorage.getItem(APP_KEY)||'{}');return (Array.isArray(data.lessons)?data.lessons:[]).filter(row=>row?.id).map(row=>({lesson_id:String(row.id),lesson_date:row.date||'',lesson_status:C.status(row.lesson_status||row.status),lesson_start:typeof row.startTime==='string'?row.startTime:'',lesson_end:typeof row.endTime==='string'?row.endTime:'',lesson_label:[row.place,row.teacher].filter(item=>typeof item==='string'&&item).join(' · '),billing_deduction_id:typeof row.billingDeductionId==='string'?row.billingDeductionId:'',lesson_touched:Math.max(Number(row.created)||0,Number(row.updatedAt)||0)}))}catch{return []}
 }
-function open(){return new Promise((resolve,reject)=>{const request=indexedDB.open('vocalzip_billing_v1',2);let blocked=false;
+function openNamed(name){return new Promise((resolve,reject)=>{const request=indexedDB.open(name,2);let blocked=false;
  request.onupgradeneeded=()=>{for(const name of ['documents','sync','recovery'])if(!request.result.objectStoreNames.contains(name))request.result.createObjectStore(name,{keyPath:'owner'})};
  request.onblocked=()=>{blocked=true;reject(Error('이전 정산 탭을 닫고 다시 시도해 주세요.'))};
  request.onerror=()=>reject(request.error);request.onsuccess=()=>{if(blocked)request.result.close();else{request.result.onversionchange=()=>request.result.close();resolve(request.result)}};
 })}
+let migrated=null;
+async function open(){
+ if(window.VzipBillingSession)await window.VzipBillingSession.ready;
+ ensureAccount();
+ const scoped=!!window.VzipAccountScope,name=scoped?'vocalzip_billing_v1_account_'+encodeURIComponent(initialAccount.id):'vocalzip_billing_v1';
+ const db=await openNamed(name);
+ if(scoped){
+  try{
+   migrated ||= copyOwnedLegacy(db).catch(e=>{migrated=null;throw e;});
+   await migrated;ensureAccount();
+  }catch(e){db.close();throw e;}
+ }
+ return db;
+}
+async function copyOwnedLegacy(target){
+ const legacy=await openNamed('vocalzip_billing_v1');
+ try{
+  const names=['documents','sync','recovery'];
+  const values=await new Promise((resolve,reject)=>{
+   const tx=legacy.transaction(names),out={};
+   for(const name of names){const r=tx.objectStore(name).get(initialAccount.id);r.onsuccess=()=>{out[name]=r.result;};}
+   tx.oncomplete=()=>resolve(out);tx.onerror=tx.onabort=()=>reject(tx.error||Error('이전 정산 읽기 실패'));
+  });
+  if(!values.documents)return;
+  C.validateState(values.documents);
+  if(values.documents.owner!==initialAccount.id)throw Error('이전 정산 소유자를 확인할 수 없어요.');
+  await new Promise((resolve,reject)=>{
+   ensureAccount();const tx=target.transaction(names,'readwrite'),existing=tx.objectStore('documents').get(initialAccount.id);
+   existing.onsuccess=()=>{
+    if(existing.result)return;
+    for(const name of names)if(values[name]?.owner===initialAccount.id)tx.objectStore(name).add(values[name]);
+   };
+   tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||Error('이전 정산 복사 실패. 원본은 유지됩니다.'));
+  });
+ }finally{legacy.close();}
+}
 async function transaction(write,fn){
  ensureAccount();const db=await open();
  try{return await new Promise((resolve,reject)=>{
@@ -62,6 +99,18 @@ const recoveryData=()=>transaction(false,({previous})=>previous?.state||null);
 const ROWS=['passes','payments','deductions','adjustments','imports','importRows','history'];
 /** Ledgers on this device saved under another owner (e.g. '이 기기 전용' while signed out) with records the current one lacks. */
 async function others(current){
+ if(window.VzipAccountScope){
+  ensureAccount();
+  const claim=window.localStorage.getItem('vzip_legacy_claim_owner_v1');
+  if(claim&&claim!==window.VzipAccountScope.owner)return [];
+  const legacy=await openNamed('vocalzip_billing_v1');
+  try{
+   const state=await new Promise((resolve,reject)=>{const q=legacy.transaction('documents').objectStore('documents').get('device');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+   if(!state||state.owner!=='device')return [];
+   const missing=['passes','payments','deductions','adjustments'].reduce((n,key)=>{const have=new Set((current[key]||[]).map(x=>x.id));return n+(state[key]||[]).filter(x=>!x.voidedAt&&!have.has(x.id)).length;},0);
+   return missing?[{owner:'device',label:'소유자 확인이 필요한 이전 기기 전용 정산',missing,state:C.validateState(state)}]:[];
+  }finally{legacy.close();}
+ }
  const db=await open();
  try{
   const all=await new Promise((resolve,reject)=>{const q=db.transaction('documents','readonly').objectStore('documents').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)});
@@ -74,10 +123,24 @@ async function others(current){
 }
 /** Add the records of another ledger on this device to the current one (nothing is removed; the previous state stays restorable). */
 function mergeFrom(current,other){
- const next=JSON.parse(JSON.stringify(current));
- for(const key of ROWS){const ids=new Set(next[key].map(row=>row.id));for(const row of other[key]||[])if(!ids.has(row.id))next[key].push(row)}
- if(!next.hourlyRate&&other.hourlyRate)next.hourlyRate=other.hourlyRate;
- return replace(next,current.revision,{reason:'merge.'+other.owner,allowOwnerChange:true});
+ const merge=source=>{
+  const next=JSON.parse(JSON.stringify(current));
+  for(const key of ROWS){const ids=new Set(next[key].map(row=>row.id));for(const row of source[key]||[])if(!ids.has(row.id))next[key].push(row);}
+  if(!next.hourlyRate&&source.hourlyRate)next.hourlyRate=source.hourlyRate;
+  return replace(next,current.revision,{reason:'merge.'+source.owner,allowOwnerChange:true});
+ };
+ if(!window.VzipAccountScope)return merge(other);
+ if(other?.owner!=='device')throw Error('다른 로그인 계정의 정산을 가져오지 않아요.');
+ if(!navigator.locks?.request)throw Error('안전한 이전을 위해 최신 브라우저에서 다시 확인해 주세요.');
+ return navigator.locks.request('vzip-legacy-import-owner',{mode:'exclusive'},async()=>{
+  ensureAccount();const owner=window.VzipAccountScope.owner,claim=window.localStorage.getItem('vzip_legacy_claim_owner_v1');
+  if(!owner||claim&&claim!==owner)throw Error('이전 자료의 소유 계정이 달라요.');
+  const legacy=await openNamed('vocalzip_billing_v1');let source;
+  try{source=await new Promise((resolve,reject)=>{const q=legacy.transaction('documents').objectStore('documents').get('device');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});}finally{legacy.close();}
+  if(!source||!B.same(source,other))throw Error('이전 정산이 변경됐어요. 다시 확인해 주세요.');
+  ensureAccount();window.localStorage.setItem('vzip_legacy_claim_owner_v1',owner);
+  return merge(C.validateState(source));
+ });
 }
 window.VzipBillingStore={account:initialAccount,session,lessons,load,status,save,clear,replace,acknowledge,recoveryData,ensureAccount,others,mergeFrom};
 window.addEventListener('storage',event=>{if((event.key===AUTH_KEY||event.key===null)&&account().id!==initialAccount.id)window.dispatchEvent(new Event('billing:account-changed'))});

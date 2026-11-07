@@ -59,7 +59,7 @@ function corsHeaders(request, env) {
   return {
     'access-control-allow-origin': origin, vary: 'Origin',
     'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type, range',
+    'access-control-allow-headers': 'authorization, content-type, range, x-client-info',
     'access-control-expose-headers': 'etag, content-length, content-range, accept-ranges',
     'access-control-max-age': '600'
   };
@@ -67,7 +67,7 @@ function corsHeaders(request, env) {
 
 async function route(request, env) {
   const url = new URL(request.url), path = url.pathname, method = request.method;
-  if (path === '/health') return json({ok: true, bucket: !!env.MEDIA});
+  if (path === '/health') return json({ok: true, bucket: !!env.MEDIA, sessionContract: env.SESSION_GUARD_ENABLED === 'true' ? 'v2' : 'legacy'});
   if (request.headers.get('origin') && !corsHeaders(request, env)) fail(403, 'origin not allowed');
   if (!env.MEDIA) fail(500, 'MEDIA bucket is not bound');
 
@@ -75,7 +75,9 @@ async function route(request, env) {
     const key = decodeURIComponent(path.slice('/v1/media/'.length));
     if (url.searchParams.has('sig')) await checkSignature(env, key, url.searchParams);
     else ownKey(await user(request, env), key);
-    return serve(request, env, key);
+    const response=await serve(request,env,key);
+    if(env.SESSION_GUARD_ENABLED==='true')response.headers.set('cache-control','private, no-store');
+    return response;
   }
 
   const uid = await user(request, env);
@@ -142,6 +144,8 @@ async function route(request, env) {
     const {parts} = await readJson(request);
     if (!Array.isArray(parts) || !parts.length || parts.some(p => !(p.partNumber > 0) || typeof p.etag !== 'string')) fail(400, 'invalid parts');
     const done = await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).complete(parts.map(p => ({partNumber: p.partNumber, etag: p.etag})).sort((a, b) => a.partNumber - b.partNumber));
+    // A logout during the R2 completion must not finalize metadata under the old session.
+    if(env.SESSION_GUARD_ENABLED==='true')await user(request,env);
     return json({key, size: done.size, etag: done.httpEtag});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)$/)) && method === 'DELETE') {
@@ -155,7 +159,9 @@ async function route(request, env) {
     // already downloaded. {keys:[…]} signs up to 100 files in one request (the list screen prefetches visible ones).
     const body = await readJson(request), ttl = Math.min(Math.max(Number(body.ttl) || 3600, 60), 6 * 3600);
     const exp = Math.ceil((Math.floor(Date.now() / 1000) + ttl) / 3600) * 3600;
-    const link = async key => new URL('/v1/media/' + key.split('/').map(encodeURIComponent).join('/') + '?exp=' + exp + '&sig=' + await hmac(env, key + '\n' + exp), url).href;
+    const context=sessionContexts.get(request),cap=context?.playback_token||'';
+    if(context?.required&&!cap)fail(503,'session playback capability unavailable');
+    const link=async key=>new URL('/v1/media/'+key.split('/').map(encodeURIComponent).join('/')+'?exp='+exp+(cap?'&cap='+encodeURIComponent(cap):'')+'&sig='+await hmac(env,key+'\n'+exp+(cap?'\n'+cap:'')),url).href;
     if (Array.isArray(body.keys)) {
       if (!body.keys.length || body.keys.length > 100) fail(400, '1–100 keys');
       const urls = {};
@@ -248,19 +254,49 @@ async function hmac(env, text) {
 async function checkSignature(env, key, params) {
   const exp = Number(params.get('exp'));
   if (!(exp > Date.now() / 1000)) fail(403, 'link expired');
-  const expected = await hmac(env, key + '\n' + exp), given = params.get('sig') || '';
+  const cap=params.get('cap')||'';
+  const expected = await hmac(env, key + '\n' + exp+(cap?'\n'+cap:'')), given = params.get('sig') || '';
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) fail(403, 'bad signature');
+  if(env.SESSION_GUARD_ENABLED==='true'){
+    if(cap){
+      if(!/^[0-9a-f-]{36}$/i.test(cap))fail(403,'bad playback capability');
+      const owner=await sessionRpc(env,'vzip_playback_owner',{p_capability:cap});
+      if(typeof owner!=='string')fail(403,'playback session ended');
+      ownKey(owner.toLowerCase(),key);
+    }else if(await sessionRpc(env,'vzip_legacy_media_allowed',{})!==true)fail(403,'refresh playback link after signing in');
+  }
 }
 function timingSafeEqual(a, b) { let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; }
 
 /* ---------- Supabase access tokens ---------- */
+const sessionContexts=new WeakMap();
+async function sessionRpc(env,name,body,authorization,protocol=''){
+ if(!env.SUPABASE_ANON_KEY)fail(503,'session validation is not configured');
+ const root=String(env.SUPABASE_URL||'').replace(/\/+$/,'');
+ let response;
+ try{
+  response=await fetch(root+'/rest/v1/rpc/'+name,{
+   method:'POST',headers:{apikey:env.SUPABASE_ANON_KEY,authorization:authorization||'Bearer '+env.SUPABASE_ANON_KEY,'content-type':'application/json',...(protocol?{'x-client-info':protocol}:{})},
+   body:JSON.stringify(body),signal:AbortSignal.timeout(8000)
+  });
+ }catch{fail(503,'could not verify login session');}
+ if(!response.ok)fail(response.status===401||response.status===403?401:503,'could not verify login session');
+ try{return await response.json();}catch{fail(503,'invalid session response');}
+}
 let jwksCache = {url: '', at: 0, keys: []};
 async function user(request, env) {
   const m = (request.headers.get('authorization') || '').match(/^Bearer\s+(.+)$/i);
   if (!m) fail(401, 'sign in required');
   const claims = await verifyJwt(m[1].trim(), env);
   if (!claims.sub || !/^[0-9a-f-]{36}$/i.test(claims.sub)) fail(401, 'invalid user');
-  return claims.sub.toLowerCase();
+  const uid=claims.sub.toLowerCase();
+  if(env.SESSION_GUARD_ENABLED==='true'){
+    const context=await sessionRpc(env,'vzip_session_context',{},request.headers.get('authorization'),request.headers.get('x-client-info')||'');
+    if(!context||context.user_id!==uid||typeof context.required!=='boolean')fail(503,'invalid session response');
+    if(context.allowed!==true)fail(401,'login session ended');
+    sessionContexts.set(request,context);
+  }
+  return uid;
 }
 async function verifyJwt(token, env, now = Date.now() / 1000) {
   const parts = token.split('.');

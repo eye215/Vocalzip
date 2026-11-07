@@ -1,5 +1,6 @@
 // Automatic cloud sync of the billing ledger: one-sided changes copy by themselves, conflicts wait for the user.
 const {test,expect}=require('@playwright/test'),C=require('../core.js');
+require('../../tests/legacy-session-mode.cjs')(test);
 const USER='11111111-1111-4111-8111-111111111111',AUTH='sb-chxnbtiyuyhiywzeshis-auth-token';
 const remotePass=(name,rev=1)=>{let s=C.reduce(C.empty('user:'+USER),{type:'pass.save',payload:{name,totalUnits:1000,amount:300000}});return s};
 async function mockCloud(page,initial=null){

@@ -167,13 +167,14 @@ test('removed Auth sessions do not authorize requests or occupy a slot',{skip},a
  assert.equal(await active(U,B),false);assert.equal((await listing(U,A)).sessions.length,1);assert.equal((await register(U,D)).status,'active');
  await assert.rejects(register(U,B),/valid authenticated session required/);
 });
-test('legacy client protocol and ambiguous revocation arguments fail closed',{skip},async()=>{
+test('legacy writes and ambiguous revocation fail closed; active JWT reads support Realtime',{skip},async()=>{
  const state=await register(U,A);
  for(const args of [[null,false],[B,true],[null,null]])await assert.rejects(revoke(U,A,args[0],args[1],state.revision),/choose one session or all sessions/);
  await as(U,A,async q=>{
   await q.query("select set_config('request.headers','{}',true)");
   assert.equal((await q.query('select public.vzip_session_is_active() as r')).rows[0].r,false);
-  assert.equal((await q.query('select * from public.vocal_data')).rowCount,0);
+  assert.equal((await q.query('select * from public.vocal_data')).rowCount,1);
+  assert.equal((await q.query("update public.vocal_data set payload='{}' returning *")).rowCount,0);
  });
  await assert.rejects(as(U,A,async q=>{await q.query("select set_config('request.headers','{}',true)");return q.query('select public.vzip_register_session()');}),/valid authenticated session required/);
 });
