@@ -12,6 +12,9 @@ on:
       - 'tests/account-session.spec.cjs'
       - 'supabase/migrations/20261112_active_session_contract.sql'
       - '.github/workflows/account-isolation-check.yml'
+concurrency:
+  group: account-isolation-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -27,6 +30,10 @@ jobs:
       - run: npm run test:syntax
       - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test tests/account-session.spec.cjs --workers=2
+      - name: Audio fixtures for existing UI regression
+        run: |
+          command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
+          node tests/make-audio-fixtures.cjs
       - name: Existing UI regression with rollout disabled by default
         run: npm run test:ui
       - uses: actions/upload-artifact@v4
