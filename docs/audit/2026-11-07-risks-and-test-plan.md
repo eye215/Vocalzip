@@ -7,6 +7,7 @@
 ### P0: 출시 전 반드시 해결 (데이터 노출 또는 유실)
 
 **P0-1. 한 기기에서 계정을 바꾸면 이전 사용자 데이터가 새 계정에 합쳐집니다** (코드 확인)
+> 2026-11-07 PR-1에서 수정. 기존 코드로 재현했고(B의 첫 클라우드 쓰기에 A의 기록 4건, A의 녹음 1개가 B로 업로드됨), 수정 후 `tests/account-switch.spec.cjs`가 통과. 실기기 확인 전.
 - 로그아웃은 `signOut`과 `vzip_cloud_linked_user` 삭제만 합니다(`cloud-sync.js:510`). 기록, IndexedDB 녹음, 스냅샷은 그대로 남습니다.
 - 다음 로그인 때 `showUser()`가 어떤 사용자든 `sync()`를 부릅니다(`cloud-sync.js:503`). `sync()`는 기기 기록을 그 계정의 원격 기록과 병합해 업로드합니다(`:48-72`).
 - `ready`(연결 여부)는 자동 업로드 디바운스만 막습니다. 계정 단위로 걸러지는 것은 `performances`와 `songs[].repertoire`뿐입니다(`app/repertoire-model.js:42-47`).

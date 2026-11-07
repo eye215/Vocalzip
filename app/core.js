@@ -292,12 +292,17 @@ document.addEventListener('DOMContentLoaded', () => hideIcons(document));
   /** Bring back songs that are referenced but missing: from snapshots this browser kept before a
    * cloud import (vzip_before_cloud_*, vzip_before_import_*) and from song names stored on files. */
   VZ.recoverSongs = (media = []) => {
+    // Another account's records are on hold (account switch): nothing is brought back until the choice is made.
+    if (window.vzipCloudDeviceHeld?.()) return 0;
     const db = VZ.db, have = new Set(db.songs.map(s => String(s.id))), gone = new Set(db.deleted?.songs || []);
     const found = new Map();
+    // Snapshots taken before the device changed to this account hold the previous account's records: not used.
+    const since = window.VzipDeviceAccounts?.owner()?.since || 0;
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!/^vzip_before_(cloud|import)_/.test(key || '')) continue;
+        const at = /^vzip_before_(cloud|import)_(\d+)$/.exec(key || '');
+        if (!at || Number(at[2]) < since) continue;
         let snap; try { snap = JSON.parse(localStorage.getItem(key)); } catch { continue; }
         for (const s of Array.isArray(snap?.songs) ? snap.songs : []) if (s?.id != null && s.title && !have.has(String(s.id)) && !gone.has(String(s.id))) found.set(String(s.id), {...s});
       }

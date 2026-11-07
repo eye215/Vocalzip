@@ -74,6 +74,8 @@ const billLessonId = d => 'bill-' + d.id;
 let importing = null;
 VZ.billingImportLessons = () => importing ||= (async () => {
   try {
+    // Another account's records are on hold on this device (account switch): this account's ledger is not mixed in.
+    if (window.vzipCloudDeviceHeld?.()) return 0;
     const doc = await ledger().catch(() => null); if (!doc) return 0;
     const lessons = VZ.db.lessons, ids = new Set(lessons.map(l => l.id)), linked = new Set(lessons.map(l => l.billingDeductionId).filter(Boolean));
     const gone = new Set((VZ.db.deleted?.lessons || []).map(String));

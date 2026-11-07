@@ -60,7 +60,14 @@ M.list = async (force) => {
   const promise = (async () => {
     const map = new Map();
     let failed = '';
-    try { (await window.vzipReadMedia()).forEach(x => map.set(x.id, {...x, local:true})); } catch (e) { console.error(e); failed = '이 기기의 파일을 읽지 못했어요.'; }
+    // Device files of another account (account switch, device-accounts.js) are not listed; while the choice is
+    // still open (cloud-sync hold screen), no device file is listed at all.
+    try {
+      if (!window.vzipCloudDeviceHeld?.()) {
+        const hidden = window.VzipDeviceAccounts ? await window.VzipDeviceAccounts.hiddenMediaIds() : new Set();
+        (await window.vzipReadMedia()).forEach(x => { if (!hidden.has(String(x.id))) map.set(x.id, {...x, local:true}); });
+      }
+    } catch (e) { console.error(e); failed = '이 기기의 파일을 읽지 못했어요.'; }
     if (window.vzipCloudSignedIn?.()) {
       try { mergeCloud(map, await window.vzipCloudMediaList()); }
       catch (e) { failed = '클라우드 목록을 불러오지 못했어요: ' + e.message; }
@@ -294,7 +301,7 @@ let held = 0;
 M.holdBackup = on => { held = Math.max(0, held + (on ? 1 : -1)); if (!held) M.scheduleBackup(3000); };
 M.backupLocal = async () => {
   if (held) return backup;
-  if (backup.running || !window.vzipCloudSignedIn?.() || !window.vzipCloudImport) return backup;
+  if (backup.running || !window.vzipCloudSignedIn?.() || !window.vzipCloudImport || window.vzipCloudDeviceHeld?.()) return backup;
   // Only device files can need uploading: with none on this device there is nothing to ask the server (and no list refresh).
   try { if (!(await window.vzipReadMedia()).length) return backup; } catch {}
   if (backup.running) return backup;
@@ -304,7 +311,7 @@ M.backupLocal = async () => {
     const pending = M.localOnly(await M.list(true));
     Object.assign(backup, {total:pending.length, done:0, failed:0}); notify();
     for (const item of pending) {
-      if (!window.vzipCloudSignedIn?.() || held) break;
+      if (!window.vzipCloudSignedIn?.() || held || window.vzipCloudDeviceHeld?.()) break;
       let prepared = null;
       try {
         let blob = blobOf(item), info = {...item};
