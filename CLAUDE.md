@@ -15,7 +15,8 @@
 - [README](README.md)
 - [UI/UX v6 구조](docs/UIUX_v6_개편_2026-11-04.md)
 - [운영 검증 현황](docs/운영검증_2026-11-04.md)
-- **[최신 제품 정책 확정본](docs/product/PRODUCT_DECISIONS_2026-11-07.md) — AI 한도·선생님 공유·30일 휴지통·구독 고지·운영 검증 상태. 기존 초안과 충돌하면 최신 정책을 우선**
+- **[최신 제품 정책 v1.2](docs/product/PRODUCT_DECISIONS_V1_2_2026-11-07.md) — 최우선. 즉시 영구 삭제(휴지통 없음)·정산 양방향 확인·단일 활성 세션·PDF→MusicXML/OMR·트레이닝 녹음·추천/숙제 목표. 이전 문서와 충돌 시 v1.2 우선**
+- [기존 제품 정책 v1.1(변경 없는 항목은 유지)](docs/product/PRODUCT_DECISIONS_2026-11-07.md)
 - [학생용 1.0 PRD 초안](docs/product/STUDENT_1_0_PRD_DRAFT.md)
 - [학생용 1.0 IA 초안](docs/product/STUDENT_1_0_IA_DRAFT.md)
 - [데이터 호환·선생님 확장 설계](docs/product/DATA_CONTRACTS_AND_V2_EXTENSIBILITY_DRAFT.md)
