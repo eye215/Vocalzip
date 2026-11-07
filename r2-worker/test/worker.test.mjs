@@ -49,7 +49,7 @@ async function upload(auth, mediaId, bytes, type = 'audio/mp4') {
 }
 
 test('health needs no sign-in; everything else does', async () => {
-  assert.deepEqual(await (await call('/health')).json(), {ok:true, bucket:true});
+  assert.deepEqual(await (await call('/health')).json(), {ok:true, bucket:true,sessionContract:'legacy'});
   assert.equal((await call('/v1/usage')).status, 401);
   assert.equal((await call('/v1/usage', {auth:'not.a.token'})).status, 401);
 });
