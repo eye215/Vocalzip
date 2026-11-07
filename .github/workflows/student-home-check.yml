@@ -1,0 +1,128 @@
+name: Student home browser QA
+on:
+  pull_request:
+    paths:
+      - 'app/student-home*'
+      - 'app/core.js'
+      - 'app/views-main.js'
+      - 'app/app.js'
+      - 'app/app.css'
+      - 'index.html'
+      - 'design-system/**'
+      - 'docs/design/student-home-v1/**'
+      - 'tests/student-home*'
+      - 'tests/v6.spec.cjs'
+      - 'tests/legacy-session-mode.cjs'
+      - '.github/workflows/student-home-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  home:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Pure home model
+        run: node --test tests/student-home-model.test.cjs
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Approved dock regression
+        run: npx playwright test tests/v6.spec.cjs --grep 'Bottom navigation reaches' --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
+      - name: Check out pinned original home
+        uses: actions/checkout@v4
+        with:
+          ref: 27ca50caafa82b4ce866e048b68de0a3893a55c6
+          path: before-source
+      - name: Check out approved reference artwork
+        uses: actions/checkout@v4
+        with:
+          ref: 37be635fb4da9e7a78db2aa47bba2435fa231baf
+          path: approved-reference
+          sparse-checkout: docs/design/student-home-v1
+      - name: Start original home server
+        run: python3 -m http.server 4174 --bind 127.0.0.1 --directory before-source > /tmp/student-home-before.log 2>&1 &
+      - name: Mobile Chromium, mobile WebKit, and desktop Chromium
+        env:
+          VZ_HOME_BASELINE_URL: http://127.0.0.1:4174
+        run: npx playwright test tests/student-home.spec.cjs --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
+      - name: Save screenshots, traces, browser report, and approved JPEG
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-home-review-${{ env.SOURCE_HEAD }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            test-results/
+            playwright-report/
+            approved-reference/docs/design/student-home-v1/final-approved.jpeg
+            approved-reference/docs/design/student-home-v1/reference.png
+      - name: Publish fixture screenshots to an isolated evidence ref
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const source = process.env.SOURCE_HEAD;
+            const prefix = 'docs/reviews/student-home/' + source;
+            const files = [];
+            function walk(dir) {
+              if (!fs.existsSync(dir)) return;
+              for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
+                const file = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(file);
+                else if (/^student-home-.*\.png$/.test(entry.name)) files.push(file);
+              }
+            }
+            walk('test-results');
+            if (!files.length) {
+              core.notice('No fixture screenshots were produced; inspect the browser report.');
+              return;
+            }
+            const entries = [];
+            for (const file of files.sort()) {
+              const blob = await github.rest.git.createBlob({
+                ...context.repo, encoding:'base64', content:fs.readFileSync(file).toString('base64')
+              });
+              entries.push({path:prefix+'/'+file.replaceAll(path.sep,'/'), mode:'100644', type:'blob', sha:blob.data.sha});
+            }
+            const readme = [
+              '# Student home browser evidence',
+              '',
+              'Source: '+source,
+              'Pinned before source: 27ca50caafa82b4ce866e048b68de0a3893a55c6',
+              'Run: '+context.serverUrl+'/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId,
+              '',
+              'All screenshots use synthetic fixture data. before and after use the same data and fixed browser clock.',
+              'preview is the standalone design fixture; after is the actual application home.',
+              'Review these next to docs/design/student-home-v1/final-approved.jpeg from approved reference commit 37be635fb4da9e7a78db2aa47bba2435fa231baf.',
+              'Screenshots are review evidence, not a claim of visual identity. Check the run result for test failures.',
+              'Real iPhone Safari, installed PWA, hardware safe areas, and assistive technology remain unverified.',
+              '',
+              ...entries.map(entry=>'- ['+entry.path.split('/').slice(-2).join('/')+'](./'+entry.path.slice(prefix.length+1)+')'),
+              ''
+            ].join('\n');
+            entries.push({path:prefix+'/README.md', mode:'100644', type:'blob', content:readme});
+            const tree = await github.rest.git.createTree({...context.repo, tree:entries});
+            const commit = await github.rest.git.createCommit({
+              ...context.repo, message:'docs: student home fixture screenshots for '+source.slice(0,12),
+              tree:tree.data.sha, parents:[]
+            });
+            // Always create a new ref. Never update main, a product PR branch, or existing evidence.
+            const branch = 'codex/home-visual-evidence-'+source.slice(0,12)+'-'+context.runId+'-'+process.env.GITHUB_RUN_ATTEMPT;
+            await github.rest.git.createRef({...context.repo,ref:'refs/heads/'+branch,sha:commit.data.sha});
+            const url = context.serverUrl+'/'+context.repo.owner+'/'+context.repo.repo+'/tree/'+branch+'/'+prefix;
+            await core.summary.addHeading('Fixture screenshot review').addLink('Open before, after, and preview PNGs',url).addRaw('\n\nReal iPhone/PWA verification remains pending.').write();
+            core.notice('Visual evidence: '+url);

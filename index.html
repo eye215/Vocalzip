@@ -20,6 +20,10 @@
 <link rel="stylesheet" href="app/app.css?v=677">
 <link rel="stylesheet" href="app/calendar-summary.css?v=3">
 <link rel="stylesheet" href="app/repertoire.css?v=1">
+<link rel="stylesheet" href="design-system/tokens.css?v=2">
+<link rel="stylesheet" href="design-system/components.css?v=2">
+<link rel="stylesheet" href="design-system/approved-home.css?v=1">
+<link rel="modulepreload" href="design-system/student-home-app.js">
 <style>#vzip-boot-cover{position:fixed;inset:0;z-index:99998;background:#f6f4fb;display:grid;place-items:center;color:#1e1b2e;font:750 26px -apple-system,system-ui,sans-serif}#vzip-boot-cover small{display:block;text-align:center;color:#8d88a3;font-size:13px;font-weight:500;margin-top:10px}</style>
 </head>
 <body>
@@ -30,11 +34,11 @@
   <main id="view" tabindex="-1"></main>
 </div>
 <nav class="v-nav" aria-label="주요 메뉴"><ul>
-  <li><a href="#/home" data-nav="home"><i class="ph ph-house"></i>홈</a></li>
-  <li><a href="#/songs" data-nav="songs"><i class="ph ph-music-notes"></i>내 곡</a></li>
+  <li><a href="#/home" data-nav="home"><i class="ph-fill ph-house"></i>홈</a></li>
+  <li><a href="#/songs" data-nav="songs"><i class="ph-fill ph-music-notes"></i>내 곡</a></li>
   <li><a href="#/record" data-nav="record" class="rec"><i class="ph-fill ph-microphone"></i>녹음</a></li>
-  <li><a href="#/calendar" data-nav="calendar"><i class="ph ph-calendar-blank"></i>캘린더</a></li>
-  <li><a href="#/growth" data-nav="growth"><i class="ph ph-chart-line-up"></i>성장</a></li>
+  <li><a href="#/library" data-nav="library"><i class="ph-fill ph-archive-box"></i>보관함</a></li>
+  <li><a href="#/calendar" data-nav="calendar"><i class="ph-fill ph-calendar-blank"></i>일정</a></li>
 </ul></nav>
 <div id="vzip-park" hidden><div id="vzip-cloud-root" hidden></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.min.js"></script>
@@ -46,11 +50,12 @@
 <script src="app/repertoire-model.js?v=1"></script>
 <script src="account-config.js?v=3"></script>
 <script src="app/account-scope.js?v=3"></script>
-<script src="app/core.js?v=615"></script>
+<script src="app/core.js?v=616"></script>
 <script src="app/picker.js?v=1"></script>
 <script src="app/metric-help.js?v=1"></script>
 <script src="app/media.js?v=668"></script>
-<script src="data-merge.js?v=3"></script>
+<script src="data-merge.js?v=4"></script>
+<script src="app/student-home-model.js?v=1"></script>
 <script src="r2-config.js?v=2"></script>
 <script src="r2-storage.js?v=11"></script>
 <script src="app/device-sessions.js?v=1"></script>
@@ -75,5 +80,6 @@
 <script src="app/performance-assets.js?v=1"></script>
 <script src="app/media-follow.js?v=1"></script>
 <script src="app/app.js?v=600"></script>
+<script type="module" src="design-system/student-home-app.js?v=1"></script>
 </body>
 </html>
