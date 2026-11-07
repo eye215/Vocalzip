@@ -1,0 +1,39 @@
+name: Worker safety checks
+on:
+  push:
+    branches: [codex/worker-no-automatic-paid-stt]
+  pull_request:
+    paths:
+      - 'worker/**'
+      - 'tests/analysis-worker.test.mjs'
+      - '.github/workflows/worker-safety-check.yml'
+permissions:
+  contents: read
+jobs:
+  worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: worker_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - run: node --check worker/analysis-worker.mjs
+      - run: command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
+      - name: Disposable Postgres, local R2 and STT stand-ins only
+        env:
+          VZ_TEST_DB: postgres://postgres:worker_ci_only@localhost:5432/postgres
+          SUPABASE_DB_SSL: 'off'
+        run: node --test tests/analysis-worker.test.mjs
