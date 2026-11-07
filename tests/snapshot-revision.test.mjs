@@ -37,7 +37,7 @@ before(async()=>{
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
  create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
  grant usage on schema auth to authenticated;
- create table public.vocal_data(user_id uuid primary key references auth.users(id),payload jsonb,updated_at timestamptz);
+ create table public.vocal_data(user_id uuid primary key references auth.users(id) on delete cascade,payload jsonb not null,updated_at timestamptz not null);
  alter table public.vocal_data enable row level security;
  grant select,insert,update,delete on public.vocal_data to authenticated;
  create policy own on public.vocal_data for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());

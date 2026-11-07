@@ -57,13 +57,17 @@ function snapshot(data){if(!data)return;try{localStorage.setItem('vzip_before_cl
    is never dropped. */
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 function sameVersion(query,at){return at==null?query.is('updated_at',null):query.eq('updated_at',at)}
+// CAS tokens must advance even when the browser clock stalls or runs behind the server.
+function nextVersion(at){return new Date(Math.max(Date.now(),(Date.parse(at)||0)+1)).toISOString()}
 async function sync({silent=false,reload=false}={}){
  if(!user||(window.VzipAccountScope&&!sessionVerified))return;if(busy){syncAgain=true;return}
  const syncOwner=user.id,checkOwner=()=>{if(user?.id!==syncOwner||(window.VzipAccountScope&&!sessionVerified))throw Error('계정이 변경되어 동기화를 중단했어요.');};
  busy=true;let local=null,merged=null,changedLocal=false;
  try{
   for(let attempt=0;;attempt++){
-   const row=await remoteData();checkOwner();const remote=row?.payload&&Merge.valid(row.payload)?row.payload:null;
+   const row=await remoteData();checkOwner();
+   if(row&&'payload' in row&&!Merge.valid(row.payload))throw Error('클라우드 기록 형식을 확인하지 못했어요. 동기화를 중단합니다.');
+   const remote=row?.payload||null;
    // The device copy is read only now, right before it may be rewritten: an edit made while
    // waiting for the server is merged too, never overwritten.
    local=localData();
@@ -74,15 +78,18 @@ async function sync({silent=false,reload=false}={}){
    // Keep other accounts' unsynced archive data on this device; scope only the outbound payload.
    checkOwner();const payload=window.VzipArchive?window.VzipArchive.forOwner(merged,user.id):merged;
    if(remote&&Merge.same(payload,remote))break;
-   const stamp=new Date().toISOString();
-   if(row&&'payload' in row){
-    const {data,error}=await sameVersion(client.from('vocal_data').update({payload,updated_at:stamp}).eq('user_id',user.id),row.updated_at).select('user_id');
-    if(error)throw error;
-    if(!Array.isArray(data)||data.length)break;
-    // Another device saved first: read its copy and merge again.
-    if(attempt>=4)throw Error('다른 기기에서 동시에 저장하고 있어요. 다음 저장 때 다시 합쳐요.');
-    await wait(150*(attempt+1)+Math.random()*150);
-   }else{const {error}=await client.from('vocal_data').upsert({user_id:user.id,payload,updated_at:stamp});if(error)throw error;break}
+   const stamp=nextVersion(row?.updated_at);
+   // On an empty account, ON CONFLICT DO NOTHING is essential: a second first-save
+   // must not overwrite the row another session just created.
+   const {data:written,error}=row&&'payload' in row
+    ?await sameVersion(client.from('vocal_data').update({payload,updated_at:stamp}).eq('user_id',syncOwner),row.updated_at).select('user_id')
+    :await client.from('vocal_data').upsert({user_id:syncOwner,payload,updated_at:stamp},{onConflict:'user_id',ignoreDuplicates:true}).select('user_id');
+   if(error)throw error;
+   if(!Array.isArray(written))throw Error('서버 저장 결과를 확인하지 못했어요. 다시 동기화해 주세요.');
+   if(written.length)break;
+   // A concurrent create/update won: read its copy and merge again.
+   if(attempt>=4)throw Error('다른 기기에서 동시에 저장하고 있어요. 다음 저장 때 다시 합쳐요.');
+   await wait(150*(attempt+1)+Math.random()*150);
   }
   checkOwner();localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;syncFailed=false;
   if(window.VzipAccountScope&&Merge.same(localData(),merged))localStorage.removeItem('vzip_account_dirty');
@@ -330,9 +337,9 @@ async function patchMedia(id,mutate,owner=user?.id){
   if(error)throw error;if(!row?.metadata)return null;
   const next=mutate({...row.metadata});
   if(!next||JSON.stringify(next)===JSON.stringify(row.metadata))return row.metadata;
-  const {data,error:writeError}=await sameVersion(client.from('vocal_media').update({metadata:next,updated_at:new Date().toISOString()}).eq('user_id',owner).eq('id',id),row.updated_at).select('id');
+  const {data,error:writeError}=await sameVersion(client.from('vocal_media').update({metadata:next,updated_at:nextVersion(row.updated_at)}).eq('user_id',owner).eq('id',id),row.updated_at).select('id');
   if(writeError)throw writeError;
-  if(!Array.isArray(data)||data.length){window.dispatchEvent(new Event('vzip:cloud-media-changed'));return next}
+  if(Array.isArray(data)&&data.length){window.dispatchEvent(new Event('vzip:cloud-media-changed'));return next}
   await wait(120*(attempt+1)+Math.random()*120);
  }
  throw Error('다른 기기에서 같은 파일을 동시에 수정하고 있어요. 잠시 후 다시 시도해 주세요.');
@@ -379,7 +386,7 @@ async function unlinkCloudMedia(owner,id){
   }
   if(!Merge.valid(row.payload))throw Error('클라우드 기록 형식을 확인하지 못했어요.');
   const payload=Merge.deleteMedia(structuredClone(row.payload),id);
-  const {data:written,error:writeError}=await sameVersion(client.from('vocal_data').update({payload,updated_at:new Date().toISOString()}).eq('user_id',owner),row.updated_at).select('user_id');
+  const {data:written,error:writeError}=await sameVersion(client.from('vocal_data').update({payload,updated_at:nextVersion(row.updated_at)}).eq('user_id',owner),row.updated_at).select('user_id');
   if(writeError)throw writeError;
   if(written?.length)return;
  }

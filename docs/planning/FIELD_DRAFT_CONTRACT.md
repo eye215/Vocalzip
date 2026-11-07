@@ -117,3 +117,9 @@ SQL 구현은 운영 migration 디렉터리에 즉시 넣지 않고 검토 가�
 그러나 무조건적인 구형 전체 upsert·동일 필드 stale 본문·장기 tombstone 문제는 이것만으로 해결되지 않는다. 위 §5 브리지와 필드 API/클라이언트 통합 이후에만 운영 활성화를 검토한다.
 초안/lease 테이블·입력 UI·기기간 이어쓰기는 이 PR에서 구현하지 않았다. 계정 삭제 외 영수증 정리/보존 기간, 오류 재시도 관측·조회 상한은 운영 적용 전에 확정한다.
 기존 history 트리거와의 운영 통합·백업/롤백·실제 Supabase canary도 추가 게이트다. 임시 DB 통과를 운영 적용으로 표시하지 않는다.
+
+## 9. 운영 카탈로그 대조 — 2026-11-07
+
+읽기 전용 트랜잭션의 [카탈로그 검사](https://github.com/eye215/Vocalzip/actions/runs/42368781500/job/128392373357)에서 vocal_data.user_id UUID PK/FK(계정 삭제 CASCADE), payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL, 기존 vocal_history_keep 트리거 및 세션 RPC 4개를 확인했다. 임시 DB fixture를 이 제약과 맞췄다.
+세션 enforced=true, 계정별 max_sessions=2도 확인했다. 신규 revision 컬럼/영수증 표/저장 RPC는 아직 운영에 없다. 실제 사용자 ID·payload·미디어 내용은 조회하지 않았다.
+이는 스키마 메타데이터 대조이며 운영 쓰기/마이그레이션/실제 데이터 이전·복구 시험이 아니다. 운영 활성화 전 본문/필드 브리지·스냅샷·canary·롤백 검증은 남아 있다.

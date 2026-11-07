@@ -107,6 +107,10 @@ test('separate account namespaces and media databases survive account switch wit
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs[0].id)).toBe('legacy');
  await page.evaluate(()=>{localStorage.setItem('__test_user','A');window.__changeAuth('SIGNED_IN',{user:{id:'A'}});});
  await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope?.owner||null).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('A');
+ // The account scope loads before the media scripts during a full reload (notably WebKit).
+ // Wait for verified sign-in, as above for B, before reading the account media API.
+ await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>typeof window.vzipReadMedia)).toBe('function');
  expect(await page.evaluate(async()=>({ids:(await vzipReadMedia()).map(x=>x.id),queue:VzipAccountScope.storage.getItem('vzip_upload_queue_v1')}))).toEqual({ids:['private-A'],queue:'A-only-queue'});
 });
 
@@ -337,19 +341,25 @@ async function billingFixture(page){
  });
  return{revoke:()=>{allowed=false;}};
 }
+// Session verification precedes store.js loading; await both sides of the billing boot contract.
+async function billingReady(page,owner){
+ await expect.poll(()=>page.evaluate(id=>window.VzipAccountScope?.owner===id&&
+  window.VzipBillingSession?.active===true&&window.VzipBillingStore?.account?.id==='user:'+id,owner)
+  .catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return false;throw e;})).toBe(true);
+}
 test('billing copies only the verified owners legacy ledger and isolates account switches',async({page})=>{
  await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();await billingFixture(page);
  await page.goto('/billing/');
- await expect.poll(()=>page.evaluate(()=>window.VzipBillingSession?.active)).toBe(true);
+ await billingReady(page,'A');
  expect(await page.evaluate(async()=>({owner:VzipBillingStore.account.id,rate:(await VzipBillingStore.load()).hourlyRate,lessons:VzipBillingStore.lessons().map(l=>l.lesson_id),others:await VzipBillingStore.others(await VzipBillingStore.load())}))).toEqual({owner:'user:A',rate:50000,lessons:['lesson-A'],others:[]});
  await page.evaluate(()=>{localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token',JSON.stringify({access_token:'billing-B',expires_at:4102444800,user:{id:'B'}}));window.dispatchEvent(new Event('focus'));});
  await expect.poll(()=>page.evaluate(()=>VzipAccountScope?.owner).catch(()=>null)).toBe('B');
- await expect.poll(()=>page.evaluate(()=>window.VzipBillingSession?.active)).toBe(true);
+ await billingReady(page,'B');
  expect(await page.evaluate(async()=>({owner:VzipBillingStore.account.id,rate:(await VzipBillingStore.load()).hourlyRate,lessons:VzipBillingStore.lessons()}))).toEqual({owner:'user:B',rate:99000,lessons:[]});
 });
 test('billing locks local writes after remote revoke while retaining the existing ledger',async({page})=>{
  await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();const server=await billingFixture(page);
- await page.goto('/billing/');await expect.poll(()=>page.evaluate(()=>window.VzipBillingSession?.active)).toBe(true);
+ await page.goto('/billing/');await billingReady(page,'A');
  expect(await page.evaluate(async()=>(await VzipBillingStore.load()).hourlyRate)).toBe(50000);
  server.revoke();await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(page.locator('#billing-session-gate')).toBeVisible();
