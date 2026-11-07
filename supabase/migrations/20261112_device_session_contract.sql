@@ -1,10 +1,10 @@
--- D20: multiple independently revocable login sessions. Experimental default: 3 Auth sessions.
+-- D20: multiple independently revocable login sessions. Policy default: 2 Auth sessions.
 -- Supersedes the unshipped single-session draft; NOT a production migration authorization.
 begin;
 create table if not exists public.vzip_account_session_state (
  user_id uuid primary key references auth.users(id) on delete cascade,
  revision bigint not null default 0,
- max_sessions smallint not null default 3 check(max_sessions between 1 and 10)
+ max_sessions smallint not null default 2 check(max_sessions between 1 and 10)
 );
 create table if not exists public.vzip_device_sessions (
  user_id uuid not null references auth.users(id) on delete cascade,

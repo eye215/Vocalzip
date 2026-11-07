@@ -67,26 +67,26 @@ beforeEach(async()=>{
  for(const session of [A,B,C,D,E])await db.query('insert into auth.sessions values ($1,$2)',[session,U]);
  await db.query('insert into auth.sessions values ($1,$2)',[F,V]);
 });
-const slots=async()=>{for(const s of [A,B,C])assert.equal((await register(U,s)).status,'active');return listing(U,A);};
+const slots=async()=>{for(const s of [A,B])assert.equal((await register(U,s)).status,'active');return listing(U,A);};
 
-test('three independent logins coexist; retries do not consume another slot',{skip},async()=>{
- const state=await slots();assert.equal(state.limit,3);assert.equal(state.sessions.length,3);
- for(const s of [A,B,C]){
+test('two independent logins coexist; retries do not consume another slot',{skip},async()=>{
+ const state=await slots();assert.equal(state.limit,2);assert.equal(state.sessions.length,2);
+ for(const s of [A,B]){
   assert.equal(await active(U,s),true);
   assert.equal((await as(U,s,q=>q.query('select * from public.vocal_data'))).rows[0].payload.songs[0],'keep');
  }
  assert.equal((await register(U,A)).revision,state.revision);
 });
-test('fourth login requires explicit selection; cancellation never revokes existing sessions',{skip},async()=>{
+test('third login requires explicit selection; cancellation never revokes existing sessions',{skip},async()=>{
  const state=await slots(),pending=await register(U,D);
  assert.equal(pending.status,'device_limit');assert.equal(pending.revision,state.revision);
- assert.equal(pending.sessions.length,3);assert.equal(await active(U,D),false);
- for(const s of [A,B,C])assert.equal(await active(U,s),true);
+ assert.equal(pending.sessions.length,2);assert.equal(await active(U,D),false);
+ for(const s of [A,B])assert.equal(await active(U,s),true);
  await assert.rejects(listing(U,D),/active session required/);
 });
 test('confirmed replacement revokes only the selected JWT; all table and Storage guards reject it',{skip},async()=>{
  const state=await slots();assert.equal((await register(U,D,B,state.revision)).status,'active');
- for(const s of [A,C,D])assert.equal(await active(U,s),true);
+ for(const s of [A,D])assert.equal(await active(U,s),true);
  assert.equal(await active(U,B),false);
  assert.equal((await register(U,B)).status,'revoked');
  assert.equal((await as(U,B,q=>q.query('select * from public.vocal_data'))).rowCount,0);
@@ -111,32 +111,32 @@ test('concurrent replacements use account revision CAS; a stale choice cannot re
  try{
   const answers=await Promise.all([register(U,D,B,state.revision),register(U,E,B,state.revision,other)]);
   assert.equal(answers.filter(x=>x.status==='active').length,1);assert.equal(answers.filter(x=>x.status==='sessions_changed').length,1);
-  assert.equal((await listing(U,A)).sessions.length,3);assert.equal(await active(U,A),true);assert.equal(await active(U,C),true);
+  assert.equal((await listing(U,A)).sessions.length,2);assert.equal(await active(U,A),true);
  }finally{await other.end();}
 });
 test('concurrent first registrations cannot exceed the server slot limit',{skip},async()=>{
  const connections=await Promise.all([1,2,3].map(async()=>{const c=new pg.Client({connectionString:DB_URL.replace(/\/[^/]*$/,'/'+name)});await c.connect();return c;}));
  try{
   const answers=await Promise.all([A,B,C,D].map((s,i)=>register(U,s,null,null,i?connections[i-1]:db)));
-  assert.equal(answers.filter(x=>x.status==='active').length,3);assert.equal(answers.filter(x=>x.status==='device_limit').length,1);
+  assert.equal(answers.filter(x=>x.status==='active').length,2);assert.equal(answers.filter(x=>x.status==='device_limit').length,2);
  }finally{await Promise.all(connections.map(c=>c.end()));}
 });
 test('specific remote revoke preserves other devices and cannot be undone by old-token registration',{skip},async()=>{
  const state=await slots();const result=await revoke(U,A,B,false,state.revision);
  assert.equal(result.status,'revoked');assert.equal(result.count,1);assert.equal(await active(U,B),false);
- assert.equal((await register(U,B)).status,'revoked');assert.equal(await active(U,A),true);assert.equal(await active(U,C),true);
- assert.equal((await revoke(U,A,C,false,state.revision)).status,'sessions_changed');assert.equal(await active(U,C),true);
+ assert.equal((await register(U,B)).status,'revoked');assert.equal(await active(U,A),true);
+ assert.equal((await revoke(U,A,C,false,state.revision)).status,'sessions_changed');
  await assert.rejects(revoke(U,B,A,false,result.revision),/active session required/);
 });
 test('all-device logout revokes every registered session and prevents delayed callbacks reclaiming them',{skip},async()=>{
- const state=await slots();const result=await revoke(U,A,null,true,state.revision);assert.equal(result.count,3);
- for(const s of [A,B,C]){assert.equal(await active(U,s),false);assert.equal((await register(U,s)).status,'revoked');}
+ const state=await slots();const result=await revoke(U,A,null,true,state.revision);assert.equal(result.count,2);
+ for(const s of [A,B]){assert.equal(await active(U,s),false);assert.equal((await register(U,s)).status,'revoked');}
  assert.equal((await register(U,D)).status,'active');
 });
 test('local logout is idempotent and never logs out other devices',{skip},async()=>{
  await slots();
  for(const expected of [true,false])assert.equal((await as(U,A,q=>q.query('select public.vzip_release_session() as r'))).rows[0].r,expected);
- assert.equal(await active(U,A),false);assert.equal(await active(U,B),true);assert.equal(await active(U,C),true);
+ assert.equal(await active(U,A),false);assert.equal(await active(U,B),true);
  assert.equal((await register(U,A)).status,'revoked');
 });
 test('account ownership and registry privileges remain restrictive',{skip},async()=>{
@@ -155,7 +155,7 @@ test('account ownership and registry privileges remain restrictive',{skip},async
 });
 test('removed Auth sessions do not authorize requests or occupy a slot',{skip},async()=>{
  await slots();await db.query('delete from auth.sessions where id=$1',[B]);
- assert.equal(await active(U,B),false);assert.equal((await listing(U,A)).sessions.length,2);assert.equal((await register(U,D)).status,'active');
+ assert.equal(await active(U,B),false);assert.equal((await listing(U,A)).sessions.length,1);assert.equal((await register(U,D)).status,'active');
  await assert.rejects(register(U,B),/valid authenticated session required/);
 });
 test('legacy client protocol and ambiguous revocation arguments fail closed',{skip},async()=>{

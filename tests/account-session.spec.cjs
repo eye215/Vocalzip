@@ -15,7 +15,7 @@ window.supabase={createClient:(url,key,options)=>(window.__clientOptions=options
   const key='__sessions_'+sessionUser(),revKey=key+'_revision',sid=sessionStorage.getItem('__test_session')||'here-session';
   const rows=JSON.parse(localStorage.getItem(key)||'[]');let revision=Number(localStorage.getItem(revKey)||0);
   const save=()=>{localStorage.setItem(key,JSON.stringify(rows));localStorage.setItem(revKey,String(revision));};
-  const snapshot=()=>({sessions:rows.filter(s=>!s.revoked),revision,limit:3,current_session:sid});
+  const snapshot=()=>({sessions:rows.filter(s=>!s.revoked),revision,limit:2,current_session:sid});
   const result=data=>({data,error:null});
   const live=()=>rows.find(s=>s.session_id===sid&&!s.revoked);
   if(name==='vzip_register_session'){
@@ -25,7 +25,7 @@ window.supabase={createClient:(url,key,options)=>(window.__clientOptions=options
    if(current)return result({...snapshot(),status:'active'});
    if(args?.p_replace_session&&window.__changeRevisionOnReplace){window.__changeRevisionOnReplace=false;revision++;save();}
    if(args?.p_replace_session&&args.p_expected_revision!==revision)return result({...snapshot(),status:'sessions_changed'});
-   if(rows.filter(s=>!s.revoked).length>=3){
+   if(rows.filter(s=>!s.revoked).length>=2){
     if(!args?.p_replace_session)return result({...snapshot(),status:'device_limit'});
     const victim=rows.find(s=>s.session_id===args.p_replace_session&&!s.revoked);
     if(!victim)return result({...snapshot(),status:'sessions_changed'});
@@ -80,7 +80,7 @@ async function setup(page,{owner='A',user='A',active='here',error=false,session=
    localStorage.setItem('vzip_account_scope_owner_v1',o.owner);
    localStorage.setItem('__test_user',o.user);localStorage.setItem('__test_active',o.active);
    if(!localStorage.getItem('__sessions_'+o.user)){
-    const rows=['full','shared'].includes(o.active)?['other-1','other-2',...(o.active==='full'?['other-3']:[])].map((id,i)=>({session_id:id,label:['iPad','iPhone','PC'][i],created_at:'2026-11-07T05:00:00Z'})):[];
+    const rows=['full','shared'].includes(o.active)?['other-1',...(o.active==='full'?['other-2']:[])].map((id,i)=>({session_id:id,label:['iPad','iPhone'][i],created_at:'2026-11-07T05:00:00Z'})):[];
     localStorage.setItem('__sessions_'+o.user,JSON.stringify(rows));localStorage.setItem('__sessions_'+o.user+'_revision','7');
    }
    if(o.error)localStorage.setItem('__rpc_error','1');
@@ -113,11 +113,11 @@ test('separate account namespaces and media databases survive account switch wit
 test('multiple logins open without displacing existing sessions',async({page})=>{
  await setup(page,{active:'shared'});
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).map(s=>s.session_id))).toEqual(['other-1','other-2','here-session']);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).map(s=>s.session_id))).toEqual(['other-1','here-session']);
  expect(await page.evaluate(()=>window.__clientOptions.global.headers['X-Client-Info'])).toBe('vocalzip-device-session-v2');
  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
-test('fourth login selects exactly one session and approval precedes opening the app',async({page})=>{
+test('third login selects exactly one session and approval precedes opening the app',async({page})=>{
  await setup(page,{active:'full'});
  const dialog=page.getByRole('dialog',{name:'로그인 세션 한도'});
  await expect(dialog).toBeVisible();expect(await page.evaluate(()=>vzipCloudSignedIn())).toBe(false);
@@ -127,14 +127,14 @@ test('fourth login selects exactly one session and approval precedes opening the
  await dialog.getByRole('button',{name:'선택한 로그인 종료하고 계속'}).click();
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  expect(await page.evaluate(()=>window.__claims.map(x=>[x.p_replace_session,x.p_expected_revision]))).toEqual([[null,null],['other-2',7]]);
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).map(s=>s.session_id))).toEqual(['other-1','other-3','here-session']);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).map(s=>s.session_id))).toEqual(['other-1','here-session']);
 });
 test('cancel at the login limit preserves every existing session and performs no cloud writes',async({page})=>{
  await setup(page,{active:'full'});
  await Promise.all([page.waitForEvent('load'),page.getByRole('dialog',{name:'로그인 세션 한도'}).getByRole('button',{name:'취소'}).click()]);
  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('vzip_account_scope_owner_v1')).catch(()=>null)).toBe('');
  await expect(page.locator('#vzip-auth-screen')).toBeVisible();
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).length)).toBe(3);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).length)).toBe(2);
  expect(await page.evaluate(()=>window.__writes)).toEqual([]);
 });
 test('stale replacement approval displays a fresh list and never silently evicts another login',async({page})=>{
@@ -144,9 +144,9 @@ test('stale replacement approval displays a fresh list and never silently evicts
  await page.evaluate(()=>{window.__changeRevisionOnReplace=true;});
  await dialog.getByRole('button',{name:'선택한 로그인 종료하고 계속'}).click();
  await expect(dialog.getByRole('button',{name:'선택한 로그인 종료하고 계속'})).toBeDisabled();
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).length)).toBe(3);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('__sessions_A')).filter(s=>!s.revoked).length)).toBe(2);
  expect(await page.evaluate(()=>vzipCloudSignedIn())).toBe(false);
- await dialog.getByLabel('종료할 로그인').selectOption('other-3');
+ await dialog.getByLabel('종료할 로그인').selectOption('other-2');
  await dialog.getByRole('button',{name:'선택한 로그인 종료하고 계속'}).click();
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
  expect(await page.evaluate(()=>window.__claims.at(-1).p_expected_revision)).toBe(8);
@@ -282,7 +282,7 @@ test('device manager confirms a specific remote logout and preserves the current
  await dialog.getByRole('listitem').filter({hasText:'iPad'}).getByRole('button',{name:'이 로그인 로그아웃',exact:true}).click();
  expect(await page.evaluate(()=>window.__revokes||[])).toEqual([]);
  await dialog.getByRole('button',{name:'로그아웃 확인',exact:true}).click();
- await expect(dialog.getByRole('listitem')).toHaveCount(2);
+ await expect(dialog.getByRole('listitem')).toHaveCount(1);
  expect(await page.evaluate(()=>vzipCloudSignedIn())).toBe(true);
  expect(await page.evaluate(()=>window.__revokes)).toEqual([{p_session_id:'other-1',p_all:false,p_expected_revision:8}]);
  await dialog.getByRole('button',{name:'닫기',exact:true}).click();await expect(dialog).toHaveCount(0);
