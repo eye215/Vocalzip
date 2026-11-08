@@ -118,7 +118,7 @@ test('lost completion reply survives reload and is recovered without any source 
 });
 test('retry skips acknowledged parts and preserves original metadata',async()=>{
  const f=fixture(),file=new File([data(client.PART_SIZE+23)],'test.wav',{type:'audio/wav'}),args=argumentsFor('resume-parts',file);let paused=true;
- f.hook(path=>{if(paused&&path.endsWith('/parts/2'))throw Error('offline');});
+ f.hook(async path=>{if(paused&&path.endsWith('/parts/2')){for(let i=0;i<2000&&!f.client.pending()[0]?.parts.some(p=>p.partNumber===1);i++)await new Promise(r=>setTimeout(r,1));throw Error('offline');}});
  await assert.rejects(f.client.upload(file,args),/offline/);assert.equal(f.client.pending()[0].parts.length,1);paused=false;
  const out=await client.create(f.options).upload(file,{...args,context:{...args.context,metadata:{...args.context.metadata,name:'다른 이름'}}});
  assert.equal(out.size,file.size);assert.equal(f.calls.filter(p=>p.endsWith('/parts/1')).length,1);

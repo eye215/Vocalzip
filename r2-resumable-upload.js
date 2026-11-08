@@ -91,19 +91,34 @@ function create({storage,identity,api,onReceipt}){
    r.ticket={descriptor:start.descriptor,signature:start.signature};write(r);
   }
   const levels=await tree(r.manifest);check();if(levels.at(-1)[0]!==r.manifest.root)throw fault('업로드 원본 기록이 달라요.','corrupt');
-  for(let i=0;i<r.manifest.hashes.length;i++){
-   check();if(r.parts.some(p=>p.partNumber===i+1))continue;
-   const body=file.slice(i*PART,(i+1)*PART);
-   let part;
-   for(let attempt=0;;attempt++){
-    try{part=await api('/v2/uploads/parts/'+(i+1),{method:'PUT',body,signal,headers:{'X-Vzip-Upload':JSON.stringify(r.ticket),'X-Vzip-Proof':proof(levels,i).join(',')}});break;}
-    catch(error){check();if([400,401,403,409,413,422].includes(error.status)||attempt>=2)throw error;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));check();}
+  const controller=new AbortController(),cancel=()=>controller.abort();if(signal?.aborted)cancel();signal?.addEventListener('abort',cancel,{once:true});
+  let next=0,failure=null,lastProgress=0;const sending=new Map();
+  const partCheck=()=>{check();if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');};
+  const progress=()=>{
+   const complete=r.parts.reduce((sum,p)=>sum+Math.min(PART,r.manifest.size-(p.partNumber-1)*PART),0);
+   lastProgress=Math.max(lastProgress,Math.min(99,Math.round((complete+[...sending.values()].reduce((sum,n)=>sum+n,0))/r.manifest.size*100)));
+   notify(lastProgress);
+  };
+  const send=async()=>{
+   while(!failure){
+    const i=next++;if(i>=r.manifest.hashes.length)return;if(r.parts.some(p=>p.partNumber===i+1))continue;
+    try{
+     partCheck();const body=file.slice(i*PART,(i+1)*PART);let part;
+     for(let attempt=0;;attempt++){
+      try{sending.set(i,0);part=await api('/v2/uploads/parts/'+(i+1),{method:'PUT',body,signal:controller.signal,headers:{'X-Vzip-Upload':JSON.stringify(r.ticket),'X-Vzip-Proof':proof(levels,i).join(',')},
+       onUploadBytes:sent=>{sending.set(i,Math.min(body.size,sent));progress();}});break;}
+      catch(error){partCheck();if([400,401,403,409,413,422].includes(error.status)||attempt>=2)throw error;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));partCheck();}
+     }
+     partCheck();if(part?.partNumber!==i+1||typeof part.etag!=='string'||!part.etag.length)throw fault('업로드 조각을 확인하지 못했어요.','receipt');
+     sending.delete(i);r.parts.push({partNumber:part.partNumber,etag:part.etag});write(r);progress();
+    }catch(error){if(!failure)failure=error;controller.abort();return;}
    }
-   check();if(part?.partNumber!==i+1||typeof part.etag!=='string'||!part.etag.length)throw fault('업로드 조각을 확인하지 못했어요.','receipt');
-   r.parts.push({partNumber:part.partNumber,etag:part.etag});write(r);
-   notify(Math.min(99,Math.round(r.parts.length/r.manifest.hashes.length*100)));
-  }
-  check();const done=await finish(mediaId,{signal});check();if(done?.status!=='complete')throw fault('업로드 완료를 확인하지 못했어요.','receipt');notify(100);return done.receipt;
+  };
+  try{
+   await Promise.all([send(),send()]);if(failure)throw failure;partCheck();
+   const done=await finish(mediaId,{signal});check();if(done?.status!=='complete')throw fault('업로드 완료를 확인하지 못했어요.','receipt');notify(100);return done.receipt;
+  }finally{signal?.removeEventListener('abort',cancel);}
+
  }
  function acknowledge(id,metadata){
   const r=read(id);if(!r)return;
