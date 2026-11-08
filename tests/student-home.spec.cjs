@@ -537,10 +537,10 @@ test('icon selection and playback distinguish navigation from recording without 
   const home=document.querySelector('.vz-approved-dock-item[aria-current=page]'),songs=document.querySelectorAll('.vz-approved-dock-item')[1];
   const style=(root,selector)=>getComputedStyle(root.querySelector(selector)).display!=='none';
   return {selectedFill:style(home,'.vz-icon-fill'),selectedOutline:style(home,'.vz-icon-outline'),otherFill:style(songs,'.vz-icon-fill'),otherOutline:style(songs,'.vz-icon-outline'),
-   record:getComputedStyle(document.querySelector('.vz-approved-dock-record')).backgroundColor,play:getComputedStyle(document.querySelector('.vz-home-play')).backgroundColor,
+   record:getComputedStyle(document.querySelector('.vz-approved-dock-record')).backgroundColor,play:getComputedStyle(document.querySelector('.vz-home-play')).backgroundColor,playInk:getComputedStyle(document.querySelector('.vz-home-play')).color,link:getComputedStyle(document.querySelector('.vz-upcoming-link')).color,check:getComputedStyle(document.querySelector('.vz-home-goal-check:checked')).backgroundColor,
    stroke:document.querySelector('.vz-home-quick .vz-icon-outline').getAttribute('stroke-width')};
  });
- expect(icons).toEqual({selectedFill:true,selectedOutline:false,otherFill:false,otherOutline:true,record:'rgb(109, 60, 233)',play:'rgb(241, 234, 255)',stroke:'1.8'});
+ expect(icons).toEqual({selectedFill:true,selectedOutline:false,otherFill:false,otherOutline:true,record:'rgb(99, 38, 255)',play:'rgb(241, 234, 255)',playInk:'rgb(78, 27, 204)',link:'rgb(99, 38, 255)',check:'rgb(99, 38, 255)',stroke:'1.8'});
  await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
  await expect(page.locator('.preview-status')).toContainText('목표 설정');
 });
