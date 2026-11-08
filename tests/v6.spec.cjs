@@ -1808,7 +1808,7 @@ test('File deletion cancels safely, deletes one file and preserves linked practi
  await page.reload();await expect(page.locator('[data-media="m1"]')).toHaveCount(0);
 });
 
-test('Song reference settings start collapsed and suggestion cards expose individual deletion', async ({page}) => {
+test('Song check selects recordings, keeps controls sticky and exposes individual deletion', async ({page}) => {
  await boot(page);
  await page.evaluate(async()=>{
   window.vzipCloudSignedIn=()=>true;
@@ -1817,17 +1817,63 @@ test('Song reference settings start collapsed and suggestion cards expose indivi
   VZ.media.invalidate();
  });
  await page.goto('/#/song-suggest');
+ await expect(page.getByRole('heading',{name:'곡 확인'})).toBeVisible();
+ await expect(page.locator('.vz-sc-record')).toHaveCount(1);
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/song-check-top.png'});
+ await expect(page.locator('.reference-options')).toBeHidden();
+ const tip=page.locator('[data-song-help-tip]');
+ await page.getByRole('button',{name:'곡 확인 도움말'}).click();
+ await expect(tip).toBeVisible();
+ await page.getByRole('button',{name:'곡 확인 도움말'}).click();
+ await expect(tip).toBeHidden();
+ await page.locator('.vz-sc-record input[type=checkbox]').check();
+ await expect(page.locator('[data-counter]')).toHaveText('선택 1개');
+ await page.locator('[data-select-all]').click();
+ await expect(page.locator('[data-counter]')).toBeEmpty();
+ await page.getByRole('button',{name:'곡 확인 설정'}).click();
  await expect(page.locator('.reference-options')).toBeVisible();
  await expect(page.locator('[data-ref-song],[data-ref-text],[data-ref-manual]')).toHaveCount(0);
  await expect(page.getByRole('link',{name:'가사는 곡 상세의 가사 탭에서 입력 →'})).toHaveAttribute('href','#/songs');
- await expect(page.locator('[data-ref-picker]')).toBeHidden();
- if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/recording-simplified.png',fullPage:true});
- await page.locator('.reference-options > summary').click();
  await expect(page.locator('[data-ref-picker]')).toBeVisible();
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/recording-simplified.png',fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- await page.getByRole('button',{name:'미분류 파일 파일 삭제',exact:true}).click();
+ await page.getByRole('button',{name:'미분류 파일 더 보기',exact:true}).click();
+ await page.getByRole('dialog',{name:'미분류 파일'}).getByRole('button',{name:'파일 삭제'}).click();
  await sheet(page).getByRole('button',{name:'파일 영구 삭제',exact:true}).click();
- await expect(page.getByRole('button',{name:'미분류 파일 파일 삭제',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'미분류 파일 더 보기',exact:true})).toHaveCount(0);
+});
+
+test('Song check keeps the selection controls and bottom actions visible at the last recording',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  window.vzipCloudSignedIn=()=>true;
+  window.vzipCloudSongTextList=async()=>[];
+  for(let i=0;i<8;i++)await window.vzipStorePracticeMedia({id:'sc-'+i,name:'녹음 '+i,created:Date.now()-i*1000,type:'audio/wav',source:'import',blob:new Blob([window.__wav],{type:'audio/wav'})});
+  VZ.media.invalidate();
+ });
+ await page.goto('/#/song-suggest');
+ await expect(page.locator('.vz-sc-record')).toHaveCount(8);
+ await page.locator('.vz-sc-record').last().scrollIntoViewIfNeeded();
+ await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+ const positions=await page.evaluate(()=>({
+  title:document.querySelector('#top').getBoundingClientRect().bottom,
+  sticky:document.querySelector('.vz-sc-sticky').getBoundingClientRect().top,
+  selection:document.querySelector('.vz-sc-selection').getBoundingClientRect().bottom,
+  last:document.querySelector('.vz-sc-record:last-child').getBoundingClientRect().bottom,
+  footer:document.querySelector('.vz-sc-bottom').getBoundingClientRect().top,
+  width:document.documentElement.scrollWidth
+ }));
+ expect(positions.title).toBeLessThan(0);
+ expect(positions.sticky).toBeGreaterThanOrEqual(0);
+ expect(positions.selection).toBeLessThan(positions.footer);
+ expect(positions.last).toBeLessThanOrEqual(positions.footer);
+ expect(positions.width).toBeLessThanOrEqual(390);
+ for(const width of [320,430]){
+  await page.setViewportSize({width,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+ }
+ await page.setViewportSize({width:390,height:844});
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/song-check-bottom.png'});
 });
 
 

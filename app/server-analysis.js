@@ -22,6 +22,7 @@ async function load() {
     state.jobs = r.rows;
     state.review = new Map(r.review.filter(x => x.result?.top3?.length).map(x => [x.media_id, {top3:x.result.top3, transcript:x.result.transcript || ''}]));
     paint();
+    window.dispatchEvent(new Event('vzip:server-analysis-updated'));
   } finally { state.loading = false; }
 }
 // A saved result anywhere (song assigned, measurement) → every screen reads the fresh list.
@@ -59,6 +60,7 @@ function counts() {
   }
   return c;
 }
+VZ.serverAnalysisCounts = () => state.on && state.jobs ? counts() : null;
 function paint() {
   if (!host || !document.body.contains(host)) return;
   if (!state.on || !state.jobs) { host.innerHTML = ''; return; }
