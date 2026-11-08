@@ -1,4 +1,4 @@
-name: Verify source-based Vocalzip pages
+name: Verify current screen layouts and source fields
 on:
   push:
     branches: [docs/home-preview-images-20261108]
@@ -36,6 +36,7 @@ jobs:
       - name: Check actual screen contracts
         run: node design-handoff-20261108-lavender-home/current-ui/verify-current.cjs
       - name: Store preview and screenshots
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
