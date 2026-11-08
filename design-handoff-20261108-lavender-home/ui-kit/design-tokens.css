@@ -1,0 +1,10 @@
+:root{
+  --vz-accent:#7A32F5;--vz-pressed:#6528CA;--vz-soft:#F3ECFF;--vz-page:#F8F6FD;--vz-surface:#fff;
+  --vz-title:#101828;--vz-primary:#344054;--vz-body:#475467;--vz-muted:#667085;--vz-subtle:#98A2B3;
+  --vz-line:#EAECF0;--vz-partial:#D9C5FA;--vz-exceeded:#4C188E;--vz-missed:#E4E7EC;
+  --vz-danger:#B42318;--vz-danger-soft:#FEF3F2;--vz-success:#067647;--vz-success-soft:#ECFDF3;
+  --vz-gradient:linear-gradient(135deg,#9557FF 0%,#7A32F5 52%,#6D2BE5 100%);
+  --vz-song-gradient:linear-gradient(135deg,#F3ECFF,#FCFAFF);
+  --vz-radius-card:20px;--vz-radius-field:12px;--vz-radius-button:16px;--vz-padding:20px;--vz-gap:12px;
+  --vz-button:52px;--vz-touch:44px;--vz-fab:48px;--vz-nav:70px;--vz-font:Pretendard,-apple-system,BlinkMacSystemFont,sans-serif;
+}

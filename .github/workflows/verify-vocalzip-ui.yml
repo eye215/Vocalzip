@@ -1,0 +1,33 @@
+name: Verify Vocalzip UI kit
+on:
+  push:
+    branches: [docs/home-preview-images-20261108]
+    paths: [.github/workflows/verify-vocalzip-ui.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node design-handoff-20261108-lavender-home/ui-kit/verify.cjs
+      - name: Commit screenshots and QA evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add design-handoff-20261108-lavender-home/ui-kit/screenshots design-handoff-20261108-lavender-home/ui-kit/QA_RESULT.json
+          git commit -m "docs: capture UI kit routes and browser checks"
+          git push origin HEAD:docs/home-preview-images-20261108
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vocalzip-ui-kit-preview
+          path: |
+            design-handoff-20261108-lavender-home/ui-kit/screenshots
+            design-handoff-20261108-lavender-home/ui-kit/QA_RESULT.json
