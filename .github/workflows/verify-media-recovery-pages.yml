@@ -1,0 +1,19 @@
+name: Verify deployed media recovery files
+on:
+  push:
+    branches:
+      - 'codex/verify-media-recovery-0b63d76ba4e6'
+permissions:
+  contents: read
+jobs:
+  deployed:
+    if: github.repository == 'eye215/Vocalzip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compare public deployed bytes with tested source
+        run: node tools/verify-media-recovery-pages.mjs
