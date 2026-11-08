@@ -61,6 +61,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-logo svg{width:28px;height:28px;}
 #vocalzip-refined-preview .vz-schedule{padding:0 0 8px;}
 #vocalzip-refined-preview .vz-card{padding:16px;}
+#vocalzip-refined-preview .vz-song{background:linear-gradient(135deg,#E8D8FF 0%,#EFE3FF 52%,#F5EDFF 100%);}
 #vocalzip-refined-preview .vz-song h3{max-width:none;}
 #vocalzip-refined-preview main{padding-bottom:calc(142px + max(12px,env(safe-area-inset-bottom)));}
 #vocalzip-refined-preview .vz-nav-space{max-width:528px;}
