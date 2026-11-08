@@ -483,6 +483,11 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
   }
   const palette=await page.evaluate(()=>({background:getComputedStyle(document.body).backgroundColor,card:getComputedStyle(document.querySelector('.vz-home-week')).backgroundColor}));
   expect(palette).toEqual({background:'rgb(246, 244, 251)',card:'rgb(255, 255, 255)'});
+  if(name==='both'){
+   const computed=await page.evaluate(()=>['.vz-home-greeting','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
+   console.log('HOME_TYPE_AUDIT '+JSON.stringify(computed));
+   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[22,'700','rgb(25, 31, 40)'],[18,'700','rgb(25, 31, 40)'],[22,'700','rgb(25, 31, 40)'],[13,'400','rgb(107, 118, 132)'],[22,'700','rgb(25, 31, 40)'],[15,'400','rgb(78, 89, 104)'],[16,'600','rgb(51, 61, 75)']]);
+  }
   const faces=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/["']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
   expect(faces.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
   for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);}

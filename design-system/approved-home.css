@@ -247,3 +247,5 @@ body.vz-home-mode .v-nav i>.vz-nav-art{display:block;width:100%;height:100%;font
 button.vz-home-primary-button{min-height:52px;padding:0 20px;border:0;border-radius:16px;background:#7865c8;color:#fff;font:600 16px/1.5 Pretendard,system-ui,sans-serif;transition:background-color .12s;}
 button.vz-home-primary-button:active{background:#6d59b5;}
 @media(max-width:359px){.vz-student-home .vz-home-song{padding:16px;}.vz-student-home .vz-home-quick{padding:12px;gap:6px;}.vz-home-upcoming .vz-upcoming-title{font-size:22px;}.vz-upcoming-art>.vz-upcoming-fallback{width:48px;}}
+
+.vz-home-song-copy,.vz-upcoming-copy{gap:4px;}
