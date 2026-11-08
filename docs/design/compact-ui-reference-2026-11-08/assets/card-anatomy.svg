@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="1080" viewBox="0 0 840 1080" role="img" aria-labelledby="title desc">
+<title id="title">Compact card anatomy and proposed Vocalzip geometry</title><desc id="desc">Schematic diagrams, not app screenshots. Four information patterns and responsive tile calculations.</desc>
+<rect width="840" height="1080" fill="#f6f3ff"/>
+<text x="32" y="42" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#252142">COMPACT UI / CARD ANATOMY</text>
+<text x="32" y="70" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Structural diagrams. Reference dimensions are estimates at 390px width.</text>
+<text x="32" y="112" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#252142">01 / SHORT NOTICE</text>
+<text x="450" y="112" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#252142">02 / TWO ROWS, ONE SURFACE</text>
+<rect x="32" y="132" width="368" height="96" rx="14" fill="#fff"/>
+<rect x="48" y="156" width="40" height="40" rx="12" fill="#ede7ff"/>
+<text x="61" y="182" font-family="Arial,sans-serif" font-size="22" font-weight="700" fill="#252142">i</text>
+<text x="100" y="169" font-family="Arial,sans-serif" font-size="17" font-weight="600" fill="#252142">Status or benefit</text>
+<text x="100" y="193" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">One supporting line</text>
+<rect x="310" y="159" width="74" height="42" rx="10" fill="#ede7ff"/>
+<text x="326" y="185" font-family="Arial,sans-serif" font-size="14" font-weight="600" fill="#6239cf">Action</text>
+<text x="32" y="254" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Icon / text / compact secondary action</text>
+<rect x="440" y="132" width="368" height="164" rx="14" fill="#fff"/>
+<text x="458" y="170" font-family="Arial,sans-serif" font-size="22" font-weight="700" fill="#252142">VALUE A</text>
+<text x="458" y="193" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Meaning of value A</text>
+<rect x="716" y="148" width="74" height="42" rx="10" fill="#f2f1f5"/>
+<text x="730" y="174" font-family="Arial,sans-serif" font-size="14" font-weight="600" fill="#625d7c">Details</text>
+<text x="458" y="245" font-family="Arial,sans-serif" font-size="22" font-weight="700" fill="#252142">VALUE B</text>
+<text x="458" y="268" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Meaning of value B</text>
+<rect x="716" y="223" width="74" height="42" rx="10" fill="#f2f1f5"/>
+<text x="730" y="249" font-family="Arial,sans-serif" font-size="14" font-weight="600" fill="#625d7c">Details</text>
+<text x="440" y="321" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">No nested cards around each row</text>
+<text x="32" y="369" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#252142">03 / SUMMARY + FOOTER</text>
+<text x="450" y="369" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#252142">04 / FLAT CONTENT LIST</text>
+<rect x="32" y="390" width="368" height="179" rx="14" fill="#fff"/>
+<text x="50" y="424" font-family="Arial,sans-serif" font-size="18" font-weight="600" fill="#252142">Section title</text>
+<text x="50" y="467" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#252142">PRIMARY VALUE</text>
+<text x="50" y="491" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">A short interpretation</text>
+<path d="M32 515H400" stroke="#e5e0ee"/>
+<text x="63" y="548" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Link A</text>
+<text x="177" y="548" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Link B</text>
+<text x="291" y="548" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Link C</text>
+<text x="32" y="597" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">A light divider separates secondary links</text>
+<rect x="440" y="390" width="368" height="179" rx="14" fill="#fff"/>
+<rect x="456" y="407" width="60" height="60" rx="8" fill="#ede7ff"/>
+<text x="530" y="427" font-family="Arial,sans-serif" font-size="16" font-weight="600" fill="#252142">Content title</text>
+<text x="530" y="449" font-family="Arial,sans-serif" font-size="13" font-weight="400" fill="#625d7c">Date / duration / context</text>
+<text x="781" y="443" font-family="Arial,sans-serif" font-size="20" font-weight="400" fill="#625d7c">&gt;</text>
+<rect x="456" y="485" width="60" height="60" rx="8" fill="#ede7ff"/>
+<text x="530" y="505" font-family="Arial,sans-serif" font-size="16" font-weight="600" fill="#252142">Content title</text>
+<text x="530" y="527" font-family="Arial,sans-serif" font-size="13" font-weight="400" fill="#625d7c">Date / duration / context</text>
+<text x="781" y="521" font-family="Arial,sans-serif" font-size="20" font-weight="400" fill="#625d7c">&gt;</text>
+<path d="M456 477H792" stroke="#e5e0ee"/>
+<text x="440" y="597" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Shared alignment, one quiet separator</text>
+<text x="32" y="650" font-family="Arial,sans-serif" font-size="19" font-weight="700" fill="#252142">PROPOSAL / RECENT SONG + TWO QUICK LINKS</text>
+<rect x="32" y="670" width="173" height="173" rx="20" fill="#ede7ff"/>
+<rect x="217" y="670" width="173" height="80.5" rx="16" fill="#fff"/>
+<rect x="217" y="762.5" width="173" height="80.5" rx="16" fill="#fff"/>
+<text x="48" y="698" font-family="Arial,sans-serif" font-size="12" font-weight="400" fill="#625d7c">Recent song</text>
+<rect x="48" y="712" width="40" height="40" rx="8" fill="#d8c9f7"/>
+<text x="48" y="778" font-family="Arial,sans-serif" font-size="17" font-weight="600" fill="#252142">Song title</text>
+<text x="48" y="802" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Two lines allowed</text>
+<text x="48" y="826" font-family="Arial,sans-serif" font-size="12" font-weight="400" fill="#625d7c">173 x 173</text>
+<text x="233" y="703" font-family="Arial,sans-serif" font-size="15" font-weight="600" fill="#252142">Practice history</text>
+<text x="233" y="729" font-family="Arial,sans-serif" font-size="12" font-weight="400" fill="#625d7c">173 x 80.5</text>
+<text x="233" y="795" font-family="Arial,sans-serif" font-size="15" font-weight="600" fill="#252142">Lesson records</text>
+<text x="233" y="821" font-family="Arial,sans-serif" font-size="12" font-weight="400" fill="#625d7c">173 x 80.5</text>
+<text x="432" y="700" font-family="Arial,sans-serif" font-size="20" font-weight="600" fill="#252142">390 - 16 - 16 = 358</text>
+<text x="432" y="734" font-family="Arial,sans-serif" font-size="18" font-weight="400" fill="#252142">(358 - 12) / 2 = 173</text>
+<text x="432" y="768" font-family="Arial,sans-serif" font-size="18" font-weight="400" fill="#252142">(173 - 12) / 2 = 80.5</text>
+<text x="432" y="806" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Outer card ratio, not full-cover image.</text>
+<text x="432" y="832" font-family="Arial,sans-serif" font-size="14" font-weight="400" fill="#625d7c">Expand for long text and larger fonts.</text>
+<text x="32" y="899" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#252142">RESPONSIVE GEOMETRY / NOT FIXED HEIGHT REQUIREMENTS</text>
+<text x="32" y="934" font-family="Arial,sans-serif" font-size="16" font-weight="400" fill="#252142">320px: gutter 16 / full 288 / gap 10 / tile 139</text>
+<text x="32" y="964" font-family="Arial,sans-serif" font-size="16" font-weight="400" fill="#252142">390px: gutter 16 / full 358 / gap 12 / tile 173</text>
+<text x="32" y="994" font-family="Arial,sans-serif" font-size="16" font-weight="400" fill="#252142">430px: gutter 16 / full 398 / gap 12 / tile 193</text>
+<text x="32" y="1041" font-family="Arial,sans-serif" font-size="15" font-weight="600" fill="#6239cf">Keep readable text and 44px interaction targets. Allow vertical scrolling.</text>
+</svg>
