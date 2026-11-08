@@ -50,6 +50,9 @@ const adaptations=String.raw`
 /* Use the device width rather than leaving a 390px mock phone inside wider phones. */
 #vocalzip-refined-preview .vz-phone{max-width:560px;padding:8px 12px 0;padding-top:max(8px,env(safe-area-inset-top));}
 #vocalzip-refined-preview .vz-nav-item.vz-active{background:#EDE1FF;}
+#vocalzip-refined-preview .vz-nav{background:rgba(255,255,255,.68);}
+#vocalzip-refined-preview .vz-nav-item i{display:block;font:normal 22px/1 "Phosphor-Fill";color:#344054;letter-spacing:0;}
+#vocalzip-refined-preview .vz-nav-item.vz-active i{color:#7A32F5;}
 #vocalzip-refined-preview .vz-header{min-height:44px;margin-bottom:8px;}
 #vocalzip-refined-preview .vz-logo{font-size:26px;line-height:34px;gap:8px;}
 #vocalzip-refined-preview .vz-logo b{font-weight:700;}
@@ -98,6 +101,12 @@ export async function createFloatingHome(opts={}){
  template.styles.forEach((css,i)=>{const style=el("style",css);style.dataset.sourceStyle=String(i);shadow.append(style);});
  const integration=el("style",adaptations);integration.dataset.integration="accessibility";shadow.append(integration);
  const root=document.importNode(template.root,true);root.setAttribute("aria-label","Vocalzip 홈");shadow.append(root);
+ const iconFont=el("style",`@font-face{font-family:"Phosphor-Fill";src:url("${new URL('../vendor/phosphor/Phosphor-Fill.woff2',import.meta.url)}") format("woff2");font-display:block}#vocalzip-refined-preview .vz-nav-item i::before{content:attr(data-glyph)}`);
+ shadow.append(iconFont);
+ [...root.querySelectorAll('.vz-nav-item')].forEach((button,i)=>{
+  const svg=button.querySelector('svg');if(!svg)return;
+  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a'][i];svg.replaceWith(icon);
+ });
  const q=selector=>root.querySelector(selector);
  q("main").setAttribute("role","presentation");
  root.prepend(el("h1","홈","vz-visually-hidden"));
