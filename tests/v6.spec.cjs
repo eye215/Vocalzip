@@ -1003,7 +1003,8 @@ test('Library actually plays device and cloud-only audio (time advances)', async
     await page.goto('/#/library');
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
-    await expect(page).toHaveURL(new RegExp('#/recording/'+id+'$'));
+    await expect(page).toHaveURL(/#\/library$/);
+    await expect(row.locator('.media-open')).toBeVisible();
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }
