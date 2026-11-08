@@ -376,22 +376,20 @@ export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}
   list.addEventListener("scroll",updateScroll,{passive:true});requestAnimationFrame(updateScroll);
   body.append(list);card.append(body,status);return card;
 }
-const flowerPath="M20 0.3C24 0.3 24.68 3.213 26.62 4.017C28.561 4.821 31.102 3.242 33.93 6.07C36.758 8.898 35.179 11.439 35.983 13.38C36.787 15.32 39.7 16 39.7 20C39.7 24 36.787 24.68 35.983 26.62C35.179 28.561 36.758 31.102 33.93 33.93C31.102 36.758 28.561 35.179 26.62 35.983C24.68 36.787 24 39.7 20 39.7C16 39.7 15.32 36.787 13.38 35.983C11.439 35.179 8.898 36.758 6.07 33.93C3.242 31.102 4.821 28.561 4.017 26.62C3.213 24.68 0.3 24 0.3 20C0.3 16 3.213 15.32 4.017 13.38C4.821 11.439 3.242 8.898 6.07 6.07C8.898 3.242 11.439 4.821 13.38 4.017C15.32 3.213 16 0.3 20 0.3Z";
-function homeFlower({state,ratio,minutes,today}) {
-  const flower=el("span","vz-home-flower");
-  const hasTarget=ratio!=null;
-  const level=state==="future"?"future":!hasTarget?"unplanned":!minutes?"empty":ratio>120?"high":ratio>=100?"met":"low";
-  flower.dataset.level=level;flower.dataset.hasMinutes=String(minutes>0);
-  if(today)flower.classList.add("is-today");
-  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","-1 -1 42 42");svg.setAttribute("aria-hidden","true");
-  const fillId="vz-flower-"+(++homeGlyphId),defs=document.createElementNS(svg.namespaceURI,"defs");
-  defs.innerHTML='<linearGradient id="'+fillId+'" x2=".7" y2="1"><stop stop-color="#ead0ff" stop-opacity=".85"/><stop offset=".5" stop-color="currentColor"/><stop offset="1" stop-color="currentColor"/></linearGradient>';svg.append(defs);flower.style.setProperty("--vz-flower-fill","url(#"+fillId+")");
-  if(today)for(const name of ["outer","inner"]){const outline=document.createElementNS(svg.namespaceURI,"path");outline.setAttribute("d",flowerPath);outline.setAttribute("class","vz-home-flower-today vz-home-flower-today--"+name);svg.append(outline);}
-  const shape=document.createElementNS(svg.namespaceURI,"path");shape.setAttribute("d",flowerPath);shape.setAttribute("class","vz-home-flower-shape");svg.append(shape);
-  if(hasTarget&&ratio>=100&&state!=="future"){
-    const check=document.createElementNS(svg.namespaceURI,"path");check.setAttribute("d","M11 20 L17 26 L29 13");check.setAttribute("class","vz-home-flower-check");svg.append(check);
+function homeDayIndicator({state,ratio,minutes,today}) {
+  const marker=el("span","vz-home-day-indicator");
+  const complete=state!=="future"&&ratio!=null&&ratio>=100;
+  marker.dataset.state=state==="future"?"future":complete?"complete":minutes>0?"partial":"empty";
+  marker.dataset.completed=String(complete);
+  marker.setAttribute("aria-hidden","true");
+  if(today)marker.classList.add("is-today");
+  if(complete){
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    svg.setAttribute("viewBox","0 0 20 20");svg.setAttribute("focusable","false");
+    svg.innerHTML='<path d="m5 10 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+    marker.append(svg);
   }
-  flower.append(svg);return flower;
+  return marker;
 }
 export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null,ratio=null,streak=0,onGrowth}={}) {
   const {card,head}=homeCard("이번 주 연습","chart-bar");card.classList.add("vz-home-week");
@@ -413,7 +411,7 @@ export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null
     day.setAttribute("aria-label",[item.date,item.label?item.label+"요일":"",item.today?"오늘":"",item.state==="future"?"예정":minutes+"분 연습",dayRatio==null?"목표 미설정":"달성률 "+Math.round(dayRatio)+"%"].filter(Boolean).join(", "));
     const label=el("span","vz-home-day-label"+(item.today?" is-today":""),item.today?"오늘":item.label||"");
     label.setAttribute("aria-hidden","true");
-    day.append(label,homeFlower({state:item.state,ratio:dayRatio,minutes,today:item.today}),el("span","vz-home-day-time",item.state==="future"?"–":minutes+"분"));grid.append(day);
+    day.append(label,homeDayIndicator({state:item.state,ratio:dayRatio,minutes,today:item.today}),el("span","vz-home-day-time",item.state==="future"?"–":minutes+"분"));grid.append(day);
   }
   card.append(grid);
   if(!days.length)textRow(card,"p","vz-home-no-week","이번 주 연습 기록이 아직 없어요.");
@@ -425,18 +423,22 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   const songDetail=homeButton(recent?"최근 연습곡 "+recent.title+" 열기":"내 곡 선택",null,onRecent,"vz-home-song-detail");
   const head=el("div","vz-home-song-heading");head.append(homeHeading("최근 연습곡","music-notes"),homeIcon("caret-right"));song.append(head);
   // The playback slot and detail button are siblings, so large text cannot cover playback.
+  const footer=homeButton(recent?.canPlay?"최근 곡 녹음 재생":recent?"최근 연습곡 열기":"내 곡 선택",null,recent?.canPlay?onPlay:onRecent,"vz-home-song-footer");
+  footer.append(el("span","vz-home-song-listen",recent?.canPlay?"이어 듣기":"곡 살펴보기"));
   const cover=el("span","vz-home-song-cover");
-  if(recent?.canPlay)cover.append(homeButton("최근 곡 녹음 재생","play",onPlay,"vz-home-play"));
+  if(recent?.canPlay){const play=el("span","vz-home-play");play.append(homeIcon("play"));cover.append(play);}
   else cover.append(homeIcon("music-notes"));
-  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail,cover);
+  footer.append(cover);
+  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail,footer);
   if(recent)song.title=[recent.title,recent.artist].filter(Boolean).join(" · ");
   // The existing detail button supplies keyboard access; the card surface shares its pointer action.
   song.addEventListener("click",event=>{if(!event.target.closest("button"))onRecent();});
   grid.append(song);
   const quick=el("div","vz-home-quick-stack vz-quick-actions");
   for(const [label,icon,action] of [["레슨노트","notebook",onLessons],["연습기록","clock-counter-clockwise",onPractice]]){
-    const button=homeButton(label,icon,action,"vz-card vz-home-quick");
-    button.append(el("span","",label),homeIcon("caret-right"));quick.append(button);
+    const button=homeButton(label,null,action,"vz-card vz-home-quick");
+    const group=el("span","vz-home-quick-label");group.append(homeIcon(icon),el("span","",label));
+    button.append(group,homeIcon("caret-right"));quick.append(button);
   }
   grid.append(quick);return grid;
 }

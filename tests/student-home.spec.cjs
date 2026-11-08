@@ -288,12 +288,16 @@ test('today marker survives all practice percentage boundaries and future/unplan
     await expect(today).toHaveAttribute('data-today','true');
     await expect(today).toContainText('오늘');
     await expect(today).toContainText(minutes+'분');
+    await expect(today.locator('.vz-home-day-indicator')).toHaveAttribute('data-completed',String(minutes>=100));
+    await expect(today.locator('.vz-home-day-indicator')).toHaveClass(/is-today/);
+    if(minutes>=100)await expect(today.locator('.vz-home-day-indicator')).toHaveCSS('background-color','rgb(99, 38, 255)');
   }
   await expect(page.locator('.vz-week-day[data-date="2026-11-05"]')).toHaveAttribute('data-state','future');
   await page.evaluate(() => VZ.change(d => {d.practicePlans=[];}));
   await expect(today).toHaveAttribute('data-state','unplanned');
   await expect(today).toHaveAttribute('data-today','true');
   await expect(today).toHaveAttribute('aria-label',/목표 미설정/);
+  await expect(today.locator('.vz-home-day-indicator')).toHaveAttribute('data-completed','false');
   await expect(today).toContainText('121분');
 });
 
@@ -461,6 +465,11 @@ test('large text keeps preview playback separate from full song details on all m
   const artist=await page.locator('.vz-home-song-copy>span').boundingBox();
   expect(artist.y+artist.height).toBeLessThanOrEqual(p.y+1);
   await screenshot(page,testInfo,'student-home-preview-large-text-'+width+'.png');
+  await page.evaluate(()=>{const list=document.querySelector('.vz-home-goal-list');list.scrollTop=list.scrollHeight;scrollTo(0,document.documentElement.scrollHeight);});
+  const clearance=await page.evaluate(()=>({bottom:document.querySelector('.vz-home-goal-row:last-child').getBoundingClientRect().bottom,nav:document.querySelector('.vz-approved-dock').getBoundingClientRect().top}));
+  expect(clearance.bottom+12).toBeLessThanOrEqual(clearance.nav);
+  if(width===390)await screenshot(page,testInfo,'student-home-preview-large-text-bottom-'+width+'.png');
+  await page.evaluate(()=>scrollTo(0,0));
  }
  await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
  await expect(page.locator('.preview-status')).toContainText('재생');
@@ -492,7 +501,7 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
   if(name==='both'){
    const computed=await page.evaluate(()=>['.vz-home-brand','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
    console.log('HOME_TYPE_AUDIT '+JSON.stringify(computed));
-   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[16,'700','rgb(25, 31, 40)'],[18,'700','rgb(25, 31, 40)'],[22,'700','rgb(25, 31, 40)'],[14,'400','rgb(78, 89, 104)'],[32,'700','rgb(25, 31, 40)'],[15,'400','rgb(51, 61, 75)'],[16,'600','rgb(51, 61, 75)']]);
+   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[16,'700','rgb(16, 24, 40)'],[18,'600','rgb(16, 24, 40)'],[22,'600','rgb(16, 24, 40)'],[14,'400','rgb(102, 112, 133)'],[32,'700','rgb(52, 64, 84)'],[15,'400','rgb(52, 64, 84)'],[16,'600','rgb(52, 64, 84)']]);
   }
   const faces=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/["']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
   expect(faces.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
@@ -522,7 +531,7 @@ test('upcoming event comparison board captures all six real rendered fixtures',a
 test('closest event uses day and time without reordering the input records',async({page})=>{
  await page.goto('/design-system/student-home-preview.html?upcoming=all');
  const result=await page.evaluate(async()=>{
-  const {createUpcomingStage}=await import('/design-system/components.js?v=13');
+  const {createUpcomingStage}=await import('/design-system/components.js?v=14');
   const events=[{kind:'late',title:'늦은 일정',daysLeft:2,time:'18:00'},{kind:'unknown',title:'날짜 미정'},{kind:'early',title:'이른 일정',daysLeft:2,time:'09:00'}];
   const original=JSON.stringify(events),host=createUpcomingStage({events});
   return {unchanged:JSON.stringify(events)===original,order:[...host.children].map(x=>x.dataset.kind),primary:host.querySelectorAll('.is-primary').length,illustrations:host.querySelectorAll('.vz-event-illustration').length};
