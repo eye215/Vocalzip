@@ -25,3 +25,5 @@ body:has(.vz-recording-page) .v-nav{display:none}.vz-recording-page .list{backgr
 @media(max-width:350px){body.vz-collection .v-app{padding-inline:14px}.vz-library-tabs .lib-seg button{padding-inline:9px}.vz-recent-song>strong{font-size:21px}}
 
 body.vz-collection #view[data-collection=library]{display:flex;flex-direction:column}body.vz-collection [data-collection=library] .lib-tools{order:1}body.vz-collection [data-collection=library] [data-server-analysis]{order:2}body.vz-collection [data-collection=library] .vz-review-fallback{order:3}body.vz-collection [data-collection=library] [data-name-dates]{order:4}body.vz-collection [data-collection=library]>[data-l]{order:5}
+
+body.vz-collection .vz-song-list.list{background:transparent;padding:0;overflow:visible}body.vz-collection .vz-song-list>.item{background:#FFFFFF;border:0;border-radius:20px;padding:16px;min-height:86px;margin-bottom:12px}body.vz-collection .vz-song-list>.item:last-child{margin-bottom:0}
