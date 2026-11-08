@@ -368,7 +368,7 @@ function homeFlower({state,ratio,minutes,today}) {
   const bar=el("span","vz-home-flower"),hasTarget=ratio!=null;
   bar.dataset.level=state==="future"?"future":!hasTarget?"unplanned":!minutes?"empty":ratio>120?"high":ratio>=100?"met":"low";
   bar.dataset.hasMinutes=String(minutes>0);if(today)bar.classList.add("is-today");
-  bar.style.setProperty("--vz-day-fill",Math.min(100,hasTarget?Math.max(0,ratio):minutes>0?50:0)+"%");
+  bar.style.setProperty("--vz-day-fill",Math.min(100,hasTarget?Math.max(0,ratio):0)+"%");
   bar.setAttribute("aria-hidden","true");return bar;
 }
 export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null,ratio=null,streak=0,onGrowth}={}) {

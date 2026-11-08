@@ -124,8 +124,9 @@ async function noOverflow(page) {
 }
 async function screenshot(page, testInfo, name) {
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({path:testInfo.outputPath(name),fullPage:true,animations:'disabled'});
-  if(name.endsWith('-390.png'))await page.screenshot({path:testInfo.outputPath(name.replace('.png','-viewport.png')),fullPage:false,animations:'disabled'});
+  // Hide the fixed dock only in long content captures; viewport captures keep the real dock.
+  await page.screenshot({path:testInfo.outputPath(name),fullPage:true,animations:'disabled',style:'.v-nav, .vz-approved-dock { visibility:hidden !important; }'});
+  if(/-\d{3}\.png$/.test(name))await page.screenshot({path:testInfo.outputPath(name.replace('.png','-viewport.png')),fullPage:false,animations:'disabled'});
 }
 test.afterEach(async ({page}) => {expect(page.__homeErrors || []).toEqual([]);});
 
@@ -292,6 +293,8 @@ test('today marker survives all practice percentage boundaries and future/unplan
   await page.evaluate(() => VZ.change(d => {d.practicePlans=[];}));
   await expect(today).toHaveAttribute('data-state','unplanned');
   await expect(today).toHaveAttribute('data-today','true');
+  await expect(today).toHaveAttribute('aria-label',/목표 미설정/);
+  await expect(today).toContainText('121분');
 });
 
 test('long Korean goals at twice the text size stay operable on every mobile width', async ({page},testInfo) => {
