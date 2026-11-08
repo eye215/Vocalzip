@@ -449,9 +449,9 @@ test('R2 object verification carries the registered-session protocol header',asy
  const r2=await fakeR2(page);await boot(page);
  const key='u/ui-test-user/header-test/original.wav';r2.store.set(key,{bytes:Buffer.from([1,2,3]),type:'audio/wav',etag:'"header-etag"'});r2.reject.requireProtocol=true;
  const result=await page.evaluate(async key=>{
-  const original=window.VzipAccountScope;
-  try{window.VzipAccountScope={owner:'ui-test-user'};return await window.VzipR2.stat(key);}
-  finally{window.VzipAccountScope=original;}
+  const original=window.VzipAccountScope,access=window.vzipCloudAccessToken;
+  try{window.VzipAccountScope={owner:'ui-test-user'};window.vzipCloudAccessToken=async()=>'tok';return await window.VzipR2.stat(key);}
+  finally{window.VzipAccountScope=original;window.vzipCloudAccessToken=access;}
  },key);
  expect(result).toEqual({size:3,etag:'"header-etag"'});
 });
