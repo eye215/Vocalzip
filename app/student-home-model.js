@@ -70,8 +70,13 @@ function recentSong(db,practices,today){
 function build(db={},options={}){
   const today=options.today||ymd(options.now==null?new Date():new Date(options.now));
   if(!parse(today))throw Error('올바른 오늘 날짜가 필요해요.');
-  const start=monday(today),plans=unique(db.practicePlans),practices=unique(db.practices),totals=new Map();
-  for(const p of practices){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+practiceMinutes(p))}
+  const anchor=options.weekStart||today;
+  if(!parse(anchor))throw Error('올바른 주간 날짜가 필요해요.');
+  const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),totals=new Map();
+  // The adapter supplies the shared practice/recording ledger. Without it the
+  // pure model retains its existing manual-record-only contract.
+  const entries=Array.isArray(options.timeEntries)?options.timeEntries:practices.map(p=>({date:p.date,minutes:practiceMinutes(p)}));
+  for(const p of entries){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+(minutes(p.minutes)||0))}
   const days=Array.from({length:7},(_,i)=>{
     const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date),ratio=goal>0?actual/goal*100:null;
     const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';
@@ -88,7 +93,7 @@ function build(db={},options={}){
   const recommendationCandidates=unique(db.assignments).filter(t=>t.status!=='done'&&(!t.startDate||today>=t.startDate)&&(!t.dueDate||today<=t.dueDate))
     .map(t=>({title:String(t.title||''),source:'homework',sourceId:t.id}));
   return {today,goals,goalProgress:{total:goals.length,completed,ratio:goals.length?completed/goals.length*100:null},
-    week:{start,end:shift(start,6),days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
+    week:{start,end:shift(start,6),current:start===monday(today),days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
     stage:nextStage(db,today),lesson:nextLesson(db,today),recent:recentSong(db,practices,today),recommendationCandidates};
 }
 /** Call mutations inside VZ.change. updatedAt and tombstones belong to core/data-merge. */

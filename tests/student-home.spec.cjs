@@ -213,9 +213,56 @@ test('four home navigation buttons and floating recording reach existing routes'
  }
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
-test('stage, lesson, song, quick actions and growth retain their real destinations',async({page})=>{
+
+test('weekly home includes loose recordings once, but excludes lesson and performance media',async({page})=>{
+ const value=seed();value.practices=[{id:'p',date:TODAY,minutes:999,manualMinutes:4,mediaIds:['linked']}];
+ await boot(page,value);
+ await page.evaluate(date=>{
+  const files=[{id:'one',durationSeconds:225},{id:'two',durationSeconds:191},{id:'three',durationSeconds:232},
+   {id:'linked',durationSeconds:900},{id:'lesson',source:'lesson',durationSeconds:900},
+   {id:'stage',occasion:'performance',durationSeconds:900}].map(m=>({...m,recordedDate:date,type:'audio/mp4'}));
+  VZ.media.list=async()=>files;
+  window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+ },TODAY);
+ await expect(page.locator('.vz-week .vz-time b')).toHaveText('15');
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('15분');
+ await expect(page.locator('.vz-week-range')).toHaveText('2026. 11.2 – 11.8');
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-date')).toHaveText('11.4');
+ expect((await db(page)).practices[0].manualMinutes).toBe(4);
+});
+
+test('week swipe and arrows preserve history across Monday, and title/day navigate to exact calendar dates',async({page})=>{
+ const value=seed();value.practices=[{id:'sunday',date:'2026-11-08',minutes:14}];
+ await boot(page,value);
+ await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);
+ await expect(page.locator('.vz-week .vz-time b')).toHaveText('0');
+ await expect(page.locator('.vz-week-range')).toHaveText('2026. 11.9 – 11.15');
+ const card=page.locator('.vz-week');
+ await card.dispatchEvent('pointerdown',{pointerId:7,button:0,pointerType:'touch',clientX:100,clientY:400});
+ await card.dispatchEvent('pointerup',{pointerId:7,button:0,pointerType:'touch',clientX:230,clientY:403});
+ await expect(page.locator('.vz-week .vz-time b')).toHaveText('14');
+ await expect(page.locator('.vz-week-range')).toHaveText('2026. 11.2 – 11.8');
+ // A vertical scroll gesture must leave the week alone.
+ await card.dispatchEvent('pointerdown',{pointerId:8,button:0,clientX:100,clientY:400});
+ await card.dispatchEvent('pointerup',{pointerId:8,button:0,clientX:103,clientY:550});
+ await expect(card).toHaveAttribute('data-week-start','2026-11-02');
+ // Wait out synthetic swipe click suppression before a deliberate next tap.
+ await page.waitForTimeout(360);
+ await page.getByRole('button',{name:'다음 주',exact:true}).click();
+ await expect(card).toHaveAttribute('data-week-start','2026-11-09');
+ await page.getByRole('button',{name:'이전 주',exact:true}).click();
+ await page.locator('.vz-days>[data-date="2026-11-08"]').click();
+ await expect(page).toHaveURL(/#\/calendar\?date=2026-11-08$/);
+ await expect(page.locator('[data-grid] [data-d="2026-11-08"]')).toHaveAttribute('aria-pressed','true');
+ await page.evaluate(()=>VZ.nav('#/home'));await ready(page);
+ await page.getByRole('button',{name:'오늘 일정 보기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/calendar\?date=2026-11-09$/);
+ await expect(page.locator('[data-grid] [data-d="2026-11-09"]')).toHaveAttribute('aria-pressed','true');
+ expect((await db(page)).practices).toEqual(value.practices);
+});
+test('stage, lesson, song and quick actions retain their real destinations',async({page})=>{
  await boot(page);
- for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','song/s1'],['레슨노트','lessons'],['연습기록','practices'],['성장 기록 보기','growth'],['프로필','settings']]){
+ for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','song/s1'],['레슨노트','lessons'],['연습기록','practices'],['프로필','settings']]){
   await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
  }
 });

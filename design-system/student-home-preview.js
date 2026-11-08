@@ -1,7 +1,7 @@
 /* Fixed fixtures are isolated to this preview. No persistence or service calls.
  * Query ?state=empty|many|failure|boundaries to inspect additional states.
  */
-import {createFloatingHome} from "./student-home-html.js?v=2";
+import {createFloatingHome} from "./student-home-html.js?v=4";
 const params=new URLSearchParams(location.search),state=params.get("state");
 const status=document.querySelector(".preview-status");
 const announce=label=>()=>{status.textContent=label;};
