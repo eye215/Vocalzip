@@ -4,6 +4,9 @@ on:
     paths:
       - 'supabase/proposals/**'
       - 'tests/field-drafts.test.mjs'
+      - 'tests/field-draft-outbox-integration.test.mjs'
+      - 'tests/field-draft-outbox.test.cjs'
+      - 'sync/field-draft-outbox.js'
       - 'tests/snapshot-revision.test.mjs'
       - '.github/workflows/field-drafts-check.yml'
   workflow_dispatch:
@@ -34,4 +37,4 @@ jobs:
         env:
           VZ_SNAPSHOT_TEST_DB: postgres://postgres:drafts_ci_only@localhost:5432/postgres
           VZ_DRAFT_TEST_DB: postgres://postgres:drafts_ci_only@localhost:5432/postgres
-        run: node --test --test-concurrency=1 tests/snapshot-revision.test.mjs tests/field-drafts.test.mjs
+        run: node --test --test-concurrency=1 tests/snapshot-revision.test.mjs tests/field-drafts.test.mjs tests/field-draft-outbox.test.cjs tests/field-draft-outbox-integration.test.mjs

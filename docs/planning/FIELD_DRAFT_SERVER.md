@@ -47,3 +47,9 @@ marker·본문·history·영수증 중 실패하면 전부 롤백한다. 임시 
 tests/field-drafts.test.mjs는 실제 PostgreSQL의 RLS·두 Auth 세션·두 탭·epoch/재전송·충돌 보존·원자적 본문 반영을 검증한다.
 실행 결과는 이 PR/Actions에 기록하며 실행 전 통과로 표시하지 않는다.
 실제 Supabase 운영 적용·iPhone/iPad·오프라인 UI·계정별 로컬 outbox 연결은 아직 별도다.
+
+## 로컬 outbox 계약 통합
+
+#143의 headless outbox·JWT 고정 전송을 이 PostgreSQL 함수와 함께 검증한다. tests/field-draft-outbox-integration.test.mjs는 메모리 로컬 저장소/HTTP 어댑터를 거쳐 실제 SQL/RLS/트랜잭션을 실행한다. PostgREST 게이트웨이의 JWT 서명 검증이나 브라우저 실기기 E2E를 대체하지 않는다.
+문구 저장/응답 유실/전송 중 새 입력/응답 후 저장공간 실패/인계 뒤 과거 편집기/계정 전환/원본 삭제·재생성/서비스 중단을 검사한다.
+변경 응답은 is_editor 상태를 명시한다. 이 값과 영수증은 해당 연산 결과이며, 이후 편집권 유지의 증명은 아니다. resume 때 load로 재확인하고 서버가 매 요청의 epoch/세션을 다시 검증한다.

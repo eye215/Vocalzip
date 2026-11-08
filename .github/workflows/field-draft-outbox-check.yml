@@ -1,0 +1,21 @@
+name: Local field draft outbox checks
+on:
+  pull_request:
+    paths:
+      - 'sync/field-draft-outbox.js'
+      - 'tests/field-draft-outbox.test.cjs'
+      - '.github/workflows/field-draft-outbox-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  outbox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline queue, account isolation, retries and in-flight edits
+        run: node --test tests/field-draft-outbox.test.cjs
