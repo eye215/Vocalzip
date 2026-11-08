@@ -418,6 +418,8 @@ VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="bu
   const draw=()=>{
     const db=VZ.db,act=VZ.songActivity(media),term=songQ.trim().toLowerCase();
     VZ.collectionCount?.(db.songs.length,'곡');
+    const stateSelect=main.querySelector('[data-rep-filter]');
+    if(stateSelect)main.querySelector('[data-status-sheet]').innerHTML=esc(stateSelect.value?stateSelect.selectedOptions[0].text:'전체 상태')+' <i class="ph ph-caret-down"></i>';
     const latest=db.songs.filter(s=>act.get(s.id)).sort((a,b)=>String(act.get(b.id)).localeCompare(String(act.get(a.id))))[0];
     recent.innerHTML=latest?'<a class="vz-recent-song" href="#/record?song='+encodeURIComponent(latest.id)+'"><span class="vz-recent-kicker">최근 연습곡</span><strong>'+esc(latest.title)+'</strong><span>'+esc([latest.show,VZ.repertoire?.role(latest)].filter(Boolean).join(' · '))+'</span><i class="ph ph-music-note vz-hero-note" aria-hidden="true"></i><div class="vz-recent-meta"><span>'+esc(VZ.repertoire?.statusLabel(latest)||'상태 미지정')+(VZ.repertoire?.score(latest)?' · 숙련도 '+VZ.repertoire.score(latest).toFixed(1)+'/5':'')+'</span><span>'+esc(VZ.dateLabel(act.get(latest.id),true))+' 연습</span></div></a>':'';
     const newest=new Map(VZ.songsNewest().map((s,i)=>[s.id,i]));

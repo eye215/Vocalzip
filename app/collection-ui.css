@@ -1,6 +1,6 @@
 /* Scoped to the two approved root collection screens; recording controls keep their existing behavior. */
-body.vz-collection{--accent:#7A32F5;--accent-soft:#F3ECFF;--text:#27232D;--muted:#77717F;--border:#E8E4F0;background:#F8F6FD;color:#27232D;font-family:Pretendard,-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:-.02em}
-body.vz-collection .v-app{max-width:430px;margin:auto;padding:20px 16px 174px}
+body.vz-collection{--bg:#F8F6FD;--surface:#FFFFFF;--surface-2:#F3ECFF;--ink:#27232D;--ink-2:#514B59;--ink-3:#77717F;--line:#E8E4F0;--accent:#7A32F5;--accent-soft:#F3ECFF;--text:#27232D;--muted:#77717F;--border:#E8E4F0;background:#F8F6FD;color:#27232D;font-family:Pretendard,-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:-.02em}
+body.vz-collection .v-app{max-width:430px;margin:auto;padding:calc(env(safe-area-inset-top,0px) + 20px) 16px 174px}
 body.vz-collection #top{padding:0;margin:0 0 18px;position:static;background:transparent;border:0;min-height:48px;box-shadow:none;backdrop-filter:none}
 body.vz-collection #top h1{font-size:26px;line-height:34px;font-weight:700;color:#27232D;display:flex;align-items:center;gap:10px}
 body.vz-collection #view{padding:0}body.vz-collection .icon-btn{width:44px;min-height:44px;background:transparent;border:0;color:#77717F;box-shadow:none}body.vz-collection .icon-btn i{font-size:22px}
