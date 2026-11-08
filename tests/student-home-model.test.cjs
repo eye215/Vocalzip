@@ -253,3 +253,21 @@ test('invalid plan writes are atomic and cannot reuse a goal ID from another dat
     assert.equal(hash(db),before);
   }
 });
+
+
+test('week navigation stops at the first record and this week without future schedules',()=>{
+ const empty=M.build({}, {today:'2026-11-09'}).week;
+ assert.equal(empty.canPrevious,false);assert.equal(empty.canNext,false);
+ const db={lessons:[{id:'l',date:'2026-10-28'}],practices:[{id:'p',date:'2026-11-02',minutes:1}]};
+ const options={today:'2026-11-09',mediaDates:['2026-10-18','invalid']};
+ assert.deepEqual(M.weekBounds(db,options),{first:'2026-10-12',last:'2026-11-09',current:'2026-11-09'});
+ const first=M.build(db,{...options,weekStart:'2026-10-12'}).week;
+ assert.equal(first.canPrevious,false);assert.equal(first.canNext,true);
+ const current=M.build(db,options).week;assert.equal(current.canPrevious,true);assert.equal(current.canNext,false);
+});
+test('future schedule weeks extend the upper boundary, excluding cancellations and deleted records',()=>{
+ const db={lessons:[{id:'past',date:'2025-12-24'},{id:'next',date:'2026-01-14',status:'scheduled'},{id:'cancel',date:'2030-01-01',status:'cancelled'},{id:'deleted',date:'2040-01-01'}],performances:[{id:'show',start:'2026-01-30',sessions:[{date:'2026-01-18'}]},{id:'cancelShow',start:'2050-01-01',status:'cancelled'}],deleted:{lessons:['deleted']}};
+ const options={today:'2026-01-01',mediaDates:['2026-12-01']};
+ assert.deepEqual(M.weekBounds(db,options),{first:'2025-12-22',last:'2026-01-12',current:'2025-12-29'});
+ const last=M.build(db,{...options,weekStart:'2026-01-12'}).week;assert.equal(last.canNext,false);assert.equal(last.canPrevious,true);
+});

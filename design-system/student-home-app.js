@@ -1,11 +1,16 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=4';
+import {createFloatingHome} from './student-home-html.js?v=5';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
  const owner=()=>window.vzipCloudUserId?.()||window.VzipAccountScope?.owner||'';
- const state=(files=V.media.cached(),weekStart=null)=>M.build({...V.db,performances:(V.db.performances||[]).filter(p=>p.ownerId===owner()&&owner())},{today:today(),weekStart,timeEntries:V.timeEntries(files)});
+ const state=(files=V.media.cached(),weekStart=null)=>{
+  const db={...V.db,performances:(V.db.performances||[]).filter(p=>p.ownerId===owner()&&owner())};
+  const options={today:today(),timeEntries:V.timeEntries(files),mediaDates:files.filter(f=>!V.db.deleted?.media?.includes(f.id)).map(f=>V.media.dateOf(f))};
+  const bounds=M.weekBounds(db,options),requested=weekStart||bounds.current;
+  return M.build(db,{...options,weekStart:requested<bounds.first?bounds.first:requested>bounds.last?bounds.last:requested});
+ };
  let selectedWeekStart=null,stopHome=()=>{};
  const calendar=date=>nav('#/calendar?date='+encodeURIComponent(date));
  const dayLabel=date=>date?V.dateLabel(date):'';
@@ -94,7 +99,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
     ...recentCallbacks(r),onRecord:()=>nav('#/record'),onNavigate:id=>nav('#/'+id),
     onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
-    onWeekMove:delta=>{const d=V.parseYmd(state(files,selectedWeekStart).week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
+    onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
     onGoalToggle:async(id,completed)=>{
@@ -141,6 +146,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  applyTheme();
  if((location.hash.replace(/^#\/?/,'').split(/[/?]/)[0]||'home')==='home')V.softRender();
 }
+
 
 
 
