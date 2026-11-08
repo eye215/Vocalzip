@@ -114,7 +114,6 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
   document.querySelector('[data-imp]').setAttribute('aria-label','보관함 메뉴');
   document.querySelector('[data-imp]').onclick = () => VZ.collectionLibraryMenu(main);
   main.querySelector('[data-library-search]').onclick=()=>VZ.collectionSearch('보관함 검색','제목·곡·메모 검색',lib.q,value=>{const input=main.querySelector('[data-q]');input.value=value;input.dispatchEvent(new Event('input'));});
-  main.addEventListener('click',event=>{if(!l.isConnected||!l.contains(event.target))return;const row=event.target.closest('[data-media]');if(!main.classList.contains('lib-selecting')&&row&&event.target.closest('[data-toggle]')){event.preventDefault();event.stopPropagation();VZ.nav('#/recording/'+encodeURIComponent(row.dataset.media));}},true);
   document.querySelector('[data-hub-open]').onclick = () => VZ.openImportHub();
   const l = main.querySelector('[data-l]');
   let media = [], drawn = [];
