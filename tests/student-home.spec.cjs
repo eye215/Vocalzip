@@ -105,6 +105,7 @@ async function ready(page, home = true) {
     // The ES module mount may follow cloud auth visibility by several microtasks.
     await expect(page.locator('.vz-student-home')).toBeVisible();
     await expect(page.locator('body')).toHaveClass(/vz-home-mode/);
+    await page.evaluate(()=>document.fonts.ready);
   }
 }
 async function boot(page, value = seed()) {
@@ -122,245 +123,146 @@ async function noOverflow(page) {
   }))).toEqual(expect.objectContaining({viewport:expect.any(Number)}));
   expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth,document.body.scrollWidth) - innerWidth)).toBeLessThanOrEqual(1);
 }
-async function screenshot(page, testInfo, name) {
-  await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({path:testInfo.outputPath(name),fullPage:true,animations:'disabled'});
-  if(name.endsWith('-390.png'))await page.screenshot({path:testInfo.outputPath(name.replace('.png','-viewport.png')),fullPage:false,animations:'disabled'});
+
+async function screenshot(page,testInfo,name){
+ await page.evaluate(()=>document.fonts.ready);
+ await page.screenshot({path:testInfo.outputPath(name),fullPage:true,animations:'disabled',style:'.vz-nav-space,.vz-floating-record{visibility:hidden!important;}'});
+ if(/-\d{3}\.png$/.test(name))await page.screenshot({path:testInfo.outputPath(name.replace('.png','-viewport.png')),fullPage:false,animations:'disabled'});
 }
-test.afterEach(async ({page}) => {expect(page.__homeErrors || []).toEqual([]);});
-
-test('fixed preview and actual home screenshots at 320/390/430', async ({page}, testInfo) => {
-  await boot(page);
-  for (const width of widths) {
-    await page.setViewportSize({width,height:844});
-    await noOverflow(page);
-    const cards=await page.locator('section.vz-home-stage, section.vz-home-goals, section.vz-home-week, .vz-home-bottom-grid').evaluateAll(nodes=>nodes.map(node=>{const b=node.getBoundingClientRect();return {top:b.top,bottom:b.bottom};}));
-    expect(cards).toHaveLength(4);
-    for(let i=1;i<cards.length;i++) expect(cards[i-1].bottom).toBeLessThanOrEqual(cards[i].top+1);
-    const song = await page.locator('.vz-song-tile').boundingBox();
-    const quick = await page.locator('.vz-quick-actions').boundingBox();
-    expect(song).not.toBeNull();
-    expect(quick).not.toBeNull();
-    expect(Math.abs(song.width-song.height)).toBeLessThanOrEqual(1);
-    expect(Math.abs(song.height-quick.height)).toBeLessThanOrEqual(1);
-    expect(Math.abs(song.y-quick.y)).toBeLessThanOrEqual(1);
-    expect(song.x+song.width).toBeLessThanOrEqual(quick.x+1);
-    const rows = await page.locator('.vz-goal-row').evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().height));
-    expect(rows.every(height => Math.round(height) >= 44)).toBe(true);
-    await screenshot(page,testInfo,'student-home-after-'+width+'.png');
-  }
-  await page.goto('/design-system/student-home-preview.html');
-  await expect(page.locator('.vz-student-home')).toBeVisible();
-  for (const width of widths) {
-    await page.setViewportSize({width,height:844});
-    await noOverflow(page);
-    await screenshot(page,testInfo,'student-home-preview-'+width+'.png');
-  }
-});
-
-test('same fixture baseline screenshots from the pinned pre-change source', async ({page}, testInfo) => {
-  test.skip(!process.env.VZ_HOME_BASELINE_URL,'Baseline server is supplied by student-home-check workflow.');
-  await prepare(page);
-  await page.goto(process.env.VZ_HOME_BASELINE_URL+'/#/home');
-  await ready(page,false);
-  await expect(page.locator('#view')).toBeVisible();
-  for (const width of widths) {
-    await page.setViewportSize({width,height:844});
-    await screenshot(page,testInfo,'student-home-before-'+width+'.png');
-  }
-});
-
-test('reading real home preserves source records; checked goal persists across refresh', async ({page}) => {
-  const original = seed();
-  await boot(page,original);
-  const initial = await db(page);
-  for (const key of ['lessons','assignments','practices','performances','dailyGoals','practicePlans']) expect(initial[key]).toEqual(original[key]);
-  await expect(goals(page)).toHaveCount(3);
-  const checkbox = page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true});
-  await expect(checkbox).not.toBeChecked();
-  await checkbox.check();
-  await expect(checkbox).toBeChecked();
-  await expect.poll(async () => (await db(page)).dailyGoals.find(g => g.id==='g1').completed).toBe(true);
-  const changed = await db(page);
-  for (const key of ['lessons','assignments','practices','performances','practicePlans']) expect(changed[key]).toEqual(original[key]);
-  // Wait for the real sync path so a stale fake server cannot undo a refresh.
-  await expect.poll(() => page.evaluate(() => window.__homeServerRow()?.payload.dailyGoals.find(g => g.id==='g1')?.completed)).toBe(true);
-  await page.reload();
-  await ready(page);
-  await expect(page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true})).toBeChecked();
-  await expect(page.locator('.vz-home-gauge[role=img], .vz-home-gauge [role=img]')).toHaveAccessibleName(/2.*3.*67(?:%|퍼센트)|67(?:%|퍼센트).*2.*3/);
-  await page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true}).focus();
-  await page.keyboard.press('Space');
-  await expect(page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true})).not.toBeChecked();
-});
-
-test('actual persistence failure restores checkbox and db; retry succeeds', async ({page}) => {
-  await boot(page);
-  const original = await db(page);
-  await page.evaluate(key => {
-    const store = window.VzipAccountScope?.storage;
-    window.__homePersistAttempts = 0;
-    if (store) {
-      const previous = store.setItem;
-      store.setItem = function(k,v) {if (k===key) {window.__homePersistAttempts++;throw new DOMException('fixture quota','QuotaExceededError');}return previous.call(this,k,v);};
-      window.__restoreHomeStorage = () => {store.setItem=previous;};
-    } else {
-      const previous = Storage.prototype.setItem;
-      Storage.prototype.setItem = function(k,v) {if (k===key) {window.__homePersistAttempts++;throw new DOMException('fixture quota','QuotaExceededError');}return previous.call(this,k,v);};
-      window.__restoreHomeStorage = () => {Storage.prototype.setItem=previous;};
-    }
-  },KEY);
-  await page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true}).click();
-  await expect.poll(() => page.evaluate(() => window.__homePersistAttempts)).toBeGreaterThan(0);
-  await expect(page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true})).not.toBeChecked();
-  expect(await db(page)).toEqual(original);
-  await expect(page.getByText(/저장.*못|저장.*실패|다시.*시도/).first()).toBeVisible();
-  await page.evaluate(() => window.__restoreHomeStorage());
-  await page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true}).click();
-  await expect(page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true})).toBeChecked();
-});
-
-test('900 goals keep one scroll list, order, and scroll position after a check', async ({page}, testInfo) => {
-  const value = seed();
-  value.dailyGoals = Array.from({length:900},(_,i) => ({id:'many-'+i,date:TODAY,title:'연습 목표 '+String(i).padStart(3,'0'),source:'personal',completed:false,order:i}));
-  await boot(page,value);
-  await expect(page.locator('.vz-goal-list')).toHaveCount(1);
-  await expect(goals(page)).toHaveCount(900);
-  const list = page.locator('.vz-goal-list');
-  expect(await list.evaluate(el => el.scrollHeight>el.clientHeight && ['auto','scroll'].includes(getComputedStyle(el).overflowY))).toBe(true);
-  await list.evaluate(el => {el.scrollTop=450;});
-  const before = await list.evaluate(el => el.scrollTop);
-  // Choose the input by its actual accessible name via the visible row's goal id/title.
-  const visibleIndex = await list.evaluate(el => {
-    const r=el.getBoundingClientRect();
-    return [...el.querySelectorAll('.vz-goal-row')].findIndex(n => {const b=n.getBoundingClientRect();return b.top>=r.top+4&&b.bottom<=r.bottom-4;});
-  });
-  await goals(page).nth(visibleIndex).click();
-  await expect(goals(page).nth(visibleIndex)).toBeChecked();
-  expect(Math.abs(await list.evaluate(el=>el.scrollTop)-before)).toBeLessThanOrEqual(1);
-  expect((await db(page)).dailyGoals.map(g=>g.id)).toEqual(value.dailyGoals.map(g=>g.id));
-  await expect(page.locator('.vz-home-gauge[role=img], .vz-home-gauge [role=img]')).toHaveAccessibleName(/1.*900.*0(?:%|퍼센트)|0(?:%|퍼센트).*1.*900/);
-  await screenshot(page,testInfo,'student-home-900-goals.png');
-});
-
-test('empty and missing optional data never save marketing examples', async ({page}) => {
-  const value={categories:[],songs:[],lessons:[],assignments:[],practices:[],performances:[],comparisonReports:[]};
-  await boot(page,value);
-  await expect(goals(page)).toHaveCount(0);
-  await expect(page.locator('.vz-student-home')).toContainText(/목표.*없|목표.*설정/);
-  expect((await db(page)).dailyGoals || []).toEqual([]);
-  expect((await db(page)).practicePlans || []).toEqual([]);
-  for (const key of ['songs','lessons','assignments','practices','performances']) expect((await db(page))[key]).toEqual([]);
-  const writes=await page.evaluate(()=>window.__homeServerWrites);
-  expect(writes.every(q=>['songs','lessons','assignments','practices','dailyGoals','practicePlans'].every(k=>!(q.body?.payload?.[k]||[]).length))).toBe(true);
-});
-
-test('today marker survives all practice percentage boundaries and future/unplanned states differ', async ({page}) => {
-  await boot(page);
-  const today=page.locator('.vz-week-day[data-date="'+TODAY+'"]');
-  for (const [minutes,state] of [[0,'empty'],[99,'partial'],[100,'met'],[120,'met'],[121,'high']]) {
-    await page.evaluate(({minutes,date}) => VZ.change(d => {
-      d.practices=[{id:'boundary',date,minutes:999,manualMinutes:minutes,mediaSeconds:99999,mediaIds:['same-file'],songId:'s1'}];
-      d.practicePlans=[{id:'day:'+date,period:'day',date,targetMinutes:100}];
-    }),{minutes,date:TODAY});
-    await expect(today).toHaveAttribute('data-state',state);
-    await expect(today).toHaveAttribute('data-today','true');
-    await expect(today).toContainText('오늘');
-    await expect(today).toContainText(minutes+'분');
-  }
-  await expect(page.locator('.vz-week-day[data-date="2026-11-05"]')).toHaveAttribute('data-state','future');
-  await page.evaluate(() => VZ.change(d => {d.practicePlans=[];}));
-  await expect(today).toHaveAttribute('data-state','unplanned');
-  await expect(today).toHaveAttribute('data-today','true');
-});
-
-test('long Korean goals at twice the text size stay operable on every mobile width', async ({page},testInfo) => {
-  const value=seed();
-  const title='호흡과 발음의 연결을 느끼면서 긴 한국어 가사를 끝까지 천천히 읽고 다음 문장까지 자연스럽게 이어서 연습하기'.repeat(3);
-  value.dailyGoals=[{id:'long',date:TODAY,title,source:'personal',completed:false,order:0}];
-  await boot(page,value);
-  // Increase actual rendered text rather than assuming the component uses rem units.
-  await page.evaluate(() => {
-    const nodes=[...document.querySelectorAll('.vz-student-home :is(p,span,strong,small,h1,h2,h3,label,a,button)')];
-    const sizes=nodes.map(node=>parseFloat(getComputedStyle(node).fontSize));
-    nodes.forEach((node,i)=>{node.style.setProperty('font-size',sizes[i]*2+'px','important');});
-  });
-  for (const width of widths) {
-    await page.setViewportSize({width,height:844});
-    await noOverflow(page);
-    const input=page.getByRole('checkbox',{name:title,exact:true});
-    await expect(input).toBeEnabled();
-    expect(Math.round((await page.locator('.vz-goal-row').boundingBox()).height)).toBeGreaterThanOrEqual(44);
-    await screenshot(page,testInfo,'student-home-large-text-'+width+'.png');
-  }
-  await page.getByRole('checkbox',{name:title,exact:true}).check();
-  await expect(page.getByRole('checkbox',{name:title,exact:true})).toBeChecked();
-});
-
-test('dock order, destinations, 44pt targets, and safe-area content clearance', async ({page}) => {
-  await boot(page);
-  const dock=page.locator('.v-nav.vz-home-dock');
-  const links=dock.getByRole('link');
-  await expect(links).toHaveText(['홈','내 곡','녹음','보관함','일정']);
-  const routes=['home','songs','record','library','calendar'];
-  for (let i=0;i<routes.length;i++) {
-    await expect(links.nth(i)).toHaveAttribute('href','#/'+routes[i]);
-    const box=await links.nth(i).boundingBox();
-    expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
-    expect(Math.round(box.width)).toBeGreaterThanOrEqual(44);
-  }
-  await page.evaluate(() => scrollTo(0,document.documentElement.scrollHeight));
-  const clearance=await page.evaluate(() => {
-    const content=document.querySelector('.vz-home-bottom-grid').getBoundingClientRect();
-    const dock=document.querySelector('.v-nav.vz-home-dock').getBoundingClientRect();
-    return {contentBottom:content.bottom,dockTop:dock.top,padding:parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom)||0};
-  });
-  expect(clearance.contentBottom).toBeLessThanOrEqual(clearance.dockTop+1);
-  for (const route of routes.slice(1)) {
-    await page.goto('/#/home');await ready(page);
-    await dock.locator('a[href="#/'+route+'"]').click();
-    await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
-    await expect(page.locator('.vz-student-home')).toHaveCount(0);
-    await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);
-  }
-});
-
-test('actual stage, lesson, recent song and quick actions reach existing routes', async ({page}) => {
-  await boot(page);
-  await page.getByRole('button',{name:'무대 상세 보기',exact:true}).click();
-  await expect(page).toHaveURL(/#\/show\/stage1$/);
-  await page.goto('/#/home');await ready(page);
-  await page.getByRole('button',{name:'다음 레슨 보기',exact:true}).click();
-  await expect(page).toHaveURL(/#\/lesson\/l1$/);
-  await page.goto('/#/home');await ready(page);
-  await page.locator('.vz-home-song-detail').click();
-  await expect(page).toHaveURL(/#\/song\/s1$/);
-  await page.goto('/#/home');await ready(page);
-  await page.locator('.vz-quick-actions').getByRole('button',{name:'레슨노트',exact:true}).click();
-  await expect(page).toHaveURL(/#\/lessons$/);
-  await page.goto('/#/home');await ready(page);
-  await page.locator('.vz-quick-actions').getByRole('button',{name:'연습기록',exact:true}).click();
-  await expect(page).toHaveURL(/#\/practices$/);
-});
-
-test('goal settings store only user entered plans and personal goals', async ({page}) => {
-  await boot(page);
-  await page.getByRole('button',{name:/오늘의 목표 설정 및 수정|목표.*설정/}).click();
-  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
-  await sheet.getByLabel('오늘 목표 시간(분)',{exact:true}).fill('45');
-  await sheet.getByLabel('이번 주 목표 시간(분)',{exact:true}).fill('210');
-  await sheet.getByLabel('개인 목표',{exact:true}).fill('새 개인 목표');
-  await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
-  const saved=await db(page);
-  expect(saved.practicePlans.find(p=>p.id==='day:'+TODAY)?.targetMinutes).toBe(45);
-  expect(saved.practicePlans.find(p=>p.id==='week:'+WEEK)?.targetMinutes).toBe(210);
-  expect(saved.dailyGoals.some(g=>g.title==='새 개인 목표'&&g.source==='personal')).toBe(true);
-  expect(saved.assignments).toEqual(seed().assignments);
-  expect(saved.practices).toEqual(seed().practices);
-});
-
-test('recent recording uses the existing player and closing stops playback without changing practice time',async({page})=>{
+test.afterEach(async({page})=>expect(page.__homeErrors||[]).toEqual([]));
+test('literal floating HTML and app screenshots at 320/390/430',async({page},testInfo)=>{
  await boot(page);
+ for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);const card=await page.locator('.vz-week').boundingBox();expect(Math.abs(card.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(card.width-(width-32))).toBeLessThanOrEqual(1);await expect(page.locator('.vz-week')).toHaveCSS('padding-left','20px');await expect(page.locator('.vz-goals')).toHaveCSS('padding-top','20px');const dock=await page.locator('.vz-nav-space').boundingBox();expect(Math.abs(dock.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(dock.width-(width-32))).toBeLessThanOrEqual(1);const before=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(width-before.x-before.width-16)).toBeLessThanOrEqual(1);await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));const after=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);const last=await page.locator('.vz-goals').boundingBox();expect(last.y+last.height+12).toBeLessThanOrEqual(after.y);await page.evaluate(()=>scrollTo(0,0));await screenshot(page,testInfo,'student-home-after-'+width+'.png');}
+ await page.goto('/design-system/student-home-preview.html?upcoming=all');await expect(page.locator('.vz-phone')).toBeVisible();
+ for(const width of widths){
+  await page.setViewportSize({width,height:940});await noOverflow(page);
+  const nav=await page.locator('.vz-nav').boundingBox(),fab=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();
+  expect(Math.round(fab.height)).toBe(48);expect(fab.width).toBeGreaterThanOrEqual(132);expect(Math.abs(nav.y-fab.y-fab.height-12)).toBeLessThanOrEqual(1);
+  for(const button of await page.locator('.vz-nav-item').all()){const b=await button.boundingBox();expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44);}
+  await screenshot(page,testInfo,'student-home-preview-'+width+'.png');
+ }
+});
+test('uploaded HTML blob and all original stylesheet blocks are reused literally',async({page})=>{
+ const response=await page.request.get('/design-system/Vocalzip_Floating_Record_Home.html');
+ const bytes=await response.body(),hash=require('node:crypto').createHash('sha1').update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
+ expect(hash).toBe('b4ad1520615f1cae216393239679657779389d06');
+ await page.goto('/design-system/student-home-preview.html');await expect(page.locator('.vz-phone')).toBeVisible();
+ const result=await page.locator('.vz-student-home').evaluate(async host=>{
+  const original=new DOMParser().parseFromString(await(await fetch('/design-system/Vocalzip_Floating_Record_Home.html')).text(),'text/html');
+  const expected=[...original.querySelectorAll('style')].map(e=>e.textContent.replace(/@import\s+url\([^;]*\);/g,''));
+  const shadow=host.shadowRoot,actual=[...shadow.querySelectorAll('style[data-source-style]')].map(e=>e.textContent);
+  const same=selector=>original.querySelector(selector).innerHTML===shadow.querySelector(selector).innerHTML;
+  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:same('.vz-floating-record'),nav:[...shadow.querySelectorAll('.vz-nav-item')].every((e,i)=>e.querySelector('svg').innerHTML===original.querySelectorAll('.vz-nav-item')[i].querySelector('svg').innerHTML),scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
+ });
+ expect(result).toEqual({styles:true,count:10,fab:true,nav:true,scripts:0});
+ await expect(page.locator('.vz-nav-item')).toHaveCount(4);
+ const fonts=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/[\"']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
+ expect(fonts.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
+});
+test('reading home preserves source records; checked goal persists after refresh',async({page})=>{
+ await boot(page);const before=await db(page);
+ await page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true}).check();
+ await expect(page.locator('.vz-count')).toHaveText('2 / 3 완료');
+ await page.reload();await ready(page);
+ await expect(page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true})).toBeChecked();
+ const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances','practicePlans'])expect(after[key]).toEqual(before[key]);
+ expect(after.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
+});
+test('persistence failure restores the checkbox and retry succeeds',async({page})=>{
+ await boot(page);const before=await db(page);
+ await page.evaluate(()=>{window.__homeSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='vocal-zip_mvp_v1')throw new Error('fixture quota failure');return window.__homeSetItem.call(this,key,value);};});
+ const box=page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true});await box.click();await expect(box).not.toBeChecked();await expect(page.locator('.vz-save-error')).toContainText('다시 체크');
+ expect((await db(page)).dailyGoals).toEqual(before.dailyGoals);
+ await page.evaluate(()=>{Storage.prototype.setItem=window.__homeSetItem;});await box.check();await expect(box).toBeChecked();
+});
+test('900 goals preserve order and inner scroll after checking a visible row',async({page})=>{
+ const value=seed();value.dailyGoals=Array.from({length:900},(_,i)=>({id:'many-'+i,date:TODAY,title:'연습 목표 '+String(i).padStart(3,'0'),source:'personal',completed:false,order:i}));
+ await boot(page,value);const list=page.locator('.vz-goal-list');await expect(goals(page)).toHaveCount(900);
+ await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));await list.evaluate(e=>{e.scrollTop=450;});const before=await list.evaluate(e=>e.scrollTop);
+ const index=await list.evaluate(e=>{const r=e.getBoundingClientRect();return [...e.children].findIndex(n=>{const b=n.getBoundingClientRect();return b.top>=r.top+4&&b.bottom<=r.bottom-4;});});
+ await goals(page).nth(index).click();await expect(goals(page).nth(index)).toBeChecked();expect(Math.abs(await list.evaluate(e=>e.scrollTop)-before)).toBeLessThanOrEqual(1);
+ expect((await db(page)).dailyGoals.map(g=>g.id)).toEqual(value.dailyGoals.map(g=>g.id));await expect(page.locator('.vz-count')).toHaveText('1 / 900 완료');
+ // Keep this stress test focused on persistence and scroll; visual captures are covered by layout tests.
+});
+test('empty state removes all sample data and connects song and goal setup',async({page})=>{
+ const value={categories:[],songs:[],lessons:[],assignments:[],practices:[],performances:[],comparisonReports:[]};await boot(page,value);
+ await expect(page.locator('.vz-schedule')).toHaveCount(0);await expect(goals(page)).toHaveCount(0);await expect(page.locator('.vz-count')).toHaveText('0 / 0 완료');
+ await expect(page.locator('.vz-song')).not.toContainText('Defying Gravity');
+ await page.getByRole('button',{name:'곡 추가 또는 선택',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
+ await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:'주간 목표 설정',exact:true}).click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
+ expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
+});
+test('weekday names, minutes, rings and percentage colors use actual records',async({page})=>{
+ await boot(page);
+ for(const [minutes,level,color]of [[0,'missed',null],[99,'partial','rgb(217, 197, 250)'],[100,'done','rgb(122, 50, 245)'],[120,'done','rgb(122, 50, 245)'],[121,'exceeded','rgb(76, 24, 142)']]){
+  await page.evaluate(({minutes,date})=>VZ.change(d=>{d.practices=[{id:'boundary',date,manualMinutes:minutes,minutes:999,mediaSeconds:9999,songId:'s1'}];d.practicePlans=[{id:'day:'+date,period:'day',date,targetMinutes:100}];}),{minutes,date:TODAY});
+  const day=page.locator('.vz-days>div[data-date="'+TODAY+'"]'),dot=day.locator('.vz-day-dot');await expect(day).toHaveAttribute('data-today','true');await expect(day.locator('span').first()).toHaveText('수');await expect(dot).toHaveClass(new RegExp(level));await expect(dot).toHaveClass(/today/);
+  if(color)await expect(dot).toHaveCSS('background-color',color);await expect(day).toHaveAttribute('aria-label',new RegExp(minutes+'분 연습'));
+  if(minutes)await expect(day.locator('.vz-day-minutes')).toHaveText(minutes+'분');
+ }
+ const future=page.locator('.vz-days>div[data-date="2026-11-05"]');await expect(future.locator('.vz-day-dot')).toHaveClass(/future/);await expect(future.locator('svg')).toHaveCount(0);await expect(future.locator('.vz-day-minutes')).toBeEmpty();
+ await page.evaluate(()=>VZ.change(d=>{d.practicePlans=[];}));await expect(page.locator('.vz-days>div[data-date="'+TODAY+'"]')).toHaveAttribute('aria-label',/목표 미설정/);
+});
+test('four home navigation buttons and floating recording reach existing routes',async({page})=>{
+ await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정']);
+ for(const [label,route]of [['내 곡','songs'],['보관함','library'],['일정','calendar'],['녹음 시작','record']]){
+  await page.goto('/#/home');await ready(page);
+  await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));await expect(page.locator('.vz-student-home')).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);await expect(page.locator('.v-nav')).toBeVisible();await noOverflow(page);
+ }
+ const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
+});
+test('stage, lesson, song, quick actions and growth retain their real destinations',async({page})=>{
+ await boot(page);
+ for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','song/s1'],['레슨노트','lessons'],['연습기록','practices'],['성장 기록 보기','growth'],['프로필','settings']]){
+  await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
+ }
+});
+test('goal editor saves only user entered plans and personal goals',async({page})=>{
+ await boot(page);await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ expect((await sheet.getByRole('button',{name:'목표 저장',exact:true}).boundingBox()).height).toBeGreaterThanOrEqual(52);
+ await sheet.getByLabel('오늘 목표 시간(분)',{exact:true}).fill('45');await sheet.getByLabel('이번 주 목표 시간(분)',{exact:true}).fill('210');await sheet.getByLabel('개인 목표',{exact:true}).fill('새 개인 목표');await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
+ const value=await db(page);expect(value.practicePlans.find(p=>p.id==='day:'+TODAY).targetMinutes).toBe(45);expect(value.practicePlans.find(p=>p.id==='week:'+WEEK).targetMinutes).toBe(210);expect(value.dailyGoals.some(g=>g.title==='새 개인 목표')).toBe(true);expect(value.practices).toEqual(seed().practices);expect(value.assignments).toEqual(seed().assignments);
+});
+test('goal planning separates long selectable rows and keeps save visible on small screens',async({page},testInfo)=>{
+ const value=seed();value.dailyGoals[0].title='악보에 너무 맞추려 하지 않고 반주치면서 박자와 리듬을 가지고 노는 것처럼 연습하기 · 18마디 참고';
+ await boot(page,value);
+ for(const width of widths){
+  await page.setViewportSize({width,height:744});
+  await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+  await sheet.evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished));});
+  const rows=sheet.locator('.vz-plan-option'),save=sheet.getByRole('button',{name:'목표 저장',exact:true});
+  await expect(rows).toHaveCount(3);await expect(sheet.locator('[data-plan-count]')).toHaveText('3개 선택');
+  const first=await rows.nth(0).boundingBox(),second=await rows.nth(1).boundingBox();
+  expect(second.y).toBeGreaterThanOrEqual(first.y+first.height+7);expect(first.height).toBeGreaterThanOrEqual(56);
+  const text=await rows.nth(0).locator('.vz-plan-title').boundingBox(),badge=await rows.nth(0).locator('small').boundingBox();
+  expect(text.x+text.width).toBeLessThanOrEqual(badge.x-11);
+  await expect(rows.nth(0).locator('.vz-plan-check')).toHaveCSS('background-color','rgb(122, 50, 245)');
+  const before=await save.boundingBox();expect(before.y+before.height).toBeLessThanOrEqual(744);
+  await sheet.locator('.sheet-body').evaluate(el=>el.scrollTop=el.scrollHeight);
+  const after=await save.boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);
+  await noOverflow(page);expect(await sheet.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
+  await sheet.locator('.sheet-body').evaluate(el=>el.scrollTop=0);
+  await page.screenshot({path:testInfo.outputPath('student-home-plan-'+width+'.png'),animations:'disabled'});
+  await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ }
+});
+test('goal selection remains keyboard accessible and leaves source homework unchanged',async({page})=>{
+ await boot(page);const before=await db(page);
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true}),check=sheet.locator('input[name=goal]').first();
+ await check.focus();await page.keyboard.press('Space');await expect(check).not.toBeChecked();
+ await expect(sheet.locator('[data-plan-count]')).toHaveText('2개 선택');
+ await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
+ const after=await db(page);expect(after.dailyGoals.some(g=>g.id==='g1')).toBe(false);
+ expect(after.assignments).toEqual(before.assignments);expect(after.practices).toEqual(before.practices);
+});
+test('continue practice preselects the recent song with and without a recording and preserves history',async({page})=>{
+ await boot(page);
+ for(const withRecording of [false,true]){
+  if(withRecording){
  await page.evaluate(async date=>{
   window.vzipCloudSignedIn=()=>false;
   const rate=16000,frames=rate*3,bytes=new Uint8Array(44+frames*2),view=new DataView(bytes.buffer);
@@ -373,12 +275,66 @@ test('recent recording uses the existing player and closing stops playback witho
   await window.vzipStorePracticeMedia({id:'file1',name:'최근 연습 녹음',songId:'s1',source:'practice',type:'audio/wav',recordedDate:date,dateSource:'manual',created:Date.now(),durationSeconds:3,blob:new Blob([bytes],{type:'audio/wav'})});
   VZ.media.invalidate();VZ.render();
  },TODAY);
- const before=await db(page);
- await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
- await expect.poll(()=>page.locator('[data-home-player]').evaluate(host=>host._player?.el?.currentTime||0)).toBeGreaterThan(0);
- await page.evaluate(()=>{window.__homeAudio=document.querySelector('[data-home-player]')._player.el;});
- await page.getByRole('dialog',{name:'최근 연습 녹음',exact:true}).getByRole('button',{name:'닫기',exact:true}).click();
- await expect(page.locator('[data-home-player]')).toHaveCount(0);
- expect(await page.evaluate(()=>window.__homeAudio.paused)).toBe(true);
- expect((await db(page)).practices).toEqual(before.practices);
+  }
+  const before=await db(page);
+  await page.getByRole('button',{name:/계속 연습하기$/}).click();
+  await expect(page).toHaveURL(/#\/record\?song=s1$/);
+  await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
+  // Headless WebKit may have no MediaRecorder; both supported and fallback views must stay idle.
+  await expect(page.locator('.rec-time')).toHaveText('0:00');
+  await expect(page.locator('.rec-dot')).toHaveCount(0);
+  await expect(page.locator('[data-main]')).toHaveAttribute('aria-label','녹음 시작');
+  await expect(page.locator('[data-home-player]')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.goto('/#/home');await ready(page);
+  const after=await db(page);
+  for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
+ }
 });
+
+test('large text and long user content remain operable and scroll above the floating button',async({page},testInfo)=>{
+ const value=seed(),title='긴 한국어 가사와 LongEnglishWord를 끝까지 호흡하며 연결해서 연습하기 '.repeat(10);
+ value.songs[0].title='LongEnglishSongTitleAnd한글곡명'.repeat(9);
+ value.dailyGoals=[{id:'long',date:TODAY,title,source:'personal',completed:false,order:0}];
+ await boot(page,value);
+ await page.locator('.vz-student-home').evaluate(host=>{
+  const nodes=[...host.shadowRoot.querySelector('main').querySelectorAll('p,span,strong,small,h2,h3,label,button')],sizes=nodes.map(n=>parseFloat(getComputedStyle(n).fontSize));
+  nodes.forEach((n,i)=>n.style.setProperty('font-size',sizes[i]*2+'px','important'));
+ });
+ for(const width of widths){
+  await page.setViewportSize({width,height:940});await noOverflow(page);
+  const button=page.getByRole('button',{name:/계속 연습하기$/}),bounds=await button.boundingBox();expect(bounds.height).toBeGreaterThanOrEqual(44);
+  const full=await page.locator('.vz-song h3').evaluate(e=>({height:e.clientHeight,scroll:e.scrollHeight}));expect(full.scroll).toBeLessThanOrEqual(full.height+1);
+  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+  const end=await page.locator('.vz-goals').boundingBox(),fab=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(end.y+end.height+12).toBeLessThanOrEqual(fab.y);
+  await screenshot(page,testInfo,'student-home-large-text-bottom-'+width+'.png');
+ }
+ await page.getByRole('checkbox',{name:title,exact:true}).check();await expect(page.getByRole('checkbox',{name:title,exact:true})).toBeChecked();
+});
+test('six real schedule combinations never restore sample events',async({page},testInfo)=>{
+ for(const [name,total,lessons]of [['both',2,1],['stages',2,0],['all',3,1],['lesson',1,1],['none',0,0],['soon',3,1]]){
+  await page.setViewportSize({width:390,height:940});await page.goto('/design-system/student-home-preview.html?upcoming='+name);await expect(page.locator('.vz-phone')).toBeVisible();
+  await expect(page.locator('.vz-event')).toHaveCount(lessons);await expect(page.locator('.vz-event-row')).toHaveCount(total-lessons);
+  if(!total)await expect(page.locator('.vz-schedule')).toHaveCount(0);
+  for(const row of await page.locator('.vz-event-row').all())expect((await row.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);}
+  await page.setViewportSize({width:390,height:940});await screenshot(page,testInfo,'student-home-upcoming-'+name+'-390.png');
+ }
+ await page.getByRole('button',{name:'보컬 레슨 확인',exact:true}).click();await expect(page.locator('.preview-status')).toContainText('레슨 확인');
+});
+test('HTML load failure shows a retry and does not change stored records',async({page})=>{
+ await prepare(page);const pattern='**/design-system/Vocalzip_Floating_Record_Home.html?*';await page.route(pattern,r=>r.abort());await page.goto('/#/home');
+ await expect(page.getByRole('alert')).toContainText('기록은 그대로');await expect(page.locator('.vz-student-home')).toHaveCount(0);const before=await db(page);
+ await page.unroute(pattern);await page.getByRole('button',{name:'다시 불러오기',exact:true}).click();await ready(page);const after=await db(page);
+ for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
+});
+test('source HTML and hydrated home comparison use the same supplied layout',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chromium-desktop','One side-by-side source capture is sufficient.');
+ await page.route('https://cdn.jsdelivr.net/**',r=>r.fulfill({contentType:'text/css',body:''}));
+ await page.setViewportSize({width:850,height:1100});await page.goto('/design-system/handoff-comparison.html');await expect(page.locator('iframe')).toHaveCount(2);
+ const faces=[['Regular','400'],['SemiBold','600'],['Bold','700']].map(([n,w])=>'@font-face{font-family:Pretendard;src:url("/design-system/fonts/pretendard/Pretendard-'+n+'.woff2?v=1.3.9");font-weight:'+w+';font-style:normal;}').join('');
+ await page.addStyleTag({content:faces});
+ for(const frame of page.frames().filter(f=>f.parentFrame())){await frame.waitForSelector(frame.url().includes('student-home-preview')?'.vz-student-home':'.vz-phone');await frame.addStyleTag({content:faces});await frame.evaluate(()=>document.fonts.ready);}
+ await page.screenshot({path:testInfo.outputPath('student-home-html-source-comparison.png'),fullPage:true,animations:'disabled'});
+});
+

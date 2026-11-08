@@ -1,0 +1,33 @@
+name: Recording safety checks
+on:
+  pull_request:
+    paths:
+      - 'app/views-main.js'
+      - 'app/media.js'
+      - 'tests/v6.spec.cjs'
+      - '.github/workflows/recording-safety-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recording:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:syntax
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Recorder IDs, failure retry, original preservation and lesson links
+        run: npx playwright test tests/v6.spec.cjs --grep 'One-touch recording|New recording after save|Lesson recording retry|Recording from a lesson|Denied microphone' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recording-safety-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

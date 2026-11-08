@@ -1,0 +1,36 @@
+/* Vocalzip student home — final agreed light theme, 2026-11-08 */
+:root {
+  --vz-font: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+  --vz-page: #F8F6FD;
+  --vz-surface: #FFFFFF;
+  --vz-accent: #7A32F5;
+  --vz-pressed: #6528CA;
+  --vz-soft: #F3ECFF;
+  --vz-title: #101828;
+  --vz-primary: #344054;
+  --vz-body: #475467;
+  --vz-muted: #667085;
+  --vz-faint: #98A2B3;
+  --vz-song-title: #352544;
+  --vz-radius-card: 20px;
+  --vz-padding-card: 20px;
+  --vz-gap: 12px;
+  --vz-page-inset: 16px;
+  --vz-button-height: 52px;
+  --vz-button-radius: 16px;
+  --vz-touch-min: 44px;
+  --vz-lesson-min-height: 108px;
+  --vz-icon-size: 20px;
+  --vz-icon-stroke: 1.8;
+  --vz-title-icon-gap: 8px;
+  --vz-font-regular: 400;
+  --vz-font-semibold: 600;
+  --vz-font-bold: 700;
+  --vz-tracking: -0.02em;
+  --vz-nav-surface: rgba(255,255,255,.78);
+  --vz-nav-border: rgba(255,255,255,.65);
+  --vz-nav-selected: rgba(122,50,245,.055);
+  --vz-nav-blur: 20px;
+  --vz-nav-shadow: 0 5px 20px rgba(55,33,85,.045);
+}
+/* Integration tokens, not a global style reset. See DESIGN_SYSTEM_AND_HOME.md. */

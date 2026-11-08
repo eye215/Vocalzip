@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions} from './components.js';
+import {createFloatingHome} from './student-home-html.js?v=2';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -12,11 +12,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  function applyTheme(){
   const home=!!document.querySelector('[data-approved-home-host]');
   document.body.classList.toggle('vz-home-mode',home);
-  document.body.dataset.vzTheme='student';document.body.dataset.vzDesign='approved-home-v1';
-  document.querySelector('.v-nav')?.classList.add('vz-home-dock');
-  if(meta)meta.content=home?'#D8C7F7':originalTheme;
-  // The existing library controller used the record tab before it had its own dock entry.
-  const route=location.hash.replace(/^#\/?/,'').split(/[/?]/)[0];
+  if(meta)meta.content=home?'#f8f6fd':originalTheme;
+  const route=(location.hash.startsWith('#/')?location.hash.slice(2):location.hash.slice(1)).split('/')[0].split('?')[0];
   if(route==='library'||route==='practices'||route==='growth'){
    document.querySelectorAll('.v-nav [aria-current]').forEach(a=>a.removeAttribute('aria-current'));
    document.querySelector('.v-nav [data-nav="'+({library:'library',practices:'calendar',growth:'home'}[route])+'"]')?.setAttribute('aria-current','page');
@@ -28,9 +25,9 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const displayName=()=>String(V.db.profile?.displayName||V.db.settings?.displayName||'');
  function upcoming(s){
   const stage=s.stage?{id:s.stage.id,title:s.stage.title,subtitle:s.stage.songTitles.join(' · '),
-   dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
-  const l=s.lesson,lesson=l?{id:l.id,title:'다음 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
-   dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
+   date:s.stage.date,time:s.stage.time||'',dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
+  const l=s.lesson,lesson=l?{id:l.id,title:l.title||'보컬 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
+   date:l.date,time:l.startTime||'',dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
   return {stage,lesson};
  }
  function recentData(recent,files=[]){
@@ -41,14 +38,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  }
  function recentCallbacks(recent){
   return {onRecent:()=>recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
-   onPlay:()=>recent?.media?play(recent.media):recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
+   onContinue:()=>recent?nav('#/record?song='+encodeURIComponent(recent.id)):nav('#/songs'),
    onLessons:()=>nav('#/lessons'),onPractice:()=>nav('#/practices')};
- }
- function play(file){
-  let player;
-  V.sheet({title:file.name||'최근 녹음',body:'<div data-home-player></div>',
-   onMount:(el)=>{const host=el.querySelector('[data-home-player]');player=V.media.player(host,file,{tools:true});host._player=player;player.play();},
-   onClose:()=>player?.destroy()});
  }
  function notices(){
   const s=state(),tasks=s.recommendationCandidates;
@@ -62,18 +53,22 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const choices=[...existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true})),...candidates.map((g,i)=>({key:'candidate:'+i,goal:g,checked:false}))];
   const label=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':'개인';
   let dirty=false,approved=false,beforeUnload=null;
-  const body='<form id="student-home-plan"><p class="small muted">선택한 목표만 오늘의 목록에 넣어요. 수행 체크는 연습 시간이나 숙제의 최종 완료를 만들지 않아요.</p>'+
-   (choices.length?'<fieldset class="field" style="border:0;padding:0"><legend>오늘 할 목표</legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+'><span>'+esc(c.goal.title)+'</span><small>'+label(c.goal)+'</small></label>').join('')+'</div></fieldset>':'')+
-   '<label class="field"><span>개인 목표</span><textarea name="personal" rows="3" maxlength="10000" placeholder="한 줄에 목표 하나씩 입력하세요"></textarea></label>'+
-   '<div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(s.week.days.find(d=>d.today)?.targetMinutes??'')+'" placeholder="미설정"></label>'+
-   '<label class="field"><span>이번 주 목표 시간(분)</span><input type="number" name="weekMinutes" min="0" max="10080" inputmode="numeric" value="'+(s.week.targetMinutes??'')+'" placeholder="미설정"></label></div><p class="small muted">시간 목표는 직접 정해요. 입력하지 않으면 달성률을 만들지 않아요.</p><p role="alert" class="small" data-plan-error></p></form>';
-  V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block">목표 저장</button>',
+  const dayTarget=s.week.days.find(d=>d.today)?.targetMinutes;
+  const body='<form id="student-home-plan"><p class="vz-plan-intro">오늘 연습할 항목을 골라주세요.</p>'+
+   (choices.length?'<fieldset class="vz-plan-section"><legend>오늘 할 목표 <span data-plan-count>'+existing.length+'개 선택</span></legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+'><span class="vz-plan-check" aria-hidden="true"></span><span class="vz-plan-title">'+esc(c.goal.title)+'</span><small class="vz-plan-source">'+label(c.goal)+'</small></label>').join('')+'</div><p class="vz-plan-help">수행 체크는 숙제 완료나 연습 시간과 별도로 기록돼요.</p></fieldset>':'')+
+   '<label class="field vz-plan-personal"><span>개인 목표 <small>추가</small></span><textarea name="personal" aria-label="개인 목표" rows="2" maxlength="10000" placeholder="예: 후렴 고음에서 힘 빼기" aria-describedby="vz-plan-personal-help"></textarea><small id="vz-plan-personal-help" class="vz-plan-help">여러 목표는 한 줄에 하나씩 적어주세요.</small></label>'+
+   '<details class="vz-plan-time"'+(dayTarget!=null||s.week.targetMinutes!=null?' open':'')+'><summary>연습 시간 목표 <small>선택</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(dayTarget??'')+'" placeholder="미설정"></label>'+
+   '<label class="field"><span>이번 주 목표 시간(분)</span><input type="number" name="weekMinutes" min="0" max="10080" inputmode="numeric" value="'+(s.week.targetMinutes??'')+'" placeholder="미설정"></label></div><p class="vz-plan-help">설정한 시간 기준으로 달성률을 표시해요.</p></details><p role="alert" data-plan-error></p></form>';
+  V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block vz-home-primary-button">목표 저장</button>',
    onMount:(el,close)=>{
+    el.classList.add('vz-plan-sheet');
     const form=el.querySelector('form');form.addEventListener('input',()=>{dirty=true;});
+    form.addEventListener('change',()=>{const count=el.querySelector('[data-plan-count]');if(count)count.textContent=form.querySelectorAll('[name=goal]:checked').length+'개 선택';});
     beforeUnload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue='';}};
     window.addEventListener('beforeunload',beforeUnload);
-    const guard=e=>{if(e.target.closest('[data-close]')&&dirty&&!approved&&!confirm('저장하지 않은 목표 설정을 닫을까요?')){e.preventDefault();e.stopImmediatePropagation();}};
+    const guard=e=>{if((e.target===el.parentNode||e.target.closest('[data-close]')||e.key==='Escape')&&dirty&&!approved&&!confirm('저장하지 않은 목표 설정을 닫을까요?')){e.preventDefault();e.stopImmediatePropagation();}};
     el.parentNode.addEventListener('click',guard,true);
+    el.parentNode.addEventListener('keydown',guard,true);
     V.setGuard(()=>dirty&&!approved?'저장하지 않은 목표 설정이 있어요. 나갈까요?':'');
     form.onsubmit=e=>{
      e.preventDefault();const button=el.parentNode.querySelector('[type=submit]');button.disabled=true;
@@ -92,8 +87,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   async mount(main){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
    const s=state(),r=recentData(s.recent);
-   const root=createStudentHome({greeting:greeting(),name:displayName(),...upcoming(s),goals:s.goals,week:s.week,recent:r,
-    ...recentCallbacks(r),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onGrowth:()=>nav('#/growth'),onCalendar:()=>nav('#/calendar'),
+   let root;
+   try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
+    ...recentCallbacks(r),onRecord:()=>nav('#/record'),onNavigate:id=>nav('#/'+id),
+    onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onGrowth:()=>nav('#/growth'),onCalendar:()=>nav('#/calendar'),
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
     onGoalToggle:async(id,completed)=>{
@@ -101,8 +98,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
      if(!ok)throw Error('체크를 저장하지 못했어요. 다시 시도해 주세요.');
      delete main.dataset.dirty;
     }});
+   }catch(error){
+    if(!host.isConnected)return;
+    host.innerHTML='<p role="alert">홈을 불러오지 못했어요. 기록은 그대로 보관돼 있어요.</p><button type="button" data-home-retry>다시 불러오기</button> <a href="#/songs">내 곡으로 이동</a>';
+    host.querySelector('[data-home-retry]').onclick=()=>V.render();return;
+   }
+   if(!host.isConnected)return;
    host.replaceChildren(root);applyTheme();
-   V.archiveAssets?.posters(root,s.stage?[s.stage]:[]);
    const media=await V.media.list().catch(()=>[]);
    if(!host.isConnected)return;
    // Reuse the same real records; this region alone changes after media metadata arrives.
@@ -111,8 +113,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const activity=V.songActivity(media),id=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)))[0];
     if(id)recent={song:V.song(id),date:activity.get(id)};
    }
-   const resolved=recentData(recent,media),region=root.querySelector('.vz-recent-region');
-   if(region)region.replaceWith(createRecentSongActions({recent:resolved,...recentCallbacks(resolved)}));
+   const resolved=recentData(recent,media);
+   if(root.isConnected)root.updateRecent(resolved,recentCallbacks(resolved));
   }});
  // Reuse the existing practice detail/edit/record actions; the old app had no standalone history route.
  V.route('practices',{title:'연습 기록',back:true,tab:'calendar',
@@ -125,3 +127,4 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  applyTheme();
  if((location.hash.replace(/^#\/?/,'').split(/[/?]/)[0]||'home')==='home')V.softRender();
 }
+
