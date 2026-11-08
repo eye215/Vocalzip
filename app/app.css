@@ -1,12 +1,12 @@
 /* VOCAL.zip v6 — Soft Minimal + Music Studio. One stylesheet for the whole UI layer. */
 :root{
-  --bg:#f6f4fb;--surface:#fff;--surface-2:#f1edfa;--ink:#1e1b2e;--ink-2:#5f5a74;--ink-3:#8d88a3;
-  --line:#e8e3f3;--accent:#7552d9;--accent-ink:#fff;--accent-soft:#ece6fc;--accent-2:#a58bf0;
+  --bg:#F8F6FD;--surface:#fff;--surface-2:#F3ECFF;--ink:#101828;--ink-2:#475467;--ink-3:#667085;
+  --line:#E8E4F0;--accent:#7A32F5;--accent-ink:#fff;--accent-soft:#F3ECFF;--accent-2:#9557FF;
   --ok:#23855c;--ok-soft:#e3f4ec;--warn:#b26a00;--warn-soft:#fff3dc;--danger:#c93a3a;--danger-soft:#fdeaea;
-  --radius:16px;--radius-sm:12px;--shadow:0 1px 2px rgba(40,24,90,.05),0 4px 16px rgba(40,24,90,.05);
-  --nav-h:64px;--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
-  --font:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Segoe UI",system-ui,sans-serif;
-  --nav-bg:rgba(255,255,255,.94);--video-bg:#e4f1ff;--video-ink:#2a6fc9;
+  --radius:20px;--radius-sm:12px;--shadow:0 2px 10px rgba(55,33,85,.045);
+  --nav-h:70px;--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+  --font:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Segoe UI",system-ui,sans-serif;
+  --nav-bg:rgba(255,255,255,.78);--video-bg:#e4f1ff;--video-ink:#2a6fc9;
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -55,7 +55,7 @@ h2.sec a,h2.sec button{font-size:14px;font-weight:600;color:var(--accent);backgr
 /* Cards */
 .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
 .card.flat{box-shadow:none;border:1px solid var(--line)}
-.card.accent{background:linear-gradient(135deg,#7552d9,#9a7ff0);color:#fff}
+.card.accent{background:linear-gradient(125deg,#A65CFF,#7A32F5 52%,#6D2BE5);color:#fff}
 .card.accent .muted{color:rgba(255,255,255,.82)}
 .list{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
 .list>*+*{border-top:1px solid var(--line)}

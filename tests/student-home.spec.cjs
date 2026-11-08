@@ -416,3 +416,29 @@ test('My Songs and Library share the current home outer spacing and fixed naviga
   }
  }
 });
+
+test('shared colors, type hierarchy, cards and four-item dock apply to regular screens',async({page})=>{
+ await boot(page);
+ for(const route of ['songs','library','calendar']){
+  await page.evaluate(route=>VZ.nav('#/'+route),route);
+  await expect(page.locator('#view')).toHaveAttribute('data-collection',route);
+  const shell=await page.evaluate(()=>{
+   const css=el=>getComputedStyle(el),nav=document.querySelector('.v-nav');
+   return {accent:css(document.documentElement).getPropertyValue('--accent').trim(),
+    background:css(document.body).backgroundColor,
+    heading:css(document.querySelector('#top h1')).fontFamily,
+    navItems:nav.querySelectorAll('a').length,
+    navHeight:nav.getBoundingClientRect().height,
+    fab:css(document.querySelector('.vz-collection-record')).display,
+    cardRadius:css(document.querySelector('.card,.list,.empty,.vz-review-link')).borderRadius};
+  });
+  expect(shell.accent).toBe('#7A32F5');
+  expect(shell.background).toBe('rgb(248, 246, 253)');
+  expect(shell.heading).toContain('Pretendard');
+  expect(shell.navItems).toBe(4);
+  expect(shell.navHeight).toBe(70);
+  expect(shell.fab).toBe('flex');
+  expect(shell.cardRadius).toBe('20px');
+  await noOverflow(page);
+ }
+});
