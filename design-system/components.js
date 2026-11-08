@@ -299,7 +299,7 @@ export function createUpcomingStage({stage=null,lesson=null,onOpen=()=>{},onStag
     if(stage.subtitle){const subtitle=textRow(copy,"p","vz-home-stage-song",stage.subtitle);subtitle.title=stage.subtitle;}
     if(stage.dateLabel){const date=el("p","vz-home-stage-date");date.append(homeIcon("calendar-blank"),el("span","",stage.dateLabel));copy.append(date);}
     const art=el("div","vz-home-stage-art");art.setAttribute("aria-hidden","true");if(stage.id!=null)art.dataset.poster=String(stage.id);
-    // Decorative stage art is a vector background; real poster references are preserved.
+    // The home skin shows only actual user posters; poster references remain unchanged.
     content.append(copy,art);const detail=homeButton("무대 상세 보기",null,onStage,"vz-home-stage-detail"); detail.append(content);card.append(detail);
   }
   if(lesson){
