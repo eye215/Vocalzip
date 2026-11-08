@@ -250,6 +250,7 @@ VZ.render = () => {
   const scroll = current && current.name === r.name && current.key === location.hash ? window.scrollY : 0;
   if (current?.def.leave && current.key !== location.hash) current.def.leave();
   current = {name:r.name, def, key:location.hash};
+  document.body.dataset.vzRoute = r.name;
   document.querySelectorAll('.v-nav a').forEach(a => a.toggleAttribute('aria-current', false));
   const tab = def.tab || r.name;
   document.querySelector('.v-nav a[data-nav="' + tab + '"]')?.setAttribute('aria-current', 'page');
