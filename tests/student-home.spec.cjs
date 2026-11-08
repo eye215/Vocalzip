@@ -226,7 +226,7 @@ test('weekly home includes loose recordings once, but excludes lesson and perfor
  },TODAY);
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('15');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('15분');
- await expect(page.locator('.vz-week-range')).toHaveText('2026년11.2 – 11.8');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.2–11.8');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]>span:first-child')).toHaveText('4');
  expect((await db(page)).practices[0].manualMinutes).toBe(4);
 });
@@ -236,12 +236,12 @@ test('week swipe and arrows preserve history across Monday, and title/day naviga
  await boot(page,value);
  await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('0');
- await expect(page.locator('.vz-week-range')).toHaveText('2026년11.9 – 11.15');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.9–11.15');
  const card=page.locator('.vz-week');
  await card.dispatchEvent('pointerdown',{pointerId:7,button:0,pointerType:'touch',clientX:100,clientY:400});
  await card.dispatchEvent('pointerup',{pointerId:7,button:0,pointerType:'touch',clientX:230,clientY:403});
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('14');
- await expect(page.locator('.vz-week-range')).toHaveText('2026년11.2 – 11.8');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.2–11.8');
  // A vertical scroll gesture must leave the week alone.
  await card.dispatchEvent('pointerdown',{pointerId:8,button:0,clientX:100,clientY:400});
  await card.dispatchEvent('pointerup',{pointerId:8,button:0,clientX:103,clientY:550});
