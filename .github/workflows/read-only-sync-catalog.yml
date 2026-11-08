@@ -1,0 +1,22 @@
+name: Read-only sync catalog preflight
+on:
+  push:
+    branches:
+      - 'codex/read-only-sync-schema-e5e4b850d747'
+permissions:
+  contents: read
+jobs:
+  catalog:
+    if: github.repository == 'eye215/Vocalzip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Catalog only, transaction read only, no user row access
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node tools/read-only-sync-catalog.mjs
