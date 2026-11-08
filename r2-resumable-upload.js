@@ -69,7 +69,7 @@ function create({storage,identity,api,onReceipt}){
    if(r.parts.length!==r.manifest.hashes.length)return {status:'needs_file',id};
    done=await api('/v2/uploads/complete',{method:'POST',body:{upload:r.ticket,parts:[...r.parts].sort((a,b)=>a.partNumber-b.partNumber)},signal});current();
   }
-  const receipt=verify(r,done);r.receipt=receipt;write(r);
+  const receipt=verify(r,done);if(r.receipt&&r.receipt.etag!==receipt.etag)throw fault('완료된 원본이 변경되어 복구를 중단했어요.','object_changed');r.receipt=receipt;write(r);
   await onReceipt?.(clone(r.context),clone(receipt));current();
   return {status:'complete',id,context:clone(r.context),receipt};
  }

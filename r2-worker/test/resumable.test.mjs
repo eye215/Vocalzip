@@ -154,3 +154,12 @@ test('hashing and sending never require a whole-file arrayBuffer',async()=>{
  const file={size:original.size,type:original.type,arrayBuffer:()=>{throw Error('whole file read');},slice:(a,b)=>{sizes.push(b-a);assert.ok(b-a<=client.PART_SIZE);return original.slice(a,b);}};
  await f.client.upload(file,argumentsFor('bounded-file',file));assert.ok(sizes.length>=4);assert.ok(sizes.every(n=>n<=client.PART_SIZE));
 });
+
+test('a known completion etag cannot silently change during later recovery',async()=>{
+ const f=fixture(),file=new File([data(19)],'known.wav',{type:'audio/wav'}),args=argumentsFor('known-etag',file);
+ const receipt=await f.client.upload(file,args),bucket=await mf.getR2Bucket('MEDIA'),head=await bucket.head(receipt.key);
+ const changed=data(19);changed[0]^=255;
+ await bucket.put(receipt.key,changed,{httpMetadata:head.httpMetadata,customMetadata:head.customMetadata});
+ await assert.rejects(client.create(f.options).finish(args.mediaId),{code:'object_changed'});
+ assert.equal(f.client.pending()[0].receipt.etag,receipt.etag);
+});
