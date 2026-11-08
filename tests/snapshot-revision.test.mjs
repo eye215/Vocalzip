@@ -108,7 +108,7 @@ test('two concurrent first saves do not replace the created snapshot',{skip},asy
  }finally{await other.end()}
 });
 test('nonexistent expected revision fails without creating data',{skip},async()=>{
- const r=await save(U,A,9);assert.deepEqual(r,{status:'conflict',revision:'0',exists:false});
+ const r=await save(U,A,9);assert.deepEqual(r,{status:'conflict',revision:'0',generation:null,exists:false});
  assert.equal((await db.query('select * from public.vocal_data')).rowCount,0);
 });
 test('owner and request namespaces are isolated; direct receipt writes are forbidden',{skip},async()=>{
