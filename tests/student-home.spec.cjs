@@ -225,6 +225,39 @@ test('goal editor saves only user entered plans and personal goals',async({page}
  await sheet.getByLabel('오늘 목표 시간(분)',{exact:true}).fill('45');await sheet.getByLabel('이번 주 목표 시간(분)',{exact:true}).fill('210');await sheet.getByLabel('개인 목표',{exact:true}).fill('새 개인 목표');await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
  const value=await db(page);expect(value.practicePlans.find(p=>p.id==='day:'+TODAY).targetMinutes).toBe(45);expect(value.practicePlans.find(p=>p.id==='week:'+WEEK).targetMinutes).toBe(210);expect(value.dailyGoals.some(g=>g.title==='새 개인 목표')).toBe(true);expect(value.practices).toEqual(seed().practices);expect(value.assignments).toEqual(seed().assignments);
 });
+test('goal planning separates long selectable rows and keeps save visible on small screens',async({page},testInfo)=>{
+ const value=seed();value.dailyGoals[0].title='악보에 너무 맞추려 하지 않고 반주치면서 박자와 리듬을 가지고 노는 것처럼 연습하기 · 18마디 참고';
+ await boot(page,value);
+ for(const width of widths){
+  await page.setViewportSize({width,height:744});
+  await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+  const rows=sheet.locator('.vz-plan-option'),save=sheet.getByRole('button',{name:'목표 저장',exact:true});
+  await expect(rows).toHaveCount(3);await expect(sheet.locator('[data-plan-count]')).toHaveText('3개 선택');
+  const first=await rows.nth(0).boundingBox(),second=await rows.nth(1).boundingBox();
+  expect(second.y).toBeGreaterThanOrEqual(first.y+first.height+7);expect(first.height).toBeGreaterThanOrEqual(56);
+  const text=await rows.nth(0).locator('.vz-plan-title').boundingBox(),badge=await rows.nth(0).locator('small').boundingBox();
+  expect(text.x+text.width).toBeLessThanOrEqual(badge.x-11);
+  await expect(rows.nth(0).locator('.vz-plan-check')).toHaveCSS('background-color','rgb(122, 50, 245)');
+  const before=await save.boundingBox();expect(before.y+before.height).toBeLessThanOrEqual(744);
+  await sheet.locator('.sheet-body').evaluate(el=>el.scrollTop=el.scrollHeight);
+  const after=await save.boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);
+  await noOverflow(page);expect(await sheet.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
+  await sheet.locator('.sheet-body').evaluate(el=>el.scrollTop=0);
+  await page.screenshot({path:testInfo.outputPath('student-home-plan-'+width+'.png'),animations:'disabled'});
+  await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ }
+});
+test('goal selection remains keyboard accessible and leaves source homework unchanged',async({page})=>{
+ await boot(page);const before=await db(page);
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true}),check=sheet.locator('input[name=goal]').first();
+ await check.focus();await page.keyboard.press('Space');await expect(check).not.toBeChecked();
+ await expect(sheet.locator('[data-plan-count]')).toHaveText('2개 선택');
+ await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
+ const after=await db(page);expect(after.dailyGoals.some(g=>g.id==='g1')).toBe(false);
+ expect(after.assignments).toEqual(before.assignments);expect(after.practices).toEqual(before.practices);
+});
 test('continue practice preselects the recent song with and without a recording and preserves history',async({page})=>{
  await boot(page);
  for(const withRecording of [false,true]){
@@ -244,11 +277,12 @@ test('continue practice preselects the recent song with and without a recording 
   }
   const before=await db(page);
   await page.getByRole('button',{name:/계속 연습하기$/}).click();
-  const sheet=page.getByRole('dialog',{name:'연습 기록',exact:true});
-  await expect(sheet.locator('select[name="song"]')).toHaveValue('s1');
-  await expect(sheet.locator('[data-mode="song"]')).toHaveAttribute('aria-pressed','true');
+  await expect(page).toHaveURL(/#\/record\?song=s1$/);
+  await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
+  await expect(page.locator('.rec-status')).toHaveText('버튼을 누르면 바로 녹음이 시작돼요.');
   await expect(page.locator('[data-home-player]')).toHaveCount(0);
-  await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.goto('/#/home');await ready(page);
   const after=await db(page);
   for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
  }
@@ -299,3 +333,4 @@ test('source HTML and hydrated home comparison use the same supplied layout',asy
  for(const frame of page.frames().filter(f=>f.parentFrame())){await frame.waitForSelector(frame.url().includes('student-home-preview')?'.vz-student-home':'.vz-phone');await frame.addStyleTag({content:faces});await frame.evaluate(()=>document.fonts.ready);}
  await page.screenshot({path:testInfo.outputPath('student-home-html-source-comparison.png'),fullPage:true,animations:'disabled'});
 });
+
