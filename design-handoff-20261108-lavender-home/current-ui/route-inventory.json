@@ -1,0 +1,39 @@
+{
+  "app/views-main.js": [
+    "home",
+    "record",
+    "songs",
+    "song"
+  ],
+  "app/views-lessons.js": [
+    "homework",
+    "lessons",
+    "lesson",
+    "calendar"
+  ],
+  "app/views-more.js": [
+    "library",
+    "compare",
+    "growth",
+    "settings"
+  ],
+  "app/import-hub.js": [
+    "import-hub"
+  ],
+  "app/storage.js": [
+    "storage"
+  ],
+  "app/upload-check.js": [
+    "upload-check"
+  ],
+  "app/song-suggestions.js": [
+    "song-suggest"
+  ],
+  "app/analysis.js": [
+    "analysis"
+  ],
+  "app/repertoire.js": [
+    "performances",
+    "show"
+  ]
+}

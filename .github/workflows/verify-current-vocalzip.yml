@@ -1,0 +1,53 @@
+name: Verify source-based Vocalzip pages
+on:
+  push:
+    branches: [docs/home-preview-images-20261108]
+    paths: [.github/workflows/verify-current-vocalzip.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Bundle pinned existing screen implementation
+        run: |
+          git fetch --depth=1 origin 111dd126eaebd58cb584e9bc149c2b88d2f2df6b
+          python3 <<'PY'
+          from pathlib import Path
+          import subprocess,base64
+          root=Path('design-handoff-20261108-lavender-home/current-ui')
+          paths=["media-date.js","data-merge.js","app/app.css","app/metric-help.js","app/library-select.js","app/core.js","app/song-suggestions.js","app/scores.js","app/repertoire-model.js","app/repertoire.css","app/calendar-summary.css","app/views-lessons.js","app/views-more.js","app/upload-check.js","app/import-hub.js","app/billing-lessons.js","app/media-follow.js","app/student-home-model.js","app/repertoire.js","app/server-analysis.js","app/app.js","app/auto-analysis.js","app/picker.js","app/practice-tips.js","app/storage.js","app/calendar-summary.js","app/analysis.js","app/media.js","app/views-main.js","app/song-vocal-growth.js","app/performance-assets.js","vendor/phosphor/LICENSE","vendor/phosphor/style.css","vendor/phosphor/fill.css"]
+          for p in paths:
+              dst=root/'source'/p
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              dst.write_bytes(subprocess.check_output(['git','show','111dd126eaebd58cb584e9bc149c2b88d2f2df6b:'+p]))
+          for n in ['Phosphor.woff2','Phosphor-Fill.woff2']:
+              b=subprocess.check_output(['git','show','111dd126eaebd58cb584e9bc149c2b88d2f2df6b:vendor/phosphor/'+n])
+              (root/'source/vendor/phosphor'/(n+'.b64')).write_text(base64.b64encode(b).decode())
+          PY
+          python3 design-handoff-20261108-lavender-home/current-ui/build.py
+      - name: Check actual screen contracts
+        run: node design-handoff-20261108-lavender-home/current-ui/verify-current.cjs
+      - name: Store preview and screenshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add design-handoff-20261108-lavender-home/current-ui
+          if ! git diff --cached --quiet; then
+            git commit -m "design: build source-based current screens and verified previews"
+            git push origin HEAD:docs/home-preview-images-20261108
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: current-vocalzip-screens
+          path: |
+            design-handoff-20261108-lavender-home/current-ui/screenshots
+            design-handoff-20261108-lavender-home/current-ui/QA_RESULT.json
