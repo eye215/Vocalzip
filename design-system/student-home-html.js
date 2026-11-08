@@ -24,6 +24,15 @@ function action(element,label,fn){
 }
 const adaptations=String.raw`
 :host{display:block;width:100%;background:#f8f6fd;}
+/* Use the device width rather than leaving a 390px mock phone inside wider phones. */
+#vocalzip-refined-preview .vz-phone{max-width:560px;padding:12px 16px 0;padding-top:max(12px,env(safe-area-inset-top));}
+#vocalzip-refined-preview .vz-header{min-height:44px;margin-bottom:12px;}
+#vocalzip-refined-preview .vz-schedule{padding:0 0 12px;}
+#vocalzip-refined-preview .vz-card{padding:20px;}
+#vocalzip-refined-preview .vz-song h3{max-width:none;}
+#vocalzip-refined-preview main{padding-bottom:calc(142px + max(12px,env(safe-area-inset-bottom)));}
+#vocalzip-refined-preview .vz-nav-space{max-width:528px;}
+#vocalzip-refined-preview .vz-floating-record{right:max(16px,calc((100vw - 560px)/2 + 16px));}
 .vz-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;clip:rect(0,0,0,0)!important;overflow:hidden!important;white-space:nowrap!important;}
 #vocalzip-refined-preview [role=button]{cursor:pointer;}
 #vocalzip-refined-preview [role=button]:focus-visible{outline:2px solid #7a32f5;outline-offset:3px;}
@@ -140,3 +149,4 @@ export async function createFloatingHome(opts={}){
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});
  return host;
 }
+
