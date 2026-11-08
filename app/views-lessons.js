@@ -157,9 +157,13 @@ document.addEventListener('click', e => {
   if (VZ.change(d => { const x = d.lessons.find(y => y.id === id); if (!x) return; x.status = to; if (to === 'done') x.completedAt = Date.now(); }))
     VZ.toast(to === 'done' ? '레슨을 완료로 기록했어요.' : '레슨을 취소로 기록했어요.');
 });
+const lessonFeedbackLabel = l => l.feedback?.trim() || VZ.lessonSongIds(l).some(id => l.songFeedback?.[id]?.trim()) ? '피드백 작성' : '피드백 미작성';
+const lessonNoteIcon = '<svg class="vz-lesson-note-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></svg>';
+const lessonRecordTitle = l => [VZ.dateLabel(l.date),VZ.timeRange(l)||'시간 미정'].filter(Boolean).join(' · ');
+const lessonRecordSub = l => [l.place,VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean).join(', ')||'곡 미정',lessonFeedbackLabel(l)].filter(Boolean).join(' · ');
 VZ.lessonRow = l => {
-  const st = VZ.lessonStatus(l), songs = VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean), late = st === 'scheduled' && l.date && l.date < VZ.today();
-  return '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="avatar" style="flex-direction:column;font-size:11px;line-height:1.1;font-weight:700"><span>' + (VZ.parseYmd(l.date)?.getMonth() + 1 || '?') + '월</span><span style="font-size:16px">' + (VZ.parseYmd(l.date)?.getDate() || '') + '</span></span><span class="item-main"><span class="item-title">' + esc([VZ.timeRange(l) || '시간 미정', l.place].filter(Boolean).join(' · ')) + ' ' + (late ? '<span class="badge warn">결과 미기록</span>' : VZ.statusBadge(st)) + '</span><span class="item-sub">' + esc([songs.join(', '), st === 'done' ? (l.feedback ? l.feedback.slice(0, 50) : '피드백 미작성') : l.prepMemo || ''].filter(Boolean).join(' · ') || '연습 곡 미정') + '</span></span><i class="ph ph-caret-right chev"></i></a>';
+  const st=VZ.lessonStatus(l),late=st==='scheduled'&&l.date&&l.date<VZ.today();
+  return '<a class="item" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span>'+(late?'<span class="badge warn">결과 미기록</span>':VZ.statusBadge(st))+'<i class="ph ph-caret-right chev"></i></a>';
 };
 let lessonTab = 'upcoming';
 VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<a class="icon-btn" href="billing/" aria-label="레슨비 정산"><i class="ph ph-receipt"></i></a><button type="button" class="icon-btn" data-add-lesson aria-label="레슨 일정 추가"><i class="ph ph-plus"></i></button>', render() {
@@ -171,7 +175,7 @@ VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<
   };
   const overdue = groups.upcoming.filter(l => l.date < today).length;
   const list = groups[lessonTab];
-  return '<div class="seg" style="margin-bottom:12px"><button type="button" data-lt="upcoming" aria-pressed="' + (lessonTab === 'upcoming') + '">예정 ' + groups.upcoming.length + '</button><button type="button" data-lt="past" aria-pressed="' + (lessonTab === 'past') + '">완료 ' + groups.past.length + '</button><button type="button" data-lt="cancelled" aria-pressed="' + (lessonTab === 'cancelled') + '">취소 ' + groups.cancelled.length + '</button></div>' +
+  return '<div class="seg lesson-tabs" style="margin-bottom:14px"><button type="button" data-lt="upcoming" aria-pressed="' + (lessonTab === 'upcoming') + '">예정 ' + groups.upcoming.length + '</button><button type="button" data-lt="past" aria-pressed="' + (lessonTab === 'past') + '">완료 ' + groups.past.length + '</button><button type="button" data-lt="cancelled" aria-pressed="' + (lessonTab === 'cancelled') + '">취소 ' + groups.cancelled.length + '</button></div>' +
     (lessonTab === 'upcoming' && overdue ? '<div style="margin-bottom:12px">' + VZ.overdueCard(5) + '</div>' : '') +
     (list.length ? '<div class="list">' + list.map(VZ.lessonRow).join('') + '</div>' : VZ.empty('calendar-blank', {upcoming:'예정된 레슨이 없어요.', past:'완료한 레슨이 없어요.', cancelled:'취소한 레슨이 없어요.'}[lessonTab], lessonTab === 'upcoming' ? '<button type="button" class="btn sm" data-add-lesson2>레슨 일정 추가</button>' : ''));
 }, mount(main) {
@@ -333,7 +337,7 @@ VZ.route('calendar', {title:'일정', actions:() => '<a class="icon-btn" href="#
     const owner = (row, ids, kind) => '<div class="cal-own" data-kind="'+kind+'">' + row + minis(ids) + '</div>';
     const loose = (title, items, kind) => items.length ? '<div class="cal-own" data-kind="'+kind+'"><div class="cal-loose small muted">' + title + '</div>' + minis(items.map(m => m.id)) + '</div>' : '';
     const group = rows => rows ? '<div class="cal-list">' + rows + '</div>' : '';
-    const lessonRow=l=>'<a class="item vz-calendar-item" data-kind="lesson" href="#/lesson/'+esc(l.id)+'"><span class="avatar"><i class="ph ph-calendar-blank"></i></span><span class="item-main"><span class="item-title">보컬 레슨 '+VZ.statusBadge(VZ.lessonStatus(l))+'</span><span class="item-sub">'+esc([VZ.timeRange(l)||'시간 미정',l.place,VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean).join(', ')].filter(Boolean).join(' · '))+'</span></span><i class="ph ph-caret-right chev"></i></a>';
+    const lessonRow=l=>'<a class="item vz-calendar-item" data-kind="lesson" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span><i class="ph ph-caret-right chev"></i></a>';
     const lessonsHtml = group(e.l.sort(VZ.lessonSort).map(l => owner(lessonRow(l), (l.recordings || []).map(r => r.id),'lesson')).join('') + loose('기록에 연결되지 않은 레슨 녹음', e.rl,'lesson'));
     const practiceHtml = group(e.p.map(p => owner(VZ.practiceRow(p, {day:true}), p.mediaIds || [],'practice')).join('') + loose('기록에 연결되지 않은 연습 녹음', e.rp,'practice'));
     const stageHtml = group(e.ps.map(p=>owner(VZ.repertoire.showCard(p),[],'stage')).join('') + loose('공연 녹음·영상', e.rs,'stage'));

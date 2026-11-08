@@ -25,31 +25,70 @@ async function api(path, {method = 'GET', body, headers = {}, signal} = {}) {
   }
   return res.status === 204 ? null : res.json();
 }
+function uploadError(status,msg=''){
+ const error=Error(status===401?'로그인이 만료됐어요. 다시 로그인해 주세요.':status===403?'이 파일에 접근할 수 없어요.':status===413?'파일이 너무 커요.':'저장소 오류 ('+status+(msg?': '+msg:'')+')');
+ error.status=status;return error;
+}
+/** XHR sends one bounded part buffer and reports bytes; ArrayBuffer is consistent in Safari. */
+async function sendPart(path,{piece,signal,onBytes}){
+ if(!window.XMLHttpRequest)return api(path,{method:'PUT',body:piece,signal});
+ const access=await token(),payload=await piece.arrayBuffer();
+ if(signal?.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
+ return new Promise((resolve,reject)=>{
+  const xhr=new window.XMLHttpRequest();let settled=false;
+  const done=(error,value)=>{if(settled)return;settled=true;signal?.removeEventListener('abort',cancel);error?reject(error):resolve(value);};
+  const cancel=()=>{xhr.abort();done(new DOMException('업로드를 취소했어요.','AbortError'));};
+  xhr.open('PUT',endpoint()+path);xhr.responseType='json';xhr.withCredentials=false;
+  xhr.setRequestHeader('authorization','Bearer '+access);
+  if(window.VzipAccountScope)xhr.setRequestHeader('X-Client-Info','vocalzip-device-session-v2');
+  xhr.upload.onprogress=event=>{if(!settled&&event.lengthComputable)onBytes?.(Math.min(piece.size,event.loaded));};
+  xhr.onload=()=>{const data=xhr.response;if(xhr.status<200||xhr.status>=300)done(uploadError(xhr.status,typeof data?.error==='string'?data.error:''));else if(!data||typeof data!=='object')done(uploadError(502,'invalid response'));else done(null,data);};
+  xhr.onerror=()=>done(Error('업로드 연결이 끊겼어요.'));
+  xhr.onabort=()=>done(new DOMException('업로드를 취소했어요.','AbortError'));
+  xhr.ontimeout=()=>done(Error('업로드 연결 시간이 초과됐어요.'));
+  signal?.addEventListener('abort',cancel,{once:true});
+  if(signal?.aborted){cancel();return;}
+  try{xhr.send(payload);}catch(error){done(error);}
+ });
+}
 const extOf = (file, type) => (String(file.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1] || ({'application/pdf':'pdf', 'audio/mp4':'m4a', 'audio/x-m4a':'m4a', 'audio/mpeg':'mp3', 'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/aac':'aac', 'audio/ogg':'ogg', 'audio/flac':'flac', 'audio/webm':'webm', 'video/mp4':'mp4', 'video/quicktime':'mov', 'video/webm':'webm'})[type] || 'bin').toLowerCase();
 
 /** Upload a file as parts (resumable per part, 3 tries each). Returns {key, size, etag}. */
 async function upload(file, {mediaId, type = file.type, onProgress, signal, purpose} = {}) {
   const start = await api('/v1/uploads', {method:'POST', signal, body:{mediaId, contentType:type, size:file.size, ext:extOf(file, type), ...(purpose ? {purpose} : {})}});
   const q = '?key=' + encodeURIComponent(start.key), base = '/v1/uploads/' + encodeURIComponent(start.uploadId);
-  const parts = [];
-  try {
-    for (let offset = 0, n = 1; offset < file.size; offset += start.partSize, n++) {
-      const piece = file.slice(offset, offset + start.partSize);
-      for (let attempt = 0; ; attempt++) {
-        if (signal?.aborted) throw new DOMException('업로드를 취소했어요.', 'AbortError');
-        try { parts.push(await api(base + '/parts/' + n + q, {method:'PUT', body:piece, signal})); break; }
-        catch (e) { if (e.name === 'AbortError' || [401, 403, 413].includes(e.status) || attempt >= 2) throw e; await new Promise(r => setTimeout(r, 1000 * (attempt + 1) ** 2)); }
-      }
-      onProgress?.(Math.min(99, Math.round((offset + piece.size) / file.size * 100)));
+  const parts = new Array(Math.ceil(file.size/start.partSize));
+  const controller=new AbortController(),cancel=()=>controller.abort(signal?.reason);
+  if(signal?.aborted)cancel();signal?.addEventListener('abort',cancel,{once:true});
+  let next=0,bytesDone=0,failure=null,lastProgress=0;const inFlight=new Map();
+  const progress=value=>{lastProgress=Math.max(lastProgress,value);try{onProgress?.(lastProgress);}catch{}};
+  const report=()=>progress(Math.min(99,Math.round((bytesDone+[...inFlight.values()].reduce((sum,n)=>sum+n,0))/file.size*100)));
+  const send=async()=>{
+    while(!failure&&!controller.signal.aborted){
+      const index=next++;if(index>=parts.length)return;
+      const piece=file.slice(index*start.partSize,(index+1)*start.partSize);
+      try{
+        for(let attempt=0;;attempt++){
+          if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
+          try{inFlight.set(index,0);parts[index]=await sendPart(base+'/parts/'+(index+1)+q,{piece,signal:controller.signal,onBytes:sent=>{inFlight.set(index,sent);report();}});break;}
+          catch(error){if(error.name==='AbortError'||[401,403,413].includes(error.status)||attempt>=2)throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)**2));}
+        }
+        inFlight.delete(index);bytesDone+=piece.size;report();
+      }catch(error){if(!failure)failure=error;controller.abort();return;}
     }
+  };
+  try {
+    await Promise.all([send(),send()]);
+    if(failure)throw failure;
+    if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
     const done = await api(base + '/complete' + q, {method:'POST', body:{parts}, signal});
     if (done.size !== file.size) throw Error('업로드한 크기가 원본과 달라요.');
-    onProgress?.(100);
+    progress(100);
     return done;
   } catch (e) {
     api(base + q, {method:'DELETE'}).catch(() => {});
     throw e;
-  }
+  } finally {signal?.removeEventListener('abort',cancel);}
 }
 /* Playback links: kept on this device until shortly before they expire (also across reloads), asked for once per file
  * even when several screens want it at the same time, and signed in batches for the rows on screen. A link already here

@@ -114,8 +114,9 @@ async function autoUploadMedia(id){if(!user||!ready)return;if(window.VZ?.media?.
 // A device-file edit sends only the fields that changed (detail.changes), onto the newest cloud row: the
 // other fields keep what other devices saved. Edits already written to the cloud (cloudDone) are skipped,
 // and an event that does not say what changed sends nothing.
-const EDITABLE=['name','song','songId','created','recordedDate','dateSource','type','rating','review'];
-window.addEventListener('vzip:media-updated',async e=>{const d=e.detail||{};if(!user||!d.id||d.cloudDone)return;try{const item=(await localMedia()).find(x=>x.id===d.id);if(!item)return;if(!d.changes)return;/* unknown change: never re-send the device copy's older fields */const keys=Object.keys(d.changes).filter(k=>EDITABLE.includes(k));if(!keys.length)return;const pick=Object.fromEntries(keys.map(k=>[k,d.changes[k]]));await patchMedia(item.id,meta=>({...meta,...pick}))}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
+const mediaNamePatch=(meta,changes)=>window.VzipMediaNaming?.patch(meta,changes,id=>localData()?.songs?.find(song=>song.id===id)?.title)||changes;
+const EDITABLE=['name','nameMode','autoName','song','songId','created','recordedDate','dateSource','type','rating','review'];
+window.addEventListener('vzip:media-updated',async e=>{const d=e.detail||{};if(!user||!d.id||d.cloudDone)return;try{const item=(await localMedia()).find(x=>x.id===d.id);if(!item)return;if(!d.changes)return;/* unknown change: never re-send the device copy's older fields */const keys=Object.keys(d.changes).filter(k=>EDITABLE.includes(k));if(!keys.length)return;const pick=Object.fromEntries(keys.map(k=>[k,d.changes[k]]));await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,pick)}))}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
 window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e.detail.id)});
 
 /* Each >50MiB original is stored as independent <=24MiB objects, one metadata row. */
@@ -238,7 +239,7 @@ async function importMedia(file,info={},onProgress,options={}){
    offset+=part.size;
   }
   aborted();
-  const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),song:info.song||'',songId:info.songId||'',
+  const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),nameMode:info.nameMode,autoName:info.autoName,song:info.song||'',songId:info.songId||'',
    created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
    source:info.source||'import',size:file.size,
    // Import facts from the import hub (source, original name, fingerprint) stay with the file.
@@ -411,7 +412,7 @@ window.vzipCloudMediaAssignSong=async(item,changes,{expectedSongId='',expectedSo
  if(!row.updated_at)throw Error('수정 버전을 확인할 수 없어요.');
  if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');
  const updatedAt=new Date(Math.max(Date.now(),Date.parse(row.updated_at)+1)).toISOString();
- const metadata={...current,songId:String(changes.songId||''),song:String(changes.song||'')};
+ const metadata={...current,...mediaNamePatch(current,{songId:String(changes.songId||''),song:String(changes.song||'')})};
  const {data:written,error}=await table().update({metadata,updated_at:updatedAt})
   .eq('id',item.id).eq('user_id',owner).eq('updated_at',row.updated_at).select('id').maybeSingle();
  if(error)throw error;
@@ -419,7 +420,7 @@ window.vzipCloudMediaAssignSong=async(item,changes,{expectedSongId='',expectedSo
  window.dispatchEvent(new Event('vzip:cloud-media-changed'));
  return {updatedAt,metadata};
 };
-window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];const saved=await patchMedia(item.id,meta=>({...meta,...clean}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
+window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];if(clean.name===item.name)delete clean.name;const saved=await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,clean)}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
 async function unlinkCloudMedia(owner,id){
  for(let attempt=0;attempt<5;attempt++){
   if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');

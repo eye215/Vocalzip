@@ -59,9 +59,9 @@ VZ.editMedia = item => {
       el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating >= +x.dataset.star))); });
       const form = el.querySelector('form');
       // Changing the song (or its day) renames the file to "song + recording day" unless the user typed a name.
-      let typed = false, lastAuto = '', known = M.cached();
+      let typed = !window.VzipMediaNaming?.isAutomatic(item, VZ.songTitle), nameEdited = false, lastAuto = '', known = M.cached();
       M.list().then(all => { known = all; }).catch(() => {});
-      form.name.addEventListener('input', () => { typed = true; });
+      form.name.addEventListener('input', () => { typed = true; nameEdited = true; });
       const rename = () => {
         if (typed) return;
         const sel = form.song.value, title = sel === '__new' ? form.song__new.value.trim() : VZ.songTitle(sel);
@@ -70,7 +70,7 @@ VZ.editMedia = item => {
       };
       form.song.addEventListener('change', rename);
       form.song__new.addEventListener('input', rename);
-      form.date.addEventListener('change', () => { if (form.name.value === lastAuto) rename(); });
+      form.date.addEventListener('change', rename);
       form.onsubmit = async e => {
         e.preventDefault();
         const songId = VZ.readSong(form, 'song'); if (songId === null) return;
@@ -78,6 +78,8 @@ VZ.editMedia = item => {
         const d = VZ.parseYmd(date);
         const changes = {name:form.name.value.trim() || M.label(item), songId, song:VZ.songLabel(VZ.song(songId)), rating, review:form.review.value, occasion,
           created:d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime() : item.created};
+        if (!typed && lastAuto && changes.name === lastAuto) Object.assign(changes, {nameMode:'auto', autoName:lastAuto});
+        else if (nameEdited) Object.assign(changes, {nameMode:'manual', autoName:null});
         if (d && date !== M.dateOf(item)) Object.assign(changes, {recordedDate:date, dateSource:'manual'});
         if (songId !== (item.songId || '')) changes.songSource = 'user'; // the server never changes a user's choice
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;
@@ -229,7 +231,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
 VZ.practiceRow = (p, opts) => {
   const day = !!opts?.day; // inside a day view: no date, recordings are listed underneath
   const title = p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || (p.practiceMode === 'song' ? '곡 연습' : [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '연습');
-  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-' + (p.practiceMode === 'training' ? 'wind' : 'music-notes') + '"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([day ? '' : VZ.dateLabel(p.date), VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', !day && (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
+  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-timer"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([day ? '' : VZ.dateLabel(p.date), VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', !day && (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
 };
 VZ.practiceDetail = id => {
   const p = VZ.db.practices.find(x => x.id === id); if (!p) return;
@@ -565,5 +567,6 @@ function songGrowth(host, s, media, practices) {
 // Refresh media-driven views when files change.
 window.addEventListener('vzip:v6-media', () => { clearTimeout(window.__vzRefresh); window.__vzRefresh = setTimeout(() => { if (!rec?.result) VZ.softRender(); }, 400); });
 })();
+
 
 

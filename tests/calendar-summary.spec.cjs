@@ -30,6 +30,9 @@ test('one-line month totals and a clean song strip rotate the top five',async({p
  await expect(page.locator('.vz-calendar-footer [data-today]')).toHaveText('오늘');
  await page.locator('.cal-day[data-d="'+day+'"]').click();
  await expect(page.locator('.cal-own[data-kind=lesson] .avatar')).toHaveCSS('color','rgb(122, 50, 245)');
+ await expect(page.locator('.cal-own[data-kind=lesson] .vz-lesson-note-icon')).toHaveAttribute('stroke-width','1.6');
+ await expect(page.locator('.cal-own[data-kind=lesson] .item-title')).toContainText('시간 미정');
+ await expect(page.locator('.cal-own[data-kind=lesson] .item-sub')).toContainText('피드백 미작성');
  await expect(page.locator('.cal-own[data-kind=practice] .avatar').first()).toHaveCSS('color','rgb(7, 137, 148)');
  await expect(page.locator('.cal-own[data-kind=stage]')).toHaveCount(0);
  expect((await card.boundingBox()).height).toBeLessThan(230);

@@ -48,6 +48,13 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
 const data = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const media = page => page.evaluate(() => window.vzipReadMedia());
 const sheet = page => page.locator('.sheet');
+const openLibraryImport=async page=>{
+ await page.locator('[data-imp]').click();
+ const menu=page.locator('.sheet [data-import]');
+ if(await menu.count())await menu.click();
+ await expect(page.locator('.sheet')).toHaveCount(1);
+};
+
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
@@ -219,7 +226,7 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   // More than 20 files from 파일 가져오기 go to the bulk uploader, which checks and uploads them batch by batch by itself.
   await page.evaluate(() => { window.__vzipBatchSize = 10; });
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles(files);
   await expect(page.locator('.toast').last()).toContainText('22개 파일은 대량 업로드 화면에서');
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
@@ -429,10 +436,9 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   });
   await expect.poll(() => page.evaluate(() => VZ.serverAnalysisOn())).toBe(true);
   await page.goto('/#/library');
-  const card = page.locator('[data-server-analysis] .srv');
-  await expect(card).toContainText('서버 자동 분석');
-  await expect(card).toContainText('1/3');                      // vocal: 1 done of 3
-  await expect(card).toContainText('곡 자동 지정');
+  const card = page.locator('[data-server-analysis]');
+  await expect(card).toContainText('곡 확인 필요');
+  await expect(card).toContainText('대기·분석 중 1건');
   await expect(card).toContainText('분석 실패 1건');
   await expect(card.locator('a[href="#/song-suggest"]')).toContainText('1');
   await expect(page.locator('[data-media="ai1"]')).toContainText('AI 곡 지정');
@@ -447,7 +453,8 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   });
   await expect(page.locator('[data-media="rv1"]')).toContainText('On My Own', {timeout:5000});
   await expect(page.locator('[data-media="rv1"]')).not.toContainText('곡 확인 필요');
-  await expect(card).toContainText('2/3');
+  await expect(card).toContainText('곡 확인 필요 0건');
+  await expect(card).not.toContainText('대기·분석 중');
   // The browser's own background analysis leaves the work to the server.
   expect(await page.evaluate(() => { window.__vzipAutoAnalysis = true; return VZ.autoAnalysisStatus().enabled && VZ.serverAnalysisOn(); })).toBe(true);
 });
@@ -488,14 +495,14 @@ test('파일 가져오기 quietly leaves out files that are not audio or video',
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles([{name:'take.wav', mimeType:'audio/wav', buffer:b}, {name:'가사.txt', mimeType:'text/plain', buffer:Buffer.from('가사')}, {name:'._take.wav', mimeType:'audio/wav', buffer:Buffer.from('x')}]);
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
   await expect(sheet(page).locator('.up-row')).toHaveCount(1);
   await expect(sheet(page)).not.toContainText('가사.txt');
   // Only non-media picked: nothing to import.
   await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles({name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')});
   await expect(page.locator('.toast').last()).toContainText('고른 파일 중에 음성·영상 파일이 없어요');
 });
@@ -504,7 +511,7 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles({name:'2025-08-08_22-09-00.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
@@ -514,7 +521,7 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   // "11-3 scale.m4a" style: month-day at the start, the most recent such day.
   const expected = require('../media-date.js').fromName('11-3 scale.wav').recordedDate;
   await page.keyboard.press('Escape'); await page.goto('/#/home'); await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles({name:'11-3 scale.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
@@ -807,7 +814,7 @@ test('Denied microphone explains the problem and keeps the recorder usable', asy
 test('Import: multiple files, bulk and per-file song, date edit, invalid skipped, failed file retried alone', async ({page}) => {
   await boot(page);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.songId === 's2' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
   const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
   const buffer = Buffer.from(wav);
@@ -886,7 +893,7 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await page.goto('/#/calendar');
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
-  await expect(page.locator('[data-day]')).toContainText('30분');
+  await expect(page.locator('[data-day]')).toContainText('25분');
   // The practice shows its linked recording underneath; an unlinked recording appears as a practice recording.
   await expect(page.locator('[data-day] .cal-own').first().locator('[data-practice]')).toHaveCount(1);
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(2);
@@ -947,7 +954,7 @@ test('Video import keeps only the original audio and files it under the capture 
   test.setTimeout(90000);
   await boot(page, {media:false});
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles(fixture);
   await expect(sheet(page).getByText('영상 → 음성만 저장')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
@@ -991,11 +998,11 @@ test('Library actually plays device and cloud-only audio (time advances)', async
     window.vzipCloudMediaUrl = async () => { await new Promise(r => setTimeout(r, 300)); return '/cloud-audio.wav'; };
     window.dispatchEvent(new Event('vzip:auth-changed'));
   });
-  await page.goto('/#/library');
   for (const id of ['m2', 'c1']) {
     await page.goto('/#/library');
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
+    await expect(page).toHaveURL(new RegExp('#/recording/'+id+'$'));
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }
@@ -1010,7 +1017,7 @@ test('Library actually plays device and cloud-only audio (time advances)', async
 
 test('Practice records can be edited, including unlinking files that no longer exist', async ({page}) => {
   await boot(page);
-  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
+  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; d.practices[0].manualMinutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/song/s1');
   await page.getByRole('tab', {name:'연습'}).click();
   await page.locator('[data-practice="p1"]').click();
@@ -1045,23 +1052,27 @@ test('Practice time adds recording/import lengths once and fills missing lengths
   });
   await page.goto('/#/growth');
   await page.getByRole('button', {name:'전체'}).click();
-  // p1 (30분, already includes linked m1) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
-  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('40분');
+  // p1 (manual 25분; legacy minutes is 30, linked m1 is not added) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('35분');
   await expect(page.locator('[data-file-time]')).toContainText('녹음·파일 10분 포함');
   await expect.poll(async () => Math.round((await page.evaluate(() => window.vzipReadMedia())).find(m => m.id === 'm3').durationSeconds)).toBe(1);
   await expect(page.locator('.bars')).toContainText('This Is the Moment');
   await expect(page.getByText(/기록에 연결되지 않은 녹음·파일 2개/)).toBeVisible();
   // Song list/detail use the same rule.
   await page.goto('/#/song/s1');
-  await expect(page.locator('[data-summary]')).toContainText('연습 40분');
+  await expect(page.locator('[data-summary]')).toContainText('연습 35분');
   // Linking m2 into a practice record moves its time inside that record (no double count).
   await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds.push('m2'); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/growth');
-  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('30분');
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
 });
 
 test('Changing a recording\'s song renames it to song + recording day, numbered on clashes', async ({page}) => {
   await boot(page);
+  await page.evaluate(async()=>{
+    for(const item of await window.vzipReadMedia())await VZ.media.update({...item,local:true},{nameMode:'auto',autoName:item.name},{quiet:true});
+    VZ.media.invalidate();
+  });
   await page.goto('/#/library');
   const open = async id => { await page.goto('/#/library'); await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
   await open('m1');
@@ -1074,6 +1085,7 @@ test('Changing a recording\'s song renames it to song + recording day, numbered 
   await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03');
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').name).toBe('On My Own 2026.11.03');
+  expect((await media(page)).find(m=>m.id==='m1').nameMode).toBe('auto');
   // Same song and day on another file gets a number.
   await page.locator('[data-media="m1"] [data-toggle]').click();
   await open('m2');
@@ -1414,7 +1426,9 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();
-  await page.getByLabel('형식 필터').selectOption('video');
+  await page.locator('#top [data-imp]').click();
+  await page.locator('.sheet [data-format]').selectOption('video');
+  await page.getByRole('dialog', {name:'보관함 메뉴'}).getByRole('button', {name:'닫기'}).click();
   await expect(page.getByText('조건에 맞는 파일이 없어요.')).toBeVisible();
   await page.getByRole('button', {name:'필터 초기화'}).click();
   await expect(page.locator('[data-media]')).toHaveCount(3);
@@ -1489,7 +1503,7 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
   });
   const sr = 8000, n = sr * 2, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
@@ -1544,7 +1558,7 @@ test('WAV imports are stored as FLAC only after every sample is checked against 
   let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(Math.sin(i / (20 + c * 3)) * 9000 + (rnd() - 0.5) * 600))), 44 + (i * ch + c) * 2);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await sheet(page).locator('[data-file]').setInputFiles({name:'warmup.wav', mimeType:'audio/wav', buffer:b});
   await expect(sheet(page).getByText('WAV → FLAC 무손실 압축')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
@@ -1831,19 +1845,18 @@ test('Video file deletion and a cloud failure retain the correct records',async(
  expect((await data(page)).practices[0].mediaIds).toContain('m1');
 });
 
-test('Song choices open as a searchable sheet; the page under a sheet stays where it was', async ({page}) => {
+test('Library menu preserves its song filter; the page under a sheet stays where it was', async ({page}) => {
   const seed = legacy(); seed.songs.push(...Array.from({length:30}, (_, i) => ({id:'x' + i, title:'추가 곡 ' + i, show:i % 3 ? '' : '레미제라블'})));
   await boot(page, {seed, media:false});
   await page.goto('/#/library');
-  await page.getByRole('button', {name:/^곡 필터, /}).click();
-  const sheet = page.getByRole('dialog', {name:'곡 필터'});
-  await sheet.locator('[data-pick-q]').fill('레미');
-  await expect(sheet.getByRole('option', {name:/추가 곡 1\b/})).toBeHidden();
-  await expect(sheet.getByRole('option', {name:'모든 곡'})).toBeVisible();
-  await sheet.getByRole('option', {name:/추가 곡 3/}).click();
-  await expect(sheet).toHaveCount(0);
+  await page.locator('#top [data-imp]').click();
+  const menu=page.getByRole('dialog', {name:'보관함 메뉴'});
+  await menu.locator('[data-library-song]').selectOption('x3');
   await expect(page.locator('select[data-song]')).toHaveValue('x3');
-  await expect(page.getByRole('button', {name:'곡 필터, 추가 곡 3'})).toBeVisible();
+  await menu.getByRole('button', {name:'닫기'}).click();
+  await page.locator('#top [data-imp]').click();
+  await expect(page.locator('.sheet [data-library-song]')).toHaveValue('x3');
+  await page.getByRole('dialog', {name:'보관함 메뉴'}).getByRole('button', {name:'닫기'}).click();
   await page.goto('/#/home'); await page.evaluate(() => scrollTo(0, 300)); const y = await page.evaluate(() => scrollY);
   await page.evaluate(() => { VZ.confirm('확인 창', '내용'); });
   await expect(page.locator('body')).toHaveClass(/sheet-lock/);
@@ -1859,6 +1872,8 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await expect(page.locator('[data-media]')).toHaveCount(2);
   await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
+  await expect(bar).toContainText('0개 선택');
+  await page.evaluate(()=>VZ.softRender()); // a background refresh must preserve selection mode
   await expect(bar).toContainText('0개 선택');
   await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
   await page.locator('[data-media="m1"] [data-toggle]').click();
@@ -1877,6 +1892,7 @@ test('Library select mode sets the song and kind of several recordings at once; 
   // Kind for one recording.
   await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   await page.locator('[data-media="m1"] [data-toggle]').click();
+  await expect(page.getByRole('toolbar')).toContainText('1개 선택');
   await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
   await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
@@ -1982,5 +1998,6 @@ test('Files edited before the follow rule existed are lined up once after start'
   await expect.poll(() => page.evaluate(() => VZ.db.practices.find(p => p.id === 'auto-old').date), {timeout:8000}).toBe(await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(x => x.id === 'm2'))));
   expect(page.__errors).toEqual([]);
 });
+
 
 

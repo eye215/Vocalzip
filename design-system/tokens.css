@@ -10,6 +10,12 @@
   --vz-color-accent: #7A32F5;
   --vz-color-accent-strong: #6528CA;
   --vz-color-accent-soft: #F3ECFF;
+  --vz-category-lesson: #7A32F5;
+  --vz-category-lesson-soft: #F3ECFF;
+  --vz-category-practice: #078994;
+  --vz-category-practice-soft: #E8F6F6;
+  --vz-category-stage: #DE3E0A;
+  --vz-category-stage-soft: #FFF0ED;
   --vz-color-accent-ink: #ffffff;
   --vz-color-selected: #7A32F5;
   --vz-color-progress-track: #E8E4F0;
@@ -121,3 +127,4 @@
  --vz-radius-card:22px; --vz-page-gutter:16px; --vz-card-padding:16px; --vz-grid-gap:12px; --vz-blur-card:none;
 }
 @media(max-width:359px) {[data-vz-design="approved-home-v1"],.vz-home-mode {--vz-grid-gap:10px;}}
+
