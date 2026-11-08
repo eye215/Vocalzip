@@ -1,3 +1,4 @@
+import {handleUploadV2} from './resumable.js';
 /* VOCAL.zip media API on Cloudflare Workers + R2.
  *
  * The browser never sees an R2 key. It signs in with Supabase as before and sends the Supabase
@@ -59,7 +60,7 @@ function corsHeaders(request, env) {
   return {
     'access-control-allow-origin': origin, vary: 'Origin',
     'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type, range, x-client-info',
+    'access-control-allow-headers': 'authorization, content-type, range, x-client-info, x-vzip-upload, x-vzip-proof',
     'access-control-expose-headers': 'etag, content-length, content-range, accept-ranges',
     'access-control-max-age': '600'
   };
@@ -81,6 +82,9 @@ async function route(request, env) {
   }
 
   const uid = await user(request, env);
+  if(path.startsWith('/v2/uploads'))return handleUploadV2(request,env,uid,{
+    fail,json,readJson,sign:text=>hmac(env,text),equal:timingSafeEqual,assertSession:()=>user(request,env)
+  });
   // Short audio preview for opt-in STT. Reads only the caller's R2 object and
   // transforms the excerpt at Cloudflare, avoiding whole-file decoding on iOS.
   if (path.startsWith('/v1/clip/') && method === 'GET') {
@@ -153,7 +157,7 @@ async function route(request, env) {
     try { await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).abort(); } catch {}
     return json({ok: true});
   }
-  if (path === '/v1/me' && method === 'GET') return json({user: uid});
+  if (path === '/v1/me' && method === 'GET') return json({user: uid,...(env.UPLOADS_V2_ENABLED==='true'&&env.SESSION_GUARD_ENABLED==='true'?{uploadContract:'merkle-v2'}:{})});
   if (path === '/v1/sign' && method === 'POST') {
     // Expiry is rounded up to the next hour, so a file gets the same link all hour and the browser can reuse what it
     // already downloaded. {keys:[…]} signs up to 100 files in one request (the list screen prefetches visible ones).

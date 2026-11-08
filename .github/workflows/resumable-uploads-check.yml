@@ -1,0 +1,30 @@
+name: Resumable R2 upload checks
+on:
+  push:
+    branches: ['codex/phase06-resumable-r2-v2']
+  pull_request:
+    paths:
+      - 'r2-worker/**'
+      - 'r2-resumable-upload.js'
+      - 'r2-storage.js'
+      - 'cloud-sync.js'
+      - '.github/workflows/resumable-uploads-check.yml'
+permissions:
+  contents: read
+concurrency:
+  group: resumable-upload-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: r2-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm test
