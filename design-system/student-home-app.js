@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=3';
+import {createFloatingHome} from './student-home-html.js?v=1';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -12,16 +12,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  function applyTheme(){
   const home=!!document.querySelector('[data-approved-home-host]');
   document.body.classList.toggle('vz-home-mode',home);
-  document.body.dataset.vzTheme='student';document.body.dataset.vzDesign='approved-home-v1';
-  document.querySelector('.v-nav')?.classList.add('vz-home-dock');
-  const icons={home:"house",songs:"music-notes",record:"microphone",library:"archive-box",calendar:"calendar-blank"};
-  document.querySelectorAll('.v-nav [data-nav]').forEach(link=>{
-   const icon=link.querySelector('i');
-   if(icon&&!icon.querySelector('.vz-nav-art')&&icons[link.dataset.nav])icon.append(createHomeIcon(icons[link.dataset.nav],"vz-nav-art"));
-  });
-  if(meta)meta.content=home?'#D8C7F7':originalTheme;
-  // The existing library controller used the record tab before it had its own dock entry.
-  const route=location.hash.replace(/^#\/?/,'').split(/[/?]/)[0];
+  if(meta)meta.content=home?'#f8f6fd':originalTheme;
+  const route=(location.hash.startsWith('#/')?location.hash.slice(2):location.hash.slice(1)).split('/')[0].split('?')[0];
   if(route==='library'||route==='practices'||route==='growth'){
    document.querySelectorAll('.v-nav [aria-current]').forEach(a=>a.removeAttribute('aria-current'));
    document.querySelector('.v-nav [data-nav="'+({library:'library',practices:'calendar',growth:'home'}[route])+'"]')?.setAttribute('aria-current','page');
@@ -33,9 +25,9 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const displayName=()=>String(V.db.profile?.displayName||V.db.settings?.displayName||'');
  function upcoming(s){
   const stage=s.stage?{id:s.stage.id,title:s.stage.title,subtitle:s.stage.songTitles.join(' · '),
-   dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
-  const l=s.lesson,lesson=l?{id:l.id,title:'다음 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
-   dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
+   date:s.stage.date,time:s.stage.time||'',dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
+  const l=s.lesson,lesson=l?{id:l.id,title:l.title||'보컬 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
+   date:l.date,time:l.startTime||'',dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
   return {stage,lesson};
  }
  function recentData(recent,files=[]){
@@ -46,14 +38,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  }
  function recentCallbacks(recent){
   return {onRecent:()=>recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
-   onPlay:()=>recent?.media?play(recent.media):recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
+   onContinue:()=>recent?V.practiceSheet({songId:recent.id}):nav('#/songs'),
    onLessons:()=>nav('#/lessons'),onPractice:()=>nav('#/practices')};
- }
- function play(file){
-  let player;
-  V.sheet({title:file.name||'최근 녹음',body:'<div data-home-player></div>',
-   onMount:(el)=>{const host=el.querySelector('[data-home-player]');player=V.media.player(host,file,{tools:true});host._player=player;player.play();},
-   onClose:()=>player?.destroy()});
  }
  function notices(){
   const s=state(),tasks=s.recommendationCandidates;
@@ -72,7 +58,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    '<label class="field"><span>개인 목표</span><textarea name="personal" rows="3" maxlength="10000" placeholder="한 줄에 목표 하나씩 입력하세요"></textarea></label>'+
    '<div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(s.week.days.find(d=>d.today)?.targetMinutes??'')+'" placeholder="미설정"></label>'+
    '<label class="field"><span>이번 주 목표 시간(분)</span><input type="number" name="weekMinutes" min="0" max="10080" inputmode="numeric" value="'+(s.week.targetMinutes??'')+'" placeholder="미설정"></label></div><p class="small muted">시간 목표는 직접 정해요. 입력하지 않으면 달성률을 만들지 않아요.</p><p role="alert" class="small" data-plan-error></p></form>';
-  V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block">목표 저장</button>',
+  V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block vz-home-primary-button">목표 저장</button>',
    onMount:(el,close)=>{
     const form=el.querySelector('form');form.addEventListener('input',()=>{dirty=true;});
     beforeUnload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue='';}};
@@ -97,8 +83,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   async mount(main){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
    const s=state(),r=recentData(s.recent);
-   const root=createStudentHome({greeting:greeting(),name:displayName(),...upcoming(s),goals:s.goals,week:s.week,recent:r,
-    ...recentCallbacks(r),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onGrowth:()=>nav('#/growth'),onCalendar:()=>nav('#/calendar'),
+   let root;
+   try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
+    ...recentCallbacks(r),onRecord:()=>nav('#/record'),onNavigate:id=>nav('#/'+id),
+    onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onGrowth:()=>nav('#/growth'),onCalendar:()=>nav('#/calendar'),
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
     onGoalToggle:async(id,completed)=>{
@@ -106,8 +94,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
      if(!ok)throw Error('체크를 저장하지 못했어요. 다시 시도해 주세요.');
      delete main.dataset.dirty;
     }});
+   }catch(error){
+    if(!host.isConnected)return;
+    host.innerHTML='<p role="alert">홈을 불러오지 못했어요. 기록은 그대로 보관돼 있어요.</p><button type="button" data-home-retry>다시 불러오기</button> <a href="#/songs">내 곡으로 이동</a>';
+    host.querySelector('[data-home-retry]').onclick=()=>V.render();return;
+   }
+   if(!host.isConnected)return;
    host.replaceChildren(root);applyTheme();
-   V.archiveAssets?.posters(root,s.stage?[s.stage]:[]);
    const media=await V.media.list().catch(()=>[]);
    if(!host.isConnected)return;
    // Reuse the same real records; this region alone changes after media metadata arrives.
@@ -116,8 +109,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const activity=V.songActivity(media),id=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)))[0];
     if(id)recent={song:V.song(id),date:activity.get(id)};
    }
-   const resolved=recentData(recent,media),region=root.querySelector('.vz-recent-region');
-   if(region)region.replaceWith(createRecentSongActions({recent:resolved,...recentCallbacks(resolved)}));
+   const resolved=recentData(recent,media);
+   if(root.isConnected)root.updateRecent(resolved,recentCallbacks(resolved));
   }});
  // Reuse the existing practice detail/edit/record actions; the old app had no standalone history route.
  V.route('practices',{title:'연습 기록',back:true,tab:'calendar',

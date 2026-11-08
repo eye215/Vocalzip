@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 295 156">
+<!-- Render only the original stage ornament. The rounded hole excludes the reference's baked D-12 label. -->
+<defs>
+ <linearGradient id="v" x2="0" y2="1"><stop stop-color="white" stop-opacity="0"/><stop offset=".1" stop-color="white" stop-opacity=".4"/><stop offset=".2" stop-color="white"/><stop offset=".9" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient>
+ <linearGradient id="h"><stop stop-color="white" stop-opacity="0"/><stop offset=".12" stop-color="white"/><stop offset=".95" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient>
+ <mask id="edge" maskUnits="userSpaceOnUse" x="0" y="0" width="295" height="156"><path d="M0 0H295V156H0Z" fill="url(#h)"/></mask>
+</defs>
+<path fill="url(#v)" fill-rule="evenodd" mask="url(#edge)" d="M0 0H295V156H0Z M35 27H105Q140 27 140 62V69Q140 104 105 104H35Q0 104 0 69V62Q0 27 35 27Z"/>
+</svg>
