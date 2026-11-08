@@ -40,12 +40,13 @@ test('compact calendar summary follows month, sorting, expansion and data update
 });
 test('today number stays white on selected purple, and purple when unselected',async({page})=>{
  await boot(page);const today=page.locator('.cal-day.today');
+ const accent=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--accent)';document.body.append(probe);const color=getComputedStyle(probe).color;probe.remove();return color;});
  await today.click();await expect(today).toHaveAttribute('aria-pressed','true');
  expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(255, 255, 255)');
  const bg=await today.evaluate(n=>getComputedStyle(n).backgroundColor);
  expect(bg).not.toBe('rgb(255, 255, 255)');
  await page.locator('.cal-day:not(.today):not(.out)').first().click();
- expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(117, 82, 217)');
+ expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe(accent);
  await today.click();
  expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(255, 255, 255)');
 });
