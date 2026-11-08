@@ -28,8 +28,9 @@ test('one-line month totals and tinted top-five rotate by the chosen metric',asy
  await expect(card.locator('.cs-spotlight')).toHaveCSS('background-color','rgb(243, 236, 255)');
  await expect(page.locator('.vz-calendar-month .legend')).toHaveText('레슨연습공연');
  await expect(page.locator('.vz-calendar-month [data-today]')).toBeVisible();
+ await page.locator('.cal-day[data-d="'+day+'"]').click();
  await expect(page.locator('.cal-own[data-kind=lesson] .avatar')).toHaveCSS('color','rgb(122, 50, 245)');
- await expect(page.locator('.cal-own[data-kind=practice] .avatar')).toHaveCSS('color','rgb(167, 128, 216)');
+ await expect(page.locator('.cal-own[data-kind=practice] .avatar')).toHaveCSS('color','rgb(149, 101, 201)');
  expect((await card.boundingBox()).height).toBeLessThan(230);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.evaluate(date=>VZ.change(d=>{d.songs.push({id:'e',title:'노래 E'});d.practices.push({id:'e1',date,songId:'e',minutes:2});}),day);
@@ -56,7 +57,7 @@ test('today number stays white on selected purple, and purple when unselected',a
  const bg=await today.evaluate(n=>getComputedStyle(n).backgroundColor);
  expect(bg).not.toBe('rgb(255, 255, 255)');
  await page.locator('.cal-day:not(.today):not(.out)').first().click();
- expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(117, 82, 217)');
+ expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(122, 50, 245)');
  await today.click();
  expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(255, 255, 255)');
 });

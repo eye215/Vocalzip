@@ -25,8 +25,8 @@ body.vz-calendar-mode .cal-grid{gap:2px}
 body.vz-calendar-mode .cal-day{min-height:50px;border-radius:50%;color:#344054}
 body.vz-calendar-mode .cal-day[aria-pressed=true]{background:#7a32f5;color:#fff}
 body.vz-calendar-mode .dots .l,body.vz-calendar-mode .legend .l{background:#7a32f5}
-body.vz-calendar-mode .dots .p,body.vz-calendar-mode .legend .p{background:#a780d8}
-body.vz-calendar-mode .dots .s,body.vz-calendar-mode .legend .s{background:#d383a4}
+body.vz-calendar-mode .dots .p,body.vz-calendar-mode .legend .p{background:#9565c9}
+body.vz-calendar-mode .dots .s,body.vz-calendar-mode .legend .s{background:#b96087}
 body.vz-calendar-mode .cal-day[aria-pressed=true] .dots i{background:#fff}
 body.vz-calendar-mode .legend{display:flex;align-items:center;gap:16px;margin:12px 0 0;color:#667085;font-size:11px}
 body.vz-calendar-mode .legend span{gap:5px;white-space:nowrap}
@@ -42,8 +42,8 @@ body.vz-calendar-mode .cal-own{overflow:hidden;border-radius:20px;background:#ff
 body.vz-calendar-mode .cal-own .item{min-height:76px;padding:14px 16px;gap:12px;border:0}
 body.vz-calendar-mode .cal-own .avatar{width:42px;height:42px;border-radius:12px;background:var(--category-bg);color:var(--category);font-size:22px}
 body.vz-calendar-mode .cal-own[data-kind=lesson]{--category:#7a32f5;--category-bg:#f3ecff}
-body.vz-calendar-mode .cal-own[data-kind=practice]{--category:#a780d8;--category-bg:#f5eeff}
-body.vz-calendar-mode .cal-own[data-kind=stage]{--category:#d383a4;--category-bg:#fceff5}
+body.vz-calendar-mode .cal-own[data-kind=practice]{--category:#9565c9;--category-bg:#f5eeff}
+body.vz-calendar-mode .cal-own[data-kind=stage]{--category:#b96087;--category-bg:#fceff5}
 body.vz-calendar-mode .cal-own .avatar[style],body.vz-calendar-mode .cal-own .avatar[data-poster]{background:var(--category-bg)!important;color:var(--category)!important}
 body.vz-calendar-mode .cal-own .item-title{color:#101828;font-size:15px;font-weight:600;line-height:21px}
 body.vz-calendar-mode .cal-own .item-sub{margin-top:3px;color:#667085;font-size:12px;line-height:18px}

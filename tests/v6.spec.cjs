@@ -52,7 +52,7 @@ test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
  await boot(page);
- for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','캘린더']]){
+ for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','일정']]){
   await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
   await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
   await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
