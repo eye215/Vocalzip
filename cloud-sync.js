@@ -182,7 +182,7 @@ async function importMedia(file,info={},onProgress,options={}){
   if(!/^[a-z0-9_-]{1,200}$/i.test(id))throw Error('잘못된 파일 ID예요.');
   recovery=mediaRecovery();
   if(recovery.pending().some(entry=>entry.id===id)){
-   const restored=await recovery.recover(id);aborted();
+   const restored=await recovery.recover(id);aborted();window.VzipR2?.acknowledgeTransfer?.(id,restored);
    onProgress?.(100);window.dispatchEvent(new Event('vzip:cloud-media-changed'));
    return restored;
   }
@@ -191,9 +191,19 @@ async function importMedia(file,info={},onProgress,options={}){
    if(lookupError)throw lookupError;aborted();
    if(existing?.metadata){onProgress?.(100);return {...existing.metadata,id}}
   }
+  const baseMetadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),nameMode:info.nameMode,autoName:info.autoName,song:info.song||'',songId:info.songId||'',
+   created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
+   source:info.source||'import',size:file.size,
+   // Import facts from the import hub (source, original name, fingerprint) stay with the file.
+   ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]]))};
   const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
   // R2 (when the owner has set it up, r2-config.js) replaces the Supabase upload; the record stays in vocal_media.
-  if(await window.VzipR2?.ready?.()){r2=await window.VzipR2.upload(file,{mediaId:id,type,signal,onProgress:p=>onProgress?.(Math.min(99,p))});aborted()}
+  if(await window.VzipR2?.ready?.()||window.VzipR2?.hasPendingTransfer?.(id)){
+   r2=await window.VzipR2.upload(file,{mediaId:id,type,signal,onProgress:p=>onProgress?.(Math.min(99,p)),
+    recoveryContext:{kind:'library',metadata:baseMetadata},
+    onReceipt:(context,receipt)=>recovery.remember({...context.metadata,storageProvider:'r2',r2Key:receipt.key,r2Etag:receipt.etag},receipt)
+   });aborted();
+  }
   const multipart=!r2&&file.size>50*1024*1024;
   const parts=multipart?Array.from({length:Math.ceil(file.size/VzipChunks.PART_SIZE)},(_,index)=>({
    path:owner+'/'+id+'/part-'+String(index).padStart(4,'0'),
@@ -239,13 +249,9 @@ async function importMedia(file,info={},onProgress,options={}){
    offset+=part.size;
   }
   aborted();
-  const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),nameMode:info.nameMode,autoName:info.autoName,song:info.song||'',songId:info.songId||'',
-   created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
-   source:info.source||'import',size:file.size,
-   // Import facts from the import hub (source, original name, fingerprint) stay with the file.
-   ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]])),
+  let metadata={...baseMetadata,
    ...(r2?{storageProvider:'r2',r2Key:r2.key}:multipart?{storageVersion:2,parts}:{path:parts[0].path})};
-  if(r2){metadata.r2Etag=r2.etag;recovery.remember(metadata,{key:r2.key,size:r2.size,etag:r2.etag});}
+  if(r2){metadata.r2Etag=r2.etag;metadata=recovery.remember(metadata,{key:r2.key,size:r2.size,etag:r2.etag}).metadata;}
   options.onCommit?.();committing=true;
   const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},r2?{ignoreDuplicates:true}:undefined);
   // Success means the row is really there: a lost reply may hide a write that went through, and a reported success is checked.
@@ -257,7 +263,7 @@ async function importMedia(file,info={},onProgress,options={}){
    throw Error('보관함 연결을 확인하지 못했어요'+(error?': '+error.message:'')+'. 올린 파일은 지우지 않았어요.');
   }
   const confirmed=r2?recovery.acknowledge(id,check.metadata):metadata;
-  committed=true;if(!r2)forget(id);
+  committed=true;if(!r2)forget(id);else window.VzipR2?.acknowledgeTransfer?.(id,confirmed);
   if(user?.id!==owner)throw Error('로그인이 변경되어 현재 화면에 파일을 연결하지 않았어요. 원래 계정의 보관함에서 확인해 주세요.');
   onProgress?.(100);window.dispatchEvent(new Event('vzip:cloud-media-changed'));
   return confirmed;
@@ -283,22 +289,57 @@ function mediaUploadLock(work){
  });
  return work();
 }
-window.vzipCloudImport=(...args)=>mediaUploadLock(()=>importMedia(...args));
+let activeReceiptRecovery=null,activeReceiptRecoveryScope=null,activeReceiptRecoveryOwner=null,activeReceiptRecoverySession='';
+function waitForReceiptRecovery(signal){
+ if(signal?.aborted)return Promise.reject(new DOMException('업로드를 취소했어요.','AbortError'));
+ const pending=activeReceiptRecovery;if(!pending)return Promise.resolve();
+ return new Promise((resolve,reject)=>{
+  let settled=false;
+  const finish=error=>{if(settled)return;settled=true;signal?.removeEventListener('abort',cancel);error?reject(error):resolve();};
+  const cancel=()=>finish(new DOMException('업로드를 취소했어요.','AbortError'));
+  signal?.addEventListener('abort',cancel,{once:true});
+  if(signal?.aborted){cancel();return;}
+  pending.then(()=>finish(),()=>finish());
+ });
+}
+window.vzipCloudImport=(...args)=>{
+ const owner=user?.id,session=window.vzipCloudSessionId?.()||'';
+ return waitForReceiptRecovery(args[3]?.signal).then(()=>mediaUploadLock(()=>{
+  if(user?.id!==owner||(window.vzipCloudSessionId?.()||'')!==session)throw Error('로그인이 변경되어 대기하던 업로드를 중단했어요. 원래 계정에서 다시 선택해 주세요.');
+  return importMedia(...args);
+ }));
+};
 /** Retry known completed uploads without reading or uploading the source file again. */
-window.vzipRecoverMediaUploads=(id)=>mediaUploadLock(async()=>{
+window.vzipRecoverMediaUploads=(id)=>{
+ const account=user?.id,session=window.vzipCloudSessionId?.()||'';
+ const current=()=>{if(user?.id!==account||(window.vzipCloudSessionId?.()||'')!==session)throw Error('로그인이 변경되어 복구를 중단했어요.');};
+ if(activeReceiptRecovery){
+  if(activeReceiptRecoveryOwner!==account||activeReceiptRecoverySession!==session)return Promise.reject(Error('로그인이 변경되어 이전 계정의 복구 결과를 연결하지 않았어요.'));
+  if(activeReceiptRecoveryScope!==null&&activeReceiptRecoveryScope!==(id||null))return Promise.reject(Error('다른 파일을 복구하고 있어요. 잠시 후 다시 시도해 주세요.'));
+  return activeReceiptRecovery.then(rows=>id?rows.filter(row=>row.id===id):rows);
+ }
+ const operation=mediaUploadLock(async()=>{
+ current();
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요.');
- const recovery=mediaRecovery(),entries=recovery.pending().filter(entry=>!id||entry.id===id);
- if(!entries.length)return [];
+ const recovery=mediaRecovery();
  mediaImportActive=true;const result=[];
  try{
+  const transfers=await window.VzipR2?.recoverLibraryTransfers?.(id,(context,receipt)=>recovery.remember({...context.metadata,storageProvider:'r2',r2Key:receipt.key,r2Etag:receipt.etag},receipt))||[];
+  result.push(...transfers.filter(entry=>entry.status!=='complete'));
+  const entries=recovery.pending().filter(entry=>!id||entry.id===id);
   for(const entry of entries){
-   try{const metadata=await recovery.recover(entry.id);result.push({id:entry.id,status:'restored',metadata});}
+   try{const metadata=await recovery.recover(entry.id);window.VzipR2?.acknowledgeTransfer?.(entry.id,metadata);result.push({id:entry.id,status:'restored',metadata});}
    catch(error){if(error.code==='identity')throw error;result.push({id:entry.id,status:'pending',code:error.code||'unavailable'});}
   }
+  current();
   if(result.some(entry=>entry.status==='restored'))window.dispatchEvent(new Event('vzip:cloud-media-changed'));
   return result;
  }finally{mediaImportActive=false;}
-});
+ });
+ activeReceiptRecovery=operation;activeReceiptRecoveryScope=id||null;activeReceiptRecoveryOwner=account;activeReceiptRecoverySession=session;
+ operation.finally(()=>{if(activeReceiptRecovery===operation){activeReceiptRecovery=null;activeReceiptRecoveryScope=null;activeReceiptRecoveryOwner=null;activeReceiptRecoverySession='';}}).catch(()=>{});
+ return operation;
+};
 let receiptRecoveryTimer=null;
 function scheduleReceiptRecovery(){
  clearTimeout(receiptRecoveryTimer);

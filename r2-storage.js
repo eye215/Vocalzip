@@ -30,8 +30,8 @@ function uploadError(status,msg=''){
  error.status=status;return error;
 }
 /** XHR sends one bounded part buffer and reports bytes; ArrayBuffer is consistent in Safari. */
-async function sendPart(path,{piece,signal,onBytes}){
- if(!window.XMLHttpRequest)return api(path,{method:'PUT',body:piece,signal});
+async function sendPart(path,{piece,signal,onBytes,headers={}}){
+ if(!window.XMLHttpRequest)return api(path,{method:'PUT',body:piece,signal,headers});
  const access=await token(),payload=await piece.arrayBuffer();
  if(signal?.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
  return new Promise((resolve,reject)=>{
@@ -41,6 +41,7 @@ async function sendPart(path,{piece,signal,onBytes}){
   xhr.open('PUT',endpoint()+path);xhr.responseType='json';xhr.withCredentials=false;
   xhr.setRequestHeader('authorization','Bearer '+access);
   if(window.VzipAccountScope)xhr.setRequestHeader('X-Client-Info','vocalzip-device-session-v2');
+  for(const [name,value]of Object.entries(headers))xhr.setRequestHeader(name,value);
   xhr.upload.onprogress=event=>{if(!settled&&event.lengthComputable)onBytes?.(Math.min(piece.size,event.loaded));};
   xhr.onload=()=>{const data=xhr.response;if(xhr.status<200||xhr.status>=300)done(uploadError(xhr.status,typeof data?.error==='string'?data.error:''));else if(!data||typeof data!=='object')done(uploadError(502,'invalid response'));else done(null,data);};
   xhr.onerror=()=>done(Error('업로드 연결이 끊겼어요.'));
@@ -54,7 +55,12 @@ async function sendPart(path,{piece,signal,onBytes}){
 const extOf = (file, type) => (String(file.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1] || ({'application/pdf':'pdf', 'audio/mp4':'m4a', 'audio/x-m4a':'m4a', 'audio/mpeg':'mp3', 'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/aac':'aac', 'audio/ogg':'ogg', 'audio/flac':'flac', 'audio/webm':'webm', 'video/mp4':'mp4', 'video/quicktime':'mov', 'video/webm':'webm'})[type] || 'bin').toLowerCase();
 
 /** Upload a file as parts (resumable per part, 3 tries each). Returns {key, size, etag}. */
-async function upload(file, {mediaId, type = file.type, onProgress, signal, purpose} = {}) {
+async function upload(file, {mediaId, type = file.type, onProgress, signal, purpose, recoveryContext, onReceipt} = {}) {
+  if(recoveryContext){
+    const client=transferClient(onReceipt);
+    if(check.uploadContract==='merkle-v2'||client.pending().some(entry=>entry.id===mediaId))
+      return client.upload(file,{mediaId,type,ext:extOf(file,type),context:recoveryContext,onProgress,signal});
+  }
   const start = await api('/v1/uploads', {method:'POST', signal, body:{mediaId, contentType:type, size:file.size, ext:extOf(file, type), ...(purpose ? {purpose} : {})}});
   const q = '?key=' + encodeURIComponent(start.key), base = '/v1/uploads/' + encodeURIComponent(start.uploadId);
   const parts = new Array(Math.ceil(file.size/start.partSize));
@@ -83,12 +89,36 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal, purp
     if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
     const done = await api(base + '/complete' + q, {method:'POST', body:{parts}, signal});
     if (done.size !== file.size) throw Error('업로드한 크기가 원본과 달라요.');
+    await onReceipt?.(recoveryContext,done);
     progress(100);
     return done;
   } catch (e) {
     api(base + q, {method:'DELETE'}).catch(() => {});
     throw e;
   } finally {signal?.removeEventListener('abort',cancel);}
+}
+function transferClient(onReceipt){
+  if(!window.VzipResumableUploads)throw Error('업로드 재개 모듈을 불러오지 못했어요. 새로고침해 주세요.');
+  const identity=()=>!window.vzipCloudSignedIn?.()||window.VzipAccountScope?.leaving?null:{
+    owner:window.vzipCloudUserId?.()||'',
+    session:window.vzipCloudSessionId?.()||(window.VzipAccountScope?'':'legacy'),endpoint:endpoint()
+  };
+  const transferApi=(path,options={})=>options.method==='PUT'&&options.body instanceof Blob?sendPart(path,{piece:options.body,signal:options.signal,headers:options.headers,onBytes:options.onUploadBytes}):api(path,options);
+  return window.VzipResumableUploads.create({storage:localStorage,identity,api:transferApi,onReceipt});
+}
+function hasPendingTransfer(id){return !!endpoint()&&!!window.vzipCloudSignedIn?.()&&transferClient().pending().some(entry=>entry.id===id);}
+async function recoverLibraryTransfers(id,onReceipt){
+  if(!endpoint()||!window.vzipCloudSignedIn?.())return [];
+  const client=transferClient(onReceipt),out=[];
+  for(const entry of client.pending().filter(entry=>!id||entry.id===id)){
+    try{out.push(await client.finish(entry.id));}
+    catch(error){if(error.code==='identity')throw error;out.push({id:entry.id,status:'pending',code:error.code||'unavailable'});}
+  }
+  return out;
+}
+function acknowledgeTransfer(id,metadata){
+  if(!endpoint()||!window.vzipCloudSignedIn?.())return;
+  try{transferClient().acknowledge(id,metadata);}catch(error){if(error.code==='identity')throw error;}
 }
 /* Playback links: kept on this device until shortly before they expire (also across reloads), asked for once per file
  * even when several screens want it at the same time, and signed in batches for the rows on screen. A link already here
@@ -145,7 +175,7 @@ async function ready() {
   if (!endpoint() || !window.vzipCloudSignedIn?.()) return false;
   let t; try { t = await token(); } catch { return false; }
   if (check.token === t && check.until > Date.now()) return check.ok;
-  try { await api('/v1/me'); check = {token:t, ok:true, reason:'', until:Date.now() + 600000}; }
+  try { const accepted=await api('/v1/me'); check = {token:t, ok:true, reason:'', uploadContract:accepted.uploadContract||'', until:Date.now() + 600000}; }
   catch (e) { check = {token:t, ok:false, reason:e.status === 401 ? 'auth' : e.status ? 'http ' + e.status : 'network', until:Date.now() + (e.status ? 600000 : 60000)}; }
   return check.ok;
 }
@@ -183,5 +213,5 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();

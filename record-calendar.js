@@ -29,9 +29,11 @@ const localStorage=window.VzipAccountScope?.storage||window.localStorage;
   }
   function openRecord(kind, id) {
     if(kind==='media'){
-      window.vzipNavigate?.('media');
       const play=()=>{const row=[...document.querySelectorAll('.vzip-hub-item')].find(row=>row.dataset.id===id);if(!row)return false;row.querySelector('[data-action=play]')?.click();row.tabIndex=-1;row.scrollIntoView({block:'center'});row.focus();return true};
-      if(!play()){window.addEventListener('vzip:hub-refreshed',play,{once:true});document.querySelector('#vzip-hub-reload')?.click()}
+      // Navigation refreshes the library. Start playback only on the new rows.
+      window.addEventListener('vzip:hub-refreshed',play,{once:true});
+      window.vzipNavigate?.('media');
+      document.querySelector('#vzip-hub-reload')?.click();
       return;
     }
     const tab = kind === 'lesson' ? 'lessons' : 'practice';

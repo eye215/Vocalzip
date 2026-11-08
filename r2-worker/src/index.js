@@ -1,3 +1,4 @@
+import {handleUploadV2} from './resumable.mjs';
 /* VOCAL.zip media API on Cloudflare Workers + R2.
  *
  * The browser never sees an R2 key. It signs in with Supabase as before and sends the Supabase
@@ -59,7 +60,7 @@ function corsHeaders(request, env) {
   return {
     'access-control-allow-origin': origin, vary: 'Origin',
     'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type, range, x-client-info',
+    'access-control-allow-headers': 'authorization, content-type, range, x-client-info, x-vzip-upload, x-vzip-proof',
     'access-control-expose-headers': 'etag, content-length, content-range, accept-ranges',
     'access-control-max-age': '600'
   };
@@ -81,6 +82,9 @@ async function route(request, env) {
   }
 
   const uid = await user(request, env);
+  if(path.startsWith('/v2/uploads'))return handleUploadV2(request,env,uid,{
+    fail,json,readJson,sign:text=>hmac(env,text),equal:timingSafeEqual,assertSession:()=>user(request,env)
+  });
   // Short audio preview for opt-in STT. Reads only the caller's R2 object and
   // transforms the excerpt at Cloudflare, avoiding whole-file decoding on iOS.
   if (path.startsWith('/v1/clip/') && method === 'GET') {
@@ -132,7 +136,7 @@ async function route(request, env) {
     return json({key, uploadId: upload.uploadId, partSize: PART_SIZE});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)\/parts\/(\d{1,5})$/)) && method === 'PUT') {
-    const key = ownKey(uid, url.searchParams.get('key')), n = Number(m[2]);
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key')), n = Number(m[2]);
     if (n < 1 || n > 10000) fail(400, 'invalid part number');
     const length = Number(request.headers.get('content-length'));
     if (!(length > 0) || length > PART_SIZE) fail(413, 'part must be 1 byte – 8 MiB');
@@ -140,7 +144,7 @@ async function route(request, env) {
     return json({partNumber: part.partNumber, etag: part.etag});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)\/complete$/)) && method === 'POST') {
-    const key = ownKey(uid, url.searchParams.get('key'));
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key'));
     const {parts} = await readJson(request);
     if (!Array.isArray(parts) || !parts.length || parts.some(p => !(p.partNumber > 0) || typeof p.etag !== 'string')) fail(400, 'invalid parts');
     const done = await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).complete(parts.map(p => ({partNumber: p.partNumber, etag: p.etag})).sort((a, b) => a.partNumber - b.partNumber));
@@ -149,11 +153,11 @@ async function route(request, env) {
     return json({key, size: done.size, etag: done.httpEtag});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)$/)) && method === 'DELETE') {
-    const key = ownKey(uid, url.searchParams.get('key'));
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key'));
     try { await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).abort(); } catch {}
     return json({ok: true});
   }
-  if (path === '/v1/me' && method === 'GET') return json({user: uid});
+  if (path === '/v1/me' && method === 'GET') return json({user: uid,...(env.UPLOADS_V2_ENABLED==='true'&&env.SESSION_GUARD_ENABLED==='true'?{uploadContract:'merkle-v2'}:{})});
   if (path === '/v1/sign' && method === 'POST') {
     // Expiry is rounded up to the next hour, so a file gets the same link all hour and the browser can reuse what it
     // already downloaded. {keys:[…]} signs up to 100 files in one request (the list screen prefetches visible ones).
@@ -193,6 +197,12 @@ async function route(request, env) {
   fail(404, 'not found');
 }
 
+function ownLegacyUploadKey(uid,key){
+  key=ownKey(uid,key);
+  const segments=key.split('/');
+  if(segments.length!==4||!ID.test(segments[2])||!/^original\.[a-z0-9]{1,8}$/.test(segments[3]))fail(403,'use the signed resumable upload contract');
+  return key;
+}
 function ownKey(uid, key) {
   key = String(key || '');
   if (!key.startsWith('u/' + uid + '/') || key.includes('..') || key.includes('//') || key.length > 300) fail(403, 'not your file');
