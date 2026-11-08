@@ -302,7 +302,13 @@ function waitForReceiptRecovery(signal){
   pending.then(()=>finish(),()=>finish());
  });
 }
-window.vzipCloudImport=(...args)=>waitForReceiptRecovery(args[3]?.signal).then(()=>mediaUploadLock(()=>importMedia(...args)));
+window.vzipCloudImport=(...args)=>{
+ const owner=user?.id,session=window.vzipCloudSessionId?.()||'';
+ return waitForReceiptRecovery(args[3]?.signal).then(()=>mediaUploadLock(()=>{
+  if(user?.id!==owner||(window.vzipCloudSessionId?.()||'')!==session)throw Error('로그인이 변경되어 대기하던 업로드를 중단했어요. 원래 계정에서 다시 선택해 주세요.');
+  return importMedia(...args);
+ }));
+};
 /** Retry known completed uploads without reading or uploading the source file again. */
 window.vzipRecoverMediaUploads=(id)=>{
  if(activeReceiptRecovery){

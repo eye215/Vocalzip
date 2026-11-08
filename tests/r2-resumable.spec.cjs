@@ -98,3 +98,26 @@ test('manual recovery shares background work and a cancellable retry waits for i
  expect(r2.calls.filter(x=>x==='PUT /v2/uploads/parts/1')).toHaveLength(1);
  expect(r2.store.size).toBe(1);
 });
+
+test('an account change while a retry waits cannot upload the old file to the new account',async({page})=>{
+ const r2=await fakeR2(page,{resumable:true,failPart:2});await boot(page);
+ await page.evaluate(async()=>{
+  const bytes=new Uint8Array(8*1024*1024+23);bytes.fill(5);window.__oldFile=new File([bytes],'old-account.wav',{type:'audio/wav'});
+  try{await window.vzipCloudImport(window.__oldFile,{id:'v2-queued-owner',name:'이전 계정 파일'});}catch{}
+  await window.vzipRecoverMediaUploads();
+ });
+ let entered,release;const ready=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve);let held=false;
+ await page.route('**/v2/uploads/status',async route=>{if(!held){held=true;entered();await gate;}await route.fallback();});
+ await page.evaluate(()=>{window.__oldRecovery=window.vzipRecoverMediaUploads().catch(()=>[]);});
+ await ready;
+ const uploads=r2.calls.filter(x=>x==='POST /v2/uploads'||x.startsWith('PUT /v2')).length;
+ await page.evaluate(()=>{
+  window.__oldRetry=window.vzipCloudImport(window.__oldFile,{id:'v2-queued-owner'}).then(()=>null,error=>error.message);
+  for(const fn of window.__authHandlers||[])fn('SIGNED_IN',{user:{id:'other-user',email:'other@example.invalid'}});
+ });
+ release();
+ expect(await page.evaluate(()=>window.__oldRetry)).toContain('로그인이 변경');
+ expect(r2.calls.filter(x=>x==='POST /v2/uploads'||x.startsWith('PUT /v2')).length).toBe(uploads);
+ expect(await page.evaluate(()=>window.__rows['v2-queued-owner']||null)).toBeNull();
+ expect(r2.store.size).toBe(0);
+});
