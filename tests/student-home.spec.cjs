@@ -175,14 +175,14 @@ test('persistence failure restores the checkbox and retry succeeds',async({page}
  expect((await db(page)).dailyGoals).toEqual(before.dailyGoals);
  await page.evaluate(()=>{Storage.prototype.setItem=window.__homeSetItem;});await box.check();await expect(box).toBeChecked();
 });
-test('900 goals preserve order and inner scroll after checking a visible row',async({page},testInfo)=>{
+test('900 goals preserve order and inner scroll after checking a visible row',async({page})=>{
  const value=seed();value.dailyGoals=Array.from({length:900},(_,i)=>({id:'many-'+i,date:TODAY,title:'연습 목표 '+String(i).padStart(3,'0'),source:'personal',completed:false,order:i}));
  await boot(page,value);const list=page.locator('.vz-goal-list');await expect(goals(page)).toHaveCount(900);
  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));await list.evaluate(e=>{e.scrollTop=450;});const before=await list.evaluate(e=>e.scrollTop);
  const index=await list.evaluate(e=>{const r=e.getBoundingClientRect();return [...e.children].findIndex(n=>{const b=n.getBoundingClientRect();return b.top>=r.top+4&&b.bottom<=r.bottom-4;});});
  await goals(page).nth(index).click();await expect(goals(page).nth(index)).toBeChecked();expect(Math.abs(await list.evaluate(e=>e.scrollTop)-before)).toBeLessThanOrEqual(1);
  expect((await db(page)).dailyGoals.map(g=>g.id)).toEqual(value.dailyGoals.map(g=>g.id));await expect(page.locator('.vz-count')).toHaveText('1 / 900 완료');
- await screenshot(page,testInfo,'student-home-900-goals.png');
+ // Keep this stress test focused on persistence and scroll; visual captures are covered by layout tests.
 });
 test('empty state removes all sample data and connects song and goal setup',async({page})=>{
  const value={categories:[],songs:[],lessons:[],assignments:[],practices:[],performances:[],comparisonReports:[]};await boot(page,value);
