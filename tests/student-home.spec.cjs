@@ -215,7 +215,7 @@ test('four home navigation buttons and floating recording reach existing routes'
 });
 test('stage, lesson, song, quick actions and growth retain their real destinations',async({page})=>{
  await boot(page);
- for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','song/s1'],['레슨노트','lessons'],['연습기록','practices'],['성장 기록 보기','growth'],['프로필','settings']]){
+ for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','record?song=s1'],['레슨노트','lessons'],['연습기록','practices'],['성장 기록 보기','growth'],['프로필','settings']]){
   await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
  }
 });
