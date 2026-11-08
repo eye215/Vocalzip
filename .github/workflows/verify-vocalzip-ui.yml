@@ -1,4 +1,4 @@
-name: Verify Vocalzip UI kit
+name: Verify Vocalzip UI kit and visible states
 on:
   push:
     branches: [docs/home-preview-images-20261108]

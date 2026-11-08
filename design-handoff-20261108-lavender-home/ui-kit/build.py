@@ -8,6 +8,8 @@ if not source.exists():
 home=source.read_text()
 main=re.search(r'<main>([\s\S]*?)</main>',home).group(1)
 styles='\n'.join(re.findall(r'<style>([\s\S]*?)</style>',home)).replace('#vocalzip-refined-preview','#vocalzip-prototype')
+for selector in ['button{font:inherit','svg{width:20px','h2{font-size:18px']:
+ styles=styles.replace('#vocalzip-prototype '+selector,':where(#vocalzip-prototype) '+selector)
 styles=re.sub(r'@import\s+url\([^;]+;','',styles)
 names=['AudioLines','Bell','UserRound','ChevronLeft','ChevronRight','Plus','Search','Inbox','Music2','History','Upload','Video','Play','NotebookPen','ListChecks','Mic','Wind','ChartNoAxesColumnIncreasing','Palette','Circle','Drama','Pencil','Check','Pause','Square','RotateCcw','House','Archive','CalendarDays']
 js="const l=require('/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/lucide');const names="+json.dumps(names)+";console.log(JSON.stringify(Object.fromEntries(names.map(n=>{if(!l[n])throw Error(n);return [n,l[n].map(([t,a])=>'<'+t+' '+Object.entries(a).map(([k,v])=>k+'=\\\"'+String(v).replaceAll('&','&amp;').replaceAll('\\\"','&quot;')+'\\\"').join(' ')+'/>').join('')]}))))"
