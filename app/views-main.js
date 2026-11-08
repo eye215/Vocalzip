@@ -288,30 +288,33 @@ VZ.route('home', {title:'홈', render() {
 /* ---------- 녹음 ---------- */
 let rec = null; // {session, state, result, video}
 VZ.isBusy = () => !!(rec?.session || (rec?.result && !rec.saved));
-VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) {
+VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, noAutoRefresh:true, render(r) {
   const songId = r.query.get('song') || rec?.songId || '';
   const lessonId = r.query.get('lesson') || '';
-  return '<div class="stack">' +
+  const song=VZ.song(songId),songMeta=[song?.show,song?.role].filter(Boolean).join(' · ');
+  return '<div class="stack vz-record-screen">' +
     (lessonId ? '<div class="badge accent" style="justify-self:start">레슨 녹음 · ' + esc(VZ.dateLabel(VZ.db.lessons.find(l => l.id === lessonId)?.date)) + '</div>' : '') +
-    '<button type="button" class="card flat item" data-pick-song style="min-height:56px"><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-sub">곡 (선택)</span><span class="item-title" data-song-name>' + esc(VZ.songTitle(songId) || '곡 미지정') + '</span></span><i class="ph ph-caret-down chev"></i></button>' +
-    '<section class="rec-stage" aria-label="녹음기"><div class="rec-time" aria-live="off">0:00</div><canvas class="rec-wave" aria-hidden="true"></canvas>' +
-    '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph-fill ph-microphone"></i></button><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
+    '<button type="button" class="card flat item" data-pick-song><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-sub">연결 곡</span><span class="item-title" data-song-name>' + esc(VZ.songTitle(songId) || '곡 미지정') + '</span><span class="item-sub vz-record-song-meta" data-song-meta>' + esc(songMeta) + '</span></span><i class="ph ph-caret-down chev"></i></button>' +
+    '<section class="rec-stage" aria-label="녹음기" data-phase="idle"><h2 class="rec-heading">녹음 준비</h2><div class="rec-time" aria-live="off">0:00</div><canvas class="rec-wave" aria-hidden="true"></canvas>' +
+    '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><div class="rec-primary"><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph-fill ph-microphone"></i></button><strong data-rec-action>녹음 시작</strong></div><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
     '<div class="rec-status" role="status" data-status>버튼을 누르면 바로 녹음이 시작돼요.</div></section>' +
-    '<div data-review hidden></div>' +
-    '<button type="button" class="btn ghost block" data-import><i class="ph ph-upload-simple"></i> 파일 가져오기</button><p class="small muted" style="margin:0 4px">영상 파일은 음성만 추출해 원음 그대로 저장해요.</p></div>';
+    '<div data-review hidden></div></div>';
 }, leave() { rec?.result?.releaseProtection?.();if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
   const lessonId = r.query.get('lesson') || '';
   const state = {songId:r.query.get('song') || '', video:false, session:null, result:null, waveLive:[]};
   rec = state;
   const $ = s => main.querySelector(s);
   const status = $('[data-status]'), timeEl = $('.rec-time'), wave = $('.rec-wave');
-  const mainBtn = $('[data-main]'), pauseBtn = $('[data-pause]'), cancelBtn = $('[data-cancel]'), review = $('[data-review]');
-  $('[data-import]').onclick = () => VZ.importSheet({songId:state.songId});
-  $('[data-pick-song]').onclick = () => VZ.pickSong(state.songId, id => { state.songId = id; $('[data-song-name]').textContent = VZ.songTitle(id) || '곡 미지정'; });
+  const mainBtn = $('[data-main]'), pauseBtn = $('[data-pause]'), cancelBtn = $('[data-cancel]'), review = $('[data-review]'), stage=$('.rec-stage'), picker=$('[data-pick-song]');
+  picker.onclick = () => VZ.pickSong(state.songId, id => { state.songId = id; $('[data-song-name]').textContent = VZ.songTitle(id) || '곡 미지정'; const song=VZ.song(id);$('[data-song-meta]').textContent=[song?.show,song?.role].filter(Boolean).join(' · '); });
   VZ.setGuard(() => state.session ? '녹음 중이에요. 이동하면 이번 녹음이 사라져요. 이동할까요?' : state.result && !state.saved ? '저장하지 않은 녹음이 있어요. 이동하면 사라져요. 이동할까요?' : '');
-  M.drawWave(wave, []);
+  M.drawWave(wave, [], '#A65CFF');
   const setUI = phase => {
     const recording = phase === 'recording' || phase === 'paused';
+    stage.dataset.phase=phase;
+    stage.querySelector('.rec-heading').textContent=phase==='recording'?'녹음 중':phase==='paused'?'일시정지':'녹음 준비';
+    $('[data-rec-action]').textContent=recording?'녹음 종료':'녹음 시작';
+    picker.disabled=recording||phase==='review';
     mainBtn.classList.toggle('recording', recording);
     mainBtn.innerHTML = recording ? '<i class="ph-fill ph-stop"></i>' : '<i class="ph-fill ph-microphone"></i>';
     mainBtn.setAttribute('aria-label', recording ? '녹음 종료' : '녹음 시작');
@@ -320,12 +323,12 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
     mainBtn.hidden = phase === 'review';
     main.querySelector('.rec-controls').hidden = phase === 'review';
   };
-  const reset = () => { state.result?.releaseProtection?.();state.result = null; state.saved = false; state.savedId = null; review.hidden = true; review.innerHTML = ''; timeEl.textContent = '0:00'; state.waveLive = []; M.drawWave(wave, []); setUI('idle'); status.textContent = '버튼을 누르면 바로 녹음이 시작돼요.'; };
+  const reset = () => { state.result?.releaseProtection?.();state.result = null; state.saved = false; state.savedId = null; review.hidden = true; review.innerHTML = ''; timeEl.textContent = '0:00'; state.waveLive = []; M.drawWave(wave, [], '#A65CFF'); setUI('idle'); status.textContent = '버튼을 누르면 바로 녹음이 시작돼요.'; };
   mainBtn.onclick = async () => {
     if (state.session) return stop();
     mainBtn.disabled = true; status.textContent = '마이크 준비 중…';
     try {
-      state.session = await M.capture({onTick:s => { timeEl.textContent = VZ.clock(s); }, onLevel:v => { state.waveLive.push(v); if (state.waveLive.length > 400) state.waveLive.shift(); M.drawWave(wave, state.waveLive); }});
+      state.session = await M.capture({onTick:s => { timeEl.textContent = VZ.clock(s); }, onLevel:v => { state.waveLive.push(v); if (state.waveLive.length > 400) state.waveLive.shift(); M.drawWave(wave, state.waveLive, '#A65CFF'); }});
       state.session.start(); setUI('recording');
       status.innerHTML = '<span class="rec-dot"></span>녹음 중 · 다시 누르면 종료';
     } catch (e) { state.session = null; status.textContent = e.message; VZ.toast(e.message, 'error'); setUI('idle'); }
@@ -350,7 +353,7 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
     const res = state.result, now = new Date();
     const defName = state.songId ? M.autoName(VZ.songTitle(state.songId), VZ.today()) : (lessonId ? '레슨 녹음' : '녹음') + ' ' + (now.getMonth() + 1) + '.' + now.getDate() + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     setUI('review'); status.textContent = '미리 듣고 저장하세요.';
-    M.drawWave(wave, res.waveform);
+    M.drawWave(wave, res.waveform, '#A65CFF');
     review.hidden = false;
     review.innerHTML = '<div class="card stack"><div data-p></div><label class="field" style="margin:0"><span>제목</span><input type="text" name="name" maxlength="150" value="' + esc(defName) + '"></label><label class="field" style="margin:0"><span>메모 (선택)</span><textarea name="memo" rows="2" maxlength="3000" placeholder="잘된 점, 고칠 점" style="min-height:64px"></textarea></label><div class="btn-row"><button type="button" class="btn ghost" data-redo><i class="ph ph-arrow-counter-clockwise"></i>다시</button><button type="button" class="btn" data-save style="flex:2"><i class="ph ph-check"></i>저장</button></div><div data-fail hidden></div></div>';
     const tmp = {id:'preview', name:defName, type:res.type, blob:res.blob, durationSeconds:res.durationSeconds};
@@ -381,7 +384,7 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
       fail.querySelector('[data-dl]').onclick = () => { const url = URL.createObjectURL(res.blob); const a = document.createElement('a'); a.href = url; a.download = item.name + (res.type.includes('mp4') ? '.m4a' : '.webm'); a.click(); setTimeout(() => URL.revokeObjectURL(url), 4000); };
     }
   }
-  if (!M.canRecord()) { status.textContent = '이 브라우저는 녹음을 지원하지 않아요. 파일 가져오기를 이용해 주세요.'; mainBtn.disabled = true; }
+  if (!M.canRecord()) { status.textContent = '이 브라우저는 녹음을 지원하지 않아요. 보관함에서 파일을 가져올 수 있어요.'; mainBtn.disabled = true; }
 }});
 VZ.pickSong = (value, onPick) => {
   VZ.sheet({title:'곡 선택', body:'<form id="pick-song-form">' + VZ.songSelect('song', value) + '</form>',

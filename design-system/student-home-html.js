@@ -1,6 +1,6 @@
-/* Direct integration of PR #139's HTML. The distributed HTML blob is unmodified.
- * Demo scripts/dialogs stay inert; only its root markup and original style blocks are used. */
-export const FLOATING_HOME_SOURCE = "b4ad1520615f1cae216393239679657779389d06";
+/* Direct integration of the approved home HTML, including its circular quick action.
+ * Demo scripts/dialogs stay inert; only root markup and style blocks are used. */
+export const FLOATING_HOME_SOURCE = "4985592d5e93a09ba1300cf57ba4eee866db531b";
 const asset=new URL("./Vocalzip_Floating_Record_Home.html?v="+FLOATING_HOME_SOURCE.slice(0,12),import.meta.url);
 let sourcePromise;
 async function source(){
@@ -139,7 +139,7 @@ export async function createFloatingHome(opts={}){
   q(".vz-time b").textContent=String(Math.round(actual));
   const startYear=String(week.start||"").slice(0,4),endYear=String(week.end||"").slice(0,4);
   const currentYear=String(new Date().getFullYear()),showYear=startYear!==currentYear||endYear!==currentYear;
-  range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+"–"+(showYear&&endYear!==startYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
+   range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+"–"+(showYear&&endYear!==startYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
   if(target==null){
    if(week.current===false)goal.textContent="목표 미설정";
    else{const button=el("button","목표 설정","vz-empty-action");button.type="button";button.setAttribute("aria-label","주간 목표 설정");button.onclick=()=>opts.onGoals?.();goal.replaceChildren(button);}
@@ -204,7 +204,7 @@ export async function createFloatingHome(opts={}){
    finally{input.disabled=false;row.removeAttribute("aria-busy");}
   };list.append(row);
  }
- q(".vz-floating-record").onclick=()=>opts.onRecord?.();
+  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
  const routes=["home","songs","library","calendar"];
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});
  return host;

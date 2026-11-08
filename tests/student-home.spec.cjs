@@ -137,7 +137,7 @@ test('literal floating HTML and app screenshots at 320/390/430',async({page},tes
  for(const width of widths){
   await page.setViewportSize({width,height:940});await noOverflow(page);
   const nav=await page.locator('.vz-nav').boundingBox(),fab=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();
-  expect(Math.round(fab.height)).toBe(48);expect(fab.width).toBeGreaterThanOrEqual(132);expect(Math.abs(nav.y-fab.y-fab.height-12)).toBeLessThanOrEqual(1);
+   expect(Math.round(fab.height)).toBe(56);expect(Math.round(fab.width)).toBe(56);expect(Math.abs(nav.y-fab.y-fab.height-12)).toBeLessThanOrEqual(1);
   for(const button of await page.locator('.vz-nav-item').all()){const b=await button.boundingBox();expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44);}
   await screenshot(page,testInfo,'student-home-preview-'+width+'.png');
  }
@@ -145,7 +145,7 @@ test('literal floating HTML and app screenshots at 320/390/430',async({page},tes
 test('uploaded HTML blob and all original stylesheet blocks are reused literally',async({page})=>{
  const response=await page.request.get('/design-system/Vocalzip_Floating_Record_Home.html');
  const bytes=await response.body(),hash=require('node:crypto').createHash('sha1').update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
- expect(hash).toBe('b4ad1520615f1cae216393239679657779389d06');
+  expect(hash).toBe('4985592d5e93a09ba1300cf57ba4eee866db531b');
  await page.goto('/design-system/student-home-preview.html');await expect(page.locator('.vz-phone')).toBeVisible();
  const result=await page.locator('.vz-student-home').evaluate(async host=>{
   const original=new DOMParser().parseFromString(await(await fetch('/design-system/Vocalzip_Floating_Record_Home.html')).text(),'text/html');
@@ -209,7 +209,11 @@ test('four home navigation buttons and floating recording reach existing routes'
  await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정']);
  for(const [label,route]of [['내 곡','songs'],['보관함','library'],['일정','calendar'],['녹음 시작','record']]){
   await page.goto('/#/home');await ready(page);
-  await page.getByRole('button',{name:label,exact:true}).click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);await expect(page.locator('.vz-student-home')).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);await expect(page.locator('.v-nav')).toBeVisible();await noOverflow(page);
+   await page.getByRole('button',{name:label,exact:true}).click();
+   if(route==='record')await expect(page.locator('.vz-record-expansion')).toBeVisible();
+   await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);await expect(page.locator('.vz-student-home')).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);
+   if(route==='record'){await expect(page.locator('body')).toHaveClass(/vz-record-mode/);await expect(page.locator('.v-nav')).toBeHidden();}else await expect(page.locator('.v-nav')).toBeVisible();
+   await noOverflow(page);
  }
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
