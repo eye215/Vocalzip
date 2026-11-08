@@ -18,7 +18,7 @@ function environment(code,{delay=80,failPart=0,reverse=false}={}){
   throw Error('unexpected request '+path);
  }};
  vm.runInNewContext(code,context);
- return {api:window.VzipR2,calls,progress,state,run:opts=>window.VzipR2.upload(new File([new Uint8Array(32*1024*1024)],'test.wav',{type:'audio/wav'}),{mediaId:'test',onProgress:value=>progress.push(value),...opts})};
+ return {window,transport:context.fetch,api:window.VzipR2,calls,progress,state,run:opts=>window.VzipR2.upload(new File([new Uint8Array(32*1024*1024)],'test.wav',{type:'audio/wav'}),{mediaId:'test',onProgress:value=>progress.push(value),...opts})};
 }
 test('at most two 8MiB parts are sent concurrently; completion waits and progress is monotonic',async()=>{
  const f=environment(source);await f.run();assert.equal(f.state.peak,2);assert.ok(f.state.peakBytes<=16*1024*1024);assert.equal(f.state.completed,true);
@@ -47,4 +47,24 @@ test('compare unchanged serial baseline with bounded parallel transfer under ide
  const now=performance.now();await fresh.run();const parallelMs=performance.now()-now;
  assert.equal(old.state.peak,1);assert.equal(fresh.state.peak,2);
  console.log(JSON.stringify({benchmark:'4x8MiB,80ms per request; simulated network',serialMs:Math.round(serialMs),parallelMs:Math.round(parallelMs)}));
+});
+
+test('XHR sends bounded ArrayBuffer bodies and reports bytes before a part completes',async()=>{
+ const f=environment(source),types=[];
+ f.window.XMLHttpRequest=class{
+  constructor(){this.upload={};this.headers={};this.controller=new AbortController();}
+  open(method,url){this.method=method;this.url=url;}
+  setRequestHeader(k,v){this.headers[k]=v;}
+  abort(){this.controller.abort();this.onabort?.();}
+  send(body){
+   assert.ok(body instanceof ArrayBuffer);types.push(body.byteLength);
+   this.upload.onprogress?.({lengthComputable:true,loaded:body.byteLength/2,total:body.byteLength});
+   f.transport(this.url,{method:this.method,headers:this.headers,body,signal:this.controller.signal}).then(async response=>{
+    this.status=response.status;this.response=await response.json();this.onload?.();
+   },()=>this.onabort?.());
+  }
+ };
+ await f.run();
+ assert.deepEqual(types,[8*1024*1024,8*1024*1024,8*1024*1024,8*1024*1024]);
+ assert.ok(f.progress.some(n=>n>0&&n<25));assert.equal(f.progress.at(-1),100);assert.equal(f.state.completed,true);
 });

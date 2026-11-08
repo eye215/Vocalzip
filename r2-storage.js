@@ -29,10 +29,10 @@ function uploadError(status,msg=''){
  const error=Error(status===401?'로그인이 만료됐어요. 다시 로그인해 주세요.':status===403?'이 파일에 접근할 수 없어요.':status===413?'파일이 너무 커요.':'저장소 오류 ('+status+(msg?': '+msg:'')+')');
  error.status=status;return error;
 }
-/** XHR streams the Blob and reports bytes sent; fetch remains the compatibility fallback. */
+/** XHR sends one bounded part buffer and reports bytes; ArrayBuffer is consistent in Safari. */
 async function sendPart(path,{piece,signal,onBytes}){
  if(!window.XMLHttpRequest)return api(path,{method:'PUT',body:piece,signal});
- const access=await token();
+ const access=await token(),payload=await piece.arrayBuffer();
  if(signal?.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
  return new Promise((resolve,reject)=>{
   const xhr=new window.XMLHttpRequest();let settled=false;
@@ -48,7 +48,7 @@ async function sendPart(path,{piece,signal,onBytes}){
   xhr.ontimeout=()=>done(Error('업로드 연결 시간이 초과됐어요.'));
   signal?.addEventListener('abort',cancel,{once:true});
   if(signal?.aborted){cancel();return;}
-  try{xhr.send(piece);}catch(error){done(error);}
+  try{xhr.send(payload);}catch(error){done(error);}
  });
 }
 const extOf = (file, type) => (String(file.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1] || ({'application/pdf':'pdf', 'audio/mp4':'m4a', 'audio/x-m4a':'m4a', 'audio/mpeg':'mp3', 'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/aac':'aac', 'audio/ogg':'ogg', 'audio/flac':'flac', 'audio/webm':'webm', 'video/mp4':'mp4', 'video/quicktime':'mov', 'video/webm':'webm'})[type] || 'bin').toLowerCase();
