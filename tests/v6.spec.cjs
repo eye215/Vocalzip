@@ -59,7 +59,7 @@ test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
  await boot(page);
- for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','캘린더']]){
+ for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','일정']]){
   await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
   await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
   await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -905,7 +905,8 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
   await expect(page.locator('[data-day] .cal-own [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
-  await page.getByRole('button', {name:'레슨 일정'}).click();
+  await page.locator('[data-day] [data-add]').click();
+  await sheet(page).getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
   await sheet(page).getByRole('button', {name:'닫기'}).click();
   await page.getByRole('button', {name:'다음 달'}).click();
@@ -992,14 +993,16 @@ test('Library actually plays device and cloud-only audio (time advances)', async
   wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
   for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 8) * 6000), 44 + i * 2);
   await page.route('**/cloud-audio.wav', r => r.fulfill({contentType:'audio/wav', body:wav}));
+  await page.goto('/#/library');
   await page.evaluate(() => {
     window.vzipCloudSignedIn = () => true;
     window.vzipCloudMediaList = async () => [{id:'c1', name:'클라우드 음원', type:'audio/wav', path:'ui-test-user/c1.wav', created:Date.now(), songId:'', cloud:true}];
     window.vzipCloudMediaUrl = async () => { await new Promise(r => setTimeout(r, 300)); return '/cloud-audio.wav'; };
     window.dispatchEvent(new Event('vzip:auth-changed'));
+    VZ.media.invalidate(); VZ.nav('#/library');
   });
+  await expect(page.locator('[data-media="c1"]')).toBeVisible();
   for (const id of ['m2', 'c1']) {
-    await page.evaluate(()=>VZ.nav('#/library'));
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
     await expect(page).toHaveURL(/#\/library$/);
@@ -1407,7 +1410,7 @@ test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
   await page.evaluate(() => VZ.songSheet(VZ.song('s2')));
   await sheet(page).getByLabel('별칭 (쉼표로 구분)').fill('온마이오운, On my own , 온마이오운');
   await sheet(page).getByRole('button', {name:'저장'}).click();
-  expect((await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
+  await expect.poll(async () => (await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
   expect(await page.evaluate(() => VZ.suggestSongs('온마이오운_0412.m4a')[0])).toMatchObject({id:'s2'});
 });
 
@@ -1999,4 +2002,6 @@ test('Files edited before the follow rule existed are lined up once after start'
   await expect.poll(() => page.evaluate(() => VZ.db.practices.find(p => p.id === 'auto-old').date), {timeout:8000}).toBe(await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(x => x.id === 'm2'))));
   expect(page.__errors).toEqual([]);
 });
+
+
 

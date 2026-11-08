@@ -282,3 +282,23 @@ details.audit{border:0!important;margin:0!important;padding:0!important;backgrou
 .cloud-versions summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
 .cloud-versions .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
 .cloud-versions .grow{flex:1}
+
+/* Shared student shell: billing is a standalone ledger, with the same visual tokens. */
+@font-face{font-family:Pretendard;src:url('../design-system/fonts/pretendard/Pretendard-Regular.woff2') format('woff2');font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:Pretendard;src:url('../design-system/fonts/pretendard/Pretendard-SemiBold.woff2') format('woff2');font-style:normal;font-weight:600;font-display:swap}
+@font-face{font-family:Pretendard;src:url('../design-system/fonts/pretendard/Pretendard-Bold.woff2') format('woff2');font-style:normal;font-weight:700;font-display:swap}
+:root{--bg:#F8F6FD;--surface:#fff;--surface-2:#F3ECFF;--ink:#101828;--ink-2:#475467;--ink-3:#667085;--line:#E8E4F0;--accent:#7A32F5;--accent-soft:#F3ECFF;--radius:20px;--shadow:0 2px 10px rgba(55,33,85,.045);font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+.billing{max-width:560px;padding:max(8px,env(safe-area-inset-top)) 12px calc(32px + env(safe-area-inset-bottom))}
+header{min-height:44px;margin-bottom:8px}
+h1{font-size:26px;line-height:34px;font-weight:700;color:#101828}
+h2{font-size:18px;line-height:26px;font-weight:700;color:#101828}
+.card,form,.metric,.table-wrap{border-radius:20px}
+.card,form{padding:16px;margin:12px 0}
+.metrics{gap:12px}
+.metric{padding:16px}
+.metric.hero,.metric[data-total=remainingUnits]{background:linear-gradient(125deg,#A65CFF,#7A32F5 52%,#6D2BE5)}
+button[type=submit],#commit-import,#transfer-commit,#preview-import:not(:disabled),.bd-primary,button.add,.pending-bulk{min-height:52px;border-radius:16px;background:#7A32F5}
+nav{margin:8px 0 12px;gap:4px;padding:6px;border-radius:20px;background:#F3ECFF}
+nav button{border:0;border-radius:16px;background:transparent;color:#475467;font-weight:600}
+nav button[aria-pressed=true]{border:0;background:#fff;color:#7A32F5;box-shadow:0 2px 8px rgba(55,33,85,.045)}
+@media(max-width:700px){.table-wrap tr{border-radius:20px;padding:12px 16px;margin-bottom:12px}.cards tr{padding:14px 16px}}

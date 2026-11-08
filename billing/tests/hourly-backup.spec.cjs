@@ -10,7 +10,7 @@ function fixture(owner='device'){
 }
 async function open(page,login=false){
  if(login)await page.addInitScript(({key,id})=>localStorage.setItem(key,JSON.stringify({access_token:'hourly-fixture',expires_at:4102444800,user:{id}})),{key:AUTH,id:USER});
- await page.goto('/billing/');await expect(page.locator('#message')).toContainText('불러왔어요');await page.locator('[data-panel=transfer]').click();
+ await page.goto('/billing/');await expect(page.locator('#message')).toContainText(/(?:불러|받아)왔어요/);await page.locator('[data-panel=transfer]').click();
 }
 async function confirm(page){await page.locator('#transfer-confirm').check();await page.locator('#transfer-commit').click()}
 async function seed(page,data){await page.evaluate(async data=>{const current=await VzipBillingStore.load();await VzipBillingStore.replace(data,current.revision);window.dispatchEvent(new Event('billing:replaced'))},data)}
@@ -41,5 +41,5 @@ test('Hourly ledger uploads through the existing cloud RPC without schema reject
 test('Hourly cloud download preserves the price and preview totals after refresh',async({page})=>{
  const data=fixture('user:'+USER);await page.route('https://chxnbtiyuyhiywzeshis.supabase.co/rest/v1/**',route=>route.fulfill({json:[{payload:data,revision:3}]}));
  await open(page,true);await page.locator('#cloud-preview-download').click();await expect(page.locator('#transfer-comparison')).toContainText('잔여 2시간');await confirm(page);await expect(page.locator('#transfer-status')).toContainText('교체했어요');
- await page.reload();await expect(page.locator('#message')).toContainText('불러왔어요');const state=await ledger(page);expect(state.hourlyRate).toBe(50000);expect(state.history).toEqual(data.history);
+ await page.reload();await expect(page.locator('#message')).toContainText(/(?:불러|받아)왔어요/);const state=await ledger(page);expect(state.hourlyRate).toBe(50000);expect(state.history).toEqual(data.history);
 });
