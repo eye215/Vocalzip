@@ -531,7 +531,7 @@ test('upcoming event comparison board captures all six real rendered fixtures',a
 test('closest event uses day and time without reordering the input records',async({page})=>{
  await page.goto('/design-system/student-home-preview.html?upcoming=all');
  const result=await page.evaluate(async()=>{
-  const {createUpcomingStage}=await import('/design-system/components.js?v=14');
+  const {createUpcomingStage}=await import('/design-system/components.js?v=15');
   const events=[{kind:'late',title:'늦은 일정',daysLeft:2,time:'18:00'},{kind:'unknown',title:'날짜 미정'},{kind:'early',title:'이른 일정',daysLeft:2,time:'09:00'}];
   const original=JSON.stringify(events),host=createUpcomingStage({events});
   return {unchanged:JSON.stringify(events)===original,order:[...host.children].map(x=>x.dataset.kind),primary:host.querySelectorAll('.is-primary').length,illustrations:host.querySelectorAll('.vz-event-illustration').length};

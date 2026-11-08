@@ -352,7 +352,13 @@ export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}
     const title=el("span","vz-home-goal-title",goal.title||"목표");
     const source=el("span","vz-home-goal-source",({homework:"숙제",personal:"개인",recommendation:"추천"})[goal.source]||"");
     row.append(check,title,source);list.append(row);
+    // A pointer toggle preserves the current inner-list position; keyboard focus remains native.
+    let pointerScroll=null;
+    check.addEventListener("pointerdown",()=>{pointerScroll=list.scrollTop;});
+    check.addEventListener("keydown",()=>{pointerScroll=null;});
     check.addEventListener("change",async()=>{
+      const savedScroll=pointerScroll;pointerScroll=null;
+      if(savedScroll!=null){list.scrollTop=savedScroll;requestAnimationFrame(()=>{list.scrollTop=savedScroll;});}
       const previous=goal.completed,next=check.checked;
       goal.completed=next;check.disabled=true;row.setAttribute("aria-busy","true");
       status.textContent="목표 저장 중…";refresh();
@@ -429,7 +435,7 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   if(recent?.canPlay){const play=el("span","vz-home-play");play.append(homeIcon("play"));cover.append(play);}
   else cover.append(homeIcon("music-notes"));
   footer.append(cover);
-  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail,footer);
+  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail);if(recent?.canPlay)song.append(footer);
   if(recent)song.title=[recent.title,recent.artist].filter(Boolean).join(" · ");
   // The existing detail button supplies keyboard access; the card surface shares its pointer action.
   song.addEventListener("click",event=>{if(!event.target.closest("button"))onRecent();});
