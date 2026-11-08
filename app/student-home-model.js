@@ -107,8 +107,10 @@ function build(db={},options={}){
   if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
   const bounds=weekBounds(db,{...options,today});
   const actualMinutes=days.reduce((n,d)=>n+d.minutes,0);
-  let cursor=(totals.get(today)||0)>0?today:shift(today,-1),streak=0;
-  while((totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
+  // The label belongs to the displayed week. Start at its latest practiced day,
+  // then count consecutive calendar dates even when the run crosses Monday.
+  let cursor=days.slice().reverse().find(d=>d.minutes>0)?.date,streak=0;
+  while(cursor&&(totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
   const goals=unique(db.dailyGoals).filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i}))
     .sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||a._index-b._index).map(g=>{delete g._index;return g});
   const completed=goals.filter(g=>g.completed===true).length;
