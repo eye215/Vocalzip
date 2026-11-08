@@ -25,12 +25,12 @@ function action(element,label,fn){
 const adaptations=String.raw`
 #vocalzip-refined-preview .vz-week{touch-action:pan-y;}
 #vocalzip-refined-preview .vz-week-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:12px 0 0;min-height:44px;background:transparent;}
-#vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#f3ecff;color:var(--ink-2,#5f5a74);cursor:pointer;padding:0;}
+#vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:radial-gradient(circle at center,#f2f4f7 0 16px,transparent 16.5px);color:var(--ink-2,#5f5a74);cursor:pointer;padding:0;}
 #vocalzip-refined-preview .vz-week-nav button:disabled{color:#c7bfd2;cursor:default;opacity:.5;}
-#vocalzip-refined-preview .vz-week-nav button svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+#vocalzip-refined-preview .vz-week-nav button svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-week-nav .vz-week-range{text-align:center;white-space:nowrap;line-height:1.25;}
-#vocalzip-refined-preview .vz-week-year{display:block;color:#667085;font-size:11px;font-weight:500;}
-#vocalzip-refined-preview .vz-week-dates{display:block;color:#101828;font-size:18px;font-weight:700;margin-top:3px;}
+#vocalzip-refined-preview .vz-week-year{display:block;color:#667085;font-size:11px;font-weight:400;}
+#vocalzip-refined-preview .vz-week-dates{display:block;color:#475467;font-size:14px;font-weight:600;margin-top:2px;}
 #vocalzip-refined-preview .vz-days{margin-top:14px;}
 #vocalzip-refined-preview .vz-days>div{min-height:80px;cursor:pointer;}
 #vocalzip-refined-preview .vz-days>div>span:first-child{font-size:15px;font-weight:600;line-height:22px;color:#344054;}
