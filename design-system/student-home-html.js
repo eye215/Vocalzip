@@ -138,7 +138,8 @@ export async function createFloatingHome(opts={}){
   q(".vz-week h2").textContent="주간 연습";
   q(".vz-time b").textContent=String(Math.round(actual));
   const startYear=String(week.start||"").slice(0,4),endYear=String(week.end||"").slice(0,4);
-  range.replaceChildren(el("span",week.start?(endYear!==startYear?startYear+"–"+endYear:startYear)+"년":"","vz-week-year"),el("span",week.start?shortDate(week.start)+" – "+shortDate(week.end):"","vz-week-dates"));
+  const currentYear=String(new Date().getFullYear()),showYear=startYear!==currentYear||endYear!==currentYear;
+  range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+"–"+(showYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
   if(target==null){
    if(week.current===false)goal.textContent="목표 미설정";
    else{const button=el("button","목표 설정","vz-empty-action");button.type="button";button.setAttribute("aria-label","주간 목표 설정");button.onclick=()=>opts.onGoals?.();goal.replaceChildren(button);}
