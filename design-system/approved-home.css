@@ -71,6 +71,7 @@ body.vz-home-mode,body.vz-student-preview{background:radial-gradient(ellipse 100
 .vz-home-song-heading>.vz-home-icon{font-size:10px;color:#a58ab8;}
 .vz-home-song-cover{display:grid;place-items:center;align-self:center;flex:none;width:44px;height:44px;aspect-ratio:1;border-radius:12px;background:#f0e7f7;color:#a082b5;}
 .vz-student-home .vz-home-song-cover .vz-home-icon{font-size:25px;}
+.has-representative-media .vz-home-song-cover{width:44px;height:44px;}
 .vz-home-song-cover--playable>.vz-home-icon{visibility:hidden;}
 .vz-home-song-copy{display:flex;flex-direction:column;gap:2px;min-width:0;width:100%;}
 .vz-home-song-copy strong{display:block;min-width:0;color:#4a365c;font-size:15px;line-height:1.467;font-weight:600;letter-spacing:-.3px;white-space:normal;overflow-wrap:anywhere;}
