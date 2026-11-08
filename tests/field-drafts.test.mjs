@@ -218,3 +218,36 @@ test('account deletion cascades all new private text',{skip},async()=>{
  const a=await acquire();await write('draft',a);await write('conflict',a);await db.query('delete from auth.users where id=$1',[U]);
  for(const table of ['vzip_field_drafts','vzip_field_conflicts','vzip_field_requests','vzip_field_commit_markers'])assert.equal(await count(table),0);
 });
+
+test('anonymous, unregistered and mismatched JWT sessions cannot call field APIs',{skip},async()=>{
+ await assert.rejects(rpc('load',{s:D}),/active|registered/);
+ await assert.rejects(rpc('load',{u:V,s:A}),/active|registered/);
+ await db.query('begin');
+ try{await db.query('set local role anon');await assert.rejects(db.query("select public.vzip_field_draft('load','lesson-old-id','memo')"),/permission denied/);}
+ finally{await db.query('rollback')}
+ assert.equal(await count('vzip_field_drafts'),0);
+});
+test('two simultaneous writes to the same field keep winner and loser texts',{skip},async()=>{
+ const a=await acquire(),other=new pg.Client({connectionString:conn});await other.connect();
+ let results;
+ try{results=await Promise.all([write('phone text',a),write('tablet packet',a,{c:other})]);}finally{await other.end()}
+ assert.equal(results.filter(r=>r.status==='saved').length,1);assert.equal(results.filter(r=>r.status==='conflict'&&r.preserved).length,1);
+ const values=[(await load()).text,(await db.query('select text_value from public.vzip_field_conflicts')).rows[0].text_value].sort();
+ assert.deepEqual(values,['phone text','tablet packet']);assert.equal((await load()).revision,'1');
+});
+test('legacy generation is adopted lazily without changing any original payload values',{skip},async()=>{
+ const before=(await snapshotRow()).payload;
+ await db.query('alter table public.vocal_data disable trigger vzip_data_next_revision');
+ try{await db.query('update public.vocal_data set generation=null,revision=0 where user_id=$1',[U]);}
+ finally{await db.query('alter table public.vocal_data enable trigger vzip_data_next_revision')}
+ assert.equal((await load()).generation,null);const a=await acquire();assert.equal(a.status,'acquired');
+ assert.ok((await snapshotRow()).generation);assert.deepEqual((await snapshotRow()).payload,before);
+ assert.equal((await write('legacy resumed',a)).status,'saved');
+});
+test('receipt capacity preserves existing replay and blocks only new operations',{skip},async()=>{
+ const a=await acquire(),args={...tokens(a),text:'last saved',id:randomUUID()};await rpc('save',args);
+ await db.query("insert into public.vzip_field_requests(user_id,request_id,draft_id,session_id,digest,response) select $1,gen_random_uuid(),$2,$3,decode('00','hex'),'{}' from generate_series(1,10000-(select count(*) from public.vzip_field_requests where user_id=$1))",[U,a.draft_id,A]);
+ assert.equal((await rpc('save',args)).replayed,true);
+ const latest=await load();await assert.rejects(write('must stay local',latest),/capacity/);
+ assert.equal((await load()).text,'last saved');assert.equal(await count('vzip_field_requests'),10000);
+});
