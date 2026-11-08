@@ -1,5 +1,6 @@
 // Catalog only. Never emits credentials, user rows, SQL definitions or raw errors.
 import pg from 'pg';
+import { X509Certificate } from 'node:crypto';
 const raw=process.env.SUPABASE_DB_URL;
 let db;
 try {
@@ -7,7 +8,21 @@ try {
  const parsed=new URL(raw);
  if(parsed.hostname!=='db.chxnbtiyuyhiywzeshis.supabase.co'&&!decodeURIComponent(parsed.username).endsWith('.chxnbtiyuyhiywzeshis'))throw Error('unexpected project');
  for(const key of ['sslmode','sslcert','sslkey','sslrootcert','sslpassword'])parsed.searchParams.delete(key);
- db=new pg.Client({connectionString:parsed.toString(),ssl:{rejectUnauthorized:true,...(process.env.SUPABASE_DB_CA_CERT?{ca:process.env.SUPABASE_DB_CA_CERT}:{})},connectionTimeoutMillis:10000});
+ // Fixed official Studio certificate source: supabase/supabase
+ // apps/studio/hooks/custom-content/custom-content.json, ssl:certificate_url (env=prod).
+ // HTTPS and PostgreSQL chain + hostname verification stay enabled.
+ let ca=process.env.SUPABASE_DB_CA_CERT;
+ if(!ca){
+  const response=await fetch('https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt',{
+   redirect:'error',signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw Error('official certificate unavailable');
+  const bytes=await response.arrayBuffer();
+  if(bytes.byteLength>65536)throw Error('invalid official certificate');
+  ca=Buffer.from(bytes).toString('utf8');
+ }
+ const certificate=new X509Certificate(ca);
+ if(!certificate.ca||Date.parse(certificate.validFrom)>Date.now()||Date.parse(certificate.validTo)<=Date.now())throw Error('invalid official certificate');
+ db=new pg.Client({connectionString:parsed.toString(),ssl:{rejectUnauthorized:true,ca},connectionTimeoutMillis:10000});
  await db.connect();await db.query('begin read only');
  await db.query("set local statement_timeout='5s'");
  if((await db.query("select current_setting('transaction_read_only') v")).rows[0].v!=='on')throw Error('read only required');
