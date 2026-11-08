@@ -60,13 +60,14 @@ before(async()=>{
 });
 beforeEach(async()=>{
  if(skip)return;
- await db.query('truncate public.vzip_field_commit_markers,public.vzip_field_conflicts,public.vzip_field_requests,public.vzip_field_drafts,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ await db.query('truncate public.vzip_field_draft_rollout,public.vzip_field_commit_markers,public.vzip_field_conflicts,public.vzip_field_requests,public.vzip_field_drafts,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
  await db.query('delete from auth.sessions');
  await db.query('insert into auth.users values ($1),($2) on conflict do nothing',[U,V]);
  for(const s of [A,B,D])await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[s,U]);
  await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[C,V]);
  await db.query('update public.vzip_session_rollout set enforced=true');
  for(const [u,s] of [[U,A],[U,B],[V,C]])assert.equal((await register(u,s)).status,'active');
+ for(const u of [U,V])await db.query('select public.vzip_set_field_draft_enabled($1,true)',[u]);
  await db.query('insert into public.vocal_data(user_id,payload) values($1,$2),($3,$4)',[U,base(),V,base()]);
  await db.query("insert into public.vocal_media(id,user_id,metadata) values('keep-media',$1,'{}') on conflict(id) do nothing",[U]);
 });
@@ -201,4 +202,14 @@ test('service unavailability keeps the durable packet and recovery never uses sn
  assert.equal((await serverDraft()).revision,'0');wire.offline=false;await a.model.sync(S);
  assert.equal((await serverDraft()).text_value,'wait for server');assert.deepEqual(await body(),base());
  assert.ok(wire.calls.every(c=>['load','acquire','save'].includes(c.q.p_operation)));
+});
+
+test('operator pause blocks new outbox writes while preserving the durable packet for explicit recovery',{skip,timeout:20000},async()=>{
+ const wire=api(),a=device(wire);await a.open();a.model.edit(S,'paused local input');
+ await db.query('select public.vzip_set_field_draft_enabled($1,false)',[U]);
+ assert.equal((await a.model.sync(S)).status,'blocked');assert.equal(a.model.read(S).blockedReason,'feature_disabled');assert.ok(a.model.read(S).pending);
+ assert.equal((await serverDraft()).text_value,'original memo');
+ await db.query('select public.vzip_set_field_draft_enabled($1,true)',[U]);
+ const fresh=await a.request('load');a.model.resolve(S,fresh,'keep_local');await a.model.sync(S);
+ assert.equal((await serverDraft()).text_value,'paused local input');assert.deepEqual(await body(),base());
 });

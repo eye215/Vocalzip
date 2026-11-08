@@ -174,3 +174,9 @@ test('transport rejects insecure origins and server-only keys; RPC errors have n
  assert.throws(()=>createTransport({...config,publishableKey:serviceKey}),e=>e.code==='publishable_key_required');
  await assert.rejects(createTransport(config)({p_operation:'save'}),e=>e.code==='rpc_failed'&&e.status===404);
 });
+
+test('a server rollout pause preserves the pending packet and blocks automatic resends',async()=>{
+ const f=fixture({send:async()=>({status:'disabled',reason:'feature_disabled',preserved:false})});ready(f);
+ assert.equal((await f.model.sync(S)).status,'blocked');const r=f.model.read(S);assert.equal(r.blockedReason,'feature_disabled');assert.equal(r.pending.text,'typed');
+ assert.equal((await f.model.sync(S)).status,'blocked');
+});

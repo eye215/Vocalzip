@@ -124,6 +124,7 @@ function create({owner,editorId,sessionId,storage,send,getOwner,getSessionId,now
   }
   if(getOwner()!==owner||getSessionId()!==sessionId)return {status:'identity_changed'};
   r=read(s);if(!r||r.pending?.id!==p.id)return {status:'stale_ack'};
+  if(response?.status==='disabled'){r.status='blocked';r.blockedReason='feature_disabled';persist(s,r);return {status:'blocked'};}
   if(!response||typeof response!=='object'||!['saved','conflict'].includes(response.status))throw fail('invalid_response');
   if(response.status==='saved'){
    if(id(response.draft_id)!==p.draftId||revision(response.epoch)!==p.epoch||BigInt(revision(response.revision))!==BigInt(p.revision)+1n)throw fail('invalid_response');

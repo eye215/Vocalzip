@@ -1,6 +1,25 @@
 -- PROPOSAL ONLY. Depends on 20261113_snapshot_revision.sql.
 -- No automatic production migration or UI activation.
 begin;
+create table if not exists public.vzip_field_draft_rollout (
+ user_id uuid primary key references auth.users(id) on delete cascade,
+ enabled boolean not null default false
+);
+alter table public.vzip_field_draft_rollout enable row level security;
+revoke all on public.vzip_field_draft_rollout from public,anon,authenticated;
+-- Operator-only, same account lock as writes and session revocation.
+create or replace function public.vzip_set_field_draft_enabled(p_user_id uuid,p_enabled boolean)
+returns void language plpgsql security definer set search_path=''
+as $$
+begin
+ if p_enabled is null then raise exception 'explicit rollout state required' using errcode='22023'; end if;
+ perform 1 from public.vzip_account_session_state where user_id=p_user_id for update;
+ if not found then raise exception 'registered account required' using errcode='22023'; end if;
+ insert into public.vzip_field_draft_rollout(user_id,enabled) values(p_user_id,p_enabled)
+  on conflict(user_id) do update set enabled=excluded.enabled;
+end $$;
+revoke all on function public.vzip_set_field_draft_enabled(uuid,boolean) from public,anon,authenticated;
+
 create table if not exists public.vzip_field_drafts (
  user_id uuid not null references auth.users(id) on delete cascade,
  entity_id text not null check(octet_length(entity_id) between 1 and 200),
@@ -127,7 +146,7 @@ declare
  u uuid:=auth.uid(); s uuid; snap public.vocal_data; d public.vzip_field_drafts;
  receipt public.vzip_field_requests; hash bytea; result jsonb; lesson jsonb;
  idx integer; n integer; current_value jsonb; made boolean:=false; owns boolean;
- conflict_id uuid; preserved boolean; bytes bigint; count_ bigint;
+ conflict_id uuid; preserved boolean; bytes bigint; count_ bigint; enabled boolean;
 begin
  if u is null then raise exception 'authenticated session required' using errcode='42501'; end if;
  perform 1 from public.vzip_account_session_state where user_id=u for update;
@@ -135,6 +154,7 @@ begin
  perform public.vzip_assert_session();
  if not public.vzip_session_is_active() then raise exception 'active session required' using errcode='42501'; end if;
  s:=public.vzip_request_session();
+ enabled:=coalesce((select r.enabled from public.vzip_field_draft_rollout r where r.user_id=u),false);
  if not exists(select 1 from auth.sessions a where a.id=s and a.user_id=u and (a.not_after is null or a.not_after>clock_timestamp())) then
   raise exception 'active session required' using errcode='42501';
  end if;
@@ -159,11 +179,11 @@ begin
   if d.draft_id is null then
    return jsonb_build_object('status','loaded','draft_id',null,'revision','0','committed_revision','0','epoch','0',
     'text',coalesce(lesson->>p_field_key,''),'confirmed_text',coalesce(lesson->>p_field_key,''),
-    'snapshot_revision',snap.revision::text,'generation',snap.generation,'is_editor',false);
+    'snapshot_revision',snap.revision::text,'generation',snap.generation,'enabled',enabled,'is_editor',false);
   end if;
   return public.vzip_field_meta(d)||jsonb_build_object('status','loaded','text',d.text_value,
    'confirmed_text',coalesce(lesson->>p_field_key,''),'snapshot_revision',snap.revision::text,'generation',snap.generation,
-   'is_editor',coalesce(d.lease_session=s and d.editor_instance=p_editor_instance and d.lease_expires_at>clock_timestamp(),false));
+   'enabled',enabled,'is_editor',enabled and coalesce(d.lease_session=s and d.editor_instance=p_editor_instance and d.lease_expires_at>clock_timestamp(),false));
  end if;
  if p_editor_instance is null or p_request_id is null or p_expected_revision is null or p_expected_revision<0 or p_expected_epoch is null or p_expected_epoch<0 then
   raise exception 'editor, request id and nonnegative version required' using errcode='22023';
@@ -179,6 +199,7 @@ begin
   if receipt.session_id<>s or receipt.digest<>hash then raise exception 'request id reused with different input or session' using errcode='22023'; end if;
   return receipt.response||jsonb_build_object('replayed',true);
  end if;
+ if not enabled then return jsonb_build_object('status','disabled','reason','feature_disabled','preserved',false); end if;
  if (select count(*) from public.vzip_field_requests where user_id=u)>=10000 then
   raise exception 'draft request capacity reached; preserve local copy' using errcode='54000';
  end if;
@@ -280,7 +301,7 @@ begin
    result:=jsonb_build_object('status','committed','snapshot_revision',snap.revision::text,'generation',snap.generation,'updated_at',snap.updated_at);
   end if;
  end if;
- result:=public.vzip_field_meta(d)||result||jsonb_build_object('replayed',false,'is_editor',coalesce(d.lease_session=s and d.editor_instance=p_editor_instance and d.lease_expires_at>clock_timestamp(),false));
+ result:=public.vzip_field_meta(d)||result||jsonb_build_object('replayed',false,'enabled',enabled,'is_editor',enabled and coalesce(d.lease_session=s and d.editor_instance=p_editor_instance and d.lease_expires_at>clock_timestamp(),false));
  insert into public.vzip_field_requests(user_id,request_id,draft_id,session_id,digest,response)
   values(u,p_request_id,d.draft_id,s,hash,result);
  return result;

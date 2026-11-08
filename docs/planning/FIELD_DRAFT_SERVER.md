@@ -53,3 +53,9 @@ tests/field-drafts.test.mjs는 실제 PostgreSQL의 RLS·두 Auth 세션·두 �
 #143의 headless outbox·JWT 고정 전송을 이 PostgreSQL 함수와 함께 검증한다. tests/field-draft-outbox-integration.test.mjs는 메모리 로컬 저장소/HTTP 어댑터를 거쳐 실제 SQL/RLS/트랜잭션을 실행한다. PostgREST 게이트웨이의 JWT 서명 검증이나 브라우저 실기기 E2E를 대체하지 않는다.
 문구 저장/응답 유실/전송 중 새 입력/응답 후 저장공간 실패/인계 뒤 과거 편집기/계정 전환/원본 삭제·재생성/서비스 중단을 검사한다.
 변경 응답은 is_editor 상태를 명시한다. 이 값과 영수증은 해당 연산 결과이며, 이후 편집권 유지의 증명은 아니다. resume 때 load로 재확인하고 서버가 매 요청의 epoch/세션을 다시 검증한다.
+
+## 계정별 기본 비활성·안전한 중지
+
+vzip_field_draft_rollout은 기본 비활성이며 일반 사용자는 설정을 읽거나 바꿀 수 없다. 소유자 전용 vzip_set_field_draft_enabled는 세션/쓰기와 동일한 계정 잠금 순서로 명시 활성화/중지한다.
+비활성 상태에서도 본인 초안 조회와 기존 성공 영수증 재생은 유지하고 새 초안/인계/본문 쓰기는 disabled로 거부한다. 서버/로컬 문구를 삭제하거나 구형 snapshot으로 되돌리지 않는다.
+비활성화한 보호 필드는 계속 읽기 전용이다. 롤백은 필드 보호를 풀어 stale 클라이언트의 덮어쓰기를 허용하는 동작이 아니다. 클라이언트는 disabled 응답에서 미전송 원 요청을 보존하고 새 권한 확인/명시 선택 후 재개한다.

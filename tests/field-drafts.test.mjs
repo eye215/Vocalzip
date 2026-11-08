@@ -57,13 +57,14 @@ before(async()=>{
 });
 beforeEach(async()=>{
  if(skip)return;
- await db.query('truncate public.vzip_field_commit_markers,public.vzip_field_conflicts,public.vzip_field_requests,public.vzip_field_drafts,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ await db.query('truncate public.vzip_field_draft_rollout,public.vzip_field_commit_markers,public.vzip_field_conflicts,public.vzip_field_requests,public.vzip_field_drafts,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
  await db.query('delete from auth.sessions');
  await db.query('insert into auth.users values ($1),($2) on conflict do nothing',[U,V]);
  for(const s of [A,B,D])await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[s,U]);
  await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[C,V]);
  await db.query('update public.vzip_session_rollout set enforced=true');
  for(const [u,s] of [[U,A],[U,B],[V,C]])assert.equal((await register(u,s)).status,'active');
+ for(const u of [U,V])await db.query('select public.vzip_set_field_draft_enabled($1,true)',[u]);
  await db.query('insert into public.vocal_data(user_id,payload) values($1,$2),($3,$4)',[U,base(),V,base()]);
  await db.query("insert into public.vocal_media(id,user_id,metadata) values('keep-media',$1,'{}') on conflict(id) do nothing",[U]);
 });
@@ -250,4 +251,21 @@ test('receipt capacity preserves existing replay and blocks only new operations'
  assert.equal((await rpc('save',args)).replayed,true);
  const latest=await load();await assert.rejects(write('must stay local',latest),/capacity/);
  assert.equal((await load()).text,'last saved');assert.equal(await count('vzip_field_requests'),10000);
+});
+
+test('draft writes default off per account; only an operator can enable them',{skip},async()=>{
+ await db.query('delete from public.vzip_field_draft_rollout where user_id=$1',[U]);
+ assert.equal((await load()).enabled,false);assert.equal((await acquire()).status,'disabled');assert.equal(await count('vzip_field_drafts'),0);
+ await assert.rejects(as(U,A,c=>c.query('select public.vzip_set_field_draft_enabled($1,true)',[U])),/permission denied/);
+ await assert.rejects(as(U,A,c=>c.query('update public.vzip_field_draft_rollout set enabled=true')),/permission denied/);
+ await db.query('select public.vzip_set_field_draft_enabled($1,true)',[U]);
+ const a=await acquire();assert.equal(a.status,'acquired');assert.equal(a.is_editor,true);
+});
+test('pausing writes preserves read access, old receipts, body and all unsent text',{skip},async()=>{
+ const a=await acquire(),args={...tokens(a),text:'saved before pause',id:randomUUID()};await rpc('save',args);
+ await db.query('select public.vzip_set_field_draft_enabled($1,false)',[U]);
+ const r=await load();assert.equal(r.enabled,false);assert.equal(r.is_editor,false);assert.equal(r.text,'saved before pause');
+ assert.equal((await rpc('save',args)).replayed,true);
+ assert.equal((await write('not silently discarded',r)).status,'disabled');
+ assert.equal((await load()).text,'saved before pause');assert.equal((await snapshotRow()).payload.lessons[0].memo,'original memo');
 });
