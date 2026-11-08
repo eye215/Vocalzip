@@ -1,4 +1,4 @@
-name: Render approved home images
+name: Render home gradient variant
 on:
   push:
     branches: [docs/home-preview-images-20261108]
