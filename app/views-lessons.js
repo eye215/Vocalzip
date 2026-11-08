@@ -284,8 +284,10 @@ async function linkMediaSheet(l) {
 
 /* ---------- 캘린더 ---------- */
 let calMonth = null, calDay = null, calMetric = 'minutes', calExpanded = false;
-VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render() {
+VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render(route) {
   const today = VZ.today();
+  const requested=route?.query?.get('date'),date=VZ.parseYmd(requested);
+  if(date&&VZ.ymd(date)===requested){calDay=requested;calMonth=requested.slice(0,7);}
   calDay ||= today;
   calMonth ||= today.slice(0, 7);
   return '<div data-calendar-summary></div><div class="card"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="legend"><span><i style="background:var(--accent)"></i>레슨</span><span><i style="background:var(--ok)"></i>연습</span><span><i style="background:#e0742c"></i>공연</span><span class="muted">녹음은 각 기록 안에 있어요</span><button type="button" class="chip" data-today style="margin-left:auto;min-height:32px">오늘</button></div></div><div data-day></div>';
