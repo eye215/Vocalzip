@@ -905,7 +905,8 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
   await expect(page.locator('[data-day] .cal-own [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
-  await page.getByRole('button', {name:'레슨 일정'}).click();
+  await page.locator('[data-day] [data-add]').click();
+  await sheet(page).getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
   await sheet(page).getByRole('button', {name:'닫기'}).click();
   await page.getByRole('button', {name:'다음 달'}).click();

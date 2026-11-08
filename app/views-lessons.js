@@ -337,7 +337,7 @@ VZ.route('calendar', {title:'일정', actions:() => '<a class="icon-btn" href="#
     const owner = (row, ids, kind) => '<div class="cal-own" data-kind="'+kind+'">' + row + minis(ids) + '</div>';
     const loose = (title, items, kind) => items.length ? '<div class="cal-own" data-kind="'+kind+'"><div class="cal-loose small muted">' + title + '</div>' + minis(items.map(m => m.id)) + '</div>' : '';
     const group = rows => rows ? '<div class="cal-list">' + rows + '</div>' : '';
-    const lessonRow=l=>'<a class="item vz-calendar-item" data-kind="lesson" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span><i class="ph ph-caret-right chev"></i></a>';
+    const lessonRow=l=>'<a class="item vz-calendar-item" data-kind="lesson" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span>'+(VZ.lessonStatus(l)==='scheduled'?'':VZ.statusBadge(VZ.lessonStatus(l)))+'<i class="ph ph-caret-right chev"></i></a>';
     const lessonsHtml = group(e.l.sort(VZ.lessonSort).map(l => owner(lessonRow(l), (l.recordings || []).map(r => r.id),'lesson')).join('') + loose('기록에 연결되지 않은 레슨 녹음', e.rl,'lesson'));
     const practiceHtml = group(e.p.map(p => owner(VZ.practiceRow(p, {day:true}), p.mediaIds || [],'practice')).join('') + loose('기록에 연결되지 않은 연습 녹음', e.rp,'practice'));
     const stageHtml = group(e.ps.map(p=>owner(VZ.repertoire.showCard(p),[],'stage')).join('') + loose('공연 녹음·영상', e.rs,'stage'));

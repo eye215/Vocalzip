@@ -10,7 +10,7 @@
 .cs-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#101828;font-size:14px;font-weight:600}
 .cs-values{flex:none;color:#475467;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cs-help{color:#667085;font-size:11px}
-.cs-help summary{display:inline-flex;align-items:center;min-height:36px;gap:4px;list-style:none;cursor:pointer}
+.cs-help summary{display:inline-flex;align-items:center;min-height:44px;gap:4px;list-style:none;cursor:pointer}
 .cs-help summary::-webkit-details-marker{display:none}
 .cs-help summary::before{content:"ⓘ";font-size:12px}
 .cs-help p{margin:0 0 6px;line-height:1.6}
