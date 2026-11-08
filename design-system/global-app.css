@@ -1,0 +1,94 @@
+/* Student app shell · VOCAL.zip design system v1.1 (2026-11-09).
+   The approved home remains isolated inside its own shadow root. */
+:root {
+  --bg:#F8F6FD; --surface:#FFFFFF; --surface-2:#F3ECFF;
+  --ink:#101828; --ink-2:#475467; --ink-3:#667085;
+  --line:#E8E4F0; --accent:#7A32F5; --accent-soft:#F3ECFF;
+  --accent-2:#9557FF; --radius:20px; --shadow:0 2px 10px rgba(55,33,85,.045);
+  --nav-h:70px; --nav-bg:rgba(255,255,255,.78);
+  --font:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;
+  --vz-page:#F8F6FD; --vz-surface:#FFFFFF; --vz-soft:#F3ECFF;
+  --vz-title:#101828; --vz-primary:#344054; --vz-body:#475467;
+  --vz-muted:#667085; --vz-faint:#98A2B3; --vz-accent:#7A32F5;
+  --vz-card-radius:20px; --vz-card-padding:16px; --vz-card-gap:12px;
+}
+body:not(.vz-home-mode) { background:var(--vz-page); color:var(--vz-title); font-family:var(--font); letter-spacing:-.02em; }
+body:not(.vz-home-mode) .v-app {
+  width:100%; max-width:560px; min-width:0; margin:0 auto;
+  padding:max(8px,env(safe-area-inset-top)) 12px calc(142px + max(12px,env(safe-area-inset-bottom)));
+}
+body:not(.vz-home-mode) .v-top { min-height:44px; margin-bottom:8px; }
+body:not(.vz-home-mode) .v-top h1 { color:var(--vz-title); font-size:26px; line-height:34px; font-weight:700; }
+body:not(.vz-home-mode)[data-vz-route="calendar"] .v-top h1,
+body:not(.vz-home-mode)[data-vz-route="songs"] .v-top h1,
+body:not(.vz-home-mode)[data-vz-route="library"] .v-top h1 { font-size:26px; line-height:34px; }
+body:not(.vz-home-mode) h2.sec,
+body:not(.vz-home-mode) .vz-section-heading h2 { color:var(--vz-title); font-size:18px; line-height:26px; font-weight:700; }
+body:not(.vz-home-mode) .card,
+body:not(.vz-home-mode) .list,
+body:not(.vz-home-mode) .empty { border-radius:var(--vz-card-radius); background:var(--vz-surface); box-shadow:var(--shadow); }
+body:not(.vz-home-mode) .card { padding:var(--vz-card-padding); }
+body:not(.vz-home-mode) .card.flat { box-shadow:none; }
+body:not(.vz-home-mode) .stack { gap:var(--vz-card-gap); }
+body:not(.vz-home-mode) .card.accent { background:linear-gradient(125deg,#A65CFF,#7A32F5 52%,#6D2BE5); color:#fff; }
+body:not(.vz-home-mode) .item-title { color:var(--vz-title); font-size:15px; line-height:21px; font-weight:600; }
+body:not(.vz-home-mode) .item-sub,
+body:not(.vz-home-mode) .small { color:var(--vz-muted); font-size:12px; line-height:18px; }
+body:not(.vz-home-mode) .muted { color:var(--vz-muted); }
+body:not(.vz-home-mode) .item .chev { color:var(--vz-faint); }
+body:not(.vz-home-mode) .icon-btn { min-width:44px; min-height:44px; color:var(--vz-primary); }
+body:not(.vz-home-mode) .icon-btn[aria-label="설정"],
+body:not(.vz-home-mode) [data-song-search],
+body:not(.vz-home-mode) [data-library-search] { color:var(--vz-muted); background:transparent; box-shadow:none; }
+body:not(.vz-home-mode) .field>span,
+body:not(.vz-home-mode) .field>legend { color:var(--vz-primary); }
+body:not(.vz-home-mode) .btn:not(.sm) { min-height:52px; border-radius:16px; }
+body:not(.vz-home-mode) .btn:not(.secondary):not(.ghost):not(.danger):active { background:#6528CA; }
+body:not(.vz-home-mode) .chip[aria-pressed="true"] { background:var(--vz-soft); border-color:var(--vz-soft); color:var(--vz-accent); }
+
+/* One four-item dock on every regular screen. The recording action is a separate button. */
+body:not(.vz-home-mode) .v-nav {
+  position:fixed; left:50%; right:auto; bottom:max(12px,env(safe-area-inset-bottom));
+  width:min(calc(100% - 32px),528px); height:70px; transform:translateX(-50%);
+  padding:8px; border:1px solid rgba(255,255,255,.8); border-radius:999px;
+  background:rgba(255,255,255,.68); box-shadow:0 5px 20px rgba(55,33,85,.045);
+  -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px);
+}
+body:not(.vz-home-mode) .v-nav ul { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; width:100%; height:100%; max-width:none; margin:0; padding:0; }
+body:not(.vz-home-mode) .v-nav a {
+  height:54px; min-height:54px; gap:2px; border-radius:999px; background:transparent;
+  color:var(--vz-muted); font-size:11px; line-height:16px; font-weight:500;
+}
+body:not(.vz-home-mode) .v-nav a i { font-size:22px; color:#475467; }
+body:not(.vz-home-mode) .v-nav a[aria-current="page"] { background:#EDE1FF; color:#8A6DB8; }
+body:not(.vz-home-mode) .v-nav a[aria-current="page"] i { color:var(--vz-accent); }
+body:not(.vz-home-mode) .v-nav i.ph-fill { font-family:"Phosphor"!important; }
+
+body:not(.vz-home-mode) .vz-collection-record { display:none; }
+body[data-vz-route="songs"] .vz-collection-record,
+body[data-vz-route="library"] .vz-collection-record,
+body[data-vz-route="calendar"] .vz-collection-record {
+  position:fixed; display:flex; align-items:center; justify-content:center; gap:8px; z-index:41;
+  right:max(16px,calc((100vw - 560px)/2 + 16px));
+  bottom:calc(max(12px,env(safe-area-inset-bottom)) + 82px);
+  height:48px; min-width:132px; padding:0 18px; border-radius:24px;
+  background:linear-gradient(135deg,#9557FF,#7A32F5 52%,#6D2BE5);
+  color:#fff; font-size:15px; line-height:20px; font-weight:600; text-decoration:none;
+  box-shadow:0 5px 14px rgba(109,43,229,.18);
+}
+body[data-vz-route="songs"] .vz-collection-record i,
+body[data-vz-route="library"] .vz-collection-record i,
+body[data-vz-route="calendar"] .vz-collection-record i { font-size:22px; }
+body:has(.lib-selecting) .vz-collection-record,
+body:has(.sel-bar) .vz-collection-record { display:none; }
+body:has(.vz-recording-page) .v-nav { display:none; }
+body:not(.vz-home-mode) .sel-bar { bottom:calc(94px + env(safe-area-inset-bottom)); }
+@media (prefers-reduced-transparency:reduce) {
+  body:not(.vz-home-mode) .v-nav { background:#fff; -webkit-backdrop-filter:none; backdrop-filter:none; }
+}
+
+/* Lesson-note tabs use the Library tab treatment. */
+body:not(.vz-home-mode) .lesson-tabs{display:flex;gap:3px;padding:0;background:transparent;border:0;box-shadow:none;}
+body:not(.vz-home-mode) .lesson-tabs button{flex:1;min-width:0;min-height:44px;padding:0 14px;border:0;border-radius:99px;box-shadow:none;background:transparent;font-size:14px;font-weight:600;color:#475467;}
+body:not(.vz-home-mode) .lesson-tabs button[aria-pressed="true"]{background:#EDE1FF;color:#7A32F5;}
+@media(max-width:350px){body:not(.vz-home-mode) .lesson-tabs button{padding-inline:9px;}}

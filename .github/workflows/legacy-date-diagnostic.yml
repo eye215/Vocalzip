@@ -1,47 +1,26 @@
-name: Inspect legacy date failure trace
+name: Verify baseline calendar playback refresh race
 on:
   push:
     branches: ['codex/resumable-date-regression-20261108']
 permissions:
   contents: read
-  actions: read
+concurrency:
+  group: legacy-date-diagnostic
+  cancel-in-progress: true
 jobs:
-  trace:
+  focused:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: resumable-browser-failures
-          run-id: 42519936568
-          github-token: ${{ github.token }}
-          path: trace-input
-      - name: Summarize synthetic test trace without network headers
-        run: |
-          python - <<'PY'
-          import pathlib,zipfile,json
-          for path in pathlib.Path('trace-input').rglob('trace.zip'):
-            print('TRACE',str(path))
-            with zipfile.ZipFile(path) as archive:
-              for name in archive.namelist():
-                if not name.endswith('.trace'): continue
-                events=[]
-                for line in archive.read(name).decode().splitlines():
-                  try: events.append(json.loads(line))
-                  except: pass
-                calls=[e for e in events if e.get('type') in ('before','after')]
-                for e in calls[-45:]:
-                  print(json.dumps({k:e[k] for k in ('type','callId','apiName','method','startTime','endTime','error') if k in e},ensure_ascii=False)[:1000])
-                  if e.get('type')=='before': print(json.dumps(e.get('params',{}),ensure_ascii=False)[:500])
-                snapshots=[e for e in events if e.get('type')=='frame-snapshot'][-4:]
-                def walk(node,out):
-                  if not isinstance(node,list): return
-                  attrs=node[1] if len(node)>1 and isinstance(node[1],dict) else {}
-                  identity=str(attrs.get('id',''))+' '+str(attrs.get('class',''))
-                  if any(s in identity for s in ('media','hub','calendar-records')) or 'data-action' in attrs:
-                    out.append({'tag':node[0],'attrs':attrs,'fragment':json.dumps(node,ensure_ascii=False)[:1600]})
-                  for child in node[1:]: walk(child,out)
-                for e in snapshots:
-                  out=[]; snap=e.get('snapshot',{});walk(snap.get('html'),out)
-                  print('SNAPSHOT',snap.get('snapshotName'),json.dumps(out,ensure_ascii=False)[:14000])
-          PY
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/ui.spec.cjs --grep 'Calendar playback waits' --workers=2 --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: legacy-date-failures
+          path: test-results/

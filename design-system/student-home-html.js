@@ -24,29 +24,44 @@ function action(element,label,fn){
 }
 const adaptations=String.raw`
 #vocalzip-refined-preview .vz-week{touch-action:pan-y;}
+#vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"] b,#vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"]>span{color:#7a32f5;}
 #vocalzip-refined-preview .vz-week-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:12px 0 0;min-height:44px;background:transparent;}
-#vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#f3ecff;color:#8066a5;cursor:pointer;padding:0;}
+#vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:radial-gradient(circle at center,#f2f4f7 0 16px,transparent 16.5px);color:var(--ink-2,#5f5a74);cursor:pointer;padding:0;}
 #vocalzip-refined-preview .vz-week-nav button:disabled{color:#c7bfd2;cursor:default;opacity:.5;}
-#vocalzip-refined-preview .vz-week-nav button svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+#vocalzip-refined-preview .vz-week-nav button svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-week-nav .vz-week-range{text-align:center;white-space:nowrap;line-height:1.25;}
-#vocalzip-refined-preview .vz-week-year{display:block;color:#667085;font-size:11px;font-weight:500;}
-#vocalzip-refined-preview .vz-week-dates{display:block;color:#101828;font-size:18px;font-weight:700;margin-top:3px;}
+#vocalzip-refined-preview .vz-week-year{display:block;color:#667085;font-size:11px;font-weight:400;}
+#vocalzip-refined-preview .vz-week-dates{display:block;color:#475467;font-size:14px;font-weight:600;letter-spacing:.01em;font-variant-numeric:tabular-nums;margin-top:2px;}
 #vocalzip-refined-preview .vz-days{margin-top:14px;}
 #vocalzip-refined-preview .vz-days>div{min-height:80px;cursor:pointer;}
 #vocalzip-refined-preview .vz-days>div>span:first-child{font-size:15px;font-weight:600;line-height:22px;color:#344054;}
 #vocalzip-refined-preview .vz-days>div.vz-saturday>span:first-child{color:#617596;}
 #vocalzip-refined-preview .vz-days>div.vz-sunday>span:first-child{color:#a96171;}
 #vocalzip-refined-preview .vz-days>div.vz-today>span:first-child{color:#7a32f5;}
-#vocalzip-refined-preview .vz-week-meta{border-top:1px solid #ece6f4;margin-top:8px;padding-top:10px;}
+#vocalzip-refined-preview .vz-streak{color:#667085;margin-left:0;}
+#vocalzip-refined-preview .vz-streak[data-active="true"]{color:#7a32f5;}
+#vocalzip-refined-preview .vz-streak svg{width:22px;height:22px;}
+#vocalzip-refined-preview .vz-week-meta{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;box-sizing:border-box;min-height:47px;border-top:1px solid #ece6f4;margin-top:8px;padding-top:10px;}
+#vocalzip-refined-preview .vz-week-meta>span{display:flex;align-items:center;gap:3px;min-height:36px;white-space:nowrap;}
 #vocalzip-refined-preview .vz-week .vz-empty-action{min-height:36px;}
 #vocalzip-refined-preview .vz-week [role=button]:focus-visible,#vocalzip-refined-preview .vz-week button:focus-visible{outline:2px solid #7A32F5;outline-offset:3px;}
 
 :host{display:block;width:100%;background:#f8f6fd;}
 /* Use the device width rather than leaving a 390px mock phone inside wider phones. */
 #vocalzip-refined-preview .vz-phone{max-width:560px;padding:8px 12px 0;padding-top:max(8px,env(safe-area-inset-top));}
+#vocalzip-refined-preview .vz-nav-item.vz-active{background:#EDE1FF;}
+#vocalzip-refined-preview .vz-practice-icon{display:inline-flex;align-items:center;width:20px;height:20px;flex:none;font-family:"Phosphor";font-style:normal;font-weight:400;font-size:20px;line-height:1;color:inherit;}
+#vocalzip-refined-preview .vz-nav{background:rgba(255,255,255,.68);}
+#vocalzip-refined-preview .vz-nav-item i{display:block;font:normal 22px/1 "Phosphor";color:#475467;letter-spacing:0;}
+#vocalzip-refined-preview .vz-nav-item.vz-active i{color:#7A32F5;}
+#vocalzip-refined-preview .vz-floating-record i{display:block;font:normal 22px/1 "Phosphor";color:inherit;}
 #vocalzip-refined-preview .vz-header{min-height:44px;margin-bottom:8px;}
+#vocalzip-refined-preview .vz-logo{font-size:26px;line-height:34px;gap:8px;}
+#vocalzip-refined-preview .vz-logo b{font-weight:700;}
+#vocalzip-refined-preview .vz-logo svg{width:28px;height:28px;}
 #vocalzip-refined-preview .vz-schedule{padding:0 0 8px;}
 #vocalzip-refined-preview .vz-card{padding:16px;}
+#vocalzip-refined-preview .vz-song{background:linear-gradient(135deg,#E8D8FF 0%,#EFE3FF 52%,#F5EDFF 100%);}
 #vocalzip-refined-preview .vz-song h3{max-width:none;}
 #vocalzip-refined-preview main{padding-bottom:calc(142px + max(12px,env(safe-area-inset-bottom)));}
 #vocalzip-refined-preview .vz-nav-space{max-width:528px;}
@@ -78,7 +93,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-save-error{font-size:12px;line-height:1.45;color:#b42318;}
 #vocalzip-refined-preview .vz-save-error:empty{display:none;}
 #vocalzip-refined-preview .vz-goals .vz-empty-action{display:flex;align-items:center;gap:10px;min-height:56px;width:100%;margin-top:12px;padding:12px 14px;border-radius:14px;background:#f7f5fb;color:#858194;font-weight:500;text-align:left;}
-#vocalzip-refined-preview .vz-goals .vz-empty-action svg{width:22px;height:22px;flex:none;stroke:#858194;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+#vocalzip-refined-preview .vz-goals .vz-empty-action svg{width:22px;height:22px;flex:none;stroke:#858194;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-goals .vz-empty-action svg:last-child{width:16px;height:16px;margin-left:auto;}
 #vocalzip-refined-preview .vz-goal-list:empty{display:none;}
 @media(max-width:355px){#vocalzip-refined-preview .vz-event h2{line-height:1.45454545;}#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
@@ -89,6 +104,13 @@ export async function createFloatingHome(opts={}){
  template.styles.forEach((css,i)=>{const style=el("style",css);style.dataset.sourceStyle=String(i);shadow.append(style);});
  const integration=el("style",adaptations);integration.dataset.integration="accessibility";shadow.append(integration);
  const root=document.importNode(template.root,true);root.setAttribute("aria-label","Vocalzip 홈");shadow.append(root);
+ const iconFont=el("style",`@font-face{font-family:"Phosphor";src:url("${new URL('../vendor/phosphor/Phosphor.woff2',import.meta.url)}") format("woff2");font-display:block}#vocalzip-refined-preview .vz-nav-item i::before,#vocalzip-refined-preview .vz-floating-record i::before{content:attr(data-glyph)}`);
+ shadow.append(iconFont);
+ [...root.querySelectorAll('.vz-nav-item')].forEach((button,i)=>{
+  const svg=button.querySelector('svg');if(!svg)return;
+  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a'][i];svg.replaceWith(icon);
+ });
+ const recordIcon=el('i');recordIcon.setAttribute('aria-hidden','true');recordIcon.dataset.glyph='\ue326';root.querySelector('.vz-floating-record svg').replaceWith(recordIcon);
  const q=selector=>root.querySelector(selector);
  q("main").setAttribute("role","presentation");
  root.prepend(el("h1","홈","vz-visually-hidden"));
@@ -121,8 +143,8 @@ export async function createFloatingHome(opts={}){
  const flame=meta.querySelector(".vz-streak svg").cloneNode(true);
  action(q(".vz-week .vz-title"),"오늘 일정 보기",opts.onWeek||opts.onCalendar);
  const weekNav=el("div",null,"vz-week-nav"),prev=el("button"),range=el("div",null,"vz-week-range"),next=el("button");
- prev.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 3-9 9 9 9"/></svg>';
- next.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 9 9-9 9"/></svg>';
+ prev.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4.5-7.5 7.5 7.5 7.5"/></svg>';
+ next.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4.5 7.5 7.5-7.5 7.5"/></svg>';
  for(const [button,label,fn] of [[prev,"이전 주",()=>opts.onWeekMove?.(-1)],[next,"다음 주",()=>opts.onWeekMove?.(1)]]){
   button.type="button";button.setAttribute("aria-label",label);button.onclick=fn;
  }
@@ -135,13 +157,16 @@ export async function createFloatingHome(opts={}){
   prev.setAttribute("aria-disabled",String(prev.disabled));next.setAttribute("aria-disabled",String(next.disabled));
   q(".vz-week h2").textContent="주간 연습";
   q(".vz-time b").textContent=String(Math.round(actual));
+  q(".vz-time").dataset.targetMet=String(Number(target)>0&&actual>=Number(target));
   const startYear=String(week.start||"").slice(0,4),endYear=String(week.end||"").slice(0,4);
-  range.replaceChildren(el("span",week.start?(endYear!==startYear?startYear+"–"+endYear:startYear)+"년":"","vz-week-year"),el("span",week.start?shortDate(week.start)+" – "+shortDate(week.end):"","vz-week-dates"));
+  const currentYear=String(new Date().getFullYear()),showYear=startYear!==currentYear||endYear!==currentYear;
+  range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+" – "+(showYear&&endYear!==startYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
   if(target==null){
    if(week.current===false)goal.textContent="목표 미설정";
    else{const button=el("button","목표 설정","vz-empty-action");button.type="button";button.setAttribute("aria-label","주간 목표 설정");button.onclick=()=>opts.onGoals?.();goal.replaceChildren(button);}
   }else goal.textContent="목표 "+duration(target);
   meta.children[1].querySelector("strong").textContent=ratio==null?"—":Math.round(ratio)+"%";
+  meta.querySelector(".vz-streak").dataset.active=String(num(week.streak)>=2);
   meta.querySelector(".vz-streak").replaceChildren(flame.cloneNode(true),document.createTextNode(num(week.streak)+"일 연속"));
   days.replaceChildren();
   for(const item of (week.days||[]).slice(0,7)){
@@ -184,7 +209,7 @@ export async function createFloatingHome(opts={}){
   continueButton.onclick=()=>{(recent?callbacks.onContinue:callbacks.onRecent)?.();};
  };
  host.updateRecent(opts.recent,opts);
- const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();
+ const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();const practiceIcon=el("i","\ue492","vz-practice-icon");practiceIcon.setAttribute("aria-hidden","true");quick[1].querySelector("svg").replaceWith(practiceIcon);
  q(".vz-goal-tools button").setAttribute("aria-label","오늘의 목표 설정");q(".vz-goal-tools button").onclick=()=>opts.onGoals?.();
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
  if(items.length>6){list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");}

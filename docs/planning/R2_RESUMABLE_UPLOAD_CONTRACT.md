@@ -20,7 +20,8 @@
 
 ## 활성화
 
-Worker의 UPLOADS_V2_ENABLED=true + SESSION_GUARD_ENABLED=true가 있어야 새 전송을 시작한다.
+저장소의 기본 UPLOADS_V2_ENABLED는 false다. 웹 클라이언트와 Worker 소스를 먼저 배포해도 새 계약을 자동 활성화하지 않는다.
+원격 Worker 설정과 등록 세션을 검증한 뒤 UPLOADS_V2_ENABLED=true + SESSION_GUARD_ENABLED=true로 활성화해야 새 전송을 시작한다.
 /v1/me가 uploadContract=merkle-v2를 알린 경우에만 신규 보관함 업로드가 v2를 선택한다.
 기존 v2 작업이 있으면 서버가 중지/연결 실패해도 v1/TUS에 같은 ID로 자동 전환하지 않는다.
 일반 PDF/공연 자료 업로드는 이번 v2 범위가 아니다.
@@ -30,7 +31,7 @@ Worker의 UPLOADS_V2_ENABLED=true + SESSION_GUARD_ENABLED=true가 있어야 새 
 
 ## 검증·한계
 
-실제 Miniflare/workerd + R2에서 Worker 기존/추가 계약 33개 통과 및 Wrangler dry-run 번들 생성(run 42504857990). 최종 소스의 결과와 브라우저 시험은 PR/Actions에 실제 기록한다.
+실제 Miniflare/workerd + R2에서 Worker 기존/추가 계약과 비활성 상태의 v1 호환을 검증하고 Wrangler dry-run 번들을 생성한다. 최종 소스의 통과 건수와 브라우저 시험은 PR/Actions에 실제 기록한다.
 브라우저에서 모의 Supabase/R2와 연결·재로그인·원본 검증을 시험한다. 실제 운영 R2·iPhone/PWA의 결과로 확대하지 않는다.
 
 - 일부 part만 ACK된 상태에는 원본 File이 필요하다. 기기에 원본이 있는 기존 녹음 백업/같은 ID의 현재 파일 재시도는 지원하지만, 새로고침으로 사라진 직접 업로드 File을 임의 복원하지 않는다.

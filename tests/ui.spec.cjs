@@ -1154,17 +1154,7 @@ test('Metadata-derived dates remain editable and move imported audio in the cale
  await expect(page.locator('.vzip-calendar-records')).toContainText('dated-recording');
  await page.locator('.vzip-calendar-records [data-record-id]').click();
  await expect(page.locator('#media')).toBeVisible();
- try{await page.locator('.vzip-hub-item [data-action=edit]').click({timeout:8000});}
- catch(error){
-   console.log('LEGACY_DATE_DIAG',JSON.stringify(await page.evaluate(async()=>({
-    rows:[...document.querySelectorAll('.vzip-hub-item')].map(x=>({id:x.dataset.id,text:x.textContent})),
-    status:document.querySelector('#vzip-hub-status')?.textContent,
-    hubConnected:!!document.querySelector('#vzip-media-hub'),
-    mediaHidden:document.querySelector('#media')?.hidden,mediaHTML:document.querySelector('#media')?.innerHTML.slice(0,2000),
-    local:(await window.vzipReadMedia()).map(x=>({id:x.id,name:x.name,recordedDate:x.recordedDate})),
-    signed:window.vzipCloudSignedIn?.(),errors:window.__diagnosticErrors||[]
-   }))));throw error;
- }
+ await page.locator('.vzip-hub-item [data-action=edit]').click();
  const dialog=page.getByRole('dialog',{name:'🎧 이 녹음의 감상 기록'});
  await expect(dialog.locator('[name=date]')).toHaveValue('2024-02-29');
  await expect(dialog).toContainText('메타데이터');
@@ -1183,4 +1173,30 @@ test('An explicitly selected practice date survives an imported metadata date',a
  await page.locator('#practice-attachments').setInputFiles({name:'old-recording.wav',mimeType:'audio/wav',buffer:wav()});
  await expect(page.locator('#media-preview')).toContainText('2024-02-29');
  await expect(page.locator('#practice-form [name=date]')).toHaveValue('2026-10-20');
+});
+
+for(const offline of [false,true])test('Calendar playback waits for fresh library rows and remains editable'+(offline?' offline':''),async({page})=>{
+ await page.evaluate(()=>{
+  window.vzipCloudSignedIn=()=>false;
+  window.vzipPrepareMedia=async file=>({file,metadata:{created:new Date('2024-02-29T12:00:00').getTime(),recordedDate:'2024-02-29',dateSource:'metadata'},dispose:async()=>{}});
+ });
+ await page.locator('.nav [data-tab=media]').click();
+ await page.locator('#vzip-hub-upload').setInputFiles({name:'calendar-refresh-order.wav',mimeType:'audio/wav',buffer:wav()});
+ await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
+ await expect(page.locator('.vzip-hub-item')).toContainText('2024-02-29');
+ await page.locator('.nav [data-tab=practice]').click();
+ await expect(page.locator('.vzip-calendar-records')).toContainText('calendar-refresh-order');
+ await page.evaluate(offline=>{
+  window.__calendarPlayback={pending:false,calls:[]};
+  document.addEventListener('click',e=>{if(e.target.closest('.nav [data-tab=media]'))window.__calendarPlayback.pending=true;},true);
+  window.addEventListener('vzip:hub-refreshed',()=>{window.__calendarPlayback.pending=false;});
+  HTMLMediaElement.prototype.play=function(){if(this.closest('#vzip-media-hub'))window.__calendarPlayback.calls.push({pending:window.__calendarPlayback.pending,connected:this.isConnected});return Promise.resolve();};
+  if(offline){window.vzipCloudSignedIn=()=>true;window.vzipCloudMediaList=async()=>{throw Error('synthetic cloud outage');};}
+ },offline);
+ await page.locator('.vzip-calendar-records [data-record-id]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__calendarPlayback.calls.length)).toBe(1);
+ const calls=await page.evaluate(()=>window.__calendarPlayback.calls);
+ expect(calls[0]).toMatchObject({pending:true,connected:true});
+ await page.locator('.vzip-hub-item [data-action=edit]').click();
+ await expect(page.getByRole('dialog',{name:'🎧 이 녹음의 감상 기록'}).locator('[name=date]')).toHaveValue('2024-02-29');
 });

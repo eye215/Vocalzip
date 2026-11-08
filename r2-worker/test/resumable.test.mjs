@@ -177,3 +177,18 @@ test('legacy multipart routes cannot bypass the proof or abort a v2 upload',asyn
  const out=await response.json(),bucket=await mf.getR2Bucket('MEDIA');
  assert.deepEqual(new Uint8Array(await (await bucket.get(out.key)).arrayBuffer()),data(17));
 });
+
+test('staged rollout keeps v1 working and does not advertise or initialize v2',async()=>{
+ const staged=new Miniflare({modules:true,scriptPath:fileURLToPath(new URL('../src/index.js',import.meta.url)),compatibilityDate:'2025-01-01',r2Buckets:['MEDIA'],
+  bindings:{SUPABASE_URL:root,SUPABASE_ANON_KEY:'public-test-only',SUPABASE_JWT_SECRET:secret,SIGNING_SECRET:secret,SESSION_GUARD_ENABLED:'true',UPLOADS_V2_ENABLED:'false',ALLOWED_ORIGINS:'https://app.test'},
+  outboundService:async()=>Response.json({user_id:uid,allowed:true,required:true,playback_token:null})});
+ const headers={authorization:'Bearer '+token(),'x-client-info':protocol};
+ try{
+  const me=await staged.dispatchFetch('https://media.test/v1/me',{headers});
+  assert.equal(me.status,200);assert.equal((await me.json()).uploadContract,undefined);
+  const paused=await staged.dispatchFetch('https://media.test/v2/uploads',{method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({mediaId:'staged-v2',size:7,contentType:'audio/wav',ext:'wav',root:'0'.repeat(64)})});
+  assert.equal(paused.status,503);
+  const legacy=await staged.dispatchFetch('https://media.test/v1/uploads',{method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({mediaId:'staged-v1',size:7,contentType:'audio/wav',ext:'wav'})});
+  assert.equal(legacy.status,200);assert.equal((await legacy.json()).key,'u/'+uid+'/staged-v1/original.wav');
+ }finally{await staged.dispose();}
+});

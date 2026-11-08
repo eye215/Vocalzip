@@ -41,8 +41,8 @@ test('future time is ignored and missing or zero targets never divide by zero',(
   assert.equal(result.week.days[5].ratio,null);
   assert.equal(result.week.days[6].state,'future');
   assert.equal(result.week.days[6].minutes,0);
-  assert.equal(result.week.targetMinutes,null);
-  assert.equal(result.week.ratio,null);
+  assert.equal(result.week.targetMinutes,180);
+  assert.equal(result.week.ratio,10/180*100);
   assert.equal(build().week.days.filter(d=>d.today).length,1);
 });
 
@@ -50,7 +50,7 @@ test('weekly target uses the explicit plan or all seven explicit daily plans',()
   const dates=build().week.days.map(d=>d.date);
   const plans=dates.map(date=>day(date,30));
   assert.equal(build({practicePlans:plans}).week.targetMinutes,210);
-  assert.equal(build({practicePlans:plans.slice(1)}).week.targetMinutes,null);
+  assert.equal(build({practicePlans:plans.slice(1)}).week.targetMinutes,210);
   const weekly={id:'week:2026-11-02',period:'week',date:'2026-11-02',targetMinutes:180};
   assert.equal(build({practicePlans:[...plans,weekly]}).week.targetMinutes,180);
   assert.equal(build({practicePlans:[{...weekly,targetMinutes:0}]}).week.ratio,null);
@@ -89,21 +89,31 @@ test('shared ledger includes recording time and keeps last week available after 
   assert.equal(previous.today,'2026-11-09');assert.equal(db.practices[0].minutes,4);
 });
 
-test('browsing another week does not shift today, daily goals, streak, or future time into the past',()=>{
+test('browsing another week keeps today and daily goals while the streak follows the selected week',()=>{
   const db={practices:[practice('p','2026-11-08',10)],dailyGoals:[{id:'g',date:'2026-11-09',title:'Today'}]};
   const past=M.build(db,{today:'2026-11-09',weekStart:'2026-11-02'});
   assert.equal(past.week.streak,1);assert.equal(past.goals[0].id,'g');
   const future=M.build(db,{today:'2026-11-09',weekStart:'2026-11-16',timeEntries:[{date:'2026-11-16',minutes:100}]});
-  assert.equal(future.week.actualMinutes,0);assert.ok(future.week.days.every(d=>d.state==='future'));
+  assert.equal(future.week.actualMinutes,0);assert.equal(future.week.streak,0);assert.ok(future.week.days.every(d=>d.state==='future'));
   assert.throws(()=>M.build(db,{today:'2026-11-09',weekStart:'invalid'}),/주간 날짜/);
 });
 
-test('streak survives an unpracticed today, ends at a gap and ignores future dates',()=>{
+test('weekly streak crosses Sunday to Monday and restarts after a missed day',()=>{
+  const dates=['2026-11-02','2026-11-04','2026-11-06','2026-11-08','2026-11-09','2026-11-10'];
+  const practices=dates.map((date,i)=>practice(String(i),date,10));
+  assert.equal(M.build({practices},{today:'2026-11-10',weekStart:'2026-11-09'}).week.streak,3);
+  assert.equal(M.build({practices},{today:'2026-11-10',weekStart:'2026-11-02'}).week.streak,1);
+  const interrupted=['2026-11-01','2026-11-02','2026-11-03','2026-11-04','2026-11-06','2026-11-08','2026-11-10']
+    .map((date,i)=>practice('gap'+i,date,10));
+  assert.equal(M.build({practices:interrupted},{today:'2026-11-10',weekStart:'2026-11-09'}).week.streak,1);
+});
+
+test('weekly streak uses the latest practice in the displayed week and stops at a gap',()=>{
   const practices=[practice('a','2026-11-06',1),practice('b','2026-11-05',1),
     practice('c','2026-11-03',99),practice('f','2026-11-08',99)];
   assert.equal(build({practices}).week.streak,2);
   assert.equal(build({practices:[...practices,practice('t',today,1)]}).week.streak,3);
-  assert.equal(build({practices:[practice('c','2026-11-05',10)]}).week.streak,0);
+  assert.equal(build({practices:[practice('c','2026-11-05',10)]}).week.streak,1);
 });
 
 test('empty and 900-item goal lists have distinct, finite progress',()=>{
@@ -271,3 +281,11 @@ test('future schedule weeks extend the upper boundary, excluding cancellations a
  assert.deepEqual(M.weekBounds(db,options),{first:'2025-12-22',last:'2026-01-12',current:'2025-12-29'});
  const last=M.build(db,{...options,weekStart:'2026-01-12'}).week;assert.equal(last.canNext,false);assert.equal(last.canPrevious,true);
 });
+
+ test('past weeks use 30 minutes per unplanned day without changing saved records',()=>{
+ const db={practicePlans:[day('2026-11-02',45)]},before=JSON.stringify(db);
+ const result=M.build(db,{today:'2026-11-09',weekStart:'2026-11-02'});
+ assert.equal(result.week.targetMinutes,225);
+ assert.deepEqual(result.week.days.map(d=>d.targetMinutes),[45,30,30,30,30,30,30]);
+ assert.equal(JSON.stringify(db),before);
+ });
