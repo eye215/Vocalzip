@@ -1,4 +1,4 @@
-import {handleUploadV2} from './resumable.js';
+import {handleUploadV2} from './resumable.mjs';
 /* VOCAL.zip media API on Cloudflare Workers + R2.
  *
  * The browser never sees an R2 key. It signs in with Supabase as before and sends the Supabase

@@ -4,7 +4,7 @@ import {createHmac,createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {Miniflare} from 'miniflare';
-import {handleUploadV2} from '../src/resumable.js';
+import {handleUploadV2} from '../src/resumable.mjs';
 const require=createRequire(import.meta.url),client=require('../../r2-resumable-upload.js');
 const uid='11111111-1111-4111-8111-111111111111',bob='22222222-2222-4222-8222-222222222222';
 const secret='resumable-test-secret-not-production',root='https://session.test',protocol='vocalzip-device-session-v2';
