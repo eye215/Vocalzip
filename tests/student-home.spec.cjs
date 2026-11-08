@@ -448,6 +448,8 @@ test('large text keeps preview playback separate from full song details on all m
   await page.setViewportSize({width,height:844});await noOverflow(page);
   const play=page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}),p=await play.boundingBox();
   const title=await page.locator('.vz-home-song-copy strong').boundingBox();
+  const heading=await page.locator('.vz-home-song-heading').boundingBox();
+  expect(heading.y+heading.height).toBeLessThanOrEqual(p.y+1);
   expect(p.height).toBeGreaterThanOrEqual(44);expect(p.width).toBeGreaterThanOrEqual(44);
   expect(p.y+p.height).toBeLessThanOrEqual(title.y+1);
   await screenshot(page,testInfo,'student-home-preview-large-text-'+width+'.png');
