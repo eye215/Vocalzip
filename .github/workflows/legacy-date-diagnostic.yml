@@ -1,4 +1,4 @@
-name: Verify baseline calendar playback refresh race
+name: Verify fresh calendar playback and metadata date editing
 on:
   push:
     branches: ['codex/resumable-date-regression-20261108']
@@ -18,7 +18,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test tests/ui.spec.cjs --grep 'Calendar playback waits' --workers=2 --reporter=line
+      - run: npx playwright test tests/ui.spec.cjs --grep 'Calendar playback waits|Metadata-derived dates' --repeat-each=4 --workers=2 --reporter=line
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

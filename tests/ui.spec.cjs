@@ -1196,7 +1196,7 @@ for(const offline of [false,true])test('Calendar playback waits for fresh librar
  await page.locator('.vzip-calendar-records [data-record-id]').click();
  await expect.poll(()=>page.evaluate(()=>window.__calendarPlayback.calls.length)).toBe(1);
  const calls=await page.evaluate(()=>window.__calendarPlayback.calls);
- expect(calls[0]).toMatchObject({pending:true,connected:true});
+ expect(calls[0]).toMatchObject({pending:false,connected:true});
  await page.locator('.vzip-hub-item [data-action=edit]').click();
  await expect(page.getByRole('dialog',{name:'🎧 이 녹음의 감상 기록'}).locator('[name=date]')).toHaveValue('2024-02-29');
 });
