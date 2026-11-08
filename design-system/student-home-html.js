@@ -24,6 +24,7 @@ function action(element,label,fn){
 }
 const adaptations=String.raw`
 #vocalzip-refined-preview .vz-week{touch-action:pan-y;}
+#vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"] b,#vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"]>span{color:#7a32f5;}
 #vocalzip-refined-preview .vz-week-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:12px 0 0;min-height:44px;background:transparent;}
 #vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:radial-gradient(circle at center,#f2f4f7 0 16px,transparent 16.5px);color:var(--ink-2,#5f5a74);cursor:pointer;padding:0;}
 #vocalzip-refined-preview .vz-week-nav button:disabled{color:#c7bfd2;cursor:default;opacity:.5;}
@@ -139,6 +140,7 @@ export async function createFloatingHome(opts={}){
   prev.setAttribute("aria-disabled",String(prev.disabled));next.setAttribute("aria-disabled",String(next.disabled));
   q(".vz-week h2").textContent="주간 연습";
   q(".vz-time b").textContent=String(Math.round(actual));
+  q(".vz-time").dataset.targetMet=String(Number(target)>0&&actual>=Number(target));
   const startYear=String(week.start||"").slice(0,4),endYear=String(week.end||"").slice(0,4);
   const currentYear=String(new Date().getFullYear()),showYear=startYear!==currentYear||endYear!==currentYear;
   range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+" – "+(showYear&&endYear!==startYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
