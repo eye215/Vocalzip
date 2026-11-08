@@ -204,7 +204,7 @@ test('daily time comes from onboarding/settings; tomorrow offers goals once with
  const automatic=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(automatic).toBeVisible();
  await expect(automatic.locator('input[type=number]')).toHaveCount(0);
  await automatic.getByRole('button',{name:'나중에 설정할래요'}).click();
- await page.goto('/#/home');await ready(page);await expect(automatic).toHaveCount(0);
+ await page.evaluate(()=>VZ.render());await ready(page);await expect(automatic).toHaveCount(0);
  await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
  await sheet.getByRole('button',{name:'목표 저장'}).click();
