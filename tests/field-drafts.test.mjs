@@ -269,3 +269,10 @@ test('pausing writes preserves read access, old receipts, body and all unsent te
  assert.equal((await write('not silently discarded',r)).status,'disabled');
  assert.equal((await load()).text,'saved before pause');assert.equal((await snapshotRow()).payload.lessons[0].memo,'original memo');
 });
+
+test('database foreign keys forbid cross-owner draft associations even in server-side inserts',{skip},async()=>{
+ const a=await acquire();
+ await assert.rejects(db.query("insert into public.vzip_field_conflicts(user_id,draft_id,session_id,editor_instance,base_revision,lease_epoch,server_revision,text_value) values($1,$2,$3,$4,0,0,0,'wrong owner')",[V,a.draft_id,C,E1]),/foreign key/);
+ await assert.rejects(db.query("insert into public.vzip_field_requests(user_id,request_id,draft_id,session_id,digest,response) values($1,$2,$3,$4,decode('00','hex'),'{}')",[V,randomUUID(),a.draft_id,C]),/foreign key/);
+ await assert.rejects(db.query("insert into public.vzip_field_commit_markers values($1,txid_current(),$2,decode('00','hex'))",[V,a.draft_id]),/foreign key/);
+});

@@ -173,6 +173,13 @@ test('real handoff fences the old outbox, preserves both texts, then commits onl
  assert.equal((await serverDraft()).text_value,'target latest');
  const done=await b.request('commit',await b.request('load'));assert.equal(done.status,'committed');
  const expected=base();expected.lessons[0].memo='target latest';assert.deepEqual(await body(),expected);
+ const observed=await a.request('load');
+ const recovered=await a.request('recover_handoff',observed,{p_confirm_unsynced:true});
+ a.model.resolve(S,{...observed,...recovered},'keep_local');await a.model.sync(S);
+ assert.equal((await serverDraft()).text_value,'late offline source');
+ assert.ok(a.model.read(S).conflicts.some(c=>c.text==='target latest'));
+ assert.deepEqual(await body(),expected); // resolving a draft never implicitly commits the confirmed body
+
 });
 test('identity change after SQL commit does not write an acknowledgement into the next account',{skip,timeout:20000},async()=>{
  const wire=api(),a=device(wire);await a.open();a.model.edit(S,'A private');const gate=deferred();

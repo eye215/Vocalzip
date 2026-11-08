@@ -71,6 +71,7 @@ function create({owner,editorId,sessionId,storage,send,getOwner,getSessionId,now
  function attachLease(s,result){
   active();const r=read(s);if(!r)throw fail('draft_missing');if(r.pending)throw fail('pending_operation');
   const next=candidate(result);
+  if(r.candidate&&r.candidate.text!==next.text)archiveServer(r,r.candidate);
   const dirty=r.text!==r.baseText;
   if(dirty&&(next.text!==r.baseText||(r.remote&&r.remote.draftId!==next.remote.draftId))){
    r.candidate=next;r.status='conflict';return persist(s,r);
@@ -82,13 +83,20 @@ function create({owner,editorId,sessionId,storage,send,getOwner,getSessionId,now
   return persist(s,r);
  }
  function archive(r,entry){
-  if(r.conflicts.some(c=>c.id===entry.id))return;
+  const previous=r.conflicts.find(c=>c.id===entry.id);
+  if(previous){if(previous.text!==entry.text)throw fail('conflict_identity_mismatch');return;}
   if(r.conflicts.length>=32)throw fail('conflict_capacity');
   r.conflicts.push(entry);
+ }
+ function archiveServer(r,c){
+  archive(r,{id:'server:'+c.remote.draftId+':'+c.remote.revision+':'+c.remote.epoch,text:c.text,
+   reason:'server_copy_before_selection',serverPreserved:false});
  }
  function resolve(s,result,choice){
   active();if(!['keep_local','use_server'].includes(choice))throw fail('explicit_choice_required');
   const r=read(s);if(!r)throw fail('draft_missing');const next=candidate(result);
+  if(r.candidate&&r.candidate.text!==next.text)archiveServer(r,r.candidate);
+  if(choice==='keep_local'&&r.text!==next.text)archiveServer(r,next);
   if(r.pending)archive(r,{id:r.pending.id,text:r.pending.text,reason:'explicit_resolution',serverPreserved:false});
   if(choice==='use_server'&&r.text!==next.text)archive(r,{id:id(makeId()),text:r.text,reason:'local_copy_before_selection',serverPreserved:false});
   r.pending=null;r.remote=next.remote;r.baseText=next.text;r.candidate=null;r.blockedReason=null;r.localRevision++;

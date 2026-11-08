@@ -180,3 +180,14 @@ test('a server rollout pause preserves the pending packet and blocks automatic r
  assert.equal((await f.model.sync(S)).status,'blocked');const r=f.model.read(S);assert.equal(r.blockedReason,'feature_disabled');assert.equal(r.pending.text,'typed');
  assert.equal((await f.model.sync(S)).status,'blocked');
 });
+
+test('choosing local text retains the losing server version after successful synchronization',async()=>{
+ const f=fixture({send:async q=>({status:'saved',draft_id:q.p_draft_id,revision:String(BigInt(q.p_expected_revision)+1n),epoch:q.p_expected_epoch})});
+ ready(f,'chosen local');f.model.resolve(S,lease('losing server text','7','2'),'keep_local');await f.model.sync(S);
+ const r=f.model.read(S);assert.equal(r.baseText,'chosen local');assert.ok(r.conflicts.some(c=>c.text==='losing server text'));
+});
+test('new remote candidates do not erase earlier unresolved server versions',async()=>{
+ const f=fixture();f.model.start(S,'base');f.model.edit(S,'local input');
+ f.model.attachLease(S,lease('server one','1','2'));f.model.attachLease(S,lease('server two','2','3'));
+ const r=f.model.read(S);assert.equal(r.text,'local input');assert.equal(r.candidate.text,'server two');assert.ok(r.conflicts.some(c=>c.text==='server one'));
+});

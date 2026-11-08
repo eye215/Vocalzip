@@ -41,12 +41,14 @@ create table if not exists public.vzip_field_drafts (
  handoff_expires_at timestamptz,
  updated_at timestamptz not null default clock_timestamp(),
  primary key(user_id,entity_id,field_key),
+ unique(user_id,draft_id),
  check(committed_revision between 0 and revision)
 );
 create table if not exists public.vzip_field_conflicts (
  conflict_id uuid primary key default gen_random_uuid(),
  user_id uuid not null references auth.users(id) on delete cascade,
- draft_id uuid not null references public.vzip_field_drafts(draft_id) on delete cascade,
+ draft_id uuid not null,
+ foreign key(user_id,draft_id) references public.vzip_field_drafts(user_id,draft_id) on delete cascade,
  session_id uuid not null,
  editor_instance uuid not null,
  base_revision bigint not null,
@@ -59,7 +61,8 @@ create index if not exists vzip_field_conflicts_owner on public.vzip_field_confl
 create table if not exists public.vzip_field_requests (
  user_id uuid not null references auth.users(id) on delete cascade,
  request_id uuid not null,
- draft_id uuid not null references public.vzip_field_drafts(draft_id) on delete cascade,
+ draft_id uuid not null,
+ foreign key(user_id,draft_id) references public.vzip_field_drafts(user_id,draft_id) on delete cascade,
  session_id uuid not null,
  digest bytea not null,
  response jsonb not null,
@@ -71,7 +74,8 @@ create table if not exists public.vzip_field_requests (
 create table if not exists public.vzip_field_commit_markers (
  user_id uuid not null,
  tx_id bigint not null,
- draft_id uuid not null references public.vzip_field_drafts(draft_id) on delete cascade,
+ draft_id uuid not null,
+ foreign key(user_id,draft_id) references public.vzip_field_drafts(user_id,draft_id) on delete cascade,
  value_hash bytea not null,
  primary key(user_id,tx_id,draft_id)
 );
