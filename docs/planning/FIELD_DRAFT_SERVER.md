@@ -59,3 +59,15 @@ tests/field-drafts.test.mjs는 실제 PostgreSQL의 RLS·두 Auth 세션·두 �
 vzip_field_draft_rollout은 기본 비활성이며 일반 사용자는 설정을 읽거나 바꿀 수 없다. 소유자 전용 vzip_set_field_draft_enabled는 세션/쓰기와 동일한 계정 잠금 순서로 명시 활성화/중지한다.
 비활성 상태에서도 본인 초안 조회와 기존 성공 영수증 재생은 유지하고 새 초안/인계/본문 쓰기는 disabled로 거부한다. 서버/로컬 문구를 삭제하거나 구형 snapshot으로 되돌리지 않는다.
 비활성화한 보호 필드는 계속 읽기 전용이다. 롤백은 필드 보호를 풀어 stale 클라이언트의 덮어쓰기를 허용하는 동작이 아니다. 클라이언트는 disabled 응답에서 미전송 원 요청을 보존하고 새 권한 확인/명시 선택 후 재개한다.
+
+## 운영 적용 검토 순서 — 아직 미실행
+
+1. Supabase Database Settings에서 해당 프로젝트의 루트 CA를 확보하고 GitHub Actions의 SUPABASE_DB_CA_CERT로 제공한다. 기존 읽기 전용 점검 브랜치(codex/read-only-sync-schema-e5e4b850d747)는 인증서 검증을 유지하며 저장소의 SUPABASE_DB_URL과 함께 사용할 수 있다. SSL 설정/URL로 인증서 검증을 우회하지 않는다. [공식 SSL 안내](https://supabase.com/docs/guides/platform/ssl-enforcement).
+2. 읽기 전용 카탈로그로 기존 컬럼·RLS·세션 함수·history와 새 함수의 설치 상태를 대조한다. 현재 직접 도구는 프로젝트 접근 거부, 별도 점검은 루트 CA 미설정 때문에 SELF_SIGNED_CERT_IN_CHAIN으로 미확인이다. 사용자 레코드/미디어 내용은 조회하지 않았다.
+3. 운영 적용 승인과 기존 데이터의 제공자 백업·잠금 시간·실패 롤백 계획을 확인한다. 백업/사용자 payload를 GitHub 로그나 공개 아티팩트로 내보내지 않는다.
+4. snapshot 세대/revision 제안 → field draft 제안 순서로 적용하고 기본 비활성을 유지한다. 이 저장소 병합은 운영 마이그레이션 실행이 아니다.
+5. 설치 후 RLS·권한·호환 토큰을 읽기 전용으로 다시 확인한다. 보호 필드의 구형 클라이언트 쓰기 실패와 history 즉시 삭제 정책·영수증 정리 정책을 검토한다.
+6. UI/입력 이벤트·현재 세션/탭 식별·자동 초안 상태를 별도 개발한 뒤, 승인한 계정만 operator 함수로 활성화한다. 실제 iPhone↔iPad E2E와 네트워크/세션 회수 시험은 별도다.
+7. 문제 시 해당 계정의 새 쓰기만 중지하고 초안/충돌/본문을 보존한다. 테이블 DROP·이전 payload 강제 복원·보호 해제는 롤백으로 사용하지 않는다.
+
+필드 초안/충돌/영수증/내부 marker는 소유자+draft ID의 복합 FK로 연결하여 서버 코드의 실수로 다른 계정의 초안을 참조할 수도 없게 한다.
