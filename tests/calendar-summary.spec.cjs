@@ -64,8 +64,8 @@ test('calendar uses the same circular recording entry and opens a focused dark r
  await boot(page);
  const fab=page.getByRole('link',{name:'녹음 시작',exact:true}),box=await fab.boundingBox();
  expect(Math.round(box.width)).toBe(56);expect(Math.round(box.height)).toBe(56);
- await expect(page.locator('.v-nav a')).toHaveCount(5);
- await expect(page.locator('.v-nav li:has([data-nav=record])')).toBeHidden();
+ await expect(page.locator('.v-nav a')).toHaveCount(4);
+ await expect(page.locator('.v-nav [data-nav=record]')).toHaveCount(0);
  await fab.click();
  await expect(page).toHaveURL(/#\/record$/);
  await expect(page.locator('body')).toHaveClass(/vz-record-mode/);
