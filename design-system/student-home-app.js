@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=17';
+import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=18';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -34,7 +34,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  function upcoming(s){
   const stage=s.stage?{id:s.stage.id,title:s.stage.title,subtitle:s.stage.songTitles.join(' · '),
    date:s.stage.date,time:s.stage.time||'',dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
-  const l=s.lesson,lesson=l?{id:l.id,title:'다음 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
+  const l=s.lesson,lesson=l?{id:l.id,title:l.title||'보컬 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
    date:l.date,time:l.startTime||'',dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
   return {stage,lesson};
  }
@@ -46,14 +46,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  }
  function recentCallbacks(recent){
   return {onRecent:()=>recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
-   onPlay:()=>recent?.media?play(recent.media):recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
+   onContinue:()=>recent?V.practiceSheet({songId:recent.id}):nav('#/songs'),
    onLessons:()=>nav('#/lessons'),onPractice:()=>nav('#/practices')};
- }
- function play(file){
-  let player;
-  V.sheet({title:file.name||'최근 녹음',body:'<div data-home-player></div>',
-   onMount:(el)=>{const host=el.querySelector('[data-home-player]');player=V.media.player(host,file,{tools:true});host._player=player;player.play();},
-   onClose:()=>player?.destroy()});
  }
  function notices(){
   const s=state(),tasks=s.recommendationCandidates;

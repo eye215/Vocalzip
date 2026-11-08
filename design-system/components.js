@@ -227,7 +227,8 @@ export function openPlanSheet({ suggestions=[], targetMinutes=30, onSave=()=>{},
  * ratios are percentages (100 = 100%). All user supplied text uses textContent.
  */
 let homeGlyphId=0;
-const homeOutlineGlyphs={"house":"<path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/>","music-notes":"<path d=\"M9 18V5l12-2v13M9 8l12-2\"/><ellipse cx=\"6\" cy=\"18\" rx=\"3\" ry=\"3\"/><ellipse cx=\"18\" cy=\"16\" rx=\"3\" ry=\"3\"/>","bell":"<path d=\"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4\"/>","user":"<circle cx=\"12\" cy=\"7\" r=\"4\"/><path d=\"M4 21v-2a8 8 0 0 1 16 0v2\"/>","mask-happy":"<path d=\"M4 4q8 4 16 0v8c0 5-5 9-8 10-3-1-8-5-8-10zM8 10h1m6 0h1M8 15q4 4 8 0\"/>","sparkle":"<path d=\"m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z\"/>","chart-bar":"<path d=\"M5 20v-7m7 7V4m7 16V9\"/>","calendar-blank":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M7 3v4m10-4v4M3 11h18\"/>","archive-box":"<rect x=\"3\" y=\"3\" width=\"18\" height=\"5\" rx=\"1\"/><path d=\"M5 8v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4\"/>","notebook":"<rect x=\"5\" y=\"3\" width=\"15\" height=\"18\" rx=\"2\"/><path d=\"M2 7h5m-5 5h5m-5 5h5m4-9h5m-5 4h5\"/>","clock-counter-clockwise":"<path d=\"M3 11a9 9 0 1 1 3 8M3 4v7h7m2-4v5l4 2\"/>","microphone":"<rect x=\"8\" y=\"2\" width=\"8\" height=\"13\" rx=\"4\"/><path d=\"M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8\"/>","caret-right":"<path d=\"m9 5 7 7-7 7\"/>","play":"<path d=\"m9 5 11 7-11 7z\" fill=\"currentColor\" stroke=\"none\"/>","fire":"<path d=\"M13 3c1 5 7 6 7 12a8 8 0 1 1-16 0c0-4 3-6 5-9-1 4 1 6 3 6 2-2 2-5 1-9z\"/>","settings":"<path d=\"m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1\"/>"};
+// Lucide paths from PR #137; ISC/MIT notices: icons/LUCIDE_LICENSE.txt.
+const homeOutlineGlyphs={"house":"<path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\"/><path d=\"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/>","music-notes":"<circle cx=\"8\" cy=\"18\" r=\"4\"/><path d=\"M12 18V2l7 4\"/>","bell":"<path d=\"M10.268 21a2 2 0 0 0 3.464 0\"/><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"/>","user":"<circle cx=\"12\" cy=\"8\" r=\"5\"/><path d=\"M20 21a8 8 0 0 0-16 0\"/>","mask-happy":"<path d=\"M4 4q8 4 16 0v8c0 5-5 9-8 10-3-1-8-5-8-10zM8 10h1m6 0h1M8 15q4 4 8 0\"/>","sparkle":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","chart-bar":"<path d=\"M5 21v-6\"/><path d=\"M12 21V9\"/><path d=\"M19 21V3\"/>","calendar-blank":"<path d=\"M8 2v4\"/><path d=\"M16 2v4\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M3 10h18\"/><path d=\"M8 14h.01\"/><path d=\"M12 14h.01\"/><path d=\"M16 14h.01\"/><path d=\"M8 18h.01\"/><path d=\"M12 18h.01\"/><path d=\"M16 18h.01\"/>","archive-box":"<rect width=\"20\" height=\"5\" x=\"2\" y=\"3\" rx=\"1\"/><path d=\"M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8\"/><path d=\"M10 12h4\"/>","notebook":"<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/><path d=\"M2 6h4\"/><path d=\"M2 10h4\"/><path d=\"M2 14h4\"/><path d=\"M2 18h4\"/><path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>","clock-counter-clockwise":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/><path d=\"M12 7v5l4 2\"/>","microphone":"<path d=\"M12 19v3\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><rect x=\"9\" y=\"2\" width=\"6\" height=\"13\" rx=\"3\"/>","caret-right":"<path d=\"m9 18 6-6-6-6\"/>","play":"<path fill=\"currentColor\" stroke=\"none\" d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","fire":"<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1\"/>"};
 const homeFilledGlyphs={"house":"<path d=\"M2 10 12 2l10 8v10a2 2 0 0 1-2 2h-5v-8H9v8H4a2 2 0 0 1-2-2z\"/>","music-notes":"<path d=\"M9 5v10.3A4 4 0 1 0 12 19V9l9-2v7.3A4 4 0 1 0 24 18V1z\" transform=\"translate(-1 1) scale(.92)\"/>","archive-box":"<path fill-rule=\"evenodd\" d=\"M3 2h18v6H3zM4 9h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm5 3v2h6v-2z\"/>","calendar-blank":"<path fill-rule=\"evenodd\" d=\"M6 2h2v3h8V2h2v3h1a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h1zm-1 9v8h14v-8z\"/>"};
 export function createHomeIcon(name,className="") {
   const icon=el("span","vz-home-icon "+className);icon.setAttribute("aria-hidden","true");
@@ -238,6 +239,11 @@ export function createHomeIcon(name,className="") {
 }
 function createEventIllustration(kind){
   const art=el("span","vz-upcoming-fallback vz-event-illustration");art.setAttribute("aria-hidden","true");
+  if(kind==="lesson"){
+    art.classList.add("vz-lesson-illustration");
+    const back=el("span","vz-lesson-art-back"),front=el("span","vz-lesson-art-front"),note=el("span","vz-lesson-art-note","♪");
+    front.append(homeIcon("notebook"));art.append(back,front,note);return art;
+  }
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","0 0 96 96");svg.setAttribute("focusable","false");
   const shapes=kind==="lesson"?'<rect x="27" y="20" width="44" height="57" rx="7" fill="#b5a3d6"/><rect x="27" y="20" width="9" height="57" rx="4" fill="#9b85c4"/><path d="M43 36h17M43 46h17M43 56h11" stroke="#fff" stroke-width="3" stroke-linecap="round"/>':
     kind==="audition"?'<rect x="36" y="18" width="24" height="42" rx="12" fill="#ad97d0"/><path d="M28 46v3a20 20 0 0 0 40 0v-3M48 69v10M38 79h20" fill="none" stroke="#9580b9" stroke-width="5" stroke-linecap="round"/><path d="M42 30h12M42 37h12" stroke="#eee8f7" stroke-width="2.5" stroke-linecap="round"/>':
@@ -291,7 +297,7 @@ export function createUpcomingStage({stage=null,lesson=null,events=null,onOpen=(
   const region=el("section","vz-home-stage vz-home-upcoming");region.setAttribute("aria-label","다가오는 일정");
   const items=Array.isArray(events)?events:[
     ...(stage?[{...stage,kind:"stage",label:"다가오는 무대",action:onStage}]:[]),
-    ...(lesson?[{...lesson,kind:"lesson",label:"다가오는 레슨",title:lesson.subtitle||lesson.title||"레슨 일정",action:onLesson}]:[])
+    ...(lesson?[{...lesson,kind:"lesson",label:"다가오는 레슨",title:lesson.title||"보컬 레슨",action:onLesson}]:[])
   ];
   const distance=item=>item.daysLeft!=null&&typeof item.daysLeft!=="boolean"&&Number.isFinite(Number(item.daysLeft))&&Number(item.daysLeft)>=0?Number(item.daysLeft):Infinity;
   const validTime=value=>typeof value==="string"&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -302,13 +308,13 @@ export function createUpcomingStage({stage=null,lesson=null,events=null,onOpen=(
     return a.index-b.index;
   });
   for(const [index,{item}]of ordered.entries()){
-    const kind=item.kind||"stage",isLesson=kind==="lesson",primary=index===0;
+    const kind=item.kind||"stage",isLesson=kind==="lesson",primary=isLesson;
     const event=el("article","vz-upcoming-event "+(primary?"is-primary":"is-secondary"));event.dataset.kind=kind;
     const label=item.label||({performance:"다가오는 공연",audition:"다가오는 오디션",lesson:"다가오는 레슨"})[kind]||"다가오는 무대";
     const button=homeButton(item.buttonLabel||(isLesson?"다음 레슨 보기":"무대 상세 보기"),null,item.action||(isLesson?onLesson:onStage),"vz-upcoming-detail"+(isLesson?" vz-home-lesson":" vz-home-stage-detail"));
     const copy=el("span","vz-upcoming-copy"),line=el("span","vz-upcoming-line");
     const shortLabel=label.replace(/^다가오는\s*/,"");
-    if(!primary||!String(item.title||"").includes(shortLabel))line.append(el("span","vz-upcoming-kind",shortLabel));
+    if(!primary)line.append(el("span","vz-upcoming-kind",shortLabel));
     const title=el("span",isLesson?"vz-home-lesson-title":"vz-home-stage-title"),name=el("h3","vz-upcoming-title",item.title||label);
     name.id="vz-upcoming-title-"+(++homeGlyphId);button.setAttribute("aria-describedby",name.id);title.append(name);line.append(title);
     if(homeDayLabel(item.daysLeft))line.append(el("strong","vz-home-dday",homeDayLabel(item.daysLeft)));
@@ -394,7 +400,7 @@ function homeDayIndicator({state,ratio,minutes,today}) {
   }
   return marker;
 }
-export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null,ratio=null,streak=0,onGrowth}={}) {
+export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null,ratio=null,streak=0,onGrowth,onSetTarget}={}) {
   const {card,head}=homeCard("이번 주 연습","chart-bar");card.classList.add("vz-home-week");
   const streakLabel=el("span","vz-home-streak");streakLabel.append(homeIcon("fire"),el("span","",homeNumber(streak)+"일 연속"));
   if(onGrowth){const heading=head.querySelector("h2"),growth=homeButton("성장 기록 보기",null,onGrowth,"vz-home-week-action");growth.append(...heading.childNodes,homeIcon("caret-right"));heading.append(growth);}
@@ -402,7 +408,10 @@ export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null
   const overview=el("div","vz-home-week-overview"),metric=el("p","vz-home-week-metric");
   metric.append(el("strong","",String(Math.round(homeNumber(actualMinutes)))),el("span","","분"));
   const target=el("p","vz-home-week-target");
-  if(targetMinutes==null)target.append(el("span","","주간 목표 미설정"));
+  if(targetMinutes==null){
+    if(onSetTarget){const set=homeButton("주간 목표 설정",null,onSetTarget,"vz-home-target-setting");set.append(el("span","","목표 설정"));target.append(set);}
+    else target.append(el("span","","주간 목표 미설정"));
+  }
   else {target.append(el("span","","목표 "+homeDuration(targetMinutes)));textRow(target,"strong","",pct==null?"달성률 —":"달성률 "+Math.round(homeNumber(pct))+"%");}
   head.append(metric);target.append(streakLabel);overview.append(target);card.append(overview);
   const grid=el("div","vz-home-week-grid");
@@ -420,19 +429,16 @@ export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null
   if(!days.length)textRow(card,"p","vz-home-no-week","이번 주 연습 기록이 아직 없어요.");
   return card;
 }
-export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPlay,onLessons=()=>{},onPractice=()=>{}}={}) {
+export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPlay,onContinue=onRecent,onLessons=()=>{},onPractice=()=>{}}={}) {
   const grid=el("div","vz-home-bottom-grid vz-recent-region");
   const song=el("article","vz-card vz-home-song vz-song-tile");if(recent?.canPlay)song.classList.add("has-representative-media");
   const songDetail=homeButton(recent?"최근 연습곡 "+recent.title+" 열기":"내 곡 선택",null,onRecent,"vz-home-song-detail");
   const head=el("div","vz-home-song-heading");head.append(homeHeading("최근 연습곡","music-notes"),homeIcon("caret-right"));song.append(head);
-  // The playback slot and detail button are siblings, so large text cannot cover playback.
-  const footer=homeButton(recent?.canPlay?"최근 곡 녹음 재생":recent?"최근 연습곡 열기":"내 곡 선택",null,recent?.canPlay?onPlay:onRecent,"vz-home-song-footer");
-  footer.append(el("span","vz-home-song-listen",recent?.canPlay?"이어 듣기":"곡 살펴보기"));
-  const cover=el("span","vz-home-song-cover");
-  if(recent?.canPlay){const play=el("span","vz-home-play");play.append(homeIcon("play"));cover.append(play);}
-  else cover.append(homeIcon("music-notes"));
-  footer.append(cover);
-  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail);if(recent?.canPlay)song.append(footer);
+  // Practice remains available without a recording; details and practice are sibling buttons.
+  const footer=homeButton(recent?recent.title+" 계속 연습하기":"곡 추가 또는 선택",null,recent?onContinue:onRecent,"vz-home-song-footer");
+  footer.append(el("span","vz-home-song-listen",recent?"계속 연습하기":"곡 추가·선택"));
+  const cover=el("span","vz-home-song-cover"),play=el("span","vz-home-play");play.append(homeIcon("play"));cover.append(play);footer.append(cover);
+  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail,footer);
   if(recent)song.title=[recent.title,recent.artist].filter(Boolean).join(" · ");
   // The existing detail button supplies keyboard access; the card surface shares its pointer action.
   song.addEventListener("click",event=>{if(!event.target.closest("button"))onRecent();});
@@ -445,13 +451,13 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   }
   grid.append(quick);return grid;
 }
-export function createStudentHome({greeting,name,subtitle,stage,lesson,goals=[],week={},recent,onGoals,onGoalToggle,onNotifications,onProfile,onPractice,onLessons,onPlay,onRecent,onStage,onLesson,onGrowth,onCalendar,upcomingEvents}={}) {
+export function createStudentHome({greeting,name,subtitle,stage,lesson,goals=[],week={},recent,onGoals,onGoalToggle,onNotifications,onProfile,onPractice,onLessons,onPlay,onRecent,onContinue,onStage,onLesson,onGrowth,onCalendar,upcomingEvents}={}) {
   const home=el("div","vz-student-home");home.dataset.vzTheme="student";home.dataset.vzDesign="approved-home-v1";
   home.append(createStudentHeader({greeting,name,subtitle,onNotifications,onProfile}));
   const stack=el("div","vz-home-stack");
   const hasUpcoming=Array.isArray(upcomingEvents)?upcomingEvents.length>0:!!(stage||lesson);
   if(hasUpcoming)stack.append(createUpcomingStage({stage,lesson,events:upcomingEvents,onOpen:onCalendar||onLessons,onStage,onLesson}));
-  stack.append(createWeeklyPractice({...week,onGrowth}),createRecentSongActions({recent,onPlay,onRecent,onLessons,onPractice}),createGoalChecklist({goals,onGoals,onGoalToggle}));
+  stack.append(createWeeklyPractice({...week,onGrowth,onSetTarget:onGoals}),createRecentSongActions({recent,onPlay,onRecent,onContinue,onLessons,onPractice}),createGoalChecklist({goals,onGoals,onGoalToggle}));
   home.append(stack);return home;
 }
 /* Standalone preview dock only; the application keeps its existing .v-nav router. */

@@ -144,8 +144,8 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
     expect(song).not.toBeNull();
     expect(quick).not.toBeNull();
     // PR #136: square recent-song tile plus a two-row quick-action group.
-    if(width>=390)expect(Math.abs(song.height-song.width)).toBeLessThanOrEqual(1);
-    else expect(song.height).toBeGreaterThanOrEqual(song.width-1);
+    // The 173px tile is a minimum; the final 18px title and practice action may expand it.
+    expect(song.height).toBeGreaterThanOrEqual(song.width-1);
     expect(Math.abs(song.height-quick.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(song.y-quick.y)).toBeLessThanOrEqual(1);
     expect(song.x+song.width+8).toBeLessThanOrEqual(quick.x);
@@ -276,6 +276,13 @@ test('empty and missing optional data never save marketing examples', async ({pa
   for (const key of ['songs','lessons','assignments','practices','performances']) expect((await db(page))[key]).toEqual([]);
   const writes=await page.evaluate(()=>window.__homeServerWrites);
   expect(writes.every(q=>['songs','lessons','assignments','practices','dailyGoals','practicePlans'].every(k=>!(q.body?.payload?.[k]||[]).length))).toBe(true);
+  await page.getByRole('button',{name:'곡 추가 또는 선택',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
+  await page.goto('/#/home');await ready(page);
+  await page.getByRole('button',{name:'주간 목표 설정',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'오늘의 목표',exact:true})).toBeVisible();
+  await page.getByRole('dialog',{name:'오늘의 목표',exact:true}).getByRole('button',{name:'닫기',exact:true}).click();
+  expect((await db(page)).practices).toEqual([]);
+
 });
 
 test('today marker survives all practice percentage boundaries and future/unplanned states differ', async ({page}) => {
@@ -292,7 +299,7 @@ test('today marker survives all practice percentage boundaries and future/unplan
     await expect(today).toContainText(minutes+'분');
     await expect(today.locator('.vz-home-day-indicator')).toHaveAttribute('data-completed',String(minutes>=100));
     await expect(today.locator('.vz-home-day-indicator')).toHaveClass(/is-today/);
-    if(minutes>=100)await expect(today.locator('.vz-home-day-indicator')).toHaveCSS('background-color','rgb(99, 38, 255)');
+    if(minutes>=100)await expect(today.locator('.vz-home-day-indicator')).toHaveCSS('background-color','rgb(122, 50, 245)');
   }
   await expect(page.locator('.vz-week-day[data-date="2026-11-05"]')).toHaveAttribute('data-state','future');
   await page.evaluate(() => VZ.change(d => {d.practicePlans=[];}));
@@ -351,7 +358,7 @@ test('dock order, destinations, 44pt targets, and safe-area content clearance', 
     await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
     await expect(page.locator('.vz-student-home')).toHaveCount(0);
     await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);
-    await expect(dock.locator('[data-nav="'+route+'"] .'+(route==='record'?'vz-icon-outline':'vz-icon-fill'))).toBeVisible();
+    await expect(dock.locator('[data-nav="'+route+'"] .'+'vz-icon-outline')).toBeVisible();
   }
 });
 
@@ -392,8 +399,10 @@ test('goal settings store only user entered plans and personal goals', async ({p
   expect(saved.practices).toEqual(seed().practices);
 });
 
-test('recent recording uses the existing player and closing stops playback without changing practice time',async({page})=>{
+test('continue practice preselects the recent song with and without a recording and preserves history',async({page})=>{
  await boot(page);
+ for(const withRecording of [false,true]){
+  if(withRecording){
  await page.evaluate(async date=>{
   window.vzipCloudSignedIn=()=>false;
   const rate=16000,frames=rate*3,bytes=new Uint8Array(44+frames*2),view=new DataView(bytes.buffer);
@@ -406,14 +415,17 @@ test('recent recording uses the existing player and closing stops playback witho
   await window.vzipStorePracticeMedia({id:'file1',name:'최근 연습 녹음',songId:'s1',source:'practice',type:'audio/wav',recordedDate:date,dateSource:'manual',created:Date.now(),durationSeconds:3,blob:new Blob([bytes],{type:'audio/wav'})});
   VZ.media.invalidate();VZ.render();
  },TODAY);
- const before=await db(page);
- await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
- await expect.poll(()=>page.locator('[data-home-player]').evaluate(host=>host._player?.el?.currentTime||0)).toBeGreaterThan(0);
- await page.evaluate(()=>{window.__homeAudio=document.querySelector('[data-home-player]')._player.el;});
- await page.getByRole('dialog',{name:'최근 연습 녹음',exact:true}).getByRole('button',{name:'닫기',exact:true}).click();
- await expect(page.locator('[data-home-player]')).toHaveCount(0);
- expect(await page.evaluate(()=>window.__homeAudio.paused)).toBe(true);
- expect((await db(page)).practices).toEqual(before.practices);
+  }
+  const before=await db(page);
+  await page.getByRole('button',{name:/계속 연습하기$/}).click();
+  const sheet=page.getByRole('dialog',{name:'연습 기록',exact:true});
+  await expect(sheet.locator('select[name="song"]')).toHaveValue('s1');
+  await expect(sheet.locator('[data-mode="song"]')).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('[data-home-player]')).toHaveCount(0);
+  await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+  const after=await db(page);
+  for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
+ }
 });
 
 test('record destination reaches the existing recorder and preserves plans and practice records',async({page})=>{
@@ -446,7 +458,7 @@ test('compact summary uses actual practice time; long song and schedule names ex
  }
 });
 
-test('large text keeps preview playback separate from full song details on all mobile widths',async({page},testInfo)=>{
+test('large text keeps the continue-practice action separate from full song details on all mobile widths',async({page},testInfo)=>{
  await page.goto('/design-system/student-home-preview.html');
  await expect(page.locator('.vz-student-home')).toBeVisible();
  await page.locator('.vz-home-song-copy strong').evaluate(el=>{el.textContent='긴 곡명과 LongEnglishTitle을 큰 글자로 확인하는 연습곡';});
@@ -457,7 +469,7 @@ test('large text keeps preview playback separate from full song details on all m
  });
  for(const width of widths){
   await page.setViewportSize({width,height:844});await noOverflow(page);
-  const play=page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}),p=await play.boundingBox();
+  const play=page.getByRole('button',{name:/계속 연습하기$/}),p=await play.boundingBox();
   const title=await page.locator('.vz-home-song-copy strong').boundingBox();
   const heading=await page.locator('.vz-home-song-heading').boundingBox();
   expect(heading.y+heading.height).toBeLessThanOrEqual(p.y+1);
@@ -473,8 +485,8 @@ test('large text keeps preview playback separate from full song details on all m
   if(width===390)await screenshot(page,testInfo,'student-home-preview-large-text-bottom-'+width+'.png');
   await page.evaluate(()=>scrollTo(0,0));
  }
- await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
- await expect(page.locator('.preview-status')).toContainText('재생');
+ await page.getByRole('button',{name:/계속 연습하기$/}).click();
+ await expect(page.locator('.preview-status')).toContainText('계속 연습하기');
 });
 
 test('unboxed upcoming event cases keep the existing palette and appear first only when populated',async({page},testInfo)=>{
@@ -487,8 +499,10 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
   await expect(page.locator('.vz-upcoming-event')).toHaveCount(count);
   if(count){
    await expect(page.locator('.vz-home-stack> :first-child')).toHaveClass(/vz-home-upcoming/);
-   await expect(page.locator('.vz-upcoming-event.is-primary')).toHaveCount(1);
-   await expect(page.locator('.vz-upcoming-event.is-secondary')).toHaveCount(count-1);
+   const lessonCount=name==='stages'?0:1;
+   await expect(page.locator('.vz-upcoming-event.is-primary')).toHaveCount(lessonCount);
+   await expect(page.locator('.vz-upcoming-event.is-secondary')).toHaveCount(count-lessonCount);
+   if(lessonCount){const lesson=page.locator('.is-primary .vz-upcoming-detail');await expect(lesson).toHaveCSS('background-color','rgb(243, 236, 255)');expect((await lesson.boundingBox()).height).toBeGreaterThanOrEqual(108);}
    const firstKind=({both:'lesson',stages:'performance',all:'lesson',lesson:'lesson',soon:'audition'})[name];
    await expect(page.locator('.vz-upcoming-event').first()).toHaveAttribute('data-kind',firstKind);
    await expect(page.locator('.vz-upcoming-link, .vz-home-stage-song')).toHaveCount(0);
@@ -504,9 +518,9 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
   const palette=await page.evaluate(()=>({background:getComputedStyle(document.body).backgroundColor,card:getComputedStyle(document.querySelector('.vz-home-week')).backgroundColor}));
   expect(palette).toEqual({background:'rgb(248, 246, 253)',card:'rgb(255, 255, 255)'});
   if(name==='both'){
-   const computed=await page.evaluate(()=>['.vz-home-brand','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
+   const computed=await page.evaluate(()=>['.vz-home-brand','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-check:not(:checked)+.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
    console.log('HOME_TYPE_AUDIT '+JSON.stringify(computed));
-   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[16,'700','rgb(16, 24, 40)'],[18,'700','rgb(16, 24, 40)'],[22,'700','rgb(16, 24, 40)'],[14,'400','rgb(102, 112, 133)'],[32,'700','rgb(52, 64, 84)'],[15,'400','rgb(71, 84, 103)'],[16,'600','rgb(52, 64, 84)']]);
+   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[16,'700','rgb(16, 24, 40)'],[18,'700','rgb(16, 24, 40)'],[24,'700','rgb(16, 24, 40)'],[13,'400','rgb(102, 112, 133)'],[28,'700','rgb(52, 64, 84)'],[14,'400','rgb(71, 84, 103)'],[18,'600','rgb(53, 37, 68)']]);
   }
   const faces=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/["']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
   expect(faces.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
@@ -536,14 +550,14 @@ test('upcoming event comparison board captures all six real rendered fixtures',a
 test('closest event uses day and time without reordering the input records',async({page})=>{
  await page.goto('/design-system/student-home-preview.html?upcoming=all');
  const result=await page.evaluate(async()=>{
-  const {createUpcomingStage}=await import('/design-system/components.js?v=17');
+  const {createUpcomingStage}=await import('/design-system/components.js?v=18');
   const events=[{kind:'late',title:'늦은 일정',daysLeft:2,time:'18:00'},{kind:'unknown',title:'날짜 미정'},{kind:'early',title:'이른 일정',daysLeft:2,time:'09:00'}];
   const original=JSON.stringify(events),host=createUpcomingStage({events});
   return {unchanged:JSON.stringify(events)===original,order:[...host.children].map(x=>x.dataset.kind),primary:host.querySelectorAll('.is-primary').length,illustrations:host.querySelectorAll('.vz-event-illustration').length};
  });
- expect(result).toEqual({unchanged:true,order:['early','late','unknown'],primary:1,illustrations:1});
+ expect(result).toEqual({unchanged:true,order:['early','late','unknown'],primary:0,illustrations:0});
 });
-test('icon selection and playback distinguish navigation from recording without a greeting',async({page})=>{
+test('final handoff uses Lucide outlines, selected labels and continue-practice colors without a greeting',async({page})=>{
  await page.goto('/design-system/student-home-preview.html?upcoming=all');
  await expect(page.locator('.vz-student-home')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
  await expect(page.locator('.vz-home-greeting')).toHaveCount(0);
@@ -554,7 +568,22 @@ test('icon selection and playback distinguish navigation from recording without 
    record:getComputedStyle(document.querySelector('.vz-approved-dock-record')).backgroundColor,play:getComputedStyle(document.querySelector('.vz-home-play')).backgroundColor,playInk:getComputedStyle(document.querySelector('.vz-home-play')).color,link:getComputedStyle(document.querySelector('.vz-home-song-listen')).color,check:getComputedStyle(document.querySelector('.vz-home-goal-check:checked')).backgroundColor,
    stroke:document.querySelector('.vz-home-quick .vz-icon-outline').getAttribute('stroke-width')};
  });
- expect(icons).toEqual({selectedWeight:'600',defaultWeight:'400',selectedInk:'rgb(99, 38, 255)',selectedFill:true,selectedOutline:false,otherFill:false,otherOutline:true,record:'rgb(99, 38, 255)',play:'rgb(241, 234, 255)',playInk:'rgb(78, 27, 204)',link:'rgb(99, 38, 255)',check:'rgb(99, 38, 255)',stroke:'1.8'});
+ expect(icons).toEqual({selectedWeight:'600',defaultWeight:'400',selectedInk:'rgb(138, 109, 184)',selectedFill:false,selectedOutline:true,otherFill:false,otherOutline:true,record:'rgb(122, 50, 245)',play:'rgb(122, 50, 245)',playInk:'rgb(255, 255, 255)',link:'rgb(122, 50, 245)',check:'rgb(122, 50, 245)',stroke:'1.8'});
  await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
  await expect(page.locator('.preview-status')).toContainText('목표 설정');
+});
+
+test('final handoff comparison captures source and implementation using bundled fonts',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chromium-desktop','One source comparison is sufficient; app cases run in all browsers.');
+ await page.route('https://cdn.jsdelivr.net/**',route=>route.fulfill({contentType:'text/css',body:''}));
+ await page.setViewportSize({width:850,height:1200});
+ await page.goto('/design-system/handoff-comparison.html');
+ await expect(page.locator('iframe')).toHaveCount(2);
+ const faces=[['Regular','400'],['SemiBold','600'],['Bold','700']].map(([name,weight])=>'@font-face{font-family:Pretendard;src:url("/design-system/fonts/pretendard/Pretendard-'+name+'.woff2?v=1.3.9") format("woff2");font-weight:'+weight+';font-style:normal;font-display:swap;}').join('');
+ await page.addStyleTag({content:faces});
+ for(const frame of page.frames().filter(f=>f.parentFrame())){
+  await frame.waitForSelector(frame.url().includes('student-home-preview')?'.vz-student-home':'.vz-phone');await frame.addStyleTag({content:faces});await frame.evaluate(()=>document.fonts.ready);
+ }
+ await page.evaluate(()=>document.fonts.ready);
+ await page.screenshot({path:testInfo.outputPath('student-home-handoff-comparison.png'),fullPage:true,animations:'disabled'});
 });
