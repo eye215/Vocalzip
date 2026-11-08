@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=12';
+import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=13';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -33,9 +33,9 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const displayName=()=>String(V.db.profile?.displayName||V.db.settings?.displayName||'');
  function upcoming(s){
   const stage=s.stage?{id:s.stage.id,title:s.stage.title,subtitle:s.stage.songTitles.join(' · '),
-   dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
+   date:s.stage.date,time:s.stage.time||'',dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
   const l=s.lesson,lesson=l?{id:l.id,title:'다음 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
-   dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
+   date:l.date,time:l.startTime||'',dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
   return {stage,lesson};
  }
  function recentData(recent,files=[]){

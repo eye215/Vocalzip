@@ -1,7 +1,7 @@
 /* Fixed fixtures are isolated to this preview. No persistence or service calls.
  * Query ?state=empty|many|failure|boundaries to inspect additional states.
  */
-import {createStudentHome,createStudentDock} from "./components.js?v=12";
+import {createStudentHome,createStudentDock} from "./components.js?v=13";
 const params=new URLSearchParams(location.search),state=params.get("state");
 const status=document.querySelector(".preview-status");
 const announce=label=>()=>{status.textContent=label;};
@@ -23,7 +23,8 @@ const days=minutes.map((value,index)=>({
 const show={kind:"performance",label:"다가오는 공연",title:"레미제라블",dateLabel:"11월 19일 (목) 오후 7:30",subtitle:"맡은 배역 · 에포닌",daysLeft:12,buttonLabel:"레미제라블 공연 확인",action:announce("공연 확인 · 프리뷰")};
 const audition={kind:"audition",label:"다가오는 오디션",title:"위키드 오디션",dateLabel:"11월 26일 (목) 오후 2:00",subtitle:"준비곡 · Defying Gravity",daysLeft:19,buttonLabel:"위키드 오디션 확인",action:announce("오디션 확인 · 프리뷰")};
 const lessonEvent={kind:"lesson",label:"다가오는 레슨",title:"보컬 레슨",dateLabel:"11월 10일 (화) 오후 3:00",subtitle:"김선생님 · 연습실",daysLeft:3,buttonLabel:"보컬 레슨 확인",action:announce("레슨 확인 · 프리뷰")};
-const eventCases={both:[show,lessonEvent],stages:[show,audition],all:[show,audition,lessonEvent],lesson:[lessonEvent],none:[]};
+const soonAudition={...audition,dateLabel:"11월 8일 (일) 오후 2:00",daysLeft:1};
+const eventCases={soon:[show,soonAudition,lessonEvent],both:[show,lessonEvent],stages:[show,audition],all:[show,audition,lessonEvent],lesson:[lessonEvent],none:[]};
 const upcoming=params.get("upcoming");
 const upcomingEvents=state==="empty"?[]:Object.hasOwn(eventCases,upcoming)?eventCases[upcoming]:undefined;
 const home=createStudentHome({

@@ -227,17 +227,22 @@ export function openPlanSheet({ suggestions=[], targetMinutes=30, onSave=()=>{},
  * ratios are percentages (100 = 100%). All user supplied text uses textContent.
  */
 let homeGlyphId=0;
-const homeGlyphs={"house":"<path data-solid fill-rule=\"evenodd\" d=\"M2.5 10.5 12 2l9.5 8.5v10a1.5 1.5 0 0 1-1.5 1.5H15v-7H9v7H4a1.5 1.5 0 0 1-1.5-1.5z\"/>","music-notes":"<path data-solid d=\"M10 4v12.3A4.2 4.2 0 1 0 13 20V9l7-2v6.3a4.2 4.2 0 1 0 3 3.7V1z\" transform=\"translate(-1 0) scale(.96)\"/>","bell":"<path data-solid d=\"M5 10a7 7 0 0 1 5-6.7V2a2 2 0 0 1 4 0v1.3a7 7 0 0 1 5 6.7v4l2 3v2H3v-2l2-3z\"/><path data-solid d=\"M9 20h6a3 3 0 0 1-6 0z\"/>","user":"<circle data-solid cx=\"12\" cy=\"6\" r=\"5.5\"/><path data-solid d=\"M2 23v-3a10 10 0 0 1 20 0v3z\"/>","mask-happy":"<g transform=\"rotate(-12 7 12)\"><path data-solid d=\"M1 4c5 2 8 2 12 0v9c0 5-4 7-6 8-3-1-6-3-6-8z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.3\" stroke-linecap=\"round\" d=\"m4 9 1.5.5M8 9l1.5.5M4 14q3 3 5 0\"/></g><g transform=\"rotate(9 17 9)\"><path data-solid d=\"M12 1c4 2 7 2 11 0v9c0 5-4 7-6 8-3-1-5-4-5-8z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.3\" stroke-linecap=\"round\" d=\"M15 6l1-.5M19 6l1-.5M15 11q3 3 5-1\"/></g>","sparkle":"<path data-solid d=\"M10 0C11 7 13 9 20 10C13 11 11 13 10 20C9 13 7 11 0 10C7 9 9 7 10 0Z\"/><path data-solid d=\"M21 10C21.5 13.5 22.5 14.5 26 15C22.5 15.5 21.5 16.5 21 20C20.5 16.5 19.5 15.5 16 15C19.5 14.5 20.5 13.5 21 10Z\"/>","chart-bar":"<rect data-solid x=\"2\" y=\"12\" width=\"5\" height=\"11\" rx=\"2.5\"/><rect data-solid x=\"9.5\" y=\"6\" width=\"5\" height=\"17\" rx=\"2.5\"/><rect data-solid x=\"17\" y=\"1\" width=\"5\" height=\"22\" rx=\"2.5\"/>","calendar-blank":"<rect data-solid x=\"2\" y=\"4\" width=\"20\" height=\"19\" rx=\"3\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"2\" stroke-linecap=\"round\" d=\"M7 2v5m10-5v5M5 10h14\"/><rect fill=\"#f3e7ff\" x=\"6\" y=\"13\" width=\"12\" height=\"7\" rx=\"1.3\"/>","archive-box":"<path data-solid d=\"M2 2h20v5H2zm1 7h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.8\" stroke-linecap=\"round\" d=\"M9 12h6\"/>","notebook":"<rect data-solid x=\"3\" y=\"2\" width=\"19\" height=\"21\" rx=\"3\"/><path fill=\"#e9d0ff\" d=\"M16 2h3v10l-1.5-1.5L16 12z\"/><path fill=\"none\" stroke=\"#f9eaff\" stroke-width=\"1.6\" stroke-linecap=\"round\" d=\"M1 7h4m-4 5h4m-4 5h4m4-2h7m-7 4h7\"/>","clock-counter-clockwise":"<path data-solid d=\"M12 1a11 11 0 1 1-9.6 5.6L0 8V1l6 3-2.2 1.2A10 10 0 0 1 12 1z\"/><path fill=\"none\" stroke=\"#f9eaff\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.8\" d=\"M12 5v7l4 2\"/>","microphone":"<rect data-solid x=\"8\" y=\"1\" width=\"8\" height=\"14\" rx=\"4\"/><path data-stroke fill=\"none\" stroke-width=\"1.8\" stroke-linecap=\"round\" d=\"M5 10v2a7 7 0 0 0 14 0v-2M12 19v4m-4 0h8\"/>","caret-right":"<path data-solid d=\"m8 3 9 9-9 9-3-3 6-6-6-6z\"/>","play":"<path data-solid d=\"M6 2.6a1.5 1.5 0 0 1 2.2-1.3L23 10.7a1.5 1.5 0 0 1 0 2.6L8.2 22.7A1.5 1.5 0 0 1 6 21.4z\"/>","fire":"<path data-solid d=\"M13 0c1 6 8 8 8 15a9 9 0 1 1-18 0c0-5 3-7 5-10 0 4 1 5 2 5 3-2 3-6 3-10z\"/><path fill=\"#fff2bb\" d=\"M12 10c1 4 5 5 5 9a5 5 0 1 1-10 0c0-3 3-4 5-9z\"/>","sun":"<circle data-stroke fill=\"none\" cx=\"12\" cy=\"12\" r=\"5\" stroke-width=\"1.4\"/><path data-stroke fill=\"none\" stroke-width=\"1.4\" stroke-linecap=\"round\" d=\"M12 0v3m0 18v3M0 12h3m18 0h3M3.5 3.5l2 2m13 13 2 2m-17 0 2-2m13-13 2-2\"/>"};
+const homeOutlineGlyphs={"house":"<path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/>","music-notes":"<path d=\"M9 18V5l12-2v13M9 8l12-2\"/><ellipse cx=\"6\" cy=\"18\" rx=\"3\" ry=\"3\"/><ellipse cx=\"18\" cy=\"16\" rx=\"3\" ry=\"3\"/>","bell":"<path d=\"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4\"/>","user":"<circle cx=\"12\" cy=\"7\" r=\"4\"/><path d=\"M4 21v-2a8 8 0 0 1 16 0v2\"/>","mask-happy":"<path d=\"M4 4q8 4 16 0v8c0 5-5 9-8 10-3-1-8-5-8-10zM8 10h1m6 0h1M8 15q4 4 8 0\"/>","sparkle":"<path d=\"m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z\"/>","chart-bar":"<path d=\"M5 20v-7m7 7V4m7 16V9\"/>","calendar-blank":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M7 3v4m10-4v4M3 11h18\"/>","archive-box":"<rect x=\"3\" y=\"3\" width=\"18\" height=\"5\" rx=\"1\"/><path d=\"M5 8v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4\"/>","notebook":"<rect x=\"5\" y=\"3\" width=\"15\" height=\"18\" rx=\"2\"/><path d=\"M2 7h5m-5 5h5m-5 5h5m4-9h5m-5 4h5\"/>","clock-counter-clockwise":"<path d=\"M3 11a9 9 0 1 1 3 8M3 4v7h7m2-4v5l4 2\"/>","microphone":"<rect x=\"8\" y=\"2\" width=\"8\" height=\"13\" rx=\"4\"/><path d=\"M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8\"/>","caret-right":"<path d=\"m9 5 7 7-7 7\"/>","play":"<path d=\"m9 5 11 7-11 7z\" fill=\"currentColor\" stroke=\"none\"/>","fire":"<path d=\"M13 3c1 5 7 6 7 12a8 8 0 1 1-16 0c0-4 3-6 5-9-1 4 1 6 3 6 2-2 2-5 1-9z\"/>","settings":"<path d=\"m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1\"/>"};
+const homeFilledGlyphs={"house":"<path d=\"M2 10 12 2l10 8v10a2 2 0 0 1-2 2h-5v-8H9v8H4a2 2 0 0 1-2-2z\"/>","music-notes":"<path d=\"M9 5v10.3A4 4 0 1 0 12 19V9l9-2v7.3A4 4 0 1 0 24 18V1z\" transform=\"translate(-1 1) scale(.92)\"/>","archive-box":"<path fill-rule=\"evenodd\" d=\"M3 2h18v6H3zM4 9h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm5 3v2h6v-2z\"/>","calendar-blank":"<path fill-rule=\"evenodd\" d=\"M6 2h2v3h8V2h2v3h1a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h1zm-1 9v8h14v-8z\"/>"};
 export function createHomeIcon(name,className="") {
   const icon=el("span","vz-home-icon "+className);icon.setAttribute("aria-hidden","true");
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
   svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("focusable","false");
-  const id="vz-glyph-"+(++homeGlyphId);
-  const colors=name==="fire"?["#efc497","#d7a071","#ba7d52"]:["#9a85b2","#8a73a5","#7a6098"];
-  // Only these local vector constants enter markup. User text still uses textContent.
-  svg.innerHTML='<defs><linearGradient id="'+id+'" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="'+colors[0]+'"/><stop offset=".44" stop-color="'+colors[1]+'"/><stop offset="1" stop-color="'+colors[2]+'"/></linearGradient></defs><g fill="url(#'+id+')" stroke-linejoin="round">'+(homeGlyphs[name]||homeGlyphs.sparkle)+'</g>';
-  svg.querySelectorAll("[data-stroke]").forEach(path=>path.setAttribute("stroke","url(#"+id+")"));
+  svg.innerHTML='<g class="vz-icon-outline" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+(homeOutlineGlyphs[name]||homeOutlineGlyphs.sparkle)+'</g><g class="vz-icon-fill" fill="currentColor">'+(homeFilledGlyphs[name]||'')+'</g>';
   icon.append(svg);return icon;
+}
+function createEventIllustration(kind){
+  const art=el("span","vz-upcoming-fallback vz-event-illustration");art.setAttribute("aria-hidden","true");
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","0 0 96 96");svg.setAttribute("focusable","false");
+  const shapes=kind==="lesson"?'<rect x="27" y="20" width="44" height="57" rx="7" fill="#b5a3d6"/><rect x="27" y="20" width="9" height="57" rx="4" fill="#9b85c4"/><path d="M43 36h17M43 46h17M43 56h11" stroke="#fff" stroke-width="3" stroke-linecap="round"/>':
+    kind==="audition"?'<rect x="36" y="18" width="24" height="42" rx="12" fill="#ad97d0"/><path d="M28 46v3a20 20 0 0 0 40 0v-3M48 69v10M38 79h20" fill="none" stroke="#9580b9" stroke-width="5" stroke-linecap="round"/><path d="M42 30h12M42 37h12" stroke="#eee8f7" stroke-width="2.5" stroke-linecap="round"/>':
+    '<path d="M20 27q14 6 28 0v21q0 18-14 25-14-7-14-25z" fill="#b8a5d7"/><path d="M46 18q14 6 28 0v23q0 18-14 25-14-7-14-25z" fill="#a28ac6"/><path d="M27 41h3m10 0h3m10-9h3m10 0h3M28 53q6 6 12 0m13-9q7 6 13-1" fill="none" stroke="#fff" stroke-width="2.7" stroke-linecap="round"/>';
+  svg.innerHTML='<circle cx="48" cy="48" r="33" fill="#eee9f7"/>'+shapes;art.append(svg);return art;
 }
 const homeIcon=createHomeIcon;
 function homeButton(label, icon, callback, className="") {
@@ -278,9 +283,7 @@ export function createStudentHeader({greeting="반가워요,",name="",subtitle="
   // A notification dot is only rendered when the caller has supplied a count/state.
   actions.append(notification,homeButton("프로필","user",onProfile,"vz-home-round"));
   header.append(actions);
-  const hello=textRow(header,"h1","vz-home-greeting",greeting+(name?" "+name+"님":""));
-  hello.append(homeIcon("sun","vz-home-sun"));
-  textRow(header,"p","vz-home-greeting-sub",subtitle);
+  header.append(el("h1","vz-home-visually-hidden","홈"));
   return header;
 }
 /* Unboxed event area, following the Shinhan MAMA event reference. */
@@ -290,25 +293,34 @@ export function createUpcomingStage({stage=null,lesson=null,events=null,onOpen=(
     ...(stage?[{...stage,kind:"stage",label:"다가오는 무대",action:onStage}]:[]),
     ...(lesson?[{...lesson,kind:"lesson",label:"다가오는 레슨",title:lesson.subtitle||lesson.title||"레슨 일정",action:onLesson}]:[])
   ];
-  for(const item of items){
-    const kind=item.kind||"stage",isLesson=kind==="lesson";
-    const event=el("article","vz-upcoming-event");event.dataset.kind=kind;
+  const distance=item=>item.daysLeft!=null&&typeof item.daysLeft!=="boolean"&&Number.isFinite(Number(item.daysLeft))&&Number(item.daysLeft)>=0?Number(item.daysLeft):Infinity;
+  const validTime=value=>typeof value==="string"&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  const ordered=items.map((item,index)=>({item,index})).sort((a,b)=>{
+    const day=distance(a.item)-distance(b.item);
+    if(day)return day;
+    if(Number.isFinite(day)&&validTime(a.item.time)&&validTime(b.item.time)){const time=a.item.time.localeCompare(b.item.time);if(time)return time;}
+    return a.index-b.index;
+  });
+  for(const [index,{item}]of ordered.entries()){
+    const kind=item.kind||"stage",isLesson=kind==="lesson",primary=index===0;
+    const event=el("article","vz-upcoming-event "+(primary?"is-primary":"is-secondary"));event.dataset.kind=kind;
     const label=item.label||({performance:"다가오는 공연",audition:"다가오는 오디션",lesson:"다가오는 레슨"})[kind]||"다가오는 무대";
-    const action=item.action||(isLesson?onLesson:onStage);
-    const button=homeButton(item.buttonLabel||(isLesson?"다음 레슨 보기":"무대 상세 보기"),null,action,"vz-upcoming-detail"+(isLesson?" vz-home-lesson":" vz-home-stage-detail"));
-    const copy=el("span","vz-upcoming-copy");
-    const eyebrow=el("span","vz-upcoming-eyebrow");eyebrow.append(el("span","",label));
+    const button=homeButton(item.buttonLabel||(isLesson?"다음 레슨 보기":"무대 상세 보기"),null,item.action||(isLesson?onLesson:onStage),"vz-upcoming-detail"+(isLesson?" vz-home-lesson":" vz-home-stage-detail"));
+    const copy=el("span","vz-upcoming-copy"),eyebrow=el("span","vz-upcoming-eyebrow");
+    eyebrow.append(el("span","",primary?label:label.replace(/^다가오는\s*/,"")));
     if(homeDayLabel(item.daysLeft))eyebrow.append(el("strong","vz-home-dday",homeDayLabel(item.daysLeft)));
-    copy.append(eyebrow);
-    const title=el("span",isLesson?"vz-home-lesson-title":"vz-home-stage-title");
-    const name=el("h3","vz-upcoming-title",item.title||label);name.id="vz-upcoming-title-"+(++homeGlyphId);button.setAttribute("aria-describedby",name.id);title.append(name);copy.append(title);
-    if(item.dateLabel)textRow(copy,"span","vz-upcoming-date",item.dateLabel);
-    if(item.subtitle&&item.subtitle!==item.title)textRow(copy,"span","vz-home-stage-song",item.subtitle);
-    const link=el("span","vz-upcoming-link");link.append(el("span","",isLesson?"레슨 확인하기":"무대 확인하기"),homeIcon("caret-right"));copy.append(link);
-    const art=el("span","vz-home-stage-art vz-upcoming-art");art.setAttribute("aria-hidden","true");
-    art.append(homeIcon(isLesson?"notebook":kind==="audition"?"microphone":"mask-happy","vz-upcoming-fallback"));
-    if(!isLesson&&item.id!=null)art.dataset.poster=String(item.id);
-    button.append(copy,art);event.append(button);region.append(event);
+    if(primary)copy.append(eyebrow);
+    const title=el("span",isLesson?"vz-home-lesson-title":"vz-home-stage-title"),name=el("h3","vz-upcoming-title",item.title||label);
+    name.id="vz-upcoming-title-"+(++homeGlyphId);button.setAttribute("aria-describedby",name.id);title.append(name);copy.append(title);
+    if(item.dateLabel){const date=textRow(copy,"span","vz-upcoming-date",item.dateLabel);date.id=name.id+"-date";button.setAttribute("aria-describedby",name.id+" "+date.id);}
+    if(primary){
+      if(item.subtitle&&item.subtitle!==item.title)textRow(copy,"span","vz-home-stage-song",item.subtitle);
+      const art=el("span","vz-home-stage-art vz-upcoming-art");art.setAttribute("aria-hidden","true");art.append(createEventIllustration(isLesson?"lesson":kind==="audition"?"audition":"performance"));
+      if(!isLesson&&item.id!=null)art.dataset.poster=String(item.id);
+      const link=el("span","vz-upcoming-link");link.append(el("span","",isLesson?"레슨 확인하기":"무대 확인하기"),homeIcon("caret-right"));
+      button.append(copy,art,link);
+    }else{button.append(copy,eyebrow,homeIcon("caret-right","vz-upcoming-summary-arrow"));}
+    event.append(button);region.append(event);
   }
   return region;
 }
@@ -320,14 +332,13 @@ export function createGoalProgress({completed=0,total=0}={}) {
 }
 export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}}={}) {
   const {card,head}=homeCard("오늘의 목표","sparkle");card.classList.add("vz-home-goals");
-  const heading=head.querySelector("h2"),edit=homeButton("오늘의 목표 설정",null,onGoals,"vz-home-heading-action");
-  edit.append(...heading.childNodes);heading.append(edit);
+  const edit=homeButton("오늘의 목표 설정","settings",onGoals,"vz-home-goal-settings");
   const body=el("div","vz-home-goal-body");
   // Clone state: optimistic UI must never mutate application records.
   const items=goals.map(goal=>({...goal,completed:Boolean(goal.completed)}));
   const summary=el("div","vz-home-goal-summary");
   const refresh=()=>summary.replaceChildren(createGoalProgress({completed:items.filter(g=>g.completed).length,total:items.length}));
-  refresh();head.append(summary);
+  refresh();const actions=el('div','vz-home-goal-actions');actions.append(summary,edit);head.append(actions);
   const list=el("div","vz-home-goal-list vz-goal-list");if(items.length===1)list.classList.add("is-single");list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");
   const status=el("p","vz-home-goal-status");status.setAttribute("role","status");status.setAttribute("aria-live","polite");
   if(!items.length){
@@ -417,8 +428,7 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   const cover=el("span","vz-home-song-cover");
   if(recent?.canPlay)cover.append(homeButton("최근 곡 녹음 재생","play",onPlay,"vz-home-play"));
   else cover.append(homeIcon("music-notes"));
-  song.append(cover);
-  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail);
+  const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail,cover);
   if(recent)song.title=[recent.title,recent.artist].filter(Boolean).join(" · ");
   // The existing detail button supplies keyboard access; the card surface shares its pointer action.
   song.addEventListener("click",event=>{if(!event.target.closest("button"))onRecent();});

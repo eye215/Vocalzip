@@ -249,3 +249,92 @@ button.vz-home-primary-button:active{background:#6d59b5;}
 @media(max-width:359px){.vz-student-home .vz-home-song{padding:16px;}.vz-student-home .vz-home-quick{padding:12px;gap:6px;}.vz-home-upcoming .vz-upcoming-title{font-size:22px;}.vz-upcoming-art>.vz-upcoming-fallback{width:48px;}}
 
 .vz-home-song-copy,.vz-upcoming-copy{gap:4px;}
+
+/* One focal event, a single dominant weekly value, and two deliberate icon roles. */
+.vz-home-icon .vz-icon-fill{display:none;}
+.vz-icon-outline :is(path,rect,circle,ellipse,line,polyline){vector-effect:non-scaling-stroke;}
+.vz-student-home .vz-home-upcoming{gap:20px;}
+.vz-student-home .is-primary .vz-upcoming-detail{grid-template-columns:minmax(0,1fr) 76px;grid-template-rows:auto auto;column-gap:16px;row-gap:8px;align-items:center;}
+.is-primary .vz-upcoming-copy{grid-column:1;grid-row:1;gap:4px;}
+.is-primary .vz-upcoming-art{grid-column:2;grid-row:1;align-self:center;width:76px;min-height:72px;height:72px;}
+.vz-upcoming-art>.vz-event-illustration{display:block;width:72px;height:72px;max-width:100%;aspect-ratio:1;}
+.vz-event-illustration svg{display:block;width:100%;height:100%;}
+.is-primary .vz-upcoming-link{grid-column:1;grid-row:2;min-height:28px;margin:0;color:#6635ce;}
+.is-primary .vz-upcoming-title{font-size:22px;line-height:1.45454545;font-weight:700;color:#191f28;}
+.is-primary .vz-upcoming-date{font-size:14px;line-height:1.42857143;color:#4e5968;}
+.is-primary .vz-home-stage-song{color:#6b7684;}
+.vz-home-upcoming .vz-home-dday{color:#6635ce;}
+.vz-student-home .is-secondary .vz-upcoming-detail{display:grid;grid-template-columns:minmax(0,1fr) auto 14px;grid-template-rows:auto;align-items:start;gap:10px;min-height:52px;padding:4px 0;}
+.is-secondary .vz-upcoming-copy{gap:2px;}
+.vz-home-upcoming .is-secondary .vz-upcoming-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0;font-size:15px;line-height:1.46666667;font-weight:600;color:#333d4b;letter-spacing:-.02em;}
+.is-secondary .vz-upcoming-date{font-size:13px;line-height:1.53846154;color:#6b7684;}
+.is-secondary .vz-upcoming-eyebrow{flex-wrap:nowrap;gap:6px;margin-top:3px;font-size:12px;line-height:1.33333333;}
+.vz-student-home .vz-upcoming-summary-arrow{width:14px;height:14px;font-size:14px;margin-top:4px;color:#8b95a1;}
+.vz-student-home .vz-upcoming-link .vz-home-icon{width:14px;height:14px;font-size:14px;}
+.vz-home-week-metric strong{font-size:32px;line-height:1.1875;font-weight:700;color:#191f28;}
+.vz-home-week-target,.vz-home-week-target strong{font-size:12px;line-height:1.5;font-weight:400;color:#6b7684;}
+.vz-home-streak{min-height:0;padding:0;background:none;color:#6b7684;font-size:12px;line-height:1.5;font-weight:400;gap:3px;}
+.vz-student-home .vz-home-streak .vz-home-icon{width:12px;height:12px;font-size:12px;color:#8b95a1;}
+.vz-home-flower[data-level="high"]{color:#6d3ce9;}
+.vz-home-flower[data-level="met"]{color:#a88aee;}
+.vz-home-flower[data-level="low"]{color:#e6dcfc;}
+.vz-home-day-label.is-today{color:#6635ce;}
+.vz-home-goal-actions{display:flex;align-items:center;gap:4px;flex:none;}
+.vz-home-goal-settings{display:grid;place-items:center;width:44px;height:44px;min-width:44px;margin:-9px -8px -9px 0;padding:0;border:0;border-radius:12px;background:none;color:#8b95a1;transition:background-color .12s;}
+.vz-home-goal-settings:active{background:#f2f3f6;}
+.vz-student-home .vz-home-goal-settings .vz-home-icon{width:18px;height:18px;font-size:18px;color:inherit;}
+.vz-home-gauge-value,.vz-home-gauge-detail{font-size:12px;line-height:1.33333333;font-weight:400;color:#6b7684;}
+.vz-home-goal-title,.vz-home-goal-check:checked+.vz-home-goal-title{color:#333d4b;}
+.vz-home-goal-source{font-size:12px;line-height:1.66666667;color:#6b7684;font-weight:400;}
+.vz-home-goal-check:checked{background:#6d3ce9;border-color:#6d3ce9;}
+.vz-student-home .vz-home-song{grid-template-rows:auto minmax(min-content,1fr) auto;}
+.vz-home-song-detail{margin-top:0;align-self:start;}
+.vz-home-song-copy{gap:4px;}
+.vz-home-song-copy strong{font-size:16px;line-height:1.5;font-weight:600;color:#333d4b;}
+.vz-home-song-copy>span{font-size:13px;line-height:1.53846154;color:#6b7684;}
+.vz-home-song-cover,.has-representative-media .vz-home-song-cover{align-self:end;justify-self:end;background:none;}
+.vz-home-play{width:45px;height:45px;min-width:45px;min-height:45px;background:#f1eaff;color:#6635ce;box-shadow:none;}
+.vz-home-play:active{background:#e7dcfc;}
+.vz-student-home .vz-home-play .vz-home-icon{width:16px;height:16px;font-size:16px;color:inherit;}
+.vz-student-home .vz-home-heading .vz-home-icon{width:20px;height:20px;font-size:20px;color:#6b7684;}
+.vz-student-home .vz-home-week-action>.vz-home-icon:last-child{width:14px;height:14px;font-size:14px;color:#8b95a1;}
+.vz-student-home .vz-home-song-heading .vz-home-heading>.vz-home-icon{width:14px;height:14px;font-size:14px;}
+.vz-student-home .vz-home-song-heading>.vz-home-icon{width:14px;height:14px;font-size:14px;color:#8b95a1;}
+.vz-student-home .vz-home-quick>.vz-home-icon:first-child{width:22px;height:22px;font-size:22px;color:#6b7684;}
+.vz-student-home .vz-home-quick>.vz-home-icon:last-child{width:14px;height:14px;font-size:14px;color:#8b95a1;}
+.vz-student-home .vz-home-round .vz-home-icon{width:20px;height:20px;font-size:20px;color:#6b7684;}
+.vz-approved-dock .vz-approved-dock-item,body.vz-home-mode .v-nav ul>li>a{color:#6b7684;}
+.vz-approved-dock .vz-approved-dock-item[aria-current="page"],body.vz-home-mode .v-nav ul>li>a[aria-current="page"]{color:#6b7684;background:none;}
+.vz-approved-dock-item>.vz-home-icon{width:24px;height:24px;font-size:24px;color:#4e5968;}
+body.vz-home-mode .v-nav ul>li>a i{width:24px;height:24px;font-size:24px;color:#4e5968;}
+.vz-approved-dock-item[aria-current="page"]>.vz-home-icon,body.vz-home-mode .v-nav a[aria-current="page"] i{color:#6d3ce9;}
+.vz-approved-dock-item[aria-current="page"] .vz-icon-outline,body.vz-home-mode .v-nav a[aria-current="page"] .vz-icon-outline{display:none;}
+.vz-approved-dock-item[aria-current="page"] .vz-icon-fill,body.vz-home-mode .v-nav a[aria-current="page"] .vz-icon-fill{display:block;}
+.vz-approved-dock .vz-approved-dock-record,body.vz-home-mode .v-nav ul>li>a.rec{background:#6d3ce9;color:#fff;}
+.vz-approved-dock .vz-approved-dock-record>.vz-home-icon,body.vz-home-mode .v-nav ul>li>a.rec i{width:24px;height:24px;font-size:24px;color:#fff;}
+.vz-approved-dock-record .vz-icon-outline,body.vz-home-mode .v-nav a.rec .vz-icon-outline{display:block!important;}
+.vz-approved-dock-record .vz-icon-fill,body.vz-home-mode .v-nav a.rec .vz-icon-fill{display:none!important;}
+button.vz-home-primary-button{background:#6d3ce9;}
+button.vz-home-primary-button:active{background:#592bc8;}
+@media(max-width:359px){.vz-student-home .is-primary .vz-upcoming-detail{grid-template-columns:minmax(0,1fr) 64px;column-gap:12px;}.is-primary .vz-upcoming-art{width:64px;}.vz-upcoming-art>.vz-event-illustration{width:64px;height:64px;}.vz-student-home .is-secondary .vz-upcoming-detail{gap:6px;}}
+
+/* A compact application header separates navigation from upcoming content. */
+.vz-home-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;margin:0 0 16px;padding:0 4px 8px;border-bottom:1px solid #e5e2ed;}
+.vz-home-brand{height:44px;margin:0;font-size:16px;line-height:1.5;font-weight:700;color:#191f28;letter-spacing:-.02em;}
+.vz-home-brand-mark{color:#6d3ce9;}
+.vz-home-header-actions{position:static;display:flex;gap:4px;flex:none;}
+.vz-home-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;border:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+
+/* Shared navigation icon rules also survive leaving home; page layouts stay untouched. */
+.v-nav.vz-home-dock i::before{display:none;}
+.v-nav.vz-home-dock i>.vz-nav-art{display:block;width:100%;height:100%;}
+.v-nav.vz-home-dock a:not(.rec) i{display:block;width:24px;height:24px;font-size:24px;color:#4e5968;}
+.v-nav.vz-home-dock a{color:#6b7684;}
+.v-nav.vz-home-dock a[aria-current="page"]{color:#6b7684;}
+.v-nav.vz-home-dock a[aria-current="page"]:not(.rec) i{color:#6d3ce9;}
+.v-nav.vz-home-dock a[aria-current="page"] .vz-icon-outline{display:none;}
+.v-nav.vz-home-dock a[aria-current="page"] .vz-icon-fill{display:block;}
+.v-nav.vz-home-dock a.rec i{color:#fff;}
+.v-nav.vz-home-dock a.rec .vz-icon-outline{display:block!important;}
+.v-nav.vz-home-dock a.rec .vz-icon-fill{display:none!important;}
+body:not(.vz-home-mode) .v-nav.vz-home-dock a.rec i{background:#6d3ce9;}

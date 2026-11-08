@@ -162,7 +162,7 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
     if(width===390){
       const geometry=await page.evaluate(()=>{
         const box=selector=>{const el=document.querySelector(selector),r=el.getBoundingClientRect(),s=getComputedStyle(el);return{x:r.x,y:r.y,width:r.width,height:r.height,font:s.fontSize,weight:s.fontWeight,color:s.color};};
-        return{stage:box('.vz-home-stage'),goals:box('.vz-home-goals'),week:box('.vz-home-week'),recent:box('.vz-home-song'),recentTitle:box('.vz-home-song-copy strong'),recentArtist:box('.vz-home-song-copy>span'),dock:box('.vz-approved-dock'),heading:box('.vz-home-heading'),greeting:box('.vz-home-greeting'),icon:box('.vz-home-heading .vz-home-icon')};
+        return{stage:box('.vz-home-stage'),goals:box('.vz-home-goals'),week:box('.vz-home-week'),recent:box('.vz-home-song'),recentTitle:box('.vz-home-song-copy strong'),recentArtist:box('.vz-home-song-copy>span'),dock:box('.vz-approved-dock'),heading:box('.vz-home-heading'),brand:box('.vz-home-brand'),icon:box('.vz-home-heading .vz-home-icon')};
       });
       console.log('HOME_DESIGN_GEOMETRY '+JSON.stringify(geometry));
       // Content can scroll; actual titles must remain inside the expanding square tile.
@@ -345,6 +345,7 @@ test('dock order, destinations, 44pt targets, and safe-area content clearance', 
     await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
     await expect(page.locator('.vz-student-home')).toHaveCount(0);
     await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);
+    await expect(dock.locator('[data-nav="'+route+'"] .'+(route==='record'?'vz-icon-outline':'vz-icon-fill'))).toBeVisible();
   }
 });
 
@@ -457,7 +458,8 @@ test('large text keeps preview playback separate from full song details on all m
   const type=await page.locator('.vz-home-song-heading .vz-home-heading>span:last-child, .vz-home-song-copy>span').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {font:parseFloat(s.fontSize),line:parseFloat(s.lineHeight)};}));
   for(const size of type)expect(size.line).toBeGreaterThanOrEqual(size.font*1.2);
   expect(Math.round(p.height)).toBeGreaterThanOrEqual(44);expect(Math.round(p.width)).toBeGreaterThanOrEqual(44);
-  expect(p.y+p.height).toBeLessThanOrEqual(title.y+1);
+  const artist=await page.locator('.vz-home-song-copy>span').boundingBox();
+  expect(artist.y+artist.height).toBeLessThanOrEqual(p.y+1);
   await screenshot(page,testInfo,'student-home-preview-large-text-'+width+'.png');
  }
  await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
@@ -465,7 +467,7 @@ test('large text keeps preview playback separate from full song details on all m
 });
 
 test('unboxed upcoming event cases keep the existing palette and appear first only when populated',async({page},testInfo)=>{
- const cases=[['both',2],['stages',2],['all',3],['lesson',1],['none',0]];
+ const cases=[['both',2],['stages',2],['all',3],['lesson',1],['none',0],['soon',3]];
  for(const [name,count]of cases){
   await page.setViewportSize({width:390,height:940});
   await page.goto('/design-system/student-home-preview.html?upcoming='+name);
@@ -474,6 +476,10 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
   await expect(page.locator('.vz-upcoming-event')).toHaveCount(count);
   if(count){
    await expect(page.locator('.vz-home-stack> :first-child')).toHaveClass(/vz-home-upcoming/);
+   await expect(page.locator('.vz-upcoming-event.is-primary')).toHaveCount(1);
+   await expect(page.locator('.vz-upcoming-event.is-secondary')).toHaveCount(count-1);
+   const firstKind=({both:'lesson',stages:'performance',all:'lesson',lesson:'lesson',soon:'audition'})[name];
+   await expect(page.locator('.vz-upcoming-event').first()).toHaveAttribute('data-kind',firstKind);
    const surface=await page.locator('.vz-home-upcoming').evaluate(el=>{const s=getComputedStyle(el);return {background:s.backgroundColor,shadow:s.boxShadow,border:s.borderTopWidth,radius:s.borderTopLeftRadius};});
    expect(surface).toEqual({background:'rgba(0, 0, 0, 0)',shadow:'none',border:'0px',radius:'0px'});
   }else{
@@ -484,9 +490,9 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
   const palette=await page.evaluate(()=>({background:getComputedStyle(document.body).backgroundColor,card:getComputedStyle(document.querySelector('.vz-home-week')).backgroundColor}));
   expect(palette).toEqual({background:'rgb(246, 244, 251)',card:'rgb(255, 255, 255)'});
   if(name==='both'){
-   const computed=await page.evaluate(()=>['.vz-home-greeting','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
+   const computed=await page.evaluate(()=>['.vz-home-brand','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
    console.log('HOME_TYPE_AUDIT '+JSON.stringify(computed));
-   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[22,'700','rgb(25, 31, 40)'],[18,'700','rgb(25, 31, 40)'],[22,'700','rgb(25, 31, 40)'],[13,'400','rgb(107, 118, 132)'],[22,'700','rgb(25, 31, 40)'],[15,'400','rgb(78, 89, 104)'],[16,'600','rgb(51, 61, 75)']]);
+   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[16,'700','rgb(25, 31, 40)'],[18,'700','rgb(25, 31, 40)'],[22,'700','rgb(25, 31, 40)'],[14,'400','rgb(78, 89, 104)'],[32,'700','rgb(25, 31, 40)'],[15,'400','rgb(51, 61, 75)'],[16,'600','rgb(51, 61, 75)']]);
   }
   const faces=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/["']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
   expect(faces.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
@@ -501,14 +507,40 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
  await page.getByRole('button',{name:'보컬 레슨 확인',exact:true}).click();
  await expect(page.locator('.preview-status')).toContainText('레슨 확인');
 });
-test('upcoming event comparison board captures all five real rendered fixtures',async({page},testInfo)=>{
+test('upcoming event comparison board captures all six real rendered fixtures',async({page},testInfo)=>{
  test.skip(testInfo.project.name!=='chromium-desktop','One comparison board is sufficient; cases run in every browser.');
  await page.setViewportSize({width:1250,height:2100});
  await page.goto('/design-system/upcoming-events-board.html');
- await expect(page.locator('iframe')).toHaveCount(5);
+ await expect(page.locator('iframe')).toHaveCount(6);
  for(const frame of page.frames().filter(f=>f.parentFrame())){
   await frame.waitForSelector('.vz-student-home');await frame.evaluate(()=>document.fonts.ready);
  }
  await page.evaluate(()=>document.fonts.ready);
  await page.screenshot({path:testInfo.outputPath('student-home-upcoming-board.png'),fullPage:true,animations:'disabled'});
+});
+
+test('closest event uses day and time without reordering the input records',async({page})=>{
+ await page.goto('/design-system/student-home-preview.html?upcoming=all');
+ const result=await page.evaluate(async()=>{
+  const {createUpcomingStage}=await import('/design-system/components.js?v=13');
+  const events=[{kind:'late',title:'늦은 일정',daysLeft:2,time:'18:00'},{kind:'unknown',title:'날짜 미정'},{kind:'early',title:'이른 일정',daysLeft:2,time:'09:00'}];
+  const original=JSON.stringify(events),host=createUpcomingStage({events});
+  return {unchanged:JSON.stringify(events)===original,order:[...host.children].map(x=>x.dataset.kind),primary:host.querySelectorAll('.is-primary').length,illustrations:host.querySelectorAll('.vz-event-illustration').length};
+ });
+ expect(result).toEqual({unchanged:true,order:['early','late','unknown'],primary:1,illustrations:1});
+});
+test('icon selection and playback distinguish navigation from recording without a greeting',async({page})=>{
+ await page.goto('/design-system/student-home-preview.html?upcoming=all');
+ await expect(page.locator('.vz-student-home')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
+ await expect(page.locator('.vz-home-greeting')).toHaveCount(0);
+ const icons=await page.evaluate(()=>{
+  const home=document.querySelector('.vz-approved-dock-item[aria-current=page]'),songs=document.querySelectorAll('.vz-approved-dock-item')[1];
+  const style=(root,selector)=>getComputedStyle(root.querySelector(selector)).display!=='none';
+  return {selectedFill:style(home,'.vz-icon-fill'),selectedOutline:style(home,'.vz-icon-outline'),otherFill:style(songs,'.vz-icon-fill'),otherOutline:style(songs,'.vz-icon-outline'),
+   record:getComputedStyle(document.querySelector('.vz-approved-dock-record')).backgroundColor,play:getComputedStyle(document.querySelector('.vz-home-play')).backgroundColor,
+   stroke:document.querySelector('.vz-home-quick .vz-icon-outline').getAttribute('stroke-width')};
+ });
+ expect(icons).toEqual({selectedFill:true,selectedOutline:false,otherFill:false,otherOutline:true,record:'rgb(109, 60, 233)',play:'rgb(241, 234, 255)',stroke:'1.8'});
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ await expect(page.locator('.preview-status')).toContainText('목표 설정');
 });
