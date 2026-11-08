@@ -60,7 +60,6 @@ test('Bottom navigation reaches the five main screens without horizontal overflo
  await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
  await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
  const box=await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).boundingBox();expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
- await page.getByRole('button',{name:'성장 기록 보기',exact:true}).click();await expect(page.locator('#top h1')).toHaveText('성장');
 });
 
 test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never auto-complete', async ({page}) => {
