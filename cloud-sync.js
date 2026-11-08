@@ -148,7 +148,7 @@ function mediaRecovery(){
  const owner=account.owner;
  return window.VzipMediaUploadRecovery.create({storage:localStorage,identity,
   loadRow:async id=>{const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle();if(error)throw error;return data?.metadata||null;},
-  insertRow:async(id,metadata)=>{const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},{onConflict:'user_id,id',ignoreDuplicates:true});if(error)throw error;},
+  insertRow:async(id,metadata)=>{const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},{ignoreDuplicates:true});if(error)throw error;},
   stat:key=>window.VzipR2.stat(key),
   deletedIds:async()=>[...await deletedMediaIds(),...(Array.isArray(localData()?.deleted?.media)?localData().deleted.media:[])]
  });
@@ -246,7 +246,7 @@ async function importMedia(file,info={},onProgress,options={}){
    ...(r2?{storageProvider:'r2',r2Key:r2.key}:multipart?{storageVersion:2,parts}:{path:parts[0].path})};
   if(r2){metadata.r2Etag=r2.etag;recovery.remember(metadata,{key:r2.key,size:r2.size,etag:r2.etag});}
   options.onCommit?.();committing=true;
-  const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},r2?{onConflict:'user_id,id',ignoreDuplicates:true}:undefined);
+  const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},r2?{ignoreDuplicates:true}:undefined);
   // Success means the row is really there: a lost reply may hide a write that went through, and a reported success is checked.
   const {data:check,error:checkError}=await client.from('vocal_media').select('id,metadata').eq('user_id',owner).eq('id',id).maybeSingle();
   if(checkError||!check){
