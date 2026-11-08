@@ -491,6 +491,9 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
    await expect(page.locator('.vz-upcoming-event.is-secondary')).toHaveCount(count-1);
    const firstKind=({both:'lesson',stages:'performance',all:'lesson',lesson:'lesson',soon:'audition'})[name];
    await expect(page.locator('.vz-upcoming-event').first()).toHaveAttribute('data-kind',firstKind);
+   await expect(page.locator('.vz-upcoming-link, .vz-home-stage-song')).toHaveCount(0);
+   const rows=await page.locator('.is-secondary .vz-upcoming-title').evaluateAll(nodes=>nodes.map(n=>({height:n.getBoundingClientRect().height,line:parseFloat(getComputedStyle(n).lineHeight)})));
+   for(const row of rows)expect(row.height).toBeLessThanOrEqual(row.line+1);
    const surface=await page.locator('.vz-home-upcoming').evaluate(el=>{const s=getComputedStyle(el);return {background:s.backgroundColor,shadow:s.boxShadow,border:s.borderTopWidth,radius:s.borderTopLeftRadius};});
    expect(surface).toEqual({background:'rgba(0, 0, 0, 0)',shadow:'none',border:'0px',radius:'0px'});
   }else{
@@ -533,7 +536,7 @@ test('upcoming event comparison board captures all six real rendered fixtures',a
 test('closest event uses day and time without reordering the input records',async({page})=>{
  await page.goto('/design-system/student-home-preview.html?upcoming=all');
  const result=await page.evaluate(async()=>{
-  const {createUpcomingStage}=await import('/design-system/components.js?v=16');
+  const {createUpcomingStage}=await import('/design-system/components.js?v=17');
   const events=[{kind:'late',title:'늦은 일정',daysLeft:2,time:'18:00'},{kind:'unknown',title:'날짜 미정'},{kind:'early',title:'이른 일정',daysLeft:2,time:'09:00'}];
   const original=JSON.stringify(events),host=createUpcomingStage({events});
   return {unchanged:JSON.stringify(events)===original,order:[...host.children].map(x=>x.dataset.kind),primary:host.querySelectorAll('.is-primary').length,illustrations:host.querySelectorAll('.vz-event-illustration').length};
@@ -548,7 +551,7 @@ test('icon selection and playback distinguish navigation from recording without 
   const home=document.querySelector('.vz-approved-dock-item[aria-current=page]'),songs=document.querySelectorAll('.vz-approved-dock-item')[1];
   const style=(root,selector)=>getComputedStyle(root.querySelector(selector)).display!=='none';
   return {selectedWeight:getComputedStyle(home).fontWeight,defaultWeight:getComputedStyle(songs).fontWeight,selectedInk:getComputedStyle(home).color,selectedFill:style(home,'.vz-icon-fill'),selectedOutline:style(home,'.vz-icon-outline'),otherFill:style(songs,'.vz-icon-fill'),otherOutline:style(songs,'.vz-icon-outline'),
-   record:getComputedStyle(document.querySelector('.vz-approved-dock-record')).backgroundColor,play:getComputedStyle(document.querySelector('.vz-home-play')).backgroundColor,playInk:getComputedStyle(document.querySelector('.vz-home-play')).color,link:getComputedStyle(document.querySelector('.vz-upcoming-link')).color,check:getComputedStyle(document.querySelector('.vz-home-goal-check:checked')).backgroundColor,
+   record:getComputedStyle(document.querySelector('.vz-approved-dock-record')).backgroundColor,play:getComputedStyle(document.querySelector('.vz-home-play')).backgroundColor,playInk:getComputedStyle(document.querySelector('.vz-home-play')).color,link:getComputedStyle(document.querySelector('.vz-home-song-listen')).color,check:getComputedStyle(document.querySelector('.vz-home-goal-check:checked')).backgroundColor,
    stroke:document.querySelector('.vz-home-quick .vz-icon-outline').getAttribute('stroke-width')};
  });
  expect(icons).toEqual({selectedWeight:'600',defaultWeight:'400',selectedInk:'rgb(99, 38, 255)',selectedFill:true,selectedOutline:false,otherFill:false,otherOutline:true,record:'rgb(99, 38, 255)',play:'rgb(241, 234, 255)',playInk:'rgb(78, 27, 204)',link:'rgb(99, 38, 255)',check:'rgb(99, 38, 255)',stroke:'1.8'});

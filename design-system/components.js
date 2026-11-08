@@ -306,20 +306,23 @@ export function createUpcomingStage({stage=null,lesson=null,events=null,onOpen=(
     const event=el("article","vz-upcoming-event "+(primary?"is-primary":"is-secondary"));event.dataset.kind=kind;
     const label=item.label||({performance:"다가오는 공연",audition:"다가오는 오디션",lesson:"다가오는 레슨"})[kind]||"다가오는 무대";
     const button=homeButton(item.buttonLabel||(isLesson?"다음 레슨 보기":"무대 상세 보기"),null,item.action||(isLesson?onLesson:onStage),"vz-upcoming-detail"+(isLesson?" vz-home-lesson":" vz-home-stage-detail"));
-    const copy=el("span","vz-upcoming-copy"),eyebrow=el("span","vz-upcoming-eyebrow");
-    eyebrow.append(el("span","",primary?label:label.replace(/^다가오는\s*/,"")));
-    if(homeDayLabel(item.daysLeft))eyebrow.append(el("strong","vz-home-dday",homeDayLabel(item.daysLeft)));
-    if(primary)copy.append(eyebrow);
+    const copy=el("span","vz-upcoming-copy"),line=el("span","vz-upcoming-line");
+    const shortLabel=label.replace(/^다가오는\s*/,"");
+    if(!primary||!String(item.title||"").includes(shortLabel))line.append(el("span","vz-upcoming-kind",shortLabel));
     const title=el("span",isLesson?"vz-home-lesson-title":"vz-home-stage-title"),name=el("h3","vz-upcoming-title",item.title||label);
-    name.id="vz-upcoming-title-"+(++homeGlyphId);button.setAttribute("aria-describedby",name.id);title.append(name);copy.append(title);
-    if(item.dateLabel){const date=textRow(copy,"span","vz-upcoming-date",item.dateLabel);date.id=name.id+"-date";button.setAttribute("aria-describedby",name.id+" "+date.id);}
+    name.id="vz-upcoming-title-"+(++homeGlyphId);button.setAttribute("aria-describedby",name.id);title.append(name);line.append(title);
+    if(homeDayLabel(item.daysLeft))line.append(el("strong","vz-home-dday",homeDayLabel(item.daysLeft)));
+    copy.append(line);
+    if(item.dateLabel){
+      const date=textRow(copy,"span","vz-upcoming-date"+(primary?"":" vz-home-visually-hidden"),item.dateLabel);
+      date.id=name.id+"-date";button.setAttribute("aria-describedby",name.id+" "+date.id);
+    }
+    button.title=[label,item.title,item.dateLabel].filter(Boolean).join(" · ");
     if(primary){
-      if(item.subtitle&&item.subtitle!==item.title)textRow(copy,"span","vz-home-stage-song",item.subtitle);
       const art=el("span","vz-home-stage-art vz-upcoming-art");art.setAttribute("aria-hidden","true");art.append(createEventIllustration(isLesson?"lesson":kind==="audition"?"audition":"performance"));
       if(!isLesson&&item.id!=null)art.dataset.poster=String(item.id);
-      const link=el("span","vz-upcoming-link");link.append(el("span","",isLesson?"레슨 확인하기":"무대 확인하기"),homeIcon("caret-right"));
-      button.append(copy,art,link);
-    }else{button.append(copy,eyebrow,homeIcon("caret-right","vz-upcoming-summary-arrow"));}
+      button.append(copy,art);
+    }else{button.append(copy,homeIcon("caret-right","vz-upcoming-summary-arrow"));}
     event.append(button);region.append(event);
   }
   return region;
