@@ -23,8 +23,8 @@ a{color:var(--accent)}
 
 /* Shell */
 .v-app{max-width:640px;margin:0 auto;min-height:100dvh;padding:calc(var(--safe-t) + 8px) 16px calc(var(--nav-h) + var(--safe-b) + 24px)}
-.v-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;margin-bottom:8px}
-.v-top h1{margin:0;font-size:22px;font-weight:750;letter-spacing:-.02em}
+.v-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;margin-bottom:8px}
+.v-top h1{margin:0;font-size:26px;line-height:34px;font-weight:700;letter-spacing:-.02em;color:#101828}
 .v-top h1 .logo-dot{color:var(--accent)}
 .v-top .v-top-left{display:flex;align-items:center;gap:4px;min-width:0}
 .v-top .v-top-left h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -548,3 +548,7 @@ h2.sec a,h2.sec button{display:inline-flex;align-items:center;justify-content:fl
 .bars a.bar{min-height:44px}
 /* Row links made of two text lines: WebKit renders them at 43.5px, so they get an explicit 44pt floor. */
 main a.grow,main a.item-main{display:flex;flex-direction:column;justify-content:center;min-height:44px}
+
+/* Shared page header: same hierarchy and icon color as the approved home. */
+#top .icon-btn,#top .icon-btn i{color:#667085;}
+#top [data-collection-count],#top h1 .badge,#top .v-top-left>.badge{background:transparent;border:0;box-shadow:none;padding:0;color:#7a32f5;font-size:13px;font-weight:600;}
