@@ -136,7 +136,7 @@ async function route(request, env) {
     return json({key, uploadId: upload.uploadId, partSize: PART_SIZE});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)\/parts\/(\d{1,5})$/)) && method === 'PUT') {
-    const key = ownKey(uid, url.searchParams.get('key')), n = Number(m[2]);
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key')), n = Number(m[2]);
     if (n < 1 || n > 10000) fail(400, 'invalid part number');
     const length = Number(request.headers.get('content-length'));
     if (!(length > 0) || length > PART_SIZE) fail(413, 'part must be 1 byte – 8 MiB');
@@ -144,7 +144,7 @@ async function route(request, env) {
     return json({partNumber: part.partNumber, etag: part.etag});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)\/complete$/)) && method === 'POST') {
-    const key = ownKey(uid, url.searchParams.get('key'));
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key'));
     const {parts} = await readJson(request);
     if (!Array.isArray(parts) || !parts.length || parts.some(p => !(p.partNumber > 0) || typeof p.etag !== 'string')) fail(400, 'invalid parts');
     const done = await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).complete(parts.map(p => ({partNumber: p.partNumber, etag: p.etag})).sort((a, b) => a.partNumber - b.partNumber));
@@ -153,7 +153,7 @@ async function route(request, env) {
     return json({key, size: done.size, etag: done.httpEtag});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)$/)) && method === 'DELETE') {
-    const key = ownKey(uid, url.searchParams.get('key'));
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key'));
     try { await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).abort(); } catch {}
     return json({ok: true});
   }
@@ -197,6 +197,12 @@ async function route(request, env) {
   fail(404, 'not found');
 }
 
+function ownLegacyUploadKey(uid,key){
+  key=ownKey(uid,key);
+  const segments=key.split('/');
+  if(segments.length!==4||!ID.test(segments[2])||!/^original\.[a-z0-9]{1,8}$/.test(segments[3]))fail(403,'use the signed resumable upload contract');
+  return key;
+}
 function ownKey(uid, key) {
   key = String(key || '');
   if (!key.startsWith('u/' + uid + '/') || key.includes('..') || key.includes('//') || key.length > 300) fail(403, 'not your file');

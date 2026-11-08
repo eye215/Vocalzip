@@ -163,3 +163,17 @@ test('a known completion etag cannot silently change during later recovery',asyn
  await assert.rejects(client.create(f.options).finish(args.mediaId),{code:'object_changed'});
  assert.equal(f.client.pending()[0].receipt.etag,receipt.etag);
 });
+
+test('legacy multipart routes cannot bypass the proof or abort a v2 upload',async()=>{
+ const s=await start('no-legacy-bypass',data(17)),d=s.upload.descriptor;
+ const legacy='/v1/uploads/'+encodeURIComponent(d.uploadId),query='?key='+encodeURIComponent(d.key);
+ const wrong=data(17);wrong[0]^=255;
+ assert.equal((await call(legacy+'/parts/1'+query,{method:'PUT',body:wrong})).status,403);
+ const p=await part(s,1);assert.equal(p.status,200);const parts=[await p.json()];
+ assert.equal((await call(legacy+'/complete'+query,{method:'POST',body:{parts}})).status,403);
+ assert.equal((await call(legacy+query,{method:'DELETE'})).status,403);
+ const response=await call('/v2/uploads/complete',{method:'POST',body:{upload:s.upload,parts}});
+ assert.equal(response.status,200);
+ const out=await response.json(),bucket=await mf.getR2Bucket('MEDIA');
+ assert.deepEqual(new Uint8Array(await (await bucket.get(out.key)).arrayBuffer()),data(17));
+});
