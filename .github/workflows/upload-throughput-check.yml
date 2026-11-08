@@ -1,0 +1,26 @@
+name: Upload throughput and automatic titles
+on:
+  push:
+    branches: ['codex/upload-throughput-auto-title']
+  pull_request:
+    paths: ['r2-storage.js','media-naming.js','app/media.js','cloud-sync.js','tests/upload-throughput.test.cjs','tests/media-naming.test.cjs','.github/workflows/upload-throughput-check.yml']
+permissions:
+  contents: read
+concurrency:
+  group: upload-throughput-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/media-naming.test.cjs tests/upload-throughput.test.cjs
+        env:
+          VZIP_BENCH_BASE: 0b63d76ba4e6bce0ffbf12ac1ce90700227c3800
+      - run: npm run test:syntax

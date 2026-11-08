@@ -31,25 +31,37 @@ const extOf = (file, type) => (String(file.name || '').match(/\.([a-z0-9]{1,8})$
 async function upload(file, {mediaId, type = file.type, onProgress, signal, purpose} = {}) {
   const start = await api('/v1/uploads', {method:'POST', signal, body:{mediaId, contentType:type, size:file.size, ext:extOf(file, type), ...(purpose ? {purpose} : {})}});
   const q = '?key=' + encodeURIComponent(start.key), base = '/v1/uploads/' + encodeURIComponent(start.uploadId);
-  const parts = [];
-  try {
-    for (let offset = 0, n = 1; offset < file.size; offset += start.partSize, n++) {
-      const piece = file.slice(offset, offset + start.partSize);
-      for (let attempt = 0; ; attempt++) {
-        if (signal?.aborted) throw new DOMException('업로드를 취소했어요.', 'AbortError');
-        try { parts.push(await api(base + '/parts/' + n + q, {method:'PUT', body:piece, signal})); break; }
-        catch (e) { if (e.name === 'AbortError' || [401, 403, 413].includes(e.status) || attempt >= 2) throw e; await new Promise(r => setTimeout(r, 1000 * (attempt + 1) ** 2)); }
-      }
-      onProgress?.(Math.min(99, Math.round((offset + piece.size) / file.size * 100)));
+  const parts = new Array(Math.ceil(file.size/start.partSize));
+  const controller=new AbortController(),cancel=()=>controller.abort(signal?.reason);
+  if(signal?.aborted)cancel();signal?.addEventListener('abort',cancel,{once:true});
+  let next=0,bytesDone=0,failure=null;
+  const progress=value=>{try{onProgress?.(value);}catch{}};
+  const send=async()=>{
+    while(!failure&&!controller.signal.aborted){
+      const index=next++;if(index>=parts.length)return;
+      const piece=file.slice(index*start.partSize,(index+1)*start.partSize);
+      try{
+        for(let attempt=0;;attempt++){
+          if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
+          try{parts[index]=await api(base+'/parts/'+(index+1)+q,{method:'PUT',body:piece,signal:controller.signal});break;}
+          catch(error){if(error.name==='AbortError'||[401,403,413].includes(error.status)||attempt>=2)throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)**2));}
+        }
+        bytesDone+=piece.size;progress(Math.min(99,Math.round(bytesDone/file.size*100)));
+      }catch(error){if(!failure)failure=error;controller.abort();return;}
     }
+  };
+  try {
+    await Promise.all([send(),send()]);
+    if(failure)throw failure;
+    if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
     const done = await api(base + '/complete' + q, {method:'POST', body:{parts}, signal});
     if (done.size !== file.size) throw Error('업로드한 크기가 원본과 달라요.');
-    onProgress?.(100);
+    progress(100);
     return done;
   } catch (e) {
     api(base + q, {method:'DELETE'}).catch(() => {});
     throw e;
-  }
+  } finally {signal?.removeEventListener('abort',cancel);}
 }
 /* Playback links: kept on this device until shortly before they expire (also across reloads), asked for once per file
  * even when several screens want it at the same time, and signed in batches for the rows on screen. A link already here

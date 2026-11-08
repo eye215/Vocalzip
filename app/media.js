@@ -176,9 +176,9 @@ M.importFile = async (file, choice, onProgress, signal) => {
     // A file given a song is named after the song and its recording day.
     const day = /^\d{4}-\d{2}-\d{2}$/.test(meta.recordedDate || '') ? meta.recordedDate : VZ.ymd(new Date(meta.created || file.lastModified || Date.now()));
     const title = choice.songId ? VZ.songTitle(choice.songId) : '';
-    const name = title ? M.autoName(title, day) : (choice.name || file.name).replace(/\.[^.]+$/, '');
+    const name = choice.name || (title ? M.autoName(title, day) : file.name.replace(/\.[^.]+$/, ''));
     // choice.extra carries import facts (source type, original file name, hash, imported time) kept with the file.
-    const info = {...meta, ...(choice.extra || {}), id:choice.id, name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
+    const info = {...meta, ...(choice.extra || {}), id:choice.id, name, nameMode:choice.name?'manual':'auto', autoName:choice.name?null:name, originalFilename:choice.extra?.originalFilename||file.name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
     let saved;
     // Large files, and bulk imports (choice.direct), go straight to the cloud from the picked file: no device copy, so a
     // thousand files never fill Safari's storage. "Done" then means the server confirmed the row (see vzipCloudImport).
@@ -205,14 +205,16 @@ M.importFile = async (file, choice, onProgress, signal) => {
     return {...saved, originalSize:file.size, savedSize:out.size, extracted:!!meta.audioExtraction, flac:!!meta.losslessFlac};
   } finally { await prepared.dispose(); }
 };
+const namePatch=(item,changes)=>window.VzipMediaNaming?.patch(item,changes,id=>VZ.db.songs.find(song=>song.id===id)?.title)||changes;
+const nameFields=metadata=>Object.fromEntries(['name','nameMode','autoName'].filter(key=>Object.hasOwn(metadata,key)).map(key=>[key,metadata[key]]));
 M.update = async (item, changes, {quiet = false} = {}) => {
-  if (item.cloud) await window.vzipCloudMediaUpdate(item, changes);
-  if (item.local) {
-    const stored = (await window.vzipReadMedia()).find(x => x.id === item.id);
-    if (stored) await tx('readwrite', s => s.put({...stored, ...changes}));
+  changes={...changes};if(changes.name===item.name)delete changes.name;
+  const cloud=item.cloud?await window.vzipCloudMediaUpdate(item,changes):null;
+  if(item.local){
+    const stored=(await window.vzipReadMedia()).find(x=>x.id===item.id);
+    if(stored)await tx('readwrite',s=>s.put({...stored,...namePatch(stored,changes),...(cloud?nameFields(cloud):{})}));
   }
-  // Only the changed fields travel; cloudDone tells the sync layer the cloud row is already saved.
-  if (!quiet) window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:item.id, changes, cloudDone:!!item.cloud}}));
+  if(!quiet)window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes,cloudDone:!!item.cloud}}));
 };
 /** Conservative song-only change for bulk suggestions.
  * Cloud metadata is merged under a database compare-and-swap, not overwritten from a list snapshot. */
@@ -229,7 +231,7 @@ M.assignSongSafe=async(item,changes,{expectedSongId='',expectedSong='',expectedU
   if(!window.vzipCloudMediaAssignSong)throw Error('곡 전용 안전 저장 기능을 확인할 수 없어요.');
   cloudResult=await window.vzipCloudMediaAssignSong(item,selected,{expectedSongId,expectedSong,expectedUpdatedAt});
  }
- if(item.local&&existing)await tx('readwrite',s=>s.put({...existing,...selected}));
+ if(item.local&&existing)await tx('readwrite',s=>s.put({...existing,...namePatch(existing,selected),...(cloudResult?.metadata?nameFields(cloudResult.metadata):{})}));
  // Only the song changed; the cloud row (if any) is already written: the sync layer must not re-send device fields.
  window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:selected,cloudDone:!!item.cloud}}));
  return cloudResult||{updatedAt:null};
