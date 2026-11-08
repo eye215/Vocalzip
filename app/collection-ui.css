@@ -25,6 +25,10 @@ body:has(.vz-recording-page) .v-nav{display:none}.vz-recording-page .list{backgr
 .vz-recording-page .media-open>.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;overflow:visible;padding:0;margin-top:14px!important}
 .vz-recording-page .media-open>.chips .chip{min-width:0;min-height:44px;border-radius:14px;padding:0 8px;white-space:nowrap}
 .vz-recording-page .media-open>.chips [data-delete]{grid-column:1/-1;justify-self:start;border:0;background:transparent;color:#667085;padding:0 4px}
+.lib-month [data-toggle][aria-expanded=true]>.chev{transform:rotate(0)}
+.lib-month .media-open>.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;overflow:visible;padding:0;margin-top:14px!important}
+.lib-month .media-open>.chips .chip{min-width:0;min-height:44px;border-radius:14px;padding:0 8px;white-space:nowrap}
+.lib-month .media-open>.chips [data-delete]{grid-column:1/-1;justify-self:start;border:0;background:transparent;color:#667085;padding:0 4px}
 @media(max-width:350px){.vz-library-tabs .lib-seg button{padding-inline:9px}.vz-recent-song>strong{font-size:21px}}
 
 body.vz-collection #view[data-collection=library]{display:flex;flex-direction:column}body.vz-collection [data-collection=library] .lib-tools{order:1}body.vz-collection [data-collection=library] [data-server-analysis]{order:2}body.vz-collection [data-collection=library] .vz-review-fallback{order:3}body.vz-collection [data-collection=library] [data-name-dates]{order:4}body.vz-collection [data-collection=library]>[data-l]{order:5}

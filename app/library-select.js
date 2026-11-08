@@ -30,7 +30,7 @@ VZ.librarySelect = (main, {list, done}) => {
   };
   const enter = () => {
     on = true; M.stopAll?.();
-    host.querySelectorAll('.media-open:not([hidden])').forEach(p => { p.hidden = true; p.previousElementSibling?.setAttribute('aria-expanded', 'false'); });
+    host.querySelectorAll('.media-open:not([hidden])').forEach(p => { p.hidden = true; p.previousElementSibling?.setAttribute('aria-expanded', 'false'); p._player?.destroy(); p._player = null; });
     main.classList.add('lib-selecting'); toggle.textContent = '완료'; toggle.setAttribute('aria-pressed', 'true');
     bar = document.createElement('div');
     bar.className = 'sel-bar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', '선택한 녹음 작업');
