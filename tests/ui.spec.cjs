@@ -1154,7 +1154,17 @@ test('Metadata-derived dates remain editable and move imported audio in the cale
  await expect(page.locator('.vzip-calendar-records')).toContainText('dated-recording');
  await page.locator('.vzip-calendar-records [data-record-id]').click();
  await expect(page.locator('#media')).toBeVisible();
- await page.locator('.vzip-hub-item [data-action=edit]').click();
+ try{await page.locator('.vzip-hub-item [data-action=edit]').click({timeout:8000});}
+ catch(error){
+   console.log('LEGACY_DATE_DIAG',JSON.stringify(await page.evaluate(async()=>({
+    rows:[...document.querySelectorAll('.vzip-hub-item')].map(x=>({id:x.dataset.id,text:x.textContent})),
+    status:document.querySelector('#vzip-hub-status')?.textContent,
+    hubConnected:!!document.querySelector('#vzip-media-hub'),
+    mediaHidden:document.querySelector('#media')?.hidden,mediaHTML:document.querySelector('#media')?.innerHTML.slice(0,2000),
+    local:(await window.vzipReadMedia()).map(x=>({id:x.id,name:x.name,recordedDate:x.recordedDate})),
+    signed:window.vzipCloudSignedIn?.(),errors:window.__diagnosticErrors||[]
+   }))));throw error;
+ }
  const dialog=page.getByRole('dialog',{name:'🎧 이 녹음의 감상 기록'});
  await expect(dialog.locator('[name=date]')).toHaveValue('2024-02-29');
  await expect(dialog).toContainText('메타데이터');
