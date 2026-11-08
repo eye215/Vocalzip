@@ -32,6 +32,10 @@
   --vz-bg-glow-two: rgba(234,196,250,.38);
   --vz-shadow-card: 0 2px 10px rgba(55,33,85,.045);
   --vz-shadow-dock: 0 5px 20px rgba(55,33,85,.045);
+  --vz-nav-surface: rgba(255,255,255,.58);
+  --vz-nav-border: rgba(255,255,255,.68);
+  --vz-nav-shadow: 0 5px 20px rgba(55,33,85,.045);
+  --vz-nav-blur: 24px;
 }
 [data-vz-theme="teacher"] {
   --vz-color-canvas: #eff5ff;
@@ -117,12 +121,12 @@
  --vz-color-ink:#352b40; --vz-color-ink-secondary:#786381; --vz-color-ink-muted:#806989;
  --vz-color-heading:#58416b; --vz-color-heading-strong:#4a365c;
  --vz-color-icon-start:#a587ba; --vz-color-icon-end:#8e6ca6;
- --vz-color-accent:#795393; --vz-color-accent-strong:#744793; --vz-color-accent-soft:#f1e9f8;
+ --vz-color-accent:var(--vz-accent,#7A32F5); --vz-color-accent-strong:#6528CA; --vz-color-accent-soft:#F3ECFF;
  --vz-color-practice-low:#dfd0ee; --vz-color-practice-met:#b399ce; --vz-color-practice-high:#8a65a7;
- --vz-color-today:#76518d; --vz-color-day-accent:#76518d; --vz-color-nav-label:#786381;
- --vz-color-check-border:#9b83ae; --vz-color-check-fill:#8960ad; --vz-color-progress-track:#eee7f5;
+ --vz-color-today:var(--vz-accent,#7A32F5); --vz-color-day-accent:var(--vz-accent,#7A32F5); --vz-color-nav-label:#786381;
+ --vz-color-check-border:#9b83ae; --vz-color-check-fill:var(--vz-accent,#7A32F5); --vz-color-progress-track:#eee7f5;
  --vz-color-glass:#fff; --vz-color-glass-raised:#fff; --vz-color-glass-border:transparent; --vz-color-glass-fallback:#fff;
- --vz-color-focus:#79529c; --vz-color-flame:#ba7d52;
+ --vz-color-focus:var(--vz-accent,#7A32F5); --vz-color-flame:#ba7d52;
  --vz-shadow-card:0 2px 10px #55356a05; --vz-shadow-dock:0 5px 22px #57336f0a; --vz-shadow-greeting:none;
  --vz-radius-card:22px; --vz-page-gutter:16px; --vz-card-padding:16px; --vz-grid-gap:12px; --vz-blur-card:none;
 }
