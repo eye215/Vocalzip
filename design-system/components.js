@@ -410,12 +410,13 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   const grid=el("div","vz-home-bottom-grid vz-recent-region");
   const song=el("article","vz-card vz-home-song vz-song-tile");if(recent?.canPlay)song.classList.add("has-representative-media");
   const songDetail=homeButton(recent?"최근 연습곡 "+recent.title+" 열기":"내 곡 선택",null,onRecent,"vz-home-song-detail");
-  const head=el("div","vz-home-song-heading");head.append(homeHeading("최근 연습곡","music-notes"),homeIcon("caret-right"));songDetail.append(head);
-  const cover=el("span","vz-home-song-cover");cover.setAttribute("aria-hidden","true");
-  cover.classList.toggle("vz-home-song-cover--playable",Boolean(recent?.canPlay));
-  cover.append(homeIcon("music-notes"));songDetail.append(cover);
+  const head=el("div","vz-home-song-heading");head.append(homeHeading("최근 연습곡","music-notes"),homeIcon("caret-right"));song.append(head);
+  // The playback slot and detail button are siblings, so large text cannot cover playback.
+  const cover=el("span","vz-home-song-cover");
+  if(recent?.canPlay)cover.append(homeButton("최근 곡 녹음 재생","play",onPlay,"vz-home-play"));
+  else cover.append(homeIcon("music-notes"));
+  song.append(cover);
   const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail);
-  if(recent?.canPlay){const play=homeButton("최근 곡 녹음 재생","play",onPlay,"vz-home-play");song.append(play);}
   if(recent)song.title=[recent.title,recent.artist].filter(Boolean).join(" · ");
   grid.append(song);
   const quick=el("div","vz-home-quick-stack vz-quick-actions");

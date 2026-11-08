@@ -434,3 +434,24 @@ test('compact summary uses actual practice time; long song and schedule names ex
   await screenshot(page,testInfo,'student-home-long-titles-'+width+'.png');
  }
 });
+
+test('large text keeps preview playback separate from full song details on all mobile widths',async({page},testInfo)=>{
+ await page.goto('/design-system/student-home-preview.html');
+ await expect(page.locator('.vz-student-home')).toBeVisible();
+ await page.locator('.vz-home-song-copy strong').evaluate(el=>{el.textContent='긴 곡명과 LongEnglishTitle을 큰 글자로 확인하는 연습곡';});
+ await page.evaluate(()=>{
+  const nodes=[...document.querySelectorAll('.vz-student-home :is(p,span,strong,small,h1,h2,h3,label,a,button)')];
+  const sizes=nodes.map(n=>parseFloat(getComputedStyle(n).fontSize));
+  nodes.forEach((n,i)=>n.style.setProperty('font-size',sizes[i]*2+'px','important'));
+ });
+ for(const width of widths){
+  await page.setViewportSize({width,height:844});await noOverflow(page);
+  const play=page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}),p=await play.boundingBox();
+  const title=await page.locator('.vz-home-song-copy strong').boundingBox();
+  expect(p.height).toBeGreaterThanOrEqual(44);expect(p.width).toBeGreaterThanOrEqual(44);
+  expect(p.y+p.height).toBeLessThanOrEqual(title.y+1);
+  await screenshot(page,testInfo,'student-home-preview-large-text-'+width+'.png');
+ }
+ await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
+ await expect(page.locator('.preview-status')).toContainText('재생');
+});
