@@ -453,6 +453,8 @@ test('large text keeps preview playback separate from full song details on all m
   const title=await page.locator('.vz-home-song-copy strong').boundingBox();
   const heading=await page.locator('.vz-home-song-heading').boundingBox();
   expect(heading.y+heading.height).toBeLessThanOrEqual(p.y+1);
+  const type=await page.locator('.vz-home-song-heading .vz-home-heading>span:last-child, .vz-home-song-copy>span').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {font:parseFloat(s.fontSize),line:parseFloat(s.lineHeight)};}));
+  for(const size of type)expect(size.line).toBeGreaterThanOrEqual(size.font*1.2);
   expect(p.height).toBeGreaterThanOrEqual(44);expect(p.width).toBeGreaterThanOrEqual(44);
   expect(p.y+p.height).toBeLessThanOrEqual(title.y+1);
   await screenshot(page,testInfo,'student-home-preview-large-text-'+width+'.png');
