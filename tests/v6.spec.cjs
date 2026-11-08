@@ -1871,6 +1871,8 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
   await expect(bar).toContainText('0개 선택');
+  await page.evaluate(()=>VZ.softRender()); // a background refresh must preserve selection mode
+  await expect(bar).toContainText('0개 선택');
   await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
   await page.locator('[data-media="m1"] [data-toggle]').click();
   await expect(page.locator('[data-media="m1"] .media-open')).toBeHidden(); // ticked, not opened
@@ -1888,6 +1890,7 @@ test('Library select mode sets the song and kind of several recordings at once; 
   // Kind for one recording.
   await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   await page.locator('[data-media="m1"] [data-toggle]').click();
+  await expect(page.getByRole('toolbar')).toContainText('1개 선택');
   await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
   await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
