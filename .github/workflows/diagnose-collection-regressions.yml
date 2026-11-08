@@ -1,0 +1,25 @@
+name: Diagnose current collection regressions
+on:
+  push:
+    branches: ['codex/diagnose-upload-regressions-20261108']
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: node tests/make-audio-fixtures.cjs
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/v6.spec.cjs --grep '서버 자동 분석|Calendar shows|Practice records can be edited|Practice time adds|Library groups files|Song choices open|Library select mode|Library actually plays' --workers=3 --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: focused-collection-failures
+          path: test-results/
