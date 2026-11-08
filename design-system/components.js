@@ -328,7 +328,7 @@ export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}
   const summary=el("div","vz-home-goal-summary");
   const refresh=()=>summary.replaceChildren(createGoalProgress({completed:items.filter(g=>g.completed).length,total:items.length}));
   refresh();head.append(summary);
-  const list=el("div","vz-home-goal-list vz-goal-list");list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");
+  const list=el("div","vz-home-goal-list vz-goal-list");if(items.length===1)list.classList.add("is-single");list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");
   const status=el("p","vz-home-goal-status");status.setAttribute("role","status");status.setAttribute("aria-live","polite");
   if(!items.length){
     list.classList.add("is-empty");
@@ -385,14 +385,14 @@ function homeFlower({state,ratio,minutes,today}) {
 export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null,ratio=null,streak=0,onGrowth}={}) {
   const {card,head}=homeCard("이번 주 연습","chart-bar");card.classList.add("vz-home-week");
   const streakLabel=el("span","vz-home-streak");streakLabel.append(homeIcon("fire"),el("span","",homeNumber(streak)+"일 연속"));
-  if(onGrowth){const growth=homeButton("성장 기록 보기",null,onGrowth,"vz-home-streak-action");growth.append(streakLabel);head.append(growth);}else head.append(streakLabel);
+  if(onGrowth){const heading=head.querySelector("h2"),growth=homeButton("성장 기록 보기",null,onGrowth,"vz-home-week-action");growth.append(...heading.childNodes,homeIcon("caret-right"));heading.append(growth);}
   const pct=Number(targetMinutes)>0?homeNumber(actualMinutes)/Number(targetMinutes)*100:ratio;
   const overview=el("div","vz-home-week-overview"),metric=el("p","vz-home-week-metric");
   metric.append(el("strong","",String(Math.round(homeNumber(actualMinutes)))),el("span","","분"));
   const target=el("p","vz-home-week-target");
   if(targetMinutes==null)target.append(el("span","","주간 목표 미설정"));
   else {target.append(el("span","","목표 "+homeDuration(targetMinutes)));textRow(target,"strong","",pct==null?"달성률 —":"달성률 "+Math.round(homeNumber(pct))+"%");}
-  overview.append(metric,target);card.append(overview);
+  head.append(metric);target.append(streakLabel);overview.append(target);card.append(overview);
   const grid=el("div","vz-home-week-grid");
   for(const item of days.slice(0,7)){
     const minutes=homeNumber(item.minutes);

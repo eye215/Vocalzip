@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=11';
+import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=12';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -72,7 +72,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    '<label class="field"><span>개인 목표</span><textarea name="personal" rows="3" maxlength="10000" placeholder="한 줄에 목표 하나씩 입력하세요"></textarea></label>'+
    '<div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(s.week.days.find(d=>d.today)?.targetMinutes??'')+'" placeholder="미설정"></label>'+
    '<label class="field"><span>이번 주 목표 시간(분)</span><input type="number" name="weekMinutes" min="0" max="10080" inputmode="numeric" value="'+(s.week.targetMinutes??'')+'" placeholder="미설정"></label></div><p class="small muted">시간 목표는 직접 정해요. 입력하지 않으면 달성률을 만들지 않아요.</p><p role="alert" class="small" data-plan-error></p></form>';
-  V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block">목표 저장</button>',
+  V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block vz-home-primary-button">목표 저장</button>',
    onMount:(el,close)=>{
     const form=el.querySelector('form');form.addEventListener('input',()=>{dirty=true;});
     beforeUnload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue='';}};
