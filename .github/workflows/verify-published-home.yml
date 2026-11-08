@@ -1,0 +1,15 @@
+name: Verify published home
+on:
+  push:
+    branches:
+      - 'codex/verify-home-release-e2be5d341501'
+permissions:
+  contents: read
+jobs:
+  public-files:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare public assets with merged home commit
+        run: python3 tools/verify-published-home.py
