@@ -320,7 +320,7 @@ VZ.route('record', {title:'녹음', tab:'record', noAutoRefresh:true, render(r) 
     mainBtn.hidden = phase === 'review';
     main.querySelector('.rec-controls').hidden = phase === 'review';
   };
-  const reset = () => { state.result?.releaseProtection?.();state.result = null; state.saved = false; review.hidden = true; review.innerHTML = ''; timeEl.textContent = '0:00'; state.waveLive = []; M.drawWave(wave, []); setUI('idle'); status.textContent = '버튼을 누르면 바로 녹음이 시작돼요.'; };
+  const reset = () => { state.result?.releaseProtection?.();state.result = null; state.saved = false; state.savedId = null; review.hidden = true; review.innerHTML = ''; timeEl.textContent = '0:00'; state.waveLive = []; M.drawWave(wave, []); setUI('idle'); status.textContent = '버튼을 누르면 바로 녹음이 시작돼요.'; };
   mainBtn.onclick = async () => {
     if (state.session) return stop();
     mainBtn.disabled = true; status.textContent = '마이크 준비 중…';

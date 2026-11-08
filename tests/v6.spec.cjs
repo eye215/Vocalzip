@@ -649,7 +649,7 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   await expect(page.locator('[data-song-name]')).toHaveText('On My Own');
   await expect(page.getByRole('button', {name:/영상/})).toHaveCount(0); // audio-only recording
   // First save fails once.
-  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; let fail = true; window.vzipStorePracticeMedia = async item => { if (fail) { fail = false; throw Error('테스트 저장 실패'); } return real(item); }; });
+  await page.evaluate(() => { const real = window.vzipStorePracticeMedia; let fail = true; window.__recordRetryIds = []; window.vzipStorePracticeMedia = async item => { window.__recordRetryIds.push(item.id); if (fail) { fail = false; throw Error('테스트 저장 실패'); } return real(item); }; });
   await page.getByRole('button', {name:'녹음 시작'}).click();
   await expect(page.getByRole('button', {name:'녹음 종료'})).toBeVisible();
   await page.waitForTimeout(1500);
@@ -667,6 +667,7 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   await expect(page.getByText('저장했어요', {exact:true})).toBeVisible();
   const items = (await media(page)).filter(m => m.source === 'practice' && m.songId === 's2');
   expect(items).toHaveLength(1);
+  expect(await page.evaluate(() => window.__recordRetryIds)).toEqual([items[0].id, items[0].id]);
   expect(items[0].durationSeconds).toBeGreaterThan(1.5);
   expect(items[0].review).toBe('브릿지 숨 부족');
   expect(items[0].waveform.length).toBeGreaterThan(0);
@@ -675,6 +676,94 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   await page.getByRole('link', {name:'On My Own 곡 보기'}).click();
   await page.getByRole('tab', {name:'연습'}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
+});
+
+test('New recording after save gets a fresh ID and preserves both takes after reload', async ({page, browserName}) => {
+  test.skip(browserName !== 'chromium', 'Real MediaRecorder with a fake microphone is Chromium-only; not an iPhone hardware test.');
+  await boot(page, {media:false});
+  const before = await data(page);
+  await page.goto('/#/record?song=s2');
+  const take = async name => {
+    await page.getByRole('button', {name:'녹음 시작', exact:true}).click();
+    await expect(page.getByRole('button', {name:'녹음 종료', exact:true})).toBeVisible();
+    await page.waitForTimeout(1200);
+    await page.getByRole('button', {name:'녹음 종료', exact:true}).click();
+    await page.locator('[data-review] [name=name]').fill(name);
+    await page.locator('[data-review] [data-save]').click();
+    await expect(page.getByText('저장했어요', {exact:true})).toBeVisible();
+  };
+  const originals = () => page.evaluate(async () => {
+    const rows = await window.vzipReadMedia();
+    return Promise.all(rows.map(async row => {
+      const blob = window.vzipMediaBlob(row);
+      const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))].map(b => b.toString(16).padStart(2, '0')).join('');
+      return {id:row.id, name:row.name, songId:row.songId, durationSeconds:row.durationSeconds, size:blob.size, hash};
+    })).then(rows => rows.sort((a, b) => a.id.localeCompare(b.id)));
+  });
+  await take('연속 녹음 첫 번째');
+  const first = await originals();
+  expect(first).toHaveLength(1);
+  expect(first[0].size).toBeGreaterThan(0);
+  await page.getByRole('button', {name:'새 녹음', exact:true}).click();
+  await take('연속 녹음 두 번째');
+  const all = await originals();
+  expect(all).toHaveLength(2);
+  expect(new Set(all.map(row => row.id)).size).toBe(2);
+  expect(all.find(row => row.id === first[0].id)).toEqual(first[0]);
+  expect(all.every(row => row.songId === 's2' && row.durationSeconds >= 0.8 && row.size > 0)).toBe(true);
+  for (const key of ['songs','lessons','practices','assignments']) expect((await data(page))[key]).toEqual(before[key]);
+  await page.reload();
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.evaluate(() => { window.vzipCloudSignedIn = () => false; });
+  expect(await originals()).toEqual(all);
+  await page.goto('/#/library');
+  await expect(page.getByText('연속 녹음 첫 번째', {exact:true})).toBeVisible();
+  await expect(page.getByText('연속 녹음 두 번째', {exact:true})).toBeVisible();
+});
+
+test('Lesson recording retry after a committed save keeps its ID; the next take gets a new ID', async ({page, browserName}) => {
+  test.skip(browserName !== 'chromium', 'Real MediaRecorder with a fake microphone is Chromium-only; not an iPhone hardware test.');
+  await boot(page, {media:false});
+  await page.goto('/#/record?lesson=l-over&song=s1');
+  await page.evaluate(() => {
+    const store = window.vzipStorePracticeMedia;
+    window.__recordSaveIds = [];
+    window.vzipStorePracticeMedia = async item => {
+      window.__recordSaveIds.push(item.id);
+      await store(item);
+      if (window.__recordSaveIds.length === 1) throw Error('저장 완료 응답 유실');
+    };
+  });
+  const capture = async name => {
+    await page.getByRole('button', {name:'녹음 시작', exact:true}).click();
+    await expect(page.getByRole('button', {name:'녹음 종료', exact:true})).toBeVisible();
+    await page.waitForTimeout(1200);
+    await page.getByRole('button', {name:'녹음 종료', exact:true}).click();
+    await page.locator('[data-review] [name=name]').fill(name);
+  };
+  await capture('레슨 첫 번째 녹음');
+  await page.locator('[data-review] [data-save]').click();
+  await expect(page.locator('[data-fail]')).toContainText('저장 완료 응답 유실');
+  const first = await media(page);
+  expect(first).toHaveLength(1);
+  expect((await data(page)).lessons.find(l => l.id === 'l-over').recordings).toEqual([]);
+  await page.getByRole('button', {name:'다시 저장', exact:true}).click();
+  await expect(page.getByText('저장했어요', {exact:true})).toBeVisible();
+  expect(await page.evaluate(() => window.__recordSaveIds)).toEqual([first[0].id, first[0].id]);
+  expect(await media(page)).toHaveLength(1);
+  await page.getByRole('button', {name:'새 녹음', exact:true}).click();
+  await capture('레슨 두 번째 녹음');
+  await page.locator('[data-review] [data-save]').click();
+  await expect(page.getByText('저장했어요', {exact:true})).toBeVisible();
+  const saved = await media(page), lesson = (await data(page)).lessons.find(l => l.id === 'l-over');
+  expect(saved).toHaveLength(2);
+  expect(new Set(saved.map(row => row.id)).size).toBe(2);
+  expect(lesson.recordings).toHaveLength(2);
+  expect(new Set(lesson.recordings.map(row => row.id)).size).toBe(2);
+  expect(lesson.recordings.map(row => row.id).sort()).toEqual(saved.map(row => row.id).sort());
+  expect(saved.every(row => row.source === 'lesson' && row.songId === 's1')).toBe(true);
+  await page.getByRole('link', {name:'레슨으로', exact:true}).click();
+  await expect(page.locator('[data-recs] [data-media]')).toHaveCount(2);
 });
 
 test('Recording from a lesson links the file to that lesson', async ({page, browserName}) => {
