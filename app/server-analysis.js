@@ -65,6 +65,9 @@ function paint() {
   const c = counts(), v = c.vocal, s = c.song;
   if (!v.total && !s.total) { host.innerHTML = ''; return; }
   const running = v.wait + s.wait;
+  if(host.hasAttribute('data-compact')){
+    host.innerHTML='<a class="vz-review-link" href="#/song-suggest"><i class="ph ph-waveform"></i><span>곡 확인 필요 <strong>'+s.review+'건</strong></span><i class="ph ph-caret-right"></i></a>'+(running?'<p class="small muted">대기·분석 중 '+running+'건</p>':'')+(v.fail+s.fail?'<p class="small muted">분석 실패 '+(v.fail+s.fail)+'건</p>':'');return;
+  }
   host.innerHTML = '<div class="card srv"><div class="row between"><strong><i class="ph ph-cloud-check"></i> 서버 자동 분석</strong><span class="small muted">' + (running ? '진행 중 · 앱을 닫아도 계속돼요' : s.review ? '분석 완료 · 확인 대기 ' + s.review + '개' : '모두 처리됨') + '</span></div>' +
     '<div class="srv-grid">' +
       '<div><b>' + v.done + '<small>/' + v.total + '</small></b><span>보컬 측정 완료</span></div>' +
@@ -79,3 +82,5 @@ function paint() {
 }
 VZ.serverAnalysisCard = el => { host = el; paint(); if (state.on) load(); };
 })();
+
+

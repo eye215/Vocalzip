@@ -39,7 +39,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   return {id:recent.song.id,title:recent.song.title,artist:recent.song.show||'',canPlay:!!media,media};
  }
  function recentCallbacks(recent){
-  return {onRecent:()=>recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
+  return {onRecent:()=>recent?nav('#/record?song='+encodeURIComponent(recent.id)):nav('#/songs'),
    onContinue:()=>recent?nav('#/record?song='+encodeURIComponent(recent.id)):nav('#/songs'),
    onLessons:()=>nav('#/lessons'),onPractice:()=>nav('#/practices')};
  }
@@ -141,4 +141,6 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  applyTheme();
  if((location.hash.replace(/^#\/?/,'').split(/[/?]/)[0]||'home')==='home')V.softRender();
 }
+
+
 
