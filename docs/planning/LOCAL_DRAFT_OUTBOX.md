@@ -37,3 +37,8 @@ Node 시험은 메모리 storage·가짜 RPC/HTTP로 오프라인/응답 유실/
 실행 결과는 PR/Actions에 기록한다. 실제 서버 SQL은 별도 #142 PostgreSQL 시험에서 검증한다.
 브라우저 입력 이벤트 연결·가시 상태·resume/realtime·초안 본문 commit·실제 Safari/PWA localStorage 용량·두 실제 기기의 E2E는 미완료다.
 UI는 사용자가 별도로 진행하므로 이 모듈만으로 자동 초안/이어쓰기 제품 기능 완료로 표시하지 않는다.
+
+## 서버 쓰기 중지
+서버의 disabled 응답은 feature_disabled 사유의 blocked 상태로 처리하고 원 pending 요청·문구를 유지한다. 자동 재전송이나 snapshot fallback은 없다. 계정이 다시 활성화되면 최신 load/권한을 확인하고 명시적으로 resolve한 뒤 재개한다.
+
+충돌 해결에서 로컬 문구를 선택해도 버려지는 서버 문구를 별도 로컬 사본으로 보존한다. 서버 후보가 다시 갱신되면 이전 후보도 자동으로 버리지 않는다. PostgreSQL에서 표현할 수 없는 NUL/비정상 surrogate는 저장 성공으로 표시하지 않고 기존 안전한 사본을 유지한다. 영구 HTTP 4xx(408/429 제외)는 pending을 보존한 blocked 상태이며 무한 재전송하지 않는다.

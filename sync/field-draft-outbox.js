@@ -13,7 +13,15 @@ const revision=s=>{
  if(typeof s!=='string'||!/^(0|[1-9]\d*)$/.test(s)||BigInt(s)>9223372036854775807n)throw fail('invalid_version');
  return s;
 };
-const text=s=>{if(typeof s!=='string'||utf8(s)>65536)throw fail('invalid_text');return s;};
+const text=s=>{
+ if(typeof s!=='string'||s.includes('\0')||utf8(s)>65536)throw fail('invalid_text');
+ for(let i=0;i<s.length;i++){
+  const c=s.charCodeAt(i);
+  if(c>=0xd800&&c<=0xdbff){const next=s.charCodeAt(++i);if(!(next>=0xdc00&&next<=0xdfff))throw fail('invalid_text');}
+  else if(c>=0xdc00&&c<=0xdfff)throw fail('invalid_text');
+ }
+ return s;
+};
 const id=s=>{if(typeof s!=='string'||!uuid.test(s))throw fail('invalid_id');return s.toLowerCase();};
 function create({owner,editorId,sessionId,storage,send,getOwner,getSessionId,now=Date.now,makeId=()=>globalThis.crypto.randomUUID()}){
  if(typeof owner!=='string'||!owner||typeof getOwner!=='function'||typeof getSessionId!=='function'||!storage||typeof storage.getItem!=='function'||typeof storage.setItem!=='function'||typeof storage.key!=='function'||!Number.isSafeInteger(storage.length)||typeof send!=='function')throw fail('invalid_options');
@@ -71,6 +79,7 @@ function create({owner,editorId,sessionId,storage,send,getOwner,getSessionId,now
  function attachLease(s,result){
   active();const r=read(s);if(!r)throw fail('draft_missing');if(r.pending)throw fail('pending_operation');
   const next=candidate(result);
+  if(r.candidate&&r.candidate.text!==next.text)archiveServer(r,r.candidate);
   const dirty=r.text!==r.baseText;
   if(dirty&&(next.text!==r.baseText||(r.remote&&r.remote.draftId!==next.remote.draftId))){
    r.candidate=next;r.status='conflict';return persist(s,r);
@@ -82,13 +91,20 @@ function create({owner,editorId,sessionId,storage,send,getOwner,getSessionId,now
   return persist(s,r);
  }
  function archive(r,entry){
-  if(r.conflicts.some(c=>c.id===entry.id))return;
+  const previous=r.conflicts.find(c=>c.id===entry.id);
+  if(previous){if(previous.text!==entry.text)throw fail('conflict_identity_mismatch');return;}
   if(r.conflicts.length>=32)throw fail('conflict_capacity');
   r.conflicts.push(entry);
+ }
+ function archiveServer(r,c){
+  archive(r,{id:'server:'+c.remote.draftId+':'+c.remote.revision+':'+c.remote.epoch,text:c.text,
+   reason:'server_copy_before_selection',serverPreserved:false});
  }
  function resolve(s,result,choice){
   active();if(!['keep_local','use_server'].includes(choice))throw fail('explicit_choice_required');
   const r=read(s);if(!r)throw fail('draft_missing');const next=candidate(result);
+  if(r.candidate&&r.candidate.text!==next.text)archiveServer(r,r.candidate);
+  if(choice==='keep_local'&&r.text!==next.text)archiveServer(r,next);
   if(r.pending)archive(r,{id:r.pending.id,text:r.pending.text,reason:'explicit_resolution',serverPreserved:false});
   if(choice==='use_server'&&r.text!==next.text)archive(r,{id:id(makeId()),text:r.text,reason:'local_copy_before_selection',serverPreserved:false});
   r.pending=null;r.remote=next.remote;r.baseText=next.text;r.candidate=null;r.blockedReason=null;r.localRevision++;
@@ -118,12 +134,14 @@ function create({owner,editorId,sessionId,storage,send,getOwner,getSessionId,now
   }catch(error){
    if(getOwner()!==owner||getSessionId()!==sessionId)return {status:'identity_changed'};
    r=read(s);if(r?.pending?.id===p.id){
-    r.status=[401,403].includes(error?.status)?'blocked':'local';r.blockedReason=r.status==='blocked'?'authentication':null;persist(s,r);
+    const permanent=error?.status>=400&&error.status<500&&![408,429].includes(error.status);
+    r.status=permanent?'blocked':'local';r.blockedReason=permanent?([401,403].includes(error.status)?'authentication':'request_rejected'):null;persist(s,r);
    }
-   return {status:[401,403].includes(error?.status)?'blocked':'retryable'};
+   return {status:error?.status>=400&&error.status<500&&![408,429].includes(error.status)?'blocked':'retryable'};
   }
   if(getOwner()!==owner||getSessionId()!==sessionId)return {status:'identity_changed'};
   r=read(s);if(!r||r.pending?.id!==p.id)return {status:'stale_ack'};
+  if(response?.status==='disabled'){r.status='blocked';r.blockedReason='feature_disabled';persist(s,r);return {status:'blocked'};}
   if(!response||typeof response!=='object'||!['saved','conflict'].includes(response.status))throw fail('invalid_response');
   if(response.status==='saved'){
    if(id(response.draft_id)!==p.draftId||revision(response.epoch)!==p.epoch||BigInt(revision(response.revision))!==BigInt(p.revision)+1n)throw fail('invalid_response');

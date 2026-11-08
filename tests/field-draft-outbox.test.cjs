@@ -174,3 +174,33 @@ test('transport rejects insecure origins and server-only keys; RPC errors have n
  assert.throws(()=>createTransport({...config,publishableKey:serviceKey}),e=>e.code==='publishable_key_required');
  await assert.rejects(createTransport(config)({p_operation:'save'}),e=>e.code==='rpc_failed'&&e.status===404);
 });
+
+test('a server rollout pause preserves the pending packet and blocks automatic resends',async()=>{
+ const f=fixture({send:async()=>({status:'disabled',reason:'feature_disabled',preserved:false})});ready(f);
+ assert.equal((await f.model.sync(S)).status,'blocked');const r=f.model.read(S);assert.equal(r.blockedReason,'feature_disabled');assert.equal(r.pending.text,'typed');
+ assert.equal((await f.model.sync(S)).status,'blocked');
+});
+
+test('choosing local text retains the losing server version after successful synchronization',async()=>{
+ const f=fixture({send:async q=>({status:'saved',draft_id:q.p_draft_id,revision:String(BigInt(q.p_expected_revision)+1n),epoch:q.p_expected_epoch})});
+ ready(f,'chosen local');f.model.resolve(S,lease('losing server text','7','2'),'keep_local');await f.model.sync(S);
+ const r=f.model.read(S);assert.equal(r.baseText,'chosen local');assert.ok(r.conflicts.some(c=>c.text==='losing server text'));
+});
+test('new remote candidates do not erase earlier unresolved server versions',async()=>{
+ const f=fixture();f.model.start(S,'base');f.model.edit(S,'local input');
+ f.model.attachLease(S,lease('server one','1','2'));f.model.attachLease(S,lease('server two','2','3'));
+ const r=f.model.read(S);assert.equal(r.text,'local input');assert.equal(r.candidate.text,'server two');assert.ok(r.conflicts.some(c=>c.text==='server one'));
+});
+
+test('PostgreSQL-incompatible NUL and unpaired surrogate input never replaces a safe local copy',()=>{
+ const f=fixture();f.model.start(S,'safe');const before=f.model.exportRaw(S);
+ for(const value of ['a\0b','\ud800','\udc00']){assert.throws(()=>f.model.edit(S,value),e=>e.code==='invalid_text');assert.equal(f.model.exportRaw(S),before);}
+ assert.equal(f.model.edit(S,'🎭 가사').text,'🎭 가사');
+});
+test('permanent HTTP rejection blocks resends without deleting the pending original',async()=>{
+ for(const status of [400,404,422]){
+  let calls=0;const f=fixture({send:async()=>{calls++;throw Object.assign(Error('request rejected'),{status});}});ready(f);
+  assert.equal((await f.model.sync(S)).status,'blocked');assert.equal(f.model.read(S).blockedReason,'request_rejected');assert.equal(f.model.read(S).pending.text,'typed');
+  assert.equal((await f.model.sync(S)).status,'blocked');assert.equal(calls,1);
+ }
+});
