@@ -993,14 +993,16 @@ test('Library actually plays device and cloud-only audio (time advances)', async
   wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
   for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 8) * 6000), 44 + i * 2);
   await page.route('**/cloud-audio.wav', r => r.fulfill({contentType:'audio/wav', body:wav}));
+  await page.goto('/#/library');
   await page.evaluate(() => {
     window.vzipCloudSignedIn = () => true;
     window.vzipCloudMediaList = async () => [{id:'c1', name:'클라우드 음원', type:'audio/wav', path:'ui-test-user/c1.wav', created:Date.now(), songId:'', cloud:true}];
     window.vzipCloudMediaUrl = async () => { await new Promise(r => setTimeout(r, 300)); return '/cloud-audio.wav'; };
     window.dispatchEvent(new Event('vzip:auth-changed'));
+    VZ.media.invalidate(); VZ.nav('#/library');
   });
+  await expect(page.locator('[data-media="c1"]')).toBeVisible();
   for (const id of ['m2', 'c1']) {
-    await page.goto('/#/library');
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
     await expect(page).toHaveURL(/#\/library$/);
@@ -1408,7 +1410,7 @@ test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
   await page.evaluate(() => VZ.songSheet(VZ.song('s2')));
   await sheet(page).getByLabel('별칭 (쉼표로 구분)').fill('온마이오운, On my own , 온마이오운');
   await sheet(page).getByRole('button', {name:'저장'}).click();
-  expect((await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
+  await expect.poll(async () => (await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
   expect(await page.evaluate(() => VZ.suggestSongs('온마이오운_0412.m4a')[0])).toMatchObject({id:'s2'});
 });
 
