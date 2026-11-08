@@ -233,7 +233,7 @@ export function createHomeIcon(name,className="") {
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
   svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("focusable","false");
   const id="vz-glyph-"+(++homeGlyphId);
-  const colors=name==="fire"?["#ffe9ab","#ffb15a","#f18437"]:["#B78BE7","#A775D8","#9258CA"];
+  const colors=name==="fire"?["#f2d3a8","#e4b07d","#d59a68"]:["#9b84bd","#8e70b2","#8063a7"];
   // Only these local vector constants enter markup. User text still uses textContent.
   svg.innerHTML='<defs><linearGradient id="'+id+'" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="'+colors[0]+'"/><stop offset=".44" stop-color="'+colors[1]+'"/><stop offset="1" stop-color="'+colors[2]+'"/></linearGradient></defs><g fill="url(#'+id+')" stroke-linejoin="round">'+(homeGlyphs[name]||homeGlyphs.sparkle)+'</g>';
   svg.querySelectorAll("[data-stroke]").forEach(path=>path.setAttribute("stroke","url(#"+id+")"));
@@ -319,7 +319,7 @@ export function createGoalProgress({completed=0,total=0}={}) {
   svg.setAttribute("viewBox","0 0 106 57");svg.setAttribute("aria-hidden","true");
   const gradientId="vz-gauge-"+(++homeGlyphId);
   const defs=document.createElementNS(svg.namespaceURI,"defs");
-  defs.innerHTML='<linearGradient id="'+gradientId+'" x2=".8" y2="1"><stop stop-color="#ba73f5"/><stop offset=".55" stop-color="#962deb"/><stop offset="1" stop-color="#7900d9"/></linearGradient>';svg.append(defs);
+  defs.innerHTML='<linearGradient id="'+gradientId+'" x2=".8" y2="1"><stop stop-color="#b49ad6"/><stop offset=".55" stop-color="#9671c2"/><stop offset="1" stop-color="#7d59b0"/></linearGradient>';svg.append(defs);
   for(const kind of ["track","progress"]){
     const path=document.createElementNS("http://www.w3.org/2000/svg","path");
     path.setAttribute("d","M 4 53 A 49 49 0 0 1 102 53");path.setAttribute("class","vz-home-gauge-"+kind);

@@ -38,8 +38,6 @@ jobs:
         run: node --test tests/student-home-model.test.cjs
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
-      - name: Read original reference colors
-        run: node tools/student-home-reference-colors.cjs
       - name: Approved dock regression
         run: npx playwright test tests/v6.spec.cjs --grep 'Bottom navigation reaches' --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
       - name: Check out pinned original home
@@ -110,7 +108,7 @@ jobs:
               '',
               'All screenshots use synthetic fixture data. before and after use the same data and fixed browser clock.',
               'preview is the standalone design fixture; after is the actual application home.',
-              'Review these next to docs/design/student-home-v1/final-approved.jpeg from approved reference commit 37be635fb4da9e7a78db2aa47bba2435fa231baf.',
+              'Current brief: preserve composition and interactions with quieter lavender surfaces. The original JPEG is retained as historical context, not a pixel-match target.',
               'Screenshots are review evidence, not a claim of visual identity. Check the run result for test failures.',
               'Real iPhone Safari, installed PWA, hardware safe areas, and assistive technology remain unverified.',
               '',

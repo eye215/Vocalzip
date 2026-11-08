@@ -108,48 +108,43 @@
   }
 }
 
-/* Approved student home v1. Scoped to the home and its navigation skin.
- * These --vz variables never replace the live app's --bg/--accent contracts. */
-[data-vz-design="approved-home-v1"], .vz-home-mode {
-  --vz-color-canvas:#D8C7F7;
-  --vz-color-canvas-violet:#C6A6EF;
-  --vz-color-canvas-pink:#EBCBF5;
-  --vz-color-canvas-blue:#C9D5FA;
-  --vz-color-ink:#272057;
-  --vz-color-ink-secondary:#856594;
-  --vz-color-ink-muted:#8C729F;
-  --vz-color-heading:#854CBC;
-  --vz-color-heading-strong:#8140BC;
-  --vz-color-icon-start:#B78BE7;
-  --vz-color-icon-end:#9258CA;
-  --vz-color-accent:#8300DC;
-  --vz-color-accent-strong:#8050AC;
-  --vz-color-accent-soft:rgba(183,139,231,.16);
-  --vz-color-practice-low:#D9BCF8;
-  --vz-color-practice-met:#B581F6;
-  --vz-color-practice-high:#9B5EE7;
-  --vz-color-today:#7900DF;
-  --vz-color-day-accent:#F05BF4;
-  --vz-color-nav-label:#9B88B3;
-  --vz-color-check-border:#BE9EDB;
-  --vz-color-check-fill:#A879DC;
-  --vz-color-progress-track:#D8C5EF;
-  --vz-color-glass:rgba(255,255,255,.30);
-  --vz-color-glass-raised:rgba(255,255,255,.42);
-  --vz-color-glass-border:rgba(255,255,255,.48);
-  --vz-color-glass-fallback:#EDE2F9;
-  --vz-color-focus:#7137B1;
-  --vz-color-flame:#F59C48;
-  --vz-shadow-card:inset 2px 2px 8px rgba(255,255,255,.72),inset -2px -2px 6px rgba(255,255,255,.46),0 5px 17px rgba(101,57,159,.13);
-  --vz-shadow-dock:inset 2px 2px 8px rgba(255,255,255,.7),inset -2px -2px 8px rgba(255,255,255,.45),0 7px 24px rgba(104,58,161,.15);
-  --vz-shadow-greeting:0 1px 3px rgba(71,35,118,.20);
-  --vz-radius-card:28px;
-  --vz-page-gutter:13px;
-  --vz-card-padding:12px;
-  --vz-blur-card:blur(24px) saturate(135%);
+/* Refined student home. Latest direction keeps composition and prioritizes restrained surfaces. */
+[data-vz-design="approved-home-v1"],.vz-home-mode {
+ --vz-color-canvas:#f6f3fa;
+ --vz-color-canvas-violet:#eee8f7;
+ --vz-color-canvas-pink:#f5f0f8;
+ --vz-color-canvas-blue:#f1f1fa;
+ --vz-color-ink:#30283e;
+ --vz-color-ink-secondary:#8c8199;
+ --vz-color-ink-muted:#a195ac;
+ --vz-color-heading:#5e4c73;
+ --vz-color-heading-strong:#4b3b60;
+ --vz-color-icon-start:#9b84bd;
+ --vz-color-icon-end:#8063a7;
+ --vz-color-accent:#7d59b0;
+ --vz-color-accent-strong:#684392;
+ --vz-color-accent-soft:#f0eaf8;
+ --vz-color-practice-low:#e4d8f1;
+ --vz-color-practice-met:#a48aca;
+ --vz-color-practice-high:#74509f;
+ --vz-color-today:#8968b5;
+ --vz-color-day-accent:#7d59b0;
+ --vz-color-nav-label:#9b8eaa;
+ --vz-color-check-border:#d4c7e1;
+ --vz-color-check-fill:#a38ac5;
+ --vz-color-progress-track:#eee7f5;
+ --vz-color-glass:rgba(255,255,255,.92);
+ --vz-color-glass-raised:#fff;
+ --vz-color-glass-border:#e9e2ef;
+ --vz-color-glass-fallback:#fff;
+ --vz-color-focus:#76519e;
+ --vz-color-flame:#daa172;
+ --vz-shadow-card:0 4px 16px rgba(45,29,72,.035);
+ --vz-shadow-dock:0 6px 24px rgba(52,34,76,.06);
+ --vz-shadow-greeting:none;
+ --vz-radius-card:22px;
+ --vz-page-gutter:16px;
+ --vz-card-padding:14px;
+ --vz-blur-card:blur(12px) saturate(105%);
 }
-@media (max-width:359px) {
-  [data-vz-design="approved-home-v1"], .vz-home-mode {
-    --vz-page-gutter:12px; --vz-card-padding:12px;
-  }
-}
+@media(max-width:359px) {[data-vz-design="approved-home-v1"],.vz-home-mode {--vz-page-gutter:12px;--vz-card-padding:12px;}}
