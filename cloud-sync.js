@@ -289,9 +289,24 @@ function mediaUploadLock(work){
  });
  return work();
 }
-window.vzipCloudImport=(...args)=>mediaUploadLock(()=>importMedia(...args));
+let activeReceiptRecovery=null;
+function waitForReceiptRecovery(signal){
+ if(signal?.aborted)return Promise.reject(new DOMException('업로드를 취소했어요.','AbortError'));
+ const pending=activeReceiptRecovery;if(!pending)return Promise.resolve();
+ return new Promise((resolve,reject)=>{
+  let settled=false;
+  const finish=error=>{if(settled)return;settled=true;signal?.removeEventListener('abort',cancel);error?reject(error):resolve();};
+  const cancel=()=>finish(new DOMException('업로드를 취소했어요.','AbortError'));
+  signal?.addEventListener('abort',cancel,{once:true});
+  if(signal?.aborted){cancel();return;}
+  pending.then(()=>finish(),()=>finish());
+ });
+}
+window.vzipCloudImport=(...args)=>waitForReceiptRecovery(args[3]?.signal).then(()=>mediaUploadLock(()=>importMedia(...args)));
 /** Retry known completed uploads without reading or uploading the source file again. */
-window.vzipRecoverMediaUploads=(id)=>mediaUploadLock(async()=>{
+window.vzipRecoverMediaUploads=(id)=>{
+ if(activeReceiptRecovery)return activeReceiptRecovery.then(rows=>id?rows.filter(row=>row.id===id):rows);
+ const operation=mediaUploadLock(async()=>{
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요.');
  const recovery=mediaRecovery();
  mediaImportActive=true;const result=[];
@@ -306,7 +321,11 @@ window.vzipRecoverMediaUploads=(id)=>mediaUploadLock(async()=>{
   if(result.some(entry=>entry.status==='restored'))window.dispatchEvent(new Event('vzip:cloud-media-changed'));
   return result;
  }finally{mediaImportActive=false;}
-});
+ });
+ activeReceiptRecovery=operation;
+ operation.finally(()=>{if(activeReceiptRecovery===operation)activeReceiptRecovery=null;}).catch(()=>{});
+ return operation;
+};
 let receiptRecoveryTimer=null;
 function scheduleReceiptRecovery(){
  clearTimeout(receiptRecoveryTimer);

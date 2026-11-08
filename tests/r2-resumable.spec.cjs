@@ -59,3 +59,40 @@ test('another signed-in account cannot adopt the first account multipart journal
  expect(result).toEqual([]);expect(r2.calls.slice(before).some(x=>x.startsWith('POST /v2'))).toBe(false);
  expect(await page.evaluate(()=>window.__rows['v2-owner']||null)).toBeNull();expect(r2.store.size).toBe(1);
 });
+
+test('manual recovery shares background work and a cancellable retry waits for its lock',async({page})=>{
+ const r2=await fakeR2(page,{resumable:true,failPart:2});await boot(page);
+ await page.evaluate(async()=>{
+  const bytes=new Uint8Array(8*1024*1024+23);bytes.fill(7);window.__retryFile=new File([bytes],'retry.wav',{type:'audio/wav'});
+  try{await window.vzipCloudImport(window.__retryFile,{id:'v2-recovery-lock',name:'원래 제목',songId:'s1'});}catch{}
+  await window.vzipRecoverMediaUploads();
+ });
+ r2.reject.failPart=0;
+ let entered,release;const enteredGate=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve);let held=false;
+ await page.route('**/v2/uploads/status',async route=>{
+  if(!held){held=true;entered();await gate;}
+  await route.fallback();
+ });
+ await page.evaluate(()=>{window.__background=window.vzipRecoverMediaUploads();});
+ await enteredGate;
+ const requests=await page.evaluate(()=>{
+  window.__lockRequests=0;const request=navigator.locks.request.bind(navigator.locks);
+  navigator.locks.request=(...args)=>{window.__lockRequests++;return request(...args);};
+  const capture=p=>p.then(value=>({value}),error=>({error:{name:error.name,message:error.message}}));
+  window.__manual=capture(window.vzipRecoverMediaUploads('v2-recovery-lock'));
+  const controller=new AbortController();
+  window.__cancelled=capture(window.vzipCloudImport(window.__retryFile,{id:'v2-recovery-lock'},undefined,{signal:controller.signal}));
+  controller.abort();
+  window.__foreground=capture(window.vzipCloudImport(window.__retryFile,{id:'v2-recovery-lock',name:'재선택한 제목'}));
+  return window.__lockRequests;
+ });
+ release();
+ expect(requests).toBe(0);
+ const out=await page.evaluate(async()=>({manual:await window.__manual,cancelled:await window.__cancelled,saved:await window.__foreground}));
+ expect(out.manual).toEqual({value:[{status:'needs_file',id:'v2-recovery-lock'}]});
+ expect(out.cancelled.error.name).toBe('AbortError');
+ expect(out.saved.value).toMatchObject({name:'원래 제목',songId:'s1',size:8*1024*1024+23});
+ expect(r2.calls.filter(x=>x==='POST /v2/uploads')).toHaveLength(1);
+ expect(r2.calls.filter(x=>x==='PUT /v2/uploads/parts/1')).toHaveLength(1);
+ expect(r2.store.size).toBe(1);
+});
