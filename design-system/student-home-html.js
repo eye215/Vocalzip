@@ -49,6 +49,7 @@ const adaptations=String.raw`
 :host{display:block;width:100%;background:#f8f6fd;}
 /* Use the device width rather than leaving a 390px mock phone inside wider phones. */
 #vocalzip-refined-preview .vz-phone{max-width:560px;padding:8px 12px 0;padding-top:max(8px,env(safe-area-inset-top));}
+#vocalzip-refined-preview .vz-nav-item.vz-active{background:#EDE1FF;}
 #vocalzip-refined-preview .vz-header{min-height:44px;margin-bottom:8px;}
 #vocalzip-refined-preview .vz-logo{font-size:26px;line-height:34px;gap:8px;}
 #vocalzip-refined-preview .vz-logo b{font-weight:700;}
