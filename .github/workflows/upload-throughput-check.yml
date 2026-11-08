@@ -24,3 +24,24 @@ jobs:
         env:
           VZIP_BENCH_BASE: 0b63d76ba4e6bce0ffbf12ac1ce90700227c3800
       - run: npm run test:syntax
+  browser:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VZIP_BENCH_BASE: 0b63d76ba4e6bce0ffbf12ac1ce90700227c3800
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/r2.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: upload-title-failures
+          path: test-results/

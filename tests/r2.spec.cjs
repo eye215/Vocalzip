@@ -481,3 +481,92 @@ test('Malformed server deletion metadata blocks recovery without relinking or re
  expect(await page.evaluate(()=>window.__rows['receipt-bad-delete']||null)).toBeNull();
  expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);expect(r2.store.size).toBe(1);
 });
+
+test('Baseline reproduces song/date changes leaving the recording title unchanged',async({page})=>{
+ test.skip(!process.env.VZIP_BENCH_BASE,'baseline audit runs in the focused throughput workflow');
+ const {execFileSync}=require('node:child_process'),base=process.env.VZIP_BENCH_BASE;
+ for(const path of ['app/media.js','cloud-sync.js']){
+  const body=execFileSync('git',['show',base+':'+path],{encoding:'utf8'});
+  await page.route('**/'+path+'*',route=>route.fulfill({contentType:'application/javascript',body}));
+ }
+ await fakeR2(page);await boot(page);
+ const out=await page.evaluate(async()=>{
+  const id='baseline-auto-title';window.__rows[id]={id,name:'original',source:'import',originalFilename:'original.wav',type:'audio/wav',recordedDate:'2026-11-08',songId:'',song:''};window.__upd[id]='2026-11-08T01:00:00.000Z';
+  const item={...window.__rows[id],cloud:true};
+  await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  await VZ.media.update({...window.__rows[id],cloud:true},{recordedDate:'2026-11-09'});
+  return window.__rows[id];
+ });
+ expect(out).toMatchObject({songId:'s1',recordedDate:'2026-11-09',name:'original'});
+ console.log('BASELINE_TITLE_BUG_REPRODUCED');
+});
+test('An imported automatic title follows song assignment and date edits and survives reload',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ const out=await page.evaluate(async bytes=>{
+  const saved=await VZ.media.importFile(new File([new Uint8Array(bytes)],'original.wav',{type:'audio/wav'}),{id:'automatic-title',date:'2026-11-08',direct:true});
+  const item={...saved,cloud:true};await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  const assigned={...window.__rows[item.id]};
+  await VZ.media.update({...assigned,cloud:true},{recordedDate:'2026-11-09',dateSource:'manual',name:assigned.name});
+  return {assigned,current:window.__rows[item.id]};
+ },[...wav(1)]);
+ expect(out.assigned).toMatchObject({name:'Defying Gravity 2026.11.08',nameMode:'auto',originalFilename:'original.wav'});
+ expect(out.current).toMatchObject({name:'Defying Gravity 2026.11.09',recordedDate:'2026-11-09',songId:'s1'});
+ const rows=await page.evaluate(()=>window.__rows);
+ await page.addInitScript(rows=>{window.__rows=rows;},rows);await page.reload();await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__rows['automatic-title'].name)).toBe('Defying Gravity 2026.11.09');
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+});
+test('Manual recording titles stay unchanged when song and date are edited',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ const out=await page.evaluate(async()=>{
+  const id='manual-title';window.__rows[id]={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav'};window.__upd[id]='2026-11-08T01:00:00.000Z';
+  await VZ.media.update({...window.__rows[id],cloud:true},{name:'오디션 제출용 최종 테이크'});
+  await VZ.media.assignSongSafe({...window.__rows[id],cloud:true},{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  await VZ.media.update({...window.__rows[id],cloud:true},{recordedDate:'2026-11-09'});
+  return window.__rows[id];
+ });
+ expect(out).toMatchObject({name:'오디션 제출용 최종 테이크',nameMode:'manual',songId:'s1',recordedDate:'2026-11-09'});
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(0);
+});
+test('A newer title from another device wins over a stale automatic title snapshot',async({page})=>{
+ await fakeR2(page);await boot(page);
+ const result=await page.evaluate(async()=>{
+  const id='newer-title',stale={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav',cloud:true};
+  window.__rows[id]={...stale,name:'다른 기기에서 정한 제목',review:'다른 기기 메모'};window.__upd[id]='2026-11-08T01:00:00.000Z';
+  await VZ.media.assignSongSafe(stale,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  return window.__rows[id];
+ });
+ expect(result).toMatchObject({name:'다른 기기에서 정한 제목',review:'다른 기기 메모',songId:'s1'});
+});
+test('Device-only imports also update automatic titles when assigned a song',async({page})=>{
+ await fakeR2(page);await boot(page);
+ const result=await page.evaluate(async()=>{
+  VZ.media.holdBackup(true);const id='local-auto-title';
+  await window.vzipStorePracticeMedia({id,name:'original',nameMode:'auto',autoName:'original',originalFilename:'original.wav',recordedDate:'2026-11-08',type:'audio/wav',blob:new Blob([new Uint8Array([1,2,3])],{type:'audio/wav'}),songId:'',song:''});
+  const item={...(await window.vzipReadMedia()).find(x=>x.id===id),local:true,cloud:false};
+  await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  return (await window.vzipReadMedia()).find(x=>x.id===id);
+ });
+ expect(result).toMatchObject({name:'Defying Gravity 2026.11.08',songId:'s1',nameMode:'auto'});
+});
+test('Profile native WAV preparation separately from cloud transfer and metadata commit',async({page},info)=>{
+ test.skip(info.project.name!=='chromium-desktop','one reference profile; physical iPhone timing remains separate');
+ test.setTimeout(90000);await fakeR2(page);await boot(page);
+ const result=await page.evaluate(async()=>{
+  const count=60*48000,buffer=new ArrayBuffer(44+count*2),view=new DataView(buffer),bytes=new Uint8Array(buffer),set=(offset,text)=>bytes.set(new TextEncoder().encode(text),offset);
+  set(0,'RIFF');view.setUint32(4,36+count*2,true);set(8,'WAVEfmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,48000,true);view.setUint32(28,96000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);set(36,'data');view.setUint32(40,count*2,true);
+  for(let i=0;i<count;i++)view.setInt16(44+i*2,Math.round(Math.sin(i/7)*5000),true);
+  const profile={sourceBytes:buffer.byteLength,prepareMs:0,cloudMs:0};
+  const prepare=window.vzipPrepareMedia,cloud=window.vzipCloudImport;
+  window.vzipPrepareMedia=async(...args)=>{const at=performance.now(),out=await prepare(...args);profile.prepareMs+=performance.now()-at;profile.samplesVerified=!!out.metadata.losslessFlac?.samplesVerified;return out;};
+  window.vzipCloudImport=async(...args)=>{const at=performance.now();try{return await cloud(...args);}finally{profile.cloudMs+=performance.now()-at;}};
+  const at=performance.now();
+  const saved=await VZ.media.importFile(new File([buffer],'profile.wav',{type:'audio/wav'}),{id:'profile-upload',direct:true});
+  profile.totalMs=performance.now()-at;profile.storedBytes=saved.size;profile.storedType=saved.type;
+  window.vzipPrepareMedia=prepare;window.vzipCloudImport=cloud;
+  return profile;
+ });
+ expect(result.sourceBytes).toBe(5760044);expect(result.storedBytes).toBeGreaterThan(0);
+ if(result.storedType==='audio/flac')expect(result.samplesVerified).toBe(true);
+ console.log('UPLOAD_PHASE_PROFILE '+JSON.stringify(result));
+});

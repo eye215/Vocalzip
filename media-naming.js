@@ -26,7 +26,7 @@ function patch(meta,changes,resolve=()=> ''){
  if(!['song','songId','recordedDate','created'].some(k=>Object.hasOwn(out,k)&&out[k]!==meta[k])||!mode(meta,resolve))return out;
  const old=title(meta,resolve,false),tail=old&&String(meta.name||'').startsWith(old)?String(meta.name).slice(old.length):'';
  const suffix=/^ (?:[2-9]|[1-9]\d+)$/.test(tail)?tail:'';
- const name=title({...meta,...out},resolve)+(out.song||out.songId?suffix:'');
+ const next={...meta,...out},name=title(next,resolve)+(next.song||next.songId?suffix:'');
  return {...out,name,nameMode:'auto',autoName:name};
 }
 return {patch,title,isAutomatic:mode};
