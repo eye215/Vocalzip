@@ -60,7 +60,8 @@ test('database quota exhaustion and failures never issue paid model requests',as
 });
 function browser(){
  let owner='alice',paid=0,excerpts=0;const events={},storage=new Map();
- const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,list:async()=>[]},route(){},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id},vzipCloudUserId:()=>owner,
+ const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,dateOf:()=>'',list:async()=>[]},route(){},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id,
+  esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),clock:n=>`${Math.floor((n||0)/60)}:${String((n||0)%60).padStart(2,'0')}`,dateLabel:s=>s||'날짜 없음'},vzipCloudUserId:()=>owner,
   vzipCloudSignedIn:()=>true,vzipCloudAccessToken:async()=> 'fake',
   VzipR2:{clip:async()=>{excerpts++;throw Error('unexpected extraction')}},dispatchEvent(){},addEventListener:(n,f)=>events[n]=f};
  const element=()=>({style:{},setAttribute(){},append(){},add(){},replaceChildren(){},querySelector:()=>element(),querySelectorAll:()=>[]});
@@ -146,7 +147,8 @@ test('what has been spent so far is shown from the server count',async()=>{
  b.window.vzipSttUsage=async()=>({total:200,today:3});
  await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
  assert.equal(line.hidden,false);
- assert.equal(line.textContent,'지금까지 쓴 금액: 약 $0.300 · 음성 분석 200회 (오늘 3회 · 약 $0.005)');
+ assert.equal(line.textContent,'사용 금액 약 $0.300');
+ assert.match(line.title,/음성 분석 200회 · 오늘 3회/);
  b.window.vzipSttUsage=async()=>null; b.api.spend.total=null;
  await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
  assert.equal(line.hidden,true); // signed out or the usage function not installed yet: nothing invented
@@ -251,117 +253,57 @@ test('TOP3 matcher displays sorted scores even if match is too ambiguous to auto
  assert.equal(matches[0].score,0.865);
  assert.equal(matches[2].songId,'c');
 });
-test('inline playback is lazy, same page shows TOP3 and redraw releases media',()=>{
- const b=browser(),item={id:'media-1',name:'Take 1.m4a',durationSeconds:76};
- const songs=[{id:'a',title:'Song A'},{id:'b',title:'Song B'},{id:'c',title:'Song C'}];
- b.window.VZ.db.songs=songs;
- b.window.VZ.media.dateOf=()=> '2026-11-06';
- const made=[],destroyed=[],paused=[];
- b.window.VZ.media.player=(host,row,options)=>{
-  made.push({host,row,options});
-  return {pause(){paused.push(row.id)},destroy(){destroyed.push(row.id)}};
- };
+function songView(b){
  function node(tag='div'){
-  return {tag,children:[],style:{},attributes:{},hidden:false,
-   setAttribute(name,value){this.attributes[name]=value},
-   append(...children){this.children.push(...children)},
-   replaceChildren(...children){this.children=[...children]},
-   add(child){this.children.push(child)},
-   querySelector(){return null},querySelectorAll(){return []}
-  };
+  const element={tag,children:[],style:{},hidden:false,disabled:false,attributes:{},dataset:{},
+   setAttribute(k,v){this.attributes[k]=v},append(...xs){this.children.push(...xs)},
+   replaceChildren(...xs){this.children=[...xs]},add(x){this.children.push(x)},querySelectorAll(){return []}};
+  Object.defineProperty(element,'innerHTML',{set(html){this.html=html;this.fields={};for(const selector of ['input','.vz-sc-play-trigger','.vz-sc-player-host','.vz-sc-player-placeholder','.vz-sc-recommend','.vz-sc-menu'])this.fields[selector]=node()},get(){return this.html}});
+  element.querySelector=selector=>element.fields?.[selector]||null;
+  return element;
  }
+ b.document.createElement=node;
  const listing=node(),widgets=new Map();
- for(const key of ['[data-suggest-list]','[data-more]','[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]'])
-  widgets.set(key,key==='[data-suggest-list]'?listing:node());
+ for(const key of ['[data-suggest-list]','[data-more]','[data-counter]','[data-select-all]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]','[data-page-count]','[data-review-count]','[data-auto-count]','[data-wait-count]','[data-vocal-count]'])widgets.set(key,key==='[data-suggest-list]'?listing:node());
  const root=node();root.querySelector=key=>widgets.get(key)||null;
  const main={isConnected:true,querySelector:key=>key==='[data-suggest]'?root:null};
- b.document.createElement=node;
+ return {node,listing,widgets,main};
+}
+test('record cards render safe names and playback is loaded only after a tap',()=>{
+ const b=browser(),v=songView(b),item={id:'media-1',name:'Take <1>.m4a',durationSeconds:76};
+ const made=[],destroyed=[];
+ b.window.VZ.media.player=(host,row,options)=>{made.push({host,row,options});return {play(){},destroy(){destroyed.push(row.id)}}};
  b.api.state.items=[item];b.api.state.chosen.add(item.id);
- b.api.setResult(item,{status:'식별 불가',method:'stt',transcript:'some text',candidate:null,
-  matches:[{songId:'a',score:0.88},{songId:'b',score:0.65},{songId:'c',score:0.31}]});
- b.api.draw(main);
- assert.equal(made.length,0,'player must not fetch/decode media on drawing 40 items');
- const card=listing.children[0],playWrap=card.children.find(x=>x.children?.[0]?.children?.[0]?.textContent==='▶ 녹음 듣기');
- assert.ok(playWrap,'inline listen toggle should be present');
- const listen=playWrap.children[0].children[0],host=playWrap.children[1];
- assert.equal(host.hidden,true);
- listen.onclick();
+ b.api.setResult(item,{status:'후보',candidate:{id:'a',title:'The River'},matches:[]});
+ b.api.draw(v.main);
+ const card=v.listing.children[0];
+ assert.match(card.innerHTML,/Take &lt;1&gt;.m4a/);
+ assert.match(card.innerHTML,/vz-sc-recommend/);
+ assert.equal(made.length,0);
+ card.querySelector('.vz-sc-play-trigger').onclick();
  assert.equal(made.length,1);
- assert.equal(made[0].row.id,item.id);
- assert.equal(made[0].options.prefetch,false,'must avoid network prefetch for offscreen audio');
- assert.equal(made[0].options.tools,true,'player retains seek and speed controls');
- assert.equal(host.hidden,false);
- listen.onclick();assert.deepEqual(paused,['media-1']);assert.equal(host.hidden,true);
- const ranking=card.children.find(x=>x.children?.[0]?.textContent==='가사 유사도 TOP 3 · 참고 점수');
- assert.ok(ranking);
- assert.match(ranking.children[1].children[0].textContent,/88%/);
- assert.match(ranking.children[2].children[0].textContent,/65%/);
- assert.match(ranking.children[3].children[0].textContent,/31%/);
- assert.match(ranking.children[4].textContent,/확률은 아니에요/);
- ranking.children[2].children[1].onclick();
- assert.equal(b.api.readCache(item).candidate.id,'b','user can select 2nd candidate without applying song immediately');
- assert.deepEqual(destroyed,['media-1'],'redraw should close and revoke audio resources');
- assert.equal(made.length,1,'choosing another candidate never triggers audio replay or paid STT');
- assert.equal(b.counts().paid,0);
+ assert.equal(made[0].options.prefetch,false);
+ assert.equal(card.querySelector('.vz-sc-player-host').hidden,false);
+ b.api.draw(v.main);assert.deepEqual(destroyed,['media-1']);
 });
-
-test('30-item pages do not accumulate and keep existing selections between pages',()=>{
- const b=browser();
- b.window.VZ.media.dateOf=()=> '2026-11-06';
- const doc=b.document;
- function node(tag='div'){
-  return {tag,children:[],style:{},hidden:false,disabled:false,
-   setAttribute(){},append(...xs){this.children.push(...xs)},replaceChildren(...xs){this.children=[...xs]},
-   add(child){this.children.push(child)},querySelector(){return null},querySelectorAll(){return []}
-  };
- }
- doc.createElement=node;
- const listing=node(),nodes=new Map();
- for(const key of ['[data-suggest-list]','[data-more]','[data-prev]','[data-page-count]',
-  '[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]'])
-  nodes.set(key,key==='[data-suggest-list]'?listing:node());
- const root=node();root.querySelector=key=>nodes.get(key)||null;
- const main={isConnected:true,querySelector:key=>key==='[data-suggest]'?root:null};
+test('more appends batches of 30 and keeps selections',()=>{
+ const b=browser(),v=songView(b);
  b.api.state.items=Array.from({length:75},(_,i)=>({id:'m'+i,name:'Take '+i+'.m4a'}));
- b.api.state.page=0;
- b.api.draw(main);
- assert.equal(listing.children.length,30);
- assert.match(nodes.get('[data-page-count]').textContent,/1–30 \/ 전체 75개/);
- assert.equal(nodes.get('[data-prev]').hidden,true);
- assert.equal(nodes.get('[data-more]').hidden,false);
- listing.children[0].children[0].children[0].checked=true;
- listing.children[0].children[0].children[0].onchange();
+ b.api.draw(v.main);assert.equal(v.listing.children.length,30);
+ assert.equal(v.widgets.get('[data-more]').hidden,false);
+ const checkbox=v.listing.children[0].querySelector('input');checkbox.checked=true;checkbox.onchange({target:checkbox});
  assert.equal(b.api.state.chosen.has('m0'),true);
- b.api.state.page=1;b.api.draw(main);
- assert.equal(listing.children.length,30,'second page replaces first page');
- assert.match(nodes.get('[data-page-count]').textContent,/31–60 \/ 전체 75개/);
- assert.equal(b.api.state.chosen.has('m0'),true,'selection from page 1 is preserved');
- b.api.state.page=2;b.api.draw(main);
- assert.equal(listing.children.length,15);
- assert.equal(nodes.get('[data-more]').hidden,true);
- assert.match(nodes.get('[data-page-count]').textContent,/61–75 \/ 전체 75개/);
+ b.api.state.page=1;b.api.draw(v.main);assert.equal(v.listing.children.length,60);
+ assert.equal(b.api.state.chosen.has('m0'),true);
+ b.api.state.page=2;b.api.draw(v.main);assert.equal(v.listing.children.length,75);
+ assert.equal(v.widgets.get('[data-more]').hidden,true);
 });
-test('selection has no cap across pages even when the list contains hundreds',()=>{
- const b=browser();b.window.VZ.media.dateOf=()=> '';
- function node(){
-  return {children:[],style:{},hidden:false,disabled:false,setAttribute(){},append(...xs){this.children.push(...xs)},
-   replaceChildren(...xs){this.children=[...xs]},add(x){this.children.push(x)},querySelectorAll(){return []}
-  };
- }
- b.document.createElement=node;
- const listing=node(),root=node(),nodes=new Map();
- for(const key of ['[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]','[data-more]','[data-prev]','[data-page-count]'])
-  nodes.set(key,node());
- nodes.set('[data-suggest-list]',listing);
- root.querySelector=x=>nodes.get(x);
- const main={isConnected:true,querySelector:x=>x==='[data-suggest]'?root:null};
+test('selection has no cap beyond 100 recordings',()=>{
+ const b=browser(),v=songView(b);
  b.api.state.items=Array.from({length:230},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
  b.api.state.chosen=new Set(b.api.state.items.slice(0,100).map(x=>x.id));
- b.api.state.page=4; // files 120-149: none selected yet
- b.api.draw(main);
- const checkbox=listing.children[0].children[0].children[0];
- checkbox.checked=true;checkbox.onchange();
- assert.equal(checkbox.checked,true,'the 101st file can be selected');
+ b.api.state.page=4;b.api.draw(v.main);
+ const checkbox=v.listing.children[120].querySelector('input');checkbox.checked=true;checkbox.onchange({target:checkbox});
  assert.equal(b.api.state.chosen.size,101);
 });
 
