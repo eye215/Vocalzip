@@ -132,7 +132,7 @@ async function screenshot(page,testInfo,name){
 test.afterEach(async({page})=>expect(page.__homeErrors||[]).toEqual([]));
 test('literal floating HTML and app screenshots at 320/390/430',async({page},testInfo)=>{
  await boot(page);
- for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);const card=await page.locator('.vz-week').boundingBox();expect(Math.abs(card.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(card.width-(width-32))).toBeLessThanOrEqual(1);await expect(page.locator('.vz-week')).toHaveCSS('padding-left','20px');await expect(page.locator('.vz-goals')).toHaveCSS('padding-top','20px');const dock=await page.locator('.vz-nav-space').boundingBox();expect(Math.abs(dock.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(dock.width-(width-32))).toBeLessThanOrEqual(1);const before=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(width-before.x-before.width-16)).toBeLessThanOrEqual(1);await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));const after=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);const last=await page.locator('.vz-goals').boundingBox();expect(last.y+last.height+12).toBeLessThanOrEqual(after.y);await page.evaluate(()=>scrollTo(0,0));await screenshot(page,testInfo,'student-home-after-'+width+'.png');}
+ for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);const card=await page.locator('.vz-week').boundingBox();expect(card.x).toBeGreaterThanOrEqual(12);expect(card.x).toBeLessThanOrEqual(20);expect(Math.abs(card.width-(width-2*card.x))).toBeLessThanOrEqual(1);await expect(page.locator('.vz-week')).toHaveCSS('padding-left','16px');await expect(page.locator('.vz-goals')).toHaveCSS('padding-top','16px');const dock=await page.locator('.vz-nav-space').boundingBox();expect(Math.abs(dock.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(dock.width-(width-32))).toBeLessThanOrEqual(1);const before=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(width-before.x-before.width-16)).toBeLessThanOrEqual(1);await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));const after=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);const last=await page.locator('.vz-goals').boundingBox();expect(last.y+last.height+12).toBeLessThanOrEqual(after.y);await page.evaluate(()=>scrollTo(0,0));await screenshot(page,testInfo,'student-home-after-'+width+'.png');}
  await page.goto('/design-system/student-home-preview.html?upcoming=all');await expect(page.locator('.vz-phone')).toBeVisible();
  for(const width of widths){
   await page.setViewportSize({width,height:940});await noOverflow(page);
@@ -198,7 +198,7 @@ test('weekday names, minutes, rings and percentage colors use actual records',as
  await boot(page);
  for(const [minutes,level,color]of [[0,'missed',null],[99,'partial','rgb(217, 197, 250)'],[100,'done','rgb(122, 50, 245)'],[120,'done','rgb(122, 50, 245)'],[121,'exceeded','rgb(76, 24, 142)']]){
   await page.evaluate(({minutes,date})=>VZ.change(d=>{d.practices=[{id:'boundary',date,manualMinutes:minutes,minutes:999,mediaSeconds:9999,songId:'s1'}];d.practicePlans=[{id:'day:'+date,period:'day',date,targetMinutes:100}];}),{minutes,date:TODAY});
-  const day=page.locator('.vz-days>div[data-date="'+TODAY+'"]'),dot=day.locator('.vz-day-dot');await expect(day).toHaveAttribute('data-today','true');await expect(day.locator('span').first()).toHaveText('수');await expect(dot).toHaveClass(new RegExp(level));await expect(dot).toHaveClass(/today/);
+  const day=page.locator('.vz-days>div[data-date="'+TODAY+'"]'),dot=day.locator('.vz-day-dot');await expect(day).toHaveAttribute('data-today','true');await expect(day.locator('span').first()).toHaveText('4');await expect(dot).toHaveClass(new RegExp(level));await expect(dot).toHaveClass(/today/);
   if(color)await expect(dot).toHaveCSS('background-color',color);await expect(day).toHaveAttribute('aria-label',new RegExp(minutes+'분 연습'));
   if(minutes)await expect(day.locator('.vz-day-minutes')).toHaveText(minutes+'분');
  }
@@ -213,9 +213,56 @@ test('four home navigation buttons and floating recording reach existing routes'
  }
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
-test('stage, lesson, song, quick actions and growth retain their real destinations',async({page})=>{
+
+test('weekly home includes loose recordings once, but excludes lesson and performance media',async({page})=>{
+ const value=seed();value.practices=[{id:'p',date:TODAY,minutes:999,manualMinutes:4,mediaIds:['linked']}];
+ await boot(page,value);
+ await page.evaluate(date=>{
+  const files=[{id:'one',durationSeconds:225},{id:'two',durationSeconds:191},{id:'three',durationSeconds:232},
+   {id:'linked',durationSeconds:900},{id:'lesson',source:'lesson',durationSeconds:900},
+   {id:'stage',occasion:'performance',durationSeconds:900}].map(m=>({...m,recordedDate:date,type:'audio/mp4'}));
+  VZ.media.list=async()=>files;
+  window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+ },TODAY);
+ await expect(page.locator('.vz-week .vz-time b')).toHaveText('15');
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('15분');
+ await expect(page.locator('.vz-week-range')).toHaveText('2026년11.2 – 11.8');
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]>span:first-child')).toHaveText('4');
+ expect((await db(page)).practices[0].manualMinutes).toBe(4);
+});
+
+test('week swipe and arrows preserve history across Monday, and title/day navigate to exact calendar dates',async({page})=>{
+ const value=seed();value.practices=[{id:'sunday',date:'2026-11-08',minutes:14}];
+ await boot(page,value);
+ await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);
+ await expect(page.locator('.vz-week .vz-time b')).toHaveText('0');
+ await expect(page.locator('.vz-week-range')).toHaveText('2026년11.9 – 11.15');
+ const card=page.locator('.vz-week');
+ await card.dispatchEvent('pointerdown',{pointerId:7,button:0,pointerType:'touch',clientX:100,clientY:400});
+ await card.dispatchEvent('pointerup',{pointerId:7,button:0,pointerType:'touch',clientX:230,clientY:403});
+ await expect(page.locator('.vz-week .vz-time b')).toHaveText('14');
+ await expect(page.locator('.vz-week-range')).toHaveText('2026년11.2 – 11.8');
+ // A vertical scroll gesture must leave the week alone.
+ await card.dispatchEvent('pointerdown',{pointerId:8,button:0,clientX:100,clientY:400});
+ await card.dispatchEvent('pointerup',{pointerId:8,button:0,clientX:103,clientY:550});
+ await expect(card).toHaveAttribute('data-week-start','2026-11-02');
+ // Wait out synthetic swipe click suppression before a deliberate next tap.
+ await page.waitForTimeout(360);
+ await page.getByRole('button',{name:'다음 주',exact:true}).click();
+ await expect(card).toHaveAttribute('data-week-start','2026-11-09');
+ await page.getByRole('button',{name:'이전 주',exact:true}).click();
+ await page.locator('.vz-days>[data-date="2026-11-08"]').click();
+ await expect(page).toHaveURL(/#\/calendar\?date=2026-11-08$/);
+ await expect(page.locator('[data-grid] [data-d="2026-11-08"]')).toHaveAttribute('aria-pressed','true');
+ await page.evaluate(()=>VZ.nav('#/home'));await ready(page);
+ await page.getByRole('button',{name:'오늘 일정 보기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/calendar\?date=2026-11-09$/);
+ await expect(page.locator('[data-grid] [data-d="2026-11-09"]')).toHaveAttribute('aria-pressed','true');
+ expect((await db(page)).practices).toEqual(value.practices);
+});
+test('stage, lesson, song and quick actions retain their real destinations',async({page})=>{
  await boot(page);
- for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','song/s1'],['레슨노트','lessons'],['연습기록','practices'],['성장 기록 보기','growth'],['프로필','settings']]){
+ for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','song/s1'],['레슨노트','lessons'],['연습기록','practices'],['프로필','settings']]){
   await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
  }
 });
