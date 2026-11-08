@@ -280,7 +280,7 @@ begin
    result:=jsonb_build_object('status','committed','snapshot_revision',snap.revision::text,'generation',snap.generation,'updated_at',snap.updated_at);
   end if;
  end if;
- result:=public.vzip_field_meta(d)||result||jsonb_build_object('replayed',false);
+ result:=public.vzip_field_meta(d)||result||jsonb_build_object('replayed',false,'is_editor',coalesce(d.lease_session=s and d.editor_instance=p_editor_instance and d.lease_expires_at>clock_timestamp(),false));
  insert into public.vzip_field_requests(user_id,request_id,draft_id,session_id,digest,response)
   values(u,p_request_id,d.draft_id,s,hash,result);
  return result;

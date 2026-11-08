@@ -135,7 +135,7 @@ test('release retains text and invalidates queued writes',{skip},async()=>{
 test('cooperative handoff is atomic and invalidates the previous epoch',{skip},async()=>{
  const a=await acquire(),b=await write('source flushed',a),r=await load({s:B,editor:E2});
  assert.equal((await rpc('request_handoff',{s:B,editor:E2,...tokens(r)})).status,'handoff_requested');assert.equal((await load()).is_editor,true);
- const done=await rpc('accept_handoff',{...tokens(b),target:E2});assert.equal(done.status,'handed_off');assert.ok(BigInt(done.epoch)>BigInt(b.epoch));
+ const done=await rpc('accept_handoff',{...tokens(b),target:E2});assert.equal(done.status,'handed_off');assert.equal(done.is_editor,false);assert.ok(BigInt(done.epoch)>BigInt(b.epoch));
  assert.equal((await load({s:B,editor:E2})).is_editor,true);assert.equal((await write('old source',b)).status,'conflict');
  assert.equal((await write('target text',done,{s:B,editor:E2})).status,'saved');
 });
@@ -240,7 +240,7 @@ test('legacy generation is adopted lazily without changing any original payload 
  await db.query('alter table public.vocal_data disable trigger vzip_data_next_revision');
  try{await db.query('update public.vocal_data set generation=null,revision=0 where user_id=$1',[U]);}
  finally{await db.query('alter table public.vocal_data enable trigger vzip_data_next_revision')}
- assert.equal((await load()).generation,null);const a=await acquire();assert.equal(a.status,'acquired');
+ assert.equal((await load()).generation,null);const a=await acquire();assert.equal(a.status,'acquired');assert.equal(a.is_editor,true);
  assert.ok((await snapshotRow()).generation);assert.deepEqual((await snapshotRow()).payload,before);
  assert.equal((await write('legacy resumed',a)).status,'saved');
 });
