@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=1';
+import {createFloatingHome} from './student-home-html.js?v=2';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -38,7 +38,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  }
  function recentCallbacks(recent){
   return {onRecent:()=>recent?nav('#/song/'+encodeURIComponent(recent.id)):nav('#/songs'),
-   onContinue:()=>recent?V.practiceSheet({songId:recent.id}):nav('#/songs'),
+   onContinue:()=>recent?nav('#/record?song='+encodeURIComponent(recent.id)):nav('#/songs'),
    onLessons:()=>nav('#/lessons'),onPractice:()=>nav('#/practices')};
  }
  function notices(){
@@ -53,18 +53,22 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const choices=[...existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true})),...candidates.map((g,i)=>({key:'candidate:'+i,goal:g,checked:false}))];
   const label=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':'개인';
   let dirty=false,approved=false,beforeUnload=null;
-  const body='<form id="student-home-plan"><p class="small muted">선택한 목표만 오늘의 목록에 넣어요. 수행 체크는 연습 시간이나 숙제의 최종 완료를 만들지 않아요.</p>'+
-   (choices.length?'<fieldset class="field" style="border:0;padding:0"><legend>오늘 할 목표</legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+'><span>'+esc(c.goal.title)+'</span><small>'+label(c.goal)+'</small></label>').join('')+'</div></fieldset>':'')+
-   '<label class="field"><span>개인 목표</span><textarea name="personal" rows="3" maxlength="10000" placeholder="한 줄에 목표 하나씩 입력하세요"></textarea></label>'+
-   '<div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(s.week.days.find(d=>d.today)?.targetMinutes??'')+'" placeholder="미설정"></label>'+
-   '<label class="field"><span>이번 주 목표 시간(분)</span><input type="number" name="weekMinutes" min="0" max="10080" inputmode="numeric" value="'+(s.week.targetMinutes??'')+'" placeholder="미설정"></label></div><p class="small muted">시간 목표는 직접 정해요. 입력하지 않으면 달성률을 만들지 않아요.</p><p role="alert" class="small" data-plan-error></p></form>';
+  const dayTarget=s.week.days.find(d=>d.today)?.targetMinutes;
+  const body='<form id="student-home-plan"><p class="vz-plan-intro">오늘 연습할 항목을 골라주세요.</p>'+
+   (choices.length?'<fieldset class="vz-plan-section"><legend>오늘 할 목표 <span data-plan-count>'+existing.length+'개 선택</span></legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+'><span class="vz-plan-check" aria-hidden="true"></span><span class="vz-plan-title">'+esc(c.goal.title)+'</span><small class="vz-plan-source">'+label(c.goal)+'</small></label>').join('')+'</div><p class="vz-plan-help">수행 체크는 숙제 완료나 연습 시간과 별도로 기록돼요.</p></fieldset>':'')+
+   '<label class="field vz-plan-personal"><span>개인 목표 <small>추가</small></span><textarea name="personal" aria-label="개인 목표" rows="2" maxlength="10000" placeholder="예: 후렴 고음에서 힘 빼기" aria-describedby="vz-plan-personal-help"></textarea><small id="vz-plan-personal-help" class="vz-plan-help">여러 목표는 한 줄에 하나씩 적어주세요.</small></label>'+
+   '<details class="vz-plan-time"'+(dayTarget!=null||s.week.targetMinutes!=null?' open':'')+'><summary>연습 시간 목표 <small>선택</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(dayTarget??'')+'" placeholder="미설정"></label>'+
+   '<label class="field"><span>이번 주 목표 시간(분)</span><input type="number" name="weekMinutes" min="0" max="10080" inputmode="numeric" value="'+(s.week.targetMinutes??'')+'" placeholder="미설정"></label></div><p class="vz-plan-help">설정한 시간 기준으로 달성률을 표시해요.</p></details><p role="alert" data-plan-error></p></form>';
   V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block vz-home-primary-button">목표 저장</button>',
    onMount:(el,close)=>{
+    el.classList.add('vz-plan-sheet');
     const form=el.querySelector('form');form.addEventListener('input',()=>{dirty=true;});
+    form.addEventListener('change',()=>{const count=el.querySelector('[data-plan-count]');if(count)count.textContent=form.querySelectorAll('[name=goal]:checked').length+'개 선택';});
     beforeUnload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue='';}};
     window.addEventListener('beforeunload',beforeUnload);
-    const guard=e=>{if(e.target.closest('[data-close]')&&dirty&&!approved&&!confirm('저장하지 않은 목표 설정을 닫을까요?')){e.preventDefault();e.stopImmediatePropagation();}};
+    const guard=e=>{if((e.target===el.parentNode||e.target.closest('[data-close]')||e.key==='Escape')&&dirty&&!approved&&!confirm('저장하지 않은 목표 설정을 닫을까요?')){e.preventDefault();e.stopImmediatePropagation();}};
     el.parentNode.addEventListener('click',guard,true);
+    el.parentNode.addEventListener('keydown',guard,true);
     V.setGuard(()=>dirty&&!approved?'저장하지 않은 목표 설정이 있어요. 나갈까요?':'');
     form.onsubmit=e=>{
      e.preventDefault();const button=el.parentNode.querySelector('[type=submit]');button.disabled=true;
@@ -123,3 +127,4 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  applyTheme();
  if((location.hash.replace(/^#\/?/,'').split(/[/?]/)[0]||'home')==='home')V.softRender();
 }
+

@@ -10,3 +10,47 @@ body.vz-home-mode .v-app,body.vz-home-mode #view{animation:none;transform:none;f
 body.vz-home-mode button.vz-home-primary-button{min-height:52px;padding:0 20px;border:0;border-radius:16px;background:#7a32f5;color:#fff;font:600 16px/1.5 Pretendard,system-ui,sans-serif;}
 body.vz-home-mode button.vz-home-primary-button:active{background:#6528ca;}
 body.vz-home-mode [data-home-retry]{min-height:44px;}
+
+/* Goal planning lives in the light DOM, outside the approved home shadow root. */
+.sheet.vz-plan-sheet{display:flex;flex-direction:column;max-height:calc(90dvh - var(--kb,0px));padding:0;overflow:hidden;background:#fff;border-radius:24px 24px 0 0;color:#344054;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;}
+.vz-plan-sheet .sheet-grab{flex:none;width:36px;height:4px;margin:10px auto 4px;background:#e4e7ec;}
+.vz-plan-sheet .sheet-head{flex:none;margin:0;padding:8px 20px 12px;}
+.vz-plan-sheet .sheet-head h2{color:#101828;font-size:20px;font-weight:700;letter-spacing:-.03em;}
+.vz-plan-sheet .sheet-head .icon-btn{width:44px;height:44px;color:#667085;}
+.vz-plan-sheet .sheet-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:0 20px 20px;}
+.vz-plan-sheet .sheet-foot{position:static;flex:none;bottom:auto;margin:0;padding:12px 20px calc(12px + var(--safe-b));border-top:1px solid #f2f4f7;background:#fff;}
+.vz-plan-sheet .sheet-foot .btn{display:block;width:100%;min-height:52px;border:0;border-radius:16px;background:#7a32f5;color:#fff;font:600 16px/1.5 Pretendard,system-ui,sans-serif;}
+.vz-plan-sheet .sheet-foot .btn:active{background:#6528ca;}
+.vz-plan-sheet .vz-plan-intro{margin:0 0 24px;color:#667085;font-size:14px;line-height:1.5;}
+.vz-plan-sheet .vz-plan-section{margin:0 0 24px;padding:0;border:0;}
+.vz-plan-sheet .vz-plan-section legend{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px;color:#344054;font-size:15px;font-weight:600;}
+.vz-plan-sheet [data-plan-count]{margin-left:auto;color:#7a32f5;font-size:12px;font-weight:600;}
+.vz-plan-sheet .vz-plan-options{display:grid;gap:8px;}
+.vz-plan-sheet .vz-plan-option{position:relative;display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:start;gap:12px;min-height:56px;padding:14px 12px;border:1px solid #e4e7ec;border-radius:14px;background:#fff;cursor:pointer;}
+.vz-plan-sheet .vz-plan-option:has(input:checked){border-color:#dfcefc;background:#f8f5ff;}
+.vz-plan-sheet .vz-plan-option input{position:absolute;width:1px;height:1px;margin:0;padding:0;opacity:0;}
+.vz-plan-sheet .vz-plan-check{display:grid;place-items:center;width:20px;height:20px;margin-top:2px;box-sizing:border-box;border:1.5px solid #98a2b3;border-radius:6px;background:#fff;}
+.vz-plan-sheet input:checked+.vz-plan-check{border-color:#7a32f5;background:#7a32f5;}
+.vz-plan-sheet input:checked+.vz-plan-check::after{content:'';width:9px;height:5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-1px) rotate(-45deg);}
+.vz-plan-sheet input:focus-visible+.vz-plan-check{outline:3px solid #d9c5fa;outline-offset:3px;}
+.vz-plan-sheet .vz-plan-title{min-width:0;overflow-wrap:anywhere;color:#344054;font-size:15px;font-weight:500;line-height:1.6;}
+.vz-plan-sheet .vz-plan-source{align-self:start;margin-top:1px;padding:3px 6px;border-radius:6px;background:#f2f4f7;color:#667085;font-size:11px;line-height:1.6;white-space:nowrap;}
+.vz-plan-sheet .field{margin:0;gap:8px;}
+.vz-plan-sheet .field>span{color:#344054;font-size:14px;font-weight:600;}
+.vz-plan-sheet .field>span>small,.vz-plan-sheet summary>small{margin-left:6px;color:#98a2b3;font-size:12px;font-weight:400;}
+.vz-plan-sheet .vz-plan-personal{margin-bottom:24px;}
+.vz-plan-sheet textarea,.vz-plan-sheet input[type=number]{min-width:0;max-width:100%;box-sizing:border-box;border:1px solid #e4e7ec;border-radius:12px;background:#f9fafb;color:#344054;font:400 16px/1.5 Pretendard,system-ui,sans-serif;}
+.vz-plan-sheet textarea{min-height:88px;resize:vertical;}
+.vz-plan-sheet textarea:focus,.vz-plan-sheet input[type=number]:focus{border-color:#7a32f5;outline:0;box-shadow:0 0 0 3px #f3ecff;background:#fff;}
+.vz-plan-sheet .vz-plan-help{display:block;margin:8px 0 0;color:#667085;font-size:12px;font-weight:400;line-height:1.6;}
+.vz-plan-sheet .vz-plan-personal .vz-plan-help{margin:0;}
+.vz-plan-sheet .vz-plan-time{border-top:1px solid #f2f4f7;}
+.vz-plan-sheet .vz-plan-time summary{display:flex;align-items:center;min-height:48px;list-style:none;cursor:pointer;color:#344054;font-size:15px;font-weight:600;}
+.vz-plan-sheet .vz-plan-time summary::-webkit-details-marker{display:none;}
+.vz-plan-sheet .vz-plan-time summary i{margin-left:auto;color:#98a2b3;font-size:18px;transition:transform .15s;}
+.vz-plan-sheet .vz-plan-time[open] summary i{transform:rotate(180deg);}
+.vz-plan-sheet .vz-plan-time .two{gap:12px;margin-top:8px;}
+.vz-plan-sheet .vz-plan-time .field>span{font-size:12px;line-height:1.5;}
+.vz-plan-sheet [data-plan-error]{margin:12px 0 0;color:#b42318;font-size:13px;line-height:1.5;}
+.vz-plan-sheet [data-plan-error]:empty{display:none;}
+
