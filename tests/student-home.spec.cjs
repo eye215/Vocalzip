@@ -230,7 +230,7 @@ test('weekly home includes loose recordings once, but excludes lesson and perfor
  },TODAY);
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('15');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('15분');
- await expect(page.locator('.vz-week-range')).toHaveText('11.2–11.8');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.2 – 11.8');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]>span:first-child')).toHaveText('4');
  expect((await db(page)).practices[0].manualMinutes).toBe(4);
 });
@@ -240,12 +240,12 @@ test('week swipe and arrows preserve history across Monday, and title/day naviga
  await boot(page,value);
  await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('0');
- await expect(page.locator('.vz-week-range')).toHaveText('11.9–11.15');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.9 – 11.15');
  const card=page.locator('.vz-week');
  await card.dispatchEvent('pointerdown',{pointerId:7,button:0,pointerType:'touch',clientX:100,clientY:400});
  await card.dispatchEvent('pointerup',{pointerId:7,button:0,pointerType:'touch',clientX:230,clientY:403});
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('14');
- await expect(page.locator('.vz-week-range')).toHaveText('11.2–11.8');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.2 – 11.8');
  // A vertical scroll gesture must leave the week alone.
  await card.dispatchEvent('pointerdown',{pointerId:8,button:0,clientX:100,clientY:400});
  await card.dispatchEvent('pointerup',{pointerId:8,button:0,clientX:103,clientY:550});
@@ -418,5 +418,17 @@ test('My Songs and Library share the current home outer spacing and fixed naviga
    expect(Math.abs(otherFab.x+otherFab.width-fab.x-fab.width)).toBeLessThanOrEqual(1);expect(Math.abs(otherFab.y-fab.y)).toBeLessThanOrEqual(1);
    await noOverflow(page);
   }
+ }
+});
+
+test('weekly metadata keeps its height across weeks and colors streaks only from two days',async({page})=>{
+ await boot(page);
+ const host=page.locator('.vz-student-home'),card=page.locator('.vz-week');
+ const base=await page.evaluate(()=>VzipStudentHomeModel.build(VZ.db,{today:VZ.today()}).week);
+ let height;
+ for(const [streak,current,target] of [[0,true,null],[1,false,210],[2,false,210]]){
+  await host.evaluate((el,week)=>el.updateWeek(week),{...base,streak,current,targetMinutes:target});
+  const next=(await card.boundingBox()).height;if(height!==undefined)expect(Math.abs(next-height)).toBeLessThanOrEqual(1);height=next;
+  await expect(page.locator('.vz-streak')).toHaveCSS('color',streak>=2?'rgb(122, 50, 245)':'rgb(102, 112, 133)');
  }
 });
