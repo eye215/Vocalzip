@@ -1,0 +1,15 @@
+{
+  "assertions": 119,
+  "widths": [
+    320,
+    390,
+    430
+  ],
+  "routes": 17,
+  "pageErrors": [],
+  "result": "passed",
+  "limitations": [
+    "실제 iPhone/PWA/VoiceOver 미검증",
+    "운영 데이터·실제 녹음·동기화 미연결"
+  ]
+}
