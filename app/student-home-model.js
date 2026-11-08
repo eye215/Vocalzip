@@ -93,15 +93,18 @@ function build(db={},options={}){
   if(!parse(today))throw Error('올바른 오늘 날짜가 필요해요.');
   const anchor=options.weekStart||today;
   if(!parse(anchor))throw Error('올바른 주간 날짜가 필요해요.');
-  const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),totals=new Map();
+  const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),allGoals=unique(db.dailyGoals),totals=new Map();
+  const defaultDailyTarget=minutes(options.defaultDailyTargetMinutes);
   // The adapter supplies the shared practice/recording ledger. Without it the
   // pure model retains its existing manual-record-only contract.
   const entries=Array.isArray(options.timeEntries)?options.timeEntries:practices.map(p=>({date:p.date,minutes:practiceMinutes(p)}));
   for(const p of entries){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+(minutes(p.minutes)||0))}
   const days=Array.from({length:7},(_,i)=>{
-    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date),ratio=goal>0?actual/goal*100:null;
+    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(defaultDailyTarget>0?defaultDailyTarget:null),ratio=goal>0?actual/goal*100:null;
     const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';
-    return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today};
+    const dayGoals=allGoals.filter(g=>g.date===date),goalsComplete=dayGoals.length>0&&dayGoals.every(g=>g.completed===true);
+    return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today,
+      goalCount:dayGoals.length,goalsComplete,timeMet:goal>0&&actual>=goal};
   });
   let targetMinutes=target(plans,'week',start);
   if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
@@ -109,11 +112,13 @@ function build(db={},options={}){
   const actualMinutes=days.reduce((n,d)=>n+d.minutes,0);
   let cursor=(totals.get(today)||0)>0?today:shift(today,-1),streak=0;
   while((totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
-  const goals=unique(db.dailyGoals).filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i}))
+  const goals=allGoals.filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i}))
     .sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||a._index-b._index).map(g=>{delete g._index;return g});
   const completed=goals.filter(g=>g.completed===true).length;
   const recommendationCandidates=unique(db.assignments).filter(t=>t.status!=='done'&&(!t.startDate||today>=t.startDate)&&(!t.dueDate||today<=t.dueDate))
     .map(t=>({title:String(t.title||''),source:'homework',sourceId:t.id}));
+  const latestSong=recentSong(db,practices,today)?.song;
+  recommendationCandidates.push({title:latestSong?latestSong.title+' 한 번 연습하기':'호흡과 발성 연습하기',source:'recommendation',sourceId:latestSong?'song:'+latestSong.id:'basic:breathing'});
   return {today,goals,goalProgress:{total:goals.length,completed,ratio:goals.length?completed/goals.length*100:null},
     week:{start,end:shift(start,6),current:start===monday(today),firstWeek:bounds.first,lastWeek:bounds.last,canPrevious:start>bounds.first,canNext:start<bounds.last,days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
     stage:nextStage(db,today),lesson:nextLesson(db,today),recent:recentSong(db,practices,today),recommendationCandidates};

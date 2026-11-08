@@ -56,6 +56,16 @@ test('weekly target uses the explicit plan or all seven explicit daily plans',()
   assert.equal(build({practicePlans:[{...weekly,targetMinutes:0}]}).week.ratio,null);
 });
 
+test('daily time and selected goals contribute independently to each weekly mark',()=>{
+  const date=today,base={id:'g',date,title:'발성',source:'personal',completed:false};
+  const view=(minutes,completed,goals=[base])=>build({dailyGoals:goals.map(g=>({...g,completed})),practices:[practice('p',date,minutes)]},{defaultDailyTargetMinutes:30}).week.days.find(d=>d.date===date);
+  assert.deepEqual([view(40,false).timeMet,view(40,false).goalsComplete],[true,false]);
+  assert.deepEqual([view(10,true).timeMet,view(10,true).goalsComplete],[false,true]);
+  assert.deepEqual([view(40,true).timeMet,view(40,true).goalsComplete],[true,true]);
+  assert.deepEqual([view(40,true,[]).timeMet,view(40,true,[]).goalsComplete],[true,false]);
+  assert.equal(view(40,true).targetMinutes,30);
+});
+
 test('actual time prefers manual minutes, deduplicates IDs and never adds media durations',()=>{
   const result=build({practices:[
     practice('a',today,40,{manualMinutes:10,mediaIds:['file'],durationSeconds:3600}),
@@ -143,8 +153,9 @@ test('recommendations respect homework dates and remain separate from saved goal
     {id:'done',title:'완료',status:'done'},
     {id:'later',title:'나중',startDate:'2026-11-08'},
     {id:'past',title:'과거',dueDate:'2026-11-06'}]});
-  assert.deepEqual(result.recommendationCandidates.map(t=>t.sourceId),['open','legacy']);
+  assert.deepEqual(result.recommendationCandidates.map(t=>t.sourceId),['open','legacy','basic:breathing']);
   assert.equal(result.recommendationCandidates[0].source,'homework');
+  assert.equal(result.recommendationCandidates[2].source,'recommendation');
   assert.equal(result.goals.length,0);
 });
 

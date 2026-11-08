@@ -17,7 +17,7 @@ class Server{
  client(){
   const server=this;
   return{
-   auth:{getUser:async()=>({data:{user:{id:'A',email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:'fake'}}})},
+   auth:{getUser:async()=>({data:{user:{id:'A',email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:'fake'}}}),signUp:async input=>{server.signup=copy(input);return {data:{session:null},error:null};}},
    rpc:async name=>({data:name==='vzip_register_session'?{status:'active',current_session:'s1'}:true,error:null}),
    from(table){
     const q={table,filters:{},method:'read',single:false},chain={};
@@ -57,7 +57,7 @@ class Server{
 function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  const listeners=new Map(),elements=new Map(),store=storage();
  const element=k=>{if(!elements.has(k))elements.set(k,{
-  textContent:'',hidden:false,value:'',classList:{toggle(){}},remove(){},appendChild(){},insertAdjacentHTML(){},
+  textContent:'',hidden:false,value:'',classList:{toggle(){}},remove(){},appendChild(){},after(){},insertAdjacentHTML(){},focus(){},reportValidity(){return true},
   querySelector:s=>element(s)
  });return elements.get(k)};
  const on=(type,fn)=>{if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push(fn)};
@@ -75,15 +75,27 @@ function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  const context=vm.createContext({...window,window,document,localStorage:store,Date:FixedDate,
   navigator:{userAgent:'test',maxTouchPoints:0},matchMedia:()=>({matches:false}),location:{href:'https://test.invalid/',reload(){},origin:'https://test.invalid',pathname:'/'},
   URL,structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
-  Event:class{constructor(type){this.type=type}},setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,10)),clearTimeout,setInterval(){},
+  Event:class{constructor(type){this.type=type}},confirm:()=>true,setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,10)),clearTimeout,setInterval(){},
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
  vm.runInContext(script,context);
  return{store,window,status:()=>element('#cloud-status').textContent,
+  control:element,
   sync:()=>element('#cloud-upload').onclick(),
   data:()=>JSON.parse(store.getItem(KEY)),
   saved:()=>store.getItem('vzip_cloud_linked_user')==='A'&&!store.getItem('vzip_account_dirty')};
 }
+test('first signup asks for a daily time with a 30-minute default and stores the chosen value',async()=>{
+ const server=new Server(),d=device(server);
+ await until(()=>typeof d.control('#cloud-signup').onclick==='function');
+ d.control('#cloud-email').value='new@example.invalid';d.control('#cloud-password').value='password123';
+ await d.control('#cloud-signup').onclick();
+ assert.equal(server.signup,undefined);
+ assert.equal(d.control('#cloud-signup').textContent,'목표 시간으로 가입하기');
+ d.control('#vzip-signup-minutes').value='45';
+ await d.control('#cloud-signup').onclick();
+ assert.equal(server.signup.options.data.daily_target_minutes,45);
+});
 test('two empty-account first saves preserve both records and use DO NOTHING',async()=>{
  const s=new Server();let reads=0,release;const gate=new Promise(r=>release=r);
  s.afterRead=async row=>{if(row===null&&++reads<=2){if(reads===2)release();await gate}};

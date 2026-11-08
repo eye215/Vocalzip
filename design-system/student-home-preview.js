@@ -1,7 +1,7 @@
 /* Fixed fixtures are isolated to this preview. No persistence or service calls.
  * Query ?state=empty|many|failure|boundaries to inspect additional states.
  */
-import {createFloatingHome} from "./student-home-html.js?v=4";
+import {createFloatingHome} from "./student-home-html.js?v=6";
 const params=new URLSearchParams(location.search),state=params.get("state");
 const status=document.querySelector(".preview-status");
 const announce=label=>()=>{status.textContent=label;};
@@ -17,7 +17,8 @@ const days=minutes.map((value,index)=>({
   date:"2026-11-"+String(2+index).padStart(2,"0"),
   label:["월","화","수","목","금","토","일"][index],
   minutes:value,targetMinutes:30,ratio:value==null?null:value/30*100,
-  state:value==null?"future":value===0?"empty":value<30?"partial":"met",today:index===5
+  state:value==null?"future":value===0?"empty":value<30?"partial":"met",today:index===5,
+  goalCount:index===2||index===4?2:1,goalsComplete:index===2||index===4,timeMet:value!=null&&value>=30
 }));
 // All event cases are preview fixtures. They never create or mutate application records.
 const show={kind:"performance",label:"다가오는 공연",title:"레미제라블",dateLabel:"11월 19일 (목) 오후 7:30",subtitle:"맡은 배역 · 에포닌",daysLeft:12,buttonLabel:"레미제라블 공연 확인",action:announce("공연 확인 · 프리뷰")};
