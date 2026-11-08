@@ -132,7 +132,7 @@ async function screenshot(page,testInfo,name){
 test.afterEach(async({page})=>expect(page.__homeErrors||[]).toEqual([]));
 test('literal floating HTML and app screenshots at 320/390/430',async({page},testInfo)=>{
  await boot(page);
- for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);const card=await page.locator('.vz-week').boundingBox();const side=width<=355?12:16;expect(Math.abs(card.x-side)).toBeLessThanOrEqual(1);expect(Math.abs(card.width-(width-2*side))).toBeLessThanOrEqual(1);await expect(page.locator('.vz-week')).toHaveCSS('padding-left','20px');await expect(page.locator('.vz-goals')).toHaveCSS('padding-top','20px');const dock=await page.locator('.vz-nav-space').boundingBox();expect(Math.abs(dock.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(dock.width-(width-32))).toBeLessThanOrEqual(1);const before=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(width-before.x-before.width-16)).toBeLessThanOrEqual(1);await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));const after=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);const last=await page.locator('.vz-goals').boundingBox();expect(last.y+last.height+12).toBeLessThanOrEqual(after.y);await page.evaluate(()=>scrollTo(0,0));await screenshot(page,testInfo,'student-home-after-'+width+'.png');}
+ for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);const card=await page.locator('.vz-week').boundingBox();const side=width<=355?12:16;expect(Math.abs(card.x-side)).toBeLessThanOrEqual(1);expect(Math.abs(card.width-(width-2*side))).toBeLessThanOrEqual(1);await expect(page.locator('.vz-week')).toHaveCSS('padding-left','16px');await expect(page.locator('.vz-goals')).toHaveCSS('padding-top','16px');const dock=await page.locator('.vz-nav-space').boundingBox();expect(Math.abs(dock.x-16)).toBeLessThanOrEqual(1);expect(Math.abs(dock.width-(width-32))).toBeLessThanOrEqual(1);const before=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(width-before.x-before.width-16)).toBeLessThanOrEqual(1);await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));const after=await page.getByRole('button',{name:'녹음 시작',exact:true}).boundingBox();expect(Math.abs(before.y-after.y)).toBeLessThanOrEqual(1);const last=await page.locator('.vz-goals').boundingBox();expect(last.y+last.height+12).toBeLessThanOrEqual(after.y);await page.evaluate(()=>scrollTo(0,0));await screenshot(page,testInfo,'student-home-after-'+width+'.png');}
  await page.goto('/design-system/student-home-preview.html?upcoming=all');await expect(page.locator('.vz-phone')).toBeVisible();
  for(const width of widths){
   await page.setViewportSize({width,height:940});await noOverflow(page);
@@ -227,7 +227,7 @@ test('weekly home includes loose recordings once, but excludes lesson and perfor
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('15');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('15분');
  await expect(page.locator('.vz-week-range')).toHaveText('2026년11.2 – 11.8');
- await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-date')).toHaveText('4');
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]>span:first-child')).toHaveText('4');
  expect((await db(page)).practices[0].manualMinutes).toBe(4);
 });
 
