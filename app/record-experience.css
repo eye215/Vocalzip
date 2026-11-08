@@ -21,8 +21,8 @@ body.vz-calendar-mode .vz-calendar-month{padding:20px 16px}
 body.vz-calendar-mode .cal-head{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;margin-bottom:16px}
 body.vz-calendar-mode .cal-head strong{text-align:center;color:#101828;font-size:17px;font-weight:700}
 body.vz-calendar-mode .cal-head .icon-btn{width:44px;height:44px;border-radius:50%;background:#f3ecff;color:#667085}
-body.vz-calendar-mode .cal-grid{gap:4px 2px}
-body.vz-calendar-mode .cal-day{min-height:57px;border-radius:50%;color:#344054}
+body.vz-calendar-mode .cal-grid{gap:8px 2px}
+body.vz-calendar-mode .cal-day{width:min(100%,48px);min-height:0;aspect-ratio:1;margin:4px auto;border-radius:50%;color:#344054}
 body.vz-calendar-mode .cal-day[aria-pressed=true]{background:#7a32f5;color:#fff}
 body.vz-calendar-mode .dots .l,body.vz-calendar-mode .legend .l{background:#7a32f5}
 body.vz-calendar-mode .dots .p,body.vz-calendar-mode .legend .p{background:#078994}
