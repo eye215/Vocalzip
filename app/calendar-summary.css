@@ -1,21 +1,14 @@
 /* One-line month totals and a rotating top-five song spotlight. */
-.calendar-summary{margin-bottom:12px;padding:14px 16px 10px;background:#fff;border-radius:20px}
+.calendar-summary{margin-bottom:12px;padding:16px;background:#fff;border-radius:20px}
 .cs-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;white-space:nowrap}
 .cs-heading h2{margin:0;color:#101828;font-size:16px;font-weight:700;letter-spacing:-.02em}
 .cs-heading h2 small{margin-left:4px;color:#98a2b3;font-size:11px;font-weight:500}
 .cs-totals{display:flex;align-items:baseline;gap:5px;color:#667085;font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .cs-totals strong{color:#7a32f5;font-size:16px;font-weight:700;letter-spacing:-.02em}
-.cs-ranking-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 8px;color:#667085;font-size:12px;font-weight:600}
-.cs-toggle{display:flex;gap:2px;padding:2px;border-radius:9px;background:#f3ecff}
-.cs-toggle button{min-height:32px;padding:0 9px;border:0;border-radius:7px;background:transparent;color:#667085;font-size:11px;font-weight:600}
-.cs-toggle button[aria-pressed=true]{background:#fff;color:#7a32f5;box-shadow:0 1px 4px rgba(35,20,60,.07)}
-.cs-spotlight{display:flex;align-items:center;gap:8px;min-width:0;min-height:56px;padding:6px 6px 6px 12px;border-radius:14px;background:#f3ecff;color:#344054}
-.cs-rank{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#fff;color:#7a32f5;font-size:12px;font-weight:700}
+.cs-spotlight{display:flex;align-items:center;gap:9px;min-width:0;min-height:44px;margin-top:12px;padding:0 12px;border-radius:12px;background:#f3ecff;color:#344054}
+.cs-spotlight i{flex:none;color:#7a32f5;font-size:18px}
 .cs-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#101828;font-size:14px;font-weight:600}
 .cs-values{flex:none;color:#475467;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
-.cs-next{flex:none;display:flex;align-items:center;justify-content:center;gap:2px;min-width:44px;min-height:44px;padding:0 4px;border:0;border-radius:12px;background:transparent;color:#7a32f5;font-size:11px;font-weight:600}
-.cs-next i{font-size:14px}
-.cs-next:active{background:#e9ddff}
 .cs-help{color:#667085;font-size:11px}
 .cs-help summary{display:inline-flex;align-items:center;min-height:36px;gap:4px;list-style:none;cursor:pointer}
 .cs-help summary::-webkit-details-marker{display:none}

@@ -296,7 +296,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     (lessonId ? '<div class="badge accent" style="justify-self:start">레슨 녹음 · ' + esc(VZ.dateLabel(VZ.db.lessons.find(l => l.id === lessonId)?.date)) + '</div>' : '') +
     '<button type="button" class="card flat item" data-pick-song><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-sub">연결 곡</span><span class="item-title" data-song-name>' + esc(VZ.songTitle(songId) || '곡 미지정') + '</span><span class="item-sub vz-record-song-meta" data-song-meta>' + esc(songMeta) + '</span></span><i class="ph ph-caret-down chev"></i></button>' +
     '<section class="rec-stage" aria-label="녹음기" data-phase="idle"><h2 class="rec-heading">녹음 준비</h2><div class="rec-time" aria-live="off">0:00</div><canvas class="rec-wave" aria-hidden="true"></canvas>' +
-    '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><div class="rec-primary"><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph-fill ph-microphone"></i></button><strong data-rec-action>녹음 시작</strong></div><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
+    '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><div class="rec-primary"><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph-fill ph-microphone"></i></button></div><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
     '<div class="rec-status" role="status" data-status>버튼을 누르면 바로 녹음이 시작돼요.</div></section>' +
     '<div data-review hidden></div></div>';
 }, leave() { rec?.result?.releaseProtection?.();if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
@@ -313,7 +313,6 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     const recording = phase === 'recording' || phase === 'paused';
     stage.dataset.phase=phase;
     stage.querySelector('.rec-heading').textContent=phase==='recording'?'녹음 중':phase==='paused'?'일시정지':'녹음 준비';
-    $('[data-rec-action]').textContent=recording?'녹음 종료':'녹음 시작';
     picker.disabled=recording||phase==='review';
     mainBtn.classList.toggle('recording', recording);
     mainBtn.innerHTML = recording ? '<i class="ph-fill ph-stop"></i>' : '<i class="ph-fill ph-microphone"></i>';
