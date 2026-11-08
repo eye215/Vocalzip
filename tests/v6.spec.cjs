@@ -434,10 +434,9 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   });
   await expect.poll(() => page.evaluate(() => VZ.serverAnalysisOn())).toBe(true);
   await page.goto('/#/library');
-  const card = page.locator('[data-server-analysis] .srv');
-  await expect(card).toContainText('서버 자동 분석');
-  await expect(card).toContainText('1/3');                      // vocal: 1 done of 3
-  await expect(card).toContainText('곡 자동 지정');
+  const card = page.locator('[data-server-analysis]');
+  await expect(card).toContainText('곡 확인 필요');
+  await expect(card).toContainText('대기·분석 중 1건');
   await expect(card).toContainText('분석 실패 1건');
   await expect(card.locator('a[href="#/song-suggest"]')).toContainText('1');
   await expect(page.locator('[data-media="ai1"]')).toContainText('AI 곡 지정');
@@ -452,7 +451,8 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   });
   await expect(page.locator('[data-media="rv1"]')).toContainText('On My Own', {timeout:5000});
   await expect(page.locator('[data-media="rv1"]')).not.toContainText('곡 확인 필요');
-  await expect(card).toContainText('2/3');
+  await expect(card).toContainText('곡 확인 필요 0건');
+  await expect(card).not.toContainText('대기·분석 중');
   // The browser's own background analysis leaves the work to the server.
   expect(await page.evaluate(() => { window.__vzipAutoAnalysis = true; return VZ.autoAnalysisStatus().enabled && VZ.serverAnalysisOn(); })).toBe(true);
 });
@@ -891,7 +891,7 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await page.goto('/#/calendar');
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
-  await expect(page.locator('[data-day]')).toContainText('30분');
+  await expect(page.locator('[data-day]')).toContainText('25분');
   // The practice shows its linked recording underneath; an unlinked recording appears as a practice recording.
   await expect(page.locator('[data-day] .cal-own').first().locator('[data-practice]')).toHaveCount(1);
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(2);
@@ -996,11 +996,23 @@ test('Library actually plays device and cloud-only audio (time advances)', async
     window.vzipCloudMediaUrl = async () => { await new Promise(r => setTimeout(r, 300)); return '/cloud-audio.wav'; };
     window.dispatchEvent(new Event('vzip:auth-changed'));
   });
-  await page.goto('/#/library');
   for (const id of ['m2', 'c1']) {
     await page.goto('/#/library');
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
+    await expect(page).toHaveURL(new RegExp('#/recording/'+id+'
+    await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
+    await expect(row.locator('[data-msg]')).toHaveText('');
+  }
+  // Pause, then one tap on the already-loaded source plays it again.
+  const row = page.locator('[data-media="c1"]');
+  await row.getByRole('button', {name:'일시정지'}).click();
+  await expect(row.getByRole('button', {name:'재생', exact:true})).toBeVisible({timeout:5000});
+  await row.getByRole('button', {name:'재생', exact:true}).click();
+  await expect(row.getByRole('button', {name:'일시정지'})).toBeVisible();
+  await expect(row.locator('[data-msg]')).toHaveText('');
+});
+));
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }
@@ -1015,7 +1027,7 @@ test('Library actually plays device and cloud-only audio (time advances)', async
 
 test('Practice records can be edited, including unlinking files that no longer exist', async ({page}) => {
   await boot(page);
-  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
+  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; d.practices[0].manualMinutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/song/s1');
   await page.getByRole('tab', {name:'연습'}).click();
   await page.locator('[data-practice="p1"]').click();
@@ -1050,23 +1062,27 @@ test('Practice time adds recording/import lengths once and fills missing lengths
   });
   await page.goto('/#/growth');
   await page.getByRole('button', {name:'전체'}).click();
-  // p1 (30분, already includes linked m1) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
-  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('40분');
+  // p1 (manual 25분; legacy minutes is 30, linked m1 is not added) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('35분');
   await expect(page.locator('[data-file-time]')).toContainText('녹음·파일 10분 포함');
   await expect.poll(async () => Math.round((await page.evaluate(() => window.vzipReadMedia())).find(m => m.id === 'm3').durationSeconds)).toBe(1);
   await expect(page.locator('.bars')).toContainText('This Is the Moment');
   await expect(page.getByText(/기록에 연결되지 않은 녹음·파일 2개/)).toBeVisible();
   // Song list/detail use the same rule.
   await page.goto('/#/song/s1');
-  await expect(page.locator('[data-summary]')).toContainText('연습 40분');
+  await expect(page.locator('[data-summary]')).toContainText('연습 35분');
   // Linking m2 into a practice record moves its time inside that record (no double count).
   await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds.push('m2'); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/growth');
-  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('30분');
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
 });
 
 test('Changing a recording\'s song renames it to song + recording day, numbered on clashes', async ({page}) => {
   await boot(page);
+  await page.evaluate(async()=>{
+    for(const item of await window.vzipReadMedia())await VZ.media.update({...item,local:true},{nameMode:'auto',autoName:item.name},{quiet:true});
+    VZ.media.invalidate();
+  });
   await page.goto('/#/library');
   const open = async id => { await page.goto('/#/library'); await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
   await open('m1');
@@ -1079,6 +1095,7 @@ test('Changing a recording\'s song renames it to song + recording day, numbered 
   await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03');
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').name).toBe('On My Own 2026.11.03');
+  expect((await media(page)).find(m=>m.id==='m1').nameMode).toBe('auto');
   // Same song and day on another file gets a number.
   await page.locator('[data-media="m1"] [data-toggle]').click();
   await open('m2');
@@ -1419,7 +1436,9 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();
-  await page.getByLabel('형식 필터').selectOption('video');
+  await page.locator('#top [data-imp]').click();
+  await page.locator('.sheet [data-format]').selectOption('video');
+  await page.getByRole('dialog', {name:'보관함 메뉴'}).getByRole('button', {name:'닫기'}).click();
   await expect(page.getByText('조건에 맞는 파일이 없어요.')).toBeVisible();
   await page.getByRole('button', {name:'필터 초기화'}).click();
   await expect(page.locator('[data-media]')).toHaveCount(3);
@@ -1836,19 +1855,18 @@ test('Video file deletion and a cloud failure retain the correct records',async(
  expect((await data(page)).practices[0].mediaIds).toContain('m1');
 });
 
-test('Song choices open as a searchable sheet; the page under a sheet stays where it was', async ({page}) => {
+test('Library menu preserves its song filter; the page under a sheet stays where it was', async ({page}) => {
   const seed = legacy(); seed.songs.push(...Array.from({length:30}, (_, i) => ({id:'x' + i, title:'추가 곡 ' + i, show:i % 3 ? '' : '레미제라블'})));
   await boot(page, {seed, media:false});
   await page.goto('/#/library');
-  await page.getByRole('button', {name:/^곡 필터, /}).click();
-  const sheet = page.getByRole('dialog', {name:'곡 필터'});
-  await sheet.locator('[data-pick-q]').fill('레미');
-  await expect(sheet.getByRole('option', {name:/추가 곡 1\b/})).toBeHidden();
-  await expect(sheet.getByRole('option', {name:'모든 곡'})).toBeVisible();
-  await sheet.getByRole('option', {name:/추가 곡 3/}).click();
-  await expect(sheet).toHaveCount(0);
+  await page.locator('#top [data-imp]').click();
+  const menu=page.getByRole('dialog', {name:'보관함 메뉴'});
+  await menu.locator('[data-library-song]').selectOption('x3');
   await expect(page.locator('select[data-song]')).toHaveValue('x3');
-  await expect(page.getByRole('button', {name:'곡 필터, 추가 곡 3'})).toBeVisible();
+  await menu.getByRole('button', {name:'닫기'}).click();
+  await page.locator('#top [data-imp]').click();
+  await expect(page.locator('.sheet [data-library-song]')).toHaveValue('x3');
+  await page.getByRole('dialog', {name:'보관함 메뉴'}).getByRole('button', {name:'닫기'}).click();
   await page.goto('/#/home'); await page.evaluate(() => scrollTo(0, 300)); const y = await page.evaluate(() => scrollY);
   await page.evaluate(() => { VZ.confirm('확인 창', '내용'); });
   await expect(page.locator('body')).toHaveClass(/sheet-lock/);

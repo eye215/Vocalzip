@@ -22,6 +22,11 @@ function mode(meta,resolve){
 }
 function patch(meta,changes,resolve=()=> ''){
  const out={...changes};
+ if(out.nameMode==='auto'&&out.autoName===out.name){
+  if(!mode(meta,resolve)){delete out.name;delete out.nameMode;delete out.autoName;}
+  else{const base=title({...meta,...out},resolve,false),rest=String(out.name||'').slice(base.length);
+   if(base&&String(out.name||'').startsWith(base)&&(rest===''||/^ (?:[2-9]|[1-9]\d+)$/.test(rest)))return out;}
+ }
  if(Object.hasOwn(out,'name')&&out.name!==meta.name&&out.nameMode!=='auto')return {...out,nameMode:'manual',autoName:null};
  if(!['song','songId','recordedDate','created'].some(k=>Object.hasOwn(out,k)&&out[k]!==meta[k])||!mode(meta,resolve))return out;
  const old=title(meta,resolve,false),tail=old&&String(meta.name||'').startsWith(old)?String(meta.name).slice(old.length):'';

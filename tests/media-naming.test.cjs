@@ -34,3 +34,13 @@ test('unrelated review/rating edits do not change a title',()=>{
 test('recording day takes precedence over upload time',()=>{
  assert.equal(n.patch({...auto,created:1890000000000},{songId:'s2'},resolve).name,'새 곡 2026.11.08 10');
 });
+
+test('a verified automatic form name keeps its collision number',()=>{
+ const changes={songId:'s2',song:'새 곡',recordedDate:'2026-11-09',name:'새 곡 2026.11.09 2',nameMode:'auto',autoName:'새 곡 2026.11.09 2'};
+ assert.deepEqual(n.patch(auto,changes,resolve),changes);
+});
+test('a stale automatic form cannot overwrite the latest manual title',()=>{
+ const current={...auto,name:'다른 기기의 수동 제목',nameMode:'manual',autoName:null};
+ const out=n.patch(current,{songId:'s2',name:'새 곡 2026.11.08',nameMode:'auto',autoName:'새 곡 2026.11.08'},resolve);
+ assert.deepEqual(out,{songId:'s2'});
+});

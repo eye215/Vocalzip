@@ -3,7 +3,7 @@
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const KEY = 'vocal-zip_mvp_v1', R2 = 'https://r2.vocalzip.test';
-const stub = `window.__vdStub=()=>{const c={q:{}};let upd=null,ins=null;for(const m of ['select','order','range','delete'])c[m]=()=>c;c.select=cols=>{c.cols=cols;return c};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>c;c.single=()=>c;c.update=r=>{upd=r;return c};c.insert=r=>{ins=r;return c};c.upsert=r=>{window.__vdRow={payload:r.payload,updated_at:r.updated_at};return c};c.then=r=>{const row=window.__vdRow||null;if(c.cols==='ids:payload->deleted->media')return r({data:row?{ids:row.payload?.deleted?.media??null}:null,error:null});if(ins){if(row)return r({data:null,error:{code:'23505',message:'duplicate'}});window.__vdRow={payload:ins.payload,updated_at:ins.updated_at};return r({data:null,error:null})}if(upd){if(!row||('updated_at' in c.q&&c.q.updated_at!==row.updated_at))return r({data:[],error:null});window.__vdRow={payload:upd.payload,updated_at:upd.updated_at};return r({data:[{user_id:'ui-test-user'}],error:null})}return r({data:row?JSON.parse(JSON.stringify(row)):null,error:null})};return c};window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:fn=>{(window.__authHandlers||=[]).push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'tok'}}})},
+const stub = `window.__vdStub=()=>{const c={q:{}};let upd=null,ins=null;for(const m of ['select','order','range','delete'])c[m]=()=>c;c.select=cols=>{c.cols=cols;return c};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>c;c.single=()=>c;c.update=r=>{upd=r;return c};c.insert=r=>{ins=r;return c};c.upsert=r=>{window.__vdRow={payload:r.payload,updated_at:r.updated_at};return c};c.then=r=>{const row=window.__vdRow||null;if(c.cols==='ids:payload->deleted->media')return r({data:row?{ids:row.payload?.deleted?.media??null}:null,error:null});if(ins){if(row)return r({data:null,error:{code:'23505',message:'duplicate'}});window.__vdRow={payload:ins.payload,updated_at:ins.updated_at};return r({data:null,error:null})}if(upd){if(!row||('updated_at' in c.q&&c.q.updated_at!==row.updated_at))return r({data:[],error:null});window.__vdRow={payload:upd.payload,updated_at:upd.updated_at};return r({data:[{user_id:'ui-test-user'}],error:null})}return r({data:row?JSON.parse(JSON.stringify(row)):null,error:null})};return c};window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.__upd=window.__upd||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:fn=>{(window.__authHandlers||=[]).push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'tok'}}})},
  storage:{from:()=>({createSignedUrl:async p=>({data:{signedUrl:'/legacy/'+p},error:null}),upload:async()=>({error:null}),remove:async p=>{window.__removed.push(...p);return {error:null}}})},
  from:t=>{if(t==='vocal_data')return window.__vdStub();const c={q:{}};for(const m of ['order'])c[m]=()=>c;c.delete=()=>{c.del=true;return c};c.range=(a,b)=>{c.r=[a,b];return c};c.select=cols=>{c.cols=cols||'*';return c};c.in=(k,v)=>{c.ins=v;return c};window.__upd=window.__upd||{};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=(k,v)=>{c.q[k]=v;return c};
   c.upsert=(row,options)=>{window.__up.push(row);window.__beforeInsert?.(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata&&(!options?.ignoreDuplicates||!window.__rows[x.id])){window.__rows[x.id]=x.metadata;window.__upd[x.id]=x.updated_at||new Date().toISOString()}return c};
@@ -245,7 +245,7 @@ test('Playback links are signed ahead in one request for the rows shown, kept ac
   await page.goto('/#/library');
   await expect(page.locator('[data-l] [data-media]')).toHaveCount(5);
   await expect.poll(() => r2.calls.filter(c => c === 'BATCH 5').length).toBe(1);
-  expect(await page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true);
   const signs = () => r2.calls.filter(c => c === 'POST /v1/sign').length, before = signs();
   await page.evaluate(()=>{window.__recordingNavCalls=0;const nav=VZ.nav;VZ.nav=hash=>{if(hash.startsWith('#/recording/'))window.__recordingNavCalls++;return nav(hash);};});
   await page.locator('[data-l] [data-media="p2"] [data-toggle]').click();
@@ -512,11 +512,14 @@ test('An imported automatic title follows song assignment and date edits and sur
   const saved=await VZ.media.importFile(new File([new Uint8Array(bytes)],'original.wav',{type:'audio/wav'}),{id:'automatic-title',date:'2026-11-08',direct:true});
   const item={...saved,cloud:true};await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
   const assigned={...window.__rows[item.id]};
-  await VZ.media.update({...assigned,cloud:true},{recordedDate:'2026-11-09',dateSource:'manual',name:assigned.name});
-  return {assigned,current:window.__rows[item.id]};
+  VZ.editMedia({...assigned,cloud:true});
+  return {assigned};
  },[...wav(1)]);
  expect(out.assigned).toMatchObject({name:'Defying Gravity 2026.11.08',nameMode:'auto',originalFilename:'original.wav'});
- expect(out.current).toMatchObject({name:'Defying Gravity 2026.11.09',recordedDate:'2026-11-09',songId:'s1'});
+ await page.locator('.sheet [name=date]').fill('2026-11-09');await page.locator('.sheet [name=date]').dispatchEvent('change');
+ await expect(page.locator('.sheet [name=name]')).toHaveValue('Defying Gravity 2026.11.09');
+ await page.locator('.sheet').getByRole('button',{name:'저장',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__rows['automatic-title'])).toMatchObject({name:'Defying Gravity 2026.11.09',recordedDate:'2026-11-09',songId:'s1',nameMode:'auto'});
  const rows=await page.evaluate(()=>window.__rows);
  await page.addInitScript(rows=>{window.__rows=rows;},rows);await page.reload();await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
  expect(await page.evaluate(()=>window.__rows['automatic-title'].name)).toBe('Defying Gravity 2026.11.09');
@@ -527,11 +530,14 @@ test('Manual recording titles stay unchanged when song and date are edited',asyn
  const out=await page.evaluate(async()=>{
   const id='manual-title';window.__rows[id]={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav'};window.__upd[id]='2026-11-08T01:00:00.000Z';
   await VZ.media.update({...window.__rows[id],cloud:true},{name:'오디션 제출용 최종 테이크'});
-  await VZ.media.assignSongSafe({...window.__rows[id],cloud:true},{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
-  await VZ.media.update({...window.__rows[id],cloud:true},{recordedDate:'2026-11-09'});
+  VZ.editMedia({...window.__rows[id],cloud:true});
   return window.__rows[id];
  });
- expect(out).toMatchObject({name:'오디션 제출용 최종 테이크',nameMode:'manual',songId:'s1',recordedDate:'2026-11-09'});
+ await page.locator('.sheet [name=song]').selectOption('s1');
+ await page.locator('.sheet [name=date]').fill('2026-11-09');await page.locator('.sheet [name=date]').dispatchEvent('change');
+ await expect(page.locator('.sheet [name=name]')).toHaveValue('오디션 제출용 최종 테이크');
+ await page.locator('.sheet').getByRole('button',{name:'저장',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__rows['manual-title'])).toMatchObject({name:'오디션 제출용 최종 테이크',nameMode:'manual',songId:'s1',recordedDate:'2026-11-09'});
  expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(0);
 });
 test('A newer title from another device wins over a stale automatic title snapshot',async({page})=>{
