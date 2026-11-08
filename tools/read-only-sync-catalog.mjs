@@ -25,8 +25,10 @@ try {
  if(!baseOk||!rls||!pk||!cascade||!helpers||!history)throw Error('catalog differs');
  await db.query('rollback');
  console.log('READ_ONLY_SYNC_CATALOG_VERIFIED');
-} catch {
- console.error('READ_ONLY_SYNC_CATALOG_NOT_VERIFIED');
+ } catch(error) {
+ const allowed=new Set(['SELF_SIGNED_CERT_IN_CHAIN','DEPTH_ZERO_SELF_SIGNED_CERT','UNABLE_TO_VERIFY_LEAF_SIGNATURE','CERT_HAS_EXPIRED','ERR_TLS_CERT_ALTNAME_INVALID','ECONNREFUSED','ENETUNREACH','ETIMEDOUT','ENOTFOUND','28P01','42501','42703','42P01']);
+ const code=allowed.has(error?.code)?error.code:({'missing configuration':'MISSING_CONFIGURATION','unexpected project':'WRONG_PROJECT','read only required':'READ_ONLY_REQUIRED','catalog differs':'CATALOG_DIFFERENCE'}[error?.message]||'CONNECTION_OR_CATALOG');
+ console.error('READ_ONLY_SYNC_CATALOG_NOT_VERIFIED '+code);
  process.exitCode=1;
 } finally {
  if(db){try{await db.query('rollback');}catch{}try{await db.end();}catch{}}
