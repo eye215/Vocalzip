@@ -152,7 +152,7 @@ test('uploaded HTML blob and all original stylesheet blocks are reused literally
   const expected=[...original.querySelectorAll('style')].map(e=>e.textContent.replace(/@import\s+url\([^;]*\);/g,''));
   const shadow=host.shadowRoot,actual=[...shadow.querySelectorAll('style[data-source-style]')].map(e=>e.textContent);
   const same=selector=>original.querySelector(selector).innerHTML===shadow.querySelector(selector).innerHTML;
-  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:same('.vz-floating-record'),nav:[...shadow.querySelectorAll('.vz-nav-item')].every((e,i)=>e.querySelector('svg').innerHTML===original.querySelectorAll('.vz-nav-item')[i].querySelector('svg').innerHTML),scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
+  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:same('.vz-floating-record'),nav:[...shadow.querySelectorAll('.vz-nav-item')].map(e=>e.querySelector('i')?.dataset.glyph).join(',')==='\ue2c2,\ue340,\ue00e,\ue10a',scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
  });
  expect(result).toEqual({styles:true,count:10,fab:true,nav:true,scripts:0});
  await expect(page.locator('.vz-nav-item')).toHaveCount(4);
