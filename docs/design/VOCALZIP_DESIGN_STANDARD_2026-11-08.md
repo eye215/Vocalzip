@@ -1,0 +1,33 @@
+# VOCAL.zip 학생 홈 — 업로드 HTML 직접 사용
+
+최신 기준: [PR #139](https://github.com/eye215/Vocalzip/pull/139)의
+[원본 파일](https://github.com/eye215/Vocalzip/blob/docs/home-preview-images-20261108/design-handoff-20261108-lavender-home/Vocalzip_Floating_Record_Home.html).
+이전 #137/#138의 중앙 녹음 탭·별도 홈 CSS 구현보다 이 HTML이 우선한다.
+
+## 실제 적용
+
+- 배포용 [동일 HTML 파일](../../design-system/Vocalzip_Floating_Record_Home.html)을 수정 없이 저장한다. Git blob은 원본과 같은 b4ad1520615f1cae216393239679657779389d06이다.
+- [연결 모듈](../../design-system/student-home-html.js)이 이 파일 자체를 읽고 원본 루트 DOM과 CSS10개 블록을 사용한다. 레이아웃·색·아이콘을 다시 만들지 않는다.
+- 기존 앱 CSS가 원본 디자인에 섞이지 않도록 홈 안에 열린 Shadow DOM을 사용한다.
+- 폰트 CDN import만 기존 번들 Pretendard WOFF2로 대체한다. 미리보기 스크립트·설명 팝업은 실행하지 않는다.
+- 기존 데이터·저장·녹음·곡·연습·레슨·일정 동작은 앱 어댑터에서 연결한다.
+
+## 유지할 UI
+
+홈/내 곡/보관함/일정4개와48px 그라데이션 ‘녹음 시작’ 플로팅 버튼.
+원본의70px 내비·12px 분리·Safe Area·180px 본문 여백.
+원본의 주간 달성률 색 구간·요일 이름·오늘 링·분 표시·달성률 숫자 강조·카드 그라데이션.
+원본의 SVG·폰트·색·카드·여백 규칙.
+
+## 기능 연결에 필요한 예외
+
+공연 행의44px 터치 영역, 키보드 동작, 데이터 없음·저장 실패·긴 콘텐츠의 자연스러운 줄바꿈을 보완한다.
+기본 화면의 글자 크기는 바꾸지 않고 확대 시 행간이 함께 커지게 한다.
+표시할 값과 항목 수는 사용자 기록으로 계산한다. 원본180분/100%/3개 예시를 계정에 저장하거나 복사하지 않는다.
+오늘 기록이 있으면 해당 달성률 색과 바깥 링을 함께 표시한다.
+
+## 범위
+
+이번 변경은 홈에 적용한다. 다른 페이지의 기존 네비·화면·녹음 기능은 유지한다.
+서비스 DB·권한·동기화·정산·AI·미디어 원본 변경, 원본 전달 브랜치 수정, 운영 배포를 포함하지 않는다.
+검증 범위는 [직접 HTML 연결 검수서](../reviews/STUDENT_HOME_HTML_139_IMPLEMENTATION.md)를 참고한다.

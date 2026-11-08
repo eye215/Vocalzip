@@ -51,26 +51,16 @@ const sheet = page => page.locator('.sheet');
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
-  await boot(page);
-  const nav = page.locator('.v-nav');
-  for (const [label, heading] of [['내 곡', '내 곡'], ['녹음', '녹음'], ['보관함', '음원 보관함'], ['일정', '캘린더'], ['홈', null]]) {
-    await nav.getByRole('link', {name:label, exact:true}).click();
-    if (heading) await expect(page.locator('#top h1')).toHaveText(heading);
-    await expect(nav.getByRole('link', {name:label, exact:true})).toHaveAttribute('aria-current', 'page');
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-  }
-  // This navigation contract uses the approved home; the remaining legacy flows
-  // retain their original home fixture until they are migrated independently.
-  await expect(page.locator('.vz-student-home')).toBeVisible();
-  await expect(page.locator('.vz-home-goals')).toContainText('오늘의 목표를 정해보세요');
-  await expect(page.locator('.vz-home-song')).toContainText('This Is the Moment');
-  // Touch targets in nav are at least 44px.
-  const box = await nav.getByRole('link', {name:'내 곡'}).boundingBox();
-  expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
-  // Growth remains reachable from the weekly summary after leaving the dock.
-  await page.getByRole('button',{name:'성장 기록 보기',exact:true}).click();
-  await expect(page.locator('#top h1')).toHaveText('성장');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+ await boot(page);
+ for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','음원 보관함'],['일정','calendar','캘린더']]){
+  await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
+  await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
+  await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ }
+ await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
+ await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표를 정해보세요');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
+ const box=await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).boundingBox();expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
+ await page.getByRole('button',{name:'성장 기록 보기',exact:true}).click();await expect(page.locator('#top h1')).toHaveText('성장');
 });
 
 test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never auto-complete', async ({page}) => {
