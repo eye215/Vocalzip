@@ -1886,8 +1886,16 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await expect(bar).toHaveCount(0);
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id + ':' + m.songId).sort().join(','))).toBe('m1:s2,m2:s2');
   // Kind for one recording.
+  await page.evaluate(()=>{
+    window.__selectTrace=[];
+    const capture=phase=>e=>{if(e.target.closest('[data-toggle],[data-select]'))setTimeout(()=>window.__selectTrace.push({phase,target:e.target.closest('[data-toggle],[data-select]')?.outerHTML,bar:document.querySelector('.sel-bar')?.textContent,classes:document.querySelector('#view')?.className,picked:[...document.querySelectorAll('[data-media].picked')].map(x=>x.dataset.media)}),0);};
+    document.addEventListener('click',capture('capture'),true);
+    document.addEventListener('click',capture('bubble'));
+  });
   await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   await page.locator('[data-media="m1"] [data-toggle]').click();
+  await page.waitForTimeout(300);
+  console.log('SELECT_DIAG',JSON.stringify(await page.evaluate(()=>({trace:window.__selectTrace,bar:document.querySelector('.sel-bar')?.textContent,classes:document.querySelector('#view')?.className,rows:[...document.querySelectorAll('[data-media]')].map(x=>({id:x.dataset.media,picked:x.className}))}))));
   await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
   await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');

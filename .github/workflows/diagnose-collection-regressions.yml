@@ -17,7 +17,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: node tests/make-audio-fixtures.cjs
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test tests/v6.spec.cjs --grep '서버 자동 분석|Calendar shows|Practice records can be edited|Practice time adds|Library groups files|Library menu preserves|Changing a recording|Library select mode|Library actually plays' --workers=3 --reporter=line
+      - run: npx playwright test tests/v6.spec.cjs --grep 'Library select mode' --workers=3 --reporter=line
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
