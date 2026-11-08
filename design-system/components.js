@@ -418,6 +418,8 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   song.append(cover);
   const copy=el("span","vz-home-song-copy");copy.append(el("strong","",recent?.title||"연습할 곡을 골라보세요"),el("span","",recent?.artist||"내 곡에서 시작하기"));songDetail.append(copy);song.append(songDetail);
   if(recent)song.title=[recent.title,recent.artist].filter(Boolean).join(" · ");
+  // The existing detail button supplies keyboard access; the card surface shares its pointer action.
+  song.addEventListener("click",event=>{if(!event.target.closest("button"))onRecent();});
   grid.append(song);
   const quick=el("div","vz-home-quick-stack vz-quick-actions");
   for(const [label,icon,action] of [["레슨노트","notebook",onLessons],["연습기록","clock-counter-clockwise",onPractice]]){

@@ -355,6 +355,9 @@ test('actual stage, lesson, recent song and quick actions reach existing routes'
   await page.getByRole('button',{name:'다음 레슨 보기',exact:true}).click();
   await expect(page).toHaveURL(/#\/lesson\/l1$/);
   await page.goto('/#/home');await ready(page);
+  await page.locator('.vz-home-song-heading').click();
+  await expect(page).toHaveURL(/#\/song\/s1$/);
+  await page.goto('/#/home');await ready(page);
   await page.locator('.vz-home-song-detail').click();
   await expect(page).toHaveURL(/#\/song\/s1$/);
   await page.goto('/#/home');await ready(page);
