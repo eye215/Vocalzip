@@ -73,13 +73,14 @@ test('manual recovery shares background work and a cancellable retry waits for i
   if(!held){held=true;entered();await gate;}
   await route.fallback();
  });
- await page.evaluate(()=>{window.__background=window.vzipRecoverMediaUploads();});
+ await page.evaluate(()=>{window.__background=window.vzipRecoverMediaUploads('v2-recovery-lock');});
  await enteredGate;
  const requests=await page.evaluate(()=>{
   window.__lockRequests=0;const request=navigator.locks.request.bind(navigator.locks);
   navigator.locks.request=(...args)=>{window.__lockRequests++;return request(...args);};
   const capture=p=>p.then(value=>({value}),error=>({error:{name:error.name,message:error.message}}));
   window.__manual=capture(window.vzipRecoverMediaUploads('v2-recovery-lock'));
+  window.__otherRecovery=capture(window.vzipRecoverMediaUploads('another-file'));
   const controller=new AbortController();
   window.__cancelled=capture(window.vzipCloudImport(window.__retryFile,{id:'v2-recovery-lock'},undefined,{signal:controller.signal}));
   controller.abort();
@@ -88,8 +89,9 @@ test('manual recovery shares background work and a cancellable retry waits for i
  });
  release();
  expect(requests).toBe(0);
- const out=await page.evaluate(async()=>({manual:await window.__manual,cancelled:await window.__cancelled,saved:await window.__foreground}));
+ const out=await page.evaluate(async()=>({manual:await window.__manual,other:await window.__otherRecovery,cancelled:await window.__cancelled,saved:await window.__foreground}));
  expect(out.manual).toEqual({value:[{status:'needs_file',id:'v2-recovery-lock'}]});
+ expect(out.other.error.message).toContain('다른 파일을 복구');
  expect(out.cancelled.error.name).toBe('AbortError');
  expect(out.saved.value).toMatchObject({name:'원래 제목',songId:'s1',size:8*1024*1024+23});
  expect(r2.calls.filter(x=>x==='POST /v2/uploads')).toHaveLength(1);

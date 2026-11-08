@@ -289,7 +289,7 @@ function mediaUploadLock(work){
  });
  return work();
 }
-let activeReceiptRecovery=null;
+let activeReceiptRecovery=null,activeReceiptRecoveryScope=null;
 function waitForReceiptRecovery(signal){
  if(signal?.aborted)return Promise.reject(new DOMException('업로드를 취소했어요.','AbortError'));
  const pending=activeReceiptRecovery;if(!pending)return Promise.resolve();
@@ -305,7 +305,10 @@ function waitForReceiptRecovery(signal){
 window.vzipCloudImport=(...args)=>waitForReceiptRecovery(args[3]?.signal).then(()=>mediaUploadLock(()=>importMedia(...args)));
 /** Retry known completed uploads without reading or uploading the source file again. */
 window.vzipRecoverMediaUploads=(id)=>{
- if(activeReceiptRecovery)return activeReceiptRecovery.then(rows=>id?rows.filter(row=>row.id===id):rows);
+ if(activeReceiptRecovery){
+  if(activeReceiptRecoveryScope!==null&&activeReceiptRecoveryScope!==(id||null))return Promise.reject(Error('다른 파일을 복구하고 있어요. 잠시 후 다시 시도해 주세요.'));
+  return activeReceiptRecovery.then(rows=>id?rows.filter(row=>row.id===id):rows);
+ }
  const operation=mediaUploadLock(async()=>{
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요.');
  const recovery=mediaRecovery();
@@ -322,8 +325,8 @@ window.vzipRecoverMediaUploads=(id)=>{
   return result;
  }finally{mediaImportActive=false;}
  });
- activeReceiptRecovery=operation;
- operation.finally(()=>{if(activeReceiptRecovery===operation)activeReceiptRecovery=null;}).catch(()=>{});
+ activeReceiptRecovery=operation;activeReceiptRecoveryScope=id||null;
+ operation.finally(()=>{if(activeReceiptRecovery===operation){activeReceiptRecovery=null;activeReceiptRecoveryScope=null;}}).catch(()=>{});
  return operation;
 };
 let receiptRecoveryTimer=null;
