@@ -8,7 +8,7 @@ const VZ = window.VZ;
 if (!VZ) return;
 const esc = VZ.esc, MAX = 50 * 1024 * 1024;
 const KEYS = ['', 'C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'].flatMap(k => k ? [k, k + 'm'] : ['']);
-const keySelect = (name, value) => '<select name="' + name + '">' + KEYS.map(k => '<option value="' + esc(k) + '"' + (k === (value || '') ? ' selected' : '') + '>' + (k || '선택 안 함') + '</option>').join('') + '</select>';
+const keySelect = (name, value) => '<select name="' + name + '" aria-label="' + (name === 'originalKey' ? '원키' : '연습 키') + '">' + KEYS.map(k => '<option value="' + esc(k) + '"' + (k === (value || '') ? ' selected' : '') + '>' + (k || '선택 안 함') + '</option>').join('') + '</select>';
 const scoresOf = id => (VZ.song(id)?.scores || []).filter(s => !s.deleted);
 const size = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
 const save = (songId, mutate) => VZ.change(d => { const song = d.songs.find(x => x.id === songId); if (!song) throw Error('곡을 찾을 수 없어요.'); song.scores ||= []; mutate(song.scores, song); });
