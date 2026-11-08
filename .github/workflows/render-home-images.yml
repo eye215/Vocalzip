@@ -1,0 +1,60 @@
+name: Render approved home images
+on:
+  push:
+    branches: [docs/home-preview-images-20261108]
+    paths: [.github/workflows/render-home-images.yml]
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Capture final HTML with bundled Pretendard
+        run: |
+          node <<'JS'
+          const { chromium } = require('@playwright/test');
+          const fs = require('fs');
+          const path = require('path');
+          (async () => {
+            let css = '';
+            for (const [weight, name] of [[400,'Regular'],[600,'SemiBold'],[700,'Bold']]) {
+              const url = 'https://raw.githubusercontent.com/eye215/Vocalzip/f9f8e408362ec7a0348d1fd1034569e746a185ea/design-system/fonts/pretendard/Pretendard-'+name+'.woff2';
+              const res = await fetch(url);
+              if (!res.ok) throw new Error('Font fetch '+res.status);
+              const b64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+              css += '@font-face{font-family:Pretendard;font-style:normal;font-weight:'+weight+';src:url(data:font/woff2;base64,'+b64+') format("woff2");}';
+            }
+            const dir='design-handoff-20261108-lavender-home';
+            const html=fs.readFileSync(dir+'/home-preview.html','utf8');
+            const temp='.home-image-render.html';
+            fs.writeFileSync(temp,html.replace('</head>','<style>'+css+'</style></head>'));
+            const browser=await chromium.launch();
+            const page=await browser.newPage({viewport:{width:390,height:1100},deviceScaleFactor:2});
+            await page.goto('file://'+path.resolve(temp));
+            await page.evaluate(()=>document.fonts.ready);
+            if (!(await page.evaluate(()=>document.fonts.check('700 18px Pretendard')))) throw new Error('Font not ready');
+            if (await page.locator('svg').count()<20) throw new Error('Icons missing');
+            await page.locator('.vz-phone').screenshot({path:dir+'/home-preview-390.png'});
+            fs.writeFileSync(dir+'/IMAGE_SOURCE.md','# 최종 홈 시안 이미지\n\n![최종 홈 시안](home-preview-390.png)\n\n390px 화면을 2배 해상도로 캡처했습니다. 원본은 같은 폴더의 home-preview.html이며 원본 HTML은 변경하지 않았습니다. 캡처 시 Pretendard 400·600·700을 연결했습니다. 예시 데이터의 디자인 참고 이미지이며 실제 서비스 구현 캡처가 아닙니다.\n');
+            await browser.close();
+            fs.unlinkSync(temp);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Save image to this branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add design-handoff-20261108-lavender-home/home-preview-390.png design-handoff-20261108-lavender-home/IMAGE_SOURCE.md
+          git commit -m "docs: add final home preview PNG with Pretendard"
+          git push origin HEAD:docs/home-preview-images-20261108
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-home-preview
+          path: design-handoff-20261108-lavender-home/home-preview-390.png
