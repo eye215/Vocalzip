@@ -13,7 +13,7 @@
 | 보관함 | 종류 탭 + 검색 버튼 + 월별 묶음 목록 | `app/views-more.js`, `app/collection-ui.css` |
 | 곡 확인 | 선 없는 분석 현황 카드 + 선택 행 + 녹음 카드 + 고정 하단 버튼 | 승인 HTML `Vocalzip_Song_Check.html`; 이번 컬렉션 PR의 운영 적용 대상에는 포함하지 않음 |
 
-내 곡·보관함 운영 적용 변경은 [PR #147](https://github.com/eye215/Vocalzip/pull/147)에 있다. 이 문서를 작성한 시점에는 검사·병합 전이므로 운영 배포 완료를 뜻하지 않는다. 홈의 원본 직접 연결 방식은 [기존 기준](VOCALZIP_DESIGN_STANDARD_2026-11-08.md)을 유지한다.
+내 곡·보관함 운영 적용 변경은 [PR #147](https://github.com/eye215/Vocalzip/pull/147)에 있다. 최종 병합·배포 상태는 해당 PR에서 확인한다. 홈의 원본 직접 연결 방식은 [기존 기준](VOCALZIP_DESIGN_STANDARD_2026-11-08.md)을 유지한다.
 
 ## 2. 시각 방향
 
