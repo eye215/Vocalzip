@@ -289,7 +289,7 @@ function mediaUploadLock(work){
  });
  return work();
 }
-let activeReceiptRecovery=null,activeReceiptRecoveryScope=null;
+let activeReceiptRecovery=null,activeReceiptRecoveryScope=null,activeReceiptRecoveryOwner=null,activeReceiptRecoverySession='';
 function waitForReceiptRecovery(signal){
  if(signal?.aborted)return Promise.reject(new DOMException('업로드를 취소했어요.','AbortError'));
  const pending=activeReceiptRecovery;if(!pending)return Promise.resolve();
@@ -311,11 +311,15 @@ window.vzipCloudImport=(...args)=>{
 };
 /** Retry known completed uploads without reading or uploading the source file again. */
 window.vzipRecoverMediaUploads=(id)=>{
+ const account=user?.id,session=window.vzipCloudSessionId?.()||'';
+ const current=()=>{if(user?.id!==account||(window.vzipCloudSessionId?.()||'')!==session)throw Error('로그인이 변경되어 복구를 중단했어요.');};
  if(activeReceiptRecovery){
+  if(activeReceiptRecoveryOwner!==account||activeReceiptRecoverySession!==session)return Promise.reject(Error('로그인이 변경되어 이전 계정의 복구 결과를 연결하지 않았어요.'));
   if(activeReceiptRecoveryScope!==null&&activeReceiptRecoveryScope!==(id||null))return Promise.reject(Error('다른 파일을 복구하고 있어요. 잠시 후 다시 시도해 주세요.'));
   return activeReceiptRecovery.then(rows=>id?rows.filter(row=>row.id===id):rows);
  }
  const operation=mediaUploadLock(async()=>{
+ current();
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요.');
  const recovery=mediaRecovery();
  mediaImportActive=true;const result=[];
@@ -327,12 +331,13 @@ window.vzipRecoverMediaUploads=(id)=>{
    try{const metadata=await recovery.recover(entry.id);window.VzipR2?.acknowledgeTransfer?.(entry.id,metadata);result.push({id:entry.id,status:'restored',metadata});}
    catch(error){if(error.code==='identity')throw error;result.push({id:entry.id,status:'pending',code:error.code||'unavailable'});}
   }
+  current();
   if(result.some(entry=>entry.status==='restored'))window.dispatchEvent(new Event('vzip:cloud-media-changed'));
   return result;
  }finally{mediaImportActive=false;}
  });
- activeReceiptRecovery=operation;activeReceiptRecoveryScope=id||null;
- operation.finally(()=>{if(activeReceiptRecovery===operation){activeReceiptRecovery=null;activeReceiptRecoveryScope=null;}}).catch(()=>{});
+ activeReceiptRecovery=operation;activeReceiptRecoveryScope=id||null;activeReceiptRecoveryOwner=account;activeReceiptRecoverySession=session;
+ operation.finally(()=>{if(activeReceiptRecovery===operation){activeReceiptRecovery=null;activeReceiptRecoveryScope=null;activeReceiptRecoveryOwner=null;activeReceiptRecoverySession='';}}).catch(()=>{});
  return operation;
 };
 let receiptRecoveryTimer=null;

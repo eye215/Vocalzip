@@ -114,9 +114,11 @@ test('an account change while a retry waits cannot upload the old file to the ne
  await page.evaluate(()=>{
   window.__oldRetry=window.vzipCloudImport(window.__oldFile,{id:'v2-queued-owner'}).then(()=>null,error=>error.message);
   for(const fn of window.__authHandlers||[])fn('SIGNED_IN',{user:{id:'other-user',email:'other@example.invalid'}});
+  window.__newRecovery=window.vzipRecoverMediaUploads().then(value=>({value}),error=>({error:error.message}));
  });
  release();
  expect(await page.evaluate(()=>window.__oldRetry)).toContain('로그인이 변경');
+ expect((await page.evaluate(()=>window.__newRecovery)).error).toContain('로그인이 변경');
  expect(r2.calls.filter(x=>x==='POST /v2/uploads'||x.startsWith('PUT /v2')).length).toBe(uploads);
  expect(await page.evaluate(()=>window.__rows['v2-queued-owner']||null)).toBeNull();
  expect(r2.store.size).toBe(0);
