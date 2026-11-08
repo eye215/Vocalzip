@@ -233,7 +233,7 @@ export function createHomeIcon(name,className="") {
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
   svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("focusable","false");
   const id="vz-glyph-"+(++homeGlyphId);
-  const colors=name==="fire"?["#efc497","#d7a071","#ba7d52"]:["#a587ba","#9b7cb2","#8e6ca6"];
+  const colors=name==="fire"?["#efc497","#d7a071","#ba7d52"]:["#9a85b2","#8a73a5","#7a6098"];
   // Only these local vector constants enter markup. User text still uses textContent.
   svg.innerHTML='<defs><linearGradient id="'+id+'" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="'+colors[0]+'"/><stop offset=".44" stop-color="'+colors[1]+'"/><stop offset="1" stop-color="'+colors[2]+'"/></linearGradient></defs><g fill="url(#'+id+')" stroke-linejoin="round">'+(homeGlyphs[name]||homeGlyphs.sparkle)+'</g>';
   svg.querySelectorAll("[data-stroke]").forEach(path=>path.setAttribute("stroke","url(#"+id+")"));
@@ -283,32 +283,34 @@ export function createStudentHeader({greeting="반가워요,",name="",subtitle="
   textRow(header,"p","vz-home-greeting-sub",subtitle);
   return header;
 }
-export function createUpcomingStage({stage=null,lesson=null,onOpen=()=>{},onStage=onOpen,onLesson=onOpen}={}) {
-  const {card,head}=homeCard(stage?"다가오는 무대":"다가오는 레슨",stage?"mask-happy":"calendar-blank");
-  card.classList.add("vz-home-stage");
-  if(!stage)card.classList.add("vz-home-stage--lesson-only");
-  const open=homeButton("전체 일정 보기","caret-right",onOpen,"vz-home-text-button");
-  open.prepend(el("span","","전체보기"));head.append(open);
-  if(stage){
-    const content=el("div","vz-home-stage-content");
-    const copy=el("div","vz-home-stage-copy");
-    const title=el("div","vz-home-stage-title");
-    const name=el("h3","",stage.title||"다가오는 무대");name.title=stage.title||"다가오는 무대";title.append(name);
-    if(homeDayLabel(stage.daysLeft))title.append(el("strong","vz-home-dday",homeDayLabel(stage.daysLeft)));
-    copy.append(title);
-    if(stage.subtitle){const subtitle=textRow(copy,"p","vz-home-stage-song",stage.subtitle);subtitle.title=stage.subtitle;}
-    if(stage.dateLabel){const date=el("p","vz-home-stage-date");date.append(homeIcon("calendar-blank"),el("span","",stage.dateLabel));copy.prepend(date);}
-    const art=el("div","vz-home-stage-art");art.setAttribute("aria-hidden","true");if(stage.id!=null)art.dataset.poster=String(stage.id);
-    // The home skin shows only actual user posters; poster references remain unchanged.
-    content.append(copy,art);const detail=homeButton("무대 상세 보기",null,onStage,"vz-home-stage-detail"); detail.append(content);card.append(detail);
+/* Unboxed event area, following the Shinhan MAMA event reference. */
+export function createUpcomingStage({stage=null,lesson=null,events=null,onOpen=()=>{},onStage=onOpen,onLesson=onOpen}={}) {
+  const region=el("section","vz-home-stage vz-home-upcoming");region.setAttribute("aria-label","다가오는 일정");
+  const items=Array.isArray(events)?events:[
+    ...(stage?[{...stage,kind:"stage",label:"다가오는 무대",action:onStage}]:[]),
+    ...(lesson?[{...lesson,kind:"lesson",label:"다가오는 레슨",title:lesson.subtitle||lesson.title||"레슨 일정",action:onLesson}]:[])
+  ];
+  for(const item of items){
+    const kind=item.kind||"stage",isLesson=kind==="lesson";
+    const event=el("article","vz-upcoming-event");event.dataset.kind=kind;
+    const label=item.label||({performance:"다가오는 공연",audition:"다가오는 오디션",lesson:"다가오는 레슨"})[kind]||"다가오는 무대";
+    const action=item.action||(isLesson?onLesson:onStage);
+    const button=homeButton(item.buttonLabel||(isLesson?"다음 레슨 보기":"무대 상세 보기"),null,action,"vz-upcoming-detail"+(isLesson?" vz-home-lesson":" vz-home-stage-detail"));
+    const copy=el("span","vz-upcoming-copy");
+    const eyebrow=el("span","vz-upcoming-eyebrow");eyebrow.append(el("span","",label));
+    if(homeDayLabel(item.daysLeft))eyebrow.append(el("strong","vz-home-dday",homeDayLabel(item.daysLeft)));
+    copy.append(eyebrow);
+    const title=el("span",isLesson?"vz-home-lesson-title":"vz-home-stage-title");
+    const name=el("h3","vz-upcoming-title",item.title||label);name.id="vz-upcoming-title-"+(++homeGlyphId);button.setAttribute("aria-describedby",name.id);title.append(name);copy.append(title);
+    if(item.dateLabel)textRow(copy,"span","vz-upcoming-date",item.dateLabel);
+    if(item.subtitle&&item.subtitle!==item.title)textRow(copy,"span","vz-home-stage-song",item.subtitle);
+    const link=el("span","vz-upcoming-link");link.append(el("span","",isLesson?"레슨 확인하기":"무대 확인하기"),homeIcon("caret-right"));copy.append(link);
+    const art=el("span","vz-home-stage-art vz-upcoming-art");art.setAttribute("aria-hidden","true");
+    art.append(homeIcon(isLesson?"notebook":kind==="audition"?"microphone":"mask-happy","vz-upcoming-fallback"));
+    if(!isLesson&&item.id!=null)art.dataset.poster=String(item.id);
+    button.append(copy,art);event.append(button);region.append(event);
   }
-  if(lesson){
-    const strip=homeButton("다음 레슨 보기","calendar-blank",onLesson,"vz-home-lesson");
-    strip.append(el("strong","","다음 레슨"),el("span","vz-home-lesson-date",lesson.dateLabel||lesson.subtitle||lesson.title||"일정 확인"));
-    if(homeDayLabel(lesson.daysLeft))strip.append(el("span","vz-home-lesson-dday",homeDayLabel(lesson.daysLeft)));
-    strip.append(homeIcon("caret-right"));card.append(strip);
-  }
-  return card;
+  return region;
 }
 export function createGoalProgress({completed=0,total=0}={}) {
   const pct=percent(completed,total),gauge=el("div","vz-home-gauge");
@@ -428,12 +430,13 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   }
   grid.append(quick);return grid;
 }
-export function createStudentHome({greeting,name,subtitle,stage,lesson,goals=[],week={},recent,onGoals,onGoalToggle,onNotifications,onProfile,onPractice,onLessons,onPlay,onRecent,onStage,onLesson,onGrowth,onCalendar}={}) {
+export function createStudentHome({greeting,name,subtitle,stage,lesson,goals=[],week={},recent,onGoals,onGoalToggle,onNotifications,onProfile,onPractice,onLessons,onPlay,onRecent,onStage,onLesson,onGrowth,onCalendar,upcomingEvents}={}) {
   const home=el("div","vz-student-home");home.dataset.vzTheme="student";home.dataset.vzDesign="approved-home-v1";
   home.append(createStudentHeader({greeting,name,subtitle,onNotifications,onProfile}));
   const stack=el("div","vz-home-stack");
+  const hasUpcoming=Array.isArray(upcomingEvents)?upcomingEvents.length>0:!!(stage||lesson);
+  if(hasUpcoming)stack.append(createUpcomingStage({stage,lesson,events:upcomingEvents,onOpen:onCalendar||onLessons,onStage,onLesson}));
   stack.append(createWeeklyPractice({...week,onGrowth}),createRecentSongActions({recent,onPlay,onRecent,onLessons,onPractice}),createGoalChecklist({goals,onGoals,onGoalToggle}));
-  if(stage||lesson)stack.append(createUpcomingStage({stage,lesson,onOpen:onCalendar||onLessons,onStage,onLesson}));
   home.append(stack);return home;
 }
 /* Standalone preview dock only; the application keeps its existing .v-nav router. */

@@ -105,6 +105,7 @@ async function ready(page, home = true) {
     // The ES module mount may follow cloud auth visibility by several microtasks.
     await expect(page.locator('.vz-student-home')).toBeVisible();
     await expect(page.locator('body')).toHaveClass(/vz-home-mode/);
+    await page.evaluate(()=>document.fonts.ready);
   }
 }
 async function boot(page, value = seed()) {
@@ -461,4 +462,48 @@ test('large text keeps preview playback separate from full song details on all m
  }
  await page.getByRole('button',{name:'최근 곡 녹음 재생',exact:true}).click();
  await expect(page.locator('.preview-status')).toContainText('재생');
+});
+
+test('unboxed upcoming event cases keep the existing palette and appear first only when populated',async({page},testInfo)=>{
+ const cases=[['both',2],['stages',2],['all',3],['lesson',1],['none',0]];
+ for(const [name,count]of cases){
+  await page.setViewportSize({width:390,height:940});
+  await page.goto('/design-system/student-home-preview.html?upcoming='+name);
+  await expect(page.locator('.vz-student-home')).toBeVisible();
+  await page.evaluate(()=>document.fonts.ready);
+  await expect(page.locator('.vz-upcoming-event')).toHaveCount(count);
+  if(count){
+   await expect(page.locator('.vz-home-stack> :first-child')).toHaveClass(/vz-home-upcoming/);
+   const surface=await page.locator('.vz-home-upcoming').evaluate(el=>{const s=getComputedStyle(el);return {background:s.backgroundColor,shadow:s.boxShadow,border:s.borderTopWidth,radius:s.borderTopLeftRadius};});
+   expect(surface).toEqual({background:'rgba(0, 0, 0, 0)',shadow:'none',border:'0px',radius:'0px'});
+  }else{
+   await expect(page.locator('.vz-home-upcoming')).toHaveCount(0);
+   await expect(page.locator('.vz-home-stack> :first-child')).toHaveClass(/vz-home-week/);
+   await expect(page.locator('.vz-home-goals input')).toHaveCount(3);
+  }
+  const palette=await page.evaluate(()=>({background:getComputedStyle(document.body).backgroundColor,card:getComputedStyle(document.querySelector('.vz-home-week')).backgroundColor}));
+  expect(palette).toEqual({background:'rgb(246, 244, 251)',card:'rgb(255, 255, 255)'});
+  const faces=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/["']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
+  expect(faces.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
+  for(const width of widths){await page.setViewportSize({width,height:940});await noOverflow(page);}
+  await page.setViewportSize({width:390,height:940});
+  await screenshot(page,testInfo,'student-home-upcoming-'+name+'-390.png');
+ }
+ await page.goto('/design-system/student-home-preview.html?upcoming=all');
+ await expect(page.locator('.vz-upcoming-event')).toHaveCount(3);
+ await page.getByRole('button',{name:'위키드 오디션 확인',exact:true}).click();
+ await expect(page.locator('.preview-status')).toContainText('오디션 확인');
+ await page.getByRole('button',{name:'보컬 레슨 확인',exact:true}).click();
+ await expect(page.locator('.preview-status')).toContainText('레슨 확인');
+});
+test('upcoming event comparison board captures all five real rendered fixtures',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chromium-desktop','One comparison board is sufficient; cases run in every browser.');
+ await page.setViewportSize({width:1250,height:2100});
+ await page.goto('/design-system/upcoming-events-board.html');
+ await expect(page.locator('iframe')).toHaveCount(5);
+ for(const frame of page.frames().filter(f=>f.parentFrame())){
+  await frame.waitForSelector('.vz-student-home');await frame.evaluate(()=>document.fonts.ready);
+ }
+ await page.evaluate(()=>document.fonts.ready);
+ await page.screenshot({path:testInfo.outputPath('student-home-upcoming-board.png'),fullPage:true,animations:'disabled'});
 });
