@@ -123,3 +123,11 @@ SQL 구현은 운영 migration 디렉터리에 즉시 넣지 않고 검토 가�
 읽기 전용 트랜잭션의 [카탈로그 검사](https://github.com/eye215/Vocalzip/actions/runs/42368781500/job/128392373357)에서 vocal_data.user_id UUID PK/FK(계정 삭제 CASCADE), payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL, 기존 vocal_history_keep 트리거 및 세션 RPC 4개를 확인했다. 임시 DB fixture를 이 제약과 맞췄다.
 세션 enforced=true, 계정별 max_sessions=2도 확인했다. 신규 revision 컬럼/영수증 표/저장 RPC는 아직 운영에 없다. 실제 사용자 ID·payload·미디어 내용은 조회하지 않았다.
 이는 스키마 메타데이터 대조이며 운영 쓰기/마이그레이션/실제 데이터 이전·복구 시험이 아니다. 운영 활성화 전 본문/필드 브리지·스냅샷·canary·롤백 검증은 남아 있다.
+
+## 10. 2026-11-08 저장 세대 토큰 보완
+
+snapshot CAS는 `(generation UUID, revision 문자열)` 쌍을 사용한다. 레코드 삭제·재생성으로 revision이 다시 1이 되더라도 이전 세대의 지연 요청은 거부한다. 기존 행 generation은 NULL로 추가하여 전체 payload/시각을 다시 쓰지 않고, 첫 정상 변경에서 서버 UUID를 발급한다. 같은 세대의 revision은 서버가 단조 증가시킨다.
+
+제안 RPC는 `vzip_save_snapshot(expected_revision, payload, request_id, expected_generation)`이다. 기존 3인자 제안 함수가 있으면 앱 직접 실행 권한을 회수한다. 새 API는 아직 앱에서 호출하지 않는다. 생성은 `(NULL,0)`, 기존 수정은 마지막으로 읽은 세대/버전 쌍을 보낸다. 영수증은 요청 세대까지 바인딩하고 세대 없는 과거 제안 영수증은 자동 변환하지 않는다.
+
+이번 작업은 UI 파일을 변경하지 않는다. 서버 함수/로컬 초안 모듈을 분리해 먼저 검증하고, 운영 DB 적용과 클라이언트 활성화는 별도 게이트로 남긴다.

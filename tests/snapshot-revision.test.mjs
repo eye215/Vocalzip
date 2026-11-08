@@ -23,7 +23,10 @@ async function as(u,s,fn,c=db){
  }catch(e){await c.query('rollback');throw e}
 }
 const register=(u,s)=>as(u,s,async c=>(await c.query('select public.vzip_register_session($1,null,null) r',['test'])).rows[0].r);
-const save=(u=U,s=A,revision=0,payload=base('keep'),id=randomUUID(),c=db)=>as(u,s,async q=>(await q.query('select public.vzip_save_snapshot($1,$2,$3) r',[revision,payload,id])).rows[0].r,c);
+const save=async(u=U,s=A,revision=0,payload=base('keep'),id=randomUUID(),c=db,generation=undefined)=>{
+ if(generation===undefined)generation=Number(revision)>0?(await db.query('select generation from public.vocal_data where user_id=$1',[u])).rows[0]?.generation||null:null;
+ return as(u,s,async q=>(await q.query('select public.vzip_save_snapshot($1,$2,$3,$4) r',[revision,payload,id,generation])).rows[0].r,c);
+};
 before(async()=>{
  if(skip)return;
  admin=new pg.Client({connectionString:URL_});await admin.connect();name='vzip_snapshot_'+Date.now();await admin.query('create database '+name);
@@ -178,4 +181,24 @@ test('history and receipts are unreadable across owners and after session revoca
  await as(U,B,c=>c.query('select public.vzip_revoke_sessions($1,false,$2)',[A,state.revision]));
  assert.equal((await as(U,A,c=>c.query('select * from public.vocal_history'))).rowCount,0);
  assert.equal((await as(U,A,c=>c.query('select * from public.vzip_data_write_requests'))).rowCount,0);
+});
+
+test('snapshot recreation fences stale revisions with a new generation',{skip},async()=>{
+ const first=await save(U,A,0,base('before-delete'));
+ await as(U,A,c=>c.query('delete from public.vocal_data where user_id=$1',[U]));
+ const next=await save(U,B,0,base('recreated'));
+ assert.notEqual(next.generation,first.generation);
+ assert.equal(next.revision,first.revision);
+ const old=await save(U,A,first.revision,base('stale'),randomUUID(),db,first.generation);
+ assert.equal(old.status,'conflict');
+ assert.equal((await db.query('select payload from public.vocal_data where user_id=$1',[U])).rows[0].payload.songs[0].id,'recreated');
+});
+test('direct clients cannot forge snapshot generation',{skip},async()=>{
+ const first=await save();
+ await as(U,A,c=>c.query('update public.vocal_data set generation=$1 where user_id=$2',[randomUUID(),U]));
+ assert.equal((await db.query('select generation from public.vocal_data where user_id=$1',[U])).rows[0].generation,first.generation);
+});
+test('same operation cannot be reused with another generation',{skip},async()=>{
+ const id=randomUUID();await save(U,A,0,base('one'),id);
+ await assert.rejects(save(U,A,0,base('one'),id,db,randomUUID()),/different input or session/);
 });

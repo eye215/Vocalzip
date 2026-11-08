@@ -4,18 +4,24 @@
 begin;
 
 alter table public.vocal_data add column if not exists revision bigint not null default 0;
+-- Null on untouched legacy rows: no volatile default or whole-table rewrite.
+alter table public.vocal_data add column if not exists generation uuid;
 
 create table if not exists public.vzip_data_write_requests (
  user_id uuid not null references auth.users(id) on delete cascade,
  request_id uuid not null,
  session_id uuid not null,
  expected_revision bigint not null check(expected_revision>=0),
+ expected_generation uuid,
  content_hash bytea not null,
  result_revision bigint not null,
+ result_generation uuid,
  result_updated_at timestamptz not null,
  created_at timestamptz not null default clock_timestamp(),
  primary key(user_id,request_id)
 );
+alter table public.vzip_data_write_requests add column if not exists expected_generation uuid;
+alter table public.vzip_data_write_requests add column if not exists result_generation uuid;
 alter table public.vzip_data_write_requests enable row level security;
 revoke all on public.vzip_data_write_requests from public,anon,authenticated;
 grant select on public.vzip_data_write_requests to authenticated;
@@ -35,9 +41,11 @@ begin
   if old.updated_at is not null and not isfinite(old.updated_at) then
    raise exception 'invalid existing snapshot timestamp' using errcode='22023';
   end if;
+  new.generation:=coalesce(old.generation,gen_random_uuid());
   new.revision:=old.revision+1;
   new.updated_at:=greatest(clock_timestamp(),old.updated_at+interval '1 microsecond');
  else
+  new.generation:=gen_random_uuid();
   new.revision:=1;
   new.updated_at:=clock_timestamp();
  end if;
@@ -48,10 +56,17 @@ drop trigger if exists vzip_data_next_revision on public.vocal_data;
 create trigger vzip_data_next_revision before insert or update on public.vocal_data
  for each row execute function public.vzip_data_next_revision();
 
--- Successful request receipts contain hashes/revision metadata, not copied snapshots.
+-- Retire the unsafe pre-generation proposal signature, if present in a test DB.
+do $ begin
+ if to_regprocedure('public.vzip_save_snapshot(bigint,jsonb,uuid)') is not null then
+  execute 'revoke all on function public.vzip_save_snapshot(bigint,jsonb,uuid) from public,anon,authenticated';
+ end if;
+end $;
+
+-- Successful request receipts contain hashes/version metadata, not copied snapshots.
 -- Conflicts never claim success and are not committed request receipts.
 create or replace function public.vzip_save_snapshot(
- p_expected_revision bigint,p_payload jsonb,p_request_id uuid)
+ p_expected_revision bigint,p_payload jsonb,p_request_id uuid,p_expected_generation uuid)
 returns jsonb language plpgsql security definer set search_path=''
 as $$
 declare
@@ -82,22 +97,23 @@ begin
  select * into receipt from public.vzip_data_write_requests
   where user_id=u and request_id=p_request_id;
  if found then
-  if receipt.session_id<>s or receipt.expected_revision<>p_expected_revision or receipt.content_hash<>digest then
+  if receipt.session_id<>s or receipt.expected_revision<>p_expected_revision or receipt.expected_generation is distinct from p_expected_generation or receipt.content_hash<>digest then
    raise exception 'request id reused with different input or session' using errcode='22023';
   end if;
-  return jsonb_build_object('status','saved','revision',receipt.result_revision::text,
+  if receipt.result_generation is null then raise exception 'legacy receipt requires migration review' using errcode='55000'; end if;
+  return jsonb_build_object('status','saved','revision',receipt.result_revision::text,'generation',receipt.result_generation,
    'updated_at',receipt.result_updated_at,'replayed',true);
  end if;
  select * into current_row from public.vocal_data where user_id=u for update;
  if found then
-  if current_row.revision<>p_expected_revision then
-   return jsonb_build_object('status','conflict','revision',current_row.revision::text,'exists',true);
+  if current_row.revision<>p_expected_revision or current_row.generation is distinct from p_expected_generation then
+   return jsonb_build_object('status','conflict','revision',current_row.revision::text,'generation',current_row.generation,'exists',true);
   end if;
   update public.vocal_data set payload=p_payload
    where user_id=u and revision=p_expected_revision returning * into result_row;
  else
-  if p_expected_revision<>0 then
-   return jsonb_build_object('status','conflict','revision','0','exists',false);
+  if p_expected_revision<>0 or p_expected_generation is not null then
+   return jsonb_build_object('status','conflict','revision','0','generation',null,'exists',false);
   end if;
   insert into public.vocal_data(user_id,payload) values(u,p_payload)
    on conflict(user_id) do nothing returning * into result_row;
@@ -107,13 +123,13 @@ begin
    return jsonb_build_object('status','conflict','revision',current_row.revision::text,'exists',true);
   end if;
  end if;
- insert into public.vzip_data_write_requests(user_id,request_id,session_id,expected_revision,content_hash,result_revision,result_updated_at)
- values(u,p_request_id,s,p_expected_revision,digest,result_row.revision,result_row.updated_at);
- return jsonb_build_object('status','saved','revision',result_row.revision::text,
+ insert into public.vzip_data_write_requests(user_id,request_id,session_id,expected_revision,expected_generation,content_hash,result_revision,result_generation,result_updated_at)
+ values(u,p_request_id,s,p_expected_revision,p_expected_generation,digest,result_row.revision,result_row.generation,result_row.updated_at);
+ return jsonb_build_object('status','saved','revision',result_row.revision::text,'generation',result_row.generation,
   'updated_at',result_row.updated_at,'replayed',false);
 end $$;
-revoke all on function public.vzip_save_snapshot(bigint,jsonb,uuid) from public,anon;
-grant execute on function public.vzip_save_snapshot(bigint,jsonb,uuid) to authenticated;
+revoke all on function public.vzip_save_snapshot(bigint,jsonb,uuid,uuid) from public,anon;
+grant execute on function public.vzip_save_snapshot(bigint,jsonb,uuid,uuid) to authenticated;
 
 comment on table public.vzip_data_write_requests is
  'Phase 03 proposal: successful snapshot-write receipts only; no payload copies. Production activation requires client/legacy bridge and retention/deletion policy.';

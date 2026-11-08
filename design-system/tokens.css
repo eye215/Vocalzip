@@ -1,0 +1,126 @@
+/* VOCAL.zip Design System 1.0
+ * Standalone namespaced layer. Do NOT import into the live v6 app until Phase 19 migration.
+ * Brand values intentionally reconcile app/app.css (#7552d9) and ios-lavender.css (#7954e7).
+ */
+:root,
+[data-vz-theme="student"] {
+  color-scheme: light;
+  --vz-color-canvas: #f6f3ff;
+  --vz-color-canvas-end: #f9f7ff;
+  --vz-color-ink: #252142;
+  --vz-color-ink-secondary: #625d7c;
+  --vz-color-ink-muted: #77718d;
+  --vz-color-accent: #7954e7;
+  --vz-color-accent-strong: #6239cf;
+  --vz-color-accent-soft: #ede7ff;
+  --vz-color-accent-ink: #ffffff;
+  --vz-color-selected: #7954e7;
+  --vz-color-progress-track: #e9e1f7;
+  --vz-color-rest: #82769f;
+  --vz-color-success: #28785c;
+  --vz-color-danger: #a23f56;
+  --vz-color-border: rgba(122, 98, 187, .15);
+  --vz-color-glass: rgba(255,255,255,.73);
+  --vz-color-glass-raised: rgba(255,255,255,.84);
+  --vz-color-glass-border: rgba(255,255,255,.92);
+  --vz-color-glass-fallback: #fdfbff;
+  --vz-color-focus: #5d37c7;
+  --vz-bg-glow-one: rgba(197,179,255,.45);
+  --vz-bg-glow-two: rgba(234,196,250,.38);
+  --vz-shadow-card: 0 10px 34px rgba(88,63,154,.085), inset 0 1px 0 rgba(255,255,255,.9);
+  --vz-shadow-dock: 0 14px 36px rgba(73,58,128,.15), inset 0 1px 0 rgba(255,255,255,.8);
+}
+[data-vz-theme="teacher"] {
+  --vz-color-canvas: #eff5ff;
+  --vz-color-canvas-end: #f7faff;
+  --vz-color-ink: #1d304c;
+  --vz-color-ink-secondary: #556984;
+  --vz-color-ink-muted: #667991;
+  --vz-color-accent: #386ccb;
+  --vz-color-accent-strong: #2255b6;
+  --vz-color-accent-soft: #e4eeff;
+  --vz-color-selected: #386ccb;
+  --vz-color-progress-track: #d9e7fb;
+  --vz-color-rest: #6884aa;
+  --vz-color-success: #257b67;
+  --vz-color-danger: #a43f57;
+  --vz-color-border: rgba(73,119,190,.16);
+  --vz-color-glass: rgba(255,255,255,.75);
+  --vz-color-glass-raised: rgba(255,255,255,.86);
+  --vz-color-glass-border: rgba(255,255,255,.96);
+  --vz-color-glass-fallback: #f8fbff;
+  --vz-color-focus: #2157c7;
+  --vz-bg-glow-one: rgba(156,203,255,.43);
+  --vz-bg-glow-two: rgba(198,221,255,.45);
+  --vz-shadow-card: 0 10px 34px rgba(60,99,160,.085), inset 0 1px 0 rgba(255,255,255,.9);
+  --vz-shadow-dock: 0 14px 36px rgba(47,92,156,.15), inset 0 1px 0 rgba(255,255,255,.86);
+}
+:root {
+  --vz-font: -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,sans-serif;
+  --vz-text-xs: 12px;
+  --vz-text-sm: 14px;
+  --vz-text-md: 16px;
+  --vz-text-lg: 19px;
+  --vz-text-xl: 24px;
+  --vz-text-display: 30px;
+  --vz-leading-tight: 1.23;
+  --vz-leading-body: 1.5;
+  --vz-space-1: 4px;
+  --vz-space-2: 8px;
+  --vz-space-3: 12px;
+  --vz-space-4: 16px;
+  --vz-space-5: 20px;
+  --vz-space-6: 24px;
+  --vz-space-8: 32px;
+  --vz-space-10: 40px;
+  --vz-radius-control: 14px;
+  --vz-radius-tile: 20px;
+  --vz-radius-card: 28px;
+  --vz-radius-hero: 32px;
+  --vz-radius-dock: 30px;
+  --vz-radius-pill: 999px;
+  --vz-grid-gap: 12px;
+  --vz-page-gutter: 20px;
+  --vz-card-padding: 20px;
+  --vz-touch-min: 44px;
+  --vz-blur-card: blur(24px) saturate(145%);
+  --vz-blur-dock: blur(30px) saturate(165%);
+  --vz-motion-fast: 150ms;
+  --vz-motion-normal: 240ms;
+}
+@media (max-width: 359px) {
+  :root { --vz-page-gutter: 16px; --vz-card-padding: 16px; --vz-grid-gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --vz-motion-fast: 0ms; --vz-motion-normal: 0ms; }
+}
+@media (prefers-contrast: more) {
+  :root, [data-vz-theme="student"], [data-vz-theme="teacher"] {
+    --vz-color-glass: #ffffff; --vz-color-glass-raised: #ffffff;
+    --vz-color-glass-border: var(--vz-color-border);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root, [data-vz-theme="student"], [data-vz-theme="teacher"] {
+    --vz-color-glass: var(--vz-color-glass-fallback);
+    --vz-color-glass-raised: var(--vz-color-glass-fallback);
+    --vz-blur-card: none; --vz-blur-dock: none;
+  }
+}
+
+/* PR #136 compact reference. Existing app --bg/--accent and teacher tokens are unchanged. */
+[data-vz-design="approved-home-v1"],.vz-home-mode {
+ --vz-color-canvas:#f2eff8; --vz-color-canvas-violet:#e9dff6; --vz-color-canvas-pink:#f5eff9; --vz-color-canvas-blue:#eef0f8;
+ --vz-color-ink:#352b40; --vz-color-ink-secondary:#786381; --vz-color-ink-muted:#806989;
+ --vz-color-heading:#58416b; --vz-color-heading-strong:#4a365c;
+ --vz-color-icon-start:#a587ba; --vz-color-icon-end:#8e6ca6;
+ --vz-color-accent:#795393; --vz-color-accent-strong:#744793; --vz-color-accent-soft:#f1e9f8;
+ --vz-color-practice-low:#dfd0ee; --vz-color-practice-met:#b399ce; --vz-color-practice-high:#8a65a7;
+ --vz-color-today:#76518d; --vz-color-day-accent:#76518d; --vz-color-nav-label:#786381;
+ --vz-color-check-border:#9b83ae; --vz-color-check-fill:#8960ad; --vz-color-progress-track:#eee7f5;
+ --vz-color-glass:#fff; --vz-color-glass-raised:#fff; --vz-color-glass-border:transparent; --vz-color-glass-fallback:#fff;
+ --vz-color-focus:#79529c; --vz-color-flame:#ba7d52;
+ --vz-shadow-card:0 2px 10px #55356a05; --vz-shadow-dock:0 5px 22px #57336f0a; --vz-shadow-greeting:none;
+ --vz-radius-card:22px; --vz-page-gutter:16px; --vz-card-padding:16px; --vz-grid-gap:12px; --vz-blur-card:none;
+}
+@media(max-width:359px) {[data-vz-design="approved-home-v1"],.vz-home-mode {--vz-grid-gap:10px;}}

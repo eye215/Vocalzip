@@ -1,3 +1,5 @@
-// Existing fixtures exercise pre-enrollment compatibility, including additional tabs and frames.
-// New account-session tests do not load this helper and keep enforcement enabled.
-module.exports=test=>test.beforeEach(async({context})=>{await context.addInitScript(()=>{window.VZIP_DEVICE_SESSIONS_ENABLED=false;});});
+// Legacy fixtures keep their original UI/auth contract; dedicated home/session suites enable the new flows.
+module.exports=(test,{approvedHome=false}={})=>test.beforeEach(async({context},info)=>{
+ const home=typeof approvedHome==='function'?approvedHome(info):approvedHome;
+ await context.addInitScript(home=>{window.VZIP_DEVICE_SESSIONS_ENABLED=false;window.VZIP_APPROVED_HOME_ENABLED=home;},home);
+});
