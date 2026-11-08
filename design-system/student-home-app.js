@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=15';
+import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=16';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -19,7 +19,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const icon=link.querySelector('i');
    if(icon&&!icon.querySelector('.vz-nav-art')&&icons[link.dataset.nav])icon.append(createHomeIcon(icons[link.dataset.nav],"vz-nav-art"));
   });
-  if(meta)meta.content=home?'#f6f4fb':originalTheme;
+  if(meta)meta.content=home?'#f8f6fd':originalTheme;
   // The existing library controller used the record tab before it had its own dock entry.
   const route=location.hash.replace(/^#\/?/,'').split(/[/?]/)[0];
   if(route==='library'||route==='practices'||route==='growth'){

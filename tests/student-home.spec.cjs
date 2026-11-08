@@ -247,6 +247,8 @@ test('900 goals keep one scroll list, order, and scroll position after a check',
   await expect(goals(page)).toHaveCount(900);
   const list = page.locator('.vz-goal-list');
   expect(await list.evaluate(el => el.scrollHeight>el.clientHeight && ['auto','scroll'].includes(getComputedStyle(el).overflowY))).toBe(true);
+  // Bring the list above the fixed dock before measuring its independent scroll position.
+  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
   await list.evaluate(el => {el.scrollTop=450;});
   const before = await list.evaluate(el => el.scrollTop);
   // Choose the input by its actual accessible name via the visible row's goal id/title.
@@ -497,7 +499,7 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
    await expect(page.locator('.vz-home-goals input')).toHaveCount(3);
   }
   const palette=await page.evaluate(()=>({background:getComputedStyle(document.body).backgroundColor,card:getComputedStyle(document.querySelector('.vz-home-week')).backgroundColor}));
-  expect(palette).toEqual({background:'rgb(246, 244, 251)',card:'rgb(255, 255, 255)'});
+  expect(palette).toEqual({background:'rgb(248, 246, 253)',card:'rgb(255, 255, 255)'});
   if(name==='both'){
    const computed=await page.evaluate(()=>['.vz-home-brand','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
    console.log('HOME_TYPE_AUDIT '+JSON.stringify(computed));
@@ -531,7 +533,7 @@ test('upcoming event comparison board captures all six real rendered fixtures',a
 test('closest event uses day and time without reordering the input records',async({page})=>{
  await page.goto('/design-system/student-home-preview.html?upcoming=all');
  const result=await page.evaluate(async()=>{
-  const {createUpcomingStage}=await import('/design-system/components.js?v=15');
+  const {createUpcomingStage}=await import('/design-system/components.js?v=16');
   const events=[{kind:'late',title:'늦은 일정',daysLeft:2,time:'18:00'},{kind:'unknown',title:'날짜 미정'},{kind:'early',title:'이른 일정',daysLeft:2,time:'09:00'}];
   const original=JSON.stringify(events),host=createUpcomingStage({events});
   return {unchanged:JSON.stringify(events)===original,order:[...host.children].map(x=>x.dataset.kind),primary:host.querySelectorAll('.is-primary').length,illustrations:host.querySelectorAll('.vz-event-illustration').length};

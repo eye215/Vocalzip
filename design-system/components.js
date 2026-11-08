@@ -352,13 +352,7 @@ export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}
     const title=el("span","vz-home-goal-title",goal.title||"목표");
     const source=el("span","vz-home-goal-source",({homework:"숙제",personal:"개인",recommendation:"추천"})[goal.source]||"");
     row.append(check,title,source);list.append(row);
-    // A pointer toggle preserves the current inner-list position; keyboard focus remains native.
-    let pointerScroll=null;
-    check.addEventListener("pointerdown",()=>{pointerScroll=list.scrollTop;});
-    check.addEventListener("keydown",()=>{pointerScroll=null;});
     check.addEventListener("change",async()=>{
-      const savedScroll=pointerScroll;pointerScroll=null;
-      if(savedScroll!=null){list.scrollTop=savedScroll;requestAnimationFrame(()=>{list.scrollTop=savedScroll;});}
       const previous=goal.completed,next=check.checked;
       goal.completed=next;check.disabled=true;row.setAttribute("aria-busy","true");
       status.textContent="목표 저장 중…";refresh();
