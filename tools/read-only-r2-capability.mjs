@@ -1,13 +1,14 @@
 // Read-only Cloudflare deployment capability check. Never logs API bodies or credentials.
 const token=process.env.CLOUDFLARE_API_TOKEN||process.env.CF_API_TOKEN;
+const legacy=process.env.CLOUDFLARE_API_KEY||process.env.CF_API_KEY,email=process.env.CLOUDFLARE_EMAIL||process.env.CF_EMAIL;
 const configured=process.env.CLOUDFLARE_ACCOUNT_ID||process.env.CF_ACCOUNT_ID;
-const summary={token_configured:!!token,account_configured:!!configured};
+const summary={token_configured:!!token,account_configured:!!configured,legacy_key_configured:!!legacy,email_configured:!!email};
 async function get(path){
- const response=await fetch('https://api.cloudflare.com/client/v4'+path,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(10000)});
+ const response=await fetch('https://api.cloudflare.com/client/v4'+path,{headers:token?{Authorization:'Bearer '+token}:{'X-Auth-Key':legacy,'X-Auth-Email':email},signal:AbortSignal.timeout(10000)});
  if(!response.ok)return null;const body=await response.json();return body.success?body.result:null;
 }
 try{
- if(token){
+ if(token||(legacy&&email)){
   let accounts=configured&&/^[a-f0-9]{32}$/i.test(configured)?[{id:configured}]:await get('/accounts?per_page=50');
   summary.accounts_readable=Array.isArray(accounts);
   let target=null;
