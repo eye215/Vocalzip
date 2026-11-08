@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 38119)
-Total output lines: 1983
-
 // VOCAL.zip v6 UI: main user flows, data compatibility with v5 records, and mobile layout.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test,{approvedHome:info=>info.title==='Bottom navigation reaches the five main screens without horizontal overflow'});
@@ -915,7 +912,197 @@ test('Growth counts practice time once and shows empty state without invented sc
   await page.getByRole('button', {name:'전체'}).click();
   await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices.push({id:'x', date:new Date().toISOString().slice(0, 10), minutes:40, mediaSeconds:600, mediaIds:['z'], practiceMode:'song', songId:'', rating:5}); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('40분');
-  await expect(page.getByText('음…3119 tokens truncated…ad is retried', async ({page}) => {
+  await expect(page.getByText('음정·호흡·발성은 평가하지 않아요')).toBeVisible();
+});
+
+test('Settings keeps the cloud account panel across re-renders and exports a backup', async ({page}) => {
+  await boot(page, {media:false});
+  await page.goto('/#/settings');
+  await expect(page.locator('#cloud-user')).toContainText('test@example.invalid');
+  await page.goto('/#/home');
+  await page.goto('/#/settings');
+  await expect(page.locator('#cloud-logout')).toBeVisible();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', {name:/기록 백업/}).click();
+  expect((await download).suggestedFilename()).toMatch(/^vocalzip-backup-/);
+});
+
+test('Sheets fit the iPhone width and inputs do not overflow', async ({page}) => {
+  await boot(page, {media:false});
+  await page.locator('.quick [data-add-lesson]').click();
+  const width = await page.evaluate(() => innerWidth);
+  for (const sel of ['[name=date]', '[name=start]', '[name=end]', '[name=place]']) {
+    const b = await sheet(page).locator(sel).boundingBox();
+    expect(b.x).toBeGreaterThanOrEqual(0); expect(b.x + b.width).toBeLessThanOrEqual(width + 0.5);
+    expect(b.height).toBeGreaterThanOrEqual(44);
+  }
+  expect(await sheet(page).evaluate(el => getComputedStyle(el.querySelector('input')).fontSize)).toBe('16px');
+});
+
+test('Video import keeps only the original audio and files it under the capture date', async ({page}) => {
+  const fixture = path.resolve('tests/fixtures/dated-video.mp4');
+  test.skip(!fs.existsSync(fixture), 'Run node tests/make-audio-fixtures.cjs (needs ffmpeg).');
+  test.setTimeout(90000);
+  await boot(page, {media:false});
+  await page.goto('/#/library');
+  await page.locator('[data-imp]').click();
+  await sheet(page).locator('[data-file]').setInputFiles(fixture);
+  await expect(sheet(page).getByText('영상 → 음성만 저장')).toBeVisible();
+  await page.getByRole('button', {name:'가져오기', exact:true}).click();
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:60000});
+  await expect(sheet(page).locator('[data-done]')).toContainText('(파일 속 날짜)');
+  const [item] = await media(page);
+  expect(item.type).toBe('audio/mp4');
+  expect(item).toMatchObject({recordedDate:'2024-03-01', dateSource:'metadata', source:'import'});
+  expect(item.audioExtraction.audioPacketCopyVerified).toBe(true);
+});
+
+test('Billing is only linked, and editing a legacy lesson never stamps a status on it', async ({page}) => {
+  await boot(page, {media:false});
+  await page.goto('/#/settings');
+  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  await page.goto('/#/lessons');
+  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  await page.goto('/#/lesson/l1');
+  await page.locator('[data-edit-lesson]').click();
+  await sheet(page).locator('[name=teacher]').fill('박선생');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  const l1 = (await data(page)).lessons.find(l => l.id === 'l1');
+  expect(l1.teacher).toBe('박선생');
+  expect('status' in l1).toBe(false);
+  expect(l1.date).toBe(day(-7));
+  // An explicit user choice is recorded.
+  await page.getByRole('button', {name:'예정으로 되돌리기'}).click();
+  expect((await data(page)).lessons.find(l => l.id === 'l1').status).toBe('scheduled');
+});
+
+test('Library actually plays device and cloud-only audio (time advances)', async ({page}) => {
+  await boot(page);
+  // A 4s clip so a replay is still playing when checked (1s ended too fast in WebKit).
+  const sr = 8000, n = sr * 4, wav = Buffer.alloc(44 + n * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 8) * 6000), 44 + i * 2);
+  await page.route('**/cloud-audio.wav', r => r.fulfill({contentType:'audio/wav', body:wav}));
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn = () => true;
+    window.vzipCloudMediaList = async () => [{id:'c1', name:'클라우드 음원', type:'audio/wav', path:'ui-test-user/c1.wav', created:Date.now(), songId:'', cloud:true}];
+    window.vzipCloudMediaUrl = async () => { await new Promise(r => setTimeout(r, 300)); return '/cloud-audio.wav'; };
+    window.dispatchEvent(new Event('vzip:auth-changed'));
+  });
+  await page.goto('/#/library');
+  for (const id of ['m2', 'c1']) {
+    await page.goto('/#/library');
+    const row = page.locator('[data-media="' + id + '"]');
+    await row.locator('[data-toggle]').click();
+    await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
+    await expect(row.locator('[data-msg]')).toHaveText('');
+  }
+  // Pause, then one tap on the already-loaded source plays it again.
+  const row = page.locator('[data-media="c1"]');
+  await row.getByRole('button', {name:'일시정지'}).click();
+  await expect(row.getByRole('button', {name:'재생', exact:true})).toBeVisible({timeout:5000});
+  await row.getByRole('button', {name:'재생', exact:true}).click();
+  await expect(row.getByRole('button', {name:'일시정지'})).toBeVisible();
+  await expect(row.locator('[data-msg]')).toHaveText('');
+});
+
+test('Practice records can be edited, including unlinking files that no longer exist', async ({page}) => {
+  await boot(page);
+  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
+  await page.goto('/#/song/s1');
+  await page.getByRole('tab', {name:'연습'}).click();
+  await page.locator('[data-practice="p1"]').click();
+  await expect(sheet(page)).toContainText('20분');
+  await expect(sheet(page)).toContainText('찾을 수 없는 녹음 2개');
+  await sheet(page).getByRole('button', {name:'연결 해제'}).click();
+  await page.locator('.sheet').last().getByRole('button', {name:'연결 해제'}).click();
+  let p = (await data(page)).practices[0];
+  expect(p.mediaIds).toEqual(['m1']);
+  // Edit time, rating and memo; unlink the remaining file from the edit sheet.
+  await page.locator('[data-practice="p1"]').click();
+  await page.locator('.sheet-foot').getByRole('button', {name:'수정'}).click();
+  await sheet(page).locator('[name=minutes]').fill('45');
+  await sheet(page).getByRole('button', {name:'만족도 5'}).click();
+  await sheet(page).locator('[name=memo]').fill('고음 안정, 브릿지 호흡');
+  await sheet(page).locator('label.item').filter({hasText:'레슨 시범'}).locator('input').uncheck();
+  await page.getByRole('button', {name:'수정 저장'}).click();
+  p = (await data(page)).practices[0];
+  expect(p).toMatchObject({minutes:45, rating:5, memo:'고음 안정, 브릿지 호흡', mediaIds:[], completed:['a1'], assignmentNotes:{a1:'3회 반복'}});
+  expect((await media(page)).some(m => m.id === 'm1')).toBe(true); // unlinking never deletes the file
+});
+
+test('Practice time adds recording/import lengths once and fills missing lengths', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const day = 864e5, read = async id => (await window.vzipReadMedia()).find(m => m.id === id);
+    // m2: a 10-minute practice recording not linked to any record → counts.
+    const m2 = await read('m2'); delete m2.bytes; await window.vzipStorePracticeMedia({...m2, blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:600}); // WebKit may have stored bytes
+    // m3: an import saved before lengths were kept (no duration) → measured and counted.
+    await window.vzipStorePracticeMedia({id:'m3', name:'SODA_1', created:Date.now() - day, recordedDate:'', type:'audio/wav', source:'import', songId:'s2', blob:new Blob([window.__wav], {type:'audio/wav'})});
+    window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m3'}}));
+  });
+  await page.goto('/#/growth');
+  await page.getByRole('button', {name:'전체'}).click();
+  // p1 (30분, already includes linked m1) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('40분');
+  await expect(page.locator('[data-file-time]')).toContainText('녹음·파일 10분 포함');
+  await expect.poll(async () => Math.round((await page.evaluate(() => window.vzipReadMedia())).find(m => m.id === 'm3').durationSeconds)).toBe(1);
+  await expect(page.locator('.bars')).toContainText('This Is the Moment');
+  await expect(page.getByText(/기록에 연결되지 않은 녹음·파일 2개/)).toBeVisible();
+  // Song list/detail use the same rule.
+  await page.goto('/#/song/s1');
+  await expect(page.locator('[data-summary]')).toContainText('연습 40분');
+  // Linking m2 into a practice record moves its time inside that record (no double count).
+  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds.push('m2'); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
+  await page.goto('/#/growth');
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('30분');
+});
+
+test('Changing a recording\'s song renames it to song + recording day, numbered on clashes', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/library');
+  const open = async id => { await page.goto('/#/library'); await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
+  await open('m1');
+  await sheet(page).locator('[name=date]').fill('2026-11-02');
+  await sheet(page).locator('[name=song]').selectOption('s2');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.02');
+  // Changing the day follows while the name is still the automatic one.
+  await sheet(page).locator('[name=date]').fill('2026-11-03');
+  await sheet(page).locator('[name=date]').dispatchEvent('change');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').name).toBe('On My Own 2026.11.03');
+  // Same song and day on another file gets a number.
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await open('m2');
+  await sheet(page).locator('[name=date]').fill('2026-11-03');
+  await sheet(page).locator('[name=song]').selectOption('s2');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03 2');
+  // A typed name is never overwritten.
+  await sheet(page).locator('[name=name]').fill('브릿지만');
+  await sheet(page).locator('[name=song]').selectOption('s1');
+  await expect(sheet(page).locator('[name=name]')).toHaveValue('브릿지만');
+});
+
+test('Song pickers list the most recently registered song first', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/songs');
+  await page.locator('[data-add-song]').click();
+  await sheet(page).locator('[name=title]').fill('Defying Gravity');
+  await sheet(page).getByRole('button', {name:'곡 추가'}).click();
+  expect((await data(page)).songs.at(-1).created).toBeGreaterThan(0);
+  await page.goto('/#/library');
+  await page.locator('[data-media="m1"] [data-toggle]').click();
+  await page.locator('[data-media="m1"]').getByRole('button', {name:/정보 수정/}).click();
+  const options = await sheet(page).locator('[name=song] option').allTextContents();
+  // Legacy songs have no created time: save order decides (s2 was added after s1).
+  expect(options.slice(1, 4)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment — 지킬 앤 하이드']);
+  await sheet(page).getByRole('button', {name:'닫기'}).click();
+  await page.goto('/#/library');
+  expect((await page.locator('[data-song] option').allTextContents()).slice(2, 5)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment']);
+});
+
+test('A list read that overlaps a login or file change is re-read, and a failed cloud read is retried', async ({page}) => {
   await boot(page);
   const reads = await page.evaluate(async () => {
     const real = window.vzipReadMedia; let calls = 0, release;
