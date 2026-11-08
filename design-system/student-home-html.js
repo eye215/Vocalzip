@@ -24,10 +24,10 @@ function action(element,label,fn){
 }
 const adaptations=String.raw`
 #vocalzip-refined-preview .vz-week{touch-action:pan-y;}
-#vocalzip-refined-preview .vz-week-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:12px 0 0;min-height:60px;border-radius:20px;background:#f2edfa;}
-#vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;min-height:48px;border:0;background:transparent;color:#9877bd;cursor:pointer;padding:0;}
+#vocalzip-refined-preview .vz-week-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:12px 0 0;min-height:44px;background:transparent;}
+#vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#f3ecff;color:#8066a5;cursor:pointer;padding:0;}
 #vocalzip-refined-preview .vz-week-nav button:disabled{color:#c7bfd2;cursor:default;opacity:.5;}
-#vocalzip-refined-preview .vz-week-nav button svg{width:25px;height:25px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+#vocalzip-refined-preview .vz-week-nav button svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-week-nav .vz-week-range{text-align:center;white-space:nowrap;line-height:1.25;}
 #vocalzip-refined-preview .vz-week-year{display:block;color:#667085;font-size:11px;font-weight:500;}
 #vocalzip-refined-preview .vz-week-dates{display:block;color:#101828;font-size:18px;font-weight:700;margin-top:3px;}
