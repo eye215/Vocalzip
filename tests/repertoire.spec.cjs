@@ -31,9 +31,9 @@ test('Repertoire persists metadata ratings keys and filters without rewriting or
  await page.locator('[data-rep=keys]').click();await dialog(page).getByLabel('원키',{exact:true}).fill('Db');await dialog(page).getByLabel('연습키',{exact:true}).fill('C');await save(page);
  await page.reload();await expect(page.locator('[data-repertoire]')).toContainText('4.5/5');await expect(page.locator('[data-repertoire]')).toContainText('원키 Db');
  const data=await db(page);expect(data.songs[0].id).toBe('song1');expect(data.songs[0].lyrics).toBe('보존할 가사');expect(data.practices).toEqual(initial().practices);expect(data.lessons).toEqual(initial().lessons);
- await page.goto('/#/songs');await page.getByRole('combobox',{name:'레퍼토리 상태'}).selectOption('ready');await expect(page.locator('[data-l] a')).toHaveCount(1);
- await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await expect(page.locator('[data-l]')).toContainText('This Is the Moment');
- await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
+ await page.goto('/#/songs');await page.locator('[data-status-sheet]').click();await page.locator('[data-choice=ready]').click();await expect(page.locator('[data-l] a')).toHaveCount(1);
+ await page.locator('[data-song-search]').click();await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await page.locator('[data-collection-search] button[type=submit]').click();await expect(page.locator('[data-l]')).toContainText('This Is the Moment');
+ await page.locator('[data-sort-sheet]').click();await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
 });
 test('Performance CRUD, distinct sessions, bidirectional song links and safe deletion',async({page})=>{
  await boot(page);const id=await newShow(page);await addSession(page,'14:00','1');await addSession(page,'19:00','2');
@@ -121,3 +121,13 @@ test('A production connects to the rest of the app: its day on the calendar, 공
  await page.evaluate(()=>{localStorage.setItem('vzip_cloud_linked_user','archive-user');window.vzipCloudUserId=()=>''});
  await page.goto('/#/performances');await expect(page.locator('.archive-page')).toContainText('맘마미아');
 });
+
+
+ test('Approved collections show live songs, filter sheets, recorder preselection and correct Library tab',async({page})=>{
+ await boot(page);await expect(page.locator('.vz-song-list a')).toHaveCount(2);await expect(page.locator('.vz-song-filters')).toHaveCSS('background-color','rgb(243, 236, 255)');
+ await page.locator('[data-sort-sheet]').click();await expect(page.locator('[data-choice=name]')).toBeVisible();await page.locator('[data-choice=name]').click();await expect(page.locator('[data-sort-sheet]')).toContainText('이름순');
+ await expect(page.locator('.vz-recent-song')).toHaveAttribute('href','#/record?song=song1');await page.locator('.vz-recent-song').click();await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
+ await page.goto('/#/library');await expect(page.locator('.v-nav [data-nav=library]')).toHaveAttribute('aria-current','page');await expect(page.locator('#top [data-back]')).toHaveCount(0);await expect(page.locator('[data-library-search]')).toBeVisible();
+ await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeVisible();
+ });
+

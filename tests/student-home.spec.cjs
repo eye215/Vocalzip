@@ -209,7 +209,7 @@ test('four home navigation buttons and floating recording reach existing routes'
  await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정']);
  for(const [label,route]of [['내 곡','songs'],['보관함','library'],['일정','calendar'],['녹음 시작','record']]){
   await page.goto('/#/home');await ready(page);
-  await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));await expect(page.locator('.vz-student-home')).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);await expect(page.locator('.v-nav')).toBeVisible();await noOverflow(page);
+  await page.getByRole('button',{name:label,exact:true}).click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);await expect(page.locator('.vz-student-home')).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);await expect(page.locator('.v-nav')).toBeVisible();await noOverflow(page);
  }
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
@@ -262,8 +262,8 @@ test('week swipe and arrows preserve history across Monday, and title/day naviga
 });
 test('stage, lesson, song and quick actions retain their real destinations',async({page})=>{
  await boot(page);
- for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','song/s1'],['레슨노트','lessons'],['연습기록','practices'],['프로필','settings']]){
-  await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
+ for(const [label,route]of [['다음 레슨 보기','lesson/l1'],['무대 상세 보기','show/stage1'],['최근 연습곡 This Is the Moment 열기','record?song=s1'],['레슨노트','lessons'],['연습기록','practices'],['프로필','settings']]){
+  await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:label,exact:true}).click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);
  }
 });
 test('goal editor saves only user entered plans and personal goals',async({page})=>{
@@ -384,4 +384,5 @@ test('source HTML and hydrated home comparison use the same supplied layout',asy
  for(const frame of page.frames().filter(f=>f.parentFrame())){await frame.waitForSelector(frame.url().includes('student-home-preview')?'.vz-student-home':'.vz-phone');await frame.addStyleTag({content:faces});await frame.evaluate(()=>document.fonts.ready);}
  await page.screenshot({path:testInfo.outputPath('student-home-html-source-comparison.png'),fullPage:true,animations:'disabled'});
 });
+
 

@@ -52,7 +52,7 @@ test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
  await boot(page);
- for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','음원 보관함'],['일정','calendar','캘린더']]){
+ for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','캘린더']]){
   await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
   await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
   await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -613,13 +613,16 @@ test('Songs: add, search, detail tabs, delete keeps records', async ({page}) => 
   await sheet(page).getByRole('button', {name:'곡 추가'}).click();
   await expect(page.locator('#top h1')).toHaveText('Defying Gravity');
   await page.goto('/#/songs');
-  await page.getByLabel('곡 검색').fill('moment');
+  await page.locator('[data-song-search]').click();
+  await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('moment');
+  await page.locator('[data-collection-search] button[type=submit]').click();
   await expect(page.locator('.list .item')).toHaveCount(1);
-  // A background media refresh keeps the search.
-  await page.getByLabel('곡 검색').blur();
+  // A background media refresh keeps the applied search.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m1'}})));
   await page.waitForTimeout(700);
-  await expect(page.getByLabel('곡 검색')).toHaveValue('moment');
+  await page.locator('[data-song-search]').click();
+  await expect(page.getByRole('searchbox',{name:'곡 검색',exact:true})).toHaveValue('moment');
+  await page.locator('[data-collection-search] button[type=submit]').click();
   await expect(page.locator('.list .item')).toHaveCount(1);
   await page.locator('.list .item').click();
   await expect(page.locator('[data-summary]')).toContainText('녹음 2개');
@@ -988,6 +991,7 @@ test('Library actually plays device and cloud-only audio (time advances)', async
   });
   await page.goto('/#/library');
   for (const id of ['m2', 'c1']) {
+    await page.goto('/#/library');
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
@@ -1057,7 +1061,7 @@ test('Practice time adds recording/import lengths once and fills missing lengths
 test('Changing a recording\'s song renames it to song + recording day, numbered on clashes', async ({page}) => {
   await boot(page);
   await page.goto('/#/library');
-  const open = async id => { await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
+  const open = async id => { await page.goto('/#/library'); await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
   await open('m1');
   await sheet(page).locator('[name=date]').fill('2026-11-02');
   await sheet(page).locator('[name=song]').selectOption('s2');
@@ -1094,6 +1098,7 @@ test('Song pickers list the most recently registered song first', async ({page})
   // Legacy songs have no created time: save order decides (s2 was added after s1).
   expect(options.slice(1, 4)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment — 지킬 앤 하이드']);
   await sheet(page).getByRole('button', {name:'닫기'}).click();
+  await page.goto('/#/library');
   expect((await page.locator('[data-song] option').allTextContents()).slice(2, 5)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment']);
 });
 
@@ -1850,7 +1855,7 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
-  await page.getByRole('button', {name:'선택', exact:true}).click();
+  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
   await expect(bar).toContainText('0개 선택');
   await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
@@ -1868,13 +1873,13 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await expect(bar).toHaveCount(0);
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id + ':' + m.songId).sort().join(','))).toBe('m1:s2,m2:s2');
   // Kind for one recording.
-  await page.getByRole('button', {name:'선택', exact:true}).click();
+  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   await page.locator('[data-media="m1"] [data-toggle]').click();
   await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
   await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
   // Leaving the screen ends select mode.
-  await page.getByRole('button', {name:'선택', exact:true}).click();
+  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   await page.goto('/#/home');
   await expect(page.locator('.sel-bar')).toHaveCount(0);
   expect(page.__errors).toEqual([]);
@@ -1975,3 +1980,4 @@ test('Files edited before the follow rule existed are lined up once after start'
   await expect.poll(() => page.evaluate(() => VZ.db.practices.find(p => p.id === 'auto-old').date), {timeout:8000}).toBe(await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(x => x.id === 'm2'))));
   expect(page.__errors).toEqual([]);
 });
+
