@@ -1000,19 +1000,7 @@ test('Library actually plays device and cloud-only audio (time advances)', async
     await page.goto('/#/library');
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
-    await expect(page).toHaveURL(new RegExp('#/recording/'+id+'
-    await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
-    await expect(row.locator('[data-msg]')).toHaveText('');
-  }
-  // Pause, then one tap on the already-loaded source plays it again.
-  const row = page.locator('[data-media="c1"]');
-  await row.getByRole('button', {name:'일시정지'}).click();
-  await expect(row.getByRole('button', {name:'재생', exact:true})).toBeVisible({timeout:5000});
-  await row.getByRole('button', {name:'재생', exact:true}).click();
-  await expect(row.getByRole('button', {name:'일시정지'})).toBeVisible();
-  await expect(row.locator('[data-msg]')).toHaveText('');
-});
-));
+    await expect(page).toHaveURL(new RegExp('#/recording/'+id+'$'));
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }
