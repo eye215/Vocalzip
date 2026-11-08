@@ -109,7 +109,7 @@ jobs:
               'All screenshots use synthetic fixture data. before and after use the same data and fixed browser clock.',
               'preview is the standalone design fixture; after is the actual application home.',
               'Full-page content captures hide the fixed dock; viewport PNGs retain the real fixed dock. Scroll clearance is tested separately.',
-              'Current brief: independently redesign the home around practice, with a dark primary card, line icons, simple weekly meters, and a scrollable layout. Previous designs remain historical context.',
+              'Current brief: implement compact reference PR #136. Light lavender identity, one weekly metric, square recent-song tile with two quick actions, grouped goals, and conditional schedules. Earlier rejected mockups remain historical context.',
               'Screenshots are review evidence, not a claim of visual identity. Check the run result for test failures.',
               'Real iPhone Safari, installed PWA, hardware safe areas, and assistive technology remain unverified.',
               '',

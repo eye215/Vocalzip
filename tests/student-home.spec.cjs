@@ -142,15 +142,14 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
     const quick = await page.locator('.vz-quick-actions').boundingBox();
     expect(song).not.toBeNull();
     expect(quick).not.toBeNull();
-    // The redesigned recent song spans the width; secondary actions sit below it.
-    expect(Math.abs(song.width-quick.width)).toBeLessThanOrEqual(1);
-    expect(Math.abs(song.x-quick.x)).toBeLessThanOrEqual(1);
-    expect(song.y+song.height+8).toBeLessThanOrEqual(quick.y);
-    const record = await page.getByRole('button',{name:'녹음 시작하기',exact:true}).boundingBox();
-    expect(record.width).toBeGreaterThanOrEqual(44);
-    expect(record.height).toBeGreaterThanOrEqual(44);
+    // PR #136: square recent-song tile plus a two-row quick-action group.
+    if(width>=390)expect(Math.abs(song.height-song.width)).toBeLessThanOrEqual(1);
+    else expect(song.height).toBeGreaterThanOrEqual(song.width-1);
+    expect(Math.abs(song.height-quick.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(song.y-quick.y)).toBeLessThanOrEqual(1);
+    expect(song.x+song.width+8).toBeLessThanOrEqual(quick.x);
     const rows = await page.locator('.vz-goal-row').evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().height));
-    expect(rows.every(height => Math.round(height) >= 44)).toBe(true);
+    expect(rows.every(height => Math.round(height) >= 48)).toBe(true);
     await screenshot(page,testInfo,'student-home-after-'+width+'.png');
   }
   await page.goto('/design-system/student-home-preview.html');
@@ -165,12 +164,12 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
         return{stage:box('.vz-home-stage'),goals:box('.vz-home-goals'),week:box('.vz-home-week'),recent:box('.vz-home-song'),recentTitle:box('.vz-home-song-copy strong'),recentArtist:box('.vz-home-song-copy>span'),dock:box('.vz-approved-dock'),heading:box('.vz-home-heading'),greeting:box('.vz-home-greeting'),icon:box('.vz-home-heading .vz-home-icon')};
       });
       console.log('HOME_DESIGN_GEOMETRY '+JSON.stringify(geometry));
-      // The practice-first home is scrollable. Clearance is checked after scrolling below.
+      // Content can scroll; actual titles must remain inside the expanding square tile.
       expect(geometry.recentArtist.y+geometry.recentArtist.height+5).toBeLessThanOrEqual(geometry.recent.y+geometry.recent.height);
       expect(geometry.recentTitle.y+geometry.recentTitle.height).toBeLessThanOrEqual(geometry.recentArtist.y+1);
     }
     await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
-    const bottom=await page.locator('.vz-home-bottom-grid').boundingBox();
+    const bottom=await page.locator('.vz-home-stack> :last-child').boundingBox();
     const dock=await page.locator('.vz-approved-dock').boundingBox();
     expect(bottom.y+bottom.height+6).toBeLessThanOrEqual(dock.y);
     await page.evaluate(()=>scrollTo(0,0));
@@ -334,7 +333,7 @@ test('dock order, destinations, 44pt targets, and safe-area content clearance', 
   }
   await page.evaluate(() => scrollTo(0,document.documentElement.scrollHeight));
   const clearance=await page.evaluate(() => {
-    const content=document.querySelector('.vz-home-bottom-grid').getBoundingClientRect();
+    const content=document.querySelector('.vz-home-stack> :last-child').getBoundingClientRect();
     const dock=document.querySelector('.v-nav.vz-home-dock').getBoundingClientRect();
     return {contentBottom:content.bottom,dockTop:dock.top,padding:parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom)||0};
   });
@@ -406,12 +405,32 @@ test('recent recording uses the existing player and closing stops playback witho
  expect((await db(page)).practices).toEqual(before.practices);
 });
 
-test('primary recording action reaches the existing recorder and preserves plans and practice records',async({page})=>{
+test('record destination reaches the existing recorder and preserves plans and practice records',async({page})=>{
  await boot(page);
  const before=await db(page);
- await page.getByRole('button',{name:'녹음 시작하기',exact:true}).click();
+ await page.locator('.v-nav').getByRole('link',{name:'녹음',exact:true}).click();
  await expect(page).toHaveURL(/#\/record$/);
  await expect(page.locator('.vz-student-home')).toHaveCount(0);
  const after=await db(page);
  for(const key of ['dailyGoals','practicePlans','practices','lessons','assignments'])expect(after[key]).toEqual(before[key]);
+});
+
+test('compact summary uses actual practice time; long song and schedule names expand without hiding content',async({page},testInfo)=>{
+ const value=seed(),songTitle='공백없는LongEnglishSongTitleAndKorean가사호흡프레이징을연결하는곡'.repeat(3);
+ value.songs[0].title=songTitle;
+ value.performances[0].title='뮤지컬 오디션 및 공연 리허설의 긴 제목을 모두 확인하는 일정 '.repeat(3);
+ await boot(page,value);
+ await expect(page.locator('.vz-home-week-metric strong')).toHaveText('30');
+ await expect(page.locator('.vz-home-song-copy strong')).toHaveText(songTitle);
+ await expect(page.locator('.vz-home-stage-title h3')).toHaveText(value.performances[0].title);
+ for(const width of widths){
+  await page.setViewportSize({width,height:844});await noOverflow(page);
+  const contained=await page.locator('.vz-home-song').evaluate(card=>{
+   const c=card.getBoundingClientRect(),name=card.querySelector('.vz-home-song-copy strong'),n=name.getBoundingClientRect();
+   return {bottom:n.bottom,cardBottom:c.bottom,scroll:name.scrollHeight,height:name.clientHeight};
+  });
+  expect(contained.bottom+8).toBeLessThanOrEqual(contained.cardBottom);
+  expect(contained.scroll).toBeLessThanOrEqual(contained.height+1);
+  await screenshot(page,testInfo,'student-home-long-titles-'+width+'.png');
+ }
 });

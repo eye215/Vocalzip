@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=7';
+import {createStudentHome,createRecentSongActions,createHomeIcon} from './components.js?v=8';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -19,7 +19,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const icon=link.querySelector('i');
    if(icon&&!icon.querySelector('.vz-nav-art')&&icons[link.dataset.nav])icon.append(createHomeIcon(icons[link.dataset.nav],"vz-nav-art"));
   });
-  if(meta)meta.content=home?'#f5f4f0':originalTheme;
+  if(meta)meta.content=home?'#f2eff8':originalTheme;
   // The existing library controller used the record tab before it had its own dock entry.
   const route=location.hash.replace(/^#\/?/,'').split(/[/?]/)[0];
   if(route==='library'||route==='practices'||route==='growth'){
@@ -98,7 +98,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
    const s=state(),r=recentData(s.recent);
    const root=createStudentHome({greeting:greeting(),name:displayName(),...upcoming(s),goals:s.goals,week:s.week,recent:r,
-    ...recentCallbacks(r),onRecord:()=>nav('#/record'),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onGrowth:()=>nav('#/growth'),onCalendar:()=>nav('#/calendar'),
+    ...recentCallbacks(r),onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onGrowth:()=>nav('#/growth'),onCalendar:()=>nav('#/calendar'),
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
     onGoalToggle:async(id,completed)=>{

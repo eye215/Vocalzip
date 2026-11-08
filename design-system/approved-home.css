@@ -1,181 +1,176 @@
-/* Student home: practice-first editorial layout. Scoped away from all other routes. */
-.vz-student-home{box-sizing:border-box;width:100%;max-width:480px;min-width:0;margin:0 auto;padding:20px 20px calc(116px + env(safe-area-inset-bottom));padding-top:calc(20px + env(safe-area-inset-top));font:400 15px/1.45 var(--vz-font);color:#24232a;font-variant-numeric:tabular-nums;}
-body.vz-home-mode,body.vz-student-preview{background:#f5f4f0;}
+/* PR #136 reference application. Home-only skin; data and other routes keep existing contracts. */
+.vz-student-home{box-sizing:border-box;width:100%;max-width:480px;min-width:0;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) 16px calc(116px + env(safe-area-inset-bottom));font:400 15px/1.45 var(--vz-font);color:#352b40;}
+body.vz-home-mode,body.vz-student-preview{background:radial-gradient(ellipse 100% 40% at 80% 0,#e9dff6 0,transparent 80%),#f2eff8;background-attachment:fixed;}
 .vz-student-home *,.vz-approved-dock *{box-sizing:border-box;}
 .vz-student-home button,.vz-approved-dock button{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-.vz-student-home :is(button,input):focus-visible,.vz-approved-dock button:focus-visible{outline:3px solid #8260bd;outline-offset:3px;}
+.vz-student-home :is(button,input):focus-visible,.vz-approved-dock button:focus-visible{outline:3px solid #79529c;outline-offset:3px;}
 .vz-home-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:1em;height:1em;vertical-align:middle;line-height:1;}
 .vz-home-icon svg{display:block;width:100%;height:100%;overflow:visible;}
 .vz-student-home .vz-home-icon,.vz-approved-dock .vz-home-icon{font-size:20px;filter:none;background:none;-webkit-text-fill-color:initial;}
-.vz-home-header{position:relative;min-height:108px;padding:0 0 22px;}
-.vz-home-brand{display:flex;align-items:center;gap:8px;height:26px;margin:0;color:#24232a;font-size:17px;line-height:26px;font-weight:750;letter-spacing:-.7px;}
-.vz-home-brand-mark{display:grid;place-items:center;width:10px;height:10px;border-radius:3px;background:#a88acc;transform:rotate(-12deg);}
-.vz-home-brand-mark b{display:none;}
-.vz-home-header-actions{position:absolute;right:-4px;top:-9px;display:flex;gap:0;}
-.vz-home-round{display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:none;color:#57535e;}
-.vz-home-round:last-child{margin-left:2px;background:#e8e5ec;color:#55505e;}
-.vz-student-home .vz-home-round .vz-home-icon{font-size:20px;}
-.vz-home-greeting{max-width:100%;margin:17px 0 0;font-size:27px;line-height:1.3;font-weight:650;letter-spacing:-1.1px;color:#24232a;text-shadow:none;overflow-wrap:anywhere;}
-.vz-home-greeting-sub{margin:5px 0 0;font-size:12px;line-height:18px;color:#77737e;font-weight:400;}
-.vz-home-sun{display:none!important;}
-.vz-home-stack{display:grid;gap:20px;}
-.vz-student-home .vz-home-card,.vz-student-home .vz-home-song{min-width:0;margin:0;padding:20px;border:1px solid #e7e5e3;border-radius:20px;background:#fff;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;}
-.vz-home-card-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;min-height:22px;margin-bottom:16px;}
-.vz-home-heading{display:flex;align-items:center;gap:8px;min-width:0;margin:0;color:#36333c;font-size:15px;line-height:1.4;font-weight:650;letter-spacing:-.4px;overflow-wrap:anywhere;}
+.vz-home-header{position:relative;min-height:76px;padding:0 4px 16px;}
+.vz-home-brand{display:flex;align-items:center;gap:6px;height:20px;margin:0;color:#79558d;font-size:14px;line-height:20px;font-weight:600;letter-spacing:.1px;}
+.vz-home-brand-mark{display:flex;align-items:center;gap:2px;height:16px;color:#a17cb8;}
+.vz-home-brand-mark b{display:block;width:2px;height:5px;border-radius:2px;background:currentColor;}
+.vz-home-brand-mark b:nth-child(2),.vz-home-brand-mark b:nth-child(4){height:10px;}
+.vz-home-brand-mark b:nth-child(3){height:15px;}
+.vz-home-header-actions{position:absolute;right:0;top:-8px;display:flex;gap:4px;}
+.vz-home-round{display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:transparent;color:#826595;}
+.vz-home-round:last-child{background:#ffffffb3;}
+.vz-student-home .vz-home-round .vz-home-icon{font-size:21px;}
+.vz-home-greeting{max-width:100%;margin:10px 0 0;color:#392a45;font-size:22px;line-height:30px;font-weight:600;letter-spacing:-.7px;overflow-wrap:anywhere;}
+.vz-home-greeting-sub{margin:4px 0 0;color:#786781;font-size:12px;line-height:18px;font-weight:400;}
+.vz-home-greeting-sub:empty,.vz-home-sun{display:none!important;}
+.vz-home-stack{display:grid;gap:12px;}
+.vz-student-home .vz-home-card,.vz-student-home .vz-home-song,.vz-student-home .vz-home-quick{min-width:0;margin:0;padding:16px;border:0;border-radius:22px;background:#ffffff;box-shadow:0 2px 10px #55356a05;backdrop-filter:none;-webkit-backdrop-filter:none;}
+.vz-home-card-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;min-height:24px;margin-bottom:12px;}
+.vz-home-heading{display:flex;align-items:center;gap:7px;min-width:0;margin:0;color:#58416b;font-size:16px;line-height:24px;font-weight:600;letter-spacing:-.35px;overflow-wrap:anywhere;}
 .vz-home-heading>span{min-width:0;overflow-wrap:anywhere;}
-.vz-student-home .vz-home-heading>.vz-home-icon{font-size:18px;color:#89828f;}
-.vz-home-text-button,.vz-home-icon-button{display:flex;align-items:center;justify-content:center;gap:3px;min-height:44px;margin:-11px 0;padding:0;border:0;background:none;color:#827b89;font-size:11px!important;font-weight:400;}
+.vz-student-home .vz-home-heading>.vz-home-icon{font-size:18px;}
+.vz-home-text-button,.vz-home-icon-button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:44px;margin:-10px 0;padding:0;border:0;background:none;color:#786381;font-size:12px!important;font-weight:400;}
 .vz-home-icon-button{min-width:44px;}
 .vz-home-text-button .vz-home-icon{font-size:12px;}
-.vz-home-heading-action{display:flex;align-items:center;gap:7px;min-height:44px;margin:-11px 0;padding:0;border:0;background:none;color:inherit;font:inherit!important;text-align:left;}
+.vz-home-heading-action{display:flex;align-items:center;gap:7px;min-height:44px;margin:-10px 0;padding:0;border:0;background:none;color:inherit;font:inherit!important;text-align:left;}
 .vz-home-heading-action>span:last-child{min-width:0;overflow-wrap:anywhere;}
-/* A single dark practice card owns the primary action and today's checklist. */
-.vz-student-home .vz-home-goals{padding:20px;border:0;border-radius:24px;background:#292631;color:#fff;box-shadow:0 8px 24px #2926310a;}
-.vz-home-goals .vz-home-card-head{margin-bottom:14px;}
-.vz-home-goals .vz-home-heading{color:#f6f3fa;font-size:15px;font-weight:550;}
-.vz-home-goals .vz-home-heading-action>.vz-home-icon{display:none;}
-.vz-home-goals .vz-home-heading-action::after{content:"수정";display:block;margin-left:6px;padding:2px 6px;border:1px solid #ffffff24;border-radius:5px;font-size:10px;line-height:16px;font-weight:400;color:#c3bdcf;}
-.vz-home-goal-body{display:grid;grid-template-columns:1fr;gap:16px;min-width:0;}
-.vz-home-goal-overview{display:flex;flex-wrap:wrap;align-items:center;gap:16px;}
-.vz-home-goal-summary{flex:1 1 110px;min-width:0;}
-.vz-home-gauge{display:flex;flex-direction:column;align-items:flex-start;position:relative;width:100%;min-height:0;padding:0;text-align:left;}
-.vz-home-gauge-label{display:block;margin-bottom:2px;font-size:11px;line-height:16px;color:#b9b2c4;font-weight:400;}
-.vz-home-gauge-value{display:block;color:#fff;font-size:42px;font-weight:600;line-height:1.1;letter-spacing:-1.7px;}
-.vz-home-gauge-detail{display:block;margin-top:5px;color:#bcb4c9;font-size:12px;line-height:18px;}
-.vz-home-progress{display:block;width:116px;max-width:100%;height:3px;margin-top:10px;border-radius:3px;background:#ffffff1c;overflow:hidden;}
-.vz-home-progress::after{content:"";display:block;width:var(--vz-goal-progress,0%);height:100%;border-radius:inherit;background:#cbb7ef;}
-.vz-student-home .vz-home-record-start{display:flex;align-items:center;justify-content:center;gap:8px;flex:0 1 auto;max-width:100%;min-width:124px;min-height:52px;padding:12px 14px;border:0;border-radius:14px;background:#d4c5ee;color:#302639;font-size:14px;font-weight:650;letter-spacing:-.3px;}
-.vz-home-record-start>span{min-width:0;overflow-wrap:anywhere;}
-.vz-home-record-start>.vz-home-icon:first-child{font-size:20px;}
-.vz-home-record-start>.vz-home-icon:last-child{font-size:12px;}
-.vz-student-home .vz-home-goal-list{position:relative;width:100%;height:132px;max-height:132px;padding:0 8px 0 0;border:0;overflow-y:auto;overscroll-behavior-y:contain;scrollbar-width:thin;scrollbar-color:#81728f transparent;}
-.vz-student-home .vz-home-goal-row{display:flex;align-items:flex-start;flex-wrap:wrap;gap:10px;width:100%;min-height:44px;margin:0;padding:11px 0;border:0;border-top:1px solid #ffffff12;border-radius:0;background:none;box-shadow:none;color:#f2eef7;cursor:pointer;}
-.vz-home-goal-check{appearance:none;-webkit-appearance:none;display:grid;place-content:center;align-self:flex-start;flex:none;width:20px;height:20px;min-width:20px;margin:0;border:1px solid #89808f;border-radius:6px;background:transparent;cursor:pointer;}
-.vz-home-goal-check:checked{border-color:#ccbaec;background:#ccbaec;}
-.vz-home-goal-check:checked::after{content:"";width:9px;height:5px;border-bottom:2px solid #393044;border-left:2px solid #393044;transform:rotate(-45deg) translateY(-1px);}
-.vz-home-goal-check:disabled{opacity:.65;cursor:progress;}
-.vz-home-goal-title{flex:1 1 6ch;min-width:0;font-size:13px;line-height:20px;font-weight:400;overflow-wrap:anywhere;}
-.vz-home-goal-check:checked+.vz-home-goal-title{color:#b6aebf;}
-.vz-home-goal-source{align-self:flex-start;flex:none;max-width:100%;padding:1px 5px;border-radius:5px;background:#ffffff0c;color:#aaa1b5;font-size:10px;line-height:18px;white-space:nowrap;}
-.vz-home-goal-row[aria-busy="true"] .vz-home-goal-source{opacity:.5;}
-.vz-home-empty-action{display:flex;align-items:center;gap:6px;min-height:88px;padding:0;border:0;background:none;text-align:left;font-size:13px!important;color:#d9d1e3;}
-.vz-home-goal-status{margin:0;color:#d3c6e6;font-size:11px;line-height:1.4;}
-.vz-home-goal-status:not(:empty){padding-top:10px;}
-.vz-student-home .vz-home-goal-list.is-overflowing{background-image:linear-gradient(#81728f,#81728f);background-size:2px var(--vz-scroll-thumb,0px);background-position:right var(--vz-scroll-offset,6px);background-repeat:no-repeat;scrollbar-width:none;}
-.vz-home-goal-list.is-overflowing::-webkit-scrollbar{display:none;}
-/* Week: simple vertical meters, with text retaining actual minutes and target semantics. */
-.vz-student-home .vz-home-week{padding:18px 20px 15px;}
-.vz-home-week>.vz-home-card-head{margin-bottom:14px;}
-.vz-home-week .vz-home-heading>.vz-home-icon{display:none;}
-.vz-home-streak-action{display:flex;align-items:center;justify-content:center;min-width:60px;min-height:44px;margin:-11px 0;padding:0;border:0;background:none;}
-.vz-home-streak{display:flex;align-items:center;gap:4px;padding:0;color:#8c768f;font-size:11px;line-height:1.4;white-space:nowrap;}
-.vz-student-home .vz-home-streak .vz-home-icon{font-size:14px;color:#b98d65;}
+.vz-home-heading-action::after{content:"설정";margin-left:3px;color:#806989;font-size:11px;line-height:18px;font-weight:400;}
+/* One weekly figure; targets and seven daily markers stay subordinate. */
+.vz-home-week>.vz-home-card-head{margin-bottom:8px;}
+.vz-home-week-overview{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px 16px;margin-bottom:14px;}
+.vz-home-week-metric{display:flex;align-items:baseline;gap:5px;min-width:0;margin:0;color:#3c254e;font-variant-numeric:tabular-nums;}
+.vz-home-week-metric strong{font-size:30px;line-height:36px;font-weight:700;letter-spacing:-.8px;overflow-wrap:anywhere;}
+.vz-home-week-metric>span{font-size:14px;line-height:20px;font-weight:500;}
+.vz-home-week-target{display:flex;align-items:baseline;justify-content:flex-end;flex-wrap:wrap;gap:4px 8px;min-width:0;margin:0;color:#786381;font-size:12px;line-height:18px;}
+.vz-home-week-target strong{color:#795393;font-size:12px;font-weight:600;}
+.vz-home-streak-action{display:flex;align-items:center;justify-content:center;min-width:60px;min-height:44px;margin:-10px 0;padding:0;border:0;background:none;}
+.vz-home-streak{display:flex;align-items:center;gap:4px;padding:0;color:#80668a;font-size:11px;line-height:18px;white-space:nowrap;}
+.vz-student-home .vz-home-streak .vz-home-icon{font-size:14px;}
 .vz-home-week-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;}
-.vz-home-week-day{display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0;}
-.vz-home-day-label{max-width:100%;min-height:16px;font-size:11px;line-height:1.45;color:#8a828f;text-align:center;}
-.vz-home-day-label.is-today{color:#4e385f;font-weight:700;}
-.vz-home-flower{display:block;position:relative;flex:none;width:22px;height:38px;border-radius:6px;background:#f1eef4;overflow:hidden;}
-.vz-home-flower::after{content:"";position:absolute;inset:auto 0 0;height:var(--vz-day-fill,0%);border-radius:5px;background:#c1addd;}
-.vz-home-flower[data-level="high"]::after{background:#765894;}
-.vz-home-flower[data-level="met"]::after{background:#a58aba;}
-.vz-home-flower[data-level="future"]{background:transparent;border:1px dashed #e1dce6;}
-.vz-home-flower[data-level="unplanned"]{background:#f8f6f9;border:1px solid #ece7ef;}
-.vz-home-flower[data-level="unplanned"]::after{display:none;height:6px;width:6px;left:calc(50% - 3px);bottom:calc(50% - 3px);border-radius:50%;background:#baa8c9;}
-.vz-home-flower[data-level="unplanned"][data-has-minutes="true"]::after{display:block;}
-.vz-home-flower.is-today{outline:1px solid #a58aba;outline-offset:2px;}
-.vz-home-day-time{max-width:100%;font-size:10px;line-height:16px;color:#6f6679;text-align:center;overflow-wrap:anywhere;}
-.vz-home-week-summary{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:4px;margin:14px 0 0;padding-top:12px;border-top:1px solid #f0edf1;color:#8c8493;font-size:10px;line-height:18px;}
-.vz-home-week-summary strong{color:#695079;font-size:14px;font-weight:650;}
-.vz-home-week-summary .vz-home-summary-duration{color:#5a515f;font-size:11px;font-weight:500;}
-.vz-home-summary-compact{display:none;}
-.vz-home-no-week{margin:6px 0;color:#827988;font-size:13px;}
-/* Upcoming events remain conditional, and use actual uploaded posters only. */
-.vz-home-stage-detail{display:block;width:100%;min-height:44px;padding:0;border:0;background:none;text-align:left;}
-.vz-home-stage-content{display:flex;align-items:center;gap:14px;min-height:60px;}
-.vz-home-stage-copy{flex:1;min-width:0;}
-.vz-home-stage-title{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;}
-.vz-home-stage-title h3{min-width:0;margin:0;color:#35303b;font-size:19px;line-height:1.35;font-weight:600;letter-spacing:-.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.vz-home-dday{padding:4px 8px;border:0;border-radius:7px;background:#f0eaf6;color:#795b90;font-size:12px;line-height:18px;font-weight:600;white-space:nowrap;}
-.vz-home-stage-song{max-width:100%;margin:3px 0 0;color:#82778a;font-size:12px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.vz-home-stage-date{display:flex;align-items:center;gap:5px;margin:6px 0 0;color:#918897;font-size:11px;line-height:17px;}
-.vz-home-stage-date .vz-home-icon{font-size:13px;}
-.vz-home-stage-art{display:none;}
-.vz-home-stage-art.has-user-poster{display:block;position:static;flex:none;width:56px;height:70px;overflow:hidden;border-radius:8px;background:none;mask:none;}
-.vz-home-stage-art.has-user-poster img{display:block;width:100%;height:100%;object-fit:cover;}
-.vz-home-lesson{display:flex;align-items:center;flex-wrap:wrap;gap:7px;row-gap:4px;width:100%;min-height:44px;margin-top:12px;padding:10px 0 0;border:0;border-top:1px solid #efebf1;background:none;color:#8a7d92;text-align:left;font-size:11px!important;}
-.vz-home-lesson>strong{font-weight:500;white-space:nowrap;color:#62526e;}
-.vz-home-lesson-date{flex:1 1 9ch;min-width:0;overflow-wrap:anywhere;}
-.vz-home-lesson-dday{padding:2px 6px;border-radius:5px;background:#f4f0f8;color:#8a7399;font-size:10px;line-height:16px;white-space:nowrap;}
-.vz-home-lesson .vz-home-icon{font-size:15px;}
-.vz-home-stage--lesson-only .vz-home-lesson{margin-top:0;padding-top:0;border-top:0;}
-/* Recent recording is a horizontal item. Secondary actions share a quiet row. */
-.vz-home-bottom-grid{display:grid;grid-template-columns:1fr;gap:12px;min-width:0;}
-.vz-student-home .vz-home-song{position:relative;display:block;width:100%;min-height:0;aspect-ratio:auto;padding:16px;}
-.vz-home-song-detail{display:grid;grid-template-columns:52px minmax(0,1fr);grid-template-rows:auto auto;column-gap:14px;row-gap:1px;align-items:center;width:100%;min-width:0;min-height:52px;height:auto;padding:0;border:0;background:none;text-align:left;}
-.has-representative-media .vz-home-song-detail{padding-right:48px;}
-.vz-home-song-heading{grid-column:2;grid-row:1;align-self:end;min-width:0;}
-.vz-home-song-heading .vz-home-heading{font-size:10px;font-weight:400;line-height:16px;color:#9a8f9e;}
-.vz-home-song-heading .vz-home-icon{display:none;}
-.vz-home-song-cover{display:grid;grid-column:1;grid-row:1 / 3;place-items:center;align-self:center;flex:none;width:52px;height:52px;aspect-ratio:1;border-radius:12px;background:#ece5f2;color:#8d739d;}
-.vz-student-home .vz-home-song-cover .vz-home-icon{font-size:22px;}
-.vz-home-song-copy{display:flex;grid-column:2;grid-row:2;align-self:start;flex-direction:column;gap:2px;min-width:0;width:100%;}
-.vz-home-song-copy strong{display:block;min-width:0;color:#3f3546;font-size:14px;line-height:20px;font-weight:600;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.vz-home-song-copy>span{color:#9a8f9e;font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.vz-home-play{position:absolute;right:12px;left:auto;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:0;border-radius:50%;background:#f2edf7;color:#84619d;}
-.vz-student-home .vz-home-play .vz-home-icon{font-size:16px;}
-.vz-home-quick-stack{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-width:0;}
-.vz-student-home .vz-home-quick{display:flex;align-items:center;flex-wrap:wrap;gap:8px;width:100%;min-width:0;min-height:56px;padding:12px;border:1px solid #e7e5e3;border-radius:14px;background:transparent;color:#655b6b;box-shadow:none;text-align:left;font-size:12px;font-weight:500;}
-.vz-home-quick>.vz-home-icon:first-child{font-size:18px;color:#8c7a99;}
-.vz-home-quick>.vz-home-icon:last-child{font-size:11px;margin-left:auto;color:#9c90a5;}
+.vz-home-week-day{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;}
+.vz-home-day-label{max-width:100%;min-height:18px;color:#796782;font-size:12px;line-height:1.5;text-align:center;}
+.vz-home-day-label.is-today{color:#76518d;font-weight:700;}
+.vz-home-flower{display:block;flex:none;width:26px;height:26px;color:#dfd0ee;}
+.vz-home-flower svg{display:block;width:100%;height:100%;overflow:visible;}
+.vz-home-flower-shape{fill:currentColor;stroke:transparent;stroke-width:.7;}
+.vz-home-flower[data-level="met"]{color:#b399ce;}
+.vz-home-flower[data-level="high"]{color:#8a65a7;}
+.vz-home-flower[data-level="future"] .vz-home-flower-shape{fill:transparent;stroke:#ba9fcd;stroke-width:1;}
+.vz-home-flower[data-level="empty"] .vz-home-flower-shape,.vz-home-flower[data-level="unplanned"] .vz-home-flower-shape{fill:#f4eff9;stroke:#c1add0;stroke-width:1;}
+.vz-home-flower[data-level="unplanned"][data-has-minutes="true"] .vz-home-flower-shape{fill:#dfd0ee;stroke:transparent;}
+.vz-home-flower-today{fill:none;stroke-width:1;transform-origin:20px 20px;}
+.vz-home-flower-today--outer{stroke:#ab8ac0;transform:scale(1.2);}
+.vz-home-flower-today--inner{stroke:#fff;stroke-width:1.5;transform:scale(1.08);}
+.vz-home-flower-check{fill:none;stroke:#fff;stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round;}
+.vz-home-day-time{max-width:100%;color:#776180;font-size:11px;line-height:1.5;text-align:center;overflow-wrap:anywhere;}
+.vz-home-no-week{margin:6px 0;color:#786381;font-size:13px;line-height:20px;}
+/* Recent song: 1:1 outside tile, plus two low secondary destinations. */
+.vz-home-bottom-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch;min-width:0;}
+.vz-student-home .vz-home-song{position:relative;display:block;width:100%;min-height:min-content;aspect-ratio:1;padding:14px;border-radius:20px;}
+.vz-home-song-detail{display:flex;align-items:flex-start;flex-direction:column;gap:6px;width:100%;min-width:0;min-height:0;height:auto;padding:0;border:0;background:none;text-align:left;}
+.vz-home-song-heading{display:flex;align-items:center;justify-content:space-between;gap:4px;width:100%;min-width:0;}
+.vz-home-song-heading .vz-home-heading{font-size:12px;line-height:18px;font-weight:500;color:#786381;gap:4px;}
+.vz-home-song-heading .vz-home-heading>.vz-home-icon{font-size:14px;}
+.vz-home-song-heading>.vz-home-icon{font-size:10px;color:#a58ab8;}
+.vz-home-song-cover{display:grid;place-items:center;align-self:center;flex:none;width:44px;height:44px;aspect-ratio:1;border-radius:12px;background:#f0e7f7;color:#a082b5;}
+.vz-student-home .vz-home-song-cover .vz-home-icon{font-size:25px;}
+.vz-home-song-cover--playable>.vz-home-icon{visibility:hidden;}
+.vz-home-song-copy{display:flex;flex-direction:column;gap:2px;min-width:0;width:100%;}
+.vz-home-song-copy strong{display:block;min-width:0;color:#4a365c;font-size:15px;line-height:22px;font-weight:600;letter-spacing:-.3px;white-space:normal;overflow-wrap:anywhere;}
+.vz-home-song-copy>span{color:#786381;font-size:12px;line-height:18px;white-space:normal;overflow-wrap:anywhere;}
+.vz-home-play{position:absolute;left:50%;right:auto;top:60px;transform:translate(-50%,-50%);display:grid;place-items:center;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:0;border-radius:50%;background:linear-gradient(145deg,#9b76b6,#7e549b);color:#fff;box-shadow:0 2px 6px #69428312;}
+.vz-student-home .vz-home-play .vz-home-icon{font-size:15px;}
+.vz-home-play [data-solid]{fill:#fff;}
+.vz-home-quick-stack{display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:12px;min-width:0;min-height:0;}
+.vz-student-home .vz-home-quick{display:flex;align-items:center;flex-wrap:wrap;gap:8px;width:100%;min-width:0;min-height:52px;padding:14px;border-radius:20px;background:#fff;color:#5d456e;text-align:left;font-size:14px;font-weight:600;}
+.vz-home-quick>.vz-home-icon:first-child{font-size:25px;}
+.vz-home-quick>.vz-home-icon:last-child{font-size:11px;margin-left:auto;color:#a58ab8;}
 .vz-home-quick>span{min-width:0;overflow-wrap:anywhere;}
-/* Five existing destinations, with a stable full-width bottom bar. */
-.vz-approved-dock,.vz-home-mode .v-nav{box-sizing:border-box;position:fixed;z-index:30;left:50%;right:auto;bottom:0;transform:translateX(-50%);width:min(100%,480px);height:calc(76px + env(safe-area-inset-bottom));min-height:76px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:start;gap:0;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border:0;border-top:1px solid #e8e5e9;border-radius:0;background:#fff;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;}
-.vz-approved-dock-item,.vz-home-mode .v-nav ul>li>a{box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;width:100%;min-width:0;height:58px;min-height:58px;padding:4px 0;border:0;border-radius:14px;background:none;color:#a59aa9;font:400 10px/1.2 var(--vz-font);text-decoration:none;}
-.vz-approved-dock .vz-approved-dock-item{color:#a59aa9;}
-.vz-approved-dock-item .vz-home-icon{font-size:22px;}
-.vz-approved-dock .vz-approved-dock-item[aria-current="page"],.vz-home-mode .v-nav ul>li>a[aria-current="page"]{background:none;color:#3c3045;font-weight:650;}
-.vz-approved-dock .vz-approved-dock-record,.vz-home-mode .v-nav ul>li>a.rec{width:56px;height:58px;min-height:58px;margin:0 auto;border:0;border-radius:17px;background:#302a39;color:#fff;box-shadow:none;gap:4px;font-size:9px;}
-.vz-approved-dock-record .vz-home-icon{font-size:23px;}
-.vz-approved-dock-record>span{color:inherit;font-size:9px;}
-/* The rest of the application keeps its own shell and icons. */
+/* Related goals share one surface and accessible, stable 48px rows. */
+.vz-home-goals>.vz-home-card-head{margin-bottom:8px;}
+.vz-home-goal-body{min-width:0;}
+.vz-home-goal-summary{flex:none;min-width:0;}
+.vz-home-gauge{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;min-width:0;margin:0;color:#786381;font-size:12px;line-height:18px;}
+.vz-home-gauge-value{color:#795393;font-size:12px;line-height:18px;font-weight:600;}
+.vz-home-gauge-detail{color:#786381;font-size:12px;line-height:18px;}
+.vz-student-home .vz-home-goal-list{position:relative;width:100%;height:144px;max-height:144px;padding:0 8px 0 0;border:0;overflow-y:auto;overscroll-behavior-y:contain;scrollbar-width:thin;scrollbar-color:#c2a7d5 transparent;}
+.vz-student-home .vz-home-goal-list.is-empty{height:72px;}
+.vz-student-home .vz-home-goal-row{display:flex;align-items:flex-start;flex-wrap:wrap;gap:10px;width:100%;min-height:48px;margin:0;padding:12px 0;border:0;border-radius:0;background:none;box-shadow:none;color:#3d3048;cursor:pointer;}
+.vz-home-goal-check{appearance:none;-webkit-appearance:none;display:grid;place-content:center;align-self:flex-start;flex:none;width:22px;height:22px;min-width:22px;margin:0;border:1px solid #9b83ae;border-radius:6px;background:#fff;cursor:pointer;}
+.vz-home-goal-check:checked{border-color:#8960ad;background:#8960ad;}
+.vz-home-goal-check:checked::after{content:"";width:10px;height:6px;border-bottom:2px solid #fff;border-left:2px solid #fff;transform:rotate(-45deg) translateY(-1px);}
+.vz-home-goal-check:disabled{opacity:.65;cursor:progress;}
+.vz-home-goal-title{flex:1 1 6ch;min-width:0;font-size:15px;line-height:22px;font-weight:400;overflow-wrap:anywhere;}
+.vz-home-goal-check:checked+.vz-home-goal-title{color:#76637f;}
+.vz-home-goal-source{align-self:flex-start;flex:none;max-width:100%;padding:2px 0;color:#806989;font-size:12px;line-height:18px;white-space:nowrap;}
+.vz-home-goal-row[aria-busy="true"] .vz-home-goal-source{opacity:.6;}
+.vz-home-empty-action{display:flex;align-items:center;gap:6px;min-height:64px;padding:0;border:0;background:none;text-align:left;color:#786381;font-size:14px!important;}
+.vz-home-goal-status{margin:0;color:#76518d;font-size:12px;line-height:18px;}
+.vz-home-goal-status:not(:empty){padding-top:8px;}
+.vz-student-home .vz-home-goal-list.is-overflowing{background-image:linear-gradient(#c2a7d5,#c2a7d5);background-size:2px var(--vz-scroll-thumb,0px);background-position:right var(--vz-scroll-offset,6px);background-repeat:no-repeat;scrollbar-width:none;}
+.vz-home-goal-list.is-overflowing::-webkit-scrollbar{display:none;}
+/* Optional schedules: the date is primary, and every real title can expand. */
+.vz-home-stage-detail{display:block;width:100%;min-height:44px;padding:0;border:0;background:none;text-align:left;}
+.vz-home-stage-content{display:flex;align-items:center;gap:12px;min-height:0;}
+.vz-home-stage-copy{flex:1;min-width:0;}
+.vz-home-stage-title{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px;min-width:0;}
+.vz-home-stage-title h3{min-width:0;margin:0;color:#4a365b;font-size:16px;line-height:24px;font-weight:600;letter-spacing:-.3px;white-space:normal;overflow-wrap:anywhere;}
+.vz-home-dday{padding:2px 7px;border:0;border-radius:8px;background:#f1e9f8;color:#795393;font-size:12px;line-height:20px;font-weight:600;white-space:nowrap;}
+.vz-home-stage-song{max-width:100%;margin:3px 0 0;color:#786381;font-size:12px;line-height:18px;white-space:normal;overflow-wrap:anywhere;}
+.vz-home-stage-date{display:flex;align-items:center;gap:5px;margin:0 0 4px;color:#66506f;font-size:14px;line-height:20px;}
+.vz-home-stage-date>span{min-width:0;overflow-wrap:anywhere;}
+.vz-home-stage-date .vz-home-icon{font-size:14px;}
+.vz-home-stage-art{display:none;}
+.vz-home-stage-art.has-user-poster{display:block;position:static;flex:none;width:48px;height:60px;overflow:hidden;border-radius:8px;background:none;mask:none;}
+.vz-home-stage-art.has-user-poster img{display:block;width:100%;height:100%;object-fit:cover;}
+.vz-home-lesson{display:flex;align-items:center;flex-wrap:wrap;gap:7px;row-gap:4px;width:100%;min-height:44px;margin-top:12px;padding:10px 0 0;border:0;border-top:1px solid #f0eaf4;background:none;color:#66506f;text-align:left;font-size:14px!important;}
+.vz-home-lesson>strong{font-size:12px;line-height:18px;font-weight:500;white-space:nowrap;color:#786381;}
+.vz-home-lesson-date{flex:1 1 9ch;min-width:0;font-size:14px;line-height:20px;overflow-wrap:anywhere;}
+.vz-home-lesson-dday{padding:2px 6px;border-radius:6px;background:#f1e9f8;color:#795393;font-size:11px;line-height:18px;white-space:nowrap;}
+.vz-home-lesson .vz-home-icon{font-size:16px;}
+.vz-home-stage--lesson-only .vz-home-lesson{margin-top:0;padding-top:0;border-top:0;}
+/* Existing five destinations. Only recording is a strongly filled action. */
+.vz-approved-dock,.vz-home-mode .v-nav{box-sizing:border-box;position:fixed;z-index:30;left:50%;right:auto;bottom:calc(12px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100% - 24px),456px);height:74px;min-height:74px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;gap:0;padding:7px 8px;border:1px solid #ffffff;border-radius:25px;background:#ffffffed;box-shadow:0 5px 22px #57336f0a;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
+.vz-approved-dock-item,.vz-home-mode .v-nav ul>li>a{box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;width:100%;min-width:0;height:58px;min-height:58px;padding:4px 0;border:0;border-radius:16px;background:none;color:#786381;font:400 11px/16px var(--vz-font);text-decoration:none;}
+.vz-approved-dock .vz-approved-dock-item{color:#786381;}
+.vz-approved-dock-item .vz-home-icon{font-size:23px;}
+.vz-approved-dock .vz-approved-dock-item[aria-current="page"],.vz-home-mode .v-nav ul>li>a[aria-current="page"]{background:#f2eaf8;color:#76518d;font-weight:600;}
+.vz-approved-dock .vz-approved-dock-record,.vz-home-mode .v-nav ul>li>a.rec{width:56px;height:56px;min-height:56px;margin:0 auto;border:1px solid #fff8;border-radius:50%;background:linear-gradient(145deg,#8e66b2,#744793);color:#fff;box-shadow:inset 0 1px 1px #ffffff33,0 3px 8px #7953931a;gap:2px;font-size:10px;}
+.vz-approved-dock-record [data-solid],body.vz-home-mode .v-nav a.rec [data-solid]{fill:#fff;}
+.vz-approved-dock-record [data-stroke],body.vz-home-mode .v-nav a.rec [data-stroke]{stroke:#fff;}
+.vz-approved-dock-record .vz-home-icon{font-size:24px;}
+.vz-approved-dock-record>span{color:inherit;font-size:10px;line-height:14px;}
+/* Other routes retain their current shell, icons, and data flows. */
 body.vz-home-mode .v-app .v-top{display:none;}
 body.vz-home-mode{margin:0;min-width:0;min-height:100dvh;}
 body.vz-home-mode .v-main{margin:0;padding:0;min-width:0;}
 body.vz-home-mode .v-app{box-sizing:border-box;width:100%;max-width:480px;min-height:100dvh;margin:0 auto;padding:0;background:none;}
-body.vz-home-mode .vz-student-home{padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));}
+body.vz-home-mode .vz-student-home{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));}
 body.vz-home-mode .v-nav{display:block;}
 body.vz-home-mode .v-nav ul{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;width:100%;max-width:none;min-height:58px;gap:0;margin:0;padding:0;list-style:none;}
 body.vz-home-mode .v-nav li{min-width:0;margin:0;padding:0;list-style:none;}
-body.vz-home-mode .v-nav ul>li>a{color:#a59aa9;font-size:10px;font-weight:400;}
-body.vz-home-mode .v-nav ul>li>a[aria-current="page"]{color:#3c3045;font-weight:650;}
-body.vz-home-mode .v-nav ul>li>a i{display:block;width:22px;height:22px;margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;font-family:"Phosphor-Fill"!important;font-size:22px;font-style:normal;line-height:1;}
-body.vz-home-mode .v-nav ul>li>a:focus-visible{outline:3px solid #8260bd;outline-offset:2px;}
-body.vz-home-mode .v-nav ul>li>a.rec{width:56px;height:58px;min-height:58px;margin:0 auto;padding:4px 0;gap:4px;color:#fff;font-size:9px;}
-body.vz-home-mode .v-nav ul>li>a.rec i{width:23px;height:23px;font-size:23px;}
-body.vz-home-mode .v-nav ul>li>a.rec span{color:#fff;font-size:9px;}
+body.vz-home-mode .v-nav ul>li>a{color:#786381;font-size:11px;font-weight:400;}
+body.vz-home-mode .v-nav ul>li>a[aria-current="page"]{color:#76518d;font-weight:600;}
+body.vz-home-mode .v-nav ul>li>a i{display:block;width:23px;height:23px;margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;font-family:"Phosphor-Fill"!important;font-size:23px;font-style:normal;line-height:1;}
+body.vz-home-mode .v-nav ul>li>a:focus-visible{outline:3px solid #79529c;outline-offset:2px;}
+body.vz-home-mode .v-nav ul>li>a.rec{width:56px;height:56px;min-height:56px;margin:0 auto;padding:4px 0;gap:2px;color:#fff;font-size:10px;}
+body.vz-home-mode .v-nav ul>li>a.rec i{width:24px;height:24px;font-size:24px;}
+body.vz-home-mode .v-nav ul>li>a.rec span{color:#fff;font-size:10px;line-height:14px;}
 .vz-nav-art{display:none;}
 body.vz-home-mode .v-nav i::before{display:none;}
 body.vz-home-mode .v-nav i>.vz-nav-art{display:block;width:100%;height:100%;font-size:inherit;filter:none;}
 @media(max-width:359px){
- .vz-student-home{padding-left:16px;padding-right:16px;}
- body.vz-home-mode .vz-student-home{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));}
- .vz-home-greeting{font-size:24px;}
- .vz-student-home .vz-home-card{padding-left:16px;padding-right:16px;}
- .vz-home-goal-overview{gap:10px;}
- .vz-student-home .vz-home-record-start{min-width:112px;padding:12px 10px;font-size:13px;gap:6px;}
- .vz-home-gauge-value{font-size:38px;}
- .vz-home-goal-title{font-size:12px;}
- .vz-home-goal-source{font-size:9px;padding-left:4px;padding-right:4px;}
+ .vz-home-bottom-grid{gap:10px;}
+ .vz-home-quick-stack{gap:10px;}
+ .vz-student-home .vz-home-song{padding:12px;}
+ .vz-home-song-cover{width:36px;height:36px;}
+ .vz-home-play{top:54px;}
+ .vz-home-song-detail{gap:4px;}
+ .vz-student-home .vz-home-quick{padding:10px;font-size:13px;gap:6px;}
+ .vz-home-quick>.vz-home-icon:first-child{font-size:23px;}
+ .vz-home-quick>.vz-home-icon:last-child{font-size:10px;}
  .vz-home-week-grid{gap:2px;}
- .vz-home-flower{width:19px;}
- .vz-home-week-summary .vz-home-summary-full{display:none;}
- .vz-home-summary-compact{display:inline;}
- .vz-home-quick-stack{gap:8px;}
- .vz-student-home .vz-home-quick{padding:10px;gap:5px;font-size:11px;}
- .vz-home-song-detail{column-gap:10px;}
+ .vz-home-week-target{font-size:11px;}
+ .vz-home-heading-action::after{display:none;}
+ .vz-home-goal-source{font-size:11px;}
 }
-@media(max-width:280px){
- .vz-home-goal-overview{grid-template-columns:1fr;}
- .vz-home-quick-stack{grid-template-columns:1fr;}
-}
+@media(max-width:280px){.vz-home-bottom-grid{grid-template-columns:1fr;}.vz-home-song{aspect-ratio:auto!important;}.vz-home-quick-stack{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto;}}
 @media(prefers-reduced-motion:reduce){.vz-student-home *,.vz-approved-dock *,.vz-home-mode .v-nav *{transition:none!important;animation:none!important;}}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){.vz-approved-dock,.vz-home-mode .v-nav{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;}}
