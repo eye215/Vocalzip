@@ -30,16 +30,18 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-week-nav button svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-week-nav .vz-week-range{text-align:center;white-space:nowrap;line-height:1.25;}
 #vocalzip-refined-preview .vz-week-year{display:block;color:#667085;font-size:11px;font-weight:400;}
-#vocalzip-refined-preview .vz-week-dates{display:block;color:#475467;font-size:14px;font-weight:600;margin-top:2px;}
+#vocalzip-refined-preview .vz-week-dates{display:block;color:#475467;font-size:14px;font-weight:600;letter-spacing:.01em;font-variant-numeric:tabular-nums;margin-top:2px;}
 #vocalzip-refined-preview .vz-days{margin-top:14px;}
 #vocalzip-refined-preview .vz-days>div{min-height:80px;cursor:pointer;}
 #vocalzip-refined-preview .vz-days>div>span:first-child{font-size:15px;font-weight:600;line-height:22px;color:#344054;}
 #vocalzip-refined-preview .vz-days>div.vz-saturday>span:first-child{color:#617596;}
 #vocalzip-refined-preview .vz-days>div.vz-sunday>span:first-child{color:#a96171;}
 #vocalzip-refined-preview .vz-days>div.vz-today>span:first-child{color:#7a32f5;}
-#vocalzip-refined-preview .vz-streak{color:var(--ink-2,#5f5a74);}
+#vocalzip-refined-preview .vz-streak{color:#667085;margin-left:0;}
+#vocalzip-refined-preview .vz-streak[data-active="true"]{color:#7a32f5;}
 #vocalzip-refined-preview .vz-streak svg{width:22px;height:22px;}
-#vocalzip-refined-preview .vz-week-meta{border-top:1px solid #ece6f4;margin-top:8px;padding-top:10px;}
+#vocalzip-refined-preview .vz-week-meta{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;box-sizing:border-box;min-height:47px;border-top:1px solid #ece6f4;margin-top:8px;padding-top:10px;}
+#vocalzip-refined-preview .vz-week-meta>span{display:flex;align-items:center;gap:3px;min-height:36px;white-space:nowrap;}
 #vocalzip-refined-preview .vz-week .vz-empty-action{min-height:36px;}
 #vocalzip-refined-preview .vz-week [role=button]:focus-visible,#vocalzip-refined-preview .vz-week button:focus-visible{outline:2px solid #7A32F5;outline-offset:3px;}
 
@@ -139,12 +141,13 @@ export async function createFloatingHome(opts={}){
   q(".vz-time b").textContent=String(Math.round(actual));
   const startYear=String(week.start||"").slice(0,4),endYear=String(week.end||"").slice(0,4);
   const currentYear=String(new Date().getFullYear()),showYear=startYear!==currentYear||endYear!==currentYear;
-  range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+"–"+(showYear&&endYear!==startYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
+  range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+" – "+(showYear&&endYear!==startYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
   if(target==null){
    if(week.current===false)goal.textContent="목표 미설정";
    else{const button=el("button","목표 설정","vz-empty-action");button.type="button";button.setAttribute("aria-label","주간 목표 설정");button.onclick=()=>opts.onGoals?.();goal.replaceChildren(button);}
   }else goal.textContent="목표 "+duration(target);
   meta.children[1].querySelector("strong").textContent=ratio==null?"—":Math.round(ratio)+"%";
+  meta.querySelector(".vz-streak").dataset.active=String(num(week.streak)>=2);
   meta.querySelector(".vz-streak").replaceChildren(flame.cloneNode(true),document.createTextNode(num(week.streak)+"일 연속"));
   days.replaceChildren();
   for(const item of (week.days||[]).slice(0,7)){
