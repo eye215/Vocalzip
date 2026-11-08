@@ -18,6 +18,6 @@ V.route('recording',{title:'녹음 재생',tab:'library',back:true,noAutoRefresh
  if(!item){host.innerHTML=V.empty('waveform','녹음을 찾을 수 없어요.','<a class="btn" href="#/library">보관함으로</a>');return;}
  host.innerHTML='<div class="list">'+V.mediaRow(item)+'</div>';V.wireMedia(host,[item]);host.querySelector('[data-toggle]').click();recordPlayer=host.querySelector('.media-open')._player;
 }});
-const floating=document.createElement('a');floating.className='vz-collection-record';floating.href='#/record';floating.innerHTML='<i class="ph ph-microphone"></i><span>녹음 시작</span>';document.body.append(floating);
+const floating=document.createElement('a');floating.className='vz-collection-record';floating.href='#/record';floating.setAttribute('aria-label','녹음 시작');floating.title='녹음 시작';floating.innerHTML='<i class="ph ph-microphone" aria-hidden="true"></i>';floating.addEventListener('click',e=>{if(!window.VzipRecordTransition)return;e.preventDefault();window.VzipRecordTransition.open(floating,floating.getAttribute('href'));});document.body.append(floating);
 })();
 

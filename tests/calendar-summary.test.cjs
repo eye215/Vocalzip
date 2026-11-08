@@ -12,4 +12,6 @@ test('rank metric switches, top five is stable, and sub-minute durations are vis
  const summary={rows:[{id:'a',minutes:30,count:1},{id:'b',minutes:5,count:4}]};
  assert.equal(ranked(summary,'minutes')[0].id,'a');assert.equal(ranked(summary,'count')[0].id,'b');
  assert.equal(duration(.5),'30초');assert.equal(duration(90),'1시간 30분');
+ const six={rows:[1,2,3,4,5,6].map(n=>({id:String(n),minutes:n,count:1}))};
+ assert.deepEqual(ranked(six).map(row=>row.id),['6','5','4','3','2']);
 });

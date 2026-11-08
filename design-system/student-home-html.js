@@ -1,6 +1,6 @@
-/* Direct integration of PR #139's HTML. The distributed HTML blob is unmodified.
- * Demo scripts/dialogs stay inert; only its root markup and original style blocks are used. */
-export const FLOATING_HOME_SOURCE = "b4ad1520615f1cae216393239679657779389d06";
+/* Direct integration of the approved home HTML, including its circular quick action.
+ * Demo scripts/dialogs stay inert; only root markup and style blocks are used. */
+export const FLOATING_HOME_SOURCE = "4985592d5e93a09ba1300cf57ba4eee866db531b";
 const asset=new URL("./Vocalzip_Floating_Record_Home.html?v="+FLOATING_HOME_SOURCE.slice(0,12),import.meta.url);
 let sourcePromise;
 async function source(){
@@ -51,7 +51,9 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-phone{max-width:560px;padding:8px 12px 0;padding-top:max(8px,env(safe-area-inset-top));}
 #vocalzip-refined-preview .vz-nav-item.vz-active{background:#EDE1FF;}
 #vocalzip-refined-preview .vz-practice-icon{display:inline-flex;align-items:center;width:20px;height:20px;flex:none;font-family:"Phosphor";font-style:normal;font-weight:400;font-size:20px;line-height:1;color:inherit;}
-#vocalzip-refined-preview .vz-nav{background:rgba(255,255,255,.68);}
+#vocalzip-refined-preview .vz-goals .vz-title .vz-count{margin-left:7px;white-space:nowrap;color:#667085;font-size:12px;font-weight:600;line-height:20px;}
+#vocalzip-refined-preview .vz-nav{background:var(--vz-nav-surface,rgba(255,255,255,.58));}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){#vocalzip-refined-preview .vz-nav{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;}}
 #vocalzip-refined-preview .vz-nav-item i{display:block;font:normal 22px/1 "Phosphor";color:#475467;letter-spacing:0;}
 #vocalzip-refined-preview .vz-nav-item.vz-active i{color:#7A32F5;}
 #vocalzip-refined-preview .vz-floating-record i{display:block;font:normal 22px/1 "Phosphor";color:inherit;}
@@ -209,7 +211,8 @@ export async function createFloatingHome(opts={}){
   continueButton.onclick=()=>{(recent?callbacks.onContinue:callbacks.onRecent)?.();};
  };
  host.updateRecent(opts.recent,opts);
- const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();const practiceIcon=el("i","\ue492","vz-practice-icon");practiceIcon.setAttribute("aria-hidden","true");quick[1].querySelector("svg").replaceWith(practiceIcon);
+ const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[0].querySelector("svg").setAttribute("stroke-width","1.6");quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();const practiceIcon=el("i","\ue492","vz-practice-icon");practiceIcon.setAttribute("aria-hidden","true");quick[1].querySelector("svg").replaceWith(practiceIcon);
+ q(".vz-goals .vz-title").append(q(".vz-count"));
  q(".vz-goal-tools button").setAttribute("aria-label","오늘의 목표 설정");q(".vz-goal-tools button").onclick=()=>opts.onGoals?.();
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
  if(items.length>6){list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");}
@@ -226,10 +229,11 @@ export async function createFloatingHome(opts={}){
    finally{input.disabled=false;row.removeAttribute("aria-busy");}
   };list.append(row);
  }
- q(".vz-floating-record").onclick=()=>opts.onRecord?.();
+  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
  const routes=["home","songs","library","calendar"];
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});
  return host;
 }
+
 
 

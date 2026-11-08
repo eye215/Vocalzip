@@ -265,6 +265,8 @@ VZ.render = () => {
   if (cloud && main.contains(cloud)) document.getElementById('vzip-park')?.append(cloud);
   delete main.dataset.dirty;
   document.body.classList.toggle('vz-collection', ['songs','library'].includes(r.name));
+  document.body.classList.toggle('vz-calendar-mode', r.name === 'calendar');
+  document.body.classList.toggle('vz-record-mode', r.name === 'record');
   main.dataset.collection = r.name;
   main.innerHTML = def.render(r);
   def.mount?.(main, r);
@@ -344,5 +346,7 @@ document.addEventListener('DOMContentLoaded', () => hideIcons(document));
   addEventListener('online', show); addEventListener('offline', show);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
 })();
+
+
 
 
