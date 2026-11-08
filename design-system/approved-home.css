@@ -330,13 +330,13 @@ body:not(.vz-home-mode) .v-nav.vz-home-dock a.rec:active i{background:#4e1bcc;}
 .vz-student-home .vz-home-quick:active>.vz-home-icon{color:#4e1bcc;}
 
 /* Calm reading hierarchy; purple is reserved for actions and completion. */
-.vz-student-home .vz-home-heading{color:#101828;font-weight:600;}
+.vz-student-home .vz-home-heading{color:#101828;font-weight:700;}
 .vz-student-home .vz-home-heading>.vz-home-icon{color:#101828;}
-.vz-student-home .vz-home-song-heading .vz-home-heading{font-weight:600;color:#101828;}
-.vz-student-home .vz-home-song-heading .vz-home-heading>.vz-home-icon{color:#101828;}
+.vz-student-home .vz-home-song-heading .vz-home-heading{font-weight:400;color:#667085;}
+.vz-student-home .vz-home-song-heading .vz-home-heading>.vz-home-icon{color:#667085;}
 .vz-home-week-metric strong{color:#344054;}
-.vz-home-upcoming .vz-upcoming-title{color:#101828;font-weight:600;}
-.vz-home-upcoming .is-secondary .vz-upcoming-title{color:#344054;}
+.vz-home-upcoming .vz-upcoming-title{color:#101828;font-weight:700;}
+.vz-home-upcoming .is-secondary .vz-upcoming-title{color:#101828;font-weight:700;}
 .vz-home-upcoming .vz-upcoming-date{color:#667085;}
 .vz-home-goal-source,.vz-home-gauge-value,.vz-home-gauge-detail{color:#818da2;}
 .vz-home-day-indicator{display:grid;place-items:center;box-sizing:border-box;flex:none;width:20px;height:20px;border:1px solid #d9d0ee;border-radius:50%;background:transparent;color:#fff;}
@@ -345,13 +345,20 @@ body:not(.vz-home-mode) .v-nav.vz-home-dock a.rec:active i{background:#4e1bcc;}
 .vz-home-day-indicator[data-state="partial"]{border-color:#d9d0ee;background:#f1eaff;}
 .vz-home-day-indicator.is-today{box-shadow:0 0 0 3px #f6f4fb,0 0 0 4px #6326ff;}
 .vz-home-day-indicator[data-state="future"]{border-color:#e4dcef;background:transparent;}
-.vz-home-song-footer{display:grid;grid-template-columns:minmax(0,1fr) 45px;align-items:center;gap:8px;align-self:end;width:100%;min-width:0;min-height:45px;padding:0;border:0;background:none;text-align:left;font:inherit;color:#475467;}
+.vz-home-song-footer{display:grid;grid-template-columns:minmax(0,1fr) 45px;align-items:center;gap:8px;align-self:end;width:100%;min-width:0;min-height:45px;padding:0;border:0;background:none;text-align:left;font:inherit;color:#6326ff;}
 .vz-home-song-listen{min-width:0;font-size:13px;line-height:1.53846154;font-weight:600;overflow-wrap:anywhere;}
 .vz-home-song-footer .vz-home-song-cover{width:45px;height:45px;}
 .vz-home-song-footer:active .vz-home-play{background:#4e1bcc;color:#fff;}
-.vz-student-home .vz-home-quick{flex-wrap:nowrap;gap:8px;color:#475467;}
+.vz-student-home .vz-home-quick{flex-wrap:nowrap;gap:8px;color:#344054;}
 .vz-home-quick-label{display:flex;align-items:center;gap:8px;flex:1;min-width:0;}
 .vz-home-quick-label>span{min-width:0;overflow-wrap:anywhere;}
-.vz-student-home .vz-home-quick-label>.vz-home-icon{flex:none;width:22px;height:22px;font-size:22px;color:#475467;}
+.vz-student-home .vz-home-quick-label>.vz-home-icon{flex:none;width:22px;height:22px;font-size:22px;color:#344054;}
 .vz-student-home .vz-home-quick>.vz-home-icon:last-child{flex:none;width:12px;height:12px;font-size:12px;margin-left:0;color:#818da2;}
 .vz-student-home .vz-home-quick:active .vz-home-quick-label>.vz-home-icon{color:#4e1bcc;}
+
+/* Latest type weights: headings 700, function names 600, descriptions 400. */
+.vz-home-goal-title,.vz-home-goal-check:checked+.vz-home-goal-title{color:#475467;font-weight:400;}
+.vz-approved-dock .vz-approved-dock-item,.v-nav.vz-home-dock a,body.vz-home-mode .v-nav ul>li>a{font-weight:400;}
+.vz-approved-dock .vz-approved-dock-item[aria-current="page"],.v-nav.vz-home-dock a[aria-current="page"],body.vz-home-mode .v-nav ul>li>a[aria-current="page"]{font-weight:600;color:#6326ff;}
+.vz-approved-dock .vz-approved-dock-record,body.vz-home-mode .v-nav ul>li>a.rec{font-weight:600;color:#fff;}
+.vz-student-home .vz-home-quick:active{color:#4e1bcc;}

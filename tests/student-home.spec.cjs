@@ -501,7 +501,7 @@ test('unboxed upcoming event cases keep the existing palette and appear first on
   if(name==='both'){
    const computed=await page.evaluate(()=>['.vz-home-brand','.vz-home-week .vz-home-heading','.vz-upcoming-title','.vz-upcoming-date','.vz-home-week-metric strong','.vz-home-goal-title','.vz-home-song-copy strong'].map(selector=>{const s=getComputedStyle(document.querySelector(selector));return {selector,size:parseFloat(s.fontSize),weight:s.fontWeight,color:s.color};}));
    console.log('HOME_TYPE_AUDIT '+JSON.stringify(computed));
-   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[16,'700','rgb(16, 24, 40)'],[18,'600','rgb(16, 24, 40)'],[22,'600','rgb(16, 24, 40)'],[14,'400','rgb(102, 112, 133)'],[32,'700','rgb(52, 64, 84)'],[15,'400','rgb(52, 64, 84)'],[16,'600','rgb(52, 64, 84)']]);
+   expect(computed.map(x=>[x.size,x.weight,x.color])).toEqual([[16,'700','rgb(16, 24, 40)'],[18,'700','rgb(16, 24, 40)'],[22,'700','rgb(16, 24, 40)'],[14,'400','rgb(102, 112, 133)'],[32,'700','rgb(52, 64, 84)'],[15,'400','rgb(71, 84, 103)'],[16,'600','rgb(52, 64, 84)']]);
   }
   const faces=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/["']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
   expect(faces.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
@@ -545,11 +545,11 @@ test('icon selection and playback distinguish navigation from recording without 
  const icons=await page.evaluate(()=>{
   const home=document.querySelector('.vz-approved-dock-item[aria-current=page]'),songs=document.querySelectorAll('.vz-approved-dock-item')[1];
   const style=(root,selector)=>getComputedStyle(root.querySelector(selector)).display!=='none';
-  return {selectedFill:style(home,'.vz-icon-fill'),selectedOutline:style(home,'.vz-icon-outline'),otherFill:style(songs,'.vz-icon-fill'),otherOutline:style(songs,'.vz-icon-outline'),
+  return {selectedWeight:getComputedStyle(home).fontWeight,defaultWeight:getComputedStyle(songs).fontWeight,selectedInk:getComputedStyle(home).color,selectedFill:style(home,'.vz-icon-fill'),selectedOutline:style(home,'.vz-icon-outline'),otherFill:style(songs,'.vz-icon-fill'),otherOutline:style(songs,'.vz-icon-outline'),
    record:getComputedStyle(document.querySelector('.vz-approved-dock-record')).backgroundColor,play:getComputedStyle(document.querySelector('.vz-home-play')).backgroundColor,playInk:getComputedStyle(document.querySelector('.vz-home-play')).color,link:getComputedStyle(document.querySelector('.vz-upcoming-link')).color,check:getComputedStyle(document.querySelector('.vz-home-goal-check:checked')).backgroundColor,
    stroke:document.querySelector('.vz-home-quick .vz-icon-outline').getAttribute('stroke-width')};
  });
- expect(icons).toEqual({selectedFill:true,selectedOutline:false,otherFill:false,otherOutline:true,record:'rgb(99, 38, 255)',play:'rgb(241, 234, 255)',playInk:'rgb(78, 27, 204)',link:'rgb(99, 38, 255)',check:'rgb(99, 38, 255)',stroke:'1.8'});
+ expect(icons).toEqual({selectedWeight:'600',defaultWeight:'400',selectedInk:'rgb(99, 38, 255)',selectedFill:true,selectedOutline:false,otherFill:false,otherOutline:true,record:'rgb(99, 38, 255)',play:'rgb(241, 234, 255)',playInk:'rgb(78, 27, 204)',link:'rgb(99, 38, 255)',check:'rgb(99, 38, 255)',stroke:'1.8'});
  await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
  await expect(page.locator('.preview-status')).toContainText('목표 설정');
 });
