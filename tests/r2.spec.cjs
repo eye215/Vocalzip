@@ -3,7 +3,7 @@
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const KEY = 'vocal-zip_mvp_v1', R2 = 'https://r2.vocalzip.test';
-const stub = `window.__vdStub=()=>{const c={q:{}};let upd=null,ins=null;for(const m of ['select','order','range','delete'])c[m]=()=>c;c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>c;c.single=()=>c;c.update=r=>{upd=r;return c};c.insert=r=>{ins=r;return c};c.upsert=r=>{window.__vdRow={payload:r.payload,updated_at:r.updated_at};return c};c.then=r=>{const row=window.__vdRow||null;if(ins){if(row)return r({data:null,error:{code:'23505',message:'duplicate'}});window.__vdRow={payload:ins.payload,updated_at:ins.updated_at};return r({data:null,error:null})}if(upd){if(!row||('updated_at' in c.q&&c.q.updated_at!==row.updated_at))return r({data:[],error:null});window.__vdRow={payload:upd.payload,updated_at:upd.updated_at};return r({data:[{user_id:'ui-test-user'}],error:null})}return r({data:row?JSON.parse(JSON.stringify(row)):null,error:null})};return c};window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:fn=>{(window.__authHandlers||=[]).push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'tok'}}})},
+const stub = `window.__vdStub=()=>{const c={q:{}};let upd=null,ins=null;for(const m of ['select','order','range','delete'])c[m]=()=>c;c.select=cols=>{c.cols=cols;return c};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>c;c.single=()=>c;c.update=r=>{upd=r;return c};c.insert=r=>{ins=r;return c};c.upsert=r=>{window.__vdRow={payload:r.payload,updated_at:r.updated_at};return c};c.then=r=>{const row=window.__vdRow||null;if(c.cols==='ids:payload->deleted->media')return r({data:row?{ids:row.payload?.deleted?.media??null}:null,error:null});if(ins){if(row)return r({data:null,error:{code:'23505',message:'duplicate'}});window.__vdRow={payload:ins.payload,updated_at:ins.updated_at};return r({data:null,error:null})}if(upd){if(!row||('updated_at' in c.q&&c.q.updated_at!==row.updated_at))return r({data:[],error:null});window.__vdRow={payload:upd.payload,updated_at:upd.updated_at};return r({data:[{user_id:'ui-test-user'}],error:null})}return r({data:row?JSON.parse(JSON.stringify(row)):null,error:null})};return c};window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:fn=>{(window.__authHandlers||=[]).push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'tok'}}})},
  storage:{from:()=>({createSignedUrl:async p=>({data:{signedUrl:'/legacy/'+p},error:null}),upload:async()=>({error:null}),remove:async p=>{window.__removed.push(...p);return {error:null}}})},
  from:t=>{if(t==='vocal_data')return window.__vdStub();const c={q:{}};for(const m of ['order'])c[m]=()=>c;c.delete=()=>{c.del=true;return c};c.range=(a,b)=>{c.r=[a,b];return c};c.select=cols=>{c.cols=cols||'*';return c};c.in=(k,v)=>{c.ins=v;return c};window.__upd=window.__upd||{};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=(k,v)=>{c.q[k]=v;return c};
   c.upsert=(row,options)=>{window.__up.push(row);window.__beforeInsert?.(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata&&(!options?.ignoreDuplicates||!window.__rows[x.id])){window.__rows[x.id]=x.metadata;window.__upd[x.id]=x.updated_at||new Date().toISOString()}return c};
@@ -467,4 +467,17 @@ test('Logout while object verification waits blocks relinking and preserves the 
  expect(await page.evaluate(()=>window.__rows['receipt-logout']||null)).toBeNull();
  expect(await page.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('vzip_r2_library_receipts_v1:ui-test-user:receipt-logout')))).toBe(true);
  expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+});
+
+test('Malformed server deletion metadata blocks recovery without relinking or reuploading',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);await failLibraryAttachment(page,'receipt-bad-delete');
+ const result=await page.evaluate(async()=>{
+  window.__failUpsert=false;
+  const db=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1'));
+  window.__vdRow={payload:{...db,deleted:{...(db.deleted||{}),media:'invalid-array'}},updated_at:new Date().toISOString()};
+  return window.vzipRecoverMediaUploads('receipt-bad-delete');
+ });
+ expect(result).toEqual([{id:'receipt-bad-delete',status:'pending',code:'deleted_unavailable'}]);
+ expect(await page.evaluate(()=>window.__rows['receipt-bad-delete']||null)).toBeNull();
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);expect(r2.store.size).toBe(1);
 });

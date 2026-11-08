@@ -150,11 +150,11 @@ function mediaRecovery(){
   loadRow:async id=>{const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle();if(error)throw error;return data?.metadata||null;},
   insertRow:async(id,metadata)=>{const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},{ignoreDuplicates:true});if(error)throw error;},
   stat:key=>window.VzipR2.stat(key),
-  deletedIds:async()=>[...await deletedMediaIds(),...(Array.isArray(localData()?.deleted?.media)?localData().deleted.media:[])]
+  deletedIds:async()=>[...await deletedMediaIds(true),...(Array.isArray(localData()?.deleted?.media)?localData().deleted.media:[])]
  });
 }
 /** Ids of files deleted on any device (vocal_data.payload.deleted.media), read as a single JSON path. */
-async function deletedMediaIds(){const {data,error}=await client.from('vocal_data').select('ids:payload->deleted->media').eq('user_id',user.id).maybeSingle();if(error)throw error;return Array.isArray(data?.ids)?data.ids:[]}
+async function deletedMediaIds(strict=false){const {data,error}=await client.from('vocal_data').select('ids:payload->deleted->media').eq('user_id',user.id).maybeSingle();if(error)throw error;if(strict&&data?.ids!=null&&!Array.isArray(data.ids))throw Object.assign(Error('삭제 기록을 확인하지 못했어요.'),{code:'deleted_unavailable'});return Array.isArray(data?.ids)?data.ids:[]}
 async function importMedia(file,info={},onProgress,options={}){
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
  if(info.id){
@@ -265,7 +265,7 @@ async function importMedia(file,info={},onProgress,options={}){
   if(id&&!committing&&!committed&&user?.id===owner){
    try{await cleanupPending(owner)}catch{}
   }
-  if(r2&&!committing&&!committed)orphan({id,key:r2.key,size:file.size,name:info.name||file.name,fileHash:info.fileHash||'',reason:error?.message||'stopped'});
+  if(r2&&!committing&&!committed)orphan({owner,id,key:r2.key,size:file.size,name:info.name||file.name,fileHash:info.fileHash||'',reason:error?.message||'stopped'});
   throw error;
  }finally{
   options.signal?.removeEventListener('abort',cancel);window.removeEventListener('vzip:auth-changed',authChanged);
