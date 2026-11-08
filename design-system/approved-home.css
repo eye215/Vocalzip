@@ -462,3 +462,6 @@ body.vz-home-mode .v-nav ul{min-height:52px;}
 .vz-student-home .vz-home-week{padding:20px;}
 .vz-home-goal-settings{margin:0 -8px 0 0;}
 .vz-approved-dock,body.vz-home-mode .v-nav{width:min(calc(100% - 32px),448px);}
+
+/* Adjacent performance/audition rows: 6px gap, retaining 44px hit areas. */
+.vz-home-upcoming .is-secondary + .is-secondary{margin-block-start:-6px;}
