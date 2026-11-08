@@ -83,3 +83,4 @@ function paint() {
 VZ.serverAnalysisCard = el => { host = el; paint(); if (state.on) load(); };
 })();
 
+

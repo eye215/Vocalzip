@@ -96,7 +96,11 @@ VZ.lessonSort = (a, b) => (a.date || '').localeCompare(b.date || '') || (a.start
 VZ.nextLesson = () => db.lessons.filter(l => VZ.lessonStatus(l) === 'scheduled' && (l.date || '') >= VZ.today()).sort(VZ.lessonSort)[0];
 VZ.taskLessons = t => t.lessonIds || (t.lessonId ? [t.lessonId] : []);
 VZ.taskSongId = t => t.songId || VZ.taskLessons(t).map(id => db.lessons.find(l => l.id === id)?.songId).find(Boolean) || '';
-VZ.practiceMinutes = p => Number(p.minutes) || 0;
+VZ.practiceMinutes = p => {
+  const value=p.manualMinutes;
+  const manual=value!=null&&typeof value!=='boolean'&&String(value).trim()!==''?Number(value):NaN;
+  return Number.isFinite(manual)&&manual>=0?manual:Math.max(0,Number(p.minutes)||0);
+};
 /** Practice time = practice records + recordings/imports that are not already inside a
  * practice record (its minutes cover them) or a lesson (lesson time is not practice). */
 VZ.timeEntries = (media = []) => {
@@ -338,4 +342,5 @@ document.addEventListener('DOMContentLoaded', () => hideIcons(document));
   addEventListener('online', show); addEventListener('offline', show);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
 })();
+
 

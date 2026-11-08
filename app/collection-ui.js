@@ -20,3 +20,4 @@ V.route('recording',{title:'녹음 재생',tab:'library',back:true,noAutoRefresh
 }});
 const floating=document.createElement('a');floating.className='vz-collection-record';floating.href='#/record';floating.innerHTML='<i class="ph ph-microphone"></i><span>녹음 시작</span>';document.body.append(floating);
 })();
+

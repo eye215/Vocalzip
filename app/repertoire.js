@@ -140,3 +140,4 @@ V.route('show',{title:r=>get(r.params[0])?.title||'공연',tab:'songs',back:true
 V.archiveUI={owner,get,shows,save,panel};
 })();
 
+

@@ -74,6 +74,30 @@ test('newer duplicate practice version wins once',()=>{
   assert.equal(result.week.actualMinutes,20);
 });
 
+test('shared ledger includes recording time and keeps last week available after Monday midnight',()=>{
+  const db={practices:[practice('manual','2026-11-08',4)]};
+  const timeEntries=[{date:'2026-11-08',minutes:4},{date:'2026-11-08',minutes:225/60},
+    {date:'2026-11-08',minutes:191/60},{date:'2026-11-08',minutes:232/60}];
+  const before=M.build(db,{today:'2026-11-08',timeEntries});
+  assert.equal(before.week.actualMinutes,14.8);
+  const after=M.build(db,{today:'2026-11-09',timeEntries});
+  assert.equal(after.week.start,'2026-11-09');assert.equal(after.week.actualMinutes,0);
+  const previous=M.build(db,{today:'2026-11-09',weekStart:'2026-11-02',timeEntries});
+  assert.equal(previous.week.actualMinutes,before.week.actualMinutes);
+  assert.equal(previous.week.days[6].date,'2026-11-08');
+  assert.equal(previous.week.days[6].today,false);assert.equal(previous.week.current,false);
+  assert.equal(previous.today,'2026-11-09');assert.equal(db.practices[0].minutes,4);
+});
+
+test('browsing another week does not shift today, daily goals, streak, or future time into the past',()=>{
+  const db={practices:[practice('p','2026-11-08',10)],dailyGoals:[{id:'g',date:'2026-11-09',title:'Today'}]};
+  const past=M.build(db,{today:'2026-11-09',weekStart:'2026-11-02'});
+  assert.equal(past.week.streak,1);assert.equal(past.goals[0].id,'g');
+  const future=M.build(db,{today:'2026-11-09',weekStart:'2026-11-16',timeEntries:[{date:'2026-11-16',minutes:100}]});
+  assert.equal(future.week.actualMinutes,0);assert.ok(future.week.days.every(d=>d.state==='future'));
+  assert.throws(()=>M.build(db,{today:'2026-11-09',weekStart:'invalid'}),/주간 날짜/);
+});
+
 test('streak survives an unpracticed today, ends at a gap and ignores future dates',()=>{
   const practices=[practice('a','2026-11-06',1),practice('b','2026-11-05',1),
     practice('c','2026-11-03',99),practice('f','2026-11-08',99)];

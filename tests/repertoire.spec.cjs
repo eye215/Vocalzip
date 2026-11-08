@@ -130,3 +130,4 @@ test('A production connects to the rest of the app: its day on the calendar, 공
  await page.goto('/#/library');await expect(page.locator('.v-nav [data-nav=library]')).toHaveAttribute('aria-current','page');await expect(page.locator('#top [data-back]')).toHaveCount(0);await expect(page.locator('[data-library-search]')).toBeVisible();
  await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeVisible();
  });
+

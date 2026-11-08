@@ -1,11 +1,13 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=2';
+import {createFloatingHome} from './student-home-html.js?v=4';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
  const owner=()=>window.vzipCloudUserId?.()||window.VzipAccountScope?.owner||'';
- const state=()=>M.build({...V.db,performances:(V.db.performances||[]).filter(p=>p.ownerId===owner()&&owner())},{today:today()});
+ const state=(files=V.media.cached(),weekStart=null)=>M.build({...V.db,performances:(V.db.performances||[]).filter(p=>p.ownerId===owner()&&owner())},{today:today(),weekStart,timeEntries:V.timeEntries(files)});
+ let selectedWeekStart=null,stopHome=()=>{};
+ const calendar=date=>nav('#/calendar?date='+encodeURIComponent(date));
  const dayLabel=date=>date?V.dateLabel(date):'';
  const lessonDay=date=>{const d=V.parseYmd(date);return d?(d.getMonth()+1)+'.'+d.getDate()+' ('+'일월화수목금토'[d.getDay()]+')':'';};
  const meta=document.querySelector('meta[name="theme-color"]'),originalTheme=meta?.content;
@@ -83,14 +85,16 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     };
    },onClose:()=>{V.setGuard(null);if(beforeUnload)window.removeEventListener('beforeunload',beforeUnload);}});
  }
- V.route('home',{title:'홈',render(){return '<div data-approved-home-host></div>';},
+ V.route('home',{title:'홈',leave(){stopHome();},render(){stopHome();return '<div data-approved-home-host></div>';},
   async mount(main){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
-   const s=state(),r=recentData(s.recent);
-   let root;
+   let files=V.media.cached(),root;
+   const s=state(files,selectedWeekStart),r=recentData(s.recent);
+   const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
    try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
     ...recentCallbacks(r),onRecord:()=>nav('#/record'),onNavigate:id=>nav('#/'+id),
-    onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onGrowth:()=>nav('#/growth'),onCalendar:()=>nav('#/calendar'),
+    onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
+    onWeekMove:delta=>{const d=V.parseYmd(state(files,selectedWeekStart).week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
     onGoalToggle:async(id,completed)=>{
@@ -105,16 +109,26 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    }
    if(!host.isConnected)return;
    host.replaceChildren(root);applyTheme();
-   const media=await V.media.list().catch(()=>[]);
-   if(!host.isConnected)return;
-   // Reuse the same real records; this region alone changes after media metadata arrives.
-   let recent=s.recent;
-   if(!recent){
-    const activity=V.songActivity(media),id=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)))[0];
-    if(id)recent={song:V.song(id),date:activity.get(id)};
-   }
-   const resolved=recentData(recent,media);
-   if(root.isConnected)root.updateRecent(resolved,recentCallbacks(resolved));
+   let mediaGeneration=0,lastDate=today();
+   const refreshMedia=async()=>{
+    const generation=++mediaGeneration;
+    const media=await V.media.list().catch(()=>files);
+    if(!root.isConnected||generation!==mediaGeneration)return;
+    files=media;refreshWeek();
+    let recent=state(files).recent;
+    if(!recent){
+     const activity=V.songActivity(media),id=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)))[0];
+     if(id)recent={song:V.song(id),date:activity.get(id)};
+    }
+    const resolved=recentData(recent,media);root.updateRecent(resolved,recentCallbacks(resolved));
+   };
+   const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
+   const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};
+   const timer=setInterval(checkDate,30000);
+   window.addEventListener('vzip:v6-media',refreshMedia);
+   document.addEventListener('visibilitychange',visible);
+   stopHome=()=>{clearInterval(timer);window.removeEventListener('vzip:v6-media',refreshMedia);document.removeEventListener('visibilitychange',visible);};
+   await refreshMedia();
   }});
  // Reuse the existing practice detail/edit/record actions; the old app had no standalone history route.
  V.route('practices',{title:'연습 기록',back:true,tab:'calendar',
@@ -127,5 +141,6 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  applyTheme();
  if((location.hash.replace(/^#\/?/,'').split(/[/?]/)[0]||'home')==='home')V.softRender();
 }
+
 
 
