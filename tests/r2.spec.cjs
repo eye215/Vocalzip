@@ -435,11 +435,14 @@ test('An imported automatic title follows song assignment and date edits and sur
   const saved=await VZ.media.importFile(new File([new Uint8Array(bytes)],'original.wav',{type:'audio/wav'}),{id:'automatic-title',date:'2026-11-08',direct:true});
   const item={...saved,cloud:true};await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
   const assigned={...window.__rows[item.id]};
-  await VZ.media.update({...assigned,cloud:true},{recordedDate:'2026-11-09',dateSource:'manual',name:assigned.name});
-  return {assigned,current:window.__rows[item.id]};
+  VZ.editMedia({...assigned,cloud:true});
+  return {assigned};
  },[...wav(1)]);
  expect(out.assigned).toMatchObject({name:'Defying Gravity 2026.11.08',nameMode:'auto',originalFilename:'original.wav'});
- expect(out.current).toMatchObject({name:'Defying Gravity 2026.11.09',recordedDate:'2026-11-09',songId:'s1'});
+ await page.locator('.sheet [name=date]').fill('2026-11-09');await page.locator('.sheet [name=date]').dispatchEvent('change');
+ await expect(page.locator('.sheet [name=name]')).toHaveValue('Defying Gravity 2026.11.09');
+ await page.locator('.sheet').getByRole('button',{name:'저장',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__rows['automatic-title'])).toMatchObject({name:'Defying Gravity 2026.11.09',recordedDate:'2026-11-09',songId:'s1',nameMode:'auto'});
  const rows=await page.evaluate(()=>window.__rows);
  await page.addInitScript(rows=>{window.__rows=rows;},rows);await page.reload();await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
  expect(await page.evaluate(()=>window.__rows['automatic-title'].name)).toBe('Defying Gravity 2026.11.09');
@@ -450,11 +453,14 @@ test('Manual recording titles stay unchanged when song and date are edited',asyn
  const out=await page.evaluate(async()=>{
   const id='manual-title';window.__rows[id]={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav'};window.__upd[id]='2026-11-08T01:00:00.000Z';
   await VZ.media.update({...window.__rows[id],cloud:true},{name:'오디션 제출용 최종 테이크'});
-  await VZ.media.assignSongSafe({...window.__rows[id],cloud:true},{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
-  await VZ.media.update({...window.__rows[id],cloud:true},{recordedDate:'2026-11-09'});
+  VZ.editMedia({...window.__rows[id],cloud:true});
   return window.__rows[id];
  });
- expect(out).toMatchObject({name:'오디션 제출용 최종 테이크',nameMode:'manual',songId:'s1',recordedDate:'2026-11-09'});
+ await page.locator('.sheet [name=song]').selectOption('s1');
+ await page.locator('.sheet [name=date]').fill('2026-11-09');await page.locator('.sheet [name=date]').dispatchEvent('change');
+ await expect(page.locator('.sheet [name=name]')).toHaveValue('오디션 제출용 최종 테이크');
+ await page.locator('.sheet').getByRole('button',{name:'저장',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__rows['manual-title'])).toMatchObject({name:'오디션 제출용 최종 테이크',nameMode:'manual',songId:'s1',recordedDate:'2026-11-09'});
  expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(0);
 });
 test('A newer title from another device wins over a stale automatic title snapshot',async({page})=>{
