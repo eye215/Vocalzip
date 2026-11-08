@@ -9,7 +9,7 @@
 - `SCREEN_MAP.md`: 화면별 목적·진입점·동작·서비스 연결 지점.
 - `design-tokens.css`, `subpages.css`, `app.js`: 개발 전달용 원본.
 - `approved-home.html`: 확정한 플로팅 홈 원본 보존본.
-- `build.py`: 위 소스를 단일 HTML로 만드는 빌드 스크립트. 현재 실행 환경의 Lucide 패키지 위치를 사용합니다.
+- `build.py`: 위 소스를 단일 HTML로 만드는 빌드 스크립트. Python 표준 라이브러리와 동봉한 icons.json만 사용합니다.
 
 ## 확인 방법
 
