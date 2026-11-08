@@ -550,7 +550,7 @@ test('upcoming event comparison board captures all six real rendered fixtures',a
 test('closest event uses day and time without reordering the input records',async({page})=>{
  await page.goto('/design-system/student-home-preview.html?upcoming=all');
  const result=await page.evaluate(async()=>{
-  const {createUpcomingStage}=await import('/design-system/components.js?v=18');
+  const {createUpcomingStage}=await import('/design-system/components.js?v=19');
   const events=[{kind:'late',title:'늦은 일정',daysLeft:2,time:'18:00'},{kind:'unknown',title:'날짜 미정'},{kind:'early',title:'이른 일정',daysLeft:2,time:'09:00'}];
   const original=JSON.stringify(events),host=createUpcomingStage({events});
   return {unchanged:JSON.stringify(events)===original,order:[...host.children].map(x=>x.dataset.kind),primary:host.querySelectorAll('.is-primary').length,illustrations:host.querySelectorAll('.vz-event-illustration').length};
@@ -583,6 +583,10 @@ test('final handoff comparison captures source and implementation using bundled 
  await page.addStyleTag({content:faces});
  for(const frame of page.frames().filter(f=>f.parentFrame())){
   await frame.waitForSelector(frame.url().includes('student-home-preview')?'.vz-student-home':'.vz-phone');await frame.addStyleTag({content:faces});await frame.evaluate(()=>document.fonts.ready);
+  console.log('HOME_HANDOFF_GEOMETRY '+JSON.stringify(await frame.evaluate(()=>{
+   const selectors=location.pathname.includes('design-handoff')?['.vz-header','.vz-event','.vz-week','.vz-song','.vz-goals','.vz-nav']:['.vz-home-header','.is-primary .vz-upcoming-detail','.vz-home-week','.vz-home-song','.vz-home-goals','.vz-approved-dock'];
+   return {path:location.pathname,boxes:selectors.map(selector=>{const e=document.querySelector(selector),r=e.getBoundingClientRect(),s=getComputedStyle(e);return {selector,width:r.width,height:r.height,padding:s.padding,gap:s.gap};})};
+  })));
  }
  await page.evaluate(()=>document.fonts.ready);
  await page.screenshot({path:testInfo.outputPath('student-home-handoff-comparison.png'),fullPage:true,animations:'disabled'});

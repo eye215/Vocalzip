@@ -1,7 +1,7 @@
 /* Fixed fixtures are isolated to this preview. No persistence or service calls.
  * Query ?state=empty|many|failure|boundaries to inspect additional states.
  */
-import {createStudentHome,createStudentDock} from "./components.js?v=18";
+import {createStudentHome,createStudentDock} from "./components.js?v=19";
 const params=new URLSearchParams(location.search),state=params.get("state");
 const status=document.querySelector(".preview-status");
 const announce=label=>()=>{status.textContent=label;};
