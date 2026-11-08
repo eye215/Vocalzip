@@ -232,6 +232,7 @@ test('goal planning separates long selectable rows and keeps save visible on sma
   await page.setViewportSize({width,height:744});
   await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
   const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+  await sheet.evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished));});
   const rows=sheet.locator('.vz-plan-option'),save=sheet.getByRole('button',{name:'목표 저장',exact:true});
   await expect(rows).toHaveCount(3);await expect(sheet.locator('[data-plan-count]')).toHaveText('3개 선택');
   const first=await rows.nth(0).boundingBox(),second=await rows.nth(1).boundingBox();
@@ -279,7 +280,10 @@ test('continue practice preselects the recent song with and without a recording 
   await page.getByRole('button',{name:/계속 연습하기$/}).click();
   await expect(page).toHaveURL(/#\/record\?song=s1$/);
   await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
-  await expect(page.locator('.rec-status')).toHaveText('버튼을 누르면 바로 녹음이 시작돼요.');
+  // Headless WebKit may have no MediaRecorder; both supported and fallback views must stay idle.
+  await expect(page.locator('.rec-time')).toHaveText('0:00');
+  await expect(page.locator('.rec-dot')).toHaveCount(0);
+  await expect(page.locator('[data-main]')).toHaveAttribute('aria-label','녹음 시작');
   await expect(page.locator('[data-home-player]')).toHaveCount(0);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.goto('/#/home');await ready(page);
