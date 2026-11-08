@@ -103,6 +103,8 @@ test('separate account namespaces and media databases survive account switch wit
  });
  await expect.poll(()=>page.evaluate(()=>window.VzipAccountScope?.owner||null).catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return null;throw e;})).toBe('B');
  await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>typeof window.vzipReadMedia)).toBe('function');
+ await expect.poll(()=>page.evaluate(()=>window.vzipCloudSignedIn?.()||false)).toBe(true);
  expect(await page.evaluate(async()=>({files:await vzipReadMedia(),queue:VzipAccountScope.storage.getItem('vzip_upload_queue_v1'),songs:VZ.db.songs.map(x=>x.id)}))).toEqual({files:[],queue:null,songs:['song-B']});
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).songs[0].id)).toBe('legacy');
  await page.evaluate(()=>{localStorage.setItem('__test_user','A');window.__changeAuth('SIGNED_IN',{user:{id:'A'}});});
