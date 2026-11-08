@@ -66,7 +66,9 @@ test('Bottom navigation reaches the five main screens without horizontal overflo
  }
  await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
  await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
- const box=await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).boundingBox();expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
+ const songsButton=page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true});
+ await expect(songsButton).toBeVisible();
+ await expect.poll(async()=>Math.round((await songsButton.boundingBox())?.height||0)).toBeGreaterThanOrEqual(44);
 });
 
 test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never auto-complete', async ({page}) => {
@@ -997,10 +999,11 @@ test('Library actually plays device and cloud-only audio (time advances)', async
     window.dispatchEvent(new Event('vzip:auth-changed'));
   });
   for (const id of ['m2', 'c1']) {
-    await page.goto('/#/library');
+    await page.evaluate(()=>VZ.nav('#/library'));
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
-    await expect(page).toHaveURL(new RegExp('#/recording/'+id+'$'));
+    await expect(page).toHaveURL(/#\/library$/);
+    await expect(row.locator('.media-open')).toBeVisible();
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }

@@ -53,6 +53,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test tests/r2-resumable.spec.cjs tests/r2.spec.cjs --workers=2
+      - name: Repeat legacy imported-date navigation in WebKit
+        run: npx playwright test tests/ui.spec.cjs --project=webkit-mobile --grep 'Metadata-derived dates' --repeat-each=6 --workers=2
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

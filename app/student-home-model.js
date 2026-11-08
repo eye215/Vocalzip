@@ -99,7 +99,7 @@ function build(db={},options={}){
   const entries=Array.isArray(options.timeEntries)?options.timeEntries:practices.map(p=>({date:p.date,minutes:practiceMinutes(p)}));
   for(const p of entries){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+(minutes(p.minutes)||0))}
   const days=Array.from({length:7},(_,i)=>{
-    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date),ratio=goal>0?actual/goal*100:null;
+    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(date<today?30:null),ratio=goal>0?actual/goal*100:null;
     const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';
     return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today};
   });
@@ -107,8 +107,10 @@ function build(db={},options={}){
   if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
   const bounds=weekBounds(db,{...options,today});
   const actualMinutes=days.reduce((n,d)=>n+d.minutes,0);
-  let cursor=(totals.get(today)||0)>0?today:shift(today,-1),streak=0;
-  while((totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
+  // The label belongs to the displayed week. Start at its latest practiced day,
+  // then count consecutive calendar dates even when the run crosses Monday.
+  let cursor=days.slice().reverse().find(d=>d.minutes>0)?.date,streak=0;
+  while(cursor&&(totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
   const goals=unique(db.dailyGoals).filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i}))
     .sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||a._index-b._index).map(g=>{delete g._index;return g});
   const completed=goals.filter(g=>g.completed===true).length;

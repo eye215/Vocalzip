@@ -152,7 +152,7 @@ test('uploaded HTML blob and all original stylesheet blocks are reused literally
   const expected=[...original.querySelectorAll('style')].map(e=>e.textContent.replace(/@import\s+url\([^;]*\);/g,''));
   const shadow=host.shadowRoot,actual=[...shadow.querySelectorAll('style[data-source-style]')].map(e=>e.textContent);
   const same=selector=>original.querySelector(selector).innerHTML===shadow.querySelector(selector).innerHTML;
-  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:same('.vz-floating-record'),nav:[...shadow.querySelectorAll('.vz-nav-item')].every((e,i)=>e.querySelector('svg').innerHTML===original.querySelectorAll('.vz-nav-item')[i].querySelector('svg').innerHTML),scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
+  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:shadow.querySelector('.vz-floating-record i')?.dataset.glyph==='\ue326',nav:[...shadow.querySelectorAll('.vz-nav-item')].map(e=>e.querySelector('i')?.dataset.glyph).join(',')==='\ue2c2,\ue340,\ue00e,\ue10a',scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
  });
  expect(result).toEqual({styles:true,count:10,fab:true,nav:true,scripts:0});
  await expect(page.locator('.vz-nav-item')).toHaveCount(4);
@@ -207,6 +207,8 @@ test('weekday names, minutes, rings and percentage colors use actual records',as
 });
 test('four home navigation buttons and floating recording reach existing routes',async({page})=>{
  await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정']);
+ const dock=await page.evaluate(()=>{const root=document.querySelector('.vz-student-home').shadowRoot,nav=root.querySelector('.vz-nav');return {icons:[...nav.querySelectorAll('.vz-nav-item i')].map(i=>i.dataset.glyph),background:getComputedStyle(nav).backgroundColor,font:document.fonts.check('22px Phosphor')}});
+ expect(dock.icons).toEqual(['\ue2c2','\ue340','\ue00e','\ue10a']);expect(dock.background).toBe('rgba(255, 255, 255, 0.68)');expect(dock.font).toBe(true);
  for(const [label,route]of [['내 곡','songs'],['보관함','library'],['일정','calendar'],['녹음 시작','record']]){
   await page.goto('/#/home');await ready(page);
   await page.getByRole('button',{name:label,exact:true}).click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);await expect(page.locator('.vz-student-home')).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/vz-home-mode/);await expect(page.locator('.v-nav')).toBeVisible();await noOverflow(page);
@@ -226,7 +228,7 @@ test('weekly home includes loose recordings once, but excludes lesson and perfor
  },TODAY);
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('15');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('15분');
- await expect(page.locator('.vz-week-range')).toHaveText('2026년11.2 – 11.8');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.2 – 11.8');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]>span:first-child')).toHaveText('4');
  expect((await db(page)).practices[0].manualMinutes).toBe(4);
 });
@@ -236,12 +238,12 @@ test('week swipe and arrows preserve history across Monday, and title/day naviga
  await boot(page,value);
  await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('0');
- await expect(page.locator('.vz-week-range')).toHaveText('2026년11.9 – 11.15');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.9 – 11.15');
  const card=page.locator('.vz-week');
  await card.dispatchEvent('pointerdown',{pointerId:7,button:0,pointerType:'touch',clientX:100,clientY:400});
  await card.dispatchEvent('pointerup',{pointerId:7,button:0,pointerType:'touch',clientX:230,clientY:403});
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('14');
- await expect(page.locator('.vz-week-range')).toHaveText('2026년11.2 – 11.8');
+ await expect(page.locator('.vz-week-range')).toHaveText('11.2 – 11.8');
  // A vertical scroll gesture must leave the week alone.
  await card.dispatchEvent('pointerdown',{pointerId:8,button:0,clientX:100,clientY:400});
  await card.dispatchEvent('pointerup',{pointerId:8,button:0,clientX:103,clientY:550});
@@ -414,5 +416,43 @@ test('My Songs and Library share the current home outer spacing and fixed naviga
    expect(Math.abs(otherFab.x+otherFab.width-fab.x-fab.width)).toBeLessThanOrEqual(1);expect(Math.abs(otherFab.y-fab.y)).toBeLessThanOrEqual(1);
    await noOverflow(page);
   }
+ }
+});
+
+test('shared colors, type hierarchy, cards and four-item dock apply to regular screens',async({page})=>{
+ await boot(page);
+ for(const route of ['songs','library','calendar']){
+  await page.evaluate(route=>VZ.nav('#/'+route),route);
+  await expect(page.locator('#view')).toHaveAttribute('data-collection',route);
+  const shell=await page.evaluate(()=>{
+   const css=el=>getComputedStyle(el),nav=document.querySelector('.v-nav');
+   return {accent:css(document.documentElement).getPropertyValue('--accent').trim(),
+    background:css(document.body).backgroundColor,
+    heading:css(document.querySelector('#top h1')).fontFamily,
+    navItems:nav.querySelectorAll('a').length,
+    navHeight:nav.getBoundingClientRect().height,
+    fab:css(document.querySelector('.vz-collection-record')).display,
+    cardRadius:css(document.querySelector('.card,.list,.empty,.vz-review-link')).borderRadius};
+  });
+  expect(shell.accent).toBe('#7A32F5');
+  expect(shell.background).toBe('rgb(248, 246, 253)');
+  expect(shell.heading).toContain('Pretendard');
+  expect(shell.navItems).toBe(4);
+  expect(shell.navHeight).toBe(70);
+  expect(shell.fab).toBe('flex');
+  expect(shell.cardRadius).toBe('20px');
+  await noOverflow(page);
+ }
+});
+
+test('weekly metadata keeps its height across weeks and colors streaks only from two days',async({page})=>{
+ await boot(page);
+ const host=page.locator('.vz-student-home'),card=page.locator('.vz-week');
+ const base=await page.evaluate(()=>VzipStudentHomeModel.build(VZ.db,{today:VZ.today()}).week);
+ let height;
+ for(const [streak,current,target] of [[0,true,null],[1,false,210],[2,false,210]]){
+  await host.evaluate((el,week)=>el.updateWeek(week),{...base,streak,current,targetMinutes:target});
+  const next=(await card.boundingBox()).height;if(height!==undefined)expect(Math.abs(next-height)).toBeLessThanOrEqual(1);height=next;
+  await expect(page.locator('.vz-streak')).toHaveCSS('color',streak>=2?'rgb(122, 50, 245)':'rgb(102, 112, 133)');
  }
 });

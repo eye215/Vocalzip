@@ -11,11 +11,11 @@
   --vz-body: #475467;
   --vz-muted: #667085;
   --vz-faint: #98A2B3;
-  --vz-song-title: #352544;
+  --vz-song-title: #101828;
   --vz-radius-card: 20px;
-  --vz-padding-card: 20px;
+  --vz-padding-card: 16px;
   --vz-gap: 12px;
-  --vz-page-inset: 16px;
+  --vz-page-inset: 12px;
   --vz-button-height: 52px;
   --vz-button-radius: 16px;
   --vz-touch-min: 44px;

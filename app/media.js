@@ -528,7 +528,7 @@ M.capture = async ({onLevel, onTick}) => {
   });
   return session;
 };
-M.drawWave = (canvas, values, color = '#7552d9') => {
+M.drawWave = (canvas, values, color = getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#7A32F5') => {
   const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
   if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
   const g = canvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h); g.fillStyle = color;
