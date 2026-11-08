@@ -455,3 +455,10 @@ body.vz-home-mode .v-nav ul{min-height:52px;}
 .vz-home-round:last-child{background:transparent;}
 .vz-home-week-grid{margin-top:20px;margin-bottom:4px;}
 .vz-student-home .vz-home-song::after{content:"";position:absolute;z-index:-1;width:120px;height:120px;right:-65px;top:35px;border:18px solid rgba(122,50,245,.035);border-radius:50%;pointer-events:none;}
+
+/* Align final handoff surfaces on the same 358px content width at 390px. */
+.vz-home-header{padding-left:0;padding-right:0;}
+.vz-student-home .vz-home-upcoming{padding:0;}
+.vz-student-home .vz-home-week{padding:20px;}
+.vz-home-goal-settings{margin:0 -8px 0 0;}
+.vz-approved-dock,body.vz-home-mode .v-nav{width:min(calc(100% - 32px),448px);}
