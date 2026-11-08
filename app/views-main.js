@@ -297,8 +297,8 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   return '<div class="stack vz-record-screen">' +
     (lessonId ? '<div class="badge accent" style="justify-self:start">레슨 녹음 · ' + esc(VZ.dateLabel(VZ.db.lessons.find(l => l.id === lessonId)?.date)) + '</div>' : '') +
     '<button type="button" class="card flat item" data-pick-song><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-sub">연결 곡</span><span class="item-title" data-song-name>' + esc(VZ.songTitle(songId) || '곡 미지정') + '</span><span class="item-sub vz-record-song-meta" data-song-meta>' + esc(songMeta) + '</span></span><i class="ph ph-caret-down chev"></i></button>' +
-    '<section class="rec-stage" aria-label="녹음기" data-phase="idle"><h2 class="rec-heading">녹음 준비</h2><div class="rec-time" aria-live="off">0:00</div><canvas class="rec-wave" aria-hidden="true"></canvas>' +
-    '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><div class="rec-primary"><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph-fill ph-microphone"></i></button></div><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
+    '<section class="rec-stage" aria-label="녹음기" data-phase="idle"><h2 class="rec-heading">녹음 준비</h2><div class="rec-time" aria-live="off">0:00</div><div class="rec-wave-wrap"><div class="rec-wave-idle" aria-hidden="true"></div><canvas class="rec-wave" aria-hidden="true"></canvas></div>' +
+    '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><div class="rec-primary"><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph ph-microphone"></i></button></div><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
     '<div class="rec-status" role="status" data-status>버튼을 누르면 바로 녹음이 시작돼요.</div></section>' +
     '<div data-review hidden></div></div>';
 }, leave() { rec?.result?.releaseProtection?.();if (rec?.session) { rec.session.cancel(); } rec = null; }, mount(main, r) {
@@ -307,6 +307,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   rec = state;
   const $ = s => main.querySelector(s);
   const status = $('[data-status]'), timeEl = $('.rec-time'), wave = $('.rec-wave');
+  $('.rec-wave-idle').innerHTML = Array.from({length:45}, (_, i) => '<i style="--h:' + (9 + i * 13 % 39) + 'px"></i>').join('');
   const mainBtn = $('[data-main]'), pauseBtn = $('[data-pause]'), cancelBtn = $('[data-cancel]'), review = $('[data-review]'), stage=$('.rec-stage'), picker=$('[data-pick-song]');
   picker.onclick = () => VZ.pickSong(state.songId, id => { state.songId = id; $('[data-song-name]').textContent = VZ.songTitle(id) || '곡 미지정'; const song=VZ.song(id);$('[data-song-meta]').textContent=[song?.show,song?.role].filter(Boolean).join(' · '); });
   VZ.setGuard(() => state.session ? '녹음 중이에요. 이동하면 이번 녹음이 사라져요. 이동할까요?' : state.result && !state.saved ? '저장하지 않은 녹음이 있어요. 이동하면 사라져요. 이동할까요?' : '');
@@ -317,7 +318,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     stage.querySelector('.rec-heading').textContent=phase==='recording'?'녹음 중':phase==='paused'?'일시정지':'녹음 준비';
     picker.disabled=recording||phase==='review';
     mainBtn.classList.toggle('recording', recording);
-    mainBtn.innerHTML = recording ? '<i class="ph-fill ph-stop"></i>' : '<i class="ph-fill ph-microphone"></i>';
+    mainBtn.innerHTML = recording ? '<i class="ph-fill ph-stop"></i>' : '<i class="ph ph-microphone"></i>';
     mainBtn.setAttribute('aria-label', recording ? '녹음 종료' : '녹음 시작');
     pauseBtn.disabled = !recording; cancelBtn.disabled = !recording;
     pauseBtn.innerHTML = phase === 'paused' ? '<i class="ph ph-play"></i><span>계속</span>' : '<i class="ph ph-pause"></i><span>일시정지</span>';

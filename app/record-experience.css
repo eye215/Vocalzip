@@ -74,17 +74,22 @@ body.vz-record-mode .vz-record-screen [data-pick-song] .item-title{color:#f7f5fc
 body.vz-record-mode .vz-record-screen [data-pick-song] .item-sub{color:#aaa3b7;font-size:12px}
 .vz-record-screen [data-pick-song] .chev{color:#aaa3b7}
 .vz-record-song-meta:empty{display:none!important}
-.vz-record-screen .rec-stage{display:grid;justify-items:center;align-content:start;gap:0;min-height:min(52dvh,500px);padding:28px 4px 12px;border:0;border-radius:0;background:transparent;box-shadow:none}
-.vz-record-screen .rec-heading{justify-self:start;margin:0 0 26px 8px;color:#f7f5fc;font-size:17px;font-weight:700}
+.vz-record-screen .rec-stage{display:grid;justify-items:center;align-content:start;gap:0;min-height:470px;padding:38px 4px 12px;border:0;border-radius:0;background:transparent;box-shadow:none}
+.vz-record-screen .rec-heading{justify-self:start;margin:0 0 30px 8px;color:#f7f5fc;font-size:17px;line-height:24px;font-weight:700}
 .vz-record-screen .rec-stage[data-phase=recording] .rec-heading::before{content:'';display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:50%;background:#d33a91;box-shadow:0 0 12px #d33a91}
 .vz-record-screen .rec-time{font:700 clamp(56px,16vw,74px)/1 Pretendard,ui-monospace,system-ui,sans-serif;letter-spacing:-.04em;font-variant-numeric:tabular-nums;color:#f7f5fc}
-.vz-record-screen .rec-wave{width:100%;height:92px;margin:26px 0 18px;filter:drop-shadow(0 0 12px rgba(158,84,255,.45))}
-.vz-record-screen .rec-controls{display:grid;grid-template-columns:minmax(56px,1fr) minmax(92px,1fr) minmax(56px,1fr);align-items:center;width:100%;gap:10px}
+.vz-record-screen .rec-wave-wrap{position:relative;width:100%;height:115px;margin:28px 0 14px}
+.vz-record-screen .rec-wave{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 0 12px rgba(158,84,255,.45));opacity:0}
+.vz-record-screen .rec-wave-idle{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:3px;opacity:.85}
+.vz-record-screen .rec-wave-idle i{flex:none;width:3px;height:var(--h);border-radius:4px;background:linear-gradient(#bd75ff,#7629ef);box-shadow:0 0 12px #8f43f777;transform:scaleY(.38)}
+.vz-record-screen .rec-stage:not([data-phase=idle]) .rec-wave-idle{opacity:0}
+.vz-record-screen .rec-stage:not([data-phase=idle]) .rec-wave{opacity:1}
+.vz-record-screen .rec-controls{display:grid;grid-template-columns:minmax(56px,1fr) 112px minmax(56px,1fr);align-items:center;width:100%;gap:4px;margin-top:5px}
 .vz-record-screen .rec-primary{display:grid;justify-items:center;white-space:nowrap}
 .vz-record-screen .rec-main,
 .vz-record-screen .rec-main.recording{width:88px;height:88px;border:0;background:linear-gradient(135deg,#a25dff,#7a32f5 55%,#611de0);box-shadow:0 0 38px rgba(122,50,245,.28);color:#fff}
-.vz-record-screen .rec-main i{font-size:33px}
-.vz-record-screen .rec-side{justify-self:center;min-width:56px;min-height:64px;gap:1px;color:#f7f5fc;font-size:12px}
+.vz-record-screen .rec-main i{font-size:36px}
+.vz-record-screen .rec-side{justify-self:center;min-width:64px;min-height:68px;gap:4px;color:#d8d1e3;font-size:12px}
 .vz-record-screen .rec-side i{width:44px;height:44px;background:transparent;color:#f7f5fc;font-size:25px}
 .vz-record-screen .rec-side:disabled{opacity:.28}
 .vz-record-screen .rec-status{margin-top:42px;min-height:24px;color:#aaa3b7;font-size:13px;text-align:center}
@@ -96,5 +101,5 @@ body.vz-record-mode .vz-record-screen [data-review] input,
 body.vz-record-mode .vz-record-screen [data-review] textarea{background:#292038;color:#f7f5fc;border-color:#554766}
 body.vz-record-mode .vz-record-screen [data-review] .btn.ghost{color:#e8d9ff;border-color:#554766}
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more){body.vz-calendar-mode .v-nav{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}}
-@media(max-height:720px){.vz-record-screen .rec-stage{min-height:390px;padding-top:18px}.vz-record-screen .rec-heading{margin-bottom:16px}.vz-record-screen .rec-wave{margin:18px 0 12px}}
+@media(max-height:720px){.vz-record-screen .rec-stage{min-height:380px;padding-top:22px}.vz-record-screen .rec-heading{margin-bottom:18px}.vz-record-screen .rec-wave-wrap{height:78px;margin:18px 0 9px}.vz-record-screen .rec-status{margin-top:28px}}
 @media(max-width:350px){.vz-record-screen .rec-controls{gap:3px}.vz-record-screen .rec-main,.vz-record-screen .rec-main.recording{width:80px;height:80px}}
