@@ -6,7 +6,8 @@ try {
  if(!raw)throw Error('missing configuration');
  const parsed=new URL(raw);
  if(parsed.hostname!=='db.chxnbtiyuyhiywzeshis.supabase.co'&&!decodeURIComponent(parsed.username).endsWith('.chxnbtiyuyhiywzeshis'))throw Error('unexpected project');
- db=new pg.Client({connectionString:raw,ssl:{rejectUnauthorized:true},connectionTimeoutMillis:10000});
+ for(const key of ['sslmode','sslcert','sslkey','sslrootcert','sslpassword'])parsed.searchParams.delete(key);
+ db=new pg.Client({connectionString:parsed.toString(),ssl:{rejectUnauthorized:true,...(process.env.SUPABASE_DB_CA_CERT?{ca:process.env.SUPABASE_DB_CA_CERT}:{})},connectionTimeoutMillis:10000});
  await db.connect();await db.query('begin read only');
  await db.query("set local statement_timeout='5s'");
  if((await db.query("select current_setting('transaction_read_only') v")).rows[0].v!=='on')throw Error('read only required');
