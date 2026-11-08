@@ -99,7 +99,7 @@ function build(db={},options={}){
   const entries=Array.isArray(options.timeEntries)?options.timeEntries:practices.map(p=>({date:p.date,minutes:practiceMinutes(p)}));
   for(const p of entries){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+(minutes(p.minutes)||0))}
   const days=Array.from({length:7},(_,i)=>{
-    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date),ratio=goal>0?actual/goal*100:null;
+    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(date<today?30:null),ratio=goal>0?actual/goal*100:null;
     const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';
     return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today};
   });

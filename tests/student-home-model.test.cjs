@@ -41,8 +41,8 @@ test('future time is ignored and missing or zero targets never divide by zero',(
   assert.equal(result.week.days[5].ratio,null);
   assert.equal(result.week.days[6].state,'future');
   assert.equal(result.week.days[6].minutes,0);
-  assert.equal(result.week.targetMinutes,null);
-  assert.equal(result.week.ratio,null);
+  assert.equal(result.week.targetMinutes,180);
+  assert.equal(result.week.ratio,10/180*100);
   assert.equal(build().week.days.filter(d=>d.today).length,1);
 });
 
@@ -50,7 +50,7 @@ test('weekly target uses the explicit plan or all seven explicit daily plans',()
   const dates=build().week.days.map(d=>d.date);
   const plans=dates.map(date=>day(date,30));
   assert.equal(build({practicePlans:plans}).week.targetMinutes,210);
-  assert.equal(build({practicePlans:plans.slice(1)}).week.targetMinutes,null);
+  assert.equal(build({practicePlans:plans.slice(1)}).week.targetMinutes,210);
   const weekly={id:'week:2026-11-02',period:'week',date:'2026-11-02',targetMinutes:180};
   assert.equal(build({practicePlans:[...plans,weekly]}).week.targetMinutes,180);
   assert.equal(build({practicePlans:[{...weekly,targetMinutes:0}]}).week.ratio,null);
@@ -271,3 +271,11 @@ test('future schedule weeks extend the upper boundary, excluding cancellations a
  assert.deepEqual(M.weekBounds(db,options),{first:'2025-12-22',last:'2026-01-12',current:'2025-12-29'});
  const last=M.build(db,{...options,weekStart:'2026-01-12'}).week;assert.equal(last.canNext,false);assert.equal(last.canPrevious,true);
 });
+
+ test('past weeks use 30 minutes per unplanned day without changing saved records',()=>{
+ const db={practicePlans:[day('2026-11-02',45)]},before=JSON.stringify(db);
+ const result=M.build(db,{today:'2026-11-09',weekStart:'2026-11-02'});
+ assert.equal(result.week.targetMinutes,225);
+ assert.deepEqual(result.week.days.map(d=>d.targetMinutes),[45,30,30,30,30,30,30]);
+ assert.equal(JSON.stringify(db),before);
+ });
