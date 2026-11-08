@@ -59,9 +59,9 @@ VZ.editMedia = item => {
       el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating >= +x.dataset.star))); });
       const form = el.querySelector('form');
       // Changing the song (or its day) renames the file to "song + recording day" unless the user typed a name.
-      let typed = false, lastAuto = '', known = M.cached();
+      let typed = !window.VzipMediaNaming?.isAutomatic(item, VZ.songTitle), nameEdited = false, lastAuto = '', known = M.cached();
       M.list().then(all => { known = all; }).catch(() => {});
-      form.name.addEventListener('input', () => { typed = true; });
+      form.name.addEventListener('input', () => { typed = true; nameEdited = true; });
       const rename = () => {
         if (typed) return;
         const sel = form.song.value, title = sel === '__new' ? form.song__new.value.trim() : VZ.songTitle(sel);
@@ -70,7 +70,7 @@ VZ.editMedia = item => {
       };
       form.song.addEventListener('change', rename);
       form.song__new.addEventListener('input', rename);
-      form.date.addEventListener('change', () => { if (form.name.value === lastAuto) rename(); });
+      form.date.addEventListener('change', rename);
       form.onsubmit = async e => {
         e.preventDefault();
         const songId = VZ.readSong(form, 'song'); if (songId === null) return;
@@ -78,6 +78,8 @@ VZ.editMedia = item => {
         const d = VZ.parseYmd(date);
         const changes = {name:form.name.value.trim() || M.label(item), songId, song:VZ.songLabel(VZ.song(songId)), rating, review:form.review.value, occasion,
           created:d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime() : item.created};
+        if (!typed && lastAuto && changes.name === lastAuto) Object.assign(changes, {nameMode:'auto', autoName:lastAuto});
+        else if (nameEdited) Object.assign(changes, {nameMode:'manual', autoName:null});
         if (d && date !== M.dateOf(item)) Object.assign(changes, {recordedDate:date, dateSource:'manual'});
         if (songId !== (item.songId || '')) changes.songSource = 'user'; // the server never changes a user's choice
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;
