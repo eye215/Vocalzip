@@ -53,8 +53,10 @@ body.vz-calendar-mode .cal-own .minis{margin:0 16px 12px;padding-top:8px;border-
 body.vz-calendar-mode .cal-own .cal-loose{padding:12px 16px 0}
 
 /* The circle grows over the light shell, then reveals the dark recorder. */
-.vz-record-expansion{position:fixed;left:var(--vz-record-x);top:var(--vz-record-y);width:var(--vz-record-size);height:var(--vz-record-size);z-index:99999;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(1);background:radial-gradient(circle at center,#30154e 0%,#160d25 40%,#0b0911 78%);transition:transform 460ms cubic-bezier(.2,.75,.2,1),opacity 180ms ease}
+.vz-record-expansion{position:fixed;left:var(--vz-record-x);top:var(--vz-record-y);width:var(--vz-record-size);height:var(--vz-record-size);z-index:99999;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(1);background:linear-gradient(135deg,#9557ff,#7a32f5 52%,#6d2be5);transition:transform 460ms cubic-bezier(.2,.75,.2,1),opacity 180ms ease}
+.vz-record-expansion::after{content:'';position:absolute;inset:0;border-radius:inherit;background:radial-gradient(circle at center,#30154e 0%,#160d25 40%,#0b0911 78%);opacity:0;transition:opacity 460ms ease-in}
 .vz-record-expansion.is-expanded{transform:translate(-50%,-50%) scale(var(--vz-record-scale))}
+.vz-record-expansion.is-expanded::after{opacity:1}
 .vz-record-expansion.is-revealing{opacity:0}
 @media(prefers-reduced-motion:reduce){.vz-record-expansion{display:none!important}}
 
