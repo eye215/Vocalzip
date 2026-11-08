@@ -1,0 +1,15 @@
+name: Verify published home and score
+on:
+  push:
+    branches:
+      - 'codex/verify-score-release-4db56d0b44db'
+permissions:
+  contents: read
+jobs:
+  public-files:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare public assets with released files
+        run: python3 tools/verify-published-score.py
