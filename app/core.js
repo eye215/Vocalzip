@@ -252,12 +252,14 @@ VZ.render = () => {
   const title = typeof def.title === 'function' ? def.title(r) : def.title;
   const back = def.back ? '<button type="button" class="icon-btn" data-back aria-label="뒤로"><i class="ph ph-caret-left"></i></button>' : '';
   const heading = r.name === 'home' ? '<h1>VOCAL<span class="logo-dot">.</span>zip</h1>' : '<h1>' + VZ.esc(title) + '</h1>';
-  const actions = (def.actions ? def.actions(r) : '') + (r.name === 'settings' || def.back ? '' : '<a class="icon-btn" href="#/settings" aria-label="설정"><i class="ph ph-gear-six"></i></a>');
+  const actions = (def.actions ? def.actions(r) : '') + (r.name === 'settings' || def.back || def.noSettings ? '' : '<a class="icon-btn" href="#/settings" aria-label="설정"><i class="ph ph-gear-six"></i></a>');
   document.getElementById('top').innerHTML = '<div class="v-top-left">' + back + heading + '</div><div class="v-top-actions">' + actions + '</div>';
   document.title = (r.name === 'home' ? '' : title + ' · ') + 'VOCAL.zip';
   const cloud = document.getElementById('vzip-cloud-root');
   if (cloud && main.contains(cloud)) document.getElementById('vzip-park')?.append(cloud);
   delete main.dataset.dirty;
+  document.body.classList.toggle('vz-collection', ['songs','library'].includes(r.name));
+  main.dataset.collection = r.name;
   main.innerHTML = def.render(r);
   def.mount?.(main, r);
   window.scrollTo(0, scroll);
@@ -336,3 +338,4 @@ document.addEventListener('DOMContentLoaded', () => hideIcons(document));
   addEventListener('online', show); addEventListener('offline', show);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
 })();
+

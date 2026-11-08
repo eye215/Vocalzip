@@ -59,6 +59,7 @@ let filter='';
 V.repertoire={
  toolbar:()=>'<div class="archive-toolbar"><a class="btn secondary" href="#/performances">나의 공연</a><label class="field"><span>레퍼토리 상태</span><select data-rep-filter aria-label="레퍼토리 상태">'+opt(A.states,filter,'전체')+'</select></label></div>',
  matches:s=>!filter||info(s).status===filter,
+ statusLabel:s=>A.states[info(s).status]||'',
  // For the calendar and the song page: this account's productions on a day / with a song.
  showsOn:date=>shows().filter(p=>p.status!=='cancelled'&&days(p).has(date)),
  showsForSong:id=>shows().filter(p=>(p.songLinks||[]).some(l=>l.songId===id)),
@@ -138,3 +139,4 @@ V.route('show',{title:r=>get(r.params[0])?.title||'공연',tab:'songs',back:true
  }});
 V.archiveUI={owner,get,shows,save,panel};
 })();
+
