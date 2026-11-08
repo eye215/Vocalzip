@@ -1,5 +1,5 @@
 /* Student home refinement: same composition and behavior, quieter surfaces and hierarchy. */
-.vz-student-home {box-sizing:border-box;width:100%;min-width:0;max-width:480px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) var(--vz-page-gutter) calc(112px + env(safe-area-inset-bottom));font:400 15px/1.35 var(--vz-font);color:var(--vz-color-ink);font-variant-numeric:tabular-nums;}
+.vz-student-home {box-sizing:border-box;width:100%;min-width:0;max-width:480px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) var(--vz-page-gutter) calc(112px + env(safe-area-inset-bottom));font:400 15px/1.35 var(--vz-font);color:var(--vz-color-ink);font-variant-numeric:tabular-nums;}
 .vz-home-mode,body.vz-student-preview {background:radial-gradient(ellipse 85% 38% at 85% 0%,#eee8f7 0%,transparent 78%),linear-gradient(180deg,#f6f3fa,#f8f7fb 70%);background-attachment:fixed;}
 .vz-student-home *,.vz-approved-dock * {box-sizing:border-box;}
 .vz-student-home button,.vz-approved-dock button {font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;color:inherit;}
