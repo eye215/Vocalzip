@@ -6,3 +6,7 @@ body.vz-home-mode .v-top,body.vz-home-mode>.v-nav{display:none!important;}
 html:has(body.vz-home-mode),html:has(body.vz-student-preview){scroll-padding-bottom:180px;}
 [data-approved-home-host]>[role=alert]{margin:20px;color:#667085;}
 body.vz-home-mode .v-app,body.vz-home-mode #view{animation:none;transform:none;filter:none;perspective:none;contain:none;}
+/* Existing goal-editor footer; it lives outside the isolated home HTML. */
+body.vz-home-mode button.vz-home-primary-button{min-height:52px;padding:0 20px;border:0;border-radius:16px;background:#7a32f5;color:#fff;font:600 16px/1.5 Pretendard,system-ui,sans-serif;}
+body.vz-home-mode button.vz-home-primary-button:active{background:#6528ca;}
+body.vz-home-mode [data-home-retry]{min-height:44px;}
