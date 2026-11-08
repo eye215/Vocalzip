@@ -1,0 +1,44 @@
+name: Media library receipt recovery
+on:
+  push:
+    branches:
+      - 'codex/phase06-library-receipt-recovery'
+  pull_request:
+    paths:
+      - 'media-upload-recovery.js'
+      - 'cloud-sync.js'
+      - 'r2-storage.js'
+      - 'tests/media-upload-recovery.test.cjs'
+      - 'tests/r2.spec.cjs'
+      - '.github/workflows/media-recovery-check.yml'
+permissions:
+  contents: read
+jobs:
+  receipts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/media-upload-recovery.test.cjs
+      - run: npm run test:syntax
+  browser:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/r2.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: media-recovery-browser-failures
+          path: test-results/
+          retention-days: 3

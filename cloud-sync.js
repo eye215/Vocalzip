@@ -139,8 +139,22 @@ async function cleanupPending(owner){
   if(!removeError)forget(entry.id);
  }
 }
+/* Durable, account-bound receipts. Only a completed upload may create a recovery entry. */
+function mediaRecovery(){
+ if(!window.VzipMediaUploadRecovery)throw Error('업로드 복구 모듈을 불러오지 못했어요. 새로고침해 주세요.');
+ const identity=()=>!user||(window.VzipAccountScope&&(!sessionVerified||window.VzipAccountScope.leaving||window.VzipAccountScope.owner!==user.id))?null:
+  {owner:user.id,session:window.VzipAccountScope?activeSessionId:'legacy'};
+ const account=identity();if(!account)throw Error('로그인이 필요해요.');
+ const owner=account.owner;
+ return window.VzipMediaUploadRecovery.create({storage:localStorage,identity,
+  loadRow:async id=>{const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle();if(error)throw error;return data?.metadata||null;},
+  insertRow:async(id,metadata)=>{const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},{ignoreDuplicates:true});if(error)throw error;},
+  stat:key=>window.VzipR2.stat(key),
+  deletedIds:async()=>[...await deletedMediaIds(true),...(Array.isArray(localData()?.deleted?.media)?localData().deleted.media:[])]
+ });
+}
 /** Ids of files deleted on any device (vocal_data.payload.deleted.media), read as a single JSON path. */
-async function deletedMediaIds(){const {data,error}=await client.from('vocal_data').select('ids:payload->deleted->media').eq('user_id',user.id).maybeSingle();if(error)throw error;return Array.isArray(data?.ids)?data.ids:[]}
+async function deletedMediaIds(strict=false){const {data,error}=await client.from('vocal_data').select('ids:payload->deleted->media').eq('user_id',user.id).maybeSingle();if(error)throw error;if(strict&&data?.ids!=null&&!Array.isArray(data.ids))throw Object.assign(Error('삭제 기록을 확인하지 못했어요.'),{code:'deleted_unavailable'});return Array.isArray(data?.ids)?data.ids:[]}
 async function importMedia(file,info={},onProgress,options={}){
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
  if(info.id){
@@ -158,13 +172,19 @@ async function importMedia(file,info={},onProgress,options={}){
  const aborted=()=>{if(signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))throw Error('로그인이 변경되었어요. 다시 로그인해 주세요.')};
  if(options.signal?.aborted)cancel();options.signal?.addEventListener('abort',cancel);
  window.addEventListener('vzip:auth-changed',authChanged);
- mediaImportActive=true;let id,committing=false,committed=false,r2=null;
+ mediaImportActive=true;let id,committing=false,committed=false,r2=null,recovery=null;
  try{
   aborted();
   await cleanupPending(owner);aborted();
   const type=window.vzipMediaType?.(file)||file.type||info.type||'application/octet-stream';
   id=info.id||crypto.randomUUID();
   if(!/^[a-z0-9_-]{1,200}$/i.test(id))throw Error('잘못된 파일 ID예요.');
+  recovery=mediaRecovery();
+  if(recovery.pending().some(entry=>entry.id===id)){
+   const restored=await recovery.recover(id);aborted();
+   onProgress?.(100);window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+   return restored;
+  }
   if(info.id){
    const {data:existing,error:lookupError}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle();
    if(lookupError)throw lookupError;aborted();
@@ -218,32 +238,34 @@ async function importMedia(file,info={},onProgress,options={}){
    offset+=part.size;
   }
   aborted();
-  options.onCommit?.();committing=true;
   const metadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),song:info.song||'',songId:info.songId||'',
    created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
    source:info.source||'import',size:file.size,
    // Import facts from the import hub (source, original name, fingerprint) stay with the file.
    ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]])),
    ...(r2?{storageProvider:'r2',r2Key:r2.key}:multipart?{storageVersion:2,parts}:{path:parts[0].path})};
-  const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()});
+  if(r2){metadata.r2Etag=r2.etag;recovery.remember(metadata,{key:r2.key,size:r2.size,etag:r2.etag});}
+  options.onCommit?.();committing=true;
+  const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},r2?{ignoreDuplicates:true}:undefined);
   // Success means the row is really there: a lost reply may hide a write that went through, and a reported success is checked.
-  const {data:check,error:checkError}=await client.from('vocal_media').select('id').eq('user_id',owner).eq('id',id).maybeSingle();
+  const {data:check,error:checkError}=await client.from('vocal_media').select('id,metadata').eq('user_id',owner).eq('id',id).maybeSingle();
   if(checkError||!check){
    // Never delete the uploaded file here: it is kept and noted so it can be linked again later without uploading.
-   if(r2)orphan({id,key:r2.key,size:file.size,name:metadata.name,fileHash:metadata.fileHash||'',reason:(error||checkError)?.message||'row missing'});
+   if(r2)orphan({owner,id,key:r2.key,size:file.size,name:metadata.name,fileHash:metadata.fileHash||'',reason:(error||checkError)?.message||'row missing'});
    committing=false;r2=null;
    throw Error('보관함 연결을 확인하지 못했어요'+(error?': '+error.message:'')+'. 올린 파일은 지우지 않았어요.');
   }
-  committed=true;forget(id);
+  const confirmed=r2?recovery.acknowledge(id,check.metadata):metadata;
+  committed=true;if(!r2)forget(id);
   if(user?.id!==owner)throw Error('로그인이 변경되어 현재 화면에 파일을 연결하지 않았어요. 원래 계정의 보관함에서 확인해 주세요.');
   onProgress?.(100);window.dispatchEvent(new Event('vzip:cloud-media-changed'));
-  return metadata;
+  return confirmed;
  }catch(error){
   // Keep the journal if commit outcome is uncertain; next upload checks the row first.
   if(id&&!committing&&!committed&&user?.id===owner){
    try{await cleanupPending(owner)}catch{}
   }
-  if(r2&&!committing&&!committed)orphan({id,key:r2.key,size:file.size,name:info.name||file.name,fileHash:info.fileHash||'',reason:error?.message||'stopped'});
+  if(r2&&!committing&&!committed)orphan({owner,id,key:r2.key,size:file.size,name:info.name||file.name,fileHash:info.fileHash||'',reason:error?.message||'stopped'});
   throw error;
  }finally{
   options.signal?.removeEventListener('abort',cancel);window.removeEventListener('vzip:auth-changed',authChanged);
@@ -251,15 +273,41 @@ async function importMedia(file,info={},onProgress,options={}){
  }
 };
 /** Files that reached R2 but whose library row could not be confirmed: kept (never deleted) for re-linking. */
-function orphan(entry){try{const k='vzip_r2_orphans_v1',all=JSON.parse(localStorage.getItem(k)||'[]').filter(x=>x.id!==entry.id);all.push({...entry,owner:user?.id||'',at:Date.now()});localStorage.setItem(k,JSON.stringify(all.slice(-5000)))}catch{}}
+function orphan(entry){try{const k='vzip_r2_orphans_v1',all=JSON.parse(localStorage.getItem(k)||'[]').filter(x=>x.id!==entry.id);all.push({...entry,owner:entry.owner||user?.id||'',at:Date.now()});localStorage.setItem(k,JSON.stringify(all.slice(-5000)))}catch{}}
 window.vzipR2Orphans=()=>{try{return JSON.parse(localStorage.getItem('vzip_r2_orphans_v1')||'[]')}catch{return []}};
-window.vzipCloudImport=(...args)=>{
+function mediaUploadLock(work){
  if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
   if(!lock)throw Error('다른 파일을 업로드하고 있어요. 다른 탭의 업로드를 완료하거나 취소한 뒤 다시 선택해 주세요.');
-  return importMedia(...args);
+  return work();
  });
- return importMedia(...args);
-};
+ return work();
+}
+window.vzipCloudImport=(...args)=>mediaUploadLock(()=>importMedia(...args));
+/** Retry known completed uploads without reading or uploading the source file again. */
+window.vzipRecoverMediaUploads=(id)=>mediaUploadLock(async()=>{
+ if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요.');
+ const recovery=mediaRecovery(),entries=recovery.pending().filter(entry=>!id||entry.id===id);
+ if(!entries.length)return [];
+ mediaImportActive=true;const result=[];
+ try{
+  for(const entry of entries){
+   try{const metadata=await recovery.recover(entry.id);result.push({id:entry.id,status:'restored',metadata});}
+   catch(error){if(error.code==='identity')throw error;result.push({id:entry.id,status:'pending',code:error.code||'unavailable'});}
+  }
+  if(result.some(entry=>entry.status==='restored'))window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+  return result;
+ }finally{mediaImportActive=false;}
+});
+let receiptRecoveryTimer=null;
+function scheduleReceiptRecovery(){
+ clearTimeout(receiptRecoveryTimer);
+ if(!window.vzipCloudSignedIn?.())return;
+ receiptRecoveryTimer=setTimeout(()=>window.vzipRecoverMediaUploads().catch(()=>{}),1500);
+}
+window.addEventListener('vzip:auth-changed',scheduleReceiptRecovery);
+window.addEventListener('online',scheduleReceiptRecovery);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleReceiptRecovery();});
+
 /** All of the user's rows, page by page (the server returns at most 1,000 rows per request). */
 async function allRows(columns){
  const owner=user?.id;if(!owner)return [];const out=[];

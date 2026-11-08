@@ -3,13 +3,14 @@
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const KEY = 'vocal-zip_mvp_v1', R2 = 'https://r2.vocalzip.test';
-const stub = `window.__vdStub=()=>{const c={q:{}};let upd=null,ins=null;for(const m of ['select','order','range','delete'])c[m]=()=>c;c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>c;c.single=()=>c;c.update=r=>{upd=r;return c};c.insert=r=>{ins=r;return c};c.upsert=r=>{window.__vdRow={payload:r.payload,updated_at:r.updated_at};return c};c.then=r=>{const row=window.__vdRow||null;if(ins){if(row)return r({data:null,error:{code:'23505',message:'duplicate'}});window.__vdRow={payload:ins.payload,updated_at:ins.updated_at};return r({data:null,error:null})}if(upd){if(!row||('updated_at' in c.q&&c.q.updated_at!==row.updated_at))return r({data:[],error:null});window.__vdRow={payload:upd.payload,updated_at:upd.updated_at};return r({data:[{user_id:'ui-test-user'}],error:null})}return r({data:row?JSON.parse(JSON.stringify(row)):null,error:null})};return c};window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'tok'}}})},
+const stub = `window.__vdStub=()=>{const c={q:{}};let upd=null,ins=null;for(const m of ['select','order','range','delete'])c[m]=()=>c;c.select=cols=>{c.cols=cols;return c};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>c;c.single=()=>c;c.update=r=>{upd=r;return c};c.insert=r=>{ins=r;return c};c.upsert=r=>{window.__vdRow={payload:r.payload,updated_at:r.updated_at};return c};c.then=r=>{const row=window.__vdRow||null;if(c.cols==='ids:payload->deleted->media')return r({data:row?{ids:row.payload?.deleted?.media??null}:null,error:null});if(ins){if(row)return r({data:null,error:{code:'23505',message:'duplicate'}});window.__vdRow={payload:ins.payload,updated_at:ins.updated_at};return r({data:null,error:null})}if(upd){if(!row||('updated_at' in c.q&&c.q.updated_at!==row.updated_at))return r({data:[],error:null});window.__vdRow={payload:upd.payload,updated_at:upd.updated_at};return r({data:[{user_id:'ui-test-user'}],error:null})}return r({data:row?JSON.parse(JSON.stringify(row)):null,error:null})};return c};window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:fn=>{(window.__authHandlers||=[]).push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'tok'}}})},
  storage:{from:()=>({createSignedUrl:async p=>({data:{signedUrl:'/legacy/'+p},error:null}),upload:async()=>({error:null}),remove:async p=>{window.__removed.push(...p);return {error:null}}})},
  from:t=>{if(t==='vocal_data')return window.__vdStub();const c={q:{}};for(const m of ['order'])c[m]=()=>c;c.delete=()=>{c.del=true;return c};c.range=(a,b)=>{c.r=[a,b];return c};c.select=cols=>{c.cols=cols||'*';return c};c.in=(k,v)=>{c.ins=v;return c};window.__upd=window.__upd||{};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=(k,v)=>{c.q[k]=v;return c};
-  c.upsert=row=>{window.__up.push(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata){window.__rows[x.id]=x.metadata;window.__upd[x.id]=x.updated_at||new Date().toISOString()}return c};
+  c.upsert=(row,options)=>{window.__up.push(row);window.__beforeInsert?.(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata&&(!options?.ignoreDuplicates||!window.__rows[x.id])){window.__rows[x.id]=x.metadata;window.__upd[x.id]=x.updated_at||new Date().toISOString()}return c};
   c.update=row=>{c.pendingUpdate=row;return c};
   c.maybeSingle=()=>c;c.single=()=>c;
   c.then=r=>{if(c.err)return r({data:null,error:c.err});if(c.del&&c.q.id){const now=window.__upd[c.q.id]||null;if('updated_at' in c.q&&c.q.updated_at!==now)return r({data:[],error:null});const had=c.q.id in window.__rows;delete window.__rows[c.q.id];return r({data:had?[{id:c.q.id}]:[],error:null})}if(c.pendingUpdate&&c.q.id){window.__beforeWrite?.(c.q.id);const now=window.__upd[c.q.id]||null;if('updated_at' in c.q&&c.q.updated_at!==now){(window.__conflicts||=[]).push(c.q.id);return r({data:[],error:null})}window.__rows[c.q.id]=c.pendingUpdate.metadata;window.__upd[c.q.id]=c.pendingUpdate.updated_at;(window.__writes||=[]).push({id:c.q.id,metadata:c.pendingUpdate.metadata});return r({data:[{id:c.q.id}],error:null})}
+   if(c.q.id&&window.__failReadAfterInsert&&window.__rows[c.q.id])return r({data:null,error:{message:'verification offline'}});
    if(c.q.id)return r({data:window.__rows[c.q.id]?{metadata:window.__rows[c.q.id],updated_at:window.__upd[c.q.id]||null}:null,error:null});
    // Like the server: at most 1,000 rows per request, pages by range.
    let all=Object.entries(window.__rows).map(([id,metadata])=>({id,metadata,updated_at:window.__upd[id]||'2026-11-05T09:00:00Z'}));
@@ -43,18 +44,21 @@ async function fakeR2(page, reject = {}) {
     if ((m = p.match(/^\/v1\/uploads\/([^/]+)\/parts\/(\d+)$/))) { uploads.get(m[1]).parts.set(Number(m[2]), req.postDataBuffer()); return json({partNumber:Number(m[2]), etag:'e' + m[2]}); }
     if ((m = p.match(/^\/v1\/uploads\/([^/]+)\/complete$/))) {
       const u = uploads.get(m[1]), bytes = Buffer.concat([...u.parts.entries()].sort((a, b) => a[0] - b[0]).map(x => x[1]));
-      store.set(u.key, {bytes, type:u.type}); return json({key:u.key, size:bytes.length, etag:'"x"'});
+      const etag='"'+require('node:crypto').createHash('sha256').update(bytes).digest('hex')+'"';
+      store.set(u.key, {bytes, type:u.type, etag}); return json({key:u.key, size:bytes.length, etag});
     }
     if (p === '/v1/sign') { const b = req.postDataJSON(), exp = Math.floor(Date.now() / 1000) + 3 * 3600;
       if (Array.isArray(b.keys)) { calls.push('BATCH ' + b.keys.length); return json({urls:Object.fromEntries(b.keys.map(k => [k, R2 + '/v1/media/' + k + '?exp=' + exp + '&sig=s'])), expires:exp}); }
       return json({url:R2 + '/v1/media/' + b.key + '?exp=' + exp + '&sig=s', expires:exp}); }
     if (p.startsWith('/v1/media/')) {
+      if(method==='GET')await reject.beforeRead?.(req);
+      if(reject.requireProtocol&&req.headers()['x-client-info']!=='vocalzip-device-session-v2')return json({error:'protocol required'},401);
       const key = decodeURIComponent(p.slice(10)), o = store.get(key);
       if (method === 'DELETE') { store.delete(key); return json({ok:true}); }
       if (!o) return json({error:'file not found'}, 404);
       const range = (req.headers().range || '').match(/^bytes=(\d+)-(\d+)$/);
-      if (range) return route.fulfill({status:206, contentType:o.type, headers:{'access-control-allow-origin':'*', 'access-control-expose-headers':'content-range, content-length', 'content-range':'bytes ' + range[1] + '-' + range[2] + '/' + o.bytes.length}, body:o.bytes.subarray(Number(range[1]), Number(range[2]) + 1)});
-      return route.fulfill({status:200, contentType:o.type, headers:{'access-control-allow-origin':'*', 'accept-ranges':'bytes'}, body:o.bytes});
+      if (range) return route.fulfill({status:206, contentType:o.type, headers:{'access-control-allow-origin':'*', 'access-control-expose-headers':'content-range, content-length, etag', etag:o.etag, 'content-range':'bytes ' + range[1] + '-' + range[2] + '/' + o.bytes.length}, body:o.bytes.subarray(Number(range[1]), Number(range[2]) + 1)});
+      return route.fulfill({status:200, contentType:o.type, headers:{'access-control-allow-origin':'*', 'accept-ranges':'bytes', etag:o.etag}, body:o.bytes});
     }
     if (p === '/v1/usage') return json({objects:store.size, bytes:[...store.values()].reduce((s, o) => s + o.bytes.length, 0)});
     if (p === '/v1/objects' && !reject.list) return json({objects:[...store.entries()].map(([key, o]) => ({key, size:o.bytes.length, uploaded:'2026-11-05T10:00:00.000Z', mediaId:key.split('/')[2]})), cursor:null});
@@ -365,4 +369,115 @@ test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, 
   await page.locator('.sheet [data-ok], .sheet-foot [data-ok]').first().click();
   await expect(page.locator('[data-score]')).toHaveCount(0);
   expect(r2.store.has(saved[0].r2Key)).toBe(false);
+});
+
+async function failLibraryAttachment(page,id='receipt-retry'){
+ return page.evaluate(async({bytes,id})=>{
+  window.__failUpsert=true;
+  const file=new File([new Uint8Array(bytes)],'original.wav',{type:'audio/wav',lastModified:1780000000000});
+  try{await window.vzipCloudImport(file,{id,name:'원래 녹음',songId:'s1',song:'Defying Gravity',recordedDate:'2026-10-05',dateSource:'metadata',durationSeconds:42,source:'record'});return 'unexpected success';}
+  catch(error){return error.message;}
+ },{bytes:[...wav(1)],id});
+}
+test('A metadata retry reuses the completed upload and original metadata, even if another file is selected',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ expect(await failLibraryAttachment(page)).toContain('보관함 연결을 확인하지 못했어요');
+ const result=await page.evaluate(async()=>{
+  window.__failUpsert=false;
+  return window.vzipCloudImport(new File([new Uint8Array([8,8])],'different.wav',{type:'audio/wav'}),{id:'receipt-retry',name:'다른 이름',songId:'different-song'});
+ });
+ expect(result).toMatchObject({id:'receipt-retry',name:'원래 녹음',songId:'s1',recordedDate:'2026-10-05',durationSeconds:42,size:wav(1).length,source:'record'});
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+ expect(r2.calls.filter(x=>x.includes('/complete'))).toHaveLength(1);
+ expect([...r2.store.values()][0].bytes.equals(wav(1))).toBe(true);
+ expect(r2.calls.some(x=>x.startsWith('DELETE'))).toBe(false);
+});
+test('Reload automatically reconnects a completed upload without selecting the original file again',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ expect(await failLibraryAttachment(page,'receipt-reload')).toContain('보관함 연결을 확인하지 못했어요');
+ await page.reload();await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+ await expect.poll(()=>page.evaluate(()=>window.__rows['receipt-reload']?.name)).toBe('원래 녹음');
+ expect(await page.evaluate(()=>window.__rows['receipt-reload'])).toMatchObject({songId:'s1',recordedDate:'2026-10-05',source:'record',durationSeconds:42});
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+ expect(r2.calls.some(x=>x.startsWith('DELETE'))).toBe(false);
+});
+test('A deletion tombstone keeps the receipt pending and prevents automatic relinking',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);await failLibraryAttachment(page,'receipt-deleted');
+ const result=await page.evaluate(async()=>{
+  window.__failUpsert=false;
+  const db=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1'));db.deleted={...(db.deleted||{}),media:['receipt-deleted']};localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify(db));
+  return window.vzipRecoverMediaUploads('receipt-deleted');
+ });
+ expect(result).toEqual([{id:'receipt-deleted',status:'pending',code:'deleted'}]);
+ expect(await page.evaluate(()=>window.__rows['receipt-deleted']||null)).toBeNull();
+ expect(r2.store.size).toBe(1);expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+});
+test('Same-sized R2 replacement is not accepted as the completed original',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);await failLibraryAttachment(page,'receipt-replaced');
+ const object=[...r2.store.values()][0];object.bytes=Buffer.from(object.bytes);object.bytes[object.bytes.length-1]^=255;object.etag='"different-object"';
+ const result=await page.evaluate(async()=>{window.__failUpsert=false;return window.vzipRecoverMediaUploads('receipt-replaced');});
+ expect(result).toEqual([{id:'receipt-replaced',status:'pending',code:'object_changed'}]);
+ expect(await page.evaluate(()=>window.__rows['receipt-replaced']||null)).toBeNull();
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);expect(r2.store.size).toBe(1);
+});
+test('A concurrent library insert keeps its latest edits during fresh-upload confirmation',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ const result=await page.evaluate(async bytes=>{
+  window.__beforeInsert=row=>{if(row.id==='receipt-race')window.__rows[row.id]={...row.metadata,name:'다른 기기에서 저장한 이름',review:'새 메모',rating:5};};
+  return window.vzipCloudImport(new File([new Uint8Array(bytes)],'race.wav',{type:'audio/wav'}),{id:'receipt-race',name:'이 기기 이름'});
+ },[...wav(1)]);
+ expect(result).toMatchObject({name:'다른 기기에서 저장한 이름',review:'새 메모',rating:5});
+ expect(await page.evaluate(()=>window.__rows['receipt-race'].review)).toBe('새 메모');
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+});
+test('Lost metadata verification preserves the receipt and recovers the existing row without another upload',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ const failed=await page.evaluate(async bytes=>{
+  window.__failReadAfterInsert=true;
+  try{await window.vzipCloudImport(new File([new Uint8Array(bytes)],'lost.wav',{type:'audio/wav'}),{id:'receipt-lost',name:'원래 이름'});return 'unexpected success';}
+  catch(error){return error.message;}
+ },[...wav(1)]);
+ expect(failed).toContain('보관함 연결을 확인하지 못했어요');
+ const result=await page.evaluate(async()=>{
+  window.__failReadAfterInsert=false;window.__rows['receipt-lost'].review='그 사이 다른 기기 메모';
+  return window.vzipRecoverMediaUploads('receipt-lost');
+ });
+ expect(result[0]).toMatchObject({status:'restored',metadata:{review:'그 사이 다른 기기 메모'}});
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+});
+test('R2 object verification carries the registered-session protocol header',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ const key='u/ui-test-user/header-test/original.wav';r2.store.set(key,{bytes:Buffer.from([1,2,3]),type:'audio/wav',etag:'"header-etag"'});r2.reject.requireProtocol=true;
+ const result=await page.evaluate(async key=>{
+  const original=window.VzipAccountScope,access=window.vzipCloudAccessToken;
+  try{window.VzipAccountScope={owner:'ui-test-user'};window.vzipCloudAccessToken=async()=>'tok';return await window.VzipR2.stat(key);}
+  finally{window.VzipAccountScope=original;window.vzipCloudAccessToken=access;}
+ },key);
+ expect(result).toEqual({size:3,etag:'"header-etag"'});
+});
+test('Logout while object verification waits blocks relinking and preserves the old account receipt',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);await failLibraryAttachment(page,'receipt-logout');
+ let start,release;const started=new Promise(r=>{start=r;}),gate=new Promise(r=>{release=r;});
+ r2.reject.beforeRead=async()=>{start();await gate;};
+ await page.evaluate(()=>{window.__failUpsert=false;window.__recoveryResult=window.vzipRecoverMediaUploads('receipt-logout').catch(error=>({code:error.code}));});
+ await started;
+ await page.evaluate(()=>{for(const fn of window.__authHandlers||[])fn('SIGNED_OUT',null);});
+ release();
+ expect(await page.evaluate(()=>window.__recoveryResult)).toEqual({code:'identity'});
+ expect(await page.evaluate(()=>window.__rows['receipt-logout']||null)).toBeNull();
+ expect(await page.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('vzip_r2_library_receipts_v1:ui-test-user:receipt-logout')))).toBe(true);
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+});
+
+test('Malformed server deletion metadata blocks recovery without relinking or reuploading',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);await failLibraryAttachment(page,'receipt-bad-delete');
+ const result=await page.evaluate(async()=>{
+  window.__failUpsert=false;
+  const db=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1'));
+  window.__vdRow={payload:{...db,deleted:{...(db.deleted||{}),media:'invalid-array'}},updated_at:new Date().toISOString()};
+  return window.vzipRecoverMediaUploads('receipt-bad-delete');
+ });
+ expect(result).toEqual([{id:'receipt-bad-delete',status:'pending',code:'deleted_unavailable'}]);
+ expect(await page.evaluate(()=>window.__rows['receipt-bad-delete']||null)).toBeNull();
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);expect(r2.store.size).toBe(1);
 });

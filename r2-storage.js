@@ -92,7 +92,7 @@ async function remove(key) { signed.delete(key); persist(); await api('/v1/media
 /** Size of a stored file, or null when it is missing. */
 async function stat(key) {
   // One byte with Range: the reply's Content-Range carries the full size (no download).
-  const res = await fetch(endpoint() + '/v1/media/' + key.split('/').map(encodeURIComponent).join('/'), {headers:{authorization:'Bearer ' + await token(), range:'bytes=0-0'}, cache:'no-store'});
+  const res = await fetch(endpoint() + '/v1/media/' + key.split('/').map(encodeURIComponent).join('/'), {headers:{authorization:'Bearer ' + await token(), ...(window.VzipAccountScope?{'X-Client-Info':'vocalzip-device-session-v2'}:{}), range:'bytes=0-0'}, cache:'no-store'});
   if (res.status === 404) return null;
   if (!res.ok) throw Error('저장소 확인 실패 (' + res.status + ')');
   const total = Number((res.headers.get('content-range') || '').split('/')[1]);
