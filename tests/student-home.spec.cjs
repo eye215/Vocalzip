@@ -386,3 +386,33 @@ test('source HTML and hydrated home comparison use the same supplied layout',asy
 });
 
 
+
+
+test('week bounds disable arrows and also stop swipe beyond real recording and schedule weeks',async({page})=>{
+ const value=seed();value.practices=[];value.lessons=[];value.performances=[];
+ await boot(page,value);
+ const previous=page.getByRole('button',{name:'이전 주',exact:true}),next=page.getByRole('button',{name:'다음 주',exact:true}),card=page.locator('.vz-week');
+ await expect(previous).toBeDisabled();await expect(next).toBeDisabled();
+ await card.dispatchEvent('wheel',{deltaX:80,deltaY:0});await expect(card).toHaveAttribute('data-week-start','2026-11-02');
+ await page.evaluate(()=>{VZ.change(db=>{db.lessons.push({id:'old',date:'2026-10-28',status:'done'},{id:'future',date:'2026-11-18',status:'scheduled'})},{silent:true});VZ.render()});await ready(page);
+ await expect(previous).toBeEnabled();await expect(next).toBeEnabled();
+ await previous.click();await expect(card).toHaveAttribute('data-week-start','2026-10-26');await expect(previous).toBeDisabled();
+ await card.dispatchEvent('pointerdown',{pointerId:9,button:0,clientX:100,clientY:300});await card.dispatchEvent('pointerup',{pointerId:9,button:0,clientX:200,clientY:300});await expect(card).toHaveAttribute('data-week-start','2026-10-26');
+ await page.waitForTimeout(360);await next.click();await next.click();await next.click();await expect(card).toHaveAttribute('data-week-start','2026-11-16');await expect(next).toBeDisabled();
+});
+
+test('My Songs and Library share the current home outer spacing and fixed navigation',async({page})=>{
+ await boot(page);
+ for(const width of [320,390,430]){
+  await page.setViewportSize({width,height:940});await page.evaluate(()=>VZ.nav('#/home'));await ready(page);
+  const header=await page.locator('.vz-header').boundingBox(),nav=await page.locator('.vz-nav-space').boundingBox(),fab=await page.locator('.vz-floating-record').boundingBox();
+  for(const route of ['songs','library']){
+   await page.evaluate(route=>VZ.nav('#/'+route),route);await expect(page.locator('#view')).toHaveAttribute('data-collection',route);
+   const otherHeader=await page.locator('#top').boundingBox(),otherNav=await page.locator('.v-nav').boundingBox(),otherFab=await page.locator('.vz-collection-record').boundingBox();
+   for(const key of ['x','y','width','height'])expect(Math.abs(otherHeader[key]-header[key])).toBeLessThanOrEqual(1);
+   for(const key of ['x','y','width','height'])expect(Math.abs(otherNav[key]-nav[key])).toBeLessThanOrEqual(1);
+   expect(Math.abs(otherFab.x+otherFab.width-fab.x-fab.width)).toBeLessThanOrEqual(1);expect(Math.abs(otherFab.y-fab.y)).toBeLessThanOrEqual(1);
+   await noOverflow(page);
+  }
+ }
+});

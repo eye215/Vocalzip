@@ -67,6 +67,27 @@ function recentSong(db,practices,today){
   for(const p of ordered){const song=list(db.songs).find(s=>s&&s.id===p.songId);if(song)return {song:copy(song),practice:copy(p),date:p.date}}
   return null;
 }
+/** Weeks available in the calendar: real recordings/practices and non-cancelled schedules. */
+function weekBounds(db={},options={}){
+  const today=options.today||ymd(new Date()),current=monday(today),history=[],schedule=[];
+  const add=(to,date)=>{if(parse(date))to.push(date)};
+  const live=(key)=>unique(db[key]).filter(r=>!list(db.deleted?.[key]).includes(r.id));
+  for(const date of list(options.mediaDates))add(history,date);
+  for(const entry of list(options.timeEntries))add(history,entry.date);
+  for(const p of live('practices'))add(history,p.date);
+  for(const lesson of live('lessons'))if(lesson.status!=='cancelled')add(schedule,lesson.date);
+  for(const show of live('performances')){
+    if(show.status==='cancelled')continue;
+    const sessions=list(show.sessions);
+    if(sessions.length){for(const session of sessions)if(session.status!=='cancelled')add(schedule,session.date);}
+    else add(schedule,show.start);
+  }
+  const dates=history.concat(schedule).filter(date=>date<=today).sort();
+  const first=dates.length?monday(dates[0]):current;
+  const future=schedule.filter(date=>date>today).sort();
+  const last=future.length?monday(future[future.length-1]):current;
+  return {first,last,current};
+}
 function build(db={},options={}){
   const today=options.today||ymd(options.now==null?new Date():new Date(options.now));
   if(!parse(today))throw Error('올바른 오늘 날짜가 필요해요.');
@@ -84,6 +105,7 @@ function build(db={},options={}){
   });
   let targetMinutes=target(plans,'week',start);
   if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
+  const bounds=weekBounds(db,{...options,today});
   const actualMinutes=days.reduce((n,d)=>n+d.minutes,0);
   let cursor=(totals.get(today)||0)>0?today:shift(today,-1),streak=0;
   while((totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
@@ -93,7 +115,7 @@ function build(db={},options={}){
   const recommendationCandidates=unique(db.assignments).filter(t=>t.status!=='done'&&(!t.startDate||today>=t.startDate)&&(!t.dueDate||today<=t.dueDate))
     .map(t=>({title:String(t.title||''),source:'homework',sourceId:t.id}));
   return {today,goals,goalProgress:{total:goals.length,completed,ratio:goals.length?completed/goals.length*100:null},
-    week:{start,end:shift(start,6),current:start===monday(today),days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
+    week:{start,end:shift(start,6),current:start===monday(today),firstWeek:bounds.first,lastWeek:bounds.last,canPrevious:start>bounds.first,canNext:start<bounds.last,days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
     stage:nextStage(db,today),lesson:nextLesson(db,today),recent:recentSong(db,practices,today),recommendationCandidates};
 }
 /** Call mutations inside VZ.change. updatedAt and tombstones belong to core/data-merge. */
@@ -134,5 +156,6 @@ function savePlan(db,input){
   if(has(input,'targetMinutes')||has(input,'weekTargetMinutes'))db.practicePlans=plans;
   return true;
 }
-return {build,setGoal,savePlan};
+return {build,weekBounds,setGoal,savePlan};
 });
+

@@ -170,9 +170,11 @@ test('Playback links are signed ahead in one request for the rows shown, kept ac
   await expect.poll(() => r2.calls.filter(c => c === 'BATCH 5').length).toBe(1);
   expect(await page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true);
   const signs = () => r2.calls.filter(c => c === 'POST /v1/sign').length, before = signs();
+  await page.evaluate(()=>{window.__recordingNavCalls=0;const nav=VZ.nav;VZ.nav=hash=>{if(hash.startsWith('#/recording/'))window.__recordingNavCalls++;return nav(hash);};});
   await page.locator('[data-l] [data-media="p2"] [data-toggle]').click();
   await expect(page).toHaveURL(/#\/recording\/p2$/);
   await expect(page.locator('[data-recording] [data-media="p2"] .media-open')).toBeVisible();
+  expect(await page.evaluate(()=>window.__recordingNavCalls)).toBe(1);
   expect(signs()).toBe(before); // the tap used the link already here
   await expect.poll(()=>page.evaluate(()=>!!JSON.parse(localStorage.getItem('vzip_r2_links_v1')||'{}')['u/ui-test-user/p2/original.wav'])).toBe(true);
   await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
