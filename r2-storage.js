@@ -25,6 +25,32 @@ async function api(path, {method = 'GET', body, headers = {}, signal} = {}) {
   }
   return res.status === 204 ? null : res.json();
 }
+function uploadError(status,msg=''){
+ const error=Error(status===401?'로그인이 만료됐어요. 다시 로그인해 주세요.':status===403?'이 파일에 접근할 수 없어요.':status===413?'파일이 너무 커요.':'저장소 오류 ('+status+(msg?': '+msg:'')+')');
+ error.status=status;return error;
+}
+/** XHR streams the Blob and reports bytes sent; fetch remains the compatibility fallback. */
+async function sendPart(path,{piece,signal,onBytes}){
+ if(!window.XMLHttpRequest)return api(path,{method:'PUT',body:piece,signal});
+ const access=await token();
+ if(signal?.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
+ return new Promise((resolve,reject)=>{
+  const xhr=new window.XMLHttpRequest();let settled=false;
+  const done=(error,value)=>{if(settled)return;settled=true;signal?.removeEventListener('abort',cancel);error?reject(error):resolve(value);};
+  const cancel=()=>{xhr.abort();done(new DOMException('업로드를 취소했어요.','AbortError'));};
+  xhr.open('PUT',endpoint()+path);xhr.responseType='json';xhr.withCredentials=false;
+  xhr.setRequestHeader('authorization','Bearer '+access);
+  if(window.VzipAccountScope)xhr.setRequestHeader('X-Client-Info','vocalzip-device-session-v2');
+  xhr.upload.onprogress=event=>{if(!settled&&event.lengthComputable)onBytes?.(Math.min(piece.size,event.loaded));};
+  xhr.onload=()=>{const data=xhr.response;if(xhr.status<200||xhr.status>=300)done(uploadError(xhr.status,typeof data?.error==='string'?data.error:''));else if(!data||typeof data!=='object')done(uploadError(502,'invalid response'));else done(null,data);};
+  xhr.onerror=()=>done(Error('업로드 연결이 끊겼어요.'));
+  xhr.onabort=()=>done(new DOMException('업로드를 취소했어요.','AbortError'));
+  xhr.ontimeout=()=>done(Error('업로드 연결 시간이 초과됐어요.'));
+  signal?.addEventListener('abort',cancel,{once:true});
+  if(signal?.aborted){cancel();return;}
+  try{xhr.send(piece);}catch(error){done(error);}
+ });
+}
 const extOf = (file, type) => (String(file.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1] || ({'application/pdf':'pdf', 'audio/mp4':'m4a', 'audio/x-m4a':'m4a', 'audio/mpeg':'mp3', 'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/aac':'aac', 'audio/ogg':'ogg', 'audio/flac':'flac', 'audio/webm':'webm', 'video/mp4':'mp4', 'video/quicktime':'mov', 'video/webm':'webm'})[type] || 'bin').toLowerCase();
 
 /** Upload a file as parts (resumable per part, 3 tries each). Returns {key, size, etag}. */
@@ -34,8 +60,9 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal, purp
   const parts = new Array(Math.ceil(file.size/start.partSize));
   const controller=new AbortController(),cancel=()=>controller.abort(signal?.reason);
   if(signal?.aborted)cancel();signal?.addEventListener('abort',cancel,{once:true});
-  let next=0,bytesDone=0,failure=null;
-  const progress=value=>{try{onProgress?.(value);}catch{}};
+  let next=0,bytesDone=0,failure=null,lastProgress=0;const inFlight=new Map();
+  const progress=value=>{lastProgress=Math.max(lastProgress,value);try{onProgress?.(lastProgress);}catch{}};
+  const report=()=>progress(Math.min(99,Math.round((bytesDone+[...inFlight.values()].reduce((sum,n)=>sum+n,0))/file.size*100)));
   const send=async()=>{
     while(!failure&&!controller.signal.aborted){
       const index=next++;if(index>=parts.length)return;
@@ -43,10 +70,10 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal, purp
       try{
         for(let attempt=0;;attempt++){
           if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
-          try{parts[index]=await api(base+'/parts/'+(index+1)+q,{method:'PUT',body:piece,signal:controller.signal});break;}
+          try{inFlight.set(index,0);parts[index]=await sendPart(base+'/parts/'+(index+1)+q,{piece,signal:controller.signal,onBytes:sent=>{inFlight.set(index,sent);report();}});break;}
           catch(error){if(error.name==='AbortError'||[401,403,413].includes(error.status)||attempt>=2)throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)**2));}
         }
-        bytesDone+=piece.size;progress(Math.min(99,Math.round(bytesDone/file.size*100)));
+        inFlight.delete(index);bytesDone+=piece.size;report();
       }catch(error){if(!failure)failure=error;controller.abort();return;}
     }
   };
