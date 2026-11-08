@@ -102,16 +102,19 @@ VZ.importSheet = ({songId = ''} = {}) => {
 /* ---------- 보관함 ---------- */
 const lib = {kind:'all', origin:'all', song:'', q:''};
 const monthTitle = ym => ym ? Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월' : '날짜 미상';
-VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:() => '<button type="button" class="icon-btn" data-hub-open aria-label="기존 자료 한꺼번에 가져오기"><i class="ph ph-tray-arrow-down"></i></button><button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button>', render() {
+VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-hub-open aria-label="기존 자료 한꺼번에 가져오기"><i class="ph ph-tray-arrow-down"></i></button><button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-dots-three"></i></button>', render() {
   const seg = (k, opts, label) => '<div class="seg lib-seg" role="group" aria-label="' + label + '">' + opts.map(([v, t]) => '<button type="button" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + t + '</button>').join('') + '</div>';
-  return '<div class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·곡·메모 검색" aria-label="보관함 검색" data-q value="' + esc(lib.q) + '"></div>' +
-    seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분') +
-    '<div class="lib-selects"><select aria-label="형식 필터" data-kind data-pick><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>음성·영상</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select>' +
+  return '<div hidden class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·곡·메모 검색" aria-label="보관함 검색" data-q value="' + esc(lib.q) + '"></div>' +
+    '<div class="vz-library-tabs">'+seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분')+'<button class="icon-btn" data-library-search aria-label="보관함 검색"><i class="ph ph-magnifying-glass"></i></button></div>' +
+    '<div class="lib-selects" hidden><select aria-label="형식 필터" data-kind data-pick><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>음성·영상</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select>' +
     '<select aria-label="곡 필터" data-song data-pick="song"><option value="">모든 곡</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select></div>' +
-    '<div data-server-analysis></div>' + '<div class="btn-row" style="margin:10px 0"><a class="btn secondary" href="#/song-suggest">🎵 미분류 AI 곡 추천</a></div><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div><button type="button" class="btn sm ghost" data-select-mode aria-pressed="false">선택</button></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
+    '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 확인 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div><button type="button" hidden class="btn sm ghost" data-select-mode aria-pressed="false">선택</button></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   VZ.serverAnalysisCard?.(main.querySelector('[data-server-analysis]')); // app/server-analysis.js
-  document.querySelector('[data-imp]').onclick = () => VZ.importSheet();
+  document.querySelector('[data-imp]').setAttribute('aria-label','보관함 메뉴');
+  document.querySelector('[data-imp]').onclick = () => VZ.collectionLibraryMenu(main);
+  main.querySelector('[data-library-search]').onclick=()=>VZ.collectionSearch('보관함 검색','제목·곡·메모 검색',lib.q,value=>{const input=main.querySelector('[data-q]');input.value=value;input.dispatchEvent(new Event('input'));});
+  main.addEventListener('click',event=>{const row=event.target.closest('[data-media]');if(!main.classList.contains('lib-selecting')&&row&&event.target.closest('[data-toggle]')){event.preventDefault();event.stopPropagation();VZ.nav('#/recording/'+encodeURIComponent(row.dataset.media));}},true);
   document.querySelector('[data-hub-open]').onclick = () => VZ.openImportHub();
   const l = main.querySelector('[data-l]');
   let media = [], drawn = [];
@@ -120,6 +123,7 @@ VZ.route('library', {title:'음원 보관함', back:true, tab:'record', actions:
     const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || M.occasion(m) === lib.origin) &&
       (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
     drawn = list;
+    VZ.collectionCount?.(media.length,'개');
     const local = M.localOnly(media).length, b = M.backupStatus();
     const seconds = list.reduce((a, m) => a + (Number(m.durationSeconds) || 0), 0);
     main.querySelector('[data-count]').innerHTML = '<b>' + list.length + '개</b>' + (list.length !== media.length ? ' <span class="muted">/ 전체 ' + media.length + '개</span>' : '') + (seconds >= 60 ? ' · 총 ' + VZ.minutes(seconds / 60) : '');
@@ -465,3 +469,5 @@ async function receiveShared() {
 }
 VZ.receiveShared = receiveShared;
 })();
+
+

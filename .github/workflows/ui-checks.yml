@@ -17,6 +17,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
+      - run: node --test tests/collection-routes.test.cjs
       - run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
@@ -34,3 +35,4 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
