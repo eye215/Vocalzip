@@ -1,0 +1,19 @@
+/* Song confirmation follows the same compact card and type scale as Home and Library. */
+body[data-vz-route="song-suggest"] [data-suggest]{display:grid;gap:12px;padding-bottom:90px}
+body[data-vz-route="song-suggest"] [data-suggest]>.card{margin:0;padding:16px;border-radius:20px}
+body[data-vz-route="song-suggest"] [data-suggest] h2{margin:0 0 8px;color:#101828;font-size:18px;line-height:26px;font-weight:700}
+body[data-vz-route="song-suggest"] [data-suggest] p{line-height:1.5}
+body[data-vz-route="song-suggest"] [data-suggest] [data-counter]{display:inline-flex;align-items:center;min-height:32px;margin:4px 0 10px;padding:5px 10px;border-radius:12px;background:#F3ECFF;color:#7A32F5;font-weight:600}
+body[data-vz-route="song-suggest"] [data-suggest] .btn-row{display:flex;gap:8px}
+body[data-vz-route="song-suggest"] [data-suggest] .btn-row>.btn{flex:1;min-width:0}
+body[data-vz-route="song-suggest"] [data-suggest-list]{display:grid;gap:12px}
+body[data-vz-route="song-suggest"] [data-suggest-list]>.card{margin:0!important;padding:16px!important;border-radius:20px;background:#fff}
+body[data-vz-route="song-suggest"] [data-suggest-list]>.card>.row{align-items:flex-start}
+body[data-vz-route="song-suggest"] [data-suggest-list]>.card>.row .small{margin-left:8px!important;color:#101828;font-size:15px;line-height:22px;font-weight:600}
+body[data-vz-route="song-suggest"] [data-suggest-list]>.card>p{margin:8px 0;color:#667085}
+body[data-vz-route="song-suggest"] [data-suggest-list]>.card>select{min-height:44px;border-radius:12px;border-color:#E8E4F0;color:#344054}
+body[data-vz-route="song-suggest"] [data-suggest-list]>.card>.small:has(strong){background:#F3ECFF}
+body[data-vz-route="song-suggest"] [data-suggest] [data-apply]{background:#7A32F5;color:#fff}
+body[data-vz-route="song-suggest"] [data-suggest] [data-more]{min-height:44px;width:100%;background:#fff;color:#475467}
+body[data-vz-route="song-suggest"] [data-suggest] nav[aria-label="미분류 녹음 페이지 이동"]{display:block;margin:0;padding:0;background:transparent}
+body[data-vz-route="song-suggest"] [data-suggest] nav[aria-label="미분류 녹음 페이지 이동"] [data-page-count]{display:block;text-align:center}

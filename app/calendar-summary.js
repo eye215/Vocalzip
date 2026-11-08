@@ -32,24 +32,34 @@ function duration(value){
  const seconds=Math.round(positive(value)*60),hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60);
  return hours?hours+'시간'+(minutes?' '+minutes+'분':''):minutes?minutes+'분':seconds?seconds+'초':'0분';
 }
-function render(host,{db,media,month,dateOf,titleOf,esc,metric,onMetric,expanded=false,onExpand,error=''}){
- const summary=summarize(db,media,month,dateOf),allRows=ranked(summary,metric),rows=expanded?allRows:allRows.slice(0,3),[year,mo]=month.split('-');
+function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
+ // A redraw happens when the date, month, sort or cloud data changes.
+ if(host._csTimer)clearInterval(host._csTimer);
+ const summary=summarize(db,media,month,dateOf),rows=ranked(summary),[year,mo]=month.split('-');
  host.innerHTML='<section class="card calendar-summary" aria-label="월별 노래 연습 요약">'+
- '<div class="cs-heading"><h2>'+Number(mo)+'월 노래 연습 <small>'+year+'</small></h2>'+
- '<div class="cs-totals" aria-live="polite"><span>총 <strong data-month-minutes>'+duration(summary.minutes)+'</strong></span><span>· <strong data-month-count>'+summary.count+'회</strong></span></div></div>'+
- '<div class="cs-heading"><h3>곡별 TOP '+(expanded?'5':'3')+'</h3><div class="cs-toggle" role="group" aria-label="월별 곡 순위 기준">'+
- ['minutes','count'].map(k=>'<button type="button" data-cs-metric="'+k+'" aria-pressed="'+(metric===k)+'">'+(k==='minutes'?'시간순':'횟수순')+'</button>').join('')+'</div></div>'+
- (rows.length?'<ol class="cs-ranking">'+rows.map((r,i)=>{
- const name=r.id?titleOf(r.id)||'삭제된 곡':'곡 미지정';
- const title='<span class="cs-name" title="'+esc(name)+'">'+esc(name)+'</span>';
- return '<li data-cs-song="'+esc(r.id)+'"><span class="cs-rank">'+(i+1)+'</span>'+title+'<span class="cs-values"><b>'+duration(r.minutes)+'</b><span>'+r.count+'회</span></span></li>';
- }).join('')+'</ol>':'<p class="cs-empty">이 달의 노래 연습 기록이 없어요.</p>')+
- '<div class="cs-footer">'+(allRows.length>3?'<button type="button" class="cs-more" data-cs-expand aria-expanded="'+expanded+'">'+(expanded?'접기':'TOP 5 더 보기')+'</button>':'')+
+ '<div class="cs-heading"><h2>'+Number(mo)+'월 연습 <small>'+year+'</small></h2>'+
+ '<div class="cs-totals" aria-live="polite"><strong data-month-minutes>'+duration(summary.minutes)+'</strong><span>·</span><strong data-month-count>'+summary.count+'회</strong></div></div>'+
+ (rows.length?'<div class="cs-spotlight" data-cs-spotlight aria-live="off" aria-label="이 달에 연습한 곡"><i class="ph ph-music-notes" aria-hidden="true"></i><span class="cs-name" data-cs-name></span><span class="cs-values" data-cs-values></span></div>':'<p class="cs-empty">이 달의 노래 연습 기록이 없어요.</p>')+
  '<details class="cs-help"><summary>집계 기준</summary><p>연습 기록 1건 또는 기록에 연결되지 않은 녹음 1개를 1회로 계산해요. 연결된 녹음은 중복 집계하지 않아요. 레슨 녹음과 발성 훈련은 제외해요.'+
- (summary.unknown?' 길이가 없는 '+summary.unknown+'건은 횟수에만 포함돼요.':'')+'</p></details></div>'+
+ (summary.unknown?' 길이가 없는 '+summary.unknown+'건은 횟수에만 포함돼요.':'')+'</p></details>'+
  (error?'<p class="cs-error" role="status">'+esc(error)+' 표시된 합계는 일부 기록만 포함할 수 있어요.</p>':'')+'</section>';
- host.querySelector('[data-cs-expand]')?.addEventListener('click',()=>onExpand(!expanded));
- host.querySelectorAll('[data-cs-metric]').forEach(b=>b.onclick=()=>onMetric(b.dataset.csMetric));
+ let index=0;
+ const show=()=>{
+  const row=rows[index],box=host.querySelector('[data-cs-spotlight]');if(!row||!box)return;
+  box.dataset.csSong=row.id;
+  const name=row.id?titleOf(row.id)||'삭제된 곡':'곡 미지정';
+  box.querySelector('[data-cs-name]').textContent=name;box.querySelector('[data-cs-name]').title=name;
+  box.querySelector('[data-cs-values]').textContent=duration(row.minutes)+' · '+row.count+'회';
+ };
+ const next=()=>{index=(index+1)%rows.length;show();};
+ show();
+ if(rows.length>1){
+  host._csTimer=setInterval(()=>{
+   if(!host.isConnected){clearInterval(host._csTimer);host._csTimer=null;return;}
+   if(document.hidden||host.matches(':hover')||host.contains(document.activeElement))return;
+   next();
+  },4000);
+ }
 }
 return {summarize,ranked,duration,render};
 });

@@ -157,9 +157,13 @@ document.addEventListener('click', e => {
   if (VZ.change(d => { const x = d.lessons.find(y => y.id === id); if (!x) return; x.status = to; if (to === 'done') x.completedAt = Date.now(); }))
     VZ.toast(to === 'done' ? '레슨을 완료로 기록했어요.' : '레슨을 취소로 기록했어요.');
 });
+const lessonFeedbackLabel = l => l.feedback?.trim() || VZ.lessonSongIds(l).some(id => l.songFeedback?.[id]?.trim()) ? '피드백 작성' : '피드백 미작성';
+const lessonNoteIcon = '<svg class="vz-lesson-note-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></svg>';
+const lessonRecordTitle = l => [VZ.dateLabel(l.date),VZ.timeRange(l)||'시간 미정'].filter(Boolean).join(' · ');
+const lessonRecordSub = l => [l.place,VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean).join(', ')||'곡 미정',lessonFeedbackLabel(l)].filter(Boolean).join(' · ');
 VZ.lessonRow = l => {
-  const st = VZ.lessonStatus(l), songs = VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean), late = st === 'scheduled' && l.date && l.date < VZ.today();
-  return '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="avatar" style="flex-direction:column;font-size:11px;line-height:1.1;font-weight:700"><span>' + (VZ.parseYmd(l.date)?.getMonth() + 1 || '?') + '월</span><span style="font-size:16px">' + (VZ.parseYmd(l.date)?.getDate() || '') + '</span></span><span class="item-main"><span class="item-title">' + esc([VZ.timeRange(l) || '시간 미정', l.place].filter(Boolean).join(' · ')) + ' ' + (late ? '<span class="badge warn">결과 미기록</span>' : VZ.statusBadge(st)) + '</span><span class="item-sub">' + esc([songs.join(', '), st === 'done' ? (l.feedback ? l.feedback.slice(0, 50) : '피드백 미작성') : l.prepMemo || ''].filter(Boolean).join(' · ') || '연습 곡 미정') + '</span></span><i class="ph ph-caret-right chev"></i></a>';
+  const st=VZ.lessonStatus(l),late=st==='scheduled'&&l.date&&l.date<VZ.today();
+  return '<a class="item" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span>'+(late?'<span class="badge warn">결과 미기록</span>':VZ.statusBadge(st))+'<i class="ph ph-caret-right chev"></i></a>';
 };
 let lessonTab = 'upcoming';
 VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<a class="icon-btn" href="billing/" aria-label="레슨비 정산"><i class="ph ph-receipt"></i></a><button type="button" class="icon-btn" data-add-lesson aria-label="레슨 일정 추가"><i class="ph ph-plus"></i></button>', render() {
@@ -283,14 +287,14 @@ async function linkMediaSheet(l) {
 }
 
 /* ---------- 캘린더 ---------- */
-let calMonth = null, calDay = null, calMetric = 'minutes', calExpanded = false;
-VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render(route) {
+let calMonth = null, calDay = null;
+VZ.route('calendar', {title:'일정', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render(route) {
   const today = VZ.today();
   const requested=route?.query?.get('date'),date=VZ.parseYmd(requested);
   if(date&&VZ.ymd(date)===requested){calDay=requested;calMonth=requested.slice(0,7);}
   calDay ||= today;
   calMonth ||= today.slice(0, 7);
-  return '<div data-calendar-summary></div><div class="card"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="legend"><span><i style="background:var(--accent)"></i>레슨</span><span><i style="background:var(--ok)"></i>연습</span><span><i style="background:#e0742c"></i>공연</span><span class="muted">녹음은 각 기록 안에 있어요</span><button type="button" class="chip" data-today style="margin-left:auto;min-height:32px">오늘</button></div></div><div data-day></div>';
+  return '<div data-calendar-summary></div><div class="card vz-calendar-month"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="vz-calendar-footer"><div class="legend"><span><i class="l"></i>레슨</span><span><i class="p"></i>연습</span><span><i class="s"></i>공연</span></div><button type="button" data-today>오늘</button></div></div><div data-day></div>';
 }, async mount(main) {
   const grid = main.querySelector('[data-grid]'), dayHost = main.querySelector('[data-day]');
   let media = M.cached();
@@ -314,9 +318,7 @@ VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href
     const map = byDay(), [y, m] = calMonth.split('-').map(Number), first = new Date(y, m - 1, 1), today = VZ.today();
     main.querySelector('[data-title]').textContent = y + '년 ' + m + '월';
     VZ.calendarSummary.render(main.querySelector('[data-calendar-summary]'), {
-      db:VZ.db,media,month:calMonth,dateOf:M.dateOf,titleOf:VZ.songTitle,esc,metric:calMetric,
-      onMetric:value=>{calMetric=value;draw();main.querySelector('[data-cs-metric="'+value+'"]')?.focus();},
-      expanded:calExpanded,onExpand:value=>{calExpanded=value;draw();main.querySelector('[data-cs-expand]')?.focus();},
+      db:VZ.db,media,month:calMonth,dateOf:M.dateOf,titleOf:VZ.songTitle,esc,
       error:M.cloudError()
     });
     let html = ['일', '월', '화', '수', '목', '금', '토'].map(d => '<div class="dow">' + d + '</div>').join('');
@@ -332,18 +334,17 @@ VZ.route('calendar', {title:'캘린더', actions:() => '<a class="icon-btn" href
     // Each lesson/practice shows its own recordings underneath it.
     // One card per group; each record is a row with its recordings as slim ▶ lines underneath (no repeated date).
     const minis = ids => { const items = ids.map(id => all.get(id)).filter(Boolean); wired.push(...items); return items.length ? '<div class="minis" data-r>' + items.map(VZ.mediaMini).join('') + '</div>' : ''; };
-    const owner = (row, ids) => '<div class="cal-own">' + row + minis(ids) + '</div>';
-    const loose = (title, items) => items.length ? '<div class="cal-own"><div class="cal-loose small muted">' + title + '</div>' + minis(items.map(m => m.id)) + '</div>' : '';
-    const group = rows => rows ? '<div class="list cal-list">' + rows + '</div>' : '';
-    const lessonsHtml = group(e.l.sort(VZ.lessonSort).map(l => owner(VZ.lessonRow(l), (l.recordings || []).map(r => r.id))).join('') + loose('기록에 연결되지 않은 레슨 녹음', e.rl));
-    const practiceHtml = group(e.p.map(p => owner(VZ.practiceRow(p, {day:true}), p.mediaIds || [])).join('') + loose('기록에 연결되지 않은 연습 녹음', e.rp));
-    const stageHtml = group(e.ps.map(p => VZ.repertoire.showCard(p)).join('') + loose('공연 녹음·영상', e.rs));
-    dayHost.innerHTML = '<h2 class="sec">' + esc(VZ.dateLabel(calDay)) + '</h2>' +
-      '<div class="btn-row" style="margin-bottom:12px"><button type="button" class="btn sm secondary" data-add-l><i class="ph ph-calendar-plus"></i>레슨 일정</button><button type="button" class="btn sm secondary" data-add-p><i class="ph ph-timer"></i>연습 기록</button></div>' +
+    const owner = (row, ids, kind) => '<div class="cal-own" data-kind="'+kind+'">' + row + minis(ids) + '</div>';
+    const loose = (title, items, kind) => items.length ? '<div class="cal-own" data-kind="'+kind+'"><div class="cal-loose small muted">' + title + '</div>' + minis(items.map(m => m.id)) + '</div>' : '';
+    const group = rows => rows ? '<div class="cal-list">' + rows + '</div>' : '';
+    const lessonRow=l=>'<a class="item vz-calendar-item" data-kind="lesson" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span>'+(VZ.lessonStatus(l)==='scheduled'?'':VZ.statusBadge(VZ.lessonStatus(l)))+'<i class="ph ph-caret-right chev"></i></a>';
+    const lessonsHtml = group(e.l.sort(VZ.lessonSort).map(l => owner(lessonRow(l), (l.recordings || []).map(r => r.id),'lesson')).join('') + loose('기록에 연결되지 않은 레슨 녹음', e.rl,'lesson'));
+    const practiceHtml = group(e.p.map(p => owner(VZ.practiceRow(p, {day:true}), p.mediaIds || [],'practice')).join('') + loose('기록에 연결되지 않은 연습 녹음', e.rp,'practice'));
+    const stageHtml = group(e.ps.map(p=>owner(VZ.repertoire.showCard(p),[],'stage')).join('') + loose('공연 녹음·영상', e.rs,'stage'));
+    dayHost.innerHTML = '<div class="vz-calendar-day-head"><h2 class="sec">' + esc(VZ.dateLabel(calDay)) + '</h2><button type="button" data-add aria-label="일정 추가"><i class="ph ph-plus"></i> 추가</button></div>' +
       (lessonsHtml || practiceHtml || stageHtml ? '<div class="stack">' + (stageHtml ? '<h3 class="cal-group">공연</h3>' + stageHtml : '') + (lessonsHtml ? '<h3 class="cal-group">레슨</h3>' + lessonsHtml : '') + (practiceHtml ? '<h3 class="cal-group">연습</h3>' + practiceHtml : '') + '</div>'
         : '<p class="small muted" style="margin:0 4px">이 날 기록이 없어요.</p>');
-    dayHost.querySelector('[data-add-l]').onclick = () => VZ.lessonSheet({date:calDay});
-    dayHost.querySelector('[data-add-p]').onclick = () => VZ.practiceSheet({date:calDay});
+    dayHost.querySelector('[data-add]').onclick=()=>VZ.sheet({title:'기록 추가',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-calendar-add="lesson">레슨 일정<i class="ph ph-caret-right"></i></button><button type="button" class="vz-choice" data-calendar-add="practice">연습 기록<i class="ph ph-caret-right"></i></button><a class="vz-choice" href="#/performances" data-calendar-add="stage">나의 공연<i class="ph ph-caret-right"></i></a></div>',onMount:(sheet,close)=>sheet.querySelectorAll('[data-calendar-add]').forEach(b=>b.onclick=()=>{close();if(b.dataset.calendarAdd==='lesson')VZ.lessonSheet({date:calDay});if(b.dataset.calendarAdd==='practice')VZ.practiceSheet({date:calDay});})});
     dayHost.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, wired));
   };
   grid.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; calDay = b.dataset.d; if (calDay.slice(0, 7) !== calMonth) calMonth = calDay.slice(0, 7); draw(); };

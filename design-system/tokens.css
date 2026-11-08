@@ -10,6 +10,12 @@
   --vz-color-accent: #7A32F5;
   --vz-color-accent-strong: #6528CA;
   --vz-color-accent-soft: #F3ECFF;
+  --vz-category-lesson: #7A32F5;
+  --vz-category-lesson-soft: #F3ECFF;
+  --vz-category-practice: #078994;
+  --vz-category-practice-soft: #E8F6F6;
+  --vz-category-stage: #DE3E0A;
+  --vz-category-stage-soft: #FFF0ED;
   --vz-color-accent-ink: #ffffff;
   --vz-color-selected: #7A32F5;
   --vz-color-progress-track: #E8E4F0;
@@ -26,6 +32,10 @@
   --vz-bg-glow-two: rgba(234,196,250,.38);
   --vz-shadow-card: 0 2px 10px rgba(55,33,85,.045);
   --vz-shadow-dock: 0 5px 20px rgba(55,33,85,.045);
+  --vz-nav-surface: rgba(255,255,255,.58);
+  --vz-nav-border: rgba(255,255,255,.68);
+  --vz-nav-shadow: 0 5px 20px rgba(55,33,85,.045);
+  --vz-nav-blur: 24px;
 }
 [data-vz-theme="teacher"] {
   --vz-color-canvas: #eff5ff;
@@ -121,3 +131,4 @@
  --vz-radius-card:22px; --vz-page-gutter:16px; --vz-card-padding:16px; --vz-grid-gap:12px; --vz-blur-card:none;
 }
 @media(max-width:359px) {[data-vz-design="approved-home-v1"],.vz-home-mode {--vz-grid-gap:10px;}}
+
