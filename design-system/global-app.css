@@ -18,7 +18,7 @@ body:not(.vz-home-mode) .v-app {
   padding:max(8px,env(safe-area-inset-top)) 12px calc(142px + max(12px,env(safe-area-inset-bottom)));
 }
 body:not(.vz-home-mode) .v-top { min-height:44px; margin-bottom:8px; }
-body:not(.vz-home-mode) .v-top h1 { color:var(--vz-title); font-size:22px; line-height:28px; font-weight:700; }
+body:not(.vz-home-mode) .v-top h1 { color:var(--vz-title); font-size:26px; line-height:34px; font-weight:700; }
 body:not(.vz-home-mode)[data-vz-route="calendar"] .v-top h1,
 body:not(.vz-home-mode)[data-vz-route="songs"] .v-top h1,
 body:not(.vz-home-mode)[data-vz-route="library"] .v-top h1 { font-size:26px; line-height:34px; }
@@ -60,7 +60,7 @@ body:not(.vz-home-mode) .v-nav a {
   color:var(--vz-muted); font-size:11px; line-height:16px; font-weight:500;
 }
 body:not(.vz-home-mode) .v-nav a i { font-size:22px; color:var(--vz-primary); }
-body:not(.vz-home-mode) .v-nav a[aria-current="page"] { background:rgba(122,50,245,.055); color:#8063B0; }
+body:not(.vz-home-mode) .v-nav a[aria-current="page"] { background:#EDE1FF; color:#8A6DB8; }
 body:not(.vz-home-mode) .v-nav a[aria-current="page"] i { color:var(--vz-accent); }
 body:not(.vz-home-mode) .v-nav i.ph-fill { font-family:"Phosphor"!important; }
 
