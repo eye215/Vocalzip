@@ -141,12 +141,13 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
     const quick = await page.locator('.vz-quick-actions').boundingBox();
     expect(song).not.toBeNull();
     expect(quick).not.toBeNull();
-    // Preserve the recent-song / quick-action composition; 320px may grow for readable text.
-    if(width>=390)expect(Math.abs(song.width/1.15-song.height)).toBeLessThanOrEqual(1);
-    else expect(song.height).toBeGreaterThanOrEqual(song.width/1.15-1);
-    expect(Math.abs(song.height-quick.height)).toBeLessThanOrEqual(1);
-    expect(Math.abs(song.y-quick.y)).toBeLessThanOrEqual(1);
-    expect(song.x+song.width).toBeLessThanOrEqual(quick.x+1);
+    // The redesigned recent song spans the width; secondary actions sit below it.
+    expect(Math.abs(song.width-quick.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(song.x-quick.x)).toBeLessThanOrEqual(1);
+    expect(song.y+song.height+8).toBeLessThanOrEqual(quick.y);
+    const record = await page.getByRole('button',{name:'녹음 시작하기',exact:true}).boundingBox();
+    expect(record.width).toBeGreaterThanOrEqual(44);
+    expect(record.height).toBeGreaterThanOrEqual(44);
     const rows = await page.locator('.vz-goal-row').evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().height));
     expect(rows.every(height => Math.round(height) >= 44)).toBe(true);
     await screenshot(page,testInfo,'student-home-after-'+width+'.png');
@@ -163,11 +164,15 @@ test('fixed preview and actual home screenshots at 320/390/430', async ({page}, 
         return{stage:box('.vz-home-stage'),goals:box('.vz-home-goals'),week:box('.vz-home-week'),recent:box('.vz-home-song'),recentTitle:box('.vz-home-song-copy strong'),recentArtist:box('.vz-home-song-copy>span'),dock:box('.vz-approved-dock'),heading:box('.vz-home-heading'),greeting:box('.vz-home-greeting'),icon:box('.vz-home-heading .vz-home-icon')};
       });
       console.log('HOME_DESIGN_GEOMETRY '+JSON.stringify(geometry));
-      // The refinement preserves composition, not the earlier JPEG's pixel coordinates.
-      expect(geometry.recent.y+geometry.recent.height+6).toBeLessThanOrEqual(geometry.dock.y);
+      // The practice-first home is scrollable. Clearance is checked after scrolling below.
       expect(geometry.recentArtist.y+geometry.recentArtist.height+5).toBeLessThanOrEqual(geometry.recent.y+geometry.recent.height);
       expect(geometry.recentTitle.y+geometry.recentTitle.height).toBeLessThanOrEqual(geometry.recentArtist.y+1);
     }
+    await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+    const bottom=await page.locator('.vz-home-bottom-grid').boundingBox();
+    const dock=await page.locator('.vz-approved-dock').boundingBox();
+    expect(bottom.y+bottom.height+6).toBeLessThanOrEqual(dock.y);
+    await page.evaluate(()=>scrollTo(0,0));
   }
 });
 
@@ -396,4 +401,14 @@ test('recent recording uses the existing player and closing stops playback witho
  await expect(page.locator('[data-home-player]')).toHaveCount(0);
  expect(await page.evaluate(()=>window.__homeAudio.paused)).toBe(true);
  expect((await db(page)).practices).toEqual(before.practices);
+});
+
+test('primary recording action reaches the existing recorder and preserves plans and practice records',async({page})=>{
+ await boot(page);
+ const before=await db(page);
+ await page.getByRole('button',{name:'녹음 시작하기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/record$/);
+ await expect(page.locator('.vz-student-home')).toHaveCount(0);
+ const after=await db(page);
+ for(const key of ['dailyGoals','practicePlans','practices','lessons','assignments'])expect(after[key]).toEqual(before[key]);
 });

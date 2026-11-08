@@ -110,15 +110,15 @@
 
 /* Refined student home. Latest direction keeps composition and prioritizes restrained surfaces. */
 [data-vz-design="approved-home-v1"],.vz-home-mode {
- --vz-color-canvas:#f6f3fa;
+ --vz-color-canvas:#f5f4f0;
  --vz-color-canvas-violet:#eee8f7;
  --vz-color-canvas-pink:#f5f0f8;
  --vz-color-canvas-blue:#f1f1fa;
- --vz-color-ink:#30283e;
+ --vz-color-ink:#24232a;
  --vz-color-ink-secondary:#8c8199;
  --vz-color-ink-muted:#a195ac;
- --vz-color-heading:#5e4c73;
- --vz-color-heading-strong:#4b3b60;
+ --vz-color-heading:#36333c;
+ --vz-color-heading-strong:#3f3546;
  --vz-color-icon-start:#9b84bd;
  --vz-color-icon-end:#8063a7;
  --vz-color-accent:#7d59b0;
@@ -135,7 +135,7 @@
  --vz-color-progress-track:#eee7f5;
  --vz-color-glass:rgba(255,255,255,.92);
  --vz-color-glass-raised:#fff;
- --vz-color-glass-border:#e9e2ef;
+ --vz-color-glass-border:#e7e5e3;
  --vz-color-glass-fallback:#fff;
  --vz-color-focus:#76519e;
  --vz-color-flame:#daa172;

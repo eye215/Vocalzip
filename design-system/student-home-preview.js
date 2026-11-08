@@ -1,7 +1,7 @@
 /* Fixed fixtures are isolated to this preview. No persistence or service calls.
  * Query ?state=empty|many|failure|boundaries to inspect additional states.
  */
-import {createStudentHome,createStudentDock} from "./components.js?v=5";
+import {createStudentHome,createStudentDock} from "./components.js?v=6";
 const state=new URLSearchParams(location.search).get("state");
 const status=document.querySelector(".preview-status");
 const announce=label=>()=>{status.textContent=label;};
@@ -20,14 +20,14 @@ const days=minutes.map((value,index)=>({
   state:value==null?"future":value===0?"empty":value<30?"partial":"met",today:index===5
 }));
 const home=createStudentHome({
-  greeting:"좋은 오후예요,",name:"유리",subtitle:"오늘도 무대를 향해 한 걸음 더!",
+  greeting:"좋은 오후예요,",name:"유리",subtitle:"목표를 확인하고, 오늘의 연습을 시작해요.",
   stage:state==="empty"?null:{title:"뮤지컬 오디션",subtitle:"Wicked · Defying Gravity",dateLabel:"11월 19일 (목) 오후 2:00",daysLeft:12},
   lesson:state==="empty"?null:{title:"다음 레슨",dateLabel:"11.10 (화) 15:00",daysLeft:3},
   goals:state==="empty"?[]:state==="many"?Array.from({length:900},(_,i)=>({id:"goal-"+i,title:i%2?"긴 한글 목표명과 English Song Title 발성 및 호흡 연습 "+(i+1):"목표 "+(i+1),source:i%3?"homework":"personal",completed:i===0})):goals,
   week:state==="empty"?{days:[],actualMinutes:0,targetMinutes:null,ratio:null,streak:0}:{days,actualMinutes:minutes.reduce((sum,x)=>sum+(x||0),0),targetMinutes:180,ratio:100,streak:6},
   recent:state==="empty"?null:{id:"song",title:"Defying Gravity",artist:"뮤지컬 · Wicked",canPlay:true},
   onGoalToggle:async()=>{if(state==="failure")throw new Error("preview failure");},
-  onGoals:announce("오늘의 목표 설정 · 프리뷰"),
+  onRecord:announce("녹음 시작 · 프리뷰"),onGoals:announce("오늘의 목표 설정 · 프리뷰"),
   onNotifications:announce("알림 · 프리뷰"),onProfile:announce("프로필 · 프리뷰"),
   onStage:announce("무대 상세 · 프리뷰"),onLesson:announce("다음 레슨 · 프리뷰"),onCalendar:announce("일정 · 프리뷰"),
   onLessons:announce("레슨노트 · 프리뷰"),onPractice:announce("연습기록 · 프리뷰"),

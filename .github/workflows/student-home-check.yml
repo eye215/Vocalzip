@@ -108,7 +108,7 @@ jobs:
               '',
               'All screenshots use synthetic fixture data. before and after use the same data and fixed browser clock.',
               'preview is the standalone design fixture; after is the actual application home.',
-              'Current brief: preserve composition and interactions with quieter lavender surfaces. The original JPEG is retained as historical context, not a pixel-match target.',
+              'Current brief: independently redesign the home around practice, with a dark primary card, line icons, simple weekly meters, and a scrollable layout. Previous designs remain historical context.',
               'Screenshots are review evidence, not a claim of visual identity. Check the run result for test failures.',
               'Real iPhone Safari, installed PWA, hardware safe areas, and assistive technology remain unverified.',
               '',

@@ -227,17 +227,15 @@ export function openPlanSheet({ suggestions=[], targetMinutes=30, onSave=()=>{},
  * ratios are percentages (100 = 100%). All user supplied text uses textContent.
  */
 let homeGlyphId=0;
-const homeGlyphs={"house":"<path data-solid fill-rule=\"evenodd\" d=\"M2.5 10.5 12 2l9.5 8.5v10a1.5 1.5 0 0 1-1.5 1.5H15v-7H9v7H4a1.5 1.5 0 0 1-1.5-1.5z\"/>","music-notes":"<path data-solid d=\"M10 4v12.3A4.2 4.2 0 1 0 13 20V9l7-2v6.3a4.2 4.2 0 1 0 3 3.7V1z\" transform=\"translate(-1 0) scale(.96)\"/>","bell":"<path data-solid d=\"M5 10a7 7 0 0 1 5-6.7V2a2 2 0 0 1 4 0v1.3a7 7 0 0 1 5 6.7v4l2 3v2H3v-2l2-3z\"/><path data-solid d=\"M9 20h6a3 3 0 0 1-6 0z\"/>","user":"<circle data-solid cx=\"12\" cy=\"6\" r=\"5.5\"/><path data-solid d=\"M2 23v-3a10 10 0 0 1 20 0v3z\"/>","mask-happy":"<g transform=\"rotate(-12 7 12)\"><path data-solid d=\"M1 4c5 2 8 2 12 0v9c0 5-4 7-6 8-3-1-6-3-6-8z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.3\" stroke-linecap=\"round\" d=\"m4 9 1.5.5M8 9l1.5.5M4 14q3 3 5 0\"/></g><g transform=\"rotate(9 17 9)\"><path data-solid d=\"M12 1c4 2 7 2 11 0v9c0 5-4 7-6 8-3-1-5-4-5-8z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.3\" stroke-linecap=\"round\" d=\"M15 6l1-.5M19 6l1-.5M15 11q3 3 5-1\"/></g>","sparkle":"<path data-solid d=\"M10 0C11 7 13 9 20 10C13 11 11 13 10 20C9 13 7 11 0 10C7 9 9 7 10 0Z\"/><path data-solid d=\"M21 10C21.5 13.5 22.5 14.5 26 15C22.5 15.5 21.5 16.5 21 20C20.5 16.5 19.5 15.5 16 15C19.5 14.5 20.5 13.5 21 10Z\"/>","chart-bar":"<rect data-solid x=\"2\" y=\"12\" width=\"5\" height=\"11\" rx=\"2.5\"/><rect data-solid x=\"9.5\" y=\"6\" width=\"5\" height=\"17\" rx=\"2.5\"/><rect data-solid x=\"17\" y=\"1\" width=\"5\" height=\"22\" rx=\"2.5\"/>","calendar-blank":"<rect data-solid x=\"2\" y=\"4\" width=\"20\" height=\"19\" rx=\"3\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"2\" stroke-linecap=\"round\" d=\"M7 2v5m10-5v5M5 10h14\"/><rect fill=\"#f3e7ff\" x=\"6\" y=\"13\" width=\"12\" height=\"7\" rx=\"1.3\"/>","archive-box":"<path data-solid d=\"M2 2h20v5H2zm1 7h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path fill=\"none\" stroke=\"#f8eaff\" stroke-width=\"1.8\" stroke-linecap=\"round\" d=\"M9 12h6\"/>","notebook":"<rect data-solid x=\"3\" y=\"2\" width=\"19\" height=\"21\" rx=\"3\"/><path fill=\"#e9d0ff\" d=\"M16 2h3v10l-1.5-1.5L16 12z\"/><path fill=\"none\" stroke=\"#f9eaff\" stroke-width=\"1.6\" stroke-linecap=\"round\" d=\"M1 7h4m-4 5h4m-4 5h4m4-2h7m-7 4h7\"/>","clock-counter-clockwise":"<path data-solid d=\"M12 1a11 11 0 1 1-9.6 5.6L0 8V1l6 3-2.2 1.2A10 10 0 0 1 12 1z\"/><path fill=\"none\" stroke=\"#f9eaff\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.8\" d=\"M12 5v7l4 2\"/>","microphone":"<rect data-solid x=\"8\" y=\"1\" width=\"8\" height=\"14\" rx=\"4\"/><path data-stroke fill=\"none\" stroke-width=\"1.8\" stroke-linecap=\"round\" d=\"M5 10v2a7 7 0 0 0 14 0v-2M12 19v4m-4 0h8\"/>","caret-right":"<path data-solid d=\"m8 3 9 9-9 9-3-3 6-6-6-6z\"/>","play":"<path data-solid d=\"M6 2.6a1.5 1.5 0 0 1 2.2-1.3L23 10.7a1.5 1.5 0 0 1 0 2.6L8.2 22.7A1.5 1.5 0 0 1 6 21.4z\"/>","fire":"<path data-solid d=\"M13 0c1 6 8 8 8 15a9 9 0 1 1-18 0c0-5 3-7 5-10 0 4 1 5 2 5 3-2 3-6 3-10z\"/><path fill=\"#fff2bb\" d=\"M12 10c1 4 5 5 5 9a5 5 0 1 1-10 0c0-3 3-4 5-9z\"/>","sun":"<circle data-stroke fill=\"none\" cx=\"12\" cy=\"12\" r=\"5\" stroke-width=\"1.4\"/><path data-stroke fill=\"none\" stroke-width=\"1.4\" stroke-linecap=\"round\" d=\"M12 0v3m0 18v3M0 12h3m18 0h3M3.5 3.5l2 2m13 13 2 2m-17 0 2-2m13-13 2-2\"/>"};
+const homeGlyphs={"house":"<path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/>","music-notes":"<path d=\"M9 18V5l12-2v13M9 8l12-2\"/><ellipse cx=\"6\" cy=\"18\" rx=\"3\" ry=\"3\"/><ellipse cx=\"18\" cy=\"16\" rx=\"3\" ry=\"3\"/>","bell":"<path d=\"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4\"/>","user":"<circle cx=\"12\" cy=\"7\" r=\"4\"/><path d=\"M4 21v-2a8 8 0 0 1 16 0v2\"/>","mask-happy":"<path d=\"M4 4q8 4 16 0v8c0 5-5 9-8 10-3-1-8-5-8-10zM8 10h1m6 0h1M8 15q4 4 8 0\"/>","sparkle":"<path d=\"m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z\"/>","chart-bar":"<path d=\"M5 20v-7m7 7V4m7 16V9\"/>","calendar-blank":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M7 3v4m10-4v4M3 11h18\"/>","archive-box":"<rect x=\"3\" y=\"3\" width=\"18\" height=\"5\" rx=\"1\"/><path d=\"M5 8v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4\"/>","notebook":"<rect x=\"5\" y=\"3\" width=\"15\" height=\"18\" rx=\"2\"/><path d=\"M2 7h5m-5 5h5m-5 5h5m4-9h5m-5 4h5\"/>","clock-counter-clockwise":"<path d=\"M3 11a9 9 0 1 1 3 8M3 4v7h7m2-4v5l4 2\"/>","microphone":"<rect x=\"8\" y=\"2\" width=\"8\" height=\"13\" rx=\"4\"/><path d=\"M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8\"/>","caret-right":"<path d=\"m9 5 7 7-7 7\"/>","play":"<path d=\"m9 5 11 7-11 7z\" fill=\"currentColor\" stroke=\"none\"/>","fire":"<path d=\"M13 3c1 5 7 6 7 12a8 8 0 1 1-16 0c0-4 3-6 5-9-1 4 1 6 3 6 2-2 2-5 1-9z\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1\"/>"};
 export function createHomeIcon(name,className="") {
   const icon=el("span","vz-home-icon "+className);icon.setAttribute("aria-hidden","true");
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
   svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("focusable","false");
-  const id="vz-glyph-"+(++homeGlyphId);
-  const colors=name==="fire"?["#f2d3a8","#e4b07d","#d59a68"]:["#9b84bd","#8e70b2","#8063a7"];
-  // Only these local vector constants enter markup. User text still uses textContent.
-  svg.innerHTML='<defs><linearGradient id="'+id+'" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="'+colors[0]+'"/><stop offset=".44" stop-color="'+colors[1]+'"/><stop offset="1" stop-color="'+colors[2]+'"/></linearGradient></defs><g fill="url(#'+id+')" stroke-linejoin="round">'+(homeGlyphs[name]||homeGlyphs.sparkle)+'</g>';
-  svg.querySelectorAll("[data-stroke]").forEach(path=>path.setAttribute("stroke","url(#"+id+")"));
-  icon.append(svg);return icon;
+  svg.setAttribute("fill","none");svg.setAttribute("stroke","currentColor");
+  svg.setAttribute("stroke-width","1.7");svg.setAttribute("stroke-linecap","round");svg.setAttribute("stroke-linejoin","round");
+  // Only local icon constants enter SVG markup; user text uses textContent.
+  svg.innerHTML=homeGlyphs[name]||homeGlyphs.sparkle;icon.append(svg);return icon;
 }
 const homeIcon=createHomeIcon;
 function homeButton(label, icon, callback, className="") {
@@ -267,12 +265,12 @@ function homeDayLabel(daysLeft) {
   if(!Number.isFinite(Number(daysLeft))||daysLeft==null)return "";
   return Number(daysLeft)===0?"D-day":Number(daysLeft)>0?"D-"+daysLeft:"D+"+Math.abs(daysLeft);
 }
-export function createStudentHeader({greeting="반가워요,",name="",subtitle="오늘도 무대를 향해 한 걸음 더!",onNotifications,onProfile}={}) {
+export function createStudentHeader({greeting="반가워요,",name="",subtitle="목표를 확인하고, 오늘의 연습을 시작해요.",onNotifications,onProfile}={}) {
   const header=el("header","vz-home-header");
   const brand=el("div","vz-home-brand");
   const mark=el("span","vz-home-brand-mark");mark.setAttribute("aria-hidden","true");
   for(let i=0;i<5;i++)mark.append(el("b"));
-  brand.append(mark,el("span","","Vocalzip"));header.append(brand);
+  brand.append(mark,el("span","","VOCAL.zip"));header.append(brand);
   const actions=el("div","vz-home-header-actions");
   const notification=homeButton("알림","bell",onNotifications,"vz-home-round");
   // A notification dot is only rendered when the caller has supplied a count/state.
@@ -311,26 +309,15 @@ export function createUpcomingStage({stage=null,lesson=null,onOpen=()=>{},onStag
   return card;
 }
 export function createGoalProgress({completed=0,total=0}={}) {
-  const pct=percent(completed,total);
-  const gauge=el("div","vz-home-gauge");
+  const pct=percent(completed,total),gauge=el("div","vz-home-gauge");
   gauge.setAttribute("role","img");
   gauge.setAttribute("aria-label",pct==null?"목표 없음":"오늘의 목표 "+completed+"/"+total+"개 완료, "+pct+"퍼센트");
-  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-  svg.setAttribute("viewBox","0 0 106 57");svg.setAttribute("aria-hidden","true");
-  const gradientId="vz-gauge-"+(++homeGlyphId);
-  const defs=document.createElementNS(svg.namespaceURI,"defs");
-  defs.innerHTML='<linearGradient id="'+gradientId+'" x2=".8" y2="1"><stop stop-color="#b49ad6"/><stop offset=".55" stop-color="#9671c2"/><stop offset="1" stop-color="#7d59b0"/></linearGradient>';svg.append(defs);
-  for(const kind of ["track","progress"]){
-    const path=document.createElementNS("http://www.w3.org/2000/svg","path");
-    path.setAttribute("d","M 4 53 A 49 49 0 0 1 102 53");path.setAttribute("class","vz-home-gauge-"+kind);
-    path.setAttribute("pathLength","100");
-    if(kind==="progress"){path.style.stroke="url(#"+gradientId+")";path.setAttribute("stroke-dasharray",clamp(pct??0,0,100)+" 100");if(!pct)path.setAttribute("visibility","hidden");}
-    svg.append(path);
-  }
-  gauge.append(svg,el("strong","vz-home-gauge-value",pct==null?"—":pct+"%"),el("span","vz-home-gauge-detail",pct==null?"목표 없음":completed+"/"+total+" 완료"));return gauge;
+  gauge.append(el("span","vz-home-gauge-label","목표 달성률"),el("strong","vz-home-gauge-value",pct==null?"—":pct+"%"),el("span","vz-home-gauge-detail",pct==null?"오늘의 목표를 설정해 보세요":completed+" / "+total+"개 완료"));
+  const bar=el("span","vz-home-progress");bar.setAttribute("aria-hidden","true");
+  bar.style.setProperty("--vz-goal-progress",clamp(pct??0,0,100)+"%");gauge.append(bar);return gauge;
 }
-export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}}={}) {
-  const {card,head}=homeCard("오늘의 목표","sparkle");card.classList.add("vz-home-goals");
+export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{},onRecord=()=>{}}={}) {
+  const {card,head}=homeCard("오늘의 연습","sparkle");card.classList.add("vz-home-goals");
   const heading=head.querySelector("h2"),edit=homeButton("오늘의 목표 설정",null,onGoals,"vz-home-heading-action");
   edit.append(...heading.childNodes);heading.append(edit);
   const body=el("div","vz-home-goal-body");
@@ -338,7 +325,9 @@ export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}
   const items=goals.map(goal=>({...goal,completed:Boolean(goal.completed)}));
   const summary=el("div","vz-home-goal-summary");
   const refresh=()=>summary.replaceChildren(createGoalProgress({completed:items.filter(g=>g.completed).length,total:items.length}));
-  refresh();body.append(summary);
+  refresh();
+  const record=homeButton("녹음 시작하기","microphone",onRecord,"vz-home-record-start");record.append(el("span","","녹음 시작"),homeIcon("caret-right"));
+  const overview=el("div","vz-home-goal-overview");overview.append(summary,record);body.append(overview);
   const list=el("div","vz-home-goal-list vz-goal-list");list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");
   const status=el("p","vz-home-goal-status");status.setAttribute("role","status");status.setAttribute("aria-live","polite");
   if(!items.length){
@@ -375,22 +364,12 @@ export function createGoalChecklist({goals=[],onGoalToggle=()=>{},onGoals=()=>{}
   list.addEventListener("scroll",updateScroll,{passive:true});requestAnimationFrame(updateScroll);
   body.append(list);card.append(body,status);return card;
 }
-const flowerPath="M20 0.3C24 0.3 24.68 3.213 26.62 4.017C28.561 4.821 31.102 3.242 33.93 6.07C36.758 8.898 35.179 11.439 35.983 13.38C36.787 15.32 39.7 16 39.7 20C39.7 24 36.787 24.68 35.983 26.62C35.179 28.561 36.758 31.102 33.93 33.93C31.102 36.758 28.561 35.179 26.62 35.983C24.68 36.787 24 39.7 20 39.7C16 39.7 15.32 36.787 13.38 35.983C11.439 35.179 8.898 36.758 6.07 33.93C3.242 31.102 4.821 28.561 4.017 26.62C3.213 24.68 0.3 24 0.3 20C0.3 16 3.213 15.32 4.017 13.38C4.821 11.439 3.242 8.898 6.07 6.07C8.898 3.242 11.439 4.821 13.38 4.017C15.32 3.213 16 0.3 20 0.3Z";
 function homeFlower({state,ratio,minutes,today}) {
-  const flower=el("span","vz-home-flower");
-  const hasTarget=ratio!=null;
-  const level=state==="future"?"future":!hasTarget?"unplanned":!minutes?"empty":ratio>120?"high":ratio>=100?"met":"low";
-  flower.dataset.level=level;flower.dataset.hasMinutes=String(minutes>0);
-  if(today)flower.classList.add("is-today");
-  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","-1 -1 42 42");svg.setAttribute("aria-hidden","true");
-  const fillId="vz-flower-"+(++homeGlyphId),defs=document.createElementNS(svg.namespaceURI,"defs");
-  defs.innerHTML='<linearGradient id="'+fillId+'" x2=".7" y2="1"><stop stop-color="#ead0ff" stop-opacity=".85"/><stop offset=".5" stop-color="currentColor"/><stop offset="1" stop-color="currentColor"/></linearGradient>';svg.append(defs);flower.style.setProperty("--vz-flower-fill","url(#"+fillId+")");
-  if(today)for(const name of ["outer","inner"]){const outline=document.createElementNS(svg.namespaceURI,"path");outline.setAttribute("d",flowerPath);outline.setAttribute("class","vz-home-flower-today vz-home-flower-today--"+name);svg.append(outline);}
-  const shape=document.createElementNS(svg.namespaceURI,"path");shape.setAttribute("d",flowerPath);shape.setAttribute("class","vz-home-flower-shape");svg.append(shape);
-  if(hasTarget&&ratio>=100&&state!=="future"){
-    const check=document.createElementNS(svg.namespaceURI,"path");check.setAttribute("d","M11 20 L17 26 L29 13");check.setAttribute("class","vz-home-flower-check");svg.append(check);
-  }
-  flower.append(svg);return flower;
+  const bar=el("span","vz-home-flower"),hasTarget=ratio!=null;
+  bar.dataset.level=state==="future"?"future":!hasTarget?"unplanned":!minutes?"empty":ratio>120?"high":ratio>=100?"met":"low";
+  bar.dataset.hasMinutes=String(minutes>0);if(today)bar.classList.add("is-today");
+  bar.style.setProperty("--vz-day-fill",Math.min(100,hasTarget?Math.max(0,ratio):minutes>0?50:0)+"%");
+  bar.setAttribute("aria-hidden","true");return bar;
 }
 export function createWeeklyPractice({days=[],actualMinutes=0,targetMinutes=null,ratio=null,streak=0,onGrowth}={}) {
   const {card,head}=homeCard("이번 주 연습","chart-bar");card.classList.add("vz-home-week");
@@ -435,14 +414,13 @@ export function createRecentSongActions({recent=null,onPlay=()=>{},onRecent=onPl
   }
   grid.append(quick);return grid;
 }
-export function createStudentHome({greeting,name,subtitle,stage,lesson,goals=[],week={},recent,onGoals,onGoalToggle,onNotifications,onProfile,onPractice,onLessons,onPlay,onRecent,onStage,onLesson,onGrowth,onCalendar}={}) {
+export function createStudentHome({greeting,name,subtitle,stage,lesson,goals=[],week={},recent,onGoals,onGoalToggle,onNotifications,onProfile,onPractice,onLessons,onPlay,onRecent,onStage,onLesson,onGrowth,onCalendar,onRecord}={}) {
   const home=el("div","vz-student-home");home.dataset.vzTheme="student";home.dataset.vzDesign="approved-home-v1";
   home.append(createStudentHeader({greeting,name,subtitle,onNotifications,onProfile}));
   const stack=el("div","vz-home-stack");
+  stack.append(createGoalChecklist({goals,onGoals,onGoalToggle,onRecord}),createWeeklyPractice({...week,onGrowth}));
   if(stage||lesson)stack.append(createUpcomingStage({stage,lesson,onOpen:onCalendar||onLessons,onStage,onLesson}));
-  stack.append(createGoalChecklist({goals,onGoals,onGoalToggle}),
-    createWeeklyPractice({...week,onGrowth}),
-    createRecentSongActions({recent,onPlay,onRecent,onLessons,onPractice}));
+  stack.append(createRecentSongActions({recent,onPlay,onRecent,onLessons,onPractice}));
   home.append(stack);return home;
 }
 /* Standalone preview dock only; the application keeps its existing .v-nav router. */
