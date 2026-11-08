@@ -1,26 +1,28 @@
-name: Verify fresh calendar playback and metadata date editing
+name: Read public media storage health
 on:
   push:
     branches: ['codex/resumable-date-regression-20261108']
 permissions:
   contents: read
-concurrency:
-  group: legacy-date-diagnostic
-  cancel-in-progress: true
 jobs:
-  focused:
+  health:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test tests/ui.spec.cjs --grep 'Calendar playback waits|Metadata-derived dates' --repeat-each=4 --workers=2 --reporter=line
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: legacy-date-failures
-          path: test-results/
+      - name: Read public health and anonymous access response
+        run: |
+          node --input-type=module <<'NODE'
+          const base="https://vocalzip-media.eye215.workers.dev";
+          const origin='https://vocalzip.yullul.com';
+          await Promise.all(['/health','/v1/me'].map(async path=>{
+            const started=performance.now();
+            const response=await fetch(base+path,{headers:{Origin:origin},redirect:'error',signal:AbortSignal.timeout(15000)});
+            const data=await response.json().catch(()=>({}));
+            console.log(JSON.stringify({path,status:response.status,elapsed_ms:Math.round(performance.now()-started),ok:data.ok,bucket:data.bucket,session_contract:data.sessionContract}));
+          }));
+          const response=await fetch(base+'/v1/uploads',{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Method':'PUT','Access-Control-Request-Headers':'authorization,x-client-info'},redirect:'error',signal:AbortSignal.timeout(15000)});
+          console.log(JSON.stringify({cors_preflight_status:response.status,origin_allowed:response.headers.get('access-control-allow-origin')===origin,allowed_headers:response.headers.get('access-control-allow-headers')}));
+          NODE
