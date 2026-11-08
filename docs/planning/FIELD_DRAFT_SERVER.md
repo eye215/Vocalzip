@@ -45,8 +45,8 @@ marker·본문·history·영수증 중 실패하면 전부 롤백한다. 임시 
  
 ## 검증 상태
 tests/field-drafts.test.mjs는 실제 PostgreSQL의 RLS·두 Auth 세션·두 탭·epoch/재전송·충돌 보존·원자적 본문 반영을 검증한다.
-실행 결과는 이 PR/Actions에 기록하며 실행 전 통과로 표시하지 않는다.
-실제 Supabase 운영 적용·iPhone/iPad·오프라인 UI·계정별 로컬 outbox 연결은 아직 별도다.
+#142 최종 자동 검사: snapshot 22개 + SQL 초안 29개 + outbox 29개 + SQL 계약 통합 9개 = **89개 통과**, skip 0 ([run 42481862133](https://github.com/eye215/Vocalzip/actions/runs/42481862133)). 전체 UI 596개 통과/19 skip ([run 42481862142](https://github.com/eye215/Vocalzip/actions/runs/42481862142)), Billing·DB 검사도 통과했다. #125/#143/#142 소스는 main에 병합됐으며, 자동 검사는 운영 활성화나 실기기 성공의 증거가 아니다.
+계정별 headless outbox의 SQL 계약 통합은 검증했다. 실제 Supabase 운영 적용·PostgREST JWT 서명 검증·iPhone/iPad·오프라인 UI·앱 진입점 연결은 아직 별도다.
 
 ## 로컬 outbox 계약 통합
 
@@ -60,10 +60,10 @@ vzip_field_draft_rollout은 기본 비활성이며 일반 사용자는 설정을
 비활성 상태에서도 본인 초안 조회와 기존 성공 영수증 재생은 유지하고 새 초안/인계/본문 쓰기는 disabled로 거부한다. 서버/로컬 문구를 삭제하거나 구형 snapshot으로 되돌리지 않는다.
 비활성화한 보호 필드는 계속 읽기 전용이다. 롤백은 필드 보호를 풀어 stale 클라이언트의 덮어쓰기를 허용하는 동작이 아니다. 클라이언트는 disabled 응답에서 미전송 원 요청을 보존하고 새 권한 확인/명시 선택 후 재개한다.
 
-## 운영 적용 검토 순서 — 아직 미실행
+## 운영 적용 검토 순서 — 읽기 전용 점검만 완료
 
-1. Supabase Database Settings에서 해당 프로젝트의 루트 CA를 확보하고 GitHub Actions의 SUPABASE_DB_CA_CERT로 제공한다. 기존 읽기 전용 점검 브랜치(codex/read-only-sync-schema-e5e4b850d747)는 인증서 검증을 유지하며 저장소의 SUPABASE_DB_URL과 함께 사용할 수 있다. SSL 설정/URL로 인증서 검증을 우회하지 않는다. [공식 SSL 안내](https://supabase.com/docs/guides/platform/ssl-enforcement).
-2. 읽기 전용 카탈로그로 기존 컬럼·RLS·세션 함수·history와 새 함수의 설치 상태를 대조한다. 현재 직접 도구는 프로젝트 접근 거부, 별도 점검은 루트 CA 미설정 때문에 SELF_SIGNED_CERT_IN_CHAIN으로 미확인이다. 사용자 레코드/미디어 내용은 조회하지 않았다.
+1. 해당 프로젝트의 신뢰할 CA를 사용하고 PostgreSQL 인증서/호스트 검증을 유지한다. 읽기 전용 점검 브랜치(codex/read-only-sync-schema-e5e4b850d747)는 SUPABASE_DB_CA_CERT가 없으면 [공식 Supabase Studio 설정](https://github.com/supabase/supabase/blob/master/apps/studio/hooks/custom-content/custom-content.json)의 ssl:certificate_url(prod)을 검증된 HTTPS로 받아 사용한다. SUPABASE_DB_URL의 SSL query로 검증을 우회하지 않는다. [공식 SSL 안내](https://supabase.com/docs/guides/platform/ssl-enforcement).
+2. 읽기 전용 카탈로그로 기존 컬럼·RLS·세션 함수·history와 새 함수 설치 상태를 대조한다. **2026-11-08 run 42483381577 통과**: vocal_data 기본 컬럼·RLS·PK·auth.users 삭제 cascade·4개 세션 보안 함수·history 트리거 확인, revision/generation 및 신규 snapshot/draft RPC는 미설치. 초기 CA 미설정 오류는 공식 CA 적용 후 해결했다. [점검 코드](https://github.com/eye215/Vocalzip/blob/6c6dad32cfd68fd02d4e3077b3f8b7715ea08fdf/tools/read-only-sync-catalog.mjs), [실행 결과](https://github.com/eye215/Vocalzip/actions/runs/42483381577). BEGIN READ ONLY와 시스템 카탈로그만 사용했고 사용자 레코드/미디어·원시 함수 정의·인증정보를 조회/출력하지 않았다. 직접 Supabase 도구 접근 거부는 별도이며 전체 권한/운영 부하 검증 완료로 확대하지 않는다.
 3. 운영 적용 승인과 기존 데이터의 제공자 백업·잠금 시간·실패 롤백 계획을 확인한다. 백업/사용자 payload를 GitHub 로그나 공개 아티팩트로 내보내지 않는다.
 4. snapshot 세대/revision 제안 → field draft 제안 순서로 적용하고 기본 비활성을 유지한다. 이 저장소 병합은 운영 마이그레이션 실행이 아니다.
 5. 설치 후 RLS·권한·호환 토큰을 읽기 전용으로 다시 확인한다. 보호 필드의 구형 클라이언트 쓰기 실패와 history 즉시 삭제 정책·영수증 정리 정책을 검토한다.
