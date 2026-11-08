@@ -57,11 +57,11 @@ create trigger vzip_data_next_revision before insert or update on public.vocal_d
  for each row execute function public.vzip_data_next_revision();
 
 -- Retire the unsafe pre-generation proposal signature, if present in a test DB.
-do $ begin
+do $$ begin
  if to_regprocedure('public.vzip_save_snapshot(bigint,jsonb,uuid)') is not null then
   execute 'revoke all on function public.vzip_save_snapshot(bigint,jsonb,uuid) from public,anon,authenticated';
  end if;
-end $;
+end $$;
 
 -- Successful request receipts contain hashes/version metadata, not copied snapshots.
 -- Conflicts never claim success and are not committed request receipts.
