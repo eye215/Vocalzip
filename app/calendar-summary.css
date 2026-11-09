@@ -5,8 +5,10 @@
 .cs-heading h2 small{margin-left:4px;color:#98a2b3;font-size:11px;font-weight:500}
 .cs-totals{display:flex;align-items:baseline;gap:5px;color:#667085;font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .cs-totals strong{color:#7a32f5;font-size:16px;font-weight:700;letter-spacing:-.02em}
-.cs-spotlight{display:flex;align-items:center;gap:9px;min-width:0;min-height:44px;margin-top:12px;padding:0 12px;border-radius:12px;background:#f3ecff;color:#344054}
-.cs-spotlight i{flex:none;color:#7a32f5;font-size:18px}
+.cs-spotlight{display:flex;align-items:center;gap:9px;width:100%;min-width:0;min-height:44px;margin-top:12px;padding:0 12px;border:0;border-radius:12px;background:#f3ecff;color:#344054;text-align:left;cursor:pointer}
+.cs-spotlight i{flex:none;color:#8a6db8;font-size:14px;transition:transform .2s}.cs-spotlight[aria-expanded=true] i{transform:rotate(180deg)}
+.cs-rank{flex:none;padding:5px 8px;border-radius:7px;background:#e8d9fa;color:#7a32f5;font-size:11px;font-weight:600}
+.cs-rank-panel{max-height:0;overflow:hidden;background:#fbf9ff;border-radius:0 0 12px 12px;transition:max-height .28s ease}.cs-rank-panel.open{max-height:300px}.cs-rank-list{padding:8px 10px 10px;display:grid;gap:2px}.cs-rank-row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 8px;border:0;border-radius:9px;background:transparent;text-align:left;color:#101828;cursor:pointer}.cs-rank-row.active,.cs-rank-row:hover{background:#f3ecff}.cs-rank-number{width:16px;flex:none;color:#7a32f5;font-size:12px;font-weight:700}
 .cs-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#101828;font-size:14px;font-weight:600}
 .cs-values{flex:none;color:#475467;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cs-help{color:#667085;font-size:11px}
@@ -19,3 +21,4 @@
 @media(max-width:350px){.cs-heading h2{font-size:14px}.cs-totals strong{font-size:14px}.cs-spotlight{gap:5px}.cs-values{font-size:11px}}
 /* Selected dates override the ordinary today text rule. */
 .cal-day[aria-pressed=true]>span:first-child{color:var(--accent-ink,#fff)}
+@media(prefers-reduced-motion:reduce){.cs-rank-panel,.cs-spotlight i{transition:none}}
