@@ -489,7 +489,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       if (songTab === 'media') {
         const visible = media.slice().sort((a,b) => String(M.dateOf(b) || '').localeCompare(String(M.dateOf(a) || '')) || (b.created || 0) - (a.created || 0));
         body.innerHTML = '<div class="vz-song-section"><h2>녹음 <span>' + visible.length + '</span></h2></div>' +
-          (visible.length ? '<div class="vz-song-select-row"><label><input type="checkbox" data-all aria-label="녹음 전체선택"> 전체선택</label><div class="vz-song-selection-actions"><span data-selected-count>선택 0개</span><button type="button" data-song-selected-more aria-label="선택한 녹음 더보기"><i class="ph ph-dots-three" aria-hidden="true"></i></button></div></div><div class="vz-song-media-list" data-r data-song-media>' + visible.map(VZ.mediaRow).join('') + '</div>' : VZ.empty('waveform', '이 곡의 녹음이 없어요.', '<a class="btn sm" href="#/record?song=' + encodeURIComponent(s.id) + '">녹음 시작</a>'));
+          (visible.length ? '<div class="vz-song-select-row"><label><input type="checkbox" data-all aria-label="녹음 전체선택"> 전체선택</label><div class="vz-song-selection-actions"><span data-selected-count>선택 0개</span></div></div><div class="vz-song-media-list" data-r data-song-media>' + visible.map(VZ.mediaRow).join('') + '</div>' : VZ.empty('waveform', '이 곡의 녹음이 없어요.', '<a class="btn sm" href="#/record?song=' + encodeURIComponent(s.id) + '">녹음 시작</a>'));
         const host = body.querySelector('[data-song-media]');
         if (host) {
           const linked = m => {
@@ -521,16 +521,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
             name.append(chip);
           });
           const all = body.querySelector('[data-all]');
-          const sync = () => { const count = VZ.mediaSelection?.count(host) || 0; body.querySelector('[data-selected-count]').textContent = '선택 ' + count + '개'; body.querySelector('[data-song-selected-more]').hidden = count === 0; all.checked = count === visible.length; all.indeterminate = count > 0 && count < visible.length; };
-          body.querySelector('[data-song-selected-more]').onclick = () => { if (!(VZ.mediaSelection?.count(host) || 0)) return; VZ.sheet({title:'선택한 녹음', body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-analyze-selected><i class="ph ph-chart-line" aria-hidden="true"></i> 보컬 분석</button></div>', onMount:(sheet, close) => {
-            const analyze = sheet.querySelector('[data-analyze-selected]');
-            analyze.disabled = !(VZ.mediaSelection?.count(host) || 0);
-            analyze.onclick = () => {
-              const chosen = VZ.mediaSelection?.selectedFor(host) || [];
-              if (!chosen.length) return;
-              close(); VZ.openAnalysisSelection(chosen);
-            };
-          }}); };
+          const sync = () => { const count = VZ.mediaSelection?.count(host) || 0; body.querySelector('[data-selected-count]').textContent = '선택 ' + count + '개'; all.checked = count === visible.length; all.indeterminate = count > 0 && count < visible.length; };
           all.onchange = () => { selectionTouched = true; VZ.mediaSelection?.selectAll(host, visible, all.checked); sync(); };
           VZ.mediaSelection?.selectAll(host, visible, true);
           sync();
