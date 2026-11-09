@@ -31,6 +31,7 @@
 .vz-calendar-month .cal-grid{gap:0;grid-auto-rows:44px}
 .vz-calendar-month .cal-grid .dow{height:30px;padding:0;display:grid;place-items:center}
 .vz-calendar-month .cal-day{min-height:44px;padding:4px 0;align-content:center;gap:0}
+.vz-calendar-month .cal-day.today{outline:2px solid #7a32f5;outline-offset:3px}
 .vz-calendar-month .cal-day .dots{height:6px}
 #view [data-day] .stack{gap:0}
 #view [data-day] .cal-group{display:flex;align-items:center;min-height:48px;margin:0 0 6px;padding:0 14px;border-radius:16px;font-size:13px;font-weight:600}
