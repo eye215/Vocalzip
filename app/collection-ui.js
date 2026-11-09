@@ -6,7 +6,7 @@ V.collectionCount=(n,unit)=>{
  const h=document.querySelector('#top h1');if(!h)return;
  const headingRow=h.parentElement;let badge=headingRow.querySelector('[data-collection-count]');if(!badge){badge=document.createElement('span');badge.dataset.collectionCount='';headingRow.append(badge)}badge.textContent=n+unit;
 };
-V.collectionChoice=(title,choices,value,onSelect)=>V.sheet({title,body:'<div class="vz-choice-list">'+choices.map(([id,label])=>'<button type="button" class="vz-choice" data-choice="'+E(id)+'" aria-pressed="'+(value===id)+'"><span>'+E(label)+'</span>'+(value===id?'<i class="ph ph-check"></i>':'')+'</button>').join('')+'</div>',onMount:(el,close)=>{el.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{onSelect(b.dataset.choice);close();})}});
+V.collectionChoice=(title,choices,value,onSelect)=>V.menu({title,body:'<div class="vz-choice-list">'+choices.map(([id,label])=>'<button type="button" class="vz-choice" data-choice="'+E(id)+'" aria-pressed="'+(value===id)+'"><span>'+E(label)+'</span>'+(value===id?'<i class="ph ph-check"></i>':'')+'</button>').join('')+'</div>',onMount:(el,close)=>{el.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{onSelect(b.dataset.choice);close();})}});
 V.collectionSearch=(title,placeholder,value,onSearch)=>{
  document.querySelector('.vz-collection-search-overlay')?.remove();
  const overlay=document.createElement('div');overlay.className='vz-collection-search-overlay';

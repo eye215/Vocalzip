@@ -24,7 +24,8 @@ function panel(title,body,onSave,{wide=false,submit='저장'}={}){
  const unload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue=''}};
  V.setGuard(()=>dirty&&!approved?'저장하지 않은 입력을 버릴까요?':'');
  window.addEventListener('beforeunload',unload);el._archiveUnload=unload;
- form.onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;form.querySelector('[type=submit]').disabled=true;try{if(!account||owner()!==account)throw Error('로그인 계정이 바뀌었어요. 다시 열어 주세요.');await onSave(Object.fromEntries(new FormData(form)),form);approved=true;dirty=false;close();V.softRender()}catch(e){form.querySelector('[role=alert]').textContent=e.message}finally{busy=false;form.querySelector('[type=submit]').disabled=false}};
+ const submitButton=form.querySelector('[type=submit]');
+ form.onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;submitButton.disabled=true;try{if(!account||owner()!==account)throw Error('로그인 계정이 바뀌었어요. 다시 열어 주세요.');await onSave(Object.fromEntries(new FormData(form)),form);approved=true;dirty=false;close();V.toast('저장했어요.');V.softRender()}catch(e){form.querySelector('[role=alert]').textContent=e.message}finally{busy=false;submitButton.disabled=false}};
  },onClose:()=>{V.setGuard(null);window.removeEventListener('beforeunload',api?.el._archiveUnload);}});
  return api;
 }
