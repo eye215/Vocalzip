@@ -1,5 +1,5 @@
 /* Project B: lessons from the main app that still need a settlement decision.
- * Reads lesson_id/lesson_date/lesson_status only; never writes app lesson data. */
+ * Reads app lesson references and revision inputs; never writes app lesson data. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipBillingPending=api})(typeof globalThis!=='undefined'?globalThis:this,()=>{
 'use strict';
 const activeRows=rows=>rows.filter(row=>!row.voidedAt);
