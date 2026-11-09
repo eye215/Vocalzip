@@ -418,7 +418,7 @@ VZ.songSheet = (song, onSaved) => {
 };
 let songQ = '';
 VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="button" class="icon-btn" data-add-song aria-label="곡 추가"><i class="ph ph-plus"></i></button>', render() {
-  return '<a class="vz-performances" href="#/performances"><i class="ph ph-ticket"></i><strong>나의 공연</strong><i class="ph ph-caret-right"></i></a><div data-recent-song></div><div class="vz-section-heading"><h2>전체 곡</h2><button type="button" class="icon-btn vz-filter-icon" data-song-filter aria-label="곡 필터" aria-pressed="false"><i class="ph ph-sliders-horizontal"></i></button><button type="button" class="icon-btn" data-song-search aria-label="곡 검색"><i class="ph ph-magnifying-glass"></i></button></div><div hidden data-repertoire-filter>' + (VZ.repertoire?.toolbar() || '') + '</div><div data-l></div>';
+  return '<a class="vz-performances" href="#/performances"><i class="ph ph-ticket"></i><strong>나의 공연</strong><i class="ph ph-caret-right"></i></a><div data-recent-song></div><div class="vz-section-heading"><h2>전체 곡</h2><button type="button" class="icon-btn vz-filter-icon" data-song-filter aria-label="곡 필터" aria-pressed="false"><i class="ph ph-sliders-horizontal"></i></button><button type="button" class="icon-btn vz-search-icon" data-song-search aria-label="곡 검색" aria-pressed="false"><i class="ph ph-magnifying-glass"></i></button></div><div hidden data-repertoire-filter>' + (VZ.repertoire?.toolbar() || '') + '</div><div data-l></div>';
 }, async mount(main, r) {
   document.querySelector('[data-add-song]').onclick = () => VZ.songSheet(null, id => VZ.nav('#/song/' + id));
   if (r.query.get('add')) { history.replaceState(null, '', '#/songs'); VZ.songSheet(null, id => VZ.nav('#/song/' + id)); }
@@ -430,6 +430,7 @@ VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="bu
     VZ.collectionCount?.(db.songs.length,'곡');
     const stateSelect=main.querySelector('[data-rep-filter]');
     const filter=main.querySelector('[data-song-filter]');if(filter)filter.setAttribute('aria-pressed',String(!!stateSelect?.value||sort!=='recent'));
+    main.querySelector('[data-song-search]').setAttribute('aria-pressed',String(!!term));
     const latest=db.songs.filter(s=>act.get(s.id)).sort((a,b)=>String(act.get(b.id)).localeCompare(String(act.get(a.id))))[0];
     recent.innerHTML=latest?'<a class="vz-recent-song" href="#/record?song='+encodeURIComponent(latest.id)+'"><span class="vz-recent-kicker">최근 연습곡</span><strong>'+esc(latest.title)+'</strong><span>'+esc([latest.show,VZ.repertoire?.role(latest)].filter(Boolean).join(' · '))+'</span><i class="ph ph-music-note vz-hero-note" aria-hidden="true"></i><div class="vz-recent-meta"><span>'+esc(VZ.repertoire?.statusLabel(latest)||'상태 미지정')+(VZ.repertoire?.score(latest)?' · 숙련도 '+VZ.repertoire.score(latest).toFixed(1)+'/5':'')+'</span><span>'+esc(VZ.dateLabel(act.get(latest.id),true))+' 연습</span></div></a>':'';
     const newest=new Map(VZ.songsNewest().map((s,i)=>[s.id,i]));

@@ -144,18 +144,7 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
     importButton.setAttribute('aria-expanded', 'true');
     menu.querySelector('button').focus();
   };
-  main.querySelector('[data-library-search]').onclick=()=>{
-    document.querySelector('.vz-library-search-overlay')?.remove();
-    const overlay=document.createElement('div');overlay.className='vz-library-search-overlay';
-    overlay.innerHTML='<form class="vz-library-search-field" role="search"><label class="sr-only" for="vz-library-query">보관함 검색</label><input id="vz-library-query" type="search" name="query" enterkeyhint="search" autocomplete="off" placeholder="제목·곡·메모 검색" value="'+esc(lib.q)+'"></form>';
-    document.body.append(overlay);
-    const close=()=>overlay.remove(),form=overlay.querySelector('form'),field=form.querySelector('input');
-    overlay.onclick=e=>{if(e.target===overlay)close();};
-    overlay.onkeydown=e=>{if(e.key==='Escape')close();};
-    form.onsubmit=e=>{e.preventDefault();const input=main.querySelector('[data-q]');input.value=field.value.trim();input.dispatchEvent(new Event('input'));close();};
-    window.addEventListener('hashchange',close,{once:true});
-    field.focus({preventScroll:true});
-  };
+  main.querySelector('[data-library-search]').onclick=()=>VZ.collectionSearch('보관함 검색','제목·곡·메모 검색',lib.q,value=>{const input=main.querySelector('[data-q]');input.value=value;input.dispatchEvent(new Event('input'));});
   const libraryFilter=main.querySelector('[data-library-filter]');
   libraryFilter.onclick=()=>{const kind=main.querySelector('[data-kind]'),song=main.querySelector('[data-song]');VZ.sheet({title:'보관함 필터',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-filter-kind>파일 형식 <span>'+esc(kind.selectedOptions[0]?.text||'파일 형식 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-song>곡 <span>'+esc(song.selectedOptions[0]?.text||'곡 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-reset>필터 초기화</button></div>',onMount:(sheet,close)=>{
     sheet.querySelector('[data-filter-kind]').onclick=()=>{close();VZ.collectionChoice('파일 형식',[...kind.options].map(o=>[o.value,o.text]),kind.value,value=>{kind.value=value;kind.dispatchEvent(new Event('change'));});};
@@ -166,6 +155,7 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
   let media = [], drawn = [];
   const draw = () => {
     libraryFilter.setAttribute('aria-pressed',String(lib.kind!=='all'||!!lib.song));
+    main.querySelector('[data-library-search]').setAttribute('aria-pressed',String(!!lib.q.trim()));
     const q = lib.q.trim().toLowerCase();
     const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || M.occasion(m) === lib.origin) &&
       (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));

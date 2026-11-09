@@ -35,9 +35,10 @@ body.vz-collection .vz-song-list.list{background:transparent;padding:0;overflow:
 
 body.vz-collection{--primary:#344054;--body:#475467}body.vz-collection .icon-btn{color:#344054}body.vz-collection [data-song-search],body.vz-collection [data-library-search],body.vz-collection #top a[aria-label="설정"]{color:#667085;background:transparent}body.vz-collection .vz-section-heading i{vertical-align:middle}body.vz-collection .item-main{min-width:0}
 body.vz-collection .vz-filter-icon{color:#667085}body.vz-collection .vz-filter-icon[aria-pressed=true]{color:#7A32F5}
+body.vz-collection [data-song-search][aria-pressed=true],body.vz-collection [data-library-search][aria-pressed=true]{color:#7A32F5}
 body.vz-collection .vz-section-heading h2{margin-right:auto}
 body.vz-collection [data-collection=library] .lib-tools{display:flex;align-items:center;gap:0}body.vz-collection [data-collection=library] .lib-summary{flex:1;min-width:0}body.vz-collection [data-collection=library] .lib-tools .icon-btn{flex:none}
-.vz-library-search-overlay{position:fixed;inset:0;z-index:65;background:transparent}.vz-library-search-field{position:absolute;left:12px;right:12px;bottom:calc(var(--kb,0px) + 10px);max-width:536px;margin:0 auto;padding:8px;border:1px solid #E8E4F0;border-radius:18px;background:#fff;box-shadow:0 8px 28px rgba(40,24,90,.16)}.vz-library-search-field input{display:block;width:100%;height:44px;padding:0 12px;border:0;outline:0;background:#fff;color:#101828;font:500 16px Pretendard,-apple-system,BlinkMacSystemFont,sans-serif}.vz-library-search-field:focus-within{border-color:#7A32F5}
+.vz-collection-search-overlay{position:fixed;inset:0;z-index:65;background:transparent}.vz-collection-search-field{position:absolute;left:12px;right:12px;bottom:calc(var(--kb,0px) + 10px);max-width:536px;margin:0 auto;padding:8px;border:1px solid #E8E4F0;border-radius:18px;background:#fff;box-shadow:0 8px 28px rgba(40,24,90,.16)}.vz-collection-search-field input{display:block;width:100%;height:44px;padding:0 12px;border:0;outline:0;background:#fff;color:#101828;font:500 16px Pretendard,-apple-system,BlinkMacSystemFont,sans-serif}.vz-collection-search-field:focus-within{border-color:#7A32F5}
 
 
 body.vz-collection .v-nav i.ph-fill{font-family:"Phosphor"!important}
