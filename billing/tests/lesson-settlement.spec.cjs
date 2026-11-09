@@ -120,6 +120,9 @@ test('Reverse deletion starts unchecked, cancels only the selected charge and pr
  await setup(page);const before=await ledger(page),app=await page.evaluate(key=>localStorage.getItem(key),KEY);
  const sheet=await deleteImported(page);
  await expect(sheet.getByRole('checkbox')).not.toBeChecked();
+ await expect(sheet).toContainText('2회 차감 취소');
+ await expect(sheet).toContainText('잔여 7회 → 9회');
+ await expect(sheet).toContainText('사용 금액 90,000원 → 30,000원');
  await sheet.locator('[data-ok]').click();
  await expect(page.locator('#message')).toContainText('영구 삭제했어요');
  const after=await ledger(page);

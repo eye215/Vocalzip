@@ -109,10 +109,14 @@ function edit(kind,row){
 async function deleteDeduction(row){
  if(pending)return;
  try{
-  const links=await window.VzipBillingCloud.lessonDeletionTargets(row);
+  const links=await window.VzipBillingCloud.lessonDeletionTargets(row),operationId=crypto.randomUUID();
+  const preview=C.reduce(state,{type:'deduction.delete',payload:{id:row.id,expectedVersion:row.version,operationId}});
+  const totals=value=>value.hourlyRate?C.hourlyTotals(value):C.totals(value).total,before=totals(state),after=totals(preview);
+  const impact=window.VzipBillingDate.show(row.date)+' · '+passName(row.passId)+' · '+sessions(row.units)+' 차감 취소. '+
+   '잔여 '+sessions(before.remainingUnits)+' → '+sessions(after.remainingUnits)+' · 사용 금액 '+money(before.usedAmount)+' → '+money(after.usedAmount)+'. ';
   const answer=await window.VzipBillingDialog.ask({
    title:'수강 차감을 영구 삭제할까요?',
-   message:'이 차감을 취소하고 잔여 횟수에 반영해요. 삭제 후 복구할 수 없어요. 결제·환불과 거래 감사 이력은 유지돼요.'+
+   message:impact+'이 차감을 취소하고 잔여 횟수에 반영해요. 삭제 후 복구할 수 없어요. 결제·환불과 거래 감사 이력은 유지돼요.'+
     (links.length>1?' 연결 레슨이 여러 개라 함께 삭제할 수 없어요. 레슨을 직접 확인해 주세요.':' 연결 레슨과 녹음은 선택하지 않으면 유지돼요.'),
    option:links.length===1?'연결 레슨도 함께 영구 삭제':'',ok:'영구 삭제',selectedOk:'삭제 대상 확인',cancel:'닫기',danger:true
   });
@@ -126,7 +130,7 @@ async function deleteDeduction(row){
    return;
   }
   if(pending)throw Error('다른 정산 저장이 끝난 뒤 삭제를 다시 확인해 주세요.');
-  await persist({type:'deduction.delete',payload:{id:row.id,expectedVersion:row.version,operationId:crypto.randomUUID()}},
+  await persist({type:'deduction.delete',payload:{id:row.id,expectedVersion:row.version,operationId}},
    ()=>{if(forms.deduction.elements.id.value===row.id)resetForm(forms.deduction)},
    S.account.id.startsWith('user:')?'차감 취소를 저장했어요. 서버 반영을 확인하고 있어요.':'차감을 영구 삭제했어요. 연결 레슨과 녹음은 유지돼요.');
   if(S.account.id.startsWith('user:')){
