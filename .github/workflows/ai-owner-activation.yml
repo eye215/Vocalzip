@@ -25,3 +25,7 @@ jobs:
           SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/ai-owner-release.mjs
+      - name: Registered non-owner HTTP checks using a synthetic fixture only
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node tools/ai-owner-runtime-check.mjs
