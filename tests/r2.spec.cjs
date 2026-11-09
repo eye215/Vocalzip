@@ -20,7 +20,6 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   expect(await page.evaluate(() => window.VzipR2.enabled())).toBe(true);
   await page.goto('/#/library');
   await page.locator('[data-imp]').click();
-  await page.locator('.sheet [data-import]').click();
   await expect(page.locator('.sheet')).toHaveCount(1);
   await page.locator('.sheet [data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:wav()});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
