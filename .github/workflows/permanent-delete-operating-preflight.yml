@@ -15,9 +15,26 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --omit=dev --ignore-scripts
+      - name: Read release mode and check proof syntax
+        id: plan
+        run: |
+          node --check tools/permanent-delete-http-proof.mjs
+          node --input-type=module <<'NODE'
+          import {readFileSync,appendFileSync} from 'node:fs';
+          const plan=JSON.parse(readFileSync('ops/permanent-delete-release.json','utf8'));
+          if(!['preflight','apply','verify'].includes(plan.mode))throw Error('Invalid release mode');
+          appendFileSync(process.env.GITHUB_OUTPUT,'mode='+plan.mode+'\n');
+          NODE
       - name: Apply only a tested source or inspect read-only according to the release plan
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/permanent-delete-release.mjs
+      - name: Synthetic registered-session HTTP proof and fixture cleanup
+        if: steps.plan.outputs.mode == 'apply'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node tools/permanent-delete-http-proof.mjs

@@ -40,6 +40,18 @@ function installSDK() {
       onAuthStateChange:() => ({data:{subscription:{unsubscribe(){}}}})
     },
     storage:{from:() => ({createSignedUrl:async () => ({data:{signedUrl:'/fixture.wav'},error:null})})},
+    async rpc(name,args){
+      if(name==='vzip_lesson_delete_capabilities')return window.__denyDeletionCapabilities?{data:null,error:{message:'fixture unavailable'}}:{data:{version:1,lesson_permanent:true,charge_guard:true},error:null};
+      if(name==='vzip_delete_lesson'){
+        const current=row();
+        window.__lessonDeleteCalls||=[];window.__lessonDeleteCalls.push(clone(args));
+        if(!current||current.updated_at!==args.p_expected_updated_at)return {data:null,error:{code:'PT409'}};
+        const payload=window.VzipDataMerge.deleteLesson(clone(current.payload),args.p_lesson_id,args.p_billing_link);
+        sessionStorage.setItem('home-server-row',JSON.stringify({payload,updated_at:new Date().toISOString()}));
+        return {data:{ok:true,pending:false},error:null};
+      }
+      return {data:null,error:null};
+    },
     from(table) {
       const q = {method:'read',filters:{},single:false};
       const chain = {};
@@ -502,4 +514,42 @@ test('Homework integrity counts unique sessions in tally and detail without chan
  await sheet.getByRole('button',{name:'닫기',exact:true}).click();
  expect(await db(page)).toEqual(before);
  expect((await db(page)).assignments[0].status).toBe('active');
+});
+
+async function cloudLessonDeleteForm(page){
+ await page.goto('/#/lesson/l1');
+ await page.getByRole('button',{name:'레슨 삭제',exact:true}).click();
+ await page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true}).getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ return page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true});
+}
+test('Cloud lesson deletion connects the real UI, owner, capability and CAS request',async({page})=>{
+ await boot(page);const before=await db(page);
+ const confirm=await cloudLessonDeleteForm(page);
+ await confirm.getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>VZ.db.lessons.some(l=>l.id==='l1'))).toBe(false);
+ const after=await db(page);
+ expect(after.practices).toEqual(before.practices);expect(after.songs).toEqual(before.songs);
+ expect(after.assignments[0].title).toBe(before.assignments[0].title);
+ expect(after.assignments[0].status).toBe('active');
+ const calls=await page.evaluate(()=>window.__lessonDeleteCalls);
+ expect(calls).toHaveLength(1);expect(calls[0].p_lesson_id).toBe('l1');expect(calls[0].p_operation_id).toBeTruthy();
+ expect(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('home-server-row')).payload.lessons.some(l=>l.id==='l1'))).toBe(false);
+});
+test('Cloud lesson deletion stops before irreversible work when server protection is unavailable',async({page})=>{
+ await boot(page);const before=await db(page);
+ await page.evaluate(()=>window.__denyDeletionCapabilities=true);
+ const confirm=await cloudLessonDeleteForm(page);
+ await confirm.getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect(page.locator('[data-delete-error]')).toContainText('서버 삭제 보호 설정');
+ expect(await db(page)).toEqual(before);
+ expect(await page.evaluate(()=>window.__lessonDeleteCalls||[])).toEqual([]);
+});
+test('Cloud lesson deletion refuses a server lesson that changed before prepare',async({page})=>{
+ await boot(page);const before=await db(page);
+ const confirm=await cloudLessonDeleteForm(page);
+ await page.evaluate(()=>{const row=JSON.parse(sessionStorage.getItem('home-server-row'));row.payload.lessons[0].feedback='changed on another device';sessionStorage.setItem('home-server-row',JSON.stringify(row));});
+ await confirm.getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect(page.locator('[data-delete-error]')).toContainText('최신 레슨을 먼저 동기화');
+ expect(await db(page)).toEqual(before);
+ expect(await page.evaluate(()=>window.__lessonDeleteCalls||[])).toEqual([]);
 });

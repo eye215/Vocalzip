@@ -3,11 +3,11 @@
 'use strict';
 const VZ = window.VZ, M = VZ?.media;
 if (!VZ || !M) return;
-VZ.librarySelect = (main, {list, all = list, done}) => {
+VZ.librarySelect = (main, {list, done}) => {
   const host = main.querySelector('[data-l]'), start = main.querySelector('[data-select-mode]'),
     left = main.querySelector('.lib-selection-left'), cancel = main.querySelector('[data-lib-select-cancel]'),
     meta = main.querySelector('.lib-selection-meta'), allButton = main.querySelector('[data-lib-select-all]'),
-    count = main.querySelector('[data-lib-selected-count]'), bulk = main.querySelector('[data-lib-bulk-more]');
+    count = main.querySelector('[data-lib-selected-count]'), total = main.querySelector('[data-lib-total-count]'), bulk = main.querySelector('[data-lib-bulk-more]');
   if (!host || !allButton || !count || !bulk) return;
   const picked = new Map();
   let busy = false, selecting = false;
@@ -20,8 +20,9 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
   });
   const paint = () => {
     main.classList.toggle('lib-selection-active', selecting);
-    start.hidden = selecting; cancel.hidden = !selecting; left.hidden = !selecting; meta.hidden = !selecting;
+    start.hidden = selecting; total.hidden = selecting; cancel.hidden = !selecting; left.hidden = !selecting; meta.hidden = !selecting;
     const visible = list(), all = visible.length > 0 && visible.every(m => picked.has(String(m.id)));
+    total.textContent = '총 ' + visible.length + '개';
     allButton.setAttribute('aria-pressed', String(all));
     const box = allButton.querySelector('.lib-check'); if (box && box.textContent !== (all ? '✓' : '')) box.textContent = all ? '✓' : '';
     count.textContent = picked.size + '개 선택'; bulk.disabled = !picked.size || busy; mark(host);
@@ -32,15 +33,10 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
   start.onclick = () => { selecting = true; paint(); };
   cancel.onclick = () => { selecting = false; picked.clear(); paint(); };
   allButton.onclick = () => {
-    const current = list(), every = all(), ym = VZ.ymd(new Date()).slice(0,7), month = every.filter(m => String(M.dateOf(m)||'').slice(0,7) === ym);
-    VZ.sheet({title:'전체 선택',body:'<div class="vz-choice-list">' +
-      [['filtered','현재 필터 결과 전체',current],['all','보관함의 모든 녹음',every],['month','이번 달 녹음',month]].map(([key,label,items]) =>
-        '<button type="button" class="vz-choice" data-scope="'+key+'"><span>'+label+'</span><span class="small muted">'+items.length+'개</span></button>').join('') + '</div>',onMount:(sheet,close) => {
-        sheet.querySelectorAll('[data-scope]').forEach(button => button.onclick = () => {
-          const items = {filtered:current,all:every,month}[button.dataset.scope];
-          items.forEach(m => picked.set(String(m.id),m)); close(); paint();
-        });
-      }});
+    const current = list();
+    if (current.length && current.every(m => picked.has(String(m.id)))) current.forEach(m => picked.delete(String(m.id)));
+    else current.forEach(m => picked.set(String(m.id),m));
+    paint();
   };
   const canAnalyze = items => items.length > 0 && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
   const analyze = items => { if (canAnalyze(items)) VZ.openAnalysisSelection(items); };

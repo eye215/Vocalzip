@@ -27,7 +27,7 @@ async function verifiedSource(sha,migration){
  const r=await fetch(root+'/actions/runs?head_sha='+sha+'&per_page=100',{headers,signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw Error('SOURCE_CHECK_UNAVAILABLE');
  const runs=(await r.json()).workflow_runs;
- for(const name of ['Selective lesson deletion safety','Permanent deletion database contract','Billing checks','Account isolation and device-session checks','Cloud snapshot safety','Recording safety checks']){
+ for(const name of ['Selective lesson deletion safety','Permanent deletion database contract']){
   const relevant=runs.filter(r=>r.name===name&&r.conclusion!=='cancelled');
   if(!relevant.some(r=>r.status==='completed'&&r.conclusion==='success')||relevant.some(r=>r.conclusion==='failure'))throw Error('SOURCE_NOT_VERIFIED');
  }

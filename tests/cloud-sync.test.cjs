@@ -11,7 +11,8 @@ const storage=()=>{const m=new Map();return{
  getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),
  key:i=>[...m.keys()][i]??null,get length(){return m.size}
 };};
-async function until(fn){for(let n=0;n<1000;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out waiting for sync');}
+const probes=[];
+async function until(fn){for(let n=0;n<1000;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out waiting for sync: '+probes.slice(-2).map(probe=>probe()).join(' | '));}
 class Server{
  constructor(row=null){this.row=copy(row);this.writes=[];this.reads=0;this.beforeWrite=null;this.afterRead=null;}
  client(){
@@ -57,8 +58,8 @@ class Server{
 function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  const listeners=new Map(),elements=new Map(),store=storage();
  const element=k=>{if(!elements.has(k))elements.set(k,{
-  textContent:'',hidden:false,value:'',classList:{toggle(){}},remove(){},appendChild(){},insertAdjacentHTML(){},
-  querySelector:s=>element(s)
+  textContent:'',hidden:false,value:'',dataset:{},classList:{toggle(){},contains(){return false}},remove(){},appendChild(){},insertAdjacentHTML(){},
+  querySelector:s=>element(s),querySelectorAll:()=>[]
  });return elements.get(k)};
  const on=(type,fn)=>{if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push(fn)};
  const window={localStorage:store,VZIP_DEVICE_SESSIONS_ENABLED:true,
@@ -67,7 +68,7 @@ function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
   dispatchEvent:e=>{for(const fn of listeners.get(e.type)||[])fn(e)},
  };
  const document={querySelector:element,querySelectorAll:()=>[],getElementById:id=>element('#'+id),
-  createElement:()=>({querySelector:element,appendChild(){}}),
+  createElement:()=>({querySelector:element,querySelectorAll:()=>[],dataset:{},appendChild(){}}),
   head:{appendChild(){}},body:{appendChild(){},classList:{toggle(){}}},addEventListener:on};
  class FixedDate extends Date{constructor(...a){super(...(a.length?a:[now]))}static now(){return now}}
  if(seed)store.setItem(KEY,JSON.stringify(seed));
@@ -79,6 +80,7 @@ function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
  vm.runInContext(script,context);
+ probes.push(()=>element('#cloud-status').textContent);
  return{store,window,status:()=>element('#cloud-status').textContent,
   sync:()=>element('#cloud-upload').onclick(),
   data:()=>JSON.parse(store.getItem(KEY)),
