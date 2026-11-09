@@ -1,4 +1,4 @@
-/* VOCAL.zip searchable picker (Phase 10-3): long choice lists (songs above all) open as a bottom sheet with a search
+/* VOCAL.zip searchable picker: long choice lists (songs above all) open as a full page with a search
  * field instead of the phone's wheel. The real <select> stays in the form (value, change events, VZ.readSong), only
  * visually replaced by a button, so every screen keeps working the same way and keyboard/automation still use it.
  * Applied to every select[data-song-select] and select[data-pick]; a select opts out with data-native. */
@@ -9,11 +9,11 @@ if (!VZ) return;
 const esc = VZ.esc;
 const norm = s => String(s || '').toLowerCase().replace(/\s+/g, '');
 
-/** Searchable list sheet. options: [{value, label, sub?}]; resolves the chosen value, or null when closed. */
+/** Searchable list page. options: [{value, label, sub?}]; resolves the chosen value, or null when closed. */
 VZ.pickSheet = ({title, options, value = '', placeholder = '검색'}) => new Promise(resolve => {
   let picked = null;
   const search = options.length > 7;
-  VZ.sheet({title, label:title, body:(search ? '<div class="search pick-search"><i class="ph ph-magnifying-glass"></i><input type="search" data-pick-q placeholder="' + esc(placeholder) + '" aria-label="' + esc(title) + ' 검색" autocomplete="off"></div>' : '') +
+  (search ? VZ.sheet : VZ.menu)({title, label:title, body:(search ? '<div class="search pick-search"><i class="ph ph-magnifying-glass"></i><input type="search" data-pick-q placeholder="' + esc(placeholder) + '" aria-label="' + esc(title) + ' 검색" autocomplete="off"></div>' : '') +
       '<div class="list pick-list" role="listbox" aria-label="' + esc(title) + '">' + options.map((o, i) => '<button type="button" class="item pick-row" role="option" data-i="' + i + '" aria-selected="' + (o.value === value) + '"><span class="item-main"><span class="item-title">' + esc(o.label) + '</span>' + (o.sub ? '<span class="item-sub">' + esc(o.sub) + '</span>' : '') + '</span>' + (o.value === value ? '<i class="ph ph-check pick-check"></i>' : '') + '</button>').join('') + '</div>' +
       '<p class="small muted pick-none" hidden>찾는 항목이 없어요.</p>',
     onMount:(el, close) => {
@@ -24,7 +24,7 @@ VZ.pickSheet = ({title, options, value = '', placeholder = '검색'}) => new Pro
         rows.forEach((r, i) => { const on = !t || options[i].always || keys[i].includes(t); r.hidden = !on; if (on && !options[i].always) shown++; });
         none.hidden = !!shown || !t;
       };
-      el.querySelector('.pick-list').onclick = e => { const r = e.target.closest('.pick-row'); if (!r) return; picked = options[r.dataset.i].value; close(); };
+      el.querySelector('.pick-list').onclick = e => { const r = e.target.closest('.pick-row'); if (!r) return; picked = options[r.dataset.i].value; close(); VZ.toast('선택했어요.'); };
       // Start at the current choice in a long list.
       el.querySelector('[aria-selected="true"]')?.scrollIntoView({block:'center'});
       if (q && !matchMedia('(pointer: coarse)').matches) q.focus();

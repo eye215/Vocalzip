@@ -145,15 +145,22 @@ const unlockPage = () => {
 };
 const vv = window.visualViewport;
 if (vv) {
-  const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h > 80 ? h + 'px' : '0px'); };
+  const kb = () => {
+    const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
+    document.documentElement.style.setProperty('--kb', h > 80 ? h + 'px' : '0px');
+    document.documentElement.classList.toggle('vz-keyboard-open', h > 80);
+    document.documentElement.style.setProperty('--vv-top', Math.round(vv.offsetTop) + 'px');
+    document.documentElement.style.setProperty('--vv-height', Math.round(vv.height) + 'px');
+  };
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
+  kb();
 }
-/** Bottom sheet. body: html string. Returns {el, close}. onClose fires once. */
-VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
+/** Full-page workflow by default; short action menus and confirmations are explicit variants. */
+VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor}) => {
   const previous = document.activeElement;
   const back = document.createElement('div');
-  back.className = 'sheet-back';
-  back.innerHTML = '<section class="sheet" role="dialog" aria-modal="true" aria-label="' + VZ.esc(label || title) + '"><div class="sheet-grab"></div><header class="sheet-head"><h2>' + VZ.esc(title) + '</h2><button type="button" class="icon-btn" data-close aria-label="닫기"><i class="ph ph-x"></i></button></header><div class="sheet-body">' + body + '</div>' + (foot ? '<footer class="sheet-foot">' + foot + '</footer>' : '') + '</section>';
+  back.className = 'sheet-back sheet-' + variant;
+  back.innerHTML = '<section class="sheet" role="dialog" aria-modal="true" aria-label="' + VZ.esc(label || title) + '"><div class="sheet-grab"></div><header class="sheet-head"><button type="button" class="icon-btn" data-close aria-label="돌아가기"><i class="ph ph-arrow-left"></i></button><h2>' + VZ.esc(title) + '</h2><span aria-hidden="true"></span></header><div class="sheet-body">' + body + '</div>' + (foot ? '<footer class="sheet-foot">' + foot + '</footer>' : '') + '</section>';
   const el = back.querySelector('.sheet');
   let closed = false;
   const close = () => {
@@ -165,9 +172,9 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
     if (!sheets.length && VZ.pendingRender) setTimeout(() => VZ.softRender(), 50);
   };
   const api = {el, close};
-  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) close(); });
+  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) { close(); if (variant === 'page') VZ.toast('취소했어요.'); } });
   back.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); if (variant === 'page') VZ.toast('취소했어요.'); }
     if (e.key === 'Tab') {
       const nodes = [...el.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled && n.offsetParent);
       if (!nodes.length) return;
@@ -175,18 +182,38 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
       else if (!e.shiftKey && document.activeElement === nodes.at(-1)) { e.preventDefault(); nodes[0].focus(); }
     }
   });
-  document.body.append(back); lockPage();
+  document.body.append(back); if (variant !== 'menu') lockPage();
   sheets.push(api);
   onMount?.(el, close);
+  if (variant === 'page' && !foot) {
+    const form = el.querySelector('.sheet-body form');
+    const submit = form?.querySelector('button[type="submit"],input[type="submit"]');
+    if (submit && !form.matches('[data-add-cat],[data-add-item]')) {
+      if (!form.id) form.id = 'vz-page-form-' + Math.random().toString(36).slice(2);
+      submit.setAttribute('form', form.id);
+      const footer = document.createElement('footer'); footer.className = 'sheet-foot';
+      footer.append(submit); el.append(footer);
+    }
+  }
+  if (variant === 'menu') {
+    const target = anchor || previous;
+    const rect = target?.getBoundingClientRect?.();
+    const width = Math.min(304, innerWidth - 28), height = el.getBoundingClientRect().height;
+    const left = Math.max(14, Math.min(innerWidth - width - 14, (rect?.right || innerWidth - 14) - width));
+    const below = (rect?.bottom || 0) + 8;
+    const top = below + height <= innerHeight - 12 ? below : Math.max(12, (rect?.top || innerHeight) - height - 8);
+    el.style.width = width + 'px'; el.style.left = left + 'px'; el.style.top = top + 'px';
+  }
   // Keep a focused field above the iOS keyboard.
   el.addEventListener('focusin', e => { if (e.target.matches('input,textarea,select')) setTimeout(() => e.target.scrollIntoView({block:'center', behavior:'smooth'}), 300); });
-  (el.querySelector('[autofocus]') || el.querySelector('[data-close]')).focus({preventScroll:true});
+  (el.querySelector('[autofocus]') || el.querySelector('[data-close]') || el.querySelector('button'))?.focus({preventScroll:true});
   return api;
 };
+VZ.menu = options => VZ.sheet({...options, variant:'menu'});
 VZ.closeSheets = () => [...sheets].forEach(s => s.close());
 VZ.confirm = (title, message, {ok = '확인', danger} = {}) => new Promise(resolve => {
   let result = false;
-  VZ.sheet({title, label:title, body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',
+  VZ.sheet({title, label:title, variant:'alert', body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',
     foot:'<div class="btn-row"><button type="button" class="btn ghost" data-close>취소</button><button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-ok>' + VZ.esc(ok) + '</button></div>',
     onMount:(el, close) => el.parentNode.querySelector('[data-ok]').onclick = () => { result = true; close(); },
     onClose:() => resolve(result)});

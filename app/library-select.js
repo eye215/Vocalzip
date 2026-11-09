@@ -40,7 +40,7 @@ VZ.librarySelect = (main, {list, done}) => {
   };
   const canAnalyze = items => items.length > 0 && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
   const analyze = items => { if (canAnalyze(items)) VZ.openAnalysisSelection(items); };
-  const singleMenu = (item, row) => VZ.sheet({title:'녹음 더보기', body:
+  const singleMenu = (item, row) => VZ.menu({title:'녹음 더보기', body:
     '<div class="vz-choice-list vz-media-action-sheet">' +
     '<button type="button" class="vz-choice" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button>' +
     '<button type="button" class="vz-choice" data-download><i class="ph ph-download-simple"></i> 저장</button>' +
@@ -72,7 +72,7 @@ VZ.librarySelect = (main, {list, done}) => {
   }, true);
   bulk.onclick = () => {
     if (!picked.size) return;
-    VZ.sheet({title:'선택한 녹음 ' + picked.size + '개', body:
+    VZ.menu({title:'선택한 녹음 ' + picked.size + '개', body:
       '<div class="vz-choice-list vz-media-action-sheet">' +
       '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정</button>' +
       '<button type="button" class="vz-choice" data-occ><i class="ph ph-tag"></i> 종류 변경</button>' +
