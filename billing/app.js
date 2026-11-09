@@ -106,11 +106,41 @@ function edit(kind,row){
  f.elements.version.value=row.version;f.querySelector('[type=submit]').textContent='수정 저장';
  show(kind==='pass'?'passes':kind==='payment'?'payments':'attendance');openForm(kind,{reset:false});
 }
+async function deleteDeduction(row){
+ if(pending)return;
+ try{
+  const links=await window.VzipBillingCloud.lessonDeletionTargets(row);
+  const answer=await window.VzipBillingDialog.ask({
+   title:'수강 차감을 영구 삭제할까요?',
+   message:'이 차감을 취소하고 잔여 횟수에 반영해요. 삭제 후 복구할 수 없어요. 결제·환불과 거래 감사 이력은 유지돼요.'+
+    (links.length>1?' 연결 레슨이 여러 개라 함께 삭제할 수 없어요. 레슨을 직접 확인해 주세요.':' 연결 레슨과 녹음은 선택하지 않으면 유지돼요.'),
+   option:links.length===1?'연결 레슨도 함께 영구 삭제':'',ok:links.length===1?'삭제 대상 확인':'영구 삭제',cancel:'닫기',danger:true
+  });
+  const confirmed=typeof answer==='boolean'?answer:answer.confirmed;if(!confirmed)return;
+  const current=await S.load(),fresh=current.deductions.find(d=>d.id===row.id);
+  if(!fresh||fresh.voidedAt||fresh.version!==row.version)throw Error('수강 내역이 변경됐어요. 새로 불러온 뒤 다시 확인해 주세요.');
+  if(answer.selected){
+   const again=await window.VzipBillingCloud.lessonDeletionTargets(fresh);
+   if(again.length!==1||again[0]!==links[0])throw Error('연결 레슨이 변경됐어요. 다시 확인해 주세요.');
+   location.assign('../#/lesson/'+encodeURIComponent(links[0])+'?settlementDelete='+encodeURIComponent(row.id)+'&version='+row.version);
+   return;
+  }
+  await persist({type:'deduction.delete',payload:{id:row.id,expectedVersion:row.version,operationId:crypto.randomUUID()}},
+   ()=>{if(forms.deduction.elements.id.value===row.id)resetForm(forms.deduction)},
+   S.account.id.startsWith('user:')?'차감 취소를 저장했어요. 서버 반영을 확인하고 있어요.':'차감을 영구 삭제했어요. 연결 레슨과 녹음은 유지돼요.');
+  if(S.account.id.startsWith('user:')){
+   const result=await window.VzipBillingCloud.sync(),status=await S.status();
+   if(result.action==='conflict'||status.meta.syncedLocalRevision!==status.state.revision)throw Error('기기 차감 취소는 저장됐어요. 클라우드 충돌을 해결한 뒤 서버 반영을 확인해 주세요.');
+   notify('차감 영구 삭제를 서버에서도 확인했어요. 연결 레슨과 녹음은 유지돼요.');
+  }
+ }catch(error){notify(error.message,true);}
+}
 async function toggle(collection,row){
+ if(collection==='deductions'&&!row.voidedAt)return deleteDeduction(row);
  const restore=!!row.voidedAt;if(!await window.VzipBillingDialog.ask({title:restore?'기록을 복구할까요?':'기록을 삭제할까요?',message:'삭제하면 목록과 정산 합계에서 제외돼요. 삭제 내역 보기에서 복구할 수 있고, 변경 이력은 보존돼요. 연결된 앱 레슨은 삭제되지 않아요. 레슨권은 연결된 결제·수강·조정을 먼저 삭제해 주세요.',ok:restore?'복구':'삭제',cancel:'닫기',danger:!restore}))return;
  try{await persist({type:restore?'entity.restore':'entity.void',payload:{collection,id:row.id,expectedVersion:row.version}},()=>{for(const form of Object.values(forms))if(form.elements.id.value===row.id)resetForm(form)},'기록을 '+(restore?'복구':'삭제')+'했어요.')}catch{}
 }
-function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(row.deletionOperationId){box.append(el('span','레슨 삭제로 차감 취소','small'));return box;}if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'삭제',()=>toggle(collection,row)));return box}
+function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(row.deletionOperationId){box.append(el('span','차감 취소 · 복구 불가','small'));return box;}if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'삭제',()=>toggle(collection,row)));return box}
 /** Records list newest date first; same day: most recently saved first. */
 function newestFirst(rows){return rows.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')))}
 function render(){

@@ -7,6 +7,8 @@ async function mockCloud(page,initial=null){
  const cloud={row:initial,writes:0,reads:0};
  await page.route('https://chxnbtiyuyhiywzeshis.supabase.co/rest/v1/**',async route=>{
   const url=new URL(route.request().url());
+  if(url.pathname.endsWith('/vzip_lesson_delete_capabilities'))return route.fulfill({json:{version:1,charge_guard:true,lesson_permanent:true}});
+  if(url.pathname.endsWith('/vocal_data'))return route.fulfill({json:[]});
   if(url.pathname.endsWith('/vocal_history')){
    if(!cloud.history)return route.fulfill({status:404,json:{code:'PGRST205',message:'not found'}});
    const id=(url.searchParams.get('id')||'').replace('eq.','');
@@ -147,4 +149,25 @@ test('Deletion receipt received from cloud blocks restoring a prior local backup
  },old);
  expect(result).toContain('과거 백업');
  expect(cloud.row.payload.deductions.find(d=>d.id===input.id).voidedAt).toBeTruthy();
+});
+
+test('Reverse deletion waits for cloud acknowledgement and does not claim server success on failure',async({page})=>{
+ const cloud=await mockCloud(page);await open(page);await addPass(page,'삭제 확인 권');
+ await expect.poll(()=>cloud.writes).toBe(1);
+ await page.evaluate(async()=>{
+  const S=VzipBillingStore,s=await S.load();
+  await S.save({type:'deduction.save',payload:{passId:s.passes[0].id,date:'2026-11-09',status:'completed',units:100}},s.revision);
+ });
+ await page.reload();await page.locator('[data-panel=attendance]').click();
+ await expect.poll(()=>cloud.row?.payload.deductions.length).toBe(1);
+ cloud.rejectCancellation=true;
+ await page.locator('#deduction-list').getByRole('button',{name:'삭제',exact:true}).click();
+ await page.locator('.bd-sheet [data-ok]').click();
+ await expect(page.locator('#message')).toContainText('클라우드 요청 실패');
+ const status=await ledger(page);expect(status.state.deductions[0].deletionOperationId).toBeTruthy();
+ expect(status.meta.syncedLocalRevision).not.toBe(status.state.revision);
+ expect(cloud.row.payload.deductions[0].voidedAt).toBeFalsy();
+ cloud.rejectCancellation=false;
+ await page.evaluate(()=>VzipBillingCloud.sync());
+ expect(cloud.row.payload.deductions[0].deletionOperationId).toBeTruthy();
 });

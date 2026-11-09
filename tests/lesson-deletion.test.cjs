@@ -147,3 +147,29 @@ test('missing server protection never cancels a charge or deletes a file',async(
  const x=await fixture();x.ports.ensureServerProtection=async()=>{throw Error('server unavailable');};
  await assert.rejects(P.execute(x.job,x.ports),/server unavailable/);assert.deepEqual(x.events,[]);
 });
+
+test('settlement-origin plans only permit a fixed billing return target',async()=>{
+ const job=await P.plan({id:'b',owner:'alice',lesson:lesson(),returnTo:'billing'});
+ assert.equal(P.validate(job).returnTo,'billing');
+ await assert.rejects(P.plan({id:'b',owner:'alice',lesson:lesson(),returnTo:'https://foreign.invalid'}),/경로/);
+ assert.throws(()=>P.validate({...job,returnTo:'//foreign.invalid'}),/삭제 작업/);
+ const legacy={...job};delete legacy.returnTo;assert.doesNotThrow(()=>P.validate(legacy));
+});
+test('financial-only permanent deletion works without a lesson link and cannot be restored from backup',()=>{
+ const {s,run}=billed(),row=s.deductions[0];delete row.lessonId;
+ const cmd={id:row.id,expectedVersion:row.version,operationId:'financial-only'};
+ const out=run(s,'deduction.delete',cmd);
+ assert.deepEqual(out.payments,s.payments);assert.deepEqual(out.passes,s.passes);
+ assert.equal(C.totals(out).total.remainingUnits,1000);
+ assert.deepEqual(run(out,'deduction.delete',cmd),out);
+ assert.throws(()=>run(out,'entity.restore',{collection:'deductions',id:row.id,expectedVersion:out.deductions[0].version}),/복구/);
+ assert.throws(()=>C.verifyDeletionGuards(s,C.deletionGuards(out)),/과거/);
+ assert.throws(()=>run(s,'deduction.delete',{...cmd,expectedVersion:999}),/수정/);
+ assert.throws(()=>run(s,'deduction.delete',{...cmd,id:'missing'}),/대상/);
+});
+test('permanently deleted linked charge is not automatically charged again on reload',()=>{
+ const {s,run}=billed(),row=s.deductions[0];
+ const out=run(s,'deduction.delete',{id:row.id,expectedVersion:row.version,operationId:'financial-only'});
+ const Pending=require('../billing/pending.js');
+ assert.equal(Pending.classify([{lesson_id:'l',lesson_date:row.date,lesson_status:'completed'}],out,'2999-01-01').toDeduct.length,0);
+});

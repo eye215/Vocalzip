@@ -34,6 +34,20 @@ async function read(){
  if(!Array.isArray(rows)||rows.length>1)throw Error('클라우드 응답 형식을 확인해 주세요.');
  const result=envelope(rows[0]);if(result)await S.rememberDeletionGuards(result.payload);return result;
 }
+/** Read only this account's current lesson IDs. Dates never identify a deletion target. */
+async function lessonDeletionTargets(row){
+ let lessons=S.lessons().map(l=>({id:l.lesson_id,billingDeductionId:l.billing_deduction_id}));
+ if(S.account.id.startsWith('user:')){
+  const {userId}=credentials();
+  const capability=await request('/rest/v1/rpc/vzip_lesson_delete_capabilities',{});
+  if(capability?.version!==1||!capability.charge_guard||!capability.lesson_permanent)throw Error('안전한 삭제를 위한 서버 확인을 마치지 못했어요.');
+  const remote=await request('/rest/v1/vocal_data?select='+encodeURIComponent('lessons:payload->lessons')+'&user_id=eq.'+encodeURIComponent(userId));
+  if(!Array.isArray(remote)||remote.length>1||remote[0]&&remote[0].lessons!==null&&!Array.isArray(remote[0].lessons))throw Error('연결 레슨 응답을 확인하지 못했어요.');
+  lessons=lessons.concat(remote[0]?.lessons||[]);
+ }
+ const hits=lessons.filter(l=>l?.id&&(l.id===row.lessonId||l.billingDeductionId===row.id));
+ return [...new Set(hits.map(l=>l.id))];
+}
 async function preview(direction){
  const local=await S.status(),remote=await read();S.ensureAccount();
  if(direction==='download'){if(!remote)throw Error('클라우드에 저장된 정산이 없어요.');return {direction,localRevision:local.state.revision,payload:remote.payload,remoteRevision:remote.revision,remoteAt:remote.updatedAt,before:B.summary(local.state),after:B.summary(remote.payload)}}
@@ -123,5 +137,5 @@ async function version(id){
 }
 /** Make a kept version the ledger on this device (the current one stays restorable); automatic sync then sends it. */
 async function restoreVersion(id){const payload=await version(id),local=await S.status();return S.replace(payload,local.state.revision,{reason:'cloud.history'})}
-window.VzipBillingCloud={read,preview,commit,sync,resolve,autoOn,setAuto,mergeStates,versions,version,restoreVersion};
+window.VzipBillingCloud={read,lessonDeletionTargets,preview,commit,sync,resolve,autoOn,setAuto,mergeStates,versions,version,restoreVersion};
 })();
