@@ -17,6 +17,17 @@ const time = s => V.clock(Math.max(0,s||0));
 const day = m => (M.dateOf(m)||'').slice(5).replace('-','.');
 const valid = n => n == null || n === '' ? null : Number.isFinite(Number(n)) ? Number(n) : null;
 const analysis = m => m.analysis?.metrics ? m.analysis : null;
+const selectionKey = 'vocalzip-vocal-lab-selected-media-v1';
+const selectionIds = () => { try { const ids=JSON.parse(sessionStorage.getItem(selectionKey)||'[]'); return Array.isArray(ids) ? ids.map(String) : []; } catch { return []; } };
+V.openAnalysisSelection = items => {
+  const unique=[...new Map(items.filter(Boolean).map(m=>[String(m.id),m])).values()];
+  if(!unique.length)return;
+  try { sessionStorage.setItem(selectionKey,JSON.stringify(unique.map(m=>m.id))); } catch { V.toast('선택한 녹음을 저장하지 못했어요.','error'); return; }
+  const songs=[...new Set(unique.map(m=>m.songId).filter(Boolean))];
+  V.nav(songs.length===1 && unique.every(m=>m.songId===songs[0])
+    ? '#/vocal-lab/'+encodeURIComponent(songs[0])+'?selection=1'
+    : '#/vocal-lab?selection=1');
+};
 let current = null, instance = 0;
 const clean = () => { current?.player?.destroy(); if (current) current.dead = true; current = null; instance++; };
 function waveform(m) {
@@ -125,6 +136,22 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
   render:()=>'<div class="vl" data-lab><p class="vl-muted">녹음을 불러오는 중…</p></div>',
   async mount(main,r){
     clean();const id=++instance, song=V.song(r.params[0]),host=main.querySelector('[data-lab]');
+    if(!song && r.query.get('selection')==='1'){
+      const ids=selectionIds(), all=await M.list().catch(()=>M.cached());
+      if(id!==instance||!host.isConnected)return;
+      const byId=new Map(all.map(m=>[String(m.id),m]));
+      const selected=ids.map(key=>byId.get(key)).filter(Boolean);
+      const groups=new Map();
+      selected.forEach(m=>{const key=m.songId||'';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(m);});
+      host.innerHTML='<div class="vl-song"><i class="ph ph-waveform"></i><strong>선택한 녹음 '+selected.length+'개</strong></div>'+
+        (selected.length?[...groups].map(([songId,files])=>{
+          const known=songId&&V.song(songId), label=known?.title||'곡 미지정';
+          return '<div class="vl-section"><h2>'+esc(label)+' · '+files.length+'개</h2>'+
+            (known?'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(songId)+'?selection=1"><strong>선택한 녹음 모두 분석</strong><i class="ph ph-caret-right"></i></a>':'<p class="vl-muted">곡을 지정하면 여러 녹음의 변화를 함께 볼 수 있어요.</p>')+
+            files.map(m=>'<a class="vl-report" href="'+(known?'#/vocal-lab/'+encodeURIComponent(songId)+'?selection=1':'#/analysis/'+encodeURIComponent(m.id))+'"><span>'+esc(M.label(m))+'</span><span>'+esc(day(m))+'</span></a>').join('')+'</div>';
+        }).join(''):'<p class="vl-muted">선택한 녹음을 찾지 못했어요. 보관함에서 다시 선택해 주세요.</p>');
+      return;
+    }
     if(!song){
       const songs=V.songsNewest();
       host.innerHTML=songs.length?'<div class="vl-song"><i class="ph ph-waveform"></i><strong>보컬 연구소</strong></div><p class="vl-muted">분석할 곡을 선택해 주세요.</p>'+songs.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.id)+'"><strong>'+esc(x.title)+'</strong><i class="ph ph-caret-right"></i></a>').join(''):V.empty('music-notes','먼저 곡을 추가해 주세요.');
@@ -134,7 +161,7 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
     const items=(await M.list().catch(()=>M.cached())).filter(m=>m.songId===song.id && !M.isVideo(m)).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(a.created||0)-(b.created||0));
     if(id!==instance||!host.isConnected)return;
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
-    const selected=report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
+    const selected=r.query.get('selection')==='1' ? selectionIds().filter(key=>items.some(m=>String(m.id)===key)) : report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
     current={host,song,items,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null};
     screen(current);
   },leave:clean
