@@ -10,7 +10,7 @@ if(!url||!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error(
 const db=new pg.Client({connectionString:url});await db.connect();
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
 const json=x=>JSON.stringify(x),source='supabase/migrations/20261114_permanent_lesson_delete.sql';
-const payload=(id='lesson')=>({categories:[],songs:[{id:'keep-song'}],lessons:[{id,feedback:'erase private text',recordings:[]},{id:'keep',feedback:'keep feedback'}],
+const payload=(id='lesson')=>({categories:[],songs:[{id:'keep-song'}],lessons:[{id,feedback:'erase private text',billingDeductionId:'billing-source',recordings:[]},{id:'keep',feedback:'keep feedback'}],
  assignments:[{id:'task',lessonIds:[id,'keep'],lessonId:id,title:'keep homework'}],practices:[{id:'p',minutes:12}],deleted:{}});
 async function admin(){await db.query('reset role');}
 async function auth(id=A,active=true){
@@ -19,7 +19,7 @@ async function auth(id=A,active=true){
 }
 async function putApp(id,value){await admin();await db.query('insert into public.vocal_data(user_id,payload) values($1,$2) on conflict(user_id) do update set payload=excluded.payload,updated_at=clock_timestamp()',[id,json(value)]);}
 async function row(id=A){return (await db.query('select payload,updated_at::text updated_at from public.vocal_data where user_id=$1',[id])).rows[0];}
-async function remove(id='lesson',at=null,operation=randomUUID(),link=''){
+async function remove(id='lesson',at=null,operation=randomUUID(),link='billing-source'){
  const version=at??(await row()).updated_at;
  return (await db.query('select public.vzip_delete_lesson($1,$2,$3,$4) result',[id,operation,version,link])).rows[0].result;
 }
@@ -88,7 +88,7 @@ test('whole-document removal and recreation retain account deletion guards',asyn
  assert.deepEqual((await row()).payload.lessons.map(l=>l.id),['keep']);
 });
 test('cross-account requests never select or redact another account lesson',async()=>{
- await auth(B);await remove('own-only',(await row(B)).updated_at);
+ await auth(B);await assert.rejects(remove('own-only',(await row(B)).updated_at),e=>e.code==='PT409');
  assert.equal((await row(B)).payload.lessons[0].id,'lesson');
  const foreign=(await db.query('select payload from public.vocal_data where user_id=$1',[A])).rows;assert.equal(foreign.length,0);
  await admin();const guard=(await db.query("select count(*) n from public.vzip_permanent_delete_guards where user_id=$1 and entity_id='own-only'",[A])).rows[0].n;

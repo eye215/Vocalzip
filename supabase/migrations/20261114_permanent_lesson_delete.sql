@@ -157,6 +157,10 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('vzip-permanent-delete:'||uid::text,0));
  select exists(select 1 from public.vzip_permanent_delete_guards where user_id=uid and kind='lesson' and entity_id=p_lesson_id) into existing;
  if not existing then
+  if (select count(*) from jsonb_array_elements(case when jsonb_typeof(doc.payload->'lessons')='array' then doc.payload->'lessons' else '[]'::jsonb end) l where l->>'id'=p_lesson_id)<>1 then
+   raise exception 'Sync the exact lesson before deleting it' using errcode='PT409';end if;
+  if coalesce((select l->>'billingDeductionId' from jsonb_array_elements(doc.payload->'lessons') l where l->>'id'=p_lesson_id),'')<>coalesce(p_billing_link,'') then
+   raise exception 'Lesson billing link changed' using errcode='PT409';end if;
   if doc.updated_at is distinct from p_expected_updated_at then raise exception 'Lesson snapshot changed' using errcode='PT409';end if;
   insert into public.vzip_permanent_delete_guards(user_id,kind,entity_id,operation_id,billing_link)
    values(uid,'lesson',p_lesson_id,p_operation_id,coalesce(p_billing_link,''));
