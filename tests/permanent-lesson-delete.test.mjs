@@ -118,3 +118,30 @@ test('guards are private, all definer helpers have a fixed search path, and no a
  assert.equal((await db.query("select has_function_privilege('anon','public.vzip_delete_lesson(text,text,timestamptz,text)','execute') allowed")).rows[0].allowed,false);
  assert.equal((await db.query("select relrowsecurity enabled from pg_class where oid='public.vzip_permanent_delete_guards'::regclass")).rows[0].enabled,true);
 });
+
+test('a stale legacy writer and deletion RPC use the same lock order without deadlocking',async()=>{
+ await putApp(A,payload('race'));await auth();const version=(await row()).updated_at;await admin();
+ const left=new pg.Client({connectionString:url}),right=new pg.Client({connectionString:url});
+ await left.connect();await right.connect();
+ try{
+  for(const c of [left,right]){
+   await c.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.fixture_active','yes',false)",[A]);
+   await c.query('set role authenticated');await c.query("set statement_timeout='5s'");
+  }
+  await left.query('begin');await left.query('select user_id from public.vocal_data where user_id=$1 for update',[A]);
+  const pid=(await right.query('select pg_backend_pid() pid')).rows[0].pid;
+  const pending=right.query('select public.vzip_delete_lesson($1,$2,$3,$4)',['race','race-operation',version,'billing-source']).then(()=>({code:'unexpected_success'}),e=>({code:e.code}));
+  let blocked=false;
+  for(let i=0;i<100;i++){
+   const waiting=(await db.query('select wait_event_type from pg_stat_activity where pid=$1',[pid])).rows[0];
+   if(waiting?.wait_event_type==='Lock'){blocked=true;break;}
+   await new Promise(r=>setTimeout(r,10));
+  }
+  assert.equal(blocked,true);
+  await left.query("update public.vocal_data set updated_at=updated_at+interval '1 millisecond' where user_id=$1",[A]);
+  await left.query('commit');
+  assert.equal((await pending).code,'PT409');
+ }finally{
+  await left.query('rollback').catch(()=>{});await right.query('rollback').catch(()=>{});await left.end();await right.end();
+ }
+});

@@ -7,6 +7,9 @@ on:
       - 'supabase/migrations/20261114_permanent_lesson_delete.sql'
       - 'tests/permanent-lesson-delete.test.mjs'
       - '.github/workflows/permanent-delete-db-check.yml'
+concurrency:
+  group: permanent-deletion-db-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

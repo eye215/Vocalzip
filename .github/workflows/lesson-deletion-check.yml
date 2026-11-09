@@ -11,6 +11,9 @@ on:
       - 'billing/**'
       - 'tests/lesson-deletion*'
       - '.github/workflows/lesson-deletion-check.yml'
+concurrency:
+  group: selective-lesson-deletion-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

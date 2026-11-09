@@ -183,3 +183,5 @@ end;
 $$;
 revoke all on function public.vzip_delete_lesson(text,text,timestamptz,text) from public,anon;
 grant execute on function public.vzip_delete_lesson(text,text,timestamptz,text) to authenticated;
+
+notify pgrst,'reload schema';
