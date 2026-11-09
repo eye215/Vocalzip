@@ -90,8 +90,8 @@ VZ.route('homework', {title:'숙제', back:true, tab:'home', actions:() => '<but
 }});
 
 /* ---------- 레슨 일정 ---------- */
-VZ.lessonSheet = ({lesson, date} = {}) => {
-  const l = lesson, db = VZ.db, selected = new Set(l ? VZ.lessonSongIds(l) : []);
+VZ.lessonSheet = ({lesson, date, songId} = {}) => {
+  const l = lesson, db = VZ.db, selected = new Set(l ? VZ.lessonSongIds(l) : songId && VZ.song(songId) ? [songId] : []);
   const last = [...db.lessons].filter(x => x.place || x.teacher).sort((a, b) => VZ.lessonSort(b, a))[0];
   const st = l ? VZ.lessonStatus(l) : 'scheduled';
   VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', body:'<form id="lesson-form">' +
