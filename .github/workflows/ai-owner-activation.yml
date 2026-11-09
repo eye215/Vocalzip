@@ -1,0 +1,27 @@
+name: Apply verified AI owner policy
+on:
+  push:
+    branches: ['codex/ai-owner-activation-20261109']
+    paths: ['ops/ai-owner-only-release.json','.github/workflows/ai-owner-activation.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  owner-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    concurrency:
+      group: vocalzip-ai-owner-policy-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Execute only the reviewed owner policy plan
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/ai-owner-release.mjs
