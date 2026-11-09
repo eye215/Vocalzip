@@ -96,6 +96,7 @@
     showSongAction:() => { songAction = true; paintSelection(); },
     hideSongAction:() => { songAction = false; clearSelection(); },
     count:host => [...selected.values()].filter(entry => entry.row.isConnected && host.contains(entry.row)).length,
+    selectedFor:host => [...selected.values()].filter(entry => entry.row.isConnected && host.contains(entry.row)).map(entry => entry.item),
     selectAll:(host, items, on) => {
       for (const item of items) {
         const row = [...host.querySelectorAll('[data-media]')].find(r => r.dataset.media === String(item.id));
