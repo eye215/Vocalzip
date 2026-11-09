@@ -65,7 +65,7 @@ async function transaction(write,fn){
    const guards=requests[3].result?.guards||[];
    const remember=source=>{
     const all=new Map([...guards,...C.deletionGuards(state),...C.deletionGuards(source)].map(g=>[g.id,g]));
-    const merged=[...all.values()];documents.put({owner:initialAccount.id+':lesson-deletion-guards',guards:merged});return merged;
+    const merged=[...all.values()];if(merged.length)documents.put({owner:initialAccount.id+':lesson-deletion-guards',guards:merged});return merged;
    };
    result=fn({state,meta,previous:requests[2].result,documents,sync,recovery,guards,remember});
   }catch(problem){error=problem;tx.abort()}};

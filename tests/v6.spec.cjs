@@ -696,18 +696,21 @@ test('Songs: add, search, detail tabs, delete keeps records', async ({page}) => 
   await sheet(page).locator('[name=title]').fill('Defying Gravity');
   await sheet(page).locator('[name=show]').fill('위키드');
   await sheet(page).getByRole('button', {name:'곡 추가'}).click();
-  await expect(page.locator('#top h1')).toHaveText('Defying Gravity');
+  await expect(page.locator('.vz-song-detail-title')).toHaveText('Defying Gravity');
   await page.goto('/#/songs');
   await page.locator('[data-song-search]').click();
+  const beforeSearch = await page.locator('.list .item').count();
   await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('moment');
-  await page.locator('[data-collection-search] button[type=submit]').click();
+  await expect(page.locator('.list .item')).toHaveCount(beforeSearch);
+  await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');
   await expect(page.locator('.list .item')).toHaveCount(1);
+  await expect(page.locator('[data-song-search]')).toHaveAttribute('aria-pressed','true');
   // A background media refresh keeps the applied search.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m1'}})));
   await page.waitForTimeout(700);
   await page.locator('[data-song-search]').click();
   await expect(page.getByRole('searchbox',{name:'곡 검색',exact:true})).toHaveValue('moment');
-  await page.locator('[data-collection-search] button[type=submit]').click();
+  await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');
   await expect(page.locator('.list .item')).toHaveCount(1);
   await page.locator('.list .item').click();
   await expect(page.locator('[data-summary]')).toContainText('녹음 2개');

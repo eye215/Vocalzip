@@ -7,7 +7,19 @@ V.collectionCount=(n,unit)=>{
  const headingRow=h.parentElement;let badge=headingRow.querySelector('[data-collection-count]');if(!badge){badge=document.createElement('span');badge.dataset.collectionCount='';headingRow.append(badge)}badge.textContent=n+unit;
 };
 V.collectionChoice=(title,choices,value,onSelect)=>V.sheet({title,body:'<div class="vz-choice-list">'+choices.map(([id,label])=>'<button type="button" class="vz-choice" data-choice="'+E(id)+'" aria-pressed="'+(value===id)+'"><span>'+E(label)+'</span>'+(value===id?'<i class="ph ph-check"></i>':'')+'</button>').join('')+'</div>',onMount:(el,close)=>{el.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{onSelect(b.dataset.choice);close();})}});
-V.collectionSearch=(title,placeholder,value,onSearch)=>V.sheet({title,body:'<form data-collection-search><label class="field"><span class="sr-only">'+E(title)+'</span><input type="search" name="query" placeholder="'+E(placeholder)+'" value="'+E(value)+'"></label><button class="btn block" type="submit">검색</button><button class="btn ghost block" type="button" data-clear>검색 초기화</button></form>',onMount:(el,close)=>{const form=el.querySelector('form');form.onsubmit=e=>{e.preventDefault();onSearch(form.elements.query.value.trim());close()};el.querySelector('[data-clear]').onclick=()=>{onSearch('');close()};}});
+V.collectionSearch=(title,placeholder,value,onSearch)=>{
+ document.querySelector('.vz-collection-search-overlay')?.remove();
+ const overlay=document.createElement('div');overlay.className='vz-collection-search-overlay';
+ overlay.innerHTML='<form class="vz-collection-search-field" data-collection-search role="search"><label class="sr-only" for="vz-collection-query">'+E(title)+'</label><input id="vz-collection-query" type="search" name="query" inputmode="search" enterkeyhint="search" autocomplete="off" placeholder="'+E(placeholder)+'" value="'+E(value)+'"></form>';
+ document.body.append(overlay);
+ const form=overlay.querySelector('form'),field=form.querySelector('input');
+ const close=()=>{window.removeEventListener('hashchange',close);overlay.remove();};
+ overlay.onclick=e=>{if(e.target===overlay)close();};
+ overlay.onkeydown=e=>{if(e.key==='Escape')close();};
+ form.onsubmit=e=>{e.preventDefault();onSearch(field.value.trim());close();};
+ window.addEventListener('hashchange',close);
+ field.focus({preventScroll:true});
+};
 let recordPlayer=null;
 V.route('recording',{title:'녹음 재생',tab:'library',back:true,noAutoRefresh:true,render(){return '<div class="vz-recording-page" data-recording><p class="muted">녹음을 불러오는 중…</p></div>'},leave(){recordPlayer?.destroy();recordPlayer=null;},async mount(main,r){
  const host=main.querySelector('[data-recording]');const all=await M.list().catch(()=>M.cached()),item=all.find(x=>x.id===r.params[0]);if(!host.isConnected)return;

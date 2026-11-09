@@ -128,3 +128,11 @@ test('deleting an imported lesson suppresses automatic re-import without voiding
  const out=Merge.merge(db,stale).data;assert.equal(out.lessons.length,0);
  assert.deepEqual(out.deleted.billingLessonLinks,['imported-d']);
 });
+
+test('two legitimate cancellation receipts remain cancelled when resolving a cloud conflict',()=>{
+ const {s,run}=billed(),row=s.deductions[0];
+ const a=run(s,'deduction.cancelForDeletion',{id:row.id,expectedVersion:row.version,lessonId:'l',operationId:'a'});
+ const b=run(s,'deduction.cancelForDeletion',{id:row.id,expectedVersion:row.version,lessonId:'l',operationId:'b'});
+ assert.doesNotThrow(()=>C.verifyDeletionGuards(b,C.deletionGuards(a)));
+ assert.throws(()=>C.verifyDeletionGuards(s,C.deletionGuards(a)),/과거 백업/);
+});

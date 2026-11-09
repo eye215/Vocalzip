@@ -88,7 +88,7 @@ function deletionGuards(state){
 function verifyDeletionGuards(state,guards){
  for(const g of guards||[]){
   const row=(state.deductions||[]).find(r=>r.id===g.id);
-  if(row&&(!row.voidedAt||row.deletionOperationId!==g.operationId))fail('레슨 삭제로 취소한 차감은 과거 백업이나 버전으로 복구할 수 없어요.');
+  if(row&&(!row.voidedAt||typeof row.deletionOperationId!=='string'||!row.deletionOperationId))fail('레슨 삭제로 취소한 차감은 과거 백업이나 버전으로 복구할 수 없어요.');
  }
  return state;
 }
