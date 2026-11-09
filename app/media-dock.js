@@ -64,7 +64,7 @@
     dock.querySelector('strong').textContent = M.label(item);
     document.body.append(dock);
     document.body.classList.add('vz-media-dock-open');
-    player = M.player(dock.querySelector('[data-player]'), item, {prefetch:true});
+    player = M.player(dock.querySelector('[data-player]'), item, {tools:true, prefetch:true});
     player.play();
     dock.querySelector('[data-close]').onclick = close;
     const more = dock.querySelector('[data-more]'), menu = dock.querySelector('[data-menu]');
