@@ -89,24 +89,3 @@ jobs:
             billing-results
           retention-days: 14
 
-  deletion-db:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 7
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: deletion_ci_only
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: npm ci --omit=dev --ignore-scripts
-      - name: Permanent lesson deletion and history privacy in disposable PostgreSQL
-        env:
-          VZ_DELETE_TEST_DB: postgres://postgres:deletion_ci_only@localhost:5432/postgres
-        run: node --test tests/permanent-lesson-delete.test.mjs

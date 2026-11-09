@@ -18,7 +18,7 @@ async function auth(id=A,active=true){
  await db.query('set role authenticated');
 }
 async function putApp(id,value){await admin();await db.query('insert into public.vocal_data(user_id,payload) values($1,$2) on conflict(user_id) do update set payload=excluded.payload,updated_at=clock_timestamp()',[id,json(value)]);}
-async function row(id=A){return (await db.query('select payload,updated_at from public.vocal_data where user_id=$1',[id])).rows[0];}
+async function row(id=A){return (await db.query('select payload,updated_at::text updated_at from public.vocal_data where user_id=$1',[id])).rows[0];}
 async function remove(id='lesson',at=null,operation=randomUUID(),link=''){
  const version=at??(await row()).updated_at;
  return (await db.query('select public.vzip_delete_lesson($1,$2,$3,$4) result',[id,operation,version,link])).rows[0].result;
@@ -59,7 +59,7 @@ test('deletion redacts old history in bounded batches and hides pending text imm
  await putApp(A,payload());await putApp(B,payload());
  await admin();const original=await row();
  await db.query(`insert into public.vocal_history(user_id,source,row_id,op,data)
-  select $1,'vocal_data',$1::text,'update',jsonb_build_object('payload',$2::jsonb)
+  select $1::uuid,'vocal_data',$1::text,'update',jsonb_build_object('payload',$2::jsonb)
   from generate_series(1,240)`,[A,json(payload())]);
  await auth();const first=await remove('lesson',original.updated_at,'operation-a','billing-source');
  assert.equal(first.ok,false);assert.equal(first.pending,true);assert.equal(first.redacted,100);
@@ -88,7 +88,7 @@ test('whole-document removal and recreation retain account deletion guards',asyn
  assert.deepEqual((await row()).payload.lessons.map(l=>l.id),['keep']);
 });
 test('cross-account requests never select or redact another account lesson',async()=>{
- await auth(B);await remove('own-only');
+ await auth(B);await remove('own-only',(await row(B)).updated_at);
  assert.equal((await row(B)).payload.lessons[0].id,'lesson');
  const foreign=(await db.query('select payload from public.vocal_data where user_id=$1',[A])).rows;assert.equal(foreign.length,0);
  await admin();const guard=(await db.query("select count(*) n from public.vzip_permanent_delete_guards where user_id=$1 and entity_id='own-only'",[A])).rows[0].n;
