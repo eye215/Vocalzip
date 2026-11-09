@@ -64,11 +64,9 @@ VZ.librarySelect = (main, {list, done}) => {
     if (!picked.size) return;
     VZ.sheet({title:'선택한 녹음 ' + picked.size + '개', body:
       '<div class="vz-choice-list vz-media-action-sheet">' +
-      '<button type="button" class="vz-choice" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button>' +
       '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정</button>' +
       '<button type="button" class="vz-choice" data-occ><i class="ph ph-tag"></i> 종류 변경</button></div>',
       onMount:(sheet, close) => {
-        sheet.querySelector('[data-analyze]').onclick = () => { const items = chosen(); close(); analyze(items); };
         sheet.querySelector('[data-song]').onclick = () => { close(); setSong(); };
         sheet.querySelector('[data-occ]').onclick = () => { close(); setKind(); };
       }
