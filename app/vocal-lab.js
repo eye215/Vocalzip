@@ -102,6 +102,7 @@ function playerCard(s,m) {
 }
 function screen(s) {
   const host=s.host, m=s.items.find(x=>x.id===s.active);
+  const scrollTop=document.scrollingElement?.scrollTop??0;
   const recs=m?recommendations(s):null;
   s.player?.destroy(); s.player=null;
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
@@ -109,6 +110,7 @@ function screen(s) {
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
       recommendationList(recs)+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
+  if(document.scrollingElement)document.scrollingElement.scrollTop=scrollTop;
   host.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{
     const id=b.dataset.date;
     if(s.selected.includes(id))s.selected=s.selected.filter(x=>x!==id); else s.selected=s.items.filter(x=>s.selected.includes(x.id)||x.id===id).map(x=>x.id);
@@ -118,7 +120,8 @@ function screen(s) {
     screen(s);
   });
   if(!m)return;
-  host.querySelector('[data-date="'+CSS.escape(m.id)+'"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
+  const dateStrip=host.querySelector('.vl-dates'), activeDate=host.querySelector('[data-date="'+CSS.escape(m.id)+'"]');
+  if(activeDate){const strip=dateStrip.getBoundingClientRect(), chip=activeDate.getBoundingClientRect();if(chip.left<strip.left)dateStrip.scrollLeft+=chip.left-strip.left;else if(chip.right>strip.right)dateStrip.scrollLeft+=chip.right-strip.right;}
   const carrier=host.querySelector('[data-carousel]'), player=M.player(host.querySelector('[data-player]'),m,{prefetch:true}); s.player=player;
   const el=player.el, play=host.querySelector('[data-play]'), seek=host.querySelector('[data-seek]'), status=host.querySelector('[data-player-status]');
   const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;seek.value=d?Math.round(el.currentTime/d*1000):0;host.querySelector('[data-time]').textContent=time(el.currentTime);host.querySelector('[data-duration]').textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
@@ -140,7 +143,7 @@ function screen(s) {
   });
   host.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{s.metric=b.dataset.metric;screen(s);});
   host.querySelectorAll('[data-point]').forEach(b=>b.onclick=()=>{const chosen=s.items.find(x=>x.id===b.dataset.point);if(!chosen)return;s.active=chosen.id;screen(s);observe(s,chosen);});
-  host.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;screen(s);}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
+  host.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;host.querySelectorAll('[data-rating]').forEach(star=>star.setAttribute('aria-pressed',String(Number(star.dataset.rating)<=score)));host.querySelector('.vl-rating b').textContent=score+'/5';}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
   host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;host.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
   host.querySelectorAll('[data-practice-tip]').forEach(button=>button.onclick=()=>{
     const tip=recs.tips.find(x=>x.key===button.dataset.practiceTip);

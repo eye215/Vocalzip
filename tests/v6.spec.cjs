@@ -111,6 +111,25 @@ test('Vocal lab shows a compact recommendation list and opens the chosen practic
  await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(new RegExp('\\[추천 연습\\] '+name));
 });
 
+test('Vocal lab keeps the viewport on date, metric, and satisfaction selection', async ({page}) => {
+ await boot(page);
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await page.evaluate(() => window.scrollTo(0, 70));
+ const beforeDate=await page.evaluate(() => window.scrollY);
+ await page.locator('.vl-dates button').nth(1).click();
+ expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeDate, 0);
+ await page.locator('[data-metric="into"]').scrollIntoViewIfNeeded();
+ const beforeMetric=await page.evaluate(() => window.scrollY);
+ await page.locator('[data-metric="into"]').click();
+ expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeMetric, 0);
+ await page.locator('[data-rating="4"]').scrollIntoViewIfNeeded();
+ const beforeRating=await page.evaluate(() => window.scrollY);
+ await page.locator('[data-rating="4"]').click();
+ await expect(page.locator('[data-rating="4"]')).toHaveAttribute('aria-pressed','true');
+ expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeRating, 0);
+});
+
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
  await boot(page);
  for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','일정']]){
