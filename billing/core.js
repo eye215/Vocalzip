@@ -81,6 +81,17 @@ function check(state,allowOverdraw=false){
  for(const value of Object.values(balances.total))if(!Number.isSafeInteger(value)||Math.abs(value)>Number.MAX_SAFE_INTEGER)fail('전체 정산 금액/횟수가 계산 범위를 초과했어요.');
  return balances;
 }
+/** Small irreversible cancellation receipts survive local clear/backup replacement. */
+function deletionGuards(state){
+ return (state?.deductions||[]).filter(r=>r.voidedAt&&typeof r.deletionOperationId==='string'&&r.deletionOperationId).map(r=>({id:r.id,operationId:r.deletionOperationId}));
+}
+function verifyDeletionGuards(state,guards){
+ for(const g of guards||[]){
+  const row=(state.deductions||[]).find(r=>r.id===g.id);
+  if(row&&(!row.voidedAt||typeof row.deletionOperationId!=='string'||!row.deletionOperationId))fail('레슨 삭제로 취소한 차감은 과거 백업이나 버전으로 복구할 수 없어요.');
+ }
+ return state;
+}
 function reduce(original,command,context={}){
  validateState(original);const state=clone(original),now=context.now||new Date().toISOString(),uid=context.uid||(()=>globalThis.crypto.randomUUID());
  const payload=command.payload||{},opts=command.options||{};
@@ -133,10 +144,18 @@ function reduce(original,command,context={}){
   findPass(payload.passId);integer(payload.unitsDelta,'조정 횟수',{negative:true,max:100000000});integer(payload.amountDelta,'조정 금액',{negative:true});
   if(!str(payload.memo)||(!payload.unitsDelta&&!payload.amountDelta))fail('조정 값과 사유를 입력해 주세요.');
   put('adjustments',{passId:payload.passId,date:date(payload.date),unitsDelta:payload.unitsDelta,amountDelta:payload.amountDelta,memo:str(payload.memo)},'adjustment.create');
+ }else if(command.type==='deduction.cancelForDeletion'){
+  const row=state.deductions.find(r=>r.id===payload.id),op=str(payload.operationId);
+  if(!row||!op||op.length>128||!str(payload.lessonId))fail('차감 취소 대상을 확인해 주세요.');
+  if(row.lessonId&&row.lessonId!==payload.lessonId||!row.lessonId&&payload.billingDeductionId!==row.id)fail('레슨과 차감 연결이 일치하지 않아요.');
+  if(row.voidedAt&&row.deletionOperationId===op)return clone(original);
+  if(row.voidedAt)fail('다른 작업으로 취소된 차감이에요. 정산을 확인해 주세요.');
+  put('deductions',{id:row.id,expectedVersion:payload.expectedVersion,voidedAt:now,deletionOperationId:op},'deduction.cancelForDeletion');
  }else if(command.type==='entity.void'||command.type==='entity.restore'){
   if(!['passes','payments','deductions','adjustments'].includes(payload.collection))fail('취소할 수 없는 기록이에요.');
   const row=state[payload.collection].find(item=>item.id===payload.id);if(!row)fail('기록을 찾지 못했어요.');
   if(payload.collection==='passes'&&command.type==='entity.void'&&active([...state.payments,...state.deductions,...state.adjustments]).some(item=>item.passId===row.id))fail('연결된 결제·수강·조정을 먼저 삭제해 주세요.');
+  if(command.type==='entity.restore'&&row.deletionOperationId)fail('레슨 삭제로 취소한 차감은 복구할 수 없어요.');
   if(command.type==='entity.restore'&&payload.collection!=='passes')findPass(row.passId);
   if(command.type==='entity.restore'&&payload.collection==='deductions'&&active(state.deductions).some(other=>other.id!==row.id&&((row.lessonId&&other.lessonId===row.lessonId)||(row.legacyRef&&other.legacyRef===row.legacyRef))))fail('동일 레슨에 다른 차감이 있어 복구할 수 없어요.');
   if(command.type==='entity.restore'&&payload.collection==='payments'&&active(state.payments).some(other=>other.id!==row.id&&fingerprint('payment',other)===fingerprint('payment',row))&&!opts.allowDuplicate)fail('동일 결제가 있어 복구할 수 없어요.');
@@ -178,5 +197,5 @@ function reduce(original,command,context={}){
  }
  state.revision++;return state;
 }
-return {empty,validateState,reduce,totals,hourlyTotals,passBalance,fingerprint,money,units,date,time,timeRange,status,active,check};
+return {deletionGuards,verifyDeletionGuards,empty,validateState,reduce,totals,hourlyTotals,passBalance,fingerprint,money,units,date,time,timeRange,status,active,check};
 });

@@ -644,7 +644,9 @@ test('Lesson delete keeps homework and practice history; legacy page still reads
   await boot(page);
   await page.goto('/#/lesson/l1');
   await page.getByRole('button', {name:'레슨 삭제'}).click();
-  await sheet(page).getByRole('button', {name:'삭제'}).click();
+  await page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true}).getByRole('button',{name:'삭제 대상 확인'}).click();
+  await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+  await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
   const d = await data(page);
   expect(d.lessons.some(l => l.id === 'l1')).toBe(false);
   expect(d.assignments.find(a => a.id === 'a1')).toMatchObject({title:'립트릴 5분', lessonIds:[]});
@@ -2219,4 +2221,154 @@ test('Actual practice time supports training recordings without changing the ent
  await page.reload();
  expect(await page.evaluate(()=>VZ.sumMinutes(VZ.timeEntries()))).toBe(12);
  expect((await media(page)).some(x=>x.id==='m2')).toBe(true);
+});
+
+async function deletionBillingFrame(page,seed=false){
+ if(seed){
+  const cloud=page.__deletionCloud={row:null};
+  await page.route('**/rest/v1/vocal_billing_documents*',route=>route.fulfill({json:cloud.row?[cloud.row]:[]}));
+  await page.route('**/rest/v1/rpc/vocal_billing_save',route=>{
+   const body=route.request().postDataJSON();
+   if((cloud.row?.revision||0)!==body.p_expected_revision)return route.fulfill({status:409,json:{code:'PT409'}});
+   cloud.row={payload:body.p_payload,revision:(cloud.row?.revision||0)+1,last_request_id:body.p_request_id,updated_at:new Date().toISOString()};
+   return route.fulfill({json:cloud.row});
+  });
+  await page.evaluate(()=>localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token',JSON.stringify({access_token:'fixture-token',expires_at:4102444800,user:{id:'ui-test-user',email:'fixture@example.invalid'}})));
+ }
+ const handle=await page.evaluateHandle(()=>{
+  const frame=document.createElement('iframe');frame.hidden=true;frame.dataset.deletionFixture='';
+  window.__deletionFixtureReady=new Promise(resolve=>{
+   const listener=e=>{if(e.origin===location.origin&&e.source===frame.contentWindow&&e.data?.type==='vzip-billing-auto'){window.removeEventListener('message',listener);resolve();}};
+   window.addEventListener('message',listener);
+  });
+  frame.src='/billing/?auto=1&do=fixture';document.body.append(frame);return frame;
+ });
+ const frame=await handle.asElement().contentFrame();
+ await expect.poll(()=>frame.evaluate(()=>typeof window.VzipBillingStore?.load==='function').catch(()=>false)).toBe(true);
+ await page.evaluate(()=>window.__deletionFixtureReady);
+ if(seed)await frame.evaluate(async()=>{
+  const S=VzipBillingStore;let s=await S.load(),run=async(type,payload)=>s=await S.save({type,payload},s.revision);
+  const date=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).lessons.find(l=>l.id==='l1').date;
+  await run('pass.save',{name:'보존할 10회권',amount:300000,totalUnits:1000});const passId=s.passes[0].id;
+  await run('payment.save',{passId,date,kind:'payment',amount:300000});
+  await run('payment.save',{passId,date,kind:'refund',amount:10000});
+  await run('deduction.save',{passId,date,lessonId:'l1',status:'completed',units:100});
+  await run('deduction.save',{passId,date,lessonId:'same-day-neighbour',status:'completed',units:100});
+  await VzipBillingCloud.sync();
+ });
+ const value=await frame.evaluate(()=>VzipBillingStore.load());
+ await handle.evaluate(el=>el.remove());return value;
+}
+async function confirmLessonDeletion(page,{files=[],billing=false}={}){
+ await page.goto('/#/lesson/l1');await page.getByRole('button',{name:'레슨 삭제',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan).toBeVisible();
+ for(const id of files)await plan.locator('[name=media][value="'+id+'"]').check();
+ if(billing)await plan.locator('[name=billing]').check();
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ const final=page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true});
+ await expect(final).toContainText('복구할 수 없습니다');
+ await final.getByRole('button',{name:'영구 삭제',exact:true}).click();
+}
+test('Lesson deletion preserves unselected billing and recordings and starts with all options off',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true);
+ await page.goto('/#/lesson/l1');await page.getByRole('button',{name:'레슨 삭제',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan.locator('input:checked')).toHaveCount(0);
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ const after=await deletionBillingFrame(page);
+ expect(after).toEqual(before);expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+ expect((await data(page)).practices[0].manualMinutes).toBe(25);
+});
+test('Lesson deletion cancels the exact charge once after a lost response and deletes only the chosen recording',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true);
+ await page.evaluate(()=>{
+  const cancel=VZ.billingCancelForDeletion;let first=true;
+  VZ.billingCancelForDeletion=async job=>{const result=await cancel(job);if(first){first=false;throw Error('응답 중단 시험');}return result;};
+ });
+ await confirmLessonDeletion(page,{files:['m1'],billing:true});
+ const progress=page.getByRole('dialog',{name:'레슨 삭제 진행',exact:true});
+ await expect(progress.locator('[data-delete-error]')).toContainText('응답 중단 시험');
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
+ expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+ await progress.getByRole('button',{name:'삭제 재시도',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>({
+  exists:VZ.db.lessons.some(l=>l.id==='l1'),
+  error:document.querySelector('[data-delete-error]')?.textContent||''
+ })),{timeout:10000}).toEqual({exists:false,error:''});
+ const after=await deletionBillingFrame(page);
+ expect(after.payments).toEqual(before.payments);
+ expect(after.deductions.find(d=>d.lessonId==='same-day-neighbour')).toEqual(before.deductions.find(d=>d.lessonId==='same-day-neighbour'));
+ expect(after.deductions.find(d=>d.lessonId==='l1').voidedAt).toBeTruthy();
+ expect(after.history.filter(h=>h.action==='deduction.cancelForDeletion')).toHaveLength(1);
+ expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
+ const d=await data(page);expect(d.practices[0]).toMatchObject({mediaIds:[],manualMinutes:25,completed:['a1']});
+ expect(d.assignments.find(a=>a.id==='a2').lessonIds).toEqual(['l-over']);
+ expect(await page.evaluate(()=>VZ.lessonDeletion.jobs())).toEqual([]);
+ const handle=await page.evaluateHandle(()=>{const f=document.createElement('iframe');f.hidden=true;f.src='/billing/?auto=1&do=fixture';document.body.append(f);return f;});
+ const frame=await handle.asElement().contentFrame();
+ await expect.poll(()=>frame.evaluate(()=>!!window.VzipBillingStore).catch(()=>false)).toBe(true);
+ const guarded=await frame.evaluate(async old=>{
+  const S=VzipBillingStore;let s=await S.load(),errors=[];
+  try{await S.replace(old,s.revision);}catch(e){errors.push(e.message);}
+  s=await S.clear(s.revision);
+  try{await S.replace(old,s.revision);}catch(e){errors.push(e.message);}
+  return errors;
+ },before);
+ expect(guarded).toHaveLength(2);expect(guarded.every(e=>e.includes('과거 백업'))).toBe(true);
+ await handle.evaluate(el=>el.remove());
+});
+test('Lesson deletion resumes a partial file failure after refresh without restoring or deleting unselected data',async({page})=>{
+ const seed=legacy();seed.lessons[0].recordings.push({id:'m2',note:'second'});await boot(page,{seed});
+ await page.evaluate(()=>{
+  const remove=VZ.media.remove;
+  VZ.media.remove=async item=>{if(item.id==='m2')throw Error('두 번째 파일 실패 시험');return remove(item);};
+ });
+ await confirmLessonDeletion(page,{files:['m1','m2']});
+ const progress=page.getByRole('dialog',{name:'레슨 삭제 진행',exact:true});
+ await expect(progress.locator('[data-delete-error]')).toContainText('두 번째 파일 실패 시험');
+ expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
+ await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false;});
+ await page.goto('/#/lessons');
+ await page.getByRole('button',{name:'미완료 레슨 삭제 1건 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'미완료 레슨 삭제',exact:true}).locator('[data-job]').click();
+ await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ expect(await media(page)).toEqual([]);
+ expect((await data(page)).practices[0].manualMinutes).toBe(25);
+});
+test('Lesson deletion detects changed lesson content before any irreversible step',async({page})=>{
+ await boot(page);
+ await page.goto('/#/lesson/l1');await page.getByRole('button',{name:'레슨 삭제',exact:true}).click();
+ await page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true}).getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ const final=page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true});await expect(final).toBeVisible();
+ await page.evaluate(()=>VZ.change(d=>{d.lessons.find(l=>l.id==='l1').feedback='변경된 피드백';},{silent:true}));
+ await final.getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect(page.locator('.toast').last()).toContainText('레슨 내용이 바뀌었어요');
+ expect((await data(page)).lessons.find(l=>l.id==='l1').feedback).toBe('변경된 피드백');
+ expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+});
+
+test('Lesson deletion can reselect changed content after partial failure while preserving already completed steps',async({page})=>{
+ const seed=legacy();seed.lessons[0].recordings.push({id:'m2'});await boot(page,{seed});
+ await page.evaluate(()=>{
+  const remove=VZ.media.remove;VZ.media.remove=async m=>{if(m.id==='m2')throw Error('partial fixture');return remove(m);};
+ });
+ await confirmLessonDeletion(page,{files:['m1','m2']});
+ let progress=page.getByRole('dialog',{name:'레슨 삭제 진행',exact:true});
+ await expect(progress.locator('[data-delete-error]')).toContainText('partial fixture');
+ await page.evaluate(()=>VZ.change(d=>{d.lessons.find(l=>l.id==='l1').feedback='새로 작성한 피드백';},{silent:true}));
+ await progress.getByRole('button',{name:'삭제 재시도',exact:true}).click();
+ await expect(progress.locator('[data-delete-error]')).toContainText('레슨 내용이 바뀌었어요');
+ await progress.getByRole('button',{name:'대상 다시 선택',exact:true}).click();
+ await page.getByRole('dialog',{name:'삭제 대상을 다시 선택할까요?',exact:true}).getByRole('button',{name:'다시 선택',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan.locator('input:checked')).toHaveCount(0);
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
 });

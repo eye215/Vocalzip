@@ -30,13 +30,16 @@ function merge(primary, secondary) {
     const seen = new Set();
     out[k] = order.filter(id => id !== 'undefined' && !seen.has(id) && seen.add(id) && map.has(id) && !gone.has(id)).map(id => map.get(id));
     if (!Array.isArray(a[k]) && !Array.isArray(b[k])) delete out[k];
-    if (gone.size) deleted[k] = [...gone].slice(-5000);
+    if (gone.size) deleted[k] = [...gone];
     added[k] = fromSecondary;
   }
   const media = [...new Set([...(a.deleted?.media || []), ...(b.deleted?.media || [])])];
   if (media.length) deleted.media = media;
+  const billingLinks=[...new Set([...(a.deleted?.billingLessonLinks||[]),...(b.deleted?.billingLessonLinks||[])])];
+  if(billingLinks.length)deleted.billingLessonLinks=billingLinks;
   out.deleted = deleted;
   unlinkMedia(out, media);
+  unlinkLessons(out, out.deleted.lessons || []);
   const removedSongs = new Set(out.deleted.songs || []);
   if (out.performances) out.performances = out.performances.map(p => ({...p, songLinks:(p.songLinks || []).map(l => removedSongs.has(l.songId) ? {...l,songId:'',unlinked:true} : l)}));
   return {data:out, added};
@@ -60,8 +63,23 @@ function deleteMedia(data, id) {
   data.deleted.media = [...new Set([...(data.deleted.media || []), id])];
   return unlinkMedia(data, [id]);
 }
+function unlinkLessons(data,ids){
+ const gone=new Set(ids);
+ if(data.assignments)data.assignments=data.assignments.map(t=>{
+  const linked=[...new Set([...(Array.isArray(t.lessonIds)?t.lessonIds:[]),t.lessonId].filter(Boolean))];
+  if(!linked.some(id=>gone.has(id)))return t;
+  const keep=linked.filter(id=>!gone.has(id));return {...t,lessonIds:keep,lessonId:keep[0]||''};
+ });
+ return data;
+}
+function deleteLesson(data,id,billingId=''){
+ const linked=billingId||(data.lessons||[]).find(l=>l.id===id)?.billingDeductionId;
+ data.deleted||={};if(linked)data.deleted.billingLessonLinks=[...new Set([...(data.deleted.billingLessonLinks||[]),linked])];data.deleted.lessons=[...new Set([...(data.deleted.lessons||[]),id])];
+ if(data.lessons)data.lessons=data.lessons.filter(l=>l.id!==id);
+ return unlinkLessons(data,[id]);
+}
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
-const api = {COLLECTIONS, merge, valid, count, same, deleteMedia};
+const api = {COLLECTIONS, merge, valid, count, same, deleteMedia, deleteLesson};
 root.VzipDataMerge = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

@@ -172,7 +172,7 @@ VZ.route('lessons', {title:'레슨', back:true, tab:'calendar', actions:() => '<
   };
   const overdue = groups.upcoming.filter(l => l.date < today).length;
   const list = groups[lessonTab];
-  return '<div class="seg lesson-tabs" style="margin-bottom:14px"><button type="button" data-lt="upcoming" aria-pressed="' + (lessonTab === 'upcoming') + '">예정 ' + groups.upcoming.length + '</button><button type="button" data-lt="past" aria-pressed="' + (lessonTab === 'past') + '">완료 ' + groups.past.length + '</button><button type="button" data-lt="cancelled" aria-pressed="' + (lessonTab === 'cancelled') + '">취소 ' + groups.cancelled.length + '</button></div>' +
+  return (VZ.lessonDeletion?.pendingButton() || '') + '<div class="seg lesson-tabs" style="margin-bottom:14px"><button type="button" data-lt="upcoming" aria-pressed="' + (lessonTab === 'upcoming') + '">예정 ' + groups.upcoming.length + '</button><button type="button" data-lt="past" aria-pressed="' + (lessonTab === 'past') + '">완료 ' + groups.past.length + '</button><button type="button" data-lt="cancelled" aria-pressed="' + (lessonTab === 'cancelled') + '">취소 ' + groups.cancelled.length + '</button></div>' +
     (lessonTab === 'upcoming' && overdue ? '<div style="margin-bottom:12px">' + VZ.overdueCard(5) + '</div>' : '') +
     (list.length ? '<div class="list">' + list.map(VZ.lessonRow).join('') + '</div>' : VZ.empty('calendar-blank', {upcoming:'예정된 레슨이 없어요.', past:'완료한 레슨이 없어요.', cancelled:'취소한 레슨이 없어요.'}[lessonTab], lessonTab === 'upcoming' ? '<button type="button" class="btn sm" data-add-lesson2>레슨 일정 추가</button>' : ''));
 }, mount(main) {
@@ -216,14 +216,7 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
     VZ.billingLessonCard?.(main.querySelector('[data-billing-status]'), l);
     main.querySelectorAll('[data-fb],[data-fb2]').forEach(b => b.onclick = () => feedbackSheet(l));
     main.querySelector('[data-add-task]')?.addEventListener('click', () => VZ.taskSheet({lessonId:id, songId:VZ.lessonSongIds(l)[0] || ''}));
-    main.querySelector('[data-del-lesson]').onclick = async () => {
-      if (!await VZ.confirm('레슨 삭제', '이 레슨을 삭제할까요? 숙제·숙제 수행 기록·녹음 원본은 지워지지 않고 이 레슨과의 연결만 해제돼요.', {ok:'삭제', danger:true})) return;
-      const ok = VZ.change(d => {
-        d.lessons = d.lessons.filter(x => x.id !== id);
-        d.assignments.forEach(t => { if (VZ.taskLessons(t).includes(id)) { t.lessonIds = VZ.taskLessons(t).filter(x => x !== id); t.lessonId = t.lessonIds[0] || ''; } });
-      }, {silent:true});
-      if (ok) { VZ.toast('레슨을 삭제했어요.'); history.length > 1 ? history.back() : VZ.nav('#/lessons'); }
-    };
+    main.querySelector('[data-del-lesson]').onclick = () => VZ.lessonDeletion.open(id);
     const host = main.querySelector('[data-recs]'); if (!host) return;
     const recs = l.recordings || [];
     main.querySelector('[data-link-media]').onclick = () => linkMediaSheet(l);

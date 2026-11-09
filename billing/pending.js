@@ -29,6 +29,11 @@ function verifyLesson(command,lessons,state){
   if(command.payload.units>0&&!['completed','unconfirmed'].includes(lesson.lesson_status))
    throw Error('완료로 확인된 레슨만 차감할 수 있어요.');
   if(linked.row&&linked.row.id!==command.payload.id)throw Error('동일 레슨의 차감 기록이 이미 있어요.');
+ }else if(command.type==='deduction.cancelForDeletion'){
+  const row=state.deductions.find(r=>r.id===command.payload.id);
+  if(!row||command.payload.lessonId!==lesson.lesson_id||command.payload.billingDeductionId!==(lesson.billing_deduction_id||'')||
+   linked.row&&linked.row.id!==row.id||!linked.row&&!(row.voidedAt&&row.deletionOperationId===command.payload.operationId))
+   throw Error('삭제할 레슨과 차감 연결이 변경됐어요. 다시 확인해 주세요.');
  }else if(command.type==='entity.void'){
   if(command.payload.collection!=='deductions'||linked.row?.id!==command.payload.id)
    throw Error('차감을 취소할 레슨 연결이 변경됐어요. 다시 확인해 주세요.');

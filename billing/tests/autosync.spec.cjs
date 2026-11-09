@@ -14,7 +14,7 @@ async function mockCloud(page,initial=null){
    return route.fulfill({json:cloud.history.map(h=>({id:h.id,op:h.op,at:h.at,rev:String(h.payload.revision)}))});
   }
   if(route.request().method()==='GET'){cloud.reads++;return route.fulfill({json:cloud.row?[cloud.row]:[]})}
-  const body=route.request().postDataJSON();cloud.writes++;
+  const body=route.request().postDataJSON();if(cloud.rejectCancellation&&body.p_payload.deductions.some(d=>d.deletionOperationId))return route.fulfill({status:503,json:{message:'fixture unavailable'}});cloud.writes++;
   if((cloud.row?.revision||0)!==body.p_expected_revision)return route.fulfill({status:409,json:{code:'PT409'}});
   cloud.row={payload:body.p_payload,revision:(cloud.row?.revision||0)+1,last_request_id:body.p_request_id,updated_at:new Date().toISOString()};
   return route.fulfill({json:cloud.row});
@@ -94,4 +94,57 @@ test('without the server history set up, the versions panel says so',async({page
  await mockCloud(page);await open(page);
  await page.locator('[data-panel=transfer]').click();await page.locator('#cloud-versions summary').click();
  await expect(page.locator('#cloud-versions')).toContainText('서버 보관 기능이 아직 설정되지 않았어요');
+});
+
+async function deletionCloudSetup(page){
+ const cloud=await mockCloud(page);await open(page);
+ await expect(page.locator('#sync-line')).toContainText('다른 기기와 자동으로 맞춰져요');
+ const input=await page.evaluate(async()=>{
+  const S=VzipBillingStore;let s=await S.load();
+  const run=async(type,payload)=>s=await S.save({type,payload},s.revision),date='2026-11-09';
+  await run('pass.save',{name:'guard pass',amount:300000,totalUnits:1000});
+  const passId=s.passes[0].id;
+  await run('payment.save',{passId,date,kind:'payment',amount:300000});
+  await run('deduction.save',{passId,date,lessonId:'delete-lesson',status:'completed',units:100});
+  const row=s.deductions[0];
+  localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify({lessons:[{id:'delete-lesson',date,status:'done'}]}));
+  await VzipBillingCloud.sync();
+  return {id:row.id,version:row.version,guard:{id:'delete-lesson',date,status:'completed',start:'',end:'',billingId:'',touched:0}};
+ });
+ return {cloud,input};
+}
+async function deletionCloudAction(page,input){
+ await page.evaluate(()=>{window.__deleteReports=[];window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='vzip-billing-auto')window.__deleteReports.push(e.data);});});
+ const src='/billing/?auto=1&do=delete-cancel&lesson=delete-lesson&deduction='+encodeURIComponent(input.id)+'&version='+input.version+'&operation=cloud-delete-fixture&guard='+encodeURIComponent(JSON.stringify(input.guard));
+ const handle=await page.evaluateHandle(src=>{const f=document.createElement('iframe');f.hidden=true;f.src=src;document.body.append(f);return f;},src);
+ await expect.poll(()=>page.evaluate(()=>window.__deleteReports.length),{timeout:20000}).toBeGreaterThan(0);
+ const result=await page.evaluate(()=>window.__deleteReports.at(-1));await handle.evaluate(el=>el.remove());return result;
+}
+test('Deletion receipt confirms financial cancellation on the cloud before reporting success',async({page})=>{
+ const {cloud,input}=await deletionCloudSetup(page);
+ const result=await deletionCloudAction(page,input);expect(result.action.ok).toBe(true);
+ expect(cloud.row.payload.deductions.find(d=>d.id===input.id).deletionOperationId).toBe('cloud-delete-fixture');
+ const once=JSON.stringify(cloud.row.payload);
+ const retried=await deletionCloudAction(page,input);expect(retried.action.ok).toBe(true);
+ expect(JSON.stringify(cloud.row.payload)).toBe(once);
+});
+test('Deletion receipt fails closed when the cloud cannot acknowledge cancellation',async({page})=>{
+ const {cloud,input}=await deletionCloudSetup(page),before=JSON.stringify(cloud.row);
+ cloud.rejectCancellation=true;
+ const result=await deletionCloudAction(page,input);expect(result.action.ok).toBe(false);
+ expect(result.action.message).toContain('클라우드 요청 실패');
+ expect(JSON.stringify(cloud.row)).toBe(before);
+ const local=await ledger(page);
+ expect(local.state.deductions.find(d=>d.id===input.id).voidedAt).toBeTruthy();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).lessons.length)).toBe(1);
+});
+test('Deletion receipt received from cloud blocks restoring a prior local backup',async({page})=>{
+ const {cloud,input}=await deletionCloudSetup(page),old=JSON.parse(JSON.stringify(cloud.row.payload));
+ expect((await deletionCloudAction(page,input)).action.ok).toBe(true);
+ const result=await page.evaluate(async old=>{
+  const S=VzipBillingStore,current=await S.load();
+  try{await S.replace(old,current.revision);return '';}catch(e){return e.message;}
+ },old);
+ expect(result).toContain('과거 백업');
+ expect(cloud.row.payload.deductions.find(d=>d.id===input.id).voidedAt).toBeTruthy();
 });
