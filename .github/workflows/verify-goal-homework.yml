@@ -1,0 +1,46 @@
+name: Verify goal and homework web release
+on:
+  push:
+    branches: ['codex/verify-goal-homework-20261109']
+permissions:
+  contents: read
+jobs:
+  published-practice:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compare published practice scripts with the merged source
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          const hash=b=>createHash('sha256').update(b).digest('hex');
+          const paths=['index.html','app/practice-time-model.js','app/student-home-model.js','app/views-lessons.js','app/views-main.js','design-system/student-home-app.js'];
+          const results=await Promise.all(paths.map(async path=>{
+            const local=await readFile(path);
+            const r=await fetch('https://vocalzip.yullul.com/'+path+'?verify='+process.env.GITHUB_SHA,{redirect:'error',signal:AbortSignal.timeout(15000)});
+            return {path,status:r.status,sha256_match:r.ok&&hash(local)===hash(Buffer.from(await r.arrayBuffer()))};
+          }));
+          for(const row of results)console.log(JSON.stringify(row));
+          if(results.some(row=>!row.sha256_match))process.exitCode=1;
+          NODE
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Published screens with synthetic local records and blocked cloud requests
+        run: |
+          node <<'NODE'
+          require('node:fs').writeFileSync('practice-release.config.cjs',[
+            "const base=require('./playwright.config.cjs');",
+            "module.exports={...base,testDir:'./tests',webServer:undefined,use:{...base.use,baseURL:'https://vocalzip.yullul.com'},reporter:'list',outputDir:'published-practice-results'};"
+          ].join('\n'));
+          NODE
+          npx playwright test tests/student-home.spec.cjs --config=practice-release.config.cjs --grep 'Goal integrity|Homework integrity' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: published-practice-time-results
+          path: published-practice-results/
