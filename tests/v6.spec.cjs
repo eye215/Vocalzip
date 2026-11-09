@@ -2270,7 +2270,10 @@ test('Lesson deletion cancels the exact charge once after a lost response and de
  expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
  expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
  await progress.getByRole('button',{name:'삭제 재시도',exact:true}).click();
- await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ await expect.poll(()=>page.evaluate(()=>({
+  exists:VZ.db.lessons.some(l=>l.id==='l1'),
+  error:document.querySelector('[data-delete-error]')?.textContent||''
+ })),{timeout:10000}).toEqual({exists:false,error:''});
  const after=await deletionBillingFrame(page);
  expect(after.payments).toEqual(before.payments);
  expect(after.deductions.find(d=>d.lessonId==='same-day-neighbour')).toEqual(before.deductions.find(d=>d.lessonId==='same-day-neighbour'));
@@ -2323,4 +2326,25 @@ test('Lesson deletion detects changed lesson content before any irreversible ste
  await expect(page.locator('.toast').last()).toContainText('레슨 내용이 바뀌었어요');
  expect((await data(page)).lessons.find(l=>l.id==='l1').feedback).toBe('변경된 피드백');
  expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+});
+
+test('Lesson deletion can reselect changed content after partial failure while preserving already completed steps',async({page})=>{
+ const seed=legacy();seed.lessons[0].recordings.push({id:'m2'});await boot(page,{seed});
+ await page.evaluate(()=>{
+  const remove=VZ.media.remove;VZ.media.remove=async m=>{if(m.id==='m2')throw Error('partial fixture');return remove(m);};
+ });
+ await confirmLessonDeletion(page,{files:['m1','m2']});
+ let progress=page.getByRole('dialog',{name:'레슨 삭제 진행',exact:true});
+ await expect(progress.locator('[data-delete-error]')).toContainText('partial fixture');
+ await page.evaluate(()=>VZ.change(d=>{d.lessons.find(l=>l.id==='l1').feedback='새로 작성한 피드백';},{silent:true}));
+ await progress.getByRole('button',{name:'삭제 재시도',exact:true}).click();
+ await expect(progress.locator('[data-delete-error]')).toContainText('레슨 내용이 바뀌었어요');
+ await progress.getByRole('button',{name:'대상 다시 선택',exact:true}).click();
+ await page.getByRole('dialog',{name:'삭제 대상을 다시 선택할까요?',exact:true}).getByRole('button',{name:'다시 선택',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan.locator('input:checked')).toHaveCount(0);
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
 });

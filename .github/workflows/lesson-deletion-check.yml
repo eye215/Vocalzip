@@ -24,7 +24,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/lesson-deletion.test.cjs tests/media-delete.test.cjs tests/data-merge.test.cjs billing/tests/*.test.cjs
+      - run: node --test tests/lesson-deletion.test.cjs tests/media-delete.test.cjs tests/data-merge.test.cjs tests/cloud-sync.test.cjs billing/tests/*.test.cjs
       - run: npx playwright install --with-deps chromium webkit
       - name: Existing lesson deletion preserves unselected records
         run: npx playwright test tests/v6.spec.cjs --grep 'Lesson delete keeps|Lesson deletion' --workers=2
@@ -41,3 +41,50 @@ jobs:
             playwright-report/
             billing-results/
             billing-report/
+
+  accounts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:syntax
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/account-session.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deletion-account-isolation
+          path: |
+            playwright-report/
+            test-results/
+
+  billing-all:
+    runs-on: ubuntu-24.04  # Playwright 1.56 has no Ubuntu 26.04 build; ubuntu-latest moved there in Oct 2026
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Ledger and import unit tests
+        run: node --test billing/tests/*.test.cjs
+      - name: JavaScript syntax
+        run: |
+          for file in billing/*.js; do node --check "$file"; done
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Billing browser tests
+        run: npx playwright test --config=billing/playwright.config.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deletion-billing-all
+          path: |
+            billing-report
+            billing-results
+          retention-days: 14

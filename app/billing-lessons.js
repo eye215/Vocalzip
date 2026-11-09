@@ -87,6 +87,7 @@ VZ.billingImportLessons = () => importing ||= (async () => {
     const gone = new Set((VZ.db.deleted?.lessons || []).map(String));
     const suppressed = new Set(VZ.db.deleted?.billingLessonLinks || []);
     const active = (doc.deductions || []).filter(d => !suppressed.has(d.id) && !d.voidedAt && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')).sort((a, b) => a.date.localeCompare(b.date));
+    const pendingDeletionIds = new Set((VZ.lessonDeletion?.jobs() || []).map(j => j.lesson.id));
     const claimed = new Set(active.map(d => d.lessonId).filter(Boolean)); // app lessons a record already points at
     const passes = new Map((doc.passes || []).map(p => [p.id, p]));
     const add = [], link = [], taken = new Set();
@@ -96,7 +97,7 @@ VZ.billingImportLessons = () => importing ||= (async () => {
     const stale = l => l.importedFrom === 'billing' && l.billingDeductionId && !known.has(l.billingDeductionId);
     for (const d of active) {
       if ((d.lessonId && (ids.has(d.lessonId) || gone.has(String(d.lessonId)))) || linked.has(d.id) || ids.has(billLessonId(d)) || gone.has(billLessonId(d))) continue;
-      const same = lessons.find(l => l.date === d.date && (!l.billingDeductionId || stale(l)) && !claimed.has(l.id) && !taken.has(l.id));
+      const same = !d.lessonId && lessons.find(l => !pendingDeletionIds.has(l.id) && l.date === d.date && (!l.billingDeductionId || stale(l)) && !claimed.has(l.id) && !taken.has(l.id));
       if (same) { taken.add(same.id); link.push([same.id, d.id]); } else add.push(d);
     }
     if (!add.length && !link.length) return 0;

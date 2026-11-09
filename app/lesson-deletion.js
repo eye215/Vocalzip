@@ -76,19 +76,24 @@ function progressText(job){
 function progress(job){
  let latest=job,running=false;
  V.sheet({title:'레슨 삭제 진행',body:'<p class="muted">확인한 대상만 순서대로 처리해요. 중간에 멈추면 완료된 단계는 유지하고 다시 시도할 수 있어요.</p><p data-delete-progress role="status"></p><p data-delete-error role="alert"></p>',
-  foot:'<button type="button" class="btn danger block" data-delete-retry>삭제 재시도</button>',
+  foot:'<div class="btn-row"><button type="button" class="btn ghost" data-delete-replan>대상 다시 선택</button><button type="button" class="btn danger" data-delete-retry>삭제 재시도</button></div>',
   onMount:(el,close)=>{
-   const status=el.querySelector('[data-delete-progress]'),error=el.querySelector('[data-delete-error]'),button=el.querySelector('[data-delete-retry]');
+   const status=el.querySelector('[data-delete-progress]'),error=el.querySelector('[data-delete-error]'),button=el.querySelector('[data-delete-retry]'),replan=el.querySelector('[data-delete-replan]');
    const start=async()=>{
-    if(running)return;running=true;button.disabled=true;error.textContent='';
+    if(running)return;running=true;button.disabled=true;replan.disabled=true;error.textContent='';
     try{
      const result=await run(latest,next=>{latest=next;status.textContent=progressText(next);});
      status.textContent=progressText(result);V.toast('선택한 레슨과 항목을 삭제했어요.');close();V.nav('#/lessons');
     }catch(e){
      error.textContent=e.message;
      try{latest=jobs().find(x=>x.id===job.id)||latest;}catch{}
-     status.textContent=progressText(latest);button.disabled=false;
+     status.textContent=progressText(latest);button.disabled=false;replan.disabled=false;
     }finally{running=false;}
+   };
+   replan.onclick=async()=>{
+    if(running)return;
+    if(!await V.confirm('삭제 대상을 다시 선택할까요?','이미 삭제한 파일과 취소한 차감은 되돌리지 않습니다. 남은 레슨의 최신 내용을 기준으로 대상을 다시 고르고 최종 확인합니다.',{ok:'다시 선택'}))return;
+    try{save({...latest,phase:'complete'});close();await open(latest.lesson.id);}catch(e){error.textContent=e.message;}
    };
    button.onclick=start;status.textContent=progressText(job);start();
   }});
