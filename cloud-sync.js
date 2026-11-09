@@ -464,10 +464,16 @@ window.vzipCloudMediaAssignSong=async(item,changes,{expectedSongId='',expectedSo
 };
 window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];if(clean.name===item.name)delete clean.name;const saved=await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,clean)}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
 /** Verify server privacy/history guards before any irreversible selected action. */
-window.vzipCloudLessonDeleteReady=async()=>{
+window.vzipCloudLessonDeleteReady=async job=>{
  if(!window.vzipCloudSignedIn?.()||!client?.rpc)throw Error('로그인 계정을 확인해 주세요.');
  const {data,error}=await client.rpc('vzip_lesson_delete_capabilities');
  if(error||data?.version!==1||!data.lesson_permanent||!data.charge_guard)throw Error('서버 삭제 보호 설정을 확인하지 못했어요. 파일과 정산은 아직 처리하지 않았어요.');
+ const owner=user?.id;
+ const result=await client.from('vocal_data').select('payload').eq('user_id',owner).maybeSingle();
+ const matches=(result.data?.payload?.lessons||[]).filter(l=>l.id===job.lesson.id);
+ if(result.error||matches.length!==1||await window.VzipLessonDeletionModel.fingerprint(matches[0],job.mediaIds)!==job.lessonSignature)
+  throw Error('클라우드에 최신 레슨을 먼저 동기화한 뒤 삭제해 주세요. 파일과 정산은 아직 처리하지 않았어요.');
+ if(user?.id!==owner||owner!==job.owner||window.VzipAccountScope?.leaving)throw Error('로그인 계정이 변경됐어요.');
 };
 /** ID-bound server CAS plus bounded history redaction. */
 window.vzipCloudLessonDelete=async({owner,lesson,mediaIds=[],lessonSignature,id})=>{

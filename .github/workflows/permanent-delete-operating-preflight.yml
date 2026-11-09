@@ -1,21 +1,23 @@
-name: Permanent deletion operating preflight
+name: Permanent deletion operating release
 on:
   push:
     branches: ['codex/permanent-delete-release-20261109']
 permissions:
   contents: read
+  actions: read
 jobs:
-  preflight:
+  release:
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm ci --omit=dev --ignore-scripts
-      - name: Verify operating prerequisites without user data or writes
+      - name: Apply only a tested source or inspect read-only according to the release plan
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
-        run: node tools/permanent-delete-preflight.mjs
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/permanent-delete-release.mjs
