@@ -45,6 +45,7 @@ async function run(job,onProgress){
    if(!lock)throw Error('다른 탭에서 삭제 중이에요. 작업이 끝난 뒤 다시 확인해 주세요.');
    return P.execute(job,{
     owner,verify,save,progress:onProgress,
+    ensureServerProtection:()=>window.vzipCloudLessonDeleteReady(),
     cancelCharge:job=>V.billingCancelForDeletion(job),
     removeMedia:async(job,id)=>{
      const files=await M.list(true);await verify(job);

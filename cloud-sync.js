@@ -463,8 +463,14 @@ window.vzipCloudMediaAssignSong=async(item,changes,{expectedSongId='',expectedSo
  return {updatedAt,metadata};
 };
 window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];if(clean.name===item.name)delete clean.name;const saved=await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,clean)}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
-/** Remove this account's exact lesson and links with the existing payload CAS. */
-window.vzipCloudLessonDelete=async({owner,lesson,mediaIds=[],lessonSignature})=>{
+/** Verify server privacy/history guards before any irreversible selected action. */
+window.vzipCloudLessonDeleteReady=async()=>{
+ if(!window.vzipCloudSignedIn?.()||!client?.rpc)throw Error('로그인 계정을 확인해 주세요.');
+ const {data,error}=await client.rpc('vzip_lesson_delete_capabilities');
+ if(error||data?.version!==1||!data.lesson_permanent||!data.charge_guard)throw Error('서버 삭제 보호 설정을 확인하지 못했어요. 파일과 정산은 아직 처리하지 않았어요.');
+};
+/** ID-bound server CAS plus bounded history redaction. */
+window.vzipCloudLessonDelete=async({owner,lesson,mediaIds=[],lessonSignature,id})=>{
  if(!user||user.id!==owner||!window.vzipCloudSignedIn())throw Error('로그인 계정을 다시 확인해 주세요.');
  const assertOwner=()=>{if(!user||user.id!==owner||window.VzipAccountScope?.leaving)throw Error('계정 변경으로 삭제를 멈췄어요.');};
  for(let attempt=0;attempt<5;attempt++){
@@ -477,12 +483,14 @@ window.vzipCloudLessonDelete=async({owner,lesson,mediaIds=[],lessonSignature})=>
   if(matches.length>1||matches.length===1&&await window.VzipLessonDeletionModel.fingerprint(matches[0],mediaIds)!==lessonSignature)
    throw Error('다른 기기에서 레슨이 바뀌었어요. 최신 내용을 확인해 주세요.');
   assertOwner();
-  const payload=Merge.deleteLesson(structuredClone(row.payload),lesson.id,lesson.billingDeductionId);
-  const {data:written,error:writeError}=await sameVersion(client.from('vocal_data').update({payload,updated_at:nextVersion(row.updated_at)}).eq('user_id',owner),row.updated_at).select('user_id');
-  if(writeError)throw writeError;assertOwner();
-  if(written?.length)return true;
+  const result=await client.rpc('vzip_delete_lesson',{p_lesson_id:lesson.id,p_operation_id:id,p_expected_updated_at:row.updated_at,p_billing_link:lesson.billingDeductionId||''});
+  assertOwner();
+  if(result.error?.code==='PT409')continue;
+  if(result.error)throw Error('서버의 레슨 삭제를 확인하지 못했어요. 미완료 삭제에서 다시 시도해 주세요.');
+  if(result.data?.ok)return true;
+  if(!result.data?.pending)throw Error('서버 삭제 응답을 확인하지 못했어요.');
  }
- throw Error('다른 기기에서 기록을 수정 중이에요. 삭제를 다시 시도해 주세요.');
+ throw Error('레슨의 서버 이력 정리가 진행 중이거나 다른 기기에서 수정 중이에요. 미완료 삭제에서 다시 확인해 주세요.');
 };
 async function unlinkCloudMedia(owner,id){
  for(let attempt=0;attempt<5;attempt++){

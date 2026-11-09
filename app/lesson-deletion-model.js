@@ -24,7 +24,7 @@ async function plan({id,owner,lesson,mediaIds=[],deduction=null,cloud=false}){
  if(!Array.isArray(mediaIds)||mediaIds.some(x=>typeof x!=='string'||!rows(lesson.recordings).some(r=>r.id===x))||new Set(mediaIds).size!==mediaIds.length)fail('이 레슨에 연결된 파일만 선택해 주세요.');
  if(deduction&&(deduction.voidedAt||target(lesson,{deductions:[deduction]})?.id!==deduction.id||!Number.isSafeInteger(deduction.version)))fail('취소할 정산 차감을 다시 확인해 주세요.');
  return {version:1,id,owner,lesson:{id:lesson.id,date:lesson.date||'',billingDeductionId:lesson.billingDeductionId||''},lessonSignature:await fingerprint(lesson,mediaIds),mediaIds:[...mediaIds],linkedMediaIds:[...new Set(rows(lesson.recordings).map(r=>r.id))],deduction:deduction?{id:deduction.id,version:deduction.version}:null,cloud:!!cloud,
-  done:{billing:!deduction,media:[],cloud:!cloud,lesson:false},phase:'ready',error:''};
+  done:{prepared:!cloud,billing:!deduction,media:[],cloud:!cloud,lesson:false},phase:'ready',error:''};
 }
 function validate(job){
  if(!job||job.version!==1||typeof job.id!=='string'||!job.id||typeof job.owner!=='string'||!job.owner||!job.lesson?.id||
@@ -32,7 +32,7 @@ function validate(job){
   !Array.isArray(job.linkedMediaIds)||job.mediaIds.some(id=>!job.linkedMediaIds.includes(id))||
   job.deduction&&(!job.deduction.id||!Number.isSafeInteger(job.deduction.version)||job.deduction.version<1)||
   !job.done||!Array.isArray(job.done.media)||job.done.media.some(id=>!job.mediaIds.includes(id))||
-  ['billing','cloud','lesson'].some(k=>typeof job.done[k]!=='boolean')||typeof job.cloud!=='boolean')fail('삭제 작업 기록을 확인할 수 없어요. 원본은 자동으로 지우지 않습니다.');
+  ['prepared','billing','cloud','lesson'].some(k=>typeof job.done[k]!=='boolean')||typeof job.cloud!=='boolean')fail('삭제 작업 기록을 확인할 수 없어요. 원본은 자동으로 지우지 않습니다.');
  return job;
 }
 async function execute(original,ports){
@@ -41,6 +41,7 @@ async function execute(original,ports){
  const save=async patch=>{const next={...job,...patch};await ports.save(next);job=next;ports.progress?.(copy(job));};
  await guard();await save({phase:'running',error:''});
  try{
+  if(!job.done.prepared){await guard();await ports.ensureServerProtection(job);await guard();await save({done:{...job.done,prepared:true}});}
   if(!job.done.billing){await guard();await ports.cancelCharge(job);await guard();await save({done:{...job.done,billing:true}});}
   for(const id of job.mediaIds){
    if(job.done.media.includes(id))continue;
