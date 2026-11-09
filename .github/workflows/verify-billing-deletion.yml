@@ -1,0 +1,56 @@
+name: Verify published billing lesson deletion
+on:
+  push:
+    branches: ['codex/verify-billing-delete-20261109']
+permissions:
+  contents: read
+jobs:
+  published:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Compare deployed scripts and their cache versions
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          const hash=x=>createHash('sha256').update(x).digest('hex');
+          const paths=['index.html','app/core.js','data-merge.js','cloud-sync.js','app/lesson-deletion-model.js','app/lesson-deletion.js','app/views-lessons.js','app/billing-lessons.js','billing/index.html','billing/core.js','billing/dialog.js','billing/store.js','billing/pending.js','billing/app.js','billing/cloud.js'];
+          const out=await Promise.all(paths.map(async path=>{
+            const local=await readFile(path),r=await fetch('https://vocalzip.yullul.com/'+path+'?verify='+process.env.GITHUB_SHA,{redirect:'error',signal:AbortSignal.timeout(15000)});
+            return {path,status:r.status,sha256_match:r.ok&&hash(local)===hash(Buffer.from(await r.arrayBuffer()))};
+          }));
+          for(const row of out)console.log(JSON.stringify(row));
+          if(out.some(x=>!x.sha256_match))process.exitCode=1;
+          NODE
+      - name: Actual published screens with synthetic account, ledger and media fixtures
+        run: |
+          node <<'NODE'
+          require('node:fs').writeFileSync('published-deletion.config.cjs',[
+            "const base=require('./playwright.config.cjs');",
+            "module.exports={...base,webServer:undefined,use:{...base.use,baseURL:'https://vocalzip.yullul.com'},reporter:'list',outputDir:'published-deletion-results'};"
+          ].join('\n'));
+          NODE
+          npx playwright test tests/v6.spec.cjs tests/student-home.spec.cjs --config=published-deletion.config.cjs --grep 'Lesson delete keeps|Lesson deletion|Cloud lesson deletion' --workers=2
+      - name: Published reverse deletion and cloud acknowledgement fixtures
+        run: |
+          node <<'NODE'
+          require('node:fs').writeFileSync('published-billing.config.cjs',[
+            "const base=require('./billing/playwright.config.cjs');",
+            "module.exports={...base,testDir:'./billing/tests',webServer:undefined,use:{...base.use,baseURL:'https://vocalzip.yullul.com',serviceWorkers:'block'},reporter:'list',outputDir:'published-billing-results'};"
+          ].join('\n'));
+          NODE
+          npx playwright test billing/tests/lesson-settlement.spec.cjs billing/tests/autosync.spec.cjs --config=published-billing.config.cjs --grep 'Reverse deletion' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: published-billing-lesson-deletion
+          path: |
+            published-deletion-results/
+            published-billing-results/
