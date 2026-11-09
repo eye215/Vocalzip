@@ -2051,3 +2051,25 @@ test('Files edited before the follow rule existed are lined up once after start'
 
 
 
+
+test('Actual practice time excludes recording length across growth, calendar and home',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  const m=(await window.vzipReadMedia()).find(x=>x.id==='m2');delete m.bytes;
+  await window.vzipStorePracticeMedia({...m,blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:600});
+  VZ.change(d=>{d.practices[0].date=VZ.today();});VZ.media.invalidate();
+ });
+ const values=await page.evaluate(async()=>{
+  const entries=VZ.timeEntries(await VZ.media.list());
+  return {total:VZ.sumMinutes(entries),home:VzipStudentHomeModel.build(VZ.db,{today:VZ.today(),timeEntries:entries}).week.actualMinutes};
+ });
+ expect(values).toEqual({total:25,home:25});
+ await page.goto('/#/growth');await page.getByRole('button',{name:'전체',exact:true}).click();
+ await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
+ await expect(page.locator('[data-file-time]')).toHaveCount(0);
+ await page.locator('[data-song-metric="files"]').click();
+ await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회');
+ await page.goto('/#/song/s1');await expect(page.locator('[data-summary]')).toContainText('연습 25분');
+ await page.goto('/#/calendar');await expect(page.locator('[data-month-minutes]')).toHaveText('25분');
+ expect((await data(page)).practices[0]).toMatchObject({minutes:30,manualMinutes:25,mediaSeconds:300});
+});
