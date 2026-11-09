@@ -3,6 +3,8 @@ import {test,before,beforeEach,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import pg from 'pg';
+import {createHash} from 'node:crypto';
+import {ownerPolicyRelease,verifyOwnerPolicy} from '../tools/ai-owner-release.mjs';
 const url=process.env.VZ_AI_OWNER_TEST_DB,skip=!url;
 const U='11111111-1111-4111-8111-111111111111',V='22222222-2222-4222-8222-222222222222';
 const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',C='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -44,6 +46,8 @@ before(async()=>{
  update public.vzip_session_rollout set enforced=true;
  insert into public.vzip_account_session_state(user_id) values ('${U}'),('${V}');
  insert into public.vzip_device_sessions(user_id,session_id,label) values ('${U}','${A}','owner phone'),('${U}','${B}','owner tablet'),('${V}','${C}','other user');`);
+ await db.query("alter table auth.users add column email text");
+ await db.query("update auth.users set email=case when id=$1 then 'owner@example.invalid' else 'other@example.invalid' end",[U]);
  await db.query(sql);await db.query(sql);
 });
 beforeEach(async()=>{
@@ -103,4 +107,31 @@ test('concurrent requests never let another account increment paid usage',{skip}
  try{assert.deepEqual(await Promise.all([reserve(U,A,a),reserve(V,C,b)]),[true,false]);}
  finally{await Promise.all([a.end(),b.end()]);}
  const rows=await counts();assert.equal(rows[0].used_total,8);assert.equal(rows[1].used_total,5);
+});
+
+const selector=email=>createHash('sha256').update(email).digest('hex');
+test('release preflight is read only and exactly matches the synthetic email',{skip},async()=>{
+ await db.query('update public.vzip_ai_owner_policy set enabled=false');
+ const before=await counts(),r=await ownerPolicyRelease(db,{selector:selector('owner@example.invalid'),migration:sql});
+ assert.equal(r.matched_accounts,1);assert.equal(r.applied,false);assert.equal(await allowed(),false);assert.deepEqual(await counts(),before);
+});
+test('release applies the owner atomically and verifies a real registered non-owner without writing usage',{skip},async()=>{
+ await db.query('update public.vzip_ai_owner_policy set enabled=false');const before=await counts();
+ const r=await ownerPolicyRelease(db,{selector:selector('owner@example.invalid'),migration:sql,apply:true});
+ assert.equal(r.applied,true);assert.deepEqual(await counts(),before);
+ assert.deepEqual(await verifyOwnerPolicy(db,{selector:selector('owner@example.invalid')}),{policy_single_owner:true,owner_runtime_allowed:true,registered_non_owner_checked:true,non_owner_rpc_denied:true});
+ assert.deepEqual(await counts(),before);
+});
+test('release cannot select a missing or ambiguous owner and rolls back',{skip},async()=>{
+ await assert.rejects(ownerPolicyRelease(db,{selector:selector('missing@example.invalid'),migration:sql,apply:true}),/OWNER_MATCH_NOT_UNIQUE/);
+ await db.query("update auth.users set email='owner@example.invalid'");
+ try{await assert.rejects(ownerPolicyRelease(db,{selector:selector('owner@example.invalid'),migration:sql,apply:true}),/OWNER_MATCH_NOT_UNIQUE/);}
+ finally{await db.query("update auth.users set email=case when id=$1 then 'owner@example.invalid' else 'other@example.invalid' end",[U]);}
+ assert.equal(await allowed(),true);
+});
+test('release preserves an unexpected reservation implementation and stops',{skip},async()=>{
+ await db.query("create or replace function public.vzip_song_stt_reserve() returns boolean language sql security definer set search_path='' as $$ select false $$");
+ try{await assert.rejects(ownerPolicyRelease(db,{selector:selector('owner@example.invalid'),migration:sql,apply:true}),/RESERVATION_CONTRACT_CHANGED/);}
+ finally{await db.query(sql);}
+ assert.equal(await allowed(),true);
 });
