@@ -21,12 +21,13 @@ const selectionKey = 'vocalzip-vocal-lab-selected-media-v1';
 const selectionIds = () => { try { const ids=JSON.parse(sessionStorage.getItem(selectionKey)||'[]'); return Array.isArray(ids) ? ids.map(String) : []; } catch { return []; } };
 V.openAnalysisSelection = items => {
   const unique=[...new Map(items.filter(Boolean).map(m=>[String(m.id),m])).values()];
-  if(!unique.length)return;
-  try { sessionStorage.setItem(selectionKey,JSON.stringify(unique.map(m=>m.id))); } catch { V.toast('선택한 녹음을 저장하지 못했어요.','error'); return; }
+  if(!unique.length)return false;
+  try { sessionStorage.setItem(selectionKey,JSON.stringify(unique.map(m=>m.id))); } catch { V.toast('선택한 녹음을 저장하지 못했어요.','error'); return false; }
   const songs=[...new Set(unique.map(m=>m.songId).filter(Boolean))];
   V.nav(songs.length===1 && unique.every(m=>m.songId===songs[0])
     ? '#/vocal-lab/'+encodeURIComponent(songs[0])+'?selection=1'
     : '#/vocal-lab?selection=1');
+  return true;
 };
 let current = null, instance = 0;
 const clean = () => { current?.player?.destroy(); if (current) current.dead = true; current = null; instance++; };
@@ -158,7 +159,8 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
       return;
     }
     document.querySelector('[data-lab-more]').onclick=()=>V.sheet({title:'보컬 연구소',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/lab-reports">리포트 보관함 <i class="ph ph-caret-right"></i></a><a class="vz-choice" href="#/song/'+encodeURIComponent(song.id)+'">곡 상세 <i class="ph ph-caret-right"></i></a></div>'});
-    const items=(await M.list().catch(()=>M.cached())).filter(m=>m.songId===song.id && !M.isVideo(m)).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(a.created||0)-(b.created||0));
+    const requested=r.query.get('selection')==='1' ? new Set(selectionIds()) : null;
+    const items=(await M.list().catch(()=>M.cached())).filter(m=>m.songId===song.id && (!M.isVideo(m) || requested?.has(String(m.id)))).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(a.created||0)-(b.created||0));
     if(id!==instance||!host.isConnected)return;
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
     const selected=r.query.get('selection')==='1' ? selectionIds().filter(key=>items.some(m=>String(m.id)===key)) : report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];

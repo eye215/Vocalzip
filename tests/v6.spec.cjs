@@ -1517,9 +1517,31 @@ test('Song detail shows real growth, recording selection and analysis handoff', 
   await expect(page.locator('[data-selected-count]')).toHaveText('선택 2개');
   await expect(page.getByRole('button', {name:'보컬 분석하기'})).toBeEnabled();
   await page.getByRole('button', {name:'보컬 분석하기'}).click();
-  await expect(page).toHaveURL(/#\/analysis\/.*\?selected=/);
-  await expect(page.locator('.vz-analysis-selected-scroll a')).toHaveCount(2);
+  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?selection=1$/);
+  await expect(page.locator('.vl-dates button[aria-pressed="true"]')).toHaveCount(2);
+  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+  expect((await page.evaluate(() => JSON.parse(sessionStorage.getItem('vocalzip-vocal-lab-selected-media-v1')))).sort()).toEqual(['m1','m2']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
+test('Library bulk analysis opens every selected recording in the vocal lab', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    await window.vzipStorePracticeMedia({id:'m3',name:'다른 곡 녹음',created:Date.now(),type:'audio/wav',source:'practice',songId:'s2',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/library');
+  await expect(page.locator('[data-media]')).toHaveCount(3);
+  await page.locator('[data-lib-select-all]').click();
+  await expect(page.locator('[data-lib-selected-count]')).toHaveText('3개 선택');
+  await page.locator('[data-lib-bulk-more]').click();
+  await page.getByRole('dialog', {name:'선택한 녹음 3개'}).getByRole('button', {name:'보컬 분석'}).click();
+  await expect(page).toHaveURL(/#\/vocal-lab\?selection=1$/);
+  await expect(page.locator('.vl-song')).toContainText('선택한 녹음 3개');
+  await expect(page.locator('.vl-section h2')).toHaveCount(2);
+  expect((await page.evaluate(() => JSON.parse(sessionStorage.getItem('vocalzip-vocal-lab-selected-media-v1')))).sort()).toEqual(['m1','m2','m3']);
+  await page.locator('.vl-section').filter({hasText:'This Is the Moment'}).getByRole('link', {name:'선택한 녹음 모두 분석'}).click();
+  await expect(page.locator('.vl-dates button[aria-pressed="true"]')).toHaveCount(2);
 });
 
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
