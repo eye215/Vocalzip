@@ -220,7 +220,7 @@ test('four home navigation buttons and floating recording reach existing routes'
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
 
-test('weekly home includes loose recordings once, but excludes lesson and performance media',async({page})=>{
+test('weekly home keeps actual practice time separate from every recording length',async({page})=>{
  const value=seed();value.practices=[{id:'p',date:TODAY,minutes:999,manualMinutes:4,mediaIds:['linked']}];
  await boot(page,value);
  await page.evaluate(date=>{
@@ -230,8 +230,8 @@ test('weekly home includes loose recordings once, but excludes lesson and perfor
   VZ.media.list=async()=>files;
   window.dispatchEvent(new Event('vzip:cloud-media-changed'));
  },TODAY);
- await expect(page.locator('.vz-week .vz-time b')).toHaveText('15');
- await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('15분');
+ await expect(page.locator('.vz-week .vz-time b')).toHaveText('4');
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"] .vz-day-minutes')).toHaveText('4분');
  await expect(page.locator('.vz-week-range')).toHaveText('11.2 – 11.8');
  await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]>span:first-child')).toHaveText('4');
  expect((await db(page)).practices[0].manualMinutes).toBe(4);

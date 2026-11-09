@@ -1,13 +1,13 @@
 /* Read-only monthly song-practice summary. No media/storage mutations. */
 (function(root,factory){
- const api=factory();
+ const api=factory(typeof module==='object'&&module.exports?require('./practice-time-model.js'):root.VzipPracticeTime);
  if(typeof module==='object'&&module.exports)module.exports=api;
  else root.VZ.calendarSummary=api;
-})(globalThis,()=>{
+})(globalThis,Time=>{
 'use strict';
 const positive=n=>Number.isFinite(Number(n))&&Number(n)>0?Number(n):0;
 function summarize(db,media,month,dateOf){
- const rows=new Map(),seen=new Set(),linked=new Set((db.practices||[]).flatMap(p=>p.mediaIds||[]));
+ const practices=Time.records(db.practices),rows=new Map(),seen=new Set(),linked=new Set(practices.flatMap(p=>p.mediaIds||[]));
  const lessonFiles=new Set((db.lessons||[]).flatMap(l=>(l.recordings||[]).map(r=>r.id)));
  let minutes=0,count=0,unknown=0;
  const add=(key,date,songId,value)=>{
@@ -17,10 +17,10 @@ function summarize(db,media,month,dateOf){
   row.minutes+=time;row.count++;rows.set(id,row);
   minutes+=time;count++;if(!time)unknown++;
  };
- for(const p of db.practices||[])if(p.practiceMode!=='training')add('p:'+p.id,p.date,p.songId,p.minutes);
+ for(const p of practices)if(p.practiceMode!=='training')add('p:'+p.id,p.date,p.songId,Time.actualMinutes(p));
  for(const m of media||[]){
-  if(linked.has(m.id)||lessonFiles.has(m.id)||m.source==='lesson')continue;
-  add('m:'+m.id,dateOf(m),m.songId,positive(m.durationSeconds)/60);
+  if(linked.has(m.id)||lessonFiles.has(m.id)||m.source==='lesson'||m.occasion==='lesson'||m.occasion==='performance')continue;
+  add('m:'+m.id,dateOf(m),m.songId,0);
  }
  return {minutes,count,unknown,rows:[...rows.values()]};
 }
@@ -36,8 +36,8 @@ function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
  if(host._csTimer)clearInterval(host._csTimer);
  const summary=summarize(db,media,month,dateOf),[year,mo]=month.split('-');
  const lists={minutes:ranked(summary,'minutes'),count:ranked(summary,'count')};
- const help='<details class="cs-help"><summary>집계 기준</summary><p>연습 기록 1건 또는 기록에 연결되지 않은 녹음 1개를 1회로 계산해요. 연결된 녹음은 중복 집계하지 않아요. 레슨 녹음과 발성 훈련은 제외해요.'+
- (summary.unknown?' 길이가 없는 '+summary.unknown+'건은 횟수에만 포함돼요.':'')+'</p></details>';
+ const help='<details class="cs-help"><summary>집계 기준</summary><p>직접 기록한 연습 시간만 합산해요. 연습 기록 1건 또는 기록에 연결되지 않은 녹음 1개를 1회로 계산해요. 연결된 녹음은 중복 집계하지 않아요. 레슨 녹음과 발성 훈련은 제외해요.'+
+ (summary.unknown?' 연습 시간이 미입력된 '+summary.unknown+'건은 횟수에만 포함돼요.':'')+'</p></details>';
  host.innerHTML='<section class="card calendar-summary" aria-label="월별 노래 연습 요약">'+
  '<div class="cs-heading"><div class="cs-title"><h2>'+Number(mo)+'월 연습 <small>'+year+'</small></h2>'+help+'</div>'+
  '<div class="cs-totals" aria-live="polite"><strong data-month-minutes>'+duration(summary.minutes)+'</strong><span>·</span><strong data-month-count>'+summary.count+'회</strong></div></div>'+

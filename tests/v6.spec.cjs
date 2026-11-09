@@ -1044,28 +1044,28 @@ test('Practice records can be edited, including unlinking files that no longer e
   expect((await media(page)).some(m => m.id === 'm1')).toBe(true); // unlinking never deletes the file
 });
 
-test('Practice time adds recording/import lengths once and fills missing lengths', async ({page}) => {
+test('Practice time excludes recording/import lengths while file metadata remains measured', async ({page}) => {
   await boot(page);
   await page.evaluate(async () => {
     const day = 864e5, read = async id => (await window.vzipReadMedia()).find(m => m.id === id);
-    // m2: a 10-minute practice recording not linked to any record → counts.
+    // m2: a 10-minute practice recording not linked to any record → duration metadata only.
     const m2 = await read('m2'); delete m2.bytes; await window.vzipStorePracticeMedia({...m2, blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:600}); // WebKit may have stored bytes
-    // m3: an import saved before lengths were kept (no duration) → measured and counted.
+    // m3: an import saved before lengths were kept (no duration) → still measured, never added to actual time.
     await window.vzipStorePracticeMedia({id:'m3', name:'SODA_1', created:Date.now() - day, recordedDate:'', type:'audio/wav', source:'import', songId:'s2', blob:new Blob([window.__wav], {type:'audio/wav'})});
     window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m3'}}));
   });
   await page.goto('/#/growth');
   await page.getByRole('button', {name:'전체'}).click();
-  // p1 (manual 25분; legacy minutes is 30, linked m1 is not added) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
-  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('35분');
-  await expect(page.locator('[data-file-time]')).toContainText('녹음·파일 10분 포함');
+  // Only the entered 25 minutes count; standalone files keep duration metadata separately.
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
+  await expect(page.locator('[data-file-time]')).toHaveCount(0);
   await expect.poll(async () => Math.round((await page.evaluate(() => window.vzipReadMedia())).find(m => m.id === 'm3').durationSeconds)).toBe(1);
   await expect(page.locator('.bars')).toContainText('This Is the Moment');
-  await expect(page.getByText(/기록에 연결되지 않은 녹음·파일 2개/)).toBeVisible();
+  await expect(page.getByText('녹음 3개를 남겼어요. 녹음 길이는 연습 시간에 자동으로 더하지 않아요.')).toBeVisible();
   // Song list/detail use the same rule.
   await page.goto('/#/song/s1');
-  await expect(page.locator('[data-summary]')).toContainText('연습 35분');
-  // Linking m2 into a practice record moves its time inside that record (no double count).
+  await expect(page.locator('[data-summary]')).toContainText('연습 25분');
+  // Linking m2 into a practice record does not change the entered time.
   await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds.push('m2'); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/growth');
   await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
@@ -1271,9 +1271,9 @@ test('Growth month filters, file-count units and every-week horizontal chart rem
   await page.goto('/#/growth');
   await page.getByRole('button',{name:'월별',exact:true}).click();
   await page.getByRole('combobox',{name:'조회 월'}).selectOption(previous);
-  await expect(page.locator('.stat').filter({hasText:'연습 시간'}).first()).toContainText('37분');
+  await expect(page.locator('.stat').filter({hasText:'연습 시간'}).first()).toContainText('30분');
   await expect(page.locator('.stat').filter({hasText:'평균 만족도'})).toContainText('4.0');
-  await expect(page.locator('[data-song-stat="s1"]')).toContainText('32분');
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('30분');
   await page.getByRole('button',{name:'횟수(파일 수)',exact:true}).click();
   await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회');
   await expect(page.locator('[data-song-stat="s2"]')).toContainText('1회');
@@ -1297,7 +1297,7 @@ test('Growth month filters, file-count units and every-week horizontal chart rem
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   }
   await page.getByRole('button',{name:'분',exact:true}).click();
-  await expect(page.locator('[data-song-stat="s1"]')).toContainText('42분');
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('40분');
   await page.getByRole('button',{name:'월별',exact:true}).click();
   await page.getByRole('button',{name:'이전 달 통계',exact:true}).click();
   await expect(page.getByRole('combobox',{name:'조회 월'})).toHaveValue(previous);
@@ -1394,6 +1394,14 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   expect(items.find(m => m.originalFilename === '원데이모어 20260401.wav')).toMatchObject({recordedDate:'2026-04-01', recordedAtSource:'filename', songId:'s3'});
   const made = (await data(page)).practices.filter(p => p.importedFrom === 'voice-memo');
   expect(made).toHaveLength(2);
+  for(const record of made){expect(record).toMatchObject({minutes:0,manualMinutes:0,practiceTimeSource:'unconfirmed'});expect(record.mediaSeconds).toBeGreaterThan(0);}
+  const chosen=made.find(p=>p.mediaIds[0]===take.id);
+  await page.evaluate(id=>VZ.practiceSheet(VZ.db.practices.find(p=>p.id===id)),chosen.id);
+  await expect(sheet(page).locator('[name=minutes]')).toHaveValue('0');
+  await sheet(page).locator('[name=minutes]').fill('12');
+  await sheet(page).getByRole('button',{name:'수정 저장',exact:true}).click();
+  expect((await data(page)).practices.find(p=>p.id===chosen.id)).toMatchObject({minutes:12,manualMinutes:12,practiceTimeSource:'manual',mediaSeconds:chosen.mediaSeconds});
+
   expect(items.find(m => m.originalFilename === '원데이모어 20260401.wav').occasion).toBe('performance');
   expect(made.find(p => p.mediaIds[0] === take.id)).toMatchObject({date:'2026-05-10', songId:'s1', confirmedSongId:'s1', suggestedSongId:'s1'});
   // Picking the same files again finds them in the library and makes no second practice record.
@@ -1527,7 +1535,7 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await boot(page);
   await page.goto('/#/library');
   await expect(page.getByRole('button', {name:'공연', exact:true})).toBeVisible();
-  // m2 is an unlinked practice recording (counts as practice time until it is marked a performance).
+  // m2 is an unlinked practice recording; its length never adds to actual practice time.
   await page.locator('[data-media="m2"] [data-toggle]').click();
   await page.locator('[data-media="m2"]').getByRole('button', {name:/정보 수정/}).click();
   await expect(sheet(page).getByRole('radio', {name:'연습'})).toHaveAttribute('aria-checked', 'true');
@@ -2072,4 +2080,20 @@ test('Actual practice time excludes recording length across growth, calendar and
  await page.goto('/#/song/s1');await expect(page.locator('[data-summary]')).toContainText('연습 25분');
  await page.goto('/#/calendar');await expect(page.locator('[data-month-minutes]')).toHaveText('25분');
  expect((await data(page)).practices[0]).toMatchObject({minutes:30,manualMinutes:25,mediaSeconds:300});
+});
+
+test('Actual practice time supports training recordings without changing the entered minutes',async({page})=>{
+ const seed=legacy();seed.practices=[];await boot(page,{seed});
+ await page.evaluate(()=>VZ.practiceSheet());await sheet(page).locator('[data-mode="training"]').click();
+ await sheet(page).locator('[name=date]').fill(day(-1));
+ await sheet(page).locator('[name=minutes]').fill('12');
+ await sheet(page).locator('input[name=media][value="m2"]').check();
+ await expect(sheet(page).locator('[name=minutes]')).toHaveValue('12');
+ await sheet(page).getByRole('button',{name:'연습 기록 저장',exact:true}).click();
+ const record=(await data(page)).practices[0];
+ expect(record).toMatchObject({practiceMode:'training',minutes:12,manualMinutes:12,practiceTimeSource:'manual',mediaIds:['m2'],songId:''});
+ expect(await page.evaluate(()=>VZ.sumMinutes(VZ.timeEntries()))).toBe(12);
+ await page.reload();
+ expect(await page.evaluate(()=>VZ.sumMinutes(VZ.timeEntries()))).toBe(12);
+ expect((await media(page)).some(x=>x.id==='m2')).toBe(true);
 });

@@ -74,12 +74,12 @@ test('newer duplicate practice version wins once',()=>{
   assert.equal(result.week.actualMinutes,20);
 });
 
-test('shared ledger includes recording time and keeps last week available after Monday midnight',()=>{
+test('shared ledger excludes recording time and keeps last week available after Monday midnight',()=>{
   const db={practices:[practice('manual','2026-11-08',4)]};
-  const timeEntries=[{date:'2026-11-08',minutes:4},{date:'2026-11-08',minutes:225/60},
-    {date:'2026-11-08',minutes:191/60},{date:'2026-11-08',minutes:232/60}];
+  const timeEntries=[{date:'2026-11-08',minutes:4},{date:'2026-11-08',minutes:225/60,kind:'recording'},
+    {date:'2026-11-08',minutes:191/60,kind:'recording'},{date:'2026-11-08',minutes:232/60,kind:'recording'}];
   const before=M.build(db,{today:'2026-11-08',timeEntries});
-  assert.equal(before.week.actualMinutes,14.8);
+  assert.equal(before.week.actualMinutes,4);
   const after=M.build(db,{today:'2026-11-09',timeEntries});
   assert.equal(after.week.start,'2026-11-09');assert.equal(after.week.actualMinutes,0);
   const previous=M.build(db,{today:'2026-11-09',weekStart:'2026-11-02',timeEntries});
@@ -289,3 +289,9 @@ test('future schedule weeks extend the upper boundary, excluding cancellations a
  assert.deepEqual(result.week.days.map(d=>d.targetMinutes),[45,30,30,30,30,30,30]);
  assert.equal(JSON.stringify(db),before);
  });
+
+test('unconfirmed imports cannot satisfy a goal even when an adapter supplies old totals',()=>{
+ const pending={id:'new',date:today,minutes:99,manualMinutes:99,practiceTimeSource:'unconfirmed'};
+ const result=M.build({practices:[pending]},{today,timeEntries:[{date:today,minutes:99,kind:'practice',ref:pending}]});
+ assert.equal(result.week.actualMinutes,0);
+});
