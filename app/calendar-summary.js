@@ -33,33 +33,51 @@ function duration(value){
  return hours?hours+'시간'+(minutes?' '+minutes+'분':''):minutes?minutes+'분':seconds?seconds+'초':'0분';
 }
 function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
- // A redraw happens when the date, month, sort or cloud data changes.
  if(host._csTimer)clearInterval(host._csTimer);
- const summary=summarize(db,media,month,dateOf),rows=ranked(summary),[year,mo]=month.split('-');
+ const summary=summarize(db,media,month,dateOf),[year,mo]=month.split('-');
+ const lists={minutes:ranked(summary,'minutes'),count:ranked(summary,'count')};
  host.innerHTML='<section class="card calendar-summary" aria-label="월별 노래 연습 요약">'+
  '<div class="cs-heading"><h2>'+Number(mo)+'월 연습 <small>'+year+'</small></h2>'+
  '<div class="cs-totals" aria-live="polite"><strong data-month-minutes>'+duration(summary.minutes)+'</strong><span>·</span><strong data-month-count>'+summary.count+'회</strong></div></div>'+
- (rows.length?'<div class="cs-spotlight" data-cs-spotlight aria-live="off" aria-label="이 달에 연습한 곡"><i class="ph ph-music-notes" aria-hidden="true"></i><span class="cs-name" data-cs-name></span><span class="cs-values" data-cs-values></span></div>':'<p class="cs-empty">이 달의 노래 연습 기록이 없어요.</p>')+
+ (lists.minutes.length?'<button type="button" class="cs-spotlight" data-cs-spotlight aria-expanded="false" aria-controls="cs-rank-panel" aria-label="연습곡 순위 펼치기, 좌우로 밀어 시간별 횟수별 전환"><span class="cs-rank" data-cs-rank></span><span class="cs-name" data-cs-name></span><span class="cs-values" data-cs-values></span><i class="ph ph-caret-down" aria-hidden="true"></i></button><div class="cs-rank-panel" id="cs-rank-panel" aria-hidden="true" inert><div class="cs-rank-list" data-cs-list></div></div>':'<p class="cs-empty">이 달의 노래 연습 기록이 없어요.</p>')+
  '<details class="cs-help"><summary>집계 기준</summary><p>연습 기록 1건 또는 기록에 연결되지 않은 녹음 1개를 1회로 계산해요. 연결된 녹음은 중복 집계하지 않아요. 레슨 녹음과 발성 훈련은 제외해요.'+
  (summary.unknown?' 길이가 없는 '+summary.unknown+'건은 횟수에만 포함돼요.':'')+'</p></details>'+
  (error?'<p class="cs-error" role="status">'+esc(error)+' 표시된 합계는 일부 기록만 포함할 수 있어요.</p>':'')+'</section>';
- let index=0;
+ const ticker=host.querySelector('[data-cs-spotlight]');if(!ticker)return;
+ const panel=host.querySelector('[data-cs-rank-panel],#cs-rank-panel'),list=host.querySelector('[data-cs-list]');
+ let metric='minutes',index=0,opened=false,touchX=0,touchY=0,swiped=false;
+ const label=()=>metric==='minutes'?'시간별':'횟수별';
  const show=()=>{
-  const row=rows[index],box=host.querySelector('[data-cs-spotlight]');if(!row||!box)return;
-  box.dataset.csSong=row.id;
+  const rows=lists[metric],row=rows[index];if(!row)return;
+  ticker.dataset.csSong=row.id;
   const name=row.id?titleOf(row.id)||'삭제된 곡':'곡 미지정';
-  box.querySelector('[data-cs-name]').textContent=name;box.querySelector('[data-cs-name]').title=name;
-  box.querySelector('[data-cs-values]').textContent=duration(row.minutes)+' · '+row.count+'회';
+  ticker.querySelector('[data-cs-rank]').textContent=label()+' '+(index+1)+'위';
+  ticker.querySelector('[data-cs-name]').textContent=name;
+  ticker.querySelector('[data-cs-name]').title=name;
+  ticker.querySelector('[data-cs-values]').textContent=metric==='minutes'?duration(row.minutes):row.count+'회';
+  list.replaceChildren();
+  rows.forEach((entry,i)=>{
+   const b=document.createElement('button');b.type='button';b.className='cs-rank-row'+(i===index?' active':'');
+   const title=entry.id?titleOf(entry.id)||'삭제된 곡':'곡 미지정',value=metric==='minutes'?duration(entry.minutes):entry.count+'회';
+   b.setAttribute('aria-label',label()+' '+(i+1)+'위 '+title+', '+value);
+   b.innerHTML='<span class="cs-rank-number"></span><span class="cs-name"></span><span class="cs-values"></span>';
+   b.querySelector('.cs-rank-number').textContent=i+1;b.querySelector('.cs-name').textContent=title;b.querySelector('.cs-values').textContent=value;
+   b.onclick=()=>{index=i;show();close();ticker.focus()};list.append(b);
+  });
  };
- const next=()=>{index=(index+1)%rows.length;show();};
- show();
- if(rows.length>1){
-  host._csTimer=setInterval(()=>{
-   if(!host.isConnected){clearInterval(host._csTimer);host._csTimer=null;return;}
-   if(document.hidden||host.matches(':hover')||host.contains(document.activeElement))return;
-   next();
-  },4000);
+ const close=()=>{opened=false;panel.classList.remove('open');panel.setAttribute('aria-hidden','true');panel.inert=true;ticker.setAttribute('aria-expanded','false')};
+ const flip=()=>{metric=metric==='minutes'?'count':'minutes';index=0;show()};
+ ticker.onclick=()=>{if(swiped){swiped=false;return}opened=!opened;panel.classList.toggle('open',opened);panel.setAttribute('aria-hidden',String(!opened));panel.inert=!opened;ticker.setAttribute('aria-expanded',String(opened))};
+ for(const target of [ticker,panel]){
+  target.addEventListener('touchstart',e=>{touchX=e.touches[0].clientX;touchY=e.touches[0].clientY;swiped=false},{passive:true});
+  target.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>35&&Math.abs(dx)>Math.abs(dy)){swiped=true;flip();setTimeout(()=>swiped=false,500)}},{passive:true});
  }
+ show();
+ host._csTimer=setInterval(()=>{
+  if(!host.isConnected){clearInterval(host._csTimer);host._csTimer=null;return}
+  if(opened||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(index<lists[metric].length-1)index++;else{metric=metric==='minutes'?'count':'minutes';index=0}show();
+ },3500);
 }
 return {summarize,ranked,duration,render};
 });
