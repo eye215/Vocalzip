@@ -102,21 +102,45 @@ function confidence(r) {
   return '<div class="ana-note ' + (ok ? 'ok' : 'warn') + '"><i class="ph ph-' + (ok ? 'check-circle' : 'warning') + '"></i><span>목소리가 반주보다 약 ' + Math.round(c.voiceOverMrDb) + 'dB 커요. ' + (ok ? '반주와 잘 구분됐어요.' : '반주가 커서 일부 구간을 목소리로 잘못 읽었을 수 있어요. 곡선이 노래와 맞는지 들으며 확인해 주세요.') + '</span></div>';
 }
 
+/* Pass any number of selected recordings to the analysis view without an overlong URL. */
+const selectionKey = 'vocalzip-analysis-selected-media-v1';
+VZ.openAnalysisSelection = ids => {
+  const unique = [...new Set((ids || []).map(String).filter(Boolean))];
+  if (!unique.length) return;
+  VZ.analysisSelectedIds = unique;
+  try { sessionStorage.setItem(selectionKey, JSON.stringify(unique)); } catch {}
+  VZ.nav('#/analysis?selection=1');
+};
+
 /* ---------- view ---------- */
 VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefresh:true,
   render() { return '<div data-ana><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>'; },
   async mount(main, r) {
     const id = r.params[0], my = ++job, host = main.querySelector('[data-ana]');
     const alive = () => my === job && document.body.contains(host);
+    if (r.query.get('selection') === '1') {
+      let ids = VZ.analysisSelectedIds;
+      if (!ids) { try { ids = JSON.parse(sessionStorage.getItem(selectionKey) || '[]'); } catch { ids = []; } }
+      const media = await M.list().catch(() => []);
+      if (!alive()) return;
+      const byId = new Map(media.map(m => [String(m.id), m]));
+      const chosen = (ids || []).map(x => byId.get(String(x))).filter(Boolean);
+      host.innerHTML = '<div class="card"><h2 class="sec" style="margin:0 0 4px">선택한 녹음 ' + chosen.length + '개</h2><p class="small muted" style="margin:0">보관함에서 선택한 녹음이에요. 녹음을 누르면 분석 결과를 볼 수 있어요.</p></div>' +
+        (chosen.length ? '<div class="list" style="margin-top:12px">' + chosen.map(m => '<button type="button" class="item" data-analysis-id="' + esc(m.id) + '"><span class="avatar"><i class="ph ph-waveform"></i></span><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc([VZ.dateLabel(M.dateOf(m)), VZ.clock(m.durationSeconds)].join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>').join('') + '</div>' : '<div class="empty"><p>선택한 녹음을 찾지 못했어요.</p></div>');
+      host.querySelectorAll('[data-analysis-id]').forEach(b => b.onclick = () => VZ.nav('#/analysis/' + encodeURIComponent(b.dataset.analysisId) + '?fromSelection=1'));
+      return;
+    }
     const allItems = await M.list().catch(() => []), item = allItems.find(m => m.id === id);
     if (!alive()) return;
     if (!item) { host.innerHTML = '<div class="empty"><i class="ph ph-question"></i><p>녹음을 찾지 못했어요.</p></div>'; return; }
     const song = VZ.songTitle(item.songId);
-    const selectedIds = (r.query.get('selected') || '').split(',').filter(Boolean);
+    let selectedIds = (r.query.get('selected') || '').split(',').filter(Boolean);
+    const fromSelection = r.query.get('fromSelection') === '1';
+    if (fromSelection) { selectedIds = VZ.analysisSelectedIds || []; if (!selectedIds.length) { try { selectedIds = JSON.parse(sessionStorage.getItem(selectionKey) || '[]'); } catch { selectedIds = []; } } }
     const allowed = new Set(selectedIds);
-    const chosen = allItems.filter(m => allowed.has(String(m.id)) && m.songId === item.songId);
+    const chosen = allItems.filter(m => allowed.has(String(m.id)) && (fromSelection || m.songId === item.songId));
     const chosenParam = chosen.map(m => m.id).join(',');
-    const selector = chosen.length > 1 ? '<div class="vz-analysis-selected"><div class="small muted">선택한 녹음 ' + chosen.length + '개</div><div class="vz-analysis-selected-scroll">' + chosen.map(m => '<a href="#/analysis/' + encodeURIComponent(m.id) + '?selected=' + encodeURIComponent(chosenParam) + '" aria-current="' + (m.id === id ? 'true' : 'false') + '">' + esc(M.label(m)) + '</a>').join('') + '</div></div>' : '';
+    const selector = chosen.length > 1 ? '<div class="vz-analysis-selected"><div class="small muted">선택한 녹음 ' + chosen.length + '개</div><div class="vz-analysis-selected-scroll">' + chosen.map(m => '<a href="#/analysis/' + encodeURIComponent(m.id) + (fromSelection ? '?fromSelection=1' : '?selected=' + encodeURIComponent(chosenParam)) + '" aria-current="' + (m.id === id ? 'true' : 'false') + '">' + esc(M.label(m)) + '</a>').join('') + '</div></div>' : '';
     host.innerHTML = selector + '<div class="card"><div class="item-title">' + esc(M.label(item)) + '</div><div class="small muted">' + esc([VZ.dateLabel(M.dateOf(item)), song].filter(Boolean).join(' · ')) + '</div><div data-p style="margin-top:10px"></div></div>' +
       '<div data-out><div class="card"><p data-stage>준비 중…</p><div class="ana-bar"><span data-bar style="width:0%"></span></div><p class="small muted">이 기기 안에서 분석해요. 파일이 밖으로 나가지 않아요. 5분짜리 곡은 보통 10~30초 걸려요.</p></div></div>';
     const player = M.player(host.querySelector('[data-p]'), item, {prefetch:true});
@@ -154,3 +178,4 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
   leave() { job++; }
 });
 })();
+
