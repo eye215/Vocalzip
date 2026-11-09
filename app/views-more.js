@@ -209,7 +209,7 @@ VZ.route('compare', {title:'녹음 비교', back:true, tab:'growth', noAutoRefre
   let a = A || null, b = B || null;
   if (!a && !b && pool().length >= 2) { a = pool()[0]; b = pool().at(-1); }
   if (a && !b) b = pool().filter(m => m.id !== a.id).at(-1) || null;
-  const reports = VZ.db.comparisonReports || [];
+  const reports = (VZ.db.comparisonReports || []).filter(x => x.kind !== 'vocal-lab');
     // Recording day of each side ("2026.08.12"): the file's current date, else the date saved with the comparison.
     const cmpDay = (id, saved) => { const m = media.find(x => x.id === id), d = m ? M.dateOf(m) : Number(saved) > 0 ? VZ.ymd(new Date(Number(saved))) : ''; return d ? d.replace(/-/g, '.') : '날짜 없음'; };
   const pick = (which) => {
