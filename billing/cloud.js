@@ -41,8 +41,8 @@ async function lessonDeletionTargets(row){
   const {userId}=credentials();
   const capability=await request('/rest/v1/rpc/vzip_lesson_delete_capabilities',{});
   if(capability?.version!==1||!capability.charge_guard||!capability.lesson_permanent)throw Error('안전한 삭제를 위한 서버 확인을 마치지 못했어요.');
-  const remote=await request('/rest/v1/vocal_data?select='+encodeURIComponent('lessons:payload->lessons')+'&user_id=eq.'+encodeURIComponent(userId));
-  if(!Array.isArray(remote)||remote.length>1||remote[0]&&remote[0].lessons!==null&&!Array.isArray(remote[0].lessons))throw Error('연결 레슨 응답을 확인하지 못했어요.');
+  const remote=await request('/rest/v1/vocal_data?select='+encodeURIComponent('user_id,lessons:payload->lessons')+'&user_id=eq.'+encodeURIComponent(userId));
+  if(!Array.isArray(remote)||remote.length>1||remote[0]&&remote[0].user_id!==userId||remote[0]&&remote[0].lessons!==null&&!Array.isArray(remote[0].lessons))throw Error('연결 레슨 응답을 확인하지 못했어요.');
   lessons=lessons.concat(remote[0]?.lessons||[]);
  }
  const hits=lessons.filter(l=>l?.id&&(l.id===row.lessonId||l.billingDeductionId===row.id));
