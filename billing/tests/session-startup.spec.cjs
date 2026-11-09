@@ -2,8 +2,9 @@ const {test,expect}=require('@playwright/test');
 const USER='11111111-1111-4111-8111-111111111111',OTHER='22222222-2222-4222-8222-222222222222';
 const AUTH='sb-chxnbtiyuyhiywzeshis-auth-token';
 async function fixture(page){
- await page.route('**/__billing-fixture',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Billing fixture</title>'}));
+ await page.route('**/__billing-fixture',route=>route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><meta charset="utf-8"><title>Billing fixture</title>'}));
  await page.goto('/__billing-fixture');await page.addScriptTag({url:'/billing/core.js'});
+ expect(await page.evaluate(()=>typeof window.VzipBilling)).toBe('object');
  await page.evaluate(async({USER,OTHER,AUTH})=>{
   localStorage.setItem(AUTH,JSON.stringify({access_token:'billing-fixture-token',expires_at:4102444800,user:{id:USER,email:'fixture@example.invalid'}}));
   localStorage.setItem('vzip_account_scope_owner_v1',USER);
