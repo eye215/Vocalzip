@@ -7,6 +7,7 @@ test('Login screen keeps the three account actions clear and usable',async({page
   await page.goto('/#/home');
   const screen=page.locator('#vzip-auth-screen');
   await expect(screen).toBeVisible();
+  await expect(screen.locator('.vzip-auth-logo')).toHaveText('VOCAL.zip ♫');
   await expect(screen.locator('.vzip-auth-card h3')).toHaveText('로그인');
   await expect(screen.getByRole('button',{name:'로그인',exact:true})).toBeVisible();
   await expect(screen.getByRole('button',{name:'비밀번호를 잊으셨나요?'})).toBeVisible();
