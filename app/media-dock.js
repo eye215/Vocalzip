@@ -5,19 +5,21 @@
   if (!VZ?.wireMedia || !M) return;
   const legacyWire = VZ.wireMedia;
   const selected = new Map();
-  let dock = null, player = null, activeRow = null, activeItem = null, selectionBar = null;
+  let dock = null, player = null, dockObserver = null, activeRow = null, activeItem = null, selectionBar = null;
 
   const visibleSelected = () => {
     for (const [id, entry] of selected) if (!entry.button.isConnected) selected.delete(id);
     return [...selected.values()].map(entry => entry.item);
   };
   const close = () => {
+    dockObserver?.disconnect(); dockObserver = null;
     player?.destroy(); player = null;
     dock?.remove(); dock = null;
     activeRow?.classList.remove('vz-media-active');
     activeRow?.querySelector('[data-toggle]')?.setAttribute('aria-expanded', 'false');
     activeRow = activeItem = null;
     document.body.classList.remove('vz-media-dock-open');
+    document.body.style.removeProperty('--vz-media-dock-height');
   };
   const clearSelection = () => {
     for (const entry of selected.values()) {
@@ -75,7 +77,11 @@
     dock.querySelector('strong').textContent = M.label(item);
     document.body.append(dock);
     document.body.classList.add('vz-media-dock-open');
-    player = M.player(dock.querySelector('[data-player]'), item, {tools:true, prefetch:true});
+    player = M.player(dock.querySelector('[data-player]'), item, {prefetch:true});
+    if (window.ResizeObserver) {
+      dockObserver = new ResizeObserver(() => document.body.style.setProperty('--vz-media-dock-height', dock.offsetHeight + 'px'));
+      dockObserver.observe(dock);
+    }
     player.play();
     dock.querySelector('[data-close]').onclick = close;
     const more = dock.querySelector('[data-more]'), menu = dock.querySelector('[data-menu]');
