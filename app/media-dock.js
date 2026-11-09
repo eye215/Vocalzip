@@ -6,6 +6,7 @@
   const wireAccordion = VZ.wireMedia;
   const selected = new Map();
   let selectionBar = null;
+  let songAction = false;
 
   const visibleSelected = () => {
     for (const [id, entry] of selected) if (!entry.button.isConnected) selected.delete(id);
@@ -17,11 +18,12 @@
       entry.row.classList.remove('vz-media-picked');
     }
     selected.clear(); selectionBar?.remove(); selectionBar = null;
-    document.body.classList.remove('vz-media-selecting');
+    document.body.classList.remove('vz-media-selecting', 'vz-media-has-selection');
   };
   const paintSelection = () => {
     const items = visibleSelected();
-    if (!items.length) { selectionBar?.remove(); selectionBar = null; document.body.classList.remove('vz-media-selecting'); return; }
+    const keepSongAction = songAction && document.body.dataset.vzRoute === 'song';
+    if (!items.length && !keepSongAction) { selectionBar?.remove(); selectionBar = null; document.body.classList.remove('vz-media-selecting', 'vz-media-has-selection'); return; }
     if (!selectionBar) {
       selectionBar = document.createElement('div');
       selectionBar.className = 'vz-media-selection';
@@ -37,6 +39,7 @@
       };
     }
     document.body.classList.add('vz-media-selecting');
+    document.body.classList.toggle('vz-media-has-selection', !!items.length);
     selectionBar.querySelector('[data-count]').textContent = items.length + '개 선택';
     const analysis = selectionBar.querySelector('[data-analysis]');
     analysis.disabled = !items.length;
@@ -95,10 +98,12 @@
     }, true);
     return wireAccordion(host, items);
   };
-  window.addEventListener('hashchange', clearSelection);
-  new MutationObserver(() => { if (selectionBar && !visibleSelected().length) paintSelection(); }).observe(document.body, {childList:true, subtree:true});
+  window.addEventListener('hashchange', () => { if (songAction && document.body.dataset.vzRoute === 'song') return; songAction = false; clearSelection(); });
+  new MutationObserver(() => { if (selectionBar && selected.size && !visibleSelected().length) paintSelection(); }).observe(document.body, {childList:true, subtree:true});
   VZ.mediaSelection = {
     clear:clearSelection,
+    showSongAction:() => { songAction = true; paintSelection(); },
+    hideSongAction:() => { songAction = false; clearSelection(); },
     count:host => [...selected.values()].filter(entry => entry.row.isConnected && host.contains(entry.row)).length,
     selectAll:(host, items, on) => {
       for (const item of items) {

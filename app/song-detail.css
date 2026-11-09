@@ -55,7 +55,11 @@ body[data-vz-route="song"] .song-tabs button[aria-selected="true"]{background:#E
 .vz-song-linked-note{padding:12px 14px;border-radius:12px;background:#F3ECFF;font-size:13px;color:#475467}
 body[data-vz-route="song"] .vz-collection-record{position:fixed;display:grid;place-items:center;right:max(16px,calc((100vw - 560px)/2 + 16px));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 82px);width:56px;height:56px;padding:0;min-width:0;border-radius:50%;background:linear-gradient(135deg,#9557FF,#7A32F5 52%,#6D2BE5);color:#fff;box-shadow:0 8px 20px #7A32F547}
 body[data-vz-route="song"] .vz-collection-record i{font-size:22px}
-body[data-vz-route="song"].vz-media-selecting .vz-collection-record{opacity:.35;filter:grayscale(1);pointer-events:none;bottom:calc(106px + env(safe-area-inset-bottom));box-shadow:none}
+body[data-vz-route="song"].vz-media-has-selection .vz-collection-record{opacity:.35;filter:grayscale(1);pointer-events:none;bottom:calc(106px + env(safe-area-inset-bottom));box-shadow:none}
+body[data-vz-route="song"] .vz-media-selection strong,
+body[data-vz-route="song"] .vz-media-selection [data-clear]{display:none}
+body[data-vz-route="song"] .vz-media-selection [data-analysis]{width:100%;min-height:52px;font-size:16px;font-weight:700}
+body[data-vz-route="song"] .vz-media-selection [data-analysis]:disabled{opacity:.45;cursor:not-allowed}
 .vz-analysis-selected{margin-bottom:12px}
 .vz-analysis-selected-scroll{display:flex;gap:8px;overflow-x:auto;padding:8px 0;scrollbar-width:none}
 .vz-analysis-selected-scroll a{display:block;flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:10px 13px;border-radius:99px;background:#F3ECFF;color:#475467;text-decoration:none;font-size:12px}
@@ -67,5 +71,5 @@ body[data-vz-route="song"].vz-media-selecting .vz-collection-record{opacity:.35;
 .vz-song-more>summary::-webkit-details-marker{display:none}
 .vz-song-more>summary i{font-size:17px;color:#98A2B3}
 .vz-song-more[open]>summary i{transform:rotate(180deg)}
-.vz-song-more>[data-repertoire],.vz-song-more>[data-song-vocal],.vz-song-more>[data-song-tips]{padding:0 12px 12px}
+.vz-song-more>[data-repertoire]{padding:0 12px 12px}
 .vz-song-more .card{margin-bottom:0;box-shadow:none}

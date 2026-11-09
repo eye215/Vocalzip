@@ -21,7 +21,7 @@ body[data-vz-route=library] .vz-media-select-enabled [data-media] [data-toggle]{
 .vz-media-selection .btn{min-height:52px;padding:0 14px;border-radius:13px;white-space:nowrap;font-size:14px}
 body.vz-media-selecting .v-nav{display:none!important}
 body.vz-media-selecting .v-app{padding-bottom:calc(120px + env(safe-area-inset-bottom))!important}
-body.vz-media-selecting .vz-collection-record{bottom:calc(106px + env(safe-area-inset-bottom))!important;opacity:.35;filter:grayscale(1);pointer-events:none;box-shadow:none}
+body.vz-media-selecting:not([data-vz-route="song"]) .vz-collection-record,body[data-vz-route="song"].vz-media-has-selection .vz-collection-record{bottom:calc(106px + env(safe-area-inset-bottom))!important;opacity:.35;filter:grayscale(1);pointer-events:none;box-shadow:none}
 @media(max-width:350px){.vz-media-selection{gap:4px;padding-inline:12px}.vz-media-selection .btn{padding-inline:8px}}
 
 /* The Library selection action appears only after at least one recording is checked. */
