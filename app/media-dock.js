@@ -28,7 +28,7 @@
       selectionBar.className = 'vz-media-selection';
       selectionBar.setAttribute('role', 'toolbar');
       selectionBar.setAttribute('aria-label', '선택한 녹음');
-      selectionBar.innerHTML = '<strong data-count></strong><button type="button" data-clear>선택 해제</button><button type="button" data-analysis class="btn sm">보컬 분석하기</button>';
+      selectionBar.innerHTML = '<strong data-count></strong><button type="button" data-clear>선택 해제</button><button type="button" data-analysis class="btn sm"><i class="ph ph-sparkle" aria-hidden="true"></i><span>보컬 분석하기</span></button>';
       document.body.append(selectionBar);
       selectionBar.querySelector('[data-clear]').onclick = clearSelection;
       selectionBar.querySelector('[data-analysis]').onclick = () => {
