@@ -60,6 +60,8 @@ body[data-vz-route="song"] .vz-media-selection strong,
 body[data-vz-route="song"] .vz-media-selection [data-clear]{display:none}
 body[data-vz-route="song"] .vz-media-selection [data-analysis]{width:100%;min-height:52px;font-size:16px;font-weight:700}
 body[data-vz-route="song"] .vz-media-selection [data-analysis]:disabled{opacity:.45;cursor:not-allowed}
+body[data-vz-route="song"] .sheet-back{z-index:62}
+.vz-lyric-list{display:grid;gap:12px}.vz-lyric-card{display:block;width:100%;min-height:83px;padding:16px;border:0;border-radius:20px;background:#fff;text-align:left;color:#101828}.vz-lyric-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.vz-lyric-heading strong{font-size:16px;line-height:22px;font-weight:600}.vz-lyric-heading i{font-size:17px;color:#98A2B3}.vz-lyric-preview{display:block;margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#667085;font-size:13px;line-height:18px}.vz-lyric-card:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}.vz-lyric-form textarea{width:100%;min-height:150px;resize:vertical}.vz-lyric-form [role="alert"]{color:var(--danger)}
 .vz-analysis-selected{margin-bottom:12px}
 .vz-analysis-selected-scroll{display:flex;gap:8px;overflow-x:auto;padding:8px 0;scrollbar-width:none}
 .vz-analysis-selected-scroll a{display:block;flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:10px 13px;border-radius:99px;background:#F3ECFF;color:#475467;text-decoration:none;font-size:12px}
