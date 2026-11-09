@@ -1922,16 +1922,17 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await expect(page.locator('[data-media]')).toHaveCount(2);
   await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
-  await expect(bar).toContainText('0개 선택');
+  await expect(page.locator('.vz-record-selection-row')).toContainText('선택 0개');
+  await expect(bar).toBeHidden();
   await page.evaluate(()=>VZ.softRender()); // a background refresh must preserve selection mode
-  await expect(bar).toContainText('0개 선택');
-  await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
+  await expect(page.locator('.vz-record-selection-row')).toContainText('선택 0개');
   await page.locator('[data-media="m1"] [data-toggle]').click();
   await expect(page.locator('[data-media="m1"] .media-open')).toBeHidden(); // ticked, not opened
   await expect(bar).toContainText('1개 선택');
-  await bar.getByRole('button', {name:'전체 선택'}).click();
+  await page.locator('.vz-record-selection-row').getByRole('button', {name:'전체 선택'}).click();
   await expect(bar).toContainText('2개 선택');
-  await bar.getByRole('button', {name:/곡 지정/}).click();
+  await bar.getByRole('button', {name:'일괄 변경'}).click();
+  await page.getByRole('dialog', {name:'선택한 녹음 변경'}).getByRole('button', {name:'곡 지정'}).click();
   const pick = page.getByRole('dialog', {name:'곡 지정'});
   await pick.getByRole('option', {name:'On My Own'}).click();
   const ask = page.getByRole('dialog', {name:'곡 지정'});
@@ -1943,7 +1944,8 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
   await page.locator('[data-media="m1"] [data-toggle]').click();
   await expect(page.getByRole('toolbar')).toContainText('1개 선택');
-  await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
+  await page.getByRole('toolbar').getByRole('button', {name:'일괄 변경'}).click();
+  await page.getByRole('dialog', {name:'선택한 녹음 변경'}).getByRole('button', {name:'종류 변경'}).click();
   await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
   // Leaving the screen ends select mode.
@@ -1951,6 +1953,38 @@ test('Library select mode sets the song and kind of several recordings at once; 
   await page.goto('/#/home');
   await expect(page.locator('.sel-bar')).toHaveCount(0);
   expect(page.__errors).toEqual([]);
+});
+
+test('Song recordings and Library selection show individual checks, select all, and a consistent count', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/song/s1');
+  await page.getByRole('tab', {name:'녹음'}).click();
+  const songList = page.locator('[data-body] .list[data-r]');
+  await expect(songList.locator('[data-media]')).toHaveCount(2);
+  await songList.locator('[data-media="m1"] .vz-media-select').click();
+  await expect(page.locator('[data-song-selected]')).toHaveText('선택 1개');
+  await expect(songList.locator('[data-media="m1"] .media-open')).toBeHidden();
+  await page.locator('[data-song-select-all]').click();
+  await expect(page.locator('[data-song-selected]')).toHaveText('선택 2개');
+  await expect(page.locator('[data-song-select-all]')).toHaveAttribute('aria-pressed', 'true');
+  if (process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT + '/song-selection.png'});
+  await page.locator('[data-song-select-all]').click();
+  await expect(page.locator('[data-song-selected]')).toHaveText('선택 0개');
+  await expect(page.locator('.vz-media-selection')).toHaveCount(0);
+
+  await page.goto('/#/library');
+  await page.locator('[data-select-mode]').click();
+  const selection = page.locator('[data-lib-selection-row], .vz-record-selection-row').first();
+  await expect(selection).toContainText('선택 0개');
+  await selection.getByRole('button', {name:'전체 선택'}).click();
+  await expect(selection).toContainText('선택 2개');
+  await expect(page.locator('.sel-bar')).toBeVisible();
+  if (process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT + '/library-selection.png'});
+  await selection.getByRole('button', {name:'전체 선택 해제'}).click();
+  await expect(selection).toContainText('선택 0개');
+  await expect(page.locator('.sel-bar')).toBeHidden();
+  await page.locator('[data-select-mode]').click();
+  await expect(page.locator('.vz-record-selection-row')).toHaveCount(0);
 });
 
 test('A measurement ⓘ opens what it measures and how to read it', async ({page}) => {

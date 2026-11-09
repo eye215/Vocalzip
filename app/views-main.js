@@ -25,10 +25,10 @@ VZ.wireMedia = (host, items) => {
       host.querySelectorAll('.media-open:not([hidden])').forEach(p => { if (p !== panel) { p.hidden = true; p.closest('[data-media]')?.querySelector('[data-toggle]')?.setAttribute('aria-expanded', 'false'); p._player?.destroy(); } });
       panel.hidden = !open; btn.setAttribute('aria-expanded', String(open));
       if (open) {
-        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<div class="vz-media-accordion-more"><button type="button" data-media-more aria-expanded="false" aria-label="녹음 더보기"><i class="ph ph-dots-three" aria-hidden="true"></i> 더보기</button><div class="vz-media-accordion-menu" data-media-menu hidden><button type="button" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button><button type="button" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div></div>';
-        panel._player = M.player(panel.querySelector('[data-p]'), item, {tools:true});
+        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<button type="button" class="vz-media-accordion-more" data-media-more aria-label="녹음 더보기"><i class="ph ph-dots-three" aria-hidden="true"></i> 더보기</button>';
+        panel._player = M.player(panel.querySelector('[data-p]'), item, {});
         panel._player.play();
-        panel.querySelector('[data-media-more]').onclick = e => { const button = e.currentTarget, menu = panel.querySelector('[data-media-menu]'); menu.hidden = !menu.hidden; button.setAttribute('aria-expanded', String(!menu.hidden)); };
+        panel.querySelector('[data-media-more]').onclick = () => VZ.sheet({title:'녹음 더보기', body:'<div class="vz-choice-list vz-media-action-sheet"><button type="button" class="vz-choice" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" class="vz-choice" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" class="vz-choice" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button></div><details class="vz-media-other"><summary>기타 작업</summary><div class="vz-choice-list"><button type="button" class="vz-choice" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" class="vz-choice" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div></details>', onMount:(sheet, close) => { sheet.querySelector('[data-edit]').onclick = () => { close(); VZ.editMedia(item); }; sheet.querySelector('[data-download]').onclick = () => { close(); M.download(item).catch(err => VZ.toast('저장하지 못했어요: ' + err.message, 'error')); }; sheet.querySelector('[data-analyze]').onclick = () => { close(); panel._player?.destroy(); VZ.nav('#/analysis/' + encodeURIComponent(item.id)); }; sheet.querySelector('[data-compare]').onclick = () => { close(); VZ.nav('#/compare?a=' + encodeURIComponent(item.id) + (item.songId ? '&song=' + encodeURIComponent(item.songId) : '')); }; sheet.querySelector('[data-delete]').onclick = async () => { close(); try { if (!await M.confirmRemove(item)) return; await M.remove(item); row.remove(); VZ.toast('파일을 삭제했어요. 연습·레슨 기록은 남아 있어요.'); } catch(err) { VZ.toast('삭제를 완료하지 못했어요: ' + err.message, 'error'); } }; }});
       } else panel._player?.destroy();
     }
     if (e.target.closest('[data-edit]')) VZ.editMedia(item);
@@ -442,13 +442,15 @@ VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="bu
 }});
 
 /* ---------- 곡 상세 ---------- */
-let songTab = 'timeline';
+let songTab = 'media';
+let songSelectionAbort;
 VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', back:true,
+  leave() { songSelectionAbort?.abort(); VZ.mediaSelection?.clear?.(); },
   actions:r => VZ.song(r.params[0]) ? '<button type="button" class="icon-btn" data-song-menu aria-label="곡 수정·삭제"><i class="ph ph-dots-three-outline"></i></button>' : '',
   render(r) {
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
-    const tabs = [['timeline', '전체'], ['lyrics', '가사'], ['scores', '악보'], ['lessons', '레슨'], ['practice', '연습'], ['performance', '공연']];
+    const tabs = [['media', '녹음'], ['timeline', '전체'], ['lyrics', '가사'], ['scores', '악보'], ['lessons', '레슨'], ['practice', '연습'], ['performance', '공연']];
     return '<div class="song-head">' + (s.show ? '<div class="muted">' + esc(s.show) + '</div>' : '') + '<div class="small muted" data-summary></div></div>' +
       '<div class="btn-row" style="margin-bottom:16px"><a class="btn" href="#/record?song=' + esc(s.id) + '"><i class="ph-fill ph-microphone"></i>녹음</a><button type="button" class="btn secondary" data-log><i class="ph ph-timer"></i>기록</button><button type="button" class="btn secondary" data-quick-compare><i class="ph ph-arrows-left-right"></i>비교</button></div>' +
       '<div data-repertoire></div><div data-song-growth></div><div data-song-vocal></div><div data-song-tips></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
@@ -473,6 +475,7 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       VZ.nav('#/compare?song=' + encodeURIComponent(s.id) + '&a=' + encodeURIComponent(recs[0].id) + '&b=' + encodeURIComponent(recs.at(-1).id));
     };
     const draw = () => {
+      songSelectionAbort?.abort(); songSelectionAbort = new AbortController();
       const db = VZ.db;
       const practices = db.practices.filter(p => p.songId === s.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       const lessons = db.lessons.filter(l => VZ.lessonSongIds(l).includes(s.id) || l.songFeedback?.[s.id]).sort((a, b) => VZ.lessonSort(b, a));
@@ -488,8 +491,12 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       // Recordings live inside lessons and practices: each tab lists its records with their recordings.
       const lessonMedia = media.filter(m => M.occasion(m) === 'lesson'), practiceMedia = media.filter(m => M.occasion(m) === 'practice'), stageMedia = media.filter(m => M.occasion(m) === 'performance');
       const recList = (items, empty) => items.length ? '<div class="list" data-r>' + items.map(VZ.mediaRow).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">' + empty + '</p>';
-      if (songTab === 'media') songTab = 'practice';
-      if (songTab === 'scores') VZ.renderScores ? VZ.renderScores(body, s) : (body.innerHTML = '');
+      if (songTab === 'media') {
+        body.innerHTML = '<div class="vz-song-recordings-heading"><h2>녹음 <span>' + media.length + '</span></h2></div>' + (media.length ?
+          '<div class="vz-record-selection-row"><button type="button" data-song-select-all aria-pressed="false"><span class="vz-select-checkbox" aria-hidden="true"></span>전체선택</button><span data-song-selected>선택 0개</span></div>' + recList(media, '') :
+          VZ.empty('waveform', '이 곡의 녹음이 없어요.', '<a class="btn sm" href="#/record?song=' + esc(s.id) + '">녹음하기</a>'));
+      }
+      else if (songTab === 'scores') VZ.renderScores ? VZ.renderScores(body, s) : (body.innerHTML = '');
       else if (songTab === 'lyrics') {
         const current = VZ.song(s.id) || s;
         body.innerHTML = '<div class="card"><div class="row between"><h2 style="margin:0">가사 노트</h2><span class="small muted">곡당 1개 · 자동 저장 아님</span></div>' +
@@ -523,7 +530,22 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
       }
       else if (songTab === 'performance') body.innerHTML = (shows => shows.length ? '<h2 class="sec" style="margin-top:4px">나의 공연 ' + shows.length + '</h2><div class="list">' + shows.map(VZ.repertoire.showCard).join('') + '</div>' : '')(VZ.repertoire?.showsForSong?.(s.id) || []) +
         '<h2 class="sec" style="margin-top:4px">공연 녹음·영상 ' + stageMedia.length + '</h2>' + recList(stageMedia, '이 곡의 공연 녹음이 없어요. 녹음의 "정보 수정"에서 종류를 공연으로 바꿀 수 있어요.');
-      if (songTab !== 'timeline') { body.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, media)); return; }
+      if (songTab !== 'timeline') {
+        body.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, media));
+        const all = body.querySelector('[data-song-select-all]'), host = body.querySelector('[data-r]');
+        if (all && host) {
+          const update = () => {
+            if (!all.isConnected) return;
+            const {buttons, selected} = VZ.mediaSelection?.scope(host) || {buttons:[], selected:0};
+            all.setAttribute('aria-pressed', String(!!buttons.length && selected === buttons.length));
+            body.querySelector('[data-song-selected]').textContent = '선택 ' + selected + '개';
+          };
+          all.onclick = () => VZ.mediaSelection?.selectAll(host);
+          window.addEventListener('vzip:media-selection-change', update, {signal:songSelectionAbort.signal});
+          update();
+        }
+        return;
+      }
       {
         // One entry: title (+ badge/rating on the right), date · details, then a short note. Lessons and practices open.
         const ev = [
@@ -540,13 +562,14 @@ VZ.route('song', {title:r => VZ.songTitle(r.params[0]) || '곡', tab:'songs', ba
     };
     // The tab bar sticks to the top: a tab chosen further down starts its list right under the bar.
     main.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+      VZ.mediaSelection?.clear?.();
       songTab = b.dataset.tab; draw();
       const bar = main.querySelector('.song-tabs'), body = main.querySelector('[data-body]');
       if (bar && body && body.getBoundingClientRect().top < bar.getBoundingClientRect().bottom) scrollTo(0, scrollY + body.getBoundingClientRect().top - bar.getBoundingClientRect().bottom - 8);
     });
     draw();
-    media = (await M.list().catch(() => [])).filter(m => m.songId === s.id); if (body.isConnected) draw();
-    if (await M.fillDurations(media) && body.isConnected && !body.querySelector('.media-open:not([hidden])')) draw();
+    media = (await M.list().catch(() => [])).filter(m => m.songId === s.id); if (body.isConnected && !document.body.classList.contains('vz-media-selecting')) draw();
+    if (await M.fillDurations(media) && body.isConnected && !body.querySelector('.media-open:not([hidden])') && !document.body.classList.contains('vz-media-selecting')) draw();
   }});
 /** "이 곡의 성장": recent time, practice days, rating, six months of minutes, first → latest recording. */
 function songGrowth(host, s, media, practices) {

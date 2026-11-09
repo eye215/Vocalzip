@@ -11,6 +11,7 @@
     for (const [id, entry] of selected) if (!entry.button.isConnected) selected.delete(id);
     return [...selected.values()].map(entry => entry.item);
   };
+  const announce = () => window.dispatchEvent(new CustomEvent('vzip:media-selection-change'));
   const clearSelection = () => {
     for (const entry of selected.values()) {
       entry.button.setAttribute('aria-pressed', 'false');
@@ -18,10 +19,11 @@
     }
     selected.clear(); selectionBar?.remove(); selectionBar = null;
     document.body.classList.remove('vz-media-selecting');
+    announce();
   };
   const paintSelection = () => {
     const items = visibleSelected();
-    if (!items.length) { selectionBar?.remove(); selectionBar = null; document.body.classList.remove('vz-media-selecting'); return; }
+    if (!items.length) { selectionBar?.remove(); selectionBar = null; document.body.classList.remove('vz-media-selecting'); announce(); return; }
     if (!selectionBar) {
       selectionBar = document.createElement('div');
       selectionBar.className = 'vz-media-selection';
@@ -42,6 +44,7 @@
     const analysis = selectionBar.querySelector('[data-analysis]');
     analysis.disabled = items.length !== 1;
     analysis.title = items.length === 1 ? '' : '보컬 분석은 녹음 1개를 선택해 주세요';
+    announce();
   };
   const closeAccordions = () => {
     M.stopAll?.();
@@ -62,6 +65,24 @@
     }
     paintSelection();
   };
+  const scope = host => {
+    const buttons = [...host.querySelectorAll('[data-media] > .vz-media-select')];
+    return {buttons, selected:buttons.filter(button => selected.has(button.parentElement.dataset.media)).length};
+  };
+  const selectAll = host => {
+    const {buttons, selected:count} = scope(host);
+    if (!buttons.length) return;
+    const allSelected = count === buttons.length;
+    if (!allSelected) closeAccordions();
+    buttons.forEach(button => {
+      const row = button.parentElement, id = row.dataset.media;
+      if (allSelected) selected.delete(id);
+      else selected.set(id, {item:button._vzItem, row, button});
+      button.setAttribute('aria-pressed', String(!allSelected));
+      row.classList.toggle('vz-media-picked', !allSelected);
+    });
+    paintSelection();
+  };
 
   VZ.wireMedia = (host, items) => {
     if (host.closest('.vz-recording-page')) return wireAccordion(host, items);
@@ -77,6 +98,7 @@
         button.type = 'button'; button.className = 'vz-media-select';
         button.setAttribute('aria-label', '녹음 선택: ' + M.label(item));
         button.setAttribute('aria-pressed', 'false');
+        button._vzItem = item;
         button.innerHTML = '<i class="ph ph-check" aria-hidden="true"></i>';
         row.append(button);
       });
@@ -98,5 +120,5 @@
   };
   window.addEventListener('hashchange', clearSelection);
   new MutationObserver(() => { if (selectionBar && !visibleSelected().length) paintSelection(); }).observe(document.body, {childList:true, subtree:true});
-  VZ.mediaSelection = {clear:clearSelection};
+  VZ.mediaSelection = {clear:clearSelection, scope, selectAll};
 })();
