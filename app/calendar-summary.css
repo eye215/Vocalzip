@@ -23,3 +23,22 @@
 /* Selected dates override the ordinary today text rule. */
 .cal-day[aria-pressed=true]>span:first-child{color:var(--accent-ink,#fff)}
 @media(prefers-reduced-motion:reduce){.cs-rank-panel,.cs-spotlight i{transition:none}}
+
+/* Calendar month and date list: compact approved preview treatment. */
+.vz-calendar-month{padding:14px 14px 12px}
+.vz-calendar-month .cal-head{height:44px;margin-bottom:7px}
+.vz-calendar-month .cal-head .icon-btn{width:44px;height:44px;padding:0;border:0;background:radial-gradient(circle,#f2f4f7 0 16px,transparent 16.5px);color:var(--ink-2);font-size:18px}
+.vz-calendar-month .cal-grid{gap:0;grid-auto-rows:44px}
+.vz-calendar-month .cal-grid .dow{height:30px;padding:0;display:grid;place-items:center}
+.vz-calendar-month .cal-day{min-height:44px;padding:4px 0;align-content:center;gap:0}
+.vz-calendar-month .cal-day .dots{height:6px}
+#view [data-day] .cal-group{display:flex;align-items:center;min-height:44px;margin:2px 0 6px;padding:0 14px;border-radius:16px;font-size:13px;font-weight:650}
+#view [data-day] .cal-group.stage{background:#fff0e9;color:#c43d18}
+#view [data-day] .cal-group.lesson{background:#f3ecff;color:#7a32f5}
+#view [data-day] .cal-group.practice{background:#e7f5f5;color:#007e88}
+#view [data-day] .cal-list{display:grid;gap:8px}
+#view [data-day] .cal-list .cal-own{min-width:0;background:#fff;border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
+#view [data-day] .cal-list .cal-own>.item{min-height:72px;padding:12px 16px}
+#view [data-day] .cal-list .cal-own[data-kind=stage] .avatar{background:#fff0e9;color:#c43d18}
+#view [data-day] .cal-list .cal-own[data-kind=lesson] .avatar{background:#f3ecff;color:#7a32f5}
+#view [data-day] .cal-list .cal-own[data-kind=practice] .avatar{background:#e7f5f5;color:#007e88}
