@@ -1,0 +1,44 @@
+name: Snapshot draft and permanent deletion compatibility
+on:
+  push:
+    branches: ['codex/sync-delete-compatibility-20261109']
+  pull_request:
+    paths:
+      - 'supabase/proposals/**'
+      - 'supabase/migrations/20261114_permanent_lesson_delete.sql'
+      - 'tests/field-draft-outbox-integration.test.mjs'
+      - 'tests/permanent-lesson-delete.test.mjs'
+      - '.github/workflows/sync-delete-compatibility.yml'
+permissions:
+  contents: read
+jobs:
+  compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: compatibility_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Permanent deletion in its standalone disposable database
+        env:
+          VZ_DELETE_TEST_DB: postgres://postgres:compatibility_ci_only@localhost:5432/postgres
+        run: node --test tests/permanent-lesson-delete.test.mjs
+      - name: Existing snapshot, draft, outbox and permanent deletion SQL contracts
+        env:
+          VZ_SNAPSHOT_TEST_DB: postgres://postgres:compatibility_ci_only@localhost:5432/postgres
+          VZ_DRAFT_TEST_DB: postgres://postgres:compatibility_ci_only@localhost:5432/postgres
+          VZIP_WITH_PERMANENT_DELETE: '1'
+        run: node --test --test-concurrency=1 tests/snapshot-revision.test.mjs tests/field-drafts.test.mjs tests/field-draft-outbox.test.cjs tests/field-draft-outbox-integration.test.mjs

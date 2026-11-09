@@ -17,6 +17,8 @@ let admin,db,name,conn;
 const proposal=readFileSync(new URL('../supabase/proposals/20261113_snapshot_revision.sql',import.meta.url),'utf8');
 const drafts=readFileSync(new URL('../supabase/proposals/20261114_field_drafts.sql',import.meta.url),'utf8');
 const sessions=readFileSync(new URL('../supabase/migrations/20261112_device_session_contract.sql',import.meta.url),'utf8');
+const withPermanentDelete=process.env.VZIP_WITH_PERMANENT_DELETE==='1';
+const deletion=withPermanentDelete?readFileSync(new URL('../supabase/migrations/20261114_permanent_lesson_delete.sql',import.meta.url),'utf8'):null;
 const history=readFileSync(new URL('../supabase/migrations/20261106_keep_history.sql',import.meta.url),'utf8');
 async function as(u,s,fn,c=db){
  await c.query('begin');
@@ -53,7 +55,7 @@ before(async()=>{
  `);
  await db.query('insert into auth.users values ($1),($2)',[U,V]);
  const legacy=base('legacy-id-not-uuid');await db.query("insert into public.vocal_data values($1,$2,'2099-01-01T00:00:00Z')",[U,legacy]);
- await db.query(history);await db.query(sessions);await db.query(proposal);await db.query(proposal);await db.query(drafts);await db.query(drafts);
+ await db.query(history);await db.query(sessions);await db.query(proposal);await db.query(proposal);await db.query(drafts);await db.query(drafts);if(deletion){await db.query(deletion);await db.query(deletion);}
  const row=(await db.query('select payload,revision from public.vocal_data where user_id=$1',[U])).rows[0];
  assert.deepEqual(row.payload,legacy);assert.equal(row.revision,'0');
 
@@ -61,6 +63,7 @@ before(async()=>{
 beforeEach(async()=>{
  if(skip)return;
  await db.query('truncate public.vzip_field_draft_rollout,public.vzip_field_commit_markers,public.vzip_field_conflicts,public.vzip_field_requests,public.vzip_field_drafts,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ if(deletion)await db.query('truncate public.vzip_permanent_delete_guards');
  await db.query('delete from auth.sessions');
  await db.query('insert into auth.users values ($1),($2) on conflict do nothing',[U,V]);
  for(const s of [A,B,D])await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[s,U]);
@@ -219,4 +222,43 @@ test('operator pause blocks new outbox writes while preserving the durable packe
  await db.query('select public.vzip_set_field_draft_enabled($1,true)',[U]);
  const fresh=await a.request('load');a.model.resolve(S,fresh,'keep_local');await a.model.sync(S);
  assert.equal((await serverDraft()).text_value,'paused local input');assert.deepEqual(await body(),base());
+});
+
+async function permanentDelete(){
+ const row=(await db.query('select updated_at::text updated_at from public.vocal_data where user_id=$1',[U])).rows[0];
+ let result;
+ do{result=await as(U,A,async c=>(await c.query('select public.vzip_delete_lesson($1,$2,$3,$4) r',[S.entityId,'combined-delete',row.updated_at,''])).rows[0].r);}while(result.pending);
+ assert.equal(result.ok,true);return result;
+}
+test('permanent deletion cascades only its draft, conflict copies and request receipts under snapshot triggers',{skip:skip||!withPermanentDelete,timeout:20000},async()=>{
+ const wire=api(),a=device(wire),other=device(wire,{owner:V,session:C,editor:E2});
+ await a.open();a.model.edit(S,'private server draft');await a.model.sync(S);
+ await other.open();other.model.edit(S,'other account draft');await other.model.sync(S);
+ const b=device(wire,{session:B,editor:E2}),loaded=await b.request('load');
+ const conflict=await b.request('save',loaded,{p_text:'private conflicting text'});
+ assert.equal(conflict.status,'conflict');assert.equal(conflict.preserved,true);
+ assert.equal((await db.query('select count(*) n from public.vzip_field_conflicts where user_id=$1',[U])).rows[0].n,'1');
+ const otherBody=(await db.query('select payload from public.vocal_data where user_id=$1',[V])).rows[0].payload;
+ await permanentDelete();
+ for(const table of ['vzip_field_drafts','vzip_field_conflicts','vzip_field_requests','vzip_field_commit_markers'])
+  assert.equal((await db.query('select count(*) n from public.'+table+' where user_id=$1',[U])).rows[0].n,'0',table);
+ assert.equal((await db.query('select text_value from public.vzip_field_drafts where user_id=$1',[V])).rows[0].text_value,'other account draft');
+ assert.deepEqual((await db.query('select payload from public.vocal_data where user_id=$1',[V])).rows[0].payload,otherBody);
+ const current=await body();assert.equal(current.lessons.some(l=>l.id===S.entityId),false);
+ assert.equal(current.lessons[0].id,'lesson-other');assert.equal(current.practices[0].manualMinutes,12);
+ assert.equal((await db.query("select count(*) n from public.vocal_media where id='keep-media'")).rows[0].n,'1');
+ const history=(await db.query('select data from public.vocal_history where user_id=$1',[U])).rows;
+ assert.ok(history.every(h=>!(h.data.payload?.lessons||[]).some(l=>l.id===S.entityId)));
+});
+test('snapshot replay and offline outbox cannot recreate a permanently deleted lesson or its draft',{skip:skip||!withPermanentDelete,timeout:20000},async()=>{
+ const wire=api(),a=device(wire);await a.open();a.model.edit(S,'offline pending text');
+ await permanentDelete();
+ const row=(await db.query('select revision,generation from public.vocal_data where user_id=$1',[U])).rows[0];
+ const response=await as(U,B,async c=>(await c.query('select public.vzip_save_snapshot($1,$2,$3,$4) r',[row.revision,base(),randomUUID(),row.generation])).rows[0].r);
+ assert.equal(response.status,'saved');assert.equal((await body()).lessons.some(l=>l.id===S.entityId),false);
+ assert.ok((await body()).deleted.lessons.includes(S.entityId));
+ const result=await a.model.sync(S);assert.notEqual(result.status,'server_draft');
+ assert.equal(a.model.read(S).text,'offline pending text');assert.ok(a.model.read(S).pending);
+ assert.equal(await serverDraft(),undefined);
+ const current=await body();assert.equal(current.songs[0].id,'song-legacy');assert.equal(current.performances[0].id,'show-old');
 });
