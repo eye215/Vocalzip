@@ -56,14 +56,17 @@ function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
   ticker.querySelector('[data-cs-name]').title=name;
   ticker.querySelector('[data-cs-values]').textContent=metric==='minutes'?duration(row.minutes):row.count+'회';
   list.replaceChildren();
-  rows.forEach((entry,i)=>{
-   const b=document.createElement('button');b.type='button';b.className='cs-rank-row'+(i===index?' active':'');
-   const title=entry.id?titleOf(entry.id)||'삭제된 곡':'곡 미지정',value=metric==='minutes'?duration(entry.minutes):entry.count+'회';
-   b.setAttribute('aria-label',label()+' '+(i+1)+'위 '+title+', '+value);
-   b.innerHTML='<span class="cs-rank-number"></span><span class="cs-name"></span><span class="cs-values"></span>';
-   b.querySelector('.cs-rank-number').textContent=i+1;b.querySelector('.cs-name').textContent=title;b.querySelector('.cs-values').textContent=value;
-   b.onclick=()=>{index=i;show();close();ticker.focus()};list.append(b);
-  });
+  for(const category of ['minutes','count']){
+   const heading=document.createElement('div');heading.className='cs-rank-group';heading.textContent=category==='minutes'?'시간별':'횟수별';list.append(heading);
+   lists[category].forEach((entry,i)=>{
+    const button=document.createElement('button');button.type='button';button.className='cs-rank-row'+(category===metric&&i===index?' active':'');
+    const title=entry.id?titleOf(entry.id)||'삭제된 곡':'곡 미지정',value=category==='minutes'?duration(entry.minutes):entry.count+'회',prefix=category==='minutes'?'시간별':'횟수별';
+    button.setAttribute('aria-label',prefix+' '+(i+1)+'위 '+title+', '+value);
+    button.innerHTML='<span class="cs-rank-number"></span><span class="cs-name"></span><span class="cs-values"></span>';
+    button.querySelector('.cs-rank-number').textContent=prefix+' '+(i+1)+'위';button.querySelector('.cs-name').textContent=title;button.querySelector('.cs-values').textContent=value;
+    button.onclick=()=>{metric=category;index=i;show();close();ticker.focus()};list.append(button);
+   });
+  }
  };
  const close=()=>{opened=false;panel.classList.remove('open');panel.setAttribute('aria-hidden','true');panel.inert=true;ticker.setAttribute('aria-expanded','false')};
  const flip=()=>{metric=metric==='minutes'?'count':'minutes';index=0;show()};
