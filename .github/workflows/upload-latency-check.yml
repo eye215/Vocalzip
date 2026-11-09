@@ -31,6 +31,7 @@ jobs:
       - name: Cache identity, cancellation, memory bound and multipart failure tests
         run: node --test tests/media-inspection-reuse.test.cjs tests/upload-throughput.test.cjs tests/media-upload-recovery.test.cjs tests/flac-encode.test.cjs
       - run: npx playwright install --with-deps chromium webkit
+      - run: sudo apt-get install -y ffmpeg
       - name: Bounded media parser bundle
         run: curl --fail --location --retry 2 https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs --output /tmp/vzip-mediabunny.mjs
       - name: Create synthetic audio and video fixtures
