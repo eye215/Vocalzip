@@ -24,6 +24,18 @@ async function addSession(page,time,number){
  await page.locator('[data-add-session]').click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill(time);await dialog(page).getByLabel('공연 회차',{exact:true}).fill(number);await dialog(page).getByLabel('해당 회차 출연',{exact:true}).selectOption('yes');await save(page);
 }
 test.afterEach(async({page})=>expect(page._archiveErrors||[]).toEqual([]));
+test('Library exposes filters beside selection and opens a selection scope sheet',async({page})=>{
+ await boot(page);await page.goto('/#/library');
+ await expect(page.locator('[data-kind]')).toBeAttached();await expect(page.locator('[data-song]')).toBeAttached();
+ await expect(page.locator('[data-select-mode]')).toBeVisible();
+ await page.locator('[data-select-mode]').click();await page.locator('[data-lib-select-all]').click();
+ const options=page.getByRole('dialog',{name:'전체 선택'});
+ await expect(options).toContainText('현재 필터 결과 전체');
+ await expect(options).toContainText('보관함의 모든 녹음');
+ await options.getByRole('button',{name:/현재 필터 결과 전체/}).click();
+ await expect(page.locator('[data-lib-selected-count]')).toContainText('0개 선택');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+});
 test('Lyrics cards preview saved text and edit each field in a bottom sheet',async({page})=>{
  const seed=initial();seed.songs[0].lyrics='첫 줄 가사\n둘째 줄 가사';seed.songs[0].translation='한글 해석이 길어질 때 카드의 오른쪽을 넘어가지 않고 말줄임으로 표시되는지 확인하는 문장입니다. '.repeat(4);
  await boot(page,{seed});await page.goto('/#/song/song1');await page.locator('[data-tab=lyrics]').click();
