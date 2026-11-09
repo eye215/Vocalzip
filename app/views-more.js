@@ -102,7 +102,7 @@ VZ.importSheet = ({songId = ''} = {}) => {
 /* ---------- 보관함 ---------- */
 const lib = {kind:'all', origin:'all', song:'', q:''};
 const monthTitle = ym => ym ? Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월' : '날짜 미상';
-VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-hub-open aria-label="기존 자료 한꺼번에 가져오기"><i class="ph ph-tray-arrow-down"></i></button><button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button>', render() {
+VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button>', render() {
   const seg = (k, opts, label) => '<div class="seg lib-seg" role="group" aria-label="' + label + '">' + opts.map(([v, t]) => '<button type="button" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + t + '</button>').join('') + '</div>';
   return '<div hidden class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·곡·메모 검색" aria-label="보관함 검색" data-q value="' + esc(lib.q) + '"></div>' +
     '<div class="vz-library-tabs">'+seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분')+'<button class="icon-btn" data-library-search aria-label="보관함 검색"><i class="ph ph-magnifying-glass"></i></button></div>' +
@@ -112,7 +112,6 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
   document.querySelector('[data-imp]').setAttribute('aria-label','파일 가져오기');
   document.querySelector('[data-imp]').onclick = () => VZ.importSheet();
   main.querySelector('[data-library-search]').onclick=()=>VZ.collectionSearch('보관함 검색','제목·곡·메모 검색',lib.q,value=>{const input=main.querySelector('[data-q]');input.value=value;input.dispatchEvent(new Event('input'));});
-  document.querySelector('[data-hub-open]').onclick = () => VZ.openImportHub();
   const l = main.querySelector('[data-l]');
   let media = [], drawn = [];
   const draw = () => {
