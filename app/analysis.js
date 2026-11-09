@@ -108,11 +108,16 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
   async mount(main, r) {
     const id = r.params[0], my = ++job, host = main.querySelector('[data-ana]');
     const alive = () => my === job && document.body.contains(host);
-    const item = (await M.list().catch(() => [])).find(m => m.id === id);
+    const allItems = await M.list().catch(() => []), item = allItems.find(m => m.id === id);
     if (!alive()) return;
     if (!item) { host.innerHTML = '<div class="empty"><i class="ph ph-question"></i><p>녹음을 찾지 못했어요.</p></div>'; return; }
     const song = VZ.songTitle(item.songId);
-    host.innerHTML = '<div class="card"><div class="item-title">' + esc(M.label(item)) + '</div><div class="small muted">' + esc([VZ.dateLabel(M.dateOf(item)), song].filter(Boolean).join(' · ')) + '</div><div data-p style="margin-top:10px"></div></div>' +
+    const selectedIds = (r.query.get('selected') || '').split(',').filter(Boolean);
+    const allowed = new Set(selectedIds);
+    const chosen = allItems.filter(m => allowed.has(String(m.id)) && m.songId === item.songId);
+    const chosenParam = chosen.map(m => m.id).join(',');
+    const selector = chosen.length > 1 ? '<div class="vz-analysis-selected"><div class="small muted">선택한 녹음 ' + chosen.length + '개</div><div class="vz-analysis-selected-scroll">' + chosen.map(m => '<a href="#/analysis/' + encodeURIComponent(m.id) + '?selected=' + encodeURIComponent(chosenParam) + '" aria-current="' + (m.id === id ? 'true' : 'false') + '">' + esc(M.label(m)) + '</a>').join('') + '</div></div>' : '';
+    host.innerHTML = selector + '<div class="card"><div class="item-title">' + esc(M.label(item)) + '</div><div class="small muted">' + esc([VZ.dateLabel(M.dateOf(item)), song].filter(Boolean).join(' · ')) + '</div><div data-p style="margin-top:10px"></div></div>' +
       '<div data-out><div class="card"><p data-stage>준비 중…</p><div class="ana-bar"><span data-bar style="width:0%"></span></div><p class="small muted">이 기기 안에서 분석해요. 파일이 밖으로 나가지 않아요. 5분짜리 곡은 보통 10~30초 걸려요.</p></div></div>';
     const player = M.player(host.querySelector('[data-p]'), item, {prefetch:true});
     const out = host.querySelector('[data-out]'), stage = t => { const s = out.querySelector('[data-stage]'); if (s) s.textContent = t; }, bar = p => { const b = out.querySelector('[data-bar]'); if (b) b.style.width = Math.round(p * 100) + '%'; };

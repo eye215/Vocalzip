@@ -27,21 +27,22 @@
       selectionBar.className = 'vz-media-selection';
       selectionBar.setAttribute('role', 'toolbar');
       selectionBar.setAttribute('aria-label', '선택한 녹음');
-      selectionBar.innerHTML = '<strong data-count></strong><button type="button" data-clear>선택 해제</button><button type="button" data-analysis class="btn sm">보컬 분석</button>';
+      selectionBar.innerHTML = '<strong data-count></strong><button type="button" data-clear>선택 해제</button><button type="button" data-analysis class="btn sm">보컬 분석하기</button>';
       document.body.append(selectionBar);
       selectionBar.querySelector('[data-clear]').onclick = clearSelection;
       selectionBar.querySelector('[data-analysis]').onclick = () => {
         const chosen = visibleSelected();
-        if (chosen.length !== 1) return;
+        if (!chosen.length) return;
         const id = chosen[0].id;
-        clearSelection(); VZ.nav('#/analysis/' + encodeURIComponent(id));
+        const params = document.body.dataset.vzRoute === 'song' ? '?selected=' + encodeURIComponent(chosen.map(x => x.id).join(',')) : '';
+        clearSelection(); VZ.nav('#/analysis/' + encodeURIComponent(id) + params);
       };
     }
     document.body.classList.add('vz-media-selecting');
     selectionBar.querySelector('[data-count]').textContent = items.length + '개 선택';
     const analysis = selectionBar.querySelector('[data-analysis]');
-    analysis.disabled = items.length !== 1;
-    analysis.title = items.length === 1 ? '' : '보컬 분석은 녹음 1개를 선택해 주세요';
+    analysis.disabled = !items.length || (document.body.dataset.vzRoute !== 'song' && items.length !== 1);
+    analysis.title = analysis.disabled ? '보컬 분석은 녹음 1개를 선택해 주세요' : '';
   };
   const closeAccordions = () => {
     M.stopAll?.();
@@ -98,5 +99,15 @@
   };
   window.addEventListener('hashchange', clearSelection);
   new MutationObserver(() => { if (selectionBar && !visibleSelected().length) paintSelection(); }).observe(document.body, {childList:true, subtree:true});
-  VZ.mediaSelection = {clear:clearSelection};
+  VZ.mediaSelection = {
+    clear:clearSelection,
+    count:host => [...selected.values()].filter(entry => entry.row.isConnected && host.contains(entry.row)).length,
+    selectAll:(host, items, on) => {
+      for (const item of items) {
+        const row = [...host.querySelectorAll('[data-media]')].find(r => r.dataset.media === String(item.id));
+        const button = row?.querySelector('.vz-media-select');
+        if (row && button && selected.has(String(item.id)) !== on) toggleSelected(row, item, button);
+      }
+    }
+  };
 })();
