@@ -108,6 +108,15 @@ export async function createFloatingHome(opts={}){
  const root=document.importNode(template.root,true);root.setAttribute("aria-label","Vocalzip 홈");shadow.append(root);
  const iconFont=el("style",`@font-face{font-family:"Phosphor";src:url("${new URL('../vendor/phosphor/Phosphor.woff2',import.meta.url)}") format("woff2");font-display:block}#vocalzip-refined-preview .vz-nav-item i::before,#vocalzip-refined-preview .vz-floating-record i::before{content:attr(data-glyph)}`);
  shadow.append(iconFont);
+ const sharedShell=el("style",`/* Match the common four-tab dock and circular recording action. */
+#vocalzip-refined-preview .vz-nav{box-sizing:border-box;height:70px;padding:8px;border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;background:var(--vz-nav-surface,rgba(255,255,255,.58));box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));-webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px))}
+#vocalzip-refined-preview .vz-nav-item{box-sizing:border-box;height:54px;min-height:54px;gap:2px;border-radius:999px;font-size:11px;font-weight:500}
+#vocalzip-refined-preview .vz-nav-item.vz-active{background:#EDE1FF;color:#8A6DB8;font-weight:600}
+#vocalzip-refined-preview .vz-nav-item i{font-size:22px}
+#vocalzip-refined-preview .vz-floating-record{width:56px;min-width:56px;height:56px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 82px);box-shadow:0 5px 14px rgba(109,43,229,.18),inset 0 1px 0 rgba(255,255,255,.22)}
+@media(prefers-reduced-transparency:reduce){#vocalzip-refined-preview .vz-nav{background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none}}
+`);
+ shadow.append(sharedShell);
  [...root.querySelectorAll('.vz-nav-item')].forEach((button,i)=>{
   const svg=button.querySelector('svg');if(!svg)return;
   const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a'][i];svg.replaceWith(icon);
