@@ -1,25 +1,15 @@
-/* Shared recording list selection and bottom player. */
+/* Shared selection for recording lists. Playback remains inside each row. */
 (() => {
   'use strict';
   const VZ = window.VZ, M = VZ?.media;
   if (!VZ?.wireMedia || !M) return;
-  const legacyWire = VZ.wireMedia;
+  const wireAccordion = VZ.wireMedia;
   const selected = new Map();
-  let dock = null, player = null, dockObserver = null, activeRow = null, activeItem = null, selectionBar = null;
+  let selectionBar = null;
 
   const visibleSelected = () => {
     for (const [id, entry] of selected) if (!entry.button.isConnected) selected.delete(id);
     return [...selected.values()].map(entry => entry.item);
-  };
-  const close = () => {
-    dockObserver?.disconnect(); dockObserver = null;
-    player?.destroy(); player = null;
-    dock?.remove(); dock = null;
-    activeRow?.classList.remove('vz-media-active');
-    activeRow?.querySelector('[data-toggle]')?.setAttribute('aria-expanded', 'false');
-    activeRow = activeItem = null;
-    document.body.classList.remove('vz-media-dock-open');
-    document.body.style.removeProperty('--vz-media-dock-height');
   };
   const clearSelection = () => {
     for (const entry of selected.values()) {
@@ -44,7 +34,7 @@
         const chosen = visibleSelected();
         if (chosen.length !== 1) return;
         const id = chosen[0].id;
-        clearSelection(); close(); VZ.nav('#/analysis/' + encodeURIComponent(id));
+        clearSelection(); VZ.nav('#/analysis/' + encodeURIComponent(id));
       };
     }
     document.body.classList.add('vz-media-selecting');
@@ -53,48 +43,29 @@
     analysis.disabled = items.length !== 1;
     analysis.title = items.length === 1 ? '' : '보컬 분석은 녹음 1개를 선택해 주세요';
   };
+  const closeAccordions = () => {
+    M.stopAll?.();
+    document.querySelectorAll('.vz-media-select-enabled .media-open:not([hidden])').forEach(panel => {
+      panel.hidden = true;
+      panel._player?.destroy(); panel._player = null;
+      panel.closest('[data-media]')?.querySelector('[data-toggle]')?.setAttribute('aria-expanded', 'false');
+    });
+  };
   const toggleSelected = (row, item, button) => {
     if (selected.has(row.dataset.media)) {
       selected.delete(row.dataset.media);
       button.setAttribute('aria-pressed', 'false'); row.classList.remove('vz-media-picked');
     } else {
-      if (!selected.size) close();
+      if (!selected.size) closeAccordions();
       selected.set(row.dataset.media, {item, row, button});
       button.setAttribute('aria-pressed', 'true'); row.classList.add('vz-media-picked');
     }
     paintSelection();
   };
-  const open = (item, row) => {
-    close();
-    activeItem = item; activeRow = row;
-    row.classList.add('vz-media-active');
-    row.querySelector('[data-toggle]')?.setAttribute('aria-expanded', 'true');
-    dock = document.createElement('section');
-    dock.className = 'vz-media-dock';
-    dock.setAttribute('aria-label', '녹음 플레이어');
-    dock.innerHTML = '<div class="vz-media-dock-head"><strong></strong><button type="button" data-more aria-label="녹음 더보기" aria-expanded="false"><i class="ph ph-dots-three"></i></button><button type="button" data-close aria-label="플레이어 닫기"><i class="ph ph-x"></i></button></div>' +
-      '<div data-player></div><div class="vz-media-dock-menu" data-menu hidden><button type="button" data-edit><i class="ph ph-pencil-simple"></i>정보 수정</button><button type="button" data-download><i class="ph ph-download-simple"></i>저장</button><button type="button" data-analyze><i class="ph ph-chart-line"></i>보컬 분석</button></div>';
-    dock.querySelector('strong').textContent = M.label(item);
-    document.body.append(dock);
-    document.body.classList.add('vz-media-dock-open');
-    player = M.player(dock.querySelector('[data-player]'), item, {prefetch:true});
-    if (window.ResizeObserver) {
-      dockObserver = new ResizeObserver(() => document.body.style.setProperty('--vz-media-dock-height', dock.offsetHeight + 'px'));
-      dockObserver.observe(dock);
-    }
-    player.play();
-    dock.querySelector('[data-close]').onclick = close;
-    const more = dock.querySelector('[data-more]'), menu = dock.querySelector('[data-menu]');
-    more.onclick = () => { menu.hidden = !menu.hidden; more.setAttribute('aria-expanded', String(!menu.hidden)); };
-    dock.querySelector('[data-edit]').onclick = () => { menu.hidden = true; more.setAttribute('aria-expanded', 'false'); player?.pause(); VZ.editMedia(item); };
-    dock.querySelector('[data-download]').onclick = () => { menu.hidden = true; more.setAttribute('aria-expanded', 'false'); M.download(item).catch(err => VZ.toast('저장하지 못했어요: ' + err.message, 'error')); };
-    dock.querySelector('[data-analyze]').onclick = () => { close(); VZ.nav('#/analysis/' + encodeURIComponent(item.id)); };
-  };
 
   VZ.wireMedia = (host, items) => {
-    // The immediate post-recording review has its own player and controls.
-    if (host.closest('.vz-recording-page')) return legacyWire(host, items);
-    host.classList.add('vz-media-dock-enabled');
+    if (host.closest('.vz-recording-page')) return wireAccordion(host, items);
+    host.classList.add('vz-media-select-enabled');
     const findItem = id => items.find(item => String(item.id) === id);
     const decorate = () => {
       if (document.body.dataset.vzRoute === 'library') return;
@@ -117,32 +88,15 @@
       if (!row || !host.contains(row)) return;
       const item = findItem(row.dataset.media);
       if (!item) return;
-      const select = event.target.closest('.vz-media-select');
-      if (select) {
+      const button = row.querySelector('.vz-media-select');
+      if (event.target.closest('.vz-media-select') || (selected.size && button && event.target.closest('[data-toggle]'))) {
         event.preventDefault(); event.stopImmediatePropagation();
-        toggleSelected(row, item, select); return;
+        toggleSelected(row, item, button);
       }
-      if (!event.target.closest('[data-toggle]') || host.closest('.lib-selecting')) return;
-      event.preventDefault(); event.stopImmediatePropagation();
-      if (selected.size) {
-        const button = row.querySelector('.vz-media-select');
-        if (button) { toggleSelected(row, item, button); return; }
-      }
-      open(item, row);
     }, true);
-    return legacyWire(host, items);
+    return wireAccordion(host, items);
   };
-  document.addEventListener('click', event => {
-    if (event.target.closest('[data-select-mode]')) close();
-    if (dock && !event.target.closest('.vz-media-dock') && !event.target.closest('[data-media]')) {
-      const menu = dock.querySelector('[data-menu]');
-      if (!menu.hidden) { menu.hidden = true; dock.querySelector('[data-more]').setAttribute('aria-expanded', 'false'); }
-    }
-  }, true);
-  window.addEventListener('hashchange', () => { close(); clearSelection(); });
-  new MutationObserver(() => {
-    if (dock && activeRow && !activeRow.isConnected) close();
-    if (selectionBar && !visibleSelected().length) paintSelection();
-  }).observe(document.body, {childList:true, subtree:true});
-  VZ.mediaDock = {open, close, clearSelection};
+  window.addEventListener('hashchange', clearSelection);
+  new MutationObserver(() => { if (selectionBar && !visibleSelected().length) paintSelection(); }).observe(document.body, {childList:true, subtree:true});
+  VZ.mediaSelection = {clear:clearSelection};
 })();
