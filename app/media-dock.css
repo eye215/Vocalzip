@@ -42,3 +42,25 @@ body.vz-collection .lib-selecting [data-media].picked .avatar::after{border-colo
 .vz-media-action-sheet .vz-choice i{font-size:20px;color:var(--vz-color-accent,#7a32f5)}
 .vz-media-action-sheet [data-delete]{color:var(--vz-color-danger,#a23f56)}
 .vz-media-action-sheet [data-delete] i{color:inherit}
+
+/* Library selection and row actions: the selected recording keeps its white surface. */
+body.vz-collection #view[data-collection=library] .lib-selection-tools{order:5}
+body.vz-collection #view[data-collection=library]>[data-l]{order:6}
+body.vz-collection .lib-selection-tools{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:48px;margin:0 0 10px;padding:2px 8px;border-radius:16px;background:#F3ECFF}
+.lib-select-all{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 4px;border:0;background:transparent;color:#475467;font-size:13px;font-weight:600;white-space:nowrap}
+.lib-check,.lib-pick span{display:grid;place-items:center;width:20px;height:20px;border:1.5px solid #98A2B3;border-radius:5px;background:#fff;color:#fff;font-size:13px;font-weight:700}
+.lib-select-all[aria-pressed=true] .lib-check,.lib-pick[aria-pressed=true] span{border-color:#7A32F5;background:#7A32F5}
+.lib-selection-meta{display:flex;align-items:center;gap:2px;white-space:nowrap}.lib-selection-meta strong{color:#7A32F5;font-size:12px;font-weight:600}
+.lib-bulk-more,.lib-row-more,.lib-pick{display:grid;place-items:center;flex:none;width:44px;height:44px;padding:0;border:0;background:transparent;color:#667085}
+.lib-bulk-more:disabled{opacity:.35}.lib-bulk-more i,.lib-row-more i{font-size:20px}
+body.vz-collection .lib-month .lib-row{display:flex;align-items:center;gap:4px;min-width:0}
+body.vz-collection .lib-month .lib-record .lib-row [data-toggle]{flex:1;min-width:0;width:auto;min-height:64px;padding:10px 0;gap:8px;background:transparent}
+body.vz-collection .lib-month .lib-row .avatar{flex:none;width:26px;height:32px}
+body.vz-collection .lib-month .lib-row .item-main{min-width:0;flex:1}
+body.vz-collection .lib-month .lib-row .chev{flex:none;font-size:16px}
+body.vz-collection .lib-month .lib-record .media-open:not([hidden]){border-top:1px solid #E8E4F0}
+body.vz-collection .lib-month .lib-record .player{padding-top:12px}
+body.vz-collection .lib-month .lib-record .player-btn{background:#F3ECFF;color:#7A32F5}
+body.vz-collection .lib-month .lib-record .lib-row,.lib-record .lib-row .item{background:#fff}
+@media(max-width:350px){body.vz-collection .lib-month .lib-row{gap:2px}.lib-pick,.lib-row-more{width:40px}}
+

@@ -108,7 +108,7 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
     '<div class="vz-library-tabs">'+seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분')+'<button class="icon-btn" data-library-search aria-label="보관함 검색"><i class="ph ph-magnifying-glass"></i></button></div>' +
     '<div class="lib-selects" hidden><select aria-label="형식 필터" data-kind data-pick><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>음성·영상</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select>' +
     '<select aria-label="곡 필터" data-song data-pick="song"><option value="">모든 곡</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select></div>' +
-    '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 확인 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div><button type="button" class="btn sm ghost" data-select-mode aria-pressed="false">선택</button></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
+    '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 확인 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div></div><div class="lib-selection-tools" aria-label="녹음 선택"><button type="button" class="lib-select-all" data-lib-select-all aria-pressed="false"><span class="lib-check" aria-hidden="true"></span>전체 선택</button><div class="lib-selection-meta"><strong data-lib-selected-count>0개 선택</strong><button type="button" class="lib-bulk-more" data-lib-bulk-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three"></i></button></div></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   VZ.serverAnalysisCard?.(main.querySelector('[data-server-analysis]')); // app/server-analysis.js
   document.querySelector('[data-imp]').setAttribute('aria-label','보관함 메뉴');
@@ -142,7 +142,7 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
       while (shown < end) {
         const k = order[shown][0]; let html = '';
         if (k !== lastKey) { root.insertAdjacentHTML('beforeend', head(k)); lastKey = k; }
-        while (shown < end && order[shown][0] === k) html += VZ.mediaRow(order[shown++][1]);
+        while (shown < end && order[shown][0] === k) html += VZ.mediaRow(order[shown++][1], {library:true});
         root.lastElementChild.querySelector('.list').insertAdjacentHTML('beforeend', html);
       }
       root.vzPrefetch?.();
@@ -467,5 +467,6 @@ async function receiveShared() {
 }
 VZ.receiveShared = receiveShared;
 })();
+
 
 

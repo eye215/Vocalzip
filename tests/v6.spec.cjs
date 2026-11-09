@@ -1575,7 +1575,7 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await expect(page.getByRole('button', {name:'공연', exact:true})).toBeVisible();
   // m2 is an unlinked practice recording; its length never adds to actual practice time.
   await page.locator('[data-media="m2"] [data-toggle]').click();
-  await page.locator('[data-media="m2"]').getByRole('button',{name:'녹음 더보기',exact:true}).click();
+  await page.locator('[data-media="m2"] [data-lib-row-more]').click();
   await sheet(page).getByRole('button', {name:/정보 수정/}).click();
   await expect(sheet(page).getByRole('radio', {name:'연습'})).toHaveAttribute('aria-checked', 'true');
   await sheet(page).getByRole('radio', {name:'공연'}).click();
