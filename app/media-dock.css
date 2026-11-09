@@ -100,13 +100,16 @@ body.vz-collection .lib-month .lib-record .lib-row-more i{font-size:20px}
 body.vz-collection .lib-month .lib-record .player [data-msg]:not(:empty){padding:0 12px 8px}
 @media(max-width:350px){body.vz-collection .lib-month .lib-record .player-row{gap:3px;padding-left:3px}body.vz-collection .lib-month .lib-record .player-row .time{font-size:10px}body.vz-collection .lib-month .lib-record .lib-row-more{width:44px}}
 
-/* Library filters and selection share a compact toolbar. */
-body.vz-collection .lib-selection-tools{display:flex;flex-wrap:wrap;align-items:center;gap:0;min-height:48px;margin:0 0 12px;padding:0;background:transparent}
+/* Library selection keeps the lavender surface in both states. */
+body.vz-collection .lib-selection-tools{display:flex;align-items:center;gap:6px;min-height:48px;margin:0 0 12px;padding:2px 12px;border-radius:16px;background:#F3ECFF}
+body.vz-collection .lib-selection-tools .lib-selection-total{margin-left:auto;color:#667085;font-size:13px;font-weight:500;white-space:nowrap}
 body.vz-collection .lib-selection-tools .lib-selects{display:flex;flex:1;min-width:0;gap:6px;margin:0}
 body.vz-collection .lib-selection-tools .lib-selects>select,body.vz-collection .lib-selection-tools .lib-selects>.pick-btn{min-width:0;max-width:calc(50% - 3px);width:auto;min-height:44px;padding:0 9px;border:1px solid #E8E4F0;border-radius:15px;background:#fff;color:#475467;font-size:12px;font-weight:600}
 body.vz-collection .lib-selection-tools .lib-selects>select:first-child,body.vz-collection .lib-selection-tools .lib-selects>.pick-btn:first-child{flex:0 1 126px}
 body.vz-collection .lib-selection-tools .lib-selects>select:last-child,body.vz-collection .lib-selection-tools .lib-selects>.pick-btn:last-child{flex:0 1 112px}
-body.vz-collection .lib-selection-tools .lib-select-start,body.vz-collection .lib-selection-tools .lib-select-cancel{margin-left:auto;color:#7A32F5;padding:0 4px}
-body.vz-collection .lib-selection-tools .lib-selection-left{flex:1 0 auto;order:3;margin-top:5px}
-body.vz-collection .lib-selection-tools .lib-selection-meta{order:4;margin-top:5px}
+body.vz-collection .lib-selection-tools .lib-select-start{margin:0;color:#7A32F5;padding:0 4px}
+body.vz-collection .lib-selection-tools .lib-select-cancel{margin:0 0 0 5px;padding:0 0 0 13px;color:#667085;position:relative}
+body.vz-collection .lib-selection-tools .lib-select-cancel::before{content:"|";position:absolute;left:0;top:50%;transform:translateY(-50%);color:#A99CBF;font-size:13px;font-weight:400}
+body.vz-collection .lib-selection-tools .lib-selection-left{flex:1;min-width:0;gap:2px}
+body.vz-collection .lib-selection-tools .lib-selection-meta{margin-left:auto;gap:0}
 body.vz-collection .lib-selection-tools [hidden]{display:none!important}

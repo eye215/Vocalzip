@@ -2045,8 +2045,15 @@ test('Library selection scopes and bulk actions update selected recordings', asy
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
-  await page.locator('[data-select-mode]').click();
   const bar=page.locator('.lib-selection-tools');
+  await expect(bar).toContainText('총 2개');
+  await expect(bar).toHaveCSS('background-color', 'rgb(243, 236, 255)');
+  await expect(bar.locator('[data-lib-select-all]')).toBeHidden();
+  await expect(page.locator('[data-media="m1"] [data-lib-pick]')).toBeHidden();
+  await page.locator('[data-select-mode]').click();
+  await expect(bar.locator('[data-lib-select-all]')).toBeVisible();
+  await expect(bar.locator('[data-lib-select-cancel]')).toBeVisible();
+  await expect(bar).toHaveCSS('background-color', 'rgb(243, 236, 255)');
   await expect(bar).toContainText('0개 선택');
   await page.locator('[data-media="m1"] [data-lib-pick]').click();
   await expect(bar).toContainText('1개 선택');
@@ -2059,6 +2066,9 @@ test('Library selection scopes and bulk actions update selected recordings', asy
   await page.getByRole('dialog',{name:'곡 지정'}).getByRole('button',{name:'바꾸기'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id + ':' + m.songId).sort().join(','))).toBe('m1:s2,m2:s2');
   await bar.locator('[data-lib-select-cancel]').click();
+  await expect(bar).toContainText('총 2개');
+  await expect(bar.locator('[data-lib-selected-count]')).toBeHidden();
+  await expect(page.locator('[data-media="m1"] [data-lib-pick]')).toBeHidden();
   await page.goto('/#/home');
   expect(page.__errors).toEqual([]);
 });

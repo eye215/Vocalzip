@@ -7,7 +7,7 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
   const host = main.querySelector('[data-l]'), start = main.querySelector('[data-select-mode]'),
     left = main.querySelector('.lib-selection-left'), cancel = main.querySelector('[data-lib-select-cancel]'),
     meta = main.querySelector('.lib-selection-meta'), allButton = main.querySelector('[data-lib-select-all]'),
-    count = main.querySelector('[data-lib-selected-count]'), bulk = main.querySelector('[data-lib-bulk-more]');
+    count = main.querySelector('[data-lib-selected-count]'), total = main.querySelector('[data-lib-total-count]'), bulk = main.querySelector('[data-lib-bulk-more]');
   if (!host || !allButton || !count || !bulk) return;
   const picked = new Map();
   let busy = false, selecting = false;
@@ -20,8 +20,9 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
   });
   const paint = () => {
     main.classList.toggle('lib-selection-active', selecting);
-    start.hidden = selecting; cancel.hidden = !selecting; left.hidden = !selecting; meta.hidden = !selecting;
+    start.hidden = selecting; total.hidden = selecting; cancel.hidden = !selecting; left.hidden = !selecting; meta.hidden = !selecting;
     const visible = list(), all = visible.length > 0 && visible.every(m => picked.has(String(m.id)));
+    total.textContent = '총 ' + visible.length + '개';
     allButton.setAttribute('aria-pressed', String(all));
     const box = allButton.querySelector('.lib-check'); if (box && box.textContent !== (all ? '✓' : '')) box.textContent = all ? '✓' : '';
     count.textContent = picked.size + '개 선택'; bulk.disabled = !picked.size || busy; mark(host);
