@@ -63,7 +63,11 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal, purp
   }
   const start = await api('/v1/uploads', {method:'POST', signal, body:{mediaId, contentType:type, size:file.size, ext:extOf(file, type), ...(purpose ? {purpose} : {})}});
   const q = '?key=' + encodeURIComponent(start.key), base = '/v1/uploads/' + encodeURIComponent(start.uploadId);
+  if(!Number.isSafeInteger(start.partSize)||start.partSize<1||start.partSize>8*1024*1024)throw Error('저장소 전송 구간을 확인하지 못했어요.');
   const parts = new Array(Math.ceil(file.size/start.partSize));
+  // At most 32MiB of part buffers; save-data, slow links and low-memory devices retain two senders.
+  const connection=window.navigator?.connection;
+  const lanes=connection?.saveData||/^(slow-2g|2g|3g)$/.test(connection?.effectiveType||'')||(window.navigator?.deviceMemory>0&&window.navigator.deviceMemory<=2)?2:4;
   const controller=new AbortController(),cancel=()=>controller.abort(signal?.reason);
   if(signal?.aborted)cancel();signal?.addEventListener('abort',cancel,{once:true});
   let next=0,bytesDone=0,failure=null,lastProgress=0;const inFlight=new Map();
@@ -84,7 +88,7 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal, purp
     }
   };
   try {
-    await Promise.all([send(),send()]);
+    await Promise.all(Array.from({length:lanes},()=>send()));
     if(failure)throw failure;
     if(controller.signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');
     const done = await api(base + '/complete' + q, {method:'POST', body:{parts}, signal});

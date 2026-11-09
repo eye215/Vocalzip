@@ -20,8 +20,8 @@ function environment(code,{delay=80,failPart=0,reverse=false}={}){
  vm.runInNewContext(code,context);
  return {window,transport:context.fetch,api:window.VzipR2,calls,progress,state,run:opts=>window.VzipR2.upload(new File([new Uint8Array(32*1024*1024)],'test.wav',{type:'audio/wav'}),{mediaId:'test',onProgress:value=>progress.push(value),...opts})};
 }
-test('at most two 8MiB parts are sent concurrently; completion waits and progress is monotonic',async()=>{
- const f=environment(source);await f.run();assert.equal(f.state.peak,2);assert.ok(f.state.peakBytes<=16*1024*1024);assert.equal(f.state.completed,true);
+test('at most four 8MiB parts are sent concurrently; completion waits and progress is monotonic',async()=>{
+ const f=environment(source);await f.run();assert.equal(f.state.peak,4);assert.ok(f.state.peakBytes<=32*1024*1024);assert.equal(f.state.completed,true);
  assert.equal(f.progress.at(-1),100);assert.ok(f.progress.every((n,i)=>i===0||n>=f.progress[i-1]));
 });
 test('out-of-order replies still produce the correct ordered multipart manifest',async()=>{
@@ -45,7 +45,7 @@ test('compare unchanged serial baseline with bounded parallel transfer under ide
  const old=environment(baseline),fresh=environment(source);
  const start=performance.now();await old.run();const serialMs=performance.now()-start;
  const now=performance.now();await fresh.run();const parallelMs=performance.now()-now;
- assert.equal(old.state.peak,1);assert.equal(fresh.state.peak,2);
+ assert.equal(old.state.peak,1);assert.equal(fresh.state.peak,4);
  console.log(JSON.stringify({benchmark:'4x8MiB,80ms per request; simulated network',serialMs:Math.round(serialMs),parallelMs:Math.round(parallelMs)}));
 });
 
@@ -67,4 +67,11 @@ test('XHR sends bounded ArrayBuffer bodies and reports bytes before a part compl
  await f.run();
  assert.deepEqual(types,[8*1024*1024,8*1024*1024,8*1024*1024,8*1024*1024]);
  assert.ok(f.progress.some(n=>n>0&&n<25));assert.equal(f.progress.at(-1),100);assert.equal(f.state.completed,true);
+});
+
+test('save-data, slow links and low-memory devices retain the two-part memory bound',async()=>{
+ for(const navigator of [{connection:{saveData:true}},{connection:{effectiveType:'3g'}},{deviceMemory:2}]){
+  const f=environment(source);f.window.navigator=navigator;await f.run();
+  assert.equal(f.state.peak,2);assert.ok(f.state.peakBytes<=16*1024*1024);
+ }
 });

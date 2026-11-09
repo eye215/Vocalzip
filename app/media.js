@@ -156,11 +156,12 @@ M.importFile = async (file, choice, onProgress, signal) => {
   if (!file.size) throw Error('빈 파일은 가져올 수 없어요.');
   if (file.size > (window.VzipChunks?.MAX_SIZE || 1073741824)) throw Error('파일당 최대 1GB까지 가져올 수 있어요.');
   if (!window.vzipPrepareMedia) throw Error('가져오기 모듈을 불러오지 못했어요. 새로고침해 주세요.');
-  const typed = file.type === type ? file : new File([file], file.name, {type, lastModified:file.lastModified});
-  const prepared = await window.vzipPrepareMedia(typed, {signal, onProgress:msg => onProgress?.(msg)});
+  // Keep the same File identity so trusted parser metadata can be reused after import review.
+  const prepared = await window.vzipPrepareMedia(file, {signal, onProgress:msg => onProgress?.(msg)});
   try {
     if(window.VzipAccountScope?.leaving)throw Error('계정이 변경되어 가져오기를 중단했어요.');
     const out = prepared.file, meta = {...prepared.metadata};
+    if(out===file&&Number.isFinite(choice.durationSeconds)&&choice.durationSeconds>0)meta.durationSeconds=choice.durationSeconds;
     // Keep the length so practice time can include imported files.
     if (!(Number(meta.durationSeconds) > 0)) meta.durationSeconds = await M.measure({blob:out, type:out.type || typeOf(out), name:out.name}, 8000);
     // A file named yyyy-MM-dd_HH-mm-ss keeps that exact time (also when the chosen date is the same day).

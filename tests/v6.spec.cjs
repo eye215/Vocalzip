@@ -2399,3 +2399,25 @@ test('Lesson deletion from stale settlement version stops without a dialog or de
  expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
  expect(await deletionBillingFrame(page)).toEqual(before);
 });
+
+test('Upload startup inspects only four files before sending and holds background backup through all windows',async({page})=>{
+ await boot(page,{media:false});
+ await page.evaluate(()=>{
+  window.__startup={inspected:0,first:0,sent:0,holds:0,firstHolds:0};
+  window.vzipCloudSignedIn=()=>true;window.vzipCloudUserId=()=> 'ui-test-user';
+  VZ.media.list=async()=>[];
+  const hold=VZ.media.holdBackup;
+  VZ.media.holdBackup=on=>{window.__startup.holds+=on?1:-1;hold(on);};
+  window.vzipInspectMedia=async()=>{window.__startup.inspected++;return {readable:true,duration:32,hasVideo:false,hasAudio:true,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}};};
+  VZ.media.importFile=async(file,choice)=>{
+   if(!window.__startup.sent){window.__startup.first=window.__startup.inspected;window.__startup.firstHolds=window.__startup.holds;}
+   window.__startup.sent++;return {id:choice.id,cloud:true,size:file.size,durationSeconds:32,recordedDate:'2026-11-09'};
+  };
+  VZ.openImportHub({files:Array.from({length:9},(_,i)=>new File([new Uint8Array([i,1,2,3])],'part-'+i+'.m4a',{type:'audio/mp4'}))});
+ });
+ await expect.poll(()=>page.evaluate(()=>window.__startup.sent)).toBe(9);
+ await expect.poll(()=>page.evaluate(()=>window.__startup.holds)).toBe(0);
+ const result=await page.evaluate(()=>window.__startup);
+ expect(result.first).toBe(4);expect(result.firstHolds).toBeGreaterThanOrEqual(2);
+ expect(result.inspected).toBe(9);
+});
