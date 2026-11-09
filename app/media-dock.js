@@ -57,7 +57,7 @@
   };
 
   VZ.wireMedia = (host, items) => {
-    if (host.closest('.vz-recording-page')) return wireAccordion(host, items);
+    if (host.closest('.vz-recording-page, .archive-song')) return wireAccordion(host, items);
     host.classList.add('vz-media-select-enabled');
     const findItem = id => items.find(item => String(item.id) === id);
     const decorate = () => {
