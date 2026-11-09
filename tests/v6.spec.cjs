@@ -72,13 +72,10 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('.vl-player')).toHaveCount(0);
  await page.locator('.vl-dates button').first().click();
  await expect(page.locator('.vl-single')).toBeVisible();
- await expect(page.locator('.vl-recommend>strong')).toHaveText('지속음 안정화');
- await page.locator('[data-practice]').click();
- await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(/\[추천 연습\] 지속음 안정화/);
- await page.evaluate(() => VZ.closeSheets());
+ await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
  await page.locator('.vl-dates button').nth(1).click();
  await expect(page.locator('.vl-trend')).toBeVisible();
- await expect(page.locator('.vl-recommend>strong')).toHaveText('프레이즈 유지');
+ await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
  await page.locator('.vl-plot-dates button').first().click();
  await expect(page.locator('.sheet')).toContainText('지속음의 음정 흔들림');
@@ -90,6 +87,28 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('.vl-player-head')).toContainText('1 / 2');
  await page.goto('/#/song/s1');
  await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(0);
+});
+
+test('Vocal lab shows a compact recommendation list and opens the chosen practice', async ({page}) => {
+ await boot(page);
+ await page.evaluate(async () => {
+   await window.vzipStorePracticeMedia({id:'m3', name:'세 번째 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', song:'This Is the Moment', blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:1});
+   VZ.media.invalidate();
+   const all=await VZ.media.list();
+   for(const m of all.filter(x=>x.songId==='s1')) {
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:18,notes:4},intonation:{meanAbsCents:28,notes:10},range:{lowCents:6000,highCents:8100},breath:{medianPhrase:2.4}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   }
+   VZ.media.invalidate();
+ });
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await expect(page.locator('.vl-tip')).toHaveCount(2);
+ const first=page.locator('.vl-tip').first();
+ const name=await first.locator('summary strong').innerText();
+ await first.locator('summary').click();
+ await expect(first.locator('.vl-tip-detail')).toBeVisible();
+ await first.locator('[data-practice-tip]').click();
+ await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(new RegExp('\\[추천 연습\\] '+name));
 });
 
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
@@ -1530,7 +1549,7 @@ test('Song detail shows real growth, recording selection and analysis handoff', 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
-test('Library bulk analysis opens every selected recording in the vocal lab', async ({page}) => {
+test('Library bulk menu omits analysis when selected recordings span songs', async ({page}) => {
   await boot(page);
   await page.evaluate(async () => {
     await window.vzipStorePracticeMedia({id:'m3',name:'다른 곡 녹음',created:Date.now(),type:'audio/wav',source:'practice',songId:'s2',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
@@ -1541,13 +1560,7 @@ test('Library bulk analysis opens every selected recording in the vocal lab', as
   await page.locator('[data-lib-select-all]').click();
   await expect(page.locator('[data-lib-selected-count]')).toHaveText('3개 선택');
   await page.locator('[data-lib-bulk-more]').click();
-  await page.getByRole('dialog', {name:'선택한 녹음 3개'}).getByRole('button', {name:'보컬 분석'}).click();
-  await expect(page).toHaveURL(/#\/vocal-lab\?selection=1$/);
-  await expect(page.locator('.vl-song')).toContainText('선택한 녹음 3개');
-  await expect(page.locator('.vl-section h2')).toHaveCount(2);
-  expect((await page.evaluate(() => JSON.parse(sessionStorage.getItem('vocalzip-vocal-lab-selected-media-v1')))).sort()).toEqual(['m1','m2','m3']);
-  await page.locator('.vl-section').filter({hasText:'This Is the Moment'}).getByRole('link', {name:'선택한 녹음 모두 분석'}).click();
-  await expect(page.locator('.vl-dates button[aria-pressed="true"]')).toHaveCount(2);
+  await expect(page.getByRole('dialog', {name:'선택한 녹음 3개'}).getByRole('button', {name:'보컬 분석'})).toHaveCount(0);
 });
 
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
