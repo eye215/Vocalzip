@@ -47,8 +47,8 @@ body[data-vz-route="song"] .song-tabs button[aria-selected="true"]{background:#E
 .vz-song-media-list [data-toggle]{width:100%;min-height:78px;margin:0;border:0;border-radius:20px;background:#fff}
 .vz-song-media-list .item-title{display:flex;align-items:center;gap:6px;min-width:0;font-size:16px;line-height:22px;font-weight:600}
 .vz-song-media-list .item-sub{font-size:12px;line-height:18px;color:#667085}
-.vz-song-media-list .vz-song-kind{display:inline-flex;align-items:center;flex:none;min-height:23px;padding:0 7px;border-radius:7px;font-size:11px;font-weight:600;white-space:nowrap;background:#E7F5F5;color:#078994}
-.vz-song-media-list .vz-song-kind.lesson{background:#F3ECFF;color:#7A32F5}
+.vz-song-media-list .vz-song-kind{display:inline-flex;align-items:center;flex:none;min-height:23px;padding:0 7px;border-radius:7px;font-size:11px;font-weight:600;white-space:nowrap;background:var(--vz-category-practice-soft);color:var(--vz-category-practice)}
+.vz-song-media-list .vz-song-kind.lesson{background:var(--vz-category-lesson-soft);color:var(--vz-category-lesson)}
 .vz-song-media-list .vz-song-kind.performance,.vz-song-media-list .vz-song-kind.audition{background:#FFF0E9;color:#DE3E0A}
 .vz-song-media-list .vz-song-kind[role="button"]{position:relative;cursor:pointer}
 .vz-song-media-list .vz-song-kind[role="button"]::before{content:"";position:absolute;left:-5px;right:-5px;top:50%;height:44px;transform:translateY(-50%)}
