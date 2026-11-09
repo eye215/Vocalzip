@@ -1513,6 +1513,18 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();
   await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-month]').click();
+  await page.locator('[data-choice=this]').click();
+  await expect(page.locator('[data-media]')).toHaveCount(2);
+  await page.locator('[data-select-mode]').click();
+  await page.locator('[data-lib-select-all]').click();
+  await expect(page.locator('[data-lib-selected-count]')).toHaveText('2개 선택');
+  await page.locator('[data-lib-select-all]').click();
+  await expect(page.locator('[data-lib-selected-count]')).toHaveText('0개 선택');
+  await page.locator('[data-lib-select-cancel]').click();
+  await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-reset]').click();
+  await page.locator('[data-library-filter]').click();
   await page.locator('[data-filter-kind]').click();
   await page.locator('[data-choice=video]').click();
   await expect(page.getByText('조건에 맞는 파일이 없어요.')).toBeVisible();
@@ -1596,7 +1608,6 @@ test('Library bulk menu omits analysis when selected recordings span songs', asy
   await expect(page.locator('[data-media]')).toHaveCount(3);
   await page.locator('[data-select-mode]').click();
   await page.locator('[data-lib-select-all]').click();
-  await page.getByRole('dialog',{name:'전체 선택'}).getByRole('button',{name:/현재 필터 결과 전체/}).click();
   await expect(page.locator('[data-lib-selected-count]')).toHaveText('3개 선택');
   await page.locator('[data-lib-bulk-more]').click();
   await expect(page.getByRole('dialog', {name:'선택한 녹음 3개'}).getByRole('button', {name:'보컬 분석'})).toHaveCount(0);
@@ -2058,8 +2069,8 @@ test('Library selection scopes and bulk actions update selected recordings', asy
   await page.locator('[data-media="m1"] [data-lib-pick]').click();
   await expect(bar).toContainText('1개 선택');
   await bar.locator('[data-lib-select-all]').click();
-  await page.getByRole('dialog',{name:'전체 선택'}).getByRole('button',{name:/현재 필터 결과 전체/}).click();
   await expect(bar).toContainText('2개 선택');
+  await expect(bar.locator('[data-lib-select-all]')).toHaveAttribute('aria-pressed','true');
   await bar.locator('[data-lib-bulk-more]').click();
   await page.getByRole('dialog',{name:'선택한 녹음 2개'}).getByRole('button',{name:/곡 지정/}).click();
   await page.getByRole('dialog',{name:'곡 지정'}).getByRole('option',{name:'On My Own'}).click();

@@ -103,7 +103,7 @@ VZ.importSheet = ({songId = '', files:initialFiles = null} = {}) => {
 };
 
 /* ---------- 보관함 ---------- */
-const lib = {kind:'all', origin:'all', song:'', q:''};
+const lib = {kind:'all', origin:'all', song:'', month:'', q:''};
 const monthTitle = ym => ym ? Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월' : '날짜 미상';
 VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기" aria-haspopup="menu" aria-expanded="false"><i class="ph ph-plus"></i></button><input type="file" multiple accept="video/*" class="sr-only" data-imp-photos aria-label="사진 보관함에서 영상 선택"><input type="file" accept="video/*" capture="environment" class="sr-only" data-imp-camera aria-label="비디오 촬영"><input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.mov,.mp4,.m4v,.webm,.ogg,.flac" class="sr-only" data-imp-files aria-label="음성·영상 파일 선택">', render() {
   const seg = (k, opts, label) => '<div class="seg lib-seg" role="group" aria-label="' + label + '">' + opts.map(([v, t]) => '<button type="button" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + t + '</button>').join('') + '</div>';
@@ -146,26 +146,27 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
   };
   main.querySelector('[data-library-search]').onclick=()=>VZ.collectionSearch('보관함 검색','제목·곡·메모 검색',lib.q,value=>{const input=main.querySelector('[data-q]');input.value=value;input.dispatchEvent(new Event('input'));});
   const libraryFilter=main.querySelector('[data-library-filter]');
-  libraryFilter.onclick=()=>{const kind=main.querySelector('[data-kind]'),song=main.querySelector('[data-song]');VZ.sheet({title:'보관함 필터',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-filter-kind>파일 형식 <span>'+esc(kind.selectedOptions[0]?.text||'파일 형식 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-song>곡 <span>'+esc(song.selectedOptions[0]?.text||'곡 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-reset>필터 초기화</button></div>',onMount:(sheet,close)=>{
+  libraryFilter.onclick=()=>{const kind=main.querySelector('[data-kind]'),song=main.querySelector('[data-song]'),ym=VZ.ymd(new Date()).slice(0,7),months=[...new Set(media.map(m=>(M.dateOf(m)||'').slice(0,7)).filter(Boolean))].sort().reverse(),monthLabel=lib.month===''?'전체 기간':lib.month==='this'?'이번 달':monthTitle(lib.month);VZ.sheet({title:'보관함 필터',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-filter-kind>파일 형식 <span>'+esc(kind.selectedOptions[0]?.text||'파일 형식 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-song>곡 <span>'+esc(song.selectedOptions[0]?.text||'곡 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-month>기간 <span>'+esc(monthLabel)+' ›</span></button><button type="button" class="vz-choice" data-filter-reset>필터 초기화</button></div>',onMount:(sheet,close)=>{
     sheet.querySelector('[data-filter-kind]').onclick=()=>{close();VZ.collectionChoice('파일 형식',[...kind.options].map(o=>[o.value,o.text]),kind.value,value=>{kind.value=value;kind.dispatchEvent(new Event('change'));});};
     sheet.querySelector('[data-filter-song]').onclick=()=>{close();VZ.collectionChoice('곡 선택',[...song.options].map(o=>[o.value,o.text]),song.value,value=>{song.value=value;song.dispatchEvent(new Event('change'));});};
-    sheet.querySelector('[data-filter-reset]').onclick=()=>{kind.value='all';song.value='';lib.kind='all';lib.song='';M.stopAll();close();draw();};
+    sheet.querySelector('[data-filter-month]').onclick=()=>{close();VZ.collectionChoice('기간 선택',[['','전체 기간'],['this','이번 달'],...months.filter(m=>m!==ym).map(m=>[m,monthTitle(m)])],lib.month,value=>{lib.month=value;M.stopAll();draw();});};
+    sheet.querySelector('[data-filter-reset]').onclick=()=>{kind.value='all';song.value='';lib.kind='all';lib.song='';lib.month='';M.stopAll();close();draw();};
   }});};
   const l = main.querySelector('[data-l]');
   let media = [], drawn = [];
   const draw = () => {
-    libraryFilter.setAttribute('aria-pressed',String(lib.kind!=='all'||!!lib.song));
+    libraryFilter.setAttribute('aria-pressed',String(lib.kind!=='all'||!!lib.song||!!lib.month));
     main.querySelector('[data-library-search]').setAttribute('aria-pressed',String(!!lib.q.trim()));
     const q = lib.q.trim().toLowerCase();
     const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || M.occasion(m) === lib.origin) &&
-      (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
+      (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!lib.month || (M.dateOf(m)||'').slice(0,7)===(lib.month==='this'?VZ.ymd(new Date()).slice(0,7):lib.month)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
     drawn = list;
     VZ.collectionCount?.(media.length,'개');
     const local = M.localOnly(media).length, b = M.backupStatus();
     const seconds = list.reduce((a, m) => a + (Number(m.durationSeconds) || 0), 0);
     main.querySelector('[data-count]').innerHTML = '<b>' + list.length + '개</b>' + (list.length !== media.length ? ' <span class="muted">/ 전체 ' + media.length + '개</span>' : '') + (seconds >= 60 ? ' · 총 ' + VZ.minutes(seconds / 60) : '');
     main.querySelector('[data-backup]').textContent = [M.cloudError(), b.running ? '클라우드 백업 중 ' + (b.done + b.failed) + '/' + b.total : local ? '기기에만 있는 파일 ' + local + '개' + (window.vzipCloudSignedIn?.() ? ' · 곧 자동 백업' : ' · 로그인하면 클라우드에 자동 백업돼요') : window.vzipCloudSignedIn?.() && media.length ? '모두 클라우드에 백업됨' : ''].filter(Boolean).join(' · ');
-    if (!list.length) { l.innerHTML = VZ.empty('waveform', media.length ? '조건에 맞는 파일이 없어요.' : '아직 저장된 녹음이 없어요.', media.length ? '<button type="button" class="btn sm secondary" data-reset>필터 초기화</button>' : '<a class="btn sm" href="#/record">녹음하기</a>'); l.querySelector('[data-reset]')?.addEventListener('click', () => { Object.assign(lib, {kind:'all', origin:'all', song:'', q:''}); VZ.render(); }); return; }
+    if (!list.length) { l.innerHTML = VZ.empty('waveform', media.length ? '조건에 맞는 파일이 없어요.' : '아직 저장된 녹음이 없어요.', media.length ? '<button type="button" class="btn sm secondary" data-reset>필터 초기화</button>' : '<a class="btn sm" href="#/record">녹음하기</a>'); l.querySelector('[data-reset]')?.addEventListener('click', () => { Object.assign(lib, {kind:'all', origin:'all', song:'', month:'', q:''}); VZ.render(); }); return; }
     // Newest recording month first; each month shows how many files and how long.
     const groups = new Map();
     for (const m of list) { const k = (M.dateOf(m) || '').slice(0, 7); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
@@ -197,7 +198,7 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
   main.querySelector('[data-song]').onchange = e => { lib.song = e.target.value; M.stopAll(); draw(); };
   main.querySelector('[data-q]').oninput = e => { lib.q = e.target.value; draw(); };
   // 선택 모드 (app/library-select.js): the ticked rows are among what the filters show now.
-  VZ.librarySelect?.(main, {list:() => drawn, all:() => media, done:async () => { media = await M.list().catch(() => media); if (l.isConnected) draw(); }});
+  VZ.librarySelect?.(main, {list:() => drawn, done:async () => { media = await M.list().catch(() => media); if (l.isConnected) draw(); }});
   // The list kept on this device is drawn at once; the fresh one replaces it only if something changed and no player is open.
   const sig = list => list.map(m => [m.id, m.name, M.dateOf(m), m.durationSeconds, m.songId, m.occasion, m.cloud ? 1 : 0].join(':')).join('|');
   const peek = await M.peek().catch(() => null);
