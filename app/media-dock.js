@@ -33,16 +33,14 @@
       selectionBar.querySelector('[data-analysis]').onclick = () => {
         const chosen = visibleSelected();
         if (!chosen.length) return;
-        const id = chosen[0].id;
-        const params = document.body.dataset.vzRoute === 'song' ? '?selected=' + encodeURIComponent(chosen.map(x => x.id).join(',')) : '';
-        clearSelection(); VZ.nav('#/analysis/' + encodeURIComponent(id) + params);
+        if (VZ.openAnalysisSelection(chosen)) clearSelection();
       };
     }
     document.body.classList.add('vz-media-selecting');
     selectionBar.querySelector('[data-count]').textContent = items.length + '개 선택';
     const analysis = selectionBar.querySelector('[data-analysis]');
-    analysis.disabled = !items.length || (document.body.dataset.vzRoute !== 'song' && items.length !== 1);
-    analysis.title = analysis.disabled ? '보컬 분석은 녹음 1개를 선택해 주세요' : '';
+    analysis.disabled = !items.length;
+    analysis.title = '';
   };
   const closeAccordions = () => {
     M.stopAll?.();
