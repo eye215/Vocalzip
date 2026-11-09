@@ -80,17 +80,42 @@ function makeSegment(s,m) {
     (full?(sampled.length?'<div class="vl-segment-chart"><div class="vl-chart-heading">선택 구간의 음정 편차 (cent)</div>'+plot(sampled.map(x=>({value:x.value,label:time(x.t)})),{height:115})+'</div>':'<p class="vl-muted">이 구간에서 목소리를 측정하지 못했어요.</p>'):'<button type="button" class="vl-analyze" data-analyze>이 구간 그래프 보기 <i class="ph ph-arrow-right"></i></button>')+
     '<label class="vl-range-label">분석할 구간 이동<input type="range" min="0" max="'+Math.max(0,Math.floor(total-16))+'" value="'+Math.min(start,Math.max(0,Math.floor(total-16)))+'" data-start aria-label="구간 시작 위치"></label><p class="vl-muted" data-analyze-status aria-live="polite">'+(full?'파형과 수치는 실제 녹음 분석 결과예요.':'그래프는 이 녹음을 분석하면 표시돼요.')+'</p></section>';
 }
+function recommendation(s,m) {
+  const a=analysis(m), start=s.start[m.id]||0, end=Math.min(Number(m.durationSeconds)||start+16,start+16);
+  const range=time(start)+'–'+time(end);
+  if (!a || !V.analysisReliable(a)) return {
+    label:a?'측정 신뢰도 낮음 · 기본 연습':'분석 전 · 기본 연습',
+    title:'구간 반복 듣기',
+    detail:range+'을 느리게 듣고 같은 프레이즈를 다시 불러 보세요.', minutes:10
+  };
+  const wob=Number(a.metrics.stability?.wobbleCents), into=Number(a.metrics.intonation?.meanAbsCents), phrase=Number(a.metrics.breath?.medianPhrase);
+  if (Number.isFinite(wob) && wob>=25) return {
+    label:'지속음 흔들림 ±'+wob+' cent', title:'지속음 안정화',
+    detail:range+'을 0.75×로 듣고, 한 음을 5초씩 일정하게 내는 연습을 5회 해 보세요.', minutes:10
+  };
+  if (Number.isFinite(into) && into>=25) return {
+    label:'음정 오차 ±'+into+' cent', title:'음정 중심 잡기',
+    detail:range+'의 시작음을 먼저 듣고, 같은 음을 낸 뒤 짧게 녹음해 비교해 보세요.', minutes:10
+  };
+  if (Number.isFinite(phrase) && phrase>0 && phrase<3) return {
+    label:'평균 프레이즈 '+phrase+'초', title:'프레이즈 이어 부르기',
+    detail:range+'을 한 호흡으로 연결해 부르고, 편안하게 이어지는 길이를 기록해 보세요.', minutes:10
+  };
+  return {label:'분석 결과 반영', title:'프레이즈 유지',
+    detail:range+'을 반복 듣고 같은 길이와 느낌으로 녹음해 보세요.', minutes:10};
+}
 function playerCard(s,m) {
   const idx=s.selected.indexOf(m.id), total=Math.max(0,Number(m.durationSeconds)||0);
   return '<div class="vl-peek" data-prev '+(idx===0?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx-1])||m))+'</span></div><div class="vl-player" data-card><div class="vl-player-head"><strong>'+esc(day(m)+' · '+M.label(m))+'</strong><span>'+esc((idx+1)+' / '+s.selected.length)+'</span></div>'+waveform(m)+'<div class="vl-seek"><span data-time>0:00</span><input type="range" min="0" max="1000" value="0" data-seek aria-label="재생 위치"><span data-duration>'+time(total)+'</span></div><div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div><div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div><div class="vl-peek" data-next-peek '+(idx===s.selected.length-1?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx+1])||m))+'</span></div>';
 }
 function screen(s) {
   const host=s.host, m=s.items.find(x=>x.id===s.active);
+  const rec=m?recommendation(s,m):null;
   s.player?.destroy(); s.player=null;
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
     (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
-      '<section class="vl-section vl-recommend"><h2>추천 연습</h2><p>'+esc((analysis(m)?.metrics?.stability?.wobbleCents??0)>25?'지속음을 천천히 내며 같은 길이로 유지해 보세요.':'선택 구간을 반복 듣고 같은 프레이즈를 녹음해 보세요.')+'</p><div><button type="button" data-repeat-practice>이 구간 반복 듣기</button><button type="button" data-practice>연습 기록에 담기</button></div></section>'+
+      '<section class="vl-section vl-recommend"><h2>추천 연습</h2><span class="vl-rec-label">'+esc(rec.label)+'</span><strong>'+esc(rec.title)+'</strong><p>'+esc(rec.detail)+'</p><div><button type="button" data-repeat-practice>이 구간 반복 듣기</button><button type="button" data-practice>연습 기록에 담기</button></div></section>'+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
   host.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{
     const id=b.dataset.date;
@@ -125,7 +150,7 @@ function screen(s) {
   host.querySelectorAll('[data-point]').forEach(b=>b.onclick=()=>{const chosen=s.items.find(x=>x.id===b.dataset.point);if(!chosen)return;s.active=chosen.id;screen(s);observe(s,chosen);});
   host.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;screen(s);}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
   host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;host.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
-  host.querySelector('[data-practice]').onclick=()=>V.practiceSheet({songId:s.song.id,mediaIds:[m.id],preset:{minutes:10,memo:'[추천 연습] '+time(s.start[m.id]||0)+'–'+time(Math.min(Number(m.durationSeconds)||16,(s.start[m.id]||0)+16))+' 지속음 반복'}});
+  host.querySelector('[data-practice]').onclick=()=>V.practiceSheet({songId:s.song.id,mediaIds:[m.id],preset:{minutes:rec.minutes,memo:'[추천 연습] '+rec.title+' — '+rec.detail}});
   host.querySelector('[data-save-report]').onclick=()=>{
     const selected=s.selected.map(id=>s.items.find(x=>x.id===id)).filter(Boolean);
     const record={kind:'vocal-lab',songId:s.song.id,song:s.song.title,mediaIds:selected.map(x=>x.id),activeId:m.id,metric:s.metric,snapshots:selected.map(x=>({id:x.id,date:M.dateOf(x),name:M.label(x),rating:x.rating??null,analysis:analysis(x)}))};

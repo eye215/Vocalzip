@@ -61,8 +61,9 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await boot(page);
  await page.evaluate(async () => {
    const all=await VZ.media.list();
-   for(const [i,m] of all.filter(x=>x.songId==='s1').entries()) {
-     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:i?23:34,notes:4},intonation:{meanAbsCents:i?18:27,notes:10},range:{highCents:8100,high:'A5'},breath:{medianPhrase:i?3.2:2.4}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   for(const m of all.filter(x=>x.songId==='s1')) {
+     const old=m.id==='m1';
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:old?34:23,notes:4},intonation:{meanAbsCents:old?27:18,notes:10},range:{highCents:8100,high:'A5'},breath:{medianPhrase:old?2.4:3.2}},confidence:{voiceOverMrDb:12}}},{quiet:true});
    }
    VZ.media.invalidate();
  });
@@ -71,8 +72,13 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('.vl-player')).toHaveCount(0);
  await page.locator('.vl-dates button').first().click();
  await expect(page.locator('.vl-single')).toBeVisible();
+ await expect(page.locator('.vl-recommend>strong')).toHaveText('지속음 안정화');
+ await page.locator('[data-practice]').click();
+ await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(/\[추천 연습\] 지속음 안정화/);
+ await page.evaluate(() => VZ.closeSheets());
  await page.locator('.vl-dates button').nth(1).click();
  await expect(page.locator('.vl-trend')).toBeVisible();
+ await expect(page.locator('.vl-recommend>strong')).toHaveText('프레이즈 유지');
  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
  await page.locator('.vl-plot-dates button').first().click();
  await expect(page.locator('.sheet')).toContainText('지속음의 음정 흔들림');
