@@ -58,8 +58,8 @@ class Server{
 function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  const listeners=new Map(),elements=new Map(),store=storage();
  const element=k=>{if(!elements.has(k))elements.set(k,{
-  textContent:'',hidden:false,value:'',classList:{toggle(){}},remove(){},appendChild(){},insertAdjacentHTML(){},
-  querySelector:s=>element(s)
+  textContent:'',hidden:false,value:'',dataset:{},classList:{toggle(){},contains(){return false}},remove(){},appendChild(){},insertAdjacentHTML(){},
+  querySelector:s=>element(s),querySelectorAll:()=>[]
  });return elements.get(k)};
  const on=(type,fn)=>{if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push(fn)};
  const window={localStorage:store,VZIP_DEVICE_SESSIONS_ENABLED:true,
@@ -68,7 +68,7 @@ function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
   dispatchEvent:e=>{for(const fn of listeners.get(e.type)||[])fn(e)},
  };
  const document={querySelector:element,querySelectorAll:()=>[],getElementById:id=>element('#'+id),
-  createElement:()=>({querySelector:element,appendChild(){}}),
+  createElement:()=>({querySelector:element,querySelectorAll:()=>[],dataset:{},appendChild(){}}),
   head:{appendChild(){}},body:{appendChild(){},classList:{toggle(){}}},addEventListener:on};
  class FixedDate extends Date{constructor(...a){super(...(a.length?a:[now]))}static now(){return now}}
  if(seed)store.setItem(KEY,JSON.stringify(seed));
