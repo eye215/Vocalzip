@@ -1,0 +1,56 @@
+name: Verify published upload and Photos improvements
+on:
+  push:
+    branches: ['codex/verify-upload-photos-20261109']
+permissions:
+  contents: read
+jobs:
+  published:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: sudo apt-get install -y ffmpeg
+      - name: Verify deployed runtime content
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          const hash=x=>createHash('sha256').update(x).digest('hex');
+          const paths=['index.html','legacy.html','media-import.js','audio-extract-worker.js','audio-packet-proof.js','app/media.js','app/import-hub.js','r2-storage.js'];
+          const rows=await Promise.all(paths.map(async path=>{
+           const local=await readFile(path),r=await fetch('https://vocalzip.yullul.com/'+path+'?verify='+process.env.GITHUB_SHA,{redirect:'error',signal:AbortSignal.timeout(15000)});
+           return {path,status:r.status,sha256_match:r.ok&&hash(local)===hash(Buffer.from(await r.arrayBuffer()))};
+          }));
+          rows.forEach(r=>console.log(JSON.stringify(r)));
+          if(rows.some(r=>!r.sha256_match))process.exitCode=1;
+          NODE
+      - name: Synthetic fixtures and remote-site test configuration
+        run: |
+          node tests/make-audio-fixtures.cjs
+          curl --fail --location --retry 2 https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs --output /tmp/vzip-mediabunny.mjs
+          node <<'NODE'
+          require('node:fs').writeFileSync('published-upload.config.cjs',[
+           "const base=require('./playwright.config.cjs');",
+           "module.exports={...base,webServer:undefined,use:{...base.use,baseURL:'https://vocalzip.yullul.com',serviceWorkers:'block'},reporter:'list',outputDir:'published-upload-results'};"
+          ].join('\n'));
+          NODE
+      - name: Published Photos extraction and exact audio regressions
+        env:
+          VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
+        run: npx playwright test tests/audio-import.spec.cjs --config=published-upload.config.cjs --workers=2
+      - name: Published early upload and native file picker, R2 receipt recovery
+        env:
+          VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
+        run: >-
+          npx playwright test tests/v6.spec.cjs tests/r2.spec.cjs --config=published-upload.config.cjs --grep 'Upload startup|With R2 set up|A metadata retry|Lost metadata verification' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: published-upload-photos
+          path: published-upload-results/
