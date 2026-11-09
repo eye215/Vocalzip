@@ -51,6 +51,17 @@
     analysis.disabled = items.length !== 1;
     analysis.title = items.length === 1 ? '' : '보컬 분석은 녹음 1개를 선택해 주세요';
   };
+  const toggleSelected = (row, item, button) => {
+    if (selected.has(row.dataset.media)) {
+      selected.delete(row.dataset.media);
+      button.setAttribute('aria-pressed', 'false'); row.classList.remove('vz-media-picked');
+    } else {
+      if (!selected.size) close();
+      selected.set(row.dataset.media, {item, row, button});
+      button.setAttribute('aria-pressed', 'true'); row.classList.add('vz-media-picked');
+    }
+    paintSelection();
+  };
   const open = (item, row) => {
     close();
     activeItem = item; activeRow = row;
@@ -103,12 +114,14 @@
       const select = event.target.closest('.vz-media-select');
       if (select) {
         event.preventDefault(); event.stopImmediatePropagation();
-        if (selected.has(row.dataset.media)) { selected.delete(row.dataset.media); select.setAttribute('aria-pressed', 'false'); row.classList.remove('vz-media-picked'); }
-        else { selected.set(row.dataset.media, {item, row, button:select}); select.setAttribute('aria-pressed', 'true'); row.classList.add('vz-media-picked'); }
-        paintSelection(); return;
+        toggleSelected(row, item, select); return;
       }
       if (!event.target.closest('[data-toggle]') || host.closest('.lib-selecting')) return;
       event.preventDefault(); event.stopImmediatePropagation();
+      if (selected.size) {
+        const button = row.querySelector('.vz-media-select');
+        if (button) { toggleSelected(row, item, button); return; }
+      }
       open(item, row);
     }, true);
     return legacyWire(host, items);
