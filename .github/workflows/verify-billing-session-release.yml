@@ -1,0 +1,47 @@
+name: Verify billing verified-login web release
+on:
+  push:
+    branches: ['codex/verify-billing-session-release-20261109']
+permissions:
+  contents: read
+jobs:
+  published-billing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Confirm published billing scripts match the merged source
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          const hash=b=>createHash('sha256').update(b).digest('hex');
+          for(const path of ['billing/index.html','billing/store.js']){
+            const local=await readFile(path);
+            const response=await fetch('https://vocalzip.yullul.com/'+path+'?verify='+process.env.GITHUB_SHA,{redirect:'error',signal:AbortSignal.timeout(15000)});
+            const equal=response.ok&&hash(local)===hash(Buffer.from(await response.arrayBuffer()));
+            console.log(JSON.stringify({path,status:response.status,sha256_match:equal}));
+            if(!equal)process.exitCode=1;
+          }
+          NODE
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Open published billing with isolated fake auth and browser-local ledgers
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs');
+          fs.writeFileSync('billing-release.config.cjs',[
+            "const base=require('./billing/playwright.config.cjs');",
+            "module.exports={...base,testDir:'./billing/tests',testMatch:'session-startup.spec.cjs',webServer:undefined,",
+            "use:{...base.use,baseURL:'https://vocalzip.yullul.com'},outputDir:'billing-production-results',reporter:'list'};"
+          ].join('\n'));
+          NODE
+          npx playwright test --config=billing-release.config.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: published-billing-session-check
+          path: billing-production-results/
