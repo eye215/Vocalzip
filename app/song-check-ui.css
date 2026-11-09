@@ -31,14 +31,18 @@ body[data-vz-route="song-suggest"] .v-nav{display:none}
 .vz-sc-tab[aria-selected="true"]{background:#EDE1FF;color:#7A32F5}
 .vz-sc-selection{display:flex;align-items:center;justify-content:space-between;min-height:52px;margin-bottom:12px;padding:0 14px;border-radius:16px;background:#F3ECFF}
 .vz-sc-select-all{display:flex;align-items:center;gap:9px;min-height:44px;border:0;background:transparent;font-weight:600;color:#101828}
-.vz-sc-select-all i{font-size:21px;color:#667085}.vz-sc-select-all[aria-pressed="true"] i{color:#7A32F5}
+.vz-sc-checkbox{display:grid;place-items:center;width:20px;height:20px;flex:none;border:1.5px solid #98A2B3;border-radius:5px;background:#fff;color:#fff;box-sizing:border-box}
+.vz-sc-checkbox::after{content:"";width:9px;height:5px;border-left:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-1px) rotate(-45deg);opacity:0}
+.vz-sc-select-all[aria-pressed="true"] .vz-sc-checkbox,.vz-sc-record-check input:checked+.vz-sc-checkbox{border-color:#7A32F5;background:#7A32F5}
+.vz-sc-select-all[aria-pressed="true"] .vz-sc-checkbox::after,.vz-sc-record-check input:checked+.vz-sc-checkbox::after{opacity:1}
+.vz-sc-select-all:focus-visible .vz-sc-checkbox,.vz-sc-record-check input:focus-visible+.vz-sc-checkbox{outline:2px solid #7A32F5;outline-offset:3px}
 .vz-sc-selection [data-counter]{color:#7A32F5;font-size:13px;font-weight:600}
 .vz-sc-list{display:grid;gap:12px}
 .vz-sc-record{overflow:hidden;border-radius:20px;background:#fff}
 .vz-sc-record-main{padding:16px 16px 10px}
 .vz-sc-record-head{display:flex;align-items:flex-start;gap:8px}
-.vz-sc-record-check{display:grid;place-items:center;flex:none;width:44px;height:44px;margin:-10px 0 0 -10px}
-.vz-sc-record-check input{width:20px;height:20px;margin:0;accent-color:#7A32F5;cursor:pointer}
+.vz-sc-record-check{position:relative;display:grid;place-items:center;flex:none;width:44px;height:44px;margin:-10px 0 0 -10px;cursor:pointer}
+.vz-sc-record-check input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
 .vz-sc-record-name{min-width:0;flex:1}
 .vz-sc-record-name strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;line-height:22px;font-weight:600}
 .vz-sc-record-name small{display:block;margin-top:2px;color:#667085;font-size:12px;line-height:18px}
