@@ -307,7 +307,8 @@ test('보컬 분석: a recording sung over an MR gets a pitch curve and measurem
   await page.goto('/#/library');
   const row = page.locator('[data-media="song"]');
   await row.locator('[data-toggle]').click();
-  await row.getByRole('button', {name:'분석'}).click();
+  await row.getByRole('button', {name:'더보기'}).click();
+  await sheet(page).getByRole('button', {name:'보컬 분석'}).click();
   await expect(page).toHaveURL(/#\/analysis\/song$/);
   const out = page.locator('[data-out]');
   await expect(out.locator('.ana-grid')).toBeVisible({timeout:60000});
@@ -348,6 +349,7 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
     VZ.media.invalidate();
   }, [['t0', '2026-07-01'], ...takes]);
   await page.goto('/#/song/s1');
+  await page.locator('.vz-song-more').filter({hasText:'보컬 변화'}).locator('summary').first().click();
   const card = page.locator('[data-song-vocal]');
   await expect(card).toContainText('분석 0/4개');
   await card.getByRole('button', {name:/지금 4개 분석하기/}).click();
@@ -375,6 +377,7 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   await expect(page.locator('.vg-table')).toContainText('음정 오차');
   // A dot opens that take's pitch curve.
   await page.goto('/#/song/s1');
+  await page.locator('.vz-song-more').filter({hasText:'보컬 변화'}).locator('summary').first().click();
   await page.locator('[data-song-vocal] .vg-chart').first().locator('a').last().click();
   await expect(page).toHaveURL(/#\/analysis\/t3$/);
 });
@@ -635,14 +638,11 @@ test('Songs: add, search, detail tabs, delete keeps records', async ({page}) => 
   await expect(page.locator('.list .item')).toHaveCount(1);
   await page.locator('.list .item').click();
   await expect(page.locator('[data-summary]')).toContainText('녹음 2개');
-  // Recordings live inside lessons and practices.
-  await expect(page.getByRole('tab', {name:'녹음'})).toHaveCount(0);
-  await page.getByRole('tab', {name:'연습'}).click();
-  await expect(page.locator('[data-body] [data-media]')).toHaveCount(1);
-  await expect(page.locator('[data-body]')).toContainText('연습 녹음');
-  await page.getByRole('tab', {name:'레슨'}).click();
+  // Recordings share one tab; lesson and practice records remain in activity history.
+  await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('[data-body] [data-media]')).toHaveCount(2);
+  await page.getByRole('tab', {name:'활동 기록'}).click();
   await expect(page.getByText('호흡 길게')).toBeVisible();
-  await expect(page.locator('[data-body] [data-media]')).toHaveCount(1);
   await page.locator('[data-song-menu]').click();
   await page.getByRole('button', {name:'곡 삭제'}).click();
   await sheet(page).getByRole('button', {name:'삭제'}).click();
@@ -685,7 +685,7 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   // Recording alone does not create a practice session (no double-count).
   expect((await data(page)).practices).toHaveLength(1);
   await page.getByRole('link', {name:'On My Own 곡 보기'}).click();
-  await page.getByRole('tab', {name:'연습'}).click();
+  await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
   await expect(page.locator('[data-media]')).toHaveCount(1);
 });
 
@@ -1023,7 +1023,7 @@ test('Practice records can be edited, including unlinking files that no longer e
   await boot(page);
   await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; d.practices[0].manualMinutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/song/s1');
-  await page.getByRole('tab', {name:'연습'}).click();
+  await page.getByRole('tab', {name:'활동 기록'}).click();
   await page.locator('[data-practice="p1"]').click();
   await expect(sheet(page)).toContainText('20분');
   await expect(sheet(page)).toContainText('찾을 수 없는 녹음 2개');
@@ -1464,15 +1464,24 @@ test('Growth leads with this period\'s time compared with the same days before, 
   await expect(page).toHaveURL(/#\/song\/g0$/);
 });
 
-test('Song page shows this song\'s growth: recent time, days, rating, six months, first recording', async ({page}) => {
+test('Song detail shows real growth, recording selection and analysis handoff', async ({page}) => {
   await boot(page);
   await page.goto('/#/song/s1');
-  const card = page.locator('.song-growth');
-  await expect(card).toContainText('이 곡의 성장');
-  await expect(card).toContainText('최근 30일');
-  await expect(card.locator('.song-growth-chart > div')).toHaveCount(6);
-  await expect(card).toContainText('첫 녹음');
-  await expect(card).toContainText('★4.0'); // p1 rating 4
+  const card = page.locator('.vz-song-dashboard');
+  await expect(card).toContainText('누적 연습');
+  await expect(card).toContainText('25분');
+  await expect(card.locator('.vz-song-months > div')).toHaveCount(6);
+  await expect(card).toContainText('★ 4.0');
+  await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByRole('tab', {name:'레슨'})).toHaveCount(0);
+  await expect(page.locator('.vz-song-media-list [data-media]')).toHaveCount(2);
+  const all = page.getByRole('checkbox', {name:'녹음 전체선택'});
+  await all.check();
+  await expect(page.locator('[data-selected-count]')).toHaveText('선택 2개');
+  await expect(page.getByRole('button', {name:'보컬 분석하기'})).toBeEnabled();
+  await page.getByRole('button', {name:'보컬 분석하기'}).click();
+  await expect(page).toHaveURL(/#\/analysis\/.*\?selected=/);
+  await expect(page.locator('.vz-analysis-selected-scroll a')).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
@@ -1989,7 +1998,7 @@ test('Offline notice, a change sent at once when the app goes to the background,
   const bar = page.locator('.song-tabs');
   await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
   await expect.poll(async () => Math.round((await bar.boundingBox()).y)).toBeLessThan(40);
-  await bar.getByRole('tab', {name:'레슨'}).click();
+  await bar.getByRole('tab', {name:'활동 기록'}).click();
   const gap = await page.evaluate(() => document.querySelector('[data-body]').getBoundingClientRect().top - document.querySelector('.song-tabs').getBoundingClientRect().bottom);
   expect(gap).toBeGreaterThanOrEqual(0);
   expect(gap).toBeLessThan(40);
