@@ -76,7 +76,13 @@ try{
   console.log(JSON.stringify({installed_contract_verified:true,operating_writes:false}));
  }else{
   const present=(await db.query("select to_regclass('public.vzip_permanent_delete_guards') is not null installed")).rows[0].installed;
-  await db.query('rollback');console.log(JSON.stringify({prerequisites_verified:true,installed:present,operating_writes:false,sql_sha256:hash(migration)}));
+  const sync=(await db.query(`select
+   (select count(*)=2 from information_schema.columns where table_schema='public' and table_name='vocal_data' and column_name in ('revision','generation')) snapshot_version_columns,
+   to_regprocedure('public.vzip_save_snapshot(bigint,jsonb,uuid,uuid)') is not null snapshot_rpc,
+   to_regclass('public.vzip_data_write_requests') is not null snapshot_receipts,
+   to_regclass('public.vzip_field_drafts') is not null field_drafts,
+   to_regclass('public.vzip_field_draft_rollout') is not null field_rollout`)).rows[0];
+  await db.query('rollback');console.log(JSON.stringify({prerequisites_verified:true,installed:present,sync_schema:sync,operating_writes:false,sql_sha256:hash(migration)}));
  }
 }catch(e){
  const known=['INVALID_SOURCE','SOURCE_CHECK_UNAVAILABLE','SOURCE_NOT_VERIFIED','SOURCE_CONTENT_UNAVAILABLE','SOURCE_SQL_MISMATCH','PREREQUISITE_MISSING','SCHEMA_MISMATCH','INSTALLED_GUARD_MISMATCH','RECORD_COUNTS_CHANGED','INVALID_MODE','MISSING_CONNECTION','WRONG_PROJECT','CA_UNAVAILABLE','INVALID_CA'];
