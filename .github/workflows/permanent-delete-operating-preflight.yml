@@ -32,7 +32,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/permanent-delete-release.mjs
       - name: Synthetic registered-session HTTP proof and fixture cleanup
-        if: steps.plan.outputs.mode == 'apply'
+        if: steps.plan.outputs.mode == 'apply' || steps.plan.outputs.mode == 'verify'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}

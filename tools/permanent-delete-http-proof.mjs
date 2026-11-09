@@ -1,6 +1,7 @@
 // Synthetic operating HTTP proof only. No media or customer records; no secrets/identities in logs.
 import {randomUUID,randomBytes,X509Certificate} from 'node:crypto';
 import pg from 'pg';
+import {isDeepStrictEqual} from 'node:util';
 import C from '../billing/core.js';
 async function connectProduction(){
  const raw=process.env.SUPABASE_DB_URL;if(!raw)throw Error('MISSING_CONNECTION');
@@ -65,7 +66,7 @@ try{
  const restore=await api('/rest/v1/rpc/vocal_billing_save',{token,body:{p_expected_revision:cancelled.data.revision,p_payload:prior,p_request_id:randomUUID()}});
  check(restore.status>=400&&restore.data?.code==='23514','SERVER_RESTORE_ALLOWED');
  const kept=(await api('/rest/v1/vocal_billing_documents?select=payload&user_id=eq.'+uid,{token})).data?.[0]?.payload;
- check(JSON.stringify(kept.payments)===JSON.stringify(prior.payments)&&kept.deductions[0].voidedAt,'PAYMENT_FACTS_CHANGED');
+ check(isDeepStrictEqual(kept.payments,prior.payments)&&kept.deductions[0].voidedAt,'PAYMENT_FACTS_CHANGED');
  check((await api('/rest/v1/rpc/vzip_release_session',{token,body:{}})).status===200,'FIXTURE_REVOKE_FAILED');
  check((await api('/rest/v1/rpc/vzip_lesson_delete_capabilities',{token,body:{}})).status===403,'REVOKED_SESSION_ALLOWED');
  console.log(JSON.stringify({synthetic_http_proof:true,registered_session:true,permanent_lesson_delete:true,history_text_redacted:true,legacy_resurrection_blocked:true,server_charge_restore_blocked:true,payment_refund_preserved:true,revoked_session_denied:true,customer_data_used:false,media_operations:false}));
