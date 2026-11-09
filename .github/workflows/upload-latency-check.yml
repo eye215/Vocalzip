@@ -42,7 +42,8 @@ jobs:
       - name: Multi-file queue, retry, dates, lossless sound and early first upload
         env:
           VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
-        run: npx playwright test tests/v6.spec.cjs --grep 'Bulk upload:|A stopped upload|Upload startup|Import hub filters|Import hub suggests|Import hub takes|WAV imports|Signed-in imports|Import: multiple' --workers=2
+        run: >-
+          npx playwright test tests/v6.spec.cjs --grep 'Bulk upload:|A stopped upload|Upload startup|Import hub filters|Import hub suggests|Import hub takes|WAV imports|Signed-in imports|Import: multiple' --workers=2
       - name: R2 receipt, cancellation, bytes, ownership and metadata regressions
         env:
           VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
