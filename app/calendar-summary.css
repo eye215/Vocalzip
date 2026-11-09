@@ -1,7 +1,7 @@
 /* One-line month totals and a rotating top-five song spotlight. */
 .calendar-summary{margin-bottom:12px;padding:16px;background:#fff;border-radius:20px}
 .cs-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;white-space:nowrap}
-.cs-heading h2{margin:0;color:#101828;font-size:16px;font-weight:700;letter-spacing:-.02em}
+.cs-title{display:flex;align-items:center;gap:3px;min-width:0}.cs-heading h2{margin:0;color:#101828;font-size:16px;font-weight:700;letter-spacing:-.02em}
 .cs-heading h2 small{margin-left:4px;color:#98a2b3;font-size:11px;font-weight:500}
 .cs-totals{display:flex;align-items:baseline;gap:5px;color:#667085;font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .cs-totals strong{color:#7a32f5;font-size:16px;font-weight:700;letter-spacing:-.02em}
@@ -11,11 +11,12 @@
 .cs-rank-panel{max-height:0;overflow:hidden;background:#fbf9ff;border-radius:0 0 12px 12px;transition:max-height .28s ease}.cs-rank-panel.open{max-height:340px}.cs-rank-list{padding:8px 10px 10px;display:grid;gap:2px}.cs-rank-row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 8px;border:0;border-radius:9px;background:transparent;text-align:left;color:#101828;cursor:pointer}.cs-rank-row.active,.cs-rank-row:hover{background:#f3ecff}.cs-rank-number{width:67px;flex:none;color:#7a32f5;font-size:12px;font-weight:700}
 .cs-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#101828;font-size:14px;font-weight:600}
 .cs-values{flex:none;color:#475467;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
-.cs-help{color:#667085;font-size:11px}
-.cs-help summary{display:inline-flex;align-items:center;min-height:44px;gap:4px;list-style:none;cursor:pointer}
+.cs-help{position:relative;flex:none;color:#667085;font-size:11px}
+.cs-help summary{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;list-style:none;cursor:pointer;color:#8a6db8;font-size:0}
 .cs-help summary::-webkit-details-marker{display:none}
-.cs-help summary::before{content:"ⓘ";font-size:12px}
-.cs-help p{margin:0 0 6px;line-height:1.6}
+.cs-help summary::before{content:"ⓘ";font-size:15px}
+.cs-help[open] summary{background:#f3ecff}
+.cs-help p{position:absolute;z-index:5;top:32px;left:-92px;width:min(290px,calc(100vw - 44px));margin:0;padding:12px 14px;border:1px solid #ebe3f6;border-radius:12px;background:#fff;box-shadow:0 8px 24px #3721551f;color:#475467;font-size:12px;line-height:1.5;white-space:normal}
 .cs-empty,.cs-error{margin:8px 0;color:#667085;font-size:12px;line-height:1.6}
 .cs-error{color:#b42318}
 @media(max-width:350px){.cs-heading h2{font-size:14px}.cs-totals strong{font-size:14px}.cs-spotlight{gap:5px}.cs-values{font-size:11px}}
