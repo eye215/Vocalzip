@@ -570,13 +570,13 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       {
         const shows = VZ.repertoire?.showsForSong?.(s.id) || [];
         body.innerHTML =
+          '<div class="vz-song-section"><h2>공연·오디션 <span>' + shows.length + '</span></h2><a class="icon-btn" href="#/performances" aria-label="공연 관리"><i class="ph ph-arrow-up-right"></i></a></div>' +
+          (shows.length ? '<div class="list">' + shows.map(VZ.repertoire.showCard).join('') + '</div>' : '') +
+          (!shows.length ? '<p class="small muted" style="margin:0 4px">연결된 공연·오디션 기록이 없어요.</p>' : '') +
           '<div class="vz-song-section"><h2>레슨 기록 <span>' + lessons.length + '</span></h2><button type="button" data-add-lesson-from-activity aria-label="레슨 기록 추가"><i class="ph ph-plus"></i></button></div>' +
           (lessons.length ? '<div class="list">' + lessons.map(l => '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="item-main"><span class="item-title">' + esc(VZ.dateLabel(l.date)) + ' ' + VZ.statusBadge(VZ.lessonStatus(l)) + '</span><span class="item-sub">' + esc([VZ.timeRange(l), l.place, fb(l) || '피드백 미작성'].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></a>').join('') + '</div>' : '<p class="small muted" style="margin:0 4px">연결된 레슨 기록이 없어요.</p>') +
           '<div class="vz-song-section"><h2>연습 기록 <span>' + practices.length + '</span></h2><button type="button" data-log-from-activity aria-label="연습 기록 추가"><i class="ph ph-plus"></i></button></div>' +
           (practices.length ? '<div class="list">' + practices.map(p => VZ.practiceRow(p)).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">이 곡의 연습 기록이 없어요.</p>') +
-          '<div class="vz-song-section"><h2>공연·오디션 <span>' + shows.length + '</span></h2><a class="icon-btn" href="#/performances" aria-label="공연 관리"><i class="ph ph-arrow-up-right"></i></a></div>' +
-          (shows.length ? '<div class="list">' + shows.map(VZ.repertoire.showCard).join('') + '</div>' : '') +
-          (!shows.length ? '<p class="small muted" style="margin:0 4px">연결된 공연·오디션 기록이 없어요.</p>' : '') +
           '<div class="vz-song-section"><h2>숙제 <span>' + tasks.length + '</span></h2><button type="button" data-add-task aria-label="숙제 추가"><i class="ph ph-plus"></i></button></div>' +
           (tasks.length ? '<div class="vz-song-activity-list">' + tasks.map(VZ.taskRow).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">연결된 숙제가 없어요.</p>');
         body.querySelector('[data-add-lesson-from-activity]').onclick = () => VZ.lessonSheet({songId:s.id});
