@@ -54,26 +54,23 @@ function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
   ticker.querySelector('[data-cs-rank]').textContent=label()+' '+(index+1)+'위';
   ticker.querySelector('[data-cs-name]').textContent=name;
   ticker.querySelector('[data-cs-name]').title=name;
-  ticker.querySelector('[data-cs-values]').textContent=metric==='minutes'?duration(row.minutes):row.count+'회';
+  ticker.querySelector('[data-cs-values]').textContent=duration(row.minutes)+' · '+row.count+'회';
   list.replaceChildren();
-  for(const category of ['minutes','count']){
-   const heading=document.createElement('div');heading.className='cs-rank-group';heading.textContent=category==='minutes'?'시간별':'횟수별';list.append(heading);
-   lists[category].forEach((entry,i)=>{
-    const button=document.createElement('button');button.type='button';button.className='cs-rank-row'+(category===metric&&i===index?' active':'');
-    const title=entry.id?titleOf(entry.id)||'삭제된 곡':'곡 미지정',value=category==='minutes'?duration(entry.minutes):entry.count+'회',prefix=category==='minutes'?'시간별':'횟수별';
-    button.setAttribute('aria-label',prefix+' '+(i+1)+'위 '+title+', '+value);
-    button.innerHTML='<span class="cs-rank-number"></span><span class="cs-name"></span><span class="cs-values"></span>';
-    button.querySelector('.cs-rank-number').textContent=prefix+' '+(i+1)+'위';button.querySelector('.cs-name').textContent=title;button.querySelector('.cs-values').textContent=value;
-    button.onclick=()=>{metric=category;index=i;show();close();ticker.focus()};list.append(button);
-   });
-  }
+  rows.forEach((entry,i)=>{
+   const button=document.createElement('button');button.type='button';button.className='cs-rank-row'+(i===index?' active':'');
+   const title=entry.id?titleOf(entry.id)||'삭제된 곡':'곡 미지정',value=duration(entry.minutes)+' · '+entry.count+'회',prefix=label();
+   button.setAttribute('aria-label',prefix+' '+(i+1)+'위 '+title+', '+value);
+   button.innerHTML='<span class="cs-rank-number"></span><span class="cs-name"></span><span class="cs-values"></span>';
+   button.querySelector('.cs-rank-number').textContent=prefix+' '+(i+1)+'위';button.querySelector('.cs-name').textContent=title;button.querySelector('.cs-values').textContent=value;
+   button.onclick=()=>{if(swiped)return;index=i;show();close();ticker.focus()};list.append(button);
+  });
  };
  const close=()=>{opened=false;panel.classList.remove('open');panel.setAttribute('aria-hidden','true');panel.inert=true;ticker.setAttribute('aria-expanded','false')};
- const flip=()=>{metric=metric==='minutes'?'count':'minutes';index=0;show()};
+ const setMetric=next=>{if(metric===next)return;metric=next;index=0;show()};
  ticker.onclick=()=>{if(swiped){swiped=false;return}opened=!opened;panel.classList.toggle('open',opened);panel.setAttribute('aria-hidden',String(!opened));panel.inert=!opened;ticker.setAttribute('aria-expanded',String(opened))};
  for(const target of [ticker,panel]){
   target.addEventListener('touchstart',e=>{touchX=e.touches[0].clientX;touchY=e.touches[0].clientY;swiped=false},{passive:true});
-  target.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>35&&Math.abs(dx)>Math.abs(dy)){swiped=true;flip();setTimeout(()=>swiped=false,500)}},{passive:true});
+  target.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>35&&Math.abs(dx)>Math.abs(dy)){swiped=true;setMetric(dx>0?'minutes':'count');setTimeout(()=>swiped=false,500)}},{passive:true});
  }
  show();
  host._csTimer=setInterval(()=>{
