@@ -561,23 +561,23 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       }
       if (songTab !== 'timeline') { body.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, media)); return; }
       {
-        // One entry: title (+ badge/rating on the right), date · details, then a short note. Lessons and practices open.
-        const ev = [
-          ...media.map(m => ({date:M.dateOf(m), kind:M.occasion(m), title:M.label(m), side:m.rating ? '<span class="t-side">★' + m.rating + '</span>' : '', sub:[M.occasionLabel(M.occasion(m)) + ' 녹음', VZ.clock(m.durationSeconds)], note:m.review})),
-          ...practices.map(p => ({date:p.date, kind:'practice', title:'연습 ' + VZ.minutes(VZ.practiceMinutes(p)), side:p.rating ? '<span class="t-side">★' + p.rating + '</span>' : '', sub:[(p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length + '개' : ''], note:p.memo, attr:' data-practice="' + esc(p.id) + '"'})),
-          ...lessons.map(l => ({date:l.date, kind:'lesson', title:'레슨' + (VZ.timeRange(l) ? ' · ' + VZ.timeRange(l) : ''), side:VZ.statusBadge(VZ.lessonStatus(l)), sub:[l.place, l.teacher], note:fb(l), href:'#/lesson/' + l.id})),
-          ...(VZ.repertoire?.showsForSong?.(s.id) || []).map(p => ({date:p.start, kind:'performance', title:p.title, side:'', sub:[p.role, p.venue], note:p.memo, href:'#/show/' + p.id}))
-        ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        const entry = e => {
-          const inner = '<span class="t-head"><strong>' + esc(e.title) + '</strong>' + e.side + '</span><span class="t-date">' + esc([VZ.dateLabel(e.date), ...e.sub].filter(Boolean).join(' · ')) + '</span>' + (e.note ? '<span class="t-note">' + esc(String(e.note).slice(0, 100)) + '</span>' : '');
-          return '<div class="t ' + e.kind + '">' + (e.href ? '<a class="t-body" href="' + esc(e.href) + '">' + inner + '</a>' : e.attr ? '<button type="button" class="t-body"' + e.attr + '>' + inner + '</button>' : '<div class="t-body">' + inner + '</div>') + '</div>';
-        };
-        body.innerHTML = '<div class="vz-song-section"><h2>활동 기록</h2><button type="button" data-log-from-activity aria-label="연습 기록 추가"><i class="ph ph-plus"></i></button></div>' +
-          (ev.length ? '<div class="timeline">' + ev.map(entry).join('') + '</div>' : VZ.empty('path', '녹음·연습·레슨·공연을 기록하면 이 곡의 활동이 여기에 쌓여요.')) +
-          '<div class="vz-song-section"><h2>숙제</h2><button type="button" data-add-task aria-label="숙제 추가"><i class="ph ph-plus"></i></button></div>' +
-          (tasks.length ? '<div class="vz-song-activity-list">' + tasks.map(VZ.taskRow).join('') + '</div>' : '<p class="small muted">연결된 숙제가 없어요.</p>');
+        const shows = VZ.repertoire?.showsForSong?.(s.id) || [];
+        const stageRecords = media.filter(m => ['performance', 'audition'].includes(M.occasion(m)));
+        body.innerHTML =
+          '<div class="vz-song-section"><h2>레슨 기록 <span>' + lessons.length + '</span></h2></div>' +
+          (lessons.length ? '<div class="list">' + lessons.map(l => '<a class="item" href="#/lesson/' + esc(l.id) + '"><span class="item-main"><span class="item-title">' + esc(VZ.dateLabel(l.date)) + ' ' + VZ.statusBadge(VZ.lessonStatus(l)) + '</span><span class="item-sub">' + esc([VZ.timeRange(l), l.place, fb(l) || '피드백 미작성'].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></a>').join('') + '</div>' : '<p class="small muted" style="margin:0 4px">연결된 레슨 기록이 없어요.</p>') +
+          '<div class="vz-song-section"><h2>연습 기록 <span>' + practices.length + '</span></h2><button type="button" data-log-from-activity aria-label="연습 기록 추가"><i class="ph ph-plus"></i></button></div>' +
+          (practices.length ? '<div class="list">' + practices.map(p => VZ.practiceRow(p)).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">이 곡의 연습 기록이 없어요.</p>') +
+          '<div class="vz-song-section"><h2>공연·오디션 <span>' + (shows.length + stageRecords.length) + '</span></h2><a class="icon-btn" href="#/performances" aria-label="공연 관리"><i class="ph ph-arrow-up-right"></i></a></div>' +
+          (shows.length ? '<div class="list">' + shows.map(VZ.repertoire.showCard).join('') + '</div>' : '') +
+          (stageRecords.length ? '<div class="vz-song-media-list" data-stage-records>' + stageRecords.map(VZ.mediaRow).join('') + '</div>' : '') +
+          (!shows.length && !stageRecords.length ? '<p class="small muted" style="margin:0 4px">연결된 공연·오디션 기록이 없어요.</p>' : '') +
+          '<div class="vz-song-section"><h2>숙제 <span>' + tasks.length + '</span></h2><button type="button" data-add-task aria-label="숙제 추가"><i class="ph ph-plus"></i></button></div>' +
+          (tasks.length ? '<div class="vz-song-activity-list">' + tasks.map(VZ.taskRow).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">연결된 숙제가 없어요.</p>');
         body.querySelector('[data-log-from-activity]').onclick = () => VZ.practiceSheet({songId:s.id});
         body.querySelector('[data-add-task]').onclick = () => VZ.taskSheet({songId:s.id});
+        const stageHost = body.querySelector('[data-stage-records]');
+        if (stageHost) VZ.wireMedia(stageHost, stageRecords);
       }
     };
     // The tab bar sticks to the top: a tab chosen further down starts its list right under the bar.
