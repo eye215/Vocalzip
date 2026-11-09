@@ -22,6 +22,8 @@ const selectionIds = () => { try { const ids=JSON.parse(sessionStorage.getItem(s
 V.openAnalysisSelection = items => {
   const unique=[...new Map(items.filter(Boolean).map(m=>[String(m.id),m])).values()];
   if(!unique.length)return false;
+  const songId=unique[0].songId;
+  if(!songId || !V.song(songId) || !unique.every(m=>m.songId===songId)) { V.toast('같은 곡으로 지정된 녹음만 분석할 수 있어요.','error'); return false; }
   try { sessionStorage.setItem(selectionKey,JSON.stringify(unique.map(m=>m.id))); } catch { V.toast('선택한 녹음을 저장하지 못했어요.','error'); return false; }
   const songs=[...new Set(unique.map(m=>m.songId).filter(Boolean))];
   V.nav(songs.length===1 && unique.every(m=>m.songId===songs[0])
