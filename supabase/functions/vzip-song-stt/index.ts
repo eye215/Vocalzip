@@ -41,6 +41,15 @@ Deno.serve(async (req:Request) => {
     // Mandatory owner allowlist prevents unbounded public spending; no default.
     const allowed=(Deno.env.get('STT_ALLOWED_USER_IDS')||'').split(',').map(s=>s.trim()).filter(Boolean);
     if(!allowed.includes(data.user.id))return reply(req,403,{error:'일회성 STT 사용 권한이 없어요.'});
+    // The database owner policy is authoritative; browser flags, email and metadata cannot grant access.
+    // Check before readiness, body parsing or any paid API call. Missing policy fails closed.
+    const authenticatedDb=createClient(SUPABASE_URL,ANON,{
+      auth:{persistSession:false,autoRefreshToken:false},
+      global:{headers:{Authorization:'Bearer '+token}}
+    });
+    const {data:ownerAllowed,error:ownerError}=await authenticatedDb.rpc('vzip_ai_owner_allowed');
+    if(ownerError)return reply(req,503,{error:'AI 소유자 접근 설정을 확인할 수 없어 중단했어요.'});
+    if(ownerAllowed!==true)return reply(req,403,{error:'현재 AI 분석은 소유자 계정만 사용할 수 있어요.'});
     // Check authorization before the browser downloads or transforms any audio.
     if(req.method==='GET')return reply(req,200,{enabled:true});
     const declared=Number(req.headers.get('content-length')||0);
@@ -71,10 +80,6 @@ Deno.serve(async (req:Request) => {
     if(!transcriptOnly&&!songs.length)return reply(req,400,{error:'등록된 곡이 없어요. 내 곡에 곡을 먼저 등록해 주세요.'});
     // Reserve an attempt atomically in Postgres BEFORE any paid OpenAI request.
     // Fail closed if migration/function is missing, quota is exceeded, or DB is unavailable.
-    const authenticatedDb=createClient(SUPABASE_URL,ANON,{
-      auth:{persistSession:false,autoRefreshToken:false},
-      global:{headers:{Authorization:'Bearer '+token}}
-    });
     const {data:reserved,error:quotaError}=await authenticatedDb.rpc('vzip_song_stt_reserve');
     if(quotaError)return reply(req,503,{error:'AI 분석 사용량 보호 설정을 확인할 수 없어 중단했어요. 관리자에게 문의해 주세요.'});
     if(reserved!==true)return reply(req,429,{error:'AI 분석 안전 한도에 도달했어요. 내일 다시 시도하거나 관리자에게 한도 조정을 요청해 주세요.'});

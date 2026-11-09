@@ -3,12 +3,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const {stripTypeScriptTypes}=require('node:module');
 
-function edge(env={},user='alice',quota={data:true,error:null},apiText=''){
+function edge(env={},user='alice',quota={data:true,error:null},apiText='',owner={data:true,error:null}){
  let handler,calls=0;
  const code=fs.readFileSync('supabase/functions/vzip-song-stt/index.ts','utf8').replace(/^import .*;$/m,'');
  const context={Request,Response,Blob,File,FormData,Uint8Array,AbortSignal,console:{error(){}},
   Deno:{env:{get:k=>env[k]},serve:fn=>handler=fn},
-  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async()=>quota}),
+  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async name=>name==='vzip_ai_owner_allowed'?owner:quota}),
   fetch:async()=>{calls++;return Response.json({text:apiText})}};
  vm.runInNewContext(stripTypeScriptTypes(code),context);
  return {call:handler,calls:()=>calls};
@@ -58,6 +58,22 @@ test('database quota exhaustion and failures never issue paid model requests',as
   assert.equal(e.calls(),0);
  }
 });
+
+test('only the database-configured owner may check readiness or submit paid audio',async()=>{
+ for(const method of ['GET','POST']){
+  for(const [policy,status]of[[{data:false,error:null},403],[{data:null,error:{message:'owner policy missing'}},503]]){
+   const e=edge({...enabled,STT_ALLOWED_USER_IDS:'alice,bob'},'bob',{data:true,error:null},'',policy);
+   const response=await e.call(request(method,method==='POST'?'not even valid multipart':undefined));
+   assert.equal(response.status,status);assert.equal(e.calls(),0);
+  }
+ }
+});
+test('a metadata or body owner claim never bypasses the server owner policy',async()=>{
+ const e=edge(enabled,'alice',{data:true,error:null},'',{data:false,error:null});
+ const response=await e.call(request('POST',JSON.stringify({owner:true,role:'owner',email:'owner@example.invalid'}),{'Content-Type':'application/json'}));
+ assert.equal(response.status,403);assert.equal(e.calls(),0);
+});
+
 function browser(){
  let owner='alice',paid=0,excerpts=0;const events={},storage=new Map();
  const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,dateOf:()=>'',list:async()=>[]},route(){},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id,
