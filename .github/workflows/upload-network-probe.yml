@@ -1,0 +1,20 @@
+name: Synthetic operating upload latency probe
+on:
+  push:
+    branches: ['codex/upload-network-probe-20261109']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check tools/upload-network-probe.mjs
+      - name: Four synthetic 32MiB audio uploads; owned objects and account cleaned
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node tools/upload-network-probe.mjs
