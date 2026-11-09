@@ -98,3 +98,36 @@ test('Inspected PCM retains verified FLAC conversion on Chromium and original WA
  if(browserName==='webkit'){expect(result.type).toBe('audio/wav');expect(result.same).toBe(true);}
  else{expect(result.type).toBe('audio/flac');expect(result.proof.samplesVerified).toBe(true);}
 });
+
+test('Photos interleaved video reads the original once while preserving exact audio and fallback verification',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chromium-desktop','large read-volume comparison once; small fixtures cover all browsers');
+ test.setTimeout(120000);await selected(page,'photos-interleaved.mp4');
+ const optimized=await page.evaluate(async()=>{
+  const source=document.querySelector('#vzip-hub-upload').files[0],prepared=await vzipPrepareMedia(source);
+  try{
+   const b=await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');
+   const a=new b.Input({source:new b.BlobSource(source),formats:b.ALL_FORMATS}),c=new b.Input({source:new b.BlobSource(prepared.file),formats:b.ALL_FORMATS});
+   try{
+    const original=new b.EncodedPacketSink((await a.getAudioTracks())[0]).packets(),output=new b.EncodedPacketSink((await c.getAudioTracks())[0]).packets();
+    let packets=0,bytes=0;
+    while(true){
+     const [x,y]=await Promise.all([original.next(),output.next()]);if(x.done||y.done){if(x.done!==y.done)throw Error('count changed');break;}
+     if(x.value.data.length!==y.value.data.length||x.value.data.some((v,i)=>v!==y.value.data[i]))throw Error('bytes changed');
+     packets++;bytes+=x.value.data.length;
+    }
+    return {proof:prepared.metadata.audioExtraction,packets,bytes,size:prepared.file.size};
+   }finally{a.dispose();c.dispose();}
+  }finally{await prepared.dispose();}
+ });
+ await page.route('**/audio-packet-proof.js*',route=>route.fulfill({contentType:'application/javascript',body:'// Force the existing exact-packet fallback for the comparison only.'}));
+ const fallback=await page.evaluate(async()=>{
+  const prepared=await vzipPrepareMedia(document.querySelector('#vzip-hub-upload').files[0]);
+  try{return {proof:prepared.metadata.audioExtraction,size:prepared.file.size}}finally{await prepared.dispose()}
+ });
+ expect(optimized.proof.verificationMode).toBe('sha256-blocks-v1');expect(fallback.proof.verificationMode).toBe('exact-packets');
+ expect(optimized.proof.audioPackets).toBe(optimized.packets);expect(optimized.proof.audioBytes).toBe(optimized.bytes);
+ expect(fallback.proof.audioPacketCopyVerified).toBe(true);expect(fallback.proof.audioPackets).toBe(optimized.packets);
+ expect(fallback.size).toBe(optimized.size);
+ expect(optimized.proof.inputReadBytes).toBeLessThan(fallback.proof.inputReadBytes);
+ console.log('PHOTOS_READ_PROFILE '+JSON.stringify({optimized:optimized.proof,fallback:fallback.proof}));
+});
