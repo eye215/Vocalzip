@@ -32,14 +32,14 @@ body.vz-calendar-mode .vz-calendar-footer{display:flex;align-items:center;justif
 body.vz-calendar-mode .legend{display:flex;align-items:center;gap:14px;margin:0;color:#667085;font-size:11px}
 body.vz-calendar-mode .legend span{gap:5px;white-space:nowrap}
 body.vz-calendar-mode .vz-calendar-footer button{flex:none;min-width:44px;min-height:44px;padding:0 8px;border:0;border-radius:12px;background:#f3ecff;color:#7a32f5;font-size:12px;font-weight:700}
-body.vz-calendar-mode .vz-calendar-day-head{display:flex;align-items:center;justify-content:space-between;margin:18px 4px 8px}
+body.vz-calendar-mode .vz-calendar-day-head{display:flex;align-items:center;justify-content:space-between;min-height:58px;margin:0 4px}
 body.vz-calendar-mode .vz-calendar-day-head h2{margin:0;color:#101828;font-size:18px}
-body.vz-calendar-mode .vz-calendar-day-head button{display:flex;align-items:center;gap:3px;min-height:44px;padding:0 8px;border:0;background:transparent;color:#667085;font-size:13px}
-body.vz-calendar-mode .vz-calendar-day-head button i{font-size:18px}
+body.vz-calendar-mode .vz-calendar-day-head button{display:grid;place-items:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;color:#667085;font-size:13px}
+body.vz-calendar-mode .vz-calendar-day-head button i{font-size:22px}
 body.vz-calendar-mode .cal-group{margin:10px 4px 6px;color:#667085;font-size:12px;font-weight:600}
 body.vz-calendar-mode .cal-list{display:grid;gap:12px}
-body.vz-calendar-mode .cal-own{overflow:hidden;border-left:3px solid var(--category);border-radius:20px;background:#fff}
-body.vz-calendar-mode .cal-own .item{min-height:76px;padding:14px 16px;gap:12px;border:0}
+body.vz-calendar-mode .cal-own{overflow:hidden;border:0;border-radius:20px;background:#fff}
+body.vz-calendar-mode .cal-own .item{min-height:86px;padding:16px;gap:12px;border:0}
 body.vz-calendar-mode .cal-own .avatar{width:42px;height:42px;border-radius:12px;background:var(--category-bg);color:var(--category);font-size:22px}
 body.vz-calendar-mode .cal-own[data-kind=lesson]{--category:var(--vz-category-lesson);--category-bg:var(--vz-category-lesson-soft)}
 body.vz-calendar-mode .cal-own[data-kind=practice]{--category:var(--vz-category-practice);--category-bg:var(--vz-category-practice-soft)}
