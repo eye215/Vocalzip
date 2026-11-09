@@ -67,7 +67,7 @@ window.supabase={createClient:(url,key,options)=>(window.__clientOptions=options
  storage:{from:()=>({})}
 })};
 `;
-async function setup(page,{owner='A',user='A',active='here',error=false,session='here-session'}={}){
+async function setup(page,{owner='A',user='A',active='here',error=false,session='here-session',oneAccount=false}={}){
  page.__errors=[];page.on('pageerror',e=>page.__errors.push(e.message));
  await page.route('**/supabase.min.js',r=>r.fulfill({contentType:'application/javascript',body:stub}));
  await page.route('**/r2-config.js*',r=>r.fulfill({contentType:'application/javascript',body:"window.VZIP_R2_ENDPOINT='';"}));
@@ -75,6 +75,7 @@ async function setup(page,{owner='A',user='A',active='here',error=false,session=
  await page.route('**/*.supabase.co/**',r=>r.abort());
  await page.addInitScript(o=>{
   window.VZIP_DEVICE_SESSIONS_ENABLED=true;
+  window.VZIP_ONE_ACCOUNT_PER_BROWSER=o.oneAccount;
   if(!sessionStorage.getItem('__seed_iso')){
    sessionStorage.setItem('__seed_iso','1');sessionStorage.setItem('__test_session',o.session);
    localStorage.setItem('vzip_account_scope_owner_v1',o.owner);
@@ -86,11 +87,27 @@ async function setup(page,{owner='A',user='A',active='here',error=false,session=
    if(o.error)localStorage.setItem('__rpc_error','1');
    localStorage.setItem('vocal-zip_mvp_v1',JSON.stringify({songs:[{id:'legacy',title:'이전 원본'}]}));
   }
- },{owner,user,active,error,session});
+ },{owner,user,active,error,session,oneAccount});
  await page.goto('/#/home');
  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
 }
 test.afterEach(async({page})=>expect(page.__errors||[]).toEqual([]));
+
+test('a remembered account blocks another signup without replacing its owner',async({page})=>{
+ await setup(page,{owner:'A',user:'out',oneAccount:true});
+ await page.locator('#cloud-signup').click();
+ await expect(page.locator('.vzip-auth-bound-card')).toBeVisible();
+ await expect(page.locator('.vzip-auth-signup-card')).toBeHidden();
+ expect(await page.evaluate(()=>localStorage.getItem('vzip_account_scope_owner_v1'))).toBe('A');
+ await page.locator('#cloud-bound-login').click();
+ await expect(page.locator('.vzip-auth-login-card')).toBeVisible();
+});
+
+test('a different account login is signed out before accessing saved data',async({page})=>{
+ await setup(page,{owner:'A',user:'B',oneAccount:true});
+ await expect(page.locator('.vzip-auth-bound-card')).toBeVisible();
+ expect(await page.evaluate(()=>({owner:localStorage.getItem('vzip_account_scope_owner_v1'),user:localStorage.getItem('__test_user'),claims:window.__claims?.length||0,signedIn:window.vzipCloudSignedIn?.()}))).toEqual({owner:'A',user:'out',claims:0,signedIn:false});
+});
 
 test('separate account namespaces and media databases survive account switch without auto-import',async({page})=>{
  await setup(page);
