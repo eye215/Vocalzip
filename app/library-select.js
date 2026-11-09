@@ -4,11 +4,13 @@
 const VZ = window.VZ, M = VZ?.media;
 if (!VZ || !M) return;
 VZ.librarySelect = (main, {list, done}) => {
-  const host = main.querySelector('[data-l]'), allButton = main.querySelector('[data-lib-select-all]'),
+  const host = main.querySelector('[data-l]'), start = main.querySelector('[data-select-mode]'),
+    left = main.querySelector('.lib-selection-left'), cancel = main.querySelector('[data-lib-select-cancel]'),
+    meta = main.querySelector('.lib-selection-meta'), allButton = main.querySelector('[data-lib-select-all]'),
     count = main.querySelector('[data-lib-selected-count]'), bulk = main.querySelector('[data-lib-bulk-more]');
   if (!host || !allButton || !count || !bulk) return;
   const picked = new Map();
-  let busy = false;
+  let busy = false, selecting = false;
   const chosen = () => [...picked.values()];
   const mark = root => root.querySelectorAll('[data-media].lib-record').forEach(row => {
     const button = row.querySelector('[data-lib-pick]'); if (!button) return;
@@ -17,6 +19,8 @@ VZ.librarySelect = (main, {list, done}) => {
     if (span && span.textContent !== (yes ? '✓' : '')) span.textContent = yes ? '✓' : '';
   });
   const paint = () => {
+    main.classList.toggle('lib-selection-active', selecting);
+    start.hidden = selecting; left.hidden = !selecting; meta.hidden = !selecting;
     const visible = list(), all = visible.length > 0 && visible.every(m => picked.has(String(m.id)));
     allButton.setAttribute('aria-pressed', String(all));
     const box = allButton.querySelector('.lib-check'); if (box && box.textContent !== (all ? '✓' : '')) box.textContent = all ? '✓' : '';
@@ -25,6 +29,8 @@ VZ.librarySelect = (main, {list, done}) => {
   const watch = new MutationObserver(() => paint());
   watch.observe(host, {childList:true, subtree:true});
   addEventListener('hashchange', () => watch.disconnect(), {once:true});
+  start.onclick = () => { selecting = true; paint(); };
+  cancel.onclick = () => { selecting = false; picked.clear(); paint(); };
   allButton.onclick = () => {
     const visible = list(), all = visible.length > 0 && visible.every(m => picked.has(String(m.id)));
     visible.forEach(m => all ? picked.delete(String(m.id)) : picked.set(String(m.id), m)); paint();
@@ -53,7 +59,7 @@ VZ.librarySelect = (main, {list, done}) => {
     const row = e.target.closest('[data-media].lib-record'); if (!row || !host.contains(row)) return;
     const item = list().find(m => String(m.id) === row.dataset.media) || picked.get(row.dataset.media);
     if (!item) return;
-    if (e.target.closest('[data-lib-pick]')) {
+    if (e.target.closest('[data-lib-pick]') && selecting) {
       e.preventDefault(); e.stopImmediatePropagation();
       picked.has(row.dataset.media) ? picked.delete(row.dataset.media) : picked.set(row.dataset.media, item); paint();
     } else if (e.target.closest('[data-lib-row-more]')) {

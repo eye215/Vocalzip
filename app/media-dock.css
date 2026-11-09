@@ -63,3 +63,28 @@ body.vz-collection .lib-month .lib-record .player-btn{background:#F3ECFF;color:#
 body.vz-collection .lib-month .lib-record .lib-row,.lib-record .lib-row .item{background:#fff}
 @media(max-width:350px){body.vz-collection .lib-month .lib-row{gap:2px}.lib-pick,.lib-row-more{width:40px}}
 
+/* Library selection follows the compact before/after state in the approved reference. */
+body.vz-collection .lib-selection-tools{min-height:48px;margin-bottom:20px;padding:2px 12px}
+.lib-select-start,.lib-select-cancel{min-height:44px;border:0;background:transparent;font:600 13px Pretendard,-apple-system,sans-serif}
+.lib-select-start{color:#7A32F5;padding:0 4px}.lib-select-cancel{color:#667085;padding:0 8px}
+.lib-selection-left{display:flex;align-items:center;gap:5px;min-width:0}
+.lib-selection-left .lib-select-all{padding:0 3px;gap:7px}
+.lib-selection-meta{margin-left:auto}
+body.vz-collection .lib-month .lib-pick{display:none}
+body.vz-collection .lib-selection-active .lib-month .lib-pick{display:grid}
+body.vz-collection .lib-month .lib-record + .lib-record{border-top:0}
+body.vz-collection .lib-month .lib-row{padding:2px 0}
+body.vz-collection .lib-month .lib-row .item{min-width:0}
+body.vz-collection .lib-month .lib-record .media-open:not([hidden]){border:0;padding:0 0 12px!important}
+body.vz-collection .lib-month .lib-record .player{padding:0;border-radius:14px;background:#F8F6FD}
+body.vz-collection .lib-month .lib-record .player-row{min-width:0;gap:5px;padding:6px 4px 6px 8px}
+body.vz-collection .lib-month .lib-record .player-btn{position:relative;width:44px;height:44px;background:transparent;color:white;font-size:18px;isolation:isolate}
+body.vz-collection .lib-month .lib-record .player-btn{margin-right:12px}
+body.vz-collection .lib-month .lib-record .player-btn::before{content:"";position:absolute;z-index:-1;width:36px;height:36px;border-radius:50%;background:#7A32F5}
+body.vz-collection .lib-month .lib-record .player-row input[type=range]{flex:1 1 0;width:0;min-width:0;margin:0;accent-color:#7A32F5}
+body.vz-collection .lib-month .lib-record .player-row .time{flex:none;min-width:max-content;white-space:nowrap;font-size:11px;font-weight:500}
+body.vz-collection .lib-month .lib-record .lib-row-more{width:48px;height:44px;margin-left:0;color:#667085}
+body.vz-collection .lib-month .lib-record .lib-row-more i{font-size:20px}
+body.vz-collection .lib-month .lib-record .player [data-msg]:not(:empty){padding:0 12px 8px}
+@media(max-width:350px){body.vz-collection .lib-month .lib-record .player-row{gap:3px;padding-left:3px}body.vz-collection .lib-month .lib-record .player-row .time{font-size:10px}body.vz-collection .lib-month .lib-record .lib-row-more{width:44px}}
+
