@@ -521,8 +521,8 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
             name.append(chip);
           });
           const all = body.querySelector('[data-all]');
-          const sync = () => { const count = VZ.mediaSelection?.count(host) || 0; body.querySelector('[data-selected-count]').textContent = '선택 ' + count + '개'; all.checked = count === visible.length; all.indeterminate = count > 0 && count < visible.length; };
-          body.querySelector('[data-song-selected-more]').onclick = () => VZ.sheet({title:'선택한 녹음', body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-analyze-selected><i class="ph ph-chart-line" aria-hidden="true"></i> 보컬 분석</button></div>', onMount:(sheet, close) => {
+          const sync = () => { const count = VZ.mediaSelection?.count(host) || 0; body.querySelector('[data-selected-count]').textContent = '선택 ' + count + '개'; body.querySelector('[data-song-selected-more]').hidden = count === 0; all.checked = count === visible.length; all.indeterminate = count > 0 && count < visible.length; };
+          body.querySelector('[data-song-selected-more]').onclick = () => { if (!(VZ.mediaSelection?.count(host) || 0)) return; VZ.sheet({title:'선택한 녹음', body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-analyze-selected><i class="ph ph-chart-line" aria-hidden="true"></i> 보컬 분석</button></div>', onMount:(sheet, close) => {
             const analyze = sheet.querySelector('[data-analyze-selected]');
             analyze.disabled = !(VZ.mediaSelection?.count(host) || 0);
             analyze.onclick = () => {
@@ -530,7 +530,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
               if (!chosen.length) return;
               close(); VZ.openAnalysisSelection(chosen);
             };
-          }});
+          }}); };
           all.onchange = () => { selectionTouched = true; VZ.mediaSelection?.selectAll(host, visible, all.checked); sync(); };
           VZ.mediaSelection?.selectAll(host, visible, true);
           sync();
