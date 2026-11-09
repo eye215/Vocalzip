@@ -10,7 +10,7 @@ window.vzipPrepareMedia=async(file,{signal,onProgress=()=>{}}={})=>{
  if(file.size>1024*1024*1024)throw Error('원본 파일은 최대 1GB까지 선택할 수 있어요.');
  if(signal?.aborted)throw new DOMException('가져오기를 취소했어요.','AbortError');
  const cached=inspections.get(file);
- if(cached?.reusableAudio&&cached.readable===true&&cached.hasAudio===true&&cached.hasVideo===false)
+ if(!video(file)&&cached?.reusableAudio&&cached.readable===true&&cached.hasAudio===true&&cached.hasVideo===false)
   return {file,metadata:{...clone(cached.metadata),...(cached.duration>0?{durationSeconds:cached.duration}:{})},dispose:async()=>{}};
  const fallback=()=>({file,metadata:VzipMediaDates.pick({},file.lastModified),dispose:async()=>{}});
  if(typeof Worker!=='function'){if(video(file))throw Error('영상 대신 음원 파일로 가져와 주세요.');return fallback()}

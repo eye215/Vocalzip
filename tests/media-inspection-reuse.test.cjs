@@ -40,3 +40,9 @@ test('pre-aborted inspection and preparation never start a worker, including a c
  await f.window.vzipInspectMedia(file);
  await assert.rejects(f.window.vzipPrepareMedia(file,{signal}),{name:'AbortError'});assert.equal(f.state.workers,1);
 });
+
+test('audio in a video-labelled container still normalizes its output type through preparation',async()=>{
+ const f=setup(),file=new File(['original bytes'],'container.mp4',{type:'video/mp4'});
+ await f.window.vzipInspectMedia(file);await f.window.vzipPrepareMedia(file);
+ assert.equal(f.state.prepares,1);
+});
