@@ -57,6 +57,8 @@ function days(p){
 const stageMedia=(p,media)=>{const d=days(p);return media.filter(m=>M.occasion(m)==='performance'&&d.has(M.dateOf(m))&&!V.db.deleted?.media?.includes(m.id))};
 let filter='';
 V.repertoire={
+ edit:editRepertoire,
+ chooseTake,
  toolbar:()=>'<div class="archive-toolbar"><a class="btn secondary" href="#/performances">나의 공연</a><label class="field"><span>레퍼토리 상태</span><select data-rep-filter aria-label="레퍼토리 상태">'+opt(A.states,filter,'전체')+'</select></label></div>',
  matches:s=>!filter||info(s).status===filter,
  statusLabel:s=>A.states[info(s).status]||'',
