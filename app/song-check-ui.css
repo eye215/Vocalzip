@@ -37,12 +37,14 @@ body[data-vz-route="song-suggest"] .v-nav{display:none}
 .vz-sc-select-all[aria-pressed="true"] .vz-sc-checkbox::after,.vz-sc-record-check input:checked+.vz-sc-checkbox::after{opacity:1}
 .vz-sc-select-all:focus-visible .vz-sc-checkbox,.vz-sc-record-check input:focus-visible+.vz-sc-checkbox{outline:2px solid #7A32F5;outline-offset:3px}
 .vz-sc-selection [data-counter]{color:#7A32F5;font-size:13px;font-weight:600}
+.vz-sc-selection-end{display:flex;align-items:center;gap:4px;margin-left:auto}.vz-sc-selection-more{display:grid;place-items:center;flex:none;width:44px;height:44px;padding:0;border:0;background:transparent;color:#667085}.vz-sc-selection-more i{font-size:22px}.vz-sc-selection-more:disabled{opacity:.4}.vz-sc-selection-more:focus-visible{outline:2px solid #7A32F5;border-radius:10px}
 .vz-sc-list{display:grid;gap:12px}
 .vz-sc-record{overflow:hidden;border-radius:20px;background:#fff}
 .vz-sc-record-main{padding:16px 16px 10px}
 .vz-sc-record-head{display:flex;align-items:flex-start;gap:8px}
 .vz-sc-record-check{position:relative;display:grid;place-items:center;flex:none;width:44px;height:44px;margin:-10px 0 0 -10px;cursor:pointer}
 .vz-sc-record-check input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.vz-sc-record-check .vz-sc-checkbox{pointer-events:none}
 .vz-sc-record-name{min-width:0;flex:1}
 .vz-sc-record-name strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;line-height:22px;font-weight:600}
 .vz-sc-record-name small{display:block;margin-top:2px;color:#667085;font-size:12px;line-height:18px}

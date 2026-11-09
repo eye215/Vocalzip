@@ -316,6 +316,7 @@ function controls(main){
  const root=main.querySelector('[data-suggest]');if(!root)return;
  const count=state.chosen.size,done=state.items.filter(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate).length;
  const counter=root.querySelector('[data-counter]');if(counter)counter.textContent=count?'선택 '+count+'개':'';
+ const selectionMore=root.querySelector('[data-selection-more]');if(selectionMore)selectionMore.disabled=state.running||!count;
  const all=root.querySelector('[data-select-all]'),scope=filteredItems();
  if(all){all.disabled=state.running||!scope.length;all.setAttribute('aria-pressed',String(!!scope.length&&scope.every(m=>state.chosen.has(m.id))))}
  const analyzeBtn=root.querySelector('[data-analyze]'),applyBtn=root.querySelector('[data-apply]');
@@ -342,6 +343,16 @@ function openRecordMenu(main,item){
    state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);state.results.delete(item.id);state.recognitions.delete(item.id);
    saveCheckpoint();draw(main);VZ.toast('파일을 삭제했어요. 연습·레슨 기록은 남아 있어요.');
   })};
+ }});
+}
+function openSelectionMenu(main){
+ const root=main.querySelector('[data-suggest]'),count=state.chosen.size;
+ if(!count||state.running)return;
+ const ready=state.items.some(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate);
+ VZ.sheet({title:'선택한 녹음 '+count+'개',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-selection-analyze>분석 시작 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-apply'+(ready?'':' disabled')+'>추천대로 곡 지정 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-clear>선택 해제 <i class="ph ph-x"></i></button></div>',onMount:(el,close)=>{
+  el.querySelector('[data-selection-analyze]').onclick=()=>{close();root.querySelector('[data-analyze]').click()};
+  el.querySelector('[data-selection-apply]').onclick=()=>{close();root.querySelector('[data-apply]').click()};
+  el.querySelector('[data-selection-clear]').onclick=()=>{close();state.chosen.clear();saveCheckpoint();draw(main)};
  }});
 }
 function draw(main){
@@ -538,7 +549,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
  <div class="vz-sc-status-foot"><span>곡 지정은 확인 후 적용</span><span data-spend hidden></span></div></div>
  <div class="vz-sc-sticky"><div class="vz-sc-section-head"><h2>미지정 녹음</h2><span>식별 실패·분석 실패 포함</span></div>
  <div class="vz-sc-tabs" role="tablist" aria-label="분석 상태"><button class="vz-sc-tab" role="tab" type="button" data-filter="all" aria-selected="true">전체 0</button><button class="vz-sc-tab" role="tab" type="button" data-filter="unknown" aria-selected="false">식별 불가</button><button class="vz-sc-tab" role="tab" type="button" data-filter="failed" aria-selected="false">분석 실패</button><button class="vz-sc-tab" role="tab" type="button" data-filter="complete" aria-selected="false">분석 완료</button></div>
- <div class="vz-sc-selection"><button type="button" class="vz-sc-select-all" data-select-all aria-pressed="false"><span class="vz-sc-checkbox" aria-hidden="true"></span>전체선택</button><span data-counter></span></div></div>
+ <div class="vz-sc-selection"><button type="button" class="vz-sc-select-all" data-select-all aria-pressed="false"><span class="vz-sc-checkbox" aria-hidden="true"></span>전체선택</button><div class="vz-sc-selection-end"><span data-counter></span><button type="button" class="vz-sc-selection-more" data-selection-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three" aria-hidden="true"></i></button></div></div></div>
  <div class="vz-sc-list" data-suggest-list></div><button type="button" class="vz-sc-more" data-more hidden>더 보기 <i class="ph ph-caret-down"></i></button><span class="sr-only" data-page-count aria-live="polite"></span>
  <p role="status" class="vz-sc-progress" data-progress>목록 확인 중…</p><button class="btn ghost" type="button" data-stop hidden>분석 중단</button>
  <details class="reference-options vz-sc-advanced" hidden><summary>가사 없는 곡용 기준 만들기 (고급)</summary><p class="small muted">가사를 입력하기 어려운 곡만 녹음으로 기준을 만들어요. 최초 음성 변환에 비용이 발생해요. 이미 저장한 기준은 계속 매칭에 사용돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted" data-ref-list></p><button class="btn ghost block" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted"><a href="#/songs">가사는 곡 상세의 가사 탭에서 입력 →</a></p></details>
@@ -558,6 +569,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   const previous=new Set(loadCheckpoint());state.chosen=new Set(state.items.filter(m=>previous.has(m.id)).map(m=>m.id));
   if(state.cloudReady)root.querySelector('[data-progress]').textContent=state.items.length+'개 미지정 녹음'+(state.chosen.size?' · 이전 선택 '+state.chosen.size+'개 복원':'');
   root.querySelector('[data-select-all]').onclick=()=>{const scope=filteredItems(),all=scope.length&&scope.every(m=>state.chosen.has(m.id));for(const item of scope)all?state.chosen.delete(item.id):state.chosen.add(item.id);saveCheckpoint();draw(main)};
+  root.querySelector('[data-selection-more]').onclick=()=>openSelectionMenu(main);
   root.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{state.filter=button.dataset.filter;state.page=0;draw(main)});
   root.querySelector('[data-more]').onclick=()=>{if(!state.running){state.page++;draw(main)}};
   root.querySelector('[data-stop]').onclick=()=>{state.cancel=true;state.controller?.abort();root.querySelector('[data-progress]').textContent='분석을 중단합니다.'};

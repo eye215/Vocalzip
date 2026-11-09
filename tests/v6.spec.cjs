@@ -1952,6 +1952,15 @@ test('Song check selects recordings, keeps controls sticky and exposes individua
  await expect(tip).toBeHidden();
  await page.locator('.vz-sc-record input[type=checkbox]').check();
  await expect(page.locator('[data-counter]')).toHaveText('선택 1개');
+ await page.getByRole('button',{name:'선택한 녹음 더보기'}).click();
+ const selectionMenu=page.getByRole('dialog',{name:'선택한 녹음 1개'});
+ await expect(selectionMenu.getByRole('button',{name:/분석 시작/})).toBeEnabled();
+ await expect(selectionMenu.getByRole('button',{name:/추천대로 곡 지정/})).toBeDisabled();
+ await selectionMenu.getByRole('button',{name:/선택 해제/}).click();
+ await expect(page.locator('[data-counter]')).toBeEmpty();
+ await expect(page.getByRole('button',{name:'선택한 녹음 더보기'})).toBeDisabled();
+ await page.locator('[data-select-all]').click();
+ await expect(page.locator('[data-counter]')).toHaveText('선택 1개');
  await page.locator('[data-select-all]').click();
  await expect(page.locator('[data-counter]')).toBeEmpty();
  await page.getByRole('button',{name:'곡 확인 설정'}).click();
