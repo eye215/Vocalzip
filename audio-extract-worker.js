@@ -22,7 +22,14 @@ async function prepare({file,id,videoHint,inspect}){
   catch(error){if(videoHint)throw Error('영상의 음성 정보를 읽지 못했어요. 음원 파일로 가져와 주세요.');success=true;self.postMessage({type:'done',metadata:fallback,inspect:{duration:null,readable:false}});return}
   const metadata=self.VzipMediaDates.pick(tags,file.lastModified);
   // Inspect only: date and length for the import filter, without extracting or writing anything.
-  if(inspect){let duration=null;try{duration=await input.computeDuration()}catch{}success=true;self.postMessage({type:'done',metadata,inspect:{duration:Number.isFinite(duration)?Math.round(duration*10)/10:null,hasVideo:videos.length>0,hasAudio:audios.length>0,readable:true}});return}
+  if(inspect){
+   let duration=null;try{duration=await input.computeDuration()}catch{}
+   let codec=null;try{if(audios.length===1)codec=await audios[0].getCodec()}catch{}
+   // Only a parser-confirmed audio file can skip a second parse. WAV compression and video verification still run.
+   const webkit=/AppleWebKit/i.test(navigator.userAgent)&&!/Chrome|Chromium|Edg/i.test(navigator.userAgent)||/iPhone|iPad|iPod/i.test(navigator.userAgent);
+   const flacEligible=audios.length===1&&['pcm-s16','pcm-s24'].includes(codec)&&!webkit&&file.size<=400*1024*1024;
+   success=true;self.postMessage({type:'done',metadata,inspect:{duration:Number.isFinite(duration)?Math.round(duration*10)/10:null,hasVideo:videos.length>0,hasAudio:audios.length>0,reusableAudio:!videos.length&&audios.length>0&&!flacEligible,readable:true}});return;
+  }
   if(!videos.length&&!videoHint){
    // Uncompressed WAV becomes FLAC (lossless) only when decoding both gives the very same samples.
    let flac=null;try{flac=await toFlac(b,input,audios,file,metadata,progress,iterators)}catch(error){flac={error:error.message}}

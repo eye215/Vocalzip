@@ -50,8 +50,11 @@ const media = page => page.evaluate(() => window.vzipReadMedia());
 const sheet = page => page.locator('.sheet');
 const openLibraryImport=async page=>{
  await page.locator('[data-imp]').click();
- await expect(page.locator('.sheet')).toHaveCount(1);
+ const picker=page.waitForEvent('filechooser');
+ await page.getByRole('menuitem',{name:'파일 선택',exact:true}).click();
+ page.__libraryImportChooser=await picker;
 };
+const pickLibraryImportFiles=(page,files)=>page.__libraryImportChooser.setFiles(files);
 
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
@@ -298,7 +301,7 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   await page.evaluate(() => { window.__vzipBatchSize = 10; });
   await page.goto('/#/library');
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles(files);
+  await pickLibraryImportFiles(page,files);
   await expect(page.locator('.toast').last()).toContainText('22개 파일은 대량 업로드 화면에서');
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
   const dash = page.locator('[data-dash]'), n = k => dash.locator('[data-count="' + k + '"] b');
@@ -570,14 +573,14 @@ test('파일 가져오기 quietly leaves out files that are not audio or video',
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles([{name:'take.wav', mimeType:'audio/wav', buffer:b}, {name:'가사.txt', mimeType:'text/plain', buffer:Buffer.from('가사')}, {name:'._take.wav', mimeType:'audio/wav', buffer:Buffer.from('x')}]);
+  await pickLibraryImportFiles(page,[{name:'take.wav', mimeType:'audio/wav', buffer:b}, {name:'가사.txt', mimeType:'text/plain', buffer:Buffer.from('가사')}, {name:'._take.wav', mimeType:'audio/wav', buffer:Buffer.from('x')}]);
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
   await expect(sheet(page).locator('.up-row')).toHaveCount(1);
   await expect(sheet(page)).not.toContainText('가사.txt');
   // Only non-media picked: nothing to import.
   await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles({name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')});
+  await pickLibraryImportFiles(page,{name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')});
   await expect(page.locator('.toast').last()).toContainText('고른 파일 중에 음성·영상 파일이 없어요');
 });
 
@@ -586,7 +589,7 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles({name:'2025-08-08_22-09-00.wav', mimeType:'audio/wav', buffer:b});
+  await pickLibraryImportFiles(page,{name:'2025-08-08_22-09-00.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
   const [saved] = await media(page);
@@ -596,7 +599,7 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   const expected = require('../media-date.js').fromName('11-3 scale.wav').recordedDate;
   await page.keyboard.press('Escape'); await page.goto('/#/home'); await page.goto('/#/library');
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles({name:'11-3 scale.wav', mimeType:'audio/wav', buffer:b});
+  await pickLibraryImportFiles(page,{name:'11-3 scale.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
   expect((await media(page)).find(m => m.id !== saved.id)).toMatchObject({recordedDate:expected, dateSource:'filename'});
@@ -894,7 +897,7 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.songId === 's2' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
   const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
   const buffer = Buffer.from(wav);
-  await sheet(page).locator('[data-file]').setInputFiles([
+  await pickLibraryImportFiles(page,[
     {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 1개는 뺐어요'); // left out, not listed
   await expect(sheet(page)).not.toContainText('notes.txt');
@@ -1032,7 +1035,7 @@ test('Video import keeps only the original audio and files it under the capture 
   await boot(page, {media:false});
   await page.goto('/#/library');
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles(fixture);
+  await pickLibraryImportFiles(page,fixture);
   await expect(sheet(page).getByText('영상 → 음성만 저장')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:60000});
@@ -1647,7 +1650,7 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
   const sr = 8000, n = sr * 2, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:b});
+  await pickLibraryImportFiles(page,{name:'take.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
   await expect(sheet(page).locator('[data-summary]')).toContainText('클라우드 업로드는 자동으로 이어져요');
@@ -1703,7 +1706,7 @@ test('WAV imports are stored as FLAC only after every sample is checked against 
   for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(Math.sin(i / (20 + c * 3)) * 9000 + (rnd() - 0.5) * 600))), 44 + (i * ch + c) * 2);
   await page.goto('/#/library');
   await openLibraryImport(page);
-  await sheet(page).locator('[data-file]').setInputFiles({name:'warmup.wav', mimeType:'audio/wav', buffer:b});
+  await pickLibraryImportFiles(page,{name:'warmup.wav', mimeType:'audio/wav', buffer:b});
   await expect(sheet(page).getByText('WAV → FLAC 무손실 압축')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:45000});
@@ -2398,4 +2401,26 @@ test('Lesson deletion from stale settlement version stops without a dialog or de
  await expect(page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true})).toHaveCount(0);
  expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
  expect(await deletionBillingFrame(page)).toEqual(before);
+});
+
+test('Upload startup inspects only four files before sending and holds background backup through all windows',async({page})=>{
+ await boot(page,{media:false});
+ await page.evaluate(()=>{
+  window.__startup={inspected:0,first:0,sent:0,holds:0,firstHolds:0};
+  window.vzipCloudSignedIn=()=>true;window.vzipCloudUserId=()=> 'ui-test-user';
+  VZ.media.list=async()=>[];
+  const hold=VZ.media.holdBackup;
+  VZ.media.holdBackup=on=>{window.__startup.holds+=on?1:-1;hold(on);};
+  window.vzipInspectMedia=async()=>{window.__startup.inspected++;return {readable:true,duration:32,hasVideo:false,hasAudio:true,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}};};
+  VZ.media.importFile=async(file,choice)=>{
+   if(!window.__startup.sent){window.__startup.first=window.__startup.inspected;window.__startup.firstHolds=window.__startup.holds;}
+   window.__startup.sent++;return {id:choice.id,cloud:true,size:file.size,durationSeconds:32,recordedDate:'2026-11-09'};
+  };
+  VZ.openImportHub({files:Array.from({length:9},(_,i)=>new File([new Uint8Array([i,1,2,3])],'part-'+i+'.m4a',{type:'audio/mp4'}))});
+ });
+ await expect.poll(()=>page.evaluate(()=>window.__startup.sent)).toBe(9);
+ await expect.poll(()=>page.evaluate(()=>window.__startup.holds)).toBe(0);
+ const result=await page.evaluate(()=>window.__startup);
+ expect(result.first).toBe(4);expect(result.firstHolds).toBeGreaterThanOrEqual(2);
+ expect(result.inspected).toBe(9);
 });

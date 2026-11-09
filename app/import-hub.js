@@ -146,17 +146,17 @@ async function analyze(files) {
   hub.phase = 'review'; hub.progress = ''; draw();
 }
 /* ---------- automatic batches (many files from 파일 가져오기) ----------
- * No review step: files are checked and uploaded 250 at a time, one batch after another. Duplicates are left out,
+ * No review step: files are checked and uploaded in short windows, one batch after another. Duplicates are left out,
  * unreadable files are listed as failed, and a file without any date keeps the date the file itself carries
  * (file modified) — it can be changed later in the library. Pausing keeps the remaining files for "이어서 올리기". */
-const BATCH = () => window.__vzipBatchSize || 250; // tests use small batches
+const BATCH = () => window.__vzipBatchSize || 4; // tests use small batches
 async function runAuto(files) {
   if (hub.running || hub.autoRunning) return;
   if (!window.vzipCloudSignedIn?.()) { VZ.toast('여러 파일을 한꺼번에 올리려면 먼저 로그인해 주세요. 로그인 후 다시 선택하면 돼요.', 'error'); if (files) { hub = fresh(); draw(); } return; }
   if (files) { hub.pendingFiles = files.slice(); hub.totalFiles = files.length; hub.batchCount = Math.ceil(files.length / BATCH()); hub.batchNo = 0; }
   hub.auto = true; hub.phase = 'importing'; hub.paused = false; hub.notice = ''; hub.batch ||= VZ.uid(); hub.startedAt ||= Date.now(); hub.autoRunning = true;
-  M.keepAwake(true); draw();
-  try { await autoLoop(); } finally { hub.autoRunning = false; M.keepAwake(false); hub.stage = ''; saveQueue(true); if (host()) draw(); }
+  M.keepAwake(true); M.holdBackup?.(true); draw();
+  try { await autoLoop(); } finally { hub.autoRunning = false; M.keepAwake(false); M.holdBackup?.(false); hub.stage = ''; saveQueue(true); if (host()) draw(); }
 }
 async function autoLoop() {
   hub.known ||= await knownFiles();
@@ -217,7 +217,7 @@ async function importRows(rows) {
     try {
       const song = VZ.song(row.song);
       const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
-      const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct},
+      const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct, durationSeconds:row.duration},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
       row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
     } catch (e) {

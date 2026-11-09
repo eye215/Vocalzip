@@ -58,3 +58,43 @@ test('iPhone spatial-audio MOV keeps the copyable AAC mix and skips the extra tr
  expect(result.metadata.audioExtraction.skippedAudioTracks).toHaveLength(1);
  expect(result.metadata.recordedDate).toBe('2026-11-02');
 });
+
+test('Inspected AAC reuses its original bytes, metadata and duration without a second worker',async({page})=>{
+ test.setTimeout(90000);await selected(page,'dated-video.mp4');
+ const value=await page.evaluate(async()=>{
+  const source=await vzipPrepareMedia(document.querySelector('#vzip-hub-upload').files[0]);
+  try{
+   const file=new File([source.file],'audio.m4a',{type:'audio/mp4',lastModified:source.file.lastModified});
+   const Original=Worker;let workers=0;
+   window.Worker=class extends Original{constructor(...args){super(...args);workers++;}};
+   try{
+    const inspection=await vzipInspectMedia(file);inspection.metadata.recordedDate='1999-01-01';
+    const prepared=await vzipPrepareMedia(file);
+    const original=new Uint8Array(await source.file.arrayBuffer()),actual=new Uint8Array(await prepared.file.arrayBuffer());
+    const same=prepared.file===file&&actual.length===original.length&&actual.every((n,i)=>n===original[i]);
+    return {workers,same,metadata:prepared.metadata,duration:inspection.duration};
+   }finally{window.Worker=Original;}
+  }finally{await source.dispose();}
+ });
+ expect(value.workers).toBe(1);expect(value.same).toBe(true);
+ expect(value.metadata.recordedDate).toBe('2024-03-01');expect(value.metadata.durationSeconds).toBeCloseTo(value.duration,1);
+});
+test('Video disguised as audio never bypasses original-packet extraction after inspection',async({page})=>{
+ test.setTimeout(90000);await selected(page,'dated-video.mp4');
+ const result=await page.evaluate(async()=>{
+  const source=document.querySelector('#vzip-hub-upload').files[0],file=new File([source],'disguised.m4a',{type:'audio/mp4'});
+  const inspected=await vzipInspectMedia(file),prepared=await vzipPrepareMedia(file);
+  try{return {video:inspected.hasVideo,reused:prepared.file===file,proof:prepared.metadata.audioExtraction}}finally{await prepared.dispose()}
+ });
+ expect(result.video).toBe(true);expect(result.reused).toBe(false);expect(result.proof.audioPacketCopyVerified).toBe(true);
+});
+test('Inspected PCM retains verified FLAC conversion on Chromium and original WAV on WebKit',async({page,browserName})=>{
+ test.setTimeout(90000);
+ const result=await page.evaluate(async bytes=>{
+  const file=new File([new Uint8Array(bytes)],'pcm.wav',{type:'audio/wav'});
+  await vzipInspectMedia(file);const prepared=await vzipPrepareMedia(file);
+  try{return {type:prepared.file.type,proof:prepared.metadata.losslessFlac,same:prepared.file===file}}finally{await prepared.dispose()}
+ },[...require('./helpers/r2-fixture.cjs').wav(3)]);
+ if(browserName==='webkit'){expect(result.type).toBe('audio/wav');expect(result.same).toBe(true);}
+ else{expect(result.type).toBe('audio/flac');expect(result.proof.samplesVerified).toBe(true);}
+});
