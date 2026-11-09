@@ -332,10 +332,10 @@ VZ.route('calendar', {title:'일정', actions:() => '<a class="icon-btn" href="#
     grid.innerHTML = html;
     const e = map.get(calDay) || {l:[], p:[], rl:[], rp:[], rs:[], ps:[]}, all = new Map(media.map(m => [m.id, m])), wired = [];
     // Each lesson/practice shows its own recordings underneath it.
-    // One card per group; each record is a row with its recordings as slim ▶ lines underneath (no repeated date).
+    // Records keep their attached recordings; each unlinked recording is a separate playable card.
     const minis = ids => { const items = ids.map(id => all.get(id)).filter(Boolean); wired.push(...items); return items.length ? '<div class="minis" data-r>' + items.map(VZ.mediaMini).join('') + '</div>' : ''; };
     const owner = (row, ids, kind) => '<div class="cal-own" data-kind="'+kind+'">' + row + minis(ids) + '</div>';
-    const loose = (title, items, kind) => items.length ? '<div class="cal-own" data-kind="'+kind+'"><div class="cal-loose small muted">' + title + '</div>' + minis(items.map(m => m.id)) + '</div>' : '';
+    const loose = (title, items, kind) => { if (!items.length) return ''; wired.push(...items); return '<p class="cal-loose-heading">' + title + '</p>' + items.map(m => '<div class="cal-own cal-loose-card" data-kind="' + kind + '" data-r>' + VZ.mediaMini(m) + '</div>').join(''); };
     const group = rows => rows ? '<div class="cal-list">' + rows + '</div>' : '';
     const lessonRow=l=>'<a class="item vz-calendar-item" data-kind="lesson" href="#/lesson/'+esc(l.id)+'"><span class="avatar">'+lessonNoteIcon+'</span><span class="item-main"><span class="item-title">'+esc(lessonRecordTitle(l))+'</span><span class="item-sub">'+esc(lessonRecordSub(l))+'</span></span>'+(VZ.lessonStatus(l)==='scheduled'?'':VZ.statusBadge(VZ.lessonStatus(l)))+'<i class="ph ph-caret-right chev"></i></a>';
     const lessonsHtml = group(e.l.sort(VZ.lessonSort).map(l => owner(lessonRow(l), (l.recordings || []).map(r => r.id),'lesson')).join('') + loose('기록에 연결되지 않은 레슨 녹음', e.rl,'lesson'));
