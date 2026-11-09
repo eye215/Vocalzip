@@ -75,11 +75,14 @@ V.repertoire={
  songPanel:(host,s,media)=>{
   if(!host)return;const r=info(s),score=A.proficiency({repertoire:r}),take=media.find(m=>m.id===r.takeId&&!V.db.deleted?.media?.includes(m.id));
   const work=[s.show,r.role].filter(Boolean).join(' · '),keys=[r.originalKey&&'원키 '+r.originalKey,r.practiceKey&&'연습키 '+r.practiceKey,r.stageKey&&'공연키 '+r.stageKey].filter(Boolean).join(' · ');
-  host.innerHTML='<section class="card archive-song" aria-label="나의 레퍼토리">' +
-    '<div class="archive-song-head"><h2>나의 레퍼토리</h2><button type="button" class="archive-song-status" data-rep="status">'+E(A.states[r.status]||'상태 지정')+' <i class="ph ph-caret-right" aria-hidden="true"></i></button></div>' +
-    '<button type="button" class="archive-song-work" data-rep="info"><span>작품 · 배역</span><strong class="'+(work?'':'is-empty')+'">'+E(work||'입력하기')+'</strong><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
-    '<div class="archive-song-meta"><button type="button" data-rep="skills"><span>숙련도</span><strong class="'+(score?'':'is-empty')+'">'+E(score?score.toFixed(1)+'/5':'미평가')+'</strong></button><button type="button" data-rep="keys"><span>키</span><strong class="'+(keys?'':'is-empty')+'">'+E(keys||'미입력')+'</strong></button></div>' +
-    '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'녹음을 불러올 수 없어요':'아직 지정한 녹음이 없어요')+'</small></span><span class="archive-song-take-action">'+(r.takeId?'변경':'지정')+' <i class="ph ph-caret-right" aria-hidden="true"></i></span></button>' +
+  const row=(key,label,value,extra='')=>'<button type="button" class="archive-song-row '+extra+'" data-rep="'+key+'"><strong>'+label+'</strong><span class="archive-song-value '+(value?'':'is-empty')+'">'+E(value||({status:'상태 지정',info:'입력하기',skills:'미평가',keys:'미입력'}[key]))+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
+  host.innerHTML='<section class="archive-song" aria-label="나의 레퍼토리">' +
+    '<h2 class="archive-song-title">나의 레퍼토리</h2>' +
+    row('status','상태',A.states[r.status]||'','archive-song-status') +
+    row('info','작품 · 배역',work) +
+    row('skills','숙련도',score?score.toFixed(1)+'/5':'') +
+    row('keys','키 정보',keys) +
+    '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'녹음을 불러올 수 없어요':'아직 지정한 녹음이 없어요')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
     (r.memo?'<p class="archive-note">'+E(r.memo)+'</p>':'') +
     '<div data-take-player>'+(take?'<div class="list">'+V.mediaRow(take)+'</div>':r.takeId?'<p class="small muted">원본 연결은 유지됩니다.</p>':'')+'</div></section>';
   host.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>editRepertoire(s.id,b.dataset.rep));host.querySelector('[data-take]').onclick=()=>chooseTake(s.id);if(take)V.wireMedia(host.querySelector('[data-take-player] .list'),[take]);
