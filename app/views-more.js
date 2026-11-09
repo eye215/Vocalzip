@@ -10,15 +10,14 @@ let importRunning = false;
 VZ.importSheet = ({songId = ''} = {}) => {
   if (importRunning) { VZ.toast('이미 파일을 가져오는 중이에요.', 'error'); return; }
   const signed = !!window.vzipCloudSignedIn?.();
-  VZ.sheet({title:'파일 가져오기', body:'<div data-step1><label class="btn block" style="cursor:pointer"><i class="ph ph-folder-open"></i>음성·영상 파일 선택<input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.mov,.mp4,.m4v,.webm,.ogg,.flac" class="sr-only" data-file></label><p class="small muted">여러 파일을 한 번에 고를 수 있어요. 파일당 최대 1GB · 원본 음질 그대로 저장해요. 영상 파일은 음성만 추출해 음원으로 저장해요.' + (signed ? '' : '<br>로그인하지 않으면 25MB 이하 파일만 이 기기에 저장돼요.') + '</p><button type="button" class="btn ghost block" data-hub><i class="ph ph-funnel"></i>사진·음성 메모에서 기간·길이로 골라 가져오기</button></div><div data-step2 hidden></div>',
+  VZ.sheet({title:'파일 가져오기', body:'<div data-step1><label class="btn block" style="cursor:pointer"><i class="ph ph-image"></i>사진 보관함<input type="file" multiple accept="video/*" class="sr-only" data-file></label><label class="btn ghost block" style="cursor:pointer;margin-top:8px"><i class="ph ph-video-camera"></i>비디오 촬영<input type="file" accept="video/*" capture="environment" class="sr-only" data-file></label><label class="btn ghost block" style="cursor:pointer;margin-top:8px"><i class="ph ph-folder-open"></i>파일 선택<input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.mov,.mp4,.m4v,.webm,.ogg,.flac" class="sr-only" data-file></label><p class="small muted">여러 파일을 한 번에 고를 수 있어요. 파일당 최대 1GB · 원본 음질 그대로 저장해요. 영상 파일은 음성만 추출해 음원으로 저장해요.' + (signed ? '' : '<br>로그인하지 않으면 25MB 이하 파일만 이 기기에 저장돼요.') + '</p></div><div data-step2 hidden></div>',
     foot:'<div data-foot hidden class="btn-row"><button type="button" class="btn ghost" data-cancel>취소</button><button type="button" class="btn" data-start style="flex:2">가져오기</button></div>',
     onClose:() => { if (importRunning) abort?.abort(); },
     onMount:(el, close) => {
       const wrap = el.parentNode, step2 = el.querySelector('[data-step2]'), foot = wrap.querySelector('[data-foot]');
-      el.querySelector('[data-hub]').onclick = () => { close(); VZ.openImportHub(); };
       let rows = [];
       const songOpts = v => '<option value="">곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (s.id === v ? ' selected' : '') + '>' + esc(VZ.songLabel(s)) + '</option>').join('');
-      el.querySelector('[data-file]').onchange = e => {
+      el.querySelectorAll('[data-file]').forEach(input => input.onchange = e => {
         // Only audio and video files are taken (text, images, documents, hidden system files are left out quietly).
         const picked = [...e.target.files]; e.target.value = '';
         const files = picked.filter(f => /^(audio|video)\//.test(M.typeOf(f)) && !/^\./.test(f.name)), skipped = picked.length - files.length;
@@ -34,19 +33,22 @@ VZ.importSheet = ({songId = ''} = {}) => {
           else if (!file.size) error = '빈 파일이에요.';
           else if (file.size > (window.VzipChunks?.MAX_SIZE || 1073741824)) error = '1GB를 넘는 파일은 가져올 수 없어요.';
           else if (file.size > M.LOCAL_LIMIT && !window.vzipCloudSignedIn?.()) error = '25MB 초과 파일은 로그인이 필요해요.';
-          return {file, id:VZ.uid(), state:error ? 'invalid' : 'ready', error, songId, video:type.startsWith('video/')};
+          const candidates = VZ.suggestSongs?.(file.name) || [];
+          const autoSongId = candidates[0]?.score >= 0.95 && (!candidates[1] || candidates[1].score < 0.95) ? candidates[0].id : '';
+          const namedDate = window.VzipMediaDates?.fromName?.(file.name) || null;
+          return {file, id:VZ.uid(), state:error ? 'invalid' : 'ready', error, songId:songId || autoSongId, namedDate, video:type.startsWith('video/')};
         });
         el.querySelector('[data-step1]').hidden = true; step2.hidden = false; foot.hidden = false;
         step2.innerHTML = '<fieldset class="field" style="border:0;padding:0"><legend>종류 (모든 파일)</legend><div class="seg" role="radiogroup" aria-label="가져올 파일 종류">' + M.OCCASIONS.map(([k, v]) => '<button type="button" role="radio" data-occ="' + k + '" aria-pressed="' + (k === occasion) + '" aria-checked="' + (k === occasion) + '">' + v + '</button>').join('') + '</div></fieldset>' + (rows.length > 1 ? '<label class="field"><span>모든 파일의 곡 한 번에 지정</span><select data-bulk data-pick="song"><option value="">선택…</option>' + songOpts('').replace('<option value="">곡 미지정</option>', '<option value="__none">곡 미지정</option>') + '</select></label>' : '') +
-          '<p class="up-done" data-done role="status" hidden></p><div class="list up-saved" data-saved hidden></div><p class="small muted" style="margin-top:0">날짜를 비워 두면 파일 속 촬영·녹음 날짜(없으면 파일 수정일)로 자동 정리해요.</p><div class="stack" data-rows>' + rows.map((r, i) =>
+          '<p class="up-done" data-done role="status" hidden></p><div class="list up-saved" data-saved hidden></div><p class="small muted" style="margin-top:0">파일명 날짜·곡 제목을 먼저 인식해요. 인식되지 않은 날짜는 파일 속 촬영·녹음 날짜(없으면 수정일)를 사용해요.</p><div class="stack" data-rows>' + rows.map((r, i) =>
           '<div class="up-row' + (r.state === 'invalid' ? ' failed' : '') + '" data-i="' + i + '"><div class="up-head"><strong title="' + esc(r.file.name) + '">' + esc(r.file.name) + '</strong><span class="small muted">' + VZ.size(r.file.size) + '</span></div>' +
           (r.state === 'invalid' ? '<div class="small" style="color:var(--danger)">' + esc(r.error) + ' (건너뜀)</div>' :
-          (r.video ? '<span class="badge accent" style="justify-self:start">영상 → 음성만 저장</span>' : /\.wav$/i.test(r.file.name) || /wav/.test(r.file.type) ? '<span class="badge accent" style="justify-self:start">WAV → FLAC 무손실 압축</span>' : '') + '<select aria-label="' + esc(r.file.name) + ' 곡" data-song data-pick="song">' + songOpts(r.songId) + '</select><label class="up-date"><span>녹음 날짜 <em>비우면 자동</em></span><input type="date" aria-label="' + esc(r.file.name) + ' 날짜" data-date></label><div class="bar-mini"><i></i></div><div class="row between"><span class="small muted" data-st>대기 중</span><button type="button" class="btn sm ghost" data-retry hidden>다시 시도</button></div>') + '</div>').join('') + '</div><p class="small muted" data-summary role="status"></p>';
+          (r.video ? '<span class="badge accent" style="justify-self:start">영상 → 음성만 저장</span>' : /\.wav$/i.test(r.file.name) || /wav/.test(r.file.type) ? '<span class="badge accent" style="justify-self:start">WAV → FLAC 무손실 압축</span>' : '') + '<select aria-label="' + esc(r.file.name) + ' 곡" data-song data-pick="song">' + songOpts(r.songId) + '</select><label class="up-date"><span>녹음 날짜 <em>' + (r.namedDate ? '파일명에서 인식' : '비우면 자동') + '</em></span><input type="date" aria-label="' + esc(r.file.name) + ' 날짜" data-date value="' + esc(r.namedDate?.recordedDate || '') + '"></label>' + (r.namedDate && !r.namedDate.timeless ? '<span class="small muted">파일명 시각 ' + esc(new Date(r.namedDate.created).toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', second:'2-digit'})) + ' 적용</span>' : '') + '<div class="bar-mini"><i></i></div><div class="row between"><span class="small muted" data-st>대기 중</span><button type="button" class="btn sm ghost" data-retry hidden>다시 시도</button></div>') + '</div>').join('') + '</div><p class="small muted" data-summary role="status"></p>';
         step2.querySelectorAll('[data-occ]').forEach(b => b.onclick = () => { occasion = b.dataset.occ; step2.querySelectorAll('[data-occ]').forEach(x => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); }); });
         step2.querySelector('[data-bulk]')?.addEventListener('change', ev => { const v = ev.target.value === '__none' ? '' : ev.target.value; if (!ev.target.value) return; step2.querySelectorAll('[data-song]').forEach(s => { s.value = v; }); });
         step2.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => run([rows[+b.closest('[data-i]').dataset.i]]));
         wrap.querySelector('[data-start]').disabled = !rows.some(r => r.state === 'ready');
-      };
+      });
       let abort = null, occasion = 'practice'; const savedItems = [];
       const ui = r => step2.querySelector('[data-i="' + rows.indexOf(r) + '"]');
       const setRow = (r, text, pct) => { const u = ui(r); u.querySelector('[data-st]').textContent = text; if (pct != null) u.querySelector('.bar-mini i').style.width = pct + '%'; u.classList.toggle('failed', r.state === 'failed' || r.state === 'cancelled'); u.classList.toggle('done', r.state === 'done'); u.querySelector('[data-retry]').hidden = !['failed', 'cancelled'].includes(r.state); };
@@ -102,20 +104,37 @@ VZ.importSheet = ({songId = ''} = {}) => {
 /* ---------- 보관함 ---------- */
 const lib = {kind:'all', origin:'all', song:'', q:''};
 const monthTitle = ym => ym ? Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월' : '날짜 미상';
-VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-hub-open aria-label="기존 자료 한꺼번에 가져오기"><i class="ph ph-tray-arrow-down"></i></button><button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button>', render() {
+VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button>', render() {
   const seg = (k, opts, label) => '<div class="seg lib-seg" role="group" aria-label="' + label + '">' + opts.map(([v, t]) => '<button type="button" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + t + '</button>').join('') + '</div>';
   return '<div hidden class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·곡·메모 검색" aria-label="보관함 검색" data-q value="' + esc(lib.q) + '"></div>' +
-    '<div class="vz-library-tabs">'+seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분')+'<button class="icon-btn" data-library-search aria-label="보관함 검색"><i class="ph ph-magnifying-glass"></i></button></div>' +
-    '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 확인 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div></div><div class="lib-selection-tools" aria-label="녹음 선택"><div class="lib-selects"><select aria-label="형식 필터" data-kind data-pick><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>파일 형식 전체</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select><select aria-label="곡 필터" data-song data-pick="song"><option value="">곡 전체</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select></div><button type="button" class="lib-select-start" data-select-mode>선택</button><button type="button" class="lib-select-cancel" data-lib-select-cancel hidden>취소</button><div class="lib-selection-left" hidden><button type="button" class="lib-select-all" data-lib-select-all aria-pressed="false"><span class="lib-check" aria-hidden="true"></span>전체 선택</button></div><div class="lib-selection-meta" hidden><strong data-lib-selected-count>0개 선택</strong><button type="button" class="lib-bulk-more" data-lib-bulk-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three"></i></button></div></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
+    '<div class="vz-library-tabs">'+seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분')+'</div>' +
+    '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 확인 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div><button type="button" class="icon-btn vz-filter-icon" data-library-filter aria-label="보관함 필터" aria-pressed="false"><i class="ph ph-sliders-horizontal"></i></button><button type="button" class="icon-btn" data-library-search aria-label="보관함 검색"><i class="ph ph-magnifying-glass"></i></button></div><div class="lib-selects" hidden><select aria-label="형식 필터" data-kind><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>파일 형식 전체</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select><select aria-label="곡 필터" data-song><option value="">곡 전체</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select></div><div class="lib-selection-tools" aria-label="녹음 선택"><button type="button" class="lib-select-start" data-select-mode>선택</button><button type="button" class="lib-select-cancel" data-lib-select-cancel hidden>취소</button><div class="lib-selection-left" hidden><button type="button" class="lib-select-all" data-lib-select-all aria-pressed="false"><span class="lib-check" aria-hidden="true"></span>전체 선택</button></div><div class="lib-selection-meta" hidden><strong data-lib-selected-count>0개 선택</strong><button type="button" class="lib-bulk-more" data-lib-bulk-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three"></i></button></div></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   VZ.serverAnalysisCard?.(main.querySelector('[data-server-analysis]')); // app/server-analysis.js
   document.querySelector('[data-imp]').setAttribute('aria-label','파일 가져오기');
   document.querySelector('[data-imp]').onclick = () => VZ.importSheet();
-  main.querySelector('[data-library-search]').onclick=()=>VZ.collectionSearch('보관함 검색','제목·곡·메모 검색',lib.q,value=>{const input=main.querySelector('[data-q]');input.value=value;input.dispatchEvent(new Event('input'));});
-  document.querySelector('[data-hub-open]').onclick = () => VZ.openImportHub();
+  main.querySelector('[data-library-search]').onclick=()=>{
+    document.querySelector('.vz-library-search-overlay')?.remove();
+    const overlay=document.createElement('div');overlay.className='vz-library-search-overlay';
+    overlay.innerHTML='<form class="vz-library-search-field" role="search"><label class="sr-only" for="vz-library-query">보관함 검색</label><input id="vz-library-query" type="search" name="query" enterkeyhint="search" autocomplete="off" placeholder="제목·곡·메모 검색" value="'+esc(lib.q)+'"></form>';
+    document.body.append(overlay);
+    const close=()=>overlay.remove(),form=overlay.querySelector('form'),field=form.querySelector('input');
+    overlay.onclick=e=>{if(e.target===overlay)close();};
+    overlay.onkeydown=e=>{if(e.key==='Escape')close();};
+    form.onsubmit=e=>{e.preventDefault();const input=main.querySelector('[data-q]');input.value=field.value.trim();input.dispatchEvent(new Event('input'));close();};
+    window.addEventListener('hashchange',close,{once:true});
+    field.focus({preventScroll:true});
+  };
+  const libraryFilter=main.querySelector('[data-library-filter]');
+  libraryFilter.onclick=()=>{const kind=main.querySelector('[data-kind]'),song=main.querySelector('[data-song]');VZ.sheet({title:'보관함 필터',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-filter-kind>파일 형식 <span>'+esc(kind.selectedOptions[0]?.text||'파일 형식 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-song>곡 <span>'+esc(song.selectedOptions[0]?.text||'곡 전체')+' ›</span></button><button type="button" class="vz-choice" data-filter-reset>필터 초기화</button></div>',onMount:(sheet,close)=>{
+    sheet.querySelector('[data-filter-kind]').onclick=()=>{close();VZ.collectionChoice('파일 형식',[...kind.options].map(o=>[o.value,o.text]),kind.value,value=>{kind.value=value;kind.dispatchEvent(new Event('change'));});};
+    sheet.querySelector('[data-filter-song]').onclick=()=>{close();VZ.collectionChoice('곡 선택',[...song.options].map(o=>[o.value,o.text]),song.value,value=>{song.value=value;song.dispatchEvent(new Event('change'));});};
+    sheet.querySelector('[data-filter-reset]').onclick=()=>{kind.value='all';song.value='';lib.kind='all';lib.song='';M.stopAll();close();draw();};
+  }});};
   const l = main.querySelector('[data-l]');
   let media = [], drawn = [];
   const draw = () => {
+    libraryFilter.setAttribute('aria-pressed',String(lib.kind!=='all'||!!lib.song));
     const q = lib.q.trim().toLowerCase();
     const list = media.filter(m => (lib.kind === 'all' || (lib.kind === 'video') === M.isVideo(m)) && (lib.origin === 'all' || M.occasion(m) === lib.origin) &&
       (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
