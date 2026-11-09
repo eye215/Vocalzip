@@ -238,7 +238,7 @@ VZ.practiceRow = (p, opts) => {
 };
 VZ.practiceDetail = id => {
   const p = VZ.db.practices.find(x => x.id === id); if (!p) return;
-  const tasks = (p.completed || []).map(id => { const t = VZ.db.assignments.find(a => a.id === id); return t && [t.title + ' ' + (Number(p.assignmentReps?.[id]) || 1) + '회', p.assignmentNotes?.[id] || ''].filter(Boolean).join(' — '); }).filter(Boolean);
+  const tasks = (p.completed || []).map(id => { const t = VZ.db.assignments.find(a => a.id === id); return t && [t.title + ' ' + window.VzipPracticeTime.homeworkRepetitions(p, id) + '회', p.assignmentNotes?.[id] || ''].filter(Boolean).join(' — '); }).filter(Boolean);
   VZ.sheet({title:VZ.dateLabel(p.date) + ' 연습', body:'<div class="stack"><div class="card flat"><div class="row between"><strong>' + esc(p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || '곡 연습') + '</strong><span class="badge">' + VZ.minutes(VZ.practiceMinutes(p)) + '</span></div>' + (p.rating ? '<p class="small muted">만족도 ' + '★'.repeat(p.rating) + '</p>' : '') + (p.memo ? '<p style="white-space:pre-wrap;margin:8px 0 0">' + esc(p.memo) + '</p>' : '') + (tasks.length ? '<div class="small" style="margin-top:8px"><strong>한 숙제</strong>' + tasks.map(x => '<div class="muted">· ' + esc(x) + '</div>').join('') + '</div>' : '') + '</div><div class="list" data-list></div></div>',
     foot:'<div class="btn-row"><button type="button" class="btn danger" data-del>삭제</button><button type="button" class="btn secondary" data-edit>수정</button></div>',
     onMount:async (el, close) => {

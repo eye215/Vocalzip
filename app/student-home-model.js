@@ -128,9 +128,23 @@ function setGoal(db,id,completed){
   goal.completed=completed;return true;
 }
 function planMinutes(value){const n=minutes(value);if(value==null||value==='')return null;if(n==null)throw Error('목표 시간을 확인해 주세요.');return n}
+// Local optimistic guard: compare only the goal editor's day/week inputs.
+function planSnapshot(db,date){
+  if(!parse(date))throw Error('목표 날짜를 확인해 주세요.');
+  const start=monday(date),end=shift(start,6);
+  const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?
+    Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
+  const stable=rows=>rows.map(r=>JSON.stringify(canonical(r))).sort();
+  return JSON.stringify({
+    goals:stable(list(db.dailyGoals).filter(g=>g?.date===date)),
+    plans:stable(list(db.practicePlans).filter(p=>p&&(
+      p.period==='day'&&p.date>=start&&p.date<=end||p.period==='week'&&p.date===start)))
+  });
+}
 function savePlan(db,input){
   const date=input?.date;
   if(!parse(date))throw Error('목표 날짜를 확인해 주세요.');
+  if(has(input,'expectedSnapshot')&&input.expectedSnapshot!==planSnapshot(db,date))throw Error('목표나 시간 설정이 변경됐어요. 입력을 확인한 뒤 창을 다시 열어 주세요.');
   let goals=list(db.dailyGoals),plans=list(db.practicePlans);
   if(has(input,'goals')){
     if(!Array.isArray(input.goals))throw Error('목표 목록을 확인해 주세요.');
@@ -158,6 +172,6 @@ function savePlan(db,input){
   if(has(input,'targetMinutes')||has(input,'weekTargetMinutes'))db.practicePlans=plans;
   return true;
 }
-return {build,weekBounds,setGoal,savePlan};
+return {build,weekBounds,setGoal,savePlan,planSnapshot};
 });
 

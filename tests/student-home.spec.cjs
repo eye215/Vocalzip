@@ -462,3 +462,44 @@ test('weekly metadata keeps its height across weeks and colors streaks only from
 });
 
 
+
+test('Goal integrity rejects stale editor while retaining draft and latest check',async({page})=>{
+ await boot(page);
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ await sheet.getByLabel('개인 목표',{exact:true}).fill('보존할 작성 중 목표');
+ await page.evaluate(()=>VZ.change(d=>{
+  d.dailyGoals.find(g=>g.id==='g1').completed=true;
+  d.dailyGoals.push({id:'concurrent',date:'2026-11-04',title:'새로 받은 목표',source:'personal',completed:false});
+ },{silent:true}));
+ const before=await db(page);
+ await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
+ await expect(sheet.locator('[data-plan-error]')).toContainText('변경됐어요');
+ await expect(sheet.getByLabel('개인 목표',{exact:true})).toHaveValue('보존할 작성 중 목표');
+ await expect(sheet.getByRole('button',{name:'목표 저장',exact:true})).toBeEnabled();
+ expect(await db(page)).toEqual(before);
+ await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.reload();await ready(page);
+ expect((await db(page)).dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
+ expect((await db(page)).dailyGoals.some(g=>g.id==='concurrent')).toBe(true);
+});
+test('Homework integrity counts unique sessions in tally and detail without changing records',async({page})=>{
+ const value=seed();
+ value.practices=[
+  {id:'p1',date:TODAY,minutes:10,completed:['a1'],assignmentReps:{a1:2},updatedAt:1},
+  {id:'p1',date:TODAY,minutes:10,completed:['a1'],assignmentReps:{a1:3},updatedAt:2},
+  {id:'p2',date:TODAY,minutes:15,completed:['a1','a1'],assignmentReps:{a1:2}}
+ ];
+ await boot(page,value);
+ // Simulate received duplicate versions after boot normalization as well.
+ await page.evaluate(rows=>{VZ.db.practices=rows;},value.practices);
+ const before=await db(page);
+ expect(await page.evaluate(()=>VZ.taskTally(VZ.db.assignments[0]))).toEqual({sessions:2,reps:5,last:TODAY});
+ await page.evaluate(()=>VZ.taskSheet({task:VZ.db.assignments[0]}));
+ const sheet=page.getByRole('dialog',{name:'숙제',exact:true});
+ await expect(sheet.locator('[data-practice]')).toHaveCount(2);
+ await expect(sheet).toContainText('연습 2번 · 5회');
+ await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ expect(await db(page)).toEqual(before);
+ expect((await db(page)).assignments[0].status).toBe('active');
+});
