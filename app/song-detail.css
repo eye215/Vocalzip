@@ -38,10 +38,6 @@ body[data-vz-route="song"] .song-tabs button[aria-selected="true"]{background:#E
 .vz-song-select-row input{width:20px;height:20px;margin:0;accent-color:#7A32F5}
 .vz-song-select-row [data-selected-count]{color:#7A32F5}
 .vz-song-selection-actions{display:flex;align-items:center;gap:4px;margin-left:auto}
-.vz-song-selection-actions [data-song-selected-more]{display:grid;place-items:center;flex:none;width:44px;height:44px;padding:0;border:0;background:transparent;color:#667085}
-.vz-song-selection-actions [data-song-selected-more][hidden]{display:none}
-.vz-song-selection-actions [data-song-selected-more] i{font-size:20px}
-.vz-song-selection-actions [data-song-selected-more]:focus-visible{outline:2px solid #7A32F5;border-radius:10px}
 .vz-song-media-list{display:grid;gap:12px}
 .vz-song-media-list>[data-media]{position:relative;overflow:hidden;border-radius:20px;background:#fff}
 .vz-song-media-list [data-toggle]{width:100%;min-height:78px;margin:0;border:0;border-radius:20px;background:#fff}
