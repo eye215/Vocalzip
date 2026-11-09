@@ -23,5 +23,20 @@ function records(input){
 function entries(input){
  return records(input).map(p=>({date:p.date,minutes:actualMinutes(p),songId:p.practiceMode==='training'?'':p.songId||'',training:p.practiceMode==='training',kind:'practice',ref:p})).filter(e=>e.minutes>0);
 }
-return {number,actualMinutes,records,entries};
+// Homework completion is a session link, never an automatic global task completion.
+function homeworkRows(db,taskId,exceptId){
+ return records(db?.practices).filter(p=>p.id!==exceptId&&Array.isArray(p.completed)&&p.completed.includes(taskId));
+}
+function homeworkRepetitions(p,taskId){
+ if(!Array.isArray(p?.completed)||!p.completed.includes(taskId))return 0;
+ // Old completed links had no repetition field; keep their historical one-repetition meaning.
+ if(!p.assignmentReps||!Object.prototype.hasOwnProperty.call(p.assignmentReps,taskId))return 1;
+ const n=number(p.assignmentReps[taskId]);return n!==null&&Number.isSafeInteger(n)?n:0;
+}
+function homeworkProgress(db,taskId,exceptId){
+ const rows=homeworkRows(db,taskId,exceptId);
+ return {sessions:rows.length,reps:rows.reduce((sum,p)=>sum+homeworkRepetitions(p,taskId),0),
+  last:rows.map(p=>typeof p.date==='string'?p.date:'').sort().at(-1)||''};
+}
+return {number,actualMinutes,records,entries,homeworkRows,homeworkRepetitions,homeworkProgress};
 });

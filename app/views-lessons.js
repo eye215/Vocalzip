@@ -10,10 +10,7 @@ VZ.taskPeriod = t => t.startDate || t.dueDate ? (t.startDate ? md(t.startDate) :
 VZ.taskInPeriod = (t, date) => t.status !== 'done' && (!t.startDate || !date || date >= t.startDate) && (!t.dueDate || !date || date <= t.dueDate);
 VZ.taskOverdue = t => t.status !== 'done' && !!t.dueDate && t.dueDate < VZ.today();
 /** How often the homework was done: {sessions, reps, last} over practice records (excluding one record if given). */
-VZ.taskTally = (t, exceptId) => {
-  const rows = VZ.db.practices.filter(p => p.id !== exceptId && (p.completed || []).includes(t.id));
-  return {sessions:rows.length, reps:rows.reduce((n, p) => n + (Number(p.assignmentReps?.[t.id]) || 1), 0), last:rows.map(p => p.date).sort().at(-1) || ''};
-};
+VZ.taskTally = (t, exceptId) => window.VzipPracticeTime.homeworkProgress(VZ.db, t.id, exceptId);
 VZ.taskRow = t => {
   const done = t.status === 'done';
   const lesson = VZ.taskLessons(t).map(id => VZ.db.lessons.find(l => l.id === id)).filter(Boolean)[0];
@@ -44,14 +41,14 @@ VZ.taskSheet = ({task, songId = '', lessonId = ''} = {}) => {
   const db = VZ.db, t = task;
   const lessons = [...db.lessons].sort((a, b) => VZ.lessonSort(b, a)).slice(0, 40);
   const linked = t ? VZ.taskLessons(t)[0] || '' : lessonId;
-  const practices = t ? db.practices.filter(p => (p.completed || []).includes(t.id)).sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [];
+  const practices = t ? window.VzipPracticeTime.homeworkRows(db, t.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [];
   VZ.sheet({title:t ? '숙제' : '숙제 추가', body:'<form id="task-form"><label class="field"><span>숙제 내용 <span class="req">*</span></span><textarea name="title" rows="2" maxlength="500" required autofocus style="min-height:64px">' + esc(t?.title || '') + '</textarea></label>' +
     VZ.songSelect('song', t ? t.songId || VZ.taskSongId(t) : songId, {label:'연결 곡'}) +
     '<div class="two"><label class="field"><span>시작일</span><input type="date" name="startDate" value="' + esc(t ? t.startDate || '' : VZ.today()) + '"></label><label class="field"><span>마감일</span><input type="date" name="dueDate" value="' + esc(t ? t.dueDate || '' : defaultDue(lessonId)) + '"></label></div>' +
     '<p class="small muted" style="margin:-6px 4px 14px">기간 안에 연습을 기록할 때마다 이 숙제를 했는지 물어봐요.</p>' +
     '<label class="field"><span>연결 레슨</span><select name="lesson"><option value="">연결 안 함</option>' + lessons.map(l => '<option value="' + esc(l.id) + '"' + (l.id === linked ? ' selected' : '') + '>' + esc(VZ.dateLabel(l.date) + ' ' + (VZ.timeRange(l) || '') + ' · ' + VZ.statusLabel[VZ.lessonStatus(l)]) + '</option>').join('') + '</select></label>' +
     (t ? '<label class="item" style="padding:0 0 14px"><input type="checkbox" name="done"' + (t.status === 'done' ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--ok)"><span class="item-main">숙제 완료</span></label>' : '') +
-    (practices.length ? '<h2 class="sec" style="margin-top:4px">한 기록 <span class="small muted">연습 ' + practices.length + '번 · ' + VZ.taskTally(t).reps + '회</span></h2><div class="list" style="margin-bottom:14px">' + practices.map(p => '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok);font-size:13px;font-weight:750">' + (Number(p.assignmentReps?.[t.id]) || 1) + '회</span><span class="item-main"><span class="item-title">' + esc(VZ.dateLabel(p.date)) + '</span><span class="item-sub">' + esc(p.assignmentNotes?.[t.id] || '메모 없음') + '</span></span><i class="ph ph-caret-right chev"></i></button>').join('') + '</div>' : '') + '</form>',
+    (practices.length ? '<h2 class="sec" style="margin-top:4px">한 기록 <span class="small muted">연습 ' + practices.length + '번 · ' + VZ.taskTally(t).reps + '회</span></h2><div class="list" style="margin-bottom:14px">' + practices.map(p => '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok);font-size:13px;font-weight:750">' + window.VzipPracticeTime.homeworkRepetitions(p, t.id) + '회</span><span class="item-main"><span class="item-title">' + esc(VZ.dateLabel(p.date)) + '</span><span class="item-sub">' + esc(p.assignmentNotes?.[t.id] || '메모 없음') + '</span></span><i class="ph ph-caret-right chev"></i></button>').join('') + '</div>' : '') + '</form>',
     foot:'<div class="btn-row">' + (t ? '<button type="button" class="btn danger" data-del>삭제</button>' : '') + '<button type="submit" form="task-form" class="btn" style="flex:2">저장</button></div>',
     onMount:(el, close) => {
       const form = el.querySelector('form');

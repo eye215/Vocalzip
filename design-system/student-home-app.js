@@ -56,7 +56,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   V.sheet({title:'일정과 숙제 알림',body:content?'<div class="list">'+content+'</div>':'<p class="muted">확인할 일정과 숙제가 없어요.</p>'});
  }
  function planSheet(){
-  const s=state(),existing=s.goals,candidates=s.recommendationCandidates.filter(c=>!existing.some(g=>g.source==='homework'&&g.sourceId===c.sourceId));
+  const s=state(),expectedSnapshot=M.planSnapshot(V.db,s.today),existing=s.goals,candidates=s.recommendationCandidates.filter(c=>!existing.some(g=>g.source==='homework'&&g.sourceId===c.sourceId));
   const choices=[...existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true})),...candidates.map((g,i)=>({key:'candidate:'+i,goal:g,checked:false}))];
   const label=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':'개인';
   let dirty=false,approved=false,beforeUnload=null;
@@ -83,7 +83,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
       const selected=new Set(new FormData(form).getAll('goal')),goals=choices.filter(c=>selected.has(c.key)).map(c=>c.checked?{...c.goal}:{...c.goal,id:V.uid(),completed:false});
       for(const title of form.personal.value.split(/\r?\n/).map(t=>t.trim()).filter(Boolean))goals.push({id:V.uid(),title,source:'personal',sourceId:'',completed:false});
       const n=(value,max)=>{if(value==='')return null;const v=Number(value);if(!Number.isFinite(v)||v<0||v>max)throw Error('목표 시간을 확인해 주세요.');return v;};
-      const ok=V.change(db=>M.savePlan(db,{date:s.today,goals,targetMinutes:n(form.dayMinutes.value,1440),weekTargetMinutes:n(form.weekMinutes.value,10080)}),{silent:true});
+      if(expectedSnapshot!==M.planSnapshot(V.db,s.today))throw Error('목표나 시간 설정이 변경됐어요. 입력을 확인한 뒤 창을 다시 열어 주세요.');
+      const ok=V.change(db=>M.savePlan(db,{date:s.today,expectedSnapshot,goals,targetMinutes:n(form.dayMinutes.value,1440),weekTargetMinutes:n(form.weekMinutes.value,10080)}),{silent:true});
       if(!ok)throw Error('목표를 저장하지 못했어요. 입력은 그대로 있어요. 다시 시도해 주세요.');
       approved=true;dirty=false;close();delete document.getElementById('view').dataset.dirty;V.softRender();V.toast('오늘의 목표를 저장했어요.');
      }catch(error){el.querySelector('[data-plan-error]').textContent=error.message;button.disabled=false;}
