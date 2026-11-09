@@ -64,6 +64,7 @@ body:not(.vz-home-mode) .v-nav a[aria-current="page"] { background:#EDE1FF; colo
 body:not(.vz-home-mode) .v-nav a[aria-current="page"] i { color:var(--vz-accent); }
 body:not(.vz-home-mode) .v-nav i.ph-fill { font-family:"Phosphor"!important; }
 
+.vz-collection-record{display:none}
 /* Shared recording action: the same 56px icon-only circle as the home screen. */
 body:not(.vz-home-mode) .vz-collection-record {
   position:fixed; display:grid; place-items:center; z-index:41;
