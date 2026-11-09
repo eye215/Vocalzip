@@ -27,6 +27,8 @@ jobs:
       - run: npx playwright install --with-deps chromium webkit
       - name: Goal editor and homework integrity on mobile and desktop
         run: npx playwright test tests/student-home.spec.cjs --grep 'Goal integrity|Homework integrity|goal editor saves|goal selection remains|checked goal persists|persistence failure restores|weekly home keeps actual' --workers=2
+      - name: Existing homework writes and practice editing
+        run: npx playwright test tests/v6.spec.cjs --grep 'Homework has a period|Homework: add|Lesson delete keeps homework|Practice records can be edited' --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:

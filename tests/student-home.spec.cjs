@@ -492,7 +492,7 @@ test('Homework integrity counts unique sessions in tally and detail without chan
  ];
  await boot(page,value);
  // Simulate received duplicate versions after boot normalization as well.
- await page.evaluate(rows=>VZ.change(d=>{d.practices=rows;},{silent:true}),value.practices);
+ await page.evaluate(rows=>{VZ.db.practices=rows;},value.practices);
  const before=await db(page);
  expect(await page.evaluate(()=>VZ.taskTally(VZ.db.assignments[0]))).toEqual({sessions:2,reps:5,last:TODAY});
  await page.evaluate(()=>VZ.taskSheet({task:VZ.db.assignments[0]}));
