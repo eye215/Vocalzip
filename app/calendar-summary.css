@@ -34,11 +34,11 @@
 .vz-calendar-month .cal-day .dots{height:6px}
 #view [data-day] .cal-group{display:flex;align-items:center;min-height:44px;margin:2px 0 6px;padding:0 14px;border-radius:16px;font-size:13px;font-weight:650}
 #view [data-day] .cal-group.stage{background:#fff0e9;color:#c43d18}
-#view [data-day] .cal-group.lesson{background:#f3ecff;color:#7a32f5}
-#view [data-day] .cal-group.practice{background:#e7f5f5;color:#007e88}
+#view [data-day] .cal-group.lesson{background:#e8f6f6;color:#078994}
+#view [data-day] .cal-group.practice{background:#f3ecff;color:#7a32f5}
 #view [data-day] .cal-list{display:grid;gap:8px}
 #view [data-day] .cal-list .cal-own{min-width:0;background:#fff;border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
 #view [data-day] .cal-list .cal-own>.item{min-height:72px;padding:12px 16px}
 #view [data-day] .cal-list .cal-own[data-kind=stage] .avatar{background:#fff0e9;color:#c43d18}
-#view [data-day] .cal-list .cal-own[data-kind=lesson] .avatar{background:#f3ecff;color:#7a32f5}
-#view [data-day] .cal-list .cal-own[data-kind=practice] .avatar{background:#e7f5f5;color:#007e88}
+#view [data-day] .cal-list .cal-own[data-kind=lesson] .avatar{background:#e8f6f6;color:#078994}
+#view [data-day] .cal-list .cal-own[data-kind=practice] .avatar{background:#f3ecff;color:#7a32f5}
