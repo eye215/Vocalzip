@@ -291,8 +291,9 @@ let calMonth = null, calDay = null;
 VZ.route('calendar', {title:'일정', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render(route) {
   const today = VZ.today();
   const requested=route?.query?.get('date'),date=VZ.parseYmd(requested);
-  calDay = date && VZ.ymd(date) === requested ? requested : today;
-  calMonth = calDay.slice(0, 7);
+  if(date&&VZ.ymd(date)===requested){calDay=requested;calMonth=requested.slice(0,7);}
+  calDay ||= today;
+  calMonth ||= today.slice(0, 7);
   return '<div data-calendar-summary></div><div class="card vz-calendar-month"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="vz-calendar-footer"><div class="legend"><span><i class="l"></i>레슨</span><span><i class="p"></i>연습</span><span><i class="s"></i>공연</span></div><button type="button" data-today>오늘</button></div></div><div data-day></div>';
 }, async mount(main) {
   const grid = main.querySelector('[data-grid]'), dayHost = main.querySelector('[data-day]');
