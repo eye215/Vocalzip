@@ -2200,13 +2200,28 @@ test('Actual practice time supports training recordings without changing the ent
 });
 
 async function deletionBillingFrame(page,seed=false){
- if(seed)await page.evaluate(()=>localStorage.removeItem('vzip_cloud_linked_user'));
+ if(seed){
+  const cloud=page.__deletionCloud={row:null};
+  await page.route('**/rest/v1/vocal_billing_documents*',route=>route.fulfill({json:cloud.row?[cloud.row]:[]}));
+  await page.route('**/rest/v1/rpc/vocal_billing_save',route=>{
+   const body=route.request().postDataJSON();
+   if((cloud.row?.revision||0)!==body.p_expected_revision)return route.fulfill({status:409,json:{code:'PT409'}});
+   cloud.row={payload:body.p_payload,revision:(cloud.row?.revision||0)+1,last_request_id:body.p_request_id,updated_at:new Date().toISOString()};
+   return route.fulfill({json:cloud.row});
+  });
+  await page.evaluate(()=>localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token',JSON.stringify({access_token:'fixture-token',expires_at:4102444800,user:{id:'ui-test-user',email:'fixture@example.invalid'}})));
+ }
  const handle=await page.evaluateHandle(()=>{
   const frame=document.createElement('iframe');frame.hidden=true;frame.dataset.deletionFixture='';
+  window.__deletionFixtureReady=new Promise(resolve=>{
+   const listener=e=>{if(e.origin===location.origin&&e.source===frame.contentWindow&&e.data?.type==='vzip-billing-auto'){window.removeEventListener('message',listener);resolve();}};
+   window.addEventListener('message',listener);
+  });
   frame.src='/billing/?auto=1&do=fixture';document.body.append(frame);return frame;
  });
  const frame=await handle.asElement().contentFrame();
  await expect.poll(()=>frame.evaluate(()=>typeof window.VzipBillingStore?.load==='function').catch(()=>false)).toBe(true);
+ await page.evaluate(()=>window.__deletionFixtureReady);
  if(seed)await frame.evaluate(async()=>{
   const S=VzipBillingStore;let s=await S.load(),run=async(type,payload)=>s=await S.save({type,payload},s.revision);
   const date=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).lessons.find(l=>l.id==='l1').date;
@@ -2215,6 +2230,7 @@ async function deletionBillingFrame(page,seed=false){
   await run('payment.save',{passId,date,kind:'refund',amount:10000});
   await run('deduction.save',{passId,date,lessonId:'l1',status:'completed',units:100});
   await run('deduction.save',{passId,date,lessonId:'same-day-neighbour',status:'completed',units:100});
+  await VzipBillingCloud.sync();
  });
  const value=await frame.evaluate(()=>VzipBillingStore.load());
  await handle.evaluate(el=>el.remove());return value;

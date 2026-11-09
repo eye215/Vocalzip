@@ -98,6 +98,7 @@ test('without the server history set up, the versions panel says so',async({page
 
 async function deletionCloudSetup(page){
  const cloud=await mockCloud(page);await open(page);
+ await expect(page.locator('#sync-line')).toContainText('다른 기기와 자동으로 맞춰져요');
  const input=await page.evaluate(async()=>{
   const S=VzipBillingStore;let s=await S.load();
   const run=async(type,payload)=>s=await S.save({type,payload},s.revision),date='2026-11-09';

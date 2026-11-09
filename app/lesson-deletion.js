@@ -13,7 +13,7 @@ function jobs(){
  const raw=storage.getItem(key());if(!raw)return [];
  let values;try{values=JSON.parse(raw);}catch{throw Error('미완료 삭제 기록을 읽지 못했어요. 새 삭제를 시작하지 않았어요.');}
  if(!Array.isArray(values))throw Error('삭제 작업 기록을 확인해 주세요.');
- return values.map(P.validate);
+ const list=values.map(P.validate);if(list.some(j=>j.owner!==owner()))throw Error('다른 계정의 삭제 기록은 표시하지 않아요.');return list;
 }
 function save(job){
  if(owner()!==job.owner)throw Error('계정 변경으로 삭제 기록 저장을 멈췄어요.');
