@@ -1,0 +1,146 @@
+/* A song's recordings, measured with the existing on-device analyzer. No demo values are shown. */
+(() => {
+'use strict';
+const V = window.VZ, M = V?.media, esc = V?.esc;
+if (!V || !M) return;
+const METRICS = [
+  {key:'wob', label:'지속음 흔들림', unit:'cent', get:a=>a?.metrics?.stability?.wobbleCents, fmt:v=>'±'+v+' cent', better:-1},
+  {key:'into', label:'음정 오차', unit:'cent', get:a=>a?.metrics?.intonation?.meanAbsCents, fmt:v=>'±'+v+' cent', better:-1},
+  {key:'high', label:'최고음', unit:'', get:a=>a?.metrics?.range?.highCents, fmt:(v,a)=>a?.metrics?.range?.high||'—', better:1},
+  {key:'phr', label:'프레이즈 길이', unit:'초', get:a=>a?.metrics?.breath?.medianPhrase, fmt:v=>v+'초', better:1},
+  {key:'rating', label:'만족도', unit:'점', get:(a,m)=>m?.rating, fmt:v=>v+'/5', better:1}
+];
+const speedStore = window.VzipAccountScope?.storage || localStorage;
+const speedKey = 'vzip_vocal_lab_rates_v1';
+const rates = () => { try { return JSON.parse(speedStore.getItem(speedKey)) || {}; } catch { return {}; } };
+const time = s => V.clock(Math.max(0,s||0));
+const day = m => (M.dateOf(m)||'').slice(5).replace('-','.');
+const valid = n => n == null || n === '' ? null : Number.isFinite(Number(n)) ? Number(n) : null;
+const analysis = m => m.analysis?.metrics ? m.analysis : null;
+let current = null, instance = 0;
+const clean = () => { current?.player?.destroy(); if (current) current.dead = true; current = null; instance++; };
+function waveform(m) {
+  const data = Array.isArray(m.waveform) ? m.waveform : [];
+  if (!data.length) return '<div class="vl-wave-empty" aria-label="저장된 파형 정보가 없어요"><i class="ph ph-waveform"></i><span>파형 정보 없음</span></div>';
+  const step = Math.max(1,Math.ceil(data.length/70));
+  const values = []; for(let i=0;i<data.length;i+=step) values.push(Math.max(...data.slice(i,i+step)));
+  return '<div class="vl-wave" aria-label="녹음 파형">'+values.map(v=>'<span style="height:'+Math.max(12,Math.min(100,Math.round(Number(v||0)*90+10)))+'%"></span>').join('')+'</div>';
+}
+function plot(vals, {height=142, highlighted=-1}={}) {
+  const rows=vals.filter(p=>valid(p.value)!=null), W=340, H=height, pad=20;
+  if (!rows.length) return '<p class="vl-muted">측정된 값이 없어요.</p>';
+  let lo=Math.min(...rows.map(p=>+p.value)), hi=Math.max(...rows.map(p=>+p.value));
+  const spread=Math.max(hi-lo, 2); lo-=spread*.18; hi+=spread*.18;
+  const x=i=>rows.length===1?W/2:pad+i*(W-pad*2)/(rows.length-1);
+  const y=v=>H-pad-(v-lo)/(hi-lo)*(H-pad*2);
+  const points=rows.map((p,i)=>[x(i),y(+p.value)]);
+  const line=points.length>1?'<polyline points="'+points.map(p=>p.map(v=>v.toFixed(1)).join(',')).join(' ')+'"/>':'';
+  return '<svg class="vl-plot" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+esc(rows.map(p=>p.label+' '+p.value).join(', '))+'"><line class="vl-mid" x1="0" x2="340" y1="'+H/2+'" y2="'+H/2+'"/>'+line+points.map((p,i)=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(i===highlighted?6:4)+'" class="'+(i===highlighted?'active':'')+'"/>').join('')+'</svg>';
+}
+function trend(s) {
+  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0];
+  const rows=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean).map(m=>({m,value:metric.get(analysis(m),m)}));
+  const measured=rows.filter(x=>valid(x.value)!=null);
+  return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2><div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
+    (measured.length ? plot(measured.map(x=>({value:x.value,label:day(x.m)})),{highlighted:measured.findIndex(x=>x.m.id===s.active)})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'" aria-label="'+esc(day(x.m)+' '+metric.label+' '+metric.fmt(x.value,analysis(x.m))+' 분석 관찰')+'">'+esc(day(x.m))+'</button>').join('')+'</div>' : '<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
+    (measured.length ? '<p class="vl-muted">그래프의 날짜를 누르면 해당 녹음의 관찰 내용을 볼 수 있어요.</p>' : '')+'</section>';
+}
+function single(s,m) {
+  const a=analysis(m);
+  return '<section class="vl-section vl-single"><div class="vl-divider"></div><h2>'+esc(day(m))+' 분석 관찰</h2>'+
+    (!a?'<p class="vl-muted">이 녹음의 분석 결과가 아직 없어요. 위의 구간 분석을 시작해 주세요.</p>':'<div class="vl-metric-grid">'+METRICS.slice(0,4).map(metric=>{
+      const v=metric.get(a,m), count=metric.key==='wob'?a.metrics.stability?.notes:metric.key==='into'?a.metrics.intonation?.notes:null;
+      return '<div class="vl-stat"><span>'+metric.label+'</span><strong>'+esc(v==null?'측정 안 됨':metric.fmt(v,a))+'</strong><div class="vl-stat-visual" aria-hidden="true"><span style="width:'+Math.min(94,Math.max(8,(Number(v)||0)/(metric.key==='high'?10000:metric.key==='phr'?12:50)*100))+'%"></span></div>'+(count?'<small>측정한 음 '+count+'개</small>':'')+'</div>';
+    }).join('')+'</div>')+'</section>';
+}
+function observe(s,m) {
+  const a=analysis(m), baseline=s.items.filter(x=>s.selected.includes(x.id)&&V.analysisReliable(analysis(x))).sort((x,y)=>(M.dateOf(x)||'').localeCompare(M.dateOf(y)||''))[0];
+  const wob=a?.metrics?.stability?.wobbleCents, first=baseline&&baseline.id!==m.id?baseline.analysis?.metrics?.stability?.wobbleCents:null;
+  const description=wob==null?'지속음 분석값이 없어요.':first==null?'이 녹음에서 측정한 지속음 흔들림이에요.':Math.abs(first-wob)<.5?'첫 녹음과 비슷한 수준이에요.':first>wob?'첫 녹음보다 '+(first-wob).toFixed(1)+' cent 줄었어요.':'첫 녹음보다 '+(wob-first).toFixed(1)+' cent 늘었어요.';
+  V.sheet({title:day(m)+' 분석 관찰',body:'<div class="vl-observe"><span>지속음의 음정 흔들림</span><strong>'+esc(wob==null?'측정 안 됨':'±'+wob+' cent')+'</strong>'+(first!=null?'<p>첫 녹음 대비 ±'+esc(first)+' → ±'+esc(wob)+' cent</p>':'')+'<p>'+esc(description)+'</p>'+(a&&!V.analysisReliable(a)?'<p>목소리가 짧거나 반주가 커서 측정 신뢰도가 낮아요.</p>':'')+'</div>',foot:'<button type="button" class="btn block" data-close-observe>확인</button>',onMount:(el,close)=>{el.querySelector('[data-close-observe]').onclick=close;}});
+}
+function makeSegment(s,m) {
+  const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
+  const slice=full?.curve?.map((v,i)=>({t:i/full.fps,value:v==null?null:((v%100)+150)%100-50})).filter(p=>p.t>=start&&p.t<=end&&p.value!=null)||[];
+  const sampled=slice.filter((_,i)=>i%Math.max(1,Math.ceil(slice.length/25))===0);
+  return '<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+
+    '<div class="vl-ruler" aria-hidden="true"><span>−50</span><i></i><span>0</span><i></i><span>+50</span></div>'+
+    (full?(sampled.length?'<div class="vl-segment-chart"><div class="vl-chart-heading">선택 구간의 음정 편차 (cent)</div>'+plot(sampled.map(x=>({value:x.value,label:time(x.t)})),{height:115})+'</div>':'<p class="vl-muted">이 구간에서 목소리를 측정하지 못했어요.</p>'):'<button type="button" class="vl-analyze" data-analyze>이 구간 그래프 보기 <i class="ph ph-arrow-right"></i></button>')+
+    '<label class="vl-range-label">분석할 구간 이동<input type="range" min="0" max="'+Math.max(0,Math.floor(total-16))+'" value="'+Math.min(start,Math.max(0,Math.floor(total-16)))+'" data-start aria-label="구간 시작 위치"></label><p class="vl-muted" data-analyze-status aria-live="polite">'+(full?'파형과 수치는 실제 녹음 분석 결과예요.':'그래프는 이 녹음을 분석하면 표시돼요.')+'</p></section>';
+}
+function playerCard(s,m) {
+  const idx=s.selected.indexOf(m.id), total=Math.max(0,Number(m.durationSeconds)||0);
+  return '<div class="vl-peek" data-prev '+(idx===0?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx-1])||m))+'</span></div><div class="vl-player" data-card><div class="vl-player-head"><strong>'+esc(day(m)+' · '+M.label(m))+'</strong><span>'+esc((idx+1)+' / '+s.selected.length)+'</span></div>'+waveform(m)+'<div class="vl-seek"><span data-time>0:00</span><input type="range" min="0" max="1000" value="0" data-seek aria-label="재생 위치"><span data-duration>'+time(total)+'</span></div><div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div><div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div><div class="vl-peek" data-next-peek '+(idx===s.selected.length-1?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx+1])||m))+'</span></div>';
+}
+function screen(s) {
+  const host=s.host, m=s.items.find(x=>x.id===s.active);
+  s.player?.destroy(); s.player=null;
+  host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
+    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
+      '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
+      '<section class="vl-section vl-recommend"><h2>추천 연습</h2><p>'+esc((analysis(m)?.metrics?.stability?.wobbleCents??0)>25?'지속음을 천천히 내며 같은 길이로 유지해 보세요.':'선택 구간을 반복 듣고 같은 프레이즈를 녹음해 보세요.')+'</p><div><button type="button" data-repeat-practice>이 구간 반복 듣기</button><button type="button" data-practice>연습 기록에 담기</button></div></section>'+
+      '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
+  host.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.date;
+    if(s.selected.includes(id))s.selected=s.selected.filter(x=>x!==id); else s.selected=s.items.filter(x=>s.selected.includes(x.id)||x.id===id).map(x=>x.id);
+    if(!s.selected.includes(s.active))s.active=s.selected.at(-1)||null;
+    if(!s.active)s.active=id===s.active?null:s.selected.at(-1)||null;
+    if(s.selected.includes(id))s.active=id;
+    screen(s);
+  });
+  if(!m)return;
+  host.querySelector('[data-date="'+CSS.escape(m.id)+'"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
+  const carrier=host.querySelector('[data-carousel]'), player=M.player(host.querySelector('[data-player]'),m,{prefetch:true}); s.player=player;
+  const el=player.el, play=host.querySelector('[data-play]'), seek=host.querySelector('[data-seek]'), status=host.querySelector('[data-player-status]');
+  const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;seek.value=d?Math.round(el.currentTime/d*1000):0;host.querySelector('[data-time]').textContent=time(el.currentTime);host.querySelector('[data-duration]').textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
+  el.addEventListener('timeupdate',()=>{if(s.loop&&el.currentTime>=Math.min(el.duration||Infinity,(s.start[m.id]||0)+16))el.currentTime=s.start[m.id]||0;paint();}); el.addEventListener('play',paint);el.addEventListener('pause',paint);el.addEventListener('loadedmetadata',paint); el.addEventListener('error',paint);paint();
+  play.onclick=()=>el.paused?player.play():player.pause();seek.oninput=()=>player.seek(Number(seek.value)/1000*(el.duration||m.durationSeconds||0));
+  const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.active=s.selected[n];screen(s);};
+  host.querySelector('[data-previous]').onclick=()=>move(-1);host.querySelector('[data-next]').onclick=()=>move(1);
+  host.querySelector('[data-prev]')?.addEventListener('click',()=>move(-1));host.querySelector('[data-next-peek]')?.addEventListener('click',()=>move(1));
+  let x=null;carrier.addEventListener('touchstart',e=>{x=e.touches[0]?.clientX??null;},{passive:true});carrier.addEventListener('touchend',e=>{if(x==null)return;const dx=(e.changedTouches[0]?.clientX||x)-x;x=null;if(Math.abs(dx)>55)move(dx<0?1:-1);},{passive:true});
+  carrier.tabIndex=0;carrier.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();move(e.key==='ArrowLeft'?-1:1);}};
+  const savedRate=Number(rates()[m.id])||1;player.setRate(savedRate);host.querySelector('[data-speed]').textContent=savedRate.toFixed(1)+'×';
+  host.querySelector('[data-speed]').onclick=()=>V.collectionChoice('이 녹음의 배속',[[.5,'0.5×'],[.75,'0.75×'],[1,'1.0×'],[1.25,'1.25×'],[1.5,'1.5×']].map(([v,l])=>[String(v),l]),String(player.el.playbackRate),value=>{const rate=Number(value);player.setRate(rate);host.querySelector('[data-speed]').textContent=rate.toFixed(rate%1?2:1).replace(/0×$/,'×');try{speedStore.setItem(speedKey,JSON.stringify({...rates(),[m.id]:rate}));}catch{V.toast('배속을 저장하지 못했어요.','error');}});
+  host.querySelector('[data-loop]').onclick=e=>{s.loop=!s.loop;e.currentTarget.setAttribute('aria-pressed',String(s.loop));if(s.loop)player.seek(s.start[m.id]||0);};
+  host.querySelector('[data-start]').onchange=e=>{s.start[m.id]=Number(e.target.value);const pos=el.currentTime;screen(s);s.player.seek(pos);};
+  host.querySelector('[data-analyze]')?.addEventListener('click',async e=>{
+    const btn=e.currentTarget;btn.disabled=true;status.textContent='녹음을 분석하고 있어요…';
+    try{const full=await V.analyzeRecording(m,{onStage:t=>{if(!s.dead)status.textContent=t;}});if(s.dead||s.active!==m.id)return;s.results.set(m.id,full);m.analysis=full.summary;screen(s);}
+    catch(err){if(!s.dead){btn.disabled=false;status.textContent='분석하지 못했어요: '+err.message;}}
+  });
+  host.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{s.metric=b.dataset.metric;screen(s);});
+  host.querySelectorAll('[data-point]').forEach(b=>b.onclick=()=>{const chosen=s.items.find(x=>x.id===b.dataset.point);if(!chosen)return;s.active=chosen.id;screen(s);observe(s,chosen);});
+  host.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;screen(s);}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
+  host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;host.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
+  host.querySelector('[data-practice]').onclick=()=>V.practiceSheet({songId:s.song.id,mediaIds:[m.id],preset:{minutes:10,memo:'[추천 연습] '+time(s.start[m.id]||0)+'–'+time(Math.min(Number(m.durationSeconds)||16,(s.start[m.id]||0)+16))+' 지속음 반복'}});
+  host.querySelector('[data-save-report]').onclick=()=>{
+    const selected=s.selected.map(id=>s.items.find(x=>x.id===id)).filter(Boolean);
+    const record={kind:'vocal-lab',songId:s.song.id,song:s.song.title,mediaIds:selected.map(x=>x.id),activeId:m.id,metric:s.metric,snapshots:selected.map(x=>({id:x.id,date:M.dateOf(x),name:M.label(x),rating:x.rating??null,analysis:analysis(x)}))};
+    if(V.change(d=>{d.comparisonReports||=[];d.comparisonReports.push({id:V.uid(),created:Date.now(),...record});},{silent:true}))V.toast('리포트를 보관함에 저장했어요.');
+  };
+}
+V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefresh:true,
+  actions:()=>'<button type="button" class="icon-btn" data-lab-more aria-label="더보기"><i class="ph ph-dots-three-outline"></i></button>',
+  render:()=>'<div class="vl" data-lab><p class="vl-muted">녹음을 불러오는 중…</p></div>',
+  async mount(main,r){
+    clean();const id=++instance, song=V.song(r.params[0]),host=main.querySelector('[data-lab]');
+    if(!song){
+      const songs=V.songsNewest();
+      host.innerHTML=songs.length?'<div class="vl-song"><i class="ph ph-waveform"></i><strong>보컬 연구소</strong></div><p class="vl-muted">분석할 곡을 선택해 주세요.</p>'+songs.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.id)+'"><strong>'+esc(x.title)+'</strong><i class="ph ph-caret-right"></i></a>').join(''):V.empty('music-notes','먼저 곡을 추가해 주세요.');
+      return;
+    }
+    document.querySelector('[data-lab-more]').onclick=()=>V.sheet({title:'보컬 연구소',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/lab-reports">리포트 보관함 <i class="ph ph-caret-right"></i></a><a class="vz-choice" href="#/song/'+encodeURIComponent(song.id)+'">곡 상세 <i class="ph ph-caret-right"></i></a></div>'});
+    const items=(await M.list().catch(()=>M.cached())).filter(m=>m.songId===song.id && !M.isVideo(m)).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(a.created||0)-(b.created||0));
+    if(id!==instance||!host.isConnected)return;
+    const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
+    const selected=report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
+    current={host,song,items,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null};
+    screen(current);
+  },leave:clean
+});
+V.route('lab-reports',{title:'리포트 보관함',back:true,tab:'songs',render(){
+  const reports=(V.db.comparisonReports||[]).filter(x=>x.kind==='vocal-lab').sort((a,b)=>(b.created||0)-(a.created||0));
+  return '<div class="vl vl-reports">'+(reports.length?reports.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.songId)+'?report='+encodeURIComponent(x.id)+'"><strong>'+esc(x.song||'삭제된 곡')+'</strong><span>'+esc(new Date(x.created).toLocaleDateString('ko-KR'))+' · 녹음 '+(x.mediaIds||[]).length+'개</span><i class="ph ph-caret-right"></i></a>').join(''):'<div class="vl-empty">저장한 리포트가 없어요.<br><small>보컬 연구소에서 리포트를 저장하면 여기에 모여요.</small></div>')+'</div>';
+}});
+})();
