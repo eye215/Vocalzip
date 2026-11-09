@@ -32,8 +32,17 @@ test('Library places filter and search above review, and keeps selection separat
  await page.locator('[data-library-filter]').click();await page.locator('[data-filter-kind]').click();await page.locator('[data-choice=audio]').click();
  await expect(page.locator('[data-library-filter]')).toHaveAttribute('aria-pressed','true');
  await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeFocused();
- await page.getByRole('searchbox',{name:'보관함 검색'}).fill('테스트');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
+ await expect(page.locator('[data-collection-search] button')).toHaveCount(0);
+ await page.evaluate(()=>document.documentElement.style.setProperty('--kb','280px'));
+ expect(await page.locator('[data-collection-search]').evaluate(form=>Math.round(innerHeight-form.getBoundingClientRect().bottom))).toBe(290);
+ await page.evaluate(()=>document.documentElement.style.removeProperty('--kb'));
+ await page.getByRole('searchbox',{name:'보관함 검색'}).fill('테스트');await expect(page.locator('[data-q]')).toHaveValue('');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
  await expect(page.locator('[data-q]')).toHaveValue('테스트');
+ await expect(page.locator('[data-library-search]')).toHaveAttribute('aria-pressed','true');
+ await expect(page.locator('[data-library-search]')).toHaveCSS('color','rgb(122, 50, 245)');
+ await page.locator('[data-library-search]').click();await page.getByRole('searchbox',{name:'보관함 검색'}).fill('');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
+ await expect(page.locator('[data-library-search]')).toHaveAttribute('aria-pressed','false');
+ await expect(page.locator('[data-library-search]')).toHaveCSS('color','rgb(102, 112, 133)');
  await expect(page.locator('[data-select-mode]')).toBeVisible();
  await page.locator('[data-select-mode]').click();await page.locator('[data-lib-select-all]').click();
  const options=page.getByRole('dialog',{name:'전체 선택'});
@@ -62,7 +71,7 @@ test('Repertoire persists metadata ratings keys and filters without rewriting or
  await page.reload();await expect(page.locator('[data-repertoire]')).toContainText('4.5/5');await expect(page.locator('[data-repertoire]')).toContainText('원키 Db');
  const data=await db(page);expect(data.songs[0].id).toBe('song1');expect(data.songs[0].lyrics).toBe('보존할 가사');expect(data.practices).toEqual(initial().practices);expect(data.lessons).toEqual(initial().lessons);
  await page.goto('/#/songs');await page.locator('[data-song-filter]').click();await page.locator('[data-filter-status]').click();await page.locator('[data-choice=ready]').click();await expect(page.locator('[data-l] a')).toHaveCount(1);await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','true');
- await page.locator('[data-song-search]').click();await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await page.locator('[data-collection-search] button[type=submit]').click();await expect(page.locator('[data-l]')).toContainText('This Is the Moment');
+ await page.locator('[data-song-search]').click();await expect(page.getByRole('searchbox',{name:'곡 검색',exact:true})).toBeFocused();await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await expect(page.locator('[data-l] a')).toHaveCount(1);await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');await expect(page.locator('[data-l]')).toContainText('This Is the Moment');await expect(page.locator('[data-song-search]')).toHaveCSS('color','rgb(122, 50, 245)');
  await page.locator('[data-song-filter]').click();await page.locator('[data-filter-sort]').click();await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
 });
 test('Performance CRUD, distinct sessions, bidirectional song links and safe deletion',async({page})=>{
