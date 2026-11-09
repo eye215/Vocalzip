@@ -80,3 +80,13 @@ test('calendar uses the same circular recording entry and opens a focused dark r
  await expect(page).toHaveURL(/#\/calendar$/);
  await expect(page.locator('body')).not.toHaveClass(/vz-record-mode/);
 });
+
+test('Actual practice time keeps calendar counts while using only entered minutes',async({page})=>{
+ await boot(page);
+ await expect(page.locator('[data-month-minutes]')).toHaveText('45분');
+ await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ await page.evaluate(()=>VZ.change(d=>{d.practices.find(p=>p.id==='p1').manualMinutes=12;}));
+ await expect(page.locator('[data-month-minutes]')).toHaveText('27분');
+ await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ expect(await page.evaluate(()=>VZ.db.practices.find(p=>p.id==='p1').minutes)).toBe(30);
+});

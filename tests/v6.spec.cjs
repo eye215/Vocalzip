@@ -1596,7 +1596,7 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   for (let i = 0; i < 3 && !(await page.locator('[data-d="' + m2day + '"]').count()); i++) await page.getByRole('button', {name:'이전 달'}).click();
   await page.locator('[data-d="' + m2day + '"]').click();
   await expect(page.locator('[data-d="' + m2day + '"] .dots .s')).toHaveCount(1);
-  await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연');
+  await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연·오디션');
   await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
