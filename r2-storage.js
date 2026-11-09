@@ -63,7 +63,10 @@ async function upload(file, {mediaId, type = file.type, onProgress, signal, purp
   }
   const start = await api('/v1/uploads', {method:'POST', signal, body:{mediaId, contentType:type, size:file.size, ext:extOf(file, type), ...(purpose ? {purpose} : {})}});
   const q = '?key=' + encodeURIComponent(start.key), base = '/v1/uploads/' + encodeURIComponent(start.uploadId);
-  if(!Number.isSafeInteger(start.partSize)||start.partSize<1||start.partSize>8*1024*1024)throw Error('저장소 전송 구간을 확인하지 못했어요.');
+  if(!Number.isSafeInteger(start.partSize)||start.partSize<1||start.partSize>8*1024*1024){
+    await api('/v1/uploads/'+encodeURIComponent(start.uploadId)+'?key='+encodeURIComponent(start.key),{method:'DELETE'}).catch(()=>{});
+    throw Error('저장소 전송 구간을 확인하지 못했어요.');
+  }
   const parts = new Array(Math.ceil(file.size/start.partSize));
   // At most 32MiB of part buffers; save-data, slow links and low-memory devices retain two senders.
   const connection=window.navigator?.connection;
