@@ -10,7 +10,7 @@ let importRunning = false;
 VZ.importSheet = ({songId = ''} = {}) => {
   if (importRunning) { VZ.toast('이미 파일을 가져오는 중이에요.', 'error'); return; }
   const signed = !!window.vzipCloudSignedIn?.();
-  VZ.sheet({title:'파일 가져오기', body:'<div data-step1><label class="btn block" style="cursor:pointer"><i class="ph ph-folder-open"></i>음성·영상 파일 선택<input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.mov,.mp4,.m4v,.webm,.ogg,.flac" class="sr-only" data-file></label><p class="small muted">여러 파일을 한 번에 고를 수 있어요. 파일당 최대 1GB · 원본 음질 그대로 저장해요. 영상 파일은 음성만 추출해 음원으로 저장해요.' + (signed ? '' : '<br>로그인하지 않으면 25MB 이하 파일만 이 기기에 저장돼요.') + '</p><button type="button" class="btn ghost block" data-hub><i class="ph ph-funnel"></i>사진·음성 메모에서 기간·길이로 골라 가져오기</button></div><div data-step2 hidden></div>',
+  VZ.sheet({title:'파일 가져오기', body:'<div data-step1><label class="btn block" style="cursor:pointer"><i class="ph ph-image"></i>사진 보관함<input type="file" multiple accept="video/*" class="sr-only" data-file></label><label class="btn ghost block" style="cursor:pointer;margin-top:8px"><i class="ph ph-video-camera"></i>비디오 촬영<input type="file" accept="video/*" capture="environment" class="sr-only" data-file></label><label class="btn ghost block" style="cursor:pointer;margin-top:8px"><i class="ph ph-folder-open"></i>파일 선택<input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.mov,.mp4,.m4v,.webm,.ogg,.flac" class="sr-only" data-file></label><p class="small muted">여러 파일을 한 번에 고를 수 있어요. 파일당 최대 1GB · 원본 음질 그대로 저장해요. 영상 파일은 음성만 추출해 음원으로 저장해요.' + (signed ? '' : '<br>로그인하지 않으면 25MB 이하 파일만 이 기기에 저장돼요.') + '</p><button type="button" class="btn ghost block" data-hub><i class="ph ph-funnel"></i>사진·음성 메모에서 기간·길이로 골라 가져오기</button></div><div data-step2 hidden></div>',
     foot:'<div data-foot hidden class="btn-row"><button type="button" class="btn ghost" data-cancel>취소</button><button type="button" class="btn" data-start style="flex:2">가져오기</button></div>',
     onClose:() => { if (importRunning) abort?.abort(); },
     onMount:(el, close) => {
@@ -18,7 +18,7 @@ VZ.importSheet = ({songId = ''} = {}) => {
       el.querySelector('[data-hub]').onclick = () => { close(); VZ.openImportHub(); };
       let rows = [];
       const songOpts = v => '<option value="">곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (s.id === v ? ' selected' : '') + '>' + esc(VZ.songLabel(s)) + '</option>').join('');
-      el.querySelector('[data-file]').onchange = e => {
+      el.querySelectorAll('[data-file]').forEach(input => input.onchange = e => {
         // Only audio and video files are taken (text, images, documents, hidden system files are left out quietly).
         const picked = [...e.target.files]; e.target.value = '';
         const files = picked.filter(f => /^(audio|video)\//.test(M.typeOf(f)) && !/^\./.test(f.name)), skipped = picked.length - files.length;
@@ -46,7 +46,7 @@ VZ.importSheet = ({songId = ''} = {}) => {
         step2.querySelector('[data-bulk]')?.addEventListener('change', ev => { const v = ev.target.value === '__none' ? '' : ev.target.value; if (!ev.target.value) return; step2.querySelectorAll('[data-song]').forEach(s => { s.value = v; }); });
         step2.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => run([rows[+b.closest('[data-i]').dataset.i]]));
         wrap.querySelector('[data-start]').disabled = !rows.some(r => r.state === 'ready');
-      };
+      });
       let abort = null, occasion = 'practice'; const savedItems = [];
       const ui = r => step2.querySelector('[data-i="' + rows.indexOf(r) + '"]');
       const setRow = (r, text, pct) => { const u = ui(r); u.querySelector('[data-st]').textContent = text; if (pct != null) u.querySelector('.bar-mini i').style.width = pct + '%'; u.classList.toggle('failed', r.state === 'failed' || r.state === 'cancelled'); u.classList.toggle('done', r.state === 'done'); u.querySelector('[data-retry]').hidden = !['failed', 'cancelled'].includes(r.state); };
