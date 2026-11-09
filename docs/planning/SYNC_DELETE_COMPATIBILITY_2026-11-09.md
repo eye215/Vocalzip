@@ -51,3 +51,7 @@ Phase 03/05의 revision·generation, 필드 초안/lease/오프라인 outbox를 
 관측 결과는 아래 Actions 출력과 대조하며, 운영 설치 여부가 거짓이면 제안 소스/자동 시험 통과를 운영 제공으로 표시하지 않는다.
 
 실측: 영구 삭제 보호는 설치됨. snapshot revision/generation 열, 저장 RPC, 요청 영수증, 필드 초안, rollout 테이블은 모두 미설치다. 따라서 현재 운영 서비스에서 새 revision/초안/인계 계약이 활성화됐다고 볼 수 없다. 다음 작업은 앱 브리지와 제한된 설치/활성화 절차를 갖추는 것이다.
+
+관련 #204 배포 확인: [Pages 42613094750](https://github.com/eye215/Vocalzip/actions/runs/42613094750) 및 [공개 파일/화면 42613319797](https://github.com/eye215/Vocalzip/actions/runs/42613319797) 성공. 파일 15개 SHA256 일치, 공개 UI 33+18=51개 통과. 이 결과는 기존 저장/신규 선택 삭제에 해당하며 비활성인 동기화 제안의 배포 증거로 사용하지 않는다.
+
+최신 #204 main을 반영한 `5b8d3983a46fa87a9044170fee4fa139733f9986`에서도 [호환 검사 42613428293](https://github.com/eye215/Vocalzip/actions/runs/42613428293) 및 기존 Field draft server checks(42613428598)가 성공했다. 이후 변경은 이 검증 기록뿐이다.
