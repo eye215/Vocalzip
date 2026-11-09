@@ -1425,7 +1425,7 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   expect(made).toHaveLength(2);
   for(const record of made){expect(record).toMatchObject({minutes:0,manualMinutes:0,practiceTimeSource:'unconfirmed'});expect(record.mediaSeconds).toBeGreaterThan(0);}
   const chosen=made.find(p=>p.mediaIds[0]===take.id);
-  await page.evaluate(id=>VZ.practiceSheet(VZ.db.practices.find(p=>p.id===id)),chosen.id);
+  await page.evaluate(id=>VZ.practiceSheet({practice:VZ.db.practices.find(p=>p.id===id)}),chosen.id);
   await expect(sheet(page).locator('[name=minutes]')).toHaveValue('0');
   await sheet(page).locator('[name=minutes]').fill('12');
   await sheet(page).getByRole('button',{name:'수정 저장',exact:true}).click();
@@ -1575,7 +1575,8 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await expect(page.getByRole('button', {name:'공연', exact:true})).toBeVisible();
   // m2 is an unlinked practice recording; its length never adds to actual practice time.
   await page.locator('[data-media="m2"] [data-toggle]').click();
-  await page.locator('[data-media="m2"]').getByRole('button', {name:/정보 수정/}).click();
+  await page.locator('[data-media="m2"]').getByRole('button',{name:'녹음 더보기',exact:true}).click();
+  await sheet(page).getByRole('button', {name:/정보 수정/}).click();
   await expect(sheet(page).getByRole('radio', {name:'연습'})).toHaveAttribute('aria-checked', 'true');
   await sheet(page).getByRole('radio', {name:'공연'}).click();
   await sheet(page).getByRole('button', {name:'저장'}).click();
