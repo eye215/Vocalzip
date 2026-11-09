@@ -64,26 +64,30 @@ body:not(.vz-home-mode) .v-nav a[aria-current="page"] { background:#EDE1FF; colo
 body:not(.vz-home-mode) .v-nav a[aria-current="page"] i { color:var(--vz-accent); }
 body:not(.vz-home-mode) .v-nav i.ph-fill { font-family:"Phosphor"!important; }
 
-body:not(.vz-home-mode) .vz-collection-record { display:none; }
-body[data-vz-route="songs"] .vz-collection-record,
-body[data-vz-route="library"] .vz-collection-record,
-body[data-vz-route="calendar"] .vz-collection-record {
-  position:fixed; display:flex; align-items:center; justify-content:center; gap:8px; z-index:41;
+/* Shared recording action: the same 56px icon-only circle as the home screen. */
+body:not(.vz-home-mode) .vz-collection-record {
+  position:fixed; display:grid; place-items:center; z-index:41;
   right:max(16px,calc((100vw - 560px)/2 + 16px));
   bottom:calc(max(12px,env(safe-area-inset-bottom)) + 82px);
-  height:48px; min-width:132px; padding:0 18px; border-radius:24px;
-  background:linear-gradient(135deg,#9557FF,#7A32F5 52%,#6D2BE5);
-  color:#fff; font-size:15px; line-height:20px; font-weight:600; text-decoration:none;
-  box-shadow:0 5px 14px rgba(109,43,229,.18);
+  width:56px; min-width:56px; height:56px; padding:0; border:0; border-radius:50%;
+  background:linear-gradient(135deg,#9557FF 0%,#7A32F5 52%,#6D2BE5 100%);
+  color:#fff; text-decoration:none;
+  box-shadow:0 5px 14px rgba(109,43,229,.18),inset 0 1px 0 rgba(255,255,255,.22);
+  transition:filter .14s,transform .14s;
 }
-body[data-vz-route="songs"] .vz-collection-record i,
-body[data-vz-route="library"] .vz-collection-record i,
-body[data-vz-route="calendar"] .vz-collection-record i { font-size:22px; }
+body:not(.vz-home-mode) .vz-collection-record i { font-size:22px; }
+body:not(.vz-home-mode) .vz-collection-record:active { filter:brightness(.9); transform:scale(.98); }
+body.vz-record-mode .vz-collection-record,
+body[data-vz-route="vocal-lab"] .vz-collection-record,
+body[data-vz-route="lab-reports"] .vz-collection-record,
+body[data-vz-route="song-suggest"] .vz-collection-record,
+body:has(.vz-recording-page) .vz-collection-record,
 body:has(.lib-selecting) .vz-collection-record,
-body:has(.sel-bar) .vz-collection-record { display:none; }
+body:has(.sel-bar) .vz-collection-record,
+body.vz-media-selecting .vz-collection-record { display:none!important; }
 body:has(.vz-recording-page) .v-nav { display:none; }
 body:not(.vz-home-mode) .sel-bar { bottom:calc(94px + env(safe-area-inset-bottom)); }
-@media (prefers-reduced-transparency:reduce) {
+@media (prefers-reduced-transparency:reduce), (prefers-contrast:more) {
   body:not(.vz-home-mode) .v-nav { background:#fff; -webkit-backdrop-filter:none; backdrop-filter:none; }
 }
 
