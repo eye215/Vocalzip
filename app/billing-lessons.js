@@ -175,6 +175,19 @@ VZ.billingStatusOf = (doc, l) => {
   return rows.some(x => x.date === l.date) ? {kind:'sameDay'} : {kind:'pending'};
 };
 VZ.billingLedger = () => ledger().catch(() => null);
+// Deletion must distinguish a failed ledger read from an account that never had a ledger.
+VZ.billingDeletionLedger = () => ledger();
+VZ.billingCancelForDeletion = async job => {
+ const l=VZ.db.lessons.find(x=>x.id===job.lesson.id);
+ if(!l)throw Error('삭제할 레슨이 변경됐어요.');
+ const guard={id:l.id,date:l.date||'',status:({done:'completed',scheduled:'scheduled',cancelled:'cancelled'})[l.status]||'unconfirmed',
+  start:l.startTime||'',end:l.endTime||'',billingId:l.billingDeductionId||'',touched:Math.max(Number(l.created)||0,Number(l.updatedAt)||0)};
+ const query='&do=delete-cancel&lesson='+encodeURIComponent(l.id)+'&deduction='+encodeURIComponent(job.deduction.id)+
+  '&version='+job.deduction.version+'&operation='+encodeURIComponent(job.id)+'&guard='+encodeURIComponent(JSON.stringify(guard));
+ const result=await runBilling(query);
+ if(!result.action?.ok||result.action.operationId!==job.id)throw Error(result.action?.message||'정산 응답을 확인하지 못했어요. 삭제를 다시 시도해 주세요.');
+ return result.action;
+};
 const units = d => (Number(d.units) || 0) / 100 + '회';
 const badge = st => st.kind === 'deducted'
   ? '<span class="badge" data-billing-badge><i class="ph ph-receipt"></i>' + (st.deduction.status === 'noshow' ? '당일 취소 ' : '정산 ') + units(st.deduction) + '</span>'

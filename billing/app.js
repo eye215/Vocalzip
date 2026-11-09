@@ -110,7 +110,7 @@ async function toggle(collection,row){
  const restore=!!row.voidedAt;if(!await window.VzipBillingDialog.ask({title:restore?'기록을 복구할까요?':'기록을 삭제할까요?',message:'삭제하면 목록과 정산 합계에서 제외돼요. 삭제 내역 보기에서 복구할 수 있고, 변경 이력은 보존돼요. 연결된 앱 레슨은 삭제되지 않아요. 레슨권은 연결된 결제·수강·조정을 먼저 삭제해 주세요.',ok:restore?'복구':'삭제',cancel:'닫기',danger:!restore}))return;
  try{await persist({type:restore?'entity.restore':'entity.void',payload:{collection,id:row.id,expectedVersion:row.version}},()=>{for(const form of Object.values(forms))if(form.elements.id.value===row.id)resetForm(form)},'기록을 '+(restore?'복구':'삭제')+'했어요.')}catch{}
 }
-function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'삭제',()=>toggle(collection,row)));return box}
+function rowActions(collection,kind,row){const box=el('div',undefined,'actions');if(row.deletionOperationId){box.append(el('span','레슨 삭제로 차감 취소','small'));return box;}if(kind&&!row.voidedAt)box.append(button('수정',()=>edit(kind,row)));box.append(button(row.voidedAt?'복구':'삭제',()=>toggle(collection,row)));return box}
 /** Records list newest date first; same day: most recently saved first. */
 function newestFirst(rows){return rows.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')))}
 function render(){
@@ -163,7 +163,7 @@ const pendingApp={
 $('#show-deleted').onchange=event=>{showDeleted=event.target.checked;render()};
 function show(id){for(const section of document.querySelectorAll('main>section'))section.hidden=section.id!==id;for(const tab of document.querySelectorAll('[data-panel]'))tab.setAttribute('aria-pressed',String(tab.dataset.panel===id))}
 for(const tab of document.querySelectorAll('[data-panel]'))tab.onclick=()=>show(tab.dataset.panel);
-const auditNames={'pass.save':'레슨권','payment.save':'결제·환불','deduction.save':'수강','adjustment.create':'수동 조정','entity.void':'삭제','entity.restore':'복구','import.commit':'일괄 업로드','import.undo':'업로드 취소','hourly-rate.save':'시간당 단가'};
+const auditNames={'pass.save':'레슨권','payment.save':'결제·환불','deduction.save':'수강','adjustment.create':'수동 조정','entity.void':'삭제','entity.restore':'복구','deduction.cancelForDeletion':'레슨 삭제 차감 취소','import.commit':'일괄 업로드','import.undo':'업로드 취소','hourly-rate.save':'시간당 단가'};
 const collectionNames={passes:'레슨권',payments:'결제',deductions:'수강',adjustments:'조정'};
 function auditText(row){
  const a=row.after||{},b=row.before,d=a.date?window.VzipBillingDate.show(a.date):'';
@@ -342,6 +342,24 @@ async function appAction(){
   const units=P.unitsFor(lesson);
   await persist(P.deductionFor(lesson,passId,{units}),null,'앱 레슨 차감');
   return {ok:true,message:sessions(units)+' 차감했어요 · '+left(passId)};
+ }
+ if(kind==='delete-cancel'){
+  const guard=JSON.parse(params.get('guard')||'null');
+  if(!guard||guard.id!==params.get('lesson'))throw Error('레슨 삭제 대상을 다시 확인해 주세요.');
+  const cmd={type:'deduction.cancelForDeletion',payload:{id:params.get('deduction'),expectedVersion:Number(params.get('version')),
+   lessonId:guard.id,billingDeductionId:guard.billingId||'',operationId:params.get('operation')},options:{lessonGuard:guard}};
+  await persist(cmd,null,'레슨 삭제에 따른 차감 취소');
+  // Do not let an unresolved cloud conflict look like a confirmed financial cancellation.
+  if(S.account.id.startsWith('user:')){
+   if(!Cloud())throw Error('정산 클라우드 연결을 기다린 뒤 다시 시도해 주세요.');
+   const result=await Cloud().sync();
+   if(result.action==='conflict')throw Error('다른 기기의 정산 변경을 먼저 맞춰 주세요. 레슨은 아직 삭제하지 않았어요.');
+   const current=await S.status();state=current.state;
+   const row=state.deductions.find(d=>d.id===cmd.payload.id);
+   if(current.meta.syncedLocalRevision!==state.revision||!row?.voidedAt||row.deletionOperationId!==cmd.payload.operationId)
+    throw Error('정산 클라우드의 차감 취소를 확인하지 못했어요. 삭제를 다시 시도해 주세요.');
+  }
+  return {ok:true,operationId:cmd.payload.operationId,message:'선택한 레슨의 차감을 취소했어요.'};
  }
  if(kind==='void'){
   const row=C.active(state.deductions).find(item=>item.id===params.get('deduction'));

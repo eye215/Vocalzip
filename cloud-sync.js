@@ -462,6 +462,27 @@ window.vzipCloudMediaAssignSong=async(item,changes,{expectedSongId='',expectedSo
  return {updatedAt,metadata};
 };
 window.vzipCloudMediaUpdate=async(item,changes)=>{if(!user)throw Error('로그인이 필요해요.');const clean={...changes};for(const k of ['id','cloud','local','blob','bytes'])delete clean[k];if(clean.name===item.name)delete clean.name;const saved=await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,clean)}));if(!saved)throw Error('클라우드에서 이 파일 정보를 찾지 못했어요.');return saved};
+/** Remove this account's exact lesson and links with the existing payload CAS. */
+window.vzipCloudLessonDelete=async({owner,lesson,mediaIds=[],lessonSignature})=>{
+ if(!user||user.id!==owner||!window.vzipCloudSignedIn())throw Error('로그인 계정을 다시 확인해 주세요.');
+ const assertOwner=()=>{if(!user||user.id!==owner||window.VzipAccountScope?.leaving)throw Error('계정 변경으로 삭제를 멈췄어요.');};
+ for(let attempt=0;attempt<5;attempt++){
+  assertOwner();
+  const {data:row,error}=await client.from('vocal_data').select('payload,updated_at').eq('user_id',owner).maybeSingle();
+  if(error)throw error;assertOwner();
+  if(!row)throw Error('클라우드 기록을 먼저 동기화한 뒤 삭제해 주세요.');
+  if(!Merge.valid(row.payload))throw Error('클라우드 기록 형식을 확인하지 못했어요.');
+  const matches=(row.payload.lessons||[]).filter(l=>l.id===lesson.id);
+  if(matches.length>1||matches.length===1&&await window.VzipLessonDeletionModel.fingerprint(matches[0],mediaIds)!==lessonSignature)
+   throw Error('다른 기기에서 레슨이 바뀌었어요. 최신 내용을 확인해 주세요.');
+  assertOwner();
+  const payload=Merge.deleteLesson(structuredClone(row.payload),lesson.id);
+  const {data:written,error:writeError}=await sameVersion(client.from('vocal_data').update({payload,updated_at:nextVersion(row.updated_at)}).eq('user_id',owner),row.updated_at).select('user_id');
+  if(writeError)throw writeError;assertOwner();
+  if(written?.length)return true;
+ }
+ throw Error('다른 기기에서 기록을 수정 중이에요. 삭제를 다시 시도해 주세요.');
+};
 async function unlinkCloudMedia(owner,id){
  for(let attempt=0;attempt<5;attempt++){
   if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');

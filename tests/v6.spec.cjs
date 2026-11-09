@@ -644,7 +644,9 @@ test('Lesson delete keeps homework and practice history; legacy page still reads
   await boot(page);
   await page.goto('/#/lesson/l1');
   await page.getByRole('button', {name:'레슨 삭제'}).click();
-  await sheet(page).getByRole('button', {name:'삭제'}).click();
+  await page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true}).getByRole('button',{name:'삭제 대상 확인'}).click();
+  await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+  await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
   const d = await data(page);
   expect(d.lessons.some(l => l.id === 'l1')).toBe(false);
   expect(d.assignments.find(a => a.id === 'a1')).toMatchObject({title:'립트릴 5분', lessonIds:[]});

@@ -36,7 +36,7 @@ function stamp(before, after) {
       if (old.get(String(x.id)) !== JSON.stringify(x)) x.updatedAt = now;
     }
     const removed = [...old.keys()].filter(id => !ids.has(id));
-    if (removed.length) { after.deleted ||= {}; after.deleted[k] = [...new Set([...(after.deleted[k] || []), ...removed])].slice(-5000); }
+    if (removed.length) { after.deleted ||= {}; after.deleted[k] = [...new Set([...(after.deleted[k] || []), ...removed])]; }
   }
 }
 VZ.change = (mutate, {silent} = {}) => {
