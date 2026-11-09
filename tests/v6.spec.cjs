@@ -2200,6 +2200,7 @@ test('Actual practice time supports training recordings without changing the ent
 });
 
 async function deletionBillingFrame(page,seed=false){
+ if(seed)await page.evaluate(()=>localStorage.removeItem('vzip_cloud_linked_user'));
  const handle=await page.evaluateHandle(()=>{
   const frame=document.createElement('iframe');frame.hidden=true;frame.dataset.deletionFixture='';
   frame.src='/billing/?auto=1&do=fixture';document.body.append(frame);return frame;
@@ -2263,6 +2264,18 @@ test('Lesson deletion cancels the exact charge once after a lost response and de
  const d=await data(page);expect(d.practices[0]).toMatchObject({mediaIds:[],manualMinutes:25,completed:['a1']});
  expect(d.assignments.find(a=>a.id==='a2').lessonIds).toEqual(['l-over']);
  expect(await page.evaluate(()=>VZ.lessonDeletion.jobs())).toEqual([]);
+ const handle=await page.evaluateHandle(()=>{const f=document.createElement('iframe');f.hidden=true;f.src='/billing/?auto=1&do=fixture';document.body.append(f);return f;});
+ const frame=await handle.asElement().contentFrame();
+ await expect.poll(()=>frame.evaluate(()=>!!window.VzipBillingStore).catch(()=>false)).toBe(true);
+ const guarded=await frame.evaluate(async old=>{
+  const S=VzipBillingStore;let s=await S.load(),errors=[];
+  try{await S.replace(old,s.revision);}catch(e){errors.push(e.message);}
+  s=await S.clear(s.revision);
+  try{await S.replace(old,s.revision);}catch(e){errors.push(e.message);}
+  return errors;
+ },before);
+ expect(guarded).toHaveLength(2);expect(guarded.every(e=>e.includes('과거 백업'))).toBe(true);
+ await handle.evaluate(el=>el.remove());
 });
 test('Lesson deletion resumes a partial file failure after refresh without restoring or deleting unselected data',async({page})=>{
  const seed=legacy();seed.lessons[0].recordings.push({id:'m2',note:'second'});await boot(page,{seed});

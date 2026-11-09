@@ -85,7 +85,8 @@ VZ.billingImportLessons = () => importing ||= (async () => {
     const doc = await ledger().catch(() => null); if (!doc) return 0;
     const lessons = VZ.db.lessons, ids = new Set(lessons.map(l => l.id)), linked = new Set(lessons.map(l => l.billingDeductionId).filter(Boolean));
     const gone = new Set((VZ.db.deleted?.lessons || []).map(String));
-    const active = (doc.deductions || []).filter(d => !d.voidedAt && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')).sort((a, b) => a.date.localeCompare(b.date));
+    const suppressed = new Set(VZ.db.deleted?.billingLessonLinks || []);
+    const active = (doc.deductions || []).filter(d => !suppressed.has(d.id) && !d.voidedAt && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')).sort((a, b) => a.date.localeCompare(b.date));
     const claimed = new Set(active.map(d => d.lessonId).filter(Boolean)); // app lessons a record already points at
     const passes = new Map((doc.passes || []).map(p => [p.id, p]));
     const add = [], link = [], taken = new Set();

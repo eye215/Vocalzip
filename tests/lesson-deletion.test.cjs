@@ -120,3 +120,11 @@ test('changed server lesson or account after a CAS miss stops deletion',async()=
  const x=cloud({conflict:true,change:true});await assert.rejects(x.run(),/다른 기기/);assert.equal(x.payload().lessons.length,1);
  const y=cloud({foreign:true});await assert.rejects(y.run(),/계정/);assert.equal(y.payload().lessons.length,1);
 });
+
+test('deleting an imported lesson suppresses automatic re-import without voiding its retained charge',()=>{
+ const db=empty();db.lessons[0].billingDeductionId='imported-d';
+ Merge.deleteLesson(db,'l');assert.deepEqual(db.deleted.billingLessonLinks,['imported-d']);
+ const stale=empty();stale.lessons[0].billingDeductionId='imported-d';
+ const out=Merge.merge(db,stale).data;assert.equal(out.lessons.length,0);
+ assert.deepEqual(out.deleted.billingLessonLinks,['imported-d']);
+});

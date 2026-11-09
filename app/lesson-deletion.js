@@ -61,7 +61,7 @@ async function run(job,onProgress){
      if(!V.change(db=>{
       const next=db.lessons.find(l=>l.id===job.lesson.id);
       if((next?P.lessonValue(next,job.mediaIds):null)!==value)throw Error('삭제 직전에 레슨이 변경됐어요.');
-      window.VzipDataMerge.deleteLesson(db,job.lesson.id);
+      window.VzipDataMerge.deleteLesson(db,job.lesson.id,job.lesson.billingDeductionId);
      },{silent:true}))throw Error('레슨 삭제를 저장하지 못했어요. 미완료 삭제에서 다시 시도해 주세요.');
     }
    });

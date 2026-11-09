@@ -35,6 +35,8 @@ function merge(primary, secondary) {
   }
   const media = [...new Set([...(a.deleted?.media || []), ...(b.deleted?.media || [])])];
   if (media.length) deleted.media = media;
+  const billingLinks=[...new Set([...(a.deleted?.billingLessonLinks||[]),...(b.deleted?.billingLessonLinks||[])])];
+  if(billingLinks.length)deleted.billingLessonLinks=billingLinks;
   out.deleted = deleted;
   unlinkMedia(out, media);
   unlinkLessons(out, out.deleted.lessons || []);
@@ -70,8 +72,9 @@ function unlinkLessons(data,ids){
  });
  return data;
 }
-function deleteLesson(data,id){
- data.deleted||={};data.deleted.lessons=[...new Set([...(data.deleted.lessons||[]),id])];
+function deleteLesson(data,id,billingId=''){
+ const linked=billingId||(data.lessons||[]).find(l=>l.id===id)?.billingDeductionId;
+ data.deleted||={};if(linked)data.deleted.billingLessonLinks=[...new Set([...(data.deleted.billingLessonLinks||[]),linked])];data.deleted.lessons=[...new Set([...(data.deleted.lessons||[]),id])];
  if(data.lessons)data.lessons=data.lessons.filter(l=>l.id!==id);
  return unlinkLessons(data,[id]);
 }

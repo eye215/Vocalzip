@@ -477,7 +477,7 @@ window.vzipCloudLessonDelete=async({owner,lesson,mediaIds=[],lessonSignature})=>
   if(matches.length>1||matches.length===1&&await window.VzipLessonDeletionModel.fingerprint(matches[0],mediaIds)!==lessonSignature)
    throw Error('다른 기기에서 레슨이 바뀌었어요. 최신 내용을 확인해 주세요.');
   assertOwner();
-  const payload=Merge.deleteLesson(structuredClone(row.payload),lesson.id);
+  const payload=Merge.deleteLesson(structuredClone(row.payload),lesson.id,lesson.billingDeductionId);
   const {data:written,error:writeError}=await sameVersion(client.from('vocal_data').update({payload,updated_at:nextVersion(row.updated_at)}).eq('user_id',owner),row.updated_at).select('user_id');
   if(writeError)throw writeError;assertOwner();
   if(written?.length)return true;
