@@ -36,12 +36,13 @@ function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
  if(host._csTimer)clearInterval(host._csTimer);
  const summary=summarize(db,media,month,dateOf),[year,mo]=month.split('-');
  const lists={minutes:ranked(summary,'minutes'),count:ranked(summary,'count')};
+ const help='<details class="cs-help"><summary>집계 기준</summary><p>연습 기록 1건 또는 기록에 연결되지 않은 녹음 1개를 1회로 계산해요. 연결된 녹음은 중복 집계하지 않아요. 레슨 녹음과 발성 훈련은 제외해요.'+
+ (summary.unknown?' 길이가 없는 '+summary.unknown+'건은 횟수에만 포함돼요.':'')+'</p></details>';
  host.innerHTML='<section class="card calendar-summary" aria-label="월별 노래 연습 요약">'+
- '<div class="cs-heading"><h2>'+Number(mo)+'월 연습 <small>'+year+'</small></h2>'+
+ '<div class="cs-heading"><div class="cs-title"><h2>'+Number(mo)+'월 연습 <small>'+year+'</small></h2>'+help+'</div>'+
  '<div class="cs-totals" aria-live="polite"><strong data-month-minutes>'+duration(summary.minutes)+'</strong><span>·</span><strong data-month-count>'+summary.count+'회</strong></div></div>'+
  (lists.minutes.length?'<button type="button" class="cs-spotlight" data-cs-spotlight aria-expanded="false" aria-controls="cs-rank-panel" aria-label="연습곡 순위 펼치기, 좌우로 밀어 시간별 횟수별 전환"><span class="cs-rank" data-cs-rank></span><span class="cs-name" data-cs-name></span><span class="cs-values" data-cs-values></span><i class="ph ph-caret-down" aria-hidden="true"></i></button><div class="cs-rank-panel" id="cs-rank-panel" aria-hidden="true" inert><div class="cs-rank-list" data-cs-list></div></div>':'<p class="cs-empty">이 달의 노래 연습 기록이 없어요.</p>')+
- '<details class="cs-help"><summary>집계 기준</summary><p>연습 기록 1건 또는 기록에 연결되지 않은 녹음 1개를 1회로 계산해요. 연결된 녹음은 중복 집계하지 않아요. 레슨 녹음과 발성 훈련은 제외해요.'+
- (summary.unknown?' 길이가 없는 '+summary.unknown+'건은 횟수에만 포함돼요.':'')+'</p></details>'+
+
  (error?'<p class="cs-error" role="status">'+esc(error)+' 표시된 합계는 일부 기록만 포함할 수 있어요.</p>':'')+'</section>';
  const ticker=host.querySelector('[data-cs-spotlight]');if(!ticker)return;
  const panel=host.querySelector('[data-cs-rank-panel],#cs-rank-panel'),list=host.querySelector('[data-cs-list]');
