@@ -22,12 +22,13 @@ VZ.wireMedia = (host, items) => {
     if (e.target.closest('[data-toggle]')) {
       const panel = row.querySelector('.media-open'), btn = row.querySelector('[data-toggle]');
       const open = panel.hidden;
-      host.querySelectorAll('.media-open:not([hidden])').forEach(p => { if (p !== panel) { p.hidden = true; p.previousSibling.setAttribute('aria-expanded', 'false'); p._player?.destroy(); } });
+      host.querySelectorAll('.media-open:not([hidden])').forEach(p => { if (p !== panel) { p.hidden = true; p.closest('[data-media]')?.querySelector('[data-toggle]')?.setAttribute('aria-expanded', 'false'); p._player?.destroy(); } });
       panel.hidden = !open; btn.setAttribute('aria-expanded', String(open));
       if (open) {
-        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<div class="chips" style="margin-top:8px"><button type="button" class="chip" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" class="chip" data-analyze><i class="ph ph-chart-line"></i> 분석</button><button type="button" class="chip" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" class="chip" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" class="chip" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div>';
+        panel.innerHTML = '<div data-p></div>' + (item.review ? '<p class="small muted" style="white-space:pre-wrap">' + esc(item.review) + '</p>' : '') + '<div class="vz-media-accordion-more"><button type="button" data-media-more aria-expanded="false" aria-label="녹음 더보기"><i class="ph ph-dots-three" aria-hidden="true"></i> 더보기</button><div class="vz-media-accordion-menu" data-media-menu hidden><button type="button" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button><button type="button" data-download><i class="ph ph-download-simple"></i> 저장</button><button type="button" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button><button type="button" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button><button type="button" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div></div>';
         panel._player = M.player(panel.querySelector('[data-p]'), item, {tools:true});
         panel._player.play();
+        panel.querySelector('[data-media-more]').onclick = e => { const button = e.currentTarget, menu = panel.querySelector('[data-media-menu]'); menu.hidden = !menu.hidden; button.setAttribute('aria-expanded', String(!menu.hidden)); };
       } else panel._player?.destroy();
     }
     if (e.target.closest('[data-edit]')) VZ.editMedia(item);
