@@ -1,0 +1,26 @@
+name: Baseline song-check UI diagnostics
+on:
+  push:
+    branches: ['codex/billing-ui-baseline-20261109']
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Check existing song-check cases on main before the billing fix
+        run: npx playwright test tests/v6.spec.cjs --grep 'Song check selects recordings|Song check keeps the selection controls' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-song-check-baseline
+          path: |
+            playwright-report/
+            test-results/
