@@ -3,7 +3,7 @@
 'use strict';
 let open=null;
 /** Resolves true when confirmed. {title, message, ok, cancel, danger} */
-function ask({title,message='',ok='확인',cancel='취소',danger=false,option=''}){
+function ask({title,message='',ok='확인',cancel='취소',danger=false,option='',selectedOk=ok}){
  open?.(false);
  return new Promise(resolve=>{
   const previous=document.activeElement,back=document.createElement('div');back.className='bd-back';
@@ -15,6 +15,7 @@ function ask({title,message='',ok='확인',cancel='취소',danger=false,option='
   const row=document.createElement('div');row.className='bd-actions';
   const no=document.createElement('button');no.type='button';no.className='bd-ghost';no.dataset.cancel='';no.textContent=cancel;
   const yes=document.createElement('button');yes.type='button';yes.className=danger?'bd-danger':'bd-primary';yes.dataset.ok='';yes.textContent=ok;
+  if(choice)choice.onchange=()=>{yes.textContent=choice.checked?selectedOk:ok;};
   row.append(no,yes);sheet.append(Object.assign(document.createElement('div'),{className:'bd-grab'}),h,p);if(choice)sheet.append(choice.parentElement);sheet.append(row);back.append(sheet);
   const done=value=>{if(open!==finish)return;open=null;back.remove();document.removeEventListener('keydown',key,true);if(previous?.isConnected)previous.focus();resolve(option?{confirmed:value,selected:!!value&&choice.checked}:value)};
   const finish=done;open=finish;
