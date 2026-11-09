@@ -24,8 +24,18 @@ async function addSession(page,time,number){
  await page.locator('[data-add-session]').click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill(time);await dialog(page).getByLabel('공연 회차',{exact:true}).fill(number);await dialog(page).getByLabel('해당 회차 출연',{exact:true}).selectOption('yes');await save(page);
 }
 test.afterEach(async({page})=>expect(page._archiveErrors||[]).toEqual([]));
+test('Lyrics cards preview saved text and edit each field in a bottom sheet',async({page})=>{
+ const seed=initial();seed.songs[0].lyrics='첫 줄 가사\n둘째 줄 가사';seed.songs[0].translation='첫 줄 해석';
+ await boot(page,{seed});await page.goto('/#/song/song1');await page.locator('[data-tab=lyrics]').click();
+ await expect(page.locator('[data-lyric=lyrics]')).toContainText('첫 줄 가사 둘째 줄 가사');
+ await expect(page.locator('[data-lyric=translation]')).toContainText('첫 줄 해석');
+ await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('입력한 내용이 없습니다');
+ await page.locator('[data-lyric=lyricNotes]').click();await page.getByRole('textbox',{name:'발음 / 호흡 / 감정 메모'}).fill('후렴 전에 숨쉬기');
+ await page.locator('.vz-lyric-form button[type=submit]').click();await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('후렴 전에 숨쉬기');
+ expect((await db(page)).songs[0].lyrics).toBe('첫 줄 가사\n둘째 줄 가사');expect((await db(page)).songs[0].lyricNotes).toBe('후렴 전에 숨쉬기');
+});
 test('Repertoire persists metadata ratings keys and filters without rewriting original records',async({page})=>{
- await boot(page);await page.goto('/#/song/song1');await page.locator('[data-rep=status]').click();await dialog(page).getByLabel('상태',{exact:true}).selectOption('ready');await save(page);
+ await boot(page);await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('나의 레퍼토리');await expect(page.locator('[data-repertoire]')).not.toContainText('공연 이력');await page.locator('[data-rep=status]').click();await dialog(page).getByLabel('상태',{exact:true}).selectOption('ready');await save(page);
  await page.locator('[data-rep=info]').click();await dialog(page).getByLabel('배역',{exact:true}).fill('지킬');await dialog(page).getByLabel('원어',{exact:true}).fill('영어');await dialog(page).getByLabel('구분',{exact:true}).selectOption('solo');await save(page);
  await page.locator('[data-rep=skills]').click();await dialog(page).getByLabel('가사 암보',{exact:true}).selectOption('5');await dialog(page).getByLabel('전체 완성도',{exact:true}).selectOption('4');await save(page);
  await page.locator('[data-rep=keys]').click();await dialog(page).getByLabel('원키',{exact:true}).fill('Db');await dialog(page).getByLabel('연습키',{exact:true}).fill('C');await save(page);
@@ -40,7 +50,7 @@ test('Performance CRUD, distinct sessions, bidirectional song links and safe del
  await page.locator('[data-edit-session]').first().click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill('15:00');await save(page);expect((await db(page)).performances[0].sessions.some(s=>s.time==='15:00')).toBe(true);
  await page.locator('[data-link-songs]').click();await dialog(page).getByRole('searchbox',{name:'공연곡 검색'}).fill('moment');await dialog(page).getByLabel('연결할 기존 곡',{exact:true}).selectOption('song1');await dialog(page).getByLabel('공연 당시 키',{exact:true}).fill('D');await save(page);
  await page.reload();expect((await db(page)).performances[0].sessions).toHaveLength(2);
- await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('지킬 앤 하이드');
+ await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).not.toContainText('공연 이력');await page.locator('[data-tab=timeline]').click();await expect(page.locator('[data-body]')).toContainText('지킬 앤 하이드');
  const id2=await newShow(page,'두 번째 공연');await page.locator('[data-link-songs]').click();await dialog(page).getByLabel('연결할 기존 곡',{exact:true}).selectOption('song1');await save(page);
  expect((await db(page)).songs).toHaveLength(2);
  await page.goto('/#/show/'+id);await page.locator('[data-edit-show]').click();await dialog(page).getByLabel('공연 후기·개인 메모',{exact:true}).fill('첫 무대');await save(page);
@@ -116,7 +126,7 @@ test('A production connects to the rest of the app: its day on the calendar, 공
  await expect.poll(async()=>(await db(page)).performances.find(p=>p.id===id).songLinks.map(l=>l.songId)).toEqual(['song2']);
  await page.goto('/#/calendar');await page.locator('[data-d="2026-11-01"]').click();
  await expect(page.locator('[data-day]')).toContainText('맘마미아');
- await page.goto('/#/song/song2');await page.getByRole('tab',{name:'공연'}).click();await expect(page.locator('[data-body]')).toContainText('맘마미아');
+ await page.goto('/#/song/song2');await page.getByRole('tab',{name:'활동 기록'}).click();await expect(page.locator('[data-body]')).toContainText('맘마미아');
  // App just opened / offline: the account this device last synced with still sees its productions.
  await page.evaluate(()=>{localStorage.setItem('vzip_cloud_linked_user','archive-user');window.vzipCloudUserId=()=>''});
  await page.goto('/#/performances');await expect(page.locator('.archive-page')).toContainText('맘마미아');
