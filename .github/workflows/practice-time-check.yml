@@ -21,7 +21,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium webkit
       - name: Actual practice time across existing screens
-        run: npx playwright test tests/v6.spec.cjs --grep '^Actual practice time' --workers=2
+        run: npx playwright test tests/v6.spec.cjs --grep 'Actual practice time' --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
