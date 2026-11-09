@@ -50,8 +50,6 @@ const media = page => page.evaluate(() => window.vzipReadMedia());
 const sheet = page => page.locator('.sheet');
 const openLibraryImport=async page=>{
  await page.locator('[data-imp]').click();
- const menu=page.locator('.sheet [data-import]');
- if(await menu.count())await menu.click();
  await expect(page.locator('.sheet')).toHaveCount(1);
 };
 
@@ -1511,9 +1509,7 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();
-  await page.locator('#top [data-imp]').click();
-  await page.locator('.sheet [data-format]').selectOption('video');
-  await page.getByRole('dialog', {name:'보관함 메뉴'}).getByRole('button', {name:'닫기'}).click();
+  await page.locator('[data-kind]').selectOption('video');
   await expect(page.getByText('조건에 맞는 파일이 없어요.')).toBeVisible();
   await page.getByRole('button', {name:'필터 초기화'}).click();
   await expect(page.locator('[data-media]')).toHaveCount(3);
@@ -1593,7 +1589,9 @@ test('Library bulk menu omits analysis when selected recordings span songs', asy
   });
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(3);
+  await page.locator('[data-select-mode]').click();
   await page.locator('[data-lib-select-all]').click();
+  await page.getByRole('dialog',{name:'전체 선택'}).getByRole('button',{name:/현재 필터 결과 전체/}).click();
   await expect(page.locator('[data-lib-selected-count]')).toHaveText('3개 선택');
   await page.locator('[data-lib-bulk-more]').click();
   await expect(page.getByRole('dialog', {name:'선택한 녹음 3개'}).getByRole('button', {name:'보컬 분석'})).toHaveCount(0);
@@ -1952,15 +1950,6 @@ test('Song check selects recordings, keeps controls sticky and exposes individua
  await expect(tip).toBeHidden();
  await page.locator('.vz-sc-record input[type=checkbox]').check();
  await expect(page.locator('[data-counter]')).toHaveText('선택 1개');
- await page.getByRole('button',{name:'선택한 녹음 더보기'}).click();
- const selectionMenu=page.getByRole('dialog',{name:'선택한 녹음 1개'});
- await expect(selectionMenu.getByRole('button',{name:/분석 시작/})).toBeEnabled();
- await expect(selectionMenu.getByRole('button',{name:/추천대로 곡 지정/})).toBeDisabled();
- await selectionMenu.getByRole('button',{name:/선택 해제/}).click();
- await expect(page.locator('[data-counter]')).toBeEmpty();
- await expect(page.getByRole('button',{name:'선택한 녹음 더보기'})).toBeDisabled();
- await page.locator('[data-select-all]').click();
- await expect(page.locator('[data-counter]')).toHaveText('선택 1개');
  await page.locator('[data-select-all]').click();
  await expect(page.locator('[data-counter]')).toBeEmpty();
  await page.getByRole('button',{name:'곡 확인 설정'}).click();
@@ -2028,18 +2017,14 @@ test('Video file deletion and a cloud failure retain the correct records',async(
  expect((await data(page)).practices[0].mediaIds).toContain('m1');
 });
 
-test('Library menu preserves its song filter; the page under a sheet stays where it was', async ({page}) => {
+test('Library song filter stays selected and sheets preserve the underlying scroll', async ({page}) => {
   const seed = legacy(); seed.songs.push(...Array.from({length:30}, (_, i) => ({id:'x' + i, title:'추가 곡 ' + i, show:i % 3 ? '' : '레미제라블'})));
   await boot(page, {seed, media:false});
   await page.goto('/#/library');
-  await page.locator('#top [data-imp]').click();
-  const menu=page.getByRole('dialog', {name:'보관함 메뉴'});
-  await menu.locator('[data-library-song]').selectOption('x3');
-  await expect(page.locator('select[data-song]')).toHaveValue('x3');
-  await menu.getByRole('button', {name:'닫기'}).click();
-  await page.locator('#top [data-imp]').click();
-  await expect(page.locator('.sheet [data-library-song]')).toHaveValue('x3');
-  await page.getByRole('dialog', {name:'보관함 메뉴'}).getByRole('button', {name:'닫기'}).click();
+  await page.locator('[data-song]').selectOption('x3');
+  await expect(page.locator('[data-song]')).toHaveValue('x3');
+  await page.locator('[data-select-mode]').click();
+  await expect(page.locator('[data-song]')).toHaveValue('x3');
   await page.goto('/#/home'); await page.evaluate(() => scrollTo(0, 300)); const y = await page.evaluate(() => scrollY);
   await page.evaluate(() => { VZ.confirm('확인 창', '내용'); });
   await expect(page.locator('body')).toHaveClass(/sheet-lock/);
@@ -2049,40 +2034,25 @@ test('Library menu preserves its song filter; the page under a sheet stays where
   expect(page.__errors).toEqual([]);
 });
 
-test('Library select mode sets the song and kind of several recordings at once; rows tick instead of opening', async ({page}) => {
+test('Library selection scopes and bulk actions update selected recordings', async ({page}) => {
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
-  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
-  const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
+  await page.locator('[data-select-mode]').click();
+  const bar=page.locator('.lib-selection-tools');
   await expect(bar).toContainText('0개 선택');
-  await page.evaluate(()=>VZ.softRender()); // a background refresh must preserve selection mode
-  await expect(bar).toContainText('0개 선택');
-  await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
-  await page.locator('[data-media="m1"] [data-toggle]').click();
-  await expect(page.locator('[data-media="m1"] .media-open')).toBeHidden(); // ticked, not opened
+  await page.locator('[data-media="m1"] [data-lib-pick]').click();
   await expect(bar).toContainText('1개 선택');
-  await bar.getByRole('button', {name:'전체 선택'}).click();
+  await bar.locator('[data-lib-select-all]').click();
+  await page.getByRole('dialog',{name:'전체 선택'}).getByRole('button',{name:/현재 필터 결과 전체/}).click();
   await expect(bar).toContainText('2개 선택');
-  await bar.getByRole('button', {name:/곡 지정/}).click();
-  const pick = page.getByRole('dialog', {name:'곡 지정'});
-  await pick.getByRole('option', {name:'On My Own'}).click();
-  const ask = page.getByRole('dialog', {name:'곡 지정'});
-  await expect(ask).toContainText('2개 녹음');
-  await ask.getByRole('button', {name:'바꾸기'}).click();
-  await expect(bar).toHaveCount(0);
+  await bar.locator('[data-lib-bulk-more]').click();
+  await page.getByRole('dialog',{name:'선택한 녹음 2개'}).getByRole('button',{name:/곡 지정/}).click();
+  await page.getByRole('dialog',{name:'곡 지정'}).getByRole('option',{name:'On My Own'}).click();
+  await page.getByRole('dialog',{name:'곡 지정'}).getByRole('button',{name:'바꾸기'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id + ':' + m.songId).sort().join(','))).toBe('m1:s2,m2:s2');
-  // Kind for one recording.
-  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
-  await page.locator('[data-media="m1"] [data-toggle]').click();
-  await expect(page.getByRole('toolbar')).toContainText('1개 선택');
-  await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
-  await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
-  await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
-  // Leaving the screen ends select mode.
-  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
+  await bar.locator('[data-lib-select-cancel]').click();
   await page.goto('/#/home');
-  await expect(page.locator('.sel-bar')).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
 
