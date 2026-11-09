@@ -15,7 +15,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test tests/calendar-summary.spec.cjs --grep 'one-line month totals|calendar uses the same circular' --workers=2
+      - run: npx playwright test tests/student-home.spec.cjs --grep 'My Songs and Library share the current home outer spacing' --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
