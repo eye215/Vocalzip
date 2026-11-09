@@ -105,16 +105,45 @@ VZ.importSheet = ({songId = '', files:initialFiles = null} = {}) => {
 /* ---------- 보관함 ---------- */
 const lib = {kind:'all', origin:'all', song:'', q:''};
 const monthTitle = ym => ym ? Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월' : '날짜 미상';
-VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="사진 보관함·비디오 촬영·파일 선택"><i class="ph ph-plus"></i></button><input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.mov,.mp4,.m4v,.webm,.ogg,.flac" class="sr-only" data-imp-native aria-label="가져올 음성·영상 선택">', render() {
+VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기" aria-haspopup="menu" aria-expanded="false"><i class="ph ph-plus"></i></button><input type="file" multiple accept="video/*" class="sr-only" data-imp-photos aria-label="사진 보관함에서 영상 선택"><input type="file" accept="video/*" capture="environment" class="sr-only" data-imp-camera aria-label="비디오 촬영"><input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.mov,.mp4,.m4v,.webm,.ogg,.flac" class="sr-only" data-imp-files aria-label="음성·영상 파일 선택">', render() {
   const seg = (k, opts, label) => '<div class="seg lib-seg" role="group" aria-label="' + label + '">' + opts.map(([v, t]) => '<button type="button" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + t + '</button>').join('') + '</div>';
   return '<div hidden class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·곡·메모 검색" aria-label="보관함 검색" data-q value="' + esc(lib.q) + '"></div>' +
     '<div class="vz-library-tabs">'+seg('origin', [['all', '전체'], ['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']], '공연·레슨·연습 구분')+'</div>' +
     '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 확인 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p></div><button type="button" class="icon-btn vz-filter-icon" data-library-filter aria-label="보관함 필터" aria-pressed="false"><i class="ph ph-sliders-horizontal"></i></button><button type="button" class="icon-btn" data-library-search aria-label="보관함 검색"><i class="ph ph-magnifying-glass"></i></button></div><div class="lib-selects" hidden><select aria-label="형식 필터" data-kind><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>파일 형식 전체</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select><select aria-label="곡 필터" data-song><option value="">곡 전체</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select></div><div class="lib-selection-tools" aria-label="녹음 선택"><button type="button" class="lib-select-start" data-select-mode>선택</button><button type="button" class="lib-select-cancel" data-lib-select-cancel hidden>취소</button><div class="lib-selection-left" hidden><button type="button" class="lib-select-all" data-lib-select-all aria-pressed="false"><span class="lib-check" aria-hidden="true"></span>전체 선택</button></div><div class="lib-selection-meta" hidden><strong data-lib-selected-count>0개 선택</strong><button type="button" class="lib-bulk-more" data-lib-bulk-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three"></i></button></div></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
 }, async mount(main) {
   VZ.serverAnalysisCard?.(main.querySelector('[data-server-analysis]')); // app/server-analysis.js
-  const importPicker = document.querySelector('[data-imp-native]');
-  document.querySelector('[data-imp]').onclick = () => importPicker.click();
-  importPicker.onchange = e => { const files = [...e.target.files]; e.target.value = ''; if (files.length) VZ.importSheet({files}); };
+  const importButton = document.querySelector('[data-imp]');
+  const importPickers = {
+    photos: document.querySelector('[data-imp-photos]'),
+    camera: document.querySelector('[data-imp-camera]'),
+    files: document.querySelector('[data-imp-files]')
+  };
+  Object.values(importPickers).forEach(input => input.onchange = e => {
+    const files = [...e.target.files]; e.target.value = '';
+    if (files.length) VZ.importSheet({files});
+  });
+  document.querySelector('.vz-import-menu-overlay')?.remove();
+  importButton.onclick = () => {
+    const existing = document.querySelector('.vz-import-menu-overlay');
+    if (existing) { existing.remove(); importButton.setAttribute('aria-expanded', 'false'); return; }
+    const rect = importButton.getBoundingClientRect(), overlay = document.createElement('div');
+    overlay.className = 'vz-import-menu-overlay';
+    overlay.innerHTML = '<div class="vz-import-menu" role="menu" aria-label="파일 가져오기"><button type="button" role="menuitem" data-source="photos"><i class="ph ph-images"></i>사진 보관함</button><button type="button" role="menuitem" data-source="camera"><i class="ph ph-camera"></i>비디오 촬영</button><button type="button" role="menuitem" data-source="files"><i class="ph ph-folder"></i>파일 선택</button></div>';
+    const menu = overlay.firstElementChild;
+    menu.style.top = Math.min(rect.bottom + 6, window.innerHeight - 208) + 'px';
+    menu.style.right = Math.max(12, window.innerWidth - rect.right) + 'px';
+    const closeMenu = () => { overlay.remove(); importButton.setAttribute('aria-expanded', 'false'); };
+    overlay.onclick = e => { if (e.target === overlay) closeMenu(); };
+    overlay.onkeydown = e => { if (e.key === 'Escape') { closeMenu(); importButton.focus(); } };
+    menu.querySelectorAll('[data-source]').forEach(option => option.onclick = () => {
+      const input = importPickers[option.dataset.source];
+      closeMenu();
+      input.click();
+    });
+    document.body.appendChild(overlay);
+    importButton.setAttribute('aria-expanded', 'true');
+    menu.querySelector('button').focus();
+  };
   main.querySelector('[data-library-search]').onclick=()=>{
     document.querySelector('.vz-library-search-overlay')?.remove();
     const overlay=document.createElement('div');overlay.className='vz-library-search-overlay';
