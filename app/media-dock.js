@@ -22,8 +22,7 @@
   };
   const paintSelection = () => {
     const items = visibleSelected();
-    const keepSongAction = songAction && document.body.dataset.vzRoute === 'song';
-    if (!items.length && !keepSongAction) { selectionBar?.remove(); selectionBar = null; document.body.classList.remove('vz-media-selecting', 'vz-media-has-selection'); return; }
+    if (!items.length) { selectionBar?.remove(); selectionBar = null; document.body.classList.remove('vz-media-selecting', 'vz-media-has-selection'); return; }
     if (!selectionBar) {
       selectionBar = document.createElement('div');
       selectionBar.className = 'vz-media-selection';
@@ -42,7 +41,10 @@
     document.body.classList.toggle('vz-media-has-selection', !!items.length);
     selectionBar.querySelector('[data-count]').textContent = items.length + '개 선택';
     const analysis = selectionBar.querySelector('[data-analysis]');
-    analysis.disabled = !items.length;
+    const songId = items[0]?.songId;
+    const analyzable = !!songId && !!VZ.song(songId) && items.every(item => item.songId === songId);
+    analysis.hidden = !analyzable;
+    analysis.disabled = !analyzable;
     analysis.title = '';
   };
   const toggleSelected = (row, item, button) => {
