@@ -11,7 +11,8 @@ const storage=()=>{const m=new Map();return{
  getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),
  key:i=>[...m.keys()][i]??null,get length(){return m.size}
 };};
-async function until(fn){for(let n=0;n<1000;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out waiting for sync');}
+const probes=[];
+async function until(fn){for(let n=0;n<1000;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out waiting for sync: '+probes.slice(-2).map(probe=>probe()).join(' | '));}
 class Server{
  constructor(row=null){this.row=copy(row);this.writes=[];this.reads=0;this.beforeWrite=null;this.afterRead=null;}
  client(){
@@ -79,6 +80,7 @@ function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
  vm.runInContext(script,context);
+ probes.push(()=>element('#cloud-status').textContent);
  return{store,window,status:()=>element('#cloud-status').textContent,
   sync:()=>element('#cloud-upload').onclick(),
   data:()=>JSON.parse(store.getItem(KEY)),
