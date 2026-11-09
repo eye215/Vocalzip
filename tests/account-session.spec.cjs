@@ -343,11 +343,12 @@ async function billingFixture(page){
  });
  return{revoke:()=>{allowed=false;}};
 }
-// Session verification precedes store.js loading; await both sides of the billing boot contract.
+// Require verified login and the app's own successful initial ledger load, not just a later manual store read.
 async function billingReady(page,owner){
  await expect.poll(()=>page.evaluate(id=>window.VzipAccountScope?.owner===id&&
   window.VzipBillingSession?.active===true&&window.VzipBillingStore?.account?.id==='user:'+id,owner)
   .catch(e=>{if(/context.*destroyed|most likely because of a navigation/i.test(e.message))return false;throw e;})).toBe(true);
+ await expect(page.locator('#message')).toContainText(/불러왔어요|받아왔어요/);
 }
 test('billing copies only the verified owners legacy ledger and isolates account switches',async({page})=>{
  await setup(page);await expect(page.locator('#vzip-auth-screen')).toBeHidden();await billingFixture(page);

@@ -55,7 +55,8 @@ async function copyOwnedLegacy(target){
  }finally{legacy.close();}
 }
 async function transaction(write,fn){
- ensureAccount();const db=await open();
+ // open() waits for server login verification before checking access; checking first rejects every cold start.
+ const db=await open();
  try{return await new Promise((resolve,reject)=>{
   const tx=db.transaction(['documents','sync','recovery'],write?'readwrite':'readonly'),documents=tx.objectStore('documents'),sync=tx.objectStore('sync'),recovery=tx.objectStore('recovery');
   const requests=[documents.get(initialAccount.id),sync.get(initialAccount.id),recovery.get(initialAccount.id)];let remaining=3,result,error;
