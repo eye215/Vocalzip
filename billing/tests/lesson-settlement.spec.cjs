@@ -141,8 +141,11 @@ test('Reverse deletion cancellation and Escape preserve both records and allow k
 });
 test('Reverse deletion hands off exact IDs without cancelling before final lesson confirmation',async({page})=>{
  const fixture=await setup(page),before=await ledger(page),sheet=await deleteImported(page);
+ // The main app consumes the intent immediately; inspect its initial hash rather than racing replaceState.
+ await page.addInitScript(()=>{window.__settlementNavigationHash=location.hash;});
  await sheet.getByRole('checkbox').check();await sheet.locator('[data-ok]').click();
- await expect(page).toHaveURL(new RegExp('lesson/imported\\?settlementDelete='+fixture.deductionId+'&version=1'));
+ await expect(page).toHaveURL(/#\/lesson\/imported(?:\?|$)/);
+ await expect.poll(()=>page.evaluate(()=>window.__settlementNavigationHash)).toBe('#/lesson/imported?settlementDelete='+fixture.deductionId+'&version=1');
  await page.goto('/billing/');await expect(page.locator('#message')).toContainText('불러왔어요');
  expect(await ledger(page)).toEqual(before);
 });
