@@ -25,10 +25,11 @@ async function addSession(page,time,number){
 }
 test.afterEach(async({page})=>expect(page._archiveErrors||[]).toEqual([]));
 test('Lyrics cards preview saved text and edit each field in a bottom sheet',async({page})=>{
- const seed=initial();seed.songs[0].lyrics='첫 줄 가사\n둘째 줄 가사';seed.songs[0].translation='첫 줄 해석';
+ const seed=initial();seed.songs[0].lyrics='첫 줄 가사\n둘째 줄 가사';seed.songs[0].translation='한글 해석이 길어질 때 카드의 오른쪽을 넘어가지 않고 말줄임으로 표시되는지 확인하는 문장입니다. '.repeat(4);
  await boot(page,{seed});await page.goto('/#/song/song1');await page.locator('[data-tab=lyrics]').click();
  await expect(page.locator('[data-lyric=lyrics]')).toContainText('첫 줄 가사 둘째 줄 가사');
- await expect(page.locator('[data-lyric=translation]')).toContainText('첫 줄 해석');
+ await expect(page.locator('[data-lyric=translation]')).toContainText('한글 해석이 길어질 때');
+ expect(await page.locator('[data-lyric=translation]').evaluate(card=>{const preview=card.querySelector('.vz-lyric-preview'),box=card.getBoundingClientRect();return getComputedStyle(preview).textOverflow==='ellipsis'&&getComputedStyle(preview).whiteSpace==='nowrap'&&preview.scrollWidth>preview.clientWidth&&box.right<=innerWidth})).toBe(true);
  await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('입력한 내용이 없습니다');
  await page.locator('[data-lyric=lyricNotes]').click();await page.getByRole('textbox',{name:'발음 / 호흡 / 감정 메모'}).fill('후렴 전에 숨쉬기');
  await page.locator('.vz-lyric-form button[type=submit]').click();await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('후렴 전에 숨쉬기');
