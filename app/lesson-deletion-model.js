@@ -19,15 +19,16 @@ function target(lesson,ledger){
  if(hits.length>1||hits.some(d=>d.lessonId&&d.lessonId!==lesson.id))fail('레슨과 정산 연결이 일치하지 않아요. 수강 기록을 먼저 확인해 주세요.');
  return hits[0]||null;
 }
-async function plan({id,owner,lesson,mediaIds=[],deduction=null,cloud=false}){
+async function plan({id,owner,lesson,mediaIds=[],deduction=null,cloud=false,returnTo=''}){
+ if(!['','billing'].includes(returnTo))fail('삭제 후 이동 경로를 확인해 주세요.');
  if(typeof id!=='string'||!id||typeof owner!=='string'||!owner||!lesson?.id)fail('삭제 대상과 계정을 확인해 주세요.');
  if(!Array.isArray(mediaIds)||mediaIds.some(x=>typeof x!=='string'||!rows(lesson.recordings).some(r=>r.id===x))||new Set(mediaIds).size!==mediaIds.length)fail('이 레슨에 연결된 파일만 선택해 주세요.');
  if(deduction&&(deduction.voidedAt||target(lesson,{deductions:[deduction]})?.id!==deduction.id||!Number.isSafeInteger(deduction.version)))fail('취소할 정산 차감을 다시 확인해 주세요.');
- return {version:1,id,owner,lesson:{id:lesson.id,date:lesson.date||'',billingDeductionId:lesson.billingDeductionId||''},lessonSignature:await fingerprint(lesson,mediaIds),mediaIds:[...mediaIds],linkedMediaIds:[...new Set(rows(lesson.recordings).map(r=>r.id))],deduction:deduction?{id:deduction.id,version:deduction.version}:null,cloud:!!cloud,
+ return {version:1,id,owner,returnTo,lesson:{id:lesson.id,date:lesson.date||'',billingDeductionId:lesson.billingDeductionId||''},lessonSignature:await fingerprint(lesson,mediaIds),mediaIds:[...mediaIds],linkedMediaIds:[...new Set(rows(lesson.recordings).map(r=>r.id))],deduction:deduction?{id:deduction.id,version:deduction.version}:null,cloud:!!cloud,
   done:{prepared:!cloud,billing:!deduction,media:[],cloud:!cloud,lesson:false},phase:'ready',error:''};
 }
 function validate(job){
- if(!job||job.version!==1||typeof job.id!=='string'||!job.id||typeof job.owner!=='string'||!job.owner||!job.lesson?.id||
+ if(!job||job.returnTo!==undefined&&!['','billing'].includes(job.returnTo)||job.version!==1||typeof job.id!=='string'||!job.id||typeof job.owner!=='string'||!job.owner||!job.lesson?.id||
   !Array.isArray(job.mediaIds)||new Set(job.mediaIds).size!==job.mediaIds.length||job.mediaIds.some(id=>typeof id!=='string'||!id)||!/^[a-f0-9]{64}$/.test(job.lessonSignature)||
   !Array.isArray(job.linkedMediaIds)||job.mediaIds.some(id=>!job.linkedMediaIds.includes(id))||
   job.deduction&&(!job.deduction.id||!Number.isSafeInteger(job.deduction.version)||job.deduction.version<1)||

@@ -217,6 +217,14 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
     main.querySelectorAll('[data-fb],[data-fb2]').forEach(b => b.onclick = () => feedbackSheet(l));
     main.querySelector('[data-add-task]')?.addEventListener('click', () => VZ.taskSheet({lessonId:id, songId:VZ.lessonSongIds(l)[0] || ''}));
     main.querySelector('[data-del-lesson]').onclick = () => VZ.lessonDeletion.open(id);
+    const query=new URLSearchParams(location.hash.split('?')[1]||''),deductionId=query.get('settlementDelete');
+    if(deductionId){
+      const expectedVersion=Number(query.get('version'));
+      history.replaceState(null,'',location.pathname+location.search+'#/lesson/'+encodeURIComponent(id));
+      if(Number.isSafeInteger(expectedVersion)&&expectedVersion>0)
+        void VZ.lessonDeletion.open(id,{deductionId,expectedVersion,returnTo:'billing'});
+      else VZ.toast('정산 삭제 대상을 다시 확인해 주세요.','error');
+    }
     const host = main.querySelector('[data-recs]'); if (!host) return;
     const recs = l.recordings || [];
     main.querySelector('[data-link-media]').onclick = () => linkMediaSheet(l);

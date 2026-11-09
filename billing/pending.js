@@ -59,7 +59,7 @@ function classify(lessons,state,today){
    continue;
   }
   // Imported lessons remain settled by their original record, even if it was voided or removed.
-  if(lesson.billing_deduction_id)continue;
+  if(lesson.billing_deduction_id||(state.deductions||[]).some(d=>d.voidedAt&&d.deletionOperationId&&d.lessonId===lesson.lesson_id))continue;
   if(!date||date>today)continue;
   if(lesson.lesson_status==='completed')toDeduct.push(lesson);
   else if(lesson.lesson_status==='unconfirmed')toConfirm.push(lesson);

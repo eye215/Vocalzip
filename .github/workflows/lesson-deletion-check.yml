@@ -1,7 +1,7 @@
 name: Selective lesson deletion safety
 on:
   push:
-    branches: ['codex/lesson-selective-delete-20261109']
+    branches: ['codex/lesson-selective-delete-20261109', 'codex/billing-linked-delete-20261109']
   pull_request:
     paths:
       - 'app/lesson-deletion*'

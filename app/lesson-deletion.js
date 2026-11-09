@@ -84,7 +84,7 @@ function progress(job){
     if(running)return;running=true;button.disabled=true;replan.disabled=true;error.textContent='';
     try{
      const result=await run(latest,next=>{latest=next;status.textContent=progressText(next);});
-     status.textContent=progressText(result);V.toast('선택한 레슨과 항목을 삭제했어요.');close();V.nav('#/lessons');
+     status.textContent=progressText(result);V.toast('선택한 레슨과 항목을 삭제했어요.');close();if(result.returnTo==='billing')location.assign('billing/');else V.nav('#/lessons');
     }catch(e){
      error.textContent=e.message;
      try{latest=jobs().find(x=>x.id===job.id)||latest;}catch{}
@@ -94,7 +94,7 @@ function progress(job){
    replan.onclick=async()=>{
     if(running)return;
     if(!await V.confirm('삭제 대상을 다시 선택할까요?','이미 삭제한 파일과 취소한 차감은 되돌리지 않습니다. 남은 레슨의 최신 내용을 기준으로 대상을 다시 고르고 최종 확인합니다.',{ok:'다시 선택'}))return;
-    try{save({...latest,phase:'complete'});close();await open(latest.lesson.id);}catch(e){error.textContent=e.message;}
+    try{save({...latest,phase:'complete'});close();await open(latest.lesson.id,{returnTo:latest.returnTo});}catch(e){error.textContent=e.message;}
    };
    button.onclick=start;status.textContent=progressText(job);start();
   }});
@@ -105,22 +105,24 @@ function pending(){
  V.sheet({title:'미완료 레슨 삭제',body:'<p class="muted">이미 삭제한 파일은 복구할 수 없어요. 확인했던 대상의 남은 단계만 다시 처리합니다.</p><div class="list">'+list.map(j=>'<button type="button" class="item" data-job="'+esc(j.id)+'"><span class="item-main"><span class="item-title">'+esc(V.dateLabel(j.lesson.date))+'</span><span class="item-sub">'+esc(progressText(j))+'</span></span><i class="ph ph-caret-right"></i></button>').join('')+'</div>',
   onMount:(el,close)=>el.querySelectorAll('[data-job]').forEach(b=>b.onclick=()=>{const j=list.find(j=>j.id===b.dataset.job);close();progress(j);})});
 }
-async function open(id){
+async function open(id,{deductionId='',expectedVersion=0,returnTo=''}={}){
  if(active)return V.toast('진행 중인 삭제가 끝난 뒤 다시 확인해 주세요.');
  try{
-  const old=jobs().find(j=>j.lesson.id===id);if(old){progress(old);return;}
+  const old=jobs().find(j=>j.lesson.id===id);if(old){if(deductionId)throw Error('이 レ슨에 미완료 삭제가 있어요. 미완료 삭제에서 대상을 먼저 확인해 주세요.');progress(old);return;}
   const account=owner(),lesson=structuredClone(V.db.lessons.find(l=>l.id===id));
   if(!lesson)throw Error('레슨을 찾지 못했어요.');
   const [ledger,files]=await Promise.all([V.billingDeletionLedger(),M.list(true)]);
   if(owner()!==account)throw Error('계정이 변경됐어요.');if(M.cloudError())throw Error(M.cloudError());
-  const charge=P.target(lesson,ledger),refs=[...new Set((lesson.recordings||[]).map(r=>r.id))];
+  const charge=P.target(lesson,ledger);
+  if(deductionId&&(!charge||charge.id!==deductionId||charge.version!==expectedVersion))throw Error('연결 차감이 변경됐어요. 정산에서 최신 내역을 다시 확인해 주세요.');
+  const refs=[...new Set((lesson.recordings||[]).map(r=>r.id))];
   const lines=refs.map(fileId=>{
    const file=files.find(m=>m.id===fileId);
    return '<label class="item"><input type="checkbox" name="media" value="'+esc(fileId)+'"><span class="item-main">'+esc(file?M.label(file):'연결 파일 · 원본 확인 후 삭제')+'</span></label>';
   }).join('');
   V.sheet({title:'레슨 삭제 대상',body:'<form id="lesson-delete-form"><p>'+esc(V.dateLabel(lesson.date))+' 레슨을 영구 삭제해요.</p><p class="muted">체크하지 않은 녹음과 정산은 유지돼요. 숙제·연습 기록·곡은 남고 레슨 연결만 해제돼요.</p>'+
    (lines?'<fieldset><legend>함께 영구 삭제할 녹음 · 기본 선택 없음</legend><div class="list">'+lines+'</div></fieldset>':'<p class="muted">연결된 녹음이 없어요.</p>')+
-   (charge?'<label class="item"><input type="checkbox" name="billing"><span class="item-main">연결 차감 취소 · '+esc(String(charge.units/100))+'회 반환<small class="item-sub">결제·환불과 최소 거래 이력은 유지돼요.</small></span></label>':'<p class="muted">취소할 연결 차감이 없어요. 다른 날짜나 같은 날의 별도 정산은 유지돼요.</p>')+
+   (charge?'<label class="item"><input type="checkbox" name="billing"'+(deductionId?' checked':'')+'><span class="item-main">연결 차감 취소 · '+esc(String(charge.units/100))+'회 반환<small class="item-sub">결제·환불과 최소 거래 이력은 유지돼요.</small></span></label>':'<p class="muted">취소할 연결 차감이 없어요. 다른 날짜나 같은 날의 별도 정산은 유지돼요.</p>')+
    '<p data-delete-plan-error role="alert"></p></form>',
    foot:'<button type="submit" form="lesson-delete-form" class="btn danger block">삭제 대상 확인</button>',
    onMount:(el,close)=>{
@@ -129,7 +131,7 @@ async function open(id){
      e.preventDefault();button.disabled=true;
      try{
       const selected=[...new FormData(form).getAll('media')],cancel=!!form.elements.billing?.checked;
-      const job=await P.plan({id:V.uid(),owner:account,lesson,mediaIds:selected,deduction:cancel?charge:null,cloud:!!window.vzipCloudSignedIn?.()});
+      const job=await P.plan({id:V.uid(),owner:account,lesson,mediaIds:selected,deduction:cancel?charge:null,cloud:!!window.vzipCloudSignedIn?.(),returnTo});
       await verify(job);close();
       const shared=selected.filter(fileId=>V.db.practices.some(p=>(p.mediaIds||[]).includes(fileId))||
        V.db.lessons.some(l=>l.id!==id&&(l.recordings||[]).some(r=>r.id===fileId))||V.db.songs.some(s=>s.repertoire?.takeId===fileId));

@@ -110,3 +110,51 @@ test('Settlement safety refused explicit charge cannot trigger unrelated automat
  expect(report.action.message).toContain('완료로 확인된 레슨만');
  expect(state).toEqual(before);
 });
+
+async function deleteImported(page){
+ await attendance(page);
+ await page.locator('#deduction-list tbody tr').filter({hasText:'가져온 수강'}).getByRole('button',{name:'삭제',exact:true}).click();
+ return page.locator('.bd-sheet');
+}
+test('Reverse deletion starts unchecked, cancels only the selected charge and preserves lesson, media links and payments',async({page})=>{
+ await setup(page);const before=await ledger(page),app=await page.evaluate(key=>localStorage.getItem(key),KEY);
+ const sheet=await deleteImported(page);
+ await expect(sheet.getByRole('checkbox')).not.toBeChecked();
+ await expect(sheet).toContainText('2회 차감 취소');
+ await expect(sheet).toContainText('잔여 7회 → 9회');
+ await expect(sheet).toContainText('사용 금액 90,000원 → 30,000원');
+ await sheet.locator('[data-ok]').click();
+ await expect(page.locator('#message')).toContainText('영구 삭제했어요');
+ const after=await ledger(page);
+ expect(after.payments).toEqual(before.payments);
+ expect(after.deductions.find(d=>d.lessonId==='neighbour')).toEqual(before.deductions.find(d=>d.lessonId==='neighbour'));
+ expect(after.deductions.find(d=>d.id===before.deductions[0].id).deletionOperationId).toBeTruthy();
+ expect(await page.evaluate(key=>localStorage.getItem(key),KEY)).toBe(app);
+ await page.reload();await attendance(page);await page.locator('#show-deleted').check();
+ await expect(page.locator('#deduction-list tbody tr').filter({hasText:'가져온 수강'}).getByRole('button',{name:'복구',exact:true})).toHaveCount(0);
+});
+test('Reverse deletion cancellation and Escape preserve both records and allow keyboard choice focus',async({page})=>{
+ await setup(page);const before=await ledger(page),sheet=await deleteImported(page);
+ await page.keyboard.press('Shift+Tab');await expect(sheet.getByRole('checkbox')).toBeFocused();
+ await page.keyboard.press('Space');await expect(sheet.getByRole('checkbox')).toBeChecked();
+ await page.keyboard.press('Escape');await expect(sheet).toHaveCount(0);expect(await ledger(page)).toEqual(before);
+});
+test('Reverse deletion hands off exact IDs without cancelling before final lesson confirmation',async({page})=>{
+ const fixture=await setup(page),before=await ledger(page),sheet=await deleteImported(page);
+ // The main app consumes the intent immediately; inspect its initial hash rather than racing replaceState.
+ await page.addInitScript(()=>{window.__settlementNavigationHash=location.hash;});
+ await sheet.getByRole('checkbox').check();await sheet.locator('[data-ok]').click();
+ await expect(page).toHaveURL(/#\/lesson\/imported(?:\?|$)/);
+ await expect.poll(()=>page.evaluate(()=>window.__settlementNavigationHash)).toBe('#/lesson/imported?settlementDelete='+fixture.deductionId+'&version=1');
+ await page.goto('/billing/');await expect(page.locator('#message')).toContainText('불러왔어요');
+ expect(await ledger(page)).toEqual(before);
+});
+test('Reverse deletion never chooses between conflicting lesson references on the same date',async({page})=>{
+ const fixture=await setup(page);
+ await page.evaluate(({key,deductionId})=>{
+  const app=JSON.parse(localStorage.getItem(key));app.lessons[1].billingDeductionId=deductionId;localStorage.setItem(key,JSON.stringify(app));
+ },{key:KEY,...fixture});
+ const sheet=await deleteImported(page);
+ await expect(sheet.getByRole('checkbox')).toHaveCount(0);await expect(sheet).toContainText('연결 레슨이 여러 개');
+ await sheet.locator('[data-cancel]').click();
+});

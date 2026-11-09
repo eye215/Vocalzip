@@ -2372,3 +2372,30 @@ test('Lesson deletion can reselect changed content after partial failure while p
  await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
  expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
 });
+
+test('Lesson deletion from settlement verifies exact charge, preserves recordings and returns to billing',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true),row=before.deductions.find(d=>d.lessonId==='l1');
+ await page.goto('/#/lesson/l1?settlementDelete='+encodeURIComponent(row.id)+'&version='+row.version);
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan.locator('input[name=billing]')).toBeChecked();
+ await expect(plan.locator('input[name=media]:checked')).toHaveCount(0);
+ await expect(page).toHaveURL(/#\/lesson\/l1$/);
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect(page).toHaveURL(/\/billing\/$/);
+ const after=await page.evaluate(()=>VzipBillingStore.load());
+ expect(after.payments).toEqual(before.payments);
+ expect(after.deductions.find(d=>d.lessonId==='l1').deletionOperationId).toBeTruthy();
+ expect(after.deductions.find(d=>d.lessonId==='same-day-neighbour')).toEqual(before.deductions.find(d=>d.lessonId==='same-day-neighbour'));
+ await page.goto('/#/lessons');await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false;});
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+});
+test('Lesson deletion from stale settlement version stops without a dialog or destructive actions',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true),row=before.deductions.find(d=>d.lessonId==='l1');
+ await page.goto('/#/lesson/l1?settlementDelete='+encodeURIComponent(row.id)+'&version=999');
+ await expect(page.locator('.toast').last()).toContainText(' 연결 차감이 변경됐어요'.trim());
+ await expect(page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true})).toHaveCount(0);
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
+ expect(await deletionBillingFrame(page)).toEqual(before);
+});
