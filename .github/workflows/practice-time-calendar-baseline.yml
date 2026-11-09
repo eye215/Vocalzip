@@ -1,0 +1,25 @@
+name: Existing calendar visual baseline
+on:
+  push:
+    branches: ['codex/practice-time-calendar-baseline-20261109']
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/calendar-summary.spec.cjs --grep 'one-line month totals|calendar uses the same circular' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-calendar-visual-baseline
+          path: |
+            playwright-report/
+            test-results/
