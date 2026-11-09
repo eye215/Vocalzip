@@ -70,7 +70,12 @@ async function transaction(write,fn){
 function expected(state,revision){if(state.revision!==revision)throw Error('다른 정산 탭에서 데이터가 변경됐어요. 다시 불러온 뒤 입력을 확인해 주세요.')}
 const load=()=>transaction(false,({state})=>state);
 const status=()=>transaction(false,({state,meta,previous})=>({state,meta,recovery:previous?{at:previous.at,reason:previous.reason,summary:B.summary(previous.state)}:null}));
-const save=(command,revision)=>transaction(true,({state,documents})=>{expected(state,revision);const next=C.reduce(state,command);documents.put(next);return next});
+const save=(command,revision)=>transaction(true,({state,documents})=>{expected(state,revision);
+ if(command.options?.lessonGuard){
+  if(!window.VzipBillingPending?.verifyLesson)throw Error('레슨 정산 검증을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.');
+  window.VzipBillingPending.verifyLesson(command,lessons(),state);
+ }
+ const next=C.reduce(state,command);documents.put(next);return next});
 function replace(source,revision,{reason='backup.restore',allowOwnerChange=false,remoteRevision=null,undo=false}={}){
  const incoming=source?B.validate(source):null;
  return transaction(true,({state,meta,previous,documents,sync,recovery})=>{

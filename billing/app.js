@@ -316,7 +316,8 @@ function autoSetting(){
 function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AUTO_KEY)||'{}'),v=autoSetting();all[S.account.id]={on,since:on&&!v.on?Date.now():v.since,grace:1};localStorage.setItem(AUTO_KEY,JSON.stringify(all));notify(on?'앱에서 완료한 레슨을 자동으로 차감할게요.':'자동 차감을 껐어요. 정산 대기에서 직접 차감해 주세요.');render();if(on)autoDeduct()}catch{}}
 let autoRunning=false,autoWaiting=0;
 async function autoDeduct(){
- if(autoRunning||pending||!state||!P?.autoCandidates)return 0;const cfg=autoSetting();if(!cfg.on)return 0;
+ // An explicit lesson action must never trigger charges for unrelated lessons.
+ if(params.has('do')||autoRunning||pending||!state||!P?.autoCandidates)return 0;const cfg=autoSetting();if(!cfg.on)return 0;
  autoRunning=true;let n=0;
  try{
   const todo=P.autoCandidates(S.lessons(),state,today(),cfg.since);autoWaiting=0;

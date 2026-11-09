@@ -4,23 +4,57 @@
 'use strict';
 const activeRows=rows=>rows.filter(row=>!row.voidedAt);
 
+
+/** Resolve IDs only. A shared date never identifies a lesson. Conflicting links require manual review. */
+function linkedDeduction(lesson,state){
+ const rows=activeRows(state.deductions||[]).filter(row=>
+  row.lessonId===lesson.lesson_id||lesson.billing_deduction_id&&row.id===lesson.billing_deduction_id);
+ if(rows.length>1||rows.some(row=>row.lessonId&&row.lessonId!==lesson.lesson_id))return {conflict:true,row:null};
+ return {conflict:false,row:rows[0]||null};
+}
+function lessonSnapshot(lesson){
+ return {id:lesson.lesson_id,date:lesson.lesson_date||'',status:lesson.lesson_status||'unconfirmed',
+  start:lesson.lesson_start||'',end:lesson.lesson_end||'',billingId:lesson.billing_deduction_id||'',
+  touched:Number(lesson.lesson_touched)||0};
+}
+function verifyLesson(command,lessons,state){
+ const expected=command.options?.lessonGuard;if(!expected)return;
+ const matches=lessons.filter(row=>row.lesson_id===expected.id);
+ if(matches.length!==1||Object.entries(lessonSnapshot(matches[0])).some(([key,value])=>expected[key]!==value))
+  throw Error('레슨이 변경되거나 삭제됐어요. 다시 확인한 뒤 처리해 주세요.');
+ const lesson=matches[0],linked=linkedDeduction(lesson,state);
+ if(linked.conflict)throw Error('레슨과 정산 연결이 일치하지 않아요. 수강 기록을 직접 확인해 주세요.');
+ if(command.type==='deduction.save'){
+  if(command.payload.lessonId!==lesson.lesson_id)throw Error('처리할 레슨 연결을 확인해 주세요.');
+  if(command.payload.units>0&&!['completed','unconfirmed'].includes(lesson.lesson_status))
+   throw Error('완료로 확인된 레슨만 차감할 수 있어요.');
+  if(linked.row&&linked.row.id!==command.payload.id)throw Error('동일 레슨의 차감 기록이 이미 있어요.');
+ }else if(command.type==='entity.void'){
+  if(command.payload.collection!=='deductions'||linked.row?.id!==command.payload.id)
+   throw Error('차감을 취소할 레슨 연결이 변경됐어요. 다시 확인해 주세요.');
+ }else throw Error('지원하지 않는 레슨 정산 작업이에요.');
+}
+function cancellationFor(lesson,deduction){
+ return {type:'entity.void',payload:{collection:'deductions',id:deduction.id,expectedVersion:deduction.version},
+  options:{lessonGuard:lessonSnapshot(lesson)}};
+}
+
 /** Split app lessons into: completed without a deduction (toDeduct), status-less legacy
  * lessons without a deduction (toConfirm), and active charged deductions whose lesson is
  * now scheduled/cancelled in the app (toRestore). Future lessons are never pending. */
 function classify(lessons,state,today){
- const deductions=activeRows(state.deductions||[]),byLesson=new Map(),activeIds=new Set(deductions.map(row=>row.id));
- for(const row of deductions)if(row.lessonId)byLesson.set(row.lessonId,row);
+
  const toDeduct=[],toConfirm=[],toRestore=[];
  for(const lesson of lessons){
-  const id=lesson.lesson_id,existing=byLesson.get(id),date=lesson.lesson_date||'';
-  // A lesson the app created from this ledger's own attendance record is settled by that record. If the record is gone
-  // (deleted, or the ledger was rebuilt), it is still not asked again: deducting it would count the same lesson twice.
-  if(lesson.billing_deduction_id)continue;
+  const {row:existing,conflict}=linkedDeduction(lesson,state),date=lesson.lesson_date||'';
+  if(conflict)continue; // Never choose a financial target from contradictory references.
   if(existing){
    // Only plain completed charges; a manual same-day-cancel (noshow) charge is intentional.
    if(existing.status==='completed'&&existing.units>0&&['scheduled','cancelled'].includes(lesson.lesson_status))toRestore.push({lesson,deduction:existing});
    continue;
   }
+  // Imported lessons remain settled by their original record, even if it was voided or removed.
+  if(lesson.billing_deduction_id)continue;
   if(!date||date>today)continue;
   if(lesson.lesson_status==='completed')toDeduct.push(lesson);
   else if(lesson.lesson_status==='unconfirmed')toConfirm.push(lesson);
@@ -46,7 +80,7 @@ function defaultPass(state,balances,hourly){
 }
 
 function deductionFor(lesson,passId,{status='completed',units=100}={}){
- return {type:'deduction.save',payload:{passId,lessonId:lesson.lesson_id,date:lesson.lesson_date,status,units,start:lesson.lesson_start||'',end:lesson.lesson_end||'',memo:''}};
+ return {type:'deduction.save',payload:{passId,lessonId:lesson.lesson_id,date:lesson.lesson_date,status,units,start:lesson.lesson_start||'',end:lesson.lesson_end||'',memo:''},options:{lessonGuard:lessonSnapshot(lesson)}};
 }
 
 /** Lessons to deduct automatically: completed in the app after auto-deduction was turned on (and dated at most a
@@ -125,9 +159,9 @@ function render(ctx){
  }
  list('완료 · 차감 대기',groups.toDeduct,lesson=>[['1시간',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:100}),lesson.lesson_date+' 1시간 차감')],['2시간',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:200}),lesson.lesson_date+' 2시간 차감')],['0시간(보강)',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:0}),lesson.lesson_date+' 0시간 차감')],['직접 입력',()=>app.prefill(lesson.lesson_id)]]);
  list('상태 없음 · 수강 확인',groups.toConfirm,lesson=>[['1시간 수강',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:100}),lesson.lesson_date+' 1시간 차감')],['2시간 수강',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{units:200}),lesson.lesson_date+' 2시간 차감')],['수강 안 함 · 0회',()=>need()&&app.persist(deductionFor(lesson,chosenPass,{status:'cancelled',units:0}),lesson.lesson_date+' 레슨을 차감 없이 기록했어요.')],['직접 입력',()=>app.prefill(lesson.lesson_id)]]);
- list('앱에서 취소·예정으로 바뀐 차감',groups.toRestore,({lesson,deduction})=>[['차감 취소(복구)',async()=>{if(await window.VzipBillingDialog.ask({title:'차감을 취소할까요?',message:lesson.lesson_date+' 레슨이 앱에서 취소·예정으로 바뀌었어요. 차감을 취소하면 기록한 시간만큼 복구돼요. 변경 이력은 남아요.',ok:'차감 취소',cancel:'닫기',danger:true}))app.persist({type:'entity.void',payload:{collection:'deductions',id:deduction.id,expectedVersion:deduction.version}},'차감을 취소했어요.')}],['당일 취소 등으로 수정',()=>app.edit(deduction)]]);
+ list('앱에서 취소·예정으로 바뀐 차감',groups.toRestore,({lesson,deduction})=>[['차감 취소(복구)',async()=>{if(await window.VzipBillingDialog.ask({title:'차감을 취소할까요?',message:lesson.lesson_date+' 레슨이 앱에서 취소·예정으로 바뀌었어요. 차감을 취소하면 기록한 시간만큼 복구돼요. 변경 이력은 남아요.',ok:'차감 취소',cancel:'닫기',danger:true}))app.persist(cancellationFor(lesson,deduction),'차감을 취소했어요.')}],['당일 취소 등으로 수정',()=>app.edit(deduction)]]);
  host.append(box);
  if(passes.length&&!chosenPass){const warn=document.createElement('p');warn.className='help error';warn.textContent='잔여 1회 이상인 레슨권이 없어요. 새 레슨권을 등록하거나 직접 선택해 주세요.';box.insertBefore(warn,box.querySelector('h4'))}
 }
-return {classify,defaultPass,deductionFor,autoCandidates,unitsFor,render};
+return {classify,defaultPass,deductionFor,cancellationFor,lessonSnapshot,verifyLesson,linkedDeduction,autoCandidates,unitsFor,render};
 });

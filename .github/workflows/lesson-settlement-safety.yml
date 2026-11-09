@@ -1,0 +1,32 @@
+name: Lesson settlement safety
+on:
+  push:
+    branches: ['codex/lesson-settlement-safety-20261109']
+  pull_request:
+    paths:
+      - 'billing/**'
+      - '.github/workflows/lesson-settlement-safety.yml'
+permissions:
+  contents: read
+jobs:
+  settlement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: node --test billing/tests/*.test.cjs
+      - run: npm run test:syntax
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Settlement identity, stale confirmation, retries and unrelated-record protection
+        run: npx playwright test --config=billing/playwright.config.cjs billing/tests/lesson-settlement.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lesson-settlement-safety
+          path: |
+            billing-report/
+            billing-results/
