@@ -24,9 +24,16 @@ async function addSession(page,time,number){
  await page.locator('[data-add-session]').click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill(time);await dialog(page).getByLabel('공연 회차',{exact:true}).fill(number);await dialog(page).getByLabel('해당 회차 출연',{exact:true}).selectOption('yes');await save(page);
 }
 test.afterEach(async({page})=>expect(page._archiveErrors||[]).toEqual([]));
-test('Library exposes filters beside selection and opens a selection scope sheet',async({page})=>{
+test('Library places filter and search above review, and keeps selection separate',async({page})=>{
  await boot(page);await page.goto('/#/library');
- await expect(page.locator('[data-kind]')).toBeAttached();await expect(page.locator('[data-song]')).toBeAttached();
+ await expect(page.locator('[data-kind]')).toBeHidden();await expect(page.locator('[data-song]')).toBeHidden();
+ await expect(page.locator('.lib-tools [data-library-filter]')).toHaveAttribute('aria-pressed','false');
+ await expect(page.locator('.lib-tools [data-library-search]')).toBeVisible();
+ await page.locator('[data-library-filter]').click();await page.locator('[data-filter-kind]').click();await page.locator('[data-choice=audio]').click();
+ await expect(page.locator('[data-library-filter]')).toHaveAttribute('aria-pressed','true');
+ await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeFocused();
+ await page.getByRole('searchbox',{name:'보관함 검색'}).fill('테스트');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
+ await expect(page.locator('[data-q]')).toHaveValue('테스트');
  await expect(page.locator('[data-select-mode]')).toBeVisible();
  await page.locator('[data-select-mode]').click();await page.locator('[data-lib-select-all]').click();
  const options=page.getByRole('dialog',{name:'전체 선택'});
@@ -54,9 +61,9 @@ test('Repertoire persists metadata ratings keys and filters without rewriting or
  await page.locator('[data-rep=keys]').click();await dialog(page).getByLabel('원키',{exact:true}).fill('Db');await dialog(page).getByLabel('연습키',{exact:true}).fill('C');await save(page);
  await page.reload();await expect(page.locator('[data-repertoire]')).toContainText('4.5/5');await expect(page.locator('[data-repertoire]')).toContainText('원키 Db');
  const data=await db(page);expect(data.songs[0].id).toBe('song1');expect(data.songs[0].lyrics).toBe('보존할 가사');expect(data.practices).toEqual(initial().practices);expect(data.lessons).toEqual(initial().lessons);
- await page.goto('/#/songs');await page.locator('[data-status-sheet]').click();await page.locator('[data-choice=ready]').click();await expect(page.locator('[data-l] a')).toHaveCount(1);
+ await page.goto('/#/songs');await page.locator('[data-song-filter]').click();await page.locator('[data-filter-status]').click();await page.locator('[data-choice=ready]').click();await expect(page.locator('[data-l] a')).toHaveCount(1);await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','true');
  await page.locator('[data-song-search]').click();await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await page.locator('[data-collection-search] button[type=submit]').click();await expect(page.locator('[data-l]')).toContainText('This Is the Moment');
- await page.locator('[data-sort-sheet]').click();await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
+ await page.locator('[data-song-filter]').click();await page.locator('[data-filter-sort]').click();await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
 });
 test('Performance CRUD, distinct sessions, bidirectional song links and safe deletion',async({page})=>{
  await boot(page);const id=await newShow(page);await addSession(page,'14:00','1');await addSession(page,'19:00','2');
@@ -147,8 +154,8 @@ test('A production connects to the rest of the app: its day on the calendar, 공
 
 
  test('Approved collections show live songs, filter sheets, recorder preselection and correct Library tab',async({page})=>{
- await boot(page);await expect(page.locator('.vz-song-list a')).toHaveCount(2);await expect(page.locator('.vz-song-filters')).toHaveCSS('background-color','rgb(243, 236, 255)');
- await page.locator('[data-sort-sheet]').click();await expect(page.locator('[data-choice=name]')).toBeVisible();await page.locator('[data-choice=name]').click();await expect(page.locator('[data-sort-sheet]')).toContainText('이름순');
+ await boot(page);await expect(page.locator('.vz-song-list a')).toHaveCount(2);await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','false');
+ await page.locator('[data-song-filter]').click();await page.locator('[data-filter-sort]').click();await expect(page.locator('[data-choice=name]')).toBeVisible();await page.locator('[data-choice=name]').click();await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','true');
  await expect(page.locator('.vz-recent-song')).toHaveAttribute('href','#/record?song=song1');await page.locator('.vz-recent-song').click();await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
  await page.goto('/#/library');await expect(page.locator('.v-nav [data-nav=library]')).toHaveAttribute('aria-current','page');await expect(page.locator('#top [data-back]')).toHaveCount(0);await expect(page.locator('[data-library-search]')).toBeVisible();
  await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeVisible();

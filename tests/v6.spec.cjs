@@ -1504,12 +1504,14 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('.lib-month').last()).toContainText('2025년 1월');
   await expect(page.locator('.lib-month').last()).toContainText('1개 · 2분');
   await expect(page.locator('[data-count]')).toContainText('3개');
-  // Filters: lesson/practice segment, then format + song selects side by side.
+  // The origin segment stays separate from the format and song filter sheet.
   await page.getByRole('button', {name:'레슨', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();
-  await page.locator('[data-kind]').selectOption('video');
+  await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-kind]').click();
+  await page.locator('[data-choice=video]').click();
   await expect(page.getByText('조건에 맞는 파일이 없어요.')).toBeVisible();
   await page.getByRole('button', {name:'필터 초기화'}).click();
   await expect(page.locator('[data-media]')).toHaveCount(3);
@@ -2021,7 +2023,9 @@ test('Library song filter stays selected and sheets preserve the underlying scro
   const seed = legacy(); seed.songs.push(...Array.from({length:30}, (_, i) => ({id:'x' + i, title:'추가 곡 ' + i, show:i % 3 ? '' : '레미제라블'})));
   await boot(page, {seed, media:false});
   await page.goto('/#/library');
-  await page.locator('[data-song]').selectOption('x3');
+  await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-song]').click();
+  await page.locator('[data-choice=x3]').click();
   await expect(page.locator('[data-song]')).toHaveValue('x3');
   await page.locator('[data-select-mode]').click();
   await expect(page.locator('[data-song]')).toHaveValue('x3');
