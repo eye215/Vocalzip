@@ -32,10 +32,13 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --omit=dev --ignore-scripts
+      - name: Permanent deletion in its standalone disposable database
+        env:
+          VZ_DELETE_TEST_DB: postgres://postgres:compatibility_ci_only@localhost:5432/postgres
+        run: node --test tests/permanent-lesson-delete.test.mjs
       - name: Existing snapshot, draft, outbox and permanent deletion SQL contracts
         env:
           VZ_SNAPSHOT_TEST_DB: postgres://postgres:compatibility_ci_only@localhost:5432/postgres
           VZ_DRAFT_TEST_DB: postgres://postgres:compatibility_ci_only@localhost:5432/postgres
-          VZ_DELETE_TEST_DB: postgres://postgres:compatibility_ci_only@localhost:5432/postgres
           VZIP_WITH_PERMANENT_DELETE: '1'
-        run: node --test --test-concurrency=1 tests/snapshot-revision.test.mjs tests/field-drafts.test.mjs tests/field-draft-outbox.test.cjs tests/field-draft-outbox-integration.test.mjs tests/permanent-lesson-delete.test.mjs
+        run: node --test --test-concurrency=1 tests/snapshot-revision.test.mjs tests/field-drafts.test.mjs tests/field-draft-outbox.test.cjs tests/field-draft-outbox-integration.test.mjs
