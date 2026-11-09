@@ -1,0 +1,60 @@
+name: Photos audio packet read safety
+on:
+  push:
+    branches: ['codex/photo-audio-read-20261109']
+  pull_request:
+    paths:
+      - 'audio-extract-worker.js'
+      - 'audio-packet-proof.js'
+      - 'tests/audio-packet-proof.test.cjs'
+      - 'media-import.js'
+      - 'app/import-hub.js'
+      - 'app/media.js'
+      - 'r2-storage.js'
+      - 'tests/media-inspection-reuse.test.cjs'
+      - 'tests/upload-throughput.test.cjs'
+      - '.github/workflows/photo-audio-read-check.yml'
+permissions:
+  contents: read
+concurrency:
+  group: photo-audio-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  prepare-transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:syntax
+      - name: Cache identity, cancellation, memory bound and multipart failure tests
+        run: node --test tests/audio-packet-proof.test.cjs tests/media-inspection-reuse.test.cjs tests/upload-throughput.test.cjs tests/media-upload-recovery.test.cjs
+      - run: npx playwright install --with-deps chromium webkit
+      - run: sudo apt-get install -y ffmpeg
+      - name: Bounded media parser bundle
+        run: curl --fail --location --retry 2 https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs --output /tmp/vzip-mediabunny.mjs
+      - name: Create synthetic audio and video fixtures
+        run: node tests/make-audio-fixtures.cjs
+      - name: Packet-preserving video extraction and audio inspection reuse
+        env:
+          VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
+        run: npx playwright test tests/audio-import.spec.cjs --workers=2
+      - name: Multi-file queue, retry, dates, lossless sound and early first upload
+        env:
+          VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
+        run: >-
+          npx playwright test tests/v6.spec.cjs --grep 'Bulk upload:|A stopped upload|Upload startup|Import hub filters|Import hub suggests|Import hub takes|WAV imports|Signed-in imports|Import: multiple' --workers=2
+      - name: R2 receipt, cancellation, bytes, ownership and metadata regressions
+        env:
+          VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
+        run: npx playwright test tests/r2.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: photo-audio-read
+          path: |
+            test-results/
+            playwright-report/

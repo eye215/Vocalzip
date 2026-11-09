@@ -16,7 +16,7 @@ window.vzipPrepareMedia=async(file,{signal,onProgress=()=>{}}={})=>{
  if(typeof Worker!=='function'){if(video(file))throw Error('영상 대신 음원 파일로 가져와 주세요.');return fallback()}
  if(active)throw Error('다른 파일을 준비 중이에요. 완료 후 다시 시도해 주세요.');
  active=true;const id=Date.now()+'-'+crypto.randomUUID();let worker;
- try{worker=new Worker(new URL('audio-extract-worker.js?v=6',location.href),{type:'module'})}catch(error){active=false;if(!video(file))return fallback();throw Error('영상의 음원 추출을 시작하지 못했어요. 음원 파일로 가져와 주세요.')}
+ try{worker=new Worker(new URL('audio-extract-worker.js?v=7',location.href),{type:'module'})}catch(error){active=false;if(!video(file))return fallback();throw Error('영상의 음원 추출을 시작하지 못했어요. 음원 파일로 가져와 주세요.')}
  let disposed=false;
  const dispose=async()=>{if(disposed)return;disposed=true;worker.terminate();resources.delete(dispose);await remove(id)};
  resources.add(dispose);
@@ -45,7 +45,7 @@ window.vzipInspectMedia=(file,{signal}={})=>new Promise((resolve,reject)=>{
  const cached=inspections.get(file);if(cached){resolve(clone(cached));return}
  const fallback=extra=>({metadata:VzipMediaDates.pick({},file.lastModified),duration:null,readable:false,...extra});
  if(typeof Worker!=='function'){resolve(fallback());return}
- let worker;try{worker=new Worker(new URL('audio-extract-worker.js?v=6',location.href),{type:'module'})}catch{resolve(fallback());return}
+ let worker;try{worker=new Worker(new URL('audio-extract-worker.js?v=7',location.href),{type:'module'})}catch{resolve(fallback());return}
  let settled=false,timer=null;const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);worker.terminate();signal?.removeEventListener('abort',abort);if(value.readable===true)inspections.set(file,clone(value));resolve(value)};
  const abort=()=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);worker.postMessage({type:'cancel'});worker.terminate();reject(new DOMException('가져오기를 취소했어요.','AbortError'))};
  signal?.addEventListener('abort',abort,{once:true});

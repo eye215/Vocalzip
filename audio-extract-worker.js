@@ -13,9 +13,10 @@ async function prepare({file,id,videoHint,inspect}){
   await import('./media-date.js?v=3');
   const fallback=self.VzipMediaDates.pick({},file.lastModified);
   const b=await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');check();
-  let maximumInputRead=0;
+  let maximumInputRead=0,inputReadBytes=0,inputReadCalls=0;
+  const startedAt=performance.now();let copyFinishedAt=0;
   const slice=file.slice.bind(file);file.arrayBuffer=()=>{throw Error('원본 전체를 메모리에 읽지 않아요.')};
-  file.slice=(...args)=>{const part=slice(...args);maximumInputRead=Math.max(maximumInputRead,part.size);if(part.size>8*1024*1024)throw Error('한 구간이 너무 큰 파일이에요. 음원 파일로 다시 가져와 주세요.');return part};
+  file.slice=(...args)=>{const part=slice(...args);maximumInputRead=Math.max(maximumInputRead,part.size);inputReadBytes+=part.size;inputReadCalls++;if(part.size>8*1024*1024)throw Error('한 구간이 너무 큰 파일이에요. 음원 파일로 다시 가져와 주세요.');return part};
   input=new b.Input({source:new b.BlobSource(file,{maxCacheSize:4*1024*1024,useStreamReader:false}),formats:b.ALL_FORMATS});
   let tags={},videos,audios;
   try{tags=await input.getMetadataTags();videos=await input.getVideoTracks();audios=await input.getAudioTracks()}
@@ -74,29 +75,43 @@ async function prepare({file,id,videoHint,inspect}){
   const recordedTag=typeof tags.raw?.['com.apple.quicktime.creationdate']==='string'?tags.raw['com.apple.quicktime.creationdate']:metadata.recordedDate;
   const rawDate=selected.extension==='.m4a'?{'com.apple.quicktime.creationdate':recordedTag,recorded_date:metadata.recordedDate}:selected.extension==='.wav'?{ICRD:metadata.recordedDate}:{DATE:metadata.recordedDate};
   output.setMetadataTags({creationTime:new Date(metadata.created),raw:rawDate});
-  const pumps=[];
+  // Capture bounded source hashes while copying; avoid rereading the large Photos/iCloud source for verification.
+  let packetProof=null;
+  if(audios.length<=4)try{await import('./audio-packet-proof.js?v=1');packetProof=self.VzipAudioPacketProof||null;}catch{}
+  const proofLimit=Math.floor(65536/audios.length),pumps=[];
   for(let i=0;i<audios.length;i++){
    const track=audios[i],config=await track.getDecoderConfig();if(!config)throw Error('원본 음성 정보를 확인하지 못했어요.');
    const source=new b.EncodedAudioPacketSource(codecs[i]);
    output.addAudioTrack(source,{languageCode:await track.getLanguageCode(),name:await track.getName()||undefined,disposition:await track.getDisposition()});
    const iterator=new b.EncodedPacketSink(track).packets();iterators.push(iterator);
-   pumps.push({source,iterator,config,next:await iterator.next(),done:false});
+   pumps.push({source,iterator,config,proof:packetProof?.create({maxPackets:proofLimit}),next:await iterator.next(),done:false});
   }
   await output.start();
   const pump=async(value,until)=>{
-   while(!value.next.done&&value.next.value.timestamp<until){check();await value.source.add(value.next.value,{decoderConfig:value.config});value.next=await value.iterator.next()}
+   while(!value.next.done&&value.next.value.timestamp<until){check();await value.proof?.add(value.next.value);await value.source.add(value.next.value,{decoderConfig:value.config});value.next=await value.iterator.next()}
    if(value.next.done&&!value.done){value.source.close();value.done=true}
   };
   for(let until=1;pumps.some(value=>!value.done);until++){check();await Promise.all(pumps.map(value=>pump(value,until)));if(until%3===0){progress('음성 추출 '+until+'초 구간 처리 중');await new Promise(resolve=>setTimeout(resolve,0))}}
-  await output.finalize();check();
+  await output.finalize();check();copyFinishedAt=performance.now();
   const extracted=buffered?new File(buffered.parts(),id,{type:selected.type}):await handle.getFile();
   resultInput=new b.Input({source:new b.BlobSource(extracted,{maxCacheSize:4*1024*1024,useStreamReader:false}),formats:b.ALL_FORMATS});
   const resultAudios=await resultInput.getAudioTracks();if((await resultInput.getVideoTracks()).length||resultAudios.length!==audios.length)throw Error('음원 변환 결과를 확인하지 못했어요.');
   progress('추출한 음성이 원본과 같은지 확인 중…');
-  let packets=0,bytes=0;
+  let packets=0,bytes=0,blockVerifiedTracks=0;
   for(let i=0;i<audios.length;i++){
    const original=audios[i],result=resultAudios[i],aConfig=await original.getDecoderConfig(),cConfig=await result.getDecoderConfig();
    if(await original.getCodec()!==await result.getCodec()||aConfig.sampleRate!==cConfig.sampleRate||aConfig.numberOfChannels!==cConfig.numberOfChannels)throw Error('원본 음성 형식이 달라 저장하지 않았어요.');
+   const captured=await pumps[i].proof?.finish();
+   if(captured){
+    const verifier=packetProof.create({maxPackets:proofLimit}),resultPackets=new b.EncodedPacketSink(result).packets();iterators.push(resultPackets);
+    for await(const packet of resultPackets){check();await verifier.add(packet);}
+    const verified=await verifier.finish();
+    if(verified){
+     if(!packetProof.same(captured,verified,aConfig.sampleRate))throw Error('음성 데이터 또는 타이밍이 달라 저장하지 않았어요.');
+     packets+=captured.packets;bytes+=captured.bytes;blockVerifiedTracks++;continue;
+    }
+   }
+   // Missing WebCrypto/module or an exceeded proof budget never bypasses exact verification.
    const a=new b.EncodedPacketSink(original).packets(),c=new b.EncodedPacketSink(result).packets();iterators.push(a,c);
    while(true){
     check();const [x,y]=await Promise.all([a.next(),c.next()]);
@@ -107,7 +122,7 @@ async function prepare({file,id,videoHint,inspect}){
     packets++;bytes+=p.data.length;if(packets%250===0)await new Promise(resolve=>setTimeout(resolve,0));
    }
   }
-  const proof={version:1,originalName:file.name,originalBytes:file.size,outputBytes:extracted.size,audioPacketCopyVerified:true,audioTracks:audios.length,audioPackets:packets,audioBytes:bytes,maximumInputRead,storageMode:buffered?'bounded-memory':'opfs',skippedAudioTracks:skipped};
+  const proof={version:1,originalName:file.name,originalBytes:file.size,outputBytes:extracted.size,audioPacketCopyVerified:true,audioTracks:audios.length,audioPackets:packets,audioBytes:bytes,maximumInputRead,inputReadBytes,inputReadCalls,copyMs:Math.round(copyFinishedAt-startedAt),verifyMs:Math.round(performance.now()-copyFinishedAt),verificationMode:blockVerifiedTracks===audios.length?'sha256-blocks-v1':blockVerifiedTracks?'mixed':'exact-packets',storageMode:buffered?'bounded-memory':'opfs',skippedAudioTracks:skipped};
   const resultFile=new File([extracted],file.name.replace(/\.[^.]+$/,'')+selected.extension,{type:selected.type,lastModified:metadata.created});
   success=true;self.postMessage({type:'done',file:resultFile,metadata:{...metadata,originalMedia:{name:file.name,type:file.type,size:file.size,created:metadata.created,recordedDate:metadata.recordedDate},audioExtraction:proof}});
  }finally{
