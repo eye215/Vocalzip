@@ -35,19 +35,20 @@ VZ.librarySelect = (main, {list, done}) => {
     const visible = list(), all = visible.length > 0 && visible.every(m => picked.has(String(m.id)));
     visible.forEach(m => all ? picked.delete(String(m.id)) : picked.set(String(m.id), m)); paint();
   };
-  const analyze = items => { if (items.length) VZ.openAnalysisSelection(items); };
+  const canAnalyze = items => items.length > 0 && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
+  const analyze = items => { if (canAnalyze(items)) VZ.openAnalysisSelection(items); };
   const singleMenu = (item, row) => VZ.sheet({title:'녹음 더보기', body:
     '<div class="vz-choice-list vz-media-action-sheet">' +
     '<button type="button" class="vz-choice" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button>' +
     '<button type="button" class="vz-choice" data-download><i class="ph ph-download-simple"></i> 저장</button>' +
-    '<button type="button" class="vz-choice" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button>' +
+    (canAnalyze([item]) ? '<button type="button" class="vz-choice" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">곡을 지정하면 보컬 분석을 할 수 있어요.</p>') +
     '</div><details class="vz-media-other"><summary>기타 작업</summary><div class="vz-choice-list">' +
     '<button type="button" class="vz-choice" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button>' +
     '<button type="button" class="vz-choice" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div></details>',
     onMount:(sheet, close) => {
       sheet.querySelector('[data-edit]').onclick = () => { close(); VZ.editMedia(item); };
       sheet.querySelector('[data-download]').onclick = () => { close(); M.download(item).catch(e => VZ.toast('저장하지 못했어요: ' + e.message, 'error')); };
-      sheet.querySelector('[data-analyze]').onclick = () => { close(); analyze([item]); };
+      sheet.querySelector('[data-analyze]')?.addEventListener('click', () => { close(); analyze([item]); });
       sheet.querySelector('[data-compare]').onclick = () => { close(); VZ.nav('#/compare?a=' + encodeURIComponent(item.id) + (item.songId ? '&song=' + encodeURIComponent(item.songId) : '')); };
       sheet.querySelector('[data-delete]').onclick = async () => {
         close(); try { if (!await M.confirmRemove(item)) return; await M.remove(item); picked.delete(String(item.id)); row.remove(); paint(); await done(); VZ.toast('파일을 삭제했어요.'); }
@@ -71,10 +72,12 @@ VZ.librarySelect = (main, {list, done}) => {
     VZ.sheet({title:'선택한 녹음 ' + picked.size + '개', body:
       '<div class="vz-choice-list vz-media-action-sheet">' +
       '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정</button>' +
-      '<button type="button" class="vz-choice" data-occ><i class="ph ph-tag"></i> 종류 변경</button></div>',
+      '<button type="button" class="vz-choice" data-occ><i class="ph ph-tag"></i> 종류 변경</button>' +
+      (canAnalyze(chosen()) ? '<button type="button" class="vz-choice" data-analyze-bulk><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">같은 곡으로 지정된 녹음만 분석할 수 있어요.</p>') + '</div>',
       onMount:(sheet, close) => {
         sheet.querySelector('[data-song]').onclick = () => { close(); setSong(); };
         sheet.querySelector('[data-occ]').onclick = () => { close(); setKind(); };
+        sheet.querySelector('[data-analyze-bulk]')?.addEventListener('click', () => { const items = chosen(); if (!canAnalyze(items)) return; close(); analyze(items); });
       }
     });
   };
