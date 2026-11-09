@@ -1,0 +1,25 @@
+name: Baseline song UI checks before goal fix
+on:
+  push:
+    branches: ['codex/goal-homework-baseline-20261109']
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test tests/v6.spec.cjs --grep 'Song detail shows real growth|Recordings can be marked' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: song-ui-baseline-before-goal-fix
+          path: |
+            playwright-report/
+            test-results/
