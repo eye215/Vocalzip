@@ -37,9 +37,7 @@ jobs:
       - name: Bounded media parser bundle
         run: curl --fail --location --retry 2 https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs --output /tmp/vzip-mediabunny.mjs
       - name: Create synthetic audio and video fixtures
-        run: |
-          node tests/make-audio-fixtures.cjs
-          node tests/make-photo-fixture.cjs
+        run: node tests/make-audio-fixtures.cjs
       - name: Packet-preserving video extraction and audio inspection reuse
         env:
           VZ_MEDIABUNNY: /tmp/vzip-mediabunny.mjs
