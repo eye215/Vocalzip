@@ -222,7 +222,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         const completed = [...hw].filter(([id, st]) => st.did && shown.has(id)).map(([id]) => id);
         const assignmentReps = Object.fromEntries(completed.map(id => [id, hw.get(id).reps || 1]));
         const assignmentNotes = Object.fromEntries(completed.filter(id => hw.get(id).note.trim()).map(id => [id, hw.get(id).note.trim()]));
-        const entry = {date:form.date.value, minutes, manualMinutes:minutes, mediaSeconds:p?.mediaSeconds && p.minutes === minutes ? p.mediaSeconds : 0, mediaIds:[...selected], practiceMode:current,
+        const entry = {date:form.date.value, minutes, manualMinutes:minutes, practiceTimeSource:'manual', mediaSeconds:p?.mediaSeconds || 0, mediaIds:[...selected], practiceMode:current,
           technique:detail ? [{name:[detail, detail2].filter(Boolean).join(' · '), minutes}] : [], songId:sid,
           categoryId:current === 'training' ? catId : '', categoryLabel:current === 'training' ? cat.name : '', detail, detail2,
           rating:rating || 0, memo:form.memo.value, completed, assignmentReps, assignmentNotes};
@@ -234,7 +234,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
 VZ.practiceRow = (p, opts) => {
   const day = !!opts?.day; // inside a day view: no date, recordings are listed underneath
   const title = p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || (p.practiceMode === 'song' ? '곡 연습' : [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '연습');
-  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-timer"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([day ? '' : VZ.dateLabel(p.date), VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', !day && (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
+  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-timer"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([day ? '' : VZ.dateLabel(p.date), p.practiceTimeSource === 'unconfirmed' ? '시간 미입력' : VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', !day && (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
 };
 VZ.practiceDetail = id => {
   const p = VZ.db.practices.find(x => x.id === id); if (!p) return;

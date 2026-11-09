@@ -5,6 +5,7 @@
   if(typeof module==='object'&&module.exports)module.exports=api;
 })(typeof window==='object'?window:globalThis,function(){
 'use strict';
+const Time=typeof module==='object'&&module.exports?require('./practice-time-model.js'):globalThis.VzipPracticeTime;
 const list=v=>Array.isArray(v)?v:[];
 const copy=v=>v==null?v:JSON.parse(JSON.stringify(v));
 const pad=n=>String(n).padStart(2,'0');
@@ -27,7 +28,7 @@ function minutes(value){
   if(value==null||typeof value==='boolean'||(typeof value==='string'&&!value.trim()))return null;
   const n=Number(value);return Number.isFinite(n)&&n>=0?n:null;
 }
-function practiceMinutes(p){return minutes(p.manualMinutes)??minutes(p.minutes)??0}
+function practiceMinutes(p){return Time.actualMinutes(p)}
 function unique(records){
   const out=[],index=new Map();
   for(const r of list(records)){
@@ -94,10 +95,9 @@ function build(db={},options={}){
   const anchor=options.weekStart||today;
   if(!parse(anchor))throw Error('올바른 주간 날짜가 필요해요.');
   const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),totals=new Map();
-  // The adapter supplies the shared practice/recording ledger. Without it the
-  // pure model retains its existing manual-record-only contract.
+  // Every view uses performed practice time; standalone recording lengths are never added.
   const entries=Array.isArray(options.timeEntries)?options.timeEntries:practices.map(p=>({date:p.date,minutes:practiceMinutes(p)}));
-  for(const p of entries){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+(minutes(p.minutes)||0))}
+  for(const p of entries){if(p.kind==='recording'||!parse(p.date)||p.date>today)continue;const actual=p.ref?practiceMinutes(p.ref):minutes(p.minutes)||0;totals.set(p.date,(totals.get(p.date)||0)+actual)}
   const days=Array.from({length:7},(_,i)=>{
     const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(date<today?30:null),ratio=goal>0?actual/goal*100:null;
     const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';

@@ -21,7 +21,7 @@ async function boot(page){
 }
 test('one-line month totals and a clean song strip rotate the top five',async({page})=>{
  await boot(page);const card=page.locator('.calendar-summary');
- await expect(card.locator('[data-month-minutes]')).toHaveText('47분');
+ await expect(card.locator('[data-month-minutes]')).toHaveText('45분');
  await expect(card.locator('[data-month-count]')).toHaveText('7회');
  await expect(card.locator('.cs-heading')).toHaveCSS('flex-wrap','nowrap');
  await expect(card.locator('.cs-spotlight')).toHaveAttribute('data-cs-song','a');
@@ -38,7 +38,7 @@ test('one-line month totals and a clean song strip rotate the top five',async({p
  expect((await card.boundingBox()).height).toBeLessThan(230);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.evaluate(date=>VZ.change(d=>{d.songs.push({id:'e',title:'노래 E'});d.practices.push({id:'e1',date,songId:'e',minutes:2});}),day);
- await expect(card.locator('[data-month-minutes]')).toHaveText('49분');
+ await expect(card.locator('[data-month-minutes]')).toHaveText('47분');
  await expect(card.locator('[data-cs-position], [data-cs-metric], .cs-ranking-head')).toHaveCount(0);
  await expect(card.locator('.cs-spotlight')).toHaveAttribute('data-cs-song','a');
  await page.mouse.move(0,0);await page.evaluate(()=>document.activeElement?.blur());
@@ -50,7 +50,7 @@ test('one-line month totals and a clean song strip rotate the top five',async({p
  await expect(card).toContainText('이 달의 노래 연습 기록이 없어요.');
  await page.getByRole('button',{name:'오늘',exact:true}).click();
  await page.evaluate(date=>VZ.change(d=>d.practices.push({id:'added',date,songId:'b',minutes:13})),day);
- await expect(page.locator('[data-month-minutes]')).toHaveText('1시간 2분');
+ await expect(page.locator('[data-month-minutes]')).toHaveText('1시간');
 });
 test('today number stays white on selected purple, and purple when unselected',async({page})=>{
  await boot(page);const today=page.locator('.cal-day.today');
@@ -79,4 +79,14 @@ test('calendar uses the same circular recording entry and opens a focused dark r
  await page.getByRole('button',{name:'뒤로'}).click();
  await expect(page).toHaveURL(/#\/calendar$/);
  await expect(page.locator('body')).not.toHaveClass(/vz-record-mode/);
+});
+
+test('Actual practice time keeps calendar counts while using only entered minutes',async({page})=>{
+ await boot(page);
+ await expect(page.locator('[data-month-minutes]')).toHaveText('45분');
+ await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ await page.evaluate(()=>VZ.change(d=>{d.practices.find(p=>p.id==='p1').manualMinutes=12;}));
+ await expect(page.locator('[data-month-minutes]')).toHaveText('27분');
+ await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ expect(await page.evaluate(()=>VZ.db.practices.find(p=>p.id==='p1').minutes)).toBe(30);
 });

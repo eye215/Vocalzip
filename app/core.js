@@ -96,25 +96,9 @@ VZ.lessonSort = (a, b) => (a.date || '').localeCompare(b.date || '') || (a.start
 VZ.nextLesson = () => db.lessons.filter(l => VZ.lessonStatus(l) === 'scheduled' && (l.date || '') >= VZ.today()).sort(VZ.lessonSort)[0];
 VZ.taskLessons = t => t.lessonIds || (t.lessonId ? [t.lessonId] : []);
 VZ.taskSongId = t => t.songId || VZ.taskLessons(t).map(id => db.lessons.find(l => l.id === id)?.songId).find(Boolean) || '';
-VZ.practiceMinutes = p => {
-  const value=p.manualMinutes;
-  const manual=value!=null&&typeof value!=='boolean'&&String(value).trim()!==''?Number(value):NaN;
-  return Number.isFinite(manual)&&manual>=0?manual:Math.max(0,Number(p.minutes)||0);
-};
-/** Practice time = practice records + recordings/imports that are not already inside a
- * practice record (its minutes cover them) or a lesson (lesson time is not practice). */
-VZ.timeEntries = (media = []) => {
-  const inPractice = new Set(db.practices.flatMap(p => p.mediaIds || []));
-  const inLesson = new Set(db.lessons.flatMap(l => (l.recordings || []).map(r => r.id)));
-  const out = db.practices.map(p => ({date:p.date, minutes:VZ.practiceMinutes(p), songId:p.practiceMode === 'training' ? '' : p.songId || '', training:p.practiceMode === 'training', kind:'practice', ref:p}));
-  for (const m of media) {
-    // Lesson and performance recordings are not practice time (unless placed inside a practice record).
-    if (inPractice.has(m.id) || inLesson.has(m.id) || m.source === 'lesson' || m.occasion === 'lesson' || m.occasion === 'performance') continue;
-    const seconds = Number(m.durationSeconds) || 0, date = VZ.media?.dateOf(m);
-    if (seconds > 0 && date) out.push({date, minutes:seconds / 60, songId:m.songId || '', training:false, kind:'recording', ref:m});
-  }
-  return out;
-};
+// Recording length is evidence, not performed practice time. Legacy stored minutes remain a fallback.
+VZ.practiceMinutes = p => window.VzipPracticeTime.actualMinutes(p);
+VZ.timeEntries = (_media = []) => window.VzipPracticeTime.entries(db.practices);
 VZ.sumMinutes = entries => entries.reduce((a, e) => a + e.minutes, 0);
 VZ.addSong = (title, show = '') => {
   title = String(title || '').trim();

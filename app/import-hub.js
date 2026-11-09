@@ -238,8 +238,8 @@ async function importRows(rows) {
     const linked = new Set(VZ.db.practices.flatMap(p => p.mediaIds || []));
     const todo = rows.filter(r => r.state === 'done' && r.song && r.occasion === 'practice' && !linked.has(r.id));
     if (todo.length) VZ.change(d => { for (const r of todo) {
-      const minutes = Math.max(0.1, Math.round((Number(r.saved?.durationSeconds || r.duration) || 0) / 6) / 10);
-      d.practices.push({id:VZ.uid(), date:M.dateOf(r.saved) || r.date, minutes, manualMinutes:minutes, mediaSeconds:0, mediaIds:[r.id], practiceMode:'song', technique:[], songId:r.song, categoryId:'', categoryLabel:'', detail:'', rating:0,
+      const seconds = Math.max(0, Number(r.saved?.durationSeconds || r.duration) || 0);
+      d.practices.push({id:VZ.uid(), date:M.dateOf(r.saved) || r.date, minutes:0, manualMinutes:0, mediaSeconds:seconds, practiceTimeSource:'unconfirmed', mediaIds:[r.id], practiceMode:'song', technique:[], songId:r.song, categoryId:'', categoryLabel:'', detail:'', rating:0,
         memo:'', completed:[], assignmentNotes:{}, importedFrom:SOURCE_TYPE[hub.source], suggestedSongId:r.suggestions?.[0]?.id || '', confirmedSongId:r.song});
       made++; } }, {silent:true});
   }
@@ -344,7 +344,7 @@ function draw() {
       '<div class="chips" style="flex-wrap:wrap;margin-bottom:10px"><button type="button" class="chip" data-all>전체 선택</button><button type="button" class="chip" data-none>선택 해제</button><button type="button" class="chip" data-nodup>중복 제외</button><button type="button" class="chip" data-approve-all>추천곡 일괄 승인</button><button type="button" class="chip" data-approve-lessons>레슨 연결 일괄 승인</button><button type="button" class="chip" data-group aria-pressed="' + hub.group + '">곡별 묶어 보기</button></div>' +
       '<label class="field"><span>선택한 파일의 종류 한 번에 지정</span><select data-bulk-occ><option value="">선택…</option>' + M.OCCASIONS.map(([k, v]) => '<option value="' + k + '">' + v + '</option>').join('') + '</select></label>' +
       '<label class="field"><span>선택한 파일의 곡 한 번에 지정</span><select data-bulk data-pick="song"><option value="">선택…</option>' + songOpts('').replace('<option value="">곡 미지정</option>', '<option value="__none">곡 미지정</option>') + '</select></label>' +
-      '<label class="item" style="padding:0 0 10px"><input type="checkbox" data-auto' + (hub.autoPractice ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main small">곡을 정한 "연습" 파일은 그 날짜의 연습 기록으로 만들기 (같은 파일은 한 번만)</span></label>' +
+      '<label class="item" style="padding:0 0 10px"><input type="checkbox" data-auto' + (hub.autoPractice ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main small">곡을 정한 "연습" 파일은 그 날짜의 연습 기록으로 만들기 (시간은 직접 입력 · 같은 파일은 한 번만)</span></label>' +
       '<div class="stack" data-list>' + (list || '<p class="small muted">이 조건에 해당하는 파일이 없어요.</p>') + '</div>' +
       '<div class="sheet-foot" style="position:sticky;bottom:calc(var(--nav-h) + var(--safe-b));margin:16px -16px 0;padding:12px 16px"><button type="button" class="btn block" data-import' + (selected.length ? '' : ' disabled') + '>선택한 ' + selected.length + '개 가져오기</button></div>';
     wireReview(h);

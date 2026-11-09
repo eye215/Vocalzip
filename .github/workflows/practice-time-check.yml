@@ -1,0 +1,45 @@
+name: Actual practice time checks
+on:
+  push:
+    branches: ['codex/actual-practice-time-20261109']
+  pull_request:
+    paths:
+      - 'app/practice-time-model.js'
+      - 'app/core.js'
+      - 'app/student-home-model.js'
+      - 'app/calendar-summary.js'
+      - 'app/import-hub.js'
+      - 'app/views-main.js'
+      - 'app/views-more.js'
+      - 'app/media-follow.js'
+      - 'tests/v6.spec.cjs'
+      - 'tests/student-home*'
+      - 'tests/calendar-summary*'
+      - 'tests/practice-time.test.cjs'
+      - '.github/workflows/practice-time-check.yml'
+permissions:
+  contents: read
+jobs:
+  practice:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:syntax
+      - run: node --test tests/practice-time.test.cjs tests/student-home-model.test.cjs tests/calendar-summary.test.cjs
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Actual practice time across existing screens
+        run: npx playwright test tests/v6.spec.cjs --grep 'Actual practice time|Practice time|Growth|Song page shows|Import hub filters|Vocal training|Practice records can|Recordings can be|Files edited before|A practice record made' --workers=2
+      - name: Calendar and approved home time regression
+        run: npx playwright test tests/calendar-summary.spec.cjs tests/student-home.spec.cjs --grep 'Actual practice time|weekly home keeps actual' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-practice-time-regression
+          path: |
+            playwright-report/
+            test-results/

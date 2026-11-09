@@ -31,7 +31,7 @@ async function askRemove(ids) {
   const fresh = [...new Set(ids)].filter(id => !asked().has(id) && auto(VZ.db, id).length);
   if (!fresh.length) return;
   remember(fresh);
-  const records = fresh.flatMap(id => auto(VZ.db, id)), minutes = records.reduce((a, p) => a + (Number(p.minutes) || 0), 0);
+  const records = fresh.flatMap(id => auto(VZ.db, id)), minutes = records.reduce((a, p) => a + VZ.practiceMinutes(p), 0);
   const ok = await VZ.confirm('연습 기록도 정리할까요?', '공연·레슨으로 바꾼 녹음 ' + fresh.length + '개에, 파일을 가져올 때 자동으로 만든 연습 기록 ' + records.length + '개(' + VZ.minutes(minutes) + ')가 남아 있어요.\n\n연습 시간에서 빼고 이 자동 기록만 지울까요? 녹음 파일은 그대로예요.', {ok:'연습 기록 지우기'});
   if (!ok) return;
   const gone = new Set(records.map(p => p.id));
