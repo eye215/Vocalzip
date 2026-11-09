@@ -45,20 +45,11 @@
     analysis.disabled = !items.length;
     analysis.title = '';
   };
-  const closeAccordions = () => {
-    M.stopAll?.();
-    document.querySelectorAll('.vz-media-select-enabled .media-open:not([hidden])').forEach(panel => {
-      panel.hidden = true;
-      panel._player?.destroy(); panel._player = null;
-      panel.closest('[data-media]')?.querySelector('[data-toggle]')?.setAttribute('aria-expanded', 'false');
-    });
-  };
   const toggleSelected = (row, item, button) => {
     if (selected.has(row.dataset.media)) {
       selected.delete(row.dataset.media);
       button.setAttribute('aria-pressed', 'false'); row.classList.remove('vz-media-picked');
     } else {
-      if (!selected.size) closeAccordions();
       selected.set(row.dataset.media, {item, row, button});
       button.setAttribute('aria-pressed', 'true'); row.classList.add('vz-media-picked');
     }
@@ -91,7 +82,7 @@
       const item = findItem(row.dataset.media);
       if (!item) return;
       const button = row.querySelector('.vz-media-select');
-      if (event.target.closest('.vz-media-select') || (selected.size && button && event.target.closest('[data-toggle]'))) {
+      if (event.target.closest('.vz-media-select')) {
         event.preventDefault(); event.stopImmediatePropagation();
         toggleSelected(row, item, button);
       }

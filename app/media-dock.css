@@ -1,8 +1,7 @@
 /* Shared recording selection and inline accordion, using the student style guide. */
 .vz-media-select-enabled [data-media]{position:relative}
 .vz-media-select-enabled [data-media] [data-toggle]{padding-left:56px}
-.vz-media-select-enabled [data-media].vz-media-picked [data-toggle]{background:var(--vz-color-accent-soft,#f3ecff)}
-.vz-media-select{position:absolute;z-index:1;left:6px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:transparent;font-size:16px}
+.vz-media-select{position:absolute;z-index:1;left:6px;top:17px;display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:transparent;font-size:16px}
 .vz-media-select::before{content:'';position:absolute;width:20px;height:20px;border:1.5px solid #98a2b3;border-radius:5px;background:#fff}
 .vz-media-select i{position:relative}
 .vz-media-select[aria-pressed=true]{color:#fff}

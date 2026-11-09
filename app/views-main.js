@@ -505,7 +505,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
             const title = record.kind === 'lesson' ? '레슨 기록' : '연습 기록';
             VZ.sheet({title, body:'<div class="vz-song-linked-sheet"><p class="small muted">'+esc(VZ.dateLabel(record.date))+' · '+esc(s.title)+'</p><strong>'+esc([record.minutes,record.rating].filter(Boolean).join(' · ') || title)+'</strong><div class="vz-song-linked-note">'+esc(record.summary)+'</div></div>'});
           }, true);
-          host.addEventListener('click', e => { if (e.target.closest('.vz-media-select, [data-toggle]')) selectionTouched = true; }, true);
+          host.addEventListener('click', e => { if (e.target.closest('.vz-media-select, [data-toggle]')) { selectionTouched = true; setTimeout(sync, 0); } }, true);
           VZ.wireMedia(host, visible);
           host.querySelectorAll('[data-media]').forEach(row => {
             const item = visible.find(m => String(m.id) === row.dataset.media), name = row.querySelector('.item-title');
@@ -520,7 +520,6 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
           const all = body.querySelector('[data-all]');
           const sync = () => { const count = VZ.mediaSelection?.count(host) || 0; body.querySelector('[data-selected-count]').textContent = '선택 ' + count + '개'; all.checked = count === visible.length; all.indeterminate = count > 0 && count < visible.length; };
           all.onchange = () => { selectionTouched = true; VZ.mediaSelection?.selectAll(host, visible, all.checked); sync(); };
-          host.addEventListener('click', () => setTimeout(sync, 0));
           VZ.mediaSelection?.selectAll(host, visible, true);
           sync();
         }
