@@ -114,11 +114,10 @@ function render(host,month,items,rows){
 
  const formEl=host.querySelector('[data-plan-form]');
  function nextPlan(p){
-  const details=host.querySelector('.growth-plan-expand');
-  if(!details)return;
+  const form=host.querySelector('[data-plan-form]');
+  const details=form?.closest('details');
+  if(!details||!form)return;
   details.open=true;
-  const form=details.querySelector('[data-plan-form]');
-  if(!form)return;
   form.elements.metric.value=p.metric;
   form.elements.song.value=p.songId;
   form.elements.song.dispatchEvent(new Event('change',{bubbles:true}));
