@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
     // The client sends a bounded, derived summary from this owner's saved observations.
     if (input.mode === 'monthly') {
       const month = String(input.month || '');
-      if (!/^20\\d{2}-(0[1-9]|1[0-2])$/.test(month)) return reply(req, 400, {error: '월 형식을 확인해 주세요.'});
+      if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)) return reply(req, 400, {error: '월 형식을 확인해 주세요.'});
       const source = Array.isArray(input.metrics) ? input.metrics : [];
       const allowedMetrics = new Set(['intonation','stability','phrase','vibrato']);
       const metrics = source.slice(0, 4).filter((x): x is Record<string, unknown> =>
@@ -84,16 +84,16 @@ Deno.serve(async (req: Request) => {
         .map(x => ({
           key: String(x.key), title: String(x.title || '').slice(0, 32),
           value: typeof x.value === 'number' && Number.isFinite(x.value) ? x.value : null,
-          count: Number.isSafeInteger(x.count) && (x.count as number) >= 0 ? Math.min(x.count as number,10000) : 0,
+          count: typeof x.count === 'number' && Number.isSafeInteger(x.count) && (x.count as number) >= 0 ? Math.min(x.count as number,10000) : 0,
           compare: ['better','worse','similar'].includes(String(x.state)) ? String(x.state) : 'unknown',
-          sharedSongs: Number.isSafeInteger(x.sharedSongs) ? Math.max(0, Math.min(x.sharedSongs as number,1000)) : 0
+          sharedSongs: typeof x.sharedSongs === 'number' && Number.isSafeInteger(x.sharedSongs) ? Math.max(0, Math.min(x.sharedSongs as number,1000)) : 0
         }));
       const rawNotes = Array.isArray(input.observations) ? input.observations : [];
       const observations = rawNotes.slice(0, 5).filter((v): v is Record<string, unknown> =>
         !!v && typeof v === 'object' && !Array.isArray(v))
         .map(v => ({
           song: String(v.song || '').slice(0, 100),
-          date: /^20\\d{2}-\\d{2}-\\d{2}$/.test(String(v.date||'')) ? String(v.date) : '',
+          date: /^20\d{2}-\d{2}-\d{2}$/.test(String(v.date||'')) ? String(v.date) : '',
           heard: String(v.heard || '').slice(0, 270),
           suggested: String(v.suggested || '').slice(0, 200),
           comfortConcern: v.comfortConcern === true
