@@ -168,6 +168,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function commitSelection(rows){
   if(!selectionFresh()){clearSelection();paint();say('선택한 필기가 다른 곳에서 바뀌었어요. 다시 선택해 주세요.',true);return;}
+  if(rows.every((s,i)=>s.width===selection.rows[i].width&&JSON.stringify(s.points)===JSON.stringify(selection.rows[i].points))){selection.preview=null;paint();return;}
   const old=selection.rows;clearSelection();
   const add=rows.map(s=>({...s,id:VZ.uid()}));
   apply({add,remove:old});if(!pending){selection={rows:add,page:pageNo,preview:null,drag:null};paint();}
@@ -221,7 +222,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const group=node('g',{'data-ink-selection-overlay':'','aria-hidden':'true'});
   group.append(node('rect',{x:b.x*1000,y:b.y*aspect*1000,width:b.w*1000,height:b.h*aspect*1000,class:'score-ink-selection-outline','vector-effect':'non-scaling-stroke'}));
   if(rows.length){
-   const pixel=1000/Math.max(1,svg.getBoundingClientRect().width),x=(b.x+b.w)*1000,y=(b.y+b.h)*aspect*1000;
+   const pixel=1000/Math.max(1,svg.getBoundingClientRect().width),x=Math.max(22*pixel,Math.min(1000-22*pixel,(b.x+b.w)*1000)),y=Math.max(22*pixel,Math.min(aspect*1000-22*pixel,(b.y+b.h)*aspect*1000));
    group.append(node('rect',{x:x-22*pixel,y:y-22*pixel,width:44*pixel,height:44*pixel,fill:'transparent','data-ink-selection-handle':''}));
    group.append(node('circle',{cx:x,cy:y,r:6*pixel,class:'score-ink-selection-handle','data-ink-selection-handle':'','vector-effect':'non-scaling-stroke'}));
   }
@@ -297,7 +298,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   }catch(e){say('저장하지 못했어요: '+e.message,true);}
   paint();
  }
- function inverse(action){return {add:action.remove.map(s=>({...s,id:VZ.uid(),createdAt:Date.now()})),remove:action.add};}
+ function inverse(action){return {add:action.remove.map(s=>({...s,id:VZ.uid()})),remove:action.add};}
  function finishStroke(){
   if(!active)return;const s=active.stroke;active=null;
   if(s?.points.length){
