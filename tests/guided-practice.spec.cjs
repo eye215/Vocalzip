@@ -3,10 +3,10 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 
-function setup({assignments=[],feedback=[],tips=[]}={}){
-  const db={assignments,videoFeedback:feedback};
+function setup({assignments=[],feedback=[],tips=[],categories=[]}={}){
+  const db={assignments,categories,videoFeedback:feedback};
   const V={db,media:{list:async()=>[]},esc:s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),today:()=> '2026-11-10',
-    taskInPeriod:t=>t.status!=='done',taskLessons:t=>t.lessonId?[t.lessonId]:[],taskSongId:t=>t.songId||'',dateLabel:s=>s,
+    uid:()=>`new-${db.categories.length}`,taskInPeriod:t=>t.status!=='done',taskLessons:t=>t.lessonId?[t.lessonId]:[],taskSongId:t=>t.songId||'',dateLabel:s=>s,
     practiceTips:()=>({tips}),route:()=>{}};
   const window={VZ:V};
   vm.runInNewContext(fs.readFileSync('app/guided-practice.js','utf8'),{window,document:{},location:{},setInterval,clearInterval}, {filename:'app/guided-practice.js'});
@@ -33,4 +33,19 @@ test('rejected video is suppressed only for the same exercise',async()=>{
 test('isolated weak observation is not recommended',async()=>{
   const V=setup({tips:[{key:'wob',name:'롱톤',frequency:1,score:1,metric:'흔들림',value:'±18 cent'}]});
   assert.equal((await V.guidedRecommendations()).length,0);
+});
+test('guided recommendation reuses a suitable category or creates a missing one',()=>{
+  const V=setup({categories:[{id:'breath',name:'호흡',items:['복식호흡']} ]});
+  const existing=V.guidedCategory(V.db,{title:'호흡을 길게 유지하기',kind:'homework'});
+  assert.equal(existing.categoryId,'breath');
+  assert.equal(existing.detail,'호흡을 길게 유지하기');
+  assert.deepEqual(V.db.categories[0].items,['복식호흡','호흡을 길게 유지하기']);
+  V.guidedCategory(V.db,{title:'호흡을 길게 유지하기',kind:'homework'});
+  assert.equal(V.db.categories[0].items.length,2);
+  const newCategory=V.guidedCategory(V.db,{title:'음정 안정성 (롱톤) 연습',tipKey:'wob'});
+  assert.equal(newCategory.categoryLabel,'발성');
+  assert.equal(V.db.categories.length,2);
+  const fallback=V.guidedCategory(V.db,{title:'어깨 힘 풀기'});
+  assert.equal(fallback.categoryLabel,'보컬 트레이닝');
+  assert.equal(V.db.categories.length,3);
 });

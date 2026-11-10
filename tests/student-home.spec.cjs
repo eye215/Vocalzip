@@ -207,6 +207,35 @@ test('empty state removes all sample data and connects song and goal setup',asyn
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
 });
+test('home recommendation starts homework and the final step saves practice and goal automatically',async({page})=>{
+ await boot(page);
+ const start=page.getByRole('button',{name:'호흡을 길게 유지하기 따라 하기',exact:true});
+ await expect(start).toBeVisible();
+ await start.click();
+ await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1\?song=s1$/);
+ await page.evaluate(()=>{const epoch=Date.now();Date.now=()=>epoch+performance.now();});
+ await page.getByRole('button',{name:'연습 시작',exact:true}).click();
+ await page.waitForTimeout(3800);
+ await page.getByRole('button',{name:'연습 종료',exact:true}).click();
+ await page.getByRole('button',{name:'마무리하기',exact:true}).click();
+ await expect(page.getByRole('button',{name:'연습 기록 보기',exact:true})).toBeVisible();
+ const value=await db(page);
+ expect(value.practices.filter(p=>p.guidedExerciseKey==='homework:a1')).toHaveLength(1);
+ expect(value.practices.at(-1).guidedSeconds).toBeGreaterThanOrEqual(3);
+ const category=value.categories.find(c=>c.id===value.practices.at(-1).categoryId);
+ expect(category.name).toBe('호흡');
+ expect(category.items).toContain('호흡을 길게 유지하기');
+ expect(value.assignments.find(t=>t.id==='a1').status).toBe('done');
+ expect(value.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
+ await page.getByRole('button',{name:'연습 기록 보기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/practices$/);
+});
+test('active homework card directly opens guided practice',async({page})=>{
+ await boot(page);
+ await page.goto('/#/homework');
+ await page.getByRole('link',{name:'호흡을 길게 유지하기 따라 하기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1$/);
+});
 test('weekday names, minutes, rings and percentage colors use actual records',async({page})=>{
  await boot(page);
  for(const [minutes,level,color]of [[0,'missed',null],[99,'partial','rgb(217, 197, 250)'],[100,'done','rgb(122, 50, 245)'],[120,'done','rgb(122, 50, 245)'],[121,'exceeded','rgb(76, 24, 142)']]){
