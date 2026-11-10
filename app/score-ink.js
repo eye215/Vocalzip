@@ -39,7 +39,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
+ let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
  let savedView=null;
@@ -60,7 +60,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '<div class="score-ink-save-state" data-ink-save-state role="status">PDF 준비 중</div>'+ 
   '<div class="score-ink-bar"><div class="score-ink-tools" role="toolbar" aria-label="필기 도구">'+tools.map((t,i)=>'<button type="button" data-ink-tool="'+t+'" aria-label="'+names[i]+'" title="'+names[i]+'" aria-pressed="'+(t===tool)+'"><i class="ph ph-'+icons[i]+'"></i><span>'+names[i]+'</span></button>').join('')+
   '</div>'+
-  '<div class="score-ink-actions">'+button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('clear','trash','현재 페이지 필기 삭제')+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('performance','eye','무대용 보기')+button('fullscreen','arrows-out','전체화면')+'</div>'+
+  '<div class="score-ink-actions">'+button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('clear','trash','현재 페이지 필기 삭제')+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('marker-mode','bookmark-simple','악보 표시')+button('performance','eye','무대용 보기')+button('fullscreen','arrows-out','전체화면')+'</div>'+
+  '<div class="score-ink-marker-palette" data-ink-marker-palette hidden><button type="button" data-ink-marker="breath">숨표</button><button type="button" data-ink-marker="repeat">반복</button><button type="button" data-ink-marker="cut">컷</button><button type="button" data-ink-marker="start">시작점</button></div>'+
   '<section class="score-ink-settings" data-ink-settings aria-label="필기 설정" hidden><div class="score-ink-settings-head"><strong data-ink-profile-label>펜 설정</strong>'+button('settings-close','x','필기 설정 닫기')+'</div>'+
   '<div class="score-ink-palette-section"><span>기본 색상</span><div data-ink-palette class="score-ink-swatches" role="group" aria-label="기본 색상"></div></div>'+
   '<div class="score-ink-palette-section"><span>최근 사용</span><div data-ink-recent class="score-ink-swatches" role="group" aria-label="최근 사용 색상"></div></div>'+
@@ -137,7 +138,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function performanceMode(next){
   if(next===performance||next&&!ready)return;
-  finishStroke();if(next&&pending){saveState('저장 실패 · 다시 시도','error');say('필기를 먼저 다시 저장해 주세요.',true);return;}
+  finishStroke();markerStart=null;markerDrag=null;if(next&&pending){saveState('저장 실패 · 다시 시도','error');say('필기를 먼저 다시 저장해 주세요.',true);return;}
   if(next){performanceOriginFull=full;if(!full)fullLayout(true);}
   performance=next;el.classList.toggle('score-ink-performance',next);
   svg.style.pointerEvents=next?'none':ready?'':'none';
@@ -395,6 +396,27 @@ VZ.openScoreInk=(songId,scoreId)=>{
   }catch(e){if(!closed&&number===renderNumber&&e.name!=='RenderingCancelledException')say('악보를 열지 못했어요: '+e.message,true);}
   finally{if(number===renderNumber){busy=false;if(!closed)paint();}}
  }
+ function markPoint(x,y){return [Math.max(0,Math.min(1,x)),Math.max(0,Math.min(1,y)),.5];}
+ function placeMarker(start,end){
+  if(markerType==='repeat'&&!markerStart){markerStart=start;say('반복 구간의 끝을 눌러 주세요.');return;}
+  let points,width=.006,opacity=1,color='#7a32f5',drawTool='pen';
+  if(markerType==='breath'){
+   const x=start[0],y=start[1],h=.017/aspect;
+   points=[markPoint(x-.016,y-h),markPoint(x,y+h),markPoint(x+.016,y-h)];
+  }else if(markerType==='start'){
+   points=Array.from({length:21},(_,i)=>{const t=i/20*Math.PI*2;return markPoint(start[0]+.018*Math.cos(t),start[1]+.018/aspect*Math.sin(t));});
+  }else if(markerType==='cut'){
+   const distance=Math.hypot((end[0]-start[0])*box.clientWidth,(end[1]-start[1])*box.clientHeight);
+   const stop=distance<8?markPoint(start[0]+.07,start[1]):end;
+   points=[start,stop];width=.04;opacity=.25;drawTool='highlighter';
+  }else{
+   const first=markerStart;markerStart=null;
+   const h=.023/aspect;
+   points=[markPoint(first[0],first[1]-h),markPoint(first[0],first[1]+h),markPoint(end[0],end[1]+h),markPoint(end[0],end[1]-h)];
+  }
+  const stroke={version:1,id:VZ.uid(),...binding,page:pageNo,tool:drawTool,color,opacity,width,points,createdAt:Date.now()};
+  apply({add:[stroke],remove:[]});
+ }
  function closeThumbnails(){
   const panel=el?.querySelector('[data-ink-thumbnails]');if(!panel)return;
   panel.hidden=true;el.querySelector('[data-ink-page]').setAttribute('aria-expanded','false');
@@ -481,8 +503,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-fullscreen]').onclick=()=>fullscreen(!full);
   el.querySelector('[data-ink-performance]').onclick=()=>performanceMode(true);
   el.querySelector('[data-ink-performance-exit]').onclick=()=>performanceMode(false);
-  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(ready&&!busy&&pageNo>1){pageNo--;renderPage();}};
-  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(ready&&!busy&&pageNo<doc?.numPages){pageNo++;renderPage();}};
+  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(ready&&!busy&&pageNo>1){pageNo--;markerStart=null;renderPage();}};
+  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(ready&&!busy&&pageNo<doc?.numPages){pageNo++;markerStart=null;renderPage();}};
   stage.onpointerdown=event=>{if(performance&&event.pointerType==='touch'&&ready&&!busy&&event.target!==svg)gestureDown(event);};
   stage.onpointermove=event=>{if(performance&&event.target!==svg)gestureMove(event);};
   stage.onpointerup=stage.onpointercancel=event=>{if(performance&&event.target!==svg)gestureEnd(event);};
@@ -502,9 +524,21 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-thumb-next]').onclick=()=>{if((thumbBatch+1)*24<doc?.numPages){thumbBatch++;drawThumbnailBatch();}};
   el.querySelector('[data-ink-jump-form]').onsubmit=event=>{event.preventDefault();const n=Number(el.querySelector('[data-ink-jump-input]').value);if(!Number.isInteger(n)||n<1||n>doc?.numPages){say('1부터 '+doc.numPages+'쪽 사이 번호를 입력해 주세요.',true);return;}pageNo=n;closeThumbnails();renderPage();};
   el.querySelectorAll('[data-ink-tool]').forEach(button=>button.onclick=()=>{
-   selectionEnd(false);clearSelection();finishStroke();resetGestures();tool=button.dataset.inkTool;svg.dataset.tool=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
+   selectionEnd(false);clearSelection();finishStroke();resetGestures();markerStart=null;markerDrag=null;el.querySelector('[data-ink-marker-palette]').hidden=true;el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool=button.dataset.inkTool;svg.dataset.tool=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));paint();
    if(tool==='select')say('필기를 누르거나 사각형으로 둘러 선택하세요.');
+  });
+  el.querySelector('[data-ink-marker-mode]').onclick=()=>{
+   const palette=el.querySelector('[data-ink-marker-palette]');palette.hidden=!palette.hidden;
+  };
+  el.querySelectorAll('[data-ink-marker]').forEach(button=>button.onclick=()=>{
+   finishStroke();selectionEnd(false);clearSelection();markerStart=null;markerDrag=null;resetGestures();
+   markerType=button.dataset.inkMarker;tool='marker';svg.dataset.tool=tool;
+   el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));
+   el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','true');
+   el.querySelectorAll('[data-ink-marker]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+   el.querySelector('[data-ink-marker-palette]').hidden=true;
+   say(markerType==='repeat'?'반복 구간의 시작과 끝을 차례로 눌러 주세요.':markerType==='cut'?'생략할 구간을 따라 그어 주세요.':'악보에서 표시할 위치를 눌러 주세요.');
   });
   el.querySelector('[data-ink-prev]').onclick=()=>{if(ready&&!busy&&pageNo>1){pageNo--;renderPage();}};
   el.querySelector('[data-ink-next]').onclick=()=>{if(ready&&!busy&&pageNo<doc?.numPages){pageNo++;renderPage();}};
@@ -530,7 +564,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(!ready||busy||exportBusy||pending||event.button>0)return;
    if(event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size&&event.width<=50&&event.height<=50&&Date.now()-touchInkStart.time<280&&(!active||active.stroke.points.length<4)){
     if(active?.pointer===touchInkStart.pointer){active=null;cancelAnimationFrame(frame);frame=0;}
-    touchEraser=null;
+    touchEraser=null;markerDrag=null;
     if(selection?.drag?.pointer===touchInkStart.pointer)selectionEnd(false);
     paint();
     const first=touchInkStart;touchInkStart=null;
@@ -550,6 +584,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    try{
     current();event.preventDefault();const p=coords(event);
     if(tool==='select'){selectionDown(event,p);return;}
+    if(tool==='marker'){markerDrag={pointer:event.pointerId,start:p};try{svg.setPointerCapture?.(event.pointerId);}catch{}return;}
     if(tool==='eraser'){
      if(event.pointerType==='touch'){touchEraser={pointer:event.pointerId,point:p};try{svg.setPointerCapture?.(event.pointerId);}catch{}return;}
      const found=strokes().reverse().find(s=>Ink.hit(s,p,aspect));if(found)apply({add:[],remove:[found]});return;
@@ -563,6 +598,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   svg.onpointermove=event=>{
    try{if(selectionMove(event))return;}catch(e){selectionEnd(false);say(e.message,true);return;}
    if(!active&&gestureMove(event))return;
+   if(markerDrag?.pointer===event.pointerId){event.preventDefault();markerDrag.end=coords(event);return;}
    if(active?.pointer!==event.pointerId)return;event.preventDefault();
    const samples=event.getCoalescedEvents?.();const events=samples?.length?samples:[event];
    for(const item of events){const p=coords(item),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008&&active.stroke.points.length<Ink.MAX_POINTS)active.stroke.points.push(p);}
@@ -573,6 +609,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(touchEraser?.pointer===event.pointerId){const point=touchEraser.point;touchEraser=null;if(event.type==='pointerup'){try{const found=strokes().reverse().find(s=>Ink.hit(s,point,aspect));if(found)apply({add:[],remove:[found]});}catch(e){say(e.message,true);}}return;}
    if(selection?.drag?.pointer===event.pointerId){event.preventDefault();try{selectionEnd(event.type==='pointerup');}catch(e){selectionEnd(false);say(e.message,true);}return;}
    if(gestureEnd(event))return;
+   if(markerDrag?.pointer===event.pointerId){const start=markerDrag.start;markerDrag=null;if(event.type==='pointerup')try{placeMarker(start,coords(event));}catch(e){say(e.message,true);}return;}
    if(active?.pointer!==event.pointerId)return;
    if(event.type==='pointerup'&&active.stroke.points.length<Ink.MAX_POINTS){const p=coords(event),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008)active.stroke.points.push(p);}
    finishStroke();
