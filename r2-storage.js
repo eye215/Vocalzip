@@ -227,8 +227,8 @@ async function clip(key, {time=20, duration=30, signal}={}) {
   return new File([body],'vocalzip-stt-clip.m4a',{type:'audio/mp4'});
 }
 async function usage() { return api('/v1/usage'); }
-async function scoreVisionAvailable(){return api('/v1/scores/vision');}
-async function scoreVision(mode,image,signal){return api('/v1/scores/vision',{method:'POST',body:{mode,image},signal});}
+async function scoreVisionAvailable(){return window.vzipCloudScoreVision?.()||{available:false};}
+async function scoreVision(mode,image,signal){if(!window.vzipCloudScoreVision)throw Error('로그인을 확인해 주세요.');return window.vzipCloudScoreVision(mode,image,signal);}
 /** Every object under the user's own folder (read-only; the Worker lists only u/<user>/). */
 async function objects() {
   const out = [];
