@@ -556,16 +556,17 @@ async function allRows(columns){
 const LIST_DB='vocalzip_cache_v1',FULL_AFTER=24*3600*1000;
 function listDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(LIST_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('lists'))r.result.createObjectStore('lists',{keyPath:'owner'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
 async function listCache(owner,entry){try{const db=await listDb();try{return await new Promise(resolve=>{const t=db.transaction('lists',entry?'readwrite':'readonly'),st=t.objectStore('lists'),q=entry?st.put(entry):st.get(owner);let out=null;q.onsuccess=()=>{out=entry?true:q.result||null};t.oncomplete=()=>resolve(out);t.onerror=t.onabort=()=>resolve(null)})}finally{db.close()}}catch{return null}}
-const mediaEditBases=new Map();
+const mediaEditBases=new Map();let mediaEditBaseLimit=2000;
+const copyEditMetadata=value=>Array.isArray(value)?value.map(copyEditMetadata):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([k,v])=>[k,copyEditMetadata(v)])):value;
 function mediaEditItem(row,owner){
  const item={...row.metadata,id:row.id||row.metadata.id,cloud:true};
  if(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true)return item;
  const session=window.vzipCloudSessionId?.();if(!session)throw Error('파일 수정 기준의 로그인 세션을 확인해 주세요.');
- const ref=crypto.randomUUID();mediaEditBases.set(ref,{owner,session,metadata:JSON.parse(JSON.stringify(row.metadata)),updated_at:row.updated_at});
- while(mediaEditBases.size>2000)mediaEditBases.delete(mediaEditBases.keys().next().value);
+ const ref=crypto.randomUUID();mediaEditBases.set(ref,{owner,session,metadata:copyEditMetadata(row.metadata),updated_at:row.updated_at});
+ while(mediaEditBases.size>mediaEditBaseLimit)mediaEditBases.delete(mediaEditBases.keys().next().value);
  return {...item,cloudEditBase:ref};
 }
-const asItems=(rows,owner=user?.id)=>{if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');return rows.map(x=>mediaEditItem(x,owner));};
+const asItems=(rows,owner=user?.id)=>{if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');mediaEditBaseLimit=Math.max(2000,rows.length+500);const items=rows.map(x=>mediaEditItem(x,owner));while(mediaEditBases.size>mediaEditBaseLimit)mediaEditBases.delete(mediaEditBases.keys().next().value);return items;};
 
 let listing=null;
 async function readList(owner){

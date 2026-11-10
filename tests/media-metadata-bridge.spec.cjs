@@ -141,3 +141,13 @@ test('ambiguous metadata input blocks deletion before any original or root is re
  expect(await page.evaluate(()=>window.__removed)).toEqual([]);expect(f.r2.store.get(key).bytes.equals(f.bytes)).toBe(true);
  expect(await page.evaluate(()=>window.vzipPendingMediaEdits())).toHaveLength(1);
 });
+
+test('a library above 2000 files retains the first displayed recording version instead of evicting it during listing',async({page})=>{
+ const f=await setup(page);
+ await page.evaluate(({base,at})=>{
+  for(let i=0;i<2105;i++){const id='extra-'+i;window.__rows[id]={...base,id,r2Key:base.r2Key.replace('/voice/','/'+id+'/')};window.__upd[id]=at;}
+ },{base:f.state.metadata,at:f.state.at});
+ const item=await f.item();expect(item.cloudEditBase).toBeTruthy();
+ const out=await update(page,item,{rating:5});expect(out.saved.rating).toBe(5);expect(f.requests).toHaveLength(1);
+ expect(await page.evaluate(()=>Object.keys(window.__rows).length)).toBe(2106);
+});
