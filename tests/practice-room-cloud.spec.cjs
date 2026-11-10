@@ -1,4 +1,17 @@
 const {test,expect}=require('@playwright/test');
+const {boot,fakeR2}=require('./helpers/r2-fixture.cjs');
+require('./legacy-session-mode.cjs')(test,{approvedHome:true});
+
+test('practice room opens from settings management while home has no shortcut',async({page})=>{
+ await fakeR2(page);await boot(page);
+ await expect(page.locator('.vz-room-entry')).toHaveCount(0);
+ await page.goto('/#/settings');
+ const entry=page.locator('a.item[href="#/practice-room"]');
+ await expect(entry).toBeVisible();
+ await entry.click();
+ await expect(page).toHaveURL(/#\/practice-room$/);
+ await expect(page.locator('iframe.vzip-practice-room-frame')).toBeVisible();
+});
 
 test('practice-room bridge stores reflection in synced practice data and verifies R2 recording',async({page})=>{
  await page.goto('/practice-room/index.html');
