@@ -585,7 +585,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    try{current();if(!result.rows.every(s=>store.list(binding,pageNo).some(r=>r.id===s.id&&Ink.same(r,s))))throw Error('원래 필기가 바뀌었어요. 다시 선택해 주세요.');const note={id:VZ.uid(),page:pageNo,text:text.slice(0,1200),x:Math.max(0,Math.min(.92,result.rect.x)),y:Math.max(0,Math.min(.95,result.rect.y))};saveNotes([...notes,note]);apply({add:[],remove:result.rows});visionPanel(false);clearSelection();}catch(e){say('필기 대체를 완료하지 못했어요: '+e.message,true);}
   };
   el.querySelector('[data-ink-recognize]').onclick=()=>{if(selection?.rows.length)recognize('handwriting',null,selection.rows);};
-  el.querySelector('[data-ink-notation]').onclick=()=>{selectionEnd(false);clearSelection();finishStroke();tool='notation';svg.dataset.tool=tool;el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));say('궁금한 표기를 사각형으로 둘러 주세요.');};
+  el.querySelector('[data-ink-notation]').onclick=()=>{selectionEnd(false);clearSelection();finishStroke();resetGestures();tool='notation';svg.dataset.tool=tool;stage.dataset.notation='true';el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));say('궁금한 표기를 손가락으로 사각형으로 둘러 주세요.');};
   el.querySelector('[data-ink-width]').oninput=event=>updateSettings({width:Number(event.target.value)/1000});
   el.querySelector('[data-ink-opacity]').oninput=event=>updateSettings({opacity:Math.round((100-Number(event.target.value))*1000)/100000});
   el.querySelector('[data-ink-picker]').oninput=event=>{el.querySelector('[data-ink-hex]').value=event.target.value;el.querySelector('[data-ink-custom-add]').disabled=false;};
@@ -600,7 +600,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-thumb-next]').onclick=()=>{if((thumbBatch+1)*24<doc?.numPages){thumbBatch++;drawThumbnailBatch();}};
   el.querySelector('[data-ink-jump-form]').onsubmit=event=>{event.preventDefault();const n=Number(el.querySelector('[data-ink-jump-input]').value);if(!Number.isInteger(n)||n<1||n>doc?.numPages){say('1부터 '+doc.numPages+'쪽 사이 번호를 입력해 주세요.',true);return;}pageNo=n;closeThumbnails();renderPage();};
   el.querySelectorAll('[data-ink-tool]').forEach(button=>button.onclick=()=>{
-   selectionEnd(false);clearSelection();finishStroke();resetGestures();markerStart=null;markerDrag=null;el.querySelector('[data-ink-marker-palette]').hidden=true;el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool=button.dataset.inkTool;svg.dataset.tool=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
+   selectionEnd(false);clearSelection();finishStroke();resetGestures();markerStart=null;markerDrag=null;el.querySelector('[data-ink-marker-palette]').hidden=true;el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool=button.dataset.inkTool;svg.dataset.tool=tool;stage.dataset.notation='false';if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));paint();
    if(tool==='select')say('필기를 누르거나 사각형으로 둘러 선택하세요.');
   });
@@ -609,7 +609,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   };
   el.querySelectorAll('[data-ink-marker]').forEach(button=>button.onclick=()=>{
    finishStroke();selectionEnd(false);clearSelection();markerStart=null;markerDrag=null;resetGestures();
-   markerType=button.dataset.inkMarker;tool='marker';svg.dataset.tool=tool;
+   markerType=button.dataset.inkMarker;tool='marker';svg.dataset.tool=tool;stage.dataset.notation='false';
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));
    el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','true');
    el.querySelectorAll('[data-ink-marker]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
@@ -638,7 +638,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   };
   svg.onpointerdown=event=>{
    if(!ready||busy||exportBusy||pending||event.button>0)return;
-   if(event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size&&event.width<=50&&event.height<=50&&Date.now()-touchInkStart.time<280&&(!active||active.stroke.points.length<4)){
+   if(tool!=='notation'&&event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size&&event.width<=50&&event.height<=50&&Date.now()-touchInkStart.time<280&&(!active||active.stroke.points.length<4)){
     if(active?.pointer===touchInkStart.pointer){active=null;cancelAnimationFrame(frame);frame=0;}
     touchEraser=null;markerDrag=null;
     if(selection?.drag?.pointer===touchInkStart.pointer)selectionEnd(false);
@@ -647,16 +647,16 @@ VZ.openScoreInk=(songId,scoreId)=>{
     gestureDown({pointerId:first.pointer,clientX:first.x,clientY:first.y,width:0,height:0,preventDefault(){}});
     gestureDown(event);return;
    }
-   if(event.pointerType==='touch'&&(profiles.penOnly||tool==='pan')){
+   if(event.pointerType==='touch'&&tool!=='notation'&&(profiles.penOnly||tool==='pan')){
     if(active||selection?.drag)return;
     if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
     gestureDown(event);return;
    }
    if(tool==='pan'||active||selection?.drag||event.isPrimary===false)return;
    if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
-   if(profiles.penOnly&&event.pointerType!=='pen')return;
+   if(profiles.penOnly&&event.pointerType!=='pen'&&tool!=='notation')return;
    resetGestures();
-   if(event.pointerType==='touch')touchInkStart={pointer:event.pointerId,x:event.clientX,y:event.clientY,time:Date.now()};
+   if(event.pointerType==='touch'&&tool!=='notation')touchInkStart={pointer:event.pointerId,x:event.clientX,y:event.clientY,time:Date.now()};
    try{
     current();event.preventDefault();const p=coords(event);
     if(tool==='select'){selectionDown(event,p);return;}
