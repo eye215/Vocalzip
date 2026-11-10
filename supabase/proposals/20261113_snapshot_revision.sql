@@ -120,7 +120,7 @@ begin
   if not found then
    -- A legacy direct first writer may have created the row outside the account lock.
    select * into current_row from public.vocal_data where user_id=u;
-   return jsonb_build_object('status','conflict','revision',current_row.revision::text,'exists',true);
+   return jsonb_build_object('status','conflict','revision',current_row.revision::text,'generation',current_row.generation,'exists',true);
   end if;
  end if;
  insert into public.vzip_data_write_requests(user_id,request_id,session_id,expected_revision,expected_generation,content_hash,result_revision,result_generation,result_updated_at)

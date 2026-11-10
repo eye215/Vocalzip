@@ -66,25 +66,62 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 function sameVersion(query,at){return at==null?query.is('updated_at',null):query.eq('updated_at',at)}
 // CAS tokens must advance even when the browser clock stalls or runs behind the server.
 function nextVersion(at){return new Date(Math.max(Date.now(),(Date.parse(at)||0)+1)).toISOString()}
+let revisionBridge=null,revisionBridgeOwner='',revisionBridgeSession='';
+function snapshotBridge({allowPaused=false}={}){
+ const owner=user?.id,session=window.vzipCloudSessionId?.();
+ const stored=owner&&localStorage.getItem('vzip_snapshot_transport_v1:'+encodeURIComponent(owner));
+ if(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true){
+  if(stored&&!allowPaused)throw Error('새 저장 계약이 일시 중지됐어요. 미완료 저장을 보존하고 기존 방식으로 덮어쓰지 않아요.');
+  if(!stored)return null;
+ }
+ if(!window.VzipSnapshotTransport||!window.VzipAccountScope||!sessionVerified||!session)throw Error('새 저장 모듈과 등록 로그인을 먼저 확인해 주세요.');
+ if(revisionBridge&&revisionBridgeOwner===owner&&revisionBridgeSession===session)return revisionBridge;
+ const identity=()=>!user||!sessionVerified||window.VzipAccountScope.leaving?null:{owner:user.id,session:window.vzipCloudSessionId()};
+ const transport=window.VzipSnapshotTransport.createTransport({projectUrl:url,publishableKey:key,
+  getCredentials:()=>window.vzipCloudAccessToken(),getOwner:()=>identity()?.owner,getSessionId:()=>identity()?.session});
+ revisionBridge=window.VzipSnapshotTransport.create({storage:localStorage,identity,...transport,valid:Merge.valid,same:Merge.same,
+  deletedIds:()=>localData()?.deleted?.lessons||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;},
+  lock:work=>{
+   if(!navigator.locks?.request)throw Error('새 저장 계약은 Web Locks를 지원하는 브라우저에서 확인해 주세요.');
+   return navigator.locks.request('vzip-snapshot-write:'+owner,{ifAvailable:true},lock=>{if(!lock)throw Error('다른 탭에서 저장을 확인하고 있어요.');return work();});
+  },
+  onAck:(row)=>{
+   const current=localData(),next=Merge.merge(current||{},row.payload).data;
+   if(!Merge.valid(next))throw Error('서버에서 확인한 기록 형식을 확인해 주세요.');
+   if(!current||!Merge.same(current,next)){snapshot(current);localStorage.setItem(dataKey,JSON.stringify(next));window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}));}
+  }});
+ revisionBridgeOwner=owner;revisionBridgeSession=session;return revisionBridge;
+}
+window.vzipSnapshotDeleteLocalLesson=(id,apply)=>{
+ const bridge=snapshotBridge({allowPaused:true});
+ return bridge?bridge.redactLessons([id],apply):apply();
+};
 async function sync({silent=false,reload=false}={}){
  if(!user||(window.VzipAccountScope&&!sessionVerified))return;if(busy){syncAgain=true;return}
  const syncOwner=user.id,checkOwner=()=>{if(user?.id!==syncOwner||(window.VzipAccountScope&&!sessionVerified))throw Error('계정이 변경되어 동기화를 중단했어요.');};
- busy=true;let local=null,merged=null,changedLocal=false;
+ busy=true;let local=null,merged=null,changedLocal=false,bridge=null,confirmed=null;
  try{
+  bridge=snapshotBridge();if(bridge)await bridge.recover();
   for(let attempt=0;;attempt++){
-   const row=await remoteData();checkOwner();
+   const row=bridge?await bridge.read():await remoteData();checkOwner();
    if(row&&'payload' in row&&!Merge.valid(row.payload))throw Error('클라우드 기록 형식을 확인하지 못했어요. 동기화를 중단합니다.');
    const remote=row?.payload||null;
    // The device copy is read only now, right before it may be rewritten: an edit made while
    // waiting for the server is merged too, never overwritten.
-   local=localData();
+   const prepare=current=>{
+    local=current;
+    if(!local&&!remote)return;
+    merged=remote?(window.VzipAccountScope&&!localStorage.getItem('vzip_account_dirty')?remote:Merge.merge(local||{},remote).data):local;
+    if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
+    if(!local||!Merge.same(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));changedLocal=true;window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}));}
+   };
+   if(bridge)await bridge.prepare(row,()=>({payload:localData(),dirty:!!localStorage.getItem('vzip_account_dirty')}),prepare);
+   else prepare(localData());
    if(!local&&!remote){say('아직 저장된 기록이 없어요.');return}
-   merged=remote?(window.VzipAccountScope&&!localStorage.getItem('vzip_account_dirty')?remote:Merge.merge(local||{},remote).data):local;
-   if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
-   if(!local||!Merge.same(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));changedLocal=true;window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}))}
    // Keep other accounts' unsynced archive data on this device; scope only the outbound payload.
    checkOwner();const payload=window.VzipArchive?window.VzipArchive.forOwner(merged,user.id):merged;
-   if(remote&&Merge.same(payload,remote))break;
+   if(remote&&Merge.same(payload,remote)){confirmed=remote;break;}
+   if(bridge){const saved=await bridge.write(row,payload);confirmed=saved.payload;merged=localData();break;}
    const stamp=nextVersion(row?.updated_at);
    // On an empty account, ON CONFLICT DO NOTHING is essential: a second first-save
    // must not overwrite the row another session just created.
@@ -99,7 +136,8 @@ async function sync({silent=false,reload=false}={}){
    await wait(150*(attempt+1)+Math.random()*150);
   }
   checkOwner();localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;syncFailed=false;
-  if(window.VzipAccountScope&&Merge.same(localData(),merged))localStorage.removeItem('vzip_account_dirty');
+  if(window.VzipAccountScope&&Merge.same(localData(),bridge?confirmed:merged))localStorage.removeItem('vzip_account_dirty');
+  else if(bridge){localStorage.setItem('vzip_account_dirty','1');syncAgain=true;}
   say('✓ 이 기기와 클라우드 기록을 합쳐 저장했어요 · '+Merge.count(merged)+'건'+(silent?' (자동 동기화)':''));
   if(reload&&local&&changedLocal)setTimeout(()=>location.reload(),650);
  }catch(e){syncFailed=true;say('동기화 실패: '+e.message+' · 기록은 그대로 있어요.')}
