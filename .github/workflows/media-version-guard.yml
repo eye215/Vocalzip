@@ -1,15 +1,17 @@
 name: Media immutable version server contract
 on:
   push:
-    branches: ['codex/media-version-server-20261110', 'codex/media-publication-speed-20261110']
+    branches: ['codex/media-version-server-20261110', 'codex/media-publication-speed-20261110', 'codex/media-metadata-cas-20261110']
   pull_request:
     paths:
       - 'r2-worker/**'
       - 'supabase/proposals/20261116_media_version_guard.sql'
       - 'supabase/proposals/20261117_media_publication.sql'
+      - 'supabase/proposals/20261118_media_metadata_cas.sql'
       - 'r2-storage.js'
       - 'cloud-sync.js'
       - 'tests/media-publication*'
+      - 'tests/media-metadata-client.test.cjs'
       - 'tests/media-version-guard.test.mjs'
       - '.github/workflows/media-version-guard.yml'
 permissions:
@@ -44,7 +46,7 @@ jobs:
       - name: Publication client and upload preflight contracts
         env:
           VZIP_PUBLICATION_BASE: 014cee2e3605f323b405e2a3d43fe7d1c047d338
-        run: node --test tests/media-publication-client.test.cjs
+        run: node --test tests/media-publication-client.test.cjs tests/media-metadata-client.test.cjs
       - name: SQL ownership, sessions, signed object proof and real in-memory R2 multipart/delete
         env:
           VZ_MEDIA_VERSION_TEST_DB: postgres://postgres:media_ci_only@localhost:5432/postgres

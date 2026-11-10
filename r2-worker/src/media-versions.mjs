@@ -103,6 +103,27 @@ export async function handleMediaV2(request,env,uid,sid,context,api){
    !Number.isFinite(Date.parse(saved.updated_at)))fail(503,'publication not confirmed');
   return json(saved);
  }
+ if(url.pathname==='/v2/media/edit'&&request.method==='POST'){
+  if(!UUID.test(body?.requestId||'')||typeof body.updatedAt!=='string'||
+   !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(body.updatedAt)||!Number.isFinite(Date.parse(body.updatedAt))||
+   !body.patch||Array.isArray(body.patch)||typeof body.patch!=='object'||!Object.keys(body.patch).length||
+   Object.keys(body.patch).some(k=>!['name','song','songId','recordedDate','dateSource','rating','review'].includes(k)))fail(400,'invalid metadata edit');
+  objectKey(uid,body.mediaId,body.key,fail);
+  const saved=await mediaRpc(request,env,'vzip_edit_media',{p_request_id:body.requestId,p_media_id:body.mediaId,
+   p_key:body.key,p_expected_updated_at:body.updatedAt,p_patch:body.patch},api);
+  const stamp=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(v)&&Number.isFinite(Date.parse(v));
+  if(!saved||saved.version!==1||saved.user_id!==uid||saved.session_id!==sid||saved.request_id!==body.requestId||
+   saved.id!==body.mediaId||saved.object_key!==body.key||saved.metadata?.id!==body.mediaId||
+   saved.metadata?.storageProvider!=='r2'||saved.metadata?.r2Key!==body.key||
+  !Number.isSafeInteger(saved.metadata.size)||saved.metadata.size<1||saved.metadata.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(saved.metadata.type||'')||!/^[!-~]{1,200}$/.test(saved.metadata.r2Etag||'')||
+  ['path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(saved.metadata,k))||
+   !stamp(saved.updated_at)||!stamp(saved.applied_updated_at)||saved.applied_updated_at<=body.updatedAt||saved.applied_updated_at>saved.updated_at||
+   typeof saved.replayed!=='boolean'||typeof saved.superseded!=='boolean'||
+   saved.superseded!==(saved.applied_updated_at!==saved.updated_at)||(saved.superseded&&!saved.replayed)||
+   (!saved.superseded&&Object.entries(body.patch).some(([k,v])=>saved.metadata[k]!==v)))fail(503,'metadata edit not confirmed');
+  return json(saved);
+ }
  if(url.pathname==='/v2/media/delete/prepare'&&request.method==='POST'){
   if(!UUID.test(body.requestId||'')||typeof body.updatedAt!=='string'||body.updatedAt.length>80||!Number.isFinite(Date.parse(body.updatedAt))||
    !Number.isSafeInteger(body.size)||body.size<1||body.size>2147483648)fail(400,'invalid deletion target');
