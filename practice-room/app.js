@@ -32,7 +32,7 @@ const KEY='vocalzip-practice-room-v1';
 const fresh={goal:'뮤지컬 한 곡을 내 해석으로 부르기',minutesGoal:15,totalSeconds:0,mood:'편안해',history:[],goals:[],drafts:{},next:null};
 let store; try {store={...fresh,...JSON.parse(localStorage.getItem(KEY)||'{}')};}catch{store={...fresh};}
 let saveWarned=false;
-function hydrateHistory(){if(!roomBridge)return;try{const cloud=roomBridge.history(window);const map=new Map(store.history.map(r=>[r.id,r]));for(const r of cloud){if(!TASKS[r.task])continue;const old=map.get(r.id);map.set(r.id,{...r,aiCoach:old?.aiCoach||'',aiConditionCheck:old?.aiConditionCheck||r.aiConditionCheck||false,aiNextTask:old?.aiNextTask||r.aiNextTask||'',appSaved:true,audioSaved:true,audioIds:r.audioIds.map(a=>({...a,cloud:a.cloud||old?.audioIds?.find(v=>v.id===a.id)?.cloud||false}))});}store.history=[...map.values()].sort((a,b)=>String(b.date).localeCompare(String(a.date)));save();}catch{}}
+function hydrateHistory(){if(!roomBridge)return;try{const cloud=roomBridge.history(window);const map=new Map(store.history.map(r=>[r.id,r]));for(const r of cloud){if(!TASKS[r.task])continue;const old=map.get(r.id);map.set(r.id,{...r,aiCoach:r.aiCoach||old?.aiCoach||'',aiConditionCheck:r.aiCoach?r.aiConditionCheck===true:(old?.aiConditionCheck||false),aiNextTask:r.aiNextTask||old?.aiNextTask||'',appSaved:true,audioSaved:true,audioIds:r.audioIds.map(a=>({...a,cloud:a.cloud||old?.audioIds?.find(v=>v.id===a.id)?.cloud||false}))});}store.history=[...map.values()].sort((a,b)=>String(b.date).localeCompare(String(a.date)));save();}catch{}}
 let syncPromise=null;
 async function syncPending(){if(roomLocked||!roomBridge)return;if(syncPromise){await syncPromise;return syncPending();}const work=(async()=>{
  for(const r of store.history){if(r.demo)continue;
