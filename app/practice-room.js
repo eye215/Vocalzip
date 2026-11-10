@@ -15,6 +15,7 @@ window.VocalzipPracticeRoom={
   assert(source);if(media.storageProvider!=='r2'||!media.r2Key)throw Error('R2 저장을 확인하지 못했어요.');return {id:media.id,cloud:true};
  },
  async audioUrl(id,source){assert(source);if(!/^[a-zA-Z0-9-]{8,80}-[01]$/.test(id))throw Error('녹음 ID를 확인해 주세요.');const media=(await window.vzipCloudMediaList()).find(m=>m.id===id&&m.storageProvider==='r2');assert(source);if(!media)throw Error('클라우드 녹음을 찾지 못했어요.');return window.vzipCloudMediaUrl(media);},
+ async coach(input,source){assert(source);if(!window.vzipCloudCoach)throw Error('AI 코멘트 연결이 준비되지 않았어요.');const result=await window.vzipCloudCoach(input);assert(source);return result;},
  saveGoal(input,source){assert(source);if(input.demo)return {ok:true,skipped:true};let changed=false;const ok=V.change(db=>{changed=M.goal(db,input,V.today());},{silent:true});return {ok,changed};},
  openGoals(source){assert(source);V.nav('#/home');},
  context(source){assert(source);return {totalSeconds:Math.round(V.timeEntries().reduce((n,p)=>n+p.minutes*60,0)),goals:(V.db.dailyGoals||[]).filter(g=>g.date===V.today()).map(g=>({title:g.title,completed:g.completed}))};}
