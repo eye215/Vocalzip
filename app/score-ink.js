@@ -63,7 +63,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '</div>'+
   '<div class="score-ink-actions">'+button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('clear','trash','현재 페이지 필기 삭제')+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('marker-mode','bookmark-simple','악보 표시')+button('performance','eye','무대용 보기')+button('fullscreen','arrows-out','전체화면')+'</div>'+
   '<div class="score-ink-marker-palette" data-ink-marker-palette hidden><button type="button" data-ink-marker="breath">숨표</button><button type="button" data-ink-marker="repeat">반복</button><button type="button" data-ink-marker="cut">컷</button><button type="button" data-ink-marker="start">시작점</button></div>'+
-  '<div class="score-ink-vision-tools" data-ink-vision-tools hidden><button type="button" data-ink-notation>표기 알아보기</button><button type="button" data-ink-note-undo hidden>메모 되돌리기</button><span>악보에서 궁금한 표기를 사각형으로 선택해요.</span></div>'+
+  '<div class="score-ink-vision-tools" data-ink-vision-tools hidden><button type="button" data-ink-notation>표기 알아보기</button><button type="button" data-ink-note-undo hidden>메모 되돌리기</button><span>선택한 악보 영역을 AI로 설명해요.</span></div>'+
   '<section class="score-ink-settings" data-ink-settings aria-label="필기 설정" hidden><div class="score-ink-settings-head"><strong data-ink-profile-label>펜 설정</strong>'+button('settings-close','x','필기 설정 닫기')+'</div>'+
   '<div class="score-ink-palette-section"><span>기본 색상</span><div data-ink-palette class="score-ink-swatches" role="group" aria-label="기본 색상"></div></div>'+
   '<div class="score-ink-palette-section"><span>최근 사용</span><div data-ink-recent class="score-ink-swatches" role="group" aria-label="최근 사용 색상"></div></div>'+
@@ -251,9 +251,15 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(!commit){clearSelection();paint();return;}
    const a=drag.start,b=drag.end||a,r=svg.getBoundingClientRect();
    const rows=store.list(binding,pageNo);
-   selected(Math.hypot((b[0]-a[0])*r.width,(b[1]-a[1])*r.height)<6?
-    rows.slice().reverse().filter(s=>Ink.hit(s,b,aspect)).slice(0,1):
-    Ink.inRect(rows,{x:a[0],y:a[1],w:b[0]-a[0],h:b[1]-a[1]},aspect));return;
+   const distance=Math.hypot((b[0]-a[0])*r.width,(b[1]-a[1])*r.height);
+   const matches=distance<6?rows.slice().reverse().filter(s=>Ink.hit(s,b,aspect)).slice(0,1):
+    Ink.inRect(rows,{x:a[0],y:a[1],w:b[0]-a[0],h:b[1]-a[1]},aspect);
+   selected(matches);
+   if(!matches.length&&distance>=6){
+    if(visionAvailable)recognize('notation',{x:a[0],y:a[1],w:b[0]-a[0],h:b[1]-a[1]});
+    else say('표기 설명 기능을 사용할 수 없어요. 로그인과 AI 인식 권한을 확인해 주세요.',true);
+   }
+   return;
   }
   if(commit&&preview)commitSelection(preview);else paint();
  }
@@ -348,7 +354,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  async function recognize(mode,rect,rows){
   if(visionBusy||!visionAvailable||!ready||busy||pending||performance)return;
   const bound=binding.pdfHash,atPage=pageNo,chosen=rows?.map(s=>({...s}));
-  if(!await VZ.confirm('선택 영역 인식','선택한 '+(mode==='notation'?'악보 부분':'손글씨 획만')+' OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.',{ok:'인식하기'}))return;
+  if(mode==='handwriting'&&!await VZ.confirm('선택 영역 인식','선택한 손글씨 획만 OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.',{ok:'인식하기'}))return;
   visionBusy=true;visionController=new AbortController();saveState('인식 중…','pending');say('선택한 영역을 인식하고 있어요.');
   try{
    current();const image=mode==='notation'?cropNotation(rect):cropHandwriting(chosen).image;
@@ -436,6 +442,15 @@ VZ.openScoreInk=(songId,scoreId)=>{
   }
  }
  function coords(event){const r=svg.getBoundingClientRect();return Ink.point((event.clientX-r.left)/r.width,(event.clientY-r.top)/r.height,event.pressure||0.5);}
+ function visionMove(point){
+  if(!visionDrag)return;const a=visionDrag.start,rect=el.querySelector('[data-ink-vision-rect]');rect.hidden=false;
+  rect.style.left=Math.min(a[0],point[0])*100+'%';rect.style.top=Math.min(a[1],point[1])*100+'%';
+  rect.style.width=Math.abs(a[0]-point[0])*100+'%';rect.style.height=Math.abs(a[1]-point[1])*100+'%';
+ }
+ function visionEnd(point,complete){
+  if(!visionDrag)return;const start=visionDrag.start;visionDrag=null;el.querySelector('[data-ink-vision-rect]').hidden=true;
+  if(complete)recognize('notation',{x:start[0],y:start[1],w:point[0]-start[0],h:point[1]-start[1]});
+ }
  async function renderPage({keepScroll=false}={}){
   if(!doc||closed)return;const previousScroll={left:stage.scrollLeft,top:stage.scrollTop};resetGestures();selectionEnd(false);if(selection?.page!==pageNo)clearSelection();finishStroke();busy=true;ready=false;const number=++renderNumber;renderTask?.cancel();
   if(!performance)box.hidden=true;svg.dataset.tool='pan';say('악보 '+pageNo+'쪽을 불러오고 있어요.');
@@ -569,6 +584,21 @@ VZ.openScoreInk=(songId,scoreId)=>{
   stage.onpointerdown=event=>{if(performance&&event.pointerType==='touch'&&ready&&!busy&&event.target!==svg)gestureDown(event);};
   stage.onpointermove=event=>{if(performance&&event.target!==svg)gestureMove(event);};
   stage.onpointerup=stage.onpointercancel=event=>{if(performance&&event.target!==svg)gestureEnd(event);};
+  stage.addEventListener('touchstart',event=>{
+   if(tool!=='notation'||!ready||busy||exportBusy||pending||!box.contains(event.target)||event.touches.length!==1)return;
+   const touch=event.changedTouches[0];if(!touch||touch.touchType==='stylus')return;
+   event.preventDefault();visionDrag={touch:touch.identifier,start:coords(touch)};visionMove(visionDrag.start);
+  },{passive:false});
+  stage.addEventListener('touchmove',event=>{
+   if(tool!=='notation'||visionDrag?.touch===undefined)return;
+   const touch=Array.from(event.changedTouches).find(t=>t.identifier===visionDrag.touch);if(!touch)return;
+   event.preventDefault();visionMove(coords(touch));
+  },{passive:false});
+  for(const type of ['touchend','touchcancel'])stage.addEventListener(type,event=>{
+   if(visionDrag?.touch===undefined)return;
+   const touch=Array.from(event.changedTouches).find(t=>t.identifier===visionDrag.touch);if(!touch)return;
+   event.preventDefault();visionEnd(coords(touch),type==='touchend');
+  },{passive:false});
   stage.onclick=event=>{if(performance&&event.target.closest?.('[data-ink-performance-controls]')==null)showPerformanceControls();};
   el.querySelector('[data-ink-export]').onclick=exportPDF;
   el.querySelector('[data-ink-vision-cancel]').onclick=()=>visionPanel(false);
@@ -673,7 +703,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    }catch(e){say(e.message,true);}
   };
   svg.onpointermove=event=>{
-   if(visionDrag?.pointer===event.pointerId){event.preventDefault();const p=coords(event),a=visionDrag.start;const rect=el.querySelector('[data-ink-vision-rect]');rect.hidden=false;rect.style.left=Math.min(a[0],p[0])*100+'%';rect.style.top=Math.min(a[1],p[1])*100+'%';rect.style.width=Math.abs(a[0]-p[0])*100+'%';rect.style.height=Math.abs(a[1]-p[1])*100+'%';return;}
+   if(visionDrag?.pointer===event.pointerId){event.preventDefault();visionMove(coords(event));return;}
    try{if(selectionMove(event))return;}catch(e){selectionEnd(false);say(e.message,true);return;}
    if(!active&&gestureMove(event))return;
    if(markerDrag?.pointer===event.pointerId){event.preventDefault();markerDrag.end=coords(event);return;}
@@ -683,7 +713,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    schedule();
   };
   svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{
-   if(visionDrag?.pointer===event.pointerId){const start=visionDrag.start;visionDrag=null;el.querySelector('[data-ink-vision-rect]').hidden=true;if(event.type==='pointerup'){const p=coords(event);recognize('notation',{x:start[0],y:start[1],w:p[0]-start[0],h:p[1]-start[1]});}return;}
+   if(visionDrag?.pointer===event.pointerId){visionEnd(coords(event),event.type==='pointerup');return;}
    if(touchInkStart?.pointer===event.pointerId)touchInkStart=null;
    if(touchEraser?.pointer===event.pointerId){const point=touchEraser.point;touchEraser=null;if(event.type==='pointerup'){try{const found=strokes().reverse().find(s=>Ink.hit(s,point,aspect));if(found)apply({add:[],remove:[found]});}catch(e){say(e.message,true);}}return;}
    if(selection?.drag?.pointer===event.pointerId){event.preventDefault();try{selectionEnd(event.type==='pointerup');}catch(e){selectionEnd(false);say(e.message,true);}return;}
