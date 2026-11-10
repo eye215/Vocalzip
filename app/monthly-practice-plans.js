@@ -101,6 +101,7 @@ function create(form,month){
 }
 function render(host,month,items,rows){
  if(!host?.isConnected)return;
+ V.segmentABStop?.();
  const mine=plans().sort((a,b)=>(b.created||0)-(a.created||0));
  host.innerHTML='<section class="card growth-section"><h2>곡별 집중 연습 계획</h2>'+
  '<p class="small muted">월간 추천을 실제 곡과 직접 선택한 구간에 연결해요. 하루 목표 완료로 진행률을 추적합니다.</p>'+
@@ -186,7 +187,7 @@ function render(host,month,items,rows){
  host.querySelectorAll('[data-ab-plan]').forEach(btn=>btn.onclick=()=>{
   const plan=mine.find(x=>x.id===btn.dataset.abPlan),panel=btn.closest('.growth-plan-item')?.querySelector('[data-ab-host]');
   if(!plan||!panel||!V.segmentABPanel)return;
-  if(panel.childElementCount){panel.replaceChildren();return;}
+  if(panel.childElementCount){V.segmentABStop?.();panel.replaceChildren();return;}
   V.segmentABPanel(panel,plan,items);
  });
  host.querySelectorAll('[data-archive-plan]').forEach(btn=>btn.onclick=async()=>{
