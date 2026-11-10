@@ -20,7 +20,8 @@ concurrency:
 jobs:
   scores:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,7 +32,6 @@ jobs:
       - run: node --test tests/score-ink-model.test.cjs tests/data-merge.test.cjs
       - name: Pinned PDF.js renderer for actual browser PDF tests
         run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38
-      - run: npx playwright install --with-deps chromium webkit
       - run: npx playwright test tests/scores.spec.cjs tests/score-ink.spec.cjs --workers=2
         env:
           VZ_INK_PREVIEW: '1'
