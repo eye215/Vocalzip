@@ -98,21 +98,21 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
   const tasksFor = day => db.assignments.filter(t => p?.completed?.includes(t.id) || VZ.taskInPeriod?.(t, day));
   const hw = new Map((p?.completed || []).map(id => [id, {did:true, reps:Number(p.assignmentReps?.[id]) || 1, note:p.assignmentNotes?.[id] || ''}]));
   const cats = db.categories;
-  const catOpts = cats.map(c => '<option value="' + esc(c.id) + '"' + (p?.categoryId === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '<option value="__new">+ 새 분류 추가</option>';
+  const catOpts = '<option value="">분류 선택</option>' + cats.map(c => '<option value="' + esc(c.id) + '"' + (p?.categoryId === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '<option value="__new">+ 새 분류 추가</option>';
   // 트레이닝 분류 3단계: 분류 › 세부 항목 › 세부 항목 2. Each level can add a new entry that is kept for next time.
   const level = (label, name, opts, placeholder) => '<label class="field"><span>' + label + '</span><select name="' + name + '" data-level>' + opts + '</select><input type="text" name="' + name + '__new" maxlength="40" placeholder="' + placeholder + '" hidden style="margin-top:8px"></label>';
-  const quick = [10, 20, 30, 60].map(n => '<button type="button" class="chip" data-min="' + n + '">' + n + '분</button>').join('');
-  const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + ((p?.rating || 0) >= n) + '">★</button>').join('');
+  const initialMinutes = p ? VZ.practiceMinutes(p) : preset?.minutes || 30;
+  const quick = [10, 20, 30, 60].map(n => '<button type="button" data-min="' + n + '" aria-pressed="' + (Number(initialMinutes) === n) + '">' + n + '분</button>').join('');
+  const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + ((p?.rating || 0) >= n) + '"><i class="' + ((p?.rating || 0) >= n ? 'ph-fill' : 'ph') + ' ph-star" aria-hidden="true"></i></button>').join('');
   VZ.sheet({title:p ? '연습 기록 수정' : '연습 기록', body:'<form id="practice-log">' +
-    '<div class="seg" role="group" aria-label="연습 종류" style="margin-bottom:14px"><button type="button" data-mode="song" aria-pressed="' + (mode === 'song') + '">곡 연습</button><button type="button" data-mode="training" aria-pressed="' + (mode === 'training') + '">보컬 트레이닝</button></div>' +
+    '<div class="vz-library-tabs vz-practice-tabs"><div class="lib-seg" role="group" aria-label="연습 종류"><button type="button" data-mode="song" aria-pressed="' + (mode === 'song') + '">곡 연습</button><button type="button" data-mode="training" aria-pressed="' + (mode === 'training') + '">보컬 트레이닝</button></div></div>' +
     '<div data-song-part>' + VZ.songSelect('song', p?.songId || songId) + '</div>' +
-    '<div data-train-part><div class="two">' + level('분류', 'category', catOpts, '새 분류 이름 (예: 고음)') + level('세부 항목', 'detail', '', '새 세부 항목 (예: 립트릴)') + '</div>' + level('세부 항목 2 <span class="small muted">(선택)</span>', 'detail2', '', '새 항목 (예: 저음 5도)') + '</div>' +
-    '<div class="two"><label class="field"><span>날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(p?.date || date) + '"></label><label class="field"><span>연습 시간(분) <span class="req">*</span></span><input type="number" name="minutes" inputmode="numeric" min="1" max="1440" required value="' + (p ? VZ.practiceMinutes(p) : preset?.minutes || '') + '" placeholder="30"></label></div>' +
-    '<div class="chips" style="margin:-6px 0 14px">' + quick + '</div>' +
-    '<fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset>' +
-    '<div data-hw-host></div>' +
-    '<div data-media-pick></div>' +
-    '<label class="field"><span>메모</span><textarea name="memo" maxlength="5000" placeholder="오늘 연습한 내용, 느낀 점">' + esc(p?.memo || preset?.memo || '') + '</textarea></label></form>',
+    '<div data-train-part><label class="field"><span>훈련 내용</span><select name="recommendation" data-recommendation><option value="">추천 연습 또는 직접 입력 선택</option><option value="__custom">직접 입력</option></select></label><div class="vz-practice-recommendation" data-recommendation-info hidden></div><div data-custom-training hidden>' + level('분류', 'category', catOpts, '새 분류 이름 (예: 고음)') + level('세부 항목', 'detail', '', '새 세부 항목 (예: 립트릴)') + level('세부 항목 2 <span class="small muted">(선택)</span>', 'detail2', '', '새 항목 (예: 저음 5도)') + '</div></div>' +
+    '<label class="field vz-practice-date"><span>기록 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(p?.date || date) + '"></label>' +
+    '<div class="vz-practice-time"><label for="vz-practice-minutes">연습 시간 <span class="req">*</span></label><div class="vz-practice-time-value"><button type="button" data-minute-step="-5" aria-label="연습 시간 5분 줄이기"><i class="ph ph-minus" aria-hidden="true"></i></button><div><input id="vz-practice-minutes" type="number" name="minutes" inputmode="numeric" min="1" max="1440" required value="' + initialMinutes + '" aria-label="연습 시간(분)"><span>분</span></div><button type="button" data-minute-step="5" aria-label="연습 시간 5분 늘리기"><i class="ph ph-plus" aria-hidden="true"></i></button></div><div class="vz-practice-minutes" role="group" aria-label="연습 시간 빠른 선택">' + quick + '</div></div>' +
+    '<fieldset class="vz-practice-rating"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset>' +
+    '<label class="field"><span>메모 <span class="small muted">(선택)</span></span><textarea name="memo" maxlength="5000" placeholder="오늘 연습에서 느낀 점">' + esc(p?.memo || preset?.memo || '') + '</textarea></label>' +
+    '<div data-hw-host></div><div data-media-pick></div></form>',
     foot:'<button type="submit" form="practice-log" class="btn block">' + (p ? '수정 저장' : '연습 기록 저장') + '</button>',
     onMount:async (el, close) => {
       const form = el.querySelector('form');
@@ -137,6 +137,57 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
       form.detail2.onchange = () => showNew(form.detail2);
       if (!cats.length) form.category.value = '__new';
       showNew(form.category); fillDetail();
+      const recSelect = form.elements.recommendation, recInfo = el.querySelector('[data-recommendation-info]');
+      const customTraining = el.querySelector('[data-custom-training]');
+      let recommendations = [], chosenRecommendation = null;
+      const classify = (title, key = '', assignedCategory = '') => {
+        const name = String(title || '').trim();
+        const group = assignedCategory || (key === 'phr' || /호흡|프레이즈|숨/.test(name) ? '호흡' :
+          key === 'into' || key === 'wob' || /음정|기준음|롱톤/.test(name) ? '음정' :
+          key === 'vib' || /발성|립트릴|허밍|비브라토/.test(name) ? '발성' : '기타 훈련');
+        return {category:group, detail:name};
+      };
+      const applyRecommendation = item => {
+        chosenRecommendation = item || null;
+        customTraining.hidden = !!item;
+        recInfo.hidden = !item;
+        if (!item) return;
+        const mapped = classify(item.title, item.key, item.category), existing = cats.find(c => c.name === mapped.category);
+        form.category.value = existing?.id || '__new';
+        form.elements.category__new.value = existing ? '' : mapped.category;
+        showNew(form.category); fillDetail();
+        form.detail.value = existing?.items?.includes(mapped.detail) ? mapped.detail : '__new';
+        form.elements.detail__new.value = form.detail.value === '__new' ? mapped.detail : '';
+        showNew(form.detail); fillDetail2(); form.detail2.value = '';
+        recInfo.innerHTML = '<strong>' + esc(item.title) + '</strong><span>' + esc(item.source === 'lesson' ? '레슨 숙제' : '분석 추천') + ' · ' + esc(mapped.category) + '으로 자동 분류</span>' + (item.description ? '<small>' + esc(item.description) + '</small>' : '');
+      };
+      recSelect.onchange = () => {
+        if (recSelect.value === '__custom' && chosenRecommendation) {
+          form.category.value = ''; form.elements.category__new.value = '';
+          showNew(form.category); fillDetail();
+          form.elements.detail__new.value = '';
+        }
+        applyRecommendation(recommendations.find(x => x.id === recSelect.value));
+      };
+      const drawRecommendations = async () => {
+        const day = form.date.value;
+        const homework = tasksFor(day).filter(t => t.status !== 'done').map(t => ({id:'lesson:' + t.id, key:'', title:t.title, category:t.categoryLabel || t.category || '', source:'lesson', description:VZ.taskPeriod?.(t) ? '기간 ' + VZ.taskPeriod(t) : '', sourceId:t.id}));
+        let analysis = [];
+        try {
+          const media = await M.list();
+          const result = VZ.practiceTips?.(media.filter(m => !M.dateOf(m) || M.dateOf(m) <= day));
+          analysis = (result?.tips || []).map(t => ({id:'analysis:' + t.key, key:t.key, title:t.name, category:t.category, source:'analysis', description:t.reason}));
+        } catch (_) { /* Recommendations are optional; manual entry remains available. */ }
+        recommendations = [...homework, ...analysis.filter(t => !homework.some(h => h.title === t.title))].slice(0, 3);
+        const previous = recSelect.value;
+        recSelect.innerHTML = '<option value="">추천 연습 또는 직접 입력 선택</option>' + recommendations.map(t => '<option value="' + esc(t.id) + '">' + esc(t.title) + ' · ' + (t.source === 'lesson' ? '레슨 숙제' : '분석 추천') + '</option>').join('') + '<option value="__custom">직접 입력</option>';
+        const savedId = p?.recommendationSource && p?.recommendationSourceId ? p.recommendationSource + ':' + p.recommendationSourceId : '';
+        recSelect.value = previous === '__custom' || recommendations.some(t => t.id === previous) ? previous : recommendations.some(t => t.id === savedId) ? savedId : p ? '__custom' : '';
+        if (!recommendations.length && !p) recSelect.value = '__custom';
+        applyRecommendation(recommendations.find(x => x.id === recSelect.value));
+        if (recSelect.value === '__custom') customTraining.hidden = false;
+      };
+      drawRecommendations();
       const hwHost = el.querySelector('[data-hw-host]');
       const drawHw = () => {
         const list = tasksFor(form.date.value);
@@ -170,9 +221,12 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         if (e.target.matches('[data-hw-note]')) st.note = e.target.value;
         hw.set(item.dataset.hwId, st);
       });
-      form.date.addEventListener('change', drawHw); drawHw();
-      el.querySelectorAll('[data-min]').forEach(b => b.onclick = () => { form.minutes.value = b.dataset.min; });
-      el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating >= +x.dataset.star))); });
+      form.date.addEventListener('change', () => { drawHw(); drawRecommendations(); }); drawHw();
+      const syncMinutes = () => el.querySelectorAll('[data-min]').forEach(b => b.setAttribute('aria-pressed', String(Number(form.minutes.value) === Number(b.dataset.min))));
+      el.querySelectorAll('[data-min]').forEach(b => b.onclick = () => { form.minutes.value = b.dataset.min; syncMinutes(); });
+      el.querySelectorAll('[data-minute-step]').forEach(b => b.onclick = () => { form.minutes.value = Math.max(1, Math.min(1440, (Number(form.minutes.value) || 0) + Number(b.dataset.minuteStep))); syncMinutes(); });
+      form.minutes.addEventListener('input', syncMinutes);
+      el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => { const active = rating >= +x.dataset.star; x.setAttribute('aria-pressed', String(active)); x.querySelector('i').className = (active ? 'ph-fill' : 'ph') + ' ph-star'; }); });
       // Offer recordings from the same day to link (recordings never add to practice time).
       const pickHost = el.querySelector('[data-media-pick]');
       const selected = new Set(p?.mediaIds || mediaIds);
@@ -197,6 +251,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         e.preventDefault();
         const minutes = Number(form.minutes.value);
         if (!(minutes > 0)) { VZ.toast('연습 시간을 1분 이상 입력해 주세요.', 'error'); form.minutes.focus(); return; }
+        if (current === 'training' && !recSelect.value) { VZ.toast('훈련 내용을 선택해 주세요.', 'error'); recSelect.focus(); return; }
         let sid = '';
         if (current === 'song') { sid = VZ.readSong(form, 'song'); if (sid === null) return; }
         // New 분류 / 세부 항목 typed here are added to the lists (reusing an existing one with the same name).
@@ -206,6 +261,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         let catId = current === 'training' ? form.category.value : '';
         if (newCat !== null) catId = cats.find(c => c.name === newCat)?.id || VZ.uid();
         const detail = current === 'training' ? (newDetail ?? form.detail.value) : '', detail2 = current === 'training' && detail ? (newDetail2 ?? form.detail2.value) : '';
+        if (current === 'training' && (!catId || !detail)) { VZ.toast('분류와 훈련 내용을 입력해 주세요.', 'error'); (catId ? form.detail : form.category).focus(); return; }
         const catName = newCat ?? cats.find(c => c.id === catId)?.name ?? '';
         const learn = d => {
           if (current !== 'training' || !catId) return;
@@ -223,6 +279,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
         const entry = {date:form.date.value, minutes, manualMinutes:minutes, practiceTimeSource:'manual', mediaSeconds:p?.mediaSeconds || 0, mediaIds:[...selected], practiceMode:current,
           technique:detail ? [{name:[detail, detail2].filter(Boolean).join(' · '), minutes}] : [], songId:sid,
           categoryId:current === 'training' ? catId : '', categoryLabel:current === 'training' ? cat.name : '', detail, detail2,
+          recommendationSource:current === 'training' ? chosenRecommendation?.source || '' : '', recommendationSourceId:current === 'training' ? chosenRecommendation?.sourceId || chosenRecommendation?.key || '' : '',
           rating:rating || 0, memo:form.memo.value, completed, assignmentReps, assignmentNotes};
         const ok = VZ.change(d => { learn(d); if (p) Object.assign(d.practices.find(x => x.id === p.id) || {}, entry); else d.practices.push({id:VZ.uid(), ...entry}); });
         if (ok) { close(); VZ.toast(p ? '연습 기록을 수정했어요.' : '연습 기록을 저장했어요.'); window.dispatchEvent(new Event('vzip:practice-saved')); }
