@@ -1,7 +1,7 @@
 name: Score upload checks
 on:
   push:
-    branches: ['codex/score-private-ink-20261110', 'codex/score-viewer-controls-20261110']
+    branches: ['codex/score-private-ink-20261110', 'codex/score-viewer-controls-20261110', 'codex/score-selection-20261110']
   pull_request:
     paths:
       - 'app/scores.js'
