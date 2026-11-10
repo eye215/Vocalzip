@@ -1,4 +1,5 @@
 import {handleUploadV2} from './resumable.mjs';
+import {mediaPolicy,handleMediaV2,mediaRpc} from './media-versions.mjs';
 /* VOCAL.zip media API on Cloudflare Workers + R2.
  *
  * The browser never sees an R2 key. It signs in with Supabase as before and sends the Supabase
@@ -86,8 +87,11 @@ async function route(request, env) {
   }
 
   const uid = await user(request, env);
+  const mediaContext=await mediaPolicy(request,env,uid,{fail});
+  if(path.startsWith('/v2/media/'))return handleMediaV2(request,env,uid,sessionContexts.get(request)?.verified_session_id,mediaContext,{fail,json,equal:timingSafeEqual});
   if(path.startsWith('/v2/uploads'))return handleUploadV2(request,env,uid,{
-    fail,json,readJson,sign:text=>hmac(env,text),equal:timingSafeEqual,assertSession:()=>user(request,env)
+    fail,json,readJson,sign:text=>hmac(env,text),equal:timingSafeEqual,assertSession:()=>user(request,env),
+    assertUpload:async id=>{if(env.MEDIA_VERSION_GUARD_ENABLED==='true'&&await mediaRpc(request,env,'vzip_media_upload_allowed',{p_media_id:id},{fail})!==true)fail(409,'deleted media ID cannot be uploaded again');}
   });
   // Short audio preview for opt-in STT. Reads only the caller's R2 object and
   // transforms the excerpt at Cloudflare, avoiding whole-file decoding on iOS.
@@ -161,7 +165,7 @@ async function route(request, env) {
     try { await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).abort(); } catch {}
     return json({ok: true});
   }
-  if (path === '/v1/me' && method === 'GET') return json({user: uid,...(env.UPLOADS_V2_ENABLED==='true'&&env.SESSION_GUARD_ENABLED==='true'?{uploadContract:'merkle-v2'}:{})});
+  if (path === '/v1/me' && method === 'GET') return json({user: uid,...(env.UPLOADS_V2_ENABLED==='true'&&env.SESSION_GUARD_ENABLED==='true'?{uploadContract:'merkle-v2'}:{}),...(mediaContext?{mediaMode:mediaContext.mode,mediaContract:'immutable-v1'}:{})});
   if (path === '/v1/sign' && method === 'POST') {
     // Expiry is rounded up to the next hour, so a file gets the same link all hour and the browser can reuse what it
     // already downloaded. {keys:[…]} signs up to 100 files in one request (the list screen prefetches visible ones).
@@ -308,7 +312,7 @@ async function user(request, env) {
     const context=await sessionRpc(env,'vzip_session_context',{},request.headers.get('authorization'),request.headers.get('x-client-info')||'');
     if(!context||context.user_id!==uid||typeof context.required!=='boolean')fail(503,'invalid session response');
     if(context.allowed!==true)fail(401,'login session ended');
-    sessionContexts.set(request,context);
+    sessionContexts.set(request,{...context,verified_session_id:claims.session_id||null});
   }
   return uid;
 }
