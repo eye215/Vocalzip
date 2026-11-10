@@ -466,14 +466,12 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
   render(r) {
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
-    const tabs = [['media', '녹음'], ['lyrics', '가사'], ['scores', '악보'], ['timeline', '활동 기록']];
-    const links = (s.arLinks || []).filter(link => songArUrl(link.url));
+    const tabs = [['media', '녹음'], ['lyrics', '가사'], ['scores', '악보'], ['timeline', '활동 기록'], ['ar', '레퍼런스']];
     return '<div class="song-head vz-song-detail-hero"><span class="vz-song-detail-eyebrow">곡 상세</span><strong class="vz-song-detail-title">' + esc(s.title) + '</strong>' + '<span class="vz-song-detail-summary" data-summary></span></div>' +
-      '<a class="vz-song-lab-entry" href="#/vocal-lab/' + encodeURIComponent(s.id) + '"><span class="vz-song-lab-icon"><i class="ph ph-waveform" aria-hidden="true"></i></span><span><strong>보컬 연구소</strong><small data-lab-count>녹음 분석과 비교 보기</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a><section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>' + links.length + '</span></strong><button type="button" data-add-song-ar>+ 링크 추가</button></div>' + (links.length ? '<div class="vz-ar-list">' + links.map((link, i) => '<a href="' + esc(songArUrl(link.url)) + '" target="_blank" rel="noopener noreferrer"><span><strong>' + esc(link.label || 'AR 레퍼런스 ' + (i + 1)) + '</strong><small>' + esc(link.url) + '</small></span><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>').join('') + '</div>' : '<p>링크를 추가하면 여기서 바로 열 수 있어요.</p>') + '</section><div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
+      '<div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
     const s = VZ.song(r.params[0]); if (!s) return;
-    main.querySelector('[data-add-song-ar]').onclick = () => VZ.songSheet(VZ.song(s.id), null, {hideShow:true, focusAr:true});
     document.querySelector('.vz-collection-record')?.setAttribute('href','#/record?song='+encodeURIComponent(s.id));
     document.querySelector('[data-song-menu]')?.addEventListener('click', () => VZ.menu({title:s.title, body:'<div class="list"><button type="button" class="item" data-e><i class="ph ph-pencil-simple"></i><span class="item-main">곡 정보 수정</span></button><button type="button" class="item" data-rep-menu><i class="ph ph-music-notes"></i><span class="item-main">나의 레퍼토리 설정</span></button><button type="button" class="item" data-d style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">곡 삭제</span></button></div>',
       onMount:(el, close) => {
@@ -495,7 +493,6 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       const minutes = VZ.sumMinutes(VZ.timeEntries(media).filter(e => e.songId === s.id && !e.training));
       main.querySelector('[data-summary]').textContent = [minutes ? '연습 ' + VZ.minutes(minutes) : '', practices.length ? '기록 ' + practices.length + '회' : '', media.length ? '녹음 ' + media.length + '개' : '', (n => n ? '레슨 ' + n + '회' : '')(lessons.filter(l => VZ.lessonStatus(l) === 'done').length)].filter(Boolean).join(' · ') || '아직 기록이 없어요';
       VZ.repertoire?.songPanel(main.querySelector('[data-repertoire]'), VZ.song(s.id) || s, media);
-      main.querySelector('[data-lab-count]').textContent = '녹음 ' + media.length + '개 · 분석과 비교 보기';
       main.querySelectorAll('[data-tab]').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.tab === songTab)); b.setAttribute('aria-selected', String(b.dataset.tab === songTab)); });
       const fb = l => l.songFeedback?.[s.id] || l.feedback || '';
       // Recordings live inside lessons and practices: each tab lists its records with their recordings.
@@ -542,6 +539,15 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
           sync();
         }
         VZ.mediaSelection?.showSongAction();
+        return;
+      }
+      if (songTab === 'ar') {
+        const current = VZ.song(s.id) || s;
+        const links = (current.arLinks || []).filter(link => songArUrl(link.url));
+        body.innerHTML = '<section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>' + links.length + '</span></strong><button type="button" data-add-song-ar>+ 링크 추가</button></div>' +
+          (links.length ? '<div class="vz-ar-list">' + links.map((link, i) => '<a href="' + esc(songArUrl(link.url)) + '" target="_blank" rel="noopener noreferrer"><span><strong>' + esc(link.label || 'AR 레퍼런스 ' + (i + 1)) + '</strong><small>' + esc(link.url) + '</small></span><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>').join('') + '</div>' : '<p>링크를 추가하면 여기서 바로 열 수 있어요.</p>') + '</section>';
+        body.querySelector('[data-add-song-ar]').onclick = () => VZ.songSheet(VZ.song(s.id), () => draw(), {hideShow:true, focusAr:true});
+        VZ.mediaSelection?.hideSongAction();
         return;
       }
       if (songTab === 'scores') VZ.renderScores ? VZ.renderScores(body, s) : (body.innerHTML = '');
