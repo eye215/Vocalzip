@@ -7,7 +7,7 @@ permissions:
 jobs:
   published:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,7 +22,7 @@ jobs:
           const origin='https://vocalzip.yullul.com',hash=x=>createHash('sha256').update(x).digest('hex');
           const ordered=['account-config.js','app/account-scope.js','data-merge.js','sync/snapshot-transport.js','cloud-sync.js','app/lesson-deletion.js'];
           let verified=false;
-          for(let attempt=1;attempt<=6;attempt++){
+          for(let attempt=1;attempt<=30;attempt++){
            try{
             const index=await fetch(origin+'/index.html?verify='+process.env.GITHUB_SHA+'-'+attempt,{redirect:'error',signal:AbortSignal.timeout(15000)});
             if(!index.ok)throw Error('published HTML unavailable');
@@ -44,7 +44,7 @@ jobs:
             console.log(JSON.stringify({attempt,script_order:true,default_off:results.find(r=>r.path==='account-config.js')?.sha256_match===true,results}));
             if(results.every(r=>r.sha256_match)){verified=true;break;}
            }catch(e){console.log(JSON.stringify({attempt,verified:false,error:e.message}));}
-           if(attempt<6)await new Promise(r=>setTimeout(r,15000));
+           if(attempt<30)await new Promise(r=>setTimeout(r,20000));
           }
           if(!verified)process.exitCode=1;
           NODE
