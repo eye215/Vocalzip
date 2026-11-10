@@ -2,18 +2,20 @@ const {test,expect}=require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const {boot,fakeR2,wav,R2}=require('./helpers/r2-fixture.cjs');
 test.afterEach(async({page})=>expect(page.__errors||[]).toEqual([]));
+const cors={'access-control-allow-origin':'*','access-control-allow-headers':'authorization, content-type, x-client-info','access-control-allow-methods':'GET, POST, OPTIONS'};
 async function publicationServer(page,options={}){
  const r2=await fakeR2(page,{resumable:true}),requests=[];
- await page.route(R2+'/v1/me',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({user:'ui-test-user',uploadContract:'merkle-v2',mediaMode:'revision',mediaContract:'immutable-v1'})}));
+ await page.route(R2+'/v1/me',route=>route.fulfill({headers:cors,contentType:'application/json',body:JSON.stringify({user:'ui-test-user',uploadContract:'merkle-v2',mediaMode:'revision',mediaContract:'immutable-v1'})}));
  await page.route(R2+'/v2/media/publish',async route=>{
+  if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:cors});
   const body=route.request().postDataJSON();requests.push(body);
   const m=body.metadata,object=r2.store.get(m.r2Key);
-  if(!object||object.bytes.length!==m.size||object.etag!==m.r2Etag)return route.fulfill({status:409,contentType:'application/json',body:'{"error":"original changed"}'});
+  if(!object||object.bytes.length!==m.size||object.etag!==m.r2Etag)return route.fulfill({headers:cors,status:409,contentType:'application/json',body:'{"error":"original changed"}'});
   if(options.failOnce){options.failOnce=false;return route.abort('failed');}
   const session=await page.evaluate(()=>window.vzipCloudSessionId?.()||'');
   const saved=options.newer?{...m,name:'다른 기기에서 바꾼 제목',songId:'newer-song'}:m;
   if(!options.wrongAck)await page.evaluate(meta=>{window.__rows[meta.id]=meta;},saved);
-  return route.fulfill({contentType:'application/json',body:JSON.stringify({version:1,user_id:'ui-test-user',session_id:session,request_id:body.requestId,id:m.id,
+  return route.fulfill({headers:cors,contentType:'application/json',body:JSON.stringify({version:1,user_id:'ui-test-user',session_id:session,request_id:body.requestId,id:m.id,
    metadata:options.wrongAck?{...m,r2Key:'u/ui-test-user/other/original.wav'}:saved,updated_at:'2026-11-10T00:00:00.000001Z'})});
  });
  return {r2,requests};
