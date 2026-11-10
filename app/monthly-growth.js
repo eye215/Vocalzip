@@ -228,10 +228,10 @@ async function mount(host){
   render();
  }catch(err){if(my===request)host.innerHTML='<div class="empty"><p>녹음 목록을 불러오지 못했어요.</p><p class="small muted">'+e(err.message)+'</p></div>';}
 }
-V.route('growth',{title:'보컬 성장',tab:'growth',noAutoRefresh:true,
+V.route('vocal-growth',{title:'보컬 성장',tab:'growth',noAutoRefresh:true,
  render:()=>'<div data-growth class="growth-page"><div class="empty compact">분석 기록을 불러오는 중…</div></div>',
  mount(main){mount(main.querySelector('[data-growth]'));},
  leave(){request++;}
 });
-window.addEventListener('vzip:analysis-saved',()=>{if(location.hash==='#/growth'){const host=document.querySelector('[data-growth]');if(host)mount(host);}});
+window.addEventListener('vzip:analysis-saved',()=>{if(location.hash==='#/vocal-growth'){const host=document.querySelector('[data-growth]');if(host)mount(host);}});
 })();
