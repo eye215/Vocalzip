@@ -18,10 +18,12 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
       - run: node --test tests/collection-routes.test.cjs
-      - run: |
+      - name: Provide FFmpeg for media fixtures
+        run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            timeout 300 sudo apt-get update -q
-            timeout 300 sudo apt-get install -y -q ffmpeg
+            timeout 180 npm install --prefix "$RUNNER_TEMP/ffmpeg-bin" --no-save --no-audit --no-fund ffmpeg-static@5.2.0
+            ln -s "$RUNNER_TEMP/ffmpeg-bin/node_modules/ffmpeg-static/ffmpeg" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
+            echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
           fi
       - run: node tests/make-audio-fixtures.cjs
       - run: node --test tests/repertoire-model.test.cjs tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs tests/data-merge.test.cjs tests/media-delete.test.cjs tests/flac-encode.test.cjs tests/vocal-analysis.test.cjs
