@@ -19,3 +19,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .learning-example{display:grid;gap:4px;margin:14px 0;padding:12px;border-radius:12px;background:var(--vz-color-surface);font-size:13px;line-height:20px;color:var(--vz-color-ink-secondary)}
 .learning-example strong,.learning-check strong{font-size:12px;font-weight:700;color:var(--vz-color-accent)}
 .learning-check{margin:0}
+
+.coach-sections{display:grid;gap:10px;margin:12px 0}
+.coach-section{padding:14px 16px;border-radius:14px;background:var(--vz-color-accent-soft)}
+.coach-section h4{margin:0 0 6px;color:var(--vz-color-primary);font-size:14px;line-height:20px}
+.feedback-block .coach-section p{margin:6px 0 0;color:var(--vz-color-ink-secondary);font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.feedback-block .coach-plain{white-space:pre-line;overflow-wrap:anywhere}
