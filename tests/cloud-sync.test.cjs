@@ -324,3 +324,11 @@ test('the default-off legacy deletion path keeps its existing behavior',async()=
  assert.equal(s.events[0],'bytes');assert.ok(s.events.includes('legacy-root'));assert.equal(s.rpcCalls.length,0);assert.equal(s.writes.length,1);
  assert.ok(s.row.payload.deleted.media.includes('chosen'));assert.ok(s.objects.has('other'));
 });
+
+for(const raw of ['{"broken":',JSON.stringify({songs:[],lessons:'unreadable local input'})]){
+ test('media deletion preserves malformed local input instead of replacing it: '+raw,async()=>{
+  const {s,d}=await mediaDevice();d.store.setItem(KEY,raw);
+  await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/기기 기록 형식/);
+  assert.equal(d.store.getItem(KEY),raw);assert.equal(s.events.length,0);assert.equal(s.commits,0);assert.ok(s.objects.has('other'));
+ });
+}

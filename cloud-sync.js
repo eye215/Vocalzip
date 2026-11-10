@@ -617,6 +617,13 @@ function mediaDeletionEngine({allowPaused=false}={}){
   },
   validate:row=>mediaDeleteTargets(row,owner),
   prepare:async({id,stamp})=>{
+   const currentLocal=()=>{
+    const raw=localStorage.getItem(dataKey);let payload=null;
+    try{payload=raw===null?null:JSON.parse(raw);}catch{throw Error('기기 기록 형식을 먼저 확인해 주세요. 파일 원본은 지우지 않았어요.');}
+    if(payload!==null&&!Merge.valid(payload))throw Error('기기 기록 형식을 먼저 확인해 주세요. 파일 원본은 지우지 않았어요.');
+    return {payload,dirty:!!localStorage.getItem('vzip_account_dirty')};
+   };
+   currentLocal();
    const pending=bridge.state().pending;
    if(pending){
     const context=pending.context;
@@ -626,7 +633,7 @@ function mediaDeletionEngine({allowPaused=false}={}){
    const row=await bridge.read();
    if(row?.payload?.deleted?.media?.includes(id))return row;
    let payload;
-   await bridge.prepare(row,()=>({payload:localData(),dirty:!!localStorage.getItem('vzip_account_dirty')}),local=>{
+   await bridge.prepare(row,currentLocal,local=>{
     const remote=row?.payload;
     const merged=remote?(localStorage.getItem('vzip_account_dirty')?Merge.merge(local||{},remote).data:remote):local||{categories:[],songs:[],lessons:[],assignments:[],practices:[]};
     if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
