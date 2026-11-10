@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=22';
+import {createFloatingHome} from './student-home-html.js?v=23';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -74,7 +74,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     V.guidedRecommendations?.({date:s.today}).then(rows=>{
       if(!form.isConnected)return;
       recommended=rows.filter(c=>!existing.some(g=>g.sourceId===(c.assignmentId||c.key)&&g.source===(c.assignmentId?'homework':'recommendation')));
-      el.querySelector('[data-guided-recommendations]').innerHTML=recommended.length?V.guidedRecommendationCards(recommended,{selectable:true}):'';
+      el.querySelector('[data-guided-recommendations]').innerHTML=recommended.length?V.guidedRecommendationCards(recommended,{selectable:true,showStart:false}):'';
     }).catch(()=>{});
     form.addEventListener('change',()=>{const count=el.querySelector('[data-plan-count]');if(count)count.textContent=form.querySelectorAll('[name=goal]:checked').length+'개 선택';});
     beforeUnload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue='';}};
@@ -107,7 +107,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
    try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
     ...recentCallbacks(r),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
-    onGoals:planSheet,onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
+    onGoals:planSheet,onGuidedPractice:c=>nav('#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
@@ -129,6 +129,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const media=await V.media.list().catch(()=>files);
     if(!root.isConnected||generation!==mediaGeneration)return;
     files=media;refreshWeek();
+    const recommendations=await V.guidedRecommendations({date:today(),media}).catch(()=>[]);
+    if(root.isConnected&&generation===mediaGeneration)root.updateRecommendations(recommendations);
     let recent=state(files).recent;
     if(!recent){
      const activity=V.songActivity(media),id=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)))[0];

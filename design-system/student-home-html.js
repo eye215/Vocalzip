@@ -105,6 +105,16 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-goals .vz-empty-action svg{width:22px;height:22px;flex:none;stroke:#858194;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-goals .vz-empty-action svg:last-child{width:16px;height:16px;margin-left:auto;}
 #vocalzip-refined-preview .vz-goal-list:empty{display:none;}
+#vocalzip-refined-preview .vz-guided-recs{margin-top:14px;padding-top:14px;border-top:1px solid var(--vz-color-divider,#e8e2ef);}
+#vocalzip-refined-preview .vz-guided-recs[hidden]{display:none;}
+#vocalzip-refined-preview .vz-guided-heading{display:flex;align-items:center;gap:7px;margin-bottom:8px;color:var(--vz-color-ink);font-size:14px;font-weight:700;}
+#vocalzip-refined-preview .vz-guided-item{display:flex;align-items:center;min-width:0;gap:8px;padding:10px 12px;border-radius:14px;background:#f7f5fb;}
+#vocalzip-refined-preview .vz-guided-item+.vz-guided-item{margin-top:8px;}
+#vocalzip-refined-preview .vz-guided-copy{min-width:0;flex:1;}
+#vocalzip-refined-preview .vz-guided-copy strong,#vocalzip-refined-preview .vz-guided-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vocalzip-refined-preview .vz-guided-copy strong{color:var(--vz-color-ink);font-size:13px;line-height:19px;}
+#vocalzip-refined-preview .vz-guided-copy small{color:var(--vz-color-ink-muted);font-size:11px;line-height:17px;margin-top:2px;}
+#vocalzip-refined-preview .vz-guided-item button{flex:none;min-height:44px;border:0;border-radius:12px;padding:0 10px;background:var(--vz-color-selected-bg,#eee5ff);color:var(--vz-color-accent);font-size:12px;font-weight:700;cursor:pointer;}
 @media(max-width:355px){#vocalzip-refined-preview .vz-event h2{line-height:1.45454545;}#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
 `;
 export async function createFloatingHome(opts={}){
@@ -240,6 +250,17 @@ export async function createFloatingHome(opts={}){
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
  if(items.length>6){list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");}
  const error=el("p","","vz-save-error");error.setAttribute("role","status");error.setAttribute("aria-live","polite");list.after(error);
+ const guided=el("div",null,"vz-guided-recs");guided.hidden=true;guided.setAttribute("aria-label","추천 연습");error.after(guided);
+ host.updateRecommendations=rows=>{
+  guided.replaceChildren();const items=(rows||[]).slice(0,3);guided.hidden=!items.length;if(!items.length)return;
+  guided.append(el("h3","추천 연습","vz-guided-heading"));
+  for(const item of items){
+   const row=el("div",null,"vz-guided-item"),copy=el("div",null,"vz-guided-copy"),button=el("button","따라 하기");
+   copy.append(el("strong",(item.label|| (item.kind==="homework"?"숙제":"분석 추천"))+" · "+item.title),el("small",item.subtitle+" · "+(item.video?"영상 포함":"타이머 안내")));
+   button.type="button";button.setAttribute("aria-label",item.title+" 따라 하기");button.onclick=()=>opts.onGuidedPractice?.(item);
+   row.append(copy,button);guided.append(row);
+  }
+ };host.updateRecommendations(opts.recommendations);
  const refresh=()=>{q(".vz-count").textContent=items.filter(g=>g.completed).length+" / "+items.length+" 완료";};refresh();
  if(!items.length){const button=el("button",null,"vz-empty-action");button.type="button";button.setAttribute("aria-label","오늘의 목표 정하기");button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>오늘의 목표 정하기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg>';button.onclick=()=>opts.onGoals?.();list.append(button);}
  for(const item of items){
