@@ -400,18 +400,18 @@ VZ.pickSong = (value, onPick) => {
 };
 
 /* ---------- 내 곡 ---------- */
-VZ.songSheet = (song, onSaved) => {
-  VZ.sheet({title:song ? '곡 수정' : '곡 추가', body:'<form id="song-form"><label class="field"><span>곡 제목 <span class="req">*</span></span><input type="text" name="title" maxlength="150" required autofocus value="' + esc(song?.title || '') + '"></label><label class="field"><span>작품 / 아티스트</span><input type="text" name="show" maxlength="150" placeholder="예: 레미제라블" value="' + esc(song?.show || '') + '"></label><label class="field"><span>별칭 (쉼표로 구분)</span><input type="text" name="aliases" maxlength="300" placeholder="예: 원데이모어, One Day" value="' + esc((song?.aliases || []).join(', ')) + '"><small class="small muted">파일 이름에 별칭이 들어 있으면 가져올 때 이 곡을 추천해요.</small></label></form>',
+VZ.songSheet = (song, onSaved, {hideShow = false} = {}) => {
+  VZ.sheet({title:song ? '곡 수정' : '곡 추가', body:'<form id="song-form"><label class="field"><span>곡 제목 <span class="req">*</span></span><input type="text" name="title" maxlength="150" required autofocus value="' + esc(song?.title || '') + '"></label>' + (hideShow ? '' : '<label class="field"><span>작품 / 아티스트</span><input type="text" name="show" maxlength="150" placeholder="예: 레미제라블" value="' + esc(song?.show || '') + '"></label>') + '<label class="field"><span>별칭 (쉼표로 구분)</span><input type="text" name="aliases" maxlength="300" placeholder="예: 원데이모어, One Day" value="' + esc((song?.aliases || []).join(', ')) + '"><small class="small muted">파일 이름에 별칭이 들어 있으면 가져올 때 이 곡을 추천해요.</small></label></form>',
     foot:'<button type="submit" form="song-form" class="btn block">' + (song ? '저장' : '곡 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form');
       form.onsubmit = e => {
         e.preventDefault();
-        const title = form.title.value.trim(), show = form.show.value.trim(), aliases = [...new Set(form.aliases.value.split(/[,，]/).map(x => x.trim()).filter(Boolean))].slice(0, 20);
+        const title = form.title.value.trim(), show = hideShow ? (song?.show || '') : form.show.value.trim(), aliases = [...new Set(form.aliases.value.split(/[,，]/).map(x => x.trim()).filter(Boolean))].slice(0, 20);
         if (!title) return;
         if (!song && VZ.db.songs.some(s => s.title.trim().toLowerCase() === title.toLowerCase() && (s.show || '') === show)) { VZ.toast('이미 같은 곡이 있어요.', 'error'); return; }
         let id = song?.id;
-        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), {title, show, aliases}); else { id = VZ.uid(); d.songs.push({id, title, show, aliases, created:Date.now()}); } });
+        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), hideShow ? {title, aliases} : {title, show, aliases}); else { id = VZ.uid(); d.songs.push({id, title, show, aliases, created:Date.now()}); } });
         if (ok) { close(); VZ.toast(song ? '곡을 수정했어요.' : '곡을 추가했어요.'); onSaved?.(id); }
       };
     }});
@@ -458,7 +458,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
     const tabs = [['media', '녹음'], ['lyrics', '가사'], ['scores', '악보'], ['timeline', '활동 기록']];
-    return '<div class="song-head vz-song-detail-hero"><span class="vz-song-detail-eyebrow">곡 상세</span><strong class="vz-song-detail-title">' + esc(s.title) + '</strong>' + (s.show ? '<span class="vz-song-detail-sub">' + esc(s.show) + '</span>' : '') + '<span class="vz-song-detail-summary" data-summary></span></div>' +
+    return '<div class="song-head vz-song-detail-hero"><span class="vz-song-detail-eyebrow">곡 상세</span><strong class="vz-song-detail-title">' + esc(s.title) + '</strong>' + '<span class="vz-song-detail-summary" data-summary></span></div>' +
       '<div data-song-growth></div><div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
@@ -466,8 +466,8 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     document.querySelector('.vz-collection-record')?.setAttribute('href','#/record?song='+encodeURIComponent(s.id));
     document.querySelector('[data-song-menu]')?.addEventListener('click', () => VZ.menu({title:s.title, body:'<div class="list"><button type="button" class="item" data-e><i class="ph ph-pencil-simple"></i><span class="item-main">곡 정보 수정</span></button><button type="button" class="item" data-rep-menu><i class="ph ph-music-notes"></i><span class="item-main">나의 레퍼토리 설정</span></button><button type="button" class="item" data-d style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">곡 삭제</span></button></div>',
       onMount:(el, close) => {
-        el.querySelector('[data-e]').onclick = () => { close(); VZ.songSheet(s); };
-        el.querySelector('[data-rep-menu]').onclick = () => { close(); VZ.menu({title:'나의 레퍼토리', body:'<div class="list">' + [['status','상태'],['info','작품'],['skills','숙련도'],['keys','키 정보'],['take','대표 테이크']].map(([k,label]) => '<button type="button" class="item" data-rep="' + k + '"><span class="item-main">' + label + '</span></button>').join('') + '</div>', onMount:(panel,done) => panel.querySelectorAll('[data-rep]').forEach(button => button.onclick = () => { done(); if (button.dataset.rep === 'take') VZ.repertoire?.chooseTake?.(s.id); else VZ.repertoire?.edit?.(s.id,button.dataset.rep); })}); };
+        el.querySelector('[data-e]').onclick = () => { close(); VZ.songSheet(s, null, {hideShow:true}); };
+        el.querySelector('[data-rep-menu]').onclick = () => { close(); VZ.menu({title:'나의 레퍼토리', body:'<div class="list">' + [['status','상태'],['skills','숙련도'],['keys','키 정보'],['take','대표 테이크']].map(([k,label]) => '<button type="button" class="item" data-rep="' + k + '"><span class="item-main">' + label + '</span></button>').join('') + '</div>', onMount:(panel,done) => panel.querySelectorAll('[data-rep]').forEach(button => button.onclick = () => { done(); if (button.dataset.rep === 'take') VZ.repertoire?.chooseTake?.(s.id); else VZ.repertoire?.edit?.(s.id,button.dataset.rep); })}); };
         el.querySelector('[data-d]').onclick = async () => {
           close();
           if (!await VZ.confirm('곡 삭제', '"' + s.title + '" 곡을 목록에서 삭제할까요? 녹음·연습·레슨 기록은 지워지지 않고 "곡 미지정"으로 남아요.', {ok:'삭제', danger:true})) return;
