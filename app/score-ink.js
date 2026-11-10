@@ -406,6 +406,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-vision-explanation]').textContent=result.mode==='notation'?(result.explanation||'표기를 구별하기 어려워요.'):(result.confidence==='low'?'인식이 불확실해요. 글자를 직접 확인하고 수정해 주세요.':'원래 필기는 그대로 남아요. 결과를 확인하고 수정해 주세요.');
   el.querySelector('[data-ink-vision-text-label]').hidden=!isText;el.querySelector('[data-ink-vision-text]').value=result.text||'';
   el.querySelector('[data-ink-vision-save]').hidden=!isText;el.querySelector('[data-ink-vision-replace]').hidden=result.mode!=='handwriting';el.querySelector('[data-ink-vision-delete]').hidden=result.mode!=='edit';
+  el.querySelector('.score-ink-vision-disclosure').textContent=result.mode==='notation'?'선택한 악보 영역만 NVIDIA AI로 보내 설명해요. 결과는 직접 확인해 주세요.':'선택한 필기만 OpenAI API로 보내 인식해요. 결과는 직접 확인해 주세요.';
   el.querySelector('[data-ink-vision-cancel]').textContent='닫기';visionPanel(true);
  }
  function cropNotation(rect){
