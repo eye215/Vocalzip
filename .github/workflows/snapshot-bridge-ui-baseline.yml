@@ -1,0 +1,28 @@
+name: Snapshot bridge UI baseline comparison
+on:
+  push:
+    branches: ['codex/snapshot-bridge-ui-baseline-20261110']
+permissions:
+  contents: read
+jobs:
+  existing-main-archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: '04c9695633e3f643668f1556a3f53d6581aa660b'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Reproduce existing archive expectations without snapshot changes
+        run: npx playwright test tests/repertoire.spec.cjs --grep 'Library places|Lyrics cards|Repertoire persists|Performance upload|Archive sheets' --workers=3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-main-archive
+          path: |
+            test-results/
+            playwright-report/
