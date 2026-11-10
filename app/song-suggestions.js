@@ -584,7 +584,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   loadSpend(main);updateMetrics(main);
   const mediaItems=await M.list(true).catch(()=>[]);
   state.items=mediaItems.filter(eligible);
-  state.referenceItems=mediaItems.filter(m=>!!(m.songId||m.song)&&!M.isVideo(m));
+  state.referenceItems=mediaItems.filter(m=>M.songSearchEligible(m)&&!!(m.songId||m.song)&&!M.isVideo(m));
   try{await loadCloudTexts()}catch(error){root.querySelector('[data-progress]').textContent='동기화 실패: '+String(error.message||error)+' · 이전 데이터는 삭제하지 않았어요.';VZ.toast('가사 동기화 실패: '+String(error.message||error),'error')}
   if(!main.isConnected||owner()!==viewOwner)return;
   for(const m of state.items){const r=VZ.serverReview?.(m.id);if(r&&!state.results.has(m.id)&&!readCache(m))state.results.set(m.id,{status:'식별 불가',candidate:null,method:'stt',transcript:r.transcript,matches:r.top3.map(x=>({songId:x.songId,score:x.score})),reason:'서버 분석 결과'})}
