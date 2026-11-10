@@ -601,3 +601,29 @@ main a.grow,main a.item-main{display:flex;flex-direction:column;justify-content:
 .v-nav a:not(.rec)[aria-current="page"]{background:var(--vz-color-selected-bg);color:#8A6DB8;border-radius:999px;}
 .v-nav a:not(.rec)[aria-current="page"] i{color:var(--vz-color-accent);}
 
+
+/* Practice recording keeps the established time and satisfaction controls. */
+body .sheet-page #practice-log .vz-practice-tabs{margin-bottom:24px}
+body .sheet-page #practice-log .vz-practice-tabs .lib-seg{width:100%}
+body .sheet-page #practice-log .vz-practice-tabs .lib-seg button{flex:1}
+body .sheet-page #practice-log .vz-practice-date{margin:24px 0 22px}
+body .sheet-page #practice-log .vz-practice-recommendation{display:grid;gap:5px;margin:-3px 0 16px;padding:13px 16px;border-radius:15px;background:#F2EFF7}
+body .sheet-page #practice-log .vz-practice-recommendation strong{font-size:15px;color:#101828}
+body .sheet-page #practice-log .vz-practice-recommendation span{font-size:12px;font-weight:650;color:#7933EE}
+body .sheet-page #practice-log .vz-practice-recommendation small{font-size:12px;line-height:1.45;color:#667085}
+body .sheet-page #practice-log .vz-practice-time{margin:22px 0 25px}
+body .sheet-page #practice-log .vz-practice-time>label,body .sheet-page #practice-log .vz-practice-rating>legend{display:block;margin-bottom:8px;color:#101828;font-size:15px;font-weight:700}
+body .sheet-page #practice-log .vz-practice-time-value{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;align-items:center;gap:12px;margin:16px 18px 10px;text-align:center}
+body .sheet-page #practice-log .vz-practice-time-value>button{width:48px;height:48px;border:0;border-radius:50%;background:#EDE1FF;color:#7D4AB8;font-size:24px}
+body .sheet-page #practice-log .vz-practice-time-value>div{display:flex;align-items:baseline;justify-content:center;color:#7933EE;font-size:46px;font-weight:800;white-space:nowrap}
+body .sheet-page #practice-log .vz-practice-time-value input[type=number]{width:2.3ch;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:inherit;font:inherit;text-align:right;appearance:textfield;-moz-appearance:textfield}
+body .sheet-page #practice-log .vz-practice-time-value input::-webkit-inner-spin-button,body .sheet-page #practice-log .vz-practice-time-value input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+body .sheet-page #practice-log .vz-practice-minutes{display:grid;grid-template-columns:repeat(4,1fr);margin:11px 8px 0}
+body .sheet-page #practice-log .vz-practice-minutes button{position:relative;min-height:52px;border:0;background:transparent;color:#7E67A0;font-size:16px;font-weight:550}
+body .sheet-page #practice-log .vz-practice-minutes button:not(:last-child)::after{content:"";position:absolute;right:0;top:15px;width:1px;height:20px;background:#D6C4E9}
+body .sheet-page #practice-log .vz-practice-minutes button[aria-pressed=true]{color:#7933EE;font-weight:750}
+body .sheet-page #practice-log .vz-practice-minutes button[aria-pressed=true]::before{content:"";position:absolute;left:27%;right:27%;bottom:0;height:3px;border-radius:3px;background:#7933EE}
+body .sheet-page #practice-log .vz-practice-rating{margin:0 0 23px;padding:0;border:0}
+body .sheet-page #practice-log .vz-practice-rating .stars{justify-content:space-around;gap:0;padding:3px 16px 0}
+body .sheet-page #practice-log .vz-practice-rating .stars button{width:52px;height:52px;color:#9674BC;font-size:35px}
+body .sheet-page #practice-log .vz-practice-rating .stars button[aria-pressed=true]{color:#7933EE}
