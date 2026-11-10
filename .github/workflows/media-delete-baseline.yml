@@ -18,7 +18,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install chromium
       - name: Existing bulk-upload test without any media-deletion changes
-        run: npx playwright test tests/v6.spec.cjs --project=chromium-desktop --grep 'Bulk upload: one file at a time' --workers=1
+        run: >-
+          npx playwright test tests/v6.spec.cjs --project=chromium-desktop --grep 'Bulk upload: one file at a time' --workers=1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
