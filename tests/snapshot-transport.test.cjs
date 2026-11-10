@@ -60,7 +60,7 @@ test('malformed acknowledgement and a later server generation retain the pending
 test('dirty bootstrap and changed baselines never apply a merge or erase local input',async()=>{
  const f=fixture(),local=payload();local.songs.push({id:'offline'});
  let applied=false;await assert.rejects(f.client.prepare(f.server.row,()=>({payload:local,dirty:true}),()=>{applied=true;}),e=>e.code==='bootstrap');
- assert.equal(applied,false);assert.equal(local.songs[1].id,'offline');
+ assert.equal(applied,false);assert.equal(local.songs[1].id,'offline');assert.equal(P.hasState(f.store,U),false);
  const c=f.create();await c.observe(f.server.row,f.server.row.payload);
  f.server.row.generation=T;
  await assert.rejects(c.prepare(f.server.row,()=>({payload:local,dirty:true}),()=>{applied=true;}),e=>e.code==='conflict');assert.equal(applied,false);

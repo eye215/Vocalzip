@@ -60,7 +60,7 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
   rowCheck(row);if(s.pending)throw fail('pending');
   const next=version(row),identical=row&&local&&same(local,row.payload);
   if(s.baseline&&pair(s.baseline,next)&&!s.conflict)return s;
-  if(!s.baseline&&row&&dirty&&local&&!identical)return conflict(s,row,'bootstrap');
+  if(!s.baseline&&row&&dirty&&local&&!identical)throw fail('bootstrap');
   if(s.baseline&&!pair(s.baseline,next)&&dirty&&!identical)return conflict(s,row);
   if(s.conflict&&dirty&&!identical)throw fail(s.conflict.kind||'conflict');
   return {...s,baseline:next,conflict:null};

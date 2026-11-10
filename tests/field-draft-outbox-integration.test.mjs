@@ -91,7 +91,7 @@ class Store {
  key(i){return [...this.rows.keys()][i]??null;}
  get length(){return this.rows.size;}
 }
-const jwt=(u,s)=>'test.'+Buffer.from(JSON.stringify({sub:u,session_id:s})).toString('base64url')+'.synthetic-signature';
+const jwt=(u,s)=>'test.'+Buffer.from(JSON.stringify({sub:u,session_id:s,role:'authenticated'})).toString('base64url')+'.synthetic-signature';
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve};};
 function api(){
  const instance={calls:[],after:null,offline:false};
