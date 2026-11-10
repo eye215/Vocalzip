@@ -81,7 +81,7 @@ M.list = async (force) => {
   try { return await promise; } finally { if (loading?.promise === promise) loading = null; }
 };
 M.cached = () => cache || [];
-function mergeCloud(map, items) { items.forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion, storageProvider:x.storageProvider, r2Key:x.r2Key, legacyStorage:x.legacyStorage})); }
+function mergeCloud(map, items) { items.forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion, storageProvider:x.storageProvider, r2Key:x.r2Key, legacyStorage:x.legacyStorage, ...(x.cloudEditBase?{cloudEditBase:x.cloudEditBase}:{})})); }
 // Newest recording day first (the file's own date), then newest saved.
 const sortList = map => [...map.values()].sort((a, b) => (M.dateOf(b) || '').localeCompare(M.dateOf(a) || '') || (b.created || 0) - (a.created || 0));
 /** The list as last kept on this device (no network), to draw a screen at once while M.list() refreshes. Null if none. */
@@ -216,7 +216,7 @@ M.update = async (item, changes, {quiet = false} = {}) => {
   let updated=cloud;
   if(item.local){
     const stored=(await window.vzipReadMedia()).find(x=>x.id===item.id);
-    if(stored){updated={...stored,...namePatch(stored,changes),...(cloud?nameFields(cloud):{})};await tx('readwrite',s=>s.put(updated));}
+    if(stored){updated={...stored,...namePatch(stored,changes),...(cloud?nameFields(cloud):{}),...(cloud?.cloudEditBase?{cloudEditBase:cloud.cloudEditBase}:{})};await tx('readwrite',s=>s.put(updated));}
   }
   if(!quiet)window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes,cloudDone:!!item.cloud}}));
   return updated;
@@ -236,7 +236,7 @@ M.assignSongSafe=async(item,changes,{expectedSongId='',expectedSong='',expectedU
   if(!window.vzipCloudMediaAssignSong)throw Error('곡 전용 안전 저장 기능을 확인할 수 없어요.');
   cloudResult=await window.vzipCloudMediaAssignSong(item,selected,{expectedSongId,expectedSong,expectedUpdatedAt});
  }
- if(item.local&&existing)await tx('readwrite',s=>s.put({...existing,...namePatch(existing,selected),...(cloudResult?.metadata?nameFields(cloudResult.metadata):{})}));
+ if(item.local&&existing)await tx('readwrite',s=>s.put({...existing,...namePatch(existing,selected),...(cloudResult?.metadata?nameFields(cloudResult.metadata):{}),...(cloudResult?.metadata?.cloudEditBase?{cloudEditBase:cloudResult.metadata.cloudEditBase}:{})}));
  // Only the song changed; the cloud row (if any) is already written: the sync layer must not re-send device fields.
  window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:selected,cloudDone:!!item.cloud}}));
  return cloudResult||{updatedAt:null};
