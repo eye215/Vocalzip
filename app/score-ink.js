@@ -41,7 +41,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,prepared=null,prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
+ let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
  const notesKey='vzip_score_text_v1:'+owner+':'+scoreId;
@@ -268,22 +268,24 @@ VZ.openScoreInk=(songId,scoreId)=>{
   touches.delete(event.pointerId);pinch=null;
   if(!touches.size){
    const swipe=pageSwipe,pair=twoSwipe,redraw=pinchDirty;
+   if(pair?.canceled&&touchSwipe)touchSwipe.needsRedraw=redraw;
    let direction=0;
    if(pair&&!pair.canceled&&Date.now()-pair.time<1200){
     const ids=[...pair.starts.keys()],[a,b]=ids.map(id=>pair.starts.get(id)),[c,d]=ids.map(id=>pair.ends.get(id));
     const dx1=c.x-a.x,dx2=d.x-b.x,dy1=c.y-a.y,dy2=d.y-b.y;
     const startDistance=Math.hypot(a.x-b.x,a.y-b.y),endDistance=Math.hypot(c.x-d.x,c.y-d.y);
-    if(dx1*dx2>0&&Math.min(Math.abs(dx1),Math.abs(dx2))>72&&Math.max(Math.abs(dy1),Math.abs(dy2))<Math.min(Math.abs(dx1),Math.abs(dx2))*.7&&Math.abs(dx1-dx2)<55&&Math.abs(endDistance-startDistance)<Math.max(25,startDistance*.18))direction=dx1<0?1:-1;
+    if(dx1*dx2>0&&Math.min(Math.abs(dx1),Math.abs(dx2))>56&&Math.max(Math.abs(dy1),Math.abs(dy2))<Math.min(Math.abs(dx1),Math.abs(dx2))*.7&&Math.abs(dx1-dx2)<55&&Math.abs(endDistance-startDistance)<Math.max(25,startDistance*.18))direction=dx1<0?1:-1;
    }else if(profiles.penOnly&&event.type==='pointerup'&&swipe?.pointer===event.pointerId&&Date.now()-swipe.time<900){
     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
-    if(Math.abs(dx)>72&&Math.abs(dx)>Math.abs(dy)*1.4)direction=dx<0?1:-1;
+    if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.4)direction=dx<0?1:-1;
    }
    const edge=direction===1?(pair||swipe)?.atRight:(pair||swipe)?.atLeft;
-   const turn=direction&&edge&&viewReady&&!busy&&!pending&&pageNo+direction>=1&&pageNo+direction<=doc?.numPages;
+   const canTurn=!!pair||stage.scrollWidth-stage.clientWidth<=8||edge;
+   const turn=direction&&canTurn&&viewReady&&!busy&&!pending&&pageNo+direction>=1&&pageNo+direction<=doc?.numPages;
    if(pair&&turn){zoom=pair.zoom;zoomValue();}
    resetGestures();
    if(turn){pageNo+=direction;renderPage();}
-   else if(redraw)renderPage({keepScroll:true});
+   else if(redraw&&!(pair?.canceled&&touchSwipe))renderPage({keepScroll:true});
   }
   return true;
  }
@@ -710,6 +712,47 @@ VZ.openScoreInk=(songId,scoreId)=>{
   stage.onpointerdown=event=>{if((performance||!ready)&&event.pointerType==='touch'&&viewReady&&!busy&&event.target!==svg)gestureDown(event);};
   stage.onpointermove=event=>{if((performance||!ready)&&event.target!==svg)gestureMove(event);};
   stage.onpointerup=stage.onpointercancel=event=>{if((performance||!ready)&&event.target!==svg)gestureEnd(event);};
+  // Safari can cancel PointerEvents while scrolling. Track fingers as a fallback
+  // so horizontal page swipes still work without interfering with Apple Pencil.
+  stage.addEventListener('touchstart',event=>{
+   if(tool==='notation'||!viewReady||busy||pending)return;
+   const fingers=[...event.touches].filter(t=>t.touchType!=='stylus');
+   if(fingers.length!==2&&!(fingers.length===1&&profiles.penOnly))return;
+   if(fingers.length===2){
+    if(active&&touchInkStart?.pointer===active.pointer){active=null;cancelAnimationFrame(frame);frame=0;paint();}
+    touchEraser=null;markerDrag=null;
+    if(selection?.drag)selectionEnd(false);
+   }
+   if(!touchSwipe||touchSwipe.count!==fingers.length){
+    touchSwipe={count:fingers.length,start:new Map(fingers.map(t=>[t.identifier,{x:t.clientX,y:t.clientY}])),
+     end:new Map(fingers.map(t=>[t.identifier,{x:t.clientX,y:t.clientY}])),page:pageNo,time:Date.now(),
+     zoom,atLeft:stage.scrollLeft<=2,atRight:stage.scrollLeft>=stage.scrollWidth-stage.clientWidth-2};
+   }
+  },{passive:true});
+  stage.addEventListener('touchmove',event=>{
+   if(!touchSwipe)return;
+   for(const t of event.changedTouches)if(touchSwipe.end.has(t.identifier))touchSwipe.end.set(t.identifier,{x:t.clientX,y:t.clientY});
+  },{passive:true});
+  for(const type of ['touchend','touchcancel'])stage.addEventListener(type,event=>{
+   const swipe=touchSwipe;if(!swipe)return;
+   for(const t of event.changedTouches)if(swipe.end.has(t.identifier))swipe.end.set(t.identifier,{x:t.clientX,y:t.clientY});
+   if(type==='touchcancel'){touchSwipe=null;return;}
+   if([...event.touches].some(t=>swipe.start.has(t.identifier)))return;
+   touchSwipe=null;
+   const restore=()=>{if(swipe.needsRedraw&&!busy&&pageNo===swipe.page)renderPage({keepScroll:true});};
+   if(pageNo!==swipe.page||Date.now()-swipe.time>1200||!viewReady||busy||pending||!doc){restore();return;}
+   const ids=[...swipe.start.keys()],dx=ids.map(id=>swipe.end.get(id).x-swipe.start.get(id).x),
+    dy=ids.map(id=>swipe.end.get(id).y-swipe.start.get(id).y);
+   if(dx.some((v,i)=>Math.abs(v)<56||Math.abs(v)<Math.abs(dy[i])*1.4)){restore();return;}
+   if(swipe.count===2){
+    const [a,b]=ids.map(id=>swipe.start.get(id)),[c,d]=ids.map(id=>swipe.end.get(id));
+    if(dx[0]*dx[1]<=0||Math.abs(dx[0]-dx[1])>=55||Math.abs(Math.hypot(c.x-d.x,c.y-d.y)-Math.hypot(a.x-b.x,a.y-b.y)) >=Math.max(25,Math.hypot(a.x-b.x,a.y-b.y)*.18)){restore();return;}
+   }else if(!profiles.penOnly||stage.scrollWidth-stage.clientWidth>8&&!(dx[0]<0?swipe.atRight:swipe.atLeft)){restore();return;}
+   const direction=dx[0]<0?1:-1;
+   if(pageNo+direction<1||pageNo+direction>doc.numPages){restore();return;}
+   if(swipe.count===2){zoom=swipe.zoom;zoomValue();}
+   pageNo+=direction;resetGestures();renderPage();
+  },{passive:true});
   stage.addEventListener('touchstart',event=>{
    if(tool!=='notation'||!ready||busy||exportBusy||pending||!box.contains(event.target)||event.touches.length!==1)return;
    const touch=event.changedTouches[0];if(!touch||touch.touchType==='stylus')return;
