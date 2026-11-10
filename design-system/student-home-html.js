@@ -247,6 +247,11 @@ export async function createFloatingHome(opts={}){
  swap(".vz-shortcut:first-child > span svg","\ue34c");swap(".vz-shortcut:nth-child(2) > span svg","\ue492");
  q(".vz-goals .vz-title").append(q(".vz-count"));
  q(".vz-goal-tools button").setAttribute("aria-label","오늘의 목표 설정");q(".vz-goal-tools button").onclick=()=>opts.onGoals?.();
+ const aiActions=el("div",null,"vz-ai-plan-actions");aiActions.setAttribute("aria-label","AI 연습 계획");
+ for(const [label,callback] of [["AI로 오늘 할 일 추천받기",opts.onDailyRecommendation],["주간 돌아보기 · 다음 목표 추천",opts.onWeeklyReview]]){
+  const button=el("button",label,"vz-empty-action");button.type="button";button.onclick=()=>callback?.();aiActions.append(button);
+ }
+ q(".vz-goals").append(aiActions);
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
  if(items.length>6){list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");}
  const error=el("p","","vz-save-error");error.setAttribute("role","status");error.setAttribute("aria-live","polite");list.after(error);

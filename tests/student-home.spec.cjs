@@ -584,3 +584,14 @@ test('Cloud lesson deletion refuses a server lesson that changed before prepare'
  expect(await page.evaluate(()=>window.__lessonDeleteCalls||[])).toEqual([]);
 });
 
+
+for(const [label,hash] of [['AI로 오늘 할 일 추천받기','#/practice-review?mode=today'],['주간 돌아보기 · 다음 목표 추천','#/practice-review']]){
+ test('home visibly renders and opens '+label,async({page})=>{
+  await boot(page);const button=page.getByRole('button',{name:label,exact:true});
+  await expect(button).toBeVisible();
+  expect(await button.evaluate(el=>el.getRootNode() instanceof ShadowRoot)).toBe(true);
+  await button.scrollIntoViewIfNeeded();const box=await button.boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);
+  await button.click();await expect(page).toHaveURL(new RegExp(hash.replace(/[?]/g,'\\?')+'$'));
+  await expect(page.locator('[data-review]')).toBeVisible();
+ });
+}
