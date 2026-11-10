@@ -210,7 +210,7 @@ async function mount(host){
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
    };
 
-   V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,current,rows);
+   V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,items,rows);
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
     if(!d)return;
