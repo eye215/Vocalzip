@@ -1,4 +1,4 @@
-name: Release duplicate metadata bridge check slots
+name: Release obsolete metadata bridge check slots
 on:
   push:
     branches: ['verify/media-edit-bridge-ci-20261110']
@@ -13,10 +13,12 @@ jobs:
         with:
           script: |
             const {owner,repo}=context.repo;
-            for(const run_id of [42820429955,42820430221]){
+            const oldHeads=new Set(['5f0e0516d80286faf7c3f4ed3a82f2fe86c4f041','558f0b4c0a31522f71397a8e17d9d7f57bdd1f0d','f9240f8ddba4bb141b33fa11973018a35f226376','2e3831ef']);
+            for(const run_id of [42826321449,42825195759,42825195787,42824143765,42823515841]){
               const {data:r}=await github.rest.actions.getWorkflowRun({owner,repo,run_id});
-              if(r.head_branch!=='codex/media-metadata-bridge-20261110'||r.event!=='push'||r.head_sha!=='b83c66919f24376979bdc6e8d840faef822a7178'||r.status==='completed')continue;
+              const obsolete=[...oldHeads].some(head=>r.head_sha.startsWith(head));
+              if(r.head_branch!=='codex/media-metadata-bridge-20261110'||r.event!=='pull_request'||!obsolete||r.status==='completed')continue;
               try{await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/force-cancel',{owner,repo,run_id});}
               catch(error){if(![404,409,422].includes(error.status))throw error;}
             }
-            console.log('Only duplicate push runs of the metadata bridge branch were stopped; PR checks retained.');
+            console.log('Only explicitly obsolete runs of this feature branch were stopped. Latest checks and other developers are untouched.');
