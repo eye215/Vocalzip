@@ -141,3 +141,17 @@ test('a stale prepared payload is sanitized under the write lock before it can e
  await assert.rejects(c.write(f.server.row,value),e=>e.code==='deleted');assert.equal(f.server.calls.length,0);
  assert.ok(!JSON.stringify(c.state()).includes('never keep this'));assert.equal(c.state().pending.payload.lessons.length,0);
 });
+
+test('pending media links are scrubbed without removing notes, practice time or unselected files',async()=>{
+ const Merge=require('../data-merge.js'),f=fixture(),client=f.create({deletedMediaIds:()=>[],redactMedia:(data,ids)=>{ids.forEach(id=>Merge.deleteMedia(data,id));return data;}});
+ await client.observe(f.server.row,payload());const value=payload();value.lessons=[{id:'lesson',memo:'keep unsent notes',recordings:[{id:'chosen'},{id:'other'}]}];value.practices=[{id:'practice',manualMinutes:12,mediaIds:['chosen','other']}];f.server.lost=true;
+ await assert.rejects(client.write(f.server.row,value));const before=client.state().pending.id;await client.redactMedia(['chosen']);
+ const state=client.state();assert.notEqual(state.pending.id,before);assert.equal(state.pending.retiredRequestId,before);assert.equal(state.pending.payload.lessons[0].memo,'keep unsent notes');
+ assert.deepEqual(state.pending.payload.lessons[0].recordings,[{id:'other'}]);assert.equal(state.pending.payload.practices[0].manualMinutes,12);assert.deepEqual(state.pending.payload.practices[0].mediaIds,['other']);
+ const calls=f.server.calls.length;await assert.rejects(client.recover(),e=>e.code==='deleted');assert.equal(f.server.calls.length,calls);
+});
+test('media-delete purpose is durable but never added to the snapshot RPC arguments',async()=>{
+ const f=fixture();await f.client.observe(f.server.row,payload());const context={kind:'media-delete',id:'chosen',stamp:'a'.repeat(64)};f.server.lost=true;
+ await assert.rejects(f.client.write(f.server.row,payload(),context));context.id='other';assert.equal(f.client.state().pending.context.id,'chosen');
+ await f.create().recover();assert.deepEqual(Object.keys(f.server.calls[0]).sort(),['p_expected_generation','p_expected_revision','p_payload','p_request_id']);assert.deepEqual(f.server.calls[0],f.server.calls[1]);
+});

@@ -1,13 +1,15 @@
 name: Snapshot application bridge safety
 on:
   push:
-    branches: ['codex/snapshot-app-bridge-20261110']
+    branches: ['codex/snapshot-app-bridge-20261110', 'codex/snapshot-media-delete-20261110']
   pull_request:
     paths:
       - 'sync/snapshot-transport.js'
       - 'cloud-sync.js'
       - 'account-config.js'
       - 'app/lesson-deletion.js'
+      - 'app/media.js'
+      - 'tests/media-deletion.test.cjs'
       - 'tests/snapshot-*'
       - 'supabase/proposals/20261115_snapshot_rollout.sql'
       - 'supabase/proposals/20261113_snapshot_revision.sql'
@@ -33,7 +35,7 @@ jobs:
           node-version: '22'
       - run: npm run test:syntax
       - run: node --check sync/snapshot-transport.js
-      - run: node --test tests/snapshot-transport.test.cjs tests/cloud-sync.test.cjs tests/data-merge.test.cjs tests/lesson-deletion.test.cjs
+      - run: node --test tests/media-delete.test.cjs tests/media-deletion.test.cjs tests/snapshot-transport.test.cjs tests/cloud-sync.test.cjs tests/data-merge.test.cjs tests/lesson-deletion.test.cjs
   compatibility-db:
     runs-on: ubuntu-24.04
     timeout-minutes: 8

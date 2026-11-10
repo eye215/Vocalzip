@@ -270,18 +270,37 @@ M.fillDurations = async (items, {limit = 10} = {}) => {
 const removing = new Set();
 M.confirmRemove = item => VZ.confirm('파일 영구 삭제', '“' + M.label(item) + '” 파일을 삭제할까요?\n\n이 기기와 클라우드의 파일 및 연결을 삭제해요. 연습·레슨 기록, 메모와 연습 시간은 남아요. 다른 기기에 따로 내려받은 사본은 남을 수 있어요. 파일은 복구할 수 없어요.', {ok:'파일 영구 삭제', danger:true});
 M.remove = async item => {
+  const currentOwner=()=>window.VzipAccountScope?window.VzipAccountScope.owner:(window.vzipCloudSignedIn?.()?window.vzipCloudUserId():'device');
+  const removalOwner=currentOwner(),removalSession=window.VZIP_SNAPSHOT_REVISION_ENABLED===true?window.vzipCloudSessionId?.():null;
+  const guard=()=>{
+    if(window.VzipAccountScope?.leaving||currentOwner()!==removalOwner||removalSession&&(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true||window.vzipCloudSessionId?.()!==removalSession))throw Error('계정 또는 세션이 변경되어 파일 삭제를 멈췄어요.');
+  };
+  guard();if(item.accountOwner&&item.accountOwner!==removalOwner)throw Error('다른 계정의 파일은 삭제할 수 없어요.');
   if (removing.has(item.id)) throw Error('이미 삭제 중이에요.');
   if (backup.running) throw Error('자동 백업이 끝난 뒤 삭제해 주세요.');
   removing.add(item.id); M.holdBackup(true);
   try {
     // A list snapshot can predate automatic backup. Resolve the cloud copy again.
     if (item.cloud || window.vzipCloudSignedIn?.()) await window.vzipCloudMediaDelete(item);
+    guard();
     // Save the unlink intent before removing local bytes; a failed write remains retryable.
-    if (!VZ.change(d => window.VzipDataMerge.deleteMedia(d, item.id), {silent:true})) throw Error('파일 연결 정리를 저장하지 못했어요. 다시 시도해 주세요.');
+    const unlink=()=>{guard();if (!VZ.change(d => window.VzipDataMerge.deleteMedia(d, item.id), {silent:true})) throw Error('파일 연결 정리를 저장하지 못했어요. 다시 시도해 주세요.');};
+    if(window.vzipSnapshotDeleteLocalMedia)await window.vzipSnapshotDeleteLocalMedia(item.id,unlink);else unlink();
     for (const player of players) if (player.item.id === item.id) player.destroy();
-    await tx('readwrite', s => s.delete(item.id));
+    guard();await tx('readwrite', s => {guard();return s.delete(item.id);});guard();
+    await window.vzipMediaDeleteAcknowledge?.(item.id);
     changed();
   } finally { removing.delete(item.id); M.holdBackup(false); }
+};
+/** Resume only the same account and Auth session's already confirmed delete intents. */
+M.resumeDeletes=async()=>{
+ if(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true||!window.vzipCloudSignedIn?.())return;
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.(),pending=window.vzipPendingMediaDeletes?.()||[];
+ for(const job of pending){
+  if(job.owner!==owner||job.session!==session)continue;
+  try{await M.remove({id:job.id,cloud:true,accountOwner:owner});}
+  catch(error){VZ.toast('미완료 파일 삭제: '+error.message,'error');}
+ }
 };
 M.src = async item => {
   const blob = blobOf(item);

@@ -69,18 +69,19 @@ function nextVersion(at){return new Date(Math.max(Date.now(),(Date.parse(at)||0)
 let revisionBridge=null,revisionBridgeOwner='',revisionBridgeSession='';
 function snapshotBridge({allowPaused=false}={}){
  const owner=user?.id,session=window.vzipCloudSessionId?.();
- const stored=owner&&localStorage.getItem('vzip_snapshot_transport_v1:'+encodeURIComponent(owner));
+ const stored=owner&&(localStorage.getItem('vzip_snapshot_transport_v1:'+encodeURIComponent(owner))||window.VzipSnapshotTransport?.hasMediaDeletes?.(localStorage,owner));
  if(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true){
   if(stored&&!allowPaused)throw Error('새 저장 계약이 일시 중지됐어요. 미완료 저장을 보존하고 기존 방식으로 덮어쓰지 않아요.');
   if(!stored)return null;
  }
  if(!window.VzipSnapshotTransport||!window.VzipAccountScope||!sessionVerified||!session)throw Error('새 저장 모듈과 등록 로그인을 먼저 확인해 주세요.');
  if(revisionBridge&&revisionBridgeOwner===owner&&revisionBridgeSession===session)return revisionBridge;
- const identity=()=>!user||!sessionVerified||window.VzipAccountScope.leaving?null:{owner:user.id,session:window.vzipCloudSessionId()};
+ const identity=()=>!user||!sessionVerified||window.VzipAccountScope.leaving||window.VzipAccountScope.owner!==user.id?null:{owner:user.id,session:window.vzipCloudSessionId()};
  const transport=window.VzipSnapshotTransport.createTransport({projectUrl:url,publishableKey:key,
   getCredentials:()=>window.vzipCloudAccessToken(),getOwner:()=>identity()?.owner,getSessionId:()=>identity()?.session});
  revisionBridge=window.VzipSnapshotTransport.create({storage:localStorage,identity,...transport,valid:Merge.valid,same:Merge.same,
   deletedIds:()=>localData()?.deleted?.lessons||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;},
+  deletedMediaIds:()=>localData()?.deleted?.media||[],redactMedia:(data,ids)=>{for(const id of ids)Merge.deleteMedia(data,id);return data;},
   lock:work=>{
    if(!navigator.locks?.request)throw Error('새 저장 계약은 Web Locks를 지원하는 브라우저에서 확인해 주세요.');
    return navigator.locks.request('vzip-snapshot-write:'+owner,{ifAvailable:true},lock=>{if(!lock)throw Error('다른 탭에서 저장을 확인하고 있어요.');return work();});
@@ -96,6 +97,18 @@ window.vzipSnapshotDeleteLocalLesson=(id,apply)=>{
  const bridge=snapshotBridge({allowPaused:true});
  return bridge?bridge.redactLessons([id],apply):apply();
 };
+window.vzipSnapshotDeleteLocalMedia=(id,apply)=>{
+ const bridge=snapshotBridge({allowPaused:true});
+ return bridge?bridge.redactMedia([id],apply):apply();
+};
+let mediaResumeIdentity='';
+window.addEventListener('online',()=>{mediaResumeIdentity='';});
+function requestMediaDeleteResume(){
+ const token=user?.id+':'+window.vzipCloudSessionId?.();
+ if(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true||token===mediaResumeIdentity)return;
+ mediaResumeIdentity=token;
+ setTimeout(()=>window.VZ?.media?.resumeDeletes?.().catch(e=>say('미완료 파일 삭제 확인: '+e.message)),0);
+}
 async function sync({silent=false,reload=false}={}){
  if(!user||(window.VzipAccountScope&&!sessionVerified))return;if(busy){syncAgain=true;return}
  const syncOwner=user.id,checkOwner=()=>{if(user?.id!==syncOwner||(window.VzipAccountScope&&!sessionVerified))throw Error('계정이 변경되어 동기화를 중단했어요.');};
@@ -139,6 +152,7 @@ async function sync({silent=false,reload=false}={}){
   const latest=localData(),comparable=bridge&&window.VzipArchive?window.VzipArchive.forOwner(latest,syncOwner):latest;
   if(window.VzipAccountScope&&Merge.same(comparable,bridge?confirmed:merged))localStorage.removeItem('vzip_account_dirty');
   else if(bridge){localStorage.setItem('vzip_account_dirty','1');syncAgain=true;}
+  requestMediaDeleteResume();
   say('✓ 이 기기와 클라우드 기록을 합쳐 저장했어요 · '+Merge.count(merged)+'건'+(silent?' (자동 동기화)':''));
   if(reload&&local&&changedLocal)setTimeout(()=>location.reload(),650);
  }catch(e){syncFailed=true;say('동기화 실패: '+e.message+' · 기록은 그대로 있어요.')}
@@ -563,37 +577,87 @@ async function unlinkCloudMedia(owner,id){
  }
  throw Error('기록이 다른 기기에서 수정 중이에요. 삭제를 다시 시도해 주세요.');
 }
-async function deleteCloudMedia(item){
- if(!user)throw Error('로그인이 필요해요.');
- const owner=user.id;
- const {data:row,error:readError}=await client.from('vocal_media').select('metadata,updated_at').eq('id',item.id).eq('user_id',owner).maybeSingle();
- if(readError)throw readError;
- if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');
- // Only server-owned metadata determines which objects are deleted, never a stale UI path.
- const current=row?.metadata||{};
- const old=current.storageProvider==='r2'?(current.legacyStorage||{}):current;
+function mediaDeleteTargets(row,owner){
+ const current=row?.metadata||{},old=current.storageProvider==='r2'?(current.legacyStorage||{}):current;
  const paths=old.storageVersion===2?VzipChunks.validate(old).parts.map(x=>x.path):(old.path?[old.path]:[]);
  if(paths.some(path=>!path.startsWith(owner+'/')||path.includes('..')))throw Error('다른 계정의 파일은 삭제할 수 없어요.');
- if(current.storageProvider==='r2'&&current.r2Key){
-  if(!current.r2Key.startsWith('u/'+owner+'/')||current.r2Key.includes('..'))throw Error('다른 계정의 파일은 삭제할 수 없어요.');
-  await window.VzipR2.remove(current.r2Key);
- }
- if(paths.length){const {error}=await client.storage.from('vocal-recordings').remove(paths);if(error)throw error}
- if(user?.id!==owner)throw Error('로그인이 변경되었어요.');
- // Keep the media row until all cleanup succeeds: partial failures can be retried.
- await unlinkCloudMedia(owner,item.id);
- const {error:textError}=await client.from('vocal_song_texts').update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('user_id',owner).eq('kind','recognition').eq('record_id',item.id);
- if(textError)throw textError;
- if(user?.id!==owner)throw Error('로그인이 변경되었어요.');
+ const r2Key=current.storageProvider==='r2'?current.r2Key:'';
+ if(r2Key&&(!r2Key.startsWith('u/'+owner+'/')||r2Key.includes('..')))throw Error('다른 계정의 파일은 삭제할 수 없어요.');
+ return {paths,r2Key};
+}
+async function cleanupCloudMedia(row,owner,id,guard,unlink=null){
+ const {paths,r2Key}=mediaDeleteTargets(row,owner);guard();
+ if(r2Key){await window.VzipR2.remove(r2Key);guard();}
+ if(paths.length){const {error}=await client.storage.from('vocal-recordings').remove(paths);if(error)throw error;guard();}
+ if(unlink){await unlink();guard();}
+ const {error:textError}=await client.from('vocal_song_texts').update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('user_id',owner).eq('kind','recognition').eq('record_id',id);
+ if(textError)throw textError;guard();
  if(row){
-  const {data:removed,error}=await sameVersion(client.from('vocal_media').delete().eq('id',item.id).eq('user_id',owner),row.updated_at).select('id');
-  if(error)throw error;
+  const {data:removed,error}=await sameVersion(client.from('vocal_media').delete().eq('id',id).eq('user_id',owner),row.updated_at).select('id');
+  if(error)throw error;guard();
   if(!removed?.length)throw Error('다른 기기에서 파일 정보가 변경됐어요. 삭제를 다시 시도해 주세요.');
  }
- const cached=await listCache(owner);if(cached)await listCache(owner,{...cached,rows:cached.rows.filter(r=>r.id!==item.id)});
+ const cached=await listCache(owner);guard();if(cached)await listCache(owner,{...cached,rows:cached.rows.filter(r=>r.id!==id)});guard();
  window.dispatchEvent(new Event('vzip:cloud-media-changed'));
 }
+function mediaDeletionEngine({allowPaused=false}={}){
+ const bridge=snapshotBridge({allowPaused});if(!bridge)return null;
+ if(typeof window.VzipSnapshotTransport.createMediaDeletion!=='function')throw Error('파일 삭제 저장 모듈을 다시 불러와 주세요.');
+ const owner=user.id,identity=()=>!user||!sessionVerified||window.VzipAccountScope.leaving||window.VzipAccountScope.owner!==user.id||!allowPaused&&window.VZIP_SNAPSHOT_REVISION_ENABLED!==true?null:{owner:user.id,session:window.vzipCloudSessionId()};
+ return window.VzipSnapshotTransport.createMediaDeletion({
+  storage:localStorage,identity,
+  lock:(work,purpose,id)=>navigator.locks.request('vzip-media-delete:'+owner+':'+id,purpose==='ack'?{}:{ifAvailable:true},lock=>{
+   if(!lock)throw Error('이 파일의 삭제를 다른 탭에서 확인하고 있어요.');
+   if(purpose==='ack')return work();
+   return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},uploadLock=>{if(!uploadLock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');return work();});
+  }),
+  read:async id=>{
+   const {data,error}=await client.from('vocal_media').select('metadata,updated_at').eq('id',id).eq('user_id',owner).maybeSingle();
+   if(error)throw error;return data||null;
+  },
+  validate:row=>mediaDeleteTargets(row,owner),
+  prepare:async({id,stamp})=>{
+   const currentLocal=()=>{
+    const raw=localStorage.getItem(dataKey);let payload=null;
+    try{payload=raw===null?null:JSON.parse(raw);}catch{throw Error('기기 기록 형식을 먼저 확인해 주세요. 파일 원본은 지우지 않았어요.');}
+    if(payload!==null&&!Merge.valid(payload))throw Error('기기 기록 형식을 먼저 확인해 주세요. 파일 원본은 지우지 않았어요.');
+    return {payload,dirty:!!localStorage.getItem('vzip_account_dirty')};
+   };
+   currentLocal();
+   const pending=bridge.state().pending;
+   if(pending){
+    const context=pending.context;
+    if(context?.kind!=='media-delete'||context.id!==id||context.stamp!==stamp)throw Error('이전 저장 요청을 먼저 확인해 주세요. 파일 원본은 지우지 않았어요.');
+    await bridge.recover();
+   }
+   const row=await bridge.read();
+   if(row?.payload?.deleted?.media?.includes(id))return row;
+   let payload;
+   await bridge.prepare(row,currentLocal,local=>{
+    const remote=row?.payload;
+    const merged=remote?(localStorage.getItem('vzip_account_dirty')?Merge.merge(local||{},remote).data:remote):local||{categories:[],songs:[],lessons:[],assignments:[],practices:[]};
+    if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
+    if(!local||!Merge.same(local,merged)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}));}
+    payload=Merge.deleteMedia(structuredClone(merged),id);
+    if(window.VzipArchive)payload=window.VzipArchive.forOwner(payload,owner);
+   });
+   return bridge.write(row,payload,{kind:'media-delete',id,stamp});
+  },
+  cleanup:(row,guard,id)=>cleanupCloudMedia(row,owner,id,guard)
+ });
+}
+window.vzipPendingMediaDeletes=()=>mediaDeletionEngine({allowPaused:true})?.list()||[];
+window.vzipMediaDeleteAcknowledge=id=>mediaDeletionEngine({allowPaused:true})?.acknowledge(id);
+async function deleteCloudMedia(item){
+ if(!user)throw Error('로그인이 필요해요.');
+ const owner=user.id,guard=()=>{if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');};
+ const {data:row,error:readError}=await client.from('vocal_media').select('metadata,updated_at').eq('id',item.id).eq('user_id',owner).maybeSingle();
+ if(readError)throw readError;guard();
+ // Legacy default keeps its existing cleanup order. Revision mode uses the durable engine.
+ return cleanupCloudMedia(row,owner,item.id,guard,()=>unlinkCloudMedia(owner,item.id));
+}
 window.vzipCloudMediaDelete=item=>{
+ const engine=mediaDeletionEngine();if(engine)return engine.run(item.id);
  if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
   if(!lock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');
   return deleteCloudMedia(item);

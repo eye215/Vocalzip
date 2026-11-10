@@ -50,7 +50,7 @@ async function run(job,onProgress){
     removeMedia:async(job,id)=>{
      const files=await M.list(true);await verify(job);
      if(M.cloudError())throw Error(M.cloudError());
-     const file=files.find(m=>m.id===id)||{id,cloud:job.cloud};
+     const file=files.find(m=>m.id===id)||{id,cloud:job.cloud,accountOwner:job.owner};
      if(file.accountOwner&&file.accountOwner!==job.owner)throw Error('다른 계정의 파일은 삭제하지 않아요.');
      await M.remove(file);
     },
