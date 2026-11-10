@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const M=require('../app/practice-room-model.js');
 const Merge=require('../data-merge.js');
+const Lessons=require('../practice-room/lessons.js');
 const session={id:'test-session-1234',task:'tone',seconds:31,demo:false};
 test('records actual seconds once and preserves existing data',()=>{
  const original={id:'existing',manualMinutes:20,memo:'keep'};const db={practices:[original],dailyGoals:[]};
@@ -50,4 +51,12 @@ test('each roadmap submission keeps its own stable stage without moving legacy r
  assert.equal(M.record(db,old,'2026-11-01'),true);
  assert.equal(db.practices.at(-1).practiceRoom.chapterId,'musical-expression');
  assert.throws(()=>M.record(db,{...old,id:'bad-stage-1234',room:{...old.room,chapterId:'scene-work'}},'2026-11-01'));
+});
+test('every roadmap task has actionable learning content before submission',()=>{
+ const taskIds=Object.keys(M.stages);
+ assert.deepEqual(Object.keys(Lessons).sort(),taskIds.sort());
+ for(const task of taskIds){
+  const c=Lessons[task];
+  for(const key of ['title','body','example','checkLabel','check'])assert.ok(c[key]?.trim().length>5,`${task}: ${key}`);
+ }
 });

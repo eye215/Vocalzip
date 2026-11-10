@@ -39,6 +39,10 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  const room=page.frameLocator('#host iframe');
  await room.locator('[data-nav="roadmap"]').click();
  await room.locator('[data-task="reflection"]').click();
+ await expect(room.locator('[data-learning="reflection"]')).toContainText('가사의 상대와 목적을 구체적으로');
+ expect(await room.locator('[data-learning="reflection"]').evaluate(el=>el.compareDocumentPosition(document.querySelector('#answer-0'))&Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+ await page.setViewportSize({width:320,height:700});
+ expect(await room.locator('body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  await room.locator('#answer-0').fill('The River 후렴');
  await room.locator('#answer-1').fill('친구에게');
  await room.locator('#answer-2').fill('다시 함께 노래하기');
