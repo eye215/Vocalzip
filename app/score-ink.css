@@ -196,3 +196,12 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
  .score-ink-fullscreen .score-ink-actions>button{min-width:0;width:auto;flex:1}
  .score-ink-fullscreen .score-ink-quick{width:100%;box-sizing:border-box}
 }
+
+/* Compact the optional recognition action without wrapping its help across the score. */
+@media(max-width:600px){
+ .score-ink-fullscreen .score-ink-vision-tools{min-width:0;justify-content:flex-start;gap:6px}
+ .score-ink-fullscreen .score-ink-vision-tools>span{display:none}
+ .score-ink-fullscreen .score-ink-vision-tools button{min-height:36px;padding:0 12px;font-size:12px;white-space:nowrap}
+ .score-ink-fullscreen .score-ink-explain-action button{min-height:36px;font-size:12px}
+}
+.score-ink-vision-tools [data-ink-notation][aria-pressed=true]{background:#ede1ff;border-color:#7a32f5;color:#7a32f5}
