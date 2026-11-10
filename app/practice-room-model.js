@@ -14,15 +14,15 @@ function record(db,input,date){
  db.practices||=[];const id='practice-room:'+s.id;
  const existing=db.practices.find(p=>p.id===id);
  const room=s.room&&typeof s.room==='object'?{
-  id:s.id,task:s.task,chapterId:stages[s.task],title:names[s.task],date:String(s.room.date||new Date().toISOString()),
+  id:s.id,task:s.task,chapterId:stages[s.task],title:names[s.task],songId:String(s.room.songId||'').slice(0,80),date:String(s.room.date||new Date().toISOString()),
   analysis:s.room.analysis||{status:'reflection',summary:''},recommendation:String(s.room.recommendation||'reflection'),
   summary:String(s.room.summary||''),draft:{difficulty:String(s.room.draft?.difficulty||''),comfort:String(s.room.draft?.comfort||''),memo:String(s.room.draft?.memo||'').slice(0,4000),answers:(s.room.draft?.answers||[]).slice(0,4).map(a=>String(a).slice(0,2000))},
   demo:false,audioIds:(s.room.audioIds||[]).slice(0,2).map(a=>({id:String(a.id),name:String(a.name||'녹음'),duration:Number(a.duration)||0,cloud:!!a.cloud})),
   seconds:Math.floor(s.seconds),variant:s.room.variant==='short'?'short':'normal'
  }:null;
- if(existing){if(!room||JSON.stringify(existing.practiceRoom)===JSON.stringify(room))return false;existing.practiceRoom=room;existing.mediaIds=room.audioIds.filter(a=>a.cloud).map(a=>a.id);return true;}
+ if(existing){if(!room||JSON.stringify(existing.practiceRoom)===JSON.stringify(room))return false;existing.practiceRoom=room;existing.songId=room.songId;existing.practiceMode=room.songId?'song':'training';existing.mediaIds=room.audioIds.filter(a=>a.cloud).map(a=>a.id);return true;}
  const seconds=Math.floor(s.seconds),minutes=seconds/60;
- db.practices.push({id,date,minutes,manualMinutes:minutes,practiceRoomSeconds:seconds,practiceTimeSource:'manual',practiceMode:'training',songId:'',categoryLabel:'노래 연습실',detail:names[s.task],memo:'[노래 연습실] '+names[s.task],created:Date.now(),...(room?{practiceRoom:room,mediaIds:room.audioIds.filter(a=>a.cloud).map(a=>a.id)}:{})});return true;
+ db.practices.push({id,date,minutes,manualMinutes:minutes,practiceRoomSeconds:seconds,practiceTimeSource:'manual',practiceMode:room?.songId?'song':'training',songId:room?.songId||'',categoryLabel:'노래 연습실',detail:names[s.task],memo:'[노래 연습실] '+names[s.task],created:Date.now(),...(room?{practiceRoom:room,mediaIds:room.audioIds.filter(a=>a.cloud).map(a=>a.id)}:{})});return true;
 }
 function goal(db,input,date){
  const s=validate(input);if(s.demo)return false;
