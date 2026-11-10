@@ -256,7 +256,7 @@ export async function createFloatingHome(opts={}){
   guided.append(el("h3","추천 연습","vz-guided-heading"));
   for(const item of items){
    const row=el("div",null,"vz-guided-item"),copy=el("div",null,"vz-guided-copy"),button=el("button","따라 하기");
-   copy.append(el("strong",(item.label|| (item.kind==="homework"?"숙제":"분석 추천"))+" · "+item.title),el("small",item.subtitle+" · "+(item.video?"영상 포함":"타이머 안내")));
+   copy.append(el("strong",(item.label|| (item.kind==="homework"?"숙제":"분석 추천"))+" · "+item.title),el("small",item.subtitle+(item.kind==="room"?"":" · "+(item.video?"영상 포함":"타이머 안내"))));
    button.type="button";button.setAttribute("aria-label",item.title+" 따라 하기");button.onclick=()=>opts.onGuidedPractice?.(item);
    row.append(copy,button);guided.append(row);
   }

@@ -16,7 +16,7 @@ const videoFor=c=>{
   }
   return video && !(V.db.videoFeedback||[]).some(f=>f.exerciseKey===c.key&&f.videoId===video.id&&f.verdict==='bad')?video:null;
 };
-const path=c=>'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'');
+const path=c=>c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'');
 V.guidedRecommendations=async({date=V.today(),songId='',media=null}={})=>{
   const homework=V.db.assignments.filter(t=>V.taskInPeriod?.(t,date)&&(!songId||!V.taskSongId(t)||V.taskSongId(t)===songId))
     .sort((a,b)=>Number(!!V.taskLessons(b).length)-Number(!!V.taskLessons(a).length)||(a.dueDate||'9999').localeCompare(b.dueDate||'9999')||(b.created||0)-(a.created||0))
@@ -25,10 +25,12 @@ V.guidedRecommendations=async({date=V.today(),songId='',media=null}={})=>{
   const tips=(result.tips||[]).filter(t=>t.frequency>=2).sort((a,b)=>b.frequency-a.frequency||b.score-a.score)
     .map(t=>({kind:'analysis',key:'analysis:'+t.key,tipKey:t.key,title:t.name,subtitle:'최근 녹음 '+t.frequency+'회 · '+t.metric+' '+t.value,songId,steps:t.steps,minutes:t.minutes,goal:t.goal}));
   const duplicate=t=>homework.some(h=>t.tipKey==='wob'?/롱톤|지속음|긴 음/.test(h.title):t.tipKey==='into'?/음정|기준음/.test(h.title):false);
-  return [...homework,...tips.filter(t=>!duplicate(t))].slice(0,3).map(c=>({...c,video:videoFor(c)}));
+  const room=(window.VocalzipPracticeRoomModel?.recommendations(V.db,date,songId)||[]).map(c=>({...c,kind:'room',label:c.source==='ai'?'AI 추천':'연습 결과',title:c.action,subtitle:c.reason+' → '+(c.source==='ai'?c.body:c.section)+' · 약 '+c.minutes+'분',steps:[c.action],href:'#/practice-room?result='+encodeURIComponent(c.sourceId)}));
+  const safe=room.some(c=>c.vocal===false);
+  return [...(safe?[]:homework.slice(0,2)),...room,...(safe?[]:homework.slice(2)),...(safe?[]:tips).filter(t=>!duplicate(t))].slice(0,3).map(c=>({...c,video:videoFor(c)}));
 };
 V.guidedRecommendationCards=(rows,{selectable=false,showStart=true}={})=>'<div class="gp-recommendations"><h3>추천 연습 <small>최대 3개</small></h3>'+rows.map(c=>
-  '<div class="gp-rec" data-guided-key="'+esc(c.key)+'">'+(selectable?'<label class="gp-rec-select"><input type="checkbox" name="guided-recommendation" value="'+esc(c.key)+'" aria-label="'+esc(c.title)+' 목표에 담기"><span class="gp-rec-check" aria-hidden="true"></span><span class="gp-rec-copy"><strong>'+esc((c.label|| (c.kind==='homework'?'숙제':'분석 추천'))+' · '+c.title)+'</strong><small>'+esc(c.subtitle+' · '+(c.video?'영상 포함':'타이머 안내'))+'</small></span></label>':'<div class="gp-rec-copy"><strong>'+esc((c.label||(c.kind==='homework'?'숙제':'분석 추천'))+' · '+c.title)+'</strong><small>'+esc(c.subtitle+' · '+(c.video?'영상 포함':'타이머 안내'))+'</small></div>')+
+  '<div class="gp-rec" data-guided-key="'+esc(c.key)+'">'+(selectable?'<label class="gp-rec-select"><input type="checkbox" name="guided-recommendation" value="'+esc(c.key)+'" aria-label="'+esc(c.title)+' 목표에 담기"><span class="gp-rec-check" aria-hidden="true"></span><span class="gp-rec-copy"><strong>'+esc((c.label|| (c.kind==='homework'?'숙제':'분석 추천'))+' · '+c.title)+'</strong><small>'+esc(c.subtitle+(c.kind==='room'?'':' · '+(c.video?'영상 포함':'타이머 안내')))+'</small></span></label>':'<div class="gp-rec-copy"><strong>'+esc((c.label||(c.kind==='homework'?'숙제':'분석 추천'))+' · '+c.title)+'</strong><small>'+esc(c.subtitle+(c.kind==='room'?'':' · '+(c.video?'영상 포함':'타이머 안내')))+'</small></div>')+
     (showStart?'<a href="'+esc(path(c))+'" aria-label="'+esc(c.title)+' 따라 하기">따라 하기 <i class="ph ph-arrow-up-right"></i></a>':'')+'</div>').join('')+'</div>';
 
 let live=null;
