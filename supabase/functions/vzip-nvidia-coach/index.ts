@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
       mood: String(input.mood || '').slice(0, 60),
       symptoms: Array.isArray(input.symptoms) ? input.symptoms.filter((v): v is string => ['통증', '쉰 소리', '목 잠김'].includes(String(v))).slice(0, 3) : [],
       userNote: String(input.memo || '').slice(0, 400),
-      answers: Array.isArray(input.answers) ? input.answers.slice(0,4).map(v=>String(v).slice(0,600)) : []
+      answers: Array.isArray(input.answers) ? input.answers.slice(0,4).map(v=>String(v).slice(0,12000)) : []
     };
     if (!brief.task || !brief.result) return reply(req, 400, {error: '분석 결과를 확인해 주세요.'});
     let conditionCheck = false, heard = '';

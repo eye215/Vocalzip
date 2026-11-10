@@ -122,7 +122,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     host.querySelector('[data-home-retry]').onclick=()=>V.render();return;
    }
    if(!host.isConnected)return;
-   host.replaceChildren(root);applyTheme();
+   host.replaceChildren(root);const review=document.createElement('a');review.className='btn secondary block';review.href='#/practice-review';review.textContent='주간 돌아보기 · 다음 목표 추천';root.append(review);applyTheme();
    let mediaGeneration=0,lastDate=today();
    const refreshMedia=async()=>{
     const generation=++mediaGeneration;
