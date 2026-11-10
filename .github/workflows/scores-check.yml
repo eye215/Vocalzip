@@ -1,7 +1,7 @@
 name: Score upload checks
 on:
   push:
-    branches: ['codex/score-private-ink-20261110', 'codex/score-viewer-controls-20261110']
+    branches: ['codex/score-private-ink-20261110', 'codex/score-viewer-controls-20261110', 'codex/score-selection-20261110']
   pull_request:
     paths:
       - 'app/scores.js'
@@ -38,6 +38,8 @@ jobs:
       # Previous full-suite run timed out in this existing WebKit calendar route.
       - name: Repeat metadata date edit regression in WebKit
         run: npx playwright test tests/ui.spec.cjs --project=webkit-mobile --grep 'Metadata-derived dates remain editable' --repeat-each=3 --workers=1
+      - name: Repeat selection movement in WebKit after pixel-rounding regression
+        run: npx playwright test tests/score-ink.spec.cjs --project=webkit-mobile --grep 'selection moves a group once' --repeat-each=3 --workers=1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

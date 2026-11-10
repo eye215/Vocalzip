@@ -44,7 +44,7 @@ body .score-ink-sheet .sheet-body{padding:8px 12px 12px;display:flex;min-height:
 .score-ink-page{position:relative;background:white;margin:0 auto;flex:none}
 .score-ink-page canvas,.score-ink-page svg{display:block;position:absolute;inset:0;width:100%;height:100%}
 .score-ink-page svg{pointer-events:none;user-select:none;-webkit-user-select:none}
-.score-ink-page svg[data-tool=pan],.score-ink-page svg[data-tool=pen],.score-ink-page svg[data-tool=highlighter],.score-ink-page svg[data-tool=eraser]{pointer-events:auto;touch-action:none;cursor:crosshair}
+.score-ink-page svg[data-tool=pan],.score-ink-page svg[data-tool=pen],.score-ink-page svg[data-tool=highlighter],.score-ink-page svg[data-tool=eraser],.score-ink-page svg[data-tool=select]{pointer-events:auto;touch-action:none;cursor:crosshair}
 .score-ink-page svg path{pointer-events:none}
 .score-ink-help{margin:0;font-size:12px;line-height:18px;color:#667085}
 .score-ink-sheet .sheet-foot{padding-top:6px!important}
@@ -74,3 +74,14 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-settings [data-ink-export-save][hidden]{display:none}
 
 .score-ink-fullscreen .score-ink-settings{left:auto;right:0;width:min(420px,100%);box-sizing:border-box}
+
+/* Same 44px controls as the editor; selection never changes the original PDF. */
+.score-ink-selection-bar{display:flex;align-items:center;gap:4px;flex:none;min-width:0}
+.score-ink-selection-bar[hidden]{display:none}
+.score-ink-selection-bar>span{flex:1;min-width:0;font-size:12px;color:var(--vz-color-muted,#667085);white-space:nowrap}
+.score-ink-selection-bar>button{display:grid;place-items:center;width:44px;height:44px;min-width:44px;border:0;border-radius:12px;background:#fff;color:var(--vz-color-primary,#344054);font-size:20px}
+.score-ink-selection-bar>button:disabled{opacity:.35}
+.score-ink-selection-bar [data-ink-selection-delete]{color:#c4322a}
+.score-ink-selection-outline{fill:#7a32f508;stroke:var(--vz-color-accent,#7a32f5);stroke-width:1.5;stroke-dasharray:5 3;cursor:move}
+.score-ink-selection-handle{fill:white;stroke:var(--vz-color-accent,#7a32f5);stroke-width:2;cursor:nwse-resize}
+.score-ink-page svg[data-tool=select]{cursor:crosshair}
