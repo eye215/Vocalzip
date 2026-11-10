@@ -83,6 +83,8 @@ Deno.serve(async (req: Request) => {
       }),
       signal: AbortSignal.timeout(25000)
     });
+    if (upstream.status === 401) return reply(req, 503, {error: 'NVIDIA API 키를 확인해 주세요. 기존 연습 안내는 그대로 사용할 수 있어요.'});
+    if (upstream.status === 402) return reply(req, 429, {error: 'NVIDIA 무료 사용량을 확인해 주세요. 기존 연습 안내를 이용해 주세요.'});
     if (upstream.status === 429) return reply(req, 429, {error: 'NVIDIA 무료 API가 잠시 제한됐어요. 기존 연습 안내를 이용해 주세요.'});
     if (!upstream.ok) {
       console.error('NVIDIA coach status', upstream.status);
