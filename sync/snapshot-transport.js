@@ -27,7 +27,7 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
   return s;
  }
  function recoveryValid(r){
-  if(r?.version!==1||r.owner!==owner||!uuid.test(r.id)||!uuid.test(r.session)||!Number.isFinite(r.createdAt)||!stampPattern.test(r.deviceStamp)||!valid(r.device))return false;
+  if(r?.version!==1||r.owner!==owner||!uuid.test(r.id)||!uuid.test(r.requestId)||!uuid.test(r.session)||!Number.isFinite(r.createdAt)||!stampPattern.test(r.deviceStamp)||!valid(r.device))return false;
   try{rowCheck(r.cloud);const p=r.pending;if(p&&(!uuid.test(p.id)||p.owner!==owner||!uuid.test(p.session)||!valid(p.payload)||!pair(version(p),p)))return false;if(p?.context)mediaContext(p.context);}catch{return false;}
   return true;
  }
@@ -97,7 +97,7 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
   return [device,cloud?.payload,s.pending?.payload,...(s.recoveries||[]).flatMap(r=>[r.device,r.cloud?.payload,r.pending?.payload])].filter(Boolean);
  }
  function cleanRecovery(payload,sources){
-  const gone={};
+  const gone=Object.create(null);
   for(const source of sources)for(const [name,ids] of Object.entries(source.deleted||{})){
    if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string'||!id))throw fail('corrupt');
    gone[name]=[...new Set([...(gone[name]||[]),...ids])];
@@ -113,6 +113,11 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
   return result;
  }
  function requireRecords(candidate,sources){
+  for(const rows of Object.values(candidate)){
+   if(!Array.isArray(rows))continue;
+   const ids=rows.filter(r=>r&&typeof r==='object'&&r.id!=null).map(r=>String(r.id));
+   if(new Set(ids).size!==ids.length)throw fail('incomplete');
+  }
   // Preserve records unique to any source, including future id-based collections.
   // Conflicting values inside a shared record require a caller's explicit field choice.
   for(const source of sources)for(const [name,rows] of Object.entries(source)){
@@ -122,7 +127,7 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
   }
  }
  function newId(s){
-  const used=new Set([s.pending?.id,s.pending?.retiredRequestId,...(s.recoveries||[]).flatMap(r=>[r.id,r.pending?.id,r.pending?.retiredRequestId])]);
+  const used=new Set([s.pending?.id,s.pending?.retiredRequestId,...(s.recoveries||[]).flatMap(r=>[r.id,r.requestId,r.pending?.id,r.pending?.retiredRequestId])]);
   const id=makeId();if(!uuid.test(id)||used.has(id))throw fail('response');return id;
  }
  async function reviewRecovery(){
@@ -158,7 +163,7 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
    const archive={version:1,id:r.id,owner,session,createdAt:Date.now(),deviceStamp,device:cleanRecovery(r.device,sources),
     cloud:cloud?{...cloud,payload:cleanRecovery(cloud.payload,sources)}:null,
     pending:s.pending?{...s.pending,payload:cleanRecovery(s.pending.payload,sources)}:null};
-   const id=newId({...s,recoveries:[...(s.recoveries||[]),archive]});
+   const id=newId({...s,recoveries:[...(s.recoveries||[]),archive]});archive.requestId=id;
    // Persist both inputs plus the fresh current-session CAS request in ONE entry before send.
    // Even choosing unchanged cloud content needs this CAS fence against an old in-flight write.
    const next={...s,recoveries:[...(s.recoveries||[]),archive],conflict:null,

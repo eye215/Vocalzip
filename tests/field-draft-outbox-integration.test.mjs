@@ -268,12 +268,12 @@ test('snapshot replay and offline outbox cannot recreate a permanently deleted l
  const current=await body();assert.equal(current.songs[0].id,'song-legacy');assert.equal(current.performances[0].id,'show-old');
 });
 
-function snapshotDevice({owner=U,session=A,store=new Store()}={}){
+function snapshotDevice({owner=U,session=A,store=new Store(),getLocal=null,onAck=()=>{}}={}){
  const identity={owner,session},wire={lost:false,calls:0};
  const transport=Snap.createTransport({projectUrl:'https://example.supabase.co',publishableKey:'sb_publishable_test',
   getOwner:()=>identity.owner,getSessionId:()=>identity.session,getCredentials:async()=>jwt(identity.owner,identity.session),
   fetch:async(url,options)=>{
-   wire.calls++;const path=new URL(url),claims=JSON.parse(Buffer.from(options.headers.Authorization.split(' ')[1].split('.')[1],'base64url').toString());
+   wire.calls++;if(options.method==='POST')await wire.beforeSave?.();const path=new URL(url),claims=JSON.parse(Buffer.from(options.headers.Authorization.split(' ')[1].split('.')[1],'base64url').toString());
    assert.equal(options.headers['X-Client-Info'],'vocalzip-device-session-v2');
    const connection=new pg.Client({connectionString:conn});await connection.connect();
    let data;
@@ -292,7 +292,7 @@ function snapshotDevice({owner=U,session=A,store=new Store()}={}){
    if(options.method==='POST'&&wire.lost){wire.lost=false;throw Error('synthetic response loss');}
    return {ok:true,status:200,json:async()=>structuredClone(data)};
   }});
- const options={storage:store,identity:()=>identity,...transport,lock:async work=>work(),valid:Merge.valid,same:Merge.same,
+ const options={storage:store,identity:()=>identity,...transport,getLocal,onAck,lock:async work=>work(),valid:Merge.valid,same:Merge.same,
   deletedIds:()=>wire.deleted||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;},
   deletedMediaIds:()=>wire.deletedMedia||[],redactMedia:(data,ids)=>{for(const id of ids)Merge.deleteMedia(data,id);return data;}};
  return {model:Snap.create(options),recreate:()=>Snap.create(options),wire,store};
@@ -368,4 +368,48 @@ test('metadata changed after a real snapshot commit prevents the destructive med
  await assert.rejects(m.model.run('keep-media'),e=>e.code==='mediaChanged');assert.equal(d.wire.physical||0,0);
  assert.equal((await db.query("select metadata->>'review' r from public.vocal_media where id='keep-media'")).rows[0].r,'new device review');
  assert.equal(m.model.list()[0].phase,'root-confirmed');assert.equal((await body()).lessons[0].memo,'original memo');
+});
+
+test('reviewed recovery rebinds a real SQL lost receipt to the other active session without replaying the old id',{skip,timeout:20000},async()=>{
+ let local=base();
+ const a=snapshotDevice(),row=await a.model.read();await a.model.observe(row,base());
+ const value=base();value.practices.push({id:'previous-login-practice',manualMinutes:19});a.wire.lost=true;
+ await assert.rejects(a.model.write(row,value));const old=a.model.state().pending.id;
+ local.lessons[0].memo='new login local note';
+ const b=snapshotDevice({session:B,store:a.store,getLocal:()=>local,onAck:(saved,payload,meta)=>{assert.ok(meta.recovery);local=structuredClone(saved.payload);}});
+ const r=await b.model.reviewRecovery();
+ const chosen=Merge.merge(Merge.merge(r.device,r.pending.payload).data,r.cloud.payload).data;
+ chosen.lessons[0].memo='new login local note';
+ await b.model.resolveRecovery(r.reviewId,chosen,{confirmed:true});
+ assert.equal(local.practices[1].manualMinutes,19);assert.equal(local.lessons[0].memo,'new login local note');
+ const receipts=(await db.query('select request_id,session_id,result_revision::text from public.vzip_data_write_requests where user_id=$1 order by result_revision',[U])).rows;
+ assert.equal(receipts.length,2);assert.equal(receipts[0].request_id,old);assert.equal(receipts[0].session_id,A);
+ assert.notEqual(receipts[1].request_id,old);assert.equal(receipts[1].session_id,B);
+ assert.equal(b.model.state().pending,null);assert.equal(b.model.state().recoveries[0].pending.id,old);
+});
+test('real SQL recovery of unchanged cloud content creates a fresh fence and preserves the old input',{skip,timeout:20000},async()=>{
+ let local=base();local.lessons[0].memo='unconfirmed device choice';
+ const a=snapshotDevice({getLocal:()=>local}),row=await a.model.read();await a.model.observe(row,local);
+ const r=await a.model.reviewRecovery();
+ await a.model.resolveRecovery(r.reviewId,r.cloud.payload,{confirmed:true});
+ assert.equal((await body()).lessons[0].memo,'original memo');
+ assert.equal(a.model.state().recoveries[0].device.lessons[0].memo,'unconfirmed device choice');
+ assert.equal((await db.query('select revision::text r from public.vocal_data where user_id=$1',[U])).rows[0].r,'2');
+ assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'1');
+});
+test('revoking a session after review blocks the real SQL recovery and retains its durable inputs',{skip,timeout:20000},async()=>{
+ const local=base(),d=snapshotDevice({getLocal:()=>local}),r=await d.model.reviewRecovery();
+ d.wire.beforeSave=()=>as(U,A,c=>c.query('select public.vzip_release_session()'));
+ await assert.rejects(d.model.resolveRecovery(r.reviewId,r.cloud.payload,{confirmed:true}),e=>e.code==='auth');
+ assert.ok(d.model.state().pending);assert.equal(d.model.state().recoveries.length,1);
+ assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'0');
+ assert.equal((await body()).lessons[0].memo,'original memo');
+});
+test('a real protected field lease rejects recovery without modifying the original body',{skip,timeout:20000},async()=>{
+ const field=device(api());await field.open();
+ const local=base(),d=snapshotDevice({getLocal:()=>local}),r=await d.model.reviewRecovery();
+ const chosen=structuredClone(r.cloud.payload);chosen.lessons[0].memo='must not bypass the field lease';
+ await assert.rejects(d.model.resolveRecovery(r.reviewId,chosen,{confirmed:true}));
+ assert.equal((await body()).lessons[0].memo,'original memo');assert.ok(d.model.state().pending);
+ assert.equal(d.model.state().recoveries[0].cloud.payload.lessons[0].memo,'original memo');
 });

@@ -180,3 +180,14 @@ test('recovery request ids cannot reuse a reviewed id or previous session reques
  const bad=f.create({makeId:()=>r.reviewId});const review=await bad.reviewRecovery();
  await assert.rejects(bad.resolveRecovery(review.reviewId,merged(review),confirm),e=>e.code==='response');
 });
+
+test('duplicate selected ids are rejected rather than leaving an ambiguous replacement',async()=>{
+ const f=fixture(),r=await f.client.reviewRecovery(),p=merged(r);p.songs.push(copy(p.songs[0]));
+ await assert.rejects(f.client.resolveRecovery(r.reviewId,p,confirm),e=>e.code==='incomplete');assert.equal(f.server.calls.length,0);
+});
+test('current session may be revoked during send: the approved input remains durable and not acknowledged',async()=>{
+ const f=fixture(),r=await f.client.reviewRecovery();
+ const c=f.create({send:async()=>{throw Object.assign(Error('revoked'),{code:'auth'});}}),view=await c.reviewRecovery();
+ await assert.rejects(c.resolveRecovery(view.reviewId,merged(view),confirm),e=>e.code==='auth');
+ assert.ok(c.state().pending);assert.equal(c.state().recoveries.length,1);assert.deepEqual(f.local,r.device);
+});
