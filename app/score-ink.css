@@ -51,7 +51,7 @@ body .score-ink-sheet .sheet-body{padding:8px 12px 12px;display:flex;min-height:
 body .score-ink-sheet.score-ink-fullscreen{width:100%;max-width:none;height:100%;background:var(--vz-color-canvas,#f8f6fd)}
 body .score-ink-sheet.score-ink-fullscreen .sheet-head,body .score-ink-sheet.score-ink-fullscreen:not([data-ink-save-error]) .sheet-foot{display:none}
 body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));overflow:hidden}
-.score-ink-fullscreen .score-ink-title,.score-ink-fullscreen .score-ink-help{display:none}
+.score-ink-fullscreen .score-ink-header,.score-ink-fullscreen .score-ink-score-picker,.score-ink-fullscreen .score-ink-save-state,.score-ink-fullscreen .score-ink-original-quick,.score-ink-fullscreen [data-ink-original],.score-ink-fullscreen .score-ink-title,.score-ink-fullscreen .score-ink-help{display:none!important}
 .score-ink-fullscreen .score-ink-bar{flex-direction:row;align-items:center}
 .score-ink-fullscreen .score-ink-tools{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:none;overscroll-behavior-x:contain}
 .score-ink-fullscreen .score-ink-tools::-webkit-scrollbar{display:none}
