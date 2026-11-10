@@ -205,3 +205,7 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
  .score-ink-fullscreen .score-ink-explain-action button{min-height:36px;font-size:12px}
 }
 .score-ink-vision-tools [data-ink-notation][aria-pressed=true]{background:#ede1ff;border-color:#7a32f5;color:#7a32f5}
+
+/* The sample row is a full-width editor row below the toolbar. */
+.score-ink-editor>.score-ink-quick{position:static;align-self:stretch;flex:none;width:100%;min-width:0;box-sizing:border-box}
+.score-ink-editor>.score-ink-quick[hidden]{display:none}
