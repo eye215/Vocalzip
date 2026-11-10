@@ -17,19 +17,20 @@ function pdf(){
  return Buffer.from(out);
 }
 const bytes=pdf(),key='u/ui-test-user/score-ink/original.pdf';
-async function setup(page){
- const r2=await fakeR2(page);r2.store.set(key,{bytes,type:'application/pdf',etag:'"pdf"'});
+async function setup(page,sourceBytes=bytes){
+ const r2=await fakeR2(page);r2.store.set(key,{bytes:sourceBytes,type:'application/pdf',etag:'"pdf"'});
  await page.context().route('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/**',route=>{
   const suffix=new URL(route.request().url()).pathname.split('pdfjs-dist@4.10.38/')[1],file=path.join(PDFROOT,suffix);
   if(!suffix||suffix.includes('..')||!fs.existsSync(file))return route.abort();
   return route.fulfill({path:file,contentType:file.endsWith('.mjs')?'text/javascript':'application/octet-stream',headers:{'access-control-allow-origin':'*'}});
  });
+ await page.context().route('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/**',route=>route.fulfill({path:path.join(PDFROOT,'../pdf-lib/dist/pdf-lib.min.js'),contentType:'text/javascript',headers:{'access-control-allow-origin':'*'}}));
  await boot(page);
  await page.evaluate(([key,size])=>window.VZ.change(d=>{
   if(!d.songs[0].scores?.some(s=>s.id==='score-ink'))d.songs[0].scores=[{id:'score-ink',songId:'s1',title:'연습 악보',r2Key:key,size,uploadedAt:Date.now()}];
   if(!d.lessons.length)d.lessons.push({id:'existing-lesson',note:'기존 레슨 메모'});
   if(!d.practices.length)d.practices.push({id:'existing-practice',minutes:17,note:'기존 연습 메모'});
- }),[key,bytes.length]);
+ }),[key,sourceBytes.length]);
  return r2;
 }
 async function open(page){
@@ -246,3 +247,37 @@ test('fullscreen-capable browsers keep the editor open when the explicit exit co
  await expect(dialog).toHaveClass(/score-ink-fullscreen/);await expect(dialog.getByRole('button',{name:'전체화면 종료',exact:true})).toBeVisible();
  await dialog.getByRole('button',{name:'전체화면 종료',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog).not.toHaveClass(/score-ink-fullscreen/);
 });
+
+for(const rotated of [false,true]){
+ test('annotated PDF download preserves source and exports visible red ink'+(rotated?' with rotation/crop':''),async({page})=>{
+  const lib=require(path.join(PDFROOT,'../pdf-lib')),sourceDoc=await lib.PDFDocument.load(bytes);
+  if(rotated){sourceDoc.getPage(0).setRotation(lib.degrees(90));sourceDoc.getPage(0).setCropBox(20,30,260,340);}
+  const sourceBytes=rotated?Buffer.from(await sourceDoc.save()):bytes,r2=await setup(page,sourceBytes),dialog=await open(page);
+  await dialog.getByRole('button',{name:'펜',exact:true}).click();let panel=await configure(dialog);
+  await panel.getByRole('button',{name:'진한 빨강 #b42318',exact:true}).click();await range(dialog,'펜 굵기',14);
+  await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();await draw(page,dialog);
+  const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations);panel=await configure(dialog);
+  await panel.getByRole('button',{name:'필기 PDF 만들기',exact:true}).click();
+  const save=panel.getByRole('link',{name:'만든 PDF 저장',exact:true});await expect(save).toBeVisible({timeout:20000});
+  const rendered=await save.evaluate(async a=>{
+   const bytes=new Uint8Array(await(await fetch(a.href)).arrayBuffer());
+   const pdf=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs');
+   const document=await pdf.getDocument({data:bytes,isEvalSupported:false,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/standard_fonts/'}).promise;
+   try{
+    const page=await document.getPage(1),view=page.getViewport({scale:1}),canvas=window.document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:view}).promise;
+    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let red=0;
+    for(let i=0;i<pixels.length;i+=4)if(pixels[i]>100&&pixels[i+1]<80&&pixels[i+2]<80)red++;
+    const out={red,pages:document.numPages,rotation:page.rotate};canvas.width=0;canvas.height=0;return out;
+   }finally{await document.destroy();}
+  });
+  expect(rendered.red).toBeGreaterThan(50);expect(rendered.pages).toBe(2);expect(rendered.rotation).toBe(rotated?90:0);
+  const downloadEvent=page.waitForEvent('download');await save.click();const download=await downloadEvent;
+  expect(download.suggestedFilename()).toBe('연습 악보_필기.pdf');
+  const output=await lib.PDFDocument.load(fs.readFileSync(await download.path()));expect(output.getPageCount()).toBe(2);
+  expect(output.getPage(0).getRotation().angle).toBe(rotated?90:0);
+  if(rotated)expect(output.getPage(0).getCropBox()).toEqual({x:20,y:30,width:260,height:340});
+  expect(r2.store.get(key).bytes.equals(sourceBytes)).toBe(true);expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual(before);
+  expect(r2.calls.some(c=>c.startsWith('PUT')||c.startsWith('DELETE')||c==='POST /v1/uploads')).toBe(false);
+ });
+}

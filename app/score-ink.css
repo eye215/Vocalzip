@@ -68,3 +68,7 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-row [data-score-open] .item-main{min-width:0;flex:1}
 .score-row{cursor:pointer}
 .score-row .score-actions{display:flex;flex:none}
+
+.score-ink-settings [data-ink-export]{min-height:44px;border:0;border-radius:12px;padding:8px 12px;background:var(--vz-color-selected-bg,#ede1ff);color:var(--vz-color-accent,#7a32f5);font-size:14px}
+.score-ink-settings [data-ink-export-save]{min-height:44px;display:flex;align-items:center;color:var(--vz-color-accent,#7a32f5);font-size:14px}
+.score-ink-settings [data-ink-export-save][hidden]{display:none}
