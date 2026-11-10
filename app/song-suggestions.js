@@ -306,7 +306,7 @@ function classification(item){
 function filteredItems(){return state.items.filter(item=>state.filter==='all'||classification(item)===state.filter)}
 function updateMetrics(main){
  const c=VZ.serverAnalysisCounts?.(),root=main.querySelector('[data-suggest]');if(!root)return;
- const values={'[data-review-count]':c?.song?.review,'[data-auto-count]':c?.song?.auto,'[data-wait-count]':c?c.vocal.wait+c.song.wait:null};
+ const values={'[data-review-count]':c?(M.cloudError?.()?c.song.review:state.items.filter(m=>VZ.serverReview?.(m.id)).length):null,'[data-auto-count]':c?.song?.auto,'[data-wait-count]':c?c.vocal.wait+c.song.wait:null};
  for(const [selector,value] of Object.entries(values)){const el=root.querySelector(selector);if(el)el.textContent=value==null?'—':value.toLocaleString()}
  const vocal=root.querySelector('[data-vocal-count]');if(vocal)vocal.textContent=c?.vocal?.total?`보컬 측정 ${c.vocal.done}/${c.vocal.total} 완료`:'보컬 측정 내역 확인 중';
 }
