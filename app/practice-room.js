@@ -11,7 +11,7 @@ window.VocalzipPracticeRoom={
  async uploadAudio(input,blob,source){assert(source);if(!window.vzipCloudSignedIn?.())throw Error('클라우드 로그인이 필요해요.');if(!await window.VzipR2?.ready?.())throw Error('R2 저장소 연결을 확인하지 못했어요.');assert(source);
   if(!/^[a-zA-Z0-9-]{8,80}-[01]$/.test(input.id)||!blob||blob.size<1||blob.size>25*1024*1024)throw Error('녹음 파일을 확인해 주세요.');
   const type=(blob.type||'audio/webm').split(';')[0],ext=type.includes('wav')?'wav':type.includes('mpeg')?'mp3':type.includes('mp4')||type.includes('aac')?'m4a':type.includes('ogg')?'ogg':'webm';
-  const media=await window.vzipCloudImport(new File([blob],input.id+'.'+ext,{type}),{id:input.id,name:String(input.name||'연습실 녹음').slice(0,100),type,source:'practice',songId:String(input.songId||''),song:V.songLabel(V.song(input.songId)),durationSeconds:Number(input.duration)||0,created:Date.now(),recordedDate:V.today()},undefined,{requireR2:true});
+  const media=await window.vzipCloudImport(new File([blob],input.id+'.'+ext,{type}),{id:input.id,name:String(input.name||'연습실 녹음').slice(0,100),type,source:'practice-room',recordingCategory:'room',songId:String(input.songId||''),song:V.songLabel(V.song(input.songId)),durationSeconds:Number(input.duration)||0,created:Date.now(),recordedDate:V.today()},undefined,{requireR2:true});
   assert(source);if(media.storageProvider!=='r2'||!media.r2Key)throw Error('R2 저장을 확인하지 못했어요.');return {id:media.id,cloud:true};
  },
  async audioUrl(id,source){assert(source);if(!/^[a-zA-Z0-9-]{8,80}-[01]$/.test(id))throw Error('녹음 ID를 확인해 주세요.');const media=(await window.vzipCloudMediaList()).find(m=>m.id===id&&m.storageProvider==='r2');assert(source);if(!media)throw Error('클라우드 녹음을 찾지 못했어요.');return window.vzipCloudMediaUrl(media);},
