@@ -16,7 +16,7 @@ function record(db,input,date){
  const room=s.room&&typeof s.room==='object'?{
   id:s.id,task:s.task,chapterId:stages[s.task],title:names[s.task],songId:String(s.room.songId||'').slice(0,80),date:String(s.room.date||new Date().toISOString()),
   analysis:s.room.analysis||{status:'reflection',summary:''},recommendation:String(s.room.recommendation||'reflection'),mood:String(s.room.mood||'').slice(0,60),
-  summary:String(s.room.summary||''),aiConditionCheck:!!s.room.aiConditionCheck,draft:{difficulty:String(s.room.draft?.difficulty||''),comfort:String(s.room.draft?.comfort||''),symptoms:Array.isArray(s.room.draft?.symptoms)?s.room.draft.symptoms.filter(v=>['통증','쉰 소리','목 잠김'].includes(v)).slice(0,3):[],memo:String(s.room.draft?.memo||'').slice(0,4000),answers:(s.room.draft?.answers||[]).slice(0,4).map(a=>String(a).slice(0,2000))},
+  summary:String(s.room.summary||''),aiConditionCheck:!!s.room.aiConditionCheck,aiNextTask:names[s.room.aiNextTask]?s.room.aiNextTask:'',draft:{difficulty:String(s.room.draft?.difficulty||''),comfort:String(s.room.draft?.comfort||''),symptoms:Array.isArray(s.room.draft?.symptoms)?s.room.draft.symptoms.filter(v=>['통증','쉰 소리','목 잠김'].includes(v)).slice(0,3):[],memo:String(s.room.draft?.memo||'').slice(0,4000),answers:(s.room.draft?.answers||[]).slice(0,4).map(a=>String(a).slice(0,2000))},
   demo:false,audioIds:(s.room.audioIds||[]).slice(0,2).map(a=>({id:String(a.id),name:String(a.name||'녹음'),duration:Number(a.duration)||0,cloud:!!a.cloud})),
   seconds:Math.floor(s.seconds),variant:s.room.variant==='short'?'short':'normal'
  }:null;
