@@ -10,6 +10,8 @@ async function library(){
  if(!pdfLibrary)pdfLibrary=import(PDFJS+'legacy/build/pdf.min.mjs').then(pdf=>{pdf.GlobalWorkerOptions.workerSrc=PDFJS+'legacy/build/pdf.worker.min.mjs';return pdf;}).catch(e=>{pdfLibrary=null;throw e;});
  return pdfLibrary;
 }
+// Opening the score list is a good time to warm the viewer without fetching private PDF bytes.
+VZ.preloadScoreInk=()=>{library().catch(()=>{});};
 async function readPDF(response,size,signal){
  if(!response.ok)throw Error('악보를 불러오지 못했어요 ('+response.status+').');
  if(!Number.isSafeInteger(size)||size<=0||size>MAX)throw Error('50MB 이하 PDF를 사용해 주세요.');
@@ -835,17 +837,18 @@ VZ.openScoreInk=(songId,scoreId)=>{
  (async()=>{
   try{
    say('PDF를 준비하고 있어요.');
-   const [url,pdf]=await Promise.all([
-    deadline(window.VzipR2.url(score.r2Key),15000,'PDF 주소 확인이 오래 걸려요.'),
-    deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.')
-   ]);current();
-   el.querySelector('[data-ink-original]').href=url;el.querySelector('[data-ink-original-quick]').href=url;
-   let bytesPromise;
+   const urlPromise=deadline(window.VzipR2.url(score.r2Key),15000,'PDF 주소 확인이 오래 걸려요.');
+   let bytesPromise,downloadedBytes=null;
+   const eagerBytes=urlPromise.then(async url=>{
+    const response=await deadline(fetch(url,{signal:controller.signal,cache:'no-store'}),20000,'PDF 다운로드가 지연되고 있어요.');
+    return readPDF(response,score.size,controller.signal);
+   });
+   // Download and verify the complete original while the viewer module and first page load.
+   // This keeps the PDF hash check before any private ink is displayed or edited.
+   eagerBytes.then(bytes=>{downloadedBytes=bytes;},()=>{});
    const fullBytes=()=>bytesPromise ||= (async()=>{
-    try{
-     const response=await deadline(fetch(url,{signal:controller.signal,cache:'no-store'}),20000,'PDF 다운로드가 지연되고 있어요.');
-     return await readPDF(response,score.size,controller.signal);
-    }catch(error){
+    try{return await eagerBytes;}
+    catch(error){
      if(!doc||controller.signal.aborted)throw error;
      say('PDF 뷰어에서 원본을 확인하고 있어요.');
      const data=await deadline(doc.getData(),45000,'PDF 원본 확인이 지연되고 있어요.');
@@ -853,9 +856,12 @@ VZ.openScoreInk=(songId,scoreId)=>{
      return data;
     }
    })();
+   const [url,pdf]=await Promise.all([urlPromise,deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.')]);current();
+   el.querySelector('[data-ink-original]').href=url;el.querySelector('[data-ink-original-quick]').href=url;
    const options={isEvalSupported:false,enableXfa:false,standardFontDataUrl:PDFJS+'standard_fonts/',cMapUrl:PDFJS+'cmaps/',cMapPacked:true};
    say('첫 페이지를 준비하고 있어요.');
-   loadingTask=pdf.getDocument({...options,url,disableAutoFetch:false,disableStream:false,rangeChunkSize:262144});
+   loadingTask=!downloadedBytes?pdf.getDocument({...options,url,disableAutoFetch:true,disableStream:true,rangeChunkSize:262144}):
+    pdf.getDocument({...options,data:new Uint8Array(downloadedBytes)});
    loadingTask.onPassword=()=>{loadingTask.destroy();say('암호가 없는 PDF로 다시 올려 주세요.',true);};
    try{doc=await deadline(loadingTask.promise,30000,'PDF 첫 페이지를 열지 못했어요.');}
    catch(rangeError){
@@ -863,7 +869,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     loadingTask?.destroy()?.catch?.(()=>{});
     say('PDF 전체를 확인하고 있어요.');
     const bytes=await fullBytes();current();
-    loadingTask=pdf.getDocument({...options,data:bytes});
+    loadingTask=pdf.getDocument({...options,data:new Uint8Array(bytes)});
     doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');
    }
    current();if(closed)return;

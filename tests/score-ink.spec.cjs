@@ -39,6 +39,7 @@ async function open(page){
  const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
  await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
  await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
+ await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨',{timeout:20000});
  return dialog;
 }
 async function draw(page,dialog,{tool='펜',y=.22,ignored=false}={}){
@@ -73,6 +74,27 @@ test('other scores lists peer songs, puts the latest practiced song first, then 
  await options.nth(0).click();
  await expect(page.getByRole('dialog',{name:'악보 개인 필기'}).locator('.score-ink-title')).toHaveText('연습 악보');
  await expect(page.getByRole('dialog',{name:'악보 개인 필기'}).locator('[data-ink-box]')).toBeVisible();
+});
+test('the complete PDF starts downloading while the viewer module is still loading',async({page})=>{
+ const r2=await setup(page);let started,moduleRequested;
+ const fullStarted=new Promise(resolve=>{started=resolve;});
+ const moduleStarted=new Promise(resolve=>{moduleRequested=resolve;});let release;
+ const gate=new Promise(resolve=>{release=resolve;});
+ r2.reject.beforeRead=async req=>{if(!req.headers().range)started();};
+ await page.route('**/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs',async route=>{
+  moduleRequested();await gate;
+  await route.fulfill({path:path.join(PDFROOT,'legacy/build/pdf.min.mjs'),contentType:'text/javascript',headers:{'access-control-allow-origin':'*'}});
+ });
+ try{
+  await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+  await moduleStarted;
+  await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
+  await fullStarted;
+  await expect(dialog.locator('[data-ink-box]')).toBeHidden();
+  release();
+  await expect(dialog.locator('[data-ink-status]')).toContainText('필기 준비됨',{timeout:20000});
+ }finally{release();}
 });
 test('real PDF renders, ink persists after reload and original PDF/lesson/practice bytes remain unchanged',async({page})=>{
  const r2=await setup(page),dialog=await open(page);
