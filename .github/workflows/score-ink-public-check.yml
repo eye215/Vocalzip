@@ -1,0 +1,55 @@
+name: Verify private PDF ink public assets
+on:
+  push:
+    branches: ['verify/score-ink-public-20261110']
+permissions:
+  contents: read
+jobs:
+  public-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8abada17d94b0581b5a2d9c65f549df8a048c0ea
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify public ink assets and pinned renderer without account/media access
+        env:
+          EXPECTED_SHA: 8abada17d94b0581b5a2d9c65f549df8a048c0ea
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const paths=['index.html','app/score-ink-model.js','app/score-ink.js','app/score-ink.css','app/scores.js','app/core.js','data-merge.js','account-config.js'];
+          const hash=b=>createHash('sha256').update(b).digest('hex');
+          for(let attempt=0;;attempt++){
+            try{
+              for(const path of paths){
+                const res=await fetch('https://vocalzip.yullul.com/'+path+'?vzip_ink='+process.env.EXPECTED_SHA+'-'+attempt,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+                assert.equal(res.status,200,path);
+                assert.equal(hash(new Uint8Array(await res.arrayBuffer())),hash(readFileSync(path)),path+' SHA-256');
+              }
+              break;
+            }catch(error){
+              if(attempt>=9)throw error;
+              console.log('Waiting for public ink assets: '+(attempt+1));
+              await new Promise(r=>setTimeout(r,10000));
+            }
+          }
+          const html=readFileSync('index.html','utf8');
+          for(const path of ['app/score-ink-model.js','app/score-ink.js','app/score-ink.css'])assert.ok(html.includes(path));
+          const config=readFileSync('account-config.js','utf8');
+          assert.match(config,/VZIP_SNAPSHOT_REVISION_ENABLED\s*\?\?=\s*false/);
+          const flags=readFileSync('r2-worker/wrangler.toml','utf8');
+          assert.match(flags,/UPLOADS_V2_ENABLED\s*=\s*"false"/);
+          assert.match(flags,/MEDIA_VERSION_GUARD_ENABLED\s*=\s*"false"/);
+          for(const path of ['pdf.min.mjs','pdf.worker.min.mjs']){
+            const res=await fetch('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/'+path,{method:'HEAD',signal:AbortSignal.timeout(15000)});
+            assert.equal(res.status,200,path+' public renderer');
+            assert.equal(res.headers.get('access-control-allow-origin'),'*',path+' CORS');
+          }
+          console.log('Public ink assets: 8 SHA-256 matches; renderer/worker HEAD and CORS OK; source flags OFF; no auth/user media accessed.');
+          NODE
