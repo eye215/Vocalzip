@@ -85,6 +85,28 @@ function saveGrowthGoal(d,month){
  return V.change(db=>{db.dailyGoals.push({id,date,title:d.practice+' ('+d.minutes+'분)',source:'personal',
   sourceId:'monthly-growth:'+month,completed:false,order:db.dailyGoals.filter(g=>g.date===date).length,created:Date.now()});},{silent:true});
 }
+
+function listeningEvidence(month){
+ const entries=(V.db.practices||[]).filter(p=>p.practiceRoom&&!p.practiceRoom.demo&&
+  ym(p.date||p.practiceRoom.date)===month&&String(p.practiceRoom.aiCoach||'').trim())
+  .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+ if(!entries.length)return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p>이달에 저장된 AI 청취 코멘트가 아직 없어요.</p><p class="small muted">노래 연습실에서 녹음을 제출하고 직접 AI 코멘트를 요청하면 여기에도 연결돼요.</p></section>';
+ const quotes=entries.slice(0,5).map(p=>{
+  const v=p.practiceRoom,note=String(v.aiCoach||'');
+  const audible=note.match(/(?:^|\\n)\\s*들리는 특징\\s*[:：]\\s*([^\\n]+)/)?.[1]||note.split('\\n')[0];
+  const follow=note.match(/(?:^|\\n)\\s*다음 시도\\s*[:：]\\s*([^\\n]+)/)?.[1]||'';
+  const safe=String(audible||'').slice(0,250),next=String(follow||'').slice(0,200);
+  const title=V.songTitle(p.songId||v.songId)||v.title||'곡 미지정';
+  const date=String(p.date||v.date||'').slice(0,10);
+  return '<article class="growth-listening"><strong>'+e(title)+'</strong><span class="small muted">'+e(date)+'</span>'+
+   '<p>'+e(safe)+'</p>'+(next?'<p class="small muted">AI 제안: '+e(next)+'</p>':'')+
+   (v.aiConditionCheck?'<p class="small muted">소리 변화에 대한 컨디션 확인 권고가 있었어요. 녹음만으로 건강 상태를 판정한 것은 아니에요.</p>':'')+
+   '</article>';
+ }).join('');
+ return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p class="small muted">직접 요청해 저장한 AI 청취 코멘트 '+entries.length+'건 · 최근 최대 5건 표시</p>'+
+ quotes+'<p class="small muted">청취 코멘트는 참고 의견입니다. 월별 개선·악화 판정은 위의 동일 곡 정량 비교만 사용합니다. AI가 듣지 않은 녹음의 특징은 추정하지 않아요.</p></section>';
+}
+
 function archiveCard(month){
  const report=(V.db.monthlyGrowthReports||[]).find(r=>r.month===month);
  if(!report)return '';
@@ -117,8 +139,8 @@ async function mount(host){
    const rows=monthlyRows(selected,months);
    const validCount=current.filter(valid).length;
    host.innerHTML='<header class="growth-intro"><p class="small muted">모든 곡의 녹음 데이터를 한곳에서</p><h2>내 목소리의 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
-   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+prescriptions(rows)+history(months)+
-   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 다음 앱 접속 시 저장됩니다. 서버 예약 자동 생성 및 AI 청취 코멘트 통합은 후속 개발 항목입니다.</p>';
+   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+prescriptions(rows)+history(months)+
+   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 다음 앱 접속 시 저장됩니다. 서버 예약 자동 생성과 AI 코멘트 기반 맞춤 추천 생성은 후속 개발 항목입니다.</p>';
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
     if(!d)return;
