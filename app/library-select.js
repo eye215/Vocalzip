@@ -43,16 +43,14 @@ VZ.librarySelect = (main, {list, done}) => {
   const singleMenu = (item, row) => VZ.menu({title:'녹음 더보기', body:
     '<div class="vz-choice-list vz-media-action-sheet">' +
     '<button type="button" class="vz-choice" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button>' +
-    '<button type="button" class="vz-choice" data-download><i class="ph ph-download-simple"></i> 저장</button>' +
+    '<button type="button" class="vz-choice" data-download><i class="ph ph-download-simple"></i> 음원 다운로드</button>' +
     (canAnalyze([item]) ? '<button type="button" class="vz-choice" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">곡을 지정하면 보컬 분석을 할 수 있어요.</p>') +
     '</div><details class="vz-media-other"><summary>기타 작업</summary><div class="vz-choice-list">' +
-    '<button type="button" class="vz-choice" data-compare><i class="ph ph-arrows-left-right"></i> 비교</button>' +
     '<button type="button" class="vz-choice" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div></details>',
     onMount:(sheet, close) => {
       sheet.querySelector('[data-edit]').onclick = () => { close(); VZ.editMedia(item); };
       sheet.querySelector('[data-download]').onclick = () => { close(); M.download(item).catch(e => VZ.toast('저장하지 못했어요: ' + e.message, 'error')); };
       sheet.querySelector('[data-analyze]')?.addEventListener('click', () => { close(); analyze([item]); });
-      sheet.querySelector('[data-compare]').onclick = () => { close(); VZ.nav('#/compare?a=' + encodeURIComponent(item.id) + (item.songId ? '&song=' + encodeURIComponent(item.songId) : '')); };
       sheet.querySelector('[data-delete]').onclick = async () => {
         close(); try { if (!await M.confirmRemove(item)) return; await M.remove(item); picked.delete(String(item.id)); row.remove(); paint(); await done(); VZ.toast('파일을 삭제했어요.'); }
         catch(e) { VZ.toast('삭제하지 못했어요: ' + e.message, 'error'); }

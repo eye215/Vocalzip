@@ -98,6 +98,17 @@ function recommendationList(recs) {
     (items?'<div class="vl-tip-list">'+items+'</div>':'<p class="vl-muted">이 곡의 신뢰할 수 있는 분석 녹음이 3개 이상 모이면 맞춤 연습 목록이 나와요. 현재 '+recs.count+'개예요.</p>')+
     '<button type="button" class="vl-repeat-practice" data-repeat-practice>이 구간 반복 듣기</button></section>';
 }
+function comparePanel(s) {
+  if(s.selected.length<2)return '';
+  const picked=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean);
+  const first=picked[0], last=picked.at(-1);
+  const a=s.items.find(m=>m.id===s.compareA)||first, b=s.items.find(m=>m.id===s.compareB)||last;
+  const saved=(V.db.comparisonReports||[]).find(x=>x.kind!=='vocal-lab'&&x.firstId===a.id&&x.secondId===b.id);
+  const options=selected=>picked.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===selected.id?' selected':'')+'>'+esc(day(m)+' · '+M.label(m))+'</option>').join('');
+  return '<section class="vl-section vl-compare"><details data-compare-panel'+(s.compareOpen?' open':'')+'><summary>두 녹음 자세히 비교 <i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-compare-body"><p class="vl-muted">A/B를 누르면 재생 위치를 유지한 채 해당 녹음으로 전환해요.</p><div class="vl-compare-picks"><label>A 녹음<select data-compare-a>'+options(a)+'</select></label><label>B 녹음<select data-compare-b>'+options(b)+'</select></label></div><div class="vl-compare-actions"><button type="button" data-compare-switch>같은 위치에서 '+(s.active===a.id?'B':'A')+' 듣기</button><button type="button" data-compare-first>첫 녹음 ↔ 최근 녹음</button></div>'+
+    (V.measureTable?.(a,b)||'<p class="vl-muted">두 녹음의 측정 결과가 있으면 비교표가 나타나요.</p>')+
+    '<form data-compare-form><label>달라진 점<textarea name="notes" maxlength="5000" placeholder="직접 느낀 변화를 적어주세요">'+esc(saved?.notes||'')+'</textarea></label><label>다음 연습 목표<textarea name="goal" maxlength="3000">'+esc(saved?.goal||'')+'</textarea></label><div class="vl-compare-actions"><button type="button" data-compare-ai>메모 AI 정리</button><button type="submit">비교 메모 저장</button></div><p class="vl-muted" data-compare-output aria-live="polite"></p></form></div></details></section>';
+}
 function playerCard(s,m) {
   const idx=s.selected.indexOf(m.id), total=Math.max(0,Number(m.durationSeconds)||0);
   return '<div class="vl-peek" data-prev '+(idx===0?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx-1])||m))+'</span></div><div class="vl-player" data-card><div class="vl-player-head"><strong>'+esc(day(m)+' · '+M.label(m))+'</strong><span>'+esc((idx+1)+' / '+s.selected.length)+'</span></div>'+waveform(m)+'<div class="vl-seek"><span data-time>0:00</span><input type="range" min="0" max="1000" value="0" data-seek aria-label="재생 위치"><span data-duration>'+time(total)+'</span></div><div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div><div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div><div class="vl-peek" data-next-peek '+(idx===s.selected.length-1?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx+1])||m))+'</span></div>';
@@ -110,7 +121,7 @@ function screen(s) {
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
     (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
-      recommendationList(recs)+
+      comparePanel(s)+recommendationList(recs)+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
   if(document.scrollingElement)document.scrollingElement.scrollTop=scrollTop;
   host.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{
@@ -145,6 +156,18 @@ function screen(s) {
   });
   host.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{s.metric=b.dataset.metric;screen(s);});
   host.querySelectorAll('[data-point]').forEach(b=>b.onclick=()=>{const chosen=s.items.find(x=>x.id===b.dataset.point);if(!chosen)return;s.active=chosen.id;screen(s);observe(s,chosen);});
+  const cmp=host.querySelector('[data-compare-panel]');
+  if(cmp){
+    cmp.ontoggle=()=>{s.compareOpen=cmp.open};
+    const switchTo=id=>{if(id===s.active)return;const position=el.currentTime, wasPlaying=!el.paused;s.compareOpen=true;s.active=id;screen(s);s.player?.load().then(()=>{s.player.seek(position);if(wasPlaying)s.player.play()}).catch(()=>{});};
+    cmp.querySelector('[data-compare-a]').onchange=e=>{s.compareA=e.target.value;s.compareOpen=true;screen(s)};
+    cmp.querySelector('[data-compare-b]').onchange=e=>{s.compareB=e.target.value;s.compareOpen=true;screen(s)};
+    cmp.querySelector('[data-compare-first]').onclick=()=>{s.compareA=s.selected[0];s.compareB=s.selected.at(-1);s.compareOpen=true;screen(s)};
+    cmp.querySelector('[data-compare-switch]').onclick=()=>{const a=cmp.querySelector('[data-compare-a]').value,b=cmp.querySelector('[data-compare-b]').value;switchTo(s.active===a?b:a)};
+    const form=cmp.querySelector('[data-compare-form]'),output=cmp.querySelector('[data-compare-output]');
+    form.onsubmit=e=>{e.preventDefault();const a=s.items.find(x=>x.id===cmp.querySelector('[data-compare-a]').value),b=s.items.find(x=>x.id===cmp.querySelector('[data-compare-b]').value);if(!a||!b||a.id===b.id){output.textContent='서로 다른 녹음 두 개를 선택해 주세요.';return}const entry={firstId:a.id,secondId:b.id,firstName:M.label(a),secondName:M.label(b),firstDate:a.created,secondDate:b.created,song:s.song.title,songId:s.song.id,measures:{first:V.measureSnapshot?.(a)||null,second:V.measureSnapshot?.(b)||null},notes:form.elements.notes.value,goal:form.elements.goal.value,firstRating:a.rating??null,secondRating:b.rating??null,firstReview:a.review||'',secondReview:b.review||''};if(V.change(d=>{d.comparisonReports||=[];const old=d.comparisonReports.find(x=>x.kind!=='vocal-lab'&&x.firstId===a.id&&x.secondId===b.id);if(old)Object.assign(old,entry);else d.comparisonReports.push({id:V.uid(),created:Date.now(),...entry})},{silent:true}))V.toast('비교 메모를 저장했어요.');};
+    cmp.querySelector('[data-compare-ai]').onclick=async e=>{const notes=form.elements.notes.value.trim(),btn=e.currentTarget;if(notes.length<10){output.textContent='정리할 메모를 10자 이상 작성해 주세요.';return}const token=await window.vzipCloudAccessToken?.();if(!token){output.textContent='로그인 후 사용할 수 있어요.';return}btn.disabled=true;output.textContent='메모를 정리하는 중…';try{const res=await fetch('https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vocal-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,apikey:V.anonKey},body:JSON.stringify({mode:'comparison',notes})});const json=await res.json();if(!res.ok)throw Error(json.error||'AI 정리 실패');output.textContent=json.analysis+'\n\n※ 작성한 메모를 정리한 결과예요.'}catch(err){output.textContent='AI 정리 실패: '+err.message}finally{btn.disabled=false}};
+  }
   host.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;host.querySelectorAll('[data-rating]').forEach(star=>star.setAttribute('aria-pressed',String(Number(star.dataset.rating)<=score)));host.querySelector('.vl-rating b').textContent=score+'/5';}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
   host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;host.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
   host.querySelectorAll('[data-practice-tip]').forEach(button=>button.onclick=()=>{
@@ -189,13 +212,14 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
     const items=(await M.list().catch(()=>M.cached())).filter(m=>m.songId===song.id && (!M.isVideo(m) || requested?.has(String(m.id)))).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(a.created||0)-(b.created||0));
     if(id!==instance||!host.isConnected)return;
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
-    const selected=r.query.get('selection')==='1' ? selectionIds().filter(key=>items.some(m=>String(m.id)===key)) : report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
-    current={host,song,items,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null};
+    const pair=[r.query.get('a'),r.query.get('b')].filter(key=>items.some(m=>String(m.id)===key));
+    const selected=r.query.get('selection')==='1' ? selectionIds().filter(key=>items.some(m=>String(m.id)===key)) : pair.length ? items.filter(m=>pair.includes(String(m.id))).map(m=>m.id) : report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
+    current={host,song,items,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null,compareOpen:r.query.get('compare')==='1',compareA:r.query.get('a'),compareB:r.query.get('b')};
     screen(current);
   },leave:clean
 });
 V.route('lab-reports',{title:'리포트 보관함',back:true,tab:'songs',render(){
-  const reports=(V.db.comparisonReports||[]).filter(x=>x.kind==='vocal-lab').sort((a,b)=>(b.created||0)-(a.created||0));
-  return '<div class="vl vl-reports">'+(reports.length?reports.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.songId)+'?report='+encodeURIComponent(x.id)+'"><strong>'+esc(x.song||'삭제된 곡')+'</strong><span>'+esc(new Date(x.created).toLocaleDateString('ko-KR'))+' · 녹음 '+(x.mediaIds||[]).length+'개</span><i class="ph ph-caret-right"></i></a>').join(''):'<div class="vl-empty">저장한 리포트가 없어요.<br><small>보컬 연구소에서 리포트를 저장하면 여기에 모여요.</small></div>')+'</div>';
+  const reports=(V.db.comparisonReports||[]).sort((a,b)=>(b.created||0)-(a.created||0));
+  return '<div class="vl vl-reports">'+(reports.length?reports.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.songId||'')+'?'+(x.kind==='vocal-lab'?'report='+encodeURIComponent(x.id):'a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId)+'&compare=1')+'"><strong>'+esc(x.song||'삭제된 곡')+'</strong><span>'+esc(new Date(x.created).toLocaleDateString('ko-KR'))+' · '+(x.kind==='vocal-lab'?'녹음 '+(x.mediaIds||[]).length+'개':'비교 메모')+'</span><i class="ph ph-caret-right"></i></a>').join(''):'<div class="vl-empty">저장한 리포트가 없어요.<br><small>보컬 연구소에서 리포트를 저장하면 여기에 모여요.</small></div>')+'</div>';
 }});
 })();

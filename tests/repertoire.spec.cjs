@@ -83,7 +83,7 @@ test('Performance CRUD, distinct sessions, bidirectional song links and safe del
  const id2=await newShow(page,'두 번째 공연');await page.locator('[data-link-songs]').click();await dialog(page).getByLabel('연결할 기존 곡',{exact:true}).selectOption('song1');await save(page);
  expect((await db(page)).songs).toHaveLength(2);
  await page.goto('/#/show/'+id);await page.locator('[data-edit-show]').click();await dialog(page).getByLabel('공연 후기·개인 메모',{exact:true}).fill('첫 무대');await save(page);
- await page.goto('/#/performances');await expect(page.locator('.archive-page')).toContainText('실제 출연 2회');
+ await page.goto('/#/performances');await expect(page.locator('.archive-performance-stats')).toContainText('2 출연');
  await page.goto('/#/show/'+id2);await page.locator('[data-delete-show]').click();await page.locator('.sheet [data-ok]').click();await expect(page.locator('[data-new-show]')).toBeVisible();
  const state=await db(page);expect(state.performances).toHaveLength(1);expect(state.songs).toHaveLength(2);expect(state.lessons).toEqual(initial().lessons);
  await page.goto('/#/song/song1');await page.locator('[data-song-menu]').click();await page.locator('[data-d]').click();await page.locator('.sheet [data-ok]').click();
