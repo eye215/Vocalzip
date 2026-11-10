@@ -18,22 +18,33 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   const r2 = await fakeR2(page);
   await boot(page);
   expect(await page.evaluate(() => window.VzipR2.enabled())).toBe(true);
+  await page.evaluate(() => {
+    const prepare=window.vzipPrepareMedia;
+    window.vzipPrepareMedia=async(...args)=>{
+      const prepared=await prepare(...args);
+      window.__preparedImportBytes=[...new Uint8Array(await prepared.file.arrayBuffer())];
+      return prepared;
+    };
+  });
   await page.goto('/#/library');
   const picker=page.waitForEvent('filechooser');
   await page.locator('[data-imp]').click();
-  await (await picker).setFiles({name:'take.wav', mimeType:'audio/wav', buffer:wav()});
-  await expect(page.locator('.sheet')).toHaveCount(1);
-  await page.getByRole('button', {name:'가져오기', exact:true}).click();
-  await expect(page.locator('.sheet [data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
-  // Saved on the device first; the upload to R2 follows from that copy.
+  await (await picker).setFiles({name:'2026-11-09_10-00-00.wav', mimeType:'audio/wav', buffer:wav()});
+  await expect(page).toHaveURL(/import-hub$/);
+  await expect(page.locator('[data-hub] [data-import]')).toBeEnabled({timeout:30000});
+  await page.locator('[data-hub] [data-import]').click();
+  await expect(page.locator('[data-result]')).toContainText('저장 1개', {timeout:30000});
+  // The approved import hub uploads directly; completion requires confirmed cloud metadata.
   await expect.poll(() => page.evaluate(() => Object.keys(window.__rows).length), {timeout:20000}).toBe(1);
   const meta = await page.evaluate(() => Object.values(window.__rows)[0]);
   expect(meta).toMatchObject({storageProvider:'r2', source:'import'});
-  // A WAV may be stored as its lossless FLAC; the object in R2 is exactly the file the app kept.
+  // A WAV may become lossless FLAC; R2 must contain exactly the prepared payload.
   expect(meta.r2Key).toMatch(new RegExp('^u/ui-test-user/' + meta.id + '/original\\.(wav|flac)$'));
   expect(meta.path).toBeUndefined();
   expect(r2.store.get(meta.r2Key).bytes.length).toBe(meta.size);
-  const kept = (await page.evaluate(async () => { const x = (await window.vzipReadMedia())[0]; return [...new Uint8Array(x.blob ? await x.blob.arrayBuffer() : x.bytes)]; }));
+  const kept=await page.evaluate(() => window.__preparedImportBytes);
+  expect(Array.isArray(kept)).toBe(true);
+  expect(await page.evaluate(async id => (await window.vzipReadMedia()).filter(x=>x.id===id).length,meta.id)).toBe(0);
   expect(r2.store.get(meta.r2Key).bytes.equals(Buffer.from(kept))).toBe(true);
   // Playback asks the Worker for a signed link.
   const url = await page.evaluate(m => window.vzipCloudMediaUrl(m), meta);
