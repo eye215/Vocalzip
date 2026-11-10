@@ -80,12 +80,12 @@ function browser(){
   esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),clock:n=>`${Math.floor((n||0)/60)}:${String((n||0)%60).padStart(2,'0')}`,dateLabel:s=>s||'날짜 없음'},vzipCloudUserId:()=>owner,
   vzipCloudSignedIn:()=>true,vzipCloudAccessToken:async()=> 'fake',
   VzipR2:{clip:async()=>{excerpts++;throw Error('unexpected extraction')}},dispatchEvent(){},addEventListener:(n,f)=>events[n]=f};
- const element=()=>({style:{},setAttribute(){},append(){},add(){},replaceChildren(){},querySelector:()=>element(),querySelectorAll:()=>[]});
+ const element=()=>{const children=new Map();return {style:{},setAttribute(){},append(){},add(){},replaceChildren(){},querySelector:key=>{if(!children.has(key))children.set(key,element());return children.get(key)},querySelectorAll:()=>[]}};
  const context={window,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
   fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
  const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend};})();');
+  'window.test={stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend};})();');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
  return {api:window.test,window,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
@@ -99,6 +99,34 @@ test('operation lock covers pending confirmation and blocks competing writes',as
  const first=b.api.exclusive(main,async()=>{calls++;await pending});
  await b.api.exclusive(main,async()=>calls++);assert.equal(calls,1);release();await first;
  await b.api.exclusive(main,async()=>calls++);assert.equal(calls,2);
+});
+test('reopening song check during an operation shows progress and returns to the list when idle',async()=>{
+ const b=browser();let release,rendered=0,overlay;
+ const main={isConnected:true,dataset:{collection:'song-suggest'},append:el=>overlay=el};
+ b.window.VZ.render=()=>rendered++;
+ const operation=b.api.exclusive(main,async()=>new Promise(resolve=>release=resolve));
+ b.api.showBusyPopup(main);
+ assert.equal(overlay.className,'vz-sc-busy');
+ assert.equal(overlay.querySelector('strong').textContent,'작업을 처리하고 있어요');
+ assert.equal(rendered,0);
+ release();await operation;
+ assert.equal(rendered,1);
+});
+test('analysis progress appears in a dialog with count, file name and a stop action',()=>{
+ const b=browser();let overlay,removed=false,aborted=false;
+ b.window.VZ.media.label=m=>m.name;
+ b.document.createElement=()=>{
+  const fields=new Map();return {setAttribute(k,v){this[k]=v},remove(){removed=true},querySelector(key){if(!fields.has(key))fields.set(key,{style:{}});return fields.get(key)}};
+ };
+ b.api.state.controller={abort(){aborted=true}};
+ const popup=b.api.showAnalysisPopup({append:el=>overlay=el},95);
+ assert.equal(overlay.role,'dialog');assert.equal(overlay.querySelector('[data-analysis-count]').textContent,'0 / 95개 완료');
+ popup.update(10,{name:'녹음 10'});
+ assert.equal(overlay.querySelector('[data-analysis-count]').textContent,'10 / 95개 진행');
+ assert.equal(overlay.querySelector('[data-analysis-file]').textContent,'녹음 10');
+ assert.equal(overlay.querySelector('[data-analysis-fill]').style.width,'11%');
+ overlay.querySelector('[data-analysis-stop]').onclick();assert.equal(aborted,true);assert.equal(b.api.state.cancel,true);
+ popup.close();assert.equal(removed,true);
 });
 test('account changes invalidate a pending operation and clear in-memory suggestions',async()=>{
  const b=browser();let release,writes=0;const pending=new Promise(r=>release=r);
