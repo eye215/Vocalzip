@@ -13,7 +13,7 @@ function fixture(mode='revision'){
   if(path==='/v2/media/edit'){
    await hooks.edit?.();if(hooks.status)return Response.json({error:'fixture rejection'},{status:hooks.status});
    const result={version:1,user_id:owner,session_id:session,request_id:body.requestId,id:body.mediaId,object_key:body.key,
-    metadata:{id:body.mediaId,storageProvider:'r2',r2Key:body.key,size:3,type:'audio/wav',...body.patch},
+    metadata:{id:body.mediaId,storageProvider:'r2',r2Key:body.key,size:3,type:'audio/wav',r2Etag:'"fixture"',...body.patch},
     updated_at:next,applied_updated_at:next,replayed:false,superseded:false};
    return Response.json(hooks.result?hooks.result(result):result);
   }
@@ -60,7 +60,7 @@ test('owner or session handoff before/after the edit refuses its result',async()
 test('untrusted acknowledgements cannot claim a different original, request, owner or unapplied text',async()=>{
  for(const patch of [{user_id:session},{session_id:requestId},{request_id:session},{object_key:'other'},{id:'other'},
  {updated_at:null},{replayed:null},{superseded:true},{updated_at:at,applied_updated_at:at},
- {metadata:{id:'voice',storageProvider:'r2',r2Key:key,name:'not applied'}}]){
+ {metadata:{id:'voice',storageProvider:'r2',r2Key:key,name:'not applied'}},{metadata:{id:'voice',storageProvider:'r2',r2Key:key,...target().patch}}]){
   const f=fixture();f.hooks.result=r=>({...r,...patch});await assert.rejects(f.api.editLibrary(target()),/확인/);
  }
 });

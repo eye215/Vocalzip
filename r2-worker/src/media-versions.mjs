@@ -115,6 +115,9 @@ export async function handleMediaV2(request,env,uid,sid,context,api){
   if(!saved||saved.version!==1||saved.user_id!==uid||saved.session_id!==sid||saved.request_id!==body.requestId||
    saved.id!==body.mediaId||saved.object_key!==body.key||saved.metadata?.id!==body.mediaId||
    saved.metadata?.storageProvider!=='r2'||saved.metadata?.r2Key!==body.key||
+  !Number.isSafeInteger(saved.metadata.size)||saved.metadata.size<1||saved.metadata.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(saved.metadata.type||'')||!/^[!-~]{1,200}$/.test(saved.metadata.r2Etag||'')||
+  ['path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(saved.metadata,k))||
    !stamp(saved.updated_at)||!stamp(saved.applied_updated_at)||saved.applied_updated_at<=body.updatedAt||saved.applied_updated_at>saved.updated_at||
    typeof saved.replayed!=='boolean'||typeof saved.superseded!=='boolean'||
    saved.superseded!==(saved.applied_updated_at!==saved.updated_at)||(saved.superseded&&!saved.replayed)||

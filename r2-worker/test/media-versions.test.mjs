@@ -22,7 +22,7 @@ function fixture(){
   if(name==='vzip_edit_media'){
    if(state.conflict)return Response.json({},{status:409});
    const result={version:1,user_id:claims.sub,session_id:claims.session_id,request_id:body.p_request_id,
-    id:body.p_media_id,object_key:body.p_key,metadata:{id:body.p_media_id,storageProvider:'r2',r2Key:body.p_key,...body.p_patch},
+    id:body.p_media_id,object_key:body.p_key,metadata:{id:body.p_media_id,storageProvider:'r2',r2Key:body.p_key,size:3,type:'audio/wav',r2Etag:'"fake-etag"',...body.p_patch},
     updated_at:'2026-11-10T00:00:00.123457Z',applied_updated_at:'2026-11-10T00:00:00.123457Z',replayed:false,superseded:false};
    return Response.json(state.editResult?state.editResult(result):result);
   }

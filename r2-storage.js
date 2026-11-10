@@ -226,6 +226,9 @@ async function editLibrary(target,{signal}={}){
  if(result?.version!==1||result.user_id!==owner||result.session_id!==session||result.request_id!==body.requestId||
   result.id!==body.mediaId||result.object_key!==body.key||result.metadata?.id!==body.mediaId||
   result.metadata?.storageProvider!=='r2'||result.metadata?.r2Key!==body.key||
+  !Number.isSafeInteger(result.metadata.size)||result.metadata.size<1||result.metadata.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(result.metadata.type||'')||!/^[!-~]{1,200}$/.test(result.metadata.r2Etag||'')||
+  ['path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(result.metadata,k))||
   !stamp(result.updated_at)||!stamp(result.applied_updated_at)||result.applied_updated_at<=body.updatedAt||result.applied_updated_at>result.updated_at||
   typeof result.replayed!=='boolean'||typeof result.superseded!=='boolean'||
   result.superseded!==(result.applied_updated_at!==result.updated_at)||(result.superseded&&!result.replayed)||
