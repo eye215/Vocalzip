@@ -1006,6 +1006,16 @@ window.vzipCloudScoreVision=async(mode,image,signal)=>{
  if(!res.ok)throw Error(data.error||'악보 인식 오류 ('+res.status+').');
  return data;
 };
+window.vzipCloudCoach=async(input,signal)=>{
+ const owner=user?.id,session=window.vzipCloudSessionId?.();
+ if(!owner||!session||!window.vzipCloudSignedIn?.())throw Error('로그인을 확인해 주세요.');
+ const access=await window.vzipCloudAccessToken();if(!access)throw Error('로그인을 다시 확인해 주세요.');
+ const res=await fetch(url+'/functions/v1/vzip-nvidia-coach',{method:'POST',headers:{apikey:key,authorization:'Bearer '+access,'content-type':'application/json'},body:JSON.stringify(input),signal,cache:'no-store'});
+ let data={};try{data=await res.json();}catch{}
+ if(user?.id!==owner||window.vzipCloudSessionId?.()!==session)throw Error('계정이 변경되어 AI 코멘트를 중단했어요.');
+ if(!res.ok)throw Error(data.error||'AI 코멘트 오류 ('+res.status+').');
+ return data;
+};
 let streamOwner=null;
 function showUser(){
  if(window.VzipAccountScope){void enterAccount().catch(e=>{sessionVerified=false;ready=false;updateAuthScreen();say('로그인 보호 확인 실패: '+e.message)});return;}
