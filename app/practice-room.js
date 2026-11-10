@@ -15,6 +15,7 @@ window.VocalzipPracticeRoom={
   assert(source);if(media.storageProvider!=='r2'||!media.r2Key)throw Error('R2 저장을 확인하지 못했어요.');return {id:media.id,cloud:true};
  },
  async audioUrl(id,source){assert(source);if(!/^[a-zA-Z0-9-]{8,80}-[01]$/.test(id))throw Error('녹음 ID를 확인해 주세요.');const media=(await window.vzipCloudMediaList()).find(m=>m.id===id&&m.storageProvider==='r2');assert(source);if(!media)throw Error('클라우드 녹음을 찾지 못했어요.');return window.vzipCloudMediaUrl(media);},
+ async coach(input,source){assert(source);if(!window.vzipCloudCoach)throw Error('AI 코멘트 연결이 준비되지 않았어요.');const result=await window.vzipCloudCoach(input);assert(source);return result;},
  saveGoal(input,source){assert(source);if(input.demo)return {ok:true,skipped:true};let changed=false;const ok=V.change(db=>{changed=M.goal(db,input,V.today());},{silent:true});return {ok,changed};},
  openGoals(source){assert(source);V.nav('#/home');},
  context(source){assert(source);return {totalSeconds:Math.round(V.timeEntries().reduce((n,p)=>n+p.minutes*60,0)),goals:(V.db.dailyGoals||[]).filter(g=>g.date===V.today()).map(g=>({title:g.title,completed:g.completed}))};}
@@ -22,7 +23,7 @@ window.VocalzipPracticeRoom={
 window.VzipAccountScope?.beforeLeave(()=>{locked=true;frame?.contentWindow?.postMessage({type:'vocalzip:room-lock'},location.origin);});
 for(const event of ['vzip:auth-changed','vzip:data-changed'])window.addEventListener(event,()=>{if(frame?.isConnected&&!locked)frame.contentWindow?.postMessage({type:'vocalzip:room-refresh'},location.origin);});
 V.route('practice-room',{title:'노래 연습실',back:true,tab:'home',noSettings:true,noAutoRefresh:true,
- render:()=>'<iframe class="vzip-practice-room-frame" title="노래 연습실 · 과제와 제출" src="practice-room/index.html?v=6" allow="microphone"></iframe>',
+ render:()=>'<iframe class="vzip-practice-room-frame" title="노래 연습실 · 과제와 제출" src="practice-room/index.html?v=7" allow="microphone"></iframe>',
  mount(host){frame=host.querySelector('iframe');V.setGuard(()=>{try{return frame?.contentWindow?.VocalzipRoomBusy?.()?'진행 중인 연습이 있어요. 제출 전 녹음은 화면을 나가면 사라져요. 나갈까요?':'';}catch{return '';}});},
  leave(){frame?.contentWindow?.postMessage({type:'vocalzip:room-lock'},location.origin);frame=null;V.setGuard(null);}
 });
