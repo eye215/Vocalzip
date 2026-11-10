@@ -107,7 +107,7 @@ export async function handleMediaV2(request,env,uid,sid,context,api){
   if(!UUID.test(body?.requestId||'')||typeof body.updatedAt!=='string'||
    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(body.updatedAt)||!Number.isFinite(Date.parse(body.updatedAt))||
    !body.patch||Array.isArray(body.patch)||typeof body.patch!=='object'||!Object.keys(body.patch).length||
-   Object.keys(body.patch).some(k=>!['name','song','songId','recordedDate','dateSource','rating','review'].includes(k)))fail(400,'invalid metadata edit');
+   Object.keys(body.patch).some(k=>!['name','nameMode','autoName','song','songId','created','recordedDate','dateSource','rating','review'].includes(k)))fail(400,'invalid metadata edit');
   objectKey(uid,body.mediaId,body.key,fail);
   const saved=await mediaRpc(request,env,'vzip_edit_media',{p_request_id:body.requestId,p_media_id:body.mediaId,
    p_key:body.key,p_expected_updated_at:body.updatedAt,p_patch:body.patch},api);

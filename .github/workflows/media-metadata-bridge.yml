@@ -1,0 +1,38 @@
+name: Media metadata app bridge checks
+on:
+  pull_request:
+    paths:
+      - 'media-metadata-edits.js'
+      - 'cloud-sync.js'
+      - 'r2-storage.js'
+      - 'app/media.js'
+      - 'tests/media-metadata*'
+      - '.github/workflows/media-metadata-bridge.yml'
+permissions:
+  contents: read
+concurrency:
+  group: media-metadata-bridge-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:syntax
+      - run: node --test tests/media-metadata-edits.test.cjs tests/media-metadata-client.test.cjs
+      - name: Existing app metadata, publication and legacy R2 regression
+        run: npx playwright test tests/media-metadata-bridge.spec.cjs tests/media-publication.spec.cjs tests/r2.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: media-metadata-bridge-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
