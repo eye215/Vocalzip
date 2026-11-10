@@ -10,6 +10,7 @@ on:
       - 'cloud-sync.js'
       - '.github/workflows/resumable-uploads-check.yml'
       - 'tests/r2-resumable.spec.cjs'
+      - 'tests/media-publication.spec.cjs'
       - 'tests/helpers/r2-fixture.cjs'
 permissions:
   contents: read
@@ -52,7 +53,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test tests/r2-resumable.spec.cjs tests/r2.spec.cjs --workers=2
+      - run: npx playwright test tests/media-publication.spec.cjs tests/r2-resumable.spec.cjs tests/r2.spec.cjs --workers=2
       - name: Repeat legacy imported-date navigation in WebKit
         run: npx playwright test tests/ui.spec.cjs --project=webkit-mobile --grep 'Metadata-derived dates' --repeat-each=6 --workers=2
 
