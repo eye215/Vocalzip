@@ -53,7 +53,11 @@ const adaptations=String.raw`
 /* Use the device width rather than leaving a 390px mock phone inside wider phones. */
 #vocalzip-refined-preview .vz-phone{max-width:var(--vz-content-max);padding:8px 12px 0;padding-top:max(8px,env(safe-area-inset-top));}
 #vocalzip-refined-preview .vz-nav-item.vz-active{background:var(--vz-color-selected-bg);}
-#vocalzip-refined-preview .vz-practice-icon{display:inline-flex;align-items:center;width:20px;height:20px;flex:none;font-family:"Phosphor";font-style:normal;font-weight:400;font-size:20px;line-height:1;color:inherit;}
+#vocalzip-refined-preview .vz-ui-icon{display:inline-grid;place-items:center;width:20px;height:20px;flex:none;font-family:"Phosphor";font-style:normal;font-weight:400;font-size:20px;line-height:1;color:inherit;}
+#vocalzip-refined-preview .vz-streak .vz-ui-icon,#vocalzip-refined-preview .vz-song-label .vz-ui-icon{width:13px;height:13px;font-size:13px;}
+#vocalzip-refined-preview .vz-card .vz-title>.vz-ui-icon:first-child,#vocalzip-refined-preview .vz-shortcut>span>.vz-ui-icon{color:inherit;}
+#vocalzip-refined-preview .vz-goal-tools .vz-ui-icon{width:17px;height:17px;font-size:17px;}
+#vocalzip-refined-preview .vz-art-front .vz-ui-icon{width:28px;height:28px;font-size:28px;color:#fff;}
 #vocalzip-refined-preview .vz-goals .vz-title .vz-count{margin-left:7px;white-space:nowrap;color:var(--vz-color-ink-muted);font-size:12px;font-weight:600;line-height:20px;}
 #vocalzip-refined-preview .vz-nav{background:var(--vz-nav-surface,rgba(255,255,255,.58));}
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more){#vocalzip-refined-preview .vz-nav{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;}}
@@ -158,7 +162,7 @@ export async function createFloatingHome(opts={}){
  if(!events.length)section.remove();
  const weekCard=q(".vz-week"),meta=q(".vz-week-meta"),goal=meta.children[0];
  const days=q(".vz-days"),dayPrototype=days.firstElementChild.cloneNode(true),check=days.querySelector(".vz-day-dot svg").cloneNode(true);
- const flame=meta.querySelector(".vz-streak svg").cloneNode(true);
+ const flame=el("i","\ue242","vz-ui-icon");flame.setAttribute("aria-hidden","true");
  action(q(".vz-week .vz-title"),"오늘 일정 보기",opts.onWeek||opts.onCalendar);
  const weekNav=el("div",null,"vz-week-nav"),prev=el("button"),range=el("div",null,"vz-week-range"),next=el("button");
  prev.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4.5-7.5 7.5 7.5 7.5"/></svg>';
@@ -227,7 +231,10 @@ export async function createFloatingHome(opts={}){
   continueButton.onclick=()=>{(recent?callbacks.onContinue:callbacks.onRecent)?.();};
  };
  host.updateRecent(opts.recent,opts);
- const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[0].querySelector("svg").setAttribute("stroke-width","1.8");quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();const practiceIcon=el("i","\ue492","vz-practice-icon");practiceIcon.setAttribute("aria-hidden","true");quick[1].querySelector("svg").replaceWith(practiceIcon);
+ const regular=(glyph)=>{const icon=el("i",glyph,"vz-ui-icon");icon.setAttribute("aria-hidden","true");return icon;};
+ const swap=(selector,glyph)=>root.querySelectorAll(selector).forEach(svg=>svg.replaceWith(regular(glyph)));
+ const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();
+ swap(".vz-shortcut:first-child > span svg","\ue34c");swap(".vz-shortcut:nth-child(2) > span svg","\ue492");
  q(".vz-goals .vz-title").append(q(".vz-count"));
  q(".vz-goal-tools button").setAttribute("aria-label","오늘의 목표 설정");q(".vz-goal-tools button").onclick=()=>opts.onGoals?.();
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
@@ -245,7 +252,12 @@ export async function createFloatingHome(opts={}){
    finally{input.disabled=false;row.removeAttribute("aria-busy");}
   };list.append(row);
  }
-  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
+  // Semantic icons share the same Phosphor Regular weight as the practice timer.
+ // Chevrons, add controls, status marks, logo, play and record icons keep their own rules.
+ swap(".vz-header-actions button:first-child svg","\ue0ce");swap(".vz-header-actions button:last-child svg","\ue4c2");
+ swap(".vz-event .vz-art-front svg","\ue34c");swap(".vz-week .vz-title > svg:not(.vz-chevron)","\ue150");
+ swap(".vz-song-label svg","\ue33c");swap(".vz-goals .vz-title > svg","\ue6a2");swap(".vz-goal-tools button svg","\ue270");
+ q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
  const routes=["home","songs","library","calendar"];
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});
  return host;
