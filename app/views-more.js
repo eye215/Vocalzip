@@ -210,75 +210,14 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
   if (await M.fillDurations(drawn.slice(0, 60)) && l.isConnected && !l.querySelector('.media-open:not([hidden])')) draw();
 }});
 
-/* ---------- 비교 ---------- */
-VZ.route('compare', {title:'녹음 비교', back:true, tab:'growth', noAutoRefresh:true, render() {
-  return '<div data-c><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
-}, async mount(main, r) {
-  const host = main.querySelector('[data-c]');
-  const media = await M.list().catch(() => []); if (!host.isConnected) return;
-  const q = r.query, A = media.find(m => m.id === q.get('a')), B = media.find(m => m.id === q.get('b'));
-  let songId = q.get('song') || A?.songId || '';
-  const pool = () => media.filter(m => !songId || m.songId === songId).sort((a, b) => M.dateOf(a).localeCompare(M.dateOf(b)) || (a.created || 0) - (b.created || 0));
-  let a = A || null, b = B || null;
-  if (!a && !b && pool().length >= 2) { a = pool()[0]; b = pool().at(-1); }
-  if (a && !b) b = pool().filter(m => m.id !== a.id).at(-1) || null;
-  const reports = (VZ.db.comparisonReports || []).filter(x => x.kind !== 'vocal-lab');
-    // Recording day of each side ("2026.08.12"): the file's current date, else the date saved with the comparison.
-    const cmpDay = (id, saved) => { const m = media.find(x => x.id === id), d = m ? M.dateOf(m) : Number(saved) > 0 ? VZ.ymd(new Date(Number(saved))) : ''; return d ? d.replace(/-/g, '.') : '날짜 없음'; };
-  const pick = (which) => {
-    const list = pool();
-    VZ.sheet({title:which + ' 녹음 선택', body:list.length ? '<div class="list">' + list.map(m => '<button type="button" class="item" data-id="' + esc(m.id) + '"><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(VZ.dateLabel(M.dateOf(m)) + ' · ' + VZ.clock(m.durationSeconds) + (m.rating ? ' · ★' + m.rating : '')) + '</span></span></button>').join('') + '</div>' : VZ.empty('waveform', '선택할 녹음이 없어요.'),
-      onMount:(el, close) => el.onclick = e => { const btn = e.target.closest('[data-id]'); if (!btn) return; const m = media.find(x => x.id === btn.dataset.id); if (which === 'A') a = m; else b = m; close(); draw(); }});
-  };
-  let pa, pb, active = 'A';
-  const draw = () => {
-    pa?.destroy(); pb?.destroy();
-    const saved = a && b ? reports.find(x => (x.firstId === a.id && x.secondId === b.id)) : null;
-    const side = (tag, m) => '<div class="side' + (active === tag ? ' active' : '') + '" data-side="' + tag + '"><div class="row between" style="margin-bottom:8px"><div class="grow" style="min-width:0"><span class="tag">' + tag + '</span><strong>' + esc(m ? M.label(m) : '녹음 선택') + '</strong>' + (m ? '<div class="small muted">' + esc(VZ.dateLabel(M.dateOf(m)) + (m.rating ? ' · ★' + m.rating : '')) + '</div>' : '') + '</div><button type="button" class="btn sm ghost" data-pick="' + tag + '">변경</button></div>' + (m ? '<div data-p></div>' + (m.review ? '<p class="small muted" style="white-space:pre-wrap;margin:6px 0 0">' + esc(m.review) + '</p>' : '') : '') + '</div>';
-    host.innerHTML = '<select aria-label="곡" data-song-f data-pick="song" style="margin-bottom:10px;min-height:44px"><option value="">곡 전체</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (s.id === songId ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select>' +
-      (pool().length >= 2 ? '<button type="button" class="btn sm secondary" data-first-last style="margin-bottom:10px"><i class="ph ph-lightning"></i>처음 vs 최근 바로 비교</button>' : '') +
-      '<div class="ab">' + side('A', a) + side('B', b) + '</div>' +
-      (a && b && VZ.measureTable ? (t => t ? '<h2 class="sec">측정값 비교</h2>' + t : '')(VZ.measureTable(a, b)) : '') +
-      (a && b ? '<button type="button" class="btn block" data-switch style="margin-top:10px"><i class="ph ph-swap"></i>A/B 전환 (같은 위치에서)</button><div class="chips" style="margin-top:10px" role="group" aria-label="재생 속도">' + [0.5, 0.75, 1, 1.25].map(s => '<button type="button" class="chip" data-rate="' + s + '" aria-pressed="' + (s === 1) + '">' + s + '×</button>').join('') + '</div>' +
-        '<h2 class="sec">비교 메모</h2><form id="cmp-form"><label class="field"><span>달라진 점</span><textarea name="notes" maxlength="5000" placeholder="예: 고음에서 힘이 덜 들어감">' + esc(saved?.notes || '') + '</textarea></label><label class="field"><span>다음 연습 목표</span><textarea name="goal" rows="2" maxlength="3000" style="min-height:64px">' + esc(saved?.goal || '') + '</textarea></label><div class="btn-row"><button type="button" class="btn secondary" data-ai><i class="ph ph-sparkle"></i>메모 AI 정리</button><button type="submit" class="btn">' + (saved ? '메모 수정' : '메모 저장') + '</button></div><p class="small muted" data-ai-out style="white-space:pre-wrap"></p><p class="small muted">AI는 작성한 메모만 정리해요. 녹음의 음정·호흡·발성을 측정하지 않아요.</p></form>' : '<p class="small muted">두 녹음을 고르면 A/B로 번갈아 들을 수 있어요.</p>') +
-      (reports.length ? '<h2 class="sec">저장한 비교</h2><div class="list">' + [...reports].sort((x, y) => (y.created || 0) - (x.created || 0)).slice(0, 20).map(x => '<a class="item" href="#/compare?a=' + esc(x.firstId) + '&b=' + esc(x.secondId) + '"><span class="item-main"><span class="item-title">' + esc(x.song || '비교') + '</span><span class="item-sub">' + esc(cmpDay(x.firstId, x.firstDate) + ' → ' + cmpDay(x.secondId, x.secondDate) + (x.notes ? ' · ' + x.notes.slice(0, 40) : '')) + '</span></span><i class="ph ph-caret-right chev"></i></a>').join('') + '</div>' : '');
-    host.querySelector('[data-song-f]').onchange = e => { songId = e.target.value; a = b = null; if (pool().length >= 2) { a = pool()[0]; b = pool().at(-1); } draw(); };
-    host.querySelector('[data-first-last]')?.addEventListener('click', () => { a = pool()[0]; b = pool().at(-1); draw(); });
-    host.querySelectorAll('[data-pick]').forEach(x => x.onclick = () => pick(x.dataset.pick));
-    if (a) pa = M.player(host.querySelector('[data-side="A"] [data-p]'), a, {tools:true, speed:false});
-    if (b) pb = M.player(host.querySelector('[data-side="B"] [data-p]'), b, {tools:true, speed:false});
-    const mark = () => host.querySelectorAll('[data-side]').forEach(s => s.classList.toggle('active', s.dataset.side === active));
-    pa && pa.el.addEventListener('play', () => { active = 'A'; mark(); });
-    pb && pb.el.addEventListener('play', () => { active = 'B'; mark(); });
-    host.querySelector('[data-switch]')?.addEventListener('click', async () => {
-      const from = active === 'A' ? pa : pb, to = active === 'A' ? pb : pa;
-      const t = from.el.currentTime; from.pause(); await to.load().catch(() => {});
-      to.seek(t); to.play();
-    });
-    host.querySelectorAll('[data-rate]').forEach(x => x.onclick = () => { const v = +x.dataset.rate; pa?.setRate(v); pb?.setRate(v); host.querySelectorAll('[data-rate]').forEach(y => y.setAttribute('aria-pressed', String(y === x))); });
-    const form = host.querySelector('#cmp-form');
-    if (form) {
-      form.onsubmit = e => {
-        e.preventDefault();
-        const entry = {firstId:a.id, secondId:b.id, firstName:M.label(a), secondName:M.label(b), firstDate:a.created, secondDate:b.created, song:VZ.songTitle(a.songId && a.songId === b.songId ? a.songId : '') || '서로 다른 곡 또는 미지정', songId:a.songId && a.songId === b.songId ? a.songId : '', measures:{first:VZ.measureSnapshot?.(a) || null, second:VZ.measureSnapshot?.(b) || null}, notes:form.notes.value, goal:form.goal.value, firstRating:a.rating ?? null, secondRating:b.rating ?? null, firstReview:a.review || '', secondReview:b.review || ''};
-        const ok = VZ.change(d => { d.comparisonReports ||= []; const x = d.comparisonReports.find(y => y.firstId === a.id && y.secondId === b.id); if (x) Object.assign(x, entry); else d.comparisonReports.push({id:VZ.uid(), created:Date.now(), ...entry}); }, {silent:true});
-        if (ok) { delete document.getElementById('view').dataset.dirty; VZ.toast('비교 메모를 저장했어요.'); }
-      };
-      host.querySelector('[data-ai]').onclick = async () => {
-        const out = host.querySelector('[data-ai-out]'), notes = form.notes.value.trim(), btn = host.querySelector('[data-ai]');
-        if (notes.length < 10) { out.textContent = '정리할 메모를 10자 이상 작성해 주세요.'; return; }
-        const token = await window.vzipCloudAccessToken?.(); if (!token) { out.textContent = 'AI 정리는 로그인 후 사용할 수 있어요.'; return; }
-        btn.disabled = true; out.textContent = '메모를 정리하는 중…';
-        try {
-          const res = await fetch('https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vocal-ai', {method:'POST', headers:{'Content-Type':'application/json', Authorization:'Bearer ' + token, apikey:VZ.anonKey}, body:JSON.stringify({mode:'comparison', notes})});
-          const json = await res.json(); if (!res.ok) throw Error(json.error || 'AI 정리 실패');
-          out.textContent = json.analysis + '\n\n※ 작성한 메모를 정리한 결과예요. 녹음을 직접 분석하지 않았어요.';
-        } catch (e) { out.textContent = 'AI 정리 실패: ' + e.message; } finally { btn.disabled = false; }
-      };
-    }
-  };
-  draw();
-}, leave() { M.destroyAll(); }});
+/* Legacy comparison links now open the same-song comparison in 보컬 연구소. */
+VZ.route('compare', {title:'보컬 연구소', back:true, tab:'songs', render:()=>'<p class="muted">보컬 연구소로 이동하는 중…</p>', async mount(main,r){
+  const media=await M.list().catch(()=>M.cached());if(!main.isConnected)return;
+  const a=media.find(m=>m.id===r.query.get('a')), b=media.find(m=>m.id===r.query.get('b'));
+  const songId=r.query.get('song')||a?.songId||b?.songId;
+  if(a&&b&&a.songId!==b.songId){VZ.toast('같은 곡의 녹음만 비교할 수 있어요.','error');VZ.nav('#/vocal-lab');return}
+  VZ.nav('#/vocal-lab'+(songId?'/'+encodeURIComponent(songId):'')+(a||b?'?a='+encodeURIComponent(a?.id||'')+'&b='+encodeURIComponent(b?.id||'')+'&compare=1':''));
+}});
 VZ.anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E';
 
 /* ---------- 성장 ---------- */
@@ -361,7 +300,7 @@ VZ.route('growth', {title:'성장', render() {
       '<h2 class="sec">곡별 연습량</h2><div class="seg growth-metric" role="group" aria-label="곡별 연습량 기준"><button type="button" data-song-metric="minutes" aria-pressed="' + (songMetric === 'minutes') + '">분</button><button type="button" data-song-metric="files" aria-pressed="' + (songMetric === 'files') + '">횟수(파일 수)</button></div><p class="small muted">' + (songMetric === 'files' ? '저장된 음원 파일 1개를 1회로 계산해요. 레슨·연습에 연결된 파일도 한 번만 세어요.' : '직접 입력한 실제 연습 시간만 합산해요. 녹음·파일 길이는 자동으로 더하지 않아요.') + '</p>' + (songRows.length ? '<div class="card bars">' + songRows.map(([k, v], i) => '<' + (VZ.song(k) ? 'a href="#/song/' + encodeURIComponent(k) + '"' : 'div') + ' class="bar' + (i >= 8 && !songsOpen ? ' more-hidden' : '') + '" data-song-stat="' + esc(k) + '"><span class="ellipsis" title="' + esc(k === '__train' ? '보컬 트레이닝' : k === '__none' ? '곡 미지정' : VZ.songTitle(k) || '삭제된 곡') + '">' + esc(k === '__train' ? '보컬 트레이닝' : k === '__none' ? '곡 미지정' : VZ.songTitle(k) || '삭제된 곡') + '</span><span class="track"><span class="fill" style="width:' + Math.round(v / max * 100) + '%;display:block"></span></span><span>' + (songMetric === 'files' ? v + '회' : v < 0.5 ? '1분 미만' : VZ.minutes(v)) + '</span></' + (VZ.song(k) ? 'a' : 'div') + '>').join('') + (songRows.length > 8 ? '<button type="button" class="btn ghost sm block" data-songs-more>' + (songsOpen ? '접기' : '나머지 ' + (songRows.length - 8) + '곡 더 보기') + '</button>' : '') + '</div>' : VZ.empty('chart-bar', label + ' 연습 기록이 없어요.', '<button type="button" class="btn sm" data-log>연습 기록하기</button>')) +
       '<h2 class="sec">만족도 추이 <span class="small muted" style="font-weight:500">연습 별점 · 최근 ' + trend.length + '개</span></h2>' + (trend.length >= 2 ? '<div class="card"><div class="week rating-trend" style="grid-template-columns:repeat(' + trend.length + ',minmax(0,1fr))">' + trend.map(p => '<div title="' + esc(p.date) + ' ★' + p.rating + '"><span class="rating-val">★' + p.rating + '</span><span class="col" style="height:' + p.rating * 14 + 'px"></span>' + Number(p.date.slice(5, 7)) + '/' + Number(p.date.slice(8)) + '</div>').join('') + '</div></div>' : '<p class="small muted" style="margin:0 4px">만족도를 기록한 연습이 2개 이상이면 추이를 보여 드려요.</p>') +
       '<h2 class="sec">기록 요약</h2><div class="card small" style="display:grid;gap:6px">' + summary(ps, recs, doneTasks, label, es) + '</div>' +
-      '<div class="btn-row" style="margin-top:16px"><a class="btn secondary" href="#/compare"><i class="ph ph-arrows-left-right"></i>녹음 비교</a><a class="btn secondary" href="#/library"><i class="ph ph-waveform"></i>보관함</a></div>';
+      '<div class="btn-row" style="margin-top:16px"><a class="btn secondary" href="#/vocal-lab"><i class="ph ph-waveform"></i>보컬 연구소</a><a class="btn secondary" href="#/library"><i class="ph ph-waveform"></i>보관함</a></div>';
     const scroll = host.querySelector('[data-chart-scroll]');
     if (period === 'all') scroll.scrollLeft = previousScroll ?? scroll.scrollWidth;
     host.querySelector('[data-chart-prev]')?.addEventListener('click', () => scroll.scrollBy({left:-Math.max(144, scroll.clientWidth * .8), behavior:'smooth'}));

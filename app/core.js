@@ -195,6 +195,20 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
       footer.append(submit); el.append(footer);
     }
   }
+  if (variant === 'page') {
+    const form = el.querySelector('.sheet-body form:not([data-add-cat]):not([data-add-item])');
+    const submit = el.querySelector('.sheet-foot button[type="submit"],.sheet-foot input[type="submit"]');
+    if (form && submit) {
+      el.classList.add('sheet-form-page');
+      const sync = () => {
+        if (submit.disabled && !submit.dataset.vzRequiredDisabled) return;
+        const missing = [...form.querySelectorAll('[required]')].some(field => !field.disabled && (!field.checkValidity() || ((field.matches('input[type="text"],input[type="search"],textarea')) && !field.value.trim())));
+        submit.disabled = missing;
+        if (missing) submit.dataset.vzRequiredDisabled = 'true'; else delete submit.dataset.vzRequiredDisabled;
+      };
+      form.addEventListener('input',sync); form.addEventListener('change',sync); sync();
+    }
+  }
   if (variant === 'menu') {
     const target = anchor || previous;
     const rect = target?.getBoundingClientRect?.();

@@ -393,14 +393,14 @@ function dashHtml() {
 }
 function listsHtml() {
   const q = hub.rows.filter(r => r.queued), failed = q.filter(r => r.state === 'failed'), done = q.filter(r => r.state === 'done'), dup = q.filter(r => r.state === 'dup');
-  const line = r => '<div class="item"><span class="item-main"><span class="item-title">' + esc(r.name) + '</span><span class="item-sub" style="white-space:normal">' + esc(r.msg || '') + '</span></span></div>';
+  const line = r => '<div class="item"><span class="item-main"><span class="item-title">' + esc(r.state === 'done' ? r.saved?.name || r.name : r.name) + '</span><span class="item-sub" style="white-space:normal">' + esc((r.state === 'done' && r.saved?.name && r.saved.name !== r.name ? '원본: ' + r.name + ' · ' : '') + (r.msg || '')) + '</span></span></div>';
   return (failed.length ? '<h3 class="cal-group">실패 ' + failed.length + '</h3><div class="list">' + failed.map(line).join('') + '</div>' : '') +
     (done.length ? '<details class="up-list"><summary>완료한 파일 ' + done.length + '개 보기</summary><div class="list">' + done.slice(-300).reverse().map(line).join('') + (done.length > 300 ? '<div class="item small muted">최근 300개만 보여요. 전체는 결과 보고서에 있어요.</div>' : '') + '</div></details>' : '') +
     (dup.length ? '<details class="up-list"><summary>중복이라 뺀 파일 ' + dup.length + '개 보기</summary><div class="list">' + dup.slice(0, 300).map(line).join('') + '</div></details>' : '');
 }
 function report() {
   const q = hub.rows.filter(r => r.queued), data = {app:'VOCAL.zip', kind:'upload-report', batch:hub.batch, startedAt:new Date(hub.startedAt || Date.now()).toISOString(), savedAt:new Date().toISOString(), counts:counts(q),
-    items:q.map(r => ({name:r.name, size:r.size, fingerprint:r.hash || '', state:r.state, message:r.msg || '', mediaId:r.state === 'done' ? r.id : ''}))};
+    items:q.map(r => ({name:r.state === 'done' ? r.saved?.name || r.name : r.name, originalName:r.name, size:r.size, fingerprint:r.hash || '', state:r.state, message:r.msg || '', mediaId:r.state === 'done' ? r.id : ''}))};
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type:'application/json'})); a.download = 'vocalzip-upload-report-' + VZ.today() + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 function wireDash(h) {

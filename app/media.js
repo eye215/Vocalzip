@@ -211,11 +211,13 @@ const nameFields=metadata=>Object.fromEntries(['name','nameMode','autoName'].fil
 M.update = async (item, changes, {quiet = false} = {}) => {
   changes={...changes};if(changes.name===item.name)delete changes.name;
   const cloud=item.cloud?await window.vzipCloudMediaUpdate(item,changes):null;
+  let updated=cloud;
   if(item.local){
     const stored=(await window.vzipReadMedia()).find(x=>x.id===item.id);
-    if(stored)await tx('readwrite',s=>s.put({...stored,...namePatch(stored,changes),...(cloud?nameFields(cloud):{})}));
+    if(stored){updated={...stored,...namePatch(stored,changes),...(cloud?nameFields(cloud):{})};await tx('readwrite',s=>s.put(updated));}
   }
   if(!quiet)window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes,cloudDone:!!item.cloud}}));
+  return updated;
 };
 /** Conservative song-only change for bulk suggestions.
  * Cloud metadata is merged under a database compare-and-swap, not overwritten from a list snapshot. */

@@ -448,7 +448,7 @@ test('An imported automatic title follows song assignment and date edits and sur
  expect(await page.evaluate(()=>window.__rows['automatic-title'].name)).toBe('Defying Gravity 2026.11.09');
  expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
 });
-test('Manual recording titles stay unchanged when song and date are edited',async({page})=>{
+test('Old recording title moves to review when song and date are edited',async({page})=>{
  const r2=await fakeR2(page);await boot(page);
  const out=await page.evaluate(async()=>{
   const id='manual-title';window.__rows[id]={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav'};window.__upd[id]='2026-11-08T01:00:00.000Z';
@@ -458,12 +458,12 @@ test('Manual recording titles stay unchanged when song and date are edited',asyn
  });
  await page.locator('.sheet [name=song]').selectOption('s1');
  await page.locator('.sheet [name=date]').fill('2026-11-09');await page.locator('.sheet [name=date]').dispatchEvent('change');
- await expect(page.locator('.sheet [name=name]')).toHaveValue('오디션 제출용 최종 테이크');
+ await expect(page.locator('.sheet [name=name]')).toHaveValue('Defying Gravity 2026.11.09');
  await page.locator('.sheet').getByRole('button',{name:'저장',exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>window.__rows['manual-title'])).toMatchObject({name:'오디션 제출용 최종 테이크',nameMode:'manual',songId:'s1',recordedDate:'2026-11-09'});
+ await expect.poll(()=>page.evaluate(()=>window.__rows['manual-title'])).toMatchObject({name:'Defying Gravity 2026.11.09',nameMode:'auto',review:'이전 제목: 오디션 제출용 최종 테이크',songId:'s1',recordedDate:'2026-11-09'});
  expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(0);
 });
-test('A newer title from another device wins over a stale automatic title snapshot',async({page})=>{
+test('A newer title from another device moves into the review on song assignment',async({page})=>{
  await fakeR2(page);await boot(page);
  const result=await page.evaluate(async()=>{
   const id='newer-title',stale={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav',cloud:true};
@@ -471,7 +471,7 @@ test('A newer title from another device wins over a stale automatic title snapsh
   await VZ.media.assignSongSafe(stale,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
   return window.__rows[id];
  });
- expect(result).toMatchObject({name:'다른 기기에서 정한 제목',review:'다른 기기 메모',songId:'s1'});
+ expect(result).toMatchObject({name:'Defying Gravity 2026.11.08',review:'다른 기기 메모\n이전 제목: 다른 기기에서 정한 제목',songId:'s1'});
 });
 test('Device-only imports also update automatic titles when assigned a song',async({page})=>{
  await fakeR2(page);await boot(page);
