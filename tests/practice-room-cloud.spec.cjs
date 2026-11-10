@@ -9,7 +9,7 @@ test('practice-room bridge stores reflection in synced practice data and verifie
   window.VZ={db:window.__db,today:()=> '2026-11-10',ymd:()=> '2026-11-10',change(fn){fn(window.__db);return true},route(key,config){window.__route=config},setGuard(){},timeEntries:()=>[]};
   window.vzipCloudSignedIn=()=>true;
   window.VzipR2={configured:()=>true,ready:async()=>true};
-  window.vzipCloudImport=async(file,info)=>{window.__uploaded={name:file.name,size:file.size,source:info.source,id:info.id};return {id:info.id,storageProvider:'r2',r2Key:'u/user/'+info.id+'/original.wav'}};
+  window.vzipCloudImport=async(file,info,progress,options)=>{window.__uploaded={name:file.name,size:file.size,source:info.source,id:info.id,requireR2:options?.requireR2};return {id:info.id,storageProvider:'r2',r2Key:'u/user/'+info.id+'/original.wav'}};
   window.vzipCloudMediaList=async()=>[{id:'test-session-1234-0',storageProvider:'r2',r2Key:'u/user/test-session-1234-0/original.wav'}];
   window.vzipCloudMediaUrl=async()=>'/recording.wav';
  });
@@ -33,6 +33,7 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  expect(result.record.practiceRoom.draft.memo).toBe('후렴 집중');
  expect(result.record.mediaIds).toEqual(['test-session-1234-0']);
  expect(result.uploaded.source).toBe('practice');
+ expect(result.uploaded.requireR2).toBe(true);
  expect(result.audio.cloud).toBe(true);
  expect(result.url).toBe('/recording.wav');
  expect(result.history).toHaveLength(1);

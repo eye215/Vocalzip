@@ -378,6 +378,9 @@ async function importMedia(file,info={},onProgress,options={}){
     onReceipt:(context,receipt)=>recovery.remember({...context.metadata,storageProvider:'r2',r2Key:receipt.key,r2Etag:receipt.etag},receipt)
    });aborted();
   }
+  // Some callers require R2. A readiness check made before import can become stale;
+  // reject before creating a Supabase Storage upload when R2 has gone away.
+  if(options.requireR2&&!r2)throw Error('R2 저장소 연결을 확인하지 못했어요. 녹음은 이 기기에 남아 있어요.');
   const multipart=!r2&&file.size>50*1024*1024;
   const parts=multipart?Array.from({length:Math.ceil(file.size/VzipChunks.PART_SIZE)},(_,index)=>({
    path:owner+'/'+id+'/part-'+String(index).padStart(4,'0'),
