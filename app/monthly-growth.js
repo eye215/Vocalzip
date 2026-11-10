@@ -107,6 +107,36 @@ function listeningEvidence(month){
  quotes+'<p class="small muted">청취 코멘트는 참고 의견입니다. 월별 개선·악화 판정은 위의 동일 곡 정량 비교만 사용합니다. AI가 듣지 않은 녹음의 특징은 추정하지 않아요.</p></section>';
 }
 
+
+let monthlyAiBusy=false;
+function monthlyAiEvidence(month,rows,items){
+ const observations=(V.db.practices||[]).filter(p=>p.practiceRoom&&!p.practiceRoom.demo&&
+  ym(p.date||p.practiceRoom.date)===month&&String(p.practiceRoom.aiCoach||'').trim())
+  .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,5)
+  .map(p=>{
+   const v=p.practiceRoom,txt=String(v.aiCoach||'');
+   return {song:V.songTitle(p.songId||v.songId)||'곡 미지정',date:String(p.date||v.date||'').slice(0,10),
+    heard:(txt.match(/(?:^|\\n)\\s*들리는 특징\\s*[:：]\\s*([^\\n]+)/)?.[1]||txt.split('\\n')[0]||'').slice(0,270),
+    suggested:(txt.match(/(?:^|\\n)\\s*다음 시도\\s*[:：]\\s*([^\\n]+)/)?.[1]||'').slice(0,200),
+    comfortConcern:v.aiConditionCheck===true||Array.isArray(v.draft?.symptoms)&&v.draft.symptoms.length>0||v.draft?.comfort==='불편해'
+   };
+  });
+ const metrics=rows.map(({d,current,c})=>({key:d.id,title:d.title,value:current.value,count:current.count,
+    state:c?.state||'unknown',sharedSongs:c?.songs||0}));
+ return {mode:'monthly',month,recordingCount:items.length,
+    analysisCount:items.filter(valid).length,metrics,observations};
+}
+function monthlyAiCard(month){
+ const found=(V.db.monthlyAiReports||[]).find(x=>x.id==='monthly-ai:'+month);
+ return '<section class="card growth-section" data-monthly-ai><h2>AI 월간 종합 코치</h2>'+
+  (found?'<p class="small muted">저장된 AI 분석 · '+e(String(found.createdDate||'').slice(0,10))+'</p>'+
+    '<div class="growth-ai-note">'+e(found.note||'').replace(/\\n/g,'<br>')+'</div>':
+    '<p>이달의 측정 결과와 이미 저장된 AI 청취 코멘트를 종합해 개선점과 다음 연습을 제안해요.</p>')+
+  '<p class="small muted">버튼을 누를 때만 측정 요약과 기존 AI 청취 텍스트가 서버로 전송돼요. 원본 음원은 보내지 않으며 AI API 호출이 발생합니다. AI 의견은 참고용이며 녹음 상태가 달라지면 결과도 달라질 수 있어요.</p>'+
+  '<button type="button" class="btn ghost" data-monthly-ai-run>'+ (found?'분석 다시 생성':'AI 월간 종합 분석하기')+'</button>'+
+  '<p class="small muted" role="status" data-monthly-ai-state></p></section>';
+}
+
 function archiveCard(month){
  const report=(V.db.monthlyGrowthReports||[]).find(r=>r.month===month);
  if(!report)return '';
@@ -139,8 +169,47 @@ async function mount(host){
    const rows=monthlyRows(selected,months);
    const validCount=current.filter(valid).length;
    host.innerHTML='<header class="growth-intro"><p class="small muted">모든 곡의 녹음 데이터를 한곳에서</p><h2>내 목소리의 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
-   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+prescriptions(rows)+history(months)+
+   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+monthlyAiCard(selected)+prescriptions(rows)+history(months)+
    '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 다음 앱 접속 시 저장됩니다. 서버 예약 자동 생성과 AI 코멘트 기반 맞춤 추천 생성은 후속 개발 항목입니다.</p>';
+
+   const aiButton=host.querySelector('[data-monthly-ai-run]');
+   if(aiButton)aiButton.onclick=async()=>{
+    if(monthlyAiBusy)return;
+    if(!window.vzipCloudSignedIn?.()||!window.vzipCloudCoach){
+      V.toast('AI 분석을 이용하려면 로그인과 서버 연결이 필요해요.','error');return;
+    }
+    const evidence=monthlyAiEvidence(selected,rows,current);
+    if(!evidence.analysisCount&&!evidence.observations.length){
+      V.toast('이달에 분석 가능한 녹음이나 청취 코멘트가 없어요.','error');return;
+    }
+    const month=selected,owner=window.vzipCloudUserId?.(),origin=window.vzipCloudSessionId?.();
+    const state=host.querySelector('[data-monthly-ai-state]');
+    monthlyAiBusy=true;aiButton.disabled=true;aiButton.textContent='AI 분석 중…';
+    if(state)state.textContent='요약 데이터를 분석하고 있어요. 화면을 닫으면 완료 결과가 저장되지 않을 수 있어요.';
+    try{
+      const response=await window.vzipCloudCoach(evidence);
+      if(!host.isConnected||!window.vzipCloudSignedIn?.()||owner!==window.vzipCloudUserId?.()||
+          origin!==window.vzipCloudSessionId?.()||response?.mode!=='monthly'||response.month!==month)
+        throw Error('화면이나 계정이 변경되어 결과를 저장하지 않았어요.');
+      const note=String(response.note||'').trim().slice(0,1800);
+      if(!note)throw Error('AI 분석 결과가 비어 있어요.');
+      const ok=V.change(db=>{
+        db.monthlyAiReports||=[];
+        const id='monthly-ai:'+month,at=db.monthlyAiReports.findIndex(x=>x.id===id);
+        const row={id,month,note,created:Date.now(),createdDate:V.today(),
+          analysisCount:evidence.analysisCount,observationsCount:evidence.observations.length};
+        if(at===-1)db.monthlyAiReports.push(row);else db.monthlyAiReports[at]=row;
+      },{silent:true});
+      if(!ok)throw Error('AI 리포트 저장에 실패했어요.');
+      const card=host.querySelector('[data-monthly-ai]');
+      if(card)card.outerHTML=monthlyAiCard(month);
+      const btn=host.querySelector('[data-monthly-ai-run]');
+      if(btn)btn.onclick=()=>{selected=month;render();host.querySelector('[data-monthly-ai-run]')?.click();};
+      V.toast('월간 AI 리포트를 저장했어요.');
+    }catch(err){if(state)state.textContent=err.message||'AI 리포트 생성에 실패했어요.';V.toast('월간 분석에 실패했어요. 기존 기록은 유지돼요.','error');}
+    finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
+   };
+
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
     if(!d)return;
