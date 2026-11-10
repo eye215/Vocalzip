@@ -15,7 +15,7 @@ function resultText(r){
  if(m.change==='insufficient')return '계획 시작 전·후의 동일 곡 분석된 녹음이 부족해 수치 변화를 판단할 수 없어요.';
  if(m.change==='similar')return '측정된 차이가 작아 뚜렷한 변화로 판단하지 않았어요.';
  const label=delta<0?'감소':'증가';
- return (m.change==='better'?'개선 방향의 변화':'추가 확인이 필요한 변화')+' · '+Math.abs(delta)+' '+(r.metric==='vibrato'?'규칙성 단위':'단위')+' '+label;
+ return (m.change==='better'?'개선 방향의 변화':'추가 확인이 필요한 변화')+' · '+(r.metric==='vibrato'?Math.round(Math.abs(delta)*100)+'%p':Math.abs(delta)+(r.metric==='phrase'?'초':' cent'))+' '+label;
 }
 function fmt(n,r){return n==null?'측정 없음':(r.metric==='vibrato'?Math.round(n*100)+'%':n+(r.metric==='phrase'?'초':' cent'));}
 function view(r){
