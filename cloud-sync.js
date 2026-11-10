@@ -668,6 +668,13 @@ window.vzipCloudSongTextDelete=async(kind,recordId)=>{
 /* ---------- server analysis (worker/analysis-worker.mjs) ---------- */
 /** Queue this account's recordings that still need work; null when the server queue is not installed. */
 window.vzipAnalysisEnqueue=async()=>{if(!client?.rpc||!user)return null;const {data,error}=await client.rpc('vzip_enqueue_my_media');return error?null:Number(data)||0};
+window.vzipAnalysisRetry=async()=>{
+ if(!client?.rpc||!user)throw Error('로그인 후 다시 시도해 주세요.');
+ const owner=user.id,{data,error}=await client.rpc('vzip_retry_my_failed_analysis');
+ if(user?.id!==owner)throw Error('로그인이 변경되어 재시도를 중단했어요.');
+ if(error)throw Error(error.code==='PGRST202'||error.code==='42883'?'서버 재시도 기능이 아직 적용되지 않았어요.':error.message);
+ return Number(data)||0;
+};
 /** Own jobs (RLS): kind, status and, for songs needing a look, the top 3. */
 window.vzipAnalysisJobs=async()=>{
  if(!client||!user)return null;const owner=user.id,rows=[];
