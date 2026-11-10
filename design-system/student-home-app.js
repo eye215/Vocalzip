@@ -56,12 +56,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   V.sheet({title:'일정과 숙제 알림',body:content?'<div class="list">'+content+'</div>':'<p class="muted">확인할 일정과 숙제가 없어요.</p>'});
  }
  function planSheet(){
-  const s=state(),expectedSnapshot=M.planSnapshot(V.db,s.today),existing=s.goals,candidates=s.recommendationCandidates.filter(c=>!existing.some(g=>g.source==='homework'&&g.sourceId===c.sourceId));
-  const choices=[...existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true})),...candidates.map((g,i)=>({key:'candidate:'+i,goal:g,checked:false}))];
+  const s=state(),expectedSnapshot=M.planSnapshot(V.db,s.today),existing=s.goals;
+  const choices=existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true}));
+  let recommended=[];
   const label=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':'개인';
   let dirty=false,approved=false,beforeUnload=null;
   const dayTarget=s.week.days.find(d=>d.today)?.targetMinutes;
-  const body='<form id="student-home-plan"><p class="vz-plan-intro">오늘 연습할 항목을 골라주세요.</p>'+
+  const body='<form id="student-home-plan"><p class="vz-plan-intro">오늘 연습할 항목을 골라주세요.</p><div data-guided-recommendations></div>'+
    (choices.length?'<fieldset class="vz-plan-section"><legend>오늘 할 목표 <span data-plan-count>'+existing.length+'개 선택</span></legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+'><span class="vz-plan-check" aria-hidden="true"></span><span class="vz-plan-title">'+esc(c.goal.title)+'</span><small class="vz-plan-source">'+label(c.goal)+'</small></label>').join('')+'</div><p class="vz-plan-help">수행 체크는 숙제 완료나 연습 시간과 별도로 기록돼요.</p></fieldset>':'')+
    '<label class="field vz-plan-personal"><span>개인 목표 <small>추가</small></span><textarea name="personal" aria-label="개인 목표" rows="2" maxlength="10000" placeholder="예: 후렴 고음에서 힘 빼기" aria-describedby="vz-plan-personal-help"></textarea><small id="vz-plan-personal-help" class="vz-plan-help">여러 목표는 한 줄에 하나씩 적어주세요.</small></label>'+
    '<details class="vz-plan-time"'+(dayTarget!=null||s.week.targetMinutes!=null?' open':'')+'><summary>연습 시간 목표 <small>선택</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(dayTarget??'')+'" placeholder="미설정"></label>'+
@@ -70,6 +71,11 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    onMount:(el,close)=>{
     el.classList.add('vz-plan-sheet');
     const form=el.querySelector('form');form.addEventListener('input',()=>{dirty=true;});
+    V.guidedRecommendations?.({date:s.today}).then(rows=>{
+      if(!form.isConnected)return;
+      recommended=rows.filter(c=>!existing.some(g=>g.sourceId===(c.assignmentId||c.key)&&g.source===(c.assignmentId?'homework':'recommendation')));
+      el.querySelector('[data-guided-recommendations]').innerHTML=recommended.length?V.guidedRecommendationCards(recommended,{selectable:true}):'';
+    }).catch(()=>{});
     form.addEventListener('change',()=>{const count=el.querySelector('[data-plan-count]');if(count)count.textContent=form.querySelectorAll('[name=goal]:checked').length+'개 선택';});
     beforeUnload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue='';}};
     window.addEventListener('beforeunload',beforeUnload);
@@ -78,9 +84,11 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     el.parentNode.addEventListener('keydown',guard,true);
     V.setGuard(()=>dirty&&!approved?'저장하지 않은 목표 설정이 있어요. 나갈까요?':'');
     form.onsubmit=e=>{
-     e.preventDefault();const button=el.parentNode.querySelector('[type=submit]');button.disabled=true;
+      e.preventDefault();const button=el.parentNode.querySelector('[type=submit]');button.disabled=true;
      try{
-      const selected=new Set(new FormData(form).getAll('goal')),goals=choices.filter(c=>selected.has(c.key)).map(c=>c.checked?{...c.goal}:{...c.goal,id:V.uid(),completed:false});
+      const data=new FormData(form),selected=new Set(data.getAll('goal')),goals=choices.filter(c=>selected.has(c.key)).map(c=>({...c.goal}));
+      const guided=new Set(data.getAll('guided-recommendation'));
+      for(const c of recommended.filter(c=>guided.has(c.key)))goals.push({id:V.uid(),title:c.title,source:c.assignmentId?'homework':'recommendation',sourceId:c.assignmentId||c.key,completed:false});
       for(const title of form.personal.value.split(/\r?\n/).map(t=>t.trim()).filter(Boolean))goals.push({id:V.uid(),title,source:'personal',sourceId:'',completed:false});
       const n=(value,max)=>{if(value==='')return null;const v=Number(value);if(!Number.isFinite(v)||v<0||v>max)throw Error('목표 시간을 확인해 주세요.');return v;};
       if(expectedSnapshot!==M.planSnapshot(V.db,s.today))throw Error('목표나 시간 설정이 변경됐어요. 입력을 확인한 뒤 창을 다시 열어 주세요.');

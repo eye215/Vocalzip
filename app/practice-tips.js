@@ -56,7 +56,8 @@ VZ.practiceTips = (media, {songId = ''} = {}) => {
     if (!s) return null;
     const before = older.length >= 3 ? pick(older, rule) : null;
     const worse = typeof v === 'number' && before != null && (rule.lower ? v - before : before - v) > (rule.key === 'phr' ? 0.5 : 3);
-    return {key:rule.key, name:rule.name, metric:rule.metric, value:rule.show(v), reason:rule.reason(v) + (worse ? ' 예전 녹음보다 나빠졌어요.' : ''),
+    const frequency = recent.filter(a => severity(rule, rule.value(a)) > 0).length;
+    return {key:rule.key, name:rule.name, metric:rule.metric, value:rule.show(v), frequency, reason:rule.reason(v) + (worse ? ' 예전 녹음보다 나빠졌어요.' : ''),
       goal:rule.goal, minutes:rule.minutes, steps:[...rule.steps, ...(range ? ['무리하지 말고 지금 안정적인 음역(' + range + ') 안에서'] : [])], score:s + (worse ? 0.2 : 0)};
   }).filter(Boolean).sort((a, b) => b.score - a.score);
   return {enough:true, count:takes.length, range, tips};
