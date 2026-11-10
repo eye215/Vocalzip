@@ -45,7 +45,8 @@ function report({plan,goals=[],recordings=[],dateOf,valid,asOf}){
  const b=avg(before.map(m=>value(m,plan.metric))),a=avg(after.map(m=>value(m,plan.metric)));
  const delta=b!=null&&a!=null?ROUND(a-b):null;
  // Threshold avoids falsely asserting growth from tiny numeric jitter.
- const margin=b!=null?Math.max(3,Math.abs(b)*.05):null;
+ const floor=plan.metric==='vibrato'?0.05:plan.metric==='phrase'?0.3:3;
+ const margin=b!=null?Math.max(floor,Math.abs(b)*.05):null;
  const direction=plan.metric==='intonation'||plan.metric==='stability'?-1:1;
  const change=delta==null?'insufficient':Math.abs(delta)<margin?'similar':Math.sign(delta)===direction?'better':'worse';
  return {id:'plan-outcome:'+plan.id,planId:plan.id,songId:plan.songId,metric:plan.metric,
