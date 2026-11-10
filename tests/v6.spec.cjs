@@ -1466,7 +1466,8 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await expect(page.getByRole('button', {name:/^날짜 확인 필요 1/})).toBeVisible();
   await expect(page.getByRole('button', {name:/^조건 밖 3/})).toBeVisible();
   const row = name => page.locator('.hub-row').filter({has:page.locator('.hub-name', {hasText:name})});
-  await expect(row('너무 짧음')).toContainText('길이 0:29');
+  await expect(row('너무 짧음')).toContainText('30초 미만 · 가져오지 않음');
+  await expect(row('너무 짧음').locator('[data-sel]')).toBeDisabled();
   await expect(row('긴 녹음')).toContainText('길이 8:01');
   await expect(row('옛날')).toContainText('기간 밖');
   await expect(row('복사본')).toContainText('선택한 파일끼리 같아요');
@@ -1516,6 +1517,24 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await expect(row('This Is the Moment')).toContainText('보관함에 이미 있어요', {timeout:30000});
   await expect(page.getByRole('button', {name:'선택한 0개 가져오기'})).toBeDisabled();
   expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(2);
+});
+
+test('Library import never selects or uploads a file shorter than 30 seconds', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn=()=>true;
+    window.__importedNames=[];
+    VZ.media.list=async()=>[];
+    window.vzipInspectMedia=async file=>({readable:true,duration:file.name.startsWith('short')?29:30,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}});
+    VZ.media.importFile=async(file,choice)=>{window.__importedNames.push(file.name);return {id:choice.id,name:file.name,cloud:true,durationSeconds:30,recordedDate:'2026-11-09'};};
+    VZ.openImportHub({files:[new File(['short'],'short.wav',{type:'audio/wav'}),new File(['long'],'long.wav',{type:'audio/wav'})],review:true});
+  });
+  const short=page.locator('.hub-row').filter({hasText:'short.wav'});
+  await expect(short.locator('[data-sel]')).toBeDisabled();
+  await page.locator('[data-all]').click();
+  await expect(page.getByRole('button',{name:'선택한 1개 가져오기'})).toBeVisible();
+  await page.getByRole('button',{name:'선택한 1개 가져오기'}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__importedNames)).toEqual(['long.wav']);
 });
 
 test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
