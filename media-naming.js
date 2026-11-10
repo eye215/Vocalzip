@@ -2,6 +2,12 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipMediaNaming=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const strip=value=>String(value||'').replace(/\.(m4a|mp3|wav|aac|ogg|flac|webm|mp4|mov|aiff?|caf|wma|m4v)$/i,'');
+function keepPrevious(review,oldName,newName){
+ const previous=strip(oldName).trim(),current=String(review||'');
+ if(!previous||previous===newName)return current;
+ const entry='이전 제목: '+previous;
+ return current.split('\n').includes(entry)?current:current+(current&&!current.endsWith('\n')?'\n':'')+entry;
+}
 function date(meta){
  if(/^\d{4}-\d{2}-\d{2}$/.test(meta.recordedDate||''))return meta.recordedDate;
  const d=new Date(Number(meta.created));if(!Number.isFinite(d.getTime()))return '';
@@ -27,13 +33,16 @@ function patch(meta,changes,resolve=()=> ''){
  if(normalize||changed){
   const next={...meta,...out},base=title(next,resolve,false);
   if(base){
-   if(mode(meta,resolve)&&out.nameMode==='auto'&&out.name===out.autoName&&String(out.name).startsWith(base)&&/^$|^ (?:[2-9]|[1-9]\d+)$/.test(String(out.name).slice(base.length)))return out;
+   const requested=out.nameMode==='auto'&&out.name===out.autoName&&String(out.name).startsWith(base)&&/^$|^ (?:[2-9]|[1-9]\d+)$/.test(String(out.name).slice(base.length))?out.name:null;
+   if(mode(meta,resolve)&&requested){
+    if(meta.name&&meta.name!==requested)out.review=keepPrevious(out.review??meta.review,meta.name,requested);
+    return out;
+   }
    const automatic=mode(meta,resolve),old=title(meta,resolve,false),tail=old&&String(meta.name||'').startsWith(old)?String(meta.name).slice(old.length):'';
    const suffix=automatic&&/^ (?:[2-9]|[1-9]\d+)$/.test(tail)?tail:'';
-   const name=base+suffix;
-   if(!automatic&&meta.name&&meta.name!==name){
-    const prior=String(out.review??meta.review??''),entry='이전 제목: '+meta.name;
-    out.review=prior.split('\n').includes(entry)?prior:prior+(prior&&!prior.endsWith('\n')?'\n':'')+entry;
+   const name=requested||base+suffix;
+   if(meta.name&&meta.name!==name){
+    out.review=keepPrevious(out.review??meta.review,meta.name,name);
    }
    return {...out,name,nameMode:'auto',autoName:name};
   }
@@ -50,5 +59,5 @@ function patch(meta,changes,resolve=()=> ''){
  const next={...meta,...out},name=title(next,resolve)+(next.song||next.songId?suffix:'');
  return {...out,name,nameMode:'auto',autoName:name};
 }
-return {patch,title,isAutomatic:mode};
+return {patch,title,isAutomatic:mode,keepPrevious};
 });

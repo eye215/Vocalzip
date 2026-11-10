@@ -1183,7 +1183,7 @@ test('Changing a recording\'s song renames it to song + recording day, numbered 
     VZ.media.invalidate();
   });
   await page.goto('/#/library');
-  const open = async id => { await page.goto('/#/library'); await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
+  const open = async id => { await page.goto('/#/library'); await page.evaluate(async id => VZ.editMedia((await VZ.media.list(true)).find(m=>m.id===id)),id); };
   await open('m1');
   await sheet(page).locator('[name=date]').fill('2026-11-02');
   await sheet(page).locator('[name=song]').selectOption('s2');
@@ -1201,10 +1201,32 @@ test('Changing a recording\'s song renames it to song + recording day, numbered 
   await sheet(page).locator('[name=date]').fill('2026-11-03');
   await sheet(page).locator('[name=song]').selectOption('s2');
   await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03 2');
-  // A typed name is never overwritten.
-  await sheet(page).locator('[name=name]').fill('브릿지만');
-  await sheet(page).locator('[name=song]').selectOption('s1');
-  await expect(sheet(page).locator('[name=name]')).toHaveValue('브릿지만');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  await expect.poll(async()=>(await media(page)).find(m=>m.id==='m2').name).toBe('On My Own 2026.11.03 2');
+  const second=(await media(page)).find(m=>m.id==='m2');
+  expect(second.name).toBe('On My Own 2026.11.03 2');
+  expect(second.review).toContain('이전 제목: 연습 녹음');
+});
+
+test('Import with song and date saves the generated title and appends the original filename to the memo', async ({page}) => {
+  await boot(page, {media:false});
+  const saved=await page.evaluate(async()=>{
+    const file=new File([new Uint8Array(44)],'SODA_123.wav',{type:'audio/wav',lastModified:Date.now()});
+    window.vzipPrepareMedia=async()=>({file,metadata:{created:Date.now(),durationSeconds:30},dispose:async()=>{}});
+    await VZ.media.importFile(file,{id:'named-import',songId:'s2',song:'On My Own',date:'2026-11-09',extra:{review:'호흡 확인'},durationSeconds:30});
+    return (await window.vzipReadMedia()).find(m=>m.id==='named-import');
+  });
+  expect(saved).toMatchObject({name:'On My Own 2026.11.09',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인\n이전 제목: SODA_123'});
+});
+
+test('Editing both song and date updates a saved title while retaining the old title in the memo', async ({page}) => {
+  await boot(page);
+  const saved=await page.evaluate(async()=>{
+    const item=(await window.vzipReadMedia()).find(m=>m.id==='m1');
+    await VZ.media.update({...item,local:true},{songId:'s2',song:'On My Own',recordedDate:'2026-11-09',dateSource:'manual',review:'호흡 확인',normalizeTitle:true});
+    return (await window.vzipReadMedia()).find(m=>m.id==='m1');
+  });
+  expect(saved).toMatchObject({name:'On My Own 2026.11.09',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인\n이전 제목: 레슨 시범'});
 });
 
 test('Song pickers list the most recently registered song first', async ({page}) => {

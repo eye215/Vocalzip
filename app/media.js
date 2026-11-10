@@ -181,6 +181,7 @@ M.importFile = async (file, choice, onProgress, signal) => {
     const name = choice.name || (title ? M.autoName(title, day) : file.name.replace(/\.[^.]+$/, ''));
     // choice.extra carries import facts (source type, original file name, hash, imported time) kept with the file.
     const info = {...meta, ...(choice.extra || {}), id:choice.id, name, nameMode:choice.name?'manual':'auto', autoName:choice.name?null:name, originalFilename:choice.extra?.originalFilename||file.name, type:out.type || typeOf(out), songId:choice.songId || '', song:choice.song || '', source:'import'};
+    if(title&&!choice.name)info.review=window.VzipMediaNaming?.keepPrevious(info.review,info.originalFilename,name)||info.review||'';
     let saved;
     // Large files, and bulk imports (choice.direct), go straight to the cloud from the picked file: no device copy, so a
     // thousand files never fill Safari's storage. "Done" then means the server confirmed the row (see vzipCloudImport).
@@ -208,7 +209,7 @@ M.importFile = async (file, choice, onProgress, signal) => {
   } finally { await prepared.dispose(); }
 };
 const namePatch=(item,changes)=>window.VzipMediaNaming?.patch(item,changes,id=>VZ.db.songs.find(song=>song.id===id)?.title)||changes;
-const nameFields=metadata=>Object.fromEntries(['name','nameMode','autoName'].filter(key=>Object.hasOwn(metadata,key)).map(key=>[key,metadata[key]]));
+const nameFields=metadata=>Object.fromEntries(['name','nameMode','autoName','review'].filter(key=>Object.hasOwn(metadata,key)).map(key=>[key,metadata[key]]));
 M.update = async (item, changes, {quiet = false} = {}) => {
   changes={...changes};if(changes.name===item.name)delete changes.name;
   const cloud=item.cloud?await window.vzipCloudMediaUpdate(item,changes):null;

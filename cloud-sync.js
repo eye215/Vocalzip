@@ -365,7 +365,7 @@ async function importMedia(file,info={},onProgress,options={}){
    return restored;
   }
   if(lookup.data?.metadata){onProgress?.(100);return {...lookup.data.metadata,id}}
-  const baseMetadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),nameMode:info.nameMode,autoName:info.autoName,song:info.song||'',songId:info.songId||'',
+  const baseMetadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),nameMode:info.nameMode,autoName:info.autoName,song:info.song||'',songId:info.songId||'',review:info.review||'',
    created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
    source:info.source||'import',size:file.size,
    // Import facts from the import hub (source, original name, fingerprint) stay with the file.
