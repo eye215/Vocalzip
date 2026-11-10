@@ -1,0 +1,36 @@
+name: Compare existing upload scenarios without metadata CAS
+on:
+  push:
+    branches: ['verify/media-cas-upload-baseline-20261110']
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ed135f1beb41fe5f442e6f04029345ccc46791f7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - name: Fixture FFmpeg binaries
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            timeout 180 npm install --prefix "$RUNNER_TEMP/ffmpeg-bin" --no-save --no-audit --no-fund ffmpeg-static@5.2.0 ffprobe-static@3.1.0
+            ln -s "$(node -p "require('$RUNNER_TEMP/ffmpeg-bin/node_modules/ffmpeg-static')")" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
+            ln -s "$(node -p "require('$RUNNER_TEMP/ffmpeg-bin/node_modules/ffprobe-static').path")" "$RUNNER_TEMP/ffmpeg-bin/ffprobe"
+            echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
+          fi
+      - run: node tests/make-audio-fixtures.cjs
+      - name: Same seven upload scenarios on the unchanged base
+        run: npx playwright test tests/v6.spec.cjs --project=chromium-mobile --workers=2 --grep 'Bulk upload:|A stopped upload resumes|Import: multiple files|Import hub filters|Signed-in imports are kept|WAV imports are stored|Import hub suggests'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-upload-baseline
+          path: test-results/
+          retention-days: 7
