@@ -49,7 +49,19 @@ function plot(vals, {height=142, highlighted=-1}={}) {
   const y=v=>H-pad-(v-lo)/(hi-lo)*(H-pad*2);
   const points=rows.map((p,i)=>[x(i),y(+p.value)]);
   const line=points.length>1?'<polyline points="'+points.map(p=>p.map(v=>v.toFixed(1)).join(',')).join(' ')+'"/>':'';
-  return '<svg class="vl-plot" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+esc(rows.map(p=>p.label+' '+p.value).join(', '))+'"><line class="vl-mid" x1="0" x2="340" y1="'+H/2+'" y2="'+H/2+'"/>'+line+points.map((p,i)=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(i===highlighted?6:4)+'" class="'+(i===highlighted?'active':'')+'"/>').join('')+'</svg>';
+  return '<svg class="vl-plot" style="height:'+H+'px" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+esc(rows.map(p=>p.label+' '+p.value).join(', '))+'"><line class="vl-mid" x1="0" x2="340" y1="'+H/2+'" y2="'+H/2+'"/>'+line+points.map((p,i)=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(i===highlighted?6:4)+'" class="'+(i===highlighted?'active':'')+'"/>').join('')+'</svg>';
+}
+function sizePlots(host) {
+  host.querySelectorAll('.vl-plot').forEach(svg=>{
+    const width=svg.getBoundingClientRect().width, circles=[...svg.querySelectorAll('circle')];
+    if(!width||!circles.length)return;
+    const height=Number(svg.viewBox.baseVal.height)||142, pad=20;
+    svg.setAttribute('viewBox','0 0 '+width+' '+height);
+    circles.forEach((circle,i)=>circle.setAttribute('cx',String(circles.length===1?width/2:pad+i*(width-pad*2)/(circles.length-1))));
+    const line=svg.querySelector('polyline');
+    if(line)line.setAttribute('points',circles.map(circle=>circle.getAttribute('cx')+','+circle.getAttribute('cy')).join(' '));
+    svg.querySelector('.vl-mid')?.setAttribute('x2',String(width));
+  });
 }
 function trend(s) {
   const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0];
@@ -118,11 +130,14 @@ function screen(s) {
   const scrollTop=document.scrollingElement?.scrollTop??0;
   const recs=m?recommendations(s):null;
   s.player?.destroy(); s.player=null;
+  s.plotObserver?.disconnect(); s.plotObserver=null;
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
     (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
       comparePanel(s)+recommendationList(recs)+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
+  sizePlots(host);
+  if(window.ResizeObserver){s.plotObserver=new ResizeObserver(()=>sizePlots(host));host.querySelectorAll('.vl-plot').forEach(svg=>s.plotObserver.observe(svg));}
   if(document.scrollingElement)document.scrollingElement.scrollTop=scrollTop;
   host.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{
     const id=b.dataset.date;
