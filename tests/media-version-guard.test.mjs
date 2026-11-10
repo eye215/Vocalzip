@@ -16,6 +16,7 @@ let admin,db,name,conn,mf;
 const rpcTrace=[];
 const shared='isolated-media-version-secret-never-production-32',jwtSecret='isolated-media-jwt-secret-never-production';
 const mediaProposal=readFileSync(new URL('../supabase/proposals/20261116_media_version_guard.sql',import.meta.url),'utf8');
+const publicationProposal=readFileSync(new URL('../supabase/proposals/20261117_media_publication.sql',import.meta.url),'utf8');
 const require=createRequire(import.meta.url);
 const proposal=readFileSync(new URL('../supabase/proposals/20261113_snapshot_revision.sql',import.meta.url),'utf8');
 const sessions=readFileSync(new URL('../supabase/migrations/20261112_device_session_contract.sql',import.meta.url),'utf8');
@@ -88,13 +89,14 @@ before(async()=>{
  assert.equal((await db.query('select count(*) from public.vzip_snapshot_rollout')).rows[0].count,'0');
  const preserved=(await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows;
  await db.query(mediaProposal);await db.query(mediaProposal);
+ await db.query(publicationProposal);await db.query(publicationProposal);
  assert.deepEqual((await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows,preserved);
  assert.equal((await db.query('select count(*) n from public.vzip_media_delete_guards')).rows[0].n,'0');
  await bootWorker();
 });
 beforeEach(async()=>{
  if(skip)return;
- await db.query('truncate storage.objects,public.vzip_media_delete_requests,public.vzip_media_delete_guards,public.vocal_media,public.vzip_snapshot_rollout,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ await db.query('truncate public.vzip_media_publications,storage.objects,public.vzip_media_delete_requests,public.vzip_media_delete_guards,public.vocal_media,public.vzip_snapshot_rollout,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
  await db.query('insert into vault.decrypted_secrets values($1,$2) on conflict(name) do update set decrypted_secret=excluded.decrypted_secret',['vzip_media_version_secret',shared]);
  await db.query('delete from auth.sessions');
  for(const s of [A,B,D])await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[s,U]);
@@ -224,6 +226,7 @@ async function bootWorker(){
      if(name==='vzip_session_context')return (await c.query('select public.vzip_session_context() r')).rows[0].r;
      if(name==='vzip_media_mutation_context')return (await c.query('select public.vzip_media_mutation_context() r')).rows[0].r;
      if(name==='vzip_media_upload_allowed')return (await c.query('select public.vzip_media_upload_allowed($1) r',[body.p_media_id])).rows[0].r;
+     if(name==='vzip_publish_media')return (await c.query('select public.vzip_publish_media($1,$2,$3,$4,$5,$6) r',[body.p_request_id,body.p_metadata_text,body.p_version,body.p_root,body.p_etag,body.p_signature])).rows[0].r;
      if(name==='vzip_prepare_media_delete')return (await c.query('select public.vzip_prepare_media_delete($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) r',[body.p_request_id,body.p_media_id,body.p_key,body.p_version,body.p_expected_updated_at,body.p_size,body.p_type,body.p_root,body.p_etag,body.p_signature])).rows[0].r;
      if(name==='vzip_media_delete_status')return (await c.query('select public.vzip_media_delete_status($1) r',[body.p_request_id])).rows[0].r;
      if(name==='vzip_finish_media_delete')return (await c.query('select public.vzip_finish_media_delete($1,$2) r',[body.p_request_id,body.p_signature])).rows[0].r;
@@ -288,4 +291,90 @@ test('old Supabase storage writes cannot bypass the guard; reads and other accou
  await as(V,C,c=>c.query("insert into storage.objects(bucket_id,name,owner) values('vocal-recordings','legacy-ok',$1)",[V]));
  assert.equal((await as(V,C,c=>c.query("delete from storage.objects where name='legacy-ok'"))).rowCount,1);
  assert.equal((await db.query("select count(*) n from storage.objects where name='old-original'")).rows[0].n,'1');
+});
+
+
+const publicationMetadata=()=>({id:'publish-voice',name:'처음 제목',songId:'song',recordedDate:'2026-11-10',review:'원래 메모',
+ storageProvider:'r2',r2Key:'u/'+U+'/publish-voice/'+version+'/original.wav',r2Etag:'"fixture"',size:3,type:'audio/wav'});
+async function publicationAccount(){
+ await db.query('insert into public.vocal_data(user_id,payload) values($1,$2)',[U,base('song')]);
+ await db.query("select public.vzip_set_snapshot_mode($1,'revision')",[U]);
+}
+function publicationArgs(metadata=publicationMetadata(),request=version,sid=A,overrides={}){
+ const text=JSON.stringify(metadata);
+ const digest=require('node:crypto').createHash('sha256').update(text).digest('hex');
+ const proof=['vzip-media-publish-v1','1',U,sid,request,metadata.id,metadata.r2Key,version,String(metadata.size),metadata.type,rootHash,metadata.r2Etag,digest].join('\n');
+ return {request,text,version,root:rootHash,etag:metadata.r2Etag,signature:sign(proof),...overrides};
+}
+const publishSQL=(p,owner=U,sid=A)=>as(owner,sid,async c=>(await c.query(
+ 'select public.vzip_publish_media($1,$2,$3,$4,$5,$6) r',[p.request,p.text,p.version,p.root,p.etag,p.signature])).rows[0].r);
+test('publication inserts a verified original once without changing root or copying notes into its ledger',{skip},async()=>{
+ await publicationAccount();const before=(await db.query('select payload,revision from public.vocal_data')).rows;
+ const result=await publishSQL(publicationArgs());assert.deepEqual(result.metadata,publicationMetadata());assert.equal(result.request_id,version);
+ assert.deepEqual((await db.query('select payload,revision from public.vocal_data')).rows,before);
+ const receipt=(await db.query('select * from public.vzip_media_publications')).rows[0];
+ assert.equal(JSON.stringify(receipt).includes('원래 메모'),false);assert.equal(await count('vocal_media'),1);
+ assert.equal((await publishSQL(publicationArgs())).updated_at,result.updated_at);
+});
+test('publication retry preserves a newer title/date/song edit and refuses different input or login reuse',{skip},async()=>{
+ await publicationAccount();const args=publicationArgs();await publishSQL(args);
+ await db.query("update public.vocal_media set metadata=metadata||$1,updated_at=clock_timestamp()",[{name:'다른 기기 제목',recordedDate:'2026-11-11',songId:'other',review:'새 메모'}]);
+ const retry=await publishSQL(args);assert.equal(retry.metadata.name,'다른 기기 제목');assert.equal(retry.metadata.review,'새 메모');
+ await assert.rejects(publishSQL(publicationArgs({...publicationMetadata(),name:'changed'})),e=>e.code==='40001');
+ await assert.rejects(publishSQL(publicationArgs(publicationMetadata(),version,B),U,B),e=>e.code==='40001');
+});
+test('publication proof binds the full metadata, session and purpose and is inaccessible without a valid server proof',{skip},async()=>{
+ await publicationAccount();const p=publicationArgs();
+ for(const changed of [{...p,text:JSON.stringify({...publicationMetadata(),name:'tampered'})},{...p,signature:'0'.repeat(64)},{...p,signature:sign('vzip-media-deleted-v1')}]){
+  await assert.rejects(publishSQL(changed),e=>e.code==='42501');
+ }
+ await assert.rejects(as(V,C,c=>c.query('select * from public.vzip_media_publications')),e=>e.code==='42501');
+ assert.equal(await count('vocal_media'),0);assert.equal(await count('vzip_media_publications'),0);
+});
+test('a different original or another account ID cannot be overwritten by publication',{skip},async()=>{
+ await publicationAccount();const m=publicationMetadata();
+ await db.query('insert into public.vocal_media values($1,$2,$3,clock_timestamp())',[m.id,U,{...m,r2Key:m.r2Key.replace(version,A)}]);
+ await assert.rejects(publishSQL(publicationArgs()),e=>e.code==='40001');
+ await db.query('delete from public.vocal_media');
+ await db.query('insert into public.vocal_media values($1,$2,$3,clock_timestamp())',[m.id,V,{id:m.id,name:'private other account'}]);
+ await assert.rejects(publishSQL(publicationArgs()),e=>e.code==='40001');
+ assert.equal(await count('vzip_media_publications'),0);
+ assert.equal((await db.query('select metadata from public.vocal_media')).rows[0].metadata.name,'private other account');
+});
+test('publication rejects deleted IDs, malformed tombstones and paused/revoked/legacy accounts',{skip},async()=>{
+ await publicationAccount();const p=publicationArgs(),id=publicationMetadata().id;
+ for(const marker of [[id],{[id]:true}]){
+  await db.query('update public.vocal_data set payload=payload||$1',[{deleted:{media:marker}}]);
+  await assert.rejects(publishSQL(p),e=>e.code==='55000');
+ }
+ await db.query('update public.vocal_data set payload=$1',[base('song')]);
+ await db.query("select public.vzip_set_snapshot_mode($1,'paused')",[U]);
+ await assert.rejects(publishSQL(p),e=>e.code==='42501');
+ await db.query("select public.vzip_set_snapshot_mode($1,'revision')",[U]);
+ await as(U,A,c=>c.query('select public.vzip_release_session()'));
+ await assert.rejects(publishSQL(p),e=>e.code==='42501');
+ await assert.rejects(publishSQL(publicationArgs(),V,C),e=>e.code==='42501');
+ assert.equal(await count('vocal_media'),0);
+});
+test('publication refuses legacy paths, alternate storage pointers, invalid descriptors and oversized input',{skip},async()=>{
+ await publicationAccount();const m=publicationMetadata();
+ for(const bad of [{...m,r2Key:m.r2Key.replace('/'+version,'')},{...m,path:'legacy/file'},{...m,blob:'bytes'},{...m,size:0},{...m,type:'video/mp4'},{...m,r2Root:'b'.repeat(64)},{...m,name:'x'.repeat(16000)}]){
+  await assert.rejects(publishSQL(publicationArgs(bad)),e=>['22023','42501'].includes(e.code));
+ }
+ assert.equal(await count('vocal_media'),0);
+});
+test('real Worker HEAD and SQL publish only completed immutable audio; replay keeps later edits',{skip,timeout:60000},async()=>{
+ await publicationAccount();
+ const upload=await original('published-e2e',new Uint8Array([4,5,6])),d=upload.ticket.descriptor;
+ const metadata={...publicationMetadata(),id:d.mediaId,r2Key:d.key,r2Etag:upload.done.etag,size:3};
+ const body={requestId:d.attempt,metadata};
+ const saved=await call('/v2/media/publish',{body});assert.equal(saved.status,200,await saved.clone().text());
+ assert.deepEqual((await saved.json()).metadata,metadata);
+ await db.query('update public.vocal_media set metadata=metadata||$1',[{name:'newer edit',songId:'new-song'}]);
+ const again=await call('/v2/media/publish',{body});assert.equal(again.status,200);assert.equal((await again.json()).metadata.name,'newer edit');
+ for(const bad of [{...metadata,size:4},{...metadata,r2Etag:'"different"'},{...metadata,r2Key:metadata.r2Key.replace(d.attempt,B)}]){
+  const failed=await call('/v2/media/publish',{body:{requestId:d.attempt,metadata:bad}});assert.equal(failed.status,409,await failed.clone().text());
+ }
+ assert.equal(await count('vzip_media_publications'),1);
+ const bucket=await mf.getR2Bucket('MEDIA');assert.deepEqual(new Uint8Array(await(await bucket.get(d.key)).arrayBuffer()),new Uint8Array([4,5,6]));
 });

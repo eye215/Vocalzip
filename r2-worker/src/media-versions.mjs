@@ -81,6 +81,28 @@ export async function handleMediaV2(request,env,uid,sid,context,api){
  if(context?.mode!=='revision')fail(403,'revision media account required');
  if(!UUID.test(sid||''))fail(401,'registered media session required');secret(env,fail);
  const body=await bounded(request,fail);
+ if(url.pathname==='/v2/media/publish'&&request.method==='POST'){
+  const m=body?.metadata;
+  if(!UUID.test(body?.requestId||'')||!m||Array.isArray(m)||typeof m!=='object'||
+   m.storageProvider!=='r2'||!Number.isSafeInteger(m.size)||m.size<1||m.size>2147483648||
+   ['blob','bytes','path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(m,k)))fail(400,'invalid publication metadata');
+  const version=objectKey(uid,m.id,m.r2Key,fail),text=JSON.stringify(m);
+  if(new TextEncoder().encode(text).length>16000)fail(413,'publication metadata too large');
+  const head=await env.MEDIA.head(m.r2Key);if(!head)fail(409,'completed original is not verified');
+  const d={version:1,user_id:uid,session_id:sid,request_id:body.requestId,media_id:m.id,object_key:m.r2Key,object_version:version,
+   expected_updated_at:new Date().toISOString(),size:m.size,content_type:m.type,content_root:head.customMetadata?.uploadRoot,etag:m.r2Etag,state:'reserved'};
+  receipt(d,uid,sid,fail);headMatches(head,d,fail);
+  if(Object.hasOwn(m,'r2Root')&&m.r2Root!==d.content_root)fail(409,'publication root changed');
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),b=>b.toString(16).padStart(2,'0')).join('');
+  const proof=['vzip-media-publish-v1','1',uid,sid,body.requestId,m.id,m.r2Key,version,String(m.size),m.type,d.content_root,m.r2Etag,hash].join('\n');
+  const saved=await mediaRpc(request,env,'vzip_publish_media',{p_request_id:body.requestId,p_metadata_text:text,p_version:version,
+   p_root:d.content_root,p_etag:m.r2Etag,p_signature:await sign(env,proof,fail)},api);
+  if(!saved||saved.version!==1||saved.user_id!==uid||saved.session_id!==sid||saved.request_id!==body.requestId||
+   saved.id!==m.id||saved.metadata?.id!==m.id||saved.metadata?.storageProvider!=='r2'||saved.metadata?.r2Key!==m.r2Key||
+   saved.metadata?.size!==m.size||saved.metadata?.type!==m.type||saved.metadata?.r2Etag!==m.r2Etag||
+   !Number.isFinite(Date.parse(saved.updated_at)))fail(503,'publication not confirmed');
+  return json(saved);
+ }
  if(url.pathname==='/v2/media/delete/prepare'&&request.method==='POST'){
   if(!UUID.test(body.requestId||'')||typeof body.updatedAt!=='string'||body.updatedAt.length>80||!Number.isFinite(Date.parse(body.updatedAt))||
    !Number.isSafeInteger(body.size)||body.size<1||body.size>2147483648)fail(400,'invalid deletion target');

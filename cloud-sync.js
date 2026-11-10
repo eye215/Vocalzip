@@ -324,7 +324,7 @@ function mediaRecovery(){
  const owner=account.owner;
  return window.VzipMediaUploadRecovery.create({storage:localStorage,identity,
   loadRow:async id=>{const {data,error}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle();if(error)throw error;return data?.metadata||null;},
-  insertRow:async(id,metadata)=>{const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},{ignoreDuplicates:true});if(error)throw error;},
+  insertRow:async(id,metadata)=>{const published=await window.VzipR2?.publishLibrary?.(metadata);if(published)return published;const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},{ignoreDuplicates:true});if(error)throw error;},
   stat:key=>window.VzipR2.stat(key),
   deletedIds:async()=>[...await deletedMediaIds(true),...(Array.isArray(localData()?.deleted?.media)?localData().deleted.media:[])]
  });
@@ -333,12 +333,6 @@ function mediaRecovery(){
 async function deletedMediaIds(strict=false){const {data,error}=await client.from('vocal_data').select('ids:payload->deleted->media').eq('user_id',user.id).maybeSingle();if(error)throw error;if(strict&&data?.ids!=null&&!Array.isArray(data.ids))throw Object.assign(Error('삭제 기록을 확인하지 못했어요.'),{code:'deleted_unavailable'});return Array.isArray(data?.ids)?data.ids:[]}
 async function importMedia(file,info={},onProgress,options={}){
  if(!client||!user)throw Error('클라우드 로그인이 필요해요. 설정에서 로그인해 주세요.');
- if(info.id){
-  // Only the deleted-file list is read (not the whole record payload): this runs for every file of a bulk upload.
-  const account=user.id,deletedIds=await deletedMediaIds();
-  if(user?.id!==account)throw Error('로그인 계정이 변경됐어요.');
-  if(deletedIds.includes(info.id))throw Error('삭제한 파일은 자동 백업하지 않아요. 다시 가져오려면 새 파일로 등록해 주세요.');
- }
  if(!file||file.size<=0)throw Error('빈 파일은 업로드할 수 없어요.');
  if((window.vzipMediaType?.(file)||file.type||'').startsWith('video/'))throw Error('영상은 음원으로 추출한 뒤 저장해 주세요.');
  if(file.size>VzipChunks.MAX_SIZE)throw Error('파일당 최대 1GB까지 업로드할 수 있어요.');
@@ -355,17 +349,22 @@ async function importMedia(file,info={},onProgress,options={}){
   const type=window.vzipMediaType?.(file)||file.type||info.type||'application/octet-stream';
   id=info.id||crypto.randomUUID();
   if(!/^[a-z0-9_-]{1,200}$/i.test(id))throw Error('잘못된 파일 ID예요.');
+  // These read-only checks are independent. Await all before any transfer/metadata write.
+  const checks=await Promise.all([
+   info.id?deletedMediaIds():Promise.resolve([]),
+   info.id?client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle():Promise.resolve({data:null,error:null}),
+   window.VzipR2?.ready?.()
+  ]);aborted();
+  const [deleted,lookup,r2Ready]=checks;
+  if(deleted.includes(id))throw Error('삭제한 파일은 자동 백업하지 않아요. 다시 가져오려면 새 파일로 등록해 주세요.');
+  if(lookup.error)throw lookup.error;
   recovery=mediaRecovery();
   if(recovery.pending().some(entry=>entry.id===id)){
    const restored=await recovery.recover(id);aborted();window.VzipR2?.acknowledgeTransfer?.(id,restored);
    onProgress?.(100);window.dispatchEvent(new Event('vzip:cloud-media-changed'));
    return restored;
   }
-  if(info.id){
-   const {data:existing,error:lookupError}=await client.from('vocal_media').select('metadata').eq('user_id',owner).eq('id',id).maybeSingle();
-   if(lookupError)throw lookupError;aborted();
-   if(existing?.metadata){onProgress?.(100);return {...existing.metadata,id}}
-  }
+  if(lookup.data?.metadata){onProgress?.(100);return {...lookup.data.metadata,id}}
   const baseMetadata={id,name:info.name||file.name.replace(/\.[^.]+$/,''),nameMode:info.nameMode,autoName:info.autoName,song:info.song||'',songId:info.songId||'',
    created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
    source:info.source||'import',size:file.size,
@@ -373,7 +372,7 @@ async function importMedia(file,info={},onProgress,options={}){
    ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]]))};
   const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
   // R2 (when the owner has set it up, r2-config.js) replaces the Supabase upload; the record stays in vocal_media.
-  if(await window.VzipR2?.ready?.()||window.VzipR2?.hasPendingTransfer?.(id)){
+  if(r2Ready||window.VzipR2?.hasPendingTransfer?.(id)){
    r2=await window.VzipR2.upload(file,{mediaId:id,type,signal,onProgress:p=>onProgress?.(Math.min(99,p)),
     recoveryContext:{kind:'library',metadata:baseMetadata},
     onReceipt:(context,receipt)=>recovery.remember({...context.metadata,storageProvider:'r2',r2Key:receipt.key,r2Etag:receipt.etag},receipt)
@@ -428,9 +427,15 @@ async function importMedia(file,info={},onProgress,options={}){
    ...(r2?{storageProvider:'r2',r2Key:r2.key}:multipart?{storageVersion:2,parts}:{path:parts[0].path})};
   if(r2){metadata.r2Etag=r2.etag;metadata=recovery.remember(metadata,{key:r2.key,size:r2.size,etag:r2.etag}).metadata;}
   options.onCommit?.();committing=true;
-  const {error}=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},r2?{ignoreDuplicates:true}:undefined);
-  // Success means the row is really there: a lost reply may hide a write that went through, and a reported success is checked.
-  const {data:check,error:checkError}=await client.from('vocal_media').select('id,metadata').eq('user_id',owner).eq('id',id).maybeSingle();
+  let published=null,error=null;
+  try{
+   if(r2)published=await window.VzipR2?.publishLibrary?.(metadata,{signal});
+   if(!published){const result=await client.from('vocal_media').upsert({id,user_id:owner,metadata,updated_at:new Date().toISOString()},r2?{ignoreDuplicates:true}:undefined);error=result.error;}
+  }catch(e){error=e;}
+  aborted();
+  // A verified server publication is the commit acknowledgement. An uncertain response is reread.
+  const {data:check,error:checkError}=published?{data:{id,metadata:published},error:null}:
+   await client.from('vocal_media').select('id,metadata').eq('user_id',owner).eq('id',id).maybeSingle();
   if(checkError||!check){
    // Never delete the uploaded file here: it is kept and noted so it can be linked again later without uploading.
    if(r2)orphan({owner,id,key:r2.key,size:file.size,name:metadata.name,fileHash:metadata.fileHash||'',reason:(error||checkError)?.message||'row missing'});

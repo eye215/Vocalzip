@@ -182,9 +182,28 @@ async function ready() {
   if (!endpoint() || !window.vzipCloudSignedIn?.()) return false;
   let t; try { t = await token(); } catch { return false; }
   if (check.token === t && check.until > Date.now()) return check.ok;
-  try { const accepted=await api('/v1/me'); check = {token:t, ok:true, reason:'', uploadContract:accepted.uploadContract||'', until:Date.now() + 600000}; }
+  try { const accepted=await api('/v1/me'); check = {token:t, ok:true, reason:'', uploadContract:accepted.uploadContract||'', mediaMode:accepted.mediaMode||'', until:Date.now() + 600000}; }
   catch (e) { check = {token:t, ok:false, reason:e.status === 401 ? 'auth' : e.status ? 'http ' + e.status : 'network', until:Date.now() + (e.status ? 600000 : 60000)}; }
   return check.ok;
+}
+/** Server publishes only a HEAD-verified immutable original; legacy accounts keep their existing insert path. */
+async function publishLibrary(metadata,{signal}={}){
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
+ const current=()=>{if(window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 보관함 연결을 중단했어요.');};
+ await ready();current();
+ if(check.mediaMode==='paused')throw uploadError(423,'media writes are paused');
+ if(check.mediaMode!=='revision')return null;
+ if(!check.ok)throw Error('저장소 연결을 확인한 뒤 다시 시도해 주세요.');
+ const parts=String(metadata?.r2Key||'').split('/');
+ if(parts.length!==5||parts[0]!=='u'||parts[1]!==owner||parts[2]!==metadata.id||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(parts[3])||
+  !/^original\.[a-z0-9]{1,8}$/.test(parts[4]))throw Error('기존 파일은 새 저장 방식으로 인수한 뒤 연결할 수 있어요.');
+ // The unique upload attempt is the stable request ID across response loss/reloads.
+ const result=await api('/v2/media/publish',{method:'POST',body:{requestId:parts[3],metadata},signal});current();
+ if(result?.version!==1||result.user_id!==owner||result.session_id!==session||result.request_id!==parts[3]||
+  result.id!==metadata.id||result.metadata?.id!==metadata.id||result.metadata?.storageProvider!=='r2'||
+  result.metadata?.r2Key!==metadata.r2Key||result.metadata?.size!==metadata.size||result.metadata?.r2Etag!==metadata.r2Etag||
+  !Number.isFinite(Date.parse(result.updated_at)))throw Error('보관함 연결 결과를 확인하지 못했어요. 올린 원본은 보존돼요.');
+ return result.metadata;
 }
 /** Download only a transformed 30-second excerpt of an R2 M4A/MP4 audio file.
  * Never decodes/downloads the entire original on iPhone; the Worker enforces ownership.
@@ -220,5 +239,5 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();
