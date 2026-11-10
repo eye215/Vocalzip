@@ -14,3 +14,7 @@
 .growth-month{font:inherit;background:transparent;color:inherit;border:1px solid var(--vz-border,#ddd);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left}
 .growth-disclaimer{padding:0 4px;line-height:1.6}
 @media(max-width:420px){.growth-metrics{grid-template-columns:1fr}.growth-month{align-items:flex-start;flex-direction:column}}
+
+.growth-listening{padding:12px 0;border-top:1px solid var(--vz-border,#eee)}
+.growth-listening strong{display:inline-block;margin-right:10px}
+.growth-listening p{margin:8px 0;line-height:1.55;overflow-wrap:anywhere}
