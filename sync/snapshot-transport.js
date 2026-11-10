@@ -76,6 +76,7 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
    const currentLocal=localCopy(),stamp=await digest(currentLocal);guard();
    if(stamp!==recovery.deviceStamp||!same(localCopy(),currentLocal))return conflict(s,row,'localChanged');
   }
+  if(!same(state(),current))throw fail('pending');
   const applied=onAck(row,copy(p.payload),recovery?{recovery:copy(recovery)}:null);
   if(applied&&typeof applied.then==='function')throw fail('response');guard();
   // One atomic local entry: an interrupted acknowledgement always retains the original request.

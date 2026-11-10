@@ -191,3 +191,14 @@ test('current session may be revoked during send: the approved input remains dur
  await assert.rejects(c.resolveRecovery(view.reviewId,merged(view),confirm),e=>e.code==='auth');
  assert.ok(c.state().pending);assert.equal(c.state().recoveries.length,1);assert.deepEqual(f.local,base());
 });
+
+for(const change of ['device','journal']){
+ test('revalidation catches '+change+' edits made while awaiting the server read',async()=>{
+  const f=fixture(),r=await f.client.reviewRecovery();
+  f.server.readHook=async()=>{
+   if(change==='device')f.local.practices.push({id:'during-read',manualMinutes:21});
+   else {const k='vzip_snapshot_transport_v1:'+U;f.storage.setItem(k,JSON.stringify({version:1,owner:U,baseline:null,pending:null,conflict:{kind:'conflict',revision:'1',generation:G}}));}
+  };
+  await assert.rejects(f.client.resolveRecovery(r.reviewId,merged(r),confirm),e=>e.code==='review');assert.equal(f.server.calls.length,0);
+ });
+}
