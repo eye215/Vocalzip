@@ -269,7 +269,7 @@ test('A changed remote file blocks interrupted deletion before any cleanup',asyn
 test('A same-size local overwrite during cleanup survives the attempt and automatic retry',async({page})=>{
  const {remote,deleted,dialog}=await interruptedFileDelete(page);
  await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
- remote.beforeDelete=()=>page.evaluate(async()=>{await vzipStorePracticeMedia({id:'chosen',name:'new local file',created:Date.now(),type:'audio/wav',blob:new Blob([new Uint8Array([5,6,7])],{type:'audio/wav'})});});
+ remote.beforeDelete=()=>page.evaluate(async()=>{const original=(await vzipReadMedia()).find(x=>x.id==='chosen');await vzipStorePracticeMedia({...original,blob:new Blob([new Uint8Array([5,6,7])],{type:'audio/wav'})});});
  for(const field of await dialog.locator('fieldset').all())await field.locator('label').first().click();
  await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();
  await expect(dialog.locator('[data-review-message]')).toContainText('바뀌었어요');expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);

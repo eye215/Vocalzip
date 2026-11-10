@@ -187,9 +187,10 @@ async function openMediaDeleteReview(){
     const local=await window.VZ.media.localDeleteInfo(id);guard();localToken=local.token;
     const sources=[rootReview.device,rootReview.cloud?.payload,rootReview.pending?.payload,...rootReview.recoveries.flatMap(r=>[r.device,r.cloud?.payload,r.pending?.payload])].filter(Boolean);
     if(window.VzipArchive&&sources.some(data=>!Merge.same(window.VzipArchive.forOwner(data,owner),data)))throw Object.assign(Error('계정 확인이 필요한 기록이 섞여 있어요. 원본은 유지돼요.'),{code:'identity'});
-    if(!value.file?.name&&!local.name)throw Object.assign(Error('대상 파일의 이름을 확인하지 못했어요. 원본을 더 지우지 않고 유지해요.'),{code:'pending'});
+    const deletionName=String(value.file?.name||local.name||'').trim();
+    if(!deletionName)throw Object.assign(Error('대상 파일의 이름을 확인하지 못했어요. 원본을 더 지우지 않고 유지해요.'),{code:'pending'});
     if(rootReview.baseline?.generation&&rootReview.baseline.generation!==rootReview.cloud?.generation)throw Object.assign(Error('클라우드 기록이 새로 만들어져 별도 확인이 필요해요.'),{code:'generation'});
-    return {...rootReview,reviewId:value.reviewId,deletionName:value.file?.name||local.name};
+    return {...rootReview,reviewId:value.reviewId,deletionName};
    },
    resolve:async(id,payload,confirmation)=>{
     guard();if((await window.VZ.media.localDeleteInfo(selected)).token!==localToken)throw Object.assign(Error('이 기기의 파일이 바뀌었어요. 다시 확인해 주세요.'),{code:'localChanged'});
