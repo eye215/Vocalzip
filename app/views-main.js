@@ -103,6 +103,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + ((p?.rating || 0) >= n) + '">★</button>').join('');
   VZ.sheet({title:p ? '연습 기록 수정' : '연습 기록', body:'<form id="practice-log">' +
     '<div class="seg" role="group" aria-label="연습 종류" style="margin-bottom:14px"><button type="button" data-mode="song" aria-pressed="' + (mode === 'song') + '">곡 연습</button><button type="button" data-mode="training" aria-pressed="' + (mode === 'training') + '">보컬 트레이닝</button></div>' +
+    (p ? '' : '<div data-guided-recommendations></div>') +
     '<div data-song-part>' + VZ.songSelect('song', p?.songId || songId) + '</div>' +
     '<div data-train-part><div class="two">' + level('분류', 'category', catOpts, '새 분류 이름 (예: 고음)') + level('세부 항목', 'detail', '', '새 세부 항목 (예: 립트릴)') + '</div>' + level('세부 항목 2 <span class="small muted">(선택)</span>', 'detail2', '', '새 항목 (예: 저음 5도)') + '</div>' +
     '<div class="two"><label class="field"><span>날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(p?.date || date) + '"></label><label class="field"><span>연습 시간(분) <span class="req">*</span></span><input type="number" name="minutes" inputmode="numeric" min="1" max="1440" required value="' + (p ? VZ.practiceMinutes(p) : preset?.minutes || '') + '" placeholder="30"></label></div>' +
@@ -115,6 +116,10 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
     onMount:async (el, close) => {
       const form = el.querySelector('form');
       let current = mode, rating = p?.rating || null;
+      if(!p){let generation=0;const drawRecommendations=async()=>{const id=++generation,host=el.querySelector('[data-guided-recommendations]');if(!host)return;const rows=await VZ.guidedRecommendations?.({date:form.date.value,songId:current==='song'?form.song?.value||songId:''});if(id!==generation||!host.isConnected)return;host.innerHTML=rows?.length?VZ.guidedRecommendationCards(rows):'';};
+        form.addEventListener('change',e=>{if(e.target.name==='song'||e.target.name==='date')drawRecommendations()});
+        el.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>queueMicrotask(drawRecommendations)));drawRecommendations().catch(()=>{});
+      }
       const setMode = m => { current = m; el.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m))); el.querySelector('[data-song-part]').hidden = m !== 'song'; el.querySelector('[data-train-part]').hidden = m !== 'training'; };
       el.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode)); setMode(mode);
       const opt = (v, t, sel) => '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(t) + '</option>';
