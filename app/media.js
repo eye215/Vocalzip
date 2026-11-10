@@ -141,6 +141,18 @@ M.owner = item => {
 M.OCCASIONS = [['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']];
 M.occasion = item => ['performance', 'lesson', 'practice'].includes(item?.occasion) ? item.occasion : M.owner(item).kind;
 M.occasionLabel = k => ({performance:'공연', lesson:'레슨', practice:'연습'})[k] || '연습';
+/** Recording purpose, independent of its song link and lesson/practice ownership.
+ * Older untagged recordings remain in song search unless positively identified as room exercises. */
+M.RECORDING_CATEGORIES=[['song','곡 녹음'],['lesson','레슨 녹음'],['training','트레이닝'],['room','연습실']];
+M.recordingCategory=item=>{
+ const explicit=String(item?.recordingCategory||'');
+ if(['song','lesson','training','room'].includes(explicit))return explicit;
+ if(item?.source==='practice-room'||(item?.source==='practice'&&/^[a-zA-Z0-9-]{8,80}-[01]$/.test(String(item?.id||''))))return 'room';
+ if(M.occasion(item)==='lesson')return 'lesson';
+ return 'song';
+};
+M.songSearchEligible=item=>['song','lesson'].includes(M.recordingCategory(item));
+
 const changed = () => { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-media')); };
 ['vzip:cloud-media-changed', 'vzip:media-saved', 'vzip:media-updated', 'vzip:auth-changed'].forEach(n => window.addEventListener(n, changed));
 
