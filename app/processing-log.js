@@ -9,6 +9,12 @@ const read=()=>{try{const rows=JSON.parse(storage.getItem(key())||'[]');return A
 const safe=o=>Object.fromEntries(Object.entries(o).filter(([k])=>['originalName','savedName','size','savedSize','state','error','songId','songSource','date','dateSource','cloud','pendingUpload','audioExtraction','losslessFlac'].includes(k)).map(([k,v])=>[k,typeof v==='string'?v.slice(0,300):v]));
 VZ.processingLog={record(id,patch){if(!id)return;try{const rows=read(),before=rows.find(r=>r.id===id)||{};rows.unshift({...before,id,...safe(patch),updatedAt:Date.now()});storage.setItem(key(),JSON.stringify(rows.filter((r,i)=>i===0||r.id!==id).slice(0,200)));window.dispatchEvent(new Event('vzip:processing-log'))}catch{}},read};
 const size=n=>{n=Number(n)||0;return n>=1073741824?(n/1073741824).toFixed(2)+' GB':(n/1048576).toFixed(1)+' MB'};
+// Approximation only: Standard R2 at today's occupancy for a full month, and one 30 s STT clip per reserved call.
+VZ.processingCostEstimate=({r2Bytes,sttCalls,jobUsd=0})=>({
+ storageUsd:r2Bytes==null?null:Math.ceil(Math.max(0,Number(r2Bytes)/1e9-10))*0.015,
+ sttUsd:sttCalls==null?null:Math.max(0,Number(sttCalls))*0.0015,
+ jobUsd:Math.max(0,Number(jobUsd)||0)
+});
 const stateLabel=s=>({review:'가져오기 확인 대기',uploading:'업로드 중',waiting:'대기',failed:'실패',done:'완료',queued:'대기',running:'분석 중',skipped:'건너뜀'}[s]||'기록 없음');
 const jobLine=(job,review)=>{
  if(!job)return '작업 기록 없음';
@@ -25,7 +31,7 @@ VZ.route('processing-log',{title:'처리 내역',back:true,tab:'library',noAutoR
  mount(main){stop?.();let live=true,busy=false;const host=main.querySelector('[data-processing-log]');
   async function refresh(){if(!live||busy||!host.isConnected)return;busy=true;
    try{
-    const [media,jobs,usage]=await Promise.all([M.list(true).catch(()=>M.cached()),window.vzipAnalysisJobs?window.vzipAnalysisJobs().catch(()=>null):Promise.resolve(null),window.VzipR2?.configured?.()&&window.vzipCloudSignedIn?.()?window.VzipR2.usage().catch(()=>null):Promise.resolve(null)]);
+    const [media,jobs,usage,stt]=await Promise.all([M.list(true).catch(()=>M.cached()),window.vzipAnalysisJobs?window.vzipAnalysisJobs().catch(()=>null):Promise.resolve(null),window.VzipR2?.configured?.()&&window.vzipCloudSignedIn?.()?window.VzipR2.usage().catch(()=>null):Promise.resolve(null),window.vzipSttUsage?window.vzipSttUsage().catch(()=>null):Promise.resolve(null)]);
     if(!live||!host.isConnected)return;
     const journal=read(),byId=new Map((media||[]).map(m=>[m.id,m]));
     const rows=new Map(journal.map(r=>[r.id,r]));
@@ -36,6 +42,7 @@ VZ.route('processing-log',{title:'처리 내역',back:true,tab:'library',noAutoR
     for(const j of jobs?.rows||[])counts[j.status]=(counts[j.status]||0)+1;
     const tracked=(jobs?.rows||[]).reduce((n,j)=>n+(Number(j.cost_usd)||0),0);
     const r2Bytes=usage?.bytes, stored=(media||[]).filter(m=>m.storageProvider==='r2').reduce((n,m)=>n+(Number(m.savedSize||m.size)||0),0);
+    const estimate=VZ.processingCostEstimate({r2Bytes,sttCalls:stt?.total,jobUsd:tracked});
     const device=VZ.autoAnalysisStatus?.();
     const article=r=>{const m=byId.get(r.id),s=VZ.song(m?.songId||r.songId),v=jobMap.get(r.id+':vocal'),j=jobMap.get(r.id+':song'),original=m?.originalFilename||m?.originalMedia?.name||r.originalName||'',saved=m?.name||r.savedName||'',song=s?VZ.songLabel(s):(m?.song||'곡 미지정');
      const review=reviews.get(r.id)?.result, candidates=(review?.top3||[]).slice(0,3).map(x=>(x.title||VZ.songTitle(x.songId)||'제목 없음')+(Number.isFinite(Number(x.score))?' '+Math.round(Number(x.score)*100)+'%':'')).join(' · ');
@@ -48,7 +55,7 @@ VZ.route('processing-log',{title:'처리 내역',back:true,tab:'library',noAutoR
       '<div class="small muted">'+esc(conversion)+' · '+esc(location)+(m?.size||r.size?' · '+size(m?.savedSize||r.savedSize||m?.size||r.size):'')+'</div>'+
       (r.error?'<p class="small" style="color:var(--danger);margin:0">오류 · '+esc(r.error)+'</p>':'')+(j?.status==='failed'?'<p class="small" style="color:var(--danger);margin:0">곡 분석 오류 · '+esc(j.last_error||'원인을 확인할 수 없어요.')+'</p>':'')+'</article>'};
     host.innerHTML='<div class="card stack" style="margin-bottom:12px"><strong>현재 분석 상태</strong><p class="small" style="margin:0">서버 작업 · 대기 '+counts.queued+' · 진행 '+counts.running+' · 곡 확인 '+counts.review+' · 완료 '+counts.done+' · 실패 '+counts.failed+'</p><p class="small muted" style="margin:0">기기 분석 · '+esc(device?.running?'진행 중: '+device.current:device?.enabled?'대기 중 또는 완료':'꺼짐')+'</p></div>'+
-     '<div class="card stack" style="margin-bottom:20px"><strong>사용량 · 비용</strong><p class="small" style="margin:0">R2 저장량 · '+(r2Bytes==null?'서버 조회 불가 (보관함 기준 '+size(stored)+')':size(r2Bytes))+'</p><p class="small" style="margin:0">서버 분석 작업에 기록된 비용 · '+(jobs?'$'+tracked.toFixed(4):'조회 불가')+'</p><p class="small muted" style="margin:0">실제 청구액은 확인할 수 없어요. 수동 유료 가사 인식, R2 요청·전송료, Supabase 요금은 이 수치에 포함되지 않아요.</p></div>'+
+     '<div class="card stack" style="margin-bottom:20px"><strong>사용량 기준 대략적인 비용</strong><p class="small" style="margin:0">R2 저장 '+(r2Bytes==null?'서버 조회 불가 (보관함 기준 '+size(stored)+')':size(r2Bytes))+' · '+(estimate.storageUsd==null?'월 보관료 계산 불가':'현재 용량 유지 시 약 $'+estimate.storageUsd.toFixed(2)+'/월')+'</p><p class="small" style="margin:0">유료 가사 인식 '+(stt?'누적 '+stt.total+'회 · 약 $'+estimate.sttUsd.toFixed(4):'호출 횟수 조회 불가')+'</p><p class="small" style="margin:0">서버 분석 작업에 기록된 비용 · '+(jobs?'$'+estimate.jobUsd.toFixed(4):'조회 불가')+'</p><p class="small muted" style="margin:0">R2 Standard 무료 10 GB·초과 $0.015/GB·월, 가사 인식은 회당 30초×$0.003/분으로 계산했어요. 가사 인식 호출에는 실패한 시도도 포함될 수 있어요. R2 요청량·다른 버킷·Supabase·Workers 요금과 실제 청구액은 별도예요.</p></div>'+
      '<h2 class="sec">파일별 처리 내역</h2>'+(rows.size?[...rows.values()].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,100).map(article).join(''):'<p class="muted">처리된 파일이 없어요.</p>');
    }finally{busy=false}}
   const on=()=>refresh().catch(()=>{});['vzip:processing-log','vzip:server-analysis-updated','vzip:cloud-media-changed','vzip:media-saved'].forEach(n=>window.addEventListener(n,on));
