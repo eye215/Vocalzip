@@ -285,6 +285,27 @@ drop trigger if exists vzip_media_root_restore_guard on public.vocal_data;
 create trigger vzip_media_root_restore_guard before insert or update on public.vocal_data
  for each row execute function public.vzip_guard_media_root_restore();
 
+
+-- Old clients must not bypass the R2 guard through the legacy Supabase bucket.
+-- Existing owner/session policies remain ANDed; reads and unrelated buckets are unchanged.
+do $$
+declare op text; policy_name text;
+begin
+ if to_regclass('storage.objects') is not null then
+  foreach op in array array['insert','update','delete'] loop
+   policy_name:='vzip_versioned_recordings_'||op;
+   execute format('drop policy if exists %I on storage.objects',policy_name);
+   if op='insert' then
+    execute format('create policy %I on storage.objects as restrictive for insert to authenticated with check (bucket_id<>''vocal-recordings'' or public.vzip_snapshot_mode_for((select auth.uid()))=''legacy'')',policy_name);
+   elsif op='update' then
+    execute format('create policy %I on storage.objects as restrictive for update to authenticated using (bucket_id<>''vocal-recordings'' or public.vzip_snapshot_mode_for((select auth.uid()))=''legacy'') with check (bucket_id<>''vocal-recordings'' or public.vzip_snapshot_mode_for((select auth.uid()))=''legacy'')',policy_name);
+   else
+    execute format('create policy %I on storage.objects as restrictive for delete to authenticated using (bucket_id<>''vocal-recordings'' or public.vzip_snapshot_mode_for((select auth.uid()))=''legacy'')',policy_name);
+   end if;
+  end loop;
+ end if;
+end $$;
+
 comment on table public.vzip_media_delete_guards is
  'Proposal only: permanent immutable-object deletion guards, no media bodies or user notes. Do not activate before client publication/deletion, legacy adoption, all writer inventory and HTTP/device acceptance.';
 commit;

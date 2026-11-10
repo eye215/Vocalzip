@@ -44,6 +44,11 @@ before(async()=>{
  create extension pgcrypto with schema extensions;
  create schema vault;
  create table vault.decrypted_secrets(name text primary key,decrypted_secret text not null);
+ create schema storage;
+ create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null,name text not null,owner uuid);
+ alter table storage.objects enable row level security;
+ grant usage on schema storage to authenticated;
+ grant select,insert,update,delete on storage.objects to authenticated;
  create schema auth;
  create table auth.users(id uuid primary key);
  create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id),not_after timestamptz);
@@ -51,6 +56,8 @@ before(async()=>{
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
  create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
  grant usage on schema auth to authenticated;
+ create policy own_storage on storage.objects for all to authenticated using(owner=auth.uid()) with check(owner=auth.uid());
+
  create table public.vocal_data(user_id uuid primary key references auth.users(id) on delete cascade,payload jsonb not null,updated_at timestamptz not null);
  alter table public.vocal_data enable row level security;
  grant select,insert,update,delete on public.vocal_data to authenticated;
@@ -87,8 +94,8 @@ before(async()=>{
 });
 beforeEach(async()=>{
  if(skip)return;
- await db.query('truncate public.vzip_media_delete_requests,public.vzip_media_delete_guards,public.vocal_media,public.vzip_snapshot_rollout,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
- await db.query('update vault.decrypted_secrets set decrypted_secret=$1',[shared]);
+ await db.query('truncate storage.objects,public.vzip_media_delete_requests,public.vzip_media_delete_guards,public.vocal_media,public.vzip_snapshot_rollout,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ await db.query('insert into vault.decrypted_secrets values($1,$2) on conflict(name) do update set decrypted_secret=excluded.decrypted_secret',['vzip_media_version_secret',shared]);
  await db.query('delete from auth.sessions');
  for(const s of [A,B,D])await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[s,U]);
  await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[C,V]);
@@ -223,7 +230,7 @@ async function bootWorker(){
      throw Error('unlisted RPC');
     },connection);
     return Response.json(result);
-   }catch(e){return Response.json({code:e.code},{status:e.code==='42501'?403:e.code==='40001'||e.code==='55000'?409:400});}
+   }catch(e){rpcTrace.push(name+':'+e.code);return Response.json({code:e.code},{status:e.code==='42501'?403:e.code==='40001'||e.code==='55000'?409:400});}
    finally{await connection.end();}
   }});
 }
@@ -266,6 +273,19 @@ test('a newly published metadata version makes the old delete request fail befor
  const d=await seed({mediaId:'actual-change',objectKey:one.done.key,objectVersion:one.ticket.descriptor.attempt,size:3,root:one.done.root,etag:one.done.etag});
  await db.query("update public.vocal_media set metadata=jsonb_set(metadata,'{r2Key}',to_jsonb($1::text)),updated_at=clock_timestamp() where id=$2",[two.done.key,d.id]);
  const response=await call('/v2/media/delete/prepare',{body:{requestId:d.request,mediaId:d.id,key:d.key,updatedAt:d.at,size:3}});
- assert.equal(response.status,409);const bucket=await mf.getR2Bucket('MEDIA');
+ assert.equal(response.status,409);assert.ok(rpcTrace.includes('vzip_prepare_media_delete:40001'));const bucket=await mf.getR2Bucket('MEDIA');
  assert.ok(await bucket.head(one.done.key));assert.deepEqual(new Uint8Array(await(await bucket.get(two.done.key)).arrayBuffer()),new Uint8Array([9,8,7]));assert.equal(await count('vzip_media_delete_requests'),0);
+});
+
+test('old Supabase storage writes cannot bypass the guard; reads and other accounts/buckets remain available',{skip},async()=>{
+ await seed();
+ await db.query("insert into storage.objects(bucket_id,name,owner) values('vocal-recordings','old-original',$1)",[U]);
+ assert.equal((await as(U,A,c=>c.query("select * from storage.objects where bucket_id='vocal-recordings'"))).rowCount,1);
+ assert.equal((await as(U,A,c=>c.query("delete from storage.objects where bucket_id='vocal-recordings'"))).rowCount,0);
+ assert.equal((await as(U,A,c=>c.query("update storage.objects set name='changed' where bucket_id='vocal-recordings'"))).rowCount,0);
+ await assert.rejects(as(U,A,c=>c.query("insert into storage.objects(bucket_id,name,owner) values('vocal-recordings','new',$1)",[U])),{code:'42501'});
+ await as(U,A,c=>c.query("insert into storage.objects(bucket_id,name,owner) values('other-bucket','ok',$1)",[U]));
+ await as(V,C,c=>c.query("insert into storage.objects(bucket_id,name,owner) values('vocal-recordings','legacy-ok',$1)",[V]));
+ assert.equal((await as(V,C,c=>c.query("delete from storage.objects where name='legacy-ok'"))).rowCount,1);
+ assert.equal((await db.query("select count(*) n from storage.objects where name='old-original'")).rows[0].n,'1');
 });
