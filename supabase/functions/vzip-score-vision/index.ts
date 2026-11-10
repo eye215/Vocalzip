@@ -54,7 +54,12 @@ Deno.serve(async (req:Request)=>{
     const format={type:'json_schema',name:mode==='notation'?'score_notation':'score_handwriting',strict:true,
       schema:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}};
     const res=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-mini',store:false,max_output_tokens:mode==='notation'?320:512,text:{format},input:[{role:'user',content:[{type:'input_text',text:prompt},{type:'input_image',image_url:image,detail:'high'}]}]}),signal:AbortSignal.timeout(20000)});
-    if(!res.ok){console.error('score vision failure',res.status);return reply(req,502,{error:'이미지 인식 요청에 실패했어요.'});}
+    if(!res.ok){
+      console.error('score vision failure',res.status);
+      if(res.status===401)return reply(req,503,{error:'OpenAI API 키 인증에 실패했어요. 서버의 API 키를 다시 설정해 주세요.'});
+      if(res.status===429)return reply(req,503,{error:'AI 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.'});
+      return reply(req,502,{error:'이미지 인식 요청에 실패했어요.'});
+    }
     const result=await res.json();const raw=(result.output||[]).flatMap((x:{content?:Array<{type:string;text?:string}>})=>x.content||[]).filter((x:{type:string})=>x.type==='output_text').map((x:{text?:string})=>x.text||'').join('');
     let parsed:Record<string,unknown>;try{parsed=JSON.parse(raw);}catch{return reply(req,502,{error:'인식 결과 형식을 확인할 수 없어요.'});}
     const confidence=['high','medium','low'].includes(String(parsed.confidence))?parsed.confidence:'low';
