@@ -77,6 +77,10 @@ async function route(request, env) {
     if (url.searchParams.has('sig')) await checkSignature(env, key, url.searchParams);
     else ownKey(await user(request, env), key);
     const response=await serve(request,env,key);
+    if(method==='GET'&&url.searchParams.has('download')){
+      const filename=String(url.searchParams.get('download')||'').replace(/[\\/\r\n";]/g,'_').slice(0,180);
+      if(filename)response.headers.set('content-disposition',"attachment; filename=\"download\"; filename*=UTF-8''"+encodeURIComponent(filename));
+    }
     if(env.SESSION_GUARD_ENABLED==='true')response.headers.set('cache-control','private, no-store');
     return response;
   }

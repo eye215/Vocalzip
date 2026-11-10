@@ -634,7 +634,7 @@ window.vzipAnalysisEnqueue=async()=>{if(!client?.rpc||!user)return null;const {d
 window.vzipAnalysisJobs=async()=>{
  if(!client||!user)return null;const owner=user.id,rows=[];
  for(let from=0;from<50000;from+=1000){
-  const {data,error}=await client.from('vocal_analysis_jobs').select('media_id,kind,status,updated_at').eq('user_id',owner).order('id').range(from,from+999);
+  const {data,error}=await client.from('vocal_analysis_jobs').select('media_id,kind,status,updated_at,last_error,cost_usd').eq('user_id',owner).order('id').range(from,from+999);
   if(error)return null;rows.push(...(data||[]));if(!data||data.length<1000)break;
  }
  const {data:review}=await client.from('vocal_analysis_jobs').select('media_id,result').eq('user_id',owner).eq('kind','song').eq('status','review').limit(2000);

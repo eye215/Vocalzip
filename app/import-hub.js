@@ -134,6 +134,7 @@ async function inspectFile(file, known) {
   row.suggestions = sug; if (sug[0]?.score >= 0.9) row.song = sug[0].id;
   evaluate(row);
   row.selected = row.status === 'ok';
+  VZ.processingLog?.record(row.id, {originalName:row.name, size:row.size, state:row.error?'failed':'review', error:row.error||'', songId:row.song, songSource:row.song?'파일명 추천 (가져오기 전 확인)':'미지정', date:row.date, dateSource:row.dateSource});
   return row;
 }
 async function analyze(files) {
@@ -214,12 +215,14 @@ async function importRows(rows) {
     if (direct && !window.vzipCloudSignedIn?.()) { hub.paused = true; hub.notice = '로그인이 풀렸어요. 다시 로그인한 뒤 "이어서 올리기"를 눌러 주세요. 완료된 파일은 그대로예요.'; break; }
     if (!row.file) { row.state = 'failed'; row.msg = '원본 파일을 다시 선택해야 해요.'; continue; }
     row.state = 'uploading'; row.msg = '준비 중…'; hub.current = row; drawRow(row);
+    VZ.processingLog?.record(row.id, {state:'uploading', originalName:row.name, songId:row.song, songSource:row.song?(row.suggestions?.[0]?.id===row.song?'파일명 추천 · 확인 후 저장':'직접 지정'):'미지정', date:row.date, dateSource:row.dateSource});
     try {
       const song = VZ.song(row.song);
       const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
       const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct, durationSeconds:row.duration},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
       row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
+      VZ.processingLog?.record(row.id, {state:'done', savedName:saved.name||'', songId:saved.songId||row.song, cloud:!!saved.cloud, pendingUpload:!!saved.pendingUpload, audioExtraction:!!saved.audioExtraction||!!saved.extracted, losslessFlac:!!saved.losslessFlac||!!saved.flac, savedSize:saved.savedSize||saved.size||0, error:''});
     } catch (e) {
       if (isAuth(e)) { row.state = 'waiting'; row.msg = ''; hub.paused = true; hub.notice = '로그인이 만료됐어요. 다시 로그인한 뒤 "이어서 올리기"를 눌러 주세요. 완료된 파일은 그대로예요.'; }
       else if ((isBusy(e) || isNetwork(e)) && (row.tries = (row.tries || 0) + 1) <= 3) {
@@ -227,6 +230,7 @@ async function importRows(rows) {
         await new Promise(r => setTimeout(r, isBusy(e) ? 4000 : 3000 * row.tries));
         if (!hub.paused) { rows.push(row); } // try again at the end of the list
       } else { row.state = 'failed'; row.msg = '실패: ' + (e.message || '알 수 없는 오류'); }
+      VZ.processingLog?.record(row.id, {state:row.state, error:row.state==='failed'?(e.message||'알 수 없는 오류'):''});
     }
     hub.current = null; drawRow(row); saveQueue();
   }
@@ -351,10 +355,19 @@ function draw() {
     h.querySelector('[data-more-rows]')?.addEventListener('click', () => { hub.limit += 200; draw(); });
     return;
   }
-  h.innerHTML = dashHtml() + listsHtml();
+  h.innerHTML = (hub.phase === 'done' ? resultHtml() : dashHtml()) + listsHtml();
   wireDash(h);
 }
 /* ---------- upload progress / result ---------- */
+function resultHtml() {
+  const q = hub.rows.filter(r => r.queued), c = counts(q);
+  return '<div class="card stack" data-result><strong>가져오기 완료</strong>' +
+    '<p class="small muted" style="margin:0">저장 ' + c.done + '개' + (c.dup ? ' · 중복 제외 ' + c.dup + '개' : '') + (c.failed ? ' · 실패 ' + c.failed + '개' : '') + '</p>' +
+    '<div class="btn-row"><a class="btn" href="#/library">보관함 보기</a><a class="btn secondary" href="#/processing-log">처리 내역</a><button type="button" class="btn secondary" data-report>결과 보고서 저장</button></div>' +
+    (hub.made ? '<p class="small muted" style="margin:0">연습 기록 ' + hub.made + '개 생성</p>' : '') +
+    (hub.linked ? '<p class="small muted" style="margin:0">레슨 녹음 ' + hub.linked + '개 연결</p>' : '') +
+    '<button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button></div>';
+}
 function dashHtml() {
   const q = hub.rows.filter(r => r.queued), c = counts(q), failed = c.failed, cur = hub.current;
   const unchecked = (hub.pendingFiles?.length || 0) + (hub.autoRunning ? hub.rows.filter(r => !r.queued).length : 0);
@@ -370,7 +383,7 @@ function dashHtml() {
     '<p class="small muted" style="margin:0">완료는 서버에 저장된 것을 확인한 파일만 세요. 멈추거나 중단돼도 완료된 파일은 그대로예요.</p>' +
     '<div class="btn-row">' + (importing ? (running ? '<button type="button" class="btn secondary" data-pause>일시정지</button>' : hub.running || hub.autoRunning ? '' : '<button type="button" class="btn" data-resume>이어서 올리기</button>') : '') +
       (failed && !hub.running && !hub.autoRunning && !hub.pendingFiles?.length ? '<button type="button" class="btn secondary" data-retry>실패한 ' + failed + '개만 다시</button>' : '') + '</div>' +
-    (hub.phase === 'done' ? '<div class="btn-row"><a class="btn" href="#/library">보관함 보기</a><button type="button" class="btn secondary" data-report>결과 보고서 저장</button></div>' + (hub.made ? '<p class="small muted" style="margin:0">연습 기록 ' + hub.made + '개 생성</p>' : '') + (hub.linked ? '<p class="small muted" style="margin:0">레슨 녹음 ' + hub.linked + '개 연결</p>' : '') + '<button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button>' : '') + '</div>';
+    '</div>';
 }
 function listsHtml() {
   const q = hub.rows.filter(r => r.queued), failed = q.filter(r => r.state === 'failed'), done = q.filter(r => r.state === 'done'), dup = q.filter(r => r.state === 'dup');
@@ -394,6 +407,7 @@ function wireDash(h) {
 function drawProgress() { const p = host()?.querySelector('[data-progress]'); if (p) p.textContent = hub.progress; else draw(); }
 function drawRow(row) {
   const h = host(); if (!h) return;
+  if (hub.phase === 'done') { draw(); return; }
   const dash = h.querySelector('[data-dash]');
   if (dash) { dash.outerHTML = dashHtml(); wireDash(h); return; }
   const el = h.querySelector('[data-row="' + row.id + '"] [data-msg]'); if (el) el.textContent = row.msg || ''; else draw();
@@ -439,7 +453,7 @@ function wireReview(h) {
   };
   wirePlay(h);
 }
-VZ.openImportHub = ({files} = {}) => {
+VZ.openImportHub = ({files, review = false} = {}) => {
   if (hub.phase === 'importing') { VZ.nav('#/import-hub'); return; }
   hub = fresh();
   // Files handed over from 파일 가져오기 (many files): no date or length filter, so nothing is left out silently.
@@ -447,7 +461,7 @@ VZ.openImportHub = ({files} = {}) => {
     hub.source = 'drive'; hub.cond = {start:'', end:'', min:0, max:24 * 3600}; VZ.nav('#/import-hub');
     const media = mediaOnly(files), skipped = files.length - media.length;
     if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 건너뛰었어요.');
-    setTimeout(() => runAuto(media), 0); return;
+    setTimeout(() => review ? analyze(media) : runAuto(media), 0); return;
   }
   VZ.nav('#/import-hub');
 };
