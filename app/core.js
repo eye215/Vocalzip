@@ -4,7 +4,7 @@
 const localStorage = window.VzipAccountScope?.storage || window.localStorage;
 
 const KEY = 'vocal-zip_mvp_v1';
-const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback'];
+const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback', 'scoreAnnotations'];
 const DEFAULTS = {categories:[{id:'c1',name:'발성',items:['립트릴','허밍','패사지오']},{id:'c2',name:'호흡',items:['복식호흡','호흡 유지']},{id:'c3',name:'곡 연습',items:['음정 교정','프레이징','감정 표현']}],songs:[],lessons:[],assignments:[],practices:[],comparisonReports:[]};
 const VZ = window.VZ = {version:'6.0'};
 
