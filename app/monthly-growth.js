@@ -18,6 +18,11 @@ let request = 0;
 function group(items) {
  const months = new Map();
  for(const m of items){
+  // 성장 분석은 곡으로 확인된 녹음만 사용한다. 트레이닝/연습실 과제는
+  // 같은 곡에 연결된 별도 레슨/곡 녹음이 아닌 한 포함하지 않는다.
+  if(!m.songId||!V.song(m.songId))continue;
+  const practice=M.owner?.(m)?.practice;
+  if(practice?.practiceRoom||practice?.practiceMode==='training')continue;
   const date=ym(M.dateOf(m));if(!date)continue;
   const slot=months.get(date)||[];slot.push(m);months.set(date,slot);
  }
@@ -151,7 +156,7 @@ function history(months){
  const ordered=[...months.keys()].sort();
  return '<section class="card growth-section"><h2>월별 기록</h2><div class="growth-months">'+ordered.map(key=>{
   const ms=months.get(key),eligible=ms.filter(valid).length;
-  return '<button type="button" class="growth-month" data-month="'+key+'"><strong>'+e(key.replace('-','년 ')+'월')+'</strong><span class="small muted">녹음 '+ms.length+'개 · 분석 가능 '+eligible+'개</span></button>';
+  return '<button type="button" class="growth-month" data-month="'+key+'"><strong>'+e(key.replace('-','년 ')+'월')+'</strong><span class="small muted">곡 녹음 '+ms.length+'개 · 분석 가능 '+eligible+'개</span></button>';
  }).join('')+'</div></section>';
 }
 async function mount(host){
@@ -168,7 +173,7 @@ async function mount(host){
    const current=months.get(selected)||[],previous=months.get(prev)||[];
    const rows=monthlyRows(selected,months);
    const validCount=current.filter(valid).length;
-   host.innerHTML='<header class="growth-intro"><p class="small muted">모든 곡의 녹음 데이터를 한곳에서</p><h2>내 목소리의 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
+   host.innerHTML='<header class="growth-intro"><p class="small muted">곡으로 지정된 녹음 데이터를 한곳에서</p><h2>내 목소리의 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">곡 녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
    archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+monthlyAiCard(selected)+prescriptions(rows)+'<div data-monthly-plans></div>'+history(months)+
    '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 다음 앱 접속 시 저장됩니다. 서버 예약 자동 생성과 AI 코멘트 기반 맞춤 추천 생성은 후속 개발 항목입니다.</p>';
 
