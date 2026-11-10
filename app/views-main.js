@@ -394,18 +394,33 @@ VZ.pickSong = (value, onPick) => {
 };
 
 /* ---------- 내 곡 ---------- */
-VZ.songSheet = (song, onSaved, {hideShow = false} = {}) => {
-  VZ.sheet({title:song ? '곡 수정' : '곡 추가', body:'<form id="song-form"><label class="field"><span>곡 제목 <span class="req">*</span></span><input type="text" name="title" maxlength="150" required autofocus value="' + esc(song?.title || '') + '"></label>' + (hideShow ? '' : '<label class="field"><span>작품 / 아티스트</span><input type="text" name="show" maxlength="150" placeholder="예: 레미제라블" value="' + esc(song?.show || '') + '"></label>') + '<label class="field"><span>별칭 (쉼표로 구분)</span><input type="text" name="aliases" maxlength="300" placeholder="예: 원데이모어, One Day" value="' + esc((song?.aliases || []).join(', ')) + '"><small class="small muted">파일 이름에 별칭이 들어 있으면 가져올 때 이 곡을 추천해요.</small></label></form>',
+const songArUrl = value => { try { const url = new URL(String(value || '').trim()); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; } };
+const songArRow = (link = {}) => '<div class="vz-ar-edit-row" data-ar-row data-id="' + esc(link.id || '') + '"><label class="field"><span>이름 (선택)</span><input type="text" data-ar-label maxlength="80" placeholder="예: 연습용 반주" value="' + esc(link.label || '') + '"></label><label class="field"><span>링크</span><input type="url" data-ar-url inputmode="url" maxlength="2000" placeholder="https://" value="' + esc(link.url || '') + '"></label><button type="button" class="icon-btn" data-remove-ar aria-label="AR 링크 삭제"><i class="ph ph-x" aria-hidden="true"></i></button></div>';
+VZ.songSheet = (song, onSaved, {hideShow = false, focusAr = false} = {}) => {
+  VZ.sheet({title:song ? '곡 수정' : '곡 추가', body:'<form id="song-form"><label class="field"><span>곡 제목 <span class="req">*</span></span><input type="text" name="title" maxlength="150" required autofocus value="' + esc(song?.title || '') + '"></label>' + (hideShow ? '' : '<label class="field"><span>작품 / 아티스트</span><input type="text" name="show" maxlength="150" placeholder="예: 레미제라블" value="' + esc(song?.show || '') + '"></label>') + '<label class="field"><span>별칭 (쉼표로 구분)</span><input type="text" name="aliases" maxlength="300" placeholder="예: 원데이모어, One Day" value="' + esc((song?.aliases || []).join(', ')) + '"><small class="small muted">파일 이름에 별칭이 들어 있으면 가져올 때 이 곡을 추천해요.</small></label><div class="vz-ar-edit"><div class="row between"><strong>AR 레퍼런스</strong><button type="button" class="btn sm secondary" data-add-ar>+ 링크 추가</button></div><div data-ar-rows>' + (song?.arLinks || []).map(songArRow).join('') + '</div></div></form>',
     foot:'<button type="submit" form="song-form" class="btn block">' + (song ? '저장' : '곡 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form');
+      const rows = form.querySelector('[data-ar-rows]');
+      const addAr = () => { rows.insertAdjacentHTML('beforeend', songArRow()); rows.lastElementChild.querySelector('[data-ar-url]').focus(); };
+      form.querySelector('[data-add-ar]').onclick = addAr;
+      rows.onclick = e => { const button = e.target.closest('[data-remove-ar]'); if (button) button.closest('[data-ar-row]').remove(); };
+      if (focusAr) addAr();
       form.onsubmit = e => {
         e.preventDefault();
         const title = form.title.value.trim(), show = hideShow ? (song?.show || '') : form.show.value.trim(), aliases = [...new Set(form.aliases.value.split(/[,，]/).map(x => x.trim()).filter(Boolean))].slice(0, 20);
+        const arLinks = [];
+        for (const row of rows.querySelectorAll('[data-ar-row]')) {
+          const label = row.querySelector('[data-ar-label]').value.trim(), input = row.querySelector('[data-ar-url]'), raw = input.value.trim();
+          if (!raw && !label) continue;
+          const url = songArUrl(raw);
+          if (!url) { input.setCustomValidity('http:// 또는 https:// 링크를 입력해 주세요.'); input.reportValidity(); input.addEventListener('input', () => input.setCustomValidity(''), {once:true}); return; }
+          arLinks.push({id:row.dataset.id || VZ.uid(), label, url});
+        }
         if (!title) return;
         if (!song && VZ.db.songs.some(s => s.title.trim().toLowerCase() === title.toLowerCase() && (s.show || '') === show)) { VZ.toast('이미 같은 곡이 있어요.', 'error'); return; }
         let id = song?.id;
-        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), hideShow ? {title, aliases} : {title, show, aliases}); else { id = VZ.uid(); d.songs.push({id, title, show, aliases, created:Date.now()}); } });
+        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), hideShow ? {title, aliases, arLinks} : {title, show, aliases, arLinks}); else { id = VZ.uid(); d.songs.push({id, title, show, aliases, arLinks, created:Date.now()}); } });
         if (ok) { close(); VZ.toast(song ? '곡을 수정했어요.' : '곡을 추가했어요.'); onSaved?.(id); }
       };
     }});
@@ -452,11 +467,13 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
     const tabs = [['media', '녹음'], ['lyrics', '가사'], ['scores', '악보'], ['timeline', '활동 기록']];
+    const links = (s.arLinks || []).filter(link => songArUrl(link.url));
     return '<div class="song-head vz-song-detail-hero"><span class="vz-song-detail-eyebrow">곡 상세</span><strong class="vz-song-detail-title">' + esc(s.title) + '</strong>' + '<span class="vz-song-detail-summary" data-summary></span></div>' +
-      '<a class="vz-song-lab-entry" href="#/vocal-lab/' + encodeURIComponent(s.id) + '"><span class="vz-song-lab-icon"><i class="ph ph-waveform" aria-hidden="true"></i></span><span><strong>보컬 연구소</strong><small data-lab-count>녹음 분석과 비교 보기</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a><div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
+      '<a class="vz-song-lab-entry" href="#/vocal-lab/' + encodeURIComponent(s.id) + '"><span class="vz-song-lab-icon"><i class="ph ph-waveform" aria-hidden="true"></i></span><span><strong>보컬 연구소</strong><small data-lab-count>녹음 분석과 비교 보기</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a><section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>' + links.length + '</span></strong><button type="button" data-add-song-ar>+ 링크 추가</button></div>' + (links.length ? '<div class="vz-ar-list">' + links.map((link, i) => '<a href="' + esc(songArUrl(link.url)) + '" target="_blank" rel="noopener noreferrer"><span><strong>' + esc(link.label || 'AR 레퍼런스 ' + (i + 1)) + '</strong><small>' + esc(link.url) + '</small></span><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>').join('') + '</div>' : '<p>링크를 추가하면 여기서 바로 열 수 있어요.</p>') + '</section><div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
     const s = VZ.song(r.params[0]); if (!s) return;
+    main.querySelector('[data-add-song-ar]').onclick = () => VZ.songSheet(VZ.song(s.id), null, {hideShow:true, focusAr:true});
     document.querySelector('.vz-collection-record')?.setAttribute('href','#/record?song='+encodeURIComponent(s.id));
     document.querySelector('[data-song-menu]')?.addEventListener('click', () => VZ.menu({title:s.title, body:'<div class="list"><button type="button" class="item" data-e><i class="ph ph-pencil-simple"></i><span class="item-main">곡 정보 수정</span></button><button type="button" class="item" data-rep-menu><i class="ph ph-music-notes"></i><span class="item-main">나의 레퍼토리 설정</span></button><button type="button" class="item" data-d style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">곡 삭제</span></button></div>',
       onMount:(el, close) => {

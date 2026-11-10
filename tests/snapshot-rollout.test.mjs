@@ -27,6 +27,7 @@ const save=async(u=U,s=A,revision=0,payload=base('keep'),id=randomUUID(),c=db,ge
  if(generation===undefined)generation=Number(revision)>0?(await db.query('select generation from public.vocal_data where user_id=$1',[u])).rows[0]?.generation||null:null;
  return as(u,s,async q=>(await q.query('select public.vzip_save_snapshot($1,$2,$3,$4) r',[revision,payload,id,generation])).rows[0].r,c);
 };
+const rollout=readFileSync(new URL('../supabase/proposals/20261115_snapshot_rollout.sql',import.meta.url),'utf8');
 before(async()=>{
  if(skip)return;
  admin=new pg.Client({connectionString:URL_});await admin.connect();name='vzip_snapshot_rollout_'+Date.now();await admin.query('create database '+name);
@@ -60,6 +61,10 @@ before(async()=>{
  await db.query("update public.vocal_data set payload=payload,revision=999999,updated_at='1900-01-01' where user_id=$1",[U]);
  assert.equal((await db.query("select revision,updated_at>'2099-01-01T00:00:00Z'::timestamptz advanced from public.vocal_data where user_id=$1",[U])).rows[0].advanced,true);
  assert.equal((await db.query('select revision from public.vocal_data where user_id=$1',[U])).rows[0].revision,'1');
+ const prior=(await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows;
+ await db.query(rollout);await db.query(rollout);
+ assert.deepEqual((await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows,prior);
+ assert.equal((await db.query('select count(*) from public.vzip_snapshot_rollout')).rows[0].count,'0');
 });
 beforeEach(async()=>{
  if(skip)return;
@@ -75,14 +80,7 @@ after(async()=>{
  if(admin){if(name)await admin.query('drop database if exists '+name);await admin.end()}
 });
 
-const rollout=readFileSync(new URL('../supabase/proposals/20261115_snapshot_rollout.sql',import.meta.url),'utf8');
-before(async()=>{
- if(skip)return;
- const prior=(await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows;
- await db.query(rollout);await db.query(rollout);
- assert.deepEqual((await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows,prior);
- assert.equal((await db.query('select count(*) from public.vzip_snapshot_rollout')).rows[0].count,'0');
-});
+
 const mode=(u,m)=>db.query('select public.vzip_set_snapshot_mode($1,$2)',[u,m]);
 const snapshot=async(u=U)=>(await db.query('select payload,revision,generation,updated_at::text from public.vocal_data where user_id=$1',[u])).rows[0];
 const direct=(u=U,s=A,payload=base('legacy'))=>as(u,s,c=>c.query('insert into public.vocal_data(user_id,payload) values($1,$2) on conflict(user_id) do update set payload=excluded.payload',[u,payload]));
