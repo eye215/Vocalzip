@@ -44,7 +44,7 @@ body .score-ink-sheet .sheet-body{padding:8px 12px 12px;display:flex;min-height:
 .score-ink-page{position:relative;background:white;margin:0 auto;flex:none}
 .score-ink-page canvas,.score-ink-page svg{display:block;position:absolute;inset:0;width:100%;height:100%}
 .score-ink-page svg{pointer-events:none;user-select:none;-webkit-user-select:none}
-.score-ink-page svg[data-tool=pen],.score-ink-page svg[data-tool=highlighter],.score-ink-page svg[data-tool=eraser]{pointer-events:auto;touch-action:none;cursor:crosshair}
+.score-ink-page svg[data-tool=pan],.score-ink-page svg[data-tool=pen],.score-ink-page svg[data-tool=highlighter],.score-ink-page svg[data-tool=eraser]{pointer-events:auto;touch-action:none;cursor:crosshair}
 .score-ink-page svg path{pointer-events:none}
 .score-ink-help{margin:0;font-size:12px;line-height:18px;color:#667085}
 .score-ink-sheet .sheet-foot{padding-top:6px!important}

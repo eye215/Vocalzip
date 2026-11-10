@@ -217,3 +217,32 @@ test('whole score row opens the viewer with keyboard access and independent edit
  await expect(page.getByRole('dialog',{name:'악보 개인 필기'})).toHaveCount(0);
  await page.getByRole('dialog',{name:'악보 삭제',exact:true}).getByRole('button',{name:'취소',exact:true}).click();
 });
+
+test('tablet default favors Pencil and two-finger pinch zoom changes only the viewport',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{Object.defineProperty(navigator,'platform',{configurable:true,value:'MacIntel'});Object.defineProperty(navigator,'maxTouchPoints',{configurable:true,value:5});});
+ const dialog=await open(page);await configure(dialog);await expect(dialog.getByLabel('펜만',{exact:true})).toBeChecked();
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
+ const before=await dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width);
+ await dialog.locator('[data-ink-svg]').evaluate(svg=>{
+  const r=svg.closest('[data-ink-stage]').getBoundingClientRect(),common={bubbles:true,pointerType:'touch',button:0};
+  const send=(type,id,x,primary)=>svg.dispatchEvent(new PointerEvent(type,{...common,pointerId:id,isPrimary:primary,clientX:r.x+x,clientY:r.y+140}));
+  send('pointerdown',31,90,true);send('pointerdown',32,190,false);
+  send('pointermove',31,50,true);send('pointermove',32,230,false);
+  send('pointerup',31,50,true);send('pointerup',32,230,false);
+ });
+ await expect(dialog.locator('[data-ink-box]')).toBeVisible();
+ await expect.poll(()=>dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width)).toBeGreaterThan(before*1.5);
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations||[])).toEqual([]);
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();
+ await dialog.locator('[data-ink-svg]').evaluate(svg=>{
+  const r=svg.closest('[data-ink-stage]').getBoundingClientRect(),common={bubbles:true,pointerId:81,pointerType:'pen',isPrimary:true,button:0,pressure:.7};
+  for(const [type,x]of [['pointerdown',50],['pointermove',150],['pointerup',180]])svg.dispatchEvent(new PointerEvent(type,{...common,clientX:r.x+x,clientY:r.y+100}));
+ });
+ await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(1);
+});
+test('fullscreen-capable browsers keep the editor open when the explicit exit control is used',async({page})=>{
+ await setup(page);const dialog=await open(page);await dialog.getByRole('button',{name:'전체화면',exact:true}).click();
+ await expect(dialog).toHaveClass(/score-ink-fullscreen/);await expect(dialog.getByRole('button',{name:'전체화면 종료',exact:true})).toBeVisible();
+ await dialog.getByRole('button',{name:'전체화면 종료',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog).not.toHaveClass(/score-ink-fullscreen/);
+});

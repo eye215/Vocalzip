@@ -7,13 +7,13 @@ const PALETTES={
  highlighter:[['#fef08a','파스텔 노랑'],['#fbcfe8','파스텔 분홍'],['#bae6fd','파스텔 하늘'],['#bbf7d0','파스텔 초록'],['#ddd6fe','파스텔 보라'],['#fed7aa','파스텔 주황'],['#99f6e4','파스텔 민트'],['#e9d5ff','파스텔 라일락']]
 };
 const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},penOnly:false});
-function create({storage,identity}){
+function create({storage,identity,defaultPenOnly=false}){
  const initial=identity(),owner=initial?.owner,session=initial?.session;
  if(!owner||!session)throw Error('로그인이 필요해요.');
  const key=PREFIX+encodeURIComponent(owner);
  const current=()=>{const now=identity();if(now?.owner!==owner||now?.session!==session)throw Error('로그인이 바뀌어 도구 설정을 중단했어요.');};
  function read(){
-  current();const fallback=defaults();let data;
+  current();const fallback=defaults();fallback.penOnly=defaultPenOnly===true;let data;
   try{const text=storage.getItem(key);if(!text||text.length>16000)return fallback;data=JSON.parse(text);}catch{return fallback;}
   if(data?.version!==1||data.owner!==owner)return fallback;
   for(const tool of ['pen','highlighter']){
@@ -23,7 +23,7 @@ function create({storage,identity}){
    if(Number.isFinite(p.opacity)&&p.opacity>=0.05&&p.opacity<=1)fallback[tool].opacity=p.opacity;
    for(const name of ['recent','custom'])if(Array.isArray(p[name]))fallback[tool][name]=[...new Set(p[name].filter(c=>typeof c==='string'&&HEX.test(c)).map(c=>c.toLowerCase()))].slice(0,name==='recent'?8:24);
   }
-  fallback.penOnly=data.penOnly===true;return fallback;
+  if(typeof data.penOnly==='boolean')fallback.penOnly=data.penOnly;return fallback;
  }
  function write(tool,patch={},options={}){
   current();const data=read();

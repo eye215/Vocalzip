@@ -34,10 +34,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const current=()=>{const i=identity(),s=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted);if(i?.owner!==owner||i.session!==initialSession||!s||s.r2Key!==score.r2Key)throw Error('계정이나 악보가 바뀌어 필기를 중단했어요.');};
  let store,prefs,profiles;
- try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity});profiles=prefs.read();}
+ try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let tool='pan',paintTool='pen',full=false,hadNative=false,fullGeneration=0,touchPan=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
+ let tool='pan',paintTool='pen',full=false,hadNative=false,fullGeneration=0,touchPan=null,touches=new Map(),pinch=null,pinchDirty=false,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
  const button=(name,icon,label)=>'<button type="button" class="icon-btn" data-ink-'+name+' aria-label="'+label+'" title="'+label+'"><i class="ph ph-'+icon+'"></i></button>';
  const tools=['pan','pen','highlighter','eraser'];
  const names=['이동','펜','형광펜','지우개'],icons=['hand','pen','highlighter','eraser'];
@@ -83,7 +83,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   swatches('custom',p.custom.map(c=>[c,'사용자 색상']));
   el.querySelector('[data-ink-width]').value=String(Math.round(p.width*1000));el.querySelector('[data-ink-width-label]').textContent=String(Math.round(p.width*1000));
   el.querySelector('[data-ink-opacity]').value=String(Math.round((1-p.opacity)*100));el.querySelector('[data-ink-opacity-label]').textContent=Math.round((1-p.opacity)*100)+'%';
-  el.querySelector('[data-ink-pen-only]').checked=profiles.penOnly;
+  el.querySelector('[data-ink-pen-only]').checked=profiles.penOnly;if(svg)svg.dataset.penOnly=String(profiles.penOnly);
   el.querySelector('[data-ink-picker]').value=p.color;el.querySelector('[data-ink-hex]').value=p.color;
   el.querySelector('[data-ink-custom-add]').disabled=false;el.querySelector('[data-ink-custom-remove]').disabled=!p.custom.includes(p.color);
   el.style.setProperty('--ink-active-color',p.color);
@@ -94,7 +94,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   catch(e){if(patch.width!==undefined||patch.opacity!==undefined)syncSettings();say('도구 설정을 저장하지 못했어요: '+e.message,true);}
  }
  function fullLayout(next){
-  full=next;el.classList.toggle('score-ink-fullscreen',full);
+  resetGestures();full=next;el.classList.toggle('score-ink-fullscreen',full);
   const button=el.querySelector('[data-ink-fullscreen]');
   button.setAttribute('aria-label',full?'전체화면 종료':'전체화면');button.title=full?'전체화면 종료':'전체화면';
   button.innerHTML='<i class="ph ph-'+(full?'arrows-in':'arrows-out')+'" aria-hidden="true"></i>';
@@ -112,6 +112,47 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const native=document.fullscreenElement===el;
   if(hadNative&&!native&&full){fullLayout(false);requestAnimationFrame(renderPage);}
   hadNative=native;
+ }
+
+ function resetGestures(){touchPan=null;touches.clear();pinch=null;pinchDirty=false;}
+ function zoomValue(){
+  const select=el.querySelector('[data-ink-zoom]'),value=String(zoom);
+  select.querySelector('[data-ink-free-zoom]')?.remove();
+  if(![...select.options].some(o=>o.value===value)){const option=new Option(Math.round(zoom*100)+'%',value);option.dataset.inkFreeZoom='';select.add(option);}
+  select.value=value;
+ }
+ function beginPinch(){
+  const points=[...touches.values()];if(points.length<2)return;
+  const [a,b]=points,r=box.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
+  if(distance<8)return;
+  pinch={distance,zoom,x:((a.x+b.x)/2-r.left)/r.width,y:((a.y+b.y)/2-r.top)/r.height};
+ }
+ function gestureDown(event){
+  if(touches.size>=2||event.width>50||event.height>50)return;
+  event.preventDefault();touches.set(event.pointerId,{x:event.clientX,y:event.clientY});touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
+  if(touches.size===2)beginPinch();try{svg.setPointerCapture(event.pointerId);}catch{}
+ }
+ function gestureMove(event){
+  const old=touches.get(event.pointerId);if(!old)return false;
+  event.preventDefault();touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(touches.size===2){
+   if(!pinch)beginPinch();if(!pinch)return true;
+   const [a,b]=[...touches.values()],r=stage.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
+   zoom=Math.round(Math.max(.75,Math.min(4,pinch.zoom*distance/pinch.distance))*100)/100;zoomValue();
+   const width=baseWidth*zoom,height=width*aspect;box.style.width=width+'px';box.style.height=height+'px';
+   stage.scrollLeft=box.offsetLeft+pinch.x*width-((a.x+b.x)/2-r.left);
+   stage.scrollTop=box.offsetTop+pinch.y*height-((a.y+b.y)/2-r.top);pinchDirty=true;
+  }else{
+   stage.scrollLeft-=event.clientX-old.x;stage.scrollTop-=event.clientY-old.y;
+   touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
+  }
+  return true;
+ }
+ function gestureEnd(event){
+  if(!touches.has(event.pointerId))return false;
+  touches.delete(event.pointerId);pinch=null;
+  if(!touches.size){const redraw=pinchDirty;resetGestures();if(redraw)renderPage({keepScroll:true});}
+  return true;
  }
 
  function strokes(){
@@ -168,8 +209,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   }
  }
  function coords(event){const r=svg.getBoundingClientRect();return Ink.point((event.clientX-r.left)/r.width,(event.clientY-r.top)/r.height,event.pressure||0.5);}
- async function renderPage(){
-  if(!doc||closed)return;finishStroke();busy=true;ready=false;const number=++renderNumber;renderTask?.cancel();
+ async function renderPage({keepScroll=false}={}){
+  if(!doc||closed)return;const previousScroll={left:stage.scrollLeft,top:stage.scrollTop};resetGestures();finishStroke();busy=true;ready=false;const number=++renderNumber;renderTask?.cancel();
   box.hidden=true;svg.dataset.tool='pan';say('악보 '+pageNo+'쪽을 불러오고 있어요.');
   try{
    current();const page=await doc.getPage(pageNo);if(closed||number!==renderNumber)return;current();
@@ -182,7 +223,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(closed||number!==renderNumber)return;current();
    el.querySelector('[data-ink-page]').textContent=pageNo+' / '+doc.numPages+'쪽';
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
-   box.hidden=false;ready=true;svg.dataset.tool=tool;stage.scrollTo(0,0);
+   box.hidden=false;ready=true;svg.dataset.tool=tool;svg.dataset.penOnly=String(profiles.penOnly);if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
    paint();if(!pending)say('이동 모드로 스크롤하거나 필기 도구를 선택하세요.');
   }catch(e){if(!closed&&number===renderNumber&&e.name!=='RenderingCancelledException')say('악보를 열지 못했어요: '+e.message,true);}
   finally{if(number===renderNumber){busy=false;if(!closed)paint();}}
@@ -196,7 +237,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{current();store.restore();paint();}catch{sheet.close();}
  }
  function cleanup(){
-  closed=true;document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
+  closed=true;document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
   window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);VZ.setGuard(null);
  }
@@ -220,10 +261,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-hex]').oninput=event=>{const valid=/^#[0-9a-f]{6}$/i.test(event.target.value);el.querySelector('[data-ink-custom-add]').disabled=!valid;if(valid)el.querySelector('[data-ink-picker]').value=event.target.value;};
   el.querySelector('[data-ink-custom-add]').onclick=()=>updateSettings({color:el.querySelector('[data-ink-hex]').value},{custom:true,recent:true});
   el.querySelector('[data-ink-custom-remove]').onclick=()=>updateSettings({},{removeCustom:true});
-  el.querySelector('[data-ink-pen-only]').onchange=event=>{finishStroke();try{profiles=prefs.write('input',{penOnly:event.target.checked});}catch(e){event.target.checked=profiles.penOnly;say(e.message,true);}};
+  el.querySelector('[data-ink-pen-only]').onchange=event=>{finishStroke();try{profiles=prefs.write('input',{penOnly:event.target.checked});syncSettings();}catch(e){event.target.checked=profiles.penOnly;say(e.message,true);}};
   syncSettings();settingsOpen(false);
   el.querySelectorAll('[data-ink-tool]').forEach(button=>button.onclick=()=>{
-   finishStroke();touchPan=null;tool=button.dataset.inkTool;svg.dataset.tool=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
+   finishStroke();resetGestures();tool=button.dataset.inkTool;svg.dataset.tool=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
   });
   el.querySelector('[data-ink-prev]').onclick=()=>{if(ready&&!busy&&pageNo>1){pageNo--;renderPage();}};
@@ -239,13 +280,16 @@ VZ.openScoreInk=(songId,scoreId)=>{
    }
   };
   svg.onpointerdown=event=>{
-   if(!ready||busy||tool==='pan'||active||pending||event.isPrimary===false||event.button>0)return;
-   if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
-   if(profiles.penOnly&&event.pointerType!=='pen'){
-    if(event.pointerType==='touch'){event.preventDefault();touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};try{svg.setPointerCapture(event.pointerId);}catch{}}
-    return;
+   if(!ready||busy||pending||event.button>0)return;
+   if(event.pointerType==='touch'&&(profiles.penOnly||tool==='pan')){
+    if(active)return;
+    if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
+    gestureDown(event);return;
    }
-   touchPan=null;
+   if(tool==='pan'||active||event.isPrimary===false)return;
+   if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
+   if(profiles.penOnly&&event.pointerType!=='pen')return;
+   resetGestures();
    try{
     current();event.preventDefault();const p=coords(event);
     if(tool==='eraser'){const found=strokes().reverse().find(s=>Ink.hit(s,p,aspect));if(found)apply({add:[],remove:[found]});return;}
@@ -256,14 +300,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
    }catch(e){say(e.message,true);}
   };
   svg.onpointermove=event=>{
-   if(touchPan?.pointer===event.pointerId&&!active){event.preventDefault();stage.scrollLeft-=event.clientX-touchPan.x;stage.scrollTop-=event.clientY-touchPan.y;touchPan.x=event.clientX;touchPan.y=event.clientY;return;}
+   if(!active&&gestureMove(event))return;
    if(active?.pointer!==event.pointerId)return;event.preventDefault();
    const samples=event.getCoalescedEvents?.();const events=samples?.length?samples:[event];
    for(const item of events){const p=coords(item),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008&&active.stroke.points.length<Ink.MAX_POINTS)active.stroke.points.push(p);}
    schedule();
   };
   svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{
-   if(touchPan?.pointer===event.pointerId){touchPan=null;return;}
+   if(gestureEnd(event))return;
    if(active?.pointer!==event.pointerId)return;
    if(event.type==='pointerup'&&active.stroke.points.length<Ink.MAX_POINTS){const p=coords(event),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008)active.stroke.points.push(p);}
    finishStroke();

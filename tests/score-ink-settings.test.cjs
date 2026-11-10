@@ -42,3 +42,8 @@ test('malformed and future preferences fall back without rewriting raw storage o
   f.memory.set(f.api.key,text);assert.match(f.api.read().pen.color,/^#[0-9a-f]{6}$/);assert.equal(f.memory.get(f.api.key),text);
  }
 });
+
+test('tablet pen-only default applies only until the user chooses an input preference',()=>{
+ const f=fixture(),tablet=create({...f.options,defaultPenOnly:true});assert.equal(tablet.read().penOnly,true);
+ tablet.write('input',{penOnly:false});assert.equal(create({...f.options,defaultPenOnly:true}).read().penOnly,false);
+});
