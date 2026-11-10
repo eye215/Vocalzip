@@ -5,7 +5,7 @@ test('weekly draft stays separate from goals until explicit save',async({page})=
  await page.addScriptTag({path:path.resolve('app/practice-review-model.js')});await page.addScriptTag({path:path.resolve('app/practice-review.js')});
  await page.evaluate(()=>{const main=document.querySelector('main');main.innerHTML=reviewRoute.render();return reviewRoute.mount(main,{query:new URLSearchParams()});});
  await page.getByRole('button',{name:'기록으로 AI 추천받기'}).click();await expect(page.locator('[name="action"]')).toHaveValue('가사의 목적을 정리해요.');expect(await page.evaluate(()=>VZ.db.dailyGoals.length)).toBe(0);
- await page.locator('[name="section"]').fill('후렴 첫 두 줄');await page.getByRole('button',{name:'오늘 목표에 담기',exact:true}).click();await expect(page.locator('[data-status]')).toContainText('오늘 목표에 담았어요');expect(await page.evaluate(()=>VZ.db.dailyGoals[0].recommendation.section)).toBe('후렴 첫 두 줄');
+ await page.locator('[name="section"]').fill('후렴 첫 두 줄');await page.getByRole('button',{name:'오늘 목표에 담기',exact:true}).click();await expect(page.locator('[data-status]')).toContainText('오늘 목표에 담았어요');expect(await page.evaluate(()=>VZ.db.dailyGoals[0].recommendation.section)).toBe('후렴 첫 두 줄');await page.locator('[name=action]').fill('새 회고 목표');await page.getByRole('button',{name:'오늘 목표에 담기',exact:true}).click();expect(await page.evaluate(()=>VZ.db.dailyGoals.length)).toBe(1);expect(await page.evaluate(()=>VZ.db.dailyGoals[0].title)).toContain('새 회고 목표');await page.locator('[data-skip]').click();await expect(page.locator('[data-status]')).toContainText('이미 오늘 목표에 담은');
 });
 
 test('today recommendation considers homework and preserves it',async({page})=>{
