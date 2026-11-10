@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=25';
+import {createFloatingHome} from './student-home-html.js?v=26';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -107,7 +107,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
    try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
     ...recentCallbacks(r),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
-    onGoals:planSheet,onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
+    onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
@@ -122,7 +122,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     host.querySelector('[data-home-retry]').onclick=()=>V.render();return;
    }
    if(!host.isConnected)return;
-   host.replaceChildren(root);const review=document.createElement('a');review.className='btn secondary block';review.href='#/practice-review';review.textContent='주간 돌아보기 · 다음 목표 추천';const daily=document.createElement('a');daily.className='btn secondary block';daily.href='#/practice-review?mode=today';daily.textContent='AI로 오늘 할 일 추천받기';root.append(daily,review);applyTheme();
+   host.replaceChildren(root);applyTheme();
    let mediaGeneration=0,lastDate=today();
    const refreshMedia=async()=>{
     const generation=++mediaGeneration;
