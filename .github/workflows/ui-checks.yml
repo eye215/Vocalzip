@@ -19,8 +19,10 @@ jobs:
       - run: npm run test:syntax
       - run: node --test tests/collection-routes.test.cjs
       - run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            timeout 300 sudo apt-get update -q
+            timeout 300 sudo apt-get install -y -q ffmpeg
+          fi
       - run: node tests/make-audio-fixtures.cjs
       - run: node --test tests/repertoire-model.test.cjs tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs tests/data-merge.test.cjs tests/media-delete.test.cjs tests/flac-encode.test.cjs tests/vocal-analysis.test.cjs
       - run: npx playwright install --with-deps chromium webkit
