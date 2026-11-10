@@ -1,0 +1,16 @@
+/* VOCAL.zip monthly overview — scoped to the growth screen. */
+.growth-page{display:grid;gap:16px;padding-bottom:28px}
+.growth-intro{padding:12px 2px}.growth-intro h2{font-size:25px;margin:5px 0 16px}
+.growth-intro .field{max-width:280px}.growth-section{padding:18px}
+.growth-section h2{font-size:18px;margin:0 0 12px}
+.growth-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.growth-metric{padding:14px;min-width:0}.growth-metric-head{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.growth-number{display:block;font-size:22px;margin:14px 0 4px}
+.growth-state{font-size:12px;border-radius:99px;background:var(--vz-surface-muted,#f3f0f8);padding:4px 9px}
+.growth-state.good{color:#147d56;background:#e7f7ef}.growth-state.bad{color:#ad3c56;background:#fff0f1}
+.growth-task{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--vz-border,#eee)}
+.growth-task:last-of-type{border-bottom:0}.growth-task-number{border-radius:50%;background:var(--vz-accent,#7a32f5);color:white;width:26px;height:26px;display:grid;place-items:center;flex:none}
+.growth-task p{margin:5px 0}.growth-months{display:grid;gap:8px}
+.growth-month{font:inherit;background:transparent;color:inherit;border:1px solid var(--vz-border,#ddd);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left}
+.growth-disclaimer{padding:0 4px;line-height:1.6}
+@media(max-width:420px){.growth-metrics{grid-template-columns:1fr}.growth-month{align-items:flex-start;flex-direction:column}}
