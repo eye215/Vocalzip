@@ -65,6 +65,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '<div class="score-ink-quick" data-ink-quick hidden><div class="score-ink-quick-row" data-ink-quick-color-row><span>색상</span><div class="score-ink-quick-options" data-ink-quick-colors></div></div><div class="score-ink-quick-row"><span data-ink-quick-size-label>굵기</span><div class="score-ink-quick-options" data-ink-quick-sizes></div></div></div>'+
   '<div class="score-ink-marker-palette" data-ink-marker-palette hidden><button type="button" data-ink-marker="breath">숨표</button><button type="button" data-ink-marker="repeat">반복</button><button type="button" data-ink-marker="cut">컷</button><button type="button" data-ink-marker="start">시작점</button></div>'+
   '<div class="score-ink-vision-tools" data-ink-vision-tools hidden><button type="button" data-ink-notation>표기 알아보기</button><button type="button" data-ink-note-undo hidden>메모 되돌리기</button><span>요청할 때만 선택 영역을 AI로 설명해요.</span></div><div class="score-ink-explain-action" data-ink-explain-action hidden><button type="button" data-ink-explain-selection>선택 영역 설명 보기</button></div>'+ 
+  '<section class="score-ink-settings" data-ink-settings aria-label="필기 설정" hidden><div class="score-ink-settings-head"><strong data-ink-profile-label>펜 설정</strong>'+button('settings-close','x','필기 설정 닫기')+'</div>'+
   '<div class="score-ink-settings-tabs" role="tablist" aria-label="도구 상세 설정"><button type="button" data-ink-settings-tab="pen" role="tab">펜</button><button type="button" data-ink-settings-tab="highlighter" role="tab">형광펜</button><button type="button" data-ink-settings-tab="eraser" role="tab">지우개</button><button type="button" data-ink-settings-tab="general" role="tab">기타</button></div><div class="score-ink-settings-content" data-ink-draw-settings>'+
   '<div class="score-ink-palette-section"><span>기본 색상</span><div data-ink-palette class="score-ink-swatches" role="group" aria-label="기본 색상"></div></div>'+
   '<div class="score-ink-palette-section"><span>최근 사용</span><div data-ink-recent class="score-ink-swatches" role="group" aria-label="최근 사용 색상"></div></div>'+
@@ -601,13 +602,37 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function openOtherScores(){
   const picker=el.querySelector('[data-ink-score-picker]');if(!picker.hidden){picker.hidden=true;return;}
-  const scores=(VZ.song(songId)?.scores||[]).filter(item=>!item.deleted&&item.r2Key?.startsWith('u/'+owner+'/'+item.id+'/')&&item.id!==scoreId);
+  const songs=VZ.db.songs||[],currentSong=VZ.song(songId),lastPractice=new Map();
+  for(const practice of VZ.db.practices||[]){
+   if(!practice.songId||!/^\d{4}-\d{2}-\d{2}$/.test(practice.date||''))continue;
+   const stamp=practice.date+'|'+String(Number(practice.created)||0).padStart(15,'0');
+   if(stamp>(lastPractice.get(practice.songId)||''))lastPractice.set(practice.songId,stamp);
+  }
+  const sameShow=new Set([songId]);
+  const showName=(currentSong?.show||'').trim().toLocaleLowerCase();
+  for(const song of songs)if(showName&&song.show?.trim().toLocaleLowerCase()===showName)sameShow.add(song.id);
+  for(const show of VZ.db.performances||[]){
+   if(show.ownerId!==owner||!(show.songLinks||[]).some(link=>link.songId===songId))continue;
+   for(const link of show.songLinks||[])if(link.songId)sameShow.add(link.songId);
+  }
+  const scores=songs.flatMap(song=>(song.scores||[]).filter(item=>!item.deleted&&item.id!==scoreId&&item.r2Key?.startsWith('u/'+owner+'/'+item.id+'/')).map(item=>({song,item})));
+  const mostRecent=[...scores].filter(x=>lastPractice.has(x.song.id)).sort((a,b)=>lastPractice.get(b.song.id).localeCompare(lastPractice.get(a.song.id)))[0]?.song.id;
+  scores.sort((a,b)=>{
+   const rank=x=>x.song.id===mostRecent?0:x.song.id===songId?1:sameShow.has(x.song.id)?2:3;
+   return rank(a)-rank(b)||(lastPractice.get(b.song.id)||'').localeCompare(lastPractice.get(a.song.id)||'')||String(a.song.title||'').localeCompare(String(b.song.title||''),'ko')||String(a.item.title||'').localeCompare(String(b.item.title||''),'ko');
+  });
   picker.replaceChildren();
-  if(!scores.length){const empty=document.createElement('p');empty.textContent='이 곡에 다른 PDF 악보가 없어요.';picker.append(empty);}
-  for(const item of scores){
-   const button=document.createElement('button');button.type='button';button.textContent=item.title||item.fileName||'PDF 악보';
+  if(!scores.length){const empty=document.createElement('p');empty.textContent='열 수 있는 다른 PDF 악보가 없어요.';picker.append(empty);}
+  for(const {song,item} of scores){
+   const button=document.createElement('button');button.type='button';
+   const title=document.createElement('strong');title.textContent=song.title||'제목 없는 곡';
+   const detail=document.createElement('span');detail.textContent=[item.title||item.fileName||'PDF 악보',song.show||''].filter(Boolean).join(' · ');
+   const heading=document.createElement('span');heading.className='score-ink-score-heading';heading.append(title);
+   const badge=song.id===mostRecent?'최근 연습':sameShow.has(song.id)?'같은 공연':'';
+   if(badge){const tag=document.createElement('small');tag.textContent=badge;heading.append(tag);}
+   button.append(heading,detail);
    button.onclick=()=>{finishStroke();if(pending){say('필기를 먼저 다시 저장해 주세요. 저장되지 않은 획은 이 화면에 남아 있어요.',true);return;}
-    try{current();sheet.close();requestAnimationFrame(()=>VZ.openScoreInk(songId,item.id));}catch(e){say(e.message,true);}
+    try{current();sheet.close();requestAnimationFrame(()=>VZ.openScoreInk(song.id,item.id));}catch(e){say(e.message,true);}
    };
    picker.append(button);
   }

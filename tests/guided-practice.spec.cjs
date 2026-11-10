@@ -8,8 +8,8 @@ function setup({assignments=[],feedback=[],tips=[],categories=[]}={}){
   const V={db,media:{list:async()=>[]},esc:s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),today:()=> '2026-11-10',
     uid:()=>`new-${db.categories.length}`,taskInPeriod:t=>t.status!=='done',taskLessons:t=>t.lessonId?[t.lessonId]:[],taskSongId:t=>t.songId||'',dateLabel:s=>s,
     practiceTips:()=>({tips}),route:()=>{}};
-  const window={VZ:V};
-  vm.runInNewContext(fs.readFileSync('app/guided-practice.js','utf8'),{window,document:{},location:{},setInterval,clearInterval}, {filename:'app/guided-practice.js'});
+  const window={VZ:V,addEventListener:()=>{}};
+  vm.runInNewContext(fs.readFileSync('app/guided-practice.js','utf8'),{window,document:{addEventListener:()=>{}},location:{},setInterval,clearInterval}, {filename:'app/guided-practice.js'});
   return V;
 }
 test('lesson homework comes first, repeated measurements fill only three cards',async()=>{

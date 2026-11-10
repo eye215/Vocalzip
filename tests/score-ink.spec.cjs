@@ -48,6 +48,32 @@ async function draw(page,dialog,{tool='펜',y=.22,ignored=false}={}){
  if(!ignored)await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');
 }
 test.afterEach(async({page})=>expect(page.__errors||[]).toEqual([]));
+test('other scores lists peer songs, puts the latest practiced song first, then the same show, and opens the selected PDF',async({page})=>{
+ const r2=await setup(page);
+ for(const id of ['score-recent','score-show','score-other'])r2.store.set('u/ui-test-user/'+id+'/original.pdf',{bytes,type:'application/pdf',etag:'"pdf"'});
+ await page.evaluate(size=>window.VZ.change(d=>{
+  d.songs[0].show='Mamma Mia';
+  d.songs.push(
+   {id:'s2',title:'The Winner Takes It All',show:'공연용 편집본',scores:[{id:'score-show',songId:'s2',title:'공연 악보',r2Key:'u/ui-test-user/score-show/original.pdf',size}]},
+   {id:'s3',title:'Memory',show:'Cats',scores:[{id:'score-recent',songId:'s3',title:'연습 악보',r2Key:'u/ui-test-user/score-recent/original.pdf',size}]},
+   {id:'s4',title:'Tomorrow',show:'Annie',scores:[{id:'score-other',songId:'s4',title:'기본 악보',r2Key:'u/ui-test-user/score-other/original.pdf',size}]}
+  );
+  d.performances=[{id:'show-1',ownerId:'ui-test-user',title:'Mamma Mia',songLinks:[{songId:'s1'},{songId:'s2'}]}];
+  d.practices=[{id:'p1',songId:'s2',date:'2026-11-09'},{id:'p2',songId:'s3',date:'2026-11-10'}];
+ }),bytes.length);
+ const dialog=await open(page);
+ await dialog.getByRole('button',{name:'다른 악보'}).click();
+ const options=dialog.locator('[data-ink-score-picker] button');
+ await expect(options).toHaveCount(3);
+ await expect(options.nth(0)).toContainText('Memory');
+ await expect(options.nth(0)).toContainText('최근 연습');
+ await expect(options.nth(1)).toContainText('The Winner Takes It All');
+ await expect(options.nth(1)).toContainText('같은 공연');
+ await expect(options.nth(2)).toContainText('Tomorrow');
+ await options.nth(0).click();
+ await expect(page.getByRole('dialog',{name:'악보 개인 필기'}).locator('.score-ink-title')).toHaveText('연습 악보');
+ await expect(page.getByRole('dialog',{name:'악보 개인 필기'}).locator('[data-ink-box]')).toBeVisible();
+});
 test('real PDF renders, ink persists after reload and original PDF/lesson/practice bytes remain unchanged',async({page})=>{
  const r2=await setup(page),dialog=await open(page);
  const before=await page.evaluate(()=>({songs:window.VZ.db.songs,lessons:window.VZ.db.lessons,practices:window.VZ.db.practices}));
