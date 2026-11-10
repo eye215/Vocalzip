@@ -38,6 +38,8 @@ jobs:
       # Previous full-suite run timed out in this existing WebKit calendar route.
       - name: Repeat metadata date edit regression in WebKit
         run: npx playwright test tests/ui.spec.cjs --project=webkit-mobile --grep 'Metadata-derived dates remain editable' --repeat-each=3 --workers=1
+      - name: Repeat selection movement in WebKit after pixel-rounding regression
+        run: npx playwright test tests/score-ink.spec.cjs --project=webkit-mobile --grep 'selection moves a group once' --repeat-each=3 --workers=1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

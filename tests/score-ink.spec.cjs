@@ -352,6 +352,7 @@ test('selection controls remain touch sized in fullscreen, preserve selection on
  for(const label of ['선택 필기 축소','선택 필기 확대','선택 필기 삭제','필기 선택 해제']){
   const r=await dialog.getByRole('button',{name:label,exact:true}).boundingBox();expect(r.width).toBeGreaterThanOrEqual(44);expect(r.height).toBeGreaterThanOrEqual(44);
  }
+ if(process.env.VZ_INK_PREVIEW==='1'&&test.info().project.name==='chromium-mobile')console.log('VZIP_INK_SELECTION_PREVIEW:'+Buffer.from(await page.screenshot()).toString('base64'));
  await dialog.getByLabel('악보 확대',{exact:true}).selectOption('1.5');
  await expect(dialog.locator('[data-ink-selection-bar]')).toBeVisible();
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(before);
