@@ -123,6 +123,7 @@ function render(host,month,items,rows){
  songInput.addEventListener('change',updateRecordings);
  updateRecordings();
  recordInput.addEventListener('change',()=>{stopReview();weakToken++;statusEl.textContent='';formEl.elements.sourceRecording.value='';});
+ for(const field of [formEl.elements.start,formEl.elements.end])field.addEventListener('input',()=>{formEl.elements.sourceRecording.value='';});
  async function playSegment(item,seg,playerHost){
   stopReview();const generation=reviewState.generation;
   playerHost.textContent='재생 불러오는 중…';
