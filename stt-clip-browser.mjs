@@ -41,14 +41,13 @@ export function encodeBufferRange(pcm,buffer,bufferTimestamp,clipStart,firstInde
 const SEARCH_SECONDS = 120;
 /** Fetch only the R2 byte ranges for [time, time+seconds) and return it as 16 kHz mono PCM16.
  * Used to look for the singing (up to 2 minutes) before choosing the 30 seconds that are paid for. */
-export async function extractR2AudioPcm(sourceUrl,{time=0,seconds=SEARCH_SECONDS,signal,media}={}) {
+async function extractAudioPcm(source,{time=0,seconds=SEARCH_SECONDS,signal,media}={}) {
   if(!Number.isInteger(time)||time<0||!(seconds>=2&&seconds<=SEARCH_SECONDS))throw Error('잘못된 추출 구간이에요.');
-  if(!sourceUrl || !/^https:\/\//.test(sourceUrl))throw Error('R2 음원 링크를 확인해 주세요.');
   if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
   const b=media || await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');
   let input; let onAbort;
   try{
-    input=new b.Input({source:new b.UrlSource(sourceUrl),formats:b.ALL_FORMATS});
+    input=new b.Input({source,formats:b.ALL_FORMATS});
     onAbort=()=>input.dispose();
     signal?.addEventListener('abort',onAbort,{once:true});
     const track=await input.getPrimaryAudioTrack();
@@ -71,6 +70,17 @@ export async function extractR2AudioPcm(sourceUrl,{time=0,seconds=SEARCH_SECONDS
     signal?.removeEventListener('abort',onAbort);
     try{input?.dispose()}catch{}
   }
+}
+export async function extractR2AudioPcm(sourceUrl,options={}) {
+  if(!sourceUrl || !/^https:\/\//.test(sourceUrl))throw Error('R2 음원 링크를 확인해 주세요.');
+  const b=options.media || await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');
+  return extractAudioPcm(new b.UrlSource(sourceUrl),{...options,media:b});
+}
+/** Decode a bounded range of a device-only Blob without uploading or decoding the whole recording. */
+export async function extractLocalAudioPcm(blob,options={}) {
+  if(!(blob instanceof Blob))throw Error('기기에 저장된 음원을 찾을 수 없어요.');
+  const b=options.media || await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');
+  return extractAudioPcm(new b.BlobSource(blob,{maxCacheSize:4*1024*1024,useStreamReader:false}),{...options,media:b});
 }
 /** The 30 seconds starting at `offset` (seconds into pcm) as a WAV file. */
 export function clipFromPcm(pcm,offset=0,name='vocalzip-stt-clip.wav') {

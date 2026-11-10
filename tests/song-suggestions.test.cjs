@@ -74,21 +74,23 @@ test('a metadata or body owner claim never bypasses the server owner policy',asy
  assert.equal(response.status,403);assert.equal(e.calls(),0);
 });
 
-function browser(){
- let owner='alice',paid=0,excerpts=0;const events={},storage=new Map();
- const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,dateOf:()=>'',list:async()=>[]},route(){},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id,
+function browser({mockStt=false}={}){
+ let owner='alice',paid=0,excerpts=0;const events={},storage=new Map(),routes={};
+ const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,dateOf:()=>'',list:async()=>[]},route(name,def){routes[name]=def},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id,
   esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),clock:n=>`${Math.floor((n||0)/60)}:${String((n||0)%60).padStart(2,'0')}`,dateLabel:s=>s||'날짜 없음'},vzipCloudUserId:()=>owner,
   vzipCloudSignedIn:()=>true,vzipCloudAccessToken:async()=> 'fake',
   VzipR2:{clip:async()=>{excerpts++;throw Error('unexpected extraction')}},dispatchEvent(){},addEventListener:(n,f)=>events[n]=f};
  const element=()=>{const children=new Map();return {style:{},setAttribute(){},append(){},add(){},replaceChildren(){},querySelector:key=>{if(!children.has(key))children.set(key,element());return children.get(key)},querySelectorAll:()=>[]}};
  const context={window,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
-  fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
- const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend};})();');
+  fetch:async()=>{paid++;return mockStt?Response.json({enabled:true}):Response.json({error:'STT_DISABLED'},{status:503})}};
+ let code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
+  'window.test={stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend,scanWindows,setPipeline:(audio,transcribe)=>{audioWindow=audio;transcribeClip=transcribe}};})();');
+ if(mockStt)code=code.replaceAll("await import('../song-text-match.mjs?v=1')",'window.testMatchModule')
+  .replaceAll("await import('../stt-clip-browser.mjs?v=3')",'window.testClipModule');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
- return {api:window.test,window,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
+ return {api:window.test,window,routes,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
 }
 test('disabled STT is checked before any R2 extraction',async()=>{
  const b=browser();await assert.rejects(b.api.stt({storageProvider:'r2',r2Key:'test'},new AbortController().signal),/STT_DISABLED/);
@@ -184,7 +186,43 @@ test('no per-run cap on paid analysis: 150 recordings go straight to the cost co
  b.window.VZ.toast=message=>errors.push(message);b.window.VZ.confirm=async(title,text)=>{asked=text;return false};
  b.api.state.items=Array.from({length:150},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
  await b.api.analyze({querySelector:()=>({})});
- assert.equal(errors.filter(e=>/까지/.test(e)).length,0);assert.match(asked,/150개/);assert.match(asked,/\$0\.225/);assert.equal(b.counts().paid,0);
+ assert.equal(errors.filter(e=>/까지/.test(e)).length,0);assert.match(asked,/150개/);assert.match(asked,/최대 3600구간/);assert.match(asked,/\$5\.400/);assert.equal(b.counts().paid,0);
+});
+test('식별 불가일 때만 다음 구간을 전사하고 곡이 맞으면 즉시 멈춘다',async()=>{
+ const b=browser({mockStt:true}),calls=[],saved=[];
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.vzipCloudSongTextSave=async row=>saved.push(row);
+ b.window.testMatchModule={matchTranscripts:text=>text==='song'?{candidate:'s1',reason:'match',matches:[{songId:'s1',score:0.8}]}:{candidate:null,reason:'no match',matches:[]}};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async(_item,_signal,{time})=>({pcm:new Int16Array(16000*120),rate:16000,duration:90,start:time}),async()=>{calls.push('paid');return calls.length===1?'chat':'song'});
+ const result=await b.api.stt({id:'m1',durationSeconds:90},new AbortController().signal);
+ assert.equal(result.candidate.id,'s1');assert.equal(result.strongMatch,true);
+ assert.equal(calls.length,2);assert.deepEqual(saved.map(x=>x.recordId),['m1','m1@0']);
+});
+test('목소리가 없는 첫 구간과 후속 구간은 유료 전사 요청 없이 건너뛴다',async()=>{
+ const b=browser({mockStt:true});let paid=0;
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.VZ.analyzeSamples=async()=>({curve:Array(600).fill(null),fps:20});
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:null,reason:'no match',matches:[]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async()=>({pcm:new Int16Array(16000*120),rate:16000,duration:45}),async()=>{paid++;return 'unexpected'});
+ const result=await b.api.stt({id:'silent',durationSeconds:45},new AbortController().signal);
+ assert.equal(result.status,'식별 불가');assert.equal(paid,0);
+});
+test('전사 확인은 구간별 내용을 순서대로 보이고 원본 문구를 HTML로 해석하지 않는다',async()=>{
+ const b=browser(),item={id:'m1',name:'내 녹음',durationSeconds:90},host={isConnected:true,innerHTML:''};
+ b.window.VZ.media.list=async()=>[item];
+ b.window.vzipCloudSongTextList=async()=>[
+  {kind:'recognition',record_id:'m1@54',transcript:'마지막 가사'},
+  {kind:'recognition',record_id:'m1',transcript:'<잡담>'},
+  {kind:'recognition',record_id:'m1@0',transcript:'첫 가사'}];
+ await b.routes['song-transcript'].mount({querySelector:()=>host},{params:['m1']});
+ assert.match(host.innerHTML,/&lt;잡담&gt;/);
+ assert.ok(host.innerHTML.indexOf('첫 가사')<host.innerHTML.indexOf('마지막 가사'));
+ b.switchOwner();assert.equal(host.textContent,'계정이 변경되어 전사 내용을 닫았어요.');
+ b.routes['song-transcript'].leave();
 });
 test('what has been spent so far is shown from the server count',async()=>{
  const b=browser(),line={hidden:true,textContent:''};
