@@ -71,7 +71,7 @@ function card(plan,items){
  fmt(plan.segmentStart)+'–'+fmt(plan.segmentEnd)+' · '+plan.minutes+'분 × '+plan.days+'일</p>'+
  '<p class="small muted">'+E(plan.startDate)+' ~ '+E(last)+' · 홈의 오늘 목표에서 완료 체크</p>'+compareSongTakes(plan,items)+
  '<div class="row"><a class="btn sm ghost" href="#/song/'+encodeURIComponent(plan.songId)+'">곡 상세 보기</a>'+
- '<button type="button" class="btn sm ghost" data-ab-plan="'+E(plan.id)+'">구간 A/B 비교</button>'+ '<button type="button" class="btn sm ghost" data-archive-plan="'+E(plan.id)+'">계획 종료</button></div>'+ '<div data-ab-host="'+E(plan.id)+'"></div></article>';
+ '<button type="button" class="btn sm ghost" data-ab-plan="'+E(plan.id)+'">구간 A/B 비교</button>'+ '<button type="button" class="btn sm ghost" data-archive-plan="'+E(plan.id)+'">계획 종료</button></div>'+ '<div data-ab-host="'+E(plan.id)+'"></div><div data-plan-outcome="'+E(plan.id)+'"></div></article>';
 }
 function create(form,month){
  const metric=form.elements.metric.value,songId=form.elements.song.value,
@@ -103,12 +103,38 @@ function render(host,month,items,rows){
  if(!host?.isConnected)return;
  V.segmentABStop?.();
  const mine=plans().sort((a,b)=>(b.created||0)-(a.created||0));
+ const savedOutcomeIds=new Set((V.db.vocalPlanReports||[]).map(x=>x.planId));
+ const retired=(V.db.practicePlans||[]).filter(x=>x?.kind==='monthly-vocal'&&x.archived&&savedOutcomeIds.has(x.id))
+  .sort((a,b)=>(b.archivedAt||0)-(a.archivedAt||0));
  host.innerHTML='<section class="card growth-section"><h2>곡별 집중 연습 계획</h2>'+
  '<p class="small muted">월간 추천을 실제 곡과 직접 선택한 구간에 연결해요. 하루 목표 완료로 진행률을 추적합니다.</p>'+
- (mine.length?'<div class="growth-plan-list">'+mine.map(plan=>card(plan,items)).join('')+'</div>':'<p>등록한 집중 연습 계획이 없어요.</p>')+
+ (mine.length?'<div class="growth-plan-list">'+mine.map(plan=>card(plan,items)).join('')+'</div>':'<p>진행 중인 집중 연습 계획이 없어요.</p>')+
+ (retired.length?'<details class="growth-plan-expand"><summary>완료·종료된 계획의 보관 리포트 ('+retired.length+')</summary><div class="growth-plan-list">'+retired.map(plan=>card(plan,items)).join('')+'</div></details>':'')+
  '<details class="growth-plan-expand"><summary>새 연습 계획 만들기</summary>'+form(month,items,rows)+'</details></section>';
 
  const formEl=host.querySelector('[data-plan-form]');
+ function nextPlan(p){
+  const details=host.querySelector('.growth-plan-expand');
+  if(!details)return;
+  details.open=true;
+  const form=details.querySelector('[data-plan-form]');
+  if(!form)return;
+  form.elements.metric.value=p.metric;
+  form.elements.song.value=p.songId;
+  form.elements.song.dispatchEvent(new Event('change',{bubbles:true}));
+  form.elements.start.value=p.segmentStart;
+  form.elements.end.value=p.segmentEnd;
+  form.elements.minutes.value=p.minutes;
+  form.elements.days.value=Math.min(5,p.days);
+  details.scrollIntoView({behavior:'smooth',block:'start'});
+  V.toast('이전 계획을 바탕으로 입력했어요. 확인 후 등록하세요.');
+ }
+ for(const p of [...mine,...retired]){
+  const card=host.querySelectorAll('[data-plan-outcome]');
+  const target=[...card].find(x=>x.dataset.planOutcome===p.id);
+  if(target)V.planOutcomeCard?.(target,p,items,nextPlan);
+ }
+
  const songInput=formEl.elements.song,recordInput=formEl.querySelector('[data-weak-record]');
  const statusEl=formEl.querySelector('[data-weak-results]');
  const button=formEl.querySelector('[data-find-weak]');
