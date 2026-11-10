@@ -72,3 +72,5 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-settings [data-ink-export]{min-height:44px;border:0;border-radius:12px;padding:8px 12px;background:var(--vz-color-selected-bg,#ede1ff);color:var(--vz-color-accent,#7a32f5);font-size:14px}
 .score-ink-settings [data-ink-export-save]{min-height:44px;display:flex;align-items:center;color:var(--vz-color-accent,#7a32f5);font-size:14px}
 .score-ink-settings [data-ink-export-save][hidden]{display:none}
+
+.score-ink-fullscreen .score-ink-settings{left:auto;right:0;width:min(420px,100%);box-sizing:border-box}

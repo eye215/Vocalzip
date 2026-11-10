@@ -222,7 +222,7 @@ test('whole score row opens the viewer with keyboard access and independent edit
 test('tablet default favors Pencil and two-finger pinch zoom changes only the viewport',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{Object.defineProperty(navigator,'platform',{configurable:true,value:'MacIntel'});Object.defineProperty(navigator,'maxTouchPoints',{configurable:true,value:5});});
- const dialog=await open(page);await configure(dialog);await expect(dialog.getByLabel('펜만',{exact:true})).toBeChecked();
+ const dialog=await open(page);await expect(dialog.getByRole('button',{name:'펜',exact:true})).toHaveAttribute('aria-pressed','true');await configure(dialog);await expect(dialog.getByLabel('펜만',{exact:true})).toBeChecked();
  await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
  const before=await dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width);
  await dialog.locator('[data-ink-svg]').evaluate(svg=>{
