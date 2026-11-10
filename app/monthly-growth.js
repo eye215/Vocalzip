@@ -93,8 +93,8 @@ function listeningEvidence(month){
  if(!entries.length)return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p>이달에 저장된 AI 청취 코멘트가 아직 없어요.</p><p class="small muted">노래 연습실에서 녹음을 제출하고 직접 AI 코멘트를 요청하면 여기에도 연결돼요.</p></section>';
  const quotes=entries.slice(0,5).map(p=>{
   const v=p.practiceRoom,note=String(v.aiCoach||'');
-  const audible=note.match(/(?:^|\\n)\\s*들리는 특징\\s*[:：]\\s*([^\\n]+)/)?.[1]||note.split('\\n')[0];
-  const follow=note.match(/(?:^|\\n)\\s*다음 시도\\s*[:：]\\s*([^\\n]+)/)?.[1]||'';
+  const audible=note.match(/(?:^|\n)\s*들리는 특징\s*[:：]\s*([^\n]+)/)?.[1]||note.split('\n')[0];
+  const follow=note.match(/(?:^|\n)\s*다음 시도\s*[:：]\s*([^\n]+)/)?.[1]||'';
   const safe=String(audible||'').slice(0,250),next=String(follow||'').slice(0,200);
   const title=V.songTitle(p.songId||v.songId)||v.title||'곡 미지정';
   const date=String(p.date||v.date||'').slice(0,10);
