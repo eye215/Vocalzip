@@ -116,8 +116,8 @@ function monthlyAiEvidence(month,rows,items){
   .map(p=>{
    const v=p.practiceRoom,txt=String(v.aiCoach||'');
    return {song:V.songTitle(p.songId||v.songId)||'곡 미지정',date:String(p.date||v.date||'').slice(0,10),
-    heard:(txt.match(/(?:^|\\n)\\s*들리는 특징\\s*[:：]\\s*([^\\n]+)/)?.[1]||txt.split('\\n')[0]||'').slice(0,270),
-    suggested:(txt.match(/(?:^|\\n)\\s*다음 시도\\s*[:：]\\s*([^\\n]+)/)?.[1]||'').slice(0,200),
+    heard:(txt.match(/(?:^|\n)\s*들리는 특징\s*[:：]\s*([^\n]+)/)?.[1]||txt.split('\n')[0]||'').slice(0,270),
+    suggested:(txt.match(/(?:^|\n)\s*다음 시도\s*[:：]\s*([^\n]+)/)?.[1]||'').slice(0,200),
     comfortConcern:v.aiConditionCheck===true||Array.isArray(v.draft?.symptoms)&&v.draft.symptoms.length>0||v.draft?.comfort==='불편해'
    };
   });
@@ -130,7 +130,7 @@ function monthlyAiCard(month){
  const found=(V.db.monthlyAiReports||[]).find(x=>x.id==='monthly-ai:'+month);
  return '<section class="card growth-section" data-monthly-ai><h2>AI 월간 종합 코치</h2>'+
   (found?'<p class="small muted">저장된 AI 분석 · '+e(String(found.createdDate||'').slice(0,10))+'</p>'+
-    '<div class="growth-ai-note">'+e(found.note||'').replace(/\\n/g,'<br>')+'</div>':
+    '<div class="growth-ai-note">'+e(found.note||'').replace(/\n/g,'<br>')+'</div>':
     '<p>이달의 측정 결과와 이미 저장된 AI 청취 코멘트를 종합해 개선점과 다음 연습을 제안해요.</p>')+
   '<p class="small muted">버튼을 누를 때만 측정 요약과 기존 AI 청취 텍스트가 서버로 전송돼요. 원본 음원은 보내지 않으며 AI API 호출이 발생합니다. AI 의견은 참고용이며 녹음 상태가 달라지면 결과도 달라질 수 있어요.</p>'+
   '<button type="button" class="btn ghost" data-monthly-ai-run>'+ (found?'분석 다시 생성':'AI 월간 종합 분석하기')+'</button>'+
