@@ -636,7 +636,12 @@ function mediaMetadataEditor(){
  if(!api||window.VzipAccountScope&&typeof window.VzipAccountScope.beforeLeave!=='function'||!mediaEditIdentity()||!window.VzipR2?.metadataMode||!window.VzipR2?.editLibrary)throw Error('안전한 파일 수정 모듈과 로그인을 확인해 주세요.');
  if(mediaEditor&&mediaEditorOwner===owner&&mediaEditorSession===session)return mediaEditor;
  mediaEditor=api.create({storage:localStorage,listKeys:mediaEditKeys,identity:mediaEditIdentity,uuid:()=>crypto.randomUUID(),
-  mode:()=>window.VzipR2.metadataMode(),send:async request=>{
+  mode:async()=>{
+   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+   try{return await window.VzipR2.metadataMode({signal:controller.signal});}
+   catch(error){if(controller.signal.aborted)throw Error('파일 수정 저장 방식을 확인하지 못했어요. 입력을 유지하고 다시 시도해 주세요.');throw error;}
+   finally{clearTimeout(timer);}
+  },send:async request=>{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
    try{return await window.VzipR2.editLibrary(request,{signal:controller.signal});}
    catch(error){if(controller.signal.aborted)throw Object.assign(Error('저장 응답이 없어요. 입력을 보관했으니 같은 수정의 결과를 다시 확인해 주세요.'),{code:'ambiguous'});throw error;}
