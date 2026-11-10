@@ -41,9 +41,9 @@ function editRepertoire(id,kind){
  if(kind==='status')return panel('레퍼토리 상태',select('상태','status',A.states,r.status),v=>updateSong(id,v));
  if(kind==='skills')return panel('나의 숙련도', '<p class="small muted">직접 평가하는 항목입니다. AI 분석 점수와 별도로 저장해요.</p>'+Object.entries(A.skills).map(([k,n])=>select(n,k,{'1':'1','2':'2','3':'3','4':'4','5':'5'},String(r.skills?.[k]||''))).join(''),v=>updateSong(id,{skills:v}));
  if(kind==='keys')return panel('키 정보',field('원키','originalKey',r.originalKey)+field('연습키','practiceKey',r.practiceKey)+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote),v=>updateSong(id,v));
- const values=key=>[...new Set(V.db.songs.map(x=>key==='show'?x.show:info(x)[key]).filter(Boolean))];
- const options=(key)=>'<datalist id="archive-'+key+'">'+values(key).map(v=>'<option value="'+E(v)+'"></option>').join('')+'</datalist>';
- panel('작품·배역 정보',field('곡명','title',s.title,'text',true)+field('뮤지컬 작품명','show',s.show).replace('name="show"','name="show" list="archive-show"')+options('show')+field('배역','role',r.role).replace('name="role"','name="role" list="archive-role"')+options('role')+select('구분','kind',A.kinds,r.kind)+field('원어','language',r.language)+area('개인 메모','memo',r.memo),v=>{const {title,show,...rest}=v;if(!title.trim())throw Error('곡명을 입력해 주세요.');updateSong(id,rest,{title:title.trim(),show:show.trim()})});
+ const values=[...new Set(V.db.songs.map(x=>x.show).filter(Boolean))];
+ const showOptions='<datalist id="archive-show">'+values.map(v=>'<option value="'+E(v)+'"></option>').join('')+'</datalist>';
+ panel('곡 정보',field('곡명','title',s.title,'text',true)+field('뮤지컬 작품명','show',s.show).replace('name="show"','name="show" list="archive-show"')+showOptions+select('구분','kind',A.kinds,r.kind)+field('원어','language',r.language)+area('개인 메모','memo',r.memo),v=>{const {title,show,...rest}=v;if(!title.trim())throw Error('곡명을 입력해 주세요.');updateSong(id,rest,{title:title.trim(),show:show.trim()})});
 }
 async function chooseTake(id){
  try{const media=(await M.list()).filter(m=>m.songId===id&&!V.db.deleted?.media?.includes(m.id));const s=V.song(id);if(!s)return;
@@ -75,12 +75,12 @@ V.repertoire={
  wireList:(main,draw)=>{const el=main.querySelector('[data-rep-filter]');if(el)el.onchange=()=>{filter=el.value;draw()}},
  songPanel:(host,s,media)=>{
   if(!host)return;const r=info(s),score=A.proficiency({repertoire:r}),take=media.find(m=>m.id===r.takeId&&!V.db.deleted?.media?.includes(m.id));
-  const work=[s.show,r.role].filter(Boolean).join(' · '),keys=[r.originalKey&&'원키 '+r.originalKey,r.practiceKey&&'연습키 '+r.practiceKey,r.stageKey&&'공연키 '+r.stageKey].filter(Boolean).join(' · ');
+  const work=s.show||'',keys=[r.originalKey&&'원키 '+r.originalKey,r.practiceKey&&'연습키 '+r.practiceKey,r.stageKey&&'공연키 '+r.stageKey].filter(Boolean).join(' · ');
   const row=(key,label,value,extra='')=>'<button type="button" class="archive-song-row '+extra+'" data-rep="'+key+'"><strong>'+label+'</strong><span class="archive-song-value '+(value?'':'is-empty')+'">'+E(value||({status:'상태 지정',info:'입력하기',skills:'미평가',keys:'미입력'}[key]))+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
   host.innerHTML='<section class="archive-song" aria-label="나의 레퍼토리">' +
     '<h2 class="archive-song-title">나의 레퍼토리</h2>' +
     row('status','상태',A.states[r.status]||'','archive-song-status') +
-    row('info','작품 · 배역',work) +
+    row('info','작품',work) +
     row('skills','숙련도',score?score.toFixed(1)+'/5':'') +
     row('keys','키 정보',keys) +
     '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'녹음을 불러올 수 없어요':'아직 지정한 녹음이 없어요')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
