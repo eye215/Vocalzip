@@ -159,7 +159,11 @@ VZ.openScoreInk=(songId,scoreId)=>{
    for(const item of events){const p=coords(item),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008&&active.stroke.points.length<Ink.MAX_POINTS)active.stroke.points.push(p);}
    schedule();
   };
-  svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{if(active?.pointer===event.pointerId)finishStroke();};
+  svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{
+   if(active?.pointer!==event.pointerId)return;
+   if(event.type==='pointerup'&&active.stroke.points.length<Ink.MAX_POINTS){const p=coords(event),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008)active.stroke.points.push(p);}
+   finishStroke();
+  };
  }});
  if(window.ResizeObserver){resizeObserver=new ResizeObserver(()=>{if(ready&&!busy&&Math.abs(Math.max(240,stage.clientWidth-16)-baseWidth)>1){clearTimeout(resizeTimer);resizeTimer=setTimeout(renderPage,120);}});resizeObserver.observe(stage);}
  cleanupHook=scope?.beforeLeave(()=>{if(active||pending)throw Error('악보 필기를 먼저 저장하고 계정을 바꿔 주세요.');sheet.close();})||(()=>{});

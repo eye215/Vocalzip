@@ -1,5 +1,7 @@
 name: Score upload checks
 on:
+  push:
+    branches: ['codex/score-private-ink-20261110']
   pull_request:
     paths:
       - 'app/scores.js'
@@ -12,6 +14,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: scores-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   scores:
     runs-on: ubuntu-24.04

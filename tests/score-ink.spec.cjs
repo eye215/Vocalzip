@@ -40,11 +40,11 @@ async function open(page){
  await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
  return dialog;
 }
-async function draw(page,dialog,{tool='펜',y=.22}={}){
+async function draw(page,dialog,{tool='펜',y=.22,ignored=false}={}){
  await dialog.getByRole('button',{name:tool,exact:true}).click();
  const r=await dialog.locator('[data-ink-svg]').boundingBox();
  await page.mouse.move(r.x+r.width*.15,r.y+r.height*y);await page.mouse.down();await page.mouse.move(r.x+r.width*.65,r.y+r.height*(y+.04),{steps:10});await page.mouse.up();
- await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');
+ if(!ignored)await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');
 }
 test.afterEach(async({page})=>expect(page.__errors||[]).toEqual([]));
 test('real PDF renders, ink persists after reload and original PDF/lesson/practice bytes remain unchanged',async({page})=>{
@@ -86,7 +86,7 @@ test('zoom, 320px layout and synthetic pen-only input preserve normalized positi
  await dialog.getByLabel('악보 확대',{exact:true}).selectOption('1');
  await expect.poll(()=>dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width)).toBeLessThan(350);
  await dialog.getByLabel('펜만',{exact:true}).check();
- await draw(page,dialog); // Mouse is ignored in pen-only mode.
+ await draw(page,dialog,{ignored:true}); // Mouse is ignored in pen-only mode.
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
  await dialog.locator('[data-ink-svg]').evaluate(svg=>{
   const r=svg.getBoundingClientRect(),common={bubbles:true,pointerId:77,pointerType:'pen',isPrimary:true,button:0,pressure:.6};
