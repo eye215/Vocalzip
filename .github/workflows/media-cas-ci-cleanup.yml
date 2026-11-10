@@ -1,0 +1,24 @@
+name: Cancel obsolete runs for metadata CAS branch
+on:
+  push:
+    branches: ['verify/media-cas-ci-cleanup-20261110']
+permissions:
+  actions: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const branch='codex/media-metadata-cas-20261110', keep='00c2b558856127ef6d555270caf8adf3fd1fa981';
+            const {owner,repo}=context.repo;
+            const runs=await github.paginate(github.rest.actions.listWorkflowRunsForRepo,{owner,repo,branch,per_page:100});
+            let canceled=0;
+            for(const r of runs){
+              if(r.head_branch!==branch||r.head_sha===keep||!['queued','in_progress','waiting','pending','requested'].includes(r.status))continue;
+              try{await github.rest.actions.cancelWorkflowRun({owner,repo,run_id:r.id});canceled++;}
+              catch(error){if(![404,409,422].includes(error.status))throw error;}
+            }
+            console.log('Canceled obsolete runs on this task branch only: '+canceled+'; latest head kept.');
