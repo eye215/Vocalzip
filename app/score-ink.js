@@ -602,37 +602,13 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function openOtherScores(){
   const picker=el.querySelector('[data-ink-score-picker]');if(!picker.hidden){picker.hidden=true;return;}
-  const songs=VZ.db.songs||[],currentSong=VZ.song(songId),lastPractice=new Map();
-  for(const practice of VZ.db.practices||[]){
-   if(!practice.songId||!/^\d{4}-\d{2}-\d{2}$/.test(practice.date||''))continue;
-   const stamp=practice.date+'|'+String(Number(practice.created)||0).padStart(15,'0');
-   if(stamp>(lastPractice.get(practice.songId)||''))lastPractice.set(practice.songId,stamp);
-  }
-  const sameShow=new Set([songId]);
-  const showName=(currentSong?.show||'').trim().toLocaleLowerCase();
-  for(const song of songs)if(showName&&song.show?.trim().toLocaleLowerCase()===showName)sameShow.add(song.id);
-  for(const show of VZ.db.performances||[]){
-   if(show.ownerId!==owner||!(show.songLinks||[]).some(link=>link.songId===songId))continue;
-   for(const link of show.songLinks||[])if(link.songId)sameShow.add(link.songId);
-  }
-  const scores=songs.flatMap(song=>(song.scores||[]).filter(item=>!item.deleted&&item.id!==scoreId&&item.r2Key?.startsWith('u/'+owner+'/'+item.id+'/')).map(item=>({song,item})));
-  const mostRecent=[...scores].filter(x=>lastPractice.has(x.song.id)).sort((a,b)=>lastPractice.get(b.song.id).localeCompare(lastPractice.get(a.song.id)))[0]?.song.id;
-  scores.sort((a,b)=>{
-   const rank=x=>x.song.id===mostRecent?0:x.song.id===songId?1:sameShow.has(x.song.id)?2:3;
-   return rank(a)-rank(b)||(lastPractice.get(b.song.id)||'').localeCompare(lastPractice.get(a.song.id)||'')||String(a.song.title||'').localeCompare(String(b.song.title||''),'ko')||String(a.item.title||'').localeCompare(String(b.item.title||''),'ko');
-  });
+  const scores=(VZ.song(songId)?.scores||[]).filter(item=>!item.deleted&&item.r2Key?.startsWith('u/'+owner+'/'+item.id+'/')&&item.id!==scoreId);
   picker.replaceChildren();
-  if(!scores.length){const empty=document.createElement('p');empty.textContent='열 수 있는 다른 PDF 악보가 없어요.';picker.append(empty);}
-  for(const {song,item} of scores){
-   const button=document.createElement('button');button.type='button';
-   const title=document.createElement('strong');title.textContent=song.title||'제목 없는 곡';
-   const detail=document.createElement('span');detail.textContent=[item.title||item.fileName||'PDF 악보',song.show||''].filter(Boolean).join(' · ');
-   const heading=document.createElement('span');heading.className='score-ink-score-heading';heading.append(title);
-   const badge=song.id===mostRecent?'최근 연습':sameShow.has(song.id)?'같은 공연':'';
-   if(badge){const tag=document.createElement('small');tag.textContent=badge;heading.append(tag);}
-   button.append(heading,detail);
+  if(!scores.length){const empty=document.createElement('p');empty.textContent='이 곡에 다른 PDF 악보가 없어요.';picker.append(empty);}
+  for(const item of scores){
+   const button=document.createElement('button');button.type='button';button.textContent=item.title||item.fileName||'PDF 악보';
    button.onclick=()=>{finishStroke();if(pending){say('필기를 먼저 다시 저장해 주세요. 저장되지 않은 획은 이 화면에 남아 있어요.',true);return;}
-    try{current();sheet.close();requestAnimationFrame(()=>VZ.openScoreInk(song.id,item.id));}catch(e){say(e.message,true);}
+    try{current();sheet.close();requestAnimationFrame(()=>VZ.openScoreInk(songId,item.id));}catch(e){say(e.message,true);}
    };
    picker.append(button);
   }
