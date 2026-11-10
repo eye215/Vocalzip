@@ -663,7 +663,11 @@ VZ.openScoreInk=(songId,scoreId)=>{
  function unload(event){selectionEnd();finishStroke();if(pending){event.preventDefault();event.returnValue='';}}
  function hidden(){if(document.visibilityState==='hidden'){selectionEnd();finishStroke();}}
  sheet=VZ.sheet({title:'악보 필기',label:'악보 개인 필기',body,foot:'<button type="button" class="btn block" data-ink-done>완료</button>',onClose:cleanup,onMount:(node)=>{
-  el=node;el.classList.add('score-ink-sheet');svg=el.querySelector('[data-ink-svg]');canvas=el.querySelector('[data-ink-pdf]');box=el.querySelector('[data-ink-box]');stage=el.querySelector('[data-ink-stage]');status=el.querySelector('[data-ink-status]');done=el.querySelector('[data-ink-done]');
+  el=node;el.classList.add('score-ink-sheet');
+  // Quick samples sit below the whole toolbar, independent of fullscreen toolbar layout.
+  const toolbar=el.querySelector('.score-ink-bar');
+  toolbar.after(el.querySelector('[data-ink-quick]'),el.querySelector('[data-ink-vision-tools]'),el.querySelector('[data-ink-explain-action]'));
+  svg=el.querySelector('[data-ink-svg]');canvas=el.querySelector('[data-ink-pdf]');box=el.querySelector('[data-ink-box]');stage=el.querySelector('[data-ink-stage]');status=el.querySelector('[data-ink-status]');done=el.querySelector('[data-ink-done]');
   el.querySelector('[data-ink-prev]').disabled=true;el.querySelector('[data-ink-next]').disabled=true;
   el.querySelector('[data-ink-first]').disabled=true;el.querySelector('[data-ink-last]').disabled=true;
   const back=el.parentNode;
