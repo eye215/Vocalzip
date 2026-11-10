@@ -18,3 +18,6 @@
 .growth-listening{padding:12px 0;border-top:1px solid var(--vz-border,#eee)}
 .growth-listening strong{display:inline-block;margin-right:10px}
 .growth-listening p{margin:8px 0;line-height:1.55;overflow-wrap:anywhere}
+
+.growth-ai-note{line-height:1.9;white-space:normal;overflow-wrap:anywhere;border-radius:12px;background:var(--vz-surface-muted,#f7f3fc);padding:15px;margin:12px 0 16px}
+[data-monthly-ai-run]{margin-top:8px}
