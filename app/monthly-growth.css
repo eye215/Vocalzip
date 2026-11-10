@@ -31,3 +31,10 @@
 .growth-plan-form{display:grid;gap:10px}.growth-plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .growth-plan-form .field{min-width:0}.growth-plan-form input{min-width:0;width:100%}
 @media(max-width:360px){.growth-plan-grid{grid-template-columns:1fr}}
+
+.growth-weak-search{border:1px solid var(--vz-border,#e8e2ee);border-radius:14px;padding:14px;margin:12px 0;min-width:0}
+.growth-weak-search h3{font-size:15px;margin:0 0 8px}
+.growth-weak-search button{margin:6px 0}
+.growth-weak-search [data-weak-results]{margin-top:10px}
+.growth-weak-item{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--vz-border,#eee)}
+.growth-weak-search audio{display:block;width:100%;margin:10px 0}
