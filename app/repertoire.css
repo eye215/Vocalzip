@@ -43,3 +43,40 @@
 .archive-performance-stats{display:flex;align-items:center;gap:0;padding:16px 4px 20px;color:#667085;font-size:12px}.archive-performance-stats span{padding:0 14px;border-left:1px solid #e4dded}.archive-performance-stats span:first-child{padding-left:0;border:0}.archive-performance-stats strong{color:#7A32F5;font-size:17px;margin-right:3px}
 .archive-performance-list{display:grid;gap:12px}.archive-performance{display:flex;align-items:center;gap:14px;min-width:0;min-height:110px;padding:16px;border:1px solid #E6DBF5;border-radius:20px;background:#fff;text-decoration:none;color:#101828;box-shadow:0 5px 20px rgba(43,25,63,.035)}.archive-performance-poster{width:66px;height:76px;border-radius:14px;flex:none;background:#F3ECFF;color:#7A32F5;display:grid;place-items:center;overflow:hidden}.archive-performance-poster i{font-size:26px}.archive-performance-poster img{width:100%;height:100%;object-fit:cover}.archive-performance-copy{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}.archive-performance-date{color:#7A32F5;font-size:12px;font-weight:650}.archive-performance-copy strong{font-size:16px;line-height:22px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-performance-meta{font-size:12px;color:#667085;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-performance-state{align-self:start;white-space:nowrap;padding:5px 8px;border-radius:999px;background:#F3ECFF;color:#7A32F5;font-size:11px;font-weight:600}.archive-performance>i{font-size:16px;color:#98A2B3;flex:none}.archive-performance-empty{padding:48px 20px;text-align:center;border-radius:20px;background:#fff;color:#667085}.archive-performance-empty i{display:block;color:#A56FEF;font-size:30px;margin-bottom:12px}.archive-performance-empty strong{display:block;color:#101828;font-size:15px}.archive-performance-empty p{font-size:12px;line-height:18px}
 @media(max-width:380px){.archive-performance{gap:10px;padding:12px}.archive-performance-poster{width:54px;height:68px}.archive-performance-state{display:none}.archive-performance-copy strong{font-size:15px}}
+
+/* 2026-11-10: performance pages share the compact card language of My Songs. */
+.archive-performances-page{gap:12px;padding-bottom:32px}
+.archive-performances-page .archive-performance-toolbar{margin:0 4px 2px}
+.archive-performances-page .archive-performance-toolbar h2 span{font-size:16px;color:#667085}
+.archive-performances-page .archive-performance-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;padding:4px 16px;border-radius:20px;background:#F2EEF8}
+.archive-performances-page .archive-performance-stats span{display:flex;align-items:center;justify-content:space-between;min-width:0;padding:13px 3px;border:0;color:#667085;font-size:13px}
+.archive-performances-page .archive-performance-stats span:nth-child(odd){padding-right:15px}
+.archive-performances-page .archive-performance-stats span:nth-child(even){padding-left:15px}
+.archive-performances-page .archive-performance-stats span:nth-child(n+3){border-top:1px solid #E8E4F0}
+.archive-performances-page .archive-performance-stats strong{margin:0;font-size:18px;color:#344054}
+.archive-performances-page .archive-performance{min-height:98px;border:0;box-shadow:none}
+.archive-performances-page .archive-performance-state{align-self:center}
+.archive-performances-page .archive-performance-date{color:#667085}
+.archive-performance-add{width:100%;min-height:52px;border-radius:16px}
+.archive-show-page{display:grid;gap:12px;padding-bottom:36px}
+.archive-show-hero,.archive-show-info,.archive-show-section{min-width:0;padding:18px 16px;border-radius:20px;background:#fff}
+.archive-show-hero{position:relative;display:flex;flex-direction:column;gap:8px;padding:22px 18px}
+.archive-show-eyebrow{color:#7A32F5;font-size:12px;font-weight:700}
+.archive-show-hero>strong{color:#101828;font-size:24px;line-height:31px;font-weight:700;overflow-wrap:anywhere}
+.archive-show-date{color:#667085;font-size:13px}
+.archive-show-status{align-self:flex-start;padding:6px 10px;border-radius:999px;background:#F3ECFF;color:#7A32F5;font-size:12px;font-weight:600}
+.archive-show-info h2,.archive-show-section h2{margin:0 0 14px;color:#101828;font-size:18px;line-height:26px;font-weight:700}
+.archive-show-facts{display:grid;gap:0}
+.archive-show-facts>div{display:flex;justify-content:space-between;gap:14px;min-height:42px;align-items:center;border-top:1px solid #F2F0F6}
+.archive-show-facts small{flex:none;color:#667085;font-size:13px}.archive-show-facts span{min-width:0;text-align:right;color:#344054;font-size:14px;overflow-wrap:anywhere}
+.archive-show-memo{margin:12px 0 0;padding:13px;border-radius:14px;background:#F8F6FD;color:#475467;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
+.archive-show-actions{display:flex;gap:8px;margin-top:18px}.archive-show-actions button{flex:1;min-height:44px}
+.archive-show-section .sec{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.archive-show-section .sec button{flex:none;border:0;background:#F3ECFF;color:#7A32F5;border-radius:12px;padding:0 12px;font-size:13px;font-weight:600}
+.archive-show-section .list{margin:0;background:transparent;box-shadow:none}
+.archive-show-section .item{gap:8px;padding:12px 0;border-top:1px solid #F2F0F6;background:transparent}
+.archive-show-section .item .btn{min-width:44px;padding:0 8px}
+.archive-show-section .item-main{min-width:0;flex:1}
+.archive-show-section [data-show-media]>p{margin:0;color:#667085;line-height:1.5}
+.archive-show-section [data-show-assets]:empty::after,.archive-show-section .list:empty::after{display:block;content:'아직 연결된 기록이 없어요.';color:#667085;font-size:13px}
+@media(max-width:360px){.archive-show-section .item{flex-wrap:wrap}.archive-show-section .item-main{flex-basis:100%}}
