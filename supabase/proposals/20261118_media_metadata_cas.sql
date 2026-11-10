@@ -30,7 +30,7 @@ begin
   raise exception 'invalid media edit' using errcode='22023';
  end if;
  for field,value in select * from jsonb_each(p_patch) loop
-  if field not in ('name','song','songId','recordedDate','dateSource','rating','review') then
+  if field not in ('name','nameMode','autoName','song','songId','created','recordedDate','dateSource','rating','review') then
    raise exception 'unsupported media edit field' using errcode='22023';
   end if;
   if field='rating' then
@@ -41,6 +41,12 @@ begin
      raise exception 'invalid media rating' using errcode='22023';
     end if;
    end if;
+  elsif field='created' then
+   if jsonb_typeof(value) is distinct from 'number' then raise exception 'invalid recorded time' using errcode='22023';end if;
+   if abs((value#>>'{}')::numeric)>8640000000000000 or trunc((value#>>'{}')::numeric)<>(value#>>'{}')::numeric
+    or not (p_patch ? 'recordedDate') then raise exception 'recorded time requires its date' using errcode='22023';end if;
+  elsif field='autoName' and value='null'::jsonb then
+   continue;
   else
    if jsonb_typeof(value) is distinct from 'string'
    or length(value#>>'{}')>(case field when 'review' then 8000 when 'songId' then 200 when 'recordedDate' then 10 when 'dateSource' then 40 else 500 end)
@@ -57,6 +63,14 @@ begin
    end if;
   end if;
  end loop;
+ if p_patch ?| array['nameMode','autoName'] then
+  if not (p_patch ?& array['name','nameMode','autoName'])
+   or p_patch->>'nameMode' not in ('auto','manual')
+   or (p_patch->>'nameMode'='auto' and p_patch->'autoName' is distinct from p_patch->'name')
+   or (p_patch->>'nameMode'='manual' and p_patch->'autoName' is distinct from 'null'::jsonb) then
+   raise exception 'invalid automatic title state' using errcode='22023';
+  end if;
+ end if;
  if (p_patch ? 'songId')<>(p_patch ? 'song') then
   raise exception 'song id and label must be edited together' using errcode='22023';
  end if;

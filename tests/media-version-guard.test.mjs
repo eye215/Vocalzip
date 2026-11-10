@@ -508,3 +508,26 @@ test('an existing metadata trigger cannot silently regress the CAS version or mu
   assert.deepEqual((await db.query('select metadata from public.vocal_media')).rows[0].metadata,initial.metadata);
  }finally{await db.query('drop trigger fixture_bad_media_version on public.vocal_media;drop function public.fixture_bad_media_version()');}
 });
+
+test('metadata CAS preserves automatic title derivation and editable recording time as one exact request',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial,{name:'내 곡 2026.11.09',nameMode:'auto',autoName:'내 곡 2026.11.09',
+  songId:'song',song:'내 곡',recordedDate:'2026-11-09',created:Date.parse('2026-11-09T09:00:00+09:00'),review:'keep previous title'});
+ const saved=await editSQL(p);assert.equal(saved.metadata.nameMode,'auto');assert.equal(saved.metadata.autoName,saved.metadata.name);
+ assert.equal(saved.metadata.created,p.patch.created);assert.equal(saved.metadata.r2Key,initial.metadata.r2Key);
+ const again=await editSQL(p);assert.equal(again.replayed,true);assert.equal(again.updated_at,saved.updated_at);
+});
+test('invalid title state, partial pairs and invalid capture times cannot mutate the original or create receipts',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial);
+ for(const patch of [{nameMode:'auto'},{autoName:null},{name:'new',nameMode:'auto',autoName:'different'},
+  {name:'new',nameMode:'manual',autoName:'new'},{name:'new',nameMode:'unknown',autoName:null},
+  {created:Date.now()},{created:'1',recordedDate:'2026-11-09'},{created:.5,recordedDate:'2026-11-09'},
+  {created:8640000000000001,recordedDate:'2026-11-09'}])
+  await assert.rejects(editSQL({...p,patch}),{code:'22023'});
+ assert.equal(await count('vzip_media_edits'),0);
+ assert.deepEqual((await db.query('select metadata from public.vocal_media')).rows[0].metadata,initial.metadata);
+});
+test('a manual title has an explicit null automatic title and is preserved with unrelated metadata',{skip},async()=>{
+ const initial=await editable(),saved=await editSQL(editTarget(initial,{name:'내가 쓴 제목',nameMode:'manual',autoName:null}));
+ assert.equal(saved.metadata.autoName,null);assert.equal(saved.metadata.nameMode,'manual');
+ assert.equal(saved.metadata.review,initial.metadata.review);assert.equal(saved.metadata.size,initial.metadata.size);
+});

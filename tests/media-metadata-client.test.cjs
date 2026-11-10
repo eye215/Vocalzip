@@ -9,7 +9,7 @@ function fixture(mode='revision'){
   vzipCloudAccessToken:async()=>'fixture-token',addEventListener(){},localStorage:{getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)}};
  const context={window,URL,Blob,DOMException,AbortController,AbortSignal,Date,setTimeout,clearTimeout,location:{href:'https://app.test'},fetch:async(url,options)=>{
   const path=new URL(url).pathname,body=options.body?JSON.parse(options.body):null;calls.push({path,body});
-  if(path==='/v1/me'){await hooks.ready?.();if(hooks.failReady)throw Error('offline');return Response.json({mediaMode:state.mode});}
+  if(path==='/v1/me'){await hooks.ready?.();if(hooks.failReady)throw Error('offline');return Response.json({user:state.owner,mediaMode:state.mode});}
   if(path==='/v2/media/edit'){
    await hooks.edit?.();if(hooks.status)return Response.json({error:'fixture rejection'},{status:hooks.status});
    const result={version:1,user_id:owner,session_id:session,request_id:body.requestId,id:body.mediaId,object_key:body.key,
@@ -67,4 +67,17 @@ test('untrusted acknowledgements cannot claim a different original, request, own
 test('edits snapshot input before waiting for readiness so a mutable form cannot change an in-flight request',async()=>{
  const f=fixture(),p=target();f.hooks.ready=()=>{p.patch.name='다음 입력';p.requestId=session;};
  const result=await f.api.editLibrary(p);assert.equal(result.metadata.name,'수정한 제목');assert.equal(f.calls[1].body.requestId,requestId);
+});
+
+test('mode lookup is fresh and refreshes a formerly legacy transport before its first revision edit',async()=>{
+ const f=fixture('legacy');assert.equal(await f.api.metadataMode(),'legacy');
+ f.state.mode='revision';assert.equal(await f.api.metadataMode(),'revision');
+ await f.api.editLibrary(target());assert.deepEqual(f.calls.map(c=>c.path),['/v1/me','/v1/me','/v2/media/edit']);
+});
+test('mode lookup cannot authorize paused, unknown, failed or changed-account fallbacks',async()=>{
+ for(const mode of ['paused','unknown']){
+  const f=fixture(mode);await assert.rejects(f.api.metadataMode());assert.equal(f.calls.length,1);
+ }
+ const f=fixture();f.hooks.failReady=true;await assert.rejects(f.api.metadataMode(),/offline/);
+ const changed=fixture();changed.hooks.ready=()=>{changed.state.owner=requestId;};await assert.rejects(changed.api.metadataMode(),/로그인/);
 });
