@@ -203,7 +203,7 @@ test('Editing a recording saves only the changed fields onto the newest cloud co
     await VZ.media.update(item, {song:'Defying Gravity', songId:'s1'});
     return window.__rows.c1;
   });
-  expect(row).toMatchObject({song:'Defying Gravity', songId:'s1', review:'다른 기기 메모', rating:5, r2Key:'u/ui-test-user/c1/original.m4a'});
+  expect(row).toMatchObject({song:'Defying Gravity', songId:'s1', review:'다른 기기 메모\n이전 제목: 녹음', rating:5, r2Key:'u/ui-test-user/c1/original.m4a'});
 });
 
 test('When another device saves between reading and writing, the write is refused, re-read and applied again', async ({page}) => {
@@ -242,8 +242,8 @@ test('A device file edit sends only what changed: older device values never over
     VZ.media.holdBackup(false);
     return {afterApp, afterEvent:window.__rows.d1, local:(await window.vzipReadMedia()).find(x => x.id === 'd1')};
   });
-  expect(rows.afterApp).toMatchObject({song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
-  expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
+  expect(rows.afterApp).toMatchObject({song:'Defying Gravity', review:'새 메모 (다른 기기)\n이전 제목: 기기 녹음', rating:5});
+  expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)\n이전 제목: 기기 녹음', rating:5});
   expect(rows.local).toMatchObject({song:'Defying Gravity'});
 });
 
@@ -267,10 +267,10 @@ test('A song picked by the AI suggestion for a file on this device changes only 
     VZ.media.holdBackup(false);
     return {afterAssign, sameVersion:versionAfter === written.updatedAt, undoError, afterUndo:window.__rows.s9};
   });
-  expect(out.afterAssign).toMatchObject({songId:'s1', song:'Defying Gravity', review:'다른 기기 메모', rating:5, recordedDate:'2026-10-01'});
+  expect(out.afterAssign).toMatchObject({songId:'s1', song:'Defying Gravity', review:'다른 기기 메모\n이전 제목: 미분류 녹음', rating:5, recordedDate:'2026-10-01'});
   expect(out.sameVersion).toBe(true);
   expect(out.undoError).toBeNull();
-  expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모', rating:5});
+  expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모\n이전 제목: 미분류 녹음', rating:5});
 });
 
 test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, can be renamed, survives a reload, and deletes its file', async ({page}) => {
