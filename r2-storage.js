@@ -227,6 +227,8 @@ async function clip(key, {time=20, duration=30, signal}={}) {
   return new File([body],'vocalzip-stt-clip.m4a',{type:'audio/mp4'});
 }
 async function usage() { return api('/v1/usage'); }
+async function scoreVisionAvailable(){return api('/v1/scores/vision');}
+async function scoreVision(mode,image,signal){return api('/v1/scores/vision',{method:'POST',body:{mode,image},signal});}
 /** Every object under the user's own folder (read-only; the Worker lists only u/<user>/). */
 async function objects() {
   const out = [];
@@ -239,5 +241,5 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();
