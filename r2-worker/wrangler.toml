@@ -18,11 +18,6 @@ SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 SUPABASE_URL = "https://chxnbtiyuyhiywzeshis.supabase.co"
 ALLOWED_ORIGINS = "https://vocalzip.yullul.com,https://eye215.github.io"
 STT_CLIP_ENABLED = "false"
-# Score image recognition is owner-only and off until the account UUID allowlist and
-# OPENAI_API_KEY secret are configured in Cloudflare. Never commit the key here.
-SCORE_VISION_ENABLED = "false"
-# SCORE_VISION_ALLOWED_USER_IDS = "<owner Supabase user UUID>"
-# SCORE_VISION_MODEL = "gpt-4.1-mini"
 # MAX_FILE_BYTES = "2147483648"
 
 # Secrets are NOT written here. Set them once with:
