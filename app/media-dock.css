@@ -67,6 +67,7 @@ body.vz-collection .lib-selection-tools{display:flex;align-items:center;justify-
 body.vz-collection .lib-month .lib-row{display:flex;align-items:center;gap:4px;min-width:0}
 body.vz-collection .lib-month .lib-record .lib-row [data-toggle]{flex:1;min-width:0;width:auto;min-height:64px;padding:10px 0;gap:8px;background:transparent}
 body.vz-collection .lib-month .lib-row .avatar{flex:none;width:26px;height:32px}
+body.vz-collection .lib-month .lib-row .avatar.video{background:var(--accent-soft);color:var(--accent)}
 body.vz-collection .lib-month .lib-row .item-main{min-width:0;flex:1}
 body.vz-collection .lib-month .lib-row .chev{flex:none;font-size:16px}
 body.vz-collection .lib-month .lib-record .media-open:not([hidden]){border-top:1px solid #E8E4F0}
