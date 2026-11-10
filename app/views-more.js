@@ -42,14 +42,14 @@ VZ.importSheet = ({songId = '', files:initialFiles = null} = {}) => {
           try {
             const info = await window.vzipInspectMedia(r.file);
             r.duration = info.duration ?? await M.measure({blob:r.file, type:M.typeOf(r.file), name:r.file.name}, 8000);
-            if (!(Number(r.duration) >= 30)) { r.state = 'invalid'; r.error = r.duration > 0 ? '30초 미만 파일은 가져오지 않아요.' : '길이를 확인할 수 없어 가져오지 않아요.'; }
+            if (!(Number(r.duration) >= 25)) { r.state = 'invalid'; r.error = r.duration > 0 ? '25초 미만 파일은 가져오지 않아요.' : '길이를 확인할 수 없어 가져오지 않아요.'; }
           } catch { r.state = 'invalid'; r.error = '길이를 확인할 수 없어 가져오지 않아요.'; }
         }
         const excluded = rows.filter(r => r.state === 'invalid').length;
         if (excluded) VZ.toast(excluded + '개 파일을 가져오기 목록에서 제외했어요. 원본 파일은 그대로예요.');
         el.querySelector('[data-step1]').hidden = true; step2.hidden = false; foot.hidden = false;
         step2.innerHTML = '<fieldset class="field" style="border:0;padding:0"><legend>종류 (모든 파일)</legend><div class="seg" role="radiogroup" aria-label="가져올 파일 종류">' + M.OCCASIONS.map(([k, v]) => '<button type="button" role="radio" data-occ="' + k + '" aria-pressed="' + (k === occasion) + '" aria-checked="' + (k === occasion) + '">' + v + '</button>').join('') + '</div></fieldset>' + (rows.length > 1 ? '<label class="field"><span>모든 파일의 곡 한 번에 지정</span><select data-bulk data-pick="song"><option value="">선택…</option>' + songOpts('').replace('<option value="">곡 미지정</option>', '<option value="__none">곡 미지정</option>') + '</select></label>' : '') +
-          '<p class="up-done" data-done role="status" hidden></p><div class="list up-saved" data-saved hidden></div><p class="small muted" style="margin-top:0">30초 미만 파일은 제외해요. 파일명 날짜·곡 제목을 먼저 인식하고, 인식되지 않은 날짜는 파일 속 촬영·녹음 날짜(없으면 수정일)를 사용해요.</p><div class="stack" data-rows>' + rows.map((r, i) =>
+          '<p class="up-done" data-done role="status" hidden></p><div class="list up-saved" data-saved hidden></div><p class="small muted" style="margin-top:0">25초 미만 파일은 제외해요. 파일명 날짜·곡 제목을 먼저 인식하고, 인식되지 않은 날짜는 파일 속 촬영·녹음 날짜(없으면 수정일)를 사용해요.</p><div class="stack" data-rows>' + rows.map((r, i) =>
           '<div class="up-row' + (r.state === 'invalid' ? ' failed' : '') + '" data-i="' + i + '"><div class="up-head"><strong title="' + esc(r.file.name) + '">' + esc(r.file.name) + '</strong><span class="small muted">' + VZ.size(r.file.size) + '</span></div>' +
           (r.state === 'invalid' ? '<div class="small" style="color:var(--danger)">' + esc(r.error) + ' (건너뜀)</div>' :
           (r.video ? '<span class="badge accent" style="justify-self:start">영상 → 음성만 저장</span>' : /\.wav$/i.test(r.file.name) || /wav/.test(r.file.type) ? '<span class="badge accent" style="justify-self:start">WAV → FLAC 무손실 압축</span>' : '') + '<select aria-label="' + esc(r.file.name) + ' 곡" data-song data-pick="song">' + songOpts(r.songId) + '</select><label class="up-date"><span>녹음 날짜 <em>' + (r.namedDate ? '파일명에서 인식' : '비우면 자동') + '</em></span><input type="date" aria-label="' + esc(r.file.name) + ' 날짜" data-date value="' + esc(r.namedDate?.recordedDate || '') + '"></label>' + (r.namedDate && !r.namedDate.timeless ? '<span class="small muted">파일명 시각 ' + esc(new Date(r.namedDate.created).toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', second:'2-digit'})) + ' 적용</span>' : '') + '<div class="bar-mini"><i></i></div><div class="row between"><span class="small muted" data-st>대기 중</span><button type="button" class="btn sm ghost" data-retry hidden>다시 시도</button></div>') + '</div>').join('') + '</div><p class="small muted" data-summary role="status"></p>';
@@ -71,7 +71,7 @@ VZ.importSheet = ({songId = '', files:initialFiles = null} = {}) => {
           for (const r of list) {
             if (abort.signal.aborted) { r.state = 'cancelled'; setRow(r, '취소됨'); continue; }
             const u = ui(r), sid = u.querySelector('[data-song]').value, date = u.querySelector('[data-date]').value;
-            if (!(Number(r.duration) >= 30)) { r.state = 'invalid'; setRow(r, '30초 미만 또는 길이 미확인 파일은 제외돼요.'); continue; }
+            if (!(Number(r.duration) >= 25)) { r.state = 'invalid'; setRow(r, '25초 미만 또는 길이 미확인 파일은 제외돼요.'); continue; }
             r.state = 'uploading'; setRow(r, '준비 중…', 2);
             try {
               // The original name and a content fingerprint go with the file, so a later bulk upload can skip it.

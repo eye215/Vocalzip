@@ -1447,9 +1447,9 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await page.getByRole('link', {name:/기존 자료 가져오기/}).click();
   await expect(page.locator('#top h1')).toHaveText('기존 자료 가져오기');
   await page.getByRole('button', {name:/음성 메모/}).click();
-  // Voice memo defaults: 2025-07-24 → today, 0:30 – 8:00 (both ends included).
+  // Voice memo defaults: 2025-07-24 → today, 0:25 – 8:00 (both ends included).
   await expect(page.locator('[data-c="start"]')).toHaveValue('2025-07-24');
-  await expect(page.locator('[data-c="min"]')).toHaveValue('0:30');
+  await expect(page.locator('[data-c="min"]')).toHaveValue('0:25');
   await expect(page.locator('[data-c="max"]')).toHaveValue('8:00');
   const first = wav(30);
   await page.locator('[data-files]').setInputFiles([
@@ -1457,7 +1457,7 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
     {name:'복사본 2026-03-05.wav', mimeType:'audio/wav', buffer:first},                        // same bytes → duplicate
     {name:'원데이모어 20260401.wav', mimeType:'audio/wav', buffer:wav(480, 9)},                 // exactly 8:00, song by alias
     {name:'the moment take.wav', mimeType:'audio/wav', buffer:wav(40, 10)},                  // no date → needs-date, weak suggestion
-    {name:'너무 짧음 2026-02-01.wav', mimeType:'audio/wav', buffer:wav(29, 11)},              // 0:29 → out
+    {name:'너무 짧음 2026-02-01.wav', mimeType:'audio/wav', buffer:wav(24, 11)},              // 0:24 → out
     {name:'긴 녹음 2026-02-02.wav', mimeType:'audio/wav', buffer:wav(481, 12)},               // 8:01 → out
     {name:'옛날 2025-01-01.wav', mimeType:'audio/wav', buffer:wav(35, 13)},                   // before start → out
   ]);
@@ -1466,7 +1466,7 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await expect(page.getByRole('button', {name:/^날짜 확인 필요 1/})).toBeVisible();
   await expect(page.getByRole('button', {name:/^조건 밖 3/})).toBeVisible();
   const row = name => page.locator('.hub-row').filter({has:page.locator('.hub-name', {hasText:name})});
-  await expect(row('너무 짧음')).toContainText('30초 미만 · 가져오지 않음');
+  await expect(row('너무 짧음')).toContainText('25초 미만 · 가져오지 않음');
   await expect(row('너무 짧음').locator('[data-sel]')).toBeDisabled();
   await expect(row('긴 녹음')).toContainText('길이 8:01');
   await expect(row('옛날')).toContainText('기간 밖');
@@ -1519,14 +1519,14 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(2);
 });
 
-test('Library import never selects or uploads a file shorter than 30 seconds', async ({page}) => {
+test('Library import skips 24 seconds and includes 25 seconds', async ({page}) => {
   await boot(page, {media:false});
   await page.evaluate(() => {
     window.vzipCloudSignedIn=()=>true;
     window.__importedNames=[];
     VZ.media.list=async()=>[];
-    window.vzipInspectMedia=async file=>({readable:true,duration:file.name.startsWith('short')?29:30,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}});
-    VZ.media.importFile=async(file,choice)=>{window.__importedNames.push(file.name);return {id:choice.id,name:file.name,cloud:true,durationSeconds:30,recordedDate:'2026-11-09'};};
+    window.vzipInspectMedia=async file=>({readable:true,duration:file.name.startsWith('short')?24:25,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}});
+    VZ.media.importFile=async(file,choice)=>{window.__importedNames.push(file.name);return {id:choice.id,name:file.name,cloud:true,durationSeconds:25,recordedDate:'2026-11-09'};};
     VZ.openImportHub({files:[new File(['short'],'short.wav',{type:'audio/wav'}),new File(['long'],'long.wav',{type:'audio/wav'})],review:true});
   });
   const short=page.locator('.hub-row').filter({hasText:'short.wav'});
