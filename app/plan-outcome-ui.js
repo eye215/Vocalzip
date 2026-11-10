@@ -47,7 +47,7 @@ function render(host,plan,items,action){
     valid:m=>m.analysis?.v===1&&V.analysisReliable?.(m.analysis),asOf:V.today()});
    updated.created=Date.now();updated.createdDate=V.today();
    if(!V.change(db=>{
-    db.vocalPlanReports||[]=[];
+    db.vocalPlanReports ||= [];
     const index=db.vocalPlanReports.findIndex(r=>r.planId===plan.id);
     if(index>=0)db.vocalPlanReports[index]=updated;else db.vocalPlanReports.push(updated);
    },{silent:true}))throw Error('결과를 저장하지 못했어요.');
