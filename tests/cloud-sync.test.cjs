@@ -353,11 +353,11 @@ test('cancelled review never writes or discards the current local input',async()
  const x=d.data();x.songs[0].title='phone';d.store.setItem(KEY,JSON.stringify(x));d.store.setItem('vzip_account_dirty','1');s.row.revision='2';s.row.payload.songs[0].title='cloud';await d.sync();
  const before=d.store.getItem(KEY);await d.review();await get().review();get().onClose();assert.equal(d.store.getItem(KEY),before);assert.equal(s.rpcCalls.length,0);
 });
-for(const change of ['local','pause']){
+for(const change of ['local','pause','owner']){
  test('shipped recovery refuses '+change+' changes after inspection',async()=>{
   const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
   await d.review();const ui=get(),r=await ui.review();
-  if(change==='local'){const x=d.data();x.practices.push({id:'late'});d.store.setItem(KEY,JSON.stringify(x));}else d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;
+  if(change==='local'){const x=d.data();x.practices.push({id:'late'});d.store.setItem(KEY,JSON.stringify(x));}else if(change==='pause')d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;else d.window.VzipAccountScope.owner='another-owner';
   await assert.rejects(ui.resolve(r.reviewId,r.device,{confirmed:true}),e=>['review','identity'].includes(e.code));ui.onClose();assert.equal(s.rpcCalls.length,0);
  });
 }
@@ -373,4 +373,19 @@ test('shipped recovery retries a lost ACK with the same selected request rather 
  await d.review();const ui=get(),r=await ui.review();s.loseReply=true;
  await assert.rejects(ui.resolve(r.reviewId,r.device,{confirmed:true}));assert.equal(s.commits,1);const first=copy(s.rpcCalls[0]);
  await ui.retry();ui.onClose();assert.equal(s.commits,1);assert.deepEqual(s.rpcCalls[1],first);assert.ok(d.saved());
+});
+
+test('foreign archive entries added during recovery acknowledgement are preserved locally',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ await d.review();const ui=get(),r=await ui.review();
+ s.afterRpc=async()=>{const current=d.data();current.performances=[{id:'late-foreign',ownerId:'other',memo:'foreign after submit'}];d.store.setItem(KEY,JSON.stringify(current));};
+ await ui.resolve(r.reviewId,r.device,{confirmed:true});ui.onClose();
+ assert.equal(d.data().performances[0].memo,'foreign after submit');assert.ok(!JSON.stringify(s.rpcCalls).includes('foreign after submit'));assert.ok(d.saved());
+});
+test('foreign archive collisions stop before recovery transmission',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ const raw=d.data();raw.performances=[{id:'same-show',ownerId:'other',memo:'private'}];d.store.setItem(KEY,JSON.stringify(raw));s.row.payload.performances=[{id:'same-show',ownerId:UID,title:'own show'}];s.row.revision='2';
+ await d.review();const ui=get(),r=await ui.review();
+ await assert.rejects(ui.resolve(r.reviewId,r.cloud.payload,{confirmed:true}),e=>e.code==='archiveConflict');ui.onClose();
+ assert.equal(s.rpcCalls.length,0);assert.equal(d.data().performances[0].memo,'private');
 });

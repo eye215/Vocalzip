@@ -214,3 +214,12 @@ test('Default-off flow never exposes recovery or writes a revision journal',asyn
  const remote=await boot(page,{revision:false});await page.goto('/#/settings');await expect(page.locator('#cloud-review')).toBeHidden();expect(remote.requests).toHaveLength(0);
  expect(await page.evaluate(()=>VzipAccountScope.storage.getItem('vzip_snapshot_transport_v1:'+VzipAccountScope.owner))).toBeNull();
 });
+
+test('Recovery requires selections for all pages of conflicts and closes on an account change',async({page})=>{
+ const remote=await boot(page);
+ await page.evaluate(()=>VZ.change(d=>{d.songs=Array.from({length:25},(_,i)=>({id:'s'+i,title:'device '+i}));},{silent:true}));
+ remote.row.payload.songs=Array.from({length:25},(_,i)=>({id:'s'+i,title:'cloud '+i}));remote.row.revision='2';await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();
+ const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('fieldset')).toHaveCount(20);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeDisabled();
+ await dialog.locator('[data-review-more]').click();await expect(dialog.locator('fieldset')).toHaveCount(25);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeEnabled();
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vzip:auth-changed')));await expect(dialog).toHaveCount(0);expect(remote.requests).toHaveLength(0);expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('device 0');
+});

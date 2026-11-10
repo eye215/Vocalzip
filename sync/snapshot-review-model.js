@@ -46,7 +46,7 @@ function plan(review){
   if(Object.hasOwn(n,'value'))return copy(n.value);
   if(n.object)return Object.fromEntries(n.object.map(([key,value])=>[key,materialize(value,choices)]));
   if(n.array)return n.array.map(v=>materialize(v,choices));
-  const selected=n.options.find(o=>o.id===choices[n.choice]);
+  const selected=Object.hasOwn(choices,n.choice)?n.options.find(o=>o.id===choices[n.choice]):null;
   if(!selected)throw error('incomplete','서로 다른 내용을 모두 선택해 주세요.');
   return copy(selected.value);
  }
