@@ -80,10 +80,11 @@ function device(server,seed=base('local'),{clean=false,now=Date.now(),revision=f
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
  vm.runInContext(fs.readFileSync('sync/snapshot-transport.js','utf8'),context);window.VzipSnapshotTransport=context.VzipSnapshotTransport;
+ vm.runInContext(fs.readFileSync('sync/snapshot-review-model.js','utf8'),context);window.VzipSnapshotReviewModel=context.VzipSnapshotReviewModel;
  vm.runInContext(script,context);
  probes.push(()=>element('#cloud-status').textContent);
  return{store,window,status:()=>element('#cloud-status').textContent,
-  sync:()=>element('#cloud-upload').onclick(),
+  sync:()=>element('#cloud-upload').onclick(),review:()=>element('#cloud-review').onclick(),
   data:()=>JSON.parse(store.getItem(KEY)),
   saved:()=>store.getItem('vzip_cloud_linked_user')===server.owner&&!store.getItem('vzip_account_dirty')};
 }
@@ -332,3 +333,44 @@ for(const raw of ['{"broken":',JSON.stringify({songs:[],lessons:'unreadable loca
   assert.equal(d.store.getItem(KEY),raw);assert.equal(s.events.length,0);assert.equal(s.commits,0);assert.ok(s.objects.has('other'));
  });
 }
+
+function reviewHarness(d){
+ let callbacks;d.window.VZ={sheet(){}};
+ d.window.VzipSnapshotReview={open:x=>{callbacks=x;}};
+ return ()=>{assert.ok(callbacks);return callbacks;};
+}
+test('shipped recovery control applies the selected cloud field despite a newer local timestamp',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+ const local=d.data();local.songs[0].title='phone';local.songs[0].updatedAt=900;local.practices.push({id:'phone-only'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ s.row.payload.songs[0].title='cloud choice';s.row.payload.songs[0].updatedAt=100;s.row.payload.lessons=[{id:'cloud-only'}];s.row.revision='2';await d.sync();
+ await d.review();const ui=get(),r=await ui.review(),p=require('../sync/snapshot-review-model.js').plan(r);
+ const choices=Object.fromEntries(p.conflicts.map(c=>[c.id,c.options.find(o=>o.sources.includes('클라우드')).id]));
+ await ui.resolve(r.reviewId,p.candidate(choices),{confirmed:true});ui.onClose();
+ assert.equal(d.data().songs[0].title,'cloud choice');assert.equal(d.data().practices[0].id,'phone-only');assert.equal(d.data().lessons[0].id,'cloud-only');assert.ok(d.saved());assert.equal(s.writes.length,0);
+});
+test('cancelled review never writes or discards the current local input',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+ const x=d.data();x.songs[0].title='phone';d.store.setItem(KEY,JSON.stringify(x));d.store.setItem('vzip_account_dirty','1');s.row.revision='2';s.row.payload.songs[0].title='cloud';await d.sync();
+ const before=d.store.getItem(KEY);await d.review();await get().review();get().onClose();assert.equal(d.store.getItem(KEY),before);assert.equal(s.rpcCalls.length,0);
+});
+for(const change of ['local','pause']){
+ test('shipped recovery refuses '+change+' changes after inspection',async()=>{
+  const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+  await d.review();const ui=get(),r=await ui.review();
+  if(change==='local'){const x=d.data();x.practices.push({id:'late'});d.store.setItem(KEY,JSON.stringify(x));}else d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;
+  await assert.rejects(ui.resolve(r.reviewId,r.device,{confirmed:true}),e=>['review','identity'].includes(e.code));ui.onClose();assert.equal(s.rpcCalls.length,0);
+ });
+}
+test('shipped recovery keeps foreign archive data locally without sending it to the server',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ const x=d.data();x.songs[0].title='phone';x.songs[0].repertoire={ownerId:'other',memo:'foreign private text'};x.performances=[{id:'foreign',ownerId:'other',memo:'foreign private text'}];d.store.setItem(KEY,JSON.stringify(x));d.store.setItem('vzip_account_dirty','1');s.row.revision='2';s.row.payload.songs[0].title='cloud';await d.sync();
+ await d.review();const ui=get(),r=await ui.review();assert.ok(!JSON.stringify(r).includes('foreign private text'));
+ await ui.resolve(r.reviewId,r.device,{confirmed:true});ui.onClose();
+ assert.equal(d.data().songs[0].repertoire.memo,'foreign private text');assert.equal(d.data().performances[0].id,'foreign');assert.ok(!JSON.stringify(s.rpcCalls).includes('foreign private text'));assert.ok(d.saved());
+});
+test('shipped recovery retries a lost ACK with the same selected request rather than another save',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+ await d.review();const ui=get(),r=await ui.review();s.loseReply=true;
+ await assert.rejects(ui.resolve(r.reviewId,r.device,{confirmed:true}));assert.equal(s.commits,1);const first=copy(s.rpcCalls[0]);
+ await ui.retry();ui.onClose();assert.equal(s.commits,1);assert.deepEqual(s.rpcCalls[1],first);assert.ok(d.saved());
+});
