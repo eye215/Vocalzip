@@ -530,7 +530,7 @@ body .sheet-back.sheet-menu{align-items:stretch;padding:0;background:rgba(25,20,
 body .sheet-menu>.sheet{position:absolute;width:min(304px,calc(100% - 28px));max-width:none;max-height:min(70dvh,620px);padding:9px 8px;overflow:auto;border:1px solid rgba(255,255,255,.2);border-radius:27px;background:rgba(54,51,59,.92);color:#fff;box-shadow:0 18px 40px rgba(24,17,33,.25);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);animation:none}
 body .sheet-menu .sheet-grab,body .sheet-menu .sheet-head,body .sheet-menu .sheet-foot{display:none}
 body .sheet-menu .sheet-body{padding:0}
-body .sheet-menu .vz-choice-list,body .sheet-menu .list{display:grid;gap:0;margin:0;padding:0;background:none;border:0;box-shadow:none}
+body .sheet-menu .vz-choice-list,body .sheet-menu .sheet-body .list{display:grid;gap:0;margin:0;padding:0;background:none;border:0;box-shadow:none;border-radius:0;overflow:visible}
 body .sheet-menu .vz-choice,body .sheet-menu .list .item{display:flex;justify-content:flex-start;align-items:center;gap:14px;width:100%;min-height:56px;margin:0;padding:9px 14px;border:0;border-radius:15px;background:none;color:#fff;text-align:left;font-size:15px;font-weight:550;box-shadow:none}
 body .sheet-menu .vz-choice i,body .sheet-menu .list .item>i{flex:none;font-size:21px;color:#fff}
 body .sheet-menu .vz-choice .ph-check,body .sheet-menu .pick-check{margin-left:auto}

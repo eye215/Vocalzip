@@ -43,6 +43,20 @@ test('A song keeps multiple AR links, including repeated URLs, across edit and r
  await expect(page.locator('.vz-ar-list a')).toHaveCount(1);
  expect((await db(page)).songs[0].arLinks[0].label).toBe('공연용');
 });
+test('Song action menu keeps its dark surface and readable choices in a narrow web window',async({page})=>{
+ await page.setViewportSize({width:500,height:890});
+ await boot(page);
+ await page.goto('/#/song/song1');
+ await page.locator('[data-song-menu]').click();
+ const menu=page.locator('.sheet-menu .sheet');
+ const list=menu.locator('.list');
+ await expect(menu).toBeVisible();
+ await expect(list.getByRole('button',{name:'곡 정보 수정'})).toBeVisible();
+ expect(await list.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+ expect(await menu.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgba(54, 51, 59, 0.92)');
+ await expect(menu).toContainText('나의 레퍼토리 설정');
+ await expect(menu).toContainText('곡 삭제');
+});
 test('Library places filter and search above review, and keeps selection separate',async({page})=>{
  await boot(page);await page.goto('/#/library');
  await expect(page.locator('[data-kind]')).toBeHidden();await expect(page.locator('[data-song]')).toBeHidden();
