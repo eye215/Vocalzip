@@ -49,7 +49,11 @@ function unlinkMedia(data, ids) {
   if (!ids.length) return data;
   const gone = new Set(ids);
   if (data.songs) data.songs = data.songs.map(s => gone.has(s.repertoire?.takeId) ? {...s,repertoire:{...s.repertoire,takeId:''}} : s);
-  if (data.practices) data.practices = data.practices.map(p => p.mediaIds ? {...p, mediaIds:p.mediaIds.filter(id => !gone.has(id))} : p);
+  if (data.practices) data.practices = data.practices.map(p => p.mediaIds || p.practiceRoom?.audioIds ? {
+    ...p,
+    ...(p.mediaIds ? {mediaIds:p.mediaIds.filter(id => !gone.has(id))} : {}),
+    ...(p.practiceRoom?.audioIds ? {practiceRoom:{...p.practiceRoom,audioIds:p.practiceRoom.audioIds.filter(a => !gone.has(a.id))}} : {})
+  } : p);
   if (data.lessons) data.lessons = data.lessons.map(l => l.recordings ? {...l, recordings:l.recordings.filter(r => !gone.has(r.id))} : l);
   if (data.comparisonReports) data.comparisonReports = data.comparisonReports.map(original => {
     const r = {...original};

@@ -31,6 +31,21 @@ test('completed upload is published through the server with no direct metadata u
  expect([...server.r2.store.values()][0].bytes.equals(wav(1))).toBe(true);
  expect(server.r2.calls.some(x=>x.startsWith('DELETE'))).toBe(false);
 });
+test('R2-required practice audio never falls back to Supabase Storage when readiness changes',async({page})=>{
+ const server=await publicationServer(page);await boot(page);
+ const result=await page.evaluate(async bytes=>{
+  window.VzipR2.ready=async()=>false;
+  try{
+   await window.vzipCloudImport(new File([new Uint8Array(bytes)],'practice.wav',{type:'audio/wav'}),{id:'practice-r2-only',source:'practice'},undefined,{requireR2:true});
+   return 'unexpected success';
+  }catch(error){return error.message;}
+ },[...wav(1)]);
+ expect(result).toContain('R2 저장소 연결');
+ expect(await page.evaluate(()=>window.__up.length)).toBe(0);
+ expect(await page.evaluate(()=>window.__rows['practice-r2-only'])).toBeUndefined();
+ expect(server.requests).toHaveLength(0);
+ expect(server.r2.store.size).toBe(0);
+});
 test('failed publication survives reload and retries without re-reading or re-uploading a source file',async({page})=>{
  const server=await publicationServer(page,{failOnce:true});await boot(page);
  const failed=await page.evaluate(async bytes=>{
