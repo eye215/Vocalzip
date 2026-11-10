@@ -32,7 +32,18 @@ V.guidedRecommendationCards=(rows,{selectable=false,showStart=true}={})=>'<div c
     (showStart?'<a href="'+esc(path(c))+'" aria-label="'+esc(c.title)+' 따라 하기">따라 하기 <i class="ph ph-arrow-up-right"></i></a>':'')+'</div>').join('')+'</div>';
 
 let live=null;
-function clear(){if(!live)return;clearInterval(live.clock);clearInterval(live.watchClock);try{live.player?.destroy()}catch{}live=null;}
+function pauseForInterruption(){
+  const s=live;if(!s)return;
+  if(s.running){const now=Date.now();if(!s.steps[s.index]?.video||s.videoPlaying)s.elapsed+=Math.min(2,Math.max(0,(now-s.last)/1000));}
+  if(s.videoPlaying&&s.player){const now=s.player.getCurrentTime?.()||0;if(now>=s.lastVideoTime&&now-s.lastVideoTime<2.5)s.watched=Math.min(s.videoDuration,s.watched+now-s.lastVideoTime);}
+  s.running=false;s.videoPlaying=false;clearInterval(s.clock);clearInterval(s.watchClock);s.clock=null;s.watchClock=null;s.lastVideoTime=0;
+  try{s.player?.pauseVideo?.()}catch{}
+  const start=s.host.querySelector('[data-gp-start]');if(start&&!s.ended){start.disabled=!!s.steps[s.index]?.video&&!s.playerReady;start.textContent=s.steps[s.index]?.video?'영상 이어 듣기':s.elapsed?'다시 시작':'연습 시작';}
+  updateProgress(s);
+}
+function clear(){if(!live)return;pauseForInterruption();const s=live;live=null;try{s.player?.destroy()}catch{}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')pauseForInterruption()});
+window.addEventListener('pagehide',pauseForInterruption);
 function seconds(n){return Math.floor(n/60)+':'+String(Math.floor(n%60)).padStart(2,'0')}
 function stepList(c){
   const steps=c.steps.slice(0,4).map((text,i)=>({title:text,duration:Math.max(45,Math.round(c.minutes*60/Math.max(1,c.steps.length))),video:i===0?c.video:null}));
@@ -80,24 +91,26 @@ function saveSession(s){
 }
 function paint(s){
   if(!s.host.isConnected)return;
-  clearInterval(s.watchClock);s.watchClock=null;try{s.player?.destroy()}catch{}s.player=null;
+  clearInterval(s.watchClock);s.watchClock=null;try{s.player?.destroy()}catch{}s.player=null;s.playerReady=false;s.videoPlaying=false;
   const c=s.c,step=s.steps[Math.min(s.index,s.steps.length-1)],target=s.steps.reduce((n,x)=>n+x.duration,0),before=s.steps.slice(0,s.index).reduce((n,x)=>n+x.duration,0);
   const current=step.video?Math.min(step.duration,s.watched/(s.videoDuration||step.duration)*step.duration):Math.min(step.duration,s.elapsed);
   const progress=s.finished?100:Math.min(99,Math.round((before+current)/target*100));
   s.host.innerHTML='<div class="gp-screen"><p class="gp-eyebrow">'+esc(c.kind==='homework'?'레슨 숙제':'분석 추천 연습')+'</p><h2>'+esc(c.title)+'</h2><p class="gp-reason">'+esc(c.subtitle)+'</p>'+
     '<div class="gp-progress"><span>'+(s.finished?'연습 완료':(s.index+1)+' / '+s.steps.length+' 단계')+'</span><strong>'+progress+'%</strong></div><div class="gp-meter"><i style="width:'+progress+'%"></i></div>'+
-    (s.finished?'<div class="gp-done"><i class="ph ph-check-circle"></i><h3>모든 단계를 마쳤어요</h3><p>실제 연습 '+seconds(s.completedSeconds)+' · '+(s.saved?'연습 기록과 목표를 저장했어요.':'저장하지 못했어요. 다시 시도해 주세요.')+'</p></div><button type="button" class="gp-primary" '+(s.saved?'data-gp-record':'data-gp-retry')+'>'+(s.saved?'연습 기록 보기':'다시 저장')+'</button>':
+    (s.finished?'<div class="gp-done"><i class="ph ph-check-circle"></i><h3>모든 단계를 마쳤어요</h3><p>실제 연습 '+seconds(s.completedSeconds)+' · '+(s.saved?'연습 기록과 목표를 저장했어요.':'저장하지 못했어요. 다시 시도해 주세요.')+'</p></div><div class="gp-actions"><button type="button" class="gp-primary" '+(s.saved?'data-gp-record':'data-gp-retry')+'>'+(s.saved?'연습 기록 보기':'다시 저장')+'</button></div>':
     '<div class="gp-steps">'+s.steps.map((x,i)=>'<span class="'+(i===s.index?'active':i<s.index?'done':'')+'">'+(i<s.index?'✓':i+1)+'</span>').join('')+'</div>'+
     (step.video?'<div class="gp-video"><div id="gp-youtube"></div><p>연습 영상 · '+esc(step.video.title)+'</p><small>영상 '+seconds(s.watched)+' / '+seconds(s.videoDuration||step.duration)+'</small><div class="gp-meter"><i style="width:'+Math.min(100,Math.round(s.watched/(s.videoDuration||step.duration)*100))+'%"></i></div></div>':'<div class="gp-timer"><i class="ph ph-timer"></i><strong>'+seconds(s.elapsed)+'</strong><span>영상 없이 안내에 맞춰 연습해요</span></div>')+
     '<div class="gp-instruction"><small>STEP '+String(s.index+1).padStart(2,'0')+'</small><h3>'+esc(step.title)+'</h3><p>편한 음역에서 무리하지 말고 반복해 주세요.</p></div>'+
     (step.video?'<div class="gp-feedback"><span>이 영상이 이 연습에 맞았나요?</span><button type="button" data-gp-feedback="good" aria-pressed="'+(V.db.videoFeedback||[]).some(f=>f.exerciseKey===c.key&&f.videoId===step.video.id&&f.verdict==='good')+'">맞아요</button><button type="button" data-gp-feedback="bad" aria-pressed="false">맞지 않아요</button></div>':'')+
-    '<div class="gp-actions"><button type="button" class="gp-primary" data-gp-start>'+(s.running?'연습 종료':s.ended?'다시 시작':'연습 시작')+'</button>'+
-    '<button type="button" class="gp-secondary" data-gp-next '+(!s.ended?'disabled':'')+'>'+(s.index===s.steps.length-1?'마무리하기':'다음 단계')+'</button></div>'+
+    '<div class="gp-actions"><button type="button" class="gp-primary" data-gp-start '+(step.video?'disabled':'')+(s.ended?' hidden':'')+'>'+(step.video?'영상 불러오는 중…':s.running?'연습 종료':'연습 시작')+'</button>'+
+    '<button type="button" class="gp-secondary" data-gp-next '+(!s.ended?'hidden disabled':'')+'>'+(s.index===s.steps.length-1?'연습 끝내기':'다음 단계')+'</button></div>'+
     (step.video?'<button type="button" class="gp-fallback" data-gp-no-video>영상이 재생되지 않나요? 타이머로 연습하기</button>':''))+'</div>';
   s.host.querySelector('[data-gp-start]')?.addEventListener('click',e=>{const b=e.currentTarget;
-    if(s.running){clearInterval(s.clock);s.running=false;const practiced=s.elapsed>=3,watched=!step.video||s.videoDuration>0&&s.watched/s.videoDuration>=.8;s.ended=practiced&&watched;b.textContent='다시 시작';s.host.querySelector('[data-gp-next]').disabled=!s.ended;if(!practiced)V.toast('최소 3초 연습한 뒤 종료해 주세요.');else if(!watched)V.toast('영상을 80% 이상 보거나 타이머로 연습해 주세요.');return}
-    s.running=true;s.ended=false;s.last=Date.now();b.textContent='연습 종료';s.host.querySelector('[data-gp-next]').disabled=true;
-    s.clock=setInterval(()=>{if(!s.host.isConnected){clear();return}const now=Date.now();s.elapsed+=Math.min(2,(now-s.last)/1000);s.last=now;const label=s.host.querySelector('.gp-timer strong');if(label)label.textContent=seconds(s.elapsed);updateProgress(s)},1000)
+    if(!step.video&&s.running){clearInterval(s.clock);s.running=false;s.ended=s.elapsed>=3;b.textContent='다시 시작';const next=s.host.querySelector('[data-gp-next]');next.disabled=!s.ended;next.hidden=!s.ended;if(s.ended)b.hidden=true;else V.toast('최소 3초 연습한 뒤 종료해 주세요.');return}
+    if(step.video&&!s.playerReady)return;
+    if(step.video){if(s.player?.getPlayerState?.()===YT.PlayerState.ENDED){s.player.seekTo(0,true);s.watched=0;s.lastVideoTime=0;}s.player.playVideo();}
+    s.running=true;s.ended=false;s.last=Date.now();b.textContent=step.video?'영상 재생 중':'연습 종료';if(step.video)b.disabled=true;
+    s.clock=setInterval(()=>{if(!s.host.isConnected){clear();return}const now=Date.now();if(!step.video||s.videoPlaying)s.elapsed+=Math.min(2,(now-s.last)/1000);s.last=now;const label=s.host.querySelector('.gp-timer strong');if(label)label.textContent=seconds(s.elapsed);updateProgress(s)},1000)
   });
   s.host.querySelector('[data-gp-next]')?.addEventListener('click',()=>{if(!s.ended)return;s.completedSeconds+=s.elapsed;s.elapsed=0;s.watched=0;s.videoDuration=0;s.ended=false;s.index++;s.finished=s.index>=s.steps.length;if(s.finished)saveSession(s);paint(s)});
   s.host.querySelector('[data-gp-no-video]')?.addEventListener('click',()=>{try{s.player?.destroy()}catch{}s.player=null;step.video=null;s.watched=0;paint(s)});
@@ -108,16 +121,19 @@ function paint(s){
 }
 function attachPlayer(s,video){
   const mount=()=>{if(!live||live!==s||!s.host.isConnected||!s.host.querySelector('#gp-youtube')||!window.YT?.Player)return;
-    s.player=new YT.Player('gp-youtube',{videoId:video.id,playerVars:{playsinline:1,rel:0,origin:location.origin},events:{onReady:e=>{s.videoDuration=e.target.getDuration()||s.steps[s.index].duration;s.steps[s.index].duration=s.videoDuration;updateProgress(s)},onStateChange:e=>{if(e.data===YT.PlayerState.PLAYING){clearInterval(s.watchClock);s.watchClock=setInterval(()=>{if(!s.host.isConnected){clearInterval(s.watchClock);return}const duration=e.target.getDuration(),now=e.target.getCurrentTime();if(duration>0){s.videoDuration=duration;s.steps[s.index].duration=duration}
+    s.player=new YT.Player('gp-youtube',{videoId:video.id,playerVars:{playsinline:1,controls:0,disablekb:1,fs:0,rel:0,origin:location.origin},events:{onReady:e=>{if(live!==s||!s.host.isConnected||s.steps[s.index]?.video?.id!==video.id)return;s.playerReady=true;e.target.getIframe?.()?.setAttribute('tabindex','-1');s.videoDuration=e.target.getDuration()||s.steps[s.index].duration;s.steps[s.index].duration=s.videoDuration;const start=s.host.querySelector('[data-gp-start]');if(start){start.disabled=false;start.textContent='영상 재생';}updateProgress(s)},onStateChange:e=>{if(live!==s||!s.host.isConnected||s.steps[s.index]?.video?.id!==video.id)return;if(e.data===YT.PlayerState.PLAYING){s.videoPlaying=true;s.last=Date.now();clearInterval(s.watchClock);s.watchClock=setInterval(()=>{if(!s.host.isConnected){clearInterval(s.watchClock);return}const duration=e.target.getDuration(),now=e.target.getCurrentTime();if(duration>0){s.videoDuration=duration;s.steps[s.index].duration=duration}
       if(now>=s.lastVideoTime&&now-s.lastVideoTime<2.5)s.watched=Math.min(s.videoDuration,s.watched+Math.max(0,now-s.lastVideoTime));s.lastVideoTime=now;
       updateProgress(s);
-    },1000)}else{clearInterval(s.watchClock);s.lastVideoTime=0;updateProgress(s)}}}});
+    },1000)}else{const now=e.target.getCurrentTime();if(s.videoPlaying&&now>=s.lastVideoTime&&now-s.lastVideoTime<2.5)s.watched=Math.min(s.videoDuration,s.watched+now-s.lastVideoTime);s.videoPlaying=false;clearInterval(s.watchClock);s.lastVideoTime=0;
+      if(e.data===YT.PlayerState.ENDED&&s.running){clearInterval(s.clock);s.running=false;const start=s.host.querySelector('[data-gp-start]'),next=s.host.querySelector('[data-gp-next]');s.ended=s.videoDuration>0&&s.watched/s.videoDuration>=.8&&s.elapsed>=3;if(start){start.hidden=s.ended;start.disabled=false;start.textContent='영상 다시 듣기';}if(next){next.hidden=!s.ended;next.disabled=!s.ended;}if(!s.ended)V.toast('영상을 끝까지 재생한 뒤 다음 단계로 이동할 수 있어요.');}
+      else if(e.data===YT.PlayerState.PAUSED&&s.running){clearInterval(s.clock);s.running=false;const start=s.host.querySelector('[data-gp-start]');if(start){start.disabled=false;start.textContent='영상 이어 듣기';}}
+      updateProgress(s)}}}});
   };
   if(window.YT?.Player){mount();return}
   window.onYouTubeIframeAPIReady=mount;
   if(!document.querySelector('script[data-gp-youtube]')){const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';script.async=true;script.dataset.gpYoutube='';document.head.append(script)}
 }
-V.route('guided-practice',{title:'연습 따라 하기',back:true,tab:'home',noSettings:true,
+V.route('guided-practice',{title:'연습 따라 하기',back:true,tab:'home',noSettings:true,noAutoRefresh:true,
   render:()=>'<div class="gp-loading">연습 내용을 불러오는 중…</div>',
   async mount(host,r){clear();const key=r.params[0],songId=r.query.get('song')||'';
     let c;if(key?.startsWith('homework:')){const t=V.db.assignments.find(x=>'homework:'+x.id===key);if(t)c={kind:'homework',key,title:t.title,subtitle:'레슨 숙제',songId:V.taskSongId(t)||'',assignmentId:t.id,steps:[t.title],minutes:5};}

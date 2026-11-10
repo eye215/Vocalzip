@@ -4,3 +4,8 @@ body[data-vz-route="guided-practice"]{background:#0b0911;color:#f7f5fc;color-sch
 
 .gp-feedback button[aria-pressed="true"]{background:#7a32f5;color:#fff}
 .item .vz-task-start{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 10px;border-radius:12px;background:var(--accent-soft,#f1eaff);color:var(--accent,#7a32f5);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}
+/* Playback is controlled by the practice buttons; touches on the video do not seek or pause it. */
+.gp-video iframe{pointer-events:none}
+.gp-screen{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
+.gp-actions{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,560px);box-sizing:border-box;margin:0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:#0b0911;box-shadow:0 -10px 24px #0b0911cc}
+.gp-actions [hidden]{display:none}
