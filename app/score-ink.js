@@ -39,7 +39,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touches=new Map(),pinch=null,pinchDirty=false,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
+ let selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
  const button=(name,icon,label)=>'<button type="button" class="icon-btn" data-ink-'+name+' aria-label="'+label+'" title="'+label+'"><i class="ph ph-'+icon+'"></i></button>';
  const tools=['pan','pen','highlighter','eraser','select'];
  const names=['이동','펜','형광펜','지우개','선택'],icons=['hand','pen','highlighter','eraser','selection'];
@@ -117,7 +117,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   hadNative=native;
  }
 
- function resetGestures(){touchPan=null;pageSwipe=null;twoSwipe=null;touchInkStart=null;touches.clear();pinch=null;pinchDirty=false;}
+ function resetGestures(){touchPan=null;pageSwipe=null;twoSwipe=null;touchInkStart=null;touchEraser=null;touches.clear();pinch=null;pinchDirty=false;}
  function zoomValue(){
   const select=el.querySelector('[data-ink-zoom]'),value=String(zoom);
   select.querySelector('[data-ink-free-zoom]')?.remove();
@@ -420,8 +420,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
   };
   svg.onpointerdown=event=>{
    if(!ready||busy||exportBusy||pending||event.button>0)return;
-   if(event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size){
+   if(event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size&&event.width<=50&&event.height<=50&&Date.now()-touchInkStart.time<280&&(!active||active.stroke.points.length<4)){
     if(active?.pointer===touchInkStart.pointer){active=null;cancelAnimationFrame(frame);frame=0;}
+    touchEraser=null;
     if(selection?.drag?.pointer===touchInkStart.pointer)selectionEnd(false);
     paint();
     const first=touchInkStart;touchInkStart=null;
@@ -437,11 +438,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
    if(profiles.penOnly&&event.pointerType!=='pen')return;
    resetGestures();
-   if(event.pointerType==='touch')touchInkStart={pointer:event.pointerId,x:event.clientX,y:event.clientY};
+   if(event.pointerType==='touch')touchInkStart={pointer:event.pointerId,x:event.clientX,y:event.clientY,time:Date.now()};
    try{
     current();event.preventDefault();const p=coords(event);
     if(tool==='select'){selectionDown(event,p);return;}
-    if(tool==='eraser'){const found=strokes().reverse().find(s=>Ink.hit(s,p,aspect));if(found)apply({add:[],remove:[found]});return;}
+    if(tool==='eraser'){
+     if(event.pointerType==='touch'){touchEraser={pointer:event.pointerId,point:p};try{svg.setPointerCapture?.(event.pointerId);}catch{}return;}
+     const found=strokes().reverse().find(s=>Ink.hit(s,p,aspect));if(found)apply({add:[],remove:[found]});return;
+    }
     const config=profiles[tool];
     const stroke={version:1,id:VZ.uid(),...binding,page:pageNo,tool,color:config.color,opacity:config.opacity,
      width:config.width,points:[p],createdAt:Date.now()};
@@ -458,6 +462,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   };
   svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{
    if(touchInkStart?.pointer===event.pointerId)touchInkStart=null;
+   if(touchEraser?.pointer===event.pointerId){const point=touchEraser.point;touchEraser=null;if(event.type==='pointerup'){try{const found=strokes().reverse().find(s=>Ink.hit(s,point,aspect));if(found)apply({add:[],remove:[found]});}catch(e){say(e.message,true);}}return;}
    if(selection?.drag?.pointer===event.pointerId){event.preventDefault();try{selectionEnd(event.type==='pointerup');}catch(e){selectionEnd(false);say(e.message,true);}return;}
    if(gestureEnd(event))return;
    if(active?.pointer!==event.pointerId)return;
