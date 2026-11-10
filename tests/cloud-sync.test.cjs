@@ -75,7 +75,7 @@ function device(server,seed=base('local'),{clean=false,now=Date.now(),revision=f
  if(!clean)store.setItem('vzip_account_dirty','1');
  const context=vm.createContext({...window,window,document,localStorage:store,Date:FixedDate,
   navigator:{userAgent:'test',maxTouchPoints:0,locks:{request:async(name,options,work)=>work({})}},matchMedia:()=>({matches:false}),location:{href:'https://test.invalid/',reload(){},origin:'https://test.invalid',pathname:'/'},
-  URL,AbortController,atob,fetch:server.fetch?server.fetch.bind(server):async()=>{throw Error('Unexpected REST transport');},structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
+  URL,TextEncoder,AbortController,atob,fetch:server.fetch?server.fetch.bind(server):async()=>{throw Error('Unexpected REST transport');},structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
   Event:class{constructor(type){this.type=type}},setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,10)),clearTimeout,setInterval(){},
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
@@ -242,4 +242,85 @@ test('revision bridge compares the owner-scoped payload without resending exclud
  const local=d.data();local.excludedArchive=[{id:'other-owner-private-entry'}];d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
  await d.sync();assert.ok(d.saved());assert.equal(s.commits,0);assert.equal(s.rpcCalls.length,0);assert.equal(s.writes.length,0);
  assert.equal(d.data().excludedArchive[0].id,'other-owner-private-entry');assert.equal(s.row.payload.excludedArchive,undefined);
+});
+
+const mediaSeed=()=>({...base('cloud'),deleted:{},lessons:[{id:'lesson',memo:'keep notes',recordings:[{id:'chosen'},{id:'other'}]}],practices:[{id:'practice',manualMinutes:12,mediaIds:['chosen','other']}]});
+class MediaRevisionServer extends RevisionServer{
+ constructor(){super(mediaSeed());this.media=new Map([['chosen',{metadata:{id:'chosen',storageProvider:'r2',r2Key:'u/'+UID+'/chosen/original.wav',review:'keep current review'},updated_at:'2026-11-10T00:00:00Z'}]]);this.events=[];this.objects=new Set(['chosen','other']);this.mediaReads=0;}
+ async run(q){
+  if(q.table==='vocal_media'){
+   assert.equal(q.filters.user_id,UID);
+   if(q.method==='read'){if(q.single){this.mediaReads++;await this.onMediaRead?.();return {data:copy(this.media.get(q.filters.id)||null),error:null};}return {data:[...this.media].map(([id,row])=>({id,...copy(row)})),error:null};}
+   assert.equal(q.method,'delete');const row=this.media.get(q.filters.id);
+   if(row&&q.filters.updated_at===row.updated_at){this.media.delete(q.filters.id);this.events.push('metadata');return {data:[{id:q.filters.id}],error:null};}
+   return {data:[],error:null};
+  }
+  if(q.table==='vocal_song_texts'){this.events.push('texts');if(this.failText){this.failText=false;return {data:null,error:Error('text cleanup failed')};}return {data:[],error:null};}
+  if(q.table==='vocal_data'&&q.method!=='read')this.events.push('legacy-root');
+  return super.run(q);
+ }
+}
+async function mediaDevice({revision=true}={}){
+ const s=new MediaRevisionServer(),d=device(s,mediaSeed(),{clean:true,revision});await until(()=>d.saved());
+ d.window.VzipR2={remove:async key=>{
+  assert.equal(key,'u/'+UID+'/chosen/original.wav');
+  if(revision)assert.ok(s.row.payload.deleted.media.includes('chosen'));
+  s.events.push('bytes');s.objects.delete('chosen');await s.onBytes?.();
+ }};
+ return {s,d};
+}
+test('revision media delete confirms snapshot first and never uses direct root writes',async()=>{
+ const {s,d}=await mediaDevice();await d.window.vzipCloudMediaDelete({id:'chosen'});
+ assert.deepEqual(s.events,['bytes','texts','metadata']);assert.equal(s.writes.length,0);assert.equal(s.commits,1);
+ assert.deepEqual(s.row.payload.lessons[0].recordings,[{id:'other'}]);assert.equal(s.row.payload.lessons[0].memo,'keep notes');assert.equal(s.row.payload.practices[0].manualMinutes,12);
+ assert.ok(s.objects.has('other'));assert.equal(d.window.vzipPendingMediaDeletes()[0].phase,'cloud-complete');
+ await d.window.vzipMediaDeleteAcknowledge('chosen');assert.deepEqual(d.window.vzipPendingMediaDeletes(),[]);
+});
+test('lost snapshot delete acknowledgement preserves bytes and replays the exact request',async()=>{
+ const {s,d}=await mediaDevice();s.loseReply=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));
+ assert.ok(s.objects.has('chosen'));assert.equal(s.events.length,0);
+ const before=copy(s.rpcCalls[0]),journal=JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID));
+ assert.equal(journal.pending.context.kind,'media-delete');assert.equal(journal.pending.context.id,'chosen');
+ await d.window.vzipCloudMediaDelete({id:'chosen'});assert.equal(s.commits,1);assert.deepEqual(s.rpcCalls[1],before);assert.ok(s.objects.has('other'));
+});
+test('a concurrent root edit prevents bytes from being erased',async()=>{
+ const {s,d}=await mediaDevice();const local=d.data();local.lessons[0].memo='phone unsent';d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ s.row.payload.lessons[0].memo='tablet saved';s.row.revision='2';
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));assert.equal(s.events.length,0);assert.equal(s.commits,0);
+ assert.equal(d.data().lessons[0].memo,'phone unsent');assert.equal(s.row.payload.lessons[0].memo,'tablet saved');
+});
+test('metadata changed during the root RPC keeps both the original and current file information',async()=>{
+ const {s,d}=await mediaDevice();s.afterRpc=()=>{s.media.get('chosen').metadata.review='new device memo';s.media.get('chosen').updated_at='2026-11-10T00:00:01Z';};
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),e=>e.code==='mediaChanged');assert.equal(s.events.length,0);
+ assert.ok(s.objects.has('chosen'));assert.equal(s.media.get('chosen').metadata.review,'new device memo');
+});
+test('cleanup can resume after a file was erased but later metadata work failed',async()=>{
+ const {s,d}=await mediaDevice();s.failText=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/text cleanup/);
+ assert.ok(s.media.has('chosen'));assert.equal(d.window.vzipPendingMediaDeletes()[0].phase,'root-confirmed');
+ await d.window.vzipCloudMediaDelete({id:'chosen'});await d.window.vzipMediaDeleteAcknowledge('chosen');
+ assert.equal(s.commits,1);assert.ok(!s.media.has('chosen'));assert.ok(s.objects.has('other'));assert.deepEqual(d.window.vzipPendingMediaDeletes(),[]);
+});
+test('a generic unresolved snapshot is never mistaken for a media deletion receipt',async()=>{
+ const {s,d}=await mediaDevice();const local=d.data();local.songs.push({id:'unsent'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');s.reject=true;
+ await d.sync();const pending=JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID)).pending;
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/이전 저장 요청/);assert.equal(s.events.length,0);
+ assert.equal(JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID)).pending.id,pending.id);assert.ok(d.data().songs.some(x=>x.id==='unsent'));
+});
+test('new-session delete resume and paused configuration both stop before touching media',async()=>{
+ const {s,d}=await mediaDevice();s.loseReply=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));const reads=s.mediaReads;
+ d.window.vzipCloudSessionId=()=> 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),e=>e.code==='session');assert.equal(s.mediaReads,reads);assert.equal(s.events.length,0);
+ d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/일시 중지/);assert.equal(s.events.length,0);
+});
+test('intent storage failure and foreign storage paths fail before snapshot or file changes',async()=>{
+ const a=await mediaDevice(),save=a.d.store.setItem;
+ a.d.store.setItem=(k,v)=>{if(k.startsWith('vzip_media_delete_v1:'))throw Error('quota');return save(k,v);};
+ await assert.rejects(a.d.window.vzipCloudMediaDelete({id:'chosen'}),e=>e.code==='storage');assert.equal(a.s.events.length,0);assert.equal(a.s.commits,0);
+ const b=await mediaDevice();b.s.media.get('chosen').metadata.r2Key='u/22222222-2222-4222-8222-222222222222/foreign/original.wav';
+ await assert.rejects(b.d.window.vzipCloudMediaDelete({id:'chosen'}),/다른 계정/);assert.equal(b.s.events.length,0);assert.equal(b.s.commits,0);
+});
+test('the default-off legacy deletion path keeps its existing behavior',async()=>{
+ const {s,d}=await mediaDevice({revision:false});await d.window.vzipCloudMediaDelete({id:'chosen'});
+ assert.equal(s.events[0],'bytes');assert.ok(s.events.includes('legacy-root'));assert.equal(s.rpcCalls.length,0);assert.equal(s.writes.length,1);
+ assert.ok(s.row.payload.deleted.media.includes('chosen'));assert.ok(s.objects.has('other'));
 });

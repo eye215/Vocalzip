@@ -277,11 +277,23 @@ M.remove = async item => {
     // A list snapshot can predate automatic backup. Resolve the cloud copy again.
     if (item.cloud || window.vzipCloudSignedIn?.()) await window.vzipCloudMediaDelete(item);
     // Save the unlink intent before removing local bytes; a failed write remains retryable.
-    if (!VZ.change(d => window.VzipDataMerge.deleteMedia(d, item.id), {silent:true})) throw Error('파일 연결 정리를 저장하지 못했어요. 다시 시도해 주세요.');
+    const unlink=()=>{if (!VZ.change(d => window.VzipDataMerge.deleteMedia(d, item.id), {silent:true})) throw Error('파일 연결 정리를 저장하지 못했어요. 다시 시도해 주세요.');};
+    if(window.vzipSnapshotDeleteLocalMedia)await window.vzipSnapshotDeleteLocalMedia(item.id,unlink);else unlink();
     for (const player of players) if (player.item.id === item.id) player.destroy();
     await tx('readwrite', s => s.delete(item.id));
+    await window.vzipMediaDeleteAcknowledge?.(item.id);
     changed();
   } finally { removing.delete(item.id); M.holdBackup(false); }
+};
+/** Resume only the same account and Auth session's already confirmed delete intents. */
+M.resumeDeletes=async()=>{
+ if(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true||!window.vzipCloudSignedIn?.())return;
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.(),pending=window.vzipPendingMediaDeletes?.()||[];
+ for(const job of pending){
+  if(job.owner!==owner||job.session!==session)continue;
+  try{await M.remove({id:job.id,cloud:true,accountOwner:owner});}
+  catch(error){VZ.toast('미완료 파일 삭제: '+error.message,'error');}
+ }
 };
 M.src = async item => {
   const blob = blobOf(item);
