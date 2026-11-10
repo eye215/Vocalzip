@@ -292,7 +292,7 @@ test('Homework has a period; each practice in it asks whether it was done, how m
   await page.locator('[data-log]').click();
   await sheet(page).locator('[name=date]').fill(day(10)); await sheet(page).locator('[name=date]').dispatchEvent('change');
   await expect(sheet(page).locator('.hw-ask')).toHaveCount(0);
-  await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
+  await sheet(page).locator('[data-close]').first().click();
   // The homework shows the period, the total and each time with its memo.
   await page.goto('/#/homework');
   await expect(page.locator('[data-task="' + task.id + '"]')).toContainText('3회 했어요');
