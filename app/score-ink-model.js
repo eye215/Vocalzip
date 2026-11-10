@@ -18,8 +18,8 @@ const same=(a,b)=>JSON.stringify(['version','id','ownerId','songId','scoreId','r
 const opacity=s=>s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
 function scope(s,b){return s.songId===b.songId&&s.scoreId===b.scoreId&&s.r2Key===b.r2Key&&s.pdfHash===b.pdfHash&&s.ownerId===b.ownerId;}
 function point(x,y,pressure=0.5){return [x,y,pressure].map(n=>Math.round(Math.max(0,Math.min(1,Number.isFinite(n)?n:0.5))*100000)/100000);}
-function hit(s,p,aspect=1){
- const x=p[0],y=p[1]*aspect,r=Math.max(s.width/2,0.018),pts=s.points;
+function hit(s,p,aspect=1,radius=0.018){
+ const x=p[0],y=p[1]*aspect,r=Math.max(s.width/2,radius),pts=s.points;
  const dist=(a,b)=>{
   const ax=a[0],ay=a[1]*aspect,bx=b[0],by=b[1]*aspect,dx=bx-ax,dy=by-ay,den=dx*dx+dy*dy,t=den?Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/den)):0;
   return Math.hypot(x-ax-t*dx,y-ay-t*dy);
