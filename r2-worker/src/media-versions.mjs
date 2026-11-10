@@ -7,7 +7,7 @@ export async function mediaRpc(request,env,name,body,{fail}){
  if(!env.SUPABASE_ANON_KEY)fail(503,'media validation is not configured');
  let response;
  try{response=await fetch(String(env.SUPABASE_URL||'').replace(/\/+$/,'')+'/rest/v1/rpc/'+name,{
-  method:'POST',redirect:'error',headers:{apikey:env.SUPABASE_ANON_KEY,authorization:request.headers.get('authorization')||'',
+  method:'POST',redirect:'manual',headers:{apikey:env.SUPABASE_ANON_KEY,authorization:request.headers.get('authorization')||'',
    'content-type':'application/json','x-client-info':request.headers.get('x-client-info')||''},
   body:JSON.stringify(body),signal:AbortSignal.timeout(8000)
  });}catch{fail(503,'media validation unavailable');}

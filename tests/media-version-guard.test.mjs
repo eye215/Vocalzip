@@ -13,6 +13,7 @@ const U='11111111-1111-4111-8111-111111111111',V='22222222-2222-4222-8222-222222
 const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',C='cccccccc-cccc-4ccc-8ccc-cccccccccccc',D='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const base=id=>({categories:[],songs:id?[{id,title:id}]:[],lessons:[],assignments:[],practices:[]});
 let admin,db,name,conn,mf;
+const rpcTrace=[];
 const shared='isolated-media-version-secret-never-production-32',jwtSecret='isolated-media-jwt-secret-never-production';
 const mediaProposal=readFileSync(new URL('../supabase/proposals/20261116_media_version_guard.sql',import.meta.url),'utf8');
 const require=createRequire(import.meta.url);
@@ -209,6 +210,7 @@ async function bootWorker(){
   bindings:{SUPABASE_URL:'https://media-db.test',SUPABASE_ANON_KEY:'public-fixture',SUPABASE_JWT_SECRET:jwtSecret,SIGNING_SECRET:jwtSecret,SESSION_GUARD_ENABLED:'true',UPLOADS_V2_ENABLED:'true',MEDIA_VERSION_GUARD_ENABLED:'true',MEDIA_VERSION_SECRET:shared},
   outboundService:async request=>{
    const body=await request.json(),name=new URL(request.url).pathname.split('/').at(-1),jwt=request.headers.get('authorization').split(' ')[1],claims=JSON.parse(Buffer.from(jwt.split('.')[1],'base64url'));
+   rpcTrace.push(name);
    const connection=new pg.Client({connectionString:conn});await connection.connect();
    try{
     const result=await as(claims.sub,claims.session_id,async c=>{
@@ -239,7 +241,7 @@ async function call(path,{body,method=body?'POST':'GET'}={}){
 async function original(mediaId,bytes){
  const client=require('../r2-resumable-upload.js'),file=new File([bytes],'voice.wav',{type:'audio/wav'}),manifest=await client.inspect(file),levels=await client.tree(manifest);
  const start=await call('/v2/uploads',{body:{mediaId,contentType:'audio/wav',size:file.size,ext:'wav',root:manifest.root}});
- assert.equal(start.status,200,await start.clone().text());const upload=await start.json(),parts=[];
+ assert.equal(start.status,200,(await start.clone().text())+' RPC names: '+rpcTrace.join(','));const upload=await start.json(),parts=[];
  // Use the exact signed upload and Merkle proof headers for the real R2 multipart part.
  const part=await mf.dispatchFetch('https://media.test/v2/uploads/parts/1',{method:'PUT',headers:{authorization:'Bearer '+jwt(),'x-client-info':'vocalzip-device-session-v2','x-vzip-upload':JSON.stringify({descriptor:upload.descriptor,signature:upload.signature}),'x-vzip-proof':client.proof(levels,0).join(','),'content-length':String(bytes.length)},body:bytes});
  assert.equal(part.status,200,await part.clone().text());parts.push(await part.json());
