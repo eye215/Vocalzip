@@ -1,0 +1,45 @@
+name: Media immutable version server contract
+on:
+  push:
+    branches: ['codex/media-version-server-20261110']
+  pull_request:
+    paths:
+      - 'r2-worker/**'
+      - 'supabase/proposals/20261116_media_version_guard.sql'
+      - 'tests/media-version-guard.test.mjs'
+      - '.github/workflows/media-version-guard.yml'
+permissions:
+  contents: read
+concurrency:
+  group: media-version-server-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  sql-worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: media_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - run: npm ci --prefix r2-worker
+      - name: SQL ownership, sessions, signed object proof and real in-memory R2 multipart/delete
+        env:
+          VZ_MEDIA_VERSION_TEST_DB: postgres://postgres:media_ci_only@localhost:5432/postgres
+        run: node --test --test-concurrency=1 tests/media-version-guard.test.mjs
+      - name: Existing revision routing and two-session database contract
+        env:
+          VZ_SNAPSHOT_ROLLOUT_TEST_DB: postgres://postgres:media_ci_only@localhost:5432/postgres
+        run: node --test tests/snapshot-rollout.test.mjs

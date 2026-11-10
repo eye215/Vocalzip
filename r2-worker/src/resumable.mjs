@@ -12,7 +12,7 @@ const hex=b=>Array.from(new Uint8Array(b),v=>v.toString(16).padStart(2,'0')).joi
 const digest=b=>crypto.subtle.digest('SHA-256',b).then(hex);
 function leaf(index,length,hash){const b=new Uint8Array(41),v=new DataView(b.buffer);b[0]=0;v.setUint32(1,index);v.setUint32(5,length);b.set(bytes(hash),9);return digest(b);}
 function pair(a,b){const out=new Uint8Array(65);out[0]=1;out.set(bytes(a),1);out.set(bytes(b),33);return digest(out);}
-export async function handleUploadV2(request,env,uid,{fail,json,readJson,sign,equal,assertSession}){
+export async function handleUploadV2(request,env,uid,{fail,json,readJson,sign,equal,assertSession,assertUpload=async()=>{}}){
  const url=new URL(request.url),path=url.pathname,method=request.method,enabled=env.UPLOADS_V2_ENABLED==='true';
  const write=()=>{if(!enabled)fail(503,'resumable uploads are paused');};
  if(env.SESSION_GUARD_ENABLED!=='true')fail(503,'registered sessions required');
@@ -40,6 +40,7 @@ export async function handleUploadV2(request,env,uid,{fail,json,readJson,sign,eq
   write();const body=await boundedJson(request,fail);
   if(!ID.test(body.mediaId||'')||!EXT.test(body.ext||'')||!HEX.test(body.root||'')||!/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(body.contentType||''))fail(400,'invalid upload');
   if(!Number.isSafeInteger(body.size)||body.size<1||body.size>(Number(env.MAX_FILE_BYTES)||2*1024**3))fail(413,'invalid upload size');
+  await assertUpload(body.mediaId);
   const attempt=crypto.randomUUID(),key='u/'+uid+'/'+body.mediaId+'/'+attempt+'/original.'+body.ext;
   const upload=await env.MEDIA.createMultipartUpload(key,{httpMetadata:{contentType:body.contentType},
    customMetadata:{owner:uid,mediaId:body.mediaId,size:String(body.size),uploadAttempt:attempt,uploadRoot:body.root}});
@@ -54,7 +55,7 @@ export async function handleUploadV2(request,env,uid,{fail,json,readJson,sign,eq
  let match;
  if((match=path.match(/^\/v2\/uploads\/parts\/(\d{1,3})$/))&&method==='PUT'){
   write();let upload;try{upload=JSON.parse(request.headers.get('x-vzip-upload')||'');}catch{fail(400,'invalid upload descriptor');}
-  const d=await ticket(upload),n=Number(match[1]),count=Math.ceil(d.size/PART);
+  const d=await ticket(upload);await assertUpload(d.mediaId);const n=Number(match[1]),count=Math.ceil(d.size/PART);
   if(n<1||n>count)fail(400,'invalid part number');
   if(await completed(d))fail(409,'upload already complete');
   const expected=Math.min(PART,d.size-(n-1)*PART),declared=request.headers.get('content-length');
@@ -76,6 +77,7 @@ export async function handleUploadV2(request,env,uid,{fail,json,readJson,sign,eq
  if(path==='/v2/uploads/complete'&&method==='POST'){
   const body=await boundedJson(request,fail),d=await ticket(body.upload),count=Math.ceil(d.size/PART),parts=body.parts;
   if(!Array.isArray(parts)||parts.length!==count||parts.some((p,i)=>p.partNumber!==i+1||typeof p.etag!=='string'||!p.etag.length||p.etag.length>200))fail(400,'invalid upload parts');
+  await assertUpload(d.mediaId);
   let done=await completed(d);
   if(!done){
    write();
@@ -83,7 +85,7 @@ export async function handleUploadV2(request,env,uid,{fail,json,readJson,sign,eq
    catch(error){done=await completed(d);if(!done)fail(503,'upload completion is pending');}
    done=done||await completed(d);if(!done)fail(503,'upload completion is not confirmed');
   }
-  await assertSession();return json(done);
+  await assertSession();await assertUpload(d.mediaId);return json(done);
  }
  fail(404,'not found');
 }
