@@ -314,6 +314,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .hub-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 /* 보관함 */
 .lib-seg{margin-bottom:8px}
+/* Recording-purpose tabs: keep all categories reachable on narrow iPhone screens. */
+.vz-library-tabs{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:4px}
+.vz-library-tabs::-webkit-scrollbar{display:none}
+.vz-library-tabs .lib-seg{display:flex;width:max-content;min-width:100%;gap:4px}
+.vz-library-tabs .lib-seg button{flex:0 0 auto;white-space:nowrap;padding-inline:13px}
+
 .lib-selects{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px;margin-bottom:12px}
 .lib-selects select{min-width:0;min-height:44px}
 .lib-summary{margin:0 4px 4px}
