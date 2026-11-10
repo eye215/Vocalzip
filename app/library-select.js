@@ -12,6 +12,8 @@ VZ.librarySelect = (main, {list, done}) => {
   const picked = new Map();
   let busy = false, selecting = false;
   const chosen = () => [...picked.values()];
+  const activeChosen = () => chosen().filter(m => list().some(v => String(v.id)===String(m.id)));
+  const clearOffscreen = () => {const ids=new Set(list().map(m=>String(m.id)));for(const id of picked.keys())if(!ids.has(id))picked.delete(id);};
   const mark = root => root.querySelectorAll('[data-media].lib-record').forEach(row => {
     const button = row.querySelector('[data-lib-pick]'); if (!button) return;
     const yes = picked.has(row.dataset.media), span = button.querySelector('span');
@@ -21,6 +23,7 @@ VZ.librarySelect = (main, {list, done}) => {
   const paint = () => {
     main.classList.toggle('lib-selection-active', selecting);
     start.hidden = selecting; total.hidden = selecting; cancel.hidden = !selecting; left.hidden = !selecting; meta.hidden = !selecting;
+    clearOffscreen();
     const visible = list(), all = visible.length > 0 && visible.every(m => picked.has(String(m.id)));
     total.textContent = '총 ' + visible.length + '개';
     allButton.setAttribute('aria-pressed', String(all));
@@ -38,7 +41,7 @@ VZ.librarySelect = (main, {list, done}) => {
     else current.forEach(m => picked.set(String(m.id),m));
     paint();
   };
-  const canAnalyze = items => items.length > 0 && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
+  const canAnalyze = items => items.length > 0 && items.every(m=>M.songSearchEligible(m)) && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
   const analyze = items => { if (canAnalyze(items)) VZ.openAnalysisSelection(items); };
   const singleMenu = (item, row) => VZ.menu({title:'녹음 더보기', body:
     '<div class="vz-choice-list vz-media-action-sheet">' +
@@ -69,21 +72,21 @@ VZ.librarySelect = (main, {list, done}) => {
     }
   }, true);
   bulk.onclick = () => {
-    if (!picked.size) return;
+    clearOffscreen();if (!picked.size) return;
     VZ.menu({title:'선택한 녹음 ' + picked.size + '개', body:
       '<div class="vz-choice-list vz-media-action-sheet">' +
-      '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정</button>' +
+      (activeChosen().every(m=>M.songSearchEligible(m))?'<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정</button>':'') +
       '<button type="button" class="vz-choice" data-occ><i class="ph ph-tag"></i> 종류 변경</button>' +
       (canAnalyze(chosen()) ? '<button type="button" class="vz-choice" data-analyze-bulk><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">같은 곡으로 지정된 녹음만 분석할 수 있어요.</p>') + '</div>',
       onMount:(sheet, close) => {
-        sheet.querySelector('[data-song]').onclick = () => { close(); setSong(); };
+        sheet.querySelector('[data-song]')?.addEventListener('click',() => { close(); setSong(); });
         sheet.querySelector('[data-occ]').onclick = () => { close(); setKind(); };
         sheet.querySelector('[data-analyze-bulk]')?.addEventListener('click', () => { const items = chosen(); if (!canAnalyze(items)) return; close(); analyze(items); });
       }
     });
   };
   const run = async (label, fn) => {
-    const items = chosen(); if (!items.length) return;
+    const items = activeChosen(); if (!items.length) return;
     busy = true; paint(); let ok = 0, failed = 0;
     for (const m of items) { try { await fn(m); ok++; } catch { failed++; } }
     busy = false; picked.clear(); paint(); M.invalidate?.(); await done();
@@ -98,11 +101,11 @@ VZ.librarySelect = (main, {list, done}) => {
     await run('곡을 바꿨어요:', m => (m.songId || '') === v ? null : M.assignSongSafe(m, {songId:v, song:song ? VZ.songLabel(song) : ''}, {expectedSongId:m.songId || '', expectedSong:m.song || ''}));
   }
   async function setKind() {
-    const v = await VZ.pickSheet({title:'종류 바꾸기', value:null, options:M.OCCASIONS.map(([k,t]) => ({value:k, label:t}))});
+    const v = await VZ.pickSheet({title:'녹음 분류 바꾸기', value:null, options:M.RECORDING_CATEGORIES.map(([k,t]) => ({value:k, label:t}))});
     if (v == null) return;
-    await run('종류를 바꿨어요:', m => M.occasion(m) === v ? null : M.update(m, {occasion:v}));
+    await run('분류를 바꿨어요:', m => M.recordingCategory(m) === v ? null : M.update(m, {recordingCategory:v}));
   }
   paint();
-  return {clear:() => { picked.clear(); paint(); }};
+  return {clear:() => { picked.clear(); paint(); }, refresh:paint};
 };
 })();
