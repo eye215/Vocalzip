@@ -27,8 +27,11 @@ function record(db,input,date){
 function goal(db,input,date){
  const s=validate(input);if(s.demo)return false;
  const task=input.nextTask;if(!names[task])throw Error('다음 과제를 확인할 수 없어요.');
- const id='practice-room:'+s.id+':next';db.dailyGoals||=[];if(db.dailyGoals.some(g=>g.id===id))return false;
- db.dailyGoals.push({id,date,title:names[task]+(input.short?' · 짧은 구간 복습':''),source:'personal',sourceId:'practice-room:'+s.id,completed:false,order:db.dailyGoals.filter(g=>g.date===date).length,created:Date.now()});return true;
+ const id='practice-room:'+s.id+':next',title=names[task]+(input.short?' · 짧은 구간 복습':'');
+ db.dailyGoals||=[];
+ const sameTitle=value=>String(value||'').trim().replace(/\s+/g,' ')===title;
+ if(db.dailyGoals.some(g=>g.id===id||g.date===date&&sameTitle(g.title)))return false;
+ db.dailyGoals.push({id,date,title,source:'personal',sourceId:'practice-room:'+s.id,completed:false,order:db.dailyGoals.filter(g=>g.date===date).length,created:Date.now()});return true;
 }
 return {record,goal,validate,stages};
 });

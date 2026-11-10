@@ -17,6 +17,21 @@ test('next goal is explicit, idempotent and does not check existing goals',()=>{
  assert.equal(M.goal(db,input,'2026-11-10'),true);assert.equal(M.goal(db,input,'2026-11-10'),false);
  assert.equal(db.dailyGoals.length,2);assert.equal(db.dailyGoals[0].completed,false);assert.equal(db.dailyGoals[1].completed,false);assert.match(db.dailyGoals[1].title,/짧은 구간/);
 });
+test('separate practice submissions cannot add the same goal twice on the same day',()=>{
+ const db={dailyGoals:[]},day='2026-11-10';
+ const input={...session,nextTask:'melody',short:false};
+ assert.equal(M.goal(db,input,day),true);
+ assert.equal(M.goal(db,{...input,id:'another-session-1234'},day),false);
+ assert.equal(db.dailyGoals.length,1);
+ assert.equal(M.goal(db,{...input,id:'third-session-1234',nextTask:'tone'},day),true);
+ assert.equal(M.goal(db,{...input,id:'fourth-session-1234'},'2026-11-11'),true);
+ assert.equal(db.dailyGoals.length,3);
+});
+test('existing completed goal blocks a duplicate without changing its completion',()=>{
+ const db={dailyGoals:[{id:'manual',date:'2026-11-10',title:'  짧은  선율 따라 부르기  ',source:'personal',completed:true}]};
+ assert.equal(M.goal(db,{...session,nextTask:'melody'},'2026-11-10'),false);
+ assert.deepEqual(db.dailyGoals,[{id:'manual',date:'2026-11-10',title:'  짧은  선율 따라 부르기  ',source:'personal',completed:true}]);
+});
 test('invalid task, ids and durations cannot mutate records',()=>{
  for(const input of [{...session,task:'arbitrary'},{...session,id:'../bad'},{...session,seconds:NaN},{...session,seconds:-1},{...session,seconds:21601}]){
   const db={};assert.throws(()=>M.record(db,input,'2026-11-10'));assert.deepEqual(db,{});
