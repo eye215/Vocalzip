@@ -380,9 +380,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 #vzip-cloud-root #cloud-logout{display:block;width:auto;min-height:44px;margin:8px 0 -6px auto;padding:0 4px;font-size:13px;font-weight:600;color:var(--ink-3)}
 /* 연습 기록의 숙제 체크: 했어요/안 했어요 → 횟수 · 메모 */
 .hw-ask .list{overflow:visible}
-.hw-item{padding:12px 14px}
-.hw-seg{flex:none;padding:3px}
-.hw-seg button{min-height:40px;position:relative;padding:0 10px;font-size:13px;white-space:nowrap;flex:none}
+.hw-item{padding:14px 16px}
+.hw-item>.row{flex-direction:column;align-items:stretch!important;gap:12px!important}
+.hw-item>.row>.grow strong{font-size:15px;line-height:22px;overflow-wrap:anywhere}
+.hw-item>.row>.grow .small{display:block;margin-top:4px;line-height:18px}
+.hw-seg{display:flex;width:100%;align-self:stretch;padding:3px}
+.hw-seg button{min-height:44px;position:relative;padding:0 10px;font-size:13px;white-space:nowrap;flex:1;min-width:0}
 .hw-seg [data-hw-did="1"][aria-pressed="true"]{background:var(--accent);color:#fff}
 .hw-item .icon-btn.sm{width:44px;height:44px;font-size:18px;background:var(--surface-2)}
 .hw-item [data-hw-reps]{min-height:44px;padding:0 6px}
