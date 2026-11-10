@@ -49,3 +49,10 @@
 .growth-ab-result{margin-top:12px;line-height:1.65;overflow-wrap:anywhere}
 .growth-ab-result p{margin:8px 0}
 @media(max-width:560px){.growth-ab-grid{grid-template-columns:1fr}}
+
+.growth-outcome-panel{margin:14px 0 0;border-top:1px solid var(--vz-border,#e7dff0);padding:14px 0 0;overflow-wrap:anywhere}
+.growth-outcome-panel h4{font-size:15px;margin:0 0 8px}
+.growth-outcome-report{font-size:14px;line-height:1.65}
+.growth-outcome-report p{margin:10px 0}
+.growth-outcome-panel button{margin:6px 8px 6px 0}
+.growth-outcome-panel [data-outcome-status]{margin:6px 0}
