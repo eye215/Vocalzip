@@ -95,5 +95,6 @@ function panel(host,plan,items){
   finally{if(button.isConnected)button.disabled=false;}
  };
 }
+V.segmentABStop=stop;
 V.segmentABPanel=panel;
 })();
