@@ -41,7 +41,7 @@ VZ.librarySelect = (main, {list, done}) => {
     else current.forEach(m => picked.set(String(m.id),m));
     paint();
   };
-  const canAnalyze = items => items.length > 0 && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
+  const canAnalyze = items => items.length > 0 && items.every(m=>M.songSearchEligible(m)) && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
   const analyze = items => { if (canAnalyze(items)) VZ.openAnalysisSelection(items); };
   const singleMenu = (item, row) => VZ.menu({title:'녹음 더보기', body:
     '<div class="vz-choice-list vz-media-action-sheet">' +
