@@ -2,6 +2,8 @@ const {test,expect}=require('@playwright/test');
 const {boot,fakeR2}=require('./helpers/r2-fixture.cjs');
 require('./legacy-session-mode.cjs')(test,{approvedHome:true});
 
+function sampleWav(){const rate=16000,frames=rate,bytes=44+frames*2,b=Buffer.alloc(bytes);b.write('RIFF',0);b.writeUInt32LE(bytes-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(rate,24);b.writeUInt32LE(rate*2,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(frames*2,40);for(let i=0;i<frames;i++)b.writeInt16LE(Math.round(7000*Math.sin(i*440*2*Math.PI/rate)),44+i*2);return b;}
+
 test('practice room opens from settings management while home has no shortcut',async({page})=>{
  await fakeR2(page);await boot(page);
  await expect(page.locator('.vz-room-entry')).toHaveCount(0);
@@ -72,4 +74,23 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  await expect(room.locator('.chapter').nth(6).locator('.chapter-note')).toContainText('과제 기록 0/1');
  await expect(room.locator('.chapter').nth(3).locator('[data-task="delivery"]')).toHaveCount(1);
  await expect(room.locator('.chapter').nth(6).locator('[data-task="scene"]')).toHaveCount(1);
+});
+
+test('practice-room result appears while R2 upload is still pending',async({page})=>{
+ await fakeR2(page);await boot(page);await page.goto('/#/practice-room');
+ await page.evaluate(()=>{
+  window.vzipCloudSignedIn=()=>true;
+  window.VzipR2={configured:()=>true,ready:async()=>true};
+  window.vzipCloudImport=()=>new Promise(()=>{});
+ });
+ const room=page.frameLocator('iframe.vzip-practice-room-frame');
+ await room.locator('[data-nav="roadmap"]').click();
+ await room.locator('[data-task="basics"]').click();
+ await room.locator('[data-upload="0"]').setInputFiles({name:'test.wav',mimeType:'audio/wav',buffer:sampleWav()});
+ await expect(room.locator('audio[data-audio="0"]')).toBeVisible();
+ await room.locator('#memo').fill('오늘은 한 구절을 편하게 불렀어요.');
+ await room.locator('#submit').click();
+ await expect(room.locator('.result-heading')).toContainText('연습과 회고를 기록했어요',{timeout:5000});
+ await expect(room.locator('.processing')).toHaveCount(0);
+ await expect(room.locator('.feedback-block audio')).toBeVisible();
 });
