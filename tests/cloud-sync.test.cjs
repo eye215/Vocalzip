@@ -235,3 +235,11 @@ test('a paused revision contract never downgrades its existing state to direct w
  d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;const local=d.data();local.songs.push({id:'offline'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
  await d.sync();assert.match(d.status(),/일시 중지/);assert.equal(s.writes.length,0);assert.equal(s.commits,0);assert.ok(d.data().songs.some(x=>x.id==='offline'));
 });
+
+test('revision bridge compares the owner-scoped payload without resending excluded archive entries',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ d.window.VzipArchive={forOwner:(value,owner)=>{assert.equal(owner,UID);const own=copy(value);delete own.excludedArchive;return own;}};
+ const local=d.data();local.excludedArchive=[{id:'other-owner-private-entry'}];d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ await d.sync();assert.ok(d.saved());assert.equal(s.commits,0);assert.equal(s.rpcCalls.length,0);assert.equal(s.writes.length,0);
+ assert.equal(d.data().excludedArchive[0].id,'other-owner-private-entry');assert.equal(s.row.payload.excludedArchive,undefined);
+});

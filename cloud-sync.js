@@ -136,7 +136,8 @@ async function sync({silent=false,reload=false}={}){
    await wait(150*(attempt+1)+Math.random()*150);
   }
   checkOwner();localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;syncFailed=false;
-  if(window.VzipAccountScope&&Merge.same(localData(),bridge?confirmed:merged))localStorage.removeItem('vzip_account_dirty');
+  const latest=localData(),comparable=bridge&&window.VzipArchive?window.VzipArchive.forOwner(latest,syncOwner):latest;
+  if(window.VzipAccountScope&&Merge.same(comparable,bridge?confirmed:merged))localStorage.removeItem('vzip_account_dirty');
   else if(bridge){localStorage.setItem('vzip_account_dirty','1');syncAgain=true;}
   say('✓ 이 기기와 클라우드 기록을 합쳐 저장했어요 · '+Merge.count(merged)+'건'+(silent?' (자동 동기화)':''));
   if(reload&&local&&changedLocal)setTimeout(()=>location.reload(),650);
