@@ -542,7 +542,6 @@ function wireHelp(main){
 }
 VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
  titleAddon:()=>'<button type="button" class="icon-btn" data-song-help aria-label="곡 확인 도움말" aria-expanded="false" aria-controls="song-check-help"><i class="ph ph-info"></i></button>',
- actions:()=>'<button type="button" class="icon-btn" data-song-settings aria-label="곡 확인 설정"><i class="ph ph-gear-six"></i></button>',
  render(){return `<section data-suggest class="vz-song-check">
  <div class="vz-sc-status"><div class="vz-sc-status-head"><div class="vz-sc-status-title"><i class="ph ph-chart-line-up"></i>분석 현황 <small>내 계정 기준</small></div><div class="vz-sc-complete"><i class="ph ph-check"></i><span data-vocal-count>보컬 측정 내역 확인 중</span></div></div>
  <div class="vz-sc-metrics"><div class="vz-sc-metric"><strong data-review-count>—</strong><span>확인 필요</span></div><div class="vz-sc-metric"><strong data-auto-count>—</strong><span>곡 자동 지정</span></div><div class="vz-sc-metric"><strong data-wait-count>—</strong><span>대기·분석 중</span></div></div>
@@ -579,7 +578,6 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   root.querySelector('[data-ref-add]').onclick=()=>exclusive(main,indexReference);
   root.querySelector('[data-ref-picker]').onchange=()=>showReferenceControls(main);
   root.querySelector('[data-ref-clear]').onclick=()=>exclusive(main,deleteReference);
-  document.querySelector('#top [data-song-settings]').onclick=()=>{const advanced=root.querySelector('.reference-options');advanced.hidden=false;advanced.open=true;advanced.scrollIntoView({block:'start',behavior:'smooth'})};
   window.addEventListener('vzip:server-analysis-updated',()=>{if(main.isConnected)updateMetrics(main)},{signal:helpAbort.signal});
   showReferenceControls(main);draw(main);
  },leave(){helpAbort?.abort();helpAbort=null;destroyPlayers()}
