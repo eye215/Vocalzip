@@ -77,8 +77,10 @@ VZ.editMedia = item => {
         const songId = VZ.readSong(form, 'song'); if (songId === null) return;
         const date = form.date.value, keep = item.created ? new Date(item.created) : new Date();
         const d = VZ.parseYmd(date);
+        const preview=form.name.value;
         const changes = {songId, song:VZ.songLabel(VZ.song(songId)), rating, review:form.review.value, occasion, normalizeTitle:!!songId,
           created:d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime() : item.created};
+        if(songId&&preview){Object.assign(changes,{name:preview,nameMode:'auto',autoName:preview})}
         if (d && date !== M.dateOf(item)) Object.assign(changes, {recordedDate:date, dateSource:'manual'});
         if (songId !== (item.songId || '')) changes.songSource = 'user'; // the server never changes a user's choice
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;

@@ -205,7 +205,7 @@ VZ.route('library', {title:'보관함', tab:'library', noSettings:true, actions:
         const keep = new Date(Number(m.created) || named.created), d = new Date(named.created);
         const created = named.timeless ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes(), keep.getSeconds()).getTime() : named.created;
         const changes = {created, recordedDate:named.recordedDate, dateSource:'filename'};
-        try { await M.update(m, changes, {quiet:true}); Object.assign(m, changes); n++; } catch { failed++; }
+        try { const updated=await M.update(m, changes, {quiet:true}); Object.assign(m, updated || changes); n++; } catch { failed++; }
       }
       window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{}}));
       VZ.toast(n + '개 녹음을 파일 이름 날짜로 옮겼어요.' + (failed ? ' ' + failed + '개는 실패했어요. 다시 시도해 주세요.' : ''), failed ? 'error' : undefined);
