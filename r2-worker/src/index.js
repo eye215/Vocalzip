@@ -1,6 +1,5 @@
 import {handleUploadV2} from './resumable.mjs';
 import {mediaPolicy,handleMediaV2,mediaRpc} from './media-versions.mjs';
-import {scoreVisionReady,interpretScore} from './score-vision.mjs';
 /* VOCAL.zip media API on Cloudflare Workers + R2.
  *
  * The browser never sees an R2 key. It signs in with Supabase as before and sends the Supabase
@@ -89,8 +88,6 @@ async function route(request, env) {
 
   const uid = await user(request, env);
   const mediaContext=await mediaPolicy(request,env,uid,{fail});
-  if(path==='/v1/scores/vision'&&method==='GET')return json({available:scoreVisionReady(env,uid)});
-  if(path==='/v1/scores/vision'&&method==='POST')return interpretScore(request,env,uid,{fail,json});
   if(path.startsWith('/v2/media/'))return handleMediaV2(request,env,uid,sessionContexts.get(request)?.verified_session_id,mediaContext,{fail,json,equal:timingSafeEqual});
   if(path.startsWith('/v2/uploads'))return handleUploadV2(request,env,uid,{
     fail,json,readJson,sign:text=>hmac(env,text),equal:timingSafeEqual,assertSession:()=>user(request,env),
