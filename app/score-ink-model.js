@@ -30,6 +30,33 @@ function path(s,aspect=1){
  const pts=s.points.map(p=>[p[0]*1000,p[1]*aspect*1000]);
  return pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(2)+' '+p[1].toFixed(2)).join(' ')+(pts.length===1?' l0.01 0':'');
 }
+// Page-normalized geometry; stroke thickness is measured against page width.
+function bounds(rows,aspect=1){
+ if(!rows.length||!Number.isFinite(aspect)||aspect<=0)return null;
+ let x=Infinity,y=Infinity,right=-Infinity,bottom=-Infinity;
+ for(const s of rows)for(const p of s.points){const r=s.width/2;x=Math.min(x,p[0]-r);right=Math.max(right,p[0]+r);y=Math.min(y,p[1]-r/aspect);bottom=Math.max(bottom,p[1]+r/aspect);}
+ return {x,y,w:right-x,h:bottom-y};
+}
+function inRect(rows,rect,aspect=1){
+ const x=Math.min(rect.x,rect.x+rect.w),y=Math.min(rect.y,rect.y+rect.h),right=Math.max(rect.x,rect.x+rect.w),bottom=Math.max(rect.y,rect.y+rect.h);
+ return rows.filter(s=>{
+  const r=s.width/2,left=x-r,top=y-r/aspect,w=right-x+2*r,h=bottom-y+2*r/aspect;
+  return s.points.some((b,i)=>{
+   const a=s.points[Math.max(0,i-1)],dx=b[0]-a[0],dy=b[1]-a[1];let lo=0,hi=1;
+   for(const [p,q]of [[-dx,a[0]-left],[dx,left+w-a[0]],[-dy,a[1]-top],[dy,top+h-a[1]]]){
+    if(!p){if(q<0)return false;continue;}const t=q/p;if(p<0)lo=Math.max(lo,t);else hi=Math.min(hi,t);if(lo>hi)return false;
+   }
+   return true;
+  });
+ });
+}
+function transform(rows,{dx=0,dy=0,scale=1}={},aspect=1){
+ if(!rows.length||!rows.every(valid)||![dx,dy,scale,aspect].every(Number.isFinite)||scale<=0||aspect<=0)throw fail('선택한 필기 범위를 확인해 주세요.','geometry');
+ const b=bounds(rows,aspect),min=Math.max(...rows.map(s=>.001/s.width)),max=Math.min(1/b.w,1/b.h,...rows.map(s=>.06/s.width));
+ if(max<min)throw fail('이 필기는 더 줄일 수 없어요.','geometry');
+ const k=Math.max(min,Math.min(max,scale)),x=Math.max(0,Math.min(1-b.w*k,b.x+dx)),y=Math.max(0,Math.min(1-b.h*k,b.y+dy));
+ return rows.map(s=>({...clone(s),width:Math.max(.001,Math.min(.06,s.width*k)),points:s.points.map(p=>[point(x+(p[0]-b.x)*k,0)[0],point(0,y+(p[1]-b.y)*k)[1],p[2]])}));
+}
 function create({storage,identity,getData,change}){
  const start=identity(),owner=start?.owner,session=start?.session;
  if(!owner||!session)throw fail('필기하려면 로그인해 주세요.','identity');
@@ -102,5 +129,5 @@ function create({storage,identity,getData,change}){
  }
  return {restore,list,commit,removeScore,key};
 }
-return {COLLECTION,valid,opacity,point,hit,path,create,MAX_POINTS,MAX_BYTES};
+return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES};
 });

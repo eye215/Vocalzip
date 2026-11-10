@@ -89,3 +89,38 @@ test('opacity remains backward compatible and is included in immutable stroke id
  for(const opacity of [0,1.1,-1,NaN,'0.5'])assert.equal(Ink.valid(stroke('bad',{opacity})),false);
  assert.equal(Ink.valid(stroke('good',{opacity:.05})),true);
 });
+
+test('rectangle selection uses segment intersection and thickness, not only bounding boxes',()=>{
+ const diagonal=stroke('a',{points:[[.1,.1,.3],[.9,.9,.8]]});
+ assert.equal(Ink.inRect([diagonal],{x:.45,y:.45,w:.1,h:.1},2).length,1);
+ assert.equal(Ink.inRect([diagonal],{x:.1,y:.8,w:.1,h:.1},2).length,0);
+ assert.equal(Ink.inRect([diagonal],{x:.55,y:.55,w:-.1,h:-.1},2).length,1);
+ assert.equal(Ink.inRect([stroke('dot',{points:[[.2,.2,.5]],width:.04})],{x:.21,y:.2,w:.01,h:.01},2).length,1);
+});
+test('group transforms preserve pressure, opacity, scope and inputs while translating and scaling uniformly',()=>{
+ const rows=[stroke('a',{opacity:.6}),stroke('b',{tool:'highlighter',width:.02,points:[[.2,.4,.2],[.6,.5,.9]]})],before=structuredClone(rows),b=Ink.bounds(rows,2);
+ const moved=Ink.transform(rows,{dx:.1,dy:.2},2);
+ assert.deepEqual(rows,before);
+ rows.forEach((s,i)=>{assert.equal(moved[i].ownerId,s.ownerId);assert.equal(moved[i].r2Key,s.r2Key);assert.equal(moved[i].opacity,s.opacity);assert.equal(moved[i].width,s.width);assert.equal(moved[i].points[0][2],s.points[0][2]);assert.ok(Math.abs(moved[i].points[0][0]-s.points[0][0]-.1)<.00001);});
+ const scaled=Ink.transform(rows,{scale:1.5},2),bb=Ink.bounds(scaled,2);
+ assert.ok(Math.abs(bb.w/b.w-1.5)<.0001);assert.ok(Math.abs(bb.h/b.h-1.5)<.0001);
+ scaled.forEach((s,i)=>assert.ok(Math.abs(s.width/rows[i].width-1.5)<.0001));
+});
+test('transform bounds prevent leaving the page or invalid thickness, including dots and page edges',()=>{
+ for(const rows of [[stroke()], [stroke('dot',{points:[[0,1,.5]]})], [stroke('wide',{width:.06,points:[[.05,.05,.5],[.95,.95,.5]]})]]){
+  for(const options of [{dx:100,dy:-100},{scale:.00001},{scale:100}]){
+   const result=Ink.transform(rows,options,1.333),b=Ink.bounds(result,1.333);
+   assert.ok(result.every(Ink.valid));assert.ok(b.x>=-.00001&&b.y>=-.00001);assert.ok(b.x+b.w<=1.00001&&b.y+b.h<=1.00001);
+  }
+ }
+ assert.throws(()=>Ink.transform([stroke()],{scale:NaN}),{code:'geometry'});
+});
+test('transformed immutable replacements recover atomically after root failure and keep unrelated records',()=>{
+ const f=fixture(),original=stroke(),other=stroke('other',{page:2});f.store.commit({add:[original,other]});
+ const replacement={...Ink.transform([original],{dx:.1},2)[0],id:'replacement'};
+ f.hooks.failChange=true;assert.equal(f.store.commit({add:[replacement],remove:[original.id]}),false);
+ assert.deepEqual(f.store.list(binding,1).map(s=>s.id),['replacement']);
+ f.hooks.failChange=false;assert.equal(Ink.create(f.options).restore(),true);
+ assert.deepEqual(f.store.list(binding).map(s=>s.id).sort(),['other','replacement']);
+ assert.equal(f.data.lessons[0].note,'keep');assert.equal(f.data.practices[0].minutes,12);
+});
