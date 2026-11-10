@@ -1,0 +1,54 @@
+name: Verify published interrupted media deletion remains off
+on:
+  push:
+    branches: ['codex/verify-media-resume-4456ae68aa5b']
+permissions:
+  contents: read
+jobs:
+  published:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reviewed core assets at actual HTML script URLs and inactive default
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          import vm from 'node:vm';
+          const origin='https://vocalzip.yullul.com',hash=x=>createHash('sha256').update(x).digest('hex');
+          const ordered=['account-config.js','app/account-scope.js','app/media.js','data-merge.js','sync/snapshot-transport.js','sync/snapshot-review-model.js','sync/snapshot-review.js','sync/media-delete-review.js','cloud-sync.js','app/lesson-deletion.js'];
+          let verified=false;
+          for(let attempt=1;attempt<=30;attempt++){
+           try{
+            const index=await fetch(origin+'/index.html?verify='+process.env.GITHUB_SHA+'-'+attempt,{redirect:'error',signal:AbortSignal.timeout(15000)});
+            if(!index.ok)throw Error('published HTML unavailable');
+            const html=await index.text(),scripts=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g)].map(x=>new URL(x[1],origin));
+            const positions=ordered.map(path=>scripts.findIndex(u=>u.origin===origin&&u.pathname==='/'+path));
+            const correctOrder=positions.every((p,i)=>p>=0&&(!i||p>positions[i-1]));
+            if(!correctOrder)throw Error('reviewed script order is not published yet');
+            const urls=new Map(ordered.map((p,i)=>[p,scripts[positions[i]].href]));
+            const links=[...html.matchAll(/<link\b[^>]*\bhref=["']([^"']+)["']/g)].map(x=>new URL(x[1],origin));
+            const reviewCSS=links.find(u=>u.origin===origin&&u.pathname==='/sync/snapshot-review.css');
+            if(!reviewCSS)throw Error('review stylesheet not published yet');
+            urls.set('sync/snapshot-review.css',reviewCSS.href);
+            urls.set('legacy.html',origin+'/legacy.html?verify='+process.env.GITHUB_SHA+'-'+attempt);
+            const results=await Promise.all([...urls].map(async([path,url])=>{
+             const expected=await readFile(path),r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000)});
+             const bytes=Buffer.from(await r.arrayBuffer()),match=r.ok&&hash(expected)===hash(bytes);
+             if(match&&path==='account-config.js'){
+              const context={window:{}};vm.runInNewContext(bytes.toString('utf8'),context);
+              if(context.window.VZIP_SNAPSHOT_REVISION_ENABLED!==false)throw Error('reviewed default is not off');
+             }
+             return {path,status:r.status,sha256_match:match};
+            }));
+            console.log(JSON.stringify({attempt,script_order:true,default_off:results.find(r=>r.path==='account-config.js')?.sha256_match===true,results}));
+            if(results.every(r=>r.sha256_match)){verified=true;break;}
+           }catch(e){console.log(JSON.stringify({attempt,verified:false,error:e.message}));}
+           if(attempt<30)await new Promise(r=>setTimeout(r,20000));
+          }
+          if(!verified)process.exitCode=1;
+          NODE
