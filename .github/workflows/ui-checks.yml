@@ -32,6 +32,8 @@ jobs:
       - run: npx playwright test tests/v6.spec.cjs --project=chromium-mobile --grep 'Settings' --workers=1
       - run: npx playwright test tests/repertoire.spec.cjs --workers=2
       - run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Video import copies|201MiB video extraction|Real queue extracts|Metadata-derived dates'
+      - name: Pinned PDF renderer/export libraries for full score regression
+        run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
       - run: npm run test:ui
       - uses: actions/upload-artifact@v4
         if: always()
