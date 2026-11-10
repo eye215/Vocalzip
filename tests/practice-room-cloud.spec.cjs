@@ -47,4 +47,11 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  await expect(room.locator('.result-heading')).toContainText('연습과 회고를 기록했어요');
  const saved=await page.evaluate(()=>window.__db.practices.find(p=>p.practiceRoom?.draft?.memo==='첫 소절은 조용하게'));
  expect(saved.practiceRoom.draft.answers).toContain('The River 후렴');
+ expect(saved.practiceRoom.chapterId).toBe('interpretation');
+ await room.locator('[data-nav="roadmap"]').click();
+ await expect(room.locator('.chapter').nth(5).locator('.chapter-note')).toContainText('과제 기록 1/1');
+ await expect(room.locator('.chapter').nth(3).locator('.chapter-note')).toContainText('과제 기록 0/1');
+ await expect(room.locator('.chapter').nth(6).locator('.chapter-note')).toContainText('과제 기록 0/1');
+ await expect(room.locator('.chapter').nth(3).locator('[data-task="delivery"]')).toHaveCount(1);
+ await expect(room.locator('.chapter').nth(6).locator('[data-task="scene"]')).toHaveCount(1);
 });

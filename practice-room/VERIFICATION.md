@@ -36,3 +36,9 @@
 
 - `npm run test:syntax` 및 `node --test tests/practice-room-model.test.cjs tests/data-merge.test.cjs` 통과. 회고·R2 파일 참조의 계정 스냅샷 병합, 빈 연습 시간, 중복 저장을 확인했다.
 - `playwright test tests/practice-room-cloud.spec.cjs --project=chromium-desktop` 통과. 브라우저에서 부모 브리지의 R2 연결 실패 차단·업로드 응답·다른 기기 재생 URL과 실제 연습실 텍스트 회고 제출을 모의 검증했다. 실제 R2 Worker 및 운영 Supabase로의 업로드는 이 모의 검사에 포함되지 않는다.
+
+## 2026-11-10 로드맵 단계 연결 검증
+
+- 시작점은 답변 과제, 가사 전달과 장면 만들기는 각각 별도 음성·회고 과제로 연결했다. 과제 기록 N/M은 서로 다른 과제의 제출 여부만 표시하고 기술 숙련도라고 표기하지 않는다.
+- 단계 ID가 없는 기존 제출은 종전 과제 단계에 그대로 둔다. 기존 `expressive` 제출은 음악적 표현에 남으며 다른 단계로 복제하지 않는다.
+- 구문 검사, 기록·병합 단위 테스트 11개, Chromium 브라우저의 텍스트 회고 제출과 단계별 진행 표시 검사를 통과했다. 실제 계정 및 iPhone 검증은 여전히 필요하다.

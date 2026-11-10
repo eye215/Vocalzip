@@ -38,3 +38,16 @@ test('reflection and R2 media references survive a second device snapshot merge'
  assert.deepEqual(Merge.merge(other,db).data.practices[0].practiceRoom.audioIds[0].cloud,true);
  assert.equal(M.record(db,{...input,room:{...room,audioIds:[{...room.audioIds[0],cloud:true}]}},'2026-11-10'),false);
 });
+test('each roadmap submission keeps its own stable stage without moving legacy records',()=>{
+ const db={practices:[]};
+ for(const [task,chapterId] of [['orientation','starting-point'],['delivery','lyric-delivery'],['expressive','musical-expression'],['scene','scene-work']]){
+  const id='test-'+task+'-2026';
+  assert.equal(M.record(db,{id,task,seconds:0,room:{date:'2026-11-10T00:00:00.000Z',chapterId,draft:{memo:'다음 연습'},audioIds:[]}},'2026-11-10'),true);
+  assert.equal(db.practices.at(-1).practiceRoom.chapterId,chapterId);
+ }
+ assert.equal(new Set(db.practices.map(p=>p.practiceRoom.chapterId)).size,4);
+ const old={id:'legacy-expressive-1',task:'expressive',seconds:20,room:{date:'2026-11-01T00:00:00.000Z',draft:{memo:'기존 회고'},audioIds:[]}};
+ assert.equal(M.record(db,old,'2026-11-01'),true);
+ assert.equal(db.practices.at(-1).practiceRoom.chapterId,'musical-expression');
+ assert.throws(()=>M.record(db,{...old,id:'bad-stage-1234',room:{...old.room,chapterId:'scene-work'}},'2026-11-01'));
+});
