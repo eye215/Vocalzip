@@ -351,9 +351,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
    renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;
    if(closed||number!==renderNumber)return;current();
    el.querySelector('[data-ink-page]').textContent=pageNo+' / '+doc.numPages+'쪽';
-   el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
-   box.hidden=false;ready=true;svg.dataset.tool=tool;svg.dataset.penOnly=String(profiles.penOnly);if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
-   paint();if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
+   el.querySelector('[data-ink-prev]').disabled=pageNo<=1||!binding;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages||!binding;
+   box.hidden=false;ready=!!binding;svg.dataset.tool=ready?tool:'pan';svg.dataset.penOnly=String(profiles.penOnly);svg.style.pointerEvents=ready?'':'none';if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
+   paint();if(!binding)say('악보를 볼 수 있어요 · 필기를 확인하고 있어요.');else if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
   }catch(e){if(!closed&&number===renderNumber&&e.name!=='RenderingCancelledException')say('악보를 열지 못했어요: '+e.message,true);}
   finally{if(number===renderNumber){busy=false;if(!closed)paint();}}
  }
@@ -478,21 +478,51 @@ VZ.openScoreInk=(songId,scoreId)=>{
  VZ.setGuard(()=>{selectionEnd();finishStroke();return pending?'필기가 아직 저장되지 않았어요. 먼저 다시 저장해 주세요.':null;});
  (async()=>{
   try{
-   say('PDF 주소를 확인하고 있어요.');
-   const url=await deadline(window.VzipR2.url(score.r2Key),15000,'PDF 주소 확인이 오래 걸려요.');current();
+   say('PDF를 준비하고 있어요.');
+   const [url,pdf]=await Promise.all([
+    deadline(window.VzipR2.url(score.r2Key),15000,'PDF 주소 확인이 오래 걸려요.'),
+    deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.')
+   ]);current();
    el.querySelector('[data-ink-original]').href=url;el.querySelector('[data-ink-original-quick]').href=url;
-   say('악보 뷰어를 준비하고 있어요.');
-   const pdf=await deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.');current();
-   say('PDF를 내려받고 있어요.');
-   const response=await deadline(fetch(url,{signal:controller.signal,cache:'no-store'}),20000,'PDF 다운로드가 지연되고 있어요.');
-   const bytes=await readPDF(response,score.size,controller.signal);current();
-   const pdfHash=await hash(bytes);current();binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
-   loadingTask=pdf.getDocument({data:bytes,isEvalSupported:false,enableXfa:false,standardFontDataUrl:PDFJS+'standard_fonts/',cMapUrl:PDFJS+'cmaps/',cMapPacked:true});
-   loadingTask.onPassword=()=>{loadingTask.destroy();say('암호가 없는 PDF로 다시 올려 주세요. 원본과 기존 필기는 유지돼요.',true);};
-   say('PDF 페이지를 준비하고 있어요.');doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');current();if(closed)return;
+   let bytesPromise;
+   const fullBytes=()=>bytesPromise ||= (async()=>{
+    const response=await deadline(fetch(url,{signal:controller.signal,cache:'no-store'}),20000,'PDF 다운로드가 지연되고 있어요.');
+    return readPDF(response,score.size,controller.signal);
+   })();
+   const options={isEvalSupported:false,enableXfa:false,standardFontDataUrl:PDFJS+'standard_fonts/',cMapUrl:PDFJS+'cmaps/',cMapPacked:true};
+   say('첫 페이지를 준비하고 있어요.');
+   let fromRange=true;
+   loadingTask=pdf.getDocument({...options,url,disableAutoFetch:true,disableStream:true,rangeChunkSize:65536});
+   loadingTask.onPassword=()=>{loadingTask.destroy();say('암호가 없는 PDF로 다시 올려 주세요.',true);};
+   try{doc=await deadline(loadingTask.promise,30000,'PDF 첫 페이지를 열지 못했어요.');}
+   catch(rangeError){
+    fromRange=false;
+    current();if(closed)return;
+    loadingTask?.destroy()?.catch?.(()=>{});
+    say('PDF 전체를 확인하고 있어요.');
+    const bytes=await fullBytes();current();
+    loadingTask=pdf.getDocument({...options,data:bytes});
+    doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');
+   }
+   current();if(closed)return;
    if(doc.numPages>2000)throw Error('2000쪽 이하 PDF를 사용해 주세요.');
+   await renderPage();current();if(closed)return;
+   if(box.hidden)throw Error('악보 첫 페이지를 표시하지 못했어요.');
+   // PDF content identity must be verified before annotations can be drawn or edited.
+   // The first page is readable while the complete original is being hashed.
+   const bytes=await fullBytes();current();if(closed)return;
+   const pdfHash=await hash(bytes);current();if(closed)return;
+   if(fromRange){
+    const fullTask=pdf.getDocument({...options,data:bytes});
+    const fullDoc=await deadline(fullTask.promise,30000,'필기 준비가 지연되고 있어요.');current();if(closed){fullTask.destroy()?.catch?.(()=>{});return;}
+    const rangeTask=loadingTask;doc=fullDoc;loadingTask=fullTask;rangeTask.destroy()?.catch?.(()=>{});
+   }
+   binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
+   ready=true;svg.style.pointerEvents='';svg.dataset.tool=tool;
+   el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
+   paint();
    const old=(VZ.db.scoreAnnotations||[]).some(s=>s.ownerId===owner&&s.scoreId===scoreId&&s.r2Key===score.r2Key&&s.pdfHash!==pdfHash);
-   await renderPage();if(old)say('PDF 내용이 바뀌어 이전 버전 필기는 겹쳐 표시하지 않아요. 이전 필기 기록은 유지돼요.');
+   say(old?'PDF 내용이 바뀌어 이전 버전 필기는 겹쳐 표시하지 않아요. 이전 필기 기록은 유지돼요.':'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
   }catch(e){if(!closed&&e.name!=='AbortError'){say('악보를 열지 못했어요: '+e.message+' · 원본 PDF 열기를 눌러 확인해 주세요.',true);el.querySelector('[data-ink-original-quick]').hidden=!el.querySelector('[data-ink-original-quick]').hasAttribute('href');}}
  })();
  return sheet;
