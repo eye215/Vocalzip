@@ -16,6 +16,7 @@ let admin,db,name,conn,mf;
 const rpcTrace=[];
 const shared='isolated-media-version-secret-never-production-32',jwtSecret='isolated-media-jwt-secret-never-production';
 const mediaProposal=readFileSync(new URL('../supabase/proposals/20261116_media_version_guard.sql',import.meta.url),'utf8');
+const editProposal=readFileSync(new URL('../supabase/proposals/20261118_media_metadata_cas.sql',import.meta.url),'utf8');
 const publicationProposal=readFileSync(new URL('../supabase/proposals/20261117_media_publication.sql',import.meta.url),'utf8');
 const require=createRequire(import.meta.url);
 const proposal=readFileSync(new URL('../supabase/proposals/20261113_snapshot_revision.sql',import.meta.url),'utf8');
@@ -90,13 +91,14 @@ before(async()=>{
  const preserved=(await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows;
  await db.query(mediaProposal);await db.query(mediaProposal);
  await db.query(publicationProposal);await db.query(publicationProposal);
+ await db.query(editProposal);await db.query(editProposal);
  assert.deepEqual((await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows,preserved);
  assert.equal((await db.query('select count(*) n from public.vzip_media_delete_guards')).rows[0].n,'0');
  await bootWorker();
 });
 beforeEach(async()=>{
  if(skip)return;
- await db.query('truncate public.vzip_media_publications,storage.objects,public.vzip_media_delete_requests,public.vzip_media_delete_guards,public.vocal_media,public.vzip_snapshot_rollout,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ await db.query('truncate public.vzip_media_edits,public.vzip_media_publications,storage.objects,public.vzip_media_delete_requests,public.vzip_media_delete_guards,public.vocal_media,public.vzip_snapshot_rollout,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
  await db.query('insert into vault.decrypted_secrets values($1,$2) on conflict(name) do update set decrypted_secret=excluded.decrypted_secret',['vzip_media_version_secret',shared]);
  await db.query('delete from auth.sessions');
  for(const s of [A,B,D])await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[s,U]);
@@ -226,6 +228,7 @@ async function bootWorker(){
      if(name==='vzip_session_context')return (await c.query('select public.vzip_session_context() r')).rows[0].r;
      if(name==='vzip_media_mutation_context')return (await c.query('select public.vzip_media_mutation_context() r')).rows[0].r;
      if(name==='vzip_media_upload_allowed')return (await c.query('select public.vzip_media_upload_allowed($1) r',[body.p_media_id])).rows[0].r;
+     if(name==='vzip_edit_media')return (await c.query('select public.vzip_edit_media($1,$2,$3,$4,$5) r',[body.p_request_id,body.p_media_id,body.p_key,body.p_expected_updated_at,body.p_patch])).rows[0].r;
      if(name==='vzip_publish_media')return (await c.query('select public.vzip_publish_media($1,$2,$3,$4,$5,$6) r',[body.p_request_id,body.p_metadata_text,body.p_version,body.p_root,body.p_etag,body.p_signature])).rows[0].r;
      if(name==='vzip_prepare_media_delete')return (await c.query('select public.vzip_prepare_media_delete($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) r',[body.p_request_id,body.p_media_id,body.p_key,body.p_version,body.p_expected_updated_at,body.p_size,body.p_type,body.p_root,body.p_etag,body.p_signature])).rows[0].r;
      if(name==='vzip_media_delete_status')return (await c.query('select public.vzip_media_delete_status($1) r',[body.p_request_id])).rows[0].r;
@@ -377,4 +380,130 @@ test('real Worker HEAD and SQL publish only completed immutable audio; replay ke
  }
  assert.equal(await count('vzip_media_publications'),1);
  const bucket=await mf.getR2Bucket('MEDIA');assert.deepEqual(new Uint8Array(await(await bucket.get(d.key)).arrayBuffer()),new Uint8Array([4,5,6]));
+});
+
+async function editable(){
+ await publicationAccount();
+ await db.query("update public.vocal_data set payload=payload||$1",[{lessons:[{id:'lesson',memo:'keep lesson'}],practices:[{id:'practice',manualMinutes:17}]}]);
+ return publishSQL(publicationArgs());
+}
+const editTarget=(saved,patch={name:'새 제목',recordedDate:'2026-11-09',review:'직접 쓴 후기'},requestId=randomUUID())=>({
+ requestId,mediaId:saved.id,key:saved.metadata.r2Key,updatedAt:saved.updated_at,patch
+});
+const editSQL=(p,owner=U,sid=A,c=db)=>as(owner,sid,async c=>(await c.query(
+ 'select public.vzip_edit_media($1,$2,$3,$4,$5) r',[p.requestId,p.mediaId,p.key,p.updatedAt,p.patch])).rows[0].r,c);
+
+test('metadata CAS changes only selected fields and keeps root, original descriptor and private receipts minimal',{skip},async()=>{
+ const initial=await editable(),root=(await db.query('select payload,revision from public.vocal_data')).rows;
+ const p=editTarget(initial),saved=await editSQL(p);
+ assert.equal(saved.metadata.name,'새 제목');assert.equal(saved.metadata.review,'직접 쓴 후기');assert.equal(saved.metadata.recordedDate,'2026-11-09');
+ for(const field of ['id','storageProvider','r2Key','r2Etag','size','type','songId'])assert.deepEqual(saved.metadata[field],initial.metadata[field]);
+ assert.equal(saved.replayed,false);assert.equal(saved.superseded,false);assert.ok(saved.updated_at>initial.updated_at);
+ assert.equal(saved.applied_updated_at,saved.updated_at);assert.match(saved.updated_at,/\.\d{6}Z$/);
+ assert.deepEqual((await db.query('select payload,revision from public.vocal_data')).rows,root);
+ const receipt=(await db.query('select * from public.vzip_media_edits')).rows[0];
+ assert.equal(JSON.stringify(receipt).includes('직접 쓴 후기'),false);assert.equal(Object.hasOwn(receipt,'patch'),false);
+ await assert.rejects(as(U,A,c=>c.query('select * from public.vzip_media_edits')),{code:'42501'});
+ await assert.rejects(as(U,A,c=>c.query("delete from public.vzip_media_edits")),{code:'42501'});
+ assert.equal((await db.query("select has_function_privilege('anon','public.vzip_edit_media(uuid,text,text,timestamptz,jsonb)','execute') r")).rows[0].r,false);
+});
+test('a stale edit never automatically rebases onto another device title/date/review',{skip},async()=>{
+ const initial=await editable(),one=await editSQL(editTarget(initial,{name:'다른 기기의 최신 제목',review:'다른 기기 후기'}));
+ await assert.rejects(editSQL(editTarget(initial,{recordedDate:'2026-11-08'})),{code:'40001'});
+ const latest=(await db.query('select metadata from public.vocal_media')).rows[0].metadata;
+ assert.equal(latest.name,one.metadata.name);assert.equal(latest.review,one.metadata.review);assert.equal(await count('vzip_media_edits'),1);
+ const two=await editSQL(editTarget(one,{recordedDate:'2026-11-08'}));assert.equal(two.metadata.name,one.metadata.name);
+});
+test('same request confirms response loss without applying old text again and reports superseded results',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial),one=await editSQL(p),again=await editSQL(p);
+ assert.equal(again.replayed,true);assert.equal(again.updated_at,one.updated_at);assert.equal(await count('vzip_media_edits'),1);
+ const two=await editSQL(editTarget(one,{name:'이후 최신 제목',review:'이후 후기'})),old=await editSQL(p);
+ assert.equal(old.replayed,true);assert.equal(old.superseded,true);assert.equal(old.applied_updated_at,one.updated_at);
+ assert.equal(old.updated_at,two.updated_at);assert.equal(old.metadata.name,two.metadata.name);
+ await assert.rejects(editSQL({...p,patch:{...p.patch,name:'다른 요청'}}),{code:'40001'});
+ await assert.rejects(editSQL(p,U,B),{code:'40001'});assert.equal(await count('vzip_media_edits'),2);
+});
+test('metadata edit requires the active owner session and refuses paused, legacy or revoked accounts',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial);
+ await assert.rejects(editSQL(p,V,C),{code:'42501'});await assert.rejects(editSQL(p,U,D),{code:'42501'});
+ await db.query("select public.vzip_set_snapshot_mode($1,'paused')",[U]);await assert.rejects(editSQL(p),{code:'42501'});
+ await db.query("select public.vzip_set_snapshot_mode($1,'revision')",[U]);
+ await as(U,A,c=>c.query('select public.vzip_release_session()'));await assert.rejects(editSQL(p),{code:'42501'});
+ assert.equal(await count('vzip_media_edits'),0);assert.equal((await editSQL(p,U,B)).session_id,B);
+});
+test('immutable storage fields, invalid dates/types, empty and oversized patches are rejected without writes',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial);
+ const patches=[{},null,[],{name:1},{name:'   '},{review:null},{rating:6},{rating:-1},{rating:1.5},{rating:'5'},
+ {recordedDate:'2026-02-30'},{recordedDate:'2026/11/10'},{review:'가'.repeat(6000)}];
+ for(const key of ['id','user_id','r2Key','r2Root','r2Etag','size','type','path','parts','legacyStorage','durationSeconds'])patches.push({[key]:'changed'});
+ for(const patch of patches)await assert.rejects(editSQL({...p,patch}),{code:'22023'});
+ assert.equal(await count('vzip_media_edits'),0);
+ const valid=await editSQL({...p,patch:{recordedDate:'2024-02-29',rating:null,review:''}});
+ assert.equal(valid.metadata.recordedDate,'2024-02-29');assert.equal(valid.metadata.rating,null);
+});
+test('song changes require a paired label and a song owned by this account; clearing keeps original media',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial);
+ await db.query('insert into public.vocal_data(user_id,payload) values($1,$2)',[V,base('private-other-song')]);
+ for(const patch of [{songId:'song'},{song:'song'},{songId:'private-other-song',song:'다른 계정 곡'},{songId:'',song:'leftover'}])
+  await assert.rejects(editSQL({...p,patch}),{code:'22023'});
+ const saved=await editSQL({...p,patch:{songId:'song',song:'내 곡'}});
+ const cleared=await editSQL(editTarget(saved,{songId:'',song:''}));assert.equal(cleared.metadata.songId,'');assert.equal(cleared.metadata.r2Key,p.key);
+});
+test('root deletion markers and reserved deletion guards reject edits and old receipt replays',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial),saved=await editSQL(p);
+ await db.query('update public.vocal_data set payload=payload||$1',[{deleted:{media:[initial.id]}}]);
+ await assert.rejects(editSQL(editTarget(saved,{review:'restore'})),{code:'55000'});
+ await assert.rejects(editSQL(p),{code:'55000'});
+ await prepare({owner:U,id:initial.id,key:p.key,version,size:3,type:'audio/wav',root:rootHash,etag:'"fixture"',at:saved.updated_at,request:randomUUID()});
+ await assert.rejects(editSQL(editTarget(saved)),{code:'55000'});assert.equal(await count('vocal_media'),1);
+});
+test('metadata timestamps advance by one microsecond even when an old row has a future clock',{skip},async()=>{
+ const initial=await editable();initial.updated_at='2099-01-01T00:00:00.123456Z';
+ await db.query('update public.vocal_media set updated_at=$1',[initial.updated_at]);
+ const saved=await editSQL(editTarget(initial));assert.equal(saved.updated_at,'2099-01-01T00:00:00.123457Z');
+});
+test('two real PostgreSQL sessions cannot both commit an old version; identical requests write only once',{skip},async()=>{
+ const initial=await editable(),c1=new pg.Client({connectionString:conn}),c2=new pg.Client({connectionString:conn});await Promise.all([c1.connect(),c2.connect()]);
+ try{
+  const results=await Promise.allSettled([editSQL(editTarget(initial,{name:'기기 A'}),U,A,c1),editSQL(editTarget(initial,{name:'기기 B'}),U,B,c2)]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+  assert.equal(results.find(r=>r.status==='rejected').reason.code,'40001');
+  assert.equal(await count('vzip_media_edits'),1);
+  const winner=results.find(r=>r.status==='fulfilled').value,p=editTarget(winner,{review:'같은 요청'});
+  const replay=await Promise.all([editSQL(p,U,A,c1),editSQL(p,U,A,c2)]);
+  assert.equal(replay[0].updated_at,replay[1].updated_at);assert.deepEqual(replay.map(r=>r.replayed).sort(),[false,true]);
+  assert.equal(await count('vzip_media_edits'),2);
+ }finally{await Promise.all([c1.end(),c2.end()]);}
+});
+test('an old metadata receipt never restores an original changed by a trusted writer',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial);await editSQL(p);
+ const newKey=p.key.replace(version,A);
+ await db.query("update public.vocal_media set metadata=jsonb_set(metadata,'{r2Key}',to_jsonb($1::text)),updated_at=clock_timestamp()",[newKey]);
+ await assert.rejects(editSQL(p),{code:'40001'});
+ assert.equal((await db.query('select metadata from public.vocal_media')).rows[0].metadata.r2Key,newKey);
+});
+test('real Worker and SQL edit metadata without replacing R2 bytes, and distinguish a superseded retry',{skip,timeout:60000},async()=>{
+ await publicationAccount();const upload=await original('metadata-e2e',new Uint8Array([1,7,9])),d=upload.ticket.descriptor;
+ const metadata={...publicationMetadata(),id:d.mediaId,r2Key:d.key,r2Etag:upload.done.etag,size:3};
+ const published=await call('/v2/media/publish',{body:{requestId:d.attempt,metadata}});
+ assert.equal(published.status,200);const initial=await published.json(),p=editTarget(initial);
+ const response=await call('/v2/media/edit',{body:p});assert.equal(response.status,200,await response.clone().text());
+ const saved=await response.json();assert.equal(saved.metadata.name,p.patch.name);assert.equal(saved.superseded,false);
+ const newer=await call('/v2/media/edit',{body:editTarget(saved,{name:'나중 수정'})});assert.equal(newer.status,200);
+ const retry=await call('/v2/media/edit',{body:p});assert.equal(retry.status,200);assert.equal((await retry.json()).superseded,true);
+ assert.equal((await call('/v2/media/edit',{body:{...p,requestId:randomUUID()}})).status,409);
+ assert.equal((await call('/v2/media/edit',{body:{...p,patch:{r2Key:'other'}}})).status,400);
+ const bucket=await mf.getR2Bucket('MEDIA');assert.deepEqual(new Uint8Array(await(await bucket.get(d.key)).arrayBuffer()),new Uint8Array([1,7,9]));
+ assert.equal(await count('vzip_media_edits'),2);
+});
+
+test('an existing metadata trigger cannot silently regress the CAS version or mutate confirmed content',{skip},async()=>{
+ const initial=await editable(),p=editTarget(initial);
+ await db.query(`create function public.fixture_bad_media_version() returns trigger language plpgsql as $$
+ begin new.updated_at:=old.updated_at;return new;end $$;
+ create trigger fixture_bad_media_version before update on public.vocal_media for each row execute function public.fixture_bad_media_version();`);
+ try{
+  await assert.rejects(editSQL(p),{code:'40001'});assert.equal(await count('vzip_media_edits'),0);
+  assert.deepEqual((await db.query('select metadata from public.vocal_media')).rows[0].metadata,initial.metadata);
+ }finally{await db.query('drop trigger fixture_bad_media_version on public.vocal_media;drop function public.fixture_bad_media_version()');}
 });
