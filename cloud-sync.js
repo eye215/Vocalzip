@@ -10,7 +10,7 @@ const dataKey='vocal-zip_mvp_v1',mediaDb=window.VzipAccountScope?.mediaDb()||'vo
 const $=s=>document.querySelector(s);
 root.insertAdjacentHTML('beforeend',`<div class="cloud-controls">
 <div id="cloud-signed-out"><label class="sr-only" for="cloud-email">이메일</label><input id="cloud-email" type="email" autocomplete="email" inputmode="email" placeholder="이메일 주소"><label class="sr-only" for="cloud-password">비밀번호</label><div class="vzip-password-row"><input id="cloud-password" type="password" autocomplete="current-password" minlength="8" placeholder="비밀번호 8자 이상 입력"><button type="button" class="smallbtn" id="cloud-show-password" aria-label="비밀번호 표시">보기</button></div><div class="cloud-actions"><button class="btn" type="button" id="cloud-login">로그인</button></div><button type="button" id="cloud-reset">비밀번호를 잊으셨나요?</button><div class="vzip-auth-join"><span>처음 오셨나요?</span><button type="button" id="cloud-signup">회원가입</button></div></div>
-<div id="cloud-signed-in" hidden><p id="cloud-user" class="muted"></p><p class="muted">기기와 클라우드의 기록을 항목별로 합쳐 저장해요. 어느 쪽 기록도 덮어쓰거나 지우지 않아요.</p><div class="cloud-actions"><button type="button" class="btn" id="cloud-upload">지금 동기화 (기기·클라우드 합치기)</button><button type="button" class="btn secondary" id="cloud-review" hidden style="display:none">저장할 기록 확인</button><button type="button" class="btn secondary" id="cloud-download">클라우드 기록 합쳐서 불러오기</button><button type="button" class="btn secondary" id="cloud-media-upload">음원 클라우드 백업</button><button type="button" class="btn secondary" id="cloud-media-download">클라우드 음원 가져오기</button><button type="button" class="smallbtn" id="cloud-logout">로그아웃</button></div></div>
+<div id="cloud-signed-in" hidden><p id="cloud-user" class="muted"></p><p class="muted">기기와 클라우드의 기록을 항목별로 합쳐 저장해요. 어느 쪽 기록도 덮어쓰거나 지우지 않아요.</p><div class="cloud-actions"><button type="button" class="btn" id="cloud-upload">지금 동기화 (기기·클라우드 합치기)</button><button type="button" class="btn secondary" id="cloud-delete-review" hidden style="display:none">중단된 파일 삭제 확인</button><button type="button" class="btn secondary" id="cloud-review" hidden style="display:none">저장할 기록 확인</button><button type="button" class="btn secondary" id="cloud-download">클라우드 기록 합쳐서 불러오기</button><button type="button" class="btn secondary" id="cloud-media-upload">음원 클라우드 백업</button><button type="button" class="btn secondary" id="cloud-media-download">클라우드 음원 가져오기</button><button type="button" class="smallbtn" id="cloud-logout">로그아웃</button></div></div>
 <p id="cloud-status" role="status" class="muted">연결 확인 중…</p></div>`);
 
 // Dedicated full-screen authentication view. Keep local data untouched.
@@ -115,6 +115,7 @@ function refreshSnapshotReview(){
  const button=$('#cloud-review');if(!button)return;
  const visible=snapshotReviewAvailable&&window.VZIP_SNAPSHOT_REVISION_ENABLED===true&&sessionVerified&&!!user&&!!window.VZ?.sheet&&!!window.VzipSnapshotReview;
  button.hidden=!visible;if(button.style)button.style.display=visible?'':'none';button.disabled=snapshotReviewOpen;
+ refreshMediaDeleteReview();
 }
 window.addEventListener('vzip:auth-changed',()=>{snapshotReviewAvailable=false;refreshSnapshotReview();});
 async function openSnapshotReview(){
@@ -150,6 +151,68 @@ async function openSnapshotReview(){
    onClose:()=>{snapshotReviewOpen=false;syncAgain=false;refreshSnapshotReview();}
   });
  }catch(e){snapshotReviewOpen=false;refreshSnapshotReview();say('기록 비교 실패: '+e.message);}
+}
+function refreshMediaDeleteReview(){
+ const button=$('#cloud-delete-review');if(!button)return;
+ let count=0;
+ if(window.VZIP_SNAPSHOT_REVISION_ENABLED===true&&sessionVerified&&user&&window.VZ?.sheet&&window.VzipMediaDeleteReview){
+  try{count=mediaDeletionEngine()?.list().length||0;}catch{}
+ }
+ button.hidden=!count;if(button.style)button.style.display=count?'':'none';button.disabled=snapshotReviewOpen;
+ button.textContent='중단된 파일 삭제 확인'+(count?' ('+count+')':'');
+}
+async function openMediaDeleteReview(){
+ if(snapshotReviewOpen||busy||window.VZIP_SNAPSHOT_REVISION_ENABLED!==true||!window.VzipMediaDeleteReview)return;
+ const owner=user?.id,session=window.vzipCloudSessionId?.(),engine=mediaDeletionEngine(),bridge=snapshotBridge();
+ if(!owner||!session||!engine||!bridge)return;
+ const guard=()=>{if(!snapshotReviewOpen||user?.id!==owner||window.vzipCloudSessionId?.()!==session||!sessionVerified||window.VzipAccountScope?.owner!==owner||window.VzipAccountScope?.leaving||window.VZIP_SNAPSHOT_REVISION_ENABLED!==true)throw Object.assign(Error('로그인 또는 저장 상태가 바뀌었어요. 원본은 유지돼요.'),{code:'identity'});};
+ let selected=null,rootReview=null,lastPayload=null,localToken=null,completed=false;
+ snapshotReviewOpen=true;refreshSnapshotReview();
+ try{
+  window.VzipMediaDeleteReview.open({
+   list:async({offset=0}={})=>{
+    guard();const jobs=engine.list(),rows=[];
+    for(let n=offset;n<Math.min(offset+20,jobs.length);n+=4){
+     const part=await Promise.all(jobs.slice(n,Math.min(n+4,offset+20)).map(async job=>{
+      const {data,error}=await client.from('vocal_media').select('metadata,updated_at').eq('user_id',owner).eq('id',job.id).maybeSingle();guard();if(error)throw error;
+      if(data)mediaDeleteTargets(data,owner);
+      const local=await window.VZ.media.localDeleteInfo(job.id);guard();
+      return {id:job.id,name:String(data?.metadata?.name||local.name||'원본 확인이 필요한 파일'),date:Number(job.createdAt)};
+     }));guard();rows.push(...part);
+    }
+    return {rows,total:jobs.length};
+   },
+   review:async id=>{
+    guard();selected=id;const value=await engine.review(id);guard();rootReview=value.root;lastPayload=null;
+    const local=await window.VZ.media.localDeleteInfo(id);guard();localToken=local.token;
+    const sources=[rootReview.device,rootReview.cloud?.payload,rootReview.pending?.payload,...rootReview.recoveries.flatMap(r=>[r.device,r.cloud?.payload,r.pending?.payload])].filter(Boolean);
+    if(window.VzipArchive&&sources.some(data=>!Merge.same(window.VzipArchive.forOwner(data,owner),data)))throw Object.assign(Error('계정 확인이 필요한 기록이 섞여 있어요. 원본은 유지돼요.'),{code:'identity'});
+    if(!value.file?.name&&!local.name)throw Object.assign(Error('대상 파일의 이름을 확인하지 못했어요. 원본을 더 지우지 않고 유지해요.'),{code:'pending'});
+    if(rootReview.baseline?.generation&&rootReview.baseline.generation!==rootReview.cloud?.generation)throw Object.assign(Error('클라우드 기록이 새로 만들어져 별도 확인이 필요해요.'),{code:'generation'});
+    return {...rootReview,reviewId:value.reviewId,deletionName:value.file?.name||local.name};
+   },
+   resolve:async(id,payload,confirmation)=>{
+    guard();if((await window.VZ.media.localDeleteInfo(selected)).token!==localToken)throw Object.assign(Error('이 기기의 파일이 바뀌었어요. 다시 확인해 주세요.'),{code:'localChanged'});
+    guard();lastPayload=payload;const result=await engine.resume(id,payload,confirmation);guard();
+    // Cloud metadata is now absent; the normal path re-checks the intent before local cleanup.
+    await window.VZ.media.remove({id:selected,cloud:true,accountOwner:owner},{expectedLocal:localToken});guard();
+    ready=true;syncFailed=false;completed=true;localStorage.setItem('vzip_cloud_linked_user',owner);
+    const comparable=window.VzipArchive?window.VzipArchive.forOwner(localData(),owner):localData();
+    if(Merge.same(comparable,result.proof.payload))localStorage.removeItem('vzip_account_dirty');
+    snapshotReviewAvailable=false;say('✓ 확인한 파일을 영구 삭제했어요.');refreshSnapshotReview();
+   },
+   retry:async id=>{
+    guard();if(!lastPayload)throw Object.assign(Error('파일을 다시 확인해 주세요.'),{code:'review'});
+    const result=await engine.resume(id,lastPayload,{confirmed:true,retry:true});guard();
+    await window.VZ.media.remove({id:selected,cloud:true,accountOwner:owner},{expectedLocal:localToken});guard();
+    ready=true;syncFailed=false;completed=true;localStorage.setItem('vzip_cloud_linked_user',owner);
+    const comparable=window.VzipArchive?window.VzipArchive.forOwner(localData(),owner):localData();
+    if(Merge.same(comparable,result.proof.payload))localStorage.removeItem('vzip_account_dirty');
+    say('✓ 확인한 파일을 영구 삭제했어요.');refreshSnapshotReview();
+   },
+   onClose:()=>{snapshotReviewOpen=false;syncAgain=false;refreshSnapshotReview();if(completed&&user?.id===owner&&localStorage.getItem('vzip_account_dirty'))setTimeout(()=>sync({silent:true}),300);}
+  });
+ }catch(e){snapshotReviewOpen=false;refreshSnapshotReview();say('파일 삭제 확인 실패: '+e.message);}
 }
 let mediaResumeIdentity='';
 window.addEventListener('online',()=>{mediaResumeIdentity='';});
@@ -667,6 +730,16 @@ function mediaDeletionEngine({allowPaused=false}={}){
    if(error)throw error;return data||null;
   },
   validate:row=>mediaDeleteTargets(row,owner),
+  readLocalStamp:window.VZ?.media?.localDeleteInfo?async id=>window.VzipSnapshotTransport.localStamp((await window.VZ.media.localDeleteInfo(id)).token):null,
+  reviewRoot:context=>bridge.reviewMediaRecovery(context),
+  prepareResume:async({context,reviewId,payload,confirmed,retry})=>{
+   if(retry){const p=bridge.state().pending;if(!p||p.session!==window.vzipCloudSessionId?.()||p.recoveryId!==reviewId||!Merge.same(p.context,context))throw Object.assign(Error('파일과 기록을 다시 확인해 주세요.'),{code:'review'});return bridge.recover();}
+   if(!window.VzipSnapshotReviewModel)throw Error('기록 비교 모듈을 다시 불러와 주세요.');
+   const outbound=window.VzipArchive?window.VzipArchive.forOwner(payload,owner):payload;
+   if(!Merge.same(outbound,payload))throw Object.assign(Error('현재 계정의 기록만 저장할 수 있어요.'),{code:'identity'});
+   window.VzipSnapshotReviewModel.preserveLocal(localData(),payload,owner);
+   return bridge.resolveRecovery(reviewId,payload,{confirmed});
+  },
   prepare:async({id,stamp})=>{
    const currentLocal=()=>{
     const raw=localStorage.getItem(dataKey);let payload=null;
@@ -698,7 +771,7 @@ function mediaDeletionEngine({allowPaused=false}={}){
  });
 }
 window.vzipPendingMediaDeletes=()=>mediaDeletionEngine({allowPaused:true})?.list()||[];
-window.vzipMediaDeleteAcknowledge=id=>mediaDeletionEngine({allowPaused:true})?.acknowledge(id);
+window.vzipMediaDeleteAcknowledge=id=>mediaDeletionEngine({allowPaused:true})?.acknowledge(id)?.finally(refreshMediaDeleteReview);
 async function deleteCloudMedia(item){
  if(!user)throw Error('로그인이 필요해요.');
  const owner=user.id,guard=()=>{if(user?.id!==owner)throw Error('로그인 계정이 변경됐어요.');};
@@ -708,7 +781,7 @@ async function deleteCloudMedia(item){
  return cleanupCloudMedia(row,owner,item.id,guard,()=>unlinkCloudMedia(owner,item.id));
 }
 window.vzipCloudMediaDelete=item=>{
- const engine=mediaDeletionEngine();if(engine)return engine.run(item.id);
+ const engine=mediaDeletionEngine();if(engine)return engine.run(item.id).finally(refreshMediaDeleteReview);
  if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
   if(!lock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');
   return deleteCloudMedia(item);
@@ -959,6 +1032,7 @@ const sendRecovery=async()=>{const field=$('#cloud-recovery-email'),email=field.
 $('#cloud-recovery-send').onclick=sendRecovery;
 $('#cloud-recovery-resend').onclick=async()=>{$('#cloud-recovery-email').value=$('#cloud-recovery-sent-email').textContent;await sendRecovery()};
 $('#cloud-new-password-submit').onclick=async()=>{const password=$('#cloud-new-password').value,confirm=$('#cloud-new-password-confirm').value;if(password.length<8)return say('비밀번호를 8자 이상 입력해 주세요.');if(password!==confirm)return say('비밀번호가 일치하지 않아요.');say('비밀번호 변경 중…');const {error}=await client.auth.updateUser({password});if(error)return say('비밀번호 변경 실패: '+error.message);recoveryMode=false;$('#cloud-new-password').value='';$('#cloud-new-password-confirm').value='';showAuthView('login');updateAuthScreen();say('✓ 새 비밀번호로 변경했어요.')};
+$('#cloud-delete-review').onclick=()=>openMediaDeleteReview().catch(e=>say('파일 삭제 확인 실패: '+e.message));
 $('#cloud-review').onclick=()=>openSnapshotReview().catch(e=>say('기록 비교 실패: '+e.message));
 $('#cloud-logout').onclick=async()=>{if(window.VzipAccountScope){try{await endThisSession();}catch(e){say(e.message);}return;}await client.auth.signOut({scope:'local'});localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=()=>sync();$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',e=>{if(!ready||!user||e.detail?.source==='cloud-merge')return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>{uploadTimer=null;upload(true)},900)});
  /* A change saved just before the app goes to the background is sent at once (iOS may suspend the page before the
