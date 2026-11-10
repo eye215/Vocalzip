@@ -14,12 +14,12 @@ const storage=()=>{const m=new Map();return{
 const probes=[];
 async function until(fn){for(let n=0;n<1000;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out waiting for sync: '+probes.slice(-2).map(probe=>probe()).join(' | '));}
 class Server{
- constructor(row=null){this.row=copy(row);this.writes=[];this.reads=0;this.beforeWrite=null;this.afterRead=null;}
+ constructor(row=null){this.owner='A';this.sid='s1';this.token='fake';this.row=copy(row);this.writes=[];this.reads=0;this.beforeWrite=null;this.afterRead=null;}
  client(){
   const server=this;
   return{
-   auth:{getUser:async()=>({data:{user:{id:'A',email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:'fake'}}})},
-   rpc:async name=>({data:name==='vzip_register_session'?{status:'active',current_session:'s1'}:true,error:null}),
+   auth:{getUser:async()=>({data:{user:{id:server.owner,email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:server.token}}})},
+   rpc:async name=>({data:name==='vzip_register_session'?{status:'active',current_session:server.sid}:true,error:null}),
    from(table){
     const q={table,filters:{},method:'read',single:false},chain={};
     for(const m of ['select','order','range','in'])chain[m]=()=>chain;
@@ -33,7 +33,7 @@ class Server{
  }
  async run(q){
   if(q.table!=='vocal_data')return{data:[],error:null};
-  assert.equal(q.filters.user_id??q.body?.user_id,'A');
+  assert.equal(q.filters.user_id??q.body?.user_id,this.owner);
   if(q.method==='read'){
    this.reads++;const result=copy(this.row);
    await this.afterRead?.(result);
@@ -55,15 +55,15 @@ class Server{
   throw Error('Unexpected operation '+q.method);
  }
 }
-function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
+function device(server,seed=base('local'),{clean=false,now=Date.now(),revision=false}={}){
  const listeners=new Map(),elements=new Map(),store=storage();
  const element=k=>{if(!elements.has(k))elements.set(k,{
   textContent:'',hidden:false,value:'',dataset:{},classList:{toggle(){},contains(){return false}},remove(){},appendChild(){},insertAdjacentHTML(){},
   querySelector:s=>element(s),querySelectorAll:()=>[]
  });return elements.get(k)};
  const on=(type,fn)=>{if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push(fn)};
- const window={localStorage:store,VZIP_DEVICE_SESSIONS_ENABLED:true,
-  VzipAccountScope:{owner:'A',storage:store,mediaDb:()=> 'test-only',canImportLegacy:()=>false},
+ const window={localStorage:store,VZIP_DEVICE_SESSIONS_ENABLED:true,VZIP_SNAPSHOT_REVISION_ENABLED:revision,
+  VzipAccountScope:{owner:server.owner,storage:store,mediaDb:()=> 'test-only',canImportLegacy:()=>false},
   supabase:{createClient:()=>server.client()},addEventListener:on,
   dispatchEvent:e=>{for(const fn of listeners.get(e.type)||[])fn(e)},
  };
@@ -74,17 +74,18 @@ function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
  if(seed)store.setItem(KEY,JSON.stringify(seed));
  if(!clean)store.setItem('vzip_account_dirty','1');
  const context=vm.createContext({...window,window,document,localStorage:store,Date:FixedDate,
-  navigator:{userAgent:'test',maxTouchPoints:0},matchMedia:()=>({matches:false}),location:{href:'https://test.invalid/',reload(){},origin:'https://test.invalid',pathname:'/'},
-  URL,structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
+  navigator:{userAgent:'test',maxTouchPoints:0,locks:{request:async(name,options,work)=>work({})}},matchMedia:()=>({matches:false}),location:{href:'https://test.invalid/',reload(){},origin:'https://test.invalid',pathname:'/'},
+  URL,AbortController,atob,fetch:server.fetch?server.fetch.bind(server):async()=>{throw Error('Unexpected REST transport');},structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
   Event:class{constructor(type){this.type=type}},setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,10)),clearTimeout,setInterval(){},
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
+ vm.runInContext(fs.readFileSync('sync/snapshot-transport.js','utf8'),context);window.VzipSnapshotTransport=context.VzipSnapshotTransport;
  vm.runInContext(script,context);
  probes.push(()=>element('#cloud-status').textContent);
  return{store,window,status:()=>element('#cloud-status').textContent,
   sync:()=>element('#cloud-upload').onclick(),
   data:()=>JSON.parse(store.getItem(KEY)),
-  saved:()=>store.getItem('vzip_cloud_linked_user')==='A'&&!store.getItem('vzip_account_dirty')};
+  saved:()=>store.getItem('vzip_cloud_linked_user')===server.owner&&!store.getItem('vzip_account_dirty')};
 }
 test('two empty-account first saves preserve both records and use DO NOTHING',async()=>{
  const s=new Server();let reads=0,release;const gate=new Promise(r=>release=r);
@@ -179,4 +180,66 @@ test('a clean device adopts authoritative cloud data without sending stale local
 test('an empty new device loads existing cloud records without writes',async()=>{
  const s=new Server({payload:base('remote'),updated_at:'2026-11-07T00:00:00Z'}),d=device(s,null,{clean:true});
  await until(()=>d.saved());assert.deepEqual(d.data(),base('remote'));assert.equal(s.writes.length,0);
+});
+
+const UID='11111111-1111-4111-8111-111111111111',SID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',GEN='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+class RevisionServer extends Server{
+ constructor(payload=base('cloud')){
+  super({payload,updated_at:'2026-11-10T00:00:00.000001Z',revision:'1',generation:GEN});
+  this.owner=UID;this.sid=SID;this.token='test.'+Buffer.from(JSON.stringify({sub:UID,session_id:SID,role:'authenticated'})).toString('base64url')+'.signature';this.receipts=new Map();this.rpcCalls=[];this.commits=0;
+ }
+ async fetch(url,init){
+  const parsed=new URL(url);assert.equal(init.headers['X-Client-Info'],'vocalzip-device-session-v2');
+  if(init.method==='GET'){
+   assert.equal(parsed.searchParams.get('user_id'),'eq.'+UID);assert.ok(parsed.searchParams.get('select').includes('revision:revision::text'));
+   return Response.json(this.row?[{...copy(this.row),user_id:UID}]:[]);
+  }
+  assert.equal(parsed.pathname,'/rest/v1/rpc/vzip_save_snapshot');
+  const q=JSON.parse(init.body);this.rpcCalls.push(copy(q));await this.beforeRpc?.(q);
+  if(this.reject)return Response.json({},{status:403});
+  let receipt=this.receipts.get(q.p_request_id);
+  if(!receipt){
+   if(q.p_expected_revision!==(this.row?.revision||'0')||q.p_expected_generation!==(this.row?.generation||null))
+    return Response.json({status:'conflict',revision:this.row?.revision||'0',generation:this.row?.generation||null,exists:!!this.row});
+   this.commits++;this.row={payload:copy(q.p_payload),updated_at:'2026-11-10T00:00:01.000001Z',revision:String(BigInt(this.row?.revision||'0')+1n),generation:this.row?.generation||GEN};
+   if(this.normalize)this.row.payload=this.normalize(this.row.payload);
+   receipt={status:'saved',revision:this.row.revision,generation:this.row.generation,updated_at:this.row.updated_at};this.receipts.set(q.p_request_id,receipt);
+   await this.afterRpc?.();
+   if(this.loseReply){this.loseReply=false;throw TypeError('response lost');}
+  }
+  return Response.json(receipt);
+ }
+}
+test('revision bridge replays a lost reply through the shipped sync controls with no legacy write',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ const local=d.data();local.songs.push({id:'phone',title:'phone'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');s.loseReply=true;
+ await d.sync();assert.match(d.status(),/실패/);const journal=()=>JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID));
+ assert.ok(journal().pending);assert.equal(s.commits,1);
+ await d.sync();await until(()=>d.saved());assert.equal(s.commits,1);assert.equal(s.rpcCalls.length,2);assert.deepEqual(s.rpcCalls[0],s.rpcCalls[1]);assert.equal(journal().pending,null);assert.equal(s.writes.length,0);
+});
+test('revision bridge stops concurrent writes before merging away the local edit',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ const local=d.data();local.songs[0].title='private phone edit';d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ s.row.payload.songs[0].title='tablet edit';s.row.revision='2';
+ await d.sync();assert.match(d.status(),/실패/);assert.equal(d.data().songs[0].title,'private phone edit');assert.equal(s.row.payload.songs[0].title,'tablet edit');assert.equal(s.commits,0);assert.equal(s.writes.length,0);
+});
+test('revision bridge retains edits made during acknowledgement for a later RPC',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ const local=d.data();local.songs.push({id:'first'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ let once=true;s.afterRpc=async()=>{if(once){once=false;const value=d.data();value.songs.push({id:'late'});d.store.setItem(KEY,JSON.stringify(value));d.store.setItem('vzip_account_dirty','1');}};
+ await d.sync();await until(()=>d.saved()&&s.row.payload.songs.some(v=>v.id==='late'));
+ assert.ok(s.row.payload.songs.some(v=>v.id==='first'));assert.equal(s.writes.length,0);assert.equal(s.commits,2);
+});
+test('a paused revision contract never downgrades its existing state to direct writes',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;const local=d.data();local.songs.push({id:'offline'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ await d.sync();assert.match(d.status(),/일시 중지/);assert.equal(s.writes.length,0);assert.equal(s.commits,0);assert.ok(d.data().songs.some(x=>x.id==='offline'));
+});
+
+test('revision bridge compares the owner-scoped payload without resending excluded archive entries',async()=>{
+ const seed={...base('cloud'),deleted:{}},s=new RevisionServer(seed),d=device(s,seed,{clean:true,revision:true});await until(()=>d.saved());
+ d.window.VzipArchive={forOwner:(value,owner)=>{assert.equal(owner,UID);const own=copy(value);delete own.excludedArchive;return own;}};
+ const local=d.data();local.excludedArchive=[{id:'other-owner-private-entry'}];d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ await d.sync();assert.ok(d.saved());assert.equal(s.commits,0);assert.equal(s.rpcCalls.length,0);assert.equal(s.writes.length,0);
+ assert.equal(d.data().excludedArchive[0].id,'other-owner-private-entry');assert.equal(s.row.payload.excludedArchive,undefined);
 });

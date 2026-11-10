@@ -85,6 +85,10 @@ begin
  if not public.vzip_session_is_active() then
   raise exception 'registered session required' using errcode='42501';
  end if;
+ -- Optional staged rollout proposal; absent in the backwards-compatible foundation.
+ if to_regprocedure('public.vzip_assert_snapshot_enabled(uuid)') is not null then
+  perform public.vzip_assert_snapshot_enabled(u);
+ end if;
  s:=public.vzip_request_session();
  if p_request_id is null or p_expected_revision is null or p_expected_revision<0 then
   raise exception 'request id and nonnegative revision required' using errcode='22023';
@@ -120,7 +124,7 @@ begin
   if not found then
    -- A legacy direct first writer may have created the row outside the account lock.
    select * into current_row from public.vocal_data where user_id=u;
-   return jsonb_build_object('status','conflict','revision',current_row.revision::text,'exists',true);
+   return jsonb_build_object('status','conflict','revision',current_row.revision::text,'generation',current_row.generation,'exists',true);
   end if;
  end if;
  insert into public.vzip_data_write_requests(user_id,request_id,session_id,expected_revision,expected_generation,content_hash,result_revision,result_generation,result_updated_at)

@@ -8,6 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {create,createTransport}=require('../sync/field-draft-outbox.js');
+const Snap=require('../sync/snapshot-transport.js'),Merge=require('../data-merge.js');
 const URL_=process.env.VZ_DRAFT_TEST_DB,skip=!URL_;
 if(URL_&&!['localhost','127.0.0.1','[::1]'].includes(new URL(URL_).hostname))throw Error('local disposable database required');
 const U='11111111-1111-4111-8111-111111111111',V='22222222-2222-4222-8222-222222222222';
@@ -17,6 +18,8 @@ let admin,db,name,conn;
 const proposal=readFileSync(new URL('../supabase/proposals/20261113_snapshot_revision.sql',import.meta.url),'utf8');
 const drafts=readFileSync(new URL('../supabase/proposals/20261114_field_drafts.sql',import.meta.url),'utf8');
 const sessions=readFileSync(new URL('../supabase/migrations/20261112_device_session_contract.sql',import.meta.url),'utf8');
+const withSnapshotRollout=process.env.VZIP_WITH_SNAPSHOT_ROLLOUT==='1';
+const snapshotRollout=withSnapshotRollout?readFileSync(new URL('../supabase/proposals/20261115_snapshot_rollout.sql',import.meta.url),'utf8'):null;
 const withPermanentDelete=process.env.VZIP_WITH_PERMANENT_DELETE==='1';
 const deletion=withPermanentDelete?readFileSync(new URL('../supabase/migrations/20261114_permanent_lesson_delete.sql',import.meta.url),'utf8'):null;
 const history=readFileSync(new URL('../supabase/migrations/20261106_keep_history.sql',import.meta.url),'utf8');
@@ -24,7 +27,7 @@ async function as(u,s,fn,c=db){
  await c.query('begin');
  try{
   await c.query('set local role authenticated');
-  await c.query("select set_config('request.jwt.claim.sub',$1,true),set_config('request.jwt.claims',$2,true),set_config('request.headers',$3,true)",[u,JSON.stringify({sub:u,session_id:s}),JSON.stringify({'x-client-info':'vocalzip-device-session-v2'})]);
+  await c.query("select set_config('request.jwt.claim.sub',$1,true),set_config('request.jwt.claims',$2,true),set_config('request.headers',$3,true)",[u,JSON.stringify({sub:u,session_id:s,role:'authenticated'}),JSON.stringify({'x-client-info':'vocalzip-device-session-v2'})]);
   const out=await fn(c);await c.query('commit');return out;
  }catch(e){await c.query('rollback');throw e}
 }
@@ -33,7 +36,7 @@ before(async()=>{
  if(skip)return;
  admin=new pg.Client({connectionString:URL_});await admin.connect();name='vzip_outbox_integration_'+Date.now();await admin.query('create database '+name);
  conn=URL_.replace(/\/[^/]*$/,'/'+name);db=new pg.Client({connectionString:conn});await db.connect();
- await db.query("do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;");
+ await db.query("do $$ begin if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;");
  await db.query(String.raw`
  create schema auth;
  create table auth.users(id uuid primary key);
@@ -55,7 +58,7 @@ before(async()=>{
  `);
  await db.query('insert into auth.users values ($1),($2)',[U,V]);
  const legacy=base('legacy-id-not-uuid');await db.query("insert into public.vocal_data values($1,$2,'2099-01-01T00:00:00Z')",[U,legacy]);
- await db.query(history);await db.query(sessions);await db.query(proposal);await db.query(proposal);await db.query(drafts);await db.query(drafts);if(deletion){await db.query(deletion);await db.query(deletion);}
+ await db.query(history);await db.query(sessions);await db.query(proposal);await db.query(proposal);await db.query(drafts);await db.query(drafts);if(snapshotRollout){await db.query(snapshotRollout);await db.query(snapshotRollout);}if(deletion){await db.query(deletion);await db.query(deletion);}
  const row=(await db.query('select payload,revision from public.vocal_data where user_id=$1',[U])).rows[0];
  assert.deepEqual(row.payload,legacy);assert.equal(row.revision,'0');
 
@@ -63,6 +66,7 @@ before(async()=>{
 beforeEach(async()=>{
  if(skip)return;
  await db.query('truncate public.vzip_field_draft_rollout,public.vzip_field_commit_markers,public.vzip_field_conflicts,public.vzip_field_requests,public.vzip_field_drafts,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ if(snapshotRollout)await db.query('truncate public.vzip_snapshot_rollout');
  if(deletion)await db.query('truncate public.vzip_permanent_delete_guards');
  await db.query('delete from auth.sessions');
  await db.query('insert into auth.users values ($1),($2) on conflict do nothing',[U,V]);
@@ -70,7 +74,7 @@ beforeEach(async()=>{
  await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[C,V]);
  await db.query('update public.vzip_session_rollout set enforced=true');
  for(const [u,s] of [[U,A],[U,B],[V,C]])assert.equal((await register(u,s)).status,'active');
- for(const u of [U,V])await db.query('select public.vzip_set_field_draft_enabled($1,true)',[u]);
+ for(const u of [U,V]){await db.query('select public.vzip_set_field_draft_enabled($1,true)',[u]);if(snapshotRollout)await db.query("select public.vzip_set_snapshot_mode($1,'revision')",[u]);}
  await db.query('insert into public.vocal_data(user_id,payload) values($1,$2),($3,$4)',[U,base(),V,base()]);
  await db.query("insert into public.vocal_media(id,user_id,metadata) values('keep-media',$1,'{}') on conflict(id) do nothing",[U]);
 });
@@ -90,7 +94,7 @@ class Store {
  key(i){return [...this.rows.keys()][i]??null;}
  get length(){return this.rows.size;}
 }
-const jwt=(u,s)=>'test.'+Buffer.from(JSON.stringify({sub:u,session_id:s})).toString('base64url')+'.synthetic-signature';
+const jwt=(u,s)=>'test.'+Buffer.from(JSON.stringify({sub:u,session_id:s,role:'authenticated'})).toString('base64url')+'.synthetic-signature';
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve};};
 function api(){
  const instance={calls:[],after:null,offline:false};
@@ -261,4 +265,63 @@ test('snapshot replay and offline outbox cannot recreate a permanently deleted l
  assert.equal(a.model.read(S).text,'offline pending text');assert.ok(a.model.read(S).pending);
  assert.equal(await serverDraft(),undefined);
  const current=await body();assert.equal(current.songs[0].id,'song-legacy');assert.equal(current.performances[0].id,'show-old');
+});
+
+function snapshotDevice({owner=U,session=A,store=new Store()}={}){
+ const identity={owner,session},wire={lost:false,calls:0};
+ const transport=Snap.createTransport({projectUrl:'https://example.supabase.co',publishableKey:'sb_publishable_test',
+  getOwner:()=>identity.owner,getSessionId:()=>identity.session,getCredentials:async()=>jwt(identity.owner,identity.session),
+  fetch:async(url,options)=>{
+   wire.calls++;const path=new URL(url),claims=JSON.parse(Buffer.from(options.headers.Authorization.split(' ')[1].split('.')[1],'base64url').toString());
+   assert.equal(options.headers['X-Client-Info'],'vocalzip-device-session-v2');
+   const connection=new pg.Client({connectionString:conn});await connection.connect();
+   let data;
+   try{
+    data=await as(claims.sub,claims.session_id,async c=>{
+     if(options.method==='GET'){
+      assert.equal(path.searchParams.get('user_id'),'eq.'+claims.sub);
+      return (await c.query('select user_id,payload,updated_at::text updated_at,revision::text revision,generation from public.vocal_data where user_id=$1',[claims.sub])).rows;
+     }
+     assert.equal(path.pathname,'/rest/v1/rpc/vzip_save_snapshot');const q=JSON.parse(options.body);
+     return (await c.query('select public.vzip_save_snapshot($1,$2,$3,$4) r',[q.p_expected_revision,q.p_payload,q.p_request_id,q.p_expected_generation])).rows[0].r;
+    },connection);
+   }catch(e){return {ok:false,status:e.code==='42501'?403:400,json:async()=>({code:e.code})};}
+   finally{await connection.end();}
+   if(options.method==='POST'&&wire.lost){wire.lost=false;throw Error('synthetic response loss');}
+   return {ok:true,status:200,json:async()=>structuredClone(data)};
+  }});
+ const options={storage:store,identity:()=>identity,...transport,lock:async work=>work(),valid:Merge.valid,same:Merge.same,
+  deletedIds:()=>wire.deleted||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;}};
+ return {model:Snap.create(options),recreate:()=>Snap.create(options),wire,store};
+}
+test('snapshot bridge replays one durable request after a real SQL commit loses its HTTP response',{skip,timeout:20000},async()=>{
+ const d=snapshotDevice(),row=await d.model.read();await d.model.observe(row,base());const value=base();value.practices.push({id:'late-practice',manualMinutes:25});
+ d.wire.lost=true;await assert.rejects(d.model.write(row,value));const pending=d.model.state().pending;
+ await d.recreate().recover();
+ assert.equal((await db.query('select revision from public.vocal_data where user_id=$1',[U])).rows[0].revision,'2');
+ assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'1');
+ assert.equal((await body()).practices[1].manualMinutes,25);assert.equal(d.model.state().pending,null);assert.ok(pending.id);
+});
+test('snapshot bridge preserves both sides of two registered sessions instead of silently merging a conflict',{skip,timeout:20000},async()=>{
+ const a=snapshotDevice(),b=snapshotDevice({session:B}),first=await a.model.read();await a.model.observe(first,base());await b.model.observe(first,base());
+ const phone=base(),tablet=base();phone.lessons[0].memo='phone confirmed';tablet.lessons[0].memo='tablet unsent';
+ await a.model.write(first,phone);await assert.rejects(b.model.write(first,tablet),e=>e.code==='conflict');
+ assert.equal((await body()).lessons[0].memo,'phone confirmed');assert.equal(b.model.state().pending.payload.lessons[0].memo,'tablet unsent');
+ assert.equal((await db.query('select revision from public.vocal_data where user_id=$1',[U])).rows[0].revision,'2');
+});
+test('snapshot bridge respects protected field leases and retains the blocked payload',{skip,timeout:20000},async()=>{
+ const field=device(api());await field.open();
+ const d=snapshotDevice(),row=await d.model.read();await d.model.observe(row,base());const value=base();value.lessons[0].memo='unversioned raw change';
+ await assert.rejects(d.model.write(row,value));
+ assert.equal((await body()).lessons[0].memo,'original memo');assert.equal(d.model.state().pending.payload.lessons[0].memo,'unversioned raw change');
+ assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'0');
+});
+test('snapshot bridge deletion removes pending lesson text without losing unrelated input or restoring a SQL-deleted lesson',{skip:skip||!withPermanentDelete,timeout:20000},async()=>{
+ const d=snapshotDevice(),row=await d.model.read();await d.model.observe(row,base());const value=base();value.lessons[0].feedback='private unsent feedback';value.practices.push({id:'keep-unrelated',manualMinutes:25});
+ d.wire.lost=true;await assert.rejects(d.model.write(row,value));await permanentDelete();
+ await d.model.redactLessons([S.entityId]);const state=d.model.state();
+ assert.ok(!JSON.stringify(state).includes('private unsent feedback'));assert.equal(state.pending.payload.practices[1].manualMinutes,25);
+ const calls=d.wire.calls;await assert.rejects(d.model.recover(),e=>e.code==='deleted');assert.equal(d.wire.calls,calls);
+ assert.equal((await body()).lessons.some(l=>l.id===S.entityId),false);assert.equal((await body()).practices[1].manualMinutes,25);
+ assert.equal((await db.query("select count(*) n from public.vocal_media where id='keep-media'")).rows[0].n,'1');
 });

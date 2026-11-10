@@ -18,23 +18,33 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   const r2 = await fakeR2(page);
   await boot(page);
   expect(await page.evaluate(() => window.VzipR2.enabled())).toBe(true);
+  await page.evaluate(() => {
+    const prepare=window.vzipPrepareMedia;
+    window.vzipPrepareMedia=async(...args)=>{
+      const prepared=await prepare(...args);
+      window.__preparedImportBytes=[...new Uint8Array(await prepared.file.arrayBuffer())];
+      return prepared;
+    };
+  });
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
   const picker=page.waitForEvent('filechooser');
-  await page.getByRole('menuitem',{name:'파일 선택',exact:true}).click();
-  await (await picker).setFiles({name:'take.wav', mimeType:'audio/wav', buffer:wav()});
-  await expect(page.locator('.sheet')).toHaveCount(1);
-  await page.getByRole('button', {name:'가져오기', exact:true}).click();
-  await expect(page.locator('.sheet [data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
-  // Saved on the device first; the upload to R2 follows from that copy.
+  await page.locator('[data-imp]').click();
+  await (await picker).setFiles({name:'2026-11-09_10-00-00.wav', mimeType:'audio/wav', buffer:wav(26)});
+  await expect(page).toHaveURL(/import-hub$/);
+  await expect(page.locator('[data-hub] [data-import]')).toBeEnabled({timeout:30000});
+  await page.locator('[data-hub] [data-import]').click();
+  await expect(page.locator('[data-result]')).toContainText('저장 1개', {timeout:30000});
+  // The approved import hub uploads directly; completion requires confirmed cloud metadata.
   await expect.poll(() => page.evaluate(() => Object.keys(window.__rows).length), {timeout:20000}).toBe(1);
   const meta = await page.evaluate(() => Object.values(window.__rows)[0]);
   expect(meta).toMatchObject({storageProvider:'r2', source:'import'});
-  // A WAV may be stored as its lossless FLAC; the object in R2 is exactly the file the app kept.
+  // A WAV may become lossless FLAC; R2 must contain exactly the prepared payload.
   expect(meta.r2Key).toMatch(new RegExp('^u/ui-test-user/' + meta.id + '/original\\.(wav|flac)$'));
   expect(meta.path).toBeUndefined();
   expect(r2.store.get(meta.r2Key).bytes.length).toBe(meta.size);
-  const kept = (await page.evaluate(async () => { const x = (await window.vzipReadMedia())[0]; return [...new Uint8Array(x.blob ? await x.blob.arrayBuffer() : x.bytes)]; }));
+  const kept=await page.evaluate(() => window.__preparedImportBytes);
+  expect(Array.isArray(kept)).toBe(true);
+  expect(await page.evaluate(async id => (await window.vzipReadMedia()).filter(x=>x.id===id).length,meta.id)).toBe(0);
   expect(r2.store.get(meta.r2Key).bytes.equals(Buffer.from(kept))).toBe(true);
   // Playback asks the Worker for a signed link.
   const url = await page.evaluate(m => window.vzipCloudMediaUrl(m), meta);
@@ -193,7 +203,7 @@ test('Editing a recording saves only the changed fields onto the newest cloud co
     await VZ.media.update(item, {song:'Defying Gravity', songId:'s1'});
     return window.__rows.c1;
   });
-  expect(row).toMatchObject({song:'Defying Gravity', songId:'s1', review:'다른 기기 메모', rating:5, r2Key:'u/ui-test-user/c1/original.m4a'});
+  expect(row).toMatchObject({song:'Defying Gravity', songId:'s1', review:'다른 기기 메모\n이전 제목: 녹음', rating:5, r2Key:'u/ui-test-user/c1/original.m4a'});
 });
 
 test('When another device saves between reading and writing, the write is refused, re-read and applied again', async ({page}) => {
@@ -232,8 +242,8 @@ test('A device file edit sends only what changed: older device values never over
     VZ.media.holdBackup(false);
     return {afterApp, afterEvent:window.__rows.d1, local:(await window.vzipReadMedia()).find(x => x.id === 'd1')};
   });
-  expect(rows.afterApp).toMatchObject({song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
-  expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
+  expect(rows.afterApp).toMatchObject({song:'Defying Gravity', review:'새 메모 (다른 기기)\n이전 제목: 기기 녹음', rating:5});
+  expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)\n이전 제목: 기기 녹음', rating:5});
   expect(rows.local).toMatchObject({song:'Defying Gravity'});
 });
 
@@ -257,10 +267,10 @@ test('A song picked by the AI suggestion for a file on this device changes only 
     VZ.media.holdBackup(false);
     return {afterAssign, sameVersion:versionAfter === written.updatedAt, undoError, afterUndo:window.__rows.s9};
   });
-  expect(out.afterAssign).toMatchObject({songId:'s1', song:'Defying Gravity', review:'다른 기기 메모', rating:5, recordedDate:'2026-10-01'});
+  expect(out.afterAssign).toMatchObject({songId:'s1', song:'Defying Gravity', review:'다른 기기 메모\n이전 제목: 미분류 녹음', rating:5, recordedDate:'2026-10-01'});
   expect(out.sameVersion).toBe(true);
   expect(out.undoError).toBeNull();
-  expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모', rating:5});
+  expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모\n이전 제목: 미분류 녹음', rating:5});
 });
 
 test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, can be renamed, survives a reload, and deletes its file', async ({page}) => {
