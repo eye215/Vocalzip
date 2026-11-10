@@ -540,7 +540,7 @@ async function apply(main,check=()=>{}){
     const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('p');
     summary.textContent='실패 원인 확인 ('+errors.length+'건)';
     body.style.whiteSpace='pre-wrap';
-    body.textContent=errors.slice(0,10).join('\\n')+(errors.length>10?'\\n외 '+(errors.length-10)+'건':'');
+    body.textContent=errors.slice(0,10).join('\n')+(errors.length>10?'\n외 '+(errors.length-10)+'건':'');
     details.append(summary,body);progress.append(details);
     VZ.toast('곡 지정 '+failed+'개 실패. 아래 실패 원인을 확인해 주세요.','error');
    }else if(done)VZ.toast('곡 '+done+'개를 지정했어요.');
