@@ -39,7 +39,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
+ let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
  const notesKey='vzip_score_text_v1:'+owner+':'+scoreId;
@@ -63,7 +63,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '</div>'+
   '<div class="score-ink-actions">'+button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('clear','trash','현재 페이지 필기 삭제')+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('marker-mode','bookmark-simple','악보 표시')+button('performance','eye','무대용 보기')+button('fullscreen','arrows-out','전체화면')+'</div>'+
   '<div class="score-ink-marker-palette" data-ink-marker-palette hidden><button type="button" data-ink-marker="breath">숨표</button><button type="button" data-ink-marker="repeat">반복</button><button type="button" data-ink-marker="cut">컷</button><button type="button" data-ink-marker="start">시작점</button></div>'+
-  '<div class="score-ink-vision-tools" data-ink-vision-tools hidden><button type="button" data-ink-notation>표기 알아보기</button><button type="button" data-ink-note-undo hidden>메모 되돌리기</button><span>선택한 악보 영역을 AI로 설명해요.</span></div>'+
+  '<div class="score-ink-vision-tools" data-ink-vision-tools hidden><button type="button" data-ink-notation>표기 알아보기</button><button type="button" data-ink-explain-selection hidden>선택 영역 설명 보기</button><button type="button" data-ink-note-undo hidden>메모 되돌리기</button><span>요청할 때만 선택 영역을 AI로 설명해요.</span></div>'+ 
   '<section class="score-ink-settings" data-ink-settings aria-label="필기 설정" hidden><div class="score-ink-settings-head"><strong data-ink-profile-label>펜 설정</strong>'+button('settings-close','x','필기 설정 닫기')+'</div>'+
   '<div class="score-ink-palette-section"><span>기본 색상</span><div data-ink-palette class="score-ink-swatches" role="group" aria-label="기본 색상"></div></div>'+
   '<div class="score-ink-palette-section"><span>최근 사용</span><div data-ink-recent class="score-ink-swatches" role="group" aria-label="최근 사용 색상"></div></div>'+
@@ -255,15 +255,20 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const matches=distance<6?rows.slice().reverse().filter(s=>Ink.hit(s,b,aspect)).slice(0,1):
     Ink.inRect(rows,{x:a[0],y:a[1],w:b[0]-a[0],h:b[1]-a[1]},aspect);
    selected(matches);
-   if(!matches.length&&distance>=6){
-    if(visionAvailable)recognize('notation',{x:a[0],y:a[1],w:b[0]-a[0],h:b[1]-a[1]});
-    else say('표기 설명 기능을 사용할 수 없어요. 로그인과 AI 인식 권한을 확인해 주세요.',true);
+   if(distance>=6&&visionAvailable){
+    scoreRect={x:a[0],y:a[1],w:b[0]-a[0],h:b[1]-a[1]};
+    const rect=el.querySelector('[data-ink-vision-rect]');rect.hidden=false;
+    rect.style.left=Math.min(a[0],b[0])*100+'%';rect.style.top=Math.min(a[1],b[1])*100+'%';
+    rect.style.width=Math.abs(a[0]-b[0])*100+'%';rect.style.height=Math.abs(a[1]-b[1])*100+'%';
+    el.querySelector('[data-ink-explain-selection]').hidden=false;
+    say(matches.length?matches.length+'개 필기 선택됨 · 필요하면 선택 영역 설명 보기':'필기 선택 없음 · 표기 설명이 필요하면 선택 영역 설명 보기');
    }
    return;
   }
   if(commit&&preview)commitSelection(preview);else paint();
  }
  function selectionDown(event,p){
+  clearScoreRect();
   if(selection&&!selectionFresh()){clearSelection();say('선택한 필기가 바뀌었어요. 다시 선택해 주세요.',true);}
   const b=selection?.rows.length?Ink.bounds(selection.rows,aspect):null;
   let kind='marquee';
@@ -442,6 +447,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   }
  }
  function coords(event){const r=svg.getBoundingClientRect();return Ink.point((event.clientX-r.left)/r.width,(event.clientY-r.top)/r.height,event.pressure||0.5);}
+ function clearScoreRect(){scoreRect=null;const rect=el?.querySelector('[data-ink-vision-rect]');if(rect)rect.hidden=true;const action=el?.querySelector('[data-ink-explain-selection]');if(action)action.hidden=true;}
  function visionMove(point){
   if(!visionDrag)return;const a=visionDrag.start,rect=el.querySelector('[data-ink-vision-rect]');rect.hidden=false;
   rect.style.left=Math.min(a[0],point[0])*100+'%';rect.style.top=Math.min(a[1],point[1])*100+'%';
@@ -452,7 +458,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(complete)recognize('notation',{x:start[0],y:start[1],w:point[0]-start[0],h:point[1]-start[1]});
  }
  async function renderPage({keepScroll=false}={}){
-  if(!doc||closed)return;const previousScroll={left:stage.scrollLeft,top:stage.scrollTop};resetGestures();selectionEnd(false);if(selection?.page!==pageNo)clearSelection();finishStroke();busy=true;ready=false;const number=++renderNumber;renderTask?.cancel();
+  if(!doc||closed)return;const previousScroll={left:stage.scrollLeft,top:stage.scrollTop};resetGestures();selectionEnd(false);clearScoreRect();if(selection?.page!==pageNo)clearSelection();finishStroke();busy=true;ready=false;const number=++renderNumber;renderTask?.cancel();
   if(!performance)box.hidden=true;svg.dataset.tool='pan';say('악보 '+pageNo+'쪽을 불러오고 있어요.');
   try{
    current();const page=await doc.getPage(pageNo);if(closed||number!==renderNumber)return;current();
@@ -615,7 +621,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
    try{current();if(!result.rows.every(s=>store.list(binding,pageNo).some(r=>r.id===s.id&&Ink.same(r,s))))throw Error('원래 필기가 바뀌었어요. 다시 선택해 주세요.');const note={id:VZ.uid(),page:pageNo,text:text.slice(0,1200),x:Math.max(0,Math.min(.92,result.rect.x)),y:Math.max(0,Math.min(.95,result.rect.y))};saveNotes([...notes,note]);apply({add:[],remove:result.rows});visionPanel(false);clearSelection();}catch(e){say('필기 대체를 완료하지 못했어요: '+e.message,true);}
   };
   el.querySelector('[data-ink-recognize]').onclick=()=>{if(selection?.rows.length)recognize('handwriting',null,selection.rows);};
-  el.querySelector('[data-ink-notation]').onclick=()=>{selectionEnd(false);clearSelection();finishStroke();resetGestures();tool='notation';svg.dataset.tool=tool;stage.dataset.notation='true';el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));say('궁금한 표기를 손가락으로 사각형으로 둘러 주세요.');};
+  el.querySelector('[data-ink-explain-selection]').onclick=()=>{if(scoreRect)recognize('notation',scoreRect);};
+  el.querySelector('[data-ink-notation]').onclick=()=>{selectionEnd(false);clearSelection();clearScoreRect();finishStroke();resetGestures();tool='notation';svg.dataset.tool=tool;stage.dataset.notation='true';el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));say('궁금한 표기를 손가락으로 사각형으로 둘러 주세요.');};
   el.querySelector('[data-ink-width]').oninput=event=>updateSettings({width:Number(event.target.value)/1000});
   el.querySelector('[data-ink-opacity]').oninput=event=>updateSettings({opacity:Math.round((100-Number(event.target.value))*1000)/100000});
   el.querySelector('[data-ink-picker]').oninput=event=>{el.querySelector('[data-ink-hex]').value=event.target.value;el.querySelector('[data-ink-custom-add]').disabled=false;};
@@ -630,7 +637,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-thumb-next]').onclick=()=>{if((thumbBatch+1)*24<doc?.numPages){thumbBatch++;drawThumbnailBatch();}};
   el.querySelector('[data-ink-jump-form]').onsubmit=event=>{event.preventDefault();const n=Number(el.querySelector('[data-ink-jump-input]').value);if(!Number.isInteger(n)||n<1||n>doc?.numPages){say('1부터 '+doc.numPages+'쪽 사이 번호를 입력해 주세요.',true);return;}pageNo=n;closeThumbnails();renderPage();};
   el.querySelectorAll('[data-ink-tool]').forEach(button=>button.onclick=()=>{
-   selectionEnd(false);clearSelection();finishStroke();resetGestures();markerStart=null;markerDrag=null;el.querySelector('[data-ink-marker-palette]').hidden=true;el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool=button.dataset.inkTool;svg.dataset.tool=tool;stage.dataset.notation='false';if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
+   selectionEnd(false);clearSelection();clearScoreRect();finishStroke();resetGestures();markerStart=null;markerDrag=null;el.querySelector('[data-ink-marker-palette]').hidden=true;el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool=button.dataset.inkTool;svg.dataset.tool=tool;stage.dataset.notation='false';if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));paint();
    if(tool==='select')say('필기를 누르거나 사각형으로 둘러 선택하세요.');
   });
@@ -638,7 +645,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const palette=el.querySelector('[data-ink-marker-palette]');palette.hidden=!palette.hidden;
   };
   el.querySelectorAll('[data-ink-marker]').forEach(button=>button.onclick=()=>{
-   finishStroke();selectionEnd(false);clearSelection();markerStart=null;markerDrag=null;resetGestures();
+   finishStroke();selectionEnd(false);clearSelection();clearScoreRect();markerStart=null;markerDrag=null;resetGestures();
    markerType=button.dataset.inkMarker;tool='marker';svg.dataset.tool=tool;stage.dataset.notation='false';
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));
    el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','true');
