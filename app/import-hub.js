@@ -50,9 +50,10 @@ const isNetwork = e => e?.name === 'TypeError' || /network|load failed|fetch|연
 function conditionsFor(source) {
   let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}')[source] || {}; } catch {}
   const s = SOURCES[source];
-  return {start:saved.start ?? s.start, end:saved.end ?? (s.end === 'today' ? VZ.today() : s.end), min:Math.max(30, saved.min ?? 30), max:saved.max ?? 480};
+  const min = saved.min == null || saved.min === 30 && saved.minPolicy !== 25 ? 25 : Math.max(25, saved.min);
+  return {start:saved.start ?? s.start, end:saved.end ?? (s.end === 'today' ? VZ.today() : s.end), min, max:saved.max ?? 480};
 }
-function saveConditions() { try { const all = JSON.parse(localStorage.getItem(KEY) || '{}'); all[hub.source] = {...hub.cond, end:hub.source === 'memo' && hub.cond.end === VZ.today() ? undefined : hub.cond.end}; localStorage.setItem(KEY, JSON.stringify(all)); } catch {} }
+function saveConditions() { try { const all = JSON.parse(localStorage.getItem(KEY) || '{}'); all[hub.source] = {...hub.cond, minPolicy:25, end:hub.source === 'memo' && hub.cond.end === VZ.today() ? undefined : hub.cond.end}; localStorage.setItem(KEY, JSON.stringify(all)); } catch {} }
 const mmss = sec => sec == null ? '—' : VZ.clock(sec);
 const parseMmss = text => { const m = String(text).trim().match(/^(\d+)(?::(\d{1,2}))?$/); return m ? Number(m[1]) * (m[2] != null ? 60 : 1) + Number(m[2] || 0) : null; };
 const dateFromName = name => { const m = String(name).match(/(20\d{2})[-._ ]?(0[1-9]|1[0-2])[-._ ]?(0[1-9]|[12]\d|3[01])/); return m ? m[1] + '-' + m[2] + '-' + m[3] : ''; };
@@ -172,7 +173,7 @@ async function autoLoop() {
       hub.stage = '묶음 ' + hub.batchNo + '/' + hub.batchCount + ' · 파일 확인 중 ' + (i + 1) + '/' + part.length; drawRow({});
       const row = await inspectFile(file, hub.known);
       if (row.error) Object.assign(row, {queued:true, state:'failed', msg:'실패: ' + row.error, file:null});
-      else if (row.status === 'out') Object.assign(row, {queued:true, state:'skipped', msg:row.duration != null && row.duration < 30 ? '30초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음', file:null});
+      else if (row.status === 'out') Object.assign(row, {queued:true, state:'skipped', msg:row.duration != null && row.duration < 25 ? '25초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음', file:null});
       hub.rows.push(row); rows.push(row);
     }
     if (hub.paused) { // files already checked in this batch wait in the queue for "이어서 올리기"
@@ -190,7 +191,7 @@ function evaluate(row) {
   row.reasons = [];
   if (row.error) { row.status = 'error'; return; }
   if (row.duration == null) row.reasons.push('길이 확인 불가');
-  else if (row.duration < Math.max(30, c.min) || row.duration > c.max) row.reasons.push(row.duration < 30 ? '30초 미만 · 가져오지 않음' : '길이 ' + mmss(row.duration));
+  else if (row.duration < Math.max(25, c.min) || row.duration > c.max) row.reasons.push(row.duration < 25 ? '25초 미만 · 가져오지 않음' : '길이 ' + mmss(row.duration));
   if (row.dateOk && row.date && ((c.start && row.date < c.start) || (c.end && row.date > c.end))) row.reasons.push('기간 밖 ' + VZ.dateLabel(row.date));
   row.status = row.reasons.length ? 'out' : row.dup ? 'dup' : !row.dateOk ? 'needs-date' : 'ok';
 }
@@ -213,7 +214,7 @@ async function importRows(rows) {
   for (const row of rows) {
     if (hub.paused) break;
     if (row.state === 'done' || row.state === 'dup' || row.state === 'skipped') continue;
-    if (!(Number(row.duration) >= 30)) { row.state = 'skipped'; row.msg = row.duration != null && row.duration < 30 ? '30초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음'; row.file = null; drawRow(row); continue; }
+    if (!(Number(row.duration) >= 25)) { row.state = 'skipped'; row.msg = row.duration != null && row.duration < 25 ? '25초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음'; row.file = null; drawRow(row); continue; }
     if (direct && !window.vzipCloudSignedIn?.()) { hub.paused = true; hub.notice = '로그인이 풀렸어요. 다시 로그인한 뒤 "이어서 올리기"를 눌러 주세요. 완료된 파일은 그대로예요.'; break; }
     if (!row.file) { row.state = 'failed'; row.msg = '원본 파일을 다시 선택해야 해요.'; continue; }
     row.state = 'uploading'; row.msg = '준비 중…'; hub.current = row; drawRow(row);
@@ -314,7 +315,7 @@ function draw() {
     h.querySelector('[data-reset]').onclick = () => { hub = fresh(); draw(); };
     h.querySelectorAll('[data-c]').forEach(inp => inp.onchange = () => {
       const k = inp.dataset.c;
-      if (k === 'min' || k === 'max') { const v = parseMmss(inp.value); if (v == null || k === 'min' && v < 30) { VZ.toast(k === 'min' && v != null ? '30초 미만 파일은 가져올 수 없어요.' : '길이는 분:초로 입력해 주세요. 예: 0:30, 8:00', 'error'); inp.value = mmss(c[k]); return; } c[k] = v; inp.value = mmss(v); }
+      if (k === 'min' || k === 'max') { const v = parseMmss(inp.value); if (v == null || k === 'min' && v < 25) { VZ.toast(k === 'min' && v != null ? '25초 미만 파일은 가져올 수 없어요.' : '길이는 분:초로 입력해 주세요. 예: 0:25, 8:00', 'error'); inp.value = mmss(c[k]); return; } c[k] = v; inp.value = mmss(v); }
       else c[k] = inp.value;
       saveConditions();
     });
@@ -334,7 +335,7 @@ function draw() {
   const rowHtml = r => {
     const sug = r.suggestions?.[0], sugSong = sug && VZ.song(sug.id);
     const badge = {ok:'', dup:'<span class="badge warn">중복 의심 · ' + esc(r.dup) + '</span>', 'needs-date':'<span class="badge warn">날짜 확인 필요</span>', out:'<span class="badge">' + esc(r.reasons.join(' · ')) + '</span>', error:'<span class="badge danger">' + esc(r.error || '읽기 실패') + '</span>'}[r.status];
-    return '<div class="hub-row" data-row="' + r.id + '"><label class="hub-check"><input type="checkbox" data-sel' + (r.selected ? ' checked' : '') + (r.status === 'error' || r.state === 'done' || !(Number(r.duration) >= 30) ? ' disabled' : '') + ' aria-label="' + esc(r.name) + ' 선택"></label><div class="hub-main">' +
+    return '<div class="hub-row" data-row="' + r.id + '"><label class="hub-check"><input type="checkbox" data-sel' + (r.selected ? ' checked' : '') + (r.status === 'error' || r.state === 'done' || !(Number(r.duration) >= 25) ? ' disabled' : '') + ' aria-label="' + esc(r.name) + ' 선택"></label><div class="hub-main">' +
       '<div class="hub-top"><strong>' + (r.dateOk ? esc(VZ.dateLabel(r.date)) : '날짜 미확인') + '</strong><span class="small muted">' + mmss(r.duration) + (r.video ? ' · 영상→음성' : '') + '</span></div>' +
       '<div class="small muted hub-name" title="' + esc(r.name) + '">' + esc(r.name) + '</div>' + (badge ? '<div>' + badge + '</div>' : '') +
       (r.status === 'needs-date' || r.dateSource === 'filename' ? '<label class="hub-date"><span class="small">녹음 날짜' + (r.dateSource === 'filename' ? ' (파일명)' : r.date ? ' · 파일 수정일 ' + esc(r.date) + '을 넣어 뒀어요' : '') + '</span><input type="date" data-date value="' + esc(r.date || '') + '"></label>' : '') +
@@ -434,7 +435,7 @@ function wireReview(h) {
   const byRow = el => hub.rows.find(r => r.id === el.closest('[data-row]').dataset.row);
   h.querySelector('[data-again]').onclick = () => { hub.phase = 'pick'; hub.rows = []; draw(); };
   h.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { hub.filter = b.dataset.f; draw(); });
-  h.querySelector('[data-all]').onclick = () => { hub.rows.forEach(r => { if (r.status !== 'error' && Number(r.duration) >= 30) r.selected = true; }); draw(); };
+  h.querySelector('[data-all]').onclick = () => { hub.rows.forEach(r => { if (r.status !== 'error' && Number(r.duration) >= 25) r.selected = true; }); draw(); };
   h.querySelector('[data-none]').onclick = () => { hub.rows.forEach(r => { r.selected = false; }); draw(); };
   h.querySelector('[data-nodup]').onclick = () => { hub.rows.forEach(r => { if (r.dup) r.selected = false; }); draw(); };
   h.querySelector('[data-approve-all]').onclick = () => { let n = 0; hub.rows.forEach(r => { const s = r.suggestions?.[0]; if (s && r.song !== s.id) { r.song = s.id; n++; } }); VZ.toast(n ? '추천곡 ' + n + '개를 승인했어요.' : '승인할 추천곡이 없어요.'); draw(); };
@@ -455,7 +456,7 @@ function wireReview(h) {
     Object.assign(r, {date:inp.value, dateOk:true, dateSource:r.dateSource === 'filename' ? 'filename' : 'user'}); evaluate(r); if (r.status === 'ok') r.selected = true; draw();
   });
   h.querySelector('[data-import]').onclick = () => {
-    const rows = hub.rows.filter(r => r.selected && r.state !== 'done' && Number(r.duration) >= 30);
+    const rows = hub.rows.filter(r => r.selected && r.state !== 'done' && Number(r.duration) >= 25);
     const undated = rows.filter(r => !r.dateOk);
     if (undated.length) { VZ.toast('날짜를 확인하지 않은 파일 ' + undated.length + '개가 있어요. 날짜를 정하거나 선택을 해제해 주세요.', 'error'); hub.filter = 'needs-date'; draw(); return; }
     runImport(rows);
@@ -465,9 +466,9 @@ function wireReview(h) {
 VZ.openImportHub = ({files, review = false} = {}) => {
   if (hub.phase === 'importing') { VZ.nav('#/import-hub'); return; }
   hub = fresh();
-  // Files handed over from the library still exclude recordings shorter than 30 seconds.
+  // Files handed over from the library still exclude recordings shorter than 25 seconds.
   if (files?.length) {
-    hub.source = 'drive'; hub.cond = {start:'', end:'', min:30, max:24 * 3600}; VZ.nav('#/import-hub');
+    hub.source = 'drive'; hub.cond = {start:'', end:'', min:25, max:24 * 3600}; VZ.nav('#/import-hub');
     const media = mediaOnly(files), skipped = files.length - media.length;
     if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 건너뛰었어요.');
     setTimeout(() => review ? analyze(media) : runAuto(media), 0); return;
