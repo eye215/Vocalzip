@@ -1,31 +1,31 @@
 /* A circular entry action shared by all four root tabs. */
-body.vz-calendar-mode{--bg:#f8f6fd;--surface:#fff;--surface-2:#f3ecff;--ink:#101828;--ink-2:#475467;--ink-3:#667085;--accent:#7a32f5;--accent-soft:#f3ecff;--line:#e8e4f0;background:#f8f6fd;color:#101828;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+body.vz-calendar-mode{background:var(--vz-color-canvas);color:var(--vz-color-ink);font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 body.vz-calendar-mode .v-app{max-width:560px;margin:auto;padding:max(8px,env(safe-area-inset-top)) 12px calc(142px + max(12px,env(safe-area-inset-bottom)))}
 body.vz-calendar-mode #top{position:static;min-height:44px;margin:0 0 8px;padding:0;border:0;background:transparent;box-shadow:none}
-body.vz-calendar-mode #top h1{font-size:26px;font-weight:700;color:#101828}
+body.vz-calendar-mode #top h1{font-size:26px;font-weight:700;color:var(--vz-color-ink)}
 body.vz-calendar-mode #view{padding:0}
 body.vz-calendar-mode .card{border-radius:20px;background:#fff;box-shadow:none}
-body.vz-calendar-mode .icon-btn{color:#667085}
+body.vz-calendar-mode .icon-btn{color:var(--vz-color-ink-muted)}
 body.vz-calendar-mode .vz-calendar-month{padding:20px 16px}
 body.vz-calendar-mode .cal-head{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;margin-bottom:16px}
-body.vz-calendar-mode .cal-head strong{text-align:center;color:#101828;font-size:17px;font-weight:700}
-body.vz-calendar-mode .cal-head .icon-btn{width:44px;height:44px;padding:0;border:0;border-radius:50%;background:radial-gradient(circle at center,#F2F4F7 0 16px,transparent 16.5px);color:var(--ink-2,#475467)}
+body.vz-calendar-mode .cal-head strong{text-align:center;color:var(--vz-color-ink);font-size:17px;font-weight:700}
+body.vz-calendar-mode .cal-head .icon-btn{width:44px;height:44px;padding:0;border:0;border-radius:50%;background:radial-gradient(circle at center,#F2F4F7 0 16px,transparent 16.5px);color:var(--ink-2,var(--vz-color-ink-secondary))}
 body.vz-calendar-mode .cal-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:8px 2px}
-body.vz-calendar-mode .cal-day{width:100%;max-width:48px;min-width:0;min-height:0;aspect-ratio:1;margin:4px auto;border-radius:50%;color:#344054}
-body.vz-calendar-mode .cal-day[aria-pressed=true]{background:#7a32f5;color:#fff}
+body.vz-calendar-mode .cal-day{width:100%;max-width:48px;min-width:0;min-height:0;aspect-ratio:1;margin:4px auto;border-radius:50%;color:var(--vz-color-primary)}
+body.vz-calendar-mode .cal-day[aria-pressed=true]{background:var(--vz-color-accent);color:#fff}
 body.vz-calendar-mode .dots .l,body.vz-calendar-mode .legend .l{background:var(--vz-category-lesson)}
 body.vz-calendar-mode .dots .p,body.vz-calendar-mode .legend .p{background:var(--vz-category-practice)}
 body.vz-calendar-mode .dots .s,body.vz-calendar-mode .legend .s{background:var(--vz-category-stage)}
 body.vz-calendar-mode .cal-day[aria-pressed=true] .dots i{background:#fff}
 body.vz-calendar-mode .vz-calendar-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;margin-top:12px}
-body.vz-calendar-mode .legend{display:flex;align-items:center;gap:14px;margin:0;color:#667085;font-size:11px}
+body.vz-calendar-mode .legend{display:flex;align-items:center;gap:14px;margin:0;color:var(--vz-color-ink-muted);font-size:11px}
 body.vz-calendar-mode .legend span{gap:5px;white-space:nowrap}
-body.vz-calendar-mode .vz-calendar-footer button{flex:none;min-width:44px;min-height:44px;padding:0 8px;border:0;border-radius:12px;background:#f3ecff;color:#7a32f5;font-size:12px;font-weight:700}
+body.vz-calendar-mode .vz-calendar-footer button{flex:none;min-width:44px;min-height:44px;padding:0 8px;border:0;border-radius:12px;background:var(--vz-color-accent-soft);color:var(--vz-color-accent);font-size:12px;font-weight:700}
 body.vz-calendar-mode .vz-calendar-day-head{display:flex;align-items:center;justify-content:space-between;min-height:58px;margin:0 4px}
-body.vz-calendar-mode .vz-calendar-day-head h2{margin:0;color:#101828;font-size:18px}
-body.vz-calendar-mode .vz-calendar-day-head button{display:grid;place-items:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;color:#667085;font-size:13px}
+body.vz-calendar-mode .vz-calendar-day-head h2{margin:0;color:var(--vz-color-ink);font-size:18px}
+body.vz-calendar-mode .vz-calendar-day-head button{display:grid;place-items:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;color:var(--vz-color-ink-muted);font-size:13px}
 body.vz-calendar-mode .vz-calendar-day-head button i{font-size:22px}
-body.vz-calendar-mode .cal-group{margin:10px 4px 6px;color:#667085;font-size:12px;font-weight:600}
+body.vz-calendar-mode .cal-group{margin:10px 4px 6px;color:var(--vz-color-ink-muted);font-size:12px;font-weight:600}
 body.vz-calendar-mode .cal-list{display:grid;gap:12px}
 body.vz-calendar-mode .cal-own{overflow:hidden;border:0;border-radius:20px;background:#fff}
 body.vz-calendar-mode .cal-own .item{min-height:86px;padding:16px;gap:12px;border:0}
@@ -34,15 +34,15 @@ body.vz-calendar-mode .cal-own[data-kind=lesson]{--category:var(--vz-category-le
 body.vz-calendar-mode .cal-own[data-kind=practice]{--category:var(--vz-category-practice);--category-bg:var(--vz-category-practice-soft)}
 body.vz-calendar-mode .cal-own[data-kind=stage]{--category:var(--vz-category-stage);--category-bg:var(--vz-category-stage-soft)}
 body.vz-calendar-mode .cal-own .avatar[style],body.vz-calendar-mode .cal-own .avatar[data-poster]{background:var(--category-bg)!important;color:var(--category)!important}
-body.vz-calendar-mode .cal-own .item-title{color:#101828;font-size:15px;font-weight:600;line-height:21px}
-body.vz-calendar-mode .cal-own .item-sub{margin-top:3px;color:#667085;font-size:12px;line-height:18px}
-body.vz-calendar-mode .cal-own .chev{color:#98a2b3;font-size:17px}
-body.vz-calendar-mode .cal-own .archive-performance::after{content:'';flex:none;width:8px;height:8px;margin-right:5px;border-top:2px solid #98a2b3;border-right:2px solid #98a2b3;transform:rotate(45deg)}
+body.vz-calendar-mode .cal-own .item-title{color:var(--vz-color-ink);font-size:15px;font-weight:600;line-height:21px}
+body.vz-calendar-mode .cal-own .item-sub{margin-top:3px;color:var(--vz-color-ink-muted);font-size:12px;line-height:18px}
+body.vz-calendar-mode .cal-own .chev{color:var(--vz-color-faint);font-size:17px}
+body.vz-calendar-mode .cal-own .archive-performance::after{content:'';flex:none;width:8px;height:8px;margin-right:5px;border-top:2px solid var(--vz-color-faint);border-right:2px solid var(--vz-color-faint);transform:rotate(45deg)}
 body.vz-calendar-mode .cal-own .minis{margin:0 16px 12px;padding-top:8px;border-top:1px solid #ece8f2}
 body.vz-calendar-mode .cal-own .cal-loose{padding:12px 16px 0}
 
 /* The circle grows over the light shell, then reveals the dark recorder. */
-.vz-record-expansion{position:fixed;left:var(--vz-record-x);top:var(--vz-record-y);width:var(--vz-record-size);height:var(--vz-record-size);z-index:99999;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(1);background:linear-gradient(135deg,#9557ff,#7a32f5 52%,#6d2be5);transition:transform 460ms cubic-bezier(.2,.75,.2,1),opacity 180ms ease}
+.vz-record-expansion{position:fixed;left:var(--vz-record-x);top:var(--vz-record-y);width:var(--vz-record-size);height:var(--vz-record-size);z-index:99999;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(1);background:linear-gradient(135deg,#9557ff,var(--vz-color-accent) 52%,#6d2be5);transition:transform 460ms cubic-bezier(.2,.75,.2,1),opacity 180ms ease}
 .vz-record-expansion::after{content:'';position:absolute;inset:0;border-radius:inherit;background:radial-gradient(circle at center,#30154e 0%,#160d25 40%,#0b0911 78%);opacity:0;transition:opacity 460ms ease-in}
 .vz-record-expansion.is-expanded{transform:translate(-50%,-50%) scale(var(--vz-record-scale))}
 .vz-record-expansion.is-expanded::after{opacity:1}
@@ -50,7 +50,7 @@ body.vz-calendar-mode .cal-own .cal-loose{padding:12px 16px 0}
 @media(prefers-reduced-motion:reduce){.vz-record-expansion{display:none!important}}
 
 /* Recording is a focused studio, with the real capture/review behavior intact. */
-body.vz-record-mode{--bg:#0b0911;--surface:#1b1724;--surface-2:#292038;--ink:#f7f5fc;--ink-2:#b4aec1;--ink-3:#938ba1;--line:#3f364d;--accent:#7a32f5;--accent-soft:#30203f;--vz-page:#0b0911;--vz-surface:#1b1724;--vz-title:#f7f5fc;--vz-primary:#b4aec1;--vz-muted:#aaa3b7;background:radial-gradient(ellipse at 50% 46%,#1b0e2b 0%,#100a19 38%,#0b0911 76%);color:#f7f5fc;color-scheme:dark;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+body.vz-record-mode{background:radial-gradient(ellipse at 50% 46%,#1b0e2b 0%,#100a19 38%,#0b0911 76%);color:#f7f5fc;color-scheme:dark;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 body.vz-record-mode .v-app{max-width:560px;min-height:100dvh;margin:auto;padding:max(8px,env(safe-area-inset-top)) 12px max(24px,env(safe-area-inset-bottom))}
 body.vz-record-mode #top{position:static;min-height:44px;margin:0 0 16px;padding:0;border:0;background:none;box-shadow:none}
 body.vz-record-mode #top h1{font-size:26px;font-weight:700;color:#f7f5fc}
@@ -78,7 +78,7 @@ body.vz-record-mode .vz-record-screen [data-pick-song] .item-sub{color:#aaa3b7;f
 .vz-record-screen .rec-controls{display:grid;grid-template-columns:minmax(56px,1fr) 112px minmax(56px,1fr);align-items:center;width:100%;gap:4px;margin-top:5px}
 .vz-record-screen .rec-primary{display:grid;justify-items:center;white-space:nowrap}
 .vz-record-screen .rec-main,
-.vz-record-screen .rec-main.recording{width:88px;height:88px;border:0;background:linear-gradient(135deg,#a25dff,#7a32f5 55%,#611de0);box-shadow:0 0 38px rgba(122,50,245,.28);color:#fff}
+.vz-record-screen .rec-main.recording{width:88px;height:88px;border:0;background:linear-gradient(135deg,#a25dff,var(--vz-color-accent) 55%,#611de0);box-shadow:0 0 38px rgba(122,50,245,.28);color:#fff}
 .vz-record-screen .rec-main i{font-size:36px}
 .vz-record-screen .rec-side{justify-self:center;min-width:64px;min-height:68px;gap:4px;color:#d8d1e3;font-size:12px}
 .vz-record-screen .rec-side i{width:44px;height:44px;background:transparent;color:#f7f5fc;font-size:25px}
@@ -93,3 +93,4 @@ body.vz-record-mode .vz-record-screen [data-review] textarea{background:#292038;
 body.vz-record-mode .vz-record-screen [data-review] .btn.ghost{color:#e8d9ff;border-color:#554766}
 @media(max-height:720px){.vz-record-screen .rec-stage{min-height:380px;padding-top:22px}.vz-record-screen .rec-heading{margin-bottom:18px}.vz-record-screen .rec-wave-wrap{height:78px;margin:18px 0 9px}.vz-record-screen .rec-status{margin-top:28px}}
 @media(max-width:350px){.vz-record-screen .rec-controls{gap:3px}.vz-record-screen .rec-main,.vz-record-screen .rec-main.recording{width:80px;height:80px}}
+

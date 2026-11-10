@@ -168,6 +168,7 @@ test('uploaded HTML blob and all original stylesheet blocks are reused literally
  });
  expect(result).toEqual({styles:true,count:10,fab:true,nav:true,scripts:0});
  await expect(page.locator('.vz-nav-item')).toHaveCount(4);
+ await page.evaluate(()=>document.fonts.ready);
  const fonts=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/[\"']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
  expect(fonts.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
 });
@@ -202,7 +203,7 @@ test('empty state removes all sample data and connects song and goal setup',asyn
  await expect(page.locator('.vz-song')).not.toContainText('Defying Gravity');
  await page.getByRole('button',{name:'곡 추가 또는 선택',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
  await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:'주간 목표 설정',exact:true}).click();
- const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
 });
@@ -311,7 +312,7 @@ test('goal planning separates long selectable rows and keeps save visible on sma
   await noOverflow(page);expect(await sheet.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
   await sheet.locator('.sheet-body').evaluate(el=>el.scrollTop=0);
   await page.screenshot({path:testInfo.outputPath('student-home-plan-'+width+'.png'),animations:'disabled'});
-  await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+  await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();
  }
 });
 test('goal selection remains keyboard accessible and leaves source homework unchanged',async({page})=>{
@@ -490,7 +491,7 @@ test('Goal integrity rejects stale editor while retaining draft and latest check
  await expect(sheet.getByLabel('개인 목표',{exact:true})).toHaveValue('보존할 작성 중 목표');
  await expect(sheet.getByRole('button',{name:'목표 저장',exact:true})).toBeEnabled();
  expect(await db(page)).toEqual(before);
- await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();
  await page.reload();await ready(page);
  expect((await db(page)).dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
  expect((await db(page)).dailyGoals.some(g=>g.id==='concurrent')).toBe(true);
@@ -511,7 +512,7 @@ test('Homework integrity counts unique sessions in tally and detail without chan
  const sheet=page.getByRole('dialog',{name:'숙제',exact:true});
  await expect(sheet.locator('[data-practice]')).toHaveCount(2);
  await expect(sheet).toContainText('연습 2번 · 5회');
- await sheet.getByRole('button',{name:'닫기',exact:true}).click();
+ await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();
  expect(await db(page)).toEqual(before);
  expect((await db(page)).assignments[0].status).toBe('active');
 });
@@ -553,3 +554,4 @@ test('Cloud lesson deletion refuses a server lesson that changed before prepare'
  expect(await db(page)).toEqual(before);
  expect(await page.evaluate(()=>window.__lessonDeleteCalls||[])).toEqual([]);
 });
+
