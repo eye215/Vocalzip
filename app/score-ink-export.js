@@ -28,7 +28,7 @@ async function make({document:source,binding,annotations,check=()=>{},onProgress
   canvas.width=Math.max(1,Math.ceil(crop.width*scale));canvas.height=Math.max(1,Math.ceil(crop.height*scale));const ctx=canvas.getContext('2d');
   try{
    for(const s of annotations.filter(s=>s.page===number)){
-    check();ctx.strokeStyle=s.color;ctx.globalAlpha=Ink.opacity(s);ctx.lineWidth=s.width*viewport.width*scale;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
+    check();ctx.strokeStyle=s.color;ctx.globalAlpha=Ink.opacity(s);const origin=viewport.convertToPdfPoint(0,0),edge=viewport.convertToPdfPoint(s.width*viewport.width,0);ctx.lineWidth=Math.hypot(edge[0]-origin[0],edge[1]-origin[1])*scale;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
     let first;
     s.points.forEach((p,i)=>{
      const [x,y]=viewport.convertToPdfPoint(p[0]*viewport.width,p[1]*viewport.height),px=(x-crop.x)*scale,py=(crop.y+crop.height-y)*scale;

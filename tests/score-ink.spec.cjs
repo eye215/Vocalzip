@@ -266,12 +266,12 @@ for(const rotated of [false,true]){
    try{
     const page=await document.getPage(1),view=page.getViewport({scale:1}),canvas=window.document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
     await page.render({canvasContext:canvas.getContext('2d'),viewport:view}).promise;
-    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let red=0;
-    for(let i=0;i<pixels.length;i+=4)if(pixels[i]>100&&pixels[i+1]<80&&pixels[i+2]<80)red++;
-    const out={red,pages:document.numPages,rotation:page.rotate};canvas.width=0;canvas.height=0;return out;
+    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let red=0,positioned=0;
+    for(let i=0;i<pixels.length;i+=4)if(pixels[i]>100&&pixels[i+1]<80&&pixels[i+2]<80){red++;const x=(i/4%canvas.width)/canvas.width,y=Math.floor(i/4/canvas.width)/canvas.height;if(x>.12&&x<.68&&y>.18&&y<.30)positioned++;}
+    const out={red,positioned,pages:document.numPages,rotation:page.rotate};canvas.width=0;canvas.height=0;return out;
    }finally{await document.destroy();}
   });
-  expect(rendered.red).toBeGreaterThan(50);expect(rendered.pages).toBe(2);expect(rendered.rotation).toBe(rotated?90:0);
+  expect(rendered.red).toBeGreaterThan(50);expect(rendered.positioned/rendered.red).toBeGreaterThan(.95);expect(rendered.pages).toBe(2);expect(rendered.rotation).toBe(rotated?90:0);
   const downloadEvent=page.waitForEvent('download');await save.click();const download=await downloadEvent;
   expect(download.suggestedFilename()).toBe('연습 악보_필기.pdf');
   const output=await lib.PDFDocument.load(fs.readFileSync(await download.path()));expect(output.getPageCount()).toBe(2);
