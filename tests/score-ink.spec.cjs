@@ -54,6 +54,7 @@ test('real PDF renders, ink persists after reload and original PDF/lesson/practi
   const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let dark=0;for(let i=0;i<data.length;i+=4)if(data[i]<100&&data[i+1]<100&&data[i+2]<100)dark++;return dark;
  })).toBeGreaterThan(500);
  await draw(page,dialog);await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
+ if(process.env.VZ_INK_PREVIEW==='1'&&test.info().project.name==='chromium-mobile')console.log('VZIP_INK_PREVIEW:'+Buffer.from(await page.screenshot()).toString('base64'));
  const saved=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
  expect(saved[0]).toMatchObject({ownerId:'ui-test-user',scoreId:'score-ink',page:1,tool:'pen',pdfHash:crypto.createHash('sha256').update(bytes).digest('hex')});
  expect(saved[0].points.length).toBeGreaterThan(2);
@@ -113,4 +114,15 @@ test('root save failure preserves the stroke journal and retries; account change
  await page.evaluate(()=>{window.vzipCloudUserId=()=> 'other-user';window.dispatchEvent(new Event('vzip:auth-changed'));});
  await expect(dialog).toHaveCount(0);
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(1);
+});
+
+test('explicit PDF deletion removes its annotation vectors and keeps lesson/practice records',async({page})=>{
+ const r2=await setup(page),dialog=await open(page);await draw(page,dialog);await dialog.getByRole('button',{name:'완료',exact:true}).click();
+ await page.getByRole('button',{name:'삭제',exact:true}).click();const confirm=page.getByRole('dialog',{name:'악보 삭제',exact:true});
+ await expect(confirm).toContainText('개인 필기');await confirm.getByRole('button',{name:'삭제',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.VZ.song('s1').scores.length)).toBe(0);
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual([]);
+ expect(await page.evaluate(()=>window.VZ.db.lessons[0].note)).toBe('기존 레슨 메모');
+ expect(await page.evaluate(()=>window.VZ.db.practices[0].minutes)).toBe(17);expect(r2.store.has(key)).toBe(false);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vzip_score_ink_v1:ui-test-user')).records)).toEqual([]);
 });

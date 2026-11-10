@@ -29,11 +29,12 @@ VZ.deleteScoreWithInk=(songId,score)=>{
 VZ.openScoreInk=(songId,scoreId)=>{
  const score=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted),owner=window.vzipCloudUserId?.();
  if(!score||!owner||!window.vzipCloudSignedIn?.()||!score.r2Key?.startsWith('u/'+owner+'/'+scoreId+'/')){VZ.toast('이 계정의 PDF 악보를 먼저 열어 주세요.','error');return;}
+ if(!Number.isSafeInteger(score.size)||score.size<=0||score.size>MAX){VZ.toast('50MB 이하 PDF 원본 크기를 확인해 주세요.','error');return;}
  const initialSession=window.vzipCloudSessionId?.()||'legacy',scope=window.VzipAccountScope;
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const current=()=>{const i=identity(),s=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted);if(i?.owner!==owner||i.session!==initialSession||!s||s.r2Key!==score.r2Key)throw Error('계정이나 악보가 바뀌어 필기를 중단했어요.');};
  let store;
- try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});store.restore();}
+ try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
  let tool='pan',active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
@@ -106,7 +107,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function closeEditor(){
   finishStroke();if(pending){say('필기를 먼저 다시 저장해 주세요. 저장되지 않은 획은 이 화면에 남아 있어요.',true);return;}
-  sheet.close();VZ.toast('필기를 이 기기에 저장했어요.');
+  sheet.close();VZ.toast('필기 화면을 닫았어요.');
  }
  function changed(){
   if(closed)return;
