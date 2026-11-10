@@ -1,0 +1,47 @@
+name: Media deletion app contract checks
+on:
+  pull_request:
+    paths:
+      - 'cloud-sync.js'
+      - 'r2-storage.js'
+      - 'sync/snapshot-transport.js'
+      - 'app/media.js'
+      - 'tests/media-object-delete-client.test.cjs'
+      - 'tests/media-deletion.test.cjs'
+      - 'tests/snapshot-bridge.spec.cjs'
+      - '.github/workflows/media-delete-contract.yml'
+permissions:
+  contents: read
+concurrency:
+  group: media-delete-contract-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run test:syntax
+      - run: node --test tests/media-object-delete-client.test.cjs tests/media-deletion.test.cjs tests/media-delete-resume.test.cjs tests/media-delete.test.cjs tests/snapshot-transport.test.cjs tests/cloud-sync.test.cjs tests/media-metadata-client.test.cjs tests/media-metadata-edits.test.cjs tests/media-publication-client.test.cjs
+  browser:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright test tests/snapshot-bridge.spec.cjs tests/media-metadata-bridge.spec.cjs tests/r2.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: media-delete-contract-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7

@@ -7,7 +7,7 @@ async function boot(page,{media=false,revision=true}={}){
  const stub=`window.__legacySnapshotWrites=[];window.supabase={createClient:()=>({
  auth:{getUser:async()=>({data:{user:{id:'${U}',email:'synthetic@example.invalid'}}}),getSession:async()=>({data:{session:{access_token:'${jwt}'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},
  rpc:async name=>({data:name==='vzip_register_session'||name==='vzip_list_sessions'?{status:'active',current_session:'${S}',sessions:[{session_id:'${S}',label:'synthetic'}],revision:1,limit:2}:true,error:null}),
- from:table=>{let write=null,single=false;const filters={},q={};for(const m of ['select','order','range','in'])q[m]=()=>q;for(const m of ['eq','is'])q[m]=(k,v)=>{filters[k]=v;return q;};q.maybeSingle=()=>{single=true;return q;};for(const m of ['upsert','insert','update','delete'])q[m]=body=>{write={table,method:m,body};return q;};q.then=resolve=>{if(table==='vocal_media'){const rows=window.__fixtureMedia||(window.__fixtureMedia=JSON.parse(sessionStorage.getItem('snapshot-test-media')||'{}'));if(write?.method==='delete'){const row=rows[filters.id];if(row?.updated_at===filters.updated_at){delete rows[filters.id];sessionStorage.setItem('snapshot-test-media',JSON.stringify(rows));return resolve({data:[{id:filters.id}],error:null});}return resolve({data:[],error:null});}return resolve({data:single?(rows[filters.id]||null):Object.entries(rows).map(([id,r])=>({id,...r})),error:null});}if(write){if(table==='vocal_data')window.__legacySnapshotWrites.push(write);return resolve({data:[{user_id:'${U}'}],error:null});}return resolve({data:table==='vocal_data'?{payload:window.VZ?.db||window.__seed,updated_at:'2026-11-10T00:00:00Z'}:[],error:null});};return q;},storage:{from:()=>({})}
+ from:table=>{let write=null,single=false;const filters={},q={};for(const m of ['select','order','range','in'])q[m]=()=>q;for(const m of ['eq','is'])q[m]=(k,v)=>{filters[k]=v;return q;};q.maybeSingle=()=>{single=true;return q;};for(const m of ['upsert','insert','update','delete'])q[m]=body=>{write={table,method:m,body};return q;};q.then=resolve=>{if(table==='vocal_media'){const rows=window.__fixtureMedia||(window.__fixtureMedia=JSON.parse(sessionStorage.getItem('snapshot-test-media')||'{}'));if(write?.method==='delete'){const row=rows[filters.id];if(row?.updated_at===filters.updated_at){delete rows[filters.id];sessionStorage.setItem('snapshot-test-media',JSON.stringify(rows));return resolve({data:[{id:filters.id}],error:null});}return resolve({data:[],error:null});}return resolve({data:single?(rows[filters.id]||null):Object.entries(rows).map(([id,r])=>({id,...r})),error:null});}if(write){if(table==='vocal_song_texts'&&window.__fixtureTextFailure)return resolve({data:null,error:{message:'text cleanup failed'}});if(table==='vocal_data')window.__legacySnapshotWrites.push(write);return resolve({data:[{user_id:'${U}'}],error:null});}return resolve({data:table==='vocal_data'?{payload:window.VZ?.db||window.__seed,updated_at:'2026-11-10T00:00:00Z'}:[],error:null});};return q;},storage:{from:()=>({})}
  })};`;
  page.__errors=[];page.on('pageerror',e=>page.__errors.push(e.message));
  await page.route('**/supabase.min.js',r=>r.fulfill({contentType:'application/javascript',body:stub}));
@@ -76,33 +76,55 @@ test('Snapshot bridge deletion scrubs a pending lesson before local completion w
  expect(await page.evaluate(()=>VZ.db.lessons.some(l=>l.id==='private'))).toBe(false);
 });
 
-async function deletionFixture(page){
- const deleted=[];let remote;
+async function deletionFixture(page,options={}){
+ const deleted=[],versioned=options.versioned===true,control={mode:versioned?'revision':'legacy',requests:[],receipts:new Map(),losePrepare:false,loseCommit:false,rejectPrepare:false};let remote;
  await page.route('https://delete-fixture.invalid/**',async route=>{
   const req=route.request(),url=new URL(req.url()),headers={'access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,DELETE,OPTIONS','access-control-allow-headers':'authorization,x-client-info,content-type'};
+  const reply=(json,status=200)=>route.fulfill({status,headers,json});
   if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
-  if(req.method()==='DELETE'){
+  if(url.pathname==='/v1/me')return reply({user:U,mediaMode:control.mode});
+  if(url.pathname.startsWith('/v2/media/delete/')){
+   const body=req.postDataJSON();control.requests.push({path:url.pathname,body});
    expect(remote.row.payload.deleted.media).toContain('chosen');
-   await remote.beforeDelete?.();
-   deleted.push(decodeURIComponent(url.pathname.slice('/v1/media/'.length)));
-   return route.fulfill({headers,json:{ok:true}});
+   if(url.pathname.endsWith('/prepare')){
+    if(control.rejectPrepare)return reply({error:'version conflict'},409);
+    let receipt=control.receipts.get(body.requestId);
+    if(!receipt){
+     const row=await page.evaluate(()=>window.__fixtureMedia.chosen);
+     if(!row||row.updated_at!==body.updatedAt||row.metadata.r2Key!==body.key)return reply({error:'changed'},409);
+     receipt={state:'reserved',ticket:{descriptor:{version:1,user_id:U,session_id:S,request_id:body.requestId,media_id:'chosen',object_key:body.key,object_version:G,expected_updated_at:body.updatedAt,size:3,content_type:'audio/wav',content_root:'a'.repeat(64),etag:'"original"'},signature:'b'.repeat(64)}};
+     control.receipts.set(body.requestId,receipt);
+    }
+    if(control.losePrepare){control.losePrepare=false;return route.abort('failed');}
+    return reply(receipt);
+   }
+   const d=body.ticket.descriptor,receipt=control.receipts.get(d.request_id);expect(receipt).toBeTruthy();
+   if(receipt.state!=='deleted'){
+    await remote.beforeDelete?.();receipt.state='deleted';deleted.push(d.object_key);
+    await page.evaluate(()=>{delete window.__fixtureMedia.chosen;sessionStorage.setItem('snapshot-test-media',JSON.stringify(window.__fixtureMedia));});
+   }
+   if(control.loseCommit){control.loseCommit=false;return route.abort('failed');}
+   return reply({ok:true,state:'deleted',key:d.object_key,requestId:d.request_id});
   }
-  return route.fulfill({headers,json:{}});
+  if(req.method()==='DELETE'){
+   expect(versioned).toBe(false);expect(remote.row.payload.deleted.media).toContain('chosen');
+   await remote.beforeDelete?.();deleted.push(decodeURIComponent(url.pathname.slice('/v1/media/'.length)));return reply({ok:true});
+  }
+  return reply({});
  });
  remote=await boot(page,{media:true});
- await page.evaluate(async owner=>{
-  VZ.media.holdBackup(true);
-  window.__fixtureMedia={};
+ await page.evaluate(async({owner,versioned,attempt})=>{
+  VZ.media.holdBackup(true);window.__fixtureMedia={};
   for(const id of ['chosen','other']){
-   window.__fixtureMedia[id]={metadata:{id,name:id,storageProvider:'r2',r2Key:'u/'+owner+'/'+id+'/original.wav',type:'audio/wav',review:'keep '+id},updated_at:'2026-11-10T00:00:00Z'};
+   window.__fixtureMedia[id]={metadata:{id,name:id,storageProvider:'r2',r2Key:'u/'+owner+'/'+id+'/'+(versioned?attempt+'/':'')+'original.wav',type:'audio/wav',review:'keep '+id,...(versioned?{size:3,r2Etag:'"original"'}:{})},updated_at:versioned?'2026-11-10T00:00:00.123456Z':'2026-11-10T00:00:00Z'};
    await window.vzipStorePracticeMedia({id,name:id,created:Date.now(),type:'audio/wav',source:'practice',blob:new Blob([new Uint8Array(id==='chosen'?[1,2,3]:[9,8,7])],{type:'audio/wav'})});
   }
   sessionStorage.setItem('snapshot-test-media',JSON.stringify(window.__fixtureMedia));
   VZ.change(d=>{d.lessons.push({id:'lesson-files',date:'2026-11-10',memo:'keep lesson notes',recordings:[{id:'chosen'},{id:'other'}]});d.practices.push({id:'practice-files',date:'2026-11-10',manualMinutes:12,minutes:12,mediaIds:['chosen','other']});},{silent:true});
- },U);
+ },{owner:U,versioned,attempt:G});
  await sync(page);await expect.poll(()=>page.evaluate(()=>!VzipAccountScope.storage.getItem('vzip_account_dirty'))).toBe(true);
  expect(remote.row.payload.lessons.some(l=>l.id==='lesson-files')).toBe(true);
- return {remote,deleted};
+ return {remote,deleted,control};
 }
 test('Revision media deletion confirms server links before R2 cleanup and local-byte acknowledgement',async({page})=>{
  const {remote,deleted}=await deletionFixture(page);
@@ -276,4 +298,58 @@ test('A same-size local overwrite during cleanup survives the attempt and automa
  await page.evaluate(()=>VZ.media.resumeDeletes());
  const kept=await page.evaluate(async()=>{const item=(await vzipReadMedia()).find(x=>x.id==='chosen');return [...new Uint8Array(await vzipMediaBlob(item).arrayBuffer())];});
  expect(kept).toEqual([5,6,7]);expect(await page.evaluate(()=>vzipPendingMediaDeletes().length)).toBe(1);
+});
+
+async function removeChosen(page){return page.evaluate(async()=>{try{await VZ.media.remove({id:'chosen',cloud:true});return null;}catch(e){return {message:e.message,code:e.code};}});}
+const localIds=page=>page.evaluate(async()=>(await vzipReadMedia()).map(x=>x.id));
+test('Immutable deletion confirms root and uses signed prepare/commit without direct metadata deletion',async({page})=>{
+ const {remote,deleted,control}=await deletionFixture(page,{versioned:true});
+ expect(await removeChosen(page)).toBeNull();
+ expect(deleted).toEqual(['u/'+U+'/chosen/'+G+'/original.wav']);
+ expect(control.requests.map(r=>r.path)).toEqual(['/v2/media/delete/prepare','/v2/media/delete/commit']);
+ expect(control.requests[0].body.updatedAt).toBe('2026-11-10T00:00:00.123456Z');
+ expect(await localIds(page)).toEqual(['other']);expect(await page.evaluate(()=>vzipPendingMediaDeletes())).toEqual([]);
+ expect(remote.row.payload.lessons.find(l=>l.id==='lesson-files')).toMatchObject({memo:'keep lesson notes',recordings:[{id:'other'}]});
+ expect(remote.row.payload.practices.find(p=>p.id==='practice-files')).toMatchObject({manualMinutes:12,mediaIds:['other']});
+ expect(await page.evaluate(()=>window.__legacySnapshotWrites)).toEqual([]);
+});
+for(const lost of ['losePrepare','loseCommit'])test('Immutable deletion retains the same request after '+lost+' and reload',async({page})=>{
+ const {deleted,control}=await deletionFixture(page,{versioned:true});control[lost]=true;
+ expect(await removeChosen(page)).toBeTruthy();expect(await localIds(page)).toContain('chosen');
+ const before=await page.evaluate(()=>vzipPendingMediaDeletes()[0]);expect(before.object.requestId).toBeTruthy();
+ expect(JSON.stringify(before)).not.toContain('keep chosen');expect(JSON.stringify(before)).not.toContain('signature');
+ await page.reload();await expect.poll(()=>page.evaluate(()=>vzipPendingMediaDeletes().length),{timeout:20000}).toBe(0);
+ expect(await localIds(page)).toEqual(['other']);expect(deleted).toHaveLength(1);
+ expect(new Set(control.requests.filter(r=>r.path.endsWith('/prepare')).map(r=>r.body.requestId))).toEqual(new Set([before.object.requestId]));
+});
+test('Immutable deletion conflict preserves local bytes and the exact pending target without raw fallback',async({page})=>{
+ const {deleted,control}=await deletionFixture(page,{versioned:true});control.rejectPrepare=true;
+ expect(await removeChosen(page)).toBeTruthy();const job=await page.evaluate(()=>vzipPendingMediaDeletes()[0]);
+ expect(job.phase).toBe('root-confirmed');expect(deleted).toEqual([]);expect(await localIds(page)).toContain('chosen');
+ expect(await removeChosen(page)).toBeTruthy();expect(control.requests.every(r=>r.body.requestId===job.object.requestId)).toBe(true);
+ await page.evaluate(()=>window.VZIP_SNAPSHOT_REVISION_ENABLED=false);expect(await removeChosen(page)).toBeTruthy();expect(deleted).toEqual([]);
+});
+test('Immutable deletion paused or unknown mode stops before root or original mutations',async({page})=>{
+ const {remote,deleted,control}=await deletionFixture(page,{versioned:true}),commits=remote.commits;
+ for(const mode of ['paused','unknown']){control.mode=mode;expect(await removeChosen(page)).toBeTruthy();}
+ expect(remote.commits).toBe(commits);expect(deleted).toEqual([]);expect(control.requests).toEqual([]);expect(await localIds(page)).toContain('chosen');
+});
+test('Immutable deletion cannot remove a changed metadata version after root acknowledgement',async({page})=>{
+ const {remote,deleted,control}=await deletionFixture(page,{versioned:true});
+ remote.onSaved=()=>page.evaluate(()=>{window.__fixtureMedia.chosen.updated_at='2026-11-10T00:00:00.123457Z';window.__fixtureMedia.chosen.metadata.review='other-device note';});
+ expect((await removeChosen(page)).code).toBe('mediaChanged');expect(control.requests).toEqual([]);expect(deleted).toEqual([]);expect(await localIds(page)).toContain('chosen');
+});
+test('Immutable deletion can finish text cleanup after the original and metadata are already absent',async({page})=>{
+ const {deleted,control}=await deletionFixture(page,{versioned:true});await page.evaluate(()=>window.__fixtureTextFailure=true);
+ expect(await removeChosen(page)).toBeTruthy();expect(deleted).toHaveLength(1);expect(await localIds(page)).toContain('chosen');
+ const id=await page.evaluate(()=>vzipPendingMediaDeletes()[0].object.requestId);
+ await page.evaluate(()=>window.__fixtureTextFailure=false);expect(await removeChosen(page)).toBeNull();expect(deleted).toHaveLength(1);
+ expect(await localIds(page)).toEqual(['other']);expect(control.requests.filter(r=>r.path.endsWith('/prepare')).every(r=>r.body.requestId===id)).toBe(true);
+});
+test('Immutable deletion preserves a same-ID local replacement made during first-time cloud cleanup',async({page})=>{
+ const {remote,deleted}=await deletionFixture(page,{versioned:true});
+ remote.beforeDelete=()=>page.evaluate(async()=>{const original=(await vzipReadMedia()).find(x=>x.id==='chosen');await vzipStorePracticeMedia({...original,blob:new Blob([new Uint8Array([5,6,7])],{type:'audio/wav'})});});
+ expect((await removeChosen(page)).code).toBe('localChanged');expect(deleted).toHaveLength(1);
+ expect(await page.evaluate(async()=>{const m=(await vzipReadMedia()).find(x=>x.id==='chosen');return [...new Uint8Array(await vzipMediaBlob(m).arrayBuffer())];})).toEqual([5,6,7]);
+ expect(await page.evaluate(()=>vzipPendingMediaDeletes().length)).toBe(1);
 });
