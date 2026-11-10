@@ -230,3 +230,5 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-fullscreen .score-ink-full-actions .score-ink-actions>button{min-width:0;width:100%;min-height:66px;display:flex;flex-direction:column;gap:3px;padding:7px;background:#f8f6fd;color:#344054;font-size:12px;line-height:1.2;text-align:center;white-space:normal}
 .score-ink-fullscreen .score-ink-full-actions .score-ink-actions>button .score-ink-menu-label{display:block}
 .score-ink-performance .score-ink-quick,.score-ink-performance .score-ink-full-actions,.score-ink-performance .score-ink-vision-tools,.score-ink-performance .score-ink-explain-action{display:none!important}
+
+.score-ink-tools [data-ink-marker-mode][aria-pressed=true]{background:#ede1ff;color:#7a32f5}
