@@ -28,12 +28,13 @@ const jobLine=(job,review)=>{
 let stop=null;
 VZ.route('processing-log',{title:'처리 내역',back:true,tab:'library',noAutoRefresh:true,
  render(){return '<div data-processing-log><p class="muted">처리 상태를 불러오는 중…</p></div>';},
- mount(main){stop?.();let live=true,busy=false;const host=main.querySelector('[data-processing-log]');
+ mount(main){stop?.();let live=true,busy=false,retrying=false,feedback='';const host=main.querySelector('[data-processing-log]');
   async function refresh(){if(!live||busy||!host.isConnected)return;busy=true;
    try{
     const [media,jobs,usage,stt]=await Promise.all([M.list(true).catch(()=>M.cached()),window.vzipAnalysisJobs?window.vzipAnalysisJobs().catch(()=>null):Promise.resolve(null),window.VzipR2?.configured?.()&&window.vzipCloudSignedIn?.()?window.VzipR2.usage().catch(()=>null):Promise.resolve(null),window.vzipSttUsage?window.vzipSttUsage().catch(()=>null):Promise.resolve(null)]);
     if(!live||!host.isConnected)return;
     const journal=read(),byId=new Map((media||[]).map(m=>[m.id,m]));
+    const missingOriginal=journal.some(r=>r.state==='failed'&&!byId.has(r.id));
     const rows=new Map(journal.map(r=>[r.id,r]));
     for(const m of media||[])if(!rows.has(m.id))rows.set(m.id,{id:m.id,updatedAt:m.importedAt||m.created||0});
     const jobMap=new Map((jobs?.rows||[]).map(j=>[j.media_id+':'+j.kind,j]));
@@ -54,11 +55,23 @@ VZ.route('processing-log',{title:'처리 내역',back:true,tab:'library',noAutoR
       '<div class="small">가사 매칭 · '+esc(lyrics)+'</div>'+(candidates?'<div class="small muted">비교 후보 · '+esc(candidates)+'</div>':'')+'<div class="small">보컬 분석 · '+esc(v?jobLine(v):m?.analysis?.v?'기기 분석 완료':device?.running&&m&&device.current===M.label(m)?'이 기기에서 분석 중':'작업 기록 없음')+'</div>'+
       '<div class="small muted">'+esc(conversion)+' · '+esc(location)+(m?.size||r.size?' · '+size(m?.savedSize||r.savedSize||m?.size||r.size):'')+'</div>'+
       (r.error?'<p class="small" style="color:var(--danger);margin:0">오류 · '+esc(r.error)+'</p>':'')+(j?.status==='failed'?'<p class="small" style="color:var(--danger);margin:0">곡 분석 오류 · '+esc(j.last_error||'원인을 확인할 수 없어요.')+'</p>':'')+'</article>'};
-    host.innerHTML='<div class="card stack" style="margin-bottom:12px"><strong>현재 분석 상태</strong><p class="small" style="margin:0">서버 작업 · 대기 '+counts.queued+' · 진행 '+counts.running+' · 곡 확인 '+counts.review+' · 완료 '+counts.done+' · 실패 '+counts.failed+'</p><p class="small muted" style="margin:0">기기 분석 · '+esc(device?.running?'진행 중: '+device.current:device?.enabled?'대기 중 또는 완료':'꺼짐')+'</p></div>'+
+    host.dataset.failedJobs=String(counts.failed);
+    host.innerHTML='<div class="card stack" style="margin-bottom:12px"><div class="row between"><strong>현재 분석 상태</strong><button type="button" class="btn sm secondary" data-retry-all'+(retrying?' disabled':'')+'><i class="ph ph-arrow-clockwise"></i> '+(retrying?'다시 확인 중…':'새로고침')+'</button></div><p class="small" style="margin:0">서버 작업 · 대기 '+counts.queued+' · 진행 '+counts.running+' · 곡 확인 '+counts.review+' · 완료 '+counts.done+' · 실패 '+counts.failed+'</p><p class="small muted" style="margin:0">기기 분석 · '+esc(device?.running?'진행 중: '+device.current:device?.enabled?'대기 중 또는 완료':'꺼짐')+'</p>'+(feedback?'<p class="small muted" role="status" style="margin:0">'+esc(feedback)+'</p>':'')+(missingOriginal?'<label class="btn sm ghost" style="cursor:pointer">원본 파일 다시 선택<input type="file" multiple accept="audio/*,video/*" class="sr-only" data-repick></label><p class="small muted" style="margin:0">브라우저를 다시 연 뒤에는 업로드 실패 파일의 원본을 다시 골라야 해요. 날짜·곡 확인 후 올릴 수 있어요.</p>':'')+'</div>'+
      '<div class="card stack" style="margin-bottom:20px"><strong>사용량 기준 대략적인 비용</strong><p class="small" style="margin:0">R2 저장 '+(r2Bytes==null?'서버 조회 불가 (보관함 기준 '+size(stored)+')':size(r2Bytes))+' · '+(estimate.storageUsd==null?'월 보관료 계산 불가':'현재 용량 유지 시 약 $'+estimate.storageUsd.toFixed(2)+'/월')+'</p><p class="small" style="margin:0">유료 가사 인식 '+(stt?'누적 '+stt.total+'회 · 약 $'+estimate.sttUsd.toFixed(4):'호출 횟수 조회 불가')+'</p><p class="small" style="margin:0">서버 분석 작업에 기록된 비용 · '+(jobs?'$'+estimate.jobUsd.toFixed(4):'조회 불가')+'</p><p class="small muted" style="margin:0">R2 Standard 무료 10 GB·초과 $0.015/GB·월, 가사 인식은 회당 30초×$0.003/분으로 계산했어요. 가사 인식 호출에는 실패한 시도도 포함될 수 있어요. R2 요청량·다른 버킷·Supabase·Workers 요금과 실제 청구액은 별도예요.</p></div>'+
      '<h2 class="sec">파일별 처리 내역</h2>'+(rows.size?[...rows.values()].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,100).map(article).join(''):'<p class="muted">처리된 파일이 없어요.</p>');
    }finally{busy=false}}
   const on=()=>refresh().catch(()=>{});['vzip:processing-log','vzip:server-analysis-updated','vzip:cloud-media-changed','vzip:media-saved'].forEach(n=>window.addEventListener(n,on));
+  host.onclick=async e=>{if(!e.target.closest('[data-retry-all]')||retrying)return;retrying=true;feedback='실패한 작업을 확인하는 중…';await refresh();
+   const notes=[];
+   try{const r=await VZ.retryImportFailures?.();if(r?.retried)notes.push('업로드 '+r.retried+'개 다시 시도');if(r?.missing)notes.push('원본 파일 재선택 필요 '+r.missing+'개');}
+   catch(err){notes.push('업로드 재시도 실패: '+(err.message||err));}
+   try{if(window.vzipCloudSignedIn?.()){const b=await M.backupLocal();if(b?.done)notes.push('클라우드 백업 '+b.done+'개 완료');if(b?.failed)notes.push('백업 '+b.failed+'개 재시도 대기');}}
+   catch(err){notes.push('백업 확인 실패: '+(err.message||err));}
+   if(Number(host.dataset.failedJobs)>0){try{const n=await window.vzipAnalysisRetry?.();notes.push(n?'서버 분석 '+n+'개 다시 대기열에 등록':'서버에서 다시 시도할 실패 작업 없음');}
+   catch(err){notes.push('서버 분석 재시도 실패: '+(err.message||err));}}
+   retrying=false;feedback=notes.join(' · ')||'최신 상태를 확인했어요.';await refresh().catch(()=>{});
+  };
+  host.onchange=e=>{if(!e.target.matches('[data-repick]'))return;const files=[...e.target.files];e.target.value='';if(files.length)VZ.openImportHub({files,review:true});};
   const poll=setInterval(()=>{if(document.visibilityState==='visible')on()},60000);on();
   stop=()=>{live=false;clearInterval(poll);['vzip:processing-log','vzip:server-analysis-updated','vzip:cloud-media-changed','vzip:media-saved'].forEach(n=>window.removeEventListener(n,on))};
  },leave(){stop?.();stop=null}});

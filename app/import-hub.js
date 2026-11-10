@@ -262,7 +262,13 @@ VZ.route('import-hub', {title:'기존 자료 가져오기', back:true, tab:'reco
     VZ.setGuard(() => hub.phase === 'review' && hub.rows.some(r => r.selected) ? '분석한 파일을 아직 가져오지 않았어요. 나가면 선택이 사라져요. 나갈까요?' : hub.phase === 'importing' ? '가져오는 중이에요. 나가면 남은 파일은 가져오지 않아요. 나갈까요?' : '');
     draw();
   },
-  leave() { if (hub.phase !== 'importing') { M.destroyAll(); if (['done', 'source'].includes(hub.phase)) hub = fresh(); } }});
+  leave() { if (hub.phase !== 'importing') { M.destroyAll(); if (hub.phase === 'source' || hub.phase === 'done' && !hub.rows.some(r => r.state === 'failed' && r.file)) hub = fresh(); } }});
+VZ.retryImportFailures = async () => {
+  if (hub.running || hub.autoRunning) return {retried:0, missing:0};
+  const failed = hub.rows.filter(r => r.state === 'failed'), ready = failed.filter(r => r.file);
+  if (ready.length) await runImport(ready);
+  return {retried:ready.length, missing:failed.length-ready.length};
+};
 function host() { return document.querySelector('[data-hub]'); }
 function draw() {
   const h = host(); if (!h) return;
