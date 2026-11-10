@@ -11,7 +11,7 @@ const typeOf = file => {
 };
 const blobOf = item => item.blob instanceof Blob ? (item.blob.type === typeOf(item) ? item.blob : new Blob([item.blob], {type:typeOf(item)}))
   : item.bytes instanceof ArrayBuffer || ArrayBuffer.isView(item.bytes) ? new Blob([item.bytes], {type:typeOf(item)}) : null;
-async function tx(mode, action) {
+async function tx(mode, action, onResult) {
   const db = await new Promise((resolve, reject) => {
     const req = indexedDB.open(window.VzipAccountScope?.mediaDb()||'vocalzip_media_v1', 1);
     let blocked = false;
@@ -23,7 +23,7 @@ async function tx(mode, action) {
   try {
     return await new Promise((resolve, reject) => {
       const t = db.transaction('recordings', mode), r = action(t.objectStore('recordings'));
-      let result; r.onsuccess = () => { result = r.result; }; r.onerror = () => reject(r.error);
+      let result; r.onsuccess = () => { result = r.result; if(onResult)try{onResult(result,t);}catch(error){t.abort();reject(error);} }; r.onerror = () => reject(r.error);
       t.oncomplete = () => resolve(result); t.onabort = t.onerror = () => reject(t.error || Error('파일 저장이 중단됐어요.'));
     });
   } finally { db.close(); }
@@ -31,6 +31,7 @@ async function tx(mode, action) {
 const quota = e => e?.name === 'QuotaExceededError' || /quota|space/i.test(e?.message || '') ? Error('기기 저장 공간이 부족해요. 공간을 확보하거나 클라우드에 저장해 주세요.') : e;
 /** Globals relied on by cloud-sync.js. */
 window.vzipStorePracticeMedia = async item => {
+  item={...item,localRevision:globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)};
   if(window.VzipAccountScope){
     if(item.accountOwner&&item.accountOwner!==window.VzipAccountScope.owner)throw Error('다른 계정의 녹음은 저장할 수 없어요.');
     item={...item,accountOwner:window.VzipAccountScope.owner};
@@ -269,12 +270,31 @@ M.fillDurations = async (items, {limit = 10} = {}) => {
 };
 const removing = new Set();
 M.confirmRemove = item => VZ.confirm('파일 영구 삭제', '“' + M.label(item) + '” 파일을 삭제할까요?\n\n이 기기와 클라우드의 파일 및 연결을 삭제해요. 연습·레슨 기록, 메모와 연습 시간은 남아요. 다른 기기에 따로 내려받은 사본은 남을 수 있어요. 파일은 복구할 수 없어요.', {ok:'파일 영구 삭제', danger:true});
-M.remove = async item => {
+const deleteLocalToken=row=>{
+ if(!row)return null;
+ const metadata=Object.fromEntries(Object.keys(row).filter(k=>!['blob','bytes'].includes(k)).sort().map(k=>[k,row[k]]));
+ return JSON.stringify({metadata,blob:row.blob?{size:row.blob.size,type:row.blob.type}:null,bytes:row.bytes?.byteLength??null});
+};
+M.localDeleteInfo=async id=>{
+ const owner=window.VzipAccountScope?.owner,row=await tx('readonly',s=>s.get(id));
+ if(window.VzipAccountScope&&(window.VzipAccountScope.leaving||window.VzipAccountScope.owner!==owner))throw Error('계정이 변경됐어요.');
+ if(row?.accountOwner&&row.accountOwner!==owner)throw Error('다른 계정의 파일은 확인할 수 없어요.');
+ return {token:deleteLocalToken(row),name:String(row?.name||''),exists:!!row};
+};
+M.remove = async (item,{expectedLocal}={}) => {
   const currentOwner=()=>window.VzipAccountScope?window.VzipAccountScope.owner:(window.vzipCloudSignedIn?.()?window.vzipCloudUserId():'device');
   const removalOwner=currentOwner(),removalSession=window.VZIP_SNAPSHOT_REVISION_ENABLED===true?window.vzipCloudSessionId?.():null;
   const guard=()=>{
     if(window.VzipAccountScope?.leaving||currentOwner()!==removalOwner||removalSession&&(window.VZIP_SNAPSHOT_REVISION_ENABLED!==true||window.vzipCloudSessionId?.()!==removalSession))throw Error('계정 또는 세션이 변경되어 파일 삭제를 멈췄어요.');
   };
+  guard();
+  const bound=window.vzipPendingMediaDeletes?.().find(job=>job.id===item.id&&job.owner===removalOwner&&job.session===removalSession&&job.localStamp);
+  if(bound){
+    const info=await M.localDeleteInfo(item.id);guard();
+    if(await window.VzipSnapshotTransport.localStamp(info.token)!==bound.localStamp)throw Object.assign(Error('중단 후 이 기기의 파일이 바뀌었어요. 새 파일은 유지돼요.'),{code:'localChanged'});
+    if(expectedLocal===undefined)expectedLocal=info.token;
+  }
+  guard();if(expectedLocal!==undefined&&(await M.localDeleteInfo(item.id)).token!==expectedLocal)throw Object.assign(Error('확인 후 이 기기의 파일이 바뀌었어요. 새 파일은 유지돼요.'),{code:'localChanged'});
   guard();if(item.accountOwner&&item.accountOwner!==removalOwner)throw Error('다른 계정의 파일은 삭제할 수 없어요.');
   if (removing.has(item.id)) throw Error('이미 삭제 중이에요.');
   if (backup.running) throw Error('자동 백업이 끝난 뒤 삭제해 주세요.');
@@ -287,7 +307,12 @@ M.remove = async item => {
     const unlink=()=>{guard();if (!VZ.change(d => window.VzipDataMerge.deleteMedia(d, item.id), {silent:true})) throw Error('파일 연결 정리를 저장하지 못했어요. 다시 시도해 주세요.');};
     if(window.vzipSnapshotDeleteLocalMedia)await window.vzipSnapshotDeleteLocalMedia(item.id,unlink);else unlink();
     for (const player of players) if (player.item.id === item.id) player.destroy();
-    guard();await tx('readwrite', s => {guard();return s.delete(item.id);});guard();
+    guard();
+    if(expectedLocal!==undefined)await tx('readwrite',s=>s.get(item.id),(row,t)=>{
+      guard();if(deleteLocalToken(row)!==expectedLocal)throw Object.assign(Error('확인 후 이 기기의 파일이 바뀌었어요. 새 파일은 유지돼요.'),{code:'localChanged'});
+      t.objectStore('recordings').delete(item.id);
+    });else await tx('readwrite', s => {guard();return s.delete(item.id);});
+    guard();
     await window.vzipMediaDeleteAcknowledge?.(item.id);
     changed();
   } finally { removing.delete(item.id); M.holdBackup(false); }

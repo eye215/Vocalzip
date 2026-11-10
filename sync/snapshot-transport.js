@@ -28,7 +28,7 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
  }
  function recoveryValid(r){
   if(r?.version!==1||r.owner!==owner||!uuid.test(r.id)||!uuid.test(r.requestId)||!uuid.test(r.session)||!Number.isFinite(r.createdAt)||!stampPattern.test(r.deviceStamp)||!valid(r.device))return false;
-  try{rowCheck(r.cloud);const p=r.pending;if(p&&(!uuid.test(p.id)||p.owner!==owner||!uuid.test(p.session)||!valid(p.payload)||!pair(version(p),p)))return false;if(p?.context)mediaContext(p.context);}catch{return false;}
+  try{rowCheck(r.cloud);const p=r.pending;if(p&&(!uuid.test(p.id)||p.owner!==owner||!uuid.test(p.session)||!valid(p.payload)||!pair(version(p),p)))return false;if(p?.context)mediaContext(p.context);if(r.mediaDelete){const {fromSession,...context}=r.mediaDelete;if(!uuid.test(fromSession))return false;mediaContext(context);}}catch{return false;}
   return true;
  }
  function localCopy(){guard();if(typeof getLocal!=='function')throw fail('unavailable');const v=getLocal();if(!valid(v))throw fail('corrupt');return copy(v);}
@@ -131,16 +131,22 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
   const used=new Set([s.pending?.id,s.pending?.retiredRequestId,...(s.recoveries||[]).flatMap(r=>[r.id,r.requestId,r.pending?.id,r.pending?.retiredRequestId])]);
   const id=makeId();if(!uuid.test(id)||used.has(id))throw fail('response');return id;
  }
- async function reviewRecovery(){
+ async function reviewRecovery(media=null){
   return exclusive(async()=>{
    const old=state(),s=scrub(old);if(s!==old)put(s);
+   let intent=null;
+   if(media){
+    media=mediaContext(media);intent=readMediaIntent(storage,owner,media.id);
+    if(!intent||intent.stamp!==media.stamp)throw fail('review');
+    if(s.pending?.context&&!same(s.pending.context,media))throw fail('pending');
+   }
    const cloud=await readRow(),device=localCopy();guard();
    if(!same(state(),s))throw fail('review');
    const id=newId(s);
-   reviewed={id,journal:copy(s),device,cloud:copy(cloud)};
-   const sources=recoverySources(s,device,cloud);
+   reviewed={id,journal:copy(s),device,cloud:copy(cloud),media,intent:copy(intent)};
+   const sources=recoverySources(s,device,cloud);if(media)sources.push({deleted:{media:[media.id]}});
    // Returned values are independent copies and never expose token/credential state.
-   return copy({reviewId:id,owner,session,baseline:s.baseline,reason:s.conflict?.kind||(s.pending?.session&&s.pending.session!==session?'session':s.pending?'pending':'review'),
+   return copy({reviewId:id,owner,session,...(media?{mediaDelete:{...media,fromSession:intent.session}}:{}),baseline:s.baseline,reason:s.conflict?.kind||(s.pending?.session&&s.pending.session!==session?'session':s.pending?'pending':'review'),
     device:cleanRecovery(device,sources),cloud:cloud?{...cloud,payload:cleanRecovery(cloud.payload,sources)}:null,
     pending:s.pending?{...s.pending,payload:cleanRecovery(s.pending.payload,sources)}:null,
     recoveries:(s.recoveries||[]).map(r=>({...r,device:cleanRecovery(r.device,sources),cloud:r.cloud?{...r.cloud,payload:cleanRecovery(r.cloud.payload,sources)}:null,pending:r.pending?{...r.pending,payload:cleanRecovery(r.pending.payload,sources)}:null}))});
@@ -152,29 +158,33 @@ function create({storage,identity,read,send,lock,makeId=()=>crypto.randomUUID(),
    if(!confirmed||!r||r.id!==reviewId||!same(s,r.journal)||!same(localCopy(),r.device))throw fail('review');
    if(!valid(payload))throw fail('response');
    // Physical deletion retains a separate proof and must not be re-authorized here.
-   if(s.pending?.context||hasMediaDeletes(storage,owner))throw fail('pending');
+   if(r.media){
+    if(!same(readMediaIntent(storage,owner,r.media.id),r.intent))throw fail('review');
+    if(s.pending?.context&&!same(s.pending.context,r.media))throw fail('pending');
+   }else if(s.pending?.context||hasMediaDeletes(storage,owner))throw fail('pending');
    const cloud=await readRow();guard();
    if(!same(cloud,r.cloud)||!same(state(),s)||!same(localCopy(),r.device))throw fail('review');
    const expected=version(cloud);
    if(s.baseline?.generation&&s.baseline.generation!==expected.generation)throw fail('generation');
-   const sources=recoverySources(s,r.device,cloud),clean=cleanRecovery(payload,sources);
+   const sources=recoverySources(s,r.device,cloud);if(r.media)sources.push({deleted:{media:[r.media.id]}});
+   const clean=cleanRecovery(payload,sources);
    requireRecords(clean,sources);
    const deviceStamp=await digest(r.device);guard();
-   if(!same(state(),s)||!same(localCopy(),r.device))throw fail('review');
-   const archive={version:1,id:r.id,owner,session,createdAt:Date.now(),deviceStamp,device:cleanRecovery(r.device,sources),
+   if(!same(state(),s)||!same(localCopy(),r.device)||r.media&&!same(readMediaIntent(storage,owner,r.media.id),r.intent))throw fail('review');
+   const archive={version:1,id:r.id,owner,session,createdAt:Date.now(),deviceStamp,...(r.media?{mediaDelete:{...r.media,fromSession:r.intent.session}}:{}),device:cleanRecovery(r.device,sources),
     cloud:cloud?{...cloud,payload:cleanRecovery(cloud.payload,sources)}:null,
     pending:s.pending?{...s.pending,payload:cleanRecovery(s.pending.payload,sources)}:null};
    const id=newId({...s,recoveries:[...(s.recoveries||[]),archive]});archive.requestId=id;
    // Persist both inputs plus the fresh current-session CAS request in ONE entry before send.
    // Even choosing unchanged cloud content needs this CAS fence against an old in-flight write.
    const next={...s,recoveries:[...(s.recoveries||[]),archive],conflict:null,
-    pending:{id,owner,session,...expected,payload:clean,recoveryId:archive.id}};
+    pending:{id,owner,session,...expected,payload:clean,recoveryId:archive.id,...(r.media?{context:copy(r.media)}:{})}};
    put(next);reviewed=null;return finish(next);
   });
  }
  return {
   state:()=>copy(state()),
-  reviewRecovery,resolveRecovery,
+  reviewRecovery:()=>reviewRecovery(),reviewMediaRecovery:context=>reviewRecovery(mediaContext(context)),resolveRecovery,
   recover:()=>exclusive(async()=>{const s=state(),next=scrub(s);if(next!==s)put(next);return finish(next);}),
   redactLessons:(ids,apply=()=>{})=>exclusive(async()=>{const s=state(),next=scrub(s,ids);if(next!==s)put(next);return apply();}),
   redactMedia:(ids,apply=()=>{})=>exclusive(async()=>{const s=state(),next=scrub(s,undefined,ids);if(next!==s)put(next);return apply();}),
@@ -214,40 +224,87 @@ async function mediaStamp(row){
  return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
 }
 /** Small, account/session-bound delete intents; file bytes and metadata text are never copied. */
-function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare,cleanup}){
+function mediaIntentKey(owner,id){
+ if(!uuid.test(owner)||typeof id!=='string'||!mediaId.test(id))throw fail('response');
+ return 'vzip_media_delete_v1:'+encodeURIComponent(owner)+':'+encodeURIComponent(id);
+}
+function readMediaIntent(storage,owner,id){
+ const raw=storage.getItem(mediaIntentKey(owner,id));if(raw===null)return null;
+ let r;try{r=JSON.parse(raw);}catch{throw fail('corrupt');}
+ if(r?.version!==1||r.owner!==owner||r.id!==id||!uuid.test(r.session)||r.stamp!==null&&!stampPattern.test(r.stamp)||!['prepared','root-confirmed','cloud-complete'].includes(r.phase)||!Number.isFinite(r.createdAt)||r.localStamp!==undefined&&!stampPattern.test(r.localStamp)||Object.keys(r).some(k=>!['version','id','owner','session','stamp','phase','createdAt','localStamp'].includes(k)))throw fail('corrupt');
+ return r;
+}
+function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare,cleanup,reviewRoot=null,prepareResume=null,readLocalStamp=null,makeId=()=>crypto.randomUUID()}){
  if(!storage||[identity,lock,read,prepare,cleanup].some(f=>typeof f!=='function'))throw fail('unavailable');
  const who=identity();if(!who||!uuid.test(who.owner)||!uuid.test(who.session))throw fail('identity');
- const {owner,session}=who,prefix='vzip_media_delete_v1:'+encodeURIComponent(owner)+':';
+ const {owner,session}=who,prefix='vzip_media_delete_v1:'+encodeURIComponent(owner)+':';let reviewed=null;
  const guard=()=>{const now=identity();if(now?.owner!==owner||now?.session!==session)throw fail('identity');};
- const key=id=>{if(typeof id!=='string'||!mediaId.test(id))throw fail('response');return prefix+encodeURIComponent(id);};
- function get(id){
-  guard();const raw=storage.getItem(key(id));if(raw===null)return null;
-  let r;try{r=JSON.parse(raw);}catch{throw fail('corrupt');}
-  if(r?.version!==1||r.owner!==owner||r.id!==id||!uuid.test(r.session)||r.stamp!==null&&!stampPattern.test(r.stamp)||!['prepared','root-confirmed','cloud-complete'].includes(r.phase)||!Number.isFinite(r.createdAt)||Object.keys(r).some(k=>!['version','id','owner','session','stamp','phase','createdAt'].includes(k)))throw fail('corrupt');
-  return r;
- }
+ const key=id=>mediaIntentKey(owner,id);
+ function get(id){guard();return readMediaIntent(storage,owner,id);}
  function put(r){
   guard();const raw=JSON.stringify(r);if(raw.length>4096)throw fail('storage');
   try{storage.setItem(key(r.id),raw);if(storage.getItem(key(r.id))!==raw)throw fail('storage');}catch{throw fail('storage');}guard();
  }
  const own=r=>{if(r&&r.session!==session)throw fail('session');};
+ const sameIntent=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+ const checkedRow=async(id,intent)=>{
+  const row=await read(id);guard();validate(row);const stamp=await mediaStamp(row);guard();
+  if(intent&&(row!==null&&intent.stamp!==stamp||intent.phase==='cloud-complete'&&row!==null))throw fail('mediaChanged');
+  return {row,stamp};
+ };
+ const localCheck=async(id,expected)=>{
+  if(readLocalStamp===null){if(expected!==undefined)throw fail('unavailable');return undefined;}
+  const stamp=await readLocalStamp(id);guard();if(!stampPattern.test(stamp))throw fail('response');
+  if(expected!==undefined&&expected!==stamp)throw fail('localChanged');return stamp;
+ };
+ const proofCheck=(proof,id)=>{if(!proof||!Array.isArray(proof.payload?.deleted?.media)||!proof.payload.deleted.media.includes(id))throw fail('response');version(proof);};
  return {
   list:()=>{
    guard();const out=[];
    for(let i=0;i<storage.length;i++){const k=storage.key(i);if(k?.startsWith(prefix)){let id;try{id=decodeURIComponent(k.slice(prefix.length));}catch{throw fail('corrupt');}const r=get(id);if(r)out.push(copy(r));}}
    return out;
   },
+  review:id=>lock(async()=>{
+   guard();if(typeof reviewRoot!=='function')throw fail('unavailable');const intent=get(id);if(!intent)throw fail('pending');
+   const localStamp=await localCheck(id,intent.localStamp);
+   const before=await checkedRow(id,intent),root=await reviewRoot({kind:'media-delete',id,stamp:intent.stamp});guard();
+   const after=await checkedRow(id,intent);
+   if(!sameIntent(intent,get(id))||before.stamp!==after.stamp)throw fail('review');
+   if(root?.owner!==owner||root?.session!==session||root?.mediaDelete?.id!==id||root?.mediaDelete?.stamp!==intent.stamp||!uuid.test(root.reviewId))throw fail('response');
+   const reviewId=makeId();if(!uuid.test(reviewId))throw fail('response');
+   await localCheck(id,localStamp);
+   reviewed={reviewId,intent:copy(intent),stamp:after.stamp,rootReviewId:root.reviewId,localStamp};
+   return {reviewId,root:copy(root),file:after.row?{name:String(after.row.metadata?.name||''),recordedDate:String(after.row.metadata?.recordedDate||'')}:null};
+  },'review',id),
+  resume:(reviewId,payload,{confirmed=false,retry=false}={})=>lock(async()=>{
+   guard();const r=reviewed;
+   if(!confirmed||!r||r.reviewId!==reviewId||typeof prepareResume!=='function'||!sameIntent(get(r?.intent?.id),r?.intent))throw fail('review');
+   const id=r.intent.id;await localCheck(id,r.localStamp);
+   const before=await checkedRow(id,r.intent);if(before.stamp!==r.stamp)throw fail('review');
+   const proof=await prepareResume({context:{kind:'media-delete',id,stamp:r.intent.stamp},reviewId:r.rootReviewId,payload,confirmed:true,retry});guard();proofCheck(proof,id);
+   await localCheck(id,r.localStamp);
+   const after=await checkedRow(id,r.intent);if(after.stamp!==r.stamp||!sameIntent(get(id),r.intent))throw fail('review');
+   // A fresh current-session root CAS is acknowledged before adopting the old intent.
+   // A crash before this put keeps the old session and requires explicit review again.
+   let intent={...r.intent,session,phase:'root-confirmed',...(r.localStamp?{localStamp:r.localStamp}:{})};put(intent);reviewed=null;
+   const latest=await checkedRow(id,intent);if(latest.stamp!==r.stamp)throw fail('mediaChanged');
+   await localCheck(id,intent.localStamp);
+   await cleanup(latest.row,guard,id);guard();
+   intent={...intent,phase:'cloud-complete'};put(intent);return {...copy(intent),proof:copy(proof)};
+  },'resume',reviewed?.intent?.id),
   run:id=>lock(async()=>{
    guard();let intent=get(id);own(intent);
+   const localStamp=await localCheck(id,intent?.localStamp);
    const row=await read(id);guard();validate(row);const stamp=await mediaStamp(row);guard();
-   if(intent&&row!==null&&intent.stamp!==stamp)throw fail('mediaChanged');
-   if(!intent){intent={version:1,id,owner,session,stamp,phase:'prepared',createdAt:Date.now()};put(intent);}
+   if(intent&&(row!==null&&intent.stamp!==stamp||intent.phase==='cloud-complete'&&row!==null))throw fail('mediaChanged');
+   if(!intent){intent={version:1,id,owner,session,stamp,phase:'prepared',createdAt:Date.now(),...(localStamp?{localStamp}:{})};put(intent);}
    const proof=await prepare({id,stamp:intent.stamp});guard();
    if(!proof||!Array.isArray(proof.payload?.deleted?.media)||!proof.payload.deleted.media.includes(id))throw fail('response');
    version(proof);
    if(intent.phase!=='cloud-complete'){intent={...intent,phase:'root-confirmed'};put(intent);}
    const latest=await read(id);guard();validate(latest);
    if(latest!==null&&await mediaStamp(latest)!==intent.stamp)throw fail('mediaChanged');guard();
+   await localCheck(id,intent.localStamp);
    await cleanup(latest,guard,id);guard();
    intent={...intent,phase:'cloud-complete'};put(intent);return copy(intent);
   },'run',id),
@@ -289,5 +346,5 @@ function createTransport({projectUrl,publishableKey,getCredentials,getOwner,getS
   }
  };
 }
-return {create,createTransport,hasState,hasMediaDeletes,version,mediaStamp,createMediaDeletion};
+return {create,createTransport,hasState,hasMediaDeletes,version,mediaStamp,localStamp:digest,createMediaDeletion};
 });

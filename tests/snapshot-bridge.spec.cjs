@@ -83,6 +83,7 @@ async function deletionFixture(page){
   if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
   if(req.method()==='DELETE'){
    expect(remote.row.payload.deleted.media).toContain('chosen');
+   await remote.beforeDelete?.();
    deleted.push(decodeURIComponent(url.pathname.slice('/v1/media/'.length)));
    return route.fulfill({headers,json:{ok:true}});
   }
@@ -222,4 +223,57 @@ test('Recovery requires selections for all pages of conflicts and closes on an a
  const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('fieldset')).toHaveCount(20);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeDisabled();
  await dialog.locator('[data-review-more]').click();await expect(dialog.locator('fieldset')).toHaveCount(25);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeEnabled();
  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vzip:auth-changed')));await expect(dialog).toHaveCount(0);expect(remote.requests).toHaveLength(0);expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('device 0');
+});
+
+async function interruptedFileDelete(page){
+ const fixture=await deletionFixture(page);fixture.remote.block=true;
+ await page.evaluate(async()=>{try{await VZ.media.remove({id:'chosen',cloud:true});}catch{}});
+ const original=(await state(page)).pending.id;
+ await page.evaluate(()=>{
+  const store=VzipAccountScope.storage,owner=VzipAccountScope.owner;
+  for(const key of ['vzip_snapshot_transport_v1:'+owner,'vzip_media_delete_v1:'+owner+':chosen']){
+   const data=JSON.parse(store.getItem(key));if(data.pending)data.pending.session='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';else data.session='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';store.setItem(key,JSON.stringify(data));
+  }
+ });
+ fixture.remote.block=false;await sync(page);await page.goto('/#/settings');
+ await page.locator('#cloud-delete-review').click();await page.locator('[data-media-delete-item="chosen"]').click();
+ return {...fixture,original,dialog:page.locator('.snapshot-review-page')};
+}
+test('Interrupted deletion confirms the current target, uses a fresh request and preserves the other file',async({page})=>{
+ const {remote,deleted,original,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ await expect(dialog).toContainText('chosen');await expect(dialog).toContainText('복구할 수 없어요');await expect(dialog.locator('[data-review-save]')).toBeDisabled();
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').first().click();
+ await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);expect(remote.requests.at(-1).p_request_id).not.toBe(original);
+ const info=await page.evaluate(async()=>({ids:(await vzipReadMedia()).map(x=>x.id),pending:vzipPendingMediaDeletes(),lessons:VZ.db.lessons,practices:VZ.db.practices}));
+ expect(info.ids).toContain('other');expect(info.ids).not.toContain('chosen');expect(info.pending).toEqual([]);
+ expect(info.lessons.find(x=>x.id==='lesson-files').memo).toBe('keep lesson notes');expect(info.practices.find(x=>x.id==='practice-files').manualMinutes).toBe(12);
+});
+test('Cancelling interrupted deletion never clears the previous-login intent or removes bytes',async({page})=>{
+ const {deleted,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');await dialog.locator('[data-close]').click();
+ expect(deleted).toEqual([]);expect(await page.evaluate(async()=>(await vzipReadMedia()).map(x=>x.id))).toEqual(expect.arrayContaining(['chosen','other']));
+ expect(await page.evaluate(()=>vzipPendingMediaDeletes()[0].session)).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+});
+test('A changed remote file blocks interrupted deletion before any cleanup',async({page})=>{
+ const {remote,deleted,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ await page.evaluate(()=>{window.__fixtureMedia.chosen.metadata.review='updated by another device';window.__fixtureMedia.chosen.updated_at='2026-11-10T01:00:00Z';});
+ const before=remote.requests.length;
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').first().click();
+ await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();
+ await expect(dialog.locator('[data-review-message]')).toContainText('파일');await expect(dialog.locator('[data-review-refresh]')).toBeVisible();
+ expect(deleted).toEqual([]);expect(remote.requests.length).toBe(before);
+});
+test('A same-size local overwrite during cleanup survives the attempt and automatic retry',async({page})=>{
+ const {remote,deleted,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ remote.beforeDelete=()=>page.evaluate(async()=>{const original=(await vzipReadMedia()).find(x=>x.id==='chosen');await vzipStorePracticeMedia({...original,blob:new Blob([new Uint8Array([5,6,7])],{type:'audio/wav'})});});
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').first().click();
+ await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();
+ await expect(dialog.locator('[data-review-message]')).toContainText('바뀌었어요');expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);
+ await page.evaluate(()=>VZ.media.resumeDeletes());
+ const kept=await page.evaluate(async()=>{const item=(await vzipReadMedia()).find(x=>x.id==='chosen');return [...new Uint8Array(await vzipMediaBlob(item).arrayBuffer())];});
+ expect(kept).toEqual([5,6,7]);expect(await page.evaluate(()=>vzipPendingMediaDeletes().length)).toBe(1);
 });
