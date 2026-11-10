@@ -8,7 +8,7 @@ const API='https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vzip-song-stt';
 const cachePrefix='vzip_song_suggest_v2:';
 const backupPrefix='vzip_song_assignment_backup:';
 const backupPointer='vzip_song_assignment_last';
-const MAX_BYTES=12*1024*1024, PAGE_SIZE=30;
+const PAGE_SIZE=30;
 // Paid STT per tap. The server quota (vzip_song_stt_reserve) is the real cap; this keeps one run reviewable.
 // No per-run limit: spending is bounded by the OpenAI account budget. What has been spent so far is shown
 // instead (server count of paid STT calls × ≈ $0.0015 per 30-second clip, gpt-4o-mini-transcribe ≈ $0.003/min).
@@ -19,10 +19,23 @@ function showSpend(main){const el=main?.querySelector?.('[data-spend]');if(!el)r
 async function loadSpend(main){try{const u=await window.vzipSttUsage?.();if(u){spend.total=u.total;spend.today=u.today}}catch{}showSpend(main)}
 const SEARCH_SECONDS=120, MIN_SUNG_SECONDS=4;
 // Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
-const MAX_DURATION_SECONDS=80, MAX_PCM_BYTES=32*1024*1024;
+const CLIP_SECONDS=30, STEP_SECONDS=27, MAX_SCAN_SECONDS=600;
+function scanWindows(duration,initialStart=null){
+ const limit=Math.min(MAX_SCAN_SECONDS,Math.max(0,Number(duration)||0)),starts=[];
+ if(limit<2)return starts;
+ for(let at=0;at<limit;at+=STEP_SECONDS){
+  const start=Math.max(0,Math.min(at,Math.max(0,limit-CLIP_SECONDS)));
+  if(starts.at(-1)===start)break;
+  if(initialStart==null||Math.abs(start-initialStart)>=2)starts.push(start);
+ }
+ return starts;
+}
+const strongestMatch=(a,b)=>(b?.matches?.[0]?.score||0)>(a?.matches?.[0]?.score||0)?b:a;
 const checkpointKey='vzip_song_suggest_checkpoint_v2';
 const referenceKey='vzip_song_stt_references_v1';
 const inlinePlayers=new Map();
+const segmentKey=(item,start)=>item.id+'@'+Math.round(start);
+const segmentCacheKey=(item,start)=>'vzip_song_segment_v1:'+owner()+':'+segmentKey(item,start);
 function destroyPlayers(){for(const player of inlinePlayers.values())player.destroy();inlinePlayers.clear()}
 window.addEventListener('hashchange',destroyPlayers);
 window.addEventListener('pagehide',destroyPlayers);
@@ -64,6 +77,20 @@ async function saveRecognition(item,transcript){
  const originalOwner=owner();await window.vzipCloudSongTextSave({kind:'recognition',recordId:item.id,transcript,source:'stt',onlyIfMissing:true});
  if(originalOwner!==owner()||owner()!==viewOwner)throw Error('계정 변경으로 다른 사용자의 기록을 표시하지 않아요.');
  state.recognitions.set(item.id,transcript);
+}
+async function saveSegment(item,start,transcript){
+ const id=segmentKey(item,start),value=String(transcript||'').slice(0,1600);
+ // Persist before the remote write; a temporary sync error must not charge again.
+ try{localStorage.setItem(segmentCacheKey(item,start),value)}catch{}
+ const originalOwner=owner();
+ await window.vzipCloudSongTextSave({kind:'recognition',recordId:id,transcript:value,source:'stt',onlyIfMissing:true});
+ if(originalOwner!==owner()||owner()!==viewOwner)throw Error('계정 변경으로 분석을 중단했어요.');
+ state.recognitions.set(id,value);
+}
+function previousSegment(item,start){
+ const id=segmentKey(item,start);
+ if(state.recognitions.has(id))return state.recognitions.get(id);
+ try{return localStorage.getItem(segmentCacheKey(item,start))}catch{return null}
 }
 async function loadCloudTexts(){
  state.cloudReady=false;state.referenceRows=[];state.recognitions.clear();
@@ -130,7 +157,7 @@ function showAnalysisPopup(main,total){
  count.textContent='0 / '+total+'개 완료';file.textContent='첫 번째 녹음을 준비하고 있어요';
  overlay.querySelector('[data-analysis-stop]').onclick=()=>{state.cancel=true;state.controller?.abort();file.textContent='분석을 중단하고 있어요…'};
  main.append(overlay);
- return {update(done,item){count.textContent=done+' / '+total+'개 진행';file.textContent=M.label(item);fill.style.width=Math.round(done/total*100)+'%'},close(){overlay.remove()}};
+ return {update(done,item,message=''){count.textContent=done+' / '+total+'개 진행';file.textContent=M.label(item)+(message?' · '+message:'');fill.style.width=Math.round(done/total*100)+'%'},close(){overlay.remove()}};
 }
 const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
 function saveCheckpoint(){try{localStorage.setItem(scoped(checkpointKey),JSON.stringify({ids:[...state.chosen],at:Date.now()}))}catch{}}
@@ -171,66 +198,6 @@ function resultFor(item){
 }
 function eligible(item){return !item.songId&&!item.song && !M.isVideo(item);}
 function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);saveCheckpoint();}
-function durationOf(url,signal){
- return new Promise((resolve,reject)=>{
-  const el=document.createElement('audio');el.preload='metadata';el.muted=true;
-  const timer=setTimeout(()=>finish(Error('음원 길이를 확인하지 못했어요.')),12000);
-  function finish(error,duration){
-   clearTimeout(timer);signal?.removeEventListener('abort',abort);
-   el.onloadedmetadata=null;el.onerror=null;el.removeAttribute('src');el.load();
-   error?reject(error):resolve(duration);
-  }
-  function abort(){finish(new DOMException('분석 중단','AbortError'))}
-  signal?.addEventListener('abort',abort,{once:true});
-  if(signal?.aborted)return abort();
-  el.onloadedmetadata=()=>finish(null,el.duration);
-  el.onerror=()=>finish(Error('음원 메타데이터를 읽지 못했어요.'));
-  el.src=url;
- });
-}
-async function getAudioBytes(item,signal){
- // VZ.media.src returns signed R2 URL or local blob URL. Only read-only requests.
- const source=await M.src(item);
- try {
-  // HTML audio metadata requests are typically byte-ranged by the browser.
-  // Do NOT blindly fetch first 3-5MB: M4A moov atoms may live at the end.
-  const seconds=await durationOf(source.url,signal);
-  if(!Number.isFinite(seconds)||seconds<=0)
-   throw Error('길이가 확인되지 않는 파일은 전체 디코딩하지 않아요. Mac 분석 도구를 이용해 주세요.');
-  if(seconds>MAX_DURATION_SECONDS)
-   throw Error('아이폰 메모리 보호: '+Math.ceil(seconds)+'초 음원은 Mac의 구간 STT 도구에서 분석해 주세요 (80초 제한).');
-  const estimatedPcm=seconds*48000*2*4;
-  if(estimatedPcm>MAX_PCM_BYTES)
-   throw Error('압축 해제 예상 용량이 커서 아이폰 분석을 건너뛰었어요.');
-  const response=await fetch(source.url,{cache:'no-store',signal});
-  if(!response.ok)throw Error('음원을 불러오지 못했어요: '+response.status);
-  const size=Number(response.headers.get('content-length')||0);
-  if(size>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 분석하지 않아요.');
-  const bytes=await response.arrayBuffer();
-  if(bytes.byteLength>MAX_BYTES)throw Error('12MB 초과 원본은 아이폰에서 분석하지 않아요.');
-  return bytes;
- }finally{if(source.revoke)URL.revokeObjectURL(source.url)}
-}
-function wavBytes(buffer, offsetSec=20, seconds=30){
- const sr=16000, from=Math.min(buffer.length-1,Math.max(0,Math.floor(offsetSec*buffer.sampleRate)));
- const length=Math.min(Math.floor(seconds*buffer.sampleRate),buffer.length-from);
- if(length<buffer.sampleRate*2)throw Error('가사가 있는 녹음 구간이 너무 짧아요.');
- // Resampling is performed here rather than returning large decoded audio to the server.
- const bytes=new ArrayBuffer(44+Math.ceil(length*sr/buffer.sampleRate)*2);
- const view=new DataView(bytes);let p=0;
- function word(s){for(const c of s)view.setUint8(p++,c.charCodeAt(0))}
- function u16(x){view.setUint16(p,x,true);p+=2}
- function u32(x){view.setUint32(p,x,true);p+=4}
- const n=Math.floor(length*sr/buffer.sampleRate);
- word('RIFF');u32(36+2*n);word('WAVEfmt ');u32(16);u16(1);u16(1);u32(sr);u32(sr*2);u16(2);u16(16);word('data');u32(n*2);
- const channels=Array.from({length:Math.min(buffer.numberOfChannels,2)},(_,c)=>buffer.getChannelData(c));
- for(let i=0;i<n;i++){
-   const pos=from+i*buffer.sampleRate/sr, j=Math.min(Math.floor(pos),buffer.length-1), k=Math.min(j+1,buffer.length-1), frac=pos-j;
-   let sample=0;for(const chan of channels)sample+=(chan[j]*(1-frac)+chan[k]*frac)/channels.length;
-   sample=Math.max(-1,Math.min(1,sample));view.setInt16(44+i*2,Math.round(sample<0?sample*32768:sample*32767),true);
- }
- return new Blob([bytes],{type:'audio/wav'});
-}
 /** Where the singing is: the on-device vocal analysis (app/analysis.js) follows the voice over the
  * MR, then the 30 seconds with the most singing are chosen. Free — and a clip with no singing is
  * never paid for. Without the analyzer, the old fixed 20-second start is used. */
@@ -249,71 +216,85 @@ async function singingStart(samples,rate,signal){
  // Start half a second early so the first word is not cut.
  return Math.max(0,Math.min(at/fps-0.5,total-30));
 }
-async function clip(item,signal){
- let bytes=await getAudioBytes(item,signal);
- const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+async function audioWindow(item,signal,{time=0,seconds=SEARCH_SECONDS}={}){
+ const source=await M.src(item);
  try{
-  // decodeAudioData can expand a small AAC file into many MB of PCM.
-  const decoded=await audioCtx.decodeAudioData(bytes);
-  bytes=null; // release reference before allocating excerpt WAV
-  if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
-  const actualPcm=decoded.length*decoded.numberOfChannels*4;
-  if(actualPcm>MAX_PCM_BYTES)throw Error('실제 디코딩 음원이 32MB를 초과해 분석을 중단했어요.');
-  // Mono copy of the first two minutes for the singing finder (the decoded buffer stays as is).
-  const n=Math.min(decoded.length,Math.floor(SEARCH_SECONDS*decoded.sampleRate)),mono=new Float32Array(n);
-  for(let c=0;c<decoded.numberOfChannels;c++){const d=decoded.getChannelData(c);for(let i=0;i<n;i++)mono[i]+=d[i]/decoded.numberOfChannels}
-  const start=await singingStart(mono,decoded.sampleRate,signal);
-  return wavBytes(decoded,start,30);
- }finally{bytes=null;await audioCtx.close().catch(()=>{})}
+  const {extractR2AudioPcm,extractLocalAudioPcm}=await import('../stt-clip-browser.mjs?v=3');
+  if(source.revoke){
+   const response=await fetch(source.url,{signal});
+   if(!response.ok)throw Error('기기 음원을 읽지 못했어요.');
+   return extractLocalAudioPcm(await response.blob(),{time,seconds,signal});
+  }
+  return extractR2AudioPcm(source.url,{time,seconds,signal});
+ }finally{if(source.revoke)URL.revokeObjectURL(source.url)}
 }
-async function stt(item,signal,{reference=false}={}){
+async function transcribeClip(file,token,signal){
+ const form=new FormData();form.append('file',file,file.name);form.set('mode','transcript-only');
+ const res=await fetch(API,{method:'POST',headers:{Authorization:'Bearer '+token},body:form,signal});
+ const data=await res.json().catch(()=>({}));
+ if(!res.ok)throw Error(data.error||'STT 서버 응답 오류 ('+res.status+')');
+ if(spend.total!=null){spend.total++;spend.today=(spend.today||0)+1}
+ return String(data.transcript||'').slice(0,1600);
+}
+async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  if(!state.cloudReady)throw Error('기준 가사와 STT 기록의 클라우드 동기화가 필요해요.');
+ const refs=references(),cached=readCache(item);
  const previous=state.recognitions.get(item.id)||readCache(item)?.transcript;
- if(previous){
-  if(reference)return {transcript:previous};
-  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
-  const match=matchTranscripts(previous,references()),found=songs().find(s=>s.id===topPick(match));
-  return {status:found?'후보':'식별 불가',transcript:previous,
-   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,method:'stt',reason:match.reason,matches:candidateMatches(match)};
- }
+ if(previous&&reference)return {transcript:previous};
  if(!window.vzipCloudSignedIn?.())throw Error('로그인이 필요해요.');
  const token=await window.vzipCloudAccessToken?.();
  if(!token)throw Error('로그인 세션이 만료됐어요.');
  const status=await fetch(API,{headers:{Authorization:'Bearer '+token},signal,cache:'no-store'});
  if(!status.ok){const data=await status.json().catch(()=>({}));throw Error(data.error||'STT_DISABLED ('+status.status+')')}
  if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
- const form=new FormData();
- let excerpt;
- if(item.storageProvider==='r2' && item.r2Key){
-  // Sparse authenticated range reads: only the first two minutes are decoded on the device (never the
-  // whole file, never on a server), the singing is found in them, and only those 30 s are sent.
-  // Works for Voice Memos M4A, video-extracted audio, MP3, WAV, FLAC. Original R2 data is never modified.
-  if(!window.VzipR2?.url)throw Error('클라우드 음원 주소를 가져올 수 없어요.');
-  const signedUrl=await window.VzipR2.url(item.r2Key);
-  const {extractR2AudioPcm,clipFromPcm}=await import('../stt-clip-browser.mjs?v=2');
-  const {pcm,rate}=await extractR2AudioPcm(signedUrl,{time:0,seconds:SEARCH_SECONDS,signal});
-  const offset=await singingStart(Float32Array.from(pcm,v=>v/32768),rate,signal);
-  excerpt=clipFromPcm(pcm,offset);
- } else {
-  // Small local/legacy files keep the existing memory-bounded decoder path.
-  excerpt=new File([await clip(item,signal)],'vocal-clip.wav',{type:'audio/wav'});
- }
- form.append('file',excerpt,excerpt.name);
- form.set('mode','transcript-only');
- form.append('songs',JSON.stringify(songs().map(s=>({id:s.id,title:s.title,show:s.show||''})).slice(0,250)));
- const res=await fetch(API,{method:'POST',headers:{Authorization:'Bearer '+token},body:form,signal});
- const data=await res.json().catch(()=>({}));
- if(!res.ok)throw Error(data.error||'STT 서버 응답 오류 ('+res.status+')');
- if(spend.total!=null){spend.total++;spend.today=(spend.today||0)+1}
- const transcript=String(data.transcript||'').slice(0,1600);
- if(transcript.trim())await saveRecognition(item,transcript);
- if(reference)return {transcript};
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
- const match=matchTranscripts(transcript,references());
+ const {clipFromPcm}=await import('../stt-clip-browser.mjs?v=3');
+ let transcript=previous||'',initialStart=cached?.initialStart??null,duration=Number(item.durationSeconds)||0;
+ if(!previous){
+  onProgress('첫 30초 노래 구간 찾는 중');
+  const first=await audioWindow(item,signal,{time:0,seconds:SEARCH_SECONDS});duration=first.duration;
+  try{initialStart=await singingStart(Float32Array.from(first.pcm,v=>v/32768),first.rate,signal)}
+  catch(error){if(!/노래 구간을 찾지 못했어요/.test(String(error.message||error)))throw error}
+  if(initialStart!=null){
+   onProgress('첫 30초 가사 인식 중');
+   transcript=await transcribeClip(clipFromPcm(first.pcm,initialStart),token,signal);
+   if(transcript.trim())await saveRecognition(item,transcript);
+  }
+ }
+ if(reference){if(!transcript.trim())throw Error('기준 녹음에서 노래를 찾지 못했어요.');return {transcript}}
+ let match=matchTranscripts(transcript,refs),best=match,bestText=transcript;
+ // A real match ends immediately; a low-confidence top-1 is kept only as a suggestion.
+ if(!match.candidate){
+  if(!duration){const probe=await audioWindow(item,signal,{time:0,seconds:2});duration=probe.duration}
+  const windows=scanWindows(duration,initialStart);
+  for(const [index,start] of windows.entries()){
+   if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
+   onProgress('추가 분석 '+(index+1)+'/'+windows.length+'구간 · '+Math.floor(start/60)+'분 '+Math.round(start%60)+'초부터');
+   let text=previousSegment(item,start);
+   if(text==null){
+    const segment=await audioWindow(item,signal,{time:Math.floor(start),seconds:CLIP_SECONDS});
+    try{await singingStart(Float32Array.from(segment.pcm,v=>v/32768),segment.rate,signal)}
+    catch(error){
+     if(!/노래 구간을 찾지 못했어요/.test(String(error.message||error)))throw error;
+     onProgress('추가 분석 '+(index+1)+'/'+windows.length+'구간 · 목소리 감지 안 됨, 건너뜀');
+     continue;
+    }
+    text=await transcribeClip(clipFromPcm(segment.pcm,0),token,signal);
+    if(text.trim())await saveSegment(item,start,text);
+    else try{localStorage.setItem(segmentCacheKey(item,start),'')}catch{}
+   }
+   if(!text?.trim())continue;
+   const current=matchTranscripts(text,refs),stronger=strongestMatch(best,current);
+   if(stronger!==best){best=stronger;bestText=text}
+   if(current.candidate){match=current;transcript=text;break}
+  }
+  if(!match.candidate){match=best;transcript=bestText}
+ }
  const found=songs().find(s=>s.id===topPick(match));
  return {status:found?'후보':'식별 불가',transcript,
   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,
-  method:'stt',reason:match.reason,matches:candidateMatches(match)};
+  method:'stt',reason:match.reason,matches:candidateMatches(match),strongMatch:!!match.candidate,scanComplete:true,initialStart,
+  scannedSeconds:Math.min(duration,MAX_SCAN_SECONDS)};
 }
 function classification(item){
  const result=resultFor(item);
@@ -354,7 +335,8 @@ function pickSong(main,item){
  }});
 }
 function openRecordMenu(main,item){
- VZ.sheet({title:M.label(item),body:'<button type="button" class="btn ghost block" data-file-delete>파일 삭제</button>',onMount:(el,close)=>{
+ VZ.sheet({title:M.label(item),body:'<button type="button" class="btn ghost block" data-transcript-view>전사 확인</button><button type="button" class="btn ghost block" data-file-delete>파일 삭제</button>',onMount:(el,close)=>{
+  el.querySelector('[data-transcript-view]').onclick=()=>{close();VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))};
   el.querySelector('[data-file-delete]').onclick=()=>{close();exclusive(main,async(_main,check)=>{
    if(state.running||!await M.confirmRemove(item))return;check();await M.remove(item);check();
    state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);state.results.delete(item.id);state.recognitions.delete(item.id);
@@ -458,10 +440,12 @@ async function analyze(main,check=()=>{}){
  if(!state.cloudReady){VZ.toast('클라우드 기준 가사 동기화를 먼저 완료해 주세요.','error');return}
  await rematchCached(main);
  const targets=state.items.filter(m=>state.chosen.has(m.id));
- if(targets.some(m=>!resultFor(m)?.candidate)&&!references().length){VZ.toast('비교할 기준 가사가 없어요. 내 곡의 가사 탭에 입력하거나 아래에서 기준을 등록해 주세요.','error');return}
- const paid=targets.filter(m=>!resultFor(m)?.candidate&&!state.recognitions.has(m.id)&&!readCache(m)?.transcript).length;
- // Until a durable server quota is in place, limit each manual action to one paid request.
- if(paid&&!await VZ.confirm('AI 음성 분석 실행',paid+'개 파일에 STT만 사용해요(GPT 비용 없음). 파일마다 노래가 나오는 30초만 보내요. 예상 비용 약 $'+(paid*COST_PER_CLIP_USD).toFixed(3)+' (30초당 약 $'+COST_PER_CLIP_USD+')'+(spend.total!=null?' · 지금까지 약 '+usd(spend.total):'')+'. 노래 구간이 없는 파일은 보내지 않아 비용이 없어요. 기준 텍스트와의 비교는 무료이고 원본은 바뀌지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
+ const needsScan=m=>{const r=resultFor(m);return !r?.candidate || r.method==='stt'&&!r.strongMatch&&!r.scanComplete};
+ const pending=targets.filter(needsScan);
+ if(pending.length&&!references().length){VZ.toast('비교할 기준 가사가 없어요. 내 곡의 가사 탭에 입력하거나 아래에서 기준을 등록해 주세요.','error');return}
+ const maxCalls=pending.reduce((sum,m)=>sum+scanWindows(Number(m.durationSeconds)||MAX_SCAN_SECONDS).length+
+  (state.recognitions.has(m.id)||readCache(m)?.transcript?0:1),0);
+ if(maxCalls&&!await VZ.confirm('AI 음성 분석 실행',pending.length+'개 파일을 확인해요. 첫 30초의 가사가 맞지 않을 때만 녹음을 30초씩 나눠 더 살펴보고, 맞는 곡을 찾으면 멈춰요. 파일당 최대 10분까지 확인하며 최대 '+maxCalls+'구간 · 예상 상한 약 $'+(maxCalls*COST_PER_CLIP_USD).toFixed(3)+'입니다 (30초당 약 $'+COST_PER_CLIP_USD+'). 이미 저장한 전사는 재사용해요. 잡담도 전사될 수 있고, 네트워크·서버 오류는 전체 전사로 넘어가지 않아요. 원본은 바뀌지 않아요.\n\n분석을 진행할까요?',{ok:'분석 시작'}))return;
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  // Up to 100 files take ~10 minutes: keep the screen awake so iOS does not suspend the run.
  M.keepAwake?.(true);
@@ -470,8 +454,10 @@ async function analyze(main,check=()=>{}){
   for(const m of targets){
    if(state.cancel||!main.isConnected||state.controller.signal.aborted)break;
    seen++;popup.update(seen,m);
-   const cached=readCache(m);if(resultFor(m)?.candidate){const f=resultFor(m);state.results.set(m.id,f);success++;continue}if(cached?.method==='stt'&&!cached.candidate){state.results.set(m.id,cached);failed++;continue}
-   try{const result=await stt(m,state.controller.signal);check();setResult(m,result);result.candidate?success++:failed++}
+   if(!needsScan(m)){const f=resultFor(m);state.results.set(m.id,f);success++;continue}
+   try{const result=await stt(m,state.controller.signal,{onProgress:message=>{
+    if(main.isConnected){popup.update(seen,m,message);const progress=root.querySelector('[data-progress]');if(progress)progress.textContent=seen+'/'+targets.length+' · '+M.label(m)+' · '+message}
+   }});check();setResult(m,result);result.candidate?success++:failed++}
    catch(error){
      const text=String(error.message||error);
      // Cache only successful recognition; failed queries are retryable.
@@ -569,7 +555,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
  <div class="vz-sc-list" data-suggest-list></div><button type="button" class="vz-sc-more" data-more hidden>더 보기 <i class="ph ph-caret-down"></i></button><span class="sr-only" data-page-count aria-live="polite"></span>
  <p role="status" class="vz-sc-progress" data-progress>목록 확인 중…</p><button class="btn ghost" type="button" data-stop hidden>분석 중단</button>
  <details class="reference-options vz-sc-advanced" hidden><summary>가사 없는 곡용 기준 만들기 (고급)</summary><p class="small muted">가사를 입력하기 어려운 곡만 녹음으로 기준을 만들어요. 최초 음성 변환에 비용이 발생해요. 이미 저장한 기준은 계속 매칭에 사용돼요.</p><select data-ref-picker aria-label="기준 녹음 선택"></select><div class="btn-row"><button class="btn secondary" data-ref-add type="button">기준 녹음 만들기(최초 STT 비용)</button><button class="btn ghost" data-ref-clear type="button">선택 곡 기준 삭제</button></div><p class="small muted" data-ref-list></p><button class="btn ghost block" type="button" data-undo>↶ 마지막 일괄 지정 되돌리기</button><p class="small muted"><a href="#/songs">가사는 곡 상세의 가사 탭에서 입력 →</a></p></details>
- <div id="song-check-help" class="vz-sc-help" role="tooltip" data-song-help-tip hidden>원어 가사부터 비교하고, 맞지 않으면 한국어 가사도 확인해요. 가사 수정 후 AI 분석을 누르면 다시 비교해요.</div>
+ <div id="song-check-help" class="vz-sc-help" role="tooltip" data-song-help-tip hidden>곡 상세의 원문 가사와 비교해요. 첫 구간에서 찾지 못하면 다른 구간을 순서대로 확인하고, 일치하면 멈춰요.</div>
  <div class="vz-sc-bottom"><button type="button" data-analyze>분석 시작</button><button type="button" data-apply>추천대로 곡 지정</button></div></section>`},
  async mount(main){
   if(busy){showBusyPopup(main);return}
@@ -599,4 +585,39 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   showReferenceControls(main);draw(main);
  },leave(){helpAbort?.abort();helpAbort=null;destroyPlayers()}
 });
+let transcriptAbort=null;
+VZ.route('song-transcript',{title:'전사 확인',back:true,tab:'record',noAutoRefresh:true,
+ render(){return '<section class="vz-transcript" data-transcript><p class="muted">전사 내용을 불러오는 중…</p></section>'},
+ async mount(main,r){
+  const host=main.querySelector('[data-transcript]'),id=r.params[0],currentOwner=owner();
+  transcriptAbort?.abort();transcriptAbort=new AbortController();
+  window.addEventListener('vzip:auth-changed',()=>{if(currentOwner!==owner())host.textContent='계정이 변경되어 전사 내용을 닫았어요.'},{signal:transcriptAbort.signal});
+  try{
+   const items=await M.list(true),item=items.find(m=>m.id===id);
+   if(!item||currentOwner!==owner())throw Error('이 계정의 녹음을 찾을 수 없어요.');
+   const rows=await window.vzipCloudSongTextList?.()||[];
+   if(currentOwner!==owner()||!host.isConnected)return;
+   const primary=rows.find(x=>x.kind==='recognition'&&x.record_id===id&&!x.deleted_at)?.transcript||readCache(item)?.transcript||'';
+   const parts=rows.filter(x=>x.kind==='recognition'&&x.record_id.startsWith(id+'@')&&!x.deleted_at)
+    .map(x=>({start:Number(x.record_id.slice(id.length+1)),text:x.transcript})).filter(x=>Number.isFinite(x.start)&&x.start>=0);
+   const seen=new Set(parts.map(p=>p.start));
+   for(const start of scanLocalStarts(item))if(!seen.has(start)){
+    const text=previousSegment(item,start);if(text?.trim())parts.push({start,text});
+   }
+   parts.sort((a,b)=>a.start-b.start);
+   const card=(label,text)=>'<article class="card"><strong>'+esc(label)+'</strong><p>'+esc(text)+'</p></article>';
+   host.innerHTML='<h2 class="sec">'+esc(M.label(item))+'</h2>'+
+    (primary?card('첫 분석 구간',primary):'')+
+    parts.map(p=>card(Math.floor(p.start/60)+'분 '+String(p.start%60).padStart(2,'0')+'초부터',p.text)).join('')+
+    (!primary&&!parts.length?'<div class="card"><p class="muted">아직 전사한 내용이 없어요. 곡 확인에서 녹음을 선택하고 분석을 시작해 주세요.</p></div>':'')+
+    '<p class="small muted">전사된 말에는 잡담이나 잘못 인식된 가사가 포함될 수 있어요. 곡 지정은 직접 확인 후 적용돼요.</p>';
+  }catch(error){if(host.isConnected&&currentOwner===owner())host.innerHTML='<div class="card"><p class="muted">'+esc(error.message||'전사 내용을 불러오지 못했어요.')+'</p></div>'}
+ },leave(){transcriptAbort?.abort();transcriptAbort=null}
+});
+function scanLocalStarts(item){
+ // Cloud rows are the primary source. Device-only cached segments are optional.
+ const seconds=Math.min(600,Number(item.durationSeconds)||0),starts=[];
+ for(let at=0;at<seconds;at+=27){const start=Math.round(Math.max(0,Math.min(at,Math.max(0,seconds-30))));if(starts.at(-1)!==start)starts.push(start)}
+ return starts;
+}
 })();
