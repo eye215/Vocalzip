@@ -215,6 +215,42 @@ async function metadataMode({signal}={}){
  check={token:access,ok:true,reason:'',mediaMode:value.mediaMode,uploadContract:typeof value.uploadContract==='string'?value.uploadContract:check.token===access?check.uploadContract||'':'',until:Date.now()+600000};
  return value.mediaMode;
 }
+/** Minimal immutable target retained by the existing deletion journal, never a bearer ticket. */
+function deletionTarget(row,{id,requestId}={}){
+ const m=row?.metadata,owner=window.vzipCloudUserId?.();
+ if(!m||m.id!==id||m.storageProvider!=='r2'||['path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(m,k)))throw Error('기존 원본은 새 저장 방식 인수가 먼저 필요해요.');
+ const target={requestId,mediaId:id,key:m.r2Key,updatedAt:deleteStamp(row.updated_at),size:m.size,type:m.type,etag:m.r2Etag};
+ validateDeletionTarget(target,owner);return target;
+}
+function deleteStamp(value){
+ if(!window.VzipMediaMetadataEdits?.stamp)throw Error('파일 버전 확인 모듈을 다시 불러와 주세요.');
+ return window.VzipMediaMetadataEdits.stamp(value);
+}
+function validateDeletionTarget(t,owner){
+ const fields=['requestId','mediaId','key','updatedAt','size','type','etag'],p=String(t?.key||'').split('/'),
+ uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+ if(!owner||!t||Object.keys(t).length!==fields.length||Object.keys(t).some(k=>!fields.includes(k))||!uuid.test(t.requestId||'')||
+  !/^[A-Za-z0-9_-]{1,100}$/.test(t.mediaId||'')||p.length!==5||p[0]!=='u'||p[1]!==owner||p[2]!==t.mediaId||!uuid.test(p[3])||!/^original\.[a-z0-9]{1,8}$/.test(p[4])||
+  deleteStamp(t.updatedAt)!==t.updatedAt||!Number.isSafeInteger(t.size)||t.size<1||t.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(t.type||'')||!/^[!-~]{1,200}$/.test(t.etag||''))throw Error('삭제할 원본과 이전 버전을 확인해 주세요.');
+}
+/** Re-obtain the same signed ticket; only the Worker deletes immutable bytes and the row. */
+async function deleteLibrary(target,{signal}={}){
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'',t=JSON.parse(JSON.stringify(target));
+ const current=()=>{if(!owner||!session||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 파일 삭제를 중단했어요.');};
+ current();validateDeletionTarget(t,owner);
+ if(await metadataMode({signal})!=='revision')throw Error('미완료 원본 삭제를 이전 저장 방식으로 우회하지 않아요.');current();
+ const value=await api('/v2/media/delete/prepare',{method:'POST',body:{requestId:t.requestId,mediaId:t.mediaId,key:t.key,updatedAt:t.updatedAt,size:t.size},signal});current();
+ const ticket=value?.ticket,d=ticket?.descriptor,fields=['version','user_id','session_id','request_id','media_id','object_key','object_version','expected_updated_at','size','content_type','content_root','etag'];
+ if(!['reserved','deleted'].includes(value?.state)||!d||Object.keys(d).length!==fields.length||Object.keys(d).some(k=>!fields.includes(k))||
+  d.version!==1||d.user_id!==owner||d.session_id!==session||d.request_id!==t.requestId||d.media_id!==t.mediaId||
+  d.object_key!==t.key||d.object_version!==t.key.split('/')[3]||deleteStamp(d.expected_updated_at)!==t.updatedAt||
+  d.size!==t.size||d.content_type!==t.type||d.etag!==t.etag||!/^[0-9a-f]{64}$/.test(d.content_root||'')||!/^[0-9a-f]{64}$/.test(ticket.signature||''))
+  throw Error('원본 삭제 허가를 확인하지 못했어요. 같은 요청으로 다시 확인해 주세요.');
+ const result=await api('/v2/media/delete/commit',{method:'POST',body:{ticket},signal});current();
+ if(result?.ok!==true||result.state!=='deleted'||result.key!==t.key||result.requestId!==t.requestId)throw Error('원본 삭제 결과를 확인하지 못했어요. 같은 요청으로 다시 확인해 주세요.');
+ signed.delete(t.key);persist();return result;
+}
 /** CAS transport. Caller retains this exact request for ambiguous replies; never retry a conflict with a fresh version. */
 async function editLibrary(target,{signal}={}){
  const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
@@ -281,5 +317,5 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, metadataMode, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, metadataMode, deletionTarget, deleteLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();

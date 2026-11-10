@@ -80,3 +80,50 @@ test('metadata digest binds content/version and ignores JSON property order',asy
  assert.equal(await P.mediaStamp(a),await P.mediaStamp(b));b.metadata.size=13;assert.notEqual(await P.mediaStamp(a),await P.mediaStamp(b));
  await assert.rejects(P.mediaStamp({metadata:{},updated_at:'invalid'}),e=>e.code==='response');assert.equal(await P.mediaStamp(null),null);
 });
+
+function versioned(f,extra={}){
+ f.server.row={metadata:{id:'chosen',name:'keep private title',storageProvider:'r2',r2Key:'u/'+U+'/chosen/'+G+'/original.wav',size:3,type:'audio/wav',r2Etag:'"original"'},updated_at:'2026-11-10T00:00:00.123456Z'};
+ const target=(row,{requestId,previous})=>row?{requestId,mediaId:'chosen',key:row.metadata.r2Key,updatedAt:row.updated_at,size:3,type:'audio/wav',etag:'"original"'}:clone(previous);
+ const options={objectTarget:target,...extra};return {target,options,client:f.create(options)};
+}
+test('immutable target is stored before root mutation, with no title, ticket or original bytes',async()=>{
+ const f=fixture(),v=versioned(f);f.server.reject=true;await assert.rejects(v.client.run('chosen'));
+ const saved=v.client.list()[0];assert.ok(saved.object.requestId);assert.equal(saved.object.updatedAt,'2026-11-10T00:00:00.123456Z');
+ assert.equal(saved.object.key,f.server.row.metadata.r2Key);assert.ok(!JSON.stringify([...f.rows]).includes('keep private title'));assert.equal(f.server.physical,0);
+});
+test('lost root acknowledgement preserves the exact immutable request across recreation',async()=>{
+ const f=fixture(),v=versioned(f);f.server.lost=true;await assert.rejects(v.client.run('chosen'));
+ const object=clone(v.client.list()[0].object);let received;
+ await f.create({...v.options,cleanup:async(row,guard,id,target)=>{guard();received=target;}}).run('chosen');
+ assert.deepEqual(received,object);assert.equal(f.server.writes,2);
+});
+test('a missing metadata row after commit response loss retains the original deletion target',async()=>{
+ const f=fixture(),v=versioned(f);let first;
+ const cleanup=async(row,guard,id,target)=>{guard();if(!first){first=clone(target);f.server.row=null;throw Error('commit response lost');}assert.equal(row,null);assert.deepEqual(target,first);};
+ await assert.rejects(f.create({...v.options,cleanup}).run('chosen'),/commit response lost/);
+ await f.create({...v.options,cleanup}).run('chosen');assert.equal(v.client.list()[0].phase,'cloud-complete');
+ await v.client.acknowledge('chosen');assert.deepEqual(v.client.list(),[]);
+});
+test('immutable target cannot silently fall back to legacy or a client without its adapter',async()=>{
+ const f=fixture(),v=versioned(f);f.server.reject=true;await assert.rejects(v.client.run('chosen'));f.server.reject=false;
+ const writes=f.server.writes;
+ for(const extra of [{objectTarget:()=>null},{objectTarget:null}])await assert.rejects(f.create({...v.options,...extra}).run('chosen'),e=>e.code==='unavailable');
+ assert.equal(f.server.writes,writes);assert.equal(f.server.physical,0);
+});
+test('legacy pending intent requires explicit review before acquiring an immutable target',async()=>{
+ const f=fixture(),v=versioned(f);f.server.reject=true;await assert.rejects(f.client.run('chosen'));f.server.reject=false;
+ await assert.rejects(v.client.run('chosen'),e=>e.code==='review');assert.equal(f.server.physical,0);
+});
+test('malformed or foreign stored immutable target blocks all server reads',async()=>{
+ for(const patch of [{key:'u/'+V+'/chosen/'+G+'/original.wav'},{updatedAt:'2026-11-10T00:00:00Z'},{size:0},{type:'video/mp4'},{etag:''},{requestId:'bad'},{extra:'bad'}]){
+  const f=fixture(),v=versioned(f);f.server.reject=true;await assert.rejects(v.client.run('chosen'));
+  const k='vzip_media_delete_v1:'+U+':chosen',job=JSON.parse(f.rows.get(k));job.object={...job.object,...patch};f.rows.set(k,JSON.stringify(job));const reads=f.server.reads;
+  await assert.rejects(v.client.run('chosen'),e=>e.code==='corrupt');assert.equal(f.server.reads,reads);
+ }
+});
+test('old-login immutable requests cannot be adopted through root-only confirmation',async()=>{
+ const f=fixture(),v=versioned(f);f.server.reject=true;await assert.rejects(v.client.run('chosen'));f.server.reject=false;f.who.session=T;let approvals=0;
+ const client=f.create({...v.options,reviewRoot:async context=>({owner:U,session:T,reviewId:G,mediaDelete:context}),prepareResume:async()=>{approvals++;}});
+ const review=await client.review('chosen');await assert.rejects(client.resume(review.reviewId,{}, {confirmed:true}),e=>e.code==='session');
+ assert.equal(approvals,0);assert.equal(f.server.physical,0);assert.equal(client.list()[0].session,S);
+});
