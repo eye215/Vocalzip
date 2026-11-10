@@ -1,0 +1,50 @@
+name: Verify publication upload public assets
+on:
+  push:
+    branches: ['verify/media-publication-public-20261110']
+permissions:
+  contents: read
+jobs:
+  public-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: aafb37267fad8c5a733f59dc5b6cf4decc178a9c
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify public upload assets and dormant source flags without signing in
+        env:
+          EXPECTED_COMMIT: aafb37267fad8c5a733f59dc5b6cf4decc178a9c
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const paths=['index.html','r2-storage.js','cloud-sync.js','r2-resumable-upload.js','media-upload-recovery.js','account-config.js'];
+          const hash=x=>createHash('sha256').update(x).digest('hex');
+          for(let attempt=0;;attempt++){
+            try{
+              for(const path of paths){
+                const response=await fetch('https://vocalzip.yullul.com/'+path+'?vzip_verify='+process.env.EXPECTED_COMMIT+'-'+attempt,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+                assert.equal(response.status,200,path);
+                assert.equal(hash(new Uint8Array(await response.arrayBuffer())),hash(readFileSync(path)),path+' public SHA-256');
+              }
+              break;
+            }catch(error){
+              if(attempt>=9)throw error;
+              console.log('Public assets not current yet; retry '+(attempt+1));
+              await new Promise(r=>setTimeout(r,10000));
+            }
+          }
+          const html=readFileSync('index.html','utf8');
+          assert.ok(html.includes('r2-storage.js?v=16')&&html.includes('cloud-sync.js?v=138'),'new asset references');
+          const flags=readFileSync('r2-worker/wrangler.toml','utf8');
+          assert.match(flags,/MEDIA_VERSION_GUARD_ENABLED\s*=\s*"false"/);
+          assert.match(flags,/UPLOADS_V2_ENABLED\s*=\s*"false"/);
+          const config=readFileSync('account-config.js','utf8');
+          assert.match(config,/VZIP_SNAPSHOT_REVISION_ENABLED\s*\?\?=\s*false/);
+          console.log('Public asset SHA-256 matched for '+paths.length+' files; source flags remain OFF; no auth/user data read.');
+          NODE
