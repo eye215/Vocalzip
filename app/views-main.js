@@ -53,7 +53,7 @@ VZ.wireMedia = (host, items) => {
 VZ.editMedia = item => {
   const created = M.dateOf(item);
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + (item.rating >= n) + '">★</button>').join('');
-  VZ.sheet({title:'녹음 정보 수정', body:'<form id="media-edit"><label class="field"><span>제목</span><input type="text" name="name" maxlength="150" required value="' + esc(M.label(item)) + '"></label><button type="button" class="btn sm ghost" data-apply-song-date>곡명·날짜로 제목 적용</button><p class="small muted" data-title-hint>직접 정한 제목은 곡이나 날짜를 바꿔도 유지돼요.</p>' + VZ.songSelect('song', item.songId || '') +
+  VZ.sheet({title:'녹음 정보 수정', body:'<form id="media-edit"><label class="field"><span>제목</span><input type="text" name="name" readonly value="' + esc(M.label(item)) + '"><span class="small muted">곡과 날짜를 지정하면 제목이 자동으로 바뀌고, 이전 제목은 감상 메모에 남아요.</span></label>' + VZ.songSelect('song', item.songId || '') +
     '<fieldset class="field" style="border:0;padding:0"><legend>종류</legend><div class="seg" role="radiogroup" aria-label="녹음 종류">' + M.OCCASIONS.map(([k, v]) => '<button type="button" role="radio" data-occ="' + k + '" aria-checked="' + (M.occasion(item) === k) + '" aria-pressed="' + (M.occasion(item) === k) + '">' + v + '</button>').join('') + '</div></fieldset>' +
     '<label class="field"><span>녹음 날짜</span><input type="date" name="date" value="' + created + '"><span class="small muted">' + ({metadata:'파일 속 촬영·녹음 날짜예요.', 'file-modified':'날짜 정보가 없어 파일 수정일을 썼어요.', manual:'직접 지정한 날짜예요.'}[item.dateSource] || '') + '</span></label><fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset><label class="field"><span>감상 메모</span><textarea name="review" maxlength="3000" placeholder="잘된 점, 고칠 점">' + esc(item.review || '') + '</textarea></label></form>',
     foot:'<button type="submit" form="media-edit" class="btn block">저장</button>',
@@ -62,43 +62,27 @@ VZ.editMedia = item => {
       el.querySelectorAll('[data-occ]').forEach(b => b.onclick = () => { occasion = b.dataset.occ; el.querySelectorAll('[data-occ]').forEach(x => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); }); });
       el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating >= +x.dataset.star))); });
       const form = el.querySelector('form');
-      // Changing the song (or its day) renames the file to "song + recording day" unless the user typed a name.
-      let typed = !window.VzipMediaNaming?.isAutomatic(item, VZ.songTitle), nameEdited = false, lastAuto = '', known = M.cached();
-      M.list().then(all => { known = all; }).catch(() => {});
-      form.name.addEventListener('input', () => { typed = true; nameEdited = true; });
+      let known = M.cached();
+      M.list().then(all => { known = all; rename(); }).catch(() => {});
       const rename = () => {
-        if (typed) return;
         const sel = form.song.value, title = sel === '__new' ? form.song__new.value.trim() : VZ.songTitle(sel);
-        if (!title) return;
-        lastAuto = form.name.value = M.autoName(title, form.date.value || M.dateOf(item), item.id, known);
+        form.name.value = title ? M.autoName(title, form.date.value || M.dateOf(item), item.id, known) : M.label(item);
       };
+      rename();
       form.song.addEventListener('change', rename);
       form.song__new.addEventListener('input', rename);
       form.date.addEventListener('change', rename);
-      const applyTitle = el.querySelector('[data-apply-song-date]'), titleHint = el.querySelector('[data-title-hint]');
-      const updateTitleHint = () => { applyTitle.hidden = titleHint.hidden = !typed; };
-      updateTitleHint();
-      form.name.addEventListener('input', updateTitleHint);
-      applyTitle.onclick = () => {
-        const sel = form.song.value, title = sel === '__new' ? form.song__new.value.trim() : VZ.songTitle(sel);
-        if (!title) { VZ.toast('먼저 곡을 선택해 주세요.', 'error'); return; }
-        form.name.value = M.autoName(title, form.date.value || M.dateOf(item), item.id, known);
-        // Explicitly replacing a custom title is a user edit, including for legacy imports.
-        typed = true; nameEdited = true; updateTitleHint();
-      };
       form.onsubmit = async e => {
         e.preventDefault();
         const songId = VZ.readSong(form, 'song'); if (songId === null) return;
         const date = form.date.value, keep = item.created ? new Date(item.created) : new Date();
         const d = VZ.parseYmd(date);
-        const changes = {name:form.name.value.trim() || M.label(item), songId, song:VZ.songLabel(VZ.song(songId)), rating, review:form.review.value, occasion,
+        const changes = {songId, song:VZ.songLabel(VZ.song(songId)), rating, review:form.review.value, occasion, normalizeTitle:!!songId,
           created:d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime() : item.created};
-        if (!typed && lastAuto && changes.name === lastAuto) Object.assign(changes, {nameMode:'auto', autoName:lastAuto});
-        else if (nameEdited) Object.assign(changes, {nameMode:'manual', autoName:null});
         if (d && date !== M.dateOf(item)) Object.assign(changes, {recordedDate:date, dateSource:'manual'});
         if (songId !== (item.songId || '')) changes.songSource = 'user'; // the server never changes a user's choice
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;
-        try { await M.update(item, changes); M.reserveName(changes.name); Object.assign(item, changes); close(); VZ.toast('저장했어요.'); }
+        try { const updated = await M.update(item, changes); if(updated?.name)M.reserveName(updated.name); Object.assign(item, updated || changes); close(); VZ.toast('저장했어요.'); }
         catch (err) { btn.disabled = false; VZ.toast('저장하지 못했어요: ' + err.message + ' · 입력은 유지돼요.', 'error'); }
       };
     }});

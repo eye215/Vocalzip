@@ -330,13 +330,36 @@ VZ.route('growth', {title:'성장', render() {
 
 /* ---------- 설정 ---------- */
 VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true, render() {
-  return '<h2 class="sec" style="margin-top:4px">계정 · 클라우드 동기화</h2><div class="card" data-cloud></div>' +
-    '<h2 class="sec">음원</h2><div class="list icons"><a class="item" href="#/library"><i class="ph ph-waveform"></i><span class="item-main"><span class="item-title">전체 음원 보관함</span><span class="item-sub">월별로 모아 보기 · 재생 · 정보 수정</span></span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/import-hub"><i class="ph ph-tray-arrow-down"></i><span class="item-main"><span class="item-title">기존 자료 가져오기</span><span class="item-sub">사진·iCloud Drive·음성 메모에서 기간·길이로 골라 가져오기</span></span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/processing-log"><i class="ph ph-list-magnifying-glass"></i><span class="item-main"><span class="item-title">처리 내역 · 분석 상태</span><span class="item-sub">파일별 업로드·가사 매칭·보컬 분석·사용량</span></span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/storage"><i class="ph ph-hard-drives"></i><span class="item-main"><span class="item-title">저장 공간 관리</span><span class="item-sub" data-storage-status>확인 중…</span></span><i class="ph ph-caret-right chev"></i></a></div>' +
-    '<div class="list icons" data-auto-analysis style="margin-top:10px"></div>' +
-    '<h2 class="sec">기록 관리</h2><div class="list icons"><a class="item" href="#/lessons"><i class="ph ph-chalkboard-teacher"></i><span class="item-main"><span class="item-title">레슨 기록</span><span class="item-sub">레슨 ' + VZ.db.lessons.length + '개 · 일정·피드백·녹음</span></span><i class="ph ph-caret-right chev"></i></a><a class="item" href="#/homework"><i class="ph ph-check-square"></i><span class="item-main"><span class="item-title">숙제 관리</span><span class="item-sub">남은 숙제 ' + VZ.db.assignments.filter(t => t.status !== 'done').length + '개</span></span><i class="ph ph-caret-right chev"></i></a><button type="button" class="item" data-cats><i class="ph ph-tag"></i><span class="item-main"><span class="item-title">트레이닝 항목 관리</span><span class="item-sub">발성·호흡 연습 항목</span></span><i class="ph ph-caret-right chev"></i></button><a class="item" href="billing/" data-billing><i class="ph ph-receipt"></i><span class="item-main"><span class="item-title">레슨비 정산</span><span class="item-sub">레슨권·결제·남은 횟수</span></span><i class="ph ph-arrow-square-out chev"></i></a></div>' +
-    '<h2 class="sec">데이터</h2><div class="list icons"><button type="button" class="item" data-export><i class="ph ph-download-simple"></i><span class="item-main"><span class="item-title">기록 백업 (JSON)</span><span class="item-sub">음성·영상 원본은 포함되지 않아요</span></span></button><label class="item" style="cursor:pointer"><i class="ph ph-upload-simple"></i><span class="item-main"><span class="item-title">백업 불러오기</span><span class="item-sub">백업 파일의 기록을 현재 기록과 합쳐요</span></span><input type="file" accept="application/json,.json" class="sr-only" data-import-json></label></div>' +
-    '<h2 class="sec">앱 정보</h2><div class="list icons"><button type="button" class="item" data-refresh><i class="ph ph-arrow-clockwise"></i><span class="item-main"><span class="item-title">최신 버전으로 새로고침</span><span class="item-sub">화면이 예전 그대로면 눌러 주세요. 기록은 그대로 남아요.</span></span></button><div class="item"><i class="ph ph-info"></i><span class="item-main"><span class="item-title">VOCAL.zip v' + VZ.version + '</span><span class="item-sub">기록은 이 기기에 저장되고, 로그인하면 클라우드에 자동 백업돼요.</span></span></div></div>';
+  return '<div class="vz-settings">' +
+    '<section class="vz-settings-account" aria-label="로그인 계정"><div class="vz-settings-cloud" data-cloud></div><span class="vz-sync-summary" data-sync-summary aria-hidden="true"></span></section>' +
+    '<section class="vz-journey" aria-label="나의 노래 기록"><div class="vz-journey-content" data-journey><strong>기록을 불러오는 중이에요</strong></div></section>' +
+    '<section class="vz-settings-section"><h2>분석</h2><div class="list icons vz-settings-list" data-auto-analysis></div></section>' +
+    '<section class="vz-settings-section"><h2>관리</h2><div class="list icons vz-settings-list"><button type="button" class="item" data-cats><i class="ph ph-tag"></i><span class="item-main"><span class="item-title">트레이닝 항목</span><span class="item-sub">발성·호흡 연습 분류</span></span><i class="ph ph-caret-right chev"></i></button><a class="item" href="#/storage"><i class="ph ph-hard-drives"></i><span class="item-main"><span class="item-title">저장 공간</span><span class="item-sub" data-storage-status>확인 중…</span></span><i class="ph ph-caret-right chev"></i></a><details class="vz-settings-backup"><summary class="item"><i class="ph ph-archive"></i><span class="item-main"><span class="item-title">기록 백업·복원</span><span class="item-sub">필요할 때만 사용</span></span><i class="ph ph-caret-down chev"></i></summary><div class="vz-settings-backup-actions"><p>JSON 기록만 포함해요. 음성·영상 원본은 포함되지 않아요.</p><button type="button" data-export>기록 내보내기</button><label>기록 불러오기<input type="file" accept="application/json,.json" class="sr-only" data-import-json></label></div></details></div></section>' +
+    '<p class="vz-settings-version">VOCAL.zip v' + VZ.version + '</p>' +
+    '</div>';
 }, mount(main) {
+  const journey = main.querySelector('[data-journey]');
+  const drawJourney = media => {
+    if (!journey.isConnected) return;
+    const valid = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') && !!VZ.parseYmd(d) && VZ.ymd(VZ.parseYmd(d)) === d && d <= VZ.today();
+    const accountId = window.vzipCloudUserId?.() || localStorage.getItem('vzip_cloud_linked_user') || '';
+    const shows = (VZ.db.performances || []).filter(p => accountId && p.ownerId === accountId);
+    const dates = [...media.map(M.dateOf), ...VZ.db.lessons.map(l => l.date), ...shows.flatMap(p => [p.start, ...(p.sessions || []).map(x => x.date)])].filter(valid).sort();
+    const first = dates[0];
+    let duration = '';
+    if (first) {
+      const a = VZ.parseYmd(first), b = VZ.parseYmd(VZ.today());
+      let months = (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth() - (b.getDate() < a.getDate() ? 1 : 0);
+      months = Math.max(0, months);
+      const years = Math.floor(months / 12), rest = months % 12;
+      duration = months ? [years ? years + '년' : '', rest ? rest + '개월' : ''].filter(Boolean).join(' ') : Math.max(1, VZ.daysBetween(first, VZ.today()) + 1) + '일';
+    }
+    journey.innerHTML =
+      (first ? '<strong><span>노래가 쌓인 시간</span><em>' + duration + '</em><small class="vz-journey-date">첫 기록 ' + esc(first.replace(/-/g, '.')) + '</small></strong>' : '<strong><span>노래가 쌓인 시간</span><em>첫 기록을 기다려요</em><small class="vz-journey-date">녹음·레슨·공연을 남겨보세요</small></strong>') +
+      '<div class="vz-journey-stats"><div><span>내 곡</span><b>' + VZ.db.songs.length + '</b></div><div><span>녹음</span><b>' + media.length + '</b></div><div><span>레슨</span><b>' + VZ.db.lessons.length + '</b></div></div>';
+  };
+  drawJourney(M.cached());
+  M.list().then(drawJourney).catch(() => {});
   VZ.autoAnalysisSettings?.(main.querySelector('[data-auto-analysis]')); // app/auto-analysis.js
   const root = document.getElementById('vzip-cloud-root');
   if (root) {
@@ -345,15 +368,36 @@ VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true,
     const box = root.querySelector('#cloud-signed-in .cloud-actions');
     if (box && !root.querySelector('.cloud-more')) {
       const more = document.createElement('details'); more.className = 'cloud-more';
-      more.innerHTML = '<summary>수동 백업·복원</summary><p class="small muted" style="margin:6px 0">평소에는 자동으로 동기화·백업돼요. 다른 기기와 맞지 않을 때만 쓰세요.</p><div class="cloud-actions"></div>';
-      for (const id of ['cloud-download', 'cloud-media-upload', 'cloud-media-download']) { const b = root.querySelector('#' + id); if (b) more.lastChild.append(b); }
+      more.innerHTML = '<summary>동기화·백업 도구</summary><p class="small muted" data-cloud-detail-status style="margin:6px 0"></p><div class="cloud-actions"></div>';
+      for (const id of ['cloud-upload', 'cloud-download', 'cloud-media-upload', 'cloud-media-download']) { const b = root.querySelector('#' + id); if (b) more.lastChild.append(b); }
       box.after(more);
-      const out = root.querySelector('#cloud-logout'); if (out) root.append(out);
+      const out = root.querySelector('#cloud-logout'); if (out) more.append(out);
       const who = root.querySelector('#cloud-user');
       if (who && !who.closest('.cloud-account')) { const row = document.createElement('div'); row.className = 'cloud-account'; row.innerHTML = '<i class="ph-fill ph-user-circle"></i><div><small>로그인 계정</small></div>'; who.before(row); row.lastChild.append(who); }
     }
+    const statusLine = root.querySelector('#cloud-status'), accountRow = root.querySelector('.cloud-account');
+    if (statusLine && accountRow) accountRow.after(statusLine);
+    main._vzSyncCleanup?.();
+    const summary = main.querySelector('[data-sync-summary]');
+    const paintSync = () => {
+      if (!summary.isConnected) return;
+      const raw = statusLine?.textContent || '', signed = !root.querySelector('#cloud-signed-in')?.hidden;
+      const state = !signed ? 'off' : /오류|실패|확인 필요|못했/.test(raw) ? 'error' : /진행 중|합치는 중|연결 확인 중|동기화 중/.test(raw) ? 'busy' : /저장했어요|자동으로 서버에 저장/.test(raw) ? 'ok' : 'busy';
+      summary.dataset.state = state;
+      summary.textContent = state === 'off' ? '로그인하면 기록을 동기화할 수 있어요' : state === 'error' ? '동기화 확인 필요' : state === 'ok' ? '자동 동기화됨' : '동기화 상태 확인 중';
+      const detail = root.querySelector('[data-cloud-detail-status]');
+      if (detail) detail.textContent = raw;
+    };
+    const observer = new MutationObserver(paintSync);
+    if (statusLine) observer.observe(statusLine, {childList:true, characterData:true, subtree:true});
+    const signedPanel = root.querySelector('#cloud-signed-in');
+    if (signedPanel) observer.observe(signedPanel, {attributes:true, attributeFilter:['hidden']});
+    window.addEventListener('vzip:auth-changed', paintSync);
+    main._vzSyncCleanup = () => { observer.disconnect(); window.removeEventListener('vzip:auth-changed', paintSync); };
+    paintSync();
+    const syncButton = root.querySelector('#cloud-upload');
+    if (syncButton) { syncButton.textContent = '지금 동기화'; syncButton.setAttribute('aria-label', '지금 동기화: 기기와 클라우드 기록 합치기'); }
   }
-  main.querySelector('[data-refresh]').onclick = () => { const u = new URL(location.href); u.searchParams.set('fresh', Date.now()); location.replace(u.href); };
   const status = main.querySelector('[data-storage-status]');
   (async () => {
     const r2 = window.VzipR2, signed = !!window.vzipCloudSignedIn?.();
@@ -377,6 +421,7 @@ VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true,
   };
   main.querySelector('[data-cats]').onclick = categorySheet;
 }, leave() {
+  document.getElementById('view')?._vzSyncCleanup?.();
   const root = document.getElementById('vzip-cloud-root'), park = document.getElementById('vzip-park');
   if (root && park) { park.append(root); }
 }});

@@ -122,7 +122,7 @@ async function autoUploadMedia(id){if(!user||!ready)return;if(window.VZ?.media?.
 // other fields keep what other devices saved. Edits already written to the cloud (cloudDone) are skipped,
 // and an event that does not say what changed sends nothing.
 const mediaNamePatch=(meta,changes)=>window.VzipMediaNaming?.patch(meta,changes,id=>localData()?.songs?.find(song=>song.id===id)?.title)||changes;
-const EDITABLE=['name','nameMode','autoName','song','songId','created','recordedDate','dateSource','type','rating','review'];
+const EDITABLE=['name','nameMode','autoName','normalizeTitle','song','songId','created','recordedDate','dateSource','type','rating','review'];
 window.addEventListener('vzip:media-updated',async e=>{const d=e.detail||{};if(!user||!d.id||d.cloudDone)return;try{const item=(await localMedia()).find(x=>x.id===d.id);if(!item)return;if(!d.changes)return;/* unknown change: never re-send the device copy's older fields */const keys=Object.keys(d.changes).filter(k=>EDITABLE.includes(k));if(!keys.length)return;const pick=Object.fromEntries(keys.map(k=>[k,d.changes[k]]));await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,pick)}))}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
 window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e.detail.id)});
 

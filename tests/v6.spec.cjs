@@ -1034,9 +1034,11 @@ test('Settings keeps the cloud account panel across re-renders and exports a bac
   await expect(page.locator('#cloud-user')).toContainText('test@example.invalid');
   await page.goto('/#/home');
   await page.goto('/#/settings');
+  await page.getByText('동기화·백업 도구').click();
   await expect(page.locator('#cloud-logout')).toBeVisible();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', {name:/기록 백업/}).click();
+  await page.getByText('기록 백업·복원').click();
+  await page.getByRole('button', {name:'기록 내보내기'}).click();
   expect((await download).suggestedFilename()).toMatch(/^vocalzip-backup-/);
 });
 
@@ -1643,18 +1645,34 @@ test('Library bulk menu omits analysis when selected recordings span songs', asy
 });
 
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
-  await boot(page, {media:false});
+  const seed = legacy();
+  seed.performances = [{id:'show1',ownerId:'ui-test-user',title:'첫 무대',start:'2025-07-24',status:'completed',sessions:[]}];
+  await boot(page, {seed});
   await page.goto('/#/settings');
-  const headings = await page.locator('h2.sec').allTextContents();
-  expect(headings.map(h => h.trim())).toEqual(['계정 · 클라우드 동기화', '음원', '기록 관리', '데이터', '앱 정보']);
-  await expect(page.locator('#cloud-upload')).toBeVisible();
-  await expect(page.locator('#cloud-logout')).toBeVisible();
+  await expect(page.locator('[data-journey]')).toContainText('첫 기록 2025.07.24');
+  await expect(page.locator('[data-journey]')).toContainText('녹음2');
+  await expect(page.locator('.vz-journey')).toHaveCSS('font-family', /Pretendard/);
+  await expect(page.locator('.vz-journey')).toHaveCSS('background-image', /linear-gradient/);
+  await expect(page.locator('[data-sync-summary]')).toBeVisible();
+  const headings = await page.locator('.vz-settings-section h2').allTextContents();
+  expect(headings.map(h => h.trim())).toEqual(['분석', '관리']);
+  await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();
+  await expect(page.locator('#cloud-upload')).toBeHidden();
+  await expect(page.locator('#cloud-logout')).toBeHidden();
   await expect(page.locator('#cloud-media-upload')).toBeHidden();
-  await page.getByText('수동 백업·복원').click();
+  await page.getByText('동기화·백업 도구').click();
+  await expect(page.locator('#cloud-logout')).toBeVisible();
+  await expect(page.locator('#cloud-upload')).toBeVisible();
   await expect(page.locator('#cloud-media-upload')).toBeVisible();
-  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  await expect(page.locator('.vz-settings').getByRole('link', {name:'레슨비 정산'})).toHaveCount(0);
   await expect(page.locator('[data-storage-status]')).not.toHaveText('확인 중…');
-  await expect(page.getByRole('button', {name:/최신 버전으로 새로고침/})).toBeVisible();
+  await expect(page.locator('[data-export]')).toBeHidden();
+  await page.getByText('기록 백업·복원').click();
+  await expect(page.locator('[data-export]')).toBeVisible();
+  await expect(page.locator('[data-import-json]')).toHaveCount(1);
+  await expect(page.getByRole('navigation', {name:'주요 메뉴'})).toBeHidden();
+  await page.setViewportSize({width:320,height:700});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   // Leaving and coming back doesn't wrap the tools twice.
   await page.goto('/#/home'); await page.goto('/#/settings');
   await expect(page.locator('.cloud-more')).toHaveCount(1);

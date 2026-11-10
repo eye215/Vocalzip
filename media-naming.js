@@ -22,6 +22,22 @@ function mode(meta,resolve){
 }
 function patch(meta,changes,resolve=()=> ''){
  const out={...changes};
+ const normalize=!!out.normalizeTitle;delete out.normalizeTitle;
+ const changed=['song','songId','recordedDate','created'].some(k=>Object.hasOwn(out,k)&&out[k]!==meta[k]);
+ if(normalize||changed){
+  const next={...meta,...out},base=title(next,resolve,false);
+  if(base){
+   if(mode(meta,resolve)&&out.nameMode==='auto'&&out.name===out.autoName&&String(out.name).startsWith(base)&&/^$|^ (?:[2-9]|[1-9]\d+)$/.test(String(out.name).slice(base.length)))return out;
+   const automatic=mode(meta,resolve),old=title(meta,resolve,false),tail=old&&String(meta.name||'').startsWith(old)?String(meta.name).slice(old.length):'';
+   const suffix=automatic&&/^ (?:[2-9]|[1-9]\d+)$/.test(tail)?tail:'';
+   const name=base+suffix;
+   if(!automatic&&meta.name&&meta.name!==name){
+    const prior=String(out.review??meta.review??'').trim(),entry='이전 제목: '+meta.name;
+    out.review=prior.includes(entry)?prior:[prior,entry].filter(Boolean).join('\n');
+   }
+   return {...out,name,nameMode:'auto',autoName:name};
+  }
+ }
  if(out.nameMode==='auto'&&out.autoName===out.name){
   if(!mode(meta,resolve)){delete out.name;delete out.nameMode;delete out.autoName;}
   else{const base=title({...meta,...out},resolve,false),rest=String(out.name||'').slice(base.length);
