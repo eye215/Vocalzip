@@ -76,6 +76,19 @@ body[data-vz-route="song-suggest"] .v-nav{display:none}
 .vz-sc-advanced{margin-top:16px;padding:16px;border-radius:20px;background:#fff}
 .vz-sc-advanced summary{cursor:pointer;font-weight:600}
 .vz-sc-progress{margin:12px 4px;color:#667085;font-size:12px}
+.vz-sc-busy{position:fixed;z-index:100;inset:0;display:grid;place-items:center;padding:24px;background:rgba(20,16,32,.32);backdrop-filter:blur(3px)}
+.vz-sc-busy-card{display:grid;justify-items:center;gap:10px;width:min(100%,320px);padding:30px 22px;border-radius:22px;background:#fff;box-shadow:0 22px 55px rgba(25,18,45,.18);text-align:center}
+.vz-sc-busy-card strong{color:#101828;font-size:17px;line-height:24px;font-weight:700}
+.vz-sc-busy-card p{margin:0;color:#667085;font-size:13px;line-height:19px}
+.vz-sc-busy-spinner{width:32px;height:32px;margin-bottom:3px;border:3px solid #EDE1FF;border-top-color:#7A32F5;border-radius:50%;animation:vz-sc-spin .8s linear infinite}
+.vz-sc-analysis .vz-sc-busy-card{width:min(100%,360px);gap:14px;padding:32px 24px}
+.vz-sc-analysis [data-analysis-count]{font-size:19px;font-weight:700;color:#7A32F5;font-variant-numeric:tabular-nums}
+.vz-sc-analysis-track{width:100%;height:8px;overflow:hidden;border-radius:99px;background:#EDE1FF}
+.vz-sc-analysis-track span{display:block;width:0;height:100%;border-radius:inherit;background:#7A32F5;transition:width .2s ease}
+.vz-sc-analysis [data-analysis-file]{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vz-sc-analysis [data-analysis-stop]{min-width:120px;min-height:44px;padding:0 16px;border:1px solid #DDD5EA;border-radius:12px;background:#fff;color:#344054;font-weight:600}
+@keyframes vz-sc-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.vz-sc-busy-spinner{animation:none;border-color:#7A32F5}}
 .vz-sc-pick{display:grid;gap:8px;max-height:58vh;overflow:auto}.vz-sc-pick button{min-height:48px;padding:10px 14px;border:0;border-radius:14px;background:#fff;text-align:left;color:#101828}
 .vz-sc-pick button[aria-pressed="true"]{background:#EDE1FF;color:#7A32F5}
 .vz-sc-pick small{display:block;color:#667085;font-size:11px}

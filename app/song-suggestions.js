@@ -34,7 +34,8 @@ const pickReason=(match,why)=>match?.candidate?why:'유사도 1위 자동 선택
 function candidateMatches(match){return match.matches.map(x=>({songId:x.songId,score:Math.round(x.score*1000)/1000})).slice(0,3)}
 const state={items:[],referenceItems:[],chosen:new Set(),results:new Map(),recognitions:new Map(),referenceRows:[],cloudReady:false,running:false,cancel:false,page:0,filter:'all',controller:null};
 const owner=()=>window.vzipCloudUserId?.()||'device';
-let viewOwner=owner(), busy=false, authGeneration=0;
+let viewOwner=owner(), busy=false, busyLabel='', authGeneration=0;
+const idleListeners=new Set();
 const scoped=key=>key+':'+viewOwner;
 function references(){
  // The user's original lyrics are already synced through the existing song catalog (#80).
@@ -110,10 +111,26 @@ window.addEventListener('vzip:auth-changed',()=>{
 });
 async function exclusive(main,action){
  if(busy||owner()!==viewOwner)return;
- busy=true;const generation=authGeneration;
+ busy=true;busyLabel=action===apply?'파일에 곡을 적용하고 있어요':action===analyze?'녹음을 분석하고 있어요':'작업을 처리하고 있어요';const generation=authGeneration;
  const check=()=>{if(generation!==authGeneration||owner()!==viewOwner||!main.isConnected)throw Error('화면 또는 계정이 변경되어 중단했어요.')};
  try{await action(main,check)}catch(error){VZ.toast(String(error.message||error),'error')}
- finally{busy=false}
+ finally{busy=false;busyLabel='';for(const listener of idleListeners)listener();idleListeners.clear()}
+}
+function showBusyPopup(main){
+ const overlay=document.createElement('div');overlay.className='vz-sc-busy';overlay.setAttribute('role','status');overlay.setAttribute('aria-live','polite');
+ overlay.innerHTML='<div class="vz-sc-busy-card"><span class="vz-sc-busy-spinner" aria-hidden="true"></span><strong></strong><p>완료되면 곡 확인 목록이 다시 열려요.</p></div>';
+ overlay.querySelector('strong').textContent=busyLabel||'파일을 처리하고 있어요';
+ main.append(overlay);
+ idleListeners.add(()=>{if(main.isConnected&&main.dataset.collection==='song-suggest')VZ.render()});
+}
+function showAnalysisPopup(main,total){
+ const overlay=document.createElement('div');overlay.className='vz-sc-busy vz-sc-analysis';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','녹음 분석 진행 중');
+ overlay.innerHTML='<div class="vz-sc-busy-card"><span class="vz-sc-busy-spinner" aria-hidden="true"></span><strong>녹음을 분석하고 있어요</strong><p data-analysis-count></p><div class="vz-sc-analysis-track"><span data-analysis-fill></span></div><p data-analysis-file></p><button type="button" data-analysis-stop>분석 중단</button></div>';
+ const count=overlay.querySelector('[data-analysis-count]'),file=overlay.querySelector('[data-analysis-file]'),fill=overlay.querySelector('[data-analysis-fill]');
+ count.textContent='0 / '+total+'개 완료';file.textContent='첫 번째 녹음을 준비하고 있어요';
+ overlay.querySelector('[data-analysis-stop]').onclick=()=>{state.cancel=true;state.controller?.abort();file.textContent='분석을 중단하고 있어요…'};
+ main.append(overlay);
+ return {update(done,item){count.textContent=done+' / '+total+'개 진행';file.textContent=M.label(item);fill.style.width=Math.round(done/total*100)+'%'},close(){overlay.remove()}};
 }
 const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
 function saveCheckpoint(){try{localStorage.setItem(scoped(checkpointKey),JSON.stringify({ids:[...state.chosen],at:Date.now()}))}catch{}}
@@ -448,11 +465,11 @@ async function analyze(main,check=()=>{}){
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  // Up to 100 files take ~10 minutes: keep the screen awake so iOS does not suspend the run.
  M.keepAwake?.(true);
- let success=0,failed=0,seen=0;
+ let success=0,failed=0,seen=0;const popup=showAnalysisPopup(main,targets.length);
  try{
   for(const m of targets){
    if(state.cancel||!main.isConnected||state.controller.signal.aborted)break;
-   seen++;root.querySelector('[data-progress]').textContent=seen+'/'+targets.length+' · '+M.label(m);
+   seen++;popup.update(seen,m);
    const cached=readCache(m);if(resultFor(m)?.candidate){const f=resultFor(m);state.results.set(m.id,f);success++;continue}if(cached?.method==='stt'&&!cached.candidate){state.results.set(m.id,cached);failed++;continue}
    try{const result=await stt(m,state.controller.signal);check();setResult(m,result);result.candidate?success++:failed++}
    catch(error){
@@ -465,7 +482,7 @@ async function analyze(main,check=()=>{}){
    // Allow UI to paint and the browser a chance to reclaim decoded audio between files.
    await pause();
   }
- }finally{M.keepAwake?.(false);loadSpend(main);state.running=false;state.controller=null;root.querySelector('[data-progress]').textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
+ }finally{popup.close();M.keepAwake?.(false);loadSpend(main);state.running=false;state.controller=null;const progress=root.querySelector('[data-progress]');if(progress)progress.textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
 }
 async function undo(main,check=()=>{}){
  let backup;try{backup=JSON.parse(localStorage.getItem(localStorage.getItem(scoped(backupPointer))||'')||'null')}catch{}
@@ -488,7 +505,7 @@ async function undo(main,check=()=>{}){
   }
   M.invalidate();window.dispatchEvent(new Event('vzip:media-updated'));
   state.items=(await M.list(true)).filter(eligible);
- }finally{state.running=false;main.querySelector('[data-progress]').textContent='되돌림 '+undone+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개';draw(main)}
+ }finally{state.running=false;const progress=main.querySelector('[data-progress]');if(progress)progress.textContent='되돌림 '+undone+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개';draw(main)}
 }
 async function apply(main,check=()=>{}){
  const approved=state.items.filter(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate)
@@ -522,7 +539,7 @@ async function apply(main,check=()=>{}){
   state.items=(await M.list(true)).filter(eligible);
  }finally{
   state.running=false;
-  main.querySelector('[data-progress]').textContent='곡 지정 '+done+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개';
+  const progress=main.querySelector('[data-progress]');if(progress)progress.textContent='곡 지정 '+done+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개';
   draw(main);
  }
 }
@@ -555,7 +572,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
  <div id="song-check-help" class="vz-sc-help" role="tooltip" data-song-help-tip hidden>원어 가사부터 비교하고, 맞지 않으면 한국어 가사도 확인해요. 가사 수정 후 AI 분석을 누르면 다시 비교해요.</div>
  <div class="vz-sc-bottom"><button type="button" data-analyze>분석 시작</button><button type="button" data-apply>추천대로 곡 지정</button></div></section>`},
  async mount(main){
-  if(busy){main.textContent='이전 작업을 마무리하고 있어요. 잠시 후 다시 열어 주세요.';return}
+  if(busy){showBusyPopup(main);return}
   viewOwner=owner();wireHelp(main);
   const root=main.querySelector('[data-suggest]');state.chosen.clear();state.results.clear();state.cloudReady=false;state.running=false;state.cancel=false;state.controller=null;state.page=0;state.filter='all';
   loadSpend(main);updateMetrics(main);
