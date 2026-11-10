@@ -302,3 +302,28 @@ nav{margin:8px 0 12px;gap:4px;padding:6px;border-radius:20px;background:#F3ECFF}
 nav button{border:0;border-radius:16px;background:transparent;color:#475467;font-weight:600}
 nav button[aria-pressed=true]{border:0;background:#fff;color:#7A32F5;box-shadow:0 2px 8px rgba(55,33,85,.045)}
 @media(max-width:700px){.table-wrap tr{border-radius:20px;padding:12px 16px;margin-bottom:12px}.cards tr{padding:14px 16px}}
+
+/* Billing: align with the main app's quiet cards and make the locked state intentional. */
+#billing-session-gate{width:calc(100% - 24px);max-width:560px;margin:clamp(90px,17vh,180px) auto 0;padding:28px 20px;border-radius:20px;background:#fff;color:#101828;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+#billing-session-gate h1,#billing-session-gate h2{margin:0 0 8px;font-size:22px;line-height:30px}
+#billing-session-gate p{margin:0 0 20px;color:#667085;font-size:14px;line-height:21px}
+#billing-session-gate a,#billing-session-gate button{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;margin-top:10px;border:0;border-radius:16px;text-decoration:none;font:600 15px Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+#billing-session-gate a{background:#7A32F5;color:#fff}
+#billing-session-gate button{background:#F3ECFF;color:#7A32F5}
+.billing header{margin-bottom:16px}
+.billing header .back{margin-left:0;border-radius:12px;background:#fff;color:#667085}
+.billing header button.ghost{width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:12px;background:#fff;color:#667085;font-size:22px}
+.billing #account-label{margin-top:2px}
+.billing nav{margin:0 0 20px;padding:5px;gap:3px;border-radius:16px;background:#EDE1FF}
+.billing nav button{min-height:44px;padding:0 14px;border-radius:12px;font-size:13px;white-space:nowrap}
+.billing nav button[aria-pressed=true]{box-shadow:none}
+.billing section>h2{margin-bottom:12px}
+.billing .metric,.billing .card,.billing .table-wrap{box-shadow:none}
+.billing .metric{min-height:94px}
+.billing .metric strong{color:#101828;font-size:23px}
+.billing .metric.hero strong,.billing .metric[data-total=remainingUnits] strong{color:#fff}
+.billing .metric span{color:#667085;font-size:12px}
+.billing .metric.recent{min-height:auto}
+.billing .empty{border:0;background:#fff}
+.billing .pending-summary{border-radius:16px}
+@media(max-width:700px){.billing .metrics{gap:12px}.billing nav{margin-right:-12px;padding-right:12px;border-radius:16px 0 0 16px}.billing .metric strong{font-size:20px}.billing .metric.hero strong{font-size:30px}}

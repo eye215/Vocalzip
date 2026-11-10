@@ -65,3 +65,24 @@ body[data-vz-route="settings"] #view{padding-bottom:12px}
 .vz-settings-cloud #vzip-cloud-root #cloud-logout{margin:1px 0 -5px auto;color:#667085;font-size:12px}
 .vz-settings-cloud #vzip-cloud-root #vzip-device-manage{min-height:44px;width:100%;margin-top:8px;background:#F8F6FD;color:#475467;font-size:13px}
 @media(max-width:350px){.vz-settings-list .item{gap:9px}.vz-journey-content>strong em{font-size:32px}.vz-journey-date{font-size:10px}.vz-journey-stats b{font-size:16px}.vz-journey-stats span{font-size:11px}}
+
+/* Settings uses quiet cards; the song history is information rather than a promotion. */
+.vz-settings{gap:20px}
+.vz-settings-account{padding:18px 16px;box-shadow:none}
+.vz-journey{padding:18px 16px;border:0;background:#fff;color:#101828;box-shadow:none}
+.vz-journey::after{display:none}
+.vz-journey-content>strong{gap:4px}
+.vz-journey-content>strong>span{color:#667085;font-size:13px;font-weight:600}
+.vz-journey-content>strong em{color:#101828;font-size:27px;line-height:34px;letter-spacing:-.03em;white-space:normal}
+.vz-journey-date{color:#667085;font-size:12px}
+.vz-journey-stats{margin-top:18px;padding:15px 0 0;border-top:1px solid #E8E4F0;gap:4px}
+.vz-journey-stats>div{display:grid;justify-items:center;gap:2px}
+.vz-journey-stats b{grid-row:1;color:#7A32F5;font-size:19px;line-height:25px}
+.vz-journey-stats span{grid-row:2;color:#667085;font-size:12px}
+.vz-settings-list .item{min-height:56px}
+.vz-settings-list .item>.ph:first-child{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:10px;background:#F3ECFF;color:#7A32F5;font-size:17px}
+.vz-settings-list .item .item-sub{display:block;margin-top:2px;color:#667085;font-size:12px;line-height:17px}
+.vz-settings-list .item .chev{margin-left:auto}
+.vz-settings-list[data-auto-analysis] .item{padding-bottom:10px}
+.vz-settings-cloud #vzip-cloud-root .cloud-more{border-top-color:#E8E4F0}
+@media(max-width:350px){.vz-journey-content>strong em{font-size:24px}.vz-journey-stats b{font-size:17px}}
