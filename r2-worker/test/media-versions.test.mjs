@@ -133,7 +133,8 @@ test('metadata edit forwards an exact version and patch without touching R2 or r
 test('metadata edit stays disabled for legacy, paused, revoked and unconfigured server states',async()=>{
  for(const scenario of ['legacy','paused','revoked','disabled']){
   const f=fixture();if(scenario==='disabled')f.env.MEDIA_VERSION_GUARD_ENABLED='false';else if(scenario==='revoked')f.state.active=false;else f.state.mode=scenario;
-  assert.ok([403,423,503].includes((await f.call('/v2/media/edit',{body:editBody()})).status));
+  const response=await f.call('/v2/media/edit',{body:editBody()});
+  assert.equal(response.status,{legacy:403,paused:423,revoked:401,disabled:503}[scenario],scenario);
   assert.equal(f.state.calls.some(x=>x.name==='vzip_edit_media'),false);
  }
 });

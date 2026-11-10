@@ -43,7 +43,7 @@ begin
    end if;
   else
    if jsonb_typeof(value) is distinct from 'string'
-   or length(value#>>'{}')>case field when 'review' then 8000 when 'songId' then 200 when 'recordedDate' then 10 when 'dateSource' then 40 else 500 end
+   or length(value#>>'{}')>(case field when 'review' then 8000 when 'songId' then 200 when 'recordedDate' then 10 when 'dateSource' then 40 else 500 end)
    or (field='name' and length(btrim(value#>>'{}'))=0) then
     raise exception 'invalid media text' using errcode='22023';
    end if;

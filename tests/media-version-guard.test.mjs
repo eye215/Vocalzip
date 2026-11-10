@@ -91,7 +91,8 @@ before(async()=>{
  const preserved=(await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows;
  await db.query(mediaProposal);await db.query(mediaProposal);
  await db.query(publicationProposal);await db.query(publicationProposal);
- await db.query(editProposal);await db.query(editProposal);
+ try{await db.query(editProposal);await db.query(editProposal);}
+ catch(error){const p=Number(error.position||1)-1;error.message+=' [metadata proposal position '+error.position+': '+editProposal.slice(Math.max(0,p-100),p+100)+']';throw error;}
  assert.deepEqual((await db.query('select payload,revision,generation,updated_at::text from public.vocal_data')).rows,preserved);
  assert.equal((await db.query('select count(*) n from public.vzip_media_delete_guards')).rows[0].n,'0');
  await bootWorker();
