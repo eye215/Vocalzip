@@ -68,3 +68,16 @@ DB는 임시 PostgreSQL 16을 사용했다. 브라우저는 테스트용 사용�
 ## 병렬 작업 경계
 
 Codex는 transport·복구/rollout 계약·격리 검사를 맡는다. 별도 UI 작업은 최신 main의 디자인을 유지한다. root 저장·계정·삭제 hook은 충돌 가능 파일이므로 병합 전 최신 main과 대조한다. 검사 결과와 후속 실제 운영·실기기 인수는 구분해 추가한다.
+
+## 2026-11-10 추가 — 서버 계정별 제한 계약(제안)
+
+`supabase/proposals/20261115_snapshot_rollout.sql` 및 기초 RPC의 선택 guard를 추가했다. 운영 설치·실제 계정 활성화는 하지 않는다. 검사 결과는 이후 PR CI에 추가한다.
+
+- 미등록 모드는 legacy다. 기존 직접 쓰기는 유지하고 새 snapshot RPC는 거부한다.
+- 승인된 운영자만 등록 계정을 revision 또는 paused로 전환한다. 일반 사용자는 flag/JWT 부가값으로 이를 바꾸지 못한다.
+- revision 계정은 새 RPC만 사용하며 authenticated/anon 역할의 root 직접 INSERT/UPDATE/DELETE는 거부한다.
+- paused는 새 RPC와 직접 쓰기를 모두 중단한다. pending/영수증을 지우지 않으며 legacy로 자동 복귀하는 API가 없다.
+- 모드 변경은 저장·세션 취소와 같은 계정 잠금 순서로 직렬화한다. 설치·재설치는 payload/기존 ID/시간/버전을 변경하거나 계정을 일괄 전환하지 않는다.
+- 기존 SECURITY DEFINER 서버 변경 함수는 자체 권한·삭제/lease 검사로 계속 동작한다. 역할 검사는 클라이언트 GUC를 신뢰하지 않는다.
+
+활성화 전에 **모든 root 직접 쓰기 호출**(미디어 삭제 tombstone 등)을 새 계약으로 연결하고, 기존 복원/서버 변경 함수를 목록화·검증해야 한다. 이 제안이 준비됐다고 현재 앱의 모든 저장·삭제 경로가 전환됐다고 표시하지 않는다. 실제 계정 설치·활성화는 충돌 복구 UI, 실제 HTTP 및 iPhone 인수 이후다.

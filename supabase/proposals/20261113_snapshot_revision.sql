@@ -85,6 +85,10 @@ begin
  if not public.vzip_session_is_active() then
   raise exception 'registered session required' using errcode='42501';
  end if;
+ -- Optional staged rollout proposal; absent in the backwards-compatible foundation.
+ if to_regprocedure('public.vzip_assert_snapshot_enabled(uuid)') is not null then
+  perform public.vzip_assert_snapshot_enabled(u);
+ end if;
  s:=public.vzip_request_session();
  if p_request_id is null or p_expected_revision is null or p_expected_revision<0 then
   raise exception 'request id and nonnegative revision required' using errcode='22023';

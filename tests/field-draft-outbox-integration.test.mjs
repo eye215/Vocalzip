@@ -18,6 +18,8 @@ let admin,db,name,conn;
 const proposal=readFileSync(new URL('../supabase/proposals/20261113_snapshot_revision.sql',import.meta.url),'utf8');
 const drafts=readFileSync(new URL('../supabase/proposals/20261114_field_drafts.sql',import.meta.url),'utf8');
 const sessions=readFileSync(new URL('../supabase/migrations/20261112_device_session_contract.sql',import.meta.url),'utf8');
+const withSnapshotRollout=process.env.VZIP_WITH_SNAPSHOT_ROLLOUT==='1';
+const snapshotRollout=withSnapshotRollout?readFileSync(new URL('../supabase/proposals/20261115_snapshot_rollout.sql',import.meta.url),'utf8'):null;
 const withPermanentDelete=process.env.VZIP_WITH_PERMANENT_DELETE==='1';
 const deletion=withPermanentDelete?readFileSync(new URL('../supabase/migrations/20261114_permanent_lesson_delete.sql',import.meta.url),'utf8'):null;
 const history=readFileSync(new URL('../supabase/migrations/20261106_keep_history.sql',import.meta.url),'utf8');
@@ -34,7 +36,7 @@ before(async()=>{
  if(skip)return;
  admin=new pg.Client({connectionString:URL_});await admin.connect();name='vzip_outbox_integration_'+Date.now();await admin.query('create database '+name);
  conn=URL_.replace(/\/[^/]*$/,'/'+name);db=new pg.Client({connectionString:conn});await db.connect();
- await db.query("do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;");
+ await db.query("do $$ begin if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;");
  await db.query(String.raw`
  create schema auth;
  create table auth.users(id uuid primary key);
@@ -56,7 +58,7 @@ before(async()=>{
  `);
  await db.query('insert into auth.users values ($1),($2)',[U,V]);
  const legacy=base('legacy-id-not-uuid');await db.query("insert into public.vocal_data values($1,$2,'2099-01-01T00:00:00Z')",[U,legacy]);
- await db.query(history);await db.query(sessions);await db.query(proposal);await db.query(proposal);await db.query(drafts);await db.query(drafts);if(deletion){await db.query(deletion);await db.query(deletion);}
+ await db.query(history);await db.query(sessions);await db.query(proposal);await db.query(proposal);await db.query(drafts);await db.query(drafts);if(snapshotRollout){await db.query(snapshotRollout);await db.query(snapshotRollout);}if(deletion){await db.query(deletion);await db.query(deletion);}
  const row=(await db.query('select payload,revision from public.vocal_data where user_id=$1',[U])).rows[0];
  assert.deepEqual(row.payload,legacy);assert.equal(row.revision,'0');
 
@@ -64,6 +66,7 @@ before(async()=>{
 beforeEach(async()=>{
  if(skip)return;
  await db.query('truncate public.vzip_field_draft_rollout,public.vzip_field_commit_markers,public.vzip_field_conflicts,public.vzip_field_requests,public.vzip_field_drafts,public.vzip_data_write_requests,public.vocal_data,public.vzip_device_sessions,public.vzip_account_session_state,public.vocal_history');
+ if(snapshotRollout)await db.query('truncate public.vzip_snapshot_rollout');
  if(deletion)await db.query('truncate public.vzip_permanent_delete_guards');
  await db.query('delete from auth.sessions');
  await db.query('insert into auth.users values ($1),($2) on conflict do nothing',[U,V]);
@@ -71,7 +74,7 @@ beforeEach(async()=>{
  await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[C,V]);
  await db.query('update public.vzip_session_rollout set enforced=true');
  for(const [u,s] of [[U,A],[U,B],[V,C]])assert.equal((await register(u,s)).status,'active');
- for(const u of [U,V])await db.query('select public.vzip_set_field_draft_enabled($1,true)',[u]);
+ for(const u of [U,V]){await db.query('select public.vzip_set_field_draft_enabled($1,true)',[u]);if(snapshotRollout)await db.query("select public.vzip_set_snapshot_mode($1,'revision')",[u]);}
  await db.query('insert into public.vocal_data(user_id,payload) values($1,$2),($3,$4)',[U,base(),V,base()]);
  await db.query("insert into public.vocal_media(id,user_id,metadata) values('keep-media',$1,'{}') on conflict(id) do nothing",[U]);
 });
