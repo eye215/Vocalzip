@@ -4,7 +4,7 @@
  * `updatedAt` wins; without timestamps the first argument (this device) wins. */
 ((root) => {
 'use strict';
-const COLLECTIONS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback', 'scoreAnnotations', 'monthlyGrowthReports', 'monthlyAiReports'];
+const COLLECTIONS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback', 'scoreAnnotations', 'monthlyGrowthReports', 'monthlyAiReports', 'vocalPlanReports'];
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
 function valid(data) { return isObj(data) && ['lessons', 'practices', 'assignments', 'categories', 'songs'].every(k => Array.isArray(data[k])); }
 function count(data) { return valid(data) ? (data.songs.length + data.lessons.length + data.practices.length + data.assignments.length) : 0; }
