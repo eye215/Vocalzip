@@ -1,0 +1,4 @@
+/* Existing shell, four-item dock and recording navigation remain unchanged. */
+body[data-vz-route="practice-room"] .v-app{padding-bottom:0;}
+body[data-vz-route="practice-room"] .v-nav,body[data-vz-route="practice-room"] .vz-collection-record{display:none!important;}
+.vzip-practice-room-frame{display:block;width:100%;height:calc(100dvh - 62px - env(safe-area-inset-top,0px));border:0;background:var(--vz-color-canvas);}

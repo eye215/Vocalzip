@@ -144,6 +144,14 @@ export async function createFloatingHome(opts={}){
  });
  const recordIcon=el('i');recordIcon.setAttribute('aria-hidden','true');recordIcon.dataset.glyph='\ue326';root.querySelector('.vz-floating-record svg').replaceWith(recordIcon);
  const q=selector=>root.querySelector(selector);
+ if(opts.onNavigate){
+  const entry=el('button');entry.type='button';entry.className='vz-card vz-room-entry';
+  entry.innerHTML='<span><strong>노래 연습실</strong><small>과제 받고 · 녹음 제출하고 · 다음 연습 찾기</small></span><span aria-hidden="true">›</span>';
+  entry.onclick=()=>opts.onNavigate('practice-room');
+  const style=el('style',`#vocalzip-refined-preview .vz-room-entry{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;text-align:left;cursor:pointer;margin:12px 0;background:var(--vz-color-surface);color:var(--vz-color-ink);font-family:var(--vz-font);letter-spacing:var(--vz-tracking);min-height:80px}#vocalzip-refined-preview .vz-room-entry strong{display:block;font-size:16px;line-height:22px;font-weight:600}#vocalzip-refined-preview .vz-room-entry small{display:block;font-size:12px;line-height:18px;margin-top:6px;color:var(--vz-color-ink-muted)}#vocalzip-refined-preview .vz-room-entry>span:last-child{font-size:24px;color:var(--vz-color-faint)}#vocalzip-refined-preview .vz-room-entry:focus-visible{outline:var(--vz-focus-width) solid var(--vz-color-focus);outline-offset:var(--vz-focus-offset)}`);
+  shadow.append(style);q('.vz-goals').before(entry);
+ }
+
  q("main").setAttribute("role","presentation");
  root.prepend(el("h1","홈","vz-visually-hidden"));
  q('[aria-label="알림"]').onclick=()=>opts.onNotifications?.();
