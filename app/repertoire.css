@@ -12,5 +12,28 @@
 .archive-page>.btn{margin-top:12px}.archive-sheet{padding-bottom:calc(20px + env(safe-area-inset-bottom));overscroll-behavior:contain}
 .archive-full{height:92dvh}.archive-form{min-width:0}.archive-form .two{grid-template-columns:repeat(2,minmax(0,1fr))}.archive-error{color:var(--danger);white-space:pre-wrap}
 .archive-performance .avatar img{width:40px;height:40px;border-radius:10px;object-fit:cover}.archive-asset{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.archive-performances-page{display:grid;gap:16px}
+.archive-performance-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:5px 4px 0}
+.archive-performance-toolbar h2{margin:0;color:#101828;font-size:18px;line-height:26px;font-weight:700}
+.archive-performance-toolbar h2 span{margin-left:4px;color:#7A32F5;font-size:13px;font-weight:600}
+.archive-performance-year{position:relative;display:flex;align-items:center;min-width:112px;height:44px;border-radius:14px;background:#fff;color:#475467}
+.archive-performance-year select{width:100%;height:44px;padding:0 31px 0 13px;border:0;background:transparent;appearance:none;color:inherit;font:600 13px Pretendard,-apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}
+.archive-performance-year i{position:absolute;right:12px;pointer-events:none;color:#98A2B3;font-size:14px}
+.archive-performance-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px;border-radius:20px;background:#F2EEF8;color:#667085;font-size:13px}
+.archive-performance-stats span{display:flex;align-items:baseline;justify-content:space-between;gap:6px;white-space:nowrap}
+.archive-performance-stats strong{color:#344054;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.archive-performance-list{display:grid;gap:12px}
+.archive-performance-entry{display:flex;align-items:center;gap:14px;min-width:0;min-height:96px;padding:18px;border-radius:20px;background:#fff;color:#101828;text-decoration:none}
+.archive-performance-entry:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
+.archive-performance-copy{display:grid;gap:4px;min-width:0;flex:1}
+.archive-performance-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;line-height:23px;font-weight:700}
+.archive-performance-copy small{color:#667085;font-size:12px;line-height:18px;font-variant-numeric:tabular-nums}
+.archive-performance-detail{color:#9A531C;font-size:12px;line-height:18px;font-weight:600}
+.archive-performance-entry>i{flex:none;color:#98A2B3;font-size:17px}
+.archive-performance-poster{display:grid;place-items:center;flex:none;width:46px;height:58px;border-radius:9px;background:#FFF0ED;overflow:hidden}
+.archive-performance-poster i{color:#C97350;font-size:20px}
+.archive-performance-poster img{width:100%;height:100%;object-fit:cover}
+.archive-performance-empty{display:grid;gap:6px;min-height:108px;align-content:center;padding:20px;border-radius:20px;background:#fff}
+.archive-performance-empty strong{font-size:15px;color:#344054}.archive-performance-empty span{font-size:12px;color:#667085}
 .archive-asset strong{overflow-wrap:anywhere}.archive-asset .archive-actions{grid-column:1/-1}.archive-page .btn,.archive-song .btn,.archive-form button,.archive-page .sec button{min-height:44px;min-width:44px}.archive-page video,.archive-page img{max-width:100%;max-height:50vh;object-fit:contain}
 @media(max-width:360px){.archive-toolbar{grid-template-columns:1fr}.archive-page .item{flex-wrap:wrap}.archive-page .item-main{flex-basis:100%}}
