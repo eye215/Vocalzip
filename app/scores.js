@@ -98,6 +98,10 @@ async function remove(song, score, redraw) {
 VZ.renderScores = (host, song) => {
  const draw=()=>{
   const list=scoresOf(song.id);
+  if(list.length){
+   VZ.preloadScoreInk?.();
+   window.VzipR2?.prefetch?.(list.slice(0,5).map(s=>s.r2Key)).catch(()=>{});
+  }
   host.innerHTML='<div class="row between" style="margin:4px 4px 10px"><h2 class="sec" style="margin:0">악보 '+list.length+'</h2><button type="button" class="btn sm" data-score-add><i class="ph ph-file-arrow-up"></i>PDF 올리기</button></div>'+
    (list.length?'<div class="list">'+list.map(s=>'<div class="item score-row" data-score="'+esc(s.id)+'"><button type="button" data-score-open aria-label="'+esc(s.title)+' 열기"><span class="avatar"><i class="ph ph-file-pdf"></i></span><span class="item-main"><span class="item-title">'+esc(s.title)+'</span><span class="item-sub">'+
    esc([s.originalKey?'원키 '+s.originalKey:'',s.practiceKey?'연습 '+s.practiceKey:'',VZ.dateLabel(VZ.ymd(new Date(s.uploadedAt))),size(s.size||0)].filter(Boolean).join(' · '))+'</span></span></button>'+

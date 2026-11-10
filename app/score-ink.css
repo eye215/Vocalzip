@@ -13,7 +13,7 @@ body .score-ink-sheet{height:calc(var(--vv-height,100dvh) - env(safe-area-inset-
 .score-ink-tools>button:disabled{opacity:.35}
 .score-ink-actions{display:flex;justify-content:space-between;gap:4px;flex:none}
 .score-ink-actions [data-ink-settings]{position:relative}
-.score-ink-quick{position:absolute;z-index:7;top:calc(100% + 4px);left:0;right:0;display:grid;gap:4px;padding:8px;background:#fffffff5;border:1px solid var(--vz-color-line,#e8e4f0);border-radius:16px;box-shadow:0 8px 22px #23143c16}
+.score-ink-quick{display:grid;gap:4px;padding:8px;background:#fffffff5;border:1px solid var(--vz-color-line,#e8e4f0);border-radius:16px;box-shadow:0 8px 22px #23143c16}
 .score-ink-quick[hidden],.score-ink-quick-row[hidden]{display:none}
 .score-ink-quick-row{display:flex;align-items:center;gap:6px;min-width:0}
 .score-ink-quick-row>span{width:32px;flex:none;font-size:11px;color:#667085}
