@@ -1,8 +1,8 @@
 /* Phase 07-C: client-rendered PDF and private vector ink. Original R2 bytes never change. */
 (() => {
 'use strict';
-const VZ=window.VZ,Ink=window.VzipScoreInk;
-if(!VZ||!Ink)return;
+const VZ=window.VZ,Ink=window.VzipScoreInk,Settings=window.VzipScoreInkSettings,Export=window.VzipScoreInkExport;
+if(!VZ||!Ink||!Settings)return;
 const PDFJS='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/',MAX=50*1024*1024;
 let pdfLibrary;
 async function library(){
@@ -33,26 +33,147 @@ VZ.openScoreInk=(songId,scoreId)=>{
  const initialSession=window.vzipCloudSessionId?.()||'legacy',scope=window.VzipAccountScope;
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const current=()=>{const i=identity(),s=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted);if(i?.owner!==owner||i.session!==initialSession||!s||s.r2Key!==score.r2Key)throw Error('계정이나 악보가 바뀌어 필기를 중단했어요.');};
- let store;
- try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');}
+ let store,prefs,profiles;
+ try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let tool='pan',active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
+ let exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,hadNative=false,fullGeneration=0,touchPan=null,touches=new Map(),pinch=null,pinchDirty=false,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
  const button=(name,icon,label)=>'<button type="button" class="icon-btn" data-ink-'+name+' aria-label="'+label+'" title="'+label+'"><i class="ph ph-'+icon+'"></i></button>';
  const tools=['pan','pen','highlighter','eraser'];
  const names=['이동','펜','형광펜','지우개'],icons=['hand','pen','highlighter','eraser'];
  const body='<div class="score-ink-editor"><p class="score-ink-title">'+VZ.esc(score.title||score.fileName||'PDF 악보')+'</p>'+
-  '<div class="score-ink-tools" role="toolbar" aria-label="필기 도구">'+tools.map((t,i)=>'<button type="button" data-ink-tool="'+t+'" aria-pressed="'+(t==='pan')+'"><i class="ph ph-'+icons[i]+'"></i><span>'+names[i]+'</span></button>').join('')+
+  '<div class="score-ink-bar"><div class="score-ink-tools" role="toolbar" aria-label="필기 도구">'+tools.map((t,i)=>'<button type="button" data-ink-tool="'+t+'" aria-label="'+names[i]+'" title="'+names[i]+'" aria-pressed="'+(t===tool)+'"><i class="ph ph-'+icons[i]+'"></i><span>'+names[i]+'</span></button>').join('')+
   button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('clear','trash','현재 페이지 필기 삭제')+'</div>'+
-  '<div class="score-ink-options"><label>색상 <select data-ink-color aria-label="필기 색상"><option value="#7a32f5">보라</option><option value="#344054">진회색</option><option value="#e5484d">빨강</option><option value="#eab308">노랑</option></select></label>'+
-  '<label>굵기 <select data-ink-width aria-label="펜 굵기"><option value="0.004">얇게</option><option value="0.008">보통</option><option value="0.014">굵게</option></select></label>'+
-  '<label class="score-ink-pen-only"><input type="checkbox" data-ink-pen-only>펜만</label></div>'+
+  '<div class="score-ink-actions">'+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('fullscreen','arrows-out','전체화면')+'</div>'+
+  '<section class="score-ink-settings" data-ink-settings aria-label="필기 설정" hidden><div class="score-ink-settings-head"><strong data-ink-profile-label>펜 설정</strong>'+button('settings-close','x','필기 설정 닫기')+'</div>'+
+  '<div class="score-ink-palette-section"><span>기본 색상</span><div data-ink-palette class="score-ink-swatches" role="group" aria-label="기본 색상"></div></div>'+
+  '<div class="score-ink-palette-section"><span>최근 사용</span><div data-ink-recent class="score-ink-swatches" role="group" aria-label="최근 사용 색상"></div></div>'+
+  '<div class="score-ink-palette-section"><span>사용자 색상</span><div data-ink-custom class="score-ink-swatches" role="group" aria-label="사용자 색상"></div></div>'+
+  '<div class="score-ink-custom-add"><input type="color" data-ink-picker aria-label="사용자 색상 선택" value="#101828"><input type="text" data-ink-hex aria-label="사용자 색상 코드" maxlength="7" placeholder="#RRGGBB" value="#101828" autocapitalize="none" spellcheck="false"><button type="button" data-ink-custom-add>추가</button></div>'+
+  '<button type="button" class="score-ink-custom-remove" data-ink-custom-remove>선택한 사용자 색상 삭제</button>'+
+  '<label class="score-ink-slider">굵기 <output data-ink-width-label>4</output><input type="range" data-ink-width aria-label="펜 굵기" min="1" max="60" step="1" value="4"></label>'+
+  '<label class="score-ink-slider">투명도 <output data-ink-opacity-label>0%</output><input type="range" data-ink-opacity aria-label="필기 투명도" min="0" max="95" step="1" value="0"></label>'+
+  '<label class="score-ink-pen-only"><input type="checkbox" aria-label="펜만" data-ink-pen-only>펜만 필기 · 손가락은 스크롤</label>'+
+  '<a data-ink-original target="_blank" rel="noopener">원본 PDF 열기</a><button type="button" data-ink-export>필기 PDF 만들기</button><a data-ink-export-save hidden>만든 PDF 저장</a></section></div>'+
   '<div class="score-ink-pages">'+button('prev','caret-left','이전 악보 페이지')+'<span data-ink-page aria-live="polite">불러오는 중</span>'+button('next','caret-right','다음 악보 페이지')+
   '<select data-ink-zoom aria-label="악보 확대"><option value="1">화면 맞춤</option><option value="1.5">150%</option><option value="2">200%</option></select></div>'+
   '<p class="score-ink-status" data-ink-status role="status" aria-live="polite">PDF를 준비하고 있어요.</p>'+
   '<div class="score-ink-stage" data-ink-stage tabindex="0" aria-label="악보 페이지"><div class="score-ink-page" data-ink-box hidden><canvas data-ink-pdf aria-label="PDF 악보"></canvas><svg xmlns="http://www.w3.org/2000/svg" data-ink-svg role="img" aria-label="개인 필기 영역"></svg></div></div>'+
   '<p class="score-ink-help">손가락·펜으로 필기해요. 스크롤은 이동 모드를 선택하세요.</p></div>';
- function say(text,error=false){if(!closed){status.textContent=text;status.dataset.error=error?'true':'false';done.textContent=pending?'다시 저장':'완료';}}
+ function say(text,error=false){if(!closed){status.textContent=text;status.dataset.error=error?'true':'false';done.textContent=pending?'다시 저장':'완료';el.toggleAttribute('data-ink-save-error',!!pending);}}
+ function settingsOpen(open){
+  const panel=el.querySelector('section[data-ink-settings]');panel.hidden=!open;panel.inert=!open;
+  el.querySelector('.score-ink-actions [data-ink-settings]').setAttribute('aria-expanded',String(open));
+ }
+ function syncSettings(){
+  const p=profiles[paintTool];
+  el.querySelector('[data-ink-profile-label]').textContent=paintTool==='highlighter'?'형광펜 설정':'펜 설정';
+  const swatches=(name,colors)=>{
+   const host=el.querySelector('[data-ink-'+name+']');host.replaceChildren();
+   for(const [color,label]of colors){
+    const b=document.createElement('button');b.type='button';b.className='score-ink-swatch';b.dataset.inkSwatch=color;
+    b.setAttribute('aria-label',label+' '+color);b.title=label+' '+color;b.setAttribute('aria-pressed',String(p.color===color));
+    const dot=document.createElement('span');dot.style.background=color;dot.setAttribute('aria-hidden','true');b.append(dot);
+    b.onclick=()=>updateSettings({color},{recent:true});host.append(b);
+   }
+   if(!colors.length){const hint=document.createElement('span');hint.className='score-ink-no-colors';hint.textContent='아직 없어요';host.append(hint);}
+  };
+  swatches('palette',Settings.PALETTES[paintTool]);
+  swatches('recent',p.recent.map(c=>[c,'최근 사용 색상']));
+  swatches('custom',p.custom.map(c=>[c,'사용자 색상']));
+  el.querySelector('[data-ink-width]').value=String(Math.round(p.width*1000));el.querySelector('[data-ink-width-label]').textContent=String(Math.round(p.width*1000));
+  el.querySelector('[data-ink-opacity]').value=String(Math.round((1-p.opacity)*100));el.querySelector('[data-ink-opacity-label]').textContent=Math.round((1-p.opacity)*100)+'%';
+  el.querySelector('[data-ink-pen-only]').checked=profiles.penOnly;if(svg)svg.dataset.penOnly=String(profiles.penOnly);
+  el.querySelector('[data-ink-picker]').value=p.color;el.querySelector('[data-ink-hex]').value=p.color;
+  el.querySelector('[data-ink-custom-add]').disabled=false;el.querySelector('[data-ink-custom-remove]').disabled=!p.custom.includes(p.color);
+  el.style.setProperty('--ink-active-color',p.color);
+ }
+ function updateSettings(patch,options={}){
+  finishStroke();
+  try{current();profiles=prefs.write(paintTool,patch,options);syncSettings();}
+  catch(e){if(patch.width!==undefined||patch.opacity!==undefined)syncSettings();say('도구 설정을 저장하지 못했어요: '+e.message,true);}
+ }
+ function fullLayout(next){
+  resetGestures();full=next;el.classList.toggle('score-ink-fullscreen',full);
+  const button=el.querySelector('[data-ink-fullscreen]');
+  button.setAttribute('aria-label',full?'전체화면 종료':'전체화면');button.title=full?'전체화면 종료':'전체화면';
+  button.innerHTML='<i class="ph ph-'+(full?'arrows-in':'arrows-out')+'" aria-hidden="true"></i>';
+ }
+ async function fullscreen(next){
+  finishStroke();const generation=++fullGeneration;fullLayout(next);
+  try{
+   if(next&&document.fullscreenEnabled&&el.requestFullscreen&&!document.fullscreenElement)await el.requestFullscreen();
+   else if(!next&&document.fullscreenElement===el)await document.exitFullscreen();
+  }catch{} // iOS/PWA keep the same viewport-filling layout when native fullscreen is unavailable.
+  if(!closed&&generation===fullGeneration)requestAnimationFrame(renderPage);
+ }
+ function nativeFullscreenChanged(){
+  if(closed)return;
+  const native=document.fullscreenElement===el;
+  if(hadNative&&!native&&full){fullLayout(false);requestAnimationFrame(renderPage);}
+  hadNative=native;
+ }
+
+ function resetGestures(){touchPan=null;touches.clear();pinch=null;pinchDirty=false;}
+ function zoomValue(){
+  const select=el.querySelector('[data-ink-zoom]'),value=String(zoom);
+  select.querySelector('[data-ink-free-zoom]')?.remove();
+  if(![...select.options].some(o=>o.value===value)){const option=new Option(Math.round(zoom*100)+'%',value);option.dataset.inkFreeZoom='';select.add(option);}
+  select.value=value;
+ }
+ function beginPinch(){
+  const points=[...touches.values()];if(points.length<2)return;
+  const [a,b]=points,r=box.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
+  if(distance<8)return;
+  pinch={distance,zoom,x:((a.x+b.x)/2-r.left)/r.width,y:((a.y+b.y)/2-r.top)/r.height};
+ }
+ function gestureDown(event){
+  if(touches.size>=2||event.width>50||event.height>50)return;
+  event.preventDefault();touches.set(event.pointerId,{x:event.clientX,y:event.clientY});touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
+  if(touches.size===2)beginPinch();try{svg.setPointerCapture(event.pointerId);}catch{}
+ }
+ function gestureMove(event){
+  const old=touches.get(event.pointerId);if(!old)return false;
+  event.preventDefault();touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(touches.size===2){
+   if(!pinch)beginPinch();if(!pinch)return true;
+   const [a,b]=[...touches.values()],r=stage.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
+   zoom=Math.round(Math.max(.75,Math.min(4,pinch.zoom*distance/pinch.distance))*100)/100;zoomValue();
+   const width=baseWidth*zoom,height=width*aspect;box.style.width=width+'px';box.style.height=height+'px';
+   stage.scrollLeft=box.offsetLeft+pinch.x*width-((a.x+b.x)/2-r.left);
+   stage.scrollTop=box.offsetTop+pinch.y*height-((a.y+b.y)/2-r.top);pinchDirty=true;
+  }else{
+   stage.scrollLeft-=event.clientX-old.x;stage.scrollTop-=event.clientY-old.y;
+   touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
+  }
+  return true;
+ }
+ function gestureEnd(event){
+  if(!touches.has(event.pointerId))return false;
+  touches.delete(event.pointerId);pinch=null;
+  if(!touches.size){const redraw=pinchDirty;resetGestures();if(redraw)renderPage({keepScroll:true});}
+  return true;
+ }
+
+ const exportSignature=rows=>JSON.stringify(rows.map(s=>[s.id,s.page,s.tool,s.color,s.width,Ink.opacity(s),s.points]));
+ function invalidateExport(){
+  if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=null;exportStamp='';
+  const link=el?.querySelector('[data-ink-export-save]');if(link){link.hidden=true;link.removeAttribute('href');}
+ }
+ async function exportPDF(){
+  finishStroke();if(!doc||!ready||busy||pending||exportBusy||!Export){say('악보와 필기 저장을 확인한 뒤 다시 시도해 주세요.',true);return;}
+  const button=el.querySelector('[data-ink-export]'),rows=store.list(binding),stamp=exportSignature(rows);exportBusy=true;button.disabled=true;paint();say('필기 PDF를 만들고 있어요.');
+  try{
+   const blob=await Export.make({document:doc,binding,annotations:rows,check:()=>{current();if(closed||controller.signal.aborted)throw new DOMException('닫힘','AbortError');},
+    onProgress:(page,total)=>say('필기 PDF 준비 '+page+' / '+total+'쪽')});
+   current();if(exportSignature(store.list(binding))!==stamp)throw Error('내보내는 동안 필기가 바뀌었어요. 다시 만들어 주세요.');
+   invalidateExport();exportUrl=URL.createObjectURL(blob);exportStamp=stamp;
+   const link=el.querySelector('[data-ink-export-save]');link.href=exportUrl;link.download=String(score.title||'악보').replace(/[\\/:*?"<>|]/g,'_')+'_필기.pdf';link.hidden=false;
+   say('필기 PDF가 준비됐어요. 만든 PDF 저장을 눌러 주세요.');settingsOpen(true);
+  }catch(e){if(!closed&&e.name!=='AbortError')say('내보내지 못했어요: '+e.message+' · 원본과 필기는 유지돼요.',true);}
+  finally{exportBusy=false;if(!closed){button.disabled=false;paint();}}
+ }
+
  function strokes(){
   if(!binding)return [];
   let rows=store.list(binding,pageNo);if(pending){rows=rows.filter(s=>!pending.action.remove.some(r=>r.id===s.id));const ids=new Set(rows.map(s=>s.id));rows.push(...pending.action.add.filter(s=>s.page===pageNo&&!ids.has(s.id)));}
@@ -63,10 +184,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
   svg.replaceChildren();svg.setAttribute('viewBox','0 0 1000 '+(1000*aspect));
   for(const s of strokes()){
    const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',Ink.path(s,aspect));path.setAttribute('fill','none');path.setAttribute('stroke',s.color);
-   path.setAttribute('stroke-width',s.width*1000);path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');path.setAttribute('opacity',s.tool==='highlighter'?'0.28':'1');path.dataset.stroke=s.id;svg.append(path);
+   path.setAttribute('stroke-width',s.width*1000);path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');path.setAttribute('opacity',String(Ink.opacity(s)));path.dataset.stroke=s.id;svg.append(path);
   }
-  el.querySelector('[data-ink-undo]').disabled=!ready||busy||!!pending||!undo.length;
-  el.querySelector('[data-ink-redo]').disabled=!ready||busy||!!pending||!redo.length;
+  el.querySelector('[data-ink-undo]').disabled=!ready||busy||exportBusy||!!pending||!undo.length;
+  el.querySelector('[data-ink-redo]').disabled=!ready||busy||exportBusy||!!pending||!redo.length;
  }
  function schedule(){
   if(frame)return;
@@ -79,7 +200,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
      active.path=svg.querySelector('[data-stroke="'+s.id+'"]');
      if(!active.path){
       const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.dataset.stroke=s.id;p.setAttribute('fill','none');p.setAttribute('stroke',s.color);
-      p.setAttribute('stroke-width',s.width*1000);p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');p.setAttribute('opacity',s.tool==='highlighter'?'0.28':'1');
+      p.setAttribute('stroke-width',s.width*1000);p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');p.setAttribute('opacity',String(Ink.opacity(s)));
       svg.append(p);active.path=p;
      }
     }
@@ -92,20 +213,23 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{
    current();
    if(!store.commit({add:action.add,remove:action.remove.map(s=>s.id)}))throw Error('필기 복구 기록은 보존했어요. 저장 공간을 확인하고 다시 저장해 주세요.');
-   pending=null;
+   pending=null;invalidateExport();
    if(kind==='normal'){undo.push(action);redo=[];}else if(kind==='undo'){undo.pop();redo.push(action);}else{redo.pop();undo.push(action);}
-   say(navigator.onLine===false?'이 기기에 저장됨 · 온라인 연결 후 동기화':'이 기기에 저장됨 · 클라우드는 기존 동기화로 저장');
+   lastSaveMessage=navigator.onLine===false?'이 기기에 저장됨 · 온라인 연결 후 동기화':'이 기기에 저장됨 · 클라우드는 기존 동기화로 저장';say(lastSaveMessage);
   }catch(e){say('저장하지 못했어요: '+e.message,true);}
   paint();
  }
  function inverse(action){return {add:action.remove.map(s=>({...s,id:VZ.uid(),createdAt:Date.now()})),remove:action.add};}
  function finishStroke(){
   if(!active)return;const s=active.stroke;active=null;
-  if(s?.points.length)apply({add:[s],remove:[]});
+  if(s?.points.length){
+   apply({add:[s],remove:[]});
+   if(!pending)try{profiles=prefs.write(s.tool,{},{recent:true});syncSettings();}catch{say('필기는 이 기기에 저장됨 · 최근 색상 설정은 저장하지 못했어요.');}
+  }
  }
  function coords(event){const r=svg.getBoundingClientRect();return Ink.point((event.clientX-r.left)/r.width,(event.clientY-r.top)/r.height,event.pressure||0.5);}
- async function renderPage(){
-  if(!doc||closed)return;finishStroke();busy=true;ready=false;const number=++renderNumber;renderTask?.cancel();
+ async function renderPage({keepScroll=false}={}){
+  if(!doc||closed)return;const previousScroll={left:stage.scrollLeft,top:stage.scrollTop};resetGestures();finishStroke();busy=true;ready=false;const number=++renderNumber;renderTask?.cancel();
   box.hidden=true;svg.dataset.tool='pan';say('악보 '+pageNo+'쪽을 불러오고 있어요.');
   try{
    current();const page=await doc.getPage(pageNo);if(closed||number!==renderNumber)return;current();
@@ -118,8 +242,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(closed||number!==renderNumber)return;current();
    el.querySelector('[data-ink-page]').textContent=pageNo+' / '+doc.numPages+'쪽';
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
-   box.hidden=false;ready=true;svg.dataset.tool=tool;stage.scrollTo(0,0);
-   paint();if(!pending)say('이동 모드로 스크롤하거나 필기 도구를 선택하세요.');
+   box.hidden=false;ready=true;svg.dataset.tool=tool;svg.dataset.penOnly=String(profiles.penOnly);if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
+   paint();if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
   }catch(e){if(!closed&&number===renderNumber&&e.name!=='RenderingCancelledException')say('악보를 열지 못했어요: '+e.message,true);}
   finally{if(number===renderNumber){busy=false;if(!closed)paint();}}
  }
@@ -129,10 +253,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function changed(){
   if(closed)return;
-  try{current();store.restore();paint();}catch{sheet.close();}
+  try{current();store.restore();if(exportUrl&&exportSignature(store.list(binding))!==exportStamp)invalidateExport();paint();}catch{sheet.close();}
  }
  function cleanup(){
-  closed=true;controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
+  closed=true;invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
   window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);VZ.setGuard(null);
  }
@@ -143,10 +267,24 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-prev]').disabled=true;el.querySelector('[data-ink-next]').disabled=true;
   const back=el.parentNode;
   back.addEventListener('click',event=>{if(event.target===back||event.target.closest('[data-close]')){event.preventDefault();event.stopImmediatePropagation();closeEditor();}},true);
-  back.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();closeEditor();}},true);
+  back.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();if(!el.querySelector('section[data-ink-settings]').hidden)settingsOpen(false);else if(full)fullscreen(false);else closeEditor();}},true);
   done.onclick=()=>{if(pending)apply(pending.action,pending.kind);else closeEditor();};
+  const settingsButton=el.querySelector('.score-ink-actions [data-ink-settings]');
+  settingsButton.setAttribute('aria-expanded','false');
+  settingsButton.onclick=()=>settingsOpen(el.querySelector('section[data-ink-settings]').hidden);
+  el.querySelector('[data-ink-settings-close]').onclick=()=>settingsOpen(false);
+  el.querySelector('[data-ink-fullscreen]').onclick=()=>fullscreen(!full);
+  el.querySelector('[data-ink-export]').onclick=exportPDF;
+  el.querySelector('[data-ink-width]').oninput=event=>updateSettings({width:Number(event.target.value)/1000});
+  el.querySelector('[data-ink-opacity]').oninput=event=>updateSettings({opacity:Math.round((100-Number(event.target.value))*1000)/100000});
+  el.querySelector('[data-ink-picker]').oninput=event=>{el.querySelector('[data-ink-hex]').value=event.target.value;el.querySelector('[data-ink-custom-add]').disabled=false;};
+  el.querySelector('[data-ink-hex]').oninput=event=>{const valid=/^#[0-9a-f]{6}$/i.test(event.target.value);el.querySelector('[data-ink-custom-add]').disabled=!valid;if(valid)el.querySelector('[data-ink-picker]').value=event.target.value;};
+  el.querySelector('[data-ink-custom-add]').onclick=()=>updateSettings({color:el.querySelector('[data-ink-hex]').value},{custom:true,recent:true});
+  el.querySelector('[data-ink-custom-remove]').onclick=()=>updateSettings({},{removeCustom:true});
+  el.querySelector('[data-ink-pen-only]').onchange=event=>{finishStroke();try{profiles=prefs.write('input',{penOnly:event.target.checked});syncSettings();}catch(e){event.target.checked=profiles.penOnly;say(e.message,true);}};
+  syncSettings();settingsOpen(false);
   el.querySelectorAll('[data-ink-tool]').forEach(button=>button.onclick=()=>{
-   finishStroke();tool=button.dataset.inkTool;svg.dataset.tool=tool;
+   finishStroke();resetGestures();tool=button.dataset.inkTool;svg.dataset.tool=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
   });
   el.querySelector('[data-ink-prev]').onclick=()=>{if(ready&&!busy&&pageNo>1){pageNo--;renderPage();}};
@@ -155,29 +293,41 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-undo]').onclick=()=>{if(!pending&&undo.length)apply(inverse(undo.at(-1)),'undo');};
   el.querySelector('[data-ink-redo]').onclick=()=>{if(!pending&&redo.length)apply(inverse(redo.at(-1)),'redo');};
   el.querySelector('[data-ink-clear]').onclick=async()=>{
-   if(!ready||busy||pending)return;
+   if(!ready||busy||exportBusy||pending)return;
    const rows=store.list(binding,pageNo);if(!rows.length)return;
    if(await VZ.confirm('페이지 필기 삭제','현재 페이지의 개인 필기 '+rows.length+'개를 지울까요? PDF 원본은 그대로예요.',{ok:'필기 삭제',danger:true})){
     try{current();apply({add:[],remove:rows});}catch(e){say(e.message,true);}
    }
   };
   svg.onpointerdown=event=>{
-   if(!ready||busy||tool==='pan'||active||pending||event.isPrimary===false||event.button>0||el.querySelector('[data-ink-pen-only]').checked&&event.pointerType!=='pen')return;
+   if(!ready||busy||exportBusy||pending||event.button>0)return;
+   if(event.pointerType==='touch'&&(profiles.penOnly||tool==='pan')){
+    if(active)return;
+    if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
+    gestureDown(event);return;
+   }
+   if(tool==='pan'||active||event.isPrimary===false)return;
+   if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
+   if(profiles.penOnly&&event.pointerType!=='pen')return;
+   resetGestures();
    try{
     current();event.preventDefault();const p=coords(event);
     if(tool==='eraser'){const found=strokes().reverse().find(s=>Ink.hit(s,p,aspect));if(found)apply({add:[],remove:[found]});return;}
-    const stroke={version:1,id:VZ.uid(),...binding,page:pageNo,tool,color:el.querySelector('[data-ink-color]').value,
-     width:Number(el.querySelector('[data-ink-width]').value)*(tool==='highlighter'?3:1),points:[p],createdAt:Date.now()};
+    const config=profiles[tool];
+    const stroke={version:1,id:VZ.uid(),...binding,page:pageNo,tool,color:config.color,opacity:config.opacity,
+     width:config.width,points:[p],createdAt:Date.now()};
     active={pointer:event.pointerId,stroke};try{svg.setPointerCapture?.(event.pointerId);}catch{}schedule();
    }catch(e){say(e.message,true);}
   };
   svg.onpointermove=event=>{
+   if(!active&&gestureMove(event))return;
    if(active?.pointer!==event.pointerId)return;event.preventDefault();
    const samples=event.getCoalescedEvents?.();const events=samples?.length?samples:[event];
    for(const item of events){const p=coords(item),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008&&active.stroke.points.length<Ink.MAX_POINTS)active.stroke.points.push(p);}
    schedule();
   };
   svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{
+   if(gestureEnd(event))return;
    if(active?.pointer!==event.pointerId)return;
    if(event.type==='pointerup'&&active.stroke.points.length<Ink.MAX_POINTS){const p=coords(event),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008)active.stroke.points.push(p);}
    finishStroke();
@@ -185,12 +335,13 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }});
  if(window.ResizeObserver){resizeObserver=new ResizeObserver(()=>{if(ready&&!busy&&Math.abs(Math.max(240,stage.clientWidth-16)-baseWidth)>1){clearTimeout(resizeTimer);resizeTimer=setTimeout(renderPage,120);}});resizeObserver.observe(stage);}
  cleanupHook=scope?.beforeLeave(()=>{if(active||pending)throw Error('악보 필기를 먼저 저장하고 계정을 바꿔 주세요.');sheet.close();})||(()=>{});
+ document.addEventListener('fullscreenchange',nativeFullscreenChanged);
  window.addEventListener('vzip:auth-changed',changed);window.addEventListener('vzip:data-changed',changed);
  window.addEventListener('beforeunload',unload);document.addEventListener('visibilitychange',hidden);
  VZ.setGuard(()=>{finishStroke();return pending?'필기가 아직 저장되지 않았어요. 먼저 다시 저장해 주세요.':null;});
  (async()=>{
   try{
-   const [pdf,url]=await Promise.all([library(),window.VzipR2.url(score.r2Key)]);current();
+   const [pdf,url]=await Promise.all([library(),window.VzipR2.url(score.r2Key)]);current();el.querySelector('[data-ink-original]').href=url;
    const bytes=await readPDF(await fetch(url,{signal:controller.signal,cache:'no-store'}),score.size,controller.signal);current();
    const pdfHash=await hash(bytes);current();binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
    loadingTask=pdf.getDocument({data:bytes,isEvalSupported:false,enableXfa:false,standardFontDataUrl:PDFJS+'standard_fonts/',cMapUrl:PDFJS+'cmaps/',cMapPacked:true});

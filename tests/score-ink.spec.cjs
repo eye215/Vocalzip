@@ -17,24 +17,25 @@ function pdf(){
  return Buffer.from(out);
 }
 const bytes=pdf(),key='u/ui-test-user/score-ink/original.pdf';
-async function setup(page){
- const r2=await fakeR2(page);r2.store.set(key,{bytes,type:'application/pdf',etag:'"pdf"'});
+async function setup(page,sourceBytes=bytes){
+ const r2=await fakeR2(page);r2.store.set(key,{bytes:sourceBytes,type:'application/pdf',etag:'"pdf"'});
  await page.context().route('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/**',route=>{
   const suffix=new URL(route.request().url()).pathname.split('pdfjs-dist@4.10.38/')[1],file=path.join(PDFROOT,suffix);
   if(!suffix||suffix.includes('..')||!fs.existsSync(file))return route.abort();
   return route.fulfill({path:file,contentType:file.endsWith('.mjs')?'text/javascript':'application/octet-stream',headers:{'access-control-allow-origin':'*'}});
  });
+ await page.context().route('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/**',route=>route.fulfill({path:path.join(PDFROOT,'../pdf-lib/dist/pdf-lib.min.js'),contentType:'text/javascript',headers:{'access-control-allow-origin':'*'}}));
  await boot(page);
  await page.evaluate(([key,size])=>window.VZ.change(d=>{
   if(!d.songs[0].scores?.some(s=>s.id==='score-ink'))d.songs[0].scores=[{id:'score-ink',songId:'s1',title:'연습 악보',r2Key:key,size,uploadedAt:Date.now()}];
   if(!d.lessons.length)d.lessons.push({id:'existing-lesson',note:'기존 레슨 메모'});
   if(!d.practices.length)d.practices.push({id:'existing-practice',minutes:17,note:'기존 연습 메모'});
- }),[key,bytes.length]);
+ }),[key,sourceBytes.length]);
  return r2;
 }
 async function open(page){
  await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
- await page.getByRole('button',{name:'연습 악보 필기',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
  await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
  await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
@@ -66,7 +67,7 @@ test('real PDF renders, ink persists after reload and original PDF/lesson/practi
 });
 test('highlighter, undo/redo, eraser and page selection keep independent stroke records',async({page})=>{
  await setup(page);const dialog=await open(page);await draw(page,dialog,{tool:'형광펜'});
- await expect(dialog.locator('path[data-stroke]')).toHaveAttribute('opacity','0.28');
+ await expect(dialog.locator('path[data-stroke]')).toHaveAttribute('opacity','0.55');
  await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
  await dialog.getByRole('button',{name:'필기 다시 실행',exact:true}).click();await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
  await dialog.getByRole('button',{name:'다음 악보 페이지',exact:true}).click();await expect(dialog.locator('[data-ink-page]')).toHaveText('2 / 2쪽');
@@ -86,7 +87,9 @@ test('zoom, 320px layout and synthetic pen-only input preserve normalized positi
  expect(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);
  await dialog.getByLabel('악보 확대',{exact:true}).selectOption('1');
  await expect.poll(()=>dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width)).toBeLessThan(350);
+ await dialog.getByRole('button',{name:'색상·굵기·투명도 설정',exact:true}).click();
  await dialog.getByLabel('펜만',{exact:true}).check();
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
  await draw(page,dialog,{ignored:true}); // Mouse is ignored in pen-only mode.
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
  await dialog.locator('[data-ink-svg]').evaluate(svg=>{
@@ -127,3 +130,154 @@ test('explicit PDF deletion removes its annotation vectors and keeps lesson/prac
  expect(await page.evaluate(()=>window.VZ.db.practices[0].minutes)).toBe(17);expect(r2.store.has(key)).toBe(false);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vzip_score_ink_v1:ui-test-user')).records)).toEqual([]);
 });
+
+async function configure(dialog){
+ await dialog.getByRole('button',{name:'색상·굵기·투명도 설정',exact:true}).click();
+ return dialog.getByRole('region',{name:'필기 설정',exact:true});
+}
+async function range(dialog,name,value){
+ await dialog.getByRole('slider',{name,exact:true}).evaluate((el,value)=>{el.value=String(value);el.dispatchEvent(new Event('input',{bubbles:true}));},value);
+}
+test('custom ink and settings persist across viewport fullscreen entry/exit with one toolbar row',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();let panel=await configure(dialog);
+ await panel.getByRole('group',{name:'기본 색상',exact:true}).getByRole('button',{name:'파랑 #175cd3',exact:true}).click();
+ await panel.getByLabel('사용자 색상 코드',{exact:true}).fill('#123456');await panel.getByRole('button',{name:'추가',exact:true}).click();
+ await range(dialog,'펜 굵기',12);await range(dialog,'필기 투명도',60);
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();await draw(page,dialog);
+ const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
+ expect(before[0]).toMatchObject({color:'#123456',width:.012,opacity:.4});
+ // Explicitly exercise the iOS/PWA viewport fallback without pretending this is a physical device.
+ await page.evaluate(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+ await dialog.getByRole('button',{name:'전체화면',exact:true}).click();
+ await expect(dialog).toHaveClass(/score-ink-fullscreen/);await expect(dialog.locator('[data-ink-box]')).toBeVisible();
+ const tops=await dialog.locator('.score-ink-bar>.score-ink-tools>button,.score-ink-bar>.score-ink-actions>button').evaluateAll(nodes=>nodes.map(n=>Math.round(n.getBoundingClientRect().top)));
+ expect(new Set(tops).size).toBe(1);
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual(before);
+ panel=await configure(dialog);await expect(panel.getByRole('slider',{name:'펜 굵기',exact:true})).toHaveValue('12');
+ await expect(panel.getByRole('slider',{name:'필기 투명도',exact:true})).toHaveValue('60');
+ await expect(panel.getByRole('button',{name:'사용자 색상 #123456',exact:true})).toHaveAttribute('aria-pressed','true');
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
+ if(process.env.VZ_INK_PREVIEW==='1'&&test.info().project.name==='chromium-mobile')console.log('VZIP_INK2_FULL_PREVIEW:'+Buffer.from(await page.screenshot()).toString('base64'));
+ await dialog.getByRole('button',{name:'전체화면 종료',exact:true}).click();
+ await expect(dialog).not.toHaveClass(/score-ink-fullscreen/);await expect(dialog.locator('[data-ink-box]')).toBeVisible();
+ panel=await configure(dialog);await expect(panel.getByRole('slider',{name:'펜 굵기',exact:true})).toHaveValue('12');
+ await expect(panel.getByRole('slider',{name:'필기 투명도',exact:true})).toHaveValue('60');expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual(before);
+});
+test('highlighter pastel and recent/custom colors survive refresh separately from pen preferences',async({page})=>{
+ await setup(page);let dialog=await open(page);await dialog.getByRole('button',{name:'형광펜',exact:true}).click();
+ let panel=await configure(dialog);
+ await expect(panel.getByRole('group',{name:'기본 색상',exact:true}).getByRole('button')).toHaveCount(8);
+ await panel.getByLabel('사용자 색상 코드',{exact:true}).fill('#c0ffee');await panel.getByRole('button',{name:'추가',exact:true}).click();
+ await range(dialog,'펜 굵기',42);await range(dialog,'필기 투명도',20);
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();await draw(page,dialog,{tool:'형광펜'});
+ await expect(dialog.locator('path[data-stroke]')).toHaveAttribute('opacity','0.8');
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations[0])).toMatchObject({color:'#c0ffee',width:.042,opacity:.8});
+ await dialog.getByRole('button',{name:'완료',exact:true}).click();await page.reload();dialog=await open(page);
+ await dialog.getByRole('button',{name:'형광펜',exact:true}).click();panel=await configure(dialog);
+ await expect(panel.getByRole('button',{name:'사용자 색상 #c0ffee',exact:true})).toBeVisible();
+ await expect(panel.getByRole('button',{name:'최근 사용 색상 #c0ffee',exact:true})).toBeVisible();
+ await expect(panel.getByRole('button',{name:'파랑 #175cd3',exact:true})).toHaveCount(0);
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();
+ await expect(panel.getByRole('button',{name:'파랑 #175cd3',exact:true})).toBeVisible();
+ await expect(panel.getByRole('button',{name:'사용자 색상 #c0ffee',exact:true})).toHaveCount(0);
+});
+test('pen-only mode permits finger scrolling and ignores a palm while a pen stroke is active',async({page})=>{
+ await setup(page);const dialog=await open(page);await dialog.getByLabel('악보 확대',{exact:true}).selectOption('2');
+ await expect.poll(()=>dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width)).toBeGreaterThan(450);
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();await configure(dialog);await dialog.getByLabel('펜만',{exact:true}).check();
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
+ await dialog.locator('[data-ink-svg]').evaluate(svg=>{
+  const stage=svg.closest('[data-ink-stage]'),r=stage.getBoundingClientRect(),common={bubbles:true,pointerId:51,pointerType:'touch',isPrimary:true,button:0};
+  svg.dispatchEvent(new PointerEvent('pointerdown',{...common,clientX:r.x+100,clientY:r.y+150}));
+  svg.dispatchEvent(new PointerEvent('pointermove',{...common,clientX:r.x+100,clientY:r.y+70}));
+  svg.dispatchEvent(new PointerEvent('pointerup',{...common,clientX:r.x+100,clientY:r.y+70}));
+ });
+ await expect.poll(()=>dialog.locator('[data-ink-stage]').evaluate(e=>e.scrollTop)).toBeGreaterThan(20);
+ const result=await dialog.locator('[data-ink-svg]').evaluate(svg=>{
+  const stage=svg.closest('[data-ink-stage]'),r=stage.getBoundingClientRect(),before=stage.scrollTop,common={bubbles:true,isPrimary:true,button:0};
+  svg.dispatchEvent(new PointerEvent('pointerdown',{...common,pointerId:77,pointerType:'pen',clientX:r.x+50,clientY:r.y+90}));
+  svg.dispatchEvent(new PointerEvent('pointerdown',{...common,pointerId:52,pointerType:'touch',clientX:r.x+120,clientY:r.y+150}));
+  svg.dispatchEvent(new PointerEvent('pointermove',{...common,pointerId:52,pointerType:'touch',clientX:r.x+120,clientY:r.y+80}));
+  const unchanged=stage.scrollTop===before;
+  svg.dispatchEvent(new PointerEvent('pointermove',{...common,pointerId:77,pointerType:'pen',clientX:r.x+150,clientY:r.y+100}));
+  svg.dispatchEvent(new PointerEvent('pointerup',{...common,pointerId:77,pointerType:'pen',clientX:r.x+150,clientY:r.y+100}));
+  return unchanged;
+ });
+ expect(result).toBe(true);expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(1);
+});
+test('whole score row opens the viewer with keyboard access and independent edit/delete controls',async({page})=>{
+ await setup(page);await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ const row=page.locator('[data-score="score-ink"]');await expect(row.locator('[data-open],[data-ink]')).toHaveCount(0);
+ await row.getByRole('button',{name:'정보 수정',exact:true}).click();await expect(page.getByRole('dialog',{name:'악보 개인 필기'})).toHaveCount(0);
+ await page.getByRole('dialog',{name:'악보 정보',exact:true}).getByRole('button',{name:'돌아가기',exact:true}).click();
+ await row.getByRole('button',{name:'연습 악보 열기',exact:true}).focus();await page.keyboard.press('Enter');
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ await dialog.getByRole('button',{name:'완료',exact:true}).click();
+ await row.getByRole('button',{name:'삭제',exact:true}).click();await expect(page.getByRole('dialog',{name:'악보 삭제',exact:true})).toBeVisible();
+ await expect(page.getByRole('dialog',{name:'악보 개인 필기'})).toHaveCount(0);
+ await page.getByRole('dialog',{name:'악보 삭제',exact:true}).getByRole('button',{name:'취소',exact:true}).click();
+});
+
+test('tablet default favors Pencil and two-finger pinch zoom changes only the viewport',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{Object.defineProperty(navigator,'platform',{configurable:true,value:'MacIntel'});Object.defineProperty(navigator,'maxTouchPoints',{configurable:true,value:5});});
+ const dialog=await open(page);await expect(dialog.getByRole('button',{name:'펜',exact:true})).toHaveAttribute('aria-pressed','true');await configure(dialog);await expect(dialog.getByLabel('펜만',{exact:true})).toBeChecked();
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
+ const before=await dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width);
+ await dialog.locator('[data-ink-svg]').evaluate(svg=>{
+  const r=svg.closest('[data-ink-stage]').getBoundingClientRect(),common={bubbles:true,pointerType:'touch',button:0};
+  const send=(type,id,x,primary)=>svg.dispatchEvent(new PointerEvent(type,{...common,pointerId:id,isPrimary:primary,clientX:r.x+x,clientY:r.y+140}));
+  send('pointerdown',31,90,true);send('pointerdown',32,190,false);
+  send('pointermove',31,50,true);send('pointermove',32,230,false);
+  send('pointerup',31,50,true);send('pointerup',32,230,false);
+ });
+ await expect(dialog.locator('[data-ink-box]')).toBeVisible();
+ await expect.poll(()=>dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width)).toBeGreaterThan(before*1.5);
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations||[])).toEqual([]);
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();
+ await dialog.locator('[data-ink-svg]').evaluate(svg=>{
+  const r=svg.closest('[data-ink-stage]').getBoundingClientRect(),common={bubbles:true,pointerId:81,pointerType:'pen',isPrimary:true,button:0,pressure:.7};
+  for(const [type,x]of [['pointerdown',50],['pointermove',150],['pointerup',180]])svg.dispatchEvent(new PointerEvent(type,{...common,clientX:r.x+x,clientY:r.y+100}));
+ });
+ await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(1);
+});
+test('fullscreen-capable browsers keep the editor open when the explicit exit control is used',async({page})=>{
+ await setup(page);const dialog=await open(page);await dialog.getByRole('button',{name:'전체화면',exact:true}).click();
+ await expect(dialog).toHaveClass(/score-ink-fullscreen/);await expect(dialog.getByRole('button',{name:'전체화면 종료',exact:true})).toBeVisible();
+ await dialog.getByRole('button',{name:'전체화면 종료',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog).not.toHaveClass(/score-ink-fullscreen/);
+});
+
+for(const rotated of [false,true]){
+ test('annotated PDF download preserves source and exports visible red ink'+(rotated?' with rotation/crop':''),async({page})=>{
+  const lib=require(path.join(PDFROOT,'../pdf-lib')),sourceDoc=await lib.PDFDocument.load(bytes);
+  if(rotated){sourceDoc.getPage(0).setRotation(lib.degrees(90));sourceDoc.getPage(0).setCropBox(20,30,260,340);}
+  const sourceBytes=rotated?Buffer.from(await sourceDoc.save()):bytes,r2=await setup(page,sourceBytes),dialog=await open(page);
+  await dialog.getByRole('button',{name:'펜',exact:true}).click();let panel=await configure(dialog);
+  await panel.getByRole('button',{name:'진한 빨강 #b42318',exact:true}).click();await range(dialog,'펜 굵기',14);
+  await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();await draw(page,dialog);
+  const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations);panel=await configure(dialog);
+  await panel.getByRole('button',{name:'필기 PDF 만들기',exact:true}).click();
+  const save=panel.getByRole('link',{name:'만든 PDF 저장',exact:true});await expect(save).toBeVisible({timeout:20000});
+  const rendered=await save.evaluate(async a=>{
+   const bytes=new Uint8Array(await(await fetch(a.href)).arrayBuffer());
+   const pdf=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs');
+   const document=await pdf.getDocument({data:bytes,isEvalSupported:false,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/standard_fonts/'}).promise;
+   try{
+    const page=await document.getPage(1),view=page.getViewport({scale:1}),canvas=window.document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:view}).promise;
+    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let red=0,positioned=0;
+    for(let i=0;i<pixels.length;i+=4)if(pixels[i]>100&&pixels[i+1]<80&&pixels[i+2]<80){red++;const x=(i/4%canvas.width)/canvas.width,y=Math.floor(i/4/canvas.width)/canvas.height;if(x>.12&&x<.68&&y>.18&&y<.30)positioned++;}
+    const out={red,positioned,pages:document.numPages,rotation:page.rotate};canvas.width=0;canvas.height=0;return out;
+   }finally{await document.destroy();}
+  });
+  expect(rendered.red).toBeGreaterThan(50);expect(rendered.positioned/rendered.red).toBeGreaterThan(.95);expect(rendered.pages).toBe(2);expect(rendered.rotation).toBe(rotated?90:0);
+  const downloadEvent=page.waitForEvent('download');await save.click();const download=await downloadEvent;
+  expect(download.suggestedFilename()).toBe('연습 악보_필기.pdf');
+  const output=await lib.PDFDocument.load(fs.readFileSync(await download.path()));expect(output.getPageCount()).toBe(2);
+  expect(output.getPage(0).getRotation().angle).toBe(rotated?90:0);
+  if(rotated)expect(output.getPage(0).getCropBox()).toEqual({x:20,y:30,width:260,height:340});
+  expect(r2.store.get(key).bytes.equals(sourceBytes)).toBe(true);expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual(before);
+  expect(r2.calls.some(c=>c.startsWith('PUT')||c.startsWith('DELETE')||c==='POST /v1/uploads')).toBe(false);
+ });
+}

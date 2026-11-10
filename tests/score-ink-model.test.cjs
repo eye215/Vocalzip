@@ -81,3 +81,11 @@ test('explicit PDF deletion atomically removes its ink and recovery vectors whil
  assert.deepEqual(JSON.parse([...f.memory.values()][0]).records,[]);assert.ok(f.data.deleted.scoreAnnotations.includes('line'));
  assert.deepEqual(f.data.lessons,oldLessons);assert.deepEqual(f.data.practices,oldPractices);
 });
+
+test('opacity remains backward compatible and is included in immutable stroke identity',()=>{
+ const f=fixture(),old=stroke('old',{tool:'highlighter'});assert.equal(Ink.opacity(old),.28);assert.equal(Ink.opacity(stroke()),1);
+ f.store.commit({add:[old,stroke('new',{opacity:.4})]});assert.equal(Ink.opacity(f.store.list(binding).find(s=>s.id==='new')),.4);
+ assert.throws(()=>f.store.commit({add:[stroke('new',{opacity:.8})]}),{code:'conflict'});
+ for(const opacity of [0,1.1,-1,NaN,'0.5'])assert.equal(Ink.valid(stroke('bad',{opacity})),false);
+ assert.equal(Ink.valid(stroke('good',{opacity:.05})),true);
+});
