@@ -880,8 +880,8 @@ async function deleteCloudMedia(item){
  return cleanupCloudMedia(row,owner,item.id,guard,()=>unlinkCloudMedia(owner,item.id));
 }
 window.vzipCloudMediaDelete=async item=>{
- const editor=mediaMetadataEditor();
- if(editor?.list().some(job=>job.id===item.id))throw Error('미완료 파일 수정 결과를 확인한 뒤 삭제해 주세요. 보관한 입력과 원본은 그대로예요.');
+ const owner=user?.id,prefix=window.VzipMediaMetadataEdits?.PREFIX||'vzip_media_edit_v1:';
+ if(owner&&localStorage.getItem(prefix+encodeURIComponent(owner)+':'+encodeURIComponent(item.id))!==null)throw Error('미완료 파일 수정 결과를 확인한 뒤 삭제해 주세요. 보관한 입력과 원본은 그대로예요.');
  const engine=mediaDeletionEngine();if(engine)return engine.run(item.id).finally(refreshMediaDeleteReview);
  if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
   if(!lock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');

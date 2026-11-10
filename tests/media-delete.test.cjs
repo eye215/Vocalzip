@@ -15,7 +15,7 @@ function setup({provider='supabase',fail='',conflict=false,path='alice/f.wav',pe
    resolve({data:[]});
   };return q;
  }};
- const context={mediaMetadataEditor:()=>pending?{list:()=>[{id:'m',state:'pending'}]}:null,client,user:{id:'alice'},Merge,structuredClone,Error,Event,Date,navigator:{},localStorage:{getItem:()=>null,key:()=>null,length:0},sameVersion:q=>q,listCache:async()=>null,window:{addEventListener(){},dispatchEvent(){},VzipR2:{remove:async key=>events.push(['r2',key])}}};
+ const context={client,user:{id:'alice'},Merge,structuredClone,Error,Event,Date,navigator:{},localStorage:{getItem:k=>pending&&k==='vzip_media_edit_v1:alice:m'?'saved pending input':null,key:()=>null,length:0},sameVersion:q=>q,listCache:async()=>null,window:{addEventListener(){},dispatchEvent(){},VzipR2:{remove:async key=>events.push(['r2',key])}}};
  const code=fs.readFileSync('cloud-sync.js','utf8');
  vm.runInNewContext(code.slice(code.indexOf('function nextVersion'),code.indexOf('async function sync'))+code.slice(code.indexOf('async function unlinkCloudMedia'),code.indexOf('/* ---------- R2 move')),context);
  return {events,payload,run:()=>context.window.vzipCloudMediaDelete({id:'m',path:'attacker/stale'}),row:()=>row};
