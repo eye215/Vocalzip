@@ -108,7 +108,7 @@ returns jsonb language sql stable set search_path=''
 as $$
  select jsonb_build_object('version',1,'user_id',p.user_id,'session_id',p.session_id,
  'request_id',p.request_id,'media_id',p.media_id,'object_key',p.object_key,'object_version',p.object_version,
- 'expected_updated_at',p.expected_updated_at::text,'size',p.size,'content_type',p.content_type,
+ 'expected_updated_at',to_char(p.expected_updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'size',p.size,'content_type',p.content_type,
  'content_root',p.content_root,'etag',p.etag,'state',p.state)
 $$;
 revoke all on function public.vzip_media_delete_receipt(public.vzip_media_delete_requests) from public,anon,authenticated;
