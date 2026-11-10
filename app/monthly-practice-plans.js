@@ -81,7 +81,7 @@ function create(form,month){
  if(![start,end,minutes,days].every(Number.isInteger)||start<0||end>7200||end<=start||
     minutes<3||minutes>60||days<1||days>14)throw Error('구간·시간·일수를 확인해 주세요.');
  const sourceId=String(form.elements.sourceRecording.value||'');
- const source=sourceId?M.cached?.().find(m=>m.id===sourceId):null;
+ const source=sourceId?M.cached?.()?.find(m=>m.id===sourceId):null;
  if(sourceId && (!source||source.songId!==songId))throw Error('선택한 녹음의 곡 정보가 변경됐어요. 다시 선택해 주세요.');
  const today=V.today(),id='monthly-plan:'+V.uid(),title=V.songTitle(songId);
  const segment=fmt(start)+'–'+fmt(end);
