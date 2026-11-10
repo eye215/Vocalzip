@@ -55,8 +55,46 @@ function rowsHtml(rows) {
 function prescriptions(rows){
  const ranked=rows.filter(r=>r.c?.state==='worse').concat(rows.filter(r=>r.c?.state==='similar')).concat(rows.filter(r=>!r.c&&r.current.value!=null));
  const chosen=ranked.slice(0,3);
- return '<section class="card growth-section"><h2>추천 연습</h2>'+(chosen.length?'<p class="small muted">실측 변화에 기반한 규칙형 추천입니다. AI 청취 진단이나 의학적 판단이 아니에요.</p>'+chosen.map((r,i)=>'<div class="growth-task"><span class="growth-task-number">'+(i+1)+'</span><div><strong>'+e(r.d.title)+'</strong><p>'+e(r.d.practice)+'</p><p class="small muted">권장 '+r.d.minutes+'분 · '+(r.c?.state==='worse'?'전월 대비 악화된 지표':r.c?'유지·강화':'비교 데이터 부족')+'</p></div></div>').join('')+'<a class="btn block" href="#/practice-room">노래 연습실에서 연습하기</a>':'<p>분석된 녹음이 쌓이면 우선 연습 과제를 제안할게요.</p>')+'</section>';
+ return '<section class="card growth-section"><h2>추천 연습</h2>'+(chosen.length?'<p class="small muted">실측 변화에 기반한 규칙형 추천입니다. AI 청취 진단이나 의학적 판단이 아니에요.</p>'+chosen.map((r,i)=>'<div class="growth-task"><span class="growth-task-number">'+(i+1)+'</span><div><strong>'+e(r.d.title)+'</strong><p>'+e(r.d.practice)+'</p><p class="small muted">권장 '+r.d.minutes+'분 · '+(r.c?.state==='worse'?'전월 대비 악화된 지표':r.c?'유지·강화':'비교 데이터 부족')+'</p><button type="button" class="btn sm ghost" data-growth-goal="'+r.d.id+'">오늘의 목표에 추가</button></div></div>').join('')+'<a class="btn block" href="#/practice-room">노래 연습실에서 연습하기</a>':'<p>분석된 녹음이 쌓이면 우선 연습 과제를 제안할게요.</p>')+'</section>';
 }
+
+const previousMonth = k => { const [y,m]=k.split('-').map(Number);return (m===1?y-1:y)+'-'+String(m===1?12:m-1).padStart(2,'0'); };
+function monthlyRows(key, months){
+ const current=months.get(key)||[],previous=months.get(previousMonth(key))||[];
+ return definitions.map(d=>({d,current:measure(current,d),c:comparable(current,previous,d)}));
+}
+function archiveMonths(months){
+ const today=ym(V.today()),stored=new Set((V.db.monthlyGrowthReports||[]).map(r=>r.month));
+ const pending=[...months.keys()].filter(k=>k<today&&!stored.has(k)&&months.get(k).some(valid));
+ if(!pending.length)return;
+ const reports=pending.map(month=>{
+  const rows=monthlyRows(month,months),items=months.get(month);
+  return {id:'monthly-growth:'+month,month,created:Date.now(),recordingCount:items.length,
+   analysisCount:items.filter(valid).length,
+   metrics:rows.map(({d,current,c})=>({key:d.id,title:d.title,value:current.value,count:current.count,comparison:c})),
+   recommendations:rows.filter(r=>r.c?.state==='worse').concat(rows.filter(r=>r.c?.state==='similar'))
+    .slice(0,3).map(({d})=>({key:d.id,title:d.title,practice:d.practice,minutes:d.minutes}))};
+ });
+ V.change(db=>{db.monthlyGrowthReports||=[];for(const report of reports)
+  if(!db.monthlyGrowthReports.some(r=>r.id===report.id))db.monthlyGrowthReports.push(report);
+ },{silent:true});
+}
+function saveGrowthGoal(d,month){
+ const date=V.today(),id='monthly-growth:'+month+':'+d.id+':'+date;
+ if((V.db.dailyGoals||[]).some(g=>g.id===id))return false;
+ return V.change(db=>{db.dailyGoals.push({id,date,title:d.practice+' ('+d.minutes+'분)',source:'personal',
+  sourceId:'monthly-growth:'+month,completed:false,order:db.dailyGoals.filter(g=>g.date===date).length,created:Date.now()});},{silent:true});
+}
+function archiveCard(month){
+ const report=(V.db.monthlyGrowthReports||[]).find(r=>r.month===month);
+ if(!report)return '';
+ const improved=report.metrics.filter(x=>x.comparison?.state==='better').map(x=>x.title);
+ const worsened=report.metrics.filter(x=>x.comparison?.state==='worse').map(x=>x.title);
+ return '<section class="card growth-section"><h2>보관된 월간 리포트</h2><p class="small muted">분석 '+report.analysisCount+'개를 바탕으로 '+e(month)+'에 대한 결과를 보관했어요.</p>'+
+ '<p>개선: '+e(improved.join(', ')||'판정 불가')+'</p><p>보완: '+e(worsened.join(', ')||'판정 불가')+'</p>'+
+ '<p class="small muted">아래 수치는 새로 추가된 녹음까지 포함한 최신 집계일 수 있어요.</p></section>';
+}
+
 function history(months){
  const ordered=[...months.keys()].sort();
  return '<section class="card growth-section"><h2>월별 기록</h2><div class="growth-months">'+ordered.map(key=>{
@@ -68,18 +106,25 @@ async function mount(host){
  const my=++request;
  try {
   const items=await M.list();if(my!==request||!host.isConnected)return;
-  const months=group(items), keys=[...months.keys()].sort().reverse();
+  const months=group(items); archiveMonths(months);
+  const keys=[...new Set([...months.keys(),...(V.db.monthlyGrowthReports||[]).map(r=>r.month)])].sort().reverse();
   const currentKey=ym(V.today());
   let selected=keys.includes(currentKey)?currentKey:keys[0];
   const render=()=>{
    if(!keys.length){host.innerHTML='<div class="empty"><p>아직 날짜가 있는 녹음이 없어요.</p></div>';return;}
-   const idx=keys.indexOf(selected),prev=String(Number(selected.slice(0,4))-(selected.endsWith('-01')?1:0))+'-'+(selected.endsWith('-01')?'12':String(Number(selected.slice(5))-1).padStart(2,'0'));
+   const prev=previousMonth(selected);
    const current=months.get(selected)||[],previous=months.get(prev)||[];
-   const rows=definitions.map(d=>({d,current:measure(current,d),c:comparable(current,previous,d)}));
+   const rows=monthlyRows(selected,months);
    const validCount=current.filter(valid).length;
    host.innerHTML='<header class="growth-intro"><p class="small muted">모든 곡의 녹음 데이터를 한곳에서</p><h2>내 목소리의 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
-   narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+prescriptions(rows)+history(months)+
-   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 월간 리포트 저장·AI 청취 코멘트 통합·자동 생성은 후속 개발 항목입니다.</p>';
+   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+prescriptions(rows)+history(months)+
+   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 다음 앱 접속 시 저장됩니다. 서버 예약 자동 생성 및 AI 청취 코멘트 통합은 후속 개발 항목입니다.</p>';
+   host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
+    const d=definitions.find(x=>x.id===b.dataset.growthGoal);
+    if(!d)return;
+    if(saveGrowthGoal(d,selected)){b.disabled=true;b.textContent='추가됨';V.toast('오늘의 목표에 추가했어요.');}
+    else V.toast('이미 오늘의 목표에 있어요.');
+   });
    host.querySelector('[data-growth-select]').onchange=ev=>{selected=ev.target.value;render();};
    host.querySelectorAll('[data-month]').forEach(b=>b.onclick=()=>{selected=b.dataset.month;render();window.scrollTo({top:0,behavior:'smooth'});});
   };
