@@ -6,6 +6,13 @@ body[data-vz-route="guided-practice"]{background:#0b0911;color:#f7f5fc;color-sch
 .item .vz-task-start{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 10px;border-radius:12px;background:var(--accent-soft,#f1eaff);color:var(--accent,#7a32f5);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}
 /* Playback is controlled by the practice buttons; touches on the video do not seek or pause it. */
 .gp-video iframe{pointer-events:none}
+.gp-timer.has-reference{height:auto;min-height:212px;padding:22px 14px;box-sizing:border-box}
+.gp-reference{width:100%;max-width:360px;margin-top:12px;padding-top:16px;border-top:1px solid #514363;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;text-align:left}
+.gp-reference label{display:grid;gap:6px;color:#d6c8e5;font-size:12px;font-weight:650}
+.gp-reference select,.gp-reference button{min-height:44px;border-radius:12px;border:1px solid #6c557f;color:#f7f5fc;background:#32243f;padding:0 12px;font-size:14px}
+.gp-reference button{background:#6f2ce5;border-color:#6f2ce5;font-weight:700;white-space:nowrap}
+.gp-reference button:disabled{opacity:.45}
+.gp-reference small{grid-column:1/-1;color:#bdb0ca;font-size:11px;line-height:1.45}
 .gp-screen{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
 .gp-actions{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,560px);box-sizing:border-box;margin:0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:#0b0911;box-shadow:0 -10px 24px #0b0911cc}
 .gp-actions [hidden]{display:none}

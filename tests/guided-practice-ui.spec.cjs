@@ -68,3 +68,34 @@ test('timer-only practice stops on backgrounding and leaving the page',async({pa
  await expect(page.locator('.gp-screen')).toHaveCount(0);
  expect(page.__errors).toEqual([]);
 });
+
+test('only a step with an explicit range offers a playable reference tone',async({page})=>{
+ await page.addInitScript(()=>{
+  window.__tone={starts:0,stops:0,frequency:0};
+  window.AudioContext=class{
+   state='running';currentTime=0;destination={};resume(){return Promise.resolve()}close(){return Promise.resolve()}
+   createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){}},connect(){},disconnect(){}}}
+   createOscillator(){const tone=window.__tone;return {type:'',frequency:{set value(v){tone.frequency=v}},connect(gain){return gain},start(){tone.starts++},stop(){tone.stops++},disconnect(){}}}
+  };
+ });
+ await boot(page);
+ await page.evaluate(()=>window.VZ.change(d=>d.assignments.push(
+  {id:'range-test',title:'안정적인 음역(D#3~A#5) 안에서 아 소리 유지',status:'active'},
+  {id:'plain-test',title:'호흡을 편하게 유지하기',status:'active'}
+ ),{silent:true}));
+ await page.evaluate(()=>window.VZ.nav('#/guided-practice/homework:range-test'));
+ const note=page.getByRole('combobox',{name:'기준음 높이'});
+ await expect(note).toBeVisible();await expect(note.locator('option')).toHaveCount(3);
+ await expect(note).toHaveValue('63');
+ await page.getByRole('button',{name:'기준음 듣기'}).click();
+ expect(await page.evaluate(()=>window.__tone)).toMatchObject({starts:1,frequency:311.1269837220809});
+ await expect(page.locator('.gp-timer strong')).toHaveText('0:00');
+ await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
+ expect(await page.evaluate(()=>window.__tone.stops)).toBeGreaterThan(0);
+ await expect(page.getByRole('button',{name:'기준음 듣기'})).toBeVisible();
+ await page.getByRole('button',{name:'연습 시작'}).click();
+ await expect(page.getByRole('button',{name:'기준음 듣기'})).toBeDisabled();
+ await page.evaluate(()=>window.VZ.nav('#/guided-practice/homework:plain-test'));
+ await expect(page.locator('[data-gp-reference]')).toHaveCount(0);
+ expect(page.__errors).toEqual([]);
+});
