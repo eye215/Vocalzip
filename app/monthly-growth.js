@@ -169,7 +169,7 @@ async function mount(host){
    const rows=monthlyRows(selected,months);
    const validCount=current.filter(valid).length;
    host.innerHTML='<header class="growth-intro"><p class="small muted">모든 곡의 녹음 데이터를 한곳에서</p><h2>내 목소리의 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
-   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+monthlyAiCard(selected)+prescriptions(rows)+history(months)+
+   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+monthlyAiCard(selected)+prescriptions(rows)+'<div data-monthly-plans></div>'+history(months)+
    '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 다음 앱 접속 시 저장됩니다. 서버 예약 자동 생성과 AI 코멘트 기반 맞춤 추천 생성은 후속 개발 항목입니다.</p>';
 
    const aiButton=host.querySelector('[data-monthly-ai-run]');
@@ -210,6 +210,7 @@ async function mount(host){
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
    };
 
+   V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,current,rows);
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
     if(!d)return;
