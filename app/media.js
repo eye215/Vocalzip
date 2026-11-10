@@ -292,9 +292,11 @@ M.remove = async (item,{expectedLocal}={}) => {
   const bound=window.vzipPendingMediaDeletes?.().find(job=>job.id===item.id&&job.owner===removalOwner&&job.session===removalSession&&job.localStamp);
   if(bound){
     const info=await M.localDeleteInfo(item.id);guard();
+    if(bound.object&&bound.phase==='cloud-complete'&&!info.exists){await window.vzipMediaDeleteAcknowledge?.(item.id);guard();changed();return;}
     if(await window.VzipSnapshotTransport.localStamp(info.token)!==bound.localStamp)throw Object.assign(Error('중단 후 이 기기의 파일이 바뀌었어요. 새 파일은 유지돼요.'),{code:'localChanged'});
     if(expectedLocal===undefined)expectedLocal=info.token;
   }
+  if(removalSession&&expectedLocal===undefined){expectedLocal=(await M.localDeleteInfo(item.id)).token;guard();}
   guard();if(expectedLocal!==undefined&&(await M.localDeleteInfo(item.id)).token!==expectedLocal)throw Object.assign(Error('확인 후 이 기기의 파일이 바뀌었어요. 새 파일은 유지돼요.'),{code:'localChanged'});
   guard();if(item.accountOwner&&item.accountOwner!==removalOwner)throw Error('다른 계정의 파일은 삭제할 수 없어요.');
   if (removing.has(item.id)) throw Error('이미 삭제 중이에요.');

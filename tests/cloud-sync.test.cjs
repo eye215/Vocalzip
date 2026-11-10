@@ -263,7 +263,7 @@ class MediaRevisionServer extends RevisionServer{
 }
 async function mediaDevice({revision=true}={}){
  const s=new MediaRevisionServer(),d=device(s,mediaSeed(),{clean:true,revision});await until(()=>d.saved());
- d.window.VzipR2={remove:async key=>{
+ d.window.VzipR2={metadataMode:async()=>'legacy',remove:async key=>{
   assert.equal(key,'u/'+UID+'/chosen/original.wav');
   if(revision)assert.ok(s.row.payload.deleted.media.includes('chosen'));
   s.events.push('bytes');s.objects.delete('chosen');await s.onBytes?.();
@@ -396,4 +396,11 @@ test('a mixed-account cloud snapshot is blocked before any private foreign value
  await d.review();const ui=get();
  await assert.rejects(ui.review(),e=>e.code==='identity'&&!e.message.includes('must not display'));ui.onClose();
  assert.equal(s.rpcCalls.length,0);assert.equal(d.data().performances,undefined);assert.equal(s.row.payload.performances[0].memo,'must not display');
+});
+
+test('missing or unavailable media capability stops revision deletion before root or bytes',async()=>{
+ for(const missing of [true,false]){
+  const {s,d}=await mediaDevice();if(missing)delete d.window.VzipR2.metadataMode;else d.window.VzipR2.metadataMode=async()=>{throw Error('paused');};
+  await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));assert.ok(s.objects.has('chosen'));assert.equal(s.events.length,0);assert.equal(d.window.vzipPendingMediaDeletes().length,0);
+ }
 });
