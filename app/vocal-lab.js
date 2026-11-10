@@ -56,7 +56,7 @@ function trend(s) {
   const rows=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean).map(m=>({m,value:metric.get(analysis(m),m)}));
   const measured=rows.filter(x=>valid(x.value)!=null);
   return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2><div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
-    (measured.length ? plot(measured.map(x=>({value:x.value,label:day(x.m)})),{highlighted:measured.findIndex(x=>x.m.id===s.active)})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'" aria-label="'+esc(day(x.m)+' '+metric.label+' '+metric.fmt(x.value,analysis(x.m))+' 분석 관찰')+'">'+esc(day(x.m))+'</button>').join('')+'</div>' : '<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
+    (measured.length ? '<div class="vl-plot-scroll" tabindex="0" role="region" aria-label="녹음별 변화 그래프, 좌우로 스크롤 가능"><div class="vl-plot-track" style="--vl-points:'+measured.length+'">'+plot(measured.map(x=>({value:x.value,label:day(x.m)})),{highlighted:measured.findIndex(x=>x.m.id===s.active)})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'" aria-label="'+esc(day(x.m)+' '+metric.label+' '+metric.fmt(x.value,analysis(x.m))+' 분석 관찰')+'">'+esc(day(x.m))+'</button>').join('')+'</div></div></div>' : '<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
     (measured.length ? '<p class="vl-muted">그래프의 날짜를 누르면 해당 녹음의 관찰 내용을 볼 수 있어요.</p>' : '')+'</section>';
 }
 function single(s,m) {
