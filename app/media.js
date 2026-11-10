@@ -149,6 +149,9 @@ M.recordingCategory=item=>{
  if(['song','lesson','training','room'].includes(explicit))return explicit;
  if(item?.source==='practice-room'||(item?.source==='practice'&&/^[a-zA-Z0-9-]{8,80}-[01]$/.test(String(item?.id||''))))return 'room';
  if(M.occasion(item)==='lesson')return 'lesson';
+ const owner=M.owner(item),practice=owner.practice;
+ if(practice?.practiceRoom)return 'room';
+ if(practice?.practiceMode==='training')return 'training';
  return 'song';
 };
 M.songSearchEligible=item=>['song','lesson'].includes(M.recordingCategory(item));
