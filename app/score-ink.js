@@ -715,7 +715,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   };
   el.querySelector('[data-ink-recognize]').onclick=()=>{if(selection?.rows.length)recognize('handwriting',null,selection.rows);};
   el.querySelector('[data-ink-explain-selection]').onclick=()=>{if(scoreRect)recognize('notation',scoreRect);};
-  el.querySelector('[data-ink-notation]').onclick=()=>{selectionEnd(false);clearSelection();clearScoreRect();finishStroke();resetGestures();tool='notation';svg.dataset.tool=tool;stage.dataset.notation='true';el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));say('궁금한 표기를 손가락으로 사각형으로 둘러 주세요.');};
+  el.querySelector('[data-ink-notation]').onclick=()=>{selectionEnd(false);clearSelection();clearScoreRect();finishStroke();resetGestures();tool='notation';svg.dataset.tool=tool;stage.dataset.notation='true';el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));el.querySelector('[data-ink-notation]').setAttribute('aria-pressed','true');syncQuick();say('궁금한 표기를 손가락으로 사각형으로 둘러 주세요.');};
   el.querySelector('[data-ink-width]').oninput=event=>updateSettings({width:Number(event.target.value)/1000});
   el.querySelector('[data-ink-eraser-size]').oninput=event=>updateEraser(Number(event.target.value)/1000);
   el.querySelectorAll('[data-ink-settings-tab]').forEach(button=>button.onclick=()=>setSettingsTab(button.dataset.inkSettingsTab));
@@ -732,7 +732,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-thumb-next]').onclick=()=>{if((thumbBatch+1)*24<doc?.numPages){thumbBatch++;drawThumbnailBatch();}};
   el.querySelector('[data-ink-jump-form]').onsubmit=event=>{event.preventDefault();const n=Number(el.querySelector('[data-ink-jump-input]').value);if(!Number.isInteger(n)||n<1||n>doc?.numPages){say('1부터 '+doc.numPages+'쪽 사이 번호를 입력해 주세요.',true);return;}pageNo=n;closeThumbnails();renderPage();};
   el.querySelectorAll('[data-ink-tool]').forEach(button=>button.onclick=()=>{
-   selectionEnd(false);clearSelection();clearScoreRect();finishStroke();resetGestures();markerStart=null;markerDrag=null;el.querySelector('[data-ink-marker-palette]').hidden=true;el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool=button.dataset.inkTool;svg.dataset.tool=tool;stage.dataset.notation='false';if(['pen','highlighter','eraser'].includes(tool))settingsTab=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
+   selectionEnd(false);clearSelection();clearScoreRect();finishStroke();resetGestures();markerStart=null;markerDrag=null;el.querySelector('[data-ink-marker-palette]').hidden=true;el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool=button.dataset.inkTool;svg.dataset.tool=tool;stage.dataset.notation='false';el.querySelector('[data-ink-notation]').setAttribute('aria-pressed','false');if(['pen','highlighter','eraser'].includes(tool))settingsTab=tool;if(['pen','highlighter'].includes(tool))paintTool=tool;syncSettings();
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));paint();
    if(tool==='select')say('필기를 누르거나 사각형으로 둘러 선택하세요.');
   });
@@ -741,7 +741,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   };
   el.querySelectorAll('[data-ink-marker]').forEach(button=>button.onclick=()=>{
    finishStroke();selectionEnd(false);clearSelection();clearScoreRect();markerStart=null;markerDrag=null;resetGestures();
-   markerType=button.dataset.inkMarker;tool='marker';svg.dataset.tool=tool;stage.dataset.notation='false';
+   markerType=button.dataset.inkMarker;tool='marker';svg.dataset.tool=tool;stage.dataset.notation='false';el.querySelector('[data-ink-notation]').setAttribute('aria-pressed','false');syncQuick();
    el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));
    el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','true');
    el.querySelectorAll('[data-ink-marker]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
