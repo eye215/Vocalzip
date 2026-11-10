@@ -35,7 +35,7 @@ jobs:
           node-version: '22'
       - run: npm run test:syntax
       - run: node --check sync/snapshot-transport.js
-      - run: node --test tests/media-deletion.test.cjs tests/snapshot-transport.test.cjs tests/cloud-sync.test.cjs tests/data-merge.test.cjs tests/lesson-deletion.test.cjs
+      - run: node --test tests/media-delete.test.cjs tests/media-deletion.test.cjs tests/snapshot-transport.test.cjs tests/cloud-sync.test.cjs tests/data-merge.test.cjs tests/lesson-deletion.test.cjs
   compatibility-db:
     runs-on: ubuntu-24.04
     timeout-minutes: 8

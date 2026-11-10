@@ -131,3 +131,20 @@ test('Media metadata changed during root save stays recoverable without deleting
  expect(await page.evaluate(async()=>(await vzipReadMedia()).map(x=>x.id))).toEqual(expect.arrayContaining(['chosen','other']));
  expect(await page.evaluate(()=>window.vzipPendingMediaDeletes()[0].phase)).toBe('root-confirmed');
 });
+
+test('Account handoff after cloud cleanup cannot delete a same-ID file from the next local account',async({page})=>{
+ const {deleted}=await deletionFixture(page);
+ const result=await page.evaluate(async()=>{
+  const foreign='22222222-2222-4222-8222-222222222222',name='foreign-delete-fixture';
+  const db=await new Promise((resolve,reject)=>{const r=indexedDB.open(name,1);r.onupgradeneeded=()=>r.result.createObjectStore('recordings',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+  await new Promise((resolve,reject)=>{const t=db.transaction('recordings','readwrite');t.objectStore('recordings').put({id:'chosen',accountOwner:foreign,bytes:new Uint8Array([99]).buffer});t.oncomplete=resolve;t.onerror=()=>reject(t.error);});
+  const scope=window.VzipAccountScope,remove=window.vzipCloudMediaDelete;
+  window.vzipCloudMediaDelete=async item=>{const out=await remove(item);window.VzipAccountScope={...scope,owner:foreign,mediaDb:()=>name};return out;};
+  let error;try{await VZ.media.remove({id:'chosen',cloud:true,accountOwner:scope.owner});}catch(e){error=e.message;}
+  window.VzipAccountScope=scope;window.vzipCloudMediaDelete=remove;VZ.media.holdBackup(true);
+  const found=await new Promise((resolve,reject)=>{const t=db.transaction('recordings','readonly'),r=t.objectStore('recordings').get('chosen');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});db.close();
+  return {error,foreignBytes:[...new Uint8Array(found.bytes)],originalLocal:(await vzipReadMedia()).map(x=>x.id),phase:window.vzipPendingMediaDeletes()[0]?.phase};
+ });
+ expect(result.error).toContain('계정');expect(result.foreignBytes).toEqual([99]);expect(result.originalLocal).toContain('chosen');expect(result.phase).toBe('cloud-complete');
+ expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);
+});

@@ -142,11 +142,11 @@ function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare
    if(latest!==null&&await mediaStamp(latest)!==intent.stamp)throw fail('mediaChanged');guard();
    await cleanup(latest,guard,id);guard();
    intent={...intent,phase:'cloud-complete'};put(intent);return copy(intent);
-  }),
+  },'run',id),
   acknowledge:id=>lock(async()=>{
    guard();const r=get(id);if(!r)return;own(r);if(r.phase!=='cloud-complete')throw fail('pending');
    try{storage.removeItem(key(id));if(storage.getItem(key(id))!==null)throw fail('storage');}catch{throw fail('storage');}guard();
-  },'ack')
+  },'ack',id)
  };
 }
 
