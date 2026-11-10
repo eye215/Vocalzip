@@ -232,3 +232,5 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-performance .score-ink-quick,.score-ink-performance .score-ink-full-actions,.score-ink-performance .score-ink-vision-tools,.score-ink-performance .score-ink-explain-action{display:none!important}
 
 .score-ink-tools [data-ink-marker-mode][aria-pressed=true]{background:#ede1ff;color:#7a32f5}
+
+.score-ink-fullscreen .score-ink-bar{z-index:30}
