@@ -50,6 +50,10 @@ before(async()=>{
  grant select,insert,update,delete on public.vocal_data to authenticated;
  create policy own on public.vocal_data for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
  create table public.vocal_media(id text primary key,user_id uuid,metadata jsonb,updated_at timestamptz);
+ alter table public.vocal_media enable row level security;
+ grant select,delete on public.vocal_media to authenticated;
+ create policy media_read_own on public.vocal_media for select to authenticated using(user_id=auth.uid());
+ create policy media_delete_own on public.vocal_media for delete to authenticated using(user_id=auth.uid());
  create table public.vocal_billing_documents(user_id uuid primary key,payload jsonb,previous_payload jsonb,previous_revision bigint,updated_at timestamptz);
  create function public.vocal_billing_save(bigint,jsonb,uuid) returns jsonb language sql as $$select $2$$;
  create function public.vzip_enqueue_my_media() returns integer language sql as $$select 0$$;
