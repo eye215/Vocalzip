@@ -1,0 +1,50 @@
+name: Verify tablet score workspace public assets
+on:
+  push:
+    branches: ['verify/score-workspace-public-20261110']
+permissions:
+  contents: read
+jobs:
+  public-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3fb876b8401df3675bf12c429cc3da0944d8d74c
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read-only public asset and renderer/export dependency checks
+        env:
+          EXPECTED_SHA: 3fb876b8401df3675bf12c429cc3da0944d8d74c
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const paths=['index.html','app/score-ink-model.js','app/score-ink-settings.js','app/score-ink-export.js','app/score-ink.js','app/score-ink.css','app/scores.js','account-config.js'];
+          const hash=b=>createHash('sha256').update(b).digest('hex');
+          for(let attempt=0;;attempt++){
+            try{
+              for(const path of paths){
+                const res=await fetch('https://vocalzip.yullul.com/'+path+'?vzip_workspace='+process.env.EXPECTED_SHA+'-'+attempt,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+                assert.equal(res.status,200,path);assert.equal(hash(new Uint8Array(await res.arrayBuffer())),hash(readFileSync(path)),path+' public SHA-256');
+              }
+              break;
+            }catch(error){if(attempt>=9)throw error;console.log('Waiting for public workspace assets: '+(attempt+1));await new Promise(r=>setTimeout(r,10000));}
+          }
+          const html=readFileSync('index.html','utf8');
+          for(const ref of ['score-ink-model.js?v=2','score-ink-settings.js?v=1','score-ink-export.js?v=1','score-ink.js?v=2','score-ink.css?v=2','scores.js?v=4'])assert.ok(html.includes(ref),ref);
+          assert.match(readFileSync('account-config.js','utf8'),/VZIP_SNAPSHOT_REVISION_ENABLED\s*\?\?=\s*false/);
+          const flags=readFileSync('r2-worker/wrangler.toml','utf8');
+          assert.match(flags,/UPLOADS_V2_ENABLED\s*=\s*"false"/);assert.match(flags,/MEDIA_VERSION_GUARD_ENABLED\s*=\s*"false"/);
+          for(const url of [
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs',
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.worker.min.mjs',
+            'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js'
+          ]){
+            const res=await fetch(url,{method:'HEAD',signal:AbortSignal.timeout(15000)});assert.equal(res.status,200);assert.equal(res.headers.get('access-control-allow-origin'),'*');
+          }
+          console.log('Workspace public proof: 8 SHA-256 matches; 3 renderer/export HEAD+CORS checks; dormant source flags OFF; no auth or private media access.');
+          NODE
