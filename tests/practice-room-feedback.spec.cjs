@@ -39,3 +39,20 @@ test('large pitch difference is marked as uncertain rather than graded',async({p
  await expect(page.locator('.result-metric').first()).toContainText('%');
  await expect(page.locator('.result-metric').first()).toContainText(/기준 대비 주파수 차이 [+-]?\d+(?:\.\d+)?% · \d+ cent/);
 });
+
+test('two connected-phrase recordings enable results without a memo',async({page})=>{
+ await page.goto('/practice-room/index.html');
+ await page.locator('[data-task="connect"]').click();
+ await expect(page.locator('#submit')).toBeDisabled();
+ await page.locator('[data-upload="0"]').setInputFiles({name:'A.wav',mimeType:'audio/wav',buffer:wav()});
+ await expect(page.locator('#submit')).toBeDisabled();
+ await page.locator('[data-upload="1"]').setInputFiles({name:'B.wav',mimeType:'audio/wav',buffer:wav()});
+ await expect(page.locator('#submit')).toBeEnabled();
+ await expect(page.locator('label[for="memo"]')).toContainText('(선택)');
+ await page.locator('[data-action="remove"][data-slot="1"]').click();
+ await expect(page.locator('#submit')).toBeDisabled();
+ await page.locator('[data-upload="1"]').setInputFiles({name:'B.wav',mimeType:'audio/wav',buffer:wav()});
+ await page.locator('#submit').click();
+ await expect(page.locator('.result-heading')).toBeVisible();
+ await expect(page.getByText('별도 메모를 남기지 않았어요.')).toBeVisible();
+});
