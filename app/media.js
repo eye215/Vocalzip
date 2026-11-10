@@ -289,8 +289,19 @@ M.src = async item => {
 };
 M.download = async item => {
   const {url, revoke} = await M.src(item);
-  const a = document.createElement('a'); a.href = url; a.download = M.label(item); document.body.append(a); a.click(); a.remove();
-  if (revoke) setTimeout(() => URL.revokeObjectURL(url), 4000);
+  const suffix = {'audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav','audio/x-wav':'wav','audio/flac':'flac','audio/aac':'aac','audio/ogg':'ogg','audio/webm':'webm','audio/x-caf':'caf','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'}[typeOf(item).split(';')[0]] || 'bin';
+  const filename = M.label(item).replace(/[\\/:*?"<>|\r\n]/g,'_').replace(/\.(mov|mp4|m4v|wav|mp3|m4a|flac|aac|ogg|webm|caf)$/i,'') + '.' + suffix;
+  let href=url, local=revoke;
+  try {
+    // Cross-origin signed URLs ignore the anchor's download filename. A same-origin blob URL preserves it.
+    if (!revoke && (Number(item.savedSize||item.size)||0) > 0 && (Number(item.savedSize||item.size)||0) <= 200*1024*1024) {
+      const response=await fetch(url);if(!response.ok)throw Error('파일 다운로드 실패 ('+response.status+')');
+      href=URL.createObjectURL(await response.blob());local=true;
+    } else if (!revoke && item.storageProvider==='r2') {
+      const signed=new URL(url);signed.searchParams.set('download',filename);href=signed.href;
+    }
+    const a = document.createElement('a'); a.href = href; a.download = filename; document.body.append(a); a.click(); a.remove();
+  } finally {if(local)setTimeout(() => URL.revokeObjectURL(href), 10000);}
 };
 
 /* ---------- automatic cloud backup ---------- */
@@ -334,8 +345,10 @@ M.backupLocal = async () => {
         const extra = {}; for (const k of ['rating', 'review', 'waveform', 'importedAt', 'occasion']) if (item[k] != null) extra[k] = item[k];
         if (Object.keys(extra).length) await window.vzipCloudMediaUpdate({...meta, id:item.id}, extra);
         backup.done++;
+        VZ.processingLog?.record(item.id,{state:'done',cloud:true,pendingUpload:false,error:''});
       } catch (e) {
         backup.failed++;
+        VZ.processingLog?.record(item.id,{state:'waiting',pendingUpload:true,error:'클라우드 백업: '+(e.message||'다시 시도 예정')});
         // Another upload holds the lock: try again shortly instead of counting it lost.
         if (/다른 파일을 업로드/.test(e.message || '')) backup.waiting = true;
         console.warn('backup failed', item.id, e);

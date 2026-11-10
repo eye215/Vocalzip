@@ -49,12 +49,36 @@ const data = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY
 const media = page => page.evaluate(() => window.vzipReadMedia());
 const sheet = page => page.locator('.sheet');
 const openLibraryImport=async page=>{
- await page.locator('[data-imp]').click();
- const picker=page.waitForEvent('filechooser');
- await page.getByRole('menuitem',{name:'파일 선택',exact:true}).click();
- page.__libraryImportChooser=await picker;
+ // Legacy import sheet remains testable for records created by older app versions.
+ await page.evaluate(() => VZ.importSheet());
 };
-const pickLibraryImportFiles=(page,files)=>page.__libraryImportChooser.setFiles(files);
+const pickLibraryImportFiles=(page,files)=>sheet(page).locator('[data-file]').last().setInputFiles(files);
+
+test('보관함에서 고른 파일은 새 확인 화면을 거쳐 업로드 중에만 상단 대시보드를 보인다', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
+  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-imp]').click();
+  await (await chooser).setFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
+  await expect(page).toHaveURL(/#\/import-hub$/);
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
+  await expect(page.locator('[data-dash]')).toHaveCount(0);
+  await page.evaluate(() => {
+    VZ.media.importFile = async (file, choice) => new Promise(resolve => {
+      window.__finishImport = () => resolve({id:choice.id, cloud:true, name:file.name, recordedDate:choice.date || '2026-11-01'});
+    });
+  });
+  await page.locator('[data-hub] [data-import]').click();
+  await expect(page.locator('[data-hub] > [data-dash]')).toBeVisible();
+  await page.evaluate(() => window.__finishImport());
+  await expect(page.locator('[data-result]')).toBeVisible();
+  await expect(page.locator('[data-dash]')).toHaveCount(0);
+});
 
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 

@@ -282,7 +282,7 @@ VZ.route('home', {title:'홈', render() {
   main.querySelectorAll('[data-add-lesson]').forEach(b => b.onclick = () => VZ.lessonSheet());
   main.querySelector('[data-log]').onclick = () => VZ.practiceSheet();
   VZ.renderTips?.(main.querySelector('[data-tip]'), {limit:1}); // app/practice-tips.js
-  main.querySelector('[data-import]').onclick = () => VZ.importSheet();
+  main.querySelector('[data-import]').onclick = () => VZ.openImportHub();
   VZ.billingLeftChip?.(main.querySelector('[data-billing-left]'));
   const media = await M.list().catch(() => []);
   const host = main.querySelector('[data-recent]'); if (!host?.isConnected) return;
