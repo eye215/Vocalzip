@@ -1671,7 +1671,7 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await expect(page.locator('[data-journey]')).toContainText('첫 기록 2025.07.24');
   await expect(page.locator('[data-journey]')).toContainText('녹음2');
   await expect(page.locator('.vz-journey')).toHaveCSS('font-family', /Pretendard/);
-  await expect(page.locator('.vz-journey')).toHaveCSS('background-image', /linear-gradient/);
+  await expect(page.locator('.vz-journey')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(page.locator('[data-sync-summary]')).toBeVisible();
   const headings = await page.locator('.vz-settings-section h2').allTextContents();
   expect(headings.map(h => h.trim())).toEqual(['분석', '관리']);

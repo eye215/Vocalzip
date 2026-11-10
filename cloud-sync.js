@@ -603,7 +603,7 @@ async function cleanupCloudMedia(row,owner,id,guard,unlink=null){
 function mediaDeletionEngine({allowPaused=false}={}){
  const bridge=snapshotBridge({allowPaused});if(!bridge)return null;
  if(typeof window.VzipSnapshotTransport.createMediaDeletion!=='function')throw Error('파일 삭제 저장 모듈을 다시 불러와 주세요.');
- const owner=user.id,identity=()=>!user||!sessionVerified||window.VzipAccountScope.leaving?null:{owner:user.id,session:window.vzipCloudSessionId()};
+ const owner=user.id,identity=()=>!user||!sessionVerified||window.VzipAccountScope.leaving||!allowPaused&&window.VZIP_SNAPSHOT_REVISION_ENABLED!==true?null:{owner:user.id,session:window.vzipCloudSessionId()};
  return window.VzipSnapshotTransport.createMediaDeletion({
   storage:localStorage,identity,
   lock:(work,purpose)=>navigator.locks.request('vzip-cloud-media-upload',purpose==='ack'?{}:{ifAvailable:true},lock=>{

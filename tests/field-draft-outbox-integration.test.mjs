@@ -90,6 +90,7 @@ const S={entityId:'lesson-old-id',field:'memo'};
 class Store {
  constructor(){this.rows=new Map();this.failNext=false;}
  getItem(k){return this.rows.get(k)??null;}
+ removeItem(k){this.rows.delete(k);}
  setItem(k,v){if(this.failNext){this.failNext=false;throw Error('quota failure');}this.rows.set(k,v);}
  key(i){return [...this.rows.keys()][i]??null;}
  get length(){return this.rows.size;}
@@ -287,11 +288,13 @@ function snapshotDevice({owner=U,session=A,store=new Store()}={}){
     },connection);
    }catch(e){return {ok:false,status:e.code==='42501'?403:400,json:async()=>({code:e.code})};}
    finally{await connection.end();}
+   if(options.method==='POST')await wire.afterSave?.();
    if(options.method==='POST'&&wire.lost){wire.lost=false;throw Error('synthetic response loss');}
    return {ok:true,status:200,json:async()=>structuredClone(data)};
   }});
  const options={storage:store,identity:()=>identity,...transport,lock:async work=>work(),valid:Merge.valid,same:Merge.same,
-  deletedIds:()=>wire.deleted||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;}};
+  deletedIds:()=>wire.deleted||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;},
+  deletedMediaIds:()=>wire.deletedMedia||[],redactMedia:(data,ids)=>{for(const id of ids)Merge.deleteMedia(data,id);return data;}};
  return {model:Snap.create(options),recreate:()=>Snap.create(options),wire,store};
 }
 test('snapshot bridge replays one durable request after a real SQL commit loses its HTTP response',{skip,timeout:20000},async()=>{
@@ -324,4 +327,45 @@ test('snapshot bridge deletion removes pending lesson text without losing unrela
  const calls=d.wire.calls;await assert.rejects(d.model.recover(),e=>e.code==='deleted');assert.equal(d.wire.calls,calls);
  assert.equal((await body()).lessons.some(l=>l.id===S.entityId),false);assert.equal((await body()).practices[1].manualMinutes,25);
  assert.equal((await db.query("select count(*) n from public.vocal_media where id='keep-media'")).rows[0].n,'1');
+});
+
+async function mediaOperation(d){
+ await db.query("update public.vocal_media set metadata=$1,updated_at=clock_timestamp() where id='keep-media' and user_id=$2",[{id:'keep-media',storageProvider:'r2',r2Key:'u/'+U+'/keep-media/original.wav',review:'keep latest review'},U]);
+ const make=core=>Snap.createMediaDeletion({storage:d.store,identity:()=>({owner:U,session:A}),lock:async work=>work(),
+  read:async id=>(await db.query('select metadata,updated_at::text updated_at from public.vocal_media where user_id=$1 and id=$2',[U,id])).rows[0]||null,
+  prepare:async({id,stamp})=>{
+   const pending=core.state().pending;
+   if(pending){assert.equal(pending.context?.kind,'media-delete');assert.equal(pending.context?.id,id);assert.equal(pending.context?.stamp,stamp);await core.recover();}
+   const row=await core.read();if(row.payload.deleted?.media?.includes(id))return row;
+   let value;await core.prepare(row,()=>({payload:base(),dirty:false}),()=>{value=Merge.deleteMedia(structuredClone(row.payload),id);});
+   return core.write(row,value,{kind:'media-delete',id,stamp});
+  },
+  cleanup:async(row,guard,id)=>{
+   guard();assert.ok((await body()).deleted.media.includes(id));d.wire.physical=(d.wire.physical||0)+1;
+   if(row)await db.query('delete from public.vocal_media where user_id=$1 and id=$2',[U,id]);guard();
+  }});
+ return {model:make(d.model),recreate:()=>make(d.recreate())};
+}
+test('media deletion commits its revision before cleanup and keeps lease text and unrelated history',{skip,timeout:20000},async()=>{
+ const field=device(api());await field.open();const text=(await serverDraft()).text_value;
+ const d=snapshotDevice(),row=await d.model.read();await d.model.observe(row,base());const m=await mediaOperation(d);
+ await m.model.run('keep-media');assert.equal(m.model.list()[0].phase,'cloud-complete');await m.model.acknowledge('keep-media');
+ const current=await body();assert.equal(current.lessons[0].memo,'original memo');assert.deepEqual(current.lessons[0].recordings,[]);
+ assert.equal(current.practices[0].manualMinutes,12);assert.equal(current.songs[0].id,'song-legacy');assert.equal((await serverDraft()).text_value,text);
+ assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'1');assert.deepEqual(m.model.list(),[]);
+});
+test('real SQL lost media-delete reply reuses the receipt before any object cleanup',{skip,timeout:20000},async()=>{
+ const d=snapshotDevice(),row=await d.model.read();await d.model.observe(row,base());const m=await mediaOperation(d);d.wire.lost=true;
+ await assert.rejects(m.model.run('keep-media'));assert.equal(d.wire.physical||0,0);assert.equal(d.model.state().pending.context.kind,'media-delete');
+ assert.equal((await db.query("select count(*) n from public.vocal_media where id='keep-media'")).rows[0].n,'1');
+ const restored=m.recreate();await restored.run('keep-media');await restored.acknowledge('keep-media');
+ assert.equal(d.wire.physical,1);assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'1');
+ assert.equal((await body()).practices[0].manualMinutes,12);
+});
+test('metadata changed after a real snapshot commit prevents the destructive media step',{skip,timeout:20000},async()=>{
+ const d=snapshotDevice(),row=await d.model.read();await d.model.observe(row,base());const m=await mediaOperation(d);
+ d.wire.afterSave=()=>db.query("update public.vocal_media set metadata=jsonb_set(metadata,'{review}',to_jsonb('new device review'::text)),updated_at=clock_timestamp() where id='keep-media'");
+ await assert.rejects(m.model.run('keep-media'),e=>e.code==='mediaChanged');assert.equal(d.wire.physical||0,0);
+ assert.equal((await db.query("select metadata->>'review' r from public.vocal_media where id='keep-media'")).rows[0].r,'new device review');
+ assert.equal(m.model.list()[0].phase,'root-confirmed');assert.equal((await body()).lessons[0].memo,'original memo');
 });

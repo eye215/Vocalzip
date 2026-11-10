@@ -274,7 +274,7 @@ test('revision media delete confirms snapshot first and never uses direct root w
  assert.deepEqual(s.events,['bytes','texts','metadata']);assert.equal(s.writes.length,0);assert.equal(s.commits,1);
  assert.deepEqual(s.row.payload.lessons[0].recordings,[{id:'other'}]);assert.equal(s.row.payload.lessons[0].memo,'keep notes');assert.equal(s.row.payload.practices[0].manualMinutes,12);
  assert.ok(s.objects.has('other'));assert.equal(d.window.vzipPendingMediaDeletes()[0].phase,'cloud-complete');
- await d.window.vzipMediaDeleteAcknowledge('chosen');assert.deepEqual(d.window.vzipPendingMediaDeletes(),[]);
+ await d.window.vzipMediaDeleteAcknowledge('chosen');assert.deepEqual(copy(d.window.vzipPendingMediaDeletes()),[]);
 });
 test('lost snapshot delete acknowledgement preserves bytes and replays the exact request',async()=>{
  const {s,d}=await mediaDevice();s.loseReply=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));
@@ -298,7 +298,7 @@ test('cleanup can resume after a file was erased but later metadata work failed'
  const {s,d}=await mediaDevice();s.failText=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/text cleanup/);
  assert.ok(s.media.has('chosen'));assert.equal(d.window.vzipPendingMediaDeletes()[0].phase,'root-confirmed');
  await d.window.vzipCloudMediaDelete({id:'chosen'});await d.window.vzipMediaDeleteAcknowledge('chosen');
- assert.equal(s.commits,1);assert.ok(!s.media.has('chosen'));assert.ok(s.objects.has('other'));assert.deepEqual(d.window.vzipPendingMediaDeletes(),[]);
+ assert.equal(s.commits,1);assert.ok(!s.media.has('chosen'));assert.ok(s.objects.has('other'));assert.deepEqual(copy(d.window.vzipPendingMediaDeletes()),[]);
 });
 test('a generic unresolved snapshot is never mistaken for a media deletion receipt',async()=>{
  const {s,d}=await mediaDevice();const local=d.data();local.songs.push({id:'unsent'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');s.reject=true;
@@ -310,7 +310,7 @@ test('new-session delete resume and paused configuration both stop before touchi
  const {s,d}=await mediaDevice();s.loseReply=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));const reads=s.mediaReads;
  d.window.vzipCloudSessionId=()=> 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
  await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),e=>e.code==='session');assert.equal(s.mediaReads,reads);assert.equal(s.events.length,0);
- d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/일시 중지/);assert.equal(s.events.length,0);
+ d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;await assert.rejects(async()=>d.window.vzipCloudMediaDelete({id:'chosen'}),/일시 중지/);assert.equal(s.events.length,0);
 });
 test('intent storage failure and foreign storage paths fail before snapshot or file changes',async()=>{
  const a=await mediaDevice(),save=a.d.store.setItem;
