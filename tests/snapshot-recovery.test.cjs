@@ -189,5 +189,5 @@ test('current session may be revoked during send: the approved input remains dur
  const f=fixture(),r=await f.client.reviewRecovery();
  const c=f.create({send:async()=>{throw Object.assign(Error('revoked'),{code:'auth'});}}),view=await c.reviewRecovery();
  await assert.rejects(c.resolveRecovery(view.reviewId,merged(view),confirm),e=>e.code==='auth');
- assert.ok(c.state().pending);assert.equal(c.state().recoveries.length,1);assert.deepEqual(f.local,r.device);
+ assert.ok(c.state().pending);assert.equal(c.state().recoveries.length,1);assert.deepEqual(f.local,base());
 });
