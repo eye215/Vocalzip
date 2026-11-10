@@ -389,3 +389,11 @@ test('foreign archive collisions stop before recovery transmission',async()=>{
  await assert.rejects(ui.resolve(r.reviewId,r.cloud.payload,{confirmed:true}),e=>e.code==='archiveConflict');ui.onClose();
  assert.equal(s.rpcCalls.length,0);assert.equal(d.data().performances[0].memo,'private');
 });
+
+test('a mixed-account cloud snapshot is blocked before any private foreign values reach the review view',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ s.row.payload.performances=[{id:'foreign-cloud',ownerId:'other',memo:'must not display'}];s.row.revision='2';
+ await d.review();const ui=get();
+ await assert.rejects(ui.review(),e=>e.code==='identity'&&!e.message.includes('must not display'));ui.onClose();
+ assert.equal(s.rpcCalls.length,0);assert.equal(d.data().performances,undefined);assert.equal(s.row.payload.performances[0].memo,'must not display');
+});

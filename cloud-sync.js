@@ -80,7 +80,11 @@ function snapshotBridge({allowPaused=false}={}){
  const transport=window.VzipSnapshotTransport.createTransport({projectUrl:url,publishableKey:key,
   getCredentials:()=>window.vzipCloudAccessToken(),getOwner:()=>window.VZIP_SNAPSHOT_REVISION_ENABLED===true?identity()?.owner:null,getSessionId:()=>window.VZIP_SNAPSHOT_REVISION_ENABLED===true?identity()?.session:null});
  revisionBridge=window.VzipSnapshotTransport.create({storage:localStorage,identity,...transport,valid:Merge.valid,same:Merge.same,
-  getLocal:()=>{const current=localData();return window.VzipArchive?window.VzipArchive.forOwner(current,owner):current;},
+  getLocal:()=>{
+   const current=localData(),own=window.VzipArchive?window.VzipArchive.forOwner(current,owner):current;
+   // Absence and an empty owner-filtered archive mean the same thing for this account.
+   return own?{...own,performances:own.performances===undefined?[]:own.performances}:own;
+  },
   deletedIds:()=>localData()?.deleted?.lessons||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;},
   deletedMediaIds:()=>localData()?.deleted?.media||[],redactMedia:(data,ids)=>{for(const id of ids)Merge.deleteMedia(data,id);return data;},
   lock:work=>{
@@ -88,6 +92,7 @@ function snapshotBridge({allowPaused=false}={}){
    return navigator.locks.request('vzip-snapshot-write:'+owner,{ifAvailable:true},lock=>{if(!lock)throw Error('다른 탭에서 저장을 확인하고 있어요.');return work();});
   },
   onAck:(row,payload,meta)=>{
+   if(meta?.recovery&&window.VzipArchive&&!Merge.same(window.VzipArchive.forOwner(row.payload,owner),row.payload))throw Object.assign(Error('서버 기록의 계정 범위를 다시 확인해야 해요. 이 기기의 원본은 유지돼요.'),{code:'identity'});
    const current=localData(),next=meta?.recovery
     ?window.VzipSnapshotReviewModel?.preserveLocal(current,row.payload,owner)
     :Merge.merge(current||{},row.payload).data;
@@ -129,6 +134,8 @@ async function openSnapshotReview(){
   window.VzipSnapshotReview.open({
    review:async()=>{
     guard();const value=await bridge.reviewRecovery();guard();
+    const sources=[value.device,value.cloud?.payload,value.pending?.payload,...value.recoveries.flatMap(r=>[r.device,r.cloud?.payload,r.pending?.payload])].filter(Boolean);
+    if(window.VzipArchive&&sources.some(data=>!Merge.same(window.VzipArchive.forOwner(data,owner),data)))throw Object.assign(Error('계정 확인이 필요한 기록이 섞여 있어요. 원본을 유지하고 비교를 멈췄어요.'),{code:'identity'});
     if(value.pending?.context||window.VzipSnapshotTransport.hasMediaDeletes(localStorage,owner))throw Object.assign(Error('중단된 파일 삭제는 별도 복구 확인이 필요해요. 원본을 더 지우지 않고 유지해요.'),{code:'pending'});
     if(value.baseline?.generation&&value.baseline.generation!==value.cloud?.generation)throw Object.assign(Error('클라우드 기록이 새로 만들어져 별도 확인이 필요해요. 이 기기의 기록은 유지돼요.'),{code:'generation'});
     return value;
