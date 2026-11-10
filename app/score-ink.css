@@ -186,3 +186,13 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-marker-palette button{min-height:44px;border:0;border-radius:12px;background:#f3edff;color:#6f3ec2;font-size:13px;font-weight:650}
 .score-ink-marker-palette button[aria-pressed=true]{background:#7a32f5;color:white}
 .score-ink-performance .score-ink-marker-palette,.score-ink-performance .score-ink-vision-tools,.score-ink-performance .score-ink-vision-result{display:none!important}
+
+/* Keep every drawing tool reachable on narrow full-screen score views. */
+@media(max-width:600px){
+ .score-ink-fullscreen .score-ink-bar{flex-direction:column;align-items:stretch;min-width:0;width:100%}
+ .score-ink-fullscreen .score-ink-tools{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:visible;width:100%;flex:none}
+ .score-ink-fullscreen .score-ink-tools>button{width:auto;min-width:0;max-width:none;flex:none}
+ .score-ink-fullscreen .score-ink-actions{width:100%;min-width:0;justify-content:space-between}
+ .score-ink-fullscreen .score-ink-actions>button{min-width:0;width:auto;flex:1}
+ .score-ink-fullscreen .score-ink-quick{width:100%;box-sizing:border-box}
+}
