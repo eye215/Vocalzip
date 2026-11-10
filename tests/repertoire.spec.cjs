@@ -24,6 +24,25 @@ async function addSession(page,time,number){
  await page.locator('[data-add-session]').click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill(time);await dialog(page).getByLabel('공연 회차',{exact:true}).fill(number);await dialog(page).getByLabel('해당 회차 출연',{exact:true}).selectOption('yes');await save(page);
 }
 test.afterEach(async({page})=>expect(page._archiveErrors||[]).toEqual([]));
+test('A song keeps multiple AR links, including repeated URLs, across edit and reload',async({page})=>{
+ await boot(page);await page.goto('/#/song/song1');
+ await page.locator('[data-add-song-ar]').click();
+ let form=page.locator('#song-form');
+ await form.locator('[data-ar-row]').first().locator('[data-ar-label]').fill('연습용');
+ await form.locator('[data-ar-row]').first().locator('[data-ar-url]').fill('https://example.com/ar');
+ await form.locator('[data-add-ar]').click();
+ await form.locator('[data-ar-row]').last().locator('[data-ar-label]').fill('공연용');
+ await form.locator('[data-ar-row]').last().locator('[data-ar-url]').fill('https://example.com/ar');
+ await page.locator('.sheet [form="song-form"]').click();
+ await expect(page.locator('.vz-ar-list a')).toHaveCount(2);
+ expect((await db(page)).songs[0].arLinks.map(x=>x.label)).toEqual(['연습용','공연용']);
+ await page.reload();await expect(page.locator('.vz-ar-list a')).toHaveCount(2);
+ await page.locator('[data-song-menu]').click();await page.locator('[data-e]').click();
+ form=page.locator('#song-form');await form.locator('[data-ar-row]').first().locator('[data-remove-ar]').click();
+ await page.locator('.sheet [form="song-form"]').click();
+ await expect(page.locator('.vz-ar-list a')).toHaveCount(1);
+ expect((await db(page)).songs[0].arLinks[0].label).toBe('공연용');
+});
 test('Library places filter and search above review, and keeps selection separate',async({page})=>{
  await boot(page);await page.goto('/#/library');
  await expect(page.locator('[data-kind]')).toBeHidden();await expect(page.locator('[data-song]')).toBeHidden();
