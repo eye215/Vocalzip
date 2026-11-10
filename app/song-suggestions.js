@@ -329,7 +329,7 @@ function pickSong(main,item){
  const matchRows=matches.map((match,i)=>{const song=songs().find(x=>x.id===match.songId);return song?'<button type="button" data-pick="'+esc(song.id)+'"><strong>'+(i+1)+'위 '+esc(VZ.songLabel(song))+'</strong><small>가사 유사도 '+Math.round(Math.max(0,Math.min(1,match.score))*100)+'% · 곡이 맞을 확률은 아니에요</small></button>':''}).join('');
  const options=songs().map(song=>'<option value="'+esc(song.id)+'"'+(song.id===result?.candidate?.id?' selected':'')+'>'+esc(VZ.songLabel(song))+'</option>').join('');
  VZ.sheet({title:'곡 선택',body:'<div class="vz-sc-pick">'+(matchRows||'')+'<label class="field"><span>내 곡에서 직접 선택</span><select data-pick-select><option value="">곡 미지정 (변경 안 함)</option>'+options+'</select></label><p class="small muted">선택 후 아래 ‘추천대로 곡 지정’을 눌러야 저장돼요.</p></div>',onMount:(el,close)=>{
-  const choose=id=>{const song=songs().find(x=>x.id===id);setResult(item,{...(result||{}),userSelected:true,status:song?'후보':'미분류',candidate:song?{id:song.id,title:VZ.songLabel(song),reason:'직접 선택',level:'사용자 지정'}:null});draw(main);close()};
+  const choose=id=>{const song=songs().find(x=>x.id===id);setResult(item,{...(result||{}),userSelected:true,status:song?'후보':'미분류',candidate:song?{id:song.id,title:VZ.songLabel(song),reason:'직접 선택',level:'사용자 지정'}:null});if(song)state.chosen.add(item.id);else state.chosen.delete(item.id);saveCheckpoint();draw(main);close()};
   el.querySelectorAll('[data-pick]').forEach(button=>button.onclick=()=>choose(button.dataset.pick));
   el.querySelector('[data-pick-select]').onchange=e=>choose(e.target.value);
  }});
@@ -500,9 +500,11 @@ async function apply(main,check=()=>{}){
  if(!await VZ.confirm('추천 결과 일괄 지정',approved.length+'개 녹음의 곡을 선택된 추천대로 지정할까요? 기존 곡이 연결된 파일은 변경하지 않아요. 원본 음원도 그대로입니다.',{ok:'네, 지정할게요'}))return;
  check();state.running=true;controls(main);
  let done=0,skipped=0,failed=0;
+ const errors=[];
  try{
   const fresh=await M.list(true);
   check();
+  if(M.cloudError?.())throw Error(M.cloudError()+' · 목록 확인 실패 상태에서는 곡을 지정하지 않아요.');
   const changes=approved.map(previous=>({old:fresh.find(x=>x.id===previous.id),newSong:previous.candidate})).filter(x=>x.old&&eligible(x.old)&&x.newSong&&songs().some(s=>s.id===x.newSong.id));
   const backup={at:new Date().toISOString(),rows:changes.map(x=>({id:x.old.id,oldId:x.old.songId||'',oldSong:x.old.song||'',assignedId:x.newSong.id,assignedSong:x.newSong.title,applied:false,updatedAt:null}))};
   if(!backup.rows.length){VZ.toast('지정할 녹음이 없어요.');return}
@@ -519,14 +521,30 @@ async function apply(main,check=()=>{}){
      const row=backup.rows.find(r=>r.id===item.id);
      if(row){row.applied=true;row.updatedAt=written.updatedAt||null;localStorage.setItem(backupKey,JSON.stringify(backup))}
      done++;state.chosen.delete(item.id);
-   }catch{failed++}
+   }catch(error){
+     failed++;
+     errors.push(M.label(item)+' — '+String(error?.message||error));
+     console.error('[VOCAL.zip] 곡 지정 실패',item.id,error);
+   }
   }
-  M.invalidate();window.dispatchEvent(new Event('vzip:media-updated'));
+  M.invalidate();
   state.items=(await M.list(true)).filter(eligible);
+  if(M.cloudError?.())errors.push('최종 목록 확인: '+M.cloudError());
  }finally{
   state.running=false;
-  const progress=main.querySelector('[data-progress]');if(progress)progress.textContent='곡 지정 '+done+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개';
   draw(main);
+  const progress=main.querySelector('[data-progress]');
+  if(progress){
+   progress.replaceChildren(document.createTextNode('곡 지정 '+done+'개 · 건너뜀 '+skipped+'개 · 실패 '+failed+'개'));
+   if(errors.length){
+    const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('p');
+    summary.textContent='실패 원인 확인 ('+errors.length+'건)';
+    body.style.whiteSpace='pre-wrap';
+    body.textContent=errors.slice(0,10).join('\n')+(errors.length>10?'\n외 '+(errors.length-10)+'건':'');
+    details.append(summary,body);progress.append(details);
+    VZ.toast('곡 지정 '+failed+'개 실패. 아래 실패 원인을 확인해 주세요.','error');
+   }else if(done)VZ.toast('곡 '+done+'개를 지정했어요.');
+  }
  }
 }
 let helpAbort=null;

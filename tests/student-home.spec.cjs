@@ -217,7 +217,7 @@ test('home recommendation starts homework and the final step saves practice and 
  await page.getByRole('button',{name:'연습 시작',exact:true}).click();
  await page.waitForTimeout(3800);
  await page.getByRole('button',{name:'연습 종료',exact:true}).click();
- await page.getByRole('button',{name:'마무리하기',exact:true}).click();
+ await page.getByRole('button',{name:'연습 끝내기',exact:true}).click();
  await expect(page.getByRole('button',{name:'연습 기록 보기',exact:true})).toBeVisible();
  const value=await db(page);
  expect(value.practices.filter(p=>p.guidedExerciseKey==='homework:a1')).toHaveLength(1);

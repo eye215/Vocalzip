@@ -81,7 +81,18 @@ M.list = async (force) => {
   try { return await promise; } finally { if (loading?.promise === promise) loading = null; }
 };
 M.cached = () => cache || [];
-function mergeCloud(map, items) { items.forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion, storageProvider:x.storageProvider, r2Key:x.r2Key, legacyStorage:x.legacyStorage, ...(x.cloudEditBase?{cloudEditBase:x.cloudEditBase}:{})})); }
+function mergeCloud(map, items) {
+ // The cloud is authoritative for song/metadata. A stale device copy must not hide a
+ // song that was already assigned on another device. Keep the device-only media bytes.
+ items.forEach(remote=>{
+  const local=map.get(remote.id);
+  map.set(remote.id,{
+   ...local,...remote,cloud:true,local:!!local,
+   ...(local?.blob?{blob:local.blob}:{}),
+   ...(local?.bytes?{bytes:local.bytes}:{})
+  });
+ });
+}
 // Newest recording day first (the file's own date), then newest saved.
 const sortList = map => [...map.values()].sort((a, b) => (M.dateOf(b) || '').localeCompare(M.dateOf(a) || '') || (b.created || 0) - (a.created || 0));
 /** The list as last kept on this device (no network), to draw a screen at once while M.list() refreshes. Null if none. */
