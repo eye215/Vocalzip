@@ -15,14 +15,14 @@ const ym = s => /^\d{4}-\d{2}/.test(String(s||'')) ? String(s).slice(0,7) : '';
 const avg = xs => xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
 const format = (n,d) => n==null?'측정 없음': (Math.round(n*10)/10).toLocaleString('ko-KR')+(d.unit?' '+d.unit:'');
 let request = 0;
+function isSongTake(m) {
+ if(!m.songId||!V.song(m.songId))return false;
+ const practice=M.owner?.(m)?.practice;
+ return !practice?.practiceRoom && practice?.practiceMode!=='training';
+}
 function group(items) {
  const months = new Map();
  for(const m of items){
-  // 성장 분석은 곡으로 확인된 녹음만 사용한다. 트레이닝/연습실 과제는
-  // 같은 곡에 연결된 별도 레슨/곡 녹음이 아닌 한 포함하지 않는다.
-  if(!m.songId||!V.song(m.songId))continue;
-  const practice=M.owner?.(m)?.practice;
-  if(practice?.practiceRoom||practice?.practiceMode==='training')continue;
   const date=ym(M.dateOf(m));if(!date)continue;
   const slot=months.get(date)||[];slot.push(m);months.set(date,slot);
  }
@@ -163,7 +163,8 @@ async function mount(host){
  const my=++request;
  try {
   const items=await M.list();if(my!==request||!host.isConnected)return;
-  const months=group(items); archiveMonths(months);
+  const songItems=items.filter(isSongTake);
+  const months=group(songItems); archiveMonths(months);
   const keys=[...new Set([...months.keys(),...(V.db.monthlyGrowthReports||[]).map(r=>r.month)])].sort().reverse();
   const currentKey=ym(V.today());
   let selected=keys.includes(currentKey)?currentKey:keys[0];
@@ -215,7 +216,7 @@ async function mount(host){
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
    };
 
-   V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,items,rows);
+   V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,songItems,rows);
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
     if(!d)return;
