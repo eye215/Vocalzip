@@ -27,9 +27,11 @@ test('all synced report arrays exist in core and conflict merge',()=>{
 });
 test('song reports exclude unlabeled training and exercise takes',()=>{
  const js=file('app/monthly-growth.js');
- assert.match(js,/if\(!m\.songId\|\|!V\.song\(m\.songId\)\)continue/);
- assert.match(js,/practice\?\.practiceRoom/);
- assert.match(js,/practice\?\.practiceMode==='training'/);
+ assert.match(js,/if\(!m\.songId\|\|!V\.song\(m\.songId\)\)return false/);
+ assert.match(js,/!practice\?\.practiceRoom/);
+ assert.match(js,/practice\?\.practiceMode!=='training'/);
+ assert.match(js,/songItems=items\.filter\(isSongTake\)/);
+ assert.match(js,/selected,songItems,rows/);
 });
 test('AI reports remain explicit opt-in with no direct audio upload',()=>{
  const js=file('app/monthly-growth.js');
