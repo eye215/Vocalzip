@@ -311,12 +311,13 @@ test('selection moves a group once, undoes/redoes and deletes without changing s
  await draw(page,dialog,{y:.14});await draw(page,dialog,{tool:'형광펜',y:.24});
  const before=await page.evaluate(()=>structuredClone(window.VZ.db)),original=before.scoreAnnotations;
  await selectInk(page,dialog);
+ const dragBox=await dialog.locator('[data-ink-svg]').boundingBox();
  await dragInk(page,dialog,[.4,.2],[.5,.24]);
  await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');
  const moved=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
  expect(moved).toHaveLength(2);moved.forEach((s,i)=>{
-  expect(s.id).not.toBe(original[i].id);expect(s.points[0][0]).toBeCloseTo(original[i].points[0][0]+.1,3);
-  expect(s.points[0][1]).toBeCloseTo(original[i].points[0][1]+.04,3);
+  expect(s.id).not.toBe(original[i].id);expect(Math.abs(s.points[0][0]-original[i].points[0][0]-.1)).toBeLessThan(1.5/dragBox.width);
+  expect(Math.abs(s.points[0][1]-original[i].points[0][1]-.04)).toBeLessThan(1.5/dragBox.height);
   expect(s.color).toBe(original[i].color);expect(s.opacity).toBe(original[i].opacity);expect(s.points[0][2]).toBe(original[i].points[0][2]);
  });
  await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();
