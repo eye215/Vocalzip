@@ -117,6 +117,9 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-vision-result[hidden]{display:none}
 .score-ink-vision-result strong{font-size:16px}
 .score-ink-vision-result p{margin:8px 0;line-height:1.5}
+.score-ink-vision-result[data-mode=notation][data-expanded=false] [data-ink-vision-explanation]{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.score-ink-vision-more{margin:2px 0 8px;padding:4px 0;border:0;background:none;color:#7a32f5;font:inherit;font-weight:700;cursor:pointer}
+.score-ink-vision-more[hidden]{display:none}
 .score-ink-vision-result label{display:block;font-size:13px;font-weight:650}
 .score-ink-vision-result textarea{display:block;width:100%;min-height:80px;margin-top:8px;padding:10px;border:1px solid #d6d1e2;border-radius:10px;font:inherit;resize:vertical}
 .score-ink-vision-result .score-ink-vision-disclosure{color:#667085;font-size:12px}
