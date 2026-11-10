@@ -116,7 +116,8 @@ test('Native PDF chooser opens, uploads through R2, and survives refresh without
   await page.goto('/#/song/s1');
   await page.getByRole('tab', {name:'악보', exact:true}).click();
   await expect(page.locator('[data-score] .item-title')).toHaveText('공연용 악보');
-  await expect(page.getByRole('link', {name:'공연용 악보 열기'})).toHaveAttribute('href', /sig=s/);
+  await expect(page.getByRole('button', {name:'공연용 악보 열기'})).toBeVisible();
+  await expect(page.locator('[data-open]')).toHaveCount(0);
   expect(await savedScores(page)).toEqual(scores);
   expect(await page.evaluate(() => ({practices:window.VZ.db.practices, lessons:window.VZ.db.lessons}))).toEqual(before);
   expect(await page.evaluate(() => window.VZ.song('s1').memo)).toBe('기존 곡 메모');

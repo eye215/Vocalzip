@@ -94,31 +94,23 @@ async function remove(song, score, redraw) {
   } catch (err) { VZ.toast('삭제하지 못했어요: ' + err.message, 'error'); }
 }
 
-/** The 악보 tab of a song page. Links are signed ahead so a tap opens the PDF at once (iOS blocks late popups). */
+/** The complete PDF row opens the integrated viewer; secondary actions remain independent. */
 VZ.renderScores = (host, song) => {
-  const draw = () => {
-    const list = scoresOf(song.id);
-    host.innerHTML = '<div class="row between" style="margin:4px 4px 10px"><h2 class="sec" style="margin:0">악보 ' + list.length + '</h2><button type="button" class="btn sm" data-score-add><i class="ph ph-file-arrow-up"></i>PDF 올리기</button></div>' +
-      (list.length ? '<div class="list">' + list.map(s => '<div class="item score-row" data-score="' + esc(s.id) + '"><span class="avatar"><i class="ph ph-file-pdf"></i></span><span class="item-main"><span class="item-title">' + esc(s.title) + '</span><span class="item-sub">' +
-        esc([s.originalKey ? '원키 ' + s.originalKey : '', s.practiceKey ? '연습 ' + s.practiceKey : '', VZ.dateLabel(VZ.ymd(new Date(s.uploadedAt))), size(s.size || 0)].filter(Boolean).join(' · ')) + '</span></span>' +
-        '<span class="score-actions"><button type="button" class="icon-btn" data-ink aria-label="' + esc(s.title) + ' 필기"><i class="ph ph-pen-nib"></i></button><a class="icon-btn" data-open target="_blank" rel="noopener" aria-label="' + esc(s.title) + ' 열기"><i class="ph ph-eye"></i></a><button type="button" class="icon-btn" data-edit aria-label="정보 수정"><i class="ph ph-pencil-simple"></i></button><button type="button" class="icon-btn" data-del aria-label="삭제"><i class="ph ph-trash"></i></button></span></div>').join('') + '</div>'
-        : VZ.empty('music-notes', '아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 열어 볼 수 있어요.'));
-    host.querySelector('[data-score-add]').onclick = () => uploadSheet(song, draw);
-    const keys = list.map(s => s.r2Key);
-    const link = () => host.querySelectorAll('[data-score]').forEach(row => { const s = list.find(x => x.id === row.dataset.score), a = row.querySelector('[data-open]'), u = s && window.VzipR2?.cachedUrl?.(s.r2Key); if (u) a.href = u; });
-    window.VzipR2?.prefetch?.(keys)?.then?.(link); link();
-    host.querySelectorAll('[data-score]').forEach(row => {
-      const s = list.find(x => x.id === row.dataset.score);
-      row.querySelector('[data-open]').onclick = async e => {
-        if (e.currentTarget.getAttribute('href')) return; // signed already: the browser opens it
-        e.preventDefault();
-        try { const u = await window.VzipR2.url(s.r2Key); e.currentTarget.href = u; VZ.toast('준비됐어요. 한 번 더 누르면 열려요.'); } catch (err) { VZ.toast('열지 못했어요: ' + err.message, 'error'); }
-      };
-      row.querySelector('[data-ink]').onclick = () => VZ.openScoreInk(song.id, s.id);
-      row.querySelector('[data-edit]').onclick = () => editSheet(song, s, draw);
-      row.querySelector('[data-del]').onclick = () => remove(song, s, draw);
-    });
-  };
-  draw();
+ const draw=()=>{
+  const list=scoresOf(song.id);
+  host.innerHTML='<div class="row between" style="margin:4px 4px 10px"><h2 class="sec" style="margin:0">악보 '+list.length+'</h2><button type="button" class="btn sm" data-score-add><i class="ph ph-file-arrow-up"></i>PDF 올리기</button></div>'+
+   (list.length?'<div class="list">'+list.map(s=>'<div class="item score-row" data-score="'+esc(s.id)+'"><button type="button" data-score-open aria-label="'+esc(s.title)+' 열기"><span class="avatar"><i class="ph ph-file-pdf"></i></span><span class="item-main"><span class="item-title">'+esc(s.title)+'</span><span class="item-sub">'+
+   esc([s.originalKey?'원키 '+s.originalKey:'',s.practiceKey?'연습 '+s.practiceKey:'',VZ.dateLabel(VZ.ymd(new Date(s.uploadedAt))),size(s.size||0)].filter(Boolean).join(' · '))+'</span></span></button>'+
+   '<span class="score-actions"><button type="button" class="icon-btn" data-edit aria-label="정보 수정"><i class="ph ph-pencil-simple"></i></button><button type="button" class="icon-btn" data-del aria-label="삭제"><i class="ph ph-trash"></i></button></span></div>').join('')+'</div>':
+   VZ.empty('music-notes','아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 열어 볼 수 있어요.'));
+  host.querySelector('[data-score-add]').onclick=()=>uploadSheet(song,draw);
+  host.querySelectorAll('[data-score]').forEach(row=>{
+   const score=list.find(s=>s.id===row.dataset.score);
+   row.onclick=event=>{if(!event.target.closest('[data-edit],[data-del]'))VZ.openScoreInk(song.id,score.id);};
+   row.querySelector('[data-edit]').onclick=event=>{event.stopPropagation();editSheet(song,score,draw);};
+   row.querySelector('[data-del]').onclick=event=>{event.stopPropagation();remove(song,score,draw);};
+  });
+ };
+ draw();
 };
 })();

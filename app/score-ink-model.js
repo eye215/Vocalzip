@@ -10,10 +10,12 @@ function valid(s){
   typeof s.r2Key==='string'&&s.r2Key.startsWith('u/'+s.ownerId+'/'+s.scoreId+'/')&&!s.r2Key.includes('..')&&s.r2Key.length<=300&&
   /^[0-9a-f]{64}$/.test(s.pdfHash||'')&&Number.isInteger(s.page)&&s.page>=1&&s.page<=2000&&
   ['pen','highlighter'].includes(s.tool)&&/^#[0-9a-f]{6}$/i.test(s.color||'')&&Number.isFinite(s.width)&&s.width>=0.001&&s.width<=0.06&&
+  (s.opacity===undefined||Number.isFinite(s.opacity)&&s.opacity>=0.05&&s.opacity<=1)&&
   Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit))&&
   Number.isFinite(s.createdAt)&&s.createdAt>0;
 }
-const same=(a,b)=>JSON.stringify(['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','points','createdAt'].map(k=>a[k]))===JSON.stringify(['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','points','createdAt'].map(k=>b[k]));
+const same=(a,b)=>JSON.stringify(['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt'].map(k=>a[k]))===JSON.stringify(['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt'].map(k=>b[k]));
+const opacity=s=>s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
 function scope(s,b){return s.songId===b.songId&&s.scoreId===b.scoreId&&s.r2Key===b.r2Key&&s.pdfHash===b.pdfHash&&s.ownerId===b.ownerId;}
 function point(x,y,pressure=0.5){return [x,y,pressure].map(n=>Math.round(Math.max(0,Math.min(1,Number.isFinite(n)?n:0.5))*100000)/100000);}
 function hit(s,p,aspect=1){
@@ -100,5 +102,5 @@ function create({storage,identity,getData,change}){
  }
  return {restore,list,commit,removeScore,key};
 }
-return {COLLECTION,valid,point,hit,path,create,MAX_POINTS,MAX_BYTES};
+return {COLLECTION,valid,opacity,point,hit,path,create,MAX_POINTS,MAX_BYTES};
 });
