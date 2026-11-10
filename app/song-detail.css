@@ -84,3 +84,8 @@ body[data-vz-route="song"] .sheet-back{z-index:62}
 .vz-song-more[open]>summary i{transform:rotate(180deg)}
 .vz-song-more>[data-repertoire]{padding:0 12px 12px}
 .vz-song-more .card{margin-bottom:0;box-shadow:none}
+
+body[data-vz-route="song"] .vz-media-selection{display:block;min-height:0}
+body[data-vz-route="song"] .vz-media-selection [data-lab-link]{display:block;min-height:32px;margin-top:8px;padding:6px 4px;text-align:center;color:#7A32F5;font-size:13px;font-weight:600;text-decoration:none}
+body[data-vz-route="song"] .vz-media-selection [data-lab-link][hidden]{display:none!important}
+body[data-vz-route="song"] .vz-media-selection [data-lab-link]:focus-visible{outline:2px solid #7A32F5;outline-offset:2px;border-radius:8px}
