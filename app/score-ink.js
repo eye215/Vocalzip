@@ -182,6 +182,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const button=el.querySelector('[data-ink-fullscreen]');
   button.setAttribute('aria-label',full?'전체화면 종료':'전체화면');button.title=full?'전체화면 종료':'전체화면';
   button.querySelector('i').className='ph ph-'+(full?'arrows-in':'arrows-out');
+  button.querySelector('.score-ink-menu-label').textContent=full?'전체화면 종료':'전체화면';
  }
  async function fullscreen(next){
   finishStroke();const generation=++fullGeneration;fullLayout(next);
