@@ -54,7 +54,7 @@ window.VzipSnapshotReview={open({review,resolve,retry,onClose=()=>{}}){
  function changed(){if(!alive||saving)return;stale=true;approve.checked=false;notice('확인 중 기록이 바뀌었어요. 다시 비교해 주세요.');refresh.hidden=false;update();}
  window.addEventListener('vzip:auth-changed',authChanged);window.addEventListener('vzip:data-changed',changed);
  // A submitted request is durable; prevent a misleading cancel toast while its ACK is pending.
- el.parentNode.addEventListener('click',e=>{if(saving&&e.target.closest('[data-close]')){e.preventDefault();e.stopImmediatePropagation();}},true);
+ el.parentNode.addEventListener('click',e=>{if(saving&&(e.target===el.parentNode||e.target.closest('[data-close]'))){e.preventDefault();e.stopImmediatePropagation();}},true);
  el.parentNode.addEventListener('keydown',e=>{if(saving&&e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();}},true);
  void load();return api;
 }};

@@ -127,7 +127,12 @@ async function openSnapshotReview(){
  snapshotReviewOpen=true;refreshSnapshotReview();
  try{
   window.VzipSnapshotReview.open({
-   review:async()=>{guard();const value=await bridge.reviewRecovery();guard();return value;},
+   review:async()=>{
+    guard();const value=await bridge.reviewRecovery();guard();
+    if(value.pending?.context||window.VzipSnapshotTransport.hasMediaDeletes(localStorage,owner))throw Object.assign(Error('중단된 파일 삭제는 별도 복구 확인이 필요해요. 원본을 더 지우지 않고 유지해요.'),{code:'pending'});
+    if(value.baseline?.generation&&value.baseline.generation!==value.cloud?.generation)throw Object.assign(Error('클라우드 기록이 새로 만들어져 별도 확인이 필요해요. 이 기기의 기록은 유지돼요.'),{code:'generation'});
+    return value;
+   },
    resolve:async(id,payload,confirmation)=>{
     guard();const outbound=window.VzipArchive?window.VzipArchive.forOwner(payload,owner):payload;
     if(!Merge.same(outbound,payload))throw Object.assign(Error('다른 계정의 기록이 포함되어 복구를 멈췄어요.'),{code:'identity'});
@@ -139,7 +144,6 @@ async function openSnapshotReview(){
   });
  }catch(e){snapshotReviewOpen=false;refreshSnapshotReview();say('기록 비교 실패: '+e.message);}
 }
-$('#cloud-review').onclick=()=>openSnapshotReview().catch(e=>say('기록 비교 실패: '+e.message));
 let mediaResumeIdentity='';
 window.addEventListener('online',()=>{mediaResumeIdentity='';});
 function requestMediaDeleteResume(){
@@ -948,6 +952,7 @@ const sendRecovery=async()=>{const field=$('#cloud-recovery-email'),email=field.
 $('#cloud-recovery-send').onclick=sendRecovery;
 $('#cloud-recovery-resend').onclick=async()=>{$('#cloud-recovery-email').value=$('#cloud-recovery-sent-email').textContent;await sendRecovery()};
 $('#cloud-new-password-submit').onclick=async()=>{const password=$('#cloud-new-password').value,confirm=$('#cloud-new-password-confirm').value;if(password.length<8)return say('비밀번호를 8자 이상 입력해 주세요.');if(password!==confirm)return say('비밀번호가 일치하지 않아요.');say('비밀번호 변경 중…');const {error}=await client.auth.updateUser({password});if(error)return say('비밀번호 변경 실패: '+error.message);recoveryMode=false;$('#cloud-new-password').value='';$('#cloud-new-password-confirm').value='';showAuthView('login');updateAuthScreen();say('✓ 새 비밀번호로 변경했어요.')};
+$('#cloud-review').onclick=()=>openSnapshotReview().catch(e=>say('기록 비교 실패: '+e.message));
 $('#cloud-logout').onclick=async()=>{if(window.VzipAccountScope){try{await endThisSession();}catch(e){say(e.message);}return;}await client.auth.signOut({scope:'local'});localStorage.removeItem('vzip_cloud_linked_user');user=null;showUser()};$('#cloud-upload').onclick=()=>sync();$('#cloud-download').onclick=download;$('#cloud-media-upload').onclick=uploadMedia;$('#cloud-media-download').onclick=downloadMedia;window.addEventListener('vzip:data-changed',e=>{if(!ready||!user||e.detail?.source==='cloud-merge')return;clearTimeout(uploadTimer);uploadTimer=setTimeout(()=>{uploadTimer=null;upload(true)},900)});
  /* A change saved just before the app goes to the background is sent at once (iOS may suspend the page before the
   * 0.9 s wait ends); a save that failed offline is sent again when the network or the app comes back. */
