@@ -71,7 +71,7 @@ function card(plan,items){
  fmt(plan.segmentStart)+'–'+fmt(plan.segmentEnd)+' · '+plan.minutes+'분 × '+plan.days+'일</p>'+
  '<p class="small muted">'+E(plan.startDate)+' ~ '+E(last)+' · 홈의 오늘 목표에서 완료 체크</p>'+compareSongTakes(plan,items)+
  '<div class="row"><a class="btn sm ghost" href="#/song/'+encodeURIComponent(plan.songId)+'">곡 상세 보기</a>'+
- '<button type="button" class="btn sm ghost" data-archive-plan="'+E(plan.id)+'">계획 종료</button></div></article>';
+ '<button type="button" class="btn sm ghost" data-ab-plan="'+E(plan.id)+'">구간 A/B 비교</button>'+ '<button type="button" class="btn sm ghost" data-archive-plan="'+E(plan.id)+'">계획 종료</button></div>'+ '<div data-ab-host="'+E(plan.id)+'"></div></article>';
 }
 function create(form,month){
  const metric=form.elements.metric.value,songId=form.elements.song.value,
@@ -183,6 +183,12 @@ function render(host,month,items,rows){
   try{create(formEl,month);V.toast('계획을 저장했어요. 홈의 오늘 목표에서 확인해 주세요.');render(host,month,items,rows);}
   catch(error){statusEl.textContent=error.message||'계획을 저장하지 못했어요.';}
  };
+ host.querySelectorAll('[data-ab-plan]').forEach(btn=>btn.onclick=()=>{
+  const plan=mine.find(x=>x.id===btn.dataset.abPlan),panel=btn.closest('.growth-plan-item')?.querySelector('[data-ab-host]');
+  if(!plan||!panel||!V.segmentABPanel)return;
+  if(panel.childElementCount){panel.replaceChildren();return;}
+  V.segmentABPanel(panel,plan,items);
+ });
  host.querySelectorAll('[data-archive-plan]').forEach(btn=>btn.onclick=async()=>{
   const id=btn.dataset.archivePlan;
   if(!await V.confirm('계획 종료','남은 날짜의 목표를 제거하고 이 계획을 종료할까요?'))return;
