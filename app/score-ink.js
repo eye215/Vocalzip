@@ -37,7 +37,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let tool='pan',paintTool='pen',full=false,hadNative=false,fullGeneration=0,touchPan=null,touches=new Map(),pinch=null,pinchDirty=false,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
+ let lastSaveMessage='',tool='pan',paintTool='pen',full=false,hadNative=false,fullGeneration=0,touchPan=null,touches=new Map(),pinch=null,pinchDirty=false,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
  const button=(name,icon,label)=>'<button type="button" class="icon-btn" data-ink-'+name+' aria-label="'+label+'" title="'+label+'"><i class="ph ph-'+icon+'"></i></button>';
  const tools=['pan','pen','highlighter','eraser'];
  const names=['이동','펜','형광펜','지우개'],icons=['hand','pen','highlighter','eraser'];
@@ -196,7 +196,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(!store.commit({add:action.add,remove:action.remove.map(s=>s.id)}))throw Error('필기 복구 기록은 보존했어요. 저장 공간을 확인하고 다시 저장해 주세요.');
    pending=null;
    if(kind==='normal'){undo.push(action);redo=[];}else if(kind==='undo'){undo.pop();redo.push(action);}else{redo.pop();undo.push(action);}
-   say(navigator.onLine===false?'이 기기에 저장됨 · 온라인 연결 후 동기화':'이 기기에 저장됨 · 클라우드는 기존 동기화로 저장');
+   lastSaveMessage=navigator.onLine===false?'이 기기에 저장됨 · 온라인 연결 후 동기화':'이 기기에 저장됨 · 클라우드는 기존 동기화로 저장';say(lastSaveMessage);
   }catch(e){say('저장하지 못했어요: '+e.message,true);}
   paint();
  }
@@ -224,7 +224,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    el.querySelector('[data-ink-page]').textContent=pageNo+' / '+doc.numPages+'쪽';
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
    box.hidden=false;ready=true;svg.dataset.tool=tool;svg.dataset.penOnly=String(profiles.penOnly);if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
-   paint();if(!pending)say('이동 모드로 스크롤하거나 필기 도구를 선택하세요.');
+   paint();if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
   }catch(e){if(!closed&&number===renderNumber&&e.name!=='RenderingCancelledException')say('악보를 열지 못했어요: '+e.message,true);}
   finally{if(number===renderNumber){busy=false;if(!closed)paint();}}
  }
