@@ -205,6 +205,36 @@ async function publishLibrary(metadata,{signal}={}){
   !Number.isFinite(Date.parse(result.updated_at)))throw Error('보관함 연결 결과를 확인하지 못했어요. 올린 원본은 보존돼요.');
  return result.metadata;
 }
+/** Dormant CAS transport. Caller retains this exact request for ambiguous replies; never retry a conflict with a fresh version. */
+async function editLibrary(target,{signal}={}){
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
+ const current=()=>{if(!owner||!session||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 파일 수정을 중단했어요.');};
+ current();const body=JSON.parse(JSON.stringify({requestId:target?.requestId,mediaId:target?.mediaId,key:target?.key,updatedAt:target?.updatedAt,patch:target?.patch}));
+ await ready();current();
+ if(!check.ok)throw Error('저장소 연결을 확인한 뒤 다시 시도해 주세요.');
+ if(check.mediaMode==='paused')throw uploadError(423,'media writes are paused');
+ if(check.mediaMode==='legacy')return null;
+ if(check.mediaMode!=='revision')throw Error('파일 수정의 저장 방식을 확인하지 못했어요.');
+ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+ const stamp=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(v)&&Number.isFinite(Date.parse(v));
+ const parts=String(body?.key||'').split('/');
+ if(!uuid.test(body?.requestId||'')||!/^[A-Za-z0-9_-]{1,100}$/.test(body?.mediaId||'')||!stamp(body.updatedAt)||
+  parts.length!==5||parts[0]!=='u'||parts[1]!==owner||parts[2]!==body.mediaId||!uuid.test(parts[3])||!/^original\.[a-z0-9]{1,8}$/.test(parts[4])||
+  !body.patch||Array.isArray(body.patch)||typeof body.patch!=='object'||!Object.keys(body.patch).length||
+  Object.keys(body.patch).some(k=>!['name','song','songId','recordedDate','dateSource','rating','review'].includes(k)))throw Error('수정할 원본과 이전 버전을 확인해 주세요.');
+ const result=await api('/v2/media/edit',{method:'POST',body,signal});current();
+ if(result?.version!==1||result.user_id!==owner||result.session_id!==session||result.request_id!==body.requestId||
+  result.id!==body.mediaId||result.object_key!==body.key||result.metadata?.id!==body.mediaId||
+  result.metadata?.storageProvider!=='r2'||result.metadata?.r2Key!==body.key||
+  !Number.isSafeInteger(result.metadata.size)||result.metadata.size<1||result.metadata.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(result.metadata.type||'')||!/^[!-~]{1,200}$/.test(result.metadata.r2Etag||'')||
+  ['path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(result.metadata,k))||
+  !stamp(result.updated_at)||!stamp(result.applied_updated_at)||result.applied_updated_at<=body.updatedAt||result.applied_updated_at>result.updated_at||
+  typeof result.replayed!=='boolean'||typeof result.superseded!=='boolean'||
+  result.superseded!==(result.applied_updated_at!==result.updated_at)||(result.superseded&&!result.replayed)||
+  (!result.superseded&&Object.entries(body.patch).some(([k,v])=>result.metadata[k]!==v)))throw Error('파일 수정 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해 주세요.');
+ return result;
+}
 /** Download only a transformed 30-second excerpt of an R2 M4A/MP4 audio file.
  * Never decodes/downloads the entire original on iPhone; the Worker enforces ownership.
  * Requires the optional Cloudflare Media Transformations binding on the deployed Worker. */
@@ -227,6 +257,8 @@ async function clip(key, {time=20, duration=30, signal}={}) {
   return new File([body],'vocalzip-stt-clip.m4a',{type:'audio/mp4'});
 }
 async function usage() { return api('/v1/usage'); }
+async function scoreVisionAvailable(){return window.vzipCloudScoreVision?.()||{available:false};}
+async function scoreVision(mode,image,signal){if(!window.vzipCloudScoreVision)throw Error('로그인을 확인해 주세요.');return window.vzipCloudScoreVision(mode,image,signal);}
 /** Every object under the user's own folder (read-only; the Worker lists only u/<user>/). */
 async function objects() {
   const out = [];
@@ -239,5 +271,5 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();

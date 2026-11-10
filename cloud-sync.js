@@ -895,6 +895,16 @@ window.vzipAnalysisLive=(onMedia,onJobs)=>{
 /** Paid STT calls so far for this account ({total, today}); null when signed out or the usage function is missing. */
 window.vzipSttUsage=async()=>{if(!client||!user)return null;const {data,error}=await client.rpc('vzip_song_stt_usage');if(error)return null;const row=Array.isArray(data)?data[0]:data;return {total:Number(row?.used_total)||0,today:Number(row?.used_today)||0}};
 window.vzipCloudAccessToken=async()=>{if(!client||!user||(window.VzipAccountScope&&!sessionVerified))return null;const owner=user.id;const {data}=await client.auth.getSession();if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))return null;return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user&&(!window.VzipAccountScope||sessionVerified);
+window.vzipCloudScoreVision=async(mode,image,signal)=>{
+ const owner=user?.id,session=window.vzipCloudSessionId?.();
+ if(!owner||!session||!window.vzipCloudSignedIn?.())throw Error('로그인을 확인해 주세요.');
+ const access=await window.vzipCloudAccessToken();if(!access)throw Error('로그인을 다시 확인해 주세요.');
+ const res=await fetch(url+'/functions/v1/vzip-score-vision',{method:mode?'POST':'GET',headers:{apikey:key,authorization:'Bearer '+access,...(mode?{'content-type':'application/json'}:{})},body:mode?JSON.stringify({mode,image}):undefined,signal,cache:'no-store'});
+ let data={};try{data=await res.json();}catch{}
+ if(user?.id!==owner||window.vzipCloudSessionId?.()!==session)throw Error('계정이 변경되어 인식을 중단했어요.');
+ if(!res.ok)throw Error(data.error||'악보 인식 오류 ('+res.status+').');
+ return data;
+};
 let streamOwner=null;
 function showUser(){
  if(window.VzipAccountScope){void enterAccount().catch(e=>{sessionVerified=false;ready=false;updateAuthScreen();say('로그인 보호 확인 실패: '+e.message)});return;}

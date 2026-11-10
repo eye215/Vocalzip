@@ -273,7 +273,7 @@ test('A song picked by the AI suggestion for a file on this device changes only 
   expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모\n이전 제목: 미분류 녹음', rating:5});
 });
 
-test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, can be renamed, survives a reload, and deletes its file', async ({page}) => {
+test('악보: a PDF is uploaded to R2 under the song, delegates its full row to the viewer with signed source access, can be renamed, survives a reload, and deletes its file', async ({page}) => {
   const r2 = await fakeR2(page);
   await boot(page);
   await page.goto('/#/song/s1');
@@ -293,8 +293,18 @@ test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, 
   expect(saved[0]).toMatchObject({songId:'s1', fileName:'Defying Gravity vocal.pdf', originalKey:'C#/Db', practiceKey:'C'});
   expect(saved[0].r2Key).toMatch(/^u\/ui-test-user\/score-[0-9a-f-]+\/original\.pdf$/);
   expect(r2.store.get(saved[0].r2Key).bytes.toString()).toContain('%PDF');
-  // A signed link is ready before the tap (iOS opens it directly).
-  await expect(row.locator('[data-open]')).toHaveAttribute('href', new RegExp('/v1/media/' + saved[0].r2Key.replace(/[/.]/g, '\\$&')));
+  // The current row delegates to the editor; source download remains signed.
+  // Renderer/Pencil behavior is covered by score-ink.spec.cjs using actual PDF.js.
+  const source=await page.evaluate(async key=>{
+    const url=await window.VzipR2.url(key),response=await fetch(url);
+    return {url,ok:response.ok,text:await response.text()};
+  },saved[0].r2Key);
+  expect(source.ok).toBe(true);expect(source.url).toContain('/v1/media/'+saved[0].r2Key);expect(source.text).toContain('%PDF');
+  await expect(row.locator('[data-open]')).toHaveCount(0);
+  await page.evaluate(()=>{window.__pdfOpenOriginal=window.VZ.openScoreInk;window.VZ.openScoreInk=(...ids)=>{window.__pdfOpenArgs=ids;};});
+  await row.getByRole('button',{name:'Defying Gravity vocal 열기',exact:true}).click();
+  const opened=await page.evaluate(()=>{window.VZ.openScoreInk=window.__pdfOpenOriginal;return window.__pdfOpenArgs;});
+  expect(opened).toEqual(['s1',saved[0].id]);
   // Rename in a sheet.
   await row.locator('[data-edit]').click();
   await page.locator('.sheet input[name=title]').fill('Defying Gravity (2막)');

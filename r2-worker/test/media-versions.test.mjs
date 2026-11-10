@@ -19,6 +19,13 @@ function fixture(){
   if(name==='vzip_session_context')return Response.json({user_id:claims.sub,allowed:state.active&&options.headers['x-client-info']==='vocalzip-device-session-v2',required:true,playback_token:null});
   if(name==='vzip_media_mutation_context')return Response.json({user_id:claims.sub,mode:state.mode,session_id:claims.session_id});
   if(!state.active)return Response.json({},{status:403});
+  if(name==='vzip_edit_media'){
+   if(state.conflict)return Response.json({},{status:409});
+   const result={version:1,user_id:claims.sub,session_id:claims.session_id,request_id:body.p_request_id,
+    id:body.p_media_id,object_key:body.p_key,metadata:{id:body.p_media_id,storageProvider:'r2',r2Key:body.p_key,size:3,type:'audio/wav',r2Etag:'"fake-etag"',...body.p_patch},
+    updated_at:'2026-11-10T00:00:00.123457Z',applied_updated_at:'2026-11-10T00:00:00.123457Z',replayed:false,superseded:false};
+   return Response.json(state.editResult?state.editResult(result):result);
+  }
   if(name==='vzip_media_upload_allowed')return Response.json(state.uploadsAllowed);
   if(name==='vzip_prepare_media_delete'){
    if(state.conflict)return Response.json({},{status:409});
@@ -111,4 +118,44 @@ test('chunked over-limit JSON is rejected before database preparation or object 
  const f=fixture();const body=new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('x'.repeat(17000)));c.close();}});
  const r=await worker.fetch(new Request('https://media.test/v2/media/delete/prepare',{method:'POST',headers:{authorization:'Bearer '+token(),'x-client-info':'vocalzip-device-session-v2'},body,duplex:'half'}),f.env);
  assert.equal(r.status,413);assert.equal(f.state.deleted.length,0);assert.ok(!f.state.calls.some(x=>x.name==='vzip_prepare_media_delete'));
+});
+
+const editBody=()=>({requestId:R,mediaId:'voice',key,updatedAt:stamp,patch:{name:'직접 쓴 제목',review:'개인 메모'}});
+test('metadata edit forwards an exact version and patch without touching R2 or retrying conflicts',async()=>{
+ const f=fixture();f.state.onHead=()=>{throw Error('metadata-only edit must not read R2');};
+ const response=await f.call('/v2/media/edit',{body:editBody()});assert.equal(response.status,200);
+ assert.equal((await response.json()).metadata.name,'직접 쓴 제목');
+ const rpc=f.state.calls.find(x=>x.name==='vzip_edit_media').body;
+ assert.equal(rpc.p_expected_updated_at,stamp);assert.deepEqual(rpc.p_patch,editBody().patch);assert.equal(rpc.p_key,key);
+ f.state.conflict=true;assert.equal((await f.call('/v2/media/edit',{body:editBody()})).status,409);
+ assert.equal(f.state.calls.filter(x=>x.name==='vzip_edit_media').length,2);assert.equal(f.state.deleted.length,0);assert.ok(f.objects.has(key));
+});
+test('metadata edit stays disabled for legacy, paused, revoked and unconfigured server states',async()=>{
+ for(const scenario of ['legacy','paused','revoked','disabled']){
+  const f=fixture();if(scenario==='disabled')f.env.MEDIA_VERSION_GUARD_ENABLED='false';else if(scenario==='revoked')f.state.active=false;else f.state.mode=scenario;
+  const response=await f.call('/v2/media/edit',{body:editBody()});
+  assert.equal(response.status,{legacy:403,paused:423,revoked:401,disabled:503}[scenario],scenario);
+  assert.equal(f.state.calls.some(x=>x.name==='vzip_edit_media'),false);
+ }
+});
+test('metadata edit rejects alternate originals, unversioned timestamps, unknown fields and oversized bodies',async()=>{
+ for(const body of [{...editBody(),key:legacy},{...editBody(),key:key.replace(U,V)},{...editBody(),updatedAt:'2026-11-10T00:00:00Z'},
+  {...editBody(),requestId:'invalid'},{...editBody(),patch:{}},{...editBody(),patch:{r2Key:newKey}},{...editBody(),patch:{review:'가'.repeat(6000)}}]){
+  const f=fixture(),response=await f.call('/v2/media/edit',{body});assert.ok([400,409,413].includes(response.status));assert.equal(f.state.calls.some(x=>x.name==='vzip_edit_media'),false);
+ }
+});
+test('metadata edit cannot acknowledge another identity, request, original, version or unapplied patch',async()=>{
+ for(const patch of [{user_id:V},{session_id:T},{request_id:B},{id:'other'},{object_key:newKey},{updated_at:null},
+  {replayed:null},{superseded:true},{applied_updated_at:stamp,updated_at:stamp},
+  {metadata:{id:'voice',storageProvider:'r2',r2Key:key,name:'unapplied'}}]){
+  const f=fixture();f.state.editResult=r=>({...r,...patch});
+  // An unchanged version is not a valid acknowledgement of a new edit.
+  const response=await f.call('/v2/media/edit',{body:editBody()});
+  assert.equal(response.status,503);
+ }
+});
+test('metadata retry can return a later revision only when explicitly marked superseded and replayed',async()=>{
+ const f=fixture();f.state.editResult=r=>({...r,replayed:true,superseded:true,updated_at:'2026-11-10T00:00:00.123458Z',metadata:{...r.metadata,name:'나중 제목'}});
+ const response=await f.call('/v2/media/edit',{body:editBody()});assert.equal(response.status,200);
+ const result=await response.json();assert.equal(result.superseded,true);assert.equal(result.metadata.name,'나중 제목');assert.equal(f.state.deleted.length,0);
 });
