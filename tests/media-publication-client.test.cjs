@@ -49,13 +49,13 @@ test('a malformed or different-original server acknowledgement cannot confirm pu
   await assert.rejects(f.api.publishLibrary(metadata()),/확인/);
  }
 });
-function preflight(source,{delay=30,deleted=false,change=false,fail=false}={}){
+function preflight(source,{delay=30,deleted=false,change=false,fail=false,existing=true}={}){
  const start=source.indexOf('async function importMedia('),end=source.indexOf('/** Files that reached R2',start);
  assert.ok(start>0&&end>start);
  const state={active:0,peak:0,ready:0,writes:0},user={id:owner};
  const wait=async value=>{state.active++;state.peak=Math.max(state.peak,state.active);await new Promise(r=>setTimeout(r,delay));state.active--;if(change)user.id=sid;if(fail)throw Error('read unavailable');return value;};
- const query={select(){return this},eq(){return this},maybeSingle:()=>wait({data:{metadata:{id:'voice',name:'existing'}},error:null})};
- const window={vzipMediaType:f=>f.type,addEventListener(){},removeEventListener(){},VzipR2:{ready:()=>{state.ready++;return wait(true)}},VzipAccountScope:null};
+ const query={select(){return this},eq(){return this},maybeSingle:()=>wait({data:existing?{metadata:{id:'voice',name:'existing'}}:null,error:null})};
+ const window={vzipMediaType:f=>f.type,addEventListener(){},removeEventListener(){},VzipR2:{ready:()=>{state.ready++;return wait(true)},upload:async()=>{throw Object.assign(Error('transfer boundary'),{code:'transfer_boundary'});}},VzipAccountScope:null};
  const context={user,client:{from:()=>query},window,mediaImportActive:false,sessionVerified:true,VzipChunks:{MAX_SIZE:2*1024**3},crypto:require('node:crypto').webcrypto,
   AbortController,DOMException,console,cleanupPending:async()=>{},deletedMediaIds:()=>wait(deleted?['voice']:[]),
   mediaRecovery:()=>({pending:()=>[],remember(){state.writes++}})};
@@ -74,10 +74,10 @@ test('parallel preflight still blocks deleted files and account changes before p
 test('measure preflight with identical simulated 30ms read latency',async t=>{
  const base=process.env.VZIP_PUBLICATION_BASE;if(!base){t.skip('baseline not requested');return;}assert.match(base,/^[0-9a-f]{40}$/);
  const previous=execFileSync('git',['show',base+':cloud-sync.js'],{encoding:'utf8'});
- const old=preflight(previous),fresh=preflight(fs.readFileSync('cloud-sync.js','utf8'));
- let start=performance.now();await old.run();const before=performance.now()-start;
- start=performance.now();await fresh.run();const after=performance.now()-start;
- // The old early duplicate return makes two serial checks and skips ready; the new checks run concurrently.
+ const old=preflight(previous,{existing:false}),fresh=preflight(fs.readFileSync('cloud-sync.js','utf8'),{existing:false});
+ let start=performance.now();await assert.rejects(old.run(),{code:'transfer_boundary'});const before=performance.now()-start;
+ start=performance.now();await assert.rejects(fresh.run(),{code:'transfer_boundary'});const after=performance.now()-start;
+ // Both versions reach the same transfer boundary; only independent preflight scheduling differs.
  assert.equal(old.state.peak,1);assert.equal(fresh.state.peak,3);
- console.log(JSON.stringify({benchmark:'duplicate-file preflight; simulated 30ms independent reads',beforeMs:Math.round(before),afterMs:Math.round(after),beforePeak:old.state.peak,afterPeak:fresh.state.peak}));
+ console.log(JSON.stringify({benchmark:'new-file preflight; simulated 30ms independent reads',beforeMs:Math.round(before),afterMs:Math.round(after),beforePeak:old.state.peak,afterPeak:fresh.state.peak}));
 });
