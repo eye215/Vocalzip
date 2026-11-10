@@ -41,8 +41,19 @@ Deno.serve(async (req: Request) => {
     if (ownerAllowed !== true) return reply(req, 403, {error: '소유자 계정에서만 사용할 수 있어요.'});
 
     if (Number(req.headers.get('content-length') || 0) > 6000) return reply(req, 413, {error: '요청이 너무 커요.'});
-    const raw = await req.text();
-    if (raw.length > 6000) return reply(req, 413, {error: '요청이 너무 커요.'});
+    const reader = req.body?.getReader();
+    if (!reader) return reply(req, 400, {error: '요청 내용이 없어요.'});
+    const parts: Uint8Array[] = []; let size = 0;
+    try {
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 6000) { await reader.cancel(); return reply(req, 413, {error: '요청이 너무 커요.'}); }
+        parts.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    const raw = await new Blob(parts).text();
     let input: Record<string, unknown>;
     try { input = JSON.parse(raw); } catch { return reply(req, 400, {error: '요청 형식이 올바르지 않아요.'}); }
     if (!input || typeof input !== 'object' || Array.isArray(input) || input.demo === true)
@@ -51,7 +62,7 @@ Deno.serve(async (req: Request) => {
       task: String(input.task || '').slice(0, 50),
       result: String(input.summary || '').slice(0, 350),
       detail: String(input.detail || '').slice(0, 450),
-      metric: Number.isFinite(Number(input.metric)) ? Number(input.metric) : null,
+      metric: input.metric !== null && input.metric !== undefined && Number.isFinite(Number(input.metric)) ? Number(input.metric) : null,
       unit: ['cent', 'ms'].includes(String(input.unit)) ? input.unit : null,
       status: String(input.status || '').slice(0, 30),
       difficulty: String(input.difficulty || '').slice(0, 60),
