@@ -29,7 +29,7 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   await page.goto('/#/library');
   const picker=page.waitForEvent('filechooser');
   await page.locator('[data-imp]').click();
-  await (await picker).setFiles({name:'2026-11-09_10-00-00.wav', mimeType:'audio/wav', buffer:wav()});
+  await (await picker).setFiles({name:'2026-11-09_10-00-00.wav', mimeType:'audio/wav', buffer:wav(26)});
   await expect(page).toHaveURL(/import-hub$/);
   await expect(page.locator('[data-hub] [data-import]')).toBeEnabled({timeout:30000});
   await page.locator('[data-hub] [data-import]').click();
