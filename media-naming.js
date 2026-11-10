@@ -32,8 +32,8 @@ function patch(meta,changes,resolve=()=> ''){
    const suffix=automatic&&/^ (?:[2-9]|[1-9]\d+)$/.test(tail)?tail:'';
    const name=base+suffix;
    if(!automatic&&meta.name&&meta.name!==name){
-    const prior=String(out.review??meta.review??'').trim(),entry='이전 제목: '+meta.name;
-    out.review=prior.includes(entry)?prior:[prior,entry].filter(Boolean).join('\n');
+    const prior=String(out.review??meta.review??''),entry='이전 제목: '+meta.name;
+    out.review=prior.split('\n').includes(entry)?prior:prior+(prior&&!prior.endsWith('\n')?'\n':'')+entry;
    }
    return {...out,name,nameMode:'auto',autoName:name};
   }

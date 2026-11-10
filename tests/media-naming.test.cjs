@@ -13,6 +13,13 @@ test('manual title moves to the review when song and date are set',()=>{
  const patch=n.patch(meta,{songId:'s2',song:'새 곡',recordedDate:'2026-11-09'},resolve);
  assert.equal(patch.name,'새 곡 2026.11.09');assert.equal(patch.review,'이전 제목: 내가 직접 쓴 제목');assert.equal(patch.nameMode,'auto');
 });
+test('previous title is appended without changing an existing review',()=>{
+ const meta={...auto,name:'예전 제목',nameMode:'manual',review:'첫 줄 메모\n둘째 줄 메모  '};
+ const first=n.patch(meta,{normalizeTitle:true},resolve);
+ assert.equal(first.review,'첫 줄 메모\n둘째 줄 메모  \n이전 제목: 예전 제목');
+ const second=n.patch({...meta,...first},{normalizeTitle:true},resolve);
+ assert.equal(second.review,undefined);
+});
 test('legacy manual title is converted when a date is edited',()=>{
  const patch=n.patch(auto,{name:'오디션용 최종'},resolve),meta={...auto,...patch};
  assert.equal(patch.nameMode,'manual');const next=n.patch(meta,{recordedDate:'2026-11-09'},resolve);
