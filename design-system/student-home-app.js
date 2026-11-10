@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=24';
+import {createFloatingHome} from './student-home-html.js?v=25';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -73,7 +73,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const form=el.querySelector('form');form.addEventListener('input',()=>{dirty=true;});
     V.guidedRecommendations?.({date:s.today}).then(rows=>{
       if(!form.isConnected)return;
-      recommended=rows.filter(c=>!existing.some(g=>g.sourceId===(c.assignmentId||c.key)&&g.source===(c.assignmentId?'homework':'recommendation')));
+      recommended=rows.filter(c=>!existing.some(g=>(g.sourceId===(c.assignmentId||c.key)&&g.source===(c.assignmentId?'homework':'recommendation'))||(c.kind==='room'&&g.recommendation?.sourceId===c.sourceId)));
       el.querySelector('[data-guided-recommendations]').innerHTML=recommended.length?V.guidedRecommendationCards(recommended,{selectable:true,showStart:false}):'';
     }).catch(()=>{});
     form.addEventListener('change',()=>{const count=el.querySelector('[data-plan-count]');if(count)count.textContent=form.querySelectorAll('[name=goal]:checked').length+'개 선택';});
@@ -88,7 +88,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
      try{
       const data=new FormData(form),selected=new Set(data.getAll('goal')),goals=choices.filter(c=>selected.has(c.key)).map(c=>({...c.goal}));
       const guided=new Set(data.getAll('guided-recommendation'));
-      for(const c of recommended.filter(c=>guided.has(c.key)))goals.push({id:V.uid(),title:c.title,source:c.assignmentId?'homework':'recommendation',sourceId:c.assignmentId||c.key,completed:false});
+      for(const c of recommended.filter(c=>guided.has(c.key)))goals.push({id:V.uid(),title:c.title,source:c.assignmentId?'homework':'recommendation',sourceId:c.assignmentId||c.key,...(c.kind==='room'?{songId:c.songId,recommendation:{reason:c.reason,action:c.action,minutes:c.minutes,days:c.days,section:c.section,task:c.task,sourceId:c.sourceId}}:{}),completed:false});
       for(const title of form.personal.value.split(/\r?\n/).map(t=>t.trim()).filter(Boolean))goals.push({id:V.uid(),title,source:'personal',sourceId:'',completed:false});
       const n=(value,max)=>{if(value==='')return null;const v=Number(value);if(!Number.isFinite(v)||v<0||v>max)throw Error('목표 시간을 확인해 주세요.');return v;};
       if(expectedSnapshot!==M.planSnapshot(V.db,s.today))throw Error('목표나 시간 설정이 변경됐어요. 입력을 확인한 뒤 창을 다시 열어 주세요.');
@@ -107,7 +107,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
    try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
     ...recentCallbacks(r),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
-    onGoals:planSheet,onGuidedPractice:c=>nav('#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
+    onGoals:planSheet,onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
@@ -122,7 +122,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     host.querySelector('[data-home-retry]').onclick=()=>V.render();return;
    }
    if(!host.isConnected)return;
-   host.replaceChildren(root);applyTheme();
+   host.replaceChildren(root);const review=document.createElement('a');review.className='btn secondary block';review.href='#/practice-review';review.textContent='주간 돌아보기 · 다음 목표 추천';const daily=document.createElement('a');daily.className='btn secondary block';daily.href='#/practice-review?mode=today';daily.textContent='AI로 오늘 할 일 추천받기';root.append(daily,review);applyTheme();
    let mediaGeneration=0,lastDate=today();
    const refreshMedia=async()=>{
     const generation=++mediaGeneration;
