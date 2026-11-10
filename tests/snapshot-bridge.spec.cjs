@@ -1,7 +1,7 @@
 const {test,expect}=require('@playwright/test');
 const U='11111111-1111-4111-8111-111111111111',S='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',G='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const jwt='test.'+Buffer.from(JSON.stringify({sub:U,session_id:S,role:'authenticated'})).toString('base64url')+'.signature';
-async function boot(page,{media=false}={}){
+async function boot(page,{media=false,revision=true}={}){
  const remote={row:null,receipts:new Map(),requests:[],commits:0,block:false,lose:false};
  const seed={categories:[],songs:[{id:'song',title:'original'}],lessons:[],assignments:[],practices:[]};
  const stub=`window.__legacySnapshotWrites=[];window.supabase={createClient:()=>({
@@ -31,15 +31,15 @@ async function boot(page,{media=false}={}){
   }
   return route.fulfill({json:receipt});
  });
- await page.addInitScript(({owner,seed})=>{
-  window.VZIP_SNAPSHOT_REVISION_ENABLED=true;window.VZIP_DEVICE_SESSIONS_ENABLED=true;window.VZIP_ONE_ACCOUNT_PER_BROWSER=false;
+ await page.addInitScript(({owner,seed,revision})=>{
+  window.VZIP_SNAPSHOT_REVISION_ENABLED=revision;window.VZIP_DEVICE_SESSIONS_ENABLED=true;window.VZIP_ONE_ACCOUNT_PER_BROWSER=false;
   localStorage.setItem('vzip_account_scope_owner_v1',owner);window.__seed=seed;
   if(!sessionStorage.getItem('snapshot-seeded')){
    sessionStorage.setItem('snapshot-seeded','1');localStorage.setItem('vzip_account_v1:'+owner+':vocal-zip_mvp_v1',JSON.stringify(seed));
   }
- },{owner:U,seed});
+ },{owner:U,seed,revision});
  await page.goto('/#/home');await expect(page.locator('#vzip-auth-screen')).toBeHidden();
- await expect.poll(()=>page.evaluate(()=>!!VzipAccountScope.storage.getItem('vzip_snapshot_transport_v1:'+VzipAccountScope.owner))).toBe(true);
+ if(revision)await expect.poll(()=>page.evaluate(()=>!!VzipAccountScope.storage.getItem('vzip_snapshot_transport_v1:'+VzipAccountScope.owner))).toBe(true);
  await expect.poll(()=>page.evaluate(()=>!VzipAccountScope.storage.getItem('vzip_account_dirty'))).toBe(true);
  return remote;
 }
@@ -147,4 +147,79 @@ test('Account handoff after cloud cleanup cannot delete a same-ID file from the 
  });
  expect(result.error).toContain('계정');expect(result.foreignBytes).toEqual([99]);expect(result.originalLocal).toContain('chosen');expect(result.phase).toBe('cloud-complete');
  expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);
+});
+
+async function conflictingReview(page,remote){
+ await page.evaluate(()=>VZ.change(d=>{d.songs[0].title='phone title';d.songs[0].updatedAt=900;d.practices.push({id:'phone-only',date:'2026-11-10',manualMinutes:11});},{silent:true}));
+ remote.row.payload.songs[0].title='cloud title';remote.row.payload.songs[0].updatedAt=100;remote.row.payload.lessons=[{id:'cloud-only',date:'2026-11-10',memo:'keep server note'}];remote.row.revision='2';
+ await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();
+ const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('[data-conflict]').first()).toBeVisible();return dialog;
+}
+async function selectSource(dialog,source='클라우드'){
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').filter({hasText:source}).first().click();
+ await dialog.locator('[data-review-approve]').check();
+}
+test('Recovery page selects the cloud field and preserves records unique to both sides after reload',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);
+ await expect(dialog.locator('[data-review-save]')).toBeDisabled();await selectSource(dialog);
+ await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.row.payload.songs[0].title).toBe('cloud title');expect(remote.row.payload.practices[0].id).toBe('phone-only');expect(remote.row.payload.lessons[0].id).toBe('cloud-only');
+ expect(remote.commits).toBe(1);await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>VZ.db.songs[0].title)).toBe('cloud title');expect(await page.evaluate(()=>window.__legacySnapshotWrites)).toEqual([]);
+});
+test('Recovery cancellation leaves both inputs unchanged and sends no request',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);
+ await dialog.locator('[data-close]').click();await expect(dialog).toHaveCount(0);
+ expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('phone title');expect(remote.row.payload.songs[0].title).toBe('cloud title');expect(remote.requests).toHaveLength(0);
+});
+test('Recovery page invalidates local edits and requires a fresh explicit comparison',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);await selectSource(dialog);
+ await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'late-input',manualMinutes:13});},{silent:true}));
+ await expect(dialog.locator('[data-review-save]')).toBeDisabled();await expect(dialog.locator('[data-review-message]')).toContainText('바뀌었어요');
+ await dialog.locator('[data-review-refresh]').click();await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ await expect(dialog.locator('[data-review-approve]')).not.toBeChecked();await selectSource(dialog);await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.row.payload.practices.some(p=>p.id==='late-input')).toBe(true);
+});
+test('Recovery refuses a remote revision changed after inspection without replacing local input',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);await selectSource(dialog);
+ remote.row.revision='3';remote.row.payload.songs[0].title='newer cloud edit';
+ await dialog.locator('[data-review-save]').click();await expect(dialog.locator('[data-review-refresh]')).toBeVisible();
+ expect(remote.requests).toHaveLength(0);expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('phone title');expect(remote.row.payload.songs[0].title).toBe('newer cloud edit');
+});
+test('Recovery keeps a lost ACK durable and explicitly rechecks the same request',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);await selectSource(dialog);remote.lose=true;
+ await dialog.locator('[data-review-save]').click();await expect(dialog.locator('[data-review-retry]')).toBeVisible();expect(remote.commits).toBe(1);
+ const id=remote.requests[0].p_request_id;remote.block=false;await dialog.locator('[data-review-retry]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.commits).toBe(1);expect(new Set(remote.requests.map(r=>r.p_request_id))).toEqual(new Set([id]));expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('cloud title');
+});
+test('Recovery from a previous-login pending uses a new ID and retains the prior unsent record',async({page})=>{
+ const remote=await boot(page);remote.block=true;
+ await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'previous-input',manualMinutes:7});},{silent:true}));await sync(page);
+ const old=(await state(page)).pending.id;
+ await page.evaluate(()=>{
+  const key='vzip_snapshot_transport_v1:'+VzipAccountScope.owner,s=JSON.parse(VzipAccountScope.storage.getItem(key));s.pending.session='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';VzipAccountScope.storage.setItem(key,JSON.stringify(s));
+ });
+ remote.block=false;await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();const dialog=page.locator('.snapshot-review-page');
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.requests.at(-1).p_request_id).not.toBe(old);expect(remote.row.payload.practices.some(x=>x.id==='previous-input')).toBe(true);
+});
+test('Recovery content is escaped and the full page fits narrow mobile widths',async({page})=>{
+ await page.setViewportSize({width:320,height:720});const remote=await boot(page);remote.row.payload.songs[0].title='<img src=x onerror="window.__unsafe=true">';
+ await page.evaluate(()=>VZ.change(d=>{d.songs[0].title='phone';},{silent:true}));remote.row.revision='2';await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();
+ const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('fieldset')).toBeVisible();expect(await dialog.locator('img').count()).toBe(0);expect(await page.evaluate(()=>window.__unsafe)).toBeUndefined();
+ expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeInViewport();await dialog.locator('[data-close]').click();
+});
+test('Default-off flow never exposes recovery or writes a revision journal',async({page})=>{
+ const remote=await boot(page,{revision:false});await page.goto('/#/settings');await expect(page.locator('#cloud-review')).toBeHidden();expect(remote.requests).toHaveLength(0);
+ expect(await page.evaluate(()=>VzipAccountScope.storage.getItem('vzip_snapshot_transport_v1:'+VzipAccountScope.owner))).toBeNull();
+});
+
+test('Recovery requires selections for all pages of conflicts and closes on an account change',async({page})=>{
+ const remote=await boot(page);
+ await page.evaluate(()=>VZ.change(d=>{d.songs=Array.from({length:25},(_,i)=>({id:'s'+i,title:'device '+i}));},{silent:true}));
+ remote.row.payload.songs=Array.from({length:25},(_,i)=>({id:'s'+i,title:'cloud '+i}));remote.row.revision='2';await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();
+ const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('fieldset')).toHaveCount(20);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeDisabled();
+ await dialog.locator('[data-review-more]').click();await expect(dialog.locator('fieldset')).toHaveCount(25);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeEnabled();
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vzip:auth-changed')));await expect(dialog).toHaveCount(0);expect(remote.requests).toHaveLength(0);expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('device 0');
 });
