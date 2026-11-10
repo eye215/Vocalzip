@@ -6,6 +6,7 @@ body[data-vz-route="guided-practice"]{background:#0b0911;color:#f7f5fc;color-sch
 .item .vz-task-start{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 10px;border-radius:12px;background:var(--accent-soft,#f1eaff);color:var(--accent,#7a32f5);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}
 /* Playback is controlled by the practice buttons; touches on the video do not seek or pause it. */
 .gp-video iframe{pointer-events:none}
+.gp-range-note{margin:-10px 0 20px;color:#cdb5f4;font-size:12px;line-height:1.5}
 .gp-timer.has-reference{height:auto;min-height:212px;padding:22px 14px;box-sizing:border-box}
 .gp-reference{width:100%;max-width:360px;margin-top:12px;padding-top:16px;border-top:1px solid #514363;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;text-align:left}
 .gp-reference label{display:grid;gap:6px;color:#d6c8e5;font-size:12px;font-weight:650}
@@ -13,6 +14,12 @@ body[data-vz-route="guided-practice"]{background:#0b0911;color:#f7f5fc;color-sch
 .gp-reference button{background:#6f2ce5;border-color:#6f2ce5;font-weight:700;white-space:nowrap}
 .gp-reference button:disabled{opacity:.45}
 .gp-reference small{grid-column:1/-1;color:#bdb0ca;font-size:11px;line-height:1.45}
+.gp-tuner{width:100%;max-width:360px;box-sizing:border-box;margin-top:16px;padding:16px 14px;border-radius:16px;background:#2b2037;text-align:center}
+.gp-tuner-track{height:12px;position:relative;border-radius:12px;background:linear-gradient(90deg,#905ae3 0%,#cf9bff 37%,#9ff0c9 47%,#9ff0c9 53%,#cf9bff 63%,#905ae3 100%)}
+.gp-tuner-track:after{content:'';position:absolute;top:-5px;bottom:-5px;left:50%;width:2px;background:#fff9;transform:translateX(-50%)}
+.gp-tuner-track i{position:absolute;z-index:1;top:-7px;left:50%;height:26px;width:4px;border-radius:4px;background:#fff;transform:translateX(-50%);box-shadow:0 0 6px #fff9;transition:left .12s ease}
+.gp-tuner-labels{display:flex;justify-content:space-between;margin:12px 0;color:#bbadcc;font-size:11px}
+.gp-tuner strong{display:block;font-size:14px;font-weight:700;line-height:1.4}.gp-tuner small{display:block;color:#bdb0ca;margin-top:5px;font-size:12px}.gp-tuner.on-pitch small{color:#9ff0c9}
 .gp-screen{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
 .gp-actions{position:fixed;z-index:20;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,560px);box-sizing:border-box;margin:0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:#0b0911;box-shadow:0 -10px 24px #0b0911cc}
 .gp-actions [hidden]{display:none}

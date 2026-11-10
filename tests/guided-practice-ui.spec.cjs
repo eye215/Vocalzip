@@ -99,3 +99,55 @@ test('only a step with an explicit range offers a playable reference tone',async
  await expect(page.locator('[data-gp-reference]')).toHaveCount(0);
  expect(page.__errors).toEqual([]);
 });
+test('analysis range is a note above three exercises, not a fourth timer step',async({page})=>{
+ await boot(page);
+ await page.evaluate(()=>{
+  window.VZ.practiceTips=()=>({tips:[{key:'into',name:'음정 정확도 연습',frequency:8,metric:'음정 오차',value:'±19.2 cent',minutes:10,range:'A#2~A5',
+   steps:['기준음 듣고 따라 부르기','5음계 상행·하행 (도레미파솔파미레도)','고른 음을 4초 유지하고 처음과 비교']} ]});
+  window.VZ.change(d=>{d.videoFeedback||=[];d.videoFeedback.push({exerciseKey:'analysis:into',videoId:'00vt7RAvG70',verdict:'bad'})},{silent:true});
+  window.VZ.nav('#/guided-practice/analysis:into');
+ });
+ await expect(page.locator('.gp-progress span')).toHaveText('1 / 3 단계');
+ await expect(page.locator('.gp-range-note')).toContainText('A#2~A5');
+ await expect(page.getByRole('combobox',{name:'기준음 높이'})).toBeVisible();
+ await expect(page.locator('.gp-steps span')).toHaveCount(3);
+ expect(page.__errors).toEqual([]);
+});
+test('pitch exercise measures the selected note and releases the mic on backgrounding',async({page})=>{
+ await boot(page);
+ await page.evaluate(()=>{
+  window.__mic={stopped:0};window.__tones=[];
+  navigator.mediaDevices.getUserMedia=async()=>({getTracks:()=>[{stop(){window.__mic.stopped++}}]});
+  window.AudioContext=class{
+   sampleRate=48000;currentTime=0;destination={};state='running';resume(){return Promise.resolve()}close(){return Promise.resolve()}
+   createMediaStreamSource(){return {connect(){},disconnect(){}}}
+   createAnalyser(){return {fftSize:4096,connect(){},disconnect(){},getFloatTimeDomainData(data){
+    for(let i=0;i<data.length;i++)data[i]=.2*Math.sin(2*Math.PI*233.08188*i/48000);
+   }}}
+   createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){}},connect(){},disconnect(){}}}
+   createOscillator(){const source={frequency:{value:0},connect(gain){return gain},start(){window.__tones.push(source.frequency.value)},stop(){},disconnect(){}};return source}
+  };
+  window.VZ.practiceTips=()=>({tips:[{key:'into',name:'음정 정확도 연습',frequency:8,metric:'음정 오차',value:'±19.2 cent',minutes:10,range:'A#2~A5',steps:['기준음 따라 부르기','5음계 상행·하행 (도레미파솔파미레도)','고른 목표음을 4초 유지하며 튜너가 가운데에 오는지 확인해요']} ]});
+  window.VZ.change(d=>{d.videoFeedback||=[];d.videoFeedback.push({exerciseKey:'analysis:into',videoId:'00vt7RAvG70',verdict:'bad'})},{silent:true});
+  window.VZ.nav('#/guided-practice/analysis:into');
+ });
+ for(let i=0;i<2;i++){
+  if(i===1){await expect(page.getByRole('combobox',{name:'도 시작음'})).toHaveValue('58');
+   await page.getByRole('button',{name:'음계 듣기'}).click();
+   expect(await page.evaluate(()=>window.__tones.length)).toBe(9);
+  }
+  await page.getByRole('button',{name:'연습 시작'}).click();
+  await page.waitForTimeout(3200);
+  await page.getByRole('button',{name:'연습 종료'}).click();
+  await page.getByRole('button',{name:'다음 단계'}).click();
+ }
+ await expect(page.locator('[data-gp-tuner]')).toBeVisible();
+ await expect(page.getByRole('combobox',{name:'기준음 높이'})).toHaveValue('58');
+ await page.getByRole('button',{name:'연습 시작'}).click();
+ await expect(page.locator('[data-gp-tuner-status]')).toContainText('가운데에 가까워요');
+ await expect(page.locator('[data-gp-tuner]')).toHaveClass(/on-pitch/,{timeout:7000});
+ await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
+ expect(await page.evaluate(()=>window.__mic.stopped)).toBe(1);
+ await expect(page.getByRole('button',{name:'다시 시작'})).toBeVisible();
+ expect(page.__errors).toEqual([]);
+});
