@@ -18,11 +18,12 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
       - run: node --test tests/collection-routes.test.cjs
-      - name: Provide FFmpeg for media fixtures
+      - name: Provide FFmpeg and FFprobe for media fixtures
         run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            timeout 180 npm install --prefix "$RUNNER_TEMP/ffmpeg-bin" --no-save --no-audit --no-fund ffmpeg-static@5.2.0
-            ln -s "$RUNNER_TEMP/ffmpeg-bin/node_modules/ffmpeg-static/ffmpeg" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            timeout 180 npm install --prefix "$RUNNER_TEMP/ffmpeg-bin" --no-save --no-audit --no-fund ffmpeg-static@5.2.0 ffprobe-static@3.1.0
+            ln -s "$(node -p "require('$RUNNER_TEMP/ffmpeg-bin/node_modules/ffmpeg-static')")" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
+            ln -s "$(node -p "require('$RUNNER_TEMP/ffmpeg-bin/node_modules/ffprobe-static').path")" "$RUNNER_TEMP/ffmpeg-bin/ffprobe"
             echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
           fi
       - run: node tests/make-audio-fixtures.cjs
