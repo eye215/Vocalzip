@@ -39,9 +39,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  const controller=new AbortController();let doc,loadingTask,renderTask,closed=false,binding,ready=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
- let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done;
+ let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
+ const notesKey='vzip_score_text_v1:'+owner+':'+scoreId;
  let savedView=null;
  try{
   const value=JSON.parse(viewStorage.getItem(viewKey)||'null');
@@ -62,6 +63,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '</div>'+
   '<div class="score-ink-actions">'+button('undo','arrow-counter-clockwise','필기 되돌리기')+button('redo','arrow-clockwise','필기 다시 실행')+button('clear','trash','현재 페이지 필기 삭제')+button('settings','sliders-horizontal','색상·굵기·투명도 설정')+button('marker-mode','bookmark-simple','악보 표시')+button('performance','eye','무대용 보기')+button('fullscreen','arrows-out','전체화면')+'</div>'+
   '<div class="score-ink-marker-palette" data-ink-marker-palette hidden><button type="button" data-ink-marker="breath">숨표</button><button type="button" data-ink-marker="repeat">반복</button><button type="button" data-ink-marker="cut">컷</button><button type="button" data-ink-marker="start">시작점</button></div>'+
+  '<div class="score-ink-vision-tools" data-ink-vision-tools hidden><button type="button" data-ink-notation>표기 알아보기</button><button type="button" data-ink-note-undo hidden>메모 되돌리기</button><span>악보에서 궁금한 표기를 사각형으로 선택해요.</span></div>'+
   '<section class="score-ink-settings" data-ink-settings aria-label="필기 설정" hidden><div class="score-ink-settings-head"><strong data-ink-profile-label>펜 설정</strong>'+button('settings-close','x','필기 설정 닫기')+'</div>'+
   '<div class="score-ink-palette-section"><span>기본 색상</span><div data-ink-palette class="score-ink-swatches" role="group" aria-label="기본 색상"></div></div>'+
   '<div class="score-ink-palette-section"><span>최근 사용</span><div data-ink-recent class="score-ink-swatches" role="group" aria-label="최근 사용 색상"></div></div>'+
@@ -75,9 +77,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '<div class="score-ink-pages">'+button('prev','caret-left','이전 악보 페이지')+'<button type="button" class="score-ink-page-jump" data-ink-page aria-label="페이지 미리보기와 바로 이동" aria-expanded="false">불러오는 중</button>'+button('next','caret-right','다음 악보 페이지')+
   '<select data-ink-zoom aria-label="악보 확대"><option value="1">화면 맞춤</option><option value="1.5">150%</option><option value="2">200%</option></select></div>'+
   '<section class="score-ink-thumbnails" data-ink-thumbnails aria-label="악보 페이지 미리보기" hidden><div class="score-ink-thumbnails-head"><strong>페이지 이동</strong>'+button('thumb-close','x','페이지 미리보기 닫기')+'</div><form data-ink-jump-form><label>페이지 번호 <input type="number" data-ink-jump-input min="1" inputmode="numeric" aria-label="이동할 페이지 번호"></label><button type="submit">이동</button></form><div class="score-ink-thumb-grid" data-ink-thumb-grid></div><div class="score-ink-thumb-nav">'+button('thumb-prev','caret-left','앞 페이지 목록')+'<span data-ink-thumb-range></span>'+button('thumb-next','caret-right','다음 페이지 목록')+'</div></section>'+
-  '<div class="score-ink-selection-bar" data-ink-selection-bar role="group" aria-label="선택한 필기" hidden><span data-ink-selection-count></span>'+button('selection-smaller','minus','선택 필기 축소')+button('selection-larger','plus','선택 필기 확대')+button('selection-delete','trash','선택 필기 삭제')+button('selection-clear','x','필기 선택 해제')+'</div>'+
+  '<div class="score-ink-selection-bar" data-ink-selection-bar role="group" aria-label="선택한 필기" hidden><span data-ink-selection-count></span><button type="button" data-ink-recognize hidden>텍스트로 변환</button>'+button('selection-smaller','minus','선택 필기 축소')+button('selection-larger','plus','선택 필기 확대')+button('selection-delete','trash','선택 필기 삭제')+button('selection-clear','x','필기 선택 해제')+'</div>'+
   '<p class="score-ink-status" data-ink-status role="status" aria-live="polite">PDF를 준비하고 있어요.</p><a class="score-ink-original-quick" data-ink-original-quick target="_blank" rel="noopener" hidden>원본 PDF 열기</a>'+
-  '<div class="score-ink-stage" data-ink-stage tabindex="0" aria-label="악보 페이지"><div class="score-ink-page" data-ink-box hidden><canvas data-ink-pdf aria-label="PDF 악보"></canvas><svg xmlns="http://www.w3.org/2000/svg" data-ink-svg role="img" aria-label="개인 필기 영역"></svg></div></div>'+ 
+  '<div class="score-ink-stage" data-ink-stage tabindex="0" aria-label="악보 페이지"><div class="score-ink-page" data-ink-box hidden><canvas data-ink-pdf aria-label="PDF 악보"></canvas><svg xmlns="http://www.w3.org/2000/svg" data-ink-svg role="img" aria-label="개인 필기 영역"></svg><div class="score-ink-text-layer" data-ink-text-layer></div><div class="score-ink-vision-rect" data-ink-vision-rect hidden></div></div></div>'+ 
+  '<section class="score-ink-vision-result" data-ink-vision-result aria-label="인식 결과" hidden><strong data-ink-vision-heading></strong><p data-ink-vision-explanation></p><label data-ink-vision-text-label hidden>변환된 글자 확인·수정<textarea data-ink-vision-text rows="3" maxlength="1200"></textarea></label><p class="score-ink-vision-disclosure">선택 영역만 OpenAI API로 전송해 인식해요. 결과는 틀릴 수 있으니 확인해 주세요.</p><div class="score-ink-vision-buttons"><button type="button" data-ink-vision-save hidden>텍스트 메모 저장</button><button type="button" data-ink-vision-replace hidden>저장 후 원래 필기 대체</button><button type="button" data-ink-vision-delete hidden>메모 삭제</button><button type="button" data-ink-vision-cancel>닫기</button></div></section>'+ 
   '<div class="score-ink-performance-controls" data-ink-performance-controls hidden>'+button('performance-prev','caret-left','이전 페이지')+'<span data-ink-performance-page></span>'+button('performance-next','caret-right','다음 페이지')+'<button type="button" data-ink-performance-exit>편집으로 돌아가기</button></div>'+
   '<p class="score-ink-help">손가락 두 개로 좌우 스와이프해 페이지를 넘겨요. ‘펜만 필기’가 켜져 있으면 한 손가락도 사용할 수 있어요.</p></div>';
  function say(text,error=false){if(!closed){status.textContent=text;status.dataset.error=error?'true':'false';done.textContent=pending?'다시 저장':'완료';el.toggleAttribute('data-ink-save-error',!!pending);}}
@@ -280,6 +283,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const panel=el.querySelector('[data-ink-selection-bar]'),rows=selection?.rows||[];
   panel.hidden=!rows.length||tool!=='select';
   el.querySelector('[data-ink-selection-count]').textContent=rows.length+'개 선택';
+  el.querySelector('[data-ink-recognize]').hidden=!visionAvailable||!rows.length;
   panel.querySelectorAll('button').forEach(b=>b.disabled=busy||exportBusy||!!pending||!!selection?.drag);
   if(!selection||tool!=='select')return;
   const drag=selection.drag,preview=selection.preview||rows;
@@ -301,6 +305,62 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{current();commitSelection(Ink.transform(selection.rows,{scale},aspect));}catch(e){say(e.message,true);}
  }
  const exportSignature=rows=>JSON.stringify(rows.map(s=>[s.id,s.page,s.tool,s.color,s.width,Ink.opacity(s),s.points]));
+ function readNotes(){
+  try{const saved=JSON.parse(viewStorage.getItem(notesKey)||'null');notes=saved?.pdfHash===binding?.pdfHash&&saved?.r2Key===score.r2Key&&Array.isArray(saved.notes)?saved.notes.filter(n=>n&&n.page>=1&&n.page<=2000&&typeof n.text==='string'&&n.text.length<=1200&&n.x>=0&&n.x<=1&&n.y>=0&&n.y<=1).slice(0,300):[];}catch{notes=[];}
+ }
+ function saveNotes(next){
+  current();if(!binding||!ready)throw Error('악보를 확인한 뒤 저장해 주세요.');
+  viewStorage.setItem(notesKey,JSON.stringify({pdfHash:binding.pdfHash,r2Key:score.r2Key,notes:next}));notesHistory.push(notes);if(notesHistory.length>30)notesHistory.shift();notes=next;el.querySelector('[data-ink-note-undo]').hidden=false;paintNotes();saveState('이 기기에 저장됨','local');say('텍스트 메모를 이 기기에 저장했어요.');
+ }
+ function paintNotes(){
+  const host=el?.querySelector('[data-ink-text-layer]');if(!host)return;host.replaceChildren();
+  for(const note of notes.filter(n=>n.page===pageNo)){
+   const b=document.createElement('button');b.type='button';b.className='score-ink-text-note';b.style.left=(note.x*100)+'%';b.style.top=(note.y*100)+'%';b.textContent=note.text;b.title='텍스트 메모 수정';
+   b.onclick=()=>{if(performance)return;showVisionResult({mode:'edit',id:note.id,page:note.page,rect:{x:note.x,y:note.y},text:note.text});};host.append(b);
+  }
+ }
+ function visionPanel(open){const panel=el.querySelector('[data-ink-vision-result]');panel.hidden=!open;if(open)panel.scrollIntoView({block:'nearest',behavior:'smooth'});}
+ function showVisionResult(result){
+  const panel=el.querySelector('[data-ink-vision-result]');panel.dataset.mode=result.mode;panel.dataset.noteId=result.id||'';panel._result=result;
+  const isText=result.mode==='handwriting'||result.mode==='edit';
+  el.querySelector('[data-ink-vision-heading]').textContent=result.mode==='notation'?(result.label||'악보 표기 설명'):'손글씨 → 텍스트 메모';
+  el.querySelector('[data-ink-vision-explanation]').textContent=result.mode==='notation'?(result.explanation||'표기를 구별하기 어려워요.'):(result.confidence==='low'?'인식이 불확실해요. 글자를 직접 확인하고 수정해 주세요.':'원래 필기는 그대로 남아요. 결과를 확인하고 수정해 주세요.');
+  el.querySelector('[data-ink-vision-text-label]').hidden=!isText;el.querySelector('[data-ink-vision-text]').value=result.text||'';
+  el.querySelector('[data-ink-vision-save]').hidden=!isText;el.querySelector('[data-ink-vision-replace]').hidden=result.mode!=='handwriting';el.querySelector('[data-ink-vision-delete]').hidden=result.mode!=='edit';
+  el.querySelector('[data-ink-vision-cancel]').textContent='닫기';visionPanel(true);
+ }
+ function cropNotation(rect){
+  const x=Math.max(0,Math.min(rect.x,rect.x+rect.w)),y=Math.max(0,Math.min(rect.y,rect.y+rect.h));
+  const w=Math.min(1-x,Math.abs(rect.w)),h=Math.min(1-y,Math.abs(rect.h));
+  if(w<.018||h<.012)throw Error('표기를 조금 더 넓게 둘러 선택해 주세요.');
+  const src={x:Math.floor(x*canvas.width),y:Math.floor(y*canvas.height),w:Math.max(1,Math.floor(w*canvas.width)),h:Math.max(1,Math.floor(h*canvas.height))};
+  const scale=Math.min(2,1024/Math.max(src.w,src.h)),out=document.createElement('canvas');out.width=Math.max(1,Math.floor(src.w*scale));out.height=Math.max(1,Math.floor(src.h*scale));
+  out.getContext('2d').drawImage(canvas,src.x,src.y,src.w,src.h,0,0,out.width,out.height);return out.toDataURL('image/jpeg',.76);
+ }
+ function cropHandwriting(rows){
+  const bounds=Ink.bounds(rows,aspect),pad=.03,x=Math.max(0,bounds.x-pad),y=Math.max(0,bounds.y-pad),w=Math.min(1-x,bounds.w+2*pad),h=Math.min(1-y,bounds.h+2*pad);
+  if(w<.008||h<.008)throw Error('선택한 필기를 확인해 주세요.');
+  const out=document.createElement('canvas'),scale=Math.min(1024/Math.max(w,h*aspect),1800);out.width=Math.max(64,Math.ceil(w*scale));out.height=Math.max(64,Math.ceil(h*aspect*scale));const ctx=out.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,out.width,out.height);
+  ctx.save();ctx.scale(scale/1000,scale/1000);ctx.translate(-x*1000,-y*aspect*1000);
+  for(const stroke of rows){ctx.strokeStyle=stroke.color;ctx.globalAlpha=Ink.opacity(stroke);ctx.lineWidth=stroke.width*1000;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke(new Path2D(Ink.path(stroke,aspect)));}ctx.restore();
+  return {image:out.toDataURL('image/jpeg',.82),rect:{x,y,w,h}};
+ }
+ async function recognize(mode,rect,rows){
+  if(visionBusy||!visionAvailable||!ready||busy||pending||performance)return;
+  const bound=binding.pdfHash,atPage=pageNo,chosen=rows?.map(s=>({...s}));
+  if(!await VZ.confirm('선택 영역 인식','선택한 '+(mode==='notation'?'악보 부분':'손글씨 획만')+' OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.',{ok:'인식하기'}))return;
+  visionBusy=true;visionController=new AbortController();saveState('인식 중…','pending');say('선택한 영역을 인식하고 있어요.');
+  try{
+   current();const image=mode==='notation'?cropNotation(rect):cropHandwriting(chosen).image;
+   if(image.length>600000)throw Error('선택 영역이 너무 커요. 조금 작게 선택해 주세요.');
+   const result=await window.VzipR2.scoreVision(mode,image,visionController.signal);
+   current();if(closed||binding.pdfHash!==bound||pageNo!==atPage)return;
+   if(mode==='handwriting'&&!chosen.every(s=>store.list(binding,atPage).some(r=>r.id===s.id&&Ink.same(r,s))))throw Error('인식하는 동안 원래 필기가 바뀌었어요. 다시 선택해 주세요.');
+   showVisionResult({mode,...result,page:atPage,rect:mode==='notation'?rect:cropHandwriting(chosen).rect,rows:chosen});
+   say(mode==='notation'?'표기 설명을 확인해 주세요.':'변환 결과를 확인하고 수정해 주세요.');
+  }catch(e){if(e.name!=='AbortError')say('인식하지 못했어요: '+e.message,true);}
+  finally{visionBusy=false;visionController=null;if(!closed)saveState('이 기기에 저장됨','local');}
+ }
  function invalidateExport(){
   if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=null;exportStamp='';
   const link=el?.querySelector('[data-ink-export-save]');if(link){link.hidden=true;link.removeAttribute('href');}
@@ -333,6 +393,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    path.setAttribute('stroke-width',s.width*1000);path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');path.setAttribute('opacity',String(Ink.opacity(s)));path.dataset.stroke=s.id;svg.append(path);
   }
   selectionOverlay();
+  paintNotes();
   el.querySelector('[data-ink-undo]').disabled=!ready||busy||exportBusy||!!pending||!undo.length;
   el.querySelector('[data-ink-redo]').disabled=!ready||busy||exportBusy||!!pending||!redo.length;
  }
@@ -482,7 +543,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{current();store.restore();if(selection&&!selectionFresh()){clearSelection();say('선택한 필기가 다른 곳에서 바뀌었어요. 다시 선택해 주세요.',true);}if(exportUrl&&exportSignature(store.list(binding))!==exportStamp)invalidateExport();paint();}catch{sheet.close();}
  }
  function cleanup(){
-  closed=true;clearTimeout(performanceTimer);closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
+  closed=true;visionController?.abort();clearTimeout(performanceTimer);closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
   window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);VZ.setGuard(null);
  }
@@ -510,6 +571,21 @@ VZ.openScoreInk=(songId,scoreId)=>{
   stage.onpointerup=stage.onpointercancel=event=>{if(performance&&event.target!==svg)gestureEnd(event);};
   stage.onclick=event=>{if(performance&&event.target.closest?.('[data-ink-performance-controls]')==null)showPerformanceControls();};
   el.querySelector('[data-ink-export]').onclick=exportPDF;
+  el.querySelector('[data-ink-vision-cancel]').onclick=()=>visionPanel(false);
+  el.querySelector('[data-ink-note-undo]').onclick=()=>{if(!notesHistory.length||!ready)return;try{const previous=notesHistory.at(-1);current();viewStorage.setItem(notesKey,JSON.stringify({pdfHash:binding.pdfHash,r2Key:score.r2Key,notes:previous}));notesHistory.pop();notes=previous;el.querySelector('[data-ink-note-undo]').hidden=!notesHistory.length;paintNotes();say('이전 텍스트 메모로 되돌렸어요.');}catch(e){say(e.message,true);}};
+  el.querySelector('[data-ink-vision-delete]').onclick=()=>{const result=el.querySelector('[data-ink-vision-result]')._result;if(result?.mode!=='edit')return;try{saveNotes(notes.filter(n=>n.id!==result.id));visionPanel(false);}catch(e){say(e.message,true);}};
+  el.querySelector('[data-ink-vision-save]').onclick=()=>{
+   const result=el.querySelector('[data-ink-vision-result]')._result,text=el.querySelector('[data-ink-vision-text]').value.trim();
+   if(!text){say('저장할 글자를 입력해 주세요.',true);return;}if(!result||result.page!==pageNo||!ready){say('원래 페이지에서 다시 확인해 주세요.',true);return;}
+   try{const note={id:result.id||VZ.uid(),page:pageNo,text:text.slice(0,1200),x:Math.max(0,Math.min(.92,result.rect.x)),y:Math.max(0,Math.min(.95,result.rect.y))};saveNotes([...notes.filter(n=>n.id!==note.id),note]);visionPanel(false);}catch(e){say('텍스트 메모를 저장하지 못했어요: '+e.message,true);}
+  };
+  el.querySelector('[data-ink-vision-replace]').onclick=()=>{
+   const result=el.querySelector('[data-ink-vision-result]')._result,text=el.querySelector('[data-ink-vision-text]').value.trim();
+   if(!text||result?.page!==pageNo||!ready||pending||!result?.rows?.length){say('변환 결과와 원래 필기를 확인해 주세요.',true);return;}
+   try{current();if(!result.rows.every(s=>store.list(binding,pageNo).some(r=>r.id===s.id&&Ink.same(r,s))))throw Error('원래 필기가 바뀌었어요. 다시 선택해 주세요.');const note={id:VZ.uid(),page:pageNo,text:text.slice(0,1200),x:Math.max(0,Math.min(.92,result.rect.x)),y:Math.max(0,Math.min(.95,result.rect.y))};saveNotes([...notes,note]);apply({add:[],remove:result.rows});visionPanel(false);clearSelection();}catch(e){say('필기 대체를 완료하지 못했어요: '+e.message,true);}
+  };
+  el.querySelector('[data-ink-recognize]').onclick=()=>{if(selection?.rows.length)recognize('handwriting',null,selection.rows);};
+  el.querySelector('[data-ink-notation]').onclick=()=>{selectionEnd(false);clearSelection();finishStroke();tool='notation';svg.dataset.tool=tool;el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));say('궁금한 표기를 사각형으로 둘러 주세요.');};
   el.querySelector('[data-ink-width]').oninput=event=>updateSettings({width:Number(event.target.value)/1000});
   el.querySelector('[data-ink-opacity]').oninput=event=>updateSettings({opacity:Math.round((100-Number(event.target.value))*1000)/100000});
   el.querySelector('[data-ink-picker]').oninput=event=>{el.querySelector('[data-ink-hex]').value=event.target.value;el.querySelector('[data-ink-custom-add]').disabled=false;};
@@ -584,6 +660,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    try{
     current();event.preventDefault();const p=coords(event);
     if(tool==='select'){selectionDown(event,p);return;}
+    if(tool==='notation'){visionDrag={pointer:event.pointerId,start:p};try{svg.setPointerCapture?.(event.pointerId);}catch{}return;}
     if(tool==='marker'){markerDrag={pointer:event.pointerId,start:p};try{svg.setPointerCapture?.(event.pointerId);}catch{}return;}
     if(tool==='eraser'){
      if(event.pointerType==='touch'){touchEraser={pointer:event.pointerId,point:p};try{svg.setPointerCapture?.(event.pointerId);}catch{}return;}
@@ -596,6 +673,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    }catch(e){say(e.message,true);}
   };
   svg.onpointermove=event=>{
+   if(visionDrag?.pointer===event.pointerId){event.preventDefault();const p=coords(event),a=visionDrag.start;const rect=el.querySelector('[data-ink-vision-rect]');rect.hidden=false;rect.style.left=Math.min(a[0],p[0])*100+'%';rect.style.top=Math.min(a[1],p[1])*100+'%';rect.style.width=Math.abs(a[0]-p[0])*100+'%';rect.style.height=Math.abs(a[1]-p[1])*100+'%';return;}
    try{if(selectionMove(event))return;}catch(e){selectionEnd(false);say(e.message,true);return;}
    if(!active&&gestureMove(event))return;
    if(markerDrag?.pointer===event.pointerId){event.preventDefault();markerDrag.end=coords(event);return;}
@@ -605,6 +683,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    schedule();
   };
   svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{
+   if(visionDrag?.pointer===event.pointerId){const start=visionDrag.start;visionDrag=null;el.querySelector('[data-ink-vision-rect]').hidden=true;if(event.type==='pointerup'){const p=coords(event);recognize('notation',{x:start[0],y:start[1],w:p[0]-start[0],h:p[1]-start[1]});}return;}
    if(touchInkStart?.pointer===event.pointerId)touchInkStart=null;
    if(touchEraser?.pointer===event.pointerId){const point=touchEraser.point;touchEraser=null;if(event.type==='pointerup'){try{const found=strokes().reverse().find(s=>Ink.hit(s,point,aspect));if(found)apply({add:[],remove:[found]});}catch(e){say(e.message,true);}}return;}
    if(selection?.drag?.pointer===event.pointerId){event.preventDefault();try{selectionEnd(event.type==='pointerup');}catch(e){selectionEnd(false);say(e.message,true);}return;}
@@ -664,10 +743,12 @@ VZ.openScoreInk=(songId,scoreId)=>{
     const rangeTask=loadingTask;doc=fullDoc;loadingTask=fullTask;rangeTask.destroy()?.catch?.(()=>{});
    }
    binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
+   readNotes();
    if(savedView?.pdfHash&&savedView.pdfHash!==pdfHash){
     pageNo=1;zoom=1;zoomValue();await renderPage();current();if(closed)return;
    }
    ready=true;rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents='';svg.dataset.tool=tool;
+   window.VzipR2.scoreVisionAvailable?.().then(result=>{if(closed)return;visionAvailable=!!result.available;el.querySelector('[data-ink-vision-tools]').hidden=!visionAvailable;paint();}).catch(()=>{});
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
    paint();
    const old=(VZ.db.scoreAnnotations||[]).some(s=>s.ownerId===owner&&s.scoreId===scoreId&&s.r2Key===score.r2Key&&s.pdfHash!==pdfHash);
