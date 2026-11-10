@@ -249,13 +249,17 @@ test('fullscreen-capable browsers keep the editor open when the explicit exit co
 });
 
 for(const rotated of [false,true]){
- test('annotated PDF download preserves source and exports visible red ink'+(rotated?' with rotation/crop':''),async({page})=>{
+ test('annotated PDF download preserves source and exports transformed red ink'+(rotated?' with rotation/crop':''),async({page})=>{
   const lib=require(path.join(PDFROOT,'../pdf-lib')),sourceDoc=await lib.PDFDocument.load(bytes);
   if(rotated){sourceDoc.getPage(0).setRotation(lib.degrees(90));sourceDoc.getPage(0).setCropBox(20,30,260,340);}
   const sourceBytes=rotated?Buffer.from(await sourceDoc.save()):bytes,r2=await setup(page,sourceBytes),dialog=await open(page);
   await dialog.getByRole('button',{name:'펜',exact:true}).click();let panel=await configure(dialog);
   await panel.getByRole('button',{name:'진한 빨강 #b42318',exact:true}).click();await range(dialog,'펜 굵기',14);
   await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();await draw(page,dialog);
+  await dialog.getByRole('button',{name:'선택',exact:true}).click();
+  await dragInk(page,dialog,[.1,.18],[.7,.30]);
+  await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('1개 선택');
+  await dragInk(page,dialog,[.4,.24],[.5,.28],{pen:true});
   const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations);panel=await configure(dialog);
   await panel.getByRole('button',{name:'필기 PDF 만들기',exact:true}).click();
   const save=panel.getByRole('link',{name:'만든 PDF 저장',exact:true});await expect(save).toBeVisible({timeout:20000});
@@ -267,7 +271,7 @@ for(const rotated of [false,true]){
     const page=await document.getPage(1),view=page.getViewport({scale:1}),canvas=window.document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
     await page.render({canvasContext:canvas.getContext('2d'),viewport:view}).promise;
     const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let red=0,positioned=0;
-    for(let i=0;i<pixels.length;i+=4)if(pixels[i]>100&&pixels[i+1]<80&&pixels[i+2]<80){red++;const x=(i/4%canvas.width)/canvas.width,y=Math.floor(i/4/canvas.width)/canvas.height;if(x>.12&&x<.68&&y>.18&&y<.30)positioned++;}
+    for(let i=0;i<pixels.length;i+=4)if(pixels[i]>100&&pixels[i+1]<80&&pixels[i+2]<80){red++;const x=(i/4%canvas.width)/canvas.width,y=Math.floor(i/4/canvas.width)/canvas.height;if(x>.22&&x<.78&&y>.22&&y<.34)positioned++;}
     const out={red,positioned,pages:document.numPages,rotation:page.rotate};canvas.width=0;canvas.height=0;return out;
    }finally{await document.destroy();}
   });
@@ -281,3 +285,106 @@ for(const rotated of [false,true]){
   expect(r2.calls.some(c=>c.startsWith('PUT')||c.startsWith('DELETE')||c==='POST /v1/uploads')).toBe(false);
  });
 }
+
+async function dragInk(page,dialog,from,to,{cancel=false,pen=false,handle=false}={}){
+ const svg=dialog.locator('[data-ink-svg]'),r=await svg.boundingBox();
+ if(pen||cancel){
+  await svg.evaluate((svg,{from,to,cancel,handle})=>{
+   const r=svg.getBoundingClientRect(),common={bubbles:true,pointerId:91,pointerType:'pen',isPrimary:true,button:0,pressure:.6};
+   const fire=(target,type,p)=>target.dispatchEvent(new PointerEvent(type,{...common,clientX:r.x+r.width*p[0],clientY:r.y+r.height*p[1]}));
+   fire(handle?svg.querySelector('[data-ink-selection-handle]'):svg,'pointerdown',from);
+   fire(svg,'pointermove',to);fire(svg,cancel?'pointercancel':'pointerup',to);
+  },{from,to,cancel,handle});
+ }else{
+  await page.mouse.move(r.x+r.width*from[0],r.y+r.height*from[1]);await page.mouse.down();
+  await page.mouse.move(r.x+r.width*to[0],r.y+r.height*to[1],{steps:8});await page.mouse.up();
+ }
+}
+async function selectInk(page,dialog){
+ await dialog.getByRole('button',{name:'선택',exact:true}).click();
+ await dragInk(page,dialog,[.10,.10],[.70,.33]);
+ await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('2개 선택');
+}
+
+test('selection moves a group once, undoes/redoes and deletes without changing scores or unrelated records',async({page})=>{
+ const r2=await setup(page);let dialog=await open(page);
+ await draw(page,dialog,{y:.14});await draw(page,dialog,{tool:'형광펜',y:.24});
+ const before=await page.evaluate(()=>structuredClone(window.VZ.db)),original=before.scoreAnnotations;
+ await selectInk(page,dialog);
+ const dragBox=await dialog.locator('[data-ink-svg]').boundingBox();
+ await dragInk(page,dialog,[.4,.2],[.5,.24]);
+ await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');
+ const moved=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
+ expect(moved).toHaveLength(2);moved.forEach((s,i)=>{
+  expect(s.id).not.toBe(original[i].id);expect(Math.abs(s.points[0][0]-original[i].points[0][0]-.1)).toBeLessThan(1.5/dragBox.width);
+  expect(Math.abs(s.points[0][1]-original[i].points[0][1]-.04)).toBeLessThan(1.5/dragBox.height);
+  expect(s.color).toBe(original[i].color);expect(s.opacity).toBe(original[i].opacity);expect(s.points[0][2]).toBe(original[i].points[0][2]);
+ });
+ await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(original.map(s=>s.points));
+ await dialog.getByRole('button',{name:'필기 다시 실행',exact:true}).click();
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(moved.map(s=>s.points));
+ await selectInk(page,dialog);await dialog.getByRole('button',{name:'선택 필기 삭제',exact:true}).click();
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();await expect(dialog.locator('path[data-stroke]')).toHaveCount(2);
+ await dialog.getByRole('button',{name:'완료',exact:true}).click();await page.reload();dialog=await open(page);
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(moved.map(s=>s.points));
+ expect(await page.evaluate(()=>({songs:window.VZ.db.songs,lessons:window.VZ.db.lessons,practices:window.VZ.db.practices}))).toEqual({songs:before.songs,lessons:before.lessons,practices:before.practices});
+ expect(r2.store.get(key).bytes.equals(bytes)).toBe(true);
+});
+test('Pencil corner resize scales a group and thickness; cancellation and empty tap never edit notes',async({page})=>{
+ await setup(page);const dialog=await open(page);await draw(page,dialog,{y:.14});await draw(page,dialog,{tool:'형광펜',y:.24});await selectInk(page,dialog);
+ const original=await page.evaluate(()=>window.VZ.db.scoreAnnotations),b=await page.evaluate(()=>window.VzipScoreInk.bounds(window.VZ.db.scoreAnnotations,4/3));
+ await dragInk(page,dialog,[b.x+b.w,b.y+b.h],[b.x+b.w*1.2,b.y+b.h*1.2],{pen:true,handle:true});
+ const resized=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
+ resized.forEach((s,i)=>expect(s.width/original[i].width).toBeCloseTo(1.2,2));
+ await dragInk(page,dialog,[.4,.2],[.5,.25],{pen:true,cancel:true});
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual(resized);
+ await dragInk(page,dialog,[.9,.35],[.9,.35],{pen:true});
+ await expect(dialog.locator('[data-ink-selection-bar]')).toBeHidden();
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual(resized);
+});
+test('selection controls remain touch sized in fullscreen, preserve selection on zoom, and release on page change',async({page})=>{
+ await setup(page);const dialog=await open(page);await draw(page,dialog,{y:.14});await draw(page,dialog,{y:.24});await selectInk(page,dialog);
+ const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points));
+ await dialog.getByRole('button',{name:'전체화면',exact:true}).click();
+ await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('2개 선택');
+ for(const label of ['선택 필기 축소','선택 필기 확대','선택 필기 삭제','필기 선택 해제']){
+  const r=await dialog.getByRole('button',{name:label,exact:true}).boundingBox();expect(r.width).toBeGreaterThanOrEqual(44);expect(r.height).toBeGreaterThanOrEqual(44);
+ }
+ if(process.env.VZ_INK_PREVIEW==='1'&&test.info().project.name==='chromium-mobile')console.log('VZIP_INK_SELECTION_PREVIEW:'+Buffer.from(await page.screenshot()).toString('base64'));
+ await dialog.getByLabel('악보 확대',{exact:true}).selectOption('1.5');
+ await expect(dialog.locator('[data-ink-selection-bar]')).toBeVisible();
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(before);
+ await dialog.getByRole('button',{name:'선택 필기 확대',exact:true}).click();
+ const after=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
+ expect(after[0].width/.004).toBeCloseTo(1.1,3);
+ await dialog.getByRole('button',{name:'다음 악보 페이지',exact:true}).click();
+ await expect(dialog.locator('[data-ink-page]')).toHaveText('2 / 2쪽');await expect(dialog.locator('[data-ink-selection-bar]')).toBeHidden();
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
+});
+test('a concurrent deleted selection is released and never deletes another incoming stroke',async({page})=>{
+ await setup(page);const dialog=await open(page);await draw(page,dialog,{y:.14});await draw(page,dialog,{y:.24});await selectInk(page,dialog);
+ await page.evaluate(()=>window.VZ.change(d=>{
+  const old=d.scoreAnnotations[0];d.scoreAnnotations=d.scoreAnnotations.slice(1);d.scoreAnnotations.push({...old,id:'other-device',points:[[.8,.1,.5],[.9,.2,.5]]});
+  d.deleted||={};d.deleted.scoreAnnotations=[...(d.deleted.scoreAnnotations||[]),old.id];
+ }));
+ await expect(dialog.locator('[data-ink-selection-bar]')).toBeHidden();
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.some(s=>s.id==='other-device'))).toBe(true);
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();
+ await expect(dialog.locator('[data-ink-selection-overlay]')).toHaveCount(0);
+});
+test('failed group movement preserves a recovery copy, retries once, and undo restores the original group',async({page})=>{
+ await setup(page);const dialog=await open(page);await draw(page,dialog,{y:.14});await draw(page,dialog,{y:.24});await selectInk(page,dialog);
+ const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points));
+ await page.evaluate(()=>{window.__inkChange=window.VZ.change;window.VZ.change=()=>false;});
+ await dragInk(page,dialog,[.4,.2],[.5,.24],{pen:true});
+ await expect(dialog.getByRole('button',{name:'다시 저장',exact:true})).toBeVisible();
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(2);
+ await page.evaluate(()=>window.VZ.change=window.__inkChange);
+ await dialog.getByRole('button',{name:'다시 저장',exact:true}).click();
+ const moved=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
+ expect(moved).toHaveLength(2);expect(moved[0].points).not.toEqual(before[0]);
+ await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(before);
+});
