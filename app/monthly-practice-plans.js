@@ -13,6 +13,15 @@ const dayShift=(date,offset)=>{
 const fmt=seconds=>Math.floor(seconds/60)+':'+pad(seconds%60);
 const options=[{key:'intonation',label:'음정 정확도'},{key:'stability',label:'지속음 안정성'},
  {key:'phrase',label:'프레이즈 연결'},{key:'vibrato',label:'비브라토 규칙성'}];
+const reviewState={player:null,revoke:null,generation:0};
+function stopReview(){
+ reviewState.generation++;
+ if(reviewState.player){reviewState.player.pause();reviewState.player.removeAttribute('src');reviewState.player.load();reviewState.player=null;}
+ if(reviewState.revoke){reviewState.revoke();reviewState.revoke=null;}
+}
+window.addEventListener('hashchange',stopReview);
+window.addEventListener('pagehide',stopReview);
+window.VzipAccountScope?.beforeLeave(stopReview);
 const plans=()=> (V.db.practicePlans||[]).filter(x=>x?.kind==='monthly-vocal'&&!x.archived);
 function entries(plan){return (V.db.dailyGoals||[]).filter(g=>g.sourceId===plan.id).sort((a,b)=>a.date.localeCompare(b.date));}
 function status(plan){
@@ -31,7 +40,11 @@ function form(month,items,rows){
   '<label class="field"><span>구간 종료 (초)</span><input name="end" type="number" min="1" max="7200" value="30" required></label>'+
   '<label class="field"><span>하루 연습 (분)</span><input name="minutes" type="number" min="3" max="60" value="10" required></label>'+
   '<label class="field"><span>연습 일수</span><input name="days" type="number" min="1" max="14" value="5" required></label></div>'+
-  '<p class="small muted">AI가 곡의 특정 초를 알아낸 것은 아니에요. 직접 녹음을 듣고 연습할 구간을 지정하세요. 생성 전에는 목표가 저장되지 않아요.</p>'+
+  '<div class="growth-weak-search"><h3>녹음에서 확인할 구간 찾기</h3><label class="field"><span>분석할 녹음</span><select data-weak-record><option value="">곡을 먼저 선택하세요</option></select></label>'+
+  '<button type="button" class="btn ghost" data-find-weak>음높이 확인 구간 찾기</button>'+
+  '<p class="small muted">기기에서 녹음을 다시 측정해 음높이가 가까운 반음에서 다소 벗어난 지속음을 검토 후보로 찾아요. 곡의 악보·정답 음정과 비교한 오답 판정은 아닙니다.</p>'+
+  '<div data-weak-results aria-live="polite"></div><input type="hidden" name="sourceRecording" value=""></div>'+
+  '<p class="small muted">확인된 후보를 눌러 구간을 채우거나, 직접 시작·종료 시간을 입력할 수 있어요. 계획은 등록 버튼을 누르기 전까지 저장되지 않아요.</p>'+
   '<button class="btn block" type="submit">이 계획을 오늘부터 등록</button><p class="small muted" data-plan-message role="status"></p></form>';
 }
 const measurePaths={intonation:['intonation','meanAbsCents'],stability:['stability','wobbleCents'],
@@ -67,13 +80,16 @@ function create(form,month){
  if(!options.some(o=>o.key===metric)||!V.song(songId))throw Error('등록된 곡과 연습 항목을 선택해 주세요.');
  if(![start,end,minutes,days].every(Number.isInteger)||start<0||end>7200||end<=start||
     minutes<3||minutes>60||days<1||days>14)throw Error('구간·시간·일수를 확인해 주세요.');
+ const sourceId=String(form.elements.sourceRecording.value||'');
+ const source=sourceId?M.cached?.().find(m=>m.id===sourceId):null;
+ if(sourceId && (!source||source.songId!==songId))throw Error('선택한 녹음의 곡 정보가 변경됐어요. 다시 선택해 주세요.');
  const today=V.today(),id='monthly-plan:'+V.uid(),title=V.songTitle(songId);
  const segment=fmt(start)+'–'+fmt(end);
  const label=title+' · '+(options.find(o=>o.key===metric)?.label||'연습')+' ('+segment+', '+minutes+'분)';
  const ok=V.change(db=>{
   db.practicePlans||=[];db.dailyGoals||=[];
   db.practicePlans.push({id,kind:'monthly-vocal',sourceMonth:month,songId,metric,
-   segmentStart:start,segmentEnd:end,minutes,days,startDate:today,created:Date.now(),archived:false});
+   segmentStart:start,segmentEnd:end,minutes,days,reviewRecordingId:sourceId||'',startDate:today,created:Date.now(),archived:false});
   for(let i=0;i<days;i++){
    const date=dayShift(today,i);
    db.dailyGoals.push({id:id+':'+date,date,title:label,source:'personal',sourceId:id,
@@ -90,7 +106,76 @@ function render(host,month,items,rows){
  '<p class="small muted">월간 추천을 실제 곡과 직접 선택한 구간에 연결해요. 하루 목표 완료로 진행률을 추적합니다.</p>'+
  (mine.length?'<div class="growth-plan-list">'+mine.map(plan=>card(plan,items)).join('')+'</div>':'<p>등록한 집중 연습 계획이 없어요.</p>')+
  '<details class="growth-plan-expand"><summary>새 연습 계획 만들기</summary>'+form(month,items,rows)+'</details></section>';
+
  const formEl=host.querySelector('[data-plan-form]');
+ const songInput=formEl.elements.song,recordInput=formEl.querySelector('[data-weak-record]');
+ const statusEl=formEl.querySelector('[data-weak-results]');
+ const button=formEl.querySelector('[data-find-weak]');
+ let weakToken=0;
+ function updateRecordings(){
+  stopReview(); weakToken++;statusEl.textContent='';formEl.elements.sourceRecording.value='';
+  const available=items.filter(m=>m.songId===songInput.value && (!M.isVideo(m)||m.cloud)&&(!m.size||m.size<=60*1024*1024));
+  recordInput.innerHTML='<option value="">녹음 선택</option>'+available.map(m=>
+   '<option value="'+E(m.id)+'">'+E((M.dateOf(m)||'날짜 없음')+' · '+M.label(m))+'</option>').join('');
+  button.disabled=!available.length;
+  if(!available.length)statusEl.textContent='이달에 분석 가능한 해당 곡의 녹음이 없어요. 구간을 직접 입력할 수 있어요.';
+ }
+ songInput.addEventListener('change',updateRecordings);
+ updateRecordings();
+ recordInput.addEventListener('change',()=>{stopReview();weakToken++;statusEl.textContent='';formEl.elements.sourceRecording.value='';});
+ async function playSegment(item,seg,playerHost){
+  stopReview();const generation=reviewState.generation;
+  playerHost.textContent='재생 불러오는 중…';
+  try{
+   const src=await M.src(item);
+   if(generation!==reviewState.generation||!playerHost.isConnected){
+    if(src.revoke)URL.revokeObjectURL(src.url);
+    return;
+   }
+   const audio=document.createElement('audio');
+   audio.controls=true;audio.preload='metadata';audio.src=src.url;audio.setAttribute('aria-label','검토 구간 듣기');
+   reviewState.player=audio;
+   if(src.revoke)reviewState.revoke=()=>URL.revokeObjectURL(src.url);
+   playerHost.replaceChildren(audio);
+   audio.addEventListener('loadedmetadata',()=>{audio.currentTime=Math.min(seg.start,Number.isFinite(audio.duration)?Math.max(0,audio.duration-.1):seg.start);},{once:true});
+   audio.addEventListener('timeupdate',()=>{if(audio.currentTime>=seg.end)audio.pause();});
+   audio.play().catch(()=>{});
+  }catch(err){if(generation===reviewState.generation)playerHost.textContent=err.message||'재생할 수 없어요.';}
+ }
+ button.onclick=async()=>{
+  if(!recordInput.value)return;
+  const item=items.find(m=>m.id===recordInput.value&&m.songId===songInput.value);
+  if(!item)return;
+  stopReview();const token=++weakToken;button.disabled=true;
+  statusEl.textContent='기기에서 녹음을 분석하고 있어요…';
+  try{
+   const result=await V.analyzeRecording(item,{save:false,onProgress:p=>{
+    if(token===weakToken&&statusEl.isConnected)statusEl.textContent='구간 확인 중 · '+Math.round(Math.min(1,Math.max(0,p))*100)+'%';
+   }});
+   if(token!==weakToken||!statusEl.isConnected)return;
+   if(!V.analysisReliable(result.summary)){
+    statusEl.textContent='목소리와 반주를 충분히 분리하지 못했거나 유효한 발화가 짧아 자동 구간 추천을 보류했어요.';
+    return;
+   }
+   const found=window.VzipWeakPhrase?.candidates(result)||[];
+   if(!found.length){statusEl.textContent='확신할 만한 검토 후보를 찾지 못했어요. 직접 구간을 지정해 주세요.';return;}
+   statusEl.innerHTML='<p class="small muted">음높이 확인 후보 '+found.length+'개 · 녹음을 듣고 실제 연습 구간인지 확인하세요.</p>'+
+     found.map((seg,i)=>'<div class="growth-weak-item"><button type="button" data-use-weak="'+i+'" class="btn sm ghost">'+
+      fmt(Math.floor(seg.start))+'–'+fmt(Math.ceil(seg.end))+' 선택</button><button type="button" data-play-weak="'+i+'" class="btn sm ghost">▶ 듣기</button>'+
+      '<span class="small muted">기준 반음 편차 '+(seg.deviation>0?'+':'')+seg.deviation+' cent · 정답 판정 아님</span></div>').join('')+
+     '<div data-weak-player></div>';
+   statusEl.querySelectorAll('[data-use-weak]').forEach(b=>b.onclick=()=>{
+    const segment=found[Number(b.dataset.useWeak)];
+    formEl.elements.start.value=Math.floor(segment.start);
+    formEl.elements.end.value=Math.ceil(segment.end);
+    formEl.elements.sourceRecording.value=item.id;
+    V.toast('구간을 입력했어요. 재생해 확인한 뒤 계획을 저장하세요.');
+   });
+   statusEl.querySelectorAll('[data-play-weak]').forEach(b=>b.onclick=()=>playSegment(item,found[Number(b.dataset.playWeak)],statusEl.querySelector('[data-weak-player]')));
+  }catch(err){if(token===weakToken&&statusEl.isConnected)statusEl.textContent=err.message||'녹음 분석에 실패했어요.';}
+  finally{if(token===weakToken&&button.isConnected)button.disabled=false;}
+ };
+
  formEl.onsubmit=event=>{
   event.preventDefault();
   const statusEl=formEl.querySelector('[data-plan-message]');
