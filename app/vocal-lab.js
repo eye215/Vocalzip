@@ -223,8 +223,21 @@ function comparePanel(s) {
     '<form data-compare-form><label>달라진 점<textarea name="notes" maxlength="5000" placeholder="직접 느낀 변화를 적어주세요">'+esc(saved?.notes||'')+'</textarea></label><label>다음 연습 목표<textarea name="goal" maxlength="3000">'+esc(saved?.goal||'')+'</textarea></label><div class="vl-compare-actions"><button type="button" data-compare-ai>메모 AI 정리</button><button type="submit">비교 메모 저장</button></div><p class="vl-muted" data-compare-output aria-live="polite"></p></form></div></details></section>';
 }
 function playerCard(s,m) {
-  const idx=s.selected.indexOf(m.id), total=Math.max(0,Number(m.durationSeconds)||0);
-  return '<div class="vl-peek" data-prev '+(idx===0?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx-1])||m))+'</span></div><div class="vl-player" data-card><div class="vl-player-head"><strong>'+esc(day(m)+' · '+M.label(m))+'</strong><span>'+esc((idx+1)+' / '+s.selected.length)+'</span></div>'+waveform(m)+'<div class="vl-seek"><span data-time>0:00</span><input type="range" min="0" max="1000" value="0" data-seek aria-label="재생 위치"><span data-duration>'+time(total)+'</span></div><div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div><div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div><div class="vl-peek" data-next-peek '+(idx===s.selected.length-1?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx+1])||m))+'</span></div>';
+  const idx=s.selected.indexOf(m.id),total=Math.max(0,Number(m.durationSeconds)||0);
+  const previous=s.items.find(x=>x.id===s.selected[idx-1]),next=s.items.find(x=>x.id===s.selected[idx+1]);
+  const hasWave=Array.isArray(m.waveform)&&m.waveform.length>0;
+  const dateLabel=M.dateOf(m)||'날짜 없음',name=M.label(m)||'제목 없는 녹음';
+  const itemName=name.startsWith(dateLabel)||name===dateLabel?name:dateLabel+' · '+name;
+  const readable=(value)=>value?esc(value):'';
+  const hint=(item,dir)=>'<button type="button" class="vl-peek '+dir+'" data-'+(dir==='left'?'prev':'next-peek')+
+    ' aria-label="'+(dir==='left'?'이전':'다음')+' 녹음'+(item?' · '+esc(M.label(item)):' 없음')+'"'+(!item?' disabled':'')+'>'+
+    '<i class="ph ph-caret-'+(dir==='left'?'left':'right')+'" aria-hidden="true"></i></button>';
+  return hint(previous,'left')+'<div class="vl-player" data-card data-waveform="'+(hasWave?'yes':'no')+'">'+
+    '<div class="vl-player-head"><div class="vl-player-title"><span class="vl-player-eyebrow">'+esc(day(m))+' · '+(idx+1)+'번째 녹음</span><strong>'+esc(name)+'</strong></div><span class="vl-player-count">'+(idx+1)+' / '+s.selected.length+'</span></div>'+
+    (hasWave?waveform(m):'<div class="vl-wave-compact"><i class="ph ph-waveform"></i><span>파형 정보 없음 · 녹음은 정상 재생할 수 있어요</span></div>')+
+    '<div class="vl-seek"><span data-time>0:00</span><input type="range" min="0" max="1000" value="0" data-seek aria-label="재생 위치"><span data-duration>'+time(total)+'</span></div>'+
+    '<div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"'+(!previous?' disabled':'')+'><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"'+(!next?' disabled':'')+'><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div>'+
+    '<div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div>'+hint(next,'right');
 }
 function screen(s) {
   const host=s.host, m=s.items.find(x=>x.id===s.active);
@@ -233,7 +246,7 @@ function screen(s) {
   s.player?.destroy(); s.player=null;
   s.plotObserver?.disconnect(); s.plotObserver=null;
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
-    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
+    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
       comparePanel(s)+recommendationList(recs,s.song.id,savedAITip(s))+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
@@ -256,10 +269,61 @@ function screen(s) {
   const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;seek.value=d?Math.round(el.currentTime/d*1000):0;host.querySelector('[data-time]').textContent=time(el.currentTime);host.querySelector('[data-duration]').textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
   el.addEventListener('timeupdate',()=>{if(s.loop&&el.currentTime>=Math.min(el.duration||Infinity,(s.start[m.id]||0)+16))el.currentTime=s.start[m.id]||0;paint();}); el.addEventListener('play',paint);el.addEventListener('pause',paint);el.addEventListener('loadedmetadata',paint); el.addEventListener('error',paint);paint();
   play.onclick=()=>el.paused?player.play():player.pause();seek.oninput=()=>player.seek(Number(seek.value)/1000*(el.duration||m.durationSeconds||0));
-  const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.active=s.selected[n];screen(s);};
+  const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.carouselDirection=step;s.active=s.selected[n];screen(s);};
   host.querySelector('[data-previous]').onclick=()=>move(-1);host.querySelector('[data-next]').onclick=()=>move(1);
   host.querySelector('[data-prev]')?.addEventListener('click',()=>move(-1));host.querySelector('[data-next-peek]')?.addEventListener('click',()=>move(1));
-  let x=null;carrier.addEventListener('touchstart',e=>{x=e.touches[0]?.clientX??null;},{passive:true});carrier.addEventListener('touchend',e=>{if(x==null)return;const dx=(e.changedTouches[0]?.clientX||x)-x;x=null;if(Math.abs(dx)>55)move(dx<0?1:-1);},{passive:true});
+  // Date tabs run oldest → newest. Swipe finger left to advance to a newer recording.
+  // Keep page's vertical scrolling and playback sliders completely native.
+  const card=carrier.querySelector('[data-card]'), reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
+  const activeIndex=s.selected.indexOf(s.active);
+  const hasNeighbor=step=>activeIndex+step>=0&&activeIndex+step<s.selected.length;
+  const snap=()=>{
+    card.style.transition=reduced?'none':'transform .28s cubic-bezier(.2,.85,.2,1), opacity .28s ease';
+    card.style.transform='translate3d(0,0,0) scale(1)';
+    card.style.opacity='1';
+    carrier.classList.remove('vl-swiping');
+  };
+  let gesture=null,changing=false;
+  carrier.addEventListener('pointerdown',e=>{
+    if(!e.isPrimary||e.button!==0||changing||s.selected.length<2)return;
+    if(e.target.closest('button,input,select,textarea,a,[data-player]'))return;
+    gesture={id:e.pointerId,x:e.clientX,y:e.clientY,dx:0,started:performance.now(),horizontal:false};
+  });
+  carrier.addEventListener('pointermove',e=>{
+    const g=gesture;if(!g||e.pointerId!==g.id||changing)return;
+    const dx=e.clientX-g.x,dy=e.clientY-g.y;
+    if(!g.horizontal){
+      if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){gesture=null;return;}
+      if(Math.abs(dx)<9||Math.abs(dx)<Math.abs(dy)*1.2)return;
+      g.horizontal=true;carrier.classList.add('vl-swiping');
+      try{carrier.setPointerCapture(e.pointerId)}catch{}
+    }
+    const step=dx<0?1:-1;
+    g.dx=hasNeighbor(step)?dx:Math.sign(dx)*Math.min(26,Math.abs(dx)*.2);
+    card.style.transition='none';
+    card.style.transform='translate3d('+g.dx+'px,0,0) scale('+(1-Math.min(.023,Math.abs(g.dx)/700))+')';
+    card.style.opacity=String(1-Math.min(.17,Math.abs(g.dx)/950));
+  });
+  const finish=e=>{
+    const g=gesture;if(!g||e.pointerId!==g.id)return;gesture=null;
+    if(!g.horizontal)return;
+    try{carrier.releasePointerCapture(e.pointerId)}catch{}
+    const step=g.dx<0?1:-1;
+    const elapsed=Math.max(40,performance.now()-g.started);
+    const shouldMove=hasNeighbor(step)&&(Math.abs(g.dx)>Math.min(82,carrier.clientWidth*.22)||(Math.abs(g.dx)>28&&Math.abs(g.dx)/elapsed>.55));
+    if(!shouldMove){snap();return;}
+    changing=true;carrier.classList.remove('vl-swiping');
+    if(!reduced&&card.animate){
+      const animation=card.animate([{transform:'translate3d('+g.dx+'px,0,0)',opacity:1},{transform:'translate3d('+(step===1?-110:110)+'px,0,0) scale(.96)',opacity:0}],{duration:155,easing:'ease-in',fill:'forwards'});
+      animation.finished.catch(()=>{}).then(()=>{if(!carrier.isConnected)return;s.carouselDirection=step;move(step);});
+    }else {s.carouselDirection=step;move(step);}
+  };
+  carrier.addEventListener('pointerup',finish);
+  carrier.addEventListener('pointercancel',e=>{if(gesture?.id!==e.pointerId)return;gesture=null;snap();});
+  const enter=s.carouselDirection||0;s.carouselDirection=0;
+  if(enter&&!reduced&&card.animate){
+    card.animate([{transform:'translate3d('+(enter===1?46:-46)+'px,0,0) scale(.975)',opacity:.6},{transform:'translate3d(0,0,0) scale(1)',opacity:1}],{duration:300,easing:'cubic-bezier(.18,1,.2,1)'});
+  }
   carrier.tabIndex=0;carrier.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();move(e.key==='ArrowLeft'?-1:1);}};
   const savedRate=Number(rates()[m.id])||1;player.setRate(savedRate);host.querySelector('[data-speed]').textContent=savedRate.toFixed(1)+'×';
   host.querySelector('[data-speed]').onclick=()=>V.collectionChoice('이 녹음의 배속',[[.5,'0.5×'],[.75,'0.75×'],[1,'1.0×'],[1.25,'1.25×'],[1.5,'1.5×']].map(([v,l])=>[String(v),l]),String(player.el.playbackRate),value=>{const rate=Number(value);player.setRate(rate);host.querySelector('[data-speed]').textContent=rate.toFixed(rate%1?2:1).replace(/0×$/,'×');try{speedStore.setItem(speedKey,JSON.stringify({...rates(),[m.id]:rate}));}catch{V.toast('배속을 저장하지 못했어요.','error');}});
@@ -353,6 +417,8 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
     const pair=[r.query.get('a'),r.query.get('b')].filter(key=>items.some(m=>String(m.id)===key));
     const selected=r.query.get('selection')==='1' ? selectionIds().filter(key=>items.some(m=>String(m.id)===key)) : pair.length ? items.filter(m=>pair.includes(String(m.id))).map(m=>m.id) : report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
+    // Navigation always follows the date tabs: oldest on the left, newest on the right.
+    selected.sort((a,b)=>items.findIndex(x=>x.id===a)-items.findIndex(x=>x.id===b));
     const aiTips=new Map();
     const savedPlans=(V.db.practicePlans||[]).filter(p=>p.period==='ai-exercise'&&p.songId===song.id&&p.tip&&items.some(m=>m.id===p.mediaId)&&!(V.db.deleted?.practicePlans||[]).includes(p.id)).slice().sort((a,b)=>(a.created||0)-(b.created||0));
     for(const plan of savedPlans)aiTips.set(String(plan.mediaId)+':'+(plan.segmentStart||0),plan.tip);
