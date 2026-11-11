@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
-const WORKER = 'app/vocal-analysis.js?v=3', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=4', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0;
@@ -46,19 +46,26 @@ function runWorker(samples, sampleRate, onProgress, {voiceOnly = false, signal} 
 /** Analyze raw mono samples in the worker (used by the song finder to locate the singing). The array is transferred. */
 VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}, options = {}) => runWorker(samples, sampleRate, onProgress, options);
 /** The summary kept with a recording (no curve: it would make every library row heavy). */
-const summaryOf = result => ({v:result.version, at:Date.now(), seconds:result.seconds, metrics:result.metrics, confidence:result.confidence});
+const summaryOf = (result, previous) => {
+  const history = previous?.history ? previous.history.slice() : [];
+  if(previous?.v){const {history:ignored,...saved}=previous;history.push(saved);}
+  return {v:result.version,at:Date.now(),seconds:result.seconds,metrics:result.metrics,confidence:result.confidence,
+    ...(history.length?{history}:{}),scope:{kind:'whole-recording',cut:!!result.cut}};
+};
+VZ.analysisSummary = summaryOf;
 /** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).
  * Used by the analysis screen and the song page's "analyze all". Returns the full result (with curve). */
 VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, save = true} = {}) => {
   const {samples, sampleRate, cut} = await decode(item, onStage);
   onStage('목소리 찾는 중… (반주와 구분)');
   const result = await runWorker(samples, sampleRate, onProgress);
-  result.cut = cut; result.summary = summaryOf(result);
+  result.cut = cut; result.summary = summaryOf(result, item.analysis);
   if (save) { await M.update(item, {analysis:result.summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:result.summary}})); }
   return result;
 };
 /** Whether a saved summary is trustworthy enough to chart (enough singing, voice not drowned by the MR). */
-VZ.analysisReliable = a => !!a?.metrics?.voicedSeconds && a.metrics.voicedSeconds >= 10 && (a.confidence?.voiceOverMrDb == null || a.confidence.voiceOverMrDb >= 3);
+VZ.analysisReliable = a => !!a?.metrics?.voicedSeconds && a.metrics.voicedSeconds >= 10 && (a.confidence?.voiceOverMrDb == null || a.confidence.voiceOverMrDb >= 3) && (a.v < 2 || Number(a.confidence?.pitchConfidence) >= .8);
+VZ.analysisComparable = (a,b) => !!a && !!b && a.v === b.v && VZ.analysisReliable(a) && VZ.analysisReliable(b);
 
 /* ---------- drawing ---------- */
 const PX_PER_S = 36, H = 200, PAD = 30;
@@ -93,17 +100,23 @@ function cards(r) {
   const v = m.vibrato;
   if (v) out.push(card('waveform', '비브라토', v.rateHz ? '초당 ' + v.rateHz + '회' : '거의 없음', (v.rateHz ? '폭 ±' + v.extentCents + ' cent · ' : '') + '긴 음 ' + v.notes + '개 중 ' + v.share + '%' + (v.regularity != null ? ' · 규칙성 ' + Math.round(v.regularity * 100) + '%' : ''), '흔히 초당 5~7회 · 폭 ±20~60'));
   const g = m.range;
-  if (g) out.push(card('arrows-vertical', '음역', esc(g.low) + ' ~ ' + esc(g.high), '순간 최고 ' + esc(g.peak), '0.3초 넘게 머문 음 기준'));
+  if (g) {
+    out.push(card('arrows-vertical','음역',g.validHigh ? '유효 최고 '+esc(g.validHigh.note) : '유효 최고 판정 보류',
+      '안정 최고 '+esc(g.stableHigh?.note||'판정 보류')+' · 주 가창 '+esc(g.main?.low||'—')+' ~ '+esc(g.main?.high||'—'),
+      '유효 0.2초 이상 · 안정 0.5초 이상과 흔들림 조건 · 신뢰도 함께 확인'));
+    out.push(card('waveform','순간 검출 최고',esc(g.instantaneous?.note||'—'),'반주·짧은 오검출이 포함될 수 있어요.','실력 평가와 성장 비교에는 사용하지 않아요.'));
+  }
   const b = m.breath;
   if (b) out.push(card('wind', '프레이즈 길이', '평균 ' + b.medianPhrase + '초', '최장 ' + b.longestPhrase + '초 · ' + b.phrases + '개' + (b.medianGap != null ? ' · 숨 ' + b.medianGap + '초' : ''), '쉬지 않고 이어 부른 길이'));
   return out.join('');
 }
 function confidence(r) {
   const c = r.confidence;
+  if (c.pitchConfidence < .8) return '<div class="ana-note warn"><span>피치 신뢰도가 낮아 성장 판정을 보류해요. 원본을 들으며 확인해 주세요.</span></div>';
   if (c.voiceOverMrDb == null) return '<p class="small muted">반주만 따로 들리는 구간이 없어서 목소리와 반주의 크기 차이는 재지 못했어요.</p>';
   if (c.voiceOverMrDb < 3) return '<div class="ana-note warn"><i class="ph ph-warning"></i><span>목소리가 반주보다 크게 녹음되지 않았어요. 반주를 목소리로 잘못 읽었을 수 있으니 곡선이 노래와 맞는지 들으며 확인해 주세요.</span></div>';
   const ok = c.voiceOverMrDb >= 10;
-  return '<div class="ana-note ' + (ok ? 'ok' : 'warn') + '"><i class="ph ph-' + (ok ? 'check-circle' : 'warning') + '"></i><span>목소리가 반주보다 약 ' + Math.round(c.voiceOverMrDb) + 'dB 커요. ' + (ok ? '반주와 잘 구분됐어요.' : '반주가 커서 일부 구간을 목소리로 잘못 읽었을 수 있어요. 곡선이 노래와 맞는지 들으며 확인해 주세요.') + '</span></div>';
+  return '<div class="ana-note ' + (ok ? 'ok' : 'warn') + '"><i class="ph ph-' + (ok ? 'check-circle' : 'warning') + '"></i><span>목소리가 반주보다 약 ' + Math.round(c.voiceOverMrDb) + 'dB 커요. ' + (ok ? '크기 차이만으로 보컬 분리가 확인되지는 않아요.' : '반주가 커서 일부 구간을 목소리로 잘못 읽었을 수 있어요. 곡선이 노래와 맞는지 들으며 확인해 주세요.') + '</span></div>';
 }
 
 /** Reuse the existing whole-recording pitch graph in the vocal-lab point popup.
@@ -181,7 +194,7 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
     }
     // Keep the summary with the recording (only this field changes; other devices' edits stay).
     const summary = result.summary;
-    try { await M.update(item, {analysis:summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:summary}})); if (alive()) out.querySelector('[data-saved]').textContent = '분석 결과를 이 녹음에 저장했어요.'; }
+    try { await M.update(item, {analysis:summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:summary}})); if (alive()) out.querySelector('[data-saved]').textContent = '분석 v2를 저장했어요. 이전 결과는 분석 이력에 보존했어요.'; }
     catch (e) { if (alive()) out.querySelector('[data-saved]').textContent = '결과를 저장하지 못했어요: ' + e.message; }
   },
   leave() { job++; }

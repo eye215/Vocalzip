@@ -5,8 +5,9 @@ const V = window.VZ, M = V?.media, esc = V?.esc;
 if (!V || !M) return;
 const METRICS = [
   {key:'wob',label:'지속음 흔들림',unit:'cent',get:a=>a?.metrics?.stability?.wobbleCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'지속해서 낸 소리의 음높이 흔들림입니다. 낮을수록 안정적이에요. 같은 조건의 녹음끼리 비교하세요.'},
-  {key:'into',label:'음정 오차',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'기준 음정과의 평균 절대 오차입니다. 0에 가까울수록 정확해요. 같은 곡·구간에서 비교하는 것이 좋아요.'},
-  {key:'high',label:'최고음',unit:'',get:a=>a?.metrics?.range?.highCents,fmt:(v,a)=>a?.metrics?.range?.high||'—',better:0,tolerance:50,guide:'녹음에서 관측된 가장 높은 음입니다. 높다고 반드시 좋은 발성은 아니므로 오르내림은 중립으로 표시해요.'},
+  {key:'into',label:'음정 오차',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'가장 가까운 반음과의 평균 편차입니다. 악보의 정답 음정과 비교한 정확도는 아니에요. 같은 곡·구간에서 비교하는 것이 좋아요.'},
+  {key:'high',label:'유효 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.validHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.validHigh?.note||'—',better:0,tolerance:50,guide:'0.2초 이상 지속되고 신뢰도·연속성 조건을 충족한 음입니다. 순간 최고음은 성장 평가에 쓰지 않아요.'},
+  {key:'stable',label:'안정 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.stableHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.stableHigh?.note||'—',better:0,tolerance:50,guide:'0.5초 이상 지속되고 흔들림·신뢰도 조건을 충족한 음입니다. 실력의 좋고 나쁨을 단정하지 않아요.'},
   {key:'phr',label:'프레이즈 길이',unit:'초',get:a=>a?.metrics?.breath?.medianPhrase,fmt:v=>v+'초',better:1,tolerance:.2,guide:'한 구절을 이어 부른 시간의 중앙값입니다. 같은 구절과 템포라면 길어진 것이 긍정적일 수 있지만, 무조건 길수록 좋은 것은 아니에요.'},
   {key:'rating',label:'만족도',unit:'점',get:(a,m)=>m?.rating,fmt:v=>v+'/5',better:1,tolerance:.1,guide:'녹음 후 직접 기록한 만족도입니다. 높을수록 스스로 만족한 녹음이에요. 객관적 발성 점수는 아니에요.'}
 ];
@@ -20,6 +21,7 @@ const metricChangeText=(metric,previous,current)=>{
  if(previous==null||current==null)return '비교할 이전 녹음 없음';
  const diff=current-previous,amount=Math.abs(diff).toFixed(metric.key==='rating'?0:1);
  if(Math.abs(diff)<=metric.tolerance)return '이전 녹음과 비슷해요';
+ if(metric.key==='high'||metric.key==='stable')return '이전 대비 '+(diff>0?'상승 ':'하락 ')+Math.abs(Math.round(current/100)-Math.round(previous/100))+'반음 · 실력 판정 아님';
  if(!metric.better)return '이전 대비 '+(diff>0?'상승 ':'하락 ')+amount+' cent · 좋고 나쁨은 판단하지 않아요';
  return '이전보다 '+(diff>0?'증가 ':'감소 ')+amount+(metric.unit?' '+metric.unit:'')+' · '+(metricColor(metric,previous,current)==='good'?'좋아진 방향':'아쉬운 방향');
 };
@@ -88,6 +90,7 @@ const growthMetric=(metric,s)=>{
  const rows=trendRows(s,metric).filter(x=>V.analysisReliable(analysis(x.m)));
  if(rows.length<2)return null;
  const first=rows[0],last=rows.at(-1),delta=last.value-first.value;
+ if(!V.analysisComparable(analysis(first.m),analysis(last.m)))return null;
  const tolerance=metric.tolerance??.5;
  const tone=metricColor(metric,first.value,last.value);
  return {metric,first,last,delta,tone,count:rows.length,
@@ -109,9 +112,9 @@ function growthReport(s){
  const badge=(tone)=>tone==='good'?'좋아진 방향':tone==='bad'?'주의할 변화':'참고할 변화';
  const describe=x=>{
    const metric=x.metric,delta=x.delta,amount=Math.abs(delta).toFixed(metric.key==='rating'?0:1);
-   if(metric.key==='high'){
+   if(metric.key==='high'||metric.key==='stable'){
      const from=metric.fmt(x.first.value,analysis(x.first.m)),to=metric.fmt(x.last.value,analysis(x.last.m));
-     return '관측 최고음 '+from+' → '+to+(x.changed?' ('+(delta>0?'상승':'하락')+' 약 '+(Math.abs(delta)/100).toFixed(1)+'반음)':' (비슷함)')+' · 도달한 최고음이 곧 안정된 가창 음역이라는 뜻은 아니에요.';
+     return metric.label+' '+from+' → '+to+(x.changed?' ('+(delta>0?'상승':'하락')+' 약 '+Math.abs(Math.round(x.last.value/100)-Math.round(x.first.value/100))+'반음)':' (비슷함)')+' · 도달한 최고음이 곧 안정된 가창 음역이라는 뜻은 아니에요.';
    }
    if(metric.key==='phr')return '프레이즈 '+x.formatted+(x.changed?' · '+(delta>0?'길어짐':'짧아짐'):' · 큰 변화 없음')+' (곡 구성·템포에 따라 달라질 수 있어요).';
    if(metric.key==='rating')return '내 만족도 '+x.formatted+' · 직접 기록한 체감 평가예요.';
@@ -125,7 +128,7 @@ function growthReport(s){
  const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(row).join('')+'</ul></div>':'';
  return '<section class="vl-section vl-growth" data-growth-report aria-label="AI 종합 성장 리포트"><div class="vl-divider"></div>'+
   '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>AI 종합 리포트</h2></div><span class="vl-growth-count">'+analyzed.length+'개 분석 기준</span></div>'+
-  '<p class="vl-growth-intro">'+esc(title)+' <small>같은 곡의 신뢰도 높은 녹음을 날짜순으로 비교해요.</small></p>'+
+  '<p class="vl-growth-intro">'+esc(title)+' <small>같은 곡·같은 분석 버전의 녹음을 비교해요. 동일 구간을 지정한 A/B 비교를 우선 확인하세요.</small></p>'+
   (data.length?section('좋아진 부분',strong,'good')+section('아쉬워진 부분',weak,'bad')+section('음역·참고 지표',neutral,'neutral')+
     '<p class="vl-growth-caution">최고음의 상승·하락은 곡의 구간·발성 방식에 따라 달라지며, 음성 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
     '<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
@@ -142,10 +145,10 @@ function trendRows(s,metric){
 }
 function trend(s) {
  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],measured=trendRows(s,metric);
- const series=measured.map((x,i)=>({id:x.m.id,value:x.value,label:day(x.m),tone:metricColor(metric,measured[i-1]?.value,x.value)}));
+ const series=measured.map((x,i)=>({id:x.m.id,value:x.value,label:day(x.m),tone:metric.key==='rating'||V.analysisComparable(analysis(measured[i-1]?.m||{}),analysis(x.m))?metricColor(metric,measured[i-1]?.value,x.value):'neutral'}));
  const last=measured.at(-1),prev=measured.at(-2);
- const state=last?metricColor(metric,prev?.value,last.value):'neutral';
- const explanation=last?metricChangeText(metric,prev?.value,last.value):'분석된 값이 없어요';
+ const state=last&&(metric.key==='rating'||V.analysisComparable(analysis(prev?.m||{}),analysis(last.m)))?metricColor(metric,prev?.value,last.value):'neutral';
+ const explanation=last&&prev&&!V.analysisComparable(analysis(prev.m),analysis(last.m))?'판정 보류 · 신뢰도/분석 버전 확인':last?metricChangeText(metric,prev?.value,last.value):'분석된 값이 없어요';
  return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2><div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
   '<p class="vl-metric-guide"><strong>'+esc(metric.label)+' · '+esc(metric.better===-1?'낮을수록 좋아요':metric.better===1?'대체로 높을수록 좋아요':'높낮이만으로 판단하지 않아요')+'</strong><span>'+esc(metric.guide)+'</span></p>'+
   (last?'<p class="vl-change '+state+'" role="status">'+esc('최근 변화 · '+explanation)+'</p>':'')+
@@ -156,7 +159,7 @@ function trend(s) {
 function single(s,m) {
   const a=analysis(m);
   return '<section class="vl-section vl-single"><div class="vl-divider"></div><h2>'+esc(day(m))+' 분석 관찰</h2>'+
-    (!a?'<p class="vl-muted">이 녹음의 분석 결과가 아직 없어요. 위의 구간 분석을 시작해 주세요.</p>':'<div class="vl-metric-grid">'+METRICS.slice(0,4).map(metric=>{
+    (!a?'<p class="vl-muted">이 녹음의 분석 결과가 아직 없어요. 위의 구간 분석을 시작해 주세요.</p>':'<div class="vl-metric-grid">'+METRICS.filter(x=>x.key!=='rating').map(metric=>{
       const v=metric.get(a,m), count=metric.key==='wob'?a.metrics.stability?.notes:metric.key==='into'?a.metrics.intonation?.notes:null;
       return '<div class="vl-stat"><span>'+metric.label+'</span><strong>'+esc(v==null?'측정 안 됨':metric.fmt(v,a))+'</strong><div class="vl-stat-visual" aria-hidden="true"><span style="width:'+Math.min(94,Math.max(8,(Number(v)||0)/(metric.key==='high'?10000:metric.key==='phr'?12:50)*100))+'%"></span></div>'+(count?'<small>측정한 음 '+count+'개</small>':'')+'</div>';
     }).join('')+'</div>')+'</section>';
@@ -196,12 +199,14 @@ function observe(s,m) {
  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],current=valid(metric.get(analysis(m),m));
  const ordered=trendRows(s,metric),idx=ordered.findIndex(x=>x.m.id===m.id);
  const first=ordered[0],baseline=first?.m.id!==m.id?first:null;
- const initial=baseline?.value??null,difference=initial!=null&&current!=null?current-initial:null;
- const improved=baseline?metricColor(metric,initial,current):'neutral';
+ const comparable=metric.key==='rating'||V.analysisComparable(analysis(baseline?.m||{}),analysis(m));
+ const initial=comparable?(baseline?.value??null):null,difference=initial!=null&&current!=null?current-initial:null;
+ const improved=baseline&&comparable?metricColor(metric,initial,current):'neutral';
  const safe=value=>esc(String(value??''));
  const title='분석 관찰';
  const explanation=()=>{
   if(current==null)return '이 녹음에서 해당 측정값을 확인하지 못했어요.';
+  if(baseline&&!comparable)return '판정 보류 · 신뢰도와 분석 버전을 확인해 주세요.';
   if(initial==null)return '첫 녹음의 측정값이에요. 다음 녹음과 비교하면 변화가 표시돼요.';
   if(metric.better===0)return '첫 녹음과의 변화는 확인할 수 있지만 높고 낮음만으로 좋고 나쁨을 판단하지 않아요.';
   const percent=Math.abs(initial)>0?Math.round(Math.abs(difference)/Math.abs(initial)*100):null;
@@ -210,7 +215,7 @@ function observe(s,m) {
  };
  const valueLabel=current==null?'측정 안 됨':metric.fmt(current,analysis(m));
  const compare=initial!=null?'<div class="vl-observation-compare"><span>첫 녹음 대비</span><strong>'+safe(metric.fmt(initial,analysis(baseline.m)))+' → '+safe(valueLabel)+'</strong>'+(Math.abs(initial)>0?'<em class="'+improved+'">'+safe('('+Math.round(Math.abs(difference)/Math.abs(initial)*100)+'% '+(difference<0?'감소':'증가')+')')+'</em>':'')+'</div>':'';
- V.sheet({title:day(m)+' · '+title,body:'<div class="vl-observation-card"><div class="vl-observation-label">♧ 분석 관찰</div><h3>'+safe(metric.key==='wob'?'지속음의 음정 흔들림(위블)':metric.label)+(V.metricInfo?V.metricInfo(metric.key==='high'?'range':metric.key,metric.label):'')+'</h3><div class="vl-observation-value">'+safe(valueLabel)+'</div>'+compare+
+ V.sheet({title:day(m)+' · '+title,body:'<div class="vl-observation-card"><div class="vl-observation-label">♧ 분석 관찰</div><h3>'+safe(metric.key==='wob'?'지속음의 음정 흔들림(위블)':metric.label)+(V.metricInfo?V.metricInfo((metric.key==='high'||metric.key==='stable')?'range':metric.key,metric.label):'')+'</h3><div class="vl-observation-value">'+safe(valueLabel)+'</div>'+compare+
   '<div class="vl-observation-loading" data-observe-loading role="status">녹음의 실제 음정 곡선을 확인하고 있어요…</div><div data-observe-curve></div>'+
   '<p class="vl-observation-summary">'+safe(explanation())+'</p><p class="vl-observation-note">'+safe(metric.guide)+'</p>'+
   (analysis(m)&&!V.analysisReliable(analysis(m))?'<p class="vl-observation-note">음성 검출이 적거나 반주가 커서 측정 신뢰도가 낮아요.</p>':'')+'</div>',

@@ -1,4 +1,4 @@
-/* VOCAL.zip vocal analysis (v1): follows the singing voice over an accompaniment (MR) and measures it.
+/* VOCAL.zip vocal analysis (v2): follows the singing voice over an accompaniment (MR) and measures it.
  * Runs on the device: nothing is uploaded and no paid API is used.
  *
  * 1. Predominant pitch: each 10 ms frame's spectral peaks vote for the fundamentals they could be
@@ -13,7 +13,7 @@
  * Pure functions (Node tests use them directly); inside a Web Worker it answers {samples, sampleRate}. */
 (function (root) {
 'use strict';
-const VERSION = 1;
+const VERSION = 2;
 // 8 kHz is plenty for the voice (fundamentals ≤ 1.1 kHz, harmonics used up to 3.8 kHz) and makes the
 // analysis ~4× lighter than 16 kHz on a phone. Same 64 ms window and 10 ms steps.
 const SR = 8000, WIN = 512, NFFT = 1024, HOP = 80, FPS = SR / HOP;
@@ -34,7 +34,7 @@ const quantile = (a, q) => { if (!a.length) return NaN; const s = Float64Array.f
 const round = (x, d = 0) => Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : null;
 
 /* ---------- signal ---------- */
-/** Linear resample to 16 kHz (input is already mono). */
+/** Downsample to 8 kHz (input is already mono). */
 function resample(x, rate) {
   if (rate === SR) return x;
   const n = Math.floor(x.length * SR / rate), out = new Float32Array(n), r = rate / SR;
@@ -72,6 +72,33 @@ function fft(re, im, t) {
       re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
     }
   }
+}
+
+
+/** Candidate evidence, not an octave rule: a lower candidate must have a real fundamental
+ * or coprime harmonics. A lone second harmonic cannot invent an octave below a pure tone. */
+function evidence(x, offset, hz, peaks) {
+  let total=0, matched=0, mass=0, fundamental=0, divisor=0, count=0, max=0;
+  const gcd=(a,b)=>b?gcd(b,a%b):a;
+  for(const p of peaks)max=Math.max(max,p.amp);
+  for(const p of peaks){
+    const power=p.amp*p.amp; total+=power;
+    const h=Math.round(p.hz/hz);
+    if(h<1||h>H||Math.abs(1200*Math.log2(p.hz/(h*hz)))>40)continue;
+    matched+=power; mass+=p.amp;
+    if(p.amp>=max*.025){divisor=gcd(divisor,h);count++;}
+    if(h===1)fundamental=Math.max(fundamental,p.amp/max);
+  }
+  const supported=fundamental>=.025||(count>=2&&divisor===1);
+  const lag=SR/hz, whole=Math.floor(lag), part=lag-whole;
+  let diff=0, power=0;
+  for(let i=0;i<WIN-whole-1;i++){
+    const a=x[offset+i],b=x[offset+i+whole]*(1-part)+x[offset+i+whole+1]*part;
+    diff+=(a-b)*(a-b); power+=a*a+b*b;
+  }
+  const periodicity=Math.max(0,1-diff/(power||1));
+  const coverage=matched/(total||1);
+  return {mass,supported,periodicity,coverage,confidence:supported?Math.sqrt(periodicity*coverage):0};
 }
 
 /* ---------- predominant pitch ---------- */
@@ -116,6 +143,21 @@ function track(x, onProgress) {
     const c = [];
     for (let j = 1; j < NB - 1; j++) if (sal[j] > 0 && sal[j] >= sal[j - 1] && sal[j] > sal[j + 1]) c.push([j, sal[j]]);
     c.sort((p, q) => q[1] - p[1]); c.length = Math.min(c.length, K);
+    // Score acoustic evidence before continuity. Real octave jumps remain candidates;
+    // continuity never divides an observed frequency by two.
+    for(const candidate of c){
+      const ev=evidence(x,f*HOP,FMIN*2**(candidate[0]/(12*PER_SEMI)),peaks);
+      candidate.push(ev.confidence,ev);
+      candidate[1]*=ev.supported?1:.03;
+    }
+    for(const low of c)for(const high of c){
+      if(Math.abs(high[0]-low[0]-120)>4)continue;
+      const a=low[3],b=high[3];
+      if(a.supported&&a.coverage>.95&&a.coverage>b.coverage+.001&&a.periodicity>=b.periodicity-.01)
+        low[1]=Math.max(low[1],high[1]*1.25);
+    }
+    for(const candidate of c)candidate.length=3;
+    c.sort((a,b)=>b[1]-a[1]);
     cand[f] = c;
     if (onProgress && f % 500 === 0) onProgress(0.1 + 0.7 * f / frames);
   }
@@ -141,7 +183,7 @@ function track(x, onProgress) {
     if (f && from[f][path[f]] >= 0) path[f - 1] = from[f][path[f]];
   }
   // Refine each chosen pitch from the harmonics that support it (amplitude-weighted).
-  const hz = new Float64Array(frames), level = new Float64Array(frames);
+  const hz = new Float64Array(frames), level = new Float64Array(frames), confidence = new Float64Array(frames);
   for (let f = 0; f < frames; f++) {
     if (path[f] < 0) continue;
     const [bin, s] = cand[f][path[f]], f0 = FMIN * 2 ** (bin / (12 * PER_SEMI));
@@ -152,9 +194,9 @@ function track(x, onProgress) {
       if (Math.abs(1200 * Math.log2(ph / (h * f0))) > 40) continue;
       const w = pk[i + 1] * ALPHA ** (h - 1); sw += w; sf += w * ph / h;
     }
-    hz[f] = sw ? sf / sw : f0; level[f] = s;
+    hz[f] = sw ? sf / sw : f0; level[f] = s; confidence[f] = cand[f][path[f]][2];
   }
-  return {frames, hz, level, energy};
+  return {frames, hz, level, energy, confidence};
 }
 
 /* ---------- voice vs accompaniment ---------- */
@@ -178,6 +220,9 @@ function contours(tr) {
     const decayDbPerS = den ? num / den * FPS * 20 / Math.LN10 : 0, jitter = std(cs);
     c.level = Math.log(median(lv));
     c.flat = (jitter < 3 && n > 40) || (decayDbPerS <= -8 && jitter < 8 && n >= 40);
+    // A steady, nearly periodic reference tone is measurable too. This does not identify
+    // its source as human: source separation remains explicitly uncertain.
+    c.pureTone = jitter < 3 && decayDbPerS > -5 && mean(Array.from(tr.confidence.subarray(c.start,c.end))) >= .94;
   }
   return out;
 }
@@ -254,6 +299,37 @@ function vibratoOf(raw, sm) {
   const ft = rate * WIN / SR, win = Math.abs(Math.sin(Math.PI * ft) / (Math.PI * ft) / (1 - ft * ft)) || 1;
   return {rate, extent:Math.SQRT2 * std(r) / keep / win, regularity:best};
 }
+
+/** Duration is hop-count, never inflated by the overlapping FFT window. No quantile fallback.
+ * Split by gaps, confidence, adjacent jumps and drift from the note center. */
+function rangeOf(tr, voiced) {
+  const all=[], segments=[]; let current=null;
+  const finish=()=>{if(current)segments.push(current);current=null;};
+  for(let f=0;f<tr.frames;f++){
+    if(!voiced[f]||tr.confidence[f]<.75){finish();continue;}
+    const c=centsOf(tr.hz[f]); all.push(c);
+    if(current&&(Math.abs(c-current.last)>80||Math.abs(c-current.sum/current.values.length)>100))finish();
+    if(!current)current={start:f,values:[],quality:[],sum:0,last:c};
+    current.values.push(c);current.sum+=c;current.quality.push(tr.confidence[f]);current.last=c;
+  }
+  finish();
+  if(!all.length)return null;
+  const rows=segments.map(s=>({t:s.start/FPS,dur:s.values.length/FPS,cents:median(s.values),
+    confidence:mean(s.quality),spread:quantile(s.values,.9)-quantile(s.values,.1)}));
+  const valid=rows.filter(s=>s.dur>=.2&&s.confidence>=.8);
+  const stable=valid.filter(s=>s.dur>=.5&&s.confidence>=.9&&s.spread<=70);
+  const top=rows=>rows.length?rows.reduce((a,b)=>a.cents>b.cents?a:b):null;
+  const point=r=>r?{note:noteName(r.cents),cents:round(r.cents),t:round(r.t,2),duration:round(r.dur,2),confidence:round(r.confidence,3)}:null;
+  const hi=top(valid),lo=valid.length?valid.reduce((a,b)=>a.cents<b.cents?a:b):null;
+  const instant=Array.from(tr.hz).reduce((max,hz,f)=>hz>0&&tr.confidence[f]>=.5?Math.max(max,centsOf(hz)):max,-Infinity),mainLow=quantile(all,.1),mainHigh=quantile(all,.9);
+  return {low:lo?noteName(lo.cents):null,high:hi?noteName(hi.cents):null,
+    lowCents:lo?round(lo.cents):null,highCents:hi?round(hi.cents):null,peak:noteName(instant),
+    instantaneous:{note:noteName(instant),cents:round(instant),scope:'all-pitched-frames'},
+    validHigh:point(hi),stableHigh:point(top(stable)),
+    main:{low:noteName(mainLow),high:noteName(mainHigh),lowCents:round(mainLow),highCents:round(mainHigh),percentiles:[10,90]},
+    criteria:{minimumSeconds:.2,stableSeconds:.5,minConfidence:.8,stableConfidence:.9,stableSpreadCents:70}};
+}
+
 function measure(tr, voiced, refTuning) {
   const cents = new Float64Array(tr.frames).fill(NaN);
   for (let f = 0; f < tr.frames; f++) if (voiced[f]) cents[f] = centsOf(tr.hz[f]);
@@ -287,7 +363,7 @@ function measure(tr, voiced, refTuning) {
       intonation:noteRows.length ? {meanAbsCents:round(weighted(noteRows, r => Math.abs(r.dev)), 1), within20:round(weighted(noteRows, r => Math.abs(r.dev) <= 20 ? 1 : 0) * 100), tuningCents:round(tuning, 1), notes:noteRows.length} : null,
       stability:sustained.length ? {wobbleCents:round(median(sustained.map(r => r.wobble)), 1), notes:sustained.length} : null,
       vibrato:long.length ? {share:round(vibNotes.length / long.length * 100), rateHz:vibNotes.length ? round(median(vibNotes.map(r => r.vib.rate)), 1) : null, extentCents:vibNotes.length ? round(median(vibNotes.map(r => r.vib.extent))) : null, regularity:vibNotes.length ? round(median(vibNotes.map(r => r.vib.regularity)), 2) : null, notes:long.length} : null,
-      range:all.length ? {low:noteName(Math.min(...centers.length ? centers : [quantile(all, 0.03)])), high:noteName(Math.max(...centers.length ? centers : [quantile(all, 0.97)])), lowCents:round(centers.length ? Math.min(...centers) : quantile(all, 0.03)), highCents:round(centers.length ? Math.max(...centers) : quantile(all, 0.97)), peak:noteName(quantile(all, 0.99))} : null,
+      range:rangeOf(tr, voiced),
       breath:kept.length ? {phrases:kept.length, medianPhrase:round(median(lens), 1), longestPhrase:round(Math.max(...lens), 1), medianGap:gaps.length ? round(median(gaps), 2) : null} : null
     }
   };
@@ -299,27 +375,27 @@ function analyze(samples, sampleRate, {onProgress, voiceOnly = false} = {}) {
   const x = highpass(resample(samples, sampleRate));
   const tr = track(x, onProgress);
   onProgress?.(0.85);
-  const cs = contours(tr), melodic = cs.filter(c => !c.flat), split = splitLevels(melodic);
+  const cs = contours(tr), melodic = cs.filter(c => !c.flat || c.pureTone), split = splitLevels(melodic);
   // A real gap between loud and quiet melodic contours (≥ 6 dB) means voice over a quieter MR: keep
   // the loud group. Otherwise everything melodic counts as voice except contours 12 dB under the median.
   const useSplit = split.gapDb != null && split.gapDb >= 6;
   const cut = useSplit ? split.threshold : (melodic.length ? median(melodic.map(c => c.level)) - 12 / 20 * Math.LN10 : Infinity);
   const voiced = new Uint8Array(tr.frames), mr = [], voiceLv = [], mrLv = [];
   for (const c of cs) {
-    const isVoice = !c.flat && c.level >= cut;
+    const isVoice = (!c.flat || c.pureTone) && c.level >= cut;
     (isVoice ? voiceLv : mrLv).push(c.level);
     for (let f = c.start; f < c.end; f++) if (isVoice) voiced[f] = 1; else mr.push(centsOf(tr.hz[f]));
   }
-  // Under 2 s of "voice" in a whole recording is a stray instrument note, not singing.
+  // Short clips require particularly strong pitch evidence; do not invent voice from brief MR notes.
   let voicedFrames = 0; for (let f = 0; f < tr.frames; f++) voicedFrames += voiced[f];
-  if (voicedFrames < 2 * FPS) { voiced.fill(0); mr.length = 0; voiceLv.length = 0; }
+  if (voicedFrames < 20 || (voicedFrames < 2 * FPS && mean(Array.from(tr.confidence).filter((_,f)=>voiced[f])) < .9)) { voiced.fill(0); voicedFrames=0; mr.length = 0; voiceLv.length = 0; }
   // How much louder the voice is than the accompaniment heard on its own (confidence hint).
   const gapDb = voiceLv.length && mrLv.length ? 20 / Math.LN10 * (median(voiceLv) - median(mrLv)) : null;
   // The MR's tuning, from the accompaniment heard on its own (needs ≥ 3 s of it).
   let ref = null;
   if (mr.length >= 3 * FPS) { let sx = 0, sy = 0; for (const c of mr) { const a = 2 * Math.PI * wrap(c) / 100; sx += Math.cos(a); sy += Math.sin(a); } if (Math.hypot(sx, sy) / mr.length > 0.5) ref = Math.atan2(sy, sx) * 100 / (2 * Math.PI); }
   // Song identification needs the same voice mask, not note/vibrato measurements.
-  const out = voiceOnly ? {metrics:{voicedSeconds:round(voicedFrames < 2 * FPS ? 0 : voicedFrames / FPS,1)},notes:[]} : measure(tr, voiced, ref);
+  const out = voiceOnly ? {metrics:{voicedSeconds:round(voicedFrames < 20 ? 0 : voicedFrames / FPS,1)},notes:[]} : measure(tr, voiced, ref);
   const step = FPS / 20, curve = [];
   for (let f = 0; f < tr.frames; f += step) {
     const v = []; for (let g = f; g < Math.min(tr.frames, f + step); g++) if (voiced[g]) v.push(centsOf(tr.hz[g]));
@@ -329,12 +405,12 @@ function analyze(samples, sampleRate, {onProgress, voiceOnly = false} = {}) {
   const seconds = round(samples.length / sampleRate, 1);
   return {
     version:VERSION, seconds,
-    confidence:{voiceOverMrDb:round(gapDb, 1), separated:gapDb != null && gapDb >= 6, tuningFrom:ref == null ? 'a440' : 'mr', voicedShare:round(out.metrics.voicedSeconds / (seconds || 1) * 100)},
+    confidence:{pitchConfidence:round(mean(Array.from(tr.confidence).filter((_,f)=>voiced[f])),3), pitchMethod:'harmonic-periodicity-v2', sourceVerified:false, voiceOverMrDb:round(gapDb, 1), separated:gapDb != null && gapDb >= 6, tuningFrom:ref == null ? 'a440' : 'mr', voicedShare:round(out.metrics.voicedSeconds / (seconds || 1) * 100)},
     metrics:out.metrics, notes:out.notes.map(n => ({t:n.t, dur:n.dur, cents:round(n.center), dev:round(n.dev), vib:!!n.vib})), curve, fps:20
   };
 }
 
-const api = {VERSION, analyze, noteName, centsOf, resample, _internal:{track, contours, highpass, notesOf, prefixMedian}};
+const api = {VERSION, analyze, noteName, centsOf, resample, _internal:{track, contours, highpass, notesOf, prefixMedian, rangeOf, evidence}};
 if (typeof module === 'object' && module.exports) module.exports = api;
 else root.VzipVocalAnalysis = api;
 // As a Web Worker: {samples, sampleRate} in, {progress} … {result} or {error} out.
