@@ -259,7 +259,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   hadNative=native;
  }
 
- function resetGestures(){touchPan=null;pageSwipe=null;twoSwipe=null;touchInkStart=null;touchEraser=null;touches.clear();pinch=null;pinchDirty=false;}
+ function resetGestures(){swipeLock=false;touchPan=null;pageSwipe=null;twoSwipe=null;touchInkStart=null;touchEraser=null;touches.clear();pinch=null;pinchDirty=false;}
  function zoomValue(){
   const select=el.querySelector('[data-ink-zoom]'),value=String(zoom);
   select.querySelector('[data-ink-free-zoom]')?.remove();
@@ -287,14 +287,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const old=touches.get(event.pointerId);if(!old)return false;
   event.preventDefault();touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
   if(twoSwipe?.ends.has(event.pointerId))twoSwipe.ends.set(event.pointerId,{x:event.clientX,y:event.clientY});
-  if(touches.size===2){
+  if(touches.size===2&&!swipeLock){
    if(!pinch)beginPinch();if(!pinch)return true;
    const [a,b]=[...touches.values()],r=stage.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
    zoom=Math.round(Math.max(.75,Math.min(4,pinch.zoom*distance/pinch.distance))*100)/100;zoomValue();
    const width=baseWidth*zoom,height=width*aspect;box.style.width=width+'px';box.style.height=height+'px';
    stage.scrollLeft=box.offsetLeft+pinch.x*width-((a.x+b.x)/2-r.left);
-   stage.scrollTop=box.offsetTop+pinch.y*height-((a.y+b.y)/2-r.top);pinchDirty=true;
-  }else{
+   stage.scrollTop=box.offsetTop+pinch.y*height-((a.y+b.y)/2-r.top);pinchDirty=true;fitMark();
+  }else if(!swipeLock&&touches.size===1){
    stage.scrollLeft-=event.clientX-old.x;stage.scrollTop-=event.clientY-old.y;
    touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
   }
@@ -325,7 +325,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const turn=direction&&canTurn&&viewReady&&!busy&&!pending&&pageNo+direction>=1&&pageNo+direction<=doc?.numPages;
    if(pair&&turn){zoom=pair.zoom;zoomValue();}
    resetGestures();
-   if(turn){pageNo+=direction;renderPage();}
+   if(turn)turnTo(pageNo+direction);
    else if(redraw&&!(pair?.canceled&&touchSwipe))renderPage({keepScroll:true});
   }
   return true;
@@ -578,6 +578,44 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(!visionDrag)return;const start=visionDrag.start;visionDrag=null;el.querySelector('[data-ink-vision-rect]').hidden=true;
   if(complete)recognize('notation',{x:start[0],y:start[1],w:point[0]-start[0],h:point[1]-start[1]});
  }
+ /* Page turns slide: the page leaves toward the swipe (from wherever a finger dragged it), the next one comes in
+  * from the other side. Reduced motion turns instantly. */
+ let turning=false,swipeLock=false,turnTarget=0,queuedTurn=0;
+ // Where the reader is heading: quick repeated taps add up instead of being lost mid-slide.
+ const aim=()=>queuedTurn||(turning?turnTarget:pageNo);
+ const pause=ms=>new Promise(r=>setTimeout(r,ms));
+ async function turnTo(next){
+  if(turning&&doc&&next>=1&&next<=doc.numPages){queuedTurn=next===turnTarget?0:next;return;}
+  if(!doc||busy||turning||next<1||next>doc.numPages||next===pageNo){springBack();return;}
+  const direction=next>pageNo?1:-1;markerStart=null;
+  if(matchMedia?.('(prefers-reduced-motion: reduce)').matches){pageNo=next;box.style.transform='';return renderPage();}
+  turning=true;turnTarget=next;stage.dataset.inkTurning='';
+  try{
+   box.style.transition='transform .14s ease-in,opacity .14s ease-in';box.style.transform='translateX('+(-direction*32)+'%)';box.style.opacity='0';
+   await pause(140);if(closed)return;
+   pageNo=next;await renderPage();if(closed)return;
+   box.style.transition='none';box.style.transform='translateX('+(direction*32)+'%)';box.style.opacity='0';void box.offsetWidth;
+   box.style.transition='transform .22s cubic-bezier(.2,.8,.2,1),opacity .18s ease-out';box.style.transform='';box.style.opacity='';
+   await pause(220);
+  }finally{turning=false;delete stage.dataset.inkTurning;if(!closed){box.style.transition='';box.style.transform='';box.style.opacity='';}}
+  const queued=queuedTurn;queuedTurn=0;if(queued&&!closed)turnTo(queued);
+ }
+ /* While a sideways swipe is under way the page follows the finger and nothing else moves.
+  * Past the first or last page it only gives a little, so the edge is felt. */
+ function dragPage(dx){
+  if(turning)return;
+  const direction=dx<0?1:-1,open=doc&&pageNo+direction>=1&&pageNo+direction<=doc.numPages;
+  const shift=open?dx:dx*.25,width=stage.clientWidth||1;
+  stage.dataset.inkTurning='';box.style.transition='none';box.style.transform='translateX('+Math.round(shift)+'px)';
+  box.style.opacity=String(open?Math.max(.55,1-Math.abs(shift)/width*.6):1);
+ }
+ function springBack(){
+  if(!turning)delete stage.dataset.inkTurning;
+  if(turning||!box.style.transform)return;
+  box.style.transition='transform .2s cubic-bezier(.2,.8,.2,1),opacity .2s ease-out';box.style.transform='';box.style.opacity='';
+  setTimeout(()=>{if(!turning)box.style.transition='';},220);
+ }
+ function fitMark(){if(stage.scrollWidth-stage.clientWidth<=8)stage.dataset.inkFit='';else delete stage.dataset.inkFit;}
  async function renderPage({keepScroll=false}={}){
   if(!doc||closed)return;const previousScroll={left:stage.scrollLeft,top:stage.scrollTop};resetGestures();selectionEnd(false);clearScoreRect();if(selection?.page!==pageNo)clearSelection();finishStroke();busy=true;viewReady=false;ready=false;const number=++renderNumber;renderTask?.cancel();clearTimeout(prepareTimer);
   svg.dataset.tool='pan';say('악보 '+pageNo+'쪽을 불러오고 있어요.');
@@ -598,7 +636,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    el.querySelector('[data-ink-page]').textContent=pageNo+' / '+doc.numPages+'쪽';
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
    el.querySelector('[data-ink-first]').disabled=pageNo<=1;el.querySelector('[data-ink-last]').disabled=pageNo>=doc.numPages;
-   box.hidden=false;viewReady=true;ready=!!binding;stage.dataset.viewOnly=String(!ready);if(ready)rememberView();svg.dataset.tool=ready?tool:'pan';svg.dataset.penOnly=String(profiles.penOnly);svg.style.pointerEvents=ready&&!performance?'':'none';if(performance)showPerformanceControls();if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
+   fitMark();box.hidden=false;viewReady=true;ready=!!binding;stage.dataset.viewOnly=String(!ready);if(ready)rememberView();svg.dataset.tool=ready?tool:'pan';svg.dataset.penOnly=String(profiles.penOnly);svg.style.pointerEvents=ready&&!performance?'':'none';if(performance)showPerformanceControls();if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
    paint();if(!binding)say('악보를 볼 수 있어요 · 필기를 확인하고 있어요.');else if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
    // Keep this page and pre-render both neighbours, so turning either way needs no new render.
    for(const key of [...prepared.keys()])if(Math.abs(key-pageNo)>1)prepared.delete(key);
@@ -764,8 +802,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.addEventListener('click',event=>{if(el.dataset.inkMoreOpen==='true'&&!event.target.closest('[data-ink-more],.score-ink-actions'))setMoreOpen(false);else if(event.target.closest('.score-ink-actions>button'))setMoreOpen(false);});
   el.querySelector('[data-ink-performance]').onclick=()=>performanceMode(true);
   el.querySelector('[data-ink-performance-exit]').onclick=()=>performanceMode(false);
-  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(viewReady&&!busy&&pageNo>1){pageNo--;markerStart=null;renderPage();}};
-  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(viewReady&&!busy&&pageNo<doc?.numPages){pageNo++;markerStart=null;renderPage();}};
+  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(viewReady||turning)turnTo(aim()-1);};
+  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(viewReady||turning)turnTo(aim()+1);};
   stage.onpointerdown=event=>{if((performance||!ready)&&event.pointerType==='touch'&&viewReady&&!busy&&event.target!==svg)gestureDown(event);};
   stage.onpointermove=event=>{if((performance||!ready)&&event.target!==svg)gestureMove(event);};
   stage.onpointerup=stage.onpointercancel=event=>{if((performance||!ready)&&event.target!==svg)gestureEnd(event);};
@@ -786,17 +824,35 @@ VZ.openScoreInk=(songId,scoreId)=>{
      zoom,atLeft:stage.scrollLeft<=2,atRight:stage.scrollLeft>=stage.scrollWidth-stage.clientWidth-2};
    }
   },{passive:true});
+  // Not passive: once a swipe is clearly sideways, the screen stays put and only the page follows the finger.
+  // Two fingers never scroll or zoom the whole app; this viewer does its own pinch.
   stage.addEventListener('touchmove',event=>{
-   if(!touchSwipe)return;
-   for(const t of event.changedTouches)if(touchSwipe.end.has(t.identifier))touchSwipe.end.set(t.identifier,{x:t.clientX,y:t.clientY});
-  },{passive:true});
+   const swipe=touchSwipe;if(!swipe)return;
+   for(const t of event.changedTouches)if(swipe.end.has(t.identifier))swipe.end.set(t.identifier,{x:t.clientX,y:t.clientY});
+   if(swipe.count===2&&event.cancelable)event.preventDefault();
+   if(turning||!viewReady||busy)return;
+   const ids=[...swipe.start.keys()],dxs=ids.map(id=>swipe.end.get(id).x-swipe.start.get(id).x),dys=ids.map(id=>swipe.end.get(id).y-swipe.start.get(id).y);
+   const dx=dxs.reduce((a,b)=>a+b,0)/ids.length,dy=dys.reduce((a,b)=>a+b,0)/ids.length;
+   if(swipe.count===2){
+    const [a,b]=ids.map(id=>swipe.start.get(id)),[c,d]=ids.map(id=>swipe.end.get(id)),from=Math.hypot(a.x-b.x,a.y-b.y);
+    if(dxs[0]*dxs[1]<0||Math.abs(Math.hypot(c.x-d.x,c.y-d.y)-from)>=Math.max(25,from*.18)){if(swipe.locked){swipe.locked=false;swipeLock=false;springBack();}swipe.pinched=true;return;}
+   }
+   if(!swipe.locked&&!swipe.pinched&&Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)*1.4){
+    const fits=stage.scrollWidth-stage.clientWidth<=8;
+    if(swipe.count===2||fits||(dx<0?swipe.atRight:swipe.atLeft))swipe.locked=true;
+   }
+   if(!swipe.locked)return;
+   if(event.cancelable)event.preventDefault();
+   swipeLock=true;touchPan=null;dragPage(dx);
+  },{passive:false});
+  stage.addEventListener('gesturestart',event=>event.preventDefault());
   for(const type of ['touchend','touchcancel'])stage.addEventListener(type,event=>{
    const swipe=touchSwipe;if(!swipe)return;
    for(const t of event.changedTouches)if(swipe.end.has(t.identifier))swipe.end.set(t.identifier,{x:t.clientX,y:t.clientY});
-   if(type==='touchcancel'){touchSwipe=null;return;}
+   if(type==='touchcancel'){touchSwipe=null;swipeLock=false;springBack();return;}
    if([...event.touches].some(t=>swipe.start.has(t.identifier)))return;
-   touchSwipe=null;
-   const restore=()=>{if(swipe.needsRedraw&&!busy&&pageNo===swipe.page)renderPage({keepScroll:true});};
+   touchSwipe=null;swipeLock=false;
+   const restore=()=>{springBack();if(swipe.needsRedraw&&!busy&&pageNo===swipe.page)renderPage({keepScroll:true});};
    if(pageNo!==swipe.page||Date.now()-swipe.time>1200||!viewReady||busy||pending||!doc){restore();return;}
    const ids=[...swipe.start.keys()],dx=ids.map(id=>swipe.end.get(id).x-swipe.start.get(id).x),
     dy=ids.map(id=>swipe.end.get(id).y-swipe.start.get(id).y);
@@ -808,7 +864,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const direction=dx[0]<0?1:-1;
    if(pageNo+direction<1||pageNo+direction>doc.numPages){restore();return;}
    if(swipe.count===2){zoom=swipe.zoom;zoomValue();}
-   pageNo+=direction;resetGestures();renderPage();
+   resetGestures();turnTo(pageNo+direction);
   },{passive:true});
   stage.addEventListener('touchstart',event=>{
    if(tool!=='notation'||!ready||busy||exportBusy||pending||!box.contains(event.target)||event.touches.length!==1)return;
@@ -879,10 +935,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
    el.querySelector('[data-ink-marker-palette]').hidden=true;
    say(markerType==='repeat'?'반복 구간의 시작과 끝을 차례로 눌러 주세요.':markerType==='cut'?'생략할 구간을 따라 그어 주세요.':'악보에서 표시할 위치를 눌러 주세요.');
   });
-  el.querySelector('[data-ink-prev]').onclick=()=>{if(viewReady&&!busy&&pageNo>1){pageNo--;renderPage();}};
-  el.querySelector('[data-ink-next]').onclick=()=>{if(viewReady&&!busy&&pageNo<doc?.numPages){pageNo++;renderPage();}};
-  el.querySelector('[data-ink-first]').onclick=()=>{if(viewReady&&!busy&&pageNo>1){pageNo=1;renderPage();}};
-  el.querySelector('[data-ink-last]').onclick=()=>{if(viewReady&&!busy&&pageNo<doc?.numPages){pageNo=doc.numPages;renderPage();}};
+  el.querySelector('[data-ink-prev]').onclick=()=>{if(viewReady||turning)turnTo(aim()-1);};
+  el.querySelector('[data-ink-next]').onclick=()=>{if(viewReady||turning)turnTo(aim()+1);};
+  el.querySelector('[data-ink-first]').onclick=()=>{if(viewReady)turnTo(1);};
+  el.querySelector('[data-ink-last]').onclick=()=>{if(viewReady&&doc)turnTo(doc.numPages);};
   el.querySelector('[data-ink-zoom]').onchange=event=>{zoom=Number(event.target.value);renderPage();};
   el.querySelector('[data-ink-undo]').onclick=()=>{if(!pending&&undo.length){clearSelection();apply(inverse(undo.at(-1)),'undo');}};
   el.querySelector('[data-ink-redo]').onclick=()=>{if(!pending&&redo.length){clearSelection();apply(inverse(redo.at(-1)),'redo');}};

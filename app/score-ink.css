@@ -55,7 +55,11 @@ body .score-ink-sheet{height:calc(var(--vv-height,100dvh) - env(safe-area-inset-
 @media(max-width:430px){.score-ink-pages{gap:3px}.score-ink-pages [data-ink-page]{min-width:58px}.score-ink-pages select{min-width:70px;max-width:100px;font-size:12px;padding:4px}}
 .score-ink-status{margin:0;min-height:18px;font-size:12px;line-height:18px;color:#667085}
 .score-ink-status[data-error=true]{color:#c4322a}
-.score-ink-stage{position:relative;overflow:auto;overscroll-behavior:contain;flex:1;min-height:160px;width:100%;border-radius:12px;background:#e8e4f0;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch;padding:8px;box-sizing:border-box}
+.score-ink-stage{position:relative;overflow:auto;overscroll-behavior:contain;flex:1;min-height:160px;width:100%;border-radius:12px;background:#e8e4f0;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch;padding:8px;box-sizing:border-box}
+/* A page that fits the width leaves sideways swipes to the page turn; a sliding page never scrolls the screen. */
+.score-ink-stage[data-ink-fit]{touch-action:pan-y}
+.score-ink-stage[data-ink-turning]{overflow:hidden}
+.score-ink-stage [data-ink-box]{will-change:transform}
 .score-ink-stage[data-notation=true]{touch-action:none;overscroll-behavior:none}
 .score-ink-stage[data-view-only=true],.score-ink-performance .score-ink-stage{touch-action:none}
 .score-ink-stage[data-notation=true] .score-ink-page{touch-action:none;-webkit-user-select:none;user-select:none}
