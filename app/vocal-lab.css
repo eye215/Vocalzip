@@ -175,3 +175,26 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
 .vl-swipe-track{width:68px;max-width:20%;height:3px;display:block;overflow:hidden;border-radius:999px;background:#40314b}
 .vl-swipe-track b{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#9651f1,#cc8dff);transition:width .32s ease}
 @media(prefers-reduced-motion:reduce){.vl-swipe-track b,.vl-carousel .vl-peek{transition:none}}
+
+/* Responsive card information hierarchy and discreet adjacent-record controls. */
+.vl-carousel .vl-peek{appearance:none;-webkit-appearance:none;box-sizing:border-box;flex:0 0 18px;width:18px;min-width:18px;margin:18px -3px 18px 0;padding:0;border:1px solid #49335c;border-radius:12px 0 0 12px;background:#322742;color:#c7a5ef;outline-offset:3px}
+.vl-carousel .vl-peek:last-child{margin:18px 0 18px -3px;border-radius:0 12px 12px 0}
+.vl-carousel .vl-peek i{font-size:19px;line-height:1}
+.vl-carousel .vl-peek::after,.vl-carousel .vl-peek:last-child::after{content:none}
+.vl-carousel .vl-peek[disabled]{visibility:hidden;pointer-events:none}
+.vl-carousel .vl-peek:not([disabled]):focus-visible{outline:2px solid #bc8ef8}
+.vl-player-head{align-items:start}
+.vl-player-title{min-width:0;flex:1;display:grid;gap:5px}
+.vl-player-eyebrow{display:block;font-size:11px;line-height:16px;letter-spacing:.01em;color:#b4a3c6;font-weight:600}
+.vl-player-head .vl-player-title strong{display:block;max-width:100%;font-size:16px;line-height:23px;font-weight:650;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.vl-player-count{padding:5px 9px;border-radius:99px;background:#332640;color:#d5c1e7!important;font-size:11px!important;font-weight:700}
+.vl-wave-compact{height:70px;margin:11px 0 6px;display:flex;align-items:center;justify-content:center;gap:10px;border:1px dashed #3d304b;border-radius:13px;background:#241b2f;color:#a890bb;font-size:11px;text-align:center;padding:10px}
+.vl-wave-compact i{color:#bc7bfa;font-size:22px}
+.vl-controls button:disabled{opacity:.26;cursor:default;box-shadow:none}
+.vl-controls button:disabled:active{transform:none}
+.vl-swipe-guide{padding-top:12px}
+@media(max-width:375px){
+ .vl-player-head .vl-player-title strong{font-size:14px;line-height:20px}
+ .vl-player-count{padding:4px 7px}
+ .vl-swipe-guide{gap:6px;font-size:10px;padding-left:14px;padding-right:14px}
+}
