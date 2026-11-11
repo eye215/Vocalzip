@@ -483,7 +483,7 @@ test('shared colors, type hierarchy, cards and four-item dock apply to regular s
   expect(shell.accent).toBe('#7A32F5');
   expect(shell.background).toBe('rgb(248, 246, 253)');
   expect(shell.heading).toContain('Pretendard');
-  expect(shell.navItems).toBe(4);
+  expect(shell.navItems).toBe(5); // Added dedicated vocal-growth navigation tab.
   expect(shell.navHeight).toBe(70);
   expect(shell.fab).toBe('grid');
   expect(shell.cardRadius).toBe('20px');
