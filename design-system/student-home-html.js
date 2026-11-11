@@ -124,6 +124,16 @@ export async function createFloatingHome(opts={}){
  const tokenStyle=el("style",template.tokens);tokenStyle.dataset.sharedTokens="true";shadow.append(tokenStyle);
  const integration=el("style",adaptations);integration.dataset.integration="accessibility";shadow.append(integration);
  const root=document.importNode(template.root,true);root.setAttribute("aria-label","Vocalzip 홈");shadow.append(root);
+ // Extend only the rendered dock; keep the approved HTML file untouched.
+ // On home, the ordinary .v-nav is hidden in favor of this shadow-root dock.
+ const dock=root.querySelector('.vz-nav');
+ const growthButton=dock?.querySelector('.vz-nav-item:last-child')?.cloneNode(true);
+ if(growthButton){
+  growthButton.classList.remove('vz-active');
+  growthButton.removeAttribute('aria-current');
+  growthButton.querySelector('span').textContent='성장';
+  dock.append(growthButton);
+ }
  const iconFont=el("style",`@font-face{font-family:"Phosphor";src:url("${new URL('../vendor/phosphor/Phosphor.woff2',import.meta.url)}") format("woff2");font-display:block}#vocalzip-refined-preview .vz-nav-item i::before,#vocalzip-refined-preview .vz-floating-record i::before{content:attr(data-glyph)}`);
  shadow.append(iconFont);
  const sharedShell=el("style",`/* Match the common four-tab dock and circular recording action. */
@@ -131,7 +141,7 @@ export async function createFloatingHome(opts={}){
 #vocalzip-refined-preview .vz-card{padding:var(--vz-card-padding);border-radius:var(--vz-radius-card)}
 #vocalzip-refined-preview .vz-floating-record{background:var(--vz-gradient-floating)}
 #vocalzip-refined-preview .vz-nav{box-sizing:border-box;height:var(--vz-nav-height);padding:var(--vz-nav-padding);border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;background:var(--vz-nav-surface,rgba(255,255,255,.58));box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));-webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px))}
-#vocalzip-refined-preview .vz-nav-item{box-sizing:border-box;height:var(--vz-nav-item-height);min-height:var(--vz-nav-item-height);gap:2px;border-radius:999px;font-size:var(--vz-type-nav-size);font-weight:var(--vz-font-medium)}
+#vocalzip-refined-preview .vz-nav{grid-template-columns:repeat(5,minmax(0,1fr));}\n#vocalzip-refined-preview .vz-nav-item{box-sizing:border-box;height:var(--vz-nav-item-height);min-height:var(--vz-nav-item-height);gap:2px;border-radius:999px;font-size:var(--vz-type-nav-size);font-weight:var(--vz-font-medium)}
 #vocalzip-refined-preview .vz-nav-item.vz-active{background:var(--vz-color-selected-bg);color:var(--vz-nav-active-label);font-weight:600}
 #vocalzip-refined-preview .vz-nav-item i{font-size:var(--vz-icon-tool-size)}
 #vocalzip-refined-preview .vz-floating-record{width:var(--vz-floating-size);min-width:var(--vz-floating-size);height:var(--vz-floating-size);bottom:calc(max(var(--vz-nav-bottom),env(safe-area-inset-bottom)) + var(--vz-floating-bottom));box-shadow:var(--vz-shadow-floating)}
@@ -140,7 +150,7 @@ export async function createFloatingHome(opts={}){
  shadow.append(sharedShell);
  [...root.querySelectorAll('.vz-nav-item')].forEach((button,i)=>{
   const svg=button.querySelector('svg');if(!svg)return;
-  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a'][i];svg.replaceWith(icon);
+  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a','\ue44e'][i];svg.replaceWith(icon);
  });
  const recordIcon=el('i');recordIcon.setAttribute('aria-hidden','true');recordIcon.dataset.glyph='\ue326';root.querySelector('.vz-floating-record svg').replaceWith(recordIcon);
  const q=selector=>root.querySelector(selector);
@@ -284,7 +294,7 @@ export async function createFloatingHome(opts={}){
  swap(".vz-event .vz-art-front svg","\ue34c");swap(".vz-week .vz-title > svg:not(.vz-chevron)","\ue150");
  swap(".vz-song-label svg","\ue33c");swap(".vz-goals .vz-title > svg","\ue6a2");swap(".vz-goal-tools button svg","\ue270");
  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
- const routes=["home","songs","library","calendar"];
+ const routes=["home","songs","library","calendar","vocal-growth"];
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});
  return host;
 }
