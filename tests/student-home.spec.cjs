@@ -595,3 +595,15 @@ for(const [label,hash] of [['AI로 오늘 할 일 추천받기','#/practice-revi
   await expect(page.locator('[data-review]')).toBeVisible();
  });
 }
+test('every page shows the very same bottom dock as Home at phone widths',async({page})=>{
+ await boot(page);
+ for(const width of [320,393,430]){
+  await page.setViewportSize({width,height:852});await page.evaluate(()=>VZ.nav('#/home'));await ready(page);
+  const home=await page.evaluate(()=>{const n=document.querySelector('.vz-student-home').shadowRoot.querySelector('.vz-nav'),r=n.getBoundingClientRect(),i=n.querySelector('.vz-nav-item').getBoundingClientRect();return [r.x,r.y,r.width,r.height,i.x,i.width,i.height].map(Math.round);});
+  for(const route of ['songs','library','calendar','vocal-growth']){
+   await page.evaluate(r=>VZ.nav('#/'+r),route);await expect(page.locator('.v-nav')).toBeVisible();
+   const other=await page.evaluate(()=>{const u=document.querySelector('.v-nav>ul'),r=u.getBoundingClientRect(),i=u.querySelector('a').getBoundingClientRect();return [r.x,r.y,r.width,r.height,i.x,i.width,i.height].map(Math.round);});
+   for(let k=0;k<home.length;k++)expect(Math.abs(other[k]-home[k]),route+' at '+width+'px, value '+k).toBeLessThanOrEqual(1);
+  }
+ }
+});
