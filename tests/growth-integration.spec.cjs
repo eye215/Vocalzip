@@ -61,3 +61,16 @@ test('current month stays available without recordings, and AI completion respec
  assert.match(js,/my!==request\|\|!window\.vzipCloudSignedIn/);
  assert.doesNotMatch(js,/btn\.onclick=\(\)=>\{selected=month;render\(\)/);
 });
+
+test('song plans are available before recording and archived plans remain discoverable',()=>{
+ const code=file('app/monthly-practice-plans.js');
+ assert.match(code,/\.\.\.\(V\.db\.songs\|\|\[\]\)\.map\(x=>x\.id\)/);
+ assert.match(code,/filter\(x=>x\?\.kind==='monthly-vocal'&&x\.archived\)/);
+ assert.doesNotMatch(code,/x\.archived&&savedOutcomeIds\.has/);
+ assert.match(code,/plan\.archived\?'':'<button/);
+});
+test('archiving cannot reduce planned-day completion denominator or duplicate completed days',()=>{
+ const code=file('app/monthly-practice-plans.js');
+ assert.match(code,/new Set\(goals\.filter\(g=>g\.completed===true\)\.map\(g=>g\.date\)\)\.size/);
+ assert.match(code,/total:Number\.isInteger\(plan\.days\)&&plan\.days>0\?plan\.days:goals\.length/);
+});
