@@ -74,3 +74,12 @@ test('archiving cannot reduce planned-day completion denominator or duplicate co
  assert.match(code,/new Set\(goals\.filter\(g=>g\.completed===true\)\.map\(g=>g\.date\)\)\.size/);
  assert.match(code,/total:Number\.isInteger\(plan\.days\)&&plan\.days>0\?plan\.days:goals\.length/);
 });
+
+test('song-only AI evidence shares the same explicit exclusion for training sessions',()=>{
+ const js=file('app/monthly-growth.js');
+ assert.match(js,/function songListeningEntry\(p,month\)/);
+ assert.match(js,/p\.practiceMode!=='training'/);
+ assert.match(js,/!!V\.song\(songId\)/);
+ assert.match(js,/const entries=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
+ assert.match(js,/const observations=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
+});
