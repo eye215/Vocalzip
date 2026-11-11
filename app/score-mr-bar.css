@@ -1,0 +1,19 @@
+/* MR 재생·녹음 bar on the score viewer (app/score-mr-bar.js): stays at the bottom while the score scrolls. */
+.score-mr{position:relative;flex:none;z-index:6;width:100%;box-sizing:border-box;margin:4px 0 0;padding:10px 12px;border:1px solid rgba(255,255,255,.7);border-radius:20px;background:rgba(255,255,255,.88);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:0 8px 24px rgba(55,33,85,.12)}
+.score-mr-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-width:0}
+.score-mr-row select{flex:1;min-width:0;min-height:44px;font-size:16px}
+.score-mr-name{flex:1;min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650;font-size:14px;color:var(--vz-color-ink,#1e1b2e)}
+.score-mr-name i{color:var(--vz-color-accent,#7a32f5);font-size:18px}
+.score-mr-time{flex:none;font:650 15px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--vz-color-ink-secondary,#5f5a74);font-variant-numeric:tabular-nums}
+.score-mr.is-busy .score-mr-time{color:#d0244b}
+.score-mr-actions{display:grid;grid-template-columns:1fr 1fr 1.6fr;gap:8px}
+.score-mr-actions button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:48px;border:0;border-radius:14px;background:var(--vz-color-accent-soft,#f3ebff);color:var(--vz-color-accent,#7a32f5);font:650 14px inherit;white-space:nowrap}
+.score-mr-actions button[data-mr-act="rec"] i{color:#d0244b}
+.score-mr-actions .score-mr-main{background:var(--vz-color-accent,#7a32f5);color:#fff}
+.score-mr-actions button[data-mr-act="stop"]{grid-column:1/-1;background:#1e1b2e;color:#fff}
+.score-mr-actions button:disabled{opacity:.45}
+.score-mr-note{margin:8px 2px 0;font-size:12px;color:var(--vz-color-ink-muted,#8d88a3)}
+.score-mr-review{display:grid;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--vz-color-border,#e8e3f3)}
+.score-mr-review .field{margin:0}
+.score-mr-review-actions{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.score-mr-saved{margin:0;font-weight:650;color:var(--ok,#23855c)}
