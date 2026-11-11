@@ -67,5 +67,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
           node worker/omr-worker.mjs --selftest /tmp/omr/melody.pdf | tee /tmp/omr/result.json
           node -e "const r=JSON.parse(require('fs').readFileSync('/tmp/omr/result.json','utf8').trim().split('\n').pop());if(r.notes<14||!['C','D','E','F','G','A'].every(s=>r.steps.includes(s))){console.error('unexpected recognition',JSON.stringify(r));process.exit(1)}"

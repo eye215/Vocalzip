@@ -47,7 +47,11 @@ async function installAudiveris() {
     await writeFile(join(dir, deb), Buffer.from(await res.arrayBuffer()));
     console.log('Audiveris', release.tag_name);
   }
-  await run('sudo', ['apt-get', 'install', '-y', '-q', join(dir, deb)], {maxBuffer: 64 * 1024 * 1024});
+  // The package's install scripts register desktop menus (fails on a headless runner); the app itself only needs its
+  // files, which bundle their own Java runtime.
+  try { await run('sudo', ['dpkg-deb', '-x', join(dir, deb), '/'], {maxBuffer: 64 * 1024 * 1024}); }
+  catch (e) { throw new Error('Audiveris unpack failed: ' + String(e.stderr || e.message).slice(-400)); }
+  if (!existsSync(AUDIVERIS)) throw new Error('Audiveris not found at ' + AUDIVERIS + ' after unpacking');
 }
 
 /** Converts one PDF; returns {mxl: Buffer, movements} or throws {code}. */
