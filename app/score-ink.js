@@ -24,10 +24,46 @@ async function readPDF(response,size,signal){
 }
 function deadline(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
 const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+/* Opened PDFs are kept on this device (Cache Storage, per account + R2 key + size + upload time) with their verified
+ * SHA-256, so reopening a score skips the download and the hash. A replaced PDF has a new key/time and is fetched
+ * again; deleting a score drops its copy. Only the last 12 scores are kept. */
+const PDF_CACHE='vzip-score-pdf-v1',PDF_KEEP=12;
+const pdfKey=(owner,score)=>'https://vzip-score.invalid/'+encodeURIComponent(owner)+'/'+encodeURIComponent(score.r2Key)+'?size='+score.size+'&v='+encodeURIComponent(score.updatedAt||score.uploadedAt||'');
+const pdfCache={
+ async get(owner,score){
+  if(!window.caches)return null;
+  const response=await (await caches.open(PDF_CACHE)).match(pdfKey(owner,score));if(!response)return null;
+  const digest=response.headers.get('x-vzip-pdf-hash')||'',bytes=new Uint8Array(await response.arrayBuffer());
+  if(!/^[0-9a-f]{64}$/.test(digest)||bytes.length!==score.size||!new TextDecoder().decode(bytes.subarray(0,1024)).includes('%PDF-'))return null;
+  return {bytes,hash:digest,etag:response.headers.get('x-vzip-pdf-etag')||''};
+ },
+ /** The device copy is used only while the stored original is still the same (size and ETag, one 1-byte request).
+  * Offline, the device copy is used as is. */
+ async fresh(owner,score){
+  const kept=await this.get(owner,score);if(!kept)return null;
+  let now;try{now=await deadline(window.VzipR2.stat(score.r2Key),5000,'확인 지연');}catch{return kept;}
+  if(!now||now.size!==score.size||(now.etag||kept.etag)&&now.etag!==kept.etag){await this.drop(score.r2Key);return null;}
+  return kept;
+ },
+ async put(owner,score,bytes,digest){
+  if(!window.caches)return;
+  const cache=await caches.open(PDF_CACHE),key=pdfKey(owner,score);
+  // The ETag is read after the hash, so a copy is only ever labelled with the original it was verified against.
+  const etag=(await window.VzipR2.stat(score.r2Key).catch(()=>null))?.etag||'';
+  await cache.delete(key);await cache.put(key,new Response(bytes,{headers:{'content-type':'application/pdf','x-vzip-pdf-hash':digest,'x-vzip-pdf-etag':etag}}));
+  const keys=await cache.keys();for(const old of keys.slice(0,Math.max(0,keys.length-PDF_KEEP)))await cache.delete(old);
+ },
+ async drop(r2Key){
+  if(!window.caches)return;
+  const cache=await caches.open(PDF_CACHE),part='/'+encodeURIComponent(r2Key)+'?';
+  for(const key of await cache.keys())if(key.url.includes(part))await cache.delete(key);
+ }
+};
 VZ.deleteScoreWithInk=(songId,score)=>{
  const owner=window.vzipCloudUserId?.(),scope=window.VzipAccountScope;
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});
+ pdfCache.drop(score.r2Key).catch(()=>{});
  return store.removeScore({ownerId:owner,songId,scoreId:score.id,r2Key:score.r2Key});
 };
 VZ.openScoreInk=(songId,scoreId)=>{
@@ -40,7 +76,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  let store,prefs,profiles;
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
- const controller=new AbortController();let doc,loadingTask,renderTask,prepared=null,prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
+ const controller=new AbortController();let idleTimer=0,wakeControls=()=>{},audioBar=null,doc,loadingTask,renderTask,prepared=null,prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
  let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
@@ -166,19 +202,21 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.dataset.inkMoreOpen=String(!!open);
   el.querySelector('[data-ink-more]').setAttribute('aria-expanded',String(!!open));
  }
- function fullLayout(next){
-  resetGestures();full=next;el.classList.toggle('score-ink-fullscreen',full);setMoreOpen(false);
+ /* Compact viewer (both normal and fullscreen): one tool row whose right end is 더보기 (undo/redo/clear/settings/
+  * stage view/fullscreen), the song title on top with 다른 악보 as an icon, and the page row fixed at the bottom. */
+ function compactLayout(){
+  el.classList.add('score-ink-compact');
   const bar=el.querySelector('.score-ink-bar'),actions=el.querySelector('.score-ink-actions'),
-   fullActions=el.querySelector('[data-ink-full-actions]'),vision=el.querySelector('[data-ink-vision-tools]'),
-   notation=el.querySelector('[data-ink-notation]'),noteUndo=el.querySelector('[data-ink-note-undo]');
-  if(next){
-   fullActions.insertBefore(notation,el.querySelector('[data-ink-more]'));
-   fullActions.append(actions);actions.append(noteUndo);fullActions.hidden=false;
-  }else{
-   bar.insertBefore(actions,el.querySelector('[data-ink-marker-palette]'));
-   vision.insertBefore(notation,vision.querySelector('span'));
-   vision.insertBefore(noteUndo,vision.querySelector('span'));fullActions.hidden=true;
-  }
+   fullActions=el.querySelector('[data-ink-full-actions]'),notation=el.querySelector('[data-ink-notation]'),noteUndo=el.querySelector('[data-ink-note-undo]');
+  notation.hidden=!visionAvailable; // shown once the owner-only AI check answers (syncVisionTools)
+  bar.append(fullActions);fullActions.insertBefore(notation,el.querySelector('[data-ink-more]'));
+  fullActions.append(actions);actions.append(noteUndo);fullActions.hidden=false;
+  const head=el.querySelector('.sheet-head'),other=el.querySelector('[data-ink-other-scores]');
+  if(head&&other){other.innerHTML='<i class="ph ph-files" aria-hidden="true"></i>';other.setAttribute('aria-label','다른 악보');other.title='다른 악보';other.classList.add('icon-btn');head.querySelector(':scope>span[aria-hidden]')?.replaceWith(other);}
+  el.querySelector('.score-ink-editor').append(el.querySelector('.score-ink-pages'));
+ }
+ function fullLayout(next){
+  resetGestures();full=next;el.classList.toggle('score-ink-fullscreen',full);setMoreOpen(false);wakeControls();
   const button=el.querySelector('[data-ink-fullscreen]');
   button.setAttribute('aria-label',full?'전체화면 종료':'전체화면');button.title=full?'전체화면 종료':'전체화면';
   button.querySelector('i').className='ph ph-'+(full?'arrows-in':'arrows-out');
@@ -196,12 +234,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(!performance||closed)return;
   const controls=el.querySelector('[data-ink-performance-controls]');controls.hidden=false;
   controls.querySelector('[data-ink-performance-page]').textContent=pageNo+' / '+(doc?.numPages||'?')+'쪽';
-  controls.querySelector('[data-ink-performance-prev]').disabled=!ready||pageNo<=1;
-  controls.querySelector('[data-ink-performance-next]').disabled=!ready||pageNo>=doc?.numPages;
+  controls.querySelector('[data-ink-performance-prev]').disabled=!viewReady||pageNo<=1;
+  controls.querySelector('[data-ink-performance-next]').disabled=!viewReady||pageNo>=doc?.numPages;
   clearTimeout(performanceTimer);performanceTimer=setTimeout(()=>{if(!closed&&performance)controls.hidden=true;},4500);
  }
  function performanceMode(next){
-  if(next===performance||next&&!ready)return;
+  // Stage view only reads the score: it works as soon as a page is on screen, before the ink check finishes.
+  if(next&&!viewReady){say('악보 첫 페이지가 보인 뒤에 무대용 보기를 쓸 수 있어요.',true);return;}
+  if(next===performance)return;
   finishStroke();markerStart=null;markerDrag=null;if(next&&pending){saveState('저장 실패 · 다시 시도','error');say('필기를 먼저 다시 저장해 주세요.',true);return;}
   if(next){performanceOriginFull=full;if(!full)fullLayout(true);}
   performance=next;el.classList.toggle('score-ink-performance',next);
@@ -275,7 +315,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     const dx1=c.x-a.x,dx2=d.x-b.x,dy1=c.y-a.y,dy2=d.y-b.y;
     const startDistance=Math.hypot(a.x-b.x,a.y-b.y),endDistance=Math.hypot(c.x-d.x,c.y-d.y);
     if(dx1*dx2>0&&Math.min(Math.abs(dx1),Math.abs(dx2))>56&&Math.max(Math.abs(dy1),Math.abs(dy2))<Math.min(Math.abs(dx1),Math.abs(dx2))*.7&&Math.abs(dx1-dx2)<55&&Math.abs(endDistance-startDistance)<Math.max(25,startDistance*.18))direction=dx1<0?1:-1;
-   }else if(profiles.penOnly&&event.type==='pointerup'&&swipe?.pointer===event.pointerId&&Date.now()-swipe.time<900){
+   }else if((profiles.penOnly||performance)&&event.type==='pointerup'&&swipe?.pointer===event.pointerId&&Date.now()-swipe.time<900){
     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
     if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.4)direction=dx<0?1:-1;
    }
@@ -404,8 +444,13 @@ VZ.openScoreInk=(songId,scoreId)=>{
  function showVisionResult(result){
   const panel=el.querySelector('[data-ink-vision-result]');panel.dataset.mode=result.mode;panel.dataset.noteId=result.id||'';panel._result=result;
   const isText=result.mode==='handwriting'||result.mode==='edit';
-  el.querySelector('[data-ink-vision-heading]').textContent=result.mode==='notation'?(result.label||'악보 표기 설명'):'손글씨 → 텍스트 메모';
-  el.querySelector('[data-ink-vision-explanation]').textContent=result.mode==='notation'?(result.explanation||'표기를 구별하기 어려워요.'):(result.confidence==='low'?'인식이 불확실해요. 글자를 직접 확인하고 수정해 주세요.':'원래 필기는 그대로 남아요. 결과를 확인하고 수정해 주세요.');
+  const label=String(result.label||'');
+  el.querySelector('[data-ink-vision-heading]').textContent=result.mode==='notation'?(/[A-Za-z]/.test(label)&&!/[가-힣]/.test(label)?'악보 표기 설명':label||'악보 표기 설명'):'손글씨 → 텍스트 메모';
+  const tempo=result.mode==='notation'&&String(result.label||'').match(/[♩♪]\s*=\s*(\d{2,3})/);
+  const explanation=result.mode==='notation'&&!/[가-힣]/.test(String(result.explanation||''))
+   ?(tempo?'4분음표를 1박으로 하여 1분에 '+tempo[1]+'박의 빠르기로 노래하세요. 일정한 박을 유지해 보세요.':'한국어 설명을 받지 못했어요. 영역을 다시 선택해 분석해 주세요.')
+   :result.explanation;
+  el.querySelector('[data-ink-vision-explanation]').textContent=result.mode==='notation'?(explanation||'표기를 구별하기 어려워요.'):(result.confidence==='low'?'인식이 불확실해요. 글자를 직접 확인하고 수정해 주세요.':'원래 필기는 그대로 남아요. 결과를 확인하고 수정해 주세요.');
   const more=el.querySelector('[data-ink-vision-more]'),description=el.querySelector('[data-ink-vision-explanation]');panel.dataset.expanded='false';more.hidden=true;more.textContent='더보기';more.setAttribute('aria-expanded','false');
   if(result.mode==='notation')requestAnimationFrame(()=>{if(panel.hidden||panel._result!==result)return;more.hidden=description.scrollHeight<=description.clientHeight+2;});
   el.querySelector('[data-ink-vision-text-label]').hidden=!isText;el.querySelector('[data-ink-vision-text]').value=result.text||'';
@@ -678,19 +723,28 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{current();store.restore();if(selection&&!selectionFresh()){clearSelection();say('선택한 필기가 다른 곳에서 바뀌었어요. 다시 선택해 주세요.',true);}if(exportUrl&&exportSignature(store.list(binding))!==exportStamp)invalidateExport();paint();}catch{sheet.close();}
  }
  function cleanup(){
+  clearTimeout(idleTimer);
+  audioBar?.destroy()?.catch?.(()=>{});audioBar=null;
   closed=true;visionController?.abort();clearTimeout(performanceTimer);clearTimeout(prepareTimer);prepareTask?.cancel();prepared=null;closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
   window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);VZ.setGuard(null);
  }
  function unload(event){selectionEnd();finishStroke();if(pending){event.preventDefault();event.returnValue='';}}
  function hidden(){if(document.visibilityState==='hidden'){selectionEnd();finishStroke();}}
- sheet=VZ.sheet({title:'악보 필기',label:'악보 개인 필기',body,foot:'<button type="button" class="btn block" data-ink-done>완료</button>',onClose:cleanup,onMount:(node)=>{
+ sheet=VZ.sheet({title:VZ.songTitle?.(songId)||score.title||score.fileName||'악보',label:'악보 개인 필기',body,foot:'<button type="button" class="btn block" data-ink-done>완료</button>',onClose:cleanup,onMount:(node)=>{
   el=node;el.classList.add('score-ink-sheet');
   // Quick samples sit below the whole toolbar, independent of fullscreen toolbar layout.
   const toolbar=el.querySelector('.score-ink-bar');
   toolbar.after(el.querySelector('[data-ink-quick]'),el.querySelector('[data-ink-full-actions]'),el.querySelector('[data-ink-vision-tools]'),el.querySelector('[data-ink-explain-action]'));
   el.querySelectorAll('.score-ink-actions>button').forEach(button=>{const label=document.createElement('span');label.className='score-ink-menu-label';label.textContent=button.getAttribute('aria-label')||'';button.append(label);});
   svg=el.querySelector('[data-ink-svg]');canvas=el.querySelector('[data-ink-pdf]');box=el.querySelector('[data-ink-box]');stage=el.querySelector('[data-ink-stage]');status=el.querySelector('[data-ink-status]');done=el.querySelector('[data-ink-done]');
+  // MR 재생 · 녹음 · MR+녹음 under the score page (app/score-audio.js).
+  try{audioBar=window.VzipScoreAudio?.mount(stage,{songId,scoreTitle:score.title||score.fileName||''})||null;}catch{audioBar=null;}
+  compactLayout();
+  // Fullscreen: the page row floats over the score and hides after 2.5 s without touch, swipe, scroll or keys.
+  const wake=()=>{el.dataset.inkIdle='false';clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(!closed&&full)el.dataset.inkIdle='true';},2500);};
+  for(const type of ['pointerdown','touchstart','wheel','keydown'])el.addEventListener(type,wake,{passive:true,capture:true});
+  stage.addEventListener('scroll',wake,{passive:true});wakeControls=wake;
   el.querySelector('[data-ink-prev]').disabled=true;el.querySelector('[data-ink-next]').disabled=true;
   el.querySelector('[data-ink-first]').disabled=true;el.querySelector('[data-ink-last]').disabled=true;
   const back=el.parentNode;
@@ -707,8 +761,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.addEventListener('click',event=>{if(el.dataset.inkMoreOpen==='true'&&!event.target.closest('[data-ink-more],.score-ink-actions'))setMoreOpen(false);else if(event.target.closest('.score-ink-actions>button'))setMoreOpen(false);});
   el.querySelector('[data-ink-performance]').onclick=()=>performanceMode(true);
   el.querySelector('[data-ink-performance-exit]').onclick=()=>performanceMode(false);
-  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(ready&&!busy&&pageNo>1){pageNo--;markerStart=null;renderPage();}};
-  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(ready&&!busy&&pageNo<doc?.numPages){pageNo++;markerStart=null;renderPage();}};
+  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(viewReady&&!busy&&pageNo>1){pageNo--;markerStart=null;renderPage();}};
+  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(viewReady&&!busy&&pageNo<doc?.numPages){pageNo++;markerStart=null;renderPage();}};
   stage.onpointerdown=event=>{if((performance||!ready)&&event.pointerType==='touch'&&viewReady&&!busy&&event.target!==svg)gestureDown(event);};
   stage.onpointermove=event=>{if((performance||!ready)&&event.target!==svg)gestureMove(event);};
   stage.onpointerup=stage.onpointercancel=event=>{if((performance||!ready)&&event.target!==svg)gestureEnd(event);};
@@ -717,7 +771,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   stage.addEventListener('touchstart',event=>{
    if(tool==='notation'||!viewReady||busy||pending)return;
    const fingers=[...event.touches].filter(t=>t.touchType!=='stylus');
-   if(fingers.length!==2&&!(fingers.length===1&&profiles.penOnly))return;
+   if(fingers.length!==2&&!(fingers.length===1&&(profiles.penOnly||performance)))return;
    if(fingers.length===2){
     if(active&&touchInkStart?.pointer===active.pointer){active=null;cancelAnimationFrame(frame);frame=0;paint();}
     touchEraser=null;markerDrag=null;
@@ -747,7 +801,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(swipe.count===2){
     const [a,b]=ids.map(id=>swipe.start.get(id)),[c,d]=ids.map(id=>swipe.end.get(id));
     if(dx[0]*dx[1]<=0||Math.abs(dx[0]-dx[1])>=55||Math.abs(Math.hypot(c.x-d.x,c.y-d.y)-Math.hypot(a.x-b.x,a.y-b.y)) >=Math.max(25,Math.hypot(a.x-b.x,a.y-b.y)*.18)){restore();return;}
-   }else if(!profiles.penOnly||stage.scrollWidth-stage.clientWidth>8&&!(dx[0]<0?swipe.atRight:swipe.atLeft)){restore();return;}
+   }else if(!(profiles.penOnly||performance)||stage.scrollWidth-stage.clientWidth>8&&!(dx[0]<0?swipe.atRight:swipe.atLeft)){restore();return;}
    const direction=dx[0]<0?1:-1;
    if(pageNo+direction<1||pageNo+direction>doc.numPages){restore();return;}
    if(swipe.count===2){zoom=swipe.zoom;zoomValue();}
@@ -910,7 +964,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{
    say('PDF를 준비하고 있어요.');
    const urlPromise=deadline(window.VzipR2.url(score.r2Key),15000,'PDF 주소 확인이 오래 걸려요.');
-   let bytesPromise;
+   let bytesPromise,knownHash='';
    // Render the first page via PDF.js ranges, then reuse its raw bytes for the
    // original hash. A separate download is only needed if PDF.js cannot provide them.
    const fullBytes=()=>bytesPromise ||= (async()=>{
@@ -927,9 +981,20 @@ VZ.openScoreInk=(songId,scoreId)=>{
     const response=await deadline(fetch(url,{signal:controller.signal,cache:'default'}),20000,'PDF 다운로드가 지연되고 있어요.');
     return readPDF(response,score.size,controller.signal);
    })();
-   const [url,pdf]=await Promise.all([urlPromise,deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.')]);current();
-   el.querySelector('[data-ink-original]').href=url;el.querySelector('[data-ink-original-quick]').href=url;
    const options={isEvalSupported:false,enableXfa:false,standardFontDataUrl:PDFJS+'standard_fonts/',cMapUrl:PDFJS+'cmaps/',cMapPacked:true};
+   const original=url=>{if(!closed){el.querySelector('[data-ink-original]').href=url;el.querySelector('[data-ink-original-quick]').href=url;}};
+   // A PDF opened before on this device opens from the device copy: no download, no second hash.
+   const kept=await pdfCache.fresh(owner,score).catch(()=>null);current();
+   if(kept){
+    urlPromise.then(original,()=>{});
+    const pdf=await deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.');current();
+    say('첫 페이지를 준비하고 있어요.');
+    bytesPromise=Promise.resolve(kept.bytes);knownHash=kept.hash;
+    loadingTask=pdf.getDocument({...options,data:kept.bytes.slice()});
+    doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');
+   }else{
+   const [url,pdf]=await Promise.all([urlPromise,deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.')]);current();
+   original(url);
    say('첫 페이지를 준비하고 있어요.');
    loadingTask=pdf.getDocument({...options,url,disableAutoFetch:true,disableStream:true,rangeChunkSize:262144});
    loadingTask.onPassword=()=>{loadingTask.destroy();say('암호가 없는 PDF로 다시 올려 주세요.',true);};
@@ -942,6 +1007,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     loadingTask=pdf.getDocument({...options,data:new Uint8Array(bytes)});
     doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');
    }
+   }
    current();if(closed)return;
    if(doc.numPages>2000)throw Error('2000쪽 이하 PDF를 사용해 주세요.');
    pageNo=Math.min(pageNo,doc.numPages);
@@ -950,13 +1016,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
    // PDF content identity must be verified before annotations can be drawn or edited.
    // The first page is readable while the complete original is being hashed.
    const bytes=await fullBytes();current();if(closed)return;
-   const pdfHash=await hash(bytes);current();if(closed)return;
+   const pdfHash=knownHash||await hash(bytes);current();if(closed)return;
+   if(!knownHash)pdfCache.put(owner,score,bytes,pdfHash).catch(()=>{});
    binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
    readNotes();
    if(savedView?.pdfHash&&savedView.pdfHash!==pdfHash){
     pageNo=1;zoom=1;zoomValue();await renderPage();current();if(closed)return;
    }
-   ready=true;stage.dataset.viewOnly='false';rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents='';svg.dataset.tool=tool;
+   ready=true;stage.dataset.viewOnly='false';rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents=performance?'none':'';svg.dataset.tool=tool;
    window.VzipR2.scoreVisionAvailable?.().then(result=>{if(closed)return;visionAvailable=!!result.available;syncVisionTools();paint();}).catch(()=>{if(!closed)syncVisionTools();});
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
    el.querySelector('[data-ink-first]').disabled=pageNo<=1;el.querySelector('[data-ink-last]').disabled=pageNo>=doc.numPages;
