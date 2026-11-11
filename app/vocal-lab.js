@@ -109,10 +109,78 @@ function single(s,m) {
       return '<div class="vl-stat"><span>'+metric.label+'</span><strong>'+esc(v==null?'측정 안 됨':metric.fmt(v,a))+'</strong><div class="vl-stat-visual" aria-hidden="true"><span style="width:'+Math.min(94,Math.max(8,(Number(v)||0)/(metric.key==='high'?10000:metric.key==='phr'?12:50)*100))+'%"></span></div>'+(count?'<small>측정한 음 '+count+'개</small>':'')+'</div>';
     }).join('')+'</div>')+'</section>';
 }
+function observationCurve(result) {
+ // Saved summaries contain no waveform: draw only actual measured pitch samples.
+ const values=result?.curve||[],fps=Number(result?.fps)||0;
+ if(!fps||!values.length)return '';
+ const first=values.findIndex(v=>v!=null);
+ if(first<0)return '';
+ // Find the first continuous voiced segment long enough for meaningful pitch motion.
+ let begin=first,bestStart=-1,bestLen=0;
+ for(let i=0;i<values.length;){
+  if(values[i]==null){i++;continue;}
+  const j=i;while(i<values.length&&values[i]!=null)i++;
+  if(i-j>bestLen){bestStart=j;bestLen=i-j;}
+  if(bestLen>=fps*3.6)break;
+ }
+ if(bestStart<0||bestLen<Math.max(5,Math.round(fps*.45)))return '';
+ begin=bestStart;
+ const maxCount=Math.min(bestLen,Math.round(fps*3.6)),step=Math.max(1,Math.ceil(maxCount/140));
+ const rows=[];
+ for(let i=0;i<maxCount;i+=step){
+  const v=values[begin+i];if(v==null)continue;
+  rows.push({sec:i/fps,cent:((v%100)+150)%100-50});
+ }
+ if(rows.length<3)return '';
+ const W=340,H=130,padL=36,padR=9,top=9,bottom=25;
+ const x=t=>padL+t/Math.max(.5,maxCount/fps)*(W-padL-padR),y=c=>top+(50-c)/100*(H-top-bottom);
+ const path=rows.map((p,i)=>(i?'L':'M')+x(p.sec).toFixed(2)+' '+y(p.cent).toFixed(2)).join(' ');
+ const ticks=[-50,-25,0,25,50].map(c=>'<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+y(c)+'" y2="'+y(c)+'" stroke="#554b61" stroke-dasharray="'+(c===0?'0':'4 5')+'" opacity=".7"/><text x="'+(padL-6)+'" y="'+(y(c)+4)+'" text-anchor="end" fill="#c4b5ce" font-size="10">'+(c>0?'+':'')+c+'</text>').join('');
+ const seconds=[0,1,2,3].filter(t=>t<=maxCount/fps).map(t=>'<text x="'+x(t)+'" y="'+(H-4)+'" fill="#c4b5ce" text-anchor="middle" font-size="10">'+t.toFixed(1)+'</text>').join('');
+ return '<svg class="vl-observation-curve" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="실제 녹음의 지속 구간 약 '+(maxCount/fps).toFixed(1)+'초 음정 편차 그래프">'+
+  ticks+'<text x="'+padL+'" y="10" font-size="10" fill="#d9c7e8">(cent)</text><path d="'+path+'" fill="none" stroke="#bb72ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'+seconds+'<text x="'+(W-padR)+'" y="'+(H-4)+'" text-anchor="end" font-size="10" fill="#c4b5ce">(초)</text></svg>';
+}
 function observe(s,m) {
- // Trend points represent full recordings; open the original whole-recording pitch graph.
- if(V.openRecordingAnalysisSheet)V.openRecordingAnalysisSheet(m);
- else V.nav('#/analysis/'+encodeURIComponent(m.id));
+ const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],current=valid(metric.get(analysis(m),m));
+ const ordered=trendRows(s,metric),idx=ordered.findIndex(x=>x.m.id===m.id);
+ const first=ordered[0],baseline=first?.m.id!==m.id?first:null;
+ const initial=baseline?.value??null,difference=initial!=null&&current!=null?current-initial:null;
+ const improved=baseline?metricColor(metric,initial,current):'neutral';
+ const safe=value=>esc(String(value??''));
+ const title='분석 관찰';
+ const explanation=()=>{
+  if(current==null)return '이 녹음에서 해당 측정값을 확인하지 못했어요.';
+  if(initial==null)return '첫 녹음의 측정값이에요. 다음 녹음과 비교하면 변화가 표시돼요.';
+  if(metric.better===0)return '첫 녹음과의 변화는 확인할 수 있지만 높고 낮음만으로 좋고 나쁨을 판단하지 않아요.';
+  const percent=Math.abs(initial)>0?Math.round(Math.abs(difference)/Math.abs(initial)*100):null;
+  const direction=difference<0?'줄었어요':'늘었어요';
+  return '첫 녹음('+metric.fmt(initial,analysis(baseline.m))+')보다 '+metric.label+' 수치가 '+(percent!=null?'약 '+percent+'% ':'')+direction+' '+(improved==='good'?'좋아진 방향이에요.':improved==='bad'?'아쉬운 방향이에요.':'비슷한 수준이에요.');
+ };
+ const valueLabel=current==null?'측정 안 됨':metric.fmt(current,analysis(m));
+ const compare=initial!=null?'<div class="vl-observation-compare"><span>첫 녹음 대비</span><strong>'+safe(metric.fmt(initial,analysis(baseline.m)))+' → '+safe(valueLabel)+'</strong>'+(Math.abs(initial)>0?'<em class="'+improved+'">'+safe('('+Math.round(Math.abs(difference)/Math.abs(initial)*100)+'% '+(difference<0?'감소':'증가')+')')+'</em>':'')+'</div>':'';
+ V.sheet({title:day(m)+' · '+title,body:'<div class="vl-observation-card"><div class="vl-observation-label">♧ 분석 관찰</div><h3>'+safe(metric.key==='wob'?'지속음의 음정 흔들림(위블)':metric.label)+(V.metricInfo?V.metricInfo(metric.key==='high'?'range':metric.key,metric.label):'')+'</h3><div class="vl-observation-value">'+safe(valueLabel)+'</div>'+compare+
+  '<div class="vl-observation-loading" data-observe-loading role="status">녹음의 실제 음정 곡선을 확인하고 있어요…</div><div data-observe-curve></div>'+
+  '<p class="vl-observation-summary">'+safe(explanation())+'</p><p class="vl-observation-note">'+safe(metric.guide)+'</p>'+
+  (analysis(m)&&!V.analysisReliable(analysis(m))?'<p class="vl-observation-note">음성 검출이 적거나 반주가 커서 측정 신뢰도가 낮아요.</p>':'')+'</div>',
+  foot:'<button type="button" class="btn block" data-close-observe>확인</button>',
+  onMount:(el,close)=>{
+   el.classList.add('vl-observation-sheet');
+   el.querySelector('[data-close-observe]').onclick=close;
+   let active=true;const stop=()=>{active=false;};
+   // Closing the sheet removes it, so all delayed renders check isConnected.
+   const existing=s.results.get(m.id);
+   const fill=result=>{
+    if(!active||!el.isConnected)return;
+    const html=observationCurve(result);
+    el.querySelector('[data-observe-curve]').innerHTML=html||'<p class="vl-observation-note">지속해서 노래한 구간이 충분하지 않아 곡선을 만들지 못했어요.</p>';
+    el.querySelector('[data-observe-loading]').remove();
+   };
+   if(existing?.curve)fill(existing);
+   else V.analyzeRecording(m,{save:false}).then(fill).catch(error=>{
+     if(!active||!el.isConnected)return;
+     el.querySelector('[data-observe-loading]').textContent='녹음 곡선을 가져오지 못했어요: '+String(error?.message||error);
+   });
+  }});
 }
 function makeSegment(s,m) {
   const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
