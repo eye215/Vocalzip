@@ -88,7 +88,9 @@ Deno.serve(async (req: Request) => {
           value: typeof x.value === 'number' && Number.isFinite(x.value) ? x.value : null,
           count: typeof x.count === 'number' && Number.isSafeInteger(x.count) && (x.count as number) >= 0 ? Math.min(x.count as number,10000) : 0,
           compare: ['better','worse','similar'].includes(String(x.state)) ? String(x.state) : 'unknown',
-          sharedSongs: typeof x.sharedSongs === 'number' && Number.isSafeInteger(x.sharedSongs) ? Math.max(0, Math.min(x.sharedSongs as number,1000)) : 0
+          sharedSongs: typeof x.sharedSongs === 'number' && Number.isSafeInteger(x.sharedSongs) ? Math.max(0, Math.min(x.sharedSongs as number,1000)) : 0,
+          improvedSongs: typeof x.improvedSongs === 'number' && Number.isSafeInteger(x.improvedSongs) ? Math.max(0, Math.min(x.improvedSongs as number,1000)) : 0,
+          worsenedSongs: typeof x.worsenedSongs === 'number' && Number.isSafeInteger(x.worsenedSongs) ? Math.max(0, Math.min(x.worsenedSongs as number,1000)) : 0
         }));
       const rawNotes = Array.isArray(input.observations) ? input.observations : [];
       const observations = rawNotes.slice(0, 5).filter((v): v is Record<string, unknown> =>
@@ -108,10 +110,7 @@ Deno.serve(async (req: Request) => {
         analyzedSongs:overall?Math.min(Math.max(Number(input.analyzedSongs)||0,0),10000):undefined,
         firstDate:overall?String(input.periodStart||'').slice(0,10):undefined,
         lastDate:overall?String(input.periodEnd||'').slice(0,10):undefined,
-        metrics:overall?metrics.map((m,index)=>({...m,
-          improvedSongs:Number.isSafeInteger((source[index] as any)?.improvedSongs)?Math.min((source[index] as any).improvedSongs,1000):0,
-          worsenedSongs:Number.isSafeInteger((source[index] as any)?.worsenedSongs)?Math.min((source[index] as any).worsenedSongs,1000):0
-        })):metrics,observations};
+        metrics,observations};
       // No audio is uploaded or inferred. Observations are labeled as historical AI notes.
       const upstream = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
         method:'POST',
