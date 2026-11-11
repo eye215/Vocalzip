@@ -38,7 +38,8 @@ jobs:
         run: |
           node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs
   browser-smoke:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 is not compatible with ubuntu-26.04 runners.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
