@@ -76,7 +76,7 @@ function sizePlots(host) {
     if(!width||!circles.length)return;
     const height=Number(svg.viewBox.baseVal.height)||142, pad=20;
     svg.setAttribute('viewBox','0 0 '+width+' '+height);
-    circles.forEach((circle,i)=>circle.setAttribute('cx',String(circles.length===1?width/2:pad+i*(width-pad*2)/(circles.length-1))));
+    circles.forEach((circle,i)=>{const cx=String(circles.length===1?width/2:pad+i*(width-pad*2)/(circles.length-1));circle.setAttribute('cx',cx);circle.parentElement?.querySelector('.vl-hit')?.setAttribute('cx',cx);});
     const line=svg.querySelector('polyline');
     if(line)line.setAttribute('points',circles.map(circle=>circle.getAttribute('cx')+','+circle.getAttribute('cy')).join(' '));
     svg.querySelector('.vl-mid')?.setAttribute('x2',String(width));
