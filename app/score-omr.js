@@ -38,7 +38,7 @@ VZ.scoreOmrSheet = (song, score) => {
         if (!job || job.status === 'failed') {
           body.innerHTML = (job ? '<p class="omr-note omr-error" role="alert">' + esc(FAIL[job.error] || FAIL.engine) + '</p>' : '') +
             '<p class="omr-note">PDF의 음표를 읽어 MusicXML(다른 악보 앱에서 열 수 있는 형식)로 바꿔요. 인쇄된 악보에서 가장 잘 되고, 자동 인식이라 틀린 음표가 있을 수 있어요.</p>' +
-            '<p class="omr-note small">변환하면 이 PDF를 VOCAL.zip 변환 서버(GitHub 실행 환경)에서 처리해요. 끝나면 서버에서 지우고, 결과는 원본 옆에 저장해요. 원본 PDF는 바뀌지 않아요.</p>' +
+            '<p class="omr-note small">새로 올린 악보는 자동으로 변환돼요. 변환하면 이 PDF를 VOCAL.zip 변환 서버(GitHub 실행 환경)에서 처리해요. 끝나면 서버에서 지우고, 결과는 원본 옆에 저장해요. 원본 PDF는 바뀌지 않아요.</p>' +
             '<button type="button" class="btn block" data-omr-start><i class="ph ph-music-notes" aria-hidden="true"></i>' + (job ? '다시 변환하기' : '변환 요청') + '</button>';
           body.querySelector('[data-omr-start]').onclick = start;
           return;

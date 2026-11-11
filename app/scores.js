@@ -22,7 +22,7 @@ function uploadSheet(song, redraw) {
       '<p class="small muted" data-file-name aria-live="polite" style="overflow-wrap:anywhere">선택한 파일이 없어요.</p>' +
       '<label class="field"><span>제목</span><input type="text" name="title" maxlength="120" placeholder="비워 두면 파일 이름"></label>' +
       '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey') + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey') + '</label></div>' +
-      '<p class="small muted" data-msg role="status">PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요.</p></form>',
+      '<p class="small muted" data-msg role="status">PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요. 올리면 음표 변환(시험판)도 자동으로 시작돼요.</p></form>',
     foot:'<button type="submit" form="score-up" class="btn block" data-go>올리기</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), msg = el.querySelector('[data-msg]'), go = el.querySelector('[data-go]');
@@ -59,7 +59,10 @@ function uploadSheet(song, redraw) {
           if (!current.receipt?.key) throw Error('업로드 결과를 확인하지 못했어요.');
           const entry = {id:current.id, songId:song.id, ...details, fileName:file.name, r2Key:current.receipt.key, size:file.size, uploadedAt:Date.now(), updatedAt:Date.now()};
           if (!save(song.id, list => { if (!list.some(s => s.id === current.id)) list.push(entry); })) throw Error('목록에 저장하지 못했어요.');
-          close(); VZ.toast('악보를 올렸어요.'); redraw();
+          // Decided 2026-11-11: a new score starts its note conversion (OMR) right away; failures never affect the upload.
+          const converting = !!window.VzipR2.omr && /\/original\.pdf$/.test(entry.r2Key);
+          if (converting) window.VzipR2.omr.request(entry.r2Key).catch(() => {});
+          close(); VZ.toast(converting ? '악보를 올렸어요. 음표 변환도 시작했어요.' : '악보를 올렸어요.'); redraw();
         } catch (err) {
           msg.textContent = '올리지 못했어요: ' + err.message + ' · 선택한 파일은 유지돼요.';
           go.textContent = '다시 시도';
