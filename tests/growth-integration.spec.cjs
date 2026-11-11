@@ -42,3 +42,13 @@ test('AI reports remain explicit opt-in with no direct audio upload',()=>{
  assert.match(worker,/input\.mode === 'monthly'/);
  assert.ok(worker.indexOf("input.mode === 'monthly'") < worker.indexOf('const audio = input.audio'));
 });
+
+test('mobile segment playback is cleaned on month changes and only audio is analyzed',()=>{
+ const plan=file('app/monthly-practice-plans.js'),ab=file('app/segment-ab-ui.js');
+ assert.match(plan,/function render\(host,month,items,rows\)\{[\s\S]*?stopReview\(\)/);
+ assert.match(plan,/items\.find\(m=>m\.id===sourceId\)/);
+ assert.match(plan,/songInput\.value&&!M\.isVideo\(m\)/);
+ assert.match(ab,/songId===plan\.songId&&!M\.isVideo\(x\)/);
+ assert.match(ab,/V\.analyzeRecording\(a\.m,\{save:false\}\)/);
+ assert.match(ab,/V\.analyzeRecording\(b\.m,\{save:false\}\)/);
+});
