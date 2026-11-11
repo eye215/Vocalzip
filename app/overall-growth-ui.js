@@ -103,15 +103,18 @@ function render(report,metric){
   trends(report,metric||'intonation')+coachCard()+recommendations(report)+evidence(report);
 }
 function bind(host,report,{rerender,ownerIdentity}={}){
- host.querySelectorAll('[data-overall-metric]').forEach(btn=>btn.onclick=()=>{
-  const id=btn.dataset.overallMetric;
-  const chart=host.querySelector('[data-overall-trend]');
-  if(!chart)return;
-  const wrap=document.createElement('div');wrap.innerHTML=trends(report,id);
-  chart.replaceWith(wrap.firstElementChild);
+ const wireTrend=()=>{
+  host.querySelectorAll('[data-overall-metric]').forEach(btn=>btn.onclick=()=>{
+   const id=btn.dataset.overallMetric;
+   const chart=host.querySelector('[data-overall-trend]');
+   if(!chart)return;
+   const wrap=document.createElement('div');wrap.innerHTML=trends(report,id);
+   chart.replaceWith(wrap.firstElementChild);
+   wireTrend();
+  });
   bindChart(host,report);
- });
- bindChart(host,report);
+ };
+ wireTrend();
  host.querySelectorAll('[data-overall-goal]').forEach(btn=>btn.onclick=()=>{
   const m=report.metrics.find(x=>x.id===btn.dataset.overallGoal);if(!m)return;
   const date=V.today(),id='overall-growth:'+date+':'+m.id;
