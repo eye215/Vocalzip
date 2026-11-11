@@ -256,10 +256,61 @@ function screen(s) {
   const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;seek.value=d?Math.round(el.currentTime/d*1000):0;host.querySelector('[data-time]').textContent=time(el.currentTime);host.querySelector('[data-duration]').textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
   el.addEventListener('timeupdate',()=>{if(s.loop&&el.currentTime>=Math.min(el.duration||Infinity,(s.start[m.id]||0)+16))el.currentTime=s.start[m.id]||0;paint();}); el.addEventListener('play',paint);el.addEventListener('pause',paint);el.addEventListener('loadedmetadata',paint); el.addEventListener('error',paint);paint();
   play.onclick=()=>el.paused?player.play():player.pause();seek.oninput=()=>player.seek(Number(seek.value)/1000*(el.duration||m.durationSeconds||0));
-  const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.active=s.selected[n];screen(s);};
+  const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.carouselDirection=step;s.active=s.selected[n];screen(s);};
   host.querySelector('[data-previous]').onclick=()=>move(-1);host.querySelector('[data-next]').onclick=()=>move(1);
   host.querySelector('[data-prev]')?.addEventListener('click',()=>move(-1));host.querySelector('[data-next-peek]')?.addEventListener('click',()=>move(1));
-  let x=null;carrier.addEventListener('touchstart',e=>{x=e.touches[0]?.clientX??null;},{passive:true});carrier.addEventListener('touchend',e=>{if(x==null)return;const dx=(e.changedTouches[0]?.clientX||x)-x;x=null;if(Math.abs(dx)>55)move(dx<0?1:-1);},{passive:true});
+  // Horizontal swipes follow the date tabs: left = older, right = newer.
+  // Keep page's vertical scrolling and playback sliders completely native.
+  const card=carrier.querySelector('[data-card]'), reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
+  const activeIndex=s.selected.indexOf(s.active);
+  const hasNeighbor=step=>activeIndex+step>=0&&activeIndex+step<s.selected.length;
+  const snap=()=>{
+    card.style.transition=reduced?'none':'transform .28s cubic-bezier(.2,.85,.2,1), opacity .28s ease';
+    card.style.transform='translate3d(0,0,0) scale(1)';
+    card.style.opacity='1';
+    carrier.classList.remove('vl-swiping');
+  };
+  let gesture=null,changing=false;
+  carrier.addEventListener('pointerdown',e=>{
+    if(!e.isPrimary||e.button!==0||changing||s.selected.length<2)return;
+    if(e.target.closest('button,input,select,textarea,a,[data-player]'))return;
+    gesture={id:e.pointerId,x:e.clientX,y:e.clientY,dx:0,started:performance.now(),horizontal:false};
+  });
+  carrier.addEventListener('pointermove',e=>{
+    const g=gesture;if(!g||e.pointerId!==g.id||changing)return;
+    const dx=e.clientX-g.x,dy=e.clientY-g.y;
+    if(!g.horizontal){
+      if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){gesture=null;return;}
+      if(Math.abs(dx)<9||Math.abs(dx)<Math.abs(dy)*1.2)return;
+      g.horizontal=true;carrier.classList.add('vl-swiping');
+      try{carrier.setPointerCapture(e.pointerId)}catch{}
+    }
+    const step=dx<0?1:-1;
+    g.dx=hasNeighbor(step)?dx:Math.sign(dx)*Math.min(26,Math.abs(dx)*.2);
+    card.style.transition='none';
+    card.style.transform='translate3d('+g.dx+'px,0,0) scale('+(1-Math.min(.023,Math.abs(g.dx)/700))+')';
+    card.style.opacity=String(1-Math.min(.17,Math.abs(g.dx)/950));
+  });
+  const finish=e=>{
+    const g=gesture;if(!g||e.pointerId!==g.id)return;gesture=null;
+    if(!g.horizontal)return;
+    try{carrier.releasePointerCapture(e.pointerId)}catch{}
+    const step=g.dx<0?1:-1;
+    const elapsed=Math.max(40,performance.now()-g.started);
+    const shouldMove=hasNeighbor(step)&&(Math.abs(g.dx)>Math.min(82,carrier.clientWidth*.22)||(Math.abs(g.dx)>28&&Math.abs(g.dx)/elapsed>.55));
+    if(!shouldMove){snap();return;}
+    changing=true;carrier.classList.remove('vl-swiping');
+    if(!reduced&&card.animate){
+      const animation=card.animate([{transform:'translate3d('+g.dx+'px,0,0)',opacity:1},{transform:'translate3d('+(step===1?-110:110)+'px,0,0) scale(.96)',opacity:0}],{duration:155,easing:'ease-in',fill:'forwards'});
+      animation.finished.catch(()=>{}).then(()=>{if(!carrier.isConnected)return;s.carouselDirection=step;move(step);});
+    }else {s.carouselDirection=step;move(step);}
+  };
+  carrier.addEventListener('pointerup',finish);
+  carrier.addEventListener('pointercancel',e=>{if(gesture?.id!==e.pointerId)return;gesture=null;snap();});
+  const enter=s.carouselDirection||0;s.carouselDirection=0;
+  if(enter&&!reduced&&card.animate){
+    card.animate([{transform:'translate3d('+(enter===1?46:-46)+'px,0,0) scale(.975)',opacity:.6},{transform:'translate3d(0,0,0) scale(1)',opacity:1}],{duration:300,easing:'cubic-bezier(.18,1,.2,1)'});
+  }
   carrier.tabIndex=0;carrier.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();move(e.key==='ArrowLeft'?-1:1);}};
   const savedRate=Number(rates()[m.id])||1;player.setRate(savedRate);host.querySelector('[data-speed]').textContent=savedRate.toFixed(1)+'×';
   host.querySelector('[data-speed]').onclick=()=>V.collectionChoice('이 녹음의 배속',[[.5,'0.5×'],[.75,'0.75×'],[1,'1.0×'],[1.25,'1.25×'],[1.5,'1.5×']].map(([v,l])=>[String(v),l]),String(player.el.playbackRate),value=>{const rate=Number(value);player.setRate(rate);host.querySelector('[data-speed]').textContent=rate.toFixed(rate%1?2:1).replace(/0×$/,'×');try{speedStore.setItem(speedKey,JSON.stringify({...rates(),[m.id]:rate}));}catch{V.toast('배속을 저장하지 못했어요.','error');}});
@@ -353,6 +404,8 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
     const pair=[r.query.get('a'),r.query.get('b')].filter(key=>items.some(m=>String(m.id)===key));
     const selected=r.query.get('selection')==='1' ? selectionIds().filter(key=>items.some(m=>String(m.id)===key)) : pair.length ? items.filter(m=>pair.includes(String(m.id))).map(m=>m.id) : report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
+    // Navigation always follows the date tabs: oldest on the left, newest on the right.
+    selected.sort((a,b)=>items.findIndex(x=>x.id===a)-items.findIndex(x=>x.id===b));
     const aiTips=new Map();
     const savedPlans=(V.db.practicePlans||[]).filter(p=>p.period==='ai-exercise'&&p.songId===song.id&&p.tip&&items.some(m=>m.id===p.mediaId)&&!(V.db.deleted?.practicePlans||[]).includes(p.id)).slice().sort((a,b)=>(a.created||0)-(b.created||0));
     for(const plan of savedPlans)aiTips.set(String(plan.mediaId)+':'+(plan.segmentStart||0),plan.tip);
