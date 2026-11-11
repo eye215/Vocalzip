@@ -60,7 +60,7 @@ function metricCard(m){
  return '<article class="growth-stat"><div class="growth-stat-top"><span>'+esc(m.title)+'</span><span class="growth-state '+state+'">'+label+'</span></div>'+
   '<strong class="growth-stat-number">'+esc(fmt(m.current,m))+'</strong>'+
   '<p class="growth-stat-sub">최근 분석 기준 · '+m.currentSongs+'곡</p>'+
-  (m.pairedSongs?'<div class="growth-stat-comparison"><span>첫 녹음 평균</span><strong>'+esc(fmt(m.before,m))+'</strong><span>→</span><span>최근 녹음 평균</span><strong>'+esc(fmt(m.after,m))+'</strong></div>'+
+  (m.pairedSongs?'<div class="growth-stat-comparison"><div><span>첫 녹음</span><strong>'+esc(fmt(m.before,m))+'</strong></div><i class="ph ph-arrow-right" aria-hidden="true"></i><div><span>최근 녹음</span><strong>'+esc(fmt(m.after,m))+'</strong></div></div>'+
   '<p class="growth-stat-sub">같은 곡 '+m.pairedSongs+'곡 · 개선 '+m.improved+' / 보완 '+m.worsened+' / 유사 '+m.similar+'</p>':
   '<p class="growth-stat-sub">다른 날 부른 동일 곡이 있어야 변화를 비교해요.</p>')+
   '<details class="growth-measure-help"><summary>수치 읽는 법</summary><p>'+esc(m.hint)+'</p><p>곡별 첫 녹음과 최근 녹음을 비교하며, 같은 날의 두 녹음만으로 개선을 확정하지 않아요.</p></details></article>';
@@ -72,7 +72,8 @@ function trends(report,selected){
  const lo=Math.min(...vals),hi=Math.max(...vals);
  const floor=Number.isFinite(lo)?Math.min(0,lo):0;
  const span=Number.isFinite(hi)?Math.max(hi-floor,0.00001):1;
- return '<section class="growth-panel" data-overall-trend><header class="growth-panel-head"><div><p class="growth-eyebrow">TRACK YOUR VOICE</p><h2>월별 측정 흐름</h2></div></header>'+
+ return '<section class="growth-panel" data-overall-trend><header class="growth-panel-head"><div><p class="growth-eyebrow">TRACK YOUR VOICE</p><h2>월별 측정 흐름</h2></div>'+
+  (pts.length?'<div class="growth-chart-current"><span>최근 기록</span><strong>'+esc(fmt(pts.at(-1).value,metric))+'</strong><small>'+esc(pts.at(-1).month)+'</small></div>':'')+'</header>'+
  '<div class="growth-metric-picks" role="group" aria-label="표시할 지표">'+report.metrics.map(m=>
   '<button type="button" data-overall-metric="'+m.id+'" class="'+(m.id===metric.id?'active':'')+'" aria-pressed="'+(m.id===metric.id)+'">'+esc(m.title)+'</button>').join('')+'</div>'+
  (pts.length?'<p class="small muted">달마다 녹음한 곡이 다를 수 있어요. 막대 높이는 측정 추이이며 실력 향상 판정이 아니에요.</p>'+
