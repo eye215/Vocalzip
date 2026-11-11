@@ -52,3 +52,12 @@ test('mobile segment playback is cleaned on month changes and only audio is anal
  assert.match(ab,/V\.analyzeRecording\(a\.m,\{save:false\}\)/);
  assert.match(ab,/V\.analyzeRecording\(b\.m,\{save:false\}\)/);
 });
+
+test('current month stays available without recordings, and AI completion respects month switches',()=>{
+ const js=file('app/monthly-growth.js');
+ assert.match(js,/ym\(V\.today\(\)\),\.\.\.months\.keys\(\)/);
+ assert.match(js,/\.\.\.\(V\.db\.practicePlans\|\|\[\]\)/);
+ assert.match(js,/visibleSerial===renderSerial&&selected===month/);
+ assert.match(js,/my!==request\|\|!window\.vzipCloudSignedIn/);
+ assert.doesNotMatch(js,/btn\.onclick=\(\)=>\{selected=month;render\(\)/);
+});
