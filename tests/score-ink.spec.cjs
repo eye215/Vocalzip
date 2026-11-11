@@ -586,3 +586,21 @@ test('fullscreen page row is one line over the score and hides while nothing mov
  await page.mouse.click(stage.x+stage.width/2,stage.y+stage.height/2);
  await expect.poll(()=>pages.evaluate(el=>getComputedStyle(el).opacity)).toBe('1');
 });
+test('fullscreen: the loading popup stays a small pill and the page row never covers the audio bar',async({page})=>{
+ await setup(page);
+ let release;const held=new Promise(r=>{release=r;});
+ await page.route('**/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs',async route=>{await held;route.fallback();});
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
+ await act(dialog,'전체화면');await expect(dialog).toHaveClass(/score-ink-fullscreen/);
+ const popup=dialog.locator('[data-ink-status]');await expect(popup).toBeVisible();
+ const pill=await popup.boundingBox();expect(pill.height).toBeLessThan(60);
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-full-loading-'+test.info().project.name+'.png'});
+ release();await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ await page.mouse.click(10,10);
+ const pages=await dialog.locator('.score-ink-pages').boundingBox(),bar=await dialog.locator('[data-score-audio]').boundingBox(),stage=await dialog.locator('[data-ink-stage]').boundingBox();
+ expect(pages.y+pages.height).toBeLessThanOrEqual(bar.y+1); // above the audio bar
+ expect(pages.y+pages.height).toBeLessThanOrEqual(stage.y+stage.height+1); // over the score
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-full-ready-'+test.info().project.name+'.png'});
+});

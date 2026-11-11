@@ -79,7 +79,8 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
   function place() {
     const editor = bar.parentElement, rect = editor?.getBoundingClientRect(), stage = anchor.getBoundingClientRect();
     if (!rect) return;
-    bar.style.bottom = Math.max(8, rect.bottom - stage.bottom + 10) + 'px';
+    // In fullscreen the page row floats at the score's bottom edge, so the chip sits above it.
+    bar.style.bottom = Math.max(8, rect.bottom - stage.bottom + 10 + (bar.closest('.score-ink-fullscreen') ? 54 : 0)) + 'px';
   }
   function wire(t) {
     const on = (name, fn) => { const b = bar.querySelector('[data-score-audio-' + name + ']'); if (b) b.onclick = () => Promise.resolve().then(fn).catch(fail); };
