@@ -149,7 +149,7 @@ function monthlyAiCard(month){
  const found=(V.db.monthlyAiReports||[]).find(x=>x.id==='monthly-ai:'+month);
  return '<section class="card growth-section" data-monthly-ai><h2>AI 월간 종합 코치</h2>'+
   (found?'<p class="small muted">저장된 AI 분석 · '+e(String(found.createdDate||'').slice(0,10))+'</p>'+
-    '<div class="growth-ai-note">'+e(found.note||'').replace(/\n/g,'<br>')+'</div>':
+    (window.VzipOverallGrowthUI?.noteHtml?.(found.note)||'<div class="growth-ai-note">'+e(found.note||'').replace(/\n/g,'<br>')+'</div>'):
     '<p>이달의 측정 결과와 이미 저장된 AI 청취 코멘트를 종합해 개선점과 다음 연습을 제안해요.</p>')+
   '<p class="small muted">버튼을 누를 때만 측정 요약과 기존 AI 청취 텍스트가 서버로 전송돼요. 원본 음원은 보내지 않으며 AI API 호출이 발생합니다. AI 의견은 참고용이며 녹음 상태가 달라지면 결과도 달라질 수 있어요.</p>'+
   '<button type="button" class="btn ghost" data-monthly-ai-run>'+ (found?'분석 다시 생성':'AI 월간 종합 분석하기')+'</button>'+
@@ -209,9 +209,25 @@ async function mount(host){
    const current=months.get(selected)||[],previous=months.get(prev)||[];
    const rows=monthlyRows(selected,months);
    const validCount=current.filter(valid).length;
-   host.innerHTML=pageHead+tabs()+'<header class="growth-intro"><p class="small muted">선택한 달의 기록</p><h2>월별 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">곡 녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
-   narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+monthlyAiCard(selected)+listeningEvidence(selected)+prescriptions(rows)+'<div data-monthly-plans></div>'+archiveCard(selected)+history(months)+
-   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 앱에 접속해 성장 화면을 열 때 저장됩니다. AI 종합 코치는 사용자가 분석 버튼을 눌렀을 때만 호출됩니다.</p>';
+   host.innerHTML=pageHead+tabs()+
+   '<header class="growth-intro"><div><p class="growth-eyebrow">MONTHLY REVIEW</p><h2>이번 달의 변화</h2></div>'+
+    '<label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label></header>'+
+   '<div class="growth-month-overview"><div><span>곡 녹음</span><strong>'+current.length+'</strong><small>개</small></div>'+
+     '<div><span>분석 가능한 녹음</span><strong>'+validCount+'</strong><small>개</small></div>'+
+     '<div><span>같은 곡 비교</span><strong>'+rows.filter(r=>r.c).length+'</strong><small>항목</small></div></div>'+
+   '<nav class="growth-jumps growth-month-jumps" aria-label="월별 성장 빠른 이동">'+
+     '<button type="button" data-monthly-jump="results">변화</button>'+
+     '<button type="button" data-monthly-jump="ai">AI 코치</button>'+
+     '<button type="button" data-monthly-jump="practice">추천·계획</button>'+
+     '<button type="button" data-monthly-jump="history">지난 기록</button></nav>'+
+   '<div class="growth-month-group" data-month-section="results">'+narrative(rows,selected,previous.length?prev:'')+
+     '<div class="growth-month-section-title"><h3>4가지 역량</h3><small>실측이 없는 항목은 비교하지 않아요</small></div>'+rowsHtml(rows)+'</div>'+
+   '<div data-month-section="ai">'+monthlyAiCard(selected)+'</div>'+
+   '<div class="growth-month-group" data-month-section="practice">'+prescriptions(rows)+'<div data-monthly-plans></div></div>'+
+   '<details class="growth-secondary"><summary><span><i class="ph ph-waveform" aria-hidden="true"></i> AI 청취 기록</span><small>저장된 청취 의견</small></summary>'+listeningEvidence(selected)+'</details>'+
+   '<details class="growth-secondary" data-month-section="history"><summary><span><i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i> 지난 기록·보관 리포트</span><small>월별 기록과 보관 결과</small></summary>'+
+     archiveCard(selected)+history(months)+'</details>'+
+   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있어요. 동일 곡의 전월 기록만 개선·악화로 비교합니다. 호흡 지지·발성 건강·감정 표현은 이 수치로 판단하지 않아요. AI 분석은 버튼을 누를 때만 실행해요.</p>';
 
    const aiButton=host.querySelector('[data-monthly-ai-run]');
    if(aiButton)aiButton.onclick=async()=>{
@@ -251,6 +267,12 @@ async function mount(host){
    };
 
    bindTabs();
+   host.querySelectorAll('[data-monthly-jump]').forEach(button=>button.onclick=()=>{
+    const target=host.querySelector('[data-month-section="'+button.dataset.monthlyJump+'"]');
+    if(button.dataset.monthlyJump==='history'&&target?.tagName==='DETAILS')target.open=true;
+    const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    target?.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+   });
    V.monthlyPracticePlans?.(host.querySelector('[data-monthly-plans]'),selected,songItems,rows);
    host.querySelectorAll('[data-growth-goal]').forEach(b=>b.onclick=()=>{
     const d=definitions.find(x=>x.id===b.dataset.growthGoal);
