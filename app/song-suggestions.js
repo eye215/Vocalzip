@@ -204,7 +204,7 @@ function setResult(item,result){state.results.set(item.id,result);writeCache(ite
 async function singingStart(samples,rate,signal){
  const total=samples.length/rate,fallback=Math.max(0,Math.min(20,total-30));
  if(!VZ.analyzeSamples)return fallback;
- const r=await VZ.analyzeSamples(samples,rate);
+ const r=await VZ.analyzeSamples(samples,rate,()=>{},{voiceOnly:true});
  if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
  const c=r.curve||[],fps=r.fps||20,win=Math.min(c.length,30*fps);
  let sum=0,best=-1,at=0;
@@ -250,9 +250,21 @@ async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
  const {clipFromPcm}=await import('../stt-clip-browser.mjs?v=3');
  let transcript=previous||'',initialStart=cached?.initialStart??null,duration=Number(item.durationSeconds)||0;
+ // Reuse decoded PCM only within this file/request; release it when this search ends.
+ let decodedWindow=null;
+ const readWindow=async(time,seconds)=>{
+  if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
+  if(decodedWindow){
+   const start=Math.max(0,Math.min(time,decodedWindow.duration-seconds)),base=decodedWindow.start||0,rate=decodedWindow.rate;
+   const from=Math.round((start-base)*rate),length=Math.floor(Math.min(seconds,decodedWindow.duration-start)*rate);
+   if(from>=0&&length>=2*rate&&from+length<=decodedWindow.pcm.length)
+    return {...decodedWindow,start,pcm:decodedWindow.pcm.subarray(from,from+length)};
+  }
+  decodedWindow=await audioWindow(item,signal,{time,seconds});return decodedWindow;
+ };
  if(!previous){
   onProgress('첫 30초 노래 구간 찾는 중');
-  const first=await audioWindow(item,signal,{time:0,seconds:SEARCH_SECONDS});duration=first.duration;
+  const first=await readWindow(0,SEARCH_SECONDS);duration=first.duration;
   try{initialStart=await singingStart(Float32Array.from(first.pcm,v=>v/32768),first.rate,signal)}
   catch(error){if(!/노래 구간을 찾지 못했어요/.test(String(error.message||error)))throw error}
   if(initialStart!=null){
@@ -265,14 +277,14 @@ async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  let match=matchTranscripts(transcript,refs),best=match,bestText=transcript;
  // A real match ends immediately; a low-confidence top-1 is kept only as a suggestion.
  if(!match.candidate){
-  if(!duration){const probe=await audioWindow(item,signal,{time:0,seconds:2});duration=probe.duration}
+  if(!duration){const probe=await readWindow(0,2);duration=probe.duration}
   const windows=scanWindows(duration,initialStart);
   for(const [index,start] of windows.entries()){
    if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
    onProgress('추가 분석 '+(index+1)+'/'+windows.length+'구간 · '+Math.floor(start/60)+'분 '+Math.round(start%60)+'초부터');
    let text=previousSegment(item,start);
    if(text==null){
-    const segment=await audioWindow(item,signal,{time:Math.floor(start),seconds:CLIP_SECONDS});
+    const segment=await readWindow(Math.floor(start),CLIP_SECONDS);
     try{await singingStart(Float32Array.from(segment.pcm,v=>v/32768),segment.rate,signal)}
     catch(error){
      if(!/노래 구간을 찾지 못했어요/.test(String(error.message||error)))throw error;

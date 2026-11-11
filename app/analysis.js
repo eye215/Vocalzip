@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
-const WORKER = 'app/vocal-analysis.js?v=2', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=3', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0;
@@ -29,18 +29,18 @@ async function decode(item, onStage) {
   for (let ch = 0; ch < buf.numberOfChannels; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < n; i++) mono[i] += d[i] / buf.numberOfChannels; }
   return {samples:mono, sampleRate:buf.sampleRate, cut:buf.length > n};
 }
-function runWorker(samples, sampleRate, onProgress) {
+function runWorker(samples, sampleRate, onProgress, {voiceOnly = false} = {}) {
   return new Promise((resolve, reject) => {
     let w;
     try { w = new Worker(WORKER); } catch (e) { reject(e); return; }
     w.onmessage = e => { const d = e.data; if (d.progress != null) onProgress(d.progress); else { w.terminate(); d.error ? reject(Error(d.error)) : resolve(d.result); } };
     w.onerror = e => { w.terminate(); reject(Error(e.message || '분석 중 오류가 났어요.')); };
-    w.postMessage({samples, sampleRate}, [samples.buffer]);
+    w.postMessage({samples, sampleRate, voiceOnly}, [samples.buffer]);
   });
 }
 
 /** Analyze raw mono samples in the worker (used by the song finder to locate the singing). The array is transferred. */
-VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}) => runWorker(samples, sampleRate, onProgress);
+VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}, options = {}) => runWorker(samples, sampleRate, onProgress, options);
 /** The summary kept with a recording (no curve: it would make every library row heavy). */
 const summaryOf = result => ({v:result.version, at:Date.now(), seconds:result.seconds, metrics:result.metrics, confidence:result.confidence});
 /** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).

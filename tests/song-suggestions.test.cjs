@@ -189,16 +189,16 @@ test('no per-run cap on paid analysis: 150 recordings go straight to the cost co
  assert.equal(errors.filter(e=>/까지/.test(e)).length,0);assert.match(asked,/150개/);assert.match(asked,/최대 3600구간/);assert.match(asked,/\$5\.400/);assert.equal(b.counts().paid,0);
 });
 test('식별 불가일 때만 다음 구간을 전사하고 곡이 맞으면 즉시 멈춘다',async()=>{
- const b=browser({mockStt:true}),calls=[],saved=[];
+ const b=browser({mockStt:true}),calls=[],saved=[];let decodes=0;
  b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
  b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
  b.window.vzipCloudSongTextSave=async row=>saved.push(row);
  b.window.testMatchModule={matchTranscripts:text=>text==='song'?{candidate:'s1',reason:'match',matches:[{songId:'s1',score:0.8}]}:{candidate:null,reason:'no match',matches:[]}};
  b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
- b.api.setPipeline(async(_item,_signal,{time})=>({pcm:new Int16Array(16000*120),rate:16000,duration:90,start:time}),async()=>{calls.push('paid');return calls.length===1?'chat':'song'});
+ b.api.setPipeline(async(_item,_signal,{time})=>{decodes++;return {pcm:new Int16Array(16000*90),rate:16000,duration:90,start:time}},async()=>{calls.push('paid');return calls.length===1?'chat':'song'});
  const result=await b.api.stt({id:'m1',durationSeconds:90},new AbortController().signal);
  assert.equal(result.candidate.id,'s1');assert.equal(result.strongMatch,true);
- assert.equal(calls.length,2);assert.deepEqual(saved.map(x=>x.recordId),['m1','m1@0']);
+ assert.equal(calls.length,2);assert.equal(decodes,1,'reuse the first decoded window for additional transcription');assert.deepEqual(saved.map(x=>x.recordId),['m1','m1@0']);
 });
 test('목소리가 없는 첫 구간과 후속 구간은 유료 전사 요청 없이 건너뛴다',async()=>{
  const b=browser({mockStt:true});let paid=0;
@@ -410,4 +410,12 @@ test('top-1 is picked by default only when the lyrics are actually similar; nois
  const close = b.api.resultFor({id:'close'}).candidate;
  assert.equal(close.id, 's2'); assert.match(close.reason, /20%/); assert.equal(close.level, '확인 필요');
  assert.equal(b.api.resultFor({id:'mine'}).candidate, null); // the user's own "no song" choice stays
+});
+
+
+test('title search requests voice detection without full note measurements',async()=>{
+ const b=browser();let requested;
+ b.window.VZ.analyzeSamples=async(samples,rate,onProgress,options)=>{requested=options;return {curve:Array(600).fill(6900),fps:20}};
+ await b.api.singingStart(new Float32Array(16000*30),16000,new AbortController().signal);
+ assert.equal(requested.voiceOnly,true);
 });
