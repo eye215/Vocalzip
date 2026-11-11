@@ -603,8 +603,9 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       if (songTab === 'ar') {
         const current = VZ.song(s.id) || s;
         const links = (current.arLinks || []).filter(link => songArUrl(link.url));
-        body.innerHTML = '<section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>' + links.length + '</span></strong><button type="button" data-add-song-ar aria-label="AR 레퍼런스 링크 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>' +
+        body.innerHTML = '<div data-song-mr></div><section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>' + links.length + '</span></strong><button type="button" data-add-song-ar aria-label="AR 레퍼런스 링크 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>' +
           (links.length ? '<div class="vz-ar-list">' + links.map((link, i) => '<a href="' + esc(songArUrl(link.url)) + '" target="_blank" rel="noopener noreferrer"><span><strong>' + esc(link.label || 'AR 레퍼런스 ' + (i + 1)) + '</strong><small>' + esc(link.url) + '</small></span><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>').join('') + '</div>' : '<p>링크를 추가하면 여기서 바로 열 수 있어요.</p>') + '</section>';
+        VZ.renderSongMR?.(body.querySelector('[data-song-mr]'),current);
         body.querySelector('[data-add-song-ar]').onclick = () => VZ.songSheet(VZ.song(s.id), () => draw(), {hideShow:true, focusAr:true});
         VZ.mediaSelection?.hideSongAction();
         return;
