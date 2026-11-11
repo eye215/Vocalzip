@@ -1,6 +1,6 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {report,completeDate}=require('../app/plan-outcome-model.js');
+const {report,measurement,completeDate}=require('../app/plan-outcome-model.js');
 const p={id:'plan-A',kind:'monthly-vocal',metric:'stability',songId:'song-1',startDate:'2026-11-01',days:5};
 const audio=(id,date,wobble,songId='song-1')=>({id,recordedDate:date,songId,analysis:{metrics:{stability:{wobbleCents:wobble}}}});
 const args={plan:p,dateOf:m=>m.recordedDate,valid:()=>true,asOf:'2026-11-07'};
@@ -33,4 +33,19 @@ test('vibrato and phrase apply domain-sensitive neutral threshold',()=>{
  {id:'y',songId:'song-1',recordedDate:'2026-11-03',analysis:{metrics:{vibrato:{regularity:0.55}}}}];
  const r=report({...args,plan:source,recordings:rows});
  assert.equal(r.measurement.change,'better');
+});
+
+test('preview and final report share the same before/during window, excluding later recordings',()=>{
+ const recordings=[audio('baseline','2026-10-29',27),audio('during','2026-11-03',19),
+  audio('later','2026-11-10',1),audio('wrong-song','2026-11-03',1,'other')];
+ const preview=measurement(p,recordings,args.dateOf,args.valid);
+ const saved=report({...args,recordings});
+ assert.deepEqual(preview,saved.measurement);
+ assert.deepEqual(preview.afterIds,['during']);
+ assert.equal(preview.after,19);
+});
+test('a preview is allowed before the final day, but a report is not',()=>{
+ const preview=measurement(p,[audio('baseline','2026-10-29',22),audio('during','2026-11-03',18)],args.dateOf,args.valid);
+ assert.equal(preview.after,18);
+ assert.throws(()=>report({...args,asOf:'2026-11-03'}),/종료 후/);
 });
