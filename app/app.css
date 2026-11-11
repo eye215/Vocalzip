@@ -658,12 +658,14 @@ body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
   -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));
 }
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav ul{
-  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:100%;gap:1px;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:100%;gap:4px;
 }
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a{
   display:flex;align-items:center;justify-content:center;flex-direction:column;
-  min-width:0;height:var(--vz-nav-item-height,54px);min-height:var(--vz-nav-item-height,54px);gap:2px;border-radius:999px;
-  font-size:11px;line-height:1.2;white-space:nowrap;
+  box-sizing:border-box;min-width:0;width:100%;height:var(--vz-nav-item-height,54px);min-height:var(--vz-nav-item-height,54px);
+  gap:2px;padding:4px;border-radius:999px;
+  font-size:var(--vz-type-nav-size,11px);line-height:var(--vz-type-nav-leading,16px);
+  font-weight:var(--vz-font-medium,500);white-space:nowrap;
 }
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a i{
   color:var(--vz-color-ink-secondary);font-size:22px;line-height:1;
