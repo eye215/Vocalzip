@@ -604,3 +604,16 @@ test('fullscreen: the loading popup stays a small pill and the page row never co
  expect(pages.y).toBeGreaterThanOrEqual(bar.y+bar.height-1);
  if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-full-ready-'+test.info().project.name+'.png'});
 });
+test('the color/width row folds once writing starts and the active tool opens it again',async({page})=>{
+ await setup(page);const dialog=await open(page),quick=dialog.locator('[data-ink-quick]');
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();
+ await expect(quick).toBeVisible();
+ const before=await dialog.locator('[data-ink-stage]').boundingBox();
+ await draw(page,dialog,{tool:'펜'});
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
+ await expect(quick).toBeHidden();
+ expect((await dialog.locator('[data-ink-stage]').boundingBox()).height).toBeGreaterThan(before.height); // the score got the room
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();await expect(quick).toBeVisible();
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();await expect(quick).toBeHidden();
+ await dialog.getByRole('button',{name:'형광펜',exact:true}).click();await expect(quick).toBeVisible();
+});
