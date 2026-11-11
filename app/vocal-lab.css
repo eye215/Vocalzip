@@ -79,3 +79,23 @@ body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports
 
 
 .vl-tip-list[data-ai-tip]:not(:empty){margin-top:12px}
+
+/* Measured trend direction: favorable green, unfavorable red, contextual neutral. */
+.vl-metric-guide{display:grid;gap:5px;margin:10px 0 12px;padding:12px 14px;border-radius:14px;background:#231b2e;color:#d8cde5;font-size:13px;line-height:1.5}
+.vl-metric-guide strong{color:#f3e9fc;font-size:14px}
+.vl-change{margin:10px 0;font-size:13px;font-weight:700;line-height:1.6}
+.vl-change.good,.vl-legend .good{color:#55dba4}
+.vl-change.bad,.vl-legend .bad{color:#ff7b87}
+.vl-change.neutral,.vl-legend .neutral{color:#c4afda}
+.vl-legend{display:flex;flex-wrap:wrap;gap:9px 14px;margin:12px 0 8px;font-size:11px;line-height:1.5}
+.vl-plot .vl-dot.good{fill:#55dba4;stroke:#217b5d}
+.vl-plot .vl-dot.bad{fill:#ff7b87;stroke:#a9384b}
+.vl-plot .vl-dot.neutral{fill:#dec4fa;stroke:#a364d1}
+.vl-plot .vl-hit{fill:transparent;stroke:none;pointer-events:all}
+.vl-plot g[data-point]{cursor:pointer;outline:0}
+.vl-plot g[data-point]:focus-visible .vl-hit{fill:#9e5af733;stroke:#d2a1ff;stroke-width:2}
+.vl-plot g[data-point] .vl-dot{pointer-events:none}
+.vl-observe .vl-change.good{color:#55dba4}
+.vl-observe .vl-change.bad{color:#ff7b87}
+.vl-observe .vl-change.neutral{color:#c4afda}
+.vl-observe p{overflow-wrap:anywhere}
