@@ -76,7 +76,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  let store,prefs,profiles;
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
- const controller=new AbortController();let quickFolded=false,audioBar=null,doc,loadingTask,renderTask,prepared=null,prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
+ const controller=new AbortController();let quickFolded=false,audioBar=null,doc,loadingTask,renderTask,prepared=new Map(),prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
  let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
@@ -586,9 +586,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const natural=page.getViewport({scale:1});aspect=natural.height/natural.width;
    baseWidth=Math.max(240,stage.clientWidth-16);const width=baseWidth*zoom,height=width*aspect;
    const pixelScale=Math.min(devicePixelRatio||1,2,Math.sqrt(4000000/(width*height))),viewport=page.getViewport({scale:width/natural.width*pixelScale});
-   const target=document.createElement('canvas'),cache=prepared;
+   const target=document.createElement('canvas'),cache=prepared.get(pageNo);
    if(cache?.page===pageNo&&cache.width===width&&cache.zoom===zoom&&cache.pixelScale===pixelScale&&cache.doc===doc){
-    prepared=null;target.width=cache.canvas.width;target.height=cache.canvas.height;target.getContext('2d').drawImage(cache.canvas,0,0);
+    target.width=cache.canvas.width;target.height=cache.canvas.height;target.getContext('2d').drawImage(cache.canvas,0,0);
    }else{
     target.width=Math.max(1,Math.floor(viewport.width));target.height=Math.max(1,Math.floor(viewport.height));
     renderTask=page.render({canvasContext:target.getContext('2d'),viewport});await renderTask.promise;
@@ -600,12 +600,16 @@ VZ.openScoreInk=(songId,scoreId)=>{
    el.querySelector('[data-ink-first]').disabled=pageNo<=1;el.querySelector('[data-ink-last]').disabled=pageNo>=doc.numPages;
    box.hidden=false;viewReady=true;ready=!!binding;stage.dataset.viewOnly=String(!ready);if(ready)rememberView();svg.dataset.tool=ready?tool:'pan';svg.dataset.penOnly=String(profiles.penOnly);svg.style.pointerEvents=ready&&!performance?'':'none';if(performance)showPerformanceControls();if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
    paint();if(!binding)say('악보를 볼 수 있어요 · 필기를 확인하고 있어요.');else if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
-   prepareTimer=setTimeout(()=>prepareNext(pageNo+1,number),100);
+   // Keep this page and pre-render both neighbours, so turning either way needs no new render.
+   for(const key of [...prepared.keys()])if(Math.abs(key-pageNo)>1)prepared.delete(key);
+   if(!cache)prepared.set(pageNo,{page:pageNo,width,zoom,pixelScale,doc,canvas:target});
+   prepareTimer=setTimeout(async()=>{await prepareNext(pageNo+1,number);await prepareNext(pageNo-1,number);},0);
   }catch(e){if(!closed&&number===renderNumber&&e.name!=='RenderingCancelledException')say('악보를 열지 못했어요: '+e.message,true);}
   finally{if(number===renderNumber){busy=false;if(!closed)paint();}}
  }
  async function prepareNext(next,number){
-  if(closed||number!==renderNumber||!doc||next>doc.numPages||prepared?.page===next)return;
+  if(closed||number!==renderNumber||!doc||next<1||next>doc.numPages)return;
+  const have=prepared.get(next);if(have&&have.doc===doc&&have.zoom===zoom)return;
   let task;
   try{
    const source=doc,page=await source.getPage(next);if(closed||number!==renderNumber||source!==doc)return;
@@ -613,7 +617,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const pixelScale=Math.min(devicePixelRatio||1,2,Math.sqrt(4000000/(width*height))),viewport=page.getViewport({scale:width/natural.width*pixelScale});
    const nextCanvas=document.createElement('canvas');nextCanvas.width=Math.max(1,Math.floor(viewport.width));nextCanvas.height=Math.max(1,Math.floor(viewport.height));
    task=page.render({canvasContext:nextCanvas.getContext('2d'),viewport});prepareTask=task;await task.promise;
-   if(!closed&&number===renderNumber&&source===doc)prepared={page:next,width,zoom,pixelScale,doc:source,canvas:nextCanvas};
+   if(!closed&&number===renderNumber&&source===doc)prepared.set(next,{page:next,width,zoom,pixelScale,doc:source,canvas:nextCanvas});
   }catch{}finally{if(prepareTask===task)prepareTask=null;}
  }
  function markPoint(x,y){return [Math.max(0,Math.min(1,x)),Math.max(0,Math.min(1,y)),.5];}
@@ -727,7 +731,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function cleanup(){
   audioBar?.destroy()?.catch?.(()=>{});audioBar=null;
-  closed=true;visionController?.abort();clearTimeout(performanceTimer);clearTimeout(prepareTimer);prepareTask?.cancel();prepared=null;closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
+  closed=true;visionController?.abort();clearTimeout(performanceTimer);clearTimeout(prepareTimer);prepareTask?.cancel();prepared.clear();closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
   window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);VZ.setGuard(null);
  }
@@ -971,7 +975,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    // The complete original is fetched in one request as soon as the score opens (not re-collected in 256 KB
    // ranges after the first page): it feeds the ink check and, when it arrives first, the page itself.
    // Its progress is shown while the first page is not on screen yet.
-   let fullDone=false;
+   let fullDone=false,rangeOpened=false;
    const fullBytes=()=>bytesPromise ||= (async()=>{
     const url=await urlPromise;
     const response=await deadline(fetch(url,{signal:controller.signal,cache:'default'}),20000,'PDF 다운로드가 지연되고 있어요.');
@@ -998,6 +1002,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     loadingTask=pdf.getDocument({...options,data:(await fullBytes()).slice()});
     doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');
    }else{
+   rangeOpened=true;
    loadingTask=pdf.getDocument({...options,url,disableAutoFetch:true,disableStream:true,rangeChunkSize:1048576});
    loadingTask.onPassword=()=>{loadingTask.destroy();say('암호가 없는 PDF로 다시 올려 주세요.',true);};
    try{doc=await deadline(loadingTask.promise,30000,'PDF 첫 페이지를 열지 못했어요.');}
@@ -1021,6 +1026,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const bytes=await fullBytes();current();if(closed)return;
    const pdfHash=knownHash||await hash(bytes);current();if(closed)return;
    if(!knownHash)pdfCache.put(owner,score,bytes,pdfHash).catch(()=>{});
+   // A document opened through ranges fetches each new page over the network. Once the whole PDF is here, page
+   // turns use a document opened from those bytes instead (the old one is released after any render on it ends).
+   if(rangeOpened){
+    try{
+     const pdf=await library(),task=pdf.getDocument({...options,data:bytes.slice()}),full=await deadline(task.promise,30000,'PDF 전환 지연');
+     if(!closed){const oldTask=loadingTask;doc=full;loadingTask=task;rangeOpened=false;prepared.clear();setTimeout(()=>oldTask?.destroy?.()?.catch?.(()=>{}),10000);if(!busy)prepareTimer=setTimeout(async()=>{const n=renderNumber;await prepareNext(pageNo+1,n);await prepareNext(pageNo-1,n);},0);}
+    }catch{}
+   }
    binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
    readNotes();
    if(savedView?.pdfHash&&savedView.pdfHash!==pdfHash){

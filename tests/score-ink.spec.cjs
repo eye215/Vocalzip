@@ -3,12 +3,12 @@ require('./legacy-session-mode.cjs')(test);
 const {boot,fakeR2}=require('./helpers/r2-fixture.cjs');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const PDFROOT=process.env.VZ_PDFJS_ROOT||'/tmp/vzip-score-pdfjs/node_modules/pdfjs-dist';
-function pdf(){
+function pdf(pad=0){
  const stream=text=>'<< /Length '+Buffer.byteLength(text)+' >>\nstream\n'+text+'\nendstream';
  const staff='0 0 0 RG 1 w '+[170,180,190,200,210].map(y=>'20 '+y+' m 280 '+y+' l S').join('\n');
  const content=n=>'BT /F1 18 Tf 20 360 Td (VOCAL.zip Score '+n+') Tj ET\n'+staff;
  const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>',
-  '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>',stream(content(1)),
+  '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>',stream(content(1)+(pad?'\n'+('%'+'x'.repeat(998)+'\n').repeat(Math.ceil(pad/1000)):'')),
   '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>',stream(content(2)),
   '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
  let out='%PDF-1.4\n',offsets=[0];
@@ -17,6 +17,17 @@ function pdf(){
  return Buffer.from(out);
 }
 const bytes=pdf(),key='u/ui-test-user/score-ink/original.pdf';
+/** n pages, each with ~pad bytes inside its content stream, so later pages lie beyond the first 1 MB range. */
+function bigPdf(n,pad){
+ const stream=text=>'<< /Length '+Buffer.byteLength(text)+' >>\nstream\n'+text+'\nendstream';
+ const filler=('%'+'x'.repeat(998)+'\n').repeat(Math.ceil(pad/1000));
+ const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids ['+Array.from({length:n},(_,i)=>(4+i*2)+' 0 R').join(' ')+'] /Count '+n+' >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+ for(let i=0;i<n;i++)objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 3 0 R >> >> /Contents '+(5+i*2)+' 0 R >>',stream('BT /F1 18 Tf 20 360 Td (Page '+(i+1)+') Tj ET\n'+filler));
+ let out='%PDF-1.4\n';const offsets=[0];
+ objects.forEach((o,i)=>{offsets.push(Buffer.byteLength(out));out+=(i+1)+' 0 obj\n'+o+'\nendobj\n';});
+ const at=Buffer.byteLength(out);out+='xref\n0 '+offsets.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+at+'\n%%EOF';
+ return Buffer.from(out);
+}
 async function setup(page,sourceBytes=bytes){
  const r2=await fakeR2(page);r2.store.set(key,{bytes:sourceBytes,type:'application/pdf',etag:'"pdf"'});
  await page.context().route('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/**',route=>{
@@ -616,4 +627,24 @@ test('the color/width row folds once writing starts and the active tool opens it
  await dialog.getByRole('button',{name:'펜',exact:true}).click();await expect(quick).toBeVisible();
  await dialog.getByRole('button',{name:'펜',exact:true}).click();await expect(quick).toBeHidden();
  await dialog.getByRole('button',{name:'형광펜',exact:true}).click();await expect(quick).toBeVisible();
+});
+test('range-opened score switches to the downloaded PDF without errors and turns pages either way with no network',async({page})=>{
+ // About 3 MB inside page 1, so page 2 lies beyond the first 1 MB range a ranged document reads.
+ // The complete download is held until the first page shows (a slow phone connection), so the page is opened
+ // through ranges first; once the download lands, page turns must stop reading ranges.
+ const r2=await setup(page,bigPdf(3,1.5e6));let release;const gate=new Promise(r=>{release=r;});
+ let held=false;r2.reject.beforeRead=async req=>{if(!req.headers().range&&!held){held=true;await gate;}}; // the app's own full download starts first
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'}),label=dialog.locator('[data-ink-page]');
+ await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ release();
+ await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨',{timeout:20000});
+ await page.waitForTimeout(500);
+ const reads=[];page.on('request',req=>{if(/original\.pdf/.test(req.url()))reads.push(req.headers().range||'full');});
+ for(const [name,shown] of [['다음 악보 페이지','2 / 3쪽'],['다음 악보 페이지','3 / 3쪽'],['이전 악보 페이지','2 / 3쪽'],['이전 악보 페이지','1 / 3쪽']]){
+  await dialog.getByRole('button',{name,exact:true}).click();
+  await expect(label).toHaveText(shown);
+ }
+ expect(reads).toEqual([]);
 });
