@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>녹음 찾기 · VOCAL.zip</title>
+<style>
+:root{--bg:#f6f4fb;--ink:#1e1b2e;--ink2:#5f5a74;--line:#e8e3f3;--accent:#7552d9;--soft:#ece6fc}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;padding:calc(env(safe-area-inset-top) + 16px) 16px 40px}
+h1{font-size:22px;margin:0 0 6px}p{margin:0 0 12px;color:var(--ink2);font-size:14px}
+.card{background:#fff;border-radius:16px;padding:14px 16px;margin:12px 0;box-shadow:0 1px 2px rgba(40,24,90,.05),0 4px 16px rgba(40,24,90,.05)}
+.card h2{font-size:15px;margin:0 0 4px;word-break:break-all}.row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.row .t{flex:1;min-width:0}.row .t b{display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row .t span{font-size:13px;color:var(--ink2)}
+button,a.btn{min-height:44px;padding:0 14px;border:0;border-radius:12px;background:var(--soft);color:var(--accent);font:600 14px inherit;text-decoration:none;display:inline-grid;place-items:center;flex:none}
+.today{background:#fff7e0}.muted{color:var(--ink2);font-size:13px}
+</style>
+</head>
+<body>
+<h1>녹음 찾기</h1>
+<p>이 기기(이 브라우저·홈 화면 앱)에 저장된 VOCAL.zip 녹음 저장소를 모두 보여줘요. <b>읽기와 파일 저장만</b> 하고 아무것도 지우거나 바꾸지 않아요. 오늘 녹음은 노란색이에요.</p>
+<p class="muted">홈 화면 앱으로 쓰셨다면 Safari가 아니라 그 앱 안에서 이 페이지를 열어야 같은 저장소가 보여요 (앱 설정의 "녹음 찾기").</p>
+<div id="out"><p>찾는 중…</p></div>
+<p><a class="btn" href="./">앱으로 돌아가기</a></p>
+<script>
+(async () => {
+  const out = document.getElementById('out'), today = new Date().toDateString();
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const size = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
+  const blobOf = r => r.blob instanceof Blob ? r.blob : r.bytes ? new Blob([r.bytes], {type:r.type || 'audio/mp4'}) : r.data ? new Blob([r.data], {type:r.type || 'audio/mp4'}) : null;
+  let names = [];
+  try { names = (await indexedDB.databases()).map(d => d.name).filter(n => /^vocalzip_media/.test(n || '')); } catch {}
+  for (const n of ['vocalzip_media_v1']) if (!names.includes(n)) names.push(n);
+  const open = name => new Promise((res, rej) => { const r = indexedDB.open(name); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onupgradeneeded = () => { r.transaction.abort(); rej(Error('없음')); }; });
+  let html = '', total = 0;
+  for (const name of names.sort()) {
+    let db; try { db = await open(name); } catch { continue; }
+    if (!db.objectStoreNames.contains('recordings')) { db.close(); continue; }
+    const rows = await new Promise((res, rej) => { const r = db.transaction('recordings').objectStore('recordings').getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }).catch(() => []);
+    db.close();
+    rows.sort((a, b) => (b.created || 0) - (a.created || 0));
+    total += rows.length;
+    const who = name === 'vocalzip_media_v1' ? '이전 공용 저장소' : /_unclaimed$/.test(name) ? '로그인 확인 전 저장소 (unclaimed)' : '계정 저장소';
+    html += '<div class="card"><h2>' + who + ' · ' + rows.length + '개</h2><div class="muted">' + esc(name) + '</div>' +
+      rows.map((r, i) => { const b = blobOf(r), d = r.created ? new Date(r.created) : null;
+        return '<div class="row' + (d && d.toDateString() === today ? ' today' : '') + '"><div class="t"><b>' + esc(r.name || r.id) + '</b><span>' + (d ? d.toLocaleString('ko-KR') : '날짜 없음') + (b ? ' · ' + size(b.size) : ' · 파일이 이 저장소에 없음(클라우드 또는 분할 저장)') + (r.cloud || r.uploaded ? ' · 클라우드 업로드됨' : '') + '</span></div>' +
+          (b ? '<button data-db="' + esc(name) + '" data-i="' + i + '">파일 저장</button>' : '') + '</div>'; }).join('') + '</div>';
+    window['rows_' + name] = rows;
+  }
+  out.innerHTML = total ? html : '<div class="card">이 기기에서 녹음 저장소를 찾지 못했어요. 홈 화면 앱으로 녹음했다면 그 앱 안에서 열어 주세요.</div>';
+  out.onclick = e => {
+    const b = e.target.closest('button[data-db]'); if (!b) return;
+    const r = window['rows_' + b.dataset.db][+b.dataset.i], blob = blobOf(r);
+    const ext = (r.name || '').match(/\.[a-z0-9]{2,5}$/i)?.[0] || ({'audio/mp4':'.m4a','audio/webm':'.webm','audio/wav':'.wav','audio/mpeg':'.mp3'}[blob.type] || '.m4a');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (r.name || 'recording-' + r.id).replace(/[\\/:*?"<>|]/g, '_') + (/\.[a-z0-9]{2,5}$/i.test(r.name || '') ? '' : ext);
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  };
+})();
+</script>
+</body>
+</html>
