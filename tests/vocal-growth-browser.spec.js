@@ -4,9 +4,10 @@ const path=require('node:path');
 const scripts=[
  'app/weak-phrase.js','app/segment-ab-model.js','app/segment-ab-ui.js',
  'app/plan-outcome-model.js','app/plan-outcome-ui.js',
+ 'app/overall-growth-model.js','app/overall-growth-ui.js',
  'app/monthly-practice-plans.js','app/monthly-growth.js'
 ];
-async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[]}={}){
+async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[],view='monthly'}={}){
  await page.goto('about:blank');
  await page.setContent('<main id="test-root"></main>');
  await page.evaluate(({recordings,plans,goals,reports,practices})=>{
@@ -24,6 +25,7 @@ async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[
    songTitle:id=>window.VZ.song(id)?.title||'',
    change(fn){fn(this.db);window.__notifications.push('saved');return true;},
    toast:msg=>window.__notifications.push(msg),
+   sheet:args=>{window.__lastSheet=args;return {close:()=>{}};},
    confirm:async()=>true,
    analysisReliable:a=>a?.metrics?.voicedSeconds>=10,
    route(name,definition){(this.routes ||= {})[name]=definition;},
@@ -48,7 +50,7 @@ async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[
   window.vzipCloudSessionId=()=> 'mock-session-1';
   window.vzipCloudCoach=async evidence=>{
    window.__coachCalls++;
-   return {mode:'monthly',month:evidence.month,note:'요약: 기록을 확인했어요.'};
+   return {mode:evidence.mode,month:evidence.month,note:'요약: 기록을 확인했어요.'};
   };
  },{recordings,plans,goals,reports,practices});
  for(const f of scripts)await page.addScriptTag({path:path.resolve(__dirname,'..',f)});
@@ -58,7 +60,13 @@ async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[
   el.innerHTML=def.render();
   def.mount(el);
  });
- await expect(page.locator('[data-growth-select]')).toBeVisible();
+ await expect(page.locator('[data-growth-mode="overall"]')).toBeVisible();
+ if(view==='monthly'){
+  await page.locator('[data-growth-mode="monthly"]').click();
+  await expect(page.locator('[data-growth-select]')).toBeVisible();
+ }else{
+  await expect(page.locator('.growth-hero')).toBeVisible();
+ }
 }
 test('empty library still shows current month and permits a song plan without a recording',async({page})=>{
  await boot(page);
@@ -189,4 +197,38 @@ test('song growth listening evidence excludes training-only and unassigned sessi
  const evidence=await page.evaluate(()=>window.__coachEvidence);
  expect(evidence.observations[0].song).toBe('Test Song');
  expect(evidence.observations[0].heard).not.toContain('훈련 전용');
+});
+
+test('all-time dashboard combines lifetime counts, consistent same-song metrics, monthly chart and opt-in overall AI',async({page})=>{
+ const media=[
+  {id:'first',songId:'song-1',recordedDate:'2026-09-01',type:'audio/wav',
+   analysis:{v:1,metrics:{voicedSeconds:22,intonation:{meanAbsCents:35},stability:{wobbleCents:20},breath:{medianPhrase:3},vibrato:{regularity:.5}}}},
+  {id:'latest',songId:'song-1',recordedDate:'2026-11-05',type:'audio/wav',
+   analysis:{v:1,metrics:{voicedSeconds:23,intonation:{meanAbsCents:17},stability:{wobbleCents:14},breath:{medianPhrase:4},vibrato:{regularity:.65}}}}
+ ];
+ await boot(page,{recordings:media,view:'overall'});
+ await expect(page.locator('.growth-hero')).toContainText('2');
+ await expect(page.locator('.growth-stat')).toHaveCount(4);
+ await expect(page.locator('.growth-stat').first()).toContainText('개선 방향');
+ expect(await page.evaluate(()=>window.__coachCalls)).toBe(0);
+ await page.locator('[data-overall-metric="phrase"]').click();
+ await expect(page.locator('[data-overall-metric="phrase"]')).toHaveAttribute('aria-pressed','true');
+ await page.locator('[data-overall-month]').first().click();
+ const popup=await page.evaluate(()=>window.__lastSheet);
+ expect(popup.title).toContain('측정 기록');
+ await page.locator('[data-overall-ai-run]').click();
+ await expect.poll(()=>page.evaluate(()=>VZ.db.overallAiReports.length)).toBe(1);
+ expect(await page.evaluate(()=>window.__coachCalls)).toBe(1);
+ await page.locator('[data-growth-mode="monthly"]').click();
+ await expect(page.locator('[data-growth-select]')).toBeVisible();
+ await page.locator('[data-growth-mode="overall"]').click();
+ await expect(page.locator('.growth-ai-note')).toContainText('기록을 확인했어요');
+});
+test('all-time with no analyzed recording explains missing measurements instead of displaying invented improvement',async({page})=>{
+ await boot(page,{recordings:[],view:'overall'});
+ await expect(page.locator('.growth-stat')).toHaveCount(4);
+ await expect(page.locator('.growth-stat').first()).toContainText('측정 없음');
+ await expect(page.locator('.growth-hero')).toContainText('비교 기록 필요');
+ await expect(page.locator('[data-overall-ai-run]')).toBeVisible();
+ expect(await page.evaluate(()=>window.__coachCalls)).toBe(0);
 });

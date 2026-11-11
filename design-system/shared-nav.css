@@ -1,0 +1,32 @@
+/* Shared five-item floating navigation — match approved student-home dock. */
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
+ box-sizing:border-box;position:fixed;left:50%;right:auto;bottom:max(12px,env(safe-area-inset-bottom));
+ transform:translateX(-50%);width:calc(100% - 32px);max-width:358px;
+ padding:0;border:0;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+ z-index:var(--vz-z-nav,35);
+}
+body>.v-nav ul{
+ box-sizing:border-box;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+ gap:4px;align-items:center;height:70px;width:100%;max-width:none;
+ border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;
+ padding:8px;margin:0;background:var(--vz-nav-surface,rgba(255,255,255,.58));
+ -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px));
+ box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));
+}
+body>.v-nav li{min-width:0;list-style:none}
+body>.v-nav a,body>.v-nav a:not(.rec){
+ box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex-direction:column;
+ height:54px;min-height:54px;gap:2px;border-radius:999px;
+ color:#7d748a;background:transparent;font-size:11px;font-weight:600;text-decoration:none;
+ min-width:0;padding:4px 1px;white-space:nowrap;
+}
+body>.v-nav a i,body>.v-nav a:not(.rec) i{font-size:22px;line-height:1.1;color:var(--vz-color-ink-secondary,#777080)}
+body>.v-nav a[aria-current="page"],body>.v-nav a:not(.rec)[aria-current="page"]{
+ background:var(--vz-color-selected-bg,#f3ebff);color:#8a6db8;
+}
+body>.v-nav a[aria-current="page"] i,body>.v-nav a:not(.rec)[aria-current="page"] i{color:var(--vz-color-accent,#7a32f5)}
+body>.v-nav a:focus-visible{outline:2px solid var(--vz-color-accent,#7a32f5);outline-offset:2px}
+body.vz-record-mode>.v-nav{display:none!important}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ body>.v-nav ul{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
+}

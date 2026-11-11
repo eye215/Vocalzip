@@ -20,7 +20,7 @@ test('dependencies load in correct order',()=>{
  assert.deepEqual(indexes,indexes.slice().sort((a,b)=>a-b));
 });
 test('all synced report arrays exist in core and conflict merge',()=>{
- for(const name of ['monthlyGrowthReports','monthlyAiReports','vocalPlanReports']){
+ for(const name of ['monthlyGrowthReports','monthlyAiReports','overallAiReports','vocalPlanReports']){
   assert.ok(file('app/core.js').includes("'"+name+"'"),name+' missing in core');
   assert.ok(file('data-merge.js').includes("'"+name+"'"),name+' missing in merge');
  }
@@ -82,4 +82,26 @@ test('song-only AI evidence shares the same explicit exclusion for training sess
  assert.match(js,/!!V\.song\(songId\)/);
  assert.match(js,/const entries=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
  assert.match(js,/const observations=\(V\.db\.practices\|\|\[\]\)\.filter\(p=>songListeningEntry\(p,month\)\)/);
+});
+
+test('overall and monthly growth share a single route and preserve month controls',()=>{
+ const html=file('index.html'),js=file('app/monthly-growth.js');
+ assert.match(html,/app\/overall-growth-model\.js/);
+ assert.match(html,/app\/overall-growth-ui\.js/);
+ assert.match(html,/design-system\/shared-nav\.css/);
+ assert.match(js,/data-growth-mode="overall"/);
+ assert.match(js,/data-growth-mode="monthly"/);
+ assert.match(js,/data-growth-select/);
+ assert.match(js,/window\.VzipOverallGrowth\?\.calculate/);
+ assert.match(js,/V\.monthlyPracticePlans/);
+});
+test('overall AI is explicit, durable and does not upload audio',()=>{
+ const overall=file('app/overall-growth-ui.js'),api=file('supabase/functions/vzip-nvidia-coach/index.ts');
+ assert.match(overall,/data-overall-ai-run/);
+ assert.match(overall,/window\.vzipCloudCoach\(input\)/);
+ assert.match(overall,/db\.overallAiReports/);
+ assert.match(overall,/mode:'overall'/);
+ assert.match(api,/input\.mode === 'overall'/);
+ assert.ok(api.indexOf("input.mode === 'overall'")<api.indexOf('const audio = input.audio'));
+ assert.match(api,/overall\?'overall':'monthly'/);
 });
