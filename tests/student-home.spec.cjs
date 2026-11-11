@@ -164,7 +164,7 @@ test('uploaded HTML blob and all original stylesheet blocks are reused literally
   const expected=[...original.querySelectorAll('style')].map(e=>e.textContent.replace(/@import\s+url\([^;]*\);/g,''));
   const shadow=host.shadowRoot,actual=[...shadow.querySelectorAll('style[data-source-style]')].map(e=>e.textContent);
   const same=selector=>original.querySelector(selector).innerHTML===shadow.querySelector(selector).innerHTML;
-  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:shadow.querySelector('.vz-floating-record i')?.dataset.glyph==='\ue326',nav:[...shadow.querySelectorAll('.vz-nav-item')].map(e=>e.querySelector('i')?.dataset.glyph).join(',')==='\ue2c2,\ue340,\ue00e,\ue10a,\ue44e',scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
+  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:shadow.querySelector('.vz-floating-record i')?.dataset.glyph==='\ue326',nav:[...shadow.querySelectorAll('.vz-nav-item')].map(e=>e.querySelector('i')?.dataset.glyph).join(',')==='\ue2c2,\ue340,\ue00e,\ue10a,\ue150',scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
  });
  expect(result).toEqual({styles:true,count:10,fab:true,nav:true,scripts:0});
  await expect(page.locator('.vz-nav-item')).toHaveCount(5);
@@ -250,7 +250,7 @@ test('weekday names, minutes, rings and percentage colors use actual records',as
 test('five home navigation buttons and floating recording reach existing routes',async({page})=>{
  await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정','성장']);
  const dock=await page.evaluate(()=>{const root=document.querySelector('.vz-student-home').shadowRoot,nav=root.querySelector('.vz-nav');return {icons:[...nav.querySelectorAll('.vz-nav-item i')].map(i=>i.dataset.glyph),background:getComputedStyle(nav).backgroundColor,font:document.fonts.check('22px Phosphor')}});
-  expect(dock.icons).toEqual(['\ue2c2','\ue340','\ue00e','\ue10a','\ue44e']);expect(dock.background).toBe('rgba(255, 255, 255, 0.58)');expect(dock.font).toBe(true);
+  expect(dock.icons).toEqual(['\ue2c2','\ue340','\ue00e','\ue10a','\ue150']);expect(dock.background).toBe('rgba(255, 255, 255, 0.58)');expect(dock.font).toBe(true);
  for(const [label,route]of [['내 곡','songs'],['보관함','library'],['일정','calendar'],['성장','vocal-growth'],['녹음 시작','record']]){
   await page.goto('/#/home');await ready(page);
    await page.getByRole('button',{name:label,exact:true}).click();
