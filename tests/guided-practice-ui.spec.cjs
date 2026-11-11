@@ -99,3 +99,24 @@ test('only a step with an explicit range offers a playable reference tone',async
  await expect(page.locator('[data-gp-reference]')).toHaveCount(0);
  expect(page.__errors).toEqual([]);
 });
+
+test('AI rhythm follow-along opens a 75 BPM metronome with opt-in beats and stops on background or navigation',async({page})=>{
+ await page.addInitScript(()=>{
+  const Original=window.AudioContext||window.webkitAudioContext;window.__metroSounds=[];
+  window.AudioContext=class extends Original{createOscillator(){const source=super.createOscillator(),start=source.start.bind(source);source.start=time=>{window.__metroSounds.push({time,frequency:source.frequency.value});start(time);};return source;}};
+ });
+ await boot(page);
+ await page.evaluate(()=>VZ.change(d=>{d.practicePlans||=[];d.practicePlans.push({id:'rhythm-test',period:'ai-exercise',songId:'song-1',tip:{name:'두 구절 리듬 연결 연습',reason:'리듬을 따로 확인해요.',steps:['메트로놈 70~80 BPM에 맞춰 박수 치기','두 구절 연결하기'],minutes:5}});},{silent:true}));
+ await page.goto('/#/guided-practice/ai:rhythm-test?song=song-1');
+ const panel=page.getByRole('region',{name:'메트로놈'});await expect(panel).toBeVisible();await expect(page.getByRole('spinbutton',{name:'메트로놈 BPM'})).toHaveValue('75');
+ await page.waitForTimeout(300);expect(await page.evaluate(()=>__metroSounds.length)).toBe(0);
+ await page.getByRole('button',{name:'BPM 5 높이기'}).click();await expect(page.locator('[data-bpm]')).toHaveValue('80');await page.getByRole('button',{name:'BPM 5 낮추기'}).click();
+ await page.getByRole('button',{name:'메트로놈 켜기'}).click();await expect(page.locator('[data-metronome]')).toHaveAttribute('aria-pressed','true');
+ await expect.poll(()=>page.evaluate(()=>__metroSounds.length)).toBeGreaterThanOrEqual(2);const sounds=await page.evaluate(()=>__metroSounds.slice(0,2));expect(sounds[0].frequency).toBe(1200);expect(sounds[1].frequency).toBe(800);expect(sounds[1].time-sounds[0].time).toBeCloseTo(.8,2);
+ await expect(page.locator('.gp-timer strong')).toHaveText('0:00');
+ await page.locator('[data-meter]').selectOption('3');await expect(page.locator('[data-beat]')).toHaveCount(3);
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'));});await expect(page.locator('[data-metronome]')).toHaveAttribute('aria-pressed','false');
+ await page.waitForTimeout(150);const stopped=await page.evaluate(()=>__metroSounds.length);await page.waitForTimeout(450);expect(await page.evaluate(()=>__metroSounds.length)).toBe(stopped);
+ await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'});document.dispatchEvent(new Event('visibilitychange'));});await expect(page.getByRole('button',{name:'메트로놈 켜기'})).toBeVisible();
+ await page.getByRole('button',{name:'메트로놈 켜기'}).click();await page.getByRole('button',{name:'연습 시작',exact:true}).click();await page.waitForTimeout(3300);await page.getByRole('button',{name:'연습 종료',exact:true}).click();await expect(page.locator('[data-metronome]')).toHaveAttribute('aria-pressed','false');await page.getByRole('button',{name:'다음 단계',exact:true}).click();await expect(page.locator('.gp-instruction h3')).toHaveText('두 구절 연결하기');await expect(page.getByRole('button',{name:'메트로놈 켜기'})).toBeVisible();await page.getByRole('button',{name:'메트로놈 켜기'}).click();await page.goto('/#/home');await page.waitForTimeout(150);const left=await page.evaluate(()=>__metroSounds.length);await page.waitForTimeout(450);expect(await page.evaluate(()=>__metroSounds.length)).toBe(left);
+});
