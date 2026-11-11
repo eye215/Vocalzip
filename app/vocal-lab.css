@@ -99,3 +99,23 @@ body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports
 .vl-observe .vl-change.bad{color:#ff7b87}
 .vl-observe .vl-change.neutral{color:#c4afda}
 .vl-observe p{overflow-wrap:anywhere}
+
+/* Established "분석 관찰" card: dark, violet, with measured pitch excerpt. */
+.vl-observation-sheet .sheet-body{padding:12px 16px 22px}
+.vl-observation-card{background:linear-gradient(145deg,#201b2c,#17131f);border:1px solid #42334d;border-radius:20px;padding:22px 20px 24px;color:#f5effc;box-shadow:0 12px 30px #10091b30}
+.vl-observation-label{color:#c18bff;font-size:16px;font-weight:750;margin-bottom:18px}
+.vl-observation-card h3{font-size:19px;line-height:1.4;margin:0 0 10px;display:flex;align-items:center;gap:9px;color:#fff;font-weight:750}
+.vl-observation-card .info-btn{color:#bda7dd;border-color:#76658a;flex:none}
+.vl-observation-value{font-size:33px;line-height:1.22;font-weight:800;color:#c47fff;letter-spacing:-.04em}
+.vl-observation-compare{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:15px 0 18px;font-size:13px;color:#e8dcef}
+.vl-observation-compare span{background:#3c2b4c;padding:7px 10px;border-radius:8px;font-weight:700}
+.vl-observation-compare strong{font-size:14px;font-weight:650}
+.vl-observation-compare em{font-style:normal;font-size:13px;color:#bd87ee;font-weight:750}
+.vl-observation-compare .good{color:#55dba4}
+.vl-observation-compare .bad{color:#ff7b87}
+.vl-observation-compare .neutral{color:#bd87ee}
+.vl-observation-loading{color:#c2b2ce;font-size:13px;padding:23px 0}
+.vl-observation-curve{width:100%;height:auto;max-height:225px;display:block;margin:25px 0 22px;overflow:visible}
+.vl-observation-summary{font-size:14px;line-height:1.75;color:#e4d5ef;margin:15px 0 0}
+.vl-observation-note{font-size:12px;line-height:1.6;color:#a99bb4;margin:10px 0 0}
+@media(max-width:380px){.vl-observation-card{padding:18px 14px}.vl-observation-value{font-size:29px}.vl-observation-card h3{font-size:17px}}
