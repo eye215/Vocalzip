@@ -742,7 +742,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{audioBar=window.VzipScoreAudio?.mount(stage,{songId,scoreTitle:score.title||score.fileName||''})||null;}catch{audioBar=null;}
   compactLayout();
   // Fullscreen: the page row floats over the score and hides after 2.5 s without touch, swipe, scroll or keys.
-  const wake=()=>{el.dataset.inkIdle='false';clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(!closed&&full)el.dataset.inkIdle='true';},2500);};
+  // In fullscreen the floating page row sits just above the score's bottom edge, never over the audio bar below it.
+  const pagesRow=el.querySelector('.score-ink-pages');
+  const placePages=()=>{if(!full){pagesRow.style.removeProperty('bottom');return;}const editor=el.querySelector('.score-ink-editor').getBoundingClientRect(),area=stage.getBoundingClientRect();pagesRow.style.bottom=Math.max(8,editor.bottom-area.bottom+8)+'px';};
+  const wake=()=>{placePages();el.dataset.inkIdle='false';clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(!closed&&full)el.dataset.inkIdle='true';},2500);};
   for(const type of ['pointerdown','touchstart','wheel','keydown'])el.addEventListener(type,wake,{passive:true,capture:true});
   stage.addEventListener('scroll',wake,{passive:true});wakeControls=wake;
   el.querySelector('[data-ink-prev]').disabled=true;el.querySelector('[data-ink-next]').disabled=true;
