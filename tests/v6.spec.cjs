@@ -163,7 +163,7 @@ test('Bottom navigation reaches the five main screens without horizontal overflo
   await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  }
  await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
- await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
+ await expect(page.locator('.vz-nav-item')).toHaveCount(5);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
  const songsButton=page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true});
  await expect(songsButton).toBeVisible();
  await expect.poll(async()=>Math.round((await songsButton.boundingBox())?.height||0)).toBeGreaterThanOrEqual(44);
