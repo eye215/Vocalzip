@@ -165,6 +165,7 @@ function observe(s,m) {
   foot:'<button type="button" class="btn block" data-close-observe>확인</button>',
   onMount:(el,close)=>{
    el.classList.add('vl-observation-sheet');
+   el.closest('.sheet-back')?.classList.add('vl-observation-overlay');
    el.querySelector('[data-close-observe]').onclick=close;
    let active=true;const stop=()=>{active=false;};
    // Closing the sheet removes it, so all delayed renders check isConnected.
