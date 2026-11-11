@@ -198,3 +198,11 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
  .vl-player-count{padding:4px 7px}
  .vl-swipe-guide{gap:6px;font-size:10px;padding-left:14px;padding-right:14px}
 }
+
+/* Expanded native selects must not contribute their longest option to page width. */
+.vl-compare details,.vl-compare-body,.vl-compare-picks>label,.vl-compare form,.vl-compare form>label{min-width:0;max-width:100%}
+.vl-compare-body{contain:inline-size;overflow-wrap:anywhere}
+.vl-compare select,.vl-compare textarea{box-sizing:border-box;max-width:100%;font-size:16px}
+.vl-compare select{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:32px}
+.vl-compare form{grid-template-columns:minmax(0,1fr)}
+.vl-compare-actions button{min-width:0;overflow-wrap:anywhere}
