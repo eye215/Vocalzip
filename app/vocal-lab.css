@@ -198,3 +198,37 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
  .vl-player-count{padding:4px 7px}
  .vl-swipe-guide{gap:6px;font-size:10px;padding-left:14px;padding-right:14px}
 }
+
+/* Holistic vocal growth, immediately below chronological trend chart. */
+.vl-growth{padding-bottom:4px}
+.vl-growth-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px}
+.vl-growth-kicker{display:inline-flex;gap:5px;align-items:center;color:#c68eff;font-size:12px;font-weight:700;margin-bottom:5px}
+.vl-growth-top h2{margin:0;font-size:21px;line-height:1.35}
+.vl-growth-count{flex:none;color:#b7a5c3;font-size:11px;border:1px solid #503a61;padding:6px 9px;border-radius:99px}
+.vl-growth-intro{margin:0 0 14px;font-size:14px;line-height:1.6;color:#f6edfd}
+.vl-growth-intro small{display:block;font-size:12px;color:#aa9bb7;margin-top:4px}
+.vl-growth-group{margin-top:13px;padding:14px;background:linear-gradient(145deg,#241b30,#1b1625);border:1px solid #3b2c4c;border-radius:17px}
+.vl-growth-group h3{display:flex;align-items:center;gap:7px;font-size:14px;margin:0 0 11px}
+.vl-growth-group h3 span{font-size:11px;opacity:.7}
+.vl-growth-group h3.good{color:#55dba4}
+.vl-growth-group h3.bad{color:#ff7b87}
+.vl-growth-group h3.neutral{color:#cab0e6}
+.vl-growth-group ul{margin:0;padding:0;list-style:none;display:grid;gap:12px}
+.vl-growth-row{display:flex;gap:10px;align-items:flex-start;font-size:13px;min-width:0}
+.vl-growth-row:not(:last-child){padding-bottom:11px;border-bottom:1px solid #ffffff11}
+.vl-growth-indicator{width:7px;height:7px;flex:none;margin-top:7px;border-radius:50%;background:#ad8ac3}
+.vl-growth-row.good .vl-growth-indicator{background:#55dba4}
+.vl-growth-row.bad .vl-growth-indicator{background:#ff7b87}
+.vl-growth-row>div{min-width:0}
+.vl-growth-row strong{display:block;font-size:13px;color:#f4ecfb;margin-bottom:3px}
+.vl-growth-row p{font-size:12px;line-height:1.65;margin:0;color:#bcaccb;overflow-wrap:anywhere}
+.vl-growth-caution{margin:13px 0 17px;color:#a998b8;font-size:11px;line-height:1.65}
+.vl-growth-ai{border:1px solid #654380;border-radius:17px;background:linear-gradient(145deg,#2c1b40,#21182e);padding:16px}
+.vl-growth-ai-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.vl-growth-ai-head strong{font-size:15px;color:#f6ecff}
+.vl-growth-ai-head button{min-height:40px;border:1px solid #a666f2;border-radius:12px;background:#7533c9;color:white;padding:8px 13px;font-size:12px;font-weight:700}
+.vl-growth-ai-head button:disabled{opacity:.55}
+.vl-growth-ai-status{font-size:12px;line-height:1.6;color:#bdacce;margin:11px 0 0}
+.vl-growth-ai-text{margin-top:12px;padding-top:12px;border-top:1px solid #ffffff22;color:#f2e4ff;font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.vl-growth-ai-text[hidden]{display:none}
+@media(max-width:375px){.vl-growth-top{align-items:flex-start}.vl-growth-count{font-size:10px}.vl-growth-ai{padding:13px}.vl-growth-ai-head button{font-size:11px}}
