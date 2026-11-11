@@ -144,3 +144,25 @@ test('completed plan saves an outcome and follow-up only prefills the next plan'
  const counts=await page.evaluate(()=>({plans:VZ.db.practicePlans.length,reports:VZ.db.vocalPlanReports.length}));
  expect(counts).toEqual({plans:1,reports:1});
 });
+
+test('browser model excludes later and unrelated takes, and the snapshot equals the saved outcome',async({page})=>{
+ await boot(page);
+ const state=await page.evaluate(()=>{
+  const plan={id:'p3',kind:'monthly-vocal',songId:'song-1',metric:'intonation',
+    startDate:'2026-11-01',days:5};
+  const data=[
+    {id:'old',songId:'song-1',date:'2026-10-29',analysis:{metrics:{intonation:{meanAbsCents:35}}}},
+    {id:'during',songId:'song-1',date:'2026-11-04',analysis:{metrics:{intonation:{meanAbsCents:25}}}},
+    {id:'late',songId:'song-1',date:'2026-11-09',analysis:{metrics:{intonation:{meanAbsCents:1}}}},
+    {id:'wrong',songId:'other',date:'2026-11-04',analysis:{metrics:{intonation:{meanAbsCents:1}}}}
+  ];
+  const dateOf=x=>x.date,valid=()=>true;
+  const measured=window.VzipPlanOutcome.measurement(plan,data,dateOf,valid);
+  const saved=window.VzipPlanOutcome.report({plan,recordings:data,dateOf,valid,asOf:'2026-11-11'});
+  return {measured,saved};
+ });
+ expect(state.measured.before).toBe(35);
+ expect(state.measured.after).toBe(25);
+ expect(state.measured.afterIds).toEqual(['during']);
+ expect(state.saved.measurement).toEqual(state.measured);
+});
