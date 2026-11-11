@@ -324,5 +324,10 @@ const shares = {
   revoke:id => api('/v1/shares/' + encodeURIComponent(id), {method:'DELETE'}),
   link:token => new URL('share.html#' + token, location.href.split('#')[0]).href
 };
-window.VzipR2 = {shares, configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, metadataMode, deletionTarget, deleteLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+/** Score → MusicXML conversion (OMR PoC). Only on the owner's request; the result sits next to the PDF. */
+const omr = {
+  request:key => api('/v1/omr', {method:'POST', body:{key}}).then(r => r.job),
+  status:scoreId => api('/v1/omr?score=' + encodeURIComponent(scoreId)).then(r => r.job)
+};
+window.VzipR2 = {shares, omr, configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, metadataMode, deletionTarget, deleteLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();

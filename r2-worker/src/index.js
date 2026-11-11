@@ -1,5 +1,6 @@
 import {handleUploadV2} from './resumable.mjs';
 import {mediaPolicy,handleMediaV2,mediaRpc} from './media-versions.mjs';
+import {handleOmrUser,handleOmrRunner} from './omr.mjs';
 /* VOCAL.zip media API on Cloudflare Workers + R2.
  *
  * The browser never sees an R2 key. It signs in with Supabase as before and sends the Supabase
@@ -16,6 +17,7 @@ import {mediaPolicy,handleMediaV2,mediaRpc} from './media-versions.mjs';
  *   DELETE /v1/media/<key>
  *   GET    /v1/usage                                → {objects, bytes}
  *   GET    /v1/me                                   → {user}   (sign-in check, no storage access)
+ *   POST/GET /v1/omr, /v1/omr-runner/…              → score PDF → MusicXML conversion (see omr.mjs)
  *
  * Bindings (wrangler.toml / dashboard):
  *   MEDIA                 R2 bucket
@@ -89,6 +91,9 @@ async function route(request, env) {
 
   // Public share links (no sign-in): the owner's grant is checked on every request, so a revoked or expired link stops at once.
   if ((m = path.match(/^\/v1\/share\/([A-Za-z0-9_-]{40,64})\/(meta|media)$/)) && (method === 'GET' || method === 'HEAD')) return shared(request, env, m[1], m[2], url);
+
+  // Score conversion server (GitHub Actions OIDC, not a user session).
+  if (path.startsWith('/v1/omr-runner/')) return handleOmrRunner(request, env, path, {fail, json, readJson, b64urlDecode});
 
   const uid = await user(request, env);
   const mediaContext=await mediaPolicy(request,env,uid,{fail});
@@ -199,6 +204,7 @@ async function route(request, env) {
   if (path === '/v1/shares' && method === 'POST') return createShare(request, env, uid);
   if (path === '/v1/shares' && method === 'GET') return json({shares:await listShares(env, uid)});
   if ((m = path.match(/^\/v1\/shares\/([a-f0-9]{24})$/)) && method === 'DELETE') return json({ok:await revokeShare(env, uid, m[1])});
+  if (path === '/v1/omr') return handleOmrUser(request, env, uid, url, {fail, json, readJson});
   if (path === '/v1/usage' && method === 'GET') {
     let cursor, objects = 0, bytes = 0;
     do {
