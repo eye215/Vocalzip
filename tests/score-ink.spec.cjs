@@ -437,16 +437,19 @@ test('failed group movement preserves a recovery copy, retries once, and undo re
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(before);
 });
 test('MR 재생 · 녹음 · MR+녹음 sit directly under the score page and leave with the viewer',async({page})=>{
- await setup(page);
- await page.evaluate(()=>window.VZ.change(d=>{d.songs[0].mrTracks=[{id:'mr-1',kind:'file',title:'연습 MR',r2Key:'u/ui-test-user/mr-1/original.m4a',type:'audio/mp4',created:Date.now()}];}));
+ const r2=await setup(page);
+ // A real (silent) WAV as the MR file, so the shared player loads it like a cloud recording.
+ const sr=8000,n=sr,mr=Buffer.alloc(44+n*2);mr.write('RIFF',0);mr.writeUInt32LE(36+n*2,4);mr.write('WAVEfmt ',8);mr.writeUInt32LE(16,16);mr.writeUInt16LE(1,20);mr.writeUInt16LE(1,22);mr.writeUInt32LE(sr,24);mr.writeUInt32LE(sr*2,28);mr.writeUInt16LE(2,32);mr.writeUInt16LE(16,34);mr.write('data',36);mr.writeUInt32LE(n*2,40);
+ r2.store.set('u/ui-test-user/mr-1/original.m4a',{bytes:mr,type:'audio/wav',etag:'"mr"'});
+ await page.evaluate(()=>window.VZ.change(d=>{d.songs[0].mrTracks=[{id:'mr-1',kind:'file',title:'연습 MR',r2Key:'u/ui-test-user/mr-1/original.m4a',type:'audio/wav',created:Date.now()}];}));
  const dialog=await open(page),bar=dialog.locator('[data-score-audio]');
  await expect(bar).toBeVisible();
- await expect(bar.getByRole('button')).toHaveText(['MR 재생','녹음','MR+녹음']);
- await expect(bar).toContainText('연습 MR');
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-'+test.info().project.name+'.png'});
+ for(const name of ['재생','녹음','MR+녹음'])await expect(bar.getByRole('button',{name,exact:true})).toBeVisible();
+ expect((await bar.boundingBox()).height).toBeLessThanOrEqual(64);
  const stage=await dialog.locator('[data-ink-stage]').boundingBox(),box=await bar.boundingBox();
  expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
  expect(await bar.evaluate(el=>el.previousElementSibling?.matches('[data-ink-stage]'))).toBe(true);
- if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-'+test.info().project.name+'.png'});
  await dialog.getByRole('button',{name:'완료',exact:true}).click();
  await expect(page.locator('[data-score-audio]')).toHaveCount(0);
 });

@@ -1,5 +1,6 @@
-// Score viewer audio bar (app/score-audio.js): MR 재생 · 녹음 · MR+녹음 under the score page.
-// Isolated page with a stand-in VZ; recording and R2 are replaced, so this is not iPhone or cloud verification.
+// Score viewer audio bar (app/score-audio.js): one compact row under the score — MR in the shared inline player,
+// 녹음 and MR+녹음. Isolated page with a stand-in VZ; recording and R2 are replaced, so this is not iPhone or cloud
+// verification.
 const {test, expect} = require('@playwright/test');
 const path = require('node:path');
 
@@ -13,117 +14,133 @@ const wav = (() => {
 
 async function open(page, {tracks = [], canRecord = true} = {}) {
   await page.goto('about:blank');
-  await page.setContent('<main><div class="score-ink-stage" id="stage">score</div></main>');
+  await page.setContent('<main style="width:358px"><div class="score-ink-stage" id="stage">score</div></main>');
   await page.evaluate(({tracks, canRecord, wav}) => {
-    window.__log = []; window.__saved = []; window.__sessions = [];
+    window.__log = []; window.__saved = [];
     navigator.audioSession = {type:'auto'};
     window.VzipAccountScope = {owner:'owner-1', beforeLeave:() => () => {}};
+    window.VzipR2 = {url:async key => { window.__log.push('sign:' + key); return wav; }};
     const song = {id:'s1', title:'Defying Gravity', show:'Wicked', mrTracks:tracks};
+    // Stand-in for the shared inline player (M.player): play button, <audio>, load/play/pause/seek/destroy.
+    const player = (host, item) => {
+      host.innerHTML = '<div class="player"><div class="player-row"><button type="button" class="player-btn" data-play aria-label="재생">▶</button><span class="time">0:00</span></div></div>';
+      const el = new Audio(); let ready = null;
+      const api = {el, item,
+        load:() => ready ||= (item.blob ? Promise.resolve(URL.createObjectURL(item.blob)) : window.VzipR2.url(item.r2Key)).then(u => { el.src = u; }),
+        play:() => api.load().then(() => { window.__log.push('play:' + item.id); return el.play(); }),
+        pause:() => { if (!el.paused) window.__log.push('pause:' + item.id); el.pause(); },
+        seek:t => { el.currentTime = t; }, destroy:() => { el.pause(); window.__log.push('destroy:' + item.id); }};
+      host.querySelector('[data-play]').onclick = () => el.paused ? api.play() : api.pause();
+      window.__log.push('player:' + item.id);
+      return api;
+    };
     window.VZ = {
       esc:x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c])),
       song:id => id === 's1' ? song : null, songTitle:id => id === 's1' ? song.title : '', songLabel:s => s ? s.title + ' — ' + s.show : '',
       today:() => '2026-11-11', uid:() => 'id-' + Math.random().toString(36).slice(2), clock:s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'),
       toast:m => window.__log.push('toast:' + m), confirm:async () => true,
       media:{
-        canRecord:() => canRecord,
-        player:() => ({destroy(){}}),
+        canRecord:() => canRecord, player,
         saveBlob:async item => { window.__saved.push({...item, blob:item.blob.size}); return item; },
         capture:async () => {
           window.__log.push('capture-open:' + navigator.audioSession.type);
-          const session = {started:false, stopped:false, cancelled:false,
-            start(){ this.started = true; window.__log.push('capture-start'); },
-            async stop(){ this.stopped = true; window.__log.push('capture-stop'); return {blob:new Blob(['take'], {type:'audio/mp4'}), type:'audio/mp4', durationSeconds:3.2, waveform:[.1, .2], accountOwner:'owner-1', releaseProtection:() => window.__log.push('released')}; },
-            cancel(){ this.cancelled = true; }};
-          window.__sessions.push(session); return session;
+          return {start(){ window.__log.push('capture-start'); },
+            async stop(){ window.__log.push('capture-stop'); return {blob:new Blob(['take'], {type:'audio/mp4'}), type:'audio/mp4', durationSeconds:3.2, waveform:[.1, .2], accountOwner:'owner-1', releaseProtection:() => window.__log.push('released')}; },
+            cancel(){ window.__log.push('capture-cancel'); }};
         }
       }
     };
-    window.VzipR2 = {url:async key => { window.__log.push('sign:' + key); return wav; }};
-    const realPlay = HTMLMediaElement.prototype.play;
-    HTMLMediaElement.prototype.play = function(){ window.__log.push('mr-play'); return realPlay.call(this); };
   }, {tracks, canRecord, wav});
   await page.addStyleTag({path:path.join(__dirname, '..', 'app', 'score-ink.css')});
   await page.addScriptTag({path:path.join(__dirname, '..', 'app', 'score-audio.js')});
   await page.evaluate(() => { window.__bar = window.VzipScoreAudio.mount(document.getElementById('stage'), {songId:'s1'}); });
   return page.locator('[data-score-audio]');
 }
+const log = page => page.evaluate(() => window.__log);
 const FILE = {id:'mr-file', kind:'file', title:'Gravity MR', r2Key:'u/owner-1/mr-file/original.m4a', type:'audio/mp4'};
 const TUBE = {id:'mr-tube', kind:'youtube', title:'유튜브 반주', videoId:'abcdefghijk', url:'https://www.youtube.com/watch?v=abcdefghijk'};
+const button = (bar, name) => bar.getByRole('button', {name, exact:true});
 
-test('the bar sits right under the score with MR 재생, 녹음 and MR+녹음', async ({page}) => {
-  const bar = await open(page, {tracks:[FILE, TUBE]});
+test('one compact row under the score: the MR in the shared player, 녹음 and MR+녹음', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE]});
   expect(await page.evaluate(() => document.getElementById('stage').nextElementSibling?.hasAttribute('data-score-audio'))).toBe(true);
-  await expect(bar.getByRole('button')).toHaveText(['MR 재생', '녹음', 'MR+녹음']);
-  for (const b of await bar.getByRole('button').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
-  // A file MR is chosen first because it can also be recorded with.
-  await expect(bar.getByLabel('MR 선택')).toHaveValue('mr-file');
+  await expect(bar.getByRole('button')).toHaveText(['▶', '녹음', 'MR+녹음']);
+  expect(await log(page)).toContain('player:mr-file');
+  expect((await bar.boundingBox()).height).toBeLessThanOrEqual(60);
+  for (const b of await bar.locator('.score-audio-btn').all()) expect(Math.round((await b.boundingBox()).height)).toBeGreaterThanOrEqual(44);
 });
 
-test('MR 재생 plays the song MR file and stops on a second tap', async ({page}) => {
+test('녹음 records and saves a recording of the song only when 저장 is pressed', async ({page}) => {
   const bar = await open(page, {tracks:[FILE]});
-  await bar.getByRole('button', {name:'MR 재생'}).click();
-  await expect(bar.getByRole('button', {name:'MR 정지'})).toHaveAttribute('aria-pressed', 'true');
-  expect(await page.evaluate(() => window.__log)).toEqual(expect.arrayContaining(['sign:' + FILE.r2Key, 'mr-play']));
-  // Recording buttons wait while the MR plays alone.
-  await expect(bar.getByRole('button', {name:'녹음',exact:true})).toBeDisabled();
-  await bar.getByRole('button', {name:'MR 정지'}).click();
-  await expect(bar.getByRole('button', {name:'MR 재생'})).toHaveAttribute('aria-pressed', 'false');
-});
-
-test('녹음 records, previews and saves a recording of the song only when saved', async ({page}) => {
-  const bar = await open(page, {tracks:[FILE]});
-  await bar.getByRole('button', {name:'녹음',exact:true}).click();
-  await expect(bar.getByRole('button', {name:'녹음 정지'})).toBeVisible();
+  await button(bar, '녹음').click();
   await expect(bar.getByRole('timer')).toBeVisible();
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('play-and-record');
-  await bar.getByRole('button', {name:'녹음 정지'}).click();
-  await expect(bar.locator('[data-score-audio-review]')).toBeVisible();
+  await button(bar, '정지').click();
+  await expect(button(bar, '저장')).toBeVisible();
+  await expect(button(bar, '버리기')).toBeVisible();
   expect(await page.evaluate(() => window.__saved.length)).toBe(0);
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('auto');
-  await expect(bar.locator('[data-score-audio-name]')).toHaveValue(/^Defying Gravity 녹음 /);
-  await bar.locator('[data-score-audio-name]').fill('2절 고음 연습');
-  await bar.getByRole('button', {name:'저장'}).click();
-  await expect(bar.locator('[data-score-audio-review]')).toBeHidden();
+  await button(bar, '저장').click();
+  await expect(button(bar, '녹음')).toBeVisible();
   const [item] = await page.evaluate(() => window.__saved);
-  expect(item).toMatchObject({name:'2절 고음 연습', songId:'s1', song:'Defying Gravity — Wicked', recordingCategory:'song', source:'practice', origin:'score', type:'audio/mp4', durationSeconds:3.2, accountOwner:'owner-1'});
+  expect(item).toMatchObject({songId:'s1', song:'Defying Gravity — Wicked', recordingCategory:'song', source:'practice', origin:'score', type:'audio/mp4', durationSeconds:3.2, accountOwner:'owner-1'});
+  expect(item.name).toMatch(/^Defying Gravity 녹음 /);
   expect(item.withMr).toBeUndefined();
-  expect(await page.evaluate(() => window.__log)).toContain('released');
+  expect(await log(page)).toContain('released');
 });
 
-test('MR+녹음 opens the microphone first, starts the MR with the take, and stops when the MR ends', async ({page}) => {
+test('버리기 drops the take without saving', async ({page}) => {
   const bar = await open(page, {tracks:[FILE]});
-  await bar.getByRole('button', {name:'MR+녹음'}).click();
-  await expect(bar.locator('[data-score-audio-hint]')).toContainText('이어폰');
-  // The 0.4 s MR ends by itself and the take is ready to review without a second tap.
-  await expect(bar.locator('[data-score-audio-review]')).toBeVisible({timeout:5000});
-  const log = await page.evaluate(() => window.__log);
-  expect(log.indexOf('capture-open:play-and-record')).toBeGreaterThanOrEqual(0);
-  expect(log.indexOf('capture-start')).toBeLessThan(log.indexOf('mr-play'));
-  expect(log.indexOf('mr-play')).toBeLessThan(log.indexOf('capture-stop'));
-  await expect(bar.locator('[data-score-audio-name]')).toHaveValue(/MR 녹음/);
-  await bar.getByRole('button', {name:'저장'}).click();
-  await expect.poll(() => page.evaluate(() => window.__saved.length)).toBe(1);
-  expect((await page.evaluate(() => window.__saved))[0].withMr).toEqual({id:'mr-file', title:'Gravity MR'});
+  await button(bar, '녹음').click();
+  await button(bar, '정지').click();
+  await button(bar, '버리기').click();
+  await expect(button(bar, '녹음')).toBeVisible();
+  expect(await page.evaluate(() => window.__saved.length)).toBe(0);
 });
 
-test('a YouTube MR plays in place but cannot be recorded with; no MR disables the MR buttons', async ({page}) => {
+test('MR+녹음 opens the microphone first, starts the MR from the top with the take, and stops when the MR ends', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE]});
+  await button(bar, 'MR+녹음').click();
+  await expect(bar).toContainText('Gravity MR + 녹음');
+  // The 0.4 s MR ends by itself and the take is ready without a second tap.
+  await expect(button(bar, '저장')).toBeVisible({timeout:5000});
+  const l = await log(page);
+  expect(l).toContain('capture-open:play-and-record');
+  expect(l.indexOf('capture-start')).toBeLessThan(l.indexOf('play:mr-file'));
+  expect(l.indexOf('play:mr-file')).toBeLessThan(l.indexOf('capture-stop'));
+  await button(bar, '저장').click();
+  await expect.poll(() => page.evaluate(() => window.__saved.length)).toBe(1);
+  const [item] = await page.evaluate(() => window.__saved);
+  expect(item.withMr).toEqual({id:'mr-file', title:'Gravity MR'});
+  expect(item.name).toMatch(/MR 녹음/);
+});
+
+test('a YouTube MR opens in place but cannot be recorded with; no MR leaves only 녹음', async ({page}) => {
   let bar = await open(page, {tracks:[TUBE]});
-  await expect(bar.getByRole('button', {name:'MR+녹음'})).toBeDisabled();
+  await expect(button(bar, 'MR+녹음')).toBeDisabled();
   await expect(bar.locator('[data-score-audio-hint]')).toContainText('업로드한 MR 파일');
-  await bar.getByRole('button', {name:'MR 재생'}).click();
+  await button(bar, '유튜브 MR').click();
   await expect(bar.locator('iframe')).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/abcdefghijk/);
-  await expect(bar.getByRole('button', {name:'녹음',exact:true})).toBeDisabled();
+  await button(bar, '유튜브 MR').click();
+  await expect(bar.locator('iframe')).toHaveCount(0);
   bar = await open(page, {tracks:[]});
   await expect(bar).toContainText('MR 없음');
-  await expect(bar.getByRole('button', {name:'MR 재생'})).toBeDisabled();
-  await expect(bar.getByRole('button', {name:'MR+녹음'})).toBeDisabled();
-  await expect(bar.getByRole('button', {name:'녹음',exact:true})).toBeEnabled();
+  await expect(button(bar, 'MR+녹음')).toBeDisabled();
+  await expect(button(bar, '녹음')).toBeEnabled();
+});
+
+test('several MRs: a file MR is picked first and the choice switches the player', async ({page}) => {
+  const bar = await open(page, {tracks:[TUBE, FILE]});
+  await expect(bar.getByLabel('MR 선택')).toHaveValue('mr-file');
+  await bar.getByLabel('MR 선택').selectOption('mr-tube');
+  await expect(button(bar, '유튜브 MR')).toBeVisible();
+  expect(await log(page)).toContain('destroy:mr-file');
 });
 
 test('closing the score keeps a take that was still recording or not yet saved', async ({page}) => {
   let bar = await open(page, {tracks:[FILE]});
-  await bar.getByRole('button', {name:'녹음',exact:true}).click();
-  await expect(bar.getByRole('button', {name:'녹음 정지'})).toBeVisible();
+  await button(bar, '녹음').click();
+  await expect(button(bar, '정지')).toBeVisible();
   await page.evaluate(() => window.__bar.destroy());
   await expect.poll(() => page.evaluate(() => window.__saved.length)).toBe(1);
   expect((await page.evaluate(() => window.__saved))[0]).toMatchObject({songId:'s1', origin:'score'});
@@ -131,17 +148,17 @@ test('closing the score keeps a take that was still recording or not yet saved',
   expect(await page.evaluate(() => navigator.audioSession.type)).toBe('auto');
 
   bar = await open(page, {tracks:[FILE]});
-  await bar.getByRole('button', {name:'녹음',exact:true}).click();
-  await bar.getByRole('button', {name:'녹음 정지'}).click();
-  await expect(bar.locator('[data-score-audio-review]')).toBeVisible();
+  await button(bar, '녹음').click();
+  await button(bar, '정지').click();
+  await expect(button(bar, '저장')).toBeVisible();
   await page.evaluate(() => window.__bar.destroy());
   await expect.poll(() => page.evaluate(() => window.__saved.length)).toBe(1);
 });
 
 test('a browser without recording keeps MR playback and explains why recording is off', async ({page}) => {
   const bar = await open(page, {tracks:[FILE], canRecord:false});
-  await expect(bar.getByRole('button', {name:'녹음',exact:true})).toBeDisabled();
-  await expect(bar.getByRole('button', {name:'MR+녹음'})).toBeDisabled();
-  await expect(bar.getByRole('button', {name:'MR 재생'})).toBeEnabled();
+  await expect(button(bar, '녹음')).toBeDisabled();
+  await expect(button(bar, 'MR+녹음')).toBeDisabled();
+  await expect(bar.locator('[data-play]')).toBeEnabled();
   await expect(bar.locator('[data-score-audio-hint]')).toContainText('녹음을 지원하지 않아요');
 });

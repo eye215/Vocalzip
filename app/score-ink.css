@@ -237,29 +237,32 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-tools [data-ink-marker-mode][aria-pressed=true]{background:#ede1ff;color:#7a32f5}
 
 .score-ink-fullscreen .score-ink-bar{z-index:30}
-/* Score audio bar (app/score-audio.js): MR 재생 · 녹음 · MR+녹음 directly under the score page. */
-.score-audio{flex:none;display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-radius:14px;background:#fff;border:1px solid #ece6f7;box-sizing:border-box;width:100%}
-.score-audio-row{display:flex;align-items:center;gap:8px;min-height:24px}
-.score-audio-row select,.score-audio-track{flex:1;min-width:0;font-size:13px;color:var(--vz-color-text-secondary,#5b5670);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.score-audio-row select{min-height:36px;border-radius:10px;padding:4px 8px;border:1px solid #e3dcf2;background:#faf8ff}
-.score-audio-time{font-variant-numeric:tabular-nums;font-weight:700;color:#d92d20}
-.score-audio-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.score-audio-btn{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:6px 8px;border-radius:12px;border:1px solid #e3dcf2;background:#f6f1ff;color:#5b21b6;font-weight:700;font-size:14px;cursor:pointer}
-.score-audio-btn i{font-size:18px}
-.score-audio-btn.is-on{background:#7a32f5;border-color:#7a32f5;color:#fff}
-.score-audio-btn[data-score-audio-rec].is-on,.score-audio-btn[data-score-audio-mrrec].is-on{background:#d92d20;border-color:#d92d20}
-.score-audio-btn:disabled{opacity:.45;cursor:default}
-.score-audio-hint{margin:0;font-size:12px;line-height:1.45;color:var(--vz-color-text-secondary,#6b6680)}
+/* Score audio bar (app/score-audio.js): one compact row under the score — shared inline player + 녹음 · MR+녹음. */
+.score-audio{flex:none;display:flex;flex-direction:column;gap:4px;padding:4px 6px;border-radius:14px;background:#fff;border:1px solid #ece6f7;box-sizing:border-box;width:100%}
+.score-audio-row{display:flex;align-items:flex-start;gap:6px;min-height:44px}
+.score-audio-row>.score-audio-label,.score-audio-row>.score-audio-live{align-self:center}
+.score-audio-player{flex:1;min-width:0}
+.score-audio-player .player{padding:0}
+.score-audio-player .player-row{display:flex;align-items:center;gap:8px;min-height:44px;width:100%}
+.score-audio-player .player input[type=range]{flex:1;min-width:40px;width:auto}
+.score-audio-player .player .time{display:none;font-size:12px;white-space:nowrap}
+@media(min-width:520px){.score-audio-player .player .time{display:inline}}
+.score-audio-player .player [data-msg]{margin:2px 0 0;font-size:12px;line-height:1.35}
+.score-audio-player .player [data-msg]:empty{display:none}
+.score-audio-select{min-height:32px;max-width:100%;border-radius:10px;padding:2px 8px;border:1px solid #e3dcf2;background:#faf8ff;font-size:13px}
+.score-audio-label{flex:1;min-width:0;font-size:13px;color:var(--vz-color-text-secondary,#5b5670);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.score-audio-live{font-variant-numeric:tabular-nums;font-weight:700;color:#d92d20;white-space:nowrap}
+.score-audio-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:44px;min-width:44px;padding:0 10px;border-radius:22px;border:1px solid #e3dcf2;background:#f6f1ff;color:#5b21b6;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+.score-audio-btn i{font-size:17px}
+.score-audio-btn:disabled{opacity:.4;cursor:default}
+.score-audio-btn[data-score-audio-stop]{background:#d92d20;border-color:#d92d20;color:#fff}
+.score-audio-btn[data-score-audio-save]{background:#7a32f5;border-color:#7a32f5;color:#fff}
+.score-audio-hint{margin:0 4px 2px;font-size:12px;line-height:1.4;color:var(--vz-color-text-secondary,#6b6680)}
 .score-audio-hint:empty{display:none}
 .score-audio-hint[data-error=true]{color:#d92d20}
-.score-audio-youtube:empty{display:none}
 .score-audio-youtube iframe{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:10px}
-.score-audio-review{display:flex;flex-direction:column;gap:8px}
-.score-audio-name{display:flex;flex-direction:column;gap:4px;font-size:13px}
-.score-audio-name input{min-height:40px;border-radius:10px;border:1px solid #e3dcf2;padding:6px 10px;font-size:15px}
-.score-audio-review-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media(max-width:360px){.score-audio-btn span{font-size:12.5px}.score-audio-btn{gap:4px;padding:6px 4px}}
-/* Fullscreen keeps the bar compact and clear of the floating page controls on the right. */
-.score-ink-fullscreen .score-audio{padding:6px;max-width:calc(100% - 200px);border-radius:12px}
-.score-ink-fullscreen .score-audio-row:has(.score-audio-track),.score-ink-fullscreen .score-audio-hint{display:none}
-@media(max-width:520px){.score-ink-fullscreen .score-audio{max-width:none;margin-bottom:52px}.score-ink-fullscreen .score-audio-btn span{display:none}}
+@media(max-width:380px){.score-audio-btn{padding:0 8px}.score-audio-btn span{font-size:12px}}
+/* Fullscreen: icon-only buttons, clear of the floating page controls on the right. */
+.score-ink-fullscreen .score-audio{max-width:calc(100% - 200px)}
+.score-ink-fullscreen .score-audio-btn span,.score-ink-fullscreen .score-audio-hint{display:none}
+@media(max-width:520px){.score-ink-fullscreen .score-audio{max-width:none;margin-bottom:52px}}
