@@ -407,18 +407,20 @@ test('보컬 분석: a recording sung over an MR gets a pitch curve and measurem
   await row.locator('[data-toggle]').click();
   await row.getByRole('button', {name:'더보기'}).click();
   await sheet(page).getByRole('button', {name:'보컬 분석'}).click();
-  await expect(page).toHaveURL(/#\/analysis\/song$/);
+  await expect(page).toHaveURL(/#\/vocal-lab\/s1/);
+  await page.goto('/#/analysis/song'); // existing whole-recording view, reached from the lab in the product
   const out = page.locator('[data-out]');
   await expect(out.locator('.ana-grid')).toBeVisible({timeout:60000});
-  await expect(out).toContainText('A3 ~ C5');
+  await expect(out).toContainText('유효 최고 C5');
+  await expect(out).toContainText('안정 최고 C5');
   await expect(out).toContainText('음정 정확도');
   await expect(out).toContainText('초당 5.5회');
-  await expect(out).toContainText('반주와 잘 구분됐어요');
+  await expect(out).toContainText('보컬 분리가 확인되지는 않아요');
   await expect(out.locator('svg path.curve')).toHaveCount(1);
   await expect(out.locator('svg line.n')).toHaveCount(9);
   await expect(out.locator('[data-saved]')).toContainText('저장했어요');
   const saved = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'song').analysis);
-  expect(saved.v).toBe(1);
+  expect(saved.v).toBe(2);
   expect(saved.metrics.range).toMatchObject({low:'A3', high:'C5'});
   expect(saved.metrics.intonation.meanAbsCents).toBeLessThan(12);
   expect(saved).not.toHaveProperty('curve'); // only the summary is kept with the recording
@@ -452,14 +454,14 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   await expect(card).toContainText('분석 0/4개');
   await card.getByRole('button', {name:/지금 4개 분석하기/}).click();
   await expect(card).toContainText('분석 4/4개', {timeout:120000});
-  await expect(card.locator('.vg-chart')).toHaveCount(4);
+  await expect(card.locator('.vg-chart')).toHaveCount(5);
   // 음정 오차 goes 30 → 5: improved; the MR-only take is hollow and left out.
   const into = card.locator('.vg-chart').filter({hasText:'음정 오차'});
   await expect(into).toContainText('좋아짐');
   await expect(into.locator('circle')).toHaveCount(3);
   await expect(card.locator('circle.weak')).toHaveCount(0); // the MR-only take has no measurements to plot
   await expect(card).toContainText('녹음 1개는 노래가 짧거나 반주가 커서 변화 계산에서 뺐어요.');
-  await expect(card.locator('.vg-chart').filter({hasText:'최고음'})).toContainText('비슷함'); // C5 each time, a few cents apart
+  await expect(card.locator('.vg-chart').filter({hasText:'유효 최고음'})).toContainText('비슷함'); // C5 each time, a few cents apart
   await card.getByText('처음 vs 최근 측정값 비교').click();
   const table = card.locator('.vg-table');
   await expect(table).toContainText('8월 1일');

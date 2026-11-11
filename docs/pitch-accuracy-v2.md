@@ -43,3 +43,16 @@ pYIN can add probabilistic voicing and transitions but needs Python/librosa and 
 
 ## Release gate
 CI regression + real annotated vocal segments (including quiet/strong accompaniment) + physical iPhone rendering/performance must be reviewed before declaring accuracy solved. A C5 seen in some score bars is not assumed to be the song's global maximum. Until real verification, keep the PR a draft and production results unchanged.
+
+## Reproduced before/after reference measurement
+Same one-second 8 kHz C5 input, excluding 100 ms at each edge; F0 frame error against known 523.251130601 Hz. Executed in the tool JavaScript runtime, not on a physical phone.
+
+| Harmonic amplitudes (H1,H2,H3) | v1 median absolute cents error | v2 median absolute cents error | v1/v2 frames within 50 cents |
+|---|---:|---:|---:|
+| 1,0,0 | 0.0 | 0.0 | 100% / 100% |
+| 0.05,1,0 | 1200.0 | 0.0 | 0% / 100% |
+| 0,1,0.5 | 0.3 | 0.3 | 100% / 100% |
+
+This isolates the reproduced harmonic-octave error. It is not a measured accuracy rate for real singing or the selected song.
+
+CI at 75a04c6: 20 unit checks + 6 Chromium/WebKit rendering checks passed; vocal-growth integration passed. Full UI was blocked by the pre-existing Settings navigation expectation (hidden vs visible), also reproduced in the pre-change #323 CI (run 43108661678). Server regression tests initially expected v1 output; their new-analysis assertions are updated to v2, while fixtures proving existing-analysis reuse stay v1. Subsequent CI results are on the PR.

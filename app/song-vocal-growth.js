@@ -64,14 +64,14 @@ function spark(metric, pts) {
   const reliable = rows.filter(r => r.p.ok), last = reliable.at(-1) || rows.at(-1);
   return '<div class="vg-chart"><div class="vg-head"><span class="vg-label">' + metric.label + '</span><span class="vg-now">' + esc(metric.fmt(last.v)) + '</span></div>' +
     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' + esc(metric.label + ' 날짜별 변화, 최근 ' + metric.fmt(last.v)) + '">' + line + dots + '</svg>' +
-    '<div class="vg-foot small muted"><span>' + esc(metric.help) + (VZ.metricInfo ? VZ.metricInfo(metric.key === 'high' ? 'range' : metric.key, metric.label) : '') + '</span>' + (reliable.length > 1 ? change(metric, reliable[0].p.a, reliable.at(-1).p.a) : '') + '</div></div>';
+    '<div class="vg-foot small muted"><span>' + esc(metric.help) + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(metric.key) ? 'range' : metric.key, metric.label) : '') + '</span>' + (reliable.length > 1 ? change(metric, reliable[0].p.a, reliable.at(-1).p.a) : '') + '</div></div>';
 }
 /** First vs latest measurement table for two recordings (both need a saved analysis). */
 VZ.measureTable = (first, second) => {
   const a = first && analysisOf(first), b = second && analysisOf(second);
   if (!a?.metrics || !b?.metrics) return '';
   const sameSong=!!first.songId&&first.songId===second.songId;
-  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(m.key === 'high' ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,a,b):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
+  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,a,b):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
   const weak = !VZ.analysisComparable(a,b) || !first.songId || first.songId!==second.songId;
   return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + '</tbody></table>' +
     (weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '');
