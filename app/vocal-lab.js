@@ -106,6 +106,7 @@ function recommendations(s) {
 }
 function tipCard(t,songId){return '<details '+(t.aiRef?'open ':'')+'class="vl-tip" data-tip="'+esc(t.key)+'"><summary><span><strong>'+esc(t.name)+'</strong><small>'+esc(t.metric+(t.value?' · '+t.value:''))+'</small></span><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-tip-detail"><p>'+esc(t.reason)+'</p><ol>'+t.steps.map(step=>'<li>'+esc(step)+'</li>').join('')+'</ol><p class="vl-tip-goal">목표: '+esc(t.goal)+' · 권장 '+t.minutes+'분</p><div class="vl-tip-actions"><a href="#/guided-practice/'+(t.aiRef?'ai:'+esc(t.aiRef):'analysis:'+esc(t.key))+'?song='+encodeURIComponent(songId)+'">따라 하기</a><button type="button" data-practice-tip="'+esc(t.key)+'">연습 기록에 담기</button></div></div></details>';}
 const aiContext=s=>String(s.active)+':'+(s.start[s.active]||0);
+const savedAITip=s=>s.aiTips?.get(aiContext(s))||[...(s.aiTips||new Map())].reverse().find(([key])=>key.startsWith(String(s.active)+':'))?.[1];
 function recommendationList(recs,songId,aiTip=null) {
   const items=recs.tips.map(t=>tipCard(t,songId)).join('');
   return '<section class="vl-section vl-recommend"><h2>추천 연습</h2>'+
@@ -136,7 +137,7 @@ function screen(s) {
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
     (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
-      comparePanel(s)+recommendationList(recs,s.song.id,s.aiTips?.get(aiContext(s)))+
+      comparePanel(s)+recommendationList(recs,s.song.id,savedAITip(s))+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
   sizePlots(host);
   if(window.ResizeObserver){s.plotObserver=new ResizeObserver(()=>sizePlots(host));host.querySelectorAll('.vl-plot').forEach(svg=>s.plotObserver.observe(svg));}
@@ -188,10 +189,11 @@ function screen(s) {
   host.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;host.querySelectorAll('[data-rating]').forEach(star=>star.setAttribute('aria-pressed',String(Number(star.dataset.rating)<=score)));host.querySelector('.vl-rating b').textContent=score+'/5';}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
   host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;host.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
   host.querySelectorAll('[data-practice-tip]').forEach(button=>button.onclick=()=>{
-    const tip=[...recs.tips,s.aiTips?.get(aiContext(s))].filter(Boolean).find(x=>x.key===button.dataset.practiceTip);
+    const tip=[...recs.tips,savedAITip(s)].filter(Boolean).find(x=>x.key===button.dataset.practiceTip);
     if(!tip)return;
     V.practiceSheet({songId:s.song.id,mediaIds:[m.id],preset:{minutes:tip.minutes,memo:'[추천 연습] '+tip.name+' — '+tip.steps.join(' / ')}});
   });
+  if(savedAITip(s))host.querySelector('[data-ai-status]').textContent='저장된 AI 추천 결과예요. 연습 기록에 담기 전에도 보관돼요.';
   const aiButton=host.querySelector('[data-ai-exercise]');
   aiButton.disabled=!!s.aiPending;
   aiButton.onclick=async()=>{
@@ -201,12 +203,12 @@ function screen(s) {
       const result=await window.vzipCloudCoach({mode:'inline-exercise',excluded:recs.tips.map(t=>t.key),task:'보컬 연구소의 기존 추천과 겹치지 않는 추가 연습 한 가지',summary:'기존 추천: '+recs.tips.map(t=>t.name).join(', '),song:s.song.title,comfort:last?.practiceRoom?.draft?.comfort||'',symptoms:last?.practiceRoom?.draft?.symptoms||[],mood:last?.practiceRoom?.mood||'',memo:last?.practiceRoom?.draft?.memo||last?.memo||'',answers:[JSON.stringify({displayed:recs.tips,recording:{date:M.dateOf(m),review:m.review||'',metrics:analysis(m)?.metrics||null},segmentStart:s.start[m.id]||0})]});
       if(s.dead||!host.isConnected||aiContext(s)!==context)return;
       const x=result.exercise;if(!x||!Array.isArray(x.steps)||!x.name)throw Error('추천 형식을 확인하지 못했어요. 다시 요청해 주세요.');
-      const id=V.uid(),tip={key:'ai-'+id,aiRef:id,name:x.name,reason:x.reason,steps:x.steps,goal:x.goal,minutes:x.minutes,metric:'AI 추가 추천',value:'',family:x.family,nonVocal:x.family==='interpretation'};
+      const id=V.uid(),tip={key:'ai-'+id,aiRef:id,name:x.name,reason:x.reason,steps:x.steps,goal:x.goal,minutes:x.minutes,metric:'AI 추가 추천',value:time(s.start[m.id]||0)+' 구간',family:x.family,nonVocal:x.family==='interpretation'};
       if(!V.change(d=>{d.practicePlans||=[];d.practicePlans.push({id,period:'ai-exercise',date:V.today(),songId:s.song.id,mediaId:m.id,segmentStart:s.start[m.id]||0,tip,created:Date.now()});},{silent:true}))throw Error('추천을 저장하지 못했어요.');
       s.aiTips||=new Map();s.aiTips.set(context,tip);
       const slot=host.querySelector('[data-ai-tip]');slot.innerHTML=tipCard(tip,s.song.id);
       slot.querySelector('[data-practice-tip]').onclick=()=>V.practiceSheet({songId:s.song.id,mediaIds:[m.id],preset:{minutes:tip.minutes,memo:'[추천 연습] '+tip.name+' — '+tip.steps.join(' / ')}});
-      status.textContent='기존 연습과 다른 AI 추천 한 개를 추가했어요.';
+      status.textContent='AI 추천 결과를 저장했어요. 연습 기록에 담기 전에도 다시 볼 수 있어요.';
     }catch(e){if(!s.dead&&host.isConnected)status.textContent=e.message||'추천을 가져오지 못했어요.';}
     finally{s.aiPending=false;if(!s.dead&&host.isConnected){const button=host.querySelector('[data-ai-exercise]');if(button)button.disabled=false;}}
   };
@@ -249,7 +251,10 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
     const pair=[r.query.get('a'),r.query.get('b')].filter(key=>items.some(m=>String(m.id)===key));
     const selected=r.query.get('selection')==='1' ? selectionIds().filter(key=>items.some(m=>String(m.id)===key)) : pair.length ? items.filter(m=>pair.includes(String(m.id))).map(m=>m.id) : report?.mediaIds?.filter(key=>items.some(m=>m.id===key))||[];
-    current={host,song,items,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null,compareOpen:r.query.get('compare')==='1',compareA:r.query.get('a'),compareB:r.query.get('b')};
+    const aiTips=new Map();
+    const savedPlans=(V.db.practicePlans||[]).filter(p=>p.period==='ai-exercise'&&p.songId===song.id&&p.tip&&items.some(m=>m.id===p.mediaId)&&!(V.db.deleted?.practicePlans||[]).includes(p.id)).slice().sort((a,b)=>(a.created||0)-(b.created||0));
+    for(const plan of savedPlans)aiTips.set(String(plan.mediaId)+':'+(plan.segmentStart||0),plan.tip);
+    current={host,song,items,aiTips,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null,compareOpen:r.query.get('compare')==='1',compareA:r.query.get('a'),compareB:r.query.get('b')};
     screen(current);
   },leave:clean
 });
