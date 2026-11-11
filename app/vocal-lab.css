@@ -159,3 +159,19 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
  border-color:#392846;
  box-shadow:none;
 }
+
+/* Touch-responsive vocal lab player carousel. Right is newer (matching date tabs). */
+.vl-carousel{touch-action:pan-y;user-select:none;-webkit-user-select:none;overflow:hidden;align-items:stretch;isolation:isolate}
+.vl-carousel .vl-player{will-change:transform,opacity;transform-origin:center;backface-visibility:hidden}
+.vl-carousel.vl-swiping .vl-player{box-shadow:0 20px 48px #05000b88;border-color:#7952a1}
+.vl-carousel .vl-peek{position:relative;display:flex;align-items:center;justify-content:center;z-index:0;opacity:.78;transition:background .2s,opacity .2s;min-height:0}
+.vl-carousel .vl-peek:not([hidden]):active{background:#654580;opacity:1}
+.vl-carousel .vl-peek::after{content:'‹';position:absolute;top:50%;left:0;right:0;text-align:center;transform:translateY(-50%);font-size:25px;font-weight:300;color:#c7a5ef}
+.vl-carousel .vl-peek:last-child::after{content:'›'}
+.vl-carousel.vl-swiping .vl-peek{opacity:1}
+.vl-swipe-guide{display:flex;align-items:center;justify-content:center;gap:8px;min-width:0;padding:10px 24px 0;color:#ac97ba;font-size:11px;line-height:16px}
+.vl-swipe-guide i{font-size:13px;color:#8a71a2}
+.vl-swipe-guide>span{white-space:nowrap}
+.vl-swipe-track{width:68px;max-width:20%;height:3px;display:block;overflow:hidden;border-radius:999px;background:#40314b}
+.vl-swipe-track b{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#9651f1,#cc8dff);transition:width .32s ease}
+@media(prefers-reduced-motion:reduce){.vl-swipe-track b,.vl-carousel .vl-peek{transition:none}}
