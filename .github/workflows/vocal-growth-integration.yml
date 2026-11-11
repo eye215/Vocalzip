@@ -1,0 +1,58 @@
+name: Vocal growth integration checks
+on:
+  pull_request:
+    paths:
+      - 'app/monthly-*.js'
+      - 'app/monthly-*.css'
+      - 'app/weak-phrase.js'
+      - 'app/segment-ab-*.js'
+      - 'app/plan-outcome-*.js'
+      - 'app/core.js'
+      - 'app/practice-room-model.js'
+      - 'app/views-more.js'
+      - 'practice-room/app.js'
+      - 'index.html'
+      - 'tests/*growth*'
+      - 'tests/*phrase*'
+      - 'tests/*segment*'
+      - 'tests/*outcome*'
+      - 'tests/*sync*'
+      - 'tests/vocal-growth-browser.spec.js'
+      - 'data-merge.js'
+      - '.github/workflows/vocal-growth-integration.yml'
+  workflow_dispatch:
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse newly integrated browser scripts
+        run: |
+          for file in app/monthly-growth.js app/monthly-practice-plans.js app/weak-phrase.js app/segment-ab-model.js app/segment-ab-ui.js app/plan-outcome-model.js app/plan-outcome-ui.js app/practice-room-model.js practice-room/app.js; do
+            node --check "$file"
+          done
+      - name: Test growth models and app integration
+        run: |
+          node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install test dependencies
+        run: npm ci
+      - name: Install headless browser engine
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Run isolated VOCAL.zip browser smoke tests
+        run: npx playwright test tests/vocal-growth-browser.spec.js --browser=${{ matrix.browser }} --workers=1
