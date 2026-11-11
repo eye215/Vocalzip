@@ -18,6 +18,7 @@ on:
       - 'tests/*outcome*'
       - 'tests/*sync*'
       - 'tests/vocal-growth-browser.spec.js'
+      - 'tests/vocal-growth.playwright.config.cjs'
       - 'data-merge.js'
       - '.github/workflows/vocal-growth-integration.yml'
   workflow_dispatch:
@@ -56,4 +57,6 @@ jobs:
       - name: Install headless browser engine
         run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Run isolated VOCAL.zip browser smoke tests
-        run: npx playwright test tests/vocal-growth-browser.spec.js --browser=${{ matrix.browser }} --workers=1
+        env:
+          VZIP_TEST_BROWSER: ${{ matrix.browser }}
+        run: npx playwright test --config=tests/vocal-growth.playwright.config.cjs
