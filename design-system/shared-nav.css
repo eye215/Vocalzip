@@ -31,6 +31,32 @@ body.vz-record-mode>.v-nav{display:none!important}
  body>.v-nav ul{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 
+/* One dock for every page (2026-11-11): exactly the Home dock's measured geometry. Several older files styled
+ * this bar differently (a 358px cap here, 528px in app.css, a padding-0 four-column grid in global-app.css), so
+ * wide phones showed a narrower dock off Home. This block is loaded last and is specific enough to be the only
+ * source: full width minus 16px each side, 70px tall pill, 8px inside, five 54px items, 22px icons, 11px labels. */
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav{
+ left:50%;right:auto;transform:translateX(-50%);
+ width:calc(100% - 2 * var(--vz-nav-inset,16px));max-width:var(--vz-nav-max-width,528px);height:70px;
+ bottom:max(12px,env(safe-area-inset-bottom));padding:0;border:0;background:transparent;box-shadow:none;
+ backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul{
+ box-sizing:border-box;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;align-items:center;
+ width:100%;max-width:none;height:70px;margin:0;padding:8px;
+ border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;
+ background:var(--vz-nav-surface,rgba(255,255,255,.58));box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));
+ -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px));
+}
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul>li>a{
+ box-sizing:border-box;width:100%;min-width:0;height:54px;min-height:54px;padding:4px 1px;gap:2px;border-radius:999px;
+ font-size:11px;font-weight:600;line-height:16px;
+}
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul>li>a i{font-size:22px;width:22px;height:22px;line-height:1}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+
 /* ── Bottom menu policy (v0.8, design guide §10) ───────────────────────────────────────────
  * The same menu shows on every ordinary screen (settings and song detail used to drop it). Focus screens keep
  * their own action area without the menu, as the guide says: recorder, 곡 확인, transcript, recording player,

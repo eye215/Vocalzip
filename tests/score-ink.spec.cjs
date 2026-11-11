@@ -3,12 +3,12 @@ require('./legacy-session-mode.cjs')(test);
 const {boot,fakeR2}=require('./helpers/r2-fixture.cjs');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const PDFROOT=process.env.VZ_PDFJS_ROOT||'/tmp/vzip-score-pdfjs/node_modules/pdfjs-dist';
-function pdf(){
+function pdf(pad=0){
  const stream=text=>'<< /Length '+Buffer.byteLength(text)+' >>\nstream\n'+text+'\nendstream';
  const staff='0 0 0 RG 1 w '+[170,180,190,200,210].map(y=>'20 '+y+' m 280 '+y+' l S').join('\n');
  const content=n=>'BT /F1 18 Tf 20 360 Td (VOCAL.zip Score '+n+') Tj ET\n'+staff;
  const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>',
-  '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>',stream(content(1)),
+  '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>',stream(content(1)+(pad?'\n'+('%'+'x'.repeat(998)+'\n').repeat(Math.ceil(pad/1000)):'')),
   '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>',stream(content(2)),
   '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
  let out='%PDF-1.4\n',offsets=[0];
@@ -17,6 +17,17 @@ function pdf(){
  return Buffer.from(out);
 }
 const bytes=pdf(),key='u/ui-test-user/score-ink/original.pdf';
+/** n pages, each with ~pad bytes inside its content stream, so later pages lie beyond the first 1 MB range. */
+function bigPdf(n,pad){
+ const stream=text=>'<< /Length '+Buffer.byteLength(text)+' >>\nstream\n'+text+'\nendstream';
+ const filler=('%'+'x'.repeat(998)+'\n').repeat(Math.ceil(pad/1000));
+ const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids ['+Array.from({length:n},(_,i)=>(4+i*2)+' 0 R').join(' ')+'] /Count '+n+' >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+ for(let i=0;i<n;i++)objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 3 0 R >> >> /Contents '+(5+i*2)+' 0 R >>',stream('BT /F1 18 Tf 20 360 Td (Page '+(i+1)+') Tj ET\n'+filler));
+ let out='%PDF-1.4\n';const offsets=[0];
+ objects.forEach((o,i)=>{offsets.push(Buffer.byteLength(out));out+=(i+1)+' 0 obj\n'+o+'\nendobj\n';});
+ const at=Buffer.byteLength(out);out+='xref\n0 '+offsets.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+at+'\n%%EOF';
+ return Buffer.from(out);
+}
 async function setup(page,sourceBytes=bytes){
  const r2=await fakeR2(page);r2.store.set(key,{bytes:sourceBytes,type:'application/pdf',etag:'"pdf"'});
  await page.context().route('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/**',route=>{
@@ -108,7 +119,7 @@ test('real PDF renders, ink persists after reload and original PDF/lesson/practi
  const saved=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
  expect(saved[0]).toMatchObject({ownerId:'ui-test-user',scoreId:'score-ink',page:1,tool:'pen',pdfHash:crypto.createHash('sha256').update(bytes).digest('hex')});
  expect(saved[0].points.length).toBeGreaterThan(2);
- await dialog.getByRole('button',{name:'완료',exact:true}).click();await page.reload();const again=await open(page);
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();await page.reload();const again=await open(page);
  await expect(again.locator('path[data-stroke]')).toHaveCount(1);
  expect(await page.evaluate(()=>({songs:window.VZ.db.songs,lessons:window.VZ.db.lessons,practices:window.VZ.db.practices}))).toEqual(before);
  expect(r2.store.get(key).bytes.equals(bytes)).toBe(true);expect(r2.calls.some(s=>s.startsWith('PUT')||s.startsWith('DELETE')||s==='POST /v1/uploads')).toBe(false);
@@ -116,8 +127,8 @@ test('real PDF renders, ink persists after reload and original PDF/lesson/practi
 test('highlighter, undo/redo, eraser and page selection keep independent stroke records',async({page})=>{
  await setup(page);const dialog=await open(page);await draw(page,dialog,{tool:'형광펜'});
  await expect(dialog.locator('path[data-stroke]')).toHaveAttribute('opacity','0.55');
- await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
- await dialog.getByRole('button',{name:'필기 다시 실행',exact:true}).click();await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
+ await act(dialog,'필기 되돌리기');await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
+ await act(dialog,'필기 다시 실행');await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
  await dialog.getByRole('button',{name:'다음 악보 페이지',exact:true}).click();await expect(dialog.locator('[data-ink-page]')).toHaveText('2 / 2쪽');
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);await draw(page,dialog,{y:.3});
  await dialog.getByRole('button',{name:'이전 악보 페이지',exact:true}).click();await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
@@ -135,9 +146,7 @@ test('zoom, 320px layout and synthetic pen-only input preserve normalized positi
  expect(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);
  await dialog.getByLabel('악보 확대',{exact:true}).selectOption('1');
  await expect.poll(()=>dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width)).toBeLessThan(350);
- await dialog.getByRole('button',{name:'색상·굵기·투명도 설정',exact:true}).click();
- await dialog.getByLabel('펜만',{exact:true}).check();
- await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
+ await penOnly(dialog);
  await draw(page,dialog,{ignored:true}); // Mouse is ignored in pen-only mode.
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
  await dialog.locator('[data-ink-svg]').evaluate(svg=>{
@@ -147,7 +156,7 @@ test('zoom, 320px layout and synthetic pen-only input preserve normalized positi
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(2);
 });
 test('a changed PDF keeps prior-version ink without placing it on the new source',async({page})=>{
- const r2=await setup(page);let dialog=await open(page);await draw(page,dialog);await dialog.getByRole('button',{name:'완료',exact:true}).click();
+ const r2=await setup(page);let dialog=await open(page);await draw(page,dialog);await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
  const changed=Buffer.from(bytes.toString().replace('Score 1','Score X'));expect(changed.length).toBe(bytes.length);
  r2.store.set(key,{bytes:changed,type:'application/pdf'});
  dialog=await open(page);await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
@@ -169,7 +178,7 @@ test('root save failure preserves the stroke journal and retries; account change
 });
 
 test('explicit PDF deletion removes its annotation vectors and keeps lesson/practice records',async({page})=>{
- const r2=await setup(page),dialog=await open(page);await draw(page,dialog);await dialog.getByRole('button',{name:'완료',exact:true}).click();
+ const r2=await setup(page),dialog=await open(page);await draw(page,dialog);await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
  await page.getByRole('button',{name:'삭제',exact:true}).click();const confirm=page.getByRole('dialog',{name:'악보 삭제',exact:true});
  await expect(confirm).toContainText('개인 필기');await confirm.getByRole('button',{name:'삭제',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.VZ.song('s1').scores.length)).toBe(0);
@@ -179,9 +188,21 @@ test('explicit PDF deletion removes its annotation vectors and keeps lesson/prac
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vzip_score_ink_v1:ui-test-user')).records)).toEqual([]);
 });
 
+/** Actions live in the viewer's 더보기 menu (compact layout); open it when the button is not on screen. */
+async function act(dialog,name){
+ const button=dialog.getByRole('button',{name,exact:true});
+ if(!await button.isVisible())await dialog.locator('[data-ink-more]').click();
+ await button.click();
+}
 async function configure(dialog){
- await dialog.getByRole('button',{name:'색상·굵기·투명도 설정',exact:true}).click();
+ await act(dialog,'색상·굵기·투명도 설정');
  return dialog.getByRole('region',{name:'필기 설정',exact:true});
+}
+/** 펜만 필기 lives on the settings' 기타 tab. */
+async function penOnly(dialog,on=true){
+ const panel=await configure(dialog);await panel.getByRole('tab',{name:'기타',exact:true}).click();
+ await dialog.getByLabel('펜만',{exact:true}).setChecked(on);
+ await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
 }
 async function range(dialog,name,value){
  await dialog.getByRole('slider',{name,exact:true}).evaluate((el,value)=>{el.value=String(value);el.dispatchEvent(new Event('input',{bubbles:true}));},value);
@@ -197,7 +218,7 @@ test('custom ink and settings persist across viewport fullscreen entry/exit with
  expect(before[0]).toMatchObject({color:'#123456',width:.012,opacity:.4});
  // Explicitly exercise the iOS/PWA viewport fallback without pretending this is a physical device.
  await page.evaluate(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
- await dialog.getByRole('button',{name:'전체화면',exact:true}).click();
+ await act(dialog,'전체화면');
  await expect(dialog).toHaveClass(/score-ink-fullscreen/);await expect(dialog.locator('[data-ink-box]')).toBeVisible();
  const tops=await dialog.locator('.score-ink-bar>.score-ink-tools>button,.score-ink-bar>.score-ink-actions>button').evaluateAll(nodes=>nodes.map(n=>Math.round(n.getBoundingClientRect().top)));
  expect(new Set(tops).size).toBe(1);
@@ -221,7 +242,7 @@ test('highlighter pastel and recent/custom colors survive refresh separately fro
  await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();await draw(page,dialog,{tool:'형광펜'});
  await expect(dialog.locator('path[data-stroke]')).toHaveAttribute('opacity','0.8');
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations[0])).toMatchObject({color:'#c0ffee',width:.042,opacity:.8});
- await dialog.getByRole('button',{name:'완료',exact:true}).click();await page.reload();dialog=await open(page);
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();await page.reload();dialog=await open(page);
  await dialog.getByRole('button',{name:'형광펜',exact:true}).click();panel=await configure(dialog);
  await expect(panel.getByRole('button',{name:'사용자 색상 #c0ffee',exact:true})).toBeVisible();
  await expect(panel.getByRole('button',{name:'최근 사용 색상 #c0ffee',exact:true})).toBeVisible();
@@ -233,8 +254,7 @@ test('highlighter pastel and recent/custom colors survive refresh separately fro
 test('pen-only mode permits finger scrolling and ignores a palm while a pen stroke is active',async({page})=>{
  await setup(page);const dialog=await open(page);await dialog.getByLabel('악보 확대',{exact:true}).selectOption('2');
  await expect.poll(()=>dialog.locator('[data-ink-svg]').evaluate(e=>e.getBoundingClientRect().width)).toBeGreaterThan(450);
- await dialog.getByRole('button',{name:'펜',exact:true}).click();await configure(dialog);await dialog.getByLabel('펜만',{exact:true}).check();
- await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();await penOnly(dialog);
  await dialog.locator('[data-ink-svg]').evaluate(svg=>{
   const stage=svg.closest('[data-ink-stage]'),r=stage.getBoundingClientRect(),common={bubbles:true,pointerId:51,pointerType:'touch',isPrimary:true,button:0};
   svg.dispatchEvent(new PointerEvent('pointerdown',{...common,clientX:r.x+100,clientY:r.y+150}));
@@ -261,7 +281,7 @@ test('whole score row opens the viewer with keyboard access and independent edit
  await page.getByRole('dialog',{name:'악보 정보',exact:true}).getByRole('button',{name:'돌아가기',exact:true}).click();
  await row.getByRole('button',{name:'연습 악보 열기',exact:true}).focus();await page.keyboard.press('Enter');
  const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
- await dialog.getByRole('button',{name:'완료',exact:true}).click();
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
  await row.getByRole('button',{name:'삭제',exact:true}).click();await expect(page.getByRole('dialog',{name:'악보 삭제',exact:true})).toBeVisible();
  await expect(page.getByRole('dialog',{name:'악보 개인 필기'})).toHaveCount(0);
  await page.getByRole('dialog',{name:'악보 삭제',exact:true}).getByRole('button',{name:'취소',exact:true}).click();
@@ -291,7 +311,7 @@ test('tablet default favors Pencil and two-finger pinch zoom changes only the vi
  await expect(dialog.locator('[data-ink-status]')).toContainText('이 기기에 저장됨');expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(1);
 });
 test('fullscreen-capable browsers keep the editor open when the explicit exit control is used',async({page})=>{
- await setup(page);const dialog=await open(page);await dialog.getByRole('button',{name:'전체화면',exact:true}).click();
+ await setup(page);const dialog=await open(page);await act(dialog,'전체화면');
  await expect(dialog).toHaveClass(/score-ink-fullscreen/);await expect(dialog.getByRole('button',{name:'전체화면 종료',exact:true})).toBeVisible();
  await dialog.getByRole('button',{name:'전체화면 종료',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog).not.toHaveClass(/score-ink-fullscreen/);
 });
@@ -368,14 +388,14 @@ test('selection moves a group once, undoes/redoes and deletes without changing s
   expect(Math.abs(s.points[0][1]-original[i].points[0][1]-.04)).toBeLessThan(1.5/dragBox.height);
   expect(s.color).toBe(original[i].color);expect(s.opacity).toBe(original[i].opacity);expect(s.points[0][2]).toBe(original[i].points[0][2]);
  });
- await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();
+ await act(dialog,'필기 되돌리기');
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(original.map(s=>s.points));
- await dialog.getByRole('button',{name:'필기 다시 실행',exact:true}).click();
+ await act(dialog,'필기 다시 실행');
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(moved.map(s=>s.points));
  await selectInk(page,dialog);await dialog.getByRole('button',{name:'선택 필기 삭제',exact:true}).click();
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
- await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();await expect(dialog.locator('path[data-stroke]')).toHaveCount(2);
- await dialog.getByRole('button',{name:'완료',exact:true}).click();await page.reload();dialog=await open(page);
+ await act(dialog,'필기 되돌리기');await expect(dialog.locator('path[data-stroke]')).toHaveCount(2);
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();await page.reload();dialog=await open(page);
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(moved.map(s=>s.points));
  expect(await page.evaluate(()=>({songs:window.VZ.db.songs,lessons:window.VZ.db.lessons,practices:window.VZ.db.practices}))).toEqual({songs:before.songs,lessons:before.lessons,practices:before.practices});
  expect(r2.store.get(key).bytes.equals(bytes)).toBe(true);
@@ -395,7 +415,7 @@ test('Pencil corner resize scales a group and thickness; cancellation and empty 
 test('selection controls remain touch sized in fullscreen, preserve selection on zoom, and release on page change',async({page})=>{
  await setup(page);const dialog=await open(page);await draw(page,dialog,{y:.14});await draw(page,dialog,{y:.24});await selectInk(page,dialog);
  const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points));
- await dialog.getByRole('button',{name:'전체화면',exact:true}).click();
+ await act(dialog,'전체화면');
  await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('2개 선택');
  for(const label of ['선택 필기 축소','선택 필기 확대','선택 필기 삭제','필기 선택 해제']){
   const r=await dialog.getByRole('button',{name:label,exact:true}).boundingBox();expect(r.width).toBeGreaterThanOrEqual(44);expect(r.height).toBeGreaterThanOrEqual(44);
@@ -433,6 +453,198 @@ test('failed group movement preserves a recovery copy, retries once, and undo re
  await dialog.getByRole('button',{name:'다시 저장',exact:true}).click();
  const moved=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
  expect(moved).toHaveLength(2);expect(moved[0].points).not.toEqual(before[0]);
- await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();
+ await act(dialog,'필기 되돌리기');
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(before);
+});
+test('MR 재생 · 녹음 · MR+녹음 sit directly under the score page and leave with the viewer',async({page})=>{
+ const r2=await setup(page);
+ // A real (silent) WAV as the MR file, so the shared player loads it like a cloud recording.
+ const sr=8000,n=sr,mr=Buffer.alloc(44+n*2);mr.write('RIFF',0);mr.writeUInt32LE(36+n*2,4);mr.write('WAVEfmt ',8);mr.writeUInt32LE(16,16);mr.writeUInt16LE(1,20);mr.writeUInt16LE(1,22);mr.writeUInt32LE(sr,24);mr.writeUInt32LE(sr*2,28);mr.writeUInt16LE(2,32);mr.writeUInt16LE(16,34);mr.write('data',36);mr.writeUInt32LE(n*2,40);
+ r2.store.set('u/ui-test-user/mr-1/original.m4a',{bytes:mr,type:'audio/wav',etag:'"mr"'});
+ await page.evaluate(()=>window.VZ.change(d=>{d.songs[0].mrTracks=[{id:'mr-1',kind:'file',title:'연습 MR',r2Key:'u/ui-test-user/mr-1/original.m4a',type:'audio/wav',created:Date.now()}];}));
+ const dialog=await open(page),bar=dialog.locator('[data-score-audio]');
+ await expect(bar).toBeVisible();
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-'+test.info().project.name+'.png'});
+ for(const name of ['재생','녹음','재생+녹음'])await expect(bar.getByRole('button',{name,exact:true})).toBeVisible();
+ expect((await bar.boundingBox()).height).toBeLessThanOrEqual(64);
+ const stage=await dialog.locator('[data-ink-stage]').boundingBox(),box=await bar.boundingBox();
+ expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
+ expect(await bar.evaluate(el=>el.previousElementSibling?.matches('[data-ink-stage]'))).toBe(true);
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await expect(page.locator('[data-score-audio]')).toHaveCount(0);
+});
+/** Real multi-touch through Chromium's input pipeline (CDP), so browser touch-action and pointer/touch events both run. */
+async function swipe(page,dialog,{fingers=2,dx=-170,dy=0}={}){
+ const r=await dialog.locator('[data-ink-stage]').boundingBox(),cdp=await page.context().newCDPSession(page);
+ const x0=r.x+r.width/2-dx/2,y0=r.y+r.height*.35-dy/2;
+ const points=t=>Array.from({length:fingers},(_,i)=>({x:x0+dx*t,y:y0+dy*t+i*70,id:i,radiusX:4,radiusY:4}));
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:points(0)});
+ for(let i=1;i<=8;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(i/8)});await page.waitForTimeout(16);}
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+ await page.waitForTimeout(250);
+}
+test('without 펜만 필기 only a two-finger sideways swipe turns the page',async({page,browserName})=>{
+ test.skip(browserName!=='chromium','multi-touch is driven through Chromium CDP');
+ await setup(page);const dialog=await open(page),pageLabel=dialog.locator('[data-ink-page]');
+ await penOnly(dialog,false);
+ await swipe(page,dialog,{fingers:1});await expect(pageLabel).toHaveText('1 / 2쪽');
+ await swipe(page,dialog,{fingers:2});await expect(pageLabel).toHaveText('2 / 2쪽');
+ await swipe(page,dialog,{fingers:2});await expect(pageLabel).toHaveText('2 / 2쪽'); // the last page stays
+ await swipe(page,dialog,{fingers:2,dx:170});await expect(pageLabel).toHaveText('1 / 2쪽');
+});
+test('with 펜만 필기 one or two fingers swipe pages, and a vertical drag never does',async({page,browserName})=>{
+ test.skip(browserName!=='chromium','multi-touch is driven through Chromium CDP');
+ await setup(page);const dialog=await open(page),pageLabel=dialog.locator('[data-ink-page]');
+ await penOnly(dialog,true);
+ await swipe(page,dialog,{fingers:1,dx:0,dy:-170});await expect(pageLabel).toHaveText('1 / 2쪽');
+ await swipe(page,dialog,{fingers:1});await expect(pageLabel).toHaveText('2 / 2쪽');
+ await swipe(page,dialog,{fingers:1,dx:170});await expect(pageLabel).toHaveText('1 / 2쪽');
+ await swipe(page,dialog,{fingers:2});await expect(pageLabel).toHaveText('2 / 2쪽');
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(0); // finger swipes never draw
+});
+test('reopening a score uses the device copy: no second PDF download',async({page})=>{
+ const r2=await setup(page);let dialog=await open(page);
+ await expect.poll(()=>page.evaluate(async()=>(await (await caches.open('vzip-score-pdf-v1')).keys()).length)).toBe(1);
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
+ expect(r2.calls.filter(c=>/GET .*original\.pdf/.test(c)).length).toBeGreaterThan(0); // the first open really downloaded it
+ // Reopening reads the PDF only through the 1-byte "still the same original?" check.
+ const reads=[];page.on('request',req=>{if(req.method()==='GET'&&/original\.pdf/.test(req.url()))reads.push(req.headers().range||'full');});
+ dialog=await open(page);
+ expect(reads).toEqual(['bytes=0-0']);
+ await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨');
+ // Deleting the score drops the device copy too.
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await page.evaluate(()=>window.VZ.deleteScoreWithInk('s1',window.VZ.song('s1').scores[0]));
+ await expect.poll(()=>page.evaluate(async()=>(await (await caches.open('vzip-score-pdf-v1')).keys()).length)).toBe(0);
+});
+test('the viewer has no 완료 button; ← closes it',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ await expect(dialog.getByRole('button',{name:'완료',exact:true})).toBeHidden();
+ await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'악보 개인 필기'})).toHaveCount(0);
+});
+test('compact viewer: song title on top with 다른 악보 icon, one tool row ending in 더보기, page row at the bottom',async({page})=>{
+ await setup(page);
+ // Hold the PDF download so the loading popup can be seen.
+ let release;const held=new Promise(r=>{release=r;});
+ await page.route('**/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs',async route=>{await held;route.fallback();});
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
+ const popup=dialog.locator('[data-ink-status]');
+ await expect(popup).toBeVisible();await expect(popup).toHaveCSS('position','absolute');
+ // The complete PDF is downloading meanwhile, and its progress is what the popup shows.
+ await expect(popup).toContainText(/악보 불러오는 중 \d+%|PDF를 준비하고 있어요/);
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-loading-'+test.info().project.name+'.png'});
+ release();
+ await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ await expect(popup).toBeHidden();
+ const head=dialog.locator('.sheet-head');
+ await expect(head.locator('h2')).toHaveText(await page.evaluate(()=>window.VZ.song('s1').title));
+ await expect(head.getByRole('button',{name:'다른 악보',exact:true})).toBeVisible();
+ await expect(dialog.locator('[data-ink-save-state]')).toBeHidden();
+ await expect(dialog.locator('.score-ink-help')).toBeHidden();
+ // One tool row; the actions are in 더보기.
+ const tools=await dialog.locator('.score-ink-tools').boundingBox(),more=await dialog.locator('[data-ink-more]').boundingBox();
+ expect(Math.abs(more.y-tools.y)).toBeLessThan(8);expect(tools.height).toBeLessThan(56);
+ await expect(dialog.getByRole('button',{name:'필기 되돌리기',exact:true})).toBeHidden();
+ await dialog.locator('[data-ink-more]').click();
+ await expect(dialog.getByRole('button',{name:'필기 되돌리기',exact:true})).toBeVisible();
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-more-'+test.info().project.name+'.png'});
+ await dialog.locator('[data-ink-more]').click();
+ // The page row is the last thing in the viewer, below the score.
+ expect(await dialog.locator('.score-ink-pages').evaluate(el=>el===el.parentElement.lastElementChild)).toBe(true);
+ const stage=await dialog.locator('[data-ink-stage]').boundingBox(),pages=await dialog.locator('.score-ink-pages').boundingBox();
+ expect(pages.y).toBeGreaterThan(stage.y+stage.height-1);
+});
+test('무대용 보기 works as soon as the first page shows, even while the ink check is still running',async({page})=>{
+ await setup(page);
+ // The ink check never finishes here (as when the full original download stalls on a slow connection).
+ await page.evaluate(()=>{crypto.subtle.digest=()=>new Promise(()=>{});});
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
+ await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ await page.waitForTimeout(500);await expect(dialog.locator('[data-ink-save-state]')).not.toContainText('필기 준비됨'); // still unverified
+ await act(dialog,'무대용 보기');
+ await expect(dialog).toHaveClass(/score-ink-performance/);
+ const controls=dialog.locator('[data-ink-performance-controls]');
+ await expect(controls).toBeVisible();await expect(controls).toContainText('1 / 2쪽');
+ await controls.getByRole('button',{name:'다음 페이지',exact:true}).click();
+ await expect(dialog.locator('[data-ink-page]')).toHaveText('2 / 2쪽');
+ await controls.getByRole('button',{name:'이전 페이지',exact:true}).click();
+ await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
+ await controls.getByRole('button',{name:'편집으로 돌아가기',exact:true}).click();
+ await expect(dialog).not.toHaveClass(/score-ink-performance/);
+});
+test('무대용 보기 after the ink check: one finger swipes pages and drawing is off',async({page,browserName})=>{
+ test.skip(browserName!=='chromium','multi-touch is driven through Chromium CDP');
+ await setup(page);const dialog=await open(page),pageLabel=dialog.locator('[data-ink-page]');
+ await penOnly(dialog,false);
+ await act(dialog,'무대용 보기');await expect(dialog).toHaveClass(/score-ink-performance/);
+ expect(await dialog.locator('[data-ink-svg]').evaluate(el=>getComputedStyle(el).pointerEvents)).toBe('none');
+ await swipe(page,dialog,{fingers:1});await expect(pageLabel).toHaveText('2 / 2쪽');
+ await swipe(page,dialog,{fingers:1,dx:170});await expect(pageLabel).toHaveText('1 / 2쪽');
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
+});
+test('fullscreen page row is one line under the score, never over it',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ await act(dialog,'전체화면');await expect(dialog).toHaveClass(/score-ink-fullscreen/);
+ const pages=dialog.locator('.score-ink-pages');
+ await expect(pages).toHaveCSS('position','static');
+ const box=await pages.boundingBox(),stage=await dialog.locator('[data-ink-stage]').boundingBox();
+ expect(box.height).toBeLessThan(56);expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
+ await page.waitForTimeout(3000);await expect(pages).toHaveCSS('opacity','1'); // stays visible
+});
+test('fullscreen: the loading popup stays a small pill and the page row never covers the audio bar',async({page})=>{
+ await setup(page);
+ let release;const held=new Promise(r=>{release=r;});
+ await page.route('**/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs',async route=>{await held;route.fallback();});
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
+ await act(dialog,'전체화면');await expect(dialog).toHaveClass(/score-ink-fullscreen/);
+ const popup=dialog.locator('[data-ink-status]');await expect(popup).toBeVisible();
+ const pill=await popup.boundingBox();expect(pill.height).toBeLessThan(60);
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-full-loading-'+test.info().project.name+'.png'});
+ release();await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ await page.mouse.click(10,10);
+ const pages=await dialog.locator('.score-ink-pages').boundingBox(),bar=await dialog.locator('[data-score-audio]').boundingBox(),stage=await dialog.locator('[data-ink-stage]').boundingBox();
+ // Score, then the audio bar, then the page row: nothing overlaps.
+ expect(bar.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
+ expect(pages.y).toBeGreaterThanOrEqual(bar.y+bar.height-1);
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-full-ready-'+test.info().project.name+'.png'});
+});
+test('the color/width row folds once writing starts and the active tool opens it again',async({page})=>{
+ await setup(page);const dialog=await open(page),quick=dialog.locator('[data-ink-quick]');
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();
+ await expect(quick).toBeVisible();
+ const before=await dialog.locator('[data-ink-stage]').boundingBox();
+ await draw(page,dialog,{tool:'펜'});
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
+ await expect(quick).toBeHidden();
+ expect((await dialog.locator('[data-ink-stage]').boundingBox()).height).toBeGreaterThan(before.height); // the score got the room
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();await expect(quick).toBeVisible();
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();await expect(quick).toBeHidden();
+ await dialog.getByRole('button',{name:'형광펜',exact:true}).click();await expect(quick).toBeVisible();
+});
+test('range-opened score switches to the downloaded PDF without errors and turns pages either way with no network',async({page})=>{
+ // About 3 MB inside page 1, so page 2 lies beyond the first 1 MB range a ranged document reads.
+ // The complete download is held until the first page shows (a slow phone connection), so the page is opened
+ // through ranges first; once the download lands, page turns must stop reading ranges.
+ const r2=await setup(page,bigPdf(3,1.5e6));let release;const gate=new Promise(r=>{release=r;});
+ let held=false;r2.reject.beforeRead=async req=>{if(!req.headers().range&&!held){held=true;await gate;}}; // the app's own full download starts first
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'}),label=dialog.locator('[data-ink-page]');
+ await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ release();
+ await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨',{timeout:20000});
+ await page.waitForTimeout(500);
+ const reads=[];page.on('request',req=>{if(/original\.pdf/.test(req.url()))reads.push(req.headers().range||'full');});
+ for(const [name,shown] of [['다음 악보 페이지','2 / 3쪽'],['다음 악보 페이지','3 / 3쪽'],['이전 악보 페이지','2 / 3쪽'],['이전 악보 페이지','1 / 3쪽']]){
+  await dialog.getByRole('button',{name,exact:true}).click();
+  await expect(label).toHaveText(shown);
+ }
+ expect(reads).toEqual([]);
 });
