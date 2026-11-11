@@ -37,9 +37,13 @@ jobs:
       - name: Test growth models and app integration
         run: |
           node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs
-  chromium-smoke:
+  browser-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,7 +52,7 @@ jobs:
           cache: npm
       - name: Install test dependencies
         run: npm ci
-      - name: Install headless Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install headless browser engine
+        run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Run isolated VOCAL.zip browser smoke tests
-        run: npx playwright test tests/vocal-growth-browser.spec.js --browser=chromium --workers=1
+        run: npx playwright test tests/vocal-growth-browser.spec.js --browser=${{ matrix.browser }} --workers=1
