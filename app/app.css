@@ -638,12 +638,12 @@ body .sheet-page #practice-log .vz-practice-rating .stars button[aria-pressed=tr
    The recording focus screen intentionally hides navigation. */
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
   position:fixed;
-  /* The home shadow dock is centered at max 358px; regular pages must use identical geometry.
-     Override the older global-app translateX(-50%) rule consistently. */
+  /* Home shadow dock's final integration CSS overrides its template's 358px
+     with --vz-nav-max-width (528px). Use that same resolved token here. */
   left:50%;
   right:auto;
-  width:min(calc(100% - 32px),358px);
-  max-width:358px;
+  width:min(calc(100% - var(--vz-nav-inset,16px)*2),var(--vz-nav-max-width,528px));
+  max-width:var(--vz-nav-max-width,528px);
   transform:translateX(-50%);
   bottom:max(var(--vz-nav-bottom,12px),env(safe-area-inset-bottom));
   z-index:var(--vz-z-nav);
@@ -658,12 +658,14 @@ body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
   -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));
 }
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav ul{
-  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:100%;gap:1px;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:100%;gap:4px;
 }
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a{
   display:flex;align-items:center;justify-content:center;flex-direction:column;
-  min-width:0;height:var(--vz-nav-item-height,54px);min-height:var(--vz-nav-item-height,54px);gap:2px;border-radius:999px;
-  font-size:11px;line-height:1.2;white-space:nowrap;
+  box-sizing:border-box;min-width:0;width:100%;height:var(--vz-nav-item-height,54px);min-height:var(--vz-nav-item-height,54px);
+  gap:2px;padding:4px;border-radius:999px;
+  font-size:var(--vz-type-nav-size,11px);line-height:var(--vz-type-nav-leading,16px);
+  font-weight:var(--vz-font-medium,500);white-space:nowrap;
 }
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a i{
   color:var(--vz-color-ink-secondary);font-size:22px;line-height:1;
