@@ -65,3 +65,33 @@ test('The public page plays and offers the download; a stopped or expired link s
   state = 'expired'; await page.reload(); await expect(page.locator('#box')).toContainText('기간이 끝난');
   await page.goto('/share.html#short'); await expect(page.locator('#box')).toContainText('링크가 올바르지');
 });
+test('MR files get a revocable link; YouTube MR and references send their own link; recordings share from the 더보기 menu', async ({page}) => {
+  await fakeR2(page); const fake = await fakeShares(page);
+  await boot(page);
+  await page.evaluate(() => { window.__sent = []; navigator.share = async data => { window.__sent.push(data); }; });
+  await page.evaluate(() => window.VZ.change(d => {
+    d.songs[0].mrTracks = [{id:'mr-f', kind:'file', title:'반주 원키', fileName:'mr.m4a', r2Key:'u/ui-test-user/mr-f/original.m4a', created:1}, {id:'mr-y', kind:'youtube', title:'유튜브 반주', url:'https://www.youtube.com/watch?v=abcdefghijk', videoId:'abcdefghijk', created:2}];
+    d.songs[0].arLinks = [{label:'뮤지컬 실황', url:'https://www.youtube.com/watch?v=zyxwvutsrqp'}];
+  }));
+  const songId = await page.evaluate(() => window.VZ.db.songs[0].id), songTitle = await page.evaluate(() => window.VZ.db.songs[0].title);
+  await page.goto('/#/song/' + songId);
+  await page.getByRole('tab', {name:'레퍼런스'}).click();
+  await page.getByRole('button', {name:'반주 원키 MR 공유'}).click();
+  const sheet = page.getByRole('dialog', {name:'공유 링크'});
+  await expect(sheet).toContainText(songTitle + ' · 반주 원키');
+  await page.getByRole('button', {name:'링크 만들기'}).click();
+  await expect(sheet).toContainText('링크를 만들었어요');
+  expect(fake.made.at(-1)).toMatchObject({key:'u/ui-test-user/mr-f/original.m4a', mediaId:'mr-f', title:songTitle + ' · 반주 원키'});
+  await sheet.getByRole('button', {name:'돌아가기'}).click();
+  await page.getByRole('button', {name:'유튜브 반주 MR 공유'}).click();
+  await page.getByRole('button', {name:'뮤지컬 실황 링크 보내기'}).click();
+  expect(await page.evaluate(() => window.__sent.map(x => x.url))).toEqual(['https://www.youtube.com/watch?v=abcdefghijk', 'https://www.youtube.com/watch?v=zyxwvutsrqp']);
+  expect(fake.made.length).toBe(1); // links are sent as they are, nothing is created on the server
+  // A cloud recording: 더보기 → 공유 링크 opens the same sheet.
+  await page.evaluate(() => window.VZ.shareSheet && window.vzipStorePracticeMedia({id:'rec-s', name:'클라우드 녹음', type:'audio/mp4', blob:new Blob([new Uint8Array(64)], {type:'audio/mp4'}), created:Date.now(), source:'practice', r2Key:'u/ui-test-user/rec-s/original.m4a'}));
+  await page.evaluate(() => window.VZ.media.invalidate?.());
+  await page.goto('/#/recording/rec-s');
+  await page.locator('[data-media-more]').first().click();
+  await page.getByRole('button', {name:'공유 링크'}).click();
+  await expect(page.getByRole('dialog', {name:'공유 링크'})).toContainText('클라우드 녹음');
+});

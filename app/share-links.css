@@ -16,3 +16,6 @@
 .share-stop{min-height:44px;border:0;background:none;color:#c93a3a;font-weight:600}
 .share-open{margin-top:12px}
 .share-row .item-sub.share-expired{color:#c93a3a}
+.vz-ar-item{display:flex;align-items:center;gap:4px}.vz-ar-item+.vz-ar-item{border-top:1px solid var(--vz-color-border)}
+.vz-ar-item>a{flex:1;min-width:0}.vz-ar-list .vz-ar-item>a+a{border-top:0}
+.vz-ar-share{flex:none;color:#667085}
