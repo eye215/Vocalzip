@@ -659,8 +659,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     main.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
       VZ.mediaSelection?.hideSongAction();
       songTab = b.dataset.tab; selectionTouched = false; draw();
-      const bar = main.querySelector('.song-tabs'), body = main.querySelector('[data-body]');
-      if (bar && body && body.getBoundingClientRect().top < bar.getBoundingClientRect().bottom) scrollTo(0, scrollY + body.getBoundingClientRect().top - bar.getBoundingClientRect().bottom - 8);
+      // Keep the user's current scroll position when changing tabs.
     });
     draw();
     media = (await M.list().catch(() => [])).filter(m => m.songId === s.id);
