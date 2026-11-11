@@ -638,12 +638,12 @@ body .sheet-page #practice-log .vz-practice-rating .stars button[aria-pressed=tr
    The recording focus screen intentionally hides navigation. */
 body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
   position:fixed;
-  /* The home shadow dock is centered at max 358px; regular pages must use identical geometry.
-     Override the older global-app translateX(-50%) rule consistently. */
+  /* Home shadow dock's final integration CSS overrides its template's 358px
+     with --vz-nav-max-width (528px). Use that same resolved token here. */
   left:50%;
   right:auto;
-  width:min(calc(100% - 32px),358px);
-  max-width:358px;
+  width:min(calc(100% - var(--vz-nav-inset,16px)*2),var(--vz-nav-max-width,528px));
+  max-width:var(--vz-nav-max-width,528px);
   transform:translateX(-50%);
   bottom:max(var(--vz-nav-bottom,12px),env(safe-area-inset-bottom));
   z-index:var(--vz-z-nav);
