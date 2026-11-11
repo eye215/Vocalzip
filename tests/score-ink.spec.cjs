@@ -454,7 +454,7 @@ test('MR 재생 · 녹음 · MR+녹음 sit directly under the score page and lea
  const dialog=await open(page),bar=dialog.locator('[data-score-audio]');
  await expect(bar).toBeVisible();
  if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-'+test.info().project.name+'.png'});
- for(const name of ['재생','녹음','MR+녹음'])await expect(bar.getByRole('button',{name,exact:true})).toBeVisible();
+ for(const name of ['재생','녹음','재생+녹음'])await expect(bar.getByRole('button',{name,exact:true})).toBeVisible();
  expect((await bar.boundingBox()).height).toBeLessThanOrEqual(64);
  const stage=await dialog.locator('[data-ink-stage]').boundingBox(),box=await bar.boundingBox();
  expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
@@ -543,4 +543,46 @@ test('compact viewer: song title on top with 다른 악보 icon, one tool row en
  expect(await dialog.locator('.score-ink-pages').evaluate(el=>el===el.parentElement.lastElementChild)).toBe(true);
  const stage=await dialog.locator('[data-ink-stage]').boundingBox(),pages=await dialog.locator('.score-ink-pages').boundingBox();
  expect(pages.y).toBeGreaterThan(stage.y+stage.height-1);
+});
+test('무대용 보기 works as soon as the first page shows, even while the ink check is still running',async({page})=>{
+ await setup(page);
+ // The ink check never finishes here (as when the full original download stalls on a slow connection).
+ await page.evaluate(()=>{crypto.subtle.digest=()=>new Promise(()=>{});});
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
+ await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
+ await page.waitForTimeout(500);await expect(dialog.locator('[data-ink-save-state]')).not.toContainText('필기 준비됨'); // still unverified
+ await act(dialog,'무대용 보기');
+ await expect(dialog).toHaveClass(/score-ink-performance/);
+ const controls=dialog.locator('[data-ink-performance-controls]');
+ await expect(controls).toBeVisible();await expect(controls).toContainText('1 / 2쪽');
+ await controls.getByRole('button',{name:'다음 페이지',exact:true}).click();
+ await expect(dialog.locator('[data-ink-page]')).toHaveText('2 / 2쪽');
+ await controls.getByRole('button',{name:'이전 페이지',exact:true}).click();
+ await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
+ await controls.getByRole('button',{name:'편집으로 돌아가기',exact:true}).click();
+ await expect(dialog).not.toHaveClass(/score-ink-performance/);
+});
+test('무대용 보기 after the ink check: one finger swipes pages and drawing is off',async({page,browserName})=>{
+ test.skip(browserName!=='chromium','multi-touch is driven through Chromium CDP');
+ await setup(page);const dialog=await open(page),pageLabel=dialog.locator('[data-ink-page]');
+ await penOnly(dialog,false);
+ await act(dialog,'무대용 보기');await expect(dialog).toHaveClass(/score-ink-performance/);
+ expect(await dialog.locator('[data-ink-svg]').evaluate(el=>getComputedStyle(el).pointerEvents)).toBe('none');
+ await swipe(page,dialog,{fingers:1});await expect(pageLabel).toHaveText('2 / 2쪽');
+ await swipe(page,dialog,{fingers:1,dx:170});await expect(pageLabel).toHaveText('1 / 2쪽');
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
+});
+test('fullscreen page row is one line over the score and hides while nothing moves',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ await act(dialog,'전체화면');await expect(dialog).toHaveClass(/score-ink-fullscreen/);
+ const pages=dialog.locator('.score-ink-pages');
+ await expect(pages).toHaveCSS('position','absolute');
+ const box=await pages.boundingBox();expect(box.height).toBeLessThan(56);
+ await expect(pages).toHaveCSS('opacity','1');
+ await expect.poll(()=>pages.evaluate(el=>getComputedStyle(el).opacity),{timeout:6000}).toBe('0');
+ const stage=await dialog.locator('[data-ink-stage]').boundingBox();
+ await page.mouse.click(stage.x+stage.width/2,stage.y+stage.height/2);
+ await expect.poll(()=>pages.evaluate(el=>getComputedStyle(el).opacity)).toBe('1');
 });

@@ -262,6 +262,20 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-audio-hint{margin:0 4px 2px;font-size:12px;line-height:1.4;color:var(--vz-color-text-secondary,#6b6680)}
 .score-audio-hint:empty{display:none}
 .score-audio-hint[data-error=true]{color:#d92d20}
+.score-audio-row>.score-audio-btn{flex:1 1 0;min-width:0}
+.score-audio-row>.score-audio-label+.score-audio-btn,.score-audio-row>.score-audio-player~.score-audio-btn{flex:none}
+/* Live: a small floating chip over the bottom-left of the score; the score takes the bar's room. */
+.score-audio.is-live{position:absolute;left:12px;z-index:7;width:auto;max-width:calc(100% - 24px);padding:0;border:0;background:transparent;animation:score-audio-flash .9s ease-out 1}
+.score-audio-chip{display:flex;align-items:center;gap:2px;padding:0 2px 0 12px;border-radius:999px;background:rgba(16,24,40,.84);color:#fff;box-shadow:0 8px 20px rgba(16,24,40,.22)}
+.score-audio-dot{width:10px;height:10px;border-radius:50%;background:#f04438;animation:score-audio-blink 1s steps(2,start) infinite}
+.score-audio-dot.is-play{background:#b692ff}
+.score-audio-chip .score-audio-time{margin:0 6px;font-size:13px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+.score-audio-icon{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:#fff;font-size:18px;cursor:pointer}
+.score-audio.is-live .score-audio-hint{position:absolute;left:0;bottom:calc(100% + 6px);white-space:nowrap;background:#fff;border-radius:10px;padding:2px 8px}
+.score-audio-label .score-audio-time{font-weight:700;color:#344054}
+@keyframes score-audio-blink{to{visibility:hidden}}
+@keyframes score-audio-flash{0%{transform:scale(.6);opacity:0}40%{transform:scale(1.08);opacity:1;filter:drop-shadow(0 0 10px #b692ff)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.score-audio.is-live,.score-audio-dot{animation:none}}
 .score-audio-youtube iframe{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:10px}
 @media(max-width:380px){.score-audio-btn{padding:0 8px}.score-audio-btn span{font-size:12px}}
 /* Fullscreen: icon-only buttons, clear of the floating page controls on the right. */
@@ -296,3 +310,7 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
 .score-ink-compact .score-ink-pages [data-ink-page]{flex:1;min-width:52px;width:auto;font-size:13px}
 .score-ink-compact .score-ink-pages select{margin-left:4px;min-height:40px;max-width:92px;padding:4px 6px;font-size:12px}
 .score-ink-compact .score-audio{max-width:none;margin-bottom:0}
+/* Fullscreen: one-line page row floating over the bottom of the score, hidden while nothing moves. */
+.score-ink-compact .score-ink-pages [data-ink-page]{white-space:nowrap}
+.score-ink-compact.score-ink-fullscreen .score-ink-pages{position:absolute;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:8;padding:0 4px;border-radius:14px;background:#ffffffee;box-shadow:0 6px 18px rgba(16,24,40,.14);transition:opacity .25s ease}
+.score-ink-compact.score-ink-fullscreen[data-ink-idle=true] .score-ink-pages{opacity:0;pointer-events:none}

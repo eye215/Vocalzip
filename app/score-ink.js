@@ -76,7 +76,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  let store,prefs,profiles;
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
- const controller=new AbortController();let audioBar=null,doc,loadingTask,renderTask,prepared=null,prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
+ const controller=new AbortController();let idleTimer=0,wakeControls=()=>{},audioBar=null,doc,loadingTask,renderTask,prepared=null,prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
  let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
@@ -216,7 +216,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('.score-ink-editor').append(el.querySelector('.score-ink-pages'));
  }
  function fullLayout(next){
-  resetGestures();full=next;el.classList.toggle('score-ink-fullscreen',full);setMoreOpen(false);
+  resetGestures();full=next;el.classList.toggle('score-ink-fullscreen',full);setMoreOpen(false);wakeControls();
   const button=el.querySelector('[data-ink-fullscreen]');
   button.setAttribute('aria-label',full?'전체화면 종료':'전체화면');button.title=full?'전체화면 종료':'전체화면';
   button.querySelector('i').className='ph ph-'+(full?'arrows-in':'arrows-out');
@@ -234,12 +234,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(!performance||closed)return;
   const controls=el.querySelector('[data-ink-performance-controls]');controls.hidden=false;
   controls.querySelector('[data-ink-performance-page]').textContent=pageNo+' / '+(doc?.numPages||'?')+'쪽';
-  controls.querySelector('[data-ink-performance-prev]').disabled=!ready||pageNo<=1;
-  controls.querySelector('[data-ink-performance-next]').disabled=!ready||pageNo>=doc?.numPages;
+  controls.querySelector('[data-ink-performance-prev]').disabled=!viewReady||pageNo<=1;
+  controls.querySelector('[data-ink-performance-next]').disabled=!viewReady||pageNo>=doc?.numPages;
   clearTimeout(performanceTimer);performanceTimer=setTimeout(()=>{if(!closed&&performance)controls.hidden=true;},4500);
  }
  function performanceMode(next){
-  if(next===performance||next&&!ready)return;
+  // Stage view only reads the score: it works as soon as a page is on screen, before the ink check finishes.
+  if(next&&!viewReady){say('악보 첫 페이지가 보인 뒤에 무대용 보기를 쓸 수 있어요.',true);return;}
+  if(next===performance)return;
   finishStroke();markerStart=null;markerDrag=null;if(next&&pending){saveState('저장 실패 · 다시 시도','error');say('필기를 먼저 다시 저장해 주세요.',true);return;}
   if(next){performanceOriginFull=full;if(!full)fullLayout(true);}
   performance=next;el.classList.toggle('score-ink-performance',next);
@@ -313,7 +315,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     const dx1=c.x-a.x,dx2=d.x-b.x,dy1=c.y-a.y,dy2=d.y-b.y;
     const startDistance=Math.hypot(a.x-b.x,a.y-b.y),endDistance=Math.hypot(c.x-d.x,c.y-d.y);
     if(dx1*dx2>0&&Math.min(Math.abs(dx1),Math.abs(dx2))>56&&Math.max(Math.abs(dy1),Math.abs(dy2))<Math.min(Math.abs(dx1),Math.abs(dx2))*.7&&Math.abs(dx1-dx2)<55&&Math.abs(endDistance-startDistance)<Math.max(25,startDistance*.18))direction=dx1<0?1:-1;
-   }else if(profiles.penOnly&&event.type==='pointerup'&&swipe?.pointer===event.pointerId&&Date.now()-swipe.time<900){
+   }else if((profiles.penOnly||performance)&&event.type==='pointerup'&&swipe?.pointer===event.pointerId&&Date.now()-swipe.time<900){
     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
     if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.4)direction=dx<0?1:-1;
    }
@@ -721,6 +723,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{current();store.restore();if(selection&&!selectionFresh()){clearSelection();say('선택한 필기가 다른 곳에서 바뀌었어요. 다시 선택해 주세요.',true);}if(exportUrl&&exportSignature(store.list(binding))!==exportStamp)invalidateExport();paint();}catch{sheet.close();}
  }
  function cleanup(){
+  clearTimeout(idleTimer);
   audioBar?.destroy()?.catch?.(()=>{});audioBar=null;
   closed=true;visionController?.abort();clearTimeout(performanceTimer);clearTimeout(prepareTimer);prepareTask?.cancel();prepared=null;closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
@@ -738,6 +741,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
   // MR 재생 · 녹음 · MR+녹음 under the score page (app/score-audio.js).
   try{audioBar=window.VzipScoreAudio?.mount(stage,{songId,scoreTitle:score.title||score.fileName||''})||null;}catch{audioBar=null;}
   compactLayout();
+  // Fullscreen: the page row floats over the score and hides after 2.5 s without touch, swipe, scroll or keys.
+  const wake=()=>{el.dataset.inkIdle='false';clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(!closed&&full)el.dataset.inkIdle='true';},2500);};
+  for(const type of ['pointerdown','touchstart','wheel','keydown'])el.addEventListener(type,wake,{passive:true,capture:true});
+  stage.addEventListener('scroll',wake,{passive:true});wakeControls=wake;
   el.querySelector('[data-ink-prev]').disabled=true;el.querySelector('[data-ink-next]').disabled=true;
   el.querySelector('[data-ink-first]').disabled=true;el.querySelector('[data-ink-last]').disabled=true;
   const back=el.parentNode;
@@ -754,8 +761,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.addEventListener('click',event=>{if(el.dataset.inkMoreOpen==='true'&&!event.target.closest('[data-ink-more],.score-ink-actions'))setMoreOpen(false);else if(event.target.closest('.score-ink-actions>button'))setMoreOpen(false);});
   el.querySelector('[data-ink-performance]').onclick=()=>performanceMode(true);
   el.querySelector('[data-ink-performance-exit]').onclick=()=>performanceMode(false);
-  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(ready&&!busy&&pageNo>1){pageNo--;markerStart=null;renderPage();}};
-  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(ready&&!busy&&pageNo<doc?.numPages){pageNo++;markerStart=null;renderPage();}};
+  el.querySelector('[data-ink-performance-prev]').onclick=()=>{if(viewReady&&!busy&&pageNo>1){pageNo--;markerStart=null;renderPage();}};
+  el.querySelector('[data-ink-performance-next]').onclick=()=>{if(viewReady&&!busy&&pageNo<doc?.numPages){pageNo++;markerStart=null;renderPage();}};
   stage.onpointerdown=event=>{if((performance||!ready)&&event.pointerType==='touch'&&viewReady&&!busy&&event.target!==svg)gestureDown(event);};
   stage.onpointermove=event=>{if((performance||!ready)&&event.target!==svg)gestureMove(event);};
   stage.onpointerup=stage.onpointercancel=event=>{if((performance||!ready)&&event.target!==svg)gestureEnd(event);};
@@ -764,7 +771,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   stage.addEventListener('touchstart',event=>{
    if(tool==='notation'||!viewReady||busy||pending)return;
    const fingers=[...event.touches].filter(t=>t.touchType!=='stylus');
-   if(fingers.length!==2&&!(fingers.length===1&&profiles.penOnly))return;
+   if(fingers.length!==2&&!(fingers.length===1&&(profiles.penOnly||performance)))return;
    if(fingers.length===2){
     if(active&&touchInkStart?.pointer===active.pointer){active=null;cancelAnimationFrame(frame);frame=0;paint();}
     touchEraser=null;markerDrag=null;
@@ -794,7 +801,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(swipe.count===2){
     const [a,b]=ids.map(id=>swipe.start.get(id)),[c,d]=ids.map(id=>swipe.end.get(id));
     if(dx[0]*dx[1]<=0||Math.abs(dx[0]-dx[1])>=55||Math.abs(Math.hypot(c.x-d.x,c.y-d.y)-Math.hypot(a.x-b.x,a.y-b.y)) >=Math.max(25,Math.hypot(a.x-b.x,a.y-b.y)*.18)){restore();return;}
-   }else if(!profiles.penOnly||stage.scrollWidth-stage.clientWidth>8&&!(dx[0]<0?swipe.atRight:swipe.atLeft)){restore();return;}
+   }else if(!(profiles.penOnly||performance)||stage.scrollWidth-stage.clientWidth>8&&!(dx[0]<0?swipe.atRight:swipe.atLeft)){restore();return;}
    const direction=dx[0]<0?1:-1;
    if(pageNo+direction<1||pageNo+direction>doc.numPages){restore();return;}
    if(swipe.count===2){zoom=swipe.zoom;zoomValue();}
@@ -1016,7 +1023,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(savedView?.pdfHash&&savedView.pdfHash!==pdfHash){
     pageNo=1;zoom=1;zoomValue();await renderPage();current();if(closed)return;
    }
-   ready=true;stage.dataset.viewOnly='false';rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents='';svg.dataset.tool=tool;
+   ready=true;stage.dataset.viewOnly='false';rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents=performance?'none':'';svg.dataset.tool=tool;
    window.VzipR2.scoreVisionAvailable?.().then(result=>{if(closed)return;visionAvailable=!!result.available;syncVisionTools();paint();}).catch(()=>{if(!closed)syncVisionTools();});
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
    el.querySelector('[data-ink-first]').disabled=pageNo<=1;el.querySelector('[data-ink-last]').disabled=pageNo>=doc.numPages;
