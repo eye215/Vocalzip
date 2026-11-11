@@ -404,8 +404,13 @@ VZ.openScoreInk=(songId,scoreId)=>{
  function showVisionResult(result){
   const panel=el.querySelector('[data-ink-vision-result]');panel.dataset.mode=result.mode;panel.dataset.noteId=result.id||'';panel._result=result;
   const isText=result.mode==='handwriting'||result.mode==='edit';
-  el.querySelector('[data-ink-vision-heading]').textContent=result.mode==='notation'?(result.label||'악보 표기 설명'):'손글씨 → 텍스트 메모';
-  el.querySelector('[data-ink-vision-explanation]').textContent=result.mode==='notation'?(result.explanation||'표기를 구별하기 어려워요.'):(result.confidence==='low'?'인식이 불확실해요. 글자를 직접 확인하고 수정해 주세요.':'원래 필기는 그대로 남아요. 결과를 확인하고 수정해 주세요.');
+  const label=String(result.label||'');
+  el.querySelector('[data-ink-vision-heading]').textContent=result.mode==='notation'?(/[A-Za-z]/.test(label)&&!/[가-힣]/.test(label)?'악보 표기 설명':label||'악보 표기 설명'):'손글씨 → 텍스트 메모';
+  const tempo=result.mode==='notation'&&String(result.label||'').match(/[♩♪]\s*=\s*(\d{2,3})/);
+  const explanation=result.mode==='notation'&&!/[가-힣]/.test(String(result.explanation||''))
+   ?(tempo?'4분음표를 1박으로 하여 1분에 '+tempo[1]+'박의 빠르기로 노래하세요. 일정한 박을 유지해 보세요.':'한국어 설명을 받지 못했어요. 영역을 다시 선택해 분석해 주세요.')
+   :result.explanation;
+  el.querySelector('[data-ink-vision-explanation]').textContent=result.mode==='notation'?(explanation||'표기를 구별하기 어려워요.'):(result.confidence==='low'?'인식이 불확실해요. 글자를 직접 확인하고 수정해 주세요.':'원래 필기는 그대로 남아요. 결과를 확인하고 수정해 주세요.');
   const more=el.querySelector('[data-ink-vision-more]'),description=el.querySelector('[data-ink-vision-explanation]');panel.dataset.expanded='false';more.hidden=true;more.textContent='더보기';more.setAttribute('aria-expanded','false');
   if(result.mode==='notation')requestAnimationFrame(()=>{if(panel.hidden||panel._result!==result)return;more.hidden=description.scrollHeight<=description.clientHeight+2;});
   el.querySelector('[data-ink-vision-text-label]').hidden=!isText;el.querySelector('[data-ink-vision-text]').value=result.text||'';
