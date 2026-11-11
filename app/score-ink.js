@@ -24,10 +24,46 @@ async function readPDF(response,size,signal){
 }
 function deadline(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
 const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+/* Opened PDFs are kept on this device (Cache Storage, per account + R2 key + size + upload time) with their verified
+ * SHA-256, so reopening a score skips the download and the hash. A replaced PDF has a new key/time and is fetched
+ * again; deleting a score drops its copy. Only the last 12 scores are kept. */
+const PDF_CACHE='vzip-score-pdf-v1',PDF_KEEP=12;
+const pdfKey=(owner,score)=>'https://vzip-score.invalid/'+encodeURIComponent(owner)+'/'+encodeURIComponent(score.r2Key)+'?size='+score.size+'&v='+encodeURIComponent(score.updatedAt||score.uploadedAt||'');
+const pdfCache={
+ async get(owner,score){
+  if(!window.caches)return null;
+  const response=await (await caches.open(PDF_CACHE)).match(pdfKey(owner,score));if(!response)return null;
+  const digest=response.headers.get('x-vzip-pdf-hash')||'',bytes=new Uint8Array(await response.arrayBuffer());
+  if(!/^[0-9a-f]{64}$/.test(digest)||bytes.length!==score.size||!new TextDecoder().decode(bytes.subarray(0,1024)).includes('%PDF-'))return null;
+  return {bytes,hash:digest,etag:response.headers.get('x-vzip-pdf-etag')||''};
+ },
+ /** The device copy is used only while the stored original is still the same (size and ETag, one 1-byte request).
+  * Offline, the device copy is used as is. */
+ async fresh(owner,score){
+  const kept=await this.get(owner,score);if(!kept)return null;
+  let now;try{now=await deadline(window.VzipR2.stat(score.r2Key),5000,'확인 지연');}catch{return kept;}
+  if(!now||now.size!==score.size||(now.etag||kept.etag)&&now.etag!==kept.etag){await this.drop(score.r2Key);return null;}
+  return kept;
+ },
+ async put(owner,score,bytes,digest){
+  if(!window.caches)return;
+  const cache=await caches.open(PDF_CACHE),key=pdfKey(owner,score);
+  // The ETag is read after the hash, so a copy is only ever labelled with the original it was verified against.
+  const etag=(await window.VzipR2.stat(score.r2Key).catch(()=>null))?.etag||'';
+  await cache.delete(key);await cache.put(key,new Response(bytes,{headers:{'content-type':'application/pdf','x-vzip-pdf-hash':digest,'x-vzip-pdf-etag':etag}}));
+  const keys=await cache.keys();for(const old of keys.slice(0,Math.max(0,keys.length-PDF_KEEP)))await cache.delete(old);
+ },
+ async drop(r2Key){
+  if(!window.caches)return;
+  const cache=await caches.open(PDF_CACHE),part='/'+encodeURIComponent(r2Key)+'?';
+  for(const key of await cache.keys())if(key.url.includes(part))await cache.delete(key);
+ }
+};
 VZ.deleteScoreWithInk=(songId,score)=>{
  const owner=window.vzipCloudUserId?.(),scope=window.VzipAccountScope;
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});
+ pdfCache.drop(score.r2Key).catch(()=>{});
  return store.removeScore({ownerId:owner,songId,scoreId:score.id,r2Key:score.r2Key});
 };
 VZ.openScoreInk=(songId,scoreId)=>{
@@ -918,7 +954,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{
    say('PDF를 준비하고 있어요.');
    const urlPromise=deadline(window.VzipR2.url(score.r2Key),15000,'PDF 주소 확인이 오래 걸려요.');
-   let bytesPromise;
+   let bytesPromise,knownHash='';
    // Render the first page via PDF.js ranges, then reuse its raw bytes for the
    // original hash. A separate download is only needed if PDF.js cannot provide them.
    const fullBytes=()=>bytesPromise ||= (async()=>{
@@ -935,9 +971,20 @@ VZ.openScoreInk=(songId,scoreId)=>{
     const response=await deadline(fetch(url,{signal:controller.signal,cache:'default'}),20000,'PDF 다운로드가 지연되고 있어요.');
     return readPDF(response,score.size,controller.signal);
    })();
-   const [url,pdf]=await Promise.all([urlPromise,deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.')]);current();
-   el.querySelector('[data-ink-original]').href=url;el.querySelector('[data-ink-original-quick]').href=url;
    const options={isEvalSupported:false,enableXfa:false,standardFontDataUrl:PDFJS+'standard_fonts/',cMapUrl:PDFJS+'cmaps/',cMapPacked:true};
+   const original=url=>{if(!closed){el.querySelector('[data-ink-original]').href=url;el.querySelector('[data-ink-original-quick]').href=url;}};
+   // A PDF opened before on this device opens from the device copy: no download, no second hash.
+   const kept=await pdfCache.fresh(owner,score).catch(()=>null);current();
+   if(kept){
+    urlPromise.then(original,()=>{});
+    const pdf=await deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.');current();
+    say('첫 페이지를 준비하고 있어요.');
+    bytesPromise=Promise.resolve(kept.bytes);knownHash=kept.hash;
+    loadingTask=pdf.getDocument({...options,data:kept.bytes.slice()});
+    doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');
+   }else{
+   const [url,pdf]=await Promise.all([urlPromise,deadline(library(),20000,'악보 뷰어를 불러오지 못했어요.')]);current();
+   original(url);
    say('첫 페이지를 준비하고 있어요.');
    loadingTask=pdf.getDocument({...options,url,disableAutoFetch:true,disableStream:true,rangeChunkSize:262144});
    loadingTask.onPassword=()=>{loadingTask.destroy();say('암호가 없는 PDF로 다시 올려 주세요.',true);};
@@ -950,6 +997,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     loadingTask=pdf.getDocument({...options,data:new Uint8Array(bytes)});
     doc=await deadline(loadingTask.promise,30000,'PDF 페이지를 열지 못했어요.');
    }
+   }
    current();if(closed)return;
    if(doc.numPages>2000)throw Error('2000쪽 이하 PDF를 사용해 주세요.');
    pageNo=Math.min(pageNo,doc.numPages);
@@ -958,7 +1006,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
    // PDF content identity must be verified before annotations can be drawn or edited.
    // The first page is readable while the complete original is being hashed.
    const bytes=await fullBytes();current();if(closed)return;
-   const pdfHash=await hash(bytes);current();if(closed)return;
+   const pdfHash=knownHash||await hash(bytes);current();if(closed)return;
+   if(!knownHash)pdfCache.put(owner,score,bytes,pdfHash).catch(()=>{});
    binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
    readNotes();
    if(savedView?.pdfHash&&savedView.pdfHash!==pdfHash){
