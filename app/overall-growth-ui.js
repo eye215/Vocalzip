@@ -6,6 +6,32 @@ if(!V||!Model)return;
 const esc=V.esc;
 const fmt=(n,m)=>n==null?'측정 없음':(Math.round((m.id==='vibrato'?n*100:n)*10)/10).toLocaleString('ko-KR')+' '+m.unit;
 const longDate=s=>s?String(s).replace(/^(\d{4})-(\d{2})-(\d{2})$/,'$1.$2.$3'):'';
+
+const COACH_FIELDS={
+ '요약':['한눈에 보기','overview','ph-sparkle'],
+ '좋아진 점':['좋아진 점','better','ph-trend-up'],
+ '보완할 점':['다음에 살필 점','focus','ph-target'],
+ '다음 연습':['다음 연습','action','ph-play-circle']
+};
+/* Render saved model text; never fabricate analysis claims. */
+function noteHtml(text){
+ const raw=String(text||'').trim();
+ if(!raw)return '';
+ const matches=[...raw.matchAll(/(?:^|\n)\s*(요약|좋아진 점|보완할 점|다음 연습)\s*[:：]\s*/g)];
+ if(!matches.length)return '<div class="growth-ai-note">'+esc(raw).replace(/\n/g,'<br>')+'</div>';
+ return '<div class="growth-ai-note growth-coach-grid">'+matches.map((m,i)=>{
+  const slice=raw.slice(m.index+m[0].length,i+1<matches.length?matches[i+1].index:raw.length).trim();
+  const [label,tone,icon]=COACH_FIELDS[m[1]];
+  return '<article class="growth-coach-part growth-coach-'+tone+'">'+
+   '<div class="growth-coach-part-heading"><i class="ph '+icon+'" aria-hidden="true"></i><strong>'+esc(label)+'</strong></div>'+
+   '<p>'+esc(slice||'비교 가능한 근거가 부족해요.').replace(/\n/g,'<br>')+'</p></article>';
+ }).join('')+'</div>';
+}
+function jumpNav(){
+ return '<nav class="growth-jumps" aria-label="성장 분석 빠른 이동">'+
+  [['overview','요약'],['skills','역량'],['coach','AI 분석'],['trend','그래프'],['practice','연습']].map(([id,label])=>
+   '<button type="button" data-growth-jump="'+id+'">'+label+'</button>').join('')+'</nav>';
+}
 function summaryCard(report){
  const valid=report.analysisCount>0;
  const complete=report.metrics.some(m=>m.pairedSongs>0);
@@ -19,6 +45,8 @@ function summaryCard(report){
    '<div><span>분석한 곡</span><strong>'+report.analyzedSongs+'</strong><small>곡</small></div>'+
    '<div><span>분석한 월</span><strong>'+report.monthCount+'</strong><small>개월</small></div></div>'+
   '<p class="growth-period-label">'+(report.firstDate?'기록 기간 '+longDate(report.firstDate)+' ~ '+longDate(report.lastDate):'아직 날짜가 있는 곡 녹음이 없어요.')+'</p>'+
+  '<div class="growth-coverage"><span>수치가 있는 녹음 <strong>'+report.analysisCount+' / '+report.recordings+'</strong></span>'+
+  '<div class="growth-coverage-track" role="progressbar" aria-label="분석된 녹음 비율" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+(report.recordings?Math.round(report.analysisCount/report.recordings*100):0)+'"><i style="width:'+(report.recordings?Math.round(report.analysisCount/report.recordings*100):0)+'%"></i></div></div>'+
   '<div class="growth-highlights"><div class="growth-highlight"><span>좋아진 방향</span><strong>'+esc(strength?.title||'비교 기록 필요')+'</strong><small>'+(strength?'동일 곡 '+strength.pairedSongs+'곡의 첫·최근 비교':'동일 곡을 다른 날 녹음하면 확인 가능')+'</small></div>'+
   '<div class="growth-highlight"><span>우선 확인할 항목</span><strong>'+esc(watch?.title||'보완 여부 판단 전')+'</strong><small>'+(watch?'변화가 필요한 곡 '+watch.worsened+'곡':'측정값만으로 약점을 단정하지 않아요')+'</small></div></div></section>';
 }
@@ -63,7 +91,7 @@ function evidence(report){
 function coachCard(){
  const found=(V.db.overallAiReports||[]).find(x=>x.id==='overall-ai:all');
  return '<section class="growth-panel growth-coach" data-overall-ai><header class="growth-panel-head"><div><p class="growth-eyebrow">AI VOCAL REVIEW</p><h2>AI 전체 종합 코치</h2></div><span class="growth-state">직접 요청</span></header>'+
- (found?'<p class="small muted">마지막 저장 '+esc(found.createdDate||'')+'</p><div class="growth-ai-note">'+esc(found.note||'').replace(/\n/g,'<br>')+'</div>':
+ (found?'<p class="small muted">마지막 저장 '+esc(found.createdDate||'')+'</p>'+noteHtml(found.note):
   '<p>현재까지의 같은 곡 성장 지표와 저장된 청취 코멘트를 함께 보고, 다음 연습 방향을 제안해요.</p>')+
  '<p class="small muted">버튼을 눌렀을 때만 분석 요약과 기존 AI 코멘트 최대 5건을 전송해요. 원본 음성은 전송하지 않아요. 새로운 녹음을 AI가 직접 듣는 분석이 아닙니다.</p>'+
  '<button type="button" class="btn block" data-overall-ai-run>'+(found?'전체 코치 다시 분석':'AI 전체 종합 분석하기')+'</button><p role="status" class="small muted" data-overall-ai-state></p></section>';
@@ -98,11 +126,19 @@ function aiEvidence(report){
   metrics,observations:observationEvidence()};
 }
 function render(report,metric){
- return summaryCard(report)+'<section class="growth-section-set"><header class="growth-panel-head"><div><p class="growth-eyebrow">4 KEY METRICS</p><h2>역량별 분석</h2></div></header>'+
+ return '<div data-growth-anchor="overview">'+summaryCard(report)+'</div>'+jumpNav()+
+  '<section class="growth-section-set" data-growth-anchor="skills"><header class="growth-panel-head"><div><p class="growth-eyebrow">VOICE METRICS</p><h2>역량별 실측 변화</h2><p class="growth-section-caption">같은 곡의 처음과 최근 녹음으로 비교해요.</p></div></header>'+
   '<div class="growth-stats-grid">'+report.metrics.map(metricCard).join('')+'</div></section>'+
-  trends(report,metric||'intonation')+coachCard()+recommendations(report)+evidence(report);
+  '<div data-growth-anchor="coach">'+coachCard()+'</div>'+
+  '<div data-growth-anchor="trend">'+trends(report,metric||'intonation')+'</div>'+
+  '<div data-growth-anchor="practice">'+recommendations(report)+'</div>'+evidence(report);
 }
 function bind(host,report,{rerender,ownerIdentity}={}){
+ host.querySelectorAll('[data-growth-jump]').forEach(button=>button.onclick=()=>{
+  const target=host.querySelector('[data-growth-anchor="'+button.dataset.growthJump+'"]');
+  const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  target?.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+ });
  const wireTrend=()=>{
   host.querySelectorAll('[data-overall-metric]').forEach(btn=>btn.onclick=()=>{
    const id=btn.dataset.overallMetric;
@@ -167,5 +203,5 @@ function bindChart(host,report){
    variant:'compact'});
  });
 }
-window.VzipOverallGrowthUI={render,bind,aiEvidence,observationEvidence};
+window.VzipOverallGrowthUI={render,bind,aiEvidence,observationEvidence,noteHtml};
 })();
