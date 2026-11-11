@@ -232,3 +232,58 @@ test('all-time with no analyzed recording explains missing measurements instead 
  await expect(page.locator('[data-overall-ai-run]')).toBeVisible();
  expect(await page.evaluate(()=>window.__coachCalls)).toBe(0);
 });
+
+test('saved overall AI becomes four readable, escaped cards and quick jumps retain the growth route',async({page})=>{
+ await boot(page,{view:'overall'});
+ await page.evaluate(()=>{
+  VZ.db.overallAiReports=[{id:'overall-ai:all',createdDate:'2026-11-11',
+   note:'요약: 전반적인 녹음 기록을 정리했어요.\n좋아진 점: 음정 흔들림이 줄었어요.\n보완할 점: <script>alert(1)</script> 같은 곡 비교가 더 필요해요.\n다음 연습: 편한 음역으로 5분 반복해요.'}];
+  const el=document.getElementById('test-root');
+  el.innerHTML=VZ.routes['vocal-growth'].render();
+  VZ.routes['vocal-growth'].mount(el);
+ });
+ await expect(page.locator('.growth-coach-part')).toHaveCount(4);
+ await expect(page.locator('.growth-coach-part.growth-coach-better')).toContainText('음정 흔들림');
+ await expect(page.locator('.growth-coach-part.growth-coach-action')).toContainText('5분');
+ await expect(page.locator('.growth-ai-note script')).toHaveCount(0);
+ await expect(page.locator('.growth-coach-part.growth-coach-focus')).toContainText('<script>');
+ await expect(page.locator('.growth-jumps button')).toHaveCount(5);
+ await page.locator('[data-growth-jump="coach"]').click();
+ await expect(page.locator('[data-growth-anchor="coach"]')).toBeAttached();
+ expect(new URL(page.url()).hash).toBe('');
+});
+test('monthly view groups measurements, AI, plans and optional supporting history',async({page})=>{
+ const recorded=[{id:'take',songId:'song-1',recordedDate:'2026-11-05',
+  analysis:{v:1,metrics:{voicedSeconds:20,intonation:{meanAbsCents:28}}}}];
+ const practices=[{id:'saved-coach',date:'2026-11-05',songId:'song-1',practiceMode:'song',
+  practiceRoom:{songId:'song-1',aiCoach:'들리는 특징: 안정된 발음'}}];
+ await boot(page,{recordings:recorded,practices,view:'monthly'});
+ await expect(page.locator('.growth-month-overview>div')).toHaveCount(3);
+ await expect(page.locator('[data-month-section="results"] .growth-metric')).toHaveCount(4);
+ await expect(page.locator('.growth-secondary')).toHaveCount(2);
+ await expect(page.locator('.growth-secondary').first()).not.toHaveAttribute('open','');
+ await page.locator('.growth-secondary').first().locator('summary').click();
+ await expect(page.locator('.growth-secondary').first().locator('.growth-listening')).toBeVisible();
+ await page.locator('[data-monthly-jump="history"]').click();
+ await expect(page.locator('[data-month-section="history"]')).toHaveAttribute('open','');
+ await expect(page.locator('[data-month-section="history"] .growth-month')).toHaveCount(1);
+});
+test('growth cards stay within a 375px viewport even with twelve month bars',async({page})=>{
+ await page.setViewportSize({width:375,height:812});
+ const media=Array.from({length:12},(_,i)=>{
+  const date='2026-'+String(i+1).padStart(2,'0')+'-03';
+  return {id:'record-'+i,songId:'song-1',recordedDate:date,
+   analysis:{v:1,metrics:{voicedSeconds:20,intonation:{meanAbsCents:35-i},stability:{wobbleCents:19-i}}}};
+ });
+ await boot(page,{recordings:media,view:'overall'});
+ await page.addStyleTag({path:path.resolve(__dirname,'../app/monthly-growth.css')});
+ await expect(page.locator('.growth-chart-point')).toHaveCount(12);
+ const widths=await page.evaluate(()=>{
+  const host=document.querySelector('.growth-page');
+  const chart=document.querySelector('.growth-chart');
+  return {viewport:window.innerWidth,document:document.documentElement.scrollWidth,
+   host:host.getBoundingClientRect().width,chart:chart.getBoundingClientRect().width};
+ });
+ expect(widths.document).toBeLessThanOrEqual(widths.viewport+1);
+ expect(widths.chart).toBeLessThanOrEqual(widths.host+1);
+});
