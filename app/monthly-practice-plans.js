@@ -26,10 +26,12 @@ const plans=()=> (V.db.practicePlans||[]).filter(x=>x?.kind==='monthly-vocal'&&!
 function entries(plan){return (V.db.dailyGoals||[]).filter(g=>g.sourceId===plan.id).sort((a,b)=>a.date.localeCompare(b.date));}
 function status(plan){
  const goals=entries(plan);
- return {done:goals.filter(g=>g.completed).length,total:goals.length};
+ const done=new Set(goals.filter(g=>g.completed===true).map(g=>g.date)).size;
+ return {done,total:Number.isInteger(plan.days)&&plan.days>0?plan.days:goals.length};
 }
 function form(month,items,rows){
- const ids=[...new Set(items.filter(m=>m.songId&&V.song(m.songId)).map(m=>m.songId))];
+ // A new plan can be created before the first take of that song is recorded.
+ const ids=[...new Set([...(V.db.songs||[]).map(x=>x.id),...items.map(m=>m.songId)].filter(Boolean))];
  const songList=ids.map(id=>V.song(id)).filter(Boolean);
  const prioritized=rows.filter(r=>r.c?.state==='worse').map(r=>r.d.id);
  return '<form data-plan-form class="growth-plan-form"><label class="field"><span>집중할 항목</span><select name="metric">'+
@@ -71,7 +73,7 @@ function card(plan,items){
  fmt(plan.segmentStart)+'–'+fmt(plan.segmentEnd)+' · '+plan.minutes+'분 × '+plan.days+'일</p>'+
  '<p class="small muted">'+E(plan.startDate)+' ~ '+E(last)+' · 홈의 오늘 목표에서 완료 체크</p>'+compareSongTakes(plan,items)+
  '<div class="row"><a class="btn sm ghost" href="#/song/'+encodeURIComponent(plan.songId)+'">곡 상세 보기</a>'+
- '<button type="button" class="btn sm ghost" data-ab-plan="'+E(plan.id)+'">구간 A/B 비교</button>'+ '<button type="button" class="btn sm ghost" data-archive-plan="'+E(plan.id)+'">계획 종료</button></div>'+ '<div data-ab-host="'+E(plan.id)+'"></div><div data-plan-outcome="'+E(plan.id)+'"></div></article>';
+ '<button type="button" class="btn sm ghost" data-ab-plan="'+E(plan.id)+'">구간 A/B 비교</button>'+ (plan.archived?'':'<button type="button" class="btn sm ghost" data-archive-plan="'+E(plan.id)+'">계획 종료</button>')+'</div>'+ '<div data-ab-host="'+E(plan.id)+'"></div><div data-plan-outcome="'+E(plan.id)+'"></div></article>';
 }
 function create(form,month,items){
  const metric=form.elements.metric.value,songId=form.elements.song.value,
@@ -104,8 +106,8 @@ function render(host,month,items,rows){
  stopReview();
  V.segmentABStop?.();
  const mine=plans().sort((a,b)=>(b.created||0)-(a.created||0));
- const savedOutcomeIds=new Set((V.db.vocalPlanReports||[]).map(x=>x.planId));
- const retired=(V.db.practicePlans||[]).filter(x=>x?.kind==='monthly-vocal'&&x.archived&&savedOutcomeIds.has(x.id))
+ // Cancelled plans must remain discoverable even without a saved final report.
+ const retired=(V.db.practicePlans||[]).filter(x=>x?.kind==='monthly-vocal'&&x.archived)
   .sort((a,b)=>(b.archivedAt||0)-(a.archivedAt||0));
  host.innerHTML='<section class="card growth-section"><h2>곡별 집중 연습 계획</h2>'+
  '<p class="small muted">월간 추천을 실제 곡과 직접 선택한 구간에 연결해요. 하루 목표 완료로 진행률을 추적합니다.</p>'+
@@ -145,7 +147,7 @@ function render(host,month,items,rows){
   recordInput.innerHTML='<option value="">녹음 선택</option>'+available.map(m=>
    '<option value="'+E(m.id)+'">'+E((M.dateOf(m)||'날짜 없음')+' · '+M.label(m))+'</option>').join('');
   button.disabled=!available.length;
-  if(!available.length)statusEl.textContent='이달에 분석 가능한 해당 곡의 녹음이 없어요. 구간을 직접 입력할 수 있어요.';
+  if(!available.length)statusEl.textContent='분석 가능한 해당 곡의 녹음이 아직 없어요. 구간을 직접 입력해 계획을 등록할 수 있어요.';
  }
  songInput.addEventListener('change',updateRecordings);
  updateRecordings();
@@ -211,7 +213,7 @@ function render(host,month,items,rows){
   catch(error){statusEl.textContent=error.message||'계획을 저장하지 못했어요.';}
  };
  host.querySelectorAll('[data-ab-plan]').forEach(btn=>btn.onclick=()=>{
-  const plan=mine.find(x=>x.id===btn.dataset.abPlan),panel=btn.closest('.growth-plan-item')?.querySelector('[data-ab-host]');
+  const plan=[...mine,...retired].find(x=>x.id===btn.dataset.abPlan),panel=btn.closest('.growth-plan-item')?.querySelector('[data-ab-host]');
   if(!plan||!panel||!V.segmentABPanel)return;
   if(panel.childElementCount){V.segmentABStop?.();panel.replaceChildren();return;}
   V.segmentABPanel(panel,plan,items);
