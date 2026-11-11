@@ -28,12 +28,12 @@ async function play(m,host,start,end){
   active={audio,revoke};host.replaceChildren(audio);
   audio.addEventListener('loadedmetadata',()=>{audio.currentTime=Math.max(0,Math.min(start,(audio.duration||start)-.1));},{once:true});
   audio.addEventListener('timeupdate',()=>{if(audio.currentTime>=end)audio.pause();});
-  audio.play().catch(()=>{});
+  audio.play().catch(()=>{ /* Native controls remain usable on iOS after async URL retrieval. */ });
  }catch(error){if(token===serial&&host.isConnected)host.textContent=error.message||'재생을 열지 못했어요.';}
 }
 function panel(host,plan,items){
  stop();
- const all=items.filter(x=>x.songId===plan.songId&&(!M.isVideo(x)||x.cloud));
+ const all=items.filter(x=>x.songId===plan.songId&&!M.isVideo(x)&&(!x.size||x.size<=60*1024*1024));
  const sorted=all.sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||''));
  const source=sorted.find(x=>x.id===plan.reviewRecordingId);
  const left=source||sorted[0],right=sorted.at(-1);
