@@ -4,12 +4,25 @@
 const V = window.VZ, M = V?.media, esc = V?.esc;
 if (!V || !M) return;
 const METRICS = [
-  {key:'wob', label:'지속음 흔들림', unit:'cent', get:a=>a?.metrics?.stability?.wobbleCents, fmt:v=>'±'+v+' cent', better:-1},
-  {key:'into', label:'음정 오차', unit:'cent', get:a=>a?.metrics?.intonation?.meanAbsCents, fmt:v=>'±'+v+' cent', better:-1},
-  {key:'high', label:'최고음', unit:'', get:a=>a?.metrics?.range?.highCents, fmt:(v,a)=>a?.metrics?.range?.high||'—', better:1},
-  {key:'phr', label:'프레이즈 길이', unit:'초', get:a=>a?.metrics?.breath?.medianPhrase, fmt:v=>v+'초', better:1},
-  {key:'rating', label:'만족도', unit:'점', get:(a,m)=>m?.rating, fmt:v=>v+'/5', better:1}
+  {key:'wob',label:'지속음 흔들림',unit:'cent',get:a=>a?.metrics?.stability?.wobbleCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'지속해서 낸 소리의 음높이 흔들림입니다. 낮을수록 안정적이에요. 같은 조건의 녹음끼리 비교하세요.'},
+  {key:'into',label:'음정 오차',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'기준 음정과의 평균 절대 오차입니다. 0에 가까울수록 정확해요. 같은 곡·구간에서 비교하는 것이 좋아요.'},
+  {key:'high',label:'최고음',unit:'',get:a=>a?.metrics?.range?.highCents,fmt:(v,a)=>a?.metrics?.range?.high||'—',better:0,tolerance:50,guide:'녹음에서 관측된 가장 높은 음입니다. 높다고 반드시 좋은 발성은 아니므로 오르내림은 중립으로 표시해요.'},
+  {key:'phr',label:'프레이즈 길이',unit:'초',get:a=>a?.metrics?.breath?.medianPhrase,fmt:v=>v+'초',better:1,tolerance:.2,guide:'한 구절을 이어 부른 시간의 중앙값입니다. 같은 구절과 템포라면 길어진 것이 긍정적일 수 있지만, 무조건 길수록 좋은 것은 아니에요.'},
+  {key:'rating',label:'만족도',unit:'점',get:(a,m)=>m?.rating,fmt:v=>v+'/5',better:1,tolerance:.1,guide:'녹음 후 직접 기록한 만족도입니다. 높을수록 스스로 만족한 녹음이에요. 객관적 발성 점수는 아니에요.'}
 ];
+const metricColor=(metric,previous,current)=>{
+ if(previous==null||current==null)return 'neutral';
+ if(!metric.better)return 'neutral';
+ const difference=(current-previous)*metric.better;
+ return Math.abs(difference)<=metric.tolerance?'neutral':difference>0?'good':'bad';
+};
+const metricChangeText=(metric,previous,current)=>{
+ if(previous==null||current==null)return '비교할 이전 녹음 없음';
+ const diff=current-previous,amount=Math.abs(diff).toFixed(metric.key==='rating'?0:1);
+ if(Math.abs(diff)<=metric.tolerance)return '이전 녹음과 비슷해요';
+ if(!metric.better)return '이전 대비 '+(diff>0?'상승 ':'하락 ')+amount+' cent · 좋고 나쁨은 판단하지 않아요';
+ return '이전보다 '+(diff>0?'증가 ':'감소 ')+amount+(metric.unit?' '+metric.unit:'')+' · '+(metricColor(metric,previous,current)==='good'?'좋아진 방향':'아쉬운 방향');
+};
 const speedStore = window.VzipAccountScope?.storage || localStorage;
 const speedKey = 'vzip_vocal_lab_rates_v1';
 const rates = () => { try { return JSON.parse(speedStore.getItem(speedKey)) || {}; } catch { return {}; } };
@@ -40,7 +53,7 @@ function waveform(m) {
   const values = []; for(let i=0;i<data.length;i+=step) values.push(Math.max(...data.slice(i,i+step)));
   return '<div class="vl-wave" aria-label="녹음 파형">'+values.map(v=>'<span style="height:'+Math.max(12,Math.min(100,Math.round(Number(v||0)*90+10)))+'%"></span>').join('')+'</div>';
 }
-function plot(vals, {height=142, highlighted=-1}={}) {
+function plot(vals, {height=142, highlighted=-1, interactive=false}={}) {
   const rows=vals.filter(p=>valid(p.value)!=null), W=340, H=height, pad=20;
   if (!rows.length) return '<p class="vl-muted">측정된 값이 없어요.</p>';
   let lo=Math.min(...rows.map(p=>+p.value)), hi=Math.max(...rows.map(p=>+p.value));
@@ -49,11 +62,17 @@ function plot(vals, {height=142, highlighted=-1}={}) {
   const y=v=>H-pad-(v-lo)/(hi-lo)*(H-pad*2);
   const points=rows.map((p,i)=>[x(i),y(+p.value)]);
   const line=points.length>1?'<polyline points="'+points.map(p=>p.map(v=>v.toFixed(1)).join(',')).join(' ')+'"/>':'';
-  return '<svg class="vl-plot" style="height:'+H+'px" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+esc(rows.map(p=>p.label+' '+p.value).join(', '))+'"><line class="vl-mid" x1="0" x2="340" y1="'+H/2+'" y2="'+H/2+'"/>'+line+points.map((p,i)=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(i===highlighted?6:4)+'" class="'+(i===highlighted?'active':'')+'"/>').join('')+'</svg>';
+  const dots=points.map((p,i)=>{
+    const cls='vl-dot '+(rows[i].tone||'neutral')+(i===highlighted?' active':'');
+    const cx=p[0].toFixed(1),cy=p[1].toFixed(1);
+    if(!interactive)return '<circle class="'+cls+'" cx="'+cx+'" cy="'+cy+'" r="'+(i===highlighted?6:4)+'"/>';
+    return '<g role="button" tabindex="0" data-point="'+esc(rows[i].id)+'" aria-label="'+esc(rows[i].label+' 상세 보기')+'"><circle class="vl-hit" cx="'+cx+'" cy="'+cy+'" r="19"/><circle class="'+cls+'" cx="'+cx+'" cy="'+cy+'" r="'+(i===highlighted?6:5)+'"/></g>';
+  }).join('');
+  return '<svg class="vl-plot" style="height:'+H+'px" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="'+(interactive?'group':'img')+'" aria-label="'+esc(rows.map(p=>p.label+' '+p.value).join(', '))+'"><line class="vl-mid" x1="0" x2="340" y1="'+H/2+'" y2="'+H/2+'"/>'+line+dots+'</svg>';
 }
 function sizePlots(host) {
   host.querySelectorAll('.vl-plot').forEach(svg=>{
-    const width=svg.getBoundingClientRect().width, circles=[...svg.querySelectorAll('circle')];
+    const width=svg.getBoundingClientRect().width, circles=[...svg.querySelectorAll('circle.vl-dot')];
     if(!width||!circles.length)return;
     const height=Number(svg.viewBox.baseVal.height)||142, pad=20;
     svg.setAttribute('viewBox','0 0 '+width+' '+height);
