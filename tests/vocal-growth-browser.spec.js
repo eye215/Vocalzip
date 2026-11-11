@@ -50,7 +50,7 @@ async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[
   window.vzipCloudSessionId=()=> 'mock-session-1';
   window.vzipCloudCoach=async evidence=>{
    window.__coachCalls++;
-   return {mode:'monthly',month:evidence.month,note:'요약: 기록을 확인했어요.'};
+   return {mode:evidence.mode,month:evidence.month,note:'요약: 기록을 확인했어요.'};
   };
  },{recordings,plans,goals,reports,practices});
  for(const f of scripts)await page.addScriptTag({path:path.resolve(__dirname,'..',f)});
