@@ -280,7 +280,7 @@ export async function createFloatingHome(opts={}){
  if(!items.length){const button=el("button",null,"vz-empty-action");button.type="button";button.setAttribute("aria-label","오늘의 목표 정하기");button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>오늘의 목표 정하기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg>';button.onclick=()=>opts.onGoals?.();list.append(button);}
  for(const item of items){
   const row=prototype.cloneNode(true),input=row.querySelector("input");row.dataset.long=String(String(item.title||"").length>80);input.removeAttribute("checked");input.checked=item.completed;input.setAttribute("aria-label",item.title||"목표");
-  row.querySelector("span").textContent=item.title||"목표";row.querySelector("small").textContent=({homework:"숙제",personal:"개인",recommendation:"추천"})[item.source]||"";row.querySelector("small").hidden=!row.querySelector("small").textContent;
+  row.querySelector("span").textContent=item.title||"목표";row.querySelector("small").textContent=item.routine&&item.source==="personal"?"반복":({homework:"숙제",personal:"개인",recommendation:"추천"})[item.source]||"";row.querySelector("small").hidden=!row.querySelector("small").textContent;
   input.onchange=async()=>{
    const before=item.completed;item.completed=input.checked;input.disabled=true;row.setAttribute("aria-busy","true");error.textContent="";refresh();
    try{if(await opts.onGoalToggle?.(item.id,item.completed)===false)throw Error("save rejected");}
