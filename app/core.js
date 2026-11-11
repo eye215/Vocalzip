@@ -219,7 +219,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
     el.style.width = width + 'px'; el.style.left = left + 'px'; el.style.top = top + 'px';
   }
   // Keep a focused field above the iOS keyboard.
-  el.addEventListener('focusin', e => { if (e.target.matches('input,textarea,select')) setTimeout(() => e.target.scrollIntoView({block:'center', behavior:'smooth'}), 300); });
+  // Do not force-scroll focused fields. iOS/browser handles keyboard visibility natively.
   (el.querySelector('[autofocus]') || el.querySelector('[data-close]') || el.querySelector('button'))?.focus({preventScroll:true});
   return api;
 };
