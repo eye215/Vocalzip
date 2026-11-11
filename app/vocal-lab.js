@@ -110,22 +110,10 @@ function single(s,m) {
     }).join('')+'</div>')+'</section>';
 }
 function observe(s,m) {
- const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0];
- const list=trendRows(s,metric),idx=list.findIndex(x=>x.m.id===m.id);
- const current=idx>=0?list[idx].value:valid(metric.get(analysis(m),m)),previous=idx>0?list[idx-1]:null;
- const tone=metricColor(metric,previous?.value,current);
- const label=metricChangeText(metric,previous?.value,current);
- const report=analysis(m);
- const safe=txt=>esc(String(txt||''));
- const body='<div class="vl-observe"><span>'+safe(M.label(m))+' · '+safe(M.dateOf(m)||'날짜 없음')+'</span>'+
-  '<p>'+safe(metric.guide)+'</p><strong>'+safe(current==null?'측정 안 됨':metric.fmt(current,report))+'</strong>'+
-  '<p class="vl-change '+tone+'">'+safe(label)+'</p>'+
-  (previous?'<p>이전 ('+safe(M.dateOf(previous.m))+') '+safe(metric.fmt(previous.value,analysis(previous.m)))+' → 현재 '+safe(metric.fmt(current,report))+'</p>':'')+
-  (m.rating!=null?'<p>내 만족도: '+safe(m.rating)+'/5</p>':'')+
-  (m.review?'<p>녹음 메모: '+safe(m.review)+'</p>':'')+
-  (report&&!V.analysisReliable(report)?'<p>분석 신뢰도가 낮아 변화 해석에 주의가 필요해요.</p>':'')+
-  '</div>';
- V.sheet({title:(M.dateOf(m)||'날짜 없음')+' · '+metric.label,body,foot:'<button type="button" class="btn block" data-close-observe>닫기</button>',onMount:(el,close)=>{el.querySelector('[data-close-observe]').onclick=close;}});
+ // A trend point represents one entire recording, not a summary of a single metric.
+ // Open the existing full-recording pitch curve reused by the analysis screen.
+ if(V.openRecordingAnalysisSheet)V.openRecordingAnalysisSheet(m);
+ else V.nav('#/analysis/'+encodeURIComponent(m.id));
 }
 function makeSegment(s,m) {
   const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
