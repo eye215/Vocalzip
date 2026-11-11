@@ -223,8 +223,21 @@ function comparePanel(s) {
     '<form data-compare-form><label>달라진 점<textarea name="notes" maxlength="5000" placeholder="직접 느낀 변화를 적어주세요">'+esc(saved?.notes||'')+'</textarea></label><label>다음 연습 목표<textarea name="goal" maxlength="3000">'+esc(saved?.goal||'')+'</textarea></label><div class="vl-compare-actions"><button type="button" data-compare-ai>메모 AI 정리</button><button type="submit">비교 메모 저장</button></div><p class="vl-muted" data-compare-output aria-live="polite"></p></form></div></details></section>';
 }
 function playerCard(s,m) {
-  const idx=s.selected.indexOf(m.id), total=Math.max(0,Number(m.durationSeconds)||0);
-  return '<div class="vl-peek" data-prev '+(idx===0?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx-1])||m))+'</span></div><div class="vl-player" data-card><div class="vl-player-head"><strong>'+esc(day(m)+' · '+M.label(m))+'</strong><span>'+esc((idx+1)+' / '+s.selected.length)+'</span></div>'+waveform(m)+'<div class="vl-seek"><span data-time>0:00</span><input type="range" min="0" max="1000" value="0" data-seek aria-label="재생 위치"><span data-duration>'+time(total)+'</span></div><div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div><div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div><div class="vl-peek" data-next-peek '+(idx===s.selected.length-1?'hidden':'')+'><span>'+esc(day(s.items.find(x=>x.id===s.selected[idx+1])||m))+'</span></div>';
+  const idx=s.selected.indexOf(m.id),total=Math.max(0,Number(m.durationSeconds)||0);
+  const previous=s.items.find(x=>x.id===s.selected[idx-1]),next=s.items.find(x=>x.id===s.selected[idx+1]);
+  const hasWave=Array.isArray(m.waveform)&&m.waveform.length>0;
+  const dateLabel=M.dateOf(m)||'날짜 없음',name=M.label(m)||'제목 없는 녹음';
+  const itemName=name.startsWith(dateLabel)||name===dateLabel?name:dateLabel+' · '+name;
+  const readable=(value)=>value?esc(value):'';
+  const hint=(item,dir)=>'<button type="button" class="vl-peek '+dir+'" data-'+(dir==='left'?'prev':'next-peek')+
+    ' aria-label="'+(dir==='left'?'이전':'다음')+' 녹음'+(item?' · '+esc(M.label(item)):' 없음')+'"'+(!item?' disabled':'')+'>'+
+    '<i class="ph ph-caret-'+(dir==='left'?'left':'right')+'" aria-hidden="true"></i></button>';
+  return hint(previous,'left')+'<div class="vl-player" data-card data-waveform="'+(hasWave?'yes':'no')+'">'+
+    '<div class="vl-player-head"><div class="vl-player-title"><span class="vl-player-eyebrow">'+esc(day(m))+' · '+(idx+1)+'번째 녹음</span><strong>'+esc(name)+'</strong></div><span class="vl-player-count">'+(idx+1)+' / '+s.selected.length+'</span></div>'+
+    (hasWave?waveform(m):'<div class="vl-wave-compact"><i class="ph ph-waveform"></i><span>파형 정보 없음 · 녹음은 정상 재생할 수 있어요</span></div>')+
+    '<div class="vl-seek"><span data-time>0:00</span><input type="range" min="0" max="1000" value="0" data-seek aria-label="재생 위치"><span data-duration>'+time(total)+'</span></div>'+
+    '<div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"'+(!previous?' disabled':'')+'><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"'+(!next?' disabled':'')+'><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div>'+
+    '<div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div>'+hint(next,'right');
 }
 function screen(s) {
   const host=s.host, m=s.items.find(x=>x.id===s.active);
@@ -259,7 +272,7 @@ function screen(s) {
   const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.carouselDirection=step;s.active=s.selected[n];screen(s);};
   host.querySelector('[data-previous]').onclick=()=>move(-1);host.querySelector('[data-next]').onclick=()=>move(1);
   host.querySelector('[data-prev]')?.addEventListener('click',()=>move(-1));host.querySelector('[data-next-peek]')?.addEventListener('click',()=>move(1));
-  // Horizontal swipes follow the date tabs: left = older, right = newer.
+  // Date tabs run oldest → newest. Swipe finger left to advance to a newer recording.
   // Keep page's vertical scrolling and playback sliders completely native.
   const card=carrier.querySelector('[data-card]'), reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
   const activeIndex=s.selected.indexOf(s.active);
