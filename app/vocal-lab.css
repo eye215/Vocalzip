@@ -119,3 +119,43 @@ body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports
 .vl-observation-summary{font-size:14px;line-height:1.75;color:#e4d5ef;margin:15px 0 0}
 .vl-observation-note{font-size:12px;line-height:1.6;color:#a99bb4;margin:10px 0 0}
 @media(max-width:380px){.vl-observation-card{padding:18px 14px}.vl-observation-value{font-size:29px}.vl-observation-card h3{font-size:17px}}
+
+/* Full-page analysis observation: dark surface through the header, body and footer.
+   Standard VZ.sheet uses a light page canvas; override that only for this popup. */
+body .sheet-back.sheet-page.vl-observation-overlay{
+ background:#0d0b12;
+ color:#f6f0fc;
+}
+body .sheet-page.vl-observation-overlay>.sheet{
+ background:#0d0b12;
+ color:#f6f0fc;
+}
+body .sheet-page.vl-observation-overlay .sheet-head{
+ background:#0d0b12;
+ border-bottom:1px solid #282034;
+}
+body .sheet-page.vl-observation-overlay .sheet-head h2{
+ color:#f8f2ff;
+}
+body .sheet-page.vl-observation-overlay .sheet-head .icon-btn{
+ color:#e7d4ff;
+}
+body .sheet-page.vl-observation-overlay .sheet-body{
+ background:#0d0b12;
+ color:#f6f0fc;
+ padding:20px 16px 28px;
+}
+body .sheet-page.vl-observation-overlay .sheet-foot{
+ background:#0d0b12;
+ border-top:1px solid #282034;
+}
+body .sheet-page.vl-observation-overlay .sheet-foot .btn{
+ background:#7b32f5;
+ color:#fff;
+ border-color:#7b32f5;
+}
+body .sheet-page.vl-observation-overlay .vl-observation-card{
+ background:linear-gradient(160deg,#1b1528 0%,#14101d 72%,#110d17 100%);
+ border-color:#392846;
+ box-shadow:none;
+}
