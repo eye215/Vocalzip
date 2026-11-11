@@ -50,8 +50,8 @@ button,a.btn{min-height:44px;padding:0 14px;border:0;border-radius:12px;backgrou
   out.onclick = e => {
     const b = e.target.closest('button[data-db]'); if (!b) return;
     const r = window['rows_' + b.dataset.db][+b.dataset.i], blob = blobOf(r);
-    const ext = (r.name || '').match(/\.[a-z0-9]{2,5}$/i)?.[0] || ({'audio/mp4':'.m4a','audio/webm':'.webm','audio/wav':'.wav','audio/mpeg':'.mp3'}[blob.type] || '.m4a');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (r.name || 'recording-' + r.id).replace(/[\\/:*?"<>|]/g, '_') + (/\.[a-z0-9]{2,5}$/i.test(r.name || '') ? '' : ext);
+    const ext = (r.name || '').match(/\.(m4a|mp3|wav|aac|flac|ogg|oga|opus|webm|caf|mp4|mov)$/i)?.[0] || ({'audio/mp4':'.m4a','audio/webm':'.webm','audio/wav':'.wav','audio/mpeg':'.mp3'}[blob.type] || '.m4a');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (r.name || 'recording-' + r.id).replace(/[\\/:*?"<>|]/g, '_') + (/\.(m4a|mp3|wav|aac|flac|ogg|oga|opus|webm|caf|mp4|mov)$/i.test(r.name || '') ? '' : ext);
     document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   };
 })();

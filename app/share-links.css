@@ -1,0 +1,18 @@
+/* 공유 링크 시트·목록 (app/share-links.js). Chips follow the shared capsule tab rule (design guide §8). */
+.share-file{display:flex;align-items:center;gap:8px;margin:0 0 14px;font-weight:650}
+.share-file i{color:#7A32F5;font-size:20px}.share-file span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.share-period{border:0;padding:0;margin:0}
+.share-period legend{font-size:14px;font-weight:600;color:#475467;margin-bottom:8px}
+.share-chips{display:flex;flex-wrap:wrap;gap:3px}
+.share-chips button{min-height:44px;padding:0 14px;border:0;border-radius:99px;background:transparent;color:#475467;font:600 14px inherit}
+.share-chips button[aria-checked="true"]{background:#EDE1FF;color:#7A32F5}
+.share-days{display:flex;align-items:center;gap:8px;margin-top:10px}
+.share-days input{width:96px;min-height:44px;font-size:16px}
+.share-note{margin:14px 2px 0;font-size:12px;line-height:1.55;color:#667085}
+.share-result{display:grid;gap:10px;margin-top:6px}
+.share-ok{display:flex;align-items:center;gap:6px;margin:0;font-weight:650;color:#23855c}
+.share-result input{font-size:14px}
+.share-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.share-stop{min-height:44px;border:0;background:none;color:#c93a3a;font-weight:600}
+.share-open{margin-top:12px}
+.share-row .item-sub.share-expired{color:#c93a3a}

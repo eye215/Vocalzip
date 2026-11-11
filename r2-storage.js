@@ -317,5 +317,12 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, metadataMode, deletionTarget, deleteLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+/** Individual share links (owner-managed, revocable): create / list / revoke. The token is the link's secret. */
+const shares = {
+  create:({key, mediaId, title, expiresIn}) => api('/v1/shares', {method:'POST', body:{key, mediaId, title, expiresIn}}),
+  list:async () => (await api('/v1/shares')).shares || [],
+  revoke:id => api('/v1/shares/' + encodeURIComponent(id), {method:'DELETE'}),
+  link:token => new URL('share.html#' + token, location.href.split('#')[0]).href
+};
+window.VzipR2 = {shares, configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, metadataMode, deletionTarget, deleteLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();
