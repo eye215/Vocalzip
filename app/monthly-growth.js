@@ -91,11 +91,19 @@ function saveGrowthGoal(d,month){
   sourceId:'monthly-growth:'+month,completed:false,order:db.dailyGoals.filter(g=>g.date===date).length,created:Date.now()});},{silent:true});
 }
 
+/** Stored listening notes from training-only practice-room tasks must not be
+ * represented as evidence about an individual song's vocal progress. */
+function songListeningEntry(p,month){
+ if(!p?.practiceRoom||p.practiceRoom.demo)return false;
+ const songId=p.songId||p.practiceRoom.songId;
+ return !!songId&&!!V.song(songId)&&p.practiceMode!=='training'&&
+   ym(p.date||p.practiceRoom.date)===month&&
+   !!String(p.practiceRoom.aiCoach||'').trim();
+}
 function listeningEvidence(month){
- const entries=(V.db.practices||[]).filter(p=>p.practiceRoom&&!p.practiceRoom.demo&&
-  ym(p.date||p.practiceRoom.date)===month&&String(p.practiceRoom.aiCoach||'').trim())
+ const entries=(V.db.practices||[]).filter(p=>songListeningEntry(p,month))
   .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
- if(!entries.length)return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p>이달에 저장된 AI 청취 코멘트가 아직 없어요.</p><p class="small muted">노래 연습실에서 녹음을 제출하고 직접 AI 코멘트를 요청하면 여기에도 연결돼요.</p></section>';
+ if(!entries.length)return '<section class="card growth-section"><h2>AI 청취 관찰</h2><p>이달에 저장된 AI 청취 코멘트가 아직 없어요.</p><p class="small muted">곡으로 지정된 연습실 녹음에 AI 코멘트를 요청하면 여기에도 연결돼요. 트레이닝 과제의 코멘트는 제외해요.</p></section>';
  const quotes=entries.slice(0,5).map(p=>{
   const v=p.practiceRoom,note=String(v.aiCoach||'');
   const audible=note.match(/(?:^|\n)\s*들리는 특징\s*[:：]\s*([^\n]+)/)?.[1]||note.split('\n')[0];
@@ -115,8 +123,7 @@ function listeningEvidence(month){
 
 let monthlyAiBusy=false;
 function monthlyAiEvidence(month,rows,items){
- const observations=(V.db.practices||[]).filter(p=>p.practiceRoom&&!p.practiceRoom.demo&&
-  ym(p.date||p.practiceRoom.date)===month&&String(p.practiceRoom.aiCoach||'').trim())
+ const observations=(V.db.practices||[]).filter(p=>songListeningEntry(p,month))
   .slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,5)
   .map(p=>{
    const v=p.practiceRoom,txt=String(v.aiCoach||'');
