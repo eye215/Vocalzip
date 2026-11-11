@@ -44,7 +44,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     } else if (s.mode === 'review') {
       row = '<div class="score-audio-player" data-score-audio-preview></div>' + pill('save', 'check', '저장') + pill('discard', 'trash', '버리기');
     } else {
-      const mrSlot = !t ? '<span class="score-audio-label">MR 없음 · 곡의 레퍼런스 탭에서 추가</span>'
+      const mrSlot = !t ? '<span class="score-audio-label" title="곡의 레퍼런스 탭에서 MR을 추가할 수 있어요">MR 없음</span>'
         : t.kind === 'youtube' ? pill('youtube', 'youtube-logo', '유튜브 MR', ' aria-expanded="' + !!bar.querySelector('iframe') + '"')
         : '<div class="score-audio-player" data-score-audio-mr></div>';
       row = mrSlot + pill('rec', 'microphone', '녹음', canRecord && !s.busy ? '' : ' disabled') +

@@ -202,19 +202,21 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.dataset.inkMoreOpen=String(!!open);
   el.querySelector('[data-ink-more]').setAttribute('aria-expanded',String(!!open));
  }
+ /* Compact viewer (both normal and fullscreen): one tool row whose right end is 더보기 (undo/redo/clear/settings/
+  * stage view/fullscreen), the song title on top with 다른 악보 as an icon, and the page row fixed at the bottom. */
+ function compactLayout(){
+  el.classList.add('score-ink-compact');
+  const bar=el.querySelector('.score-ink-bar'),actions=el.querySelector('.score-ink-actions'),
+   fullActions=el.querySelector('[data-ink-full-actions]'),notation=el.querySelector('[data-ink-notation]'),noteUndo=el.querySelector('[data-ink-note-undo]');
+  notation.hidden=!visionAvailable; // shown once the owner-only AI check answers (syncVisionTools)
+  bar.append(fullActions);fullActions.insertBefore(notation,el.querySelector('[data-ink-more]'));
+  fullActions.append(actions);actions.append(noteUndo);fullActions.hidden=false;
+  const head=el.querySelector('.sheet-head'),other=el.querySelector('[data-ink-other-scores]');
+  if(head&&other){other.innerHTML='<i class="ph ph-files" aria-hidden="true"></i>';other.setAttribute('aria-label','다른 악보');other.title='다른 악보';other.classList.add('icon-btn');head.querySelector(':scope>span[aria-hidden]')?.replaceWith(other);}
+  el.querySelector('.score-ink-editor').append(el.querySelector('.score-ink-pages'));
+ }
  function fullLayout(next){
   resetGestures();full=next;el.classList.toggle('score-ink-fullscreen',full);setMoreOpen(false);
-  const bar=el.querySelector('.score-ink-bar'),actions=el.querySelector('.score-ink-actions'),
-   fullActions=el.querySelector('[data-ink-full-actions]'),vision=el.querySelector('[data-ink-vision-tools]'),
-   notation=el.querySelector('[data-ink-notation]'),noteUndo=el.querySelector('[data-ink-note-undo]');
-  if(next){
-   fullActions.insertBefore(notation,el.querySelector('[data-ink-more]'));
-   fullActions.append(actions);actions.append(noteUndo);fullActions.hidden=false;
-  }else{
-   bar.insertBefore(actions,el.querySelector('[data-ink-marker-palette]'));
-   vision.insertBefore(notation,vision.querySelector('span'));
-   vision.insertBefore(noteUndo,vision.querySelector('span'));fullActions.hidden=true;
-  }
   const button=el.querySelector('[data-ink-fullscreen]');
   button.setAttribute('aria-label',full?'전체화면 종료':'전체화면');button.title=full?'전체화면 종료':'전체화면';
   button.querySelector('i').className='ph ph-'+(full?'arrows-in':'arrows-out');
@@ -726,7 +728,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function unload(event){selectionEnd();finishStroke();if(pending){event.preventDefault();event.returnValue='';}}
  function hidden(){if(document.visibilityState==='hidden'){selectionEnd();finishStroke();}}
- sheet=VZ.sheet({title:'악보 필기',label:'악보 개인 필기',body,foot:'<button type="button" class="btn block" data-ink-done>완료</button>',onClose:cleanup,onMount:(node)=>{
+ sheet=VZ.sheet({title:VZ.songTitle?.(songId)||score.title||score.fileName||'악보',label:'악보 개인 필기',body,foot:'<button type="button" class="btn block" data-ink-done>완료</button>',onClose:cleanup,onMount:(node)=>{
   el=node;el.classList.add('score-ink-sheet');
   // Quick samples sit below the whole toolbar, independent of fullscreen toolbar layout.
   const toolbar=el.querySelector('.score-ink-bar');
@@ -735,6 +737,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   svg=el.querySelector('[data-ink-svg]');canvas=el.querySelector('[data-ink-pdf]');box=el.querySelector('[data-ink-box]');stage=el.querySelector('[data-ink-stage]');status=el.querySelector('[data-ink-status]');done=el.querySelector('[data-ink-done]');
   // MR 재생 · 녹음 · MR+녹음 under the score page (app/score-audio.js).
   try{audioBar=window.VzipScoreAudio?.mount(stage,{songId,scoreTitle:score.title||score.fileName||''})||null;}catch{audioBar=null;}
+  compactLayout();
   el.querySelector('[data-ink-prev]').disabled=true;el.querySelector('[data-ink-next]').disabled=true;
   el.querySelector('[data-ink-first]').disabled=true;el.querySelector('[data-ink-last]').disabled=true;
   const back=el.parentNode;
