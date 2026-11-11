@@ -165,10 +165,13 @@ async function mount(host){
   const items=await M.list();if(my!==request||!host.isConnected)return;
   const songItems=items.filter(isSongTake);
   const months=group(songItems); archiveMonths(months);
-  const keys=[...new Set([...months.keys(),...(V.db.monthlyGrowthReports||[]).map(r=>r.month)])].sort().reverse();
+  const keys=[...new Set([ym(V.today()),...months.keys(),...(V.db.monthlyGrowthReports||[]).map(r=>r.month),...(V.db.practicePlans||[]).filter(p=>p.kind==='monthly-vocal').map(p=>ym(p.sourceMonth||p.startDate))].filter(Boolean))].sort().reverse();
   const currentKey=ym(V.today());
   let selected=keys.includes(currentKey)?currentKey:keys[0];
+  let renderSerial=0;
   const render=()=>{
+   renderSerial++;
+   const visibleSerial=renderSerial;
    if(!keys.length){host.innerHTML='<div class="empty"><p>아직 날짜가 있는 녹음이 없어요.</p></div>';return;}
    const prev=previousMonth(selected);
    const current=months.get(selected)||[],previous=months.get(prev)||[];
@@ -176,7 +179,7 @@ async function mount(host){
    const validCount=current.filter(valid).length;
    host.innerHTML='<header class="growth-intro"><p class="small muted">곡으로 지정된 녹음 데이터를 한곳에서</p><h2>내 목소리의 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">곡 녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
    archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+monthlyAiCard(selected)+prescriptions(rows)+'<div data-monthly-plans></div>'+history(months)+
-   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 다음 앱 접속 시 저장됩니다. 서버 예약 자동 생성과 AI 코멘트 기반 맞춤 추천 생성은 후속 개발 항목입니다.</p>';
+   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 앱에 접속해 성장 화면을 열 때 저장됩니다. AI 종합 코치는 사용자가 분석 버튼을 눌렀을 때만 호출됩니다.</p>';
 
    const aiButton=host.querySelector('[data-monthly-ai-run]');
    if(aiButton)aiButton.onclick=async()=>{
@@ -194,7 +197,7 @@ async function mount(host){
     if(state)state.textContent='요약 데이터를 분석하고 있어요. 화면을 닫으면 완료 결과가 저장되지 않을 수 있어요.';
     try{
       const response=await window.vzipCloudCoach(evidence);
-      if(!host.isConnected||!window.vzipCloudSignedIn?.()||owner!==window.vzipCloudUserId?.()||
+      if(!host.isConnected||my!==request||!window.vzipCloudSignedIn?.()||owner!==window.vzipCloudUserId?.()||
           origin!==window.vzipCloudSessionId?.()||response?.mode!=='monthly'||response.month!==month)
         throw Error('화면이나 계정이 변경되어 결과를 저장하지 않았어요.');
       const note=String(response.note||'').trim().slice(0,1800);
@@ -207,12 +210,11 @@ async function mount(host){
         if(at===-1)db.monthlyAiReports.push(row);else db.monthlyAiReports[at]=row;
       },{silent:true});
       if(!ok)throw Error('AI 리포트 저장에 실패했어요.');
-      const card=host.querySelector('[data-monthly-ai]');
-      if(card)card.outerHTML=monthlyAiCard(month);
-      const btn=host.querySelector('[data-monthly-ai-run]');
-      if(btn)btn.onclick=()=>{selected=month;render();host.querySelector('[data-monthly-ai-run]')?.click();};
+      // A different month can be selected while the model is generating.
+      // Never replace the currently displayed month's card with the old result.
+      if(visibleSerial===renderSerial&&selected===month)render();
       V.toast('월간 AI 리포트를 저장했어요.');
-    }catch(err){if(state)state.textContent=err.message||'AI 리포트 생성에 실패했어요.';V.toast('월간 분석에 실패했어요. 기존 기록은 유지돼요.','error');}
+    }catch(err){if(state?.isConnected)state.textContent=err.message||'AI 리포트 생성에 실패했어요.';V.toast('월간 분석에 실패했어요. 기존 기록은 유지돼요.','error');}
     finally{monthlyAiBusy=false;if(aiButton.isConnected){aiButton.disabled=false;aiButton.textContent='AI 월간 종합 분석하기';}}
    };
 
