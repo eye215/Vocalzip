@@ -82,13 +82,24 @@ function sizePlots(host) {
     svg.querySelector('.vl-mid')?.setAttribute('x2',String(width));
   });
 }
+function trendRows(s,metric){
+ return s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean)
+  .map(m=>({m,value:valid(metric.get(analysis(m),m))}))
+  .filter(x=>x.value!=null)
+  .sort((a,b)=>(M.dateOf(a.m)||'').localeCompare(M.dateOf(b.m)||'')||(Number(a.m.created)||0)-(Number(b.m.created)||0)||String(a.m.id).localeCompare(String(b.m.id)));
+}
 function trend(s) {
-  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0];
-  const rows=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean).map(m=>({m,value:metric.get(analysis(m),m)}));
-  const measured=rows.filter(x=>valid(x.value)!=null);
-  return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2><div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
-    (measured.length ? '<div class="vl-plot-scroll" tabindex="0" role="region" aria-label="녹음별 변화 그래프, 좌우로 스크롤 가능"><div class="vl-plot-track" style="--vl-points:'+measured.length+'">'+plot(measured.map(x=>({value:x.value,label:day(x.m)})),{highlighted:measured.findIndex(x=>x.m.id===s.active)})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'" aria-label="'+esc(day(x.m)+' '+metric.label+' '+metric.fmt(x.value,analysis(x.m))+' 분석 관찰')+'">'+esc(day(x.m))+'</button>').join('')+'</div></div></div>' : '<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
-    (measured.length ? '<p class="vl-muted">그래프의 날짜를 누르면 해당 녹음의 관찰 내용을 볼 수 있어요.</p>' : '')+'</section>';
+ const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],measured=trendRows(s,metric);
+ const series=measured.map((x,i)=>({id:x.m.id,value:x.value,label:day(x.m),tone:metricColor(metric,measured[i-1]?.value,x.value)}));
+ const last=measured.at(-1),prev=measured.at(-2);
+ const state=last?metricColor(metric,prev?.value,last.value):'neutral';
+ const explanation=last?metricChangeText(metric,prev?.value,last.value):'분석된 값이 없어요';
+ return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2><div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
+  '<p class="vl-metric-guide"><strong>'+esc(metric.label)+' · '+esc(metric.better===-1?'낮을수록 좋아요':metric.better===1?'대체로 높을수록 좋아요':'높낮이만으로 판단하지 않아요')+'</strong><span>'+esc(metric.guide)+'</span></p>'+
+  (last?'<p class="vl-change '+state+'" role="status">'+esc('최근 변화 · '+explanation)+'</p>':'')+
+  '<p class="vl-legend"><span class="good">● 좋아진 방향</span><span class="bad">● 아쉬운 방향</span><span class="neutral">● 비슷함·판단 보류</span></p>'+
+  (measured.length?'<div class="vl-plot-scroll" tabindex="0" role="region" aria-label="녹음별 변화 그래프, 좌우로 스크롤 가능"><div class="vl-plot-track" style="--vl-points:'+measured.length+'">'+plot(series,{highlighted:measured.findIndex(x=>x.m.id===s.active),interactive:true})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'" aria-label="'+esc(day(x.m)+' '+metric.label+' '+metric.fmt(x.value,analysis(x.m))+' 상세 보기')+'">'+esc(day(x.m))+'</button>').join('')+'</div></div></div>':'<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
+  (measured.length?'<p class="vl-muted">그래프의 점이나 날짜를 누르면 해당 녹음의 상세 팝업을 볼 수 있어요. 색상은 이전 녹음과의 비교이며 첫 점은 중립이에요.</p>':'')+'</section>';
 }
 function single(s,m) {
   const a=analysis(m);
@@ -99,10 +110,22 @@ function single(s,m) {
     }).join('')+'</div>')+'</section>';
 }
 function observe(s,m) {
-  const a=analysis(m), baseline=s.items.filter(x=>s.selected.includes(x.id)&&V.analysisReliable(analysis(x))).sort((x,y)=>(M.dateOf(x)||'').localeCompare(M.dateOf(y)||''))[0];
-  const wob=a?.metrics?.stability?.wobbleCents, first=baseline&&baseline.id!==m.id?baseline.analysis?.metrics?.stability?.wobbleCents:null;
-  const description=wob==null?'지속음 분석값이 없어요.':first==null?'이 녹음에서 측정한 지속음 흔들림이에요.':Math.abs(first-wob)<.5?'첫 녹음과 비슷한 수준이에요.':first>wob?'첫 녹음보다 '+(first-wob).toFixed(1)+' cent 줄었어요.':'첫 녹음보다 '+(wob-first).toFixed(1)+' cent 늘었어요.';
-  V.sheet({title:day(m)+' 분석 관찰',body:'<div class="vl-observe"><span>지속음의 음정 흔들림</span><strong>'+esc(wob==null?'측정 안 됨':'±'+wob+' cent')+'</strong>'+(first!=null?'<p>첫 녹음 대비 ±'+esc(first)+' → ±'+esc(wob)+' cent</p>':'')+'<p>'+esc(description)+'</p>'+(a&&!V.analysisReliable(a)?'<p>목소리가 짧거나 반주가 커서 측정 신뢰도가 낮아요.</p>':'')+'</div>',foot:'<button type="button" class="btn block" data-close-observe>확인</button>',onMount:(el,close)=>{el.querySelector('[data-close-observe]').onclick=close;}});
+ const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0];
+ const list=trendRows(s,metric),idx=list.findIndex(x=>x.m.id===m.id);
+ const current=idx>=0?list[idx].value:valid(metric.get(analysis(m),m)),previous=idx>0?list[idx-1]:null;
+ const tone=metricColor(metric,previous?.value,current);
+ const label=metricChangeText(metric,previous?.value,current);
+ const report=analysis(m);
+ const safe=txt=>esc(String(txt||''));
+ const body='<div class="vl-observe"><span>'+safe(M.label(m))+' · '+safe(M.dateOf(m)||'날짜 없음')+'</span>'+
+  '<p>'+safe(metric.guide)+'</p><strong>'+safe(current==null?'측정 안 됨':metric.fmt(current,report))+'</strong>'+
+  '<p class="vl-change '+tone+'">'+safe(label)+'</p>'+
+  (previous?'<p>이전 ('+safe(M.dateOf(previous.m))+') '+safe(metric.fmt(previous.value,analysis(previous.m)))+' → 현재 '+safe(metric.fmt(current,report))+'</p>':'')+
+  (m.rating!=null?'<p>내 만족도: '+safe(m.rating)+'/5</p>':'')+
+  (m.review?'<p>녹음 메모: '+safe(m.review)+'</p>':'')+
+  (report&&!V.analysisReliable(report)?'<p>분석 신뢰도가 낮아 변화 해석에 주의가 필요해요.</p>':'')+
+  '</div>';
+ V.sheet({title:(M.dateOf(m)||'날짜 없음')+' · '+metric.label,body,foot:'<button type="button" class="btn block" data-close-observe>닫기</button>',onMount:(el,close)=>{el.querySelector('[data-close-observe]').onclick=close;}});
 }
 function makeSegment(s,m) {
   const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
@@ -191,7 +214,11 @@ function screen(s) {
     catch(err){if(!s.dead){btn.disabled=false;status.textContent='분석하지 못했어요: '+err.message;}}
   });
   host.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{s.metric=b.dataset.metric;screen(s);});
-  host.querySelectorAll('[data-point]').forEach(b=>b.onclick=()=>{const chosen=s.items.find(x=>x.id===b.dataset.point);if(!chosen)return;s.active=chosen.id;screen(s);observe(s,chosen);});
+  host.querySelectorAll('[data-point]').forEach(b=>{
+    const open=()=>{const chosen=s.items.find(x=>x.id===b.dataset.point);if(chosen)observe(s,chosen);};
+    b.addEventListener('click',open);
+    b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
+  });
   const cmp=host.querySelector('[data-compare-panel]');
   if(cmp){
     cmp.ontoggle=()=>{s.compareOpen=cmp.open};
