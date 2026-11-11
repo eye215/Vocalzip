@@ -82,6 +82,58 @@ function sizePlots(host) {
     svg.querySelector('.vl-mid')?.setAttribute('x2',String(width));
   });
 }
+// All comparisons use measured summaries from chronological recordings only.
+// The instant overview is factual; optional AI wording never replaces the evidence.
+const growthMetric=(metric,s)=>{
+ const rows=trendRows(s,metric).filter(x=>V.analysisReliable(analysis(x.m)));
+ if(rows.length<2)return null;
+ const first=rows[0],last=rows.at(-1),delta=last.value-first.value;
+ const tolerance=metric.tolerance??.5;
+ const tone=metricColor(metric,first.value,last.value);
+ return {metric,first,last,delta,tone,count:rows.length,
+  formatted:metric.fmt(first.value,analysis(first.m))+' → '+metric.fmt(last.value,analysis(last.m)),
+  changed:Math.abs(delta)>tolerance};
+};
+const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+s.selected.slice().sort().join(',');
+const savedGrowthReport=s=>(V.db.practicePlans||[]).find(x=>x.id===labGrowthId(s)&&x.period==='vocal-growth-ai'&&x.evidenceKey===growthEvidenceKey(s));
+function growthEvidenceKey(s){
+ return s.selected.map(id=>{
+  const m=s.items.find(x=>x.id===id),a=m&&analysis(m);
+  return id+':'+(a?.at||0)+':'+(m?.rating??'');
+ }).join('|');
+}
+function growthReport(s){
+ const data=METRICS.map(metric=>growthMetric(metric,s)).filter(Boolean);
+ const analyzed=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&V.analysisReliable(analysis(m)));
+ const saved=savedGrowthReport(s);
+ const badge=(tone)=>tone==='good'?'좋아진 방향':tone==='bad'?'주의할 변화':'참고할 변화';
+ const describe=x=>{
+   const metric=x.metric,delta=x.delta,amount=Math.abs(delta).toFixed(metric.key==='rating'?0:1);
+   if(metric.key==='high'){
+     const from=metric.fmt(x.first.value,analysis(x.first.m)),to=metric.fmt(x.last.value,analysis(x.last.m));
+     return '관측 최고음 '+from+' → '+to+(x.changed?' ('+(delta>0?'상승':'하락')+' 약 '+(Math.abs(delta)/100).toFixed(1)+'반음)':' (비슷함)')+' · 도달한 최고음이 곧 안정된 가창 음역이라는 뜻은 아니에요.';
+   }
+   if(metric.key==='phr')return '프레이즈 '+x.formatted+(x.changed?' · '+(delta>0?'길어짐':'짧아짐'):' · 큰 변화 없음')+' (곡 구성·템포에 따라 달라질 수 있어요).';
+   if(metric.key==='rating')return '내 만족도 '+x.formatted+' · 직접 기록한 체감 평가예요.';
+   return metric.label+' '+x.formatted+(x.changed?' · '+(delta>0?'증가':'감소')+' '+amount+' '+metric.unit:' · 비슷한 수준');
+ };
+ const strong=data.filter(x=>x.tone==='good'&&x.changed);
+ const weak=data.filter(x=>x.tone==='bad'&&x.changed);
+ const neutral=data.filter(x=>x.tone==='neutral'||!x.changed);
+ const title=data.length>=2?'처음과 최근 측정값을 비교했어요':'비교할 분석 기록이 더 필요해요';
+ const row=x=>'<li class="vl-growth-row '+x.tone+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(x.metric.label)+'</strong><p>'+esc(describe(x))+'</p></div></li>';
+ const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(row).join('')+'</ul></div>':'';
+ return '<section class="vl-section vl-growth" data-growth-report aria-label="AI 종합 성장 리포트"><div class="vl-divider"></div>'+
+  '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>AI 종합 리포트</h2></div><span class="vl-growth-count">'+analyzed.length+'개 분석 기준</span></div>'+
+  '<p class="vl-growth-intro">'+esc(title)+' <small>같은 곡의 신뢰도 높은 녹음을 날짜순으로 비교해요.</small></p>'+
+  (data.length?section('좋아진 부분',strong,'good')+section('아쉬워진 부분',weak,'bad')+section('음역·참고 지표',neutral,'neutral')+
+    '<p class="vl-growth-caution">최고음의 상승·하락은 곡의 구간·발성 방식에 따라 달라지며, 음성 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
+    '<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
+    '<p class="vl-growth-ai-status" data-growth-ai-status role="status">'+(s.growthPending?'AI가 측정 기록을 해석하고 있어요…':saved?'선택한 녹음의 AI 해석을 저장해 두었어요.':'측정값을 바탕으로 좋아진 점·아쉬운 점과 다음 연습 방향을 종합해요.')+'</p>'+
+    (saved?'<div class="vl-growth-ai-text">'+esc(saved.text)+'</div>':'<div class="vl-growth-ai-text" data-growth-ai-result hidden></div>')+'</div>':
+    '<p class="vl-muted">분석 신뢰도가 충분한 녹음이 두 개 이상 있어야 비교할 수 있어요. 선택한 녹음들의 분석을 먼저 완료해 주세요.</p>')+
+    '</section>';
+}
 function trendRows(s,metric){
  return s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean)
   .map(m=>({m,value:valid(metric.get(analysis(m),m))}))
@@ -246,7 +298,7 @@ function screen(s) {
   s.player?.destroy(); s.player=null;
   s.plotObserver?.disconnect(); s.plotObserver=null;
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
-    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
+    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s)+growthReport(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
       comparePanel(s)+recommendationList(recs,s.song.id,savedAITip(s))+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
