@@ -103,13 +103,13 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
  await page.locator('.vl-plot-dates button').first().click();
- await expect(page.locator('.sheet')).toContainText('지속음의 음정 흔들림');
+ await expect(page.locator('.sheet')).toContainText('소리의 음높이 흔들림');
  await page.locator('.sheet [data-close-observe]').click();
  await page.locator('[data-save-report]').click();
  await page.goto('/#/lab-reports');
  await expect(page.locator('.vl-report')).toHaveCount(1);
  await page.locator('.vl-report').click();
- await expect(page.locator('.vl-player-head')).toContainText('1 / 2');
+ await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
  await page.goto('/#/song/s1');
  await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(0);
 });
@@ -2523,6 +2523,9 @@ test('AI exercise appears inline in the same card form and follow-along uses its
  await page.getByRole('button',{name:'다른 연습 하나 AI 추천받기'}).click();await expect(page.locator('.vl-tip')).toHaveCount(3);
  await page.evaluate(()=>window.vzipCloudCoach=async()=>{throw Error('요청 실패 테스트');});await page.getByRole('button',{name:'다른 연습 하나 AI 추천받기'}).click();await expect(page.locator('[data-ai-status]')).toHaveText('요청 실패 테스트');await expect(page.locator('.vl-tip')).toHaveCount(3);
  expect(await page.evaluate(()=>__aiInput.mode)).toBe('inline-exercise');expect(await page.evaluate(()=>__aiInput.excluded.length)).toBe(2);await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
+ const before=await page.evaluate(()=>VZ.db.practices.length);
+ await page.goto('/#/song/s1');await page.goto('/#/vocal-lab/s1');await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');
+ await page.reload();await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-ai-status]')).toContainText('저장된 AI 추천');expect(await page.evaluate(()=>VZ.db.practices.length)).toBe(before);
  await page.evaluate(()=>VZ.practiceSheet=input=>window.__recordPreset=input);await card.getByRole('button',{name:'연습 기록에 담기'}).click();expect(await page.evaluate(()=>__recordPreset.preset.minutes)).toBe(4);
  await card.getByRole('link',{name:'따라 하기'}).click();await expect(page.locator('.gp-screen h2')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('.gp-instruction h3')).toHaveText('가사 한 줄을 읽어요.');
 });
