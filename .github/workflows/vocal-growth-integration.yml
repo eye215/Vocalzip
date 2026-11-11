@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'app/monthly-*.js'
+      - 'app/overall-growth-*.js'
+      - 'design-system/shared-nav.css'
       - 'app/monthly-*.css'
       - 'app/weak-phrase.js'
       - 'app/segment-ab-*.js'
@@ -32,12 +34,12 @@ jobs:
           node-version: '22'
       - name: Parse newly integrated browser scripts
         run: |
-          for file in app/monthly-growth.js app/monthly-practice-plans.js app/weak-phrase.js app/segment-ab-model.js app/segment-ab-ui.js app/plan-outcome-model.js app/plan-outcome-ui.js app/practice-room-model.js practice-room/app.js; do
+          for file in app/monthly-growth.js app/overall-growth-model.js app/overall-growth-ui.js app/monthly-practice-plans.js app/weak-phrase.js app/segment-ab-model.js app/segment-ab-ui.js app/plan-outcome-model.js app/plan-outcome-ui.js app/practice-room-model.js practice-room/app.js; do
             node --check "$file"
           done
       - name: Test growth models and app integration
         run: |
-          node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs
+          node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs tests/overall-growth.spec.cjs
   browser-smoke:
     # Playwright 1.56.1 is not compatible with ubuntu-26.04 runners.
     runs-on: ubuntu-24.04
