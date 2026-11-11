@@ -48,7 +48,7 @@ function trends(report,selected){
  '<div class="growth-metric-picks" role="group" aria-label="표시할 지표">'+report.metrics.map(m=>
   '<button type="button" data-overall-metric="'+m.id+'" class="'+(m.id===metric.id?'active':'')+'" aria-pressed="'+(m.id===metric.id)+'">'+esc(m.title)+'</button>').join('')+'</div>'+
  (pts.length?'<p class="small muted">달마다 녹음한 곡이 다를 수 있어요. 막대 높이는 측정 추이이며 실력 향상 판정이 아니에요.</p>'+
- '<div class="growth-chart" role="group" aria-label="월별 측정값">'+pts.map((p,i)=>{
+ '<div class="growth-chart" role="group" aria-label="월별 측정값" style="--growth-point-count:${pts.length}">'+pts.map((p,i)=>{
   const height=Math.max(8,Math.round(((p.value-floor)/span)*85)+8);
   return '<button type="button" class="growth-chart-point" data-overall-month="'+esc(p.month)+'" data-overall-value="'+esc(fmt(p.value,metric))+'" data-overall-count="'+p.songs+'" aria-label="'+esc(p.month)+' '+esc(fmt(p.value,metric))+' '+p.songs+'곡" title="'+esc(p.month)+' '+esc(fmt(p.value,metric))+'"><span class="growth-chart-track"><i style="height:'+height+'%"></i></span><small>'+esc(p.month.slice(5))+'월</small></button>';
  }).join('')+'</div><p class="small muted">그래프의 막대를 누르면 해당 월의 수치와 사용된 곡 수를 확인할 수 있어요.</p>':
