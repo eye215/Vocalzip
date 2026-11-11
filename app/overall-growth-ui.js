@@ -17,7 +17,7 @@ function summaryCard(report){
    '<div><span>곡 녹음</span><strong>'+report.recordings+'</strong><small>개</small></div>'+
    '<div><span>분석 완료</span><strong>'+report.analysisCount+'</strong><small>개</small></div>'+
    '<div><span>분석한 곡</span><strong>'+report.analyzedSongs+'</strong><small>곡</small></div>'+
-   '<div><span>기록한 월</span><strong>'+report.monthCount+'</strong><small>개월</small></div></div>'+
+   '<div><span>분석한 월</span><strong>'+report.monthCount+'</strong><small>개월</small></div></div>'+
   '<p class="growth-period-label">'+(report.firstDate?'기록 기간 '+longDate(report.firstDate)+' ~ '+longDate(report.lastDate):'아직 날짜가 있는 곡 녹음이 없어요.')+'</p>'+
   '<div class="growth-highlights"><div class="growth-highlight"><span>좋아진 방향</span><strong>'+esc(strength?.title||'비교 기록 필요')+'</strong><small>'+(strength?'동일 곡 '+strength.pairedSongs+'곡의 첫·최근 비교':'동일 곡을 다른 날 녹음하면 확인 가능')+'</small></div>'+
   '<div class="growth-highlight"><span>우선 확인할 항목</span><strong>'+esc(watch?.title||'보완 여부 판단 전')+'</strong><small>'+(watch?'변화가 필요한 곡 '+watch.worsened+'곡':'측정값만으로 약점을 단정하지 않아요')+'</small></div></div></section>';
