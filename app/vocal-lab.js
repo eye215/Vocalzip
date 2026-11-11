@@ -82,6 +82,58 @@ function sizePlots(host) {
     svg.querySelector('.vl-mid')?.setAttribute('x2',String(width));
   });
 }
+// All comparisons use measured summaries from chronological recordings only.
+// The instant overview is factual; optional AI wording never replaces the evidence.
+const growthMetric=(metric,s)=>{
+ const rows=trendRows(s,metric).filter(x=>V.analysisReliable(analysis(x.m)));
+ if(rows.length<2)return null;
+ const first=rows[0],last=rows.at(-1),delta=last.value-first.value;
+ const tolerance=metric.tolerance??.5;
+ const tone=metricColor(metric,first.value,last.value);
+ return {metric,first,last,delta,tone,count:rows.length,
+  formatted:metric.fmt(first.value,analysis(first.m))+' → '+metric.fmt(last.value,analysis(last.m)),
+  changed:Math.abs(delta)>tolerance};
+};
+const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+s.selected.slice().sort().join(',');
+const savedGrowthReport=s=>(V.db.practicePlans||[]).find(x=>x.id===labGrowthId(s)&&x.period==='vocal-growth-ai'&&x.evidenceKey===growthEvidenceKey(s));
+function growthEvidenceKey(s){
+ return s.selected.map(id=>{
+  const m=s.items.find(x=>x.id===id),a=m&&analysis(m);
+  return id+':'+(a?.at||0)+':'+(m?.rating??'');
+ }).join('|');
+}
+function growthReport(s){
+ const data=METRICS.map(metric=>growthMetric(metric,s)).filter(Boolean);
+ const analyzed=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&V.analysisReliable(analysis(m)));
+ const saved=savedGrowthReport(s);
+ const badge=(tone)=>tone==='good'?'좋아진 방향':tone==='bad'?'주의할 변화':'참고할 변화';
+ const describe=x=>{
+   const metric=x.metric,delta=x.delta,amount=Math.abs(delta).toFixed(metric.key==='rating'?0:1);
+   if(metric.key==='high'){
+     const from=metric.fmt(x.first.value,analysis(x.first.m)),to=metric.fmt(x.last.value,analysis(x.last.m));
+     return '관측 최고음 '+from+' → '+to+(x.changed?' ('+(delta>0?'상승':'하락')+' 약 '+(Math.abs(delta)/100).toFixed(1)+'반음)':' (비슷함)')+' · 도달한 최고음이 곧 안정된 가창 음역이라는 뜻은 아니에요.';
+   }
+   if(metric.key==='phr')return '프레이즈 '+x.formatted+(x.changed?' · '+(delta>0?'길어짐':'짧아짐'):' · 큰 변화 없음')+' (곡 구성·템포에 따라 달라질 수 있어요).';
+   if(metric.key==='rating')return '내 만족도 '+x.formatted+' · 직접 기록한 체감 평가예요.';
+   return metric.label+' '+x.formatted+(x.changed?' · '+(delta>0?'증가':'감소')+' '+amount+' '+metric.unit:' · 비슷한 수준');
+ };
+ const strong=data.filter(x=>x.tone==='good'&&x.changed);
+ const weak=data.filter(x=>x.tone==='bad'&&x.changed);
+ const neutral=data.filter(x=>x.tone==='neutral'||!x.changed);
+ const title=data.length>=2?'처음과 최근 측정값을 비교했어요':'비교할 분석 기록이 더 필요해요';
+ const row=x=>'<li class="vl-growth-row '+x.tone+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(x.metric.label)+'</strong><p>'+esc(describe(x))+'</p></div></li>';
+ const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(row).join('')+'</ul></div>':'';
+ return '<section class="vl-section vl-growth" data-growth-report aria-label="AI 종합 성장 리포트"><div class="vl-divider"></div>'+
+  '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>AI 종합 리포트</h2></div><span class="vl-growth-count">'+analyzed.length+'개 분석 기준</span></div>'+
+  '<p class="vl-growth-intro">'+esc(title)+' <small>같은 곡의 신뢰도 높은 녹음을 날짜순으로 비교해요.</small></p>'+
+  (data.length?section('좋아진 부분',strong,'good')+section('아쉬워진 부분',weak,'bad')+section('음역·참고 지표',neutral,'neutral')+
+    '<p class="vl-growth-caution">최고음의 상승·하락은 곡의 구간·발성 방식에 따라 달라지며, 음성 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
+    '<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
+    '<p class="vl-growth-ai-status" data-growth-ai-status role="status">'+(s.growthPending?'AI가 측정 기록을 해석하고 있어요…':saved?'선택한 녹음의 AI 해석을 저장해 두었어요.':'측정값을 바탕으로 좋아진 점·아쉬운 점과 다음 연습 방향을 종합해요.')+'</p>'+
+    (saved?'<div class="vl-growth-ai-text">'+esc(saved.text)+'</div>':'<div class="vl-growth-ai-text" data-growth-ai-result hidden></div>')+'</div>':
+    '<p class="vl-muted">분석 신뢰도가 충분한 녹음이 두 개 이상 있어야 비교할 수 있어요. 선택한 녹음들의 분석을 먼저 완료해 주세요.</p>')+
+    '</section>';
+}
 function trendRows(s,metric){
  return s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean)
   .map(m=>({m,value:valid(metric.get(analysis(m),m))}))
@@ -246,7 +298,7 @@ function screen(s) {
   s.player?.destroy(); s.player=null;
   s.plotObserver?.disconnect(); s.plotObserver=null;
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+'</button>').join('')+'</div></div>'+
-    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s):single(s,m))+
+    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s)+growthReport(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
       comparePanel(s)+recommendationList(recs,s.song.id,savedAITip(s))+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
@@ -340,6 +392,50 @@ function screen(s) {
     b.addEventListener('click',open);
     b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });
+  const growthButton=host.querySelector('[data-growth-ai]');
+  if(growthButton){
+    growthButton.onclick=async()=>{
+      if(s.growthPending)return;
+      const key=growthEvidenceKey(s),id=labGrowthId(s);
+      const metrics=METRICS.map(metric=>growthMetric(metric,s)).filter(Boolean);
+      const status=host.querySelector('[data-growth-ai-status]'),output=host.querySelector('[data-growth-ai-result]')||host.querySelector('.vl-growth-ai-text');
+      if(!metrics.length){status.textContent='비교할 신뢰도 높은 측정값이 부족해요.';return;}
+      if(typeof window.vzipCloudCoach!=='function'){status.textContent='AI 연결을 사용할 수 없어요. 위의 측정 기반 변화 요약은 계속 볼 수 있어요.';return;}
+      s.growthPending=true;growthButton.disabled=true;status.textContent='AI가 녹음별 측정 변화를 정리하고 있어요…';
+      try{
+        const evidence={
+          song:s.song.title,firstDate:M.dateOf(s.items.find(m=>m.id===s.selected[0])),lastDate:M.dateOf(s.items.find(m=>m.id===s.selected.at(-1))),
+          scope:'선택한 같은 곡의 신뢰할 수 있는 분석 녹음',records:s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean).map(m=>({
+            date:M.dateOf(m),id:m.id,reliable:V.analysisReliable(analysis(m)),
+            rating:m.rating??null,review:String(m.review||'').slice(0,400),
+            metrics:analysis(m)?.metrics||null
+          })).slice(-35),
+          changes:metrics.map(x=>({
+            metric:x.metric.label,unit:x.metric.unit,first:x.first.value,last:x.last.value,
+            firstLabel:x.metric.fmt(x.first.value,analysis(x.first.m)),
+            lastLabel:x.metric.fmt(x.last.value,analysis(x.last.m)),
+            direction:x.tone,firstDate:M.dateOf(x.first.m),lastDate:M.dateOf(x.last.m)
+          }))
+        };
+        const response=await window.vzipCloudCoach({
+          mode:'text',song:s.song.title,
+          task:'이 곡의 여러 날짜 녹음을 비교한 한국어 보컬 성장 종합 리포트를 작성해 주세요. 좋아진 점, 아쉬워진 점, 관측 최고음/음역 변화, 다음 연습 초점을 각각 짧고 구체적으로 정리해 주세요. 제공된 측정값/메모만 근거로 사용하고 녹음을 실제로 들은 것처럼 말하지 마세요. 최고음 상승을 발성 실력 향상으로 단정하지 말고 비교 구간/반주/녹음 조건 차이와 신뢰도도 고지하세요. 변화 없는 항목은 변화 없다고 말하세요. 진단이나 과장 금지. 수치는 정확히 재인용하세요.',
+          summary:'녹음별 실측 성장 리포트. 데이터에서 확인되지 않은 공명·호흡법·감정 표현·톤 개선을 창작하지 말 것. 충분하지 않은 데이터는 추측하지 말 것. 4개 문단 이내로 작성.',
+          answers:[JSON.stringify(evidence).slice(0,16000)]
+        });
+        if(s.dead||!host.isConnected||growthEvidenceKey(s)!==key||labGrowthId(s)!==id)return;
+        const textResult=String(response?.note||response?.analysis||response?.text||'').trim();
+        if(textResult.length<20)throw Error('AI 해석이 충분하지 않아요. 다시 생성해 주세요.');
+        const report={id,period:'vocal-growth-ai',songId:s.song.id,mediaIds:s.selected.slice(),evidenceKey:key,text:textResult.slice(0,5000),updatedAt:Date.now()};
+        const stored=V.change(db=>{db.practicePlans||=[];const existing=db.practicePlans.find(p=>p.id===id);if(existing)Object.assign(existing,report);else db.practicePlans.push(report);},{silent:true});
+        if(!stored)throw Error('AI 리포트 저장에 실패했어요.');
+        if(output){output.hidden=false;output.textContent=report.text;}
+        status.textContent='AI 종합 리포트를 저장했어요. 다시 열어도 확인할 수 있어요.';
+        growthButton.textContent='다시 생성';
+      }catch(e){if(!s.dead&&host.isConnected)status.textContent='AI 해석 생성 실패: '+String(e?.message||e)+' · 위 측정 기반 요약은 그대로 볼 수 있어요.';}
+      finally{s.growthPending=false;if(growthButton.isConnected)growthButton.disabled=false;}
+    };
+  }
   const cmp=host.querySelector('[data-compare-panel]');
   if(cmp){
     cmp.ontoggle=()=>{s.compareOpen=cmp.open};
