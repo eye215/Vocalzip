@@ -77,3 +77,5 @@ body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports
 @media(max-width:355px){.vl-player{padding:12px}.vl-controls .vl-play{width:54px;height:54px;min-width:54px}.vl-controls .vl-speed{min-width:48px}.vl-measure strong{font-size:24px}.vl-recommend>div{gap:8px}}
 @media(prefers-reduced-motion:reduce){.vl *{transition-duration:.01ms!important;animation-duration:.01ms!important}.vl-dates{scroll-behavior:auto}}
 
+
+.vl-tip-list[data-ai-tip]:not(:empty){margin-top:12px}
