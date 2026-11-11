@@ -125,3 +125,19 @@ test('conversion records stay out of the file list and usage; waiting jobs per a
   const objects = (await (await call('/v1/objects', {auth})).json()).objects.map(o => o.key);
   assert.ok(objects.every(k => k.startsWith('u/' + BOB + '/') && k.endsWith('/original.pdf')), objects.join());
 });
+
+test('with nothing waiting, the converter picks up never-converted song scores by itself, once', async () => {
+  const runner = await runnerToken(), next = async () => (await (await call('/v1/omr-runner/next', {method:'POST', auth:runner, origin:false})).json()).job;
+  // drain whatever earlier tests left waiting
+  for (let j = await next(); j; j = await next()) await call('/v1/omr-runner/' + j.id + '/fail', {method:'POST', auth:runner, origin:false, body:{code:'engine'}});
+  const key = await uploadPdf(ALICE, 'score-auto');
+  await uploadPdf(ALICE, 'performance-poster');
+  const job = await next();
+  assert.ok(job, 'an uploaded score is queued without any app request');
+  const status = (await (await call('/v1/omr?score=score-auto', {auth:await userToken(ALICE)})).json()).job;
+  assert.deepEqual([status.id, status.status], [job.id, 'running']);
+  assert.equal((await call('/v1/omr-runner/' + job.id + '/source', {auth:runner, origin:false})).status, 200);
+  await call('/v1/omr-runner/' + job.id + '/fail', {method:'POST', auth:runner, origin:false, body:{code:'no-music'}});
+  assert.equal(await next(), null, 'performance PDFs are not scores, and a failed score is not retried automatically');
+  assert.equal((await call('/v1/media/' + key, {auth:await userToken(ALICE)})).status, 200);
+});

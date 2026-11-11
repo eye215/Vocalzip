@@ -1,11 +1,13 @@
-/* PDF score → MusicXML (OMR PoC, Phase 07-B/16). Only when the owner presses "음표로 변환".
+/* PDF score → MusicXML (OMR PoC, Phase 07-B/16). Song score PDFs are converted automatically in the background
+ * (decided 2026-11-11); the owner can also ask again from the app.
  *
  * Owner (Supabase sign-in, after user()):
  *   POST /v1/omr        {key: u/<uid>/<scoreId>/original.pdf}  → {job}   (an active job for the same score is reused)
  *   GET  /v1/omr?score=<scoreId>                              → {job|null}
  * Converter (GitHub Actions run of .github/workflows/omr-worker.yml on main, proven with GitHub's OIDC token — no
  * shared secret exists anywhere):
- *   POST /v1/omr-runner/next                 → {job:{id,size}|null}   claims the oldest waiting job
+ *   POST /v1/omr-runner/next                 → {job:{id,size}|null}   claims the oldest waiting job; if none, queues one
+ *                                              never-converted score PDF of any account (backend auto-conversion)
  *   GET  /v1/omr-runner/<id>/source          → the PDF bytes (only while that job is claimed)
  *   PUT  /v1/omr-runner/<id>/result          body = .mxl (zip)  → stored as u/<uid>/<scoreId>/omr.mxl next to the PDF
  *   POST /v1/omr-runner/<id>/fail  {code}
@@ -51,13 +53,33 @@ export async function handleOmrUser(request, env, uid, url, {fail, json, readJso
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
   if (active >= MAX_ACTIVE) fail(429, 'too many conversions waiting');
+  return json({job: publicJob(await createJob(env, uid, key, scoreId, head.size, 'owner'))}, 201);
+}
+async function createJob(env, uid, key, scoreId, size, source) {
   const now = Date.now(), id = randomId();
-  const job = {v: 1, id, owner: uid, key, scoreId, size: head.size, status: 'queued', created: now, attempts: 0,
+  const job = {v: 1, id, owner: uid, key, scoreId, size, status: 'queued', created: now, attempts: 0, source,
     resultKey: 'u/' + uid + '/' + scoreId + '/omr.mxl'};
   await write(env, 'omr-jobs/' + id + '.json', job);
   await env.MEDIA.put('omr-queue/' + String(now).padStart(15, '0') + '-' + id, '', {customMetadata: {owner: uid, id}});
   await write(env, 'omr-index/' + uid + '/' + scoreId, {id});
-  return json({job: publicJob(job)}, 201);
+  return job;
+}
+/* Backend auto-conversion (decided 2026-11-11): when nothing waits, queue one score PDF that has never been converted
+ * (no job record for it). Only song scores (u/<uid>/score-…/original.pdf) up to 50MB; performance archive PDFs and
+ * other files are never touched. A failed or finished score is not queued again automatically. */
+async function discover(env) {
+  let cursor;
+  do {
+    const page = await env.MEDIA.list({prefix: 'u/', cursor, limit: 1000});
+    for (const o of page.objects) {
+      const m = o.key.match(/^u\/([0-9a-f-]{36})\/(score-[A-Za-z0-9_-]{1,94})\/original\.pdf$/);
+      if (!m || o.size > MAX_PDF) continue;
+      if (await env.MEDIA.head('omr-index/' + m[1] + '/' + m[2])) continue;
+      return createJob(env, m[1], o.key, m[2], o.size, 'auto');
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return null;
 }
 
 /** Converter routes; null when the path is not one of them. */
@@ -66,6 +88,8 @@ export async function handleOmrRunner(request, env, path, {fail, json, readJson,
   await runnerIdentity(request, env, {fail, b64urlDecode});
   const method = request.method;
   if (path === '/v1/omr-runner/next' && method === 'POST') {
+    for (let round = 0; round < 2; round++) {
+    if (round === 1 && !await discover(env)) break;
     const page = await env.MEDIA.list({prefix: 'omr-queue/', limit: 50, include: ['customMetadata']});
     for (const entry of page.objects) {
       const id = entry.customMetadata?.id || entry.key.split('-').pop();
@@ -78,6 +102,7 @@ export async function handleOmrRunner(request, env, path, {fail, json, readJson,
       Object.assign(job, {status: 'running', claimedAt: Date.now(), attempts: (job.attempts || 0) + 1, queueKey: entry.key});
       await write(env, 'omr-jobs/' + id + '.json', job);
       return json({job: {id, size: job.size}});
+    }
     }
     return json({job: null});
   }
