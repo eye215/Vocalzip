@@ -392,6 +392,50 @@ function screen(s) {
     b.addEventListener('click',open);
     b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });
+  const growthButton=host.querySelector('[data-growth-ai]');
+  if(growthButton){
+    growthButton.onclick=async()=>{
+      if(s.growthPending)return;
+      const key=growthEvidenceKey(s),id=labGrowthId(s);
+      const metrics=METRICS.map(metric=>growthMetric(metric,s)).filter(Boolean);
+      const status=host.querySelector('[data-growth-ai-status]'),output=host.querySelector('[data-growth-ai-result]')||host.querySelector('.vl-growth-ai-text');
+      if(!metrics.length){status.textContent='비교할 신뢰도 높은 측정값이 부족해요.';return;}
+      if(typeof window.vzipCloudCoach!=='function'){status.textContent='AI 연결을 사용할 수 없어요. 위의 측정 기반 변화 요약은 계속 볼 수 있어요.';return;}
+      s.growthPending=true;growthButton.disabled=true;status.textContent='AI가 녹음별 측정 변화를 정리하고 있어요…';
+      try{
+        const evidence={
+          song:s.song.title,firstDate:M.dateOf(s.items.find(m=>m.id===s.selected[0])),lastDate:M.dateOf(s.items.find(m=>m.id===s.selected.at(-1))),
+          scope:'선택한 같은 곡의 신뢰할 수 있는 분석 녹음',records:s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean).map(m=>({
+            date:M.dateOf(m),id:m.id,reliable:V.analysisReliable(analysis(m)),
+            rating:m.rating??null,review:String(m.review||'').slice(0,400),
+            metrics:analysis(m)?.metrics||null
+          })).slice(-35),
+          changes:metrics.map(x=>({
+            metric:x.metric.label,unit:x.metric.unit,first:x.first.value,last:x.last.value,
+            firstLabel:x.metric.fmt(x.first.value,analysis(x.first.m)),
+            lastLabel:x.metric.fmt(x.last.value,analysis(x.last.m)),
+            direction:x.tone,firstDate:M.dateOf(x.first.m),lastDate:M.dateOf(x.last.m)
+          }))
+        };
+        const response=await window.vzipCloudCoach({
+          mode:'text',song:s.song.title,
+          task:'이 곡의 여러 날짜 녹음을 비교한 한국어 보컬 성장 종합 리포트를 작성해 주세요. 좋아진 점, 아쉬워진 점, 관측 최고음/음역 변화, 다음 연습 초점을 각각 짧고 구체적으로 정리해 주세요. 제공된 측정값/메모만 근거로 사용하고 녹음을 실제로 들은 것처럼 말하지 마세요. 최고음 상승을 발성 실력 향상으로 단정하지 말고 비교 구간/반주/녹음 조건 차이와 신뢰도도 고지하세요. 변화 없는 항목은 변화 없다고 말하세요. 진단이나 과장 금지. 수치는 정확히 재인용하세요.',
+          summary:'녹음별 실측 성장 리포트. 데이터에서 확인되지 않은 공명·호흡법·감정 표현·톤 개선을 창작하지 말 것. 충분하지 않은 데이터는 추측하지 말 것. 4개 문단 이내로 작성.',
+          answers:[JSON.stringify(evidence).slice(0,16000)]
+        });
+        if(s.dead||!host.isConnected||growthEvidenceKey(s)!==key||labGrowthId(s)!==id)return;
+        const textResult=String(response?.note||response?.analysis||response?.text||'').trim();
+        if(textResult.length<20)throw Error('AI 해석이 충분하지 않아요. 다시 생성해 주세요.');
+        const report={id,period:'vocal-growth-ai',songId:s.song.id,mediaIds:s.selected.slice(),evidenceKey:key,text:textResult.slice(0,5000),updatedAt:Date.now()};
+        const stored=V.change(db=>{db.practicePlans||=[];const existing=db.practicePlans.find(p=>p.id===id);if(existing)Object.assign(existing,report);else db.practicePlans.push(report);},{silent:true});
+        if(!stored)throw Error('AI 리포트 저장에 실패했어요.');
+        if(output){output.hidden=false;output.textContent=report.text;}
+        status.textContent='AI 종합 리포트를 저장했어요. 다시 열어도 확인할 수 있어요.';
+        growthButton.textContent='다시 생성';
+      }catch(e){if(!s.dead&&host.isConnected)status.textContent='AI 해석 생성 실패: '+String(e?.message||e)+' · 위 측정 기반 요약은 그대로 볼 수 있어요.';}
+      finally{s.growthPending=false;if(growthButton.isConnected)growthButton.disabled=false;}
+    };
+  }
   const cmp=host.querySelector('[data-compare-panel]');
   if(cmp){
     cmp.ontoggle=()=>{s.compareOpen=cmp.open};
