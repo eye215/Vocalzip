@@ -73,7 +73,7 @@ function card(plan,items){
  '<div class="row"><a class="btn sm ghost" href="#/song/'+encodeURIComponent(plan.songId)+'">곡 상세 보기</a>'+
  '<button type="button" class="btn sm ghost" data-ab-plan="'+E(plan.id)+'">구간 A/B 비교</button>'+ '<button type="button" class="btn sm ghost" data-archive-plan="'+E(plan.id)+'">계획 종료</button></div>'+ '<div data-ab-host="'+E(plan.id)+'"></div><div data-plan-outcome="'+E(plan.id)+'"></div></article>';
 }
-function create(form,month){
+function create(form,month,items){
  const metric=form.elements.metric.value,songId=form.elements.song.value,
  start=Number(form.elements.start.value),end=Number(form.elements.end.value),
  minutes=Number(form.elements.minutes.value),days=Number(form.elements.days.value);
@@ -81,7 +81,7 @@ function create(form,month){
  if(![start,end,minutes,days].every(Number.isInteger)||start<0||end>7200||end<=start||
     minutes<3||minutes>60||days<1||days>14)throw Error('구간·시간·일수를 확인해 주세요.');
  const sourceId=String(form.elements.sourceRecording.value||'');
- const source=sourceId?M.cached?.()?.find(m=>m.id===sourceId):null;
+ const source=sourceId?items.find(m=>m.id===sourceId):null;
  if(sourceId && (!source||source.songId!==songId))throw Error('선택한 녹음의 곡 정보가 변경됐어요. 다시 선택해 주세요.');
  const today=V.today(),id='monthly-plan:'+V.uid(),title=V.songTitle(songId);
  const segment=fmt(start)+'–'+fmt(end);
@@ -101,6 +101,7 @@ function create(form,month){
 }
 function render(host,month,items,rows){
  if(!host?.isConnected)return;
+ stopReview();
  V.segmentABStop?.();
  const mine=plans().sort((a,b)=>(b.created||0)-(a.created||0));
  const savedOutcomeIds=new Set((V.db.vocalPlanReports||[]).map(x=>x.planId));
@@ -140,7 +141,7 @@ function render(host,month,items,rows){
  let weakToken=0;
  function updateRecordings(){
   stopReview(); weakToken++;statusEl.textContent='';formEl.elements.sourceRecording.value='';
-  const available=items.filter(m=>m.songId===songInput.value && (!M.isVideo(m)||m.cloud)&&(!m.size||m.size<=60*1024*1024));
+  const available=items.filter(m=>m.songId===songInput.value&&!M.isVideo(m)&&(!m.size||m.size<=60*1024*1024));
   recordInput.innerHTML='<option value="">녹음 선택</option>'+available.map(m=>
    '<option value="'+E(m.id)+'">'+E((M.dateOf(m)||'날짜 없음')+' · '+M.label(m))+'</option>').join('');
   button.disabled=!available.length;
@@ -206,7 +207,7 @@ function render(host,month,items,rows){
  formEl.onsubmit=event=>{
   event.preventDefault();
   const statusEl=formEl.querySelector('[data-plan-message]');
-  try{create(formEl,month);V.toast('계획을 저장했어요. 홈의 오늘 목표에서 확인해 주세요.');render(host,month,items,rows);}
+  try{create(formEl,month,items);V.toast('계획을 저장했어요. 홈의 오늘 목표에서 확인해 주세요.');render(host,month,items,rows);}
   catch(error){statusEl.textContent=error.message||'계획을 저장하지 못했어요.';}
  };
  host.querySelectorAll('[data-ab-plan]').forEach(btn=>btn.onclick=()=>{
