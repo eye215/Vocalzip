@@ -17,6 +17,7 @@ on:
       - 'tests/*segment*'
       - 'tests/*outcome*'
       - 'tests/*sync*'
+      - 'tests/vocal-growth-browser.spec.js'
       - 'data-merge.js'
       - '.github/workflows/vocal-growth-integration.yml'
   workflow_dispatch:
@@ -36,3 +37,18 @@ jobs:
       - name: Test growth models and app integration
         run: |
           node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs
+  chromium-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install test dependencies
+        run: npm ci
+      - name: Install headless Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run isolated VOCAL.zip browser smoke tests
+        run: npx playwright test tests/vocal-growth-browser.spec.js --browser=chromium --workers=1
