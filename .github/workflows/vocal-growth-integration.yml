@@ -16,6 +16,8 @@ on:
       - 'tests/*phrase*'
       - 'tests/*segment*'
       - 'tests/*outcome*'
+      - 'tests/*sync*'
+      - 'data-merge.js'
       - '.github/workflows/vocal-growth-integration.yml'
   workflow_dispatch:
 jobs:
@@ -33,4 +35,4 @@ jobs:
           done
       - name: Test growth models and app integration
         run: |
-          node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs
+          node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs
