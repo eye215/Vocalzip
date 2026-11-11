@@ -2,7 +2,7 @@
  * The owner makes a link for one cloud (R2) recording: anyone with it can play and download it without signing in,
  * until it expires (1/7/30 days, a number of days, or "until I stop it") or the owner stops it — the server checks
  * the grant on every request, so a stopped link refuses new playback at once. A file already downloaded by the
- * receiver cannot be taken back (said in the sheet). Links: recording page → 공유 링크, settings → 공유 중인 링크. */
+ * receiver cannot be taken back (said in the sheet). Entry points: 녹음 더보기 → 공유 링크, 곡 > 레퍼런스의 MR·레퍼런스 공유 아이콘, settings → 공유 중인 링크. */
 (() => {
 'use strict';
 const VZ = window.VZ;
@@ -24,13 +24,16 @@ async function stop(share, after) {
   catch (e) { VZ.toast('끊지 못했어요: ' + e.message, 'error'); return false; }
 }
 
-/** Sheet to make (and then manage) a link for one recording. */
-VZ.shareSheet = item => {
+/** A plain web link (YouTube MR, AR reference): the phone's share sheet, else copy. */
+VZ.shareUrl = (title, url) => send(title, url);
+
+/** Sheet to make (and then manage) a link for one recording or MR file. */
+VZ.shareSheet = (item, {title:named = ''} = {}) => {
   if (!ready()) { VZ.toast('공유 링크는 로그인하고 클라우드에 올라간 녹음에서 만들 수 있어요.', 'error'); return; }
   if (!item?.r2Key) { VZ.toast('클라우드에 올라간 녹음만 공유할 수 있어요. 업로드가 끝난 뒤 다시 시도해 주세요.', 'error'); return; }
   const choices = [['1', '1일'], ['7', '7일'], ['30', '30일'], ['custom', '직접 입력'], ['none', '계속']];
   VZ.sheet({title:'공유 링크', body:'<div class="share-sheet" data-share>' +
-      '<p class="share-file"><i class="ph ph-waveform" aria-hidden="true"></i><span>' + esc(VZ.media?.label?.(item) || item.name || '녹음') + '</span></p>' +
+      '<p class="share-file"><i class="ph ph-waveform" aria-hidden="true"></i><span>' + esc(named || item.name || VZ.media?.label?.(item) || '녹음') + '</span></p>' +
       '<fieldset class="share-period"><legend>링크 유지 기간</legend><div class="share-chips" role="radiogroup" aria-label="링크 유지 기간">' +
         choices.map(([v, t]) => '<button type="button" role="radio" data-period="' + v + '" aria-checked="' + (v === '7') + '">' + t + '</button>').join('') + '</div>' +
         '<label class="share-days" data-days hidden><input type="number" inputmode="numeric" min="1" max="3650" value="14" aria-label="며칠 동안"><span>일 동안</span></label></fieldset>' +
@@ -51,7 +54,7 @@ VZ.shareSheet = item => {
         else if (period !== 'none') expiresIn = Number(period) * DAY;
         busy = true; make.disabled = true; make.textContent = '만드는 중…';
         try {
-          const title = VZ.media?.label?.(item) || item.name || '녹음';
+          const title = named || item.name || VZ.media?.label?.(item) || '녹음';
           const s = await window.VzipR2.shares.create({key:item.r2Key, mediaId:item.id, title, expiresIn});
           const url = window.VzipR2.shares.link(s.token), result = root.querySelector('[data-result]');
           root.querySelector('.share-period').hidden = true;
@@ -93,16 +96,4 @@ VZ.route('shares', {title:'공유 중인 링크', back:true, tab:'home', render(
   draw();
 }});
 
-/* Recording page (보관함 → 녹음 재생): a 공유 링크 button under the player. */
-const addButton = host => {
-  if (!host || host.querySelector('[data-share-open]')) return;
-  const id = location.hash.match(/^#\/recording\/([^/?]+)/)?.[1]; if (!id) return;
-  const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'btn secondary block share-open'; btn.dataset.shareOpen = '';
-  btn.innerHTML = '<i class="ph ph-link" aria-hidden="true"></i>공유 링크';
-  btn.onclick = async () => { const all = await VZ.media.list().catch(() => VZ.media.cached?.() || []); VZ.shareSheet(all.find(x => x.id === decodeURIComponent(id))); };
-  host.append(btn);
-};
-new MutationObserver(() => { const host = document.querySelector('.vz-recording-page'); if (host?.querySelector('.list')) addButton(host); })
-  .observe(document.documentElement, {childList:true, subtree:true});
 })();
