@@ -166,3 +166,27 @@ test('browser model excludes later and unrelated takes, and the snapshot equals 
  expect(state.measured.afterIds).toEqual(['during']);
  expect(state.saved.measurement).toEqual(state.measured);
 });
+
+test('song growth listening evidence excludes training-only and unassigned sessions',async({page})=>{
+ const practices=[
+  {id:'practice-room:song',date:'2026-11-05',songId:'song-1',practiceMode:'song',
+   practiceRoom:{songId:'song-1',aiCoach:'들리는 특징: 지정 곡의 짧은 소리 관찰'}},
+  {id:'practice-room:training',date:'2026-11-05',practiceMode:'training',
+   practiceRoom:{songId:'',aiCoach:'들리는 특징: 훈련 전용 코멘트'}},
+  {id:'practice-room:unassigned',date:'2026-11-05',practiceMode:'song',
+   practiceRoom:{songId:'',aiCoach:'들리는 특징: 미지정 과제 코멘트'}}
+ ];
+ await boot(page,{practices});
+ await expect(page.locator('.growth-listening')).toHaveCount(1);
+ await expect(page.locator('.growth-listening')).toContainText('지정 곡의 짧은 소리');
+ await expect(page.locator('.growth-page')).not.toContainText('훈련 전용 코멘트');
+ await page.evaluate(()=>{window.vzipCloudCoach=async evidence=>{
+   window.__coachEvidence=evidence;
+   return {mode:'monthly',month:evidence.month,note:'요약: 곡의 기록 확인'};
+ };});
+ await page.locator('[data-monthly-ai-run]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__coachEvidence?.observations?.length)).toBe(1);
+ const evidence=await page.evaluate(()=>window.__coachEvidence);
+ expect(evidence.observations[0].song).toBe('Test Song');
+ expect(evidence.observations[0].heard).not.toContain('훈련 전용');
+});
