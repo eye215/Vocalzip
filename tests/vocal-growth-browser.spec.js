@@ -120,3 +120,27 @@ test('monthly AI is explicit opt-in and month switching never replaces a differe
  await expect(page.locator('[data-monthly-ai]')).not.toContainText('11월 확인');
  expect(await page.evaluate(()=>window.__coachCalls)).toBe(1);
 });
+
+test('completed plan saves an outcome and follow-up only prefills the next plan',async({page})=>{
+ const plan={id:'plan-outcome-demo',kind:'monthly-vocal',songId:'song-1',metric:'intonation',
+  startDate:'2026-11-01',sourceMonth:'2026-11',segmentStart:5,segmentEnd:15,minutes:10,days:5};
+ const media=[
+  {id:'before',songId:'song-1',recordedDate:'2026-10-29',type:'audio/wav',
+   analysis:{v:1,metrics:{voicedSeconds:22,intonation:{meanAbsCents:36}},confidence:{voiceOverMrDb:6}}},
+  {id:'after',songId:'song-1',recordedDate:'2026-11-04',type:'audio/wav',
+   analysis:{v:1,metrics:{voicedSeconds:22,intonation:{meanAbsCents:21}},confidence:{voiceOverMrDb:6}}}
+ ];
+ const goals=[{id:'goal-1',sourceId:plan.id,date:'2026-11-01',completed:true}];
+ await boot(page,{plans:[plan],recordings:media,goals});
+ await page.locator('[data-save-outcome]').first().click();
+ await expect(page.locator('.growth-outcome-report').first()).toContainText('1/5일');
+ await expect(page.locator('.growth-outcome-report').first()).toContainText('36 cent');
+ await expect(page.locator('.growth-outcome-report').first()).toContainText('21 cent');
+ await page.locator('[data-next-outcome]').first().click();
+ const next=page.locator('[data-plan-form]');
+ await expect(next.locator('[name=song]')).toHaveValue('song-1');
+ await expect(next.locator('[name=metric]')).toHaveValue('intonation');
+ await expect(next.locator('[name=start]')).toHaveValue('5');
+ const counts=await page.evaluate(()=>({plans:VZ.db.practicePlans.length,reports:VZ.db.vocalPlanReports.length}));
+ expect(counts).toEqual({plans:1,reports:1});
+});
