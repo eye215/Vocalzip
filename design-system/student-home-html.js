@@ -150,7 +150,7 @@ export async function createFloatingHome(opts={}){
  shadow.append(sharedShell);
  [...root.querySelectorAll('.vz-nav-item')].forEach((button,i)=>{
   const svg=button.querySelector('svg');if(!svg)return;
-  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a','\ue44e'][i];svg.replaceWith(icon);
+  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a','\ue150'][i];svg.replaceWith(icon);
  });
  const recordIcon=el('i');recordIcon.setAttribute('aria-hidden','true');recordIcon.dataset.glyph='\ue326';root.querySelector('.vz-floating-record svg').replaceWith(recordIcon);
  const q=selector=>root.querySelector(selector);
