@@ -70,13 +70,14 @@ function spark(metric, pts) {
 VZ.measureTable = (first, second) => {
   const a = first && analysisOf(first), b = second && analysisOf(second);
   if (!a?.metrics || !b?.metrics) return '';
-  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(m.key === 'high' ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + change(m, a, b) + '</td></tr>'; }).join('');
-  const weak = !VZ.analysisComparable(a,b);
+  const sameSong=!!first.songId&&first.songId===second.songId;
+  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(m.key === 'high' ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,a,b):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
+  const weak = !VZ.analysisComparable(a,b) || !first.songId || first.songId!==second.songId;
   return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + '</tbody></table>' +
     (weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '');
 };
 /** Measurement summary saved with a comparison report (numbers only). */
-VZ.measureSnapshot = item => { const a = item && analysisOf(item); return a?.metrics ? {at:a.at, reliable:VZ.analysisReliable(a), metrics:a.metrics} : null; };
+VZ.measureSnapshot = item => { const a = item && analysisOf(item); return a?.metrics ? {v:a.v, at:a.at, reliable:VZ.analysisReliable(a), metrics:a.metrics, confidence:a.confidence} : null; };
 
 async function runBatch(song, todo) {
   if (batch.running || !VZ.analyzeRecording) return;

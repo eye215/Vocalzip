@@ -1,6 +1,6 @@
 const {test,expect}=require('@playwright/test');
 async function open(page){
- await page.route('**/__pitch-test',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html lang="ko"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/app/app.css"><body><main id="test-host" style="max-width:560px;margin:auto"></main></body></html>'}));
+ await page.route('**/__pitch-test',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/app/app.css"><body><main id="test-host" style="max-width:560px;margin:auto"></main></body></html>'}));
  await page.goto('/__pitch-test');
  await page.evaluate(()=>{
   window.VZ={media:{},esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
@@ -19,7 +19,7 @@ async function open(page){
 }
 test('real audio decoder and Worker render distinct range metrics and retain prior analysis on reload',async({page})=>{
  await open(page);
- await page.evaluate(()=>analysisRoute.mount(document.querySelector('#test-host'),{params:['synthetic-recording'],query:new URLSearchParams()}));
+ await page.evaluate(()=>{const host=document.querySelector('#test-host');host.innerHTML=analysisRoute.render();return analysisRoute.mount(host,{params:['synthetic-recording'],query:new URLSearchParams()});});
  await expect(page.locator('#test-host')).toContainText('유효 최고 C5');
  await expect(page.locator('#test-host')).toContainText('안정 최고 C5');
  await expect(page.locator('#test-host')).toContainText('순간 검출 최고');
