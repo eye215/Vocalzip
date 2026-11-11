@@ -17,7 +17,7 @@ const spend={total:null,today:null};
 const usd=n=>'$'+(n*COST_PER_CLIP_USD).toFixed(n*COST_PER_CLIP_USD<1?3:2);
 function showSpend(main){const el=main?.querySelector?.('[data-spend]');if(!el)return;el.hidden=spend.total==null;if(spend.total!=null){el.textContent='사용 금액 약 '+usd(spend.total);el.title='음성 분석 '+spend.total.toLocaleString()+'회'+(spend.today?' · 오늘 '+spend.today+'회':'')}}
 async function loadSpend(main){try{const u=await window.vzipSttUsage?.();if(u){spend.total=u.total;spend.today=u.today}}catch{}showSpend(main)}
-const SEARCH_SECONDS=120, MIN_SUNG_SECONDS=4;
+const SEARCH_SECONDS=30, MIN_SUNG_SECONDS=4;
 // Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
 const CLIP_SECONDS=30, STEP_SECONDS=27, MAX_SCAN_SECONDS=600;
 function scanWindows(duration,initialStart=null){
@@ -48,7 +48,8 @@ function candidateMatches(match){return match.matches.map(x=>({songId:x.songId,s
 const state={items:[],referenceItems:[],chosen:new Set(),results:new Map(),recognitions:new Map(),referenceRows:[],cloudReady:false,running:false,cancel:false,page:0,filter:'all',category:'song',controller:null};
 const owner=()=>window.vzipCloudUserId?.()||'device';
 let viewOwner=owner(), busy=false, busyLabel='', authGeneration=0;
-const idleListeners=new Set();
+const idleListeners=new Set(), analysisListeners=new Set();
+let analysisProgress=null;
 const scoped=key=>key+':'+viewOwner;
 function references(){
  // The user's original lyrics are already synced through the existing song catalog (#80).
@@ -134,16 +135,21 @@ async function loadCloudTexts(){
 }
 window.addEventListener('vzip:auth-changed',()=>{
  if(owner()===viewOwner)return;
- authGeneration++;state.cancel=true;state.controller?.abort();destroyPlayers();state.results.clear();state.chosen.clear();state.referenceRows=[];state.recognitions.clear();state.cloudReady=false;
+ authGeneration++;state.cancel=true;state.controller?.abort();analysisProgress=null;for(const listener of analysisListeners)listener({done:0,total:1,item:{name:''},message:'계정 변경으로 중단했어요'});analysisListeners.clear();destroyPlayers();state.results.clear();state.chosen.clear();state.referenceRows=[];state.recognitions.clear();state.cloudReady=false;
 });
 async function exclusive(main,action){
  if(busy||owner()!==viewOwner)return;
  busy=true;busyLabel=action===apply?'파일에 곡을 적용하고 있어요':action===analyze?'녹음을 분석하고 있어요':'작업을 처리하고 있어요';const generation=authGeneration;
- const check=()=>{if(generation!==authGeneration||owner()!==viewOwner||!main.isConnected)throw Error('화면 또는 계정이 변경되어 중단했어요.')};
+ const check=()=>{if(generation!==authGeneration||owner()!==viewOwner||(!main.isConnected&&action!==analyze))throw Error('화면 또는 계정이 변경되어 중단했어요.')};
  try{await action(main,check)}catch(error){VZ.toast(String(error.message||error),'error')}
  finally{busy=false;busyLabel='';for(const listener of idleListeners)listener();idleListeners.clear()}
 }
 function showBusyPopup(main){
+ if(state.running&&analysisProgress){
+  const popup=showAnalysisPopup(main,analysisProgress.total);
+  idleListeners.add(()=>{popup.close();if(main.isConnected&&main.dataset.collection==='song-suggest')VZ.render()});
+  return;
+ }
  const overlay=document.createElement('div');overlay.className='vz-sc-busy';overlay.setAttribute('role','status');overlay.setAttribute('aria-live','polite');
  overlay.innerHTML='<div class="vz-sc-busy-card"><span class="vz-sc-busy-spinner" aria-hidden="true"></span><strong></strong><p>완료되면 곡 확인 목록이 다시 열려요.</p></div>';
  overlay.querySelector('strong').textContent=busyLabel||'파일을 처리하고 있어요';
@@ -157,7 +163,9 @@ function showAnalysisPopup(main,total){
  count.textContent='0 / '+total+'개 완료';file.textContent='첫 번째 녹음을 준비하고 있어요';
  overlay.querySelector('[data-analysis-stop]').onclick=()=>{state.cancel=true;state.controller?.abort();file.textContent='분석을 중단하고 있어요…'};
  main.append(overlay);
- return {update(done,item,message=''){count.textContent=done+' / '+total+'개 진행';file.textContent=M.label(item)+(message?' · '+message:'');fill.style.width=Math.round(done/total*100)+'%'},close(){overlay.remove()}};
+ const render=p=>{count.textContent=p.done+' / '+p.total+'개 진행';file.textContent=M.label(p.item)+(p.message?' · '+p.message:'');fill.style.width=Math.round(p.done/p.total*100)+'%'};
+ analysisListeners.add(render);if(analysisProgress)render(analysisProgress);
+ return {update(done,item,message=''){analysisProgress={done,item,message,total};for(const listener of analysisListeners)listener(analysisProgress)},close(){analysisListeners.delete(render);overlay.remove()}};
 }
 const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
 function saveCheckpoint(){try{localStorage.setItem(scoped(checkpointKey),JSON.stringify({ids:[...state.chosen],at:Date.now()}))}catch{}}
@@ -204,7 +212,7 @@ function setResult(item,result){state.results.set(item.id,result);writeCache(ite
 async function singingStart(samples,rate,signal){
  const total=samples.length/rate,fallback=Math.max(0,Math.min(20,total-30));
  if(!VZ.analyzeSamples)return fallback;
- const r=await VZ.analyzeSamples(samples,rate,()=>{},{voiceOnly:true});
+ const r=await VZ.analyzeSamples(samples,rate,()=>{},{voiceOnly:true,signal});
  if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
  const c=r.curve||[],fps=r.fps||20,win=Math.min(c.length,30*fps);
  let sum=0,best=-1,at=0;
@@ -462,14 +470,14 @@ async function analyze(main,check=()=>{}){
  check();state.running=true;state.cancel=false;state.controller=new AbortController();saveCheckpoint();controls(main);
  // Up to 100 files take ~10 minutes: keep the screen awake so iOS does not suspend the run.
  M.keepAwake?.(true);
- let success=0,failed=0,seen=0;const popup=showAnalysisPopup(main,targets.length);
+ analysisProgress=null;let success=0,failed=0,seen=0;const popup=showAnalysisPopup(main,targets.length);
  try{
   for(const m of targets){
-   if(state.cancel||!main.isConnected||state.controller.signal.aborted)break;
+   if(state.cancel||state.controller.signal.aborted)break;
    seen++;popup.update(seen,m);
    if(!needsScan(m)){const f=resultFor(m);state.results.set(m.id,f);success++;continue}
    try{const result=await stt(m,state.controller.signal,{onProgress:message=>{
-    if(main.isConnected){popup.update(seen,m,message);const progress=root.querySelector('[data-progress]');if(progress)progress.textContent=seen+'/'+targets.length+' · '+M.label(m)+' · '+message}
+    popup.update(seen,m,message);if(main.isConnected){const progress=root.querySelector('[data-progress]');if(progress)progress.textContent=seen+'/'+targets.length+' · '+M.label(m)+' · '+message}
    }});check();setResult(m,result);result.candidate?success++:failed++}
    catch(error){
      const text=String(error.message||error);
@@ -481,7 +489,7 @@ async function analyze(main,check=()=>{}){
    // Allow UI to paint and the browser a chance to reclaim decoded audio between files.
    await pause();
   }
- }finally{popup.close();M.keepAwake?.(false);loadSpend(main);state.running=false;state.controller=null;const progress=root.querySelector('[data-progress]');if(progress)progress.textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
+ }finally{popup.close();analysisProgress=null;M.keepAwake?.(false);loadSpend(main);state.running=false;state.controller=null;const progress=root.querySelector('[data-progress]');if(progress)progress.textContent='후보 '+success+'개 · 미분류/실패 '+failed+'개'+(state.cancel?' · 중지됨':'');if(main.isConnected)draw(main)}
 }
 async function undo(main,check=()=>{}){
  let backup;try{backup=JSON.parse(localStorage.getItem(localStorage.getItem(scoped(backupPointer))||'')||'null')}catch{}
@@ -581,7 +589,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
  <div class="vz-sc-metrics"><div class="vz-sc-metric"><strong data-review-count>—</strong><span>확인 필요</span></div><div class="vz-sc-metric"><strong data-auto-count>—</strong><span>곡 자동 지정</span></div><div class="vz-sc-metric"><strong data-wait-count>—</strong><span>대기·분석 중</span></div></div>
  <div class="vz-sc-status-foot"><span>곡 지정은 확인 후 적용</span><span data-spend hidden></span></div></div>
  <div class="vz-sc-sticky"><div class="vz-sc-section-head"><h2>미지정 녹음</h2><span>식별 실패·분석 실패 포함</span></div>
- <div class="vz-sc-tabs" role="tablist" aria-label="곡 찾기 대상"><button class="vz-sc-tab" type="button" data-category="song" aria-pressed="true">곡 녹음</button><button class="vz-sc-tab" type="button" data-category="lesson" aria-pressed="false">레슨 녹음</button></div>
+ <div class="vz-sc-tabs" role="tablist" aria-label="곡 찾기 대상"><button class="vz-sc-tab" type="button" role="tab" data-category="song" aria-selected="true">곡 녹음</button><button class="vz-sc-tab" type="button" role="tab" data-category="lesson" aria-selected="false">레슨 녹음</button></div>
  <div class="vz-sc-tabs" role="tablist" aria-label="분석 상태"><button class="vz-sc-tab" role="tab" type="button" data-filter="all" aria-selected="true">전체 0</button><button class="vz-sc-tab" role="tab" type="button" data-filter="unknown" aria-selected="false">식별 불가</button><button class="vz-sc-tab" role="tab" type="button" data-filter="failed" aria-selected="false">분석 실패</button><button class="vz-sc-tab" role="tab" type="button" data-filter="complete" aria-selected="false">분석 완료</button></div>
  <div class="vz-sc-selection"><button type="button" class="vz-sc-select-all" data-select-all aria-pressed="false"><span class="vz-sc-checkbox" aria-hidden="true"></span>전체선택</button><div class="vz-sc-selection-end"><span data-counter></span><button type="button" class="vz-sc-selection-more" data-selection-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three" aria-hidden="true"></i></button></div></div></div>
  <div class="vz-sc-list" data-suggest-list></div><button type="button" class="vz-sc-more" data-more hidden>더 보기 <i class="ph ph-caret-down"></i></button><span class="sr-only" data-page-count aria-live="polite"></span>
@@ -605,7 +613,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   root.querySelector('[data-select-all]').onclick=()=>{const scope=filteredItems(),all=scope.length&&scope.every(m=>state.chosen.has(m.id));for(const item of scope)all?state.chosen.delete(item.id):state.chosen.add(item.id);saveCheckpoint();draw(main)};
   root.querySelector('[data-selection-more]').onclick=()=>openSelectionMenu(main);
   root.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{state.filter=button.dataset.filter;state.chosen.clear();saveCheckpoint();state.page=0;draw(main)});
-  root.querySelectorAll('[data-category]').forEach(button=>button.onclick=()=>{if(state.running)return;state.category=button.dataset.category;state.chosen.clear();saveCheckpoint();state.page=0;state.filter='all';root.querySelectorAll('[data-category]').forEach(x=>x.setAttribute('aria-pressed',String(x===button)));draw(main)});
+  root.querySelectorAll('[data-category]').forEach(button=>button.onclick=()=>{if(state.running)return;state.category=button.dataset.category;state.chosen.clear();saveCheckpoint();state.page=0;state.filter='all';root.querySelectorAll('[data-category]').forEach(x=>x.setAttribute('aria-selected',String(x===button)));draw(main)});
   root.querySelector('[data-more]').onclick=()=>{if(!state.running){state.page++;draw(main)}};
   root.querySelector('[data-stop]').onclick=()=>{state.cancel=true;state.controller?.abort();root.querySelector('[data-progress]').textContent='분석을 중단합니다.'};
   root.querySelector('[data-analyze]').onclick=()=>exclusive(main,analyze);

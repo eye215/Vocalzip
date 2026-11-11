@@ -80,7 +80,7 @@ function browser({mockStt=false}={}){
   esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),clock:n=>`${Math.floor((n||0)/60)}:${String((n||0)%60).padStart(2,'0')}`,dateLabel:s=>s||'날짜 없음'},vzipCloudUserId:()=>owner,
   vzipCloudSignedIn:()=>true,vzipCloudAccessToken:async()=> 'fake',
   VzipR2:{clip:async()=>{excerpts++;throw Error('unexpected extraction')}},dispatchEvent(){},addEventListener:(n,f)=>events[n]=f};
- const element=()=>{const children=new Map();return {style:{},setAttribute(){},append(){},add(){},replaceChildren(){},querySelector:key=>{if(!children.has(key))children.set(key,element());return children.get(key)},querySelectorAll:()=>[]}};
+ const element=()=>{const children=new Map();return {style:{},setAttribute(){},append(){},remove(){},add(){},replaceChildren(){},querySelector:key=>{if(!children.has(key))children.set(key,element());return children.get(key)},querySelectorAll:()=>[]}};
  const context={window,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
   fetch:async()=>{paid++;return mockStt?Response.json({enabled:true}):Response.json({error:'STT_DISABLED'},{status:503})}};
@@ -418,4 +418,37 @@ test('title search requests voice detection without full note measurements',asyn
  b.window.VZ.analyzeSamples=async(samples,rate,onProgress,options)=>{requested=options;return {curve:Array(600).fill(6900),fps:20}};
  await b.api.singingStart(new Float32Array(16000*30),16000,new AbortController().signal);
  assert.equal(requested.voiceOnly,true);
+});
+
+
+test('first title match decodes only 30 seconds and stops before further excerpts',async()=>{
+ const b=browser({mockStt:true}),requests=[];let paid=0;
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.vzipCloudSongTextSave=async()=>{};
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:'s1',matches:[{songId:'s1',score:.9}]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async(_item,_signal,options)=>{requests.push(options);return {pcm:new Int16Array(16000*30),rate:16000,duration:300,start:0}},async()=>{paid++;return 'matching lyric'});
+ const result=await b.api.stt({id:'m1',durationSeconds:300},new AbortController().signal);
+ assert.equal(requests.length,1);assert.equal(requests[0].seconds,30);assert.equal(paid,1);assert.equal(result.candidate.id,'s1');
+});
+test('returning during title analysis shows live progress and preserves the completed result',async()=>{
+ const b=browser({mockStt:true});let enter,release,overlay,rendered=0;
+ const entered=new Promise(r=>enter=r),pending=new Promise(r=>release=r);
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.window.VZ.media.recordingCategory=()=> 'song';b.window.VZ.confirm=async()=>true;
+ b.window.VZ.render=()=>rendered++;
+ b.window.vzipCloudSongTextSave=async()=>{};
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.api.state.items=[{id:'m1',name:'진행 중인 녹음',durationSeconds:300}];b.api.state.chosen.add('m1');
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:'s1',matches:[{songId:'s1',score:.9}]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async()=>({pcm:new Int16Array(16000*30),rate:16000,duration:300,start:0}),async()=>{enter();await pending;return 'matching lyric'});
+ const running=b.api.exclusive(b.main,b.api.analyze);
+ await entered;b.main.isConnected=false;
+ b.api.showBusyPopup({isConnected:true,dataset:{collection:'song-suggest'},append:el=>overlay=el});
+ assert.match(overlay.className,/vz-sc-analysis/);
+ assert.match(overlay.querySelector('[data-analysis-file]').textContent,/진행 중인 녹음.*가사 인식/);
+ release();await running;
+ assert.equal(b.api.state.results.get('m1').candidate.id,'s1');assert.equal(rendered,1);
 });

@@ -29,12 +29,16 @@ async function decode(item, onStage) {
   for (let ch = 0; ch < buf.numberOfChannels; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < n; i++) mono[i] += d[i] / buf.numberOfChannels; }
   return {samples:mono, sampleRate:buf.sampleRate, cut:buf.length > n};
 }
-function runWorker(samples, sampleRate, onProgress, {voiceOnly = false} = {}) {
+function runWorker(samples, sampleRate, onProgress, {voiceOnly = false, signal} = {}) {
   return new Promise((resolve, reject) => {
+    if(signal?.aborted){reject(new DOMException('분석 중단','AbortError'));return;}
     let w;
     try { w = new Worker(WORKER); } catch (e) { reject(e); return; }
-    w.onmessage = e => { const d = e.data; if (d.progress != null) onProgress(d.progress); else { w.terminate(); d.error ? reject(Error(d.error)) : resolve(d.result); } };
-    w.onerror = e => { w.terminate(); reject(Error(e.message || '분석 중 오류가 났어요.')); };
+    const cleanup=()=>{signal?.removeEventListener('abort',abort);w.terminate()};
+    const abort=()=>{cleanup();reject(new DOMException('분석 중단','AbortError'))};
+    signal?.addEventListener('abort',abort,{once:true});
+    w.onmessage = e => { const d = e.data; if (d.progress != null) onProgress(d.progress); else { cleanup(); d.error ? reject(Error(d.error)) : resolve(d.result); } };
+    w.onerror = e => { cleanup(); reject(Error(e.message || '분석 중 오류가 났어요.')); };
     w.postMessage({samples, sampleRate, voiceOnly}, [samples.buffer]);
   });
 }
