@@ -49,20 +49,20 @@ function form(month,items,rows){
   '<p class="small muted">확인된 후보를 눌러 구간을 채우거나, 직접 시작·종료 시간을 입력할 수 있어요. 계획은 등록 버튼을 누르기 전까지 저장되지 않아요.</p>'+
   '<button class="btn block" type="submit">이 계획을 오늘부터 등록</button><p class="small muted" data-plan-message role="status"></p></form>';
 }
-const measurePaths={intonation:['intonation','meanAbsCents'],stability:['stability','wobbleCents'],
- phrase:['breath','medianPhrase'],vibrato:['vibrato','regularity']};
 function compareSongTakes(plan,items){
- const path=measurePaths[plan.metric],song=items.filter(m=>m.songId===plan.songId&&m.analysis?.metrics&&V.analysisReliable?.(m.analysis));
- const value=m=>{let n=m.analysis.metrics;for(const key of path)n=n?.[key];return Number.isFinite(n)?n:null;};
- const before=song.filter(m=>(M.dateOf(m)||'')<plan.startDate).map(value).filter(n=>n!=null);
- const after=song.filter(m=>(M.dateOf(m)||'')>=plan.startDate).map(value).filter(n=>n!=null);
- if(!before.length||!after.length)return '<p class="small muted">성장 재측정 대기 · 계획 시작 전후 동일 곡의 분석된 녹음이 필요해요.</p>';
- const a=before.reduce((x,y)=>x+y,0)/before.length,b=after.reduce((x,y)=>x+y,0)/after.length,
-    change=b-a,good=plan.metric==='intonation'||plan.metric==='stability'?change<0:change>0,
-    formatted=n=>(plan.metric==='vibrato'?Math.round(n*100):Math.round(n*10)/10);
- return '<p class="small muted">녹음 변화 참고: '+formatted(a)+' → '+formatted(b)+(plan.metric==='vibrato'?'%':'')+
-  ' ('+(Math.abs(change)<0.001?'변화 미미':good?'개선 방향':'변화 확인 필요')+') · 계획 전 '+before.length+'개 / 이후 '+after.length+
-  '개. 전체 녹음 기준이므로 지정 구간의 향상을 입증하지는 않아요.</p>';
+ const model=window.VzipPlanOutcome;
+ if(!model?.measurement)return '';
+ let m;
+ try{
+  m=model.measurement(plan,items,M.dateOf,x=>x.analysis?.v===1&&V.analysisReliable?.(x.analysis));
+ }catch{return '<p class="small muted">저장된 계획의 날짜나 측정 기준을 확인해 주세요.</p>';}
+ if(m.change==='insufficient')
+  return '<p class="small muted">성장 재측정 대기 · 계획 시작 전과 계획 기간 중의 동일 곡 분석 녹음이 필요해요.</p>';
+ const formatted=n=>plan.metric==='vibrato'?Math.round(n*100)+'%':n+(plan.metric==='phrase'?'초':' cent');
+ const state=m.change==='better'?'개선 방향':m.change==='worse'?'추가 확인 필요':'큰 변화 없음';
+ return '<p class="small muted">전체 녹음 변화 참고: '+formatted(m.before)+' → '+formatted(m.after)+
+  ' ('+state+') · 계획 전 '+m.beforeCount+'개 / 계획 중 '+m.afterCount+
+  '개. 지정 구간 개선이나 악보 기준 음정 정확도를 뜻하지 않아요.</p>';
 }
 
 function card(plan,items){
