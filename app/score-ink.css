@@ -310,7 +310,5 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
 .score-ink-compact .score-ink-pages [data-ink-page]{flex:1;min-width:52px;width:auto;font-size:13px}
 .score-ink-compact .score-ink-pages select{margin-left:4px;min-height:40px;max-width:92px;padding:4px 6px;font-size:12px}
 .score-ink-compact .score-audio{max-width:none;margin-bottom:0}
-/* Fullscreen: one-line page row floating over the bottom of the score, hidden while nothing moves. */
+/* The page row is one line under the score in both views; it never floats over the score. */
 .score-ink-compact .score-ink-pages [data-ink-page]{white-space:nowrap}
-.score-ink-compact.score-ink-fullscreen .score-ink-pages{position:absolute;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:8;padding:0 4px;border-radius:14px;background:#ffffffee;box-shadow:0 6px 18px rgba(16,24,40,.14);transition:opacity .25s ease}
-.score-ink-compact.score-ink-fullscreen[data-ink-idle=true] .score-ink-pages{opacity:0;pointer-events:none}

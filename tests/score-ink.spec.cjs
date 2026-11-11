@@ -522,6 +522,8 @@ test('compact viewer: song title on top with 다른 악보 icon, one tool row en
  const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
  const popup=dialog.locator('[data-ink-status]');
  await expect(popup).toBeVisible();await expect(popup).toHaveCSS('position','absolute');
+ // The complete PDF is downloading meanwhile, and its progress is what the popup shows.
+ await expect(popup).toContainText(/악보 불러오는 중 \d+%|PDF를 준비하고 있어요/);
  if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-loading-'+test.info().project.name+'.png'});
  release();
  await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
@@ -574,17 +576,14 @@ test('무대용 보기 after the ink check: one finger swipes pages and drawing 
  await swipe(page,dialog,{fingers:1,dx:170});await expect(pageLabel).toHaveText('1 / 2쪽');
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
 });
-test('fullscreen page row is one line over the score and hides while nothing moves',async({page})=>{
+test('fullscreen page row is one line under the score, never over it',async({page})=>{
  await setup(page);const dialog=await open(page);
  await act(dialog,'전체화면');await expect(dialog).toHaveClass(/score-ink-fullscreen/);
  const pages=dialog.locator('.score-ink-pages');
- await expect(pages).toHaveCSS('position','absolute');
- const box=await pages.boundingBox();expect(box.height).toBeLessThan(56);
- await expect(pages).toHaveCSS('opacity','1');
- await expect.poll(()=>pages.evaluate(el=>getComputedStyle(el).opacity),{timeout:6000}).toBe('0');
- const stage=await dialog.locator('[data-ink-stage]').boundingBox();
- await page.mouse.click(stage.x+stage.width/2,stage.y+stage.height/2);
- await expect.poll(()=>pages.evaluate(el=>getComputedStyle(el).opacity)).toBe('1');
+ await expect(pages).toHaveCSS('position','static');
+ const box=await pages.boundingBox(),stage=await dialog.locator('[data-ink-stage]').boundingBox();
+ expect(box.height).toBeLessThan(56);expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
+ await page.waitForTimeout(3000);await expect(pages).toHaveCSS('opacity','1'); // stays visible
 });
 test('fullscreen: the loading popup stays a small pill and the page row never covers the audio bar',async({page})=>{
  await setup(page);
@@ -600,7 +599,8 @@ test('fullscreen: the loading popup stays a small pill and the page row never co
  release();await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
  await page.mouse.click(10,10);
  const pages=await dialog.locator('.score-ink-pages').boundingBox(),bar=await dialog.locator('[data-score-audio]').boundingBox(),stage=await dialog.locator('[data-ink-stage]').boundingBox();
- expect(pages.y+pages.height).toBeLessThanOrEqual(bar.y+1); // above the audio bar
- expect(pages.y+pages.height).toBeLessThanOrEqual(stage.y+stage.height+1); // over the score
+ // Score, then the audio bar, then the page row: nothing overlaps.
+ expect(bar.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
+ expect(pages.y).toBeGreaterThanOrEqual(bar.y+bar.height-1);
  if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-full-ready-'+test.info().project.name+'.png'});
 });
