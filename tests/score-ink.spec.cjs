@@ -436,3 +436,17 @@ test('failed group movement preserves a recovery copy, retries once, and undo re
  await dialog.getByRole('button',{name:'필기 되돌리기',exact:true}).click();
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.points))).toEqual(before);
 });
+test('MR 재생 · 녹음 · MR+녹음 sit directly under the score page and leave with the viewer',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>window.VZ.change(d=>{d.songs[0].mrTracks=[{id:'mr-1',kind:'file',title:'연습 MR',r2Key:'u/ui-test-user/mr-1/original.m4a',type:'audio/mp4',created:Date.now()}];}));
+ const dialog=await open(page),bar=dialog.locator('[data-score-audio]');
+ await expect(bar).toBeVisible();
+ await expect(bar.getByRole('button')).toHaveText(['MR 재생','녹음','MR+녹음']);
+ await expect(bar).toContainText('연습 MR');
+ const stage=await dialog.locator('[data-ink-stage]').boundingBox(),box=await bar.boundingBox();
+ expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
+ expect(await bar.evaluate(el=>el.previousElementSibling?.matches('[data-ink-stage]'))).toBe(true);
+ if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-'+test.info().project.name+'.png'});
+ await dialog.getByRole('button',{name:'완료',exact:true}).click();
+ await expect(page.locator('[data-score-audio]')).toHaveCount(0);
+});
