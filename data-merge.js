@@ -55,6 +55,18 @@ function unlinkMedia(data, ids) {
     ...(p.practiceRoom?.audioIds ? {practiceRoom:{...p.practiceRoom,audioIds:p.practiceRoom.audioIds.filter(a => !gone.has(a.id))}} : {})
   } : p);
   if (data.lessons) data.lessons = data.lessons.map(l => l.recordings ? {...l, recordings:l.recordings.filter(r => !gone.has(r.id))} : l);
+  // New training plans may hold an optional source recording. Preserve the plan,
+  // schedule and outcome numbers, but do not retain a dangling link to a deleted file.
+  if (data.practicePlans) data.practicePlans = data.practicePlans.map(p =>
+    gone.has(p.reviewRecordingId) ? {...p, reviewRecordingId:''} : p);
+  if (data.vocalPlanReports) data.vocalPlanReports = data.vocalPlanReports.map(r => {
+    const m = r.measurement;
+    if (!m || !Array.isArray(m.beforeIds) && !Array.isArray(m.afterIds)) return r;
+    const beforeIds = Array.isArray(m.beforeIds) ? m.beforeIds.filter(id=>!gone.has(id)) : m.beforeIds;
+    const afterIds = Array.isArray(m.afterIds) ? m.afterIds.filter(id=>!gone.has(id)) : m.afterIds;
+    // The immutable measured values remain as a historical snapshot; only dead links go.
+    return {...r,measurement:{...m,beforeIds,afterIds}};
+  });
   if (data.comparisonReports) data.comparisonReports = data.comparisonReports.map(original => {
     const r = {...original};
     for (const key of ['firstId', 'secondId']) if (gone.has(r[key])) r[key] = '';
