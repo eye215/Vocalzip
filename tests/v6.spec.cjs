@@ -103,13 +103,13 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
  await page.locator('.vl-plot-dates button').first().click();
- await expect(page.locator('.sheet')).toContainText('지속음의 음정 흔들림');
+ await expect(page.locator('.sheet')).toContainText('소리의 음높이 흔들림');
  await page.locator('.sheet [data-close-observe]').click();
  await page.locator('[data-save-report]').click();
  await page.goto('/#/lab-reports');
  await expect(page.locator('.vl-report')).toHaveCount(1);
  await page.locator('.vl-report').click();
- await expect(page.locator('.vl-player-head')).toContainText('1 / 2');
+ await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
  await page.goto('/#/song/s1');
  await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(0);
 });
