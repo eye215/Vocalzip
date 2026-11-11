@@ -197,3 +197,47 @@ test('performance attachments use private R2 and reject active content',async()=
  assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-no-purpose',contentType:'image/png',size:10,ext:'png'}})).status,400);
  assert.equal((await call('/v1/media/'+start.key,{method:'DELETE',auth:alice})).status,200);
 });
+
+test('share links: owner creates, anyone with the link plays (Range, download), others cannot manage, revoke and expiry stop it at once', async () => {
+  const alice = await token(ALICE), bob = await token(BOB);
+  const bytes = new Uint8Array(4096).map((_, i) => i % 251);
+  const up = await upload(alice, 'share-1', bytes);
+  // Only the owner of the file can create a link; only recordings.
+  assert.equal((await call('/v1/shares', {method:'POST', auth:bob, body:{key:up.key, expiresIn:86400}})).status, 403);
+  assert.equal((await call('/v1/shares', {method:'POST', auth:alice, body:{key:up.key, expiresIn:60}})).status, 400);
+  const made = await (await call('/v1/shares', {method:'POST', auth:alice, body:{key:up.key, mediaId:'share-1', title:'레슨 녹음', expiresIn:7 * 86400}})).json();
+  assert.match(made.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.ok(made.expires > Date.now() + 6 * 86400e3);
+  // No sign-in needed for the link.
+  const meta = await call('/v1/share/' + made.token + '/meta', {headers:{origin:''}});
+  assert.equal(meta.status, 200);
+  assert.deepEqual((({title, size}) => ({title, size}))(await meta.json()), {title:'레슨 녹음', size:4096});
+  const part = await call('/v1/share/' + made.token + '/media', {headers:{range:'bytes=100-199'}});
+  assert.equal(part.status, 206);
+  assert.deepEqual([...new Uint8Array(await part.arrayBuffer())], [...bytes.subarray(100, 200)]);
+  assert.equal(part.headers.get('cache-control'), 'no-store');
+  const dl = await call('/v1/share/' + made.token + '/media?download=' + encodeURIComponent('레슨 녹음.m4a'));
+  assert.match(dl.headers.get('content-disposition'), /attachment/);
+  await dl.arrayBuffer();
+  // Listing is the owner's own; another account sees nothing and cannot revoke it.
+  assert.equal((await (await call('/v1/shares', {auth:alice})).json()).shares[0].token, made.token);
+  assert.deepEqual((await (await call('/v1/shares', {auth:bob})).json()).shares, []);
+  assert.deepEqual(await (await call('/v1/shares/' + made.id, {method:'DELETE', auth:bob})).json(), {ok:false});
+  assert.equal((await call('/v1/share/' + made.token + '/meta')).status, 200);
+  // Share records never show up as the owner's files or usage.
+  const objects = (await (await call('/v1/objects', {auth:alice})).json()).objects;
+  assert.ok(objects.every(o => o.key.startsWith('u/' + ALICE + '/')));
+  // Revoke: the next request is refused.
+  assert.deepEqual(await (await call('/v1/shares/' + made.id, {method:'DELETE', auth:alice})).json(), {ok:true});
+  assert.equal((await call('/v1/share/' + made.token + '/media')).status, 404);
+  assert.deepEqual((await (await call('/v1/shares', {auth:alice})).json()).shares, []);
+  // "Until revoked" links have no expiry; an expired link answers 410.
+  const forever = await (await call('/v1/shares', {method:'POST', auth:alice, body:{key:up.key, expiresIn:null}})).json();
+  assert.equal(forever.expires, null);
+  const bucket = await mf.getR2Bucket('MEDIA'), hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(forever.token))).toString('hex');
+  const rec = await (await bucket.get('shares/' + hash)).json();
+  await bucket.put('shares/' + hash, JSON.stringify({...rec, expires:Date.now() - 1000}));
+  assert.equal((await call('/v1/share/' + forever.token + '/media')).status, 410);
+  // A made-up token is just not found.
+  assert.equal((await call('/v1/share/' + 'x'.repeat(43) + '/meta')).status, 404);
+});
