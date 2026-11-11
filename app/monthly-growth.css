@@ -104,7 +104,7 @@
 .growth-metric-picks::-webkit-scrollbar{display:none}
 .growth-metric-picks button{min-height:37px;white-space:nowrap;flex:none;border-radius:999px;padding:7px 12px;border:1px solid #e5dfef;background:#f8f6fb;color:#71687e;font-size:12px;font-weight:700;cursor:pointer}
 .growth-metric-picks button.active{background:#5b3e8c;border-color:#5b3e8c;color:#fff}
-.growth-chart{display:grid;grid-template-columns:repeat(auto-fit,minmax(30px,1fr));gap:6px;align-items:end;min-height:196px;padding:25px 13px 13px;background:linear-gradient(160deg,#29233a,#17172a);border-radius:17px;margin:15px 0}
+.growth-chart{display:grid;grid-template-columns:repeat(var(--growth-point-count,12),minmax(0,1fr));gap:3px;align-items:end;min-height:196px;padding:25px 13px 13px;background:linear-gradient(160deg,#29233a,#17172a);border-radius:17px;margin:15px 0}
 .growth-chart-point{border:0;padding:0 0 2px;display:grid;grid-template-rows:1fr auto;align-items:end;gap:7px;background:transparent;cursor:pointer;min-width:0;color:#eee3ff;height:155px}
 .growth-chart-track{display:flex;align-items:flex-end;justify-content:center;height:130px;width:100%;border-bottom:1px solid #5e546d}
 .growth-chart-track i{display:block;width:100%;max-width:21px;min-height:7px;border-radius:7px 7px 3px 3px;background:linear-gradient(#bd95ff,#7c49d1);box-shadow:0 0 12px rgba(139,87,219,.22);transition:height .2s}
