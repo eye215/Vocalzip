@@ -232,3 +232,11 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
 .vl-growth-ai-text{margin-top:12px;padding-top:12px;border-top:1px solid #ffffff22;color:#f2e4ff;font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
 .vl-growth-ai-text[hidden]{display:none}
 @media(max-width:375px){.vl-growth-top{align-items:flex-start}.vl-growth-count{font-size:10px}.vl-growth-ai{padding:13px}.vl-growth-ai-head button{font-size:11px}}
+
+/* Expanded native selects must not contribute their longest option to page width. */
+.vl-compare details,.vl-compare-body,.vl-compare-picks>label,.vl-compare form,.vl-compare form>label{min-width:0;max-width:100%}
+.vl-compare-body{contain:inline-size;overflow-wrap:anywhere}
+.vl-compare select,.vl-compare textarea{box-sizing:border-box;max-width:100%;font-size:16px}
+.vl-compare select{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:32px}
+.vl-compare form{grid-template-columns:minmax(0,1fr)}
+.vl-compare-actions button{min-width:0;overflow-wrap:anywhere}
