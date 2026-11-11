@@ -54,7 +54,14 @@ function rowsHtml(rows) {
  return '<div class="growth-metrics">'+rows.map(({d,current,c})=>{
   const label=c?(c.state==='better'?'개선':c.state==='worse'?'보완 필요':'비슷함'):'비교 불가';
   const tone=c?.state==='better'?'good':c?.state==='worse'?'bad':'';
-  return '<article class="card growth-metric"><div class="growth-metric-head"><strong>'+e(d.title)+'</strong><span class="growth-state '+tone+'">'+label+'</span></div><strong class="growth-number">'+e(format(current.value,d))+'</strong><p class="small muted">이번 달 유효 측정 '+current.count+'개</p>'+(c?'<p class="small">동일 곡 '+c.songs+'곡 비교 · 이전 '+e(format(c.before,d))+' → 이번 '+e(format(c.after,d))+'</p>':'<p class="small muted">동일 곡의 전월 유효 측정이 필요해요.</p>')+'</article>';
+  const help={
+   intonation:'낮을수록 가까운 반음 기준 음높이 오차가 작아요. 악보의 실제 음정 정답률을 뜻하지 않아요.',
+   stability:'낮을수록 지속음의 흔들림이 적게 관찰돼요. 발성 건강을 평가하지 않아요.',
+   phrase:'길수록 한 번에 이어 부른 시간이 길어요. 더 길다고 무조건 더 좋은 호흡은 아니에요.',
+   vibrato:'높을수록 규칙적인 진동이 관찰돼요. 비브라토의 미적 수준을 판정하지 않아요.'
+  };
+  return '<article class="card growth-metric"><div class="growth-metric-head"><strong>'+e(d.title)+'</strong><span class="growth-state '+tone+'">'+label+'</span></div><strong class="growth-number">'+e(format(current.value,d))+'</strong><p class="small muted">이번 달 유효 측정 '+current.count+'개</p>'+(c?'<p class="small">동일 곡 '+c.songs+'곡 비교 · 이전 '+e(format(c.before,d))+' → 이번 '+e(format(c.after,d))+'</p>':'<p class="small muted">동일 곡의 전월 유효 측정이 필요해요.</p>')+
+   '<details class="growth-measure-help"><summary>수치 읽는 법</summary><p>'+e(help[d.id]||'이 값은 음성 측정의 참고 수치예요.')+'</p></details></article>';
  }).join('')+'</div>';
 }
 function prescriptions(rows){
@@ -203,7 +210,7 @@ async function mount(host){
    const rows=monthlyRows(selected,months);
    const validCount=current.filter(valid).length;
    host.innerHTML=pageHead+tabs()+'<header class="growth-intro"><p class="small muted">선택한 달의 기록</p><h2>월별 변화</h2><label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label><p class="small muted">곡 녹음 '+current.length+'개 · 신뢰 가능한 보컬 분석 '+validCount+'개 · 분석하지 않은 녹음은 계산에서 제외</p></header>'+
-   archiveCard(selected)+narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+listeningEvidence(selected)+monthlyAiCard(selected)+prescriptions(rows)+'<div data-monthly-plans></div>'+history(months)+
+   narrative(rows,selected,previous.length?prev:'')+rowsHtml(rows)+monthlyAiCard(selected)+listeningEvidence(selected)+prescriptions(rows)+'<div data-monthly-plans></div>'+archiveCard(selected)+history(months)+
    '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있습니다. 전월과 동일한 곡이 없으면 성장/악화로 판정하지 않습니다. 호흡 지지, 발성 건강, 감정 표현은 이 측정만으로 판단하지 않습니다. 지난달 리포트는 앱에 접속해 성장 화면을 열 때 저장됩니다. AI 종합 코치는 사용자가 분석 버튼을 눌렀을 때만 호출됩니다.</p>';
 
    const aiButton=host.querySelector('[data-monthly-ai-run]');
