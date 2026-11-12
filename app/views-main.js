@@ -611,7 +611,12 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
         VZ.mediaSelection?.hideSongAction();
         return;
       }
-      if (songTab === 'scores') VZ.renderScores ? VZ.renderScores(body, s) : (body.innerHTML = '');
+      if (songTab === 'scores') {
+        // The score list keeps its own host; the reference range (악보 기준 음역) sits below it.
+        body.innerHTML = '<div data-score-list></div><div data-vocal-range></div>';
+        if (VZ.renderScores) VZ.renderScores(body.querySelector('[data-score-list]'), s);
+        VZ.vocalRangeCard?.(body.querySelector('[data-vocal-range]'), VZ.song(s.id) || s);
+      }
       else if (songTab === 'lyrics') {
         const current = VZ.song(s.id) || s;
         const fields = [['lyrics','가사 원문',30000,11],['translation','한글 해석 / 번역',30000,8],['lyricNotes','발음 / 호흡 / 감정 메모',12000,7]];
