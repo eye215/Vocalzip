@@ -5,7 +5,7 @@ const V = window.VZ, M = V?.media, esc = V?.esc;
 if (!V || !M) return;
 const METRICS = [
   {key:'wob',label:'음정 안정성',unit:'cent',get:a=>a?.metrics?.stability?.wobbleCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'지속해서 낸 소리의 음높이 흔들림입니다(비브라토 제외). 낮을수록 안정적이에요. 음정 정확도와 따로 봐요.'},
-  {key:'into',label:'음정 정확도',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'가장 가까운 반음과의 평균 오차(cent)입니다. 악보·기준 멜로디와 음표 단위로 비교할 데이터가 없어 맞는 음을 불렀는지는 판단하지 않아요. 낮을수록 반음 칸에 정확히 맞아요.'},
+  {key:'into',label:'음정 정확도',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'가장 가까운 반음과의 평균 오차(cent)입니다. 이 값만으로는 맞는 음을 불렀는지는 판단하지 않아요(악보와 음표 단위로 맞춰 보려면 구간 분석의 음표 단위 비교를 쓰세요). 낮을수록 반음 칸에 정확히 맞아요.'},
   {key:'high',label:'유효 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.validHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.validHigh?.note||'—',better:0,tolerance:50,guide:'0.2초 이상 지속되고 신뢰도·연속성 조건을 충족한 음입니다. 순간 최고음은 성장 평가에 쓰지 않아요.'},
   {key:'stable',label:'안정 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.stableHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.stableHigh?.note||'—',better:0,tolerance:50,guide:'0.5초 이상 지속되고 흔들림·신뢰도 조건을 충족한 음입니다. 실력의 좋고 나쁨을 단정하지 않아요.'},
   {key:'phr',label:'프레이즈 길이',unit:'초',get:a=>a?.metrics?.breath?.medianPhrase,fmt:v=>v+'초',better:0,tolerance:.2,guide:'한 구절을 이어 부른 시간의 중앙값(참고값)입니다. 호흡 유지는 아래 성장 리포트에서 같은 프레이즈끼리 템포를 보정해 비교해요.'},
@@ -92,7 +92,7 @@ const G=window.VzipGrowthMetrics;
 const songReference=song=>{const r=(V.song?.(song?.id)||song)?.vocalRange;return r&&Number.isFinite(r.highMidi)?r:null;};
 const labTakes=s=>s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m))
  .map(m=>({id:m.id,a:analysis(m),date:String(M.dateOf(m)||'').slice(0,10),ok:!!V.analysisReliable(analysis(m))}));
-const labReport=s=>G?G.songReport(labTakes(s),{reference:songReference(s.song)}):null;
+const labReport=s=>G?G.songReport(labTakes(s),{reference:songReference(s.song),scoreNotes:(V.song?.(s.song.id)||s.song)?.noteCompare?.takes||null}):null;
 const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+s.selected.slice().sort().join(',');
 const savedGrowthReport=s=>(V.db.practicePlans||[]).find(x=>x.id===labGrowthId(s)&&x.period==='vocal-growth-ai'&&x.evidenceKey===growthEvidenceKey(s));
 function growthEvidenceKey(s){
@@ -261,7 +261,7 @@ function makeSegment(s,m) {
   const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
   const slice=full?.curve?.map((v,i)=>({t:i/full.fps,value:v==null?null:((v%100)+150)%100-50})).filter(p=>p.t>=start&&p.t<=end&&p.value!=null)||[];
   const sampled=slice.filter((_,i)=>i%Math.max(1,Math.ceil(slice.length/25))===0);
-  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+highEvidence(m)+(V.vocalRangeCompare?V.vocalRangeCompare(s.song,analysis(m),{playable:true}):'')+
+  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+highEvidence(m)+(V.vocalRangeCompare?V.vocalRangeCompare(s.song,analysis(m),{playable:true}):'')+(V.scoreNoteBlock?V.scoreNoteBlock(s.song,m):'')+
     '<div class="vl-ruler" aria-hidden="true"><span>−50</span><i></i><span>0</span><i></i><span>+50</span></div>'+
     (full?(sampled.length?'<div class="vl-segment-chart"><div class="vl-chart-heading">선택 구간의 음정 편차 (cent)</div>'+plot(sampled.map(x=>({value:x.value,label:time(x.t)})),{height:115})+'</div>':'<p class="vl-muted">이 구간에서 목소리를 측정하지 못했어요.</p>'):'<button type="button" class="vl-analyze" data-analyze>이 구간 그래프 보기 <i class="ph ph-arrow-right"></i></button>')+
     '<label class="vl-range-label">분석할 구간 이동<input type="range" min="0" max="'+Math.max(0,Math.floor(total-16))+'" value="'+Math.min(start,Math.max(0,Math.floor(total-16)))+'" data-start aria-label="구간 시작 위치"></label><p class="vl-muted" data-analyze-status aria-live="polite">'+(full?'파형과 수치는 실제 녹음 분석 결과예요.':'그래프는 이 녹음을 분석하면 표시돼요.')+'</p></section>';
@@ -343,6 +343,7 @@ function screen(s) {
   const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;seek.value=d?Math.round(el.currentTime/d*1000):0;host.querySelector('[data-time]').textContent=time(el.currentTime);host.querySelector('[data-duration]').textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
   el.addEventListener('timeupdate',()=>{if(s.loop&&el.currentTime>=Math.min(el.duration||Infinity,(s.start[m.id]||0)+16))el.currentTime=s.start[m.id]||0;paint();}); el.addEventListener('play',paint);el.addEventListener('pause',paint);el.addEventListener('loadedmetadata',paint); el.addEventListener('error',paint);paint();
   V.vocalRangeBind?.(host,s.song,()=>{if(!s.dead)screen(s);});
+  V.scoreNoteBind?.(host,{song:s.song,item:m,player,full:()=>s.results.get(m.id),keep:full=>{if(!s.dead)s.results.set(m.id,full);}});
   host.querySelectorAll('[data-seek-at]').forEach(b=>b.onclick=()=>{
     if(V.analysisPlayAt)V.analysisPlayAt(player,b.dataset.seekAt);
     else{player.seek(Math.max(0,Number(b.dataset.seekAt)-1));if(el.paused)player.play();}
