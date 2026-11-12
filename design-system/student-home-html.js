@@ -30,7 +30,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-today-line{display:flex;align-items:center;gap:10px;margin:0 4px 8px;font-size:13px;line-height:18px;font-weight:600;color:var(--vz-color-ink-secondary,#475467);}
 #vocalzip-refined-preview .vz-today-streak{display:inline-flex;align-items:center;gap:3px;color:var(--vz-color-ink-muted,#667085);}
 #vocalzip-refined-preview .vz-today-streak[data-active="true"]{color:var(--vz-color-flame,#ba7d52);}
-#vocalzip-refined-preview .vz-today-streak .vz-ui-icon{font-size:16px;}
+#vocalzip-refined-preview .vz-today-streak .vz-ui-icon{width:16px;height:16px;font-size:16px;}
 #vocalzip-refined-preview .vz-summary{display:block;margin:12px 0 0;padding:4px 12px 4px 16px;border-radius:20px;background:#fff;}
 #vocalzip-refined-preview .vz-summary[hidden],#vocalzip-refined-preview .vz-recent[hidden],#vocalzip-refined-preview .vz-schedule[hidden]{display:none;}
 #vocalzip-refined-preview .vz-summary-row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:0;border:0;background:none;color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
@@ -46,7 +46,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-summary-row[data-tone="done"] .vz-summary-badge{color:var(--vz-color-success,#23855C);}
 #vocalzip-refined-preview .vz-summary-row>.vz-ui-icon:last-child:not(:first-child){flex:none;font-size:15px;color:#98A2B3;}
 #vocalzip-refined-preview .vz-summary-row:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px;}
-#vocalzip-refined-preview .vz-recent{margin:16px 0 0;}
+#vocalzip-refined-preview .vz-recent{margin:16px 0 12px;}
 #vocalzip-refined-preview .vz-recent-heading{margin:0 4px 8px;font-size:15px;line-height:21px;font-weight:600;color:var(--vz-color-ink,#101828);}
 #vocalzip-refined-preview .vz-recent-pills{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:0 0 2px;}
 #vocalzip-refined-preview .vz-recent-pills::-webkit-scrollbar{display:none;}
@@ -54,6 +54,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-recent-pill span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #vocalzip-refined-preview .vz-recent-pill .vz-ui-icon{flex:none;font-size:18px;color:var(--vz-color-accent,#7A32F5);}
 #vocalzip-refined-preview .vz-recent-pill:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;}
+#vocalzip-refined-preview .vz-goal-list>[hidden]{display:none;}
 #vocalzip-refined-preview .vz-goal-more{display:block;width:100%;min-height:44px;margin:4px 0 0;border:0;border-radius:14px;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:13px;font-weight:600;cursor:pointer;}
 #vocalzip-refined-preview .vz-week{touch-action:pan-y;}
 #vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"] b,#vocalzip-refined-preview .vz-week .vz-time[data-target-met="true"]>span{color:var(--vz-color-accent);}
