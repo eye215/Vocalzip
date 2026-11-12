@@ -143,7 +143,9 @@ test('Representative take references the original file and deletion clears only 
   write(0,'RIFF');view.setUint32(4,bytes.length-8,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,bytes.length-44,true);
   await window.vzipStorePracticeMedia({id:'take1',name:'대표 녹음',songId:'song1',type:'audio/wav',durationSeconds:3,created:Date.now(),blob:new Blob([bytes],{type:'audio/wav'})});VZ.media.invalidate();
  });
- await page.goto('/#/song/song1');await page.locator('[data-take]').click();await dialog(page).getByLabel('기존 녹음',{exact:true}).selectOption('take1');await save(page);
+ await page.goto('/#/song/song1');await page.locator('[data-take]').click();await dialog(page).getByLabel('기존 녹음',{exact:true}).selectOption('take1');
+ // A background refresh can drop the kept list while the sheet is open (seen intermittently on WebKit): the take must still show.
+ await page.evaluate(()=>VZ.media.invalidate());await save(page);
  await expect(page.locator('[data-take-player]')).toContainText('대표 녹음');expect((await page.evaluate(()=>vzipReadMedia())).length).toBe(1);
  await page.locator('[data-take-player] [data-toggle]').click();
  await expect.poll(()=>page.locator('[data-take-player] .media-open').evaluate(el=>el._player?.el?.currentTime||0)).toBeGreaterThan(0);
