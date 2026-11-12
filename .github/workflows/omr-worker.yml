@@ -29,6 +29,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: write # only to start the next run while scores are still waiting (GitHub's 10-minute schedule can lag for hours)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,10 +40,17 @@ jobs:
           path: ~/audiveris-deb
           key: audiveris-deb-ubuntu24-v1
       - name: Convert waiting scores
+        id: convert
         env:
           OMR_MAX_JOBS: ${{ inputs.max_jobs }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node worker/omr-worker.mjs
+      # A run that converted (or tried) scores starts the next one itself; a run that found nothing ends the chain.
+      - name: Continue while scores wait
+        if: success() && steps.convert.outputs.processed != '' && steps.convert.outputs.processed != '0' && inputs.max_jobs == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run omr-worker.yml --ref "${{ github.ref_name }}" -R "$GITHUB_REPOSITORY" && echo "started the next run"
 
   # Pull requests: install the same engine and convert a freshly engraved public-domain melody, so an engine or
   # script change is checked end to end without touching any user's score.
