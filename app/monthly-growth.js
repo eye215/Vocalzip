@@ -184,13 +184,15 @@ async function mount(host){
   const keys=[...new Set([ym(V.today()),...months.keys(),...(V.db.monthlyGrowthReports||[]).map(r=>r.month),...(V.db.practicePlans||[]).filter(p=>p.kind==='monthly-vocal').map(p=>ym(p.sourceMonth||p.startDate))].filter(Boolean))].sort().reverse();
   const currentKey=ym(V.today());
   let selected=keys.includes(currentKey)?currentKey:keys[0];
-  let mode='overall';
+  // 주간 요약 (its own route) links back here with ?mode=monthly.
+  let mode=new URLSearchParams(location.hash.split('?')[1]||'').get('mode')==='monthly'?'monthly':'overall';
   const overall=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid,reference:referenceOf,title:id=>V.songTitle(id)});
   const overallUi=window.VzipOverallGrowthUI;
   const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>'+(V.voiceCheck?.entryHtml?.()||'');
   const tabs=()=>'<div class="growth-view-tabs" role="group" aria-label="성장 분석 범위">'+
    '<button type="button" data-growth-mode="overall" aria-pressed="'+(mode==='overall')+'" class="'+(mode==='overall'?'active':'')+'">전체 분석</button>'+
-   '<button type="button" data-growth-mode="monthly" aria-pressed="'+(mode==='monthly')+'" class="'+(mode==='monthly'?'active':'')+'">월별 분석</button></div>';
+   '<button type="button" data-growth-mode="monthly" aria-pressed="'+(mode==='monthly')+'" class="'+(mode==='monthly'?'active':'')+'">월별 분석</button>'+
+   (window.VzipWeeklySummary?'<a class="growth-weekly-tab" href="#/weekly-summary">주간 요약</a>':'')+'</div>';
   const bindTabs=()=>host.querySelectorAll('[data-growth-mode]').forEach(btn=>btn.onclick=()=>{
    if(btn.dataset.growthMode===mode)return;
    mode=btn.dataset.growthMode;render();

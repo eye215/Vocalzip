@@ -154,6 +154,15 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-guided-copy strong{color:var(--vz-color-ink);font-size:13px;line-height:19px;}
 #vocalzip-refined-preview .vz-guided-copy small{color:var(--vz-color-ink-muted);font-size:11px;line-height:17px;margin-top:2px;}
 #vocalzip-refined-preview .vz-guided-item button{flex:none;min-height:44px;border:0;border-radius:12px;padding:0 10px;background:var(--vz-color-selected-bg,#eee5ff);color:var(--vz-color-accent);font-size:12px;font-weight:700;cursor:pointer;}
+#vocalzip-refined-preview .vz-pset-entry{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:0 12px 0 16px;border:0;border-radius:16px;background:var(--vz-color-accent-soft,#F3ECFF);color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
+#vocalzip-refined-preview .vz-pset-entry[hidden]{display:none;}
+#vocalzip-refined-preview .vz-pset-entry:active{background:#EDE1FF;}
+#vocalzip-refined-preview .vz-pset-entry:focus-visible{outline:2px solid #DCC4FF;outline-offset:0;}
+#vocalzip-refined-preview .vz-pset-entry>.vz-ui-icon:first-child{flex:none;width:20px;font-size:20px;color:var(--vz-color-accent,#7A32F5);}
+#vocalzip-refined-preview .vz-pset-copy{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;}
+#vocalzip-refined-preview .vz-pset-copy strong{flex:none;color:var(--vz-color-accent,#7A32F5);font-size:14px;line-height:20px;font-weight:600;}
+#vocalzip-refined-preview .vz-pset-copy small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vz-color-ink-secondary,#475467);font-size:13px;line-height:18px;font-variant-numeric:tabular-nums;}
+#vocalzip-refined-preview .vz-pset-chevron{flex:none;font-size:16px;color:var(--vz-color-accent,#7A32F5);}
 @media(max-width:355px){#vocalzip-refined-preview .vz-event h2{line-height:1.45454545;}#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
 /* Wide screens (after the rules above so it wins): two columns. */
 #vocalzip-refined-preview .vz-col{display:contents;}
@@ -251,6 +260,17 @@ export async function createFloatingHome(opts={}){
   action(now,item.label||item.title||"지금 할 것",item.action);
  };
  host.updateNow(opts.now);
+ /* 오늘 연습 세트 (app/practice-set.js): one compact row under 지금 할 것 that starts or resumes today's guided set. */
+ const practiceSet=el("button",null,"vz-pset-entry");practiceSet.type="button";now.after(practiceSet);
+ host.updatePracticeSet=item=>{
+  practiceSet.hidden=!item;if(!item)return;
+  practiceSet.dataset.state=item.state||"new";practiceSet.setAttribute("aria-label",item.label||item.title||"오늘 연습 시작");
+  const icon=el("i","","vz-ui-icon");icon.setAttribute("aria-hidden","true");icon.textContent="\ue3d0";
+  const copy=el("span",null,"vz-pset-copy");copy.append(el("strong",item.title||"오늘 연습 시작"),el("small",item.line||""));
+  const chevron=el("i","\ue13a","vz-ui-icon vz-pset-chevron");chevron.setAttribute("aria-hidden","true");
+  practiceSet.replaceChildren(icon,copy,chevron);practiceSet.onclick=()=>opts.onPracticeSet?.();
+ };
+ host.updatePracticeSet(opts.practiceSet);
  const summary=el("section",null,"vz-card vz-summary");summary.setAttribute("aria-label","요약");
  const recentWrap=el("section",null,"vz-recent");recentWrap.setAttribute("aria-label","최근 곡");
  q(".vz-goals").after(summary,recentWrap);

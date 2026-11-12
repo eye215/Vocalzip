@@ -1,0 +1,57 @@
+/* 내 데이터 내보내기 (#/data-export): common full page — 560px column, 12px gutters, white R20 cards, 52px buttons. */
+body[data-vz-route="data-export"]{background:var(--vz-color-canvas)}
+body[data-vz-route="data-export"] .v-app{max-width:560px;padding-right:12px;padding-left:12px}
+/* The bottom menu stays (shared-nav policy v0.8, like 설정); the page ends above it. No floating record button here. */
+html body[data-vz-route="data-export"] .v-app{padding-bottom:calc(var(--vz-nav-stack) + 28px)!important}
+body[data-vz-route="data-export"] .vz-collection-record{display:none!important}
+.vz-export{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding-bottom:12px;font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;letter-spacing:-.02em}
+.vz-export [data-export-summary],.vz-export [data-export-controls]{display:grid;gap:10px;min-width:0}
+.vz-export-lead{margin:0 4px;color:var(--vz-color-ink-secondary);font-size:14px;line-height:20px}
+.vz-export-card{display:grid;gap:12px;min-width:0;padding:16px;border-radius:20px;background:var(--vz-color-surface);box-shadow:0 2px 10px rgba(55,33,85,.045)}
+.vz-export-card h2{margin:0;color:var(--vz-color-ink);font-size:18px;line-height:26px;font-weight:700}
+.vz-export-note{margin:0;color:var(--vz-color-ink-muted);font-size:13px;line-height:19px}
+.vz-export-warn{color:var(--vz-color-warning)}
+.vz-export-ok{color:var(--vz-color-success);font-weight:600}
+.vz-export .btn{min-height:52px;border-radius:16px;font-size:16px;font-weight:600}
+.vz-export .btn.ghost{border:0;background:transparent;color:var(--vz-color-ink-secondary);min-height:44px;font-size:14px}
+.vz-export-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.vz-export-stats{display:grid;gap:0;margin:0;border-radius:16px;background:#F8F6FD;padding:4px 14px}
+.vz-export-stats>div{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px}
+.vz-export-stats>div+div{border-top:1px solid #EFEBF6}
+.vz-export-stats dt{color:var(--vz-color-ink-secondary);font-size:14px;line-height:20px}
+.vz-export-stats dd{margin:0;color:var(--vz-color-ink);font-size:14px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.vz-export-total dt,.vz-export-total dd{color:var(--vz-color-ink);font-weight:700}
+.vz-export-total dd{color:var(--vz-color-accent);font-size:16px}
+.vz-export-field{display:grid;gap:6px}
+.vz-export-field>span,.vz-export-dest legend{color:var(--vz-color-ink-secondary);font-size:13px;line-height:18px;font-weight:600}
+.vz-export-seg{display:flex;gap:3px}
+.vz-export-seg button{flex:1;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:transparent;color:var(--vz-color-ink-secondary);font:inherit;font-size:14px;line-height:20px;font-weight:600;cursor:pointer}
+.vz-export-seg button[aria-pressed="true"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent)}
+.vz-export-dest{display:grid;gap:8px;margin:0;padding:0;border:0}
+.vz-export-dest legend{margin-bottom:6px;padding:0}
+.vz-export-dest label{display:flex;align-items:center;gap:12px;min-height:52px;padding:10px 16px;border-radius:14px;background:#F2EFF7;cursor:pointer}
+.vz-export-dest label:has(input:checked){background:var(--vz-color-accent-soft)}
+.vz-export-dest input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--vz-color-accent)}
+.vz-export-dest span{display:grid;gap:2px;min-width:0}
+.vz-export-dest b{color:var(--vz-color-ink);font-size:14px;line-height:20px;font-weight:600}
+.vz-export-dest label:has(input:checked) b{color:var(--vz-color-accent)}
+.vz-export-dest small{color:var(--vz-color-ink-muted);font-size:12px;line-height:18px}
+.vz-export-run{display:grid;gap:8px}
+.vz-export-fail{display:grid;gap:10px;padding:14px;border-radius:16px;background:var(--vz-color-danger-soft)}
+.vz-export-fail p{display:grid;gap:2px;margin:0}
+.vz-export-fail b{color:var(--vz-color-danger);font-size:14px;line-height:20px;font-weight:700;overflow-wrap:anywhere}
+.vz-export-fail span{color:var(--vz-color-ink-secondary);font-size:13px;line-height:18px;overflow-wrap:anywhere}
+.vz-export-parts{display:grid;margin:0;padding:0;list-style:none}
+.vz-export-parts li{display:grid;gap:6px;padding:12px 0}
+.vz-export-parts li+li{border-top:1px solid #F2EFF7}
+.vz-export-part-head{display:flex;align-items:center;gap:8px;min-width:0;min-height:24px}
+.vz-export-part-head b{flex:none;color:var(--vz-color-ink);font-size:14px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.vz-export-part-head span{min-width:0;overflow:hidden;color:var(--vz-color-ink-secondary);font-size:14px;line-height:20px;white-space:nowrap;text-overflow:ellipsis}
+.vz-export-redo{flex:none;min-height:44px;margin:-10px -8px -10px auto;padding:0 8px;border:0;background:transparent;color:var(--vz-color-accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.vz-export-parts small{color:var(--vz-color-ink-muted);font-size:12px;line-height:18px;font-variant-numeric:tabular-nums}
+.vz-export-bar{position:relative;height:6px;overflow:hidden;border-radius:99px;background:var(--vz-color-progress-track)}
+.vz-export-bar::after{position:absolute;inset:0 auto 0 0;width:var(--p,0%);border-radius:inherit;background:var(--vz-color-accent);content:'';transition:width 240ms}
+.vz-export-parts li[data-status="saved"] .vz-export-bar::after{background:var(--vz-color-success)}
+.vz-export-parts li[data-status="saved"] small{color:var(--vz-color-success)}
+.vz-export-parts li[data-status="failed"] small{color:var(--vz-color-danger);font-weight:600}
+@media(prefers-reduced-motion:reduce){.vz-export-bar::after{transition:none}}

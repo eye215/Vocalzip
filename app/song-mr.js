@@ -60,30 +60,93 @@ function add(song,redraw){
    };
   }});
 }
+// Players open under MR rows: closing one also stops its key-shift audio graph (app/mr-key-shift.js).
+// Their .media-open marker (while not hidden) holds off background re-renders, as an open recording does.
+const live=new WeakMap();
+const closePlayer=el=>{live.get(el)?.();live.delete(el);el.replaceChildren();el.hidden=true;};
+const shiftOf=id=>V.mrKey?V.mrKey.clamp(V.song(id)?.mrKeyShift):0;
+/** File MR: the stored file streams through <audio> untouched; the key capsule only changes how it is played. */
+function filePlayer(player,song,track,url,account,row){
+ const K=V.mrKey,make=cors=>{const audio=document.createElement('audio');audio.controls=true;audio.preload='none';if(cors)audio.crossOrigin='anonymous';audio.src=url;audio.setAttribute('aria-label',track.title+' MR 재생');return audio;};
+ let audio=make(!!K);
+ if(!K){player.replaceChildren(audio);return;}
+ const keys=K.keysOf(V.song(song.id)),label='mr-key-'+String(track.id).replace(/[^\w-]/g,'');
+ const box=document.createElement('div');box.className='vz-mr-key';box.dataset.mrKey='';
+ box.innerHTML='<div class="vz-mr-key-row"><span class="vz-mr-key-title" id="'+label+'">키</span><div class="vz-mr-key-capsule" role="group" aria-labelledby="'+label+'"><button type="button" data-mr-key-down aria-label="반음 내리기"><i class="ph ph-minus" aria-hidden="true"></i></button><button type="button" data-mr-key-value></button><button type="button" data-mr-key-up aria-label="반음 올리기"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
+  (keys.practiceKey?'<button type="button" class="vz-mr-key-practice" data-mr-key-practice><span>연습 키 <b>'+esc(keys.practiceKey)+'</b></span><small data-mr-key-suggest></small></button>':'')+'</div><p class="vz-mr-key-msg" data-mr-key-msg role="status"></p>';
+ player.replaceChildren(audio,box);
+ const down=box.querySelector('[data-mr-key-down]'),up=box.querySelector('[data-mr-key-up]'),value=box.querySelector('[data-mr-key-value]'),msg=box.querySelector('[data-mr-key-msg]'),practice=box.querySelector('[data-mr-key-practice]');
+ let n=shiftOf(song.id),timer=0,engine=null,off=false;
+ const persist=()=>{
+  clearTimeout(timer);timer=0;if(identity()!==account||window.VzipAccountScope?.leaving)return;
+  const current=V.song(song.id);if(!current||current.mrKeyShift===n||(!n&&current.mrKeyShift==null))return;
+  // Silent: a full re-render would tear down the player that is playing right now.
+  if(!V.change(d=>{const s=d.songs.find(x=>x.id===song.id);if(s)s.mrKeyShift=n;},{silent:true}))msg.textContent='키 설정을 저장하지 못했어요.';
+ };
+ const paint=()=>{
+  value.textContent=K.label(n);value.setAttribute('aria-label','현재 '+K.spoken(n)+(n?'. 누르면 원키로 돌아가요':''));value.disabled=off||!n;
+  down.disabled=off||n<=K.MIN;up.disabled=off||n>=K.MAX;
+  if(practice){
+   const s=keys.suggested,hint=practice.querySelector('[data-mr-key-suggest]');
+   const to=s==null?'':K.label(s)+([3,6].includes(Math.abs(s))?'으로':'로');
+   hint.textContent=s==null?'':s===n?'MR 맞춤':'MR '+to+' 맞추기';
+   practice.disabled=off||s==null||s===n;
+   practice.setAttribute('aria-label','연습 키 '+keys.practiceKey+(s!=null&&s!==n?'. MR을 '+to+' 맞추기':''));
+  }
+  const small=row.querySelector('[data-mr-open] small');if(small)small.textContent=(track.fileName||'오디오 파일')+(n?' · 키 '+K.label(n):'');
+ };
+ const report=error=>{if(!off)msg.textContent=error.message;};
+ const apply=next=>{
+  if(off)return;n=K.clamp(next);paint();msg.textContent='';
+  clearTimeout(timer);timer=setTimeout(persist,400);
+  // Runs inside the tap up to its first await, so the AudioContext can start on iPhone.
+  engine.set(n).then(route=>{if(route!=='loading'&&msg.textContent==='키 변경을 준비하고 있어요…')msg.textContent='';},report);
+ };
+ engine=K.attach(audio,{onState:s=>{if(s==='loading')msg.textContent='키 변경을 준비하고 있어요…';}});
+ audio.addEventListener('play',()=>{if(n)setTimeout(()=>{if(!off&&!audio.paused&&engine.context&&engine.context.state!=='running')msg.textContent='소리가 나지 않으면 키 버튼(− 또는 +)을 한 번 눌러 주세요.';},600);});
+ // A shift chosen before: build the graph now (the open tap already woke the AudioContext on iPhone).
+ if(n)engine.set(n).then(()=>{if(msg.textContent==='키 변경을 준비하고 있어요…')msg.textContent='';},report);
+ // Key change needs CORS access to the stream. If storage refuses it, fall back to plain playback in the original key.
+ let loaded=false;
+ audio.addEventListener('loadedmetadata',()=>{loaded=true;},{once:true});
+ audio.addEventListener('error',async()=>{
+  if(loaded||!audio.crossOrigin)return;
+  let cors=true;try{const r=await fetch(url,{headers:{range:'bytes=0-0'}});await r.body?.cancel();}catch{cors=false;}
+  if(cors||!audio.isConnected)return;
+  engine.destroy();off=true;const plain=make(false);audio.replaceWith(plain);audio=plain;paint();
+  msg.textContent='이 MR은 저장소 설정 때문에 키를 바꿀 수 없어 원키로 재생해요.';
+ },{once:true});
+ paint();
+ down.onclick=()=>apply(n-1);up.onclick=()=>apply(n+1);value.onclick=()=>apply(0);
+ if(practice)practice.onclick=()=>{if(keys.suggested!=null)apply(keys.suggested);};
+ live.set(player,()=>{if(timer)persist();engine?.destroy();});
+}
 V.renderSongMR=(host,song)=>{
  const draw=()=>{
   if(!host.isConnected)return;
   const list=tracks(song.id),account=identity();
   host.innerHTML='<section class="vz-ar-links vz-mr-links" aria-label="MR 반주"><div class="vz-ar-heading"><strong>MR 반주 <span>'+list.length+'</span></strong><button type="button" data-mr-add aria-label="MR 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
-   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':x.fileName||'오디오 파일')+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
+   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id)?' · 키 '+V.mrKey.label(shiftOf(song.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
   host.querySelector('[data-mr-add]').onclick=()=>add(song,draw);
   window.VzipR2?.prefetch?.(list.filter(x=>x.kind==='file').slice(0,5).map(x=>x.r2Key)).catch(()=>{});
   for(const row of host.querySelectorAll('[data-mr]')){
    const track=list.find(x=>x.id===row.dataset.mr),player=row.querySelector('[data-mr-player]'),button=row.querySelector('[data-mr-open]');
    button.setAttribute('aria-expanded','false');
    button.onclick=async()=>{
-    if(!player.hidden){player.replaceChildren();player.hidden=true;button.setAttribute('aria-expanded','false');return;}
-    for(const other of host.querySelectorAll('[data-mr-player]')){other.replaceChildren();other.hidden=true;other.closest('[data-mr]').querySelector('[data-mr-open]').setAttribute('aria-expanded','false');}
+    if(!player.hidden){closePlayer(player);button.setAttribute('aria-expanded','false');return;}
+    for(const other of host.querySelectorAll('[data-mr-player]')){closePlayer(other);other.closest('[data-mr]').querySelector('[data-mr-open]').setAttribute('aria-expanded','false');}
     player.hidden=false;button.setAttribute('aria-expanded','true');
     if(track.kind==='youtube'){
      const link=youtube(track.url);if(!link){player.textContent='영상 링크를 확인해 주세요.';return;}
-     player.innerHTML='<iframe src="https://www.youtube-nocookie.com/embed/'+link.videoId+'" title="'+esc(track.title)+'" allow="encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">유튜브에서 열기 <i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>';return;
+     player.innerHTML='<iframe src="https://www.youtube-nocookie.com/embed/'+link.videoId+'" title="'+esc(track.title)+'" allow="encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer">유튜브에서 열기 <i class="ph ph-arrow-square-out" aria-hidden="true"></i></a><p class="vz-mr-key-off" data-mr-key-off>유튜브 MR은 키를 바꿀 수 없어요. 영상 소리는 유튜브 플레이어 안에서만 나와 앱이 처리할 수 없어요. 키를 바꾸려면 MR 파일을 올려 주세요.</p>';return;
     }
     player.textContent='MR을 불러오는 중…';
+    // A remembered key shift needs Web Audio: wake it while this tap still counts as a user gesture (iPhone Safari).
+    if(shiftOf(song.id)){V.mrKey.context();V.mrKey.load().catch(()=>{});}
     try{
      const url=await window.VzipR2.url(track.r2Key);
      if(!player.isConnected||player.hidden||identity()!==account||window.VzipAccountScope?.leaving)return;
-     const audio=document.createElement('audio');audio.controls=true;audio.preload='none';audio.src=url;audio.setAttribute('aria-label',track.title+' MR 재생');player.replaceChildren(audio);
+     filePlayer(player,song,track,url,account,row);
     }catch(error){if(player.isConnected&&!player.hidden)player.textContent='재생하지 못했어요: '+error.message;}
    };
    // File MR: a revocable link like a recording; YouTube MR: send the video link itself.
@@ -101,5 +164,5 @@ V.renderSongMR=(host,song)=>{
  };
  draw();
 };
-window.addEventListener('vzip:auth-changed',()=>{document.querySelectorAll('.vz-mr-links [data-mr-player]').forEach(el=>{el.replaceChildren();el.hidden=true;});});
+window.addEventListener('vzip:auth-changed',()=>{document.querySelectorAll('.vz-mr-links [data-mr-player]').forEach(closePlayer);});
 })();

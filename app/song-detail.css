@@ -104,3 +104,22 @@ body[data-vz-route="song"] .vz-media-selection [data-lab-link]:focus-visible{out
 .vz-mr-row audio{display:block;width:100%;max-width:100%}
 .vz-mr-row iframe{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:12px}
 .vz-mr-row [data-mr-player]>a{display:inline-flex;align-items:center;gap:5px;min-height:44px;color:var(--vz-color-accent)}
+/* MR 키 바꿔 재생: compact − / value / + capsule (44px targets) beside the song's practice key. */
+.vz-mr-key{margin-top:8px}
+.vz-mr-key-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-width:0}
+.vz-mr-key-title{font-size:13px;line-height:18px;font-weight:600;color:var(--vz-color-ink-secondary)}
+.vz-mr-key-capsule{display:inline-flex;align-items:center;border-radius:99px;background:var(--vz-color-accent-soft);padding:0 2px}
+.vz-mr-key-capsule button{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;border:0;border-radius:99px;background:transparent;color:var(--vz-color-accent);font:inherit}
+.vz-mr-key-capsule button i{font-size:20px}
+.vz-mr-key-capsule [data-mr-key-value]{min-width:56px;padding:0 6px;font-size:15px;line-height:21px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--vz-color-ink)}
+.vz-mr-key-capsule [data-mr-key-value]:not(:disabled){color:var(--vz-color-accent)}
+.vz-mr-key-capsule button:disabled{opacity:1;color:var(--vz-color-faint);cursor:default}
+.vz-mr-key-capsule [data-mr-key-value]:disabled{color:var(--vz-color-ink)}
+.vz-mr-key-capsule button:focus-visible,.vz-mr-key-practice:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:2px}
+.vz-mr-key-practice{display:inline-flex;flex-direction:column;align-items:flex-start;justify-content:center;min-height:44px;padding:2px 4px;border:0;background:none;text-align:left;font:inherit;color:var(--vz-color-ink-secondary)}
+.vz-mr-key-practice span{font-size:13px;line-height:18px}.vz-mr-key-practice b{font-weight:700;color:var(--vz-color-ink)}
+.vz-mr-key-practice small{font-size:12px;line-height:16px;color:var(--vz-color-accent);font-weight:600}
+.vz-mr-key-practice:disabled{opacity:1;cursor:default}.vz-mr-key-practice:disabled small{color:var(--vz-color-ink-muted);font-weight:400}
+.vz-mr-key-msg{margin:4px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-ink-muted)}
+.vz-mr-key-msg:empty{display:none}
+.vz-mr-key-off{margin:4px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-ink-muted)}
