@@ -45,6 +45,8 @@ test('two connected-phrase recordings enable results without a memo',async({page
  await page.locator('[data-task="connect"]').click();
  await expect(page.locator('#submit')).toBeDisabled();
  await page.locator('[data-upload="0"]').setInputFiles({name:'A.wav',mimeType:'audio/wav',buffer:wav()});
+ // Each pick re-renders the slots once the take is read: wait for it before picking the next one.
+ await expect(page.locator('audio[data-audio="0"]')).toBeVisible();
  await expect(page.locator('#submit')).toBeDisabled();
  await page.locator('[data-upload="1"]').setInputFiles({name:'B.wav',mimeType:'audio/wav',buffer:wav()});
  await expect(page.locator('#submit')).toBeEnabled();
