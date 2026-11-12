@@ -5,7 +5,9 @@
  *   intonation (음정 정확도)  cents from the nearest semitone — NOT a right-note check. When both compared takes have a
  *                             saved note-level score comparison (음표 단위 악보 비교, app/score-align-model.js) for the same
  *                             score version, part and key, the share of the same score notes sung within ±50 cent is
- *                             shown as its basis ("악보 기준 맞은 음 비율 A% → B%"). The verdict itself is unchanged.
+ *                             shown as its basis ("악보 기준 맞은 음 비율 A% → B%"). Without a score, the same from a saved
+ *                             comparison with the song's original recording (원곡(AR) 음정 비교, the same AR file and
+ *                             extraction): "원곡 기준 맞은 음 비율 A% → B%". The verdict itself is unchanged.
  *   stability  (음정 안정성)  wobble of sustained notes (≥ 0.5 s, vibrato removed). Kept separate from accuracy.
  *   range      (음역 확장)    안정 최고음 + 주 가창 음역 (v2). Exact semitones of the named notes. Shown as a neutral
  *                             change only: never "better/worse", never 순간 최고음.
@@ -42,7 +44,7 @@ const RULES = {
 
 const METRICS = [
   {id:'intonation', title:'음정 정확도', unit:'cent', direction:-1, judged:true, help:'into',
-    method:'가장 가까운 반음과의 평균 음정 오차(cent)로 재요. 이 값만으로는 맞는 음을 불렀는지는 판단하지 않아요. 두 녹음 모두 음표 단위 악보 비교를 저장했다면 악보 기준 맞은 음 비율을 근거로 함께 보여요.',
+    method:'가장 가까운 반음과의 평균 음정 오차(cent)로 재요. 이 값만으로는 맞는 음을 불렀는지는 판단하지 않아요. 두 녹음 모두 음표 단위 악보 비교(또는 원곡 기준 비교)를 저장했다면 악보(원곡) 기준 맞은 음 비율을 근거로 함께 보여요.',
     practice:'기준음을 듣고 편안한 음역의 짧은 구간을 천천히 따라 부르기', minutes:10},
   {id:'stability', title:'음정 안정성', unit:'cent', direction:-1, judged:true, help:'wob',
     method:'0.5초 넘게 지속한 음에서 비브라토를 뺀 피치 흔들림이에요. 음정 정확도와 따로 봐요.',
@@ -211,7 +213,7 @@ function direction(d, delta, rule, before) {
   return Math.sign(delta) === d.direction ? 'better' : 'worse';
 }
 /** Compare one metric for two takes (first = earlier). Both are {a, date, ok}. */
-function compareMetric(id, first, last, {reference = null, sameDay = false, scoreNotes = null} = {}) {
+function compareMetric(id, first, last, {reference = null, sameDay = false, scoreNotes = null, arNotes = null} = {}) {
   const d = byId[id], a = first.a, b = last.a;
   if (d.reference) return {id, state:'reference', latest:passaggioOf(b), earlier:passaggioOf(a)};
   if (!sameDay && first.date && last.date && first.date === last.date) return {id, state:'hold', reason:'same-day'};
@@ -230,7 +232,9 @@ function compareMetric(id, first, last, {reference = null, sameDay = false, scor
       }
     }
     const delta = r1(after - before);
-    const score = id === 'intonation' && scoreNotes ? scoreNoteBasis(scoreNotes[first.id], scoreNotes[last.id]) : null;
+    // The score is preferred; else the original singer's extracted melody (원곡 기준), never the two mixed.
+    let score = id === 'intonation' && scoreNotes ? scoreNoteBasis(scoreNotes[first.id], scoreNotes[last.id]) : null;
+    if (!score && id === 'intonation' && arNotes) { const ar = scoreNoteBasis(arNotes[first.id], arNotes[last.id]); if (ar) score = {...ar, source:'ar'}; }
     return {...base, state:direction(d, delta, RULES[id], before), before, after, delta, basis, matched, ...(score ? {score} : {})};
   }
   if (id === 'phrase') {
@@ -305,7 +309,7 @@ function pickPair(takes, id) {
   return {reason:'no-pair', last};
 }
 /** All six measures for one song's takes. reference = song.vocalRange (confirmed) or null. */
-function songReport(takes, {reference = null, scoreNotes = null} = {}) {
+function songReport(takes, {reference = null, scoreNotes = null, arNotes = null} = {}) {
   const out = {};
   for (const d of METRICS) {
     if (d.reference) {
@@ -315,7 +319,7 @@ function songReport(takes, {reference = null, scoreNotes = null} = {}) {
       continue;
     }
     const p = pickPair(takes, d.id);
-    out[d.id] = p.first ? compareMetric(d.id, p.first, p.last, {reference, scoreNotes}) : {id:d.id, state:'hold', reason:p.reason, lastId:p.last?.id};
+    out[d.id] = p.first ? compareMetric(d.id, p.first, p.last, {reference, scoreNotes, arNotes}) : {id:d.id, state:'hold', reason:p.reason, lastId:p.last?.id};
     if (p.last) out[d.id].latest = d.id === 'range' || d.id === 'high' ? single(p.last.a, {reference})[d.id] : {value:d.id === 'phrase' ? num(p.last.a.metrics.breath?.medianPhrase) : value(p.last.a, d.id)};
   }
   return out;
@@ -338,10 +342,10 @@ function periodReport(beforeTakes, afterTakes, {reference = null} = {}) {
   return out;
 }
 /** Two takes chosen by the person (vocal lab A/B): the same rules, no pair picking. */
-function comparePair(first, second, {reference = null, scoreNotes = null} = {}) {
+function comparePair(first, second, {reference = null, scoreNotes = null, arNotes = null} = {}) {
   const [x, y] = [first, second].sort((p, q) => String(p.date || '').localeCompare(String(q.date || '')));
   // The person picked these two takes: the same-day rule (meant for automatic pairing) does not apply.
-  return Object.fromEntries(METRICS.map(d => [d.id, compareMetric(d.id, x, y, {reference, sameDay:true, scoreNotes})]));
+  return Object.fromEntries(METRICS.map(d => [d.id, compareMetric(d.id, x, y, {reference, sameDay:true, scoreNotes, arNotes})]));
 }
 
 /* ---------- many songs ---------- */
@@ -390,7 +394,7 @@ function changeText(x) {
 }
 function basisText(x) {
   if (!x || x.state === 'hold' || x.state === 'reference') return '';
-  if (x.score) return '악보 기준 맞은 음 비율 ' + x.score.before + '% → ' + x.score.after + '% (같은 악보 음 ' + x.score.notes + '개 · ±50 cent) · cent 비교는 ' + (x.basis === 'phrases' ? '같은 프레이즈 ' + x.matched + '개' : '곡 전체');
+  if (x.score) return (x.score.source === 'ar' ? '원곡 기준 맞은 음 비율 ' : '악보 기준 맞은 음 비율 ') + x.score.before + '% → ' + x.score.after + '% (' + (x.score.source === 'ar' ? '같은 원곡 멜로디(자동 추출) 음 ' : '같은 악보 음 ') + x.score.notes + '개 · ±50 cent) · cent 비교는 ' + (x.basis === 'phrases' ? '같은 프레이즈 ' + x.matched + '개' : '곡 전체');
   if (x.basis === 'phrases') return '같은 프레이즈 ' + x.matched + '개 비교' + (x.id === 'phrase' && x.tempo && x.tempo !== 1 ? ' · 템포 보정' : '');
   if (x.basis === 'whole') return '곡 전체 비교 (같은 프레이즈를 충분히 찾지 못함)';
   if (x.id === 'high') return x.fromScore ? '악보 최고음 기준 고음 구간' : '두 녹음 공통 고음 구간';
