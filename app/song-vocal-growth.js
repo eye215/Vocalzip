@@ -24,22 +24,26 @@ window.addEventListener('vzip:analysis-saved', e => {
 VZ.vocalBatchRunning = () => batch.running; // the background analyzer waits for it
 
 /* What is measured, how to read it, and which way is "better" (+1 higher, −1 lower, 0 neither). */
+// A cached older analysis.js may not define analysisComparable yet: never throw, use the same rule.
+const comparable = (a, b) => VZ.analysisComparable ? VZ.analysisComparable(a, b) : !!a && !!b && a.v === b.v && !!VZ.analysisReliable?.(a) && !!VZ.analysisReliable?.(b);
 const METRICS = [
   {key:'into', label:'음정 오차', unit:'cent', better:-1, get:a => a.metrics.intonation?.meanAbsCents, fmt:v => '±' + v, help:'낮을수록 음을 정확히 맞춤'},
   {key:'wob', label:'지속음 흔들림', unit:'cent', better:-1, get:a => a.metrics.stability?.wobbleCents, fmt:v => '±' + v, help:'낮을수록 안정적'},
-  {key:'high', label:'최고음', unit:'', better:1, get:a => a.metrics.range?.highCents == null ? null : Math.round(a.metrics.range.highCents / 100) * 100, fmt:v => noteName(v), help:'0.3초 넘게 머문 가장 높은 음', step:100},
+  {key:'high', label:'유효 최고음', unit:'', better:0, get:a => a.v>=2&&a.metrics.range?.validHigh ? Math.round(a.metrics.range.validHigh.cents/100)*100 : null, fmt:v => noteName(v), help:'0.2초 이상 · 신뢰도와 연속성 확인', step:100},
+  {key:'stable', label:'안정 최고음', unit:'', better:0, get:a => a.v>=2&&a.metrics.range?.stableHigh ? Math.round(a.metrics.range.stableHigh.cents/100)*100 : null, fmt:v => noteName(v), help:'0.5초 이상 · 흔들림과 신뢰도 확인', step:100},
   {key:'phr', label:'프레이즈 길이', unit:'초', better:1, get:a => a.metrics.breath?.medianPhrase, fmt:v => v + '초', help:'쉬지 않고 이어 부른 평균 길이'}
 ];
 const VIB = {key:'vib', label:'비브라토', unit:'%', better:0, get:a => a.metrics.vibrato?.share, fmt:v => v + '%', help:'긴 음 중 비브라토를 쓴 비율'};
 
 const analysisOf = m => fresh.get(m.id) || m.analysis || null;
-const usable = m => { const a = analysisOf(m); return a?.v === 1 && a.metrics; };
+const usable = m => { const a = analysisOf(m); return [1,2].includes(a?.v) && a.metrics; };
 function points(media) {
   return media.filter(usable).map(m => ({m, a:analysisOf(m), date:M.dateOf(m) || '', ok:VZ.analysisReliable(analysisOf(m)), guess:m.dateSource === 'file-modified'}))
     .sort((x, y) => x.date.localeCompare(y.date) || (x.m.created || 0) - (y.m.created || 0));
 }
 /** Change from first to latest, worded by direction. */
 function change(metric, first, last) {
+  if (!comparable(first,last)) return '<span class="vg-same">판정 보류 · 신뢰도/분석 버전 확인</span>';
   const a = metric.get(first), b = metric.get(last);
   if (a == null || b == null) return '';
   const d = Math.round((b - a) * 10) / 10;
@@ -62,19 +66,20 @@ function spark(metric, pts) {
   const reliable = rows.filter(r => r.p.ok), last = reliable.at(-1) || rows.at(-1);
   return '<div class="vg-chart"><div class="vg-head"><span class="vg-label">' + metric.label + '</span><span class="vg-now">' + esc(metric.fmt(last.v)) + '</span></div>' +
     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' + esc(metric.label + ' 날짜별 변화, 최근 ' + metric.fmt(last.v)) + '">' + line + dots + '</svg>' +
-    '<div class="vg-foot small muted"><span>' + esc(metric.help) + (VZ.metricInfo ? VZ.metricInfo(metric.key === 'high' ? 'range' : metric.key, metric.label) : '') + '</span>' + (reliable.length > 1 ? change(metric, reliable[0].p.a, reliable.at(-1).p.a) : '') + '</div></div>';
+    '<div class="vg-foot small muted"><span>' + esc(metric.help) + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(metric.key) ? 'range' : metric.key, metric.label) : '') + '</span>' + (reliable.length > 1 ? change(metric, reliable[0].p.a, reliable.at(-1).p.a) : '') + '</div></div>';
 }
 /** First vs latest measurement table for two recordings (both need a saved analysis). */
 VZ.measureTable = (first, second) => {
   const a = first && analysisOf(first), b = second && analysisOf(second);
   if (!a?.metrics || !b?.metrics) return '';
-  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(m.key === 'high' ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + change(m, a, b) + '</td></tr>'; }).join('');
-  const weak = !VZ.analysisReliable(a) || !VZ.analysisReliable(b);
+  const sameSong=!!first.songId&&first.songId===second.songId;
+  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,a,b):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
+  const weak = !comparable(a,b) || !first.songId || first.songId!==second.songId;
   return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    (weak ? '<p class="small muted">한쪽 녹음은 노래가 짧거나 반주가 커서 측정 신뢰도가 낮아요.</p>' : '');
+    (weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '');
 };
 /** Measurement summary saved with a comparison report (numbers only). */
-VZ.measureSnapshot = item => { const a = item && analysisOf(item); return a?.metrics ? {at:a.at, reliable:VZ.analysisReliable(a), metrics:a.metrics} : null; };
+VZ.measureSnapshot = item => { const a = item && analysisOf(item); return a?.metrics ? {v:a.v, at:a.at, reliable:VZ.analysisReliable(a), metrics:a.metrics, confidence:a.confidence} : null; };
 
 async function runBatch(song, todo) {
   if (batch.running || !VZ.analyzeRecording) return;
@@ -83,7 +88,7 @@ async function runBatch(song, todo) {
   try {
     for (const m of todo) {
       if (batch.stop) break;
-      if (fresh.has(m.id)) { batch.done++; continue; } // already done in the background
+      if (fresh.get(m.id)?.v >= 2) { batch.done++; continue; } // already done in the background
       batch.current = M.label(m); paint();
       try { await VZ.analyzeRecording(m); } catch { batch.failed++; }
       batch.done++; paint();
@@ -101,7 +106,7 @@ VZ.songVocalGrowth = (host, song, media) => {
   if (!host) return;
   last = {host, song, media};
   const audio = media.filter(m => !M.isVideo(m) || m.cloud), pts = points(audio);
-  const todo = audio.filter(m => !usable(m)), running = batch.running && batch.songId === song.id;
+  const todo = audio.filter(m => !usable(m) || analysisOf(m)?.v < 2), running = batch.running && batch.songId === song.id;
   if (!audio.length) { host.innerHTML = ''; return; }
   const reliable = pts.filter(p => p.ok);
   let body = '';

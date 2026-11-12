@@ -1,0 +1,32 @@
+name: Pitch accuracy checks
+on:
+  pull_request:
+    paths:
+      - 'app/*analysis*.js'
+      - 'app/*growth*.js'
+      - 'app/vocal-lab.js'
+      - 'app/metric-help.js'
+      - 'app/plan-outcome-*.js'
+      - 'app/monthly-practice-plans.js'
+      - 'worker/analysis-worker.mjs'
+      - 'tools/pitch-bench.cjs'
+      - 'tests/pitch-*'
+      - '.github/workflows/pitch-accuracy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pitch:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: node --test tests/pitch-accuracy.test.cjs tests/pitch-ground-truth.test.cjs tests/pitch-summary.test.cjs tests/plan-outcome.spec.cjs tests/vocal-analysis.test.cjs tests/analysis-prefix-median.test.cjs tests/analysis-cancel.test.cjs
+      - run: node tools/pitch-bench.cjs
+      - run: npx playwright test tests/pitch-accuracy.spec.cjs --workers=2
+      - run: npx playwright test tests/v6.spec.cjs --grep 'a recording sung over an MR gets' --workers=2

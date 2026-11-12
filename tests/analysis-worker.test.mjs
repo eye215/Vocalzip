@@ -143,7 +143,7 @@ test('Uploads keep free measurements and cached candidates, never pay or auto-as
   const a1 = await row('a1'), j1 = await jobs('a1');
   assert.equal(a1.songId, undefined); assert.equal(a1.song, undefined); assert.equal(a1.songSource, undefined);
   assert.equal(a1.review, '좋았음'); assert.equal(a1.name, '11-5 #3');                     // other fields untouched
-  assert.equal(a1.analysis.v, 1); assert.equal(a1.analysis.by, 'server');
+  assert.equal(a1.analysis.v, 2); assert.equal(a1.analysis.by, 'server');
   assert.deepEqual([a1.analysis.metrics.range.low, a1.analysis.metrics.range.high], ['A3', 'C5']);  // decoded from AAC
   assert.equal(j1.song.status, 'review'); assert.equal(j1.song.result.requiresApproval, true); assert.equal(j1.song.result.top3[0].songId, 's1'); assert.equal(Number(j1.song.cost_usd), 0);
   const j2 = await jobs('a2');
@@ -215,7 +215,7 @@ test('100 uploads, two workers at once: measurements once, paid API calls and as
   assert.equal(sttCalls - before, 0);                                                   // API key presence does not authorize spending
   const {rows:[q]} = await db.query('select used_total from public.vzip_song_stt_quota where user_id = $1', [user]);
   assert.equal(q, undefined);
-  const {rows:[m]} = await db.query("select count(*) filter (where metadata ->> 'songId' = 's1')::int sorted, count(*) filter (where metadata -> 'analysis' ->> 'v' = '1')::int measured from public.vocal_media where user_id = $1", [user]);
+  const {rows:[m]} = await db.query("select count(*) filter (where metadata ->> 'songId' = 's1')::int sorted, count(*) filter (where metadata -> 'analysis' ->> 'v' = '2')::int measured from public.vocal_media where user_id = $1", [user]);
   assert.deepEqual(m, {sorted:0, measured:100});
   const {rows:[c]} = await db.query('select sum(cost_usd)::float cost from public.vocal_analysis_jobs where user_id = $1', [user]);
   assert.equal(Number(c.cost), 0);                                     // automatic work incurred no STT cost

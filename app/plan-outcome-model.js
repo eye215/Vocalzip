@@ -46,9 +46,11 @@ function measurement(plan,recordings=[],dateOf,valid){
  const floor=plan.metric==='vibrato'?0.05:plan.metric==='phrase'?0.3:3;
  const margin=b!=null?Math.max(floor,Math.abs(b)*.05):null;
  const direction=plan.metric==='intonation'||plan.metric==='stability'?-1:1;
- const change=delta==null?'insufficient':Math.abs(delta)<margin?'similar':Math.sign(delta)===direction?'better':'worse';
+ // v1 and v2 analyses measure pitch differently: a change across versions is withheld, never judged.
+ const mixedVersions=new Set([...before,...after].map(m=>m.analysis?.v??null)).size>1;
+ const change=delta==null||mixedVersions?'insufficient':Math.abs(delta)<margin?'similar':Math.sign(delta)===direction?'better':'worse';
  return {before:b==null?null:ROUND(b),after:a==null?null:ROUND(a),delta,
-   change,beforeCount:before.length,afterCount:after.length,
+   change,mixedVersions,beforeCount:before.length,afterCount:after.length,
    beforeIds:before.map(x=>x.id),afterIds:after.map(x=>x.id)};
 }
 function report({plan,goals=[],recordings=[],dateOf,valid,asOf}){

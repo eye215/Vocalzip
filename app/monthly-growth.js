@@ -28,7 +28,7 @@ function group(items) {
  }
  return months;
 }
-const valid = m => m.analysis?.v===1 && V.analysisReliable?.(m.analysis);
+const valid = m => [1,2].includes(m.analysis?.v) && V.analysisReliable?.(m.analysis);
 function measure(items,d){ const vals=items.filter(valid).map(m=>val(m.analysis,d)).filter(v=>v!=null); return {value:avg(vals),count:vals.length}; }
 function comparable(current,previous,d) {
  // Avoid attributing changing repertoire to improvements: compare only songs present in BOTH months.

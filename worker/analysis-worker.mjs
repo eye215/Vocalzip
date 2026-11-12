@@ -211,7 +211,7 @@ async function vocalJob(db, job, meta, audio) {
   if (meta.analysis?.v) return finish(db, job, 'done', {reused:true});
   const samples = await audio();
   const r = VA.analyze(samples, 16000);
-  const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server'};
+  const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server', scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 16000}};
   // Only the analysis key changes, on the row as it is now; an analysis saved meanwhile (app) is kept.
   await db.query("update public.vocal_media set metadata = jsonb_set(metadata, '{analysis}', $3::jsonb), updated_at = now() where id = $1 and user_id = $2 and (metadata -> 'analysis' ->> 'v') is null",
     [job.media_id, job.user_id, JSON.stringify(summary)]);
