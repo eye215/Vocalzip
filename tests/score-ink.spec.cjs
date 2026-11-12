@@ -470,7 +470,11 @@ test('MR 재생 · 녹음 · MR+녹음 sit directly under the score page and lea
  await expect(bar).toBeVisible();
  if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-'+test.info().project.name+'.png'});
  for(const name of ['재생','녹음','재생+녹음'])await expect(bar.getByRole('button',{name,exact:true})).toBeVisible();
- expect((await bar.boundingBox()).height).toBeLessThanOrEqual(64);
+ // One row of controls. A browser that cannot record (no MediaRecorder, as WebKit in CI) adds a one-line hint under it.
+ const controls=await bar.locator('.score-audio-row').first().boundingBox(),hint=bar.locator('[data-score-audio-hint]');
+ const hintHeight=await hint.isVisible()?(await hint.boundingBox()).height:0;
+ expect(controls.height).toBeLessThanOrEqual(64);expect(hintHeight).toBeLessThanOrEqual(20);
+ expect((await bar.boundingBox()).height).toBeLessThanOrEqual(64+(hintHeight?hintHeight+6:0));
  const stage=await dialog.locator('[data-ink-stage]').boundingBox(),box=await bar.boundingBox();
  expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
  expect(await bar.evaluate(el=>el.previousElementSibling?.matches('[data-ink-stage]'))).toBe(true);
