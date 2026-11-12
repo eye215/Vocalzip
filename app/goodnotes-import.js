@@ -126,7 +126,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
  const options=item=>'<option value="new"'+(item.target==='new'?' selected':'')+'>새 곡으로 추가</option>'+
   songs().map(s=>'<option value="'+esc(s.id)+'"'+(item.target===s.id?' selected':'')+'>'+esc(VZ.songLabel?VZ.songLabel(s):s.title)+'</option>').join('')+
   '<option value="skip"'+(item.target==='skip'?' selected':'')+'>가져오지 않기</option>';
- const inkLabel=item=>item.mode==='none'?'필기 없음':item.mode==='editable'?'필기 '+item.count+'획 · 수정 가능':'필기 '+item.count+'획 · 양이 많아 악보에 합쳐서 넣어요 (수정 불가)';
+ const inkLabel=item=>item.mode==='none'?'필기 없음':item.mode==='editable'?'필기 '+item.count+'획 · 수정 가능':'필기 '+item.count+'획 · 수정 가능한 저장 공간 부족 (이 곡은 가져오기 보류)';
  VZ.sheet({title:'굿노트 가져오기',label:'굿노트 가져오기',
   body:'<form id="gn-import" class="stack"><p class="small muted" data-gn-summary>'+esc((model.title||file.name)+' · '+model.pages.length+'쪽 · '+(model.outline.length?'개요 '+model.outline.length+'개':'개요 없음')+' · 필기 '+total+'획')+'</p>'+
    (model.outline.length?'':'<p class="small muted">개요가 없어서 전체를 한 곡으로 가져와요. 굿노트에서 곡마다 개요를 넣으면 곡별로 나눠져요.</p>')+
@@ -154,6 +154,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     const guard=()=>{if(run.cancelled)throw Object.assign(Error('가져오기를 멈췄어요.'),{stopped:true});if(window.vzipCloudUserId?.()!==owner||!window.vzipCloudSignedIn?.()||window.VzipAccountScope?.leaving)throw Error('로그인 계정이 바뀌어 멈췄어요.');};
     run.busy=true;go.disabled=true;for(const control of form.elements)control.disabled=true;
     const todo=items.filter(i=>i.target!=='skip'&&!i.state.done),result={scores:0,ink:0,flattened:0,lost:0};
+    if(todo.some(i=>i.mode==='flatten')){msg.textContent='필기가 많은 곡은 현재 저장 공간 한도로 인해 수정 가능한 상태로 옮길 수 없어요. 필기를 PDF에 합치거나 누락하지 않도록 가져오기를 보류했어요. 해당 곡을 제외하거나 저장 구조 개선 후 다시 시도해 주세요.';run.busy=false;for(const control of form.elements)control.disabled=false;sync();return;}
     try{
      msg.textContent='PDF 도구를 준비하고 있어요.';
      const lib=await library(),sources=new Map(),store=inkStore(owner);guard();
