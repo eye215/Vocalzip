@@ -85,7 +85,7 @@ function browser({mockStt=false}={}){
   AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element,createTextNode:text=>({nodeType:3,textContent:String(text)})},Option:function(){},
   fetch:async()=>{paid++;return mockStt?Response.json({enabled:true}):Response.json({error:'STT_DISABLED'},{status:503})}};
  let code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend,scanWindows,setPipeline:(audio,transcribe)=>{audioWindow=audio;transcribeClip=transcribe}};})();');
+  'window.test={rematchServerReviews,stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend,scanWindows,setPipeline:(audio,transcribe)=>{audioWindow=audio;transcribeClip=transcribe}};})();');
  if(mockStt)code=code.replaceAll("await import('../song-text-match.mjs?v=2')",'window.testMatchModule')
   .replaceAll("await import('../stt-clip-browser.mjs?v=3')",'window.testClipModule');
  vm.runInNewContext(code,context);
@@ -459,4 +459,32 @@ test('the Korean translation is a matching reference too, next to the original l
   {id:'ko',title:'번역만',translation:'번역 가사만 입력한 곡의 한국어 가사'},{id:'short',title:'짧음',translation:'짧다'}];
  const refs=Array.from(b.api.references(),r=>r.songId+':'+r.source);
  assert.deepEqual(refs,['moment:lyrics','moment:translation','ko:translation']);
+});
+
+test('recordings the server matched with the original lyrics only are compared again with the Korean translation',async()=>{
+ const b=browser({mockStt:true});
+ b.window.testMatchModule=await import('../song-text-match.mjs');
+ b.window.VZ.db.songs=[{id:'moment',title:'지금 이 순간',lyrics:'This is the moment this is the day when I send all my doubts away',translation:'지금 이 순간 지금 여기 간절히 바라고 원했던 이 순간 나만의 꿈이'},
+  {id:'other',title:'다른 곡',lyrics:'다른 사람의 이야기를 들으며 아침 햇살을 바라봐요 오늘도'}];
+ const item={id:'srv1',name:'한국어 공연'};b.api.state.items=[item];
+ b.api.state.results.set('srv1',{status:'식별 불가',candidate:null,method:'stt',transcript:'지금 이 순간 지금 여기 간절히 바라고 원했던',matches:[{songId:'other',score:0.05}],reason:'서버 분석 결과',fromServer:true});
+ await b.api.rematchServerReviews(b.main);
+ const r=b.api.state.results.get('srv1');
+ assert.equal(r.status,'후보');assert.equal(r.candidate.id,'moment');assert.equal(r.candidate.level,'확인 필요');
+ assert.equal(r.matches[0].songId,'moment');
+ assert.equal(b.counts().paid,0); // no transcription: the server's saved text is reused
+ assert.equal(b.window.VZ.db.songs[0].id,'moment'); // nothing assigned until the user applies it
+});
+test('a first section that is clearly a vocal exercise stops the search: no further paid clips, a training hint instead',async()=>{
+ const b=browser({mockStt:true}),calls=[];
+ b.window.VzipRecordingKind=require('../app/recording-kind.js');
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.vzipCloudSongTextSave=async()=>{};
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:null,reason:'no match',matches:[]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async(_i,_s,{time})=>({pcm:new Int16Array(16000*90),rate:16000,duration:600,start:time}),async()=>{calls.push('paid');return '아 아 아아아 오 오 마 메 미 모 무'});
+ const result=await b.api.stt({id:'warm',durationSeconds:600},new AbortController().signal);
+ assert.equal(calls.length,1,'only the first 30 seconds were transcribed');
+ assert.equal(result.status,'식별 불가');assert.match(result.reason,/트레이닝 녹음 같아요/);
 });
