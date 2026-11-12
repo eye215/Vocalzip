@@ -87,7 +87,7 @@ test('a recording ⋯ opens the small dark popover by the button, not a full pag
  expect(box.width).toBeLessThanOrEqual(304);expect(box.width).toBeLessThan(vw);
  expect(Math.abs(box.y-(button.y+button.height+8))<2||Math.abs(box.y+box.height-(button.y-8))<2).toBe(true); // attached to ⋯
  const rows=menu.locator('.vz-choice');
- await expect(rows).toHaveText([/전사 확인/,/파일 삭제/]); // delete is last
+ await expect(rows).toHaveText([/전사 확인/,/레슨 녹음으로 지정/,/트레이닝으로 지정/,/파일 삭제/]); // delete is last
  expect(await rows.last().evaluate(el=>getComputedStyle(el).color)).not.toBe(await rows.first().evaluate(el=>getComputedStyle(el).color));
  await rows.first().click();
  await expect(page).toHaveURL(/#\/song-transcript\/m-free$/);

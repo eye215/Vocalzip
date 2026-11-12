@@ -1807,6 +1807,28 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
+test('A recording is marked 레슨 녹음 or 트레이닝 from its menu; 레슨 offers to link that day\'s lesson', async ({page}) => {
+  await boot(page);
+  const day = await page.evaluate(async () => { const m = (await VZ.media.list()).find(x => x.id === 'm2'); const d = VZ.media.dateOf(m);
+    VZ.change(db => db.lessons.push({id:'l-kind', date:d, startTime:'15:00', status:'scheduled', feedback:'', memo:'', recordings:[]})); return d; });
+  await page.goto('/#/library');
+  await page.locator('[data-media="m2"] [data-toggle]').click();
+  await page.locator('[data-media="m2"] [data-lib-row-more]').click();
+  await sheet(page).getByRole('button', {name:/트레이닝으로 지정/}).click();
+  await expect.poll(async () => (await media(page)).find(m => m.id === 'm2').recordingCategory).toBe('training');
+  await page.goto('/#/library');
+  await page.locator('[data-media="m2"] [data-toggle]').click();
+  await page.locator('[data-media="m2"] [data-lib-row-more]').click();
+  await expect(sheet(page).getByRole('button', {name:/트레이닝으로 지정/})).toHaveCount(0);
+  await sheet(page).getByRole('button', {name:/레슨 녹음으로 지정/}).click();
+  const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog', {name:'레슨에 연결'}));
+  await expect(confirm).toContainText('15:00 레슨');
+  await confirm.getByRole('button', {name:'연결'}).click();
+  await expect.poll(async () => { const m = (await media(page)).find(x => x.id === 'm2'); return [m.recordingCategory, m.occasion]; }).toEqual(['lesson', 'lesson']);
+  await expect.poll(() => page.evaluate(() => VZ.db.lessons.find(l => l.id === 'l-kind').recordings.map(r => r.id))).toEqual(['m2']);
+  expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});
+
 test('WAV imports are stored as FLAC only after every sample is checked against the original', async ({page, browserName}) => {
   test.setTimeout(60000);
   await boot(page, {media:false});
