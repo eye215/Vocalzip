@@ -101,7 +101,7 @@ async function remove(song, score, redraw) {
   if (!await VZ.confirm('악보 삭제', '"' + score.title + '" PDF와 연결된 개인 필기를 삭제할까요? 클라우드의 파일도 지워지고 되돌릴 수 없어요. 곡과 녹음은 그대로예요.', {ok:'삭제', danger:true})) return;
   try {
     guard();await window.VzipR2.remove(score.r2Key);if(/\/original\.pdf$/.test(score.r2Key||''))await window.VzipR2.remove(score.r2Key.replace(/original\.pdf$/,'omr.mxl')).catch(()=>{});guard();
-    if (VZ.deleteScoreWithInk ? VZ.deleteScoreWithInk(song.id, score) : save(song.id, list => { const i = list.findIndex(x => x.id === score.id); if (i >= 0) list.splice(i, 1); })) { VZ.toast('악보를 삭제했어요.'); redraw(); }
+    if (VZ.deleteScoreWithInk ? await VZ.deleteScoreWithInk(song.id, score) : save(song.id, list => { const i = list.findIndex(x => x.id === score.id); if (i >= 0) list.splice(i, 1); })) { VZ.toast('악보를 삭제했어요.'); redraw(); }
   } catch (err) { VZ.toast('삭제하지 못했어요: ' + err.message, 'error'); }
 }
 
