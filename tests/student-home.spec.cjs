@@ -164,10 +164,10 @@ test('uploaded HTML blob and all original stylesheet blocks are reused literally
   const expected=[...original.querySelectorAll('style')].map(e=>e.textContent.replace(/@import\s+url\([^;]*\);/g,''));
   const shadow=host.shadowRoot,actual=[...shadow.querySelectorAll('style[data-source-style]')].map(e=>e.textContent);
   const same=selector=>original.querySelector(selector).innerHTML===shadow.querySelector(selector).innerHTML;
-  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:shadow.querySelector('.vz-floating-record i')?.dataset.glyph==='\ue326',nav:[...shadow.querySelectorAll('.vz-nav-item')].map(e=>e.querySelector('i')?.dataset.glyph).join(',')==='\ue2c2,\ue340,\ue00e,\ue10a',scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
+  return {styles:JSON.stringify(actual)===JSON.stringify(expected),count:actual.length,fab:shadow.querySelector('.vz-floating-record i')?.dataset.glyph==='\ue326',nav:[...shadow.querySelectorAll('.vz-nav-item')].map(e=>e.querySelector('i')?.dataset.glyph).join(',')==='\ue2c2,\ue340,\ue00e,\ue10a,\ue150',scripts:shadow.querySelectorAll('script,#vz-record-dialog,#vz-toast').length};
  });
  expect(result).toEqual({styles:true,count:10,fab:true,nav:true,scripts:0});
- await expect(page.locator('.vz-nav-item')).toHaveCount(4);
+ await expect(page.locator('.vz-nav-item')).toHaveCount(5);
  await page.evaluate(()=>document.fonts.ready);
  const fonts=await page.evaluate(()=>[...document.fonts].filter(f=>f.family.replace(/[\"']/g,'')==='Pretendard').map(f=>({weight:f.weight,status:f.status})));
  expect(fonts.sort((a,b)=>Number(a.weight)-Number(b.weight))).toEqual([{weight:'400',status:'loaded'},{weight:'600',status:'loaded'},{weight:'700',status:'loaded'}]);
@@ -207,6 +207,35 @@ test('empty state removes all sample data and connects song and goal setup',asyn
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
 });
+test('home recommendation starts homework and the final step saves practice and goal automatically',async({page})=>{
+ await boot(page);
+ const start=page.getByRole('button',{name:'호흡을 길게 유지하기 따라 하기',exact:true});
+ await expect(start).toBeVisible();
+ await start.click();
+ await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1\?song=s1$/);
+ await page.evaluate(()=>{const epoch=Date.now();Date.now=()=>epoch+performance.now();});
+ await page.getByRole('button',{name:'연습 시작',exact:true}).click();
+ await page.waitForTimeout(3800);
+ await page.getByRole('button',{name:'연습 종료',exact:true}).click();
+ await page.getByRole('button',{name:'연습 끝내기',exact:true}).click();
+ await expect(page.getByRole('button',{name:'연습 기록 보기',exact:true})).toBeVisible();
+ const value=await db(page);
+ expect(value.practices.filter(p=>p.guidedExerciseKey==='homework:a1')).toHaveLength(1);
+ expect(value.practices.at(-1).guidedSeconds).toBeGreaterThanOrEqual(3);
+ const category=value.categories.find(c=>c.id===value.practices.at(-1).categoryId);
+ expect(category.name).toBe('호흡');
+ expect(category.items).toContain('호흡을 길게 유지하기');
+ expect(value.assignments.find(t=>t.id==='a1').status).toBe('done');
+ expect(value.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
+ await page.getByRole('button',{name:'연습 기록 보기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/practices$/);
+});
+test('active homework card directly opens guided practice',async({page})=>{
+ await boot(page);
+ await page.goto('/#/homework');
+ await page.getByRole('link',{name:'호흡을 길게 유지하기 따라 하기',exact:true}).click();
+ await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1$/);
+});
 test('weekday names, minutes, rings and percentage colors use actual records',async({page})=>{
  await boot(page);
  for(const [minutes,level,color]of [[0,'missed',null],[99,'partial','rgb(217, 197, 250)'],[100,'done','rgb(122, 50, 245)'],[120,'done','rgb(122, 50, 245)'],[121,'exceeded','rgb(76, 24, 142)']]){
@@ -218,11 +247,11 @@ test('weekday names, minutes, rings and percentage colors use actual records',as
  const future=page.locator('.vz-days>div[data-date="2026-11-05"]');await expect(future.locator('.vz-day-dot')).toHaveClass(/future/);await expect(future.locator('svg')).toHaveCount(0);await expect(future.locator('.vz-day-minutes')).toBeEmpty();
  await page.evaluate(()=>VZ.change(d=>{d.practicePlans=[];}));await expect(page.locator('.vz-days>div[data-date="'+TODAY+'"]')).toHaveAttribute('aria-label',/목표 미설정/);
 });
-test('four home navigation buttons and floating recording reach existing routes',async({page})=>{
- await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정']);
+test('five home navigation buttons and floating recording reach existing routes',async({page})=>{
+ await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정','성장']);
  const dock=await page.evaluate(()=>{const root=document.querySelector('.vz-student-home').shadowRoot,nav=root.querySelector('.vz-nav');return {icons:[...nav.querySelectorAll('.vz-nav-item i')].map(i=>i.dataset.glyph),background:getComputedStyle(nav).backgroundColor,font:document.fonts.check('22px Phosphor')}});
-  expect(dock.icons).toEqual(['\ue2c2','\ue340','\ue00e','\ue10a']);expect(dock.background).toBe('rgba(255, 255, 255, 0.58)');expect(dock.font).toBe(true);
- for(const [label,route]of [['내 곡','songs'],['보관함','library'],['일정','calendar'],['녹음 시작','record']]){
+  expect(dock.icons).toEqual(['\ue2c2','\ue340','\ue00e','\ue10a','\ue150']);expect(dock.background).toBe('rgba(255, 255, 255, 0.58)');expect(dock.font).toBe(true);
+ for(const [label,route]of [['내 곡','songs'],['보관함','library'],['일정','calendar'],['성장','vocal-growth'],['녹음 시작','record']]){
   await page.goto('/#/home');await ready(page);
    await page.getByRole('button',{name:label,exact:true}).click();
    if(route==='record')await expect(page.locator('.vz-record-expansion')).toBeVisible();
@@ -290,6 +319,35 @@ test('goal editor saves only user entered plans and personal goals',async({page}
  expect((await sheet.getByRole('button',{name:'목표 저장',exact:true}).boundingBox()).height).toBeGreaterThanOrEqual(52);
  await sheet.getByLabel('오늘 목표 시간(분)',{exact:true}).fill('45');await sheet.getByLabel('이번 주 목표 시간(분)',{exact:true}).fill('210');await sheet.getByLabel('개인 목표',{exact:true}).fill('새 개인 목표');await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
  const value=await db(page);expect(value.practicePlans.find(p=>p.id==='day:'+TODAY).targetMinutes).toBe(45);expect(value.practicePlans.find(p=>p.id==='week:'+WEEK).targetMinutes).toBe(210);expect(value.dailyGoals.some(g=>g.title==='새 개인 목표')).toBe(true);expect(value.practices).toEqual(seed().practices);expect(value.assignments).toEqual(seed().assignments);
+});
+test('daily routine repeats a personal goal, records optional real minutes once, and ends from today on',async({page})=>{
+ await boot(page);await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ let sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ await sheet.getByLabel('개인 목표',{exact:true}).fill('립트릴 10분');
+ await sheet.getByText('매일 반복',{exact:true}).click();
+ await sheet.getByLabel('반복 일수',{exact:true}).fill('3');
+ await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
+ let value=await db(page);const routine=value.practicePlans.find(p=>p.kind==='routine');
+ expect(routine).toMatchObject({title:'립트릴 10분',days:3,startDate:TODAY,endDate:'2026-11-06',archived:false});
+ expect(value.dailyGoals.filter(g=>g.sourceId===routine.id).map(g=>g.date)).toEqual([TODAY,'2026-11-05','2026-11-06']);
+ expect(value.dailyGoals.filter(g=>['g1','g2','g3'].includes(g.id)).map(g=>[g.id,g.title,g.completed])).toEqual(seed().dailyGoals.map(g=>[g.id,g.title,g.completed]));
+ await page.getByRole('checkbox',{name:'립트릴 10분',exact:true}).check();
+ await page.getByRole('button',{name:'연습 시간·녹음 남기기',exact:true}).click();
+ const record=page.getByRole('dialog',{name:'수행 기록',exact:true});
+ await record.getByLabel('실제로 연습한 시간(분)',{exact:true}).fill('12');
+ await record.getByRole('button',{name:'기록 저장',exact:true}).click();
+ await expect(record).toHaveCount(0);
+ value=await db(page);const goalId=routine.id+':'+TODAY;
+ expect(value.practices.find(p=>p.id==='p1')).toEqual(seed().practices[0]);
+ expect(value.practices.filter(p=>p.goalId===goalId)).toEqual([expect.objectContaining({id:'goal:'+goalId,date:TODAY,manualMinutes:12,practiceTimeSource:'goal',goalSource:'personal'})]);
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ await expect(sheet.locator('.vz-routine')).toContainText('1/3일 완료');
+ await sheet.getByRole('button',{name:'립트릴 10분 끝내기',exact:true}).click();
+ await page.getByRole('dialog',{name:'반복 끝내기',exact:true}).getByRole('button',{name:'끝내기',exact:true}).click();
+ await expect.poll(async()=>(await db(page)).practicePlans.find(p=>p.id===routine.id).archived).toBe(true);
+ value=await db(page);
+ expect(value.dailyGoals.filter(g=>g.sourceId===routine.id).map(g=>[g.date,g.completed])).toEqual([[TODAY,true]]);
+ expect(value.practices.filter(p=>p.goalId===goalId)).toHaveLength(1);
 });
 test('goal planning separates long selectable rows and keeps save visible on small screens',async({page},testInfo)=>{
  const value=seed();value.dailyGoals[0].title='악보에 너무 맞추려 하지 않고 반주치면서 박자와 리듬을 가지고 노는 것처럼 연습하기 · 18마디 참고';
@@ -436,7 +494,7 @@ test('My Songs and Library share the current home outer spacing and fixed naviga
  }
 });
 
-test('shared colors, type hierarchy, cards and four-item dock apply to regular screens',async({page})=>{
+test('shared colors, type hierarchy, cards and five-item dock apply to regular screens',async({page})=>{
  await boot(page);
  for(const route of ['songs','library','calendar']){
   await page.evaluate(route=>VZ.nav('#/'+route),route);
@@ -454,7 +512,7 @@ test('shared colors, type hierarchy, cards and four-item dock apply to regular s
   expect(shell.accent).toBe('#7A32F5');
   expect(shell.background).toBe('rgb(248, 246, 253)');
   expect(shell.heading).toContain('Pretendard');
-  expect(shell.navItems).toBe(4);
+  expect(shell.navItems).toBe(5);
   expect(shell.navHeight).toBe(70);
   expect(shell.fab).toBe('grid');
   expect(shell.cardRadius).toBe('20px');
@@ -555,3 +613,26 @@ test('Cloud lesson deletion refuses a server lesson that changed before prepare'
  expect(await page.evaluate(()=>window.__lessonDeleteCalls||[])).toEqual([]);
 });
 
+
+for(const [label,hash] of [['AI로 오늘 할 일 추천받기','#/practice-review?mode=today'],['주간 돌아보기 · 다음 목표 추천','#/practice-review']]){
+ test('home visibly renders and opens '+label,async({page})=>{
+  await boot(page);const button=page.getByRole('button',{name:label,exact:true});
+  await expect(button).toBeVisible();
+  expect(await button.evaluate(el=>el.getRootNode() instanceof ShadowRoot)).toBe(true);
+  await button.scrollIntoViewIfNeeded();const box=await button.boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);
+  await button.click();await expect(page).toHaveURL(new RegExp(hash.replace(/[?]/g,'\\?')+'$'));
+  await expect(page.locator('[data-review]')).toBeVisible();
+ });
+}
+test('every page shows the very same bottom dock as Home at phone widths',async({page})=>{
+ await boot(page);
+ for(const width of [320,393,430]){
+  await page.setViewportSize({width,height:852});await page.evaluate(()=>VZ.nav('#/home'));await ready(page);
+  const home=await page.evaluate(()=>{const n=document.querySelector('.vz-student-home').shadowRoot.querySelector('.vz-nav'),r=n.getBoundingClientRect(),i=n.querySelector('.vz-nav-item').getBoundingClientRect();return [r.x,r.y,r.width,r.height,i.x,i.width,i.height].map(Math.round);});
+  for(const route of ['songs','library','calendar','vocal-growth']){
+   await page.evaluate(r=>VZ.nav('#/'+r),route);await expect(page.locator('.v-nav')).toBeVisible();
+   const other=await page.evaluate(()=>{const u=document.querySelector('.v-nav>ul'),r=u.getBoundingClientRect(),i=u.querySelector('a').getBoundingClientRect();return [r.x,r.y,r.width,r.height,i.x,i.width,i.height].map(Math.round);});
+   for(let k=0;k<home.length;k++)expect(Math.abs(other[k]-home[k]),route+' at '+width+'px, value '+k).toBeLessThanOrEqual(1);
+  }
+ }
+});

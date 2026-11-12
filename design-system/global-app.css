@@ -27,6 +27,7 @@ body:not(.vz-home-mode) .muted { color:var(--vz-muted); }
 body:not(.vz-home-mode) .item .chev { color:var(--vz-faint); }
 body:not(.vz-home-mode) .icon-btn { min-width:var(--vz-touch-min); min-height:var(--vz-touch-min); color:var(--vz-primary); }
 body:not(.vz-home-mode) .icon-btn[aria-label="설정"],
+body:not(.vz-home-mode) .vz-filter-icon,
 body:not(.vz-home-mode) [data-song-search],
 body:not(.vz-home-mode) [data-library-search] { color:var(--vz-muted); background:transparent; box-shadow:none; }
 body:not(.vz-home-mode) .field>span,

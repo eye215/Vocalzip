@@ -125,6 +125,21 @@ test('empty and 900-item goal lists have distinct, finite progress',()=>{
   assert.equal(result.goalProgress.completed,300);
   assert.ok(Math.abs(result.goalProgress.ratio-100/3)<1e-10);
 });
+test('legacy duplicate practice room goals show once and toggle together',()=>{
+  const first={id:'practice-room:submission-one:next',date:today,title:'짧은 선율 따라 부르기',source:'personal',sourceId:'practice-room:submission-one',completed:false,order:0};
+  const second={...first,id:'practice-room:submission-two:next',sourceId:'practice-room:submission-two',completed:true,order:1};
+  const unrelated={id:'manual',date:today,title:first.title,source:'personal',sourceId:'',completed:false,order:2};
+  const db={dailyGoals:[first,second,unrelated]};
+  const view=build(db);
+  assert.equal(view.goalProgress.total,2);
+  assert.equal(view.goalProgress.completed,1);
+  assert.deepEqual(view.goals.map(g=>g.id),[first.id,unrelated.id]);
+  assert.equal(M.setGoal(db,first.id,false),true);
+  assert.equal(db.dailyGoals[1].completed,false);
+  assert.equal(db.dailyGoals[2].completed,false);
+  assert.equal(M.setGoal(db,first.id,true),true);
+  assert.deepEqual(db.dailyGoals.map(g=>g.completed),[true,true,false]);
+});
 
 test('long goal text and source survive; checking changes one record without creating actual practice',()=>{
   const title='<script> & 긴 목표 '.repeat(300);

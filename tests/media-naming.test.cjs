@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),n=require
 const resolve=id=>({s1:'첫 곡',s2:'새 곡'})[id]||'';
 const auto={name:'첫 곡 2026.11.08 10',nameMode:'auto',autoName:'첫 곡 2026.11.08 10',songId:'s1',song:'첫 곡',recordedDate:'2026-11-08'};
 test('song and date updates also update an automatic title and preserve ordinal',()=>{
- assert.deepEqual(n.patch(auto,{songId:'s2',song:'새 곡',recordedDate:'2026-11-09'},resolve),{songId:'s2',song:'새 곡',recordedDate:'2026-11-09',name:'새 곡 2026.11.09 10',nameMode:'auto',autoName:'새 곡 2026.11.09 10'});
+ assert.deepEqual(n.patch(auto,{songId:'s2',song:'새 곡',recordedDate:'2026-11-09'},resolve),{songId:'s2',song:'새 곡',recordedDate:'2026-11-09',review:'이전 제목: 첫 곡 2026.11.08 10',name:'새 곡 2026.11.09 10',nameMode:'auto',autoName:'새 곡 2026.11.09 10'});
 });
 test('an imported original filename becomes a song/date title on assignment',()=>{
  const meta={name:'2026-11-08 take',originalFilename:'2026-11-08 take.m4a',recordedDate:'2026-11-08',songId:'',song:''};
@@ -48,11 +48,22 @@ test('recording day takes precedence over upload time',()=>{
 
 test('a verified automatic form name keeps its collision number',()=>{
  const changes={songId:'s2',song:'새 곡',recordedDate:'2026-11-09',name:'새 곡 2026.11.09 2',nameMode:'auto',autoName:'새 곡 2026.11.09 2'};
- assert.deepEqual(n.patch(auto,changes,resolve),changes);
+ assert.deepEqual(n.patch(auto,changes,resolve),{...changes,review:'이전 제목: 첫 곡 2026.11.08 10'});
 });
 test('normalization uses the latest title as memo, without duplicating it',()=>{
  const current={...auto,name:'다른 기기의 수동 제목',nameMode:'manual',autoName:null};
  const out=n.patch(current,{songId:'s2',song:'새 곡',normalizeTitle:true},resolve);
  assert.equal(out.name,'새 곡 2026.11.08');assert.equal(out.review,'이전 제목: 다른 기기의 수동 제목');
  assert.equal(n.patch({...current,...out},{normalizeTitle:true},resolve).review,undefined);
+});
+test('a chosen song and date keep the collision number and append the old title to an existing memo',()=>{
+ const current={name:'오래된 파일 제목',nameMode:'manual',review:'후렴 연습',recordedDate:'2026-11-08'};
+ const next=n.patch(current,{songId:'s2',song:'새 곡',recordedDate:'2026-11-09',review:'후렴 연습',name:'새 곡 2026.11.09 2',nameMode:'auto',autoName:'새 곡 2026.11.09 2'},resolve);
+ assert.equal(next.name,'새 곡 2026.11.09 2');
+ assert.equal(next.review,'후렴 연습\n이전 제목: 오래된 파일 제목');
+});
+test('import keeps the original filename in the memo once when a song and day give it a new title',()=>{
+ assert.equal(n.keepPrevious('호흡 확인','SODA_123.m4a','The River 2026.11.10'),'호흡 확인\n이전 제목: SODA_123');
+ assert.equal(n.keepPrevious('호흡 확인\n이전 제목: SODA_123','SODA_123.m4a','The River 2026.11.10'),'호흡 확인\n이전 제목: SODA_123');
+ assert.equal(n.keepPrevious('','The River 2026.11.10.m4a','The River 2026.11.10'),'');
 });

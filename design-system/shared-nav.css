@@ -1,0 +1,70 @@
+/* Shared five-item floating navigation — match approved student-home dock. */
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
+ box-sizing:border-box;position:fixed;left:50%;right:auto;bottom:max(12px,env(safe-area-inset-bottom));
+ transform:translateX(-50%);width:calc(100% - 32px);max-width:358px;
+ padding:0;border:0;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+ z-index:var(--vz-z-nav,35);
+}
+body>.v-nav ul{
+ box-sizing:border-box;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+ gap:4px;align-items:center;height:70px;width:100%;max-width:none;
+ border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;
+ padding:8px;margin:0;background:var(--vz-nav-surface,rgba(255,255,255,.58));
+ -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px));
+ box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));
+}
+body>.v-nav li{min-width:0;list-style:none}
+body>.v-nav a,body>.v-nav a:not(.rec){
+ box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex-direction:column;
+ height:54px;min-height:54px;gap:2px;border-radius:999px;
+ color:#7d748a;background:transparent;font-size:11px;font-weight:600;text-decoration:none;
+ min-width:0;padding:4px 1px;white-space:nowrap;
+}
+body>.v-nav a i,body>.v-nav a:not(.rec) i{font-size:22px;line-height:1.1;color:var(--vz-color-ink-secondary,#777080)}
+body>.v-nav a[aria-current="page"],body>.v-nav a:not(.rec)[aria-current="page"]{
+ background:var(--vz-color-selected-bg,#f3ebff);color:#8a6db8;
+}
+body>.v-nav a[aria-current="page"] i,body>.v-nav a:not(.rec)[aria-current="page"] i{color:var(--vz-color-accent,#7a32f5)}
+body>.v-nav a:focus-visible{outline:2px solid var(--vz-color-accent,#7a32f5);outline-offset:2px}
+body.vz-record-mode>.v-nav{display:none!important}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ body>.v-nav ul{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+
+/* One dock for every page (2026-11-11): exactly the Home dock's measured geometry. Several older files styled
+ * this bar differently (a 358px cap here, 528px in app.css, a padding-0 four-column grid in global-app.css), so
+ * wide phones showed a narrower dock off Home. This block is loaded last and is specific enough to be the only
+ * source: full width minus 16px each side, 70px tall pill, 8px inside, five 54px items, 22px icons, 11px labels. */
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav{
+ left:50%;right:auto;transform:translateX(-50%);
+ width:calc(100% - 2 * var(--vz-nav-inset,16px));max-width:var(--vz-nav-max-width,528px);height:70px;
+ bottom:max(12px,env(safe-area-inset-bottom));padding:0;border:0;background:transparent;box-shadow:none;
+ backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul{
+ box-sizing:border-box;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;align-items:center;
+ width:100%;max-width:none;height:70px;margin:0;padding:8px;
+ border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;
+ background:var(--vz-nav-surface,rgba(255,255,255,.58));box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));
+ -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px));
+}
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul>li>a{
+ box-sizing:border-box;width:100%;min-width:0;height:54px;min-height:54px;padding:4px 1px;gap:2px;border-radius:999px;
+ font-size:11px;font-weight:600;line-height:16px;
+}
+html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul>li>a i{font-size:22px;width:22px;height:22px;line-height:1}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+ html body:not(.vz-home-mode):not(.vz-record-mode)>nav.v-nav>ul{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+
+/* ── Bottom menu policy (v0.8, design guide §10) ───────────────────────────────────────────
+ * The same menu shows on every ordinary screen (settings and song detail used to drop it). Focus screens keep
+ * their own action area without the menu, as the guide says: recorder, 곡 확인, transcript, recording player,
+ * practice rooms and the standalone vocal lab. Home draws the same menu in its own dock.
+ * Bars that used to replace the menu on ordinary screens (selection / analysis) now float just above it. */
+:root{--vz-nav-stack:calc(max(12px,env(safe-area-inset-bottom)) + 78px)}
+html body:not(.vz-home-mode):not(.vz-record-mode):not([data-vz-route="practice-room"]):not([data-vz-route="guided-practice"]):not([data-vz-route="song-suggest"]):not([data-vz-route="song-transcript"]):not([data-vz-route="recording"]):not([data-vz-route="vocal-lab"]):not([data-vz-route="lab-reports"])>.v-nav{display:block!important}
+html body[data-vz-route="settings"] .v-app{padding-bottom:calc(var(--vz-nav-stack) + 28px)!important}
+html body:not([data-vz-route="song-suggest"]):not([data-vz-route="recording"]) .vz-media-selection,html body.vz-media-selecting:not([data-vz-route="song-suggest"]) .sel-bar{bottom:calc(var(--vz-nav-stack) + 4px)!important;width:min(calc(100% - 24px),560px)!important;border-radius:20px!important;padding-bottom:12px!important}
+html body.vz-media-selecting:not([data-vz-route="song-suggest"]) .v-app,html body.vz-media-has-selection .v-app{padding-bottom:calc(var(--vz-nav-stack) + 120px)!important}
+html body.vz-media-selecting:not([data-vz-route="song-suggest"]) .vz-collection-record,html body.vz-media-has-selection .vz-collection-record{bottom:calc(var(--vz-nav-stack) + 96px)!important}

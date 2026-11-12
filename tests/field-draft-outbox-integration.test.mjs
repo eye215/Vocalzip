@@ -50,6 +50,10 @@ before(async()=>{
  grant select,insert,update,delete on public.vocal_data to authenticated;
  create policy own on public.vocal_data for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
  create table public.vocal_media(id text primary key,user_id uuid,metadata jsonb,updated_at timestamptz);
+ alter table public.vocal_media enable row level security;
+ grant select,delete on public.vocal_media to authenticated;
+ create policy media_read_own on public.vocal_media for select to authenticated using(user_id=auth.uid());
+ create policy media_delete_own on public.vocal_media for delete to authenticated using(user_id=auth.uid());
  create table public.vocal_billing_documents(user_id uuid primary key,payload jsonb,previous_payload jsonb,previous_revision bigint,updated_at timestamptz);
  create function public.vocal_billing_save(bigint,jsonb,uuid) returns jsonb language sql as $$select $2$$;
  create function public.vzip_enqueue_my_media() returns integer language sql as $$select 0$$;
@@ -268,12 +272,12 @@ test('snapshot replay and offline outbox cannot recreate a permanently deleted l
  const current=await body();assert.equal(current.songs[0].id,'song-legacy');assert.equal(current.performances[0].id,'show-old');
 });
 
-function snapshotDevice({owner=U,session=A,store=new Store()}={}){
+function snapshotDevice({owner=U,session=A,store=new Store(),getLocal=null,onAck=()=>{}}={}){
  const identity={owner,session},wire={lost:false,calls:0};
  const transport=Snap.createTransport({projectUrl:'https://example.supabase.co',publishableKey:'sb_publishable_test',
   getOwner:()=>identity.owner,getSessionId:()=>identity.session,getCredentials:async()=>jwt(identity.owner,identity.session),
   fetch:async(url,options)=>{
-   wire.calls++;const path=new URL(url),claims=JSON.parse(Buffer.from(options.headers.Authorization.split(' ')[1].split('.')[1],'base64url').toString());
+   wire.calls++;if(options.method==='POST')await wire.beforeSave?.();const path=new URL(url),claims=JSON.parse(Buffer.from(options.headers.Authorization.split(' ')[1].split('.')[1],'base64url').toString());
    assert.equal(options.headers['X-Client-Info'],'vocalzip-device-session-v2');
    const connection=new pg.Client({connectionString:conn});await connection.connect();
    let data;
@@ -292,7 +296,7 @@ function snapshotDevice({owner=U,session=A,store=new Store()}={}){
    if(options.method==='POST'&&wire.lost){wire.lost=false;throw Error('synthetic response loss');}
    return {ok:true,status:200,json:async()=>structuredClone(data)};
   }});
- const options={storage:store,identity:()=>identity,...transport,lock:async work=>work(),valid:Merge.valid,same:Merge.same,
+ const options={storage:store,identity:()=>identity,...transport,getLocal,onAck,lock:async work=>work(),valid:Merge.valid,same:Merge.same,
   deletedIds:()=>wire.deleted||[],redact:(data,ids)=>{for(const id of ids)Merge.deleteLesson(data,id);return data;},
   deletedMediaIds:()=>wire.deletedMedia||[],redactMedia:(data,ids)=>{for(const id of ids)Merge.deleteMedia(data,id);return data;}};
  return {model:Snap.create(options),recreate:()=>Snap.create(options),wire,store};
@@ -368,4 +372,83 @@ test('metadata changed after a real snapshot commit prevents the destructive med
  await assert.rejects(m.model.run('keep-media'),e=>e.code==='mediaChanged');assert.equal(d.wire.physical||0,0);
  assert.equal((await db.query("select metadata->>'review' r from public.vocal_media where id='keep-media'")).rows[0].r,'new device review');
  assert.equal(m.model.list()[0].phase,'root-confirmed');assert.equal((await body()).lessons[0].memo,'original memo');
+});
+
+test('reviewed recovery rebinds a real SQL lost receipt to the other active session without replaying the old id',{skip,timeout:20000},async()=>{
+ let local=base();
+ const a=snapshotDevice(),row=await a.model.read();await a.model.observe(row,base());
+ const value=base();value.practices.push({id:'previous-login-practice',manualMinutes:19});a.wire.lost=true;
+ await assert.rejects(a.model.write(row,value));const old=a.model.state().pending.id;
+ local.lessons[0].memo='new login local note';
+ const b=snapshotDevice({session:B,store:a.store,getLocal:()=>local,onAck:(saved,payload,meta)=>{assert.ok(meta.recovery);local=structuredClone(saved.payload);}});
+ const r=await b.model.reviewRecovery();
+ const chosen=Merge.merge(Merge.merge(r.device,r.pending.payload).data,r.cloud.payload).data;
+ chosen.lessons[0].memo='new login local note';
+ await b.model.resolveRecovery(r.reviewId,chosen,{confirmed:true});
+ assert.equal(local.practices[1].manualMinutes,19);assert.equal(local.lessons[0].memo,'new login local note');
+ const receipts=(await db.query('select request_id,session_id,result_revision::text from public.vzip_data_write_requests where user_id=$1 order by result_revision',[U])).rows;
+ assert.equal(receipts.length,2);assert.equal(receipts[0].request_id,old);assert.equal(receipts[0].session_id,A);
+ assert.notEqual(receipts[1].request_id,old);assert.equal(receipts[1].session_id,B);
+ assert.equal(b.model.state().pending,null);assert.equal(b.model.state().recoveries[0].pending.id,old);
+});
+test('real SQL recovery of unchanged cloud content creates a fresh fence and preserves the old input',{skip,timeout:20000},async()=>{
+ let local=base();local.lessons[0].memo='unconfirmed device choice';
+ const a=snapshotDevice({getLocal:()=>local}),row=await a.model.read();await a.model.observe(row,local);
+ const r=await a.model.reviewRecovery();
+ await a.model.resolveRecovery(r.reviewId,r.cloud.payload,{confirmed:true});
+ assert.equal((await body()).lessons[0].memo,'original memo');
+ assert.equal(a.model.state().recoveries[0].device.lessons[0].memo,'unconfirmed device choice');
+ assert.equal((await db.query('select revision::text r from public.vocal_data where user_id=$1',[U])).rows[0].r,'2');
+ assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'1');
+});
+test('revoking a session after review blocks the real SQL recovery and retains its durable inputs',{skip,timeout:20000},async()=>{
+ const local=base(),d=snapshotDevice({getLocal:()=>local}),r=await d.model.reviewRecovery();
+ d.wire.beforeSave=()=>as(U,A,c=>c.query('select public.vzip_release_session()'));
+ await assert.rejects(d.model.resolveRecovery(r.reviewId,r.cloud.payload,{confirmed:true}),e=>e.code==='auth');
+ assert.ok(d.model.state().pending);assert.equal(d.model.state().recoveries.length,1);
+ assert.equal((await db.query('select count(*) n from public.vzip_data_write_requests where user_id=$1',[U])).rows[0].n,'0');
+ assert.equal((await body()).lessons[0].memo,'original memo');
+});
+test('a real protected field lease rejects recovery without modifying the original body',{skip,timeout:20000},async()=>{
+ const field=device(api());await field.open();
+ const local=base(),d=snapshotDevice({getLocal:()=>local}),r=await d.model.reviewRecovery();
+ const chosen=structuredClone(r.cloud.payload);chosen.lessons[0].memo='must not bypass the field lease';
+ await assert.rejects(d.model.resolveRecovery(r.reviewId,chosen,{confirmed:true}));
+ assert.equal((await body()).lessons[0].memo,'original memo');assert.ok(d.model.state().pending);
+ assert.equal(d.model.state().recoveries[0].cloud.payload.lessons[0].memo,'original memo');
+});
+
+async function mediaResumeFixture(){
+ await db.query("update public.vocal_media set metadata=$1,updated_at=clock_timestamp() where user_id=$2 and id='keep-media'",[{id:'keep-media',name:'synthetic.wav'},U]);
+ const read=async()=>(await db.query("select metadata,updated_at::text updated_at from public.vocal_media where user_id=$1 and id='keep-media'",[U])).rows[0]||null;
+ const metadata=await read(),stamp=await Snap.mediaStamp(metadata),a=snapshotDevice(),row=await a.model.read();await a.model.observe(row,base());
+ const key='vzip_media_delete_v1:'+U+':keep-media';
+ a.store.setItem(key,JSON.stringify({version:1,owner:U,session:A,id:'keep-media',stamp,phase:'prepared',createdAt:1}));
+ const value=Merge.deleteMedia(structuredClone(base()),'keep-media');value.practices.push({id:'keep-unsent',manualMinutes:23});a.wire.lost=true;
+ await assert.rejects(a.model.write(row,value,{kind:'media-delete',id:'keep-media',stamp}));const old=a.model.state().pending.id;
+ let local=base(),physical=0;
+ const b=snapshotDevice({session:B,store:a.store,getLocal:()=>local,onAck:saved=>{local=structuredClone(saved.payload);}});
+ const engine=Snap.createMediaDeletion({storage:a.store,identity:()=>({owner:U,session:B}),lock:async work=>work(),read,
+  prepare:()=>b.model.read(),reviewRoot:ctx=>b.model.reviewMediaRecovery(ctx),
+  prepareResume:({reviewId,payload,retry})=>retry?b.model.recover():b.model.resolveRecovery(reviewId,payload,{confirmed:true}),
+  cleanup:async(row,guard)=>{guard();assert.ok((await body()).deleted.media.includes('keep-media'));if(row){physical++;await as(U,B,c=>c.query("delete from public.vocal_media where user_id=$1 and id='keep-media'",[U]));}}});
+ return {a,b,engine,key,old,get physical(){return physical},get local(){return local}};
+}
+test('real SQL media resume replaces an old-session purpose with a fresh CAS before metadata cleanup',{skip,timeout:20000},async()=>{
+ const f=await mediaResumeFixture(),review=await f.engine.review('keep-media');
+ const candidate=Merge.merge(Merge.merge(review.root.device,review.root.cloud.payload).data,review.root.pending.payload).data;
+ await f.engine.resume(review.reviewId,candidate,{confirmed:true});
+ assert.equal(f.physical,1);assert.equal(f.local.practices[1].manualMinutes,23);assert.equal(f.local.lessons[0].memo,'original memo');assert.deepEqual(f.local.lessons[0].recordings,[]);
+ const receipts=(await db.query('select request_id,session_id from public.vzip_data_write_requests where user_id=$1 order by result_revision',[U])).rows;
+ assert.equal(receipts.length,2);assert.equal(receipts[0].request_id,f.old);assert.equal(receipts[0].session_id,A);assert.notEqual(receipts[1].request_id,f.old);assert.equal(receipts[1].session_id,B);
+ assert.equal(f.b.model.state().recoveries[0].mediaDelete.fromSession,A);assert.equal(f.engine.list()[0].phase,'cloud-complete');assert.equal(f.engine.list()[0].session,B);
+ await f.engine.acknowledge('keep-media');assert.deepEqual(f.engine.list(),[]);
+});
+test('real SQL revoked resume cannot adopt the old intent or remove metadata',{skip,timeout:20000},async()=>{
+ const f=await mediaResumeFixture(),review=await f.engine.review('keep-media'),old=f.a.store.getItem(f.key);
+ f.b.wire.beforeSave=()=>as(U,B,c=>c.query('select public.vzip_release_session()'));
+ const candidate=Merge.merge(review.root.device,review.root.cloud.payload).data;
+ await assert.rejects(f.engine.resume(review.reviewId,candidate,{confirmed:true}),e=>e.code==='auth');
+ assert.equal(f.physical,0);assert.equal(f.a.store.getItem(f.key),old);
+ assert.equal((await db.query("select count(*) n from public.vocal_media where user_id=$1 and id='keep-media'",[U])).rows[0].n,'1');assert.ok(f.b.model.state().pending);
 });

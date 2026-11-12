@@ -40,6 +40,18 @@ function unique(records){
   }
   return out;
 }
+function practiceRoomGoal(g){return typeof g?.sourceId==='string'&&g.sourceId.startsWith('practice-room:')&&String(g.id||'').endsWith(':next')}
+function goalTitle(g){return String(g.title||'').trim().replace(/\s+/g,' ')}
+function visibleGoals(records){
+  const result=[],byTitle=new Map();
+  for(const goal of records){
+    if(!practiceRoomGoal(goal)){result.push(goal);continue}
+    const key=goal.date+'\0'+goalTitle(goal);
+    if(!byTitle.has(key)){byTitle.set(key,result.length);result.push(goal)}
+    else if(goal.completed===true)result[byTitle.get(key)].completed=true;
+  }
+  return result;
+}
 function target(plans,period,date){
   const p=plans.find(p=>p.id===period+':'+date&&p.period===period&&p.date===date);
   return p?minutes(p.targetMinutes):null;
@@ -111,7 +123,7 @@ function build(db={},options={}){
   // then count consecutive calendar dates even when the run crosses Monday.
   let cursor=days.slice().reverse().find(d=>d.minutes>0)?.date,streak=0;
   while(cursor&&(totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
-  const goals=unique(db.dailyGoals).filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i}))
+  const goals=visibleGoals(unique(db.dailyGoals).filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i})))
     .sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||a._index-b._index).map(g=>{delete g._index;return g});
   const completed=goals.filter(g=>g.completed===true).length;
   const recommendationCandidates=unique(db.assignments).filter(t=>t.status!=='done'&&(!t.startDate||today>=t.startDate)&&(!t.dueDate||today<=t.dueDate))
@@ -125,7 +137,11 @@ function setGoal(db,id,completed){
   if(typeof completed!=='boolean')throw Error('완료 상태를 확인해 주세요.');
   const goal=list(db.dailyGoals).find(g=>g&&g.id===id);
   if(!goal)return false;
-  goal.completed=completed;return true;
+  if(practiceRoomGoal(goal)){
+    const title=goalTitle(goal);
+    for(const same of db.dailyGoals)if(same?.date===goal.date&&practiceRoomGoal(same)&&goalTitle(same)===title)same.completed=completed;
+  }else goal.completed=completed;
+  return true;
 }
 function planMinutes(value){const n=minutes(value);if(value==null||value==='')return null;if(n==null)throw Error('목표 시간을 확인해 주세요.');return n}
 // Local optimistic guard: compare only the goal editor's day/week inputs.
@@ -156,7 +172,7 @@ function savePlan(db,input){
       seen.add(g.id);
       const old=previous.get(g.id),title=String(g.title??old?.title??'').trim(),source=g.source||old?.source||'personal';
       if(!title||!['homework','personal','recommendation'].includes(source))throw Error('목표 내용과 출처를 확인해 주세요.');
-      return {...old,id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
+      return {...old,...(!old&&g.recommendation?{songId:String(g.songId||''),recommendation:copy(g.recommendation)}:{}),id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
         completed:typeof g.completed==='boolean'?g.completed:old?.completed===true,order:old?Number(old.order)||0:nextOrder++};
     });
     goals=goals.filter(g=>g.date!==date).concat(next);

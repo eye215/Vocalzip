@@ -201,14 +201,38 @@ function splitLevels(cs) {
 /* ---------- measurements ---------- */
 const MA = 17; // 170 ms moving average: removes vibrato (≈5–7 Hz), keeps slower drift
 function smooth(a) { const out = new Float64Array(a.length), h = MA >> 1; for (let i = 0; i < a.length; i++) { let s = 0, n = 0; for (let j = Math.max(0, i - h); j <= Math.min(a.length - 1, i + h); j++) { s += a[j]; n++; } out[i] = s / n; } return out; }
+// Exact growing-prefix median: two heaps replace sorting the whole note every 10 ms.
+function prefixMedian() {
+  const low=[], high=[];
+  const before=(a,b,max)=>max?a>b:a<b;
+  const push=(heap,value,max)=>{
+    let i=heap.length;heap.push(value);
+    while(i){const parent=(i-1)>>1;if(!before(value,heap[parent],max))break;heap[i]=heap[parent];i=parent;}heap[i]=value;
+  };
+  const pop=(heap,max)=>{
+    const first=heap[0],last=heap.pop();
+    if(heap.length){let i=0;while(2*i+1<heap.length){let child=2*i+1;if(child+1<heap.length&&before(heap[child+1],heap[child],max))child++;if(!before(heap[child],last,max))break;heap[i]=heap[child];i=child;}heap[i]=last;}
+    return first;
+  };
+  return {
+    add(value){
+      if(!low.length||value<=low[0])push(low,value,true);else push(high,value,false);
+      if(low.length>high.length+1)push(high,pop(low,true),false);
+      else if(high.length>low.length)push(low,pop(high,false),true);
+    },
+    value(){return low.length===high.length?(low[0]+high[0])/2:low[0];}
+  };
+}
 function notesOf(segment) {
   // segment: cents per frame of one voiced contour. A new note starts when the smoothed pitch
   // stays more than 70 cents away from the current note for 50 ms.
-  const m = smooth(segment), notes = []; let start = 0, away = 0;
+  const m = smooth(segment), notes = []; let start = 0, away = 0, prefix = prefixMedian();
+  if(m.length)prefix.add(m[0]);
   const close = end => { if (end - start >= 30) notes.push({start, end}); };
   for (let i = 1; i < m.length; i++) {
-    const center = median(Array.from(m.subarray(start, i)));
-    if (Math.abs(m[i] - center) > 70) { if (++away >= 5) { close(i - 4); start = i - 4; away = 0; } } else away = 0;
+    const center = prefix.value();
+    if (Math.abs(m[i] - center) > 70) { if (++away >= 5) { close(i - 4); start = i - 4; away = 0; prefix = prefixMedian();for(let j=start;j<i;j++)prefix.add(m[j]); } } else away = 0;
+    prefix.add(m[i]);
   }
   close(m.length);
   return notes.map(n => {
@@ -270,7 +294,7 @@ function measure(tr, voiced, refTuning) {
 }
 
 /** Analyze mono samples. Returns {version, metrics, confidence, notes, curve} (curve: 20 points/s, cents or null). */
-function analyze(samples, sampleRate, {onProgress} = {}) {
+function analyze(samples, sampleRate, {onProgress, voiceOnly = false} = {}) {
   onProgress?.(0.02);
   const x = highpass(resample(samples, sampleRate));
   const tr = track(x, onProgress);
@@ -294,7 +318,8 @@ function analyze(samples, sampleRate, {onProgress} = {}) {
   // The MR's tuning, from the accompaniment heard on its own (needs ≥ 3 s of it).
   let ref = null;
   if (mr.length >= 3 * FPS) { let sx = 0, sy = 0; for (const c of mr) { const a = 2 * Math.PI * wrap(c) / 100; sx += Math.cos(a); sy += Math.sin(a); } if (Math.hypot(sx, sy) / mr.length > 0.5) ref = Math.atan2(sy, sx) * 100 / (2 * Math.PI); }
-  const out = measure(tr, voiced, ref);
+  // Song identification needs the same voice mask, not note/vibrato measurements.
+  const out = voiceOnly ? {metrics:{voicedSeconds:round(voicedFrames < 2 * FPS ? 0 : voicedFrames / FPS,1)},notes:[]} : measure(tr, voiced, ref);
   const step = FPS / 20, curve = [];
   for (let f = 0; f < tr.frames; f += step) {
     const v = []; for (let g = f; g < Math.min(tr.frames, f + step); g++) if (voiced[g]) v.push(centsOf(tr.hz[g]));
@@ -309,13 +334,13 @@ function analyze(samples, sampleRate, {onProgress} = {}) {
   };
 }
 
-const api = {VERSION, analyze, noteName, centsOf, resample, _internal:{track, contours, highpass}};
+const api = {VERSION, analyze, noteName, centsOf, resample, _internal:{track, contours, highpass, notesOf, prefixMedian}};
 if (typeof module === 'object' && module.exports) module.exports = api;
 else root.VzipVocalAnalysis = api;
 // As a Web Worker: {samples, sampleRate} in, {progress} … {result} or {error} out.
 if (typeof window === 'undefined' && typeof self === 'object' && typeof importScripts === 'function') {
   self.onmessage = e => {
-    try { const {samples, sampleRate} = e.data; self.postMessage({result:analyze(samples, sampleRate, {onProgress:p => self.postMessage({progress:p})})}); }
+    try { const {samples, sampleRate, voiceOnly} = e.data; self.postMessage({result:analyze(samples, sampleRate, {voiceOnly:voiceOnly===true,onProgress:p => self.postMessage({progress:p})})}); }
     catch (err) { self.postMessage({error:err.message || String(err)}); }
   };
 }

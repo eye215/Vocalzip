@@ -194,9 +194,12 @@ async function readReferences(db, owner) {
   const {rows:[data]} = await db.query('select payload from public.vocal_data where user_id = $1', [owner]);
   const payload = data?.payload || {}, gone = new Set(payload.deleted?.songs || []);
   const songs = (payload.songs || []).filter(s => s?.id && !gone.has(s.id));
-  // Lyrics typed on the song page first; recorded references only for songs without lyrics (as in the app).
-  const typed = songs.filter(s => String(s.lyrics || '').trim().length >= 12).map(s => ({songId:s.id, transcript:String(s.lyrics).trim().slice(0, 16000)}));
-  const has = new Set(typed.map(r => r.songId)), known = new Set(songs.map(s => s.id));
+  // Lyrics typed on the song page first, and the Korean translation too (a Korean-language production is sung in the
+  // translated words); recorded references only for songs without original lyrics (as in the app).
+  const text = (s, key) => String(s[key] || '').trim();
+  const typed = songs.flatMap(s => ['lyrics', 'translation'].filter(key => text(s, key).length >= 12)
+    .map(key => ({songId:s.id, transcript:text(s, key).slice(0, 16000), source:key})));
+  const has = new Set(typed.filter(r => r.source === 'lyrics').map(r => r.songId)), known = new Set(songs.map(s => s.id));
   const {rows} = await db.query("select record_id, transcript from public.vocal_song_texts where user_id = $1 and kind = 'reference' and deleted_at is null", [owner]).catch(() => ({rows:[]}));
   return {songs, refs:[...typed, ...rows.filter(r => known.has(r.record_id) && !has.has(r.record_id)).map(r => ({songId:r.record_id, transcript:r.transcript}))]};
 }

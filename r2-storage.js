@@ -182,9 +182,104 @@ async function ready() {
   if (!endpoint() || !window.vzipCloudSignedIn?.()) return false;
   let t; try { t = await token(); } catch { return false; }
   if (check.token === t && check.until > Date.now()) return check.ok;
-  try { const accepted=await api('/v1/me'); check = {token:t, ok:true, reason:'', uploadContract:accepted.uploadContract||'', until:Date.now() + 600000}; }
+  try { const accepted=await api('/v1/me'); check = {token:t, ok:true, reason:'', uploadContract:accepted.uploadContract||'', mediaMode:accepted.mediaMode||'', until:Date.now() + 600000}; }
   catch (e) { check = {token:t, ok:false, reason:e.status === 401 ? 'auth' : e.status ? 'http ' + e.status : 'network', until:Date.now() + (e.status ? 600000 : 60000)}; }
   return check.ok;
+}
+/** Server publishes only a HEAD-verified immutable original; legacy accounts keep their existing insert path. */
+async function publishLibrary(metadata,{signal}={}){
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
+ const current=()=>{if(window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 보관함 연결을 중단했어요.');};
+ await ready();current();
+ if(check.mediaMode==='paused')throw uploadError(423,'media writes are paused');
+ if(check.mediaMode!=='revision')return null;
+ if(!check.ok)throw Error('저장소 연결을 확인한 뒤 다시 시도해 주세요.');
+ const parts=String(metadata?.r2Key||'').split('/');
+ if(parts.length!==5||parts[0]!=='u'||parts[1]!==owner||parts[2]!==metadata.id||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(parts[3])||
+  !/^original\.[a-z0-9]{1,8}$/.test(parts[4]))throw Error('기존 파일은 새 저장 방식으로 인수한 뒤 연결할 수 있어요.');
+ // The unique upload attempt is the stable request ID across response loss/reloads.
+ const result=await api('/v2/media/publish',{method:'POST',body:{requestId:parts[3],metadata},signal});current();
+ if(result?.version!==1||result.user_id!==owner||result.session_id!==session||result.request_id!==parts[3]||
+  result.id!==metadata.id||result.metadata?.id!==metadata.id||result.metadata?.storageProvider!=='r2'||
+  result.metadata?.r2Key!==metadata.r2Key||result.metadata?.size!==metadata.size||result.metadata?.r2Etag!==metadata.r2Etag||
+  !Number.isFinite(Date.parse(result.updated_at)))throw Error('보관함 연결 결과를 확인하지 못했어요. 올린 원본은 보존돼요.');
+ return result.metadata;
+}
+/** Fresh server mode; unknown/paused states never authorize a direct-write fallback. */
+async function metadataMode({signal}={}){
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
+ const current=()=>{if(!owner||!session||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인 세션이 변경됐어요.');};
+ current();const access=await token();current();const value=await api('/v1/me',{signal});current();
+ if(value?.user!==owner||!['legacy','revision','paused'].includes(value.mediaMode))throw Error('파일 수정의 서버 저장 방식을 확인하지 못했어요.');
+ if(value.mediaMode==='paused')throw uploadError(423,'media writes are paused');
+ check={token:access,ok:true,reason:'',mediaMode:value.mediaMode,uploadContract:typeof value.uploadContract==='string'?value.uploadContract:check.token===access?check.uploadContract||'':'',until:Date.now()+600000};
+ return value.mediaMode;
+}
+/** Minimal immutable target retained by the existing deletion journal, never a bearer ticket. */
+function deletionTarget(row,{id,requestId}={}){
+ const m=row?.metadata,owner=window.vzipCloudUserId?.();
+ if(!m||m.id!==id||m.storageProvider!=='r2'||['path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(m,k)))throw Error('기존 원본은 새 저장 방식 인수가 먼저 필요해요.');
+ const target={requestId,mediaId:id,key:m.r2Key,updatedAt:deleteStamp(row.updated_at),size:m.size,type:m.type,etag:m.r2Etag};
+ validateDeletionTarget(target,owner);return target;
+}
+function deleteStamp(value){
+ if(!window.VzipMediaMetadataEdits?.stamp)throw Error('파일 버전 확인 모듈을 다시 불러와 주세요.');
+ return window.VzipMediaMetadataEdits.stamp(value);
+}
+function validateDeletionTarget(t,owner){
+ const fields=['requestId','mediaId','key','updatedAt','size','type','etag'],p=String(t?.key||'').split('/'),
+ uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+ if(!owner||!t||Object.keys(t).length!==fields.length||Object.keys(t).some(k=>!fields.includes(k))||!uuid.test(t.requestId||'')||
+  !/^[A-Za-z0-9_-]{1,100}$/.test(t.mediaId||'')||p.length!==5||p[0]!=='u'||p[1]!==owner||p[2]!==t.mediaId||!uuid.test(p[3])||!/^original\.[a-z0-9]{1,8}$/.test(p[4])||
+  deleteStamp(t.updatedAt)!==t.updatedAt||!Number.isSafeInteger(t.size)||t.size<1||t.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(t.type||'')||!/^[!-~]{1,200}$/.test(t.etag||''))throw Error('삭제할 원본과 이전 버전을 확인해 주세요.');
+}
+/** Re-obtain the same signed ticket; only the Worker deletes immutable bytes and the row. */
+async function deleteLibrary(target,{signal}={}){
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'',t=JSON.parse(JSON.stringify(target));
+ const current=()=>{if(!owner||!session||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 파일 삭제를 중단했어요.');};
+ current();validateDeletionTarget(t,owner);
+ if(await metadataMode({signal})!=='revision')throw Error('미완료 원본 삭제를 이전 저장 방식으로 우회하지 않아요.');current();
+ const value=await api('/v2/media/delete/prepare',{method:'POST',body:{requestId:t.requestId,mediaId:t.mediaId,key:t.key,updatedAt:t.updatedAt,size:t.size},signal});current();
+ const ticket=value?.ticket,d=ticket?.descriptor,fields=['version','user_id','session_id','request_id','media_id','object_key','object_version','expected_updated_at','size','content_type','content_root','etag'];
+ if(!['reserved','deleted'].includes(value?.state)||!d||Object.keys(d).length!==fields.length||Object.keys(d).some(k=>!fields.includes(k))||
+  d.version!==1||d.user_id!==owner||d.session_id!==session||d.request_id!==t.requestId||d.media_id!==t.mediaId||
+  d.object_key!==t.key||d.object_version!==t.key.split('/')[3]||deleteStamp(d.expected_updated_at)!==t.updatedAt||
+  d.size!==t.size||d.content_type!==t.type||d.etag!==t.etag||!/^[0-9a-f]{64}$/.test(d.content_root||'')||!/^[0-9a-f]{64}$/.test(ticket.signature||''))
+  throw Error('원본 삭제 허가를 확인하지 못했어요. 같은 요청으로 다시 확인해 주세요.');
+ const result=await api('/v2/media/delete/commit',{method:'POST',body:{ticket},signal});current();
+ if(result?.ok!==true||result.state!=='deleted'||result.key!==t.key||result.requestId!==t.requestId)throw Error('원본 삭제 결과를 확인하지 못했어요. 같은 요청으로 다시 확인해 주세요.');
+ signed.delete(t.key);persist();return result;
+}
+/** CAS transport. Caller retains this exact request for ambiguous replies; never retry a conflict with a fresh version. */
+async function editLibrary(target,{signal}={}){
+ const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
+ const current=()=>{if(!owner||!session||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 파일 수정을 중단했어요.');};
+ current();const body=JSON.parse(JSON.stringify({requestId:target?.requestId,mediaId:target?.mediaId,key:target?.key,updatedAt:target?.updatedAt,patch:target?.patch}));
+ await ready();current();
+ if(!check.ok)throw Error('저장소 연결을 확인한 뒤 다시 시도해 주세요.');
+ if(check.mediaMode==='paused')throw uploadError(423,'media writes are paused');
+ if(check.mediaMode==='legacy')return null;
+ if(check.mediaMode!=='revision')throw Error('파일 수정의 저장 방식을 확인하지 못했어요.');
+ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+ const stamp=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(v)&&Number.isFinite(Date.parse(v));
+ const parts=String(body?.key||'').split('/');
+ if(!uuid.test(body?.requestId||'')||!/^[A-Za-z0-9_-]{1,100}$/.test(body?.mediaId||'')||!stamp(body.updatedAt)||
+  parts.length!==5||parts[0]!=='u'||parts[1]!==owner||parts[2]!==body.mediaId||!uuid.test(parts[3])||!/^original\.[a-z0-9]{1,8}$/.test(parts[4])||
+  !body.patch||Array.isArray(body.patch)||typeof body.patch!=='object'||!Object.keys(body.patch).length||
+  Object.keys(body.patch).some(k=>!['name','nameMode','autoName','song','songId','created','recordedDate','dateSource','rating','review'].includes(k)))throw Error('수정할 원본과 이전 버전을 확인해 주세요.');
+ const result=await api('/v2/media/edit',{method:'POST',body,signal});current();
+ if(result?.version!==1||result.user_id!==owner||result.session_id!==session||result.request_id!==body.requestId||
+  result.id!==body.mediaId||result.object_key!==body.key||result.metadata?.id!==body.mediaId||
+  result.metadata?.storageProvider!=='r2'||result.metadata?.r2Key!==body.key||
+  !Number.isSafeInteger(result.metadata.size)||result.metadata.size<1||result.metadata.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(result.metadata.type||'')||!/^[!-~]{1,200}$/.test(result.metadata.r2Etag||'')||
+  ['path','parts','legacyStorage','storageVersion'].some(k=>Object.hasOwn(result.metadata,k))||
+  !stamp(result.updated_at)||!stamp(result.applied_updated_at)||result.applied_updated_at<=body.updatedAt||result.applied_updated_at>result.updated_at||
+  typeof result.replayed!=='boolean'||typeof result.superseded!=='boolean'||
+  result.superseded!==(result.applied_updated_at!==result.updated_at)||(result.superseded&&!result.replayed)||
+  (!result.superseded&&Object.entries(body.patch).some(([k,v])=>result.metadata[k]!==v)))throw Error('파일 수정 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해 주세요.');
+ return result;
 }
 /** Download only a transformed 30-second excerpt of an R2 M4A/MP4 audio file.
  * Never decodes/downloads the entire original on iPhone; the Worker enforces ownership.
@@ -208,6 +303,8 @@ async function clip(key, {time=20, duration=30, signal}={}) {
   return new File([body],'vocalzip-stt-clip.m4a',{type:'audio/mp4'});
 }
 async function usage() { return api('/v1/usage'); }
+async function scoreVisionAvailable(){return window.vzipCloudScoreVision?.()||{available:false};}
+async function scoreVision(mode,image,signal){if(!window.vzipCloudScoreVision)throw Error('로그인을 확인해 주세요.');return window.vzipCloudScoreVision(mode,image,signal);}
 /** Every object under the user's own folder (read-only; the Worker lists only u/<user>/). */
 async function objects() {
   const out = [];
@@ -220,5 +317,17 @@ async function health() {
   if (!endpoint()) return {ok:false, reason:'not-configured'};
   try { const r = await fetch(endpoint() + '/health'); return r.ok ? await r.json() : {ok:false, reason:'http ' + r.status}; } catch (e) { return {ok:false, reason:e.message}; }
 }
-window.VzipR2 = {configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
+/** Individual share links (owner-managed, revocable): create / list / revoke. The token is the link's secret. */
+const shares = {
+  create:({key, mediaId, title, expiresIn}) => api('/v1/shares', {method:'POST', body:{key, mediaId, title, expiresIn}}),
+  list:async () => (await api('/v1/shares')).shares || [],
+  revoke:id => api('/v1/shares/' + encodeURIComponent(id), {method:'DELETE'}),
+  link:token => new URL('share.html#' + token, location.href.split('#')[0]).href
+};
+/** Score → MusicXML conversion (OMR PoC). Only on the owner's request; the result sits next to the PDF. */
+const omr = {
+  request:key => api('/v1/omr', {method:'POST', body:{key}}).then(r => r.job),
+  status:scoreId => api('/v1/omr?score=' + encodeURIComponent(scoreId)).then(r => r.job)
+};
+window.VzipR2 = {shares, omr, configured:() => !!endpoint(), enabled:() => !!endpoint() && !!window.vzipCloudSignedIn?.(), upload, publishLibrary, editLibrary, metadataMode, deletionTarget, deleteLibrary, hasPendingTransfer, recoverLibraryTransfers, acknowledgeTransfer, url, cachedUrl, prefetch, remove, stat, clip, scoreVisionAvailable, scoreVision, usage, objects, health, extOf, ready, lastCheck:() => ({ok:check.ok, reason:check.reason})};
 })();

@@ -4,7 +4,7 @@
 const localStorage = window.VzipAccountScope?.storage || window.localStorage;
 
 const KEY = 'vocal-zip_mvp_v1';
-const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans'];
+const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback', 'scoreAnnotations', 'monthlyGrowthReports', 'monthlyAiReports', 'overallAiReports', 'vocalPlanReports'];
 const DEFAULTS = {categories:[{id:'c1',name:'발성',items:['립트릴','허밍','패사지오']},{id:'c2',name:'호흡',items:['복식호흡','호흡 유지']},{id:'c3',name:'곡 연습',items:['음정 교정','프레이징','감정 표현']}],songs:[],lessons:[],assignments:[],practices:[],comparisonReports:[]};
 const VZ = window.VZ = {version:'6.0'};
 
@@ -24,7 +24,7 @@ window.VzipAccountScope?.beforeLeave(()=>{accountFrozen=true;});
 /** Apply a mutation; on storage failure restore the previous state and report false. */
 /** Mark changed records with updatedAt and remember deliberately removed ids, so a cloud
  * merge (data-merge.js) never brings back what the user deleted nor drops what they added. */
-const TRACKED = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans'];
+const TRACKED = ARRAYS;
 function stamp(before, after) {
   const now = Date.now();
   for (const k of TRACKED) {
@@ -145,14 +145,29 @@ const unlockPage = () => {
 };
 const vv = window.visualViewport;
 if (vv) {
+  // The keyboard is only up while a text field has focus. Without that check a viewport value left over from the
+  // keyboard (iOS does not always report the close) kept full pages shrunk with the save button hidden.
+  const typing = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(TEXTAREA|SELECT)$/.test(a.tagName) || (a.tagName === 'INPUT' && !/^(button|checkbox|radio|range|submit|reset|file|color|image)$/i.test(a.type))); };
   const kb = () => {
-    const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
+    const h = typing() ? Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)) : 0;
     document.documentElement.style.setProperty('--kb', h > 80 ? h + 'px' : '0px');
     document.documentElement.classList.toggle('vz-keyboard-open', h > 80);
     document.documentElement.style.setProperty('--vv-top', Math.round(vv.offsetTop) + 'px');
     document.documentElement.style.setProperty('--vv-height', Math.round(vv.height) + 'px');
+    // The page itself stays put; bring the field being typed into above the keyboard inside the page's own scroll.
+    if (h > 80) {
+      const field = document.activeElement, body = field?.closest?.('.sheet-page .sheet-body');
+      if (body) requestAnimationFrame(() => {
+        const r = field.getBoundingClientRect(), b = body.getBoundingClientRect(), limit = Math.min(b.bottom, innerHeight - h) - 16;
+        if (r.bottom > limit) body.scrollTop += Math.min(r.bottom - limit, Math.max(0, r.top - b.top - 16));
+        else if (r.top < b.top) body.scrollTop -= b.top - r.top + 16;
+      });
+    }
   };
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
+  addEventListener('resize', kb); addEventListener('focusin', kb);
+  // iOS reports the keyboard closing late (or not at all): check again after a field lets go.
+  addEventListener('focusout', () => { for (const ms of [0, 250, 600]) setTimeout(kb, ms); });
   kb();
 }
 /** Full-page workflow by default; short action menus and confirmations are explicit variants. */
@@ -219,7 +234,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
     el.style.width = width + 'px'; el.style.left = left + 'px'; el.style.top = top + 'px';
   }
   // Keep a focused field above the iOS keyboard.
-  el.addEventListener('focusin', e => { if (e.target.matches('input,textarea,select')) setTimeout(() => e.target.scrollIntoView({block:'center', behavior:'smooth'}), 300); });
+  // Do not force-scroll focused fields. iOS/browser handles keyboard visibility natively.
   (el.querySelector('[autofocus]') || el.querySelector('[data-close]') || el.querySelector('button'))?.focus({preventScroll:true});
   return api;
 };

@@ -31,7 +31,7 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-week-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:12px 0 0;min-height:var(--vz-touch-min);background:transparent;}
 #vocalzip-refined-preview .vz-week-nav button{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:radial-gradient(circle at center,#f2f4f7 0 16px,transparent 16.5px);color:var(--ink-2,#5f5a74);cursor:pointer;padding:0;}
 #vocalzip-refined-preview .vz-week-nav button:disabled{color:#c7bfd2;cursor:default;opacity:.5;}
-#vocalzip-refined-preview .vz-week-nav button svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+#vocalzip-refined-preview .vz-week-nav button svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-week-nav .vz-week-range{text-align:center;white-space:nowrap;line-height:1.25;}
 #vocalzip-refined-preview .vz-week-year{display:block;color:var(--vz-color-ink-muted);font-size:11px;font-weight:400;}
 #vocalzip-refined-preview .vz-week-dates{display:block;color:var(--vz-color-ink-secondary);font-size:14px;font-weight:600;letter-spacing:.01em;font-variant-numeric:tabular-nums;margin-top:2px;}
@@ -53,7 +53,11 @@ const adaptations=String.raw`
 /* Use the device width rather than leaving a 390px mock phone inside wider phones. */
 #vocalzip-refined-preview .vz-phone{max-width:var(--vz-content-max);padding:8px 12px 0;padding-top:max(8px,env(safe-area-inset-top));}
 #vocalzip-refined-preview .vz-nav-item.vz-active{background:var(--vz-color-selected-bg);}
-#vocalzip-refined-preview .vz-practice-icon{display:inline-flex;align-items:center;width:20px;height:20px;flex:none;font-family:"Phosphor";font-style:normal;font-weight:400;font-size:20px;line-height:1;color:inherit;}
+#vocalzip-refined-preview .vz-ui-icon{display:inline-grid;place-items:center;width:20px;height:20px;flex:none;font-family:"Phosphor";font-style:normal;font-weight:400;font-size:20px;line-height:1;color:inherit;}
+#vocalzip-refined-preview .vz-streak .vz-ui-icon,#vocalzip-refined-preview .vz-song-label .vz-ui-icon{width:13px;height:13px;font-size:13px;}
+#vocalzip-refined-preview .vz-card .vz-title>.vz-ui-icon:first-child,#vocalzip-refined-preview .vz-shortcut>span>.vz-ui-icon{color:inherit;}
+#vocalzip-refined-preview .vz-goal-tools .vz-ui-icon{width:17px;height:17px;font-size:17px;}
+#vocalzip-refined-preview .vz-art-front .vz-ui-icon{width:28px;height:28px;font-size:28px;color:#fff;}
 #vocalzip-refined-preview .vz-goals .vz-title .vz-count{margin-left:7px;white-space:nowrap;color:var(--vz-color-ink-muted);font-size:12px;font-weight:600;line-height:20px;}
 #vocalzip-refined-preview .vz-nav{background:var(--vz-nav-surface,rgba(255,255,255,.58));}
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more){#vocalzip-refined-preview .vz-nav{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;}}
@@ -101,6 +105,16 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-goals .vz-empty-action svg{width:22px;height:22px;flex:none;stroke:#858194;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-goals .vz-empty-action svg:last-child{width:16px;height:16px;margin-left:auto;}
 #vocalzip-refined-preview .vz-goal-list:empty{display:none;}
+#vocalzip-refined-preview .vz-guided-recs{margin-top:14px;padding-top:14px;border-top:1px solid var(--vz-color-divider,#e8e2ef);}
+#vocalzip-refined-preview .vz-guided-recs[hidden]{display:none;}
+#vocalzip-refined-preview .vz-guided-heading{display:flex;align-items:center;gap:7px;margin-bottom:8px;color:var(--vz-color-ink);font-size:14px;font-weight:700;}
+#vocalzip-refined-preview .vz-guided-item{display:flex;align-items:center;min-width:0;gap:8px;padding:10px 12px;border-radius:14px;background:#f7f5fb;}
+#vocalzip-refined-preview .vz-guided-item+.vz-guided-item{margin-top:8px;}
+#vocalzip-refined-preview .vz-guided-copy{min-width:0;flex:1;}
+#vocalzip-refined-preview .vz-guided-copy strong,#vocalzip-refined-preview .vz-guided-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vocalzip-refined-preview .vz-guided-copy strong{color:var(--vz-color-ink);font-size:13px;line-height:19px;}
+#vocalzip-refined-preview .vz-guided-copy small{color:var(--vz-color-ink-muted);font-size:11px;line-height:17px;margin-top:2px;}
+#vocalzip-refined-preview .vz-guided-item button{flex:none;min-height:44px;border:0;border-radius:12px;padding:0 10px;background:var(--vz-color-selected-bg,#eee5ff);color:var(--vz-color-accent);font-size:12px;font-weight:700;cursor:pointer;}
 @media(max-width:355px){#vocalzip-refined-preview .vz-event h2{line-height:1.45454545;}#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
 `;
 export async function createFloatingHome(opts={}){
@@ -110,6 +124,16 @@ export async function createFloatingHome(opts={}){
  const tokenStyle=el("style",template.tokens);tokenStyle.dataset.sharedTokens="true";shadow.append(tokenStyle);
  const integration=el("style",adaptations);integration.dataset.integration="accessibility";shadow.append(integration);
  const root=document.importNode(template.root,true);root.setAttribute("aria-label","Vocalzip 홈");shadow.append(root);
+ // Extend only the rendered dock; keep the approved HTML file untouched.
+ // On home, the ordinary .v-nav is hidden in favor of this shadow-root dock.
+ const dock=root.querySelector('.vz-nav');
+ const growthButton=dock?.querySelector('.vz-nav-item:last-child')?.cloneNode(true);
+ if(growthButton){
+  growthButton.classList.remove('vz-active');
+  growthButton.removeAttribute('aria-current');
+  growthButton.querySelector('span').textContent='성장';
+  dock.append(growthButton);
+ }
  const iconFont=el("style",`@font-face{font-family:"Phosphor";src:url("${new URL('../vendor/phosphor/Phosphor.woff2',import.meta.url)}") format("woff2");font-display:block}#vocalzip-refined-preview .vz-nav-item i::before,#vocalzip-refined-preview .vz-floating-record i::before{content:attr(data-glyph)}`);
  shadow.append(iconFont);
  const sharedShell=el("style",`/* Match the common four-tab dock and circular recording action. */
@@ -117,7 +141,7 @@ export async function createFloatingHome(opts={}){
 #vocalzip-refined-preview .vz-card{padding:var(--vz-card-padding);border-radius:var(--vz-radius-card)}
 #vocalzip-refined-preview .vz-floating-record{background:var(--vz-gradient-floating)}
 #vocalzip-refined-preview .vz-nav{box-sizing:border-box;height:var(--vz-nav-height);padding:var(--vz-nav-padding);border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));border-radius:999px;background:var(--vz-nav-surface,rgba(255,255,255,.58));box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));-webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));backdrop-filter:blur(var(--vz-nav-blur,24px))}
-#vocalzip-refined-preview .vz-nav-item{box-sizing:border-box;height:var(--vz-nav-item-height);min-height:var(--vz-nav-item-height);gap:2px;border-radius:999px;font-size:var(--vz-type-nav-size);font-weight:var(--vz-font-medium)}
+#vocalzip-refined-preview .vz-nav{grid-template-columns:repeat(5,minmax(0,1fr));}\n#vocalzip-refined-preview .vz-nav-item{box-sizing:border-box;height:var(--vz-nav-item-height);min-height:var(--vz-nav-item-height);gap:2px;border-radius:999px;font-size:var(--vz-type-nav-size);font-weight:var(--vz-font-medium)}
 #vocalzip-refined-preview .vz-nav-item.vz-active{background:var(--vz-color-selected-bg);color:var(--vz-nav-active-label);font-weight:600}
 #vocalzip-refined-preview .vz-nav-item i{font-size:var(--vz-icon-tool-size)}
 #vocalzip-refined-preview .vz-floating-record{width:var(--vz-floating-size);min-width:var(--vz-floating-size);height:var(--vz-floating-size);bottom:calc(max(var(--vz-nav-bottom),env(safe-area-inset-bottom)) + var(--vz-floating-bottom));box-shadow:var(--vz-shadow-floating)}
@@ -126,7 +150,7 @@ export async function createFloatingHome(opts={}){
  shadow.append(sharedShell);
  [...root.querySelectorAll('.vz-nav-item')].forEach((button,i)=>{
   const svg=button.querySelector('svg');if(!svg)return;
-  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a'][i];svg.replaceWith(icon);
+  const icon=el('i');icon.setAttribute('aria-hidden','true');icon.dataset.glyph=['\ue2c2','\ue340','\ue00e','\ue10a','\ue150'][i];svg.replaceWith(icon);
  });
  const recordIcon=el('i');recordIcon.setAttribute('aria-hidden','true');recordIcon.dataset.glyph='\ue326';root.querySelector('.vz-floating-record svg').replaceWith(recordIcon);
  const q=selector=>root.querySelector(selector);
@@ -158,7 +182,7 @@ export async function createFloatingHome(opts={}){
  if(!events.length)section.remove();
  const weekCard=q(".vz-week"),meta=q(".vz-week-meta"),goal=meta.children[0];
  const days=q(".vz-days"),dayPrototype=days.firstElementChild.cloneNode(true),check=days.querySelector(".vz-day-dot svg").cloneNode(true);
- const flame=meta.querySelector(".vz-streak svg").cloneNode(true);
+ const flame=el("i","\ue242","vz-ui-icon");flame.setAttribute("aria-hidden","true");
  action(q(".vz-week .vz-title"),"오늘 일정 보기",opts.onWeek||opts.onCalendar);
  const weekNav=el("div",null,"vz-week-nav"),prev=el("button"),range=el("div",null,"vz-week-range"),next=el("button");
  prev.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4.5-7.5 7.5 7.5 7.5"/></svg>';
@@ -227,17 +251,36 @@ export async function createFloatingHome(opts={}){
   continueButton.onclick=()=>{(recent?callbacks.onContinue:callbacks.onRecent)?.();};
  };
  host.updateRecent(opts.recent,opts);
- const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[0].querySelector("svg").setAttribute("stroke-width","1.6");quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();const practiceIcon=el("i","\ue492","vz-practice-icon");practiceIcon.setAttribute("aria-hidden","true");quick[1].querySelector("svg").replaceWith(practiceIcon);
+ const regular=(glyph)=>{const icon=el("i",glyph,"vz-ui-icon");icon.setAttribute("aria-hidden","true");return icon;};
+ const swap=(selector,glyph)=>root.querySelectorAll(selector).forEach(svg=>svg.replaceWith(regular(glyph)));
+ const quick=[...root.querySelectorAll(".vz-shortcut")];quick[0].setAttribute("aria-label","레슨노트");quick[0].onclick=()=>opts.onLessons?.();quick[1].setAttribute("aria-label","연습기록");quick[1].onclick=()=>opts.onPractice?.();
+ swap(".vz-shortcut:first-child > span svg","\ue34c");swap(".vz-shortcut:nth-child(2) > span svg","\ue492");
  q(".vz-goals .vz-title").append(q(".vz-count"));
  q(".vz-goal-tools button").setAttribute("aria-label","오늘의 목표 설정");q(".vz-goal-tools button").onclick=()=>opts.onGoals?.();
+ const aiActions=el("div",null,"vz-ai-plan-actions");aiActions.setAttribute("aria-label","AI 연습 계획");
+ for(const [label,callback] of [["AI로 오늘 할 일 추천받기",opts.onDailyRecommendation],["주간 돌아보기 · 다음 목표 추천",opts.onWeeklyReview]]){
+  const button=el("button",label,"vz-empty-action");button.type="button";button.onclick=()=>callback?.();aiActions.append(button);
+ }
+ q(".vz-goals").append(aiActions);
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
  if(items.length>6){list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");}
  const error=el("p","","vz-save-error");error.setAttribute("role","status");error.setAttribute("aria-live","polite");list.after(error);
+ const guided=el("div",null,"vz-guided-recs");guided.hidden=true;guided.setAttribute("aria-label","추천 연습");error.after(guided);
+ host.updateRecommendations=rows=>{
+  guided.replaceChildren();const items=(rows||[]).slice(0,3);guided.hidden=!items.length;if(!items.length)return;
+  guided.append(el("h3","추천 연습","vz-guided-heading"));
+  for(const item of items){
+   const row=el("div",null,"vz-guided-item"),copy=el("div",null,"vz-guided-copy"),button=el("button","따라 하기");
+   copy.append(el("strong",(item.label|| (item.kind==="homework"?"숙제":"분석 추천"))+" · "+item.title),el("small",item.subtitle+(item.kind==="room"?"":" · "+(item.video?"영상 포함":"타이머 안내"))));
+   button.type="button";button.setAttribute("aria-label",item.title+" 따라 하기");button.onclick=()=>opts.onGuidedPractice?.(item);
+   row.append(copy,button);guided.append(row);
+  }
+ };host.updateRecommendations(opts.recommendations);
  const refresh=()=>{q(".vz-count").textContent=items.filter(g=>g.completed).length+" / "+items.length+" 완료";};refresh();
- if(!items.length){const button=el("button",null,"vz-empty-action");button.type="button";button.setAttribute("aria-label","오늘의 목표 정하기");button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H5v18h14V4h-3M8 2h8v4H8zM7 11l1.5 1.5L11 10m2 2h4M7 17l1.5 1.5L11 16m2 2h4"/></svg><span>오늘의 목표 정하기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg>';button.onclick=()=>opts.onGoals?.();list.append(button);}
+ if(!items.length){const button=el("button",null,"vz-empty-action");button.type="button";button.setAttribute("aria-label","오늘의 목표 정하기");button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>오늘의 목표 정하기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg>';button.onclick=()=>opts.onGoals?.();list.append(button);}
  for(const item of items){
   const row=prototype.cloneNode(true),input=row.querySelector("input");row.dataset.long=String(String(item.title||"").length>80);input.removeAttribute("checked");input.checked=item.completed;input.setAttribute("aria-label",item.title||"목표");
-  row.querySelector("span").textContent=item.title||"목표";row.querySelector("small").textContent=({homework:"숙제",personal:"개인",recommendation:"추천"})[item.source]||"";row.querySelector("small").hidden=!row.querySelector("small").textContent;
+  row.querySelector("span").textContent=item.title||"목표";row.querySelector("small").textContent=item.routine&&item.source==="personal"?"반복":({homework:"숙제",personal:"개인",recommendation:"추천"})[item.source]||"";row.querySelector("small").hidden=!row.querySelector("small").textContent;
   input.onchange=async()=>{
    const before=item.completed;item.completed=input.checked;input.disabled=true;row.setAttribute("aria-busy","true");error.textContent="";refresh();
    try{if(await opts.onGoalToggle?.(item.id,item.completed)===false)throw Error("save rejected");}
@@ -245,8 +288,13 @@ export async function createFloatingHome(opts={}){
    finally{input.disabled=false;row.removeAttribute("aria-busy");}
   };list.append(row);
  }
-  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
- const routes=["home","songs","library","calendar"];
+  // Semantic icons share the same Phosphor Regular weight as the practice timer.
+ // Chevrons, add controls, status marks, logo, play and record icons keep their own rules.
+ swap(".vz-header-actions button:first-child svg","\ue0ce");swap(".vz-header-actions button:last-child svg","\ue4c2");
+ swap(".vz-event .vz-art-front svg","\ue34c");swap(".vz-week .vz-title > svg:not(.vz-chevron)","\ue150");
+ swap(".vz-song-label svg","\ue33c");swap(".vz-goals .vz-title > svg","\ue6a2");swap(".vz-goal-tools button svg","\ue270");
+ q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
+ const routes=["home","songs","library","calendar","vocal-growth"];
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});
  return host;
 }

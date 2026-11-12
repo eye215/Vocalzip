@@ -41,3 +41,14 @@ test('The curve has 20 points a second and silence stays empty', () => {
   assert.ok(r.curve.slice(0, 50).every(v => v == null)); // MR intro
   assert.ok(r.curve.slice(100, 120).every(v => v != null)); // singing
 });
+
+
+test('song identification skips note measurements while keeping the exact voice curve',()=>{
+ for(const opts of [{sr:8000},{sr:8000,withVoice:false},{sr:8000,mrDb:0}]){
+  const {samples,sr}=synth(opts),full=A.analyze(samples,sr),voice=A.analyze(samples,sr,{voiceOnly:true});
+  assert.deepEqual(voice.curve,full.curve);
+  assert.deepEqual(voice.confidence,full.confidence);
+  assert.equal(voice.metrics.voicedSeconds,full.metrics.voicedSeconds);
+  assert.deepEqual(voice.notes,[]);
+ }
+});

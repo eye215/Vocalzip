@@ -90,3 +90,17 @@ body[data-vz-route="song"] .vz-media-selection [data-lab-link]{display:block;min
 body[data-vz-route="song"] .vz-media-selection [data-lab-link][hidden]{display:none!important}
 body[data-vz-route="song"] .vz-media-selection [data-lab-link]:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:2px;border-radius:8px}
 
+
+/* MR shares the existing AR section hierarchy and 44px tools. */
+.vz-mr-row{border-bottom:1px solid var(--vz-color-border);padding:6px 0}
+.vz-mr-row:last-child{border-bottom:0}
+.vz-mr-row-head{display:flex;align-items:center;gap:8px;min-width:0}
+.vz-mr-row-head [data-mr-open]{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:54px;padding:7px 4px;text-align:left;background:none;border:0;color:var(--vz-color-ink)}
+.vz-mr-row-head [data-mr-open]>span{flex:1;min-width:0}
+.vz-mr-row-head strong,.vz-mr-row-head small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vz-mr-row-head strong{font-size:14px;font-weight:600}.vz-mr-row-head small{font-size:12px;color:var(--vz-color-ink-muted)}
+.vz-mr-row-head i{font-size:21px;color:var(--vz-color-ink-muted)}
+.vz-mr-row [data-mr-player]{padding:8px 4px 12px;font-size:13px;overflow-wrap:anywhere}
+.vz-mr-row audio{display:block;width:100%;max-width:100%}
+.vz-mr-row iframe{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:12px}
+.vz-mr-row [data-mr-player]>a{display:inline-flex;align-items:center;gap:5px;min-height:44px;color:var(--vz-color-accent)}

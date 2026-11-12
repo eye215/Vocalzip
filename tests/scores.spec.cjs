@@ -110,13 +110,15 @@ test('Native PDF chooser opens, uploads through R2, and survives refresh without
   expect(scores).toHaveLength(1);
   expect(scores[0]).toMatchObject({songId:'s1', title:'공연용 악보', fileName:PDF.name, originalKey:'C', practiceKey:'D', size:PDF.buffer.length});
   expect(scores[0].r2Key).toMatch(/^u\/ui-test-user\/score-[^/]+\/original\.pdf$/);
+  await expect.poll(() => r2.calls.filter(x => x === 'POST /v1/omr').length, {message:'a new score starts its note conversion once'}).toBe(1);
   expect(r2.store.get(scores[0].r2Key)).toEqual({bytes:PDF.buffer, type:'application/pdf'});
   await page.reload();
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   await page.goto('/#/song/s1');
   await page.getByRole('tab', {name:'악보', exact:true}).click();
   await expect(page.locator('[data-score] .item-title')).toHaveText('공연용 악보');
-  await expect(page.getByRole('link', {name:'공연용 악보 열기'})).toHaveAttribute('href', /sig=s/);
+  await expect(page.getByRole('button', {name:'공연용 악보 열기'})).toBeVisible();
+  await expect(page.locator('[data-open]')).toHaveCount(0);
   expect(await savedScores(page)).toEqual(scores);
   expect(await page.evaluate(() => ({practices:window.VZ.db.practices, lessons:window.VZ.db.lessons}))).toEqual(before);
   expect(await page.evaluate(() => window.VZ.song('s1').memo)).toBe('기존 곡 메모');

@@ -42,14 +42,14 @@ VZ.route('processing-log',{title:'처리 내역',back:true,tab:'library',noAutoR
     const jobMap=new Map((jobs?.rows||[]).map(j=>[j.media_id+':'+j.kind,j]));
     const reviews=new Map((jobs?.review||[]).map(r=>[r.media_id,r]));
     const counts={queued:0,running:0,review:0,failed:0,done:0};
-    for(const j of jobs?.rows||[])counts[j.status]=(counts[j.status]||0)+1;
+    for(const j of jobs?.rows||[]){if(j.kind==='song'&&j.status==='review'&&(byId.get(j.media_id)?.songId||byId.get(j.media_id)?.song))continue;counts[j.status]=(counts[j.status]||0)+1;}
     const tracked=(jobs?.rows||[]).reduce((n,j)=>n+(Number(j.cost_usd)||0),0);
     const r2Bytes=usage?.bytes, stored=(media||[]).filter(m=>m.storageProvider==='r2').reduce((n,m)=>n+(Number(m.savedSize||m.size)||0),0);
     const estimate=VZ.processingCostEstimate({r2Bytes,sttCalls:stt?.total,jobUsd:tracked});
     const device=VZ.autoAnalysisStatus?.();
     const article=r=>{const m=byId.get(r.id),s=VZ.song(m?.songId||r.songId),v=jobMap.get(r.id+':vocal'),j=jobMap.get(r.id+':song'),original=m?.originalFilename||m?.originalMedia?.name||r.originalName||'',saved=m?.name||r.savedName||'',song=s?VZ.songLabel(s):(m?.song||'곡 미지정');
      const review=reviews.get(r.id)?.result, candidates=(review?.top3||[]).slice(0,3).map(x=>(x.title||VZ.songTitle(x.songId)||'제목 없음')+(Number.isFinite(Number(x.score))?' '+Math.round(Number(x.score)*100)+'%':'')).join(' · ');
-     const lyrics=j?jobLine(j,reviews.get(r.id)):(m?.songId||r.songId?'곡이 지정됐어요. 가사 비교 작업은 없었어요.':'가사 비교 작업 기록 없음');
+     const lyrics=m?.songId||m?.song?'곡 지정 완료':j?jobLine(j,reviews.get(r.id)):(r.songId?'곡이 지정됐어요. 가사 비교 작업은 없었어요.':'가사 비교 작업 기록 없음');
      const conversion=m?.audioExtraction||r.audioExtraction?'영상에서 음성 추출 완료':m?.losslessFlac||r.losslessFlac?'무손실 음성 변환 완료':'변환 기록 없음';
      const location=m?.storageProvider==='r2'?'R2 저장':m?.cloud||r.cloud?'클라우드 저장':m?.pendingUpload||r.pendingUpload?'기기 저장 · 백업 대기':'기기 저장';
      return '<article class="card stack" style="gap:7px;margin-bottom:12px"><div class="row between"><strong class="ellipsis">'+esc(saved||original||'이름 없음')+'</strong><span class="badge '+(r.state==='failed'?'danger':'')+'">'+esc(stateLabel(r.state|| (m?'done':'')))+'</span></div>'+
