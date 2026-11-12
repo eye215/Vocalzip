@@ -1,0 +1,84 @@
+// Builds a synthetic .goodnotes archive for tests (no real notebook, no personal data).
+// Mirrors the layout app/goodnotes-parse.js reads: index.events.pb, index.*.pb, attachments/<id>, notes/<id>.
+const zlib = require('node:zlib');
+
+const varint = n => { const out = []; let v = BigInt(n); do { let b = Number(v & 0x7fn); v >>= 7n; if (v) b |= 0x80; out.push(b); } while (v); return Buffer.from(out); };
+const key = (field, wire) => varint(field * 8 + wire);
+const ld = (field, bytes) => Buffer.concat([key(field, 2), varint(bytes.length), Buffer.from(bytes)]);
+const s = (field, text) => ld(field, Buffer.from(text, 'utf8'));
+const num = (field, n) => Buffer.concat([key(field, 0), varint(n)]);
+const f32 = (field, x) => { const b = Buffer.alloc(4); b.writeFloatLE(x); return Buffer.concat([key(field, 5), b]); };
+const msg = (...parts) => Buffer.concat(parts);
+const reg = (field, text) => ld(field, msg(s(1, text), ld(2, msg(num(1, 1), num(2, 7)))));
+const stream = records => Buffer.concat(records.map(r => Buffer.concat([varint(r.length), r])));
+const event = (id, kind, body) => msg(s(1, id), ld(kind, body));
+
+const u32 = n => { const b = Buffer.alloc(4); b.writeUInt32LE(n >>> 0); return b; };
+const u16 = n => { const b = Buffer.alloc(2); b.writeUInt16LE(n); return b; };
+const fbits = x => { const b = Buffer.alloc(4); b.writeFloatLE(x); return b; };
+/** kinds: 0 = move (one point), 1 = quadratic curve (control + end). */
+function pathTuple({width = 3, kinds, moves, curves, schema = 'vuA(v)A(S(uu))A(S(uuuu))vA(f)'}) {
+  const body = Buffer.concat([u16(2), fbits(width), u32(kinds.length), ...kinds.map(u16), u32(moves.length), ...moves.flatMap(p => p.map(fbits)),
+    u32(curves.length), ...curves.flatMap(q => q.map(fbits)), u16(1), u32(0)]);
+  const head = Buffer.concat([Buffer.from('tpl\0'), u32(0), Buffer.from(schema + '\0')]);
+  const raw = Buffer.concat([head, body]); raw.writeUInt32LE(raw.length, 4);
+  return raw;
+}
+const stored = raw => Buffer.concat([Buffer.from('bv4-'), u32(raw.length), raw, Buffer.from('bv4$')]);
+/** A valid LZ4 block made of literals only (what the encoder emits for incompressible data). */
+function lz4Literals(raw) {
+  const head = [raw.length >= 15 ? 0xf0 : raw.length << 4]; let rest = raw.length - 15;
+  if (raw.length >= 15) { while (rest >= 255) { head.push(255); rest -= 255; } head.push(rest); }
+  const block = Buffer.concat([Buffer.from(head), raw]);
+  return Buffer.concat([Buffer.from('bv41'), u32(raw.length), u32(block.length), block, Buffer.from('bv4$')]);
+}
+/** One ink item: [header record, body record] as in notes/<id>. */
+function inkItem(id, {color = [1, 0, 0, 1], deleted = false, payload}) {
+  const colour = msg(...color.map((c, i) => c ? f32(i + 1, c) : Buffer.alloc(0)));
+  return [msg(s(1, id), ld(2, msg(num(1, 2), num(2, 9)))), msg(ld(7, msg(s(1, id), ld(2, payload), ld(4, colour), num(5, 1), ...(deleted ? [num(14, 1)] : []), num(21, 24))))];
+}
+
+function zip(files) {
+  const locals = [], central = []; let offset = 0;
+  for (const [name, data, deflate] of files) {
+    const body = deflate ? zlib.deflateRawSync(data) : Buffer.from(data), n = Buffer.from(name, 'utf8');
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(deflate ? 8 : 0, 8);
+    local.writeUInt32LE(body.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(n.length, 26);
+    const head = Buffer.alloc(46); head.writeUInt32LE(0x02014b50, 0); head.writeUInt16LE(20, 6); head.writeUInt16LE(deflate ? 8 : 0, 10);
+    head.writeUInt32LE(body.length, 20); head.writeUInt32LE(data.length, 24); head.writeUInt16LE(n.length, 28); head.writeUInt32LE(offset, 42);
+    locals.push(local, n, body); central.push(head, n); offset += 30 + n.length + body.length;
+  }
+  const dir = Buffer.concat(central), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(dir.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, dir, end]);
+}
+
+const uuid = n => '00000000-0000-4000-8000-' + n.toString(16).toUpperCase().padStart(12, '0');
+/**
+ * pages: [{pdfPage, order, ink?: [inkItem…]}], outline: [{page: index, title, order}]
+ * Page ids are even numbers so that "page id + 1" (the ink file id) never collides with another page.
+ */
+function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n% synthetic\n'), pages, outline = [], width = 600, height = 800, rename = ''}) {
+  const DOC = uuid(0xD0C), ATT = uuid(0xA77), FILE = uuid(0xF11E);
+  const events = [event(DOC, 30, msg(s(1, DOC), reg(2, title), s(9, 'ko_KR'))),
+    event(ATT, 6, msg(s(1, ATT), s(2, FILE), s(6, DOC)))];
+  const notes = [], files = [];
+  pages.forEach((p, i) => {
+    const pageId = uuid(0x1000 + i * 2), bgId = uuid(0xB000 + i);
+    events.push(event(bgId, 2, msg(s(1, DOC), s(2, bgId), s(4, ATT), num(5, p.pdfPage), ld(8, msg(f32(1, width), f32(2, height))))));
+    events.push(event(pageId, 54, msg(s(1, DOC), s(2, pageId), ld(3, msg(s(1, bgId), ld(2, msg(num(1, 1), num(2, 3))))), ld(4, msg(s(1, p.order), ld(2, msg(num(1, 1), num(2, 4))))))));
+    if (p.ink) {
+      const noteId = uuid(0x1000 + i * 2 + 1);
+      notes.push(msg(s(1, noteId), s(2, 'notes/' + noteId)));
+      files.push(['notes/' + noteId, stream(p.ink.flat()), true]);
+    }
+  });
+  outline.forEach((o, i) => events.push(event(uuid(0x1000 + o.page * 2), 65, msg(s(1, uuid(0x1000 + o.page * 2)), s(2, uuid(0xE000 + i)), ld(4, msg(s(1, o.order || String(i)))), ld(5, msg(s(1, o.title)))))));
+  if (rename) events.push(event(DOC, 31, msg(s(1, DOC), reg(2, rename))));
+  // Event kinds the reader does not know must simply be counted.
+  events.push(event(DOC, 99, msg(s(1, DOC))));
+  return zip([['schema.pb', num(1, 26), false], ['index.events.pb', stream(events), true],
+    ['index.attachments.pb', stream([msg(s(1, ATT), s(2, 'attachments/' + FILE))]), false],
+    ['index.notes.pb', stream(notes), false], ['attachments/' + FILE, pdf, false], ...files]);
+}
+module.exports = {notebook, inkItem, pathTuple, stored, lz4Literals, zip, uuid};

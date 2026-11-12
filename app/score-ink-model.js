@@ -127,7 +127,10 @@ function create({storage,identity,getData,change}){
   const ids=[...new Set([...(d[COLLECTION]||[]),...read().records].filter(s=>s.ownerId===owner&&s.songId===b.songId&&s.scoreId===b.scoreId&&s.r2Key===b.r2Key).map(s=>s.id))];
   return commit({remove:ids},next=>{if(!exists(next,b))throw fail('악보가 바뀌어 삭제를 중단했어요.','binding');const song=next.songs.find(s=>s.id===b.songId);song.scores= song.scores.filter(s=>s.id!==b.scoreId);});
  }
- return {restore,list,commit,removeScore,key};
+ /** Ids erased on any device (synced) or on this one (recovery copy). Strokes that live outside the records — the
+  * handwriting attached to an imported PDF — use it to stay erased. */
+ function gone(){const d=data();return new Set([...(d.deleted?.[COLLECTION]||[]),...read().deleted]);}
+ return {restore,list,commit,removeScore,gone,key};
 }
 return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES};
 });
