@@ -228,7 +228,7 @@ test('custom ink and settings persist across viewport fullscreen entry/exit with
  await expect(panel.getByRole('button',{name:'사용자 색상 #123456',exact:true})).toHaveAttribute('aria-pressed','true');
  await dialog.getByRole('button',{name:'필기 설정 닫기',exact:true}).click();
  if(process.env.VZ_INK_PREVIEW==='1'&&test.info().project.name==='chromium-mobile')console.log('VZIP_INK2_FULL_PREVIEW:'+Buffer.from(await page.screenshot()).toString('base64'));
- await dialog.getByRole('button',{name:'전체화면 종료',exact:true}).click();
+ await act(dialog,'전체화면 종료'); // in 더보기 since the compact viewer (2026-11-11)
  await expect(dialog).not.toHaveClass(/score-ink-fullscreen/);await expect(dialog.locator('[data-ink-box]')).toBeVisible();
  panel=await configure(dialog);await expect(panel.getByRole('slider',{name:'펜 굵기',exact:true})).toHaveValue('12');
  await expect(panel.getByRole('slider',{name:'필기 투명도',exact:true})).toHaveValue('60');expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual(before);
@@ -312,7 +312,9 @@ test('tablet default favors Pencil and two-finger pinch zoom changes only the vi
 });
 test('fullscreen-capable browsers keep the editor open when the explicit exit control is used',async({page})=>{
  await setup(page);const dialog=await open(page);await act(dialog,'전체화면');
- await expect(dialog).toHaveClass(/score-ink-fullscreen/);await expect(dialog.getByRole('button',{name:'전체화면 종료',exact:true})).toBeVisible();
+ await expect(dialog).toHaveClass(/score-ink-fullscreen/);
+ // 전체화면 종료 lives in 더보기 (compact viewer, 2026-11-11), which stays reachable in fullscreen.
+ await dialog.locator('[data-ink-more]').click();await expect(dialog.getByRole('button',{name:'전체화면 종료',exact:true})).toBeVisible();
  await dialog.getByRole('button',{name:'전체화면 종료',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog).not.toHaveClass(/score-ink-fullscreen/);
 });
 
@@ -329,6 +331,7 @@ for(const rotated of [false,true]){
   await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('1개 선택');
   await dragInk(page,dialog,[.4,.24],[.5,.28],{pen:true});
   const before=await page.evaluate(()=>window.VZ.db.scoreAnnotations);panel=await configure(dialog);
+  await panel.getByRole('tab',{name:'기타',exact:true}).click(); // export sits on the settings' 기타 tab
   await panel.getByRole('button',{name:'필기 PDF 만들기',exact:true}).click();
   const save=panel.getByRole('link',{name:'만든 PDF 저장',exact:true});await expect(save).toBeVisible({timeout:20000});
   const rendered=await save.evaluate(async a=>{
@@ -345,7 +348,8 @@ for(const rotated of [false,true]){
   });
   expect(rendered.red).toBeGreaterThan(50);expect(rendered.positioned/rendered.red).toBeGreaterThan(.95);expect(rendered.pages).toBe(2);expect(rendered.rotation).toBe(rotated?90:0);
   const downloadEvent=page.waitForEvent('download');await save.click();const download=await downloadEvent;
-  expect(download.suggestedFilename()).toBe('연습 악보_필기.pdf');
+  // The app names the file through the link; headless Chromium reports any non-ASCII blob download name as "download".
+  await expect(save).toHaveAttribute('download','연습 악보_필기.pdf');expect(download.suggestedFilename()).toMatch(/^(연습 악보_필기\.pdf|download)$/);
   const output=await lib.PDFDocument.load(fs.readFileSync(await download.path()));expect(output.getPageCount()).toBe(2);
   expect(output.getPage(0).getRotation().angle).toBe(rotated?90:0);
   if(rotated)expect(output.getPage(0).getCropBox()).toEqual({x:20,y:30,width:260,height:340});
