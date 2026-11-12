@@ -155,10 +155,11 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     run.busy=true;go.disabled=true;for(const control of form.elements)control.disabled=true;
     const todo=items.filter(i=>i.target!=='skip'&&!i.state.done),result={scores:0,ink:0,flattened:0,lost:0};
     if(todo.some(i=>i.mode==='flatten')){msg.textContent='필기가 많은 곡은 현재 저장 공간 한도로 인해 수정 가능한 상태로 옮길 수 없어요. 필기를 PDF에 합치거나 누락하지 않도록 가져오기를 보류했어요. 해당 곡을 제외하거나 저장 구조 개선 후 다시 시도해 주세요.';run.busy=false;for(const control of form.elements)control.disabled=false;sync();return;}
+    let archive=null;
     try{
      msg.textContent='PDF 도구를 준비하고 있어요.';
      const lib=await library(),sources=new Map(),store=window.VzipScoreInkIDB?null:inkStore(owner);
-     const archive=window.VzipScoreInkIDB?await window.VzipScoreInkIDB.create({owner,identity:()=>window.vzipCloudSignedIn?.()?{owner:window.vzipCloudUserId?.()}:null,valid:Ink.valid}):null;
+     archive=window.VzipScoreInkIDB?await window.VzipScoreInkIDB.create({owner,identity:()=>window.vzipCloudSignedIn?.()?{owner:window.vzipCloudUserId?.()}:null,valid:Ink.valid}):null;
      guard();
      for(const [n,item] of todo.entries()){
       const step=text=>{msg.textContent=(n+1)+'/'+todo.length+' '+item.title+' · '+text;};
@@ -198,6 +199,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
      msg.textContent=(error.stopped?'':'가져오지 못했어요: ')+(error.message||error)+(result.scores?' · 앞의 '+result.scores+'개는 가져왔어요.':'')+' 다시 누르면 이어서 해요.';
      if(result.scores)onDone(result);
     }finally{
+     archive?.close();
      run.busy=false;
      if(!run.finished){for(const control of form.elements)control.disabled=false;for(const {item,row} of rows)if(item.state.done)for(const control of row.querySelectorAll('input,select'))control.disabled=true;sync();}
     }
