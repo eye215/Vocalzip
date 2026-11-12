@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=ia4-20261112';
+import {createFloatingHome} from './student-home-html.js?v=home-v4-20261112';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -32,23 +32,34 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  window.addEventListener('hashchange',applyTheme);
  const greeting=()=>new Date().getHours()<12?'좋은 아침이에요':new Date().getHours()<18?'좋은 오후예요':'좋은 저녁이에요';
  const displayName=()=>String(V.db.profile?.displayName||V.db.settings?.displayName||'');
- function upcoming(s){
-  const stage=s.stage?{id:s.stage.id,title:s.stage.title,subtitle:s.stage.songTitles.join(' · '),
-   date:s.stage.date,time:s.stage.time||'',dateLabel:dayLabel(s.stage.date)+(s.stage.time?' '+s.stage.time:''),daysLeft:s.stage.daysUntil}:null;
-  const l=s.lesson,lesson=l?{id:l.id,title:l.title||'보컬 레슨',subtitle:[l.place,l.teacher].filter(Boolean).join(' · '),
-   date:l.date,time:l.startTime||'',dateLabel:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),daysLeft:V.daysBetween(today(),l.date)}:null;
-  return {stage,lesson};
+ /* v4 home: one "지금 할 것" card. Today's lesson first, then open homework, then carrying on with the latest song,
+  * then the next lesson; with nothing at all, setting today's goals. */
+ const dday=date=>{const n=V.daysBetween(today(),date);return n===0?'D-day':n>0?'D-'+n:'';};
+ function nowCard(s,songs){
+  const l=s.lesson,lessonToday=l&&V.daysBetween(today(),l.date)===0,homework=s.recommendationCandidates.find(t=>t.source==='homework');
+  const lessonCard=title=>({kind:'lesson',title:title+(l.title||'보컬 레슨'),badge:lessonToday?(l.startTime||'오늘'):dday(l.date),line:lessonToday?[l.place,l.teacher].filter(Boolean).join(' · ')||'레슨 준비하기':lessonDay(l.date)+(l.startTime?' '+l.startTime:''),label:'다음 레슨 보기',action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
+  if(lessonToday)return lessonCard('오늘 ');
+  if(homework)return {kind:'homework',title:homework.title,badge:'숙제',line:'오늘 해 볼 숙제예요',label:'숙제 '+homework.title+' 보기',action:()=>nav('#/homework')};
+  if(songs[0])return {kind:'practice',title:'이어서 연습하기',badge:'',line:songs[0].title,label:songs[0].title+' 이어서 연습하기',action:()=>nav('#/record?song='+encodeURIComponent(songs[0].id))};
+  if(l)return lessonCard('');
+  return {kind:'goals',title:'오늘의 목표 정하기',badge:'',line:'오늘 연습할 항목을 골라요',label:'오늘의 목표 정하기',action:()=>planSheet()};
  }
- function recentData(recent,files=[]){
-  if(!recent)return null;
-  const media=files.filter(f=>f.songId===recent.song.id&&!V.db.deleted?.media?.includes(f.id))
-   .sort((a,b)=>String(window.VZ.media.dateOf(b)||'').localeCompare(String(window.VZ.media.dateOf(a)||''))||(b.created||0)-(a.created||0))[0];
-  return {id:recent.song.id,title:recent.song.title,artist:recent.song.show||'',canPlay:!!media,media};
+ /* Home summary rows: next lesson (unless it is already the 지금 할 것 card), next stage, and a needs-attention row
+  * only when something needs attention. The 이번 주 row is painted by the home from the week data. */
+ function summaryRows(s,current){
+  const rows=[],l=s.lesson,st=s.stage;
+  if(l&&current?.kind!=='lesson')rows.push({key:'lesson',icon:'\ue34c',label:'다음 레슨',value:lessonDay(l.date)+(l.startTime?' '+l.startTime:''),badge:dday(l.date),action:()=>nav('#/lesson/'+encodeURIComponent(l.id))});
+  if(st)rows.push({key:'stage',icon:'\ue490',label:({performance:'공연',audition:'오디션'})[st.kind]||'무대',value:st.title,badge:dday(st.date),action:()=>nav('#/show/'+encodeURIComponent(st.id))});
+  const c=V.serverAnalysisCounts?.(),review=c?.song?.review||0,failed=c?(c.vocal.fail+c.song.fail):0;
+  if(review)rows.push({key:'attention',tone:'attention',icon:'\ue4e2',label:'확인 필요',value:'곡 확인 '+review+'건',action:()=>nav('#/song-suggest')});
+  else if(failed)rows.push({key:'attention',tone:'attention',icon:'\ue4e2',label:'확인 필요',value:'분석 실패 '+failed+'건',action:()=>nav('#/processing-log')});
+  return rows;
  }
- function recentCallbacks(recent){
-  return {onRecent:()=>recent?nav('#/record?song='+encodeURIComponent(recent.id)):nav('#/songs'),
-   onContinue:()=>recent?nav('#/record?song='+encodeURIComponent(recent.id)):nav('#/songs'),
-   onLessons:()=>nav('#/lessons'),onPractice:()=>nav('#/practices')};
+ /** Up to three recent songs: the latest practised song first, then by recording activity. */
+ function recentSongs(s,files){
+  const activity=V.songActivity(files),ids=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)));
+  if(s.recent?.song?.id)ids.unshift(s.recent.song.id);
+  return [...new Set(ids)].filter(id=>V.song(id)).slice(0,3).map(id=>({id,title:V.song(id).title}));
  }
  function notices(){
   const s=state(),tasks=s.recommendationCandidates.filter(t=>t.source==='homework');
@@ -122,10 +133,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   async mount(main){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
    let files=V.media.cached(),root;
-   const s=state(files,selectedWeekStart),r=recentData(s.recent);
+   const s=state(files,selectedWeekStart),songs=recentSongs(s,files),current=nowCard(s,songs);
    const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
-   try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
-    ...recentCallbacks(r),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
+   try{root=await createFloatingHome({goals:s.goals,week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
+    onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),onWeek:()=>nav('#/calendar'),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
@@ -152,12 +163,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     files=media;refreshWeek();
     const recommendations=await V.guidedRecommendations({date:today(),media}).catch(()=>[]);
     if(root.isConnected&&generation===mediaGeneration)root.updateRecommendations(recommendations);
-    let recent=state(files).recent;
-    if(!recent){
-     const activity=V.songActivity(media),id=[...activity.keys()].filter(id=>V.song(id)).sort((a,b)=>activity.get(b).localeCompare(activity.get(a)))[0];
-     if(id)recent={song:V.song(id),date:activity.get(id)};
-    }
-    const resolved=recentData(recent,media);root.updateRecent(resolved,recentCallbacks(resolved));
+    const fresh=state(files),list=recentSongs(fresh,media),next=nowCard(fresh,list);
+    root.updateRecent(list);root.updateNow(next);root.updateSummary(summaryRows(fresh,next));
    };
    const checkDate=()=>{if(root.isConnected&&today()!==lastDate){lastDate=today();V.softRender();}};
    const visible=()=>{if(document.visibilityState==='visible'){checkDate();if(root.isConnected)refreshMedia();}};
