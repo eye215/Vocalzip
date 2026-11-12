@@ -807,7 +807,10 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el=node;el.classList.add('score-ink-sheet');
   // Quick samples sit below the whole toolbar, independent of fullscreen toolbar layout.
   const toolbar=el.querySelector('.score-ink-bar');
-  toolbar.after(el.querySelector('[data-ink-quick]'),el.querySelector('[data-ink-full-actions]'),el.querySelector('[data-ink-vision-tools]'),el.querySelector('[data-ink-explain-action]'));
+  toolbar.after(el.querySelector('[data-ink-quick]'),el.querySelector('[data-ink-full-actions]'),el.querySelector('[data-ink-vision-tools]'));
+  // 선택 영역 설명 보기 floats at the top of the score (a zero-height sticky row inside the stage): as a row above the
+  // score it appeared after a box selection and vanished on the next touch, shifting the page 50px mid-drag.
+  el.querySelector('[data-ink-stage]').prepend(el.querySelector('[data-ink-explain-action]'));
   el.querySelectorAll('.score-ink-actions>button').forEach(button=>{const label=document.createElement('span');label.className='score-ink-menu-label';label.textContent=button.getAttribute('aria-label')||'';button.append(label);});
   svg=el.querySelector('[data-ink-svg]');canvas=el.querySelector('[data-ink-pdf]');box=el.querySelector('[data-ink-box]');stage=el.querySelector('[data-ink-stage]');status=el.querySelector('[data-ink-status]');done=el.querySelector('[data-ink-done]');
   // MR 재생 · 녹음 · MR+녹음 under the score page (app/score-audio.js).

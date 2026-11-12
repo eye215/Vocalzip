@@ -113,6 +113,10 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .score-ink-vision-tools[hidden]{display:none}
 .score-ink-vision-tools button{min-height:44px;padding:0 12px;border:1px solid #dfc7ff;border-radius:12px;background:#f5efff;color:#7a32f5;font-weight:700}
 .score-ink-vision-tools button[hidden]{display:none}
+/* Floats over the top of the score (zero-height sticky row inside the stage) instead of taking a row: it appears when a box is drawn with 선택 and hides on the
+ * next touch, and as a row it pushed the score 50px up mid-drag, so a moved selection landed 50px off the finger. */
+.score-ink-stage>.score-ink-explain-action{position:sticky;top:0;left:0;z-index:4;display:flex;justify-content:center;height:0;overflow:visible;pointer-events:none}
+.score-ink-stage>.score-ink-explain-action button{pointer-events:auto;box-shadow:0 6px 18px #23143c1f}
 .score-ink-explain-action[hidden]{display:none}
 .score-ink-explain-action button{min-height:44px;padding:0 14px;border:1px solid #dfc7ff;border-radius:12px;background:#f5efff;color:#7a32f5;font-weight:700}
 .score-ink-page .score-ink-text-layer{position:absolute;inset:0;pointer-events:none}
