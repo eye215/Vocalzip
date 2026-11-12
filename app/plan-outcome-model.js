@@ -1,15 +1,27 @@
 /* Training plan outcome: deterministic and based on recorded goals and actual same-song measurements.
  * Never treats distance from nearest semitone as written-score accuracy or as a diagnosis.
- */
+ *
+ * 성장 리포트 v2 rules (app/growth-metrics-model.js, rules:2): the plan metric is compared with the same definitions
+ * and 판정 보류 rules as the growth report — the latest usable take before the plan vs the latest usable take during
+ * it (same song, same analysis version, same phrases preferred). Nothing is re-implemented here: the pair and the
+ * judgement come from VzipGrowthMetrics.periodReport. Old plan keys map to the growth measures:
+ *   intonation → 음정 정확도, stability → 음정 안정성, phrase → 호흡 유지 (matched phrases, tempo-corrected).
+ *   vibrato has no growth-report measure: the old whole-recording average is kept, shown as 참고 and never judged.
+ * Reports saved before rules:2 keep every field they had and still render (plan-outcome-ui.js legacy view);
+ * new reports keep all the old fields (before/after/delta/change/mixedVersions/counts/ids) and add new ones. */
 (function(root,factory){
 'use strict';
-const model=factory();
+const growth=()=>root.VzipGrowthMetrics||(typeof module==='object'&&module.exports&&typeof require==='function'?require('./growth-metrics-model.js'):null);
+const model=factory(growth);
 if(typeof module==='object'&&module.exports)module.exports=model;
 else root.VzipPlanOutcome=model;
-})(typeof self!=='undefined'?self:globalThis,()=>{
+})(typeof self!=='undefined'?self:globalThis,growth=>{
 'use strict';
+const RULES=2;
 const PATHS={intonation:['intonation','meanAbsCents'],stability:['stability','wobbleCents'],
  phrase:['breath','medianPhrase'],vibrato:['vibrato','regularity']};
+/** Plan key → growth-report measure id. Missing (vibrato) = reference only. */
+const GROWTH={intonation:'intonation',stability:'stability',phrase:'phrase'};
 const ROUND=x=>Math.round(x*10)/10;
 function shift(date,n){
  if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date))return '';
@@ -23,35 +35,64 @@ function completeDate(plan){
  return plan?.startDate&&Number.isInteger(plan.days)&&plan.days>=1&&plan.days<=365
   ?shift(plan.startDate,plan.days-1):'';
 }
-function value(media,key){
+function raw(analysis,key){
  const path=PATHS[key];if(!path)return null;
- let v=media?.analysis?.metrics;for(const p of path)v=v?.[p];
+ let v=analysis?.metrics;for(const p of path)v=v?.[p];
  return typeof v==='number'&&Number.isFinite(v)?v:null;
 }
-function avg(values){return values.length?values.reduce((a,b)=>a+b,0)/values.length:null;}
-/** Preview and archived reports use the exact same bounded, same-song takes.
- * Dates are selected per recording, without inferring that whole-take changes describe a phrase. */
+/** Whole-recording value of one take (kept for callers of the old API). */
+function value(media,key){return raw(media?.analysis,key);}
+const avg=values=>values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
+/** Legacy `change` for clients that predate rules:2: anything not judged reads as 'insufficient'. */
+const legacyChange=state=>['better','worse','similar'].includes(state)?state:'insufficient';
+/** Vibrato: no growth measure. Old averaging (≤ 5 reliable takes per side), shown as 참고 only. */
+function vibratoReference(before,during){
+ const pick=list=>list.filter(t=>t.ok&&raw(t.a,'vibrato')!=null).sort((x,y)=>y.date.localeCompare(x.date)).slice(0,5);
+ const b=pick(before),d=pick(during);
+ const why=list=>list.some(t=>!t.ok&&raw(t.a,'vibrato')!=null)?'confidence':'no-data';
+ let reason='';
+ if(!before.length||!during.length)reason='no-pair';
+ else if(!b.length)reason=why(before);
+ else if(!d.length)reason=why(during);
+ else if(new Set([...b,...d].map(t=>t.a?.v??null)).size>1)reason='version-mixed';
+ if(reason)return {state:'hold',reason};
+ const r2=x=>Math.round(x*100)/100,x=r2(avg(b.map(t=>raw(t.a,'vibrato')))),y=r2(avg(d.map(t=>raw(t.a,'vibrato'))));
+ return {state:'reference',basis:'average',before:x,after:y,delta:r2(y-x),beforeIds:b.map(t=>t.id),afterIds:d.map(t=>t.id),
+  beforeDate:b[0].date,afterDate:d[0].date};
+}
+/** Preview and archived reports use the exact same rules and takes: same song, before the plan vs during it. */
 function measurement(plan,recordings=[],dateOf,valid){
  if(!plan||!PATHS[plan.metric]||typeof dateOf!=='function'||typeof valid!=='function')
   throw Error('분석 비교 입력을 확인해 주세요.');
  const endDate=completeDate(plan);
  if(!endDate)throw Error('연습 계획 날짜를 확인해 주세요.');
- const available=recordings.filter(m=>m?.songId===plan.songId&&valid(m)&&value(m,plan.metric)!=null);
- const before=available.filter(m=>{const date=dateOf(m);return date&&date<plan.startDate;})
-  .sort((a,b)=>dateOf(b).localeCompare(dateOf(a))).slice(0,5);
- const after=available.filter(m=>{const date=dateOf(m);return date&&date>=plan.startDate&&date<=endDate;})
-  .sort((a,b)=>dateOf(b).localeCompare(dateOf(a))).slice(0,5);
- const b=avg(before.map(m=>value(m,plan.metric))),a=avg(after.map(m=>value(m,plan.metric)));
- const delta=b!=null&&a!=null?ROUND(a-b):null;
- const floor=plan.metric==='vibrato'?0.05:plan.metric==='phrase'?0.3:3;
- const margin=b!=null?Math.max(floor,Math.abs(b)*.05):null;
- const direction=plan.metric==='intonation'||plan.metric==='stability'?-1:1;
- // v1 and v2 analyses measure pitch differently: a change across versions is withheld, never judged.
- const mixedVersions=new Set([...before,...after].map(m=>m.analysis?.v??null)).size>1;
- const change=delta==null||mixedVersions?'insufficient':Math.abs(delta)<margin?'similar':Math.sign(delta)===direction?'better':'worse';
- return {before:b==null?null:ROUND(b),after:a==null?null:ROUND(a),delta,
-   change,mixedVersions,beforeCount:before.length,afterCount:after.length,
-   beforeIds:before.map(x=>x.id),afterIds:after.map(x=>x.id)};
+ const G=growth();
+ if(!G&&GROWTH[plan.metric])throw Error('성장 지표 기준을 불러오지 못했어요.');
+ const takes=recordings.filter(m=>m?.songId===plan.songId&&m.analysis?.metrics)
+  .map(m=>({id:m.id,a:m.analysis,date:String(dateOf(m)||'').slice(0,10),ok:!!valid(m)}))
+  .filter(t=>/^\d{4}-\d{2}-\d{2}$/.test(t.date));
+ const before=takes.filter(t=>t.date<plan.startDate),during=takes.filter(t=>t.date>=plan.startDate&&t.date<=endDate);
+ const id=GROWTH[plan.metric]||'';
+ let x;
+ if(!id)x=vibratoReference(before,during);
+ else if(!before.length||!during.length)x={state:'hold',reason:'no-pair'};
+ else{
+  const c=G.periodReport(before,during)[id]||{state:'hold',reason:'no-pair'};
+  x=c.state==='hold'?{state:'hold',reason:c.reason||'no-data'}:
+   {state:c.state,basis:c.basis||'',matched:c.matched??null,tempo:c.tempo??null,before:c.before,after:c.after,delta:c.delta,
+    beforeIds:[c.firstId],afterIds:[c.lastId],beforeDate:c.from||'',afterDate:c.to||''};
+ }
+ const held=x.state==='hold';
+ return {rules:RULES,growthMetric:id,state:x.state,reason:held?x.reason:'',basis:x.basis||'',
+  matched:x.matched??null,tempo:x.tempo??null,beforeDate:x.beforeDate||'',afterDate:x.afterDate||'',
+  before:held?null:x.before,after:held?null:x.after,delta:held?null:x.delta,
+  change:legacyChange(x.state),mixedVersions:x.reason==='version-mixed',
+  // Analysed same-song takes in each window; the ids are only the takes actually compared.
+  beforeCount:before.length,afterCount:during.length,beforeIds:held?[]:x.beforeIds,afterIds:held?[]:x.afterIds};
+}
+/** repeat / maintain / collect as before; held → always collect (more data); 참고 (not judged) → listen. */
+function recommendation(state){
+ return state==='worse'?'repeat':state==='better'?'maintain':state==='reference'||state==='mixed'?'listen':'collect';
 }
 function report({plan,goals=[],recordings=[],dateOf,valid,asOf}){
  if(!plan||plan.kind!=='monthly-vocal'||!PATHS[plan.metric])throw Error('올바른 연습 계획을 선택해 주세요.');
@@ -63,14 +104,15 @@ function report({plan,goals=[],recordings=[],dateOf,valid,asOf}){
  // Use planned count, not rows left after cancellation or sync anomalies, as denominator.
  const days=plan.days,done=new Set(scheduled.filter(g=>g.completed===true).map(g=>g.date)).size;
  const snapshot=measurement(plan,recordings,dateOf,valid);
- const change=snapshot.change;
- return {id:'plan-outcome:'+plan.id,planId:plan.id,songId:plan.songId,metric:plan.metric,
+ return {id:'plan-outcome:'+plan.id,planId:plan.id,songId:plan.songId,metric:plan.metric,rules:RULES,
   sourceMonth:plan.sourceMonth||'',startDate:plan.startDate,endDate,
   completedDays:Math.min(done,days),scheduledDays:days,completionRate:ROUND(Math.min(done,days)/days*100),
   measurement:snapshot,
-  recommendation:change==='worse'?'repeat':change==='better'?'maintain':'collect',
-  // No specific segment comparison is asserted: summary metrics cover full takes.
-  scope:'whole-recording'};
+  recommendation:recommendation(snapshot.state),
+  // Summary metrics cover takes, not the plan segment: same phrases when they matched, else the whole recording.
+  scope:snapshot.basis==='phrases'?'same-phrases':'whole-recording'};
 }
-return {report,measurement,completeDate,value};
+/** A report saved before rules:2 (whole-recording averages, old wording). */
+const isLegacy=r=>!(r?.rules>=2&&r.measurement?.state);
+return {RULES,GROWTH,report,measurement,completeDate,value,recommendation,isLegacy};
 });
