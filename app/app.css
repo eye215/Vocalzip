@@ -529,8 +529,9 @@ body .sheet-page .sheet-foot>.btn,body .sheet-page .sheet-foot>button[type=submi
 body .sheet-page .sheet-foot>.btn-row{display:flex;gap:8px}
 body .sheet-page .sheet-foot>.btn-row .btn{min-height:var(--vz-button-height)}
 html.vz-keyboard-open body .sheet-page .sheet-foot{display:none}
-/* Only while the keyboard is really up does the page shrink to the visible area; otherwise it always fills the screen. */
-html.vz-keyboard-open body .sheet-back.sheet-page{top:var(--vv-top,0px);bottom:auto;height:var(--vv-height,100dvh)}
+/* A full page never moves or shrinks for the keyboard (iOS keyboard viewport values are unreliable and turned the page
+ * into a band). Only its scrolling body gets room under the content, so every field can be scrolled above the keyboard. */
+html.vz-keyboard-open body .sheet-page .sheet-body{padding-bottom:calc(var(--kb,0px) + 28px);scroll-padding-bottom:calc(var(--kb,0px) + 16px)}
 body .sheet-page .field input[type=date]{width:min(var(--vz-input-date-max),100%);max-width:var(--vz-input-date-max)}
 body .sheet-page.sheet-form-page .sheet-body{padding:var(--vz-space-6) var(--vz-page-gutter) 36px}
 body .sheet-page.sheet-form-page .sheet-head{padding-left:var(--vz-page-gutter);padding-right:var(--vz-page-gutter)}

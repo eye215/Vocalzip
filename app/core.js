@@ -154,6 +154,15 @@ if (vv) {
     document.documentElement.classList.toggle('vz-keyboard-open', h > 80);
     document.documentElement.style.setProperty('--vv-top', Math.round(vv.offsetTop) + 'px');
     document.documentElement.style.setProperty('--vv-height', Math.round(vv.height) + 'px');
+    // The page itself stays put; bring the field being typed into above the keyboard inside the page's own scroll.
+    if (h > 80) {
+      const field = document.activeElement, body = field?.closest?.('.sheet-page .sheet-body');
+      if (body) requestAnimationFrame(() => {
+        const r = field.getBoundingClientRect(), b = body.getBoundingClientRect(), limit = Math.min(b.bottom, innerHeight - h) - 16;
+        if (r.bottom > limit) body.scrollTop += Math.min(r.bottom - limit, Math.max(0, r.top - b.top - 16));
+        else if (r.top < b.top) body.scrollTop -= b.top - r.top + 16;
+      });
+    }
   };
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
   addEventListener('resize', kb); addEventListener('focusin', kb);

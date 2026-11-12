@@ -93,12 +93,17 @@ test('Lyrics cards preview saved text and edit each field on a form page',async(
  await page.getByRole('dialog',{name:'발음 / 호흡 / 감정 메모'}).getByRole('button',{name:'저장'}).click();await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('후렴 전에 숨쉬기');
  expect((await db(page)).songs[0].lyrics).toBe('첫 줄 가사\n둘째 줄 가사');expect((await db(page)).songs[0].lyricNotes).toBe('후렴 전에 숨쉬기');
 });
-test('a lyrics form page fills the whole screen even when the keyboard left stale viewport values behind',async({page})=>{
+test('a lyrics form page stays full screen while the keyboard is up and after it closes, whatever viewport values iOS leaves',async({page})=>{
  const seed=initial();seed.songs[0].lyrics='첫 줄 가사\n둘째 줄 가사';
  await boot(page,{seed});await page.goto('/#/song/song1');await page.locator('[data-tab=lyrics]').click();
  await page.locator('[data-lyric=lyrics]').click();
  const form=page.getByRole('dialog',{name:'가사 원문'}),field=page.getByRole('textbox',{name:'가사 원문'});
  await expect(field).toBeVisible();await field.focus();
+ // Keyboard up (340px, with the viewport values iOS reports): the page neither moves nor shrinks; its body makes room.
+ const open=await page.evaluate(()=>{const r=document.documentElement;r.style.setProperty('--vv-height','420px');r.style.setProperty('--vv-top','90px');r.style.setProperty('--kb','340px');r.classList.add('vz-keyboard-open');
+  const back=document.querySelector('.sheet-back.sheet-page').getBoundingClientRect(),body=document.querySelector('.sheet-page .sheet-body');
+  return {top:Math.round(back.top),height:Math.round(back.height),pad:parseFloat(getComputedStyle(body).paddingBottom)};});
+ expect(open.top).toBe(0);expect(open.height).toBe(page.viewportSize().height);expect(open.pad).toBeGreaterThanOrEqual(340);
  // iOS sometimes never reports the keyboard closing: the values it left behind say "keyboard up, page is short".
  await page.evaluate(()=>{const r=document.documentElement;r.style.setProperty('--vv-height','420px');r.style.setProperty('--vv-top','90px');r.style.setProperty('--kb','340px');r.classList.add('vz-keyboard-open');});
  await field.blur();
