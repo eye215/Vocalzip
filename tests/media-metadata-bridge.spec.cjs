@@ -116,8 +116,11 @@ test('song assignment uses its captured version, and revision mode refuses physi
 test('local stale form fields do not overwrite unedited cloud notes, and local bytes are preserved',async({page})=>{
  const f=await setup(page);
  await page.evaluate(async({m,bytes})=>window.vzipStorePracticeMedia({...m,review:'old local',blob:new Blob([new Uint8Array(bytes)],{type:'audio/wav'})}),{m:f.state.metadata,bytes:[...f.bytes]});
- const item=await f.item();expect(item.review).toBe('old local');expect(item.cloudEditBase).toBeTruthy();
- const out=await update(page,item,{review:item.review,rating:5});expect(out.saved.rating).toBe(5);
+ // The cloud copy is authoritative for metadata (#276): the stale device review is not what the list shows.
+ const item=await f.item();expect(item.review).toBe('keep memo');expect(item.cloudEditBase).toBeTruthy();
+ // A form still holding the stale device value sends only what the user changed.
+ const stale={...item,review:'old local'};
+ const out=await update(page,stale,{review:stale.review,rating:5});expect(out.saved.rating).toBe(5);
  expect(f.requests[0].patch).toEqual({rating:5});expect(f.state.metadata.review).toBe('keep memo');
  const bytes=await page.evaluate(async()=>{const item=(await window.vzipReadMedia()).find(m=>m.id==='voice');return [...new Uint8Array(await window.vzipMediaBlob(item).arrayBuffer())];});
  expect(Buffer.from(bytes).equals(f.bytes)).toBe(true);

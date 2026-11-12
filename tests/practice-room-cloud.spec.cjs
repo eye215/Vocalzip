@@ -47,7 +47,7 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  expect(result.after.changed).toBe(true);
  expect(result.record.practiceRoom.draft.memo).toBe('후렴 집중');
  expect(result.record.mediaIds).toEqual(['test-session-1234-0']);
- expect(result.uploaded.source).toBe('practice');
+ expect(result.uploaded.source).toBe('practice-room'); // room takes have their own library category (#279)
  expect(result.uploaded.requireR2).toBe(true);
  expect(result.audio.cloud).toBe(true);
  expect(result.url).toBe('/recording.wav');
@@ -84,12 +84,17 @@ test('practice-room result appears while R2 upload is still pending',async({page
   window.vzipCloudImport=()=>new Promise(()=>{});
  });
  const room=page.frameLocator('iframe.vzip-practice-room-frame');
+ // The tab buttons are static HTML: wait for the room script to render its first view before using them.
+ await expect(room.locator('#main [data-task]').first()).toBeVisible();
  await room.locator('[data-nav="roadmap"]').click();
  await room.locator('[data-task="basics"]').click();
  await room.locator('[data-upload="0"]').setInputFiles({name:'test.wav',mimeType:'audio/wav',buffer:sampleWav()});
  await expect(room.locator('audio[data-audio="0"]')).toBeVisible();
  await room.locator('#memo').fill('오늘은 한 구절을 편하게 불렀어요.');
  await room.locator('#submit').click();
+ // Either the result or the room's own error text, which the second check prints if it is there.
+ await expect(room.locator('.result-heading').or(room.locator('#record-error:not(:empty)')).first()).toBeVisible({timeout:15000});
+ expect(await room.locator('#record-error').textContent({timeout:1000}).catch(()=>'')||'').toBe('');
  await expect(room.locator('.result-heading')).toContainText('연습과 회고를 기록했어요',{timeout:5000});
  await expect(room.locator('.processing')).toHaveCount(0);
  await expect(room.locator('.feedback-block audio')).toBeVisible();

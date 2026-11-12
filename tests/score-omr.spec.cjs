@@ -1,7 +1,7 @@
 // 음표로 변환 (OMR PoC, app/score-omr.js): nothing is sent until the owner asks; waiting/failed/done states;
 // the converted MusicXML is previewed with OpenSheetMusicDisplay and offered as a download. The PDF is never changed.
 const {test, expect} = require('@playwright/test');
-const fs = require('node:fs'), path = require('node:path');
+const fs = require('node:fs');
 require('./legacy-session-mode.cjs')(test);
 const {boot, fakeR2, R2} = require('./helpers/r2-fixture.cjs');
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
@@ -9,6 +9,27 @@ const PDF = 'u/ui-test-user/score-1/original.pdf', MXL = 'u/ui-test-user/score-1
 async function osmd(page) {
   const local = process.env.VZ_OSMD || '/tmp/vzip-osmd/package/build/opensheetmusicdisplay.min.js';
   if (fs.existsSync(local)) await page.context().route('**/opensheetmusicdisplay@2.2.1/build/opensheetmusicdisplay.min.js', r => r.fulfill({path:local, contentType:'text/javascript'}));
+}
+// A small compressed MusicXML (.mxl = zip of META-INF/container.xml + the score), built here because
+// tests/fixtures/ is not committed. Stored (uncompressed) zip entries are enough for MusicXML readers.
+function mxl() {
+  const crcTable = Array.from({length:256}, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc32 = b => { let c = 0xffffffff; for (const x of b) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const score = '<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"><part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>' +
+    '<part id="P1"><measure number="1"><attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>' +
+    ['C', 'D', 'E', 'F'].map(step => '<note><pitch><step>' + step + '</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note>').join('') + '</measure></part></score-partwise>';
+  const container = '<?xml version="1.0" encoding="UTF-8"?><container><rootfiles><rootfile full-path="score.xml" media-type="application/vnd.recordare.musicxml+xml"/></rootfiles></container>';
+  const files = [['META-INF/container.xml', container], ['score.xml', score]].map(([name, text]) => ({name:Buffer.from(name), data:Buffer.from(text)}));
+  const local = [], central = []; let offset = 0;
+  for (const f of files) {
+    const crc = crc32(f.data), head = Buffer.alloc(30), dir = Buffer.alloc(46);
+    head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(20, 4); head.writeUInt32LE(crc, 14); head.writeUInt32LE(f.data.length, 18); head.writeUInt32LE(f.data.length, 22); head.writeUInt16LE(f.name.length, 26);
+    dir.writeUInt32LE(0x02014b50, 0); dir.writeUInt16LE(20, 4); dir.writeUInt16LE(20, 6); dir.writeUInt32LE(crc, 16); dir.writeUInt32LE(f.data.length, 20); dir.writeUInt32LE(f.data.length, 24); dir.writeUInt16LE(f.name.length, 28); dir.writeUInt32LE(offset, 42);
+    local.push(head, f.name, f.data); central.push(dir, f.name); offset += 30 + f.name.length + f.data.length;
+  }
+  const dirBytes = Buffer.concat(central), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(dirBytes.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...local, dirBytes, end]);
 }
 async function fakeOmr(page, fake) {
   const state = {job:null, posts:[]};
@@ -40,7 +61,7 @@ test('Score row offers 음표로 변환; nothing is requested until the owner as
   await expect(sheet).toContainText('변환 차례를 기다리는 중이에요');
   expect(omr.posts).toEqual([{key:PDF}]);
   omr.job = {...omr.job, status:'done', resultKey:MXL, resultSize:500, movements:1};
-  fake.store.set(MXL, {bytes:fs.readFileSync(path.join(__dirname, 'fixtures/omr-sample.mxl')), type:'application/vnd.recordare.musicxml'});
+  fake.store.set(MXL, {bytes:mxl(), type:'application/vnd.recordare.musicxml'});
   await sheet.getByRole('button', {name:'상태 새로고침'}).click();
   await expect(sheet).toContainText('자동 인식 결과예요');
   const download = sheet.getByRole('link', {name:'MusicXML 받기'});

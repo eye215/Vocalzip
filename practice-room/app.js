@@ -67,8 +67,11 @@ let seconds=0,timerRunning=false,timerLast=Date.now(),timerRemainder=0,recordSta
 let draft={difficulty:'조금 도전적',comfort:'편안해',symptoms:[],memo:'',answers:[],demoOutcome:'review',octave:0,songId:store.lastSongId||''};
 let dbPromise=new Promise((resolve,reject)=>{if(!window.indexedDB){reject(new Error('녹음 저장을 지원하지 않아요.'));return;}const r=indexedDB.open((scope?.mediaDb?.() || 'vocalzip_media_v1')+'_practice_room',1);r.onupgradeneeded=()=>r.result.createObjectStore('audio');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
 dbPromise.catch(()=>{});
-async function putAudio(id,blob){const db=await dbPromise;await new Promise((resolve,reject)=>{const tx=db.transaction('audio','readwrite');tx.objectStore('audio').put(blob,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}
-async function getAudio(id){const db=await dbPromise;return await new Promise((resolve,reject)=>{const r=db.transaction('audio').objectStore('audio').get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+// Like the app's media store: where IndexedDB cannot keep a Blob (WebKit private/ephemeral storage), keep its bytes instead.
+async function putAudio(id,blob){const db=await dbPromise;const write=value=>new Promise((resolve,reject)=>{try{const tx=db.transaction('audio','readwrite'),req=tx.objectStore('audio').put(value,id);req.onerror=()=>reject(req.error);tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||req.error||Error('녹음을 저장하지 못했어요.'));}catch(error){reject(error);}});
+ // WebKit reports this in more than one way; anything but a full disk gets one more try as bytes.
+ try{await write(blob);}catch(error){if(error?.name==='QuotaExceededError')throw error;await write({bytes:await blob.arrayBuffer(),type:blob.type||'audio/wav'});}}
+async function getAudio(id){const db=await dbPromise;const value=await new Promise((resolve,reject)=>{const r=db.transaction('audio').objectStore('audio').get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});return value?.bytes?new Blob([value.bytes],{type:value.type||'audio/wav'}):value;}
 function toast(s){$('#toast').textContent=s;$('#toast').classList.add('visible');clearTimeout(toast.timeout);toast.timeout=setTimeout(()=>$('#toast').classList.remove('visible'),3300);}
 function formatTime(s){return `${Math.floor(s/60).toString().padStart(2,'0')}:${Math.floor(s%60).toString().padStart(2,'0')}`;}
 function dateText(){return new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',weekday:'long'}).format(new Date());}

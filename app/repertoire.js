@@ -33,8 +33,11 @@ function updateSong(id,values,shared={}){
  const song=V.song(id);if(!song)throw Error('곡을 찾을 수 없어요.');
  const next=A.repertoire(values,info(song),owner());
  save(db=>{const current=db.songs.find(s=>s.id===id);if(!current)throw Error('삭제된 곡이에요.');Object.assign(current,shared);current.repertoire=next});
- const host=document.querySelector('[data-repertoire]');
- if(host&&V.song(id))V.repertoire.songPanel(host,V.song(id),M.cached().filter(m=>m.songId===id));
+ const host=document.querySelector('[data-repertoire]');if(!host)return;
+ const draw=list=>{if(host.isConnected&&V.song(id))V.repertoire.songPanel(host,V.song(id),list.filter(m=>m.songId===id))};
+ const cached=M.cached();draw(cached);
+ // The kept list can be cold (a refresh or a cloud read that was not kept): read it again rather than show the chosen take as missing.
+ if(next.takeId&&!cached.some(m=>m.id===next.takeId))M.list().then(draw).catch(()=>{});
 }
 function editRepertoire(id,kind){
  const s=V.song(id);if(!s)return;const r=info(s);

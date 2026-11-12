@@ -7,6 +7,8 @@ const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:a
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
  from:()=>{const c={};let writing=false;for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle'])c[m]=(...a)=>{if(m==='upsert'){window.__up.push(a[0]);writing=true}return c};c.then=r=>r({data:writing?[{user_id:'ui-test-user'}]:[],error:null});return c}})};`;
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+// Imports leave out takes shorter than 25 seconds, so files picked for import are 26-second mono WAVs.
+const longWav = (seconds = 26, sr = 8000) => { const n = sr * seconds, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / 8) * 6000), 44 + i * 2); return b; };
 const legacy = () => ({
   categories:[{id:'c1', name:'발성', items:['립트릴', '허밍']}],
   songs:[{id:'s1', title:'This Is the Moment', show:'지킬 앤 하이드'}, {id:'s2', title:'On My Own', show:''}],
@@ -56,7 +58,8 @@ const pickLibraryImportFiles=(page,files)=>sheet(page).locator('[data-file]').la
 
 test('보관함에서 고른 파일은 새 확인 화면을 거쳐 업로드 중에만 상단 대시보드를 보인다', async ({page}) => {
   await boot(page, {media:false});
-  const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2);
+  // A 26-second take: imports shorter than 25 seconds are left out on purpose.
+  const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
   b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
   b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
   b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
@@ -253,7 +256,8 @@ test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never
 
 test('Vocal training has three levels and each can add a new entry that is offered next time', async ({page}) => {
   await boot(page, {media:false});
-  const open = async () => { await page.goto('/#/home'); await page.locator('[data-log]').click(); await sheet(page).locator('[data-mode="training"]').click(); };
+  // Training now starts from a recommendation picker; the three-level entry lives under 직접 입력.
+  const open = async () => { await page.goto('/#/home'); await page.locator('[data-log]').click(); await sheet(page).locator('[data-mode="training"]').click(); await sheet(page).locator('select[name=recommendation]').selectOption('__custom'); };
   await open();
   const f = sheet(page);
   // Level 1: a new 분류 → its 세부 항목 starts empty, so add one there too, and a level-3 entry.
@@ -334,7 +338,7 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   await page.evaluate(() => {
     window.__uploaded = []; window.__expireOnce = true; window.__badFails = true;
     // Already on the server from an earlier quick import: only its name (no extension) and size are known.
-    const rows = [{id:'old-quick', name:'2026-11-01_10-00-05', size:8044, storageProvider:'r2', r2Key:'u/ui-test-user/old-quick/original.wav', created:Date.now()}];
+    const rows = [{id:'old-quick', name:'2026-11-01_10-00-05', size:208044, storageProvider:'r2', r2Key:'u/ui-test-user/old-quick/original.wav', created:Date.now()}];
     window.vzipCloudSignedIn = () => true; window.vzipCloudUserId = () => 'ui-test-user';
     window.vzipCloudMediaList = async () => rows.map(r => ({...r, cloud:true}));
     window.vzipCloudImport = async (file, info) => {
@@ -344,7 +348,8 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
       rows.push(meta); window.__uploaded.push(info.originalFilename); return meta;
     };
   });
-  const wav = tone => { const sr = 4000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
+  // 26-second takes: imports shorter than 25 seconds are left out on purpose.
+  const wav = tone => { const sr = 4000, n = sr * 26, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
   const files = Array.from({length:21}, (_, i) => ({name:'2026-11-01_10-00-' + String(i).padStart(2, '0') + (i === 3 ? ' expire' : i === 7 ? ' bad' : '') + '.wav', mimeType:'audio/wav', buffer:wav(i)}));
   files.push({name:'2026-11-01_11-00-00 copy.wav', mimeType:'audio/wav', buffer:wav(0)}); // same content as the first file
   files.push({name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('not audio')}, {name:'cover.pdf', mimeType:'application/pdf', buffer:Buffer.from('%PDF')}); // left out quietly
@@ -355,7 +360,7 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   await pickLibraryImportFiles(page,files);
   await expect(page.locator('.toast').last()).toContainText('22개 파일은 대량 업로드 화면에서');
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
-  const dash = page.locator('[data-dash]'), n = k => dash.locator('[data-count="' + k + '"] b');
+  const dash = page.locator('[data-dash]');
   await expect(dash).toContainText('전체 22개');
   // The expired login pauses the queue; nothing is counted as failed for it.
   await expect(dash).toContainText('로그인이 만료됐어요', {timeout:30000});
@@ -365,17 +370,19 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   expect(queued.total).toBe(22);
   expect(queued.items.every(i => i.hash && i.size)).toBe(true);
   await dash.getByRole('button', {name:'이어서 올리기'}).click();
-  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
-  await expect(n('done')).toHaveText('19');
-  await expect(n('failed')).toHaveText('1');
-  await expect(n('dup')).toHaveText('2'); // the copy picked twice, and the file already up from a quick import
+  // A finished import shows its result card (done · duplicates — the copy picked twice and the file already up from a quick import — · failed).
+  const result = page.locator('[data-result]');
+  await expect(result).toContainText('저장 19개 · 중복 제외 2개 · 실패 1개', {timeout:60000});
   await expect(page.locator('[data-hub]')).toContainText('지원하지 않는 형식이에요');
-  // Only the failure is retried.
+  // Only the failure is retried, from 처리 내역 (the import keeps the failed file's original for it).
   await page.evaluate(() => { window.__badFails = false; });
   const before = await page.evaluate(() => window.__uploaded.length);
-  await dash.getByRole('button', {name:'실패한 1개만 다시'}).click();
-  await expect(n('failed')).toHaveText('0', {timeout:30000});
-  await expect(n('done')).toHaveText('20');
+  await result.getByRole('link', {name:'처리 내역'}).click();
+  await page.locator('[data-retry-all]').click();
+  await expect(page.locator('[role=status]').filter({hasText:'업로드 1개 다시 시도'})).toBeVisible({timeout:30000});
+  await page.goto('/#/import-hub');
+  await expect(result).toContainText('저장 20개 · 중복 제외 2개');
+  await expect(result).not.toContainText('실패');
   expect(await page.evaluate(() => window.__uploaded.some(x => /10-00-05/.test(x)))).toBe(false);
   expect(await page.evaluate(() => window.__uploaded.length)).toBe(before + 1);
   const names = await page.evaluate(() => window.__uploaded);
@@ -393,7 +400,7 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
 test('A stopped upload resumes from its card: pick the same files again, finished ones are skipped and only the rest go up', async ({page}) => {
   test.setTimeout(120000);
   await boot(page, {media:false});
-  const wav = tone => { const sr = 4000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
+  const wav = tone => { const sr = 4000, n = sr * 26, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40); for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / (3 + tone)) * 4000), 44 + i * 2); return b; };
   const files = Array.from({length:5}, (_, i) => ({name:'11-5 #' + (i + 1) + '.m4a.wav', mimeType:'audio/wav', buffer:wav(i)}));
   await page.evaluate(sizes => {
     window.__uploaded = []; const rows = [];
@@ -408,11 +415,9 @@ test('A stopped upload resumes from its card: pick the same files again, finishe
   await expect(card).toContainText('완료 3 · 남음 2');
   await card.locator('[data-q-resume]').setInputFiles([...files, {name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 1개는 건너뛰었어요');
-  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
-  const n = k => page.locator('[data-dash] [data-count="' + k + '"] b');
-  await expect(n('done')).toHaveText('2');
-  await expect(n('dup')).toHaveText('3');
-  await expect(n('failed')).toHaveText('0');
+  // The finished import's result card: the 3 files already up are left out as duplicates, nothing failed.
+  await expect(page.locator('[data-result]')).toContainText('저장 2개 · 중복 제외 3개', {timeout:60000});
+  await expect(page.locator('[data-result]')).not.toContainText('실패');
   expect((await page.evaluate(() => window.__uploaded)).sort()).toEqual(['11-5 #4.m4a.wav', '11-5 #5.m4a.wav']);
   await page.evaluate(() => { location.hash = '#/home'; }); await page.evaluate(() => { location.hash = '#/import-hub'; });
   await expect(page.locator('[data-stopped]')).toHaveCount(0); // nothing left: the card is gone
@@ -470,8 +475,11 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
     for (const [id, date] of rows) await window.vzipStorePracticeMedia({id, name:'연습 ' + date, created:new Date(date + 'T20:00:00').getTime(), recordedDate:date, dateSource:'metadata', type:'audio/wav', source:'practice', songId:'s1', song:'This Is the Moment', blob:await (await fetch('/__' + id + '.wav')).blob(), durationSeconds:20});
     VZ.media.invalidate();
   }, [['t0', '2026-07-01'], ...takes]);
+  // The song page no longer places the 보컬 변화 card (growth moved to 보컬 연구소), but the card module still ships:
+  // mount it for song s1 the way the song page did, so its on-device analysis, charts and saved comparison stay covered.
+  const mount = () => page.evaluate(async () => { document.querySelector('#vg-host')?.remove(); const host = document.createElement('div'); host.id = 'vg-host'; host.dataset.songVocal = ''; document.querySelector('#view').append(host); VZ.songVocalGrowth(host, VZ.song('s1'), (await VZ.media.list()).filter(m => m.songId === 's1')); });
   await page.goto('/#/song/s1');
-  await page.locator('.vz-song-more').filter({hasText:'보컬 변화'}).locator('summary').first().click();
+  await mount();
   const card = page.locator('[data-song-vocal]');
   await expect(card).toContainText('분석 0/4개');
   await card.getByRole('button', {name:/지금 4개 분석하기/}).click();
@@ -499,7 +507,7 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   await expect(page.locator('.vg-table')).toContainText('음정 오차');
   // A dot opens that take's pitch curve.
   await page.goto('/#/song/s1');
-  await page.locator('.vz-song-more').filter({hasText:'보컬 변화'}).locator('summary').first().click();
+  await mount();
   await page.locator('[data-song-vocal] .vg-chart').first().locator('a').last().click();
   await expect(page).toHaveURL(/#\/analysis\/t3$/);
 });
@@ -536,9 +544,11 @@ test('자동 보컬 분석: unmeasured recordings are analyzed in the background
   await page.goto('/#/home'); await page.waitForTimeout(2500);
   expect(await measured()).toEqual(['a1', 'a2', 'a3']);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vzip_auto_analysis_v1')).on)).toBe(false);
-  // The song page shows the background results without pressing anything.
-  await page.goto('/#/song/s1');
-  await expect(page.locator('[data-song-vocal]')).toContainText('분석 3/4개');
+  // (The song page's 보컬 변화 card was removed; results live on the recordings, checked above.) After a reload it stays off.
+  await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.goto('/#/settings');
+  await expect(row.locator('[data-auto-toggle]')).toHaveAttribute('aria-checked', 'false');
+  await expect(row).toContainText('꺼져 있어요.');
 });
 
 test('서버 자동 분석: progress card, AI / needs-a-look labels, live refresh when the server saves, browser analysis stands down', async ({page}) => {
@@ -599,13 +609,11 @@ test('맞춤 연습 추천: measured intonation drift leads to a pitch exercise;
   const tip = page.locator('[data-tip] .tip');
   await expect(tip).toContainText('음정 정확도 연습');
   await expect(tip).toContainText('±23.5 cent');                 // the median of the measured takes
-  await expect(tip).toContainText('A3~C5');                      // practice inside the measured range
+  // The measured range travels with the tip (guided practice uses it); the card no longer prints it as a step.
+  expect(await page.evaluate(async () => VZ.practiceTips(await VZ.media.list()).range)).toBe('A3~C5');
   await expect(page.locator('[data-tip]')).toContainText('통증이나 쉰 목소리가 있으면 쉬어 주세요');
-  // From the song page: start → the existing practice record, pre-filled; saving marks it done today.
-  await page.goto('/#/song/s1');
-  const songTip = page.locator('[data-song-tips] .tip').first();
-  await expect(songTip).toContainText('음정 정확도 연습');
-  await songTip.getByRole('button', {name:'연습 시작'}).click();
+  // Start (the song page no longer repeats the card) → the existing practice record, pre-filled; saving marks it done today.
+  await tip.getByRole('button', {name:'연습 시작'}).click();
   await expect(page.locator('.sheet input[name=minutes]')).toHaveValue('10');
   await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(/\[추천 연습\] 음정 정확도 연습/);
   await page.locator('.sheet-foot .btn').last().click();
@@ -618,7 +626,7 @@ test('맞춤 연습 추천: measured intonation drift leads to a pitch exercise;
 
 test('파일 가져오기 quietly leaves out files that are not audio or video', async ({page}) => {
   await boot(page, {media:false});
-  const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  const b = longWav();
   await page.goto('/#/library');
   await openLibraryImport(page);
   await pickLibraryImportFiles(page,[{name:'take.wav', mimeType:'audio/wav', buffer:b}, {name:'가사.txt', mimeType:'text/plain', buffer:Buffer.from('가사')}, {name:'._take.wav', mimeType:'audio/wav', buffer:Buffer.from('x')}]);
@@ -626,7 +634,8 @@ test('파일 가져오기 quietly leaves out files that are not audio or video',
   await expect(sheet(page).locator('.up-row')).toHaveCount(1);
   await expect(sheet(page)).not.toContainText('가사.txt');
   // Only non-media picked: nothing to import.
-  await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
+  await sheet(page).getByRole('button', {name:'돌아가기'}).click();
+  await expect(sheet(page)).toHaveCount(0);
   await openLibraryImport(page);
   await pickLibraryImportFiles(page,{name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')});
   await expect(page.locator('.toast').last()).toContainText('고른 파일 중에 음성·영상 파일이 없어요');
@@ -634,7 +643,7 @@ test('파일 가져오기 quietly leaves out files that are not audio or video',
 
 test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imports can be moved in one tap', async ({page}) => {
   await boot(page, {media:false});
-  const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  const b = longWav();
   await page.goto('/#/library');
   await openLibraryImport(page);
   await pickLibraryImportFiles(page,{name:'2025-08-08_22-09-00.wav', mimeType:'audio/wav', buffer:b});
@@ -676,8 +685,15 @@ test('Saved comparisons show the two recording days (2026.08.12 → 2026.10.20)'
     VZ.media.invalidate();
     VZ.change(d => { d.comparisonReports = [{id:'r1', firstId:'cmp-a', secondId:'cmp-b', firstName:'Rizzo 2026-08-12', secondName:'Rizzo 2026-10-20', firstDate:Date.now(), secondDate:Date.now(), song:'This Is the Moment', notes:'', created:Date.now()}]; }, {silent:true});
   });
-  await page.goto('/#/compare');
-  await expect(page.locator('a.item[href*="cmp-a"] .item-sub')).toHaveText('2026.08.12 → 2026.10.20');
+  // Saved comparisons are listed in 리포트 보관함 and reopen the two recordings, labelled by their recording days.
+  await page.goto('/#/lab-reports');
+  const link = page.locator('a.vl-report[href*="a=cmp-a&b=cmp-b"]');
+  await expect(link).toContainText('비교 메모');
+  await link.click();
+  await expect(page.locator('[data-compare-a]')).toHaveValue('cmp-a');
+  await expect(page.locator('[data-compare-b]')).toHaveValue('cmp-b');
+  await expect(page.locator('[data-compare-a] option:checked')).toContainText('08.12');
+  await expect(page.locator('[data-compare-b] option:checked')).toContainText('10.20');
 });
 
 test('A past scheduled lesson can be recorded as done or cancelled from home in one tap', async ({page}) => {
@@ -943,8 +959,7 @@ test('Import: multiple files, bulk and per-file song, date edit, invalid skipped
   await page.goto('/#/library');
   await openLibraryImport(page);
   await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.songId === 's2' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
-  const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
-  const buffer = Buffer.from(wav);
+  const buffer = longWav();
   await pickLibraryImportFiles(page,[
     {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 1개는 뺐어요'); // left out, not listed
@@ -990,27 +1005,32 @@ test('Library filters, edit and play; compare A/B with memo saved in v5 report s
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
-  await page.getByRole('button', {name:'레슨', exact:true}).click();
+  await page.getByRole('group', {name:'녹음 유형별 보관함'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await page.locator('[data-media] [data-toggle]').click();
   await expect(page.locator('.media-open .player')).toBeVisible();
+  // 정보 수정 lives in the recording's 더보기 menu.
+  await page.getByRole('button', {name:'레슨 시범 더보기'}).click();
   await page.getByRole('button', {name:/정보 수정/}).click();
   await sheet(page).getByRole('button', {name:'만족도 5'}).click();
   await sheet(page).locator('[name=review]').fill('선생님 시범 좋음');
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').rating).toBe(5);
-  await page.goto('/#/compare?song=s1');
-  await expect(page.locator('[data-side="A"]')).toContainText('레슨 시범');
-  await expect(page.locator('[data-side="B"]')).toContainText('연습 녹음');
-  await page.getByRole('button', {name:'0.75×'}).click();
-  await page.locator('[data-side="A"] [data-play]').click();
-  await page.getByRole('button', {name:/A\/B 전환/}).click();
-  await page.locator('#cmp-form [name=notes]').fill('호흡이 길어졌다');
+  // 비교 now opens the 보컬 연구소 compare panel for the two recordings.
+  await page.goto('/#/compare?a=m1&b=m2');
+  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=m1&b=m2&compare=1$/);
+  const cmp = page.locator('[data-compare-panel]');
+  await expect(cmp).toHaveAttribute('open', '');
+  await expect(cmp.locator('[data-compare-a]')).toHaveValue('m1'); // 레슨 시범
+  await expect(cmp.locator('[data-compare-b]')).toHaveValue('m2'); // 연습 녹음
+  await cmp.locator('[data-compare-switch]').click();
+  await cmp.locator('[name=notes]').fill('호흡이 길어졌다');
   // A background media refresh must not wipe what the user is typing.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m1'}})));
   await page.waitForTimeout(700);
-  await expect(page.locator('#cmp-form [name=notes]')).toHaveValue('호흡이 길어졌다');
-  await page.getByRole('button', {name:'메모 저장'}).click();
+  await expect(cmp.locator('[name=notes]')).toHaveValue('호흡이 길어졌다');
+  await cmp.locator('[data-compare-form] [type=submit]').click();
+  await expect.poll(async () => (await data(page)).comparisonReports.length).toBe(1);
   const r = (await data(page)).comparisonReports[0];
   expect(r).toMatchObject({firstId:'m1', secondId:'m2', notes:'호흡이 길어졌다', songId:'s1'});
 });
@@ -1035,7 +1055,7 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await page.locator('[data-day] [data-add]').click();
   await sheet(page).getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
-  await sheet(page).getByRole('button', {name:'닫기'}).click();
+  await sheet(page).getByRole('button', {name:'돌아가기'}).click();
   await page.getByRole('button', {name:'다음 달'}).click();
   await page.getByRole('button', {name:'오늘'}).click();
   await expect(page.locator('[data-d="' + day(0) + '"]')).toHaveAttribute('aria-pressed', 'true');
@@ -1079,7 +1099,7 @@ test('Sheets fit the iPhone width and inputs do not overflow', async ({page}) =>
 });
 
 test('Video import keeps only the original audio and files it under the capture date', async ({page}) => {
-  const fixture = path.resolve('tests/fixtures/dated-video.mp4');
+  const fixture = path.resolve('tests/fixtures/dated-video-26s.mp4'); // imports leave out takes under 25 seconds
   test.skip(!fs.existsSync(fixture), 'Run node tests/make-audio-fixtures.cjs (needs ffmpeg).');
   test.setTimeout(90000);
   await boot(page, {media:false});
@@ -1098,8 +1118,7 @@ test('Video import keeps only the original audio and files it under the capture 
 
 test('Billing is only linked, and editing a legacy lesson never stamps a status on it', async ({page}) => {
   await boot(page, {media:false});
-  await page.goto('/#/settings');
-  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  // 레슨비 정산 is linked from the lesson list (the settings menu no longer lists it).
   await page.goto('/#/lessons');
   await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
   await page.goto('/#/lesson/l1');
@@ -1262,11 +1281,12 @@ test('Song pickers list the most recently registered song first', async ({page})
   expect((await data(page)).songs.at(-1).created).toBeGreaterThan(0);
   await page.goto('/#/library');
   await page.locator('[data-media="m1"] [data-toggle]').click();
-  await page.locator('[data-media="m1"]').getByRole('button', {name:/정보 수정/}).click();
+  await page.getByRole('button', {name:'레슨 시범 더보기'}).click(); // 정보 수정 lives in the recording's 더보기 menu
+  await page.getByRole('button', {name:/정보 수정/}).click();
   const options = await sheet(page).locator('[name=song] option').allTextContents();
   // Legacy songs have no created time: save order decides (s2 was added after s1).
   expect(options.slice(1, 4)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment — 지킬 앤 하이드']);
-  await sheet(page).getByRole('button', {name:'닫기'}).click();
+  await sheet(page).getByRole('button', {name:'돌아가기'}).click();
   await page.goto('/#/library');
   expect((await page.locator('[data-song] option').allTextContents()).slice(2, 5)).toEqual(['Defying Gravity', 'On My Own', 'This Is the Moment']);
 });
@@ -1474,7 +1494,7 @@ test('Large song library uses compact selects for lesson multi-selection and rec
   expect(lesson.songIds).toEqual(['extra199','s1']);
   await page.locator('[data-edit-lesson]').click();
   await expect(sheet(page).locator('[data-remove-song]')).toHaveCount(2);
-  await sheet(page).getByRole('button',{name:'닫기',exact:true}).click();
+  await sheet(page).getByRole('button',{name:'돌아가기',exact:true}).click();
   await page.goto('/#/record');
   await page.locator('[data-pick-song]').click();
   await expect(sheet(page).locator('select[name=song]')).toBeVisible();
@@ -1489,8 +1509,10 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
     for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / tone) * 6000), 44 + i * 2); return b; };
   const seed = legacy(); seed.songs.push({id:'s3', title:'One Day More', show:'레미제라블', aliases:['원데이모어']});
   await boot(page, {seed, media:false});
-  await page.goto('/#/settings');
-  await page.getByRole('link', {name:/기존 자료 가져오기/}).click();
+  // 기존 자료 가져오기 opens from the home quick row's 가져오기 (no longer from settings). boot() leaves us on #/home;
+  // goto() to the same URL would reload in WebKit and drop boot's signed-out-device setup.
+  await expect(page).toHaveURL(/#\/home$/);
+  await page.locator('[data-import]').click();
   await expect(page.locator('#top h1')).toHaveText('기존 자료 가져오기');
   await page.getByRole('button', {name:/음성 메모/}).click();
   // Voice memo defaults: 2025-07-24 → today, 0:25 – 8:00 (both ends included).
@@ -1535,9 +1557,9 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   // A file marked 공연 is imported but makes no practice record.
   await row('원데이모어').locator('[data-occ-row]').selectOption('performance');
   await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
-  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
-  await expect(page.locator('[data-dash] [data-count="done"] b')).toHaveText('3');
-  await expect(page.locator('[data-hub]')).toContainText('연습 기록 2개 생성');
+  // Checked on the whole hub so a failure shows each file's reason (failed rows are listed under the result card).
+  await expect(page.locator('[data-hub]')).toContainText('저장 3개', {timeout:60000});
+  await expect(page.locator('[data-result]')).toContainText('연습 기록 2개 생성');
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(3);
   const take = items.find(m => m.originalFilename === 'the moment take.wav');
@@ -1603,8 +1625,8 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('.lib-month').last()).toContainText('2025년 1월');
   await expect(page.locator('.lib-month').last()).toContainText('1개 · 2분');
   await expect(page.locator('[data-count]')).toContainText('3개');
-  // The origin segment stays separate from the format and song filter sheet.
-  await page.getByRole('button', {name:'레슨', exact:true}).click();
+  // The recording-kind segment stays separate from the format and song filter sheet.
+  await page.getByRole('group', {name:'녹음 유형별 보관함'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();
@@ -1657,11 +1679,8 @@ test('Growth leads with this period\'s time compared with the same days before, 
 test('Song detail shows real growth, recording selection and analysis handoff', async ({page}) => {
   await boot(page);
   await page.goto('/#/song/s1');
-  const card = page.locator('.vz-song-dashboard');
-  await expect(card).toContainText('누적 연습');
-  await expect(card).toContainText('25분');
-  await expect(card.locator('.vz-song-months > div')).toHaveCount(6);
-  await expect(card).toContainText('★ 4.0');
+  // The growth charts moved to 보컬 연구소; the song header keeps the real totals (entered minutes, records, recordings).
+  await expect(page.locator('[data-summary]')).toHaveText('연습 25분 · 기록 1회 · 녹음 2개 · 레슨 1회');
   await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
   await expect(page.getByRole('tab', {name:'레슨'})).toHaveCount(0);
   await expect(page.locator('.vz-song-media-list [data-media]')).toHaveCount(2);
@@ -1754,7 +1773,7 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
     window.vzipCloudMediaList = async () => [...rows.values()].map(m => ({...m, cloud:true}));
     window.vzipCloudMediaUpdate = async () => {};
   });
-  const sr = 8000, n = sr * 2, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  const b = longWav();
   await page.goto('/#/library');
   await openLibraryImport(page);
   await pickLibraryImportFiles(page,{name:'take.wav', mimeType:'audio/wav', buffer:b});
@@ -1775,7 +1794,6 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
 test('Recordings can be marked 공연·레슨·연습; performances are filtered and not counted as practice time', async ({page}) => {
   await boot(page);
   await page.goto('/#/library');
-  await expect(page.getByRole('button', {name:'공연', exact:true})).toBeVisible();
   // m2 is an unlinked practice recording; its length never adds to actual practice time.
   await page.locator('[data-media="m2"] [data-toggle]').click();
   await page.locator('[data-media="m2"] [data-lib-row-more]').click();
@@ -1784,13 +1802,11 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await sheet(page).getByRole('radio', {name:'공연'}).click();
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm2').occasion).toBe('performance');
-  await page.goto('/#/library');
-  await page.getByRole('button', {name:'공연', exact:true}).click();
-  await expect(page.locator('[data-media]')).toHaveCount(1);
+  // The library tabs are recording kinds now; the row still says 공연, and the song's recording list marks it.
+  await page.goto('/#/home'); await page.goto('/#/library'); // the open player keeps the list as it was until the screen is left
   await expect(page.locator('[data-media="m2"] .item-sub')).toContainText('공연');
   await page.goto('/#/song/s1');
-  await page.getByRole('tab', {name:'공연'}).click();
-  await expect(page.locator('[data-body] [data-media="m2"]')).toHaveCount(1);
+  await expect(page.locator('.vz-song-media-list [data-media="m2"] .vz-song-kind.performance')).toHaveText('공연');
   const minutes = await page.evaluate(async () => VZ.timeEntries(await VZ.media.list()).filter(e => e.kind === 'recording').map(e => e.ref.id));
   expect(minutes).not.toContain('m2');  // The calendar shows performances as their own group and dot.
   const m2day = await page.evaluate(async () => VZ.media.dateOf((await VZ.media.list()).find(m => m.id === 'm2')));
@@ -1827,10 +1843,10 @@ test('A recording is marked 레슨 녹음 or 트레이닝 from its menu; 레슨 
 });
 
 test('WAV imports are stored as FLAC only after every sample is checked against the original', async ({page, browserName}) => {
-  test.setTimeout(60000);
+  test.setTimeout(120000);
   await boot(page, {media:false});
-  // 3 s of 16-bit stereo with noise so FLAC has real work to do.
-  const sr = 44100, frames = sr * 3, ch = 2, b = Buffer.alloc(44 + frames * ch * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + frames * ch * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(ch, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * ch * 2, 28); b.writeUInt16LE(ch * 2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(frames * ch * 2, 40);
+  // 26 s of 16-bit stereo with noise so FLAC has real work to do (imports leave out takes under 25 seconds).
+  const sr = 44100, frames = sr * 26, ch = 2, b = Buffer.alloc(44 + frames * ch * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + frames * ch * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(ch, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * ch * 2, 28); b.writeUInt16LE(ch * 2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(frames * ch * 2, 40);
   let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(Math.sin(i / (20 + c * 3)) * 9000 + (rnd() - 0.5) * 600))), 44 + (i * ch + c) * 2);
   await page.goto('/#/library');
@@ -1838,21 +1854,27 @@ test('WAV imports are stored as FLAC only after every sample is checked against 
   await pickLibraryImportFiles(page,{name:'warmup.wav', mimeType:'audio/wav', buffer:b});
   await expect(sheet(page).getByText('WAV → FLAC 무손실 압축')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
-  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:45000});
+  await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:90000});
   const [item] = await media(page);
   // Safari/WebKit (iPhone) keeps the WAV on purpose; other browsers must produce a verified FLAC.
-  if (browserName === 'webkit') { expect(item.type).toBe('audio/wav'); expect(item.flacSkipped).toContain('Safari'); return; }
+  // On WebKit the inspected WAV is reused as is (see audio-import.spec "original WAV on WebKit"): the stored bytes are the original's.
+  if (browserName === 'webkit') {
+    expect(item.type).toBe('audio/wav'); expect(item.losslessFlac).toBeUndefined();
+    expect(await page.evaluate(async original => { const stored = new Uint8Array(await window.vzipMediaBlob((await window.vzipReadMedia())[0]).arrayBuffer()), want = Uint8Array.from(atob(original), c => c.charCodeAt(0));
+      return stored.length === want.length && stored.every((x, i) => x === want[i]); }, b.toString('base64'))).toBe(true);
+    return;
+  }
   expect(item.type).toBe('audio/flac');
   expect(item.losslessFlac).toMatchObject({samplesVerified:true, originalCodec:'pcm-s16', originalBytes:b.length, channels:2, sampleRate:44100, frames});
   expect(item.losslessFlac.outputBytes).toBeLessThan(b.length);
   expect(item.originalMedia).toMatchObject({name:'warmup.wav', size:b.length});
   // Decoding the stored FLAC gives exactly the original 16-bit samples.
   const same = await page.evaluate(async original => {
-    const ctx = new OfflineAudioContext(2, 44100 * 3, 44100), stored = (await window.vzipReadMedia())[0];
-    const audio = await ctx.decodeAudioData(await stored.blob.arrayBuffer()), view = new DataView(new Uint8Array(original).buffer);
+    const ctx = new OfflineAudioContext(2, 44100 * 26, 44100), stored = (await window.vzipReadMedia())[0];
+    const audio = await ctx.decodeAudioData(await stored.blob.arrayBuffer()), view = new DataView(Uint8Array.from(atob(original), c => c.charCodeAt(0)).buffer);
     for (let c = 0; c < 2; c++) { const d = audio.getChannelData(c); for (let i = 0; i < d.length; i += 997) if (Math.round(d[i] * 32768) !== view.getInt16(44 + (i * 2 + c) * 2, true)) return false; }
-    return audio.length === 44100 * 3;
-  }, [...b]);
+    return audio.length === 44100 * 26;
+  }, b.toString('base64'));
   expect(same).toBe(true);
 });
 
@@ -1872,8 +1894,8 @@ test('Import hub suggests linking a file to that day\'s lesson, and links only w
   await expect(row('class').locator('[data-occ-row]')).toHaveValue('lesson');
   await expect(row('class').locator('[data-song]')).toHaveValue('s2'); // the lesson's only song
   await page.getByRole('button', {name:/선택한 2개 가져오기/}).click();
-  await expect(page.getByText('업로드 결과')).toBeVisible({timeout:60000});
-  await expect(page.locator('[data-hub]')).toContainText('레슨 녹음 1개 연결');
+  await expect(page.locator('[data-result]')).toContainText('저장 2개', {timeout:60000});
+  await expect(page.locator('[data-result]')).toContainText('레슨 녹음 1개 연결');
   const d = await data(page), items = await media(page);
   const linked = items.find(m => m.originalFilename === 'class 2026-03-05.wav');
   expect(d.lessons.find(l => l.id === 'lx').recordings.map(r => r.id)).toEqual([linked.id]);
@@ -2063,13 +2085,15 @@ test('File deletion cancels safely, deletes one file and preserves linked practi
  await boot(page);
  await page.goto('/#/library');
  const row=page.locator('[data-media="m1"]').first();
+ // 파일 삭제 sits under the recording's 더보기 → 기타 작업.
+ const askDelete=async()=>{await row.locator('[data-lib-row-more]').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByText('기타 작업').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByRole('button',{name:'파일 삭제'}).click();};
  await row.locator('[data-toggle]').click();
- await row.locator('[data-delete]').click();
+ await askDelete();
  await expect(sheet(page)).toContainText('연습·레슨 기록, 메모와 연습 시간은 남아요');
  if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/delete-confirmation.png'});
  await sheet(page).getByRole('button',{name:'취소',exact:true}).click();
  expect((await media(page)).map(x=>x.id)).toContain('m1');
- await row.locator('[data-delete]').click();
+ await askDelete();
  await sheet(page).getByRole('button',{name:'파일 영구 삭제',exact:true}).click();
  await expect.poll(async()=> (await media(page)).map(x=>x.id)).not.toContain('m1');
  const db=await data(page);
@@ -2102,12 +2126,10 @@ test('Song check selects recordings, keeps controls sticky and exposes individua
  await expect(page.locator('[data-counter]')).toHaveText('선택 1개');
  await page.locator('[data-select-all]').click();
  await expect(page.locator('[data-counter]')).toBeEmpty();
- await page.getByRole('button',{name:'곡 확인 설정'}).click();
- await expect(page.locator('.reference-options')).toBeVisible();
+ // The advanced reference settings have no entry any more: their panel stays hidden and offers no manual reference fields.
+ await expect(page.getByRole('button',{name:'곡 확인 설정'})).toHaveCount(0);
+ await expect(page.locator('.reference-options')).toBeHidden();
  await expect(page.locator('[data-ref-song],[data-ref-text],[data-ref-manual]')).toHaveCount(0);
- await expect(page.getByRole('link',{name:'가사는 곡 상세의 가사 탭에서 입력 →'})).toHaveAttribute('href','#/songs');
- await expect(page.locator('[data-ref-picker]')).toBeVisible();
- if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/recording-simplified.png',fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.getByRole('button',{name:'미분류 파일 더 보기',exact:true}).click();
  await page.getByRole('dialog',{name:'미분류 파일'}).getByRole('button',{name:'파일 삭제'}).click();
@@ -2116,6 +2138,7 @@ test('Song check selects recordings, keeps controls sticky and exposes individua
 });
 
 test('Song check keeps the selection controls and bottom actions visible at the last recording',async({page})=>{
+ await page.setViewportSize({width:390,height:844}); // a phone layout check, also on the desktop project
  await boot(page);
  await page.evaluate(async()=>{
   window.vzipCloudSignedIn=()=>true;
@@ -2225,7 +2248,7 @@ test('A measurement ⓘ opens what it measures and how to read it', async ({page
   const sheet = page.getByRole('dialog', {name:'음정 정확도 (음정 오차)'});
   await expect(sheet).toContainText('반음 하나 = 100 cent');
   await expect(sheet).toContainText('판정하지 않아요');
-  const box = await page.getByRole('button', {name:'닫기'}).boundingBox();
+  const box = await sheet.getByRole('button', {name:'돌아가기'}).boundingBox();
   expect(Math.round(box.height)).toBeGreaterThanOrEqual(44); // WebKit reports 43.99997
   expect(page.__errors).toEqual([]);
 });
@@ -2252,9 +2275,11 @@ test('Offline notice, a change sent at once when the app goes to the background,
   // Song page: the 전체·가사·악보… bar sticks; a tab chosen down the page starts right under it.
   await page.goto('/#/song/s1');
   const bar = page.locator('.song-tabs');
+  // The song opens on 녹음 (none here); 활동 기록 holds the 30 practices, long enough to scroll.
+  await bar.getByRole('tab', {name:'활동 기록'}).click();
   await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
   await expect.poll(async () => Math.round((await bar.boundingBox()).y)).toBeLessThan(40);
-  await bar.getByRole('tab', {name:'활동 기록'}).click();
+  await bar.getByRole('tab', {name:'가사'}).click();
   const gap = await page.evaluate(() => document.querySelector('[data-body]').getBoundingClientRect().top - document.querySelector('.song-tabs').getBoundingClientRect().bottom);
   expect(gap).toBeGreaterThanOrEqual(0);
   expect(gap).toBeLessThan(40);
@@ -2342,6 +2367,10 @@ test('Actual practice time excludes recording length across growth, calendar and
 test('Actual practice time supports training recordings without changing the entered minutes',async({page})=>{
  const seed=legacy();seed.practices=[];await boot(page,{seed});
  await page.evaluate(()=>VZ.practiceSheet());await sheet(page).locator('[data-mode="training"]').click();
+ // Training starts from the recommendation picker; 직접 입력 takes an existing 분류 and 세부 항목.
+ await sheet(page).locator('select[name=recommendation]').selectOption('__custom');
+ await sheet(page).locator('select[name=category]').selectOption('c1');
+ await sheet(page).locator('select[name=detail]').selectOption('립트릴');
  await sheet(page).locator('[name=date]').fill(day(-1));
  await sheet(page).locator('[name=minutes]').fill('12');
  await sheet(page).locator('input[name=media][value="m2"]').check();
@@ -2515,6 +2544,7 @@ test('Lesson deletion from settlement verifies exact charge, preserves recording
  await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
  await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
  await expect(page).toHaveURL(/\/billing\/$/);
+ await page.waitForFunction(()=>window.VzipBillingStore); // the URL changes before the billing page has loaded its scripts
  const after=await page.evaluate(()=>VzipBillingStore.load());
  expect(after.payments).toEqual(before.payments);
  expect(after.deductions.find(d=>d.lessonId==='l1').deletionOperationId).toBeTruthy();

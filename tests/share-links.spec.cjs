@@ -17,8 +17,10 @@ async function fakeShares(page) {
   });
   return {shares, made};
 }
-test('A recording link is made for the chosen period, copied, listed and stopped from settings', async ({page, context}) => {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+test('A recording link is made for the chosen period, copied, listed and stopped from settings', async ({page, context, browserName}) => {
+  // WebKit has no clipboard permissions to grant: there the copied text is read from the clipboard call itself.
+  const realClipboard = browserName === 'chromium';
+  if (realClipboard) await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await fakeR2(page); const fake = await fakeShares(page);
   await boot(page);
   await page.evaluate(() => window.VZ.shareSheet({id:'m-share', name:'레슨 녹음 11.11', r2Key:'u/ui-test-user/m-share/original.m4a'}));
@@ -31,8 +33,10 @@ test('A recording link is made for the chosen period, copied, listed and stopped
   expect(fake.made[0]).toEqual({key:'u/ui-test-user/m-share/original.m4a', mediaId:'m-share', title:'레슨 녹음 11.11', expiresIn:45 * 86400});
   const link = await sheet.getByLabel('공유 링크').inputValue();
   expect(link).toMatch(/\/share\.html#Tx+0$/);
+  if (!realClipboard) await page.evaluate(() => { navigator.clipboard.writeText = async text => { window.__copied = text; }; });
   await sheet.getByRole('button', {name:'복사'}).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+  await expect(page.locator('.toast').last()).toContainText('링크를 복사했어요');
+  expect(await page.evaluate(real => real ? navigator.clipboard.readText() : window.__copied, realClipboard)).toBe(link);
   await sheet.getByRole('button', {name:'돌아가기'}).click();
   // "계속": no expiry is sent
   await page.evaluate(() => window.VZ.shareSheet({id:'m2', name:'공연 녹음', r2Key:'u/ui-test-user/m2/original.m4a'}));

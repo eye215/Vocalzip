@@ -158,7 +158,7 @@ async function runAuto(files) {
   if (files) { hub.pendingFiles = files.slice(); hub.totalFiles = files.length; hub.batchCount = Math.ceil(files.length / BATCH()); hub.batchNo = 0; }
   hub.auto = true; hub.phase = 'importing'; hub.paused = false; hub.notice = ''; hub.batch ||= VZ.uid(); hub.startedAt ||= Date.now(); hub.autoRunning = true;
   M.keepAwake(true); M.holdBackup?.(true); draw();
-  try { await autoLoop(); } finally { hub.autoRunning = false; M.keepAwake(false); M.holdBackup?.(false); hub.stage = ''; saveQueue(true); if (host()) draw(); }
+  try { await autoLoop(); } finally { hub.autoRunning = false; hub.inBatch = 0; M.keepAwake(false); M.holdBackup?.(false); hub.stage = ''; saveQueue(true); if (host()) draw(); }
 }
 async function autoLoop() {
   hub.known ||= await knownFiles();
@@ -167,15 +167,16 @@ async function autoLoop() {
   if (leftover.length) { await runImport(leftover, {more:true}); if (hub.paused) return; }
   while (hub.pendingFiles?.length && !hub.paused) {
     const part = hub.pendingFiles.splice(0, BATCH()); hub.batchNo++;
-    const rows = [];
+    const rows = []; hub.inBatch = part.length; // files of this batch still being checked count toward the total
     for (const [i, file] of part.entries()) {
       if (hub.paused) { hub.pendingFiles.unshift(...part.slice(i)); hub.batchNo--; break; }
       hub.stage = '묶음 ' + hub.batchNo + '/' + hub.batchCount + ' · 파일 확인 중 ' + (i + 1) + '/' + part.length; drawRow({});
       const row = await inspectFile(file, hub.known);
       if (row.error) Object.assign(row, {queued:true, state:'failed', msg:'실패: ' + row.error, file:null});
       else if (row.status === 'out') Object.assign(row, {queued:true, state:'skipped', msg:row.duration != null && row.duration < 25 ? '25초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음', file:null});
-      hub.rows.push(row); rows.push(row);
+      hub.rows.push(row); rows.push(row); hub.inBatch--;
     }
+    hub.inBatch = 0;
     if (hub.paused) { // files already checked in this batch wait in the queue for "이어서 올리기"
       for (const r of rows) if (!r.error && r.state !== 'skipped') Object.assign(r, {queued:true, state:r.dup ? 'dup' : 'waiting', msg:r.dup ? '중복 제외 · ' + r.dup : ''});
       saveQueue(true); break;
@@ -379,7 +380,7 @@ function resultHtml() {
 }
 function dashHtml() {
   const q = hub.rows.filter(r => r.queued), c = counts(q), failed = c.failed, cur = hub.current;
-  const unchecked = (hub.pendingFiles?.length || 0) + (hub.autoRunning ? hub.rows.filter(r => !r.queued).length : 0);
+  const unchecked = (hub.pendingFiles?.length || 0) + (hub.autoRunning ? hub.rows.filter(r => !r.queued).length + (hub.inBatch || 0) : 0);
   c.waiting += unchecked; c.total += unchecked;
   const running = (hub.running || hub.autoRunning) && !hub.paused;
   const pct = c.total ? Math.round((c.done + c.failed + c.dup + c.skipped) / c.total * 100) : 0, importing = hub.phase === 'importing';

@@ -88,7 +88,8 @@ test('only a step with an explicit range offers a playable reference tone',async
  await expect(note).toBeVisible();await expect(note.locator('option')).toHaveCount(3);
  await expect(note).toHaveValue('63');
  await page.getByRole('button',{name:'기준음 듣기'}).click();
- expect(await page.evaluate(()=>window.__tone)).toMatchObject({starts:1,frequency:311.1269837220809});
+ const tone=await page.evaluate(()=>window.__tone);
+ expect(tone.starts).toBe(1);expect(tone.frequency).toBeCloseTo(311.127,3); // D#4; engines differ in the last float digits
  await expect(page.locator('.gp-timer strong')).toHaveText('0:00');
  await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
  expect(await page.evaluate(()=>window.__tone.stops)).toBeGreaterThan(0);
@@ -117,7 +118,10 @@ test('pitch exercise measures the selected note and releases the mic on backgrou
  await boot(page);
  await page.evaluate(()=>{
   window.__mic={stopped:0};window.__tones=[];
-  navigator.mediaDevices.getUserMedia=async()=>({getTracks:()=>[{stop(){window.__mic.stopped++}}]});
+  // Defined on the prototype too: a plain assignment does not replace WebKit's getUserMedia.
+  const fakeMic=async()=>({getTracks:()=>[{stop(){window.__mic.stopped++}}]});
+  Object.defineProperty(MediaDevices.prototype,'getUserMedia',{value:fakeMic,configurable:true,writable:true});
+  Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:fakeMic,configurable:true,writable:true});
   window.AudioContext=class{
    sampleRate=48000;currentTime=0;destination={};state='running';resume(){return Promise.resolve()}close(){return Promise.resolve()}
    createMediaStreamSource(){return {connect(){},disconnect(){}}}
