@@ -475,3 +475,16 @@ test('recordings the server matched with the original lyrics only are compared a
  assert.equal(b.counts().paid,0); // no transcription: the server's saved text is reused
  assert.equal(b.window.VZ.db.songs[0].id,'moment'); // nothing assigned until the user applies it
 });
+test('a first section that is clearly a vocal exercise stops the search: no further paid clips, a training hint instead',async()=>{
+ const b=browser({mockStt:true}),calls=[];
+ b.window.VzipRecordingKind=require('../app/recording-kind.js');
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.vzipCloudSongTextSave=async()=>{};
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:null,reason:'no match',matches:[]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async(_i,_s,{time})=>({pcm:new Int16Array(16000*90),rate:16000,duration:600,start:time}),async()=>{calls.push('paid');return '아 아 아아아 오 오 마 메 미 모 무'});
+ const result=await b.api.stt({id:'warm',durationSeconds:600},new AbortController().signal);
+ assert.equal(calls.length,1,'only the first 30 seconds were transcribed');
+ assert.equal(result.status,'식별 불가');assert.match(result.reason,/트레이닝 녹음 같아요/);
+});

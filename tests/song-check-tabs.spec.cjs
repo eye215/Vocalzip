@@ -92,3 +92,32 @@ test('a recording ⋯ opens the small dark popover by the button, not a full pag
  await rows.first().click();
  await expect(page).toHaveURL(/#\/song-transcript\/m-free$/);
 });
+
+test('an unsorted recording made at lesson time is suggested as a lesson recording and moves only when the user taps it',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  const lesson=VZ.db.lessons.find(l=>l.id==='l-over'),[y,m,d]=lesson.date.split('-').map(Number);
+  await window.vzipStorePracticeMedia({id:'m-lesson',name:'새 녹음 3',created:new Date(y,m-1,d,10,15).getTime(),type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  await window.vzipStorePracticeMedia({id:'m-warm',name:'립트릴 스케일',created:Date.now()-3*864e5,type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  await window.vzipStorePracticeMedia({id:'m-plain',name:'그냥 녹음',created:Date.now()-5*864e5,type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  window.dispatchEvent(new Event('vzip:media-updated'));
+ });
+ await page.goto('/#/song-suggest');
+ const card=name=>page.locator('.vz-sc-record').filter({hasText:name});
+ await expect(card('새 녹음 3').locator('.vz-sc-kind')).toContainText('레슨 녹음 같아요');
+ await expect(card('새 녹음 3').locator('.vz-sc-kind')).toContainText('10:00 레슨 시간에 녹음');
+ await expect(card('립트릴 스케일').locator('.vz-sc-kind')).toContainText('트레이닝 같아요');
+ await expect(card('그냥 녹음').locator('.vz-sc-kind')).toHaveCount(0);
+ // Nothing changed on its own.
+ expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-lesson').recordingCategory).toBeUndefined();
+ await card('새 녹음 3').locator('.vz-sc-kind').click();
+ await expect(card('새 녹음 3')).toHaveCount(0); // it left the 곡 녹음 tab
+ expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-lesson').recordingCategory).toBe('lesson');
+ await page.locator('[data-category=lesson]').click();
+ await expect(card('새 녹음 3')).toBeVisible();
+ await expect(card('새 녹음 3').locator('.vz-sc-kind')).toHaveCount(0);
+ await page.locator('[data-category=song]').click();
+ await card('립트릴 스케일').locator('.vz-sc-kind').click();
+ await expect(card('립트릴 스케일')).toHaveCount(0); // training recordings are not searched for songs
+ expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-warm').recordingCategory).toBe('training');
+});

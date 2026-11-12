@@ -208,6 +208,21 @@ function resultFor(item){
  return result;
 }
 function eligible(item){return M.songSearchEligible(item)&&!item.songId&&!item.song && !M.isVideo(item);}
+/** A lesson/training suggestion for an unsorted recording (app/recording-kind.js). Only a suggestion. */
+function kindHint(item){
+ return window.VzipRecordingKind?.guess(item,{lessons:VZ.db?.lessons||[],dateOf:M.dateOf,transcript:resultFor(item)?.transcript||'',current:M.recordingCategory(item)})||null;
+}
+const KIND_LABEL={lesson:'레슨 녹음',training:'트레이닝'};
+async function applyKind(main,item,kind){
+ try{
+  await M.update(item,{recordingCategory:kind},{quiet:true});
+  item.recordingCategory=kind;
+  if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
+  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 보관함에서 다시 바꿀 수 있어요.');
+  window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:{recordingCategory:kind}}}));
+ }catch(error){VZ.toast('옮기지 못했어요: '+String(error.message||error),'error')}
+ if(main.isConnected)draw(main);
+}
 function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);saveCheckpoint();}
 /** Where the singing is: the on-device vocal analysis (app/analysis.js) follows the voice over the
  * MR, then the 30 seconds with the most singing are chosen. Free — and a clip with no singing is
@@ -289,7 +304,10 @@ async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  // A real match ends immediately; a low-confidence top-1 is kept only as a suggestion.
  if(!match.candidate){
   if(!duration){const probe=await readWindow(0,2);duration=probe.duration}
-  const windows=scanWindows(duration,initialStart);
+  // A first section that is clearly a vocal exercise (아·오·마…) is not searched any further: no more paid clips.
+  const exercise=window.VzipRecordingKind?.trainingLike(transcript);
+  const windows=exercise?[]:scanWindows(duration,initialStart);
+  if(exercise){match={...match,reason:'가사 대신 발성 소리가 대부분이라 더 찾지 않았어요. 트레이닝 녹음 같아요.'};best=match}
   for(const [index,start] of windows.entries()){
    if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
    onProgress('추가 분석 '+(index+1)+'/'+windows.length+'구간 · '+Math.floor(start/60)+'분 '+Math.round(start%60)+'초부터');
@@ -389,6 +407,11 @@ function draw(main){
   const date=VZ.dateLabel?.(M.dateOf(item))||'날짜 없음';
   const card=document.createElement('article');card.className='vz-sc-record';
   card.innerHTML='<div class="vz-sc-record-main"><div class="vz-sc-record-head"><label class="vz-sc-record-check"><input type="checkbox" aria-label="'+esc(name)+' 선택"'+(state.chosen.has(item.id)?' checked':'')+'><span class="vz-sc-checkbox" aria-hidden="true"></span></label><div class="vz-sc-record-name"><strong title="'+esc(name)+'">'+esc(name)+'</strong><small>'+esc(date)+' · '+esc(duration)+' · 음성</small></div><button type="button" class="vz-sc-menu" aria-label="'+esc(name)+' 더 보기"><i class="ph ph-dots-three-vertical"></i></button></div><div class="vz-sc-player-placeholder"><button type="button" class="vz-sc-play-trigger" aria-label="'+esc(name)+' 재생"><i class="ph-fill ph-play"></i></button><span class="vz-sc-track" aria-hidden="true"></span><span class="vz-sc-time">0:00 / '+esc(duration)+'</span></div><div class="vz-sc-player-host" hidden></div></div><button type="button" class="vz-sc-recommend'+(kind==='failed'||kind==='unknown'?' failed':'')+'" aria-label="'+esc(name)+' 곡 선택"><span class="tag">'+status+'</span><span class="divider"></span><span class="song">'+esc(title)+'</span><i class="ph ph-caret-right"></i></button>';
+  const hint=kindHint(item);
+  if(hint){const row=document.createElement('button');row.type='button';row.className='vz-sc-kind';row.dataset.kind=hint.kind;
+   row.setAttribute('aria-label',KIND_LABEL[hint.kind]+'로 옮기기: '+hint.why);
+   row.innerHTML='<span class="vz-sc-kind-text"><strong>'+KIND_LABEL[hint.kind]+' 같아요</strong><small>'+esc(hint.why)+'</small></span><span class="vz-sc-kind-go">'+(hint.kind==='lesson'?'레슨으로':'트레이닝으로')+' 옮기기</span>';
+   row.onclick=()=>{if(!state.running)applyKind(main,item,hint.kind)};card.append(row)}
   card.querySelector('input').onchange=e=>{e.target.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   card.querySelector('.vz-sc-play-trigger').onclick=()=>{const host=card.querySelector('.vz-sc-player-host');try{const player=M.player(host,item,{prefetch:false,tools:false});inlinePlayers.set(item.id,player);card.querySelector('.vz-sc-player-placeholder').hidden=true;host.hidden=false;player.play()}catch(error){VZ.toast('재생할 수 없어요: '+String(error.message||error),'error')}};
   card.querySelector('.vz-sc-recommend').onclick=()=>pickSong(main,item);
