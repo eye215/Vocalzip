@@ -76,13 +76,13 @@ test('a metadata or body owner claim never bypasses the server owner policy',asy
 
 function browser({mockStt=false}={}){
  let owner='alice',paid=0,excerpts=0;const events={},storage=new Map(),routes={};
- const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,dateOf:()=>'',list:async()=>[]},route(name,def){routes[name]=def},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id,
+ const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,dateOf:()=>'',list:async()=>[],recordingCategory:m=>m?.recordingCategory||'song',songSearchEligible(m){return ['song','lesson'].includes(this.recordingCategory(m))}},route(name,def){routes[name]=def},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id,
   esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),clock:n=>`${Math.floor((n||0)/60)}:${String((n||0)%60).padStart(2,'0')}`,dateLabel:s=>s||'날짜 없음'},vzipCloudUserId:()=>owner,
   vzipCloudSignedIn:()=>true,vzipCloudAccessToken:async()=> 'fake',
   VzipR2:{clip:async()=>{excerpts++;throw Error('unexpected extraction')}},dispatchEvent(){},addEventListener:(n,f)=>events[n]=f};
  const element=()=>{const children=new Map();return {style:{},setAttribute(){},append(){},remove(){},add(){},replaceChildren(){},querySelector:key=>{if(!children.has(key))children.set(key,element());return children.get(key)},querySelectorAll:()=>[]}};
  const context={window,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
-  AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
+  AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element,createTextNode:text=>({nodeType:3,textContent:String(text)})},Option:function(){},
   fetch:async()=>{paid++;return mockStt?Response.json({enabled:true}):Response.json({error:'STT_DISABLED'},{status:503})}};
  let code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
   'window.test={stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend,scanWindows,setPipeline:(audio,transcribe)=>{audioWindow=audio;transcribeClip=transcribe}};})();');
