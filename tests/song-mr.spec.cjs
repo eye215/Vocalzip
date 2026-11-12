@@ -101,3 +101,108 @@ test('MR file uses private upload and retries metadata save without duplicating 
  await expect(page.locator('[data-mr-open]')).toHaveCount(0);
  expect(await page.evaluate(()=>window.__mrRemoved.length)).toBe(1);
 });
+
+/* MR 키 바꿔 재생 (app/mr-key-shift.js). The pinned shifter library comes from jsDelivr; CI packs the same version
+ * locally (ui-checks.yml) and sandboxes without CDN access can point VZ_SIGNALSMITH at a copy. */
+const STRETCH = process.env.VZ_SIGNALSMITH || '/tmp/vzip-signalsmith/package/SignalsmithStretch.mjs';
+async function stretchLib(page) {
+ if (fs.existsSync(STRETCH)) await page.context().route('**/signalsmith-stretch@1.3.2/SignalsmithStretch.mjs', r => r.fulfill({path:STRETCH, contentType:'text/javascript', headers:{'access-control-allow-origin':'*'}}));
+}
+function wav(seconds = 3, sr = 44100) {
+ const n = seconds * sr, b = Buffer.alloc(44 + n * 2);
+ b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+ for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(2 * Math.PI * 440 * i / sr) * 8000), 44 + i * 2);
+ return b;
+}
+test('MR key shifter moves A4 by semitones without changing its length', async ({page}) => {
+ await stretchLib(page); await boot(page, {media:false});
+ const results = await page.evaluate(async () => {
+  const sr = 48000, out = [];
+  for (const semitones of [2, -3]) {
+   const ctx = new OfflineAudioContext(2, sr * 4, sr), buf = ctx.createBuffer(2, sr * 3, sr);
+   for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = t >= 0.5 && t < 2.5 ? 0.5 * Math.sin(2 * Math.PI * 440 * t) : 0; } }
+   const src = ctx.createBufferSource(); src.buffer = buf;
+   const node = await VZ.mrKey.createShifter(ctx);
+   src.connect(node); node.connect(ctx.destination);
+   await node.schedule({active:true, semitones}); src.start(0);
+   const d = (await ctx.startRendering()).getChannelData(0);
+   let first = -1, last = -1; for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.05) { if (first < 0) first = i; last = i; }
+   const mid = Math.round((first + last) / 2), zc = [];
+   for (let i = mid - sr / 2; i < mid + sr / 2; i++) if (d[i - 1] < 0 && d[i] >= 0) zc.push(i - 1 + -d[i - 1] / (d[i] - d[i - 1]));
+   const hz = sr * (zc.length - 1) / (zc.at(-1) - zc[0]), target = 440 * 2 ** (semitones / 12);
+   out.push({semitones, hz, cents:1200 * Math.log2(hz / target), length:(last - first) / sr});
+  }
+  return out;
+ });
+ for (const r of results) {
+  expect(Math.abs(r.cents), JSON.stringify(r)).toBeLessThan(10);
+  expect(Math.abs(r.length / 2 - 1), JSON.stringify(r)).toBeLessThan(0.01);
+ }
+});
+test('File MR key capsule shifts playback, is remembered per song, and never touches the stored file', async ({page}) => {
+ const seed = legacy(), track = {id:'mr1', kind:'file', title:'연습 MR', fileName:'반주.wav', type:'audio/wav', r2Key:'u/mr-owner/mr1/original.wav', size:264644, created:1};
+ seed.songs[0].mrTracks = [track]; seed.songs[0].repertoire = {originalKey:'D', practiceKey:'F'};
+ const body = wav(), mediaRequests = [];
+ await stretchLib(page);
+ await page.route('**/mr-test.wav', r => { mediaRequests.push(r.request().method()); return r.fulfill({body, contentType:'audio/wav', headers:{'accept-ranges':'none'}}); });
+ await boot(page, {seed, media:false});
+ const stubR2 = () => {
+  window.vzipCloudUserId = () => 'mr-owner'; window.vzipCloudSignedIn = () => true; window.__mrUploads ??= 0; window.__mrRemoved ??= 0;
+  window.VzipR2 = {enabled:() => true, prefetch:async () => {}, url:async () => '/mr-test.wav', upload:async () => { window.__mrUploads++; return {key:'x'}; }, remove:async () => { window.__mrRemoved++; }};
+ };
+ await page.evaluate(stubR2);
+ await openReferences(page);
+ const key = page.locator('[data-mr-key]'), value = key.locator('[data-mr-key-value]'), audio = page.locator('.vz-mr-links audio');
+ await page.locator('[data-mr-open]').click();
+ await expect(key).toBeVisible(); await expect(value).toHaveText('원키');
+ await expect(audio).toHaveAttribute('src', '/mr-test.wav'); await expect(audio).toHaveAttribute('crossorigin', 'anonymous');
+ // Original key plays natively: no audio graph until a shift is chosen.
+ expect(await audio.getAttribute('data-mr-key-route')).toBeNull();
+ for (const b of await key.locator('button').all()) { const box = await b.boundingBox(); if (await b.isVisible()) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44); }
+ await expect(key.locator('[data-mr-key-practice]')).toContainText('연습 키 F');
+ await expect(key.locator('[data-mr-key-practice]')).toContainText('MR +3으로 맞추기');
+ await key.locator('[data-mr-key-up]').click(); await key.locator('[data-mr-key-up]').click();
+ await expect(value).toHaveText('+2');
+ await expect(audio).toHaveAttribute('data-mr-key-route', 'shifted');
+ await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(2);
+ await audio.evaluate(el => el.play());
+ await expect.poll(() => audio.evaluate(el => el.currentTime)).toBeGreaterThan(0.3);
+ expect(await page.evaluate(() => VZ.mrKey.context().state)).toBe('running');
+ await key.locator('[data-mr-key-practice]').click();
+ await expect(value).toHaveText('+3'); await expect(key.locator('[data-mr-key-practice]')).toContainText('MR 맞춤');
+ await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(3);
+ for (let i = 0; i < 12; i++) if (await key.locator('[data-mr-key-up]').isEnabled()) await key.locator('[data-mr-key-up]').click();
+ await expect(value).toHaveText('+6'); await expect(key.locator('[data-mr-key-up]')).toBeDisabled();
+ for (let i = 0; i < 9; i++) await key.locator('[data-mr-key-down]').click();
+ await expect(value).toHaveText('−3');
+ await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(-3);
+ // Remembered per song: a fresh page opens the MR in the same key and the row says so before opening.
+ await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+ await page.evaluate(stubR2);
+ await page.locator('[data-tab=ar]').click();
+ await expect(page.locator('[data-mr-open] small')).toContainText('키 −3');
+ await page.locator('[data-mr-open]').click();
+ await expect(value).toHaveText('−3'); await expect(audio).toHaveAttribute('data-mr-key-route', 'shifted');
+ await value.click(); await expect(value).toHaveText('원키'); await expect(audio).toHaveAttribute('data-mr-key-route', 'direct');
+ await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(0);
+ // Closing the player tears the graph down.
+ await page.locator('[data-mr-open]').click(); await expect(key).toHaveCount(0);
+ // The stored MR is untouched: same entry, no upload/delete, and the file was only ever read.
+ const saved = await data(page);
+ expect(saved.songs[0].mrTracks).toEqual([track]);
+ expect(await page.evaluate(() => [window.__mrUploads, window.__mrRemoved])).toEqual([0, 0]);
+ expect(mediaRequests.length).toBeGreaterThan(0); expect(mediaRequests.every(m => m === 'GET')).toBe(true);
+ expect(page.__errors).toEqual([]);
+});
+test('YouTube MR hides the key capsule and says why', async ({page}) => {
+ const seed = legacy(); seed.songs[0].mrKeyShift = 2;
+ seed.songs[0].mrTracks = [{id:'mr-y', kind:'youtube', videoId:'dQw4w9WgXcQ', url:'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title:'유튜브 반주', created:1}];
+ await boot(page, {seed, media:false});
+ await page.route('https://www.youtube-nocookie.com/**', r => r.fulfill({contentType:'text/html', body:'<p>video fixture</p>'}));
+ await openReferences(page);
+ await expect(page.locator('[data-mr-open] small')).toHaveText('유튜브 영상');
+ await page.locator('[data-mr-open]').click();
+ await expect(page.locator('.vz-mr-links iframe')).toBeVisible();
+ await expect(page.locator('[data-mr-key]')).toHaveCount(0);
+ await expect(page.locator('[data-mr-key-off]')).toContainText('유튜브 MR은 키를 바꿀 수 없어요');
+});
