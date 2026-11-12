@@ -133,9 +133,9 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
  const runs=[];for(const a of atoms){const last=runs.at(-1);if(last&&!a.untitled&&!last[0].untitled&&plain(a.title)&&plain(a.title)===plain(last[0].title))last.push(a);else runs.push([a]);}
  let items=runs.map(list=>decorate(join(list)));
  const total=atoms.reduce((k,i)=>k+i.count,0),notes=summary(model.report),run={busy:false,cancelled:false,finished:false},picked=new Set();
- const options=item=>'<option value="new"'+(item.target==='new'?' selected':'')+'>새 곡으로 추가</option>'+
+ const options=item=>'<option value="new" data-pick-always'+(item.target==='new'?' selected':'')+'>새 곡으로 추가</option>'+
   songs().map(s=>'<option value="'+esc(s.id)+'"'+(item.target===s.id?' selected':'')+'>'+esc(VZ.songLabel?VZ.songLabel(s):s.title)+'</option>').join('')+
-  '<option value="skip"'+(item.target==='skip'?' selected':'')+'>가져오지 않기</option>';
+  '<option value="skip" data-pick-always'+(item.target==='skip'?' selected':'')+'>가져오지 않기</option>';
  const inkLabel=item=>item.count?'필기 '+item.count+'획':'필기 없음';
  const pagesLabel=item=>item.from===item.to?item.from+'쪽':item.from+'–'+item.to+'쪽';
  /* One compact white card per score: tick · title (editable) · 나누기, then pages/ink, then 넣을 곡. */
@@ -146,7 +146,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
   (item.atoms.length>1&&!done?'<button type="button" class="gn-split" data-gn-split aria-label="'+esc(item.title)+' 나누기">나누기</button>':'')+'</div>'+
   '<p class="gn-meta" data-gn-info>'+pagesLabel(item)+' · '+inkLabel(item)+(item.atoms.length>1?' · '+item.atoms.length+'개 합침':'')+(done?' · 가져왔어요':'')+'</p>'+
   (item.duplicate&&!done?'<p class="gn-note">이미 가져온 악보예요</p>':'')+
-  '<label class="gn-target"><span>넣을 곡</span><select data-gn-target aria-label="'+esc(item.title)+' 넣을 곡"'+off+'>'+options(item)+'</select></label></div></div>';};
+  '<label class="gn-target"><span>넣을 곡</span><select data-gn-target data-pick="song" data-pick-title="넣을 곡" aria-label="'+esc(item.title)+' 넣을 곡"'+off+'>'+options(item)+'</select></label></div></div>';};
  const meta=model.pages.length+'쪽 · '+(model.outline.length?atoms.filter(a=>!a.untitled).length+'곡':'개요 없음')+' · 필기 '+total.toLocaleString('ko-KR')+'획';
  VZ.sheet({title:'굿노트 가져오기',label:'굿노트 가져오기',
   body:'<form id="gn-import" class="gn-import">'+

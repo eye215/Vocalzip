@@ -51,7 +51,11 @@ body .gn-row .gn-title:focus{background:#f2eff7;outline:none}
 .gn-note{margin:2px 0 0;font-size:12px;line-height:18px;font-weight:600;color:var(--vz-color-warning,#b26a00)}
 .gn-target{display:flex;align-items:center;gap:10px;margin:10px 0 0}
 .gn-target span{flex:none;font-size:13px;line-height:18px;font-weight:600;color:#475467}
-body .gn-row .gn-target select{flex:1;min-width:0;width:auto;height:44px;min-height:44px;margin:0;padding:0 34px 0 14px;border:0;border-radius:15px;background-color:#f2eff7;box-shadow:none;color:#344054;font-size:16px;text-overflow:ellipsis}
+/* 넣을 곡 uses the app's song picker (app/picker.js): a button that opens the searchable song page. */
+body .gn-row .gn-target .pick-btn{flex:1;min-width:0;width:auto;min-height:44px;padding:0 14px;border:0;border-radius:15px;background:#f2eff7;color:#344054;font-size:15px;font-weight:600}
+body .gn-row .gn-target .pick-btn .pick-val{font-size:15px;line-height:20px;color:#344054}
+body .gn-row .gn-target .pick-btn i{color:#98a2b3}
+body .gn-row .gn-target select:not(.pick-native){flex:1;min-width:0;width:auto;height:44px;min-height:44px;margin:0;padding:0 34px 0 14px;border:0;border-radius:15px;background-color:#f2eff7;box-shadow:none;color:#344054;font-size:16px;text-overflow:ellipsis}
 
 /* Above the bottom button: progress, results and errors. */
 .gn-msg{margin:0 0 8px;padding:10px 14px;border-radius:16px;background:#fff;font-size:13px;line-height:18px;color:#475467;overflow-wrap:anywhere}

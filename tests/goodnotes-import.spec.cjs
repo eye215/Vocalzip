@@ -268,6 +268,27 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  await expect(sheet).toHaveCount(0);
  expect(r2.store.size).toBe(3);
 });
+test('넣을 곡 opens the app song picker: a searchable song page where 새 곡으로 추가 and 가져오지 않기 always stay',async({page})=>{
+ const r2=await setup(page);
+ const ids=await page.evaluate(()=>['Kaleidoscope','Burn','The Wizard and I','Popular','Maybe This Time','Memory','On My Own','Bring Him Home'].map(t=>window.VZ.addSong(t).id));
+ const notebook=F.notebook({title:'한 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a'}],outline:[{page:0,title:'Untitled Medley'}]});
+ await pick(page,'한 곡.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'}),row=sheet.locator('[data-gn-section]').first();
+ const button=row.locator('.gn-target .pick-btn');
+ await expect(button).toContainText('Defying Gravity'); // a lone section started from a song's page goes to that song
+ await button.click();
+ const picker=page.getByRole('dialog',{name:'넣을 곡'});
+ await picker.getByRole('searchbox').fill('kalei');
+ await expect(picker.locator('.pick-row:visible')).toHaveText(['새 곡으로 추가','Kaleidoscope','가져오지 않기']);
+ await picker.getByRole('option',{name:'Kaleidoscope'}).click();
+ await expect(picker).toHaveCount(0);
+ await expect(button).toContainText('Kaleidoscope');
+ expect(await row.locator('[data-gn-target]').inputValue()).toBe(ids[0]);
+ await sheet.getByRole('button',{name:'가져오기 (1곡)'}).click();
+ await expect(page.locator('.toast')).toContainText('악보 1개를 가져왔어요');
+ expect(await page.evaluate(id=>window.VZ.song(id).scores.map(x=>x.title),ids[0])).toEqual(['Untitled Medley']);
+ expect(r2.store.size).toBe(1);
+});
 test('a notebook whose PDF is locked with an owner password only (as bought scores often are) imports readable pages; one that needs a password is refused',async({page})=>{
  const r2=await setup(page);
  const locked=name=>fs.readFileSync(path.join(__dirname,'encrypted-pdf',name+'.pdf'));
