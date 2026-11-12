@@ -40,9 +40,11 @@ test('A song keeps multiple AR links, including repeated URLs, across edit and r
  await page.reload();await page.locator('[data-tab=ar]').click();await expect(page.locator('.vz-ar-list a')).toHaveCount(2);
  await page.locator('[data-song-menu]').click();await page.locator('[data-e]').click();
  form=page.locator('#song-form');await form.locator('[data-ar-row]').first().locator('[data-remove-ar]').click();
+ await expect(form.getByLabel('작품 / 아티스트')).toBeVisible();await form.getByLabel('작품 / 아티스트').fill('맘마미아');
  await page.locator('.sheet [form="song-form"]').click();
  await expect(page.locator('.vz-ar-list a')).toHaveCount(1);
  expect((await db(page)).songs[0].arLinks[0].label).toBe('공연용');
+ expect((await db(page)).songs[0].show).toBe('맘마미아');
 });
 test('Song action menu keeps its dark surface and readable choices in a narrow web window',async({page})=>{
  await page.setViewportSize({width:500,height:890});
