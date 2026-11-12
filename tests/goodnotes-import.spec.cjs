@@ -37,6 +37,20 @@ const pick=async(page,name,buffer)=>{
 };
 const pdfPages=async buffer=>{const lib=require(path.join(PDFROOT,'../pdf-lib'));return (await lib.PDFDocument.load(buffer)).getPageCount();};
 
+async function readStoredInk(page){
+ return page.evaluate(()=>new Promise((resolve,reject)=>{
+  const request=indexedDB.open('vzip_score_ink_v2',2);
+  request.onerror=()=>reject(request.error);
+  request.onsuccess=()=>{
+   const db=request.result,tx=db.transaction('strokes','readonly'),get=tx.objectStore('strokes').getAll();
+   get.onsuccess=()=>resolve(get.result.map(s=>({scoreId:s.scoreId,songId:s.songId,page:s.page,tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,first:s.points[0],last:s.points.at(-1),valid:window.VzipScoreInk.valid(s)})));
+   get.onerror=()=>reject(get.error);
+   tx.oncomplete=()=>db.close();
+  };
+ }));
+}
+
+
 test('a notebook is cut by its outline into per-song scores, and its handwriting arrives as editable ink',async({page})=>{
  const r2=await setup(page);
  const notebook=F.notebook({title:'내 악보집',pdf:pdf(5),width:300,height:400,pages:[
@@ -61,8 +75,8 @@ test('a notebook is cut by its outline into per-song scores, and its handwriting
  await expect(page.locator('.toast')).toContainText('악보 2개를 가져왔어요 · 수정 가능한 필기 3획');
  await expect(sheet).toHaveCount(0);
 
- const db=await page.evaluate(()=>({songs:window.VZ.db.songs.map(s=>({id:s.id,title:s.title,scores:(s.scores||[]).map(x=>({id:x.id,title:x.title,pages:x.pages,source:x.source,r2Key:x.r2Key,size:x.size}))})),
-  ink:window.VZ.db.scoreAnnotations.map(s=>({scoreId:s.scoreId,songId:s.songId,page:s.page,tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,first:s.points[0],last:s.points.at(-1),valid:window.VzipScoreInk.valid(s)}))}));
+ const db=await page.evaluate(()=>({songs:window.VZ.db.songs.map(s=>({id:s.id,title:s.title,scores:(s.scores||[]).map(x=>({id:x.id,title:x.title,pages:x.pages,source:x.source,r2Key:x.r2Key,size:x.size}))}))}));
+ const importedInk=await readStoredInk(page);
  expect(db.songs.map(s=>s.title)).toEqual(['Defying Gravity','The River']);
  const [mine,river]=db.songs.map(s=>s.scores[0]);
  expect([mine.title,mine.pages,mine.source]).toEqual(['Defying Gravity (연습용)',2,'goodnotes']);
@@ -72,9 +86,9 @@ test('a notebook is cut by its outline into per-song scores, and its handwriting
  expect(await pdfPages(r2.store.get(mine.r2Key).bytes)).toBe(2);expect(await pdfPages(r2.store.get(river.r2Key).bytes)).toBe(2);
  expect(r2.store.get(mine.r2Key).bytes.includes(Buffer.from('Original page 2'))).toBe(true);
  expect(r2.store.get(mine.r2Key).bytes.includes(Buffer.from('Original page 4'))).toBe(false);
- expect(db.ink.every(s=>s.valid)).toBe(true);
- expect(db.ink.map(s=>[s.scoreId===mine.id?'mine':'river',s.page,s.tool,s.color,s.opacity])).toEqual([['mine',1,'pen','#ff0000',1],['mine',2,'highlighter','#00ffff',0.5],['river',2,'pen','#0000ff',1]]);
- expect([db.ink[0].first,db.ink[0].last,db.ink[0].width]).toEqual([[0.2,0.15,0.5],[0.8,0.15,0.5],0.01]);
+ expect(importedInk.every(s=>s.valid)).toBe(true);
+ expect(importedInk.map(s=>[s.scoreId===mine.id?'mine':'river',s.page,s.tool,s.color,s.opacity])).toEqual([['mine',1,'pen','#ff0000',1],['mine',2,'highlighter','#00ffff',0.5],['river',2,'pen','#0000ff',1]]);
+ expect([importedInk[0].first,importedInk[0].last,importedInk[0].width]).toEqual([[0.2,0.15,0.5],[0.8,0.15,0.5],0.01]);
 
  // The song's score list shows it, and the viewer draws the imported stroke where it was — and can erase it.
  await expect(page.locator('.score-row')).toContainText('Defying Gravity (연습용)');
@@ -86,7 +100,7 @@ test('a notebook is cut by its outline into per-song scores, and its handwriting
  await viewer.getByRole('button',{name:'지우개',exact:true}).click();const box=await viewer.locator('[data-ink-svg]').boundingBox();
  await page.mouse.click(box.x+box.width*.5,box.y+box.height*.15);
  await expect(viewer.locator('path[data-stroke]')).toHaveCount(0);
- expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(2);
+ await expect.poll(async()=>(await readStoredInk(page)).length).toBe(2);
  expect(page.__errors).toEqual([]);
 });
 test('importing the same notebook again does not add the scores twice unless the user chooses to',async({page})=>{
@@ -103,18 +117,19 @@ test('importing the same notebook again does not add the scores twice unless the
  await expect(sheet.locator('[data-gn-go]')).toBeDisabled();
  expect(r2.store.size).toBe(1);
 });
-test('excess handwriting is not silently flattened into an uneditable PDF',async({page})=>{
+test('950 handwriting strokes are imported as separately editable IndexedDB strokes',async({page})=>{
  const r2=await setup(page);
  const many=Array.from({length:950},(_,i)=>ink(100+i,[0,0,0,1],2,20+i%20*10,20+Math.floor(i/20)*7,26+i%20*10,24+Math.floor(i/20)*7));
  const notebook=F.notebook({title:'필기 많은 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a',ink:many}]});
  await pick(page,'필기 많은 곡.goodnotes',notebook);
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
- await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획 · 수정 가능한 저장 공간 부족');
+ await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획 · 수정 가능');
  await sheet.getByRole('button',{name:'가져오기 (1곡)'}).click();
- await expect(sheet.locator('[data-gn-msg]')).toContainText('필기를 PDF에 합치거나 누락하지 않도록 가져오기를 보류했어요');
- expect(r2.store.size).toBe(0);
- expect(await page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).length)).toBe(0);
- await expect(sheet).toBeVisible();
+ await expect(page.locator('.toast')).toContainText('악보 1개를 가져왔어요 · 수정 가능한 필기 950획');
+ expect(r2.store.size).toBe(1);
+ expect((await readStoredInk(page)).length).toBe(950);
+ await page.reload();
+ expect((await readStoredInk(page)).length).toBe(950);
 });
 
 test('a file that is not a GoodNotes notebook is refused and nothing is uploaded',async({page})=>{
