@@ -110,7 +110,7 @@ test('the complete PDF starts downloading while the viewer module is still loadi
 test('real PDF renders, ink persists after reload and original PDF/lesson/practice bytes remain unchanged',async({page})=>{
  const r2=await setup(page),dialog=await open(page);
  const before=await page.evaluate(()=>({songs:window.VZ.db.songs,lessons:window.VZ.db.lessons,practices:window.VZ.db.practices}));
- expect(await dialog.locator('canvas').evaluate(c=>{
+ expect(await dialog.locator('[data-ink-pdf]').evaluate(c=>{ // the current page (wide screens also show the next one)
   const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let dark=0;for(let i=0;i<data.length;i+=4)if(data[i+3]>200&&data[i]<100&&data[i+1]<100&&data[i+2]<100)dark++;return dark;
  })).toBeGreaterThan(500);
  await draw(page,dialog);await expect(dialog.locator('path[data-stroke]')).toHaveCount(1);
@@ -711,4 +711,39 @@ test('range-opened score switches to the downloaded PDF without errors and turns
   await expect(label).toHaveText(shown);
  }
  expect(reads).toEqual([]);
+});
+
+const rect=(dialog,selector)=>dialog.locator(selector).first().evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,bottom:r.bottom,right:r.right};});
+test('tablet landscape shows two whole pages side by side; the next page shows its ink read-only and opens on tap',async({page},info)=>{
+ test.skip(info.project.name!=='chromium-desktop','tablet sizes are set explicitly');
+ await page.setViewportSize({width:1180,height:820});
+ await setup(page);const dialog=await open(page),label=dialog.locator('[data-ink-page]');
+ // Ink on page 2 first, then back to page 1.
+ await dialog.getByRole('button',{name:'다음 악보 페이지',exact:true}).click();await expect(label).toHaveText('2 / 2쪽');
+ await draw(page,dialog,{y:.3});
+ await dialog.getByRole('button',{name:'이전 악보 페이지',exact:true}).click();await expect(label).toHaveText('1 / 2쪽');
+ const side=dialog.locator('button[data-ink-spread]');
+ await expect(side).toBeVisible();await expect(side).toHaveAttribute('aria-label','2쪽 보기 · 누르면 이 쪽으로 넘겨요');
+ await expect(side.locator('path[data-spread-stroke]')).toHaveCount(1);await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
+ const stage=await rect(dialog,'[data-ink-stage]'),left=await rect(dialog,'[data-ink-box]'),right=await rect(dialog,'button[data-ink-spread]');
+ expect(stage.w).toBeGreaterThan(1000); // the 560px column no longer applies to the score viewer
+ expect(Math.abs(left.y-right.y)).toBeLessThan(1);expect(Math.abs(left.w-right.w)).toBeLessThan(1);expect(right.x).toBeGreaterThan(left.right);
+ expect(left.bottom).toBeLessThanOrEqual(stage.bottom);expect(right.right).toBeLessThanOrEqual(stage.right); // whole pages, no scrolling
+ // Picking a tool that opens the colour row does not resize the pages.
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();await page.waitForTimeout(300);
+ expect(Math.abs((await rect(dialog,'[data-ink-box]')).w-left.w)).toBeLessThan(1);
+ await side.click();await expect(label).toHaveText('2 / 2쪽');
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(1); // now editable on the left
+ await expect(side).toBeHidden(); // the last page has nothing beside it
+});
+test('tablet portrait fits one whole page; phones keep fitting the width',async({page},info)=>{
+ test.skip(info.project.name!=='chromium-desktop','sizes are set explicitly');
+ await page.setViewportSize({width:820,height:1180});
+ await setup(page);let dialog=await open(page);
+ let stage=await rect(dialog,'[data-ink-stage]'),box=await rect(dialog,'[data-ink-box]');
+ expect(stage.w).toBeGreaterThan(700);expect(box.bottom).toBeLessThanOrEqual(stage.bottom);
+ await expect(dialog.locator('button[data-ink-spread]')).toHaveCount(0);
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(400);
+ stage=await rect(dialog,'[data-ink-stage]');box=await rect(dialog,'[data-ink-box]');
+ expect(Math.abs(box.w-(stage.w-16))).toBeLessThan(2); // width-fit on a phone, as before
 });
