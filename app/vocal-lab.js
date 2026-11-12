@@ -119,11 +119,15 @@ function growthReport(s){
  const rated=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&Number(m.rating)>0);
  const rating=rated.length>=2?'<p class="vl-growth-rating">내 만족도 '+rated[0].rating+'/5 → '+rated.at(-1).rating+'/5 · 직접 기록한 체감이에요.</p>':'';
  const judged=G.aiMetrics(G.aggregate([{songId:s.song.id,report}])).some(x=>x.state!=='unknown');
+ // Older (v1) or detail-less results hold every comparison back: offer to re-analyse them right here, on this device.
+ const stale=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m)&&!G.hasDetail(analysis(m)));
+ const redo=stale.length&&held.length?'<div class="vl-growth-reanalyze"><p>이전 방식으로 분석된 녹음 <strong>'+stale.length+'개</strong>를 새 방식으로 다시 분석하면 비교할 수 있어요. 이 기기에서 분석하고, 이전 결과는 이력으로 남겨요.</p>'+
+  '<button type="button" data-growth-reanalyze'+(s.reanalyzing?' disabled':'')+'><i class="ph ph-arrows-clockwise" aria-hidden="true"></i> '+(s.reanalyzing?'다시 분석하는 중…':stale.length+'개 다시 분석')+'</button><p class="vl-muted" role="status" data-growth-reanalyze-status></p></div>':'';
  const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(line).join('')+'</ul></div>':'';
  return '<section class="vl-section vl-growth" data-growth-report aria-label="AI 종합 성장 리포트"><div class="vl-divider"></div>'+
   '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>성장 리포트</h2></div><span class="vl-growth-count">'+analyzed.length+'개 분석 기준</span></div>'+
   '<p class="vl-growth-intro">'+(strong.length+weak.length+neutral.length?'처음과 최근 녹음을 6가지 지표로 나눠 비교했어요':'비교할 분석 기록이 더 필요해요')+' <small>같은 곡·같은 분석 버전·다른 날의 녹음만, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.'+(ref?' 악보 기준 음역 '+esc(ref.low+'–'+ref.high)+'을 함께 봐요.':'')+'</small></p>'+
-  section('좋아진 부분',strong,'good')+section('아쉬운 부분',weak,'bad')+section('비슷함·변화 관찰',neutral,'neutral')+section('판정 보류',held,'hold')+section('참고',refs,'ref')+rating+
+  redo+section('좋아진 부분',strong,'good')+section('아쉬운 부분',weak,'bad')+section('비슷함·변화 관찰',neutral,'neutral')+section('판정 보류',held,'hold')+section('참고',refs,'ref')+rating+
   '<p class="vl-growth-caution">판정 보류는 신뢰도·데이터·같은 프레이즈·분석 버전 중 근거가 부족하다는 뜻이에요. 최고음의 변화는 곡의 구간·발성 방식에 따라 달라지며, 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
   (judged?'<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
     '<p class="vl-growth-ai-status" data-growth-ai-status role="status">'+(s.growthPending?'AI가 측정 기록을 해석하고 있어요…':saved?'선택한 녹음의 AI 해석을 저장해 두었어요.':'음정 정확도·음정 안정성·호흡 유지의 비교 결과(판정 보류 포함)만 보내 해석해요. 음역·최고음은 보내지 않아요.')+'</p>'+
@@ -415,6 +419,25 @@ function screen(s) {
     b.addEventListener('click',open);
     b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });
+  const redoButton=host.querySelector('[data-growth-reanalyze]');
+  if(redoButton)redoButton.onclick=async()=>{
+    if(s.reanalyzing)return;
+    const todo=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m)&&!G.hasDetail(analysis(m)));
+    if(!todo.length)return;
+    s.reanalyzing=true;redoButton.disabled=true;
+    const status=host.querySelector('[data-growth-reanalyze-status]');
+    let done=0,failed=0;
+    for(const m of todo){
+      if(s.dead)break;
+      if(status?.isConnected)status.textContent=(done+failed+1)+'/'+todo.length+' 분석 중 · '+M.label(m);
+      try{const r=await V.analyzeRecording(m,{save:true});m.analysis=r.summary;done++;}
+      catch(e){failed++;}
+    }
+    s.reanalyzing=false;
+    if(s.dead)return;
+    V.toast(failed?'다시 분석 '+done+'개 완료 · '+failed+'개는 분석하지 못했어요':'다시 분석 '+done+'개를 마쳤어요',failed?'error':undefined);
+    screen(s);
+  };
   const growthButton=host.querySelector('[data-growth-ai]');
   if(growthButton){
     growthButton.onclick=async()=>{
