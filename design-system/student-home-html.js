@@ -235,7 +235,7 @@ export async function createFloatingHome(opts={}){
    aria:"이번 주 연습 "+duration(actual)+(target?", 목표 "+duration(target)+", 달성률 "+Math.round(actual/target*100)+"%":", 목표 미설정")+", 기록 보기",
    action:()=>opts.onWeek?.()};
   paintSummary();
-  const streak=num(week.streak),d=new Date();
+  const streak=num(week.streak),d=opts.today?new Date(opts.today+"T12:00:00"):new Date();
   todayLine.replaceChildren(el("span",(d.getMonth()+1)+"월 "+d.getDate()+"일 ("+"일월화수목금토"[d.getDay()]+")"));
   if(streak){const s=el("span",null,"vz-today-streak");s.dataset.active=String(streak>=2);s.append(flame.cloneNode(true),document.createTextNode(streak+"일 연속"));todayLine.append(s);}
  };

@@ -220,7 +220,7 @@ async function applyKind(main,item,kind){
   await M.update(item,{recordingCategory:kind},{quiet:true});
   item.recordingCategory=kind;
   if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
-  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 보관함에서 다시 바꿀 수 있어요.');
+  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 전체 녹음에서 다시 바꿀 수 있어요.');
   window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:{recordingCategory:kind}}}));
  }catch(error){VZ.toast('옮기지 못했어요: '+String(error.message||error),'error')}
  if(main.isConnected)draw(main);

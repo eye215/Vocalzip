@@ -122,7 +122,7 @@ function create({storage,identity,api,onReceipt}){
  }
  function acknowledge(id,metadata){
   const r=read(id);if(!r)return;
-  if(!r.receipt||metadata?.storageProvider!=='r2'||metadata.r2Key!==r.receipt.key||metadata.size!==r.receipt.size||(metadata.r2Etag&&metadata.r2Etag!==r.receipt.etag))throw fault('보관함 연결 결과가 달라요.','receipt');
+  if(!r.receipt||metadata?.storageProvider!=='r2'||metadata.r2Key!==r.receipt.key||metadata.size!==r.receipt.size||(metadata.r2Etag&&metadata.r2Etag!==r.receipt.etag))throw fault('전체 녹음 연결 결과가 달라요.','receipt');
   current();storage.removeItem(prefix+id);current();
  }
  return {upload,finish,pending,acknowledge,prefix};

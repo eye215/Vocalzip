@@ -189,7 +189,7 @@ async function ready() {
 /** Server publishes only a HEAD-verified immutable original; legacy accounts keep their existing insert path. */
 async function publishLibrary(metadata,{signal}={}){
  const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
- const current=()=>{if(window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 보관함 연결을 중단했어요.');};
+ const current=()=>{if(window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 변경되어 전체 녹음 연결을 중단했어요.');};
  await ready();current();
  if(check.mediaMode==='paused')throw uploadError(423,'media writes are paused');
  if(check.mediaMode!=='revision')return null;
@@ -202,7 +202,7 @@ async function publishLibrary(metadata,{signal}={}){
  if(result?.version!==1||result.user_id!==owner||result.session_id!==session||result.request_id!==parts[3]||
   result.id!==metadata.id||result.metadata?.id!==metadata.id||result.metadata?.storageProvider!=='r2'||
   result.metadata?.r2Key!==metadata.r2Key||result.metadata?.size!==metadata.size||result.metadata?.r2Etag!==metadata.r2Etag||
-  !Number.isFinite(Date.parse(result.updated_at)))throw Error('보관함 연결 결과를 확인하지 못했어요. 올린 원본은 보존돼요.');
+  !Number.isFinite(Date.parse(result.updated_at)))throw Error('전체 녹음 연결 결과를 확인하지 못했어요. 올린 원본은 보존돼요.');
  return result.metadata;
 }
 /** Fresh server mode; unknown/paused states never authorize a direct-write fallback. */

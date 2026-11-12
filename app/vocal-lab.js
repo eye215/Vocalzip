@@ -495,7 +495,7 @@ function screen(s) {
   host.querySelector('[data-save-report]').onclick=()=>{
     const selected=s.selected.map(id=>s.items.find(x=>x.id===id)).filter(Boolean);
     const record={kind:'vocal-lab',songId:s.song.id,song:s.song.title,mediaIds:selected.map(x=>x.id),activeId:m.id,metric:s.metric,snapshots:selected.map(x=>({id:x.id,date:M.dateOf(x),name:M.label(x),rating:x.rating??null,analysis:analysis(x)}))};
-    if(V.change(d=>{d.comparisonReports||=[];d.comparisonReports.push({id:V.uid(),created:Date.now(),...record});},{silent:true}))V.toast('리포트를 보관함에 저장했어요.');
+    if(V.change(d=>{d.comparisonReports||=[];d.comparisonReports.push({id:V.uid(),created:Date.now(),...record});},{silent:true}))V.toast('리포트를 전체 녹음에 저장했어요.');
   };
 }
 V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefresh:true,
@@ -516,7 +516,7 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefre
           return '<div class="vl-section"><h2>'+esc(label)+' · '+files.length+'개</h2>'+
             (known?'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(songId)+'?selection=1"><strong>선택한 녹음 모두 분석</strong><i class="ph ph-caret-right"></i></a>':'<p class="vl-muted">곡을 지정하면 여러 녹음의 변화를 함께 볼 수 있어요.</p>')+
             files.map(m=>'<a class="vl-report" href="'+(known?'#/vocal-lab/'+encodeURIComponent(songId)+'?selection=1':'#/analysis/'+encodeURIComponent(m.id))+'"><span>'+esc(M.label(m))+'</span><span>'+esc(day(m))+'</span></a>').join('')+'</div>';
-        }).join(''):'<p class="vl-muted">선택한 녹음을 찾지 못했어요. 보관함에서 다시 선택해 주세요.</p>');
+        }).join(''):'<p class="vl-muted">선택한 녹음을 찾지 못했어요. 전체 녹음에서 다시 선택해 주세요.</p>');
       return;
     }
     if(!song){

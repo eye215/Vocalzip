@@ -113,7 +113,7 @@ test('A file stored in R2 whose library row cannot be written is kept (not delet
     const file = new File([new Uint8Array(b)], 'take.wav', {type:'audio/wav'});
     try { await VZ.media.importFile(file, {id:'bulk-1', direct:true, extra:{fileHash:'abc'}}); return 'saved'; } catch (e) { return e.message; }
   }, [...wav()]);
-  expect(id).toContain('보관함 연결을 확인하지 못했어요');
+  expect(id).toContain('전체 녹음 연결을 확인하지 못했어요');
   expect(id).toContain('올린 파일은 지우지 않았어요');
   const key = 'u/ui-test-user/bulk-1/original.' + [...r2.store.keys()][0].split('.').pop();
   expect(r2.store.has(key)).toBe(true); // kept in R2
@@ -127,7 +127,7 @@ test('A file stored in R2 whose library row cannot be written is kept (not delet
   const uc = page.locator('.uc');
   await expect(uc).toContainText('진단 결과');
   await expect(uc.locator('.uc-row', {hasText:'R2 파일'}).first()).toContainText('1 ·');
-  await expect(uc.locator('.uc-row', {hasText:'R2에는 있는데 보관함 기록이 없는 파일'})).toContainText('1');
+  await expect(uc.locator('.uc-row', {hasText:'R2에는 있는데 전체 녹음 기록이 없는 파일'})).toContainText('1');
   await expect(uc.locator('.uc-row', {hasText:'복구 가능'})).toContainText('1');
   expect(r2.calls).toContain('GET /v1/objects');
   // A successful upload with the row confirmed is "done" and also leaves no device copy.
@@ -330,7 +330,7 @@ async function failLibraryAttachment(page,id='receipt-retry'){
 }
 test('A metadata retry reuses the completed upload and original metadata, even if another file is selected',async({page})=>{
  const r2=await fakeR2(page);await boot(page);
- expect(await failLibraryAttachment(page)).toContain('보관함 연결을 확인하지 못했어요');
+ expect(await failLibraryAttachment(page)).toContain('전체 녹음 연결을 확인하지 못했어요');
  const result=await page.evaluate(async()=>{
   window.__failUpsert=false;
   return window.vzipCloudImport(new File([new Uint8Array([8,8])],'different.wav',{type:'audio/wav'}),{id:'receipt-retry',name:'다른 이름',songId:'different-song'});
@@ -343,7 +343,7 @@ test('A metadata retry reuses the completed upload and original metadata, even i
 });
 test('Reload automatically reconnects a completed upload without selecting the original file again',async({page})=>{
  const r2=await fakeR2(page);await boot(page);
- expect(await failLibraryAttachment(page,'receipt-reload')).toContain('보관함 연결을 확인하지 못했어요');
+ expect(await failLibraryAttachment(page,'receipt-reload')).toContain('전체 녹음 연결을 확인하지 못했어요');
  await page.reload();await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>window.__rows['receipt-reload']?.name)).toBe('원래 녹음');
  expect(await page.evaluate(()=>window.__rows['receipt-reload'])).toMatchObject({songId:'s1',recordedDate:'2026-10-05',source:'record',durationSeconds:42});
@@ -386,7 +386,7 @@ test('Lost metadata verification preserves the receipt and recovers the existing
   try{await window.vzipCloudImport(new File([new Uint8Array(bytes)],'lost.wav',{type:'audio/wav'}),{id:'receipt-lost',name:'원래 이름'});return 'unexpected success';}
   catch(error){return error.message;}
  },[...wav(1)]);
- expect(failed).toContain('보관함 연결을 확인하지 못했어요');
+ expect(failed).toContain('전체 녹음 연결을 확인하지 못했어요');
  const result=await page.evaluate(async()=>{
   window.__failReadAfterInsert=false;window.__rows['receipt-lost'].review='그 사이 다른 기기 메모';
   return window.vzipRecoverMediaUploads('receipt-lost');

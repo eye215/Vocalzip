@@ -129,7 +129,7 @@ async function inspectFile(file, known) {
     row.hash = await M.fingerprint(file);
   } catch (e) { row.error = e.message; }
   if (!/^(audio|video)\//.test(row.type)) row.error = '지원하지 않는 형식이에요.';
-  row.dup = known.hash.has(row.hash) || known.nameSize.has(file.name + '|' + file.size) || known.baseSize.has(baseKey(file.name, file.size)) ? '보관함에 이미 있어요' : known.seen.has(row.hash) ? '선택한 파일끼리 같아요' : '';
+  row.dup = known.hash.has(row.hash) || known.nameSize.has(file.name + '|' + file.size) || known.baseSize.has(baseKey(file.name, file.size)) ? '전체 녹음에 이미 있어요' : known.seen.has(row.hash) ? '선택한 파일끼리 같아요' : '';
   if (row.hash && !known.seen.has(row.hash)) known.seen.set(row.hash, row);
   const sug = VZ.suggestSongs(file.name);
   row.suggestions = sug; if (sug[0]?.score >= 0.9) row.song = sug[0].id;
@@ -294,7 +294,7 @@ function draw() {
       if (!mediaOnly(all).length) { VZ.toast('가져올 음성·영상 파일이 없어요.', 'error'); return; }
       VZ.openImportHub({files:all});
     });
-    h.querySelector('[data-q-clear]')?.addEventListener('click', async () => { if (!await VZ.confirm('중단된 업로드 기록', '진행 상태 기록만 지워요. 이미 올라간 파일과 보관함은 그대로예요.', {ok:'기록 지우기'})) return; try { localStorage.removeItem(QKEY); } catch {} draw(); });
+    h.querySelector('[data-q-clear]')?.addEventListener('click', async () => { if (!await VZ.confirm('중단된 업로드 기록', '진행 상태 기록만 지워요. 이미 올라간 파일과 전체 녹음은 그대로예요.', {ok:'기록 지우기'})) return; try { localStorage.removeItem(QKEY); } catch {} draw(); });
     h.querySelectorAll('[data-src]').forEach(b => b.onclick = () => {
       const k = b.dataset.src;
       if (SOURCES[k].disabled) { VZ.toast(SOURCES[k].tip); return; }
@@ -373,7 +373,7 @@ function resultHtml() {
   const q = hub.rows.filter(r => r.queued), c = counts(q);
   return '<div class="card stack" data-result><strong>가져오기 완료</strong>' +
     '<p class="small muted" style="margin:0">저장 ' + c.done + '개' + (c.skipped ? ' · 길이 미달/미확인 제외 ' + c.skipped + '개' : '') + (c.dup ? ' · 중복 제외 ' + c.dup + '개' : '') + (c.failed ? ' · 실패 ' + c.failed + '개' : '') + '</p>' +
-    '<div class="btn-row"><a class="btn" href="#/library">보관함 보기</a><a class="btn secondary" href="#/processing-log">처리 내역</a><button type="button" class="btn secondary" data-report>결과 보고서 저장</button></div>' +
+    '<div class="btn-row"><a class="btn" href="#/library">전체 녹음 보기</a><a class="btn secondary" href="#/processing-log">처리 내역</a><button type="button" class="btn secondary" data-report>결과 보고서 저장</button></div>' +
     (hub.made ? '<p class="small muted" style="margin:0">연습 기록 ' + hub.made + '개 생성</p>' : '') +
     (hub.linked ? '<p class="small muted" style="margin:0">레슨 녹음 ' + hub.linked + '개 연결</p>' : '') +
     '<button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button></div>';
