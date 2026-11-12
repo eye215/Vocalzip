@@ -67,8 +67,8 @@ test('Library places filter and search above review, and keeps selection separat
  await expect(page.locator('[data-library-filter]')).toHaveAttribute('aria-pressed','true');
  await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeFocused();
  await expect(page.locator('[data-collection-search] button')).toHaveCount(0);
- await page.evaluate(()=>document.documentElement.style.setProperty('--kb','280px'));
- expect(await page.locator('[data-collection-search]').evaluate(form=>Math.round(innerHeight-form.getBoundingClientRect().bottom))).toBe(290);
+ // Set the keyboard height and measure in one step: the app re-reads the real (closed) keyboard after focus moves.
+ expect(await page.locator('[data-collection-search]').evaluate(form=>{document.documentElement.style.setProperty('--kb','280px');return Math.round(innerHeight-form.getBoundingClientRect().bottom)})).toBe(290);
  await page.evaluate(()=>document.documentElement.style.removeProperty('--kb'));
  await page.getByRole('searchbox',{name:'보관함 검색'}).fill('테스트');await expect(page.locator('[data-q]')).toHaveValue('');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
  await expect(page.locator('[data-q]')).toHaveValue('테스트');
