@@ -193,6 +193,31 @@ test('Uploads keep free measurements and cached candidates, never pay or auto-as
   assert.equal(other.n, 0);
 });
 
+test('Older analyses (v1, or v2 without detail) are analysed again with history kept; current ones are reused', {skip}, async () => {
+  const {requeueOldAnalyses, isCurrentAnalysis} = await import('../worker/analysis-worker.mjs');
+  const VA = require('../app/vocal-analysis.js');
+  for (const id of ['ra1', 'ra2', 'ra3']) files.set(key(U1, id, 'wav'), wav());
+  await media('ra1', {name:'v1', type:'audio/wav', storageProvider:'r2', r2Key:key(U1, 'ra1', 'wav'), songId:'s1', analysis:{v:1, at:111, metrics:{voicedSeconds:20}}});
+  await media('ra2', {name:'v2 old', type:'audio/wav', storageProvider:'r2', r2Key:key(U1, 'ra2', 'wav'), songId:'s1', analysis:{v:2, at:222, metrics:{voicedSeconds:20}}});
+  const current = {v:VA.VERSION, at:333, metrics:{voicedSeconds:20, phrases:null, pitchBands:null}};
+  await media('ra3', {name:'current', type:'audio/wav', storageProvider:'r2', r2Key:key(U1, 'ra3', 'wav'), songId:'s1', analysis:current});
+  await media('ra4', {name:'score', type:'application/pdf', storageProvider:'r2', r2Key:key(U1, 'ra4', 'pdf'), analysis:{v:1}});
+  assert.equal(isCurrentAnalysis(current), true); assert.equal(isCurrentAnalysis({v:2, metrics:{}}), false); assert.equal(isCurrentAnalysis({v:1, metrics:{phrases:null}}), false);
+  const queued = await requeueOldAnalyses(db);
+  assert.ok(queued >= 2);
+  assert.equal((await jobs('ra4')).vocal, undefined, 'non-audio files are never queued');
+  assert.equal((await jobs('ra3')).vocal, undefined, 'a current analysis is not queued');
+  await work();
+  const row = async id => (await db.query('select metadata from public.vocal_media where id = $1', [id])).rows[0].metadata;
+  for (const [id, at] of [['ra1', 111], ['ra2', 222]]) {
+    const a = (await row(id)).analysis;
+    assert.equal(a.v, VA.VERSION); assert.ok(Object.prototype.hasOwnProperty.call(a.metrics, 'phrases'));
+    assert.equal(a.history.at(-1).at, at, 'the older analysis is kept in history');
+  }
+  assert.deepEqual((await row('ra3')).analysis, current, 'current analysis untouched');
+  assert.equal((await row('ra1')).songId, 's1', 'nothing but analysis changes');
+});
+
 test('A file that cannot be read is retried and then marked failed; a paid transcript survives a later failure', {skip}, async () => {
   await media('x1', {name:'사라진 파일', storageProvider:'r2', r2Key:key(U1, 'x1', 'wav')});
   // A failed job waits 30 minutes before the next try (not retried inside the same run).
