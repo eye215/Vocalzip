@@ -579,13 +579,20 @@ test('reopening a score uses the device copy: no second PDF download',async({pag
  const reads=[];page.on('request',req=>{if(req.method()==='GET'&&/original\.pdf/.test(req.url()))reads.push(req.headers().range||'full');});
  const diagBefore=await page.evaluate(async()=>{const c=await caches.open('vzip-score-pdf-v1'),keys=await c.keys(),out=[];for(const k of keys){const r=await c.match(k),b=new Uint8Array(await r.arrayBuffer());out.push({url:k.url,hash:r.headers.get('x-vzip-pdf-hash'),etag:r.headers.get('x-vzip-pdf-etag'),len:b.length,pdf:new TextDecoder().decode(b.subarray(0,8))})}const sc=window.VZ.song('s1').scores[0];return {out,score:{r2Key:sc.r2Key,size:sc.size,updatedAt:sc.updatedAt,uploadedAt:sc.uploadedAt}}});
  const allReads=[];page.on('request',async req=>{if(/original\.pdf/.test(req.url()))allReads.push(req.method()+' '+JSON.stringify(await req.allHeaders().catch(()=>({}))));});
- await page.evaluate(()=>{window.__diag=[];const f=window.fetch;window.fetch=function(u,o){window.__diag.push('fetch '+String(u&&u.url||u).slice(0,90)+' '+JSON.stringify(o?{cache:o.cache,h:o.headers&&Object.keys(o.headers)}:null)+' @ '+(new Error().stack||'').split('\n').slice(1,5).join(' | '));return f.apply(this,arguments)};
-  const m=Cache.prototype.match;Cache.prototype.match=async function(r,o){let res;try{res=await m.call(this,r,o)}catch(e){window.__diag.push('match-err '+e.message);throw e}window.__diag.push('match '+String(r&&r.url||r).slice(0,160)+' -> '+(res?res.status+' hash='+res.headers.get('x-vzip-pdf-hash'):'none'));return res};
-  const co=CacheStorage.prototype.open;CacheStorage.prototype.open=async function(n){window.__diag.push('caches.open '+n);return co.call(this,n)};
-  const st=window.VzipR2.stat;window.VzipR2.stat=async k=>{window.__diag.push('stat '+k);try{const r=await st(k);window.__diag.push('stat-> '+JSON.stringify(r));return r}catch(e){window.__diag.push('stat-err '+e.message);throw e}};});
+ await page.evaluate(()=>sessionStorage.removeItem('__diag'));
+ await page.addInitScript(()=>{if(window.__diagOn)return;window.__diagOn=1;const log=x=>{try{const a=JSON.parse(sessionStorage.getItem('__diag')||'[]');a.push(String(x).slice(0,400));sessionStorage.setItem('__diag',JSON.stringify(a))}catch{}};log('doc '+location.href+' t='+Math.round(performance.now()));
+  if(window.caches)caches.open('vzip-score-pdf-v1').then(c=>c.keys()).then(k=>log('keys at start '+k.length),e=>log('keys err '+e.message));else log('no caches');
+  const f=window.fetch;window.fetch=function(u,o){const s=String(u&&u.url||u);if(/original\.pdf/.test(s))log('fetch '+s.slice(0,60)+' '+JSON.stringify(o?{cache:o.cache,h:o.headers&&Object.keys(o.headers)}:null)+' @ '+(new Error().stack||'').split('\n').slice(1,4).join(' | '));return f.apply(this,arguments)};
+  const m=Cache.prototype.match;Cache.prototype.match=async function(r,o){let res;try{res=await m.call(this,r,o)}catch(e){log('match-err '+e.message);throw e}log('match '+String(r&&r.url||r).slice(0,140)+' -> '+(res?res.status+' hash='+res.headers.get('x-vzip-pdf-hash'):'none'));return res};
+  addEventListener('load',()=>{const R=window.VzipR2;if(R){const st=R.stat;R.stat=async k=>{log('stat '+k+' owner='+window.vzipCloudUserId?.());try{const r=await st(k);log('stat-> '+JSON.stringify(r));return r}catch(e){log('stat-err '+e.message);throw e}}}});});
+ await page.evaluate(()=>{if(window.__diagOn)return;window.__diagOn=1;const log=x=>{try{const a=JSON.parse(sessionStorage.getItem('__diag')||'[]');a.push(String(x).slice(0,400));sessionStorage.setItem('__diag',JSON.stringify(a))}catch{}};log('doc '+location.href+' t='+Math.round(performance.now()));
+  if(window.caches)caches.open('vzip-score-pdf-v1').then(c=>c.keys()).then(k=>log('keys at start '+k.length),e=>log('keys err '+e.message));else log('no caches');
+  const f=window.fetch;window.fetch=function(u,o){const s=String(u&&u.url||u);if(/original\.pdf/.test(s))log('fetch '+s.slice(0,60)+' '+JSON.stringify(o?{cache:o.cache,h:o.headers&&Object.keys(o.headers)}:null)+' @ '+(new Error().stack||'').split('\n').slice(1,4).join(' | '));return f.apply(this,arguments)};
+  const m=Cache.prototype.match;Cache.prototype.match=async function(r,o){let res;try{res=await m.call(this,r,o)}catch(e){log('match-err '+e.message);throw e}log('match '+String(r&&r.url||r).slice(0,140)+' -> '+(res?res.status+' hash='+res.headers.get('x-vzip-pdf-hash'):'none'));return res};
+  addEventListener('load',()=>{const R=window.VzipR2;if(R){const st=R.stat;R.stat=async k=>{log('stat '+k+' owner='+window.vzipCloudUserId?.());try{const r=await st(k);log('stat-> '+JSON.stringify(r));return r}catch(e){log('stat-err '+e.message);throw e}}}});});
  dialog=await open(page);
- const diag2=await page.evaluate(()=>window.__diag);
- expect(reads,'DIAG '+JSON.stringify({diagBefore,allReads,diag2})).toEqual(['bytes=0-0']);
+ const diag2=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('__diag')||'[]'));
+ console.log('DIAGLOG',JSON.stringify(diag2));expect(reads,'DIAG '+JSON.stringify({diagBefore,allReads,diag2})).toEqual(['bytes=0-0']);
  await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨');
  // Deleting the score drops the device copy too.
  await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
