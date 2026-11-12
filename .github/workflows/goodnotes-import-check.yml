@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'app/goodnotes-*.js'
+      - 'app/goodnotes-*.css'
       - 'app/pdf-decrypt.js'
       - 'app/scores.js'
       - 'app/score-ink-model.js'

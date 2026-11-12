@@ -69,11 +69,11 @@ test('a notebook is cut by its outline into per-song scores, and its handwriting
   outline:[{page:1,title:'Defying Gravity (연습용)'},{page:3,title:'The River'}]});
  await pick(page,'내 악보집.goodnotes',notebook);
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
- await expect(sheet.locator('[data-gn-summary]')).toHaveText('내 악보집 · 5쪽 · 개요 2개 · 필기 3획');
+ await expect(sheet.locator('[data-gn-summary]')).toHaveText('5쪽 · 2곡 · 필기 3획');
  const rows=sheet.locator('[data-gn-section]');await expect(rows).toHaveCount(3);
  await expect(rows.nth(0)).toContainText('1쪽 · 필기 없음');
- await expect(rows.nth(1)).toContainText('2–3쪽 · 필기 2획 · 수정 가능');
- await expect(rows.nth(2)).toContainText('4–5쪽 · 필기 1획 · 수정 가능');
+ await expect(rows.nth(1)).toContainText('2–3쪽 · 필기 2획');
+ await expect(rows.nth(2)).toContainText('4–5쪽 · 필기 1획');
  // The untitled first page is left out, the title that names an existing song goes to that song, the other becomes a new song.
  expect(await rows.locator('[data-gn-target]').evaluateAll(list=>list.map(s=>s.value))).toEqual(['skip','s1','new']);
  // Nothing is written before the user confirms.
@@ -148,7 +148,7 @@ test('950 handwriting strokes all stay editable and reach the viewer through the
  const notebook=F.notebook({title:'필기 많은 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a',ink:many}]});
  await pick(page,'필기 많은 곡.goodnotes',notebook);
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
- await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획 · 수정 가능');
+ await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획');
  // Started from this song's page with a single section: it goes to this song.
  expect(await sheet.locator('[data-gn-target]').inputValue()).toBe('s1');
  await sheet.getByRole('button',{name:'가져오기 (1곡)'}).click();
@@ -202,7 +202,7 @@ test('rows ticked in order are joined into one score; repeated page names start 
  const titles=()=>rows.locator('[data-gn-title]').evaluateAll(list=>list.map(i=>i.value));
  await expect(rows).toHaveCount(5);
  expect(await titles()).toEqual(['Song A','B 1','B 2','B 3','C']);
- await expect(rows.nth(0)).toContainText('1–2쪽 · 필기 없음 · 2개를 합쳤어요');
+ await expect(rows.nth(0)).toContainText('1–2쪽 · 필기 없음 · 2개 합침');
  // Not next to each other: offered, but not allowed.
  await rows.nth(0).locator('[data-gn-pick]').check();await rows.nth(4).locator('[data-gn-pick]').check();
  await expect(sheet.locator('[data-gn-merge]')).toBeDisabled();await expect(sheet.locator('[data-gn-mergehint]')).toHaveText('이웃한 줄만 합칠 수 있어요');
@@ -210,15 +210,15 @@ test('rows ticked in order are joined into one score; repeated page names start 
  await expect(sheet.locator('[data-gn-mergebar]')).toBeHidden();
  // B 1, B 2, B 3 ticked in order → one score.
  for(const i of [1,2,3])await rows.nth(i).locator('[data-gn-pick]').check();
- await sheet.getByRole('button',{name:'선택한 3개를 한 곡으로 합치기'}).click();
+ await sheet.getByRole('button',{name:'한 곡으로 합치기'}).click();
  await expect(rows).toHaveCount(3);
- await expect(rows.nth(1)).toContainText('3–5쪽 · 필기 1획 · 수정 가능 · 3개를 합쳤어요');
+ await expect(rows.nth(1)).toContainText('3–5쪽 · 필기 1획 · 3개 합침');
  await rows.nth(1).locator('[data-gn-title]').fill('Song B');
  // A joined row splits back into its sections.
  await rows.nth(0).getByRole('button',{name:'Song A 나누기'}).click();
  expect(await titles()).toEqual(['Song A','Song A','Song B','C']);
  await rows.nth(0).locator('[data-gn-pick]').check();await rows.nth(1).locator('[data-gn-pick]').check();
- await sheet.getByRole('button',{name:'선택한 2개를 한 곡으로 합치기'}).click();
+ await sheet.getByRole('button',{name:'한 곡으로 합치기'}).click();
  expect(await titles()).toEqual(['Song A','Song B','C']); // the renamed Song B kept its name
  await sheet.getByRole('button',{name:'가져오기 (3곡)'}).click();
  await expect(page.locator('.toast')).toContainText('악보 3개를 가져왔어요 · 수정 가능한 필기 1획');
@@ -237,7 +237,7 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'}),rows=sheet.locator('[data-gn-section]'),go=sheet.locator('button[type=submit]');
  await expect(rows).toHaveCount(3);
  await expect(go).toHaveText('가져오기 (3곡)');
- await sheet.getByRole('button',{name:'모두 선택'}).click();
+ await sheet.getByRole('button',{name:'전체 선택'}).click();
  await expect(rows.locator('[data-gn-pick]:checked')).toHaveCount(3);
  await expect(go).toHaveText('선택한 3곡 가져오기');
  await sheet.getByRole('button',{name:'선택 해제'}).click();
@@ -245,7 +245,12 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  await expect(go).toHaveText('가져오기 (3곡)');
  // Song A and Song C ticked; Song C had been set to 가져오지 않기, but ticking it means "this one".
  await rows.nth(2).locator('[data-gn-target]').selectOption('skip');
+ await expect(rows.nth(2)).toHaveAttribute('data-skip','true'); // shown dimmed: it will not be imported
+ // Each song is one compact card, so a notebook with dozens of songs stays scannable on a phone.
+ for(const box of await rows.evaluateAll(list=>list.map(r=>r.getBoundingClientRect().height)))expect(box).toBeLessThan(150);
  await rows.nth(0).locator('[data-gn-pick]').check();await rows.nth(2).locator('[data-gn-pick]').check();
+ await expect(rows.nth(2)).toHaveAttribute('data-skip','false');
+ await expect(sheet.locator('[data-gn-count]')).toHaveText('2곡 선택');
  await expect(go).toHaveText('선택한 2곡 가져오기');
  await expect(sheet.locator('[data-gn-merge]')).toBeDisabled(); // not neighbours, so they cannot be joined
  await go.click();
@@ -256,6 +261,8 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  // The sheet stays open with Song B still to import; the imported rows are locked.
  await expect(rows.nth(0)).toContainText('가져왔어요');await expect(rows.nth(0).locator('[data-gn-pick]')).toBeDisabled();
  await expect(rows.nth(1)).not.toContainText('가져왔어요');
+ // The result sits right above the button, in view however long the list is.
+ await expect(page.locator('.sheet-foot [data-gn-msg]')).toHaveText('악보 2개를 가져왔어요. 남은 곡도 골라서 가져올 수 있어요.');
  await expect(go).toHaveText('가져오기 (1곡)');
  await go.click();
  await expect(sheet).toHaveCount(0);
