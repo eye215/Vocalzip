@@ -46,7 +46,7 @@ test('Real queue extracts audio before cloud transport and stores capture metada
  });
  await page.locator('.nav [data-tab=media]').click();await selected(page,'dated-video.mp4',true);
  await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
- await expect(page.locator('#vzip-hub-upload-queue')).toContainText('전체 녹음 저장 완료',{timeout:90000});
+ await expect(page.locator('#vzip-hub-upload-queue')).toContainText('보관함 저장 완료',{timeout:90000});
  const sent=await page.evaluate(()=>window.__sent);expect(sent.type).toBe('audio/mp4');expect(sent.size).toBeLessThan(1024*1024);
  expect(sent.info.recordedDate).toBe('2024-03-01');expect(sent.info.audioExtraction.audioPacketCopyVerified).toBe(true);
 });

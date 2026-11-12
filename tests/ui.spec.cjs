@@ -66,7 +66,7 @@ test('Imported audio links to saved practice, decodes after reload, and appears 
   await page.locator('#practice-form [name="minutes"]').fill('1');
   await page.locator('#practice-form [name="memo"]').fill('파일 연결과 재접속 확인');
   await page.locator('#practice-attachments').setInputFiles({name:'vocal-ui-test.wav',mimeType:'audio/wav',buffer:wav()});
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   const save=page.locator('#practice-form>button:not([type])');
   await expect(save).toBeEnabled();await save.click();
   await expect(page.locator('#practice-list')).toContainText('파일 연결과 재접속 확인');
@@ -191,7 +191,7 @@ test('Pending file storage blocks keyboard submission until attachment is durabl
   await page.evaluate(()=>document.querySelector('#practice-form').requestSubmit());
   expect(await page.evaluate(()=>(JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')||'{}').practices||[]).length)).toBe(0);
   await page.evaluate(()=>window.__finishImport());
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   await page.locator('#practice-form>button:not([type])').click();
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0].mediaIds.length)).toBe(1);
 });
@@ -332,7 +332,7 @@ test('Cloud import infers an empty MIME from m4a without pretending to test real
 test('Deleting a practice keeps its recording available in the library',async({page})=>{
   await page.locator('.hero [data-go-tab="practice"]').click();
   await page.locator('#practice-attachments').setInputFiles({name:'keep-after-delete.wav',mimeType:'audio/wav',buffer:wav()});
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   await page.locator('#practice-form>button:not([type])').click();
   await page.locator('#practice-list [data-delete="practice"]').click();
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices.length)).toBe(0);
@@ -647,7 +647,7 @@ test('Large practice import streams to cloud without local allocation or preview
   await page.locator('[data-mode="song"]').click();
   await page.locator('#practice-form [name="minutes"]').fill('7');
   await page.locator('#practice-attachments').setInputFiles(largeUpload());
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   await page.locator('#practice-form>button:not([type])').click();
   const result=await page.evaluate(()=>({
     record:JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).practices[0],
@@ -675,7 +675,7 @@ test('Cancelling a practice upload aborts transport, clears the input and permit
   expect(await page.evaluate(()=>window.__cloudMetadata.filter(row=>row.table==='vocal_media').length)).toBe(0);
   await page.evaluate(()=>{window.__uploadMode='success'});
   await page.locator('#practice-attachments').setInputFiles(largeUpload());
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds))).toHaveLength(1);
 });
 test('Failed cloud import never attaches a missing file and can be selected again',async({page})=>{
@@ -687,7 +687,7 @@ test('Failed cloud import never attaches a missing file and can be selected agai
   expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
   await page.evaluate(()=>{window.__uploadMode='success'});
   await page.locator('#practice-attachments').setInputFiles(largeUpload());
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(2);
 });
 test('Library and practice cannot run concurrent large uploads and library cancel releases the lock',async({page})=>{
@@ -709,7 +709,7 @@ test('Library and practice cannot run concurrent large uploads and library cance
   await page.evaluate(()=>{window.__uploadMode='success'});
   await page.locator('#vzip-hub-upload').setInputFiles(largeUpload());
   await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
-  await expect(page.locator('#vzip-hub-status')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#vzip-hub-status')).toContainText('보관함 저장 완료');
   expect(await page.evaluate(()=>window.__uploadCalls.length)).toBe(2);
 });
 test('Oversized files are rejected in both import forms before allocation or upload',async({page})=>{
@@ -839,7 +839,7 @@ test('Metadata failure after transport never attaches a missing recording and re
   expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds||'[]'))).toEqual([]);
   await page.evaluate(()=>{window.__failMetadata=false});
   await page.locator('#practice-attachments').setInputFiles(largeUpload());
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   expect(await page.evaluate(()=>JSON.parse(document.querySelector('#practice-form').dataset.mediaIds))).toHaveLength(1);
 });
 
@@ -869,7 +869,7 @@ for(const location of ['practice','library'])test('Upload progress and synthetic
  expect(await page.evaluate(()=>window.__uploadAborts)).toBe(1);
  await page.evaluate(()=>{window.__uploadMode='success'});await input.setInputFiles(largeUpload());
  if(location==='library')await page.getByRole('button',{name:'이 파일 업로드',exact:true}).click();
- await expect(status).toContainText('전체 녹음 저장 완료');
+ await expect(status).toContainText('보관함 저장 완료');
 });
 
 test('Account change during metadata commit never attaches the previous account file',async({page})=>{
@@ -932,7 +932,7 @@ test('Player card seeks, toggles playback and exposes native fallback', async ({
   test.skip(browserName === 'webkit' && process.platform === 'win32', 'Windows WebKit WAV codec unavailable.');
   await page.locator('.hero [data-go-tab="practice"]').click();
   await page.locator('#practice-attachments').setInputFiles({name:'player-test.wav',mimeType:'audio/wav',buffer:wav()});
-  await expect(page.locator('#media-preview')).toContainText('전체 녹음 저장 완료');
+  await expect(page.locator('#media-preview')).toContainText('보관함 저장 완료');
   await page.locator('.nav [data-tab="media"]').click();
   await page.locator('#vzip-hub-list [data-action=play]').click();
   const card = page.locator('#vzip-hub-list .vzip-player'), media = card.locator('audio');
@@ -1018,7 +1018,7 @@ for(const target of ['library','practice'])test('Multiple files choose independe
  await host.getByRole('button',{name:'이 파일 다시 시도'}).click();
  // Finished files leave the list; only a count line remains.
  await expect(host.locator('article.vzip-upload-progress')).toHaveCount(0);
- await expect(host.locator('.vzip-upload-done')).toContainText('✓ 전체 녹음 저장 완료 2개');
+ await expect(host.locator('.vzip-upload-done')).toContainText('✓ 보관함 저장 완료 2개');
  const calls=await page.evaluate(()=>window.__batchCalls);
  expect(calls.map(x=>[x.fileName.replace(/\.flac$/,'.wav'),x.songId])).toEqual([['first.wav','s1'],['second.wav','s2'],['second.wav','s2']]);
  if(target==='practice')expect(await page.locator('#practice-form').evaluate(f=>JSON.parse(f.dataset.mediaIds))).toEqual(['saved-first.wav','saved-second.wav']);
