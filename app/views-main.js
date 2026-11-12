@@ -485,8 +485,11 @@ VZ.songSheet = (song, onSaved, {hideShow = false, focusAr = false} = {}) => {
     }});
 };
 let songQ = '';
+/* v4 IA: 내 곡 holds two views, 곡별 (#/songs) and 전체 녹음 (#/library, formerly the 보관함 tab). Same routes, no data change. */
+VZ.songsSwitch = active => '<nav class="vz-songs-switch" aria-label="내 곡 보기">' +
+  [['songs', '곡별'], ['library', '전체 녹음']].map(([route, label]) => '<a href="#/' + route + '"' + (route === active ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>';
 VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="button" class="icon-btn" data-add-song aria-label="곡 추가"><i class="ph ph-plus"></i></button>', render() {
-  return '<a class="vz-performances" href="#/performances"><i class="ph ph-ticket"></i><strong>나의 공연</strong><i class="ph ph-caret-right"></i></a><div data-recent-song></div><div class="vz-section-heading"><h2>전체 곡</h2><button type="button" class="icon-btn vz-filter-icon" data-song-filter aria-label="곡 필터" aria-pressed="false"><i class="ph ph-sliders-horizontal"></i></button><button type="button" class="icon-btn vz-search-icon" data-song-search aria-label="곡 검색" aria-pressed="false"><i class="ph ph-magnifying-glass"></i></button></div><div hidden data-repertoire-filter>' + (VZ.repertoire?.toolbar() || '') + '</div><div data-l></div>';
+  return VZ.songsSwitch('songs') + '<a class="vz-performances" href="#/performances"><i class="ph ph-ticket"></i><strong>나의 공연</strong><i class="ph ph-caret-right"></i></a><div data-recent-song></div><div class="vz-section-heading"><h2>전체 곡</h2><button type="button" class="icon-btn vz-filter-icon" data-song-filter aria-label="곡 필터" aria-pressed="false"><i class="ph ph-sliders-horizontal"></i></button><button type="button" class="icon-btn vz-search-icon" data-song-search aria-label="곡 검색" aria-pressed="false"><i class="ph ph-magnifying-glass"></i></button></div><div hidden data-repertoire-filter>' + (VZ.repertoire?.toolbar() || '') + '</div><div data-l></div>';
 }, async mount(main, r) {
   document.querySelector('[data-add-song]').onclick = () => VZ.songSheet(null, id => VZ.nav('#/song/' + id));
   if (r.query.get('add')) { history.replaceState(null, '', '#/songs'); VZ.songSheet(null, id => VZ.nav('#/song/' + id)); }

@@ -1,6 +1,6 @@
 // VOCAL.zip v6 UI: main user flows, data compatibility with v5 records, and mobile layout.
 const {test, expect} = require('@playwright/test');
-require('./legacy-session-mode.cjs')(test,{approvedHome:info=>info.title==='Bottom navigation reaches the five main screens without horizontal overflow'});
+require('./legacy-session-mode.cjs')(test,{approvedHome:info=>info.title==='Bottom navigation reaches the four main screens and the record button without horizontal overflow'});
 const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
 const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -185,15 +185,15 @@ test('Vocal lab keeps the viewport on date, metric, and satisfaction selection',
  expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeRating, 0);
 });
 
-test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
+test('Bottom navigation reaches the four main screens and the record button without horizontal overflow', async ({page}) => {
  await boot(page);
- for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','일정']]){
+ for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['기록','calendar','기록']]){
   await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
   await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
   await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  }
  await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
- await expect(page.locator('.vz-nav-item')).toHaveCount(5);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
+ await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
  const songsButton=page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true});
  await expect(songsButton).toBeVisible();
  await expect.poll(async()=>Math.round((await songsButton.boundingBox())?.height||0)).toBeGreaterThanOrEqual(44);
@@ -2604,4 +2604,23 @@ test('AI exercise appears inline in the same card form and follow-along uses its
  await page.reload();await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-ai-status]')).toContainText('저장된 AI 추천');expect(await page.evaluate(()=>VZ.db.practices.length)).toBe(before);
  await page.evaluate(()=>VZ.practiceSheet=input=>window.__recordPreset=input);await card.getByRole('button',{name:'연습 기록에 담기'}).click();expect(await page.evaluate(()=>__recordPreset.preset.minutes)).toBe(4);
  await card.getByRole('link',{name:'따라 하기'}).click();await expect(page.locator('.gp-screen h2')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('.gp-instruction h3')).toHaveText('가사 한 줄을 읽어요.');
+});
+
+test('v4 IA: 보관함 survives as 내 곡 › 전체 녹음 with the old route and no data change', async ({page}) => {
+ await boot(page);
+ const nav=page.locator('.v-nav');
+ await page.goto('/#/songs');await expect(nav.locator('a[data-nav="library"]')).toHaveCount(0);
+ await expect(nav.locator('a[aria-current="page"]')).toHaveAttribute('data-nav','songs');
+ const sw=page.getByRole('navigation',{name:'내 곡 보기'});
+ await expect(sw.getByRole('link')).toHaveText(['곡별','전체 녹음']);await expect(sw.getByRole('link',{name:'곡별'})).toHaveAttribute('aria-current','page');
+ const before=await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1'));
+ await sw.getByRole('link',{name:'전체 녹음'}).click();await expect(page).toHaveURL(/#\/library$/);
+ await expect(page.locator('#top h1')).toHaveText('내 곡');
+ await expect(page.getByRole('navigation',{name:'내 곡 보기'}).getByRole('link',{name:'전체 녹음'})).toHaveAttribute('aria-current','page');
+ await expect(nav.locator('a[aria-current="page"]')).toHaveAttribute('data-nav','songs');
+ for(const [route,tab] of [['calendar','calendar'],['homework','calendar'],['performances','calendar'],['vocal-growth','growth']]){
+  await page.goto('/#/'+route);await expect(nav.locator('a[aria-current="page"]')).toHaveAttribute('data-nav',tab);
+ }
+ expect(await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1'))).toBe(before);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });

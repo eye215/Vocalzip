@@ -28,7 +28,7 @@ const jobLine=(job,review)=>{
  return stateLabel(job.status)+(detail?' · '+detail:'')+(job.status==='failed'?' · '+(job.last_error||'실패 이유를 확인할 수 없어요.'):'');
 };
 let stop=null;
-VZ.route('processing-log',{title:'처리 내역',back:true,tab:'library',noAutoRefresh:true,
+VZ.route('processing-log',{title:'처리 내역',back:true,tab:'home',noAutoRefresh:true,
  render(){return '<div data-processing-log><p class="muted">처리 상태를 불러오는 중…</p></div>';},
  mount(main){stop?.();let live=true,busy=false,retrying=false,feedback='';const host=main.querySelector('[data-processing-log]');
   async function refresh(){if(!live||busy||!host.isConnected)return;busy=true;
