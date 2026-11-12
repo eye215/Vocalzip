@@ -417,6 +417,21 @@ function showReferenceControls(main){
  const selected=state.referenceItems.find(m=>m.id===select.value);
  main.querySelector('[data-ref-clear]').disabled=state.running||!state.referenceRows.some(r=>r.songId===(selected?.songId||selected?.song));
 }
+// Recordings the background analysis already transcribed show the server's ranking, made when it compared with the
+// original lyrics only. Their saved transcript is compared again here with what the songs have now (original lyrics
+// and Korean translation). No new transcription, and nothing is assigned until the user applies it.
+async function rematchServerReviews(main){
+ const refs=references(),items=state.items.filter(m=>{const r=state.results.get(m.id);return r?.fromServer&&r.transcript});
+ if(!refs.length||!items.length)return;
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
+ for(const m of items){
+  const prev=state.results.get(m.id),match=matchTranscripts(prev.transcript,refs),found=songs().find(s=>s.id===topPick(match));
+  state.results.set(m.id,{...prev,status:found?'후보':'식별 불가',
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,
+   matches:candidateMatches(match),reason:'서버 받아쓰기 · 현재 가사로 다시 비교'});
+ }
+ if(main.isConnected)draw(main);
+}
 async function rematchCached(main){
  const refs=references();if(!refs.length||!state.items.some(m=>{
   const c=readCache(m);return c?.transcript&&!c.userSelected&&c.method==='stt'&&!['직접 선택','사용자가 유사도 후보 중 선택'].includes(c.candidate?.reason)
@@ -611,7 +626,8 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   state.referenceItems=mediaItems.filter(m=>M.songSearchEligible(m)&&!!(m.songId||m.song)&&!M.isVideo(m));
   try{await loadCloudTexts()}catch(error){root.querySelector('[data-progress]').textContent='동기화 실패: '+String(error.message||error)+' · 이전 데이터는 삭제하지 않았어요.';VZ.toast('가사 동기화 실패: '+String(error.message||error),'error')}
   if(!main.isConnected||owner()!==viewOwner)return;
-  for(const m of state.items){const r=VZ.serverReview?.(m.id);if(r&&!state.results.has(m.id)&&!readCache(m))state.results.set(m.id,{status:'식별 불가',candidate:null,method:'stt',transcript:r.transcript,matches:r.top3.map(x=>({songId:x.songId,score:x.score})),reason:'서버 분석 결과'})}
+  for(const m of state.items){const r=VZ.serverReview?.(m.id);if(r&&!state.results.has(m.id)&&!readCache(m))state.results.set(m.id,{status:'식별 불가',candidate:null,method:'stt',transcript:r.transcript,matches:r.top3.map(x=>({songId:x.songId,score:x.score})),reason:'서버 분석 결과',fromServer:true})}
+  await rematchServerReviews(main).catch(()=>{});
   const previous=new Set(loadCheckpoint());state.chosen=new Set(state.items.filter(m=>previous.has(m.id)).map(m=>m.id));
   if(state.cloudReady)root.querySelector('[data-progress]').textContent=state.items.length+'개 미지정 녹음'+(state.chosen.size?' · 이전 선택 '+state.chosen.size+'개 복원':'');
   root.querySelector('[data-select-all]').onclick=()=>{const scope=filteredItems(),all=scope.length&&scope.every(m=>state.chosen.has(m.id));for(const item of scope)all?state.chosen.delete(item.id):state.chosen.add(item.id);saveCheckpoint();draw(main)};
