@@ -344,7 +344,7 @@ async function importMedia(file,info={},onProgress,options={}){
  if(mediaImportActive)throw Error('다른 파일을 업로드하고 있어요. 완료하거나 취소한 뒤 다시 선택해 주세요.');
  const owner=user.id,controller=new AbortController(),signal=controller.signal;
  const cancel=()=>controller.abort(),authChanged=()=>{if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))controller.abort()};
- const aborted=()=>{if(signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError');if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))throw Error('로그인이 변경되었어요. 다시 로그인해 주세요.')};
+ const aborted=()=>{if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))throw Error('로그인이 변경되었어요. 다시 로그인해 주세요.');if(signal.aborted)throw new DOMException('업로드를 취소했어요.','AbortError')}; // an account change also aborts: say why
  if(options.signal?.aborted)cancel();options.signal?.addEventListener('abort',cancel);
  window.addEventListener('vzip:auth-changed',authChanged);
  mediaImportActive=true;let id,committing=false,committed=false,r2=null,recovery=null;
