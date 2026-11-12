@@ -22,7 +22,11 @@ function uploadSheet(song, redraw) {
       '<p class="small muted" data-file-name aria-live="polite" style="overflow-wrap:anywhere">선택한 파일이 없어요.</p>' +
       '<label class="field"><span>제목</span><input type="text" name="title" maxlength="120" placeholder="비워 두면 파일 이름"></label>' +
       '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey') + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey') + '</label></div>' +
-      '<p class="small muted" data-msg role="status">PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요. 올리면 음표 변환(시험판)도 자동으로 시작돼요.</p></form>',
+      '<p class="small muted" data-msg role="status">PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요. 올리면 음표 변환(시험판)도 자동으로 시작돼요.</p></form>' +
+      // A GoodNotes notebook is cut into songs by its outline; its own picker has no type filter because iOS greys out unknown types.
+      (VZ.goodnotesImport ? '<div class="stack" style="margin-top:16px"><span class="btn ghost" style="position:relative;overflow:hidden;min-height:44px"><i class="ph ph-notebook" aria-hidden="true"></i>굿노트 파일에서 가져오기' +
+      '<input type="file" data-goodnotes aria-label="굿노트 파일" style="position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer"></span>' +
+      '<p class="small muted">굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 고르면, 개요의 곡 제목대로 나눠 악보로 넣고 필기는 따로 수정할 수 있게 옮겨요.</p></div>' : ''),
     foot:'<button type="submit" form="score-up" class="btn block" data-go>올리기</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), msg = el.querySelector('[data-msg]'), go = el.querySelector('[data-go]');
@@ -30,7 +34,11 @@ function uploadSheet(song, redraw) {
       let busy = false, pending = null;
       const cloudMessage = '파일은 선택할 수 있어요. 올리려면 로그인과 클라우드 연결을 확인해 주세요.';
       if (!window.VzipR2?.enabled?.()) msg.textContent = cloudMessage;
+      const notebook = picked => { close(); VZ.goodnotesImport(picked, {song, onDone:redraw}); };
+      const goodnotes = el.querySelector('[data-goodnotes]');
+      if (goodnotes) goodnotes.onchange = () => { if (goodnotes.files[0]) notebook(goodnotes.files[0]); };
       input.onchange = () => {
+        if (VZ.goodnotesImport && /\.goodnotes$/i.test(input.files[0]?.name || '')) { notebook(input.files[0]); return; }
         pending = null;
         el.querySelector('[data-file-name]').textContent = input.files[0]?.name || '선택한 파일이 없어요.';
         msg.textContent = window.VzipR2?.enabled?.() ? 'PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요.' : cloudMessage;
@@ -93,7 +101,7 @@ async function remove(song, score, redraw) {
   if (!await VZ.confirm('악보 삭제', '"' + score.title + '" PDF와 연결된 개인 필기를 삭제할까요? 클라우드의 파일도 지워지고 되돌릴 수 없어요. 곡과 녹음은 그대로예요.', {ok:'삭제', danger:true})) return;
   try {
     guard();await window.VzipR2.remove(score.r2Key);if(/\/original\.pdf$/.test(score.r2Key||''))await window.VzipR2.remove(score.r2Key.replace(/original\.pdf$/,'omr.mxl')).catch(()=>{});guard();
-    if (VZ.deleteScoreWithInk ? VZ.deleteScoreWithInk(song.id, score) : save(song.id, list => { const i = list.findIndex(x => x.id === score.id); if (i >= 0) list.splice(i, 1); })) { VZ.toast('악보를 삭제했어요.'); redraw(); }
+    if (VZ.deleteScoreWithInk ? await VZ.deleteScoreWithInk(song.id, score) : save(song.id, list => { const i = list.findIndex(x => x.id === score.id); if (i >= 0) list.splice(i, 1); })) { VZ.toast('악보를 삭제했어요.'); redraw(); }
   } catch (err) { VZ.toast('삭제하지 못했어요: ' + err.message, 'error'); }
 }
 

@@ -59,6 +59,22 @@ const pdfCache={
   for(const key of await cache.keys())if(key.url.includes(part))await cache.delete(key);
  }
 };
+/** Strokes attached to the PDF (vocalzip-ink.json), bound to this account and this exact PDF. Anything malformed is
+ * left out as a whole file rather than shown half; the PDF itself still opens. */
+const INK_ATTACHMENT='vocalzip-ink.json',INK_ATTACHMENT_MAX=30*1024*1024;
+async function attachedInk(doc,binding){
+ let files;try{files=await doc.getAttachments();}catch{return [];}
+ const file=Object.values(files||{}).find(f=>(f?.filename||f?.rawFilename)===INK_ATTACHMENT);
+ if(!file?.content||file.content.length>INK_ATTACHMENT_MAX)return [];
+ try{
+  const data=JSON.parse(new TextDecoder().decode(file.content));
+  if(data?.format!=='vocalzip-ink'||data.version!==1||!Array.isArray(data.strokes)||data.strokes.length>200000)return [];
+  const rows=data.strokes.map(s=>({version:1,id:String(s?.id||''),ownerId:binding.ownerId,songId:binding.songId,scoreId:binding.scoreId,r2Key:binding.r2Key,pdfHash:binding.pdfHash,
+   page:s?.page,tool:s?.tool,color:s?.color,...(s?.opacity===undefined?{}:{opacity:s.opacity}),width:s?.width,points:s?.points,createdAt:s?.createdAt}));
+  if(!rows.every(Ink.valid)||rows.some(s=>s.page>doc.numPages)||new Set(rows.map(s=>s.id)).size!==rows.length)return [];
+  return rows;
+ }catch{return [];}
+}
 VZ.deleteScoreWithInk=(songId,score)=>{
  const owner=window.vzipCloudUserId?.(),scope=window.VzipAccountScope;
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
@@ -73,9 +89,18 @@ VZ.openScoreInk=(songId,scoreId)=>{
  const initialSession=window.vzipCloudSessionId?.()||'legacy',scope=window.VzipAccountScope;
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const current=()=>{const i=identity(),s=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted);if(i?.owner!==owner||i.session!==initialSession||!s||s.r2Key!==score.r2Key)throw Error('계정이나 악보가 바뀌어 필기를 중단했어요.');};
- let store,prefs,profiles;
+ let store,prefs,profiles,imported=[];
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
+ /* Handwriting imported with the PDF (an attached vocalzip-ink.json, e.g. from GoodNotes) is part of the score file
+  * itself: it reaches every device with the PDF. It is shown with the account's own strokes and edited the same way;
+  * erasing or moving one records it like any other change (the erased id syncs; a moved copy is a new stroke). */
+ {const base=store;store={...base,list:(b,page)=>{
+  const rows=base.list(b,page);if(!imported.length)return rows;
+  const gone=base.gone(),ids=new Set(rows.map(s=>s.id));
+  const extra=imported.filter(s=>(!page||s.page===page)&&s.pdfHash===b.pdfHash&&s.scoreId===b.scoreId&&s.r2Key===b.r2Key&&!gone.has(s.id)&&!ids.has(s.id)).map(s=>({...s}));
+  return [...extra,...rows].sort((a,c)=>a.createdAt-c.createdAt||a.id.localeCompare(c.id));
+ }};}
  const controller=new AbortController();let quickFolded=false,audioBar=null,doc,loadingTask,renderTask,prepared=new Map(),prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
  let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
@@ -1091,6 +1116,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     }catch{}
    }
    binding={ownerId:owner,songId,scoreId,r2Key:score.r2Key,pdfHash};
+   imported=await attachedInk(doc,binding);current();if(closed)return;
    readNotes();
    if(savedView?.pdfHash&&savedView.pdfHash!==pdfHash){
     pageNo=1;zoom=1;zoomValue();await renderPage();current();if(closed)return;
