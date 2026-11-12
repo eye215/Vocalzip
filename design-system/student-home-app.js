@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=ia4-20261112';
+import {createFloatingHome} from './student-home-html.js?v=routine2-20261112';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -64,7 +64,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const suggestions=s.recommendationCandidates.filter(c=>c.source==='recommendation'&&!existing.some(g=>g.source===c.source&&g.sourceId===c.sourceId));
   const choices=[...existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true})),...suggestions.map((g,i)=>({key:'candidate:'+i,goal:g,checked:false}))];
   let recommended=[];
-  const label=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':g.routine?'반복':'개인';
+  const routine=g=>!!window.VzipGoalRoutines?.routineOf(g);
+  const label=g=>g.source==='homework'?(routine(g)?'숙제·반복':'숙제'):g.source==='recommendation'?'추천':routine(g)?'반복':'개인';
   let dirty=false,approved=false,beforeUnload=null;
   // Prefill only explicit day/week plans; the settings default (onboarding) must not be written back as an override.
   const explicit=state(undefined,null,{withDefault:false}).week,dayTarget=explicit.days.find(d=>d.today)?.targetMinutes,weekTarget=explicit.targetMinutes;
@@ -124,7 +125,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    let files=V.media.cached(),root;
    const s=state(files,selectedWeekStart),r=recentData(s.recent);
    const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
-   try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
+   try{root=await createFloatingHome({...upcoming(s),goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null})),onGoalRecord:id=>V.goalPerformanceSheet?.(id),week:s.week,recent:r,
     ...recentCallbacks(r),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},

@@ -101,6 +101,9 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-goal-list label[data-long=true]{align-items:flex-start;padding-block:12px;}
 #vocalzip-refined-preview .vz-goal-list label>span{flex:1;min-width:0;overflow-wrap:anywhere;}
 #vocalzip-refined-preview .vz-goal-list label small{flex:none;}
+#vocalzip-refined-preview .vz-goal-record{flex:none;min-width:44px;min-height:44px;margin:-6px -8px -6px -4px;padding:0 8px;border:0;border-radius:12px;background:none;color:#7A32F5;font-family:inherit;font-size:13px;font-weight:600;line-height:18px;}
+#vocalzip-refined-preview .vz-goal-record:active{background:#F3ECFF;}
+#vocalzip-refined-preview .vz-goal-record[hidden]{display:none;}
 #vocalzip-refined-preview .vz-goal-list[data-many=true]{max-height:300px;overflow-y:auto;overscroll-behavior-y:contain;scroll-padding-block:8px;}
 #vocalzip-refined-preview .vz-goal-list input{scroll-margin-block:8px;}
 #vocalzip-refined-preview .vz-save-error{font-size:12px;line-height:1.45;color:#b42318;}
@@ -282,12 +285,22 @@ export async function createFloatingHome(opts={}){
  if(!items.length){const button=el("button",null,"vz-empty-action");button.type="button";button.setAttribute("aria-label","오늘의 목표 정하기");button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>오늘의 목표 정하기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg>';button.onclick=()=>opts.onGoals?.();list.append(button);}
  for(const item of items){
   const row=prototype.cloneNode(true),input=row.querySelector("input");row.dataset.long=String(String(item.title||"").length>80);input.removeAttribute("checked");input.checked=item.completed;input.setAttribute("aria-label",item.title||"목표");
-  row.querySelector("span").textContent=item.title||"목표";row.querySelector("small").textContent=item.routine&&item.source==="personal"?"반복":({homework:"숙제",personal:"개인",recommendation:"추천"})[item.source]||"";row.querySelector("small").hidden=!row.querySelector("small").textContent;
+  row.querySelector("span").textContent=item.title||"목표";
+  // A routine day shows its running count (e.g. 반복 3/7), updated with this row's check.
+  const tag=row.querySelector("small"),info=item.routineInfo,counted=item.completed;
+  const tagText=()=>info?info.label+" "+(info.done-(counted?1:0)+(item.completed?1:0))+"/"+info.total:item.routine&&item.source==="personal"?"반복":({homework:"숙제",personal:"개인",recommendation:"추천"})[item.source]||"";
+  const showTag=()=>{tag.textContent=tagText();tag.hidden=!tag.textContent;};showTag();
+  // Completed goals keep a way back to the optional 수행 기록 (minutes · recordings) after the 6-second offer.
+  let record=null;
+  if(opts.onGoalRecord){
+   record=el("button","기록","vz-goal-record");record.type="button";record.hidden=!item.completed;record.setAttribute("aria-label",(item.title||"목표")+" 수행 기록");
+   record.onclick=event=>{event.preventDefault();event.stopPropagation();opts.onGoalRecord(item.id);};row.append(record);
+  }
   input.onchange=async()=>{
-   const before=item.completed;item.completed=input.checked;input.disabled=true;row.setAttribute("aria-busy","true");error.textContent="";refresh();
+   const before=item.completed;item.completed=input.checked;input.disabled=true;row.setAttribute("aria-busy","true");error.textContent="";refresh();showTag();
    try{if(await opts.onGoalToggle?.(item.id,item.completed)===false)throw Error("save rejected");}
    catch{item.completed=before;input.checked=before;refresh();error.textContent="저장하지 못했어요. 다시 체크해 주세요.";}
-   finally{input.disabled=false;row.removeAttribute("aria-busy");}
+   finally{input.disabled=false;row.removeAttribute("aria-busy");showTag();if(record)record.hidden=!item.completed;}
   };list.append(row);
  }
   // Semantic icons share the same Phosphor Regular weight as the practice timer.
