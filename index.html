@@ -25,25 +25,29 @@
 <link rel="stylesheet" href="design-system/components.css?v=3">
 <link rel="stylesheet" href="design-system/student-home-fonts.css?v=2">
 <link rel="stylesheet" href="design-system/student-home-shell.css?v=6">
-<link rel="modulepreload" href="design-system/student-home-html.js?v=home-wide-20261112">
-<link rel="modulepreload" href="design-system/student-home-app.js?v=home-now-20261112">
+<link rel="modulepreload" href="design-system/student-home-html.js?v=pset-20261112-home-wide-20261112">
+<link rel="modulepreload" href="design-system/student-home-app.js?v=pset-20261112-home-weekly-20261112">
 <style>#vzip-boot-cover{position:fixed;inset:0;z-index:99998;background:#f8f6fd;display:grid;place-items:center;color:#1e1b2e;font:750 26px -apple-system,system-ui,sans-serif}#vzip-boot-cover small{display:block;text-align:center;color:#8d88a3;font-size:13px;font-weight:500;margin-top:10px}</style>
 <link rel="stylesheet" href="app/collection-ui.css?v=v4tools-20261112">
 <link rel="stylesheet" href="design-system/global-app.css?v=9">
 <link rel="stylesheet" href="app/record-experience.css?v=recscore-20261112">
 <link rel="stylesheet" href="app/media-dock.css?v=14">
-<link rel="stylesheet" href="app/song-detail.css?v=12">
+<link rel="stylesheet" href="app/song-detail.css?v=13-12">
+<link rel="stylesheet" href="app/lyrics-memo.css?v=1">
 <link rel="stylesheet" href="app/score-ink.css?v=tablet-spread-20261112">
 <link rel="stylesheet" href="app/song-check-ui.css?v=7">
 <link rel="stylesheet" href="app/vocal-lab.css?v=reanalyze-20261112">
 <link rel="stylesheet" href="app/guided-practice.css?v=7">
 <link rel="stylesheet" href="app/recording-list.css?v=2">
 <link rel="stylesheet" href="app/settings-refresh.css?v=16">
+<link rel="stylesheet" href="app/data-export.css?v=1">
 <link rel="stylesheet" href="sync/snapshot-review.css?v=1">
 <link rel="stylesheet" href="app/practice-room.css?v=1">
 <link rel="stylesheet" href="app/monthly-growth.css?v=3">
 <link rel="stylesheet" href="app/growth-polish.css?v=2">
+<link rel="stylesheet" href="app/weekly-summary.css?v=1">
 <link rel="stylesheet" href="app/goal-routines.css?v=3">
+<link rel="stylesheet" href="app/practice-set.css?v=1">
 <link rel="stylesheet" href="app/share-links.css?v=2">
 <link rel="stylesheet" href="app/score-omr.css?v=1">
 <link rel="stylesheet" href="app/score-range.css?v=1">
@@ -96,17 +100,23 @@
 <script src="sync/snapshot-review.js?v=2"></script>
 <script src="sync/media-delete-review.js?v=1"></script>
 <script src="media-metadata-edits.js?v=1"></script>
+<script src="app/auth-return-error.js?v=1"></script>
 <script src="cloud-sync.js?v=146"></script>
-<script src="app/song-mr.js?v=2"></script>
-<script src="app/views-main.js?v=arcmp-20261112"></script>
+<script src="app/song-mr.js?v=2-3-2"></script>
+<script src="app/views-main.js?v=arcmp-20261112-v4tools-show-20261112-lyrics-memo-20261112-recscore-20261112"></script>
+<script src="app/mr-key-shift.js?v=1"></script>
+<script src="app/lyrics-memo-model.js?v=1"></script>
+<script src="app/lyrics-memo.js?v=1"></script>
 <script src="app/media-dock.js?v=13"></script>
 <script src="app/calendar-summary.js?v=8"></script>
 <script src="app/views-lessons.js?v=v4copy-20261112"></script>
 <script src="app/billing-lessons.js?v=11"></script>
 <script src="app/lesson-deletion.js?v=4"></script>
-<script src="app/views-more.js?v=v4tools-filestatus-20261112"></script>
+<script src="app/views-more.js?v=data-export-20261112"></script>
 <script src="app/import-hub.js?v=lockdedupe-20261112"></script>
 <script src="app/storage.js?v=v4copy-20261112"></script>
+<script src="app/data-export-model.js?v=1"></script>
+<script src="app/data-export.js?v=1"></script>
 <script src="app/upload-check.js?v=v4copy-20261112"></script>
 <script src="app/recording-kind.js?v=1"></script>
 <script src="app/recording-kind-menu.js?v=1"></script>
@@ -122,8 +132,10 @@
 <script src="app/monthly-practice-plans.js?v=plan-outcome-v2-20261112"></script>
 <script src="app/overall-growth-model.js?v=2"></script>
 <script src="app/overall-growth-ui.js?v=v4copy-growth2-20261112"></script>
-<script src="app/monthly-growth.js?v=growth2-20261112"></script>
-<script src="app/vocal-lab.js?v=arcmp-20261112"></script>
+<script src="app/monthly-growth.js?v=growth2-20261112-weekly-20261112-growth2-20261112"></script>
+<script src="app/vocal-lab.js?v=arcmp-20261112-reanalyze-20261112-notecmp-20261112"></script>
+<script src="app/weekly-summary-model.js?v=1"></script>
+<script src="app/weekly-summary.js?v=1"></script>
 <script src="app/score-ink-model.js?v=5"></script>
 <script src="app/score-ink-settings.js?v=2"></script>
 <script src="app/score-ink-export.js?v=1"></script>
@@ -144,6 +156,8 @@
 <script src="app/practice-tips.js?v=3"></script>
 <script src="app/metronome.js?v=1"></script>
 <script src="app/guided-practice.js?v=9"></script>
+<script src="app/practice-set-model.js?v=1"></script>
+<script src="app/practice-set.js?v=1"></script>
 <script src="app/auto-analysis.js?v=2"></script>
 <script src="app/server-analysis.js?v=5"></script>
 <script src="app/processing-log.js?v=m4a-20261112"></script>
@@ -161,7 +175,7 @@
 <script src="app/lesson-ai-model.js?v=1"></script>
 <script src="app/lesson-ai.js?v=ia4-20261112"></script>
 <script src="app/app.js?v=600"></script>
-<script type="module" src="design-system/student-home-app.js?v=home-now-20261112"></script>
+<script type="module" src="design-system/student-home-app.js?v=pset-20261112-home-weekly-20261112"></script>
 </body>
 </html>
 
