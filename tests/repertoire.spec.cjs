@@ -212,11 +212,11 @@ test('A production connects to the rest of the app: its day on the calendar, 공
 });
 
 
- test('Approved collections show live songs, filter sheets, recorder preselection and correct Library tab',async({page})=>{
+ test('Approved collections show live songs, filter sheets, recorder preselection and 내 곡 › 전체 녹음 tab',async({page})=>{
  await boot(page);await expect(page.locator('.vz-song-list a')).toHaveCount(2);await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','false');
  await page.locator('[data-song-filter]').click();await page.locator('[data-filter-sort]').click();await expect(page.locator('[data-choice=name]')).toBeVisible();await page.locator('[data-choice=name]').click();await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','true');
  await expect(page.locator('.vz-recent-song')).toHaveAttribute('href','#/record?song=song1');await page.locator('.vz-recent-song').click();await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
- await page.goto('/#/library');await expect(page.locator('.v-nav [data-nav=library]')).toHaveAttribute('aria-current','page');await expect(page.locator('#top [data-back]')).toHaveCount(0);await expect(page.locator('[data-library-search]')).toBeVisible();
+ await page.goto('/#/library');await expect(page.locator('.v-nav [data-nav=library]')).toHaveCount(0);await expect(page.locator('.v-nav [data-nav=songs]')).toHaveAttribute('aria-current','page');await expect(page.getByRole('navigation',{name:'내 곡 보기'}).getByRole('link',{name:'전체 녹음'})).toHaveAttribute('aria-current','page');await expect(page.locator('#top [data-back]')).toHaveCount(0);await expect(page.locator('[data-library-search]')).toBeVisible();
  await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeVisible();
  });
 
