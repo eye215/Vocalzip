@@ -355,6 +355,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   return '<div class="stack vz-record-screen">' +
     (lessonId ? '<div class="badge accent" style="justify-self:start">레슨 녹음 · ' + esc(VZ.dateLabel(VZ.db.lessons.find(l => l.id === lessonId)?.date)) + '</div>' : '') +
     '<button type="button" class="card flat item" data-pick-song><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-sub">연결 곡</span><span class="item-title" data-song-name>' + esc(VZ.songTitle(songId) || '곡 미지정') + '</span><span class="item-sub vz-record-song-meta" data-song-meta>' + esc(songMeta) + '</span></span><i class="ph ph-caret-down chev"></i></button>' +
+    '<button type="button" class="vz-record-score" data-record-score hidden><i class="ph ph-music-notes" aria-hidden="true"></i><span>악보 보며 녹음</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
     '<section class="rec-stage" aria-label="녹음기" data-phase="idle"><h2 class="rec-heading">녹음 준비</h2><div class="rec-time" aria-live="off">0:00</div><div class="rec-wave-wrap"><div class="rec-wave-idle" aria-hidden="true"></div><canvas class="rec-wave" aria-hidden="true"></canvas></div>' +
     '<div class="rec-controls"><button type="button" class="rec-side" data-cancel disabled><i class="ph ph-x"></i>취소</button><div class="rec-primary"><button type="button" class="rec-main" data-main aria-label="녹음 시작"><i class="ph ph-microphone"></i></button></div><button type="button" class="rec-side" data-pause disabled><i class="ph ph-pause"></i><span>일시정지</span></button></div>' +
     '<div class="rec-status" role="status" data-status>버튼을 누르면 바로 녹음이 시작돼요.</div></section>' +
@@ -367,7 +368,19 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   const status = $('[data-status]'), timeEl = $('.rec-time'), wave = $('.rec-wave');
   $('.rec-wave-idle').innerHTML = Array.from({length:45}, (_, i) => '<i style="--h:' + (9 + i * 13 % 39) + 'px"></i>').join('');
   const mainBtn = $('[data-main]'), pauseBtn = $('[data-pause]'), cancelBtn = $('[data-cancel]'), review = $('[data-review]'), stage=$('.rec-stage'), picker=$('[data-pick-song]');
-  picker.onclick = () => VZ.pickSong(state.songId, id => { state.songId = id; $('[data-song-name]').textContent = VZ.songTitle(id) || '곡 미지정'; const song=VZ.song(id);$('[data-song-meta]').textContent=[song?.show,song?.role].filter(Boolean).join(' · '); });
+  // 악보 보며 녹음: the score viewer has its own 재생 / 녹음 / 재생+녹음 bar (app/score-audio.js). Offered only while
+  // nothing is being recorded here, so leaving never cuts a take.
+  const scoreBtn = $('[data-record-score]');
+  const scoresOf = id => (VZ.song(id)?.scores || []).filter(s => !s.deleted && s.r2Key);
+  const paintScore = () => { scoreBtn.hidden = !VZ.openScoreInk || !scoresOf(state.songId).length; scoreBtn.disabled = !!state.session; };
+  scoreBtn.onclick = async () => {
+    if (state.session) { VZ.toast('녹음을 마친 뒤 악보를 열 수 있어요.'); return; }
+    const list = scoresOf(state.songId); if (!list.length) return;
+    const pick = list.length === 1 ? list[0].id : await VZ.pickSheet({title:'악보 선택', value:null, options:list.map(s => ({value:s.id, label:s.title || s.fileName || '악보'}))});
+    if (pick) VZ.openScoreInk(state.songId, pick);
+  };
+  paintScore();
+  picker.onclick = () => VZ.pickSong(state.songId, id => { state.songId = id; $('[data-song-name]').textContent = VZ.songTitle(id) || '곡 미지정'; const song=VZ.song(id);$('[data-song-meta]').textContent=[song?.show,song?.role].filter(Boolean).join(' · '); paintScore(); });
   VZ.setGuard(() => state.session ? '녹음 중이에요. 이동하면 이번 녹음이 사라져요. 이동할까요?' : state.result && !state.saved ? '저장하지 않은 녹음이 있어요. 이동하면 사라져요. 이동할까요?' : '');
   M.drawWave(wave, [], '#A65CFF');
   const setUI = phase => {
@@ -375,6 +388,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     stage.dataset.phase=phase;
     stage.querySelector('.rec-heading').textContent=phase==='recording'?'녹음 중':phase==='paused'?'일시정지':'녹음 준비';
     picker.disabled=recording||phase==='review';
+    scoreBtn.disabled=recording;
     mainBtn.classList.toggle('recording', recording);
     mainBtn.innerHTML = recording ? '<i class="ph-fill ph-stop"></i>' : '<i class="ph ph-microphone"></i>';
     mainBtn.setAttribute('aria-label', recording ? '녹음 종료' : '녹음 시작');
@@ -523,7 +537,7 @@ VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="bu
 /* ---------- 곡 상세 ---------- */
 let songTab = 'media';
 VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true,
-  leave(){ songTab = 'media'; document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
+  leave(){ songTab = 'media'; VZ.lyricsMemo?.close(); document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
   actions:r => VZ.song(r.params[0]) ? '<button type="button" class="icon-btn" data-song-menu aria-label="곡 수정·삭제"><i class="ph ph-dots-three-outline"></i></button>' : '',
   render(r) {
     const s = VZ.song(r.params[0]);
@@ -624,8 +638,12 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
         const current = VZ.song(s.id) || s;
         const fields = [['lyrics','가사 원문',30000,11],['translation','한글 해석 / 번역',30000,8],['lyricNotes','발음 / 호흡 / 감정 메모',12000,7]];
         const preview = value => String(value || '').trim().replace(/\s+/g,' ').slice(0,180) || '입력한 내용이 없습니다';
-        body.innerHTML = '<div class="vz-song-section"><h2>가사</h2></div><div class="vz-lyric-list">' + fields.map(([key,title]) =>
-          '<button type="button" class="vz-lyric-card" data-lyric="'+key+'"><span class="vz-lyric-heading"><strong>'+title+'</strong><i class="ph ph-caret-right" aria-hidden="true"></i></span><span class="vz-lyric-preview" data-lyric-preview="'+key+'">'+esc(preview(current[key]))+'</span></button>').join('') + '</div>';
+        // 가사 외우기 (app/lyrics-memo.js) takes over the tab while open; it only writes songs[].lyricsMemo.
+        if (VZ.lyricsMemo?.isOpen(s.id)) { VZ.lyricsMemo.render(body, current, {onClose:draw}); return; }
+        const memoEntry = VZ.lyricsMemo ? VZ.lyricsMemo.entry(current) : '', memoFirst = !!(String(current.lyrics || '').trim() || String(current.translation || '').trim());
+        body.innerHTML = '<div class="vz-song-section"><h2>가사</h2></div><div class="vz-lyric-list">' + (memoFirst ? memoEntry : '') + fields.map(([key,title]) =>
+          '<button type="button" class="vz-lyric-card" data-lyric="'+key+'"><span class="vz-lyric-heading"><strong>'+title+'</strong><i class="ph ph-caret-right" aria-hidden="true"></i></span><span class="vz-lyric-preview" data-lyric-preview="'+key+'">'+esc(preview(current[key]))+'</span></button>').join('') + (memoFirst ? '' : memoEntry) + '</div>';
+        body.querySelector('[data-lm-open]:not([disabled])')?.addEventListener('click', () => { VZ.lyricsMemo.open(s.id); draw(); });
         body.querySelectorAll('[data-lyric]').forEach(button => button.onclick = () => {
           const [key,title,max,rows] = fields.find(([name]) => name === button.dataset.lyric);
           VZ.sheet({title, body:'<form class="vz-lyric-form"><label class="field"><span>'+title+'</span><textarea name="content" rows="'+rows+'" maxlength="'+max+'" aria-label="'+title+'"></textarea></label><p class="archive-error" role="alert"></p><button type="submit" class="btn block">저장</button></form>',
@@ -633,7 +651,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
               const form=sheet.querySelector('form');form.elements.content.value=(VZ.song(s.id)||s)[key]||'';
               form.onsubmit=e=>{e.preventDefault();const value=form.elements.content.value.trim();try{
                 if(!VZ.change(db=>{const song=db.songs.find(x=>x.id===s.id);if(!song)throw Error('곡을 찾을 수 없어요.');song[key]=value},{silent:true}))throw Error('저장하지 못했어요. 다시 시도해 주세요.');
-                body.querySelector('[data-lyric-preview="'+key+'"]').textContent=preview(value);close();VZ.toast('저장했어요.');
+                body.querySelector('[data-lyric-preview="'+key+'"]').textContent=preview(value);close();if(VZ.lyricsMemo&&body.isConnected&&songTab==='lyrics')draw();VZ.toast('저장했어요.');
               }catch(error){form.querySelector('[role=alert]').textContent=error.message||String(error)}};
             }});
         });

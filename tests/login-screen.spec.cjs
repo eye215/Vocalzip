@@ -68,3 +68,26 @@ test('Login and separate signup screen keep account actions usable',async({page}
   await expect(screen.locator('.vzip-auth-new-password-card')).toBeHidden();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
+
+// A failed social login returns with the reason in the address; it is shown on the login screen and then removed
+// from the address (only the error fields). Fixture values only; nothing is signed in.
+test('A Kakao login that comes back with an error shows the reason on the login screen',async({page})=>{
+  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:`window.__signupCalls=[];window.__oauthCalls=[];window.__resendCalls=[];window.__resetCalls=[];window.__authCallbacks=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),getSession:async()=>({data:{session:null}}),onAuthStateChange:callback=>{window.__authCallbacks.push(callback);return {data:{subscription:{unsubscribe(){}}}}},signInWithPassword:async()=>({error:{message:'Invalid login credentials'}}),signInWithOAuth:async(args)=>{window.__oauthCalls.push(args);return {error:null}},signUp:async(args)=>{window.__signupCalls.push(args);return {data:{session:null},error:null}},resend:async(args)=>{window.__resendCalls.push(args);return {error:null}},resetPasswordForEmail:async(...args)=>{window.__resetCalls.push(args);return {error:null}},updateUser:async()=>({error:null})}})}` }));
+  await page.route('**/r2-config.js*',route=>route.fulfill({contentType:'application/javascript',body:"window.VZIP_R2_ENDPOINT='';"}));
+  await page.goto('/?error=server_error&error_code=unexpected_failure&error_description=Error+getting+user+email+from+external+provider#/home');
+  const screen=page.locator('#vzip-auth-screen');await expect(screen).toBeVisible();
+  const alert=screen.locator('[data-auth-return-error]');
+  await expect(alert).toHaveText(/카카오 계정 이메일을 받지 못해/);await expect(alert).toHaveAttribute('role','alert');
+  if(process.env.VZ_QA_OUTPUT)await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/login-oauth-error.png'});
+  await expect.poll(()=>page.evaluate(()=>location.search)).toBe('');
+  expect(await page.evaluate(()=>location.hash)).toBe('#/home');
+  // Signing in by email still works on the same screen (the line does not block anything).
+  await expect(screen.getByRole('button',{name:'로그인',exact:true})).toBeEnabled();
+  // The same reason in the hash (implicit flow), and a cancelled consent.
+  await page.goto('/#error=access_denied&error_description=User+denied');await page.reload();
+  await expect(page.locator('[data-auth-return-error]')).toHaveText(/카카오 로그인을 취소했어요/);
+  await expect.poll(()=>page.evaluate(()=>location.hash)).toBe('#/home');
+  // A normal visit shows nothing.
+  await page.goto('/#/home');await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeVisible();
+  await expect(page.locator('[data-auth-return-error]')).toHaveCount(0);
+});

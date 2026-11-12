@@ -94,3 +94,8 @@ body.vz-record-mode .vz-record-screen [data-review] .btn.ghost{color:#e8d9ff;bor
 @media(max-height:720px){.vz-record-screen .rec-stage{min-height:380px;padding-top:22px}.vz-record-screen .rec-heading{margin-bottom:18px}.vz-record-screen .rec-wave-wrap{height:78px;margin:18px 0 9px}.vz-record-screen .rec-status{margin-top:28px}}
 @media(max-width:350px){.vz-record-screen .rec-controls{gap:3px}.vz-record-screen .rec-main,.vz-record-screen .rec-main.recording{width:80px;height:80px}}
 
+/* 악보 보며 녹음: opens the score viewer (its own 재생 / 녹음 bar). Shown only when the chosen song has a score. */
+.vz-record-screen .vz-record-score{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:0 14px;border:0;border-radius:14px;background:var(--vz-color-accent-soft,#EDE1FF);color:var(--vz-color-accent,#7A32F5);font:600 14px inherit;cursor:pointer}
+.vz-record-screen .vz-record-score span{flex:1;text-align:left}
+.vz-record-screen .vz-record-score[hidden]{display:none}
+.vz-record-screen .vz-record-score:disabled{opacity:.45;cursor:default}
