@@ -168,9 +168,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    await refreshMedia();
    // Record first contact as the baseline; starting with the following day,
    // offer the goal picker once per local date. Skipping never loops on re-entry.
+   // The date is a per-device UI marker (account-scoped storage), not a record: writing it to V.db
+   // would add a cloud save on every first home visit of the day.
    if(root.isConnected){
-    const date=today(),seen=V.db.settings?.dailyGoalPromptDate;
-    if(seen!==date&&V.change(db=>{db.settings||={};db.settings.dailyGoalPromptDate=date;},{silent:true})&&seen&&state(files).goals.length===0){
+    const store=window.VzipAccountScope?.storage||window.localStorage,key='vzip_daily_goal_prompt:'+(owner()||'local');
+    const date=today();let seen=null,saved=false;
+    try{seen=store.getItem(key);if(seen!==date){store.setItem(key,date);saved=true;}}catch{}
+    if(saved&&seen&&state(files).goals.length===0){
      setTimeout(()=>{if(root.isConnected&&today()===date&&!document.querySelector('.sheet-back'))planSheet({automatic:true});},0);
     }
    }
