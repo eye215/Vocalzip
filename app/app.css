@@ -513,7 +513,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 /* Page under an open sheet does not move (iOS ignores overflow:hidden on body). */
 body.sheet-lock{position:fixed;left:0;right:0;overflow:hidden}
 /* Page navigation for forms, pickers and long content; short menus keep the button context. */
-body .sheet-back.sheet-page{top:var(--vv-top,0px);bottom:auto;height:var(--vv-height,100dvh);align-items:stretch;padding:0;background:var(--vz-color-canvas);backdrop-filter:none;-webkit-backdrop-filter:none;animation:none}
+body .sheet-back.sheet-page{top:0;bottom:0;height:auto;align-items:stretch;padding:0;background:var(--vz-color-canvas);backdrop-filter:none;-webkit-backdrop-filter:none;animation:none}
 body .sheet-page>.sheet{display:flex;flex-direction:column;width:100%;max-width:560px;height:100%;max-height:none;margin:auto;padding:0;background:var(--vz-color-canvas);border-radius:0;overflow:hidden;animation:none}
 body .sheet-page .sheet-grab{display:none}
 body .sheet-page .sheet-head{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;flex:none;min-height:64px;margin:0;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;background:var(--vz-color-canvas)}
@@ -529,6 +529,9 @@ body .sheet-page .sheet-foot>.btn,body .sheet-page .sheet-foot>button[type=submi
 body .sheet-page .sheet-foot>.btn-row{display:flex;gap:8px}
 body .sheet-page .sheet-foot>.btn-row .btn{min-height:var(--vz-button-height)}
 html.vz-keyboard-open body .sheet-page .sheet-foot{display:none}
+/* A full page never moves or shrinks for the keyboard (iOS keyboard viewport values are unreliable and turned the page
+ * into a band). Only its scrolling body gets room under the content, so every field can be scrolled above the keyboard. */
+html.vz-keyboard-open body .sheet-page .sheet-body{padding-bottom:calc(var(--kb,0px) + 28px);scroll-padding-bottom:calc(var(--kb,0px) + 16px)}
 body .sheet-page .field input[type=date]{width:min(var(--vz-input-date-max),100%);max-width:var(--vz-input-date-max)}
 body .sheet-page.sheet-form-page .sheet-body{padding:var(--vz-space-6) var(--vz-page-gutter) 36px}
 body .sheet-page.sheet-form-page .sheet-head{padding-left:var(--vz-page-gutter);padding-right:var(--vz-page-gutter)}

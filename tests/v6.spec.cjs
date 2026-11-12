@@ -1738,7 +1738,7 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await page.getByText('기록 백업·복원').click();
   await expect(page.locator('[data-export]')).toBeVisible();
   await expect(page.locator('[data-import-json]')).toHaveCount(1);
-  await expect(page.getByRole('navigation', {name:'주요 메뉴'})).toBeHidden();
+  await expect(page.getByRole('navigation', {name:'주요 메뉴'})).toBeVisible(); // ordinary screens keep the same bottom menu as Home (shared-nav.css)
   await page.setViewportSize({width:320,height:700});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   // Leaving and coming back doesn't wrap the tools twice.

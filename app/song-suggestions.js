@@ -53,10 +53,13 @@ let analysisProgress=null;
 const scoped=key=>key+':'+viewOwner;
 function references(){
  // The user's original lyrics are already synced through the existing song catalog (#80).
- // Use them first; supplement songs without lyrics from the new private Supabase table.
- const typed=songs().filter(song=>String(song.lyrics||'').trim().length>=12)
-  .map(song=>({songId:song.id,transcript:String(song.lyrics).trim().slice(0,16000),source:'lyrics'}));
- const ids=new Set(typed.map(r=>r.songId));
+ // The Korean translation is compared too: a Korean-language production is sung in the translated words,
+ // so a recording only matches that text. Songs without typed original lyrics are supplemented from the
+ // private Supabase reference table.
+ const typed=songs().flatMap(song=>[['lyrics','lyrics'],['translation','translation']]
+  .map(([key,source])=>({songId:song.id,transcript:String(song[key]||'').trim().slice(0,16000),source}))
+  .filter(ref=>ref.transcript.length>=12));
+ const ids=new Set(typed.filter(r=>r.source==='lyrics').map(r=>r.songId));
  return [...typed,...state.referenceRows.filter(r=>!ids.has(r.songId))];
 }
 async function saveReference(songId,transcript,source='manual'){
@@ -255,7 +258,7 @@ async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  const status=await fetch(API,{headers:{Authorization:'Bearer '+token},signal,cache:'no-store'});
  if(!status.ok){const data=await status.json().catch(()=>({}));throw Error(data.error||'STT_DISABLED ('+status.status+')')}
  if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
- const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
  const {clipFromPcm}=await import('../stt-clip-browser.mjs?v=3');
  let transcript=previous||'',initialStart=cached?.initialStart??null,duration=Number(item.durationSeconds)||0;
  // Reuse decoded PCM only within this file/request; release it when this search ends.
@@ -355,8 +358,9 @@ function pickSong(main,item){
   el.querySelector('[data-pick-select]').onchange=e=>choose(e.target.value);
  }});
 }
-function openRecordMenu(main,item){
- VZ.sheet({title:M.label(item),body:'<button type="button" class="btn ghost block" data-transcript-view>전사 확인</button><button type="button" class="btn ghost block" data-file-delete>파일 삭제</button>',onMount:(el,close)=>{
+// A short action menu: the shared dark popover next to the ⋯ button (design system §공통 작업 화면과 메뉴), delete last.
+function openRecordMenu(main,item,anchor){
+ VZ.menu({title:M.label(item),anchor,body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-transcript-view><i class="ph ph-text-align-left"></i> 전사 확인</button><button type="button" class="vz-choice" data-file-delete><i class="ph ph-trash"></i> 파일 삭제</button></div>',onMount:(el,close)=>{
   el.querySelector('[data-transcript-view]').onclick=()=>{close();VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))};
   el.querySelector('[data-file-delete]').onclick=()=>{close();exclusive(main,async(_main,check)=>{
    if(state.running||!await M.confirmRemove(item))return;check();await M.remove(item);check();
@@ -388,7 +392,7 @@ function draw(main){
   card.querySelector('input').onchange=e=>{e.target.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   card.querySelector('.vz-sc-play-trigger').onclick=()=>{const host=card.querySelector('.vz-sc-player-host');try{const player=M.player(host,item,{prefetch:false,tools:false});inlinePlayers.set(item.id,player);card.querySelector('.vz-sc-player-placeholder').hidden=true;host.hidden=false;player.play()}catch(error){VZ.toast('재생할 수 없어요: '+String(error.message||error),'error')}};
   card.querySelector('.vz-sc-recommend').onclick=()=>pickSong(main,item);
-  card.querySelector('.vz-sc-menu').onclick=()=>openRecordMenu(main,item);
+  card.querySelector('.vz-sc-menu').onclick=e=>openRecordMenu(main,item,e.currentTarget);
   list.append(card);
  }
  if(!shown.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=state.items.length?'해당 상태의 녹음이 없어요.':'곡을 확인할 미지정 녹음이 없어요.';list.append(empty)}
@@ -417,7 +421,7 @@ async function rematchCached(main){
  const refs=references();if(!refs.length||!state.items.some(m=>{
   const c=readCache(m);return c?.transcript&&!c.userSelected&&c.method==='stt'&&!['직접 선택','사용자가 유사도 후보 중 선택'].includes(c.candidate?.reason)
  }))return;
- const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
  let changed=0;
  for(const item of state.items){
   const previous=readCache(item);
