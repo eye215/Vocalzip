@@ -53,10 +53,13 @@ let analysisProgress=null;
 const scoped=key=>key+':'+viewOwner;
 function references(){
  // The user's original lyrics are already synced through the existing song catalog (#80).
- // Use them first; supplement songs without lyrics from the new private Supabase table.
- const typed=songs().filter(song=>String(song.lyrics||'').trim().length>=12)
-  .map(song=>({songId:song.id,transcript:String(song.lyrics).trim().slice(0,16000),source:'lyrics'}));
- const ids=new Set(typed.map(r=>r.songId));
+ // The Korean translation is compared too: a Korean-language production is sung in the translated words,
+ // so a recording only matches that text. Songs without typed original lyrics are supplemented from the
+ // private Supabase reference table.
+ const typed=songs().flatMap(song=>[['lyrics','lyrics'],['translation','translation']]
+  .map(([key,source])=>({songId:song.id,transcript:String(song[key]||'').trim().slice(0,16000),source}))
+  .filter(ref=>ref.transcript.length>=12));
+ const ids=new Set(typed.filter(r=>r.source==='lyrics').map(r=>r.songId));
  return [...typed,...state.referenceRows.filter(r=>!ids.has(r.songId))];
 }
 async function saveReference(songId,transcript,source='manual'){
@@ -255,7 +258,7 @@ async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  const status=await fetch(API,{headers:{Authorization:'Bearer '+token},signal,cache:'no-store'});
  if(!status.ok){const data=await status.json().catch(()=>({}));throw Error(data.error||'STT_DISABLED ('+status.status+')')}
  if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
- const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
  const {clipFromPcm}=await import('../stt-clip-browser.mjs?v=3');
  let transcript=previous||'',initialStart=cached?.initialStart??null,duration=Number(item.durationSeconds)||0;
  // Reuse decoded PCM only within this file/request; release it when this search ends.
@@ -418,7 +421,7 @@ async function rematchCached(main){
  const refs=references();if(!refs.length||!state.items.some(m=>{
   const c=readCache(m);return c?.transcript&&!c.userSelected&&c.method==='stt'&&!['직접 선택','사용자가 유사도 후보 중 선택'].includes(c.candidate?.reason)
  }))return;
- const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
  let changed=0;
  for(const item of state.items){
   const previous=readCache(item);

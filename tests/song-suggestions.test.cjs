@@ -86,7 +86,7 @@ function browser({mockStt=false}={}){
   fetch:async()=>{paid++;return mockStt?Response.json({enabled:true}):Response.json({error:'STT_DISABLED'},{status:503})}};
  let code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
   'window.test={stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend,scanWindows,setPipeline:(audio,transcribe)=>{audioWindow=audio;transcribeClip=transcribe}};})();');
- if(mockStt)code=code.replaceAll("await import('../song-text-match.mjs?v=1')",'window.testMatchModule')
+ if(mockStt)code=code.replaceAll("await import('../song-text-match.mjs?v=2')",'window.testMatchModule')
   .replaceAll("await import('../stt-clip-browser.mjs?v=3')",'window.testClipModule');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
@@ -451,4 +451,12 @@ test('returning during title analysis shows live progress and preserves the comp
  assert.match(overlay.querySelector('[data-analysis-file]').textContent,/진행 중인 녹음.*가사 인식/);
  release();await running;
  assert.equal(b.api.state.results.get('m1').candidate.id,'s1');assert.equal(rendered,1);
+});
+
+test('the Korean translation is a matching reference too, next to the original lyrics',()=>{
+ const b=browser();
+ b.window.VZ.db.songs=[{id:'moment',title:'지금 이 순간',lyrics:'This is the moment this is the day',translation:'지금 이 순간 지금 여기 간절히 바라고 원했던'},
+  {id:'ko',title:'번역만',translation:'번역 가사만 입력한 곡의 한국어 가사'},{id:'short',title:'짧음',translation:'짧다'}];
+ const refs=Array.from(b.api.references(),r=>r.songId+':'+r.source);
+ assert.deepEqual(refs,['moment:lyrics','moment:translation','ko:translation']);
 });
