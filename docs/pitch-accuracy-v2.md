@@ -61,11 +61,39 @@ effective highest notes with their positions; tapping one plays the existing pla
 - Note differences are exact semitone counts of the named notes (A#5→F#5 = 4반음, never "약 4.5반음").
 - Same-song recordings are compared; the vocal lab's A/B same-segment comparison is preferred.
 
+## Growth report v2 (성장 리포트 개편, `app/growth-metrics-model.js`)
+One pure module decides every growth judgement (성장 탭 전체·월별, 보컬 연구소 성장 리포트, 녹음 비교표, AI input).
+
+**New summary fields (v2, `metrics`):** `phrases.rows = [[start s, duration s, median MIDI, intonation |cents|, sustained
+wobble]]` (≤ 160) and `pitchBands.rows = [[MIDI, notes ≥ 0.2 s, mean held s, longest s, notes ≥ 0.5 s, their mean
+wobble]]`. Pitch tracking is unchanged, so the version stays 2; a v2 summary saved before this lacks the fields and
+the detail measures ask for re-analysis (song card batch re-analyses them; the previous summary goes to history).
+Worker URL `app/vocal-analysis.js?v=6`.
+
+| 지표 | 측정 | 비교 |
+|---|---|---|
+| 음정 정확도 | `intonation.meanAbsCents` (cents from the nearest semitone). No note-level score/melody reference exists, so the screens say it is not a right-note check | same phrases (≥ 3 matched, duration-weighted) else whole recording, labelled; similar if \|Δ\| < max(3, 10 %) |
+| 음정 안정성 | `stability.wobbleCents` (sustained ≥ 0.5 s, vibrato removed); never merged with accuracy | same phrases else whole recording; max(2, 10 %) |
+| 음역 확장 | 안정 최고음 + 주 가창 음역 (p10–p90), exact semitones of the named notes; relative to `song.vocalRange.high` when confirmed | neutral only (변화 관찰/비슷함), never better/worse; never 순간 최고음; whole-range shift ≥ 2 semitones at both ends → 키 차이 판정 보류 |
+| 호흡 유지 | durations of the same phrases: matched by relative start (± 2.5 s + 4 % drift, first 6 phrases tried as anchors for partial takes), median pitch ± 1 semitone, duration ×0.5–2 | median per-phrase difference after tempo correction (span of phrase starts); tempo ratio outside 0.85–1.15 → 판정 보류; < 3 matches → 판정 보류 |
+| 고음 안정성 | sustained notes in the high zone: score top − 2 semitones when `song.vocalRange` is confirmed, else the lower of the two takes' main-range tops; capped at the lower of the two highest sung bands | wobble (max(2, 10 %)) and mean hold time (max(0.15 s, 15 %)) together; opposite directions → 변화 혼재; < 2 notes → 판정 보류 |
+| 파사지오 | semitone bands whose wobble ≥ max(1.5 × median, median + 4 cents) | reference only: "음정 데이터만으로 판별 불가, 선생님 판단 참고"; never judged |
+
+**Pairs:** per song and measure, the earliest and latest takes usable for that measure, same analysis version,
+different days (monthly: latest of last month vs latest of this month). 판정 보류 reasons: low confidence
+(`analysisReliable`), too few notes/phrases/high notes/bands, same day, single take, mixed v1/v2, v1 for v2-only
+measures, missing v2 detail, key shift, tempo. A person-chosen A/B pair (녹음 비교표) may be on the same day.
+Songs are weighted equally; the monthly trend chart shows only accuracy/stability and one analysis version.
+
+**AI:** the edge function accepts only `intonation/stability/phrase/vibrato`, so the client sends 음정 정확도·음정 안정성·
+호흡 유지 with their basis in the title and withheld ones as `state:'unknown'`, `sharedSongs:0`. Range, highest notes,
+high-note zone and passaggio are never sent. The edge function is unchanged.
+
 ## Data / compatibility
 - New results are `v:2`; v1 results stay readable and are only replaced when the owner re-analyses. The previous
   summary moves to `analysis.history` (last 5 kept). Background jobs (app and server) still skip recordings that
   already have any analysis. Server summaries now also carry `scope`.
-- v1 and v2 both count for monthly growth, practice plans and plan outcomes.
+- v1 and v2 both count for practice plans and plan outcomes; growth measures pair only same-version takes and skip v1 for v2-only measures (see above).
 - `index.html` cache-busts every changed file; callers tolerate an older cached `analysis.js` without
   `analysisComparable`. Worker URL `app/vocal-analysis.js?v=5`.
 

@@ -485,9 +485,13 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   await card.getByRole('button', {name:/지금 4개 분석하기/}).click();
   await expect(card).toContainText('분석 4/4개', {timeout:120000});
   await expect(card.locator('.vg-chart')).toHaveCount(5);
-  // 음정 오차 goes 30 → 5: improved; the MR-only take is hollow and left out.
-  const into = card.locator('.vg-chart').filter({hasText:'음정 오차'});
-  await expect(into).toContainText('좋아짐');
+  // 음정 정확도 (cents off the nearest semitone) goes 30 → 5: improved on the same phrases; the MR-only take is left out.
+  const into = card.locator('.vg-chart').filter({hasText:'음정 정확도'});
+  await expect(into).toContainText('좋아진 방향');
+  await expect(into).toContainText('같은 프레이즈');
+  // 성장 지표: range is a neutral observation, passaggio is reference only.
+  await expect(card.locator('.vg-growth li').filter({hasText:'음역 확장'})).not.toContainText('좋아진');
+  await expect(card.locator('.vg-growth li').filter({hasText:'파사지오'})).toContainText('선생님 판단 참고');
   await expect(into.locator('circle')).toHaveCount(3);
   await expect(card.locator('circle.weak')).toHaveCount(0); // the MR-only take has no measurements to plot
   await expect(card).toContainText('녹음 1개는 노래가 짧거나 반주가 커서 변화 계산에서 뺐어요.');
@@ -504,7 +508,7 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   expect(saved).toEqual(['t0', 't1', 't2', 't3']); // every take keeps its summary, so it is never analyzed twice
   // The 녹음 비교 page shows the same measurements for the two takes.
   await page.goto('/#/compare?song=s1&a=t1&b=t3');
-  await expect(page.locator('.vg-table')).toContainText('음정 오차');
+  await expect(page.locator('.vg-table')).toContainText('음정 정확도');
   // A dot opens that take's pitch curve.
   await page.goto('/#/song/s1');
   await mount();

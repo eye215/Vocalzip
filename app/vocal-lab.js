@@ -4,11 +4,11 @@
 const V = window.VZ, M = V?.media, esc = V?.esc;
 if (!V || !M) return;
 const METRICS = [
-  {key:'wob',label:'지속음 흔들림',unit:'cent',get:a=>a?.metrics?.stability?.wobbleCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'지속해서 낸 소리의 음높이 흔들림입니다. 낮을수록 안정적이에요. 같은 조건의 녹음끼리 비교하세요.'},
-  {key:'into',label:'음정 오차',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'가장 가까운 반음과의 평균 편차입니다. 악보의 정답 음정과 비교한 정확도는 아니에요. 같은 곡·구간에서 비교하는 것이 좋아요.'},
+  {key:'wob',label:'음정 안정성',unit:'cent',get:a=>a?.metrics?.stability?.wobbleCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'지속해서 낸 소리의 음높이 흔들림입니다(비브라토 제외). 낮을수록 안정적이에요. 음정 정확도와 따로 봐요.'},
+  {key:'into',label:'음정 정확도',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'가장 가까운 반음과의 평균 오차(cent)입니다. 악보·기준 멜로디와 음표 단위로 비교할 데이터가 없어 맞는 음을 불렀는지는 판단하지 않아요. 낮을수록 반음 칸에 정확히 맞아요.'},
   {key:'high',label:'유효 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.validHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.validHigh?.note||'—',better:0,tolerance:50,guide:'0.2초 이상 지속되고 신뢰도·연속성 조건을 충족한 음입니다. 순간 최고음은 성장 평가에 쓰지 않아요.'},
   {key:'stable',label:'안정 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.stableHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.stableHigh?.note||'—',better:0,tolerance:50,guide:'0.5초 이상 지속되고 흔들림·신뢰도 조건을 충족한 음입니다. 실력의 좋고 나쁨을 단정하지 않아요.'},
-  {key:'phr',label:'프레이즈 길이',unit:'초',get:a=>a?.metrics?.breath?.medianPhrase,fmt:v=>v+'초',better:1,tolerance:.2,guide:'한 구절을 이어 부른 시간의 중앙값입니다. 같은 구절과 템포라면 길어진 것이 긍정적일 수 있지만, 무조건 길수록 좋은 것은 아니에요.'},
+  {key:'phr',label:'프레이즈 길이',unit:'초',get:a=>a?.metrics?.breath?.medianPhrase,fmt:v=>v+'초',better:0,tolerance:.2,guide:'한 구절을 이어 부른 시간의 중앙값(참고값)입니다. 호흡 유지는 아래 성장 리포트에서 같은 프레이즈끼리 템포를 보정해 비교해요.'},
   {key:'rating',label:'만족도',unit:'점',get:(a,m)=>m?.rating,fmt:v=>v+'/5',better:1,tolerance:.1,guide:'녹음 후 직접 기록한 만족도입니다. 높을수록 스스로 만족한 녹음이에요. 객관적 발성 점수는 아니에요.'}
 ];
 const metricColor=(metric,previous,current)=>{
@@ -86,19 +86,13 @@ function sizePlots(host) {
     svg.querySelector('.vl-mid')?.setAttribute('x2',String(width));
   });
 }
-// All comparisons use measured summaries from chronological recordings only.
-// The instant overview is factual; optional AI wording never replaces the evidence.
-const growthMetric=(metric,s)=>{
- const rows=trendRows(s,metric).filter(x=>V.analysisReliable(analysis(x.m)));
- if(rows.length<2)return null;
- const first=rows[0],last=rows.at(-1),delta=last.value-first.value;
- if(!comparable(analysis(first.m),analysis(last.m)))return null;
- const tolerance=metric.tolerance??.5;
- const tone=metricColor(metric,first.value,last.value);
- return {metric,first,last,delta,tone,count:rows.length,
-  formatted:metric.fmt(first.value,analysis(first.m))+' → '+metric.fmt(last.value,analysis(last.m)),
-  changed:Math.abs(delta)>tolerance};
-};
+// All comparisons use measured summaries from chronological recordings only (성장 리포트 v2,
+// app/growth-metrics-model.js). The instant overview is factual; optional AI wording never replaces the evidence.
+const G=window.VzipGrowthMetrics;
+const songReference=song=>{const r=(V.song?.(song?.id)||song)?.vocalRange;return r&&Number.isFinite(r.highMidi)?r:null;};
+const labTakes=s=>s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m))
+ .map(m=>({id:m.id,a:analysis(m),date:String(M.dateOf(m)||'').slice(0,10),ok:!!V.analysisReliable(analysis(m))}));
+const labReport=s=>G?G.songReport(labTakes(s),{reference:songReference(s.song)}):null;
 const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+s.selected.slice().sort().join(',');
 const savedGrowthReport=s=>(V.db.practicePlans||[]).find(x=>x.id===labGrowthId(s)&&x.period==='vocal-growth-ai'&&x.evidenceKey===growthEvidenceKey(s));
 function growthEvidenceKey(s){
@@ -107,37 +101,35 @@ function growthEvidenceKey(s){
   return id+':'+(a?.at||0)+':'+(m?.rating??'');
  }).join('|');
 }
+const TONE={better:'good',worse:'bad',similar:'neutral',mixed:'neutral',changed:'neutral',hold:'hold',reference:'ref'};
 function growthReport(s){
- const data=METRICS.map(metric=>growthMetric(metric,s)).filter(Boolean);
+ const report=labReport(s);
+ if(!report)return '';
  const analyzed=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&V.analysisReliable(analysis(m)));
- const saved=savedGrowthReport(s);
- const badge=(tone)=>tone==='good'?'좋아진 방향':tone==='bad'?'주의할 변화':'참고할 변화';
- const describe=x=>{
-   const metric=x.metric,delta=x.delta,amount=Math.abs(delta).toFixed(metric.key==='rating'?0:1);
-   if(metric.key==='high'||metric.key==='stable'){
-     const from=metric.fmt(x.first.value,analysis(x.first.m)),to=metric.fmt(x.last.value,analysis(x.last.m));
-     return metric.label+' '+from+' → '+to+(x.changed?' ('+(delta>0?'상승':'하락')+' '+Math.abs(Math.round(x.last.value/100)-Math.round(x.first.value/100))+'반음)':' (비슷함)')+' · 도달한 최고음이 곧 안정된 가창 음역이라는 뜻은 아니에요.';
-   }
-   if(metric.key==='phr')return '프레이즈 '+x.formatted+(x.changed?' · '+(delta>0?'길어짐':'짧아짐'):' · 큰 변화 없음')+' (곡 구성·템포에 따라 달라질 수 있어요).';
-   if(metric.key==='rating')return '내 만족도 '+x.formatted+' · 직접 기록한 체감 평가예요.';
-   return metric.label+' '+x.formatted+(x.changed?' · '+(delta>0?'증가':'감소')+' '+amount+' '+metric.unit:' · 비슷한 수준');
+ const saved=savedGrowthReport(s),ref=songReference(s.song);
+ const items=G.METRICS.map(d=>({d,x:report[d.id]}));
+ const line=({d,x})=>{
+  let text=d.reference?G.passaggioText(x.latest):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
+  if(d.id==='range'&&x.vsScore)text+=' · 악보 최고음 '+x.vsScore.scoreHigh+' 대비 '+(x.vsScore.after===0?'같은 음':(x.vsScore.after>0?'+':'−')+Math.abs(x.vsScore.after)+'반음');
+  const note=d.reference?G.PASSAGGIO_NOTE:G.basisText(x)||(x.state==='hold'?'':d.method);
+  return '<li class="vl-growth-row '+TONE[x.state]+'" data-growth-row="'+d.id+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(d.title)+(x.state==='hold'?' <em>판정 보류</em>':'')+'</strong><p>'+esc(text)+'</p>'+(note?'<small>'+esc(note)+'</small>':'')+'</div></li>';
  };
- const strong=data.filter(x=>x.tone==='good'&&x.changed);
- const weak=data.filter(x=>x.tone==='bad'&&x.changed);
- const neutral=data.filter(x=>x.tone==='neutral'||!x.changed);
- const title=data.length>=2?'처음과 최근 측정값을 비교했어요':'비교할 분석 기록이 더 필요해요';
- const row=x=>'<li class="vl-growth-row '+x.tone+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(x.metric.label)+'</strong><p>'+esc(describe(x))+'</p></div></li>';
- const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(row).join('')+'</ul></div>':'';
+ const pick=states=>items.filter(({d,x})=>!d.reference&&states.includes(x.state));
+ const strong=pick(['better']),weak=pick(['worse']),neutral=pick(['similar','mixed','changed']),held=pick(['hold']),refs=items.filter(({d})=>d.reference);
+ const rated=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&Number(m.rating)>0);
+ const rating=rated.length>=2?'<p class="vl-growth-rating">내 만족도 '+rated[0].rating+'/5 → '+rated.at(-1).rating+'/5 · 직접 기록한 체감이에요.</p>':'';
+ const judged=G.aiMetrics(G.aggregate([{songId:s.song.id,report}])).some(x=>x.state!=='unknown');
+ const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(line).join('')+'</ul></div>':'';
  return '<section class="vl-section vl-growth" data-growth-report aria-label="AI 종합 성장 리포트"><div class="vl-divider"></div>'+
-  '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>AI 종합 리포트</h2></div><span class="vl-growth-count">'+analyzed.length+'개 분석 기준</span></div>'+
-  '<p class="vl-growth-intro">'+esc(title)+' <small>같은 곡·같은 분석 버전의 녹음을 비교해요. 동일 구간을 지정한 A/B 비교를 우선 확인하세요.</small></p>'+
-  (data.length?section('좋아진 부분',strong,'good')+section('아쉬워진 부분',weak,'bad')+section('음역·참고 지표',neutral,'neutral')+
-    '<p class="vl-growth-caution">최고음의 상승·하락은 곡의 구간·발성 방식에 따라 달라지며, 음성 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
-    '<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
-    '<p class="vl-growth-ai-status" data-growth-ai-status role="status">'+(s.growthPending?'AI가 측정 기록을 해석하고 있어요…':saved?'선택한 녹음의 AI 해석을 저장해 두었어요.':'측정값을 바탕으로 좋아진 점·아쉬운 점과 다음 연습 방향을 종합해요.')+'</p>'+
+  '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>성장 리포트</h2></div><span class="vl-growth-count">'+analyzed.length+'개 분석 기준</span></div>'+
+  '<p class="vl-growth-intro">'+(strong.length+weak.length+neutral.length?'처음과 최근 녹음을 6가지 지표로 나눠 비교했어요':'비교할 분석 기록이 더 필요해요')+' <small>같은 곡·같은 분석 버전·다른 날의 녹음만, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.'+(ref?' 악보 기준 음역 '+esc(ref.low+'–'+ref.high)+'을 함께 봐요.':'')+'</small></p>'+
+  section('좋아진 부분',strong,'good')+section('아쉬운 부분',weak,'bad')+section('비슷함·변화 관찰',neutral,'neutral')+section('판정 보류',held,'hold')+section('참고',refs,'ref')+rating+
+  '<p class="vl-growth-caution">판정 보류는 신뢰도·데이터·같은 프레이즈·분석 버전 중 근거가 부족하다는 뜻이에요. 최고음의 변화는 곡의 구간·발성 방식에 따라 달라지며, 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
+  (judged?'<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
+    '<p class="vl-growth-ai-status" data-growth-ai-status role="status">'+(s.growthPending?'AI가 측정 기록을 해석하고 있어요…':saved?'선택한 녹음의 AI 해석을 저장해 두었어요.':'음정 정확도·음정 안정성·호흡 유지의 비교 결과(판정 보류 포함)만 보내 해석해요. 음역·최고음은 보내지 않아요.')+'</p>'+
     (saved?'<div class="vl-growth-ai-text">'+esc(saved.text)+'</div>':'<div class="vl-growth-ai-text" data-growth-ai-result hidden></div>')+'</div>':
-    '<p class="vl-muted">분석 신뢰도가 충분한 녹음이 두 개 이상 있어야 비교할 수 있어요. 선택한 녹음들의 분석을 먼저 완료해 주세요.</p>')+
-    '</section>';
+    '<p class="vl-muted">분석 신뢰도가 충분한 같은 버전의 녹음이 다른 날 두 개 이상 있어야 AI 해석을 요청할 수 있어요.</p>')+
+  '</section>';
 }
 function trendRows(s,metric){
  return s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean)
@@ -164,7 +156,15 @@ function single(s,m) {
     (!a?'<p class="vl-muted">이 녹음의 분석 결과가 아직 없어요. 위의 구간 분석을 시작해 주세요.</p>':'<div class="vl-metric-grid">'+METRICS.filter(x=>x.key!=='rating').map(metric=>{
       const v=metric.get(a,m), count=metric.key==='wob'?a.metrics.stability?.notes:metric.key==='into'?a.metrics.intonation?.notes:null;
       return '<div class="vl-stat"><span>'+metric.label+'</span><strong>'+esc(v==null?'측정 안 됨':metric.fmt(v,a))+'</strong><div class="vl-stat-visual" aria-hidden="true"><span style="width:'+Math.min(94,Math.max(8,(Number(v)||0)/(metric.key==='high'?10000:metric.key==='phr'?12:50)*100))+'%"></span></div>'+(count?'<small>측정한 음 '+count+'개</small>':'')+'</div>';
-    }).join('')+'</div>')+'</section>';
+    }).join('')+'</div>'+singleDetail(s,a))+'</section>';
+}
+/** One take's high-note zone and passaggio reference (v2 detail); v1 and older v2 results say why not. */
+function singleDetail(s,a){
+ if(!G)return '';
+ const one=G.single(a,{reliable:V.analysisReliable(a),reference:songReference(s.song)}),h=one.high,p=one.passaggio;
+ const high=h.state==='hold'?G.holdText(h.reason):h.zone+' 구간 흔들림 ±'+h.wobble+' cent · 평균 유지 '+h.held+'초 (음 '+h.notes+'개'+(h.fromScore?', 악보 최고음 기준':'')+')';
+ return '<ul class="vl-detail-list"><li><strong>고음 안정성</strong><span>'+esc(high)+'</span></li>'+
+  '<li><strong>파사지오 <em>참고</em></strong><span>'+esc(G.passaggioText(p))+'</span><small>'+esc(G.PASSAGGIO_NOTE)+'</small></li></ul>';
 }
 function observationCurve(result) {
  // Saved summaries contain no waveform: draw only actual measured pitch samples.
@@ -420,22 +420,17 @@ function screen(s) {
     growthButton.onclick=async()=>{
       if(s.growthPending)return;
       const key=growthEvidenceKey(s),id=labGrowthId(s);
-      const metrics=METRICS.map(metric=>growthMetric(metric,s)).filter(Boolean);
+      const songReport=labReport(s);
       const status=host.querySelector('[data-growth-ai-status]'),output=host.querySelector('[data-growth-ai-result]')||host.querySelector('.vl-growth-ai-text');
-      if(!metrics.length){status.textContent='비교할 신뢰도 높은 측정값이 부족해요.';return;}
+      if(!songReport){status.textContent='비교할 신뢰도 높은 측정값이 부족해요.';return;}
       if(typeof window.vzipCloudCoach!=='function'){status.textContent='AI 연결을 사용할 수 없어요. 위의 측정 기반 변화 요약은 계속 볼 수 있어요.';return;}
       s.growthPending=true;growthButton.disabled=true;status.textContent='AI가 녹음별 측정 변화를 정리하고 있어요…';
       try{
-        // Server "overall" mode: a validated four-line report (요약/좋아진 점/보완할 점/다음 연습) built only from
-        // these measured first→last changes of ONE song. The old free-text mode cut the request to 80 characters and
-        // answered with a three-line practice tip, which was rejected as too short. No audio is sent.
-        const serverKey={wob:'stability',into:'intonation',phr:'phrase'};
-        const measured=metrics.filter(x=>serverKey[x.metric.key]).map(x=>{
-          const state=!x.changed?'similar':x.tone==='good'?'better':x.tone==='bad'?'worse':'similar';
-          return {key:serverKey[x.metric.key],title:(x.metric.label+' '+x.formatted).slice(0,32),value:x.last.value,count:x.count,
-            state,sharedSongs:1,improvedSongs:state==='better'?1:0,worsenedSongs:state==='worse'?1:0};
-        });
-        if(!measured.length)throw Error('AI가 해석할 음정·지속음·프레이즈 측정값이 부족해요.');
+        // Server "overall" mode: a validated four-line report (요약/좋아진 점/보완할 점/다음 연습) built only from the
+        // separated measures of ONE song (음정 정확도·음정 안정성·호흡 유지; withheld ones as "unknown"). Range,
+        // highest notes, high-note zone and passaggio are never sent. No audio is sent.
+        const measured=G.aiMetrics(G.aggregate([{songId:s.song.id,report:songReport}]));
+        if(!measured.some(x=>x.state!=='unknown'))throw Error('AI가 해석할 비교 가능한 음정·안정성·호흡 측정값이 부족해요.');
         const records=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean);
         const response=await window.vzipCloudCoach({
           mode:'overall',recordingCount:records.length,analysisCount:records.filter(m=>V.analysisReliable(analysis(m))).length,analyzedSongs:1,

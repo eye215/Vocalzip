@@ -4,16 +4,13 @@
 const V = window.VZ, M = V?.media;
 if (!V || !M) return;
 const e = V.esc;
-const definitions = [
- {id:'intonation', title:'음정 오차', path:['intonation','meanAbsCents'], unit:'cent', direction:-1, practice:'기준음을 듣고 짧은 구간을 천천히 따라 부르기', minutes:10},
- {id:'stability', title:'지속음 흔들림', path:['stability','wobbleCents'], unit:'cent', direction:-1, practice:'편안한 음역에서 5초 지속음을 녹음하며 일정하게 유지하기', minutes:8},
- {id:'phrase', title:'프레이즈 길이', path:['breath','medianPhrase'], unit:'초', direction:1, practice:'한 프레이즈를 무리 없는 호흡으로 끊김 없이 연결하기', minutes:8},
- {id:'vibrato', title:'비브라토 규칙성', path:['vibrato','regularity'], unit:'%', direction:1, practice:'편안한 지속음에서 힘을 빼고 자연스러운 진동을 관찰하기', minutes:5}
-];
-const val = (a,d) => { let v=a?.metrics; for(const k of d.path) v=v?.[k]; return typeof v==='number' && Number.isFinite(v) ? (d.id==='vibrato' ? v*100:v) : null; };
+const G = window.VzipGrowthMetrics;
+if (!G) return;
+// 성장 리포트 v2: the six separated measures (app/growth-metrics-model.js). ids intonation/stability/phrase stay the
+// practice-plan keys; range/high/passaggio are shown but never planned (range neutral, passaggio reference only).
+const definitions = G.METRICS;
 const ym = s => /^\d{4}-\d{2}/.test(String(s||'')) ? String(s).slice(0,7) : '';
 const avg = xs => xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
-const format = (n,d) => n==null?'측정 없음': (Math.round(n*10)/10).toLocaleString('ko-KR')+(d.unit?' '+d.unit:'');
 let request = 0;
 function isSongTake(m) {
  if(!m.songId||!V.song(m.songId))return false;
@@ -29,19 +26,22 @@ function group(items) {
  return months;
 }
 const valid = m => [1,2].includes(m.analysis?.v) && V.analysisReliable?.(m.analysis);
-function measure(items,d){ const vals=items.filter(valid).map(m=>val(m.analysis,d)).filter(v=>v!=null); return {value:avg(vals),count:vals.length}; }
-function comparable(current,previous,d) {
- // Avoid attributing changing repertoire to improvements: compare only songs present in BOTH months.
- const songs=new Set(current.filter(m=>m.songId&&valid(m)).map(m=>m.songId));
- const shared=[...songs].filter(id=>previous.some(m=>m.songId===id&&valid(m)));
- const pairs=shared.map(id=>({before:measure(previous.filter(m=>m.songId===id),d),after:measure(current.filter(m=>m.songId===id),d)}))
-  .filter(p=>p.before.value!=null&&p.after.value!=null);
- if(!pairs.length)return null;
- // Each shared song carries equal weight; repeated takes do not dominate the month.
- const before=avg(pairs.map(p=>p.before.value)),after=avg(pairs.map(p=>p.after.value));
- const delta=after-before, relative=Math.abs(delta)/Math.max(Math.abs(before),1);
- const state=relative<0.05?'similar':Math.sign(delta)===d.direction?'better':'worse';
- return {before,after,delta,state,songs:pairs.length};
+const takeOf = m => ({id:m.id, a:m.analysis, date:String(M.dateOf(m)||'').slice(0,10), ok:!!valid(m)});
+const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
+/** This month's own values (no comparison): mean over reliable takes, one value per take. */
+function measure(items,d){
+ const vals=items.filter(valid).map(m=>{
+  if(d.id==='phrase')return m.analysis.metrics?.breath?.medianPhrase;
+  if(d.id==='high')return G.single(m.analysis,{reference:referenceOf(m.songId)}).high?.wobble;
+  return G.value(m.analysis,d.id);
+ }).filter(v=>typeof v==='number'&&Number.isFinite(v));
+ return {value:avg(vals),count:vals.length};
+}
+/** Songs sung in BOTH months, latest comparable take of each month (same analysis version), equal song weight. */
+function monthlyAggregates(current,previous){
+ const songs=[...new Set(current.filter(m=>m.songId&&m.analysis?.metrics).map(m=>m.songId))];
+ const reports=songs.map(songId=>({songId,title:V.songTitle(songId)||'',report:G.periodReport(previous.filter(m=>m.songId===songId).map(takeOf),current.filter(m=>m.songId===songId).map(takeOf),{reference:referenceOf(songId)})}));
+ return G.aggregate(reports);
 }
 function narrative(rows, month, previous) {
  const gains=rows.filter(r=>r.c?.state==='better'), losses=rows.filter(r=>r.c?.state==='worse');
@@ -51,21 +51,12 @@ function narrative(rows, month, previous) {
  return '<section class="card growth-section"><h2>이달의 변화</h2><p>'+e(header)+'</p><p class="small muted">'+e(previous?previous+' 대비 · 같은 곡을 부른 녹음만 변화 판단에 사용':'전월 기록이 없어 변화 비교는 제공하지 않아요')+'</p></section>';
 }
 function rowsHtml(rows) {
- return '<div class="growth-metrics">'+rows.map(({d,current,c})=>{
-  const label=c?(c.state==='better'?'개선':c.state==='worse'?'보완 필요':'비슷함'):'비교 불가';
-  const tone=c?.state==='better'?'good':c?.state==='worse'?'bad':'';
-  const help={
-   intonation:'낮을수록 가까운 반음 기준 음높이 오차가 작아요. 악보의 실제 음정 정답률을 뜻하지 않아요.',
-   stability:'낮을수록 지속음의 흔들림이 적게 관찰돼요. 발성 건강을 평가하지 않아요.',
-   phrase:'길수록 한 번에 이어 부른 시간이 길어요. 더 길다고 무조건 더 좋은 호흡은 아니에요.',
-   vibrato:'높을수록 규칙적인 진동이 관찰돼요. 비브라토의 미적 수준을 판정하지 않아요.'
-  };
-  return '<article class="card growth-metric"><div class="growth-metric-head"><strong>'+e(d.title)+'</strong><span class="growth-state '+tone+'">'+label+'</span></div><strong class="growth-number">'+e(format(current.value,d))+'</strong><p class="small muted">이번 달 유효 측정 '+current.count+'개</p>'+(c?'<p class="small">동일 곡 '+c.songs+'곡 비교 · 이전 '+e(format(c.before,d))+' → 이번 '+e(format(c.after,d))+'</p>':'<p class="small muted">동일 곡의 전월 유효 측정이 필요해요.</p>')+
-   '<details class="growth-measure-help"><summary>수치 읽는 법</summary><p>'+e(help[d.id]||'이 값은 음성 측정의 참고 수치예요.')+'</p></details></article>';
- }).join('')+'</div>';
+ const card=window.VzipOverallGrowthUI?.metricCard;
+ return '<div class="growth-metrics">'+rows.map(({agg})=>card?card(agg,{scope:'monthly',cls:'card growth-metric'}):'').join('')+'</div>';
 }
 function prescriptions(rows){
- const ranked=rows.filter(r=>r.c?.state==='worse').concat(rows.filter(r=>r.c?.state==='similar')).concat(rows.filter(r=>!r.c&&r.current.value!=null));
+ const judged=rows.filter(r=>r.d.judged&&r.d.practice);
+ const ranked=judged.filter(r=>r.c?.state==='worse').concat(judged.filter(r=>r.c&&r.c.state!=='worse')).concat(judged.filter(r=>!r.c&&r.current.value!=null));
  const chosen=ranked.slice(0,3);
  return '<section class="card growth-section"><h2>추천 연습</h2>'+(chosen.length?'<p class="small muted">실측 변화에 기반한 규칙형 추천입니다. AI 청취 진단이나 의학적 판단이 아니에요.</p>'+chosen.map((r,i)=>'<div class="growth-task"><span class="growth-task-number">'+(i+1)+'</span><div><strong>'+e(r.d.title)+'</strong><p>'+e(r.d.practice)+'</p><p class="small muted">권장 '+r.d.minutes+'분 · '+(r.c?.state==='worse'?'전월 대비 악화된 지표':r.c?'유지·강화':'비교 데이터 부족')+'</p><button type="button" class="btn sm ghost" data-growth-goal="'+r.d.id+'">오늘의 목표에 추가</button></div></div>').join('')+'<a class="btn block" href="#/practice-room">노래 연습실에서 연습하기</a>':'<p>분석된 녹음이 쌓이면 우선 연습 과제를 제안할게요.</p>')+'</section>';
 }
@@ -73,7 +64,17 @@ function prescriptions(rows){
 const previousMonth = k => { const [y,m]=k.split('-').map(Number);return (m===1?y-1:y)+'-'+String(m===1?12:m-1).padStart(2,'0'); };
 function monthlyRows(key, months){
  const current=months.get(key)||[],previous=months.get(previousMonth(key))||[];
- return definitions.map(d=>({d,current:measure(current,d),c:comparable(current,previous,d)}));
+ const aggs=monthlyAggregates(current,previous);
+ return definitions.map(d=>{
+  const agg={...aggs.find(x=>x.id===d.id)};
+  const current_=measure(current,d);
+  agg.current=current_.value;agg.currentSongs=current_.count;
+  // The AI still sees this month's own values (state unknown) when no song can be compared with last month.
+  if(agg.latestValue==null)agg.latestValue=current_.value==null?null:Math.round(current_.value*10)/10;
+  agg.measured=Math.max(agg.measured||0,current_.count);
+  const c=agg.compared&&!d.reference?{before:agg.before,after:agg.after,delta:agg.before==null||agg.after==null?null:agg.after-agg.before,state:agg.state,songs:agg.compared}:null;
+  return {d,agg,current:current_,c};
+ });
 }
 function archiveMonths(months){
  const today=ym(V.today()),stored=new Set((V.db.monthlyGrowthReports||[]).map(r=>r.month));
@@ -83,8 +84,9 @@ function archiveMonths(months){
   const rows=monthlyRows(month,months),items=months.get(month);
   return {id:'monthly-growth:'+month,month,created:Date.now(),recordingCount:items.length,
    analysisCount:items.filter(valid).length,
-   metrics:rows.map(({d,current,c})=>({key:d.id,title:d.title,value:current.value,count:current.count,comparison:c})),
-   recommendations:rows.filter(r=>r.c?.state==='worse').concat(rows.filter(r=>r.c?.state==='similar'))
+   metrics:rows.map(({d,current,c,agg})=>({key:d.id,title:d.title,value:current.value,count:current.count,comparison:c,withheld:agg.withheld||0})),
+   growthModel:2,
+   recommendations:rows.filter(r=>r.d.judged&&r.c?.state==='worse').concat(rows.filter(r=>r.d.judged&&r.c?.state==='similar'))
     .slice(0,3).map(({d})=>({key:d.id,title:d.title,practice:d.practice,minutes:d.minutes}))};
  });
  V.change(db=>{db.monthlyGrowthReports||=[];for(const report of reports)
@@ -140,8 +142,8 @@ function monthlyAiEvidence(month,rows,items){
     comfortConcern:v.aiConditionCheck===true||Array.isArray(v.draft?.symptoms)&&v.draft.symptoms.length>0||v.draft?.comfort==='불편해'
    };
   });
- const metrics=rows.map(({d,current,c})=>({key:d.id,title:d.title,value:current.value,count:current.count,
-    state:c?.state||'unknown',sharedSongs:c?.songs||0}));
+ // Only the measures the server accepts, with their comparison basis; withheld → unknown; no range/high notes.
+ const metrics=G.aiMetrics(rows.map(r=>r.agg));
  return {mode:'monthly',month,recordingCount:items.length,
     analysisCount:items.filter(valid).length,metrics,observations};
 }
@@ -183,7 +185,7 @@ async function mount(host){
   const currentKey=ym(V.today());
   let selected=keys.includes(currentKey)?currentKey:keys[0];
   let mode='overall';
-  const overall=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid});
+  const overall=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid,reference:referenceOf,title:id=>V.songTitle(id)});
   const overallUi=window.VzipOverallGrowthUI;
   const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>';
   const tabs=()=>'<div class="growth-view-tabs" role="group" aria-label="성장 분석 범위">'+
@@ -221,13 +223,13 @@ async function mount(host){
      '<button type="button" data-monthly-jump="practice">추천·계획</button>'+
      '<button type="button" data-monthly-jump="history">지난 기록</button></nav>'+
    '<div class="growth-month-group" data-month-section="results">'+narrative(rows,selected,previous.length?prev:'')+
-     '<div class="growth-month-section-title"><h3>4가지 역량</h3><small>실측이 없는 항목은 비교하지 않아요</small></div>'+rowsHtml(rows)+'</div>'+
+     '<div class="growth-month-section-title"><h3>6가지 성장 지표</h3><small>지난달과 같은 곡만 비교 · 근거가 부족하면 판정 보류</small></div>'+rowsHtml(rows)+'</div>'+
    '<div data-month-section="ai">'+monthlyAiCard(selected)+'</div>'+
    '<div class="growth-month-group" data-month-section="practice">'+prescriptions(rows)+'<div data-monthly-plans></div></div>'+
    '<details class="growth-secondary"><summary><span><i class="ph ph-waveform" aria-hidden="true"></i> AI 청취 기록</span><small>저장된 청취 의견</small></summary>'+listeningEvidence(selected)+'</details>'+
    '<details class="growth-secondary" data-month-section="history"><summary><span><i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i> 지난 기록·보관 리포트</span><small>월별 기록과 보관 결과</small></summary>'+
      archiveCard(selected)+history(months)+'</details>'+
-   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있어요. 동일 곡의 전월 기록만 개선·악화로 비교합니다. 호흡 지지·발성 건강·감정 표현은 이 수치로 판단하지 않아요. AI 분석은 버튼을 누를 때만 실행해요.</p>';
+   '<p class="small muted growth-disclaimer">곡·녹음 환경·반주에 따라 수치가 달라질 수 있어요. 동일 곡의 전월 기록만 개선·악화로 비교하고, 최고음 하나로 실력 변화를 판단하지 않아요. 파사지오는 음정 데이터만으로 판별할 수 없어 참고로만 보여 줘요. 호흡 지지·발성 건강·감정 표현은 이 수치로 판단하지 않아요. AI 분석은 버튼을 누를 때만 실행해요.</p>';
 
    const aiButton=host.querySelector('[data-monthly-ai-run]');
    if(aiButton)aiButton.onclick=async()=>{
