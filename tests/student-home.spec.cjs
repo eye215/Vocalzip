@@ -149,6 +149,8 @@ async function screenshot(page,testInfo,name){
  await page.screenshot({path:testInfo.outputPath(name),fullPage:true,animations:'disabled',style:'.vz-nav-space,.vz-floating-record{visibility:hidden!important;}'});
  if(/-\d{3}\.png$/.test(name))await page.screenshot({path:testInfo.outputPath(name.replace('.png','-viewport.png')),fullPage:false,animations:'disabled'});
 }
+/** The phone layout (below 768px): home shows the one-line 이번 주 summary row instead of the 주간 연습 card. */
+const phoneWidth=async page=>{const v=page.viewportSize();if(v&&v.width>=768)await page.setViewportSize({width:390,height:844});};
 test.afterEach(async({page})=>expect(page.__homeErrors||[]).toEqual([]));
 test('literal floating HTML and app screenshots at 320/390/430',async({page},testInfo)=>{
  await boot(page);
@@ -283,6 +285,7 @@ test('active homework card directly opens guided practice',async({page})=>{
  await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1$/);
 });
 test('daily time comes from onboarding/settings; tomorrow offers goals once without time input',async({page})=>{
+ await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  const value=seed();value.practicePlans=[];
  await boot(page,value);
  await expect(page.getByRole('dialog',{name:'오늘의 목표',exact:true})).toHaveCount(0);
@@ -302,6 +305,7 @@ test('daily time comes from onboarding/settings; tomorrow offers goals once with
  expect((await db(page)).practicePlans).toEqual([]);
 });
 test('settings changes the default daily target on home',async({page})=>{
+ await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  const value=seed();value.practicePlans=[];
  await boot(page,value);
  await page.getByRole('button',{name:'프로필',exact:true}).click();
@@ -314,6 +318,7 @@ test('settings changes the default daily target on home',async({page})=>{
  expect((await db(page)).settings.dailyTargetMinutes).toBe(45);
 });
 test('week summary row shows only this week\'s actual practice time against the target',async({page})=>{
+ await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  await boot(page);const row=weekRow(page);
  for(const [minutes,value,badge,done]of [[0,'0분 / 3시간','0%',false],[99,'1시간 39분 / 3시간','55%',false],[180,'3시간 / 3시간','100%',true],[240,'4시간 / 3시간','133%',true]]){
   // Manual minutes win over stored minutes and recording length; tomorrow and last week never count.
@@ -342,6 +347,7 @@ test('four home navigation buttons (v4 IA) and floating recording reach existing
 });
 
 test('weekly home keeps actual practice time separate from every recording length',async({page})=>{
+ await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  const value=seed();value.practices=[{id:'p',date:TODAY,minutes:999,manualMinutes:4,mediaIds:['linked']}];
  await boot(page,value);
  await page.evaluate(date=>{
@@ -359,6 +365,7 @@ test('weekly home keeps actual practice time separate from every recording lengt
 });
 
 test('week row follows the current week across Monday and opens today in the calendar',async({page})=>{
+ await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  const value=seed();value.practices=[{id:'sunday',date:'2026-11-08',minutes:14}];
  await boot(page,value);
  const row=weekRow(page),later=()=>page.getByRole('dialog',{name:'오늘의 목표',exact:true}).getByRole('button',{name:'나중에 설정할래요'}).click();
@@ -376,6 +383,7 @@ test('week row follows the current week across Monday and opens today in the cal
  expect((await db(page)).practices).toEqual(value.practices);
 });
 test('지금 할 것, summary rows, recent songs and profile retain their real destinations',async({page})=>{
+ await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  await boot(page);const before=await db(page);
  await expect(page.locator('.vz-summary-row')).toHaveCount(3);
  for(const [i,key] of ['lesson','stage','week'].entries())await expect(page.locator('.vz-summary-row').nth(i)).toHaveAttribute('data-row',key);
@@ -879,4 +887,22 @@ test('tablets (768px+) put 지금 할 것 + goals beside the summary and recent 
  b=await box();
  expect(b.phone.w).toBeLessThanOrEqual(560);
  expect(b.summary.y).toBeGreaterThan(b.goals.bottom-1);expect(Math.abs(b.summary.x-b.goals.x)).toBeLessThan(1); // one column, as on phones
+});
+test('tablets show the full 주간 연습 card beside the summary (rings, arrows, title to the calendar); phones show the one-line row',async({page},info)=>{
+ test.skip(info.project.name!=='chromium-desktop','sizes are set explicitly');
+ const value=seed();value.practices.push({id:'last-week',date:'2026-10-28',minutes:20});
+ await page.setViewportSize({width:820,height:1180});await boot(page,value);const before=await db(page);
+ const card=page.locator('.vz-col-side .vz-week'),row=page.locator('.vz-summary-row[data-row=week]');
+ await expect(card).toBeVisible();await expect(row).toBeHidden();
+ await expect(card.locator('.vz-days>div')).toHaveCount(7);await expect(card.locator('.vz-time b')).toHaveText('30');
+ await expect(card.locator('.vz-days>div[data-today=true]')).toHaveAttribute('data-date',TODAY);
+ const order=await page.evaluate(()=>[...document.querySelector('.vz-student-home').shadowRoot.querySelector('.vz-col-side').children].map(e=>e.className.split(' ').find(c=>/vz-(summary|week|recent)$/.test(c))));
+ expect(order).toEqual(['vz-summary','vz-week','vz-recent']);
+ await card.getByRole('button',{name:'이전 주',exact:true}).click();
+ await expect(card).toHaveAttribute('data-week-start','2026-10-26');await expect(card.locator('.vz-time b')).toHaveText('20');
+ await expect(page.locator('.vz-today-line')).toContainText('1일 연속'); // the streak stays this week's
+ await page.getByRole('button',{name:'오늘 일정 보기',exact:true}).click();await expect(page).toHaveURL(/#\/calendar/);
+ expect(await db(page)).toEqual(before);
+ await page.setViewportSize({width:390,height:844});await page.goto('/#/home');await ready(page);
+ await expect(card).toBeHidden();await expect(row).toBeVisible();
 });

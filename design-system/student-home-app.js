@@ -135,9 +135,9 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
    let files=V.media.cached(),root;
    const s=state(files,selectedWeekStart),songs=recentSongs(s,files),current=nowCard(s,songs);
-   const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
-   try{root=await createFloatingHome({today:today(),goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null})),onGoalRecord:id=>V.goalPerformanceSheet?.(id),week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
-    onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),onWeek:()=>nav('#/calendar'),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
+   const refreshWeek=()=>{root?.updateWeek(state(files,selectedWeekStart).week);root?.updateThisWeek?.(state(files).week);};
+   try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null})),onGoalRecord:id=>V.goalPerformanceSheet?.(id),week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
+    onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),

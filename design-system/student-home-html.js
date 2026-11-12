@@ -158,12 +158,42 @@ const adaptations=String.raw`
 /* Wide screens (after the rules above so it wins): two columns. */
 #vocalzip-refined-preview .vz-col{display:contents;}
 #vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:12px;}
+#vocalzip-refined-preview .vz-col-side>.vz-week{display:none;}
 @media (min-width:768px){
  #vocalzip-refined-preview .vz-phone{max-width:min(1040px,100%);}
  #vocalzip-refined-preview main{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);column-gap:20px;align-items:start;}
  #vocalzip-refined-preview main>.vz-today-line{grid-column:1/-1;}
  #vocalzip-refined-preview .vz-col{display:block;min-width:0;}
  #vocalzip-refined-preview .vz-col-side>.vz-summary{margin-top:0;}
+ /* Tablets: the full 주간 연습 card (rings, arrows) replaces the one-line 이번 주 row, and everything reads larger. */
+ #vocalzip-refined-preview .vz-col-side>.vz-week{display:block;}
+ #vocalzip-refined-preview .vz-summary-row[data-row="week"]{display:none;}
+ #vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:16px;padding:24px;border-radius:24px;}
+ #vocalzip-refined-preview .vz-today-line{margin-bottom:12px;font-size:15px;line-height:22px;}
+ #vocalzip-refined-preview .vz-event{min-height:120px;margin-bottom:16px;padding:24px 28px;}
+ #vocalzip-refined-preview .vz-event h2{font-size:28px;line-height:36px;}
+ #vocalzip-refined-preview .vz-event p{font-size:16px;line-height:24px;}
+ #vocalzip-refined-preview .vz-goals h2,#vocalzip-refined-preview .vz-week h2{font-size:20px;line-height:28px;}
+ #vocalzip-refined-preview .vz-goal-list label{min-height:58px;font-size:16px;line-height:24px;}
+ #vocalzip-refined-preview .vz-goals .vz-ai-plan-actions .vz-empty-action{min-height:52px;font-size:15px;}
+ #vocalzip-refined-preview .vz-summary{padding:8px 20px 8px 24px;}
+ #vocalzip-refined-preview .vz-summary-row{min-height:64px;gap:14px;}
+ #vocalzip-refined-preview .vz-summary-copy strong,#vocalzip-refined-preview .vz-summary-value{font-size:16px;line-height:24px;}
+ #vocalzip-refined-preview .vz-summary-badge{font-size:15px;line-height:22px;}
+ #vocalzip-refined-preview .vz-summary-row>.vz-ui-icon:first-child{width:24px;font-size:24px;}
+ #vocalzip-refined-preview .vz-recent{margin-top:20px;}
+ #vocalzip-refined-preview .vz-recent-heading{margin-bottom:10px;font-size:18px;line-height:26px;}
+ #vocalzip-refined-preview .vz-recent-pills{flex-wrap:wrap;gap:10px;overflow:visible;}
+ #vocalzip-refined-preview .vz-recent-pill{min-height:52px;max-width:100%;padding:0 20px 0 16px;font-size:16px;line-height:24px;}
+ #vocalzip-refined-preview .vz-recent-pill .vz-ui-icon{font-size:20px;}
+ #vocalzip-refined-preview .vz-week .vz-time b{font-size:34px;line-height:38px;}
+ #vocalzip-refined-preview .vz-week .vz-days{gap:6px;margin-top:22px;}
+ #vocalzip-refined-preview .vz-week .vz-days>div>span:first-child{font-size:18px;line-height:24px;}
+ #vocalzip-refined-preview .vz-week .vz-day-dot{width:32px;height:32px;}
+ #vocalzip-refined-preview .vz-week .vz-day-dot svg{width:18px;height:18px;}
+ #vocalzip-refined-preview .vz-week .vz-day-minutes{font-size:13px;line-height:18px;min-height:18px;}
+ #vocalzip-refined-preview .vz-week .vz-week-dates{font-size:16px;}
+ #vocalzip-refined-preview .vz-week-meta>span{font-size:14px;}
  #vocalzip-refined-preview .vz-floating-record{right:max(var(--vz-nav-inset),calc((100vw - 1040px)/2 + var(--vz-nav-inset)));}
 }
 `;
@@ -210,7 +240,7 @@ export async function createFloatingHome(opts={}){
   * its week rings, event rows and recent-song/shortcut tiles leave home (기록 and 성장 hold those views). */
  const section=q(".vz-schedule"),now=q(".vz-event");
  section.querySelectorAll(".vz-event-row").forEach(e=>e.remove());
- q(".vz-week")?.remove();q(".vz-quick-grid")?.remove();
+ q(".vz-quick-grid")?.remove();const weekCard=q(".vz-week"); // 주간 연습 card: shown on tablets only (CSS)
  const todayLine=el("p",null,"vz-today-line");section.before(todayLine);
  const flame=el("i","","vz-ui-icon");flame.setAttribute("aria-hidden","true");
  host.updateNow=item=>{
@@ -227,7 +257,7 @@ export async function createFloatingHome(opts={}){
  // Two columns on wide screens (tablet landscape, desktop): 지금 할 것 + 오늘의 목표 | 요약 + 최근 곡. On phones the
  // columns are display:contents, so the order and spacing stay exactly as before.
  const mainColumn=el("div",null,"vz-col vz-col-main"),sideColumn=el("div",null,"vz-col vz-col-side");
- section.before(mainColumn);mainColumn.append(section,q(".vz-goals"));mainColumn.after(sideColumn);sideColumn.append(summary,recentWrap);
+ section.before(mainColumn);mainColumn.append(section,q(".vz-goals"));mainColumn.after(sideColumn);sideColumn.append(summary,weekCard,recentWrap);
  const glyph=g=>{const i=el("i",g,"vz-ui-icon");i.setAttribute("aria-hidden","true");return i;};
  let summaryRows=Array.isArray(opts.summary)?opts.summary:[],weekRow=null;
  /** One line per row: icon · label · value · trailing badge · chevron. A row without an action is not a button. */
@@ -246,7 +276,72 @@ export async function createFloatingHome(opts={}){
  };
  host.updateSummary=rows=>{summaryRows=Array.isArray(rows)?rows:[];paintSummary();};
  const shortDate=date=>{const parts=String(date||"").split("-");return parts.length===3?Number(parts[1])+"."+Number(parts[2]):"";};
- host.updateWeek=week=>{
+/* 주간 연습 card (week rings, arrows, swipe): the approved card, kept for tablets where there is room beside the
+  * summary. Phones show the one-line 이번 주 summary row instead. */
+ const meta=q(".vz-week-meta"),goal=meta.children[0];
+ const days=q(".vz-days"),dayPrototype=days.firstElementChild.cloneNode(true),check=days.querySelector(".vz-day-dot svg").cloneNode(true);
+ action(q(".vz-week .vz-title"),"오늘 일정 보기",opts.onWeek||opts.onCalendar);
+ const weekNav=el("div",null,"vz-week-nav"),prev=el("button"),range=el("div",null,"vz-week-range"),next=el("button");
+ prev.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4.5-7.5 7.5 7.5 7.5"/></svg>';
+ next.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4.5 7.5 7.5-7.5 7.5"/></svg>';
+ for(const [button,label,fn] of [[prev,"이전 주",()=>opts.onWeekMove?.(-1)],[next,"다음 주",()=>opts.onWeekMove?.(1)]]){
+  button.type="button";button.setAttribute("aria-label",label);button.onclick=fn;
+ }
+ weekNav.append(prev,range,next);meta.before(weekNav);days.after(meta);
+ const paintWeekCard=week=>{
+  const actual=num(week.actualMinutes),target=week.targetMinutes,ratio=Number(target)>0?actual/Number(target)*100:null;
+  weekCard.dataset.weekStart=week.start||"";
+  prev.disabled=week.canPrevious===false;next.disabled=week.canNext===false;
+  prev.setAttribute("aria-disabled",String(prev.disabled));next.setAttribute("aria-disabled",String(next.disabled));
+  q(".vz-week h2").textContent="주간 연습";
+  q(".vz-time b").textContent=String(Math.round(actual));
+  q(".vz-time").dataset.targetMet=String(Number(target)>0&&actual>=Number(target));
+  const startYear=String(week.start||"").slice(0,4),endYear=String(week.end||"").slice(0,4);
+  const currentYear=String(new Date().getFullYear()),showYear=startYear!==currentYear||endYear!==currentYear;
+  range.replaceChildren(el("span",week.start?(showYear?startYear+".":"")+shortDate(week.start)+" – "+(showYear&&endYear!==startYear?endYear+".":"")+shortDate(week.end):"","vz-week-dates"));
+  if(target==null){
+   if(week.current===false)goal.textContent="목표 미설정";
+   else{const button=el("button","목표 설정","vz-empty-action");button.type="button";button.setAttribute("aria-label","주간 목표 설정");button.onclick=()=>opts.onGoals?.();goal.replaceChildren(button);}
+  }else goal.textContent="목표 "+duration(target);
+  meta.children[1].querySelector("strong").textContent=ratio==null?"—":Math.round(ratio)+"%";
+  meta.querySelector(".vz-streak").dataset.active=String(num(week.streak)>=2);
+  meta.querySelector(".vz-streak").replaceChildren(flame.cloneNode(true),document.createTextNode(num(week.streak)+"일 연속"));
+  days.replaceChildren();
+  for(const item of (week.days||[]).slice(0,7)){
+   const day=dayPrototype.cloneNode(true),minutes=num(item.minutes),future=item.state==="future",planned=Number(item.targetMinutes)>0;
+   const rate=planned?minutes/Number(item.targetMinutes)*100:item.ratio!=null&&Number.isFinite(Number(item.ratio))?Number(item.ratio):null;
+   const level=future?"future":minutes===0?"missed":rate==null||rate<100?"partial":rate<=120?"done":"exceeded";
+   const weekday=item.date?new Date(item.date+"T12:00:00").getDay():-1;
+   day.className=[item.today?"vz-today":"",weekday===6?"vz-saturday":"",weekday===0?"vz-sunday":""].filter(Boolean).join(" ");day.dataset.date=item.date||"";day.dataset.state=item.state||level;day.dataset.today=String(Boolean(item.today));
+   const label=[item.date,(item.label||"")+"요일",item.today?"오늘":"",future?"예정":Math.round(minutes)+"분 연습",rate==null?"목표 미설정":(planned?"목표 "+Math.round(Number(item.targetMinutes))+"분, ":"")+"달성률 "+Math.round(rate)+"%",item.goalCount?(item.goalsComplete?"목표 모두 완료":"목표 "+item.goalCount+"개 중 미완료"):"목표 목록 미설정","일정 보기"].filter(Boolean).join(", ");
+   action(day,label,()=>opts.onDay?.(item.date));
+   day.firstElementChild.textContent=item.date?String(Number(String(item.date).slice(8,10))):"";
+   const dot=day.querySelector(".vz-day-dot");dot.className="vz-day-dot "+level+(item.today?" today":"")+(!future&&item.timeMet?" time-met":"")+(!future&&item.goalsComplete?" goals-complete":"");dot.replaceChildren();
+   if(!future&&item.goalsComplete)dot.append(check.cloneNode(true));
+   // Today's partial ring keeps its tint unless a time or goal mark already fills it.
+   if(item.today&&!future&&minutes>0&&!item.timeMet&&!item.goalsComplete)dot.style.backgroundColor=({partial:"#D9C5FA",done:"var(--vz-color-accent)",exceeded:"#4C188E"})[level];
+   day.querySelector(".vz-day-minutes").textContent=future||item.today&&minutes===0?"":Math.round(minutes)+"분";days.append(day);
+  }
+ };
+ // Horizontal gestures change weeks; vertical page scrolling stays available.
+ let pointer=null,suppressClickUntil=0,wheelMovedAt=-Infinity;
+ weekCard.addEventListener("pointerdown",event=>{if(event.button===0)pointer={id:event.pointerId,x:event.clientX,y:event.clientY};});
+ weekCard.addEventListener("pointercancel",()=>{pointer=null;});
+ weekCard.addEventListener("pointerup",event=>{
+  const start=pointer;pointer=null;if(!start||start.id!==event.pointerId)return;
+  const dx=event.clientX-start.x,dy=event.clientY-start.y;
+  if(Math.abs(dx)>=45&&Math.abs(dx)>Math.abs(dy)*1.5){suppressClickUntil=performance.now()+350;opts.onWeekMove?.(dx<0?1:-1);}
+ });
+ weekCard.addEventListener("click",event=>{if(performance.now()<suppressClickUntil){event.preventDefault();event.stopImmediatePropagation();}},true);
+ weekCard.addEventListener("wheel",event=>{
+  if(Math.abs(event.deltaX)<25||Math.abs(event.deltaX)<=Math.abs(event.deltaY))return;
+  event.preventDefault();if(performance.now()-wheelMovedAt<450)return;wheelMovedAt=performance.now();opts.onWeekMove?.(event.deltaX>0?1:-1);
+ },{passive:false});
+ days.addEventListener("keydown",event=>{if(event.key==="ArrowLeft"||event.key==="ArrowRight"){event.preventDefault();opts.onWeekMove?.(event.key==="ArrowRight"?1:-1);}});
+ /** The week the 주간 연습 card shows (it can be moved to earlier weeks). */
+ host.updateWeek=week=>{week=week||{};paintWeekCard(week);if(week.current!==false)host.updateThisWeek(week);};
+ /** The 이번 주 row and the streak always describe this week, whichever week the card shows. */
+ host.updateThisWeek=week=>{
   week=week||{};const actual=num(week.actualMinutes),target=Number(week.targetMinutes)>0?Number(week.targetMinutes):null;
   weekRow={key:"week",icon:"",label:"이번 주",value:duration(actual)+(target?" / "+duration(target):" · 목표 미설정"),
    badge:target?Math.round(actual/target*100)+"%":"",tone:target&&actual>=target?"done":"",
@@ -257,7 +352,7 @@ export async function createFloatingHome(opts={}){
   todayLine.replaceChildren(el("span",(d.getMonth()+1)+"월 "+d.getDate()+"일 ("+"일월화수목금토"[d.getDay()]+")"));
   if(streak){const s=el("span",null,"vz-today-streak");s.dataset.active=String(streak>=2);s.append(flame.cloneNode(true),document.createTextNode(streak+"일 연속"));todayLine.append(s);}
  };
- host.updateWeek(opts.week||{});
+ host.updateWeek(opts.week||{});if(opts.thisWeek)host.updateThisWeek(opts.thisWeek);
  host.updateRecent=(songs,onOpen=opts.onRecentSong)=>{
   const list=(Array.isArray(songs)?songs:[]).slice(0,3);recentWrap.replaceChildren();recentWrap.hidden=!list.length;if(!list.length)return;
   recentWrap.append(el("h3","최근 곡","vz-recent-heading"));
@@ -320,7 +415,7 @@ export async function createFloatingHome(opts={}){
   // Semantic icons share the same Phosphor Regular weight as the practice timer.
  // Chevrons, add controls, status marks, logo, play and record icons keep their own rules.
  swap(".vz-header-actions button:first-child svg","\ue0ce");swap(".vz-header-actions button:last-child svg","\ue4c2");
- swap(".vz-event .vz-art-front svg","\ue34c");swap(".vz-goals .vz-title > svg","\ue6a2");swap(".vz-goal-tools button svg","\ue270");
+ swap(".vz-event .vz-art-front svg","\ue34c");swap(".vz-week .vz-title > svg:not(.vz-chevron)","\ue150");swap(".vz-goals .vz-title > svg","\ue6a2");swap(".vz-goal-tools button svg","\ue270");
  q(".vz-floating-record").onclick=event=>opts.onRecord?.(event.currentTarget);
  const routes=["home","songs","calendar","vocal-growth"];
  [...root.querySelectorAll(".vz-nav-item")].forEach((button,i)=>{button.dataset.nav=routes[i];button.onclick=()=>opts.onNavigate?.(routes[i]);});
