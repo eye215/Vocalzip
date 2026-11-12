@@ -1556,7 +1556,9 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   // A file marked 공연 is imported but makes no practice record.
   await row('원데이모어').locator('[data-occ-row]').selectOption('performance');
   await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
-  await expect(page.locator('[data-result]')).toContainText('저장 3개', {timeout:60000});
+  // Checked on the whole hub so a failure shows each file's reason (failed rows are listed under the result card).
+  await expect(page.locator('[data-hub]')).toContainText('저장 3개', {timeout:60000});
+  await expect(page.locator('[data-result]')).toContainText('저장 3개');
   await expect(page.locator('[data-result]')).toContainText('연습 기록 2개 생성');
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(3);
@@ -1855,7 +1857,13 @@ test('WAV imports are stored as FLAC only after every sample is checked against 
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:90000});
   const [item] = await media(page);
   // Safari/WebKit (iPhone) keeps the WAV on purpose; other browsers must produce a verified FLAC.
-  if (browserName === 'webkit') { expect(item.type).toBe('audio/wav'); expect(item.flacSkipped).toContain('Safari'); return; }
+  // On WebKit the inspected WAV is reused as is (see audio-import.spec "original WAV on WebKit"): the stored bytes are the original's.
+  if (browserName === 'webkit') {
+    expect(item.type).toBe('audio/wav'); expect(item.losslessFlac).toBeUndefined();
+    expect(await page.evaluate(async original => { const stored = new Uint8Array(await window.vzipMediaBlob((await window.vzipReadMedia())[0]).arrayBuffer()), want = Uint8Array.from(atob(original), c => c.charCodeAt(0));
+      return stored.length === want.length && stored.every((x, i) => x === want[i]); }, b.toString('base64'))).toBe(true);
+    return;
+  }
   expect(item.type).toBe('audio/flac');
   expect(item.losslessFlac).toMatchObject({samplesVerified:true, originalCodec:'pcm-s16', originalBytes:b.length, channels:2, sampleRate:44100, frames});
   expect(item.losslessFlac.outputBytes).toBeLessThan(b.length);
