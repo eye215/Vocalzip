@@ -1,0 +1,36 @@
+/* 음표 단위 악보 비교 — vocal lab (dark, vl-* palette). Compact rows, 44px targets. */
+.vl-note-cmp{margin:4px 0 12px;padding-top:4px;border-top:1px solid #2b2435}
+.vl-note-cmp:empty{display:none}
+.vl-note-cmp .vl-measure{margin:8px 0 4px;align-items:center}
+.vl-note-run{flex:none;min-height:44px}
+.vl-note-run:disabled{opacity:.55}
+.vl-note-sum{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:6px 0 4px}
+.vl-note-sum strong{font-size:22px;line-height:28px;color:#c484ff}
+.vl-note-sum span{font-size:13px;line-height:18px;color:#b9a9c7}
+.vl-note-key{display:flex;gap:8px;align-items:flex-start;margin:6px 0;padding:8px 10px;border-radius:12px;background:#231c2c;color:#e4dcef;font-size:13px;line-height:19px}
+.vl-note-key i{flex:none;font-size:16px;color:#c484ff;margin-top:1px}
+.vl-note-counts{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.vl-note-count{display:inline-flex;align-items:center;min-height:26px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:650;background:#2a2832;color:#c9c3d4}
+.vl-note-count.ok{background:#163b2b;color:#7fe0b0}
+.vl-note-count.high,.vl-note-count.low{background:#3a2a14;color:#ffc56b}
+.vl-note-count.missed{background:#3a1d24;color:#ff9fae}
+.vl-note-worst{margin:4px 0;font-size:13px;line-height:19px;color:#b9a9c7}.vl-note-worst b{color:#f7f5fc}
+.vl-note-list{list-style:none;margin:4px 0 0;padding:0}
+.vl-note-row{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px;padding:2px 0 2px 10px;border-left:3px solid #4a4256;color:#d8d0e3;font-size:13px;line-height:18px}
+.vl-note-row+.vl-note-row{margin-top:2px}
+.vl-note-row>span{min-width:0;overflow-wrap:anywhere}
+.vl-note-row b{color:#f7f5fc;font-weight:700}
+.vl-note-row em{font-style:normal;color:#ffc56b}
+.vl-note-row small{margin-left:3px;font-size:11px;color:#92879e}
+.vl-note-row .vl-chip-play{flex:none}
+.vl-note-row.ok{border-left-color:#3c8f69}.vl-note-row.ok em{color:#7fe0b0}
+.vl-note-row.high,.vl-note-row.low{border-left-color:#d9973a}
+.vl-note-row.missed{border-left-color:#d9667a}.vl-note-row.missed em{color:#ff9fae}
+.vl-note-row.unsure{border-left-color:#4a4256}.vl-note-row.unsure em{color:#aaa3b7}
+.vl-note-all{margin:8px 0 0}
+.vl-note-all summary{display:flex;align-items:center;min-height:44px;color:#c484ff;font-size:14px;cursor:pointer}
+.vl-note-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:10px}
+.vl-note-save{min-height:44px;padding:0 16px;border:0;border-radius:999px;background:#7a32f5;color:#fff;font-size:14px;font-weight:700}
+.vl-note-save:disabled{background:#2a2234;color:#c9c3d4}
+.vl-note-actions small{flex:1 1 180px;font-size:11px;line-height:16px;color:#92879e}
+.vl-note-error{color:#ff9fae}

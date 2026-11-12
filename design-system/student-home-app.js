@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=pset-20261112';
+import {createFloatingHome} from './student-home-html.js?v=pset-20261112-home-wide-20261112';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -57,6 +57,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const c=V.serverAnalysisCounts?.(),review=c?.song?.review||0,failed=c?(c.vocal.fail+c.song.fail):0;
   if(review)rows.push({key:'attention',tone:'attention',icon:'\ue4e2',label:'확인 필요',value:'곡 확인 '+review+'건',action:()=>nav('#/song-suggest')});
   else if(failed)rows.push({key:'attention',tone:'attention',icon:'\ue4e2',label:'확인 필요',value:'분석 실패 '+failed+'건',action:()=>nav('#/processing-log')});
+  const weekly=V.weeklySummaryHomeRow?.();if(weekly)rows.push(weekly); // 지난주 요약 (app/weekly-summary.js), Mon–Wed only
   return rows;
  }
  /** Up to three recent songs: the latest practised song first, then by recording activity. */

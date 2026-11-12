@@ -86,17 +86,22 @@ function partInfo(scorePart) {
 function transposeOf(el) { // semitones from written to sounding pitch
   return (Number(text(el, 'chromatic')) || 0) + 12 * (Number(text(el, 'octave-change')) || 0);
 }
-/** Every part with its sounding range and a guess of which one is sung. */
-function parts(doc) {
+/** The parsed score: root element, concert-pitch flag, part-list info and part id → its measures in order
+ * (partwise: part>measure, timewise: measure>part). Shared by parts() and melody(). */
+function scoreOf(doc) {
   const root = doc?.documentElement || doc;
   const kind = root && local(root);
   if (!root || doc.querySelector?.('parsererror') || !['score-partwise', 'score-timewise'].includes(kind)) throw Error('MusicXML 악보 형식이 아니에요.');
   const concert = !!first(first(root, 'defaults'), 'concert-score'); // MusicXML 4 concert scores are already sounding pitch
   const info = kids(first(root, 'part-list'), 'score-part').map(partInfo);
-  // part id → the measure contents of that part, in order (partwise: part>measure, timewise: measure>part)
   const streams = new Map(info.map(p => [p.id, []]));
   if (kind === 'score-partwise') for (const part of kids(root, 'part')) { const id = part.getAttribute('id') || ''; if (!streams.has(id)) streams.set(id, []); for (const m of kids(part, 'measure')) streams.get(id).push({el:m, number:m.getAttribute('number')}); }
   else for (const m of kids(root, 'measure')) for (const part of kids(m, 'part')) { const id = part.getAttribute('id') || ''; if (!streams.has(id)) streams.set(id, []); streams.get(id).push({el:part, number:m.getAttribute('number')}); }
+  return {root, concert, info, streams};
+}
+/** Every part with its sounding range and a guess of which one is sung. */
+function parts(doc) {
+  const {concert, info, streams} = scoreOf(doc);
   const out = [];
   for (const [id, measures] of streams) {
     const meta = info.find(p => p.id === id) || {id, name:'', abbr:'', instrument:'', sound:'', programs:[]};
@@ -143,6 +148,73 @@ function parts(doc) {
       lowMeasure:low?.measure ?? null, highMeasure:high?.measure ?? null});
   }
   return out;
+}
+/** The sung line of one part as a note sequence (음표 단위 비교): sounding pitch (MIDI, <transpose> applied), onset and
+ * length in quarter-note beats, measure number, lyric. Ties are merged, rests stay as gaps (no row), grace/cue notes are
+ * left out, a chord keeps its top note, and only the part's main voice (the staff/voice with the most notes) is read.
+ * The converted file holds the first movement; a measure numbering that restarts at 1 is treated as a new movement and
+ * ends the sequence. */
+function melody(doc, partId, {maxNotes = 4000} = {}) {
+  const {concert, info, streams} = scoreOf(doc);
+  const id = streams.has(partId) ? partId : null;
+  if (id == null) throw Error('악보에서 고른 파트를 찾지 못했어요.');
+  const measures = streams.get(id);
+  const voiceOf = node => (text(node, 'staff') || '1') + '/' + (text(node, 'voice') || '1');
+  const counts = new Map();
+  for (const {el} of measures) for (const node of kids(el, 'note')) {
+    if (first(node, 'rest') || first(node, 'grace') || first(node, 'cue') || !first(node, 'pitch')) continue;
+    counts.set(voiceOf(node), (counts.get(voiceOf(node)) || 0) + 1);
+  }
+  const main = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'en', {numeric:true}))[0]?.[0] || '1/1';
+  const notes = [], shift = {};
+  let divisions = 1, start = 0, timeBeats = 4, tempo = null, seenHigh = false, mi = 0, transposition = 0, stopped = false;
+  const tieOf = (node, type) => kids(node, 'tie').some(t => t.getAttribute('type') === type) || kids(first(node, 'notations'), 'tied').some(t => t.getAttribute('type') === type);
+  for (const {el, number} of measures) {
+    const n = Number(number);
+    if (n === 1 && seenHigh) { stopped = true; break; }
+    if (n >= 2) seenHigh = true;
+    let pos = 0, extent = 0, prevOnset = null;
+    for (const node of kids(el)) {
+      const name = local(node);
+      if (name === 'attributes') {
+        const d = Number(text(node, 'divisions')); if (d > 0) divisions = d;
+        const t = first(node, 'time'); if (t) { const b = Number(text(t, 'beats')), bt = Number(text(t, 'beat-type')); if (b > 0 && bt > 0) timeBeats = b * 4 / bt; }
+        if (!concert) for (const t of kids(node, 'transpose')) { shift[t.getAttribute('number') || ''] = transposeOf(t); if (transposeOf(t)) transposition = transposeOf(t); }
+        continue;
+      }
+      if (name === 'backup') { pos = Math.max(0, pos - (Number(text(node, 'duration')) || 0)); continue; }
+      if (name === 'forward') { pos += Number(text(node, 'duration')) || 0; extent = Math.max(extent, pos); continue; }
+      if (name === 'direction' || name === 'sound') {
+        const snd = name === 'sound' ? node : first(node, 'sound'), bpm = Number(snd?.getAttribute('tempo'));
+        if (tempo == null && bpm > 0) tempo = Math.round(bpm);
+        continue;
+      }
+      if (name !== 'note') continue;
+      if (first(node, 'grace')) continue; // no duration
+      const chord = !!first(node, 'chord'), dur = Number(text(node, 'duration')) || 0;
+      const onset = chord && prevOnset != null ? prevOnset : pos;
+      if (!chord) { prevOnset = pos; pos += dur; extent = Math.max(extent, pos); }
+      if (voiceOf(node) !== main || first(node, 'rest') || first(node, 'cue') || node.getAttribute('print-object') === 'no') continue;
+      const pitch = first(node, 'pitch'); if (!pitch) continue;
+      const step = STEP[text(pitch, 'step').toUpperCase()], octave = Number(text(pitch, 'octave'));
+      if (step == null || !Number.isFinite(octave)) continue;
+      const midi = (octave + 1) * 12 + step + Math.round(Number(text(pitch, 'alter')) || 0) + (shift[text(node, 'staff')] ?? shift[''] ?? 0);
+      const beat = start + onset / divisions, beats = Math.max(dur / divisions, 0.125);
+      const last = notes[notes.length - 1];
+      if (chord && last && Math.abs(last.beat - beat) < 1e-6) { if (midi > last.midi) last.midi = midi; continue; } // top note of a chord
+      if (tieOf(node, 'stop') && last && last.midi === midi && Math.abs(last.beat + last.beats - beat) < 1e-3) { last.beats = Math.round((last.beats + beats) * 1000) / 1000; continue; }
+      const ly = kids(node, 'lyric').find(l => text(l, 'text'));
+      const syl = ly ? text(ly, 'syllabic') : '';
+      notes.push({i:notes.length, midi, beat:Math.round(beat * 1000) / 1000, beats:Math.round(beats * 1000) / 1000, measure:number == null ? String(mi + 1) : String(number), mi,
+        ...(ly ? {lyric:(text(ly, 'text') + (syl === 'begin' || syl === 'middle' ? '-' : '')).slice(0, 12)} : {})});
+      if (notes.length >= maxNotes) break;
+    }
+    start += extent > 0 ? extent / divisions : timeBeats;
+    mi++;
+    if (notes.length >= maxNotes) break;
+  }
+  const meta = info.find(p => p.id === id);
+  return {partId:id, part:meta?.name || meta?.instrument || id, notes, measures:mi, beats:Math.round(start * 1000) / 1000, tempo, transposition, voice:main, stoppedAtMovement:stopped};
 }
 /** Which part to preselect. Only an unambiguous vocal part (or the single plain melody line) is picked;
  * otherwise the owner chooses. The owner confirms in every case before anything is saved. */
@@ -200,5 +272,5 @@ function reference({low, high, source, scoreId = '', part = '', partId = '', tra
   return {version:1, low:noteName(lo), high:noteName(hi), lowMidi:lo, highMidi:hi, source:source === 'score' ? 'score' : 'manual',
     ...(source === 'score' ? {scoreId, part, partId, transposition} : {}), confirmedByUser:true, updatedAt:now};
 }
-return {NAMES, noteName, unzip, parts, choose, read, compare, diffText, verdictText, reference, midiOf, RULES:{MATCH, RECHECK}};
+return {NAMES, noteName, unzip, parts, melody, choose, read, compare, diffText, verdictText, reference, midiOf, RULES:{MATCH, RECHECK}};
 });
