@@ -114,6 +114,33 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(0);
 });
 
+test('Vocal lab growth AI asks the server for a measured same-song report (overall mode)', async ({page}) => {
+ await boot(page);
+ await page.evaluate(async () => {
+   for(const m of (await VZ.media.list()).filter(x=>x.songId==='s1')) {
+     const old=m.id==='m1';
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:old?34:23,notes:4},intonation:{meanAbsCents:old?27:18,notes:10},range:{highCents:8100,high:'A5'},breath:{medianPhrase:old?2.4:3.2}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   }
+   VZ.media.invalidate();
+   window.vzipCloudCoach=async input=>{window.__coach=input;return {mode:'overall',month:'all',note:'요약: 같은 곡 두 녹음을 비교했어요.\n좋아진 점: 지속음 흔들림이 줄었어요.\n보완할 점: 비교 녹음이 두 개뿐이에요.\n다음 연습: 같은 구간을 짧게 다시 녹음해요.'};};
+ });
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await page.locator('.vl-dates button').nth(1).click();
+ await page.locator('[data-growth-ai]').click();
+ await expect(page.locator('.vl-growth-ai-text')).toContainText('다음 연습: 같은 구간을');
+ const sent = await page.evaluate(() => window.__coach);
+ expect(sent.mode).toBe('overall');
+ expect(sent.analyzedSongs).toBe(1);
+ expect(sent.metrics.map(m => m.key).sort()).toEqual(['intonation', 'phrase', 'stability']);
+ expect(sent.metrics.find(m => m.key === 'stability')).toMatchObject({state:'better', improvedSongs:1, worsenedSongs:0, value:23});
+ expect(sent.observations).toEqual([]);
+ await page.reload();
+ await page.locator('.vl-dates button').first().click();
+ await page.locator('.vl-dates button').nth(1).click();
+ await expect(page.locator('.vl-growth-ai-text')).toContainText('좋아진 점: 지속음 흔들림이 줄었어요.');
+});
+
 test('Vocal lab shows a compact recommendation list and opens the chosen practice', async ({page}) => {
  await boot(page);
  await page.evaluate(async () => {

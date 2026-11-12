@@ -226,8 +226,9 @@ test('all-time dashboard combines lifetime counts, consistent same-song metrics,
 });
 test('all-time with no analyzed recording explains missing measurements instead of displaying invented improvement',async({page})=>{
  await boot(page,{recordings:[],view:'overall'});
- await expect(page.locator('.growth-stat')).toHaveCount(4);
- await expect(page.locator('.growth-stat').first()).toContainText('측정 없음');
+ // One compact note replaces four identical "측정 없음" cards; still no number, no improvement claim.
+ await expect(page.locator('.growth-stat')).toHaveCount(0);
+ await expect(page.locator('.growth-stats-empty')).toContainText('아직 측정된 곡 녹음이 없어요');
  await expect(page.locator('.growth-hero')).toContainText('비교 기록 필요');
  await expect(page.locator('[data-overall-ai-run]')).toBeVisible();
  expect(await page.evaluate(()=>window.__coachCalls)).toBe(0);

@@ -320,6 +320,35 @@ test('goal editor saves only user entered plans and personal goals',async({page}
  await sheet.getByLabel('오늘 목표 시간(분)',{exact:true}).fill('45');await sheet.getByLabel('이번 주 목표 시간(분)',{exact:true}).fill('210');await sheet.getByLabel('개인 목표',{exact:true}).fill('새 개인 목표');await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
  const value=await db(page);expect(value.practicePlans.find(p=>p.id==='day:'+TODAY).targetMinutes).toBe(45);expect(value.practicePlans.find(p=>p.id==='week:'+WEEK).targetMinutes).toBe(210);expect(value.dailyGoals.some(g=>g.title==='새 개인 목표')).toBe(true);expect(value.practices).toEqual(seed().practices);expect(value.assignments).toEqual(seed().assignments);
 });
+test('daily routine repeats a personal goal, records optional real minutes once, and ends from today on',async({page})=>{
+ await boot(page);await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ let sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ await sheet.getByLabel('개인 목표',{exact:true}).fill('립트릴 10분');
+ await sheet.getByText('매일 반복',{exact:true}).click();
+ await sheet.getByLabel('반복 일수',{exact:true}).fill('3');
+ await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
+ let value=await db(page);const routine=value.practicePlans.find(p=>p.kind==='routine');
+ expect(routine).toMatchObject({title:'립트릴 10분',days:3,startDate:TODAY,endDate:'2026-11-06',archived:false});
+ expect(value.dailyGoals.filter(g=>g.sourceId===routine.id).map(g=>g.date)).toEqual([TODAY,'2026-11-05','2026-11-06']);
+ expect(value.dailyGoals.filter(g=>['g1','g2','g3'].includes(g.id)).map(g=>[g.id,g.title,g.completed])).toEqual(seed().dailyGoals.map(g=>[g.id,g.title,g.completed]));
+ await page.getByRole('checkbox',{name:'립트릴 10분',exact:true}).check();
+ await page.getByRole('button',{name:'연습 시간·녹음 남기기',exact:true}).click();
+ const record=page.getByRole('dialog',{name:'수행 기록',exact:true});
+ await record.getByLabel('실제로 연습한 시간(분)',{exact:true}).fill('12');
+ await record.getByRole('button',{name:'기록 저장',exact:true}).click();
+ await expect(record).toHaveCount(0);
+ value=await db(page);const goalId=routine.id+':'+TODAY;
+ expect(value.practices.find(p=>p.id==='p1')).toEqual(seed().practices[0]);
+ expect(value.practices.filter(p=>p.goalId===goalId)).toEqual([expect.objectContaining({id:'goal:'+goalId,date:TODAY,manualMinutes:12,practiceTimeSource:'goal',goalSource:'personal'})]);
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ await expect(sheet.locator('.vz-routine')).toContainText('1/3일 완료');
+ await sheet.getByRole('button',{name:'립트릴 10분 끝내기',exact:true}).click();
+ await page.getByRole('dialog',{name:'반복 끝내기',exact:true}).getByRole('button',{name:'끝내기',exact:true}).click();
+ await expect.poll(async()=>(await db(page)).practicePlans.find(p=>p.id===routine.id).archived).toBe(true);
+ value=await db(page);
+ expect(value.dailyGoals.filter(g=>g.sourceId===routine.id).map(g=>[g.date,g.completed])).toEqual([[TODAY,true]]);
+ expect(value.practices.filter(p=>p.goalId===goalId)).toHaveLength(1);
+});
 test('goal planning separates long selectable rows and keeps save visible on small screens',async({page},testInfo)=>{
  const value=seed();value.dailyGoals[0].title='악보에 너무 맞추려 하지 않고 반주치면서 박자와 리듬을 가지고 노는 것처럼 연습하기 · 18마디 참고';
  await boot(page,value);

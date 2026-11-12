@@ -129,7 +129,9 @@ function aiEvidence(report){
 function render(report,metric){
  return '<div data-growth-anchor="overview">'+summaryCard(report)+'</div>'+jumpNav()+
   '<section class="growth-section-set" data-growth-anchor="skills"><header class="growth-panel-head"><div><p class="growth-eyebrow">VOICE METRICS</p><h2>역량별 실측 변화</h2><p class="growth-section-caption">같은 곡의 처음과 최근 녹음으로 비교해요.</p></div></header>'+
-  '<div class="growth-stats-grid">'+report.metrics.map(metricCard).join('')+'</div></section>'+
+  // No measured song recording yet: one short note instead of four identical "측정 없음" cards.
+  (report.metrics.some(m=>m.current!=null)?'<div class="growth-stats-grid">'+report.metrics.map(metricCard).join('')+'</div>':
+   '<div class="growth-stats-empty"><i class="ph ph-waveform" aria-hidden="true"></i><p><strong>아직 측정된 곡 녹음이 없어요</strong>곡이 지정된 녹음을 분석하면 음정 오차·지속음 흔들림·프레이즈 길이·비브라토가 여기에 쌓여요.</p><a class="btn sm secondary" href="#/library">보관함에서 분석하기</a></div>')+'</section>'+
   '<div data-growth-anchor="coach">'+coachCard()+'</div>'+
   '<div data-growth-anchor="trend">'+trends(report,metric||'intonation')+'</div>'+
   '<div data-growth-anchor="practice">'+recommendations(report)+'</div>'+evidence(report);
