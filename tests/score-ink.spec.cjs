@@ -484,10 +484,16 @@ async function swipe(page,dialog,{fingers=2,dx=-170,dy=0}={}){
  await page.waitForTimeout(250);
  await expect(dialog.locator('[data-ink-stage][data-ink-turning]')).toHaveCount(0); // the slide has finished
 }
-test('without 펜만 필기 only a two-finger sideways swipe turns the page',async({page,browserName})=>{
+test('without 펜만 필기 one finger turns pages in 이동 (the phone default); with a drawing tool a finger writes, so two fingers turn',async({page,browserName})=>{
  test.skip(browserName!=='chromium','multi-touch is driven through Chromium CDP');
  await setup(page);const dialog=await open(page),pageLabel=dialog.locator('[data-ink-page]');
  await penOnly(dialog,false);
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ await swipe(page,dialog,{fingers:1});await expect(pageLabel).toHaveText('2 / 2쪽');
+ await swipe(page,dialog,{fingers:1,dx:0,dy:-170});await expect(pageLabel).toHaveText('2 / 2쪽'); // a vertical drag never turns
+ await swipe(page,dialog,{fingers:1,dx:170});await expect(pageLabel).toHaveText('1 / 2쪽');
+ await expect(dialog.locator('path[data-stroke]')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'펜',exact:true}).click();
  await swipe(page,dialog,{fingers:1});await expect(pageLabel).toHaveText('1 / 2쪽');
  await swipe(page,dialog,{fingers:2});await expect(pageLabel).toHaveText('2 / 2쪽');
  await swipe(page,dialog,{fingers:2});await expect(pageLabel).toHaveText('2 / 2쪽'); // the last page stays

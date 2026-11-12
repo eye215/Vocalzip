@@ -297,6 +297,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(distance<8)return;
   pinch={distance,zoom,x:((a.x+b.x)/2-r.left)/r.width,y:((a.y+b.y)/2-r.top)/r.height};
  }
+ /** One finger turns pages whenever a finger cannot draw: 펜만 필기, 무대용 보기, or the 이동 tool. With a drawing tool
+  *  and no 펜만 필기 a finger writes, so pages turn with two fingers. */
+ const fingerTurns=()=>profiles.penOnly||performance||tool==='pan';
  function gestureDown(event){
   if(touches.size>=2||event.width>50||event.height>50)return;
   event.preventDefault();touches.set(event.pointerId,{x:event.clientX,y:event.clientY});touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
@@ -341,7 +344,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     const dx1=c.x-a.x,dx2=d.x-b.x,dy1=c.y-a.y,dy2=d.y-b.y;
     const startDistance=Math.hypot(a.x-b.x,a.y-b.y),endDistance=Math.hypot(c.x-d.x,c.y-d.y);
     if(dx1*dx2>0&&Math.min(Math.abs(dx1),Math.abs(dx2))>56&&Math.max(Math.abs(dy1),Math.abs(dy2))<Math.min(Math.abs(dx1),Math.abs(dx2))*.7&&Math.abs(dx1-dx2)<55&&Math.abs(endDistance-startDistance)<Math.max(25,startDistance*.18))direction=dx1<0?1:-1;
-   }else if((profiles.penOnly||performance)&&event.type==='pointerup'&&swipe?.pointer===event.pointerId&&Date.now()-swipe.time<900){
+   }else if(fingerTurns()&&event.type==='pointerup'&&swipe?.pointer===event.pointerId&&Date.now()-swipe.time<900){
     const dx=event.clientX-swipe.x,dy=event.clientY-swipe.y;
     if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.4)direction=dx<0?1:-1;
    }
@@ -837,7 +840,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   stage.addEventListener('touchstart',event=>{
    if(tool==='notation'||!viewReady||busy||pending)return;
    const fingers=[...event.touches].filter(t=>t.touchType!=='stylus');
-   if(fingers.length!==2&&!(fingers.length===1&&(profiles.penOnly||performance)))return;
+   if(fingers.length!==2&&!(fingers.length===1&&fingerTurns()))return;
    if(fingers.length===2){
     if(active&&touchInkStart?.pointer===active.pointer){active=null;cancelAnimationFrame(frame);frame=0;paint();}
     touchEraser=null;markerDrag=null;
@@ -885,7 +888,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(swipe.count===2){
     const [a,b]=ids.map(id=>swipe.start.get(id)),[c,d]=ids.map(id=>swipe.end.get(id));
     if(dx[0]*dx[1]<=0||Math.abs(dx[0]-dx[1])>=55||Math.abs(Math.hypot(c.x-d.x,c.y-d.y)-Math.hypot(a.x-b.x,a.y-b.y)) >=Math.max(25,Math.hypot(a.x-b.x,a.y-b.y)*.18)){restore();return;}
-   }else if(!(profiles.penOnly||performance)||stage.scrollWidth-stage.clientWidth>8&&!(dx[0]<0?swipe.atRight:swipe.atLeft)){restore();return;}
+   }else if(!fingerTurns()||stage.scrollWidth-stage.clientWidth>8&&!(dx[0]<0?swipe.atRight:swipe.atLeft)){restore();return;}
    const direction=dx[0]<0?1:-1;
    if(pageNo+direction<1||pageNo+direction>doc.numPages){restore();return;}
    if(swipe.count===2){zoom=swipe.zoom;zoomValue();}
