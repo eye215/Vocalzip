@@ -1,9 +1,12 @@
-# VOCAL.zip server analysis worker: analyzes new recordings and suggests song candidates from cached transcripts, even
+# VOCAL.zip server analysis worker: analyzes new recordings and suggests song candidates (lyrics recognition), even
 # when the app is closed. Free on GitHub-hosted runners for this public repository.
 # Needs repository secrets (Settings → Secrets and variables → Actions); without SUPABASE_DB_URL it does nothing:
 #   SUPABASE_DB_URL        Supabase → Connect → Session pooler URI (IPv4), with the database password
 #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY   Cloudflare R2 API token, Object Read only
-# Paid STT is disabled in this worker; existing transcripts are reused for candidates only.
+#   OPENAI_API_KEY         optional: automatic lyrics recognition (STT) for song recordings without a song, within the
+#                          owner-approved monthly cap for all accounts together (vzip_auto_stt_budget, $2.00; needs
+#                          supabase/migrations/20261115_auto_stt_budget.sql). Without the key or the migration no paid
+#                          call is made: saved transcripts are still reused. Candidates always wait for the user's approval.
 #   SUPABASE_SERVICE_ROLE_KEY   optional: older recordings still kept in Supabase Storage
 # Logs show counts only (this repository is public).
 name: Analysis worker
@@ -78,6 +81,7 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           WORKER_MAX_JOBS: ${{ inputs.max_jobs }}
           WORKER_KINDS: ${{ inputs.kinds }}
           WORKER_VERBOSE: ${{ inputs.verbose && '1' || '' }}

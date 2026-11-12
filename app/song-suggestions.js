@@ -13,10 +13,12 @@ const PAGE_SIZE=30;
 // No per-run limit: spending is bounded by the OpenAI account budget. What has been spent so far is shown
 // instead (server count of paid STT calls × ≈ $0.0015 per 30-second clip, gpt-4o-mini-transcribe ≈ $0.003/min).
 const MAX_PAID_PER_RUN=Infinity, COST_PER_CLIP_USD=0.0015;
-const spend={total:null,today:null};
+const spend={total:null,today:null,auto:null};
 const usd=n=>'$'+(n*COST_PER_CLIP_USD).toFixed(n*COST_PER_CLIP_USD<1?3:2);
-function showSpend(main){const el=main?.querySelector?.('[data-spend]');if(!el)return;el.hidden=spend.total==null;if(spend.total!=null){el.textContent='사용 금액 약 '+usd(spend.total);el.title='음성 분석 '+spend.total.toLocaleString()+'회'+(spend.today?' · 오늘 '+spend.today+'회':'')}}
-async function loadSpend(main){try{const u=await window.vzipSttUsage?.();if(u){spend.total=u.total;spend.today=u.today}}catch{}showSpend(main)}
+// Automatic recognition by the server worker: one service-wide monthly total against the owner's cap ($2).
+const autoSpend=a=>a?'자동 인식 이번 달 $'+a.spent.toFixed(a.spent<1?3:2)+' / $'+a.cap.toFixed(a.cap%1?2:0):'';
+function showSpend(main){const el=main?.querySelector?.('[data-spend]');if(!el)return;el.hidden=spend.total==null&&!spend.auto;if(!el.hidden){el.textContent=[spend.total!=null?'사용 금액 약 '+usd(spend.total):'',autoSpend(spend.auto)].filter(Boolean).join(' · ');el.title=(spend.total!=null?'음성 분석 '+spend.total.toLocaleString()+'회'+(spend.today?' · 오늘 '+spend.today+'회':''):'')+(spend.auto?(spend.total!=null?' · ':'')+'서버 자동 인식 이번 달 '+spend.auto.clips+'회 (모든 계정 합계, 한도에 닿으면 다음 달까지 자동 인식 중지)':'')}}
+async function loadSpend(main){try{const quiet=f=>Promise.resolve().then(f).catch(()=>null),[u,a]=await Promise.all([quiet(()=>window.vzipSttUsage?.()),quiet(()=>window.vzipAutoSttUsage?.())]);if(u){spend.total=u.total;spend.today=u.today}spend.auto=a||null}catch{}showSpend(main)}
 const SEARCH_SECONDS=30, MIN_SUNG_SECONDS=4;
 // Guard decoded PCM (not just compressed bytes). The browser may allocate 2-3 copies.
 const CLIP_SECONDS=30, STEP_SECONDS=27, MAX_SCAN_SECONDS=600;

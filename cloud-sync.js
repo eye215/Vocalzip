@@ -1034,6 +1034,8 @@ window.vzipAnalysisLive=(onMedia,onJobs)=>{
  return()=>{try{client.removeChannel(ch)}catch{}};
 };
 /** Paid STT calls so far for this account ({total, today}); null when signed out or the usage function is missing. */
+// Automatic (server worker) lyrics recognition this month, all accounts together, and the monthly cap. null before the migration.
+window.vzipAutoSttUsage=async()=>{if(!client||!user)return null;const {data,error}=await client.rpc('vzip_auto_stt_month_usage');if(error)return null;const row=Array.isArray(data)?data[0]:data;if(!row)return null;return {spent:Number(row.spent_usd)||0,cap:Number(row.cap_usd)||0,clips:Number(row.clips)||0}};
 window.vzipSttUsage=async()=>{if(!client||!user)return null;const {data,error}=await client.rpc('vzip_song_stt_usage');if(error)return null;const row=Array.isArray(data)?data[0]:data;return {total:Number(row?.used_total)||0,today:Number(row?.used_today)||0}};
 window.vzipCloudAccessToken=async()=>{if(!client||!user||(window.VzipAccountScope&&!sessionVerified))return null;const owner=user.id;const {data}=await client.auth.getSession();if(user?.id!==owner||(window.VzipAccountScope&&!sessionVerified))return null;return data.session?.access_token||null};window.vzipCloudSignedIn=()=>!!user&&(!window.VzipAccountScope||sessionVerified);
 window.vzipCloudScoreVision=async(mode,image,signal)=>{
