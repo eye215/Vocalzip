@@ -229,11 +229,11 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  await expect(page.locator('.vz-summary-row')).toHaveCount(1);await expect(weekRow(page).locator('.vz-summary-value')).toHaveText('0분 / 3시간 30분');
  await expect(page.locator('.vz-recent')).toBeHidden();await expect(page.locator('.vz-recent-pill')).toHaveCount(0);await expect(page.locator('.vz-today-streak')).toHaveCount(0);
  await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
- // Only the empty goal list opens the goal sheet; the suggestion opens the recorder.
+ // Only the empty goal list opens the goal sheet; the suggestion opens 노래 연습실.
  const setup=page.getByRole('button',{name:'오늘의 목표 정하기',exact:true});
  await page.goto('/#/home');await ready(page);await expect(setup).toHaveCount(1);await setup.click();
  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(sheet).toHaveCount(0);
- await page.getByRole('button',{name:'추천 연습 호흡과 발성 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/record$/);
+ await page.getByRole('button',{name:'추천 연습 호흡과 발성 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/practice-room$/);await expect(page.locator('#top h1')).toHaveText('노래 연습실');
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
 });
@@ -409,7 +409,7 @@ test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming le
  await expect(now).toHaveAttribute('data-kind','lesson');await expect(title).toHaveText('보컬 레슨');await expect(badge).toHaveText('D-2');await expect(line).toHaveText('11.6 (금) 18:30');await expect(lessonRow).toHaveCount(0);
  await page.evaluate(()=>VZ.change(d=>{d.lessons=[];}));
  await expect(now).toHaveAttribute('data-kind','recommend');await expect(title).toHaveText('호흡과 발성 연습하기');await expect(badge).toHaveText('추천');
- await now.click();await expect(page).toHaveURL(/#\/record$/);await page.goto('/#/home');await ready(page);
+ await now.click();await expect(page).toHaveURL(/#\/practice-room$/);await page.goto('/#/home');await ready(page);
  // The same suggestion already in today's goals is not repeated: the card then just offers to record.
  const goalsBefore=(await db(page)).dailyGoals;
  await page.evaluate(day=>VZ.change(d=>{d.dailyGoals=[...(d.dailyGoals||[]),{id:'g-basic',date:day,title:'호흡과 발성 연습하기',source:'recommendation',sourceId:'basic:breathing',completed:false,order:9}];}),TODAY);
