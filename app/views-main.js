@@ -537,7 +537,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     document.querySelector('.vz-collection-record')?.setAttribute('href','#/record?song='+encodeURIComponent(s.id));
     document.querySelector('[data-song-menu]')?.addEventListener('click', () => VZ.menu({title:s.title, body:'<div class="list"><button type="button" class="item" data-e><i class="ph ph-pencil-simple"></i><span class="item-main">곡 정보 수정</span></button><button type="button" class="item" data-rep-menu><i class="ph ph-music-notes"></i><span class="item-main">나의 레퍼토리 설정</span></button><button type="button" class="item" data-d style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">곡 삭제</span></button></div>',
       onMount:(el, close) => {
-        el.querySelector('[data-e]').onclick = () => { close(); VZ.songSheet(s, null, {hideShow:true}); };
+        el.querySelector('[data-e]').onclick = () => { close(); VZ.songSheet(s, () => VZ.softRender?.()); };
         el.querySelector('[data-rep-menu]').onclick = () => { close(); VZ.menu({title:'나의 레퍼토리', body:'<div class="list">' + [['status','상태'],['skills','숙련도'],['keys','키 정보'],['take','대표 테이크']].map(([k,label]) => '<button type="button" class="item" data-rep="' + k + '"><span class="item-main">' + label + '</span></button>').join('') + '</div>', onMount:(panel,done) => panel.querySelectorAll('[data-rep]').forEach(button => button.onclick = () => { done(); if (button.dataset.rep === 'take') VZ.repertoire?.chooseTake?.(s.id); else VZ.repertoire?.edit?.(s.id,button.dataset.rep); })}); };
         el.querySelector('[data-d]').onclick = async () => {
           close();
