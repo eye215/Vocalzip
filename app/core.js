@@ -36,7 +36,15 @@ function stamp(before, after) {
       if (old.get(String(x.id)) !== JSON.stringify(x)) x.updatedAt = now;
     }
     const removed = [...old.keys()].filter(id => !ids.has(id));
-    if (removed.length) { after.deleted ||= {}; after.deleted[k] = [...new Set([...(after.deleted[k] || []), ...removed])]; }
+    if (removed.length) {
+      after.deleted ||= {}; after.deleted[k] = [...new Set([...(after.deleted[k] || []), ...removed])];
+      // Each tombstone also records when it was made and which version of the row this device saw (its updatedAt):
+      // an edit made on another device that this deletion never saw wins the merge (data-merge.js). Kept beside
+      // the id list so older app versions still read deleted[k] unchanged.
+      const seen = new Map((before[k] || []).filter(x => x && x.id != null).map(x => [String(x.id), Number(x.updatedAt) || 0]));
+      after.deletedAt ||= {}; const at = after.deletedAt[k] = {...(after.deletedAt[k] || {})};
+      for (const id of removed) at[id] = {at:now, seen:seen.get(id) || 0};
+    }
   }
 }
 VZ.change = (mutate, {silent} = {}) => {

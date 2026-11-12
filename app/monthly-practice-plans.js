@@ -11,8 +11,10 @@ const dayShift=(date,offset)=>{
  return at.getFullYear()+'-'+pad(at.getMonth()+1)+'-'+pad(at.getDate());
 };
 const fmt=seconds=>Math.floor(seconds/60)+':'+pad(seconds%60);
-const options=[{key:'intonation',label:'음정 정확도'},{key:'stability',label:'지속음 안정성'},
- {key:'phrase',label:'프레이즈 연결'},{key:'vibrato',label:'비브라토 규칙성'}];
+// Same names as the growth report (성장 리포트 v2). vibrato has no growth measure: kept for old and new plans, but its
+// outcome is shown as 참고 and never judged (app/plan-outcome-model.js).
+const options=[{key:'intonation',label:'음정 정확도'},{key:'stability',label:'음정 안정성'},
+ {key:'phrase',label:'호흡 유지'},{key:'vibrato',label:'비브라토 규칙성 (참고)'}];
 const reviewState={player:null,revoke:null,generation:0};
 function stopReview(){
  reviewState.generation++;
@@ -51,20 +53,11 @@ function form(month,items,rows){
 }
 function compareSongTakes(plan,items){
  const model=window.VzipPlanOutcome;
- if(!model?.measurement)return '';
- let m;
+ if(!model?.measurement||!V.planOutcomePreview)return '';
+ // The exact measurement the saved outcome report uses (growth report v2 rules, 판정 보류 reasons included).
  try{
-  m=model.measurement(plan,items,M.dateOf,x=>[1,2].includes(x.analysis?.v)&&V.analysisReliable?.(x.analysis));
+  return V.planOutcomePreview(plan,model.measurement(plan,items,M.dateOf,x=>[1,2].includes(x.analysis?.v)&&V.analysisReliable?.(x.analysis)));
  }catch{return '<p class="small muted">저장된 계획의 날짜나 측정 기준을 확인해 주세요.</p>';}
- if(m.mixedVersions)
-  return '<p class="small muted">판정 보류 · 분석 버전(v1·v2)이 섞여 있어요. 이전 녹음을 다시 분석하면 비교할 수 있어요.</p>';
- if(m.change==='insufficient')
-  return '<p class="small muted">성장 재측정 대기 · 계획 시작 전과 계획 기간 중의 동일 곡 분석 녹음이 필요해요.</p>';
- const formatted=n=>plan.metric==='vibrato'?Math.round(n*100)+'%':n+(plan.metric==='phrase'?'초':' cent');
- const state=m.change==='better'?'개선 방향':m.change==='worse'?'추가 확인 필요':'큰 변화 없음';
- return '<p class="small muted">전체 녹음 변화 참고: '+formatted(m.before)+' → '+formatted(m.after)+
-  ' ('+state+') · 계획 전 '+m.beforeCount+'개 / 계획 중 '+m.afterCount+
-  '개. 지정 구간 개선이나 악보 기준 음정 정확도를 뜻하지 않아요.</p>';
 }
 
 function card(plan,items){

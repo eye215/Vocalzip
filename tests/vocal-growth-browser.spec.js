@@ -320,3 +320,59 @@ test('growth report v2: same-phrase comparison, neutral range, passaggio referen
  await page.locator('[data-overall-ai-run]').click();
  await expect.poll(()=>page.evaluate(()=>VZ.db.overallAiReports.length)).toBe(1);
 });
+test('plan outcome v2: same-phrase preview, 판정 보류 with the growth reason, legacy saved report still renders, 320px',async({page})=>{
+ await page.setViewportSize({width:320,height:700});
+ const rows=into=>[[10,3,64,into,8],[15,2.5,67,into,8],[20,3.5,69,into,8],[26,4,72,into,8]];
+ const a=(into,v=2)=>v===2?{v:2,metrics:{voicedSeconds:40,intonation:{meanAbsCents:into+15,notes:30},stability:{wobbleCents:8,notes:10},
+  range:{stableHigh:{note:'F5',cents:7700},main:{low:'C4',high:'D5',lowCents:6000,highCents:7400},instantaneous:{note:'C7',cents:9600}},
+  breath:{medianPhrase:3},phrases:{v:1,rows:rows(into)},pitchBands:{v:1,rows:[[60,4,.6,1,3,6],[72,3,.8,1.2,3,9]]}}}
+  :{v:1,metrics:{voicedSeconds:40,intonation:{meanAbsCents:into,notes:30},breath:{medianPhrase:3}}};
+ const plans=[
+  {id:'pv2',kind:'monthly-vocal',songId:'song-1',metric:'intonation',startDate:'2026-11-01',sourceMonth:'2026-11',segmentStart:0,segmentEnd:20,minutes:10,days:5,created:3},
+  {id:'phold',kind:'monthly-vocal',songId:'song-2',metric:'phrase',startDate:'2026-11-01',sourceMonth:'2026-11',segmentStart:0,segmentEnd:20,minutes:10,days:5,created:2},
+  {id:'plegacy',kind:'monthly-vocal',songId:'song-1',metric:'stability',startDate:'2026-10-01',sourceMonth:'2026-10',segmentStart:0,segmentEnd:20,minutes:10,days:5,created:1}];
+ const media=[{id:'s1a',songId:'song-1',recordedDate:'2026-10-28',type:'audio/wav',analysis:a(20)},
+  {id:'s1b',songId:'song-1',recordedDate:'2026-11-03',type:'audio/wav',analysis:a(11)},
+  {id:'s2a',songId:'song-2',recordedDate:'2026-10-28',type:'audio/wav',analysis:a(20,1)},
+  {id:'s2b',songId:'song-2',recordedDate:'2026-11-03',type:'audio/wav',analysis:a(11,1)}];
+ // Saved before rules:2 (old app version): must still render with its own numbers.
+ const legacy={id:'plan-outcome:plegacy',planId:'plegacy',songId:'song-1',metric:'stability',startDate:'2026-10-01',endDate:'2026-10-05',
+  completedDays:3,scheduledDays:5,completionRate:60,recommendation:'maintain',scope:'whole-recording',createdDate:'2026-10-06',
+  measurement:{before:27,after:19,delta:-8,change:'better',mixedVersions:false,beforeCount:2,afterCount:1,beforeIds:['x'],afterIds:['y']}};
+ await page.goto('about:blank');
+ await boot(page,{recordings:media,plans,reports:[legacy]});
+ await page.evaluate(()=>{VZ.db.songs.push({id:'song-2',title:'Second'});});
+ await page.evaluate(()=>{const el=document.getElementById('test-root');el.innerHTML=VZ.routes['vocal-growth'].render();VZ.routes['vocal-growth'].mount(el);});
+ await page.locator('[data-growth-mode="monthly"]').click();
+ await page.addStyleTag({path:path.resolve(__dirname,'../app/monthly-growth.css')});
+ await page.addStyleTag({path:path.resolve(__dirname,'../app/growth-polish.css')});
+ const items=page.locator('.growth-plan-item');
+ const v2card=items.filter({has:page.locator('[data-plan-outcome="pv2"]')});
+ await expect(v2card).toContainText('음정 정확도');
+ await expect(v2card.locator('.growth-plan-measure')).toContainText('좋아진 방향');
+ await expect(v2card.locator('.growth-plan-measure')).toContainText('±20 cent → ±11 cent');
+ await expect(v2card.locator('.growth-plan-measure')).toContainText('같은 프레이즈 4개 비교');
+ const hold=items.filter({has:page.locator('[data-plan-outcome="phold"]')});
+ await expect(hold).toContainText('호흡 유지');
+ await expect(hold.locator('.growth-plan-measure .growth-state')).toHaveText('판정 보류');
+ await expect(hold.locator('.growth-plan-measure')).toContainText('이전 분석(v1) 결과라 이 지표는 계산하지 않아요');
+ // Save the v2 outcome: same wording, recommendation, saved fields.
+ await v2card.locator('[data-save-outcome]').click();
+ await expect(v2card.locator('.growth-outcome-report')).toContainText('좋아진 방향');
+ await expect(v2card.locator('.growth-outcome-report')).toContainText('같은 프레이즈 4개 비교');
+ await hold.locator('[data-save-outcome]').click();
+ await expect(hold.locator('.growth-outcome-report')).toContainText('같은 곡을 계획 시작 전후로 더 녹음한 뒤');
+ const saved=await page.evaluate(()=>VZ.db.vocalPlanReports.map(r=>[r.planId,r.rules,r.measurement.state,r.measurement.reason,r.recommendation]));
+ expect(saved).toEqual([['plegacy',undefined,undefined,undefined,'maintain'],['pv2',2,'better','','maintain'],['phold',2,'hold','v1','collect']]);
+ // Legacy report (saved by an older app version).
+ const old=page.locator('[data-plan-outcome="plegacy"] .growth-outcome-report');
+ await expect(old).toContainText('3/5일');
+ await expect(old).toContainText('27 cent');
+ await expect(old).toContainText('19 cent');
+ await expect(old).toContainText('이전 기준');
+ await expect(old).toContainText('음정 안정성');
+ const over=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,vw:innerWidth,
+  n:[...document.querySelectorAll('.growth-plan-item *')].filter(e=>e.getClientRects().length&&e.getBoundingClientRect().right>innerWidth+1).length}));
+ expect(over.doc).toBeLessThanOrEqual(over.vw+1);
+ expect(over.n).toBe(0);
+});
