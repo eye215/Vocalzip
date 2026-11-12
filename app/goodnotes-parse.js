@@ -41,7 +41,9 @@ function directory(bytes){
   const start=e.local+30+view.getUint16(e.local+26,true)+view.getUint16(e.local+28,true);
   if(start+e.packed>bytes.length)throw fail('굿노트 파일이 손상됐어요.','format');
   const data=bytes.subarray(start,start+e.packed);
-  if(e.method===0){if(e.packed!==e.length)throw fail('굿노트 파일이 손상됐어요.','format');return data.slice();}
+  // Stored entries (GoodNotes keeps PDFs uncompressed) are a view into the file, not a copy: a 250 MB notebook must
+  // not need its PDFs twice in memory on a phone. Readers only read these bytes.
+  if(e.method===0){if(e.packed!==e.length)throw fail('굿노트 파일이 손상됐어요.','format');return data;}
   if(e.method!==8)throw fail('지원하지 않는 압축 방식이에요.','format');
   if(typeof DecompressionStream!=='function')throw fail('이 브라우저에서는 굿노트 파일을 풀 수 없어요. 브라우저를 업데이트해 주세요.','browser');
   // The declared size is the ceiling: an entry that inflates past it is rejected, not kept in memory.
