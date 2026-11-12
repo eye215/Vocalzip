@@ -212,7 +212,8 @@ async function runImport(rows, {more = false} = {}) {
 /** One file at a time from the picked File (no device copy); done = the server confirmed it. */
 async function importRows(rows) {
   const direct = !!window.vzipCloudSignedIn?.();
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
     if (hub.paused) break;
     if (row.state === 'done' || row.state === 'dup' || row.state === 'skipped') continue;
     if (!(Number(row.duration) >= 25)) { row.state = 'skipped'; row.msg = row.duration != null && row.duration < 25 ? '25초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음'; row.file = null; drawRow(row); continue; }
@@ -225,13 +226,24 @@ async function importRows(rows) {
       const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
       const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct, durationSeconds:row.duration},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
-      row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
+      row.busySince = 0; row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
       VZ.processingLog?.record(row.id, {state:'done', savedName:saved.name||'', songId:saved.songId||row.song, cloud:!!saved.cloud, pendingUpload:!!saved.pendingUpload, audioExtraction:!!saved.audioExtraction||!!saved.extracted, losslessFlac:!!saved.losslessFlac||!!saved.flac, savedSize:saved.savedSize||saved.size||0, error:''});
     } catch (e) {
       if (isAuth(e)) { row.state = 'waiting'; row.msg = ''; hub.paused = true; hub.notice = '로그인이 만료됐어요. 다시 로그인한 뒤 "이어서 올리기"를 눌러 주세요. 완료된 파일은 그대로예요.'; }
-      else if ((isBusy(e) || isNetwork(e)) && (row.tries = (row.tries || 0) + 1) <= 3) {
-        row.state = 'waiting'; row.msg = '잠시 후 다시 시도해요…'; drawRow(row);
-        await new Promise(r => setTimeout(r, isBusy(e) ? 4000 : 3000 * row.tries));
+      else if (isBusy(e)) {
+        // Another upload (the background device backup finishing its current file, or another tab / the home-screen
+        // app) holds the one upload slot. Waiting is not a failure: keep the file first in line until the slot frees.
+        row.busySince ||= Date.now();
+        const waited = Math.round((Date.now() - row.busySince) / 1000);
+        row.state = 'waiting';
+        row.msg = waited < 90 ? '다른 업로드가 끝나길 기다리는 중…' : '다른 업로드가 끝나길 기다리는 중 (' + Math.floor(waited / 60) + '분) · 다른 탭이나 홈 화면 앱에서 올리고 있다면 그쪽을 끝내 주세요';
+        drawRow(row);
+        await new Promise(r => setTimeout(r, 5000));
+        if (!hub.paused) { rows.splice(i + 1, 0, row); } // same file again next, order kept
+      }
+      else if (isNetwork(e) && (row.tries = (row.tries || 0) + 1) <= 3) {
+        row.state = 'waiting'; row.msg = '연결이 끊겨 잠시 후 다시 시도해요…'; drawRow(row);
+        await new Promise(r => setTimeout(r, 3000 * row.tries));
         if (!hub.paused) { rows.push(row); } // try again at the end of the list
       } else { row.state = 'failed'; row.msg = '실패: ' + (e.message || '알 수 없는 오류'); }
       VZ.processingLog?.record(row.id, {state:row.state, error:row.state==='failed'?(e.message||'알 수 없는 오류'):''});
