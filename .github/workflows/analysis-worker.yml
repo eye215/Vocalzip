@@ -29,6 +29,10 @@ on:
         description: 'Queue again the jobs that failed only because the file could not be reached'
         type: boolean
         default: false
+      reanalyze_old_vocal:
+        description: 'Re-analyse every recording whose saved analysis is older than the current analyzer (keeps the old one in history)'
+        type: boolean
+        default: false
       requeue_stt_requests:
         description: 'Queue again song jobs that waited for an app STT request (automatic STT then applies, within the monthly cap)'
         type: boolean
@@ -59,13 +63,13 @@ jobs:
         run: node worker/analysis-worker.mjs --peek
       # A pinned prebuilt ffmpeg (npm ffmpeg-static), cached between runs: apt mirrors once took 38 minutes.
       - name: Cache ffmpeg
-        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests
+        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal
         uses: actions/cache@v4
         with:
           path: ~/ffmpeg-static
           key: ffmpeg-static-5.2.0-${{ runner.os }}
       - name: Install ffmpeg
-        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests
+        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal
         timeout-minutes: 8
         run: |
           if [ ! -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
@@ -78,7 +82,7 @@ jobs:
           fi
       - name: Analyze
         id: analyze
-        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests
+        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal
         timeout-minutes: 48
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -91,6 +95,7 @@ jobs:
           WORKER_VERBOSE: ${{ inputs.verbose && '1' || '' }}
           WORKER_REQUEUE_NETWORK: ${{ inputs.requeue_network_failures && '1' || '' }}
           WORKER_REQUEUE_STT: ${{ inputs.requeue_stt_requests && '1' || '' }}
+          WORKER_REANALYZE_OLD: ${{ inputs.reanalyze_old_vocal && '1' || '' }}
         run: node worker/analysis-worker.mjs
       # GitHub's 10-minute schedule can lag for hours. A run that got through recordings (and did not stop on repeated
       # failures) starts the next run itself while more are waiting; single-file checks (max_jobs) never chain.

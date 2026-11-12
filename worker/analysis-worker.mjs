@@ -243,14 +243,34 @@ async function finish(db, job, status, result = null, error = null, cost = 0) {
   await db.query('update public.vocal_analysis_jobs set status = $2, result = coalesce($3::jsonb, result), last_error = $4, cost_usd = cost_usd + $5, locked_at = null, locked_by = null, updated_at = now() where id = $1',
     [job.id, status, result && JSON.stringify(result), error, cost]);
 }
+/** Queue a vocal job again for every audio/video recording whose saved analysis is older than this analyzer. */
+export async function requeueOldAnalyses(db) {
+  const {rowCount} = await db.query(`insert into public.vocal_analysis_jobs (user_id, media_id, kind)
+            select m.user_id, m.id, 'vocal' from public.vocal_media m
+            where coalesce(m.metadata ->> 'type', 'audio/') ~ '^(audio|video)/'
+              and (coalesce(m.metadata -> 'analysis' ->> 'v', '0') !~ '^[0-9]+$' or (m.metadata -> 'analysis' ->> 'v')::int < $1
+                   or not coalesce(m.metadata -> 'analysis' -> 'metrics' ? 'phrases', false))
+            on conflict (user_id, media_id, kind) do update set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now()
+            where public.vocal_analysis_jobs.status <> 'running'`, [VA.VERSION]);
+  return rowCount;
+}
+/** This analyzer's version with the growth-report detail present (key exists even when a short take has no rows). */
+export const isCurrentAnalysis = a => !!a && Number(a.v) >= VA.VERSION && !!a.metrics && Object.prototype.hasOwnProperty.call(a.metrics, 'phrases');
 async function vocalJob(db, job, meta, audio) {
-  if (meta.analysis?.v) return finish(db, job, 'done', {reused:true});
+  // A current analysis (this analyzer version, with the per-phrase / per-semitone detail the growth report needs) is
+  // reused. An older one (v1, or v2 saved before the detail rows existed) is analysed again; it is kept in history.
+  if (isCurrentAnalysis(meta.analysis)) return finish(db, job, 'done', {reused:true});
   const samples = await audio();
   const r = VA.analyze(samples, 16000);
-  const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server', scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 16000}};
-  // Only the analysis key changes, on the row as it is now; an analysis saved meanwhile (app) is kept.
-  await db.query("update public.vocal_media set metadata = jsonb_set(metadata, '{analysis}', $3::jsonb), updated_at = now() where id = $1 and user_id = $2 and (metadata -> 'analysis' ->> 'v') is null",
-    [job.media_id, job.user_id, JSON.stringify(summary)]);
+  const previous = meta.analysis?.v ? meta.analysis : null;
+  const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
+  if (previous) { const {history:ignored, ...saved} = previous; history.push(saved); }
+  const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server',
+    ...(history.length ? {history:history.slice(-5)} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 16000}};
+  // Only the analysis key changes, on the row as it is now; an analysis saved meanwhile (app) is kept: the row is
+  // written only while it still holds the analysis this job read (none, or the same older one).
+  await db.query("update public.vocal_media set metadata = jsonb_set(metadata, '{analysis}', $3::jsonb), updated_at = now() where id = $1 and user_id = $2 and coalesce(metadata -> 'analysis' ->> 'at', '') = $4",
+    [job.media_id, job.user_id, JSON.stringify(summary), previous?.at != null ? String(previous.at) : '']);
   return finish(db, job, 'done', {voicedSeconds:r.metrics.voicedSeconds, confidence:r.confidence});
 }
 async function songJob(db, job, meta, audio, stt) {
@@ -437,6 +457,13 @@ if (import.meta.url === 'file://' + process.argv[1]) {
           // Jobs that only failed because the file could not be reached go back to the queue, attempts reset.
           const {rowCount} = await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now() where status in ('queued', 'running', 'failed') and (last_error = 'fetch failed' or last_error like 'download network error%' or (last_error = $1 and $2))", [NEEDS_KEY, !!clean(env.SUPABASE_SERVICE_ROLE_KEY)]);
           console.log('analysis worker: ' + rowCount + ' job(s) that failed on the network (or waited for a setting now present) are queued again');
+        }
+        if (env.WORKER_REANALYZE_OLD === '1') {
+          // One-off (owner request 2026-11-12): every recording whose saved analysis is older than this analyzer (v1, or v2
+          // without the growth-report detail) gets a vocal job again. The worker re-analyses it and keeps the old summary
+          // in history; current analyses are left alone. Audio and video recordings only.
+          const rowCount = await requeueOldAnalyses(db);
+          console.log('analysis worker: ' + rowCount + ' recording(s) with an older analysis queued for re-analysis');
         }
         if (env.WORKER_REQUEUE_STT === '1') {
           // One-off (owner request 2026-11-12): song jobs that stopped at "needs an app request" before automatic STT
