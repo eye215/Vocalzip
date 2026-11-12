@@ -262,3 +262,9 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
 .vl-detail-list small{display:block;margin-top:4px;font-size:11px;color:#8fdde3}
 .vl-compare .vg-table small{display:block;font-size:10px;color:#9f90ae;margin-top:2px}
 .vl-compare .vg-table .vg-ref td{color:#d6eef0}
+/* 이전 분석 다시 분석 (growth report held back by v1/detail-less results) */
+.vl-growth-reanalyze{border:1px solid #654380;border-radius:17px;background:#21182e;padding:14px 16px;margin:0 0 14px;display:grid;gap:10px}
+.vl-growth-reanalyze p{margin:0;font-size:13px;line-height:1.55;color:#d9c8ef}
+.vl-growth-reanalyze button{min-height:44px;border:0;border-radius:99px;background:#7A32F5;color:#fff;font:600 14px inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.vl-growth-reanalyze button[disabled]{opacity:.6}
+.vl-growth-reanalyze [data-growth-reanalyze-status]:empty{display:none}

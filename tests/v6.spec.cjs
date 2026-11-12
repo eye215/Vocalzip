@@ -144,6 +144,30 @@ test('Vocal lab growth AI asks the server for a measured same-song report (overa
  await expect(page.locator('.vl-growth-ai-text')).toContainText('좋아진 점: 지속음 흔들림이 줄었어요.');
 });
 
+test('Vocal lab growth report re-analyses older (v1) recordings in place so they become comparable', async ({page}) => {
+ test.setTimeout(90000);
+ await boot(page);
+ await page.evaluate(async () => {
+   for(const m of (await VZ.media.list()).filter(x=>x.songId==='s1')) {
+     const old=m.id==='m1';
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:old?34:23,notes:4},intonation:{meanAbsCents:old?27:18,notes:10},range:{highCents:8100,high:'A5'},breath:{medianPhrase:old?2.4:3.2}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   }
+   VZ.media.invalidate();
+   window.__reanalysed=[];
+   VZ.analyzeRecording=async (item)=>{window.__reanalysed.push(item.id);const summary={v:2,at:Date.now(),seconds:30,metrics:{voicedSeconds:30,stability:{wobbleCents:20,notes:4},intonation:{meanAbsCents:15,notes:10},breath:{medianPhrase:3},phrases:{rows:[]},pitchBands:{rows:[]}},confidence:{voiceOverMrDb:12,pitch:0.95}};await VZ.media.update(item,{analysis:summary},{quiet:true});return {summary};};
+ });
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await page.locator('.vl-dates button').nth(1).click();
+ const redo=page.locator('[data-growth-reanalyze]');
+ await expect(redo).toContainText('2개 다시 분석');
+ await redo.click();
+ await expect.poll(()=>page.evaluate(()=>window.__reanalysed.slice().sort())).toEqual(['m1','m2']);
+ await expect(page.locator('[data-growth-reanalyze]')).toHaveCount(0);
+ const versions=await page.evaluate(async()=>(await VZ.media.list()).filter(x=>x.songId==='s1').map(x=>x.analysis?.v));
+ expect(versions.every(v=>v===2)).toBe(true);
+});
+
 test('Vocal lab shows a compact recommendation list and opens the chosen practice', async ({page}) => {
  await boot(page);
  await page.evaluate(async () => {
