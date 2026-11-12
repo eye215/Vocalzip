@@ -165,6 +165,23 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
    const count=el.querySelector('[data-gn-count]'),allText=el.querySelector('[data-gn-alltext]');
    /** One line above the button: progress, results and errors stay in view however long the list is. */
    const say=(text,tone='')=>{msg.textContent=text||'';msg.hidden=!text;msg.dataset.tone=tone;};
+   /* Progress popup over the page while importing: song n/total, its step, an overall bar and 멈추기. It blocks the page
+    * (nothing on it can change mid-import) and, if the import stops or fails, says why until 확인. */
+   el.insertAdjacentHTML('beforeend','<div class="gn-progress" data-gn-progress hidden><div class="gn-progress-card" role="alertdialog" aria-modal="true" aria-labelledby="gn-progress-title" aria-describedby="gn-progress-line">'+
+    '<strong id="gn-progress-title" data-gn-ptitle>악보 가져오는 중</strong><p id="gn-progress-line" data-gn-pline aria-live="polite"></p>'+
+    '<div class="gn-progress-bar" role="progressbar" aria-label="가져오기 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-gn-pbar><span></span></div>'+
+    '<p class="gn-progress-step" data-gn-pstep></p><button type="button" class="gn-progress-btn" data-gn-pbtn>멈추기</button></div></div>');
+   const pop=el.querySelector('[data-gn-progress]'),popTitle=pop.querySelector('[data-gn-ptitle]'),popLine=pop.querySelector('[data-gn-pline]'),popBar=pop.querySelector('[data-gn-pbar]'),popStep=pop.querySelector('[data-gn-pstep]'),popButton=pop.querySelector('[data-gn-pbtn]');
+   const progress={
+    show(){pop.hidden=false;pop.dataset.state='busy';popTitle.textContent='악보 가져오는 중';popButton.textContent='멈추기';popButton.disabled=false;this.set('','',0);popButton.focus();},
+    set(line,step,fraction){popLine.textContent=line;popStep.textContent=step;popStep.hidden=!step;const v=Math.round(Math.max(0,Math.min(1,fraction))*100);popBar.setAttribute('aria-valuenow',String(v));popBar.firstChild.style.width=v+'%';},
+    end(title,text,state){pop.dataset.state=state;popTitle.textContent=title;popLine.textContent=text;popStep.hidden=true;popButton.textContent='확인';popButton.disabled=false;popButton.focus();},
+    hide(){pop.hidden=true;}
+   };
+   popButton.onclick=()=>{
+    if(pop.dataset.state!=='busy'){progress.hide();go.focus();return;}
+    run.cancelled=true;popButton.disabled=true;popButton.textContent='지금 단계를 마치고 멈춰요';
+   };
    const open=()=>items.filter(i=>!i.state.done);
    const rowOf=item=>list.querySelector('[data-gn-section="'+item.key+'"]');
    /** The ticked rows, if they sit next to each other and none is imported yet. */
@@ -204,27 +221,28 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     if(!window.VzipR2?.enabled?.()||!account||!window.vzipCloudSignedIn?.()){say('올리려면 로그인과 클라우드 연결을 확인해 주세요.','error');return;}
     if(account!==owner){say('로그인 계정이 바뀌었어요. 창을 닫고 다시 열어 주세요.','error');return;}
     const guard=()=>{if(run.cancelled)throw Object.assign(Error('가져오기를 멈췄어요.'),{stopped:true});if(window.vzipCloudUserId?.()!==owner||!window.vzipCloudSignedIn?.()||window.VzipAccountScope?.leaving)throw Error('로그인 계정이 바뀌어 멈췄어요.');};
-    run.busy=true;go.disabled=true;for(const control of form.elements)control.disabled=true;
+    run.busy=true;run.cancelled=false;go.disabled=true;for(const control of form.elements)control.disabled=true;
     // A ticked row is imported even if it was set to 가져오지 않기: it goes to its matching song, or a new one.
     const chosen=open().filter(i=>picked.has(i.key));
     for(const item of chosen)if(item.target==='skip'){const hit=matchSong(item.title,songs())||(single?song:null);item.target=hit?hit.id:'new';}
     const todo=chosen.length?chosen:open().filter(i=>i.target!=='skip'),result={scores:0,ink:0};
     picked.clear();bar.hidden=true;
     try{
-     say('PDF 도구를 준비하고 있어요.');
+     say('');progress.show();progress.set('PDF 도구를 준비하고 있어요.','',0);
      const lib=await library(),sources=new Map();guard();
      for(const [n,item] of todo.entries()){
-      const step=text=>say((n+1)+'/'+todo.length+' '+item.title+' · '+text);
-      step('PDF 만드는 중');
+      // Overall bar: each song is an equal share; within a song, making the PDF ≈10%, uploading ≈85%, saving the rest.
+      const step=(text,part)=>progress.set((n+1)+' / '+todo.length+'곡 · '+item.title,text,(n+part)/todo.length);
+      step('PDF 만드는 중',0);
       const ink=inkFile(item,item.state.id,item.state.createdAt),bad=ink.strokes.find(s=>!Ink.valid({...s,version:1,ownerId:owner,songId:'song',scoreId:item.state.id,r2Key:'u/'+owner+'/'+item.state.id+'/original.pdf',pdfHash:'0'.repeat(64)}));
       if(bad)throw Error('“'+item.title+'” '+bad.page+'쪽에 앱에서 다룰 수 없는 필기가 있어요. 필기를 빠뜨리지 않도록 가져오기를 멈췄어요.');
       item.state.pdf||=await buildPdf(item,model,lib,sources,ink);guard();
       const bytes=item.state.pdf;
       if(bytes.length>MAX_PDF)throw Error('“'+item.title+'” PDF가 50MB를 넘어요. 굿노트에서 나눠서 내보내 주세요.');
       const name=item.title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'_').slice(0,80)+'.pdf';
-      item.state.receipt||=await window.VzipR2.upload(new File([bytes],name,{type:'application/pdf'}),{mediaId:item.state.id,type:'application/pdf',onProgress:p=>step('올리는 중 '+Math.round(p)+'%')});
+      item.state.receipt||=await window.VzipR2.upload(new File([bytes],name,{type:'application/pdf'}),{mediaId:item.state.id,type:'application/pdf',onProgress:p=>step('올리는 중 '+Math.round(p)+'%',.1+.85*Math.max(0,Math.min(100,p))/100)});
       guard();if(!item.state.receipt?.key)throw Error('업로드 결과를 확인하지 못했어요.');
-      step('악보 등록 중');
+      step('악보 등록 중',.95);
       const target=item.target==='new'?VZ.addSong(item.title):songs().find(s=>s.id===item.target);
       if(!target)throw Error('넣을 곡을 찾지 못했어요.');
       item.target=target.id;
@@ -237,10 +255,13 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
      // Only some songs were picked: keep the sheet open so the rest can still be imported.
      if(chosen.length&&open().length)say('악보 '+result.scores+'개를 가져왔어요. 남은 곡도 골라서 가져올 수 있어요.','done');
      else{run.finished=true;close();}
+     progress.hide();
      VZ.toast('악보 '+result.scores+'개를 가져왔어요'+(result.ink?' · 수정 가능한 필기 '+result.ink+'획':'')+'.');
      onDone(result);
     }catch(error){
-     say((error.stopped?'':'가져오지 못했어요: ')+(error.message||error)+(result.scores?' · 앞의 '+result.scores+'개는 가져왔어요.':'')+' 다시 누르면 이어서 해요.',error.stopped?'':'error');
+     const why=(error.message||String(error))+(result.scores?' 앞의 '+result.scores+'곡은 가져왔어요.':'')+' 다시 누르면 이어서 해요.';
+     say((error.stopped?'':'가져오지 못했어요: ')+why,error.stopped?'':'error');
+     progress.end(error.stopped?'가져오기를 멈췄어요':'가져오지 못했어요',error.stopped?why.replace(/^가져오기를 멈췄어요\.\s*/,''):why,error.stopped?'stopped':'error');
      if(result.scores)onDone(result);
     }finally{
      run.busy=false;

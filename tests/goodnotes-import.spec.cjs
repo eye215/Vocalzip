@@ -3,7 +3,7 @@
 // Uses a synthetic notebook (tests/goodnotes-fixture.cjs); no real GoodNotes file is in the repository.
 const {test,expect}=require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
-const {boot,fakeR2}=require('./helpers/r2-fixture.cjs');
+const {boot,fakeR2,R2}=require('./helpers/r2-fixture.cjs');
 const F=require('./goodnotes-fixture.cjs');
 const fs=require('node:fs'),path=require('node:path');
 const PDFROOT=process.env.VZ_PDFJS_ROOT||'/tmp/vzip-score-pdfjs/node_modules/pdfjs-dist';
@@ -288,6 +288,37 @@ test('넣을 곡 opens the app song picker: a searchable song page where 새 곡
  await expect(page.locator('.toast')).toContainText('악보 1개를 가져왔어요');
  expect(await page.evaluate(id=>window.VZ.song(id).scores.map(x=>x.title),ids[0])).toEqual(['Untitled Medley']);
  expect(r2.store.size).toBe(1);
+});
+test('importing shows a progress popup (song n/total, step, bar); 멈추기 stops after the current step and 가져오기 resumes without uploading twice',async({page})=>{
+ const r2=await setup(page);
+ // Hold the first upload's completion so the popup can be seen mid-import.
+ let release,held=0;const gate=new Promise(r=>{release=r;});
+ await page.route(R2+'/**',async route=>{if(/\/v1\/uploads\/[^/]+\/complete$/.test(new URL(route.request().url()).pathname)&&!held++)await gate;return route.fallback();});
+ const notebook=F.notebook({title:'두 곡',pdf:pdf(2),width:300,height:400,pages:[{pdfPage:1,order:'a'},{pdfPage:2,order:'b'}],outline:[{page:0,title:'Song A'},{page:1,title:'Song B'}]});
+ await pick(page,'두 곡.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
+ await sheet.getByRole('button',{name:'가져오기 (2곡)'}).click();
+ const pop=page.getByRole('alertdialog',{name:'악보 가져오는 중'});
+ await expect(pop).toBeVisible();
+ await expect(pop).toContainText('1 / 2곡 · Song A');
+ await expect(pop.locator('[data-gn-pstep]')).toContainText('올리는 중');
+ expect(Number(await pop.getByRole('progressbar').getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+ await pop.getByRole('button',{name:'멈추기'}).click();
+ await expect(pop.getByRole('button',{name:'지금 단계를 마치고 멈춰요'})).toBeDisabled();
+ release();
+ const stopped=page.getByRole('alertdialog',{name:'가져오기를 멈췄어요'});
+ await expect(stopped).toContainText('다시 누르면 이어서 해요');
+ expect(await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>s.scores||[]).length)).toBe(0); // stopped before saving
+ expect(r2.store.size).toBe(1);
+ await stopped.getByRole('button',{name:'확인'}).click();
+ await expect(stopped).toBeHidden();
+ await expect(sheet.locator('[data-gn-msg]')).toContainText('가져오기를 멈췄어요');
+ // Resume: Song A's finished upload is reused, Song B is uploaded, and the popup closes with the page.
+ await sheet.getByRole('button',{name:'가져오기 (2곡)'}).click();
+ await expect(page.locator('.toast')).toContainText('악보 2개를 가져왔어요');
+ await expect(page.locator('[data-gn-progress]')).toHaveCount(0);
+ expect(r2.store.size).toBe(2);
+ expect(await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>(s.scores||[]).map(x=>x.title)).sort())).toEqual(['Song A','Song B']);
 });
 test('a notebook whose PDF is locked with an owner password only (as bought scores often are) imports readable pages; one that needs a password is refused',async({page})=>{
  const r2=await setup(page);

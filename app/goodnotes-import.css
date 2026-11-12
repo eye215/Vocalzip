@@ -62,3 +62,20 @@ body .gn-row .gn-target select:not(.pick-native){flex:1;min-width:0;width:auto;h
 .gn-msg[hidden]{display:none}
 .gn-msg[data-tone="error"]{background:var(--vz-color-danger-soft,#fdeaea);color:var(--vz-color-danger,#c93a3a)}
 .gn-msg[data-tone="done"]{background:var(--vz-color-success-soft,#e3f4ec);color:var(--vz-color-success,#23855c)}
+
+/* Progress popup while importing: the app's dark glass surface (as the shared popover and the score loading pill),
+ * centred over a light dim that blocks the page; white text, a white bar, one 44px button (멈추기 / 확인). */
+.gn-progress{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:rgba(16,24,40,.24)}
+.gn-progress[hidden]{display:none}
+.gn-progress-card{width:min(304px,100%);padding:20px 20px 12px;border-radius:27px;background:rgba(54,51,59,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);color:#fff;letter-spacing:-.02em;box-shadow:0 10px 30px rgba(16,24,40,.18)}
+.gn-progress-card strong{display:block;font-size:16px;line-height:22px;font-weight:600}
+.gn-progress-card p{margin:6px 0 0;font-size:13px;line-height:18px;color:rgba(255,255,255,.82);overflow-wrap:anywhere}
+.gn-progress-bar{height:6px;margin:14px 0 0;border-radius:999px;background:rgba(255,255,255,.2);overflow:hidden}
+.gn-progress-bar span{display:block;width:0;height:100%;border-radius:inherit;background:#fff;transition:width .25s ease}
+.gn-progress .gn-progress-step{margin-top:8px;font-size:12px;color:rgba(255,255,255,.64)}
+.gn-progress[data-state="error"] .gn-progress-bar,.gn-progress[data-state="stopped"] .gn-progress-bar{display:none}
+.gn-progress[data-state="error"] strong{color:#ffb4b4}
+.gn-progress-btn{display:block;width:100%;min-height:44px;margin:12px 0 0;border:0;border-radius:14px;background:rgba(255,255,255,.12);color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.gn-progress-btn:disabled{opacity:.6;cursor:default}
+.gn-progress-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.gn-progress-bar span{transition:none}}
