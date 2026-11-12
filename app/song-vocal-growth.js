@@ -26,33 +26,45 @@ VZ.vocalBatchRunning = () => batch.running; // the background analyzer waits for
 /* What is measured, how to read it, and which way is "better" (+1 higher, −1 lower, 0 neither). */
 // A cached older analysis.js may not define analysisComparable yet: never throw, use the same rule.
 const comparable = (a, b) => VZ.analysisComparable ? VZ.analysisComparable(a, b) : !!a && !!b && a.v === b.v && !!VZ.analysisReliable?.(a) && !!VZ.analysisReliable?.(b);
+// 성장 리포트 v2: labels follow the separated measures; judgements come from app/growth-metrics-model.js.
+const G = window.VzipGrowthMetrics;
 const METRICS = [
-  {key:'into', label:'음정 오차', unit:'cent', better:-1, get:a => a.metrics.intonation?.meanAbsCents, fmt:v => '±' + v, help:'낮을수록 음을 정확히 맞춤'},
-  {key:'wob', label:'지속음 흔들림', unit:'cent', better:-1, get:a => a.metrics.stability?.wobbleCents, fmt:v => '±' + v, help:'낮을수록 안정적'},
+  {key:'into', model:'intonation', label:'음정 정확도', unit:'cent', better:-1, get:a => a.metrics.intonation?.meanAbsCents, fmt:v => '±' + v, help:'가까운 반음과의 평균 오차 · 낮을수록 정확'},
+  {key:'wob', model:'stability', label:'음정 안정성', unit:'cent', better:-1, get:a => a.metrics.stability?.wobbleCents, fmt:v => '±' + v, help:'지속음 흔들림 · 낮을수록 안정'},
   {key:'high', label:'유효 최고음', unit:'', better:0, get:a => a.v>=2&&a.metrics.range?.validHigh ? Math.round(a.metrics.range.validHigh.cents/100)*100 : null, fmt:v => noteName(v), help:'0.2초 이상 · 신뢰도와 연속성 확인', step:100},
-  {key:'stable', label:'안정 최고음', unit:'', better:0, get:a => a.v>=2&&a.metrics.range?.stableHigh ? Math.round(a.metrics.range.stableHigh.cents/100)*100 : null, fmt:v => noteName(v), help:'0.5초 이상 · 흔들림과 신뢰도 확인', step:100},
-  {key:'phr', label:'프레이즈 길이', unit:'초', better:1, get:a => a.metrics.breath?.medianPhrase, fmt:v => v + '초', help:'쉬지 않고 이어 부른 평균 길이'}
+  {key:'stable', model:'range', label:'안정 최고음', unit:'', better:0, get:a => a.v>=2&&a.metrics.range?.stableHigh ? Math.round(a.metrics.range.stableHigh.cents/100)*100 : null, fmt:v => noteName(v), help:'0.5초 이상 · 흔들림과 신뢰도 확인', step:100},
+  {key:'phr', model:'phrase', label:'프레이즈 길이', unit:'초', better:0, get:a => a.metrics.breath?.medianPhrase, fmt:v => v + '초', help:'참고값 · 호흡 유지는 같은 프레이즈끼리 비교'}
 ];
 const VIB = {key:'vib', label:'비브라토', unit:'%', better:0, get:a => a.metrics.vibrato?.share, fmt:v => v + '%', help:'긴 음 중 비브라토를 쓴 비율'};
-
+const referenceOf = songId => { const r = VZ.song?.(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
+const TONE = {better:'vg-good', worse:'vg-bad'};
+/** A measured change in words: the model's judgement (or 판정 보류 and why), never a verdict from the highest note. */
+function shortChange(x) {
+  if (!x || x.state === 'hold') return '<span class="vg-same">판정 보류 · ' + esc(G.holdText(x?.reason)) + '</span>';
+  if (x.id === 'range') return '<span class="vg-same">' + (x.delta ? (x.delta > 0 ? '▲ ' : '▼ ') + Math.abs(x.delta) + '반음' : '같은 음') + ' · 실력 판정 아님</span>';
+  if (x.id === 'high') return '<span class="' + (TONE[x.state] || 'vg-same') + '">' + esc(G.stateLabel(x)) + ' · ' + esc(x.zone) + '</span>';
+  const unit = x.id === 'phrase' ? '초' : ' cent', amount = x.delta ? (x.delta > 0 ? '▲ ' : '▼ ') + Math.abs(x.delta) + unit + ' ' : '';
+  return '<span class="' + (TONE[x.state] || 'vg-same') + '">' + esc(amount + G.stateLabel(x)) + '</span>' + (x.basis === 'phrases' ? '<small class="vg-basis">같은 프레이즈 ' + x.matched + '개</small>' : x.basis === 'whole' ? '<small class="vg-basis">곡 전체</small>' : '');
+}
 const analysisOf = m => fresh.get(m.id) || m.analysis || null;
 const usable = m => { const a = analysisOf(m); return [1,2].includes(a?.v) && a.metrics; };
 function points(media) {
   return media.filter(usable).map(m => ({m, a:analysisOf(m), date:M.dateOf(m) || '', ok:VZ.analysisReliable(analysisOf(m)), guess:m.dateSource === 'file-modified'}))
     .sort((x, y) => x.date.localeCompare(y.date) || (x.m.created || 0) - (y.m.created || 0));
 }
-/** Change from first to latest, worded by direction. */
-function change(metric, first, last) {
-  if (!comparable(first,last)) return '<span class="vg-same">판정 보류 · 신뢰도/분석 버전 확인</span>';
-  const a = metric.get(first), b = metric.get(last);
+/** Change from first to latest (takes {id, a, date, ok}). Growth measures ask the model; 유효 최고음 is a neutral note
+ * difference shown only when both takes are comparable. */
+function change(metric, first, last, {pair = false} = {}) {
+  if (metric.model && G) return shortChange(G.compareMetric(metric.model, first, last, {reference:referenceOf(first.songId || last.songId), sameDay:pair}));
+  if (!comparable(first.a, last.a)) return '<span class="vg-same">판정 보류 · 신뢰도/분석 버전 확인</span>';
+  const a = metric.get(first.a), b = metric.get(last.a);
   if (a == null || b == null) return '';
   const d = Math.round((b - a) * 10) / 10;
   if (metric.step ? Math.round(d / metric.step) === 0 : Math.abs(d) < 0.5) return '<span class="vg-same">비슷함</span>';
   const amount = metric.step ? Math.abs(Math.round(d / 100)) + '반음' : Math.abs(d) + (metric.unit ? ' ' + metric.unit : '');
-  if (!metric.better) return '<span class="vg-same">' + (d > 0 ? '▲ ' : '▼ ') + amount + '</span>';
-  const good = Math.sign(d) === metric.better;
-  return '<span class="' + (good ? 'vg-good' : 'vg-bad') + '">' + (d > 0 ? '▲ ' : '▼ ') + amount + (good ? ' 좋아짐' : ' 나빠짐') + '</span>';
+  return '<span class="vg-same">' + (d > 0 ? '▲ ' : '▼ ') + amount + (metric.step ? ' · 실력 판정 아님' : '') + '</span>';
 }
+const takeOfPoint = p => ({id:p.m.id, songId:p.m.songId, a:p.a, date:String(p.date || '').slice(0, 10), ok:p.ok});
 /** A small line chart of one measurement, oldest → newest; tap a point to open that recording's analysis. */
 function spark(metric, pts) {
   const rows = pts.map(p => ({p, v:metric.get(p.a)})).filter(r => r.v != null);
@@ -66,17 +78,30 @@ function spark(metric, pts) {
   const reliable = rows.filter(r => r.p.ok), last = reliable.at(-1) || rows.at(-1);
   return '<div class="vg-chart"><div class="vg-head"><span class="vg-label">' + metric.label + '</span><span class="vg-now">' + esc(metric.fmt(last.v)) + '</span></div>' +
     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' + esc(metric.label + ' 날짜별 변화, 최근 ' + metric.fmt(last.v)) + '">' + line + dots + '</svg>' +
-    '<div class="vg-foot small muted"><span>' + esc(metric.help) + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(metric.key) ? 'range' : metric.key, metric.label) : '') + '</span>' + (reliable.length > 1 ? change(metric, reliable[0].p.a, reliable.at(-1).p.a) : '') + '</div></div>';
+    '<div class="vg-foot small muted"><span>' + esc(metric.help) + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(metric.key) ? 'range' : metric.key, metric.label) : '') + '</span>' + (reliable.length > 1 ? change(metric, takeOfPoint(reliable[0].p), takeOfPoint(reliable.at(-1).p)) : '') + '</div></div>';
 }
-/** First vs latest measurement table for two recordings (both need a saved analysis). */
+/** First vs latest measurement table for two recordings (both need a saved analysis), then the growth measures
+ * the table cannot show (same-phrase breath, high-note zone, passaggio reference). */
 VZ.measureTable = (first, second) => {
   const a = first && analysisOf(first), b = second && analysisOf(second);
   if (!a?.metrics || !b?.metrics) return '';
   const sameSong=!!first.songId&&first.songId===second.songId;
-  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,a,b):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
+  const take = (m, x) => ({id:m.id, songId:m.songId, a:x, date:String(M.dateOf?.(m) || '').slice(0, 10), ok:!!VZ.analysisReliable?.(x)});
+  const ta = take(first, a), tb = take(second, b);
+  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,ta,tb,{pair:true}):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
+  let extra = '';
+  if (G && sameSong) {
+    const r = G.comparePair(ta, tb, {reference:referenceOf(first.songId)});
+    const row = (label, x, before, after) => '<tr><th>' + label + '</th><td>' + esc(before) + '</td><td>' + esc(after) + '</td><td>' + shortChange(x) + '</td></tr>';
+    extra = row('호흡 유지', r.phrase, r.phrase.before != null ? r.phrase.before + '초' : '–', r.phrase.after != null ? r.phrase.after + '초' : '–') +
+      row('고음 안정성', r.high, r.high.before != null ? '±' + r.high.before : '–', r.high.after != null ? '±' + r.high.after : '–');
+    const p = r.passaggio.latest;
+    extra += '<tr class="vg-ref"><th>파사지오</th><td colspan="3">' + esc(G.passaggioText(p)) + '<small>' + esc(G.PASSAGGIO_NOTE) + '</small></td></tr>';
+  }
   const weak = !comparable(a,b) || !first.songId || first.songId!==second.songId;
-  return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    (weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '');
+  return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + extra + '</tbody></table>' +
+    (weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '') +
+    '<p class="small muted">최고음은 참고로만 보여 주고 실력 판정에 쓰지 않아요. 판정 보류는 근거가 부족하다는 뜻이에요.</p>';
 };
 /** Measurement summary saved with a comparison report (numbers only). */
 VZ.measureSnapshot = item => { const a = item && analysisOf(item); return a?.metrics ? {v:a.v, at:a.at, reliable:VZ.analysisReliable(a), metrics:a.metrics, confidence:a.confidence} : null; };
@@ -88,7 +113,7 @@ async function runBatch(song, todo) {
   try {
     for (const m of todo) {
       if (batch.stop) break;
-      if (fresh.get(m.id)?.v >= 2) { batch.done++; continue; } // already done in the background
+      if (fresh.get(m.id)?.v >= 2 && (!G || G.hasDetail(fresh.get(m.id)))) { batch.done++; continue; } // already done in the background
       batch.current = M.label(m); paint();
       try { await VZ.analyzeRecording(m); } catch { batch.failed++; }
       batch.done++; paint();
@@ -106,11 +131,16 @@ VZ.songVocalGrowth = (host, song, media) => {
   if (!host) return;
   last = {host, song, media};
   const audio = media.filter(m => !M.isVideo(m) || m.cloud), pts = points(audio);
-  const todo = audio.filter(m => !usable(m) || analysisOf(m)?.v < 2), running = batch.running && batch.songId === song.id;
+  const todo = audio.filter(m => !usable(m) || analysisOf(m)?.v < 2 || (G && !G.hasDetail(analysisOf(m)))), running = batch.running && batch.songId === song.id;
   if (!audio.length) { host.innerHTML = ''; return; }
   const reliable = pts.filter(p => p.ok);
   let body = '';
   if (pts.length) {
+    if (G) {
+      const report = G.songReport(pts.map(takeOfPoint), {reference:referenceOf(song.id)});
+      body += '<ul class="vg-growth" aria-label="성장 지표">' + G.METRICS.map(d => { const x = report[d.id];
+        return '<li><span>' + esc(d.title) + '</span>' + (d.reference ? '<span class="vg-same">' + esc(G.passaggioText(x.latest)) + ' · ' + esc(G.PASSAGGIO_NOTE) + '</span>' : shortChange(x)) + '</li>'; }).join('') + '</ul>';
+    }
     body += '<div class="vg-grid">' + METRICS.map(m => spark(m, pts)).join('') + '</div>';
     if (reliable.length >= 2) {
       const first = reliable[0], latest = reliable.at(-1);

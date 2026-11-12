@@ -245,3 +245,20 @@ body .sheet-page.vl-observation-overlay .vl-observation-card{
 .vl-compare select{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:32px}
 .vl-compare form{grid-template-columns:minmax(0,1fr)}
 .vl-compare-actions button{min-width:0;overflow-wrap:anywhere}
+/* 성장 리포트 v2: withheld and reference groups, single-take detail. */
+.vl-growth-group h3.hold{color:#f2c46b}
+.vl-growth-group h3.ref{color:#6fd6de}
+.vl-growth-row.hold .vl-growth-indicator{background:#f2c46b}
+.vl-growth-row.ref .vl-growth-indicator{background:#6fd6de}
+.vl-growth-row strong em{font-style:normal;font-size:10px;font-weight:700;color:#f2c46b;margin-left:4px}
+.vl-growth-row small{display:block;margin-top:3px;font-size:11px;line-height:1.5;color:#9f90ae;overflow-wrap:anywhere}
+.vl-growth-row.ref small{color:#8fdde3;font-weight:600}
+.vl-growth-rating{margin:12px 0 0;font-size:12px;color:#bcaccb}
+.vl-detail-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}
+.vl-detail-list li{padding:12px 14px;background:#211b2b;border-radius:16px;min-width:0}
+.vl-detail-list strong{display:block;font-size:12px;color:#b9a9c7;margin-bottom:4px}
+.vl-detail-list strong em{font-style:normal;font-size:10px;color:#6fd6de;margin-left:4px}
+.vl-detail-list span{display:block;font-size:13px;line-height:1.55;color:#f4ecfb;overflow-wrap:anywhere}
+.vl-detail-list small{display:block;margin-top:4px;font-size:11px;color:#8fdde3}
+.vl-compare .vg-table small{display:block;font-size:10px;color:#9f90ae;margin-top:2px}
+.vl-compare .vg-table .vg-ref td{color:#d6eef0}

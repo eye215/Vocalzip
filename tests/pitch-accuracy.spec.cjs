@@ -38,6 +38,7 @@ test('real audio decoder and Worker render distinct range metrics and retain pri
 });
 test('growth holds low confidence/version mismatch and shows a neutral four-semitone change',async({page})=>{
  await open(page);
+ await page.addScriptTag({url:'/app/growth-metrics-model.js'});
  await page.addScriptTag({url:'/app/song-vocal-growth.js'});
  const render=async(weak=false,version=2)=>page.evaluate(({weak,version})=>{
   const a={v:2,at:2,metrics:{voicedSeconds:12,range:{validHigh:{note:'A#5',cents:8200},stableHigh:{note:'A5',cents:8100}}},confidence:{pitchConfidence:.95,voiceOverMrDb:12}};

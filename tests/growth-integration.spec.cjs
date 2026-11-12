@@ -12,7 +12,7 @@ test('new vocal growth route does not replace existing statistics growth',()=>{
 });
 test('dependencies load in correct order',()=>{
  const html=file('index.html');
- const files=['app/analysis.js','app/weak-phrase.js','app/segment-ab-model.js',
+ const files=['app/analysis.js','app/growth-metrics-model.js','app/weak-phrase.js','app/segment-ab-model.js',
   'app/segment-ab-ui.js','app/plan-outcome-model.js','app/plan-outcome-ui.js',
   'app/monthly-practice-plans.js','app/monthly-growth.js'];
  const indexes=files.map(p=>html.indexOf('src="'+p+'?'));

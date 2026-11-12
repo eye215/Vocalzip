@@ -468,6 +468,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .vg-good{color:var(--ok);font-weight:600}
 .vg-bad{color:var(--danger);font-weight:600}
 .vg-same{color:var(--ink-2);font-weight:600}
+.vg-basis{display:block;font-size:11px;color:var(--ink-3);font-weight:400}
+.vg-growth{list-style:none;margin:6px 0 10px;padding:0;display:grid;gap:6px;font-size:13px}.vg-growth li{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;padding:6px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.vg-growth li>span:first-child{font-weight:600;color:var(--ink-2)}
+.vg-table .vg-ref small{display:block;font-size:11px;color:var(--ink-3)}
 .vg-cmp{margin-top:10px}
 .vg-cmp summary{cursor:pointer;font-weight:600;color:var(--accent);min-height:44px;display:flex;align-items:center}
 .vg-table{width:100%;border-collapse:collapse;font-size:14px;margin:4px 0 10px}

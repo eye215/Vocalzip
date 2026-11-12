@@ -13,3 +13,25 @@
 .growth-stats-empty p{margin:0;font-size:13px;line-height:1.55;color:#475467}
 .growth-stats-empty strong{display:block;margin-bottom:2px;font-size:15px;color:#101828}
 .growth-stats-empty .btn{grid-column:2;justify-self:start;margin-top:4px}
+/* 성장 리포트 v2 (6가지 지표): hold reasons, per-song evidence, passaggio reference note. */
+.growth-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:420px){.growth-stats-grid{grid-template-columns:1fr}}
+.growth-stat-v2{min-width:0;overflow-wrap:anywhere}
+.growth-stat-v2 .growth-stat-top>span:first-child{display:inline-flex;align-items:center;gap:2px;min-width:0}
+.growth-stat-v2 .info-btn{min-width:32px;min-height:32px}
+.growth-state.ref{color:#078994;background:#E8F6F6}
+.growth-stat-hold{display:flex;gap:6px;align-items:flex-start;margin:8px 0 0;padding:0;color:#8a5a00;font-size:12px;line-height:18px}
+.growth-stat-hold i{font-size:15px;margin-top:1px;flex:none}
+.growth-ref-note{display:flex;gap:6px;align-items:flex-start;margin:8px 0 0;padding:8px 10px;border-radius:12px;background:#E8F6F6;color:#05606a;font-size:12px;line-height:18px;font-weight:600}
+.growth-ref-note i{font-size:15px;margin-top:1px;flex:none}
+.growth-measure-help summary{min-height:44px;display:flex;align-items:center}
+.growth-song-rows{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}
+.growth-song-rows li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:8px 0 0;border-top:1px solid #F2EFF7}
+.growth-song-rows strong{font-size:12px;color:#344054;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.growth-song-rows .growth-state{align-self:start;font-size:10px;padding:2px 7px}
+.growth-song-rows p,.growth-song-rows small{grid-column:1/-1;margin:0;font-size:11px;line-height:16px;color:#475467}
+.growth-song-rows small{color:#667085}
+.growth-metric.growth-stat-v2{padding:14px}
+.growth-metric .growth-stat-number{font-size:22px;margin:12px 0 4px}
+.growth-month-section-title{flex-wrap:wrap;row-gap:2px}
+.growth-month-section-title h3{white-space:nowrap}
