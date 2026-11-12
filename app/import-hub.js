@@ -14,7 +14,7 @@ const SOURCES = {
     tip:'파일 앱에서 폴더를 열고 여러 파일을 선택하세요.'},
   memo:{icon:'microphone', title:'음성 메모', sub:'노래 연습 녹음', accept:'audio/*,.m4a,.mp3,.wav,.aac,.caf', start:'2025-07-24', end:'today',
     tip:'음성 메모 앱에서 녹음을 선택 → 공유 → "파일에 저장"으로 한 폴더에 모은 뒤, 여기서 그 폴더의 파일을 여러 개 선택하세요.'},
-  folder:{icon:'folder-open', title:'컴퓨터 폴더', sub:'맥·PC 브라우저에서 폴더째', accept:'audio/*,video/*', start:'', end:'', folder:true,
+  folder:{icon:'folder-open', title:'컴퓨터 폴더', sub:'맥·PC 브라우저에서 폴더째', accept:'audio/*,video/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.webm,.mov,.mp4,.m4v', start:'', end:'', folder:true,
     tip:'폴더를 고르거나 이 화면에 끌어다 놓으면 하위 폴더까지 음성·영상 파일만 골라 분석해요. 아이폰·아이패드에서는 폴더 선택이 안 돼요.'},
   vocalzip:{icon:'archive', title:'기존 Vocalzip', sub:'저장된 파일 이전', accept:'', disabled:true,
     tip:'Cloudflare R2 저장소를 설정하면 기존 파일을 옮길 수 있어요. 지금은 기존 저장소(기기·클라우드)에 그대로 안전하게 보관돼요.'}

@@ -115,7 +115,7 @@ VZ.importSheet = ({songId = '', files:initialFiles = null} = {}) => {
 /* ---------- 보관함 ---------- */
 const lib = {kind:'all', category:'all', song:'', month:'', q:''};
 const monthTitle = ym => ym ? Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월' : '날짜 미상';
-VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button><input type="file" multiple accept="audio/*,video/*" class="sr-only" data-imp-native aria-label="가져올 음성·영상 선택">', render() {
+VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button><input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.webm,.mov,.mp4,.m4v" class="sr-only" data-imp-native aria-label="가져올 음성·영상 선택">', render() {
   const seg = (k, opts, label) => '<div class="seg lib-seg" role="group" aria-label="' + label + '">' + opts.map(([v, t]) => '<button type="button" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + t + '</button>').join('') + '</div>';
   return VZ.songsSwitch('library') + '<div hidden class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·곡·메모 검색" aria-label="전체 녹음 검색" data-q value="' + esc(lib.q) + '"></div>' +
     '<div class="vz-library-tabs">'+seg('category', [['all', '전체'], ...M.RECORDING_CATEGORIES], '녹음 유형별 보기')+'</div>' +
