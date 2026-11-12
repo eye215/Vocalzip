@@ -470,7 +470,7 @@ test('MR 재생 · 녹음 · MR+녹음 sit directly under the score page and lea
  await expect(bar).toBeVisible();
  if(process.env.VZ_SCORE_AUDIO_SHOT)await page.screenshot({path:process.env.VZ_SCORE_AUDIO_SHOT+'-'+test.info().project.name+'.png'});
  for(const name of ['재생','녹음','재생+녹음'])await expect(bar.getByRole('button',{name,exact:true})).toBeVisible();
- expect((await bar.boundingBox()).height).toBeLessThanOrEqual(64);
+ expect((await bar.boundingBox()).height,'DIAG bar: '+JSON.stringify(await bar.evaluate(el=>({text:el.innerText,html:el.innerHTML.slice(0,1500),rows:[...el.children].map(c=>c.className+':'+Math.round(c.getBoundingClientRect().height))})))).toBeLessThanOrEqual(64);
  const stage=await dialog.locator('[data-ink-stage]').boundingBox(),box=await bar.boundingBox();
  expect(box.y).toBeGreaterThanOrEqual(stage.y+stage.height-1);
  expect(await bar.evaluate(el=>el.previousElementSibling?.matches('[data-ink-stage]'))).toBe(true);
@@ -573,8 +573,10 @@ test('reopening a score uses the device copy: no second PDF download',async({pag
  expect(r2.calls.filter(c=>/GET .*original\.pdf/.test(c)).length).toBeGreaterThan(0); // the first open really downloaded it
  // Reopening reads the PDF only through the 1-byte "still the same original?" check.
  const reads=[];page.on('request',req=>{if(req.method()==='GET'&&/original\.pdf/.test(req.url()))reads.push(req.headers().range||'full');});
+ const diagBefore=await page.evaluate(async()=>{const c=await caches.open('vzip-score-pdf-v1'),keys=await c.keys(),out=[];for(const k of keys){const r=await c.match(k),b=new Uint8Array(await r.arrayBuffer());out.push({url:k.url,hash:r.headers.get('x-vzip-pdf-hash'),etag:r.headers.get('x-vzip-pdf-etag'),len:b.length,pdf:new TextDecoder().decode(b.subarray(0,8))})}const sc=window.VZ.song('s1').scores[0];return {out,score:{r2Key:sc.r2Key,size:sc.size,updatedAt:sc.updatedAt,uploadedAt:sc.uploadedAt}}});
+ const allReads=[];page.on('request',async req=>{if(/original\.pdf/.test(req.url()))allReads.push(req.method()+' '+JSON.stringify(await req.allHeaders().catch(()=>({}))));});
  dialog=await open(page);
- expect(reads).toEqual(['bytes=0-0']);
+ expect(reads,'DIAG '+JSON.stringify({diagBefore,allReads})).toEqual(['bytes=0-0']);
  await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨');
  // Deleting the score drops the device copy too.
  await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
