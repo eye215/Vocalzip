@@ -235,6 +235,18 @@ test('what has been spent so far is shown from the server count',async()=>{
  await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
  assert.equal(line.hidden,true); // signed out or the usage function not installed yet: nothing invented
 });
+test('automatic server recognition shows this month against the monthly cap next to what has been spent',async()=>{
+ const b=browser(),line={hidden:true,textContent:''};
+ b.window.vzipSttUsage=async()=>({total:200,today:0});
+ b.window.vzipAutoSttUsage=async()=>({spent:0.4215,cap:2,clips:281});
+ await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
+ assert.equal(line.hidden,false);
+ assert.equal(line.textContent,'사용 금액 약 $0.300 · 자동 인식 이번 달 $0.421 / $2');
+ assert.match(line.title,/서버 자동 인식 이번 달 281회/);
+ b.window.vzipAutoSttUsage=async()=>{throw Error('offline')};
+ await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
+ assert.equal(line.textContent,'사용 금액 약 $0.300'); // migration not applied or offline: nothing invented
+});
 test('the 30 paid seconds are where the singing is, found on the device for free',async()=>{
  const b=browser(),fps=20,curve=new Array(120*fps).fill(null);
  for(let i=40*fps;i<80*fps;i++)curve[i]=6000; // MR intro, singing from 0:40 to 1:20

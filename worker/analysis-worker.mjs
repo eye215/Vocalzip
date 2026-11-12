@@ -3,9 +3,12 @@
 // the recording (Cloudflare R2, read-only token; or the older Supabase Storage copy), decodes it with
 // ffmpeg and
 //   'vocal' → runs the same measurements as the app (app/vocal-analysis.js) and stores metadata.analysis;
-//   'song'  → reuses a saved transcript (no new paid STT), compares
-//             it with the user's lyrics (song-text-match.mjs), and keeps candidates for user approval.
-//             New paid transcriptions are blocked until request/entitlement/budget enforcement is implemented.
+//   'song'  → reuses a saved transcript; otherwise, for a song recording without a song (never lesson / training /
+//             room), transcribes its 30 sung seconds once (OpenAI STT) within the service-wide monthly cap
+//             (vzip_auto_stt_budget, owner-approved $2.00 for all accounts; each clip is reserved in the database
+//             before the API is called), compares the text with the user's lyrics (song-text-match.mjs) and keeps
+//             candidates for user approval. Without OPENAI_API_KEY or the budget migration (20261115) it fails
+//             closed: no paid call. A song is never assigned automatically.
 // Original files are only read. Writes touch one analysis JSON key or the job result on the
 // current row, so edits made meanwhile are never overwritten. Logs carry counts only (public repo).
 import pg from 'pg';
@@ -21,7 +24,27 @@ const require = createRequire(import.meta.url);
 const VA = require('../app/vocal-analysis.js');
 const env = process.env;
 export const COST_PER_CLIP_USD = 0.0015;            // gpt-4o-mini-transcribe ≈ $0.003/min × 30 s
+const STT_MODEL = 'gpt-4o-mini-transcribe';
 const MAX_BYTES = 300 * 1024 * 1024, MAX_SECONDS = 15 * 60, CLIP = 30, SEARCH = 120, MIN_SUNG = 4;
+/* Automatic STT: at most this many paid clips per run, on top of the monthly cap kept in the database. */
+export const MAX_AUTO_STT_PER_RUN = 50;
+export const CAP_REASON = 'monthly automatic STT cap reached';
+
+/** Same purpose rule as the app (app/media.js M.recordingCategory), from what the server has: the recording's
+ * metadata and the owner's lessons / practices (vocal_data). Only 'song' recordings get automatic STT. */
+export function recordingCategory(meta = {}, id = meta?.id, {lessons = [], practices = []} = {}) {
+  const explicit = String(meta?.recordingCategory || '');
+  if (['song', 'lesson', 'training', 'room'].includes(explicit)) return explicit;
+  if (meta?.source === 'practice-room' || (meta?.source === 'practice' && /^[a-zA-Z0-9-]{8,80}-[01]$/.test(String(id || '')))) return 'room';
+  const lesson = lessons.some(l => (l?.recordings || []).some(r => r?.id === id));
+  const practice = practices.find(p => (p?.mediaIds || []).includes(id));
+  const occasion = ['performance', 'lesson', 'practice'].includes(meta?.occasion) ? meta.occasion
+    : lesson ? 'lesson' : practice ? 'practice' : meta?.source === 'lesson' ? 'lesson' : 'practice';
+  if (occasion === 'lesson') return 'lesson';
+  if (practice?.practiceRoom) return 'room';
+  if (practice?.practiceMode === 'training') return 'training';
+  return 'song';
+}
 
 /* Match confidence is a recommendation signal, never permission to change a song. */
 export const AUTO = {minScore:0.40, minMargin:0.12, minChars:30};
@@ -85,7 +108,7 @@ export function preflight() {
       else notes.push(name + ' set (' + len + ' chars)');
     }
   }
-  notes.push('paid STT disabled; cached song candidates require user approval');
+  notes.push('OPENAI_API_KEY ' + (clean(env.OPENAI_API_KEY) ? 'set' : 'missing (automatic STT off)') + '; song candidates always require user approval');
   return {notes, problems};
 }
 async function getR2(key) {
@@ -175,6 +198,17 @@ export function wav16(samples, rate) {
   for (let i = 0; i < samples.length; i++) { const v = Math.max(-1, Math.min(1, samples[i])); b.writeInt16LE(Math.round(v < 0 ? v * 32768 : v * 32767), 44 + i * 2); }
   return b;
 }
+/** One paid transcription. An HTTP error answer is not billed (billed:false); a network error or timeout may be. */
+async function transcribe(wav) {
+  const form = new FormData();
+  form.set('model', STT_MODEL); form.set('file', new Blob([wav], {type:'audio/wav'}), 'clip.wav');
+  let res;
+  try { res = await fetch((env.OPENAI_BASE || 'https://api.openai.com/v1') + '/audio/transcriptions', {method:'POST', headers:{authorization:'Bearer ' + clean(env.OPENAI_API_KEY)}, body:form, signal:AbortSignal.timeout(90000)}); }
+  catch (e) { throw Object.assign(new Error('speech recognition network error: ' + networkCause(e)), {billed:true}); }
+  if (!res.ok) throw Object.assign(new Error('speech recognition failed (' + res.status + ')'), {billed:false});
+  const body = await res.json().catch(() => ({}));
+  return String(body.text || '').slice(0, 1600);
+}
 
 /* ---------- jobs ---------- */
 // Lyrics and references are read once per owner for a short while: a re-check of hundreds of 'review' jobs of
@@ -194,6 +228,8 @@ async function readReferences(db, owner) {
   const {rows:[data]} = await db.query('select payload from public.vocal_data where user_id = $1', [owner]);
   const payload = data?.payload || {}, gone = new Set(payload.deleted?.songs || []);
   const songs = (payload.songs || []).filter(s => s?.id && !gone.has(s.id));
+  const list = v => Array.isArray(v) ? v : [];
+  const owned = {lessons:list(payload.lessons), practices:list(payload.practices)};
   // Lyrics typed on the song page first, and the Korean translation too (a Korean-language production is sung in the
   // translated words); recorded references only for songs without original lyrics (as in the app).
   const text = (s, key) => String(s[key] || '').trim();
@@ -201,7 +237,7 @@ async function readReferences(db, owner) {
     .map(key => ({songId:s.id, transcript:text(s, key).slice(0, 16000), source:key})));
   const has = new Set(typed.filter(r => r.source === 'lyrics').map(r => r.songId)), known = new Set(songs.map(s => s.id));
   const {rows} = await db.query("select record_id, transcript from public.vocal_song_texts where user_id = $1 and kind = 'reference' and deleted_at is null", [owner]).catch(() => ({rows:[]}));
-  return {songs, refs:[...typed, ...rows.filter(r => known.has(r.record_id) && !has.has(r.record_id)).map(r => ({songId:r.record_id, transcript:r.transcript}))]};
+  return {songs, owned, refs:[...typed, ...rows.filter(r => known.has(r.record_id) && !has.has(r.record_id)).map(r => ({songId:r.record_id, transcript:r.transcript}))]};
 }
 async function finish(db, job, status, result = null, error = null, cost = 0) {
   await db.query('update public.vocal_analysis_jobs set status = $2, result = coalesce($3::jsonb, result), last_error = $4, cost_usd = cost_usd + $5, locked_at = null, locked_by = null, updated_at = now() where id = $1',
@@ -217,43 +253,85 @@ async function vocalJob(db, job, meta, audio) {
     [job.media_id, job.user_id, JSON.stringify(summary)]);
   return finish(db, job, 'done', {voicedSeconds:r.metrics.voicedSeconds, confidence:r.confidence});
 }
-async function songJob(db, job, meta, audio) {
+async function songJob(db, job, meta, audio, stt) {
   if (meta.songId || meta.song) return finish(db, job, 'skipped', {reason:'already assigned'});
   const owner = job.user_id;
   // 1–2. A transcript paid for before (by the app or an earlier attempt) is reused: never paid twice.
   const saved = await db.query("select transcript from public.vocal_song_texts where user_id = $1 and kind = 'recognition' and record_id = $2 and deleted_at is null", [owner, job.media_id]).catch(() => ({rows:[]}));
-  let transcript = saved.rows[0]?.transcript ?? job.result?.transcript ?? null, cost = 0;
-  const {songs, refs, sig} = await references(db, owner);
+  let transcript = saved.rows[0]?.transcript ?? job.result?.transcript ?? null, cost = 0, paid = false;
+  const {songs, refs, sig, owned} = await references(db, owner);
   // Remember what this job was matched with; a later change of lyrics or references queues it again
   // (vzip_recheck_review_jobs). Without the column (migration not run yet) nothing changes.
   if (sig) await db.query('update public.vocal_analysis_jobs set refs_sig = $2 where id = $1', [job.id, sig]).catch(() => {});
   if (!refs.length) return finish(db, job, 'review', {reason:'no lyrics to compare', transcript});
   if (transcript == null) {
-    // A queued job, API key, workflow input or cron is NOT user consent or a budget reservation.
-    // Fail closed without decoding/uploading audio or calling any paid service.
-    return finish(db, job, 'review', {reason:'paid transcription requires an authorized user request', requiresRequest:true});
+    // 3. Automatic STT only when the owner's budget exists in the database and the key is set; otherwise (and for
+    // lesson / training / room recordings, or once the monthly cap is reached) fail closed as before: no download,
+    // no decoding, no paid call. The app's own request (vzip-song-stt) stays available.
+    const closed = reason => finish(db, job, 'review', {reason, requiresRequest:true});
+    if (!stt?.enabled) return closed('paid transcription requires an authorized user request');
+    if (recordingCategory(meta, job.media_id, owned) !== 'song') return closed('not a song recording');
+    if (stt.capped) return closed(CAP_REASON);
+    if (stt.used >= stt.limit) throw Object.assign(new Error('per-run STT limit'), {defer:true});
+    const {rows:[month]} = await db.query('select spent_usd, cap_usd from public.vzip_auto_stt_month_state()');
+    if (Number(month.spent_usd) + COST_PER_CLIP_USD > Number(month.cap_usd)) { stt.capped = true; return closed(CAP_REASON); }
+    // 4. The 30 sung seconds (found here for free); nothing is paid when there is no singing.
+    const samples = await audio(), {start, sung} = singingWindow(samples, 16000);
+    if (sung < MIN_SUNG) return finish(db, job, 'review', {reason:'no singing found'});
+    // 5. Reserve the clip in the database (atomic, service-wide), then one paid call, then settle.
+    const {rows:[r]} = await db.query('select ledger_id, refused from public.vzip_auto_stt_reserve($1, $2)', [job.id, COST_PER_CLIP_USD]);
+    if (!r?.ledger_id) {
+      if (r?.refused === 'cap') { stt.capped = true; return closed(CAP_REASON); }
+      return closed('already transcribed automatically');
+    }
+    stt.used++;
+    try {
+      transcript = await transcribe(wav16(samples.subarray(Math.floor(start * 16000), Math.floor((start + CLIP) * 16000)), 16000));
+    } catch (e) {
+      await db.query('select public.vzip_auto_stt_settle($1, $2)', [r.ledger_id, e.billed === false ? 'released' : 'failed']).catch(() => {});
+      if (e.billed !== false) stt.spent += COST_PER_CLIP_USD;
+      throw e;
+    }
+    stt.spent += COST_PER_CLIP_USD; paid = true;
+    // Kept on the job at once (own statement): whatever fails next, a retry reuses it instead of paying again.
+    await db.query("update public.vocal_analysis_jobs set result = jsonb_build_object('transcript', $2::text, 'stt', 'auto'), cost_usd = cost_usd + $3 where id = $1", [job.id, transcript, COST_PER_CLIP_USD]);
+    await db.query('begin');
+    try {
+      await db.query('select public.vzip_auto_stt_settle($1, $2)', [r.ledger_id, 'charged']);
+      if (transcript.trim()) await db.query("insert into public.vocal_song_texts (user_id, kind, record_id, transcript, source) values ($1, 'recognition', $2, $3, 'stt') on conflict do nothing", [owner, job.media_id, transcript]);
+      await db.query('commit');
+    } catch (e) { await db.query('rollback'); throw e; }
   }
-  // Reuse existing text for recommendations only. Never update the recording's song fields.
+  // Recommendations only. Never update the recording's song fields.
   const d = decide(transcript, matchTranscripts(transcript, refs));
   // Same label the app writes (VZ.songLabel): "title — show".
   const title = id => { const s = songs.find(x => x.id === id); return s ? s.title + (s.show ? ' — ' + s.show : '') : ''; };
   const top3 = d.top3.map(m => ({...m, title:title(m.songId)}));
-  return finish(db, job, 'review', {transcript, top3, score:d.score, margin:d.margin, auto:false, requiresApproval:true}, null, cost);
+  return finish(db, job, 'review', {transcript, top3, score:d.score, margin:d.margin, auto:false, requiresApproval:true, ...(paid || job.result?.stt === 'auto' ? {stt:'auto'} : {})}, null, cost);
 }
 
-/** Cached text can be matched without an API key. Paid inference is never enabled by this worker. */
+/** Automatic STT needs the key and the owner's budget ledger (migration 20261115); otherwise it stays closed. */
+export async function autoSttReady(db) {
+  if (!clean(env.OPENAI_API_KEY)) return false;
+  const {rows:[t]} = await db.query("select to_regprocedure('public.vzip_auto_stt_reserve(bigint,numeric)') is not null and to_regprocedure('public.vzip_auto_stt_settle(bigint,text)') is not null and to_regprocedure('public.vzip_auto_stt_month_state()') is not null as ok");
+  return !!t.ok;
+}
+/** Cached text can be matched without an API key; new text is paid only within the monthly cap (autoSttReady). */
 export async function kindsFor(db) {
   const {rows:[t]} = await db.query("select to_regclass('public.vocal_song_texts') is not null as ok");
   return t.ok ? ['vocal', 'song'] : ['vocal'];
 }
-export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 40 * 60000, maxJobs = Number(env.WORKER_MAX_JOBS) || 400, log = console.log, verbose = env.WORKER_VERBOSE === '1'} = {}) {
+export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pid), budgetMs = 40 * 60000, maxJobs = Number(env.WORKER_MAX_JOBS) || 400, maxStt = MAX_AUTO_STT_PER_RUN, log = console.log, verbose = env.WORKER_VERBOSE === '1'} = {}) {
   const only = clean(env.WORKER_KINDS).split(',').map(clean).filter(Boolean);
-  const started = Date.now(), kinds = (await kindsFor(db)).filter(k => !only.length || only.includes(k)), stats = {done:0, review:0, skipped:0, failed:0, retry:0}, errors = {};
+  let kinds = (await kindsFor(db)).filter(k => !only.length || only.includes(k));
+  const started = Date.now(), stats = {done:0, review:0, skipped:0, failed:0, retry:0}, errors = {};
+  // Automatic STT for this run: at most maxStt clips, and never past the monthly cap (checked in the database).
+  const stt = {enabled:kinds.includes('song') && await autoSttReady(db), used:0, limit:Math.max(0, Math.min(MAX_AUTO_STT_PER_RUN, maxStt)), spent:0, capped:false};
   let streak = 0, stopped = false; // consecutive failures: the same problem for every file (settings, network) stops the run
   refsCache.clear(); // each run reads the lyrics fresh
   await db.query('select public.vzip_fail_abandoned_jobs()');
   let cached = null; // the decoded file is shared by the song and vocal jobs of the same recording
-  for (let taken = 0; !stopped && taken < maxJobs && Date.now() - started < budgetMs;) {
+  for (let taken = 0; !stopped && kinds.length && taken < maxJobs && Date.now() - started < budgetMs;) {
     const {rows:jobs} = await db.query('select * from public.vzip_claim_analysis_jobs($1, $2, $3)', [worker, Math.min(5, maxJobs - taken), kinds]);
     if (!jobs.length) break;
     // UPDATE … RETURNING has no order: oldest first (song identification before measurements, as claimed).
@@ -279,7 +357,7 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
           }
           return cached.samples;
         };
-        await (job.kind === 'vocal' ? vocalJob : songJob)(db, job, row.metadata, audio);
+        await (job.kind === 'vocal' ? vocalJob(db, job, row.metadata, audio) : songJob(db, job, row.metadata, audio, stt));
         const {rows:[after]} = await db.query('select status from public.vocal_analysis_jobs where id = $1', [job.id]);
         if (verbose) {
           const {rows:[m]} = await db.query("select (metadata -> 'analysis' ->> 'v') is not null as measured, coalesce(metadata ->> 'songId', '') <> '' as has_song from public.vocal_media where id = $1 and user_id = $2", [job.media_id, job.user_id]);
@@ -289,6 +367,11 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
         streak = 0;
       } catch (e) {
         await db.query('rollback').catch(() => {});
+        if (e.defer) {
+          // This run's STT clips are used up: song jobs wait for the next run (no attempt used); measurements go on.
+          await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = greatest(0, attempts - 1), locked_at = null, locked_by = null, updated_at = now() where id = $1", [job.id]);
+          kinds = kinds.filter(k => k !== 'song'); stats.deferred = (stats.deferred || 0) + 1; taken--; continue;
+        }
         if (e.setup) {
           // A missing setting, not a broken file: set aside without using up an attempt or stopping the run,
           // and not counted against max_jobs. Queued again once the setting exists (see --requeue).
@@ -308,6 +391,12 @@ export async function run({db, worker = 'gh-' + (env.GITHUB_RUN_ID || process.pi
   log('analysis worker: ' + JSON.stringify(stats) + ' in ' + Math.round((Date.now() - started) / 1000) + 's');
   if (Object.keys(errors).length) log('analysis worker errors: ' + JSON.stringify(errors));
   if (stopped) log('analysis worker: stopped early after 8 failures in a row (same problem for every file?)');
+  if (stt.enabled) {
+    // Counts and dollars only (public log).
+    const month = await db.query('select spent_usd, cap_usd from public.vzip_auto_stt_month_state()').then(r => r.rows[0], () => null);
+    log('automatic STT: ' + stt.used + ' clip(s) this run (≈ $' + stt.spent.toFixed(4) + ')' + (month ? ' · this month $' + Number(month.spent_usd).toFixed(4) + ' / $' + Number(month.cap_usd).toFixed(2) : '') + (stt.capped ? ' · monthly cap reached' : '') + (stats.deferred ? ' · ' + stats.deferred + ' song job(s) left for the next run' : ''));
+  } else if (kinds.includes('song') || stats.review) log('automatic STT: off (needs OPENAI_API_KEY and the budget migration)');
+  stats.stt = {clips:stt.used, usd:stt.spent, capped:stt.capped};
   stats.errors = errors; stats.stopped = stopped;
   return stats;
 }

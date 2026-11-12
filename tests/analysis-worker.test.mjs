@@ -1,6 +1,7 @@
 // Server analysis worker against a real Postgres (the CI database job, or VZ_TEST_DB locally), real ffmpeg
-// decoding, and local stand-ins for Cloudflare R2 and the STT API. Checks zero automatic paid calls,
-// approval-only cached candidates, protection of user edits, retries and failure.
+// decoding, and local stand-ins for Cloudflare R2 and the STT API. Checks zero automatic paid calls without the
+// budget migration, approval-only candidates, protection of user edits, retries and failure; then, with the
+// migration (20261115), automatic STT within the monthly cap: reservation, per-run limit, category rules.
 import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, mkdtempSync, rmSync} from 'node:fs';
@@ -10,7 +11,7 @@ import {createServer} from 'node:http';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import pg from 'pg';
-import {signV4, decide, AUTO, describeDbUrl, r2Endpoint, describeSecret, networkCause} from '../worker/analysis-worker.mjs';
+import {signV4, decide, AUTO, describeDbUrl, r2Endpoint, describeSecret, networkCause, recordingCategory, CAP_REASON, COST_PER_CLIP_USD} from '../worker/analysis-worker.mjs';
 
 const require = createRequire(import.meta.url);
 const {synth} = require('./synth-vocal.cjs');
@@ -60,9 +61,25 @@ test('"fetch failed" is named: DNS, refused, timeout, TLS', () => {
   assert.match(networkCause(err('UNABLE_TO_VERIFY_LEAF_SIGNATURE')), /^TLS/);
 });
 
+test('Recording purpose follows the app rule: only song recordings get automatic STT', () => {
+  const owned = {lessons:[{id:'L1', recordings:[{id:'in-lesson'}]}], practices:[{id:'P1', mediaIds:['in-room'], practiceRoom:true}, {id:'P2', mediaIds:['in-training'], practiceMode:'training'}, {id:'P3', mediaIds:['in-practice']}]};
+  assert.equal(recordingCategory({}, 'plain', owned), 'song');                         // untagged, unlinked: a song take
+  for (const c of ['song', 'lesson', 'training', 'room']) assert.equal(recordingCategory({recordingCategory:c}, 'in-lesson', owned), c, 'explicit choice wins');
+  assert.equal(recordingCategory({source:'practice-room'}, 'x', owned), 'room');
+  assert.equal(recordingCategory({source:'practice'}, 'abcd1234-ef-1', owned), 'room');
+  assert.equal(recordingCategory({}, 'in-lesson', owned), 'lesson');
+  assert.equal(recordingCategory({source:'lesson'}, 'x', owned), 'lesson');
+  assert.equal(recordingCategory({occasion:'lesson'}, 'x', owned), 'lesson');
+  assert.equal(recordingCategory({occasion:'performance'}, 'in-lesson', owned), 'song');  // the user's occasion wins over the link
+  assert.equal(recordingCategory({}, 'in-room', owned), 'room');
+  assert.equal(recordingCategory({}, 'in-training', owned), 'training');
+  assert.equal(recordingCategory({}, 'in-practice', owned), 'song');
+  assert.equal(recordingCategory({recordingCategory:'other'}, 'plain'), 'song');
+});
+
 const DB = process.env.VZ_TEST_DB;
 const skip = !DB || spawnSync('ffmpeg', ['-version']).status !== 0 ? 'needs VZ_TEST_DB and ffmpeg' : false;
-let admin, db, r2, stt, files = new Map(), sttCalls = 0, sttText = new Map(), dbName;
+let admin, db, r2, stt, files = new Map(), sttCalls = 0, sttText = new Map(), dbName, sttDelay = 0, sttStatus = 200;
 const wav = opt => { const {samples, sr} = synth({sr:22050, ...opt}); const b = Buffer.alloc(44 + samples.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 2, 40); for (let i = 0; i < samples.length; i++) b.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(samples[i] * 20000))), 44 + i * 2); return b; };
 // A real AAC M4A with its index (moov) at the end, like an iPhone recording: written to a file (MP4 needs seeking).
 const m4a = buf => { const dir = mkdtempSync(join(tmpdir(), 'vzt-')), out = join(dir, 'a.m4a');
@@ -93,10 +110,12 @@ before(async () => {
     res.writeHead(200, {'content-type':'application/octet-stream'}); res.end(files.get(k));
   });
   stt = await listen((req, res) => {
-    const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => {
+    const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', async () => {
       sttCalls++;
       const body = Buffer.concat(chunks).toString('latin1');
+      if (sttDelay) await new Promise(r => setTimeout(r, sttDelay));
       if (!body.includes('gpt-4o-mini-transcribe') || !body.includes('RIFF') || req.headers.authorization !== 'Bearer test-openai') { res.writeHead(400); return res.end('{}'); }
+      if (sttStatus !== 200) { res.writeHead(sttStatus); return res.end('{}'); }
       res.writeHead(200, {'content-type':'application/json'}); res.end(JSON.stringify({text:sttText.get('queue')?.shift() ?? ''}));
     });
   });
@@ -133,7 +152,7 @@ test('Uploads keep free measurements and cached candidates, never pay or auto-as
   // The user picks a song for a5 before the server gets to it.
   await db.query("update public.vocal_media set metadata = metadata || '{\"songId\":\"s2\",\"song\":\"Defying Gravity\"}' where id = 'a5'");
 
-  // Existing text can be reused; neither an upload nor an API key authorizes new paid inference.
+  // Existing text can be reused; without the budget migration neither an upload nor an API key authorizes new paid inference.
   for (const [id, text] of [['a1', 'this is the moment this is the day when I send all my doubts away'], ['a2', 'la la la oh yeah baby tonight']])
     await db.query("insert into public.vocal_song_texts (user_id, kind, record_id, transcript, source) values ($1, 'recognition', $2, $3, 'stt')", [U1, id, text]);
   const stats = await work();
@@ -212,7 +231,7 @@ test('100 uploads, two workers at once: measurements once, paid API calls and as
   try { await Promise.all([run({db, worker:'w1', log:() => {}}), run({db:second, worker:'w2', log:() => {}})]); } finally { await second.end(); }
   const {rows} = await db.query("select kind, status, count(*)::int n, sum(attempts)::int tries from public.vocal_analysis_jobs where user_id = $1 group by kind, status order by kind", [user]);
   assert.deepEqual(rows, [{kind:'song', status:'review', n:100, tries:100}, {kind:'vocal', status:'done', n:100, tries:100}]);
-  assert.equal(sttCalls - before, 0);                                                   // API key presence does not authorize spending
+  assert.equal(sttCalls - before, 0);                                                   // API key without the budget migration does not authorize spending
   const {rows:[q]} = await db.query('select used_total from public.vzip_song_stt_quota where user_id = $1', [user]);
   assert.equal(q, undefined);
   const {rows:[m]} = await db.query("select count(*) filter (where metadata ->> 'songId' = 's1')::int sorted, count(*) filter (where metadata -> 'analysis' ->> 'v' = '2')::int measured from public.vocal_media where user_id = $1", [user]);
@@ -255,7 +274,7 @@ test('Older Supabase Storage files without the service key are set aside (no att
   assert.equal(n.status, 'done');
 });
 
-test('Uncached jobs never contact speech recognition even when an API key is configured', {skip}, async () => {
+test('Without the budget migration, uncached jobs never contact speech recognition even when an API key is configured', {skip}, async () => {
   const keep = process.env.OPENAI_BASE, user = '22222222-2222-4222-8222-222222222222';
   await db.query("insert into public.vocal_data (user_id, payload) values ($1, $2) on conflict (user_id) do update set payload = excluded.payload", [user, JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}]})]);
   files.set(key(user, 'sttnet', 'wav'), wav({}));
@@ -391,4 +410,176 @@ test('Supabase wakes the GitHub worker only when recordings wait, no worker is b
   // The app's roles cannot call it or read the table.
   const {rows:[perm]} = await db.query("select has_function_privilege('authenticated', 'public.vzip_wake_worker(boolean)', 'execute') as f, has_table_privilege('authenticated', 'public.vzip_worker_wake', 'select') as t");
   assert.deepEqual(perm, {f:false, t:false});
+});
+
+/* ---------- automatic STT within the monthly cap (migration 20261115) ---------- */
+const U3 = '44444444-4444-4444-8444-444444444444', U4 = '55555555-5555-4555-8555-555555555555';
+const month = async () => (await db.query('select spent_usd::float spent, cap_usd::float cap, clips from public.vzip_auto_stt_month_state()')).rows[0];
+const ledger = async (where = 'true') => (await db.query('select status, count(*)::int n from public.vzip_auto_stt_ledger where ' + where + ' group by status order by status')).rows;
+const setCap = cap => db.query('update public.vzip_auto_stt_budget set monthly_cap_usd = $1', [cap]);
+const takeOf = async (id, meta = {}, user = U1, voice = true) => { files.set(key(user, id, 'wav'), wav(voice ? {} : {withVoice:false})); await media(id, {name:'take', storageProvider:'r2', r2Key:key(user, id, 'wav'), analysis:{v:1}, ...meta}, user); };
+const songUser = async user => {
+  await db.query('insert into auth.users(id) values ($1) on conflict do nothing', [user]);
+  await db.query("insert into public.vocal_data (user_id, payload) values ($1, $2) on conflict (user_id) do update set payload = excluded.payload", [user, JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}, {id:'s2', title:'Defying Gravity', lyrics:LYRICS_B}]})]);
+};
+
+test('With the budget migration: song recordings without a song are transcribed once; lesson / training / room and assigned ones never', {skip}, async () => {
+  await db.query(readFileSync(ROOT + 'supabase/migrations/20261115_auto_stt_budget.sql', 'utf8'));
+  await db.query(readFileSync(ROOT + 'supabase/migrations/20261115_auto_stt_budget.sql', 'utf8')); // safe to run again
+  await db.query("update public.vocal_analysis_jobs set status = 'done', locked_at = null, locked_by = null where status in ('queued', 'running')");
+  assert.deepEqual(await month(), {spent:0, cap:2, clips:0});
+  const {rows:[d]} = await db.query('select payload from public.vocal_data where user_id = $1', [U1]);
+  d.payload.lessons = [{id:'L1', recordings:[{id:'au-linked'}]}];
+  await db.query('update public.vocal_data set payload = $2 where user_id = $1', [U1, JSON.stringify(d.payload)]);
+  sttText.set('queue', ['this is the moment this is the day when I send all my doubts away']);
+  await takeOf('au-song');                                        // the only one that may be paid for
+  await takeOf('au-lesson', {recordingCategory:'lesson'});
+  await takeOf('au-training', {recordingCategory:'training'});
+  await takeOf('au-room', {recordingCategory:'room'});
+  await takeOf('au-roomsrc', {source:'practice-room'});
+  await takeOf('au-linked');                                       // linked to a lesson in the owner's records
+  await takeOf('au-assigned', {songId:'s2', song:'Defying Gravity'});
+  await takeOf('au-later');                                        // the user picks a song before the worker gets to it
+  await db.query("update public.vocal_media set metadata = metadata || '{\"songId\":\"s1\"}' where id = 'au-later'");
+  await takeOf('au-saved');                                        // transcribed earlier (by the app)
+  await db.query("insert into public.vocal_song_texts (user_id, kind, record_id, transcript, source) values ($1, 'recognition', 'au-saved', 'something has changed within me something is not the same I am through with playing by the rules', 'stt')", [U1]);
+  await takeOf('au-mr', {}, U1, false);                            // accompaniment only: no singing, nothing paid
+  assert.equal((await jobs('au-assigned')).song, undefined, 'a recording with a song is never queued for song identification');
+
+  const before = sttCalls, stats = await work();
+  assert.equal(sttCalls - before, 1, 'one paid clip: au-song only');
+  assert.deepEqual(stats.stt, {clips:1, usd:COST_PER_CLIP_USD, capped:false});
+  const j = (await jobs('au-song')).song;
+  assert.equal(j.status, 'review'); assert.equal(j.result.requiresApproval, true); assert.equal(j.result.auto, false); assert.equal(j.result.stt, 'auto');
+  assert.equal(j.result.top3[0].songId, 's1'); assert.equal(Number(j.cost_usd), COST_PER_CLIP_USD);
+  assert.equal((await row('au-song')).songId, undefined, 'a suggestion only: the user confirms in the app');
+  const {rows:[text]} = await db.query("select source from public.vocal_song_texts where user_id = $1 and kind = 'recognition' and record_id = 'au-song'", [U1]);
+  assert.equal(text.source, 'stt', 'saved so it is never paid for again and syncs to the app');
+  for (const id of ['au-lesson', 'au-training', 'au-room', 'au-roomsrc', 'au-linked']) {
+    const r = (await jobs(id)).song;
+    assert.deepEqual([r.status, r.result.requiresRequest, r.result.reason, Number(r.cost_usd)], ['review', true, 'not a song recording', 0], id);
+  }
+  assert.equal((await jobs('au-later')).song.status, 'skipped');
+  const saved = (await jobs('au-saved')).song;
+  assert.equal(saved.result.top3[0].songId, 's2'); assert.equal(Number(saved.cost_usd), 0); assert.equal(saved.result.stt, undefined);
+  assert.equal((await jobs('au-mr')).song.result.reason, 'no singing found');
+  assert.deepEqual(await ledger(), [{status:'charged', n:1}]);
+  assert.deepEqual(await month(), {spent:COST_PER_CLIP_USD, cap:2, clips:1});
+  const {rows:[q]} = await db.query('select used_total from public.vzip_song_stt_quota where user_id = $1', [U1]);
+  assert.equal(q, undefined, "the app's own STT count is not touched");
+
+  // Matched again later (lyrics changed): the saved text is reused, never a second charge for the recording.
+  await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, result = null where media_id = 'au-song' and kind = 'song'");
+  await work();
+  assert.equal(sttCalls - before, 1);
+  assert.deepEqual(await ledger(), [{status:'charged', n:1}]);
+  // Even without the saved text, the ledger refuses to pay twice for the same recording.
+  await db.query("delete from public.vocal_song_texts where user_id = $1 and record_id = 'au-song'", [U1]);
+  await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, result = null where media_id = 'au-song' and kind = 'song'");
+  await work();
+  assert.equal(sttCalls - before, 1);
+  assert.equal((await jobs('au-song')).song.result.reason, 'already transcribed automatically');
+
+  // The app can read the month's total, but not the ledger or the worker's functions.
+  await db.query('begin'); await db.query('set local role authenticated'); await db.query("select set_config('request.jwt.claim.sub', $1, true)", [U2]);
+  const {rows:[seen]} = await db.query('select spent_usd::float s, cap_usd::float c, clips from public.vzip_auto_stt_month_usage()');
+  await db.query('rollback');
+  assert.deepEqual(seen, {s:COST_PER_CLIP_USD, c:2, clips:1});
+  const {rows:[perm]} = await db.query("select has_function_privilege('authenticated', 'public.vzip_auto_stt_reserve(bigint,numeric)', 'execute') r, has_function_privilege('authenticated', 'public.vzip_auto_stt_settle(bigint,text)', 'execute') s, has_function_privilege('authenticated', 'public.vzip_auto_stt_month_state()', 'execute') m, has_table_privilege('authenticated', 'public.vzip_auto_stt_ledger', 'select') l, has_table_privilege('authenticated', 'public.vzip_auto_stt_budget', 'update') b");
+  assert.deepEqual(perm, {r:false, s:false, m:false, l:false, b:false});
+});
+
+test('At the monthly cap nothing is sent to the API; last month does not count', {skip}, async () => {
+  await songUser(U3);
+  // A full previous month is not this month's spend.
+  await db.query("insert into public.vzip_auto_stt_ledger (month, user_id, media_id, status, amount_usd) select (date_trunc('month', timezone('utc', now())) - interval '1 month')::date, $1, 'old-' || g, 'charged', 0.05 from generate_series(1, 60) g", [U3]);
+  assert.equal((await month()).spent, COST_PER_CLIP_USD);
+  const {spent} = await month();
+  await setCap(spent + COST_PER_CLIP_USD / 2);                    // less than one clip left
+  await takeOf('cap-1', {}, U3); await takeOf('cap-2', {}, U3);
+  const before = sttCalls, stats = await work();
+  assert.equal(sttCalls, before, 'no API call at the cap');
+  assert.equal(stats.stt.capped, true); assert.equal(stats.stt.clips, 0);
+  for (const id of ['cap-1', 'cap-2']) {
+    const j = (await jobs(id)).song;
+    assert.deepEqual([j.status, j.result.requiresRequest, j.result.reason, Number(j.cost_usd)], ['review', true, CAP_REASON, 0]);
+  }
+  assert.equal((await month()).clips, 1, 'nothing reserved');
+  await setCap(2);
+});
+
+test('Two workers at once never overshoot the cap: each clip is reserved in the database first', {skip}, async () => {
+  // The reservation itself: a second reservation waits for the first and then sees it.
+  await songUser(U4);
+  await takeOf('race-a', {}, U4); await takeOf('race-b', {}, U4);
+  const {spent} = await month();
+  await setCap(spent + COST_PER_CLIP_USD);                        // room for exactly one clip
+  const other = new pg.Client({connectionString:DB.replace(/\/[^/]*$/, '/' + dbName)}); await other.connect();
+  try {
+    const reserve = async (c, id) => (await c.query("select ledger_id, refused from public.vzip_auto_stt_reserve((select id from public.vocal_analysis_jobs where media_id = $1 and kind = 'song'), $2)", [id, COST_PER_CLIP_USD])).rows[0];
+    await db.query('begin');
+    const first = await reserve(db, 'race-a');
+    const pending = reserve(other, 'race-b');                    // blocks on the budget row
+    await new Promise(r => setTimeout(r, 200));
+    await db.query('commit');
+    const second = await pending;
+    assert.ok(first.ledger_id); assert.equal(second.ledger_id, null); assert.equal(second.refused, 'cap');
+    await db.query('select public.vzip_auto_stt_settle($1, $2)', [first.ledger_id, 'released']);
+  } finally { await other.end(); }
+
+  // Whole runs: two workers, eight eligible recordings, room for three clips, slow API answers.
+  await db.query("update public.vocal_analysis_jobs set status = 'done' where media_id in ('race-a', 'race-b')");
+  for (let i = 0; i < 8; i++) await takeOf('race' + i, {}, U4);
+  const now = await month();
+  await setCap(now.spent + 3 * COST_PER_CLIP_USD);
+  sttText.set('queue', Array.from({length:8}, () => 'this is the moment this is the day when I send all my doubts away'));
+  sttDelay = 150;
+  const before = sttCalls, {run} = await import('../worker/analysis-worker.mjs');
+  const second = new pg.Client({connectionString:DB.replace(/\/[^/]*$/, '/' + dbName)}); await second.connect();
+  try { await Promise.all([run({db, worker:'w1', log:() => {}}), run({db:second, worker:'w2', log:() => {}})]); }
+  finally { sttDelay = 0; await second.end(); }
+  assert.equal(sttCalls - before, 3, 'exactly the clips that fit');
+  const after = await month();
+  assert.ok(after.spent <= after.cap + 1e-9); assert.equal(after.clips - now.clips, 3);
+  const {rows} = await db.query("select result ->> 'reason' reason, count(*)::int n from public.vocal_analysis_jobs where user_id = $1 and kind = 'song' and media_id like 'race_' group by 1 order by 1", [U4]);
+  assert.deepEqual(rows, [{reason:CAP_REASON, n:5}, {reason:null, n:3}]);
+  await setCap(2);
+});
+
+test('At most the per-run limit is paid in one run; the rest wait queued without using an attempt', {skip}, async () => {
+  for (let i = 0; i < 4; i++) await takeOf('lim' + i, {}, U4);
+  sttText.set('queue', Array.from({length:4}, () => 'something has changed within me something is not the same I am through with playing'));
+  const {run} = await import('../worker/analysis-worker.mjs'), before = sttCalls;
+  const stats = await run({db, maxStt:2, log:() => {}});
+  assert.equal(sttCalls - before, 2); assert.equal(stats.stt.clips, 2); assert.ok(stats.deferred >= 2);
+  const {rows} = await db.query("select status, attempts, count(*)::int n from public.vocal_analysis_jobs where media_id like 'lim_' and kind = 'song' group by 1, 2 order by 1", []);
+  assert.deepEqual(rows, [{status:'queued', attempts:0, n:2}, {status:'review', attempts:1, n:2}]);
+  await run({db, maxStt:2, log:() => {}});
+  assert.equal(sttCalls - before, 4);
+  assert.equal((await db.query("select count(*)::int n from public.vocal_analysis_jobs where media_id like 'lim_' and kind = 'song' and result ->> 'stt' = 'auto'")).rows[0].n, 4);
+});
+
+test('An API error answer is released (not counted); without the key nothing is paid, as before', {skip}, async () => {
+  await takeOf('err1', {}, U4);
+  const start = await month(), before = sttCalls;
+  sttStatus = 500;
+  try { await work(); } finally { sttStatus = 200; }
+  assert.equal(sttCalls - before, 1);
+  const j = (await jobs('err1')).song;
+  assert.equal(j.status, 'running'); assert.equal(j.last_error, 'speech recognition failed (500)'); assert.equal(Number(j.cost_usd), 0); // waits to retry
+  assert.deepEqual(await month(), start, 'a refused call does not count toward the cap');
+  assert.deepEqual(await ledger("media_id = 'err1'"), [{status:'released', n:1}]);
+
+  const apiKey = process.env.OPENAI_API_KEY; delete process.env.OPENAI_API_KEY;
+  try {
+    await takeOf('nokey1', {}, U4);
+    await db.query("update public.vocal_analysis_jobs set locked_at = now() - interval '31 minutes' where media_id = 'err1'");
+    await work();
+  } finally { process.env.OPENAI_API_KEY = apiKey; }
+  assert.equal(sttCalls - before, 1, 'no key: no call');
+  for (const id of ['nokey1', 'err1']) {
+    const r = (await jobs(id)).song;
+    assert.deepEqual([r.status, r.result.requiresRequest, r.result.reason], ['review', true, 'paid transcription requires an authorized user request'], id);
+  }
+  assert.deepEqual(await month(), start);
 });
