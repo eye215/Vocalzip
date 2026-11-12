@@ -193,7 +193,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     try {
       await M.saveBlob(itemFor(take), p => hint('클라우드 저장 ' + p + '%'));
       take.res.releaseProtection?.(); s.preview?.destroy?.(); s.preview = null; s.take = null; s.mode = 'idle'; s.busy = false;
-      paint(); hint('저장했어요 · 이 곡의 녹음 탭과 보관함에서 볼 수 있어요.');
+      paint(); hint('저장했어요 · 이 곡의 녹음 탭과 전체 녹음에서 볼 수 있어요.');
       VZ.toast('악보 녹음을 저장했어요.');
     } catch (e) { s.busy = false; if (button) button.disabled = false; hint('저장 실패: ' + e.message + ' · 녹음은 이 화면에 그대로 있어요.', true); }
   }

@@ -65,16 +65,16 @@ test('Library places filter and search above review, and keeps selection separat
  await expect(page.locator('.lib-tools [data-library-search]')).toBeVisible();
  await page.locator('[data-library-filter]').click();await page.locator('[data-filter-kind]').click();await page.locator('[data-choice=audio]').click();
  await expect(page.locator('[data-library-filter]')).toHaveAttribute('aria-pressed','true');
- await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeFocused();
+ await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'전체 녹음 검색'})).toBeFocused();
  await expect(page.locator('[data-collection-search] button')).toHaveCount(0);
  // Set the keyboard height and measure in one step: the app re-reads the real (closed) keyboard after focus moves.
  expect(await page.locator('[data-collection-search]').evaluate(form=>{document.documentElement.style.setProperty('--kb','280px');return Math.round(innerHeight-form.getBoundingClientRect().bottom)})).toBe(290);
  await page.evaluate(()=>document.documentElement.style.removeProperty('--kb'));
- await page.getByRole('searchbox',{name:'보관함 검색'}).fill('테스트');await expect(page.locator('[data-q]')).toHaveValue('');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
+ await page.getByRole('searchbox',{name:'전체 녹음 검색'}).fill('테스트');await expect(page.locator('[data-q]')).toHaveValue('');await page.getByRole('searchbox',{name:'전체 녹음 검색'}).press('Enter');
  await expect(page.locator('[data-q]')).toHaveValue('테스트');
  await expect(page.locator('[data-library-search]')).toHaveAttribute('aria-pressed','true');
  expect(await page.locator('[data-library-search]').evaluate(el=>getComputedStyle(el,'::after').backgroundColor)).toBe('rgb(122, 50, 245)');
- await page.locator('[data-library-search]').click();await page.getByRole('searchbox',{name:'보관함 검색'}).fill('');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
+ await page.locator('[data-library-search]').click();await page.getByRole('searchbox',{name:'전체 녹음 검색'}).fill('');await page.getByRole('searchbox',{name:'전체 녹음 검색'}).press('Enter');
  await expect(page.locator('[data-library-search]')).toHaveAttribute('aria-pressed','false');
  expect(await page.locator('[data-library-search]').evaluate(el=>getComputedStyle(el,'::after').content)).toBe('none');
  await expect(page.locator('[data-select-mode]')).toBeVisible();
@@ -217,6 +217,6 @@ test('A production connects to the rest of the app: its day on the calendar, 공
  await page.locator('[data-song-filter]').click();await page.locator('[data-filter-sort]').click();await expect(page.locator('[data-choice=name]')).toBeVisible();await page.locator('[data-choice=name]').click();await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','true');
  await expect(page.locator('.vz-recent-song')).toHaveAttribute('href','#/record?song=song1');await page.locator('.vz-recent-song').click();await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
  await page.goto('/#/library');await expect(page.locator('.v-nav [data-nav=library]')).toHaveCount(0);await expect(page.locator('.v-nav [data-nav=songs]')).toHaveAttribute('aria-current','page');await expect(page.getByRole('navigation',{name:'내 곡 보기'}).getByRole('link',{name:'전체 녹음'})).toHaveAttribute('aria-current','page');await expect(page.locator('#top [data-back]')).toHaveCount(0);await expect(page.locator('[data-library-search]')).toBeVisible();
- await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeVisible();
+ await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'전체 녹음 검색'})).toBeVisible();
  });
 

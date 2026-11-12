@@ -300,8 +300,8 @@ VZ.practiceDetail = id => {
       const wrap = el.parentNode;
       wrap.querySelector('[data-edit]').onclick = () => { close(); VZ.practiceSheet({practice:p}); };
       wrap.querySelector('[data-del]').onclick = async () => {
-        if (!await VZ.confirm('연습 기록 삭제', '이 연습 기록을 삭제할까요? 연결된 녹음 파일은 보관함에 그대로 남아요.', {ok:'삭제', danger:true})) return;
-        if (VZ.change(d => { d.practices = d.practices.filter(x => x.id !== p.id); })) { close(); VZ.toast('삭제했어요. 녹음은 보관함에 남아 있어요.'); }
+        if (!await VZ.confirm('연습 기록 삭제', '이 연습 기록을 삭제할까요? 연결된 녹음 파일은 전체 녹음에 그대로 남아요.', {ok:'삭제', danger:true})) return;
+        if (VZ.change(d => { d.practices = d.practices.filter(x => x.id !== p.id); })) { close(); VZ.toast('삭제했어요. 녹음은 전체 녹음에 남아 있어요.'); }
       };
       const items = (await M.list()).filter(m => (p.mediaIds || []).includes(m.id));
       const host = el.querySelector('[data-list]');
@@ -444,7 +444,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
       fail.querySelector('[data-dl]').onclick = () => { const url = URL.createObjectURL(res.blob); const a = document.createElement('a'); a.href = url; a.download = item.name + (res.type.includes('mp4') ? '.m4a' : '.webm'); a.click(); setTimeout(() => URL.revokeObjectURL(url), 4000); };
     }
   }
-  if (!M.canRecord()) { status.textContent = '이 브라우저는 녹음을 지원하지 않아요. 보관함에서 파일을 가져올 수 있어요.'; mainBtn.disabled = true; }
+  if (!M.canRecord()) { status.textContent = '이 브라우저는 녹음을 지원하지 않아요. 전체 녹음에서 파일을 가져올 수 있어요.'; mainBtn.disabled = true; }
 }});
 VZ.pickSong = (value, onPick) => {
   VZ.sheet({title:'곡 선택', body:'<form id="pick-song-form">' + VZ.songSelect('song', value) + '</form>',

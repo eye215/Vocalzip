@@ -127,7 +127,7 @@ test('A file stored in R2 whose library row cannot be written is kept (not delet
   const uc = page.locator('.uc');
   await expect(uc).toContainText('진단 결과');
   await expect(uc.locator('.uc-row', {hasText:'R2 파일'}).first()).toContainText('1 ·');
-  await expect(uc.locator('.uc-row', {hasText:'R2에는 있는데 보관함 기록이 없는 파일'})).toContainText('1');
+  await expect(uc.locator('.uc-row', {hasText:'R2에는 있는데 전체 녹음 기록이 없는 파일'})).toContainText('1');
   await expect(uc.locator('.uc-row', {hasText:'복구 가능'})).toContainText('1');
   expect(r2.calls).toContain('GET /v1/objects');
   // A successful upload with the row confirmed is "done" and also leaves no device copy.

@@ -35,7 +35,7 @@ async function moveOne(item, signal) {
 }
 
 VZ.route('storage', {title:'저장 공간 관리', back:true, tab:'home', noAutoRefresh:true,
-  render() { return '<div data-storage><p class="muted">불러오는 중…</p></div><a class="card item" href="#/upload-check" style="margin-top:12px;text-decoration:none"><span class="avatar"><i class="ph ph-stethoscope"></i></span><span class="item-main"><span class="item-title">업로드 상태 진단</span><span class="item-sub">기기·보관함·R2 파일을 맞춰 보기 (읽기 전용)</span></span><i class="ph ph-caret-right chev"></i></a>'; },
+  render() { return '<div data-storage><p class="muted">불러오는 중…</p></div><a class="card item" href="#/upload-check" style="margin-top:12px;text-decoration:none"><span class="avatar"><i class="ph ph-stethoscope"></i></span><span class="item-main"><span class="item-title">업로드 상태 진단</span><span class="item-sub">기기·전체 녹음·R2 파일을 맞춰 보기 (읽기 전용)</span></span><i class="ph ph-caret-right chev"></i></a>'; },
   async mount(main) {
     VZ.setGuard(() => run && !run.finished ? '파일을 옮기는 중이에요. 나가면 남은 파일은 다음에 이어서 옮길 수 있어요. 나갈까요?' : '');
     await draw(main);

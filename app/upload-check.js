@@ -70,7 +70,7 @@ async function runCheck(host) {
   host.innerHTML = '<div class="card stack"><strong>진단 중…</strong><p class="small muted" style="margin:0" data-uc-progress>이 기기의 파일을 확인하는 중</p><p class="small muted" style="margin:0">읽기만 해요. 아무것도 바꾸거나 지우지 않아요.</p></div>';
   const result = {checkedAt:new Date().toISOString(), user:window.vzipCloudUserId?.() || '', errors:[]};
   try { result.local = await localScan(); } catch (e) { result.local = []; result.errors.push('기기 파일: ' + e.message); }
-  say('서버의 보관함 기록을 확인하는 중');
+  say('서버의 전체 녹음 기록을 확인하는 중');
   if (!window.vzipCloudSignedIn?.()) result.errors.push('로그인되어 있지 않아 서버 기록을 볼 수 없어요. 로그인 후 다시 진단해 주세요.');
   try { result.rows = window.vzipCloudSignedIn?.() ? await window.vzipCloudMediaRows() : []; } catch (e) { result.rows = []; result.errors.push('서버 기록: ' + e.message); }
   say('R2 저장소의 파일을 확인하는 중');
@@ -91,7 +91,7 @@ async function runCheck(host) {
 
 function draw(host) {
   if (!last) {
-    host.innerHTML = '<div class="card stack"><strong>업로드 상태 진단</strong><p class="small" style="margin:0">이 기기에 남은 파일, 서버의 보관함 기록, R2 저장소의 파일을 서로 맞춰 봐요. 어떤 파일이 서버에 저장됐고, 어떤 파일이 빠졌는지 알려 드려요.</p>' +
+    host.innerHTML = '<div class="card stack"><strong>업로드 상태 진단</strong><p class="small" style="margin:0">이 기기에 남은 파일, 서버의 전체 녹음 기록, R2 저장소의 파일을 서로 맞춰 봐요. 어떤 파일이 서버에 저장됐고, 어떤 파일이 빠졌는지 알려 드려요.</p>' +
       '<p class="small muted" style="margin:0">읽기만 해요. 업로드·복구·삭제는 하지 않아요. 결과는 JSON 파일로 저장해 둘 수 있어요 (복구 전 백업).</p><button type="button" class="btn block" data-uc-run>진단 시작</button></div>';
     host.querySelector('[data-uc-run]').onclick = () => runCheck(host);
     return;
@@ -102,14 +102,14 @@ function draw(host) {
   const q = s.queueCounts;
   host.innerHTML = '<div class="card stack uc"><div class="row between"><strong>진단 결과</strong><span class="small muted">' + esc(new Date(last.checkedAt).toLocaleString('ko-KR')) + '</span></div>' +
     (last.errors.length ? '<div class="small" style="color:var(--warn)">' + last.errors.map(e => '· ' + esc(e)).join('<br>') + '</div>' : '') +
-    '<h3 class="cal-group" style="margin:4px 0 0">서버 (보관함에 보이는 파일)</h3>' +
-    row('보관함 기록 전체', n(s.rows)) + row('· R2에 저장된 기록', n(s.rowsR2)) + row('· 예전 저장소(Supabase) 기록', n(s.rowsOldStorage)) + row('· 오늘 등록·수정된 기록', n(s.rowsToday)) +
+    '<h3 class="cal-group" style="margin:4px 0 0">서버 (전체 녹음에 보이는 파일)</h3>' +
+    row('전체 녹음 기록 전체', n(s.rows)) + row('· R2에 저장된 기록', n(s.rowsR2)) + row('· 예전 저장소(Supabase) 기록', n(s.rowsOldStorage)) + row('· 오늘 등록·수정된 기록', n(s.rowsToday)) +
     '<h3 class="cal-group" style="margin:4px 0 0">R2 저장소</h3>' +
     row('R2 파일', s.objects == null ? (last.r2Usage ? n(last.r2Usage.objects) + ' (개수만)' : '확인 불가') : n(s.objects) + ' · ' + mb(s.objectBytes)) +
-    row('R2에는 있는데 보관함 기록이 없는 파일', s.objects == null ? '확인 불가' : n(s.r2NoRow.length), '저장은 됐지만 보관함에 연결되지 않은 파일') +
+    row('R2에는 있는데 전체 녹음 기록이 없는 파일', s.objects == null ? '확인 불가' : n(s.r2NoRow.length), '저장은 됐지만 전체 녹음에 연결되지 않은 파일') +
     row('· 원래 정보(이름·날짜)가 남아 있어 복구 가능', s.objects == null ? '—' : n(s.r2NoRowRecoverable.length)) +
     row('· 원래 정보가 없어 따로 분류', s.objects == null ? '—' : n(s.r2NoRowUnknown.length)) +
-    row('보관함 기록은 있는데 R2 파일이 없음', s.objects == null ? '확인 불가' : n(s.rowsNoObject.length), '재생이 안 되는 기록') +
+    row('전체 녹음 기록은 있는데 R2 파일이 없음', s.objects == null ? '확인 불가' : n(s.rowsNoObject.length), '재생이 안 되는 기록') +
     '<h3 class="cal-group" style="margin:4px 0 0">이 기기</h3>' +
     row('이 기기에 저장된 파일', n(s.local) + ' · ' + mb(s.localBytes)) + row('· 아직 서버에 없는 파일', n(s.localOnly.length), '이 기기에만 있어요. 업로드하면 올라가요.') +
     (q ? '<h3 class="cal-group" style="margin:4px 0 0">마지막 대량 업로드 기록</h3>' + row('전체', n(Object.values(q).reduce((a, b) => a + b, 0))) + Object.entries({done:'완료', failed:'실패', waiting:'대기', uploading:'업로드 중이었음', dup:'중복 제외'}).filter(([k]) => q[k]).map(([k, t]) => row('· ' + t, n(q[k]))).join('') : '') +
@@ -118,7 +118,7 @@ function draw(host) {
     '<div class="btn-row"><button type="button" class="btn" data-uc-save>결과 저장 (JSON)</button><button type="button" class="btn secondary" data-uc-run>다시 진단</button></div></div>' +
     list('R2에만 있고 복구 가능한 파일', s.r2NoRowRecoverable, o => (o.name || o.mediaId) + ' · ' + mb(o.size)) +
     list('R2에만 있고 원래 정보가 없는 파일', s.r2NoRowUnknown, o => o.key + ' · ' + mb(o.size)) +
-    list('R2 파일이 없는 보관함 기록', s.rowsNoObject, r => r.name || r.id) +
+    list('R2 파일이 없는 전체 녹음 기록', s.rowsNoObject, r => r.name || r.id) +
     list('이 기기에만 있는 파일', s.localOnly, l => (l.name || l.originalFilename || l.id) + ' · ' + mb(l.size) + (l.hasData ? '' : ' · 파일 데이터 없음')) +
     list('같은 파일 묶음', s.dupGroups, g => g.map(x => x.name || x.original || x.id).join(' / '));
   host.querySelector('[data-uc-run]').onclick = () => runCheck(host);

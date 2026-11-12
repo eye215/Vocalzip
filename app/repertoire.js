@@ -50,7 +50,7 @@ function editRepertoire(id,kind){
 }
 async function chooseTake(id){
  try{const media=(await M.list()).filter(m=>m.songId===id&&!V.db.deleted?.media?.includes(m.id));const s=V.song(id);if(!s)return;
- panel('대표 테이크 선택',select('기존 녹음','takeId',Object.fromEntries(media.map(m=>[m.id,M.label(m)+' · '+(M.dateOf(m)||'날짜 미상')])),info(s).takeId)+'<p class="small muted">곡 미연결 파일은 보관함에서 먼저 곡을 지정해 주세요. 선택 안 함으로 해제할 수 있어요.</p>',v=>{if(v.takeId&&!media.some(m=>m.id===v.takeId))throw Error('녹음을 다시 선택해 주세요.');updateSong(id,v)});
+ panel('대표 테이크 선택',select('기존 녹음','takeId',Object.fromEntries(media.map(m=>[m.id,M.label(m)+' · '+(M.dateOf(m)||'날짜 미상')])),info(s).takeId)+'<p class="small muted">곡 미연결 파일은 전체 녹음에서 먼저 곡을 지정해 주세요. 선택 안 함으로 해제할 수 있어요.</p>',v=>{if(v.takeId&&!media.some(m=>m.id===v.takeId))throw Error('녹음을 다시 선택해 주세요.');updateSong(id,v)});
  }catch(e){message(e)}
 }
 /* A production's days: its sessions, or start~end when no session is entered yet (at most 120 days). */
@@ -154,7 +154,7 @@ V.route('show',{title:r=>get(r.params[0])?.title||'공연',tab:'calendar',back:t
  M.list().catch(()=>M.cached?.()||[]).then(media=>{
   if(!host.isConnected)return;const list=stageMedia(p,media),linked=new Set((p.songLinks||[]).map(l=>l.songId));
   const missing=[...new Set(list.map(m=>m.songId).filter(id=>id&&V.song(id)&&!linked.has(id)))];
-  host.innerHTML=(list.length?'<div class="list" data-r>'+list.map(V.mediaRow).join('')+'</div>':'<p class="small muted">공연 날짜('+E([...days(p)].sort().slice(0,3).join(', ')+(days(p).size>3?' …':''))+')에 "공연"으로 지정한 녹음이 없어요. 보관함에서 녹음의 종류를 공연으로, 날짜를 공연 날로 맞추면 여기 모여요.</p>')+
+  host.innerHTML=(list.length?'<div class="list" data-r>'+list.map(V.mediaRow).join('')+'</div>':'<p class="small muted">공연 날짜('+E([...days(p)].sort().slice(0,3).join(', ')+(days(p).size>3?' …':''))+')에 "공연"으로 지정한 녹음이 없어요. 전체 녹음에서 녹음의 종류를 공연으로, 날짜를 공연 날로 맞추면 여기 모여요.</p>')+
    (missing.length?'<button type="button" class="btn sm secondary" data-link-found>이 녹음들의 곡 '+missing.length+'개를 공연곡으로 연결</button>':'');
   if(list.length)V.wireMedia(host.querySelector('[data-r]'),list);
   host.querySelector('[data-link-found]')?.addEventListener('click',()=>{try{save(db=>{const row=writable(db,id);for(const sid of missing){const s=V.song(sid);if(s&&!row.songLinks.some(l=>l.songId===sid))row.songLinks.push({id:V.uid(),songId:sid,title:s.title,show:s.show||'',kind:'solo',key:''})}});V.toast('공연곡 '+missing.length+'개를 연결했어요.')}catch(e){message(e)}});

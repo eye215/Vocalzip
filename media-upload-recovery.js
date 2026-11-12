@@ -54,28 +54,28 @@
    const entry=read().entries.find(x=>x.id===id);
    if(!entry)throw error('업로드 복구 기록이 없어요.','receipt');
    if(row?.id!==id||row.storageProvider!=='r2'||row.r2Key!==entry.receipt.key||row.size!==entry.receipt.size||
-    (row.r2Etag&&row.r2Etag!==entry.receipt.etag))throw error('같은 ID의 다른 보관함 기록을 덮어쓰지 않았어요.','conflict');
+    (row.r2Etag&&row.r2Etag!==entry.receipt.etag))throw error('같은 ID의 다른 전체 녹음 기록을 덮어쓰지 않았어요.','conflict');
    try{forget(id);}catch(e){if(e.code==='identity')throw e;}
    return clone(row);
   }
   async function recover(id){
    current();const entry=read().entries.find(x=>x.id===id);if(!entry)return null;
-   if(await deleted(id))throw error('삭제한 파일은 보관함에 다시 연결하지 않아요.','deleted');
+   if(await deleted(id))throw error('삭제한 파일은 전체 녹음에 다시 연결하지 않아요.','deleted');
    let row=await loadRow(id);current();
    const head=await stat(entry.receipt.key);current();
    if(!head||head.size!==entry.receipt.size||head.etag!==entry.receipt.etag)
     throw error('저장된 원본이 업로드 결과와 달라 복구를 중단했어요.','object_changed');
    const same=metadata=>metadata?.id===id&&metadata.storageProvider==='r2'&&metadata.r2Key===entry.receipt.key&&metadata.size===entry.receipt.size&&
     (!metadata.r2Etag||metadata.r2Etag===entry.receipt.etag);
-   if(row&&!same(row))throw error('같은 ID의 다른 보관함 기록을 덮어쓰지 않았어요.','conflict');
+   if(row&&!same(row))throw error('같은 ID의 다른 전체 녹음 기록을 덮어쓰지 않았어요.','conflict');
    if(!row){
-    if(await deleted(id))throw error('삭제한 파일은 보관함에 다시 연결하지 않아요.','deleted');
+    if(await deleted(id))throw error('삭제한 파일은 전체 녹음에 다시 연결하지 않아요.','deleted');
     // INSERT ON CONFLICT DO NOTHING. Even an intervening write must win.
     let insertError;
     try{await insertRow(id,clone(entry.metadata));}catch(e){insertError=e;}
     current();row=await loadRow(id);current();
-    if(!row)throw insertError||error('보관함 연결을 확인하지 못했어요. 올린 파일은 지우지 않았어요.','unconfirmed');
-    if(!same(row))throw error('다른 기기에서 저장한 보관함 기록을 덮어쓰지 않았어요.','conflict');
+    if(!row)throw insertError||error('전체 녹음 연결을 확인하지 못했어요. 올린 파일은 지우지 않았어요.','unconfirmed');
+    if(!same(row))throw error('다른 기기에서 저장한 전체 녹음 기록을 덮어쓰지 않았어요.','conflict');
    }
    if(await deleted(id))throw error('삭제 기록이 확인되어 복구를 중단했어요.','deleted');
    return acknowledge(id,row);

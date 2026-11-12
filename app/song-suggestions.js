@@ -220,7 +220,7 @@ async function applyKind(main,item,kind){
   await M.update(item,{recordingCategory:kind},{quiet:true});
   item.recordingCategory=kind;
   if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
-  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 보관함에서 다시 바꿀 수 있어요.');
+  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 전체 녹음에서 다시 바꿀 수 있어요.');
   window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:{recordingCategory:kind}}}));
  }catch(error){VZ.toast('옮기지 못했어요: '+String(error.message||error),'error')}
  if(main.isConnected)draw(main);
@@ -669,7 +669,8 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   root.querySelector('[data-ref-add]').onclick=()=>exclusive(main,indexReference);
   root.querySelector('[data-ref-picker]').onchange=()=>showReferenceControls(main);
   root.querySelector('[data-ref-clear]').onclick=()=>exclusive(main,deleteReference);
-  window.addEventListener('vzip:server-analysis-updated',()=>{if(main.isConnected)updateMetrics(main)},{signal:helpAbort.signal});
+  // Leaving while this async mount is still running clears helpAbort first; nothing to listen for then.
+  if(helpAbort)window.addEventListener('vzip:server-analysis-updated',()=>{if(main.isConnected)updateMetrics(main)},{signal:helpAbort.signal});
   showReferenceControls(main);draw(main);
  },leave(){helpAbort?.abort();helpAbort=null;destroyPlayers()}
 });

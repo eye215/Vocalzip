@@ -56,7 +56,7 @@ const openLibraryImport=async page=>{
 };
 const pickLibraryImportFiles=(page,files)=>sheet(page).locator('[data-file]').last().setInputFiles(files);
 
-test('보관함에서 고른 파일은 새 확인 화면을 거쳐 업로드 중에만 상단 대시보드를 보인다', async ({page}) => {
+test('전체 녹음에서 고른 파일은 새 확인 화면을 거쳐 업로드 중에만 상단 대시보드를 보인다', async ({page}) => {
   await boot(page, {media:false});
   // A 26-second take: imports shorter than 25 seconds are left out on purpose.
   const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
@@ -193,7 +193,7 @@ test('Bottom navigation reaches the four main screens and the record button with
   await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  }
  await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
- await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
+ await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-recent-pill')).toContainText(['This Is the Moment']);
  const songsButton=page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true});
  await expect(songsButton).toBeVisible();
  await expect.poll(async()=>Math.round((await songsButton.boundingBox())?.height||0)).toBeGreaterThanOrEqual(44);
@@ -1009,7 +1009,7 @@ test('Library filters, edit and play; compare A/B with memo saved in v5 report s
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
-  await page.getByRole('group', {name:'녹음 유형별 보관함'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
+  await page.getByRole('group', {name:'녹음 유형별 보기'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await page.locator('[data-media] [data-toggle]').click();
   await expect(page.locator('.media-open .player')).toBeVisible();
@@ -1586,7 +1586,7 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await page.getByRole('button', {name:'다른 자료 가져오기'}).click();
   await page.getByRole('button', {name:/음성 메모/}).click();
   await page.locator('[data-files]').setInputFiles([{name:'This Is the Moment 2026-03-05.wav', mimeType:'audio/wav', buffer:first}]);
-  await expect(row('This Is the Moment')).toContainText('보관함에 이미 있어요', {timeout:30000});
+  await expect(row('This Is the Moment')).toContainText('전체 녹음에 이미 있어요', {timeout:30000});
   await expect(page.getByRole('button', {name:'선택한 0개 가져오기'})).toBeDisabled();
   expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(2);
 });
@@ -1630,7 +1630,7 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('.lib-month').last()).toContainText('1개 · 2분');
   await expect(page.locator('[data-count]')).toContainText('3개');
   // The recording-kind segment stays separate from the format and song filter sheet.
-  await page.getByRole('group', {name:'녹음 유형별 보관함'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
+  await page.getByRole('group', {name:'녹음 유형별 보기'}).getByRole('button', {name:'레슨 녹음', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();

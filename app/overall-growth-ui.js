@@ -160,7 +160,7 @@ function render(report,metric){
   '<section class="growth-section-set" data-growth-anchor="skills"><header class="growth-panel-head"><div><p class="growth-eyebrow">VOICE METRICS</p><h2>6가지 성장 지표</h2><p class="growth-section-caption">같은 곡의 처음과 최근 녹음을, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.</p></div></header>'+
   // No measured song recording yet: one short note instead of six identical "측정 없음" cards.
   (report.analysisCount?'<div class="growth-stats-grid">'+report.metrics.map(m=>metricCard(m)).join('')+'</div>':
-   '<div class="growth-stats-empty"><i class="ph ph-waveform" aria-hidden="true"></i><p><strong>아직 측정된 곡 녹음이 없어요</strong>곡이 지정된 녹음을 분석하면 음정 정확도·음정 안정성·음역·호흡 유지·고음 안정성이 여기에 쌓여요.</p><a class="btn sm secondary" href="#/library">보관함에서 분석하기</a></div>')+'</section>'+
+   '<div class="growth-stats-empty"><i class="ph ph-waveform" aria-hidden="true"></i><p><strong>아직 측정된 곡 녹음이 없어요</strong>곡이 지정된 녹음을 분석하면 음정 정확도·음정 안정성·음역·호흡 유지·고음 안정성이 여기에 쌓여요.</p><a class="btn sm secondary" href="#/library">전체 녹음에서 분석하기</a></div>')+'</section>'+
   '<div data-growth-anchor="coach">'+coachCard()+'</div>'+
   '<div data-growth-anchor="trend">'+trends(report,metric||'intonation')+'</div>'+
   '<div data-growth-anchor="practice">'+recommendations(report)+'</div>'+evidence(report);
