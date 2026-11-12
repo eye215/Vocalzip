@@ -7,6 +7,12 @@ function wav(frequency=293.66){
  return b;
 }
 
+// After 제출: either the result, or the room's own error text (printed by the assertion when it fails).
+async function result(scope){
+ await expect(scope.locator('.result-heading').or(scope.locator('#record-error:not(:empty)')).first()).toBeVisible({timeout:15000});
+ expect(await scope.locator('#record-error').textContent({timeout:1000}).catch(()=>'')||'').toBe('');
+}
+
 test('task timer starts on practice action and pitch feedback shows percent and cent together',async({page})=>{
  await page.goto('/practice-room/index.html');
  await page.locator('[data-task="tone"]').click();
@@ -20,6 +26,7 @@ test('task timer starts on practice action and pitch feedback shows percent and 
  await page.locator('[data-upload="0"]').setInputFiles({name:'D4.wav',mimeType:'audio/wav',buffer:wav()});
  await expect(page.locator('audio[data-audio="0"]')).toBeVisible();
  await page.locator('#submit').click();
+ await result(page);
  await expect(page.locator('.result-heading')).toBeVisible();
  await expect(page.locator('.result-metric').first()).toContainText('%');
  await expect(page.locator('.result-metric').first()).toContainText('cent');
@@ -33,6 +40,7 @@ test('large pitch difference is marked as uncertain rather than graded',async({p
  await page.locator('[data-task="tone"]').click();
  await page.locator('[data-upload="0"]').setInputFiles({name:'C5.wav',mimeType:'audio/wav',buffer:wav(523.25)});
  await page.locator('#submit').click();
+ await result(page);
  await expect(page.locator('.result-heading')).toContainText('분석은 보류');
  await expect(page.locator('.result-metric').first()).toContainText('확인 필요');
  await expect(page.locator('.result-metric').first()).toContainText('cent');
@@ -55,6 +63,7 @@ test('two connected-phrase recordings enable results without a memo',async({page
  await expect(page.locator('#submit')).toBeDisabled();
  await page.locator('[data-upload="1"]').setInputFiles({name:'B.wav',mimeType:'audio/wav',buffer:wav()});
  await page.locator('#submit').click();
+ await result(page);
  await expect(page.locator('.result-heading')).toBeVisible();
  await expect(page.getByText('별도 메모를 남기지 않았어요.')).toBeVisible();
 });

@@ -92,6 +92,9 @@ test('practice-room result appears while R2 upload is still pending',async({page
  await expect(room.locator('audio[data-audio="0"]')).toBeVisible();
  await room.locator('#memo').fill('오늘은 한 구절을 편하게 불렀어요.');
  await room.locator('#submit').click();
+ // Either the result or the room's own error text, which the second check prints if it is there.
+ await expect(room.locator('.result-heading').or(room.locator('#record-error:not(:empty)')).first()).toBeVisible({timeout:15000});
+ expect(await room.locator('#record-error').textContent({timeout:1000}).catch(()=>'')||'').toBe('');
  await expect(room.locator('.result-heading')).toContainText('연습과 회고를 기록했어요',{timeout:5000});
  await expect(room.locator('.processing')).toHaveCount(0);
  await expect(room.locator('.feedback-block audio')).toBeVisible();
