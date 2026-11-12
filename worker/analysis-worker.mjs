@@ -438,6 +438,13 @@ if (import.meta.url === 'file://' + process.argv[1]) {
           const {rowCount} = await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now() where status in ('queued', 'running', 'failed') and (last_error = 'fetch failed' or last_error like 'download network error%' or (last_error = $1 and $2))", [NEEDS_KEY, !!clean(env.SUPABASE_SERVICE_ROLE_KEY)]);
           console.log('analysis worker: ' + rowCount + ' job(s) that failed on the network (or waited for a setting now present) are queued again');
         }
+        if (env.WORKER_REQUEUE_STT === '1') {
+          // One-off (owner request 2026-11-12): song jobs that stopped at "needs an app request" before automatic STT
+          // existed go back to the queue. The automatic-STT rules (unassigned song recordings only, monthly cap) decide
+          // what is actually transcribed; anything else returns to the same review state without cost.
+          const {rowCount} = await db.query("update public.vocal_analysis_jobs set status = 'queued', attempts = 0, last_error = null, locked_at = null, locked_by = null, updated_at = now() where kind = 'song' and status = 'review' and result->>'requiresRequest' = 'true'");
+          console.log('analysis worker: ' + rowCount + ' song job(s) that waited for an app request are queued again');
+        }
         const s = await run({db});
         // For the workflow: did this run get anywhere (then it may start the next run while work is left)?
         const processed = ['done', 'review', 'skipped', 'failed', 'retry'].reduce((a, k) => a + (s[k] || 0), 0);
