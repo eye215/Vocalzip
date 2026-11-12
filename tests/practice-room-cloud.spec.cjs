@@ -47,7 +47,7 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  expect(result.after.changed).toBe(true);
  expect(result.record.practiceRoom.draft.memo).toBe('후렴 집중');
  expect(result.record.mediaIds).toEqual(['test-session-1234-0']);
- expect(result.uploaded.source).toBe('practice');
+ expect(result.uploaded.source).toBe('practice-room'); // room takes have their own library category (#279)
  expect(result.uploaded.requireR2).toBe(true);
  expect(result.audio.cloud).toBe(true);
  expect(result.url).toBe('/recording.wav');
@@ -84,6 +84,8 @@ test('practice-room result appears while R2 upload is still pending',async({page
   window.vzipCloudImport=()=>new Promise(()=>{});
  });
  const room=page.frameLocator('iframe.vzip-practice-room-frame');
+ // The tab buttons are static HTML: wait for the room script to render its first view before using them.
+ await expect(room.locator('#main [data-task]').first()).toBeVisible();
  await room.locator('[data-nav="roadmap"]').click();
  await room.locator('[data-task="basics"]').click();
  await room.locator('[data-upload="0"]').setInputFiles({name:'test.wav',mimeType:'audio/wav',buffer:sampleWav()});
