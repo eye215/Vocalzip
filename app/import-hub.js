@@ -221,6 +221,16 @@ async function importRows(rows) {
     if (!row.file) { row.state = 'failed'; row.msg = '원본 파일을 다시 선택해야 해요.'; continue; }
     row.state = 'uploading'; row.msg = '준비 중…'; hub.current = row; drawRow(row);
     VZ.processingLog?.record(row.id, {state:'uploading', originalName:row.name, songId:row.song, songSource:row.song?(row.suggestions?.[0]?.id===row.song?'파일명 추천 · 확인 후 저장':'직접 지정'):'미지정', date:row.date, dateSource:row.dateSource});
+    // A file that waited for the upload slot may meanwhile have been uploaded elsewhere (the same import started in
+    // another tab or the home-screen app). Check the server list again right before each retry so it is not sent twice.
+    if (row.busySince) {
+      hub.known = await knownFiles().catch(() => hub.known);
+      const k = hub.known;
+      if (k && (k.hash.has(row.hash) || k.nameSize.has(row.name + '|' + row.size) || k.baseSize.has(baseKey(row.name, row.size)))) {
+        Object.assign(row, {busySince:0, state:'dup', dup:'다른 곳에서 이미 올라갔어요', msg:'중복 제외 · 다른 곳에서 이미 올라갔어요', file:null});
+        hub.current = null; drawRow(row); saveQueue(); continue;
+      }
+    }
     try {
       const song = VZ.song(row.song);
       const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
