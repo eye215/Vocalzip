@@ -14,7 +14,7 @@ const SOURCES = {
     tip:'파일 앱에서 폴더를 열고 여러 파일을 선택하세요.'},
   memo:{icon:'microphone', title:'음성 메모', sub:'노래 연습 녹음', accept:'audio/*,.m4a,.mp3,.wav,.aac,.caf', start:'2025-07-24', end:'today',
     tip:'음성 메모 앱에서 녹음을 선택 → 공유 → "파일에 저장"으로 한 폴더에 모은 뒤, 여기서 그 폴더의 파일을 여러 개 선택하세요.'},
-  folder:{icon:'folder-open', title:'컴퓨터 폴더', sub:'맥·PC 브라우저에서 폴더째', accept:'audio/*,video/*', start:'', end:'', folder:true,
+  folder:{icon:'folder-open', title:'컴퓨터 폴더', sub:'맥·PC 브라우저에서 폴더째', accept:'audio/*,video/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.webm,.mov,.mp4,.m4v', start:'', end:'', folder:true,
     tip:'폴더를 고르거나 이 화면에 끌어다 놓으면 하위 폴더까지 음성·영상 파일만 골라 분석해요. 아이폰·아이패드에서는 폴더 선택이 안 돼요.'},
   vocalzip:{icon:'archive', title:'기존 Vocalzip', sub:'저장된 파일 이전', accept:'', disabled:true,
     tip:'Cloudflare R2 저장소를 설정하면 기존 파일을 옮길 수 있어요. 지금은 기존 저장소(기기·클라우드)에 그대로 안전하게 보관돼요.'}
@@ -212,7 +212,8 @@ async function runImport(rows, {more = false} = {}) {
 /** One file at a time from the picked File (no device copy); done = the server confirmed it. */
 async function importRows(rows) {
   const direct = !!window.vzipCloudSignedIn?.();
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
     if (hub.paused) break;
     if (row.state === 'done' || row.state === 'dup' || row.state === 'skipped') continue;
     if (!(Number(row.duration) >= 25)) { row.state = 'skipped'; row.msg = row.duration != null && row.duration < 25 ? '25초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음'; row.file = null; drawRow(row); continue; }
@@ -220,18 +221,39 @@ async function importRows(rows) {
     if (!row.file) { row.state = 'failed'; row.msg = '원본 파일을 다시 선택해야 해요.'; continue; }
     row.state = 'uploading'; row.msg = '준비 중…'; hub.current = row; drawRow(row);
     VZ.processingLog?.record(row.id, {state:'uploading', originalName:row.name, songId:row.song, songSource:row.song?(row.suggestions?.[0]?.id===row.song?'파일명 추천 · 확인 후 저장':'직접 지정'):'미지정', date:row.date, dateSource:row.dateSource});
+    // A file that waited for the upload slot may meanwhile have been uploaded elsewhere (the same import started in
+    // another tab or the home-screen app). Check the server list again right before each retry so it is not sent twice.
+    if (row.busySince) {
+      hub.known = await knownFiles().catch(() => hub.known);
+      const k = hub.known;
+      if (k && (k.hash.has(row.hash) || k.nameSize.has(row.name + '|' + row.size) || k.baseSize.has(baseKey(row.name, row.size)))) {
+        Object.assign(row, {busySince:0, state:'dup', dup:'다른 곳에서 이미 올라갔어요', msg:'중복 제외 · 다른 곳에서 이미 올라갔어요', file:null});
+        hub.current = null; drawRow(row); saveQueue(); continue;
+      }
+    }
     try {
       const song = VZ.song(row.song);
       const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
       const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct, durationSeconds:row.duration},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
-      row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
+      row.busySince = 0; row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
       VZ.processingLog?.record(row.id, {state:'done', savedName:saved.name||'', songId:saved.songId||row.song, cloud:!!saved.cloud, pendingUpload:!!saved.pendingUpload, audioExtraction:!!saved.audioExtraction||!!saved.extracted, losslessFlac:!!saved.losslessFlac||!!saved.flac, savedSize:saved.savedSize||saved.size||0, error:''});
     } catch (e) {
       if (isAuth(e)) { row.state = 'waiting'; row.msg = ''; hub.paused = true; hub.notice = '로그인이 만료됐어요. 다시 로그인한 뒤 "이어서 올리기"를 눌러 주세요. 완료된 파일은 그대로예요.'; }
-      else if ((isBusy(e) || isNetwork(e)) && (row.tries = (row.tries || 0) + 1) <= 3) {
-        row.state = 'waiting'; row.msg = '잠시 후 다시 시도해요…'; drawRow(row);
-        await new Promise(r => setTimeout(r, isBusy(e) ? 4000 : 3000 * row.tries));
+      else if (isBusy(e)) {
+        // Another upload (the background device backup finishing its current file, or another tab / the home-screen
+        // app) holds the one upload slot. Waiting is not a failure: keep the file first in line until the slot frees.
+        row.busySince ||= Date.now();
+        const waited = Math.round((Date.now() - row.busySince) / 1000);
+        row.state = 'waiting';
+        row.msg = waited < 90 ? '다른 업로드가 끝나길 기다리는 중…' : '다른 업로드가 끝나길 기다리는 중 (' + Math.floor(waited / 60) + '분) · 다른 탭이나 홈 화면 앱에서 올리고 있다면 그쪽을 끝내 주세요';
+        drawRow(row);
+        await new Promise(r => setTimeout(r, 5000));
+        if (!hub.paused) { rows.splice(i + 1, 0, row); } // same file again next, order kept
+      }
+      else if (isNetwork(e) && (row.tries = (row.tries || 0) + 1) <= 3) {
+        row.state = 'waiting'; row.msg = '연결이 끊겨 잠시 후 다시 시도해요…'; drawRow(row);
+        await new Promise(r => setTimeout(r, 3000 * row.tries));
         if (!hub.paused) { rows.push(row); } // try again at the end of the list
       } else { row.state = 'failed'; row.msg = '실패: ' + (e.message || '알 수 없는 오류'); }
       VZ.processingLog?.record(row.id, {state:row.state, error:row.state==='failed'?(e.message||'알 수 없는 오류'):''});

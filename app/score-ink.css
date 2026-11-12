@@ -320,3 +320,13 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
 .score-ink-compact .score-audio{max-width:none;margin-bottom:0}
 /* The page row is one line under the score in both views; it never floats over the score. */
 .score-ink-compact .score-ink-pages [data-ink-page]{white-space:nowrap}
+
+/* Tablets and wider: the score viewer uses the whole width (other pages keep the 560px column). 화면 맞춤 then shows
+ * the whole page, and in landscape the next page sits beside it (두 쪽 보기, see renderSpread in score-ink.js). */
+@media (min-width:768px){body .sheet-page>.sheet.score-ink-sheet{max-width:none}}
+.score-ink-stage[data-ink-two-pages]{display:flex;justify-content:center;align-items:flex-start;gap:12px}
+.score-ink-stage[data-ink-two-pages]>.score-ink-page{margin:0}
+.score-ink-stage[data-ink-two-pages]>.score-ink-explain-action{position:absolute;left:0;right:0;top:8px}
+.score-ink-spread{display:block;padding:0;border:0;border-radius:0;cursor:pointer;font:inherit;color:inherit;will-change:transform}
+.score-ink-spread[hidden]{display:none}
+.score-ink-spread:focus-visible{outline:2px solid #7a32f5;outline-offset:3px}

@@ -144,6 +144,30 @@ test('Vocal lab growth AI asks the server for a measured same-song report (overa
  await expect(page.locator('.vl-growth-ai-text')).toContainText('좋아진 점: 지속음 흔들림이 줄었어요.');
 });
 
+test('Vocal lab growth report re-analyses older (v1) recordings in place so they become comparable', async ({page}) => {
+ test.setTimeout(90000);
+ await boot(page);
+ await page.evaluate(async () => {
+   for(const m of (await VZ.media.list()).filter(x=>x.songId==='s1')) {
+     const old=m.id==='m1';
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:old?34:23,notes:4},intonation:{meanAbsCents:old?27:18,notes:10},range:{highCents:8100,high:'A5'},breath:{medianPhrase:old?2.4:3.2}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   }
+   VZ.media.invalidate();
+   window.__reanalysed=[];
+   VZ.analyzeRecording=async (item)=>{window.__reanalysed.push(item.id);const summary={v:2,at:Date.now(),seconds:30,metrics:{voicedSeconds:30,stability:{wobbleCents:20,notes:4},intonation:{meanAbsCents:15,notes:10},breath:{medianPhrase:3},phrases:{rows:[]},pitchBands:{rows:[]}},confidence:{voiceOverMrDb:12,pitch:0.95}};await VZ.media.update(item,{analysis:summary},{quiet:true});return {summary};};
+ });
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await page.locator('.vl-dates button').nth(1).click();
+ const redo=page.locator('[data-growth-reanalyze]');
+ await expect(redo).toContainText('2개 다시 분석');
+ await redo.click();
+ await expect.poll(()=>page.evaluate(()=>window.__reanalysed.slice().sort())).toEqual(['m1','m2']);
+ await expect(page.locator('[data-growth-reanalyze]')).toHaveCount(0);
+ const versions=await page.evaluate(async()=>(await VZ.media.list()).filter(x=>x.songId==='s1').map(x=>x.analysis?.v));
+ expect(versions.every(v=>v===2)).toBe(true);
+});
+
 test('Vocal lab shows a compact recommendation list and opens the chosen practice', async ({page}) => {
  await boot(page);
  await page.evaluate(async () => {
@@ -1589,6 +1613,48 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await expect(row('This Is the Moment')).toContainText('전체 녹음에 이미 있어요', {timeout:30000});
   await expect(page.getByRole('button', {name:'선택한 0개 가져오기'})).toBeDisabled();
   expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(2);
+});
+
+test('Import waits while another upload holds the slot instead of failing after 3 tries', async ({page}) => {
+  test.setTimeout(90000);
+  await boot(page, {media:false});
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn=()=>true;window.vzipCloudUserId=()=>'ui-test-user';
+    window.__busy={left:5,sent:[]};
+    VZ.media.list=async()=>[];
+    window.vzipInspectMedia=async()=>({readable:true,duration:40,hasVideo:false,hasAudio:true,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}});
+    VZ.media.importFile=async(file,choice)=>{
+      if(file.name==='a.m4a'&&window.__busy.left>0){window.__busy.left--;throw Error('다른 파일을 업로드하고 있어요. 완료하거나 취소한 뒤 다시 선택해 주세요.');}
+      window.__busy.sent.push(file.name);return {id:choice.id,cloud:true,size:file.size,durationSeconds:40,recordedDate:'2026-11-09'};
+    };
+    VZ.openImportHub({files:[new File([new Uint8Array([1,2])],'a.m4a',{type:'audio/mp4'}),new File([new Uint8Array([3,4])],'b.m4a',{type:'audio/mp4'})]});
+  });
+  await expect(page.getByText('다른 업로드가 끝나길 기다리는 중', {exact:false}).first()).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>window.__busy.sent),{timeout:60000}).toEqual(['a.m4a','b.m4a']);
+  await expect(page.getByText(/실패:/)).toHaveCount(0);
+});
+
+test('A file that waited for the upload slot is not sent again when another tab uploaded it meanwhile', async ({page}) => {
+  test.setTimeout(90000);
+  await boot(page, {media:false});
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn=()=>true;window.vzipCloudUserId=()=>'ui-test-user';
+    window.__dupe={left:2,sent:[],server:[]};
+    VZ.media.list=async()=>window.__dupe.server.slice();
+    window.vzipInspectMedia=async()=>({readable:true,duration:40,hasVideo:false,hasAudio:true,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}});
+    VZ.media.importFile=async(file,choice)=>{
+      if(file.name==='a.m4a'&&window.__dupe.left>0){
+        window.__dupe.left--;
+        // the other tab finishes the same file while this one waits
+        if(!window.__dupe.left)window.__dupe.server.push({id:'other-tab',name:'a',originalFilename:'a.m4a',size:file.size,fileHash:choice.extra.fileHash});
+        throw Error('다른 파일을 업로드하고 있어요. 완료하거나 취소한 뒤 다시 선택해 주세요.');
+      }
+      window.__dupe.sent.push(file.name);return {id:choice.id,cloud:true,size:file.size,durationSeconds:40,recordedDate:'2026-11-09'};
+    };
+    VZ.openImportHub({files:[new File([new Uint8Array([1,2])],'a.m4a',{type:'audio/mp4'}),new File([new Uint8Array([3,4])],'b.m4a',{type:'audio/mp4'})]});
+  });
+  await expect.poll(()=>page.evaluate(()=>window.__dupe.sent),{timeout:60000}).toEqual(['b.m4a']);
+  await expect(page.getByText(/실패:/)).toHaveCount(0);
 });
 
 test('Library import skips 24 seconds and includes 25 seconds', async ({page}) => {

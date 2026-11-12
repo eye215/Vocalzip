@@ -101,7 +101,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const extra=imported.filter(s=>(!page||s.page===page)&&s.pdfHash===b.pdfHash&&s.scoreId===b.scoreId&&s.r2Key===b.r2Key&&!gone.has(s.id)&&!ids.has(s.id)).map(s=>({...s}));
   return [...extra,...rows].sort((a,c)=>a.createdAt-c.createdAt||a.id.localeCompare(c.id));
  }};}
- const controller=new AbortController();let quickFolded=false,audioBar=null,doc,loadingTask,renderTask,prepared=new Map(),prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0;
+ const controller=new AbortController();let quickFolded=false,audioBar=null,doc,loadingTask,renderTask,prepared=new Map(),prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0,spreadOn=false,spreadBox=null;
  let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerType='breath',markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[];
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
@@ -612,20 +612,22 @@ VZ.openScoreInk=(songId,scoreId)=>{
  // Where the reader is heading: quick repeated taps add up instead of being lost mid-slide.
  const aim=()=>queuedTurn||(turning?turnTarget:pageNo);
  const pause=ms=>new Promise(r=>setTimeout(r,ms));
+ /** Page-turn motion applies to the current page and, in 두 쪽 보기, the side page with it. */
+ const pages=new Proxy({},{get:(_,k)=>box.style[k],set:(_,k,v)=>{box.style[k]=v;if(spreadBox&&!spreadBox.hidden)spreadBox.style[k]=v;return true;}});
  async function turnTo(next){
   if(turning&&doc&&next>=1&&next<=doc.numPages){queuedTurn=next===turnTarget?0:next;return;}
   if(!doc||busy||turning||next<1||next>doc.numPages||next===pageNo){springBack();return;}
   const direction=next>pageNo?1:-1;markerStart=null;
-  if(matchMedia?.('(prefers-reduced-motion: reduce)').matches){pageNo=next;box.style.transform='';return renderPage();}
+  if(matchMedia?.('(prefers-reduced-motion: reduce)').matches){pageNo=next;pages.transform='';return renderPage();}
   turning=true;turnTarget=next;stage.dataset.inkTurning='';
   try{
-   box.style.transition='transform .14s ease-in,opacity .14s ease-in';box.style.transform='translateX('+(-direction*32)+'%)';box.style.opacity='0';
+   pages.transition='transform .14s ease-in,opacity .14s ease-in';pages.transform='translateX('+(-direction*32)+'%)';pages.opacity='0';
    await pause(140);if(closed)return;
    pageNo=next;await renderPage();if(closed)return;
-   box.style.transition='none';box.style.transform='translateX('+(direction*32)+'%)';box.style.opacity='0';void box.offsetWidth;
-   box.style.transition='transform .22s cubic-bezier(.2,.8,.2,1),opacity .18s ease-out';box.style.transform='';box.style.opacity='';
+   pages.transition='none';pages.transform='translateX('+(direction*32)+'%)';pages.opacity='0';void box.offsetWidth;
+   pages.transition='transform .22s cubic-bezier(.2,.8,.2,1),opacity .18s ease-out';pages.transform='';pages.opacity='';
    await pause(220);
-  }finally{turning=false;delete stage.dataset.inkTurning;if(!closed){box.style.transition='';box.style.transform='';box.style.opacity='';}}
+  }finally{turning=false;delete stage.dataset.inkTurning;if(!closed){pages.transition='';pages.transform='';pages.opacity='';}}
   const queued=queuedTurn;queuedTurn=0;if(queued&&!closed)turnTo(queued);
  }
  /* While a sideways swipe is under way the page follows the finger and nothing else moves.
@@ -634,14 +636,50 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(turning)return;
   const direction=dx<0?1:-1,open=doc&&pageNo+direction>=1&&pageNo+direction<=doc.numPages;
   const shift=open?dx:dx*.25,width=stage.clientWidth||1;
-  stage.dataset.inkTurning='';box.style.transition='none';box.style.transform='translateX('+Math.round(shift)+'px)';
-  box.style.opacity=String(open?Math.max(.55,1-Math.abs(shift)/width*.6):1);
+  stage.dataset.inkTurning='';pages.transition='none';pages.transform='translateX('+Math.round(shift)+'px)';
+  pages.opacity=String(open?Math.max(.55,1-Math.abs(shift)/width*.6):1);
  }
  function springBack(){
   if(!turning)delete stage.dataset.inkTurning;
-  if(turning||!box.style.transform)return;
-  box.style.transition='transform .2s cubic-bezier(.2,.8,.2,1),opacity .2s ease-out';box.style.transform='';box.style.opacity='';
-  setTimeout(()=>{if(!turning)box.style.transition='';},220);
+  if(turning||!pages.transform)return;
+  pages.transition='transform .2s cubic-bezier(.2,.8,.2,1),opacity .2s ease-out';pages.transform='';pages.opacity='';
+  setTimeout(()=>{if(!turning)pages.transition='';},220);
+ }
+ /** 두 쪽 보기: the next page beside the current one, with its handwriting shown but not editable. Tapping it turns
+  * to that page (where it can be written on). Uses the prefetched canvas when it matches. */
+ async function renderSpread(number,width,pixelScale){
+  // Made on first use, so narrow screens keep exactly one page in the viewer.
+  if(!spreadBox&&spreadOn){
+   spreadBox=document.createElement('button');spreadBox.type='button';spreadBox.className='score-ink-page score-ink-spread';spreadBox.dataset.inkSpread='';spreadBox.hidden=true;
+   spreadBox.innerHTML='<canvas aria-hidden="true"></canvas><svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>';
+   spreadBox.onclick=()=>{if(spreadOn&&viewReady&&!busy)turnTo(pageNo+1);};box.after(spreadBox);
+  }
+  stage.toggleAttribute('data-ink-two-pages',spreadOn);if(!spreadBox)return;spreadBox.hidden=!spreadOn;if(!spreadOn)return;
+  const next=pageNo+1;
+  try{
+   const page=await doc.getPage(next);if(closed||number!==renderNumber)return;
+   const natural=page.getViewport({scale:1}),nextAspect=natural.height/natural.width,cache=prepared.get(next),canvasEl=spreadBox.querySelector('canvas');
+   let source=null;
+   if(cache?.page===next&&cache.width===width&&cache.zoom===zoom&&cache.pixelScale===pixelScale&&cache.doc===doc)source=cache.canvas;
+   else{const viewport=page.getViewport({scale:width/natural.width*pixelScale});source=document.createElement('canvas');source.width=Math.max(1,Math.floor(viewport.width));source.height=Math.max(1,Math.floor(viewport.height));await page.render({canvasContext:source.getContext('2d'),viewport}).promise;if(closed||number!==renderNumber)return;prepared.set(next,{page:next,width,zoom,pixelScale,doc,canvas:source});}
+   spreadBox.style.width=width+'px';spreadBox.style.height=width*nextAspect+'px';canvasEl.width=source.width;canvasEl.height=source.height;canvasEl.getContext('2d').drawImage(source,0,0);
+   const ink=spreadBox.querySelector('svg');ink.replaceChildren();ink.setAttribute('viewBox','0 0 1000 '+(1000*nextAspect));
+   for(const st of binding?store.list(binding,next):[]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',Ink.path(st,nextAspect));path.setAttribute('fill','none');path.setAttribute('stroke',st.color);path.setAttribute('stroke-width',st.width*1000);path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');path.setAttribute('opacity',String(Ink.opacity(st)));path.dataset.spreadStroke=st.id;ink.append(path);}
+   spreadBox.setAttribute('aria-label',next+'쪽 보기 · 누르면 이 쪽으로 넘겨요');spreadBox.dataset.page=String(next);
+  }catch(error){if(error?.name!=='RenderingCancelledException'){spreadOn=false;spreadBox.hidden=true;stage.removeAttribute('data-ink-two-pages');}}
+ }
+/** 화면 맞춤 width. Phones fit the page width (scroll down a long page). From 700px wide (tablets) the whole page fits,
+  * and in landscape the next page sits beside it (두 쪽 보기) when both fit. Rows that open and close above the score
+  * (pen colours, selection, AI tools, page thumbnails) are counted back in, so picking a tool never resizes the page. */
+ const TRANSIENT=['score-ink-quick','score-ink-vision-tools','score-ink-thumbnails','score-ink-selection-bar','score-ink-original-quick','score-ink-vision-result'];
+ function pageFit(pageAspect){
+  const roomW=Math.max(240,stage.clientWidth-16),wide=roomW>=700;
+  if(!wide)return {width:roomW,spread:false};
+  const gap=parseFloat(getComputedStyle(stage.parentElement).rowGap)||0;let extra=0;
+  for(const node of stage.parentElement.children)if(node!==stage&&!node.hidden&&TRANSIENT.some(c=>node.classList.contains(c))&&node.offsetHeight)extra+=node.offsetHeight+gap;
+  const roomH=Math.max(160,stage.clientHeight+extra-16),landscape=stage.clientWidth>(stage.clientHeight+extra)*1.1;
+  const spread=zoom===1&&landscape&&!!doc&&pageNo<doc.numPages&&Math.min((roomW-12)/2,roomH/pageAspect)>=260;
+  return {width:Math.min(spread?(roomW-12)/2:roomW,roomH/pageAspect),spread};
  }
  function fitMark(){if(stage.scrollWidth-stage.clientWidth<=8)stage.dataset.inkFit='';else delete stage.dataset.inkFit;}
  async function renderPage({keepScroll=false}={}){
@@ -650,7 +688,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{
    current();const page=await doc.getPage(pageNo);if(closed||number!==renderNumber)return;current();
    const natural=page.getViewport({scale:1});aspect=natural.height/natural.width;
-   baseWidth=Math.max(240,stage.clientWidth-16);const width=baseWidth*zoom,height=width*aspect;
+   // Phones fit the page width (scroll down a long page). From 700px wide (tablets) 화면 맞춤 shows the whole page, and
+   // in landscape the next page sits beside it (두 쪽 보기) when both fit.
+   const fit=pageFit(aspect);spreadOn=fit.spread;baseWidth=fit.width;const width=baseWidth*zoom,height=width*aspect;
    const pixelScale=Math.min(devicePixelRatio||1,2,Math.sqrt(4000000/(width*height))),viewport=page.getViewport({scale:width/natural.width*pixelScale});
    const target=document.createElement('canvas'),cache=prepared.get(pageNo);
    if(cache?.page===pageNo&&cache.width===width&&cache.zoom===zoom&&cache.pixelScale===pixelScale&&cache.doc===doc){
@@ -665,7 +705,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
    el.querySelector('[data-ink-first]').disabled=pageNo<=1;el.querySelector('[data-ink-last]').disabled=pageNo>=doc.numPages;
    fitMark();box.hidden=false;viewReady=true;ready=!!binding;stage.dataset.viewOnly=String(!ready);if(ready)rememberView();svg.dataset.tool=ready?tool:'pan';svg.dataset.penOnly=String(profiles.penOnly);svg.style.pointerEvents=ready&&!performance?'':'none';if(performance)showPerformanceControls();if(keepScroll)stage.scrollTo(previousScroll.left,previousScroll.top);else stage.scrollTo(0,0);
-   paint();if(!binding)say('악보를 볼 수 있어요 · 필기를 확인하고 있어요.');else if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
+   paint();renderSpread(number,width,pixelScale);if(!binding)say('악보를 볼 수 있어요 · 필기를 확인하고 있어요.');else if(pending)say('필기 저장이 끝나지 않았어요. 다시 저장해 주세요.',true);else say(lastSaveMessage||'필기 준비됨 · 한 획씩 이 기기에 자동 저장');
    // Keep this page and pre-render both neighbours, so turning either way needs no new render.
    for(const key of [...prepared.keys()])if(Math.abs(key-pageNo)>1)prepared.delete(key);
    if(!cache)prepared.set(pageNo,{page:pageNo,width,zoom,pixelScale,doc,canvas:target});
@@ -1046,7 +1086,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    finishStroke();
   };
  }});
- if(window.ResizeObserver){resizeObserver=new ResizeObserver(()=>{if(ready&&!busy&&Math.abs(Math.max(240,stage.clientWidth-16)-baseWidth)>1){clearTimeout(resizeTimer);resizeTimer=setTimeout(renderPage,120);}});resizeObserver.observe(stage);}
+ if(window.ResizeObserver){resizeObserver=new ResizeObserver(()=>{const fit=ready&&!busy?pageFit(aspect):null;if(fit&&(Math.abs(fit.width-baseWidth)>1||fit.spread!==spreadOn)){clearTimeout(resizeTimer);resizeTimer=setTimeout(renderPage,120);}});resizeObserver.observe(stage);}
  cleanupHook=scope?.beforeLeave(()=>{if(active||selection?.drag||pending)throw Error('악보 필기를 먼저 저장하고 계정을 바꿔 주세요.');sheet.close();})||(()=>{});
  document.addEventListener('fullscreenchange',nativeFullscreenChanged);
  window.addEventListener('vzip:auth-changed',changed);window.addEventListener('vzip:data-changed',changed);
