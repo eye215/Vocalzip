@@ -4,7 +4,7 @@ body[data-vz-route="settings"] .v-app{max-width:560px;padding-right:12px;padding
 body[data-vz-route="settings"] .v-nav,body[data-vz-route="settings"] .vz-collection-record{display:none!important}
 body[data-vz-route="settings"] .v-app{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
 body[data-vz-route="settings"] #view{padding-bottom:12px}
-.vz-settings{display:grid;gap:18px;padding-bottom:12px;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+.vz-settings{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;padding-bottom:12px;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 .vz-settings-account{display:grid;grid-template-columns:minmax(0,1fr);gap:0;min-width:0;padding:17px 18px;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(45,31,71,.045)}
 .vz-journey{position:relative;overflow:hidden;min-width:0;padding:20px 20px 17px;border-radius:20px;background:linear-gradient(120deg,#AE55F5 0%,#8020E6 48%,#5712B8 100%);box-shadow:0 10px 26px rgba(91,22,177,.18);color:#fff}
 .vz-journey::after{content:'♫';position:absolute;right:10px;top:33px;font-family:system-ui,sans-serif;font-size:98px;line-height:1;color:rgba(255,255,255,.16);transform:rotate(9deg);pointer-events:none}
