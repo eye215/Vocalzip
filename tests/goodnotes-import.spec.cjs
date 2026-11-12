@@ -162,6 +162,35 @@ test('950 handwriting strokes all stay editable and reach the viewer through the
  const viewer=await open(page,title);
  await expect(strokesIn(viewer)).toHaveCount(950);
 });
+test('a failed save loses nothing: drawn and erased strokes are journaled on the device and completed on the next open',async({page})=>{
+ await setup(page);
+ const notebook=F.notebook({title:'저장 실패',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a',ink:[ink(1,[1,0,0,1],3,60,60,240,60),ink(2,[0,0,1,1],3,60,300,240,300)]}]});
+ await pick(page,'저장 실패.goodnotes',notebook);
+ await page.getByRole('dialog',{name:'굿노트 가져오기'}).getByRole('button',{name:'가져오기 (1곡)'}).click();
+ await expect(page.locator('.toast')).toContainText('수정 가능한 필기 2획');
+ const {title,scoreId}=await page.evaluate(()=>({title:window.VZ.db.songs[0].scores[0].title,scoreId:window.VZ.db.songs[0].scores[0].id}));
+ let viewer=await open(page,title);await expect(strokesIn(viewer)).toHaveCount(2);
+ // The account record cannot be written. A new stroke stays on screen, an erase is applied, and 다시 저장 is offered.
+ await page.evaluate(()=>{window.VZ.change=()=>false;});
+ await act(viewer,'펜');let box=await viewer.locator('[data-ink-svg]').boundingBox();
+ await page.mouse.move(box.x+box.width*.2,box.y+box.height*.5);await page.mouse.down();await page.mouse.move(box.x+box.width*.8,box.y+box.height*.5,{steps:5});await page.mouse.up();
+ await expect(viewer.getByRole('button',{name:'다시 저장',exact:true})).toBeVisible();
+ await expect(strokesIn(viewer)).toHaveCount(3);
+ await viewer.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(viewer).toBeVisible(); // it does not close on unsaved ink
+ // Reload (saving works again): the device's journal completes the stroke, nothing disappears and nothing comes back.
+ await page.reload();await page.getByRole('tab',{name:'악보',exact:true}).click();
+ viewer=await open(page,title);await expect(strokesIn(viewer)).toHaveCount(3);
+ await act(viewer,'지우개');box=await viewer.locator('[data-ink-svg]').boundingBox();
+ await page.evaluate(()=>{window.__change=window.VZ.change;window.VZ.change=()=>false;});
+ await page.mouse.click(box.x+box.width*.5,box.y+box.height*.15);
+ await expect(viewer.getByRole('button',{name:'다시 저장',exact:true})).toBeVisible();
+ await expect(strokesIn(viewer)).toHaveCount(2);
+ await page.reload();await page.getByRole('tab',{name:'악보',exact:true}).click();
+ viewer=await open(page,title);await expect(strokesIn(viewer)).toHaveCount(2); // the erase was kept, the imported stroke did not return
+ const root=await page.evaluate(id=>({drawn:window.VZ.db.scoreAnnotations.length,erased:window.VZ.db.deleted.scoreAnnotations.includes(id)}),'gn-'+scoreId+'-0');
+ expect(root).toEqual({drawn:1,erased:true}); // both reached the synced account record
+ expect(page.__errors).toEqual([]);
+});
 test('a file that is not a GoodNotes notebook is refused and nothing is uploaded',async({page})=>{
  const r2=await setup(page);
  await pick(page,'악보.pdf',pdf(1));
