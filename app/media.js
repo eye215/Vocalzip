@@ -219,6 +219,7 @@ M.importFile = async (file, choice, onProgress, signal) => {
       if (signal?.aborted) throw new DOMException('취소', 'AbortError');
       saved = {...info, blob:out, importedAt:Date.now(), local:true, pendingUpload:true};
       await window.vzipStorePracticeMedia(saved);
+      M.uploadFirst(saved.id); // ahead of older device files still waiting for the background backup
       window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:saved.id, source:'import'}}));
     } else {
       if (out.size > LOCAL_LIMIT) throw Error('25MB 초과 음원은 로그인 후 가져올 수 있어요.');
@@ -389,6 +390,11 @@ M.backupStatus = () => ({...backup});
 M.localOnly = items => items.filter(m => m.local && !m.cloud && blobOf(m) && !(VZ.db.deleted?.media || []).includes(m.id));
 /** A bulk upload holds the single upload slot; the background backup waits until it ends. */
 let held = 0;
+/** Files just imported go up before older device files: the running backup re-reads its list and puts them first
+ * (the file already uploading is finished, never cut off, so nothing is left half-sent). */
+const firstUp = [];
+M.uploadFirst = id => { if (!id) return; const i = firstUp.indexOf(id); if (i >= 0) firstUp.splice(i, 1); firstUp.push(id); if (firstUp.length > 500) firstUp.shift(); backup.refresh = true; };
+const firstOrder = list => { const rank = m => { const i = firstUp.indexOf(m.id); return i < 0 ? Infinity : i; }; return list.map((m, i) => [m, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(x => x[0]); };
 M.holdBackup = on => { held = Math.max(0, held + (on ? 1 : -1)); if (!held) M.scheduleBackup(3000); };
 M.backupLocal = async () => {
   if (held) return backup;
@@ -399,10 +405,20 @@ M.backupLocal = async () => {
   backup.running = true; backup.waiting = false; M.keepAwake(true);
   const notify = () => window.dispatchEvent(new Event('vzip:v6-backup'));
   try {
-    const pending = M.localOnly(await M.list(true));
-    Object.assign(backup, {total:pending.length, done:0, failed:0}); notify();
-    for (const item of pending) {
+    backup.refresh = false;
+    let queue = firstOrder(M.localOnly(await M.list(true)));
+    const tried = new Set();
+    Object.assign(backup, {total:queue.length, done:0, failed:0}); notify();
+    while (queue.length) {
       if (!window.vzipCloudSignedIn?.() || held) break;
+      // A file imported while this run was going is put at the front instead of waiting for the whole run.
+      if (backup.refresh) {
+        backup.refresh = false;
+        try { queue = firstOrder(M.localOnly(await M.list(true)).filter(m => !tried.has(m.id))); } catch {}
+        backup.total = tried.size + queue.length; notify();
+        if (!queue.length) break;
+      }
+      const item = queue.shift(); tried.add(item.id);
       let prepared = null;
       try {
         let blob = blobOf(item), info = {...item};
@@ -420,6 +436,7 @@ M.backupLocal = async () => {
         const extra = {}; for (const k of ['rating', 'review', 'waveform', 'importedAt', 'occasion']) if (item[k] != null) extra[k] = item[k];
         if (Object.keys(extra).length) await window.vzipCloudMediaUpdate({...meta, id:item.id}, extra);
         backup.done++;
+        const first = firstUp.indexOf(item.id); if (first >= 0) firstUp.splice(first, 1);
         VZ.processingLog?.record(item.id,{state:'done',cloud:true,pendingUpload:false,error:''});
       } catch (e) {
         backup.failed++;
