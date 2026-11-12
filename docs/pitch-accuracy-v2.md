@@ -104,21 +104,31 @@ reported as voice · highs = instant/valid/stable (v1 has only `peak` and `high`
 iPhone Safari. Synthetic accuracy must not be generalised to real polyphonic singing. Voice/MR separation is still a
 level heuristic, not source separation.
 
-## P1: score-based check (design only, not implemented)
-OMR output exists as `u/<uid>/<scoreId>/omr.mxl` (`app/score-omr.js`), but the app itself says recognition is not
-used for comparison until a review step exists. Proposal:
-1. **Reference.** Additive `score.pitchReference = {version, source:'musicxml'|'manual', scoreId, partId, staff,
-   transpositionSemitones, lowMidi, highMidi, coverage:'whole'|'measures', measures:[from,to], confirmedByUser,
-   reviewedAt}`. Manual min/max (when there is no score) uses the same shape with `source:'manual'`.
-2. **Vocal part only.** Parse the `.mxl` (zip → `score-partwise`) in the browser; list parts, preselect the one with
-   lyrics / a vocal instrument name, owner confirms. Ignore piano/other staves. Apply `<transpose>`, octave-shift and
-   key changes; take min/max over confirmed vocal notes (ties and grace notes excluded). Partial coverage cannot set
-   the song's global maximum.
-3. **Compare, never correct.** Show "악보 최고음 A5 · 유효 최고음 G5 (1반음 아래)" and flag measured notes above the score
-   maximum or below the minimum with their timestamps (listen buttons) as *review* items — e.g. a likely octave
-   error or an ad-lib. Measured pitches are never clamped, octave-folded or replaced to fit the score.
-4. Note-by-note accuracy needs score↔recording alignment (manual A/B segment first); until then only the range
-   comparison above is offered, and accompaniment-heavy or low-confidence recordings stay 판정 보류.
+## P1: score-based range check (implemented 2026-11-12, `app/score-range-model.js`, `app/score-range.js`)
+OMR output is `u/<uid>/<scoreId>/omr.mxl` (`app/score-omr.js`). Recognition errors are possible, so nothing is used
+until the owner has looked at it and confirmed.
+1. **Reference.** One per song, in the synced record: `song.vocalRange = {version:1, low, high, lowMidi, highMidi,
+   source:'score'|'manual', scoreId, part, partId, transposition, confirmedByUser:true, updatedAt}` (score fields only
+   for `source:'score'`). Manual entry = two note pickers (C2–C7). A manual range is replaced only after an explicit
+   "바꿀까요?" confirmation; nothing is ever set or updated automatically (re-converting a score changes nothing).
+2. **Vocal part only.** The `.mxl` is unzipped in the browser (tiny zip reader + `DecompressionStream('deflate-raw')`,
+   `META-INF/container.xml` rootfile) and parsed with `DOMParser`; partwise and timewise are read. Per part:
+   lowest/highest **sounding** MIDI note — `<alter>` and `<octave>` exact, `<transpose>` chromatic + octave-change
+   applied (ignored in MusicXML 4 `<concert-score>`), rests, grace, cue, hidden and unpitched notes skipped, tied notes
+   are the same pitch. `<octave-shift>` and the key signature need nothing: MusicXML pitch already includes them.
+   Parts with 2+ staves or a keyboard MIDI program/sound are piano; ≥ 50 % chord notes are chord parts; instrument
+   names (sax, guitar…) are instruments — none of these is preselected. Lyrics, a `voice.*` sound or a vocal name
+   (Voice, Soprano…, 보컬, 노래, 멜로디) mark a vocal part. One vocal part → preselected; several (duet/SATB) or none →
+   the owner picks from the list (name, range, highest-note measure, lyrics, staves, guess). One unnamed single line
+   beside a piano is preselected as a guess. The owner always confirms before saving.
+3. **Compare, never correct.** Vocal lab (`makeSegment`, per recording): 악보 최고음 vs 유효 최고음 → **일치**
+   (±1 semitone), else **악보보다 N반음 높음/낮음** (exact MIDI difference of the named notes); 안정/순간 shown with their
+   own semitone differences. Instant max ≥ 3 semitones over the score while the valid max fits →
+   "순간 최고음은 재확인 필요 (배음·잡음 가능성)" with the existing tap-to-listen (`VZ.analysisPlayAt`). v1 results,
+   `analysisReliable` false or no valid note → **판정 보류**. Measured values are never clamped or folded, and the
+   block says a range difference is not a skill judgement.
+4. Not done: note-by-note accuracy (needs score↔recording alignment), partial-coverage references, key changes the
+   singer chose (practice key) — the block warns that a different key or a partial take changes the result.
 
 ## Alternatives considered
 pYIN would add probabilistic voicing but needs a Python/librosa port or a JS rewrite plus benchmarking; CREPE needs
