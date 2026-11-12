@@ -103,22 +103,20 @@ test('importing the same notebook again does not add the scores twice unless the
  await expect(sheet.locator('[data-gn-go]')).toBeDisabled();
  expect(r2.store.size).toBe(1);
 });
-test('a song with too much handwriting keeps it visible by drawing it into the PDF instead of storing it',async({page})=>{
+test('excess handwriting is not silently flattened into an uneditable PDF',async({page})=>{
  const r2=await setup(page);
  const many=Array.from({length:950},(_,i)=>ink(100+i,[0,0,0,1],2,20+i%20*10,20+Math.floor(i/20)*7,26+i%20*10,24+Math.floor(i/20)*7));
- const plainPdf=pdf(1),notebook=F.notebook({title:'필기 많은 곡',pdf:plainPdf,width:300,height:400,pages:[{pdfPage:1,order:'a',ink:many}]});
+ const notebook=F.notebook({title:'필기 많은 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a',ink:many}]});
  await pick(page,'필기 많은 곡.goodnotes',notebook);
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
- await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획 · 양이 많아 악보에 합쳐서 넣어요 (수정 불가)');
- // Started from this song's page with a single section: it goes to this song.
- expect(await sheet.locator('[data-gn-target]').inputValue()).toBe('s1');
+ await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획 · 수정 가능한 저장 공간 부족');
  await sheet.getByRole('button',{name:'가져오기 (1곡)'}).click();
- await expect(page.locator('.toast')).toContainText('악보 1개를 가져왔어요 · 악보에 합친 필기 950획');
+ await expect(sheet.locator('[data-gn-msg]')).toContainText('필기를 PDF에 합치거나 누락하지 않도록 가져오기를 보류했어요');
+ expect(r2.store.size).toBe(0);
  expect(await page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).length)).toBe(0);
- const [stored]=[...r2.store.values()];
- expect(await pdfPages(stored.bytes)).toBe(1);
- expect(stored.bytes.length).toBeGreaterThan(plainPdf.length+5000); // the strokes are in the page content
+ await expect(sheet).toBeVisible();
 });
+
 test('a file that is not a GoodNotes notebook is refused and nothing is uploaded',async({page})=>{
  const r2=await setup(page);
  await pick(page,'악보.pdf',pdf(1));
