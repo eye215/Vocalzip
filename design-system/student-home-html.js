@@ -155,6 +155,17 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-guided-copy small{color:var(--vz-color-ink-muted);font-size:11px;line-height:17px;margin-top:2px;}
 #vocalzip-refined-preview .vz-guided-item button{flex:none;min-height:44px;border:0;border-radius:12px;padding:0 10px;background:var(--vz-color-selected-bg,#eee5ff);color:var(--vz-color-accent);font-size:12px;font-weight:700;cursor:pointer;}
 @media(max-width:355px){#vocalzip-refined-preview .vz-event h2{line-height:1.45454545;}#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
+/* Wide screens (after the rules above so it wins): two columns. */
+#vocalzip-refined-preview .vz-col{display:contents;}
+#vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:12px;}
+@media (min-width:900px){
+ #vocalzip-refined-preview .vz-phone{max-width:min(1040px,100%);}
+ #vocalzip-refined-preview main{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);column-gap:20px;align-items:start;}
+ #vocalzip-refined-preview main>.vz-today-line{grid-column:1/-1;}
+ #vocalzip-refined-preview .vz-col{display:block;min-width:0;}
+ #vocalzip-refined-preview .vz-col-side>.vz-summary{margin-top:0;}
+ #vocalzip-refined-preview .vz-floating-record{right:max(var(--vz-nav-inset),calc((100vw - 1040px)/2 + var(--vz-nav-inset)));}
+}
 `;
 export async function createFloatingHome(opts={}){
  const template=await source(),host=el("section");host.className="vz-student-home";host.dataset.sourceBlob=FLOATING_HOME_SOURCE;host.setAttribute("aria-label","학생 홈");
@@ -213,6 +224,10 @@ export async function createFloatingHome(opts={}){
  const summary=el("section",null,"vz-card vz-summary");summary.setAttribute("aria-label","요약");
  const recentWrap=el("section",null,"vz-recent");recentWrap.setAttribute("aria-label","최근 곡");
  q(".vz-goals").after(summary,recentWrap);
+ // Two columns on wide screens (tablet landscape, desktop): 지금 할 것 + 오늘의 목표 | 요약 + 최근 곡. On phones the
+ // columns are display:contents, so the order and spacing stay exactly as before.
+ const mainColumn=el("div",null,"vz-col vz-col-main"),sideColumn=el("div",null,"vz-col vz-col-side");
+ section.before(mainColumn);mainColumn.append(section,q(".vz-goals"));mainColumn.after(sideColumn);sideColumn.append(summary,recentWrap);
  const glyph=g=>{const i=el("i",g,"vz-ui-icon");i.setAttribute("aria-hidden","true");return i;};
  let summaryRows=Array.isArray(opts.summary)?opts.summary:[],weekRow=null;
  /** One line per row: icon · label · value · trailing badge · chevron. A row without an action is not a button. */

@@ -105,3 +105,5 @@ Home order: small date/streak header; a single situational “지금 할 것” 
 **Status:** documentation proposal; no runtime styles, screens, or deployment changed by this document.
 
 **Implementation log:** 2026-11-12 branch `feat/ia-v4-four-tab-dock` applies only the four-item dock (`오늘 | 내 곡 | 기록 | 성장`), the `곡별 | 전체 녹음` switch on 내 곡 (`#/library` kept), and route-to-tab highlighting. Home layout, copy that still says 보관함, and Settings file status are not yet implemented.
+
+**Home on wide screens (2026-11-12):** from a 900px-wide viewport (tablet landscape, desktop) Home uses up to 1040px and two columns — left `지금 할 것` + `오늘의 목표`, right `Home summary rows` + recent-song pills; the date/streak line spans both. Below 900px (phones, tablet portrait) the columns collapse (`display:contents`) and the single-column order above is unchanged. The dock stays 528px centred; the floating mic follows the 1040px edge.
