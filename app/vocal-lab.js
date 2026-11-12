@@ -214,7 +214,7 @@ function observe(s,m) {
   return '첫 녹음('+metric.fmt(initial,analysis(baseline.m))+')보다 '+metric.label+' 수치가 '+(percent!=null?'약 '+percent+'% ':'')+direction+' '+(improved==='good'?'좋아진 방향이에요.':improved==='bad'?'아쉬운 방향이에요.':'비슷한 수준이에요.');
  };
  const valueLabel=current==null?'측정 안 됨':metric.fmt(current,analysis(m));
- const compare=initial!=null?'<div class="vl-observation-compare"><span>첫 녹음 대비</span><strong>'+safe(metric.fmt(initial,analysis(baseline.m)))+' → '+safe(valueLabel)+'</strong>'+(Math.abs(initial)>0?'<em class="'+improved+'">'+safe('('+Math.round(Math.abs(difference)/Math.abs(initial)*100)+'% '+(difference<0?'감소':'증가')+')')+'</em>':'')+'</div>':'';
+ const compare=initial!=null?'<div class="vl-observation-compare"><span>첫 녹음 대비</span><strong>'+safe(metric.fmt(initial,analysis(baseline.m)))+' → '+safe(valueLabel)+'</strong>'+(Math.abs(initial)>0?'<em class="'+improved+'">'+safe('('+(['high','stable'].includes(metric.key)?Math.abs(Math.round(current/100)-Math.round(initial/100))+'반음 ':Math.round(Math.abs(difference)/Math.abs(initial)*100)+'% ')+(difference<0?'감소':'증가')+')')+'</em>':'')+'</div>':'';
  V.sheet({title:day(m)+' · '+title,body:'<div class="vl-observation-card"><div class="vl-observation-label">♧ 분석 관찰</div><h3>'+safe(metric.key==='wob'?'지속음의 음정 흔들림(위블)':metric.label)+(V.metricInfo?V.metricInfo((metric.key==='high'||metric.key==='stable')?'range':metric.key,metric.label):'')+'</h3><div class="vl-observation-value">'+safe(valueLabel)+'</div>'+compare+
   '<div class="vl-observation-loading" data-observe-loading role="status">녹음의 실제 음정 곡선을 확인하고 있어요…</div><div data-observe-curve></div>'+
   '<p class="vl-observation-summary">'+safe(explanation())+'</p><p class="vl-observation-note">'+safe(metric.guide)+'</p>'+
