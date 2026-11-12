@@ -21,3 +21,11 @@ test('ambiguous near-tie remains unidentified',()=>{
  const r=matchTranscripts(a,[{songId:'a',transcript:a},{songId:'b',transcript:a}]);
  assert.equal(r.candidate,null);
 });
+test('a song with both original lyrics and a Korean translation is matched once, through either text',()=>{
+ const refs=[{songId:'moment',transcript:'This is the moment this is the day when I send all my doubts away',source:'lyrics'},
+  {songId:'moment',transcript:'지금 이 순간 지금 여기 간절히 바라고 원했던 이 순간',source:'translation'},
+  {songId:'other',transcript:'다른 사람의 이야기를 들으며 아침 햇살을 바라봐요',source:'lyrics'}];
+ const r=matchTranscripts('지금 이 순간 지금 여기 간절히 바라고 원했던',refs);
+ assert.equal(r.candidate,'moment'); // the Korean-sung take matches the translation, not "near-tie with itself"
+ assert.deepEqual(r.matches.map(m=>m.songId),['moment','other']); // listed once
+});

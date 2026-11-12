@@ -145,14 +145,29 @@ const unlockPage = () => {
 };
 const vv = window.visualViewport;
 if (vv) {
+  // The keyboard is only up while a text field has focus. Without that check a viewport value left over from the
+  // keyboard (iOS does not always report the close) kept full pages shrunk with the save button hidden.
+  const typing = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(TEXTAREA|SELECT)$/.test(a.tagName) || (a.tagName === 'INPUT' && !/^(button|checkbox|radio|range|submit|reset|file|color|image)$/i.test(a.type))); };
   const kb = () => {
-    const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
+    const h = typing() ? Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)) : 0;
     document.documentElement.style.setProperty('--kb', h > 80 ? h + 'px' : '0px');
     document.documentElement.classList.toggle('vz-keyboard-open', h > 80);
     document.documentElement.style.setProperty('--vv-top', Math.round(vv.offsetTop) + 'px');
     document.documentElement.style.setProperty('--vv-height', Math.round(vv.height) + 'px');
+    // The page itself stays put; bring the field being typed into above the keyboard inside the page's own scroll.
+    if (h > 80) {
+      const field = document.activeElement, body = field?.closest?.('.sheet-page .sheet-body');
+      if (body) requestAnimationFrame(() => {
+        const r = field.getBoundingClientRect(), b = body.getBoundingClientRect(), limit = Math.min(b.bottom, innerHeight - h) - 16;
+        if (r.bottom > limit) body.scrollTop += Math.min(r.bottom - limit, Math.max(0, r.top - b.top - 16));
+        else if (r.top < b.top) body.scrollTop -= b.top - r.top + 16;
+      });
+    }
   };
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
+  addEventListener('resize', kb); addEventListener('focusin', kb);
+  // iOS reports the keyboard closing late (or not at all): check again after a field lets go.
+  addEventListener('focusout', () => { for (const ms of [0, 250, 600]) setTimeout(kb, ms); });
   kb();
 }
 /** Full-page workflow by default; short action menus and confirmations are explicit variants. */

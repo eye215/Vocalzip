@@ -70,3 +70,54 @@ test('song and lesson recording tabs use the same visible selected state as stat
  await expect(song).toHaveAttribute('aria-selected','true');
  await expect(lesson).toHaveAttribute('aria-selected','false');
 });
+
+test('a recording ⋯ opens the small dark popover by the button, not a full page',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  await window.vzipStorePracticeMedia({id:'m-free',name:'SODA_808229812',created:Date.now()-2*864e5,type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  window.dispatchEvent(new Event('vzip:media-updated'));
+ });
+ await page.goto('/#/song-suggest');
+ const card=page.locator('.vz-sc-record').filter({hasText:'SODA_808229812'}),more=card.locator('.vz-sc-menu');
+ await expect(more).toBeVisible();await more.click();
+ const menu=page.locator('.sheet-back.sheet-menu .sheet');
+ await expect(menu).toBeVisible();
+ await expect(page.locator('.sheet-back.sheet-page')).toHaveCount(0);
+ const box=await menu.boundingBox(),button=await more.boundingBox(),vw=page.viewportSize().width;
+ expect(box.width).toBeLessThanOrEqual(304);expect(box.width).toBeLessThan(vw);
+ expect(Math.abs(box.y-(button.y+button.height+8))<2||Math.abs(box.y+box.height-(button.y-8))<2).toBe(true); // attached to ⋯
+ const rows=menu.locator('.vz-choice');
+ await expect(rows).toHaveText([/전사 확인/,/레슨 녹음으로 지정/,/트레이닝으로 지정/,/파일 삭제/]); // delete is last
+ expect(await rows.last().evaluate(el=>getComputedStyle(el).color)).not.toBe(await rows.first().evaluate(el=>getComputedStyle(el).color));
+ await rows.first().click();
+ await expect(page).toHaveURL(/#\/song-transcript\/m-free$/);
+});
+
+test('an unsorted recording made at lesson time is suggested as a lesson recording and moves only when the user taps it',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  const lesson=VZ.db.lessons.find(l=>l.id==='l-over'),[y,m,d]=lesson.date.split('-').map(Number);
+  await window.vzipStorePracticeMedia({id:'m-lesson',name:'새 녹음 3',created:new Date(y,m-1,d,10,15).getTime(),type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  await window.vzipStorePracticeMedia({id:'m-warm',name:'립트릴 스케일',created:Date.now()-3*864e5,type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  await window.vzipStorePracticeMedia({id:'m-plain',name:'그냥 녹음',created:Date.now()-5*864e5,type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  window.dispatchEvent(new Event('vzip:media-updated'));
+ });
+ await page.goto('/#/song-suggest');
+ const card=name=>page.locator('.vz-sc-record').filter({hasText:name});
+ await expect(card('새 녹음 3').locator('.vz-sc-kind')).toContainText('레슨 녹음 같아요');
+ await expect(card('새 녹음 3').locator('.vz-sc-kind')).toContainText('10:00 레슨 시간에 녹음');
+ await expect(card('립트릴 스케일').locator('.vz-sc-kind')).toContainText('트레이닝 같아요');
+ await expect(card('그냥 녹음').locator('.vz-sc-kind')).toHaveCount(0);
+ // Nothing changed on its own.
+ expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-lesson').recordingCategory).toBeUndefined();
+ await card('새 녹음 3').locator('.vz-sc-kind').click();
+ await expect(card('새 녹음 3')).toHaveCount(0); // it left the 곡 녹음 tab
+ expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-lesson').recordingCategory).toBe('lesson');
+ await page.locator('[data-category=lesson]').click();
+ await expect(card('새 녹음 3')).toBeVisible();
+ await expect(card('새 녹음 3').locator('.vz-sc-kind')).toHaveCount(0);
+ await page.locator('[data-category=song]').click();
+ await card('립트릴 스케일').locator('.vz-sc-kind').click();
+ await expect(card('립트릴 스케일')).toHaveCount(0); // training recordings are not searched for songs
+ expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-warm').recordingCategory).toBe('training');
+});

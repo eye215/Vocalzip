@@ -44,12 +44,12 @@ async function setup(page,sourceBytes=bytes){
  }),[key,sourceBytes.length]);
  return r2;
 }
-async function open(page){
+async function open(page,pages=2){
  await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
  await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
  await expect(dialog.locator('[data-ink-box]')).toBeVisible({timeout:20000});
- await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
+ await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / '+pages+'쪽');
  await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨',{timeout:20000});
  return dialog;
 }
@@ -482,6 +482,7 @@ async function swipe(page,dialog,{fingers=2,dx=-170,dy=0}={}){
  for(let i=1;i<=8;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(i/8)});await page.waitForTimeout(16);}
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
  await page.waitForTimeout(250);
+ await expect(dialog.locator('[data-ink-stage][data-ink-turning]')).toHaveCount(0); // the slide has finished
 }
 test('without 펜만 필기 only a two-finger sideways swipe turns the page',async({page,browserName})=>{
  test.skip(browserName!=='chromium','multi-touch is driven through Chromium CDP');
@@ -501,6 +502,59 @@ test('with 펜만 필기 one or two fingers swipe pages, and a vertical drag nev
  await swipe(page,dialog,{fingers:1,dx:170});await expect(pageLabel).toHaveText('1 / 2쪽');
  await swipe(page,dialog,{fingers:2});await expect(pageLabel).toHaveText('2 / 2쪽');
  await expect(dialog.locator('path[data-stroke]')).toHaveCount(0); // finger swipes never draw
+});
+test('a sideways swipe moves only the page: it follows the finger, the screen stays put, then it slides over',async({page,browserName})=>{
+ test.skip(browserName!=='chromium','multi-touch is driven through Chromium CDP');
+ await setup(page);const dialog=await open(page),pageLabel=dialog.locator('[data-ink-page]'),stage=dialog.locator('[data-ink-stage]');
+ await penOnly(dialog,true);
+ await expect(stage).toHaveAttribute('data-ink-fit','');
+ expect(await stage.evaluate(el=>getComputedStyle(el).touchAction)).toBe('pan-y');
+ const where=()=>page.evaluate(()=>{const s=document.querySelector('[data-ink-stage]'),d=document.querySelector('[data-ink-stage]').closest('dialog,[role=dialog]')||document.body;
+  return {sx:s.scrollLeft,sy:s.scrollTop,wx:scrollX,wy:scrollY,dx:d.scrollLeft,dy:d.scrollTop,top:Math.round(s.getBoundingClientRect().top)};});
+ const before=await where();
+ const r=await stage.boundingBox(),cdp=await page.context().newCDPSession(page),x0=r.x+r.width*.75,y0=r.y+r.height*.4;
+ const at=(dx,dy)=>[{x:x0+dx,y:y0+dy,id:0,radiusX:4,radiusY:4}];
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:at(0,0)});
+ for(let i=1;i<=6;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:at(-20*i,6*i)});await page.waitForTimeout(16);}
+ // Mid-swipe: the page is dragged with the finger (it drifted down too, but nothing scrolls vertically).
+ const shift=await dialog.locator('[data-ink-box]').evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m41);
+ expect(shift).toBeLessThan(-80);
+ expect(await where()).toEqual(before);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+ await expect(stage).toHaveAttribute('data-ink-turning',''); // it slides rather than jumping
+ await expect(pageLabel).toHaveText('2 / 2쪽');
+ await expect(stage).not.toHaveAttribute('data-ink-turning','');
+ expect(await dialog.locator('[data-ink-box]').evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+ expect(await where()).toEqual(before);
+ // A short drag that does not turn springs back into place.
+ const cdp2=await page.context().newCDPSession(page);
+ await cdp2.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:at(-100,0)});
+ for(let i=1;i<=3;i++){await cdp2.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:at(-100+12*i,0)});await page.waitForTimeout(16);}
+ await cdp2.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp2.detach();
+ await expect.poll(()=>dialog.locator('[data-ink-box]').evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+ await expect(pageLabel).toHaveText('2 / 2쪽');
+ // Page buttons slide too.
+ await dialog.locator('[data-ink-prev]').click();
+ await expect(stage).toHaveAttribute('data-ink-turning','');
+ await expect(pageLabel).toHaveText('1 / 2쪽');
+ await expect(stage).not.toHaveAttribute('data-ink-turning','');
+});
+test('tapping 다음 twice in quick succession turns two pages, even mid-slide',async({page})=>{
+ await setup(page,bigPdf(3,1000));const dialog=await open(page,3),label=dialog.locator('[data-ink-page]'),next=dialog.getByRole('button',{name:'다음 악보 페이지',exact:true});
+ await expect(label).toHaveText('1 / 3쪽');
+ await next.click();await next.click();
+ await expect(label).toHaveText('3 / 3쪽');
+ await expect(dialog.locator('[data-ink-stage]')).not.toHaveAttribute('data-ink-turning','');
+ await expect(label).toHaveText('3 / 3쪽');
+});
+test('with reduced motion pages turn at once, without sliding',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await setup(page);const dialog=await open(page),pageLabel=dialog.locator('[data-ink-page]');
+ const seen=await dialog.locator('[data-ink-stage]').evaluate(stage=>new Promise(resolve=>{let slid=false;
+  const watch=new MutationObserver(()=>{if(stage.hasAttribute('data-ink-turning'))slid=true;});watch.observe(stage,{attributes:true});
+  stage.closest('body').querySelector('[data-ink-next]').click();setTimeout(()=>{watch.disconnect();resolve(slid);},600);}));
+ expect(seen).toBe(false);
+ await expect(pageLabel).toHaveText('2 / 2쪽');
 });
 test('reopening a score uses the device copy: no second PDF download',async({page})=>{
  const r2=await setup(page);let dialog=await open(page);

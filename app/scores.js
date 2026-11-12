@@ -22,7 +22,7 @@ function uploadSheet(song, redraw) {
       '<p class="small muted" data-file-name aria-live="polite" style="overflow-wrap:anywhere">선택한 파일이 없어요.</p>' +
       '<label class="field"><span>제목</span><input type="text" name="title" maxlength="120" placeholder="비워 두면 파일 이름"></label>' +
       '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey') + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey') + '</label></div>' +
-      '<p class="small muted" data-msg role="status">PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요.</p></form>',
+      '<p class="small muted" data-msg role="status">PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요. 올리면 음표 변환(시험판)도 자동으로 시작돼요.</p></form>',
     foot:'<button type="submit" form="score-up" class="btn block" data-go>올리기</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), msg = el.querySelector('[data-msg]'), go = el.querySelector('[data-go]');
@@ -59,7 +59,10 @@ function uploadSheet(song, redraw) {
           if (!current.receipt?.key) throw Error('업로드 결과를 확인하지 못했어요.');
           const entry = {id:current.id, songId:song.id, ...details, fileName:file.name, r2Key:current.receipt.key, size:file.size, uploadedAt:Date.now(), updatedAt:Date.now()};
           if (!save(song.id, list => { if (!list.some(s => s.id === current.id)) list.push(entry); })) throw Error('목록에 저장하지 못했어요.');
-          close(); VZ.toast('악보를 올렸어요.'); redraw();
+          // Decided 2026-11-11: a new score starts its note conversion (OMR) right away; failures never affect the upload.
+          const converting = !!window.VzipR2.omr && /\/original\.pdf$/.test(entry.r2Key);
+          if (converting) window.VzipR2.omr.request(entry.r2Key).catch(() => {});
+          close(); VZ.toast(converting ? '악보를 올렸어요. 음표 변환도 시작했어요.' : '악보를 올렸어요.'); redraw();
         } catch (err) {
           msg.textContent = '올리지 못했어요: ' + err.message + ' · 선택한 파일은 유지돼요.';
           go.textContent = '다시 시도';
@@ -89,7 +92,7 @@ async function remove(song, score, redraw) {
   const guard=()=>{if(!owner||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 바뀌어 삭제를 중단했어요.');};
   if (!await VZ.confirm('악보 삭제', '"' + score.title + '" PDF와 연결된 개인 필기를 삭제할까요? 클라우드의 파일도 지워지고 되돌릴 수 없어요. 곡과 녹음은 그대로예요.', {ok:'삭제', danger:true})) return;
   try {
-    guard();await window.VzipR2.remove(score.r2Key);guard();
+    guard();await window.VzipR2.remove(score.r2Key);if(/\/original\.pdf$/.test(score.r2Key||''))await window.VzipR2.remove(score.r2Key.replace(/original\.pdf$/,'omr.mxl')).catch(()=>{});guard();
     if (VZ.deleteScoreWithInk ? VZ.deleteScoreWithInk(song.id, score) : save(song.id, list => { const i = list.findIndex(x => x.id === score.id); if (i >= 0) list.splice(i, 1); })) { VZ.toast('악보를 삭제했어요.'); redraw(); }
   } catch (err) { VZ.toast('삭제하지 못했어요: ' + err.message, 'error'); }
 }
@@ -105,12 +108,13 @@ VZ.renderScores = (host, song) => {
   host.innerHTML='<div class="row between" style="margin:4px 4px 10px"><h2 class="sec" style="margin:0">악보 '+list.length+'</h2><button type="button" class="btn sm" data-score-add><i class="ph ph-file-arrow-up"></i>PDF 올리기</button></div>'+
    (list.length?'<div class="list">'+list.map(s=>'<div class="item score-row" data-score="'+esc(s.id)+'"><button type="button" data-score-open aria-label="'+esc(s.title)+' 열기"><span class="avatar"><i class="ph ph-file-pdf"></i></span><span class="item-main"><span class="item-title">'+esc(s.title)+'</span><span class="item-sub">'+
    esc([s.originalKey?'원키 '+s.originalKey:'',s.practiceKey?'연습 '+s.practiceKey:'',VZ.dateLabel(VZ.ymd(new Date(s.uploadedAt))),size(s.size||0)].filter(Boolean).join(' · '))+'</span></span></button>'+
-   '<span class="score-actions"><button type="button" class="icon-btn" data-edit aria-label="정보 수정"><i class="ph ph-pencil-simple"></i></button><button type="button" class="icon-btn" data-del aria-label="삭제"><i class="ph ph-trash"></i></button></span></div>').join('')+'</div>':
+   '<span class="score-actions">'+(VZ.scoreOmrSheet&&s.r2Key?'<button type="button" class="icon-btn" data-omr aria-label="'+esc(s.title)+' 음표로 변환"><i class="ph ph-music-notes"></i></button>':'')+'<button type="button" class="icon-btn" data-edit aria-label="정보 수정"><i class="ph ph-pencil-simple"></i></button><button type="button" class="icon-btn" data-del aria-label="삭제"><i class="ph ph-trash"></i></button></span></div>').join('')+'</div>':
    VZ.empty('music-notes','아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 열어 볼 수 있어요.'));
   host.querySelector('[data-score-add]').onclick=()=>uploadSheet(song,draw);
   host.querySelectorAll('[data-score]').forEach(row=>{
    const score=list.find(s=>s.id===row.dataset.score);
-   row.onclick=event=>{if(!event.target.closest('[data-edit],[data-del]'))VZ.openScoreInk(song.id,score.id);};
+   row.onclick=event=>{if(!event.target.closest('[data-edit],[data-del],[data-omr]'))VZ.openScoreInk(song.id,score.id);};
+   row.querySelector('[data-omr]')?.addEventListener('click',event=>{event.stopPropagation();VZ.scoreOmrSheet(song,score);});
    row.querySelector('[data-edit]').onclick=event=>{event.stopPropagation();editSheet(song,score,draw);};
    row.querySelector('[data-del]').onclick=event=>{event.stopPropagation();remove(song,score,draw);};
   });

@@ -65,7 +65,7 @@ V.renderSongMR=(host,song)=>{
   if(!host.isConnected)return;
   const list=tracks(song.id),account=identity();
   host.innerHTML='<section class="vz-ar-links vz-mr-links" aria-label="MR 반주"><div class="vz-ar-heading"><strong>MR 반주 <span>'+list.length+'</span></strong><button type="button" data-mr-add aria-label="MR 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
-   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':x.fileName||'오디오 파일')+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
+   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':x.fileName||'오디오 파일')+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
   host.querySelector('[data-mr-add]').onclick=()=>add(song,draw);
   window.VzipR2?.prefetch?.(list.filter(x=>x.kind==='file').slice(0,5).map(x=>x.r2Key)).catch(()=>{});
   for(const row of host.querySelectorAll('[data-mr]')){
@@ -86,6 +86,8 @@ V.renderSongMR=(host,song)=>{
      const audio=document.createElement('audio');audio.controls=true;audio.preload='none';audio.src=url;audio.setAttribute('aria-label',track.title+' MR 재생');player.replaceChildren(audio);
     }catch(error){if(player.isConnected&&!player.hidden)player.textContent='재생하지 못했어요: '+error.message;}
    };
+   // File MR: a revocable link like a recording; YouTube MR: send the video link itself.
+   row.querySelector('[data-mr-share]').onclick=()=>track.kind==='youtube'?V.shareUrl?.(track.title||'유튜브 MR',track.url):V.shareSheet?.({id:track.id,name:track.title,r2Key:track.r2Key},{title:(song.title?song.title+' · ':'')+(track.title||'MR')});
    row.querySelector('[data-mr-remove]').onclick=async()=>{
     if(!await V.confirm('MR 삭제','이 곡의 MR을 삭제할까요?',{ok:'삭제',danger:true}))return;
     try{

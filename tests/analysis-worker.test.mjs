@@ -83,7 +83,7 @@ before(async () => {
   await admin.query('create database ' + dbName);
   db = new pg.Client({connectionString:DB.replace(/\/[^/]*$/, '/' + dbName)}); await db.connect();
   for (const f of ['billing/tests/sql-setup.sql', 'supabase/tests/app-tables.sql', 'billing/migrations/20261104_billing_cloud.sql', 'supabase/migrations/20261106_keep_history.sql', 'supabase/migrations/20261106_song_text_cloud_sync.sql', 'supabase/migrations/20261106_song_text_tombstones.sql',
-    'supabase/migrations/20261106_vzip_song_stt_quota.sql', 'supabase/migrations/20261108_vzip_song_stt_no_limit_usage.sql', 'supabase/migrations/20261109_server_analysis_jobs.sql', 'supabase/migrations/20261110_wake_analysis_worker.sql', 'supabase/migrations/20261111_recheck_review_songs.sql'])
+    'supabase/migrations/20261106_vzip_song_stt_quota.sql', 'supabase/migrations/20261108_vzip_song_stt_no_limit_usage.sql', 'supabase/migrations/20261109_server_analysis_jobs.sql', 'supabase/migrations/20261110_wake_analysis_worker.sql', 'supabase/migrations/20261111_recheck_review_songs.sql', 'supabase/migrations/20261112_song_refs_sig_translation.sql'])
     // Roles are server-wide: a second local run must not fail on "already exists".
     await db.query(readFileSync(ROOT + f, 'utf8').replace(/create role (anon|authenticated) nologin;/g, (_, r) => "do $$ begin if not exists (select 1 from pg_roles where rolname = '" + r + "') then create role " + r + " nologin; end if; end $$;"));
   await db.query("update public.vocal_data set payload = $1 where user_id = $2", [JSON.stringify({songs:[{id:'s1', title:'This Is the Moment', lyrics:LYRICS_A}, {id:'s2', title:'Defying Gravity', lyrics:LYRICS_B}], lessons:[], practices:[], assignments:[], categories:[]}), U1]);
@@ -320,6 +320,39 @@ test('"곡 확인 필요" is matched again only after lyrics change: no new STT 
   const {rows:[perm]} = await db.query("select has_function_privilege('authenticated', 'public.vzip_recheck_review_jobs(boolean, integer)', 'execute') as r, has_function_privilege('authenticated', 'public.vzip_song_refs_sig(uuid)', 'execute') as s");
   assert.deepEqual(perm, {r:false, s:false});
   await db.query("update public.vocal_analysis_jobs set status = 'review', locked_at = null, locked_by = null where status = 'queued' and kind = 'song'");
+});
+test('A recording sung in the Korean translation is matched through it; adding a translation re-queues review jobs once (no STT)', {skip}, async () => {
+  const recheck = async () => (await db.query('select public.vzip_recheck_review_jobs(false) as n')).rows[0].n;
+  const age = () => db.query("update public.vocal_analysis_jobs set updated_at = now() - interval '1 hour' where kind = 'song' and status = 'review'");
+  const sig = async () => (await db.query('select public.vzip_song_refs_sig($1) as s', [U1])).rows[0].s;
+  const songs = async edit => { const {rows:[d]} = await db.query('select payload from public.vocal_data where user_id = $1', [U1]); edit(d.payload.songs); await db.query('update public.vocal_data set payload = $2 where user_id = $1', [U1, JSON.stringify(d.payload)]); };
+  const KO = '지금 이 순간 지금 여기 간절히 바라고 원했던 이 순간 나만의 꿈이 나만의 소원 이뤄질지 몰라 여기 바로 오늘';
+  await songs(list => list.push({id:'s4', title:'지금 이 순간', lyrics:'This is the moment this is the day when I send all my doubts away'}));
+  files.set(key(U1, 'kt1', 'wav'), wav({}));
+  await media('kt1', {name:'한국어 공연', storageProvider:'r2', r2Key:key(U1, 'kt1', 'wav'), analysis:{v:1}});
+  await db.query("insert into public.vocal_song_texts (user_id, kind, record_id, transcript, source) values ($1, 'recognition', 'kt1', '지금 이 순간 지금 여기 간절히 바라고 원했던 이 순간 나만의 꿈이', 'stt')", [U1]);
+  await work();
+  assert.notEqual((await jobs('kt1')).song.result.top3?.[0]?.songId, 's4', 'English original only: no match yet');
+
+  // A translation under 12 characters is not compared, so nothing changes; a real one changes the fingerprint.
+  const plain = await sig();
+  await songs(list => { list.find(x => x.id === 's4').translation = '짧은 번역'; });
+  assert.equal(await sig(), plain);
+  await songs(list => { list.find(x => x.id === 's4').translation = KO; });
+  assert.notEqual(await sig(), plain);
+
+  await age();
+  assert.ok(await recheck() >= 1);
+  assert.equal((await jobs('kt1')).song.status, 'queued');
+  const paid = sttCalls; await work();
+  assert.equal(sttCalls, paid, 'the saved transcript is reused');
+  const after = await jobs('kt1');
+  assert.equal(after.song.status, 'review');
+  assert.equal(after.song.result.top3[0].songId, 's4');
+  assert.equal(after.song.result.top3.filter(m => m.songId === 's4').length, 1, 'listed once though it has two texts');
+  assert.equal(after.song.result.requiresApproval, true);
+  assert.equal((await row('kt1')).songId, undefined, 'never assigned without the user');
+  await songs(list => list.splice(list.findIndex(x => x.id === 's4'), 1));
 });
 
 test('Supabase wakes the GitHub worker only when recordings wait, no worker is busy and none was just started', {skip}, async () => {

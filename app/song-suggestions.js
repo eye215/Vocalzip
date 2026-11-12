@@ -53,10 +53,13 @@ let analysisProgress=null;
 const scoped=key=>key+':'+viewOwner;
 function references(){
  // The user's original lyrics are already synced through the existing song catalog (#80).
- // Use them first; supplement songs without lyrics from the new private Supabase table.
- const typed=songs().filter(song=>String(song.lyrics||'').trim().length>=12)
-  .map(song=>({songId:song.id,transcript:String(song.lyrics).trim().slice(0,16000),source:'lyrics'}));
- const ids=new Set(typed.map(r=>r.songId));
+ // The Korean translation is compared too: a Korean-language production is sung in the translated words,
+ // so a recording only matches that text. Songs without typed original lyrics are supplemented from the
+ // private Supabase reference table.
+ const typed=songs().flatMap(song=>[['lyrics','lyrics'],['translation','translation']]
+  .map(([key,source])=>({songId:song.id,transcript:String(song[key]||'').trim().slice(0,16000),source}))
+  .filter(ref=>ref.transcript.length>=12));
+ const ids=new Set(typed.filter(r=>r.source==='lyrics').map(r=>r.songId));
  return [...typed,...state.referenceRows.filter(r=>!ids.has(r.songId))];
 }
 async function saveReference(songId,transcript,source='manual'){
@@ -205,6 +208,21 @@ function resultFor(item){
  return result;
 }
 function eligible(item){return M.songSearchEligible(item)&&!item.songId&&!item.song && !M.isVideo(item);}
+/** A lesson/training suggestion for an unsorted recording (app/recording-kind.js). Only a suggestion. */
+function kindHint(item){
+ return window.VzipRecordingKind?.guess(item,{lessons:VZ.db?.lessons||[],dateOf:M.dateOf,transcript:resultFor(item)?.transcript||'',current:M.recordingCategory(item)})||null;
+}
+const KIND_LABEL={lesson:'레슨 녹음',training:'트레이닝'};
+async function applyKind(main,item,kind){
+ try{
+  await M.update(item,{recordingCategory:kind},{quiet:true});
+  item.recordingCategory=kind;
+  if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
+  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 보관함에서 다시 바꿀 수 있어요.');
+  window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:{recordingCategory:kind}}}));
+ }catch(error){VZ.toast('옮기지 못했어요: '+String(error.message||error),'error')}
+ if(main.isConnected)draw(main);
+}
 function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);saveCheckpoint();}
 /** Where the singing is: the on-device vocal analysis (app/analysis.js) follows the voice over the
  * MR, then the 30 seconds with the most singing are chosen. Free — and a clip with no singing is
@@ -255,7 +273,7 @@ async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  const status=await fetch(API,{headers:{Authorization:'Bearer '+token},signal,cache:'no-store'});
  if(!status.ok){const data=await status.json().catch(()=>({}));throw Error(data.error||'STT_DISABLED ('+status.status+')')}
  if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
- const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
  const {clipFromPcm}=await import('../stt-clip-browser.mjs?v=3');
  let transcript=previous||'',initialStart=cached?.initialStart??null,duration=Number(item.durationSeconds)||0;
  // Reuse decoded PCM only within this file/request; release it when this search ends.
@@ -286,7 +304,10 @@ async function stt(item,signal,{reference=false,onProgress=()=>{}}={}){
  // A real match ends immediately; a low-confidence top-1 is kept only as a suggestion.
  if(!match.candidate){
   if(!duration){const probe=await readWindow(0,2);duration=probe.duration}
-  const windows=scanWindows(duration,initialStart);
+  // A first section that is clearly a vocal exercise (아·오·마…) is not searched any further: no more paid clips.
+  const exercise=window.VzipRecordingKind?.trainingLike(transcript);
+  const windows=exercise?[]:scanWindows(duration,initialStart);
+  if(exercise){match={...match,reason:'가사 대신 발성 소리가 대부분이라 더 찾지 않았어요. 트레이닝 녹음 같아요.'};best=match}
   for(const [index,start] of windows.entries()){
    if(signal?.aborted||owner()!==viewOwner)throw new DOMException('분석 중단','AbortError');
    onProgress('추가 분석 '+(index+1)+'/'+windows.length+'구간 · '+Math.floor(start/60)+'분 '+Math.round(start%60)+'초부터');
@@ -355,9 +376,11 @@ function pickSong(main,item){
   el.querySelector('[data-pick-select]').onchange=e=>choose(e.target.value);
  }});
 }
-function openRecordMenu(main,item){
- VZ.sheet({title:M.label(item),body:'<button type="button" class="btn ghost block" data-transcript-view>전사 확인</button><button type="button" class="btn ghost block" data-file-delete>파일 삭제</button>',onMount:(el,close)=>{
+// A short action menu: the shared dark popover next to the ⋯ button (design system §공통 작업 화면과 메뉴), delete last.
+function openRecordMenu(main,item,anchor){
+ VZ.menu({title:M.label(item),anchor,body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-transcript-view><i class="ph ph-text-align-left"></i> 전사 확인</button>'+(VZ.recordingKindButtons?.([item])||'')+'<button type="button" class="vz-choice" data-file-delete><i class="ph ph-trash"></i> 파일 삭제</button></div>',onMount:(el,close)=>{
   el.querySelector('[data-transcript-view]').onclick=()=>{close();VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))};
+  VZ.bindRecordingKind?.(el,close,[item],()=>{if(main.isConnected){saveCheckpoint();draw(main)}});
   el.querySelector('[data-file-delete]').onclick=()=>{close();exclusive(main,async(_main,check)=>{
    if(state.running||!await M.confirmRemove(item))return;check();await M.remove(item);check();
    state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);state.results.delete(item.id);state.recognitions.delete(item.id);
@@ -369,7 +392,8 @@ function openSelectionMenu(main){
  const root=main.querySelector('[data-suggest]'),count=state.chosen.size;
  if(!count||state.running)return;
  const ready=categoryItems().some(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate);
- VZ.menu({title:'선택한 녹음 '+count+'개',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-selection-analyze>분석 시작 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-apply'+(ready?'':' disabled')+'>추천대로 곡 지정 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-clear>선택 해제 <i class="ph ph-x"></i></button></div>',onMount:(el,close)=>{
+ VZ.menu({title:'선택한 녹음 '+count+'개',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-selection-analyze>분석 시작 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-apply'+(ready?'':' disabled')+'>추천대로 곡 지정 <i class="ph ph-arrow-right"></i></button>'+(VZ.recordingKindButtons?.(state.items.filter(m=>state.chosen.has(m.id)))||'')+'<button type="button" class="vz-choice" data-selection-clear>선택 해제 <i class="ph ph-x"></i></button></div>',onMount:(el,close)=>{
+  VZ.bindRecordingKind?.(el,close,state.items.filter(m=>state.chosen.has(m.id)),()=>{state.chosen.clear();if(main.isConnected){saveCheckpoint();draw(main)}});
   el.querySelector('[data-selection-analyze]').onclick=()=>{close();root.querySelector('[data-analyze]').click()};
   el.querySelector('[data-selection-apply]').onclick=()=>{close();root.querySelector('[data-apply]').click()};
   el.querySelector('[data-selection-clear]').onclick=()=>{close();state.chosen.clear();saveCheckpoint();draw(main)};
@@ -385,10 +409,15 @@ function draw(main){
   const date=VZ.dateLabel?.(M.dateOf(item))||'날짜 없음';
   const card=document.createElement('article');card.className='vz-sc-record';
   card.innerHTML='<div class="vz-sc-record-main"><div class="vz-sc-record-head"><label class="vz-sc-record-check"><input type="checkbox" aria-label="'+esc(name)+' 선택"'+(state.chosen.has(item.id)?' checked':'')+'><span class="vz-sc-checkbox" aria-hidden="true"></span></label><div class="vz-sc-record-name"><strong title="'+esc(name)+'">'+esc(name)+'</strong><small>'+esc(date)+' · '+esc(duration)+' · 음성</small></div><button type="button" class="vz-sc-menu" aria-label="'+esc(name)+' 더 보기"><i class="ph ph-dots-three-vertical"></i></button></div><div class="vz-sc-player-placeholder"><button type="button" class="vz-sc-play-trigger" aria-label="'+esc(name)+' 재생"><i class="ph-fill ph-play"></i></button><span class="vz-sc-track" aria-hidden="true"></span><span class="vz-sc-time">0:00 / '+esc(duration)+'</span></div><div class="vz-sc-player-host" hidden></div></div><button type="button" class="vz-sc-recommend'+(kind==='failed'||kind==='unknown'?' failed':'')+'" aria-label="'+esc(name)+' 곡 선택"><span class="tag">'+status+'</span><span class="divider"></span><span class="song">'+esc(title)+'</span><i class="ph ph-caret-right"></i></button>';
+  const hint=kindHint(item);
+  if(hint){const row=document.createElement('button');row.type='button';row.className='vz-sc-kind';row.dataset.kind=hint.kind;
+   row.setAttribute('aria-label',KIND_LABEL[hint.kind]+'로 옮기기: '+hint.why);
+   row.innerHTML='<span class="vz-sc-kind-text"><strong>'+KIND_LABEL[hint.kind]+' 같아요</strong><small>'+esc(hint.why)+'</small></span><span class="vz-sc-kind-go">'+(hint.kind==='lesson'?'레슨으로':'트레이닝으로')+' 옮기기</span>';
+   row.onclick=()=>{if(!state.running)applyKind(main,item,hint.kind)};card.append(row)}
   card.querySelector('input').onchange=e=>{e.target.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   card.querySelector('.vz-sc-play-trigger').onclick=()=>{const host=card.querySelector('.vz-sc-player-host');try{const player=M.player(host,item,{prefetch:false,tools:false});inlinePlayers.set(item.id,player);card.querySelector('.vz-sc-player-placeholder').hidden=true;host.hidden=false;player.play()}catch(error){VZ.toast('재생할 수 없어요: '+String(error.message||error),'error')}};
   card.querySelector('.vz-sc-recommend').onclick=()=>pickSong(main,item);
-  card.querySelector('.vz-sc-menu').onclick=()=>openRecordMenu(main,item);
+  card.querySelector('.vz-sc-menu').onclick=e=>openRecordMenu(main,item,e.currentTarget);
   list.append(card);
  }
  if(!shown.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=state.items.length?'해당 상태의 녹음이 없어요.':'곡을 확인할 미지정 녹음이 없어요.';list.append(empty)}
@@ -413,11 +442,26 @@ function showReferenceControls(main){
  const selected=state.referenceItems.find(m=>m.id===select.value);
  main.querySelector('[data-ref-clear]').disabled=state.running||!state.referenceRows.some(r=>r.songId===(selected?.songId||selected?.song));
 }
+// Recordings the background analysis already transcribed show the server's ranking, made when it compared with the
+// original lyrics only. Their saved transcript is compared again here with what the songs have now (original lyrics
+// and Korean translation). No new transcription, and nothing is assigned until the user applies it.
+async function rematchServerReviews(main){
+ const refs=references(),items=state.items.filter(m=>{const r=state.results.get(m.id);return r?.fromServer&&r.transcript});
+ if(!refs.length||!items.length)return;
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
+ for(const m of items){
+  const prev=state.results.get(m.id),match=matchTranscripts(prev.transcript,refs),found=songs().find(s=>s.id===topPick(match));
+  state.results.set(m.id,{...prev,status:found?'후보':'식별 불가',
+   candidate:found?{id:found.id,title:VZ.songLabel(found),reason:pickReason(match,match.reason),level:'확인 필요'}:null,
+   matches:candidateMatches(match),reason:'서버 받아쓰기 · 현재 가사로 다시 비교'});
+ }
+ if(main.isConnected)draw(main);
+}
 async function rematchCached(main){
  const refs=references();if(!refs.length||!state.items.some(m=>{
   const c=readCache(m);return c?.transcript&&!c.userSelected&&c.method==='stt'&&!['직접 선택','사용자가 유사도 후보 중 선택'].includes(c.candidate?.reason)
  }))return;
- const {matchTranscripts}=await import('../song-text-match.mjs?v=1');
+ const {matchTranscripts}=await import('../song-text-match.mjs?v=2');
  let changed=0;
  for(const item of state.items){
   const previous=readCache(item);
@@ -607,7 +651,8 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   state.referenceItems=mediaItems.filter(m=>M.songSearchEligible(m)&&!!(m.songId||m.song)&&!M.isVideo(m));
   try{await loadCloudTexts()}catch(error){root.querySelector('[data-progress]').textContent='동기화 실패: '+String(error.message||error)+' · 이전 데이터는 삭제하지 않았어요.';VZ.toast('가사 동기화 실패: '+String(error.message||error),'error')}
   if(!main.isConnected||owner()!==viewOwner)return;
-  for(const m of state.items){const r=VZ.serverReview?.(m.id);if(r&&!state.results.has(m.id)&&!readCache(m))state.results.set(m.id,{status:'식별 불가',candidate:null,method:'stt',transcript:r.transcript,matches:r.top3.map(x=>({songId:x.songId,score:x.score})),reason:'서버 분석 결과'})}
+  for(const m of state.items){const r=VZ.serverReview?.(m.id);if(r&&!state.results.has(m.id)&&!readCache(m))state.results.set(m.id,{status:'식별 불가',candidate:null,method:'stt',transcript:r.transcript,matches:r.top3.map(x=>({songId:x.songId,score:x.score})),reason:'서버 분석 결과',fromServer:true})}
+  await rematchServerReviews(main).catch(()=>{});
   const previous=new Set(loadCheckpoint());state.chosen=new Set(state.items.filter(m=>previous.has(m.id)).map(m=>m.id));
   if(state.cloudReady)root.querySelector('[data-progress]').textContent=state.items.length+'개 미지정 녹음'+(state.chosen.size?' · 이전 선택 '+state.chosen.size+'개 복원':'');
   root.querySelector('[data-select-all]').onclick=()=>{const scope=filteredItems(),all=scope.length&&scope.every(m=>state.chosen.has(m.id));for(const item of scope)all?state.chosen.delete(item.id):state.chosen.add(item.id);saveCheckpoint();draw(main)};
