@@ -155,7 +155,7 @@ body.vz-home-mode .v-main{margin:0;padding:0;min-width:0;}
 body.vz-home-mode .v-app{box-sizing:border-box;width:100%;max-width:480px;min-height:100dvh;margin:0 auto;padding:0;background:none;}
 body.vz-home-mode .vz-student-home{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));}
 body.vz-home-mode .v-nav{display:block;}
-body.vz-home-mode .v-nav ul{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;width:100%;max-width:none;min-height:58px;gap:0;margin:0;padding:0;list-style:none;}
+body.vz-home-mode .v-nav ul{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;width:100%;max-width:none;min-height:58px;gap:0;margin:0;padding:0;list-style:none;}
 body.vz-home-mode .v-nav li{min-width:0;margin:0;padding:0;list-style:none;}
 body.vz-home-mode .v-nav ul>li>a{color:var(--ink-2,#5f5a74);font-size:11px;font-weight:400;}
 body.vz-home-mode .v-nav ul>li>a[aria-current="page"]{color:var(--accent,#7552d9);font-weight:600;}

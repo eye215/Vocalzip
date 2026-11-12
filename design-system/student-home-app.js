@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=daily-goals-20261112-1';
+import {createFloatingHome} from './student-home-html.js?v=ia4-20261112';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -25,7 +25,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const route=(location.hash.startsWith('#/')?location.hash.slice(2):location.hash.slice(1)).split('/')[0].split('?')[0];
   if(route==='library'||route==='practices'||route==='growth'){
    document.querySelectorAll('.v-nav [aria-current]').forEach(a=>a.removeAttribute('aria-current'));
-   document.querySelector('.v-nav [data-nav="'+({library:'library',practices:'calendar',growth:'home'}[route])+'"]')?.setAttribute('aria-current','page');
+   document.querySelector('.v-nav [data-nav="'+({library:'songs',practices:'calendar',growth:'home'}[route])+'"]')?.setAttribute('aria-current','page');
   }
  }
  new MutationObserver(applyTheme).observe(document.getElementById('view'),{childList:true});

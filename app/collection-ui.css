@@ -46,3 +46,9 @@ body.vz-collection .lib-month .list>[data-media]+[data-media]{border-top:0}
 
 
 
+
+/* v4 IA: 곡별 | 전체 녹음 switch on 내 곡 (content/segment tab recipe, docs/design/VOCALZIP_DESIGN_SYSTEM_V4_2026-11-12.md). */
+.vz-songs-switch{display:flex;gap:3px;margin:0 0 12px}
+.vz-songs-switch a{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:99px;background:transparent;color:var(--vz-color-ink-secondary,#475467);font-size:14px;line-height:20px;font-weight:600;letter-spacing:-.02em;text-decoration:none;white-space:nowrap}
+.vz-songs-switch a[aria-current="page"]{background:var(--vz-color-selected-bg,#EDE1FF);color:var(--vz-color-accent,#7A32F5)}
+.vz-songs-switch a:focus-visible{outline:2px solid var(--vz-color-focus,#DCC4FF);outline-offset:0}

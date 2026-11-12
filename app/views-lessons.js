@@ -77,7 +77,7 @@ VZ.taskSheet = ({task, songId = '', lessonId = ''} = {}) => {
     }});
 };
 let hwTab = 'active';
-VZ.route('homework', {title:'숙제', back:true, tab:'home', actions:() => '<button type="button" class="icon-btn" data-add-task aria-label="숙제 추가"><i class="ph ph-plus"></i></button>', render() {
+VZ.route('homework', {title:'숙제', back:true, tab:'calendar', actions:() => '<button type="button" class="icon-btn" data-add-task aria-label="숙제 추가"><i class="ph ph-plus"></i></button>', render() {
   const all = VZ.db.assignments, active = all.filter(t => t.status !== 'done'), done = all.filter(t => t.status === 'done').sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
   const list = hwTab === 'active' ? active : done;
   return '<div class="seg" style="margin-bottom:12px"><button type="button" data-hw="active" aria-pressed="' + (hwTab === 'active') + '">진행 중 ' + active.length + '</button><button type="button" data-hw="done" aria-pressed="' + (hwTab === 'done') + '">완료 ' + done.length + '</button></div>' +
@@ -286,7 +286,7 @@ async function linkMediaSheet(l) {
 
 /* ---------- 캘린더 ---------- */
 let calMonth = null, calDay = null;
-VZ.route('calendar', {title:'일정', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render(route) {
+VZ.route('calendar', {title:'기록', tab:'calendar', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render(route) {
   const today = VZ.today();
   const requested=route?.query?.get('date'),date=VZ.parseYmd(requested);
   if(date&&VZ.ymd(date)===requested){calDay=requested;calMonth=requested.slice(0,7);}

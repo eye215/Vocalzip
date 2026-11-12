@@ -499,7 +499,7 @@ function screen(s) {
     if(V.change(d=>{d.comparisonReports||=[];d.comparisonReports.push({id:V.uid(),created:Date.now(),...record});},{silent:true}))V.toast('리포트를 보관함에 저장했어요.');
   };
 }
-V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefresh:true,
+V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefresh:true,
   actions:()=>'<button type="button" class="icon-btn" data-lab-more aria-label="더보기"><i class="ph ph-dots-three-outline"></i></button>',
   render:()=>'<div class="vl" data-lab><p class="vl-muted">녹음을 불러오는 중…</p></div>',
   async mount(main,r){
@@ -542,7 +542,7 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'songs',noAutoRefres
   },leave:clean
 });
 // Older comparison memos carry no songId: they open through 비교, which finds the song from the two recordings.
-V.route('lab-reports',{title:'리포트 보관함',back:true,tab:'songs',render(){
+V.route('lab-reports',{title:'리포트 보관함',back:true,tab:'growth',render(){
   const reports=(V.db.comparisonReports||[]).sort((a,b)=>(b.created||0)-(a.created||0));
   return '<div class="vl vl-reports">'+(reports.length?reports.map(x=>'<a class="vl-report" href="'+(x.kind!=='vocal-lab'&&!x.songId?'#/compare?a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId):'#/vocal-lab/'+encodeURIComponent(x.songId||'')+'?'+(x.kind==='vocal-lab'?'report='+encodeURIComponent(x.id):'a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId)+'&compare=1'))+'"><strong>'+esc(x.song||'삭제된 곡')+'</strong><span>'+esc(new Date(x.created).toLocaleDateString('ko-KR'))+' · '+(x.kind==='vocal-lab'?'녹음 '+(x.mediaIds||[]).length+'개':'비교 메모')+'</span><i class="ph ph-caret-right"></i></a>').join(''):'<div class="vl-empty">저장한 리포트가 없어요.<br><small>보컬 연구소에서 리포트를 저장하면 여기에 모여요.</small></div>')+'</div>';
 }});
