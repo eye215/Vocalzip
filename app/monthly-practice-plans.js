@@ -54,8 +54,10 @@ function compareSongTakes(plan,items){
  if(!model?.measurement)return '';
  let m;
  try{
-  m=model.measurement(plan,items,M.dateOf,x=>x.analysis?.v===1&&V.analysisReliable?.(x.analysis));
+  m=model.measurement(plan,items,M.dateOf,x=>[1,2].includes(x.analysis?.v)&&V.analysisReliable?.(x.analysis));
  }catch{return '<p class="small muted">저장된 계획의 날짜나 측정 기준을 확인해 주세요.</p>';}
+ if(m.mixedVersions)
+  return '<p class="small muted">판정 보류 · 분석 버전(v1·v2)이 섞여 있어요. 이전 녹음을 다시 분석하면 비교할 수 있어요.</p>';
  if(m.change==='insufficient')
   return '<p class="small muted">성장 재측정 대기 · 계획 시작 전과 계획 기간 중의 동일 곡 분석 녹음이 필요해요.</p>';
  const formatted=n=>plan.metric==='vibrato'?Math.round(n*100)+'%':n+(plan.metric==='phrase'?'초':' cent');

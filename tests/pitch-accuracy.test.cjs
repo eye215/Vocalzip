@@ -12,8 +12,8 @@ function tone(notes,{harmonics=[1],sr=8000,noise=0}={}){
  return {samples:x,sr};
 }
 const run=(notes,opts)=>{const {samples,sr}=tone(notes,opts);return A.analyze(samples,sr)};
-test('C5 reference: sustained fundamental, strong second harmonic and missing fundamental',()=>{
- for(const harmonics of [[1],[.05,1],[0,1,.5],[.1,1,.3]]){
+test('C5 reference: sustained fundamental, strong second harmonic with odd harmonics, missing fundamental',()=>{
+ for(const harmonics of [[1],[.05,1,.2,.3,.1],[0,1,.5],[.1,1,.3]]){
   const r=run([[0,1,72]],{harmonics});
   assert.equal(r.version,2);assert.equal(r.metrics.range.validHigh.note,'C5');
   assert.equal(r.metrics.range.stableHigh.note,'C5');
@@ -27,8 +27,14 @@ test('real C4 to C5 and C5 to C6 octave jumps are preserved',()=>{
   assert.equal(r.metrics.range.high,A.noteName((midi+12)*100));
  }
 });
+test('two partials only (C5 at 5% + C6) is the same spectrum as C6 over a quiet C5 accompaniment: the louder one wins',()=>{
+ // Acoustically ambiguous. Accompaniment doubling an octave below is common, so without any odd
+ // harmonic (1569 Hz for C5) the analyzer does not invent the lower octave.
+ const r=run([[0,1.5,72]],{harmonics:[.05,1]});
+ assert.equal(r.metrics.range.validHigh.note,'C6');
+});
 test('short high sound does not replace sustained C5 as the valid or stable high',()=>{
- const r=run([[0,1,72],[1.3,.07,78],[1.6,1,72]]);
+ const r=run([[0,1,72],[1,.15,78],[1.15,1,72]]);
  assert.equal(r.metrics.range.validHigh.note,'C5');
  assert.equal(r.metrics.range.stableHigh.note,'C5');
  assert.ok(r.metrics.range.instantaneous.cents>7600);
@@ -54,7 +60,7 @@ test('silence and deterministic noise have no valid singing range',()=>{
 });
 test('same melody with a changed harmonic balance retains the same high',()=>{
  const notes=[[0,1,60],[1.2,1,64],[2.4,1,72]];
- const first=run(notes),last=run(notes,{harmonics:[.05,1]});
+ const first=run(notes),last=run(notes,{harmonics:[.05,1,.2,.3,.1]});
  assert.equal(first.metrics.range.high,last.metrics.range.high);
  assert.equal(Math.round(last.metrics.range.highCents/100)-Math.round(first.metrics.range.highCents/100),0);
 });

@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
-const WORKER = 'app/vocal-analysis.js?v=4', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=5', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0;
@@ -46,11 +46,12 @@ function runWorker(samples, sampleRate, onProgress, {voiceOnly = false, signal} 
 /** Analyze raw mono samples in the worker (used by the song finder to locate the singing). The array is transferred. */
 VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}, options = {}) => runWorker(samples, sampleRate, onProgress, options);
 /** The summary kept with a recording (no curve: it would make every library row heavy). */
+const HISTORY_KEEP = 5; // earlier summaries kept on the recording when it is analysed again (newest last)
 const summaryOf = (result, previous) => {
-  const history = previous?.history ? previous.history.slice() : [];
+  const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
   if(previous?.v){const {history:ignored,...saved}=previous;history.push(saved);}
   return {v:result.version,at:Date.now(),seconds:result.seconds,metrics:result.metrics,confidence:result.confidence,
-    ...(history.length?{history}:{}),scope:{kind:'whole-recording',cut:!!result.cut}};
+    ...(history.length?{history:history.slice(-HISTORY_KEEP)}:{}),scope:{kind:'whole-recording',cut:!!result.cut}};
 };
 VZ.analysisSummary = summaryOf;
 /** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).
@@ -90,8 +91,27 @@ function chart(r) {
     '<p class="small muted ana-legend"><span><span class="k ok"></span>±20</span><span><span class="k warn"></span>±35</span><span><span class="k bad"></span>그 밖 (cent)</span><span>· 곡선을 누르면 그 위치부터 재생</span></p>';
 }
 const HELP_KEY = {'음정 정확도':'into', '지속음 흔들림':'wob', '비브라토':'vib', '음역':'range', '프레이즈 길이':'phr'};
-const card = (icon, title, value, sub, help) => '<div class="card ana-card"><div class="ana-k"><i class="ph ph-' + icon + '"></i>' + title + (HELP_KEY[title] && VZ.metricInfo ? VZ.metricInfo(HELP_KEY[title], title) : '') + '</div><div class="ana-v">' + value + '</div>' + (sub ? '<div class="small">' + sub + '</div>' : '') + (help ? '<div class="small muted">' + help + '</div>' : '') + '</div>';
-function cards(r) {
+const card = (icon, title, value, sub, help, extra = '') => '<div class="card ana-card"><div class="ana-k"><i class="ph ph-' + icon + '"></i>' + title + (HELP_KEY[title] && VZ.metricInfo ? VZ.metricInfo(HELP_KEY[title], title) : '') + '</div><div class="ana-v">' + value + '</div>' + (sub ? '<div class="small">' + sub + '</div>' : '') + (help ? '<div class="small muted">' + help + '</div>' : '') + extra + '</div>';
+/** "Listen" buttons for where a highest note happened (seconds from the start of the recording).
+ * Without a player (the sheet) the positions are still shown as text. */
+const clock = t => VZ.clock ? VZ.clock(t) : Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+VZ.analysisMoments = (point, label, playable) => {
+  const times = (point?.times?.length ? point.times : point && Number.isFinite(point.t) ? [{t:point.t}] : []).filter(x => Number.isFinite(x?.t));
+  if (!times.length) return '';
+  return '<div class="ana-evidence">' + times.map(x => playable
+    ? '<button type="button" class="chip ana-play-at" data-seek-at="' + x.t + '" aria-label="' + esc(label + ' ' + clock(x.t) + ' 부분 듣기') + '"><i class="ph-fill ph-play"></i> ' + clock(x.t) + '</button>'
+    : '<span class="small muted">' + clock(x.t) + '</span>').join('') + '</div>';
+};
+/** Play a recording from a little before a moment, so the note is heard in context. play() stays inside
+ * the tap (iPhone Safari); when the file is not loaded yet the seek waits for its metadata. */
+VZ.analysisPrerollSeconds = 1;
+VZ.analysisPlayAt = (player, t) => {
+  const el = player?.el; if (!el || !Number.isFinite(Number(t))) return;
+  const at = Math.max(0, Number(t) - VZ.analysisPrerollSeconds), go = () => { try { el.currentTime = at; } catch {} };
+  if (el.readyState >= 1) go(); else el.addEventListener('loadedmetadata', go, {once:true});
+  if (el.paused) player.play();
+};
+function cards(r, playable = false) {
   const m = r.metrics, out = [];
   const i = m.intonation;
   if (i) out.push(card('target', '음정 정확도', '평균 ±' + i.meanAbsCents + ' cent', '±20 cent 안 ' + i.within20 + '% · 지속음 ' + i.notes + '개', '반음 = 100 cent · 기준 ' + (r.confidence.tuningFrom === 'mr' ? 'MR 튜닝(' + (i.tuningCents > 0 ? '+' : '') + i.tuningCents + ')' : 'A4 440Hz')));
@@ -103,8 +123,10 @@ function cards(r) {
   if (g) {
     out.push(card('arrows-vertical','음역',g.validHigh ? '유효 최고 '+esc(g.validHigh.note) : '유효 최고 판정 보류',
       '안정 최고 '+esc(g.stableHigh?.note||'판정 보류')+' · 주 가창 '+esc(g.main?.low||'—')+' ~ '+esc(g.main?.high||'—'),
-      '유효 0.2초 이상 · 안정 0.5초 이상과 흔들림 조건 · 신뢰도 함께 확인'));
-    out.push(card('waveform','순간 검출 최고',esc(g.instantaneous?.note||'—'),'반주·짧은 오검출이 포함될 수 있어요.','실력 평가와 성장 비교에는 사용하지 않아요.'));
+      '유효 0.2초 이상 · 안정 0.5초 이상과 흔들림 조건 · 신뢰도 함께 확인',
+      g.validHigh ? '<div class="small" style="margin-top:6px">유효 최고 '+esc(g.validHigh.note)+' 위치 · 눌러서 직접 들어 보세요</div>'+VZ.analysisMoments(g.validHigh,'유효 최고음',playable) : ''));
+    out.push(card('waveform','순간 검출 최고',esc(g.instantaneous?.note||'—'),'한 순간(10ms)의 최고값이라 미끄러짐·오검출이 포함될 수 있어요.','실력 평가와 성장 비교에는 사용하지 않아요.',
+      VZ.analysisMoments(g.instantaneous,'순간 최고음',playable)));
   }
   const b = m.breath;
   if (b) out.push(card('wind', '프레이즈 길이', '평균 ' + b.medianPhrase + '초', '최장 ' + b.longestPhrase + '초 · ' + b.phrases + '개' + (b.medianGap != null ? ' · 숨 ' + b.medianGap + '초' : ''), '쉬지 않고 이어 부른 길이'));
@@ -180,7 +202,7 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
       return;
     }
     out.innerHTML = chart(result) + confidence(result) + (result.cut ? '<p class="small muted">앞 15분만 분석했어요.</p>' : '') +
-      '<div class="ana-grid">' + cards(result) + '</div>' +
+      '<div class="ana-grid">' + cards(result, true) + '</div>' +
       '<p class="small muted" style="margin-top:12px">시험판이에요. 점수가 아니라 측정값이고, 같은 곡의 이전 녹음과 비교할 때 가장 의미 있어요. 음정 정확도는 맞는 음을 불렀는지가 아니라 낸 음이 반음 칸에 얼마나 정확히 맞았는지예요. 음원만으로 발성의 질이나 호흡법은 판단하지 않아요.</p><p class="small muted" data-saved></p>';
     // Playhead follows playback; tapping the curve seeks there.
     const scroll = out.querySelector('[data-scroll]'), head = out.querySelector('[data-head]'), svg = scroll?.querySelector('svg');
@@ -192,6 +214,10 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
       const first = result.curve.findIndex(v => v != null); if (first > 0) scroll.scrollLeft = Math.max(0, first / result.fps / secs * w - 20);
       svg.addEventListener('click', e => { const box = svg.getBoundingClientRect(), t = (e.clientX - box.left) / box.width * secs; player.el.currentTime = Math.max(0, t); paint(); if (player.el.paused) player.play(); });
     }
+    // Evidence: play the recording from just before the reported highest note.
+    out.addEventListener('click', e => {
+      const b = e.target.closest('[data-seek-at]'); if (b) VZ.analysisPlayAt(player, b.dataset.seekAt);
+    });
     // Keep the summary with the recording (only this field changes; other devices' edits stay).
     const summary = result.summary;
     try { await M.update(item, {analysis:summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:summary}})); if (alive()) out.querySelector('[data-saved]').textContent = '분석 v2를 저장했어요. 이전 결과는 분석 이력에 보존했어요.'; }

@@ -3,7 +3,10 @@
  *
  * 1. Predominant pitch: each 10 ms frame's spectral peaks vote for the fundamentals they could be
  *    harmonics of (harmonic summation, 10-cent bins, 75–1100 Hz). A Viterbi pass picks the smoothest
- *    loud path, and each chosen pitch is refined from its matched harmonics.
+ *    loud path, and each chosen pitch is refined from its matched harmonics. Each candidate is checked
+ *    against the waveform (normalized autocorrelation) and its harmonics: an octave below only wins with
+ *    odd harmonics the upper pitch cannot explain. Afterwards short octave flips/spikes between held
+ *    notes are repaired and unreliable frames dropped (clean()).
  * 2. Voice vs accompaniment: the phone is next to the singer, so the voice is the loudest melodic
  *    line. Pitch contours are split into a loud (voice) and a quiet (MR-only) group; very flat
  *    contours (instrument-like) are left out. The level gap is reported as a confidence hint.
@@ -75,30 +78,62 @@ function fft(re, im, t) {
 }
 
 
-/** Candidate evidence, not an octave rule: a lower candidate must have a real fundamental
- * or coprime harmonics. A lone second harmonic cannot invent an octave below a pure tone. */
-function evidence(x, offset, hz, peaks) {
-  let total=0, matched=0, mass=0, fundamental=0, divisor=0, count=0, max=0;
-  const gcd=(a,b)=>b?gcd(b,a%b):a;
-  for(const p of peaks)max=Math.max(max,p.amp);
-  for(const p of peaks){
-    const power=p.amp*p.amp; total+=power;
-    const h=Math.round(p.hz/hz);
-    if(h<1||h>H||Math.abs(1200*Math.log2(p.hz/(h*hz)))>40)continue;
-    matched+=power; mass+=p.amp;
-    if(p.amp>=max*.025){divisor=gcd(divisor,h);count++;}
-    if(h===1)fundamental=Math.max(fundamental,p.amp/max);
+/* Tunable constants of the octave / continuity / range rules (see docs/pitch-accuracy-v2.md). */
+const RULES = {
+  oddShare:0.15,      // lower octave wins only if its odd harmonics (3rd, 5th, 7th) carry ≥ 15 % of what the upper explains
+  subShare:0.10,      // a lower candidate whose odd partials (incl. fundamental) are < 10 % of the upper's is a sub-harmonic
+  dropConfidence:0.3, // frames below this pitch confidence are dropped (treated as unpitched)
+  instantConfidence:0.5, frameConfidence:0.75, // per-frame floors for the instant max and for held-note segments
+  spikeMaxMs:150,     // an excursion this short that returns to the held note is a spike, not a sung note
+  spikeJumpCents:300, // …when it jumps further than this from both sides (non-octave spikes are removed)
+  effectiveSeconds:0.2, effectiveConfidence:0.8,                // 유효 최고음
+  stableSeconds:0.5, stableConfidence:0.8, stableSpreadCents:60 // 안정 최고음 (spread of the vibrato-free pitch)
+};
+
+// Autocorrelation of the Hann window itself, to undo its taper (Boersma 1993, as in Praat).
+const HANN_AC = (() => {
+  const w = Float64Array.from({length:WIN}, (_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (WIN - 1))), ac = new Float64Array(WIN);
+  for (let l = 0; l < WIN; l++) { let s = 0; for (let i = 0; i + l < WIN; i++) s += w[i] * w[i + l]; ac[l] = s; }
+  return ac.map(v => v / ac[0]);
+})();
+/** Acoustic evidence for one candidate pitch: amplitude found at each harmonic (1…H), how much of
+ * the frame's spectral power those harmonics explain, and the waveform's normalized autocorrelation
+ * at exactly that (fractional) period, computed from the power spectrum, so high notes whose period
+ * is only a few samples at 8 kHz are not penalised by interpolation. */
+function evidence(power, hz, peaks) {
+  const amps = new Float64Array(H + 1);
+  let total = 0, matched = 0;
+  for (const p of peaks) {
+    const pw = p.amp * p.amp; total += pw;
+    const h = Math.round(p.hz / hz);
+    if (h < 1 || h > H || Math.abs(1200 * Math.log2(p.hz / (h * hz))) > 40) continue;
+    matched += pw; if (p.amp > amps[h]) amps[h] = p.amp;
   }
-  const supported=fundamental>=.025||(count>=2&&divisor===1);
-  const lag=SR/hz, whole=Math.floor(lag), part=lag-whole;
-  let diff=0, power=0;
-  for(let i=0;i<WIN-whole-1;i++){
-    const a=x[offset+i],b=x[offset+i+whole]*(1-part)+x[offset+i+whole+1]*part;
-    diff+=(a-b)*(a-b); power+=a*a+b*b;
-  }
-  const periodicity=Math.max(0,1-diff/(power||1));
-  const coverage=matched/(total||1);
-  return {mass,supported,periodicity,coverage,confidence:supported?Math.sqrt(periodicity*coverage):0};
+  // r(τ) = Σ P_k cos(2πkτ/N) by the cosine recurrence (no trig calls in the loop).
+  const lag = SR / hz, theta = 2 * Math.PI * lag / NFFT, c1 = Math.cos(theta), half = NFFT / 2;
+  let r0 = power[0], r = power[0], prev = 1, cur = c1;
+  for (let k = 1; k < half; k++) { r0 += 2 * power[k]; r += 2 * power[k] * cur; const next = 2 * c1 * cur - prev; prev = cur; cur = next; }
+  r0 += power[half]; r += power[half] * cur;
+  const l = Math.min(WIN - 2, lag), i = Math.floor(l), win = HANN_AC[i] + (HANN_AC[i + 1] - HANN_AC[i]) * (l - i);
+  const periodicity = r0 > 0 ? Math.max(0, Math.min(1, r / (r0 * win))) : 0, coverage = matched / (total || 1);
+  return {amps, periodicity, coverage, confidence:Math.sqrt(periodicity * coverage)};
+}
+/** Octave decision between a candidate and the one exactly an octave above it. Everything the upper
+ * pitch explains is also an even harmonic of the lower one, so only the lower one's ODD harmonics are
+ * independent evidence. A real sung C5 (523 Hz) has 1046 and 1569 Hz partials: 1569 is the 3rd
+ * harmonic of C5 and no harmonic of C6, so C5 wins even with a weak fundamental. A quiet tone an
+ * octave below (accompaniment doubling) adds a fundamental but no 3rd/5th/7th: the upper one stays.
+ * Returns 'low' (the lower one is the fundamental), 'high' (the lower one is a sub-harmonic) or null. */
+function octaveChoice(low, high, peakMax) {
+  const lo = low.amps, hi = high.amps;
+  let upper = 0; for (let h = 1; h <= H; h++) upper += hi[h];
+  const odd = lo[3] + lo[5] + lo[7], present = [1, 3, 5, 7].filter(h => lo[h] >= 0.1 * peakMax).length;
+  // Two separate odd partials (one chord tone landing on the 3rd harmonic is not enough), or a lower
+  // pitch that explains the whole frame clearly better than the upper one.
+  const explains = low.coverage >= 0.9 && low.coverage - high.coverage >= 0.02 && low.periodicity - high.periodicity >= 0.05;
+  if (upper > 0 && odd >= RULES.oddShare * upper && (present >= 2 || odd >= 0.5 * upper || explains)) return 'low';
+  if (odd + lo[1] < RULES.subShare * upper) return 'high';
+  return null;
 }
 
 /* ---------- predominant pitch ---------- */
@@ -106,7 +141,7 @@ function track(x, onProgress) {
   const frames = Math.max(0, Math.floor((x.length - WIN) / HOP) + 1);
   const t = fftSetup(NFFT), hann = new Float64Array(WIN);
   for (let i = 0; i < WIN; i++) hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (WIN - 1));
-  const re = new Float64Array(NFFT), im = new Float64Array(NFFT), mag = new Float64Array(NFFT / 2 + 1);
+  const re = new Float64Array(NFFT), im = new Float64Array(NFFT), mag = new Float64Array(NFFT / 2 + 1), power = new Float64Array(NFFT / 2 + 1);
   const sal = new Float64Array(NB), weight = [], alphaPow = Array.from({length:H + 1}, (_, h) => ALPHA ** Math.max(0, h - 1)), LOGB = 12 * PER_SEMI / Math.LN2, LOGMIN = Math.log(FMIN);
   for (let d = -SPREAD; d <= SPREAD; d++) weight.push(Math.cos(Math.PI / 2 * d / SPREAD) ** 2);
   const cand = new Array(frames), peaksOf = new Array(frames), energy = new Float64Array(frames);
@@ -120,7 +155,7 @@ function track(x, onProgress) {
     for (let i = 0; i < WIN; i++) re[i] = x[f * HOP + i] * hann[i];
     fft(re, im, t);
     let max = 0;
-    for (let k = 0; k <= NFFT / 2; k++) { const m = Math.sqrt(re[k] * re[k] + im[k] * im[k]); mag[k] = m; if (m > max) max = m; } // (Math.hypot is slow)
+    for (let k = 0; k <= NFFT / 2; k++) { const p = re[k] * re[k] + im[k] * im[k], m = Math.sqrt(p); power[k] = p; mag[k] = m; if (m > max) max = m; } // (Math.hypot is slow)
     // Spectral peaks within 40 dB of the frame's loudest, with quadratic (log) interpolation.
     const peaks = [], floor = max * 0.01;
     for (let k = 2; k < NFFT / 2 - 1; k++) {
@@ -143,21 +178,19 @@ function track(x, onProgress) {
     const c = [];
     for (let j = 1; j < NB - 1; j++) if (sal[j] > 0 && sal[j] >= sal[j - 1] && sal[j] > sal[j + 1]) c.push([j, sal[j]]);
     c.sort((p, q) => q[1] - p[1]); c.length = Math.min(c.length, K);
-    // Score acoustic evidence before continuity. Real octave jumps remain candidates;
-    // continuity never divides an observed frequency by two.
-    for(const candidate of c){
-      const ev=evidence(x,f*HOP,FMIN*2**(candidate[0]/(12*PER_SEMI)),peaks);
-      candidate.push(ev.confidence,ev);
-      candidate[1]*=ev.supported?1:.03;
+    // Acoustic evidence before continuity: confidence for every candidate, then the octave rule.
+    // Real octave leaps stay possible: nothing here looks at the previous frame.
+    for (const candidate of c) { const ev = evidence(power, FMIN * 2 ** (candidate[0] / (12 * PER_SEMI)), peaks); candidate.push(ev.confidence, ev); }
+    const base = c.map(q => q[1]);
+    for (let i = 0; i < c.length; i++) for (let j = 0; j < c.length; j++) {
+      if (Math.abs(c[j][0] - c[i][0] - 12 * PER_SEMI) > 4) continue;
+      const choice = octaveChoice(c[i][3], c[j][3], peaks[0].amp);
+      // A clear acoustic decision is made decisive, so continuity cannot keep the path in the wrong octave.
+      if (choice === 'low') { c[i][1] = Math.max(c[i][1], base[j]); c[j][1] = Math.min(c[j][1], base[j] * 0.3); }
+      else if (choice === 'high') c[i][1] = Math.min(c[i][1], base[i] * 0.3);
     }
-    for(const low of c)for(const high of c){
-      if(Math.abs(high[0]-low[0]-120)>4)continue;
-      const a=low[3],b=high[3];
-      if(a.supported&&a.coverage>.95&&a.coverage>b.coverage+.001&&a.periodicity>=b.periodicity-.01)
-        low[1]=Math.max(low[1],high[1]*1.25);
-    }
-    for(const candidate of c)candidate.length=3;
-    c.sort((a,b)=>b[1]-a[1]);
+    for (const candidate of c) candidate.length = 3;
+    c.sort((a, b) => b[1] - a[1]);
     cand[f] = c;
     if (onProgress && f % 500 === 0) onProgress(0.1 + 0.7 * f / frames);
   }
@@ -197,6 +230,46 @@ function track(x, onProgress) {
     hz[f] = sw ? sf / sw : f0; level[f] = s; confidence[f] = cand[f][path[f]][2];
   }
   return {frames, hz, level, energy, confidence};
+}
+
+/* ---------- continuity: spikes, octave flips, unreliable frames ---------- */
+/** Cleans the tracked pitch in place. 1) Frames below RULES.dropConfidence become unpitched.
+ * 2) An excursion of at most RULES.spikeMaxMs between two held notes that agree with each other
+ *    (or at a note's start/end, at most 60 ms) is a tracking spike: frames an octave away are folded
+ *    back onto the held note, other frames further than RULES.spikeJumpCents (≤ 60 ms) are removed.
+ * A sung octave leap is held on the new note longer than that, so it is never folded. */
+function clean(tr) {
+  const {frames, hz, confidence} = tr, out = {lowConfidence:0, octaveFolded:0, spikesRemoved:0};
+  for (let f = 0; f < frames; f++) if (hz[f] > 0 && confidence[f] < RULES.dropConfidence) { hz[f] = 0; out.lowConfidence++; }
+  const runs = []; let cur = null;
+  for (let f = 0; f < frames; f++) {
+    if (!(hz[f] > 0)) { cur = null; continue; }
+    const c = centsOf(hz[f]);
+    if (cur && Math.abs(c - cur.last) < 80) { cur.end = f + 1; cur.values.push(c); cur.last = c; continue; }
+    cur = {start:f, end:f + 1, values:[c], last:c}; runs.push(cur);
+  }
+  const maxLen = Math.round(RULES.spikeMaxMs / 10), held = r => r.end - r.start > maxLen, GAP = 3;
+  for (const r of runs) r.center = median(r.values);
+  let i = 0;
+  while (i < runs.length) {
+    if (held(runs[i])) { i++; continue; }
+    // A stretch of short runs, each starting within GAP frames of the previous one.
+    let j = i; while (j + 1 < runs.length && !held(runs[j + 1]) && runs[j + 1].start - runs[j].end <= GAP) j++;
+    const a = runs[i].start, b = runs[j].end, len = b - a;
+    const prev = i > 0 && held(runs[i - 1]) && a - runs[i - 1].end <= GAP ? runs[i - 1] : null;
+    const next = j + 1 < runs.length && held(runs[j + 1]) && runs[j + 1].start - b <= GAP ? runs[j + 1] : null;
+    let ref = null, both = false;
+    if (prev && next && Math.abs(prev.center - next.center) <= 100 && len <= maxLen) { ref = (prev.center + next.center) / 2; both = true; }
+    else if (len <= 6 && (prev || next) && !(prev && next)) ref = (prev || next).center;
+    if (ref != null) for (let f = a; f < b; f++) {
+      if (!(hz[f] > 0)) continue;
+      const d = centsOf(hz[f]) - ref, k = Math.round(d / 1200);
+      if (k && Math.abs(d - 1200 * k) <= 100) { hz[f] /= 2 ** k; confidence[f] *= 0.9; out.octaveFolded++; }
+      else if (both && len <= 6 && Math.abs(d) > RULES.spikeJumpCents) { hz[f] = 0; confidence[f] = 0; out.spikesRemoved++; }
+    }
+    i = j + 1;
+  }
+  return out;
 }
 
 /* ---------- voice vs accompaniment ---------- */
@@ -300,13 +373,23 @@ function vibratoOf(raw, sm) {
   return {rate, extent:Math.SQRT2 * std(r) / keep / win, regularity:best};
 }
 
-/** Duration is hop-count, never inflated by the overlapping FFT window. No quantile fallback.
- * Split by gaps, confidence, adjacent jumps and drift from the note center. */
+/** Four separate "highest note" answers; never a single frame as the sung highest note.
+ * - instantaneous (순간 최고음): highest single voiced frame. Can be a slide-through or a mis-read; shown for
+ *   checking only, never used to judge skill or growth.
+ * - validHigh (유효 최고음): highest note held ≥ RULES.effectiveSeconds as one continuous segment (no gaps,
+ *   every frame confident, ≤ 80 cents frame to frame, ≤ 100 cents from the segment centre), mean
+ *   confidence ≥ RULES.effectiveConfidence.
+ * - stableHigh (안정 최고음): as valid, but held ≥ RULES.stableSeconds with the vibrato-free pitch moving
+ *   ≤ RULES.stableSpreadCents (10th–90th percentile) and mean confidence ≥ RULES.stableConfidence.
+ * - main (주 가창 음역): 10th–90th percentile of all confident voiced time: where the voice spends its time.
+ * Every point keeps where it happened (t = seconds from the start of the recording, window start) so the
+ * owner can listen to it. Duration is hop count, never inflated by the overlapping FFT window. */
 function rangeOf(tr, voiced) {
-  const all=[], segments=[]; let current=null;
+  const all=[], segments=[]; let current=null, instant=null;
   const finish=()=>{if(current)segments.push(current);current=null;};
   for(let f=0;f<tr.frames;f++){
-    if(!voiced[f]||tr.confidence[f]<.75){finish();continue;}
+    if(voiced[f]&&tr.hz[f]>0&&tr.confidence[f]>=RULES.instantConfidence){const c=centsOf(tr.hz[f]);if(!instant||c>instant.cents)instant={cents:c,f};}
+    if(!voiced[f]||!(tr.hz[f]>0)||tr.confidence[f]<RULES.frameConfidence){finish();continue;}
     const c=centsOf(tr.hz[f]); all.push(c);
     if(current&&(Math.abs(c-current.last)>80||Math.abs(c-current.sum/current.values.length)>100))finish();
     if(!current)current={start:f,values:[],quality:[],sum:0,last:c};
@@ -314,20 +397,24 @@ function rangeOf(tr, voiced) {
   }
   finish();
   if(!all.length)return null;
-  const rows=segments.map(s=>({t:s.start/FPS,dur:s.values.length/FPS,cents:median(s.values),
-    confidence:mean(s.quality),spread:quantile(s.values,.9)-quantile(s.values,.1)}));
-  const valid=rows.filter(s=>s.dur>=.2&&s.confidence>=.8);
-  const stable=valid.filter(s=>s.dur>=.5&&s.confidence>=.9&&s.spread<=70);
-  const top=rows=>rows.length?rows.reduce((a,b)=>a.cents>b.cents?a:b):null;
-  const point=r=>r?{note:noteName(r.cents),cents:round(r.cents),t:round(r.t,2),duration:round(r.dur,2),confidence:round(r.confidence,3)}:null;
+  const rows=segments.map(s=>{const sm=smooth(Float64Array.from(s.values));return {t:s.start/FPS,dur:s.values.length/FPS,cents:median(s.values),
+    confidence:mean(s.quality),spread:quantile(Array.from(sm),.9)-quantile(Array.from(sm),.1)};});
+  const valid=rows.filter(s=>s.dur>=RULES.effectiveSeconds-1e-9&&s.confidence>=RULES.effectiveConfidence);
+  const stable=valid.filter(s=>s.dur>=RULES.stableSeconds-1e-9&&s.confidence>=RULES.stableConfidence&&s.spread<=RULES.stableSpreadCents);
+  const top=list=>list.length?list.reduce((a,b)=>a.cents>b.cents?a:b):null;
+  // Every time the same note was reached under the same rule (up to 3), so it can be heard more than once.
+  const point=(r,list)=>r?{note:noteName(r.cents),cents:round(r.cents),t:round(r.t,2),duration:round(r.dur,2),confidence:round(r.confidence,3),
+    ...(r.spread!=null?{spreadCents:round(r.spread)}:{}),
+    times:[r,...list.filter(x=>x!==r&&Math.round(x.cents/100)===Math.round(r.cents/100))].slice(0,3).map(x=>({t:round(x.t,2),duration:round(x.dur,2)}))}:null;
   const hi=top(valid),lo=valid.length?valid.reduce((a,b)=>a.cents<b.cents?a:b):null;
-  const instant=Array.from(tr.hz).reduce((max,hz,f)=>hz>0&&tr.confidence[f]>=.5?Math.max(max,centsOf(hz)):max,-Infinity),mainLow=quantile(all,.1),mainHigh=quantile(all,.9);
+  const mainLow=quantile(all,.1),mainHigh=quantile(all,.9);
   return {low:lo?noteName(lo.cents):null,high:hi?noteName(hi.cents):null,
-    lowCents:lo?round(lo.cents):null,highCents:hi?round(hi.cents):null,peak:noteName(instant),
-    instantaneous:{note:noteName(instant),cents:round(instant),scope:'all-pitched-frames'},
-    validHigh:point(hi),stableHigh:point(top(stable)),
+    lowCents:lo?round(lo.cents):null,highCents:hi?round(hi.cents):null,peak:instant?noteName(instant.cents):null,
+    instantaneous:instant?{note:noteName(instant.cents),cents:round(instant.cents),t:round(instant.f/FPS,2),confidence:round(tr.confidence[instant.f],3),scope:'voiced-frames'}:null,
+    validHigh:point(hi,valid),stableHigh:point(top(stable),stable),
     main:{low:noteName(mainLow),high:noteName(mainHigh),lowCents:round(mainLow),highCents:round(mainHigh),percentiles:[10,90]},
-    criteria:{minimumSeconds:.2,stableSeconds:.5,minConfidence:.8,stableConfidence:.9,stableSpreadCents:70}};
+    criteria:{minimumSeconds:RULES.effectiveSeconds,stableSeconds:RULES.stableSeconds,minConfidence:RULES.effectiveConfidence,
+      stableConfidence:RULES.stableConfidence,stableSpreadCents:RULES.stableSpreadCents,frameConfidence:RULES.frameConfidence}};
 }
 
 function measure(tr, voiced, refTuning) {
@@ -373,7 +460,7 @@ function measure(tr, voiced, refTuning) {
 function analyze(samples, sampleRate, {onProgress, voiceOnly = false} = {}) {
   onProgress?.(0.02);
   const x = highpass(resample(samples, sampleRate));
-  const tr = track(x, onProgress);
+  const tr = track(x, onProgress), fixes = clean(tr);
   onProgress?.(0.85);
   const cs = contours(tr), melodic = cs.filter(c => !c.flat || c.pureTone), split = splitLevels(melodic);
   // A real gap between loud and quiet melodic contours (≥ 6 dB) means voice over a quieter MR: keep
@@ -405,12 +492,12 @@ function analyze(samples, sampleRate, {onProgress, voiceOnly = false} = {}) {
   const seconds = round(samples.length / sampleRate, 1);
   return {
     version:VERSION, seconds,
-    confidence:{pitchConfidence:round(mean(Array.from(tr.confidence).filter((_,f)=>voiced[f])),3), pitchMethod:'harmonic-periodicity-v2', sourceVerified:false, voiceOverMrDb:round(gapDb, 1), separated:gapDb != null && gapDb >= 6, tuningFrom:ref == null ? 'a440' : 'mr', voicedShare:round(out.metrics.voicedSeconds / (seconds || 1) * 100)},
+    confidence:{pitchConfidence:round(mean(Array.from(tr.confidence).filter((_,f)=>voiced[f])),3), pitchMethod:'harmonic-octave-continuity-v2', sourceVerified:false, octaveFoldedFrames:fixes.octaveFolded, spikeFramesRemoved:fixes.spikesRemoved, lowConfidenceFrames:fixes.lowConfidence, voiceOverMrDb:round(gapDb, 1), separated:gapDb != null && gapDb >= 6, tuningFrom:ref == null ? 'a440' : 'mr', voicedShare:round(out.metrics.voicedSeconds / (seconds || 1) * 100)},
     metrics:out.metrics, notes:out.notes.map(n => ({t:n.t, dur:n.dur, cents:round(n.center), dev:round(n.dev), vib:!!n.vib})), curve, fps:20
   };
 }
 
-const api = {VERSION, analyze, noteName, centsOf, resample, _internal:{track, contours, highpass, notesOf, prefixMedian, rangeOf, evidence}};
+const api = {VERSION, analyze, noteName, centsOf, resample, RULES, _internal:{track, clean, contours, highpass, notesOf, prefixMedian, rangeOf, evidence, octaveChoice}};
 if (typeof module === 'object' && module.exports) module.exports = api;
 else root.VzipVocalAnalysis = api;
 // As a Web Worker: {samples, sampleRate} in, {progress} … {result} or {error} out.

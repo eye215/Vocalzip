@@ -1,58 +1,127 @@
-# Pitch analysis v2 · 2026-11-11
+# Pitch analysis v2 · 2026-11-12
 
-## Existing flow and cause
-Browser OfflineAudioContext → app/analysis.js Worker → app/vocal-analysis.js → media.analysis summary. The Node server imports the same pure analyzer. No pYIN/CREPE or external pitch inference currently exists.
+## Flow
+Browser `OfflineAudioContext` → `app/analysis.js` Worker → `app/vocal-analysis.js` → `media.analysis` summary.
+The GitHub Actions worker (`worker/analysis-worker.mjs`) imports the same pure analyzer. No model, paid API or
+server-side pitch service is involved; everything stays plain JavaScript (cost and runtime as before: a 5-minute
+recording takes ≈ 4.2 s in Node vs 3.3 s for v1).
 
-v1 uses 8 kHz mono, a 64 ms Hann window, 10 ms hop, spectral harmonic voting (75–1100 Hz), and Viterbi continuity. Its octave candidate scores favor a dominant second harmonic when the fundamental is weak. A synthetic C5 with fundamental amplitude 0.05 and second harmonic amplitude 1 is tracked as C6 in v1. This is a reproduced algorithm failure, not yet proof of the reported recording's cause. The v1 range also falls back to frame quantiles when sustained notes are absent. Its peak is a 99th percentile, not a literal maximum. Voice/MR level separation is a heuristic, not source identification.
+## Pitch tracking (P0)
+8 kHz mono, 64 ms Hann window, 10 ms hop, harmonic-sum candidates (75–1100 Hz), Viterbi continuity — unchanged
+from v1. v2 adds, per candidate:
 
-## Minimal implementation
-Keep the existing browser/Node pure JS architecture and existing measurements. Add candidate harmonic support (fundamental or coprime harmonic indices), explained spectral power and fractional-lag periodicity. Prefer an octave-lower candidate only when its acoustic evidence explains additional energy and its periodicity supports it. Never divide pitches merely because the preceding pitch was lower. Viterbi still permits genuine octave leaps.
+1. **Acoustic evidence.** Amplitude found at each harmonic, share of spectral power explained (coverage), and the
+   normalized autocorrelation at exactly the candidate period, computed from the power spectrum and divided by the
+   Hann window's own autocorrelation (Boersma/Praat). No sample interpolation, so high notes (C6 ≈ 7.6 samples per
+   period) are not penalised. `confidence = √(periodicity × coverage)` (a heuristic in 0…1, not a probability).
+2. **Octave rule (F0 vs harmonics).** Everything the upper candidate explains is also an even harmonic of the
+   candidate an octave below, so only the lower one's **odd** harmonics are independent evidence. A sung C5
+   (523 Hz) has partials at 1046 and **1569** Hz: 1569 is C5's 3rd harmonic and no harmonic of C6, so C5 wins even
+   with a weak fundamental. The lower octave wins when its 3rd/5th/7th harmonics carry ≥ 15 % of what the upper
+   explains **and** either two odd partials are present (≥ 10 % of the frame peak), the odd partials are
+   overwhelming (≥ 50 %), or the lower pitch explains the frame clearly better (coverage ≥ 0.9 and +0.02,
+   periodicity +0.05). A lower candidate whose odd partials (incl. fundamental) are < 10 % of the upper's is a
+   sub-harmonic and is suppressed. Decisions are made decisive (loser × 0.3) so Viterbi cannot hold a wrong octave.
+   - Accompaniment an octave below (5 % pure tone, piano doubling at −12 dB, a quiet triad) adds a fundamental but
+     no 3rd/5th/7th, so the sung octave stays. This fixes the reviewer's regression of the first v2 draft.
+   - A spectrum of only two partials (C5 at 5 % + C6) is physically identical to "C6 over a quiet C5 accompaniment";
+     v2 follows the louder partial (as v1 did). The earlier draft's test that expected C5 here was replaced by a
+     realistic weak-fundamental voice that also has a 3rd harmonic.
+3. **Continuity clean-up** (`clean()`, after Viterbi):
+   - frames with confidence < 0.3 are dropped (unpitched);
+   - an excursion of ≤ 150 ms between two held notes that agree (≤ 100 cents apart), or ≤ 60 ms at a note's start/end,
+     is a tracking spike: frames an octave away are folded back onto the held note; other frames > 300 cents away are
+     removed when the excursion is ≤ 60 ms;
+   - a sung octave leap (C4→C5, C5→C6) is held longer than that and is never folded.
+   Counts are reported in `confidence.octaveFoldedFrames / spikeFramesRemoved / lowConfidenceFrames`.
 
-The confidence score is a heuristic in [0,1], not a calibrated probability. The current frequency ceiling and resampling architecture remain; no claim of arbitrary vocal range or robust polyphonic voice separation.
+All thresholds live in `RULES` at the top of `app/vocal-analysis.js` (exported for tests).
 
-Range definitions:
-- instantaneous: highest candidate with confidence >= 0.5, over all pitched frames; can include accompaniment/transients; excluded from growth.
-- valid high: median of a contiguous >= 200 ms segment, each frame confidence >= 0.75 and mean >= 0.8; adjacent difference <= 80 cents and distance from running center <= 100 cents.
-- stable high: valid segment >= 500 ms, mean confidence >= 0.9, 10th–90th percentile spread <= 70 cents.
-- main range: time-weighted frame 10th–90th percentiles after the range confidence mask.
-- no quantile fallback for valid high. Gaps or rejected frames split segments. Duration uses hop count, not overlapping-window width.
-- Stable denotes this acoustic rule only, not healthy technique, comfort or singing skill.
+## Highest notes (P0) — `metrics.range`
+| field | meaning | used for growth |
+|---|---|---|
+| `instantaneous` (순간 최고음) | highest single voiced frame with confidence ≥ 0.5 (+ `t`) | never |
+| `validHigh` (유효 최고음) | highest note held as one continuous segment ≥ **0.2 s** (`RULES.effectiveSeconds`), every frame confidence ≥ 0.75, mean ≥ 0.8, ≤ 80 cents frame-to-frame, ≤ 100 cents from the segment centre | neutral, same version only |
+| `stableHigh` (안정 최고음) | as valid, held ≥ 0.5 s, vibrato-free (170 ms moving average) pitch spread p10–p90 ≤ 60 cents | neutral, same version only |
+| `main` (주 가창 음역) | p10–p90 of all confident voiced time | — |
 
-Compatibility high/highCents point only to valid high; absent evidence yields null. New fields contain the four distinct metrics and criteria. v1 results do not become v2 highs merely by relabeling.
+`high/highCents/low/lowCents` stay as compatibility fields and point at the valid notes. No quantile fallback: no
+held evidence → `null` (판정 보류). Every point keeps `t` (seconds from the recording start, window start),
+`duration`, `confidence` and `times` (up to 3 occurrences of the same note, the reported one first).
 
-Reanalysis is explicit through existing analysis actions. Summary v2 retains prior summaries in analysis.history without deleting recordings, transactions or stored v1 results. Background jobs continue skipping existing summaries; no bulk production rewrite. Browser Worker URL is versioned. Same-version, sufficiently reliable summaries are required for a change verdict; highest-note changes are neutral. Named-note semitone differences round MIDI note indices separately (A#5→F#5 = -4). Nearest-semitone deviation is not score-note accuracy. Existing manually aligned same-song A/B flow remains the preferred comparison.
+**Owner-verifiable evidence.** The analysis screen (`#/analysis/:id`) and the vocal lab show the instant and
+effective highest notes with their positions; tapping one plays the existing player from 1 s before
+(`VZ.analysisPlayAt`; `play()` stays inside the tap for iPhone Safari, the seek waits for metadata).
 
-## Validation and limits
-Tests contain only generated fixtures: C5, dominant second harmonic, missing fundamental, actual octave jumps, short high events, confidence/gap rules, silence/noise, changed timbre of the same melody; existing synthetic vocal + accompaniment regression is retained. Browser tests use a real WAV decode and Worker plus prior-version retention and growth withholding.
+## Growth report rules
+- Instant max is never used; 유효/안정 최고음 are shown as neutral (no better/worse colour) with "실력 판정 아님".
+- Comparisons need the same analysis version and reliable summaries (`analysisComparable`), otherwise 판정 보류.
+  Plan outcomes (`plan-outcome-model.js`) withhold a before/after that mixes v1 and v2.
+- Accuracy (cents from the nearest semitone) and stability (sustained-note wobble) remain separate metrics.
+- Note differences are exact semitone counts of the named notes (A#5→F#5 = 4반음, never "약 4.5반음").
+- Same-song recordings are compared; the vocal lab's A/B same-segment comparison is preferred.
 
-The Winner Takes It All is the user-selected real evaluation song. Its saved v1 summaries and an attached PDF were located with read-only database queries. No personal recording IDs, storage paths, names or audio are included here. Original audio and score note truth have NOT been decoded/annotated in this environment; metadata inspection is not an accuracy test. Physical iPhone Safari is NOT verified. CI outcomes are recorded on the PR; synthetic accuracy must not be generalized to real polyphonic vocals.
+## Data / compatibility
+- New results are `v:2`; v1 results stay readable and are only replaced when the owner re-analyses. The previous
+  summary moves to `analysis.history` (last 5 kept). Background jobs (app and server) still skip recordings that
+  already have any analysis. Server summaries now also carry `scope`.
+- v1 and v2 both count for monthly growth, practice plans and plan outcomes.
+- `index.html` cache-busts every changed file; callers tolerate an older cached `analysis.js` without
+  `analysisComparable`. Worker URL `app/vocal-analysis.js?v=5`.
 
-## P1: score reference contract, no forced pitch correction
-Existing songs[].scores retains score ID, song ID, private PDF key, filename, original/practice key. The score-vision endpoint describes selected symbols/handwriting; it does not produce MusicXML or isolate vocal staves.
+## Verification — synthetic only
+`tests/pitch-truth.cjs` generates recordings with a known sung pitch at every 50 ms point;
+`tests/pitch-ground-truth.test.cjs` asserts ≥ 95 % within ±50 cents, zero octave errors, no voice in silence/noise,
+the expected valid/stable highs and their timestamps. Reproduce the table with
+`node tools/pitch-bench.cjs main=<v1 file> new=app/vocal-analysis.js`.
 
-Proposed additive score.pitchReference:
-- version, source (manual/musicxml/reviewed-omr), scoreId, partId, staff/voice, transpositionSemitones, status (draft/confirmed), coverage (whole-score/selected-measures), measure bounds;
-- lowMidi/highMidi, confirmedByUser, reviewedAt; optional note events {measure,beat,duration,midi,tie,confidence};
-- manual limits use exactly the same schema, so PDF conversion is optional.
-Flow: choose uploaded PDF → identify vocal staff and have user confirm → isolated OMR/MusicXML → exclude piano/other parts → review key, clef, accidentals, octave signs, repeats, transposition → calculate extrema on confirmed vocal notes. Missing or partial score coverage cannot establish the whole-song maximum.
+acc = % of sung points within ±50 cents · oct = % off by an octave · FA = % of silence/noise/accompaniment-only points
+reported as voice · highs = instant/valid/stable (v1 has only `peak` and `high`).
 
-Recording comparison attaches review flags with timestamps for out-of-range events; it never clamps, octave-folds, edits audio or replaces measured pitches. Manual A/B alignment or confirmed score measure alignment precedes note accuracy; accompaniment/unclear notes yield pending. Record intended pitch vs observed pitch and cents error separately from sustained-note wobble.
+| scenario | v1 (main) | first v2 draft | v2 (this) |
+|---|---|---|---|
+| C5 pure tone | 100/0/0 · C5/C5/— | 100/0/0 · C5/C5/C5 | 100/0/0 · C5/C5/C5 |
+| C5 voice-like harmonics | 100/0/0 · C5/C5/— | 100/0/0 · C5/C5/C5 | 100/0/0 · C5/C5/C5 |
+| C5 weak fundamental (.1,1,.3) | 100/0/0 · C5/C5/— | 100/0/0 · C6/C5/C5 | 100/0/0 · C5/C5/C5 |
+| C5 very weak fundamental (.05,1,.2,.3,.1) | **0/100/0 · C6/C6** | 100/0/0 · C5/C5/C5 | 100/0/0 · C5/C5/C5 |
+| C5 missing fundamental | 100/0/0 · C5/C5/— | 100/0/0 · C5/C5/C5 | 100/0/0 · C5/C5/C5 |
+| C4→C5→C4 sung leaps | 100/0/0 · C5/C5/— | 100/0/0 · C5/C5/C5 | 100/0/0 · C5/C5/C5 |
+| C5→C6 sung leap | 100/0/0 · C6/C6/— | 100/0/0 · C6/C6/**C5** | 100/0/0 · C6/C6/C6 |
+| held C5/G4 + 50 ms octave spikes, blip, noise burst | 100/0/0 · C5/C5/— | 100/0/0 · C5/C5/C5 | 98.7/0/0 · C5/C5/C5 ¹ |
+| held C5 + 100 ms octave flips | **0 (no voice found)** | 64.6/0/0 · C6/C5/C5 | 100/0/0 · C5/C5/C5 |
+| melody C5–E5–G5–C6 + 5 % sub-octave tone | 100/0/0 · C6/C6/— | 95.3/4.7/0 · C6/C6/G5 | 100/0/0 · C6/C6/C6 |
+| pure-tone melody + 5 % sub-octave tone | 100/0/0 · C6/C6/— | **0/100/0 · C6/C5/C5** | 100/0/0 · C6/C6/C6 |
+| melody + piano octave-below doubling −12 dB | 100/0/0 · C6/C6/— | **50/50/0 · E5/E5/E5** | 100/0/0 · C6/C6/C6 |
+| E5 melody + quiet A3–C#4–E4 triad | 100/0/0 · E5/E5/— | 100/0/0 · E5/E5/A4 | 100/0/0 · E5/E5/E5 |
+| silence + noise segments | 100/0/0 · F5/F5/— | 100/0/0 · F5/F5/F5 | 100/0/0 · F5/F5/F5 |
+| same song, 3 takes (timbre/vibrato/detune/squeak) | 86.7, 100, 100 · C5 ×3 | 100 ×3 · C5 ×3 | 100 ×3 · C5 ×3 |
+| synth song over MR −12 dB | 100/0/0 · C5/C5/— | 100/0/0 · C5/C5/C5 | 100/0/0 · C5/C5/C5 |
+| synth song over MR 0 dB | 100/0/0 · C5/C5/— | 100/0/0 · C5/C5/C5 | 99.4/0/0 · C5/C5/C5 ¹ |
 
-## Alternative algorithms
-pYIN can add probabilistic voicing and transitions but needs Python/librosa and CPU benchmarking; it assumes a predominantly monophonic source. CREPE adds model weights and inference/runtime cost, and likewise does not solve vocal separation by itself. Keep these as candidate read-only offline benchmarks on annotated real clips before adopting a server dependency. No model or paid API is called by this change.
+¹ one 50 ms point left unvoiced (noise burst / chord change), not a wrong pitch.
 
-## Release gate
-CI regression + real annotated vocal segments (including quiet/strong accompaniment) + physical iPhone rendering/performance must be reviewed before declaring accuracy solved. A C5 seen in some score bars is not assumed to be the song's global maximum. Until real verification, keep the PR a draft and production results unchanged.
+**Not verified:** real recordings (including the owner's evaluation song), real accompaniment mixes, physical
+iPhone Safari. Synthetic accuracy must not be generalised to real polyphonic singing. Voice/MR separation is still a
+level heuristic, not source separation.
 
-## Reproduced before/after reference measurement
-Same one-second 8 kHz C5 input, excluding 100 ms at each edge; F0 frame error against known 523.251130601 Hz. Executed in the tool JavaScript runtime, not on a physical phone.
+## P1: score-based check (design only, not implemented)
+OMR output exists as `u/<uid>/<scoreId>/omr.mxl` (`app/score-omr.js`), but the app itself says recognition is not
+used for comparison until a review step exists. Proposal:
+1. **Reference.** Additive `score.pitchReference = {version, source:'musicxml'|'manual', scoreId, partId, staff,
+   transpositionSemitones, lowMidi, highMidi, coverage:'whole'|'measures', measures:[from,to], confirmedByUser,
+   reviewedAt}`. Manual min/max (when there is no score) uses the same shape with `source:'manual'`.
+2. **Vocal part only.** Parse the `.mxl` (zip → `score-partwise`) in the browser; list parts, preselect the one with
+   lyrics / a vocal instrument name, owner confirms. Ignore piano/other staves. Apply `<transpose>`, octave-shift and
+   key changes; take min/max over confirmed vocal notes (ties and grace notes excluded). Partial coverage cannot set
+   the song's global maximum.
+3. **Compare, never correct.** Show "악보 최고음 A5 · 유효 최고음 G5 (1반음 아래)" and flag measured notes above the score
+   maximum or below the minimum with their timestamps (listen buttons) as *review* items — e.g. a likely octave
+   error or an ad-lib. Measured pitches are never clamped, octave-folded or replaced to fit the score.
+4. Note-by-note accuracy needs score↔recording alignment (manual A/B segment first); until then only the range
+   comparison above is offered, and accompaniment-heavy or low-confidence recordings stay 판정 보류.
 
-| Harmonic amplitudes (H1,H2,H3) | v1 median absolute cents error | v2 median absolute cents error | v1/v2 frames within 50 cents |
-|---|---:|---:|---:|
-| 1,0,0 | 0.0 | 0.0 | 100% / 100% |
-| 0.05,1,0 | 1200.0 | 0.0 | 0% / 100% |
-| 0,1,0.5 | 0.3 | 0.3 | 100% / 100% |
-
-This isolates the reproduced harmonic-octave error. It is not a measured accuracy rate for real singing or the selected song.
-
-CI at 75a04c6: 20 unit checks + 6 Chromium/WebKit rendering checks passed; vocal-growth integration passed. Full UI was blocked by the pre-existing Settings navigation expectation (hidden vs visible), also reproduced in the pre-change #323 CI (run 43108661678). Server regression tests initially expected v1 output; their new-analysis assertions are updated to v2, while fixtures proving existing-analysis reuse stay v1. Subsequent CI results are on the PR.
+## Alternatives considered
+pYIN would add probabilistic voicing but needs a Python/librosa port or a JS rewrite plus benchmarking; CREPE needs
+model weights and inference time on the phone and the Actions worker. Neither separates the voice from the MR on its
+own. v2 keeps the harmonic-sum + Viterbi tracker and adds probabilistic-style candidate evidence instead; pYIN/CREPE
+remain candidates for an offline benchmark on annotated real clips.

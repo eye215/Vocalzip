@@ -24,6 +24,8 @@ window.addEventListener('vzip:analysis-saved', e => {
 VZ.vocalBatchRunning = () => batch.running; // the background analyzer waits for it
 
 /* What is measured, how to read it, and which way is "better" (+1 higher, −1 lower, 0 neither). */
+// A cached older analysis.js may not define analysisComparable yet: never throw, use the same rule.
+const comparable = (a, b) => VZ.analysisComparable ? VZ.analysisComparable(a, b) : !!a && !!b && a.v === b.v && !!VZ.analysisReliable?.(a) && !!VZ.analysisReliable?.(b);
 const METRICS = [
   {key:'into', label:'음정 오차', unit:'cent', better:-1, get:a => a.metrics.intonation?.meanAbsCents, fmt:v => '±' + v, help:'낮을수록 음을 정확히 맞춤'},
   {key:'wob', label:'지속음 흔들림', unit:'cent', better:-1, get:a => a.metrics.stability?.wobbleCents, fmt:v => '±' + v, help:'낮을수록 안정적'},
@@ -41,7 +43,7 @@ function points(media) {
 }
 /** Change from first to latest, worded by direction. */
 function change(metric, first, last) {
-  if (!VZ.analysisComparable(first,last)) return '<span class="vg-same">판정 보류 · 신뢰도/분석 버전 확인</span>';
+  if (!comparable(first,last)) return '<span class="vg-same">판정 보류 · 신뢰도/분석 버전 확인</span>';
   const a = metric.get(first), b = metric.get(last);
   if (a == null || b == null) return '';
   const d = Math.round((b - a) * 10) / 10;
@@ -72,7 +74,7 @@ VZ.measureTable = (first, second) => {
   if (!a?.metrics || !b?.metrics) return '';
   const sameSong=!!first.songId&&first.songId===second.songId;
   const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,a,b):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
-  const weak = !VZ.analysisComparable(a,b) || !first.songId || first.songId!==second.songId;
+  const weak = !comparable(a,b) || !first.songId || first.songId!==second.songId;
   return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + '</tbody></table>' +
     (weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '');
 };

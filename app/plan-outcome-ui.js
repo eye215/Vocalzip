@@ -12,6 +12,7 @@ const advice={
 };
 function resultText(r){
  const m=r.measurement||{},delta=m.delta;
+ if(m.mixedVersions)return '분석 버전(v1·v2)이 섞여 있어 판정을 보류했어요. 이전 녹음을 다시 분석하면 비교할 수 있어요.';
  if(m.change==='insufficient')return '계획 시작 전·후의 동일 곡 분석된 녹음이 부족해 수치 변화를 판단할 수 없어요.';
  if(m.change==='similar')return '측정된 차이가 작아 뚜렷한 변화로 판단하지 않았어요.';
  const label=delta<0?'감소':'증가';
@@ -44,7 +45,7 @@ function render(host,plan,items,action){
   const message=host.querySelector('[data-outcome-status]');
   try{
    const updated=Model.report({plan,goals:V.db.dailyGoals||[],recordings:items,dateOf:M.dateOf,
-    valid:m=>m.analysis?.v===1&&V.analysisReliable?.(m.analysis),asOf:V.today()});
+    valid:m=>[1,2].includes(m.analysis?.v)&&V.analysisReliable?.(m.analysis),asOf:V.today()});
    updated.created=Date.now();updated.createdDate=V.today();
    if(!V.change(db=>{
     db.vocalPlanReports ||= [];

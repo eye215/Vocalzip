@@ -13,7 +13,7 @@ async function open(page){
   const blob=new Blob([buf],{type:'audio/wav'}),M=VZ.media;
   M.src=async()=>({url:URL.createObjectURL(blob),revoke:true});M.list=async()=>[item];M.dateOf=()=> '2026-11-11';M.label=m=>m.name;
   M.update=async(m,patch)=>{window.saved=patch.analysis;localStorage.setItem('test-analysis',JSON.stringify(patch.analysis));};
-  M.player=host=>{const audio=document.createElement('audio');host.append(audio);return{el:audio,play:()=>{}};};
+  M.player=host=>{const audio=document.createElement('audio');host.append(audio);return{el:audio,play:()=>{window.played=(window.played||0)+1;}};};
  });
  await page.addScriptTag({url:'/app/analysis.js'});
 }
@@ -23,6 +23,12 @@ test('real audio decoder and Worker render distinct range metrics and retain pri
  await expect(page.locator('#test-host')).toContainText('유효 최고 C5');
  await expect(page.locator('#test-host')).toContainText('안정 최고 C5');
  await expect(page.locator('#test-host')).toContainText('순간 검출 최고');
+ // Evidence: the reported highest notes carry their time in the recording and play from there.
+ const listen=page.locator('[data-seek-at]');
+ await expect(listen.first()).toHaveAttribute('aria-label',/유효 최고음 .* 부분 듣기/);
+ expect(await listen.count()).toBeGreaterThanOrEqual(2);
+ await listen.first().click();
+ expect(await page.evaluate(()=>window.played)).toBe(1);
  expect(await page.evaluate(()=>saved.history[0])).toMatchObject({v:1,at:1,metrics:{range:{high:'C6'}}});
  expect(await page.evaluate(()=>saved.v)).toBe(2);
  await page.setViewportSize({width:320,height:700});

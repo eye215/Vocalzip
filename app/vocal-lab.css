@@ -48,6 +48,11 @@ body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports
 .vl-measure{margin:16px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .vl-measure>span{color:#b9a9c7;font-size:14px;line-height:20px}.vl-measure small{display:block;font-size:11px;line-height:16px;color:#92879e}
 .vl-measure strong{font-size:27px;line-height:32px;color:#c484ff;white-space:nowrap}
+.vl-high-evidence{margin:4px 0 12px}.vl-high-evidence .vl-measure{margin:8px 0 4px}
+.vl-high-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;min-height:44px;color:#b9a9c7;font-size:13px}
+.vl-high-row strong{color:#c484ff;font-size:16px}.vl-high-row small{font-size:11px;color:#92879e}
+.vl-high-times{display:flex;flex-wrap:wrap;gap:6px}
+.vl-chip-play{min-height:40px;min-width:44px;display:inline-flex;align-items:center;gap:4px;padding:0 12px;border:1px solid #70518d;border-radius:999px;background:transparent;color:#f7f5fc;font-size:13px}
 .vl-ruler{height:36px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#aaa3b7;font-size:11px;border-bottom:1px solid #5c506a}
 .vl-ruler i{flex:1;height:2px;background:linear-gradient(90deg,#594069,#a64df7,#594069)}
 .vl-analyze{min-height:44px;display:flex;align-items:center;gap:8px;border:0;background:transparent;color:#c58cff;font-size:13px;font-weight:600;padding:0 2px}

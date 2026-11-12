@@ -6,6 +6,10 @@ on:
       - 'app/*growth*.js'
       - 'app/vocal-lab.js'
       - 'app/metric-help.js'
+      - 'app/plan-outcome-*.js'
+      - 'app/monthly-practice-plans.js'
+      - 'worker/analysis-worker.mjs'
+      - 'tools/pitch-bench.cjs'
       - 'tests/pitch-*'
       - '.github/workflows/pitch-accuracy.yml'
   workflow_dispatch:
@@ -22,6 +26,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
-      - run: node --test tests/pitch-accuracy.test.cjs tests/pitch-summary.test.cjs tests/vocal-analysis.test.cjs tests/analysis-prefix-median.test.cjs tests/analysis-cancel.test.cjs
+      - run: node --test tests/pitch-accuracy.test.cjs tests/pitch-ground-truth.test.cjs tests/pitch-summary.test.cjs tests/plan-outcome.spec.cjs tests/vocal-analysis.test.cjs tests/analysis-prefix-median.test.cjs tests/analysis-cancel.test.cjs
+      - run: node tools/pitch-bench.cjs
       - run: npx playwright test tests/pitch-accuracy.spec.cjs --workers=2
       - run: npx playwright test tests/v6.spec.cjs --grep 'a recording sung over an MR gets' --workers=2

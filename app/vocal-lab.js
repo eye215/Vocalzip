@@ -32,6 +32,8 @@ const time = s => V.clock(Math.max(0,s||0));
 const day = m => (M.dateOf(m)||'').slice(5).replace('-','.');
 const valid = n => n == null || n === '' ? null : Number.isFinite(Number(n)) ? Number(n) : null;
 const analysis = m => m.analysis?.metrics ? m.analysis : null;
+// A cached older analysis.js may not define analysisComparable yet: never throw, fall back to the same rule.
+const comparable = (a,b) => V.analysisComparable ? V.analysisComparable(a,b) : !!a && !!b && a.v === b.v && !!V.analysisReliable?.(a) && !!V.analysisReliable?.(b);
 const selectionKey = 'vocalzip-vocal-lab-selected-media-v1';
 const selectionIds = () => { try { const ids=JSON.parse(sessionStorage.getItem(selectionKey)||'[]'); return Array.isArray(ids) ? ids.map(String) : []; } catch { return []; } };
 V.openAnalysisSelection = items => {
@@ -90,7 +92,7 @@ const growthMetric=(metric,s)=>{
  const rows=trendRows(s,metric).filter(x=>V.analysisReliable(analysis(x.m)));
  if(rows.length<2)return null;
  const first=rows[0],last=rows.at(-1),delta=last.value-first.value;
- if(!V.analysisComparable(analysis(first.m),analysis(last.m)))return null;
+ if(!comparable(analysis(first.m),analysis(last.m)))return null;
  const tolerance=metric.tolerance??.5;
  const tone=metricColor(metric,first.value,last.value);
  return {metric,first,last,delta,tone,count:rows.length,
@@ -114,7 +116,7 @@ function growthReport(s){
    const metric=x.metric,delta=x.delta,amount=Math.abs(delta).toFixed(metric.key==='rating'?0:1);
    if(metric.key==='high'||metric.key==='stable'){
      const from=metric.fmt(x.first.value,analysis(x.first.m)),to=metric.fmt(x.last.value,analysis(x.last.m));
-     return metric.label+' '+from+' → '+to+(x.changed?' ('+(delta>0?'상승':'하락')+' 약 '+Math.abs(Math.round(x.last.value/100)-Math.round(x.first.value/100))+'반음)':' (비슷함)')+' · 도달한 최고음이 곧 안정된 가창 음역이라는 뜻은 아니에요.';
+     return metric.label+' '+from+' → '+to+(x.changed?' ('+(delta>0?'상승':'하락')+' '+Math.abs(Math.round(x.last.value/100)-Math.round(x.first.value/100))+'반음)':' (비슷함)')+' · 도달한 최고음이 곧 안정된 가창 음역이라는 뜻은 아니에요.';
    }
    if(metric.key==='phr')return '프레이즈 '+x.formatted+(x.changed?' · '+(delta>0?'길어짐':'짧아짐'):' · 큰 변화 없음')+' (곡 구성·템포에 따라 달라질 수 있어요).';
    if(metric.key==='rating')return '내 만족도 '+x.formatted+' · 직접 기록한 체감 평가예요.';
@@ -145,10 +147,10 @@ function trendRows(s,metric){
 }
 function trend(s) {
  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],measured=trendRows(s,metric);
- const series=measured.map((x,i)=>({id:x.m.id,value:x.value,label:day(x.m),tone:metric.key==='rating'||V.analysisComparable(analysis(measured[i-1]?.m||{}),analysis(x.m))?metricColor(metric,measured[i-1]?.value,x.value):'neutral'}));
+ const series=measured.map((x,i)=>({id:x.m.id,value:x.value,label:day(x.m),tone:metric.key==='rating'||comparable(analysis(measured[i-1]?.m||{}),analysis(x.m))?metricColor(metric,measured[i-1]?.value,x.value):'neutral'}));
  const last=measured.at(-1),prev=measured.at(-2);
- const state=last&&(metric.key==='rating'||V.analysisComparable(analysis(prev?.m||{}),analysis(last.m)))?metricColor(metric,prev?.value,last.value):'neutral';
- const explanation=last&&prev&&!V.analysisComparable(analysis(prev.m),analysis(last.m))?'판정 보류 · 신뢰도/분석 버전 확인':last?metricChangeText(metric,prev?.value,last.value):'분석된 값이 없어요';
+ const state=last&&(metric.key==='rating'||comparable(analysis(prev?.m||{}),analysis(last.m)))?metricColor(metric,prev?.value,last.value):'neutral';
+ const explanation=last&&prev&&!comparable(analysis(prev.m),analysis(last.m))?'판정 보류 · 신뢰도/분석 버전 확인':last?metricChangeText(metric,prev?.value,last.value):'분석된 값이 없어요';
  return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2><div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
   '<p class="vl-metric-guide"><strong>'+esc(metric.label)+' · '+esc(metric.better===-1?'낮을수록 좋아요':metric.better===1?'대체로 높을수록 좋아요':'높낮이만으로 판단하지 않아요')+'</strong><span>'+esc(metric.guide)+'</span></p>'+
   (last?'<p class="vl-change '+state+'" role="status">'+esc('최근 변화 · '+explanation)+'</p>':'')+
@@ -199,14 +201,14 @@ function observe(s,m) {
  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],current=valid(metric.get(analysis(m),m));
  const ordered=trendRows(s,metric),idx=ordered.findIndex(x=>x.m.id===m.id);
  const first=ordered[0],baseline=first?.m.id!==m.id?first:null;
- const comparable=metric.key==='rating'||V.analysisComparable(analysis(baseline?.m||{}),analysis(m));
- const initial=comparable?(baseline?.value??null):null,difference=initial!=null&&current!=null?current-initial:null;
- const improved=baseline&&comparable?metricColor(metric,initial,current):'neutral';
+ const isComparable=metric.key==='rating'||comparable(analysis(baseline?.m||{}),analysis(m));
+ const initial=isComparable?(baseline?.value??null):null,difference=initial!=null&&current!=null?current-initial:null;
+ const improved=baseline&&isComparable?metricColor(metric,initial,current):'neutral';
  const safe=value=>esc(String(value??''));
  const title='분석 관찰';
  const explanation=()=>{
   if(current==null)return '이 녹음에서 해당 측정값을 확인하지 못했어요.';
-  if(baseline&&!comparable)return '판정 보류 · 신뢰도와 분석 버전을 확인해 주세요.';
+  if(baseline&&!isComparable)return '판정 보류 · 신뢰도와 분석 버전을 확인해 주세요.';
   if(initial==null)return '첫 녹음의 측정값이에요. 다음 녹음과 비교하면 변화가 표시돼요.';
   if(metric.better===0)return '첫 녹음과의 변화는 확인할 수 있지만 높고 낮음만으로 좋고 나쁨을 판단하지 않아요.';
   const percent=Math.abs(initial)>0?Math.round(Math.abs(difference)/Math.abs(initial)*100):null;
@@ -240,11 +242,22 @@ function observe(s,m) {
    });
   }});
 }
+/** Where the reported highest notes happened, so the owner can check them by ear on this player. */
+function highEvidence(m) {
+  const a=analysis(m),g=a?.v>=2?a.metrics?.range:null;
+  if(!g||(!g.validHigh&&!g.instantaneous))return '';
+  const chips=(p,label)=>(p?.times?.length?p.times:p&&Number.isFinite(p.t)?[{t:p.t}]:[]).filter(x=>Number.isFinite(x?.t)).slice(0,3)
+    .map(x=>'<button type="button" class="vl-chip-play" data-seek-at="'+x.t+'" aria-label="'+esc(label+' '+time(x.t)+' 부분 듣기')+'"><i class="ph-fill ph-play"></i> '+esc(time(x.t))+'</button>').join('');
+  const row=(label,p,note)=>p?'<div class="vl-high-row"><span>'+label+' <strong>'+esc(p.note)+'</strong>'+(note?' <small>'+note+'</small>':'')+'</span><span class="vl-high-times">'+chips(p,label)+'</span></div>':'';
+  return '<div class="vl-high-evidence"><div class="vl-measure"><span>최고음 확인 <small>눌러서 그 부분 듣기 (1초 전부터)</small></span></div>'+
+    (g.validHigh?row('유효 최고음',g.validHigh,'0.2초 이상'):'<p class="vl-muted">유효 최고음 판정 보류</p>')+
+    row('순간 최고음',g.instantaneous,'평가에 쓰지 않음')+'</div>';
+}
 function makeSegment(s,m) {
   const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
   const slice=full?.curve?.map((v,i)=>({t:i/full.fps,value:v==null?null:((v%100)+150)%100-50})).filter(p=>p.t>=start&&p.t<=end&&p.value!=null)||[];
   const sampled=slice.filter((_,i)=>i%Math.max(1,Math.ceil(slice.length/25))===0);
-  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+
+  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+highEvidence(m)+
     '<div class="vl-ruler" aria-hidden="true"><span>−50</span><i></i><span>0</span><i></i><span>+50</span></div>'+
     (full?(sampled.length?'<div class="vl-segment-chart"><div class="vl-chart-heading">선택 구간의 음정 편차 (cent)</div>'+plot(sampled.map(x=>({value:x.value,label:time(x.t)})),{height:115})+'</div>':'<p class="vl-muted">이 구간에서 목소리를 측정하지 못했어요.</p>'):'<button type="button" class="vl-analyze" data-analyze>이 구간 그래프 보기 <i class="ph ph-arrow-right"></i></button>')+
     '<label class="vl-range-label">분석할 구간 이동<input type="range" min="0" max="'+Math.max(0,Math.floor(total-16))+'" value="'+Math.min(start,Math.max(0,Math.floor(total-16)))+'" data-start aria-label="구간 시작 위치"></label><p class="vl-muted" data-analyze-status aria-live="polite">'+(full?'파형과 수치는 실제 녹음 분석 결과예요.':'그래프는 이 녹음을 분석하면 표시돼요.')+'</p></section>';
@@ -325,6 +338,10 @@ function screen(s) {
   const el=player.el, play=host.querySelector('[data-play]'), seek=host.querySelector('[data-seek]'), status=host.querySelector('[data-player-status]');
   const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;seek.value=d?Math.round(el.currentTime/d*1000):0;host.querySelector('[data-time]').textContent=time(el.currentTime);host.querySelector('[data-duration]').textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
   el.addEventListener('timeupdate',()=>{if(s.loop&&el.currentTime>=Math.min(el.duration||Infinity,(s.start[m.id]||0)+16))el.currentTime=s.start[m.id]||0;paint();}); el.addEventListener('play',paint);el.addEventListener('pause',paint);el.addEventListener('loadedmetadata',paint); el.addEventListener('error',paint);paint();
+  host.querySelectorAll('[data-seek-at]').forEach(b=>b.onclick=()=>{
+    if(V.analysisPlayAt)V.analysisPlayAt(player,b.dataset.seekAt);
+    else{player.seek(Math.max(0,Number(b.dataset.seekAt)-1));if(el.paused)player.play();}
+  });
   play.onclick=()=>el.paused?player.play():player.pause();seek.oninput=()=>player.seek(Number(seek.value)/1000*(el.duration||m.durationSeconds||0));
   const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.carouselDirection=step;s.active=s.selected[n];screen(s);};
   host.querySelector('[data-previous]').onclick=()=>move(-1);host.querySelector('[data-next]').onclick=()=>move(1);
