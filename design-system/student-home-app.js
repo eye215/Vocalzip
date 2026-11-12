@@ -42,7 +42,11 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(homework)return {kind:'homework',title:homework.title,badge:'숙제',line:'오늘 해 볼 숙제예요',label:'숙제 '+homework.title+' 보기',action:()=>nav('#/homework')};
   if(songs[0])return {kind:'practice',title:'이어서 연습하기',badge:'',line:songs[0].title,label:songs[0].title+' 이어서 연습하기',action:()=>nav('#/record?song='+encodeURIComponent(songs[0].id))};
   if(l)return lessonCard('');
-  return {kind:'goals',title:'오늘의 목표 정하기',badge:'',line:'오늘 연습할 항목을 골라요',label:'오늘의 목표 정하기',action:()=>planSheet()};
+  // Nothing scheduled or practised: suggest one practice in 노래 연습실 instead of a second "오늘의 목표 정하기" (the
+  // empty goal list below already offers that). A suggestion already in today's goals is not repeated; then simply record.
+  const rec=s.recommendationCandidates.find(c=>c.source==='recommendation'&&!(s.goals||[]).some(g=>g.source===c.source&&g.sourceId===c.sourceId));
+  if(rec)return {kind:'recommend',title:rec.title,badge:'추천',line:'연습실에서 시작해요',label:'추천 연습 '+rec.title,action:()=>nav('#/practice-room')};
+  return {kind:'record',title:'지금 녹음하기',badge:'',line:'짧게라도 한 번 불러 봐요',label:'지금 녹음하기',action:()=>nav('#/record')};
  }
  /* Home summary rows: next lesson (unless it is already the 지금 할 것 card), next stage, and a needs-attention row
   * only when something needs attention. The 이번 주 row is painted by the home from the week data. */

@@ -223,17 +223,17 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  const value={categories:[],songs:[],lessons:[],assignments:[],practices:[],performances:[],comparisonReports:[]};await boot(page,value);
  await noSample(page);
  await expect(goals(page)).toHaveCount(0);await expect(page.locator('.vz-count')).toHaveText('0 / 0 완료');
- // Nothing scheduled or practised: 지금 할 것 asks for today's goals, the summary only has this week, no recent songs.
- await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','goals');await expect(page.locator('.vz-event h2')).toHaveText('오늘의 목표 정하기');
+ // Nothing scheduled or practised: 지금 할 것 suggests one practice (the empty goal list below offers goal setup, so
+ // "오늘의 목표 정하기" is not shown twice); the summary only has this week, no recent songs.
+ await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','recommend');await expect(page.locator('.vz-event h2')).toHaveText('호흡과 발성 연습하기');
  await expect(page.locator('.vz-summary-row')).toHaveCount(1);await expect(weekRow(page).locator('.vz-summary-value')).toHaveText('0분 / 3시간 30분');
  await expect(page.locator('.vz-recent')).toBeHidden();await expect(page.locator('.vz-recent-pill')).toHaveCount(0);await expect(page.locator('.vz-today-streak')).toHaveCount(0);
  await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
- // Both the 지금 할 것 card and the empty goal list open the goal sheet.
+ // Only the empty goal list opens the goal sheet; the suggestion opens 노래 연습실.
  const setup=page.getByRole('button',{name:'오늘의 목표 정하기',exact:true});
- for(const index of [0,1]){
-  await page.goto('/#/home');await ready(page);await expect(setup).toHaveCount(2);await setup.nth(index).click();
-  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(sheet).toHaveCount(0);
- }
+ await page.goto('/#/home');await ready(page);await expect(setup).toHaveCount(1);await setup.click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await page.getByRole('button',{name:'추천 연습 호흡과 발성 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/practice-room$/);await expect(page.locator('#top h1')).toHaveText('노래 연습실');
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
 });
@@ -392,7 +392,7 @@ test('지금 할 것, summary rows, recent songs and profile retain their real d
  }
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
-test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming lesson, then goal setup',async({page})=>{
+test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming lesson, then a suggested practice',async({page})=>{
  await boot(page);const before=await db(page);
  const now=page.locator('.vz-event'),title=now.locator('h2'),badge=now.locator('.vz-dday'),line=now.locator('.vz-event-content>p'),lessonRow=page.locator('.vz-summary-row[data-row=lesson]');
  await page.evaluate(date=>VZ.change(d=>{d.lessons[0].date=date;}),TODAY);
@@ -408,8 +408,13 @@ test('지금 할 것 follows today\'s lesson, homework, latest song, upcoming le
  await page.evaluate(()=>VZ.change(d=>{d.practices=[];}));
  await expect(now).toHaveAttribute('data-kind','lesson');await expect(title).toHaveText('보컬 레슨');await expect(badge).toHaveText('D-2');await expect(line).toHaveText('11.6 (금) 18:30');await expect(lessonRow).toHaveCount(0);
  await page.evaluate(()=>VZ.change(d=>{d.lessons=[];}));
- await expect(now).toHaveAttribute('data-kind','goals');await expect(title).toHaveText('오늘의 목표 정하기');
- await now.click();const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await expect(now).toHaveAttribute('data-kind','recommend');await expect(title).toHaveText('호흡과 발성 연습하기');await expect(badge).toHaveText('추천');
+ await now.click();await expect(page).toHaveURL(/#\/practice-room$/);await page.goto('/#/home');await ready(page);
+ // The same suggestion already in today's goals is not repeated: the card then just offers to record.
+ const goalsBefore=(await db(page)).dailyGoals;
+ await page.evaluate(day=>VZ.change(d=>{d.dailyGoals=[...(d.dailyGoals||[]),{id:'g-basic',date:day,title:'호흡과 발성 연습하기',source:'recommendation',sourceId:'basic:breathing',completed:false,order:9}];}),TODAY);
+ await expect(now).toHaveAttribute('data-kind','record');await expect(title).toHaveText('지금 녹음하기');await expect(badge).toBeHidden();
+ await page.evaluate(goals=>VZ.change(d=>{d.dailyGoals=goals;}),goalsBefore);
  const after=await db(page);for(const key of ['songs','performances','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
 test('needs-attention summary row appears only when server analysis needs a check',async({page})=>{
@@ -651,9 +656,9 @@ test('six real schedule combinations never restore sample events',async({page},t
  const lesson=date=>({id:'l1',date,startTime:'18:30',endTime:'19:30',status:'scheduled',songId:'s1',songIds:['s1'],teacher:'김선생',place:'연습실'}),stage=seed().performances;
  for(const [name,data,kind,heading,rows]of [
   ['both',{lessons:[lesson('2026-11-06')],performances:stage},'lesson','보컬 레슨',['stage','week']],
-  ['stages',{lessons:[],performances:stage},'goals','오늘의 목표 정하기',['stage','week']],
+  ['stages',{lessons:[],performances:stage},'recommend','호흡과 발성 연습하기',['stage','week']],
   ['lesson',{lessons:[lesson('2026-11-06')],performances:[]},'lesson','보컬 레슨',['week']],
-  ['none',{lessons:[],performances:[]},'goals','오늘의 목표 정하기',['week']],
+  ['none',{lessons:[],performances:[]},'recommend','호흡과 발성 연습하기',['week']],
   ['today',{lessons:[lesson(TODAY)],performances:stage},'lesson','오늘 보컬 레슨',['stage','week']],
   ['practice',{lessons:[lesson('2026-11-06')],performances:stage,practices:seed().practices},'practice','이어서 연습하기',['lesson','stage','week']]]){
   await page.setViewportSize({width:390,height:940});
