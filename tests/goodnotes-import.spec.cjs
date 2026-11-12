@@ -261,6 +261,31 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  await expect(sheet).toHaveCount(0);
  expect(r2.store.size).toBe(3);
 });
+test('a notebook whose PDF is locked with an owner password only (as bought scores often are) imports readable pages; one that needs a password is refused',async({page})=>{
+ const r2=await setup(page);
+ const locked=name=>fs.readFileSync(path.join(__dirname,'encrypted-pdf',name+'.pdf'));
+ const notebook=F.notebook({title:'잠긴 악보',pdf:locked('aes-256'),width:300,height:400,pages:[
+  {pdfPage:1,order:'a'},{pdfPage:2,order:'b',ink:[ink(1,[1,0,0,1],3,60,60,240,60)]},{pdfPage:3,order:'c'}],
+  outline:[{page:0,title:'Song A'},{page:2,title:'Song C'}]});
+ await pick(page,'잠긴 악보.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
+ await sheet.getByRole('button',{name:'가져오기 (2곡)'}).click();
+ await expect(page.locator('.toast')).toContainText('악보 2개를 가져왔어요 · 수정 가능한 필기 1획');
+ const scores=await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>(s.scores||[]).map(x=>({title:x.title,r2Key:x.r2Key}))));
+ const a=r2.store.get(scores.find(s=>s.title==='Song A').r2Key).bytes;
+ expect(a.includes(Buffer.from('/Encrypt'))).toBe(false);
+ const pdfjs=await import(path.join(PDFROOT,'legacy/build/pdf.mjs'));
+ const doc=await pdfjs.getDocument({data:new Uint8Array(a),disableFontFace:true,useSystemFonts:false}).promise;
+ const text=[];for(let i=1;i<=doc.numPages;i++)text.push((await (await doc.getPage(i)).getTextContent()).items.map(t=>t.str).join(''));await doc.destroy();
+ expect(text).toEqual(['Original page 1','Original page 2']);
+ expect((await attached(a)).strokes.map(s=>s.page)).toEqual([2]);
+ // Needs a password to open: a plain reason, nothing uploaded.
+ const before=r2.store.size;
+ await pick(page,'비밀번호.goodnotes',F.notebook({title:'비밀번호',pdf:locked('aes-256-user-password'),width:300,height:400,pages:[{pdfPage:1,order:'a'}]}));
+ await page.getByRole('dialog',{name:'굿노트 가져오기'}).getByRole('button',{name:'가져오기 (1곡)'}).click();
+ await expect(page.getByRole('dialog',{name:'굿노트 가져오기'}).locator('[data-gn-msg]')).toContainText('비밀번호가 있어야 열리는 PDF예요');
+ expect(r2.store.size).toBe(before);
+});
 test('a file that is not a GoodNotes notebook is refused and nothing is uploaded',async({page})=>{
  const r2=await setup(page);
  await pick(page,'악보.pdf',pdf(1));

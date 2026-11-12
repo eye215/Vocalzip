@@ -74,3 +74,13 @@ An intermediate version kept imported and hand-drawn ink in IndexedDB. That was 
 - Only one real file: 1 page, 1 outline entry, highlighter strokes. **Pen strokes with pressure, text boxes, images, shapes, lasso-moved ink, multi-page ink files, several PDFs in one notebook, page deletions/moves in the event log** have not been seen. Pen width falls back to the median of the per-point values when the single width is 0 (a guess).
 - The "ink file id = page id + 1" rule comes from one page. Ink files that match no page are counted and not imported.
 - GoodNotes 5 / other schema versions; iPhone Safari with a large notebook (memory); real R2 upload.
+
+
+## 잠긴 PDF (2026-11-12, 실사용 250MB 노트에서 발견)
+- 구매한 악보는 **소유자 비밀번호만** 걸린 경우가 많다. 이런 파일은 누구나 열 수 있지만(굿노트·미리보기·pdf.js) 내용은 빈 사용자 비밀번호로 만든 키로 암호화되어 있다. pdf-lib는 이런 파일을 거부한다(`Input document to PDFDocument.load is encrypted`). `ignoreEncryption`으로 열어도 내용이 암호화된 채로 복사되어 쓸 수 없다.
+- `app/pdf-decrypt.js`는 뷰어가 하는 방식대로 이 기기에서 복호화한 뒤 pdf-lib에 넘긴다.
+  - 지원 범위는 Standard 보안 처리기 RC4 40–128비트(R2–R4), AES-128(R4), AES-256(R5·R6)이다.
+  - 객체 스트림은 먼저 복호화한 뒤 푼다. 증분 저장으로 나중에 고쳐 쓴 객체는 새 쪽을 유지한다.
+- **비밀번호가 있어야 열리는 PDF는 열지 않고** "비밀번호가 있어야 열리는 PDF예요"로 멈춘다. 추측하거나 우회하지 않는다.
+- 만든 곡 PDF는 잠금 없이 저장된다(앱 안에서 보고 필기하기 위한 개인 사본).
+- 테스트는 독립 구현(qpdf/pikepdf)으로 만든 합성 고정 파일을 쓴다: `tests/encrypted-pdf/`, `tests/pdf-decrypt.test.cjs`, `goodnotes-import.spec.cjs`.

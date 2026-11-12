@@ -66,13 +66,22 @@ function inkFile(item,scoreId,createdAt){
  const strokes=item.pages.flatMap(page=>page.strokes.map(s=>({id:'gn-'+scoreId+'-'+(n++),page:page.number,tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,points:s.points,createdAt:createdAt+n})));
  return {format:'vocalzip-ink',version:1,source:'goodnotes',strokes};
 }
+/** The notebook's PDF for page copying. Bought scores are often locked with an owner password only (they open without
+ *  a password); pdf-lib refuses those, so they are decrypted on this device first. Files that need a password are refused. */
+async function openSource(lib,bytes){
+ try{return await lib.PDFDocument.load(bytes,{updateMetadata:false});}
+ catch(error){
+  const D=window.VzipPdfDecrypt;if(!D||!D.isEncrypted(error))throw error;
+  return D.load(lib,bytes,{updateMetadata:false});
+ }
+}
 /** Builds one song's PDF from its notebook pages, with its handwriting attached. */
 async function buildPdf(item,model,lib,sources,ink){
  const out=await lib.PDFDocument.create();
  for(const page of item.pages){
   const ref=page.source.pdf;let added;
   if(ref){
-   if(!sources.has(ref.file)){const bytes=await model.readFile(ref.file);if(!bytes)throw Error('굿노트 파일 안의 PDF를 찾지 못했어요.');sources.set(ref.file,await lib.PDFDocument.load(bytes,{updateMetadata:false}));}
+   if(!sources.has(ref.file)){const bytes=await model.readFile(ref.file);if(!bytes)throw Error('굿노트 파일 안의 PDF를 찾지 못했어요.');sources.set(ref.file,await openSource(lib,bytes));}
    const source=sources.get(ref.file);
    if(ref.page<1||ref.page>source.getPageCount())throw Error('굿노트 파일의 쪽 번호가 PDF와 맞지 않아요.');
    [added]=await out.copyPages(source,[ref.page-1]);out.addPage(added);
@@ -229,5 +238,5 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
   }});
 };
 VZ.goodnotesImport.plan=plan;VZ.goodnotesImport.buildPdf=buildPdf;VZ.goodnotesImport.inkFile=inkFile;VZ.goodnotesImport.library=library;
-VZ.goodnotesImport.matchSong=matchSong;VZ.goodnotesImport.simplify=simplify;VZ.goodnotesImport.ATTACHMENT=ATTACHMENT;
+VZ.goodnotesImport.matchSong=matchSong;VZ.goodnotesImport.openSource=openSource;VZ.goodnotesImport.simplify=simplify;VZ.goodnotesImport.ATTACHMENT=ATTACHMENT;
 })();
