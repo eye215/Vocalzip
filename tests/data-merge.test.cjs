@@ -40,3 +40,57 @@ test('Daily goal checks from different devices and explicit plan deletions survi
  assert.deepEqual(out.practicePlans.map(p=>p.id),['day:2026-11-07']);
  assert.deepEqual(out.deleted.practicePlans,['week:2026-11-02']);
 });
+
+// Tombstones carry {at, seen} (deletedAt, written by core.js): an edit the deleting device never saw wins.
+test('A goal checked on another device survives a routine ended here, whichever happened first', () => {
+  const goal = (updatedAt, completed) => ({id:'g1', title:'호흡 연습', completed, updatedAt});
+  // Created at t=1 on both. Phone ends the routine (removing today's unchecked goal); tablet checks it.
+  for (const [endAt, checkAt] of [[1000, 1500], [1500, 1000]]) {
+    const phone = {...base(), dailyGoals:[], deleted:{dailyGoals:['g1']}, deletedAt:{dailyGoals:{g1:{at:endAt, seen:1}}}};
+    const tablet = {...base(), dailyGoals:[goal(checkAt, true)]};
+    for (const [first, second] of [[phone, tablet], [tablet, phone]]) {
+      const {data} = M.merge(first, second);
+      assert.deepEqual(data.dailyGoals, [goal(checkAt, true)], 'end '+endAt+' check '+checkAt);
+      assert.equal(data.deleted.dailyGoals, undefined);
+      assert.equal(data.deletedAt, undefined);
+    }
+  }
+});
+test('A deletion made after seeing the latest edit still wins, and its record is kept for the next merge', () => {
+  const phone = {...base(), dailyGoals:[], deleted:{dailyGoals:['g1']}, deletedAt:{dailyGoals:{g1:{at:2000, seen:1500}}}};
+  const tablet = {...base(), dailyGoals:[{id:'g1', completed:true, updatedAt:1500}]};
+  const {data} = M.merge(tablet, phone);
+  assert.deepEqual(data.dailyGoals, []);
+  assert.deepEqual(data.deleted.dailyGoals, ['g1']);
+  assert.deepEqual(data.deletedAt, {dailyGoals:{g1:{at:2000, seen:1500}}});
+});
+test('Old tombstones without deletedAt still always win (unchanged), and two tombstones keep the better-informed one', () => {
+  const old = {...base(), dailyGoals:[], deleted:{dailyGoals:['g1']}};
+  const edited = {...base(), dailyGoals:[{id:'g1', updatedAt:9e12}]};
+  assert.deepEqual(M.merge(edited, old).data.dailyGoals, []);
+  assert.deepEqual(M.merge(old, edited).data.dailyGoals, []);
+  const a = {...base(), deleted:{dailyGoals:['g2']}, deletedAt:{dailyGoals:{g2:{at:100, seen:40}}}};
+  const b = {...base(), deleted:{dailyGoals:['g2']}, deletedAt:{dailyGoals:{g2:{at:300, seen:20}}}};
+  assert.deepEqual(M.merge(a, b).data.deletedAt, {dailyGoals:{g2:{at:300, seen:40}}});
+});
+test('Lessons, songs and other permanently deleted records stay deleted even if edited elsewhere later', () => {
+  for (const k of ['lessons', 'songs', 'practices', 'scoreAnnotations']) {
+    const gone = {...base(), [k]:[], deleted:{[k]:['x1']}, deletedAt:{[k]:{x1:{at:1000, seen:1}}}};
+    const edited = {...base(), [k]:[{id:'x1', note:'edited elsewhere', updatedAt:5000}]};
+    assert.deepEqual(M.merge(edited, gone).data[k], [], k);
+    assert.deepEqual(M.merge(gone, edited).data.deleted[k], ['x1'], k);
+  }
+  const plan = M.merge({...base(), practicePlans:[{id:'p1', updatedAt:5000}]}, {...base(), practicePlans:[], deleted:{practicePlans:['p1']}, deletedAt:{practicePlans:{p1:{at:1000, seen:1}}}}).data;
+  assert.deepEqual(plan.practicePlans.map(p => p.id), ['p1']);
+});
+test('core.js records when each tombstone was made and which version it removed', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../app/core.js'), 'utf8');
+  const body = src.slice(src.indexOf('const ARRAYS'), src.indexOf('\n', src.indexOf('const ARRAYS'))) + '\nconst TRACKED = ARRAYS;\n' + src.slice(src.indexOf('function stamp('), src.indexOf('VZ.change ='));
+  const stamp = new Function(body + '\nreturn stamp;')();
+  const before = {dailyGoals:[{id:'g1', updatedAt:42}, {id:'g2'}, {id:'g3'}]}, after = {dailyGoals:[{id:'g3'}], deleted:{dailyGoals:['old']}, deletedAt:{dailyGoals:{old:{at:5, seen:2}}}};
+  const t0 = Date.now(); stamp(before, after);
+  assert.deepEqual(after.deleted.dailyGoals, ['old', 'g1', 'g2']);
+  assert.deepEqual(after.deletedAt.dailyGoals.old, {at:5, seen:2});
+  assert.equal(after.deletedAt.dailyGoals.g1.seen, 42);assert.equal(after.deletedAt.dailyGoals.g2.seen, 0);
+  assert.ok(after.deletedAt.dailyGoals.g1.at >= t0 && after.deletedAt.dailyGoals.g1.at <= Date.now());
+});
