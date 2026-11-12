@@ -1,62 +1,82 @@
-/* VOCAL.zip Design System 1.0
- * Standalone namespaced layer. Do NOT import into the live v6 app until Phase 19 migration.
- * Brand values intentionally reconcile app/app.css (#7552d9) and ios-lavender.css (#7954e7).
+/* VOCAL.zip shared tokens · guide v3.31 · 2026-11-10.
+ * Single source for live pages, billing, handoff entry points and shadow home.
+ * See TOKEN_REFERENCE.md for aliases, theme scopes and migration rules.
  */
 :root,
+:host,
 [data-vz-theme="student"] {
   color-scheme: light;
-  --vz-color-canvas: #f6f3ff;
-  --vz-color-canvas-end: #f9f7ff;
-  --vz-color-ink: #252142;
-  --vz-color-ink-secondary: #625d7c;
-  --vz-color-ink-muted: #77718d;
-  --vz-color-accent: #7954e7;
-  --vz-color-accent-strong: #6239cf;
-  --vz-color-accent-soft: #ede7ff;
-  --vz-color-accent-ink: #ffffff;
-  --vz-color-selected: #7954e7;
-  --vz-color-progress-track: #e9e1f7;
-  --vz-color-rest: #82769f;
-  --vz-color-success: #28785c;
-  --vz-color-danger: #a23f56;
-  --vz-color-border: rgba(122, 98, 187, .15);
-  --vz-color-glass: rgba(255,255,255,.73);
-  --vz-color-glass-raised: rgba(255,255,255,.84);
-  --vz-color-glass-border: rgba(255,255,255,.92);
-  --vz-color-glass-fallback: #fdfbff;
-  --vz-color-focus: #5d37c7;
+  --vz-font: Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+  --vz-color-canvas: #F8F6FD;
+  --vz-color-canvas-end: var(--vz-color-canvas);
+  --vz-color-surface: #FFFFFF;
+  --vz-color-surface-secondary: var(--vz-color-accent-soft);
+  --vz-color-ink-tertiary: var(--vz-color-ink-muted);
+  --vz-color-ink: #101828;
+  --vz-color-primary: #344054;
+  --vz-color-ink-secondary: #475467;
+  --vz-color-ink-muted: #667085;
+  --vz-color-faint: #98A2B3;
+  --vz-color-accent: #7A32F5;
+  --vz-color-accent-strong: #6528CA;
+  --vz-color-accent-soft: #F3ECFF;
+  --vz-color-accent-ink: #FFFFFF;
+  --vz-color-selected: var(--vz-color-accent);
+  --vz-color-selected-bg: #EDE1FF;
+  --vz-color-recommendation: #F2F4F7;
+  --vz-color-status: #8063B0;
+  --vz-color-border: #E8E4F0;
+  --vz-color-progress-track: var(--vz-color-border);
+  --vz-color-rest: #82769F;
+  /* Preserve the live shell's feedback palette; category colours are separate. */
+  --vz-color-success: #23855C;
+  --vz-color-success-soft: #E3F4EC;
+  --vz-color-warning: #B26A00;
+  --vz-color-warning-soft: #FFF3DC;
+  --vz-color-danger: #C93A3A;
+  --vz-color-danger-soft: #FDEAEA;
+  --vz-color-focus: var(--vz-color-accent);
+  --vz-color-input-focus: #DCC4FF;
+  --vz-color-disabled-bg: #D9D1E3;
+  --vz-color-disabled-ink: #7A7285;
+  --vz-category-lesson: #078994;
+  --vz-category-lesson-soft: #E8F6F6;
+  --vz-category-practice: var(--vz-color-accent);
+  --vz-category-practice-soft: var(--vz-color-accent-soft);
+  --vz-category-stage: #DE3E0A;
+  --vz-category-stage-soft: #FFF0ED;
+  --vz-color-glass: var(--vz-color-surface);
+  --vz-color-glass-raised: var(--vz-color-surface);
+  --vz-color-glass-border: transparent;
+  --vz-color-glass-fallback: var(--vz-color-surface);
   --vz-bg-glow-one: rgba(197,179,255,.45);
   --vz-bg-glow-two: rgba(234,196,250,.38);
-  --vz-shadow-card: 0 10px 34px rgba(88,63,154,.085), inset 0 1px 0 rgba(255,255,255,.9);
-  --vz-shadow-dock: 0 14px 36px rgba(73,58,128,.15), inset 0 1px 0 rgba(255,255,255,.8);
+  --vz-shadow-card: 0 2px 10px rgba(55,33,85,.045);
+  --vz-shadow-dock: 0 5px 20px rgba(55,33,85,.045);
+  --vz-shadow-floating: 0 5px 14px rgba(109,43,229,.18),inset 0 1px 0 rgba(255,255,255,.22);
+  --vz-nav-surface: rgba(255,255,255,.58);
+  --vz-nav-border: rgba(255,255,255,.68);
+  --vz-nav-shadow: var(--vz-shadow-dock);
+  --vz-nav-backdrop-blur: 24px;
+  --vz-nav-active-label: #8A6DB8;
+  --vz-nav-icon-color: var(--vz-color-ink-secondary);
+  --vz-gradient-floating: linear-gradient(135deg,#9557FF 0%,var(--vz-color-accent) 52%,#6D2BE5 100%);
+  --vz-gradient-recent: linear-gradient(125deg,#A65CFF,var(--vz-color-accent) 52%,#6D2BE5);
+  --vz-input-bg: #F2EFF7;
+  --vz-overlay-bg: rgba(20,16,40,.32);
+  --vz-menu-overlay: rgba(25,20,34,.13);
+  --vz-menu-bg: rgba(54,51,59,.92);
+  --vz-menu-ink: #FFFFFF;
+  --vz-menu-danger: #FFD6DF;
+  --vz-menu-hover: rgba(255,255,255,.13);
+  --vz-menu-border: rgba(255,255,255,.2);
+  --vz-menu-shadow: 0 18px 40px rgba(24,17,33,.25);
+  --vz-video-bg: #E4F1FF;
+  --vz-video-ink: #2A6FC9;
 }
-[data-vz-theme="teacher"] {
-  --vz-color-canvas: #eff5ff;
-  --vz-color-canvas-end: #f7faff;
-  --vz-color-ink: #1d304c;
-  --vz-color-ink-secondary: #556984;
-  --vz-color-ink-muted: #667991;
-  --vz-color-accent: #386ccb;
-  --vz-color-accent-strong: #2255b6;
-  --vz-color-accent-soft: #e4eeff;
-  --vz-color-selected: #386ccb;
-  --vz-color-progress-track: #d9e7fb;
-  --vz-color-rest: #6884aa;
-  --vz-color-success: #257b67;
-  --vz-color-danger: #a43f57;
-  --vz-color-border: rgba(73,119,190,.16);
-  --vz-color-glass: rgba(255,255,255,.75);
-  --vz-color-glass-raised: rgba(255,255,255,.86);
-  --vz-color-glass-border: rgba(255,255,255,.96);
-  --vz-color-glass-fallback: #f8fbff;
-  --vz-color-focus: #2157c7;
-  --vz-bg-glow-one: rgba(156,203,255,.43);
-  --vz-bg-glow-two: rgba(198,221,255,.45);
-  --vz-shadow-card: 0 10px 34px rgba(60,99,160,.085), inset 0 1px 0 rgba(255,255,255,.9);
-  --vz-shadow-dock: 0 14px 36px rgba(47,92,156,.15), inset 0 1px 0 rgba(255,255,255,.86);
-}
-:root {
-  --vz-font: -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,sans-serif;
+:root,
+:host {
+  /* Primitive scales are retained for compatibility. Prefer role tokens below. */
   --vz-text-xs: 12px;
   --vz-text-sm: 14px;
   --vz-text-md: 16px;
@@ -65,6 +85,31 @@
   --vz-text-display: 30px;
   --vz-leading-tight: 1.23;
   --vz-leading-body: 1.5;
+  --vz-font-regular: 400;
+  --vz-font-medium: 500;
+  --vz-font-semibold: 600;
+  --vz-font-bold: 700;
+  --vz-tracking: -0.02em;
+  --vz-type-page-size: 26px;
+  --vz-type-page-leading: 34px;
+  --vz-type-section-size: 18px;
+  --vz-type-section-leading: 26px;
+  --vz-type-card-size: 16px;
+  --vz-type-card-leading: 22px;
+  --vz-type-list-size: 15px;
+  --vz-type-list-leading: 21px;
+  --vz-type-body-size: 14px;
+  --vz-type-body-leading: 20px;
+  --vz-type-filter-size: 13px;
+  --vz-type-filter-leading: 18px;
+  --vz-type-meta-size: 12px;
+  --vz-type-meta-leading: 18px;
+  --vz-type-nav-size: 11px;
+  --vz-type-nav-leading: 16px;
+  --vz-type-metric-size: 27px;
+  --vz-type-metric-leading: 32px;
+  --vz-type-feature-size: 23px;
+  --vz-type-feature-leading: 29px;
   --vz-space-1: 4px;
   --vz-space-2: 8px;
   --vz-space-3: 12px;
@@ -73,54 +118,179 @@
   --vz-space-6: 24px;
   --vz-space-8: 32px;
   --vz-space-10: 40px;
+  --vz-content-max: 560px;
+  --vz-page-gutter: var(--vz-space-3);
+  --vz-page-top: var(--vz-space-2);
+  --vz-page-bottom: 142px;
+  --vz-grid-gap: var(--vz-space-3);
+  --vz-section-gap: var(--vz-space-8);
+  --vz-card-padding: var(--vz-space-4);
   --vz-radius-control: 14px;
   --vz-radius-tile: 20px;
-  --vz-radius-card: 28px;
+  --vz-radius-card: 20px;
   --vz-radius-hero: 32px;
   --vz-radius-dock: 30px;
   --vz-radius-pill: 999px;
-  --vz-grid-gap: 12px;
-  --vz-page-gutter: 20px;
-  --vz-card-padding: 20px;
   --vz-touch-min: 44px;
-  --vz-blur-card: blur(24px) saturate(145%);
+  --vz-header-min-height: 44px;
+  --vz-header-gap: var(--vz-space-2);
+  --vz-button-height: 52px;
+  --vz-button-radius: 16px;
+  --vz-input-min-height: 52px;
+  --vz-input-radius: 15px;
+  --vz-input-date-max: 175px;
+  --vz-field-gap: var(--vz-space-3);
+  --vz-icon-size: 20px;
+  --vz-icon-tool-size: 22px;
+  --vz-icon-stroke: 1.8;
+  --vz-title-icon-gap: var(--vz-space-2);
+  --vz-list-icon-size: 42px;
+  --vz-list-icon-radius: 12px;
+  --vz-lesson-min-height: 108px;
+  --vz-nav-height: 70px;
+  --vz-nav-max-width: 528px;
+  --vz-nav-inset: 16px;
+  --vz-nav-bottom: 12px;
+  --vz-nav-padding: var(--vz-space-2);
+  --vz-nav-item-height: 54px;
+  --vz-floating-size: 56px;
+  --vz-floating-bottom: 82px;
+  --vz-menu-max-width: 304px;
+  --vz-menu-radius: 27px;
+  --vz-menu-row-min-height: 56px;
+  --vz-focus-width: 2px;
+  --vz-focus-offset: 3px;
+  --vz-focus-input-offset: 0px;
+  --vz-border-width: 1px;
+  --vz-z-nav: 40;
+  --vz-z-floating: 41;
+  --vz-z-overlay: 60;
+  --vz-z-toast: 80;
+  --vz-blur-card: none;
   --vz-blur-dock: blur(30px) saturate(165%);
+  --vz-glass-filter: saturate(180%) blur(20px);
   --vz-motion-fast: 150ms;
   --vz-motion-normal: 240ms;
 }
-@media (max-width: 359px) {
-  :root { --vz-page-gutter: 16px; --vz-card-padding: 16px; --vz-grid-gap: 10px; }
+/* Intentional theme exceptions, not copies of the student palette. */
+[data-vz-theme="teacher"] {
+  --vz-color-canvas: #EFF5FF;
+  --vz-color-canvas-end: #F7FAFF;
+  --vz-color-ink: #1D304C;
+  --vz-color-primary: var(--vz-color-ink-secondary);
+  --vz-color-surface-secondary: var(--vz-color-accent-soft);
+  --vz-color-ink-tertiary: var(--vz-color-ink-muted);
+  --vz-nav-shadow: var(--vz-shadow-dock);
+  --vz-color-ink-secondary: #556984;
+  --vz-color-ink-muted: #667991;
+  --vz-color-accent: #386CCB;
+  --vz-color-accent-strong: #2255B6;
+  --vz-color-accent-soft: #E4EEFF;
+  --vz-color-selected: var(--vz-color-accent);
+  --vz-color-selected-bg: #E4EEFF;
+  --vz-color-progress-track: #D9E7FB;
+  --vz-color-rest: #6884AA;
+  --vz-color-success: #257B67;
+  --vz-color-danger: #A43F57;
+  --vz-color-border: rgba(73,119,190,.16);
+  --vz-color-glass: rgba(255,255,255,.75);
+  --vz-color-glass-raised: rgba(255,255,255,.86);
+  --vz-color-glass-border: rgba(255,255,255,.96);
+  --vz-color-glass-fallback: #F8FBFF;
+  --vz-color-focus: #2157C7;
+  --vz-bg-glow-one: rgba(156,203,255,.43);
+  --vz-bg-glow-two: rgba(198,221,255,.45);
+  --vz-shadow-card: 0 10px 34px rgba(60,99,160,.085),inset 0 1px 0 rgba(255,255,255,.9);
+  --vz-shadow-dock: 0 14px 36px rgba(47,92,156,.15),inset 0 1px 0 rgba(255,255,255,.86);
+}
+body.vz-record-mode {
+  color-scheme: dark;
+  --vz-color-canvas: #0B0911;
+  --vz-color-surface: #1B1724;
+  --vz-color-surface-secondary: #292038;
+  --vz-color-ink-tertiary: #938BA1;
+  --vz-color-accent-soft: #30203F;
+  --vz-color-ink: #F7F5FC;
+  --vz-color-primary: #B4AEC1;
+  --vz-color-ink-secondary: #B4AEC1;
+  --vz-color-ink-muted: #AAA3B7;
+  --vz-color-faint: #938BA1;
+  --vz-color-border: #3F364D;
+}
+/* Rebind aliases at scope boundaries: inherited var() aliases are already resolved.
+ * The home root is inside Shadow DOM; this block supersedes its old local copies.
+ */
+:root,
+:host,
+body,
+[data-vz-theme],
+#vocalzip-refined-preview,
+#vocalzip-refined-preview .vz-phone {
+  --text: var(--vz-color-ink);
+  --muted: var(--vz-color-ink-muted);
+  --border: var(--vz-color-border);
+  --primary: var(--vz-color-primary);
+  --body: var(--vz-color-ink-secondary);
+  --bg: var(--vz-color-canvas);
+  --surface: var(--vz-color-surface);
+  --surface-2: var(--vz-color-surface-secondary);
+  --ink: var(--vz-color-ink);
+  --ink-2: var(--vz-color-ink-secondary);
+  --ink-3: var(--vz-color-ink-tertiary);
+  --line: var(--vz-color-border);
+  --accent: var(--vz-color-accent);
+  --accent-ink: var(--vz-color-accent-ink);
+  --accent-soft: var(--vz-color-accent-soft);
+  --accent-2: #9557FF;
+  --ok: var(--vz-color-success);
+  --ok-soft: var(--vz-color-success-soft);
+  --warn: var(--vz-color-warning);
+  --warn-soft: var(--vz-color-warning-soft);
+  --danger: var(--vz-color-danger);
+  --danger-soft: var(--vz-color-danger-soft);
+  --radius: var(--vz-radius-card);
+  --radius-sm: var(--vz-list-icon-radius);
+  --shadow: var(--vz-shadow-card);
+  --nav-h: var(--vz-nav-height);
+  --nav-bg: var(--vz-nav-surface);
+  --safe-b: env(safe-area-inset-bottom,0px);
+  --safe-t: env(safe-area-inset-top,0px);
+  --font: var(--vz-font);
+  --video-bg: var(--vz-video-bg);
+  --video-ink: var(--vz-video-ink);
+  --glass-blur: var(--vz-glass-filter);
+  --layer-dim: var(--vz-overlay-bg);
+  --vz-page: var(--vz-color-canvas);
+  --vz-surface: var(--vz-color-surface);
+  --vz-accent: var(--vz-color-accent);
+  --vz-pressed: var(--vz-color-accent-strong);
+  --vz-soft: var(--vz-color-accent-soft);
+  --vz-title: var(--vz-color-ink);
+  --vz-primary: var(--vz-color-primary);
+  --vz-body: var(--vz-color-ink-secondary);
+  --vz-muted: var(--vz-color-ink-muted);
+  --vz-faint: var(--vz-color-faint);
+  --vz-song-title: var(--vz-color-ink);
+  --vz-padding-card: var(--vz-card-padding);
+  --vz-card-radius: var(--vz-radius-card);
+  --vz-card-gap: var(--vz-grid-gap);
+  --vz-gap: var(--vz-grid-gap);
+  --vz-page-inset: var(--vz-page-gutter);
+  --vz-nav-selected: var(--vz-color-selected-bg);
+  --vz-nav-blur: var(--vz-nav-backdrop-blur);
 }
 @media (prefers-reduced-motion: reduce) {
-  :root { --vz-motion-fast: 0ms; --vz-motion-normal: 0ms; }
+  :root, :host { --vz-motion-fast: 0ms; --vz-motion-normal: 0ms; }
 }
-@media (prefers-contrast: more) {
-  :root, [data-vz-theme="student"], [data-vz-theme="teacher"] {
-    --vz-color-glass: #ffffff; --vz-color-glass-raised: #ffffff;
-    --vz-color-glass-border: var(--vz-color-border);
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  :root, [data-vz-theme="student"], [data-vz-theme="teacher"] {
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  :root, :host, [data-vz-theme] {
     --vz-color-glass: var(--vz-color-glass-fallback);
     --vz-color-glass-raised: var(--vz-color-glass-fallback);
-    --vz-blur-card: none; --vz-blur-dock: none;
+    --vz-color-glass-border: var(--vz-color-border);
+    --vz-nav-surface: #FFFFFF;
+    --vz-nav-backdrop-blur: 0px;
+    --vz-blur-card: none;
+    --vz-blur-dock: none;
+    --vz-glass-filter: none;
   }
 }
-
-/* PR #136 compact reference. Existing app --bg/--accent and teacher tokens are unchanged. */
-[data-vz-design="approved-home-v1"],.vz-home-mode {
- --vz-color-canvas:#f2eff8; --vz-color-canvas-violet:#e9dff6; --vz-color-canvas-pink:#f5eff9; --vz-color-canvas-blue:#eef0f8;
- --vz-color-ink:#352b40; --vz-color-ink-secondary:#786381; --vz-color-ink-muted:#806989;
- --vz-color-heading:#58416b; --vz-color-heading-strong:#4a365c;
- --vz-color-icon-start:#a587ba; --vz-color-icon-end:#8e6ca6;
- --vz-color-accent:#795393; --vz-color-accent-strong:#744793; --vz-color-accent-soft:#f1e9f8;
- --vz-color-practice-low:#dfd0ee; --vz-color-practice-met:#b399ce; --vz-color-practice-high:#8a65a7;
- --vz-color-today:#76518d; --vz-color-day-accent:#76518d; --vz-color-nav-label:#786381;
- --vz-color-check-border:#9b83ae; --vz-color-check-fill:#8960ad; --vz-color-progress-track:#eee7f5;
- --vz-color-glass:#fff; --vz-color-glass-raised:#fff; --vz-color-glass-border:transparent; --vz-color-glass-fallback:#fff;
- --vz-color-focus:#79529c; --vz-color-flame:#ba7d52;
- --vz-shadow-card:0 2px 10px #55356a05; --vz-shadow-dock:0 5px 22px #57336f0a; --vz-shadow-greeting:none;
- --vz-radius-card:22px; --vz-page-gutter:16px; --vz-card-padding:16px; --vz-grid-gap:12px; --vz-blur-card:none;
-}
-@media(max-width:359px) {[data-vz-design="approved-home-v1"],.vz-home-mode {--vz-grid-gap:10px;}}

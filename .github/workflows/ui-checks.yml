@@ -6,8 +6,9 @@ permissions:
   contents: read
 jobs:
   ui:
-    runs-on: ubuntu-24.04  # Playwright 1.56 has no Ubuntu 26.04 build; ubuntu-latest moved there in Oct 2026
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 25
     env:
       PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: '1'
     steps:
@@ -18,14 +19,23 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
       - run: node --test tests/collection-routes.test.cjs
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+      - name: Provide FFmpeg and FFprobe for media fixtures
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            timeout 180 npm install --prefix "$RUNNER_TEMP/ffmpeg-bin" --no-save --no-audit --no-fund ffmpeg-static@5.2.0 ffprobe-static@3.1.0
+            ln -s "$(node -p "require('$RUNNER_TEMP/ffmpeg-bin/node_modules/ffmpeg-static')")" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
+            ln -s "$(node -p "require('$RUNNER_TEMP/ffmpeg-bin/node_modules/ffprobe-static').path")" "$RUNNER_TEMP/ffmpeg-bin/ffprobe"
+            echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
+          fi
       - run: node tests/make-audio-fixtures.cjs
-      - run: node --test tests/repertoire-model.test.cjs tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs tests/data-merge.test.cjs tests/media-delete.test.cjs tests/flac-encode.test.cjs tests/vocal-analysis.test.cjs
-      - run: npx playwright install --with-deps chromium webkit
+      - run: node --test tests/repertoire-model.test.cjs tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs tests/data-merge.test.cjs tests/media-delete.test.cjs tests/flac-encode.test.cjs tests/vocal-analysis.test.cjs tests/goal-routines.test.cjs
+      - run: npx playwright test tests/v6.spec.cjs --project=chromium-mobile --grep 'Settings' --workers=1
       - run: npx playwright test tests/repertoire.spec.cjs --workers=2
       - run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Video import copies|201MiB video extraction|Real queue extracts|Metadata-derived dates'
+      - name: Pinned PDF renderer/export libraries for full score regression
+        run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
+      - name: Pinned MusicXML preview library (bundled file only) for the score conversion preview
+        run: mkdir -p /tmp/vzip-osmd && npm pack opensheetmusicdisplay@2.2.1 --pack-destination /tmp/vzip-osmd -q && tar -xzf /tmp/vzip-osmd/opensheetmusicdisplay-2.2.1.tgz -C /tmp/vzip-osmd
       - run: npm run test:ui
       - uses: actions/upload-artifact@v4
         if: always()

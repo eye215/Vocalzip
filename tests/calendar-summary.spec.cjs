@@ -19,16 +19,30 @@ async function boot(page){
  VZ.media.cached=()=>files;VZ.media.list=async()=>files;VZ.media.cloudError=()=>'';VZ.render();
  },day);
 }
-test('compact calendar summary follows month, sorting, expansion and data updates',async({page})=>{
+test('one-line month totals and a clean song strip rotate the top five',async({page})=>{
  await boot(page);const card=page.locator('.calendar-summary');
- await expect(card.locator('[data-month-minutes]')).toHaveText('47分'.replace('分','분'));
+ await expect(card.locator('[data-month-minutes]')).toHaveText('45분');
  await expect(card.locator('[data-month-count]')).toHaveText('7회');
- await expect(card.locator('li')).toHaveCount(3);
- expect((await card.boundingBox()).height).toBeLessThan(300); // compact, with 44pt tap rows (v0.6)
+ await expect(card.locator('.cs-heading')).toHaveCSS('flex-wrap','nowrap');
+ await expect(card.locator('.cs-spotlight')).toHaveAttribute('data-cs-song','a');
+ await expect(card.locator('.cs-spotlight')).toHaveCSS('background-color','rgb(241, 237, 248)');
+ await expect(page.locator('.vz-calendar-month .legend')).toHaveText('공연·오디션레슨연습');
+ await expect(page.locator('.vz-calendar-footer [data-today]')).toHaveText('오늘');
+ await page.locator('.cal-day[data-d="'+day+'"]').click();
+ await expect(page.locator('.cal-own[data-kind=lesson] .avatar').first()).toHaveCSS('color','rgb(7, 137, 148)');
+ await expect(page.locator('.cal-own[data-kind=lesson] .vz-lesson-note-icon')).toHaveAttribute('stroke-width','1.6');
+ await expect(page.locator('.cal-own[data-kind=lesson] .item-title').first()).toContainText('시간 미정');
+ await expect(page.locator('.cal-own[data-kind=lesson] .item-sub').first()).toContainText('피드백 미작성');
+ await expect(page.locator('.cal-own[data-kind=practice] .avatar').first()).toHaveCSS('color','rgb(122, 50, 245)');
+ await expect(page.locator('.cal-own[data-kind=stage]')).toHaveCount(0);
+ expect((await card.boundingBox()).height).toBeLessThan(230);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- await card.getByRole('button',{name:'횟수순'}).click();await expect(card.locator('li').first()).toHaveAttribute('data-cs-song','b');
- await card.getByRole('button',{name:'TOP 5 더 보기'}).click();await expect(card.locator('li')).toHaveCount(4);
- await card.getByRole('button',{name:'접기',exact:true}).click();await expect(card.locator('li')).toHaveCount(3);
+ await page.evaluate(date=>VZ.change(d=>{d.songs.push({id:'e',title:'노래 E'});d.practices.push({id:'e1',date,songId:'e',minutes:2});}),day);
+ await expect(card.locator('[data-month-minutes]')).toHaveText('47분');
+ await expect(card.locator('[data-cs-position], [data-cs-metric], .cs-ranking-head')).toHaveCount(0);
+ await expect(card.locator('.cs-spotlight')).toHaveAttribute('data-cs-song','a');
+ await page.mouse.move(0,0);await page.evaluate(()=>document.activeElement?.blur());
+ await expect.poll(()=>card.locator('.cs-spotlight').getAttribute('data-cs-song'),{timeout:6000}).not.toBe('a');
  await page.getByRole('button',{name:'이전 달',exact:true}).click();
  await expect(card.locator('[data-month-minutes]')).toHaveText('2시간');
  await expect(card.locator('[data-month-count]')).toHaveText('1회');
@@ -45,7 +59,34 @@ test('today number stays white on selected purple, and purple when unselected',a
  const bg=await today.evaluate(n=>getComputedStyle(n).backgroundColor);
  expect(bg).not.toBe('rgb(255, 255, 255)');
  await page.locator('.cal-day:not(.today):not(.out)').first().click();
- expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(117, 82, 217)');
+ expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(122, 50, 245)');
  await today.click();
  expect(await today.locator('span').first().evaluate(n=>getComputedStyle(n).color)).toBe('rgb(255, 255, 255)');
+});
+test('calendar uses the same circular recording entry and opens a focused dark recorder',async({page})=>{
+ await boot(page);
+ const fab=page.getByRole('link',{name:'녹음 시작',exact:true}),box=await fab.boundingBox();
+ expect(Math.round(box.width)).toBe(56);expect(Math.round(box.height)).toBe(56);
+ await expect(page.locator('.v-nav a')).toHaveCount(4);
+ await expect(page.locator('.v-nav [data-nav=record]')).toHaveCount(0);
+ await fab.click();
+ await expect(page).toHaveURL(/#\/record$/);
+ await expect(page.locator('body')).toHaveClass(/vz-record-mode/);
+ await expect(page.locator('.v-nav')).toBeHidden();
+ await expect(page.locator('.rec-heading')).toHaveText('녹음 준비');
+ await expect(page.locator('[data-main]')).toHaveAttribute('aria-label','녹음 시작');
+ await expect(page.locator('.vz-record-screen [data-import]')).toHaveCount(0);
+ await page.getByRole('button',{name:'뒤로'}).click();
+ await expect(page).toHaveURL(/#\/calendar$/);
+ await expect(page.locator('body')).not.toHaveClass(/vz-record-mode/);
+});
+
+test('Actual practice time keeps calendar counts while using only entered minutes',async({page})=>{
+ await boot(page);
+ await expect(page.locator('[data-month-minutes]')).toHaveText('45분');
+ await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ await page.evaluate(()=>VZ.change(d=>{d.practices.find(p=>p.id==='p1').manualMinutes=12;}));
+ await expect(page.locator('[data-month-minutes]')).toHaveText('27분');
+ await expect(page.locator('[data-month-count]')).toHaveText('7회');
+ expect(await page.evaluate(()=>VZ.db.practices.find(p=>p.id==='p1').minutes)).toBe(30);
 });

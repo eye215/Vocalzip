@@ -2,84 +2,7 @@
 // with Miniflare in r2-worker/test). Signed-in cloud (Supabase stub) + R2 endpoint configured.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
-const KEY = 'vocal-zip_mvp_v1', R2 = 'https://r2.vocalzip.test';
-const stub = `window.__vdStub=()=>{const c={q:{}};let upd=null,ins=null;for(const m of ['select','order','range','delete'])c[m]=()=>c;c.select=cols=>{c.cols=cols;return c};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=c.eq;c.maybeSingle=()=>c;c.single=()=>c;c.update=r=>{upd=r;return c};c.insert=r=>{ins=r;return c};c.upsert=r=>{window.__vdRow={payload:r.payload,updated_at:r.updated_at};return c};c.then=r=>{const row=window.__vdRow||null;if(c.cols==='ids:payload->deleted->media')return r({data:row?{ids:row.payload?.deleted?.media??null}:null,error:null});if(ins){if(row)return r({data:null,error:{code:'23505',message:'duplicate'}});window.__vdRow={payload:ins.payload,updated_at:ins.updated_at};return r({data:null,error:null})}if(upd){if(!row||('updated_at' in c.q&&c.q.updated_at!==row.updated_at))return r({data:[],error:null});window.__vdRow={payload:upd.payload,updated_at:upd.updated_at};return r({data:[{user_id:'ui-test-user'}],error:null})}return r({data:row?JSON.parse(JSON.stringify(row)):null,error:null})};return c};window.__up=[];window.__removed=[];window.__rows=window.__rows||{};window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:fn=>{(window.__authHandlers||=[]).push(fn);return {data:{subscription:{unsubscribe(){}}}}},getSession:async()=>({data:{session:{access_token:'tok'}}})},
- storage:{from:()=>({createSignedUrl:async p=>({data:{signedUrl:'/legacy/'+p},error:null}),upload:async()=>({error:null}),remove:async p=>{window.__removed.push(...p);return {error:null}}})},
- from:t=>{if(t==='vocal_data')return window.__vdStub();const c={q:{}};for(const m of ['order'])c[m]=()=>c;c.delete=()=>{c.del=true;return c};c.range=(a,b)=>{c.r=[a,b];return c};c.select=cols=>{c.cols=cols||'*';return c};c.in=(k,v)=>{c.ins=v;return c};window.__upd=window.__upd||{};c.eq=(k,v)=>{c.q[k]=v;return c};c.is=(k,v)=>{c.q[k]=v;return c};
-  c.upsert=(row,options)=>{window.__up.push(row);window.__beforeInsert?.(row);if(window.__failUpsert){c.err={message:'insert denied'};return c}const r=Array.isArray(row)?row:[row];for(const x of r)if(x&&x.metadata&&(!options?.ignoreDuplicates||!window.__rows[x.id])){window.__rows[x.id]=x.metadata;window.__upd[x.id]=x.updated_at||new Date().toISOString()}return c};
-  c.update=row=>{c.pendingUpdate=row;return c};
-  c.maybeSingle=()=>c;c.single=()=>c;
-  c.then=r=>{if(c.err)return r({data:null,error:c.err});if(c.del&&c.q.id){const now=window.__upd[c.q.id]||null;if('updated_at' in c.q&&c.q.updated_at!==now)return r({data:[],error:null});const had=c.q.id in window.__rows;delete window.__rows[c.q.id];return r({data:had?[{id:c.q.id}]:[],error:null})}if(c.pendingUpdate&&c.q.id){window.__beforeWrite?.(c.q.id);const now=window.__upd[c.q.id]||null;if('updated_at' in c.q&&c.q.updated_at!==now){(window.__conflicts||=[]).push(c.q.id);return r({data:[],error:null})}window.__rows[c.q.id]=c.pendingUpdate.metadata;window.__upd[c.q.id]=c.pendingUpdate.updated_at;(window.__writes||=[]).push({id:c.q.id,metadata:c.pendingUpdate.metadata});return r({data:[{id:c.q.id}],error:null})}
-   if(c.q.id&&window.__failReadAfterInsert&&window.__rows[c.q.id])return r({data:null,error:{message:'verification offline'}});
-   if(c.q.id)return r({data:window.__rows[c.q.id]?{metadata:window.__rows[c.q.id],updated_at:window.__upd[c.q.id]||null}:null,error:null});
-   // Like the server: at most 1,000 rows per request, pages by range.
-   let all=Object.entries(window.__rows).map(([id,metadata])=>({id,metadata,updated_at:window.__upd[id]||'2026-11-05T09:00:00Z'}));
-   if(c.ins)all=all.filter(x=>c.ins.includes(x.id));
-   (window.__sel||=[]).push(String(c.cols||'*')+(c.ins?' in:'+c.ins.length:''));
-   if(c.cols&&!/metadata/.test(c.cols))all=all.map(x=>({id:x.id,updated_at:x.updated_at}));
-   const [a,b]=c.r||[0,999];return r({data:all.slice(a,Math.min(b+1,a+1000)),error:null})};return c}})};`;
-
-function wav(seconds = 2, sr = 8000) {
-  const n = sr * seconds, b = Buffer.alloc(44 + n * 2);
-  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
-  for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / 7) * 5000), 44 + i * 2);
-  return b;
-}
-async function fakeR2(page, reject = {}) {
-  const store = new Map(), uploads = new Map(), calls = [];
-  await page.route(R2 + '/**', async route => {
-    const req = route.request(), url = new URL(req.url()), p = url.pathname, method = req.method();
-    calls.push(method + ' ' + p);
-    const json = (body, status = 200) => route.fulfill({status, contentType:'application/json', headers:{'access-control-allow-origin':'*'}, body:JSON.stringify(body)});
-    if (method === 'OPTIONS') return route.fulfill({status:204, headers:{'access-control-allow-origin':'*', 'access-control-allow-headers':'authorization, content-type, range', 'access-control-allow-methods':'GET, HEAD, POST, PUT, DELETE'}});
-    if (p === '/health') return json({ok:true, bucket:true});
-    if ((reject.auth || req.headers().authorization !== 'Bearer tok') && !url.searchParams.has('sig')) return json({error:'sign in required'}, 401);
-    if (p === '/v1/me') return json({user:'ui-test-user'});
-    if (p === '/v1/uploads' && method === 'POST') {
-      const b = req.postDataJSON(), key = 'u/ui-test-user/' + b.mediaId + '/original.' + b.ext, id = 'up' + uploads.size;
-      uploads.set(id, {key, type:b.contentType, parts:new Map()});
-      return json({key, uploadId:id, partSize:8 * 1024 * 1024});
-    }
-    let m;
-    if ((m = p.match(/^\/v1\/uploads\/([^/]+)\/parts\/(\d+)$/))) { uploads.get(m[1]).parts.set(Number(m[2]), req.postDataBuffer()); return json({partNumber:Number(m[2]), etag:'e' + m[2]}); }
-    if ((m = p.match(/^\/v1\/uploads\/([^/]+)\/complete$/))) {
-      const u = uploads.get(m[1]), bytes = Buffer.concat([...u.parts.entries()].sort((a, b) => a[0] - b[0]).map(x => x[1]));
-      const etag='"'+require('node:crypto').createHash('sha256').update(bytes).digest('hex')+'"';
-      store.set(u.key, {bytes, type:u.type, etag}); return json({key:u.key, size:bytes.length, etag});
-    }
-    if (p === '/v1/sign') { const b = req.postDataJSON(), exp = Math.floor(Date.now() / 1000) + 3 * 3600;
-      if (Array.isArray(b.keys)) { calls.push('BATCH ' + b.keys.length); return json({urls:Object.fromEntries(b.keys.map(k => [k, R2 + '/v1/media/' + k + '?exp=' + exp + '&sig=s'])), expires:exp}); }
-      return json({url:R2 + '/v1/media/' + b.key + '?exp=' + exp + '&sig=s', expires:exp}); }
-    if (p.startsWith('/v1/media/')) {
-      if(method==='GET')await reject.beforeRead?.(req);
-      if(reject.requireProtocol&&req.headers()['x-client-info']!=='vocalzip-device-session-v2')return json({error:'protocol required'},401);
-      const key = decodeURIComponent(p.slice(10)), o = store.get(key);
-      if (method === 'DELETE') { store.delete(key); return json({ok:true}); }
-      if (!o) return json({error:'file not found'}, 404);
-      const range = (req.headers().range || '').match(/^bytes=(\d+)-(\d+)$/);
-      if (range) return route.fulfill({status:206, contentType:o.type, headers:{'access-control-allow-origin':'*', 'access-control-expose-headers':'content-range, content-length, etag', etag:o.etag, 'content-range':'bytes ' + range[1] + '-' + range[2] + '/' + o.bytes.length}, body:o.bytes.subarray(Number(range[1]), Number(range[2]) + 1)});
-      return route.fulfill({status:200, contentType:o.type, headers:{'access-control-allow-origin':'*', 'accept-ranges':'bytes', etag:o.etag}, body:o.bytes});
-    }
-    if (p === '/v1/usage') return json({objects:store.size, bytes:[...store.values()].reduce((s, o) => s + o.bytes.length, 0)});
-    if (p === '/v1/objects' && !reject.list) return json({objects:[...store.entries()].map(([key, o]) => ({key, size:o.bytes.length, uploaded:'2026-11-05T10:00:00.000Z', mediaId:key.split('/')[2]})), cursor:null});
-    return json({error:'not found'}, 404);
-  });
-  return {store, calls, reject};
-}
-async function boot(page, {endpoint = R2} = {}) {
-  page.__errors = [];
-  page.on('pageerror', e => page.__errors.push(e.message));
-  await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
-  await page.route('**/tus.min.js', r => r.fulfill({contentType:'application/javascript', body:'window.tus={}'}));
-  await page.route('**/*.supabase.co/**', r => r.abort());
-  await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:'window.VZIP_R2_ENDPOINT=' + JSON.stringify(endpoint) + ';'}));
-  if (process.env.VZ_MEDIABUNNY) await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs', r => r.fulfill({path:process.env.VZ_MEDIABUNNY, contentType:'text/javascript'}));
-  page.on('dialog', d => d.accept());
-  await page.addInitScript(([k]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, JSON.stringify({categories:[], songs:[{id:'s1', title:'Defying Gravity'}], lessons:[], assignments:[], practices:[], comparisonReports:[]})); sessionStorage.setItem('seeded', '1'); } }, [KEY]);
-  await page.goto('/#/home');
-  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => !!window.vzipCloudSignedIn?.())).toBe(true);
-}
+const {KEY,R2,boot,fakeR2,wav}=require('./helpers/r2-fixture.cjs');
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Without an R2 address nothing changes: uploads keep using the existing storage', async ({page}) => {
@@ -95,20 +18,33 @@ test('With R2 set up, an import is stored in R2 under the same id and plays from
   const r2 = await fakeR2(page);
   await boot(page);
   expect(await page.evaluate(() => window.VzipR2.enabled())).toBe(true);
+  await page.evaluate(() => {
+    const prepare=window.vzipPrepareMedia;
+    window.vzipPrepareMedia=async(...args)=>{
+      const prepared=await prepare(...args);
+      window.__preparedImportBytes=[...new Uint8Array(await prepared.file.arrayBuffer())];
+      return prepared;
+    };
+  });
   await page.goto('/#/library');
+  const picker=page.waitForEvent('filechooser');
   await page.locator('[data-imp]').click();
-  await page.locator('.sheet [data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:wav()});
-  await page.getByRole('button', {name:'가져오기', exact:true}).click();
-  await expect(page.locator('.sheet [data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
-  // Saved on the device first; the upload to R2 follows from that copy.
+  await (await picker).setFiles({name:'2026-11-09_10-00-00.wav', mimeType:'audio/wav', buffer:wav(26)});
+  await expect(page).toHaveURL(/import-hub$/);
+  await expect(page.locator('[data-hub] [data-import]')).toBeEnabled({timeout:30000});
+  await page.locator('[data-hub] [data-import]').click();
+  await expect(page.locator('[data-result]')).toContainText('저장 1개', {timeout:30000});
+  // The approved import hub uploads directly; completion requires confirmed cloud metadata.
   await expect.poll(() => page.evaluate(() => Object.keys(window.__rows).length), {timeout:20000}).toBe(1);
   const meta = await page.evaluate(() => Object.values(window.__rows)[0]);
   expect(meta).toMatchObject({storageProvider:'r2', source:'import'});
-  // A WAV may be stored as its lossless FLAC; the object in R2 is exactly the file the app kept.
+  // A WAV may become lossless FLAC; R2 must contain exactly the prepared payload.
   expect(meta.r2Key).toMatch(new RegExp('^u/ui-test-user/' + meta.id + '/original\\.(wav|flac)$'));
   expect(meta.path).toBeUndefined();
   expect(r2.store.get(meta.r2Key).bytes.length).toBe(meta.size);
-  const kept = (await page.evaluate(async () => { const x = (await window.vzipReadMedia())[0]; return [...new Uint8Array(x.blob ? await x.blob.arrayBuffer() : x.bytes)]; }));
+  const kept=await page.evaluate(() => window.__preparedImportBytes);
+  expect(Array.isArray(kept)).toBe(true);
+  expect(await page.evaluate(async id => (await window.vzipReadMedia()).filter(x=>x.id===id).length,meta.id)).toBe(0);
   expect(r2.store.get(meta.r2Key).bytes.equals(Buffer.from(kept))).toBe(true);
   // Playback asks the Worker for a signed link.
   const url = await page.evaluate(m => window.vzipCloudMediaUrl(m), meta);
@@ -243,11 +179,14 @@ test('Playback links are signed ahead in one request for the rows shown, kept ac
   await page.goto('/#/library');
   await expect(page.locator('[data-l] [data-media]')).toHaveCount(5);
   await expect.poll(() => r2.calls.filter(c => c === 'BATCH 5').length).toBe(1);
-  expect(await page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true);
   const signs = () => r2.calls.filter(c => c === 'POST /v1/sign').length, before = signs();
   await page.locator('[data-l] [data-media="p2"] [data-toggle]').click();
+  await expect(page).toHaveURL(/#\/library$/);
   await expect(page.locator('[data-l] [data-media="p2"] .media-open')).toBeVisible();
+  await expect(page.locator('[data-l] [data-media="p2"] [data-toggle]')).toHaveAttribute('aria-expanded', 'true');
   expect(signs()).toBe(before); // the tap used the link already here
+  await expect.poll(()=>page.evaluate(()=>!!JSON.parse(localStorage.getItem('vzip_r2_links_v1')||'{}')['u/ui-test-user/p2/original.wav'])).toBe(true);
   await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   expect(await page.evaluate(() => !!window.VzipR2.cachedUrl('u/ui-test-user/p2/original.wav'))).toBe(true); // kept across reloads
 });
@@ -264,7 +203,7 @@ test('Editing a recording saves only the changed fields onto the newest cloud co
     await VZ.media.update(item, {song:'Defying Gravity', songId:'s1'});
     return window.__rows.c1;
   });
-  expect(row).toMatchObject({song:'Defying Gravity', songId:'s1', review:'다른 기기 메모', rating:5, r2Key:'u/ui-test-user/c1/original.m4a'});
+  expect(row).toMatchObject({song:'Defying Gravity', songId:'s1', review:'다른 기기 메모\n이전 제목: 녹음', rating:5, r2Key:'u/ui-test-user/c1/original.m4a'});
 });
 
 test('When another device saves between reading and writing, the write is refused, re-read and applied again', async ({page}) => {
@@ -303,8 +242,8 @@ test('A device file edit sends only what changed: older device values never over
     VZ.media.holdBackup(false);
     return {afterApp, afterEvent:window.__rows.d1, local:(await window.vzipReadMedia()).find(x => x.id === 'd1')};
   });
-  expect(rows.afterApp).toMatchObject({song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
-  expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)', rating:5});
+  expect(rows.afterApp).toMatchObject({song:'Defying Gravity', review:'새 메모 (다른 기기)\n이전 제목: 기기 녹음', rating:5});
+  expect(rows.afterEvent).toMatchObject({name:'새 이름', song:'Defying Gravity', review:'새 메모 (다른 기기)\n이전 제목: 기기 녹음', rating:5});
   expect(rows.local).toMatchObject({song:'Defying Gravity'});
 });
 
@@ -328,13 +267,13 @@ test('A song picked by the AI suggestion for a file on this device changes only 
     VZ.media.holdBackup(false);
     return {afterAssign, sameVersion:versionAfter === written.updatedAt, undoError, afterUndo:window.__rows.s9};
   });
-  expect(out.afterAssign).toMatchObject({songId:'s1', song:'Defying Gravity', review:'다른 기기 메모', rating:5, recordedDate:'2026-10-01'});
+  expect(out.afterAssign).toMatchObject({songId:'s1', song:'Defying Gravity', review:'다른 기기 메모\n이전 제목: 미분류 녹음', rating:5, recordedDate:'2026-10-01'});
   expect(out.sameVersion).toBe(true);
   expect(out.undoError).toBeNull();
-  expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모', rating:5});
+  expect(out.afterUndo).toMatchObject({songId:'', song:'', review:'다른 기기 메모\n이전 제목: 미분류 녹음', rating:5});
 });
 
-test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, can be renamed, survives a reload, and deletes its file', async ({page}) => {
+test('악보: a PDF is uploaded to R2 under the song, delegates its full row to the viewer with signed source access, can be renamed, survives a reload, and deletes its file', async ({page}) => {
   const r2 = await fakeR2(page);
   await boot(page);
   await page.goto('/#/song/s1');
@@ -354,8 +293,18 @@ test('악보: a PDF is uploaded to R2 under the song, opens from a signed link, 
   expect(saved[0]).toMatchObject({songId:'s1', fileName:'Defying Gravity vocal.pdf', originalKey:'C#/Db', practiceKey:'C'});
   expect(saved[0].r2Key).toMatch(/^u\/ui-test-user\/score-[0-9a-f-]+\/original\.pdf$/);
   expect(r2.store.get(saved[0].r2Key).bytes.toString()).toContain('%PDF');
-  // A signed link is ready before the tap (iOS opens it directly).
-  await expect(row.locator('[data-open]')).toHaveAttribute('href', new RegExp('/v1/media/' + saved[0].r2Key.replace(/[/.]/g, '\\$&')));
+  // The current row delegates to the editor; source download remains signed.
+  // Renderer/Pencil behavior is covered by score-ink.spec.cjs using actual PDF.js.
+  const source=await page.evaluate(async key=>{
+    const url=await window.VzipR2.url(key),response=await fetch(url);
+    return {url,ok:response.ok,text:await response.text()};
+  },saved[0].r2Key);
+  expect(source.ok).toBe(true);expect(source.url).toContain('/v1/media/'+saved[0].r2Key);expect(source.text).toContain('%PDF');
+  await expect(row.locator('[data-open]')).toHaveCount(0);
+  await page.evaluate(()=>{window.__pdfOpenOriginal=window.VZ.openScoreInk;window.VZ.openScoreInk=(...ids)=>{window.__pdfOpenArgs=ids;};});
+  await row.getByRole('button',{name:'Defying Gravity vocal 열기',exact:true}).click();
+  const opened=await page.evaluate(()=>{window.VZ.openScoreInk=window.__pdfOpenOriginal;return window.__pdfOpenArgs;});
+  expect(opened).toEqual(['s1',saved[0].id]);
   // Rename in a sheet.
   await row.locator('[data-edit]').click();
   await page.locator('.sheet input[name=title]').fill('Defying Gravity (2막)');
@@ -480,4 +429,99 @@ test('Malformed server deletion metadata blocks recovery without relinking or re
  expect(result).toEqual([{id:'receipt-bad-delete',status:'pending',code:'deleted_unavailable'}]);
  expect(await page.evaluate(()=>window.__rows['receipt-bad-delete']||null)).toBeNull();
  expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);expect(r2.store.size).toBe(1);
+});
+
+test('Baseline reproduces song/date changes leaving the recording title unchanged',async({page})=>{
+ test.skip(!process.env.VZIP_BENCH_BASE,'baseline audit runs in the focused throughput workflow');
+ const {execFileSync}=require('node:child_process'),base=process.env.VZIP_BENCH_BASE;
+ for(const path of ['app/media.js','cloud-sync.js']){
+  const body=execFileSync('git',['show',base+':'+path],{encoding:'utf8'});
+  await page.route('**/'+path+'*',route=>route.fulfill({contentType:'application/javascript',body}));
+ }
+ await fakeR2(page);await boot(page);
+ const out=await page.evaluate(async()=>{
+  const id='baseline-auto-title';window.__rows[id]={id,name:'original',source:'import',originalFilename:'original.wav',type:'audio/wav',recordedDate:'2026-11-08',songId:'',song:''};window.__upd[id]='2026-11-08T01:00:00.000Z';
+  const item={...window.__rows[id],cloud:true};
+  await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  await VZ.media.update({...window.__rows[id],cloud:true},{recordedDate:'2026-11-09'});
+  return window.__rows[id];
+ });
+ expect(out).toMatchObject({songId:'s1',recordedDate:'2026-11-09',name:'original'});
+ console.log('BASELINE_TITLE_BUG_REPRODUCED');
+});
+test('An imported automatic title follows song assignment and date edits and survives reload',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ const out=await page.evaluate(async bytes=>{
+  const saved=await VZ.media.importFile(new File([new Uint8Array(bytes)],'original.wav',{type:'audio/wav'}),{id:'automatic-title',date:'2026-11-08',direct:true});
+  const item={...saved,cloud:true};await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  const assigned={...window.__rows[item.id]};
+  VZ.editMedia({...assigned,cloud:true});
+  return {assigned};
+ },[...wav(1)]);
+ expect(out.assigned).toMatchObject({name:'Defying Gravity 2026.11.08',nameMode:'auto',originalFilename:'original.wav'});
+ await page.locator('.sheet [name=date]').fill('2026-11-09');await page.locator('.sheet [name=date]').dispatchEvent('change');
+ await expect(page.locator('.sheet [name=name]')).toHaveValue('Defying Gravity 2026.11.09');
+ await page.locator('.sheet').getByRole('button',{name:'저장',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__rows['automatic-title'])).toMatchObject({name:'Defying Gravity 2026.11.09',recordedDate:'2026-11-09',songId:'s1',nameMode:'auto'});
+ const rows=await page.evaluate(()=>window.__rows);
+ await page.addInitScript(rows=>{window.__rows=rows;},rows);await page.reload();await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__rows['automatic-title'].name)).toBe('Defying Gravity 2026.11.09');
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(1);
+});
+test('Old recording title moves to review when song and date are edited',async({page})=>{
+ const r2=await fakeR2(page);await boot(page);
+ const out=await page.evaluate(async()=>{
+  const id='manual-title';window.__rows[id]={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav'};window.__upd[id]='2026-11-08T01:00:00.000Z';
+  await VZ.media.update({...window.__rows[id],cloud:true},{name:'오디션 제출용 최종 테이크'});
+  VZ.editMedia({...window.__rows[id],cloud:true});
+  return window.__rows[id];
+ });
+ await page.locator('.sheet [name=song]').selectOption('s1');
+ await page.locator('.sheet [name=date]').fill('2026-11-09');await page.locator('.sheet [name=date]').dispatchEvent('change');
+ await expect(page.locator('.sheet [name=name]')).toHaveValue('Defying Gravity 2026.11.09');
+ await page.locator('.sheet').getByRole('button',{name:'저장',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__rows['manual-title'])).toMatchObject({name:'Defying Gravity 2026.11.09',nameMode:'auto',review:'이전 제목: 오디션 제출용 최종 테이크',songId:'s1',recordedDate:'2026-11-09'});
+ expect(r2.calls.filter(x=>x==='POST /v1/uploads')).toHaveLength(0);
+});
+test('A newer title from another device moves into the review on song assignment',async({page})=>{
+ await fakeR2(page);await boot(page);
+ const result=await page.evaluate(async()=>{
+  const id='newer-title',stale={id,name:'old take',nameMode:'auto',autoName:'old take',originalFilename:'old take.wav',songId:'',song:'',recordedDate:'2026-11-08',type:'audio/wav',cloud:true};
+  window.__rows[id]={...stale,name:'다른 기기에서 정한 제목',review:'다른 기기 메모'};window.__upd[id]='2026-11-08T01:00:00.000Z';
+  await VZ.media.assignSongSafe(stale,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  return window.__rows[id];
+ });
+ expect(result).toMatchObject({name:'Defying Gravity 2026.11.08',review:'다른 기기 메모\n이전 제목: 다른 기기에서 정한 제목',songId:'s1'});
+});
+test('Device-only imports also update automatic titles when assigned a song',async({page})=>{
+ await fakeR2(page);await boot(page);
+ const result=await page.evaluate(async()=>{
+  VZ.media.holdBackup(true);const id='local-auto-title';
+  await window.vzipStorePracticeMedia({id,name:'original',nameMode:'auto',autoName:'original',originalFilename:'original.wav',recordedDate:'2026-11-08',type:'audio/wav',blob:new Blob([new Uint8Array([1,2,3])],{type:'audio/wav'}),songId:'',song:''});
+  const item={...(await window.vzipReadMedia()).find(x=>x.id===id),local:true,cloud:false};
+  await VZ.media.assignSongSafe(item,{songId:'s1',song:'Defying Gravity'},{expectedSongId:'',expectedSong:''});
+  return (await window.vzipReadMedia()).find(x=>x.id===id);
+ });
+ expect(result).toMatchObject({name:'Defying Gravity 2026.11.08',songId:'s1',nameMode:'auto'});
+});
+test('Profile native WAV preparation separately from cloud transfer and metadata commit',async({page},info)=>{
+ test.skip(info.project.name!=='chromium-desktop','one reference profile; physical iPhone timing remains separate');
+ test.setTimeout(90000);await fakeR2(page);await boot(page);
+ const result=await page.evaluate(async()=>{
+  const count=60*48000,buffer=new ArrayBuffer(44+count*2),view=new DataView(buffer),bytes=new Uint8Array(buffer),set=(offset,text)=>bytes.set(new TextEncoder().encode(text),offset);
+  set(0,'RIFF');view.setUint32(4,36+count*2,true);set(8,'WAVEfmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,48000,true);view.setUint32(28,96000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);set(36,'data');view.setUint32(40,count*2,true);
+  for(let i=0;i<count;i++)view.setInt16(44+i*2,Math.round(Math.sin(i/7)*5000),true);
+  const profile={sourceBytes:buffer.byteLength,prepareMs:0,cloudMs:0};
+  const prepare=window.vzipPrepareMedia,cloud=window.vzipCloudImport;
+  window.vzipPrepareMedia=async(...args)=>{const at=performance.now(),out=await prepare(...args);profile.prepareMs+=performance.now()-at;profile.samplesVerified=!!out.metadata.losslessFlac?.samplesVerified;return out;};
+  window.vzipCloudImport=async(...args)=>{const at=performance.now();try{return await cloud(...args);}finally{profile.cloudMs+=performance.now()-at;}};
+  const at=performance.now();
+  const saved=await VZ.media.importFile(new File([buffer],'profile.wav',{type:'audio/wav'}),{id:'profile-upload',direct:true});
+  profile.totalMs=performance.now()-at;profile.storedBytes=saved.size;profile.storedType=saved.type;
+  window.vzipPrepareMedia=prepare;window.vzipCloudImport=cloud;
+  return profile;
+ });
+ expect(result.sourceBytes).toBe(5760044);expect(result.storedBytes).toBeGreaterThan(0);
+ if(result.storedType==='audio/flac')expect(result.samplesVerified).toBe(true);
+ console.log('UPLOAD_PHASE_PROFILE '+JSON.stringify(result));
 });

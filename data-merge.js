@@ -4,7 +4,7 @@
  * `updatedAt` wins; without timestamps the first argument (this device) wins. */
 ((root) => {
 'use strict';
-const COLLECTIONS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans'];
+const COLLECTIONS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback', 'scoreAnnotations', 'monthlyGrowthReports', 'monthlyAiReports', 'overallAiReports', 'vocalPlanReports'];
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
 function valid(data) { return isObj(data) && ['lessons', 'practices', 'assignments', 'categories', 'songs'].every(k => Array.isArray(data[k])); }
 function count(data) { return valid(data) ? (data.songs.length + data.lessons.length + data.practices.length + data.assignments.length) : 0; }
@@ -30,13 +30,16 @@ function merge(primary, secondary) {
     const seen = new Set();
     out[k] = order.filter(id => id !== 'undefined' && !seen.has(id) && seen.add(id) && map.has(id) && !gone.has(id)).map(id => map.get(id));
     if (!Array.isArray(a[k]) && !Array.isArray(b[k])) delete out[k];
-    if (gone.size) deleted[k] = [...gone].slice(-5000);
+    if (gone.size) deleted[k] = [...gone];
     added[k] = fromSecondary;
   }
   const media = [...new Set([...(a.deleted?.media || []), ...(b.deleted?.media || [])])];
   if (media.length) deleted.media = media;
+  const billingLinks=[...new Set([...(a.deleted?.billingLessonLinks||[]),...(b.deleted?.billingLessonLinks||[])])];
+  if(billingLinks.length)deleted.billingLessonLinks=billingLinks;
   out.deleted = deleted;
   unlinkMedia(out, media);
+  unlinkLessons(out, out.deleted.lessons || []);
   const removedSongs = new Set(out.deleted.songs || []);
   if (out.performances) out.performances = out.performances.map(p => ({...p, songLinks:(p.songLinks || []).map(l => removedSongs.has(l.songId) ? {...l,songId:'',unlinked:true} : l)}));
   return {data:out, added};
@@ -46,8 +49,21 @@ function unlinkMedia(data, ids) {
   if (!ids.length) return data;
   const gone = new Set(ids);
   if (data.songs) data.songs = data.songs.map(s => gone.has(s.repertoire?.takeId) ? {...s,repertoire:{...s.repertoire,takeId:''}} : s);
-  if (data.practices) data.practices = data.practices.map(p => p.mediaIds ? {...p, mediaIds:p.mediaIds.filter(id => !gone.has(id))} : p);
+  if (data.practices) data.practices = data.practices.map(p => p.mediaIds || p.practiceRoom?.audioIds ? {
+    ...p,
+    ...(p.mediaIds ? {mediaIds:p.mediaIds.filter(id => !gone.has(id))} : {}),
+    ...(p.practiceRoom?.audioIds ? {practiceRoom:{...p.practiceRoom,audioIds:p.practiceRoom.audioIds.filter(a => !gone.has(a.id))}} : {})
+  } : p);
   if (data.lessons) data.lessons = data.lessons.map(l => l.recordings ? {...l, recordings:l.recordings.filter(r => !gone.has(r.id))} : l);
+  if (data.practicePlans) data.practicePlans = data.practicePlans.map(p =>
+    gone.has(p.reviewRecordingId) ? {...p, reviewRecordingId:''} : p);
+  if (data.vocalPlanReports) data.vocalPlanReports = data.vocalPlanReports.map(r => {
+    const m=r.measurement;
+    if (!m || !Array.isArray(m.beforeIds) && !Array.isArray(m.afterIds)) return r;
+    const beforeIds=Array.isArray(m.beforeIds)?m.beforeIds.filter(id=>!gone.has(id)):m.beforeIds;
+    const afterIds=Array.isArray(m.afterIds)?m.afterIds.filter(id=>!gone.has(id)):m.afterIds;
+    return {...r,measurement:{...m,beforeIds,afterIds}};
+  });
   if (data.comparisonReports) data.comparisonReports = data.comparisonReports.map(original => {
     const r = {...original};
     for (const key of ['firstId', 'secondId']) if (gone.has(r[key])) r[key] = '';
@@ -60,8 +76,23 @@ function deleteMedia(data, id) {
   data.deleted.media = [...new Set([...(data.deleted.media || []), id])];
   return unlinkMedia(data, [id]);
 }
+function unlinkLessons(data,ids){
+ const gone=new Set(ids);
+ if(data.assignments)data.assignments=data.assignments.map(t=>{
+  const linked=[...new Set([...(Array.isArray(t.lessonIds)?t.lessonIds:[]),t.lessonId].filter(Boolean))];
+  if(!linked.some(id=>gone.has(id)))return t;
+  const keep=linked.filter(id=>!gone.has(id));return {...t,lessonIds:keep,lessonId:keep[0]||''};
+ });
+ return data;
+}
+function deleteLesson(data,id,billingId=''){
+ const linked=billingId||(data.lessons||[]).find(l=>l.id===id)?.billingDeductionId;
+ data.deleted||={};if(linked)data.deleted.billingLessonLinks=[...new Set([...(data.deleted.billingLessonLinks||[]),linked])];data.deleted.lessons=[...new Set([...(data.deleted.lessons||[]),id])];
+ if(data.lessons)data.lessons=data.lessons.filter(l=>l.id!==id);
+ return unlinkLessons(data,[id]);
+}
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
-const api = {COLLECTIONS, merge, valid, count, same, deleteMedia};
+const api = {COLLECTIONS, merge, valid, count, same, deleteMedia, deleteLesson};
 root.VzipDataMerge = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof self !== 'undefined' ? self : globalThis);

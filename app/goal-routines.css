@@ -1,0 +1,18 @@
+/* 반복 목표 · 수행 기록 — design guide colours (#7A32F5 / #EDE1FF / #475467), 44px targets. */
+.vz-routine-new{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 12px}
+.vz-routine-toggle{display:inline-flex;align-items:center;gap:8px;min-height:44px;font-size:14px;font-weight:600;color:#344054}
+.vz-routine-toggle input{width:20px;height:20px;accent-color:#7A32F5;margin:0}
+.vz-routine-days{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:#475467}
+.vz-routine-days[hidden]{display:none}
+.vz-routine-days input,.vz-perform-min input{width:72px;min-height:44px;padding:0 10px;border:1px solid #d0d5dd;border-radius:12px;font:inherit;font-size:16px;text-align:center}
+.vz-routines{margin-top:4px}
+.vz-routine{display:flex;align-items:center;gap:4px;min-height:52px;padding:6px 4px 6px 12px;border:1px solid #e4e7ec;border-radius:14px;background:#fff;margin-bottom:8px}
+.vz-routine-main{flex:1;min-width:0;display:grid;gap:2px}
+.vz-routine-main strong{font-size:15px;font-weight:600;color:#101828;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vz-routine-main small{font-size:13px;color:#475467}
+.vz-routine .icon-btn{width:44px;height:44px;flex:none;color:#475467}
+.vz-perform-goal{display:flex;gap:8px;align-items:flex-start;margin:0 0 14px;font-size:15px;font-weight:600;color:#101828}
+.vz-perform-goal i{color:#7A32F5;font-size:20px;flex:none}
+.vz-perform-min{display:inline-flex;align-items:center;gap:8px}
+.toast.vz-perform-offer{display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100% - 32px);white-space:nowrap;padding:8px 8px 8px 16px;pointer-events:auto}
+.vz-perform-offer button{min-height:36px;padding:0 12px;border:0;border-radius:99px;background:#EDE1FF;color:#7A32F5;font:600 14px inherit;white-space:nowrap}

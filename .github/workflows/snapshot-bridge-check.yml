@@ -1,0 +1,124 @@
+name: Snapshot application bridge safety
+on:
+  push:
+    branches: ['codex/snapshot-app-bridge-20261110', 'codex/snapshot-media-delete-20261110', 'codex/snapshot-recovery-20261110', 'codex/snapshot-review-ui-20261110', 'codex/media-delete-resume-20261110']
+  pull_request:
+    paths:
+      - 'sync/snapshot-transport.js'
+      - 'sync/snapshot-review*'
+      - 'sync/media-delete-review.js'
+      - 'tests/media-delete-resume.test.cjs'
+      - 'cloud-sync.js'
+      - 'account-config.js'
+      - 'app/lesson-deletion.js'
+      - 'app/media.js'
+      - 'tests/media-deletion.test.cjs'
+      - 'tests/snapshot-*'
+      - 'supabase/proposals/20261115_snapshot_rollout.sql'
+      - 'supabase/proposals/20261113_snapshot_revision.sql'
+      - 'supabase/proposals/20261114_field_drafts.sql'
+      - 'supabase/migrations/20261112_device_session_contract.sql'
+      - 'supabase/migrations/20261114_permanent_lesson_delete.sql'
+      - 'tests/cloud-sync.test.cjs'
+      - 'tests/field-draft-outbox-integration.test.mjs'
+      - '.github/workflows/snapshot-bridge-check.yml'
+permissions:
+  contents: read
+concurrency:
+  group: snapshot-app-bridge-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  bridge-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run test:syntax
+      - run: node --check sync/snapshot-transport.js
+      - run: node --test tests/media-delete.test.cjs tests/media-deletion.test.cjs tests/media-delete-resume.test.cjs tests/snapshot-transport.test.cjs tests/snapshot-recovery.test.cjs tests/snapshot-review-model.test.cjs tests/cloud-sync.test.cjs tests/data-merge.test.cjs tests/lesson-deletion.test.cjs
+  compatibility-db:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: bridge_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Existing permanent-delete contract
+        env:
+          VZ_DELETE_TEST_DB: postgres://postgres:bridge_ci_only@localhost:5432/postgres
+        run: node --test tests/permanent-lesson-delete.test.mjs
+      - name: Real SQL sessions, revision, drafts, outbox and snapshot bridge
+        env:
+          VZ_SNAPSHOT_TEST_DB: postgres://postgres:bridge_ci_only@localhost:5432/postgres
+          VZ_DRAFT_TEST_DB: postgres://postgres:bridge_ci_only@localhost:5432/postgres
+          VZIP_WITH_PERMANENT_DELETE: '1'
+        run: node --test --test-concurrency=1 tests/snapshot-revision.test.mjs tests/field-drafts.test.mjs tests/field-draft-outbox.test.cjs tests/field-draft-outbox-integration.test.mjs
+  bridge-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Actual signed-in snapshot bridge and pending lesson deletion
+        run: npx playwright test tests/snapshot-bridge.spec.cjs --workers=2
+      - name: Two sessions and account isolation regression
+        run: npx playwright test tests/account-session.spec.cjs --workers=2
+      - name: R2 upload, latest metadata and title edits, playback and delete regression
+        run: npx playwright test tests/r2.spec.cjs --workers=2
+      - name: Existing selective lesson deletion regression with bridge disabled
+        run: npx playwright test tests/v6.spec.cjs --grep 'Lesson delete keeps|Lesson deletion' --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapshot-bridge-browser
+          path: |
+            test-results/
+            playwright-report/
+
+  rollout-db:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: rollout_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Account routing permissions and real snapshot, draft and permanent-delete integration
+        env:
+          VZ_SNAPSHOT_ROLLOUT_TEST_DB: postgres://postgres:rollout_ci_only@localhost:5432/postgres
+          VZ_DRAFT_TEST_DB: postgres://postgres:rollout_ci_only@localhost:5432/postgres
+          VZIP_WITH_SNAPSHOT_ROLLOUT: '1'
+          VZIP_WITH_PERMANENT_DELETE: '1'
+        run: node --test --test-concurrency=1 tests/snapshot-rollout.test.mjs tests/field-draft-outbox-integration.test.mjs

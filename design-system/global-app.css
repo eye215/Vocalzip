@@ -1,0 +1,90 @@
+/* Student app shell · VOCAL.zip design system v1.1 (2026-11-09).
+   The approved home remains isolated inside its own shadow root. */
+
+body:not(.vz-home-mode) { background:var(--vz-page); color:var(--vz-title); font-family:var(--font); letter-spacing:var(--vz-tracking); }
+body:not(.vz-home-mode) .v-app {
+  width:100%; max-width:var(--vz-content-max); min-width:0; margin:0 auto;
+  padding:max(var(--vz-page-top),env(safe-area-inset-top)) var(--vz-page-gutter) calc(var(--vz-page-bottom) + max(var(--vz-nav-bottom),env(safe-area-inset-bottom)));
+}
+body:not(.vz-home-mode) .v-top { min-height:var(--vz-touch-min); margin-bottom:var(--vz-header-gap); }
+body:not(.vz-home-mode) .v-top h1 { color:var(--vz-title); font-size:var(--vz-type-page-size); line-height:var(--vz-type-page-leading); font-weight:700; }
+body:not(.vz-home-mode)[data-vz-route="calendar"] .v-top h1,
+body:not(.vz-home-mode)[data-vz-route="songs"] .v-top h1,
+body:not(.vz-home-mode)[data-vz-route="library"] .v-top h1 { font-size:var(--vz-type-page-size); line-height:var(--vz-type-page-leading); }
+body:not(.vz-home-mode) h2.sec,
+body:not(.vz-home-mode) .vz-section-heading h2 { color:var(--vz-title); font-size:var(--vz-type-section-size); line-height:var(--vz-type-section-leading); font-weight:700; }
+body:not(.vz-home-mode) .card,
+body:not(.vz-home-mode) .list,
+body:not(.vz-home-mode) .empty { border-radius:var(--vz-card-radius); background:var(--vz-surface); box-shadow:var(--shadow); }
+body:not(.vz-home-mode) .card { padding:var(--vz-card-padding); }
+body:not(.vz-home-mode) .card.flat { box-shadow:none; }
+body:not(.vz-home-mode) .stack { gap:var(--vz-card-gap); }
+body:not(.vz-home-mode) .card.accent { background:var(--vz-gradient-recent); color:#fff; }
+body:not(.vz-home-mode) .item-title { color:var(--vz-title); font-size:var(--vz-type-list-size); line-height:var(--vz-type-list-leading); font-weight:600; }
+body:not(.vz-home-mode) .item-sub,
+body:not(.vz-home-mode) .small { color:var(--vz-muted); font-size:var(--vz-type-meta-size); line-height:var(--vz-type-meta-leading); }
+body:not(.vz-home-mode) .muted { color:var(--vz-muted); }
+body:not(.vz-home-mode) .item .chev { color:var(--vz-faint); }
+body:not(.vz-home-mode) .icon-btn { min-width:var(--vz-touch-min); min-height:var(--vz-touch-min); color:var(--vz-primary); }
+body:not(.vz-home-mode) .icon-btn[aria-label="설정"],
+body:not(.vz-home-mode) .vz-filter-icon,
+body:not(.vz-home-mode) [data-song-search],
+body:not(.vz-home-mode) [data-library-search] { color:var(--vz-muted); background:transparent; box-shadow:none; }
+body:not(.vz-home-mode) .field>span,
+body:not(.vz-home-mode) .field>legend { color:var(--vz-primary); }
+body:not(.vz-home-mode) .btn:not(.sm) { min-height:var(--vz-button-height); border-radius:var(--vz-button-radius); }
+body:not(.vz-home-mode) .btn:not(.secondary):not(.ghost):not(.danger):active { background:var(--vz-color-accent-strong); }
+body:not(.vz-home-mode) .chip[aria-pressed="true"] { background:var(--vz-soft); border-color:var(--vz-soft); color:var(--vz-accent); }
+
+/* One four-item dock on every regular screen. The recording action is a separate button. */
+body:not(.vz-home-mode) .v-nav {
+  position:fixed; left:50%; right:auto; bottom:max(var(--vz-nav-bottom),env(safe-area-inset-bottom));
+  width:min(calc(100% - var(--vz-nav-inset)*2),var(--vz-nav-max-width)); height:var(--vz-nav-height); transform:translateX(-50%);
+  padding:var(--vz-nav-padding); border:var(--vz-border-width) solid var(--vz-nav-border); border-radius:999px;
+  background:var(--vz-nav-surface); box-shadow:var(--vz-nav-shadow);
+  -webkit-backdrop-filter:blur(var(--vz-nav-blur)); backdrop-filter:blur(var(--vz-nav-blur));
+}
+body:not(.vz-home-mode) .v-nav ul { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; width:100%; height:100%; max-width:none; margin:0; padding:0; }
+body:not(.vz-home-mode) .v-nav a {
+  height:var(--vz-nav-item-height); min-height:var(--vz-nav-item-height); gap:2px; border-radius:999px; background:transparent;
+  color:var(--vz-muted); font-size:var(--vz-type-nav-size); line-height:var(--vz-type-nav-leading); font-weight:500;
+}
+body:not(.vz-home-mode) .v-nav a i { font-size:var(--vz-icon-tool-size); color:var(--vz-color-ink-secondary); }
+body:not(.vz-home-mode) .v-nav a[aria-current="page"] { background:var(--vz-color-selected-bg); color:var(--vz-nav-active-label); }
+body:not(.vz-home-mode) .v-nav a[aria-current="page"] i { color:var(--vz-accent); }
+body:not(.vz-home-mode) .v-nav i.ph-fill { font-family:"Phosphor"!important; }
+
+.vz-collection-record{display:none}
+/* Shared recording action: the same 56px icon-only circle as the home screen. */
+body:not(.vz-home-mode) .vz-collection-record {
+  position:fixed; display:grid; place-items:center; z-index:var(--vz-z-floating);
+  right:max(var(--vz-nav-inset),calc((100vw - var(--vz-content-max))/2 + var(--vz-nav-inset)));
+  bottom:calc(max(var(--vz-nav-bottom),env(safe-area-inset-bottom)) + var(--vz-floating-bottom));
+  width:var(--vz-floating-size); min-width:var(--vz-floating-size); height:var(--vz-floating-size); padding:0; border:0; border-radius:50%;
+  background:var(--vz-gradient-floating);
+  color:#fff; text-decoration:none;
+  box-shadow:var(--vz-shadow-floating);
+  transition:filter .14s,transform .14s;
+}
+body:not(.vz-home-mode) .vz-collection-record i { font-size:22px; }
+body:not(.vz-home-mode) .vz-collection-record:active { filter:brightness(.9); transform:scale(.98); }
+body.vz-record-mode .vz-collection-record,
+body[data-vz-route="vocal-lab"] .vz-collection-record,
+body[data-vz-route="lab-reports"] .vz-collection-record,
+body[data-vz-route="song-suggest"] .vz-collection-record,
+body:has(.vz-recording-page) .vz-collection-record,
+body:has(.lib-selecting) .vz-collection-record,
+body:has(.sel-bar) .vz-collection-record,
+body.vz-media-selecting .vz-collection-record { display:none!important; }
+body:has(.vz-recording-page) .v-nav { display:none; }
+body:not(.vz-home-mode) .sel-bar { bottom:calc(94px + env(safe-area-inset-bottom)); }
+@media (prefers-reduced-transparency:reduce), (prefers-contrast:more) {
+  body:not(.vz-home-mode) .v-nav { background:#fff; -webkit-backdrop-filter:none; backdrop-filter:none; }
+}
+
+/* Lesson-note tabs use the Library tab treatment. */
+body:not(.vz-home-mode) .lesson-tabs{display:flex;gap:3px;padding:0;background:transparent;border:0;box-shadow:none;}
+body:not(.vz-home-mode) .lesson-tabs button{flex:1;min-width:0;min-height:var(--vz-touch-min);padding:0 14px;border:0;border-radius:99px;box-shadow:none;background:transparent;font-size:14px;font-weight:600;color:var(--vz-color-ink-secondary);}
+body:not(.vz-home-mode) .lesson-tabs button[aria-pressed="true"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent);}
+@media(max-width:350px){body:not(.vz-home-mode) .lesson-tabs button{padding-inline:9px;}}
+

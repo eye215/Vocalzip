@@ -1,0 +1,89 @@
+/* Settings: compact account state and grouped, familiar menu rows. */
+body[data-vz-route="settings"]{background:var(--vz-color-canvas)}
+body[data-vz-route="settings"] .v-app{max-width:560px;padding-right:12px;padding-left:12px}
+body[data-vz-route="settings"] .v-nav,body[data-vz-route="settings"] .vz-collection-record{display:none!important}
+body[data-vz-route="settings"] .v-app{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+body[data-vz-route="settings"] #view{padding-bottom:12px}
+.vz-settings{display:grid;gap:18px;padding-bottom:12px;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+.vz-settings-account{display:grid;grid-template-columns:minmax(0,1fr);gap:0;min-width:0;padding:17px 18px;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(45,31,71,.045)}
+.vz-journey{position:relative;overflow:hidden;min-width:0;padding:20px 20px 17px;border-radius:20px;background:linear-gradient(120deg,#AE55F5 0%,#8020E6 48%,#5712B8 100%);box-shadow:0 10px 26px rgba(91,22,177,.18);color:#fff}
+.vz-journey::after{content:'♫';position:absolute;right:10px;top:33px;font-family:system-ui,sans-serif;font-size:98px;line-height:1;color:rgba(255,255,255,.16);transform:rotate(9deg);pointer-events:none}
+.vz-journey-content>strong{position:relative;z-index:1;display:grid;grid-template-columns:1fr auto;gap:13px 5px;align-items:start;min-width:0;font-weight:400}
+.vz-journey-content>strong>span{grid-column:1;color:#fff;font-size:14px;line-height:20px;font-weight:700;white-space:nowrap}
+.vz-journey-content>strong em{grid-column:1/-1;color:#fff;font-size:38px;line-height:1.1;font-weight:700;font-style:normal;white-space:nowrap;letter-spacing:-.045em}
+.vz-journey-date{grid-column:2;grid-row:1;color:rgba(255,255,255,.8);font-size:11px;line-height:20px;font-weight:400;white-space:nowrap}
+.vz-journey-stats{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:18px;padding:13px 0 0;border-top:1px solid rgba(255,255,255,.35)}
+.vz-journey-stats>div{display:flex;align-items:baseline;justify-content:center;gap:7px;min-width:0}
+.vz-journey-stats b{font-size:18px;line-height:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.vz-journey-stats span{color:#fff;font-size:13px;line-height:19px;white-space:nowrap}
+.vz-sync-summary{order:1;margin-top:8px;color:#537866;font-size:11px;line-height:17px}
+.vz-sync-summary::before{display:inline-block;width:6px;height:6px;margin:0 7px 1px 0;border-radius:50%;background:#3DA67D;content:''}
+.vz-sync-summary[data-state="busy"],.vz-sync-summary[data-state="off"]{color:#737986}
+.vz-sync-summary[data-state="busy"]::before,.vz-sync-summary[data-state="off"]::before{background:#AAB0BA}
+.vz-sync-summary[data-state="error"]{color:#AA563F}
+.vz-sync-summary[data-state="error"]::before{background:#D96D4D}
+.vz-settings-section h2{margin:0 4px 9px;color:var(--vz-color-ink);font-size:18px;line-height:26px;font-weight:700;letter-spacing:-.02em}
+.vz-settings-cloud,.vz-settings-list{border:0;border-radius:20px;background:#fff;box-shadow:none}
+.vz-settings-cloud,.vz-settings-cloud #vzip-cloud-root,.vz-settings-cloud #vzip-cloud-root .cloud-controls,.vz-settings-cloud #vzip-cloud-root #cloud-signed-in:not([hidden]){display:contents}
+.vz-settings-cloud #vzip-cloud-root #cloud-signed-in[hidden]{display:none}
+.vz-settings-cloud #vzip-cloud-root #cloud-signed-in>.cloud-actions:empty{display:none}
+.vz-settings-cloud #vzip-cloud-root .cloud-account{order:0;align-self:start}
+.vz-settings-cloud #vzip-cloud-root #cloud-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.vz-settings-cloud #vzip-cloud-root .cloud-more{order:2}
+.vz-settings-cloud #vzip-cloud-root #cloud-logout,.vz-settings-cloud #vzip-cloud-root #vzip-device-manage{order:3;grid-column:1/-1}
+.vz-settings-list .item{min-height:54px;padding:10px 16px;gap:12px;color:var(--vz-color-ink)}
+.vz-settings-list .item+.item{border-top:1px solid #F2F0F6}
+.vz-settings-list .item>.ph:first-child{display:none}
+.vz-settings-list .item .item-title{font-size:15px;line-height:21px;font-weight:600}
+.vz-settings-list .item .item-sub{display:none}
+.vz-settings-list .item .chev{flex:none;color:var(--vz-color-faint);font-size:16px}
+.vz-settings-version{margin:-7px 0 0;text-align:center;color:var(--vz-color-faint);font-size:12px}
+.vz-settings-list[data-auto-analysis] .item{padding-bottom:6px}
+.vz-settings-list[data-auto-analysis] .item .item-sub{display:block}
+.vz-settings-list[data-auto-analysis] .item .switch{flex:none}
+.vz-settings-list[data-auto-analysis]>p{margin:0!important;padding:0 16px 14px!important;color:var(--vz-color-ink-muted);font-size:12px;line-height:18px}
+.vz-settings-backup{border-top:1px solid #F2F0F6}
+.vz-settings-backup summary{cursor:pointer;list-style:none}
+.vz-settings-backup summary::-webkit-details-marker{display:none}
+.vz-settings-backup[open] summary .chev{transform:rotate(180deg)}
+.vz-settings-backup-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 14px}
+.vz-settings-backup-actions p{grid-column:1/-1;margin:0;color:var(--vz-color-ink-muted);font-size:12px;line-height:18px}
+.vz-settings-backup-actions button,.vz-settings-backup-actions label{display:grid;place-items:center;min-height:44px;padding:8px;border:0;border-radius:12px;background:var(--vz-color-accent-soft);color:var(--vz-color-accent);font-size:13px;font-weight:600;text-align:center;cursor:pointer}
+.vz-settings-backup-actions label:focus-within{outline:2px solid var(--vz-color-accent);outline-offset:2px}
+.vz-settings-cloud #vzip-cloud-root .cloud-account{display:flex;align-items:center;gap:11px;margin:0;min-width:0}
+.vz-settings-cloud #vzip-cloud-root .cloud-account>div{min-width:0}
+.vz-settings-cloud #vzip-cloud-root .cloud-account>.ph-fill{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:50%;background:#F0E3FF;color:var(--vz-color-accent);font-size:27px}
+.vz-settings-cloud #vzip-cloud-root .cloud-account small{color:var(--vz-color-ink-muted);font-size:12px}
+.vz-settings-cloud #vzip-cloud-root #cloud-user{font-size:15px;font-weight:700;color:var(--vz-color-ink);white-space:normal;overflow-wrap:anywhere;line-height:20px}
+.vz-settings-cloud #vzip-cloud-root #cloud-signed-in>p.muted:not(#cloud-user):not(#cloud-status){display:none}
+.vz-settings-cloud #vzip-cloud-root #cloud-signed-in>.cloud-actions:empty{display:none}
+.vz-settings-cloud #vzip-cloud-root #cloud-upload{width:100%;min-height:44px;border-radius:12px;font-size:13px}
+.vz-settings-cloud #vzip-cloud-root .cloud-more{margin:12px 0 0;padding-top:9px;border-top:1px solid #F0EDF4}
+.vz-settings-cloud #vzip-cloud-root .cloud-more summary{color:var(--vz-color-ink-secondary);font-size:13px;font-weight:600}
+.vz-settings-cloud #vzip-cloud-root .cloud-more summary::after{content:'⌄';color:var(--vz-color-faint);font-size:19px}
+.vz-settings-cloud #vzip-cloud-root .cloud-more[open] summary::after{content:'⌃'}
+.vz-settings-cloud #vzip-cloud-root #cloud-logout{margin:1px 0 -5px auto;color:var(--vz-color-ink-muted);font-size:12px}
+.vz-settings-cloud #vzip-cloud-root #vzip-device-manage{min-height:44px;width:100%;margin-top:8px;background:var(--vz-color-canvas);color:var(--vz-color-ink-secondary);font-size:13px}
+@media(max-width:350px){.vz-settings-list .item{gap:9px}.vz-journey-content>strong em{font-size:32px}.vz-journey-date{font-size:10px}.vz-journey-stats b{font-size:16px}.vz-journey-stats span{font-size:11px}}
+
+/* Settings uses quiet cards; the song history is information rather than a promotion. */
+.vz-settings{gap:20px}
+.vz-settings-account{padding:18px 16px;box-shadow:none}
+.vz-journey{padding:18px 16px;border:0;background:#fff;color:var(--vz-color-ink);box-shadow:none}
+.vz-journey::after{display:none}
+.vz-journey-content>strong{gap:4px}
+.vz-journey-content>strong>span{color:var(--vz-color-ink-muted);font-size:13px;font-weight:600}
+.vz-journey-content>strong em{color:var(--vz-color-ink);font-size:27px;line-height:34px;letter-spacing:-.03em;white-space:normal}
+.vz-journey-date{color:var(--vz-color-ink-muted);font-size:12px}
+.vz-journey-stats{margin-top:18px;padding:15px 0 0;border-top:1px solid var(--vz-color-border);gap:4px}
+.vz-journey-stats>div{display:grid;justify-items:center;gap:2px}
+.vz-journey-stats b{grid-row:1;color:var(--vz-color-accent);font-size:19px;line-height:25px}
+.vz-journey-stats span{grid-row:2;color:var(--vz-color-ink-muted);font-size:12px}
+.vz-settings-list .item{min-height:56px}
+.vz-settings-list .item>.ph:first-child{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:10px;background:var(--vz-color-accent-soft);color:var(--vz-color-accent);font-size:17px}
+.vz-settings-list .item .item-sub{display:block;margin-top:2px;color:var(--vz-color-ink-muted);font-size:12px;line-height:17px}
+.vz-settings-list .item .chev{margin-left:auto}
+.vz-settings-list[data-auto-analysis] .item{padding-bottom:10px}
+.vz-settings-cloud #vzip-cloud-root .cloud-more{border-top-color:var(--vz-color-border)}
+@media(max-width:350px){.vz-journey-content>strong em{font-size:24px}.vz-journey-stats b{font-size:17px}}
+

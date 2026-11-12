@@ -1,0 +1,55 @@
+name: Paid AI owner-only safety
+on:
+  push:
+    branches: ['codex/ai-owner-only-20261109']
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261113_ai_owner_only.sql'
+      - 'supabase/functions/vzip-song-stt/**'
+      - 'tests/ai-owner-only.test.mjs'
+      - 'tests/song-suggestions.test.cjs'
+      - '.github/workflows/ai-owner-only-check.yml'
+permissions:
+  contents: read
+jobs:
+  owner-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ai_owner_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Owner-only SQL, registered sessions and concurrent calls
+        env:
+          VZ_AI_OWNER_TEST_DB: postgres://postgres:ai_owner_ci_only@localhost:5432/postgres
+        run: node --test tests/ai-owner-only.test.mjs
+      - name: Paid edge boundary and free matching regressions
+        run: node --test tests/song-suggestions.test.cjs tests/stt-clip-browser.test.mjs tests/song-text-match.test.mjs
+  deployment-preflight:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check deployment connection presence without printing values
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          console.log(JSON.stringify({database_connection:!!process.env.SUPABASE_DB_URL,service_connection:!!process.env.SUPABASE_SERVICE_ROLE_KEY,management_connection:!!process.env.SUPABASE_ACCESS_TOKEN}));
+          NODE

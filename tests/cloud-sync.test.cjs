@@ -11,14 +11,15 @@ const storage=()=>{const m=new Map();return{
  getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),
  key:i=>[...m.keys()][i]??null,get length(){return m.size}
 };};
-async function until(fn){for(let n=0;n<1000;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out waiting for sync');}
+const probes=[];
+async function until(fn){for(let n=0;n<1000;n++){if(fn())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out waiting for sync: '+probes.slice(-2).map(probe=>probe()).join(' | '));}
 class Server{
- constructor(row=null){this.row=copy(row);this.writes=[];this.reads=0;this.beforeWrite=null;this.afterRead=null;}
+ constructor(row=null){this.owner='A';this.sid='s1';this.token='fake';this.row=copy(row);this.writes=[];this.reads=0;this.beforeWrite=null;this.afterRead=null;}
  client(){
   const server=this;
   return{
-   auth:{getUser:async()=>({data:{user:{id:'A',email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:'fake'}}}),signUp:async input=>{server.signup=copy(input);return {data:{session:null},error:null};}},
-   rpc:async name=>({data:name==='vzip_register_session'?{status:'active',current_session:'s1'}:true,error:null}),
+   auth:{getUser:async()=>({data:{user:{id:server.owner,email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:server.token}}}),signUp:async input=>{server.signup=copy(input);return {data:{session:null},error:null};}},
+   rpc:async name=>({data:name==='vzip_register_session'?{status:'active',current_session:server.sid}:true,error:null}),
    from(table){
     const q={table,filters:{},method:'read',single:false},chain={};
     for(const m of ['select','order','range','in'])chain[m]=()=>chain;
@@ -32,7 +33,7 @@ class Server{
  }
  async run(q){
   if(q.table!=='vocal_data')return{data:[],error:null};
-  assert.equal(q.filters.user_id??q.body?.user_id,'A');
+  assert.equal(q.filters.user_id??q.body?.user_id,this.owner);
   if(q.method==='read'){
    this.reads++;const result=copy(this.row);
    await this.afterRead?.(result);
@@ -54,46 +55,51 @@ class Server{
   throw Error('Unexpected operation '+q.method);
  }
 }
-function device(server,seed=base('local'),{clean=false,now=Date.now()}={}){
+function device(server,seed=base('local'),{clean=false,now=Date.now(),revision=false}={}){
  const listeners=new Map(),elements=new Map(),store=storage();
  const element=k=>{if(!elements.has(k))elements.set(k,{
-  textContent:'',hidden:false,value:'',classList:{toggle(){}},remove(){},appendChild(){},after(){},insertAdjacentHTML(){},focus(){},reportValidity(){return true},
-  querySelector:s=>element(s)
+  textContent:'',hidden:false,value:'',dataset:{},classList:{toggle(){},contains(){return false}},remove(){},appendChild(){},insertAdjacentHTML(){},
+  querySelector:s=>element(s),querySelectorAll:()=>[]
  });return elements.get(k)};
  const on=(type,fn)=>{if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push(fn)};
- const window={localStorage:store,VZIP_DEVICE_SESSIONS_ENABLED:true,
-  VzipAccountScope:{owner:'A',storage:store,mediaDb:()=> 'test-only',canImportLegacy:()=>false},
+ const window={localStorage:store,VZIP_DEVICE_SESSIONS_ENABLED:true,VZIP_SNAPSHOT_REVISION_ENABLED:revision,
+  VzipAccountScope:{owner:server.owner,storage:store,mediaDb:()=> 'test-only',canImportLegacy:()=>false},
   supabase:{createClient:()=>server.client()},addEventListener:on,
   dispatchEvent:e=>{for(const fn of listeners.get(e.type)||[])fn(e)},
  };
  const document={querySelector:element,querySelectorAll:()=>[],getElementById:id=>element('#'+id),
-  createElement:()=>({querySelector:element,appendChild(){}}),
+  createElement:()=>({querySelector:element,querySelectorAll:()=>[],dataset:{},appendChild(){}}),
   head:{appendChild(){}},body:{appendChild(){},classList:{toggle(){}}},addEventListener:on};
  class FixedDate extends Date{constructor(...a){super(...(a.length?a:[now]))}static now(){return now}}
  if(seed)store.setItem(KEY,JSON.stringify(seed));
  if(!clean)store.setItem('vzip_account_dirty','1');
  const context=vm.createContext({...window,window,document,localStorage:store,Date:FixedDate,
-  navigator:{userAgent:'test',maxTouchPoints:0},matchMedia:()=>({matches:false}),location:{href:'https://test.invalid/',reload(){},origin:'https://test.invalid',pathname:'/'},
-  URL,structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
-  Event:class{constructor(type){this.type=type}},confirm:()=>true,setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,10)),clearTimeout,setInterval(){},
+  navigator:{userAgent:'test',maxTouchPoints:0,locks:{request:async(name,options,work)=>work({})}},matchMedia:()=>({matches:false}),location:{href:'https://test.invalid/',reload(){},origin:'https://test.invalid',pathname:'/'},
+  URL,TextEncoder,AbortController,atob,fetch:server.fetch?server.fetch.bind(server):async()=>{throw Error('Unexpected REST transport');},structuredClone,crypto:require('node:crypto').webcrypto,CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail}},
+  Event:class{constructor(type){this.type=type}},setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,10)),clearTimeout,setInterval(){},
  });
  vm.runInContext(mergeScript,context);window.VzipDataMerge=context.VzipDataMerge;
+ vm.runInContext(fs.readFileSync('sync/snapshot-transport.js','utf8'),context);window.VzipSnapshotTransport=context.VzipSnapshotTransport;
+ vm.runInContext(fs.readFileSync('sync/snapshot-review-model.js','utf8'),context);window.VzipSnapshotReviewModel=context.VzipSnapshotReviewModel;
  vm.runInContext(script,context);
+ probes.push(()=>element('#cloud-status').textContent);
  return{store,window,status:()=>element('#cloud-status').textContent,
   control:element,
-  sync:()=>element('#cloud-upload').onclick(),
+  sync:()=>element('#cloud-upload').onclick(),review:()=>element('#cloud-review').onclick(),
   data:()=>JSON.parse(store.getItem(KEY)),
-  saved:()=>store.getItem('vzip_cloud_linked_user')==='A'&&!store.getItem('vzip_account_dirty')};
+  saved:()=>store.getItem('vzip_cloud_linked_user')===server.owner&&!store.getItem('vzip_account_dirty')};
 }
-test('first signup asks for a daily time with a 30-minute default and stores the chosen value',async()=>{
+test('signup sends the chosen daily practice time as account metadata',async()=>{
  const server=new Server(),d=device(server);
- await until(()=>typeof d.control('#cloud-signup').onclick==='function');
- d.control('#cloud-email').value='new@example.invalid';d.control('#cloud-password').value='password123';
- await d.control('#cloud-signup').onclick();
+ await until(()=>typeof d.control('#cloud-signup-submit').onclick==='function');
+ d.window.VZIP_ONE_ACCOUNT_PER_BROWSER=false; // signup is otherwise redirected to the bound-account notice
+ d.control('#cloud-signup-email').value='new@example.invalid';d.control('#cloud-signup-email').checkValidity=()=>true;
+ d.control('#cloud-signup-password').value='password123';d.control('#cloud-signup-confirm').value='password123';
+ d.control('#vzip-signup-minutes').value='0';
+ await d.control('#cloud-signup-submit').onclick();
  assert.equal(server.signup,undefined);
- assert.equal(d.control('#cloud-signup').textContent,'목표 시간으로 가입하기');
  d.control('#vzip-signup-minutes').value='45';
- await d.control('#cloud-signup').onclick();
+ await d.control('#cloud-signup-submit').onclick();
  assert.equal(server.signup.options.data.daily_target_minutes,45);
 });
 test('two empty-account first saves preserve both records and use DO NOTHING',async()=>{
@@ -189,4 +195,226 @@ test('a clean device adopts authoritative cloud data without sending stale local
 test('an empty new device loads existing cloud records without writes',async()=>{
  const s=new Server({payload:base('remote'),updated_at:'2026-11-07T00:00:00Z'}),d=device(s,null,{clean:true});
  await until(()=>d.saved());assert.deepEqual(d.data(),base('remote'));assert.equal(s.writes.length,0);
+});
+
+const UID='11111111-1111-4111-8111-111111111111',SID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',GEN='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+class RevisionServer extends Server{
+ constructor(payload=base('cloud')){
+  super({payload,updated_at:'2026-11-10T00:00:00.000001Z',revision:'1',generation:GEN});
+  this.owner=UID;this.sid=SID;this.token='test.'+Buffer.from(JSON.stringify({sub:UID,session_id:SID,role:'authenticated'})).toString('base64url')+'.signature';this.receipts=new Map();this.rpcCalls=[];this.commits=0;
+ }
+ async fetch(url,init){
+  const parsed=new URL(url);assert.equal(init.headers['X-Client-Info'],'vocalzip-device-session-v2');
+  if(init.method==='GET'){
+   assert.equal(parsed.searchParams.get('user_id'),'eq.'+UID);assert.ok(parsed.searchParams.get('select').includes('revision:revision::text'));
+   return Response.json(this.row?[{...copy(this.row),user_id:UID}]:[]);
+  }
+  assert.equal(parsed.pathname,'/rest/v1/rpc/vzip_save_snapshot');
+  const q=JSON.parse(init.body);this.rpcCalls.push(copy(q));await this.beforeRpc?.(q);
+  if(this.reject)return Response.json({},{status:403});
+  let receipt=this.receipts.get(q.p_request_id);
+  if(!receipt){
+   if(q.p_expected_revision!==(this.row?.revision||'0')||q.p_expected_generation!==(this.row?.generation||null))
+    return Response.json({status:'conflict',revision:this.row?.revision||'0',generation:this.row?.generation||null,exists:!!this.row});
+   this.commits++;this.row={payload:copy(q.p_payload),updated_at:'2026-11-10T00:00:01.000001Z',revision:String(BigInt(this.row?.revision||'0')+1n),generation:this.row?.generation||GEN};
+   if(this.normalize)this.row.payload=this.normalize(this.row.payload);
+   receipt={status:'saved',revision:this.row.revision,generation:this.row.generation,updated_at:this.row.updated_at};this.receipts.set(q.p_request_id,receipt);
+   await this.afterRpc?.();
+   if(this.loseReply){this.loseReply=false;throw TypeError('response lost');}
+  }
+  return Response.json(receipt);
+ }
+}
+test('revision bridge replays a lost reply through the shipped sync controls with no legacy write',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ const local=d.data();local.songs.push({id:'phone',title:'phone'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');s.loseReply=true;
+ await d.sync();assert.match(d.status(),/실패/);const journal=()=>JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID));
+ assert.ok(journal().pending);assert.equal(s.commits,1);
+ await d.sync();await until(()=>d.saved());assert.equal(s.commits,1);assert.equal(s.rpcCalls.length,2);assert.deepEqual(s.rpcCalls[0],s.rpcCalls[1]);assert.equal(journal().pending,null);assert.equal(s.writes.length,0);
+});
+test('revision bridge stops concurrent writes before merging away the local edit',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ const local=d.data();local.songs[0].title='private phone edit';d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ s.row.payload.songs[0].title='tablet edit';s.row.revision='2';
+ await d.sync();assert.match(d.status(),/실패/);assert.equal(d.data().songs[0].title,'private phone edit');assert.equal(s.row.payload.songs[0].title,'tablet edit');assert.equal(s.commits,0);assert.equal(s.writes.length,0);
+});
+test('revision bridge retains edits made during acknowledgement for a later RPC',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ const local=d.data();local.songs.push({id:'first'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ let once=true;s.afterRpc=async()=>{if(once){once=false;const value=d.data();value.songs.push({id:'late'});d.store.setItem(KEY,JSON.stringify(value));d.store.setItem('vzip_account_dirty','1');}};
+ await d.sync();await until(()=>d.saved()&&s.row.payload.songs.some(v=>v.id==='late'));
+ assert.ok(s.row.payload.songs.some(v=>v.id==='first'));assert.equal(s.writes.length,0);assert.equal(s.commits,2);
+});
+test('a paused revision contract never downgrades its existing state to direct writes',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());
+ d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;const local=d.data();local.songs.push({id:'offline'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ await d.sync();assert.match(d.status(),/일시 중지/);assert.equal(s.writes.length,0);assert.equal(s.commits,0);assert.ok(d.data().songs.some(x=>x.id==='offline'));
+});
+
+test('revision bridge compares the owner-scoped payload without resending excluded archive entries',async()=>{
+ const seed={...base('cloud'),deleted:{}},s=new RevisionServer(seed),d=device(s,seed,{clean:true,revision:true});await until(()=>d.saved());
+ d.window.VzipArchive={forOwner:(value,owner)=>{assert.equal(owner,UID);const own=copy(value);delete own.excludedArchive;return own;}};
+ const local=d.data();local.excludedArchive=[{id:'other-owner-private-entry'}];d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ await d.sync();assert.ok(d.saved());assert.equal(s.commits,0);assert.equal(s.rpcCalls.length,0);assert.equal(s.writes.length,0);
+ assert.equal(d.data().excludedArchive[0].id,'other-owner-private-entry');assert.equal(s.row.payload.excludedArchive,undefined);
+});
+
+const mediaSeed=()=>({...base('cloud'),deleted:{},lessons:[{id:'lesson',memo:'keep notes',recordings:[{id:'chosen'},{id:'other'}]}],practices:[{id:'practice',manualMinutes:12,mediaIds:['chosen','other']}]});
+class MediaRevisionServer extends RevisionServer{
+ constructor(){super(mediaSeed());this.media=new Map([['chosen',{metadata:{id:'chosen',storageProvider:'r2',r2Key:'u/'+UID+'/chosen/original.wav',review:'keep current review'},updated_at:'2026-11-10T00:00:00Z'}]]);this.events=[];this.objects=new Set(['chosen','other']);this.mediaReads=0;}
+ async run(q){
+  if(q.table==='vocal_media'){
+   assert.equal(q.filters.user_id,UID);
+   if(q.method==='read'){if(q.single){this.mediaReads++;await this.onMediaRead?.();return {data:copy(this.media.get(q.filters.id)||null),error:null};}return {data:[...this.media].map(([id,row])=>({id,...copy(row)})),error:null};}
+   assert.equal(q.method,'delete');const row=this.media.get(q.filters.id);
+   if(row&&q.filters.updated_at===row.updated_at){this.media.delete(q.filters.id);this.events.push('metadata');return {data:[{id:q.filters.id}],error:null};}
+   return {data:[],error:null};
+  }
+  if(q.table==='vocal_song_texts'){this.events.push('texts');if(this.failText){this.failText=false;return {data:null,error:Error('text cleanup failed')};}return {data:[],error:null};}
+  if(q.table==='vocal_data'&&q.method!=='read')this.events.push('legacy-root');
+  return super.run(q);
+ }
+}
+async function mediaDevice({revision=true}={}){
+ const s=new MediaRevisionServer(),d=device(s,mediaSeed(),{clean:true,revision});await until(()=>d.saved());
+ d.window.VzipR2={metadataMode:async()=>'legacy',remove:async key=>{
+  assert.equal(key,'u/'+UID+'/chosen/original.wav');
+  if(revision)assert.ok(s.row.payload.deleted.media.includes('chosen'));
+  s.events.push('bytes');s.objects.delete('chosen');await s.onBytes?.();
+ }};
+ return {s,d};
+}
+test('revision media delete confirms snapshot first and never uses direct root writes',async()=>{
+ const {s,d}=await mediaDevice();await d.window.vzipCloudMediaDelete({id:'chosen'});
+ assert.deepEqual(s.events,['bytes','texts','metadata']);assert.equal(s.writes.length,0);assert.equal(s.commits,1);
+ assert.deepEqual(s.row.payload.lessons[0].recordings,[{id:'other'}]);assert.equal(s.row.payload.lessons[0].memo,'keep notes');assert.equal(s.row.payload.practices[0].manualMinutes,12);
+ assert.ok(s.objects.has('other'));assert.equal(d.window.vzipPendingMediaDeletes()[0].phase,'cloud-complete');
+ await d.window.vzipMediaDeleteAcknowledge('chosen');assert.deepEqual(copy(d.window.vzipPendingMediaDeletes()),[]);
+});
+test('lost snapshot delete acknowledgement preserves bytes and replays the exact request',async()=>{
+ const {s,d}=await mediaDevice();s.loseReply=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));
+ assert.ok(s.objects.has('chosen'));assert.equal(s.events.length,0);
+ const before=copy(s.rpcCalls[0]),journal=JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID));
+ assert.equal(journal.pending.context.kind,'media-delete');assert.equal(journal.pending.context.id,'chosen');
+ await d.window.vzipCloudMediaDelete({id:'chosen'});assert.equal(s.commits,1);assert.deepEqual(s.rpcCalls[1],before);assert.ok(s.objects.has('other'));
+});
+test('a concurrent root edit prevents bytes from being erased',async()=>{
+ const {s,d}=await mediaDevice();const local=d.data();local.lessons[0].memo='phone unsent';d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ s.row.payload.lessons[0].memo='tablet saved';s.row.revision='2';
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));assert.equal(s.events.length,0);assert.equal(s.commits,0);
+ assert.equal(d.data().lessons[0].memo,'phone unsent');assert.equal(s.row.payload.lessons[0].memo,'tablet saved');
+});
+test('metadata changed during the root RPC keeps both the original and current file information',async()=>{
+ const {s,d}=await mediaDevice();s.afterRpc=()=>{s.media.get('chosen').metadata.review='new device memo';s.media.get('chosen').updated_at='2026-11-10T00:00:01Z';};
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),e=>e.code==='mediaChanged');assert.equal(s.events.length,0);
+ assert.ok(s.objects.has('chosen'));assert.equal(s.media.get('chosen').metadata.review,'new device memo');
+});
+test('cleanup can resume after a file was erased but later metadata work failed',async()=>{
+ const {s,d}=await mediaDevice();s.failText=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/text cleanup/);
+ assert.ok(s.media.has('chosen'));assert.equal(d.window.vzipPendingMediaDeletes()[0].phase,'root-confirmed');
+ await d.window.vzipCloudMediaDelete({id:'chosen'});await d.window.vzipMediaDeleteAcknowledge('chosen');
+ assert.equal(s.commits,1);assert.ok(!s.media.has('chosen'));assert.ok(s.objects.has('other'));assert.deepEqual(copy(d.window.vzipPendingMediaDeletes()),[]);
+});
+test('a generic unresolved snapshot is never mistaken for a media deletion receipt',async()=>{
+ const {s,d}=await mediaDevice();const local=d.data();local.songs.push({id:'unsent'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');s.reject=true;
+ await d.sync();const pending=JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID)).pending;
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/이전 저장 요청/);assert.equal(s.events.length,0);
+ assert.equal(JSON.parse(d.store.getItem('vzip_snapshot_transport_v1:'+UID)).pending.id,pending.id);assert.ok(d.data().songs.some(x=>x.id==='unsent'));
+});
+test('new-session delete resume and paused configuration both stop before touching media',async()=>{
+ const {s,d}=await mediaDevice();s.loseReply=true;await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));const reads=s.mediaReads;
+ d.window.vzipCloudSessionId=()=> 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),e=>e.code==='session');assert.equal(s.mediaReads,reads);assert.equal(s.events.length,0);
+ d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;await assert.rejects(async()=>d.window.vzipCloudMediaDelete({id:'chosen'}),/일시 중지/);assert.equal(s.events.length,0);
+});
+test('intent storage failure and foreign storage paths fail before snapshot or file changes',async()=>{
+ const a=await mediaDevice(),save=a.d.store.setItem;
+ a.d.store.setItem=(k,v)=>{if(k.startsWith('vzip_media_delete_v1:'))throw Error('quota');return save(k,v);};
+ await assert.rejects(a.d.window.vzipCloudMediaDelete({id:'chosen'}),e=>e.code==='storage');assert.equal(a.s.events.length,0);assert.equal(a.s.commits,0);
+ const b=await mediaDevice();b.s.media.get('chosen').metadata.r2Key='u/22222222-2222-4222-8222-222222222222/foreign/original.wav';
+ await assert.rejects(b.d.window.vzipCloudMediaDelete({id:'chosen'}),/다른 계정/);assert.equal(b.s.events.length,0);assert.equal(b.s.commits,0);
+});
+test('the default-off legacy deletion path keeps its existing behavior',async()=>{
+ const {s,d}=await mediaDevice({revision:false});await d.window.vzipCloudMediaDelete({id:'chosen'});
+ assert.equal(s.events[0],'bytes');assert.ok(s.events.includes('legacy-root'));assert.equal(s.rpcCalls.length,0);assert.equal(s.writes.length,1);
+ assert.ok(s.row.payload.deleted.media.includes('chosen'));assert.ok(s.objects.has('other'));
+});
+
+for(const raw of ['{"broken":',JSON.stringify({songs:[],lessons:'unreadable local input'})]){
+ test('media deletion preserves malformed local input instead of replacing it: '+raw,async()=>{
+  const {s,d}=await mediaDevice();d.store.setItem(KEY,raw);
+  await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}),/기기 기록 형식/);
+  assert.equal(d.store.getItem(KEY),raw);assert.equal(s.events.length,0);assert.equal(s.commits,0);assert.ok(s.objects.has('other'));
+ });
+}
+
+function reviewHarness(d){
+ let callbacks;d.window.VZ={sheet(){}};
+ d.window.VzipSnapshotReview={open:x=>{callbacks=x;}};
+ return ()=>{assert.ok(callbacks);return callbacks;};
+}
+test('shipped recovery control applies the selected cloud field despite a newer local timestamp',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+ const local=d.data();local.songs[0].title='phone';local.songs[0].updatedAt=900;local.practices.push({id:'phone-only'});d.store.setItem(KEY,JSON.stringify(local));d.store.setItem('vzip_account_dirty','1');
+ s.row.payload.songs[0].title='cloud choice';s.row.payload.songs[0].updatedAt=100;s.row.payload.lessons=[{id:'cloud-only'}];s.row.revision='2';await d.sync();
+ await d.review();const ui=get(),r=await ui.review(),p=require('../sync/snapshot-review-model.js').plan(r);
+ const choices=Object.fromEntries(p.conflicts.map(c=>[c.id,c.options.find(o=>o.sources.includes('클라우드')).id]));
+ await ui.resolve(r.reviewId,p.candidate(choices),{confirmed:true});ui.onClose();
+ assert.equal(d.data().songs[0].title,'cloud choice');assert.equal(d.data().practices[0].id,'phone-only');assert.equal(d.data().lessons[0].id,'cloud-only');assert.ok(d.saved());assert.equal(s.writes.length,0);
+});
+test('cancelled review never writes or discards the current local input',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+ const x=d.data();x.songs[0].title='phone';d.store.setItem(KEY,JSON.stringify(x));d.store.setItem('vzip_account_dirty','1');s.row.revision='2';s.row.payload.songs[0].title='cloud';await d.sync();
+ const before=d.store.getItem(KEY);await d.review();await get().review();get().onClose();assert.equal(d.store.getItem(KEY),before);assert.equal(s.rpcCalls.length,0);
+});
+for(const change of ['local','pause','owner']){
+ test('shipped recovery refuses '+change+' changes after inspection',async()=>{
+  const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+  await d.review();const ui=get(),r=await ui.review();
+  if(change==='local'){const x=d.data();x.practices.push({id:'late'});d.store.setItem(KEY,JSON.stringify(x));}else if(change==='pause')d.window.VZIP_SNAPSHOT_REVISION_ENABLED=false;else d.window.VzipAccountScope.owner='another-owner';
+  await assert.rejects(ui.resolve(r.reviewId,r.device,{confirmed:true}),e=>['review','identity'].includes(e.code));ui.onClose();assert.equal(s.rpcCalls.length,0);
+ });
+}
+test('shipped recovery keeps foreign archive data locally without sending it to the server',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ const x=d.data();x.songs[0].title='phone';x.songs[0].repertoire={ownerId:'other',memo:'foreign private text'};x.performances=[{id:'foreign',ownerId:'other',memo:'foreign private text'}];d.store.setItem(KEY,JSON.stringify(x));d.store.setItem('vzip_account_dirty','1');s.row.revision='2';s.row.payload.songs[0].title='cloud';await d.sync();
+ await d.review();const ui=get(),r=await ui.review();assert.ok(!JSON.stringify(r).includes('foreign private text'));
+ await ui.resolve(r.reviewId,r.device,{confirmed:true});ui.onClose();
+ assert.equal(d.data().songs[0].repertoire.memo,'foreign private text');assert.equal(d.data().performances[0].id,'foreign');assert.ok(!JSON.stringify(s.rpcCalls).includes('foreign private text'));assert.ok(d.saved());
+});
+test('shipped recovery retries a lost ACK with the same selected request rather than another save',async()=>{
+ const s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);
+ await d.review();const ui=get(),r=await ui.review();s.loseReply=true;
+ await assert.rejects(ui.resolve(r.reviewId,r.device,{confirmed:true}));assert.equal(s.commits,1);const first=copy(s.rpcCalls[0]);
+ await ui.retry();ui.onClose();assert.equal(s.commits,1);assert.deepEqual(s.rpcCalls[1],first);assert.ok(d.saved());
+});
+
+test('foreign archive entries added during recovery acknowledgement are preserved locally',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ await d.review();const ui=get(),r=await ui.review();
+ s.afterRpc=async()=>{const current=d.data();current.performances=[{id:'late-foreign',ownerId:'other',memo:'foreign after submit'}];d.store.setItem(KEY,JSON.stringify(current));};
+ await ui.resolve(r.reviewId,r.device,{confirmed:true});ui.onClose();
+ assert.equal(d.data().performances[0].memo,'foreign after submit');assert.ok(!JSON.stringify(s.rpcCalls).includes('foreign after submit'));assert.ok(d.saved());
+});
+test('foreign archive collisions stop before recovery transmission',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ const raw=d.data();raw.performances=[{id:'same-show',ownerId:'other',memo:'private'}];d.store.setItem(KEY,JSON.stringify(raw));s.row.payload.performances=[{id:'same-show',ownerId:UID,title:'own show'}];s.row.revision='2';
+ await d.review();const ui=get(),r=await ui.review();
+ await assert.rejects(ui.resolve(r.reviewId,r.cloud.payload,{confirmed:true}),e=>e.code==='archiveConflict');ui.onClose();
+ assert.equal(s.rpcCalls.length,0);assert.equal(d.data().performances[0].memo,'private');
+});
+
+test('a mixed-account cloud snapshot is blocked before any private foreign values reach the review view',async()=>{
+ const Archive=require('../app/repertoire-model.js'),s=new RevisionServer(),d=device(s,base('cloud'),{clean:true,revision:true});await until(()=>d.saved());const get=reviewHarness(d);d.window.VzipArchive=Archive;
+ s.row.payload.performances=[{id:'foreign-cloud',ownerId:'other',memo:'must not display'}];s.row.revision='2';
+ await d.review();const ui=get();
+ await assert.rejects(ui.review(),e=>e.code==='identity'&&!e.message.includes('must not display'));ui.onClose();
+ assert.equal(s.rpcCalls.length,0);assert.equal(d.data().performances,undefined);assert.equal(s.row.payload.performances[0].memo,'must not display');
+});
+
+test('missing or unavailable media capability stops revision deletion before root or bytes',async()=>{
+ for(const missing of [true,false]){
+  const {s,d}=await mediaDevice();if(missing)delete d.window.VzipR2.metadataMode;else d.window.VzipR2.metadataMode=async()=>{throw Error('paused');};
+  await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));assert.ok(s.objects.has('chosen'));assert.equal(s.events.length,0);assert.equal(d.window.vzipPendingMediaDeletes().length,0);
+ }
 });

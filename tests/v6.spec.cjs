@@ -48,18 +48,152 @@ async function boot(page, {seed = legacy(), media = true} = {}) {
 const data = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const media = page => page.evaluate(() => window.vzipReadMedia());
 const sheet = page => page.locator('.sheet');
+const openLibraryImport=async page=>{
+ // Legacy import sheet remains testable for records created by older app versions.
+ await page.evaluate(() => VZ.importSheet());
+};
+const pickLibraryImportFiles=(page,files)=>sheet(page).locator('[data-file]').last().setInputFiles(files);
+
+test('보관함에서 고른 파일은 새 확인 화면을 거쳐 업로드 중에만 상단 대시보드를 보인다', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
+  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-imp]').click();
+  await (await chooser).setFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
+  await expect(page).toHaveURL(/#\/import-hub$/);
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
+  await expect(page.locator('[data-dash]')).toHaveCount(0);
+  await page.evaluate(() => {
+    VZ.media.importFile = async (file, choice) => new Promise(resolve => {
+      window.__finishImport = () => resolve({id:choice.id, cloud:true, name:file.name, recordedDate:choice.date || '2026-11-01'});
+    });
+  });
+  await page.locator('[data-hub] [data-import]').click();
+  await expect(page.locator('[data-hub] > [data-dash]')).toBeVisible();
+  await page.evaluate(() => window.__finishImport());
+  await expect(page.locator('[data-result]')).toBeVisible();
+  await expect(page.locator('[data-dash]')).toHaveCount(0);
+});
+
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
+
+test('Vocal lab stays a standalone screen and uses selected recordings for reports', async ({page}) => {
+ await boot(page);
+ await page.evaluate(async () => {
+   const all=await VZ.media.list();
+   for(const m of all.filter(x=>x.songId==='s1')) {
+     const old=m.id==='m1';
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:old?34:23,notes:4},intonation:{meanAbsCents:old?27:18,notes:10},range:{highCents:8100,high:'A5'},breath:{medianPhrase:old?2.4:3.2}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   }
+   VZ.media.invalidate();
+ });
+ await page.goto('/#/vocal-lab/s1');
+ await expect(page.locator('.vl-song strong')).toHaveText('This Is the Moment');
+ await expect(page.locator('.vl-player')).toHaveCount(0);
+ await page.locator('.vl-dates button').first().click();
+ await expect(page.locator('.vl-single')).toBeVisible();
+ await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
+ await page.locator('.vl-dates button').nth(1).click();
+ await expect(page.locator('.vl-trend')).toBeVisible();
+ await expect(page.locator('.vl-recommend')).toContainText('3개 이상');
+ await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+ await page.locator('.vl-plot-dates button').first().click();
+ await expect(page.locator('.sheet')).toContainText('소리의 음높이 흔들림');
+ await page.locator('.sheet [data-close-observe]').click();
+ await page.locator('[data-save-report]').click();
+ await page.goto('/#/lab-reports');
+ await expect(page.locator('.vl-report')).toHaveCount(1);
+ await page.locator('.vl-report').click();
+ await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+ await page.goto('/#/song/s1');
+ await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(0);
+});
+
+test('Vocal lab growth AI asks the server for a measured same-song report (overall mode)', async ({page}) => {
+ await boot(page);
+ await page.evaluate(async () => {
+   for(const m of (await VZ.media.list()).filter(x=>x.songId==='s1')) {
+     const old=m.id==='m1';
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:old?34:23,notes:4},intonation:{meanAbsCents:old?27:18,notes:10},range:{highCents:8100,high:'A5'},breath:{medianPhrase:old?2.4:3.2}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   }
+   VZ.media.invalidate();
+   window.vzipCloudCoach=async input=>{window.__coach=input;return {mode:'overall',month:'all',note:'요약: 같은 곡 두 녹음을 비교했어요.\n좋아진 점: 지속음 흔들림이 줄었어요.\n보완할 점: 비교 녹음이 두 개뿐이에요.\n다음 연습: 같은 구간을 짧게 다시 녹음해요.'};};
+ });
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await page.locator('.vl-dates button').nth(1).click();
+ await page.locator('[data-growth-ai]').click();
+ await expect(page.locator('.vl-growth-ai-text')).toContainText('다음 연습: 같은 구간을');
+ const sent = await page.evaluate(() => window.__coach);
+ expect(sent.mode).toBe('overall');
+ expect(sent.analyzedSongs).toBe(1);
+ expect(sent.metrics.map(m => m.key).sort()).toEqual(['intonation', 'phrase', 'stability']);
+ expect(sent.metrics.find(m => m.key === 'stability')).toMatchObject({state:'better', improvedSongs:1, worsenedSongs:0, value:23});
+ expect(sent.observations).toEqual([]);
+ await page.reload();
+ await page.locator('.vl-dates button').first().click();
+ await page.locator('.vl-dates button').nth(1).click();
+ await expect(page.locator('.vl-growth-ai-text')).toContainText('좋아진 점: 지속음 흔들림이 줄었어요.');
+});
+
+test('Vocal lab shows a compact recommendation list and opens the chosen practice', async ({page}) => {
+ await boot(page);
+ await page.evaluate(async () => {
+   await window.vzipStorePracticeMedia({id:'m3', name:'세 번째 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', song:'This Is the Moment', blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:1});
+   VZ.media.invalidate();
+   const all=await VZ.media.list();
+   for(const m of all.filter(x=>x.songId==='s1')) {
+     await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:18,notes:4},intonation:{meanAbsCents:28,notes:10},range:{lowCents:6000,highCents:8100},breath:{medianPhrase:2.4}},confidence:{voiceOverMrDb:12}}},{quiet:true});
+   }
+   VZ.media.invalidate();
+ });
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await expect(page.locator('.vl-tip')).toHaveCount(2);
+ const first=page.locator('.vl-tip').first();
+ const name=await first.locator('summary strong').innerText();
+ await first.locator('summary').click();
+ await expect(first.locator('.vl-tip-detail')).toBeVisible();
+ await first.locator('[data-practice-tip]').click();
+ await expect(page.locator('.sheet textarea[name=memo]')).toHaveValue(new RegExp('\\[추천 연습\\] '+name));
+});
+
+test('Vocal lab keeps the viewport on date, metric, and satisfaction selection', async ({page}) => {
+ await boot(page);
+ await page.goto('/#/vocal-lab/s1');
+ await page.locator('.vl-dates button').first().click();
+ await page.evaluate(() => window.scrollTo(0, 70));
+ const beforeDate=await page.evaluate(() => window.scrollY);
+ await page.locator('.vl-dates button').nth(1).click();
+ expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeDate, 0);
+ await page.locator('[data-metric="into"]').scrollIntoViewIfNeeded();
+ const beforeMetric=await page.evaluate(() => window.scrollY);
+ await page.locator('[data-metric="into"]').click();
+ expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeMetric, 0);
+ await page.locator('[data-rating="4"]').scrollIntoViewIfNeeded();
+ const beforeRating=await page.evaluate(() => window.scrollY);
+ await page.locator('[data-rating="4"]').click();
+ await expect(page.locator('[data-rating="4"]')).toHaveAttribute('aria-pressed','true');
+ expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeRating, 0);
+});
 
 test('Bottom navigation reaches the five main screens without horizontal overflow', async ({page}) => {
  await boot(page);
- for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','캘린더']]){
+ for(const [label,route,heading]of [['내 곡','songs','내 곡'],['녹음 시작','record','녹음'],['보관함','library','보관함'],['일정','calendar','일정']]){
   await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
   await page.getByRole('button',{name:label,exact:true}).click();await expect(page).toHaveURL(new RegExp('#/'+route+'$'));
   await expect(page.locator('#top h1')).toHaveText(heading);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  }
  await page.goto('/#/home');await expect(page.locator('.vz-student-home')).toBeVisible();
- await expect(page.locator('.vz-nav-item')).toHaveCount(4);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
- const box=await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).boundingBox();expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
+ await expect(page.locator('.vz-nav-item')).toHaveCount(5);await expect(page.locator('.vz-goals')).toContainText('오늘의 목표 정하기');await expect(page.locator('.vz-song')).toContainText('This Is the Moment');
+ const songsButton=page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true});
+ await expect(songsButton).toBeVisible();
+ await expect.poll(async()=>Math.round((await songsButton.boundingBox())?.height||0)).toBeGreaterThanOrEqual(44);
 });
 
 test('Lesson schedule: add, edit, complete with per-song feedback, cancel, never auto-complete', async ({page}) => {
@@ -185,7 +319,7 @@ test('Homework has a period; each practice in it asks whether it was done, how m
   await page.locator('[data-log]').click();
   await sheet(page).locator('[name=date]').fill(day(10)); await sheet(page).locator('[name=date]').dispatchEvent('change');
   await expect(sheet(page).locator('.hw-ask')).toHaveCount(0);
-  await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
+  await sheet(page).locator('[data-close]').first().click();
   // The homework shows the period, the total and each time with its memo.
   await page.goto('/#/homework');
   await expect(page.locator('[data-task="' + task.id + '"]')).toContainText('3회 했어요');
@@ -217,8 +351,8 @@ test('Bulk upload: one file at a time, server-confirmed, duplicates left out, pa
   // More than 20 files from 파일 가져오기 go to the bulk uploader, which checks and uploads them batch by batch by itself.
   await page.evaluate(() => { window.__vzipBatchSize = 10; });
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles(files);
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,files);
   await expect(page.locator('.toast').last()).toContainText('22개 파일은 대량 업로드 화면에서');
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
   const dash = page.locator('[data-dash]'), n = k => dash.locator('[data-count="' + k + '"] b');
@@ -298,7 +432,8 @@ test('보컬 분석: a recording sung over an MR gets a pitch curve and measurem
   await page.goto('/#/library');
   const row = page.locator('[data-media="song"]');
   await row.locator('[data-toggle]').click();
-  await row.getByRole('button', {name:'분석'}).click();
+  await row.getByRole('button', {name:'더보기'}).click();
+  await sheet(page).getByRole('button', {name:'보컬 분석'}).click();
   await expect(page).toHaveURL(/#\/analysis\/song$/);
   const out = page.locator('[data-out]');
   await expect(out.locator('.ana-grid')).toBeVisible({timeout:60000});
@@ -339,6 +474,7 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
     VZ.media.invalidate();
   }, [['t0', '2026-07-01'], ...takes]);
   await page.goto('/#/song/s1');
+  await page.locator('.vz-song-more').filter({hasText:'보컬 변화'}).locator('summary').first().click();
   const card = page.locator('[data-song-vocal]');
   await expect(card).toContainText('분석 0/4개');
   await card.getByRole('button', {name:/지금 4개 분석하기/}).click();
@@ -366,6 +502,7 @@ test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the 
   await expect(page.locator('.vg-table')).toContainText('음정 오차');
   // A dot opens that take's pitch curve.
   await page.goto('/#/song/s1');
+  await page.locator('.vz-song-more').filter({hasText:'보컬 변화'}).locator('summary').first().click();
   await page.locator('[data-song-vocal] .vg-chart').first().locator('a').last().click();
   await expect(page).toHaveURL(/#\/analysis\/t3$/);
 });
@@ -427,10 +564,9 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   });
   await expect.poll(() => page.evaluate(() => VZ.serverAnalysisOn())).toBe(true);
   await page.goto('/#/library');
-  const card = page.locator('[data-server-analysis] .srv');
-  await expect(card).toContainText('서버 자동 분석');
-  await expect(card).toContainText('1/3');                      // vocal: 1 done of 3
-  await expect(card).toContainText('곡 자동 지정');
+  const card = page.locator('[data-server-analysis]');
+  await expect(card).toContainText('곡 확인 필요');
+  await expect(card).toContainText('대기·분석 중 1건');
   await expect(card).toContainText('분석 실패 1건');
   await expect(card.locator('a[href="#/song-suggest"]')).toContainText('1');
   await expect(page.locator('[data-media="ai1"]')).toContainText('AI 곡 지정');
@@ -445,7 +581,8 @@ test('서버 자동 분석: progress card, AI / needs-a-look labels, live refres
   });
   await expect(page.locator('[data-media="rv1"]')).toContainText('On My Own', {timeout:5000});
   await expect(page.locator('[data-media="rv1"]')).not.toContainText('곡 확인 필요');
-  await expect(card).toContainText('2/3');
+  await expect(card).toContainText('곡 확인 필요 0건');
+  await expect(card).not.toContainText('대기·분석 중');
   // The browser's own background analysis leaves the work to the server.
   expect(await page.evaluate(() => { window.__vzipAutoAnalysis = true; return VZ.autoAnalysisStatus().enabled && VZ.serverAnalysisOn(); })).toBe(true);
 });
@@ -486,15 +623,15 @@ test('파일 가져오기 quietly leaves out files that are not audio or video',
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles([{name:'take.wav', mimeType:'audio/wav', buffer:b}, {name:'가사.txt', mimeType:'text/plain', buffer:Buffer.from('가사')}, {name:'._take.wav', mimeType:'audio/wav', buffer:Buffer.from('x')}]);
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,[{name:'take.wav', mimeType:'audio/wav', buffer:b}, {name:'가사.txt', mimeType:'text/plain', buffer:Buffer.from('가사')}, {name:'._take.wav', mimeType:'audio/wav', buffer:Buffer.from('x')}]);
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 2개는 뺐어요');
   await expect(sheet(page).locator('.up-row')).toHaveCount(1);
   await expect(sheet(page)).not.toContainText('가사.txt');
   // Only non-media picked: nothing to import.
   await sheet(page).locator('[aria-label="닫기"]').first().click().catch(() => page.keyboard.press('Escape'));
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles({name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')});
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,{name:'메모.txt', mimeType:'text/plain', buffer:Buffer.from('x')});
   await expect(page.locator('.toast').last()).toContainText('고른 파일 중에 음성·영상 파일이 없어요');
 });
 
@@ -502,8 +639,8 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   await boot(page, {media:false});
   const sr = 8000, n = sr, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles({name:'2025-08-08_22-09-00.wav', mimeType:'audio/wav', buffer:b});
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,{name:'2025-08-08_22-09-00.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
   const [saved] = await media(page);
@@ -512,8 +649,8 @@ test('Recordings named yyyy-MM-dd_HH-mm-ss land on that date and time; older imp
   // "11-3 scale.m4a" style: month-day at the start, the most recent such day.
   const expected = require('../media-date.js').fromName('11-3 scale.wav').recordedDate;
   await page.keyboard.press('Escape'); await page.goto('/#/home'); await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles({name:'11-3 scale.wav', mimeType:'audio/wav', buffer:b});
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,{name:'11-3 scale.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:30000});
   expect((await media(page)).find(m => m.id !== saved.id)).toMatchObject({recordedDate:expected, dateSource:'filename'});
@@ -561,7 +698,9 @@ test('Lesson delete keeps homework and practice history; legacy page still reads
   await boot(page);
   await page.goto('/#/lesson/l1');
   await page.getByRole('button', {name:'레슨 삭제'}).click();
-  await sheet(page).getByRole('button', {name:'삭제'}).click();
+  await page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true}).getByRole('button',{name:'삭제 대상 확인'}).click();
+  await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+  await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
   const d = await data(page);
   expect(d.lessons.some(l => l.id === 'l1')).toBe(false);
   expect(d.assignments.find(a => a.id === 'a1')).toMatchObject({title:'립트릴 5분', lessonIds:[]});
@@ -611,29 +750,29 @@ test('Songs: add, search, detail tabs, delete keeps records', async ({page}) => 
   await sheet(page).locator('[name=title]').fill('Defying Gravity');
   await sheet(page).locator('[name=show]').fill('위키드');
   await sheet(page).getByRole('button', {name:'곡 추가'}).click();
-  await expect(page.locator('#top h1')).toHaveText('Defying Gravity');
+  await expect(page.locator('.vz-song-detail-title')).toHaveText('Defying Gravity');
   await page.goto('/#/songs');
   await page.locator('[data-song-search]').click();
+  const beforeSearch = await page.locator('.list .item').count();
   await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('moment');
-  await page.locator('[data-collection-search] button[type=submit]').click();
+  await expect(page.locator('.list .item')).toHaveCount(beforeSearch);
+  await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');
   await expect(page.locator('.list .item')).toHaveCount(1);
+  await expect(page.locator('[data-song-search]')).toHaveAttribute('aria-pressed','true');
   // A background media refresh keeps the applied search.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m1'}})));
   await page.waitForTimeout(700);
   await page.locator('[data-song-search]').click();
   await expect(page.getByRole('searchbox',{name:'곡 검색',exact:true})).toHaveValue('moment');
-  await page.locator('[data-collection-search] button[type=submit]').click();
+  await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');
   await expect(page.locator('.list .item')).toHaveCount(1);
   await page.locator('.list .item').click();
   await expect(page.locator('[data-summary]')).toContainText('녹음 2개');
-  // Recordings live inside lessons and practices.
-  await expect(page.getByRole('tab', {name:'녹음'})).toHaveCount(0);
-  await page.getByRole('tab', {name:'연습'}).click();
-  await expect(page.locator('[data-body] [data-media]')).toHaveCount(1);
-  await expect(page.locator('[data-body]')).toContainText('연습 녹음');
-  await page.getByRole('tab', {name:'레슨'}).click();
+  // Recordings share one tab; lesson and practice records remain in activity history.
+  await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('[data-body] [data-media]')).toHaveCount(2);
+  await page.getByRole('tab', {name:'활동 기록'}).click();
   await expect(page.getByText('호흡 길게')).toBeVisible();
-  await expect(page.locator('[data-body] [data-media]')).toHaveCount(1);
   await page.locator('[data-song-menu]').click();
   await page.getByRole('button', {name:'곡 삭제'}).click();
   await sheet(page).getByRole('button', {name:'삭제'}).click();
@@ -676,7 +815,7 @@ test('One-touch recording: record, preview, save with song; failure keeps origin
   // Recording alone does not create a practice session (no double-count).
   expect((await data(page)).practices).toHaveLength(1);
   await page.getByRole('link', {name:'On My Own 곡 보기'}).click();
-  await page.getByRole('tab', {name:'연습'}).click();
+  await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
   await expect(page.locator('[data-media]')).toHaveCount(1);
 });
 
@@ -805,11 +944,11 @@ test('Denied microphone explains the problem and keeps the recorder usable', asy
 test('Import: multiple files, bulk and per-file song, date edit, invalid skipped, failed file retried alone', async ({page}) => {
   await boot(page);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
+  await openLibraryImport(page);
   await page.evaluate(() => { const real = window.vzipStorePracticeMedia; window.__calls = 0; window.vzipStorePracticeMedia = async item => { window.__calls++; if (item.songId === 's2' && !window.__failedOnce) { window.__failedOnce = true; throw Error('네트워크 오류'); } return real(item); }; });
   const wav = await page.evaluate(() => [...new Uint8Array(window.__wav)]);
   const buffer = Buffer.from(wav);
-  await sheet(page).locator('[data-file]').setInputFiles([
+  await pickLibraryImportFiles(page,[
     {name:'a.wav', mimeType:'audio/wav', buffer}, {name:'b_talkv_dJMcaCaaATn_TFN3CMVq848GvO4AidPl6k_very_long_name_from_kakaotalk.m4a', mimeType:'', buffer}, {name:'notes.txt', mimeType:'text/plain', buffer:Buffer.from('x')}]);
   await expect(page.locator('.toast').last()).toContainText('음성·영상이 아닌 파일 1개는 뺐어요'); // left out, not listed
   await expect(sheet(page)).not.toContainText('notes.txt');
@@ -884,7 +1023,7 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await page.goto('/#/calendar');
   if (day(-1).slice(0, 7) !== day(0).slice(0, 7)) await page.getByRole('button', {name:'이전 달'}).click();
   await expect(async () => { await page.locator('[data-d="' + day(-1) + '"]').click(); await expect(page.locator('[data-d="' + day(-1) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
-  await expect(page.locator('[data-day]')).toContainText('30분');
+  await expect(page.locator('[data-day]')).toContainText('25분');
   // The practice shows its linked recording underneath; an unlinked recording appears as a practice recording.
   await expect(page.locator('[data-day] .cal-own').first().locator('[data-practice]')).toHaveCount(1);
   await expect(page.locator('[data-day] [data-media]')).toHaveCount(2);
@@ -896,7 +1035,8 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
   await expect(async () => { await page.locator('[data-d="' + day(-7) + '"]').click(); await expect(page.locator('[data-d="' + day(-7) + '"]')).toHaveAttribute('aria-pressed', 'true', {timeout:1000}); }).toPass();
   await expect(page.locator('[data-day]')).toContainText('완료');
   await expect(page.locator('[data-day] .cal-own [data-media]')).toHaveCount(1); // the lesson's recording sits under the lesson
-  await page.getByRole('button', {name:'레슨 일정'}).click();
+  await page.locator('[data-day] [data-add]').click();
+  await sheet(page).getByRole('button', {name:'레슨 일정'}).click();
   await expect(sheet(page).locator('[name=date]')).toHaveValue(day(-7));
   await sheet(page).getByRole('button', {name:'닫기'}).click();
   await page.getByRole('button', {name:'다음 달'}).click();
@@ -921,9 +1061,11 @@ test('Settings keeps the cloud account panel across re-renders and exports a bac
   await expect(page.locator('#cloud-user')).toContainText('test@example.invalid');
   await page.goto('/#/home');
   await page.goto('/#/settings');
+  await page.getByText('동기화·백업 도구').click();
   await expect(page.locator('#cloud-logout')).toBeVisible();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', {name:/기록 백업/}).click();
+  await page.getByText('기록 백업·복원').click();
+  await page.getByRole('button', {name:'기록 내보내기'}).click();
   expect((await download).suggestedFilename()).toMatch(/^vocalzip-backup-/);
 });
 
@@ -945,8 +1087,8 @@ test('Video import keeps only the original audio and files it under the capture 
   test.setTimeout(90000);
   await boot(page, {media:false});
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles(fixture);
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,fixture);
   await expect(sheet(page).getByText('영상 → 음성만 저장')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:60000});
@@ -983,17 +1125,20 @@ test('Library actually plays device and cloud-only audio (time advances)', async
   wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
   for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 8) * 6000), 44 + i * 2);
   await page.route('**/cloud-audio.wav', r => r.fulfill({contentType:'audio/wav', body:wav}));
+  await page.goto('/#/library');
   await page.evaluate(() => {
     window.vzipCloudSignedIn = () => true;
     window.vzipCloudMediaList = async () => [{id:'c1', name:'클라우드 음원', type:'audio/wav', path:'ui-test-user/c1.wav', created:Date.now(), songId:'', cloud:true}];
     window.vzipCloudMediaUrl = async () => { await new Promise(r => setTimeout(r, 300)); return '/cloud-audio.wav'; };
     window.dispatchEvent(new Event('vzip:auth-changed'));
+    VZ.media.invalidate(); VZ.nav('#/library');
   });
-  await page.goto('/#/library');
+  await expect(page.locator('[data-media="c1"]')).toBeVisible();
   for (const id of ['m2', 'c1']) {
-    await page.goto('/#/library');
     const row = page.locator('[data-media="' + id + '"]');
     await row.locator('[data-toggle]').click();
+    await expect(page).toHaveURL(/#\/library$/);
+    await expect(row.locator('.media-open')).toBeVisible();
     await expect(row.locator('.time')).not.toHaveText(/^0:00 \//, {timeout:5000});
     await expect(row.locator('[data-msg]')).toHaveText('');
   }
@@ -1008,9 +1153,9 @@ test('Library actually plays device and cloud-only audio (time advances)', async
 
 test('Practice records can be edited, including unlinking files that no longer exist', async ({page}) => {
   await boot(page);
-  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
+  await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds = ['m1', 'gone-1', 'gone-2']; d.practices[0].minutes = 19.95; d.practices[0].manualMinutes = 19.95; localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/song/s1');
-  await page.getByRole('tab', {name:'연습'}).click();
+  await page.getByRole('tab', {name:'활동 기록'}).click();
   await page.locator('[data-practice="p1"]').click();
   await expect(sheet(page)).toContainText('20분');
   await expect(sheet(page)).toContainText('찾을 수 없는 녹음 2개');
@@ -1031,37 +1176,41 @@ test('Practice records can be edited, including unlinking files that no longer e
   expect((await media(page)).some(m => m.id === 'm1')).toBe(true); // unlinking never deletes the file
 });
 
-test('Practice time adds recording/import lengths once and fills missing lengths', async ({page}) => {
+test('Practice time excludes recording/import lengths while file metadata remains measured', async ({page}) => {
   await boot(page);
   await page.evaluate(async () => {
     const day = 864e5, read = async id => (await window.vzipReadMedia()).find(m => m.id === id);
-    // m2: a 10-minute practice recording not linked to any record → counts.
+    // m2: a 10-minute practice recording not linked to any record → duration metadata only.
     const m2 = await read('m2'); delete m2.bytes; await window.vzipStorePracticeMedia({...m2, blob:new Blob([window.__wav], {type:'audio/wav'}), durationSeconds:600}); // WebKit may have stored bytes
-    // m3: an import saved before lengths were kept (no duration) → measured and counted.
+    // m3: an import saved before lengths were kept (no duration) → still measured, never added to actual time.
     await window.vzipStorePracticeMedia({id:'m3', name:'SODA_1', created:Date.now() - day, recordedDate:'', type:'audio/wav', source:'import', songId:'s2', blob:new Blob([window.__wav], {type:'audio/wav'})});
     window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m3'}}));
   });
   await page.goto('/#/growth');
   await page.getByRole('button', {name:'전체'}).click();
-  // p1 (30분, already includes linked m1) + m2 (10분) + m3 (~1초) ; m1 is a lesson recording linked to p1 → not added again.
-  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('40분');
-  await expect(page.locator('[data-file-time]')).toContainText('녹음·파일 10분 포함');
+  // Only the entered 25 minutes count; standalone files keep duration metadata separately.
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
+  await expect(page.locator('[data-file-time]')).toHaveCount(0);
   await expect.poll(async () => Math.round((await page.evaluate(() => window.vzipReadMedia())).find(m => m.id === 'm3').durationSeconds)).toBe(1);
   await expect(page.locator('.bars')).toContainText('This Is the Moment');
-  await expect(page.getByText(/기록에 연결되지 않은 녹음·파일 2개/)).toBeVisible();
+  await expect(page.getByText('녹음 3개를 남겼어요. 녹음 길이는 연습 시간에 자동으로 더하지 않아요.')).toBeVisible();
   // Song list/detail use the same rule.
   await page.goto('/#/song/s1');
-  await expect(page.locator('[data-summary]')).toContainText('연습 40분');
-  // Linking m2 into a practice record moves its time inside that record (no double count).
+  await expect(page.locator('[data-summary]')).toContainText('연습 25분');
+  // Linking m2 into a practice record does not change the entered time.
   await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds.push('m2'); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
   await page.goto('/#/growth');
-  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('30분');
+  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
 });
 
 test('Changing a recording\'s song renames it to song + recording day, numbered on clashes', async ({page}) => {
   await boot(page);
+  await page.evaluate(async()=>{
+    for(const item of await window.vzipReadMedia())await VZ.media.update({...item,local:true},{nameMode:'auto',autoName:item.name},{quiet:true});
+    VZ.media.invalidate();
+  });
   await page.goto('/#/library');
-  const open = async id => { await page.goto('/#/library'); await page.locator('[data-media="' + id + '"] [data-toggle]').click(); await page.locator('[data-media="' + id + '"]').getByRole('button', {name:/정보 수정/}).click(); };
+  const open = async id => { await page.goto('/#/library'); await page.evaluate(async id => VZ.editMedia((await VZ.media.list(true)).find(m=>m.id===id)),id); };
   await open('m1');
   await sheet(page).locator('[name=date]').fill('2026-11-02');
   await sheet(page).locator('[name=song]').selectOption('s2');
@@ -1072,16 +1221,39 @@ test('Changing a recording\'s song renames it to song + recording day, numbered 
   await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03');
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').name).toBe('On My Own 2026.11.03');
+  expect((await media(page)).find(m=>m.id==='m1').nameMode).toBe('auto');
   // Same song and day on another file gets a number.
   await page.locator('[data-media="m1"] [data-toggle]').click();
   await open('m2');
   await sheet(page).locator('[name=date]').fill('2026-11-03');
   await sheet(page).locator('[name=song]').selectOption('s2');
   await expect(sheet(page).locator('[name=name]')).toHaveValue('On My Own 2026.11.03 2');
-  // A typed name is never overwritten.
-  await sheet(page).locator('[name=name]').fill('브릿지만');
-  await sheet(page).locator('[name=song]').selectOption('s1');
-  await expect(sheet(page).locator('[name=name]')).toHaveValue('브릿지만');
+  await sheet(page).getByRole('button', {name:'저장'}).click();
+  await expect.poll(async()=>(await media(page)).find(m=>m.id==='m2').name).toBe('On My Own 2026.11.03 2');
+  const second=(await media(page)).find(m=>m.id==='m2');
+  expect(second.name).toBe('On My Own 2026.11.03 2');
+  expect(second.review).toContain('이전 제목: 연습 녹음');
+});
+
+test('Import with song and date saves the generated title and appends the original filename to the memo', async ({page}) => {
+  await boot(page, {media:false});
+  const saved=await page.evaluate(async()=>{
+    const file=new File([new Uint8Array(44)],'SODA_123.wav',{type:'audio/wav',lastModified:Date.now()});
+    window.vzipPrepareMedia=async()=>({file,metadata:{created:Date.now(),durationSeconds:30},dispose:async()=>{}});
+    await VZ.media.importFile(file,{id:'named-import',songId:'s2',song:'On My Own',date:'2026-11-09',extra:{review:'호흡 확인'},durationSeconds:30});
+    return (await window.vzipReadMedia()).find(m=>m.id==='named-import');
+  });
+  expect(saved).toMatchObject({name:'On My Own 2026.11.09',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인\n이전 제목: SODA_123'});
+});
+
+test('Editing both song and date updates a saved title while retaining the old title in the memo', async ({page}) => {
+  await boot(page);
+  const saved=await page.evaluate(async()=>{
+    const item=(await window.vzipReadMedia()).find(m=>m.id==='m1');
+    await VZ.media.update({...item,local:true},{songId:'s2',song:'On My Own',recordedDate:'2026-11-09',dateSource:'manual',review:'호흡 확인',normalizeTitle:true});
+    return (await window.vzipReadMedia()).find(m=>m.id==='m1');
+  });
+  expect(saved).toMatchObject({name:'On My Own 2026.11.09',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인\n이전 제목: 레슨 시범'});
 });
 
 test('Song pickers list the most recently registered song first', async ({page}) => {
@@ -1253,9 +1425,9 @@ test('Growth month filters, file-count units and every-week horizontal chart rem
   await page.goto('/#/growth');
   await page.getByRole('button',{name:'월별',exact:true}).click();
   await page.getByRole('combobox',{name:'조회 월'}).selectOption(previous);
-  await expect(page.locator('.stat').filter({hasText:'연습 시간'}).first()).toContainText('37분');
+  await expect(page.locator('.stat').filter({hasText:'연습 시간'}).first()).toContainText('30분');
   await expect(page.locator('.stat').filter({hasText:'평균 만족도'})).toContainText('4.0');
-  await expect(page.locator('[data-song-stat="s1"]')).toContainText('32분');
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('30분');
   await page.getByRole('button',{name:'횟수(파일 수)',exact:true}).click();
   await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회');
   await expect(page.locator('[data-song-stat="s2"]')).toContainText('1회');
@@ -1279,7 +1451,7 @@ test('Growth month filters, file-count units and every-week horizontal chart rem
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   }
   await page.getByRole('button',{name:'분',exact:true}).click();
-  await expect(page.locator('[data-song-stat="s1"]')).toContainText('42분');
+  await expect(page.locator('[data-song-stat="s1"]')).toContainText('40분');
   await page.getByRole('button',{name:'월별',exact:true}).click();
   await page.getByRole('button',{name:'이전 달 통계',exact:true}).click();
   await expect(page.getByRole('combobox',{name:'조회 월'})).toHaveValue(previous);
@@ -1324,9 +1496,9 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await page.getByRole('link', {name:/기존 자료 가져오기/}).click();
   await expect(page.locator('#top h1')).toHaveText('기존 자료 가져오기');
   await page.getByRole('button', {name:/음성 메모/}).click();
-  // Voice memo defaults: 2025-07-24 → today, 0:30 – 8:00 (both ends included).
+  // Voice memo defaults: 2025-07-24 → today, 0:25 – 8:00 (both ends included).
   await expect(page.locator('[data-c="start"]')).toHaveValue('2025-07-24');
-  await expect(page.locator('[data-c="min"]')).toHaveValue('0:30');
+  await expect(page.locator('[data-c="min"]')).toHaveValue('0:25');
   await expect(page.locator('[data-c="max"]')).toHaveValue('8:00');
   const first = wav(30);
   await page.locator('[data-files]').setInputFiles([
@@ -1334,7 +1506,7 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
     {name:'복사본 2026-03-05.wav', mimeType:'audio/wav', buffer:first},                        // same bytes → duplicate
     {name:'원데이모어 20260401.wav', mimeType:'audio/wav', buffer:wav(480, 9)},                 // exactly 8:00, song by alias
     {name:'the moment take.wav', mimeType:'audio/wav', buffer:wav(40, 10)},                  // no date → needs-date, weak suggestion
-    {name:'너무 짧음 2026-02-01.wav', mimeType:'audio/wav', buffer:wav(29, 11)},              // 0:29 → out
+    {name:'너무 짧음 2026-02-01.wav', mimeType:'audio/wav', buffer:wav(24, 11)},              // 0:24 → out
     {name:'긴 녹음 2026-02-02.wav', mimeType:'audio/wav', buffer:wav(481, 12)},               // 8:01 → out
     {name:'옛날 2025-01-01.wav', mimeType:'audio/wav', buffer:wav(35, 13)},                   // before start → out
   ]);
@@ -1343,7 +1515,8 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await expect(page.getByRole('button', {name:/^날짜 확인 필요 1/})).toBeVisible();
   await expect(page.getByRole('button', {name:/^조건 밖 3/})).toBeVisible();
   const row = name => page.locator('.hub-row').filter({has:page.locator('.hub-name', {hasText:name})});
-  await expect(row('너무 짧음')).toContainText('길이 0:29');
+  await expect(row('너무 짧음')).toContainText('25초 미만 · 가져오지 않음');
+  await expect(row('너무 짧음').locator('[data-sel]')).toBeDisabled();
   await expect(row('긴 녹음')).toContainText('길이 8:01');
   await expect(row('옛날')).toContainText('기간 밖');
   await expect(row('복사본')).toContainText('선택한 파일끼리 같아요');
@@ -1376,6 +1549,14 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   expect(items.find(m => m.originalFilename === '원데이모어 20260401.wav')).toMatchObject({recordedDate:'2026-04-01', recordedAtSource:'filename', songId:'s3'});
   const made = (await data(page)).practices.filter(p => p.importedFrom === 'voice-memo');
   expect(made).toHaveLength(2);
+  for(const record of made){expect(record).toMatchObject({minutes:0,manualMinutes:0,practiceTimeSource:'unconfirmed'});expect(record.mediaSeconds).toBeGreaterThan(0);}
+  const chosen=made.find(p=>p.mediaIds[0]===take.id);
+  await page.evaluate(id=>VZ.practiceSheet({practice:VZ.db.practices.find(p=>p.id===id)}),chosen.id);
+  await expect(sheet(page).locator('[name=minutes]')).toHaveValue('0');
+  await sheet(page).locator('[name=minutes]').fill('12');
+  await sheet(page).getByRole('button',{name:'수정 저장',exact:true}).click();
+  expect((await data(page)).practices.find(p=>p.id===chosen.id)).toMatchObject({minutes:12,manualMinutes:12,practiceTimeSource:'manual',mediaSeconds:chosen.mediaSeconds});
+
   expect(items.find(m => m.originalFilename === '원데이모어 20260401.wav').occasion).toBe('performance');
   expect(made.find(p => p.mediaIds[0] === take.id)).toMatchObject({date:'2026-05-10', songId:'s1', confirmedSongId:'s1', suggestedSongId:'s1'});
   // Picking the same files again finds them in the library and makes no second practice record.
@@ -1387,12 +1568,30 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   expect((await data(page)).practices.filter(p => p.importedFrom === 'voice-memo')).toHaveLength(2);
 });
 
+test('Library import skips 24 seconds and includes 25 seconds', async ({page}) => {
+  await boot(page, {media:false});
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn=()=>true;
+    window.__importedNames=[];
+    VZ.media.list=async()=>[];
+    window.vzipInspectMedia=async file=>({readable:true,duration:file.name.startsWith('short')?24:25,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}});
+    VZ.media.importFile=async(file,choice)=>{window.__importedNames.push(file.name);return {id:choice.id,name:file.name,cloud:true,durationSeconds:25,recordedDate:'2026-11-09'};};
+    VZ.openImportHub({files:[new File(['short'],'short.wav',{type:'audio/wav'}),new File(['long'],'long.wav',{type:'audio/wav'})],review:true});
+  });
+  const short=page.locator('.hub-row').filter({hasText:'short.wav'});
+  await expect(short.locator('[data-sel]')).toBeDisabled();
+  await page.locator('[data-all]').click();
+  await expect(page.getByRole('button',{name:'선택한 1개 가져오기'})).toBeVisible();
+  await page.getByRole('button',{name:'선택한 1개 가져오기'}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__importedNames)).toEqual(['long.wav']);
+});
+
 test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
   await boot(page, {media:false});
   await page.evaluate(() => VZ.songSheet(VZ.song('s2')));
   await sheet(page).getByLabel('별칭 (쉼표로 구분)').fill('온마이오운, On my own , 온마이오운');
   await sheet(page).getByRole('button', {name:'저장'}).click();
-  expect((await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
+  await expect.poll(async () => (await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
   expect(await page.evaluate(() => VZ.suggestSongs('온마이오운_0412.m4a')[0])).toMatchObject({id:'s2'});
 });
 
@@ -1407,12 +1606,26 @@ test('Library groups files by recording month with counts, and filters fit on a 
   await expect(page.locator('.lib-month').last()).toContainText('2025년 1월');
   await expect(page.locator('.lib-month').last()).toContainText('1개 · 2분');
   await expect(page.locator('[data-count]')).toContainText('3개');
-  // Filters: lesson/practice segment, then format + song selects side by side.
+  // The origin segment stays separate from the format and song filter sheet.
   await page.getByRole('button', {name:'레슨', exact:true}).click();
   await expect(page.locator('[data-media]')).toHaveCount(1);
   await expect(page.locator('[data-count]')).toContainText('/ 전체 3개');
   await page.getByRole('button', {name:'전체', exact:true}).click();
-  await page.getByLabel('형식 필터').selectOption('video');
+  await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-month]').click();
+  await page.locator('[data-choice=this]').click();
+  await expect(page.locator('[data-media]')).toHaveCount(2);
+  await page.locator('[data-select-mode]').click();
+  await page.locator('[data-lib-select-all]').click();
+  await expect(page.locator('[data-lib-selected-count]')).toHaveText('2개 선택');
+  await page.locator('[data-lib-select-all]').click();
+  await expect(page.locator('[data-lib-selected-count]')).toHaveText('0개 선택');
+  await page.locator('[data-lib-select-cancel]').click();
+  await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-reset]').click();
+  await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-kind]').click();
+  await page.locator('[data-choice=video]').click();
   await expect(page.getByText('조건에 맞는 파일이 없어요.')).toBeVisible();
   await page.getByRole('button', {name:'필터 초기화'}).click();
   await expect(page.locator('[data-media]')).toHaveCount(3);
@@ -1444,31 +1657,90 @@ test('Growth leads with this period\'s time compared with the same days before, 
   await expect(page).toHaveURL(/#\/song\/g0$/);
 });
 
-test('Song page shows this song\'s growth: recent time, days, rating, six months, first recording', async ({page}) => {
+test('Song detail shows real growth, recording selection and analysis handoff', async ({page}) => {
   await boot(page);
   await page.goto('/#/song/s1');
-  const card = page.locator('.song-growth');
-  await expect(card).toContainText('이 곡의 성장');
-  await expect(card).toContainText('최근 30일');
-  await expect(card.locator('.song-growth-chart > div')).toHaveCount(6);
-  await expect(card).toContainText('첫 녹음');
-  await expect(card).toContainText('★4.0'); // p1 rating 4
+  const card = page.locator('.vz-song-dashboard');
+  await expect(card).toContainText('누적 연습');
+  await expect(card).toContainText('25분');
+  await expect(card.locator('.vz-song-months > div')).toHaveCount(6);
+  await expect(card).toContainText('★ 4.0');
+  await expect(page.getByRole('tab', {name:'녹음'})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByRole('tab', {name:'레슨'})).toHaveCount(0);
+  await expect(page.locator('.vz-song-media-list [data-media]')).toHaveCount(2);
+  const all = page.getByRole('checkbox', {name:'녹음 전체선택'});
+  await all.check();
+  await expect(page.locator('[data-selected-count]')).toHaveText('선택 2개');
+  const firstRow=page.locator('.vz-song-media-list [data-media]').first();
+  const checkbox=firstRow.locator('.vz-media-select');
+  const rowButton=firstRow.locator('[data-toggle]');
+  await expect(rowButton).toHaveCSS('background-color','rgb(255, 255, 255)');
+  await rowButton.click();
+  await expect(rowButton).toHaveAttribute('aria-expanded','true');
+  await expect(firstRow.locator('.media-open')).toBeVisible();
+  await expect(checkbox).toHaveAttribute('aria-pressed','true');
+  await checkbox.click();
+  await expect(checkbox).toHaveAttribute('aria-pressed','false');
+  await expect(all).not.toBeChecked();
+  await expect(page.locator('[data-selected-count]')).toHaveText('선택 1개');
+  await expect(rowButton).toHaveAttribute('aria-expanded','true');
+  await expect(rowButton).toHaveCSS('background-color','rgb(255, 255, 255)');
+  await checkbox.click();
+  await expect(checkbox).toHaveAttribute('aria-pressed','true');
+  await expect(rowButton).toHaveAttribute('aria-expanded','true');
+  await expect(page.getByRole('button', {name:'보컬 분석하기'})).toBeEnabled();
+  await page.getByRole('button', {name:'보컬 분석하기'}).click();
+  await expect(page).toHaveURL(/#\/vocal-lab\/s1\?selection=1$/);
+  await expect(page.locator('.vl-dates button[aria-pressed="true"]')).toHaveCount(2);
+  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+  expect((await page.evaluate(() => JSON.parse(sessionStorage.getItem('vocalzip-vocal-lab-selected-media-v1')))).sort()).toEqual(['m1','m2']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
+test('Library bulk menu omits analysis when selected recordings span songs', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    await window.vzipStorePracticeMedia({id:'m3',name:'다른 곡 녹음',created:Date.now(),type:'audio/wav',source:'practice',songId:'s2',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/library');
+  await expect(page.locator('[data-media]')).toHaveCount(3);
+  await page.locator('[data-select-mode]').click();
+  await page.locator('[data-lib-select-all]').click();
+  await expect(page.locator('[data-lib-selected-count]')).toHaveText('3개 선택');
+  await page.locator('[data-lib-bulk-more]').click();
+  await expect(page.getByRole('dialog', {name:'선택한 녹음 3개'}).getByRole('button', {name:'보컬 분석'})).toHaveCount(0);
+});
+
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
-  await boot(page, {media:false});
+  const seed = legacy();
+  seed.performances = [{id:'show1',ownerId:'ui-test-user',title:'첫 무대',start:'2025-07-24',status:'completed',sessions:[]}];
+  await boot(page, {seed});
   await page.goto('/#/settings');
-  const headings = await page.locator('h2.sec').allTextContents();
-  expect(headings.map(h => h.trim())).toEqual(['계정 · 클라우드 동기화', '음원', '기록 관리', '데이터', '앱 정보']);
-  await expect(page.locator('#cloud-upload')).toBeVisible();
-  await expect(page.locator('#cloud-logout')).toBeVisible();
+  await expect(page.locator('[data-journey]')).toContainText('첫 기록 2025.07.24');
+  await expect(page.locator('[data-journey]')).toContainText('녹음2');
+  await expect(page.locator('.vz-journey')).toHaveCSS('font-family', /Pretendard/);
+  await expect(page.locator('.vz-journey')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(page.locator('[data-sync-summary]')).toBeVisible();
+  const headings = await page.locator('.vz-settings-section h2').allTextContents();
+  expect(headings.map(h => h.trim())).toEqual(['분석', '관리']);
+  await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();
+  await expect(page.locator('#cloud-upload')).toBeHidden();
+  await expect(page.locator('#cloud-logout')).toBeHidden();
   await expect(page.locator('#cloud-media-upload')).toBeHidden();
-  await page.getByText('수동 백업·복원').click();
+  await page.getByText('동기화·백업 도구').click();
+  await expect(page.locator('#cloud-logout')).toBeVisible();
+  await expect(page.locator('#cloud-upload')).toBeVisible();
   await expect(page.locator('#cloud-media-upload')).toBeVisible();
-  await expect(page.getByRole('link', {name:'레슨비 정산'})).toHaveAttribute('href', 'billing/');
+  await expect(page.locator('.vz-settings').getByRole('link', {name:'레슨비 정산'})).toHaveCount(0);
   await expect(page.locator('[data-storage-status]')).not.toHaveText('확인 중…');
-  await expect(page.getByRole('button', {name:/최신 버전으로 새로고침/})).toBeVisible();
+  await expect(page.locator('[data-export]')).toBeHidden();
+  await page.getByText('기록 백업·복원').click();
+  await expect(page.locator('[data-export]')).toBeVisible();
+  await expect(page.locator('[data-import-json]')).toHaveCount(1);
+  await expect(page.getByRole('navigation', {name:'주요 메뉴'})).toBeVisible(); // ordinary screens keep the same bottom menu as Home (shared-nav.css)
+  await page.setViewportSize({width:320,height:700});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   // Leaving and coming back doesn't wrap the tools twice.
   await page.goto('/#/home'); await page.goto('/#/settings');
   await expect(page.locator('.cloud-more')).toHaveCount(1);
@@ -1487,8 +1759,8 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
   });
   const sr = 8000, n = sr * 2, b = Buffer.alloc(44 + n * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles({name:'take.wav', mimeType:'audio/wav', buffer:b});
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,{name:'take.wav', mimeType:'audio/wav', buffer:b});
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 이 기기에 저장 1개', {timeout:30000});
   await expect(sheet(page).locator('[data-summary]')).toContainText('클라우드 업로드는 자동으로 이어져요');
@@ -1507,9 +1779,10 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   await boot(page);
   await page.goto('/#/library');
   await expect(page.getByRole('button', {name:'공연', exact:true})).toBeVisible();
-  // m2 is an unlinked practice recording (counts as practice time until it is marked a performance).
+  // m2 is an unlinked practice recording; its length never adds to actual practice time.
   await page.locator('[data-media="m2"] [data-toggle]').click();
-  await page.locator('[data-media="m2"]').getByRole('button', {name:/정보 수정/}).click();
+  await page.locator('[data-media="m2"] [data-lib-row-more]').click();
+  await sheet(page).getByRole('button', {name:/정보 수정/}).click();
   await expect(sheet(page).getByRole('radio', {name:'연습'})).toHaveAttribute('aria-checked', 'true');
   await sheet(page).getByRole('radio', {name:'공연'}).click();
   await sheet(page).getByRole('button', {name:'저장'}).click();
@@ -1529,9 +1802,31 @@ test('Recordings can be marked 공연·레슨·연습; performances are filtered
   for (let i = 0; i < 3 && !(await page.locator('[data-d="' + m2day + '"]').count()); i++) await page.getByRole('button', {name:'이전 달'}).click();
   await page.locator('[data-d="' + m2day + '"]').click();
   await expect(page.locator('[data-d="' + m2day + '"] .dots .s')).toHaveCount(1);
-  await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연');
+  await expect(page.locator('[data-day] .cal-group').first()).toHaveText('공연·오디션');
   await expect(page.locator('[data-day]')).toContainText('공연 녹음·영상');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
+test('A recording is marked 레슨 녹음 or 트레이닝 from its menu; 레슨 offers to link that day\'s lesson', async ({page}) => {
+  await boot(page);
+  const day = await page.evaluate(async () => { const m = (await VZ.media.list()).find(x => x.id === 'm2'); const d = VZ.media.dateOf(m);
+    VZ.change(db => db.lessons.push({id:'l-kind', date:d, startTime:'15:00', status:'scheduled', feedback:'', memo:'', recordings:[]})); return d; });
+  await page.goto('/#/library');
+  await page.locator('[data-media="m2"] [data-toggle]').click();
+  await page.locator('[data-media="m2"] [data-lib-row-more]').click();
+  await sheet(page).getByRole('button', {name:/트레이닝으로 지정/}).click();
+  await expect.poll(async () => (await media(page)).find(m => m.id === 'm2').recordingCategory).toBe('training');
+  await page.goto('/#/library');
+  await page.locator('[data-media="m2"] [data-toggle]').click();
+  await page.locator('[data-media="m2"] [data-lib-row-more]').click();
+  await expect(sheet(page).getByRole('button', {name:/트레이닝으로 지정/})).toHaveCount(0);
+  await sheet(page).getByRole('button', {name:/레슨 녹음으로 지정/}).click();
+  const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog', {name:'레슨에 연결'}));
+  await expect(confirm).toContainText('15:00 레슨');
+  await confirm.getByRole('button', {name:'연결'}).click();
+  await expect.poll(async () => { const m = (await media(page)).find(x => x.id === 'm2'); return [m.recordingCategory, m.occasion]; }).toEqual(['lesson', 'lesson']);
+  await expect.poll(() => page.evaluate(() => VZ.db.lessons.find(l => l.id === 'l-kind').recordings.map(r => r.id))).toEqual(['m2']);
+  expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 });
 
 test('WAV imports are stored as FLAC only after every sample is checked against the original', async ({page, browserName}) => {
@@ -1542,8 +1837,8 @@ test('WAV imports are stored as FLAC only after every sample is checked against 
   let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(Math.sin(i / (20 + c * 3)) * 9000 + (rnd() - 0.5) * 600))), 44 + (i * ch + c) * 2);
   await page.goto('/#/library');
-  await page.locator('[data-imp]').click();
-  await sheet(page).locator('[data-file]').setInputFiles({name:'warmup.wav', mimeType:'audio/wav', buffer:b});
+  await openLibraryImport(page);
+  await pickLibraryImportFiles(page,{name:'warmup.wav', mimeType:'audio/wav', buffer:b});
   await expect(sheet(page).getByText('WAV → FLAC 무손실 압축')).toBeVisible();
   await page.getByRole('button', {name:'가져오기', exact:true}).click();
   await expect(sheet(page).locator('[data-done]')).toContainText('✓ 저장 완료 1개', {timeout:45000});
@@ -1788,7 +2083,7 @@ test('File deletion cancels safely, deletes one file and preserves linked practi
  await page.reload();await expect(page.locator('[data-media="m1"]')).toHaveCount(0);
 });
 
-test('Song reference settings start collapsed and suggestion cards expose individual deletion', async ({page}) => {
+test('Song check selects recordings, keeps controls sticky and exposes individual deletion', async ({page}) => {
  await boot(page);
  await page.evaluate(async()=>{
   window.vzipCloudSignedIn=()=>true;
@@ -1797,17 +2092,63 @@ test('Song reference settings start collapsed and suggestion cards expose indivi
   VZ.media.invalidate();
  });
  await page.goto('/#/song-suggest');
+ await expect(page.getByRole('heading',{name:'곡 확인'})).toBeVisible();
+ await expect(page.locator('.vz-sc-record')).toHaveCount(1);
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/song-check-top.png'});
+ await expect(page.locator('.reference-options')).toBeHidden();
+ const tip=page.locator('[data-song-help-tip]');
+ await page.getByRole('button',{name:'곡 확인 도움말'}).click();
+ await expect(tip).toBeVisible();
+ await page.getByRole('button',{name:'곡 확인 도움말'}).click();
+ await expect(tip).toBeHidden();
+ await page.locator('.vz-sc-record input[type=checkbox]').check();
+ await expect(page.locator('[data-counter]')).toHaveText('선택 1개');
+ await page.locator('[data-select-all]').click();
+ await expect(page.locator('[data-counter]')).toBeEmpty();
+ await page.getByRole('button',{name:'곡 확인 설정'}).click();
  await expect(page.locator('.reference-options')).toBeVisible();
  await expect(page.locator('[data-ref-song],[data-ref-text],[data-ref-manual]')).toHaveCount(0);
  await expect(page.getByRole('link',{name:'가사는 곡 상세의 가사 탭에서 입력 →'})).toHaveAttribute('href','#/songs');
- await expect(page.locator('[data-ref-picker]')).toBeHidden();
- if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/recording-simplified.png',fullPage:true});
- await page.locator('.reference-options > summary').click();
  await expect(page.locator('[data-ref-picker]')).toBeVisible();
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/recording-simplified.png',fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- await page.getByRole('button',{name:'미분류 파일 파일 삭제',exact:true}).click();
+ await page.getByRole('button',{name:'미분류 파일 더 보기',exact:true}).click();
+ await page.getByRole('dialog',{name:'미분류 파일'}).getByRole('button',{name:'파일 삭제'}).click();
  await sheet(page).getByRole('button',{name:'파일 영구 삭제',exact:true}).click();
- await expect(page.getByRole('button',{name:'미분류 파일 파일 삭제',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'미분류 파일 더 보기',exact:true})).toHaveCount(0);
+});
+
+test('Song check keeps the selection controls and bottom actions visible at the last recording',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  window.vzipCloudSignedIn=()=>true;
+  window.vzipCloudSongTextList=async()=>[];
+  for(let i=0;i<8;i++)await window.vzipStorePracticeMedia({id:'sc-'+i,name:'녹음 '+i,created:Date.now()-i*1000,type:'audio/wav',source:'import',blob:new Blob([window.__wav],{type:'audio/wav'})});
+  VZ.media.invalidate();
+ });
+ await page.goto('/#/song-suggest');
+ await expect(page.locator('.vz-sc-record')).toHaveCount(8);
+ await page.locator('.vz-sc-record').last().scrollIntoViewIfNeeded();
+ await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+ const positions=await page.evaluate(()=>({
+  title:document.querySelector('#top').getBoundingClientRect().bottom,
+  sticky:document.querySelector('.vz-sc-sticky').getBoundingClientRect().top,
+  selection:document.querySelector('.vz-sc-selection').getBoundingClientRect().bottom,
+  last:document.querySelector('.vz-sc-record:last-child').getBoundingClientRect().bottom,
+  footer:document.querySelector('.vz-sc-bottom').getBoundingClientRect().top,
+  width:document.documentElement.scrollWidth
+ }));
+ expect(positions.title).toBeLessThan(0);
+ expect(positions.sticky).toBeGreaterThanOrEqual(0);
+ expect(positions.selection).toBeLessThan(positions.footer);
+ expect(positions.last).toBeLessThanOrEqual(positions.footer);
+ expect(positions.width).toBeLessThanOrEqual(390);
+ for(const width of [320,430]){
+  await page.setViewportSize({width,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+ }
+ await page.setViewportSize({width:390,height:844});
+ if(process.env.VZ_QA_OUTPUT) await page.screenshot({path:process.env.VZ_QA_OUTPUT+'/song-check-bottom.png'});
 });
 
 
@@ -1829,19 +2170,16 @@ test('Video file deletion and a cloud failure retain the correct records',async(
  expect((await data(page)).practices[0].mediaIds).toContain('m1');
 });
 
-test('Song choices open as a searchable sheet; the page under a sheet stays where it was', async ({page}) => {
+test('Library song filter stays selected and sheets preserve the underlying scroll', async ({page}) => {
   const seed = legacy(); seed.songs.push(...Array.from({length:30}, (_, i) => ({id:'x' + i, title:'추가 곡 ' + i, show:i % 3 ? '' : '레미제라블'})));
   await boot(page, {seed, media:false});
   await page.goto('/#/library');
-  await page.getByRole('button', {name:/^곡 필터, /}).click();
-  const sheet = page.getByRole('dialog', {name:'곡 필터'});
-  await sheet.locator('[data-pick-q]').fill('레미');
-  await expect(sheet.getByRole('option', {name:/추가 곡 1\b/})).toBeHidden();
-  await expect(sheet.getByRole('option', {name:'모든 곡'})).toBeVisible();
-  await sheet.getByRole('option', {name:/추가 곡 3/}).click();
-  await expect(sheet).toHaveCount(0);
-  await expect(page.locator('select[data-song]')).toHaveValue('x3');
-  await expect(page.getByRole('button', {name:'곡 필터, 추가 곡 3'})).toBeVisible();
+  await page.locator('[data-library-filter]').click();
+  await page.locator('[data-filter-song]').click();
+  await page.locator('[data-choice=x3]').click();
+  await expect(page.locator('[data-song]')).toHaveValue('x3');
+  await page.locator('[data-select-mode]').click();
+  await expect(page.locator('[data-song]')).toHaveValue('x3');
   await page.goto('/#/home'); await page.evaluate(() => scrollTo(0, 300)); const y = await page.evaluate(() => scrollY);
   await page.evaluate(() => { VZ.confirm('확인 창', '내용'); });
   await expect(page.locator('body')).toHaveClass(/sheet-lock/);
@@ -1851,37 +2189,35 @@ test('Song choices open as a searchable sheet; the page under a sheet stays wher
   expect(page.__errors).toEqual([]);
 });
 
-test('Library select mode sets the song and kind of several recordings at once; rows tick instead of opening', async ({page}) => {
+test('Library selection scopes and bulk actions update selected recordings', async ({page}) => {
   await boot(page);
   await page.goto('/#/library');
   await expect(page.locator('[data-media]')).toHaveCount(2);
-  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
-  const bar = page.getByRole('toolbar', {name:'선택한 녹음 작업'});
+  const bar=page.locator('.lib-selection-tools');
+  await expect(bar).toContainText('총 2개');
+  await expect(bar).toHaveCSS('background-color', 'rgb(243, 236, 255)');
+  await expect(bar.locator('[data-lib-select-all]')).toBeHidden();
+  await expect(page.locator('[data-media="m1"] [data-lib-pick]')).toBeHidden();
+  await page.locator('[data-select-mode]').click();
+  await expect(bar.locator('[data-lib-select-all]')).toBeVisible();
+  await expect(bar.locator('[data-lib-select-cancel]')).toBeVisible();
+  await expect(bar).toHaveCSS('background-color', 'rgb(243, 236, 255)');
   await expect(bar).toContainText('0개 선택');
-  await expect(bar.getByRole('button', {name:/곡 지정/})).toBeDisabled();
-  await page.locator('[data-media="m1"] [data-toggle]').click();
-  await expect(page.locator('[data-media="m1"] .media-open')).toBeHidden(); // ticked, not opened
+  await page.locator('[data-media="m1"] [data-lib-pick]').click();
   await expect(bar).toContainText('1개 선택');
-  await bar.getByRole('button', {name:'전체 선택'}).click();
+  await bar.locator('[data-lib-select-all]').click();
   await expect(bar).toContainText('2개 선택');
-  await bar.getByRole('button', {name:/곡 지정/}).click();
-  const pick = page.getByRole('dialog', {name:'곡 지정'});
-  await pick.getByRole('option', {name:'On My Own'}).click();
-  const ask = page.getByRole('dialog', {name:'곡 지정'});
-  await expect(ask).toContainText('2개 녹음');
-  await ask.getByRole('button', {name:'바꾸기'}).click();
-  await expect(bar).toHaveCount(0);
+  await expect(bar.locator('[data-lib-select-all]')).toHaveAttribute('aria-pressed','true');
+  await bar.locator('[data-lib-bulk-more]').click();
+  await page.getByRole('dialog',{name:'선택한 녹음 2개'}).getByRole('button',{name:/곡 지정/}).click();
+  await page.getByRole('dialog',{name:'곡 지정'}).getByRole('option',{name:'On My Own'}).click();
+  await page.getByRole('dialog',{name:'곡 지정'}).getByRole('button',{name:'바꾸기'}).click();
   await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id + ':' + m.songId).sort().join(','))).toBe('m1:s2,m2:s2');
-  // Kind for one recording.
-  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
-  await page.locator('[data-media="m1"] [data-toggle]').click();
-  await page.getByRole('toolbar').getByRole('button', {name:/종류/}).click();
-  await page.getByRole('dialog', {name:'종류 바꾸기'}).getByRole('option', {name:'공연'}).click();
-  await expect.poll(() => page.evaluate(async () => (await window.vzipReadMedia()).find(m => m.id === 'm1').occasion)).toBe('performance');
-  // Leaving the screen ends select mode.
-  await page.locator('#top [data-imp]').click(); await page.locator('.sheet [data-select]').click();
+  await bar.locator('[data-lib-select-cancel]').click();
+  await expect(bar).toContainText('총 2개');
+  await expect(bar.locator('[data-lib-selected-count]')).toBeHidden();
+  await expect(page.locator('[data-media="m1"] [data-lib-pick]')).toBeHidden();
   await page.goto('/#/home');
-  await expect(page.locator('.sel-bar')).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
 
@@ -1921,7 +2257,7 @@ test('Offline notice, a change sent at once when the app goes to the background,
   const bar = page.locator('.song-tabs');
   await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
   await expect.poll(async () => Math.round((await bar.boundingBox()).y)).toBeLessThan(40);
-  await bar.getByRole('tab', {name:'레슨'}).click();
+  await bar.getByRole('tab', {name:'활동 기록'}).click();
   const gap = await page.evaluate(() => document.querySelector('[data-body]').getBoundingClientRect().top - document.querySelector('.song-tabs').getBoundingClientRect().bottom);
   expect(gap).toBeGreaterThanOrEqual(0);
   expect(gap).toBeLessThan(40);
@@ -1981,3 +2317,264 @@ test('Files edited before the follow rule existed are lined up once after start'
   expect(page.__errors).toEqual([]);
 });
 
+
+
+
+test('Actual practice time excludes recording length across growth, calendar and home',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  const m=(await window.vzipReadMedia()).find(x=>x.id==='m2');delete m.bytes;
+  await window.vzipStorePracticeMedia({...m,blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:600});
+  VZ.change(d=>{d.practices[0].date=VZ.today();});VZ.media.invalidate();
+ });
+ const values=await page.evaluate(async()=>{
+  const entries=VZ.timeEntries(await VZ.media.list());
+  return {total:VZ.sumMinutes(entries),home:VzipStudentHomeModel.build(VZ.db,{today:VZ.today(),timeEntries:entries}).week.actualMinutes};
+ });
+ expect(values).toEqual({total:25,home:25});
+ await page.goto('/#/growth');await page.getByRole('button',{name:'전체',exact:true}).click();
+ await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
+ await expect(page.locator('[data-file-time]')).toHaveCount(0);
+ await page.locator('[data-song-metric="files"]').click();
+ await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회');
+ await page.goto('/#/song/s1');await expect(page.locator('[data-summary]')).toContainText('연습 25분');
+ await page.goto('/#/calendar');await expect(page.locator('[data-month-minutes]')).toHaveText('25분');
+ expect((await data(page)).practices[0]).toMatchObject({minutes:30,manualMinutes:25,mediaSeconds:300});
+});
+
+test('Actual practice time supports training recordings without changing the entered minutes',async({page})=>{
+ const seed=legacy();seed.practices=[];await boot(page,{seed});
+ await page.evaluate(()=>VZ.practiceSheet());await sheet(page).locator('[data-mode="training"]').click();
+ await sheet(page).locator('[name=date]').fill(day(-1));
+ await sheet(page).locator('[name=minutes]').fill('12');
+ await sheet(page).locator('input[name=media][value="m2"]').check();
+ await expect(sheet(page).locator('[name=minutes]')).toHaveValue('12');
+ await sheet(page).getByRole('button',{name:'연습 기록 저장',exact:true}).click();
+ const record=(await data(page)).practices[0];
+ expect(record).toMatchObject({practiceMode:'training',minutes:12,manualMinutes:12,practiceTimeSource:'manual',mediaIds:['m2'],songId:''});
+ expect(await page.evaluate(()=>VZ.sumMinutes(VZ.timeEntries()))).toBe(12);
+ await page.reload();
+ expect(await page.evaluate(()=>VZ.sumMinutes(VZ.timeEntries()))).toBe(12);
+ expect((await media(page)).some(x=>x.id==='m2')).toBe(true);
+});
+
+async function deletionBillingFrame(page,seed=false){
+ if(seed){
+  const cloud=page.__deletionCloud={row:null};
+  await page.route('**/rest/v1/vocal_billing_documents*',route=>route.fulfill({json:cloud.row?[cloud.row]:[]}));
+  await page.route('**/rest/v1/rpc/vocal_billing_save',route=>{
+   const body=route.request().postDataJSON();
+   if((cloud.row?.revision||0)!==body.p_expected_revision)return route.fulfill({status:409,json:{code:'PT409'}});
+   cloud.row={payload:body.p_payload,revision:(cloud.row?.revision||0)+1,last_request_id:body.p_request_id,updated_at:new Date().toISOString()};
+   return route.fulfill({json:cloud.row});
+  });
+  await page.evaluate(()=>localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token',JSON.stringify({access_token:'fixture-token',expires_at:4102444800,user:{id:'ui-test-user',email:'fixture@example.invalid'}})));
+ }
+ const handle=await page.evaluateHandle(()=>{
+  const frame=document.createElement('iframe');frame.hidden=true;frame.dataset.deletionFixture='';
+  window.__deletionFixtureReady=new Promise(resolve=>{
+   const listener=e=>{if(e.origin===location.origin&&e.source===frame.contentWindow&&e.data?.type==='vzip-billing-auto'){window.removeEventListener('message',listener);resolve();}};
+   window.addEventListener('message',listener);
+  });
+  frame.src='/billing/?auto=1&do=fixture';document.body.append(frame);return frame;
+ });
+ const frame=await handle.asElement().contentFrame();
+ await expect.poll(()=>frame.evaluate(()=>typeof window.VzipBillingStore?.load==='function').catch(()=>false)).toBe(true);
+ await page.evaluate(()=>window.__deletionFixtureReady);
+ if(seed)await frame.evaluate(async()=>{
+  const S=VzipBillingStore;let s=await S.load(),run=async(type,payload)=>s=await S.save({type,payload},s.revision);
+  const date=JSON.parse(localStorage.getItem('vocal-zip_mvp_v1')).lessons.find(l=>l.id==='l1').date;
+  await run('pass.save',{name:'보존할 10회권',amount:300000,totalUnits:1000});const passId=s.passes[0].id;
+  await run('payment.save',{passId,date,kind:'payment',amount:300000});
+  await run('payment.save',{passId,date,kind:'refund',amount:10000});
+  await run('deduction.save',{passId,date,lessonId:'l1',status:'completed',units:100});
+  await run('deduction.save',{passId,date,lessonId:'same-day-neighbour',status:'completed',units:100});
+  await VzipBillingCloud.sync();
+ });
+ const value=await frame.evaluate(()=>VzipBillingStore.load());
+ await handle.evaluate(el=>el.remove());return value;
+}
+async function confirmLessonDeletion(page,{files=[],billing=false}={}){
+ await page.goto('/#/lesson/l1');await page.getByRole('button',{name:'레슨 삭제',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan).toBeVisible();
+ for(const id of files)await plan.locator('[name=media][value="'+id+'"]').check();
+ if(billing)await plan.locator('[name=billing]').check();
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ const final=page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true});
+ await expect(final).toContainText('복구할 수 없습니다');
+ await final.getByRole('button',{name:'영구 삭제',exact:true}).click();
+}
+test('Lesson deletion preserves unselected billing and recordings and starts with all options off',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true);
+ await page.goto('/#/lesson/l1');await page.getByRole('button',{name:'레슨 삭제',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan.locator('input:checked')).toHaveCount(0);
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ const after=await deletionBillingFrame(page);
+ expect(after).toEqual(before);expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+ expect((await data(page)).practices[0].manualMinutes).toBe(25);
+});
+test('Lesson deletion cancels the exact charge once after a lost response and deletes only the chosen recording',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true);
+ await page.evaluate(()=>{
+  const cancel=VZ.billingCancelForDeletion;let first=true;
+  VZ.billingCancelForDeletion=async job=>{const result=await cancel(job);if(first){first=false;throw Error('응답 중단 시험');}return result;};
+ });
+ await confirmLessonDeletion(page,{files:['m1'],billing:true});
+ const progress=page.getByRole('dialog',{name:'레슨 삭제 진행',exact:true});
+ await expect(progress.locator('[data-delete-error]')).toContainText('응답 중단 시험');
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
+ expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+ await progress.getByRole('button',{name:'삭제 재시도',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>({
+  exists:VZ.db.lessons.some(l=>l.id==='l1'),
+  error:document.querySelector('[data-delete-error]')?.textContent||''
+ })),{timeout:10000}).toEqual({exists:false,error:''});
+ const after=await deletionBillingFrame(page);
+ expect(after.payments).toEqual(before.payments);
+ expect(after.deductions.find(d=>d.lessonId==='same-day-neighbour')).toEqual(before.deductions.find(d=>d.lessonId==='same-day-neighbour'));
+ expect(after.deductions.find(d=>d.lessonId==='l1').voidedAt).toBeTruthy();
+ expect(after.history.filter(h=>h.action==='deduction.cancelForDeletion')).toHaveLength(1);
+ expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
+ const d=await data(page);expect(d.practices[0]).toMatchObject({mediaIds:[],manualMinutes:25,completed:['a1']});
+ expect(d.assignments.find(a=>a.id==='a2').lessonIds).toEqual(['l-over']);
+ expect(await page.evaluate(()=>VZ.lessonDeletion.jobs())).toEqual([]);
+ const handle=await page.evaluateHandle(()=>{const f=document.createElement('iframe');f.hidden=true;f.src='/billing/?auto=1&do=fixture';document.body.append(f);return f;});
+ const frame=await handle.asElement().contentFrame();
+ await expect.poll(()=>frame.evaluate(()=>!!window.VzipBillingStore).catch(()=>false)).toBe(true);
+ const guarded=await frame.evaluate(async old=>{
+  const S=VzipBillingStore;let s=await S.load(),errors=[];
+  try{await S.replace(old,s.revision);}catch(e){errors.push(e.message);}
+  s=await S.clear(s.revision);
+  try{await S.replace(old,s.revision);}catch(e){errors.push(e.message);}
+  return errors;
+ },before);
+ expect(guarded).toHaveLength(2);expect(guarded.every(e=>e.includes('과거 백업'))).toBe(true);
+ await handle.evaluate(el=>el.remove());
+});
+test('Lesson deletion resumes a partial file failure after refresh without restoring or deleting unselected data',async({page})=>{
+ const seed=legacy();seed.lessons[0].recordings.push({id:'m2',note:'second'});await boot(page,{seed});
+ await page.evaluate(()=>{
+  const remove=VZ.media.remove;
+  VZ.media.remove=async item=>{if(item.id==='m2')throw Error('두 번째 파일 실패 시험');return remove(item);};
+ });
+ await confirmLessonDeletion(page,{files:['m1','m2']});
+ const progress=page.getByRole('dialog',{name:'레슨 삭제 진행',exact:true});
+ await expect(progress.locator('[data-delete-error]')).toContainText('두 번째 파일 실패 시험');
+ expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
+ await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false;});
+ await page.goto('/#/lessons');
+ await page.getByRole('button',{name:'미완료 레슨 삭제 1건 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'미완료 레슨 삭제',exact:true}).locator('[data-job]').click();
+ await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ expect(await media(page)).toEqual([]);
+ expect((await data(page)).practices[0].manualMinutes).toBe(25);
+});
+test('Lesson deletion detects changed lesson content before any irreversible step',async({page})=>{
+ await boot(page);
+ await page.goto('/#/lesson/l1');await page.getByRole('button',{name:'레슨 삭제',exact:true}).click();
+ await page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true}).getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ const final=page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true});await expect(final).toBeVisible();
+ await page.evaluate(()=>VZ.change(d=>{d.lessons.find(l=>l.id==='l1').feedback='변경된 피드백';},{silent:true}));
+ await final.getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect(page.locator('.toast').last()).toContainText('레슨 내용이 바뀌었어요');
+ expect((await data(page)).lessons.find(l=>l.id==='l1').feedback).toBe('변경된 피드백');
+ expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+});
+
+test('Lesson deletion can reselect changed content after partial failure while preserving already completed steps',async({page})=>{
+ const seed=legacy();seed.lessons[0].recordings.push({id:'m2'});await boot(page,{seed});
+ await page.evaluate(()=>{
+  const remove=VZ.media.remove;VZ.media.remove=async m=>{if(m.id==='m2')throw Error('partial fixture');return remove(m);};
+ });
+ await confirmLessonDeletion(page,{files:['m1','m2']});
+ let progress=page.getByRole('dialog',{name:'레슨 삭제 진행',exact:true});
+ await expect(progress.locator('[data-delete-error]')).toContainText('partial fixture');
+ await page.evaluate(()=>VZ.change(d=>{d.lessons.find(l=>l.id==='l1').feedback='새로 작성한 피드백';},{silent:true}));
+ await progress.getByRole('button',{name:'삭제 재시도',exact:true}).click();
+ await expect(progress.locator('[data-delete-error]')).toContainText('레슨 내용이 바뀌었어요');
+ await progress.getByRole('button',{name:'대상 다시 선택',exact:true}).click();
+ await page.getByRole('dialog',{name:'삭제 대상을 다시 선택할까요?',exact:true}).getByRole('button',{name:'다시 선택',exact:true}).click();
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan.locator('input:checked')).toHaveCount(0);
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect.poll(async()=>(await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ expect((await media(page)).map(m=>m.id)).toEqual(['m2']);
+});
+
+test('Lesson deletion from settlement verifies exact charge, preserves recordings and returns to billing',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true),row=before.deductions.find(d=>d.lessonId==='l1');
+ await page.goto('/#/lesson/l1?settlementDelete='+encodeURIComponent(row.id)+'&version='+row.version);
+ const plan=page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true});
+ await expect(plan.locator('input[name=billing]')).toBeChecked();
+ await expect(plan.locator('input[name=media]:checked')).toHaveCount(0);
+ await expect(page).toHaveURL(/#\/lesson\/l1$/);
+ await plan.getByRole('button',{name:'삭제 대상 확인',exact:true}).click();
+ await page.getByRole('dialog',{name:'선택 항목 영구 삭제',exact:true}).getByRole('button',{name:'영구 삭제',exact:true}).click();
+ await expect(page).toHaveURL(/\/billing\/$/);
+ const after=await page.evaluate(()=>VzipBillingStore.load());
+ expect(after.payments).toEqual(before.payments);
+ expect(after.deductions.find(d=>d.lessonId==='l1').deletionOperationId).toBeTruthy();
+ expect(after.deductions.find(d=>d.lessonId==='same-day-neighbour')).toEqual(before.deductions.find(d=>d.lessonId==='same-day-neighbour'));
+ await page.goto('/#/lessons');await page.evaluate(()=>{window.vzipCloudSignedIn=()=>false;});
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(false);
+ expect((await media(page)).some(m=>m.id==='m1')).toBe(true);
+});
+test('Lesson deletion from stale settlement version stops without a dialog or destructive actions',async({page})=>{
+ await boot(page);const before=await deletionBillingFrame(page,true),row=before.deductions.find(d=>d.lessonId==='l1');
+ await page.goto('/#/lesson/l1?settlementDelete='+encodeURIComponent(row.id)+'&version=999');
+ await expect(page.locator('.toast').last()).toContainText(' 연결 차감이 변경됐어요'.trim());
+ await expect(page.getByRole('dialog',{name:'레슨 삭제 대상',exact:true})).toHaveCount(0);
+ expect((await data(page)).lessons.some(l=>l.id==='l1')).toBe(true);
+ expect(await deletionBillingFrame(page)).toEqual(before);
+});
+
+test('Upload startup inspects only four files before sending and holds background backup through all windows',async({page})=>{
+ await boot(page,{media:false});
+ await page.evaluate(()=>{
+  window.__startup={inspected:0,first:0,sent:0,holds:0,firstHolds:0};
+  window.vzipCloudSignedIn=()=>true;window.vzipCloudUserId=()=> 'ui-test-user';
+  VZ.media.list=async()=>[];
+  const hold=VZ.media.holdBackup;
+  VZ.media.holdBackup=on=>{window.__startup.holds+=on?1:-1;hold(on);};
+  window.vzipInspectMedia=async()=>{window.__startup.inspected++;return {readable:true,duration:32,hasVideo:false,hasAudio:true,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}};};
+  VZ.media.importFile=async(file,choice)=>{
+   if(!window.__startup.sent){window.__startup.first=window.__startup.inspected;window.__startup.firstHolds=window.__startup.holds;}
+   window.__startup.sent++;return {id:choice.id,cloud:true,size:file.size,durationSeconds:32,recordedDate:'2026-11-09'};
+  };
+  VZ.openImportHub({files:Array.from({length:9},(_,i)=>new File([new Uint8Array([i,1,2,3])],'part-'+i+'.m4a',{type:'audio/mp4'}))});
+ });
+ await expect.poll(()=>page.evaluate(()=>window.__startup.sent)).toBe(9);
+ await expect.poll(()=>page.evaluate(()=>window.__startup.holds)).toBe(0);
+ const result=await page.evaluate(()=>window.__startup);
+ expect(result.first).toBe(4);expect(result.firstHolds).toBeGreaterThanOrEqual(2);
+ expect(result.inspected).toBe(9);
+});
+
+test('AI exercise appears inline in the same card form and follow-along uses its saved steps',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  await window.vzipStorePracticeMedia({id:'m3',name:'세 번째 녹음',created:Date.now(),type:'audio/wav',source:'practice',songId:'s1',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});VZ.media.invalidate();
+  for(const m of (await VZ.media.list()).filter(x=>x.songId==='s1'))await VZ.media.update(m,{analysis:{v:1,metrics:{voicedSeconds:30,stability:{wobbleCents:18,notes:4},intonation:{meanAbsCents:28,notes:10},range:{lowCents:6000,highCents:8100},breath:{medianPhrase:2.4}},confidence:{voiceOverMrDb:12}}},{quiet:true});VZ.media.invalidate();
+  window.vzipCloudCoach=async input=>{window.__aiInput=input;return {exercise:{family:'diction',name:'가사 자음 또렷하게 읽기',reason:'기존 두 연습과 다른 전달 연습이에요.',steps:['가사 한 줄을 읽어요.','핵심 단어를 적어요.'],goal:'전할 단어 하나 정하기',minutes:4}};};
+ });
+ await page.goto('/#/vocal-lab/s1');await page.locator('.vl-dates button').first().click();await expect(page.locator('.vl-tip')).toHaveCount(2);
+ const original=await page.locator('.vl-tip summary strong').allTextContents();
+ await page.getByRole('button',{name:'다른 연습 하나 AI 추천받기'}).click();await expect(page.locator('.vl-tip')).toHaveCount(3);
+ expect(await page.locator('.vl-tip summary strong').allTextContents()).toEqual([...original,'가사 자음 또렷하게 읽기']);
+ const card=page.locator('[data-ai-tip] .vl-tip');await expect(card).toHaveAttribute('open','');await expect(card.locator('li')).toHaveCount(2);await expect(card.locator('.vl-tip-goal')).toContainText('권장 4분');
+ await page.getByRole('button',{name:'다른 연습 하나 AI 추천받기'}).click();await expect(page.locator('.vl-tip')).toHaveCount(3);
+ await page.evaluate(()=>window.vzipCloudCoach=async()=>{throw Error('요청 실패 테스트');});await page.getByRole('button',{name:'다른 연습 하나 AI 추천받기'}).click();await expect(page.locator('[data-ai-status]')).toHaveText('요청 실패 테스트');await expect(page.locator('.vl-tip')).toHaveCount(3);
+ expect(await page.evaluate(()=>__aiInput.mode)).toBe('inline-exercise');expect(await page.evaluate(()=>__aiInput.excluded.length)).toBe(2);await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
+ const before=await page.evaluate(()=>VZ.db.practices.length);
+ await page.goto('/#/song/s1');await page.goto('/#/vocal-lab/s1');await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');
+ await page.reload();await page.locator('.vl-dates button').first().click();await expect(page.locator('[data-ai-tip] summary strong')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('[data-ai-status]')).toContainText('저장된 AI 추천');expect(await page.evaluate(()=>VZ.db.practices.length)).toBe(before);
+ await page.evaluate(()=>VZ.practiceSheet=input=>window.__recordPreset=input);await card.getByRole('button',{name:'연습 기록에 담기'}).click();expect(await page.evaluate(()=>__recordPreset.preset.minutes)).toBe(4);
+ await card.getByRole('link',{name:'따라 하기'}).click();await expect(page.locator('.gp-screen h2')).toHaveText('가사 자음 또렷하게 읽기');await expect(page.locator('.gp-instruction h3')).toHaveText('가사 한 줄을 읽어요.');
+});

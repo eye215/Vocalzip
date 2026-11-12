@@ -1,0 +1,34 @@
+/* The Library recording row and inline player, reused wherever recordings are listed. */
+#view .vz-record:not(.lib-record){min-width:0;background:#fff}
+#view .vz-record:not(.lib-record) + .vz-record:not(.lib-record){border-top:0}
+#view .vz-record:not(.lib-record) [data-toggle]{display:flex;align-items:center;gap:8px;width:100%;min-width:0;min-height:72px;padding:10px 12px;border:0;background:#fff;text-align:left;color:var(--vz-color-ink)}
+#view .vz-media-select-enabled .vz-record:not(.lib-record) [data-toggle]{padding-left:56px}
+#view .vz-record:not(.lib-record) .avatar{display:grid;place-items:center;flex:none;width:26px;height:32px;border:0;border-radius:0;background:none!important;color:var(--vz-color-accent)!important}
+#view .vz-record:not(.lib-record) .avatar i{font-size:24px}
+#view .vz-record:not(.lib-record) .item-main{display:block;flex:1;min-width:0}
+#view .vz-record .vz-record-name{display:block;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#view .vz-record:not(.lib-record) .item-title{min-width:0;color:var(--vz-color-ink);font-size:15px;line-height:21px;font-weight:600}
+#view .vz-record:not(.lib-record) .item-sub{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;color:var(--vz-color-ink-muted);font-size:12px;line-height:18px}
+#view .vz-record:not(.lib-record) .chev{flex:none;margin-left:auto;color:var(--vz-color-faint);font-size:16px}
+#view .vz-record:not(.lib-record) [data-toggle][aria-expanded=true]>.chev{transform:rotate(180deg)}
+#view .vz-record:not(.lib-record) .media-open:not([hidden]){padding:0 12px 12px!important;border:0}
+#view .vz-record:not(.lib-record) .player{padding:0;border-radius:14px;background:var(--vz-color-canvas)}
+#view .vz-record:not(.lib-record) .player-row{display:flex;align-items:center;gap:5px;min-width:0;padding:6px 4px 6px 8px}
+#view .vz-record:not(.lib-record) .player-btn{position:relative;isolation:isolate;flex:none;width:44px;height:44px;margin-right:12px;background:transparent;color:#fff;font-size:18px}
+#view .vz-record:not(.lib-record) .player-btn::before{content:"";position:absolute;z-index:-1;width:36px;height:36px;border-radius:50%;background:var(--vz-color-accent)}
+#view .vz-record:not(.lib-record) .player-row input[type=range]{flex:1 1 0;width:0;min-width:0;margin:0;accent-color:var(--vz-color-accent)}
+#view .vz-record:not(.lib-record) .player-row .time{flex:none;min-width:max-content;white-space:nowrap;color:var(--vz-color-ink-muted);font-size:11px;font-weight:500}
+#view .vz-record:not(.lib-record) .vz-row-more{display:grid;place-items:center;flex:none;width:48px;height:44px;padding:0;border:0;background:transparent;color:var(--vz-color-ink-muted);font-size:20px}
+#view .vz-record:not(.lib-record) .player [data-msg]:not(:empty){padding:0 12px 8px}
+#view .vz-record:not(.lib-record) .media-open>p{padding:0 12px}
+/* Inside a calendar event, the recording remains a row in that event's white card. */
+#view [data-day] .cal-own .minis{margin:0 12px 12px;padding:0;border:0}
+#view [data-day] .cal-own .minis .vz-record + .vz-record{border-top:0}
+#view [data-day] .cal-loose-card .vz-record{border-radius:20px}
+#view [data-day] .cal-loose-card .vz-record [data-toggle]{padding-right:12px}
+#view [data-day] .cal-loose-card.vz-media-select-enabled .vz-record [data-toggle],#view [data-day] .vz-media-select-enabled .cal-loose-card .vz-record [data-toggle]{padding-left:56px}
+#view .vz-song-media-list .vz-record:not(.lib-record) [data-toggle]{padding-left:56px}
+#view .vz-song-media-list .vz-record:not(.lib-record) .item-title{display:flex;gap:6px;align-items:center}
+#view .vz-song-media-list .vz-record:not(.lib-record) .item-title>.vz-song-kind{flex:none}
+@media(max-width:350px){#view .vz-record:not(.lib-record) .player-row{gap:3px;padding-left:3px}#view .vz-record:not(.lib-record) .player-row .time{font-size:10px}#view .vz-record:not(.lib-record) .vz-row-more{width:44px}}
+

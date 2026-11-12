@@ -1,0 +1,26 @@
+name: Media filename year contract
+on:
+  push:
+    branches: ['codex/media-filename-year-contract-20261109']
+  pull_request:
+    paths:
+      - 'media-date.js'
+      - 'tests/media-date.test.cjs'
+      - '.github/workflows/media-filename-year-check.yml'
+permissions:
+  contents: read
+jobs:
+  dates:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        timezone: [UTC, Asia/Seoul, America/Los_Angeles]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Filename and metadata calendar dates
+        env:
+          TZ: ${{ matrix.timezone }}
+        run: node --test tests/media-date.test.cjs

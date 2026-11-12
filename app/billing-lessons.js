@@ -85,7 +85,9 @@ VZ.billingImportLessons = () => importing ||= (async () => {
     const doc = await ledger().catch(() => null); if (!doc) return 0;
     const lessons = VZ.db.lessons, ids = new Set(lessons.map(l => l.id)), linked = new Set(lessons.map(l => l.billingDeductionId).filter(Boolean));
     const gone = new Set((VZ.db.deleted?.lessons || []).map(String));
-    const active = (doc.deductions || []).filter(d => !d.voidedAt && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')).sort((a, b) => a.date.localeCompare(b.date));
+    const suppressed = new Set(VZ.db.deleted?.billingLessonLinks || []);
+    const active = (doc.deductions || []).filter(d => !suppressed.has(d.id) && !d.voidedAt && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')).sort((a, b) => a.date.localeCompare(b.date));
+    const pendingDeletionIds = new Set((VZ.lessonDeletion?.jobs() || []).map(j => j.lesson.id));
     const claimed = new Set(active.map(d => d.lessonId).filter(Boolean)); // app lessons a record already points at
     const passes = new Map((doc.passes || []).map(p => [p.id, p]));
     const add = [], link = [], taken = new Set();
@@ -95,7 +97,7 @@ VZ.billingImportLessons = () => importing ||= (async () => {
     const stale = l => l.importedFrom === 'billing' && l.billingDeductionId && !known.has(l.billingDeductionId);
     for (const d of active) {
       if ((d.lessonId && (ids.has(d.lessonId) || gone.has(String(d.lessonId)))) || linked.has(d.id) || ids.has(billLessonId(d)) || gone.has(billLessonId(d))) continue;
-      const same = lessons.find(l => l.date === d.date && (!l.billingDeductionId || stale(l)) && !claimed.has(l.id) && !taken.has(l.id));
+      const same = !d.lessonId && lessons.find(l => !pendingDeletionIds.has(l.id) && l.date === d.date && (!l.billingDeductionId || stale(l)) && !claimed.has(l.id) && !taken.has(l.id));
       if (same) { taken.add(same.id); link.push([same.id, d.id]); } else add.push(d);
     }
     if (!add.length && !link.length) return 0;
@@ -175,6 +177,19 @@ VZ.billingStatusOf = (doc, l) => {
   return rows.some(x => x.date === l.date) ? {kind:'sameDay'} : {kind:'pending'};
 };
 VZ.billingLedger = () => ledger().catch(() => null);
+// Deletion must distinguish a failed ledger read from an account that never had a ledger.
+VZ.billingDeletionLedger = () => ledger();
+VZ.billingCancelForDeletion = async job => {
+ const l=VZ.db.lessons.find(x=>x.id===job.lesson.id);
+ if(!l)throw Error('삭제할 레슨이 변경됐어요.');
+ const guard={id:l.id,date:l.date||'',status:({done:'completed',scheduled:'scheduled',cancelled:'cancelled'})[l.status]||'unconfirmed',
+  start:l.startTime||'',end:l.endTime||'',billingId:l.billingDeductionId||'',touched:Math.max(Number(l.created)||0,Number(l.updatedAt)||0)};
+ const query='&do=delete-cancel&lesson='+encodeURIComponent(l.id)+'&deduction='+encodeURIComponent(job.deduction.id)+
+  '&version='+job.deduction.version+'&operation='+encodeURIComponent(job.id)+'&guard='+encodeURIComponent(JSON.stringify(guard));
+ const result=await runBilling(query);
+ if(!result.action?.ok||result.action.operationId!==job.id)throw Error(result.action?.message||'정산 응답을 확인하지 못했어요. 삭제를 다시 시도해 주세요.');
+ return result.action;
+};
 const units = d => (Number(d.units) || 0) / 100 + '회';
 const badge = st => st.kind === 'deducted'
   ? '<span class="badge" data-billing-badge><i class="ph ph-receipt"></i>' + (st.deduction.status === 'noshow' ? '당일 취소 ' : '정산 ') + units(st.deduction) + '</span>'

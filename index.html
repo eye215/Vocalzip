@@ -12,83 +12,141 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="VOCAL.zip">
 <title>VOCAL.zip</title>
+<!-- VOCAL.zip GitHub Pages deployment refresh: 2026-11-11 growth report -->
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="vendor/phosphor/style.css">
 <link rel="stylesheet" href="vendor/phosphor/fill.css">
-<link rel="stylesheet" href="app/app.css?v=677">
-<link rel="stylesheet" href="app/calendar-summary.css?v=3">
-<link rel="stylesheet" href="app/repertoire.css?v=1">
-<link rel="stylesheet" href="design-system/tokens.css?v=7">
-<link rel="stylesheet" href="design-system/components.css?v=2">
-<link rel="stylesheet" href="design-system/student-home-fonts.css?v=1">
-<link rel="stylesheet" href="design-system/student-home-shell.css?v=5">
-<link rel="modulepreload" href="design-system/student-home-html.js?v=6">
-<link rel="modulepreload" href="design-system/student-home-app.js?v=27">
+<link rel="stylesheet" href="design-system/tokens.css?v=12">
+<link rel="stylesheet" href="app/app.css?v=page-still-20261112">
+<link rel="stylesheet" href="app/calendar-summary.css?v=19">
+<link rel="stylesheet" href="app/repertoire.css?v=7">
+<link rel="stylesheet" href="design-system/components.css?v=3">
+<link rel="stylesheet" href="design-system/student-home-fonts.css?v=2">
+<link rel="stylesheet" href="design-system/student-home-shell.css?v=6">
+<link rel="modulepreload" href="design-system/student-home-html.js?v=daily-goals-20261112-1">
+<link rel="modulepreload" href="design-system/student-home-app.js?v=daily-goals-20261112-1">
 <style>#vzip-boot-cover{position:fixed;inset:0;z-index:99998;background:#f8f6fd;display:grid;place-items:center;color:#1e1b2e;font:750 26px -apple-system,system-ui,sans-serif}#vzip-boot-cover small{display:block;text-align:center;color:#8d88a3;font-size:13px;font-weight:500;margin-top:10px}</style>
-<link rel="stylesheet" href="app/collection-ui.css?v=3">
+<link rel="stylesheet" href="app/collection-ui.css?v=16">
+<link rel="stylesheet" href="design-system/global-app.css?v=9">
+<link rel="stylesheet" href="app/record-experience.css?v=16">
+<link rel="stylesheet" href="app/media-dock.css?v=14">
+<link rel="stylesheet" href="app/song-detail.css?v=12">
+<link rel="stylesheet" href="app/score-ink.css?v=29">
+<link rel="stylesheet" href="app/song-check-ui.css?v=7">
+<link rel="stylesheet" href="app/vocal-lab.css?v=compare-width-20261111-1">
+<link rel="stylesheet" href="app/guided-practice.css?v=5">
+<link rel="stylesheet" href="app/recording-list.css?v=2">
+<link rel="stylesheet" href="app/settings-refresh.css?v=14">
+<link rel="stylesheet" href="sync/snapshot-review.css?v=1">
+<link rel="stylesheet" href="app/practice-room.css?v=1">
+<link rel="stylesheet" href="app/monthly-growth.css?v=3">
+<link rel="stylesheet" href="app/growth-polish.css?v=1">
+<link rel="stylesheet" href="app/goal-routines.css?v=2">
+<link rel="stylesheet" href="app/share-links.css?v=2">
+<link rel="stylesheet" href="app/score-omr.css?v=1">
+<link rel="stylesheet" href="design-system/shared-nav.css?v=3">
 </head>
 <body>
 <a href="#view" class="skip-link">본문으로 이동</a>
-<div id="vzip-boot-cover" role="status"><div>VOCAL<span style="color:#7552d9">.</span>zip<small>로그인 확인 중…</small></div></div>
+<div id="vzip-boot-cover" role="status"><div>VOCAL<span style="color:#7A32F5">.</span>zip<small>로그인 확인 중…</small></div></div>
 <div class="v-app">
   <header class="v-top" id="top"></header>
   <main id="view" tabindex="-1"></main>
 </div>
 <nav class="v-nav" aria-label="주요 메뉴"><ul>
-  <li><a href="#/home" data-nav="home"><i class="ph-fill ph-house"></i>홈</a></li>
-  <li><a href="#/songs" data-nav="songs"><i class="ph-fill ph-music-notes"></i>내 곡</a></li>
-  <li><a href="#/record" data-nav="record" class="rec"><i class="ph-fill ph-microphone"></i>녹음</a></li>
-  <li><a href="#/library" data-nav="library"><i class="ph-fill ph-archive-box"></i>보관함</a></li>
-  <li><a href="#/calendar" data-nav="calendar"><i class="ph-fill ph-calendar-blank"></i>일정</a></li>
+  <li><a href="#/home" data-nav="home"><i class="ph ph-house"></i>홈</a></li>
+  <li><a href="#/songs" data-nav="songs"><i class="ph ph-music-notes"></i>내 곡</a></li>
+  <li><a href="#/library" data-nav="library"><i class="ph ph-archive-box"></i>보관함</a></li>
+  <li><a href="#/calendar" data-nav="calendar"><i class="ph ph-calendar-blank"></i>일정</a></li>
+  <li><a href="#/vocal-growth" data-nav="growth" aria-label="성장 분석"><i class="ph ph-chart-bar" aria-hidden="true"></i><span>성장</span></a></li>
 </ul></nav>
 <div id="vzip-park" hidden><div id="vzip-cloud-root" hidden></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
 <script src="chunk-media-core.js?v=1"></script>
 <script src="chunk-media.js?v=1"></script>
-<script src="media-date.js?v=4"></script>
-<script src="media-import.js?v=5"></script>
+<script src="media-date.js?v=5"></script>
+<script src="media-import.js?v=7"></script>
 <script src="app/repertoire-model.js?v=1"></script>
-<script src="account-config.js?v=3"></script>
+<script src="account-config.js?v=4"></script>
 <script src="app/account-scope.js?v=3"></script>
-<script src="app/core.js?v=618"></script>
-<script src="app/picker.js?v=1"></script>
+<script src="app/practice-time-model.js?v=2"></script>
+<script src="app/core.js?v=page-still-20261112"></script>
+<script src="app/picker.js?v=3"></script>
 <script src="app/metric-help.js?v=1"></script>
-<script src="app/media.js?v=668"></script>
-<script src="data-merge.js?v=4"></script>
-<script src="app/student-home-model.js?v=3"></script>
+<script src="media-naming.js?v=4"></script>
+<script src="app/media.js?v=680"></script>
+<script src="data-merge.js?v=7"></script>
+<script src="app/lesson-deletion-model.js?v=2"></script>
+<script src="app/student-home-model.js?v=10"></script>
+<script src="app/goal-routines.js?v=2"></script>
 <script src="r2-config.js?v=2"></script>
-<script src="r2-storage.js?v=12"></script>
-<script src="app/device-sessions.js?v=1"></script>
+<script src="r2-resumable-upload.js?v=1"></script>
+<script src="r2-storage.js?v=22"></script>
+<script src="app/device-sessions.js?v=2"></script>
 <script src="media-upload-recovery.js?v=1"></script>
-<script src="cloud-sync.js?v=124"></script>
-<script src="app/views-main.js?v=668"></script>
-<script src="app/calendar-summary.js?v=1"></script>
-<script src="app/views-lessons.js?v=628"></script>
-<script src="app/billing-lessons.js?v=10"></script>
-<script src="app/views-more.js?v=679"></script>
-<script src="app/import-hub.js?v=11"></script>
+<script src="sync/snapshot-transport.js?v=5"></script>
+<script src="sync/snapshot-review-model.js?v=1"></script>
+<script src="sync/snapshot-review.js?v=2"></script>
+<script src="sync/media-delete-review.js?v=1"></script>
+<script src="media-metadata-edits.js?v=1"></script>
+<script src="cloud-sync.js?v=145"></script>
+<script src="app/song-mr.js?v=2"></script>
+<script src="app/views-main.js?v=kind-20261112-1"></script>
+<script src="app/media-dock.js?v=13"></script>
+<script src="app/calendar-summary.js?v=8"></script>
+<script src="app/views-lessons.js?v=ai-642"></script>
+<script src="app/billing-lessons.js?v=11"></script>
+<script src="app/lesson-deletion.js?v=4"></script>
+<script src="app/views-more.js?v=709"></script>
+<script src="app/import-hub.js?v=18"></script>
 <script src="app/storage.js?v=5"></script>
-<script src="app/upload-check.js?v=4"></script>
-<script src="app/song-suggestions.js?v=12"></script>
-<script src="app/analysis.js?v=5"></script>
+<script src="app/upload-check.js?v=5"></script>
+<script src="app/recording-kind.js?v=1"></script>
+<script src="app/recording-kind-menu.js?v=1"></script>
+<script src="app/song-suggestions.js?v=recording-kind-20261112-2"></script>
+<script src="app/analysis.js?v=cancel-worker-20261111-2"></script>
 <script src="app/song-vocal-growth.js?v=4"></script>
-<script src="app/scores.js?v=2"></script>
-<script src="app/practice-tips.js?v=1"></script>
+<script src="app/weak-phrase.js?v=1"></script>
+<script src="app/segment-ab-model.js?v=1"></script>
+<script src="app/segment-ab-ui.js?v=1"></script>
+<script src="app/plan-outcome-model.js?v=1"></script>
+<script src="app/plan-outcome-ui.js?v=1"></script>
+<script src="app/monthly-practice-plans.js?v=1"></script>
+<script src="app/overall-growth-model.js?v=1"></script>
+<script src="app/overall-growth-ui.js?v=3"></script>
+<script src="app/monthly-growth.js?v=3"></script>
+<script src="app/vocal-lab.js?v=ai-growth-20261111-2"></script>
+<script src="app/score-ink-model.js?v=4"></script>
+<script src="app/score-ink-settings.js?v=2"></script>
+<script src="app/score-ink-export.js?v=1"></script>
+<script src="app/score-audio.js?v=6"></script>
+<script src="app/score-ink.js?v=39"></script>
+<script src="app/scores.js?v=7"></script>
+<script src="app/score-omr.js?v=2"></script>
+<script src="app/practice-tips.js?v=2"></script>
+<script src="app/metronome.js?v=1"></script>
+<script src="app/guided-practice.js?v=8"></script>
 <script src="app/auto-analysis.js?v=2"></script>
-<script src="app/server-analysis.js?v=4"></script>
-<script src="app/library-select.js?v=1"></script>
-<script src="app/repertoire.js?v=3"></script>
+<script src="app/server-analysis.js?v=5"></script>
+<script src="app/processing-log.js?v=4"></script>
+<script src="app/library-select.js?v=11"></script>
+<script src="app/repertoire.js?v=11"></script>
 <script src="app/performance-assets.js?v=1"></script>
-<script src="app/media-follow.js?v=1"></script>
-<script src="app/collection-ui.js?v=1"></script>
+<script src="app/media-follow.js?v=2"></script>
+<script src="app/collection-ui.js?v=5"></script>
+<script src="app/share-links.js?v=2"></script>
+<script src="app/record-transition.js?v=1"></script>
+<script src="app/practice-room-model.js?v=6"></script>
+<script src="app/practice-room.js?v=13"></script>
+<script src="app/practice-review-model.js?v=2"></script>
+<script src="app/practice-review.js?v=3"></script>
+<script src="app/lesson-ai-model.js?v=1"></script>
+<script src="app/lesson-ai.js?v=1"></script>
 <script src="app/app.js?v=600"></script>
-<script type="module" src="design-system/student-home-app.js?v=27"></script>
+<script type="module" src="design-system/student-home-app.js?v=daily-goals-20261112-1"></script>
 </body>
 </html>
-
-
-
 

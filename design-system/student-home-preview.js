@@ -1,7 +1,7 @@
 /* Fixed fixtures are isolated to this preview. No persistence or service calls.
  * Query ?state=empty|many|failure|boundaries to inspect additional states.
  */
-import {createFloatingHome} from "./student-home-html.js?v=6";
+import {createFloatingHome} from "./student-home-html.js?v=daily-goals-20261112-1";
 const params=new URLSearchParams(location.search),state=params.get("state");
 const status=document.querySelector(".preview-status");
 const announce=label=>()=>{status.textContent=label;};
@@ -44,4 +44,5 @@ const home=await createFloatingHome({
   onRecent:announce("최근 연습곡 상세 · 프리뷰"),onContinue:announce("Defying Gravity 계속 연습하기 · 프리뷰"),onGrowth:announce("성장 기록 · 프리뷰")
 });
 document.querySelector("#preview").append(home);
+
 

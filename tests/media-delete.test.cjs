@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const Merge=require('../data-merge.js');
-function setup({provider='supabase',fail='',conflict=false,path='alice/f.wav'}={}){
+function setup({provider='supabase',fail='',conflict=false,path='alice/f.wav',pending=false}={}){
  const events=[],payload={categories:[],songs:[],assignments:[],lessons:[{id:'l',memo:'keep',recordings:[{id:'m'}]}],practices:[{id:'p',minutes:20,mediaIds:['m','other']}],comparisonReports:[{id:'c',firstId:'m',secondId:'other',notes:'keep'}]};
  let row={metadata:provider==='r2'?{storageProvider:'r2',r2Key:'u/alice/m',legacyStorage:{path}}:{path},updated_at:'v1'};
  const client={storage:{from:()=>({remove:async paths=>{events.push(['storage',Array.from(paths)]);return {error:fail==='storage'?Error('offline'):null}}})},from:table=>{
@@ -15,7 +15,7 @@ function setup({provider='supabase',fail='',conflict=false,path='alice/f.wav'}={
    resolve({data:[]});
   };return q;
  }};
- const context={client,user:{id:'alice'},Merge,structuredClone,Error,Event,Date,navigator:{},sameVersion:q=>q,listCache:async()=>null,window:{dispatchEvent(){},VzipR2:{remove:async key=>events.push(['r2',key])}}};
+ const context={client,user:{id:'alice'},Merge,structuredClone,Error,Event,Date,navigator:{},localStorage:{getItem:k=>pending&&k==='vzip_media_edit_v1:alice:m'?'saved pending input':null,key:()=>null,length:0},sameVersion:q=>q,listCache:async()=>null,window:{addEventListener(){},dispatchEvent(){},VzipR2:{remove:async key=>events.push(['r2',key])}}};
  const code=fs.readFileSync('cloud-sync.js','utf8');
  vm.runInNewContext(code.slice(code.indexOf('function nextVersion'),code.indexOf('async function sync'))+code.slice(code.indexOf('async function unlinkCloudMedia'),code.indexOf('/* ---------- R2 move')),context);
  return {events,payload,run:()=>context.window.vzipCloudMediaDelete({id:'m',path:'attacker/stale'}),row:()=>row};
@@ -35,4 +35,9 @@ test('deleted media links cannot return from a newer offline record; input stays
  const old={categories:[],songs:[],assignments:[],lessons:[],practices:[{id:'p',updatedAt:999,mediaIds:['m','n'],memo:'new'}]};
  const fresh={...structuredClone(old),deleted:{media:['m']}};const result=Merge.merge(fresh,old).data;
  assert.deepEqual(result.practices[0].mediaIds,['n']);assert.deepEqual(old.practices[0].mediaIds,['m','n']);assert.equal(result.practices[0].memo,'new');
+});
+
+test('pending metadata input blocks deletion before storage, root or row mutations',async()=>{
+ const x=setup({provider:'r2',pending:true});await assert.rejects(x.run(),/미완료 파일 수정/);
+ assert.equal(x.events.length,0);assert.ok(x.row());
 });

@@ -1,3 +1,6 @@
+import {handleUploadV2} from './resumable.mjs';
+import {mediaPolicy,handleMediaV2,mediaRpc} from './media-versions.mjs';
+import {handleOmrUser,handleOmrRunner} from './omr.mjs';
 /* VOCAL.zip media API on Cloudflare Workers + R2.
  *
  * The browser never sees an R2 key. It signs in with Supabase as before and sends the Supabase
@@ -14,6 +17,7 @@
  *   DELETE /v1/media/<key>
  *   GET    /v1/usage                                → {objects, bytes}
  *   GET    /v1/me                                   → {user}   (sign-in check, no storage access)
+ *   POST/GET /v1/omr, /v1/omr-runner/…              → score PDF → MusicXML conversion (see omr.mjs)
  *
  * Bindings (wrangler.toml / dashboard):
  *   MEDIA                 R2 bucket
@@ -59,7 +63,7 @@ function corsHeaders(request, env) {
   return {
     'access-control-allow-origin': origin, vary: 'Origin',
     'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type, range, x-client-info',
+    'access-control-allow-headers': 'authorization, content-type, range, x-client-info, x-vzip-upload, x-vzip-proof',
     'access-control-expose-headers': 'etag, content-length, content-range, accept-ranges',
     'access-control-max-age': '600'
   };
@@ -67,6 +71,7 @@ function corsHeaders(request, env) {
 
 async function route(request, env) {
   const url = new URL(request.url), path = url.pathname, method = request.method;
+  let m;
   if (path === '/health') return json({ok: true, bucket: !!env.MEDIA, sessionContract: env.SESSION_GUARD_ENABLED === 'true' ? 'v2' : 'legacy'});
   if (request.headers.get('origin') && !corsHeaders(request, env)) fail(403, 'origin not allowed');
   if (!env.MEDIA) fail(500, 'MEDIA bucket is not bound');
@@ -76,11 +81,27 @@ async function route(request, env) {
     if (url.searchParams.has('sig')) await checkSignature(env, key, url.searchParams);
     else ownKey(await user(request, env), key);
     const response=await serve(request,env,key);
+    if(method==='GET'&&url.searchParams.has('download')){
+      const filename=String(url.searchParams.get('download')||'').replace(/[\\/\r\n";]/g,'_').slice(0,180);
+      if(filename)response.headers.set('content-disposition',"attachment; filename=\"download\"; filename*=UTF-8''"+encodeURIComponent(filename));
+    }
     if(env.SESSION_GUARD_ENABLED==='true')response.headers.set('cache-control','private, no-store');
     return response;
   }
 
+  // Public share links (no sign-in): the owner's grant is checked on every request, so a revoked or expired link stops at once.
+  if ((m = path.match(/^\/v1\/share\/([A-Za-z0-9_-]{40,64})\/(meta|media)$/)) && (method === 'GET' || method === 'HEAD')) return shared(request, env, m[1], m[2], url);
+
+  // Score conversion server (GitHub Actions OIDC, not a user session).
+  if (path.startsWith('/v1/omr-runner/')) return handleOmrRunner(request, env, path, {fail, json, readJson, b64urlDecode});
+
   const uid = await user(request, env);
+  const mediaContext=await mediaPolicy(request,env,uid,{fail});
+  if(path.startsWith('/v2/media/'))return handleMediaV2(request,env,uid,sessionContexts.get(request)?.verified_session_id,mediaContext,{fail,json,equal:timingSafeEqual});
+  if(path.startsWith('/v2/uploads'))return handleUploadV2(request,env,uid,{
+    fail,json,readJson,sign:text=>hmac(env,text),equal:timingSafeEqual,assertSession:()=>user(request,env),
+    assertUpload:async id=>{if(env.MEDIA_VERSION_GUARD_ENABLED==='true'&&await mediaRpc(request,env,'vzip_media_upload_allowed',{p_media_id:id},{fail})!==true)fail(409,'deleted media ID cannot be uploaded again');}
+  });
   // Short audio preview for opt-in STT. Reads only the caller's R2 object and
   // transforms the excerpt at Cloudflare, avoiding whole-file decoding on iOS.
   if (path.startsWith('/v1/clip/') && method === 'GET') {
@@ -116,7 +137,6 @@ async function route(request, env) {
       fail(422, 'audio clip transformation unavailable for this format');
     }
   }
-  let m;
   if (path === '/v1/uploads' && method === 'POST') {
     const body = await readJson(request);
     if (!ID.test(String(body.mediaId || ''))) fail(400, 'invalid mediaId');
@@ -132,7 +152,7 @@ async function route(request, env) {
     return json({key, uploadId: upload.uploadId, partSize: PART_SIZE});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)\/parts\/(\d{1,5})$/)) && method === 'PUT') {
-    const key = ownKey(uid, url.searchParams.get('key')), n = Number(m[2]);
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key')), n = Number(m[2]);
     if (n < 1 || n > 10000) fail(400, 'invalid part number');
     const length = Number(request.headers.get('content-length'));
     if (!(length > 0) || length > PART_SIZE) fail(413, 'part must be 1 byte – 8 MiB');
@@ -140,7 +160,7 @@ async function route(request, env) {
     return json({partNumber: part.partNumber, etag: part.etag});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)\/complete$/)) && method === 'POST') {
-    const key = ownKey(uid, url.searchParams.get('key'));
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key'));
     const {parts} = await readJson(request);
     if (!Array.isArray(parts) || !parts.length || parts.some(p => !(p.partNumber > 0) || typeof p.etag !== 'string')) fail(400, 'invalid parts');
     const done = await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).complete(parts.map(p => ({partNumber: p.partNumber, etag: p.etag})).sort((a, b) => a.partNumber - b.partNumber));
@@ -149,11 +169,11 @@ async function route(request, env) {
     return json({key, size: done.size, etag: done.httpEtag});
   }
   if ((m = path.match(/^\/v1\/uploads\/([^/]+)$/)) && method === 'DELETE') {
-    const key = ownKey(uid, url.searchParams.get('key'));
+    const key = ownLegacyUploadKey(uid, url.searchParams.get('key'));
     try { await env.MEDIA.resumeMultipartUpload(key, decodeURIComponent(m[1])).abort(); } catch {}
     return json({ok: true});
   }
-  if (path === '/v1/me' && method === 'GET') return json({user: uid});
+  if (path === '/v1/me' && method === 'GET') return json({user: uid,...(env.UPLOADS_V2_ENABLED==='true'&&env.SESSION_GUARD_ENABLED==='true'?{uploadContract:'merkle-v2'}:{}),...(mediaContext?{mediaMode:mediaContext.mode,mediaContract:'immutable-v1'}:{})});
   if (path === '/v1/sign' && method === 'POST') {
     // Expiry is rounded up to the next hour, so a file gets the same link all hour and the browser can reuse what it
     // already downloaded. {keys:[…]} signs up to 100 files in one request (the list screen prefetches visible ones).
@@ -181,6 +201,10 @@ async function route(request, env) {
     return json({objects: page.objects.map(o => ({key: o.key, size: o.size, uploaded: o.uploaded?.toISOString?.() || null, mediaId: o.customMetadata?.mediaId || o.key.split('/')[2] || ''})),
       cursor: page.truncated ? page.cursor : null});
   }
+  if (path === '/v1/shares' && method === 'POST') return createShare(request, env, uid);
+  if (path === '/v1/shares' && method === 'GET') return json({shares:await listShares(env, uid)});
+  if ((m = path.match(/^\/v1\/shares\/([a-f0-9]{24})$/)) && method === 'DELETE') return json({ok:await revokeShare(env, uid, m[1])});
+  if (path === '/v1/omr') return handleOmrUser(request, env, uid, url, {fail, json, readJson});
   if (path === '/v1/usage' && method === 'GET') {
     let cursor, objects = 0, bytes = 0;
     do {
@@ -193,6 +217,12 @@ async function route(request, env) {
   fail(404, 'not found');
 }
 
+function ownLegacyUploadKey(uid,key){
+  key=ownKey(uid,key);
+  const segments=key.split('/');
+  if(segments.length!==4||!ID.test(segments[2])||!/^original\.[a-z0-9]{1,8}$/.test(segments[3]))fail(403,'use the signed resumable upload contract');
+  return key;
+}
 function ownKey(uid, key) {
   key = String(key || '');
   if (!key.startsWith('u/' + uid + '/') || key.includes('..') || key.includes('//') || key.length > 300) fail(403, 'not your file');
@@ -294,7 +324,7 @@ async function user(request, env) {
     const context=await sessionRpc(env,'vzip_session_context',{},request.headers.get('authorization'),request.headers.get('x-client-info')||'');
     if(!context||context.user_id!==uid||typeof context.required!=='boolean')fail(503,'invalid session response');
     if(context.allowed!==true)fail(401,'login session ended');
-    sessionContexts.set(request,context);
+    sessionContexts.set(request,{...context,verified_session_id:claims.session_id||null});
   }
   return uid;
 }
@@ -334,3 +364,60 @@ async function findKey(env, kid, refresh) {
 }
 function b64url(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function b64urlDecode(s) { const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+
+/* ---------- individual share links (Phase 08/21, SHARE-08-01) ----------
+ * A link carries a random token; R2 keeps only its SHA-256: shares/<hash> → {owner, key, title, expires}.
+ * share-index/<owner>/<id> lets the owner list and revoke (it also keeps the link so it can be copied again).
+ * Both live outside u/<owner>/ so file lists and storage usage are unchanged. Deleting the file also ends its links. */
+const SHARE_MAX = 300, SHARE_MAX_SECONDS = 3650 * 86400;
+async function sha256hex(text) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(text)))].map(b => b.toString(16).padStart(2, '0')).join(''); }
+async function createShare(request, env, uid) {
+  const body = await readJson(request), key = ownKey(uid, body.key);
+  const head = await env.MEDIA.head(key); if (!head) fail(404, 'file not found');
+  if (!/^(audio|video)\//.test(head.httpMetadata?.contentType || '')) fail(400, 'only recordings can be shared');
+  const seconds = body.expiresIn == null ? null : Math.round(Number(body.expiresIn));
+  if (seconds != null && !(seconds >= 3600 && seconds <= SHARE_MAX_SECONDS)) fail(400, 'expiry must be between 1 hour and 10 years, or none');
+  const existing = await env.MEDIA.list({prefix:'share-index/' + uid + '/', limit:SHARE_MAX + 1});
+  if (existing.objects.length >= SHARE_MAX) fail(429, 'too many active share links');
+  const raw = new Uint8Array(32); crypto.getRandomValues(raw);
+  const token = b64url(raw), hash = await sha256hex(token), id = hash.slice(0, 24), now = Date.now();
+  const record = {v:1, id, owner:uid, key, mediaId:String(body.mediaId || '').slice(0, 100), title:String(body.title || '녹음').slice(0, 150),
+    type:head.httpMetadata?.contentType || '', size:head.size, created:now, expires:seconds == null ? null : now + seconds * 1000};
+  await env.MEDIA.put('shares/' + hash, JSON.stringify(record), {httpMetadata:{contentType:'application/json'}});
+  await env.MEDIA.put('share-index/' + uid + '/' + id, JSON.stringify({...record, token}), {httpMetadata:{contentType:'application/json'}});
+  return json({id, token, expires:record.expires, title:record.title});
+}
+async function listShares(env, uid) {
+  const out = [];
+  let cursor;
+  do {
+    const page = await env.MEDIA.list({prefix:'share-index/' + uid + '/', cursor, limit:1000});
+    for (const o of page.objects) { const r = await (await env.MEDIA.get(o.key))?.json().catch(() => null); if (r) out.push({id:r.id, token:r.token, key:r.key, mediaId:r.mediaId, title:r.title, created:r.created, expires:r.expires, expired:r.expires != null && r.expires <= Date.now()}); }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return out.sort((a, b) => b.created - a.created);
+}
+async function revokeShare(env, uid, id) {
+  const index = 'share-index/' + uid + '/' + id, r = await (await env.MEDIA.get(index))?.json().catch(() => null);
+  if (!r) return false; // already revoked
+  await env.MEDIA.delete('shares/' + await sha256hex(r.token)); // the link stops first
+  await env.MEDIA.delete(index);
+  return true;
+}
+async function shared(request, env, token, what, url) {
+  const r = await (await env.MEDIA.get('shares/' + await sha256hex(token)))?.json().catch(() => null);
+  if (!r) fail(404, 'this link was revoked or does not exist');
+  if (r.expires != null && r.expires <= Date.now()) fail(410, 'this link has expired');
+  if (what === 'meta') {
+    const head = await env.MEDIA.head(r.key); if (!head) fail(404, 'the shared file was deleted');
+    const res = json({title:r.title, type:r.type, size:head.size, expires:r.expires, created:r.created});
+    res.headers.set('cache-control', 'no-store'); return res;
+  }
+  const response = await serve(request, env, r.key);
+  response.headers.set('cache-control', 'no-store'); // a revoked link must not keep playing from a cache
+  if (request.method === 'GET' && url.searchParams.has('download')) {
+    const name = String(url.searchParams.get('download') || r.title).replace(/[\\/\r\n";]/g, '_').slice(0, 180);
+    response.headers.set('content-disposition', "attachment; filename=\"download\"; filename*=UTF-8''" + encodeURIComponent(name));
+  }
+  return response;
+}

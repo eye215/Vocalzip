@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
-const WORKER = 'app/vocal-analysis.js?v=2', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=3', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0;
@@ -29,18 +29,22 @@ async function decode(item, onStage) {
   for (let ch = 0; ch < buf.numberOfChannels; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < n; i++) mono[i] += d[i] / buf.numberOfChannels; }
   return {samples:mono, sampleRate:buf.sampleRate, cut:buf.length > n};
 }
-function runWorker(samples, sampleRate, onProgress) {
+function runWorker(samples, sampleRate, onProgress, {voiceOnly = false, signal} = {}) {
   return new Promise((resolve, reject) => {
+    if(signal?.aborted){reject(new DOMException('분석 중단','AbortError'));return;}
     let w;
     try { w = new Worker(WORKER); } catch (e) { reject(e); return; }
-    w.onmessage = e => { const d = e.data; if (d.progress != null) onProgress(d.progress); else { w.terminate(); d.error ? reject(Error(d.error)) : resolve(d.result); } };
-    w.onerror = e => { w.terminate(); reject(Error(e.message || '분석 중 오류가 났어요.')); };
-    w.postMessage({samples, sampleRate}, [samples.buffer]);
+    const cleanup=()=>{signal?.removeEventListener('abort',abort);w.terminate()};
+    const abort=()=>{cleanup();reject(new DOMException('분석 중단','AbortError'))};
+    signal?.addEventListener('abort',abort,{once:true});
+    w.onmessage = e => { const d = e.data; if (d.progress != null) onProgress(d.progress); else { cleanup(); d.error ? reject(Error(d.error)) : resolve(d.result); } };
+    w.onerror = e => { cleanup(); reject(Error(e.message || '분석 중 오류가 났어요.')); };
+    w.postMessage({samples, sampleRate, voiceOnly}, [samples.buffer]);
   });
 }
 
 /** Analyze raw mono samples in the worker (used by the song finder to locate the singing). The array is transferred. */
-VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}) => runWorker(samples, sampleRate, onProgress);
+VZ.analyzeSamples = (samples, sampleRate, onProgress = () => {}, options = {}) => runWorker(samples, sampleRate, onProgress, options);
 /** The summary kept with a recording (no curve: it would make every library row heavy). */
 const summaryOf = result => ({v:result.version, at:Date.now(), seconds:result.seconds, metrics:result.metrics, confidence:result.confidence});
 /** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).
@@ -102,17 +106,51 @@ function confidence(r) {
   return '<div class="ana-note ' + (ok ? 'ok' : 'warn') + '"><i class="ph ph-' + (ok ? 'check-circle' : 'warning') + '"></i><span>목소리가 반주보다 약 ' + Math.round(c.voiceOverMrDb) + 'dB 커요. ' + (ok ? '반주와 잘 구분됐어요.' : '반주가 커서 일부 구간을 목소리로 잘못 읽었을 수 있어요. 곡선이 노래와 맞는지 들으며 확인해 주세요.') + '</span></div>';
 }
 
+/** Reuse the existing whole-recording pitch graph in the vocal-lab point popup.
+ * The saved measurement summary has no time-series curve, so regenerate it locally on demand,
+ * without overwriting the previous analysis or making a paid STT request. */
+VZ.openRecordingAnalysisSheet = item => {
+  if(!item)return;
+  let alive=true;
+  VZ.sheet({
+    title:(VZ.dateLabel(M.dateOf(item))||'날짜 없음')+' · 녹음 전체 그래프',
+    variant:'page',
+    body:'<div class="ana-sheet-detail"><p class="small muted">'+esc(M.label(item))+'</p><p data-ana-sheet-status role="status">전체 녹음의 음높이 곡선을 불러오는 중…</p><div data-ana-sheet-output></div></div>',
+    onClose:()=>{alive=false;},
+    onMount:async el=>{
+      const status=el.querySelector('[data-ana-sheet-status]'),out=el.querySelector('[data-ana-sheet-output]');
+      try{
+        // Reuse the same renderer that powers #/analysis/:id and keep its result scoped to this sheet.
+        const result=await VZ.analyzeRecording(item,{save:false,onStage:text=>{if(alive&&el.isConnected)status.textContent=text;}});
+        if(!alive||!el.isConnected)return;
+        if(!result.metrics?.voicedSeconds){
+          status.textContent='이 녹음에서는 분석할 목소리가 충분히 검출되지 않았어요.';
+          return;
+        }
+        status.textContent='녹음 전체 · '+VZ.clock(result.seconds||item.durationSeconds||0);
+        out.innerHTML=chart(result)+confidence(result)+(result.cut?'<p class="small muted">앞 15분만 분석했어요.</p>':'')+
+          '<div class="ana-grid">'+cards(result)+'</div>'+
+          '<p class="small muted">그래프는 기존 보컬 분석 화면과 같은 방식으로 이 기기에서 계산했어요. 저장된 녹음이나 측정 결과는 변경하지 않았어요.</p>';
+      }catch(error){if(alive&&el.isConnected)status.textContent='전체 그래프를 불러오지 못했어요: '+String(error?.message||error);}
+    }
+  });
+};
 /* ---------- view ---------- */
 VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefresh:true,
   render() { return '<div data-ana><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>'; },
   async mount(main, r) {
     const id = r.params[0], my = ++job, host = main.querySelector('[data-ana]');
     const alive = () => my === job && document.body.contains(host);
-    const item = (await M.list().catch(() => [])).find(m => m.id === id);
+    const allItems = await M.list().catch(() => []), item = allItems.find(m => m.id === id);
     if (!alive()) return;
     if (!item) { host.innerHTML = '<div class="empty"><i class="ph ph-question"></i><p>녹음을 찾지 못했어요.</p></div>'; return; }
     const song = VZ.songTitle(item.songId);
-    host.innerHTML = '<div class="card"><div class="item-title">' + esc(M.label(item)) + '</div><div class="small muted">' + esc([VZ.dateLabel(M.dateOf(item)), song].filter(Boolean).join(' · ')) + '</div><div data-p style="margin-top:10px"></div></div>' +
+    const selectedIds = (r.query.get('selected') || '').split(',').filter(Boolean);
+    const allowed = new Set(selectedIds);
+    const chosen = allItems.filter(m => allowed.has(String(m.id)) && m.songId === item.songId);
+    const chosenParam = chosen.map(m => m.id).join(',');
+    const selector = chosen.length > 1 ? '<div class="vz-analysis-selected"><div class="small muted">선택한 녹음 ' + chosen.length + '개</div><div class="vz-analysis-selected-scroll">' + chosen.map(m => '<a href="#/analysis/' + encodeURIComponent(m.id) + '?selected=' + encodeURIComponent(chosenParam) + '" aria-current="' + (m.id === id ? 'true' : 'false') + '">' + esc(M.label(m)) + '</a>').join('') + '</div></div>' : '';
+    host.innerHTML = selector + '<div class="card"><div class="item-title">' + esc(M.label(item)) + '</div><div class="small muted">' + esc([VZ.dateLabel(M.dateOf(item)), song].filter(Boolean).join(' · ')) + '</div><div data-p style="margin-top:10px"></div></div>' +
       '<div data-out><div class="card"><p data-stage>준비 중…</p><div class="ana-bar"><span data-bar style="width:0%"></span></div><p class="small muted">이 기기 안에서 분석해요. 파일이 밖으로 나가지 않아요. 5분짜리 곡은 보통 10~30초 걸려요.</p></div></div>';
     const player = M.player(host.querySelector('[data-p]'), item, {prefetch:true});
     const out = host.querySelector('[data-out]'), stage = t => { const s = out.querySelector('[data-stage]'); if (s) s.textContent = t; }, bar = p => { const b = out.querySelector('[data-bar]'); if (b) b.style.width = Math.round(p * 100) + '%'; };

@@ -116,13 +116,13 @@ test('CSV notes are rendered as inert text',async({page})=>{
  await commit(page);await tab(page,'payments');await expect(page.locator('#payment-list')).toContainText('<img src=x');expect(await page.evaluate(()=>window.injected)).toBeUndefined();
 });
 
-test('manual adjustment and deduction cancellation/restore keep audited totals',async({page})=>{
+test('manual adjustment and permanent deduction deletion keep audited totals',async({page})=>{
  await open(page);await pass(page);await tab(page,'attendance');await openForm(page,'deduction');await page.locator('#deduction-status').selectOption('completed');await page.locator('#deduction-units').fill('2');await page.locator('#deduction-form [type=submit]').click();await expect(page.locator('#message')).toContainText('저장했어요');
  await openForm(page,'adjustment');await page.locator('#adjustment-unitsDelta').fill('10');await page.locator('#adjustment-amountDelta').fill('100000');await page.locator('#adjustment-memo').fill('추가 충전');await page.locator('#adjustment-form [name=ackImpact]').check();await page.locator('#adjustment-form [type=submit]').click();
  await total(page,'chargedUnits','20회');await total(page,'usedAmount','40,000원');
  await tab(page,'attendance');await page.locator('#deduction-list').getByRole('button',{name:'삭제',exact:true}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('삭제했어요');await total(page,'usedUnits','0회');
- await tab(page,'attendance');await page.locator('#show-deleted').check();await page.locator('#deduction-list').getByRole('button',{name:'복구',exact:true}).click();await confirmSheet(page);await expect(page.locator('#message')).toContainText('복구했어요');await total(page,'usedAmount','40,000원');
- const data=await ledger(page);expect(data.adjustments).toHaveLength(1);expect(data.history.at(-1).action).toBe('entity.restore');
+ await tab(page,'attendance');await page.locator('#show-deleted').check();await expect(page.locator('#deduction-list').getByRole('button',{name:'복구',exact:true})).toHaveCount(0);await expect(page.locator('#deduction-list')).toContainText('차감 취소 · 복구 불가');await total(page,'usedAmount','0원');
+ const data=await ledger(page);expect(data.adjustments).toHaveLength(1);expect(data.history.at(-1).action).toBe('deduction.delete');
 });
 test('app lessons waiting for settlement: one-tap deduction, status-less confirmation, restore after app cancel',async({page})=>{
  const appData={lessons:[

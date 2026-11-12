@@ -16,22 +16,22 @@ const r1 = v => Math.round(v * 10) / 10;
  * Levels follow the metric definitions: cents from the nearest semitone (±20 is clearly audible),
  * sustained-note wobble without vibrato (±5–8 is steady), vibrato share/width/regularity, phrase seconds. */
 const RULES = [
-  {key:'into', name:'음정 정확도 연습', metric:'음정 오차', lower:true, warn:14, strong:24,
+  {key:'into', name:'음정 정확도 연습', category:'음정', metric:'음정 오차', lower:true, warn:14, strong:24,
     value:a => a.metrics.intonation?.meanAbsCents, show:v => '±' + r1(v) + ' cent',
     reason:v => '최근 녹음의 지속음이 반음 칸에서 평균 ±' + r1(v) + ' cent 벗어났어요.', goal:'평균 ±12 cent 이내', minutes:10,
     steps:['기준음(피아노 앱)을 듣고 같은 음을 "아"로 따라 불러요', '편한 음역에서 5음계 상행·하행 (도레미파솔파미레도) 3회', '목표음을 4초 유지하며 튜너 바늘이 가운데에 오는지 확인']},
-  {key:'wob', name:'음정 안정성 (롱톤) 연습', metric:'지속음 흔들림', lower:true, warn:7, strong:12,
+  {key:'wob', name:'음정 안정성 (롱톤) 연습', category:'음정', metric:'지속음 흔들림', lower:true, warn:7, strong:12,
     value:a => a.metrics.stability?.wobbleCents, show:v => '±' + r1(v) + ' cent',
     reason:v => '길게 낸 음이 비브라토를 빼고도 평균 ±' + r1(v) + ' cent 흔들렸어요.', goal:'흔들림 ±6 cent 이내', minutes:8,
     steps:['편한 음역에서 "아" 롱톤 5초 × 5회', '시작·유지·끝을 같은 세기로', '짧은 음형(도-레-도) 천천히 반복']},
-  {key:'vib', name:'지속음·비브라토 연습', metric:'비브라토', lower:false,
+  {key:'vib', name:'지속음·비브라토 연습', category:'발성', metric:'비브라토', lower:false,
     value:a => a.metrics.vibrato?.notes >= 3 ? a.metrics.vibrato : null,
     level:v => { const s = []; if (v.share < 15) s.push(0.6); if (v.extentCents > 90) s.push(0.8); if (v.regularity != null && v.regularity < 0.55) s.push(0.7); return s.length ? Math.max(...s) : 0; },
     show:v => v.rateHz ? '초당 ' + v.rateHz + '회 · ±' + v.extentCents + ' cent' : '거의 없음',
     reason:v => v.share < 15 ? '긴 음에서 비브라토가 거의 없어요(긴 음 중 ' + v.share + '%).' : v.extentCents > 90 ? '비브라토 폭이 넓어요(±' + v.extentCents + ' cent).' : '비브라토 규칙성이 낮아요(' + Math.round(v.regularity * 100) + '%).',
     goal:'긴 음 끝에서 자연스럽게, 폭 ±30~60 cent', minutes:6,
     steps:['편안한 지속음 4초 → 마지막 1초에만 자연스러운 흔들림', '턱·혀·목에 힘이 들어가지 않는지 거울로 확인', '안정적인 호흡으로 같은 세기 유지']},
-  {key:'phr', name:'프레이즈·호흡 연습', metric:'프레이즈 길이', lower:false, warn:3.2, strong:2.2,
+  {key:'phr', name:'프레이즈·호흡 연습', category:'호흡', metric:'프레이즈 길이', lower:false, warn:3.2, strong:2.2,
     value:a => a.metrics.breath?.medianPhrase, show:v => '평균 ' + r1(v) + '초',
     reason:v => '쉬지 않고 이어 부른 길이가 평균 ' + r1(v) + '초로 짧아요.', goal:'평균 4초 이상', minutes:8,
     steps:['가사에 숨 쉴 곳을 미리 표시', '긴 프레이즈를 2~3조각으로 나눠 반복 → 이어 붙이기', '"스-" 소리로 일정하게 내쉬기 10초 × 3회']}
@@ -56,7 +56,8 @@ VZ.practiceTips = (media, {songId = ''} = {}) => {
     if (!s) return null;
     const before = older.length >= 3 ? pick(older, rule) : null;
     const worse = typeof v === 'number' && before != null && (rule.lower ? v - before : before - v) > (rule.key === 'phr' ? 0.5 : 3);
-    return {key:rule.key, name:rule.name, metric:rule.metric, value:rule.show(v), reason:rule.reason(v) + (worse ? ' 예전 녹음보다 나빠졌어요.' : ''),
+    const frequency = recent.filter(a => severity(rule, rule.value(a)) > 0).length;
+    return {key:rule.key, name:rule.name, category:rule.category, metric:rule.metric, value:rule.show(v), frequency, reason:rule.reason(v) + (worse ? ' 예전 녹음보다 나빠졌어요.' : ''),
       goal:rule.goal, minutes:rule.minutes, steps:[...rule.steps, ...(range ? ['무리하지 말고 지금 안정적인 음역(' + range + ') 안에서'] : [])], score:s + (worse ? 0.2 : 0)};
   }).filter(Boolean).sort((a, b) => b.score - a.score);
   return {enough:true, count:takes.length, range, tips};

@@ -4,7 +4,7 @@
 const localStorage = window.VzipAccountScope?.storage || window.localStorage;
 
 const KEY = 'vocal-zip_mvp_v1';
-const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans'];
+const ARRAYS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback', 'scoreAnnotations', 'monthlyGrowthReports', 'monthlyAiReports', 'overallAiReports', 'vocalPlanReports'];
 const DEFAULTS = {categories:[{id:'c1',name:'발성',items:['립트릴','허밍','패사지오']},{id:'c2',name:'호흡',items:['복식호흡','호흡 유지']},{id:'c3',name:'곡 연습',items:['음정 교정','프레이징','감정 표현']}],songs:[],lessons:[],assignments:[],practices:[],comparisonReports:[]};
 const VZ = window.VZ = {version:'6.0'};
 
@@ -24,7 +24,7 @@ window.VzipAccountScope?.beforeLeave(()=>{accountFrozen=true;});
 /** Apply a mutation; on storage failure restore the previous state and report false. */
 /** Mark changed records with updatedAt and remember deliberately removed ids, so a cloud
  * merge (data-merge.js) never brings back what the user deleted nor drops what they added. */
-const TRACKED = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans'];
+const TRACKED = ARRAYS;
 function stamp(before, after) {
   const now = Date.now();
   for (const k of TRACKED) {
@@ -36,7 +36,7 @@ function stamp(before, after) {
       if (old.get(String(x.id)) !== JSON.stringify(x)) x.updatedAt = now;
     }
     const removed = [...old.keys()].filter(id => !ids.has(id));
-    if (removed.length) { after.deleted ||= {}; after.deleted[k] = [...new Set([...(after.deleted[k] || []), ...removed])].slice(-5000); }
+    if (removed.length) { after.deleted ||= {}; after.deleted[k] = [...new Set([...(after.deleted[k] || []), ...removed])]; }
   }
 }
 VZ.change = (mutate, {silent} = {}) => {
@@ -96,25 +96,9 @@ VZ.lessonSort = (a, b) => (a.date || '').localeCompare(b.date || '') || (a.start
 VZ.nextLesson = () => db.lessons.filter(l => VZ.lessonStatus(l) === 'scheduled' && (l.date || '') >= VZ.today()).sort(VZ.lessonSort)[0];
 VZ.taskLessons = t => t.lessonIds || (t.lessonId ? [t.lessonId] : []);
 VZ.taskSongId = t => t.songId || VZ.taskLessons(t).map(id => db.lessons.find(l => l.id === id)?.songId).find(Boolean) || '';
-VZ.practiceMinutes = p => {
-  const value=p.manualMinutes;
-  const manual=value!=null&&typeof value!=='boolean'&&String(value).trim()!==''?Number(value):NaN;
-  return Number.isFinite(manual)&&manual>=0?manual:Math.max(0,Number(p.minutes)||0);
-};
-/** Practice time = practice records + recordings/imports that are not already inside a
- * practice record (its minutes cover them) or a lesson (lesson time is not practice). */
-VZ.timeEntries = (media = []) => {
-  const inPractice = new Set(db.practices.flatMap(p => p.mediaIds || []));
-  const inLesson = new Set(db.lessons.flatMap(l => (l.recordings || []).map(r => r.id)));
-  const out = db.practices.map(p => ({date:p.date, minutes:VZ.practiceMinutes(p), songId:p.practiceMode === 'training' ? '' : p.songId || '', training:p.practiceMode === 'training', kind:'practice', ref:p}));
-  for (const m of media) {
-    // Lesson and performance recordings are not practice time (unless placed inside a practice record).
-    if (inPractice.has(m.id) || inLesson.has(m.id) || m.source === 'lesson' || m.occasion === 'lesson' || m.occasion === 'performance') continue;
-    const seconds = Number(m.durationSeconds) || 0, date = VZ.media?.dateOf(m);
-    if (seconds > 0 && date) out.push({date, minutes:seconds / 60, songId:m.songId || '', training:false, kind:'recording', ref:m});
-  }
-  return out;
-};
+// Recording length is evidence, not performed practice time. Legacy stored minutes remain a fallback.
+VZ.practiceMinutes = p => window.VzipPracticeTime.actualMinutes(p);
+VZ.timeEntries = (_media = []) => window.VzipPracticeTime.entries(db.practices);
 VZ.sumMinutes = entries => entries.reduce((a, e) => a + e.minutes, 0);
 VZ.addSong = (title, show = '') => {
   title = String(title || '').trim();
@@ -161,15 +145,37 @@ const unlockPage = () => {
 };
 const vv = window.visualViewport;
 if (vv) {
-  const kb = () => { const h = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)); document.documentElement.style.setProperty('--kb', h > 80 ? h + 'px' : '0px'); };
+  // The keyboard is only up while a text field has focus. Without that check a viewport value left over from the
+  // keyboard (iOS does not always report the close) kept full pages shrunk with the save button hidden.
+  const typing = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(TEXTAREA|SELECT)$/.test(a.tagName) || (a.tagName === 'INPUT' && !/^(button|checkbox|radio|range|submit|reset|file|color|image)$/i.test(a.type))); };
+  const kb = () => {
+    const h = typing() ? Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)) : 0;
+    document.documentElement.style.setProperty('--kb', h > 80 ? h + 'px' : '0px');
+    document.documentElement.classList.toggle('vz-keyboard-open', h > 80);
+    document.documentElement.style.setProperty('--vv-top', Math.round(vv.offsetTop) + 'px');
+    document.documentElement.style.setProperty('--vv-height', Math.round(vv.height) + 'px');
+    // The page itself stays put; bring the field being typed into above the keyboard inside the page's own scroll.
+    if (h > 80) {
+      const field = document.activeElement, body = field?.closest?.('.sheet-page .sheet-body');
+      if (body) requestAnimationFrame(() => {
+        const r = field.getBoundingClientRect(), b = body.getBoundingClientRect(), limit = Math.min(b.bottom, innerHeight - h) - 16;
+        if (r.bottom > limit) body.scrollTop += Math.min(r.bottom - limit, Math.max(0, r.top - b.top - 16));
+        else if (r.top < b.top) body.scrollTop -= b.top - r.top + 16;
+      });
+    }
+  };
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
+  addEventListener('resize', kb); addEventListener('focusin', kb);
+  // iOS reports the keyboard closing late (or not at all): check again after a field lets go.
+  addEventListener('focusout', () => { for (const ms of [0, 250, 600]) setTimeout(kb, ms); });
+  kb();
 }
-/** Bottom sheet. body: html string. Returns {el, close}. onClose fires once. */
-VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
+/** Full-page workflow by default; short action menus and confirmations are explicit variants. */
+VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor}) => {
   const previous = document.activeElement;
   const back = document.createElement('div');
-  back.className = 'sheet-back';
-  back.innerHTML = '<section class="sheet" role="dialog" aria-modal="true" aria-label="' + VZ.esc(label || title) + '"><div class="sheet-grab"></div><header class="sheet-head"><h2>' + VZ.esc(title) + '</h2><button type="button" class="icon-btn" data-close aria-label="닫기"><i class="ph ph-x"></i></button></header><div class="sheet-body">' + body + '</div>' + (foot ? '<footer class="sheet-foot">' + foot + '</footer>' : '') + '</section>';
+  back.className = 'sheet-back sheet-' + variant;
+  back.innerHTML = '<section class="sheet" role="dialog" aria-modal="true" aria-label="' + VZ.esc(label || title) + '"><div class="sheet-grab"></div><header class="sheet-head"><button type="button" class="icon-btn" data-close aria-label="돌아가기"><i class="ph ph-arrow-left"></i></button><h2>' + VZ.esc(title) + '</h2><span aria-hidden="true"></span></header><div class="sheet-body">' + body + '</div>' + (foot ? '<footer class="sheet-foot">' + foot + '</footer>' : '') + '</section>';
   const el = back.querySelector('.sheet');
   let closed = false;
   const close = () => {
@@ -181,9 +187,9 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
     if (!sheets.length && VZ.pendingRender) setTimeout(() => VZ.softRender(), 50);
   };
   const api = {el, close};
-  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) close(); });
+  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) { close(); if (variant === 'page') VZ.toast('취소했어요.'); } });
   back.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); if (variant === 'page') VZ.toast('취소했어요.'); }
     if (e.key === 'Tab') {
       const nodes = [...el.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled && n.offsetParent);
       if (!nodes.length) return;
@@ -191,18 +197,52 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label}) => {
       else if (!e.shiftKey && document.activeElement === nodes.at(-1)) { e.preventDefault(); nodes[0].focus(); }
     }
   });
-  document.body.append(back); lockPage();
+  document.body.append(back); if (variant !== 'menu') lockPage();
   sheets.push(api);
   onMount?.(el, close);
+  if (variant === 'page' && !foot) {
+    const form = el.querySelector('.sheet-body form');
+    const submit = form?.querySelector('button[type="submit"],input[type="submit"]');
+    if (submit && !form.matches('[data-add-cat],[data-add-item]')) {
+      if (!form.id) form.id = 'vz-page-form-' + Math.random().toString(36).slice(2);
+      submit.setAttribute('form', form.id);
+      const footer = document.createElement('footer'); footer.className = 'sheet-foot';
+      footer.append(submit); el.append(footer);
+    }
+  }
+  if (variant === 'page') {
+    const form = el.querySelector('.sheet-body form:not([data-add-cat]):not([data-add-item])');
+    const submit = el.querySelector('.sheet-foot button[type="submit"],.sheet-foot input[type="submit"]');
+    if (form && submit) {
+      el.classList.add('sheet-form-page');
+      const sync = () => {
+        if (submit.disabled && !submit.dataset.vzRequiredDisabled) return;
+        const missing = [...form.querySelectorAll('[required]')].some(field => !field.disabled && (!field.checkValidity() || ((field.matches('input[type="text"],input[type="search"],textarea')) && !field.value.trim())));
+        submit.disabled = missing;
+        if (missing) submit.dataset.vzRequiredDisabled = 'true'; else delete submit.dataset.vzRequiredDisabled;
+      };
+      form.addEventListener('input',sync); form.addEventListener('change',sync); sync();
+    }
+  }
+  if (variant === 'menu') {
+    const target = anchor || previous;
+    const rect = target?.getBoundingClientRect?.();
+    const width = Math.min(304, innerWidth - 28), height = el.getBoundingClientRect().height;
+    const left = Math.max(14, Math.min(innerWidth - width - 14, (rect?.right || innerWidth - 14) - width));
+    const below = (rect?.bottom || 0) + 8;
+    const top = below + height <= innerHeight - 12 ? below : Math.max(12, (rect?.top || innerHeight) - height - 8);
+    el.style.width = width + 'px'; el.style.left = left + 'px'; el.style.top = top + 'px';
+  }
   // Keep a focused field above the iOS keyboard.
-  el.addEventListener('focusin', e => { if (e.target.matches('input,textarea,select')) setTimeout(() => e.target.scrollIntoView({block:'center', behavior:'smooth'}), 300); });
-  (el.querySelector('[autofocus]') || el.querySelector('[data-close]')).focus({preventScroll:true});
+  // Do not force-scroll focused fields. iOS/browser handles keyboard visibility natively.
+  (el.querySelector('[autofocus]') || el.querySelector('[data-close]') || el.querySelector('button'))?.focus({preventScroll:true});
   return api;
 };
+VZ.menu = options => VZ.sheet({...options, variant:'menu'});
 VZ.closeSheets = () => [...sheets].forEach(s => s.close());
 VZ.confirm = (title, message, {ok = '확인', danger} = {}) => new Promise(resolve => {
   let result = false;
-  VZ.sheet({title, label:title, body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',
+  VZ.sheet({title, label:title, variant:'alert', body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',
     foot:'<div class="btn-row"><button type="button" class="btn ghost" data-close>취소</button><button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-ok>' + VZ.esc(ok) + '</button></div>',
     onMount:(el, close) => el.parentNode.querySelector('[data-ok]').onclick = () => { result = true; close(); },
     onClose:() => resolve(result)});
@@ -250,19 +290,23 @@ VZ.render = () => {
   const scroll = current && current.name === r.name && current.key === location.hash ? window.scrollY : 0;
   if (current?.def.leave && current.key !== location.hash) current.def.leave();
   current = {name:r.name, def, key:location.hash};
+  document.body.dataset.vzRoute = r.name;
   document.querySelectorAll('.v-nav a').forEach(a => a.toggleAttribute('aria-current', false));
   const tab = def.tab || r.name;
   document.querySelector('.v-nav a[data-nav="' + tab + '"]')?.setAttribute('aria-current', 'page');
   const title = typeof def.title === 'function' ? def.title(r) : def.title;
   const back = def.back ? '<button type="button" class="icon-btn" data-back aria-label="뒤로"><i class="ph ph-caret-left"></i></button>' : '';
   const heading = r.name === 'home' ? '<h1>VOCAL<span class="logo-dot">.</span>zip</h1>' : '<h1>' + VZ.esc(title) + '</h1>';
+  const titleAddon = def.titleAddon ? def.titleAddon(r) : '';
   const actions = (def.actions ? def.actions(r) : '') + (r.name === 'settings' || def.back || def.noSettings ? '' : '<a class="icon-btn" href="#/settings" aria-label="설정"><i class="ph ph-gear-six"></i></a>');
-  document.getElementById('top').innerHTML = '<div class="v-top-left">' + back + heading + '</div><div class="v-top-actions">' + actions + '</div>';
+  document.getElementById('top').innerHTML = '<div class="v-top-left">' + back + heading + titleAddon + '</div><div class="v-top-actions">' + actions + '</div>';
   document.title = (r.name === 'home' ? '' : title + ' · ') + 'VOCAL.zip';
   const cloud = document.getElementById('vzip-cloud-root');
   if (cloud && main.contains(cloud)) document.getElementById('vzip-park')?.append(cloud);
   delete main.dataset.dirty;
   document.body.classList.toggle('vz-collection', ['songs','library'].includes(r.name));
+  document.body.classList.toggle('vz-calendar-mode', r.name === 'calendar');
+  document.body.classList.toggle('vz-record-mode', r.name === 'record');
   main.dataset.collection = r.name;
   main.innerHTML = def.render(r);
   def.mount?.(main, r);
@@ -288,7 +332,7 @@ VZ.rerender = () => VZ.render();
 VZ.softRender = () => {
   const main = document.getElementById('view');
   const typing = main?.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
-  if (VZ.isBusy?.() || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
+  if (VZ.isBusy?.() || main?.classList.contains('lib-selecting') || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
   VZ.pendingRender = false; VZ.render();
 };
 document.addEventListener('input', e => { const main = document.getElementById('view'); if (main?.contains(e.target) && !e.target.matches('[type=search],[data-q]')) main.dataset.dirty = '1'; });
@@ -342,5 +386,7 @@ document.addEventListener('DOMContentLoaded', () => hideIcons(document));
   addEventListener('online', show); addEventListener('offline', show);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
 })();
+
+
 
 

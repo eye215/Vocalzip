@@ -1,12 +1,12 @@
 /* VOCAL.zip v6 — Soft Minimal + Music Studio. One stylesheet for the whole UI layer. */
 :root{
-  --bg:#f6f4fb;--surface:#fff;--surface-2:#f1edfa;--ink:#1e1b2e;--ink-2:#5f5a74;--ink-3:#8d88a3;
-  --line:#e8e3f3;--accent:#7552d9;--accent-ink:#fff;--accent-soft:#ece6fc;--accent-2:#a58bf0;
-  --ok:#23855c;--ok-soft:#e3f4ec;--warn:#b26a00;--warn-soft:#fff3dc;--danger:#c93a3a;--danger-soft:#fdeaea;
-  --radius:16px;--radius-sm:12px;--shadow:0 1px 2px rgba(40,24,90,.05),0 4px 16px rgba(40,24,90,.05);
-  --nav-h:64px;--safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
-  --font:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Segoe UI",system-ui,sans-serif;
-  --nav-bg:rgba(255,255,255,.94);--video-bg:#e4f1ff;--video-ink:#2a6fc9;
+  
+  
+  
+  
+  
+  
+  
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -23,8 +23,8 @@ a{color:var(--accent)}
 
 /* Shell */
 .v-app{max-width:640px;margin:0 auto;min-height:100dvh;padding:calc(var(--safe-t) + 8px) 16px calc(var(--nav-h) + var(--safe-b) + 24px)}
-.v-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;margin-bottom:8px}
-.v-top h1{margin:0;font-size:22px;font-weight:750;letter-spacing:-.02em}
+.v-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;margin-bottom:8px}
+.v-top h1{margin:0;font-size:26px;line-height:34px;font-weight:700;letter-spacing:-.02em;color:var(--vz-color-ink)}
 .v-top h1 .logo-dot{color:var(--accent)}
 .v-top .v-top-left{display:flex;align-items:center;gap:4px;min-width:0}
 .v-top .v-top-left h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -33,7 +33,7 @@ a{color:var(--accent)}
 .icon-btn:active{background:var(--surface-2)}
 .icon-btn.solid{background:var(--surface);box-shadow:var(--shadow)}
 
-.v-nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+.v-nav{position:fixed;left:0;right:0;bottom:0;z-index:var(--vz-z-nav);background:var(--nav-bg);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
 .v-nav ul{display:grid;grid-template-columns:repeat(5,1fr);max-width:640px;margin:0 auto;padding:0;list-style:none}
 .v-nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:var(--nav-h);color:var(--ink-3);text-decoration:none;font-size:11px;font-weight:600}
 .v-nav a i{font-size:24px}
@@ -55,7 +55,7 @@ h2.sec a,h2.sec button{font-size:14px;font-weight:600;color:var(--accent);backgr
 /* Cards */
 .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
 .card.flat{box-shadow:none;border:1px solid var(--line)}
-.card.accent{background:linear-gradient(135deg,#7552d9,#9a7ff0);color:#fff}
+.card.accent{background:linear-gradient(125deg,#A65CFF,var(--vz-color-accent) 52%,#6D2BE5);color:#fff}
 .card.accent .muted{color:rgba(255,255,255,.82)}
 .list{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
 .list>*+*{border-top:1px solid var(--line)}
@@ -121,7 +121,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .two>.field{min-width:0}
 .seg{display:flex;padding:4px;border-radius:14px;background:var(--surface-2);gap:4px}
 .seg button{flex:1;min-height:44px;border:0;border-radius:10px;background:transparent;color:var(--ink-2);font-weight:600;font-size:14px}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.seg button[aria-pressed="true"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent);box-shadow:none}
 .stars{display:flex;gap:4px}
 .stars button{width:44px;height:44px;border:0;background:none;font-size:26px;color:var(--line)}
 .stars button[aria-pressed="true"]{color:#f2b31b}
@@ -130,7 +130,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .search input{padding-left:40px}
 
 /* Sheet (bottom) */
-.sheet-back{position:fixed;inset:0;z-index:60;background:rgba(20,16,40,.38);display:flex;align-items:flex-end;justify-content:center;animation:fade .15s ease}
+.sheet-back{position:fixed;inset:0;z-index:var(--vz-z-overlay);background:rgba(20,16,40,.38);display:flex;align-items:flex-end;justify-content:center;animation:fade .15s ease}
 .sheet{width:100%;max-width:640px;max-height:92dvh;overflow:auto;-webkit-overflow-scrolling:touch;background:var(--bg);border-radius:22px 22px 0 0;padding:8px 16px calc(16px + var(--safe-b));animation:up .2s ease}
 .sheet-grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:4px auto 8px}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
@@ -140,7 +140,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 @keyframes fade{from{opacity:0}to{opacity:1}}
 
 /* Toast */
-.toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + var(--safe-b) + 14px);transform:translateX(-50%);z-index:80;max-width:calc(100% - 32px);padding:12px 16px;border-radius:14px;background:var(--ink);color:var(--bg);font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:up .2s ease}
+.toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + var(--safe-b) + 14px);transform:translateX(-50%);z-index:var(--vz-z-toast);max-width:calc(100% - 32px);padding:12px 16px;border-radius:14px;background:var(--ink);color:var(--bg);font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:up .2s ease}
 .toast.error{background:var(--danger)}
 
 /* Next lesson */
@@ -154,7 +154,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .rec-stage{display:grid;justify-items:center;gap:14px;padding:24px 16px;background:var(--surface);border-radius:24px;box-shadow:var(--shadow)}
 .rec-time{font:700 48px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .rec-wave{width:100%;height:72px}
-.rec-video{width:100%;max-height:40dvh;border-radius:16px;background:#000;object-fit:cover}
+.rec-video{width:100%;max-height:40dvh;border-radius:var(--vz-button-radius);background:#000;object-fit:cover}
 .rec-main{display:grid;place-items:center;width:84px;height:84px;border-radius:50%;border:4px solid var(--accent-soft);background:var(--accent);color:#fff;font-size:34px;box-shadow:0 8px 24px rgba(117,82,217,.35)}
 .rec-main.recording{background:var(--danger);border-color:var(--danger-soft);box-shadow:0 8px 24px rgba(201,58,58,.35)}
 .rec-controls{display:flex;align-items:center;justify-content:center;gap:24px}
@@ -182,7 +182,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
 .cal-grid .dow{font-size:12px;font-weight:600;color:var(--ink-3);padding:4px 0}
 .cal-grid .dow:first-child{color:var(--danger)}
-.cal-day{position:relative;display:grid;justify-items:center;align-content:start;gap:2px;min-height:52px;padding:6px 0;border:0;border-radius:12px;background:none;font-size:15px;font-weight:600}
+.cal-day{position:relative;display:grid;justify-items:center;align-content:start;gap:2px;min-height:var(--vz-input-min-height);padding:6px 0;border:0;border-radius:12px;background:none;font-size:15px;font-weight:600}
 .cal-day.out{color:var(--ink-3);opacity:.45}
 .cal-day.today>span:first-child{color:var(--accent)}
 .cal-day[aria-pressed="true"]{background:var(--accent);color:#fff}
@@ -300,7 +300,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .lesson-song-selected{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
 .lesson-song-selected .chip{max-width:100%;white-space:normal;overflow-wrap:anywhere;min-height:44px}
 /* 기존 자료 가져오기 (import hub) */
-.hub-row{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--surface);min-width:0}
+.hub-row{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:var(--vz-button-radius);background:var(--surface);min-width:0}
 .hub-check{flex:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px}
 .hub-check input{width:22px;height:22px;accent-color:var(--accent)}
 .hub-main{flex:1;min-width:0;display:grid;gap:6px}
@@ -314,6 +314,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .hub-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 /* 보관함 */
 .lib-seg{margin-bottom:8px}
+/* Recording-purpose tabs: keep all categories reachable on narrow iPhone screens. */
+.vz-library-tabs{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:4px}
+.vz-library-tabs::-webkit-scrollbar{display:none}
+.vz-library-tabs .lib-seg{display:flex;width:max-content;min-width:100%;gap:4px}
+.vz-library-tabs .lib-seg button{flex:0 0 auto;white-space:nowrap;padding-inline:13px}
+
 .lib-selects{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px;margin-bottom:12px}
 .lib-selects select{min-width:0;min-height:44px}
 .lib-summary{margin:0 4px 4px}
@@ -355,10 +361,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 /* 업로드 진행 표시 */
 #vz-upload-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + var(--safe-b) + 10px);z-index:40;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;text-decoration:none;box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 공연 · 레슨 · 연습 */
-.timeline .t.performance:before{background:#e0742c}
+.timeline .t.performance:before{background:var(--vz-category-stage,#DE3E0A)}
 .hub-song{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
 .hub-song .chip{grid-column:1/-1}
-.dots .s{background:#e0742c}
+.dots .s{background:var(--vz-category-stage,#DE3E0A)}
 .legend{flex-wrap:wrap}
 .hub-lesson{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
 .hub-lesson .chip{max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left}
@@ -380,9 +386,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 #vzip-cloud-root #cloud-logout{display:block;width:auto;min-height:44px;margin:8px 0 -6px auto;padding:0 4px;font-size:13px;font-weight:600;color:var(--ink-3)}
 /* 연습 기록의 숙제 체크: 했어요/안 했어요 → 횟수 · 메모 */
 .hw-ask .list{overflow:visible}
-.hw-item{padding:12px 14px}
-.hw-seg{flex:none;padding:3px}
-.hw-seg button{min-height:40px;position:relative;padding:0 10px;font-size:13px;white-space:nowrap;flex:none}
+.hw-item{padding:14px 16px}
+.hw-item>.row{flex-direction:column;align-items:stretch!important;gap:12px!important}
+.hw-item>.row>.grow strong{font-size:15px;line-height:22px;overflow-wrap:anywhere}
+.hw-item>.row>.grow .small{display:block;margin-top:4px;line-height:18px}
+.hw-seg{display:flex;width:100%;align-self:stretch;padding:3px}
+.hw-seg button{min-height:44px;position:relative;padding:0 10px;font-size:13px;white-space:nowrap;flex:1;min-width:0}
 .hw-seg [data-hw-did="1"][aria-pressed="true"]{background:var(--accent);color:#fff}
 .hw-item .icon-btn.sm{width:44px;height:44px;font-size:18px;background:var(--surface-2)}
 .hw-item [data-hw-reps]{min-height:44px;padding:0 6px}
@@ -497,12 +506,55 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .chip::before,.cs-toggle button::before,.hw-seg button::before,.switch::before{content:"";position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
 .switch::before{left:-4px;right:-4px}
 /* Layers: sheets sit over a softly blurred page; the bottom bar is frosted glass. */
-:root{--nav-bg:rgba(255,255,255,.8);--glass-blur:saturate(180%) blur(20px);--layer-dim:rgba(20,16,40,.32)}
+/* Shared values: design-system/tokens.css. */
 .v-nav{backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur)}
 .sheet-back{background:var(--layer-dim);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);padding-bottom:var(--kb,0px)}
 .sheet{max-height:calc(92dvh - var(--kb,0px));overscroll-behavior:contain}
 /* Page under an open sheet does not move (iOS ignores overflow:hidden on body). */
 body.sheet-lock{position:fixed;left:0;right:0;overflow:hidden}
+/* Page navigation for forms, pickers and long content; short menus keep the button context. */
+body .sheet-back.sheet-page{top:0;bottom:0;height:auto;align-items:stretch;padding:0;background:var(--vz-color-canvas);backdrop-filter:none;-webkit-backdrop-filter:none;animation:none}
+body .sheet-page>.sheet{display:flex;flex-direction:column;width:100%;max-width:560px;height:100%;max-height:none;margin:auto;padding:0;background:var(--vz-color-canvas);border-radius:0;overflow:hidden;animation:none}
+body .sheet-page .sheet-grab{display:none}
+body .sheet-page .sheet-head{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;flex:none;min-height:64px;margin:0;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;background:var(--vz-color-canvas)}
+body .sheet-page .sheet-head h2{text-align:center;font-size:18px;line-height:26px;color:var(--vz-color-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body .sheet-page .sheet-head .icon-btn{width:44px;height:44px;border:0;background:none;color:var(--vz-color-primary)}
+body .sheet-page .sheet-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px 16px 28px;-webkit-overflow-scrolling:touch}
+body .sheet-page .field{margin-bottom:12px}
+body .sheet-page .field>span:first-child,body .sheet-page .field>legend{margin-bottom:7px;color:var(--vz-color-ink-secondary);font-size:13px;font-weight:650}
+body .sheet-page .field input:not([type=checkbox]):not([type=radio]),body .sheet-page .field select,body .sheet-page .field textarea{border:0;border-radius:var(--vz-input-radius);background:var(--vz-input-bg);color:var(--vz-color-ink);box-shadow:none}
+body .sheet-page .field input:focus-visible,body .sheet-page .field select:focus-visible,body .sheet-page .field textarea:focus-visible{outline:var(--vz-focus-width) solid var(--vz-color-input-focus);outline-offset:var(--vz-focus-input-offset)}
+body .sheet-page .sheet-foot{position:static;flex:none;display:block;bottom:auto;margin:0;padding:10px 16px calc(12px + env(safe-area-inset-bottom));background:var(--vz-color-canvas)}
+body .sheet-page .sheet-foot>.btn,body .sheet-page .sheet-foot>button[type=submit]{width:100%;min-height:var(--vz-button-height);border-radius:var(--vz-button-radius)}
+body .sheet-page .sheet-foot>.btn-row{display:flex;gap:8px}
+body .sheet-page .sheet-foot>.btn-row .btn{min-height:var(--vz-button-height)}
+html.vz-keyboard-open body .sheet-page .sheet-foot{display:none}
+/* A full page never moves or shrinks for the keyboard (iOS keyboard viewport values are unreliable and turned the page
+ * into a band). Only its scrolling body gets room under the content, so every field can be scrolled above the keyboard. */
+html.vz-keyboard-open body .sheet-page .sheet-body{padding-bottom:calc(var(--kb,0px) + 28px);scroll-padding-bottom:calc(var(--kb,0px) + 16px)}
+body .sheet-page .field input[type=date]{width:min(var(--vz-input-date-max),100%);max-width:var(--vz-input-date-max)}
+body .sheet-page.sheet-form-page .sheet-body{padding:var(--vz-space-6) var(--vz-page-gutter) 36px}
+body .sheet-page.sheet-form-page .sheet-head{padding-left:var(--vz-page-gutter);padding-right:var(--vz-page-gutter)}
+body .sheet-page.sheet-form-page .sheet-foot{padding-left:var(--vz-page-gutter);padding-right:var(--vz-page-gutter)}
+body .sheet-page.sheet-form-page .field input:not([type=checkbox]):not([type=radio]),body .sheet-page.sheet-form-page .field select,body .sheet-page.sheet-form-page .pick-btn{min-height:var(--vz-input-min-height)}
+body .sheet-page.sheet-form-page .sheet-foot button:disabled{background:var(--vz-color-disabled-bg);color:var(--vz-color-disabled-ink);border-color:transparent;box-shadow:none;cursor:not-allowed}
+body .sheet-back.sheet-menu{align-items:stretch;padding:0;background:var(--vz-menu-overlay);backdrop-filter:none;-webkit-backdrop-filter:none;animation:fade .12s ease}
+body .sheet-menu>.sheet{position:absolute;width:min(var(--vz-menu-max-width),calc(100% - 28px));max-width:none;max-height:min(70dvh,620px);padding:9px 8px;overflow:auto;border:1px solid rgba(255,255,255,.2);border-radius:var(--vz-menu-radius);background:var(--vz-menu-bg);color:var(--vz-menu-ink);box-shadow:var(--vz-menu-shadow);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);animation:none}
+body .sheet-menu .sheet-grab,body .sheet-menu .sheet-head,body .sheet-menu .sheet-foot{display:none}
+body .sheet-menu .sheet-body{padding:0}
+body .sheet-menu .vz-choice-list,body .sheet-menu .sheet-body .list{display:grid;gap:0;margin:0;padding:0;background:none;border:0;box-shadow:none;border-radius:0;overflow:visible}
+body .sheet-menu .vz-choice,body .sheet-menu .list .item{display:flex;justify-content:flex-start;align-items:center;gap:14px;width:100%;min-height:var(--vz-menu-row-min-height);margin:0;padding:9px 14px;border:0;border-radius:15px;background:none;color:#fff;text-align:left;font-size:15px;font-weight:550;box-shadow:none}
+body .sheet-menu .vz-choice i,body .sheet-menu .list .item>i{flex:none;font-size:21px;color:#fff}
+body .sheet-menu .vz-choice .ph-check,body .sheet-menu .pick-check{margin-left:auto}
+body .sheet-menu .vz-choice:hover,body .sheet-menu .vz-choice:focus-visible,body .sheet-menu .list .item:hover{background:var(--vz-menu-hover)}
+body .sheet-menu [data-delete],body .sheet-menu [data-d],body .sheet-menu [data-file-delete]{color:var(--vz-menu-danger)!important}
+body .sheet-menu .vz-media-other{border:0}
+body .sheet-menu .vz-media-other>summary{min-height:44px;padding:10px 14px;color:#e6dfea}
+body .sheet-menu .small.muted{color:#e0d9e7}
+body .sheet-back.sheet-alert{align-items:center;padding:20px;background:rgba(20,16,40,.38)}
+body .sheet-alert>.sheet{width:min(100%,420px);height:auto;max-height:80dvh;padding:16px;border-radius:22px;background:var(--vz-color-canvas);overflow:auto;animation:none}
+body .sheet-alert .sheet-grab{display:none}
+body .sheet-alert .sheet-foot{position:static;margin:10px -16px -16px;padding:12px 16px 16px;background:none}
 /* iOS zooms into fields under 16px. */
 input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:max(16px,1em)}
 /* Searchable picker (app/picker.js): a button that looks like a field; the real select stays for the form. */
@@ -514,7 +566,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{f
 .pick-btn:disabled{opacity:.5}
 .lib-selects .pick-btn,.hub-song .pick-btn{min-height:44px}
 .pick-search{position:sticky;top:-8px;z-index:1;margin:0 0 10px;padding-top:2px;background:var(--bg)}
-.pick-list .pick-row{min-height:52px}
+.pick-list .pick-row{min-height:var(--vz-input-min-height)}
 .pick-list .pick-row[aria-selected="true"] .item-title{color:var(--accent)}
 .pick-check{color:var(--accent);font-size:20px}
 .pick-list .pick-row+.pick-row{border-top:1px solid var(--line)}
@@ -548,3 +600,92 @@ h2.sec a,h2.sec button{display:inline-flex;align-items:center;justify-content:fl
 .bars a.bar{min-height:44px}
 /* Row links made of two text lines: WebKit renders them at 43.5px, so they get an explicit 44pt floor. */
 main a.grow,main a.item-main{display:flex;flex-direction:column;justify-content:center;min-height:44px}
+
+/* Shared page header: same hierarchy and icon color as the approved home. */
+#top .icon-btn,#top .icon-btn i{color:var(--vz-color-ink-muted);}
+#top [data-collection-count],#top h1 .badge,#top .v-top-left>.badge{background:transparent;border:0;box-shadow:none;padding:0;color:var(--vz-color-accent);font-size:13px;font-weight:600;}
+
+.v-nav a:not(.rec){color:#7D748A;}
+.v-nav a:not(.rec) i{color:var(--vz-color-ink-secondary);}
+.v-nav a:not(.rec)[aria-current="page"]{background:var(--vz-color-selected-bg);color:#8A6DB8;border-radius:999px;}
+.v-nav a:not(.rec)[aria-current="page"] i{color:var(--vz-color-accent);}
+
+
+/* Practice recording keeps the established time and satisfaction controls. */
+body .sheet-page #practice-log .vz-practice-tabs{margin-bottom:24px}
+body .sheet-page #practice-log .vz-practice-tabs .lib-seg{width:100%}
+body .sheet-page #practice-log .vz-practice-tabs .lib-seg button{flex:1}
+body .sheet-page #practice-log .vz-practice-date{margin:24px 0 22px}
+body .sheet-page #practice-log .vz-practice-recommendation{display:grid;gap:5px;margin:-3px 0 16px;padding:13px 16px;border-radius:15px;background:#F2EFF7}
+body .sheet-page #practice-log .vz-practice-recommendation strong{font-size:15px;color:#101828}
+body .sheet-page #practice-log .vz-practice-recommendation span{font-size:12px;font-weight:650;color:#7933EE}
+body .sheet-page #practice-log .vz-practice-recommendation small{font-size:12px;line-height:1.45;color:#667085}
+body .sheet-page #practice-log .vz-practice-time{margin:22px 0 25px}
+body .sheet-page #practice-log .vz-practice-time>label,body .sheet-page #practice-log .vz-practice-rating>legend{display:block;margin-bottom:8px;color:#101828;font-size:15px;font-weight:700}
+body .sheet-page #practice-log .vz-practice-time-value{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;align-items:center;gap:12px;margin:16px 18px 10px;text-align:center}
+body .sheet-page #practice-log .vz-practice-time-value>button{width:48px;height:48px;border:0;border-radius:50%;background:#EDE1FF;color:#7D4AB8;font-size:24px}
+body .sheet-page #practice-log .vz-practice-time-value>div{display:flex;align-items:baseline;justify-content:center;color:#7933EE;font-size:46px;font-weight:800;white-space:nowrap}
+body .sheet-page #practice-log .vz-practice-time-value input[type=number]{width:2.3ch;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:inherit;font:inherit;text-align:right;appearance:textfield;-moz-appearance:textfield}
+body .sheet-page #practice-log .vz-practice-time-value input::-webkit-inner-spin-button,body .sheet-page #practice-log .vz-practice-time-value input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+body .sheet-page #practice-log .vz-practice-minutes{display:grid;grid-template-columns:repeat(4,1fr);margin:11px 8px 0}
+body .sheet-page #practice-log .vz-practice-minutes button{position:relative;min-height:52px;border:0;background:transparent;color:#7E67A0;font-size:16px;font-weight:550}
+body .sheet-page #practice-log .vz-practice-minutes button:not(:last-child)::after{content:"";position:absolute;right:0;top:15px;width:1px;height:20px;background:#D6C4E9}
+body .sheet-page #practice-log .vz-practice-minutes button[aria-pressed=true]{color:#7933EE;font-weight:750}
+body .sheet-page #practice-log .vz-practice-minutes button[aria-pressed=true]::before{content:"";position:absolute;left:27%;right:27%;bottom:0;height:3px;border-radius:3px;background:#7933EE}
+body .sheet-page #practice-log .vz-practice-rating{margin:0 0 23px;padding:0;border:0}
+body .sheet-page #practice-log .vz-practice-rating .stars{justify-content:space-around;gap:0;padding:3px 16px 0}
+body .sheet-page #practice-log .vz-practice-rating .stars button{width:52px;height:52px;color:#9674BC;font-size:35px}
+body .sheet-page #practice-log .vz-practice-rating .stars button[aria-pressed=true]{color:#7933EE}
+
+/* The five-tab dock is shared with the home shadow-root dock.
+   The recording focus screen intentionally hides navigation. */
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
+  position:fixed;
+  /* Home shadow dock's final integration CSS overrides its template's 358px
+     with --vz-nav-max-width (528px). Use that same resolved token here. */
+  left:50%;
+  right:auto;
+  width:min(calc(100% - var(--vz-nav-inset,16px)*2),var(--vz-nav-max-width,528px));
+  max-width:var(--vz-nav-max-width,528px);
+  transform:translateX(-50%);
+  bottom:max(var(--vz-nav-bottom,12px),env(safe-area-inset-bottom));
+  z-index:var(--vz-z-nav);
+  box-sizing:border-box;
+  height:var(--vz-nav-height,70px);
+  padding:var(--vz-nav-padding,8px);
+  border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));
+  border-radius:999px;
+  background:var(--vz-nav-surface,rgba(255,255,255,.58));
+  box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));
+  backdrop-filter:blur(var(--vz-nav-blur,24px));
+  -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav ul{
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:100%;gap:4px;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a{
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  box-sizing:border-box;min-width:0;width:100%;height:var(--vz-nav-item-height,54px);min-height:var(--vz-nav-item-height,54px);
+  gap:2px;padding:4px;border-radius:999px;
+  font-size:var(--vz-type-nav-size,11px);line-height:var(--vz-type-nav-leading,16px);
+  font-weight:var(--vz-font-medium,500);white-space:nowrap;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a i{
+  color:var(--vz-color-ink-secondary);font-size:22px;line-height:1;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a[aria-current="page"]{
+  background:var(--vz-color-selected-bg);
+  color:var(--vz-nav-active-label,#8a6db8);
+  font-weight:650;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a[aria-current="page"] i{
+  color:var(--vz-color-accent);
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a:focus-visible{
+  outline:2px solid var(--vz-color-accent);outline-offset:2px;
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+  body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
+    background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;
+  }
+}

@@ -3,12 +3,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const {stripTypeScriptTypes}=require('node:module');
 
-function edge(env={},user='alice',quota={data:true,error:null},apiText=''){
+function edge(env={},user='alice',quota={data:true,error:null},apiText='',owner={data:true,error:null}){
  let handler,calls=0;
  const code=fs.readFileSync('supabase/functions/vzip-song-stt/index.ts','utf8').replace(/^import .*;$/m,'');
  const context={Request,Response,Blob,File,FormData,Uint8Array,AbortSignal,console:{error(){}},
   Deno:{env:{get:k=>env[k]},serve:fn=>handler=fn},
-  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async()=>quota}),
+  createClient:()=>({auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:null})},rpc:async name=>name==='vzip_ai_owner_allowed'?owner:quota}),
   fetch:async()=>{calls++;return Response.json({text:apiText})}};
  vm.runInNewContext(stripTypeScriptTypes(code),context);
  return {call:handler,calls:()=>calls};
@@ -58,20 +58,39 @@ test('database quota exhaustion and failures never issue paid model requests',as
   assert.equal(e.calls(),0);
  }
 });
-function browser(){
- let owner='alice',paid=0,excerpts=0;const events={},storage=new Map();
- const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,list:async()=>[]},route(){},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id},vzipCloudUserId:()=>owner,
+
+test('only the database-configured owner may check readiness or submit paid audio',async()=>{
+ for(const method of ['GET','POST']){
+  for(const [policy,status]of[[{data:false,error:null},403],[{data:null,error:{message:'owner policy missing'}},503]]){
+   const e=edge({...enabled,STT_ALLOWED_USER_IDS:'alice,bob'},'bob',{data:true,error:null},'',policy);
+   const response=await e.call(request(method,method==='POST'?'not even valid multipart':undefined));
+   assert.equal(response.status,status);assert.equal(e.calls(),0);
+  }
+ }
+});
+test('a metadata or body owner claim never bypasses the server owner policy',async()=>{
+ const e=edge(enabled,'alice',{data:true,error:null},'',{data:false,error:null});
+ const response=await e.call(request('POST',JSON.stringify({owner:true,role:'owner',email:'owner@example.invalid'}),{'Content-Type':'application/json'}));
+ assert.equal(response.status,403);assert.equal(e.calls(),0);
+});
+
+function browser({mockStt=false}={}){
+ let owner='alice',paid=0,excerpts=0;const events={},storage=new Map(),routes={};
+ const window={VZ:{media:{isVideo:()=>false,label:m=>m.name||m.id,dateOf:()=>'',list:async()=>[],recordingCategory:m=>m?.recordingCategory||'song',songSearchEligible(m){return ['song','lesson'].includes(this.recordingCategory(m))}},route(name,def){routes[name]=def},db:{songs:[]},toast(){},songLabel:s=>s.title||s.id,
+  esc:s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),clock:n=>`${Math.floor((n||0)/60)}:${String((n||0)%60).padStart(2,'0')}`,dateLabel:s=>s||'날짜 없음'},vzipCloudUserId:()=>owner,
   vzipCloudSignedIn:()=>true,vzipCloudAccessToken:async()=> 'fake',
   VzipR2:{clip:async()=>{excerpts++;throw Error('unexpected extraction')}},dispatchEvent(){},addEventListener:(n,f)=>events[n]=f};
- const element=()=>({style:{},setAttribute(){},append(){},add(){},replaceChildren(){},querySelector:()=>element(),querySelectorAll:()=>[]});
+ const element=()=>{const children=new Map();return {style:{},setAttribute(){},append(){},remove(){},add(){},replaceChildren(){},querySelector:key=>{if(!children.has(key))children.set(key,element());return children.get(key)},querySelectorAll:()=>[]}};
  const context={window,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
-  AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element},Option:function(){},
-  fetch:async()=>{paid++;return Response.json({error:'STT_DISABLED'},{status:503})}};
- const code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
-  'window.test={stt,exclusive,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend};})();');
+  AbortController,DOMException,FormData,File,Blob,Event,setTimeout,document:{createElement:element,createTextNode:text=>({nodeType:3,textContent:String(text)})},Option:function(){},
+  fetch:async()=>{paid++;return mockStt?Response.json({enabled:true}):Response.json({error:'STT_DISABLED'},{status:503})}};
+ let code=fs.readFileSync('app/song-suggestions.js','utf8').replace(/\}\)\(\);\s*$/,
+  'window.test={rematchServerReviews,stt,exclusive,showBusyPopup,showAnalysisPopup,state,cacheKey,analyze,setResult,readCache,apply,undo,loadCloudTexts,references,saveReference,removeReference,singingStart,draw,candidateMatches,destroyPlayers,resultFor,loadSpend,spend,scanWindows,setPipeline:(audio,transcribe)=>{audioWindow=audio;transcribeClip=transcribe}};})();');
+ if(mockStt)code=code.replaceAll("await import('../song-text-match.mjs?v=2')",'window.testMatchModule')
+  .replaceAll("await import('../stt-clip-browser.mjs?v=3')",'window.testClipModule');
  vm.runInNewContext(code,context);
  window.test.state.cloudReady=true;
- return {api:window.test,window,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
+ return {api:window.test,window,routes,document:context.document,storage,localStorage:context.localStorage,main:{...element(),isConnected:true},counts:()=>({paid,excerpts}),switchOwner:()=>{owner='bob';events['vzip:auth-changed']()}};
 }
 test('disabled STT is checked before any R2 extraction',async()=>{
  const b=browser();await assert.rejects(b.api.stt({storageProvider:'r2',r2Key:'test'},new AbortController().signal),/STT_DISABLED/);
@@ -82,6 +101,34 @@ test('operation lock covers pending confirmation and blocks competing writes',as
  const first=b.api.exclusive(main,async()=>{calls++;await pending});
  await b.api.exclusive(main,async()=>calls++);assert.equal(calls,1);release();await first;
  await b.api.exclusive(main,async()=>calls++);assert.equal(calls,2);
+});
+test('reopening song check during an operation shows progress and returns to the list when idle',async()=>{
+ const b=browser();let release,rendered=0,overlay;
+ const main={isConnected:true,dataset:{collection:'song-suggest'},append:el=>overlay=el};
+ b.window.VZ.render=()=>rendered++;
+ const operation=b.api.exclusive(main,async()=>new Promise(resolve=>release=resolve));
+ b.api.showBusyPopup(main);
+ assert.equal(overlay.className,'vz-sc-busy');
+ assert.equal(overlay.querySelector('strong').textContent,'작업을 처리하고 있어요');
+ assert.equal(rendered,0);
+ release();await operation;
+ assert.equal(rendered,1);
+});
+test('analysis progress appears in a dialog with count, file name and a stop action',()=>{
+ const b=browser();let overlay,removed=false,aborted=false;
+ b.window.VZ.media.label=m=>m.name;
+ b.document.createElement=()=>{
+  const fields=new Map();return {setAttribute(k,v){this[k]=v},remove(){removed=true},querySelector(key){if(!fields.has(key))fields.set(key,{style:{}});return fields.get(key)}};
+ };
+ b.api.state.controller={abort(){aborted=true}};
+ const popup=b.api.showAnalysisPopup({append:el=>overlay=el},95);
+ assert.equal(overlay.role,'dialog');assert.equal(overlay.querySelector('[data-analysis-count]').textContent,'0 / 95개 완료');
+ popup.update(10,{name:'녹음 10'});
+ assert.equal(overlay.querySelector('[data-analysis-count]').textContent,'10 / 95개 진행');
+ assert.equal(overlay.querySelector('[data-analysis-file]').textContent,'녹음 10');
+ assert.equal(overlay.querySelector('[data-analysis-fill]').style.width,'11%');
+ overlay.querySelector('[data-analysis-stop]').onclick();assert.equal(aborted,true);assert.equal(b.api.state.cancel,true);
+ popup.close();assert.equal(removed,true);
 });
 test('account changes invalidate a pending operation and clear in-memory suggestions',async()=>{
  const b=browser();let release,writes=0;const pending=new Promise(r=>release=r);
@@ -139,14 +186,51 @@ test('no per-run cap on paid analysis: 150 recordings go straight to the cost co
  b.window.VZ.toast=message=>errors.push(message);b.window.VZ.confirm=async(title,text)=>{asked=text;return false};
  b.api.state.items=Array.from({length:150},(_,i)=>({id:'m'+i}));for(const m of b.api.state.items)b.api.state.chosen.add(m.id);
  await b.api.analyze({querySelector:()=>({})});
- assert.equal(errors.filter(e=>/까지/.test(e)).length,0);assert.match(asked,/150개/);assert.match(asked,/\$0\.225/);assert.equal(b.counts().paid,0);
+ assert.equal(errors.filter(e=>/까지/.test(e)).length,0);assert.match(asked,/150개/);assert.match(asked,/최대 3600구간/);assert.match(asked,/\$5\.400/);assert.equal(b.counts().paid,0);
+});
+test('식별 불가일 때만 다음 구간을 전사하고 곡이 맞으면 즉시 멈춘다',async()=>{
+ const b=browser({mockStt:true}),calls=[],saved=[];let decodes=0;
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.vzipCloudSongTextSave=async row=>saved.push(row);
+ b.window.testMatchModule={matchTranscripts:text=>text==='song'?{candidate:'s1',reason:'match',matches:[{songId:'s1',score:0.8}]}:{candidate:null,reason:'no match',matches:[]}};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async(_item,_signal,{time})=>{decodes++;return {pcm:new Int16Array(16000*90),rate:16000,duration:90,start:time}},async()=>{calls.push('paid');return calls.length===1?'chat':'song'});
+ const result=await b.api.stt({id:'m1',durationSeconds:90},new AbortController().signal);
+ assert.equal(result.candidate.id,'s1');assert.equal(result.strongMatch,true);
+ assert.equal(calls.length,2);assert.equal(decodes,1,'reuse the first decoded window for additional transcription');assert.deepEqual(saved.map(x=>x.recordId),['m1','m1@0']);
+});
+test('목소리가 없는 첫 구간과 후속 구간은 유료 전사 요청 없이 건너뛴다',async()=>{
+ const b=browser({mockStt:true});let paid=0;
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.VZ.analyzeSamples=async()=>({curve:Array(600).fill(null),fps:20});
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:null,reason:'no match',matches:[]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async()=>({pcm:new Int16Array(16000*120),rate:16000,duration:45}),async()=>{paid++;return 'unexpected'});
+ const result=await b.api.stt({id:'silent',durationSeconds:45},new AbortController().signal);
+ assert.equal(result.status,'식별 불가');assert.equal(paid,0);
+});
+test('전사 확인은 구간별 내용을 순서대로 보이고 원본 문구를 HTML로 해석하지 않는다',async()=>{
+ const b=browser(),item={id:'m1',name:'내 녹음',durationSeconds:90},host={isConnected:true,innerHTML:''};
+ b.window.VZ.media.list=async()=>[item];
+ b.window.vzipCloudSongTextList=async()=>[
+  {kind:'recognition',record_id:'m1@54',transcript:'마지막 가사'},
+  {kind:'recognition',record_id:'m1',transcript:'<잡담>'},
+  {kind:'recognition',record_id:'m1@0',transcript:'첫 가사'}];
+ await b.routes['song-transcript'].mount({querySelector:()=>host},{params:['m1']});
+ assert.match(host.innerHTML,/&lt;잡담&gt;/);
+ assert.ok(host.innerHTML.indexOf('첫 가사')<host.innerHTML.indexOf('마지막 가사'));
+ b.switchOwner();assert.equal(host.textContent,'계정이 변경되어 전사 내용을 닫았어요.');
+ b.routes['song-transcript'].leave();
 });
 test('what has been spent so far is shown from the server count',async()=>{
  const b=browser(),line={hidden:true,textContent:''};
  b.window.vzipSttUsage=async()=>({total:200,today:3});
  await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
  assert.equal(line.hidden,false);
- assert.equal(line.textContent,'지금까지 쓴 금액: 약 $0.300 · 음성 분석 200회 (오늘 3회 · 약 $0.005)');
+ assert.equal(line.textContent,'사용 금액 약 $0.300');
+ assert.match(line.title,/음성 분석 200회 · 오늘 3회/);
  b.window.vzipSttUsage=async()=>null; b.api.spend.total=null;
  await b.api.loadSpend({querySelector:x=>x==='[data-spend]'?line:null});
  assert.equal(line.hidden,true); // signed out or the usage function not installed yet: nothing invented
@@ -251,117 +335,57 @@ test('TOP3 matcher displays sorted scores even if match is too ambiguous to auto
  assert.equal(matches[0].score,0.865);
  assert.equal(matches[2].songId,'c');
 });
-test('inline playback is lazy, same page shows TOP3 and redraw releases media',()=>{
- const b=browser(),item={id:'media-1',name:'Take 1.m4a',durationSeconds:76};
- const songs=[{id:'a',title:'Song A'},{id:'b',title:'Song B'},{id:'c',title:'Song C'}];
- b.window.VZ.db.songs=songs;
- b.window.VZ.media.dateOf=()=> '2026-11-06';
- const made=[],destroyed=[],paused=[];
- b.window.VZ.media.player=(host,row,options)=>{
-  made.push({host,row,options});
-  return {pause(){paused.push(row.id)},destroy(){destroyed.push(row.id)}};
- };
+function songView(b){
  function node(tag='div'){
-  return {tag,children:[],style:{},attributes:{},hidden:false,
-   setAttribute(name,value){this.attributes[name]=value},
-   append(...children){this.children.push(...children)},
-   replaceChildren(...children){this.children=[...children]},
-   add(child){this.children.push(child)},
-   querySelector(){return null},querySelectorAll(){return []}
-  };
+  const element={tag,children:[],style:{},hidden:false,disabled:false,attributes:{},dataset:{},
+   setAttribute(k,v){this.attributes[k]=v},append(...xs){this.children.push(...xs)},
+   replaceChildren(...xs){this.children=[...xs]},add(x){this.children.push(x)},querySelectorAll(){return []}};
+  Object.defineProperty(element,'innerHTML',{set(html){this.html=html;this.fields={};for(const selector of ['input','.vz-sc-play-trigger','.vz-sc-player-host','.vz-sc-player-placeholder','.vz-sc-recommend','.vz-sc-menu'])this.fields[selector]=node()},get(){return this.html}});
+  element.querySelector=selector=>element.fields?.[selector]||null;
+  return element;
  }
+ b.document.createElement=node;
  const listing=node(),widgets=new Map();
- for(const key of ['[data-suggest-list]','[data-more]','[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]'])
-  widgets.set(key,key==='[data-suggest-list]'?listing:node());
+ for(const key of ['[data-suggest-list]','[data-more]','[data-counter]','[data-select-all]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]','[data-page-count]','[data-review-count]','[data-auto-count]','[data-wait-count]','[data-vocal-count]'])widgets.set(key,key==='[data-suggest-list]'?listing:node());
  const root=node();root.querySelector=key=>widgets.get(key)||null;
  const main={isConnected:true,querySelector:key=>key==='[data-suggest]'?root:null};
- b.document.createElement=node;
+ return {node,listing,widgets,main};
+}
+test('record cards render safe names and playback is loaded only after a tap',()=>{
+ const b=browser(),v=songView(b),item={id:'media-1',name:'Take <1>.m4a',durationSeconds:76};
+ const made=[],destroyed=[];
+ b.window.VZ.media.player=(host,row,options)=>{made.push({host,row,options});return {play(){},destroy(){destroyed.push(row.id)}}};
  b.api.state.items=[item];b.api.state.chosen.add(item.id);
- b.api.setResult(item,{status:'식별 불가',method:'stt',transcript:'some text',candidate:null,
-  matches:[{songId:'a',score:0.88},{songId:'b',score:0.65},{songId:'c',score:0.31}]});
- b.api.draw(main);
- assert.equal(made.length,0,'player must not fetch/decode media on drawing 40 items');
- const card=listing.children[0],playWrap=card.children.find(x=>x.children?.[0]?.children?.[0]?.textContent==='▶ 녹음 듣기');
- assert.ok(playWrap,'inline listen toggle should be present');
- const listen=playWrap.children[0].children[0],host=playWrap.children[1];
- assert.equal(host.hidden,true);
- listen.onclick();
+ b.api.setResult(item,{status:'후보',candidate:{id:'a',title:'The River'},matches:[]});
+ b.api.draw(v.main);
+ const card=v.listing.children[0];
+ assert.match(card.innerHTML,/Take &lt;1&gt;.m4a/);
+ assert.match(card.innerHTML,/vz-sc-recommend/);
+ assert.equal(made.length,0);
+ card.querySelector('.vz-sc-play-trigger').onclick();
  assert.equal(made.length,1);
- assert.equal(made[0].row.id,item.id);
- assert.equal(made[0].options.prefetch,false,'must avoid network prefetch for offscreen audio');
- assert.equal(made[0].options.tools,true,'player retains seek and speed controls');
- assert.equal(host.hidden,false);
- listen.onclick();assert.deepEqual(paused,['media-1']);assert.equal(host.hidden,true);
- const ranking=card.children.find(x=>x.children?.[0]?.textContent==='가사 유사도 TOP 3 · 참고 점수');
- assert.ok(ranking);
- assert.match(ranking.children[1].children[0].textContent,/88%/);
- assert.match(ranking.children[2].children[0].textContent,/65%/);
- assert.match(ranking.children[3].children[0].textContent,/31%/);
- assert.match(ranking.children[4].textContent,/확률은 아니에요/);
- ranking.children[2].children[1].onclick();
- assert.equal(b.api.readCache(item).candidate.id,'b','user can select 2nd candidate without applying song immediately');
- assert.deepEqual(destroyed,['media-1'],'redraw should close and revoke audio resources');
- assert.equal(made.length,1,'choosing another candidate never triggers audio replay or paid STT');
- assert.equal(b.counts().paid,0);
+ assert.equal(made[0].options.prefetch,false);
+ assert.equal(card.querySelector('.vz-sc-player-host').hidden,false);
+ b.api.draw(v.main);assert.deepEqual(destroyed,['media-1']);
 });
-
-test('30-item pages do not accumulate and keep existing selections between pages',()=>{
- const b=browser();
- b.window.VZ.media.dateOf=()=> '2026-11-06';
- const doc=b.document;
- function node(tag='div'){
-  return {tag,children:[],style:{},hidden:false,disabled:false,
-   setAttribute(){},append(...xs){this.children.push(...xs)},replaceChildren(...xs){this.children=[...xs]},
-   add(child){this.children.push(child)},querySelector(){return null},querySelectorAll(){return []}
-  };
- }
- doc.createElement=node;
- const listing=node(),nodes=new Map();
- for(const key of ['[data-suggest-list]','[data-more]','[data-prev]','[data-page-count]',
-  '[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]'])
-  nodes.set(key,key==='[data-suggest-list]'?listing:node());
- const root=node();root.querySelector=key=>nodes.get(key)||null;
- const main={isConnected:true,querySelector:key=>key==='[data-suggest]'?root:null};
+test('more appends batches of 30 and keeps selections',()=>{
+ const b=browser(),v=songView(b);
  b.api.state.items=Array.from({length:75},(_,i)=>({id:'m'+i,name:'Take '+i+'.m4a'}));
- b.api.state.page=0;
- b.api.draw(main);
- assert.equal(listing.children.length,30);
- assert.match(nodes.get('[data-page-count]').textContent,/1–30 \/ 전체 75개/);
- assert.equal(nodes.get('[data-prev]').hidden,true);
- assert.equal(nodes.get('[data-more]').hidden,false);
- listing.children[0].children[0].children[0].checked=true;
- listing.children[0].children[0].children[0].onchange();
+ b.api.draw(v.main);assert.equal(v.listing.children.length,30);
+ assert.equal(v.widgets.get('[data-more]').hidden,false);
+ const checkbox=v.listing.children[0].querySelector('input');checkbox.checked=true;checkbox.onchange({target:checkbox});
  assert.equal(b.api.state.chosen.has('m0'),true);
- b.api.state.page=1;b.api.draw(main);
- assert.equal(listing.children.length,30,'second page replaces first page');
- assert.match(nodes.get('[data-page-count]').textContent,/31–60 \/ 전체 75개/);
- assert.equal(b.api.state.chosen.has('m0'),true,'selection from page 1 is preserved');
- b.api.state.page=2;b.api.draw(main);
- assert.equal(listing.children.length,15);
- assert.equal(nodes.get('[data-more]').hidden,true);
- assert.match(nodes.get('[data-page-count]').textContent,/61–75 \/ 전체 75개/);
+ b.api.state.page=1;b.api.draw(v.main);assert.equal(v.listing.children.length,60);
+ assert.equal(b.api.state.chosen.has('m0'),true);
+ b.api.state.page=2;b.api.draw(v.main);assert.equal(v.listing.children.length,75);
+ assert.equal(v.widgets.get('[data-more]').hidden,true);
 });
-test('selection has no cap across pages even when the list contains hundreds',()=>{
- const b=browser();b.window.VZ.media.dateOf=()=> '';
- function node(){
-  return {children:[],style:{},hidden:false,disabled:false,setAttribute(){},append(...xs){this.children.push(...xs)},
-   replaceChildren(...xs){this.children=[...xs]},add(x){this.children.push(x)},querySelectorAll(){return []}
-  };
- }
- b.document.createElement=node;
- const listing=node(),root=node(),nodes=new Map();
- for(const key of ['[data-counter]','[data-analyze]','[data-apply]','[data-undo]','[data-stop]','[data-more]','[data-prev]','[data-page-count]'])
-  nodes.set(key,node());
- nodes.set('[data-suggest-list]',listing);
- root.querySelector=x=>nodes.get(x);
- const main={isConnected:true,querySelector:x=>x==='[data-suggest]'?root:null};
+test('selection has no cap beyond 100 recordings',()=>{
+ const b=browser(),v=songView(b);
  b.api.state.items=Array.from({length:230},(_,i)=>({id:'file-'+i,name:'Audio '+i}));
  b.api.state.chosen=new Set(b.api.state.items.slice(0,100).map(x=>x.id));
- b.api.state.page=4; // files 120-149: none selected yet
- b.api.draw(main);
- const checkbox=listing.children[0].children[0].children[0];
- checkbox.checked=true;checkbox.onchange();
- assert.equal(checkbox.checked,true,'the 101st file can be selected');
+ b.api.state.page=4;b.api.draw(v.main);
+ const checkbox=v.listing.children[120].querySelector('input');checkbox.checked=true;checkbox.onchange({target:checkbox});
  assert.equal(b.api.state.chosen.size,101);
 });
 
@@ -386,4 +410,81 @@ test('top-1 is picked by default only when the lyrics are actually similar; nois
  const close = b.api.resultFor({id:'close'}).candidate;
  assert.equal(close.id, 's2'); assert.match(close.reason, /20%/); assert.equal(close.level, '확인 필요');
  assert.equal(b.api.resultFor({id:'mine'}).candidate, null); // the user's own "no song" choice stays
+});
+
+
+test('title search requests voice detection without full note measurements',async()=>{
+ const b=browser();let requested;
+ b.window.VZ.analyzeSamples=async(samples,rate,onProgress,options)=>{requested=options;return {curve:Array(600).fill(6900),fps:20}};
+ await b.api.singingStart(new Float32Array(16000*30),16000,new AbortController().signal);
+ assert.equal(requested.voiceOnly,true);
+});
+
+
+test('first title match decodes only 30 seconds and stops before further excerpts',async()=>{
+ const b=browser({mockStt:true}),requests=[];let paid=0;
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.vzipCloudSongTextSave=async()=>{};
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:'s1',matches:[{songId:'s1',score:.9}]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async(_item,_signal,options)=>{requests.push(options);return {pcm:new Int16Array(16000*30),rate:16000,duration:300,start:0}},async()=>{paid++;return 'matching lyric'});
+ const result=await b.api.stt({id:'m1',durationSeconds:300},new AbortController().signal);
+ assert.equal(requests.length,1);assert.equal(requests[0].seconds,30);assert.equal(paid,1);assert.equal(result.candidate.id,'s1');
+});
+test('returning during title analysis shows live progress and preserves the completed result',async()=>{
+ const b=browser({mockStt:true});let enter,release,overlay,rendered=0;
+ const entered=new Promise(r=>enter=r),pending=new Promise(r=>release=r);
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.window.VZ.media.recordingCategory=()=> 'song';b.window.VZ.confirm=async()=>true;
+ b.window.VZ.render=()=>rendered++;
+ b.window.vzipCloudSongTextSave=async()=>{};
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.api.state.items=[{id:'m1',name:'진행 중인 녹음',durationSeconds:300}];b.api.state.chosen.add('m1');
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:'s1',matches:[{songId:'s1',score:.9}]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async()=>({pcm:new Int16Array(16000*30),rate:16000,duration:300,start:0}),async()=>{enter();await pending;return 'matching lyric'});
+ const running=b.api.exclusive(b.main,b.api.analyze);
+ await entered;b.main.isConnected=false;
+ b.api.showBusyPopup({isConnected:true,dataset:{collection:'song-suggest'},append:el=>overlay=el});
+ assert.match(overlay.className,/vz-sc-analysis/);
+ assert.match(overlay.querySelector('[data-analysis-file]').textContent,/진행 중인 녹음.*가사 인식/);
+ release();await running;
+ assert.equal(b.api.state.results.get('m1').candidate.id,'s1');assert.equal(rendered,1);
+});
+
+test('the Korean translation is a matching reference too, next to the original lyrics',()=>{
+ const b=browser();
+ b.window.VZ.db.songs=[{id:'moment',title:'지금 이 순간',lyrics:'This is the moment this is the day',translation:'지금 이 순간 지금 여기 간절히 바라고 원했던'},
+  {id:'ko',title:'번역만',translation:'번역 가사만 입력한 곡의 한국어 가사'},{id:'short',title:'짧음',translation:'짧다'}];
+ const refs=Array.from(b.api.references(),r=>r.songId+':'+r.source);
+ assert.deepEqual(refs,['moment:lyrics','moment:translation','ko:translation']);
+});
+
+test('recordings the server matched with the original lyrics only are compared again with the Korean translation',async()=>{
+ const b=browser({mockStt:true});
+ b.window.testMatchModule=await import('../song-text-match.mjs');
+ b.window.VZ.db.songs=[{id:'moment',title:'지금 이 순간',lyrics:'This is the moment this is the day when I send all my doubts away',translation:'지금 이 순간 지금 여기 간절히 바라고 원했던 이 순간 나만의 꿈이'},
+  {id:'other',title:'다른 곡',lyrics:'다른 사람의 이야기를 들으며 아침 햇살을 바라봐요 오늘도'}];
+ const item={id:'srv1',name:'한국어 공연'};b.api.state.items=[item];
+ b.api.state.results.set('srv1',{status:'식별 불가',candidate:null,method:'stt',transcript:'지금 이 순간 지금 여기 간절히 바라고 원했던',matches:[{songId:'other',score:0.05}],reason:'서버 분석 결과',fromServer:true});
+ await b.api.rematchServerReviews(b.main);
+ const r=b.api.state.results.get('srv1');
+ assert.equal(r.status,'후보');assert.equal(r.candidate.id,'moment');assert.equal(r.candidate.level,'확인 필요');
+ assert.equal(r.matches[0].songId,'moment');
+ assert.equal(b.counts().paid,0); // no transcription: the server's saved text is reused
+ assert.equal(b.window.VZ.db.songs[0].id,'moment'); // nothing assigned until the user applies it
+});
+test('a first section that is clearly a vocal exercise stops the search: no further paid clips, a training hint instead',async()=>{
+ const b=browser({mockStt:true}),calls=[];
+ b.window.VzipRecordingKind=require('../app/recording-kind.js');
+ b.window.VZ.db.songs=[{id:'s1',title:'Song'}];
+ b.api.state.referenceRows=[{songId:'s1',transcript:'matching lyric text for this song'}];
+ b.window.vzipCloudSongTextSave=async()=>{};
+ b.window.testMatchModule={matchTranscripts:()=>({candidate:null,reason:'no match',matches:[]})};
+ b.window.testClipModule={clipFromPcm:()=>new File(['audio'],'clip.wav')};
+ b.api.setPipeline(async(_i,_s,{time})=>({pcm:new Int16Array(16000*90),rate:16000,duration:600,start:time}),async()=>{calls.push('paid');return '아 아 아아아 오 오 마 메 미 모 무'});
+ const result=await b.api.stt({id:'warm',durationSeconds:600},new AbortController().signal);
+ assert.equal(calls.length,1,'only the first 30 seconds were transcribed');
+ assert.equal(result.status,'식별 불가');assert.match(result.reason,/트레이닝 녹음 같아요/);
 });

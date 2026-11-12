@@ -1,0 +1,25 @@
+name: Billing verified-login regression
+on:
+  push:
+    branches: ['codex/billing-verified-load-20261109']
+permissions:
+  contents: read
+jobs:
+  verified-login:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test --config=billing/playwright.config.cjs billing/tests/session-startup.spec.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: billing-verified-login-regression
+          path: |
+            billing-report/
+            billing-results/

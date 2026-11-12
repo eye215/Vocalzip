@@ -10,7 +10,7 @@
 const VZ = window.VZ, M = VZ?.media;
 if (!VZ || !M) return;
 const esc = VZ.esc;
-const state = {on:false, owner:'', jobs:null, review:new Map(), stop:null, poll:null, refresh:null, loading:false};
+const state = {on:false, owner:'', jobs:null, review:new Map(), unassigned:null, stop:null, poll:null, refresh:null, loading:false};
 VZ.serverAnalysisOn = () => state.on;
 VZ.serverReview = id => state.review.get(id) || null; // {top3, transcript} for a recording that needs a look
 
@@ -19,20 +19,23 @@ async function load() {
   try {
     const r = await window.vzipAnalysisJobs?.();
     if (!r) return;
+    const media=await M.list(true).catch(()=>null);
+    state.unassigned=media&&!M.cloudError?.()?new Set(media.filter(m=>!m.songId&&!m.song).map(m=>m.id)):null;
     state.jobs = r.rows;
-    state.review = new Map(r.review.filter(x => x.result?.top3?.length).map(x => [x.media_id, {top3:x.result.top3, transcript:x.result.transcript || ''}]));
+    state.review = new Map(r.review.filter(x => x.result?.top3?.length&&(!state.unassigned||state.unassigned.has(x.media_id))).map(x => [x.media_id, {top3:x.result.top3, transcript:x.result.transcript || ''}]));
     paint();
+    window.dispatchEvent(new Event('vzip:server-analysis-updated'));
   } finally { state.loading = false; }
 }
 // A saved result anywhere (song assigned, measurement) → every screen reads the fresh list.
 function mediaChanged() {
   clearTimeout(state.refresh);
-  state.refresh = setTimeout(() => { M.invalidate(); window.dispatchEvent(new Event('vzip:cloud-media-changed')); }, 800);
+  state.refresh = setTimeout(() => { M.invalidate(); load().catch(()=>{}); window.dispatchEvent(new Event('vzip:cloud-media-changed')); }, 800);
 }
 async function start() {
   const owner = window.vzipCloudUserId?.() || '';
   if (owner === state.owner && state.on) return; // not found before (SQL not run yet): look again
-  state.stop?.(); clearInterval(state.poll); Object.assign(state, {owner, on:false, jobs:null, review:new Map(), stop:null});
+  state.stop?.(); clearInterval(state.poll); Object.assign(state, {owner, on:false, jobs:null, review:new Map(), unassigned:null, stop:null});
   if (!owner) { paint(); return; }
   let queued = null; try { queued = await window.vzipAnalysisEnqueue?.(); } catch {}
   if (queued == null || owner !== (window.vzipCloudUserId?.() || '')) { paint(); return; } // queue not installed: app works as before
@@ -42,6 +45,7 @@ async function start() {
   await load();
 }
 window.addEventListener('vzip:auth-changed', () => { start().catch(() => {}); });
+window.addEventListener('vzip:media-updated', () => { if(state.on)load().catch(()=>{}); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.on) { load(); mediaChanged(); } });
 if (window.vzipCloudSignedIn?.()) start().catch(() => {});
 
@@ -54,11 +58,12 @@ function counts() {
     if (j.status === 'failed') k.fail++;
     else if (j.status === 'queued' || j.status === 'running') k.wait++;
     else if (j.kind === 'vocal') k.done++;
-    else if (j.status === 'review') k.review++;
+    else if (j.status === 'review'&&(!state.unassigned||state.unassigned.has(j.media_id))) k.review++;
     else if (j.status === 'done') k.auto++;
   }
   return c;
 }
+VZ.serverAnalysisCounts = () => state.on && state.jobs ? counts() : null;
 function paint() {
   if (!host || !document.body.contains(host)) return;
   if (!state.on || !state.jobs) { host.innerHTML = ''; return; }

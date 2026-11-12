@@ -24,7 +24,8 @@ function panel(title,body,onSave,{wide=false,submit='저장'}={}){
  const unload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue=''}};
  V.setGuard(()=>dirty&&!approved?'저장하지 않은 입력을 버릴까요?':'');
  window.addEventListener('beforeunload',unload);el._archiveUnload=unload;
- form.onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;form.querySelector('[type=submit]').disabled=true;try{if(!account||owner()!==account)throw Error('로그인 계정이 바뀌었어요. 다시 열어 주세요.');await onSave(Object.fromEntries(new FormData(form)),form);approved=true;dirty=false;close();V.softRender()}catch(e){form.querySelector('[role=alert]').textContent=e.message}finally{busy=false;form.querySelector('[type=submit]').disabled=false}};
+ const submitButton=form.querySelector('[type=submit]');
+ form.onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;submitButton.disabled=true;try{if(!account||owner()!==account)throw Error('로그인 계정이 바뀌었어요. 다시 열어 주세요.');await onSave(Object.fromEntries(new FormData(form)),form);approved=true;dirty=false;close();V.toast('저장했어요.');V.softRender()}catch(e){form.querySelector('[role=alert]').textContent=e.message}finally{busy=false;submitButton.disabled=false}};
  },onClose:()=>{V.setGuard(null);window.removeEventListener('beforeunload',api?.el._archiveUnload);}});
  return api;
 }
@@ -32,15 +33,17 @@ function updateSong(id,values,shared={}){
  const song=V.song(id);if(!song)throw Error('곡을 찾을 수 없어요.');
  const next=A.repertoire(values,info(song),owner());
  save(db=>{const current=db.songs.find(s=>s.id===id);if(!current)throw Error('삭제된 곡이에요.');Object.assign(current,shared);current.repertoire=next});
+ const host=document.querySelector('[data-repertoire]');
+ if(host&&V.song(id))V.repertoire.songPanel(host,V.song(id),M.cached().filter(m=>m.songId===id));
 }
 function editRepertoire(id,kind){
  const s=V.song(id);if(!s)return;const r=info(s);
  if(kind==='status')return panel('레퍼토리 상태',select('상태','status',A.states,r.status),v=>updateSong(id,v));
  if(kind==='skills')return panel('나의 숙련도', '<p class="small muted">직접 평가하는 항목입니다. AI 분석 점수와 별도로 저장해요.</p>'+Object.entries(A.skills).map(([k,n])=>select(n,k,{'1':'1','2':'2','3':'3','4':'4','5':'5'},String(r.skills?.[k]||''))).join(''),v=>updateSong(id,{skills:v}));
  if(kind==='keys')return panel('키 정보',field('원키','originalKey',r.originalKey)+field('연습키','practiceKey',r.practiceKey)+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote),v=>updateSong(id,v));
- const values=key=>[...new Set(V.db.songs.map(x=>key==='show'?x.show:info(x)[key]).filter(Boolean))];
- const options=(key)=>'<datalist id="archive-'+key+'">'+values(key).map(v=>'<option value="'+E(v)+'"></option>').join('')+'</datalist>';
- panel('작품·배역 정보',field('곡명','title',s.title,'text',true)+field('뮤지컬 작품명','show',s.show).replace('name="show"','name="show" list="archive-show"')+options('show')+field('배역','role',r.role).replace('name="role"','name="role" list="archive-role"')+options('role')+select('구분','kind',A.kinds,r.kind)+field('원어','language',r.language)+area('개인 메모','memo',r.memo),v=>{const {title,show,...rest}=v;if(!title.trim())throw Error('곡명을 입력해 주세요.');updateSong(id,rest,{title:title.trim(),show:show.trim()})});
+ const values=[...new Set(V.db.songs.map(x=>x.show).filter(Boolean))];
+ const showOptions='<datalist id="archive-show">'+values.map(v=>'<option value="'+E(v)+'"></option>').join('')+'</datalist>';
+ panel('곡 정보',field('곡명','title',s.title,'text',true)+field('뮤지컬 작품명','show',s.show).replace('name="show"','name="show" list="archive-show"')+showOptions+select('구분','kind',A.kinds,r.kind)+field('원어','language',r.language)+area('개인 메모','memo',r.memo),v=>{const {title,show,...rest}=v;if(!title.trim())throw Error('곡명을 입력해 주세요.');updateSong(id,rest,{title:title.trim(),show:show.trim()})});
 }
 async function chooseTake(id){
  try{const media=(await M.list()).filter(m=>m.songId===id&&!V.db.deleted?.media?.includes(m.id));const s=V.song(id);if(!s)return;
@@ -57,6 +60,8 @@ function days(p){
 const stageMedia=(p,media)=>{const d=days(p);return media.filter(m=>M.occasion(m)==='performance'&&d.has(M.dateOf(m))&&!V.db.deleted?.media?.includes(m.id))};
 let filter='';
 V.repertoire={
+ edit:editRepertoire,
+ chooseTake,
  toolbar:()=>'<div class="archive-toolbar"><a class="btn secondary" href="#/performances">나의 공연</a><label class="field"><span>레퍼토리 상태</span><select data-rep-filter aria-label="레퍼토리 상태">'+opt(A.states,filter,'전체')+'</select></label></div>',
  matches:s=>!filter||info(s).status===filter,
  statusLabel:s=>A.states[info(s).status]||'',
@@ -70,12 +75,25 @@ V.repertoire={
  wireList:(main,draw)=>{const el=main.querySelector('[data-rep-filter]');if(el)el.onchange=()=>{filter=el.value;draw()}},
  songPanel:(host,s,media)=>{
   if(!host)return;const r=info(s),score=A.proficiency({repertoire:r}),take=media.find(m=>m.id===r.takeId&&!V.db.deleted?.media?.includes(m.id));
-  const history=shows().filter(p=>(p.songLinks||[]).some(l=>l.songId===s.id));
-  host.innerHTML='<section class="card archive-song"><div class="row between"><strong>나의 레퍼토리</strong><button class="btn sm secondary" data-rep="status">'+E(A.states[r.status]||'상태 지정')+'</button></div><p class="small muted">'+E([r.role,A.kinds[r.kind],r.language].filter(Boolean).join(' · '))+'</p><div class="archive-actions"><button class="btn sm ghost" data-rep="info">작품·배역</button><button class="btn sm ghost" data-rep="skills">숙련도 '+(score?score.toFixed(1)+'/5':'미평가')+'</button><button class="btn sm ghost" data-rep="keys">키 정보</button><button class="btn sm ghost" data-take>대표 테이크</button></div><p class="small">'+E([r.originalKey&&'원키 '+r.originalKey,r.practiceKey&&'연습키 '+r.practiceKey,r.stageKey&&'공연키 '+r.stageKey].filter(Boolean).join(' · '))+'</p>'+(r.memo?'<p class="archive-note">'+E(r.memo)+'</p>':'')+'<div data-take-player>'+(take?'<b>대표 테이크</b><div class="list">'+V.mediaRow(take)+'</div>':r.takeId?'<p class="small muted">대표 녹음을 불러오지 못했어요. 원본 연결은 유지됩니다.</p>':'')+'</div><h2 class="sec">공연 이력</h2>'+(history.length?history.map(showCard).join(''):'<p class="small muted">연결된 공연이 없어요.</p>')+'<a class="btn sm secondary" href="#/performances">나의 공연 보기</a></section>';
+  const keys=[r.originalKey&&'원키 '+r.originalKey,r.practiceKey&&'연습키 '+r.practiceKey,r.stageKey&&'공연키 '+r.stageKey].filter(Boolean).join(' · ');
+  const row=(key,label,value,extra='')=>'<button type="button" class="archive-song-row '+extra+'" data-rep="'+key+'"><strong>'+label+'</strong><span class="archive-song-value '+(value?'':'is-empty')+'">'+E(value||({status:'상태 지정',info:'입력하기',skills:'미평가',keys:'미입력'}[key]))+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
+  host.innerHTML='<section class="archive-song" aria-label="나의 레퍼토리">' +
+    '<h2 class="archive-song-title">나의 레퍼토리</h2>' +
+    row('status','상태',A.states[r.status]||'','archive-song-status') +
+    row('skills','숙련도',score?score.toFixed(1)+'/5':'') +
+    row('keys','키 정보',keys) +
+    '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'녹음을 불러올 수 없어요':'아직 지정한 녹음이 없어요')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
+    (r.memo?'<p class="archive-note">'+E(r.memo)+'</p>':'') +
+    '<div data-take-player>'+(take?'<div class="list">'+V.mediaRow(take)+'</div>':r.takeId?'<p class="small muted">원본 연결은 유지됩니다.</p>':'')+'</div></section>';
   host.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>editRepertoire(s.id,b.dataset.rep));host.querySelector('[data-take]').onclick=()=>chooseTake(s.id);if(take)V.wireMedia(host.querySelector('[data-take-player] .list'),[take]);
  }
 };
-function showCard(p){return '<a class="item archive-performance" href="#/show/'+E(p.id)+'"><span class="avatar" data-poster="'+E(p.id)+'"><i class="ph ph-mask-happy"></i></span><span class="item-main"><span class="item-title">'+E(p.title)+'</span><span class="item-sub">'+E([p.start+(p.end?' ~ '+p.end:''),p.role,A.stages[p.status]].filter(Boolean).join(' · '))+'</span></span></a>'}
+
+function showCard(p){
+ const date=p.start?V.dateLabel(p.start):'날짜 미정', meta=[p.role&&'배역 '+p.role,(p.sessions||[]).length&&'회차 '+p.sessions.length+'회',(p.songLinks||[]).length&&'공연곡 '+p.songLinks.length+'곡'].filter(Boolean);
+ return '<a class="archive-performance" href="#/show/'+E(p.id)+'"><span class="archive-performance-poster" data-poster="'+E(p.id)+'"><i class="ph ph-mask-happy" aria-hidden="true"></i></span><span class="archive-performance-copy"><span class="archive-performance-date">'+E(date)+(p.end&&p.end!==p.start?' – '+E(V.dateLabel(p.end)):'')+'</span><strong>'+E(p.title)+'</strong><span class="archive-performance-meta">'+E(meta.join(' · ')||A.stages[p.status]||'공연 기록')+'</span></span><span class="archive-performance-state">'+E(A.stages[p.status]||'공연')+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></a>';
+
+}
 function editShow(id){
  const p=id?get(id):null;if(id&&!p)return;
  panel(p?'공연 수정':'공연 등록',field('작품명','title',p?.title,'text',true)+'<div class="two">'+field('공연 시작일','start',p?.start||V.today(),'date',true)+field('공연 종료일','end',p?.end,'date')+'</div>'+field('공연장','venue',p?.venue)+field('공연팀·극단','company',p?.company)+field('배역','role',p?.role)+field('캐스팅 구분','casting',p?.casting)+field('소속팀 (A팀·B팀 등)','team',p?.team)+select('공연 상태','status',A.stages,p?.status||'preparing')+area('공연 후기·개인 메모','memo',p?.memo),v=>{
@@ -111,13 +129,15 @@ async function removeShow(id){
  try{const current=get(id);if(!current)throw Error('공연 또는 로그인 계정이 변경됐어요.');if(current.assets?.length)throw Error('공연 자료를 먼저 삭제해 주세요. 파일이 남은 채 공연만 지우지 않아요.');save(db=>{writable(db,id);db.performances=db.performances.filter(p=>p.id!==id)});V.nav('#/performances')}catch(e){message(e)}
 }
 let year='';
-V.route('performances',{title:'나의 공연',tab:'songs',back:true,actions:()=>'<button class="icon-btn" data-add-show aria-label="공연 등록"><i class="ph ph-plus"></i></button>',render(){
+V.route('performances',{title:'나의 공연',tab:'songs',back:true,render(){
  const list=shows().sort((a,b)=>b.start.localeCompare(a.start)),years=[...new Set(list.map(p=>p.start.slice(0,4)))],selected=list.filter(p=>!year||p.start.startsWith(year)),stats=A.stats(selected);
- return '<div class="archive-page"><a class="btn sm secondary" href="#/songs">나의 레퍼토리</a>'+select('공연 연도','year',Object.fromEntries(years.map(y=>[y,y+'년'])),year)+'<div class="card small">출연 작품 '+stats.productions+' · 실제 출연 '+stats.sessions+'회 · 배역 '+stats.roles+' · 곡 '+stats.songs+'</div><p class="small muted">출연함으로 등록한 회차만 집계해요. 같은 작품의 별도 공연 제작은 각각 한 작품으로 셉니다.</p><div class="list">'+(selected.length?selected.map(showCard).join(''):'<p class="muted" style="padding:16px">등록된 공연이 없어요.</p>')+'</div><button class="btn block" data-new-show>공연 등록</button></div>';
- },mount(main){document.querySelector('[data-add-show]').onclick=()=>editShow();main.querySelector('[data-new-show]').onclick=()=>editShow();main.querySelector('[name=year]').onchange=e=>{year=e.target.value;V.render()};V.archiveAssets?.posters(main,shows())}});
+
+ return '<div class="archive-page archive-performances-page"><div class="archive-performance-toolbar"><h2>공연 기록 <span>'+selected.length+'</span></h2><label class="archive-performance-year"><select name="year" aria-label="공연 연도">'+opt(Object.fromEntries(years.map(y=>[y,y+'년'])),year,'전체 연도')+'</select><i class="ph ph-caret-down" aria-hidden="true"></i></label></div><div class="archive-performance-stats"><span><strong>'+stats.productions+'</strong> 작품</span><span><strong>'+stats.sessions+'</strong> 출연</span><span><strong>'+new Set(selected.flatMap(p=>[p.role,...(p.sessions||[]).filter(s=>s.appeared).map(s=>s.role)].filter(Boolean))).size+'</strong> 배역</span><span><strong>'+stats.songs+'</strong> 공연곡</span></div><div class="archive-performance-list">'+(selected.length?selected.map(showCard).join(''):'<div class="archive-performance-empty"><strong>아직 등록한 공연이 없어요</strong><span>공연을 추가하면 이곳에 모아 볼 수 있어요.</span></div>')+'</div><button type="button" class="btn secondary archive-performance-add" data-new-show><i class="ph ph-plus" aria-hidden="true"></i> 공연 등록</button></div>';
+ },mount(main){main.querySelector('[data-new-show]').onclick=()=>editShow();main.querySelector('[name=year]').onchange=e=>{year=e.target.value;V.render()};V.archiveAssets?.posters(main,shows())}});
+
 V.route('show',{title:r=>get(r.params[0])?.title||'공연',tab:'songs',back:true,render(r){
  const p=get(r.params[0]);if(!p)return V.empty('mask-happy','공연을 찾을 수 없어요. 로그인 계정을 확인해 주세요.');
- return '<div class="archive-page"><div class="card"><p>'+E([p.start,p.end].filter(Boolean).join(' ~ '))+'</p><p>'+E([p.venue,p.company,p.role,p.casting,p.team,A.stages[p.status]].filter(Boolean).join(' · '))+'</p><p class="archive-note">'+E(p.memo)+'</p><div class="btn-row"><button class="btn secondary" data-edit-show>공연 수정</button><button class="btn ghost" data-delete-show>공연 삭제</button></div></div><h2 class="sec">공연 회차 <button data-add-session>회차 추가</button></h2><div class="list">'+(p.sessions||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time)).map(s=>'<div class="item"><div class="item-main"><b>'+E(s.date+' '+s.time+' '+s.number)+'</b><div class="small">'+E([s.appeared?'출연함':'미출연 / 예정',s.role,s.memo].filter(Boolean).join(' · '))+'</div></div><button class="btn sm ghost" data-edit-session="'+E(s.id)+'">수정</button><button class="btn sm ghost" data-delete-session="'+E(s.id)+'">삭제</button></div>').join('')+'</div><h2 class="sec">공연곡 <button data-link-songs>곡 연결</button></h2><div class="list">'+(p.songLinks||[]).map(l=>'<div class="item"><span class="item-main">'+(l.songId&&V.song(l.songId)?'<a href="#/song/'+E(l.songId)+'">'+E(V.songTitle(l.songId))+'</a>':'<b>'+E(l.title)+' (연결 해제됨)</b>')+'<span class="item-sub">'+E([A.kinds[l.kind],l.key&&'공연키 '+l.key].filter(Boolean).join(' · '))+'</span></span><button class="btn sm ghost" data-edit-link="'+E(l.id)+'">수정</button><button class="btn sm ghost" data-unlink="'+E(l.id)+'">해제</button></div>').join('')+'</div><h2 class="sec">공연 녹음·영상</h2><div data-show-media><p class="small muted">불러오는 중…</p></div><h2 class="sec">공연 자료</h2><div data-show-assets></div></div>';
+ return '<div class="archive-page archive-show-page"><section class="archive-show-hero"><span class="archive-show-eyebrow">나의 공연 기록</span><strong>'+E(p.title)+'</strong><span class="archive-show-date">'+E([p.start,p.end].filter(Boolean).join(' ~ ')||'날짜 미정')+'</span><span class="archive-show-status">'+E(A.stages[p.status]||'공연')+'</span></section><section class="archive-show-info"><h2>공연 정보</h2><div class="archive-show-facts">'+[['공연장',p.venue],['공연팀',p.company],['배역',p.role],['캐스팅',p.casting],['소속팀',p.team]].filter(([,value])=>value).map(([label,value])=>'<div><small>'+label+'</small><span>'+E(value)+'</span></div>').join('')+'</div>'+(p.memo?'<p class="archive-show-memo">'+E(p.memo)+'</p>':'')+'<div class="archive-show-actions"><button class="btn secondary" data-edit-show>공연 수정</button><button class="btn ghost" data-delete-show>공연 삭제</button></div></section><section class="archive-show-section"><h2 class="sec">공연 회차 <button data-add-session>회차 추가</button></h2><div class="list">'+(p.sessions||[]).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time)).map(s=>'<div class="item"><div class="item-main"><b>'+E(s.date+' '+s.time+' '+s.number)+'</b><div class="small">'+E([s.appeared?'출연함':'미출연 / 예정',s.role,s.memo].filter(Boolean).join(' · '))+'</div></div><button class="btn sm ghost" data-edit-session="'+E(s.id)+'">수정</button><button class="btn sm ghost" data-delete-session="'+E(s.id)+'">삭제</button></div>').join('')+'</div></section><section class="archive-show-section"><h2 class="sec">공연곡 <button data-link-songs>곡 연결</button></h2><div class="list">'+(p.songLinks||[]).map(l=>'<div class="item"><span class="item-main">'+(l.songId&&V.song(l.songId)?'<a href="#/song/'+E(l.songId)+'">'+E(V.songTitle(l.songId))+'</a>':'<b>'+E(l.title)+' (연결 해제됨)</b>')+'<span class="item-sub">'+E([A.kinds[l.kind],l.key&&'공연키 '+l.key].filter(Boolean).join(' · '))+'</span></span><button class="btn sm ghost" data-edit-link="'+E(l.id)+'">수정</button><button class="btn sm ghost" data-unlink="'+E(l.id)+'">해제</button></div>').join('')+'</div></section><section class="archive-show-section"><h2 class="sec">공연 녹음·영상</h2><div data-show-media><p class="small muted">불러오는 중…</p></div></section><section class="archive-show-section"><h2 class="sec">공연 자료</h2><div data-show-assets></div></section></div>';
  },mount(main,r){
  const id=r.params[0],p=get(id);if(!p)return;
  main.querySelector('[data-edit-show]').onclick=()=>editShow(id);main.querySelector('[data-delete-show]').onclick=()=>removeShow(id);main.querySelector('[data-add-session]').onclick=()=>editSession(id);main.querySelector('[data-link-songs]').onclick=()=>linkSongs(id);

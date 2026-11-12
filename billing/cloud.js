@@ -32,12 +32,26 @@ function envelope(row){
 async function read(){
  const {userId}=credentials(),rows=await request('/rest/v1/vocal_billing_documents?select=payload,revision,updated_at,last_request_id&user_id=eq.'+encodeURIComponent(userId));
  if(!Array.isArray(rows)||rows.length>1)throw Error('클라우드 응답 형식을 확인해 주세요.');
- return envelope(rows[0]);
+ const result=envelope(rows[0]);if(result)await S.rememberDeletionGuards(result.payload);return result;
+}
+/** Read only this account's current lesson IDs. Dates never identify a deletion target. */
+async function lessonDeletionTargets(row){
+ let lessons=S.lessons().map(l=>({id:l.lesson_id,billingDeductionId:l.billing_deduction_id}));
+ if(S.account.id.startsWith('user:')){
+  const {userId}=credentials();
+  const capability=await request('/rest/v1/rpc/vzip_lesson_delete_capabilities',{});
+  if(capability?.version!==1||!capability.charge_guard||!capability.lesson_permanent)throw Error('안전한 삭제를 위한 서버 확인을 마치지 못했어요.');
+  const remote=await request('/rest/v1/vocal_data?select='+encodeURIComponent('user_id,lessons:payload->lessons')+'&user_id=eq.'+encodeURIComponent(userId));
+  if(!Array.isArray(remote)||remote.length>1||remote[0]&&remote[0].user_id!==userId||remote[0]&&remote[0].lessons!==null&&!Array.isArray(remote[0].lessons))throw Error('연결 레슨 응답을 확인하지 못했어요.');
+  lessons=lessons.concat(remote[0]?.lessons||[]);
+ }
+ const hits=lessons.filter(l=>l?.id&&(l.id===row.lessonId||l.billingDeductionId===row.id));
+ return [...new Set(hits.map(l=>l.id))];
 }
 async function preview(direction){
  const local=await S.status(),remote=await read();S.ensureAccount();
  if(direction==='download'){if(!remote)throw Error('클라우드에 저장된 정산이 없어요.');return {direction,localRevision:local.state.revision,payload:remote.payload,remoteRevision:remote.revision,remoteAt:remote.updatedAt,before:B.summary(local.state),after:B.summary(remote.payload)}}
- const payload=B.parse(JSON.stringify(local.state));
+ const payload=B.parse(JSON.stringify(local.state));await S.checkDeletionGuards(payload);
  // A matching payload also recovers a committed upload whose response was lost.
  const identical=remote&&B.same(payload,remote.payload);
  if(!identical&&(remote?.revision||0)!==local.meta.remoteRevision)throw Error('다른 기기의 클라우드 기록이 있어요. 먼저 클라우드 가져오기에서 비교해 주세요. 현재 기기 기록은 자동으로 덮어쓰지 않습니다.');
@@ -50,6 +64,7 @@ async function commit(plan){
   const remote=await read();if(!remote||remote.revision!==plan.remoteRevision||!B.same(remote.payload,plan.payload))throw Error('미리보기 이후 클라우드가 변경됐어요. 다시 미리보기를 만들어 주세요.');
   return S.replace(plan.payload,plan.localRevision,{reason:'cloud.download',remoteRevision:plan.remoteRevision});
  }
+ await S.checkDeletionGuards(plan.payload);
  if(plan.identical){const remote=await read();if(!remote||remote.revision!==plan.remoteRevision||!B.same(remote.payload,plan.payload))throw Error('클라우드가 변경됐어요. 다시 확인해 주세요.');return S.acknowledge(remote.revision,plan.localRevision)}
  const result=envelope(await request('/rest/v1/rpc/vocal_billing_save',{p_expected_revision:plan.remoteRevision,p_payload:plan.payload,p_request_id:plan.requestId}));
  if(!result||!B.same(result.payload,plan.payload))throw Error('클라우드 저장 응답이 달라요. 다시 확인해 주세요.');
@@ -64,7 +79,7 @@ function autoOn(){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(
 function setAuto(on){try{const all=JSON.parse(localStorage.getItem(AKEY)||'{}');if(window.VzipAccountScope)all[S.account.id]=!!on;else if(on)delete all[S.account.id];else all[S.account.id]=false;localStorage.setItem(AKEY,JSON.stringify(all))}catch{}}
 const empty=state=>!['passes','payments','deductions','adjustments'].some(key=>(state[key]||[]).length);
 async function push(state,expected){
- const payload=B.parse(JSON.stringify(state));
+ const payload=B.parse(JSON.stringify(state));await S.checkDeletionGuards(payload);
  const result=envelope(await request('/rest/v1/rpc/vocal_billing_save',{p_expected_revision:expected,p_payload:payload,p_request_id:crypto.randomUUID()}));
  if(!result||!B.same(result.payload,payload))throw Error('클라우드 저장 응답이 달라요. 다시 확인해 주세요.');
  await S.acknowledge(result.revision,state.revision);return result;
@@ -122,5 +137,5 @@ async function version(id){
 }
 /** Make a kept version the ledger on this device (the current one stays restorable); automatic sync then sends it. */
 async function restoreVersion(id){const payload=await version(id),local=await S.status();return S.replace(payload,local.state.revision,{reason:'cloud.history'})}
-window.VzipBillingCloud={read,preview,commit,sync,resolve,autoOn,setAuto,mergeStates,versions,version,restoreVersion};
+window.VzipBillingCloud={read,lessonDeletionTargets,preview,commit,sync,resolve,autoOn,setAuto,mergeStates,versions,version,restoreVersion};
 })();

@@ -5,6 +5,7 @@
   if(typeof module==='object'&&module.exports)module.exports=api;
 })(typeof window==='object'?window:globalThis,function(){
 'use strict';
+const Time=typeof module==='object'&&module.exports?require('./practice-time-model.js'):globalThis.VzipPracticeTime;
 const list=v=>Array.isArray(v)?v:[];
 const copy=v=>v==null?v:JSON.parse(JSON.stringify(v));
 const pad=n=>String(n).padStart(2,'0');
@@ -27,7 +28,7 @@ function minutes(value){
   if(value==null||typeof value==='boolean'||(typeof value==='string'&&!value.trim()))return null;
   const n=Number(value);return Number.isFinite(n)&&n>=0?n:null;
 }
-function practiceMinutes(p){return minutes(p.manualMinutes)??minutes(p.minutes)??0}
+function practiceMinutes(p){return Time.actualMinutes(p)}
 function unique(records){
   const out=[],index=new Map();
   for(const r of list(records)){
@@ -38,6 +39,18 @@ function unique(records){
     else if((Number(r.updatedAt)||0)>(Number(out[index.get(id)].updatedAt)||0))out[index.get(id)]=r;
   }
   return out;
+}
+function practiceRoomGoal(g){return typeof g?.sourceId==='string'&&g.sourceId.startsWith('practice-room:')&&String(g.id||'').endsWith(':next')}
+function goalTitle(g){return String(g.title||'').trim().replace(/\s+/g,' ')}
+function visibleGoals(records){
+  const result=[],byTitle=new Map();
+  for(const goal of records){
+    if(!practiceRoomGoal(goal)){result.push(goal);continue}
+    const key=goal.date+'\0'+goalTitle(goal);
+    if(!byTitle.has(key)){byTitle.set(key,result.length);result.push(goal)}
+    else if(goal.completed===true)result[byTitle.get(key)].completed=true;
+  }
+  return result;
 }
 function target(plans,period,date){
   const p=plans.find(p=>p.id===period+':'+date&&p.period===period&&p.date===date);
@@ -93,14 +106,14 @@ function build(db={},options={}){
   if(!parse(today))throw Error('올바른 오늘 날짜가 필요해요.');
   const anchor=options.weekStart||today;
   if(!parse(anchor))throw Error('올바른 주간 날짜가 필요해요.');
-  const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),allGoals=unique(db.dailyGoals),totals=new Map();
+  const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),allGoals=visibleGoals(unique(db.dailyGoals).map(copy)),totals=new Map();
+  // Daily time target from onboarding/settings. Without it the model keeps the 30-minute fallback for past days only.
   const defaultDailyTarget=minutes(options.defaultDailyTargetMinutes);
-  // The adapter supplies the shared practice/recording ledger. Without it the
-  // pure model retains its existing manual-record-only contract.
+  // Every view uses performed practice time; standalone recording lengths are never added.
   const entries=Array.isArray(options.timeEntries)?options.timeEntries:practices.map(p=>({date:p.date,minutes:practiceMinutes(p)}));
-  for(const p of entries){if(!parse(p.date)||p.date>today)continue;totals.set(p.date,(totals.get(p.date)||0)+(minutes(p.minutes)||0))}
+  for(const p of entries){if(p.kind==='recording'||!parse(p.date)||p.date>today)continue;const actual=p.ref?practiceMinutes(p.ref):minutes(p.minutes)||0;totals.set(p.date,(totals.get(p.date)||0)+actual)}
   const days=Array.from({length:7},(_,i)=>{
-    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(defaultDailyTarget>0?defaultDailyTarget:null),ratio=goal>0?actual/goal*100:null;
+    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(defaultDailyTarget>0?defaultDailyTarget:date<today?30:null),ratio=goal>0?actual/goal*100:null;
     const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';
     const dayGoals=allGoals.filter(g=>g.date===date),goalsComplete=dayGoals.length>0&&dayGoals.every(g=>g.completed===true);
     return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today,
@@ -110,9 +123,11 @@ function build(db={},options={}){
   if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
   const bounds=weekBounds(db,{...options,today});
   const actualMinutes=days.reduce((n,d)=>n+d.minutes,0);
-  let cursor=(totals.get(today)||0)>0?today:shift(today,-1),streak=0;
-  while((totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
-  const goals=allGoals.filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i}))
+  // The label belongs to the displayed week. Start at its latest practiced day,
+  // then count consecutive calendar dates even when the run crosses Monday.
+  let cursor=days.slice().reverse().find(d=>d.minutes>0)?.date,streak=0;
+  while(cursor&&(totals.get(cursor)||0)>0){streak++;cursor=shift(cursor,-1)}
+  const goals=visibleGoals(unique(db.dailyGoals).filter(g=>g.date===today).map((g,i)=>({...copy(g),_index:i})))
     .sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||a._index-b._index).map(g=>{delete g._index;return g});
   const completed=goals.filter(g=>g.completed===true).length;
   const recommendationCandidates=unique(db.assignments).filter(t=>t.status!=='done'&&(!t.startDate||today>=t.startDate)&&(!t.dueDate||today<=t.dueDate))
@@ -128,12 +143,30 @@ function setGoal(db,id,completed){
   if(typeof completed!=='boolean')throw Error('완료 상태를 확인해 주세요.');
   const goal=list(db.dailyGoals).find(g=>g&&g.id===id);
   if(!goal)return false;
-  goal.completed=completed;return true;
+  if(practiceRoomGoal(goal)){
+    const title=goalTitle(goal);
+    for(const same of db.dailyGoals)if(same?.date===goal.date&&practiceRoomGoal(same)&&goalTitle(same)===title)same.completed=completed;
+  }else goal.completed=completed;
+  return true;
 }
 function planMinutes(value){const n=minutes(value);if(value==null||value==='')return null;if(n==null)throw Error('목표 시간을 확인해 주세요.');return n}
+// Local optimistic guard: compare only the goal editor's day/week inputs.
+function planSnapshot(db,date){
+  if(!parse(date))throw Error('목표 날짜를 확인해 주세요.');
+  const start=monday(date),end=shift(start,6);
+  const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?
+    Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
+  const stable=rows=>rows.map(r=>JSON.stringify(canonical(r))).sort();
+  return JSON.stringify({
+    goals:stable(list(db.dailyGoals).filter(g=>g?.date===date)),
+    plans:stable(list(db.practicePlans).filter(p=>p&&(
+      p.period==='day'&&p.date>=start&&p.date<=end||p.period==='week'&&p.date===start)))
+  });
+}
 function savePlan(db,input){
   const date=input?.date;
   if(!parse(date))throw Error('목표 날짜를 확인해 주세요.');
+  if(has(input,'expectedSnapshot')&&input.expectedSnapshot!==planSnapshot(db,date))throw Error('목표나 시간 설정이 변경됐어요. 입력을 확인한 뒤 창을 다시 열어 주세요.');
   let goals=list(db.dailyGoals),plans=list(db.practicePlans);
   if(has(input,'goals')){
     if(!Array.isArray(input.goals))throw Error('목표 목록을 확인해 주세요.');
@@ -145,7 +178,7 @@ function savePlan(db,input){
       seen.add(g.id);
       const old=previous.get(g.id),title=String(g.title??old?.title??'').trim(),source=g.source||old?.source||'personal';
       if(!title||!['homework','personal','recommendation'].includes(source))throw Error('목표 내용과 출처를 확인해 주세요.');
-      return {...old,id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
+      return {...old,...(!old&&g.recommendation?{songId:String(g.songId||''),recommendation:copy(g.recommendation)}:{}),id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
         completed:typeof g.completed==='boolean'?g.completed:old?.completed===true,order:old?Number(old.order)||0:nextOrder++};
     });
     goals=goals.filter(g=>g.date!==date).concat(next);
@@ -161,6 +194,6 @@ function savePlan(db,input){
   if(has(input,'targetMinutes')||has(input,'weekTargetMinutes'))db.practicePlans=plans;
   return true;
 }
-return {build,weekBounds,setGoal,savePlan};
+return {build,weekBounds,setGoal,savePlan,planSnapshot};
 });
 

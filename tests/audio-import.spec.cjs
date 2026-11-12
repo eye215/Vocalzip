@@ -58,3 +58,76 @@ test('iPhone spatial-audio MOV keeps the copyable AAC mix and skips the extra tr
  expect(result.metadata.audioExtraction.skippedAudioTracks).toHaveLength(1);
  expect(result.metadata.recordedDate).toBe('2026-11-02');
 });
+
+test('Inspected AAC reuses its original bytes, metadata and duration without a second worker',async({page})=>{
+ test.setTimeout(90000);await selected(page,'dated-video.mp4');
+ const value=await page.evaluate(async()=>{
+  const source=await vzipPrepareMedia(document.querySelector('#vzip-hub-upload').files[0]);
+  try{
+   const file=new File([source.file],'audio.m4a',{type:'audio/mp4',lastModified:source.file.lastModified});
+   const Original=Worker;let workers=0;
+   window.Worker=class extends Original{constructor(...args){super(...args);workers++;}};
+   try{
+    const inspection=await vzipInspectMedia(file);inspection.metadata.recordedDate='1999-01-01';
+    const prepared=await vzipPrepareMedia(file);
+    const original=new Uint8Array(await source.file.arrayBuffer()),actual=new Uint8Array(await prepared.file.arrayBuffer());
+    const same=prepared.file===file&&actual.length===original.length&&actual.every((n,i)=>n===original[i]);
+    return {workers,same,metadata:prepared.metadata,duration:inspection.duration};
+   }finally{window.Worker=Original;}
+  }finally{await source.dispose();}
+ });
+ expect(value.workers).toBe(1);expect(value.same).toBe(true);
+ expect(value.metadata.recordedDate).toBe('2024-03-01');expect(value.metadata.durationSeconds).toBeCloseTo(value.duration,1);
+});
+test('Video disguised as audio never bypasses original-packet extraction after inspection',async({page})=>{
+ test.setTimeout(90000);await selected(page,'dated-video.mp4');
+ const result=await page.evaluate(async()=>{
+  const source=document.querySelector('#vzip-hub-upload').files[0],file=new File([source],'disguised.m4a',{type:'audio/mp4'});
+  const inspected=await vzipInspectMedia(file),prepared=await vzipPrepareMedia(file);
+  try{return {video:inspected.hasVideo,reused:prepared.file===file,proof:prepared.metadata.audioExtraction}}finally{await prepared.dispose()}
+ });
+ expect(result.video).toBe(true);expect(result.reused).toBe(false);expect(result.proof.audioPacketCopyVerified).toBe(true);
+});
+test('Inspected PCM retains verified FLAC conversion on Chromium and original WAV on WebKit',async({page,browserName})=>{
+ test.setTimeout(90000);
+ const result=await page.evaluate(async bytes=>{
+  const file=new File([new Uint8Array(bytes)],'pcm.wav',{type:'audio/wav'});
+  await vzipInspectMedia(file);const prepared=await vzipPrepareMedia(file);
+  try{return {type:prepared.file.type,proof:prepared.metadata.losslessFlac,same:prepared.file===file}}finally{await prepared.dispose()}
+ },[...require('./helpers/r2-fixture.cjs').wav(3)]);
+ if(browserName==='webkit'){expect(result.type).toBe('audio/wav');expect(result.same).toBe(true);}
+ else{expect(result.type).toBe('audio/flac');expect(result.proof.samplesVerified).toBe(true);}
+});
+
+test('Photos interleaved video reads the original once while preserving exact audio and fallback verification',async({page},testInfo)=>{
+ test.skip(testInfo.project.name!=='chromium-desktop','large read-volume comparison once; small fixtures cover all browsers');
+ test.setTimeout(120000);await selected(page,'photos-interleaved.mp4');
+ const optimized=await page.evaluate(async()=>{
+  const source=document.querySelector('#vzip-hub-upload').files[0],prepared=await vzipPrepareMedia(source);
+  try{
+   const b=await import('https://cdn.jsdelivr.net/npm/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs');
+   const a=new b.Input({source:new b.BlobSource(source),formats:b.ALL_FORMATS}),c=new b.Input({source:new b.BlobSource(prepared.file),formats:b.ALL_FORMATS});
+   try{
+    const original=new b.EncodedPacketSink((await a.getAudioTracks())[0]).packets(),output=new b.EncodedPacketSink((await c.getAudioTracks())[0]).packets();
+    let packets=0,bytes=0;
+    while(true){
+     const [x,y]=await Promise.all([original.next(),output.next()]);if(x.done||y.done){if(x.done!==y.done)throw Error('count changed');break;}
+     if(x.value.data.length!==y.value.data.length||x.value.data.some((v,i)=>v!==y.value.data[i]))throw Error('bytes changed');
+     packets++;bytes+=x.value.data.length;
+    }
+    return {proof:prepared.metadata.audioExtraction,packets,bytes,size:prepared.file.size};
+   }finally{a.dispose();c.dispose();}
+  }finally{await prepared.dispose();}
+ });
+ await page.route('**/audio-packet-proof.js*',route=>route.fulfill({contentType:'application/javascript',body:'// Force the existing exact-packet fallback for the comparison only.'}));
+ const fallback=await page.evaluate(async()=>{
+  const prepared=await vzipPrepareMedia(document.querySelector('#vzip-hub-upload').files[0]);
+  try{return {proof:prepared.metadata.audioExtraction,size:prepared.file.size}}finally{await prepared.dispose()}
+ });
+ expect(optimized.proof.verificationMode).toBe('sha256-blocks-v1');expect(fallback.proof.verificationMode).toBe('exact-packets');
+ expect(optimized.proof.audioPackets).toBe(optimized.packets);expect(optimized.proof.audioBytes).toBe(optimized.bytes);
+ expect(fallback.proof.audioPacketCopyVerified).toBe(true);expect(fallback.proof.audioPackets).toBe(optimized.packets);
+ expect(fallback.size).toBe(optimized.size);
+ expect(optimized.proof.inputReadBytes).toBeLessThan(fallback.proof.inputReadBytes);
+ console.log('PHOTOS_READ_PROFILE '+JSON.stringify({optimized:optimized.proof,fallback:fallback.proof}));
+});

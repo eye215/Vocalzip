@@ -1,0 +1,364 @@
+const {test,expect}=require('@playwright/test');
+const U='11111111-1111-4111-8111-111111111111',S='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',G='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const jwt='test.'+Buffer.from(JSON.stringify({sub:U,session_id:S,role:'authenticated'})).toString('base64url')+'.signature';
+async function boot(page,{media=false,revision=true}={}){
+ const remote={row:null,receipts:new Map(),requests:[],commits:0,block:false,lose:false};
+ const seed={categories:[],songs:[{id:'song',title:'original'}],lessons:[],assignments:[],practices:[]};
+ const stub=`window.__legacySnapshotWrites=[];window.supabase={createClient:()=>({
+ auth:{getUser:async()=>({data:{user:{id:'${U}',email:'synthetic@example.invalid'}}}),getSession:async()=>({data:{session:{access_token:'${jwt}'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},
+ rpc:async name=>({data:name==='vzip_register_session'||name==='vzip_list_sessions'?{status:'active',current_session:'${S}',sessions:[{session_id:'${S}',label:'synthetic'}],revision:1,limit:2}:true,error:null}),
+ from:table=>{let write=null,single=false;const filters={},q={};for(const m of ['select','order','range','in'])q[m]=()=>q;for(const m of ['eq','is'])q[m]=(k,v)=>{filters[k]=v;return q;};q.maybeSingle=()=>{single=true;return q;};for(const m of ['upsert','insert','update','delete'])q[m]=body=>{write={table,method:m,body};return q;};q.then=resolve=>{if(table==='vocal_media'){const rows=window.__fixtureMedia||(window.__fixtureMedia=JSON.parse(sessionStorage.getItem('snapshot-test-media')||'{}'));if(write?.method==='delete'){const row=rows[filters.id];if(row?.updated_at===filters.updated_at){delete rows[filters.id];sessionStorage.setItem('snapshot-test-media',JSON.stringify(rows));return resolve({data:[{id:filters.id}],error:null});}return resolve({data:[],error:null});}return resolve({data:single?(rows[filters.id]||null):Object.entries(rows).map(([id,r])=>({id,...r})),error:null});}if(write){if(table==='vocal_song_texts'&&window.__fixtureTextFailure)return resolve({data:null,error:{message:'text cleanup failed'}});if(table==='vocal_data')window.__legacySnapshotWrites.push(write);return resolve({data:[{user_id:'${U}'}],error:null});}return resolve({data:table==='vocal_data'?{payload:window.VZ?.db||window.__seed,updated_at:'2026-11-10T00:00:00Z'}:[],error:null});};return q;},storage:{from:()=>({})}
+ })};`;
+ page.__errors=[];page.on('pageerror',e=>page.__errors.push(e.message));
+ await page.route('**/supabase.min.js',r=>r.fulfill({contentType:'application/javascript',body:stub}));
+ await page.route('**/tus.min.js',r=>r.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
+ await page.route('**/r2-config.js*',r=>r.fulfill({contentType:'application/javascript',body:media?"window.VZIP_R2_ENDPOINT='https://delete-fixture.invalid';":"window.VZIP_R2_ENDPOINT='';"}));
+ await page.route('https://chxnbtiyuyhiywzeshis.supabase.co/rest/v1/**',async route=>{
+  const req=route.request(),url=new URL(req.url());expect(req.headers()['x-client-info']).toBe('vocalzip-device-session-v2');
+  if(req.method()==='GET'&&url.pathname.endsWith('/vocal_data')){
+   if(!remote.row)remote.row={user_id:U,payload:await page.evaluate(()=>JSON.parse(VzipAccountScope.storage.getItem('vocal-zip_mvp_v1'))),revision:'1',generation:G,updated_at:'2026-11-10T00:00:00.000001Z'};
+   return route.fulfill({json:remote.row?[remote.row]:[]});
+  }
+  if(!url.pathname.endsWith('/rpc/vzip_save_snapshot'))return route.fulfill({status:404,json:{}});
+  const q=req.postDataJSON();remote.requests.push(q);if(remote.block)return route.fulfill({status:403,json:{}});
+  let receipt=remote.receipts.get(q.p_request_id);
+  if(!receipt){
+   if(q.p_expected_revision!==remote.row.revision||q.p_expected_generation!==remote.row.generation)return route.fulfill({json:{status:'conflict',revision:remote.row.revision,generation:G}});
+   remote.commits++;remote.row={...remote.row,payload:q.p_payload,revision:String(BigInt(remote.row.revision)+1n),updated_at:'2026-11-10T00:00:01.000001Z'};
+   receipt={status:'saved',revision:remote.row.revision,generation:G,updated_at:remote.row.updated_at};remote.receipts.set(q.p_request_id,receipt);
+   await remote.onSaved?.(q);
+   if(remote.lose){remote.lose=false;remote.block=true;return route.abort('connectionfailed');}
+  }
+  return route.fulfill({json:receipt});
+ });
+ await page.addInitScript(({owner,seed,revision})=>{
+  window.VZIP_SNAPSHOT_REVISION_ENABLED=revision;window.VZIP_DEVICE_SESSIONS_ENABLED=true;window.VZIP_ONE_ACCOUNT_PER_BROWSER=false;
+  localStorage.setItem('vzip_account_scope_owner_v1',owner);window.__seed=seed;
+  if(!sessionStorage.getItem('snapshot-seeded')){
+   sessionStorage.setItem('snapshot-seeded','1');localStorage.setItem('vzip_account_v1:'+owner+':vocal-zip_mvp_v1',JSON.stringify(seed));
+  }
+ },{owner:U,seed,revision});
+ await page.goto('/#/home');await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ if(revision)await expect.poll(()=>page.evaluate(()=>!!VzipAccountScope.storage.getItem('vzip_snapshot_transport_v1:'+VzipAccountScope.owner))).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>!VzipAccountScope.storage.getItem('vzip_account_dirty'))).toBe(true);
+ return remote;
+}
+const state=page=>page.evaluate(()=>JSON.parse(VzipAccountScope.storage.getItem('vzip_snapshot_transport_v1:'+VzipAccountScope.owner)));
+const sync=page=>page.evaluate(()=>document.getElementById('cloud-upload').onclick());
+test.afterEach(async({page})=>expect(page.__errors||[]).toEqual([]));
+test('Snapshot bridge on mobile replays a lost acknowledgement without a legacy write or duplicate commit',async({page})=>{
+ const remote=await boot(page);remote.lose=true;
+ await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'offline',date:'2026-11-10',manualMinutes:12,minutes:12});},{silent:true}));
+ await sync(page);await expect.poll(async()=>!!(await state(page)).pending).toBe(true);
+ const id=(await state(page)).pending.id;expect(remote.commits).toBe(1);remote.block=false;
+ await sync(page);await expect.poll(async()=>(await state(page)).pending).toBe(null);
+ expect(remote.commits).toBe(1);expect(new Set(remote.requests.map(r=>r.p_request_id))).toEqual(new Set([id]));
+ expect(await page.evaluate(()=>window.__legacySnapshotWrites)).toEqual([]);
+ expect(remote.row.payload.practices.some(p=>p.id==='offline')).toBe(true);
+});
+test('Snapshot bridge preserves both same-field edits on a concurrent remote save',async({page})=>{
+ const remote=await boot(page);
+ await page.evaluate(()=>VZ.change(d=>{d.songs[0].title='phone input';},{silent:true}));
+ remote.row.payload.songs[0].title='tablet input';remote.row.revision='2';
+ await sync(page);
+ expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('phone input');expect(remote.row.payload.songs[0].title).toBe('tablet input');
+ expect((await state(page)).conflict.kind).toBe('conflict');expect(remote.commits).toBe(0);
+ expect(await page.evaluate(()=>window.__legacySnapshotWrites)).toEqual([]);
+});
+test('Snapshot bridge deletion scrubs a pending lesson before local completion while retaining unrelated practice',async({page})=>{
+ const remote=await boot(page);remote.block=true;
+ await page.evaluate(()=>VZ.change(d=>{d.lessons.push({id:'private',date:'2026-11-10',feedback:'erase pending text'});d.practices.push({id:'keep',date:'2026-11-10',minutes:12,manualMinutes:12});},{silent:true}));
+ await sync(page);await expect.poll(async()=>!!(await state(page)).pending).toBe(true);
+ await page.evaluate(()=>window.vzipSnapshotDeleteLocalLesson('private',()=>VZ.change(d=>VzipDataMerge.deleteLesson(d,'private'),{silent:true})));
+ const journal=await state(page);expect(JSON.stringify(journal)).not.toContain('erase pending text');expect(journal.conflict.kind).toBe('deleted');
+ expect(journal.pending.payload.practices.some(p=>p.id==='keep')).toBe(true);
+ const calls=remote.requests.length;await sync(page);expect(remote.requests.length).toBe(calls);
+ expect(await page.evaluate(()=>VZ.db.lessons.some(l=>l.id==='private'))).toBe(false);
+});
+
+async function deletionFixture(page,options={}){
+ const deleted=[],versioned=options.versioned===true,control={mode:versioned?'revision':'legacy',requests:[],receipts:new Map(),losePrepare:false,loseCommit:false,rejectPrepare:false};let remote;
+ await page.route('https://delete-fixture.invalid/**',async route=>{
+  const req=route.request(),url=new URL(req.url()),headers={'access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,DELETE,OPTIONS','access-control-allow-headers':'authorization,x-client-info,content-type'};
+  const reply=(json,status=200)=>route.fulfill({status,headers,json});
+  if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
+  if(url.pathname==='/v1/me')return reply({user:U,mediaMode:control.mode});
+  if(url.pathname.startsWith('/v2/media/delete/')){
+   const body=req.postDataJSON();control.requests.push({path:url.pathname,body});
+   expect(remote.row.payload.deleted.media).toContain('chosen');
+   if(url.pathname.endsWith('/prepare')){
+    if(control.rejectPrepare)return reply({error:'version conflict'},409);
+    let receipt=control.receipts.get(body.requestId);
+    if(!receipt){
+     const row=await page.evaluate(()=>window.__fixtureMedia.chosen);
+     if(!row||row.updated_at!==body.updatedAt||row.metadata.r2Key!==body.key)return reply({error:'changed'},409);
+     receipt={state:'reserved',ticket:{descriptor:{version:1,user_id:U,session_id:S,request_id:body.requestId,media_id:'chosen',object_key:body.key,object_version:G,expected_updated_at:body.updatedAt,size:3,content_type:'audio/wav',content_root:'a'.repeat(64),etag:'"original"'},signature:'b'.repeat(64)}};
+     control.receipts.set(body.requestId,receipt);
+    }
+    if(control.losePrepare){control.losePrepare=false;return route.abort('failed');}
+    return reply(receipt);
+   }
+   const d=body.ticket.descriptor,receipt=control.receipts.get(d.request_id);expect(receipt).toBeTruthy();
+   if(receipt.state!=='deleted'){
+    await remote.beforeDelete?.();receipt.state='deleted';deleted.push(d.object_key);
+    await page.evaluate(()=>{delete window.__fixtureMedia.chosen;sessionStorage.setItem('snapshot-test-media',JSON.stringify(window.__fixtureMedia));});
+   }
+   if(control.loseCommit){control.loseCommit=false;return route.abort('failed');}
+   return reply({ok:true,state:'deleted',key:d.object_key,requestId:d.request_id});
+  }
+  if(req.method()==='DELETE'){
+   expect(versioned).toBe(false);expect(remote.row.payload.deleted.media).toContain('chosen');
+   await remote.beforeDelete?.();deleted.push(decodeURIComponent(url.pathname.slice('/v1/media/'.length)));return reply({ok:true});
+  }
+  return reply({});
+ });
+ remote=await boot(page,{media:true});
+ await page.evaluate(async({owner,versioned,attempt})=>{
+  VZ.media.holdBackup(true);window.__fixtureMedia={};
+  for(const id of ['chosen','other']){
+   window.__fixtureMedia[id]={metadata:{id,name:id,storageProvider:'r2',r2Key:'u/'+owner+'/'+id+'/'+(versioned?attempt+'/':'')+'original.wav',type:'audio/wav',review:'keep '+id,...(versioned?{size:3,r2Etag:'"original"'}:{})},updated_at:versioned?'2026-11-10T00:00:00.123456Z':'2026-11-10T00:00:00Z'};
+   await window.vzipStorePracticeMedia({id,name:id,created:Date.now(),type:'audio/wav',source:'practice',blob:new Blob([new Uint8Array(id==='chosen'?[1,2,3]:[9,8,7])],{type:'audio/wav'})});
+  }
+  sessionStorage.setItem('snapshot-test-media',JSON.stringify(window.__fixtureMedia));
+  VZ.change(d=>{d.lessons.push({id:'lesson-files',date:'2026-11-10',memo:'keep lesson notes',recordings:[{id:'chosen'},{id:'other'}]});d.practices.push({id:'practice-files',date:'2026-11-10',manualMinutes:12,minutes:12,mediaIds:['chosen','other']});},{silent:true});
+ },{owner:U,versioned,attempt:G});
+ await sync(page);await expect.poll(()=>page.evaluate(()=>!VzipAccountScope.storage.getItem('vzip_account_dirty'))).toBe(true);
+ expect(remote.row.payload.lessons.some(l=>l.id==='lesson-files')).toBe(true);
+ return {remote,deleted,control};
+}
+test('Revision media deletion confirms server links before R2 cleanup and local-byte acknowledgement',async({page})=>{
+ const {remote,deleted}=await deletionFixture(page);
+ await page.evaluate(()=>VZ.media.remove({id:'chosen',cloud:true}));
+ expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);
+ expect(remote.row.payload.lessons.find(l=>l.id==='lesson-files')).toMatchObject({memo:'keep lesson notes',recordings:[{id:'other'}]});
+ expect(remote.row.payload.practices.find(p=>p.id==='practice-files')).toMatchObject({manualMinutes:12,mediaIds:['other']});
+ const result=await page.evaluate(async()=>({pending:window.vzipPendingMediaDeletes(),local:(await window.vzipReadMedia()).map(x=>x.id),metadata:window.__fixtureMedia,legacy:window.__legacySnapshotWrites}));
+ expect(result.pending).toEqual([]);expect(result.local).toContain('other');expect(result.local).not.toContain('chosen');expect(result.metadata.other.metadata.review).toBe('keep other');expect(result.metadata.chosen).toBeUndefined();expect(result.legacy).toEqual([]);
+});
+test('Lost media-delete root reply preserves local bytes and resumes after reload in the same login',async({page})=>{
+ const {remote,deleted}=await deletionFixture(page);remote.lose=true;
+ const error=await page.evaluate(async()=>{try{await VZ.media.remove({id:'chosen',cloud:true});return null;}catch(e){return e.message;}});expect(error).toBeTruthy();
+ expect(deleted).toEqual([]);expect(await page.evaluate(async()=>(await vzipReadMedia()).some(x=>x.id==='chosen'))).toBe(true);
+ const pending=(await state(page)).pending;expect(pending.context.kind).toBe('media-delete');const original=remote.requests.find(r=>r.p_request_id===pending.id);
+ remote.block=false;await page.reload();
+ await expect.poll(()=>page.evaluate(()=>window.vzipPendingMediaDeletes().length),{timeout:20000}).toBe(0);
+ expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);expect(remote.requests.filter(r=>r.p_request_id===pending.id)).toEqual([original,original]);
+ expect(await page.evaluate(async()=>(await vzipReadMedia()).some(x=>x.id==='chosen'))).toBe(false);
+ expect(await page.evaluate(async()=>(await vzipReadMedia()).some(x=>x.id==='other'))).toBe(true);
+});
+test('Media metadata changed during root save stays recoverable without deleting either local file',async({page})=>{
+ const {remote,deleted}=await deletionFixture(page);
+ remote.onSaved=()=>page.evaluate(()=>{window.__fixtureMedia.chosen.metadata.review='new other-device memo';window.__fixtureMedia.chosen.updated_at='2026-11-10T00:00:01Z';sessionStorage.setItem('snapshot-test-media',JSON.stringify(window.__fixtureMedia));});
+ const error=await page.evaluate(async()=>{try{await VZ.media.remove({id:'chosen',cloud:true});return null;}catch(e){return e.code;}});expect(error).toBe('mediaChanged');
+ expect(deleted).toEqual([]);expect(await page.evaluate(()=>window.__fixtureMedia.chosen.metadata.review)).toBe('new other-device memo');
+ expect(await page.evaluate(async()=>(await vzipReadMedia()).map(x=>x.id))).toEqual(expect.arrayContaining(['chosen','other']));
+ expect(await page.evaluate(()=>window.vzipPendingMediaDeletes()[0].phase)).toBe('root-confirmed');
+});
+
+test('Account handoff after cloud cleanup cannot delete a same-ID file from the next local account',async({page})=>{
+ const {deleted}=await deletionFixture(page);
+ const result=await page.evaluate(async()=>{
+  const foreign='22222222-2222-4222-8222-222222222222',name='foreign-delete-fixture';
+  const db=await new Promise((resolve,reject)=>{const r=indexedDB.open(name,1);r.onupgradeneeded=()=>r.result.createObjectStore('recordings',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+  await new Promise((resolve,reject)=>{const t=db.transaction('recordings','readwrite');t.objectStore('recordings').put({id:'chosen',accountOwner:foreign,bytes:new Uint8Array([99]).buffer});t.oncomplete=resolve;t.onerror=()=>reject(t.error);});
+  const scope=window.VzipAccountScope,remove=window.vzipCloudMediaDelete;
+  window.vzipCloudMediaDelete=async item=>{const out=await remove(item);window.VzipAccountScope={...scope,owner:foreign,mediaDb:()=>name};return out;};
+  let error;try{await VZ.media.remove({id:'chosen',cloud:true,accountOwner:scope.owner});}catch(e){error=e.message;}
+  window.VzipAccountScope=scope;window.vzipCloudMediaDelete=remove;VZ.media.holdBackup(true);
+  const found=await new Promise((resolve,reject)=>{const t=db.transaction('recordings','readonly'),r=t.objectStore('recordings').get('chosen');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});db.close();
+  return {error,foreignBytes:[...new Uint8Array(found.bytes)],originalLocal:(await vzipReadMedia()).map(x=>x.id),phase:window.vzipPendingMediaDeletes()[0]?.phase};
+ });
+ expect(result.error).toContain('계정');expect(result.foreignBytes).toEqual([99]);expect(result.originalLocal).toContain('chosen');expect(result.phase).toBe('cloud-complete');
+ expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);
+});
+
+async function conflictingReview(page,remote){
+ await page.evaluate(()=>VZ.change(d=>{d.songs[0].title='phone title';d.songs[0].updatedAt=900;d.practices.push({id:'phone-only',date:'2026-11-10',manualMinutes:11});},{silent:true}));
+ remote.row.payload.songs[0].title='cloud title';remote.row.payload.songs[0].updatedAt=100;remote.row.payload.lessons=[{id:'cloud-only',date:'2026-11-10',memo:'keep server note'}];remote.row.revision='2';
+ await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();
+ const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('[data-conflict]').first()).toBeVisible();return dialog;
+}
+async function selectSource(dialog,source='클라우드'){
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').filter({hasText:source}).first().click();
+ await dialog.locator('[data-review-approve]').check();
+}
+test('Recovery page selects the cloud field and preserves records unique to both sides after reload',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);
+ await expect(dialog.locator('[data-review-save]')).toBeDisabled();await selectSource(dialog);
+ await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.row.payload.songs[0].title).toBe('cloud title');expect(remote.row.payload.practices[0].id).toBe('phone-only');expect(remote.row.payload.lessons[0].id).toBe('cloud-only');
+ expect(remote.commits).toBe(1);await page.reload();await expect(page.locator('#vzip-auth-screen')).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>VZ.db.songs[0].title)).toBe('cloud title');expect(await page.evaluate(()=>window.__legacySnapshotWrites)).toEqual([]);
+});
+test('Recovery cancellation leaves both inputs unchanged and sends no request',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);
+ await dialog.locator('[data-close]').click();await expect(dialog).toHaveCount(0);
+ expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('phone title');expect(remote.row.payload.songs[0].title).toBe('cloud title');expect(remote.requests).toHaveLength(0);
+});
+test('Recovery page invalidates local edits and requires a fresh explicit comparison',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);await selectSource(dialog);
+ await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'late-input',manualMinutes:13});},{silent:true}));
+ await expect(dialog.locator('[data-review-save]')).toBeDisabled();await expect(dialog.locator('[data-review-message]')).toContainText('바뀌었어요');
+ await dialog.locator('[data-review-refresh]').click();await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ await expect(dialog.locator('[data-review-approve]')).not.toBeChecked();await selectSource(dialog);await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.row.payload.practices.some(p=>p.id==='late-input')).toBe(true);
+});
+test('Recovery refuses a remote revision changed after inspection without replacing local input',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);await selectSource(dialog);
+ remote.row.revision='3';remote.row.payload.songs[0].title='newer cloud edit';
+ await dialog.locator('[data-review-save]').click();await expect(dialog.locator('[data-review-refresh]')).toBeVisible();
+ expect(remote.requests).toHaveLength(0);expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('phone title');expect(remote.row.payload.songs[0].title).toBe('newer cloud edit');
+});
+test('Recovery keeps a lost ACK durable and explicitly rechecks the same request',async({page})=>{
+ const remote=await boot(page),dialog=await conflictingReview(page,remote);await selectSource(dialog);remote.lose=true;
+ await dialog.locator('[data-review-save]').click();await expect(dialog.locator('[data-review-retry]')).toBeVisible();expect(remote.commits).toBe(1);
+ const id=remote.requests[0].p_request_id;remote.block=false;await dialog.locator('[data-review-retry]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.commits).toBe(1);expect(new Set(remote.requests.map(r=>r.p_request_id))).toEqual(new Set([id]));expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('cloud title');
+});
+test('Recovery from a previous-login pending uses a new ID and retains the prior unsent record',async({page})=>{
+ const remote=await boot(page);remote.block=true;
+ await page.evaluate(()=>VZ.change(d=>{d.practices.push({id:'previous-input',manualMinutes:7});},{silent:true}));await sync(page);
+ const old=(await state(page)).pending.id;
+ await page.evaluate(()=>{
+  const key='vzip_snapshot_transport_v1:'+VzipAccountScope.owner,s=JSON.parse(VzipAccountScope.storage.getItem(key));s.pending.session='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';VzipAccountScope.storage.setItem(key,JSON.stringify(s));
+ });
+ remote.block=false;await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();const dialog=page.locator('.snapshot-review-page');
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(remote.requests.at(-1).p_request_id).not.toBe(old);expect(remote.row.payload.practices.some(x=>x.id==='previous-input')).toBe(true);
+});
+test('Recovery content is escaped and the full page fits narrow mobile widths',async({page})=>{
+ await page.setViewportSize({width:320,height:720});const remote=await boot(page);remote.row.payload.songs[0].title='<img src=x onerror="window.__unsafe=true">';
+ await page.evaluate(()=>VZ.change(d=>{d.songs[0].title='phone';},{silent:true}));remote.row.revision='2';await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();
+ const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('fieldset')).toBeVisible();expect(await dialog.locator('img').count()).toBe(0);expect(await page.evaluate(()=>window.__unsafe)).toBeUndefined();
+ expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeInViewport();await dialog.locator('[data-close]').click();
+});
+test('Default-off flow never exposes recovery or writes a revision journal',async({page})=>{
+ const remote=await boot(page,{revision:false});await page.goto('/#/settings');await expect(page.locator('#cloud-review')).toBeHidden();expect(remote.requests).toHaveLength(0);
+ expect(await page.evaluate(()=>VzipAccountScope.storage.getItem('vzip_snapshot_transport_v1:'+VzipAccountScope.owner))).toBeNull();
+});
+
+test('Recovery requires selections for all pages of conflicts and closes on an account change',async({page})=>{
+ const remote=await boot(page);
+ await page.evaluate(()=>VZ.change(d=>{d.songs=Array.from({length:25},(_,i)=>({id:'s'+i,title:'device '+i}));},{silent:true}));
+ remote.row.payload.songs=Array.from({length:25},(_,i)=>({id:'s'+i,title:'cloud '+i}));remote.row.revision='2';await sync(page);await page.goto('/#/settings');await page.locator('#cloud-review').click();
+ const dialog=page.locator('.snapshot-review-page');await expect(dialog.locator('fieldset')).toHaveCount(20);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeDisabled();
+ await dialog.locator('[data-review-more]').click();await expect(dialog.locator('fieldset')).toHaveCount(25);await selectSource(dialog);await expect(dialog.locator('[data-review-save]')).toBeEnabled();
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vzip:auth-changed')));await expect(dialog).toHaveCount(0);expect(remote.requests).toHaveLength(0);expect(await page.evaluate(()=>VZ.db.songs[0].title)).toBe('device 0');
+});
+
+async function interruptedFileDelete(page){
+ const fixture=await deletionFixture(page);fixture.remote.block=true;
+ await page.evaluate(async()=>{try{await VZ.media.remove({id:'chosen',cloud:true});}catch{}});
+ const original=(await state(page)).pending.id;
+ await page.evaluate(()=>{
+  const store=VzipAccountScope.storage,owner=VzipAccountScope.owner;
+  for(const key of ['vzip_snapshot_transport_v1:'+owner,'vzip_media_delete_v1:'+owner+':chosen']){
+   const data=JSON.parse(store.getItem(key));if(data.pending)data.pending.session='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';else data.session='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';store.setItem(key,JSON.stringify(data));
+  }
+ });
+ fixture.remote.block=false;await sync(page);await page.goto('/#/settings');
+ await page.locator('#cloud-delete-review').click();await page.locator('[data-media-delete-item="chosen"]').click();
+ return {...fixture,original,dialog:page.locator('.snapshot-review-page')};
+}
+test('Interrupted deletion confirms the current target, uses a fresh request and preserves the other file',async({page})=>{
+ const {remote,deleted,original,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ await expect(dialog).toContainText('chosen');await expect(dialog).toContainText('복구할 수 없어요');await expect(dialog.locator('[data-review-save]')).toBeDisabled();
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').first().click();
+ await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();await expect(dialog).toHaveCount(0);
+ expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);expect(remote.requests.at(-1).p_request_id).not.toBe(original);
+ const info=await page.evaluate(async()=>({ids:(await vzipReadMedia()).map(x=>x.id),pending:vzipPendingMediaDeletes(),lessons:VZ.db.lessons,practices:VZ.db.practices}));
+ expect(info.ids).toContain('other');expect(info.ids).not.toContain('chosen');expect(info.pending).toEqual([]);
+ expect(info.lessons.find(x=>x.id==='lesson-files').memo).toBe('keep lesson notes');expect(info.practices.find(x=>x.id==='practice-files').manualMinutes).toBe(12);
+});
+test('Cancelling interrupted deletion never clears the previous-login intent or removes bytes',async({page})=>{
+ const {deleted,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');await dialog.locator('[data-close]').click();
+ expect(deleted).toEqual([]);expect(await page.evaluate(async()=>(await vzipReadMedia()).map(x=>x.id))).toEqual(expect.arrayContaining(['chosen','other']));
+ expect(await page.evaluate(()=>vzipPendingMediaDeletes()[0].session)).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+});
+test('A changed remote file blocks interrupted deletion before any cleanup',async({page})=>{
+ const {remote,deleted,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ await page.evaluate(()=>{window.__fixtureMedia.chosen.metadata.review='updated by another device';window.__fixtureMedia.chosen.updated_at='2026-11-10T01:00:00Z';});
+ const before=remote.requests.length;
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').first().click();
+ await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();
+ await expect(dialog.locator('[data-review-message]')).toContainText('파일');await expect(dialog.locator('[data-review-refresh]')).toBeVisible();
+ expect(deleted).toEqual([]);expect(remote.requests.length).toBe(before);
+});
+test('A same-size local overwrite during cleanup survives the attempt and automatic retry',async({page})=>{
+ const {remote,deleted,dialog}=await interruptedFileDelete(page);
+ await expect(dialog.locator('[data-review-message]')).toContainText('선택해');
+ remote.beforeDelete=()=>page.evaluate(async()=>{const original=(await vzipReadMedia()).find(x=>x.id==='chosen');await vzipStorePracticeMedia({...original,blob:new Blob([new Uint8Array([5,6,7])],{type:'audio/wav'})});});
+ for(const field of await dialog.locator('fieldset').all())await field.locator('label').first().click();
+ await dialog.locator('[data-review-approve]').check();await dialog.locator('[data-review-save]').click();
+ await expect(dialog.locator('[data-review-message]')).toContainText('바뀌었어요');expect(deleted).toEqual(['u/'+U+'/chosen/original.wav']);
+ await page.evaluate(()=>VZ.media.resumeDeletes());
+ const kept=await page.evaluate(async()=>{const item=(await vzipReadMedia()).find(x=>x.id==='chosen');return [...new Uint8Array(await vzipMediaBlob(item).arrayBuffer())];});
+ expect(kept).toEqual([5,6,7]);expect(await page.evaluate(()=>vzipPendingMediaDeletes().length)).toBe(1);
+});
+
+async function removeChosen(page){return page.evaluate(async()=>{try{await VZ.media.remove({id:'chosen',cloud:true});return null;}catch(e){return {message:e.message,code:e.code};}});}
+const localIds=page=>page.evaluate(async()=>(await vzipReadMedia()).map(x=>x.id));
+test('Immutable deletion confirms root and uses signed prepare/commit without direct metadata deletion',async({page})=>{
+ const {remote,deleted,control}=await deletionFixture(page,{versioned:true});
+ expect(await removeChosen(page)).toBeNull();
+ expect(deleted).toEqual(['u/'+U+'/chosen/'+G+'/original.wav']);
+ expect(control.requests.map(r=>r.path)).toEqual(['/v2/media/delete/prepare','/v2/media/delete/commit']);
+ expect(control.requests[0].body.updatedAt).toBe('2026-11-10T00:00:00.123456Z');
+ expect(await localIds(page)).toEqual(['other']);expect(await page.evaluate(()=>vzipPendingMediaDeletes())).toEqual([]);
+ expect(remote.row.payload.lessons.find(l=>l.id==='lesson-files')).toMatchObject({memo:'keep lesson notes',recordings:[{id:'other'}]});
+ expect(remote.row.payload.practices.find(p=>p.id==='practice-files')).toMatchObject({manualMinutes:12,mediaIds:['other']});
+ expect(await page.evaluate(()=>window.__legacySnapshotWrites)).toEqual([]);
+});
+for(const lost of ['losePrepare','loseCommit'])test('Immutable deletion retains the same request after '+lost+' and reload',async({page})=>{
+ const {deleted,control}=await deletionFixture(page,{versioned:true});control[lost]=true;
+ expect(await removeChosen(page)).toBeTruthy();expect(await localIds(page)).toContain('chosen');
+ const before=await page.evaluate(()=>vzipPendingMediaDeletes()[0]);expect(before.object.requestId).toBeTruthy();
+ expect(JSON.stringify(before)).not.toContain('keep chosen');expect(JSON.stringify(before)).not.toContain('signature');
+ await page.reload();await expect.poll(()=>page.evaluate(()=>vzipPendingMediaDeletes().length),{timeout:20000}).toBe(0);
+ expect(await localIds(page)).toEqual(['other']);expect(deleted).toHaveLength(1);
+ expect(new Set(control.requests.filter(r=>r.path.endsWith('/prepare')).map(r=>r.body.requestId))).toEqual(new Set([before.object.requestId]));
+});
+test('Immutable deletion conflict preserves local bytes and the exact pending target without raw fallback',async({page})=>{
+ const {deleted,control}=await deletionFixture(page,{versioned:true});control.rejectPrepare=true;
+ expect(await removeChosen(page)).toBeTruthy();const job=await page.evaluate(()=>vzipPendingMediaDeletes()[0]);
+ expect(job.phase).toBe('root-confirmed');expect(deleted).toEqual([]);expect(await localIds(page)).toContain('chosen');
+ expect(await removeChosen(page)).toBeTruthy();expect(control.requests.every(r=>r.body.requestId===job.object.requestId)).toBe(true);
+ await page.evaluate(()=>window.VZIP_SNAPSHOT_REVISION_ENABLED=false);expect(await removeChosen(page)).toBeTruthy();expect(deleted).toEqual([]);
+});
+test('Immutable deletion paused or unknown mode stops before root or original mutations',async({page})=>{
+ const {remote,deleted,control}=await deletionFixture(page,{versioned:true}),commits=remote.commits;
+ for(const mode of ['paused','unknown']){control.mode=mode;expect(await removeChosen(page)).toBeTruthy();}
+ expect(remote.commits).toBe(commits);expect(deleted).toEqual([]);expect(control.requests).toEqual([]);expect(await localIds(page)).toContain('chosen');
+});
+test('Immutable deletion cannot remove a changed metadata version after root acknowledgement',async({page})=>{
+ const {remote,deleted,control}=await deletionFixture(page,{versioned:true});
+ remote.onSaved=()=>page.evaluate(()=>{window.__fixtureMedia.chosen.updated_at='2026-11-10T00:00:00.123457Z';window.__fixtureMedia.chosen.metadata.review='other-device note';});
+ expect((await removeChosen(page)).code).toBe('mediaChanged');expect(control.requests).toEqual([]);expect(deleted).toEqual([]);expect(await localIds(page)).toContain('chosen');
+});
+test('Immutable deletion can finish text cleanup after the original and metadata are already absent',async({page})=>{
+ const {deleted,control}=await deletionFixture(page,{versioned:true});await page.evaluate(()=>window.__fixtureTextFailure=true);
+ expect(await removeChosen(page)).toBeTruthy();expect(deleted).toHaveLength(1);expect(await localIds(page)).toContain('chosen');
+ const id=await page.evaluate(()=>vzipPendingMediaDeletes()[0].object.requestId);
+ await page.evaluate(()=>window.__fixtureTextFailure=false);expect(await removeChosen(page)).toBeNull();expect(deleted).toHaveLength(1);
+ expect(await localIds(page)).toEqual(['other']);expect(control.requests.filter(r=>r.path.endsWith('/prepare')).every(r=>r.body.requestId===id)).toBe(true);
+});
+test('Immutable deletion preserves a same-ID local replacement made during first-time cloud cleanup',async({page})=>{
+ const {remote,deleted}=await deletionFixture(page,{versioned:true});
+ remote.beforeDelete=()=>page.evaluate(async()=>{const original=(await vzipReadMedia()).find(x=>x.id==='chosen');await vzipStorePracticeMedia({...original,blob:new Blob([new Uint8Array([5,6,7])],{type:'audio/wav'})});});
+ expect((await removeChosen(page)).code).toBe('localChanged');expect(deleted).toHaveLength(1);
+ expect(await page.evaluate(async()=>{const m=(await vzipReadMedia()).find(x=>x.id==='chosen');return [...new Uint8Array(await vzipMediaBlob(m).arrayBuffer())];})).toEqual([5,6,7]);
+ expect(await page.evaluate(()=>vzipPendingMediaDeletes().length)).toBe(1);
+});
+
+test('Immutable deletion finishes a failed local acknowledgement without touching originals again',async({page})=>{
+ const {deleted,control}=await deletionFixture(page,{versioned:true});
+ await page.evaluate(()=>{window.__originalDeleteAck=window.vzipMediaDeleteAcknowledge;window.vzipMediaDeleteAcknowledge=async()=>{throw Error('local acknowledgement failed');};});
+ expect(await removeChosen(page)).toBeTruthy();expect(await localIds(page)).toEqual(['other']);
+ expect(await page.evaluate(()=>vzipPendingMediaDeletes()[0].phase)).toBe('cloud-complete');const calls=control.requests.length;
+ await page.evaluate(()=>window.vzipMediaDeleteAcknowledge=window.__originalDeleteAck);
+ expect(await removeChosen(page)).toBeNull();expect(control.requests).toHaveLength(calls);expect(deleted).toHaveLength(1);expect(await page.evaluate(()=>vzipPendingMediaDeletes())).toEqual([]);
+});
