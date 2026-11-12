@@ -863,7 +863,7 @@ test('every page shows the very same bottom dock as Home at phone widths',async(
   }
  }
 });
-test('wide screens put 지금 할 것 + goals beside the summary and recent songs; narrower screens keep one column',async({page},info)=>{
+test('tablets (768px+) put 지금 할 것 + goals beside the summary and recent songs, in landscape and portrait; narrower screens keep one column',async({page},info)=>{
  test.skip(info.project.name!=='chromium-desktop','sizes are set explicitly');
  const box=()=>page.evaluate(()=>{const r=document.querySelector('.vz-student-home').shadowRoot;const b=s=>{const q=r.querySelector(s).getBoundingClientRect();return {x:q.x,y:q.y,w:q.width,bottom:q.bottom};};return {phone:b('.vz-phone'),now:b('.vz-schedule'),goals:b('.vz-goals'),summary:b('.vz-summary'),recent:b('.vz-recent')};});
  await page.setViewportSize({width:1180,height:820});await boot(page);
@@ -872,7 +872,10 @@ test('wide screens put 지금 할 것 + goals beside the summary and recent song
  expect(b.summary.x).toBeGreaterThan(b.now.x+b.now.w);expect(Math.abs(b.summary.y-b.now.y)).toBeLessThan(1);
  expect(b.goals.y).toBeGreaterThan(b.now.y);expect(b.recent.y).toBeGreaterThan(b.summary.y);
  await noOverflow(page);
- await page.setViewportSize({width:820,height:1180});await page.waitForTimeout(200);
+ await page.setViewportSize({width:820,height:1180});await page.waitForTimeout(200); // iPad portrait: still two columns
+ b=await box();
+ expect(b.summary.x).toBeGreaterThan(b.now.x+b.now.w);expect(Math.abs(b.summary.y-b.now.y)).toBeLessThan(1);await noOverflow(page);
+ await page.setViewportSize({width:744,height:1133});await page.waitForTimeout(200); // iPad mini portrait: one column
  b=await box();
  expect(b.phone.w).toBeLessThanOrEqual(560);
  expect(b.summary.y).toBeGreaterThan(b.goals.bottom-1);expect(Math.abs(b.summary.x-b.goals.x)).toBeLessThan(1); // one column, as on phones

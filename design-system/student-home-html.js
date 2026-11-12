@@ -158,7 +158,7 @@ const adaptations=String.raw`
 /* Wide screens (after the rules above so it wins): two columns. */
 #vocalzip-refined-preview .vz-col{display:contents;}
 #vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:12px;}
-@media (min-width:900px){
+@media (min-width:768px){
  #vocalzip-refined-preview .vz-phone{max-width:min(1040px,100%);}
  #vocalzip-refined-preview main{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);column-gap:20px;align-items:start;}
  #vocalzip-refined-preview main>.vz-today-line{grid-column:1/-1;}
