@@ -669,7 +669,8 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
   root.querySelector('[data-ref-add]').onclick=()=>exclusive(main,indexReference);
   root.querySelector('[data-ref-picker]').onchange=()=>showReferenceControls(main);
   root.querySelector('[data-ref-clear]').onclick=()=>exclusive(main,deleteReference);
-  window.addEventListener('vzip:server-analysis-updated',()=>{if(main.isConnected)updateMetrics(main)},{signal:helpAbort.signal});
+  // Leaving while this async mount is still running clears helpAbort first; nothing to listen for then.
+  if(helpAbort)window.addEventListener('vzip:server-analysis-updated',()=>{if(main.isConnected)updateMetrics(main)},{signal:helpAbort.signal});
   showReferenceControls(main);draw(main);
  },leave(){helpAbort?.abort();helpAbort=null;destroyPlayers()}
 });
