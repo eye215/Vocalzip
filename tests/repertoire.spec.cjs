@@ -73,10 +73,15 @@ test('Library places filter and search above review, and keeps selection separat
  await page.getByRole('searchbox',{name:'전체 녹음 검색'}).fill('테스트');await expect(page.locator('[data-q]')).toHaveValue('');await page.getByRole('searchbox',{name:'전체 녹음 검색'}).press('Enter');
  await expect(page.locator('[data-q]')).toHaveValue('테스트');
  await expect(page.locator('[data-library-search]')).toHaveAttribute('aria-pressed','true');
- expect(await page.locator('[data-library-search]').evaluate(el=>getComputedStyle(el,'::after').backgroundColor)).toBe('rgb(122, 50, 245)');
+ // v4: an applied search turns the icon itself purple — no dot.
+ await expect(page.locator('[data-library-search]')).toHaveCSS('color','rgb(122, 50, 245)');
+ expect(await page.locator('[data-library-search]').evaluate(el=>getComputedStyle(el,'::after').content)).toBe('none');
+ await expect(page.locator('[data-library-filter]')).toHaveCSS('color','rgb(122, 50, 245)');
+ await expect(page.locator('[data-library-filter] i')).toHaveClass(/ph-funnel/);
  await page.locator('[data-library-search]').click();await page.getByRole('searchbox',{name:'전체 녹음 검색'}).fill('');await page.getByRole('searchbox',{name:'전체 녹음 검색'}).press('Enter');
  await expect(page.locator('[data-library-search]')).toHaveAttribute('aria-pressed','false');
  expect(await page.locator('[data-library-search]').evaluate(el=>getComputedStyle(el,'::after').content)).toBe('none');
+ await expect(page.locator('[data-library-search]')).toHaveCSS('color','rgb(102, 112, 133)'); // back to #667085
  await expect(page.locator('[data-select-mode]')).toBeVisible();
  await page.locator('[data-select-mode]').click();await page.locator('[data-lib-select-all]').click();
  await expect(page.locator('[data-lib-selected-count]')).toContainText('0개 선택');
@@ -119,7 +124,7 @@ test('Repertoire persists metadata ratings keys and filters without rewriting or
  await page.reload();await expect(page.locator('[data-repertoire]')).toContainText('4.5/5');await expect(page.locator('[data-repertoire]')).toContainText('원키 Db');
  const data=await db(page);expect(data.songs[0].id).toBe('song1');expect(data.songs[0].lyrics).toBe('보존할 가사');expect(data.practices).toEqual(initial().practices);expect(data.lessons).toEqual(initial().lessons);
  await page.goto('/#/songs');await page.locator('[data-song-filter]').click();await page.locator('[data-filter-status]').click();await page.locator('[data-choice=ready]').click();await expect(page.locator('[data-l] a')).toHaveCount(1);await expect(page.locator('[data-song-filter]')).toHaveAttribute('aria-pressed','true');
- await page.locator('[data-song-search]').click();await expect(page.getByRole('searchbox',{name:'곡 검색',exact:true})).toBeFocused();await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await expect(page.locator('[data-l] a')).toHaveCount(1);await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');await expect(page.locator('[data-l]')).toContainText('This Is the Moment');expect(await page.locator('[data-song-search]').evaluate(el=>getComputedStyle(el,'::after').backgroundColor)).toBe('rgb(122, 50, 245)');
+ await page.locator('[data-song-search]').click();await expect(page.getByRole('searchbox',{name:'곡 검색',exact:true})).toBeFocused();await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await expect(page.locator('[data-l] a')).toHaveCount(1);await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');await expect(page.locator('[data-l]')).toContainText('This Is the Moment');await expect(page.locator('[data-song-search]')).toHaveCSS('color','rgb(122, 50, 245)');expect(await page.locator('[data-song-search]').evaluate(el=>getComputedStyle(el,'::after').content)).toBe('none');await expect(page.locator('[data-song-filter]')).toHaveCSS('color','rgb(122, 50, 245)');
  await page.locator('[data-song-filter]').click();await page.locator('[data-filter-sort]').click();await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
 });
 test('Performance CRUD, distinct sessions, bidirectional song links and safe deletion',async({page})=>{
