@@ -74,7 +74,7 @@ Spacing scale: `4,8,12,16,20,24,32,40px`. Page max width `560px`, horizontal gut
 | Floating mic | `linear-gradient(135deg,#9557FF 0%,#7A32F5 52%,#6D2BE5 100%)`; none; `0 5px 14px rgba(109,43,229,.18),inset 0 1px 0 rgba(255,255,255,.22)` | 56×56px; 50% | `ph-microphone` white 22px |
 | Action popover | `rgba(54,51,59,.92)`; none; `0 18px 40px rgba(24,17,33,.25)` | R27; max-width 304px; row min 56px | white text; optional white 21px icon |
 | Full page form | `#F8F6FD`; none; none | max-width 560px, 12px gutter; no sheet corners | header 18/26/700 |
-| Home summary rows (v4 target) | white; none; none | R20; padding 4px 12px 4px 16px; row min-height 52px; divider `1px solid #F2EFF7` | icon 20px semantic color; label 14/20/600 + value 14/20/400 `#475467`; trailing badge 13/18/700 |
+| Home summary rows | white; none; none | R20; padding 4px 12px 4px 16px; row min-height 52px; divider `1px solid #F2EFF7` | icon 20px semantic color; label 14/20/600 + value 14/20/400 `#475467`; trailing badge 13/18/700 |
 
 Use Phosphor Regular consistently: `ph-microphone` for record, `ph-timer` practice, `ph-note-pencil` lesson, `ph-magnifying-glass` search, `ph-gear` settings, `ph-plus` add, `ph-caret-left/right/down`, `ph-funnel` filter. Standard 20–22px; small chevrons 14–17px.
 
@@ -91,6 +91,8 @@ Popovers are dark glass, anchored to their trigger, with no title, grabber or ro
 Bottom dock **four items**: `오늘 | 내 곡 | 기록 | 성장`. Keep the separate floating mic above the dock, **not** a fifth dock item; opening it enters approved dark studio or common action flow. **보관함** disappears as a top-level tab but survives as `내 곡 > 전체 녹음`, with old route redirecting, not deleting data. `기록` includes calendar/list, lessons, practices, homework, performances; `성장` includes summaries, vocal lab and monthly reports. Song detail resource tab includes original scores/GoodNotes ink separate layers, lyrics, MR/AR as existing data allows. Settings hosts unified file processing/storage/analysis status.
 
 Home order: small date/streak header; a single situational “지금 할 것” card; max four goals; next schedule; up to three recent songs; conditional needs-attention line; weekly summary. To keep Home about one screen tall, next schedule, needs-attention and weekly summary sit as rows inside one **Home summary rows** card; the needs-attention row renders only when something needs attention. Recent songs are one row of content pills (R99, min-height 44px), not cards. Reuse current light home layout and token styling, not generic glossy concept art.
+
+**Home summary rows (확정 2026-11-12):** 홈의 다음 레슨·이번 주 요약(필요할 때만 주의 줄)은 List card(최소 86px)가 아니라 위 표의 Home summary rows 한 장 안의 한 줄 행으로 둔다. 순서는 위 Home order를 그대로 따른다.
 
 ## Delivery and validation
 
