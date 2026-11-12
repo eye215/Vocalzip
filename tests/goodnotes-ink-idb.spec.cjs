@@ -70,3 +70,21 @@ test('conflicting duplicate IDs abort atomically and legacy data stays untouched
  });
  expect(result).toEqual({conflict:true,rows:['one'],legacyIntact:true});
 });
+
+test('one-time legacy migration keeps deliberate erasures deleted after reopening',async({page})=>{
+ await storePage(page);
+ const result=await page.evaluate(async()=>{
+  const owner='legacy-copy',identity=()=>({owner}),valid=x=>Boolean(x?.id&&x?.ownerId&&x?.points);
+  const b={ownerId:owner,songId:'old-song',scoreId:'old-score',r2Key:'u/legacy-copy/old-score/pdf',pdfHash:'d'.repeat(64)};
+  const legacy=[{...b,id:'old-1',page:1,points:[[.1,.1,.5]]},{...b,id:'old-2',page:1,points:[[.2,.2,.5]]}];
+  const db=await window.VzipScoreInkIDB.create({owner,identity,valid});
+  const first=await db.ensureMigrated(b,legacy);
+  await db.commit(b,{remove:['old-1']});db.close();
+  const again=await window.VzipScoreInkIDB.create({owner,identity,valid});
+  const repeat=await again.ensureMigrated(b,legacy),rows=await again.list(b);again.close();
+  return {first,repeat,ids:rows.map(x=>x.id)};
+ });
+ expect(result.first).toMatchObject({copied:2,already:false,legacyRetained:true});
+ expect(result.repeat).toMatchObject({copied:0,already:true,legacyRetained:true});
+ expect(result.ids).toEqual(['old-2']);
+});
