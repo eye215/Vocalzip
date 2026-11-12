@@ -93,6 +93,20 @@ test('Lyrics cards preview saved text and edit each field on a form page',async(
  await page.getByRole('dialog',{name:'발음 / 호흡 / 감정 메모'}).getByRole('button',{name:'저장'}).click();await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('후렴 전에 숨쉬기');
  expect((await db(page)).songs[0].lyrics).toBe('첫 줄 가사\n둘째 줄 가사');expect((await db(page)).songs[0].lyricNotes).toBe('후렴 전에 숨쉬기');
 });
+test('a lyrics form page fills the whole screen even when the keyboard left stale viewport values behind',async({page})=>{
+ const seed=initial();seed.songs[0].lyrics='첫 줄 가사\n둘째 줄 가사';
+ await boot(page,{seed});await page.goto('/#/song/song1');await page.locator('[data-tab=lyrics]').click();
+ await page.locator('[data-lyric=lyrics]').click();
+ const form=page.getByRole('dialog',{name:'가사 원문'}),field=page.getByRole('textbox',{name:'가사 원문'});
+ await expect(field).toBeVisible();await field.focus();
+ // iOS sometimes never reports the keyboard closing: the values it left behind say "keyboard up, page is short".
+ await page.evaluate(()=>{const r=document.documentElement;r.style.setProperty('--vv-height','420px');r.style.setProperty('--vv-top','90px');r.style.setProperty('--kb','340px');r.classList.add('vz-keyboard-open');});
+ await field.blur();
+ await expect(page.locator('html')).not.toHaveClass(/vz-keyboard-open/);
+ const box=await page.locator('.sheet-back.sheet-page').boundingBox(),vh=page.viewportSize().height;
+ expect(Math.round(box.y)).toBe(0);expect(Math.round(box.height)).toBe(vh); // the song page behind never shows above or below
+ await expect(form.getByRole('button',{name:'저장'})).toBeVisible();
+});
 test('Repertoire persists metadata ratings keys and filters without rewriting original records',async({page})=>{
  await boot(page);await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('나의 레퍼토리');expect(await page.locator('[data-repertoire] .archive-song-row').count()).toBe(3);await expect(page.locator('[data-repertoire] .archive-song-take')).toBeVisible();await expect(page.locator('[data-repertoire]')).not.toContainText('공연 이력');await page.locator('[data-rep=status]').click();await dialog(page).getByLabel('상태',{exact:true}).selectOption('ready');await save(page);
  await page.locator('[data-rep=skills]').click();await dialog(page).getByLabel('가사 암보',{exact:true}).selectOption('5');await dialog(page).getByLabel('전체 완성도',{exact:true}).selectOption('4');await save(page);
