@@ -1,17 +1,20 @@
-// 반복 목표 across devices: every scenario runs the real merge (data-merge.js, unchanged) in both directions,
+// 반복 목표 across devices: every scenario runs the real merge (data-merge.js) in both directions,
 // then the routine reconcile the app runs after a cloud merge (goal-routines.js, through VZ.change).
 const test=require('node:test'),assert=require('node:assert/strict');
 const R=require('../app/goal-routines.js'),Merge=require('../data-merge.js'),Home=require('../app/student-home-model.js'),Time=require('../app/practice-time-model.js');
 const D1='2026-11-09',D2='2026-11-10',D3='2026-11-11',D4='2026-11-12',D5='2026-11-13';
 const ARRAYS=['practices','dailyGoals','practicePlans','assignments'];
-/** Mirrors VZ.change's stamp (app/core.js): updatedAt on changed rows, a tombstone for every removed row. */
+/** Mirrors VZ.change's stamp (app/core.js): updatedAt on changed rows, a tombstone for every removed row, and when it
+ * was made with the version (updatedAt) this device saw. */
 function change(db,mutate,now){
   const before=structuredClone(db);mutate(db);
   for(const k of ARRAYS){
     const old=new Map((before[k]||[]).map(x=>[String(x.id),JSON.stringify(x)])),ids=new Set();
     for(const x of db[k]||[]){ids.add(String(x.id));if(old.get(String(x.id))!==JSON.stringify(x))x.updatedAt=now;}
     const removed=[...old.keys()].filter(id=>!ids.has(id));
-    if(removed.length){db.deleted||={};db.deleted[k]=[...new Set([...(db.deleted[k]||[]),...removed])];}
+    if(removed.length){db.deleted||={};db.deleted[k]=[...new Set([...(db.deleted[k]||[]),...removed])];
+      const seen=new Map((before[k]||[]).map(x=>[String(x.id),Number(x.updatedAt)||0]));db.deletedAt||={};db.deletedAt[k]={...(db.deletedAt[k]||{})};
+      for(const id of removed)db.deletedAt[k][id]={at:now,seen:seen.get(id)||0};}
   }
   return db;
 }
@@ -77,10 +80,8 @@ test('(b) rename on one device while the other ends: from today on everywhere, n
   assert.equal(R.reconcile(structuredClone(ab)),false,'reconcile settles in one pass');
 });
 
-// Known limit (storage layer, out of this change's scope): VZ.change tombstones every removed row and data-merge
-// tombstones carry no time, so if B ends the routine while A checks *today's* day before syncing, B's tombstone for that
-// day wins and A's check is lost. Fixing it needs tombstones with a time (or a "revived after" rule) in data-merge.js.
-test('(b) today checked on A while B ends today keeps A’s check',{todo:'needs timestamped tombstones in data-merge.js'},()=>{
+// B ends the routine without having seen A's check of today: the check survives (timed tombstones in data-merge.js).
+test('(b) today checked on A while B ends today keeps A’s check',()=>{
   const {id,a,b}=synced();
   change(a,db=>Home.setGoal(db,id+':'+D3,true),200);
   change(b,db=>R.end(db,id,D3,210),210);

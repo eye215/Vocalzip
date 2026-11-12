@@ -1,18 +1,28 @@
 /* Lossless merge of two VOCAL.zip data snapshots (device ↔ cloud, or a recovery copy).
  * Records are matched by id. Nothing present on either side is dropped unless it was deleted
  * on purpose (a tombstone in `deleted`). When both sides changed a record, the newer
- * `updatedAt` wins; without timestamps the first argument (this device) wins. */
+ * `updatedAt` wins; without timestamps the first argument (this device) wins.
+ * A tombstone written by core.js also records `deletedAt[kind][id] = {at, seen}`: when it was made and which
+ * version (updatedAt) of the row the deleting device saw. A version edited elsewhere that the deletion never saw
+ * (updatedAt > seen) wins: the record comes back and the tombstone is dropped. So a goal checked on another device
+ * survives a routine ended here, whichever happened first. Only for day-planning records (EDIT_BEATS_DELETE): lessons, songs, media and the rest follow
+ * the permanent-deletion policy and their deletion always wins. A tombstone without a time (older data) always wins. */
 ((root) => {
 'use strict';
 const COLLECTIONS = ['categories', 'songs', 'lessons', 'assignments', 'practices', 'comparisonReports', 'performances', 'dailyGoals', 'practicePlans', 'videoFeedback', 'scoreAnnotations', 'monthlyGrowthReports', 'monthlyAiReports', 'overallAiReports', 'vocalPlanReports'];
+const EDIT_BEATS_DELETE = new Set(['dailyGoals', 'practicePlans']);
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
 function valid(data) { return isObj(data) && ['lessons', 'practices', 'assignments', 'categories', 'songs'].every(k => Array.isArray(data[k])); }
 function count(data) { return valid(data) ? (data.songs.length + data.lessons.length + data.practices.length + data.assignments.length) : 0; }
 function merge(primary, secondary) {
   const a = isObj(primary) ? primary : {}, b = isObj(secondary) ? secondary : {};
-  const out = {...b, ...a}, deleted = {}, added = {};
+  const out = {...b, ...a}, deleted = {}, deletedAt = {}, added = {};
   for (const k of COLLECTIONS) {
-    const gone = new Set([...(a.deleted?.[k] || []), ...(b.deleted?.[k] || [])]);
+    const gone = new Set([...(a.deleted?.[k] || []), ...(b.deleted?.[k] || [])].map(String));
+    const ta = isObj(a.deletedAt?.[k]) ? a.deletedAt[k] : {}, tb = isObj(b.deletedAt?.[k]) ? b.deletedAt[k] : {};
+    // {at, seen}; the better-informed tombstone (higher seen) decides.
+    const info = v => isObj(v) ? {at:Number(v.at) || 0, seen:Number(v.seen) || 0} : null;
+    const when = id => { const x = info(ta[id]), y = info(tb[id]); return x && y ? {at:Math.max(x.at, y.at), seen:Math.max(x.seen, y.seen)} : x || y; };
     const map = new Map();
     for (const x of Array.isArray(b[k]) ? b[k] : []) if (x && x.id != null) map.set(String(x.id), x);
     let fromSecondary = 0;
@@ -24,6 +34,8 @@ function merge(primary, secondary) {
       const ta = Number(x.updatedAt) || 0, tb = Number(other.updatedAt) || 0;
       map.set(id, tb > ta ? other : x);
     }
+    // An edit made after a timed deletion keeps the record.
+    if (EDIT_BEATS_DELETE.has(k)) for (const id of [...gone]) { const t = when(id), x = map.get(id); if (t && x && (Number(x.updatedAt) || 0) > t.seen) gone.delete(id); }
     for (const id of map.keys()) if (!seenA.has(id) && !gone.has(id)) fromSecondary++;
     // Keep the device's order first, then records that only the other side had.
     const order = [...(Array.isArray(a[k]) ? a[k] : []).map(x => String(x?.id)), ...(Array.isArray(b[k]) ? b[k] : []).map(x => String(x?.id))];
@@ -31,6 +43,8 @@ function merge(primary, secondary) {
     out[k] = order.filter(id => id !== 'undefined' && !seen.has(id) && seen.add(id) && map.has(id) && !gone.has(id)).map(id => map.get(id));
     if (!Array.isArray(a[k]) && !Array.isArray(b[k])) delete out[k];
     if (gone.size) deleted[k] = [...gone];
+    const times = {}; for (const id of gone) { const t = when(id); if (t) times[id] = t; }
+    if (Object.keys(times).length) deletedAt[k] = times;
     added[k] = fromSecondary;
   }
   const media = [...new Set([...(a.deleted?.media || []), ...(b.deleted?.media || [])])];
@@ -38,6 +52,7 @@ function merge(primary, secondary) {
   const billingLinks=[...new Set([...(a.deleted?.billingLessonLinks||[]),...(b.deleted?.billingLessonLinks||[])])];
   if(billingLinks.length)deleted.billingLessonLinks=billingLinks;
   out.deleted = deleted;
+  if (Object.keys(deletedAt).length) out.deletedAt = deletedAt; else delete out.deletedAt;
   unlinkMedia(out, media);
   unlinkLessons(out, out.deleted.lessons || []);
   const removedSongs = new Set(out.deleted.songs || []);
