@@ -106,14 +106,18 @@ function build(db={},options={}){
   if(!parse(today))throw Error('올바른 오늘 날짜가 필요해요.');
   const anchor=options.weekStart||today;
   if(!parse(anchor))throw Error('올바른 주간 날짜가 필요해요.');
-  const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),totals=new Map();
+  const start=monday(anchor),plans=unique(db.practicePlans),practices=unique(db.practices),allGoals=visibleGoals(unique(db.dailyGoals).map(copy)),totals=new Map();
+  // Daily time target from onboarding/settings. Without it the model keeps the 30-minute fallback for past days only.
+  const defaultDailyTarget=minutes(options.defaultDailyTargetMinutes);
   // Every view uses performed practice time; standalone recording lengths are never added.
   const entries=Array.isArray(options.timeEntries)?options.timeEntries:practices.map(p=>({date:p.date,minutes:practiceMinutes(p)}));
   for(const p of entries){if(p.kind==='recording'||!parse(p.date)||p.date>today)continue;const actual=p.ref?practiceMinutes(p.ref):minutes(p.minutes)||0;totals.set(p.date,(totals.get(p.date)||0)+actual)}
   const days=Array.from({length:7},(_,i)=>{
-    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(date<today?30:null),ratio=goal>0?actual/goal*100:null;
+    const date=shift(start,i),actual=totals.get(date)||0,goal=target(plans,'day',date)??(defaultDailyTarget>0?defaultDailyTarget:date<today?30:null),ratio=goal>0?actual/goal*100:null;
     const state=date>today?'future':actual===0?'empty':!(goal>0)?'unplanned':ratio<100?'partial':ratio<=120?'met':'high';
-    return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today};
+    const dayGoals=allGoals.filter(g=>g.date===date),goalsComplete=dayGoals.length>0&&dayGoals.every(g=>g.completed===true);
+    return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today,
+      goalCount:dayGoals.length,goalsComplete,timeMet:goal>0&&actual>=goal};
   });
   let targetMinutes=target(plans,'week',start);
   if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
@@ -128,6 +132,8 @@ function build(db={},options={}){
   const completed=goals.filter(g=>g.completed===true).length;
   const recommendationCandidates=unique(db.assignments).filter(t=>t.status!=='done'&&(!t.startDate||today>=t.startDate)&&(!t.dueDate||today<=t.dueDate))
     .map(t=>({title:String(t.title||''),source:'homework',sourceId:t.id}));
+  const latestSong=recentSong(db,practices,today)?.song;
+  recommendationCandidates.push({title:latestSong?latestSong.title+' 한 번 연습하기':'호흡과 발성 연습하기',source:'recommendation',sourceId:latestSong?'song:'+latestSong.id:'basic:breathing'});
   return {today,goals,goalProgress:{total:goals.length,completed,ratio:goals.length?completed/goals.length*100:null},
     week:{start,end:shift(start,6),current:start===monday(today),firstWeek:bounds.first,lastWeek:bounds.last,canPrevious:start>bounds.first,canNext:start<bounds.last,days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
     stage:nextStage(db,today),lesson:nextLesson(db,today),recent:recentSong(db,practices,today),recommendationCandidates};

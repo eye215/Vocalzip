@@ -202,7 +202,7 @@ test('empty state removes all sample data and connects song and goal setup',asyn
  await expect(page.locator('.vz-schedule')).toHaveCount(0);await expect(goals(page)).toHaveCount(0);await expect(page.locator('.vz-count')).toHaveText('0 / 0 완료');
  await expect(page.locator('.vz-song')).not.toContainText('Defying Gravity');
  await page.getByRole('button',{name:'곡 추가 또는 선택',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
- await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:'주간 목표 설정',exact:true}).click();
+ await page.goto('/#/home');await ready(page);await page.getByRole('button',{name:'오늘의 목표 정하기',exact:true}).click();
  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
@@ -236,16 +236,49 @@ test('active homework card directly opens guided practice',async({page})=>{
  await page.getByRole('link',{name:'호흡을 길게 유지하기 따라 하기',exact:true}).click();
  await expect(page).toHaveURL(/#\/guided-practice\/homework%3Aa1$/);
 });
+test('daily time comes from onboarding/settings; tomorrow offers goals once without time input',async({page})=>{
+ const value=seed();value.practicePlans=[];
+ await boot(page,value);
+ await expect(page.getByRole('dialog',{name:'오늘의 목표',exact:true})).toHaveCount(0);
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]')).toHaveAttribute('aria-label',/목표 30분/);
+ await page.evaluate(()=>{VZ.today=()=> '2026-11-05';VZ.render();});await ready(page);
+ const automatic=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(automatic).toBeVisible();
+ await expect(automatic.locator('[name=dayMinutes],[name=weekMinutes]')).toHaveCount(0);
+ await automatic.getByRole('button',{name:'나중에 설정할래요'}).click();
+ await page.evaluate(()=>VZ.render());await ready(page);await expect(automatic).toHaveCount(0);
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ await sheet.getByRole('button',{name:'목표 저장'}).click();
+ await expect(sheet.locator('[data-plan-error]')).toContainText('목표를 직접 입력해 주세요');await expect(sheet).toBeVisible();
+ await sheet.locator('.vz-plan-option').last().click();await sheet.getByRole('button',{name:'목표 저장'}).click();
+ expect((await db(page)).dailyGoals.some(g=>g.date==='2026-11-05'&&g.source==='recommendation')).toBe(true);
+ expect((await db(page)).practicePlans).toEqual([]);
+});
+test('settings changes the default daily target on home',async({page})=>{
+ const value=seed();value.practicePlans=[];
+ await boot(page,value);
+ await page.getByRole('button',{name:'프로필',exact:true}).click();
+ await page.locator('[data-daily-target]').click();
+ const sheet=page.getByRole('dialog',{name:'하루 연습 목표 시간'});await sheet.locator('input[name=minutes]').fill('45');
+ await sheet.getByRole('button',{name:'저장'}).click();
+ await page.goto('/#/home');await ready(page);
+ await expect(page.locator('.vz-days>[data-date="'+TODAY+'"]')).toHaveAttribute('aria-label',/목표 45분/);
+ expect((await db(page)).settings.dailyTargetMinutes).toBe(45);
+});
 test('weekday names, minutes, rings and percentage colors use actual records',async({page})=>{
  await boot(page);
- for(const [minutes,level,color]of [[0,'missed',null],[99,'partial','rgb(217, 197, 250)'],[100,'done','rgb(122, 50, 245)'],[120,'done','rgb(122, 50, 245)'],[121,'exceeded','rgb(76, 24, 142)']]){
+ for(const [minutes,level,color]of [[0,'missed',null],[99,'partial','rgb(217, 197, 250)'],[100,'done','rgb(122, 50, 245)'],[120,'done','rgb(122, 50, 245)'],[121,'exceeded','rgb(122, 50, 245)']]){
   await page.evaluate(({minutes,date})=>VZ.change(d=>{d.practices=[{id:'boundary',date,manualMinutes:minutes,minutes:999,mediaSeconds:9999,songId:'s1'}];d.practicePlans=[{id:'day:'+date,period:'day',date,targetMinutes:100}];}),{minutes,date:TODAY});
   const day=page.locator('.vz-days>div[data-date="'+TODAY+'"]'),dot=day.locator('.vz-day-dot');await expect(day).toHaveAttribute('data-today','true');await expect(day.locator('span').first()).toHaveText('4');await expect(dot).toHaveClass(new RegExp(level));await expect(dot).toHaveClass(/today/);
   if(color)await expect(dot).toHaveCSS('background-color',color);await expect(day).toHaveAttribute('aria-label',new RegExp(minutes+'분 연습'));
+  await expect(dot.locator('svg')).toHaveCount(0);
   if(minutes)await expect(day.locator('.vz-day-minutes')).toHaveText(minutes+'분');
  }
  const future=page.locator('.vz-days>div[data-date="2026-11-05"]');await expect(future.locator('.vz-day-dot')).toHaveClass(/future/);await expect(future.locator('svg')).toHaveCount(0);await expect(future.locator('.vz-day-minutes')).toBeEmpty();
- await page.evaluate(()=>VZ.change(d=>{d.practicePlans=[];}));await expect(page.locator('.vz-days>div[data-date="'+TODAY+'"]')).toHaveAttribute('aria-label',/목표 미설정/);
+ await page.evaluate(()=>VZ.change(d=>{d.practicePlans=[];}));await expect(page.locator('.vz-days>div[data-date="'+TODAY+'"]')).toHaveAttribute('aria-label',/목표 30분/);
+ await page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true}).check();
+ await page.getByRole('checkbox',{name:'후렴 연결 연습하기',exact:true}).check();
+ await expect(page.locator('.vz-days>div[data-date="'+TODAY+'"] .vz-day-dot svg')).toHaveCount(1);
 });
 test('five home navigation buttons and floating recording reach existing routes',async({page})=>{
  await boot(page);const before=await db(page);await expect(page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button')).toHaveText(['홈','내 곡','보관함','일정','성장']);
@@ -283,6 +316,7 @@ test('week swipe and arrows preserve history across Monday, and title/day naviga
  const value=seed();value.practices=[{id:'sunday',date:'2026-11-08',minutes:14}];
  await boot(page,value);
  await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);
+ await page.getByRole('dialog',{name:'오늘의 목표',exact:true}).getByRole('button',{name:'나중에 설정할래요'}).click();
  await expect(page.locator('.vz-week .vz-time b')).toHaveText('0');
  await expect(page.locator('.vz-week-range')).toHaveText('11.9 – 11.15');
  const card=page.locator('.vz-week');
@@ -319,6 +353,14 @@ test('goal editor saves only user entered plans and personal goals',async({page}
  expect((await sheet.getByRole('button',{name:'목표 저장',exact:true}).boundingBox()).height).toBeGreaterThanOrEqual(52);
  await sheet.getByLabel('오늘 목표 시간(분)',{exact:true}).fill('45');await sheet.getByLabel('이번 주 목표 시간(분)',{exact:true}).fill('210');await sheet.getByLabel('개인 목표',{exact:true}).fill('새 개인 목표');await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
  const value=await db(page);expect(value.practicePlans.find(p=>p.id==='day:'+TODAY).targetMinutes).toBe(45);expect(value.practicePlans.find(p=>p.id==='week:'+WEEK).targetMinutes).toBe(210);expect(value.dailyGoals.some(g=>g.title==='새 개인 목표')).toBe(true);expect(value.practices).toEqual(seed().practices);expect(value.assignments).toEqual(seed().assignments);
+});
+test('goal editor saves goals without pinning the default daily time',async({page})=>{
+ const value=seed();value.practicePlans=[];
+ await boot(page,value);await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
+ await expect(sheet.getByLabel('오늘 목표 시간(분)',{exact:true})).toHaveValue('');await expect(sheet.getByLabel('오늘 목표 시간(분)',{exact:true})).toHaveAttribute('placeholder','기본 30분');
+ await sheet.getByLabel('개인 목표',{exact:true}).fill('새 개인 목표');await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
+ await expect(sheet).toHaveCount(0);
+ const after=await db(page);expect(after.practicePlans).toEqual([]);expect(after.dailyGoals.some(g=>g.title==='새 개인 목표')).toBe(true);
 });
 test('daily routine repeats a personal goal, records optional real minutes once, and ends from today on',async({page})=>{
  await boot(page);await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
@@ -358,7 +400,7 @@ test('goal planning separates long selectable rows and keeps save visible on sma
   const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});
   await sheet.evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished));});
   const rows=sheet.locator('.vz-plan-option'),save=sheet.getByRole('button',{name:'목표 저장',exact:true});
-  await expect(rows).toHaveCount(3);await expect(sheet.locator('[data-plan-count]')).toHaveText('3개 선택');
+  await expect(rows).toHaveCount(4);await expect(sheet.locator('[data-plan-count]')).toHaveText('3개 선택');
   const first=await rows.nth(0).boundingBox(),second=await rows.nth(1).boundingBox();
   expect(second.y).toBeGreaterThanOrEqual(first.y+first.height+7);expect(first.height).toBeGreaterThanOrEqual(56);
   const text=await rows.nth(0).locator('.vz-plan-title').boundingBox(),badge=await rows.nth(0).locator('small').boundingBox();

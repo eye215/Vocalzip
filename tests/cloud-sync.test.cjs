@@ -18,7 +18,7 @@ class Server{
  client(){
   const server=this;
   return{
-   auth:{getUser:async()=>({data:{user:{id:server.owner,email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:server.token}}})},
+   auth:{getUser:async()=>({data:{user:{id:server.owner,email:'a@test.invalid'}}}),onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{access_token:server.token}}}),signUp:async input=>{server.signup=copy(input);return {data:{session:null},error:null};}},
    rpc:async name=>({data:name==='vzip_register_session'?{status:'active',current_session:server.sid}:true,error:null}),
    from(table){
     const q={table,filters:{},method:'read',single:false},chain={};
@@ -84,10 +84,24 @@ function device(server,seed=base('local'),{clean=false,now=Date.now(),revision=f
  vm.runInContext(script,context);
  probes.push(()=>element('#cloud-status').textContent);
  return{store,window,status:()=>element('#cloud-status').textContent,
+  control:element,
   sync:()=>element('#cloud-upload').onclick(),review:()=>element('#cloud-review').onclick(),
   data:()=>JSON.parse(store.getItem(KEY)),
   saved:()=>store.getItem('vzip_cloud_linked_user')===server.owner&&!store.getItem('vzip_account_dirty')};
 }
+test('signup sends the chosen daily practice time as account metadata',async()=>{
+ const server=new Server(),d=device(server);
+ await until(()=>typeof d.control('#cloud-signup-submit').onclick==='function');
+ d.window.VZIP_ONE_ACCOUNT_PER_BROWSER=false; // signup is otherwise redirected to the bound-account notice
+ d.control('#cloud-signup-email').value='new@example.invalid';d.control('#cloud-signup-email').checkValidity=()=>true;
+ d.control('#cloud-signup-password').value='password123';d.control('#cloud-signup-confirm').value='password123';
+ d.control('#vzip-signup-minutes').value='0';
+ await d.control('#cloud-signup-submit').onclick();
+ assert.equal(server.signup,undefined);
+ d.control('#vzip-signup-minutes').value='45';
+ await d.control('#cloud-signup-submit').onclick();
+ assert.equal(server.signup.options.data.daily_target_minutes,45);
+});
 test('two empty-account first saves preserve both records and use DO NOTHING',async()=>{
  const s=new Server();let reads=0,release;const gate=new Promise(r=>release=r);
  s.afterRead=async row=>{if(row===null&&++reads<=2){if(reads===2)release();await gate}};

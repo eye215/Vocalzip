@@ -43,6 +43,7 @@ test('Login and separate signup screen keep account actions usable',async({page}
   await screen.locator('.vzip-auth-signup-card [data-kakao]').click();
   expect(await page.evaluate(()=>window.__oauthCalls.length)).toBe(2);
   expect(await page.evaluate(()=>window.__signupCalls.length)).toBe(0);
+  await expect(screen.getByLabel('하루 연습 목표 시간(분)')).toHaveValue('30');
   await screen.locator('#cloud-signup-password').fill('password123');
   await screen.locator('#cloud-signup-confirm').fill('different123');
   await screen.locator('#cloud-signup-submit').click();
@@ -51,6 +52,7 @@ test('Login and separate signup screen keep account actions usable',async({page}
   await screen.locator('#cloud-signup-confirm').fill('password123');
   await screen.locator('#cloud-signup-submit').click();
   await expect(screen.locator('#vzip-auth-message')).toContainText('확인 메일을 보냈어요');
+  expect(await page.evaluate(()=>window.__signupCalls[0].options.data.daily_target_minutes)).toBe(30);
   await expect(screen.locator('.vzip-auth-verify-card')).toBeVisible();
   await expect(screen.locator('#cloud-verify-email')).toHaveText('test@example.com');
   await screen.locator('#cloud-resend-signup').click();

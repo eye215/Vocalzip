@@ -41,6 +41,10 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-days>div.vz-saturday>span:first-child{color:#617596;}
 #vocalzip-refined-preview .vz-days>div.vz-sunday>span:first-child{color:#a96171;}
 #vocalzip-refined-preview .vz-days>div.vz-today>span:first-child{color:var(--vz-color-accent);}
+/* Daily mark: filled when the day's time target is met, checked when every goal of that day is done. */
+#vocalzip-refined-preview .vz-day-dot.time-met{background:var(--vz-color-accent);color:#fff;border:0;}
+#vocalzip-refined-preview .vz-day-dot.goals-complete{background:#9872e2;color:#fff;border:0;}
+#vocalzip-refined-preview .vz-day-dot.goals-complete.time-met{background:#641fcb;}
 #vocalzip-refined-preview .vz-streak{color:var(--vz-color-ink-muted);margin-left:0;}
 #vocalzip-refined-preview .vz-streak[data-active="true"]{color:var(--vz-color-accent);}
 #vocalzip-refined-preview .vz-streak svg{width:22px;height:22px;}
@@ -217,11 +221,13 @@ export async function createFloatingHome(opts={}){
    const level=future?"future":minutes===0?"missed":rate==null||rate<100?"partial":rate<=120?"done":"exceeded";
    const weekday=item.date?new Date(item.date+"T12:00:00").getDay():-1;
    day.className=[item.today?"vz-today":"",weekday===6?"vz-saturday":"",weekday===0?"vz-sunday":""].filter(Boolean).join(" ");day.dataset.date=item.date||"";day.dataset.state=item.state||level;day.dataset.today=String(Boolean(item.today));
-   const label=[item.date,(item.label||"")+"요일",item.today?"오늘":"",future?"예정":Math.round(minutes)+"분 연습",rate==null?"목표 미설정":"달성률 "+Math.round(rate)+"%","일정 보기"].filter(Boolean).join(", ");
+   const label=[item.date,(item.label||"")+"요일",item.today?"오늘":"",future?"예정":Math.round(minutes)+"분 연습",rate==null?"목표 미설정":(planned?"목표 "+Math.round(Number(item.targetMinutes))+"분, ":"")+"달성률 "+Math.round(rate)+"%",item.goalCount?(item.goalsComplete?"목표 모두 완료":"목표 "+item.goalCount+"개 중 미완료"):"목표 목록 미설정","일정 보기"].filter(Boolean).join(", ");
    action(day,label,()=>opts.onDay?.(item.date));
    day.firstElementChild.textContent=item.date?String(Number(String(item.date).slice(8,10))):"";
-   const dot=day.querySelector(".vz-day-dot");dot.className="vz-day-dot "+level+(item.today?" today":"");dot.replaceChildren();
-   if(!future&&minutes>0){dot.append(check.cloneNode(true));if(item.today)dot.style.backgroundColor=({partial:"#D9C5FA",done:"var(--vz-color-accent)",exceeded:"#4C188E"})[level];}
+   const dot=day.querySelector(".vz-day-dot");dot.className="vz-day-dot "+level+(item.today?" today":"")+(!future&&item.timeMet?" time-met":"")+(!future&&item.goalsComplete?" goals-complete":"");dot.replaceChildren();
+   if(!future&&item.goalsComplete)dot.append(check.cloneNode(true));
+   // Today's partial ring keeps its tint unless a time or goal mark already fills it.
+   if(item.today&&!future&&minutes>0&&!item.timeMet&&!item.goalsComplete)dot.style.backgroundColor=({partial:"#D9C5FA",done:"var(--vz-color-accent)",exceeded:"#4C188E"})[level];
    day.querySelector(".vz-day-minutes").textContent=future||item.today&&minutes===0?"":Math.round(minutes)+"분";days.append(day);
   }
  };

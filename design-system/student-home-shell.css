@@ -21,6 +21,8 @@ body.vz-home-mode [data-home-retry]{min-height:44px;}
 .vz-plan-sheet .sheet-foot{position:static;flex:none;bottom:auto;margin:0;padding:12px 20px calc(12px + var(--safe-b));border-top:1px solid #f2f4f7;background:#fff;}
 .vz-plan-sheet .sheet-foot .btn{display:block;width:100%;min-height:52px;border:0;border-radius:16px;background:var(--vz-color-accent);color:#fff;font:600 16px/1.5 Pretendard,system-ui,sans-serif;}
 .vz-plan-sheet .sheet-foot .btn:active{background:var(--vz-color-accent-strong);}
+/* "나중에 설정할래요" on the once-a-day goal prompt. */
+.vz-plan-sheet .sheet-foot .vz-plan-later{margin-bottom:8px;border:0;background:#f8f6fd;color:var(--vz-color-ink-muted);}
 .vz-plan-sheet .vz-plan-intro{margin:0 0 24px;color:var(--vz-color-ink-muted);font-size:14px;line-height:1.5;}
 .vz-plan-sheet .vz-plan-section{margin:0 0 24px;padding:0;border:0;}
 .vz-plan-sheet .vz-plan-section legend{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px;color:var(--vz-color-primary);font-size:15px;font-weight:600;}
@@ -53,5 +55,8 @@ body.vz-home-mode [data-home-retry]{min-height:44px;}
 .vz-plan-sheet .vz-plan-time .field>span{font-size:12px;line-height:1.5;}
 .vz-plan-sheet [data-plan-error]{margin:12px 0 0;color:#b42318;font-size:13px;line-height:1.5;}
 .vz-plan-sheet [data-plan-error]:empty{display:none;}
+.vz-plan-sheet .vz-plan-required{display:block;margin-bottom:24px;}
+.vz-plan-sheet .vz-plan-required input{display:block;width:100%;min-height:52px;margin-top:8px;padding:10px 14px;}
+.vz-plan-sheet .vz-plan-required small{color:#7a32f5;}
 
 
