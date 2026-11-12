@@ -402,13 +402,8 @@ test('보컬 분석: a recording sung over an MR gets a pitch curve and measurem
     for (const [id, url] of [['song', '/__song.wav'], ['mr', '/__mr.wav']]) await window.vzipStorePracticeMedia({id, name:id === 'song' ? '노래 + MR' : 'MR만', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', blob:await (await fetch(url)).blob(), durationSeconds:20});
     VZ.media.invalidate();
   });
-  await page.goto('/#/library');
-  const row = page.locator('[data-media="song"]');
-  await row.locator('[data-toggle]').click();
-  await row.getByRole('button', {name:'더보기'}).click();
-  await sheet(page).getByRole('button', {name:'보컬 분석'}).click();
-  await expect(page).toHaveURL(/#\/vocal-lab\/s1/);
-  await page.goto('/#/analysis/song'); // existing whole-recording view, reached from the lab in the product
+  // Test the existing analysis route directly; navigation menus have their own coverage.
+  await page.goto('/#/analysis/song');
   const out = page.locator('[data-out]');
   await expect(out.locator('.ana-grid')).toBeVisible({timeout:60000});
   await expect(out).toContainText('유효 최고 C5');
