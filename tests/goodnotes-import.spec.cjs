@@ -229,6 +229,38 @@ test('rows ticked in order are joined into one score; repeated page names start 
  expect(bytes.includes(Buffer.from('Original page 3'))&&bytes.includes(Buffer.from('Original page 5'))&&!bytes.includes(Buffer.from('Original page 6'))).toBe(true);
  expect((await attached(bytes)).strokes.map(s=>s.page)).toEqual([2]); // page 4 of the notebook is page 2 of Song B
 });
+test('ticking rows imports only those songs, even one set to 가져오지 않기; select-all toggles every row',async({page})=>{
+ const r2=await setup(page);
+ const notebook=F.notebook({title:'세 곡',pdf:pdf(3),width:300,height:400,pages:[{pdfPage:1,order:'a'},{pdfPage:2,order:'b'},{pdfPage:3,order:'c'}],
+  outline:[{page:0,title:'Song A'},{page:1,title:'Song B'},{page:2,title:'Song C'}]});
+ await pick(page,'세 곡.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'}),rows=sheet.locator('[data-gn-section]'),go=sheet.locator('button[type=submit]');
+ await expect(rows).toHaveCount(3);
+ await expect(go).toHaveText('가져오기 (3곡)');
+ await sheet.getByRole('button',{name:'모두 선택'}).click();
+ await expect(rows.locator('[data-gn-pick]:checked')).toHaveCount(3);
+ await expect(go).toHaveText('선택한 3곡 가져오기');
+ await sheet.getByRole('button',{name:'선택 해제'}).click();
+ await expect(rows.locator('[data-gn-pick]:checked')).toHaveCount(0);
+ await expect(go).toHaveText('가져오기 (3곡)');
+ // Song A and Song C ticked; Song C had been set to 가져오지 않기, but ticking it means "this one".
+ await rows.nth(2).locator('[data-gn-target]').selectOption('skip');
+ await rows.nth(0).locator('[data-gn-pick]').check();await rows.nth(2).locator('[data-gn-pick]').check();
+ await expect(go).toHaveText('선택한 2곡 가져오기');
+ await expect(sheet.locator('[data-gn-merge]')).toBeDisabled(); // not neighbours, so they cannot be joined
+ await go.click();
+ await expect(page.locator('.toast')).toContainText('악보 2개를 가져왔어요');
+ const scores=await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>(s.scores||[]).map(x=>x.title)));
+ expect(scores.sort()).toEqual(['Song A','Song C']);
+ expect(r2.store.size).toBe(2);
+ // The sheet stays open with Song B still to import; the imported rows are locked.
+ await expect(rows.nth(0)).toContainText('가져왔어요');await expect(rows.nth(0).locator('[data-gn-pick]')).toBeDisabled();
+ await expect(rows.nth(1)).not.toContainText('가져왔어요');
+ await expect(go).toHaveText('가져오기 (1곡)');
+ await go.click();
+ await expect(sheet).toHaveCount(0);
+ expect(r2.store.size).toBe(3);
+});
 test('a file that is not a GoodNotes notebook is refused and nothing is uploaded',async({page})=>{
  const r2=await setup(page);
  await pick(page,'악보.pdf',pdf(1));
