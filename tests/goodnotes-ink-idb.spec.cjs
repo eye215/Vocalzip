@@ -88,3 +88,21 @@ test('one-time legacy migration keeps deliberate erasures deleted after reopenin
  expect(result.repeat).toMatchObject({copied:0,already:true,legacyRetained:true});
  expect(result.ids).toEqual(['old-2']);
 });
+
+test('deleting a score purges its local ink across PDF versions without touching other scores',async({page})=>{
+ await storePage(page);
+ const result=await page.evaluate(async()=>{
+  const owner='cleanup-owner',identity=()=>({owner}),valid=x=>Boolean(x?.id&&x?.ownerId&&x?.points);
+  const make=(id,scoreId,pdfHash,r2Key='u/cleanup-owner/score/file')=>({id,ownerId:owner,songId:'song',scoreId,r2Key,pdfHash,page:1,points:[[.3,.3,.5]]});
+  const one=make('score1-v1','score','e'.repeat(64));
+  const two=make('score1-v2','score','f'.repeat(64));
+  const other=make('other-score','other','e'.repeat(64),'u/cleanup-owner/other/file');
+  const db=await window.VzipScoreInkIDB.create({owner,identity,valid});
+  for(const row of [one,two,other])await db.commit(row,{add:[row]});
+  const removed=await db.removeScoreVersions({ownerId:owner,scoreId:'score',r2Key:one.r2Key});
+  const remaining=await db.list(other);
+  const empty=await db.list(one);
+  db.close();return {removed,remaining:remaining.map(x=>x.id),empty:empty.length};
+ });
+ expect(result).toEqual({removed:2,remaining:['other-score'],empty:0});
+});
