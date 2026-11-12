@@ -86,7 +86,7 @@ async function buildPdf(item,model,lib,sources,flatten){
   if(flatten&&page.strokes.length){
    const {width,height}=added.getSize(),box=added.getCropBox?.()||{x:0,y:0,width,height},turned=added.getRotation?.().angle||0;
    // Only a plain upright page maps 1:1; otherwise the marks would land in the wrong place, so they are left out and counted.
-   if(turned%360!==0||Math.abs(box.width-width)>0.5||Math.abs(box.height-height)>0.5){lost+=page.strokes.length;continue;}
+   if(turned%360!==0||Math.abs(box.width-width)>0.5||Math.abs(box.height-height)>0.5)throw Error('“'+item.title+'” 악보의 회전·자르기 영역 때문에 필기 위치를 보장할 수 없어요. 필기는 누락하지 않고 가져오기를 중단했어요.');
    for(const s of page.strokes){
     const d=s.points.map((p,i)=>(i?'L':'M')+(p[0]*width).toFixed(2)+' '+(p[1]*height).toFixed(2)).join(' ')+(s.points.length===1?' l0.01 0':'');
     const n=parseInt(s.color.slice(1),16);
@@ -181,7 +181,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
         tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,points:s.points,createdAt:now+order++}))).filter(Ink.valid);
        let saved=0;
        try{for(let at=0;at<records.length;at+=150){const part=records.slice(at,at+150);if(!store.commit({add:part}))throw Error('필기를 저장하지 못했어요.');saved+=part.length;guard();}}
-       catch(error){if(error.stopped){result.ink+=saved;throw error;}item.inkError=error.message||String(error);}
+       catch(error){result.ink+=saved;throw Error('“'+item.title+'” 필기 '+saved+'/'+records.length+'획 저장 후 중단했어요: '+(error.message||error)+'. 원본은 유지됐고 다시 누르면 남은 필기를 이어서 시도해요.');}
        result.ink+=saved;result.lost+=item.count-saved;
       }
       item.state.done=true;item.state.pdf=null;
