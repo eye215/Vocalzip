@@ -138,10 +138,12 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-goals .vz-empty-action svg{width:22px;height:22px;flex:none;stroke:#858194;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 #vocalzip-refined-preview .vz-goals .vz-empty-action svg:last-child{width:16px;height:16px;margin-left:auto;}
 #vocalzip-refined-preview .vz-goal-list:empty{display:none;}
-#vocalzip-refined-preview .vz-guided-recs{margin-top:14px;padding-top:14px;border-top:1px solid var(--vz-color-divider,#e8e2ef);}
+#vocalzip-refined-preview .vz-goals .vz-ai-plan-actions{display:flex;gap:8px;margin-top:8px;}
+#vocalzip-refined-preview .vz-goals .vz-ai-plan-actions .vz-empty-action{flex:1;justify-content:center;min-width:0;min-height:44px;margin:0;padding:0 10px;border-radius:999px;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font-size:13px;line-height:18px;font-weight:600;white-space:nowrap;}
+#vocalzip-refined-preview .vz-guided-recs{margin-top:8px;}
 #vocalzip-refined-preview .vz-guided-recs[hidden]{display:none;}
 #vocalzip-refined-preview .vz-guided-heading{display:flex;align-items:center;gap:7px;margin-bottom:8px;color:var(--vz-color-ink);font-size:14px;font-weight:700;}
-#vocalzip-refined-preview .vz-guided-item{display:flex;align-items:center;min-width:0;gap:8px;padding:10px 12px;border-radius:14px;background:#f7f5fb;}
+#vocalzip-refined-preview .vz-guided-item{display:flex;align-items:center;min-width:0;gap:8px;min-height:52px;padding:4px 4px 4px 12px;border-radius:14px;background:#f7f5fb;}
 #vocalzip-refined-preview .vz-guided-item+.vz-guided-item{margin-top:8px;}
 #vocalzip-refined-preview .vz-guided-copy{min-width:0;flex:1;}
 #vocalzip-refined-preview .vz-guided-copy strong,#vocalzip-refined-preview .vz-guided-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -250,8 +252,8 @@ export async function createFloatingHome(opts={}){
  q(".vz-goals .vz-title").append(q(".vz-count"));
  q(".vz-goal-tools button").setAttribute("aria-label","오늘의 목표 설정");q(".vz-goal-tools button").onclick=()=>opts.onGoals?.();
  const aiActions=el("div",null,"vz-ai-plan-actions");aiActions.setAttribute("aria-label","AI 연습 계획");
- for(const [label,callback] of [["AI로 오늘 할 일 추천받기",opts.onDailyRecommendation],["주간 돌아보기 · 다음 목표 추천",opts.onWeeklyReview]]){
-  const button=el("button",label,"vz-empty-action");button.type="button";button.onclick=()=>callback?.();aiActions.append(button);
+ for(const [label,short,callback] of [["AI로 오늘 할 일 추천받기","AI 오늘 추천",opts.onDailyRecommendation],["주간 돌아보기 · 다음 목표 추천","주간 돌아보기",opts.onWeeklyReview]]){
+  const button=el("button",short,"vz-empty-action");button.type="button";button.setAttribute("aria-label",label);button.onclick=()=>callback?.();aiActions.append(button);
  }
  q(".vz-goals").append(aiActions);
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
@@ -259,8 +261,8 @@ export async function createFloatingHome(opts={}){
  const error=el("p","","vz-save-error");error.setAttribute("role","status");error.setAttribute("aria-live","polite");list.after(error);
  const guided=el("div",null,"vz-guided-recs");guided.hidden=true;guided.setAttribute("aria-label","추천 연습");error.after(guided);
  host.updateRecommendations=rows=>{
-  guided.replaceChildren();const items=(rows||[]).slice(0,3);guided.hidden=!items.length;if(!items.length)return;
-  guided.append(el("h3","추천 연습","vz-guided-heading"));
+  const seen=new Set([...(opts.goals||[]).map(g=>String(g.title||"").trim()),String(now.querySelector("h2")?.textContent||"").trim()].filter(Boolean));
+  guided.replaceChildren();const items=(rows||[]).filter(r=>!seen.has(String(r.title||"").trim())).slice(0,1);guided.hidden=!items.length;if(!items.length)return;
   for(const item of items){
    const row=el("div",null,"vz-guided-item"),copy=el("div",null,"vz-guided-copy"),button=el("button","따라 하기");
    copy.append(el("strong",(item.label|| (item.kind==="homework"?"숙제":"분석 추천"))+" · "+item.title),el("small",item.subtitle+(item.kind==="room"?"":" · "+(item.video?"영상 포함":"타이머 안내"))));
