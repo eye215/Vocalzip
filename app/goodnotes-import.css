@@ -1,52 +1,60 @@
-/* GoodNotes import sheet (app/goodnotes-import.js). A notebook can hold dozens of songs, so each score is one compact
- * white card: tick, editable title, pages · ink, and the song it goes to. The selection bar stays at the top of the list;
- * progress and errors sit above the bottom button so they are always in view. */
-.gn-import{display:flex;flex-direction:column;gap:12px}
-.gn-summary{padding:14px 16px;border-radius:16px;background:var(--vz-color-surface,#fff)}
-.gn-summary strong{display:block;font-size:16px;line-height:1.35;font-weight:700;color:var(--vz-color-ink);overflow-wrap:anywhere}
-.gn-summary p{margin:4px 0 0;font-size:13px;line-height:1.45;color:var(--vz-color-ink-muted)}
-.gn-summary [data-gn-summary]{margin-top:2px;color:var(--vz-color-ink-secondary);font-weight:600}
+/* GoodNotes import page (app/goodnotes-import.js), built to the design system
+ * (docs/design/VOCALZIP_DESIGN_SYSTEM_2026-11-09.md §2–5, library selection bar §8, full page §5):
+ * lavender page, white R20 cards 12px apart, title #101828 · body #475467 · meta 12px #667085, accent #7A32F5 only for
+ * selection and the main action, input faces #F2EFF7 R15, 44px touch targets. Progress and errors sit above the
+ * bottom button so they stay in view in a long list. */
+.gn-import{display:flex;flex-direction:column;gap:12px;letter-spacing:-.02em}
+
+/* Summary: text on the page, like the library's count line (no extra card). */
+.gn-summary{margin:0 4px}
+.gn-summary strong{display:block;font-size:14px;line-height:20px;font-weight:700;color:#101828;overflow-wrap:anywhere}
+.gn-summary p{margin:4px 0 0;font-size:12px;line-height:18px;color:#667085}
+.gn-summary [data-gn-summary]{margin-top:2px;color:#475467;font-weight:600}
 .gn-summary .gn-warn{color:var(--vz-color-warning,#b26a00)}
 
-/* Selection bar: same lavender bar and 20px checkbox as the library. */
-.gn-bar{position:sticky;top:-20px;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-height:52px;padding:4px 8px 4px 4px;border-radius:16px;background:var(--vz-color-accent-soft,#f3ecff);box-shadow:0 0 0 8px var(--vz-color-canvas,#f8f6fd)}
-.gn-all{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 10px;border:0;border-radius:12px;background:none;color:var(--vz-color-ink);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
-.gn-all:disabled{opacity:.5;cursor:default}
-.gn-count{margin-left:auto;font-size:13px;font-weight:600;color:var(--vz-color-accent-strong,#6528ca)}
-.gn-merge{display:flex;align-items:center;gap:8px}
+/* Selection bar: the library's lavender bar (48px, R16, 13px), kept at the top of the list. */
+.gn-bar{position:sticky;top:-20px;z-index:2;display:flex;flex-wrap:wrap;align-items:center;column-gap:4px;min-height:48px;padding:2px 12px 2px 8px;border-radius:16px;background:#f3ecff;box-shadow:0 0 0 8px #f8f6fd;color:#475467;font-size:13px}
+.gn-all{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 3px;border:0;background:none;color:#475467;font:inherit;font-size:13px;font-weight:650;white-space:nowrap;cursor:pointer}
+.gn-all:disabled{opacity:.35;cursor:default}
+.gn-count{margin-left:auto;font-size:12px;font-weight:700;color:#7a32f5;white-space:nowrap}
+.gn-merge{display:flex;align-items:center}
 .gn-merge[hidden]{display:none}
-.gn-merge .btn{min-height:36px;padding:0 12px;font-size:13px;border-radius:10px}
-.gn-merge [data-gn-mergehint]{font-size:12px;color:var(--vz-color-ink-muted)}
+.gn-merge-btn{min-height:44px;padding:0 0 0 10px;border:0;background:none;color:#7a32f5;font:inherit;font-size:13px;font-weight:700;white-space:nowrap;cursor:pointer}
+.gn-merge-btn[hidden]{display:none}
+.gn-merge [data-gn-mergehint]{padding-left:10px;font-size:12px;color:#667085}
 .gn-merge [data-gn-mergehint]:empty{display:none}
 
-.gn-box{display:grid;place-items:center;width:20px;height:20px;flex:none;box-sizing:border-box;border:1.5px solid var(--vz-color-faint,#98a2b3);border-radius:5px;background:#fff;color:#fff}
+/* The shared 20px · R5 checkbox (white with #98A2B3 border; checked #7A32F5 with a white tick). */
+.gn-box{display:grid;place-items:center;width:20px;height:20px;flex:none;box-sizing:border-box;border:1.5px solid #98a2b3;border-radius:5px;background:#fff;color:#fff}
 .gn-box::after{content:"";width:9px;height:5px;border-left:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-1px) rotate(-45deg);opacity:0}
-.gn-all[aria-pressed="true"] .gn-box,.gn-pick input:checked+.gn-box{border-color:var(--vz-color-accent,#7a32f5);background:var(--vz-color-accent,#7a32f5)}
+.gn-all[aria-pressed="true"] .gn-box,.gn-pick input:checked+.gn-box{border-color:#7a32f5;background:#7a32f5}
 .gn-all[aria-pressed="true"] .gn-box::after,.gn-pick input:checked+.gn-box::after{opacity:1}
-.gn-all:focus-visible .gn-box,.gn-pick input:focus-visible+.gn-box{outline:2px solid var(--vz-color-accent,#7a32f5);outline-offset:3px}
+.gn-all:focus-visible .gn-box,.gn-pick input:focus-visible+.gn-box{outline:2px solid #7a32f5;outline-offset:3px}
 .gn-pick input:disabled+.gn-box{opacity:.4}
 
-.gn-list{display:flex;flex-direction:column;gap:8px}
-.gn-row{display:flex;align-items:flex-start;gap:2px;padding:6px 12px 12px 4px;border-radius:16px;background:var(--vz-color-surface,#fff);transition:opacity .15s}
+/* One white R20 card per score. */
+.gn-list{display:flex;flex-direction:column;gap:12px}
+.gn-row{display:flex;align-items:flex-start;gap:4px;padding:8px 16px 16px 4px;border-radius:20px;background:#fff;transition:opacity .15s}
 .gn-row[data-skip="true"],.gn-row[data-done="true"]{opacity:.55}
 .gn-pick{position:relative;display:grid;place-items:center;flex:none;width:44px;height:44px;cursor:pointer}
 .gn-pick input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
 .gn-pick .gn-box{pointer-events:none}
 .gn-main{flex:1;min-width:0}
-.gn-head{display:flex;align-items:center;gap:4px;min-height:44px}
-/* The title reads as text and edits in place (16px so iOS does not zoom on focus). */
-body .gn-row .gn-title{flex:1;min-width:0;width:auto;height:40px;min-height:40px;margin:0 0 0 -8px;padding:0 8px;border:0;border-radius:10px;background:transparent;color:var(--vz-color-ink);font-size:16px;font-weight:700;box-shadow:none}
-body .gn-row .gn-title:focus{background:var(--vz-color-canvas,#f8f6fd);outline:2px solid var(--vz-color-accent,#7a32f5);outline-offset:-2px}
-.gn-split{flex:none;min-height:36px;padding:0 10px;border:1px solid var(--vz-color-border,#e8e4f0);border-radius:10px;background:#fff;color:var(--vz-color-ink-secondary);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
-.gn-meta{margin:0;font-size:13px;line-height:1.4;color:var(--vz-color-ink-muted)}
+.gn-head{display:flex;align-items:center;gap:8px;min-height:44px}
+/* Card title 16/22 600, edited in place (16px also keeps iOS from zooming on focus). */
+body .gn-row .gn-title{flex:1;min-width:0;width:auto;height:36px;min-height:36px;margin:0 0 0 -8px;padding:0 8px;border:0;border-radius:10px;background:transparent;box-shadow:none;color:#101828;font-size:16px;line-height:22px;font-weight:600;text-overflow:ellipsis}
+body .gn-row .gn-title:focus{background:#f2eff7;outline:none}
+.gn-split{flex:none;min-height:32px;padding:0 12px;border:0;border-radius:999px;background:#f2eff7;color:#475467;font:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;position:relative}
+.gn-split::before{content:"";position:absolute;inset:-6px 0}/* 44px touch height */
+.gn-meta{margin:0;font-size:12px;line-height:18px;color:#667085}
 .gn-row[data-done="true"] .gn-meta{color:var(--vz-color-success,#23855c);font-weight:600}
-.gn-note{margin:2px 0 0;font-size:12px;font-weight:600;color:var(--vz-color-warning,#b26a00)}
-.gn-target{display:flex;align-items:center;gap:8px;margin:8px 0 0}
-.gn-target span{flex:none;font-size:13px;font-weight:600;color:var(--vz-color-ink-secondary)}
-body .gn-row .gn-target select{flex:1;min-width:0;width:auto;height:40px;min-height:40px;margin:0;padding:0 32px 0 12px;border-radius:12px;font-size:16px;text-overflow:ellipsis}
+.gn-note{margin:2px 0 0;font-size:12px;line-height:18px;font-weight:600;color:var(--vz-color-warning,#b26a00)}
+.gn-target{display:flex;align-items:center;gap:10px;margin:10px 0 0}
+.gn-target span{flex:none;font-size:13px;line-height:18px;font-weight:600;color:#475467}
+body .gn-row .gn-target select{flex:1;min-width:0;width:auto;height:44px;min-height:44px;margin:0;padding:0 34px 0 14px;border:0;border-radius:15px;background-color:#f2eff7;box-shadow:none;color:#344054;font-size:16px;text-overflow:ellipsis}
 
 /* Above the bottom button: progress, results and errors. */
-.gn-msg{margin:0 0 8px;padding:10px 12px;border-radius:12px;background:var(--vz-color-surface,#fff);font-size:13px;line-height:1.45;color:var(--vz-color-ink-secondary);overflow-wrap:anywhere}
+.gn-msg{margin:0 0 8px;padding:10px 14px;border-radius:16px;background:#fff;font-size:13px;line-height:18px;color:#475467;overflow-wrap:anywhere}
 .gn-msg[hidden]{display:none}
-.gn-msg[data-tone="error"]{background:var(--vz-color-danger-soft,#fdecec);color:var(--vz-color-danger,#c93a3a)}
+.gn-msg[data-tone="error"]{background:var(--vz-color-danger-soft,#fdeaea);color:var(--vz-color-danger,#c93a3a)}
 .gn-msg[data-tone="done"]{background:var(--vz-color-success-soft,#e3f4ec);color:var(--vz-color-success,#23855c)}

@@ -155,7 +155,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
    notes.map(t=>'<p class="gn-warn">'+esc(t)+'</p>').join('')+
    '<p>파일은 이 기기에서만 읽고, 곡별 PDF와 필기만 올라가요. 필기는 모두 수정할 수 있어요.</p></section>'+
    '<div class="gn-bar" data-gn-bar><button type="button" class="gn-all" data-gn-all aria-pressed="false"><span class="gn-box" aria-hidden="true"></span><span data-gn-alltext>전체 선택</span></button>'+
-   '<span class="gn-count" data-gn-count></span><span class="gn-merge" data-gn-mergebar hidden><button type="button" class="btn sm" data-gn-merge>한 곡으로 합치기</button><span data-gn-mergehint></span></span></div>'+
+   '<span class="gn-count" data-gn-count></span><span class="gn-merge" data-gn-mergebar hidden><button type="button" class="gn-merge-btn" data-gn-merge>한 곡으로 합치기</button><span data-gn-mergehint></span></span></div>'+
    '<div class="gn-list" data-gn-list></div></form>',
   foot:'<p class="gn-msg" data-gn-msg role="status" aria-live="polite" hidden></p><button type="submit" form="gn-import" class="btn block" data-gn-go>가져오기</button>',
   onClose:()=>{run.cancelled=true;},
