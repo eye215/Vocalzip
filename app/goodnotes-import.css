@@ -1,0 +1,81 @@
+/* GoodNotes import page (app/goodnotes-import.js), built to the design system
+ * (docs/design/VOCALZIP_DESIGN_SYSTEM_2026-11-09.md §2–5, library selection bar §8, full page §5):
+ * lavender page, white R20 cards 12px apart, title #101828 · body #475467 · meta 12px #667085, accent #7A32F5 only for
+ * selection and the main action, input faces #F2EFF7 R15, 44px touch targets. Progress and errors sit above the
+ * bottom button so they stay in view in a long list. */
+.gn-import{display:flex;flex-direction:column;gap:12px;letter-spacing:-.02em}
+
+/* Summary: text on the page, like the library's count line (no extra card). */
+.gn-summary{margin:0 4px}
+.gn-summary strong{display:block;font-size:14px;line-height:20px;font-weight:700;color:#101828;overflow-wrap:anywhere}
+.gn-summary p{margin:4px 0 0;font-size:12px;line-height:18px;color:#667085}
+.gn-summary [data-gn-summary]{margin-top:2px;color:#475467;font-weight:600}
+.gn-summary .gn-warn{color:var(--vz-color-warning,#b26a00)}
+
+/* Selection bar: the library's lavender bar (48px, R16, 13px), kept at the top of the list. */
+.gn-bar{position:sticky;top:-20px;z-index:2;display:flex;flex-wrap:wrap;align-items:center;column-gap:4px;min-height:48px;padding:2px 12px 2px 8px;border-radius:16px;background:#f3ecff;box-shadow:0 0 0 8px #f8f6fd;color:#475467;font-size:13px}
+.gn-all{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 3px;border:0;background:none;color:#475467;font:inherit;font-size:13px;font-weight:650;white-space:nowrap;cursor:pointer}
+.gn-all:disabled{opacity:.35;cursor:default}
+.gn-count{margin-left:auto;font-size:12px;font-weight:700;color:#7a32f5;white-space:nowrap}
+.gn-merge{display:flex;align-items:center}
+.gn-merge[hidden]{display:none}
+.gn-merge-btn{min-height:44px;padding:0 0 0 10px;border:0;background:none;color:#7a32f5;font:inherit;font-size:13px;font-weight:700;white-space:nowrap;cursor:pointer}
+.gn-merge-btn[hidden]{display:none}
+.gn-merge [data-gn-mergehint]{padding-left:10px;font-size:12px;color:#667085}
+.gn-merge [data-gn-mergehint]:empty{display:none}
+
+/* The shared 20px · R5 checkbox (white with #98A2B3 border; checked #7A32F5 with a white tick). */
+.gn-box{display:grid;place-items:center;width:20px;height:20px;flex:none;box-sizing:border-box;border:1.5px solid #98a2b3;border-radius:5px;background:#fff;color:#fff}
+.gn-box::after{content:"";width:9px;height:5px;border-left:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-1px) rotate(-45deg);opacity:0}
+.gn-all[aria-pressed="true"] .gn-box,.gn-pick input:checked+.gn-box{border-color:#7a32f5;background:#7a32f5}
+.gn-all[aria-pressed="true"] .gn-box::after,.gn-pick input:checked+.gn-box::after{opacity:1}
+.gn-all:focus-visible .gn-box,.gn-pick input:focus-visible+.gn-box{outline:2px solid #7a32f5;outline-offset:3px}
+.gn-pick input:disabled+.gn-box{opacity:.4}
+
+/* One white R20 card per score. */
+.gn-list{display:flex;flex-direction:column;gap:12px}
+.gn-row{display:flex;align-items:flex-start;gap:4px;padding:8px 16px 16px 4px;border-radius:20px;background:#fff;transition:opacity .15s}
+.gn-row[data-skip="true"],.gn-row[data-done="true"]{opacity:.55}
+.gn-pick{position:relative;display:grid;place-items:center;flex:none;width:44px;height:44px;cursor:pointer}
+.gn-pick input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.gn-pick .gn-box{pointer-events:none}
+.gn-main{flex:1;min-width:0}
+.gn-head{display:flex;align-items:center;gap:8px;min-height:44px}
+/* Card title 16/22 600, edited in place (16px also keeps iOS from zooming on focus). */
+body .gn-row .gn-title{flex:1;min-width:0;width:auto;height:36px;min-height:36px;margin:0 0 0 -8px;padding:0 8px;border:0;border-radius:10px;background:transparent;box-shadow:none;color:#101828;font-size:16px;line-height:22px;font-weight:600;text-overflow:ellipsis}
+body .gn-row .gn-title:focus{background:#f2eff7;outline:none}
+.gn-split{flex:none;min-height:32px;padding:0 12px;border:0;border-radius:999px;background:#f2eff7;color:#475467;font:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;position:relative}
+.gn-split::before{content:"";position:absolute;inset:-6px 0}/* 44px touch height */
+.gn-meta{margin:0;font-size:12px;line-height:18px;color:#667085}
+.gn-row[data-done="true"] .gn-meta{color:var(--vz-color-success,#23855c);font-weight:600}
+.gn-note{margin:2px 0 0;font-size:12px;line-height:18px;font-weight:600;color:var(--vz-color-warning,#b26a00)}
+.gn-target{display:flex;align-items:center;gap:10px;margin:10px 0 0}
+.gn-target span{flex:none;font-size:13px;line-height:18px;font-weight:600;color:#475467}
+/* 넣을 곡 uses the app's song picker (app/picker.js): a button that opens the searchable song page. */
+body .gn-row .gn-target .pick-btn{flex:1;min-width:0;width:auto;min-height:44px;padding:0 14px;border:0;border-radius:15px;background:#f2eff7;color:#344054;font-size:15px;font-weight:600}
+body .gn-row .gn-target .pick-btn .pick-val{font-size:15px;line-height:20px;color:#344054}
+body .gn-row .gn-target .pick-btn i{color:#98a2b3}
+body .gn-row .gn-target select:not(.pick-native){flex:1;min-width:0;width:auto;height:44px;min-height:44px;margin:0;padding:0 34px 0 14px;border:0;border-radius:15px;background-color:#f2eff7;box-shadow:none;color:#344054;font-size:16px;text-overflow:ellipsis}
+
+/* Above the bottom button: progress, results and errors. */
+.gn-msg{margin:0 0 8px;padding:10px 14px;border-radius:16px;background:#fff;font-size:13px;line-height:18px;color:#475467;overflow-wrap:anywhere}
+.gn-msg[hidden]{display:none}
+.gn-msg[data-tone="error"]{background:var(--vz-color-danger-soft,#fdeaea);color:var(--vz-color-danger,#c93a3a)}
+.gn-msg[data-tone="done"]{background:var(--vz-color-success-soft,#e3f4ec);color:var(--vz-color-success,#23855c)}
+
+/* Progress popup while importing: the app's dark glass surface (as the shared popover and the score loading pill),
+ * centred over a light dim that blocks the page; white text, a white bar, one 44px button (멈추기 / 확인). */
+.gn-progress{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:rgba(16,24,40,.24)}
+.gn-progress[hidden]{display:none}
+.gn-progress-card{width:min(304px,100%);padding:20px 20px 12px;border-radius:27px;background:rgba(54,51,59,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);color:#fff;letter-spacing:-.02em;box-shadow:0 10px 30px rgba(16,24,40,.18)}
+.gn-progress-card strong{display:block;font-size:16px;line-height:22px;font-weight:600}
+.gn-progress-card p{margin:6px 0 0;font-size:13px;line-height:18px;color:rgba(255,255,255,.82);overflow-wrap:anywhere}
+.gn-progress-bar{height:6px;margin:14px 0 0;border-radius:999px;background:rgba(255,255,255,.2);overflow:hidden}
+.gn-progress-bar span{display:block;width:0;height:100%;border-radius:inherit;background:#fff;transition:width .25s ease}
+.gn-progress .gn-progress-step{margin-top:8px;font-size:12px;color:rgba(255,255,255,.64)}
+.gn-progress[data-state="error"] .gn-progress-bar,.gn-progress[data-state="stopped"] .gn-progress-bar{display:none}
+.gn-progress[data-state="error"] strong{color:#ffb4b4}
+.gn-progress-btn{display:block;width:100%;min-height:44px;margin:12px 0 0;border:0;border-radius:14px;background:rgba(255,255,255,.12);color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.gn-progress-btn:disabled{opacity:.6;cursor:default}
+.gn-progress-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.gn-progress-bar span{transition:none}}

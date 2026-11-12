@@ -3,7 +3,7 @@
 // Uses a synthetic notebook (tests/goodnotes-fixture.cjs); no real GoodNotes file is in the repository.
 const {test,expect}=require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
-const {boot,fakeR2}=require('./helpers/r2-fixture.cjs');
+const {boot,fakeR2,R2}=require('./helpers/r2-fixture.cjs');
 const F=require('./goodnotes-fixture.cjs');
 const fs=require('node:fs'),path=require('node:path');
 const PDFROOT=process.env.VZ_PDFJS_ROOT||'/tmp/vzip-score-pdfjs/node_modules/pdfjs-dist';
@@ -69,11 +69,11 @@ test('a notebook is cut by its outline into per-song scores, and its handwriting
   outline:[{page:1,title:'Defying Gravity (연습용)'},{page:3,title:'The River'}]});
  await pick(page,'내 악보집.goodnotes',notebook);
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
- await expect(sheet.locator('[data-gn-summary]')).toHaveText('내 악보집 · 5쪽 · 개요 2개 · 필기 3획');
+ await expect(sheet.locator('[data-gn-summary]')).toHaveText('5쪽 · 2곡 · 필기 3획');
  const rows=sheet.locator('[data-gn-section]');await expect(rows).toHaveCount(3);
  await expect(rows.nth(0)).toContainText('1쪽 · 필기 없음');
- await expect(rows.nth(1)).toContainText('2–3쪽 · 필기 2획 · 수정 가능');
- await expect(rows.nth(2)).toContainText('4–5쪽 · 필기 1획 · 수정 가능');
+ await expect(rows.nth(1)).toContainText('2–3쪽 · 필기 2획');
+ await expect(rows.nth(2)).toContainText('4–5쪽 · 필기 1획');
  // The untitled first page is left out, the title that names an existing song goes to that song, the other becomes a new song.
  expect(await rows.locator('[data-gn-target]').evaluateAll(list=>list.map(s=>s.value))).toEqual(['skip','s1','new']);
  // Nothing is written before the user confirms.
@@ -148,7 +148,7 @@ test('950 handwriting strokes all stay editable and reach the viewer through the
  const notebook=F.notebook({title:'필기 많은 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a',ink:many}]});
  await pick(page,'필기 많은 곡.goodnotes',notebook);
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
- await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획 · 수정 가능');
+ await expect(sheet.locator('[data-gn-section]')).toContainText('필기 950획');
  // Started from this song's page with a single section: it goes to this song.
  expect(await sheet.locator('[data-gn-target]').inputValue()).toBe('s1');
  await sheet.getByRole('button',{name:'가져오기 (1곡)'}).click();
@@ -202,7 +202,7 @@ test('rows ticked in order are joined into one score; repeated page names start 
  const titles=()=>rows.locator('[data-gn-title]').evaluateAll(list=>list.map(i=>i.value));
  await expect(rows).toHaveCount(5);
  expect(await titles()).toEqual(['Song A','B 1','B 2','B 3','C']);
- await expect(rows.nth(0)).toContainText('1–2쪽 · 필기 없음 · 2개를 합쳤어요');
+ await expect(rows.nth(0)).toContainText('1–2쪽 · 필기 없음 · 2개 합침');
  // Not next to each other: offered, but not allowed.
  await rows.nth(0).locator('[data-gn-pick]').check();await rows.nth(4).locator('[data-gn-pick]').check();
  await expect(sheet.locator('[data-gn-merge]')).toBeDisabled();await expect(sheet.locator('[data-gn-mergehint]')).toHaveText('이웃한 줄만 합칠 수 있어요');
@@ -210,15 +210,15 @@ test('rows ticked in order are joined into one score; repeated page names start 
  await expect(sheet.locator('[data-gn-mergebar]')).toBeHidden();
  // B 1, B 2, B 3 ticked in order → one score.
  for(const i of [1,2,3])await rows.nth(i).locator('[data-gn-pick]').check();
- await sheet.getByRole('button',{name:'선택한 3개를 한 곡으로 합치기'}).click();
+ await sheet.getByRole('button',{name:'한 곡으로 합치기'}).click();
  await expect(rows).toHaveCount(3);
- await expect(rows.nth(1)).toContainText('3–5쪽 · 필기 1획 · 수정 가능 · 3개를 합쳤어요');
+ await expect(rows.nth(1)).toContainText('3–5쪽 · 필기 1획 · 3개 합침');
  await rows.nth(1).locator('[data-gn-title]').fill('Song B');
  // A joined row splits back into its sections.
  await rows.nth(0).getByRole('button',{name:'Song A 나누기'}).click();
  expect(await titles()).toEqual(['Song A','Song A','Song B','C']);
  await rows.nth(0).locator('[data-gn-pick]').check();await rows.nth(1).locator('[data-gn-pick]').check();
- await sheet.getByRole('button',{name:'선택한 2개를 한 곡으로 합치기'}).click();
+ await sheet.getByRole('button',{name:'한 곡으로 합치기'}).click();
  expect(await titles()).toEqual(['Song A','Song B','C']); // the renamed Song B kept its name
  await sheet.getByRole('button',{name:'가져오기 (3곡)'}).click();
  await expect(page.locator('.toast')).toContainText('악보 3개를 가져왔어요 · 수정 가능한 필기 1획');
@@ -237,7 +237,7 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'}),rows=sheet.locator('[data-gn-section]'),go=sheet.locator('button[type=submit]');
  await expect(rows).toHaveCount(3);
  await expect(go).toHaveText('가져오기 (3곡)');
- await sheet.getByRole('button',{name:'모두 선택'}).click();
+ await sheet.getByRole('button',{name:'전체 선택'}).click();
  await expect(rows.locator('[data-gn-pick]:checked')).toHaveCount(3);
  await expect(go).toHaveText('선택한 3곡 가져오기');
  await sheet.getByRole('button',{name:'선택 해제'}).click();
@@ -245,7 +245,12 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  await expect(go).toHaveText('가져오기 (3곡)');
  // Song A and Song C ticked; Song C had been set to 가져오지 않기, but ticking it means "this one".
  await rows.nth(2).locator('[data-gn-target]').selectOption('skip');
+ await expect(rows.nth(2)).toHaveAttribute('data-skip','true'); // shown dimmed: it will not be imported
+ // Each song is one compact card, so a notebook with dozens of songs stays scannable on a phone.
+ for(const box of await rows.evaluateAll(list=>list.map(r=>r.getBoundingClientRect().height)))expect(box).toBeLessThan(150);
  await rows.nth(0).locator('[data-gn-pick]').check();await rows.nth(2).locator('[data-gn-pick]').check();
+ await expect(rows.nth(2)).toHaveAttribute('data-skip','false');
+ await expect(sheet.locator('[data-gn-count]')).toHaveText('2곡 선택');
  await expect(go).toHaveText('선택한 2곡 가져오기');
  await expect(sheet.locator('[data-gn-merge]')).toBeDisabled(); // not neighbours, so they cannot be joined
  await go.click();
@@ -256,10 +261,64 @@ test('ticking rows imports only those songs, even one set to 가져오지 않기
  // The sheet stays open with Song B still to import; the imported rows are locked.
  await expect(rows.nth(0)).toContainText('가져왔어요');await expect(rows.nth(0).locator('[data-gn-pick]')).toBeDisabled();
  await expect(rows.nth(1)).not.toContainText('가져왔어요');
+ // The result sits right above the button, in view however long the list is.
+ await expect(page.locator('.sheet-foot [data-gn-msg]')).toHaveText('악보 2개를 가져왔어요. 남은 곡도 골라서 가져올 수 있어요.');
  await expect(go).toHaveText('가져오기 (1곡)');
  await go.click();
  await expect(sheet).toHaveCount(0);
  expect(r2.store.size).toBe(3);
+});
+test('넣을 곡 opens the app song picker: a searchable song page where 새 곡으로 추가 and 가져오지 않기 always stay',async({page})=>{
+ const r2=await setup(page);
+ const ids=await page.evaluate(()=>['Kaleidoscope','Burn','The Wizard and I','Popular','Maybe This Time','Memory','On My Own','Bring Him Home'].map(t=>window.VZ.addSong(t).id));
+ const notebook=F.notebook({title:'한 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a'}],outline:[{page:0,title:'Untitled Medley'}]});
+ await pick(page,'한 곡.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'}),row=sheet.locator('[data-gn-section]').first();
+ const button=row.locator('.gn-target .pick-btn');
+ await expect(button).toContainText('Defying Gravity'); // a lone section started from a song's page goes to that song
+ await button.click();
+ const picker=page.getByRole('dialog',{name:'넣을 곡'});
+ await picker.getByRole('searchbox').fill('kalei');
+ await expect(picker.locator('.pick-row:visible')).toHaveText(['새 곡으로 추가','Kaleidoscope','가져오지 않기']);
+ await picker.getByRole('option',{name:'Kaleidoscope'}).click();
+ await expect(picker).toHaveCount(0);
+ await expect(button).toContainText('Kaleidoscope');
+ expect(await row.locator('[data-gn-target]').inputValue()).toBe(ids[0]);
+ await sheet.getByRole('button',{name:'가져오기 (1곡)'}).click();
+ await expect(page.locator('.toast')).toContainText('악보 1개를 가져왔어요');
+ expect(await page.evaluate(id=>window.VZ.song(id).scores.map(x=>x.title),ids[0])).toEqual(['Untitled Medley']);
+ expect(r2.store.size).toBe(1);
+});
+test('importing shows a progress popup (song n/total, step, bar); 멈추기 stops after the current step and 가져오기 resumes without uploading twice',async({page})=>{
+ const r2=await setup(page);
+ // Hold the first upload's completion so the popup can be seen mid-import.
+ let release,held=0;const gate=new Promise(r=>{release=r;});
+ await page.route(R2+'/**',async route=>{if(/\/v1\/uploads\/[^/]+\/complete$/.test(new URL(route.request().url()).pathname)&&!held++)await gate;return route.fallback();});
+ const notebook=F.notebook({title:'두 곡',pdf:pdf(2),width:300,height:400,pages:[{pdfPage:1,order:'a'},{pdfPage:2,order:'b'}],outline:[{page:0,title:'Song A'},{page:1,title:'Song B'}]});
+ await pick(page,'두 곡.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
+ await sheet.getByRole('button',{name:'가져오기 (2곡)'}).click();
+ const pop=page.getByRole('alertdialog',{name:'악보 가져오는 중'});
+ await expect(pop).toBeVisible();
+ await expect(pop).toContainText('1 / 2곡 · Song A');
+ await expect(pop.locator('[data-gn-pstep]')).toContainText('올리는 중');
+ expect(Number(await pop.getByRole('progressbar').getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+ await pop.getByRole('button',{name:'멈추기'}).click();
+ await expect(pop.getByRole('button',{name:'지금 단계를 마치고 멈춰요'})).toBeDisabled();
+ release();
+ const stopped=page.getByRole('alertdialog',{name:'가져오기를 멈췄어요'});
+ await expect(stopped).toContainText('다시 누르면 이어서 해요');
+ expect(await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>s.scores||[]).length)).toBe(0); // stopped before saving
+ expect(r2.store.size).toBe(1);
+ await stopped.getByRole('button',{name:'확인'}).click();
+ await expect(stopped).toBeHidden();
+ await expect(sheet.locator('[data-gn-msg]')).toContainText('가져오기를 멈췄어요');
+ // Resume: Song A's finished upload is reused, Song B is uploaded, and the popup closes with the page.
+ await sheet.getByRole('button',{name:'가져오기 (2곡)'}).click();
+ await expect(page.locator('.toast')).toContainText('악보 2개를 가져왔어요');
+ await expect(page.locator('[data-gn-progress]')).toHaveCount(0);
+ expect(r2.store.size).toBe(2);
+ expect(await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>(s.scores||[]).map(x=>x.title)).sort())).toEqual(['Song A','Song B']);
 });
 test('a notebook whose PDF is locked with an owner password only (as bought scores often are) imports readable pages; one that needs a password is refused',async({page})=>{
  const r2=await setup(page);

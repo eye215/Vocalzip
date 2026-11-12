@@ -1,7 +1,8 @@
 /* VOCAL.zip searchable picker: long choice lists (songs above all) open as a full page with a search
  * field instead of the phone's wheel. The real <select> stays in the form (value, change events, VZ.readSong), only
  * visually replaced by a button, so every screen keeps working the same way and keyboard/automation still use it.
- * Applied to every select[data-song-select] and select[data-pick]; a select opts out with data-native. */
+ * Applied to every select[data-song-select] and select[data-pick]; a select opts out with data-native.
+ * An <option data-pick-always> (e.g. '새 곡으로 추가') stays in the list whatever is searched. */
 (() => {
 'use strict';
 const VZ = window.VZ;
@@ -56,7 +57,7 @@ function enhance(sel) {
     const song = sel.matches('[data-song-select]') || sel.dataset.pick === 'song';
     const options = [...sel.options].filter(o => !o.disabled).map(o => {
       const s = song && songOf(o.value);
-      return {value:o.value, label:o.textContent, sub:s?.show || '', keywords:s ? (s.aliases || []).join(' ') : '', always:o.value === '' || o.value === '__new' || o.value === '__none'};
+      return {value:o.value, label:o.textContent, sub:s?.show || '', keywords:s ? (s.aliases || []).join(' ') : '', always:o.value === '' || o.value === '__new' || o.value === '__none' || o.hasAttribute('data-pick-always')};
     });
     const title = name(sel);
     const v = await VZ.pickSheet({title, options, value:sel.value, placeholder:song ? '곡 제목·작품 검색' : '검색'});
