@@ -113,7 +113,22 @@
    for(let i=0;i<rows.length;i+=100)await commit(b,{remove:rows.slice(i,i+100).map(s=>s.id)});
    return rows.length;
   }
-  return {list,commit,migrateLegacy,ensureMigrated,migrationState,removeScore,close(){closed=true;db.close();},databaseName:DB_NAME};
+  async function removeScoreVersions({ownerId,scoreId,r2Key}={}){
+   check();
+   if(ownerId!==owner||!scoreId||!r2Key)throw fail('삭제할 악보를 확인할 수 없어요.','identity');
+   const tx=db.transaction(STORE,'readwrite'),index=tx.objectStore(STORE).index('scope'),done=finished(tx);
+   const range=IDBKeyRange.bound([owner,scoreId,''],[owner,scoreId,'\uffff']),cursor=index.openCursor(range);
+   let removed=0;
+   cursor.onsuccess=()=>{
+    const row=cursor.result;
+    if(!row)return;
+    if(row.value.ownerId===owner&&row.value.scoreId===scoreId&&row.value.r2Key===r2Key){row.delete();removed++;}
+    row.continue();
+   };
+   try{await done;}catch(e){throw e;}
+   check();return removed;
+  }
+  return {list,commit,migrateLegacy,ensureMigrated,migrationState,removeScore,removeScoreVersions,close(){closed=true;db.close();},databaseName:DB_NAME};
  }
  return {create,DB_NAME,VERSION};
 });
