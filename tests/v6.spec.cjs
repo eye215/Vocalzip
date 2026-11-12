@@ -1440,6 +1440,39 @@ test('Device-only files are backed up to the cloud automatically once signed in 
   expect((await media(page)).map(m => m.id).sort()).toEqual(['m1', 'm2']);
 });
 
+test('A file imported while the device backup is running goes up next, before the older device files', async ({page}) => {
+  await boot(page);
+  await page.evaluate(async () => {
+    const stored = new Map();
+    window.__imports = []; window.__gate = [];
+    // Each upload waits until the test lets it finish, so the order the backup picks is visible.
+    window.vzipCloudImport = async (file, info) => { window.__imports.push(info.id); await new Promise(r => window.__gate.push(r)); const meta = {...info, path:'u/' + info.id, size:file.size}; stored.set(info.id, meta); return meta; };
+    window.vzipCloudMediaUpdate = async () => {};
+    window.vzipCloudMediaList = async () => [...stored.values()].map(m => ({...m, cloud:true}));
+    for (let i = 1; i <= 4; i++) await window.vzipStorePracticeMedia({id:'old' + i, name:'예전 녹음 ' + i, created:Date.now() - i * 60000, type:'audio/wav', source:'practice', blob:new Blob([window.__wav], {type:'audio/wav'})});
+    window.vzipCloudSignedIn = () => true;
+    window.__run = VZ.media.backupLocal();
+  });
+  await expect.poll(() => page.evaluate(() => window.__imports.length)).toBe(1); // one older file is uploading
+  const firstUp = await page.evaluate(() => window.__imports[0]);
+  // Imported now (signed in, small file): kept on the device first, then uploaded by the backup — ahead of the rest.
+  const imported = await page.evaluate(async () => (await VZ.media.importFile(new File([window.__wav], '새 가져오기.wav', {type:'audio/wav', lastModified:Date.now()}), {id:'imported-now', songId:'', song:''})).id);
+  expect(imported).toBe('imported-now');
+  const release = () => page.evaluate(() => { const r = window.__gate.shift(); r?.(); return !!r; });
+  await release(); // the file already uploading is finished, never cut off
+  await expect.poll(() => page.evaluate(() => window.__imports.length)).toBe(2);
+  expect(await page.evaluate(() => window.__imports[1])).toBe('imported-now');
+  // Let the rest finish one by one.
+  await page.evaluate(async () => { let done = false; window.__run.then(() => { done = true; }); while (!done) { window.__gate.shift()?.(); await new Promise(r => setTimeout(r, 20)); } });
+  const order = await page.evaluate(() => window.__imports);
+  expect(order[0]).toBe(firstUp);
+  expect(order[1]).toBe('imported-now');
+  // Every device file once (the fixture's own m1/m2 included), nothing skipped or sent twice.
+  expect(new Set(order).size).toBe(order.length);
+  for (const id of ['imported-now', 'old1', 'old2', 'old3', 'old4']) expect(order).toContain(id);
+  expect(await page.evaluate(() => VZ.media.backupStatus())).toMatchObject({running:false, done:order.length, failed:0, total:order.length});
+});
+
 test('Library lists recordings by their recording day, newest first', async ({page}) => {
   await boot(page);
   await page.evaluate(async () => {
