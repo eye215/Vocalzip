@@ -1,7 +1,7 @@
 /* 음표로 변환 (OMR PoC, Phase 07-B/16): the owner asks the conversion server to read one score PDF into MusicXML.
  * Nothing is sent before the button is pressed. The PDF stays unchanged; the result (.mxl) is stored next to it and
- * shown here as a preview with a download. Automatic recognition makes mistakes, so it is not used for scoring or
- * singing comparison until a review step exists. */
+ * shown here as a preview with a download. Automatic recognition makes mistakes, so it is not used for scoring; only the
+ * vocal range the owner confirms in app/score-range.js (악보 기준 음역) is compared with recordings. */
 (() => {
 'use strict';
 const VZ = window.VZ;
@@ -50,7 +50,7 @@ VZ.scoreOmrSheet = (song, score) => {
           timer = setTimeout(draw, 60000);
           return;
         }
-        body.innerHTML = '<p class="omr-note">자동 인식 결과예요. 틀린 음표가 있을 수 있어 아직 점수나 노래 비교에는 쓰지 않아요.' + (job.movements > 1 ? ' 이 PDF에서 곡이 ' + job.movements + '개로 나뉘어 첫 곡만 보여요.' : '') + '</p>' +
+        body.innerHTML = '<p class="omr-note">자동 인식 결과예요. 틀린 음표가 있을 수 있어 점수에는 쓰지 않고, 노래 비교에는 내가 확인한 보컬 음역(악보 탭의 악보 기준 음역)만 써요.' + (job.movements > 1 ? ' 이 PDF에서 곡이 ' + job.movements + '개로 나뉘어 첫 곡만 보여요.' : '') + '</p>' +
           '<div class="omr-preview" data-omr-preview aria-label="변환된 악보 미리보기"><p class="muted">미리보기를 그리는 중…</p></div>' +
           '<div class="omr-actions"><a class="btn" data-omr-download><i class="ph ph-download-simple" aria-hidden="true"></i>MusicXML 받기</a><button type="button" class="btn secondary" data-omr-start>다시 변환</button></div>';
         body.querySelector('[data-omr-start]').onclick = async () => {

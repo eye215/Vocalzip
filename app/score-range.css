@@ -1,0 +1,43 @@
+/* 악보 기준 음역 — song card (light, design system R20/16px/44px) and the vocal lab block (dark, vl-* palette). */
+.vrange-card{margin-top:12px;padding:16px;border-radius:20px;background:var(--vz-color-surface,#fff);box-shadow:var(--vz-shadow-card)}
+.vrange-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-6px -6px 4px 0}
+.vrange-head h2{margin:0;font-size:18px;line-height:26px;font-weight:700;color:var(--vz-color-ink,#101828)}
+.vrange-head .icon-btn{min-width:44px;min-height:44px;color:var(--vz-color-ink-muted,#667085)}
+.vrange-value{margin:0;font-size:22px;line-height:30px;font-weight:700;color:var(--vz-color-accent,#7A32F5)}
+.vrange-sub{margin:4px 0 0;font-size:13px;line-height:19px;color:var(--vz-color-ink-secondary,#475467)}
+.vrange-sheet{display:grid;gap:10px}
+.vrange-h{margin:8px 0 0;font-size:15px;font-weight:700;color:var(--vz-color-ink,#101828)}
+.vrange-note{margin:0;font-size:14px;line-height:1.55;color:var(--vz-color-ink-secondary,#475467)}
+.vrange-warn{display:flex;gap:8px;padding:12px;border-radius:14px;background:var(--vz-color-warning-soft,#FFF3DC);color:#7A4A00;font-size:13px}
+.vrange-warn i{flex:none;font-size:18px;color:var(--vz-color-warning,#B26A00)}
+.vrange-error{color:var(--vz-color-danger,#C93A3A)}
+.vrange-now{display:grid;gap:2px;padding:12px 14px;border-radius:16px;background:var(--vz-color-accent-soft,#F3ECFF)}
+.vrange-now span,.vrange-now small{font-size:12px;color:var(--vz-color-ink-secondary,#475467)}
+.vrange-now strong{font-size:20px;color:var(--vz-color-accent,#7A32F5)}
+.vrange-list{display:grid;gap:8px}
+.vrange-row{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 14px;border:0;border-radius:14px;background:var(--vz-color-surface,#fff);box-shadow:inset 0 0 0 1px var(--vz-color-border,#E8E4F0);color:var(--vz-color-ink,#101828);font-size:15px;text-align:left}
+.vrange-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vrange-row i{color:var(--vz-color-accent,#7A32F5);font-size:18px}.vrange-row i:last-child{color:var(--vz-color-faint,#98A2B3)}
+.vrange-form{display:grid;gap:10px}
+.vrange-form .field{margin:0}
+.vrange-form select{min-height:44px;width:100%}
+.vrange-parts{display:grid;gap:8px;margin:0;padding:0;border:0}
+.vrange-parts legend{margin-bottom:6px;font-size:13px;font-weight:650;color:var(--vz-color-ink-secondary,#475467)}
+.vrange-part{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 14px;border-radius:14px;background:var(--vz-color-surface,#fff);box-shadow:inset 0 0 0 1px var(--vz-color-border,#E8E4F0)}
+.vrange-part:has(input:checked){background:var(--vz-color-selected-bg,#EDE1FF);box-shadow:inset 0 0 0 1.5px var(--vz-color-accent,#7A32F5)}
+.vrange-part input{flex:none;width:22px;height:22px;accent-color:var(--vz-color-accent,#7A32F5)}
+.vrange-part span{display:grid;gap:2px;min-width:0}
+.vrange-part strong{font-size:15px;color:var(--vz-color-ink,#101828);overflow-wrap:anywhere}
+.vrange-part small{font-size:12px;line-height:17px;color:var(--vz-color-ink-secondary,#475467)}
+.vrange-actions{display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:4px}
+.vrange-actions .btn,.vrange-sheet>.btn{min-height:44px}
+.vrange-clear{color:var(--vz-color-danger,#C93A3A)}
+/* vocal lab (dark) */
+.vl-score-range{margin:4px 0 12px;padding-top:4px;border-top:1px solid #2b2435}
+.vl-score-range .vl-measure{margin:8px 0 4px;align-items:center}
+.vrange-setup{flex:none}
+.vrange-verdict{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:700;background:#2a2234;color:#f7f5fc}
+.vrange-verdict.match{background:#163b2b;color:#7fe0b0}
+.vrange-verdict.above,.vrange-verdict.below{background:#3a2a14;color:#ffc56b}
+.vrange-verdict.hold{background:#2a2832;color:#c9c3d4}
+.vrange-recheck{margin:0 0 6px;font-size:12px;line-height:18px;color:#ffc56b}
