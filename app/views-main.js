@@ -537,7 +537,7 @@ VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="bu
 /* ---------- 곡 상세 ---------- */
 let songTab = 'media';
 VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true,
-  leave(){ songTab = 'media'; document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
+  leave(){ songTab = 'media'; VZ.lyricsMemo?.close(); document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
   actions:r => VZ.song(r.params[0]) ? '<button type="button" class="icon-btn" data-song-menu aria-label="곡 수정·삭제"><i class="ph ph-dots-three-outline"></i></button>' : '',
   render(r) {
     const s = VZ.song(r.params[0]);
@@ -638,8 +638,12 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
         const current = VZ.song(s.id) || s;
         const fields = [['lyrics','가사 원문',30000,11],['translation','한글 해석 / 번역',30000,8],['lyricNotes','발음 / 호흡 / 감정 메모',12000,7]];
         const preview = value => String(value || '').trim().replace(/\s+/g,' ').slice(0,180) || '입력한 내용이 없습니다';
-        body.innerHTML = '<div class="vz-song-section"><h2>가사</h2></div><div class="vz-lyric-list">' + fields.map(([key,title]) =>
-          '<button type="button" class="vz-lyric-card" data-lyric="'+key+'"><span class="vz-lyric-heading"><strong>'+title+'</strong><i class="ph ph-caret-right" aria-hidden="true"></i></span><span class="vz-lyric-preview" data-lyric-preview="'+key+'">'+esc(preview(current[key]))+'</span></button>').join('') + '</div>';
+        // 가사 외우기 (app/lyrics-memo.js) takes over the tab while open; it only writes songs[].lyricsMemo.
+        if (VZ.lyricsMemo?.isOpen(s.id)) { VZ.lyricsMemo.render(body, current, {onClose:draw}); return; }
+        const memoEntry = VZ.lyricsMemo ? VZ.lyricsMemo.entry(current) : '', memoFirst = !!(String(current.lyrics || '').trim() || String(current.translation || '').trim());
+        body.innerHTML = '<div class="vz-song-section"><h2>가사</h2></div><div class="vz-lyric-list">' + (memoFirst ? memoEntry : '') + fields.map(([key,title]) =>
+          '<button type="button" class="vz-lyric-card" data-lyric="'+key+'"><span class="vz-lyric-heading"><strong>'+title+'</strong><i class="ph ph-caret-right" aria-hidden="true"></i></span><span class="vz-lyric-preview" data-lyric-preview="'+key+'">'+esc(preview(current[key]))+'</span></button>').join('') + (memoFirst ? '' : memoEntry) + '</div>';
+        body.querySelector('[data-lm-open]:not([disabled])')?.addEventListener('click', () => { VZ.lyricsMemo.open(s.id); draw(); });
         body.querySelectorAll('[data-lyric]').forEach(button => button.onclick = () => {
           const [key,title,max,rows] = fields.find(([name]) => name === button.dataset.lyric);
           VZ.sheet({title, body:'<form class="vz-lyric-form"><label class="field"><span>'+title+'</span><textarea name="content" rows="'+rows+'" maxlength="'+max+'" aria-label="'+title+'"></textarea></label><p class="archive-error" role="alert"></p><button type="submit" class="btn block">저장</button></form>',
@@ -647,7 +651,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
               const form=sheet.querySelector('form');form.elements.content.value=(VZ.song(s.id)||s)[key]||'';
               form.onsubmit=e=>{e.preventDefault();const value=form.elements.content.value.trim();try{
                 if(!VZ.change(db=>{const song=db.songs.find(x=>x.id===s.id);if(!song)throw Error('곡을 찾을 수 없어요.');song[key]=value},{silent:true}))throw Error('저장하지 못했어요. 다시 시도해 주세요.');
-                body.querySelector('[data-lyric-preview="'+key+'"]').textContent=preview(value);close();VZ.toast('저장했어요.');
+                body.querySelector('[data-lyric-preview="'+key+'"]').textContent=preview(value);close();if(VZ.lyricsMemo&&body.isConnected&&songTab==='lyrics')draw();VZ.toast('저장했어요.');
               }catch(error){form.querySelector('[role=alert]').textContent=error.message||String(error)}};
             }});
         });
