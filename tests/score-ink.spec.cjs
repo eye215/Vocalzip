@@ -524,7 +524,7 @@ test('a sideways swipe moves only the page: it follows the finger, the screen st
  await expect(stage).toHaveAttribute('data-ink-turning',''); // it slides rather than jumping
  await expect(pageLabel).toHaveText('2 / 2쪽');
  await expect(stage).not.toHaveAttribute('data-ink-turning','');
- expect(await dialog.locator('[data-ink-box]').evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+ await expect.poll(()=>dialog.locator('[data-ink-box]').evaluate(el=>getComputedStyle(el).transform)).toBe('none'); // the slide has settled
  expect(await where()).toEqual(before);
  // A short drag that does not turn springs back into place.
  const cdp2=await page.context().newCDPSession(page);
