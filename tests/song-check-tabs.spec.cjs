@@ -70,3 +70,25 @@ test('song and lesson recording tabs use the same visible selected state as stat
  await expect(song).toHaveAttribute('aria-selected','true');
  await expect(lesson).toHaveAttribute('aria-selected','false');
 });
+
+test('a recording ⋯ opens the small dark popover by the button, not a full page',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  await window.vzipStorePracticeMedia({id:'m-free',name:'SODA_808229812',created:Date.now()-2*864e5,type:'audio/wav',source:'practice',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  window.dispatchEvent(new Event('vzip:media-updated'));
+ });
+ await page.goto('/#/song-suggest');
+ const card=page.locator('.vz-sc-record').filter({hasText:'SODA_808229812'}),more=card.locator('.vz-sc-menu');
+ await expect(more).toBeVisible();await more.click();
+ const menu=page.locator('.sheet-back.sheet-menu .sheet');
+ await expect(menu).toBeVisible();
+ await expect(page.locator('.sheet-back.sheet-page')).toHaveCount(0);
+ const box=await menu.boundingBox(),button=await more.boundingBox(),vw=page.viewportSize().width;
+ expect(box.width).toBeLessThanOrEqual(304);expect(box.width).toBeLessThan(vw);
+ expect(Math.abs(box.y-(button.y+button.height+8))<2||Math.abs(box.y+box.height-(button.y-8))<2).toBe(true); // attached to ⋯
+ const rows=menu.locator('.vz-choice');
+ await expect(rows).toHaveText([/전사 확인/,/파일 삭제/]); // delete is last
+ expect(await rows.last().evaluate(el=>getComputedStyle(el).color)).not.toBe(await rows.first().evaluate(el=>getComputedStyle(el).color));
+ await rows.first().click();
+ await expect(page).toHaveURL(/#\/song-transcript\/m-free$/);
+});

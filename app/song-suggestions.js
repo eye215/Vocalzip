@@ -355,8 +355,9 @@ function pickSong(main,item){
   el.querySelector('[data-pick-select]').onchange=e=>choose(e.target.value);
  }});
 }
-function openRecordMenu(main,item){
- VZ.sheet({title:M.label(item),body:'<button type="button" class="btn ghost block" data-transcript-view>전사 확인</button><button type="button" class="btn ghost block" data-file-delete>파일 삭제</button>',onMount:(el,close)=>{
+// A short action menu: the shared dark popover next to the ⋯ button (design system §공통 작업 화면과 메뉴), delete last.
+function openRecordMenu(main,item,anchor){
+ VZ.menu({title:M.label(item),anchor,body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-transcript-view><i class="ph ph-text-align-left"></i> 전사 확인</button><button type="button" class="vz-choice" data-file-delete><i class="ph ph-trash"></i> 파일 삭제</button></div>',onMount:(el,close)=>{
   el.querySelector('[data-transcript-view]').onclick=()=>{close();VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))};
   el.querySelector('[data-file-delete]').onclick=()=>{close();exclusive(main,async(_main,check)=>{
    if(state.running||!await M.confirmRemove(item))return;check();await M.remove(item);check();
@@ -388,7 +389,7 @@ function draw(main){
   card.querySelector('input').onchange=e=>{e.target.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   card.querySelector('.vz-sc-play-trigger').onclick=()=>{const host=card.querySelector('.vz-sc-player-host');try{const player=M.player(host,item,{prefetch:false,tools:false});inlinePlayers.set(item.id,player);card.querySelector('.vz-sc-player-placeholder').hidden=true;host.hidden=false;player.play()}catch(error){VZ.toast('재생할 수 없어요: '+String(error.message||error),'error')}};
   card.querySelector('.vz-sc-recommend').onclick=()=>pickSong(main,item);
-  card.querySelector('.vz-sc-menu').onclick=()=>openRecordMenu(main,item);
+  card.querySelector('.vz-sc-menu').onclick=e=>openRecordMenu(main,item,e.currentTarget);
   list.append(card);
  }
  if(!shown.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=state.items.length?'해당 상태의 녹음이 없어요.':'곡을 확인할 미지정 녹음이 없어요.';list.append(empty)}
