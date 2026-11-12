@@ -15,4 +15,23 @@
 .vz-perform-goal i{color:#7A32F5;font-size:20px;flex:none}
 .vz-perform-min{display:inline-flex;align-items:center;gap:8px}
 .toast.vz-perform-offer{display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100% - 32px);white-space:nowrap;padding:8px 8px 8px 16px;pointer-events:auto}
-.vz-perform-offer button{min-height:36px;padding:0 12px;border:0;border-radius:99px;background:#EDE1FF;color:#7A32F5;font:600 14px inherit;white-space:nowrap}
+.vz-perform-offer button{min-height:36px;padding:0 12px;border:0;border-radius:99px;background:#EDE1FF;color:#7A32F5;font-family:inherit;font-size:14px;font-weight:600;white-space:nowrap}
+/* 보강 (2026-11-12): missed days, homework → routine, inline 고치기 (title + remaining days), 끝난 반복. V4 tokens. */
+.vz-routine-main small b{font-weight:600;color:#B26A00}
+.vz-routine-action{flex:none;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:#F3ECFF;color:#7A32F5;font-family:inherit;font-size:14px;font-weight:600;line-height:20px;white-space:nowrap}
+.vz-routine-action:active{background:#EDE1FF}
+.vz-routine-edit{margin:-2px 0 10px;padding:12px;border:1px solid #E8E4F0;border-radius:14px;background:#F8F6FD;display:grid;gap:8px}
+.vz-routine-edit .field{margin:0}
+.vz-routine-edit .vz-routine-days{flex-wrap:wrap}
+.vz-routine-edit [role=alert]{margin:0;font-size:12px;color:#C93A3A}
+.vz-routine-edit [role=alert]:empty{display:none}
+.vz-routine-edit-actions{display:flex;justify-content:flex-end;gap:8px}
+.vz-routines-ended{margin:4px 0 12px}
+.vz-routines-ended summary{display:flex;align-items:center;gap:6px;min-height:44px;list-style:none;cursor:pointer;font-size:14px;font-weight:600;color:#475467}
+.vz-routines-ended summary::-webkit-details-marker{display:none}
+.vz-routines-ended summary small{font-size:13px;color:#667085}
+.vz-routines-ended summary i{margin-left:auto;transition:transform .15s}
+.vz-routines-ended[open] summary i{transform:rotate(180deg)}
+.vz-routine.is-ended{background:#F8F6FD;border-color:#F2EFF7;padding-right:12px}
+.vz-routine.is-ended strong{color:#475467}
+@media (prefers-reduced-motion:reduce){.vz-routines-ended summary i{transition:none}}
