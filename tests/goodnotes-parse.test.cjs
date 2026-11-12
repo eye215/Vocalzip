@@ -25,6 +25,27 @@ test('pages come out in notebook order and the outline cuts them into songs', as
   assert.equal(m.report.schema, 26);
   assert.equal(Buffer.from(await m.readFile(m.pages[0].pdf.file)).toString().startsWith('%PDF-1.4'), true);
 });
+test('outline acts as a table of contents: each song ends immediately before the next start, and the last reaches EOF', async () => {
+  const m = await G.read(new Uint8Array(F.notebook({
+    title:'뮤지컬 악보 모음',
+    pages:Array.from({length:8}, (_,i)=>({pdfPage:i+1,order:String.fromCharCode(97+i)})),
+    outline:[
+      {page:0,title:'The Winner Takes It All'},
+      {page:3,title:'Out Here on My Own'},
+      {page:5,title:'If I Ain\'t Got You'},
+      {page:7,title:'The River'}
+    ]
+  })));
+  assert.deepEqual(m.sections.map(s=>[s.title,s.from,s.to,s.pages]), [
+    ['The Winner Takes It All',1,3,[0,1,2]],
+    ['Out Here on My Own',4,5,[3,4]],
+    ['If I Ain\'t Got You',6,7,[5,6]],
+    ['The River',8,8,[7]]
+  ]);
+  assert.deepEqual(m.sections.flatMap(s=>s.pages),Array.from({length:8},(_,i)=>i),
+    'each page belongs to exactly one song, with no gaps or overlap');
+});
+
 test('a notebook without an outline is one section named after the notebook', async () => {
   const m = await G.read(new Uint8Array(F.notebook({title:'The River', pages:[{pdfPage:1, order:'a'}, {pdfPage:2, order:'b'}]})));
   assert.deepEqual(m.sections.map(x => [x.title, x.from, x.to, x.untitled]), [['The River', 1, 2, true]]);
