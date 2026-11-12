@@ -110,6 +110,7 @@ test('Native PDF chooser opens, uploads through R2, and survives refresh without
   expect(scores).toHaveLength(1);
   expect(scores[0]).toMatchObject({songId:'s1', title:'공연용 악보', fileName:PDF.name, originalKey:'C', practiceKey:'D', size:PDF.buffer.length});
   expect(scores[0].r2Key).toMatch(/^u\/ui-test-user\/score-[^/]+\/original\.pdf$/);
+  await expect.poll(() => r2.calls.filter(x => x === 'POST /v1/omr').length, {message:'a new score starts its note conversion once'}).toBe(1);
   expect(r2.store.get(scores[0].r2Key)).toEqual({bytes:PDF.buffer, type:'application/pdf'});
   await page.reload();
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);

@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=24';
+import {createFloatingHome} from './student-home-html.js?v=routine-20261111-1';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -59,12 +59,13 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const s=state(),expectedSnapshot=M.planSnapshot(V.db,s.today),existing=s.goals;
   const choices=existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true}));
   let recommended=[];
-  const label=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':'개인';
+  const label=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':g.routine?'반복':'개인';
   let dirty=false,approved=false,beforeUnload=null;
   const dayTarget=s.week.days.find(d=>d.today)?.targetMinutes;
   const body='<form id="student-home-plan"><p class="vz-plan-intro">오늘 연습할 항목을 골라주세요.</p><div data-guided-recommendations></div>'+
    (choices.length?'<fieldset class="vz-plan-section"><legend>오늘 할 목표 <span data-plan-count>'+existing.length+'개 선택</span></legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+'><span class="vz-plan-check" aria-hidden="true"></span><span class="vz-plan-title">'+esc(c.goal.title)+'</span><small class="vz-plan-source">'+label(c.goal)+'</small></label>').join('')+'</div><p class="vz-plan-help">수행 체크는 숙제 완료나 연습 시간과 별도로 기록돼요.</p></fieldset>':'')+
    '<label class="field vz-plan-personal"><span>개인 목표 <small>추가</small></span><textarea name="personal" aria-label="개인 목표" rows="2" maxlength="10000" placeholder="예: 후렴 고음에서 힘 빼기" aria-describedby="vz-plan-personal-help"></textarea><small id="vz-plan-personal-help" class="vz-plan-help">여러 목표는 한 줄에 하나씩 적어주세요.</small></label>'+
+   (V.routineFields?.()||'')+
    '<details class="vz-plan-time"'+(dayTarget!=null||s.week.targetMinutes!=null?' open':'')+'><summary>연습 시간 목표 <small>선택</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(dayTarget??'')+'" placeholder="미설정"></label>'+
    '<label class="field"><span>이번 주 목표 시간(분)</span><input type="number" name="weekMinutes" min="0" max="10080" inputmode="numeric" value="'+(s.week.targetMinutes??'')+'" placeholder="미설정"></label></div><p class="vz-plan-help">설정한 시간 기준으로 달성률을 표시해요.</p></details><p role="alert" data-plan-error></p></form>';
   V.sheet({title:'오늘의 목표',body,foot:'<button type="submit" form="student-home-plan" class="btn block vz-home-primary-button">목표 저장</button>',
@@ -73,9 +74,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     const form=el.querySelector('form');form.addEventListener('input',()=>{dirty=true;});
     V.guidedRecommendations?.({date:s.today}).then(rows=>{
       if(!form.isConnected)return;
-      recommended=rows.filter(c=>!existing.some(g=>g.sourceId===(c.assignmentId||c.key)&&g.source===(c.assignmentId?'homework':'recommendation')));
+      recommended=rows.filter(c=>!existing.some(g=>(g.sourceId===(c.assignmentId||c.key)&&g.source===(c.assignmentId?'homework':'recommendation'))||(c.kind==='room'&&g.recommendation?.sourceId===c.sourceId)));
       el.querySelector('[data-guided-recommendations]').innerHTML=recommended.length?V.guidedRecommendationCards(recommended,{selectable:true,showStart:false}):'';
     }).catch(()=>{});
+    V.routineBind?.(el,()=>{approved=true;dirty=false;close();V.softRender();setTimeout(planSheet,350);});
     form.addEventListener('change',()=>{const count=el.querySelector('[data-plan-count]');if(count)count.textContent=form.querySelectorAll('[name=goal]:checked').length+'개 선택';});
     beforeUnload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue='';}};
     window.addEventListener('beforeunload',beforeUnload);
@@ -88,13 +90,18 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
      try{
       const data=new FormData(form),selected=new Set(data.getAll('goal')),goals=choices.filter(c=>selected.has(c.key)).map(c=>({...c.goal}));
       const guided=new Set(data.getAll('guided-recommendation'));
-      for(const c of recommended.filter(c=>guided.has(c.key)))goals.push({id:V.uid(),title:c.title,source:c.assignmentId?'homework':'recommendation',sourceId:c.assignmentId||c.key,completed:false});
-      for(const title of form.personal.value.split(/\r?\n/).map(t=>t.trim()).filter(Boolean))goals.push({id:V.uid(),title,source:'personal',sourceId:'',completed:false});
+      for(const c of recommended.filter(c=>guided.has(c.key)))goals.push({id:V.uid(),title:c.title,source:c.assignmentId?'homework':'recommendation',sourceId:c.assignmentId||c.key,...(c.kind==='room'?{songId:c.songId,recommendation:{reason:c.reason,action:c.action,minutes:c.minutes,days:c.days,section:c.section,task:c.task,sourceId:c.sourceId}}:{}),completed:false});
+      const personal=form.personal.value.split(/\r?\n/).map(t=>t.trim()).filter(Boolean),repeatDays=V.routineChoice?.(form)??null;
+      if(repeatDays&&!personal.length)throw Error('반복할 개인 목표를 적어 주세요.');
+      if(repeatDays&&personal.some(t=>t.length>200))throw Error('반복 목표는 200자 이내로 적어 주세요.');
+      if(!repeatDays)for(const title of personal)goals.push({id:V.uid(),title,source:'personal',sourceId:'',completed:false});
       const n=(value,max)=>{if(value==='')return null;const v=Number(value);if(!Number.isFinite(v)||v<0||v>max)throw Error('목표 시간을 확인해 주세요.');return v;};
       if(expectedSnapshot!==M.planSnapshot(V.db,s.today))throw Error('목표나 시간 설정이 변경됐어요. 입력을 확인한 뒤 창을 다시 열어 주세요.');
-      const ok=V.change(db=>M.savePlan(db,{date:s.today,expectedSnapshot,goals,targetMinutes:n(form.dayMinutes.value,1440),weekTargetMinutes:n(form.weekMinutes.value,10080)}),{silent:true});
+      const dayMinutes=n(form.dayMinutes.value,1440),weekMinutes=n(form.weekMinutes.value,10080);
+      const ok=V.change(db=>{M.savePlan(db,{date:s.today,expectedSnapshot,goals,targetMinutes:dayMinutes,weekTargetMinutes:weekMinutes});
+       if(repeatDays)window.VzipGoalRoutines.create(db,{titles:personal,days:repeatDays,today:s.today,uid:V.uid});},{silent:true});
       if(!ok)throw Error('목표를 저장하지 못했어요. 입력은 그대로 있어요. 다시 시도해 주세요.');
-      approved=true;dirty=false;close();delete document.getElementById('view').dataset.dirty;V.softRender();V.toast('오늘의 목표를 저장했어요.');
+      approved=true;dirty=false;close();delete document.getElementById('view').dataset.dirty;V.softRender();V.toast(repeatDays?'오늘부터 '+repeatDays+'일 동안 매일 반복해요.':'오늘의 목표를 저장했어요.');
      }catch(error){el.querySelector('[data-plan-error]').textContent=error.message;button.disabled=false;}
     };
    },onClose:()=>{V.setGuard(null);if(beforeUnload)window.removeEventListener('beforeunload',beforeUnload);}});
@@ -107,7 +114,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const refreshWeek=()=>root?.updateWeek(state(files,selectedWeekStart).week);
    try{root=await createFloatingHome({...upcoming(s),goals:s.goals,week:s.week,recent:r,
     ...recentCallbacks(r),onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
-    onGoals:planSheet,onGuidedPractice:c=>nav('#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
+    onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
     onStage:()=>s.stage?nav('#/show/'+encodeURIComponent(s.stage.id)):nav('#/performances'),
     onLesson:()=>s.lesson?nav('#/lesson/'+encodeURIComponent(s.lesson.id)):V.lessonSheet(),
@@ -115,6 +122,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
      const ok=V.change(db=>{if(!M.setGoal(db,id,completed))throw Error('이 목표가 변경됐어요. 화면을 새로 열어주세요.');},{silent:true});
      if(!ok)throw Error('체크를 저장하지 못했어요. 다시 시도해 주세요.');
      delete main.dataset.dirty;
+     if(completed)V.goalPerformanceOffer?.(id);
     }});
    }catch(error){
     if(!host.isConnected)return;

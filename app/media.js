@@ -81,7 +81,18 @@ M.list = async (force) => {
   try { return await promise; } finally { if (loading?.promise === promise) loading = null; }
 };
 M.cached = () => cache || [];
-function mergeCloud(map, items) { items.forEach(x => map.set(x.id, {...x, ...(map.get(x.id) || {}), cloud:true, path:x.path, parts:x.parts, storageVersion:x.storageVersion, storageProvider:x.storageProvider, r2Key:x.r2Key, legacyStorage:x.legacyStorage, ...(x.cloudEditBase?{cloudEditBase:x.cloudEditBase}:{})})); }
+function mergeCloud(map, items) {
+ // The cloud is authoritative for song/metadata. A stale device copy must not hide a
+ // song that was already assigned on another device. Keep the device-only media bytes.
+ items.forEach(remote=>{
+  const local=map.get(remote.id);
+  map.set(remote.id,{
+   ...local,...remote,cloud:true,local:!!local,
+   ...(local?.blob?{blob:local.blob}:{}),
+   ...(local?.bytes?{bytes:local.bytes}:{})
+  });
+ });
+}
 // Newest recording day first (the file's own date), then newest saved.
 const sortList = map => [...map.values()].sort((a, b) => (M.dateOf(b) || '').localeCompare(M.dateOf(a) || '') || (b.created || 0) - (a.created || 0));
 /** The list as last kept on this device (no network), to draw a screen at once while M.list() refreshes. Null if none. */
@@ -130,6 +141,21 @@ M.owner = item => {
 M.OCCASIONS = [['performance', '공연'], ['lesson', '레슨'], ['practice', '연습']];
 M.occasion = item => ['performance', 'lesson', 'practice'].includes(item?.occasion) ? item.occasion : M.owner(item).kind;
 M.occasionLabel = k => ({performance:'공연', lesson:'레슨', practice:'연습'})[k] || '연습';
+/** Recording purpose, independent of its song link and lesson/practice ownership.
+ * Older untagged recordings remain in song search unless positively identified as room exercises. */
+M.RECORDING_CATEGORIES=[['song','곡 녹음'],['lesson','레슨 녹음'],['training','트레이닝'],['room','연습실']];
+M.recordingCategory=item=>{
+ const explicit=String(item?.recordingCategory||'');
+ if(['song','lesson','training','room'].includes(explicit))return explicit;
+ if(item?.source==='practice-room'||(item?.source==='practice'&&/^[a-zA-Z0-9-]{8,80}-[01]$/.test(String(item?.id||''))))return 'room';
+ if(M.occasion(item)==='lesson')return 'lesson';
+ const owner=M.owner(item),practice=owner.practice;
+ if(practice?.practiceRoom)return 'room';
+ if(practice?.practiceMode==='training')return 'training';
+ return 'song';
+};
+M.songSearchEligible=item=>['song','lesson'].includes(M.recordingCategory(item));
+
 const changed = () => { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-media')); };
 ['vzip:cloud-media-changed', 'vzip:media-saved', 'vzip:media-updated', 'vzip:auth-changed'].forEach(n => window.addEventListener(n, changed));
 
@@ -292,9 +318,11 @@ M.remove = async (item,{expectedLocal}={}) => {
   const bound=window.vzipPendingMediaDeletes?.().find(job=>job.id===item.id&&job.owner===removalOwner&&job.session===removalSession&&job.localStamp);
   if(bound){
     const info=await M.localDeleteInfo(item.id);guard();
+    if(bound.object&&bound.phase==='cloud-complete'&&!info.exists){await window.vzipMediaDeleteAcknowledge?.(item.id);guard();changed();return;}
     if(await window.VzipSnapshotTransport.localStamp(info.token)!==bound.localStamp)throw Object.assign(Error('중단 후 이 기기의 파일이 바뀌었어요. 새 파일은 유지돼요.'),{code:'localChanged'});
     if(expectedLocal===undefined)expectedLocal=info.token;
   }
+  if(removalSession&&expectedLocal===undefined){expectedLocal=(await M.localDeleteInfo(item.id)).token;guard();}
   guard();if(expectedLocal!==undefined&&(await M.localDeleteInfo(item.id)).token!==expectedLocal)throw Object.assign(Error('확인 후 이 기기의 파일이 바뀌었어요. 새 파일은 유지돼요.'),{code:'localChanged'});
   guard();if(item.accountOwner&&item.accountOwner!==removalOwner)throw Error('다른 계정의 파일은 삭제할 수 없어요.');
   if (removing.has(item.id)) throw Error('이미 삭제 중이에요.');

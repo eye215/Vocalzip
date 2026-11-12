@@ -314,6 +314,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .hub-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 /* 보관함 */
 .lib-seg{margin-bottom:8px}
+/* Recording-purpose tabs: keep all categories reachable on narrow iPhone screens. */
+.vz-library-tabs{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:4px}
+.vz-library-tabs::-webkit-scrollbar{display:none}
+.vz-library-tabs .lib-seg{display:flex;width:max-content;min-width:100%;gap:4px}
+.vz-library-tabs .lib-seg button{flex:0 0 auto;white-space:nowrap;padding-inline:13px}
+
 .lib-selects{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px;margin-bottom:12px}
 .lib-selects select{min-width:0;min-height:44px}
 .lib-summary{margin:0 4px 4px}
@@ -507,7 +513,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 /* Page under an open sheet does not move (iOS ignores overflow:hidden on body). */
 body.sheet-lock{position:fixed;left:0;right:0;overflow:hidden}
 /* Page navigation for forms, pickers and long content; short menus keep the button context. */
-body .sheet-back.sheet-page{top:var(--vv-top,0px);bottom:auto;height:var(--vv-height,100dvh);align-items:stretch;padding:0;background:var(--vz-color-canvas);backdrop-filter:none;-webkit-backdrop-filter:none;animation:none}
+body .sheet-back.sheet-page{top:0;bottom:0;height:auto;align-items:stretch;padding:0;background:var(--vz-color-canvas);backdrop-filter:none;-webkit-backdrop-filter:none;animation:none}
 body .sheet-page>.sheet{display:flex;flex-direction:column;width:100%;max-width:560px;height:100%;max-height:none;margin:auto;padding:0;background:var(--vz-color-canvas);border-radius:0;overflow:hidden;animation:none}
 body .sheet-page .sheet-grab{display:none}
 body .sheet-page .sheet-head{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;flex:none;min-height:64px;margin:0;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;background:var(--vz-color-canvas)}
@@ -523,6 +529,9 @@ body .sheet-page .sheet-foot>.btn,body .sheet-page .sheet-foot>button[type=submi
 body .sheet-page .sheet-foot>.btn-row{display:flex;gap:8px}
 body .sheet-page .sheet-foot>.btn-row .btn{min-height:var(--vz-button-height)}
 html.vz-keyboard-open body .sheet-page .sheet-foot{display:none}
+/* A full page never moves or shrinks for the keyboard (iOS keyboard viewport values are unreliable and turned the page
+ * into a band). Only its scrolling body gets room under the content, so every field can be scrolled above the keyboard. */
+html.vz-keyboard-open body .sheet-page .sheet-body{padding-bottom:calc(var(--kb,0px) + 28px);scroll-padding-bottom:calc(var(--kb,0px) + 16px)}
 body .sheet-page .field input[type=date]{width:min(var(--vz-input-date-max),100%);max-width:var(--vz-input-date-max)}
 body .sheet-page.sheet-form-page .sheet-body{padding:var(--vz-space-6) var(--vz-page-gutter) 36px}
 body .sheet-page.sheet-form-page .sheet-head{padding-left:var(--vz-page-gutter);padding-right:var(--vz-page-gutter)}
@@ -627,3 +636,56 @@ body .sheet-page #practice-log .vz-practice-rating{margin:0 0 23px;padding:0;bor
 body .sheet-page #practice-log .vz-practice-rating .stars{justify-content:space-around;gap:0;padding:3px 16px 0}
 body .sheet-page #practice-log .vz-practice-rating .stars button{width:52px;height:52px;color:#9674BC;font-size:35px}
 body .sheet-page #practice-log .vz-practice-rating .stars button[aria-pressed=true]{color:#7933EE}
+
+/* The five-tab dock is shared with the home shadow-root dock.
+   The recording focus screen intentionally hides navigation. */
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
+  position:fixed;
+  /* Home shadow dock's final integration CSS overrides its template's 358px
+     with --vz-nav-max-width (528px). Use that same resolved token here. */
+  left:50%;
+  right:auto;
+  width:min(calc(100% - var(--vz-nav-inset,16px)*2),var(--vz-nav-max-width,528px));
+  max-width:var(--vz-nav-max-width,528px);
+  transform:translateX(-50%);
+  bottom:max(var(--vz-nav-bottom,12px),env(safe-area-inset-bottom));
+  z-index:var(--vz-z-nav);
+  box-sizing:border-box;
+  height:var(--vz-nav-height,70px);
+  padding:var(--vz-nav-padding,8px);
+  border:1px solid var(--vz-nav-border,rgba(255,255,255,.68));
+  border-radius:999px;
+  background:var(--vz-nav-surface,rgba(255,255,255,.58));
+  box-shadow:var(--vz-nav-shadow,0 5px 20px rgba(55,33,85,.045));
+  backdrop-filter:blur(var(--vz-nav-blur,24px));
+  -webkit-backdrop-filter:blur(var(--vz-nav-blur,24px));
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav ul{
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:100%;gap:4px;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a{
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  box-sizing:border-box;min-width:0;width:100%;height:var(--vz-nav-item-height,54px);min-height:var(--vz-nav-item-height,54px);
+  gap:2px;padding:4px;border-radius:999px;
+  font-size:var(--vz-type-nav-size,11px);line-height:var(--vz-type-nav-leading,16px);
+  font-weight:var(--vz-font-medium,500);white-space:nowrap;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a i{
+  color:var(--vz-color-ink-secondary);font-size:22px;line-height:1;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a[aria-current="page"]{
+  background:var(--vz-color-selected-bg);
+  color:var(--vz-nav-active-label,#8a6db8);
+  font-weight:650;
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a[aria-current="page"] i{
+  color:var(--vz-color-accent);
+}
+body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a:focus-visible{
+  outline:2px solid var(--vz-color-accent);outline-offset:2px;
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+  body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav{
+    background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;
+  }
+}

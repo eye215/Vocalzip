@@ -67,8 +67,8 @@ test('Library places filter and search above review, and keeps selection separat
  await expect(page.locator('[data-library-filter]')).toHaveAttribute('aria-pressed','true');
  await page.locator('[data-library-search]').click();await expect(page.getByRole('searchbox',{name:'보관함 검색'})).toBeFocused();
  await expect(page.locator('[data-collection-search] button')).toHaveCount(0);
- await page.evaluate(()=>document.documentElement.style.setProperty('--kb','280px'));
- expect(await page.locator('[data-collection-search]').evaluate(form=>Math.round(innerHeight-form.getBoundingClientRect().bottom))).toBe(290);
+ // Set the keyboard height and measure in one step: the app re-reads the real (closed) keyboard after focus moves.
+ expect(await page.locator('[data-collection-search]').evaluate(form=>{document.documentElement.style.setProperty('--kb','280px');return Math.round(innerHeight-form.getBoundingClientRect().bottom)})).toBe(290);
  await page.evaluate(()=>document.documentElement.style.removeProperty('--kb'));
  await page.getByRole('searchbox',{name:'보관함 검색'}).fill('테스트');await expect(page.locator('[data-q]')).toHaveValue('');await page.getByRole('searchbox',{name:'보관함 검색'}).press('Enter');
  await expect(page.locator('[data-q]')).toHaveValue('테스트');
@@ -92,6 +92,25 @@ test('Lyrics cards preview saved text and edit each field on a form page',async(
  await page.locator('[data-lyric=lyricNotes]').click();await page.getByRole('textbox',{name:'발음 / 호흡 / 감정 메모'}).fill('후렴 전에 숨쉬기');
  await page.getByRole('dialog',{name:'발음 / 호흡 / 감정 메모'}).getByRole('button',{name:'저장'}).click();await expect(page.locator('[data-lyric=lyricNotes]')).toContainText('후렴 전에 숨쉬기');
  expect((await db(page)).songs[0].lyrics).toBe('첫 줄 가사\n둘째 줄 가사');expect((await db(page)).songs[0].lyricNotes).toBe('후렴 전에 숨쉬기');
+});
+test('a lyrics form page stays full screen while the keyboard is up and after it closes, whatever viewport values iOS leaves',async({page})=>{
+ const seed=initial();seed.songs[0].lyrics='첫 줄 가사\n둘째 줄 가사';
+ await boot(page,{seed});await page.goto('/#/song/song1');await page.locator('[data-tab=lyrics]').click();
+ await page.locator('[data-lyric=lyrics]').click();
+ const form=page.getByRole('dialog',{name:'가사 원문'}),field=page.getByRole('textbox',{name:'가사 원문'});
+ await expect(field).toBeVisible();await field.focus();
+ // Keyboard up (340px, with the viewport values iOS reports): the page neither moves nor shrinks; its body makes room.
+ const open=await page.evaluate(()=>{const r=document.documentElement;r.style.setProperty('--vv-height','420px');r.style.setProperty('--vv-top','90px');r.style.setProperty('--kb','340px');r.classList.add('vz-keyboard-open');
+  const back=document.querySelector('.sheet-back.sheet-page').getBoundingClientRect(),body=document.querySelector('.sheet-page .sheet-body');
+  return {top:Math.round(back.top),height:Math.round(back.height),pad:parseFloat(getComputedStyle(body).paddingBottom)};});
+ expect(open.top).toBe(0);expect(open.height).toBe(page.viewportSize().height);expect(open.pad).toBeGreaterThanOrEqual(340);
+ // iOS sometimes never reports the keyboard closing: the values it left behind say "keyboard up, page is short".
+ await page.evaluate(()=>{const r=document.documentElement;r.style.setProperty('--vv-height','420px');r.style.setProperty('--vv-top','90px');r.style.setProperty('--kb','340px');r.classList.add('vz-keyboard-open');});
+ await field.blur();
+ await expect(page.locator('html')).not.toHaveClass(/vz-keyboard-open/);
+ const box=await page.locator('.sheet-back.sheet-page').boundingBox(),vh=page.viewportSize().height;
+ expect(Math.round(box.y)).toBe(0);expect(Math.round(box.height)).toBe(vh); // the song page behind never shows above or below
+ await expect(form.getByRole('button',{name:'저장'})).toBeVisible();
 });
 test('Repertoire persists metadata ratings keys and filters without rewriting original records',async({page})=>{
  await boot(page);await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('나의 레퍼토리');expect(await page.locator('[data-repertoire] .archive-song-row').count()).toBe(3);await expect(page.locator('[data-repertoire] .archive-song-take')).toBeVisible();await expect(page.locator('[data-repertoire]')).not.toContainText('공연 이력');await page.locator('[data-rep=status]').click();await dialog(page).getByLabel('상태',{exact:true}).selectOption('ready');await save(page);

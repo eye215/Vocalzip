@@ -228,13 +228,23 @@ function mediaIntentKey(owner,id){
  if(!uuid.test(owner)||typeof id!=='string'||!mediaId.test(id))throw fail('response');
  return 'vzip_media_delete_v1:'+encodeURIComponent(owner)+':'+encodeURIComponent(id);
 }
+function mediaObjectTarget(t,owner,id){
+ const fields=['requestId','mediaId','key','updatedAt','size','type','etag'],parts=String(t?.key||'').split('/');
+ if(!t||Object.keys(t).length!==fields.length||Object.keys(t).some(k=>!fields.includes(k))||!uuid.test(t.requestId||'')||t.mediaId!==id||
+  !/^[A-Za-z0-9_-]{1,100}$/.test(id)||parts.length!==5||parts[0]!=='u'||parts[1]!==owner||parts[2]!==id||!uuid.test(parts[3])||!/^original\.[a-z0-9]{1,8}$/.test(parts[4])||
+  typeof t.updatedAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(t.updatedAt)||!Number.isFinite(Date.parse(t.updatedAt))||
+  new Date(t.updatedAt).toISOString().slice(0,19)!==t.updatedAt.slice(0,19)||!Number.isSafeInteger(t.size)||t.size<1||t.size>2147483648||
+  !/^audio\/[A-Za-z0-9.+-]{1,60}$/.test(t.type||'')||!/^[!-~]{1,200}$/.test(t.etag||''))throw fail('corrupt');
+ return t;
+}
 function readMediaIntent(storage,owner,id){
  const raw=storage.getItem(mediaIntentKey(owner,id));if(raw===null)return null;
  let r;try{r=JSON.parse(raw);}catch{throw fail('corrupt');}
- if(r?.version!==1||r.owner!==owner||r.id!==id||!uuid.test(r.session)||r.stamp!==null&&!stampPattern.test(r.stamp)||!['prepared','root-confirmed','cloud-complete'].includes(r.phase)||!Number.isFinite(r.createdAt)||r.localStamp!==undefined&&!stampPattern.test(r.localStamp)||Object.keys(r).some(k=>!['version','id','owner','session','stamp','phase','createdAt','localStamp'].includes(k)))throw fail('corrupt');
+ if(r?.version!==1||r.owner!==owner||r.id!==id||!uuid.test(r.session)||r.stamp!==null&&!stampPattern.test(r.stamp)||!['prepared','root-confirmed','cloud-complete'].includes(r.phase)||!Number.isFinite(r.createdAt)||r.localStamp!==undefined&&!stampPattern.test(r.localStamp)||Object.keys(r).some(k=>!['version','id','owner','session','stamp','phase','createdAt','localStamp','object'].includes(k)))throw fail('corrupt');
+ if(r.object!==undefined)mediaObjectTarget(r.object,owner,id);
  return r;
 }
-function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare,cleanup,reviewRoot=null,prepareResume=null,readLocalStamp=null,makeId=()=>crypto.randomUUID()}){
+function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare,cleanup,reviewRoot=null,prepareResume=null,readLocalStamp=null,objectTarget=null,makeId=()=>crypto.randomUUID()}){
  if(!storage||[identity,lock,read,prepare,cleanup].some(f=>typeof f!=='function'))throw fail('unavailable');
  const who=identity();if(!who||!uuid.test(who.owner)||!uuid.test(who.session))throw fail('identity');
  const {owner,session}=who,prefix='vzip_media_delete_v1:'+encodeURIComponent(owner)+':';let reviewed=null;
@@ -247,6 +257,16 @@ function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare
  }
  const own=r=>{if(r&&r.session!==session)throw fail('session');};
  const sameIntent=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+ const bindObject=async(row,id,intent,{adopt=false}={})=>{
+  if(objectTarget===null){if(intent?.object)throw fail('unavailable');return undefined;}
+  if(typeof objectTarget!=='function')throw fail('unavailable');
+  const target=await objectTarget(row,{id,requestId:intent?.object?.requestId||makeId(),previous:intent?.object?copy(intent.object):null});guard();
+  if(target==null){if(intent?.object)throw fail('unavailable');return undefined;}
+  mediaObjectTarget(target,owner,id);
+  if(intent&&!intent.object&&!adopt)throw fail('review');
+  if(intent?.object&&!sameIntent(target,intent.object))throw fail('mediaChanged');
+  return copy(target);
+ };
  const checkedRow=async(id,intent)=>{
   const row=await read(id);guard();validate(row);const stamp=await mediaStamp(row);guard();
   if(intent&&(row!==null&&intent.stamp!==stamp||intent.phase==='cloud-complete'&&row!==null))throw fail('mediaChanged');
@@ -281,15 +301,17 @@ function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare
    if(!confirmed||!r||r.reviewId!==reviewId||typeof prepareResume!=='function'||!sameIntent(get(r?.intent?.id),r?.intent))throw fail('review');
    const id=r.intent.id;await localCheck(id,r.localStamp);
    const before=await checkedRow(id,r.intent);if(before.stamp!==r.stamp)throw fail('review');
+   if(r.intent.object&&r.intent.session!==session)throw fail('session');
+   const object=await bindObject(before.row,id,r.intent,{adopt:true});
    const proof=await prepareResume({context:{kind:'media-delete',id,stamp:r.intent.stamp},reviewId:r.rootReviewId,payload,confirmed:true,retry});guard();proofCheck(proof,id);
    await localCheck(id,r.localStamp);
    const after=await checkedRow(id,r.intent);if(after.stamp!==r.stamp||!sameIntent(get(id),r.intent))throw fail('review');
    // A fresh current-session root CAS is acknowledged before adopting the old intent.
    // A crash before this put keeps the old session and requires explicit review again.
-   let intent={...r.intent,session,phase:'root-confirmed',...(r.localStamp?{localStamp:r.localStamp}:{})};put(intent);reviewed=null;
+   let intent={...r.intent,session,phase:'root-confirmed',...(object?{object}:{}),...(r.localStamp?{localStamp:r.localStamp}:{})};put(intent);reviewed=null;
    const latest=await checkedRow(id,intent);if(latest.stamp!==r.stamp)throw fail('mediaChanged');
    await localCheck(id,intent.localStamp);
-   await cleanup(latest.row,guard,id);guard();
+   await cleanup(latest.row,guard,id,intent.object);guard();
    intent={...intent,phase:'cloud-complete'};put(intent);return {...copy(intent),proof:copy(proof)};
   },'resume',reviewed?.intent?.id),
   run:id=>lock(async()=>{
@@ -297,7 +319,8 @@ function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare
    const localStamp=await localCheck(id,intent?.localStamp);
    const row=await read(id);guard();validate(row);const stamp=await mediaStamp(row);guard();
    if(intent&&(row!==null&&intent.stamp!==stamp||intent.phase==='cloud-complete'&&row!==null))throw fail('mediaChanged');
-   if(!intent){intent={version:1,id,owner,session,stamp,phase:'prepared',createdAt:Date.now(),...(localStamp?{localStamp}:{})};put(intent);}
+   const object=await bindObject(row,id,intent);
+   if(!intent){intent={version:1,id,owner,session,stamp,phase:'prepared',createdAt:Date.now(),...(object?{object}:{}),...(localStamp?{localStamp}:{})};put(intent);}
    const proof=await prepare({id,stamp:intent.stamp});guard();
    if(!proof||!Array.isArray(proof.payload?.deleted?.media)||!proof.payload.deleted.media.includes(id))throw fail('response');
    version(proof);
@@ -305,7 +328,7 @@ function createMediaDeletion({storage,identity,lock,read,validate=()=>{},prepare
    const latest=await read(id);guard();validate(latest);
    if(latest!==null&&await mediaStamp(latest)!==intent.stamp)throw fail('mediaChanged');guard();
    await localCheck(id,intent.localStamp);
-   await cleanup(latest,guard,id);guard();
+   await cleanup(latest,guard,id,intent.object);guard();
    intent={...intent,phase:'cloud-complete'};put(intent);return copy(intent);
   },'run',id),
   acknowledge:id=>lock(async()=>{

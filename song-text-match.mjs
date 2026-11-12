@@ -26,7 +26,10 @@ export function matchTranscripts(text, references, {threshold=0.26,margin=0.07}=
  if(normalizeText(text).length<12)return {candidate:null,reason:'인식된 가사가 너무 짧아요.',matches:[]};
  const ranked=(Array.isArray(references)?references:[]).filter(x=>x?.songId&&x?.transcript)
  .map(x=>({songId:x.songId,score:scoreTranscripts(text,x.transcript)}))
- .sort((a,b)=>b.score-a.score);
+ .sort((a,b)=>b.score-a.score)
+ // One song may have several texts (original lyrics, Korean translation, reference take): keep its best one,
+ // so it is neither its own runner-up nor listed twice.
+ .filter((x,i,all)=>all.findIndex(y=>y.songId===x.songId)===i);
  const top=ranked[0],second=ranked[1];
  if(!top||top.score<threshold)return {candidate:null,reason:'등록된 가사 또는 기준 녹음과 충분히 일치하지 않아요.',matches:ranked.slice(0,3)};
  if(second&&top.songId!==second.songId&&top.score-second.score<margin)

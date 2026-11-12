@@ -21,7 +21,7 @@ test('practice-room bridge stores reflection in synced practice data and verifie
  await page.addScriptTag({url:'/app/practice-room-model.js'});
  await page.evaluate(()=>{
   window.__db={categories:[],songs:[],lessons:[],assignments:[],practices:[]};
-  window.VZ={db:window.__db,today:()=> '2026-11-10',ymd:()=> '2026-11-10',change(fn){fn(window.__db);return true},route(key,config){window.__route=config},setGuard(){},timeEntries:()=>[]};
+  window.VZ={db:window.__db,song:()=>null,songLabel:()=>'',today:()=> '2026-11-10',ymd:()=> '2026-11-10',change(fn){fn(window.__db);return true},route(key,config){window.__route=config},setGuard(){},timeEntries:()=>[]};
   window.vzipCloudSignedIn=()=>true;
   window.VzipR2={configured:()=>true,ready:async()=>true};
   window.vzipCloudImport=async(file,info,progress,options)=>{window.__uploaded={name:file.name,size:file.size,source:info.source,id:info.id,requireR2:options?.requireR2};return {id:info.id,storageProvider:'r2',r2Key:'u/user/'+info.id+'/original.wav'}};

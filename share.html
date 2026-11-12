@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>공유된 녹음 · VOCAL.zip</title>
+<script src="r2-config.js"></script>
+<style>
+:root{--bg:#f7f4fc;--ink:#101828;--ink2:#475467;--line:#ece6f5;--accent:#7a32f5;--soft:#ede1ff}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--ink);font:16px/1.5 Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;padding:calc(env(safe-area-inset-top) + 28px) 16px calc(env(safe-area-inset-bottom) + 28px);display:grid;place-items:start center}
+main{width:min(100%,480px)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;margin-bottom:20px}.brand span{color:var(--accent)}
+.card{background:#fff;border-radius:20px;padding:20px;box-shadow:0 1px 2px rgba(40,24,90,.04),0 6px 20px rgba(40,24,90,.06)}
+h1{font-size:20px;line-height:1.35;margin:0 0 4px;word-break:break-word}
+.meta{margin:0 0 16px;color:var(--ink2);font-size:13px}
+audio{width:100%;margin:4px 0 16px}
+.dl{display:flex;align-items:center;justify-content:center;gap:6px;min-height:48px;border-radius:16px;background:var(--soft);color:var(--accent);font-weight:650;text-decoration:none}
+.msg{color:var(--ink2);font-size:15px;margin:0}
+.foot{margin-top:16px;color:var(--ink2);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">VOCAL<span>.</span>zip</div>
+  <div class="card" id="box"><p class="msg">녹음을 불러오는 중…</p></div>
+  <p class="foot">링크를 보낸 사람이 공유를 끊거나 기간이 지나면 더 이상 재생할 수 없어요.</p>
+</main>
+<script>
+addEventListener('hashchange', () => location.reload()); // another link opened in the same tab
+(async () => {
+  const box = document.getElementById('box'), token = (location.hash.slice(1).match(/^[A-Za-z0-9_-]{40,64}$/) || [])[0];
+  const base = String(window.VZIP_R2_ENDPOINT || '').replace(/\/$/, '');
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;'}[c]));
+  const show = text => { box.innerHTML = '<p class="msg">' + esc(text) + '</p>'; };
+  if (!token || !base) { show('링크가 올바르지 않아요. 받은 주소 전체를 다시 열어 주세요.'); return; }
+  let res; try { res = await fetch(base + '/v1/share/' + token + '/meta', {cache:'no-store'}); } catch { show('연결하지 못했어요. 잠시 후 다시 열어 주세요.'); return; }
+  if (res.status === 410) { show('공유 기간이 끝난 링크예요.'); return; }
+  if (!res.ok) { show('공유가 끊겼거나 없는 링크예요.'); return; }
+  const m = await res.json(), media = base + '/v1/share/' + token + '/media';
+  const ext = ({'audio/mp4':'.m4a', 'audio/x-m4a':'.m4a', 'audio/mpeg':'.mp3', 'audio/wav':'.wav', 'audio/x-wav':'.wav', 'audio/flac':'.flac', 'audio/webm':'.webm', 'audio/ogg':'.ogg', 'video/mp4':'.mp4', 'video/quicktime':'.mov'})[m.type] || '';
+  const name = (m.title || '녹음').replace(/[\\/:*?"<>|]/g, '_') + (/\.(m4a|mp3|wav|aac|flac|ogg|oga|opus|webm|caf|mp4|mov)$/i.test(m.title || '') ? '' : ext);
+  const when = m.expires == null ? '공유한 사람이 끊을 때까지 들을 수 있어요' : new Date(m.expires).toLocaleString('ko-KR', {month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'}) + '까지 들을 수 있어요';
+  document.title = (m.title || '녹음') + ' · VOCAL.zip';
+  box.innerHTML = '<h1>' + esc(m.title || '녹음') + '</h1><p class="meta">' + esc(when) + (m.size ? ' · ' + (m.size >= 1048576 ? (m.size / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(m.size / 1024)) + 'KB') : '') + '</p>' +
+    (/^video\//.test(m.type) ? '<video controls playsinline preload="metadata" style="width:100%;border-radius:14px;margin:4px 0 16px" src="' + esc(media) + '"></video>' : '<audio controls preload="metadata" src="' + esc(media) + '"></audio>') +
+    '<a class="dl" href="' + esc(media + '?download=' + encodeURIComponent(name)) + '">파일 내려받기</a>';
+})();
+</script>
+</body>
+</html>

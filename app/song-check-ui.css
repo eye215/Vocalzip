@@ -101,3 +101,10 @@ body[data-vz-route="song-transcript"] .v-nav{display:none}
 .vz-transcript .card strong{display:block;color:var(--vz-color-ink);font-size:16px;line-height:22px}
 .vz-transcript .card p{margin:10px 0 0;color:var(--vz-color-ink-secondary);font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 
+
+/* Lesson / training suggestion under a recording: a quiet row, applied only when tapped. */
+.vz-sc-kind{display:flex;align-items:center;gap:10px;width:calc(100% - 12px);min-height:48px;margin:0 6px 6px;padding:6px 13px;border:1px dashed #D7C6ED;border-radius:12px;background:transparent;text-align:left;color:var(--vz-color-ink-secondary,#475467)}
+.vz-sc-kind-text{display:flex;flex:1;min-width:0;flex-direction:column;gap:1px}
+.vz-sc-kind-text strong{font-size:13px;font-weight:650;color:var(--vz-color-ink,#1D2939)}
+.vz-sc-kind-text small{overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.vz-sc-kind-go{flex:none;font-size:13px;font-weight:650;color:var(--vz-color-primary,#7A32F5)}

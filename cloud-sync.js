@@ -290,7 +290,7 @@ async function autoUploadMedia(id){if(!user||!ready)return;if(window.VZ?.media?.
 // other fields keep what other devices saved. Edits already written to the cloud (cloudDone) are skipped,
 // and an event that does not say what changed sends nothing.
 const mediaNamePatch=(meta,changes)=>window.VzipMediaNaming?.patch(meta,changes,id=>localData()?.songs?.find(song=>song.id===id)?.title)||changes;
-const EDITABLE=['name','nameMode','autoName','normalizeTitle','song','songId','created','recordedDate','dateSource','type','rating','review'];
+const EDITABLE=['name','nameMode','autoName','normalizeTitle','song','songId','created','recordedDate','dateSource','type','rating','review','recordingCategory'];
 window.addEventListener('vzip:media-updated',async e=>{const d=e.detail||{};if(!user||!d.id||d.cloudDone)return;try{const item=(await localMedia()).find(x=>x.id===d.id);if(!item)return;if(!d.changes)return;/* unknown change: never re-send the device copy's older fields */const keys=Object.keys(d.changes).filter(k=>EDITABLE.includes(k));if(!keys.length)return;const pick=Object.fromEntries(keys.map(k=>[k,d.changes[k]]));await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,pick)}),user.id,{requireBase:true,intent:{kind:'device',changes:pick}})}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
 window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e.detail.id)});
 
@@ -819,6 +819,25 @@ async function cleanupCloudMedia(row,owner,id,guard,unlink=null){
  const cached=await listCache(owner);guard();if(cached)await listCache(owner,{...cached,rows:cached.rows.filter(r=>r.id!==id)});guard();
  window.dispatchEvent(new Event('vzip:cloud-media-changed'));
 }
+function assertNoPendingMediaEdit(owner,id){
+ const prefix=window.VzipMediaMetadataEdits?.PREFIX||'vzip_media_edit_v1:';
+ if(owner&&localStorage.getItem(prefix+encodeURIComponent(owner)+':'+encodeURIComponent(id))!==null)throw Error('미완료 파일 수정 결과를 확인한 뒤 삭제해 주세요. 보관한 입력과 원본은 그대로예요.');
+}
+async function mediaDeleteMode(){
+ if(!window.VzipR2?.metadataMode)throw Error('원본 삭제 저장 모듈을 다시 불러와 주세요.');
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ try{return await window.VzipR2.metadataMode({signal:controller.signal});}finally{clearTimeout(timer);}
+}
+async function cleanupVersionedCloudMedia(target,owner,id,guard){
+ if(!window.VzipR2?.deleteLibrary)throw Error('원본 삭제 저장 모듈을 다시 불러와 주세요.');
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ try{await window.VzipR2.deleteLibrary(target,{signal:controller.signal});}finally{clearTimeout(timer);}
+ guard();
+ const {error}=await client.from('vocal_song_texts').update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('user_id',owner).eq('kind','recognition').eq('record_id',id);
+ if(error)throw error;guard();
+ const cached=await listCache(owner);guard();if(cached)await listCache(owner,{...cached,rows:cached.rows.filter(r=>r.id!==id)});guard();
+ window.dispatchEvent(new Event('vzip:cloud-media-changed'));
+}
 function mediaDeletionEngine({allowPaused=false}={}){
  const bridge=snapshotBridge({allowPaused});if(!bridge)return null;
  if(typeof window.VzipSnapshotTransport.createMediaDeletion!=='function')throw Error('파일 삭제 저장 모듈을 다시 불러와 주세요.');
@@ -828,13 +847,25 @@ function mediaDeletionEngine({allowPaused=false}={}){
   lock:(work,purpose,id)=>navigator.locks.request('vzip-media-delete:'+owner+':'+id,purpose==='ack'?{}:{ifAvailable:true},lock=>{
    if(!lock)throw Error('이 파일의 삭제를 다른 탭에서 확인하고 있어요.');
    if(purpose==='ack')return work();
-   return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},uploadLock=>{if(!uploadLock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');return work();});
+   return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},uploadLock=>{
+    if(!uploadLock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');
+    return navigator.locks.request('vzip-media-edit:'+owner+':'+id,{ifAvailable:true},editLock=>{
+     if(!editLock)throw Error('파일 수정 결과를 확인한 뒤 삭제해 주세요.');
+     assertNoPendingMediaEdit(owner,id);return work();
+    });
+   });
   }),
   read:async id=>{
    const {data,error}=await client.from('vocal_media').select('metadata,updated_at').eq('id',id).eq('user_id',owner).maybeSingle();
    if(error)throw error;return data||null;
   },
   validate:row=>mediaDeleteTargets(row,owner),
+  objectTarget:async(row,{id,requestId,previous})=>{
+   if(await mediaDeleteMode()==='legacy')return null;
+   if(!window.VzipR2.deletionTarget)throw Error('원본 삭제 저장 모듈을 다시 불러와 주세요.');
+   if(row===null&&previous)return previous;
+   return window.VzipR2.deletionTarget(row,{id,requestId});
+  },
   readLocalStamp:window.VZ?.media?.localDeleteInfo?async id=>window.VzipSnapshotTransport.localStamp((await window.VZ.media.localDeleteInfo(id)).token):null,
   reviewRoot:context=>bridge.reviewMediaRecovery(context),
   prepareResume:async({context,reviewId,payload,confirmed,retry})=>{
@@ -872,7 +903,12 @@ function mediaDeletionEngine({allowPaused=false}={}){
    });
    return bridge.write(row,payload,{kind:'media-delete',id,stamp});
   },
-  cleanup:(row,guard,id)=>cleanupCloudMedia(row,owner,id,guard)
+  cleanup:async(row,guard,id,target)=>{
+   guard();assertNoPendingMediaEdit(owner,id);
+   if(target)return cleanupVersionedCloudMedia(target,owner,id,guard);
+   if(await mediaDeleteMode()!=='legacy')throw Error('기존 원본 삭제는 새 저장 방식 인수가 먼저 필요해요.');
+   guard();return cleanupCloudMedia(row,owner,id,guard);
+  }
  });
 }
 window.vzipPendingMediaDeletes=()=>mediaDeletionEngine({allowPaused:true})?.list()||[];
@@ -886,8 +922,7 @@ async function deleteCloudMedia(item){
  return cleanupCloudMedia(row,owner,item.id,guard,()=>unlinkCloudMedia(owner,item.id));
 }
 window.vzipCloudMediaDelete=async item=>{
- const owner=user?.id,prefix=window.VzipMediaMetadataEdits?.PREFIX||'vzip_media_edit_v1:';
- if(owner&&localStorage.getItem(prefix+encodeURIComponent(owner)+':'+encodeURIComponent(item.id))!==null)throw Error('미완료 파일 수정 결과를 확인한 뒤 삭제해 주세요. 보관한 입력과 원본은 그대로예요.');
+ const owner=user?.id;assertNoPendingMediaEdit(owner,item.id);
  const engine=mediaDeletionEngine();if(engine)return engine.run(item.id).finally(refreshMediaDeleteReview);
  if(navigator.locks?.request)return navigator.locks.request('vzip-cloud-media-upload',{ifAvailable:true},lock=>{
   if(!lock)throw Error('다른 탭의 업로드가 끝난 뒤 삭제해 주세요.');

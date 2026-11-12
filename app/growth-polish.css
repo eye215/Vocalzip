@@ -1,0 +1,15 @@
+/* 성장 화면 정리 (v0.8, design guide §8 공통 탭·§10 헤더): one page title, Korean section titles only, tabs in the
+ * shared capsule style, and one empty note instead of four "측정 없음" cards. Loaded after monthly-growth.css. */
+.growth-page-header{display:none}   /* the top bar already says 보컬 성장 */
+.growth-eyebrow{display:none}       /* English kickers (MY VOCAL ARCHIVE, VOICE METRICS …) */
+/* 공통 탭: transparent row, no box/border/shadow; 44px capsules, 3px apart; selected #EDE1FF / #7A32F5. */
+.growth-view-tabs,.growth-jumps{position:static;display:flex;gap:3px;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none;overflow-x:auto;scrollbar-width:none}
+.growth-view-tabs::-webkit-scrollbar,.growth-jumps::-webkit-scrollbar{display:none}
+.growth-view-tabs button,.growth-jumps button{flex:none;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:transparent;box-shadow:none;color:#475467;font:600 14px/1 inherit;font-family:inherit;white-space:nowrap}
+.growth-view-tabs button.active,.growth-jumps button[aria-pressed="true"],.growth-jumps button:active{background:#EDE1FF;color:#7A32F5;box-shadow:none}
+@media (max-width:350px){.growth-view-tabs button,.growth-jumps button{padding:0 9px}}
+.growth-stats-empty{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:start;padding:16px;border-radius:20px;background:#fff}
+.growth-stats-empty i{font-size:24px;color:#7A32F5;margin-top:2px}
+.growth-stats-empty p{margin:0;font-size:13px;line-height:1.55;color:#475467}
+.growth-stats-empty strong{display:block;margin-bottom:2px;font-size:15px;color:#101828}
+.growth-stats-empty .btn{grid-column:2;justify-self:start;margin-top:4px}
