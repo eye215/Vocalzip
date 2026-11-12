@@ -1610,6 +1610,29 @@ test('Import waits while another upload holds the slot instead of failing after 
   await expect(page.getByText(/실패:/)).toHaveCount(0);
 });
 
+test('A file that waited for the upload slot is not sent again when another tab uploaded it meanwhile', async ({page}) => {
+  test.setTimeout(90000);
+  await boot(page, {media:false});
+  await page.evaluate(() => {
+    window.vzipCloudSignedIn=()=>true;window.vzipCloudUserId=()=>'ui-test-user';
+    window.__dupe={left:2,sent:[],server:[]};
+    VZ.media.list=async()=>window.__dupe.server.slice();
+    window.vzipInspectMedia=async()=>({readable:true,duration:40,hasVideo:false,hasAudio:true,metadata:{recordedDate:'2026-11-09',dateSource:'metadata'}});
+    VZ.media.importFile=async(file,choice)=>{
+      if(file.name==='a.m4a'&&window.__dupe.left>0){
+        window.__dupe.left--;
+        // the other tab finishes the same file while this one waits
+        if(!window.__dupe.left)window.__dupe.server.push({id:'other-tab',name:'a',originalFilename:'a.m4a',size:file.size,fileHash:choice.extra.fileHash});
+        throw Error('다른 파일을 업로드하고 있어요. 완료하거나 취소한 뒤 다시 선택해 주세요.');
+      }
+      window.__dupe.sent.push(file.name);return {id:choice.id,cloud:true,size:file.size,durationSeconds:40,recordedDate:'2026-11-09'};
+    };
+    VZ.openImportHub({files:[new File([new Uint8Array([1,2])],'a.m4a',{type:'audio/mp4'}),new File([new Uint8Array([3,4])],'b.m4a',{type:'audio/mp4'})]});
+  });
+  await expect.poll(()=>page.evaluate(()=>window.__dupe.sent),{timeout:60000}).toEqual(['b.m4a']);
+  await expect(page.getByText(/실패:/)).toHaveCount(0);
+});
+
 test('Library import skips 24 seconds and includes 25 seconds', async ({page}) => {
   await boot(page, {media:false});
   await page.evaluate(() => {
