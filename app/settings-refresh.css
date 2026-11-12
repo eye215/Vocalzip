@@ -87,3 +87,6 @@ body[data-vz-route="settings"] #view{padding-bottom:12px}
 .vz-settings-cloud #vzip-cloud-root .cloud-more{border-top-color:var(--vz-color-border)}
 @media(max-width:350px){.vz-journey-content>strong em{font-size:24px}.vz-journey-stats b{font-size:17px}}
 
+
+/* 파일 상태 row: a failed import or upload reads in the danger colour (details on 처리 내역). */
+.vz-settings-list .item[data-state=error] .item-sub{color:var(--vz-color-danger,#c93a3a);font-weight:600}
