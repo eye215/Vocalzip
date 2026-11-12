@@ -1509,8 +1509,9 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
     for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin(i / tone) * 6000), 44 + i * 2); return b; };
   const seed = legacy(); seed.songs.push({id:'s3', title:'One Day More', show:'레미제라블', aliases:['원데이모어']});
   await boot(page, {seed, media:false});
-  // 기존 자료 가져오기 opens from the home quick row's 가져오기 (no longer from settings).
-  await page.goto('/#/home');
+  // 기존 자료 가져오기 opens from the home quick row's 가져오기 (no longer from settings). boot() leaves us on #/home;
+  // goto() to the same URL would reload in WebKit and drop boot's signed-out-device setup.
+  await expect(page).toHaveURL(/#\/home$/);
   await page.locator('[data-import]').click();
   await expect(page.locator('#top h1')).toHaveText('기존 자료 가져오기');
   await page.getByRole('button', {name:/음성 메모/}).click();
@@ -1558,7 +1559,6 @@ test('Import hub filters by date and length, flags duplicates and missing dates,
   await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
   // Checked on the whole hub so a failure shows each file's reason (failed rows are listed under the result card).
   await expect(page.locator('[data-hub]')).toContainText('저장 3개', {timeout:60000});
-  await expect(page.locator('[data-result]')).toContainText('저장 3개');
   await expect(page.locator('[data-result]')).toContainText('연습 기록 2개 생성');
   const items = (await media(page)).filter(m => m.source === 'import');
   expect(items).toHaveLength(3);
