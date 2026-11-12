@@ -59,12 +59,22 @@ const pdfCache={
   for(const key of await cache.keys())if(key.url.includes(part))await cache.delete(key);
  }
 };
-VZ.deleteScoreWithInk=(songId,score)=>{
+VZ.deleteScoreWithInk=async(songId,score)=>{
  const owner=window.vzipCloudUserId?.(),scope=window.VzipAccountScope;
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});
+ const saved=store.removeScore({ownerId:owner,songId,scoreId:score.id,r2Key:score.r2Key});
+ if(!saved)return false;
  pdfCache.drop(score.r2Key).catch(()=>{});
- return store.removeScore({ownerId:owner,songId,scoreId:score.id,r2Key:score.r2Key});
+ if(window.VzipScoreInkIDB){
+  let archive;
+  try{
+   archive=await window.VzipScoreInkIDB.create({owner,identity,valid:Ink.valid});
+   await archive.removeScoreVersions({ownerId:owner,scoreId:score.id,r2Key:score.r2Key});
+  }catch(error){VZ.toast('악보는 삭제했지만 기기 내 필기 정리가 완료되지 않았어요: '+error.message,'error');}
+  finally{archive?.close();}
+ }
+ return true;
 };
 VZ.openScoreInk=(songId,scoreId)=>{
  const score=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted),owner=window.vzipCloudUserId?.();
