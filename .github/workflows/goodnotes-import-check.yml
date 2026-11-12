@@ -5,7 +5,7 @@ on:
       - 'app/goodnotes-*.js'
       - 'app/scores.js'
       - 'app/score-ink-model.js'
-      - 'app/score-ink-idb.js'
+      - 'app/score-ink.js'
       - 'tests/goodnotes-*'
       - '.github/workflows/goodnotes-import-check.yml'
   workflow_dispatch:
@@ -29,6 +29,6 @@ jobs:
       - run: node --test tests/goodnotes-parse.test.cjs
       - name: Pinned PDF libraries for the browser import test
         run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
-      - run: npx playwright test tests/goodnotes-import.spec.cjs tests/goodnotes-ink-idb.spec.cjs --workers=2
+      - run: npx playwright test tests/goodnotes-import.spec.cjs --workers=2
         env:
           PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: '1'

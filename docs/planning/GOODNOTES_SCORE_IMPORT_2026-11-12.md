@@ -49,12 +49,25 @@ Rendering the decoded strokes over page 1 of the embedded PDF puts them exactly 
 
 ### Implemented
 
-- `app/goodnotes-parse.js` — reads the notebook on the device: pages in notebook order, outline → sections (songs), ink → the score viewer's stroke format (page-normalised points). Read-only; size limits on the archive and each entry; unknown ink shapes and erased items are counted and left out.
-- `app/goodnotes-import.js` — 악보 탭 → `PDF 올리기` → `굿노트 파일에서 가져오기`. Shows one row per outline section (title, pages, ink count, target song: matching song / new song / skip). On confirm, per section: build the song's PDF from its pages (pdf-lib), upload it as a normal score, add the score entry, then store the ink as editable records bound to that PDF's SHA-256.
+- `app/goodnotes-parse.js` — reads the notebook on the device: pages in notebook order, outline → sections (each outline entry runs until the page before the next one; the last reaches the end), ink → the score viewer's stroke format (page-normalised points). Read-only; size limits on the archive and each entry; unknown ink shapes and erased items are counted and left out.
+- `app/goodnotes-import.js` — 악보 탭 → `PDF 올리기` → `굿노트 파일에서 가져오기`. One row per outline section (title, pages, ink count, target song: matching song / new song / skip). On confirm, per section: build the song's PDF from its pages (pdf-lib), **attach the section's handwriting to that PDF as `vocalzip-ink.json`**, upload it as a normal score, add the score entry.
   - Only adds: nothing existing is replaced; the `.goodnotes` file is never uploaded; pages before the first outline entry are skipped by default; an already imported section is skipped by default.
-  - Ink budget: editable ink lives twice in localStorage (record list + account recovery copy), so one import takes at most ~900 strokes / ~260k characters and never more than the recovery copy can hold. A section over the budget has its ink drawn into its PDF (visible, not editable) and says so before the import.
+  - No stroke cap and no flattening: the ink is in the PDF, so its size only counts against the PDF limit (50 MB).
+  - A page that is rotated or cropped, or a stroke the app cannot represent, stops the import with the reason (nothing is silently dropped or misplaced).
   - Retry continues from the failed section; finished sections are not uploaded again.
-- Tests: `tests/goodnotes-parse.test.cjs` (7, synthetic archives), `tests/goodnotes-import.spec.cjs` (4, browser, fake R2). The real sample is used locally only and is not in the repository.
+- `app/score-ink.js` — when a score opens, the attached handwriting is read with pdf.js (`getAttachments`) and bound to this account and this exact PDF (SHA-256). It is shown and edited like the account's own strokes: erasing records the id in the synced `deleted.scoreAnnotations`; undo or moving creates ordinary synced strokes. `app/score-ink-model.js` gained `gone()` (the erased ids).
+
+### Where the handwriting lives (why not IndexedDB)
+
+An intermediate version kept imported and hand-drawn ink in IndexedDB. That was device-local only: new ink would not reach other devices and could be lost with the browser's site data, and it broke 33 existing score-ink tests. It was replaced before merge (never deployed, so no device holds data in it):
+
+| | Where | Syncs to other devices |
+|---|---|---|
+| Imported handwriting (any amount) | inside the score PDF in R2 | yes, with the PDF |
+| Erasures of imported strokes | `vocal_data.payload` → `deleted.scoreAnnotations` (ids only) | yes |
+| Strokes drawn in the app, undo copies, moved copies | `vocal_data.payload` → `scoreAnnotations` (unchanged from before) | yes |
+
+- Tests: `tests/goodnotes-parse.test.cjs` (8), `tests/goodnotes-import.spec.cjs` (4, browser, fake R2: outline split, PDF attachment contents, erase/undo, "another device" with no local copies, 950 strokes all editable). The real sample is used locally only and is not in the repository.
 
 ### Not verified yet
 
