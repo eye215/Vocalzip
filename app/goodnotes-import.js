@@ -104,38 +104,73 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
  try{model=await G.read(new Uint8Array(await file.arrayBuffer()));}
  catch(error){VZ.toast(error.code?error.message:'굿노트 파일을 읽지 못했어요: '+(error.message||error),'error');return;}
  const owner=window.vzipCloudUserId?.()||'',songs=()=>VZ.db.songs||[];
- const items=plan(model),single=items.length===1&&song;
- for(const item of items){
+ const atoms=plan(model),single=atoms.length===1&&song;
+ /* One row = one score. A row is one or more outline sections next to each other: the user can tick rows in order and
+  * join them ("한 곡으로 합치기"), or split a joined row again. Sections whose titles repeat back to back (GoodNotes
+  * names every page of a song the same) start out joined. */
+ let n=0;
+ const join=list=>{let page=0;const pages=list.flatMap(a=>a.pages).map(p=>({...p,number:++page}));
+  return {key:'r'+(n++),atoms:list,title:list[0].title,from:list[0].from,to:list.at(-1).to,untitled:list.every(a=>a.untitled),pages,count:pages.reduce((k,p)=>k+p.strokes.length,0)};};
+ const decorate=(item,{target,title}={})=>{
+  if(title)item.title=title;
   // A title that names one of the songs goes there; a lone section started from a song's page goes to that song.
   const hit=matchSong(item.title,songs())||(single?song:null);
   item.duplicate=!!hit&&(hit.scores||[]).some(s=>!s.deleted&&s.source==='goodnotes'&&plain(s.title)===plain(item.title)&&s.pages===item.pages.length);
-  item.target=item.duplicate||item.untitled&&items.length>1?'skip':hit?hit.id:'new';
+  item.target=target&&target!=='skip'?target:item.duplicate||item.untitled&&atoms.length>1?'skip':hit?hit.id:'new';
   item.state={id:'score-'+VZ.uid(),createdAt:Date.now(),receipt:null,pdf:null,done:false};
- }
- const total=items.reduce((n,i)=>n+i.count,0),notes=summary(model.report),run={busy:false,cancelled:false,finished:false};
+  return item;
+ };
+ const runs=[];for(const a of atoms){const last=runs.at(-1);if(last&&!a.untitled&&!last[0].untitled&&plain(a.title)&&plain(a.title)===plain(last[0].title))last.push(a);else runs.push([a]);}
+ let items=runs.map(list=>decorate(join(list)));
+ const total=atoms.reduce((k,i)=>k+i.count,0),notes=summary(model.report),run={busy:false,cancelled:false,finished:false},picked=new Set();
  const options=item=>'<option value="new"'+(item.target==='new'?' selected':'')+'>새 곡으로 추가</option>'+
   songs().map(s=>'<option value="'+esc(s.id)+'"'+(item.target===s.id?' selected':'')+'>'+esc(VZ.songLabel?VZ.songLabel(s):s.title)+'</option>').join('')+
   '<option value="skip"'+(item.target==='skip'?' selected':'')+'>가져오지 않기</option>';
  const inkLabel=item=>item.count?'필기 '+item.count+'획 · 수정 가능':'필기 없음';
+ const pagesLabel=item=>item.from===item.to?item.from+'쪽':item.from+'–'+item.to+'쪽';
+ const rowHtml=(item,i)=>'<fieldset class="field" data-gn-section="'+item.key+'" style="border:0;padding:12px;margin:0 0 12px;border-radius:16px;background:var(--vz-color-surface,#fff)">'+
+  '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><label style="display:flex;align-items:center;gap:6px;min-height:44px;flex:1"><input type="checkbox" data-gn-pick'+(picked.has(item.key)?' checked':'')+(item.state.done?' disabled':'')+' aria-label="'+(i+1)+'번째 악보 합치기 선택" style="width:22px;height:22px;accent-color:var(--vz-color-primary,#7a32f5)"><span class="small muted">'+pagesLabel(item)+'</span></label>'+
+  (item.atoms.length>1&&!item.state.done?'<button type="button" class="btn ghost sm" data-gn-split aria-label="'+esc(item.title)+' 나누기">나누기</button>':'')+'</div>'+
+  '<label class="field"><span>악보 제목</span><input type="text" data-gn-title maxlength="120" value="'+esc(item.title)+'" aria-label="'+(i+1)+'번째 악보 제목"'+(item.state.done?' disabled':'')+'></label>'+
+  '<p class="small muted" data-gn-info style="margin:0 0 8px">'+pagesLabel(item)+' · '+inkLabel(item)+(item.atoms.length>1?' · '+item.atoms.length+'개를 합쳤어요':'')+(item.duplicate?' · 이미 가져온 악보예요':'')+(item.state.done?' · 가져왔어요':'')+'</p>'+
+  '<label class="field" style="margin:0"><span>넣을 곡</span><select data-gn-target aria-label="'+esc(item.title)+' 넣을 곡"'+(item.state.done?' disabled':'')+'>'+options(item)+'</select></label></fieldset>';
  VZ.sheet({title:'굿노트 가져오기',label:'굿노트 가져오기',
   body:'<form id="gn-import" class="stack"><p class="small muted" data-gn-summary>'+esc((model.title||file.name)+' · '+model.pages.length+'쪽 · '+(model.outline.length?'개요 '+model.outline.length+'개':'개요 없음')+' · 필기 '+total+'획')+'</p>'+
-   (model.outline.length?'':'<p class="small muted">개요가 없어서 전체를 한 곡으로 가져와요. 굿노트에서 곡마다 개요를 넣으면 곡별로 나눠져요.</p>')+
-   notes.map(n=>'<p class="small muted">'+esc(n)+'</p>').join('')+
-   items.map(item=>'<fieldset class="field" data-gn-section="'+item.index+'" style="border:0;padding:12px;margin:0 0 12px;border-radius:16px;background:var(--vz-color-surface,#fff)">'+
-    '<label class="field"><span>악보 제목</span><input type="text" data-gn-title maxlength="120" value="'+esc(item.title)+'" aria-label="'+(item.index+1)+'번째 악보 제목"></label>'+
-    '<p class="small muted" style="margin:0 0 8px">'+(item.from===item.to?item.from+'쪽':item.from+'–'+item.to+'쪽')+' · '+inkLabel(item)+(item.duplicate?' · 이미 가져온 악보예요':'')+'</p>'+
-    '<label class="field" style="margin:0"><span>넣을 곡</span><select data-gn-target aria-label="'+esc(item.title)+' 넣을 곡">'+options(item)+'</select></label></fieldset>').join('')+
+   (model.outline.length?'<p class="small muted">한 곡이 여러 줄로 나뉘었으면 줄을 순서대로 선택하고 합치세요.</p>':'<p class="small muted">개요가 없어서 전체를 한 곡으로 가져와요. 굿노트에서 곡마다 개요를 넣으면 곡별로 나눠져요.</p>')+
+   notes.map(t=>'<p class="small muted">'+esc(t)+'</p>').join('')+
+   '<div data-gn-mergebar hidden style="position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:8px 0;background:var(--vz-color-canvas,#f8f6fd)"><button type="button" class="btn sm" data-gn-merge></button><span class="small muted" data-gn-mergehint></span></div>'+
+   '<div data-gn-list></div>'+
    '<p class="small muted" data-gn-msg role="status" aria-live="polite">굿노트 파일은 이 기기에서만 읽어요. 곡별 PDF(필기 포함)만 내 계정에 올라가 다른 기기에서도 보여요.</p></form>',
   foot:'<button type="submit" form="gn-import" class="btn block" data-gn-go>가져오기</button>',
   onClose:()=>{run.cancelled=true;},
   onMount:(el,close)=>{
-   const form=el.querySelector('form'),msg=el.querySelector('[data-gn-msg]'),go=el.querySelector('[data-gn-go]');
-   const rows=items.map(item=>({item,row:el.querySelector('[data-gn-section="'+item.index+'"]')}));
+   const form=el.querySelector('form'),msg=el.querySelector('[data-gn-msg]'),go=el.querySelector('[data-gn-go]'),list=el.querySelector('[data-gn-list]');
+   const bar=el.querySelector('[data-gn-mergebar]'),mergeButton=el.querySelector('[data-gn-merge]'),hint=el.querySelector('[data-gn-mergehint]');
+   const rowOf=item=>list.querySelector('[data-gn-section="'+item.key+'"]');
+   /** The ticked rows, if they sit next to each other and none is imported yet. */
+   const selection=()=>{const at=items.map((item,i)=>picked.has(item.key)?i:-1).filter(i=>i>=0);
+    return {at,ok:at.length>=2&&at.every((v,k)=>!k||v===at[k-1]+1)&&at.every(i=>!items[i].state.done)};};
+   const read=()=>{for(const item of items){const row=rowOf(item);if(!row||item.state.done)continue;item.target=row.querySelector('[data-gn-target]').value;item.title=row.querySelector('[data-gn-title]').value.trim()||item.title;}};
    const sync=()=>{
-    for(const {item,row} of rows){item.target=row.querySelector('[data-gn-target]').value;item.title=row.querySelector('[data-gn-title]').value.trim()||item.title;}
-    const n=items.filter(i=>i.target!=='skip'&&!i.state.done).length;go.textContent=n?'가져오기 ('+n+'곡)':'가져올 곡을 골라 주세요';go.disabled=run.busy||!n;
+    read();
+    const left=items.filter(i=>i.target!=='skip'&&!i.state.done).length;go.textContent=left?'가져오기 ('+left+'곡)':'가져올 곡을 골라 주세요';go.disabled=run.busy||!left;
+    const sel=selection();bar.hidden=run.busy||sel.at.length<2;mergeButton.disabled=!sel.ok;
+    mergeButton.textContent='선택한 '+sel.at.length+'개를 한 곡으로 합치기';hint.textContent=sel.ok?'':'이웃한 줄만 합칠 수 있어요';
    };
-   form.oninput=form.onchange=sync;sync();
+   const draw=()=>{list.innerHTML=items.map(rowHtml).join('');sync();};
+   list.addEventListener('change',event=>{const box=event.target.closest('[data-gn-pick]');if(!box)return;const key=box.closest('[data-gn-section]').dataset.gnSection;box.checked?picked.add(key):picked.delete(key);sync();});
+   list.addEventListener('click',event=>{
+    const button=event.target.closest('[data-gn-split]');if(!button||run.busy)return;read();
+    const at=items.findIndex(item=>item.key===button.closest('[data-gn-section]').dataset.gnSection),item=items[at];
+    items.splice(at,1,...item.atoms.map(a=>decorate(join([a]))));picked.clear();draw();
+   });
+   mergeButton.onclick=()=>{
+    if(run.busy)return;read();const sel=selection();if(!sel.ok)return;
+    const first=items[sel.at[0]],joined=decorate(join(sel.at.flatMap(i=>items[i].atoms)),{title:first.title,target:first.target});
+    items.splice(sel.at[0],sel.at.length,joined);picked.clear();draw();
+    msg.textContent='“'+joined.title+'” '+pagesLabel(joined)+'을 한 악보로 합쳤어요.';
+   };
+   form.oninput=form.onchange=sync;draw();
    form.onsubmit=async event=>{
     event.preventDefault();if(run.busy)return;sync();
     const account=window.vzipCloudUserId?.()||'';
@@ -143,6 +178,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     if(account!==owner){msg.textContent='로그인 계정이 바뀌었어요. 창을 닫고 다시 열어 주세요.';return;}
     const guard=()=>{if(run.cancelled)throw Object.assign(Error('가져오기를 멈췄어요.'),{stopped:true});if(window.vzipCloudUserId?.()!==owner||!window.vzipCloudSignedIn?.()||window.VzipAccountScope?.leaving)throw Error('로그인 계정이 바뀌어 멈췄어요.');};
     run.busy=true;go.disabled=true;for(const control of form.elements)control.disabled=true;
+    picked.clear();bar.hidden=true;
     const todo=items.filter(i=>i.target!=='skip'&&!i.state.done),result={scores:0,ink:0};
     try{
      msg.textContent='PDF 도구를 준비하고 있어요.';
@@ -166,7 +202,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
       if(!VZ.change(d=>{const s=d.songs.find(x=>x.id===target.id);if(!s)throw Error('곡을 찾을 수 없어요.');s.scores||=[];if(!s.scores.some(x=>x.id===entry.id))s.scores.push(entry);}))throw Error('목록에 저장하지 못했어요.');
       result.scores++;result.ink+=ink.strokes.length;
       item.state.done=true;item.state.pdf=null;
-      rows.find(r=>r.item===item).row.querySelector('p').textContent+=' · 가져왔어요';
+      const done=rowOf(item);if(done){done.querySelector('[data-gn-info]').textContent+=' · 가져왔어요';for(const control of done.querySelectorAll('input,select,button'))control.disabled=true;}
      }
      run.finished=true;close();
      VZ.toast('악보 '+result.scores+'개를 가져왔어요'+(result.ink?' · 수정 가능한 필기 '+result.ink+'획':'')+'.');
@@ -176,7 +212,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
      if(result.scores)onDone(result);
     }finally{
      run.busy=false;
-     if(!run.finished){for(const control of form.elements)control.disabled=false;for(const {item,row} of rows)if(item.state.done)for(const control of row.querySelectorAll('input,select'))control.disabled=true;sync();}
+     if(!run.finished)draw();
     }
    };
   }});
