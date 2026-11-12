@@ -1,0 +1,16 @@
+/* 원곡(AR) 음정 비교 — vocal lab block (dark, reuses the vl-note-* rows of score-note-compare.css) and the 원곡 파일
+ * section of the song's 레퍼런스 tab (light, reuses the MR row layout). */
+.vl-ar-plays{display:flex;flex:none;gap:4px;align-items:center}
+.vl-ar-orig{background:#2a2234}
+.vl-ar-disclaimer{font-size:12px;line-height:17px}
+@media (max-width:360px){.vl-ar-cmp .vl-note-row{flex-wrap:wrap;padding-right:0}.vl-ar-plays{margin-left:auto}}
+.vz-arfile .vz-ar-heading strong span{margin-left:4px}
+.vz-arfile-state{margin:2px 4px 4px;font-size:13px;line-height:19px;color:var(--vz-color-ink);overflow-wrap:anywhere}
+.vz-arfile-state.hold{color:var(--vz-color-ink-muted)}
+.vz-arfile-btn{min-height:44px;padding:0 10px;margin-left:2px;border:0;background:transparent;color:var(--vz-color-accent);font-size:13px;font-weight:650;cursor:pointer}
+.vz-arfile-note{margin:0 4px 8px;font-size:12px;line-height:17px;color:var(--vz-color-ink-muted)}
+.vz-arfile [data-arfile-player]{padding:8px 4px 12px;font-size:13px;overflow-wrap:anywhere}
+.vz-arfile audio{display:block;width:100%;max-width:100%}
+.vz-arfile .vz-mr-row-head [data-arfile-open]{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:54px;padding:7px 4px;text-align:left;background:none;border:0;color:var(--vz-color-ink)}
+.vz-arfile .vz-mr-row-head [data-arfile-open]>span{flex:1;min-width:0}
+.vl-ar-cmp .vl-note-sum strong{font-size:19px;line-height:25px}

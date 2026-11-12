@@ -39,6 +39,8 @@ const RULES = {
   tempoRange:1.8              // local tempo within ×/÷ 1.8 of the take's overall tempo (rubato, fermatas)
 };
 
+const BASE_RULES = RULES;
+
 /* ---------- input ---------- */
 /** The voice curve of a full analysis result: cents per frame (NaN = no voice), frames/s, and the reference tuning
  * (the MR's own tuning when the analyzer heard it, else A4 = 440 Hz). */
@@ -167,9 +169,10 @@ function segmentsOf(visits) {
 }
 
 /** Align one take with the melody. melody: VzipScoreRange.melody(); sung: framesOf(result).
- * Options: reliable (the analysis itself is trustworthy, VZ.analysisReliable), shifts (force candidates, tests). */
-function align(melody, sung, {reliable = true, shifts = null} = {}) {
-  const t0 = Date.now();
+ * Options: reliable (the analysis itself is trustworthy, VZ.analysisReliable), shifts (force candidates, tests),
+ * rules (thresholds of the withholding checks for another kind of reference, e.g. 원곡(AR) 음정 비교's extracted melody). */
+function align(melody, sung, {reliable = true, shifts = null, rules = null} = {}) {
+  const t0 = Date.now(), RULES = rules ? {...BASE_RULES, ...rules} : BASE_RULES;
   const notes = (melody?.notes || []).filter(n => Number.isFinite(n.midi) && n.beats > 0);
   const {cents, fps, tuning} = sung;
   const base = {version:VERSION, fps, tuning, notesTotal:notes.length, measuresTotal:new Set(notes.map(n => n.mi)).size, rows:[], segments:[]};
