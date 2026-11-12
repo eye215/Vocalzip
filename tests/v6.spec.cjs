@@ -1798,6 +1798,23 @@ test('Library bulk menu omits analysis when selected recordings span songs', asy
   await expect(page.getByRole('dialog', {name:'선택한 녹음 3개'}).getByRole('button', {name:'보컬 분석'})).toHaveCount(0);
 });
 
+test('Settings shows one 파일 상태 line from this device and opens 처리 내역 from it', async ({page}) => {
+  await boot(page, {seed:legacy()});
+  await page.goto('/#/settings');
+  const link = page.locator('[data-file-status-link]'), line = page.locator('[data-file-status]');
+  await expect(link).toBeVisible();
+  await expect(line).not.toHaveText('확인 중…');
+  await expect(link).not.toHaveAttribute('data-state', 'error');
+  // A failed import in this device's journal (fixture row only) turns the line into a call to check it.
+  await page.evaluate(() => window.VZ.processingLog.record('fixture-failed', {state:'failed', originalName:'fixture.m4a', error:'fixture failure'}));
+  await page.goto('/#/home'); await page.goto('/#/settings');
+  await expect(line).toContainText('실패 1개 확인 필요');
+  await expect(link).toHaveAttribute('data-state', 'error');
+  await link.click();
+  await expect(page).toHaveURL(/#\/processing-log$/);
+  await expect(page.locator('[data-processing-log]')).toContainText('fixture.m4a');
+});
+
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
   const seed = legacy();
   seed.performances = [{id:'show1',ownerId:'ui-test-user',title:'첫 무대',start:'2025-07-24',status:'completed',sessions:[]}];
