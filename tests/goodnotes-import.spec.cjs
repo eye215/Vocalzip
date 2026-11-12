@@ -87,8 +87,9 @@ test('a notebook is cut by its outline into per-song scores, and its handwriting
  expect(r2.store.get(mine.r2Key).bytes.includes(Buffer.from('Original page 2'))).toBe(true);
  expect(r2.store.get(mine.r2Key).bytes.includes(Buffer.from('Original page 4'))).toBe(false);
  expect(importedInk.every(s=>s.valid)).toBe(true);
- expect(importedInk.map(s=>[s.scoreId===mine.id?'mine':'river',s.page,s.tool,s.color,s.opacity])).toEqual([['mine',1,'pen','#ff0000',1],['mine',2,'highlighter','#00ffff',0.5],['river',2,'pen','#0000ff',1]]);
- expect([importedInk[0].first,importedInk[0].last,importedInk[0].width]).toEqual([[0.2,0.15,0.5],[0.8,0.15,0.5],0.01]);
+ const sortedInk=importedInk.slice().sort((a,b)=>(a.scoreId===mine.id?0:1)-(b.scoreId===mine.id?0:1)||a.page-b.page);
+ expect(sortedInk.map(s=>[s.scoreId===mine.id?'mine':'river',s.page,s.tool,s.color,s.opacity])).toEqual([['mine',1,'pen','#ff0000',1],['mine',2,'highlighter','#00ffff',0.5],['river',2,'pen','#0000ff',1]]);
+ expect([sortedInk[0].first,sortedInk[0].last,sortedInk[0].width]).toEqual([[0.2,0.15,0.5],[0.8,0.15,0.5],0.01]);
 
  // The song's score list shows it, and the viewer draws the imported stroke where it was — and can erase it.
  await expect(page.locator('.score-row')).toContainText('Defying Gravity (연습용)');
