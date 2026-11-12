@@ -113,7 +113,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
  try{model=await G.read(new Uint8Array(await file.arrayBuffer()));}
  catch(error){VZ.toast(error.code?error.message:'굿노트 파일을 읽지 못했어요: '+(error.message||error),'error');return;}
  const owner=window.vzipCloudUserId?.()||'',songs=()=>VZ.db.songs||[];
- const items=plan(model,inkBudget(owner));
+ const items=plan(model,window.VzipScoreInkIDB?{chars:Infinity,strokes:Infinity}:inkBudget(owner));
  const single=items.length===1&&song;
  for(const item of items){
   // A title that names one of the songs goes there; a lone section started from a song's page goes to that song.
@@ -157,7 +157,9 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     if(todo.some(i=>i.mode==='flatten')){msg.textContent='필기가 많은 곡은 현재 저장 공간 한도로 인해 수정 가능한 상태로 옮길 수 없어요. 필기를 PDF에 합치거나 누락하지 않도록 가져오기를 보류했어요. 해당 곡을 제외하거나 저장 구조 개선 후 다시 시도해 주세요.';run.busy=false;for(const control of form.elements)control.disabled=false;sync();return;}
     try{
      msg.textContent='PDF 도구를 준비하고 있어요.';
-     const lib=await library(),sources=new Map(),store=inkStore(owner);guard();
+     const lib=await library(),sources=new Map(),store=window.VzipScoreInkIDB?null:inkStore(owner);
+     const archive=window.VzipScoreInkIDB?await window.VzipScoreInkIDB.create({owner,identity:()=>window.vzipCloudSignedIn?.()?{owner:window.vzipCloudUserId?.()}:null,valid:Ink.valid}):null;
+     guard();
      for(const [n,item] of todo.entries()){
       const step=text=>{msg.textContent=(n+1)+'/'+todo.length+' '+item.title+' · '+text;};
       step('PDF 만드는 중');
@@ -177,11 +179,12 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
       if(item.mode==='flatten')result.flattened+=item.count-lost;
       if(item.mode==='editable'){
        step('필기 옮기는 중');
-       const pdfHash=await digest(bytes),now=Date.now();guard();let order=0;
-       const records=item.pages.flatMap(page=>page.strokes.map(s=>({version:1,id:'gn-'+VZ.uid(),ownerId:owner,songId:target.id,scoreId:entry.id,r2Key:entry.r2Key,pdfHash,page:page.number,
-        tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,points:s.points,createdAt:now+order++}))).filter(Ink.valid);
+       const pdfHash=await digest(bytes),now=item.state.createdAt||Date.now();item.state.createdAt=now;guard();let order=0;
+       const records=item.pages.flatMap(page=>page.strokes.map(s=>({version:1,id:'gn-'+entry.id+'-'+order,ownerId:owner,songId:target.id,scoreId:entry.id,r2Key:entry.r2Key,pdfHash,page:page.number,
+        tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,points:s.points,createdAt:now+order++}))); 
+       if(records.some(s=>!Ink.valid(s)))throw Error('복원한 필기에 저장할 수 없는 형식이 있어요. 필기를 누락하지 않도록 중단했어요.');
        let saved=0;
-       try{for(let at=0;at<records.length;at+=150){const part=records.slice(at,at+150);if(!store.commit({add:part}))throw Error('필기를 저장하지 못했어요.');saved+=part.length;guard();}}
+       try{for(let at=0;at<records.length;at+=150){const part=records.slice(at,at+150);if(!(archive?await archive.commit({ownerId:owner,songId:target.id,scoreId:entry.id,r2Key:entry.r2Key,pdfHash},{add:part}):store.commit({add:part})))throw Error('필기를 저장하지 못했어요.');saved+=part.length;guard();}}
        catch(error){result.ink+=saved;throw Error('“'+item.title+'” 필기 '+saved+'/'+records.length+'획 저장 후 중단했어요: '+(error.message||error)+'. 원본은 유지됐고 다시 누르면 남은 필기를 이어서 시도해요.');}
        result.ink+=saved;result.lost+=item.count-saved;
       }
