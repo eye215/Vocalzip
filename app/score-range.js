@@ -45,13 +45,17 @@ VZ.vocalRangeCard = (host, song) => {
 
 /* ---------- set / change sheet ---------- */
 const noteOptions = selected => { let h = ''; for (let m = HIGHEST; m >= LOWEST; m--) h += '<option value="' + m + '"' + (m === selected ? ' selected' : '') + '>' + R.noteName(m) + (m === 60 ? ' (가운데 도)' : '') + '</option>'; return h; };
+/** The converted score of one PDF: {job} while it is not converted, else {job, xml, result:{parts, pick, …}}.
+ * Also used by 음표 단위 비교 (app/score-note-compare.js), which reads the confirmed part's notes from the same file. */
 async function loadScore(score) {
   const job = await window.VzipR2.omr.status(score.id);
   if (!job || job.status !== 'done' || !job.resultKey) return {job};
   const res = await fetch(await window.VzipR2.url(job.resultKey), {cache:'no-store'});
   if (!res.ok) throw Error('변환된 악보를 받지 못했어요 (' + res.status + ').');
-  return {job, result:R.read(await R.unzip(await res.arrayBuffer()))};
+  const xml = await R.unzip(await res.arrayBuffer());
+  return {job, xml, result:R.read(xml)};
 }
+VZ.vocalRangeLoadScore = loadScore;
 const TYPE = {vocal:'보컬로 보여요', piano:'피아노·건반으로 보여요', chords:'화음 위주', instrument:'악기로 보여요', empty:'음표 없음', unknown:''};
 
 VZ.vocalRangeSheet = (songArg, done = () => {}) => {
