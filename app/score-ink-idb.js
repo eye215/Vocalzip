@@ -9,7 +9,7 @@
  else root.VzipScoreInkIDB=api;
 })(typeof window==='object'?window:globalThis,function(){
  'use strict';
- const DB_NAME='vzip_score_ink_v2',VERSION=1,STORE='strokes';
+ const DB_NAME='vzip_score_ink_v2',VERSION=2,STORE='strokes',META='migrations';
  const fail=(message,code)=>Object.assign(Error(message),{code});
  const clone=row=>JSON.parse(JSON.stringify(row));
  const keyOf=b=>[b.ownerId,b.scoreId,b.pdfHash];
@@ -35,6 +35,7 @@
      s.createIndex('scope',['ownerId','scoreId','pdfHash']);
      s.createIndex('page',['ownerId','scoreId','pdfHash','page']);
     }
+    if(!database.objectStoreNames.contains(META))database.createObjectStore(META,{keyPath:'key'});
    };
    req.onsuccess=()=>resolve(req.result);
    req.onerror=()=>reject(req.error||fail('필기 저장소를 열 수 없어요.','storage'));
@@ -79,9 +80,15 @@
    try{await done;}catch(e){throw error||e;}
    check();return true;
   }
+  const migrationKey=b=>JSON.stringify([b.ownerId,b.songId,b.scoreId,b.r2Key,b.pdfHash]);
+  async function migrationState(b){
+   binding(b);
+   const tx=db.transaction(META,'readonly'),done=finished(tx),row=await reqPromise(tx.objectStore(META).get(migrationKey(b)));
+   await done;check();return row||null;
+  }
   async function migrateLegacy(b,rows){
    binding(b);
-   if(!Array.isArray(rows))throw fail('기존 필기 형식이 올바르지 않아요.','validation');
+   if(!Array.isArray(rows)||rows.some(row=>!valid(row)||!sameBinding(row,b)))throw fail('기존 필기 전체의 형식을 확인해야 해요. 복사를 중단했어요.','validation');
    let count=0;
    // Copy only. A successful copy is never a signal to delete cloud/root/legacy data.
    for(let i=0;i<rows.length;i+=100){
@@ -91,13 +98,22 @@
    }
    return {copied:count,legacyRetained:true};
   }
+  async function ensureMigrated(b,rows){
+   binding(b);
+   if(await migrationState(b))return {copied:0,already:true,legacyRetained:true};
+   const copy=await migrateLegacy(b,rows);
+   check();
+   const tx=db.transaction(META,'readwrite'),done=finished(tx);
+   tx.objectStore(META).put({key:migrationKey(b),ownerId:owner,completedAt:Date.now(),count:rows.length});
+   await done;check();return {...copy,already:false};
+  }
   async function removeScore(b){
    binding(b);
    const rows=await list(b);
    for(let i=0;i<rows.length;i+=100)await commit(b,{remove:rows.slice(i,i+100).map(s=>s.id)});
    return rows.length;
   }
-  return {list,commit,migrateLegacy,removeScore,close(){closed=true;db.close();},databaseName:DB_NAME};
+  return {list,commit,migrateLegacy,ensureMigrated,migrationState,removeScore,close(){closed=true;db.close();},databaseName:DB_NAME};
  }
  return {create,DB_NAME,VERSION};
 });
