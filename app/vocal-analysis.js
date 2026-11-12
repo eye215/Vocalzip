@@ -432,7 +432,7 @@ function measure(tr, voiced, refTuning) {
     const wobble = std(n.sm.map(v => v - center));
     const vib = dur >= 0.6 ? vibratoOf(n.raw, n.sm) : null;
     const hasVib = !!vib && vib.regularity >= 0.45 && vib.extent >= 15 && vib.rate >= 4 && vib.rate <= 8.5;
-    return {t:round(n.start / FPS, 2), dur:round(dur, 2), center, dev:wrap(center - tuning), wobble, vib:hasVib ? vib : null};
+    return {start:n.start, t:round(n.start / FPS, 2), dur:round(dur, 2), center, dev:wrap(center - tuning), wobble, vib:hasVib ? vib : null};
   });
   const weighted = (rows, f) => { const w = rows.reduce((s, r) => s + r.dur, 0); return w ? rows.reduce((s, r) => s + f(r) * r.dur, 0) / w : NaN; };
   const sustained = noteRows.filter(r => r.dur >= 0.5), long = noteRows.filter(r => r.dur >= 0.6);
@@ -443,6 +443,24 @@ function measure(tr, voiced, refTuning) {
   const kept = phrases.filter(([a, b]) => b - a >= 50), lens = kept.map(([a, b]) => (b - a) / FPS);
   const gaps = []; for (let i = 1; i < kept.length; i++) { const g = (kept[i][0] - kept[i - 1][1]) / FPS; if (g < 5) gaps.push(g); }
   const centers = noteRows.map(r => r.center);
+  // Growth report v2: compact per-phrase rows (to compare the SAME phrase across takes of a song) and per-semitone
+  // note statistics (high-note zone, transition zones). Small: one short array per phrase / sung semitone.
+  // phrases.rows: [start s, duration s, median MIDI, intonation mean |cents| or null, sustained wobble cents or null]
+  const phraseRows = kept.slice(0, 160).map(([a, b]) => {
+    const inside = noteRows.filter(r => r.start >= a && r.start < b), held = inside.filter(r => r.dur >= 0.5);
+    const voicedC = []; for (let f = a; f < b; f++) if (voiced[f]) voicedC.push(cents[f]);
+    const into = inside.length ? weighted(inside, r => Math.abs(r.dev)) : NaN;
+    return [round(a / FPS, 1), round((b - a) / FPS, 1), voicedC.length ? Math.round(median(voicedC) / 100) : null, round(into, 1), held.length ? round(mean(held.map(r => r.wobble)), 1) : null];
+  });
+  // pitchBands.rows: [MIDI, notes held ≥ 0.2 s, mean held s, longest held s, notes held ≥ 0.5 s, their mean wobble cents or null]
+  const bandMap = new Map();
+  for (const r of noteRows) {
+    if (r.dur < RULES.effectiveSeconds - 1e-9) continue;
+    const k = Math.round(r.center / 100), b = bandMap.get(k) || {n:0, dur:0, max:0, nw:0, wob:0};
+    b.n++; b.dur += r.dur; b.max = Math.max(b.max, r.dur); if (r.dur >= 0.5) { b.nw++; b.wob += r.wobble; }
+    bandMap.set(k, b);
+  }
+  const bandRows = [...bandMap].sort((x, y) => x[0] - y[0]).map(([k, b]) => [k, b.n, round(b.dur / b.n, 2), round(b.max, 2), b.nw, b.nw ? round(b.wob / b.nw, 1) : null]);
   return {
     notes:noteRows,
     metrics:{
@@ -451,7 +469,9 @@ function measure(tr, voiced, refTuning) {
       stability:sustained.length ? {wobbleCents:round(median(sustained.map(r => r.wobble)), 1), notes:sustained.length} : null,
       vibrato:long.length ? {share:round(vibNotes.length / long.length * 100), rateHz:vibNotes.length ? round(median(vibNotes.map(r => r.vib.rate)), 1) : null, extentCents:vibNotes.length ? round(median(vibNotes.map(r => r.vib.extent))) : null, regularity:vibNotes.length ? round(median(vibNotes.map(r => r.vib.regularity)), 2) : null, notes:long.length} : null,
       range:rangeOf(tr, voiced),
-      breath:kept.length ? {phrases:kept.length, medianPhrase:round(median(lens), 1), longestPhrase:round(Math.max(...lens), 1), medianGap:gaps.length ? round(median(gaps), 2) : null} : null
+      breath:kept.length ? {phrases:kept.length, medianPhrase:round(median(lens), 1), longestPhrase:round(Math.max(...lens), 1), medianGap:gaps.length ? round(median(gaps), 2) : null} : null,
+      phrases:kept.length ? {v:1, rows:phraseRows} : null,
+      pitchBands:bandRows.length ? {v:1, minSeconds:RULES.effectiveSeconds, wobbleSeconds:0.5, rows:bandRows} : null
     }
   };
 }

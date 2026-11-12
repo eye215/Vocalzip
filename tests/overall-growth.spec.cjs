@@ -35,13 +35,29 @@ test('no analysis remains a data-quality blank rather than a fabricated score',(
  assert.equal(r.metrics.every(m=>m.current==null&&m.pairedSongs===0),true);
  assert.equal(r.recommendations.length,0);
 });
-test('low-is-better intonation and high-is-better phrase directions are explicit',()=>{
+test('low-is-better accuracy/stability are explicit; v2-only measures withhold v1 takes instead of judging them',()=>{
  const r=make([clip('a','s1','2026-09-01',40,20,3,.6),
   clip('b','s1','2026-11-01',20,10,4,.8)]);
  assert.equal(r.metrics.find(x=>x.id==='intonation').improved,1);
  assert.equal(r.metrics.find(x=>x.id==='stability').improved,1);
- assert.equal(r.metrics.find(x=>x.id==='phrase').improved,1);
- assert.equal(r.metrics.find(x=>x.id==='vibrato').improved,1);
+ // 호흡 유지 compares the same phrases (v2 detail); a v1 median phrase length is never judged.
+ const phrase=r.metrics.find(x=>x.id==='phrase');
+ assert.equal(phrase.improved,0);
+ assert.equal(phrase.state,'hold');
+ assert.deepEqual(phrase.holds,{v1:1});
+ assert.equal(r.metrics.find(x=>x.id==='range').state,'hold');
+ assert.equal(r.metrics.some(x=>x.id==='vibrato'),false);
+ assert.equal(r.v1Count,2);
+});
+test('a v1 first take and a v2 latest take are never paired; the trend keeps one analysis version',()=>{
+ const v2=(id,date,into)=>({id,songId:'s1',date,analysis:{v:2,metrics:{intonation:{meanAbsCents:into,notes:20},stability:{wobbleCents:9,notes:5},voicedSeconds:30},confidence:{pitchConfidence:.95}}});
+ const r=calculate([clip('old','s1','2026-08-01',50),v2('new','2026-11-01',10)],{getDate:m=>m.date,valid:m=>!!m.analysis});
+ const into=r.metrics.find(x=>x.id==='intonation');
+ assert.equal(into.pairedSongs,0);
+ assert.deepEqual(into.holds,{'version-mixed':1});
+ assert.equal(r.topStrength,null);
+ assert.deepEqual(into.trend.map(x=>x.month),['2026-11']);
+ assert.equal(r.excludedFromTrend,1);
 });
 test('metric chart holds the latest 12 measured months, not all imported months',()=>{
  const takes=Array.from({length:15},(_,i)=>{
@@ -51,5 +67,6 @@ test('metric chart holds the latest 12 measured months, not all imported months'
  const r=make(takes);
  assert.equal(r.metrics[0].trend.length,12);
  assert.equal(r.metrics[0].trend.at(-1).month,'2026-03');
- assert.equal(DEFINITIONS.length,4);
+ assert.equal(DEFINITIONS.length,6);
+ assert.deepEqual(DEFINITIONS.map(d=>d.id),['intonation','stability','range','phrase','high','passaggio']);
 });

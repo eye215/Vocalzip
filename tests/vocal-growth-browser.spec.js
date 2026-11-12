@@ -4,7 +4,7 @@ const path=require('node:path');
 const scripts=[
  'app/weak-phrase.js','app/segment-ab-model.js','app/segment-ab-ui.js',
  'app/plan-outcome-model.js','app/plan-outcome-ui.js',
- 'app/overall-growth-model.js','app/overall-growth-ui.js',
+ 'app/growth-metrics-model.js','app/overall-growth-model.js','app/overall-growth-ui.js',
  'app/monthly-practice-plans.js','app/monthly-growth.js'
 ];
 async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[],view='monthly'}={}){
@@ -208,11 +208,17 @@ test('all-time dashboard combines lifetime counts, consistent same-song metrics,
  ];
  await boot(page,{recordings:media,view:'overall'});
  await expect(page.locator('.growth-hero')).toContainText('2');
- await expect(page.locator('.growth-stat')).toHaveCount(4);
- await expect(page.locator('.growth-stat').first()).toContainText('개선 방향');
+ // 성장 리포트 v2: six separated measures; v1 takes judge accuracy/stability only, v2-only measures are withheld.
+ await expect(page.locator('.growth-stat')).toHaveCount(6);
+ await expect(page.locator('.growth-stat').first()).toContainText('음정 정확도');
+ await expect(page.locator('.growth-stat').first()).toContainText('좋아진 방향');
+ await expect(page.locator('[data-growth-metric="phrase"]')).toContainText('판정 보류');
+ await expect(page.locator('[data-growth-metric="range"]')).not.toContainText('좋아진 방향');
+ await expect(page.locator('[data-growth-metric="passaggio"]')).toContainText('음정 데이터만으로 판별 불가, 선생님 판단 참고');
  expect(await page.evaluate(()=>window.__coachCalls)).toBe(0);
- await page.locator('[data-overall-metric="phrase"]').click();
- await expect(page.locator('[data-overall-metric="phrase"]')).toHaveAttribute('aria-pressed','true');
+ await expect(page.locator('[data-overall-metric]')).toHaveCount(2); // monthly averages only for whole-recording values
+ await page.locator('[data-overall-metric="stability"]').click();
+ await expect(page.locator('[data-overall-metric="stability"]')).toHaveAttribute('aria-pressed','true');
  await page.locator('[data-overall-month]').first().click();
  const popup=await page.evaluate(()=>window.__lastSheet);
  expect(popup.title).toContain('측정 기록');
@@ -260,7 +266,7 @@ test('monthly view groups measurements, AI, plans and optional supporting histor
   practiceRoom:{songId:'song-1',aiCoach:'들리는 특징: 안정된 발음'}}];
  await boot(page,{recordings:recorded,practices,view:'monthly'});
  await expect(page.locator('.growth-month-overview>div')).toHaveCount(3);
- await expect(page.locator('[data-month-section="results"] .growth-metric')).toHaveCount(4);
+ await expect(page.locator('[data-month-section="results"] .growth-metric')).toHaveCount(6);
  await expect(page.locator('.growth-secondary')).toHaveCount(2);
  await expect(page.locator('.growth-secondary').first()).not.toHaveAttribute('open','');
  await page.locator('.growth-secondary').first().locator('summary').click();
@@ -287,4 +293,30 @@ test('growth cards stay within a 375px viewport even with twelve month bars',asy
  });
  expect(widths.document).toBeLessThanOrEqual(widths.viewport+1);
  expect(widths.chart).toBeLessThanOrEqual(widths.host+1);
+});
+test('growth report v2: same-phrase comparison, neutral range, passaggio reference and no overflow at 320px',async({page})=>{
+ await page.setViewportSize({width:320,height:700});
+ const rows=(into,longer=0)=>[[10,3+longer,64,into,8],[15,2.5+longer,67,into,8],[20,3.5+longer,69,into,8],[26,4+longer,72,into,8]];
+ const bands=w=>[[60,4,.6,1,3,6],[62,4,.6,1,3,6],[64,5,.7,1.2,4,7],[65,3,.5,.8,2,19],[67,4,.6,1,3,6],[72,3,.8,1.2,3,w],[74,2,.8,1,2,w]];
+ const a=(into,stable,w,longer)=>({v:2,metrics:{voicedSeconds:40,intonation:{meanAbsCents:into,notes:30},stability:{wobbleCents:8,notes:10},
+  range:{stableHigh:{note:stable===7700?'F5':'A5',cents:stable},main:{low:'C4',high:'D5',lowCents:6000,highCents:7400},instantaneous:{note:'C7',cents:9600}},
+  breath:{medianPhrase:3},phrases:{v:1,rows:rows(into,longer)},pitchBands:{v:1,rows:bands(w)}},confidence:{pitchConfidence:.95}});
+ const media=[{id:'x1',songId:'song-1',recordedDate:'2026-09-02',analysis:a(22,7700,14,0)},{id:'x2',songId:'song-1',recordedDate:'2026-11-03',analysis:a(10,8100,9,.6)}];
+ await boot(page,{recordings:media,view:'overall'});
+ await page.addStyleTag({path:path.resolve(__dirname,'../app/monthly-growth.css')});
+ await page.addStyleTag({path:path.resolve(__dirname,'../app/growth-polish.css')});
+ await expect(page.locator('[data-growth-metric]')).toHaveCount(6);
+ await expect(page.locator('[data-growth-metric="intonation"] .growth-state').first()).toHaveText('좋아진 방향');
+ await page.locator('[data-growth-metric="intonation"] summary').click();
+ await expect(page.locator('[data-growth-metric="intonation"]')).toContainText('같은 프레이즈 4개 비교');
+ await expect(page.locator('[data-growth-metric="phrase"] .growth-state').first()).toHaveText('좋아진 방향');
+ await expect(page.locator('[data-growth-metric="range"] .growth-state').first()).toHaveText('변화 관찰');
+ await expect(page.locator('[data-growth-metric="range"]')).not.toContainText('C7');
+ await expect(page.locator('[data-growth-metric="passaggio"]')).toContainText('음정 데이터만으로 판별 불가, 선생님 판단 참고');
+ const widths=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,
+  over:[...document.querySelectorAll('[data-growth-metric] *')].filter(e=>e.getBoundingClientRect().right>innerWidth+1).length}));
+ expect(widths.document).toBeLessThanOrEqual(widths.viewport+1);
+ expect(widths.over).toBe(0);
+ await page.locator('[data-overall-ai-run]').click();
+ await expect.poll(()=>page.evaluate(()=>VZ.db.overallAiReports.length)).toBe(1);
 });

@@ -163,7 +163,8 @@ test('vocal lab verdicts: 일치 with 순간 최고음 재확인 (tap to listen)
   // An old v1 result still renders and is not compared.
   box = await lab(page, {v:1, metrics:{voicedSeconds:30, stability:{wobbleCents:30, notes:4}, intonation:{meanAbsCents:20, notes:10}, range:{highCents:8100, high:'A5'}, breath:{medianPhrase:2.4}}, confidence:{voiceOverMrDb:12}});
   await expect(page.locator('#view')).toContainText('이전 v1 결과를 보존하고 있어요');
-  await expect(page.locator('.vl-single')).toContainText('지속음 흔들림');
+  await expect(page.locator('.vl-single')).toContainText('음정 안정성');
+  await expect(page.locator('.vl-single')).toContainText('이전 분석(v1) 결과라 이 지표는 계산하지 않아요'); // v2-only measures skip v1
   await expect(box.locator('[data-vrange-verdict]')).toHaveText('판정 보류');
   await expect(box).toContainText('이전(v1) 분석이라 비교하지 않아요');
   await page.setViewportSize({width:320, height:700});
