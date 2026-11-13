@@ -152,8 +152,13 @@ test('one tap from home opens today\'s set; edit, run steps on a clock, save rec
   await expect(run.locator('#pset-step-title')).toHaveText('This Is the Moment');await expect(run.locator('.pset-kicker')).toHaveText('곡 구간');
   await elapse(page, 120);
   await page.getByRole('button',{name:'일시정지',exact:true}).click();
+  // A paused set has no timer of its own any more (the clock only draws while running). With the page clock stopped
+  // and no timer left in the page, WebKit's click never gets the frames it waits for; a do-nothing timer keeps the
+  // stopped clock ticking for the browser, as the old always-on interval did. The app itself needs no timer here.
+  await page.evaluate(() => { window.__keepFrames = setInterval(() => {}, 1000); });
   await elapse(page, 300); // paused: not counted
   await page.getByRole('button',{name:'계속',exact:true}).click();
+  await page.evaluate(() => clearInterval(window.__keepFrames));
   await elapse(page, 180);
   await page.getByRole('button',{name:'마치기',exact:true}).click();
   // Summary: minutes from real running time only; the singer can edit them.
@@ -480,15 +485,16 @@ for (const [name, target, popup] of [['under the target', 100, true], ['over the
     await page.setViewportSize({width:375,height:812});
     await boot(page);
     // Stubs with the shapes of app/today-practice.js (VZ.todayPractice, VZ.todayPracticeText, VZ.todayPracticePopup).
+    // The real file is loaded by the app, so each case replaces or removes its functions.
     await page.evaluate(({target, popup}) => {
       window.__popups = [];
-      if (target === undefined) return;
+      if (target === undefined) { VZ.todayPractice = VZ.todayPracticeText = VZ.todayPracticePopup = undefined; return; }
       VZ.todayPractice = (date = VZ.today()) => {
         const minutes = (VZ.db.practices || []).filter(p => p.date === date).reduce((n,p) => n + (Number(p.minutes) || 0),0);
         return {minutes,targetMinutes:target,percent:target ? Math.round(minutes / target * 100) : null};
       };
       VZ.todayPracticeText = x => x.targetMinutes ? '오늘 ' + x.minutes + '분 / 목표 ' + x.targetMinutes + '분 · ' + x.percent + '%' : '오늘 ' + x.minutes + '분 · 목표 없음';
-      if (popup) VZ.todayPracticePopup = options => {window.__popups.push(options);};
+      VZ.todayPracticePopup = popup ? options => {window.__popups.push(options);} : undefined;
     }, {target, popup});
     await entry(page).click();
     await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
@@ -526,6 +532,32 @@ for (const [name, target, popup] of [['under the target', 100, true], ['over the
     }
     await noOverflow(page);
   });
+
+test('with the real today helper: the set screens show today against the target and saving opens the completion popup once', async({page}) => {
+  await page.setViewportSize({width:375,height:812});
+  await boot(page);
+  expect(await page.evaluate(() => [typeof VZ.todayPractice, typeof VZ.todayPracticeText, typeof VZ.todayPracticePopup])).toEqual(['function','function','function']);
+  const before = await page.evaluate(() => VZ.todayPractice());
+  await entry(page).click();
+  await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
+  await page.getByRole('button',{name:'시작하기'}).click();
+  await expect(page.locator('[data-pset-run] [data-pset-today]')).toContainText('이 세트는 저장하면 더해져요');
+  await elapse(page, 180);
+  await page.getByRole('button',{name:'여기까지 하고 기록하기'}).click();
+  await expect(page.locator('[data-sum-today]')).toContainText('이 세트 3분을 저장하면 오늘 ');
+  await page.getByRole('button',{name:'기록 저장'}).click();
+  // The shared popup (not a second copy on the screen): today's total now includes the set's minutes.
+  const popup = page.locator('.vz-today-result');
+  await expect(popup).toHaveCount(1);
+  await expect(popup.locator('[data-today-added]')).toHaveText('이번 기록 +3분');
+  const after = await page.evaluate(() => VZ.todayPractice());
+  expect(after.minutes).toBe(before.minutes + 3);
+  await expect(popup.locator('[data-today-text]')).toHaveText(await page.evaluate(() => VZ.todayPracticeText(VZ.todayPractice())));
+  await expect(page.locator('[data-done-today]')).toHaveCount(0);
+  await page.locator('[data-ok]').click();
+  await expect(popup).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();
+});
 
 test('a song section added before starting is remembered for the weekday and comes back next time', async({page}) => {
   await page.setViewportSize({width:320,height:700});
