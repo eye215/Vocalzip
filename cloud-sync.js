@@ -1187,7 +1187,8 @@ if(window.VzipAccountScope){
  window.addEventListener('focus',()=>checkActiveSession().catch(()=>{}));
 }
 
-async function boot(){if(!window.supabase?.createClient){say('서버 연결 라이브러리를 불러오지 못했어요. 새로고침해 주세요.');return}client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true},...(window.VzipAccountScope?{global:{headers:{'X-Client-Info':'vocalzip-device-session-v2'}}}:{})});const {data}=await client.auth.getUser();user=data?.user||null;showUser();client.auth.onAuthStateChange((event,session)=>{if(event==='PASSWORD_RECOVERY'){recoveryMode=true;showAuthView('new-password');}user=session?.user||null;showUser();if(event==='PASSWORD_RECOVERY')updateAuthScreen()});const credentials=()=>({email:$('#cloud-email').value.trim(),password:$('#cloud-password').value});
+async function boot(){if(!window.supabase?.createClient){say('서버 연결 라이브러리를 불러오지 못했어요. 새로고침해 주세요.');return}client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true},...(window.VzipAccountScope?{global:{headers:{'X-Client-Info':'vocalzip-device-session-v2'}}}:{})});// Register login actions before any network-based session check. An unresolved getUser() must not leave visible buttons inert.
+showUser();client.auth.onAuthStateChange((event,session)=>{if(event==='PASSWORD_RECOVERY'){recoveryMode=true;showAuthView('new-password');}user=session?.user||null;showUser();if(event==='PASSWORD_RECOVERY')updateAuthScreen()});const credentials=()=>({email:$('#cloud-email').value.trim(),password:$('#cloud-password').value});
 $('#cloud-show-password').onclick=()=>{const el=$('#cloud-password');el.type=el.type==='password'?'text':'password';$('#cloud-show-password').textContent=el.type==='password'?'보기':'숨기기'};
 $('#cloud-login').onclick=async()=>{const {email,password}=credentials();if(!email||!password)return say('이메일과 비밀번호를 입력해 주세요.');say('로그인 중…');const {error}=await client.auth.signInWithPassword({email,password});say(error?'로그인 실패: '+(error.message==='Invalid login credentials'?'이메일 또는 비밀번호가 맞지 않아요. 기존 이메일 링크 계정이면 비밀번호 재설정을 눌러 주세요.':error.message):accountRejected?otherAccountMessage:'✓ 로그인 완료!')};
 $('#cloud-signup').onclick=()=>showAuthView(boundOwner()?'bound':'signup');
@@ -1212,6 +1213,13 @@ $('#cloud-logout').onclick=async()=>{if(window.VzipAccountScope){try{await endTh
  const flush=()=>{if(!ready||!user)return;if(uploadTimer){clearTimeout(uploadTimer);uploadTimer=null;upload(true)}};
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush();else if(syncFailed&&ready&&user)upload(true)});
  window.addEventListener('pagehide',flush);
- window.addEventListener('online',()=>{if(ready&&user&&(syncFailed||uploadTimer)){clearTimeout(uploadTimer);uploadTimer=null;upload(true)}});}
+ window.addEventListener('online',()=>{if(ready&&user&&(syncFailed||uploadTimer)){clearTimeout(uploadTimer);uploadTimer=null;upload(true)}});
+// Initial authentication lookup is intentionally non-blocking: Supabase's INITIAL_SESSION
+// event still initializes the screen, while a slow getUser() cannot prevent button wiring.
+client.auth.getUser().then(({data,error})=>{
+ if(error){say('로그인 상태 확인 실패: '+error.message);return;}
+ if(!user&&data?.user){user=data.user;showUser();}
+}).catch(error=>say('로그인 상태 확인 실패: '+error.message));
+}
 boot().catch(e=>{say('연결 오류: '+e.message);document.getElementById('vzip-boot-cover')?.remove()});
 })();
