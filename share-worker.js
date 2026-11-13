@@ -1,6 +1,58 @@
 importScripts('chunk-media-core.js');
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
-self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
+/* App shell cache (offline launch). Online the app is never older than the server:
+ * - pages (navigations): network first; the kept copy is used only when the network fails
+ * - same-origin files with ?v= (and the two version-pinned CDN libraries): kept copy first, they never change under one version
+ * - other same-origin static files (icons, fonts, css without ?v=): network first, kept copy when the network fails
+ * Never kept: POST, range requests, media, the playback stream, share inbox, Supabase/R2/Worker/API calls (other origins). */
+const SHELL='vzip-shell-v1',SHELL_PREFIX='vzip-shell-';
+const STATIC=/\.(?:js|mjs|css|html|svg|png|jpe?g|webp|gif|ico|woff2?|webmanifest)$/i;
+const PINNED=/^https:\/\/cdn\.jsdelivr\.net\/npm\/(?:@[\w.-]+\/)?[\w.-]+@\d+\.\d+\.\d+\//;
+const scopeUrl=()=>new URL(self.registration.scope);
+// One kept copy per page: the address without ?query (start_url, ?shared=1) and index.html as the folder itself.
+const pageKey=u=>u.origin+u.pathname.replace(/index\.html$/,'');
+const usable=response=>response&&response.status===200&&(response.type==='basic'||response.type==='cors');
+async function keep(key,response){
+ if(!usable(response))return;
+ const cache=await caches.open(SHELL);await cache.put(key,response);
+ // A new ?v= replaces the older versions of the same file.
+ const u=new URL(key);
+ if(u.searchParams.has('v'))for(const request of await cache.keys()){const k=new URL(request.url);if(k.origin===u.origin&&k.pathname===u.pathname&&k.search!==u.search)await cache.delete(request)}
+}
+const kept=async key=>(await caches.open(SHELL)).match(key);
+const pinnedFetch=url=>fetch(url,{mode:'cors',credentials:'omit'});
+async function networkFirst(request,key){
+ try{const response=await fetch(request);if(usable(response))await keep(key,response.clone()).catch(()=>{});return response}
+ catch(error){const copy=await kept(key);if(copy)return copy;throw error}
+}
+async function cacheFirst(request,key,load=()=>fetch(request)){
+ const copy=await kept(key);if(copy)return copy;
+ const response=await load();if(usable(response))await keep(key,response.clone()).catch(()=>{});return response;
+}
+/* The first visit loads before this worker controls the page: read the page once and keep the files it names
+ * (scripts, styles, icons, and the fonts the styles name). Files already kept are not fetched again. */
+async function warm(){
+ const scope=scopeUrl(),cache=await caches.open(SHELL),root=pageKey(scope);
+ let page=await cache.match(root);
+ if(!page){page=await fetch(root,{cache:'no-cache'});if(!usable(page))return;await cache.put(root,page.clone())}
+ const names=text=>[...text.matchAll(/(?:src|href)="([^"#]+)"/g)].map(m=>m[1]);
+ const fonts=text=>[...text.matchAll(/url\(["']?([^"')]+\.woff2(?:\?[^"')]*)?)["']?\)/g)].map(m=>m[1]);
+ const want=(ref,base)=>{try{const u=new URL(ref,base);return (u.origin===scope.origin&&u.pathname.startsWith(scope.pathname)&&STATIC.test(u.pathname))||PINNED.test(u.href)?u:null}catch{return null}};
+ const get=async u=>{
+  let response=await cache.match(u.href);
+  if(!response){response=await (u.origin===scope.origin?fetch(u.href):pinnedFetch(u.href));if(!usable(response))return null;await keep(u.href,response.clone())}
+  return response;
+ };
+ await Promise.all([...new Set(names(await page.text()))].map(async ref=>{
+  const u=want(ref,root);if(!u)return;
+  try{const response=await get(u);if(response&&/\.css$/i.test(u.pathname))await Promise.all(fonts(await response.text()).map(f=>{const x=want(f,u.href);return x?get(x).catch(()=>{}):null}))}catch{}
+ }));
+}
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+ for(const name of await caches.keys())if(name.startsWith(SHELL_PREFIX)&&name!==SHELL)await caches.delete(name);
+ await self.clients.claim();
+})()));
+self.addEventListener('message',event=>{if(event.data?.type==='vzip-shell-warm')event.waitUntil(warm().catch(()=>{}))});
 const STREAM_DB='vzip_stream_sessions_v1';
 function streamDb(){return new Promise((resolve,reject)=>{const request=indexedDB.open(STREAM_DB,1);request.onupgradeneeded=()=>request.result.createObjectStore('streams',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})}
 async function streams(mode,action){
@@ -32,7 +84,10 @@ function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(D
 async function store(files){const db=await openDb();await new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');for(const file of files)tx.objectStore('files').put({id:crypto.randomUUID(),name:file.name,type:file.type,lastModified:file.lastModified,blob:file});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}
 self.addEventListener('fetch',event=>{
  const u=new URL(event.request.url),scope=new URL(self.registration.scope);
- if(u.origin!==scope.origin)return;
+ if(u.origin!==scope.origin){
+  if(event.request.method==='GET'&&!event.request.headers.has('range')&&PINNED.test(u.href))event.respondWith(cacheFirst(event.request,u.href,()=>pinnedFetch(u.href)).catch(()=>fetch(event.request)));
+  return;
+ }
  if(u.pathname.startsWith(scope.pathname+'__vzip_media__/')){
   event.respondWith((async()=>{
    if(!['GET','HEAD'].includes(event.request.method))return new Response(null,{status:405});
@@ -45,5 +100,8 @@ self.addEventListener('fetch',event=>{
   })().catch(()=>new Response('재생 준비 실패',{status:502})));
  }else if(u.pathname===scope.pathname+'share-inbox'&&event.request.method==='POST'){
   event.respondWith((async()=>{try{const form=await event.request.formData();const files=form.getAll('files').filter(x=>x instanceof File);if(!files.length)throw Error('No files');await store(files);return Response.redirect(scope.href+'?shared=1',303)}catch{return Response.redirect(scope.href+'?share_error=1',303)}})());
+ }else if(event.request.method==='GET'&&!event.request.headers.has('range')&&u.pathname.startsWith(scope.pathname)){
+  if(event.request.mode==='navigate')event.respondWith(networkFirst(event.request,pageKey(u)));
+  else if(STATIC.test(u.pathname))event.respondWith(u.searchParams.has('v')?cacheFirst(event.request,u.href):networkFirst(event.request,u.origin+u.pathname));
  }
 });
