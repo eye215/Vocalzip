@@ -4,7 +4,8 @@
 //   · The recording is read from this account's storage, separated in a temporary folder on the runner and deleted;
 //     nothing but the measurement summary is written (metadata.analysis, the previous one kept in history).
 //   · The result is marked confidence.aiSeparated and shown as "AI 분리 후 측정(참고)"; it is judged like any other.
-//   · A take that cannot be separated, or is still unreadable afterwards, is marked separationTried and not retried.
+//   · A take that cannot be separated, or whose voice still fails the confidence rule, is marked separationTried and
+//     not retried; its measurement stays as it was.
 // Logs show counts only (this repository is public). Needs SUPABASE_DB_URL and the R2 read secrets, like the
 // analysis worker; DEMUCS_CMD overrides the separator command (tests use a stand-in).
 import pg from 'pg';
@@ -82,8 +83,9 @@ export async function separateOne(db, row, {cmd} = {}) {
     catch { await save(db, row, tried(row, 'failed')); return 'failed'; }
     const voice = await decode(await readFile(voicePath), {rate:16000, seconds:MAX_SECONDS});
     const r = VA.analyze(voice, 16000);
-    const better = reliableResult(r) || (r.confidence?.pitchConfidence || 0) > (previous?.confidence?.pitchConfidence || 0) + 0.1;
-    if (!better || !r.metrics?.voicedSeconds) { await save(db, row, tried(row, 'not-better')); return 'not-better'; }
+    // Kept only when the voice now passes the app's confidence rule: a half-separated take (e.g. no notes found) never
+    // replaces the measurement as recorded.
+    if (!reliableResult(r)) { await save(db, row, tried(row, 'not-better')); return 'not-better'; }
     r.confidence.aiSeparated = {model:MODEL};
     const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
     if (previous?.v) { const {history:ignored, ...kept} = previous; history.push(kept); }
