@@ -223,7 +223,7 @@ async function mount(host,query){
  catch(err){if(my===request&&host.isConnected&&!items.length)host.insertAdjacentHTML('afterbegin','<p class="ws-note" role="status">녹음 목록을 불러오지 못해 녹음·성장 항목은 빠졌을 수 있어요.</p>');}
 }
 V.route('weekly-summary',{title:'주간 요약',tab:'growth',noAutoRefresh:true,
- render:()=>'<div class="ws-page" data-weekly-summary></div>',
+ render:()=>(V.growthTabs?.('report')||'')+'<div class="ws-page" data-weekly-summary></div>',
  mount(main,r){mount(main.querySelector('[data-weekly-summary]'),r?.query);},
  leave(){request++;}
 });

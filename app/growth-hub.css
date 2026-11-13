@@ -1,0 +1,19 @@
+/* 성장 통합 탭 (design guide §26). The three 성장 tabs reuse the screen-tab box of 곡 상세 (.seg: surface-2 box R14,
+ * 44px items R10, selected #EDE1FF / #7A32F5) as links; the 전체·월별·주간 row under 결과 리포트 stays the §8 capsule
+ * row, so the two levels never look like one set of equal tabs. */
+.growth-top-tabs{display:flex;gap:4px;padding:4px;margin:0 0 14px;border-radius:14px;background:var(--surface-2)}
+.growth-top-tabs a{flex:1 1 0;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0 6px;border-radius:10px;color:var(--ink-2);font-size:14px;font-weight:600;line-height:1.2;text-align:center;text-decoration:none;white-space:nowrap}
+.growth-top-tabs a[aria-current="page"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent)}
+.growth-top-tabs a:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:2px}
+@media (max-width:350px){.growth-top-tabs a{font-size:13px;padding:0 2px}}
+/* 보컬 분석 · 보컬 트레이닝 entry screens: shared white list rows (설정 › 관리 recipe), 12px between cards. */
+.growth-hub{display:grid;gap:12px;min-width:0;padding:0 0 46px;overflow-wrap:anywhere}
+.growth-hub .sec{margin:8px 0 0}
+.growth-hub-list .item{min-height:60px}
+.growth-hub-note{margin:0;padding:12px 16px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--ink-2);font-size:13px;line-height:20px}
+.growth-hub-empty{padding:16px;border-radius:20px;background:var(--surface)}
+.growth-hub-empty strong{display:block;margin-bottom:2px;font-size:15px;color:var(--ink)}
+.growth-hub-empty p{margin:0;font-size:13px;line-height:20px;color:var(--ink-2)}
+.growth-hub-more summary{display:flex;align-items:center;min-height:44px;padding:0 4px;color:var(--ink-2);font-size:14px;font-weight:600;cursor:pointer}
+.growth-hub-more[open] summary{margin-bottom:8px}
+.growth-hub-all{margin-top:4px}

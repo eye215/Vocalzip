@@ -562,6 +562,8 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefre
       return;
     }
     if(!song){
+      // 성장 통합 (#385): choosing a song is the 보컬 분석 tab now. replace(), so 뒤로 does not come back here.
+      if(V.growthHub){location.replace('#/vocal-analysis');return;}
       const songs=V.songsNewest();
       host.innerHTML=songs.length?'<div class="vl-song"><i class="ph ph-waveform"></i><strong>보컬 연구소</strong></div><p class="vl-muted">분석할 곡을 선택해 주세요.</p>'+songs.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.id)+'"><strong>'+esc(x.title)+'</strong><i class="ph ph-caret-right"></i></a>').join(''):V.empty('music-notes','먼저 곡을 추가해 주세요.');
       return;
