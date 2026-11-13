@@ -117,3 +117,5 @@ body .sheet-alert>.vz-today-popup .sheet-foot{position:static;margin:18px 0 0;pa
 .vz-week-block>.vz-today-bar{flex:0 0 100%;margin-top:8px;}
 .vz-week-source{margin:0;padding-top:4px;border-top:1px solid #F2EFF7;color:#667085;font-size:13px;line-height:20px;}
 .vz-week-source button{display:inline-flex;align-items:center;min-height:44px;padding:0;border:0;background:none;color:#7A32F5;font:inherit;font-weight:600;cursor:pointer;}
+/* These white sheets also open over the dark recorder (a take made for a goal): they keep their own light colours. */
+body.vz-record-mode .sheet.vz-time-sheet,body.vz-record-mode .sheet.vz-today-popup{color-scheme:light;--vz-color-ink:#101828;--vz-color-primary:#344054;--vz-color-ink-secondary:#475467;--vz-color-ink-muted:#667085;--vz-color-faint:#98A2B3;--vz-color-border:#E8E4F0;--vz-color-accent-soft:#F3ECFF;color:#344054;}

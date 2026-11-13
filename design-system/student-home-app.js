@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=home-time-20261113';
+import {createFloatingHome} from './student-home-html.js?v=goal-rec-20261113';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -186,14 +186,16 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    /** 시간·녹음 sheet for a completed goal. After a check (asked=true) the result popup follows 저장 and 건너뛰기 alike;
     * from the row (editing) only a save shows it. The home is updated in place either way. */
    const timeSheet=(id,asked)=>{
-    const opened=V.goalPerformanceSheet?.(id,{onDone:result=>{
+    const opened=V.goalPerformanceSheet?.(id,{asked,onDone:result=>{
      if(result.saved){refreshHome();root?.updateGoalTime?.(id,V.goalTime?.(goalOf(id))||null);}
      if(!asked&&!result.saved)return backToGoal(id);
      V.todayPracticePopup?.({addedMinutes:result.addedMinutes,...(asked?{}:{title:'저장했어요'}),onClose:()=>backToGoal(id)})||backToGoal(id);
     }});
     if(!opened&&asked)V.todayPracticePopup?.({onClose:()=>backToGoal(id)});
    };
-   try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null,time:V.goalTime?.(g)||null})),onGoalRecord:id=>timeSheet(id,false),onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
+   try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null,time:V.goalTime?.(g)||null})),onGoalRecord:id=>timeSheet(id,false),
+    // Mic on an unfinished goal row: the recorder carries the goal (and its song); saving there offers the goal as done.
+    onGoalMic:id=>{const g=goalOf(id);nav('#/record?goal='+encodeURIComponent(id)+(g?.songId&&V.song(g.songId)?'&song='+encodeURIComponent(g.songId):''));},onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
     onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     practiceSet:V.practiceSetEntry?.()||null,onPracticeSet:()=>nav('#/practice-set'),onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},

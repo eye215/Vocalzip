@@ -152,13 +152,14 @@ test('one tap from home opens today\'s set; edit, run steps on a clock, save rec
   await expect(run.locator('#pset-step-title')).toHaveText('This Is the Moment');await expect(run.locator('.pset-kicker')).toHaveText('곡 구간');
   await elapse(page, 120);
   await page.getByRole('button',{name:'일시정지',exact:true}).click();
-  // A paused set has no timer of its own any more (the clock only draws while running). With the page clock stopped
-  // and no timer left in the page, WebKit's click never gets the frames it waits for; a do-nothing timer keeps the
-  // stopped clock ticking for the browser, as the old always-on interval did. The app itself needs no timer here.
-  await page.evaluate(() => { window.__keepFrames = setInterval(() => {}, 1000); });
   await elapse(page, 300); // paused: not counted
-  await page.getByRole('button',{name:'계속',exact:true}).click();
-  await page.evaluate(() => clearInterval(window.__keepFrames));
+  // With the page clock stopped on a paused set, WebKit sometimes never delivers the animation frames Playwright's
+  // click waits for ("visible, enabled and stable" hangs; Chromium is fine, and a do-nothing timer did not help
+  // reliably). The button is checked to be there and enabled, then pressed without that wait.
+  const resume = page.getByRole('button',{name:'계속',exact:true});
+  await expect(resume).toBeVisible();await expect(resume).toBeEnabled();
+  await resume.dispatchEvent('click');
+  await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible();
   await elapse(page, 180);
   await page.getByRole('button',{name:'마치기',exact:true}).click();
   // Summary: minutes from real running time only; the singer can edit them.

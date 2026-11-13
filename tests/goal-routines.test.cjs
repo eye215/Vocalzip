@@ -113,3 +113,29 @@ test('suggestMinutes preselects nothing when another flow already recorded this 
   db.practices.at(-1).practiceTimeSource='goal';
   assert.equal(R.savedMinutes(db,db.dailyGoals.at(-1)),9);
 });
+
+// 목표에서 녹음 (2026-11-13): a recording is linked to the goal's record; time is written only by perform().
+test('linkRecording links a take once without completing the goal or adding time; perform then keeps it',()=>{
+  const db=base();
+  db.dailyGoals.push({id:'h1',date:'2026-11-11',title:'립트릴',source:'homework',sourceId:'a1',completed:false});
+  R.linkRecording(db,'h1','m1',1);R.linkRecording(db,'h1','m1',2);
+  const goal=db.dailyGoals.at(-1);
+  assert.deepEqual(goal.performance,{minutes:null,mediaIds:['m1'],at:2});
+  assert.equal(goal.completed,false);assert.equal(db.practices.length,0,'no practice row, so no minutes and no homework repetition');
+  assert.equal(Time.homeworkProgress(db,'a1').reps,0);
+  assert.throws(()=>R.perform(db,'h1',{minutes:3,mediaIds:['m1']}),/완료한 목표/,'time needs the goal to be completed');
+  // Completed with the take: one practice row with the minutes, the take once and one homework repetition.
+  goal.completed=true;R.perform(db,'h1',{minutes:3,mediaIds:goal.performance.mediaIds},3);R.perform(db,'h1',{minutes:3,mediaIds:goal.performance.mediaIds},4);
+  assert.deepEqual(db.practices.map(p=>[p.id,p.manualMinutes,p.mediaIds,p.completed]),[['goal:h1',3,['m1'],['a1']]]);
+  assert.equal(Time.homeworkProgress(db,'a1').reps,1);
+  // A later take for the same goal joins both the record and its practice row; the time stays as typed.
+  R.linkRecording(db,'h1','m2',5);
+  assert.deepEqual(goal.performance,{minutes:3,mediaIds:['m1','m2'],at:5});
+  assert.deepEqual(db.practices[0].mediaIds,['m1','m2']);assert.equal(db.practices[0].manualMinutes,3);
+  assert.equal(Time.entries(db.practices).reduce((s,e)=>s+e.minutes,0),3);assert.equal(Time.homeworkProgress(db,'a1').reps,1);
+  assert.throws(()=>R.linkRecording(db,'nope','m1'),/변경/);assert.throws(()=>R.linkRecording(db,'h1',''),/녹음/);
+});
+
+test('recordingMinutes rounds a take up to whole minutes, at least 1',()=>{
+  for(const [seconds,minutes] of [[0,1],[1.5,1],[60,1],[61,2],[170,3],[180,3],[3599,60],[99999,600],[undefined,1]])assert.equal(R.recordingMinutes(seconds),minutes,String(seconds));
+});
