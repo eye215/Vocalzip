@@ -457,7 +457,8 @@ for (const width of [320, 375]) test('phone ' + width + 'px: every tab fits with
   }
 });
 
-for (const [width, height] of [[820, 1180], [1180, 820]]) test('tablet ' + width + '×' + height + ': two columns, the wide column and no sideways scroll', async ({page}) => {
+for (const [width, height] of [[820, 1180], [1180, 820]]) test('tablet ' + width + '×' + height + ': two columns, the wide column and no sideways scroll', async ({page}, info) => {
+  test.skip(info.project.name !== 'chromium-desktop', 'sizes are set explicitly'); // same rule as the other tablet tests (phone projects emulate a phone)
   await page.setViewportSize({width, height});
   await boot(page, {extra:{...REPORT, practices:ROOM}});
   const column = Math.min(width, 1040) - 48;
