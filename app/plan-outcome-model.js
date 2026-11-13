@@ -47,7 +47,7 @@ const avg=values=>values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
 const legacyChange=state=>['better','worse','similar'].includes(state)?state:'insufficient';
 /** Vibrato: no growth measure. Old averaging (≤ 5 reliable takes per side), shown as 참고 only. */
 function vibratoReference(before,during){
- const pick=list=>list.filter(t=>t.ok&&raw(t.a,'vibrato')!=null).sort((x,y)=>y.date.localeCompare(x.date)).slice(0,5);
+ const pick=list=>list.filter(t=>t.ok&&raw(t.a,'vibrato')!=null).sort((x,y)=>y.date.localeCompare(x.date)||(Number(y.created)||0)-(Number(x.created)||0)||String(y.id).localeCompare(String(x.id))).slice(0,5);
  const b=pick(before),d=pick(during);
  const why=list=>list.some(t=>!t.ok&&raw(t.a,'vibrato')!=null)?'confidence':'no-data';
  let reason='';
@@ -69,7 +69,7 @@ function measurement(plan,recordings=[],dateOf,valid){
  const G=growth();
  if(!G&&GROWTH[plan.metric])throw Error('성장 지표 기준을 불러오지 못했어요.');
  const takes=recordings.filter(m=>m?.songId===plan.songId&&m.analysis?.metrics)
-  .map(m=>({id:m.id,a:m.analysis,date:String(dateOf(m)||'').slice(0,10),ok:!!valid(m)}))
+  .map(m=>({id:m.id,a:m.analysis,date:String(dateOf(m)||'').slice(0,10),created:m.created,ok:!!valid(m)}))
   .filter(t=>/^\d{4}-\d{2}-\d{2}$/.test(t.date));
  const before=takes.filter(t=>t.date<plan.startDate),during=takes.filter(t=>t.date>=plan.startDate&&t.date<=endDate);
  const id=GROWTH[plan.metric]||'';

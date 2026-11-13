@@ -93,12 +93,13 @@ test('goals, routine progress and homework sessions linked in the week',()=>{
  assert.deepEqual(s.goals.homework.tasks,[{id:'t1',title:'후렴 호흡',sessions:2,reps:4}]);
 });
 
-test('recordings by category, analyses done this week and new songs',()=>{
+test('recordings by category, analysed recordings of this week and new songs',()=>{
  const media=[
-  {id:'a',created:kst('2026-11-09','10:00'),category:'song'},{id:'b',created:kst('2026-11-10','10:00'),category:'lesson'},
+  {id:'a',created:kst('2026-11-09','10:00'),category:'song',analysis:{v:2,at:kst('2026-11-09','10:05')}},{id:'b',created:kst('2026-11-10','10:00'),category:'lesson'},
   {id:'c',created:kst('2026-11-11','10:00'),category:'training'},{id:'d',created:kst('2026-11-11','11:00'),category:'room'},
+  // An older recording analysed again this week is not a recording analysed "this week".
   {id:'e',created:kst('2026-10-01','10:00'),category:'song',analysis:{v:2,at:kst('2026-11-12','09:00')}},
-  {id:'f',created:kst('2026-11-12','10:00'),category:'song'}
+  {id:'f',created:kst('2026-11-12','10:00'),category:'song',analysis:{v:2,at:kst('2026-11-12','10:05')}}
  ];
  const db=base();db.deleted={media:['f']};
  const s=W.build(db,media,{today:'2026-11-15',weekStart:'2026-11-09'});
@@ -106,6 +107,34 @@ test('recordings by category, analyses done this week and new songs',()=>{
  assert.deepEqual(s.recordings.byCategory,{song:1,lesson:1,training:1,room:1});
  assert.equal(s.recordings.analyses,1);
  assert.deepEqual(s.recordings.newSongs.map(x=>x.title),['새 곡']);
+});
+
+test('분석 완료 counts this week\'s recordings that have an analysis, not the server\'s bulk re-analysis',()=>{
+ // Five recordings this week (four analysed), twenty older ones all re-analysed by the server during the week.
+ const bulk=kst('2026-11-13','03:00');
+ const week=Array.from({length:5},(_,i)=>({id:'w'+i,created:kst('2026-11-1'+i,'10:00'),category:'song',
+  analysis:i<4?{v:2,at:bulk,by:'server',history:[{v:1,at:kst('2026-11-1'+i,'10:05')}]}:null}));
+ const old=Array.from({length:20},(_,i)=>({id:'o'+i,recordedDate:'2026-10-'+String(i+1).padStart(2,'0'),created:kst('2026-10-'+String(i+1).padStart(2,'0'),'10:00'),
+  category:'song',analysis:{v:2,at:bulk,by:'server'}}));
+ const s=W.build(base(),[...week,...old],{today:'2026-11-15',weekStart:'2026-11-09'});
+ assert.equal(s.recordings.total,5);
+ assert.equal(s.recordings.analyses,4);
+ assert.ok(W.toText(s).includes('분석 4개'));
+ // A week without recordings shows no analyses even when older recordings were re-analysed in it.
+ const later=W.build(base(),old.map(m=>({...m,analysis:{...m.analysis,at:kst('2026-11-18','03:00')}})),{today:'2026-11-22',weekStart:'2026-11-16'});
+ assert.equal(later.recordings.total,0);assert.equal(later.recordings.analyses,0);
+ // A recording of this week analysed after the week ended still counts for the week it was recorded in.
+ const late=W.build(base(),[{id:'x',created:kst('2026-11-10','10:00'),category:'song',analysis:{v:2,at:kst('2026-11-20','10:00')}}],{today:'2026-11-22',weekStart:'2026-11-09'});
+ assert.equal(late.recordings.analyses,1);
+});
+
+test('growth: two takes of the same day are ordered by recording time, not by id',()=>{
+ const take=(id,date,time,into)=>({id,songId:'s1',songTake:true,recordedDate:date,created:kst(date,time),category:'song',analysis:v2(into),ok:true});
+ const media=[take('m0','2026-11-01','10:00',20),take('z-morning','2026-11-10','09:00',30),take('a-evening','2026-11-10','21:00',10)];
+ for(const list of [media,media.slice().reverse()]){
+  const item=W.build(base(),list,{today:'2026-11-15',weekStart:'2026-11-09'}).growth.items[0];
+  assert.equal(item.lines[0].id,'intonation');assert.equal(item.lines[0].state,'better');
+ }
 });
 
 test('growth compares this week with earlier takes of the same song, holds honestly, never judges the highest note, max 3',()=>{

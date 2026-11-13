@@ -26,7 +26,7 @@ function group(items) {
  return months;
 }
 const valid = m => [1,2].includes(m.analysis?.v) && V.analysisReliable?.(m.analysis);
-const takeOf = m => ({id:m.id, a:m.analysis, date:String(M.dateOf(m)||'').slice(0,10), ok:!!valid(m)});
+const takeOf = m => ({id:m.id, a:m.analysis, date:String(M.dateOf(m)||'').slice(0,10), created:m.created, ok:!!valid(m)});
 const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
 /** This month's own values (no comparison): mean over reliable takes, one value per take. */
 function measure(items,d){

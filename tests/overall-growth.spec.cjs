@@ -70,3 +70,15 @@ test('metric chart holds the latest 12 measured months, not all imported months'
  assert.equal(DEFINITIONS.length,6);
  assert.deepEqual(DEFINITIONS.map(d=>d.id),['intonation','stability','range','phrase','high','passaggio']);
 });
+test('same-day takes: the later recording (created) is the latest take, not the larger id',()=>{
+ const at=(date,time)=>Date.parse(date+'T'+time+':00+09:00');
+ const items=[{...clip('m0','s1','2026-09-01',30),created:at('2026-09-01','10:00')},
+  {...clip('z-morning','s1','2026-11-10',40),created:at('2026-11-10','09:00')},
+  {...clip('a-evening','s1','2026-11-10',10),created:at('2026-11-10','21:00')}];
+ for(const list of [items,items.slice().reverse()]){
+  const metric=make(list).metrics.find(x=>x.id==='intonation');
+  assert.equal(metric.pairs[0].lastId,'a-evening');
+  assert.equal(metric.pairs[0].after,10);
+  assert.equal(metric.pairs[0].state,'better');
+ }
+});
