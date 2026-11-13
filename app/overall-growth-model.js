@@ -28,7 +28,7 @@ function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
  const songIds=new Set(recordings.map(m=>m.songId));
  const dates=recordings.map(m=>dateOf(m,getDate)).sort();
  const perSong=new Map();
- for(const m of analyzed){const list=perSong.get(m.songId)||[];list.push({id:m.id,a:m.analysis,date:dateOf(m,getDate),ok:!!valid(m)});perSong.set(m.songId,list);}
+ for(const m of analyzed){const list=perSong.get(m.songId)||[];list.push({id:m.id,a:m.analysis,date:dateOf(m,getDate),created:m.created,ok:!!valid(m)});perSong.set(m.songId,list);}
  const reports=[...perSong].map(([songId,takes])=>({songId,title:title(songId)||'',report:G.songReport(takes,{reference:reference(songId)})}));
  // Monthly trend of whole-recording values: one version only (the newest one present), so v1 and v2 never mix.
  const newest=eligible.some(m=>m.analysis.v>=2)?2:1;

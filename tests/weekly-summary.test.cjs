@@ -128,6 +128,15 @@ test('분석 완료 counts this week\'s recordings that have an analysis, not th
  assert.equal(late.recordings.analyses,1);
 });
 
+test('growth: two takes of the same day are ordered by recording time, not by id',()=>{
+ const take=(id,date,time,into)=>({id,songId:'s1',songTake:true,recordedDate:date,created:kst(date,time),category:'song',analysis:v2(into),ok:true});
+ const media=[take('m0','2026-11-01','10:00',20),take('z-morning','2026-11-10','09:00',30),take('a-evening','2026-11-10','21:00',10)];
+ for(const list of [media,media.slice().reverse()]){
+  const item=W.build(base(),list,{today:'2026-11-15',weekStart:'2026-11-09'}).growth.items[0];
+  assert.equal(item.lines[0].id,'intonation');assert.equal(item.lines[0].state,'better');
+ }
+});
+
 test('growth compares this week with earlier takes of the same song, holds honestly, never judges the highest note, max 3',()=>{
  const db=base();
  db.songs.push({id:'s3',title:'C'},{id:'s4',title:'D'},{id:'s5',title:'E'});

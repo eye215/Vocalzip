@@ -182,3 +182,35 @@ test('the real analyzer output feeds the model (same synthetic song twice → sa
   assert.equal(r.phrase.state, 'similar');
   assert.equal(r.range.delta, 0);
 });
+
+test('takes of the same day are ordered by recording time (take.created), never by id', () => {
+  const at = (date, time) => Date.parse(date + 'T' + time + ':00+09:00');
+  const rec = (id, date, time, a) => ({id, date, a, ok:true, created:at(date, time)});
+  // The ids sort the other way round: "a…" was recorded last on each day.
+  const takes = [
+    rec('y-first', '2026-09-01', '09:00', v2({into:30})), rec('b-second', '2026-09-01', '20:00', v2({into:24})),
+    rec('z-morning', '2026-11-10', '09:00', v2({into:28})), rec('a-evening', '2026-11-10', '21:00', v2({into:10}))
+  ];
+  for (const list of [takes, takes.slice().reverse()]) {
+    const pair = G.pickPair(list, 'intonation');
+    assert.equal(pair.first.id, 'y-first'); assert.equal(pair.last.id, 'a-evening');
+    const r = G.songReport(list);
+    assert.equal(r.intonation.lastId, 'a-evening'); assert.equal(r.intonation.state, 'better');
+    assert.equal(r.intonation.before, 30); assert.equal(r.intonation.after, 10);
+    assert.equal(r.passaggio.lastId, 'a-evening'); // the reference measure reads the same latest take
+    // Period view: the latest take of each period, by recording time.
+    const p = G.periodReport(list.filter(t => t.date < '2026-10-01'), list.filter(t => t.date > '2026-10-01'));
+    assert.equal(p.intonation.firstId, 'b-second'); assert.equal(p.intonation.lastId, 'a-evening');
+    assert.equal(p.passaggio.lastId, 'a-evening');
+    // Two takes picked by the person on the same day: earlier recording first, whatever the order given.
+    const c = G.comparePair(list.find(t => t.id === 'a-evening'), list.find(t => t.id === 'z-morning'));
+    assert.equal(c.intonation.firstId, 'z-morning'); assert.equal(c.intonation.lastId, 'a-evening');
+  }
+  // The analysis time never orders takes: a morning take analysed again later stays the earlier take.
+  const again = takes.map(t => t.id === 'z-morning' ? {...t, a:{...t.a, at:at('2026-11-12', '10:00')}} : {...t, a:{...t.a, at:at('2026-11-11', '10:00')}});
+  assert.equal(G.pickPair(again, 'intonation').last.id, 'a-evening');
+  // Without a recording time the order is still the same for every caller (date, then id).
+  const bare = takes.map(({created, ...t}) => t);
+  assert.equal(G.pickPair(bare, 'intonation').last.id, G.pickPair(bare.slice().reverse(), 'intonation').last.id);
+  assert.equal(G.periodReport(bare.slice(0, 2), bare.slice(2)).intonation.lastId, G.periodReport(bare.slice(0, 2).reverse(), bare.slice(2).reverse()).intonation.lastId);
+});
