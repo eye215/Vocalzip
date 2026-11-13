@@ -85,7 +85,7 @@ function body(song, item, playable) {
   const button = label => '<button type="button" class="vl-chip-play vl-note-run" data-ar-run' + (job?.status === 'running' ? ' disabled' : '') + '>' + label + '</button>';
   const head = '<div class="vl-measure"><span>원곡 기준 비교 <small>시험판 · 원곡 가수의 멜로디(자동 추출)라 틀릴 수 있어요</small></span>' + button(job?.status === 'done' ? '다시 비교' : '비교하기') + '</div>';
   if (!job) {
-    const last = saved ? '<p class="vl-muted" data-ar-saved-summary>저장된 결과 · ' + (saved.state === 'ok' ? '원곡 기준 맞은 음 ' + saved.pct + '% (' + saved.ok + '/' + saved.judged + '음)' : '판정 보류') + (saved.at ? ' · ' + esc(VZ.dateLabel?.(new Date(saved.at).toISOString().slice(0, 10)) || '') : '') + '</p>' : '';
+    const last = saved ? '<p class="vl-muted" data-ar-saved-summary>저장된 결과 · ' + (saved.state === 'ok' ? '원곡 기준 맞은 음 ' + saved.pct + '% (' + saved.ok + '/' + saved.judged + '음)' : '판정 보류') + (saved.at ? ' · ' + esc(VZ.dateLabel?.(VZ.ymd(new Date(saved.at))) || '') : '') + '</p>' : '';
     const refState = packed ? (packed.state === 'ok' ? '원곡 멜로디는 이미 뽑아 두었어요.' : '원곡 멜로디 판정 보류: ' + esc(AM.holdRefText(packed.reason)) + '.')
       : '처음 비교할 때 원곡 "' + esc(file?.title || '원곡') + '"에서 멜로디를 한 번 뽑아요 (곡 길이에 따라 몇십 초~몇 분).';
     return head + last + '<p class="vl-muted">원곡 가수가 부른 음과 이 녹음에서 부른 음을 맞춰 봐요. ' + refState + ' 이 기기에서 계산하고, 저장된 분석과 원곡 파일은 바꾸지 않아요.</p>';

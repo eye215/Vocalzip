@@ -87,7 +87,8 @@ VZ.dday = s => { const n = VZ.daysBetween(VZ.today(), s); return n === 0 ? 'D-DA
 VZ.clock = sec => { sec = Math.max(0, Math.round(sec || 0)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return (h ? h + ':' + pad(m) : m) + ':' + pad(s); };
 VZ.minutes = min => { min = Math.round(min || 0); return min >= 60 ? Math.floor(min / 60) + '시간' + (min % 60 ? ' ' + min % 60 + '분' : '') : min + '분'; };
 VZ.size = b => b > 1048576 ? (b / 1048576).toFixed(b > 104857600 ? 0 : 1) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB';
-VZ.timeRange = l => [l.startTime, l.endTime].filter(Boolean).join(' – ');
+// A lesson brought in from 레슨비 정산 has no real time: its 00:00 start is a placeholder (shown as 시간 미정).
+VZ.timeRange = l => l.importedFrom === 'billing' && l.startTime === '00:00' ? '' : [l.startTime, l.endTime].filter(Boolean).join(' – ');
 
 /* ---------- domain ---------- */
 VZ.song = id => db.songs.find(s => s.id === id);
@@ -179,7 +180,9 @@ if (vv) {
   kb();
 }
 /** Full-page workflow by default; short action menus and confirmations are explicit variants. */
-VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor}) => {
+/** A page sheet with a form and a save button asks before X / backdrop / Escape / back throws away edits
+ * (confirmClose:false, or setting VZ.setGuard while mounting, for sheets that ask themselves; dirtyState() adds state kept outside form fields). */
+VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor, confirmClose = true, dirtyState}) => {
   const previous = document.activeElement;
   const back = document.createElement('div');
   back.className = 'sheet-back sheet-' + variant;
@@ -198,10 +201,21 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
     // A refresh that waited for this sheet runs now.
     if (!sheets.length && VZ.pendingRender) setTimeout(() => VZ.softRender(), 50);
   };
-  const api = {el, close};
-  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) { close(); if (variant === 'page') VZ.toast('취소했어요.'); } });
+  // Unsaved edits: something in the sheet was used and its fields no longer match what they were when it opened.
+  let baseline = null, touched = false;
+  const signature = () => JSON.stringify([...el.querySelectorAll('.sheet-body input,.sheet-body textarea,.sheet-body select')]
+    .filter(f => !f.matches('[type=search],[type=button],[type=submit],[type=reset],[data-q],[data-search]'))
+    .map(f => f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.type === 'file' ? f.files.length : f.value)) + '|' + (dirtyState?.() ?? '');
+  const dirty = () => { try { return !closed && baseline !== null && touched && signature() !== baseline; } catch { return false; } };
+  const dismiss = () => {
+    if (closed) return;
+    if (!dirty()) { close(); if (variant === 'page') VZ.toast('취소했어요.'); return; }
+    if (!discardAsking) VZ.confirmDiscard().then(ok => { if (ok) { close(); VZ.toast('취소했어요.'); } });
+  };
+  const api = {el, close, dirty};
+  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) dismiss(); });
   back.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { e.preventDefault(); close(); if (variant === 'page') VZ.toast('취소했어요.'); }
+    if (e.key === 'Escape') { e.preventDefault(); dismiss(); }
     if (e.key === 'Tab') {
       const nodes = [...el.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled && n.offsetParent);
       if (!nodes.length) return;
@@ -211,7 +225,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
   });
   document.body.append(back); if (variant !== 'menu') lockPage();
   sheets.push(api);
+  // A sheet that sets its own leave question while mounting (VZ.setGuard) asks by itself: no second question here.
+  const guardBefore = guard;
   onMount?.(el, close);
+  if (guard !== guardBefore) confirmClose = false;
   if (variant === 'page' && !foot) {
     const form = el.querySelector('.sheet-body form');
     const submit = form?.querySelector('button[type="submit"],input[type="submit"]');
@@ -236,6 +253,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
       form.addEventListener('input',sync); form.addEventListener('change',sync); sync();
     }
   }
+  if (variant === 'page' && confirmClose && el.classList.contains('sheet-form-page')) {
+    for (const type of ['input', 'change', 'click']) el.querySelector('.sheet-body').addEventListener(type, () => { touched = true; });
+    baseline = signature();
+  }
   if (variant === 'menu') {
     const target = anchor || previous;
     const rect = target?.getBoundingClientRect?.();
@@ -252,13 +273,19 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
 };
 VZ.menu = options => VZ.sheet({...options, variant:'menu'});
 VZ.closeSheets = () => [...sheets].forEach(s => s.close());
-VZ.confirm = (title, message, {ok = '확인', danger} = {}) => new Promise(resolve => {
+VZ.confirm = (title, message, {ok = '확인', cancel = '취소', danger} = {}) => new Promise(resolve => {
   let result = false;
   VZ.sheet({title, label:title, variant:'alert', body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',
-    foot:'<div class="btn-row"><button type="button" class="btn ghost" data-close>취소</button><button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-ok>' + VZ.esc(ok) + '</button></div>',
+    foot:'<div class="btn-row"><button type="button" class="btn ghost" data-close>' + VZ.esc(cancel) + '</button><button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-ok>' + VZ.esc(ok) + '</button></div>',
     onMount:(el, close) => el.parentNode.querySelector('[data-ok]').onclick = () => { result = true; close(); },
     onClose:() => resolve(result)});
 });
+/** One question for every "close with unsaved edits" case. */
+let discardAsking = false;
+VZ.confirmDiscard = () => {
+  discardAsking = true;
+  return VZ.confirm('작성 중인 내용이 있어요', '닫으면 입력한 내용이 저장되지 않아요. 닫을까요?', {ok:'닫기', cancel:'계속 작성', danger:true}).finally(() => { discardAsking = false; });
+};
 VZ.empty = (icon, text, action = '') => '<div class="empty"><i class="ph ph-' + icon + '"></i><div>' + VZ.esc(text) + '</div>' + action + '</div>';
 
 /** Song <select> with "새 곡 추가" option; returns html. Use VZ.readSong(form, name) to resolve. */
@@ -286,7 +313,7 @@ const routes = {};
 VZ.route = (name, def) => { routes[name] = def; };
 VZ.nav = hash => { if (location.hash === hash) VZ.render(); else location.hash = hash; };
 window.vzipNavigate = tab => VZ.nav('#/' + ({lessons:'lessons', practice:'record', media:'library', archive:'growth', manage:'settings'}[tab] || 'home'));
-let current = null, guard = null, lastHash = location.hash;
+let current = null, guard = null, lastHash = location.hash, lastTab = 'home';
 /** A view may block navigation (e.g. while recording). Return a message to confirm. */
 VZ.setGuard = fn => { guard = fn; };
 function parse() {
@@ -304,7 +331,8 @@ VZ.render = () => {
   current = {name:r.name, def, key:location.hash};
   document.body.dataset.vzRoute = r.name;
   document.querySelectorAll('.v-nav a').forEach(a => a.toggleAttribute('aria-current', false));
-  const tab = def.tab || r.name;
+  // tab:'keep' (설정 and its pages): the bottom tab stays on the screen the user came from.
+  const tab = lastTab = def.tab === 'keep' ? lastTab : def.tab || r.name;
   document.querySelector('.v-nav a[data-nav="' + tab + '"]')?.setAttribute('aria-current', 'page');
   const title = typeof def.title === 'function' ? def.title(r) : def.title;
   const back = def.back ? '<button type="button" class="icon-btn" data-back aria-label="뒤로"><i class="ph ph-caret-left"></i></button>' : '';
@@ -324,7 +352,23 @@ VZ.render = () => {
   def.mount?.(main, r);
   window.scrollTo(0, scroll);
 };
+// Where this screen sits in the browser history, when the browser tells (Navigation API): lets a refused "back" be undone exactly.
+const navIndex = () => { try { return window.navigation?.currentEntry?.index ?? null; } catch { return null; } };
+let lastIndex = navIndex(), restoring = false, restoreTimer;
 window.addEventListener('hashchange', () => {
+  if (restoring) { restoring = false; clearTimeout(restoreTimer); return; }
+  // Back / swipe-back with unsaved edits in an open sheet: stay, ask once, then go on.
+  if (location.hash !== lastHash && sheets.some(s => s.dirty())) {
+    const target = location.hash, index = navIndex(), delta = index !== null && lastIndex !== null ? lastIndex - index : 0;
+    if (delta) { restoring = true; clearTimeout(restoreTimer); restoreTimer = setTimeout(() => { restoring = false; }, 1500); history.go(delta); }
+    else history.replaceState(null, '', lastHash || '#/home');
+    if (!discardAsking) VZ.confirmDiscard().then(ok => {
+      if (!ok) return;
+      VZ.closeSheets(); restoring = false; clearTimeout(restoreTimer);
+      if (delta) history.go(-delta); else location.hash = target;
+    });
+    return;
+  }
   if (guard) {
     const message = guard();
     if (message) {
@@ -334,7 +378,7 @@ window.addEventListener('hashchange', () => {
       return;
     }
   }
-  guard = null; lastHash = location.hash; VZ.closeSheets(); VZ.render();
+  guard = null; lastHash = location.hash; lastIndex = navIndex(); VZ.closeSheets(); VZ.render();
 });
 document.addEventListener('click', e => {
   if (e.target.closest('[data-back]')) { history.length > 1 ? history.back() : VZ.nav('#/home'); }
@@ -344,8 +388,12 @@ VZ.rerender = () => VZ.render();
 VZ.softRender = () => {
   const main = document.getElementById('view');
   const typing = main?.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
-  if (VZ.isBusy?.() || main?.classList.contains('lib-selecting') || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
-  VZ.pendingRender = false; VZ.render();
+  // A route with softRefresh (보관함) updates itself where it is: scroll position, drawn rows and ticked rows stay.
+  // Without it, rows being ticked (lib-selection-active) are never wiped by a background refresh.
+  const inPlace = current?.def.softRefresh && current.key === location.hash;
+  if (VZ.isBusy?.() || (!inPlace && main?.classList.contains('lib-selection-active')) || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
+  VZ.pendingRender = false;
+  if (inPlace) current.def.softRefresh(main); else VZ.render();
 };
 document.addEventListener('input', e => { const main = document.getElementById('view'); if (main?.contains(e.target) && !e.target.matches('[type=search],[data-q]')) main.dataset.dirty = '1'; });
 // Icon fonts render private-use glyphs; keep them out of accessible names.

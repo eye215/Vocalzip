@@ -64,24 +64,33 @@ const METRICS = [
 ];
 const byId = Object.fromEntries(METRICS.map(m => [m.id, m]));
 
+/* Why a judgement is withheld. The ONE place for these words: every screen shows the label "판정 보류" once
+ * (a chip, a heading, or holdLine) and the reason from here — the reasons themselves never repeat the label. */
 const HOLD = {
   'no-data':'측정값이 없어요',
   'no-pair':'같은 곡을 다른 날 다시 부른 녹음이 필요해요',
+  'no-earlier':'이번 주 전에 분석한 같은 곡 녹음이 없어요',
   'same-day':'같은 날 녹음끼리는 변화로 보지 않아요',
-  'version-mixed':'분석 버전(v1·v2)이 달라 판정 보류 · 이전 녹음을 다시 분석하면 비교할 수 있어요',
+  'version-mixed':'분석 버전(v1·v2)이 달라요 · 이전 녹음을 다시 분석하면 비교할 수 있어요',
   'v1':'이전 분석(v1) 결과라 이 지표는 계산하지 않아요 · 다시 분석하면 확인할 수 있어요',
   'reanalyze':'세부 측정(프레이즈·음높이별)이 없는 분석이에요 · 다시 분석하면 확인할 수 있어요',
-  'confidence':'측정 신뢰도가 낮아 판정 보류',
-  'few-notes':'측정한 음이 적어 판정 보류',
-  'few-phrases':'같은 프레이즈를 3개 이상 찾지 못해 판정 보류',
-  'tempo':'템포 차이가 커서 판정 보류',
-  'key-shift':'주 가창 음역 전체가 옮겨져 키가 달랐을 수 있어 판정 보류',
-  'no-stable':'안정 최고음이 없어 판정 보류',
-  'few-high':'같은 고음 구간에서 지속한 음이 적어 판정 보류',
-  'few-bands':'여러 음높이의 지속음이 부족해 판정 보류'
+  'confidence':'측정 신뢰도가 낮아요 (목소리가 짧거나 반주가 커요)',
+  'few-notes':'측정한 음이 적어요',
+  'few-phrases':'같은 프레이즈를 3개 이상 찾지 못했어요',
+  'tempo':'템포 차이가 커요',
+  'key-shift':'주 가창 음역 전체가 옮겨져 키가 달랐을 수 있어요',
+  'no-stable':'안정 최고음이 없어요',
+  'few-high':'같은 고음 구간에서 지속한 음이 적어요',
+  'few-bands':'여러 음높이의 지속음이 부족해요'
 };
-const holdText = reason => HOLD[reason] || '판정 보류';
-const STATE = {better:'좋아진 방향', worse:'아쉬운 방향', similar:'비슷함', mixed:'변화 혼재', changed:'변화 관찰', hold:'판정 보류', reference:'참고'};
+const HOLD_LABEL = '판정 보류';
+/** The reason only — for places that already show the 판정 보류 label (chip, heading). */
+const holdText = reason => HOLD[reason] || '비교할 근거가 부족해요';
+/** Label + reason in one line — for places with no separate label. */
+const holdLine = reason => HOLD_LABEL + ' · ' + holdText(reason);
+/** Why two takes picked by hand (녹음별 변화, A/B) are not compared: the same reasons as the report. */
+const pairHold = (a, b, reliable = () => true) => !a?.metrics || !b?.metrics ? 'no-data' : (a.v ?? null) !== (b.v ?? null) ? 'version-mixed' : !reliable(a) || !reliable(b) ? 'confidence' : '';
+const STATE = {better:'좋아진 방향', worse:'아쉬운 방향', similar:'비슷함', mixed:'변화 혼재', changed:'변화 관찰', hold:HOLD_LABEL, reference:'참고'};
 
 /* ---------- one analysis ---------- */
 const metricsOf = a => a?.metrics || null;
@@ -238,6 +247,7 @@ function compareMetricRaw(id, first, last, {reference = null, sameDay = false, s
   if (id === 'intonation' || id === 'stability') {
     // Prefer the same phrases in both takes; otherwise the whole recording (labelled).
     let before = value(a, id), after = value(b, id), basis = 'whole', matched = 0;
+    const whole = {before, after}; // the whole-recording values every single-take screen shows
     if (hasDetail(a) && hasDetail(b)) {
       const col = id === 'intonation' ? 3 : 4, pairs = matchPhrases(a.metrics.phrases.rows, b.metrics.phrases.rows).filter(([x, y]) => x[col] != null && y[col] != null);
       if (pairs.length >= RULES.match.minPairs) {
@@ -249,7 +259,7 @@ function compareMetricRaw(id, first, last, {reference = null, sameDay = false, s
     // The score is preferred; else the original singer's extracted melody (원곡 기준), never the two mixed.
     let score = id === 'intonation' && scoreNotes ? scoreNoteBasis(scoreNotes[first.id], scoreNotes[last.id]) : null;
     if (!score && id === 'intonation' && arNotes) { const ar = scoreNoteBasis(arNotes[first.id], arNotes[last.id]); if (ar) score = {...ar, source:'ar'}; }
-    return {...base, state:direction(d, delta, RULES[id], before), before, after, delta, basis, matched, ...(score ? {score} : {})};
+    return {...base, state:direction(d, delta, RULES[id], before), before, after, delta, basis, matched, ...(basis === 'phrases' ? {whole} : {}), ...(score ? {score} : {})};
   }
   if (id === 'phrase') {
     const pairs = matchPhrases(a.metrics.phrases.rows, b.metrics.phrases.rows);
@@ -377,6 +387,9 @@ function aggregate(reports) {
     const holds = {}; for (const x of rows.filter(x => x.state === 'hold')) holds[x.reason] = (holds[x.reason] || 0) + 1;
     const numeric = d.judged && d.id !== 'range' ? compared.filter(x => Number.isFinite(x.before) && Number.isFinite(x.after)) : [];
     const mean = k => numeric.length ? r1(numeric.reduce((s, x) => s + x[k], 0) / numeric.length) : null;
+    // 고음 안정성 is judged from wobble AND hold time: the hold time of the compared songs goes with it.
+    const held = d.id === 'high' ? numeric.filter(x => Number.isFinite(x.heldBefore) && Number.isFinite(x.heldAfter)) : [];
+    const heldMean = k => held.length ? Math.round(held.reduce((s, x) => s + x[k], 0) / held.length * 100) / 100 : null;
     const better = count('better'), worse = count('worse'), similar = count('similar'), mixed = count('mixed'), changed = count('changed');
     let state = 'hold';
     if (d.reference) state = rows.some(x => x.latest?.state === 'reference') ? 'reference' : 'hold';
@@ -384,7 +397,9 @@ function aggregate(reports) {
     const latest = rows.map(x => num(x.latest?.value)).filter(v => v != null);
     return {...d, state, compared:compared.length, better, worse, similar, mixed, changed, holds,
       measured:latest.length, latestValue:latest.length ? r1(latest.reduce((s, v) => s + v, 0) / latest.length) : null,
-      withheld:rows.filter(x => x.state === 'hold').length, before:mean('before'), after:mean('after'), rows};
+      withheld:rows.filter(x => x.state === 'hold').length, before:mean('before'), after:mean('after'),
+      ...(d.id === 'high' ? {heldBefore:heldMean('heldBefore'), heldAfter:heldMean('heldAfter')} : {}),
+      basis:numeric.length ? (numeric.every(x => x.basis === 'phrases') ? 'phrases' : numeric.every(x => x.basis === 'whole') ? 'whole' : d.id === 'intonation' || d.id === 'stability' ? 'both' : '') : '', rows};
   });
 }
 /** Main hold reason of an aggregate (the most frequent one). */
@@ -400,31 +415,37 @@ function fmt(id, v) {
 const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
 /** One line for a compared metric: "±12 → ±9.5 cent (−2.5)". */
 function changeText(x) {
-  if (!x || x.state === 'hold') return holdText(x?.reason);
+  if (!x || x.state === 'hold') return holdLine(x?.reason);
   if (x.id === 'range') {
     let t = '안정 최고음 ' + x.before + ' → ' + x.after + (x.delta ? ' (' + signed(x.delta) + '반음)' : ' (같음)');
     if (x.main) t += ' · 주 가창 음역 ' + (x.main.before === x.main.after ? x.main.after + ' 그대로' : x.main.before + ' → ' + x.main.after);
     return t + ' · 실력 판정 아님';
   }
-  if (x.id === 'high') return x.zone + ' 구간 흔들림 ' + fmt('high', x.before) + ' → ' + fmt('high', x.after) + ' · 유지 ' + x.heldBefore + '초 → ' + x.heldAfter + '초';
+  if (x.id === 'high') return x.zone + ' 구간 흔들림 ' + fmt('high', x.before) + ' → ' + fmt('high', x.after) + ' · ' + heldText(x.heldBefore, x.heldAfter);
   if (x.id === 'passaggio') return passaggioText(x.latest);
   return fmt(x.id, x.before) + ' → ' + fmt(x.id, x.after);
 }
+/** "유지 0.99초 → 1.2초": the hold time the 고음 안정성 verdict also depends on. */
+const heldText = (before, after) => before == null || after == null ? '' : '유지 ' + before + '초 → ' + after + '초';
+/** "녹음 전체로는 ±30 cent → ±9.5 cent": the whole-recording values (the ones the analysis screen shows for a take)
+ * next to a same-phrase comparison, so one take never seems to have two different numbers. */
+const wholeText = x => x?.whole && num(x.whole.before) != null && num(x.whole.after) != null ? '녹음 전체로는 ' + fmt(x.id, x.whole.before) + ' → ' + fmt(x.id, x.whole.after) : '';
 function basisText(x) {
   if (!x || x.state === 'hold' || x.state === 'reference') return '';
-  if (x.score) return (x.score.source === 'ar' ? '원곡 기준 맞은 음 비율 ' : '악보 기준 맞은 음 비율 ') + x.score.before + '% → ' + x.score.after + '% (' + (x.score.source === 'ar' ? '같은 원곡 멜로디(자동 추출) 음 ' : '같은 악보 음 ') + x.score.notes + '개 · ±50 cent) · cent 비교는 ' + (x.basis === 'phrases' ? '같은 프레이즈 ' + x.matched + '개' : '곡 전체');
-  if (x.basis === 'phrases') return '같은 프레이즈 ' + x.matched + '개 비교' + (x.id === 'phrase' && x.tempo && x.tempo !== 1 ? ' · 템포 보정' : '');
+  const whole = wholeText(x) ? ' · ' + wholeText(x) : '';
+  if (x.score) return (x.score.source === 'ar' ? '원곡 기준 맞은 음 비율 ' : '악보 기준 맞은 음 비율 ') + x.score.before + '% → ' + x.score.after + '% (' + (x.score.source === 'ar' ? '같은 원곡 멜로디(자동 추출) 음 ' : '같은 악보 음 ') + x.score.notes + '개 · ±50 cent) · cent 비교는 ' + (x.basis === 'phrases' ? '같은 프레이즈 ' + x.matched + '개' : '곡 전체') + whole;
+  if (x.basis === 'phrases') return '같은 프레이즈 ' + x.matched + '개 비교' + (x.id === 'phrase' && x.tempo && x.tempo !== 1 ? ' · 템포 보정' : '') + whole;
   if (x.basis === 'whole') return '곡 전체 비교 (같은 프레이즈를 충분히 찾지 못함)';
   if (x.id === 'high') return x.fromScore ? '악보 최고음 기준 고음 구간' : '두 녹음 공통 고음 구간';
   return '';
 }
 function passaggioText(p) {
-  if (!p || p.state === 'hold') return holdText(p?.reason);
+  if (!p || p.state === 'hold') return holdLine(p?.reason);
   if (!p.found) return '음높이에 따라 흔들림이 크게 달라지는 구간이 보이지 않았어요 (평소 ±' + p.baseline + ' cent)';
   return (p.from === p.to ? p.from : p.from + '–' + p.to) + ' 부근에서 지속음 흔들림이 커요 (±' + p.wobble + ' cent, 평소 ±' + p.baseline + ' cent)';
 }
 const PASSAGGIO_NOTE = '음정 데이터만으로 판별 불가, 선생님 판단 참고';
-function stateLabel(x) { return STATE[x?.state] || '판정 보류'; }
+function stateLabel(x) { return STATE[x?.state] || HOLD_LABEL; }
 /** AI coach input (server "overall" mode accepts only intonation/stability/phrase/vibrato; range, high-note and
  * passaggio are never sent, so the model cannot judge from the highest note). Withheld → state unknown. */
 function aiMetrics(aggs) {
@@ -438,5 +459,5 @@ function aiMetrics(aggs) {
   });
 }
 return {VERSION:2, RULES, METRICS, HOLD, STATE, MR_REMOVED_NOTE, AI_SEPARATED_NOTE, noteName, midiOf, semitones, hasDetail, availability, value, single, zoneStats, keyShift, passaggioOf,
-  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, stateLabel, holdText, aiMetrics};
+  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, stateLabel, holdText, holdLine, pairHold, HOLD_LABEL, heldText, wholeText, aiMetrics};
 });

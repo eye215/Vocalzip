@@ -18,6 +18,7 @@ import {createHash, createHmac} from 'node:crypto';
 import {mkdtemp, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {matchTranscripts, normalizeText} from '../song-text-match.mjs';
 
 const require = createRequire(import.meta.url);
@@ -258,6 +259,51 @@ export async function requeueOldAnalyses(db) {
 export const isCurrentAnalysis = a => !!a && Number(a.v) >= VA.VERSION && !!a.metrics && Object.prototype.hasOwnProperty.call(a.metrics, 'phrases');
 /** The app's rule (app/analysis.js VZ.analysisReliable): enough singing, voice not drowned by the MR, v2 pitch confidence. */
 export const reliableResult = r => !!r?.metrics?.voicedSeconds && r.metrics.voicedSeconds >= 10 && (r.confidence?.voiceOverMrDb == null || r.confidence.voiceOverMrDb >= 3) && ((r.version ?? r.v) < 2 || Number(r.confidence?.pitchConfidence) >= 0.8);
+export const UNRELIABLE_CAMPAIGN = 'mr-separation-v1';
+const analysisFingerprint = a => sha256(JSON.stringify(a ?? null));
+/** Eligibility is metadata-only: never fetch media or change a saved result during preview. */
+export function unreliableCandidate({user_id:owner, metadata:m = {}}) {
+  const a = m.analysis;
+  if (m.deleted || !/^(audio|video)\//.test(m.type || 'audio/') || !isCurrentAnalysis(a) || reliableResult(a) ||
+      a.scope?.unreliableReanalysis === UNRELIABLE_CAMPAIGN || (a.scope?.separationWanted && !a.scope?.separationTried)) return false;
+  const owned = (path, prefix) => typeof path === 'string' && path.startsWith(prefix) && !path.includes('..') && path.length > prefix.length;
+  if (m.storageProvider === 'r2' && m.r2Key) return owned(m.r2Key, 'u/' + owner + '/');
+  const paths = m.storageVersion === 2 ? (Array.isArray(m.parts) ? m.parts.map(p => p?.path) : []) : [m.path];
+  return paths.length > 0 && paths.every(p => owned(p, owner + '/'));
+}
+/** Owner-operated, bounded backfill. Default is read-only. Existing analysis/history stay untouched until success.
+ * The unique queue row plus a campaign/fingerprint receipt makes concurrent dispatches and reruns idempotent. */
+export async function requeueUnreliableAnalyses(db, {apply = false, limit = 50} = {}) {
+  if (!Number.isInteger(Number(limit)) || Number(limit) < 1 || Number(limit) > 500) throw new Error('reanalyze limit must be an integer from 1 to 500');
+  const counts = {eligible:0, queued:0, dryRun:!apply};
+  let cursor = '';
+  while (counts.eligible < Number(limit)) {
+    const {rows} = await db.query(`select m.id, m.user_id, m.metadata, j.status, j.result from public.vocal_media m
+      left join public.vocal_analysis_jobs j on j.user_id = m.user_id and j.media_id = m.id and j.kind = 'vocal'
+      where m.id > $1 and m.metadata -> 'analysis' -> 'metrics' ? 'phrases' order by m.id limit 250`, [cursor]);
+    if (!rows.length) break;
+    for (const row of rows) {
+      cursor = row.id;
+      if (!unreliableCandidate(row) || ['queued', 'running'].includes(row.status)) continue;
+      const request = {campaign:UNRELIABLE_CAMPAIGN, fingerprint:analysisFingerprint(row.metadata.analysis)};
+      if (row.result?.reanalyze?.campaign === request.campaign && row.result.reanalyze.fingerprint === request.fingerprint) continue;
+      counts.eligible++;
+      if (apply) {
+        const {rowCount} = await db.query(`insert into public.vocal_analysis_jobs (user_id, media_id, kind, result)
+          select user_id, id, 'vocal', $3::jsonb from public.vocal_media
+          where id = $1 and user_id = $2 and metadata -> 'analysis' = $4::jsonb
+          on conflict (user_id, media_id, kind) do update set status = 'queued', attempts = 0,
+            last_error = null, locked_at = null, locked_by = null, result = excluded.result, updated_at = now()
+          where public.vocal_analysis_jobs.status not in ('queued', 'running')
+            and public.vocal_analysis_jobs.result -> 'reanalyze' is distinct from excluded.result -> 'reanalyze'`,
+          [row.id, row.user_id, JSON.stringify({...row.result, reanalyze:request}), JSON.stringify(row.metadata.analysis)]);
+        counts.queued += rowCount;
+      }
+      if (counts.eligible >= Number(limit)) break;
+    }
+  }
+  return counts;
+}
 /** 알고 있는 MR 빼기 on the server, as in the app: the song's uploaded MR files (this account's R2 folder only) are
  * lined up with the take and subtracted (app/mr-cancel.js via VA.analyzeWithoutMr). null when none fits. */
 async function withoutMr(db, owner, songId, samples) {
@@ -270,7 +316,10 @@ async function withoutMr(db, owner, songId, samples) {
 async function vocalJob(db, job, meta, audio) {
   // A current analysis (this analyzer version, with the per-phrase / per-semitone detail the growth report needs) is
   // reused. An older one (v1, or v2 saved before the detail rows existed) is analysed again; it is kept in history.
-  if (isCurrentAnalysis(meta.analysis)) return finish(db, job, 'done', {reused:true});
+  const request = job.result?.reanalyze;
+  const reanalyze = request?.campaign === UNRELIABLE_CAMPAIGN && request.fingerprint === analysisFingerprint(meta.analysis) &&
+    unreliableCandidate({user_id:job.user_id, metadata:meta});
+  if (isCurrentAnalysis(meta.analysis) && !reanalyze) return finish(db, job, 'done', {...job.result, reused:true});
   const samples = await audio();
   let r = VA.analyze(samples, 16000);
   // The MR drowned the voice: measure again with the song's own MR file taken out (kept only when clearly better).
@@ -282,14 +331,15 @@ async function vocalJob(db, job, meta, audio) {
   const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
   if (previous) { const {history:ignored, ...saved} = previous; history.push(saved); }
   const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server',
-    ...(history.length ? {history:history.slice(-5)} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 16000,
+    ...(history.length ? {history} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 16000,
+      ...(reanalyze ? {unreliableReanalysis:UNRELIABLE_CAMPAIGN} : {}),
       // Still held back and no MR file fitted: the separate AI-separation worker (worker/separation-worker.mjs) takes it.
       ...(!reliableResult(r) && !r.confidence?.mrRemoved && r.metrics?.voicedSeconds > 0 ? {separationWanted:true} : {})}};
   // Only the analysis key changes, on the row as it is now; an analysis saved meanwhile (app) is kept: the row is
   // written only while it still holds the analysis this job read (none, or the same older one).
-  await db.query("update public.vocal_media set metadata = jsonb_set(metadata, '{analysis}', $3::jsonb), updated_at = now() where id = $1 and user_id = $2 and coalesce(metadata -> 'analysis' ->> 'at', '') = $4",
-    [job.media_id, job.user_id, JSON.stringify(summary), previous?.at != null ? String(previous.at) : '']);
-  return finish(db, job, 'done', {voicedSeconds:r.metrics.voicedSeconds, confidence:r.confidence, ...(r.confidence?.mrRemoved ? {mrRemoved:true} : {})});
+  await db.query("update public.vocal_media set metadata = jsonb_set(metadata, '{analysis}', $3::jsonb), updated_at = now() where id = $1 and user_id = $2 and metadata -> 'analysis' is not distinct from $4::jsonb",
+    [job.media_id, job.user_id, JSON.stringify(summary), meta.analysis ? JSON.stringify(meta.analysis) : null]);
+  return finish(db, job, 'done', {...job.result, voicedSeconds:r.metrics.voicedSeconds, confidence:r.confidence, ...(r.confidence?.mrRemoved ? {mrRemoved:true} : {})});
 }
 async function songJob(db, job, meta, audio, stt) {
   if (meta.songId || meta.song) return finish(db, job, 'skipped', {reason:'already assigned'});
@@ -454,7 +504,7 @@ export function describeDbUrl(raw) {
   return notes.join(', ');
 }
 // CLI: `node worker/analysis-worker.mjs` (work) or `--peek` (writes jobs=<n> for the workflow to skip setup when idle).
-if (import.meta.url === 'file://' + process.argv[1]) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (!env.SUPABASE_DB_URL) { console.log('analysis worker: SUPABASE_DB_URL is not set, nothing to do'); process.exit(0); }
   const db = new pg.Client({connectionString:env.SUPABASE_DB_URL, ssl:env.SUPABASE_DB_SSL === 'off' ? false : {rejectUnauthorized:false}});
   try { await db.connect(); }
@@ -465,6 +515,10 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       const {rows:[r]} = await db.query("select count(*)::int as n from public.vocal_analysis_jobs where attempts < 3 and kind = any($1) and (status = 'queued' or (status = 'running' and locked_at < now() - interval '30 minutes'))", [kinds]);
       console.log('analysis worker: ' + r.n + ' job(s) waiting');
       if (env.GITHUB_OUTPUT) (await import('node:fs')).appendFileSync(env.GITHUB_OUTPUT, 'jobs=' + r.n + '\n');
+    } else if (process.argv.includes('--reanalyze-unreliable')) {
+      // This command only previews/enqueues; the scheduled worker handles the queue later. Never runs STT.
+      const counts = await requeueUnreliableAnalyses(db, {apply:env.WORKER_REANALYZE_APPLY === '1', limit:env.WORKER_REANALYZE_LIMIT || 50});
+      console.log('unreliable reanalysis: ' + JSON.stringify(counts));
     } else {
       // Settings first: with a broken R2 setting no job is touched (nothing used up, nothing marked failed).
       const {notes, problems} = preflight();

@@ -74,7 +74,7 @@ VZ.shareSheet = (item, {title:named = ''} = {}) => {
 };
 
 /* 공유 중인 링크 (settings → 관리): every link of this account, with copy and stop. */
-VZ.route('shares', {title:'공유 중인 링크', back:true, tab:'home', render() {
+VZ.route('shares', {title:'공유 중인 링크', back:true, tab:'keep', render() {
   return '<div class="share-list-page" data-shares><p class="muted">불러오는 중…</p></div>';
 }, async mount(main) {
   const host = main.querySelector('[data-shares]');

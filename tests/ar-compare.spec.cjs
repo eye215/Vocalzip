@@ -5,6 +5,7 @@
 // notes with ▶ (the take) and ▶ 원곡 (the AR at the matching place), withheld cases, saving, 320 px.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
+const labClear = require('./lab-clear-selection.cjs');
 const crypto = require('node:crypto');
 const {KEY, stub} = require('./helpers/r2-fixture.cjs');
 const S = require('./helpers/score-song.cjs'), H = require('./helpers/ar-song.cjs'), M = require('../app/ar-melody-model.js');
@@ -78,7 +79,7 @@ async function cloud(page, take, {reliable = true} = {}) {
 const stored = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)).songs.find(s => s.id === 's1'), KEY);
 async function lab(page) {
   await page.goto('/#/vocal-lab/s1');
-  await page.locator('.vl-dates button').first().click();
+  await labClear(page); await page.locator('.vl-dates button').first().click();
   const box = page.locator('[data-ar-cmp]');
   await expect(box).toBeVisible();
   return box;
@@ -88,7 +89,7 @@ test('upload the original in 레퍼런스, extract its melody once (cached on th
   test.setTimeout(150000);
   await boot(page);
   // No AR file yet: no block in the lab.
-  await page.goto('/#/vocal-lab/s1'); await page.locator('.vl-dates button').first().click();
+  await page.goto('/#/vocal-lab/s1'); await labClear(page); await page.locator('.vl-dates button').first().click();
   await expect(page.locator('[data-note-cmp], [data-ar-cmp]')).toHaveCount(0);
   await page.goto('/#/song/s1'); await page.locator('[data-tab=ar]').click();
   const sec = page.getByRole('group', {name:'원곡 파일'});
@@ -147,7 +148,8 @@ test('upload the original in 레퍼런스, extract its melody once (cached on th
   await page.getByRole('button', {name:'원곡 음원 원곡 파일 삭제'}).click();
   await page.locator('[data-ok]').click();
   await expect(page.getByRole('group', {name:'원곡 파일'})).toContainText('원곡 음원 파일을 올리면');
-  expect(await page.evaluate(() => window.__removed)).toEqual([file.r2Key]);
+  // Only R2 keys count here: the background move of the practice recording out of the old storage may also remove its old copy.
+  expect(await page.evaluate(() => window.__removed.filter(key => key.startsWith('u/')))).toEqual([file.r2Key]);
   const after = await stored(page);
   expect(after.arFile).toBeUndefined(); expect(after.arReference).toBeUndefined();
 });

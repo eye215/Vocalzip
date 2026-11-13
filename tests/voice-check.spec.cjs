@@ -65,7 +65,10 @@ test('daily check: home card → 30-second check saved as training with its tag,
   const p=window.VZ.db.practices.find(x=>x.voiceCheck);
   const stored=(await window.vzipReadMedia()).find(m=>m.id===p.voiceCheck.mediaId);
   const merged=(await window.VZ.media.list(true)).find(m=>m.id===p.voiceCheck.mediaId);
-  return {p,stored:{...stored,blob:undefined,bytes:undefined,size:stored.blob?.size,type:stored.type},category:window.VZ.media.recordingCategory(merged),songSearch:window.VZ.media.songSearchEligible(merged),
+  // Read the same file as playback: WebKit may store raw bytes after IndexedDB rejects a Blob.
+  const blob=window.vzipMediaBlob(stored),bytes=await blob.arrayBuffer();
+  const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+  return {p,stored:{...stored,blob:undefined,bytes:undefined,size:blob.size,type:stored.type},sha256,category:window.VZ.media.recordingCategory(merged),songSearch:window.VZ.media.songSearchEligible(merged),
    activity:[...window.VZ.songActivity([merged]).keys()],entries:window.VZ.timeEntries().filter(e=>e.ref.id===p.id).map(e=>({training:e.training,songId:e.songId})),prefs:window.VZ.db.settings.voiceCheck};
  });
  expect(saved.p).toMatchObject({practiceMode:'training',songId:'',practiceTimeSource:'voice-check',mediaIds:[saved.p.voiceCheck.mediaId],
@@ -75,6 +78,7 @@ test('daily check: home card → 30-second check saved as training with its tag,
  expect(m.sustainWobble).toBeLessThan(8);expect(m.scaleCents).toBeLessThan(8);expect(m.highHold).toBeGreaterThan(4);
  expect(saved.stored).toMatchObject({recordingCategory:'training',songId:'',origin:'voice-check',type:'audio/wav',voiceCheck:{v:1,protocol:'vc30-v1',refNote:57,highNote:66}});
  expect(saved.stored.size).toBe(44+16000*30*2); // the original take, byte for byte (no re-encode)
+ expect(saved.sha256).toBe(require('node:crypto').createHash('sha256').update(Buffer.from(WAV,'base64')).digest('hex'));
  expect(saved.stored.analysis.v).toBe(2);
  expect(saved.category).toBe('training');expect(saved.songSearch).toBe(false);expect(saved.activity).toEqual([]);
  expect(saved.entries).toEqual([{training:true,songId:''}]);

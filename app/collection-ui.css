@@ -58,3 +58,18 @@ body.vz-collection .lib-month .list>[data-media]+[data-media]{border-top:0}
 .vz-songs-switch a{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:99px;background:transparent;color:var(--vz-color-ink-secondary,#475467);font-size:14px;line-height:20px;font-weight:600;letter-spacing:-.02em;text-decoration:none;white-space:nowrap}
 .vz-songs-switch a[aria-current="page"]{background:var(--vz-color-selected-bg,#EDE1FF);color:var(--vz-color-accent,#7A32F5)}
 .vz-songs-switch a:focus-visible{outline:2px solid var(--vz-color-focus,#DCC4FF);outline-offset:0}
+
+/* 전체 녹음 header, compact (2026-11-13): the same controls on the 4/8px steps of the spacing scale, so the list starts
+ * higher — at least two full rows at 320×640 and four at 375×812. Touch targets stay 44px. */
+body.vz-collection #view[data-collection=library] .vz-songs-switch{margin-bottom:4px}
+body.vz-collection #view[data-collection=library] .vz-library-tabs{margin-bottom:4px;gap:0}
+body.vz-collection #view[data-collection=library] .lib-tools{margin:4px 4px}
+body.vz-collection #view[data-collection=library] .lib-summary{margin:0}
+body.vz-collection #view[data-collection=library] .vz-review-link,body.vz-collection #view[data-collection=library] .vz-review-fallback{min-height:48px;margin:4px 0 8px;padding:0 16px;border-radius:16px;font-size:15px}
+body.vz-collection #view[data-collection=library] [data-server-analysis] p{margin:0 4px 8px}
+body.vz-collection #view[data-collection=library] .lib-selection-tools{margin-bottom:8px}
+body.vz-collection #view[data-collection=library] .lib-month:first-child h3{margin-top:8px}
+/* All five type tabs fit a 320px screen; if they still do not (larger text), the row scrolls and its right edge fades. */
+@media(max-width:380px){body.vz-collection #view[data-collection=library] .vz-library-tabs .lib-seg button{padding-inline:12px}}
+@media(max-width:359px){body.vz-collection #view[data-collection=library] .vz-library-tabs .lib-seg button{padding-inline:8px}}
+.vz-library-tabs.vz-more-right{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent)}

@@ -1,7 +1,7 @@
 (()=>{
 'use strict';const V=window.VZ,M=window.VzipLessonAI;if(!V||!M)return;const esc=V.esc;
 V.route('lesson-ai',{title:'레슨 숙제 후보',back:true,tab:'calendar',noAutoRefresh:true,
- render:()=>'<section class="card" data-lesson-ai><h2>피드백에서 다음 숙제 찾기</h2><p>선생님 피드백·곡별 메모와 기존 숙제 내용을 NVIDIA에 보내 후보 한 가지를 정리해요. 선생님 숙제는 자동 수정하지 않아요.</p><button class="btn secondary" data-request>AI 숙제 후보 받기</button><p role="status" data-status></p><div data-candidate></div></section>',
+ render:()=>'<section class="card" data-lesson-ai><h2>피드백에서 다음 숙제 찾기</h2><p>선생님 피드백·곡별 메모와 기존 숙제 내용을 AI 서버에 보내 후보 한 가지를 정리해요. 선생님 숙제는 자동 수정하지 않아요.</p><button class="btn secondary" data-request>AI 숙제 후보 받기</button><p role="status" data-status></p><div data-candidate></div></section>',
  mount(host,r){const box=host.querySelector('[data-lesson-ai]'),out=box.querySelector('[data-candidate]'),status=box.querySelector('[data-status]'),button=box.querySelector('[data-request]'),lessonId=r.params[0];let evidence;
  try{evidence=M.context(V.db,lessonId);}catch(e){status.textContent=e.message;button.disabled=true;return;}
  if(!evidence.feedback.trim()&&!Object.values(evidence.songFeedback).some(v=>String(v).trim())){status.textContent='먼저 레슨 피드백을 작성해 주세요.';button.disabled=true;return;}

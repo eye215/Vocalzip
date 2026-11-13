@@ -4,7 +4,8 @@
 //   · The recording is read from this account's storage, separated in a temporary folder on the runner and deleted;
 //     nothing but the measurement summary is written (metadata.analysis, the previous one kept in history).
 //   · The result is marked confidence.aiSeparated and shown as "AI 분리 후 측정(참고)"; it is judged like any other.
-//   · A take that cannot be separated, or is still unreadable afterwards, is marked separationTried and not retried.
+//   · A take that cannot be separated, or whose voice still fails the confidence rule, is marked separationTried and
+//     not retried; its measurement stays as it was.
 // Logs show counts only (this repository is public). Needs SUPABASE_DB_URL and the R2 read secrets, like the
 // analysis worker; DEMUCS_CMD overrides the separator command (tests use a stand-in).
 import pg from 'pg';
@@ -28,17 +29,18 @@ export async function waiting(db, limit = 1000) {
   return rows;
 }
 /** Run the separator on a WAV; resolves with the path of the separated voice. */
-function separate(input, outDir, cmd = env.DEMUCS_CMD || 'python3 -m demucs') {
+function separate(input, outDir, cmd = env.DEMUCS_CMD || 'python3 -m demucs', diagnostic = false) {
   return new Promise((resolve, reject) => {
     const [bin, ...pre] = cmd.split(' ').filter(Boolean);
     const args = [...pre, '--two-stems', 'vocals', '-n', MODEL, '-d', 'cpu', '-o', outDir, input];
     const p = spawn(bin, args, {stdio:['ignore', 'ignore', 'pipe']});
-    let err = ''; p.stderr.on('data', d => { err = (err + d).slice(-400); });
+    let err = ''; p.stderr.on('data', d => { err = (err + d).slice(-4000); });
     const kill = setTimeout(() => p.kill('SIGKILL'), SEPARATE_TIMEOUT_MS);
     p.on('error', e => { clearTimeout(kill); reject(e); });
     p.on('close', async code => {
       clearTimeout(kill);
-      if (code !== 0) return reject(new Error('separation failed (' + code + ')'));
+      // Only synthetic selftests may expose stderr. Real recordings keep counts-only logs.
+      if (code !== 0) return reject(new Error('separation failed (' + code + ')' + (diagnostic ? ': ' + err.trim() : '')));
       // Demucs writes <out>/<model>/<input name>/vocals.wav
       try {
         const base = join(outDir, MODEL), dirs = await readdir(base);
@@ -47,12 +49,16 @@ function separate(input, outDir, cmd = env.DEMUCS_CMD || 'python3 -m demucs') {
     });
   });
 }
-/** 16-bit 44.1 kHz mono WAV of decoded samples (the separator's input). */
+/** 16-bit dual-mono WAV. Demucs 4.0.1 expands mono to overlapping stereo tensor views;
+ * torch 2.3.1 rejects its in-place normalization. Materialize both channels in the input. */
 function wav(samples, rate) {
-  const b = Buffer.alloc(44 + samples.length * 2);
-  b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
-  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 2, 40);
-  for (let i = 0; i < samples.length; i++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767))), 44 + i * 2);
+  const b = Buffer.alloc(44 + samples.length * 4);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 4, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(2, 22);
+  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 4, 28); b.writeUInt16LE(4, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 4, 40);
+  for (let i = 0; i < samples.length; i++) {
+    const sample = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+    b.writeInt16LE(sample, 44 + i * 4); b.writeInt16LE(sample, 46 + i * 4);
+  }
   return b;
 }
 /** Write the analysis only while the row still holds the analysis this run read (an app/server save meanwhile wins). */
@@ -77,13 +83,15 @@ export async function separateOne(db, row, {cmd} = {}) {
     catch { await save(db, row, tried(row, 'failed')); return 'failed'; }
     const voice = await decode(await readFile(voicePath), {rate:16000, seconds:MAX_SECONDS});
     const r = VA.analyze(voice, 16000);
-    const better = reliableResult(r) || (r.confidence?.pitchConfidence || 0) > (previous?.confidence?.pitchConfidence || 0) + 0.1;
-    if (!better || !r.metrics?.voicedSeconds) { await save(db, row, tried(row, 'not-better')); return 'not-better'; }
+    // Kept only when the voice now passes the app's confidence rule: a half-separated take (e.g. no notes found) never
+    // replaces the measurement as recorded.
+    if (!reliableResult(r)) { await save(db, row, tried(row, 'not-better')); return 'not-better'; }
     r.confidence.aiSeparated = {model:MODEL};
     const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
     if (previous?.v) { const {history:ignored, ...kept} = previous; history.push(kept); }
     const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server',
-      ...(history.length ? {history:history.slice(-5)} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 44100, separationTried:true, separationResult:'separated'}};
+      ...(history.length ? {history} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 44100, separationTried:true, separationResult:'separated',
+        ...(previous?.scope?.unreliableReanalysis ? {unreliableReanalysis:previous.scope.unreliableReanalysis} : {})}};
     return await save(db, row, summary) ? 'separated' : 'changed';
   } catch {
     // A file that cannot be read now stays waiting for the next run.
@@ -113,7 +121,7 @@ export async function selftest({cmd, log = console.log} = {}) {
     const input = join(dir, 'take8k.wav'); await writeFile(input, wav(take, Y.SR));
     const up = await decode(await readFile(input), {rate:44100, seconds:MAX_SECONDS});
     const wav44 = join(dir, 'take.wav'); await writeFile(wav44, wav(up, 44100));
-    const t0 = Date.now(), voicePath = await separate(wav44, join(dir, 'out'), cmd), seconds = (Date.now() - t0) / 1000;
+    const t0 = Date.now(), voicePath = await separate(wav44, join(dir, 'out'), cmd, true), seconds = (Date.now() - t0) / 1000;
     const after = VA.analyze(await decode(await readFile(voicePath), {rate:16000, seconds:MAX_SECONDS}), 16000);
     const result = {audioSeconds:30, separateSeconds:Math.round(seconds), pitchConfidence:{before:before.confidence.pitchConfidence, after:after.confidence.pitchConfidence},
       reliable:{before:reliableResult(before), after:reliableResult(after)}, notes:{before:before.metrics.intonation?.notes ?? 0, after:after.metrics.intonation?.notes ?? 0}};

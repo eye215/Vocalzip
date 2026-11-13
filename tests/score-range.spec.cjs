@@ -3,6 +3,7 @@
 const {test, expect} = require('@playwright/test');
 const zlib = require('node:zlib');
 require('./legacy-session-mode.cjs')(test);
+const labClear = require('./lab-clear-selection.cjs');
 const {boot, fakeR2, R2, KEY, stub} = require('./helpers/r2-fixture.cjs');
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 const PDF = 'u/ui-test-user/score-1/original.pdf', MXL = 'u/ui-test-user/score-1/omr.mxl';
@@ -124,7 +125,7 @@ async function lab(page, analysis) {
   await page.evaluate(async a => { const m = (await VZ.media.list(true)).find(x => x.id === 'm1'); await VZ.media.update(m, {analysis:a}, {quiet:true}); VZ.media.invalidate(); }, analysis);
   await page.goto('/#/home');
   await page.goto('/#/vocal-lab/s1');
-  await page.locator('.vl-dates button').first().click();
+  await labClear(page); await page.locator('.vl-dates button').first().click();
   const box = page.locator('[data-vrange]');
   await expect(box).toBeVisible();
   return box;

@@ -408,7 +408,7 @@ function onClick(e) {
   else if ('reload' in ds) load(true);
 }
 
-VZ.route('data-export', {title:'내 데이터 내보내기', back:true, tab:'home', noAutoRefresh:true,
+VZ.route('data-export', {title:'내 데이터 내보내기', back:true, tab:'keep', noAutoRefresh:true,
   render() {
     const db = VZ.db;
     return '<div class="vz-export">' +

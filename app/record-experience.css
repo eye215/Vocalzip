@@ -21,7 +21,8 @@ body.vz-calendar-mode .vz-calendar-footer{display:flex;align-items:center;justif
 body.vz-calendar-mode .legend{display:flex;align-items:center;gap:14px;margin:0;color:var(--vz-color-ink-muted);font-size:11px}
 body.vz-calendar-mode .legend span{gap:5px;white-space:nowrap}
 body.vz-calendar-mode .vz-calendar-footer button{flex:none;min-width:44px;min-height:44px;padding:0 8px;border:0;border-radius:12px;background:var(--vz-color-accent-soft);color:var(--vz-color-accent);font-size:12px;font-weight:700}
-body.vz-calendar-mode .vz-calendar-day-head{display:flex;align-items:center;justify-content:space-between;min-height:58px;margin:0 4px}
+/* The + sits beside the date, not at the right edge: the floating mic passes over that column while scrolling. */
+body.vz-calendar-mode .vz-calendar-day-head{display:flex;align-items:center;justify-content:flex-start;gap:4px;min-height:58px;margin:0 4px}
 body.vz-calendar-mode .vz-calendar-day-head h2{margin:0;color:var(--vz-color-ink);font-size:18px}
 body.vz-calendar-mode .vz-calendar-day-head button{display:grid;place-items:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;color:var(--vz-color-ink-muted);font-size:13px}
 body.vz-calendar-mode .vz-calendar-day-head button i{font-size:22px}
@@ -99,3 +100,8 @@ body.vz-record-mode .vz-record-screen [data-review] .btn.ghost{color:#e8d9ff;bor
 .vz-record-screen .vz-record-score span{flex:1;text-align:left}
 .vz-record-screen .vz-record-score[hidden]{display:none}
 .vz-record-screen .vz-record-score:disabled{opacity:.45;cursor:default}
+/* 기록 landing: entries to 레슨 · 숙제 · 연습 기록 · 나의 공연 (content pills, one row). */
+body.vz-calendar-mode .vz-record-links{display:flex;gap:6px;margin:0 0 12px;overflow-x:auto;scrollbar-width:none}
+body.vz-calendar-mode .vz-record-links::-webkit-scrollbar{display:none}
+body.vz-calendar-mode .vz-record-links a{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border-radius:99px;background:#fff;color:#475467;font-size:14px;line-height:20px;font-weight:600;text-decoration:none;white-space:nowrap}
+body.vz-calendar-mode .vz-record-links a:active{background:#EDE1FF;color:#7A32F5}
