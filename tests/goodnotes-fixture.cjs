@@ -24,6 +24,26 @@ function pathTuple({width = 3, kinds, moves, curves, schema = 'vuA(v)A(S(uu))A(S
   const raw = Buffer.concat([head, body]); raw.writeUInt32LE(raw.length, 4);
   return raw;
 }
+/** Any "tpl" tuple: schema text + already encoded body. */
+function tupleOf(schema, body) {
+  const raw = Buffer.concat([Buffer.from('tpl\0'), u32(0), Buffer.from(schema + '\0'), body]); raw.writeUInt32LE(raw.length, 4);
+  return raw;
+}
+const arr = (list, enc) => Buffer.concat([u32(list.length), ...list.map(enc)]);
+/** Pressure pen (kinds 0/1, points x,y,half width) or freehand highlighter (kinds 4/5, points x,y,full width + 3 unused values per curve). */
+function penTuple({start = [], curves = [], highlighter = false, empty = false}) {
+  const kinds = empty ? [] : [highlighter ? 4 : 0, ...curves.map(() => highlighter ? 5 : 1)]; // an erased item keeps empty lists
+  const seg = curves.flatMap(([cx, cy, cw, x, y, w]) => highlighter ? [cx, cy, cw, x, y, w, 0, 0, 0.1] : [cx, cy, cw, x, y, w]);
+  const body = Buffer.concat([u16(2), arr(kinds, u16), arr(highlighter ? [...start, 0] : start, fbits), arr(seg, fbits), arr([], u16), arr([], u16), arr([], fbits), arr([], fbits), arr([], fbits), arr([], fbits), arr([], u16)]);
+  return tupleOf('vA(v)A(u)A(u)A(v)A(v)A(u)A(u)A(u)A(u)A(v)', body);
+}
+/** Brush pen (schema 25): move (x,y,p,q,0), curves (flag, cx,cy,p,q,0, x,y,p,q,0). */
+function brushTuple({width, start, curves}) {
+  const five = p => Buffer.concat([...p, .5, 1, 0].slice(0, 5).map(fbits));
+  const body = Buffer.concat([u16(1), fbits(width), arr([0, ...curves.map(() => 1)], u16), arr([start], five),
+    arr(curves, ([cx, cy, x, y]) => Buffer.concat([0, cx, cy, .5, 1, 0, x, y, .5, 1, 0].map(fbits))), arr([], () => Buffer.alloc(0)), arr([], u16), arr([], () => Buffer.alloc(0)), arr([], () => Buffer.alloc(0)), arr([], u32)]);
+  return tupleOf('vuA(v)A(S(uuuuu))A(S(uuuuuuuuuuu))A(S(uu))A(v)A(S(uu))A(S(uuuu))A(u)', body);
+}
 const stored = raw => Buffer.concat([Buffer.from('bv4-'), u32(raw.length), raw, Buffer.from('bv4$')]);
 /** A valid LZ4 block made of literals only (what the encoder emits for incompressible data). */
 function lz4Literals(raw) {
@@ -33,9 +53,11 @@ function lz4Literals(raw) {
   return Buffer.concat([Buffer.from('bv41'), u32(raw.length), u32(block.length), block, Buffer.from('bv4$')]);
 }
 /** One ink item: [header record, body record] as in notes/<id>. */
-function inkItem(id, {color = [1, 0, 0, 1], deleted = false, payload}) {
+function inkItem(id, {color = [1, 0, 0, 1], deleted = false, payload, type = 0, shape = null}) {
   const colour = msg(...color.map((c, i) => c ? f32(i + 1, c) : Buffer.alloc(0)));
-  return [msg(s(1, id), ld(2, msg(num(1, 2), num(2, 9)))), msg(ld(7, msg(s(1, id), ld(2, payload), ld(4, colour), num(5, 1), ...(deleted ? [num(14, 1)] : []), num(21, 24))))];
+  // A shape keeps its corner points and width in field 9: {1:{1:{x,y}…} 15:width}.
+  const geometry = shape ? [ld(9, msg(ld(1, msg(...shape.points.map(([x, y]) => ld(1, msg(f32(1, x), f32(2, y)))))), f32(15, shape.width)))] : [];
+  return [msg(s(1, id), ld(2, msg(num(1, 2), num(2, 9)))), msg(ld(7, msg(s(1, id), ld(2, payload), ...(type ? [num(3, type)] : []), ld(4, colour), num(5, 1), ...geometry, ...(deleted ? [num(14, 1)] : []), num(21, 24))))];
 }
 
 function zip(files) {
@@ -67,6 +89,8 @@ function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n%
     const pageId = uuid(0x1000 + i * 2), bgId = uuid(0xB000 + i);
     events.push(event(bgId, 2, msg(s(1, DOC), s(2, bgId), s(4, ATT), num(5, p.pdfPage), ld(8, msg(f32(1, width), f32(2, height))))));
     events.push(event(pageId, 54, msg(s(1, DOC), s(2, pageId), ld(3, msg(s(1, bgId), ld(2, msg(num(1, 1), num(2, 3))))), ld(4, msg(s(1, p.order), ld(2, msg(num(1, 1), num(2, 4))))))));
+    // A page removed in GoodNotes keeps its page event and gets a "removed" register (kind 56).
+    if (p.removed != null) events.push(event(pageId, 56, msg(s(1, DOC), s(2, pageId), ld(3, msg(num(1, p.removed ? 1 : 0), ld(2, msg(num(1, 1), num(2, 5))))), s(4, uuid(0x7000 + i)))));
     if (p.ink) {
       const noteId = uuid(0x1000 + i * 2 + 1);
       notes.push(msg(s(1, noteId), s(2, 'notes/' + noteId)));
@@ -81,4 +105,4 @@ function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n%
     ['index.attachments.pb', stream([msg(s(1, ATT), s(2, 'attachments/' + FILE))]), false],
     ['index.notes.pb', stream(notes), false], ['attachments/' + FILE, pdf, false], ...files]);
 }
-module.exports = {notebook, inkItem, pathTuple, stored, lz4Literals, zip, uuid};
+module.exports = {notebook, inkItem, pathTuple, penTuple, brushTuple, stored, lz4Literals, zip, uuid};

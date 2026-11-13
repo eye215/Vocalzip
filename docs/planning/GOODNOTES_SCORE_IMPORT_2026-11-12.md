@@ -69,9 +69,24 @@ An intermediate version kept imported and hand-drawn ink in IndexedDB. That was 
 
 - Tests: `tests/goodnotes-parse.test.cjs` (8), `tests/goodnotes-import.spec.cjs` (4, browser, fake R2: outline split, PDF attachment contents, erase/undo, "another device" with no local copies, 950 strokes all editable). The real sample is used locally only and is not in the repository.
 
+### 2026-11-13: second real file (5 pages, schema 25)
+
+A real 5-page notebook with one removed page, pen, highlighter and shape strokes showed what the first sample could not:
+
+- **Removed pages.** Removing a page does not delete its page event (54). The page gets a register event **56** `{2: page id, 3: {1: 1, 2: clock}}`. The reader now leaves such pages out (and their ink file), so the pages after them keep their own PDF page. A later value 0 (restored) brings the page back. Before this, removed pages were imported.
+- **Pressure pen** (item field 3 = 1, tuple `vA(v)A(u)A(u)A(v)A(v)A(u)A(u)A(u)A(u)A(v)`): kinds 0/1 = move/curve; start `(x, y, w)`; each curve `(cx, cy, w, x, y, w)`; `w` is **half** the stroke width (it equals the distance to the outline polygon stored in the same item). Imported as a pen stroke with width 2 × median(w).
+- **Freehand highlighter** (same tuple, kinds 4/5, start has 4 values, 9 values per curve): `w` is the **full** width (18 in the sample, matching GoodNotes' own thumbnail). The colour is stored solid; it is imported as a highlighter at 0.5 opacity.
+- **Brush pen** (field 3 = 5, schema 25 tuple with `S(uuuuu)` moves and `S(uuuuuuuuuuu)` curves): one width scalar; curve = flag, control (x, y, …), end (x, y, …).
+- **Shape line**: an item with an empty plain path and its corner points and width in field 9 (`{1:{1:{x,y}…} 15:width}`).
+- The "ink file id = page id + 1" rule held for all five pages.
+- Rendering the imported strokes of page 1 matched GoodNotes' `thumbnail.jpg` (positions, colours, relative widths).
+- Event 103 (search index) is known and ignored.
+
+Still not seen: **text boxes, images, lasso-moved ink, page moves, several PDFs in one notebook**. Text typed in GoodNotes is not imported.
+
 ### Not verified yet
 
-- Only one real file: 1 page, 1 outline entry, highlighter strokes. **Pen strokes with pressure, text boxes, images, shapes, lasso-moved ink, multi-page ink files, several PDFs in one notebook, page deletions/moves in the event log** have not been seen. Pen width falls back to the median of the per-point values when the single width is 0 (a guess).
+- First real file: 1 page, 1 outline entry, highlighter strokes (see the 2026-11-13 section above for the second file). **Text boxes, images, lasso-moved ink, several PDFs in one notebook, page moves in the event log** have not been seen. Pen width falls back to the median of the per-point values when the single width is 0 (a guess).
 - The "ink file id = page id + 1" rule comes from one page. Ink files that match no page are counted and not imported.
 - GoodNotes 5 / other schema versions; iPhone Safari with a large notebook (memory); real R2 upload.
 

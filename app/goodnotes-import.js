@@ -98,6 +98,7 @@ async function buildPdf(item,model,lib,sources,ink){
  return await out.save();
 }
 const summary=report=>[
+ report.removedPages?'굿노트에서 지운 쪽 '+report.removedPages+'장은 빼고 가져와요.':'',
  report.unsupported?'알 수 없는 형식의 필기 '+report.unsupported+'개는 가져오지 않아요.':'',
  report.unmatchedNotes?'어느 쪽의 필기인지 확인하지 못한 묶음 '+report.unmatchedNotes+'개는 가져오지 않아요.':'',
  report.pagesWithoutPdf?'PDF가 아닌 쪽 '+report.pagesWithoutPdf+'장은 빈 쪽으로 들어가요.':''].filter(Boolean);
