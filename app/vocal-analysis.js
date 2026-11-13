@@ -517,13 +517,42 @@ function analyze(samples, sampleRate, {onProgress, voiceOnly = false} = {}) {
   };
 }
 
-const api = {VERSION, analyze, noteName, centsOf, resample, RULES, _internal:{track, clean, contours, highpass, notesOf, prefixMedian, rangeOf, evidence, octaveChoice}};
+/** The same analysis on the voice alone: each of the song's own MR files (mrs: [{id, samples, sampleRate}]) is lined up
+ * with the take and subtracted (app/mr-cancel.js); the one that removes the most is used. null with the reasons when
+ * none of them is in the take. The cleaned voice is returned for listening only (never saved). */
+function analyzeWithoutMr(samples, sampleRate, mrs, {onProgress} = {}) {
+  const C = root.VzipMrCancel || (typeof require === 'function' ? require('./mr-cancel.js') : null);
+  if (!C || !Array.isArray(mrs) || !mrs.length) return {result:null, reasons:['unavailable']};
+  const rec = resample(samples, sampleRate), reasons = [];
+  let best = null;
+  for (const mr of mrs.slice(0, 3)) {
+    const out = C.cancel(rec, resample(mr.samples, mr.sampleRate));
+    if (!out.ok) { reasons.push(out.reason); continue; }
+    if (!best || out.report.removedDb > best.report.removedDb) best = {...out, id:mr.id};
+  }
+  onProgress?.(0.15);
+  if (!best) return {result:null, reasons};
+  const result = analyze(best.voice, SR, {onProgress:p => onProgress?.(0.15 + p * 0.85)});
+  result.confidence.mrRemoved = {trackId:String(best.id || ''), offsetSeconds:best.report.offsetSeconds, speed:best.report.speed, removedDb:best.report.removedDb};
+  result.voice = best.voice; result.voiceRate = SR;
+  return {result, reasons};
+}
+const api = {VERSION, analyze, analyzeWithoutMr, noteName, centsOf, resample, RULES, _internal:{track, clean, contours, highpass, notesOf, prefixMedian, rangeOf, evidence, octaveChoice}};
 if (typeof module === 'object' && module.exports) module.exports = api;
 else root.VzipVocalAnalysis = api;
 // As a Web Worker: {samples, sampleRate} in, {progress} … {result} or {error} out.
 if (typeof window === 'undefined' && typeof self === 'object' && typeof importScripts === 'function') {
   self.onmessage = e => {
-    try { const {samples, sampleRate, voiceOnly} = e.data; self.postMessage({result:analyze(samples, sampleRate, {voiceOnly:voiceOnly===true,onProgress:p => self.postMessage({progress:p})})}); }
+    try {
+      const {samples, sampleRate, voiceOnly, mrs} = e.data, onProgress = p => self.postMessage({progress:p});
+      if (Array.isArray(mrs)) {
+        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=1');
+        const out = analyzeWithoutMr(samples, sampleRate, mrs, {onProgress});
+        self.postMessage({result:out.result, reasons:out.reasons}, out.result?.voice ? [out.result.voice.buffer] : []);
+        return;
+      }
+      self.postMessage({result:analyze(samples, sampleRate, {voiceOnly:voiceOnly===true,onProgress})});
+    }
     catch (err) { self.postMessage({error:err.message || String(err)}); }
   };
 }

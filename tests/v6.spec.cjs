@@ -488,6 +488,75 @@ test('보컬 분석: a recording sung over an MR gets a pitch curve and measurem
   await expect(page.locator('[data-out]')).toContainText('목소리를 찾지 못했어요', {timeout:60000});
 });
 
+test('보컬 분석: a take whose MR drowns the voice is measured again with the song\'s own MR file subtracted', async ({page}) => {
+  test.setTimeout(120000);
+  const Y = require('./helpers/mr-synth.cjs');
+  const wav = x => { const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  // Synthetic only: a song-like MR file and a phone take of a melody sung over it, the MR 8 dB louder than the voice.
+  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:9.5, db:8}).x;
+  await page.route('**/__mixed.wav', r => r.fulfill({contentType:'audio/wav', body:wav(take)}));
+  await page.route('**/__mrfile.wav', r => r.fulfill({contentType:'audio/wav', body:wav(mr)}));
+  await boot(page, {media:false});
+  await page.evaluate(async () => {
+    // The song's MR is an uploaded file (R2 is stubbed: this test checks the subtraction, not the storage).
+    window.VzipR2.enabled = () => true; window.VzipR2.url = async key => key === 'u/test/mr-1.m4a' ? '/__mrfile.wav' : '/missing';
+    VZ.change(d => { d.songs[0].mrTracks = [{id:'mr-1', kind:'file', title:'연습 MR', r2Key:'u/test/mr-1.m4a', type:'audio/wav', created:Date.now()}]; });
+    await window.vzipStorePracticeMedia({id:'mixed', name:'MR 크게 들어간 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', blob:await (await fetch('/__mixed.wav')).blob()});
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/analysis/mixed');
+  const out = page.locator('[data-out]');
+  await expect(out.locator('.ana-grid')).toBeVisible({timeout:90000});
+  const note = out.locator('[data-mr-removed]');
+  await expect(note).toContainText('반주(MR)를 빼고 목소리만 측정했어요');
+  await expect(note).toContainText('연습 MR');
+  await expect(note).toContainText(/MR 0:(09|10)부터/);
+  await expect(note.locator('audio[data-voice-only]')).toHaveAttribute('src', /^blob:/);
+  await expect(out).not.toContainText('피치 신뢰도가 낮아');
+  if (process.env.VZ_MR_SHOT) await note.screenshot({path:process.env.VZ_MR_SHOT});
+  await expect(out.locator('[data-saved]')).toContainText('저장했어요');
+  const saved = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'mixed').analysis);
+  expect(saved.confidence.mrRemoved).toMatchObject({trackId:'mr-1'});
+  expect(Math.abs(saved.confidence.mrRemoved.offsetSeconds - 9.5)).toBeLessThan(0.01);
+  expect(saved.confidence.pitchConfidence).toBeGreaterThanOrEqual(0.8);
+  expect(saved).not.toHaveProperty('voice'); // the cleaned voice is never kept
+});
+
+test('보컬 분석: a held-back saved result is replaced when the MR can now be removed; an AI-separated one is kept and labelled', async ({page}) => {
+  test.setTimeout(120000);
+  const Y = require('./helpers/mr-synth.cjs');
+  const wav = x => { const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:6, db:8}).x;
+  await page.route('**/__heldtake.wav', r => r.fulfill({contentType:'audio/wav', body:wav(take)}));
+  await page.route('**/__mrfile.wav', r => r.fulfill({contentType:'audio/wav', body:wav(mr)}));
+  await boot(page, {media:false});
+  // Saved results (current analyzer version with detail rows): one held back (MR drowned the voice), one measured by
+  // the server after AI separation.
+  const detail = {voicedSeconds:15, phrases:{rows:[]}, pitchBands:{rows:[]}, intonation:{meanAbsCents:8, notes:12}};
+  await page.evaluate(async ([detail]) => {
+    window.VzipR2.enabled = () => true; window.VzipR2.url = async () => '/__mrfile.wav';
+    VZ.change(d => { d.songs[0].mrTracks = [{id:'mr-1', kind:'file', title:'연습 MR', r2Key:'u/test/mr-1.m4a', type:'audio/wav', created:Date.now()}]; });
+    const blob = await (await fetch('/__heldtake.wav')).blob();
+    await window.vzipStorePracticeMedia({id:'held', name:'보류된 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', blob,
+      analysis:{v:2, at:111, metrics:detail, confidence:{pitchConfidence:0.42, voiceOverMrDb:0.5}, scope:{kind:'whole-recording', separationWanted:true}}});
+    await window.vzipStorePracticeMedia({id:'aisep', name:'AI 분리된 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'', blob,
+      analysis:{v:2, at:222, by:'server', metrics:detail, confidence:{pitchConfidence:0.93, aiSeparated:{model:'htdemucs'}}, scope:{kind:'whole-recording', separationTried:true}}});
+    VZ.media.invalidate();
+  }, [detail]);
+  await page.goto('/#/analysis/held');
+  const out = page.locator('[data-out]');
+  await expect(out.locator('[data-mr-removed]')).toBeVisible({timeout:90000});
+  await expect(out.locator('[data-saved]')).toContainText('저장했어요');
+  const held = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'held').analysis);
+  expect(held.confidence.mrRemoved).toMatchObject({trackId:'mr-1'}); expect(held.history.at(-1).at).toBe(111);
+  // The AI-separated result is not overwritten by the take as recorded (no MR file for it); it is labelled.
+  await page.goto('/#/analysis/aisep');
+  await expect(out.locator('[data-ai-separated]')).toContainText('AI 분리 후 측정(참고)', {timeout:90000});
+  await expect(out.locator('[data-saved]')).toContainText('그대로 두었어요');
+  const kept = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'aisep').analysis);
+  expect(kept.at).toBe(222); expect(kept.confidence.aiSeparated).toEqual({model:'htdemucs'});
+});
+
 test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the device and charted by date; first vs latest is compared and saved', async ({page}) => {
   test.setTimeout(180000);
   const {synth} = require('./synth-vocal.cjs');
@@ -2148,7 +2217,112 @@ test('The first lesson completed after the update is deducted even if 레슨비 
   // As on a device where billing was last opened before auto-deduction existed.
   await page.evaluate(() => localStorage.removeItem('vzip_billing_auto_deduct_v1'));
   await page.locator('[data-resolve="done"][data-id="l-over"]').click();
+  await page.getByRole('dialog', {name:'레슨 완료'}).locator('[data-ok]').click(); // it says 1회 will be deducted and asks first
   await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+});
+
+/* ---------- lesson fee is never deducted by accident (audit 2026-11-13) ---------- */
+async function passOf10(page) {
+  await page.evaluate(() => localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token', JSON.stringify({user:{id:'ui-test-user', email:'test@example.invalid'}})));
+  await page.goto('/billing/');
+  await expect(page.locator('#message')).toContainText('불러왔어요');
+  await page.locator('[data-panel="passes"]').click(); await page.locator('[data-open-form="pass"]').click();
+  await page.locator('#pass-name').fill('10회권'); await page.locator('#pass-totalUnits').fill('10'); await page.locator('#pass-amount').fill('500000');
+  await page.locator('#pass-form [type=submit]').click(); await expect(page.locator('#message')).toContainText('저장했어요');
+}
+const billingRows = page => page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('user:ui-test-user'); q.onsuccess = () => r(q.result); }); db.close(); return (doc?.deductions || []).filter(d => !d.voidedAt).map(d => [d.lessonId, d.units]); });
+/** Counts every background run of 레슨비 정산 (the hidden frame) from now on. */
+const watchBillingRuns = page => page.evaluate(() => { window.__billingRuns = 0; new MutationObserver(list => { for (const m of list) for (const n of m.addedNodes) if (n.tagName === 'IFRAME' && /billing\//.test(n.src)) window.__billingRuns++; }).observe(document.body, {childList:true}); });
+
+test('Lesson feedback: 레슨 완료로 표시 starts unticked, saving feedback alone neither completes nor deducts, and ticking it says what is deducted', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  // No 레슨비 정산 yet: the box is unticked and there is nothing to warn about.
+  await page.goto('/#/lesson/l-over');
+  await page.locator('[data-fb],[data-fb2]').first().click();
+  await expect(sheet(page).locator('[name=complete]')).not.toBeChecked();
+  await sheet(page).locator('[name=complete]').check();
+  await expect(sheet(page).locator('[data-complete-note]')).toBeHidden();
+  await sheet(page).locator('[data-close]').click();
+  await passOf10(page);
+  await page.goto('/#/lesson/l-over');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await watchBillingRuns(page);
+  await page.locator('[data-fb],[data-fb2]').first().click();
+  const box = sheet(page).locator('[name=complete]'), note = sheet(page).locator('[data-complete-note]');
+  await expect(box).not.toBeChecked();
+  await expect(note).toBeHidden();
+  await sheet(page).locator('[name=feedback]').fill('호흡이 좋아짐');
+  await sheet(page).getByRole('button', {name:'피드백 저장'}).click();
+  await expect(page.locator('.toast').last()).toContainText('피드백을 저장했어요');
+  let l = (await data(page)).lessons.find(x => x.id === 'l-over');
+  expect(l).toMatchObject({status:'scheduled', feedback:'호흡이 좋아짐'}); expect(l.completedAt).toBeUndefined();
+  await page.waitForTimeout(3000);
+  expect(await page.evaluate(() => window.__billingRuns)).toBe(0);
+  expect(await billingRows(page)).toEqual([]);
+  // Ticking it tells what completing costs; saving then completes and deducts once.
+  await page.locator('[data-fb],[data-fb2]').first().click();
+  await expect(sheet(page).locator('[name=feedback]')).toHaveValue('호흡이 좋아짐');
+  await box.check();
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('1회');
+  await box.uncheck(); await expect(note).toBeHidden(); await box.check();
+  await sheet(page).getByRole('button', {name:'피드백 저장'}).click();
+  await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+  l = (await data(page)).lessons.find(x => x.id === 'l-over');
+  expect(l.status).toBe('done'); expect(l.completedAt).toBeGreaterThan(0);
+  expect(await billingRows(page)).toEqual([['l-over', 100]]);
+});
+
+test('Overdue lesson card: 완료 asks first when it will deduct from the pass; 취소 keeps the lesson and the pass as they were', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  await passOf10(page);
+  await page.goto('/#/lessons');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await watchBillingRuns(page);
+  const done = page.locator('[data-resolve="done"][data-id="l-over"]');
+  await done.click();
+  const ask = page.getByRole('dialog', {name:'레슨 완료'});
+  await expect(ask).toContainText('1회');
+  await expect(ask).toContainText('차감');
+  await ask.getByRole('button', {name:'취소'}).click();
+  await expect(ask).toHaveCount(0);
+  expect((await data(page)).lessons.find(x => x.id === 'l-over').status).toBe('scheduled');
+  await page.waitForTimeout(2500);
+  expect(await page.evaluate(() => window.__billingRuns)).toBe(0);
+  expect(await billingRows(page)).toEqual([]);
+  await done.click();
+  await page.getByRole('dialog', {name:'레슨 완료'}).locator('[data-ok]').click();
+  await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+  expect((await data(page)).lessons.find(x => x.id === 'l-over').status).toBe('done');
+  expect(await billingRows(page)).toEqual([['l-over', 100]]);
+});
+
+test('A lesson completed on another device and merged in from the cloud is not deducted again on this device', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  await passOf10(page);
+  await page.goto('/#/home');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await watchBillingRuns(page);
+  // What cloud-sync does after a merge: the merged data is written and announced as 'cloud-merge'. The lesson was
+  // completed seconds ago on the other device, which deducted it there (that ledger has not reached this device yet).
+  await page.evaluate(k => {
+    const d = JSON.parse(localStorage.getItem(k));
+    d.lessons.push({id:'done-elsewhere', date:VZ.today(), startTime:'19:00', endTime:'20:00', status:'done', songIds:[], songId:'', feedback:'', memo:'', recordings:[], created:Date.now() - 60000, completedAt:Date.now() - 2000, updatedAt:Date.now() - 2000});
+    localStorage.setItem(k, JSON.stringify(d));
+    window.dispatchEvent(new CustomEvent('vzip:data-changed', {detail:{source:'cloud-merge'}}));
+  }, KEY);
+  expect((await page.evaluate(() => VZ.db.lessons.find(l => l.id === 'done-elsewhere')?.status))).toBe('done');
+  // An unrelated edit on this device right after the merge must not pick that lesson up either.
+  await page.evaluate(() => VZ.change(d => { d.songs[0].memo = '메모'; }));
+  await page.waitForTimeout(4000);
+  expect(await page.evaluate(() => window.__billingRuns)).toBe(0);
+  expect(await billingRows(page)).toEqual([]);
+  // A lesson completed on this device is still deducted, once, and only that one.
+  await page.evaluate(() => VZ.change(d => { d.lessons.push({id:'done-here', date:VZ.today(), startTime:'10:00', endTime:'11:00', status:'done', songIds:[], songId:'', feedback:'', memo:'', recordings:[], created:Date.now()}); }));
+  await expect.poll(() => page.evaluate(() => window.__billingRuns), {timeout:10000}).toBe(1);
 });
 
 test('Home shows lessons left the way 레슨비 정산 counts them (payments ÷ hourly rate)', async ({page}) => {

@@ -207,6 +207,27 @@ VZ.billingRemaining = doc => {
   const ids = new Set(passes.map(p => p.id)), sum = (rows, key) => live(rows).filter(r => ids.has(r.passId)).reduce((n, r) => n + (Number(r[key]) || 0), 0);
   return passes.reduce((n, p) => n + (Number(p.totalUnits) || 0), 0) + sum(doc.adjustments, 'unitsDelta') - sum(doc.deductions, 'units');
 };
+/** What saving this lesson as completed now would deduct by itself: {units, text:'1회'}, or null when nothing would be
+ * deducted (레슨비 정산 not used or no pass, automatic deduction off, already settled or undone, another record on that
+ * day, no session left). Read-only; the same rule as 레슨비 정산 (billing/pending.js autoCandidates/unitsFor, defaultPass). */
+VZ.billingAutoPreview = async l => {
+  const doc = await ledger().catch(() => null);
+  if (!doc || !l || l.billingDeductionId || !/^\d{4}-\d{2}-\d{2}$/.test(l.date || '') || l.date > VZ.today()) return null;
+  let cfg = null;
+  try { cfg = JSON.parse(localStorage.getItem('vzip_billing_auto_deduct_v1') || '{}')[doc.owner] || null; } catch { return null; }
+  if (cfg && !cfg.on) return null;
+  // Only lessons dated at most a week before automatic deduction was turned on (first use: ten minutes ago).
+  const grace = 10 * 60 * 1000, since = cfg ? Number(cfg.since) - (cfg.grace ? 0 : grace) : Date.now() - grace;
+  const d = new Date(since - 7 * 86400000);
+  if (l.date < d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())) return null;
+  const live = rows => (rows || []).filter(r => !r.voidedAt), rows = doc.deductions || [];
+  if (rows.some(r => r.lessonId === l.id) || live(rows).some(r => r.date === l.date)) return null;
+  const left = pass => (Number(pass.totalUnits) || 0) + live(doc.adjustments).filter(r => r.passId === pass.id).reduce((n, r) => n + (Number(r.unitsDelta) || 0), 0) - live(rows).filter(r => r.passId === pass.id).reduce((n, r) => n + (Number(r.units) || 0), 0);
+  if (!(doc.hourlyRate > 0 ? VZ.billingRemaining(doc) >= 100 : live(doc.passes).some(pass => left(pass) >= 100))) return null;
+  const m = t => /^\d{2}:\d{2}$/.test(t || '') ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : null, a = m(l.startTime), b = m(l.endTime);
+  const n = a === null || b === null || b <= a ? 100 : Math.max(50, Math.round((b - a) / 30) * 50);
+  return {units:n, text:n / 100 + '회'};
+};
 /** "레슨권 남은 N회" on the home lesson card (warns at 1회 or less). */
 VZ.billingLeftChip = async host => {
   if (!host) return;
@@ -251,9 +272,16 @@ VZ.billingLessonCard = async (host, l) => {
     if (host.isConnected) VZ.billingLessonCard(host, l);
   };
 };
-window.addEventListener('vzip:data-changed', () => {
+/* A lesson that arrives already completed from another device (cloud merge) was deducted there; this device's ledger
+ * may not have that deduction yet, so it must not deduct it again. Those lessons are remembered with the change time
+ * they arrived with, and a later save on this device does not pick them up unless the lesson itself was changed here. */
+const fromElsewhere = new Map(), touched = l => Number(l.updatedAt) || Number(l.created) || 0;
+window.addEventListener('vzip:data-changed', e => {
   const now = Date.now(), today = VZ.today();
   // Only right after a lesson was saved as completed (explicit status, not one imported from billing).
-  if (VZ.db.lessons.some(l => l.status === 'done' && !l.billingDeductionId && (l.date || '') <= today && now - (Number(l.updatedAt) || Number(l.created) || 0) < 15000)) VZ.billingAutoSync();
+  const fresh = VZ.db.lessons.filter(l => l.status === 'done' && !l.billingDeductionId && (l.date || '') <= today && now - touched(l) < 15000);
+  // 'v6' = a save made on this device (VZ.change); anything else (cloud merge, import) is not a completion made here.
+  if (e.detail?.source !== 'v6') { for (const l of fresh) fromElsewhere.set(l.id, touched(l)); return; }
+  if (fresh.some(l => fromElsewhere.get(l.id) !== touched(l))) VZ.billingAutoSync();
 });
 })();

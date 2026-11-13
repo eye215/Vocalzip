@@ -213,6 +213,95 @@ test('iPhone: one part in memory at a time — the next part is built after a ta
   await context.close();
 });
 
+test('Export buttons stay on the export screen: same-named buttons on the recorder and the practice set never reach the export', async ({page}) => {
+  test.setTimeout(60000);
+  const r2 = await fakeR2(page);
+  await seed(page, r2);
+  const downloads = []; page.on('download', d => downloads.push(d));
+  const originals = () => r2.calls.filter(c => /^GET \/v1\/media\//.test(c)).length;
+  // Twice, as the screen is often opened more than once: every visit used to add another handler to #view.
+  await page.goto('/#/data-export'); await expect(page.locator('.vz-export-stats')).toBeVisible();
+  await page.goto('/#/settings'); await page.goto('/#/data-export'); await expect(page.locator('.vz-export-stats')).toBeVisible();
+  await expect(page.getByRole('button', {name:'원본 파일 내보내기 시작'})).toBeVisible();
+  const fetched = originals(), before = await page.evaluate(() => localStorage.getItem('vzip_data_export_v1'));
+  // Recorder: 취소 (data-cancel) asks only about the recording.
+  await page.goto('/#/record');
+  await page.getByRole('button', {name:'녹음 시작'}).click();
+  const cancel = page.locator('.rec-controls [data-cancel]');
+  await expect(cancel).toBeEnabled();
+  await cancel.click();
+  await expect(page.getByRole('dialog', {name:'녹음 취소'})).toBeVisible();
+  await expect(page.getByRole('dialog', {name:'내보내기 그만두기'})).toHaveCount(0);
+  await expect(page.locator('.sheet-back')).toHaveCount(1);
+  await page.locator('.sheet-back [data-ok]').click();
+  await expect(page.locator('.sheet-back')).toHaveCount(0);
+  // Practice set: 시작하기 (data-start) starts the set, not a download of every original; data-next / data-resume / data-reset do nothing to the export.
+  await page.goto('/#/practice-set');
+  const start = page.locator('#view [data-start]');
+  if (await page.locator('#view [data-add]').count() && await start.isDisabled()) await page.evaluate(() => document.querySelector('#view [data-start]').removeAttribute('disabled'));
+  await start.click();
+  await page.evaluate(() => {
+    const view = document.getElementById('view');
+    for (const name of ['start', 'next', 'resume', 'retry', 'skip', 'again', 'reset', 'cancel', 'pause', 'reload']) {
+      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('data-' + name, ''); b.hidden = true; view.append(b); b.click(); b.remove();
+    }
+    const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'vz-export-mode'; radio.value = 'download'; radio.hidden = true; view.append(radio);
+    radio.checked = true; radio.dispatchEvent(new Event('change', {bubbles:true})); radio.remove();
+  });
+  await page.waitForTimeout(700);
+  await expect(page.getByRole('dialog', {name:'내보내기 그만두기'})).toHaveCount(0);
+  await expect(page.getByRole('dialog', {name:'원본 파일 내보내기'})).toHaveCount(0);
+  expect(downloads).toHaveLength(0);
+  expect(originals()).toBe(fetched);
+  expect(await page.evaluate(() => localStorage.getItem('vzip_data_export_v1'))).toBe(before);
+  // Back on the export screen nothing was started and its own buttons still work.
+  await page.goto('/#/data-export');
+  await expect(page.getByRole('button', {name:'원본 파일 내보내기 시작'})).toBeVisible();
+  await expect(page.locator('[data-pause],[data-resume],[data-next]')).toHaveCount(0);
+  await page.locator('[data-limit="250"]').click();
+  await expect(page.locator('[data-limit="250"]')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('Leaving a running export stops it, even between two files; coming back offers to continue', async ({page}, info) => {
+  test.skip(info.project.name.startsWith('webkit'), 'Chromium-only API (folder mode keeps the part on disk while it is written)');
+  test.setTimeout(60000);
+  const r2 = await fakeR2(page);
+  await page.addInitScript(() => {
+    window.__folder = {}; window.__writes = 0;
+    window.showDirectoryPicker = async () => ({getFileHandle:async name => ({createWritable:async () => {
+      const chunks = []; return {write:async c => { window.__writes++; if (window.__holdWrite) await window.__holdWrite; chunks.push(c instanceof Blob ? new Uint8Array(await c.arrayBuffer()) : new Uint8Array(c)); }, close:async () => { window.__folder[name] = new Blob(chunks); }, abort:async () => {}};
+    }})});
+  });
+  await seed(page, r2);
+  await page.goto('/#/data-export');
+  await expect(page.locator('.vz-export-stats')).toBeVisible();
+  await expect(page.getByLabel(/폴더에 바로 저장/)).toBeChecked();
+  const originals = () => r2.calls.filter(c => /^GET \/v1\/media\//.test(c)).length;
+  // The first file is being written into the ZIP (no download is in flight) when the user leaves.
+  await page.evaluate(() => { window.__holdWrite = new Promise(r => { window.__releaseWrite = r; }); });
+  await page.getByRole('button', {name:'원본 파일 내보내기 시작'}).click();
+  await expect.poll(() => page.evaluate(() => window.__writes)).toBeGreaterThan(0);
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.getByRole('dialog', {name:'나가기'}).getByRole('button', {name:'나가기'}).click();
+  await expect(page).toHaveURL(/#\/settings$/);
+  await expect(page.locator('body')).toHaveAttribute('data-vz-route', 'settings');
+  const fetched = originals();
+  await page.evaluate(() => { window.__holdWrite = null; window.__releaseWrite(); });
+  await page.waitForTimeout(1500);
+  expect(originals()).toBe(fetched);
+  expect(await page.evaluate(() => Object.keys(window.__folder))).toEqual([]);
+  // Back on the screen: paused, nothing lost; 이어서 받기 finishes both parts.
+  await page.goto('/#/data-export');
+  await expect(page.getByRole('button', {name:'이어서 받기'})).toBeVisible();
+  await page.getByRole('button', {name:'이어서 받기'}).click();
+  await expect(page.getByRole('status').filter({hasText:'폴더에 저장했어요'})).toBeVisible({timeout:20000});
+  const files = await page.evaluate(async () => Object.fromEntries(await Promise.all(Object.entries(window.__folder).map(async ([k, b]) =>
+    [k, await new Promise(r => { const f = new FileReader(); f.onload = () => r(String(f.result).split(',')[1]); f.readAsDataURL(b); })]))));
+  const names = Object.keys(files).sort();
+  expect(names).toHaveLength(2);
+  checkParts(Buffer.from(files[names[0]], 'base64'), Buffer.from(files[names[1]], 'base64'));
+});
+
 test('Folder mode streams each part into the chosen folder (File System Access API)', async ({page}, info) => {
   test.skip(info.project.name.startsWith('webkit'), 'Chromium-only API; the download path is covered above');
   test.setTimeout(60000);
