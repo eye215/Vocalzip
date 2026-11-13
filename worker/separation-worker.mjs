@@ -48,12 +48,16 @@ function separate(input, outDir, cmd = env.DEMUCS_CMD || 'python3 -m demucs', di
     });
   });
 }
-/** 16-bit 44.1 kHz mono WAV of decoded samples (the separator's input). */
+/** 16-bit dual-mono WAV. Demucs 4.0.1 expands mono to overlapping stereo tensor views;
+ * torch 2.3.1 rejects its in-place normalization. Materialize both channels in the input. */
 function wav(samples, rate) {
-  const b = Buffer.alloc(44 + samples.length * 2);
-  b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
-  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 2, 40);
-  for (let i = 0; i < samples.length; i++) b.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767))), 44 + i * 2);
+  const b = Buffer.alloc(44 + samples.length * 4);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + samples.length * 4, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(2, 22);
+  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 4, 28); b.writeUInt16LE(4, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(samples.length * 4, 40);
+  for (let i = 0; i < samples.length; i++) {
+    const sample = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+    b.writeInt16LE(sample, 44 + i * 4); b.writeInt16LE(sample, 46 + i * 4);
+  }
   return b;
 }
 /** Write the analysis only while the row still holds the analysis this run read (an app/server save meanwhile wins). */
