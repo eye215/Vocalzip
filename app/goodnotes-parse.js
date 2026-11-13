@@ -221,7 +221,9 @@ function readInk(bytes,page,report){
   if(!item)continue; // the id/clock header before each item
   const payload=first(item,2,2);
   if(!payload||!payload.length)continue;
-  let read;try{read=inkPaths(payload,item);}catch{read=null;}
+  let read,tag='?';try{const t=tuple(unframe(payload));tag=t.schema===PATH_SCHEMA?'path':t.schema===PEN_SCHEMA?'pen':t.schema===BRUSH_SCHEMA?'brush':'other:'+t.schema.length;}catch{tag='unreadable';}
+  tag+=(first(item,3,0)?'/t'+first(item,3,0):'')+(sub(item,9)?.length?'/shape':'')+(first(item,14,0)?'/erased':'');report.inkKinds[tag]=(report.inkKinds[tag]||0)+1;
+  try{read=inkPaths(payload,item);}catch{read=null;}
   if(!read){report.unsupported++;continue;}
   const paths=read.paths;
   if(!paths.length||first(item,14,0))  {if(paths.length)report.deleted++;continue;} // an erased item keeps an empty path and a flag
@@ -251,7 +253,7 @@ async function read(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
  if(!eventsBytes)throw fail('굿노트 파일이 아니에요. 굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 골라 주세요.','format');
- const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,unknownEvents:{},schema:null};
+ const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,unknownEvents:{},schema:null,reader:3,events:{},pageEvents:0,inkKinds:{}};
  const schemaBytes=await zip.read('schema.pb');if(schemaBytes){try{report.schema=first(fields(schemaBytes),1,0)??null;}catch{}}
  const index=async name=>{const map=new Map(),data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r);map.set(str(first(f,1,2)).toUpperCase(),str(first(f,2,2)));}catch{}}return map;};
  const [attachmentPaths,notePaths]=[await index('index.attachments.pb'),await index('index.notes.pb')];
@@ -261,6 +263,7 @@ async function read(input){
   const event=top.find(x=>x[0]!==1&&x[1]===2);if(!event)continue;
   let body;try{body=fields(event[2]);}catch{continue;}
   const kind=event[0];
+  report.events[kind]=(report.events[kind]||0)+1; // counts only, for the 진단 정보 line
   if(kind===30||kind===31){const name=reg(body,2);if(name)title=name;}
   else if(kind===2){
    const id=str(first(body,2,2)).toUpperCase(),size=sub(body,8),old=backgrounds.get(id)||{};
@@ -280,7 +283,7 @@ async function read(input){
  }
  const compare=(a,b)=>a<b?-1:a>b?1:0;
  const ordered=[...pages.values()].filter(p=>!removed.get(p.id)).sort((a,b)=>compare(a.order,b.order)||compare(a.id,b.id));
- report.removedPages=pages.size-ordered.length;
+ report.removedPages=pages.size-ordered.length;report.pageEvents=pages.size;
  if(!ordered.length)throw fail('이 굿노트 파일에서 페이지를 찾지 못했어요.','empty');
  const usedNotes=new Set(),result=[];
  for(const p of ordered){
