@@ -141,3 +141,16 @@ test('a pen item whose numbers do not add up is counted as not read instead of b
   const m = await G.read(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', ink:[F.inkItem(F.uuid(1), {type:1, payload:F.stored(odd)})]}]})));
   assert.deepEqual([m.pages[0].strokes.length, m.report.unsupported], [0, 1]);
 });
+
+test('the structure export lists events and file ids without any PDF or ink bytes', async () => {
+  const mark = F.inkItem(F.uuid(1), {payload:F.stored(F.pathTuple({width:3, ...line(60, 80, 300, 400)}))});
+  const pdf = Buffer.from('%PDF-1.4\n% secret score bytes\n');
+  const x = await G.structure(new Uint8Array(F.notebook({pdf, pages:[{pdfPage:1, order:'a', ink:[mark]}, {pdfPage:2, order:'b', removed:true}], outline:[{page:0, title:'곡'}]})));
+  assert.equal(x.format, 'vocalzip-goodnotes-structure');
+  const kinds = x.events.map(e => e.find(f => f[0] !== 1)?.[0]);
+  for (const kind of [30, 6, 2, 54, 56, 65]) assert.ok(kinds.includes(kind), 'event ' + kind);
+  assert.deepEqual([x.attachments.length, x.attachments[0][2], x.notes.length], [1, pdf.length, 1]);
+  const text = JSON.stringify(x);
+  assert.ok(!text.includes('secret score bytes') && !text.includes('tpl'));
+  assert.ok(text.includes('곡')); // titles are part of the events
+});
