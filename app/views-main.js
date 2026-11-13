@@ -545,9 +545,9 @@ VZ.route('songs', {title:'내 곡', tab:'songs', actions:() => '<button type="bu
 }});
 
 /* ---------- 곡 상세 ---------- */
-let songTab = 'media';
+let songTab = 'media', songSynced = null;
 VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true,
-  leave(){ songTab = 'media'; VZ.lyricsMemo?.close(); document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
+  leave(){ window.removeEventListener('vzip:data-changed', songSynced); songSynced = null; songTab = 'media'; VZ.lyricsMemo?.close(); document.querySelector('.vz-collection-record')?.setAttribute('href','#/record'); VZ.mediaSelection?.hideSongAction(); },
   actions:r => VZ.song(r.params[0]) ? '<button type="button" class="icon-btn" data-song-menu aria-label="곡 수정·삭제"><i class="ph ph-dots-three-outline"></i></button>' : '',
   render(r) {
     const s = VZ.song(r.params[0]);
@@ -559,13 +559,22 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
   async mount(main, r) {
     const s = VZ.song(r.params[0]); if (!s) return;
     document.querySelector('.vz-collection-record')?.setAttribute('href','#/record?song='+encodeURIComponent(s.id));
-    document.querySelector('[data-song-menu]')?.addEventListener('click', () => VZ.menu({title:s.title, body:'<div class="list"><button type="button" class="item" data-e><i class="ph ph-pencil-simple"></i><span class="item-main">곡 정보 수정</span></button><button type="button" class="item" data-rep-menu><i class="ph ph-music-notes"></i><span class="item-main">나의 레퍼토리 설정</span></button><button type="button" class="item" data-d style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">곡 삭제</span></button></div>',
+    // `s` is the song as it was when this screen opened. Synced data replaces VZ.db, so anything shown or saved reads the
+    // current song by id; for a song deleted on another device the screen says so instead of writing it back.
+    const live = () => VZ.song(s.id) || (VZ.render(), null);
+    const refresh = () => {
+      const cur = VZ.song(s.id); if (!cur) { VZ.render(); return; }
+      main.querySelector('.vz-song-detail-title').textContent = cur.title;
+      if (!selectionTouched) { VZ.mediaSelection?.clear(); draw(); } // a selection the user made is kept, as after loading the list
+    };
+    document.querySelector('[data-song-menu]')?.addEventListener('click', () => VZ.menu({title:(VZ.song(s.id) || s).title, body:'<div class="list"><button type="button" class="item" data-e><i class="ph ph-pencil-simple"></i><span class="item-main">곡 정보 수정</span></button><button type="button" class="item" data-rep-menu><i class="ph ph-music-notes"></i><span class="item-main">나의 레퍼토리 설정</span></button><button type="button" class="item" data-d style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">곡 삭제</span></button></div>',
       onMount:(el, close) => {
-        el.querySelector('[data-e]').onclick = () => { close(); VZ.songSheet(s, () => VZ.softRender?.()); };
+        el.querySelector('[data-e]').onclick = () => { close(); const cur = live(); if (cur) VZ.songSheet(cur, refresh); };
         el.querySelector('[data-rep-menu]').onclick = () => { close(); VZ.menu({title:'나의 레퍼토리', body:'<div class="list">' + [['status','상태'],['skills','숙련도'],['keys','키 정보'],['take','대표 테이크']].map(([k,label]) => '<button type="button" class="item" data-rep="' + k + '"><span class="item-main">' + label + '</span></button>').join('') + '</div>', onMount:(panel,done) => panel.querySelectorAll('[data-rep]').forEach(button => button.onclick = () => { done(); if (button.dataset.rep === 'take') VZ.repertoire?.chooseTake?.(s.id); else VZ.repertoire?.edit?.(s.id,button.dataset.rep); })}); };
         el.querySelector('[data-d]').onclick = async () => {
           close();
-          if (!await VZ.confirm('곡 삭제', '"' + s.title + '" 곡을 목록에서 삭제할까요? 녹음·연습·레슨 기록은 지워지지 않고 "곡 미지정"으로 남아요.', {ok:'삭제', danger:true})) return;
+          const cur = live(); if (!cur) return;
+          if (!await VZ.confirm('곡 삭제', '"' + cur.title + '" 곡을 목록에서 삭제할까요? 녹음·연습·레슨 기록은 지워지지 않고 "곡 미지정"으로 남아요.', {ok:'삭제', danger:true})) return;
           if (VZ.change(d => { d.songs = d.songs.filter(x => x.id !== s.id); }, {silent:true})) { VZ.toast('곡을 삭제했어요. 기록은 남아 있어요.'); VZ.nav('#/songs'); }
         };
       }}));
@@ -604,7 +613,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
             const item = visible.find(m => String(m.id) === chip.dataset.linkedRecord), record = item && linked(item);
             if (!record) return;
             const title = record.kind === 'lesson' ? '레슨 기록' : '연습 기록';
-            VZ.sheet({title, body:'<div class="vz-song-linked-sheet"><p class="small muted">'+esc(VZ.dateLabel(record.date))+' · '+esc(s.title)+'</p><strong>'+esc([record.minutes,record.rating].filter(Boolean).join(' · ') || title)+'</strong><div class="vz-song-linked-note">'+esc(record.summary)+'</div></div>'});
+            VZ.sheet({title, body:'<div class="vz-song-linked-sheet"><p class="small muted">'+esc(VZ.dateLabel(record.date))+' · '+esc((VZ.song(s.id) || s).title)+'</p><strong>'+esc([record.minutes,record.rating].filter(Boolean).join(' · ') || title)+'</strong><div class="vz-song-linked-note">'+esc(record.summary)+'</div></div>'});
           }, true);
           host.addEventListener('click', e => { if (e.target.closest('.vz-media-select, [data-toggle]')) { selectionTouched = true; setTimeout(sync, 0); } }, true);
           VZ.wireMedia(host, visible);
@@ -635,14 +644,14 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
         VZ.renderSongMR?.(body.querySelector('[data-song-mr]'),current);
         VZ.renderSongAr?.(body.querySelector('[data-song-ar-file]'),current);
         body.querySelectorAll('[data-ar-share]').forEach(b => b.onclick = () => { const link = links[+b.dataset.arShare]; VZ.shareUrl(link.label || current.title + ' 레퍼런스', songArUrl(link.url)); });
-        body.querySelector('[data-add-song-ar]').onclick = () => VZ.songSheet(VZ.song(s.id), () => draw(), {hideShow:true, focusAr:true});
+        body.querySelector('[data-add-song-ar]').onclick = () => { const cur = live(); if (cur) VZ.songSheet(cur, refresh, {hideShow:true, focusAr:true}); };
         VZ.mediaSelection?.hideSongAction();
         return;
       }
       if (songTab === 'scores') {
         // The score list keeps its own host; the reference range (악보 기준 음역) sits below it.
         body.innerHTML = '<div data-score-list></div><div data-vocal-range></div>';
-        if (VZ.renderScores) VZ.renderScores(body.querySelector('[data-score-list]'), s);
+        if (VZ.renderScores) VZ.renderScores(body.querySelector('[data-score-list]'), VZ.song(s.id) || s);
         VZ.vocalRangeCard?.(body.querySelector('[data-vocal-range]'), VZ.song(s.id) || s);
       }
       else if (songTab === 'lyrics') {
@@ -701,6 +710,18 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       // Keep the user's current scroll position when changing tabs.
     });
     draw();
+    // Data from another device arrives as vzip:data-changed. This screen is not re-rendered in the background (selection,
+    // open tab), so it redraws itself in place, unless that would interrupt typing, an open sheet, a selection or playback:
+    // then the title is refreshed now and the list on its next draw.
+    window.removeEventListener('vzip:data-changed', songSynced);
+    songSynced = e => {
+      if (!body.isConnected) { window.removeEventListener('vzip:data-changed', songSynced); return; }
+      if (e.detail?.source === 'v6') return; // this app's own save redraws where it was made
+      const cur = VZ.song(s.id), active = main.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
+      const held = document.querySelector('.sheet-back') || active || main.dataset.dirty || body.querySelector('.media-open:not([hidden]), audio, video, iframe') || M.playing?.() || VZ.lyricsMemo?.isOpen(s.id);
+      if (!held) refresh(); else if (cur) main.querySelector('.vz-song-detail-title').textContent = cur.title;
+    };
+    window.addEventListener('vzip:data-changed', songSynced);
     media = (await M.list().catch(() => [])).filter(m => m.songId === s.id);
     if (body.isConnected && !selectionTouched) { VZ.mediaSelection?.clear(); draw(); }
     if (await M.fillDurations(media) && body.isConnected && !selectionTouched && !body.querySelector('.media-open:not([hidden])')) { VZ.mediaSelection?.clear(); draw(); }
