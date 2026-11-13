@@ -3,7 +3,7 @@
 'use strict';
 const VZ = window.VZ, M = VZ?.media;
 if (!VZ || !M) return;
-VZ.librarySelect = (main, {list, done}) => {
+VZ.librarySelect = (main, {list, all = list, done}) => {
   const host = main.querySelector('[data-l]'), start = main.querySelector('[data-select-mode]'),
     left = main.querySelector('.lib-selection-left'), cancel = main.querySelector('[data-lib-select-cancel]'),
     meta = main.querySelector('.lib-selection-meta'), allButton = main.querySelector('[data-lib-select-all]'),
@@ -11,9 +11,14 @@ VZ.librarySelect = (main, {list, done}) => {
   if (!host || !allButton || !count || !bulk) return;
   const picked = new Map();
   let busy = false, selecting = false;
-  const chosen = () => [...picked.values()];
-  const activeChosen = () => chosen().filter(m => list().some(v => String(v.id)===String(m.id)));
-  const clearOffscreen = () => {const ids=new Set(list().map(m=>String(m.id)));for(const id of picked.keys())if(!ids.has(id))picked.delete(id);};
+  // Id sets are built once per drawn list (not once per ticked row): 2,000 ticked rows stay instant.
+  const idSet = () => { let of = null, ids = null; return items => { if (items !== of) { of = items; ids = new Set(items.map(m => String(m.id))); } return ids; }; };
+  const shownIds = idSet(), allIds = idSet();
+  /** Ticked rows the filters show now: every bulk action works on these. A row hidden by a search or filter keeps
+   * its tick and comes back with it; only a recording that no longer exists loses it. */
+  const activeChosen = () => { const ids = shownIds(list()); return [...picked.values()].filter(m => ids.has(String(m.id))); };
+  const activeCount = () => { const ids = shownIds(list()); let n = 0; for (const id of picked.keys()) if (ids.has(id)) n++; return n; };
+  const clearOffscreen = () => { const ids = allIds(all()); for (const id of picked.keys()) if (!ids.has(id)) picked.delete(id); };
   const mark = root => root.querySelectorAll('[data-media].lib-record').forEach(row => {
     const button = row.querySelector('[data-lib-pick]'); if (!button) return;
     const yes = picked.has(row.dataset.media), span = button.querySelector('span');
@@ -28,7 +33,8 @@ VZ.librarySelect = (main, {list, done}) => {
     total.textContent = '총 ' + visible.length + '개';
     allButton.setAttribute('aria-pressed', String(all));
     const box = allButton.querySelector('.lib-check'); if (box && box.textContent !== (all ? '✓' : '')) box.textContent = all ? '✓' : '';
-    count.textContent = picked.size + '개 선택'; bulk.disabled = !picked.size || busy; mark(host);
+    const n = activeCount();
+    count.textContent = n + '개 선택'; bulk.disabled = !n || busy; mark(host);
   };
   const watch = new MutationObserver(() => paint());
   watch.observe(host, {childList:true, subtree:true});
@@ -74,33 +80,35 @@ VZ.librarySelect = (main, {list, done}) => {
     }
   }, true);
   bulk.onclick = () => {
-    clearOffscreen();if (!picked.size) return;
-    VZ.menu({title:'선택한 녹음 ' + picked.size + '개', body:
+    clearOffscreen(); const items = activeChosen(); if (!items.length) return;
+    // 곡 지정 is for 곡 녹음·레슨 녹음: with 트레이닝·연습실 files ticked too, it stays and says how many it applies to.
+    const songItems = items.filter(m => M.songSearchEligible(m)), others = items.length - songItems.length;
+    VZ.menu({title:'선택한 녹음 ' + items.length + '개', body:
       '<div class="vz-choice-list vz-media-action-sheet">' +
-      (activeChosen().every(m=>M.songSearchEligible(m))?'<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정</button>':'') +
-      (VZ.recordingKindButtons?.(activeChosen()) || '') +
-      (canAnalyze(chosen()) ? '<button type="button" class="vz-choice" data-analyze-bulk><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">같은 곡으로 지정된 녹음만 분석할 수 있어요.</p>') + '</div>',
+      (songItems.length ? '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정' + (others ? ' <span class="small" style="margin-left:auto;font-weight:500;opacity:.75">곡·레슨 녹음 ' + songItems.length + '개만</span>' : '') + '</button>' : '<p class="small muted" data-song-note style="margin:8px 12px">트레이닝·연습실 녹음에는 곡을 지정하지 않아요. 곡 녹음으로 지정하면 곡을 고를 수 있어요.</p>') +
+      (VZ.recordingKindButtons?.(items) || '') +
+      (canAnalyze(items) ? '<button type="button" class="vz-choice" data-analyze-bulk><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">같은 곡으로 지정된 녹음만 분석할 수 있어요.</p>') + '</div>',
       onMount:(sheet, close) => {
-        sheet.querySelector('[data-song]')?.addEventListener('click',() => { close(); setSong(); });
-        VZ.bindRecordingKind?.(sheet, close, activeChosen(), async () => { picked.clear(); paint(); await done(); });
-        sheet.querySelector('[data-analyze-bulk]')?.addEventListener('click', () => { const items = chosen(); if (!canAnalyze(items)) return; close(); analyze(items); });
+        sheet.querySelector('[data-song]')?.addEventListener('click',() => { close(); setSong(songItems); });
+        VZ.bindRecordingKind?.(sheet, close, items, async () => { picked.clear(); paint(); await done(); });
+        sheet.querySelector('[data-analyze-bulk]')?.addEventListener('click', () => { if (!canAnalyze(items)) return; close(); analyze(items); });
       }
     });
   };
-  const run = async (label, fn) => {
-    const items = activeChosen(); if (!items.length) return;
+  const run = async (label, fn, items) => {
+    if (!items.length) return;
     busy = true; paint(); let ok = 0, failed = 0;
     for (const m of items) { try { await fn(m); ok++; } catch { failed++; } }
     busy = false; picked.clear(); paint(); M.invalidate?.(); await done();
     VZ.toast(label + ' ' + ok + '개' + (failed ? ' · ' + failed + '개는 변경하지 못했어요' : ''), failed ? 'error' : undefined);
   };
-  async function setSong() {
+  async function setSong(items) {
     const v = await VZ.pickSheet({title:'곡 지정', placeholder:'곡 제목·작품 검색', value:null,
       options:[{value:'', label:'곡 미지정', always:true}, ...VZ.songsNewest().map(s => ({value:s.id, label:s.title, sub:s.show || '', keywords:(s.aliases || []).join(' ')}))]});
     if (v == null) return;
     const song = VZ.song(v);
-    if (!await VZ.confirm('곡 지정', picked.size + '개 녹음의 곡을 "' + (song ? VZ.songLabel(song) : '곡 미지정') + '"(으)로 바꿀까요?', {ok:'바꾸기'})) return;
-    await run('곡을 바꿨어요:', m => (m.songId || '') === v ? null : M.assignSongSafe(m, {songId:v, song:song ? VZ.songLabel(song) : ''}, {expectedSongId:m.songId || '', expectedSong:m.song || ''}));
+    if (!await VZ.confirm('곡 지정', items.length + '개 녹음의 곡을 "' + (song ? VZ.songLabel(song) : '곡 미지정') + '"(으)로 바꿀까요?', {ok:'바꾸기'})) return;
+    await run('곡을 바꿨어요:', m => (m.songId || '') === v ? null : M.assignSongSafe(m, {songId:v, song:song ? VZ.songLabel(song) : ''}, {expectedSongId:m.songId || '', expectedSong:m.song || ''}), items);
   }
   paint();
   return {clear:() => { picked.clear(); paint(); }, refresh:paint};
