@@ -138,7 +138,7 @@ test('vocal lab 성장 리포트: groups by direction, withholds v1/v2 and the A
   for (const b of await page.locator('.vl-dates button').all()) if (await b.getAttribute('aria-pressed') !== 'true') await b.click();
   const other = page.locator('[data-growth-report]');
   await expect(other.locator('h3.good')).toHaveCount(0);
-  await expect(other.locator('[data-growth-row="intonation"]')).toContainText('분석 버전(v1·v2)이 달라 판정 보류');
+  await expect(other.locator('[data-growth-row="intonation"]')).toContainText('분석 버전(v1·v2)이 달라요');
   await expect(other).toContainText('AI 해석을 요청할 수 있어요');
   await expect(page.locator('[data-growth-ai]')).toHaveCount(0);
   expect(await fits(page)).toMatchObject({width:320, scroll:320, over:[]});

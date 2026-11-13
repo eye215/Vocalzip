@@ -58,7 +58,7 @@ function points(media) {
  * difference shown only when both takes are comparable. */
 function change(metric, first, last, {pair = false} = {}) {
   if (metric.model && G) return shortChange(G.compareMetric(metric.model, first, last, {reference:referenceOf(first.songId || last.songId), sameDay:pair}));
-  if (!comparable(first.a, last.a)) return '<span class="vg-same">판정 보류 · 신뢰도/분석 버전 확인</span>';
+  if (!comparable(first.a, last.a)) return '<span class="vg-same">' + esc(G?.holdLine ? G.holdLine(G.pairHold(first.a, last.a, a => !!VZ.analysisReliable?.(a))) : '판정 보류') + '</span>';
   const a = metric.get(first.a), b = metric.get(last.a);
   if (a == null || b == null) return '';
   const d = Math.round((b - a) * 10) / 10;

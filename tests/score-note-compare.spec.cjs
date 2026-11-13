@@ -3,6 +3,7 @@
 // covered by tests/score-align.test.cjs with real synthetic audio); this checks what the owner sees and what is saved.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
+const labClear = require('./lab-clear-selection.cjs');
 const {KEY, stub} = require('./helpers/r2-fixture.cjs');
 const S = require('./helpers/score-song.cjs');
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
@@ -42,7 +43,7 @@ async function boot(page) {
   });
   await page.waitForTimeout(300);
   await page.goto('/#/vocal-lab/s1');
-  await page.locator('.vl-dates button').first().click();
+  await labClear(page); await page.locator('.vl-dates button').first().click();
   const box = page.locator('[data-note-cmp]');
   await expect(box).toBeVisible();
   return box;
@@ -134,7 +135,7 @@ test('another song is not forced onto the score, and a low-confidence analysis i
   await expect(box.locator('[data-note-reason]')).toContainText('녹음과 악보가 맞는 곳을 찾지 못했어요');
   await expect(box.getByRole('button', {name:'결과 저장'})).toHaveCount(0);
   // The pitch curve of a recording is computed once per visit; a fresh lab visit with an unreliable analysis.
-  await page.goto('/#/home'); await page.goto('/#/vocal-lab/s1'); await page.locator('.vl-dates button').first().click();
+  await page.goto('/#/home'); await page.goto('/#/vocal-lab/s1'); await labClear(page); await page.locator('.vl-dates button').first().click();
   await cloud(page, curveOf({}), {reliable:false});
   // The last result of this session stays on screen until compared again.
   await expect(page.locator('[data-note-verdict]')).toHaveText('판정 보류');
