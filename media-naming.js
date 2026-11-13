@@ -1,4 +1,4 @@
-/* Automatic recording titles; a title the user typed is never replaced. */
+/* Automatic recording titles; manual names are preserved. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipMediaNaming=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const strip=value=>String(value||'').replace(/\.(m4a|mp3|wav|aac|ogg|flac|webm|mp4|mov|aiff?|caf|wma|m4v)$/i,'');
@@ -26,25 +26,8 @@ function mode(meta,resolve){
  const base=title(meta,resolve,false);
  return !!base&&(meta.name===base||/^ (?:[2-9]|[1-9]\d+)$/.test(String(meta.name||'').slice(base.length))&&String(meta.name||'').startsWith(base));
 }
-/* A title the user typed by hand. Titles saved before nameMode existed count when the app's own recorder saved them
- * (its 제목 field is where they were typed) and they are not one of the names the app itself gives a recording. */
-const stamped=/(?:^| )\d{1,2}[./]\d{1,2} \d{2}:\d{2}$/; // "녹음 11.13 14:05", "곡 MR 녹음 11/13 14:05", "보이스 체크 11.13 14:05"
-function typed(meta,resolve){
- const name=String(meta.name||'').trim();
- if(!name||mode(meta,resolve))return false;
- if(meta.nameMode)return true; // 'manual', or an automatic title that was later changed by hand
- if(!/^(?:practice|lesson)$/.test(meta.source||'')||name==='녹음'||stamped.test(name)||strip(name)!==name)return false;
- const day=date(meta).replace(/-/g,'.'),at=day?name.lastIndexOf(' '+day):-1;
- return at<1||!/^$|^ (?:[2-9]|[1-9]\d+)$/.test(name.slice(at+day.length+1)); // "곡 2026.11.08 2" of a song renamed since
-}
 function patch(meta,changes,resolve=()=> ''){
  const out={...changes};
- if(typed(meta,resolve)){
-  // A typed title stays as it is: a song or date change, or a form's automatic name, never replaces it.
-  delete out.normalizeTitle;
-  if(out.nameMode==='auto'&&Object.hasOwn(out,'name')){delete out.name;delete out.nameMode;delete out.autoName;}
-  return Object.hasOwn(out,'name')&&out.name!==meta.name?{...out,nameMode:'manual',autoName:null}:out;
- }
  const normalize=!!out.normalizeTitle;delete out.normalizeTitle;
  const changed=['song','songId','recordedDate','created'].some(k=>Object.hasOwn(out,k)&&out[k]!==meta[k]);
  if(normalize||changed){
@@ -76,5 +59,5 @@ function patch(meta,changes,resolve=()=> ''){
  const next={...meta,...out},name=title(next,resolve)+(next.song||next.songId?suffix:'');
  return {...out,name,nameMode:'auto',autoName:name};
 }
-return {patch,title,isAutomatic:mode,isTyped:typed,keepPrevious};
+return {patch,title,isAutomatic:mode,keepPrevious};
 });

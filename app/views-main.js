@@ -52,10 +52,8 @@ VZ.wireMedia = (host, items) => {
 };
 VZ.editMedia = item => {
   const created = M.dateOf(item);
-  // A title the user typed is never replaced by an automatic one (media-naming.js).
-  const typed = !!window.VzipMediaNaming?.isTyped?.(item, id => VZ.songTitle(id));
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + (item.rating >= n) + '">★</button>').join('');
-  VZ.sheet({title:'녹음 정보 수정', body:'<form id="media-edit"><label class="field"><span>제목</span><input type="text" name="name" readonly value="' + esc(M.label(item)) + '"><span class="small muted">' + (typed ? '직접 쓴 제목이에요. 곡이나 날짜를 바꿔도 그대로 둬요.' : '곡이나 날짜를 바꾸면 제목이 자동으로 바뀌고, 이전 제목은 기존 감상 메모 아래에 추가돼요.') + '</span></label>' + VZ.songSelect('song', item.songId || '') +
+  VZ.sheet({title:'녹음 정보 수정', body:'<form id="media-edit"><label class="field"><span>제목</span><input type="text" name="name" readonly value="' + esc(M.label(item)) + '"><span class="small muted">곡과 날짜를 지정하면 제목이 자동으로 바뀌고, 이전 제목은 기존 감상 메모 아래에 추가돼요.</span></label>' + VZ.songSelect('song', item.songId || '') +
     '<fieldset class="field" style="border:0;padding:0"><legend>종류</legend><div class="seg" role="radiogroup" aria-label="녹음 종류">' + M.OCCASIONS.map(([k, v]) => '<button type="button" role="radio" data-occ="' + k + '" aria-checked="' + (M.occasion(item) === k) + '" aria-pressed="' + (M.occasion(item) === k) + '">' + v + '</button>').join('') + '</div></fieldset>' +
     '<label class="field"><span>녹음 날짜</span><input type="date" name="date" value="' + created + '"><span class="small muted">' + ({metadata:'파일 속 촬영·녹음 날짜예요.', 'file-modified':'날짜 정보가 없어 파일 수정일을 썼어요.', manual:'직접 지정한 날짜예요.'}[item.dateSource] || '') + '</span></label><fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset><label class="field"><span>감상 메모</span><textarea name="review" maxlength="3000" placeholder="잘된 점, 고칠 점">' + esc(item.review || '') + '</textarea></label></form>',
     foot:'<button type="submit" form="media-edit" class="btn block">저장</button>',
@@ -70,7 +68,7 @@ VZ.editMedia = item => {
       const moved = () => form.song.value !== (item.songId || '') || (!!form.date.value && form.date.value !== created);
       const rename = () => {
         const sel = form.song.value, title = sel === '__new' ? form.song__new.value.trim() : VZ.songTitle(sel);
-        form.name.value = title && !typed && moved() ? M.autoName(title, form.date.value || M.dateOf(item), item.id, known) : M.label(item);
+        form.name.value = title && moved() ? M.autoName(title, form.date.value || M.dateOf(item), item.id, known) : M.label(item);
       };
       rename();
       form.song.addEventListener('change', rename);
@@ -82,14 +80,15 @@ VZ.editMedia = item => {
         const date = form.date.value, keep = item.created ? new Date(item.created) : new Date();
         const d = VZ.parseYmd(date);
         const preview=form.name.value;
-        // Only what was changed here is saved: a rating or memo edit leaves the title, song and date as they are.
+        // Only what was changed here is saved: a rating or memo edit leaves the title, memo, song and date as they are.
+        // A song or date change renames the title as before (media-naming.js keeps the old one under the memo).
         const changes = {}, songChanged = songId !== (item.songId || ''), dateChanged = !!d && date !== created;
         if (songChanged) Object.assign(changes, {songId, song:VZ.songLabel(VZ.song(songId)), songSource:'user'}); // the server never changes a user's choice
         if (rating !== (item.rating || null)) changes.rating = rating;
         if (form.review.value !== form.review.defaultValue) changes.review = form.review.value;
         if (occasion !== M.occasion(item)) changes.occasion = occasion;
         if (dateChanged) Object.assign(changes, {created:new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime(), recordedDate:date, dateSource:'manual'});
-        if ((songChanged || dateChanged) && songId && preview && !typed) Object.assign(changes, {normalizeTitle:true, name:preview, nameMode:'auto', autoName:preview});
+        if ((songChanged || dateChanged) && songId && preview) Object.assign(changes, {normalizeTitle:true, name:preview, nameMode:'auto', autoName:preview});
         if (!Object.keys(changes).length) { close(); return; }
         const btn = el.parentNode.querySelector('.sheet-foot .btn'); btn.disabled = true;
         try { const updated = await M.update(item, changes); if(updated?.name)M.reserveName(updated.name); Object.assign(item, updated || changes); close(); VZ.toast('저장했어요.'); }
@@ -446,9 +445,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   async function save(pl) {
     const res = state.result, btn = review.querySelector('[data-save]'), fail = review.querySelector('[data-fail]');
     const id = state.savedId ||= VZ.uid();
-    // A title typed over the suggested one is the user's own: a later song or date change never replaces it (media-naming.js).
-    const field = review.querySelector('[name=name]'), title = field.value.trim();
-    const item = {id, ...(window.VzipAccountScope?{accountOwner:res.accountOwner}:{}), name:title || '녹음', ...(title && title !== field.defaultValue ? {nameMode:'manual', autoName:null} : {}), created:Date.now(), recordedDate:VZ.today(), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
+    const item = {id, ...(window.VzipAccountScope?{accountOwner:res.accountOwner}:{}), name:review.querySelector('[name=name]').value.trim() || '녹음', created:Date.now(), recordedDate:VZ.today(), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
     btn.disabled = true; btn.textContent = '저장 중…'; fail.hidden = true;
     try {
       await M.saveBlob(item, p => { btn.textContent = '클라우드 저장 ' + p + '%'; });
