@@ -126,10 +126,32 @@ async function remove(song, score, redraw) {
   const guard=()=>{if(!owner||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 바뀌어 삭제를 중단했어요.');};
   if (!await VZ.confirm('악보 삭제', '"' + score.title + '" PDF와 연결된 개인 필기를 삭제할까요? 클라우드의 파일도 지워지고 되돌릴 수 없어요. 곡과 녹음은 그대로예요.', {ok:'삭제', danger:true})) return;
   try {
-    guard();await window.VzipR2.remove(score.r2Key);if(/\/original\.pdf$/.test(score.r2Key||''))await window.VzipR2.remove(score.r2Key.replace(/original\.pdf$/,'omr.mxl')).catch(()=>{});guard();
-    if (VZ.deleteScoreWithInk ? await VZ.deleteScoreWithInk(song.id, score) : save(song.id, list => { const i = list.findIndex(x => x.id === score.id); if (i >= 0) list.splice(i, 1); })) { VZ.toast('악보를 삭제했어요.'); redraw(); }
+    if (await erase(song, score, guard)) { VZ.toast('악보를 삭제했어요.'); redraw(); }
   } catch (err) { VZ.toast('삭제하지 못했어요: ' + err.message, 'error'); }
 }
+/** Deletes one score for good: its PDF and converted result in the cloud, then the entry with its handwriting. */
+async function erase(song, score, guard) {
+  guard();await window.VzipR2.remove(score.r2Key);if(/\/original\.pdf$/.test(score.r2Key||''))await window.VzipR2.remove(score.r2Key.replace(/original\.pdf$/,'omr.mxl')).catch(()=>{});guard();
+  return VZ.deleteScoreWithInk ? await VZ.deleteScoreWithInk(song.id, score) : save(song.id, list => { const i = list.findIndex(x => x.id === score.id); if (i >= 0) list.splice(i, 1); });
+}
+/* 굿노트에서 가져온 악보 모두 지우기 (설정 › 관리): only scores the GoodNotes import made (source 'goodnotes').
+ * PDFs uploaded by hand, songs, recordings, lyrics and MR files are not touched. Each score goes through the same
+ * delete as a single score; a score that cannot be deleted is left as it is and counted. */
+VZ.goodnotesScores = () => (VZ.db.songs || []).flatMap(song => (song.scores || []).filter(x => x && !x.deleted && x.source === 'goodnotes').map(score => ({song, score})));
+VZ.clearGoodnotesScores = async ({onProgress = () => {}} = {}) => {
+  if (!window.VzipR2?.enabled?.()) throw Error('로그인하고 클라우드에 연결된 뒤에 지울 수 있어요.');
+  const owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.()||'';
+  const guard=()=>{if(!owner||window.vzipCloudUserId?.()!==owner||(window.vzipCloudSessionId?.()||'')!==session||window.VzipAccountScope?.leaving)throw Error('로그인이 바뀌어 삭제를 중단했어요.');};
+  const todo = VZ.goodnotesScores(), result = {total:todo.length, removed:0, failed:0};
+  for (const {song, score} of todo) {
+    guard(); // a changed login stops the whole run; one score that fails does not
+    const current = VZ.song(song.id), live = current && (current.scores || []).find(x => x.id === score.id);
+    try { if (live && await erase(current, live, guard)) result.removed++; else result.failed++; }
+    catch (err) { if (/로그인이 바뀌어/.test(err.message)) throw err; result.failed++; }
+    onProgress(result);
+  }
+  return result;
+};
 
 /** The complete PDF row opens the integrated viewer; secondary actions remain independent. */
 VZ.renderScores = (host, song) => {
