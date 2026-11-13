@@ -45,3 +45,23 @@
   body[data-vz-route="settings"] .vz-settings{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
   body[data-vz-route="settings"] .vz-settings-section:last-of-type,body[data-vz-route="settings"] .vz-settings-version{grid-column:1/-1}
 }
+
+/* 성장 (결과 리포트 · 주간 요약 · 보컬 분석 · 보컬 트레이닝): the same 1040px column. The tab box and the period
+ * control keep a phone-like width; 보컬 분석 and 보컬 트레이닝 put their two groups side by side. */
+@media (min-width:768px){
+  body:is([data-vz-route="vocal-growth"],[data-vz-route="weekly-summary"],[data-vz-route="vocal-analysis"],[data-vz-route="vocal-training"]){--vz-content-max:1040px}
+  body:is([data-vz-route="vocal-growth"],[data-vz-route="weekly-summary"],[data-vz-route="vocal-analysis"],[data-vz-route="vocal-training"]) .v-app{max-width:1040px;padding-left:24px;padding-right:24px}
+  .growth-top-tabs{max-width:536px}
+  .growth-hub-cols{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);column-gap:24px;align-items:start}
+  .growth-hub-hint{display:flex}
+  /* 결과 리포트: the cards keep their inside; the six measures sit three across and AI 코치 beside 다음 연습. */
+  body[data-vz-route="vocal-growth"] :is(.growth-stats-grid,.growth-metrics){grid-template-columns:repeat(3,minmax(0,1fr))}
+  body[data-vz-route="vocal-growth"] [data-overall-body]{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;grid-auto-flow:row dense;align-items:start}
+  body[data-vz-route="vocal-growth"] [data-overall-body]>*{grid-column:1/-1}
+  body[data-vz-route="vocal-growth"] [data-overall-body]>[data-growth-anchor="coach"]{grid-column:1}
+  body[data-vz-route="vocal-growth"] [data-overall-body]>[data-growth-anchor="practice"]{grid-column:2}
+  /* 주간 요약: cards flow down two columns; the period control, the week switch and the note span both. */
+  body[data-vz-route="weekly-summary"] .ws-page{display:block;columns:2;column-gap:24px}
+  body[data-vz-route="weekly-summary"] .ws-page>*{break-inside:avoid;margin:0 0 12px}
+  body[data-vz-route="weekly-summary"] .ws-page>:is(.growth-view-tabs,.ws-week,.ws-disclaimer,.ws-note,.ws-empty-card){column-span:all}
+}

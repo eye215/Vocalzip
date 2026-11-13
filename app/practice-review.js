@@ -1,6 +1,6 @@
 (()=>{
 'use strict';const V=window.VZ,M=window.VzipPracticeReview;if(!V||!M)return;const esc=V.esc;
-V.route('practice-review',{title:'다음 연습 추천',back:true,tab:'home',noAutoRefresh:true,
+V.route('practice-review',{title:'다음 연습 추천',back:true,tab:'keep',noAutoRefresh:true,
  render:()=>'<section class="card" data-review><h2>기록으로 다음 연습 정하기</h2><p data-summary></p><p class="small muted">작성한 기록과 측정값을 NVIDIA에 보내 추천 초안을 만들어요. 녹음을 청취하지 않으며 수치만으로 소리나 실력 향상을 단정하지 않아요.</p><button class="btn secondary" data-generate>기록으로 AI 추천받기</button><p role="status" data-status></p><div data-proposal></div></section>',
  async mount(host,r){
   const box=host.querySelector('[data-review]'),status=box.querySelector('[data-status]'),out=box.querySelector('[data-proposal]'),button=box.querySelector('[data-generate]');
