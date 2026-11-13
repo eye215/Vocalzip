@@ -87,7 +87,8 @@ VZ.dday = s => { const n = VZ.daysBetween(VZ.today(), s); return n === 0 ? 'D-DA
 VZ.clock = sec => { sec = Math.max(0, Math.round(sec || 0)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return (h ? h + ':' + pad(m) : m) + ':' + pad(s); };
 VZ.minutes = min => { min = Math.round(min || 0); return min >= 60 ? Math.floor(min / 60) + '시간' + (min % 60 ? ' ' + min % 60 + '분' : '') : min + '분'; };
 VZ.size = b => b > 1048576 ? (b / 1048576).toFixed(b > 104857600 ? 0 : 1) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB';
-VZ.timeRange = l => [l.startTime, l.endTime].filter(Boolean).join(' – ');
+// A lesson brought in from 레슨비 정산 has no real time: its 00:00 start is a placeholder (shown as 시간 미정).
+VZ.timeRange = l => l.importedFrom === 'billing' && l.startTime === '00:00' ? '' : [l.startTime, l.endTime].filter(Boolean).join(' – ');
 
 /* ---------- domain ---------- */
 VZ.song = id => db.songs.find(s => s.id === id);
@@ -308,7 +309,7 @@ const routes = {};
 VZ.route = (name, def) => { routes[name] = def; };
 VZ.nav = hash => { if (location.hash === hash) VZ.render(); else location.hash = hash; };
 window.vzipNavigate = tab => VZ.nav('#/' + ({lessons:'lessons', practice:'record', media:'library', archive:'growth', manage:'settings'}[tab] || 'home'));
-let current = null, guard = null, lastHash = location.hash;
+let current = null, guard = null, lastHash = location.hash, lastTab = 'home';
 /** A view may block navigation (e.g. while recording). Return a message to confirm. */
 VZ.setGuard = fn => { guard = fn; };
 function parse() {
@@ -326,7 +327,8 @@ VZ.render = () => {
   current = {name:r.name, def, key:location.hash};
   document.body.dataset.vzRoute = r.name;
   document.querySelectorAll('.v-nav a').forEach(a => a.toggleAttribute('aria-current', false));
-  const tab = def.tab || r.name;
+  // tab:'keep' (설정 and its pages): the bottom tab stays on the screen the user came from.
+  const tab = lastTab = def.tab === 'keep' ? lastTab : def.tab || r.name;
   document.querySelector('.v-nav a[data-nav="' + tab + '"]')?.setAttribute('aria-current', 'page');
   const title = typeof def.title === 'function' ? def.title(r) : def.title;
   const back = def.back ? '<button type="button" class="icon-btn" data-back aria-label="뒤로"><i class="ph ph-caret-left"></i></button>' : '';

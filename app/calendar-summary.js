@@ -26,7 +26,10 @@ function summarize(db,media,month,dateOf){
 }
 function ranked(summary,metric='minutes'){
  const other=metric==='count'?'minutes':'count';
- return summary.rows.slice().sort((a,b)=>b[metric]-a[metric]||b[other]-a[other]||String(a.id).localeCompare(String(b.id))).slice(0,5);
+ const rows=summary.rows.slice().sort((a,b)=>b[metric]-a[metric]||b[other]-a[other]||String(a.id).localeCompare(String(b.id)));
+ // Songs with a name lead; records without a song (곡 미지정) always close the list.
+ const none=rows.filter(row=>!row.id);
+ return rows.filter(row=>row.id).slice(0,5-none.length).concat(none);
 }
 function duration(value){
  const seconds=Math.round(positive(value)*60),hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60);
@@ -47,6 +50,8 @@ function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
  const ticker=host.querySelector('[data-cs-spotlight]');if(!ticker)return;
  const panel=host.querySelector('[data-cs-rank-panel],#cs-rank-panel'),list=host.querySelector('[data-cs-list]');
  let metric='minutes',index=0,opened=false,touchX=0,touchY=0,swiped=false;
+ // Once the strip is tapped or swiped it stays where the user left it (no more auto-rotation in this visit).
+ const used=()=>{host._csUsed=true;if(host._csTimer){clearInterval(host._csTimer);host._csTimer=null}};
  const label=()=>metric==='minutes'?'시간별':'횟수별';
  const show=()=>{
   const rows=lists[metric],row=rows[index];if(!row)return;
@@ -63,20 +68,21 @@ function render(host,{db,media,month,dateOf,titleOf,esc,error=''}){
    button.setAttribute('aria-label',prefix+' '+(i+1)+'위 '+title+', '+value);
    button.innerHTML='<span class="cs-rank-number"></span><span class="cs-name"></span><span class="cs-values"></span>';
    button.querySelector('.cs-rank-number').textContent=prefix+' '+(i+1)+'위';button.querySelector('.cs-name').textContent=title;button.querySelector('.cs-values').textContent=value;
-   button.onclick=()=>{if(swiped)return;index=i;show();close();ticker.focus()};list.append(button);
+   button.onclick=()=>{if(swiped)return;used();index=i;show();close();ticker.focus()};list.append(button);
   });
  };
  const close=()=>{opened=false;panel.classList.remove('open');panel.setAttribute('aria-hidden','true');panel.inert=true;ticker.setAttribute('aria-expanded','false')};
  const setMetric=next=>{if(metric===next)return;metric=next;index=0;show()};
- ticker.onclick=()=>{if(swiped){swiped=false;return}opened=!opened;panel.classList.toggle('open',opened);panel.setAttribute('aria-hidden',String(!opened));panel.inert=!opened;ticker.setAttribute('aria-expanded',String(opened))};
+ ticker.onclick=()=>{used();if(swiped){swiped=false;return}opened=!opened;panel.classList.toggle('open',opened);panel.setAttribute('aria-hidden',String(!opened));panel.inert=!opened;ticker.setAttribute('aria-expanded',String(opened))};
  for(const target of [ticker,panel]){
-  target.addEventListener('touchstart',e=>{touchX=e.touches[0].clientX;touchY=e.touches[0].clientY;swiped=false},{passive:true});
+  target.addEventListener('touchstart',e=>{used();touchX=e.touches[0].clientX;touchY=e.touches[0].clientY;swiped=false},{passive:true});
   target.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>35&&Math.abs(dx)>Math.abs(dy)){swiped=true;setMetric(dx>0?'minutes':'count');setTimeout(()=>swiped=false,500)}},{passive:true});
  }
  show();
+ if(host._csUsed||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
  host._csTimer=setInterval(()=>{
   if(!host.isConnected){clearInterval(host._csTimer);host._csTimer=null;return}
-  if(opened||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(opened||document.hidden)return;
   if(index<lists[metric].length-1)index++;else{metric=metric==='minutes'?'count':'minutes';index=0}show();
  },3500);
 }

@@ -16,7 +16,7 @@ VZ.taskRow = t => {
   const lesson = VZ.taskLessons(t).map(id => VZ.db.lessons.find(l => l.id === id)).filter(Boolean)[0];
   const tally = VZ.taskTally(t), practiced = tally.sessions;
   const period = VZ.taskPeriod(t), late = VZ.taskOverdue(t);
-  return '<div class="item ' + (done ? 'done' : '') + '"><button type="button" class="check" role="checkbox" aria-checked="' + done + '" data-task-check="' + esc(t.id) + '" aria-label="' + esc(t.title) + ' 완료"><i class="ph' + (done ? '-fill ph-check-circle' : ' ph-circle') + '"></i></button><button type="button" class="item-main" data-task="' + esc(t.id) + '" style="border:0;background:none;text-align:left;padding:0;min-height:44px"><span class="item-title" style="display:block">' + esc(t.title) + '</span><span class="item-sub" style="display:block">' + esc([period ? '기간 ' + period : '', VZ.songTitle(VZ.taskSongId(t)), t.source==='ai-candidate'?'AI 후보에서 직접 추가':'', !period && lesson ? VZ.dateLabel(lesson.date) + ' 레슨' : '', practiced ? tally.reps + '회 했어요' : ''].filter(Boolean).join(' · ') || '연결 없음') + (late ? ' <span class="badge warn">기간 지남</span>' : '') + '</span></button>' + (done ? '' : '<a class="vz-task-start" href="#/guided-practice/' + encodeURIComponent('homework:' + t.id) + '" aria-label="' + esc(t.title) + ' 따라 하기">따라 하기</a>') + '</div>';
+  return '<div class="item ' + (done ? 'done' : '') + '"><button type="button" class="check" role="checkbox" aria-checked="' + done + '" data-task-check="' + esc(t.id) + '" aria-label="' + esc(t.title) + ' 완료"><i class="ph' + (done ? '-fill ph-check-circle' : ' ph-circle') + '"></i></button><button type="button" class="item-main" data-task="' + esc(t.id) + '" style="border:0;background:none;text-align:left;padding:0;min-height:44px"><span class="item-title" style="display:block">' + esc(t.title) + '</span><span class="item-sub" style="display:flex;align-items:center;gap:6px"><span class="ellipsis" style="min-width:0">' + esc([period ? '기간 ' + period : '', VZ.songTitle(VZ.taskSongId(t)), t.source==='ai-candidate'?'AI 후보에서 직접 추가':'', !period && lesson ? VZ.dateLabel(lesson.date) + ' 레슨' : '', practiced ? tally.reps + '회 했어요' : ''].filter(Boolean).join(' · ') || '연결 없음') + '</span>' + (late ? '<span class="badge warn" style="flex:none">기간 지남</span>' : '') + '</span></button>' + (done ? '' : '<a class="vz-task-start" href="#/guided-practice/' + encodeURIComponent('homework:' + t.id) + '" aria-label="' + esc(t.title) + ' 따라 하기">따라 하기</a>') + '</div>';
 };
 document.addEventListener('click', e => {
   const c = e.target.closest('[data-task-check]');
@@ -80,7 +80,7 @@ let hwTab = 'active';
 VZ.route('homework', {title:'숙제', back:true, tab:'calendar', actions:() => '<button type="button" class="icon-btn" data-add-task aria-label="숙제 추가"><i class="ph ph-plus"></i></button>', render() {
   const all = VZ.db.assignments, active = all.filter(t => t.status !== 'done'), done = all.filter(t => t.status === 'done').sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
   const list = hwTab === 'active' ? active : done;
-  return '<div class="seg" style="margin-bottom:12px"><button type="button" data-hw="active" aria-pressed="' + (hwTab === 'active') + '">진행 중 ' + active.length + '</button><button type="button" data-hw="done" aria-pressed="' + (hwTab === 'done') + '">완료 ' + done.length + '</button></div>' +
+  return '<div class="seg lesson-tabs" style="margin-bottom:12px"><button type="button" data-hw="active" aria-pressed="' + (hwTab === 'active') + '">진행 중 ' + active.length + '</button><button type="button" data-hw="done" aria-pressed="' + (hwTab === 'done') + '">완료 ' + done.length + '</button></div>' +
     (list.length ? '<div class="list">' + list.map(VZ.taskRow).join('') + '</div>' : VZ.empty('check-square', hwTab === 'active' ? '진행 중인 숙제가 없어요.' : '완료한 숙제가 없어요.', hwTab === 'active' ? '<button type="button" class="btn sm" data-add-task2>숙제 추가</button>' : '')) +
     '<p class="small muted" style="margin:12px 4px">숙제 기간 안에 연습을 기록하면 숙제를 했는지, 몇 번 했고 어땠는지 물어봐요. 숙제를 다 끝내면 체크해 주세요.</p>';
 }, mount(main) {
@@ -285,7 +285,7 @@ async function linkMediaSheet(l) {
     const near = m => Math.abs(VZ.daysBetween(l.date, M.dateOf(m) || '1970-01-01')) - (songIds.includes(m.songId) ? 3 : 0);
     return near(a) - near(b);
   }).slice(0, 60);
-  VZ.sheet({title:'녹음 연결', body:sorted.length ? '<p class="small muted" style="margin-top:0">레슨 날짜와 가까운 녹음부터 보여요.</p><div class="list">' + sorted.map(m => '<label class="item"><input type="checkbox" value="' + esc(m.id) + '"' + (linked.has(m.id) ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(VZ.dateLabel(M.dateOf(m)) + ' · ' + (VZ.songTitle(m.songId) || '곡 미지정')) + '</span></span></label>').join('') + '</div>' : VZ.empty('waveform', '전체 녹음에 녹음이 없어요.'),
+  VZ.sheet({title:'녹음 연결', body:sorted.length ? '<p class="small muted" style="margin-top:0">레슨 날짜와 가까운 녹음부터 보여요.</p><div class="list">' + sorted.map(m => '<label class="item"><input type="checkbox" value="' + esc(m.id) + '"' + (linked.has(m.id) ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main"><span class="item-title">' + esc(M.label(m)) + '</span><span class="item-sub">' + esc(VZ.dateLabel(M.dateOf(m)) + ' · ' + (VZ.songTitle(m.songId) || '곡 미지정')) + '</span></span></label>').join('') + '</div>' : VZ.empty('waveform', '아직 녹음이 없어요.'),
     foot:sorted.length ? '<button type="button" class="btn block" data-save>연결 저장</button>' : '',
     onMount:(el, close) => {
       el.parentNode.querySelector('[data-save]')?.addEventListener('click', () => {
@@ -303,17 +303,18 @@ async function linkMediaSheet(l) {
 }
 
 /* ---------- 캘린더 ---------- */
-let calMonth = null, calDay = null;
+let calMonth = null, calDay = null, calSetOn = null, calPicked = false;
 VZ.route('calendar', {title:'기록', tab:'calendar', actions:() => '<a class="icon-btn" href="#/lessons" aria-label="레슨 목록"><i class="ph ph-list-bullets"></i></a>', render(route) {
   const today = VZ.today();
   const requested=route?.query?.get('date'),date=VZ.parseYmd(requested);
+  // The day kept from an earlier date (e.g. the app stayed open past midnight) gives way to today, unless a day was picked in this visit.
+  if (calSetOn !== today && !calPicked) { calDay = today; calMonth = today.slice(0, 7); }
+  calSetOn = today;
   if(date&&VZ.ymd(date)===requested){calDay=requested;calMonth=requested.slice(0,7);}
-  calDay ||= today;
-  calMonth ||= today.slice(0, 7);
   // 기록 holds lessons, homework, practices and performances (V4 IA): one small row of ways in.
   const links = '<nav class="vz-record-links" aria-label="기록 바로가기"><a href="#/lessons">레슨</a><a href="#/homework">숙제</a><a href="#/practices">연습 기록</a><a href="#/performances">나의 공연</a></nav>';
   return links + '<div data-calendar-summary></div><div class="card vz-calendar-month"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="vz-calendar-footer"><div class="legend"><span><i class="s"></i>공연·오디션</span><span><i class="l"></i>레슨</span><span><i class="p"></i>연습</span></div><button type="button" data-today>오늘</button></div></div><div data-day></div>';
-}, async mount(main) {
+}, leave() { calPicked = false; }, async mount(main) {
   const grid = main.querySelector('[data-grid]'), dayHost = main.querySelector('[data-day]');
   let media = M.cached();
   const byDay = () => {
@@ -362,12 +363,12 @@ VZ.route('calendar', {title:'기록', tab:'calendar', actions:() => '<a class="i
     dayHost.innerHTML = '<div class="vz-calendar-day-head"><h2 class="sec">' + esc(VZ.dateLabel(calDay)) + '</h2><button type="button" data-add aria-label="일정 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>' +
       (lessonsHtml || practiceHtml || stageHtml ? '<div class="stack">' + (stageHtml ? '<h3 class="cal-group stage">공연·오디션</h3>' + stageHtml : '') + (lessonsHtml ? '<h3 class="cal-group lesson">레슨</h3>' + lessonsHtml : '') + (practiceHtml ? '<h3 class="cal-group practice">연습</h3>' + practiceHtml : '') + '</div>'
         : '<p class="small muted" style="margin:0 4px">이 날 기록이 없어요.</p>');
-    dayHost.querySelector('[data-add]').onclick=()=>VZ.menu({title:'기록 추가',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/performances" data-calendar-add="stage">나의 공연<i class="ph ph-caret-right"></i></a><button type="button" class="vz-choice" data-calendar-add="lesson">레슨 일정<i class="ph ph-caret-right"></i></button><button type="button" class="vz-choice" data-calendar-add="practice">연습 기록<i class="ph ph-caret-right"></i></button></div>',onMount:(sheet,close)=>sheet.querySelectorAll('[data-calendar-add]').forEach(b=>b.onclick=()=>{close();if(b.dataset.calendarAdd==='lesson')VZ.lessonSheet({date:calDay});if(b.dataset.calendarAdd==='practice')VZ.practiceSheet({date:calDay});})});
+    dayHost.querySelector('[data-add]').onclick=()=>VZ.menu({title:'기록 추가',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-calendar-add="stage">나의 공연<i class="ph ph-caret-right"></i></button><button type="button" class="vz-choice" data-calendar-add="lesson">레슨 일정<i class="ph ph-caret-right"></i></button><button type="button" class="vz-choice" data-calendar-add="practice">연습 기록<i class="ph ph-caret-right"></i></button></div>',onMount:(sheet,close)=>sheet.querySelectorAll('[data-calendar-add]').forEach(b=>b.onclick=()=>{close();if(b.dataset.calendarAdd==='stage')VZ.nav('#/performances');if(b.dataset.calendarAdd==='lesson')VZ.lessonSheet({date:calDay});if(b.dataset.calendarAdd==='practice')VZ.practiceSheet({date:calDay});})});
     dayHost.querySelectorAll('[data-r]').forEach(r => VZ.wireMedia(r, wired));
   };
-  grid.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; calDay = b.dataset.d; if (calDay.slice(0, 7) !== calMonth) calMonth = calDay.slice(0, 7); draw(); };
-  main.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + Number(b.dataset.mv), 1); calMonth = VZ.ymd(d).slice(0, 7); draw(); });
-  main.querySelector('[data-today]').onclick = () => { calDay = VZ.today(); calMonth = calDay.slice(0, 7); draw(); };
+  grid.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; calPicked = true; calDay = b.dataset.d; if (calDay.slice(0, 7) !== calMonth) calMonth = calDay.slice(0, 7); draw(); };
+  main.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + Number(b.dataset.mv), 1); calMonth = VZ.ymd(d).slice(0, 7); calPicked = true; calDay = calMonth === VZ.today().slice(0, 7) ? VZ.today() : calMonth + '-01'; draw(); });
+  main.querySelector('[data-today]').onclick = () => { calPicked = false; calDay = VZ.today(); calMonth = calDay.slice(0, 7); draw(); };
   // Horizontal swipe changes month.
   let sx = null; grid.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, {passive:true});
   grid.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 60) main.querySelector('[data-mv="' + (dx < 0 ? 1 : -1) + '"]').click(); });
