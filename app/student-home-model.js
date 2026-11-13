@@ -119,8 +119,13 @@ function build(db={},options={}){
     return {date,label:labels[parse(date).getDay()],minutes:actual,targetMinutes:goal,ratio,state,today:date===today,
       goalCount:dayGoals.length,goalsComplete,timeMet:goal>0&&actual>=goal};
   });
-  let targetMinutes=target(plans,'week',start);
-  if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null))targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
+  // Where the week target comes from, so the UI can say it: 'week' = this week's own plan, 'daily' = the settings
+  // daily target on all seven days, 'days' = a sum that includes day plans (or the past-day fallback), null = none.
+  let targetMinutes=target(plans,'week',start),targetSource=targetMinutes!=null?'week':null;
+  if(targetMinutes==null&&days.every(d=>d.targetMinutes!=null)){
+    targetMinutes=days.reduce((n,d)=>n+d.targetMinutes,0);
+    targetSource=defaultDailyTarget>0&&days.every(d=>target(plans,'day',d.date)==null)?'daily':'days';
+  }
   const bounds=weekBounds(db,{...options,today});
   const actualMinutes=days.reduce((n,d)=>n+d.minutes,0);
   // The label belongs to the displayed week. Start at its latest practiced day,
@@ -135,7 +140,7 @@ function build(db={},options={}){
   const latestSong=recentSong(db,practices,today)?.song;
   recommendationCandidates.push({title:latestSong?latestSong.title+' 한 번 연습하기':'호흡과 발성 연습하기',source:'recommendation',sourceId:latestSong?'song:'+latestSong.id:'basic:breathing'});
   return {today,goals,goalProgress:{total:goals.length,completed,ratio:goals.length?completed/goals.length*100:null},
-    week:{start,end:shift(start,6),current:start===monday(today),firstWeek:bounds.first,lastWeek:bounds.last,canPrevious:start>bounds.first,canNext:start<bounds.last,days,actualMinutes,targetMinutes,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
+    week:{start,end:shift(start,6),current:start===monday(today),firstWeek:bounds.first,lastWeek:bounds.last,canPrevious:start>bounds.first,canNext:start<bounds.last,days,actualMinutes,targetMinutes,targetSource,dailyTargetMinutes:defaultDailyTarget>0?defaultDailyTarget:null,ratio:targetMinutes>0?actualMinutes/targetMinutes*100:null,streak},
     stage:nextStage(db,today),lesson:nextLesson(db,today),recent:recentSong(db,practices,today),recommendationCandidates};
 }
 /** Call mutations inside VZ.change. updatedAt and tombstones belong to core/data-merge. */

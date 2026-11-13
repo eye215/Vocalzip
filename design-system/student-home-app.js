@@ -1,12 +1,12 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=pset-20261112-home-wide-20261112';
+import {createFloatingHome} from './student-home-html.js?v=home-time-20261113';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
  const owner=()=>window.vzipCloudUserId?.()||window.VzipAccountScope?.owner||'';
  // Daily time target chosen at signup (account metadata) or later in settings; 30 minutes when neither exists.
- const dailyTarget=()=>V.db.settings?.dailyTargetMinutes??window.vzipCloudUserDailyTarget?.()??30;
+ const dailyTarget=()=>V.dailyTargetMinutes?.()??V.db.settings?.dailyTargetMinutes??window.vzipCloudUserDailyTarget?.()??30;
  const state=(files=V.media.cached(),weekStart=null,{withDefault=true}={})=>{
   const db={...V.db,performances:(V.db.performances||[]).filter(p=>p.ownerId===owner()&&owner())};
   const options={...(withDefault?{defaultDailyTargetMinutes:dailyTarget()}:{}),today:today(),timeEntries:V.timeEntries(files),mediaDates:files.filter(f=>!V.db.deleted?.media?.includes(f.id)).map(f=>V.media.dateOf(f))};
@@ -72,6 +72,33 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    (s.stage?'<a class="item" href="#/show/'+esc(s.stage.id)+'"><span>'+esc(s.stage.title)+' · '+esc(dayLabel(s.stage.date))+'</span></a>':'')+
    tasks.map(t=>'<a class="item" href="#/homework"><span>'+esc(t.title)+'</span><small class="muted">숙제</small></a>').join('');
   V.sheet({title:'일정과 숙제 알림',body:content?'<div class="list">'+content+'</div>':'<p class="muted">확인할 일정과 숙제가 없어요.</p>'});
+ }
+ /* 오늘 · 이번 주 row → a short sheet: today and this week against their targets, where the week target comes from
+  * (with the way to change it) and the calendar. The numbers are the same ones the row shows. */
+ function weekSheet(){
+  const w=state().week,x=V.todayPractice?.()||{minutes:w.days.find(d=>d.today)?.minutes||0,targetMinutes:null,percent:null};
+  const target=Number(w.targetMinutes)>0?Number(w.targetMinutes):null,percent=target?Math.round(w.actualMinutes/target*100):null,daily=w.dailyTargetMinutes;
+  const bar=(value,label)=>value==null?'':'<div class="vz-today-bar" role="progressbar" aria-label="'+label+'" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.min(100,value)+'"><i style="width:'+Math.min(100,value)+'%"></i></div>';
+  const block=(key,label,minutes,goal,ratio)=>'<div class="vz-week-block" data-week-block="'+key+'"><span>'+label+'</span><strong>'+esc(V.minutes(minutes))+'</strong><small>'+(goal?'/ 목표 '+esc(V.minutes(goal))+' · '+ratio+'%':'· 목표 없음')+'</small>'+bar(goal?ratio:null,label+' 목표 달성률')+'</div>';
+  // Where the week target comes from, said once, with the place to change it.
+  const [source,link,to]=target==null?['이번 주 목표가 없어요 · ','설정에서 하루 연습 목표를 정할 수 있어요','settings']:
+   w.targetSource==='week'?['이번 주 목표로 직접 정한 시간이에요 · ','오늘의 목표 설정에서 바꿀 수 있어요','plan']:
+   w.targetSource==='daily'?['하루 '+V.minutes(daily)+' × 7일 · ','설정에서 바꿀 수 있어요','settings']:
+   ['요일마다 정한 목표를 더한 시간이에요'+(daily?' (기본 하루 '+V.minutes(daily)+')':'')+' · ','설정에서 바꿀 수 있어요','settings'];
+  V.sheet({title:'이번 주 연습',variant:'compact',
+   body:'<div class="vz-week-detail">'+block('today','오늘',x.minutes,x.targetMinutes,x.percent)+block('week','이번 주',w.actualMinutes,target,percent)+
+    '<p class="vz-week-source" data-week-source>'+esc(source)+'<button type="button" data-week-setting>'+esc(link)+'</button></p></div>',
+   foot:'<button type="button" class="btn block vz-home-primary-button" data-week-calendar>기록에서 보기</button>',
+   onMount:(el,close)=>{
+    el.classList.add('vz-plan-sheet','vz-week-sheet');
+    el.parentNode.querySelector('[data-week-calendar]').onclick=()=>{close();calendar(today());};
+    el.querySelector('[data-week-setting]').onclick=()=>{
+     close();if(to==='plan')return planSheet();
+     nav('#/settings');
+     // Bring 하루 연습 목표 시간 into view once the settings page is drawn.
+     let tries=0;const find=()=>{const row=document.querySelector('[data-daily-target]');if(row){row.scrollIntoView({block:'center'});row.focus({preventScroll:true});}else if(++tries<30)setTimeout(find,50);};find();
+    };
+   }});
  }
  function planSheet(options){
   // automatic: the once-a-day prompt. It offers goals only; time targets stay in this manual sheet and settings.
@@ -147,8 +174,26 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
    const host=main.querySelector('[data-approved-home-host]');if(!host)return;
    let files=V.media.cached(),root;
    const s=state(files,selectedWeekStart),songs=recentSongs(s,files),current=nowCard(s,songs);
-   const refreshWeek=()=>{root?.updateWeek(state(files,selectedWeekStart).week);root?.updateThisWeek?.(state(files).week);};
-   try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null})),onGoalRecord:id=>V.goalPerformanceSheet?.(id),week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
+   const refreshWeek=()=>{root?.updateWeek(state(files,selectedWeekStart).week);root?.updateThisWeek?.(state(files).week,V.todayPractice?.());};
+   // Everything on home that follows practice records (today, week, 지금 할 것, recent songs), drawn again in place.
+   const refreshHome=()=>{
+    refreshWeek();if(!root?.isConnected)return;
+    const fresh=state(files),list=recentSongs(fresh,files),next=nowCard(fresh,list);
+    root.updateRecent(list);root.updateNow(next);root.updateSummary(summaryRows(fresh,next));root.updatePracticeSet?.(V.practiceSetEntry?.()||null);
+   };
+   const goalOf=id=>(V.db.dailyGoals||[]).find(g=>g?.id===id);
+   const backToGoal=id=>setTimeout(()=>root?.focusGoal?.(id),0);
+   /** 시간·녹음 sheet for a completed goal. After a check (asked=true) the result popup follows 저장 and 건너뛰기 alike;
+    * from the row (editing) only a save shows it. The home is updated in place either way. */
+   const timeSheet=(id,asked)=>{
+    const opened=V.goalPerformanceSheet?.(id,{onDone:result=>{
+     if(result.saved){refreshHome();root?.updateGoalTime?.(id,V.goalTime?.(goalOf(id))||null);}
+     if(!asked&&!result.saved)return backToGoal(id);
+     V.todayPracticePopup?.({addedMinutes:result.addedMinutes,...(asked?{}:{title:'저장했어요'}),onClose:()=>backToGoal(id)})||backToGoal(id);
+    }});
+    if(!opened&&asked)V.todayPracticePopup?.({onClose:()=>backToGoal(id)});
+   };
+   try{root=await createFloatingHome({today:today(),thisWeek:state(files).week,todayPractice:V.todayPractice?.()||null,goals:s.goals.map(g=>({...g,routineInfo:V.routineInfo?.(g)||null,time:V.goalTime?.(g)||null})),onGoalRecord:id=>timeSheet(id,false),onWeekSummary:weekSheet,week:s.week,now:current,summary:summaryRows(s,current),recentSongs:songs,
     onRecentSong:song=>nav('#/record?song='+encodeURIComponent(song.id)),onWeek:()=>nav('#/calendar'),onDay:calendar,onRecord:source=>window.VzipRecordTransition?.open(source,'#/record')||nav('#/record'),onNavigate:id=>nav('#/'+id),
     practiceSet:V.practiceSetEntry?.()||null,onPracticeSet:()=>nav('#/practice-set'),onGoals:planSheet,onDailyRecommendation:()=>nav('#/practice-review?mode=today'),onWeeklyReview:()=>nav('#/practice-review'),onGuidedPractice:c=>nav(c.href||'#/guided-practice/'+encodeURIComponent(c.key)+(c.songId?'?song='+encodeURIComponent(c.songId):'')),onNotifications:notices,onProfile:()=>nav('#/settings'),onCalendar:()=>calendar(today()),onWeek:()=>calendar(today()),onDay:calendar,
     onWeekMove:delta=>{const week=state(files,selectedWeekStart).week;if(delta<0&&!week.canPrevious||delta>0&&!week.canNext)return;const d=V.parseYmd(week.start);d.setDate(d.getDate()+delta*7);selectedWeekStart=V.ymd(d);refreshWeek();},
@@ -159,7 +204,10 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
      if(!ok)throw Error('체크를 저장하지 못했어요. 다시 시도해 주세요.');
      refreshWeek();
      delete main.dataset.dirty;
-     if(completed)V.goalPerformanceOffer?.(id);
+     if(!completed)return;
+     // Ask for the time at once. A goal that already has a time (unticked and ticked again) is not asked again:
+     // its row shows the time and opens the sheet with it.
+     if(V.goalTime?.(goalOf(id)).minutes)V.todayPracticePopup?.({onClose:()=>backToGoal(id)});else timeSheet(id,true);
     }});
    }catch(error){
     if(!host.isConnected)return;

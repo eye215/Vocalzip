@@ -129,6 +129,11 @@ const db = page => page.evaluate(() => JSON.parse(JSON.stringify(VZ.db)));
 const goals = page => page.locator('.vz-goal-list input[type=checkbox]');
 // v4 home: one "지금 할 것" card (.vz-event), Home summary rows (.vz-summary-row) and recent-song pills.
 const weekRow = page => page.locator('.vz-summary-row[data-row=week]');
+// Checking a goal on home opens the 시간·녹음 sheet at once; afterwards a small popup shows today's result.
+const timeSheet = page => page.getByRole('dialog',{name:'연습 시간·녹음',exact:true});
+const resultPopup = page => page.locator('.sheet.vz-today-popup');
+const closePopup = async page => {await resultPopup(page).getByRole('button',{name:'확인',exact:true}).click();await expect(resultPopup(page)).toHaveCount(0);};
+const skipTime = async page => {await timeSheet(page).getByRole('button',{name:'건너뛰기',exact:true}).click();await closePopup(page);};
 // Text that only exists in the approved HTML mock; real records must never bring it back.
 const SAMPLE_TEXT = ['레미제라블','위키드','Defying Gravity','11월 10일','2절 고음 연습','가사 암기','6일 연속','최근 연습곡','계속 연습하기','레슨노트','연습기록'];
 async function noSample(page){
@@ -226,7 +231,7 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  // Nothing scheduled or practised: 지금 할 것 suggests one practice (the empty goal list below offers goal setup, so
  // "오늘의 목표 정하기" is not shown twice); the summary only has this week, no recent songs.
  await expect(page.locator('.vz-event')).toHaveAttribute('data-kind','recommend');await expect(page.locator('.vz-event h2')).toHaveText('호흡과 발성 연습하기');
- await expect(page.locator('.vz-summary-row')).toHaveCount(1);await expect(weekRow(page).locator('.vz-summary-value')).toHaveText('0분 / 3시간 30분');
+ await expect(page.locator('.vz-summary-row')).toHaveCount(1);await expect(weekRow(page).locator('.vz-summary-copy')).toHaveText('오늘 0분 / 30분 · 이번 주 0분 / 목표 3시간 30분');
  await expect(page.locator('.vz-recent')).toBeHidden();await expect(page.locator('.vz-recent-pill')).toHaveCount(0);await expect(page.locator('.vz-today-streak')).toHaveCount(0);
  await page.getByRole('navigation',{name:'하단 메뉴'}).getByRole('button',{name:'내 곡',exact:true}).click();await expect(page).toHaveURL(/#\/songs$/);
  // Only the empty goal list opens the goal sheet; the suggestion opens 노래 연습실.
@@ -290,7 +295,7 @@ test('daily time comes from onboarding/settings; tomorrow offers goals once with
  await boot(page,value);
  await expect(page.getByRole('dialog',{name:'오늘의 목표',exact:true})).toHaveCount(0);
  // No explicit plans: the week target is seven days of the 30-minute onboarding/settings default.
- await expect(weekRow(page)).toHaveAccessibleName('이번 주 연습 30분, 목표 3시간 30분, 달성률 14%, 기록 보기');
+ await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 30분, 오늘 목표 30분, 이번 주 연습 30분, 목표 3시간 30분, 달성률 14%, 자세히 보기');
  await page.evaluate(()=>{VZ.today=()=> '2026-11-05';VZ.render();});await ready(page);
  const automatic=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(automatic).toBeVisible();
  await expect(automatic.locator('[name=dayMinutes],[name=weekMinutes]')).toHaveCount(0);
@@ -314,7 +319,7 @@ test('settings changes the default daily target on home',async({page})=>{
  await sheet.getByRole('button',{name:'저장'}).click();
  await page.goto('/#/home');await ready(page);
  // Seven days of the new 45-minute default.
- await expect(weekRow(page)).toHaveAccessibleName('이번 주 연습 30분, 목표 5시간 15분, 달성률 10%, 기록 보기');
+ await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 30분, 오늘 목표 45분, 이번 주 연습 30분, 목표 5시간 15분, 달성률 10%, 자세히 보기');
  expect((await db(page)).settings.dailyTargetMinutes).toBe(45);
 });
 test('week summary row shows only this week\'s actual practice time against the target',async({page})=>{
@@ -323,12 +328,15 @@ test('week summary row shows only this week\'s actual practice time against the 
  for(const [minutes,value,badge,done]of [[0,'0분 / 3시간','0%',false],[99,'1시간 39분 / 3시간','55%',false],[180,'3시간 / 3시간','100%',true],[240,'4시간 / 3시간','133%',true]]){
   // Manual minutes win over stored minutes and recording length; tomorrow and last week never count.
   await page.evaluate(({minutes,date})=>VZ.change(d=>{d.practices=[{id:'boundary',date,manualMinutes:minutes,minutes:999,mediaSeconds:9999,songId:'s1'},{id:'tomorrow',date:'2026-11-05',manualMinutes:60,songId:'s1'},{id:'last-week',date:'2026-11-01',manualMinutes:45,songId:'s1'}];}),{minutes,date:TODAY});
-  await expect(row.locator('.vz-summary-value')).toHaveText(value);await expect(row.locator('.vz-summary-badge')).toHaveText(badge);
+  // 오늘 line (against today's 30-minute plan) and 이번 주 line (against the week target, named 목표).
+  const actual=value.split(' / ')[0];
+  await expect(row.locator('.vz-summary-value')).toHaveText(actual+' / 30분');await expect(row.locator('.vz-summary-sub')).toHaveText('이번 주 '+actual+' / 목표 3시간');
+  await expect(row.locator('.vz-summary-badge')).toHaveText(badge);
   if(done)await expect(row).toHaveAttribute('data-tone','done');else await expect(row).not.toHaveAttribute('data-tone','done');
-  await expect(row).toHaveAccessibleName('이번 주 연습 '+value.split(' / ')[0]+', 목표 3시간, 달성률 '+badge+', 기록 보기');
+  await expect(row).toHaveAccessibleName('오늘 연습 '+actual+', 오늘 목표 30분, 이번 주 연습 '+actual+', 목표 3시간, 달성률 '+badge+', 자세히 보기');
  }
  await page.evaluate(()=>VZ.change(d=>{d.practicePlans=[];}));
- await expect(row.locator('.vz-summary-value')).toHaveText('4시간 / 3시간 30분');await expect(row.locator('.vz-summary-badge')).toHaveText('114%');
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 4시간 / 30분 · 이번 주 4시간 / 목표 3시간 30분');await expect(row.locator('.vz-summary-badge')).toHaveText('114%');
  expect((await db(page)).practices.map(p=>[p.id,p.manualMinutes])).toEqual([['boundary',240],['tomorrow',60],['last-week',45]]);
 });
 test('four home navigation buttons (v4 IA) and floating recording reach existing routes',async({page})=>{
@@ -359,25 +367,26 @@ test('weekly home keeps actual practice time separate from every recording lengt
  },TODAY);
  await expect.poll(()=>page.evaluate(()=>window.__homeMediaListed===true)).toBe(true);
  await page.evaluate(()=>new Promise(r=>setTimeout(r,100)));
- await expect(weekRow(page).locator('.vz-summary-value')).toHaveText('4분 / 3시간');
- await expect(weekRow(page)).toHaveAccessibleName('이번 주 연습 4분, 목표 3시간, 달성률 2%, 기록 보기');
+ await expect(weekRow(page).locator('.vz-summary-copy')).toHaveText('오늘 4분 / 30분 · 이번 주 4분 / 목표 3시간');
+ await expect(weekRow(page)).toHaveAccessibleName('오늘 연습 4분, 오늘 목표 30분, 이번 주 연습 4분, 목표 3시간, 달성률 2%, 자세히 보기');
  expect((await db(page)).practices[0].manualMinutes).toBe(4);
 });
 
-test('week row follows the current week across Monday and opens today in the calendar',async({page})=>{
+test('week row follows the current week across Monday and reaches today in the calendar through its sheet',async({page})=>{
  await phoneWidth(page); // the one-line 이번 주 row is the phone layout; tablets show the full 주간 연습 card
  const value=seed();value.practices=[{id:'sunday',date:'2026-11-08',minutes:14}];
  await boot(page,value);
  const row=weekRow(page),later=()=>page.getByRole('dialog',{name:'오늘의 목표',exact:true}).getByRole('button',{name:'나중에 설정할래요'}).click();
  // A future-dated practice is not counted yet.
- await expect(row.locator('.vz-summary-value')).toHaveText('0분 / 3시간');
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 0분 / 30분 · 이번 주 0분 / 목표 3시간');
  await page.evaluate(()=>{VZ.today=()=> '2026-11-08';VZ.render();});await ready(page);await later();
- await expect(row.locator('.vz-summary-value')).toHaveText('14분 / 3시간');await expect(row.locator('.vz-summary-badge')).toHaveText('8%');
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 14분 / 30분 · 이번 주 14분 / 목표 3시간');await expect(row.locator('.vz-summary-badge')).toHaveText('8%');
  await expect(page.locator('.vz-today-streak')).toContainText('1일 연속');
  // Monday starts a new week: Sunday's minutes stay in last week and the target falls back to the daily default.
  await page.evaluate(()=>{VZ.today=()=> '2026-11-09';VZ.render();});await ready(page);await later();
- await expect(row.locator('.vz-summary-value')).toHaveText('0분 / 3시간 30분');await expect(page.locator('.vz-today-streak')).toHaveCount(0);
+ await expect(row.locator('.vz-summary-sub')).toHaveText('이번 주 0분 / 목표 3시간 30분');await expect(page.locator('.vz-today-streak')).toHaveCount(0);
  await row.click();
+ await page.getByRole('dialog',{name:'이번 주 연습',exact:true}).getByRole('button',{name:'기록에서 보기',exact:true}).click();
  await expect(page).toHaveURL(/#\/calendar\?date=2026-11-09$/);
  await expect(page.locator('[data-grid] [data-d="2026-11-09"]')).toHaveAttribute('aria-pressed','true');
  expect((await db(page)).practices).toEqual(value.practices);
@@ -387,8 +396,11 @@ test('지금 할 것, summary rows, recent songs and profile retain their real d
  await boot(page);const before=await db(page);
  await expect(page.locator('.vz-summary-row')).toHaveCount(3);
  for(const [i,key] of ['lesson','stage','week'].entries())await expect(page.locator('.vz-summary-row').nth(i)).toHaveAttribute('data-row',key);
- for(const [name,route]of [['숙제 호흡을 길게 유지하기 보기','homework'],['다음 레슨, 11.6 (금) 18:30, D-2','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, D-4$/,'show/stage1'],['이번 주 연습 30분, 목표 3시간, 달성률 17%, 기록 보기','calendar?date='+TODAY],['This Is the Moment 연습하기','record?song=s1'],['프로필','settings']]){
-  await page.goto('/#/home');await ready(page);await page.getByRole('button',{name,exact:typeof name==='string'}).click();await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);
+ for(const [name,route]of [['숙제 호흡을 길게 유지하기 보기','homework'],['다음 레슨, 11.6 (금) 18:30, D-2','lesson/l1'],[/^(공연|오디션|무대), 가을 뮤지컬 오디션, D-4$/,'show/stage1'],['오늘 연습 30분, 오늘 목표 30분, 이번 주 연습 30분, 목표 3시간, 달성률 17%, 자세히 보기','calendar?date='+TODAY],['This Is the Moment 연습하기','record?song=s1'],['프로필','settings']]){
+  await page.goto('/#/home');await ready(page);await page.getByRole('button',{name,exact:typeof name==='string'}).click();
+  // The 오늘 · 이번 주 row first shows its numbers and where the target comes from; the calendar is one tap further.
+  if(route.startsWith('calendar'))await page.getByRole('dialog',{name:'이번 주 연습',exact:true}).getByRole('button',{name:'기록에서 보기',exact:true}).click();
+  await expect.poll(()=>new URL(page.url()).hash).toBe('#/'+route);
  }
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances','dailyGoals','practicePlans'])expect(after[key]).toEqual(before[key]);
 });
@@ -475,11 +487,14 @@ test('daily routine repeats a personal goal, records optional real minutes once,
  expect(value.dailyGoals.filter(g=>g.sourceId===routine.id).map(g=>g.date)).toEqual([TODAY,'2026-11-05','2026-11-06']);
  expect(value.dailyGoals.filter(g=>['g1','g2','g3'].includes(g.id)).map(g=>[g.id,g.title,g.completed])).toEqual(seed().dailyGoals.map(g=>[g.id,g.title,g.completed]));
  await page.getByRole('checkbox',{name:'립트릴 10분',exact:true}).check();
- await page.getByRole('button',{name:'연습 시간·녹음 남기기',exact:true}).click();
- const record=page.getByRole('dialog',{name:'수행 기록',exact:true});
- await record.getByLabel('실제로 연습한 시간(분)',{exact:true}).fill('12');
- await record.getByRole('button',{name:'기록 저장',exact:true}).click();
- await expect(record).toHaveCount(0);
+ // The sheet opens at once (no 6-second offer) with the minutes written in the goal preselected; type another time.
+ await expect(page.locator('.vz-perform-offer')).toHaveCount(0);
+ const record=timeSheet(page);
+ await expect(record.getByRole('button',{name:'10분',exact:true})).toHaveAttribute('aria-pressed','true');
+ await record.getByRole('button',{name:'직접 입력',exact:true}).click();
+ await record.getByLabel('연습 시간(분) 직접 입력',{exact:true}).fill('12');
+ await record.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(record).toHaveCount(0);await closePopup(page);
  value=await db(page);const goalId=routine.id+':'+TODAY;
  expect(value.practices.find(p=>p.id==='p1')).toEqual(seed().practices[0]);
  expect(value.practices.filter(p=>p.goalId===goalId)).toEqual([expect.objectContaining({id:'goal:'+goalId,date:TODAY,manualMinutes:12,practiceTimeSource:'goal',goalSource:'personal'})]);
@@ -511,17 +526,20 @@ test('routine progress on home, record later, adjust remaining days, missed days
  await boot(page,value);
  const row=page.locator('.vz-goal-list label').filter({hasText:'허밍 5분'});
  await expect(row.locator('small')).toHaveText('반복 1/5');
- await expect(row.getByRole('button',{name:'허밍 5분 수행 기록'})).toBeHidden();
+ await expect(row.locator('.vz-goal-record')).toBeHidden();
  await page.getByRole('checkbox',{name:'허밍 5분',exact:true}).check();
  await expect(row.locator('small')).toHaveText('반복 2/5');
  await expect.poll(async()=>(await db(page)).dailyGoals.find(g=>g.id==='routine:old:'+TODAY).completed).toBe(true);
- // Later (after the 6-second offer), the completed row still opens 수행 기록.
- await page.locator('.vz-perform-offer').evaluate(el=>el.remove()).catch(()=>{});
- await row.getByRole('button',{name:'허밍 5분 수행 기록',exact:true}).click();
- const record=page.getByRole('dialog',{name:'수행 기록',exact:true});
- await record.getByLabel('실제로 연습한 시간(분)',{exact:true}).fill('7');
- await record.getByRole('button',{name:'기록 저장',exact:true}).click();
- await expect(record).toHaveCount(0);
+ // Skipped now; later the completed row's 시간 추가 opens the same sheet.
+ await skipTime(page);
+ await expect(row.locator('.vz-goal-record')).toHaveText('시간 추가');
+ await row.getByRole('button',{name:'허밍 5분 시간·녹음, 시간 추가',exact:true}).click();
+ const record=timeSheet(page);
+ await record.getByRole('button',{name:'직접 입력',exact:true}).click();
+ await record.getByLabel('연습 시간(분) 직접 입력',{exact:true}).fill('7');
+ await record.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(record).toHaveCount(0);await closePopup(page);
+ await expect(row.locator('.vz-goal-record')).toHaveText('7분');
  await expect.poll(async()=>(await db(page)).practices.find(p=>p.id==='goal:routine:old:'+TODAY)?.manualMinutes).toBe(7);
  await expect(page.getByRole('checkbox',{name:'허밍 5분',exact:true})).toBeChecked();
 
@@ -559,6 +577,214 @@ test('routine progress on home, record later, adjust remaining days, missed days
  await expect(page.getByRole('dialog',{name:'오늘의 목표',exact:true}).getByRole('button',{name:'호흡을 길게 유지하기 매일 반복으로'})).toHaveCount(0);
  await page.getByRole('dialog',{name:'오늘의 목표',exact:true}).getByRole('button',{name:'돌아가기'}).click();
  await expect(page.locator('.vz-goal-list label').filter({hasText:'호흡을 길게 유지하기'}).locator('small')).toHaveText('숙제 반복 0/5');
+ await noOverflow(page);
+});
+// ----- 완료 직후 연습 시간 묻기 (2026-11-13) -----
+// Today 12 minutes (p1) against the 30-minute day plan; week plan 3 hours.
+const timeSeed=()=>{const value=seed();value.practices=[{id:'p1',date:TODAY,manualMinutes:12,songId:'s1',practiceMode:'song'}];return value;};
+const goalRow=(page,title)=>page.locator('.vz-goal-list label').filter({hasText:title});
+const focusedGoal=page=>page.evaluate(()=>document.querySelector('.vz-student-home').shadowRoot.activeElement?.getAttribute('aria-label')||'');
+test('checking a goal asks for the time at once: chip, 저장, then the row, today, the week and the practice row update without a reload',async({page})=>{
+ await phoneWidth(page);await boot(page,timeSeed());
+ await page.evaluate(()=>{window.__sameDocument=true;});
+ const before=await db(page),row=goalRow(page,'후렴 연결 연습하기'),week=weekRow(page);
+ await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 12분 / 30분 · 이번 주 12분 / 목표 3시간');await expect(week.locator('.vz-summary-badge')).toHaveText('7%');
+ await page.getByRole('checkbox',{name:'후렴 연결 연습하기',exact:true}).check();
+ const sheet=timeSheet(page);await expect(sheet).toBeVisible();await expect(page.locator('.vz-perform-offer')).toHaveCount(0);
+ await expect(sheet.locator('.sheet-head h2')).toHaveText('후렴 연결 연습하기');await expect(sheet.getByText('얼마나 연습했나요?',{exact:true})).toBeVisible();
+ await expect(sheet.locator('.vz-time-chip')).toHaveText(['5분','10분','15분','20분','30분','직접 입력']);
+ await expect(sheet.locator('.vz-time-chip[aria-pressed=true]')).toHaveCount(0); // nothing to preselect for a new goal
+ for(const chip of await sheet.locator('.vz-time-chip').all())expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await sheet.getByRole('button',{name:'10분',exact:true}).click();
+ await expect(sheet.getByRole('button',{name:'10분',exact:true})).toHaveAttribute('aria-pressed','true');
+ expect((await db(page)).practices).toEqual(before.practices); // choosing alone records nothing
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ // Result popup: today against the target, the thin bar and what was just added.
+ const popup=resultPopup(page);await expect(popup).toBeVisible();
+ await expect(popup.locator('.sheet-head h2')).toHaveText('완료했어요');
+ await expect(popup.locator('[data-today-text]')).toHaveText('오늘 22분 / 목표 30분 · 73%');
+ await expect(popup.getByRole('progressbar')).toHaveAttribute('aria-valuenow','73');
+ await expect(popup.locator('[data-today-added]')).toHaveText('이번 기록 +10분');
+ expect(await page.evaluate(()=>VZ.todayPracticeText(VZ.todayPractice()))).toBe('오늘 22분 / 목표 30분 · 73%');
+ await closePopup(page);
+ await expect.poll(()=>focusedGoal(page)).toBe('후렴 연결 연습하기'); // focus is back on the goal list
+ // Home is already up to date: the row, today, this week and its percentage.
+ await expect(row.locator('.vz-goal-record')).toHaveText('10분');
+ await expect(row.getByRole('button',{name:'후렴 연결 연습하기 시간·녹음, 10분 기록됨',exact:true})).toBeVisible();
+ expect((await row.locator('.vz-goal-record').boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 22분 / 30분 · 이번 주 22분 / 목표 3시간');await expect(week.locator('.vz-summary-badge')).toHaveText('12%');
+ expect(await page.evaluate(()=>window.__sameDocument)).toBe(true);
+ let value=await db(page);
+ expect(value.practices.find(p=>p.id==='p1')).toEqual(before.practices[0]);
+ expect(value.practices.filter(p=>p.goalId==='g3')).toEqual([expect.objectContaining({id:'goal:g3',date:TODAY,minutes:10,manualMinutes:10,practiceTimeSource:'goal',goalSource:'recommendation'})]);
+ // The row opens the same sheet with the saved value; saving it unchanged writes nothing and shows no popup.
+ await row.locator('.vz-goal-record').click();
+ await expect(sheet.getByRole('button',{name:'10분',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(sheet.getByRole('button',{name:'닫기',exact:true})).toBeVisible();
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect((await db(page)).practices).toEqual(value.practices);
+ // Saving another time replaces the record, never adds a second one.
+ await row.locator('.vz-goal-record').click();
+ await sheet.getByRole('button',{name:'15분',exact:true}).click();await sheet.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(popup.locator('.sheet-head h2')).toHaveText('저장했어요');
+ await expect(popup.locator('[data-today-text]')).toHaveText('오늘 27분 / 목표 30분 · 90%');await expect(popup.locator('[data-today-added]')).toHaveText('이번 기록 +5분');
+ await closePopup(page);
+ await expect(row.locator('.vz-goal-record')).toHaveText('15분');await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 27분 / 30분 · 이번 주 27분 / 목표 3시간');
+ value=await db(page);
+ expect(value.practices.filter(p=>p.goalId==='g3').map(p=>[p.id,p.manualMinutes])).toEqual([['goal:g3',15]]);expect(value.practices).toHaveLength(2);
+ // Unticking keeps today's behaviour (the time stays recorded) and shows no popup; ticking again does not ask again.
+ await page.getByRole('checkbox',{name:'후렴 연결 연습하기',exact:true}).uncheck();
+ await expect.poll(async()=>(await db(page)).dailyGoals.find(g=>g.id==='g3').completed).toBe(false);
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(row.locator('.vz-goal-record')).toBeHidden();
+ await page.getByRole('checkbox',{name:'후렴 연결 연습하기',exact:true}).check();
+ await expect(popup.locator('.sheet-head h2')).toHaveText('완료했어요');await expect(sheet).toHaveCount(0);
+ await expect(popup.locator('[data-today-added]')).toHaveCount(0);await closePopup(page);
+ await expect(row.locator('.vz-goal-record')).toHaveText('15분');
+ expect((await db(page)).practices.filter(p=>p.goalId==='g3').map(p=>p.manualMinutes)).toEqual([15]);
+ // Reaching the day target changes the popup title.
+ await row.locator('.vz-goal-record').click();await sheet.getByRole('button',{name:'20분',exact:true}).click();await sheet.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(popup.locator('.sheet-head h2')).toHaveText('오늘 목표를 채웠어요');await expect(popup.locator('[data-today-text]')).toHaveText('오늘 32분 / 목표 30분 · 107%');
+ await expect(popup.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');await closePopup(page);
+ await noOverflow(page);
+});
+test('건너뛰기 or closing keeps the check without time; the result popup still shows, closes by itself and never appears on untick',async({page})=>{
+ await phoneWidth(page);await boot(page,timeSeed());
+ const before=await db(page),box=page.getByRole('checkbox',{name:'호흡을 길게 유지하기',exact:true}),row=goalRow(page,'호흡을 길게 유지하기'),popup=resultPopup(page);
+ await box.check();
+ await timeSheet(page).getByRole('button',{name:'30분',exact:true}).click(); // chosen but not saved
+ await timeSheet(page).getByRole('button',{name:'건너뛰기',exact:true}).click();
+ await expect(popup.locator('.sheet-head h2')).toHaveText('완료했어요');
+ await expect(popup.locator('[data-today-text]')).toHaveText('오늘 12분 / 목표 30분 · 40%');await expect(popup.locator('[data-today-added]')).toHaveCount(0);
+ // No tap: it goes away by itself after about four seconds and the focus returns to the goal.
+ await expect(popup).toHaveCount(0,{timeout:7000});
+ await expect.poll(()=>focusedGoal(page)).toBe('호흡을 길게 유지하기');
+ let value=await db(page);
+ expect(value.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);expect(value.dailyGoals.find(g=>g.id==='g1').performance).toBeUndefined();
+ expect(value.practices).toEqual(before.practices);
+ await expect(row.locator('.vz-goal-record')).toHaveText('시간 추가');await expect(box).toBeChecked();
+ await expect(weekRow(page).locator('.vz-summary-copy')).toHaveText('오늘 12분 / 30분 · 이번 주 12분 / 목표 3시간');
+ // Untick: nothing pops up.
+ await box.uncheck();await expect.poll(async()=>(await db(page)).dailyGoals.find(g=>g.id==='g1').completed).toBe(false);
+ await page.evaluate(()=>new Promise(r=>setTimeout(r,300)));await expect(page.getByRole('dialog')).toHaveCount(0);
+ // Closing the sheet (Escape) is the same as 건너뛰기; a tap outside the popup closes it.
+ await box.check();await expect(timeSheet(page)).toBeVisible();await page.keyboard.press('Escape');
+ await expect(timeSheet(page)).toHaveCount(0);await expect(popup).toBeVisible();
+ await page.locator('.sheet-back.sheet-alert').click({position:{x:6,y:6}});await expect(popup).toHaveCount(0);
+ value=await db(page);expect(value.practices).toEqual(before.practices);expect(value.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);
+});
+test('homework and daily-repeat goals preselect "(8분)" or the time last used, and save one practice row each',async({page})=>{
+ await phoneWidth(page);const value=timeSeed();
+ value.dailyGoals[0].title='호흡을 길게 유지하기 (8분)';
+ value.practicePlans.push({id:'routine:old',kind:'routine',title:'허밍 하기',days:5,startDate:'2026-11-02',endDate:'2026-11-06',archived:false,changes:[]});
+ for(const [i,date] of ['2026-11-02','2026-11-03',TODAY,'2026-11-05','2026-11-06'].entries())
+  value.dailyGoals.push({id:'routine:old:'+date,date,title:'허밍 하기',source:'personal',sourceId:'routine:old',routineId:'routine:old',routine:true,completed:i<2,order:3,
+   ...(i===1?{performance:{minutes:7,mediaIds:[],at:1}}:{})});
+ value.practices.push({id:'goal:routine:old:2026-11-03',date:'2026-11-03',minutes:7,manualMinutes:7,practiceTimeSource:'goal',practiceMode:'training',goalId:'routine:old:2026-11-03',mediaIds:[],completed:[]});
+ await boot(page,value);const sheet=timeSheet(page),input=sheet.getByLabel('연습 시간(분) 직접 입력',{exact:true});
+ // Homework: "(8분)" in the title is preselected (직접 입력 with 8), saved only when 저장 is pressed.
+ await page.getByRole('checkbox',{name:'호흡을 길게 유지하기 (8분)',exact:true}).check();
+ await expect(sheet.getByRole('button',{name:'직접 입력',exact:true})).toHaveAttribute('aria-pressed','true');await expect(input).toHaveValue('8');
+ await expect(sheet.locator('[data-time-hint]')).toHaveText('목표에 적힌 시간을 골라 뒀어요.');
+ expect((await db(page)).practices.some(p=>p.id==='goal:g1')).toBe(false);
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(resultPopup(page).locator('[data-today-text]')).toHaveText('오늘 20분 / 목표 30분 · 67%');await expect(resultPopup(page).locator('[data-today-added]')).toHaveText('이번 기록 +8분');await closePopup(page);
+ let data=await db(page);
+ expect(data.practices.find(p=>p.id==='goal:g1')).toMatchObject({date:TODAY,manualMinutes:8,goalSource:'homework',completed:['a1'],assignmentReps:{a1:1}});
+ expect(data.assignments.find(t=>t.id==='a1').status).toBe('active');
+ await expect(goalRow(page,'호흡을 길게 유지하기 (8분)').locator('.vz-goal-record')).toHaveText('8분');
+ await expect(goalRow(page,'호흡을 길게 유지하기 (8분)').locator('small')).toHaveText('숙제');
+ // Daily repeat: yesterday's 7 minutes for the same routine are preselected; one tap changes it.
+ await page.getByRole('checkbox',{name:'허밍 하기',exact:true}).check();
+ await expect(sheet.getByRole('button',{name:'직접 입력',exact:true})).toHaveAttribute('aria-pressed','true');await expect(input).toHaveValue('7');
+ await expect(sheet.locator('[data-time-hint]')).toHaveText('지난번에 기록한 시간을 골라 뒀어요.');
+ await sheet.getByRole('button',{name:'5분',exact:true}).click();await expect(input).toBeHidden();await expect(sheet.locator('[data-time-hint]')).toHaveText('');
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await closePopup(page);
+ data=await db(page);
+ expect(data.practices.filter(p=>p.goalId==='routine:old:'+TODAY).map(p=>[p.id,p.manualMinutes,p.goalSource])).toEqual([['goal:routine:old:'+TODAY,5,'personal']]);
+ expect(data.practices.find(p=>p.id==='goal:routine:old:2026-11-03').manualMinutes).toBe(7);
+ await expect(goalRow(page,'허밍 하기').locator('small')).toHaveText('반복 3/5');await expect(goalRow(page,'허밍 하기').locator('.vz-goal-record')).toHaveText('5분');
+ await expect(weekRow(page).locator('.vz-summary-copy')).toHaveText('오늘 25분 / 30분 · 이번 주 32분 / 목표 3시간');
+ // A wrong typed time is refused in the sheet and nothing is saved.
+ await goalRow(page,'허밍 하기').locator('.vz-goal-record').click();
+ await sheet.getByRole('button',{name:'직접 입력',exact:true}).click();await input.fill('601');await sheet.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(sheet.locator('[data-perform-error]')).toHaveText('연습 시간은 1~600분으로 적어 주세요.');
+ expect((await db(page)).practices.find(p=>p.id==='goal:routine:old:'+TODAY).manualMinutes).toBe(5);
+ await sheet.getByRole('button',{name:'닫기',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+test('time sheet keeps 오늘 녹음 연결 folded, always lists recordings already linked and never counts their length',async({page})=>{
+ await phoneWidth(page);const value=timeSeed();
+ value.dailyGoals[1].performance={minutes:null,mediaIds:['old-link'],at:1};
+ await boot(page,value);
+ await page.evaluate(date=>{
+  const files=[{id:'old-link',name:'어제 녹음.m4a',recordedDate:'2026-11-03',durationSeconds:900},...Array.from({length:14},(_,i)=>({id:'m'+i,name:'오늘 녹음 '+i+'.m4a',recordedDate:date,durationSeconds:600}))].map(m=>({...m,type:'audio/mp4'}));
+  VZ.media.list=async()=>files;
+ },TODAY);
+ await goalRow(page,'곡의 가사를 천천히 읽기').locator('.vz-goal-record').click();
+ const sheet=timeSheet(page),media=sheet.locator('.vz-time-media');
+ await expect(media).toBeVisible();await expect(media).not.toHaveAttribute('open','');await expect(media.locator('summary')).toContainText('오늘 녹음 연결 1개 연결됨');
+ await media.locator('summary').click();
+ // The linked recording (another day) leads the list; today's are capped at twelve.
+ await expect(media.locator('.vz-plan-option')).toHaveCount(13);
+ await expect(media.locator('.vz-plan-option').first()).toContainText('어제 녹음');await expect(media.locator('input[value=old-link]')).toBeChecked();
+ await media.locator('.vz-plan-option').filter({hasText:'오늘 녹음 0.m4a'}).click();await expect(media.locator('summary')).toContainText('2개 연결됨');
+ await sheet.getByRole('button',{name:'20분',exact:true}).click();await sheet.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(resultPopup(page).locator('[data-today-text]')).toHaveText('오늘 32분 / 목표 30분 · 107%');await closePopup(page);
+ const data=await db(page),row=data.practices.find(p=>p.id==='goal:g2');
+ expect(row).toMatchObject({manualMinutes:20,minutes:20,mediaIds:['old-link','m0']});expect(row.mediaSeconds).toBeUndefined();
+ expect(data.dailyGoals.find(g=>g.id==='g2').performance).toMatchObject({minutes:20,mediaIds:['old-link','m0']});
+ await expect(weekRow(page).locator('.vz-summary-copy')).toHaveText('오늘 32분 / 30분 · 이번 주 32분 / 목표 3시간');
+});
+for(const width of [320,375])test('summary row at '+width+'px: 오늘 and 이번 주 lines with 목표, numbers whole, and the sheet says where the target comes from',async({page})=>{
+ await page.setViewportSize({width,height:width===320?640:812});
+ const value=timeSeed();value.practicePlans=[];value.practices.push({id:'p0',date:'2026-11-03',manualMinutes:50,songId:'s1',practiceMode:'song'});
+ await boot(page,value);const row=weekRow(page);
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 12분 / 30분 · 이번 주 1시간 2분 / 목표 3시간 30분');await expect(row.locator('.vz-summary-badge')).toHaveText('30%');
+ await expect(row).toHaveAccessibleName('오늘 연습 12분, 오늘 목표 30분, 이번 주 연습 1시간 2분, 목표 3시간 30분, 달성률 30%, 자세히 보기');
+ // Two lines (오늘 above 이번 주); every number group is on one line, inside the row, and nothing is clipped.
+ const box=await row.evaluate(el=>{
+  const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,height:r.height};};
+  const line=el.querySelector('.vz-summary-line'),sub=el.querySelector('.vz-summary-sub'),value=el.querySelector('.vz-summary-value');
+  return {row:rect(el),line:rect(line),sub:rect(sub),badge:rect(el.querySelector('.vz-summary-badge')),groups:[value,...sub.children].map(e=>({...rect(e),lineHeight:parseFloat(getComputedStyle(e).lineHeight),clipped:e.scrollWidth>e.clientWidth+1&&getComputedStyle(e).overflow!=='visible'})),
+   overflow:[line,sub].map(e=>getComputedStyle(e).textOverflow+'/'+getComputedStyle(e).overflow)};
+ });
+ expect(box.sub.top).toBeGreaterThanOrEqual(box.line.bottom-1);
+ for(const g of box.groups){expect(g.left).toBeGreaterThanOrEqual(box.row.left-1);expect(g.right).toBeLessThanOrEqual(box.badge.left+1);expect(g.height).toBeLessThanOrEqual(g.lineHeight+2);expect(g.clipped).toBe(false);}
+ expect(box.overflow).toEqual(['clip/visible','clip/visible']);
+ expect(box.row.height).toBeGreaterThanOrEqual(52);
+ await noOverflow(page);
+ // The row opens a short sheet: the same numbers, and once, where 3시간 30분 comes from, with the way to change it.
+ await row.click();
+ const sheet=page.getByRole('dialog',{name:'이번 주 연습',exact:true});
+ await expect(sheet.locator('[data-week-block=today]')).toContainText('오늘12분/ 목표 30분 · 40%');await expect(sheet.locator('[data-week-block=week]')).toContainText('이번 주1시간 2분/ 목표 3시간 30분 · 30%');
+ await expect(sheet.locator('[data-week-source]')).toHaveText('하루 30분 × 7일 · 설정에서 바꿀 수 있어요');await expect(sheet.locator('[data-week-source]')).toHaveCount(1);
+ const link=sheet.getByRole('button',{name:'설정에서 바꿀 수 있어요',exact:true});expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await noOverflow(page);
+ await link.click();await expect(page).toHaveURL(/#\/settings$/);await expect(page.locator('[data-daily-target]')).toBeFocused();
+ // No daily setting: no day or week target, said as 목표 없음.
+ await page.goto('/#/home');await ready(page);
+ await page.evaluate(()=>VZ.change(d=>{d.settings={...d.settings,dailyTargetMinutes:0};}));
+ await expect(row.locator('.vz-summary-copy')).toHaveText('오늘 12분 · 이번 주 1시간 2분 / 목표 없음');await expect(row.locator('.vz-summary-badge')).toHaveCount(0);
+ await expect(row).toHaveAccessibleName('오늘 연습 12분, 이번 주 연습 1시간 2분, 목표 없음, 자세히 보기');
+ expect(await page.evaluate(()=>VZ.todayPracticeText())).toBe('오늘 12분 · 목표 없음');
+ // A week plan set by hand is named as such and leads to the goal sheet where it was set.
+ await page.evaluate(week=>VZ.change(d=>{d.settings.dailyTargetMinutes=30;d.practicePlans=[{id:'week:'+week,period:'week',date:week,targetMinutes:120}];}),WEEK);
+ await expect(row.locator('.vz-summary-sub')).toHaveText('이번 주 1시간 2분 / 목표 2시간');
+ await row.click();await expect(sheet.locator('[data-week-source]')).toHaveText('이번 주 목표로 직접 정한 시간이에요 · 오늘의 목표 설정에서 바꿀 수 있어요');
+ await sheet.getByRole('button',{name:'오늘의 목표 설정에서 바꿀 수 있어요',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'오늘의 목표',exact:true}).getByLabel('이번 주 목표 시간(분)',{exact:true})).toHaveValue('120');
+});
+test('completed goal rows keep the goal text readable beside the time at 320px',async({page})=>{
+ await page.setViewportSize({width:320,height:640});
+ const value=timeSeed();
+ value.dailyGoals.push({id:'g4',date:TODAY,title:'후렴 고음에서 힘 빼고 길게 끌기 연습을 세 번 반복하기',source:'homework',sourceId:'a1',completed:true,order:3,performance:{minutes:90,mediaIds:[],at:1}});
+ value.practices.push({id:'goal:g4',date:TODAY,minutes:90,manualMinutes:90,practiceTimeSource:'goal',practiceMode:'training',goalId:'g4',mediaIds:[],completed:['a1']});
+ await boot(page,value);
+ const row=goalRow(page,'후렴 고음에서 힘 빼고'),time=row.locator('.vz-goal-record');
+ await expect(time).toHaveText('1시간 30분');await expect(goalRow(page,'곡의 가사를 천천히 읽기').locator('.vz-goal-record')).toHaveText('시간 추가');
+ const box=await row.evaluate(el=>{const r=e=>{const b=e.getBoundingClientRect();return {left:b.left,right:b.right,width:b.width,height:b.height};};
+  return {row:r(el),card:r(el.closest('.vz-goals')),text:r(el.querySelector('span')),time:r(el.querySelector('.vz-goal-record')),lines:getComputedStyle(el.querySelector('.vz-goal-record')).whiteSpace};});
+ expect(box.text.width).toBeGreaterThanOrEqual(96);expect(box.text.left).toBeGreaterThanOrEqual(box.card.left);expect(box.time.right).toBeLessThanOrEqual(box.card.right+1);
+ expect(box.time.height).toBeGreaterThanOrEqual(44);expect(box.time.width).toBeGreaterThanOrEqual(44);expect(box.lines).toBe('nowrap');
  await noOverflow(page);
 });
 test('goal planning separates long selectable rows and keeps save visible on small screens',async({page},testInfo)=>{
@@ -749,7 +975,7 @@ test('home shows four goals first and expands the rest in order without changing
  await more.click();await expect(more).toHaveText('접기');await expect(more).toHaveAttribute('aria-expanded','true');
  for(let i=0;i<6;i++)await expect(goals(page).nth(i)).toBeVisible();
  await expect(goals(page).nth(5)).toBeChecked();
- await page.getByRole('checkbox',{name:'목표 5',exact:true}).check();await expect(page.locator('.vz-count')).toHaveText('2 / 6 완료');
+ await page.getByRole('checkbox',{name:'목표 5',exact:true}).check();await expect(page.locator('.vz-count')).toHaveText('2 / 6 완료');await skipTime(page);
  await expect.poll(async()=>(await db(page)).dailyGoals.find(g=>g.id==='goal-4').completed).toBe(true);
  await more.click();await expect(goals(page).nth(4)).toBeHidden();await expect(more).toHaveText('목표 2개 더 보기');await expect(more).toHaveAttribute('aria-expanded','false');
  expect((await db(page)).dailyGoals.map(g=>g.id)).toEqual(value.dailyGoals.map(g=>g.id));

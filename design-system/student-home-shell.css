@@ -63,5 +63,57 @@ body.vz-home-mode [data-home-retry]{min-height:44px;}
 .vz-plan-sheet .vz-plan-required{display:block;margin-bottom:24px;}
 .vz-plan-sheet .vz-plan-required input{display:block;width:100%;min-height:52px;margin-top:8px;padding:10px 14px;}
 .vz-plan-sheet .vz-plan-required small{color:#7a32f5;}
-
-
+/* 시간·녹음 sheet after a goal is checked (app/goal-routines.js): compact bottom sheet, one-tap minutes. */
+.vz-time-sheet .sheet-head{gap:4px;padding:4px 12px 8px 8px;}
+.vz-time-sheet .sheet-head h2{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px;line-height:24px;}
+.vz-time-sheet .sheet-head>span{display:none;}
+.vz-time-sheet .vz-time-question{margin:4px 0 12px;color:var(--vz-color-ink,#101828);font-size:15px;line-height:21px;font-weight:600;}
+.vz-time-chips{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;}
+.vz-time-chip{min-width:0;min-height:44px;padding:0 4px;border:0;border-radius:999px;background:#F2EFF7;color:#475467;font-family:inherit;font-size:14px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:pointer;}
+.vz-time-chip[aria-pressed=true]{background:#EDE1FF;color:#7A32F5;}
+.vz-time-chip:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;}
+.vz-time-chip.vz-time-custom{grid-column:span 2;}
+.vz-time-field{grid-column:span 3;display:flex;align-items:center;gap:8px;color:#475467;font-size:14px;}
+.vz-time-field[hidden]{display:none;}
+.vz-time-sheet .vz-time-field input[type=number]{box-sizing:border-box;width:88px;min-height:44px;padding:0 12px;border:0;border-radius:12px;background:#F2EFF7;color:#344054;font:inherit;font-size:16px;text-align:center;-moz-appearance:textfield;appearance:textfield;}
+.vz-time-field input::-webkit-outer-spin-button,.vz-time-field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.vz-time-field input:focus-visible{outline:2px solid #DCC4FF;outline-offset:0;}
+.vz-time-sheet .vz-time-help{margin:10px 0 0;color:#667085;font-size:12px;line-height:18px;}
+.vz-time-sheet .vz-time-help:empty,.vz-time-sheet [data-perform-error]:empty{display:none;}
+.vz-time-sheet [data-perform-error]{margin:10px 0 0;color:#C93A3A;font-size:12px;line-height:18px;}
+.vz-time-media{margin-top:12px;border-top:1px solid #F2EFF7;}
+.vz-time-media[hidden]{display:none;}
+.vz-time-media summary{display:flex;align-items:center;gap:8px;min-height:48px;list-style:none;color:#344054;font-size:14px;line-height:20px;font-weight:600;cursor:pointer;}
+.vz-time-media summary::-webkit-details-marker{display:none;}
+.vz-time-media summary small{color:#667085;font-size:13px;font-weight:400;}
+.vz-time-media summary i{margin-left:auto;color:#98A2B3;font-size:16px;transition:transform .15s;}
+.vz-time-media[open] summary i{transform:rotate(180deg);}
+.vz-time-media .vz-plan-options{padding-bottom:4px;}
+.vz-time-sheet .vz-time-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px;}
+.vz-time-sheet .sheet-foot .btn.secondary{background:#F3ECFF;color:#7A32F5;}
+.vz-time-sheet .sheet-foot .btn.secondary:active{background:#EDE1FF;}
+@media (prefers-reduced-motion:reduce){.vz-time-media summary i{transition:none;}}
+/* Today's result (app/today-practice.js): thin bar, and the small centred popup shown after a goal is completed. */
+.vz-today-bar{height:6px;margin:10px 0 0;border-radius:99px;background:#F2EFF7;overflow:hidden;}
+.vz-today-bar i{display:block;height:100%;border-radius:99px;background:#7A32F5;}
+body .sheet-back.sheet-alert:has(>.vz-today-popup){background:rgba(20,16,40,.32);}
+body .sheet-alert>.sheet.vz-today-popup{box-sizing:border-box;width:min(100%,320px);padding:20px;border-radius:20px;background:#fff;text-align:center;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;}
+.vz-today-popup .sheet-head{display:block;margin:0 0 6px;}
+.vz-today-popup .sheet-head .icon-btn,.vz-today-popup .sheet-head>span{display:none;}
+.vz-today-popup .sheet-head h2{margin:0;color:#101828;font-size:16px;line-height:22px;font-weight:700;}
+.vz-today-popup .vz-today-result-line{margin:0;color:#475467;font-size:14px;line-height:20px;font-weight:400;font-variant-numeric:tabular-nums;}
+.vz-today-popup .vz-today-bar{margin-top:14px;}
+.vz-today-popup [data-met=true] .vz-today-bar i{background:#23855C;}
+.vz-today-popup .vz-today-added{margin:10px 0 0;color:#7A32F5;font-size:13px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums;}
+body .sheet-alert>.vz-today-popup .sheet-foot{position:static;margin:18px 0 0;padding:0;background:none;}
+.vz-today-popup .sheet-foot .btn{display:block;width:100%;min-height:48px;border:0;border-radius:14px;background:#7A32F5;color:#fff;font:600 15px/1.4 Pretendard,system-ui,sans-serif;}
+.vz-today-popup .sheet-foot .btn:active{background:#6528CA;}
+/* 이번 주 연습 sheet behind the home's 오늘 · 이번 주 row. */
+.vz-week-sheet .vz-week-detail{display:grid;gap:18px;padding-top:4px;}
+.vz-week-block{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;min-width:0;}
+.vz-week-block>span{flex:0 0 100%;margin-bottom:2px;color:#667085;font-size:13px;line-height:18px;font-weight:600;}
+.vz-week-block>strong{color:#101828;font-size:22px;line-height:30px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.vz-week-block>small{color:#475467;font-size:14px;line-height:20px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.vz-week-block>.vz-today-bar{flex:0 0 100%;margin-top:8px;}
+.vz-week-source{margin:0;padding-top:4px;border-top:1px solid #F2EFF7;color:#667085;font-size:13px;line-height:20px;}
+.vz-week-source button{display:inline-flex;align-items:center;min-height:44px;padding:0;border:0;background:none;color:#7A32F5;font:inherit;font-weight:600;cursor:pointer;}
