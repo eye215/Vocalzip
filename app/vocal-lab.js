@@ -245,7 +245,7 @@ function observe(s,m) {
    if(existing?.curve)fill(existing);
    else V.analyzeRecording(m,{save:false}).then(fill).catch(error=>{
      if(!active||!el.isConnected)return;
-     el.querySelector('[data-observe-loading]').textContent='녹음 곡선을 가져오지 못했어요: '+String(error?.message||error);
+     const note=el.querySelector('[data-observe-loading]');if(note)note.textContent='녹음 곡선을 가져오지 못했어요: '+String(error?.message||error);
    });
   }});
 }
@@ -354,7 +354,7 @@ function screen(s) {
   if(activeDate){const strip=dateStrip.getBoundingClientRect(), chip=activeDate.getBoundingClientRect();if(chip.left<strip.left)dateStrip.scrollLeft+=chip.left-strip.left;else if(chip.right>strip.right)dateStrip.scrollLeft+=chip.right-strip.right;}
   const carrier=host.querySelector('[data-carousel]'), player=M.player(host.querySelector('[data-player]'),m,{prefetch:true}); s.player=player;
   const el=player.el, play=host.querySelector('[data-play]'), seek=host.querySelector('[data-seek]'), status=host.querySelector('[data-player-status]');
-  const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;seek.value=d?Math.round(el.currentTime/d*1000):0;host.querySelector('[data-time]').textContent=time(el.currentTime);host.querySelector('[data-duration]').textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
+  const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;const timeEl=host.querySelector('[data-time]'),durationEl=host.querySelector('[data-duration]');if(!timeEl||!durationEl)return;/* the lab was redrawn (selection changed) while this player's audio was still reporting */seek.value=d?Math.round(el.currentTime/d*1000):0;timeEl.textContent=time(el.currentTime);durationEl.textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
   el.addEventListener('timeupdate',()=>{if(s.loop&&el.currentTime>=Math.min(el.duration||Infinity,(s.start[m.id]||0)+16))el.currentTime=s.start[m.id]||0;paint();}); el.addEventListener('play',paint);el.addEventListener('pause',paint);el.addEventListener('loadedmetadata',paint); el.addEventListener('error',paint);paint();
   V.vocalRangeBind?.(host,s.song,()=>{if(!s.dead)screen(s);});
   V.scoreNoteBind?.(host,{song:s.song,item:m,player,full:()=>s.results.get(m.id),keep:full=>{if(!s.dead)s.results.set(m.id,full);}});
