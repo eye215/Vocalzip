@@ -82,7 +82,16 @@ A real 5-page notebook with one removed page, pen, highlighter and shape strokes
 - Rendering the imported strokes of page 1 matched GoodNotes' `thumbnail.jpg` (positions, colours, relative widths).
 - Event 103 (search index) is known and ignored.
 
-Still not seen: **text boxes, images, lasso-moved ink, page moves, several PDFs in one notebook**. Text typed in GoodNotes is not imported.
+Still not seen: **text boxes, images, lasso-moved ink**. Text typed in GoodNotes is not imported.
+
+### 2026-11-14: notebooks built from several PDFs, with pages moved and removed (schema 26)
+
+Two real notebooks (one with a known edit history: shuffle pages, insert a second PDF, move a page back, remove pages, append a third PDF) showed why a large real notebook imported pages in the wrong places:
+
+- **Moved pages.** Moving a page does not rewrite its page event (54). It adds event **55** `{2: page id, 3: {1: new order key, 2: {1: counter, …}}}`. The reader ignored it, so a moved page stayed at its first position and landed inside another song. Registers now carry their clock counter; the highest counter wins (the later event on a tie), for the order key, the background and the removed flag.
+- **Order keys are byte strings** compared byte by byte: first import `<prefix>01 … <prefix>13` (zero padded), an inserted PDF `<prefix>02q<…>01 …`, a moved page gets a key between its new neighbours (`…4044q62~` between `…404` and `…405`, `!1dxuw` for the front).
+- **Removed pages** (56) confirmed on 13 pages of known history.
+- With these, the reconstructed order of the known-history notebook equals the history exactly (first PDF p1, copy p2–p4, first PDF p5 moved to place 5, copy p6–p13, third PDF p1–p4).
 
 ### Not verified yet
 

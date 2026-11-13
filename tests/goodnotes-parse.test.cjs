@@ -154,3 +154,30 @@ test('the structure export lists events and file ids without any PDF or ink byte
   assert.ok(!text.includes('secret score bytes') && !text.includes('tpl'));
   assert.ok(text.includes('곡')); // titles are part of the events
 });
+
+// ---- Found in a real notebook built from several PDFs with pages moved and removed (schema 26). ----
+test('a moved page takes its new place: the move event carries the new order key, the newest clock wins', async () => {
+  // Pages a,b,c,d as first imported; then c is moved to the front and a between c's old neighbours (b < "bm" < c's old "c").
+  const pages = [{pdfPage:1, order:'4I3gR01', moves:[{order:'4I3gR02m'}]}, {pdfPage:2, order:'4I3gR02'}, {pdfPage:3, order:'4I3gR03', moves:[{order:'!1dxuw'}]}, {pdfPage:4, order:'4I3gR04'}];
+  const m = await G.read(new Uint8Array(F.notebook({pages, outline:[{page:2, title:'옮긴 곡'}]})));
+  assert.deepEqual(m.pages.map(p => p.pdf.page), [3, 2, 1, 4]);
+  assert.equal(m.report.movedPages, 2);
+  assert.deepEqual(m.sections.map(s => [s.title, s.from, s.to]), [['옮긴 곡', 1, 4]]); // the outline follows its page to the front
+  // Moved twice: the higher counter wins whatever the event order; an older counter never overrides a newer one.
+  const twice = await G.read(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', moves:[{order:'z', counter:3}, {order:'m', counter:2}]}, {pdfPage:2, order:'b'}, {pdfPage:3, order:'y'}]})));
+  assert.deepEqual(twice.pages.map(p => p.pdf.page), [2, 3, 1]);
+});
+test('order keys are compared byte by byte: a key that extends another sorts right after it, before the next page', async () => {
+  // As in the real file: "…404" < "…4044q62~" < "…405", and "…10" after "…09" (zero padded), "-" before digits.
+  const pages = [{pdfPage:1, order:'4I3gR02qFGkI405'}, {pdfPage:2, order:'4I3gR02qFGkI404'}, {pdfPage:3, order:'4I3gR02qFGkI4044q62~'}, {pdfPage:4, order:'-TvZ-'}, {pdfPage:5, order:'4I3gR10'}, {pdfPage:6, order:'4I3gR09'}];
+  const m = await G.read(new Uint8Array(F.notebook({pages})));
+  assert.deepEqual(m.pages.map(p => p.pdf.page), [4, 2, 3, 1, 6, 5]);
+});
+test('moved and removed together: the kept pages come out in their final places, like GoodNotes shows them', async () => {
+  // First PDF p1..p4, a second copy inserted, the first copy removed except p1 and a page moved back among the copies.
+  const pages = [{pdfPage:1, order:'4I3gR01', moves:[{order:'!1'}]}, {pdfPage:2, order:'4I3gR02', removed:true}, {pdfPage:3, order:'4I3gR03', moves:[{order:'4I3gR02q32~', counter:3}]}, {pdfPage:4, order:'4I3gR04', removed:true},
+    {pdfPage:1, order:'4I3gR02q1', removed:true}, {pdfPage:2, order:'4I3gR02q2'}, {pdfPage:3, order:'4I3gR02q3'}, {pdfPage:4, order:'4I3gR02q4'}];
+  const m = await G.read(new Uint8Array(F.notebook({pages})));
+  assert.deepEqual(m.pages.map(p => p.pdf.page), [1, 2, 3, 3, 4]);
+  assert.deepEqual([m.report.removedPages, m.report.movedPages], [3, 2]);
+});

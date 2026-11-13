@@ -89,6 +89,8 @@ function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n%
     const pageId = uuid(0x1000 + i * 2), bgId = uuid(0xB000 + i);
     events.push(event(bgId, 2, msg(s(1, DOC), s(2, bgId), s(4, ATT), num(5, p.pdfPage), ld(8, msg(f32(1, width), f32(2, height))))));
     events.push(event(pageId, 54, msg(s(1, DOC), s(2, pageId), ld(3, msg(s(1, bgId), ld(2, msg(num(1, 1), num(2, 3))))), ld(4, msg(s(1, p.order), ld(2, msg(num(1, 1), num(2, 4))))))));
+    // A page moved in GoodNotes gets a new order key in its own event (kind 55) with a higher clock counter.
+    for (const m of p.moves || []) events.push(event(pageId, 55, msg(s(1, DOC), s(2, pageId), ld(3, msg(s(1, m.order), ld(2, msg(num(1, m.counter ?? 2), num(2, 6))))))));
     // A page removed in GoodNotes keeps its page event and gets a "removed" register (kind 56).
     if (p.removed != null) events.push(event(pageId, 56, msg(s(1, DOC), s(2, pageId), ld(3, msg(num(1, p.removed ? 1 : 0), ld(2, msg(num(1, 1), num(2, 5))))), s(4, uuid(0x7000 + i)))));
     if (p.ink) {
