@@ -486,6 +486,40 @@ test('보컬 분석: a recording sung over an MR gets a pitch curve and measurem
   await expect(page.locator('[data-out]')).toContainText('목소리를 찾지 못했어요', {timeout:60000});
 });
 
+test('보컬 분석: a take whose MR drowns the voice is measured again with the song\'s own MR file subtracted', async ({page}) => {
+  test.setTimeout(120000);
+  const Y = require('./helpers/mr-synth.cjs');
+  const wav = x => { const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  // Synthetic only: a song-like MR file and a phone take of a melody sung over it, the MR 8 dB louder than the voice.
+  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:9.5, db:8}).x;
+  await page.route('**/__mixed.wav', r => r.fulfill({contentType:'audio/wav', body:wav(take)}));
+  await page.route('**/__mrfile.wav', r => r.fulfill({contentType:'audio/wav', body:wav(mr)}));
+  await boot(page, {media:false});
+  await page.evaluate(async () => {
+    // The song's MR is an uploaded file (R2 is stubbed: this test checks the subtraction, not the storage).
+    window.VzipR2.enabled = () => true; window.VzipR2.url = async key => key === 'u/test/mr-1.m4a' ? '/__mrfile.wav' : '/missing';
+    VZ.change(d => { d.songs[0].mrTracks = [{id:'mr-1', kind:'file', title:'연습 MR', r2Key:'u/test/mr-1.m4a', type:'audio/wav', created:Date.now()}]; });
+    await window.vzipStorePracticeMedia({id:'mixed', name:'MR 크게 들어간 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', blob:await (await fetch('/__mixed.wav')).blob()});
+    VZ.media.invalidate();
+  });
+  await page.goto('/#/analysis/mixed');
+  const out = page.locator('[data-out]');
+  await expect(out.locator('.ana-grid')).toBeVisible({timeout:90000});
+  const note = out.locator('[data-mr-removed]');
+  await expect(note).toContainText('반주(MR)를 빼고 목소리만 측정했어요');
+  await expect(note).toContainText('연습 MR');
+  await expect(note).toContainText(/MR 0:(09|10)부터/);
+  await expect(note.locator('audio[data-voice-only]')).toHaveAttribute('src', /^blob:/);
+  await expect(out).not.toContainText('피치 신뢰도가 낮아');
+  if (process.env.VZ_MR_SHOT) await note.screenshot({path:process.env.VZ_MR_SHOT});
+  await expect(out.locator('[data-saved]')).toContainText('저장했어요');
+  const saved = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'mixed').analysis);
+  expect(saved.confidence.mrRemoved).toMatchObject({trackId:'mr-1'});
+  expect(Math.abs(saved.confidence.mrRemoved.offsetSeconds - 9.5)).toBeLessThan(0.01);
+  expect(saved.confidence.pitchConfidence).toBeGreaterThanOrEqual(0.8);
+  expect(saved).not.toHaveProperty('voice'); // the cleaned voice is never kept
+});
+
 test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the device and charted by date; first vs latest is compared and saved', async ({page}) => {
   test.setTimeout(180000);
   const {synth} = require('./synth-vocal.cjs');

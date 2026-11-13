@@ -55,3 +55,28 @@ test('a different MR is not subtracted: the take is left alone and the reason is
   assert.equal(out.ok, false); assert.equal(out.reason, 'no-match'); assert.equal(out.voice, undefined);
   assert.equal(C.cancel(rec.x.subarray(0, Y.SR), MR).reason, 'short');
 });
+
+test('the analysis worker path measures the voice with the MR taken out, and names the MR it used', () => {
+  const rec = Y.record(V.x, MR, {offset:8, db:8}), other = Y.mr(60, 5).map((_, i, a) => a[(i * 7) % a.length]);
+  const out = A.analyzeWithoutMr(Float32Array.from(rec.x), Y.SR, [{id:'wrong', samples:other, sampleRate:Y.SR}, {id:'mr-1', samples:MR, sampleRate:Y.SR}]);
+  assert.ok(out.result, JSON.stringify(out.reasons));
+  assert.deepEqual(out.reasons, ['no-match']); // the other file was tried and left out
+  assert.equal(out.result.confidence.mrRemoved.trackId, 'mr-1');
+  assert.ok(Math.abs(out.result.confidence.mrRemoved.offsetSeconds - 8) <= 0.002);
+  assert.ok(out.result.confidence.pitchConfidence >= 0.9);
+  assert.equal(out.result.voice.length, rec.x.length); assert.equal(out.result.voiceRate, 8000);
+  assert.equal(A.analyzeWithoutMr(Float32Array.from(rec.x), Y.SR, [{id:'wrong', samples:other, sampleRate:Y.SR}]).result, null);
+});
+
+test('wobble-type changes of a take measured with its MR removed are shown as observed, not judged', () => {
+  const G = require('../app/growth-metrics-model.js');
+  const take = (id, date, wobble, mr) => ({id, date, ok:true, a:{v:2, metrics:{stability:{wobbleCents:wobble, notes:20}, intonation:{meanAbsCents:10, notes:20}}, confidence:{pitchConfidence:0.95, ...(mr ? {mrRemoved:{trackId:'mr-1', removedDb:9}} : {})}}});
+  const plain = G.compareMetric('stability', take('a', '2026-10-01', 12, false), take('b', '2026-11-01', 6, false));
+  assert.equal(plain.state, 'better');
+  const cleaned = G.compareMetric('stability', take('a', '2026-10-01', 12, false), take('b', '2026-11-01', 6, true));
+  assert.equal(cleaned.state, 'changed'); assert.equal(cleaned.note, 'mr-removed'); assert.equal(cleaned.judged, 'better');
+  assert.equal(cleaned.before, 12); assert.equal(cleaned.after, 6); // the measured values are still shown
+  // Pitch accuracy is still judged on the cleaned take.
+  assert.notEqual(G.compareMetric('intonation', take('a', '2026-10-01', 12, false), take('b', '2026-11-01', 6, true)).state, 'changed');
+  assert.match(G.MR_REMOVED_NOTE, /참고/);
+});

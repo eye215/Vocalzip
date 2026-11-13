@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
-const WORKER = 'app/vocal-analysis.js?v=6', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=7', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0;
@@ -17,8 +17,11 @@ async function decode(item, onStage) {
   let bytes;
   try { const res = await fetch(src.url); if (!res.ok) throw Error('파일을 받지 못했어요 (' + res.status + ').'); bytes = await res.arrayBuffer(); }
   finally { if (src.revoke) URL.revokeObjectURL(src.url); }
-  if (bytes.byteLength > MAX_BYTES) throw Error('파일이 너무 커요. 250MB 이하 녹음만 분석할 수 있어요.');
   onStage('소리 꺼내는 중…');
+  return decodeBytes(bytes);
+}
+async function decodeBytes(bytes) {
+  if (bytes.byteLength > MAX_BYTES) throw Error('파일이 너무 커요. 250MB 이하 녹음만 분석할 수 있어요.');
   const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!Ctx) throw Error('이 브라우저는 오디오 분석을 지원하지 않아요.');
   // Decode straight to 8 kHz (the analyzer's rate): less memory on the phone. Older engines refuse low rates.
@@ -30,6 +33,9 @@ async function decode(item, onStage) {
   return {samples:mono, sampleRate:buf.sampleRate, cut:buf.length > n};
 }
 function runWorker(samples, sampleRate, onProgress, {voiceOnly = false, signal} = {}) {
+  return post({samples, sampleRate, voiceOnly}, [samples.buffer], onProgress, signal).then(d => d.result);
+}
+function post(message, transfer, onProgress, signal) {
   return new Promise((resolve, reject) => {
     if(signal?.aborted){reject(new DOMException('분석 중단','AbortError'));return;}
     let w;
@@ -37,9 +43,9 @@ function runWorker(samples, sampleRate, onProgress, {voiceOnly = false, signal} 
     const cleanup=()=>{signal?.removeEventListener('abort',abort);w.terminate()};
     const abort=()=>{cleanup();reject(new DOMException('분석 중단','AbortError'))};
     signal?.addEventListener('abort',abort,{once:true});
-    w.onmessage = e => { const d = e.data; if (d.progress != null) onProgress(d.progress); else { cleanup(); d.error ? reject(Error(d.error)) : resolve(d.result); } };
+    w.onmessage = e => { const d = e.data; if (d.progress != null) onProgress(d.progress); else { cleanup(); d.error ? reject(Error(d.error)) : resolve(d); } };
     w.onerror = e => { cleanup(); reject(Error(e.message || '분석 중 오류가 났어요.')); };
-    w.postMessage({samples, sampleRate, voiceOnly}, [samples.buffer]);
+    w.postMessage(message, transfer);
   });
 }
 
@@ -54,12 +60,40 @@ const summaryOf = (result, previous) => {
     ...(history.length?{history:history.slice(-HISTORY_KEEP)}:{}),scope:{kind:'whole-recording',cut:!!result.cut}};
 };
 VZ.analysisSummary = summaryOf;
+/* ---------- 알고 있는 MR 빼기 ----------
+ * A take the analysis cannot trust (the MR drowned the voice) is analysed again with the song's own MR files
+ * subtracted (app/mr-cancel.js in the worker). Only uploaded MR files can be used (a YouTube MR has no file). The MR
+ * and the recording stay as they are; the cleaned voice is kept only for listening on this screen. */
+const reliableResult = r => !!VZ.analysisReliable?.({v:r.version, metrics:r.metrics, confidence:r.confidence});
+const mrFilesOf = item => window.VzipR2?.enabled?.() ? (VZ.song(item?.songId)?.mrTracks || []).filter(t => t && !t.deleted && t.kind === 'file' && t.r2Key).slice(0, 3) : [];
+async function withoutMr(samples, sampleRate, tracks, onStage, onProgress) {
+  onStage('곡 MR 불러오는 중… (반주를 빼고 다시 분석)');
+  const mrs = [];
+  for (const t of tracks) {
+    try {
+      const url = await window.VzipR2.url(t.r2Key), res = await fetch(url);
+      if (!res.ok) continue;
+      const d = await decodeBytes(await res.arrayBuffer());
+      mrs.push({id:t.id, samples:d.samples, sampleRate:d.sampleRate});
+    } catch {}
+  }
+  if (!mrs.length) return null;
+  onStage('반주(MR) 빼는 중…');
+  const d = await post({samples, sampleRate, mrs}, [samples.buffer, ...mrs.map(m => m.samples.buffer)], onProgress);
+  return d.result || null;
+}
+VZ.analysisWithoutMrAvailable = item => mrFilesOf(item).length > 0;
 /** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).
  * Used by the analysis screen and the song page's "analyze all". Returns the full result (with curve). */
 VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, save = true} = {}) => {
-  const {samples, sampleRate, cut} = await decode(item, onStage);
+  const {samples, sampleRate, cut} = await decode(item, onStage), tracks = mrFilesOf(item), keep = tracks.length ? samples.slice() : null;
   onStage('목소리 찾는 중… (반주와 구분)');
-  const result = await runWorker(samples, sampleRate, onProgress);
+  let result = await runWorker(samples, sampleRate, onProgress);
+  if (keep && !reliableResult(result)) {
+    // Kept only when it is trustworthy, or at least clearly better read than the take as recorded.
+    const cleaned = await withoutMr(keep, sampleRate, tracks, onStage, onProgress).catch(() => null);
+    if (cleaned && (reliableResult(cleaned) || (cleaned.confidence?.pitchConfidence || 0) > (result.confidence?.pitchConfidence || 0) + 0.1)) result = cleaned;
+  }
   result.cut = cut; result.summary = summaryOf(result, item.analysis);
   if (save) { await M.update(item, {analysis:result.summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:result.summary}})); }
   return result;
@@ -132,8 +166,28 @@ function cards(r, playable = false) {
   if (b) out.push(card('wind', '프레이즈 길이', '평균 ' + b.medianPhrase + '초', '최장 ' + b.longestPhrase + '초 · ' + b.phrases + '개' + (b.medianGap != null ? ' · 숨 ' + b.medianGap + '초' : ''), '쉬지 않고 이어 부른 길이'));
   return out.join('');
 }
+/** 16-bit WAV of the cleaned voice, for the 목소리만 듣기 player (never saved). */
+function wavUrl(samples, rate) {
+  const n = samples.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(samples[i]));
+  const g = peak > 0 ? 0.9 / peak : 1;
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i] * g)) * 32767, true);
+  return URL.createObjectURL(new Blob([buf], {type:'audio/wav'}));
+}
+function mrNote(r) {
+  const m = r.confidence?.mrRemoved;
+  if (!m) return '';
+  const track = (VZ.db.songs.flatMap(s => s.mrTracks || []).find(t => String(t.id) === m.trackId)?.title) || '곡 MR';
+  const at = Number.isFinite(m.offsetSeconds) ? (m.offsetSeconds >= 0 ? 'MR ' + clock(m.offsetSeconds) + '부터' : 'MR보다 ' + clock(-m.offsetSeconds) + ' 먼저 시작') : '';
+  const listen = r.voice ? '<audio class="ana-voice" controls preload="none" data-voice-only aria-label="반주를 뺀 목소리 듣기" src="' + wavUrl(r.voice, r.voiceRate || 8000) + '"></audio>' : '';
+  return '<div class="ana-note ok" data-mr-removed><i class="ph ph-music-notes-minus"></i><span><b>반주(MR)를 빼고 목소리만 측정했어요.</b> ' + esc(track) + (at ? ' · ' + esc(at) : '') + (m.removedDb != null ? ' · 소리 ' + esc(m.removedDb) + 'dB 줄임' : '') +
+    '<br><small>지속음 흔들림·비브라토는 뺀 흔적이 섞일 수 있어 참고로만 봐 주세요. 원본 녹음과 MR 파일은 그대로예요.</small>' + (listen ? '<br><small>목소리만 들어 보기</small>' + listen : '') + '</span></div>';
+}
 function confidence(r) {
   const c = r.confidence;
+  if (c.mrRemoved) return mrNote(r) + (c.pitchConfidence < .8 ? '<div class="ana-note warn"><span>반주를 빼고도 피치 신뢰도가 낮아 성장 판정을 보류해요.</span></div>' : '');
   if (c.pitchConfidence < .8) return '<div class="ana-note warn"><span>피치 신뢰도가 낮아 성장 판정을 보류해요. 원본을 들으며 확인해 주세요.</span></div>';
   if (c.voiceOverMrDb == null) return '<p class="small muted">반주만 따로 들리는 구간이 없어서 목소리와 반주의 크기 차이는 재지 못했어요.</p>';
   if (c.voiceOverMrDb < 3) return '<div class="ana-note warn"><i class="ph ph-warning"></i><span>목소리가 반주보다 크게 녹음되지 않았어요. 반주를 목소리로 잘못 읽었을 수 있으니 곡선이 노래와 맞는지 들으며 확인해 주세요.</span></div>';
