@@ -757,7 +757,7 @@ for(const width of [320,375])test('summary row at '+width+'px: 오늘 and 이번
  const sheet=page.getByRole('dialog',{name:'이번 주 연습',exact:true});
  await expect(sheet.locator('[data-week-block=today]')).toContainText('오늘12분/ 목표 30분 · 40%');await expect(sheet.locator('[data-week-block=week]')).toContainText('이번 주1시간 2분/ 목표 3시간 30분 · 30%');
  await expect(sheet.locator('[data-week-source]')).toHaveText('하루 30분 × 7일 · 설정에서 바꿀 수 있어요');await expect(sheet.locator('[data-week-source]')).toHaveCount(1);
- const link=sheet.getByRole('button',{name:'설정에서 바꿀 수 있어요',exact:true});expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ const link=sheet.getByRole('button',{name:'설정에서 바꿀 수 있어요',exact:true});expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(43.9); // WebKit reports 43.99997 for a 44px box
  await noOverflow(page);
  await link.click();await expect(page).toHaveURL(/#\/settings$/);await expect(page.locator('[data-daily-target]')).toBeFocused();
  // No daily setting: no day or week target, said as 목표 없음.
