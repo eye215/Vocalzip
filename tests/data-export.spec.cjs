@@ -213,7 +213,8 @@ test('iPhone: one part in memory at a time — the next part is built after a ta
   await context.close();
 });
 
-test('Export buttons stay on the export screen: same-named buttons on the recorder and the practice set never reach the export', async ({page}) => {
+test('Export buttons stay on the export screen: same-named buttons on the recorder and the practice set never reach the export', async ({page, browserName}) => {
+  test.skip(browserName === 'webkit', 'the recorder needs the fake microphone, which only the Chromium projects have');
   test.setTimeout(60000);
   const r2 = await fakeR2(page);
   await seed(page, r2);
