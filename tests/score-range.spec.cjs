@@ -188,3 +188,38 @@ test('vocal lab without a reference offers 설정; a manual range entered there 
   await expect(again.locator('[data-vrange-verdict]')).toHaveText('일치');
   await expect(again.locator('[data-vrange-row="valid"]')).toContainText('D5 1반음 높음');
 });
+
+test('악보 정보: the converted score\'s key signature is offered as a suggestion; a button only fills the field and 저장 keeps it', async ({page}) => {
+  const fake = await cloudSong(page);
+  // One flat (F or Dm); the sung notes sit on D, so Dm is the likely one.
+  fake.store.set(MXL, {bytes:mxl([['META-INF/container.xml', CONTAINER], ['score.xml', SCORE.replace('<divisions>4</divisions>', '<divisions>4</divisions><key><fifths>-1</fifths></key>')]]), type:'application/vnd.recordare.musicxml'});
+  await page.locator('[data-edit]').first().click();
+  const sheet = page.getByRole('dialog', {name:'악보 정보'}), box = sheet.locator('[data-key-suggest]');
+  await expect(box).toContainText('악보 조표로 보면');
+  await expect(box.getByRole('button', {name:'Dm (단조)'})).toHaveAttribute('aria-pressed', 'true');
+  await expect(box).toContainText('음표로 보면 Dm 쪽이에요');
+  await expect(box).toContainText('자동 인식이라 틀릴 수 있어요');
+  if (process.env.KEY_SHOT) await page.screenshot({path:process.env.KEY_SHOT});
+  // Nothing is filled or saved by itself.
+  await expect(sheet.locator('[name=originalKey]')).toHaveValue('');
+  expect((await song(page, 'song-r')).scores[0].originalKey).toBeUndefined();
+  // The owner picks the major reading for 원키 and the minor one for 연습 키.
+  await box.getByRole('button', {name:'F (장조)'}).click();
+  await box.getByRole('button', {name:'원키로 넣기'}).click();
+  await expect(sheet.locator('[name=originalKey]')).toHaveValue('F');
+  await box.getByRole('button', {name:'Dm (단조)'}).click();
+  await box.getByRole('button', {name:'연습 키로 넣기'}).click();
+  await expect(sheet.locator('[name=practiceKey]')).toHaveValue('Dm');
+  expect((await song(page, 'song-r')).scores[0].originalKey).toBeUndefined(); // still not saved
+  await sheet.getByRole('button', {name:'저장'}).click();
+  const saved = (await song(page, 'song-r')).scores[0];
+  expect([saved.originalKey, saved.practiceKey]).toEqual(['F', 'Dm']);
+  // A score with no key signature in its conversion shows no suggestion (the fixture as it is).
+  fake.store.set(MXL, {bytes:mxl([['META-INF/container.xml', CONTAINER], ['score.xml', SCORE]]), type:'application/vnd.recordare.musicxml'});
+  await page.locator('[data-edit]').first().click();
+  await expect(page.getByRole('dialog', {name:'악보 정보'}).locator('[name=originalKey]')).toHaveValue('F');
+  await page.waitForTimeout(600);
+  await expect(page.getByRole('dialog', {name:'악보 정보'}).locator('[data-key-suggest]')).toBeHidden();
+  await page.setViewportSize({width:320, height:640});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
