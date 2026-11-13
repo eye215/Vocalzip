@@ -359,8 +359,11 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   const songId = r.query.get('song') || rec?.songId || '';
   const lessonId = r.query.get('lesson') || '';
   const song=VZ.song(songId),songMeta=[song?.show,song?.role].filter(Boolean).join(' · ');
+  // #/record?goal=<id>: the take is for one of today's goals (app/goal-routines.js links it when it is saved).
+  const goal = lessonId ? null : VZ.recordGoal?.(r.query.get('goal') || '');
   return '<div class="stack vz-record-screen">' +
     (lessonId ? '<div class="badge accent" style="justify-self:start">레슨 녹음 · ' + esc(VZ.dateLabel(VZ.db.lessons.find(l => l.id === lessonId)?.date)) + '</div>' : '') +
+    (goal ? '<div class="vz-record-goal" data-record-goal><i class="ph ph-target" aria-hidden="true"></i><span class="vz-record-goal-text">목표: ' + esc(goal.title || '목표') + '</span><button type="button" class="icon-btn" data-goal-detach aria-label="목표 연결 빼기"><i class="ph ph-x" aria-hidden="true"></i></button></div>' : '') +
     '<button type="button" class="card flat item" data-pick-song><span class="avatar"><i class="ph ph-music-note"></i></span><span class="item-main"><span class="item-sub">연결 곡</span><span class="item-title" data-song-name>' + esc(VZ.songTitle(songId) || '곡 미지정') + '</span><span class="item-sub vz-record-song-meta" data-song-meta>' + esc(songMeta) + '</span></span><i class="ph ph-caret-down chev"></i></button>' +
     '<button type="button" class="vz-record-score" data-record-score hidden><i class="ph ph-music-notes" aria-hidden="true"></i><span>악보 보며 녹음</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
     '<section class="rec-stage" aria-label="녹음기" data-phase="idle"><h2 class="rec-heading">녹음 준비</h2><div class="rec-time" aria-live="off">0:00</div><div class="rec-wave-wrap"><div class="rec-wave-idle" aria-hidden="true"></div><canvas class="rec-wave" aria-hidden="true"></canvas></div>' +
@@ -372,6 +375,14 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   const state = {songId:r.query.get('song') || '', video:false, session:null, result:null, waveLive:[]};
   rec = state;
   const $ = s => main.querySelector(s);
+  state.goalId = $('[data-record-goal]') ? r.query.get('goal') : '';
+  // ✕ on the "목표: …" line: this take is no longer for the goal (the address drops it too, so a redraw keeps it off).
+  $('[data-goal-detach]')?.addEventListener('click', () => {
+    state.goalId = ''; $('[data-record-goal]').remove();
+    const query = new URLSearchParams(location.hash.split('?')[1] || ''); query.delete('goal');
+    history.replaceState(null, '', '#/record' + (query.toString() ? '?' + query : ''));
+    $('[data-pick-song]').focus();
+  });
   const status = $('[data-status]'), timeEl = $('.rec-time'), wave = $('.rec-wave');
   $('.rec-wave-idle').innerHTML = Array.from({length:45}, (_, i) => '<i style="--h:' + (9 + i * 13 % 39) + 'px"></i>').join('');
   const mainBtn = $('[data-main]'), pauseBtn = $('[data-pause]'), cancelBtn = $('[data-cancel]'), review = $('[data-review]'), stage=$('.rec-stage'), picker=$('[data-pick-song]');
@@ -458,6 +469,10 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
       review.querySelector('[data-log]')?.addEventListener('click', () => VZ.practiceSheet({songId:state.songId, mediaIds:[id]}));
       VZ.toast('녹음을 저장했어요.');
       status.textContent = '';
+      // A practice take can belong to one of today's goals (made from its row, or picked now): app/goal-routines.js.
+      // When the goal was completed with it, the time is already recorded there, so 연습 기록 gives way to 오늘.
+      if (!lessonId) VZ.goalRecordingSaved?.({mediaId:id, goalId:state.goalId, songId:state.songId, durationSeconds:item.durationSeconds, date:item.recordedDate})
+        ?.then(done => { if (done?.completed) review.querySelector('[data-log]')?.replaceWith(Object.assign(document.createElement('a'), {className:'btn secondary', href:'#/home', textContent:'오늘로'})); }).catch(error => console.error(error));
     } catch (e) {
       btn.disabled = false; btn.innerHTML = '<i class="ph ph-arrow-clockwise"></i>다시 저장';
       fail.hidden = false;

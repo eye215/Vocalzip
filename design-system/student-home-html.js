@@ -144,6 +144,12 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-goal-list label>span{flex:1;min-width:0;overflow-wrap:anywhere;}
 #vocalzip-refined-preview .vz-goal-list label small{flex:none;}
 #vocalzip-refined-preview .vz-goal-record{flex:none;min-width:44px;min-height:44px;margin:-6px -8px -6px -4px;padding:0 8px;border:0;border-radius:12px;background:none;color:#7A32F5;font-family:inherit;font-size:13px;font-weight:600;line-height:18px;white-space:nowrap;font-variant-numeric:tabular-nums;cursor:pointer;}
+/* Unfinished goal: a small mic that opens the recorder for this goal (the time button takes its place once done). */
+#vocalzip-refined-preview .vz-goal-mic{flex:none;display:grid;place-items:center;width:44px;height:44px;margin:-6px -10px -6px -6px;padding:0;border:0;border-radius:12px;background:none;color:var(--vz-color-ink-muted,#667085);cursor:pointer;}
+#vocalzip-refined-preview .vz-goal-mic .vz-ui-icon{width:20px;height:20px;font-size:20px;}
+#vocalzip-refined-preview .vz-goal-mic:active{background:#F3ECFF;color:#7A32F5;}
+#vocalzip-refined-preview .vz-goal-mic:focus-visible{outline:2px solid #DCC4FF;outline-offset:-2px;}
+#vocalzip-refined-preview .vz-goal-mic[hidden]{display:none;}
 #vocalzip-refined-preview .vz-goal-record[data-empty="true"]{color:var(--vz-color-ink-muted,#667085);font-weight:500;}
 #vocalzip-refined-preview .vz-goal-record:focus-visible{outline:2px solid #DCC4FF;outline-offset:-2px;}
 #vocalzip-refined-preview .vz-goal-record:active{background:#F3ECFF;}
@@ -445,8 +451,9 @@ export async function createFloatingHome(opts={}){
   const tagText=()=>info?info.label+" "+(info.done-(counted?1:0)+(item.completed?1:0))+"/"+info.total:item.routine&&item.source==="personal"?"반복":({homework:"숙제",personal:"개인",recommendation:"추천"})[item.source]||"";
   const showTag=()=>{tag.textContent=tagText();tag.hidden=!tag.textContent;};showTag();
   // A completed goal shows the time recorded for it ("10분"), or a quiet "시간 추가"; either opens 시간·녹음.
-  let record=null;
+  let record=null,mic=null;
   const paintTime=()=>{
+   if(mic)mic.hidden=item.completed;
    if(!record)return;const label=item.time?.label||"";
    record.textContent=label||"시간 추가";record.dataset.empty=String(!label);record.hidden=!item.completed;
    record.setAttribute("aria-label",(item.title||"목표")+" 시간·녹음, "+(label?label+" 기록됨":"시간 추가"));
@@ -454,6 +461,10 @@ export async function createFloatingHome(opts={}){
   if(opts.onGoalRecord){
    record=el("button",null,"vz-goal-record");record.type="button";
    record.onclick=event=>{event.preventDefault();event.stopPropagation();opts.onGoalRecord(item.id);};row.append(record);paintTime();
+  }
+  if(opts.onGoalMic){
+   mic=el("button",null,"vz-goal-mic");mic.type="button";mic.append(glyph("\ue326"));mic.setAttribute("aria-label",(item.title||"목표")+" 녹음하기");
+   mic.onclick=event=>{event.preventDefault();event.stopPropagation();opts.onGoalMic(item.id);};row.append(mic);paintTime();
   }
   rows.set(item.id,{item,input,paintTime});
   input.onchange=async()=>{

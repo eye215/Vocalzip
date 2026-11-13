@@ -11,7 +11,10 @@
  * Completion may optionally carry the minutes really practised and today's recordings. Only minutes the user chose
  * or typed count as practice time (one practice record per goal, so re-saving updates instead of adding); recording
  * length is never added. Homework goals (also homework routines) link the session to the assignment without marking
- * it done. Checking a goal on home asks for that time at once (2026-11-13); skipping keeps a plain check. */
+ * it done. Checking a goal on home asks for that time at once (2026-11-13); skipping keeps a plain check.
+ * A recording made for a goal (mic on the goal row, or picked after a plain take) is linked to the goal's record with
+ * linkRecording() and the same sheet then completes the goal; the recording's length is only preselected, never saved
+ * by itself. */
 (function(root,factory){
   const api=factory();
   root.VzipGoalRoutines=api;
@@ -218,6 +221,20 @@ function perform(db,goalId,{minutes,mediaIds=[],songId},now=Date.now()){
   if(at<0)db.practices.push(row);else db.practices[at]=row;
   return true;
 }
+/** Link a recording to a goal's 수행 기록 without completing the goal or adding time: the same link perform() writes
+ * (goal.performance.mediaIds, and the goal's practice row when it already has one). Idempotent per recording. */
+function linkRecording(db,goalId,mediaId,now=Date.now()){
+  const goal=(db.dailyGoals||[]).find(g=>g?.id===goalId);
+  if(!goal)throw Error('이 목표가 변경됐어요. 화면을 새로 열어 주세요.');
+  const id=String(mediaId??'');if(!id)throw Error('연결할 녹음을 확인해 주세요.');
+  const prev=goal.performance||{},ids=[...new Set([...(prev.mediaIds||[]).map(String),id])].slice(-20);
+  goal.performance={minutes:prev.minutes??null,mediaIds:ids,at:now};
+  const row=(db.practices||[]).find(p=>p?.id===practiceId(goal));
+  if(row)Object.assign(row,{mediaIds:ids,performedAt:now,updatedAt:now});
+  return true;
+}
+/** Whole minutes of a recording for preselecting: rounded up, at least 1 (at most 600). */
+const recordingMinutes=seconds=>Math.min(600,Math.max(1,Math.ceil((Number(seconds)||0)/60)));
 const whole=n=>Number.isFinite(n)&&n>=1&&n<=600?Math.round(n):null;
 /** Minutes counted for this goal: its practice row 'goal:<id>', read with the app's one practice-time rule. null when none. */
 function savedMinutes(db,goal){
@@ -250,7 +267,7 @@ function suggestMinutes(db,goal){
   }
   return last?{minutes:last.minutes,from:'last'}:{minutes:null,from:''};
 }
-return {MAX_DAYS,shift,span,routines,routineOf,goalsOf,active,view,create,rename,resize,remainingRange,end,reconcile,progress,perform,otherMinutes,practiceId,savedMinutes,titleMinutes,suggestMinutes};
+return {MAX_DAYS,shift,span,routines,routineOf,goalsOf,active,view,create,rename,resize,remainingRange,end,reconcile,progress,perform,otherMinutes,practiceId,savedMinutes,titleMinutes,suggestMinutes,linkRecording,recordingMinutes};
 });
 
 /* UI: routine section inside 오늘의 목표 sheet + optional 수행 기록 sheet after a goal is checked. */
@@ -373,15 +390,24 @@ V.goalTime=goal=>{const minutes=goal?R.savedMinutes(V.db,goal):null;return {minu
 /** Asked right after a goal is checked on home (and from the row's 시간·녹음 entry): a compact sheet with one-tap minutes,
  * 직접 입력 and today's recordings (folded). 저장 writes through perform() (one practice row per goal, so saving again
  * replaces); 건너뛰기 / closing keeps the plain check. A suggested time is only preselected, never saved by itself.
- * options.onDone({saved, minutes, addedMinutes}) runs once when the sheet closes (saved or not); the caller then
- * updates its screen and shows the result. Without it a save redraws the screen and shows a toast. */
+ * options.onDone({saved, minutes, addedMinutes, completed}) runs once when the sheet closes (saved or not); the caller
+ * then updates its screen and shows the result. Without it a save redraws the screen and shows a toast.
+ * options.asked: opened right after the goal was ticked (the second button reads 건너뛰기, not 닫기).
+ * options.complete: the goal may still be unticked (a recording was just made for it); 저장 then ticks it in the same
+ * change. options.recording {id, minutes}: that recording is ticked under 오늘 녹음 연결 and its length is preselected. */
 V.goalPerformanceSheet=(goalId,options={})=>{
-  const goal=(V.db.dailyGoals||[]).find(g=>g?.id===goalId);if(!goal||goal.completed!==true)return null;
-  const prev=goal.performance||{},other=R.otherMinutes(V.db,goal),start=R.suggestMinutes(V.db,goal),editing=start.from==='saved'||!!prev.at;
-  const picked=new Set((prev.mediaIds||[]).map(String));
+  const goal=(V.db.dailyGoals||[]).find(g=>g?.id===goalId);if(!goal||(goal.completed!==true&&!options.complete))return null;
+  const completing=goal.completed!==true,take=options.recording||null;
+  const prev=goal.performance||{},other=R.otherMinutes(V.db,goal);
+  let start=R.suggestMinutes(V.db,goal);
+  if(take&&start.from!=='saved')start={minutes:take.minutes,from:'recording'};
+  // 건너뛰기 while the goal is being completed (just ticked, or offered after a take); 닫기 when its record is opened later.
+  const editing=!completing&&!options.asked;
+  const picked=new Set([...(prev.mediaIds||[]),...(take?[take.id]:[])].map(String));
   const before=R.savedMinutes(V.db,goal)||0,result={saved:false,minutes:null,addedMinutes:0};
   let minutes=start.minutes,custom=minutes!=null&&!CHIPS.includes(minutes),files=[];
-  const hint=({goal:'목표에 적힌 시간을 골라 뒀어요.',last:'지난번에 기록한 시간을 골라 뒀어요.'})[start.from]||'';
+  const hint=({goal:'목표에 적힌 시간을 골라 뒀어요.',last:'지난번에 기록한 시간을 골라 뒀어요.',
+    recording:'녹음 길이 '+minutesLabel(start.minutes)+'을 골라 뒀어요. 바꿀 수 있어요.'})[start.from]||'';
   return V.sheet({title:goal.title||'목표',label:'연습 시간·녹음',variant:'compact',
     body:'<form class="vz-time" data-perform novalidate><p class="vz-time-question" id="vz-time-question">얼마나 연습했나요?</p>'+
       '<div class="vz-time-chips" role="group" aria-labelledby="vz-time-question">'+CHIPS.map(n=>'<button type="button" class="vz-time-chip" data-minutes="'+n+'" aria-pressed="false">'+n+'분</button>').join('')+
@@ -389,8 +415,8 @@ V.goalPerformanceSheet=(goalId,options={})=>{
       '<label class="vz-time-field" data-custom-field hidden><input type="number" name="minutes" min="1" max="600" inputmode="numeric" aria-label="연습 시간(분) 직접 입력"><span>분</span></label></div>'+
       '<p class="vz-time-help" data-time-hint>'+esc(hint)+'</p>'+
       (other?'<p class="vz-time-help">따라 하기 등에서 이 목표로 이미 '+Math.round(other)+'분이 기록됐어요. 그 시간은 다시 적지 않아도 돼요.</p>':'')+
-      '<p class="vz-time-help">고른 시간만 더해져요. 녹음 길이는 더하지 않아요.</p>'+
-      '<details class="vz-time-media" data-time-media hidden><summary>오늘 녹음 연결 <small data-media-count>선택</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vz-plan-options" data-media-list></div></details>'+
+      (start.from==='recording'?'':'<p class="vz-time-help">고른 시간만 더해져요. 녹음 길이는 더하지 않아요.</p>')+
+      '<details class="vz-time-media" data-time-media hidden'+(take?' open':'')+'><summary>오늘 녹음 연결 <small data-media-count>선택</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vz-plan-options" data-media-list></div></details>'+
       '<p role="alert" data-perform-error></p></form>',
     foot:'<div class="vz-time-actions"><button type="button" class="btn secondary" data-skip>'+(editing?'닫기':'건너뛰기')+'</button><button type="button" class="btn" data-save>저장</button></div>',
     // After the sheet has fully closed (focus restored), so the caller may open its result popup.
@@ -431,14 +457,19 @@ V.goalPerformanceSheet=(goalId,options={})=>{
           if(minutes!=null&&!(Number.isFinite(minutes)&&minutes>0&&minutes<=600))throw Error('연습 시간은 1~600분으로 적어 주세요.');
           const mediaIds=[...picked];
           // Nothing chosen and nothing to change: the same as 건너뛰기.
-          if(minutes==null&&!mediaIds.length&&!prev.at)return close();
+          if(!completing&&minutes==null&&!mediaIds.length&&!prev.at)return close();
           // Nothing changed while editing: close without writing the same record again.
-          if(prev.at&&(minutes||0)===before&&mediaIds.length===(prev.mediaIds||[]).length&&(prev.mediaIds||[]).every(id=>picked.has(String(id))))return close();
+          if(!completing&&prev.at&&(minutes||0)===before&&mediaIds.length===(prev.mediaIds||[]).length&&(prev.mediaIds||[]).every(id=>picked.has(String(id))))return close();
           const songId=files.find(m=>mediaIds.includes(String(m.id))&&m.songId)?.songId||'';
           // Check on a copy first: VZ.change hides the reason when the goal changed meanwhile (e.g. unticked on another device).
-          R.perform(structuredClone(V.db),goalId,{minutes,mediaIds,songId});
-          if(!V.change(db=>R.perform(db,goalId,{minutes,mediaIds,songId}),{silent:true}))throw Error('기록을 저장하지 못했어요. 다시 시도해 주세요.');
-          Object.assign(result,{saved:true,minutes,addedMinutes:Math.max(0,(minutes||0)-before)});
+          // A goal completed from its recording is ticked and recorded in one change (the tick alone is what home does).
+          const mutate=db=>{
+            if(completing&&!(window.VzipStudentHomeModel?.setGoal(db,goalId,true)))throw Error('이 목표가 변경됐어요. 화면을 새로 열어 주세요.');
+            R.perform(db,goalId,{minutes,mediaIds,songId});
+          };
+          mutate(structuredClone(V.db));
+          if(!V.change(mutate,{silent:true}))throw Error('기록을 저장하지 못했어요. 다시 시도해 주세요.');
+          Object.assign(result,{saved:true,minutes,addedMinutes:Math.max(0,(minutes||0)-before),completed:completing});
           close();
           if(options.onDone)return;
           V.softRender?.();V.toast(minutes?'연습 '+minutesLabel(minutes)+'을 기록했어요.':mediaIds.length?'녹음 연결을 저장했어요.':'연습 시간을 지웠어요.');
@@ -447,4 +478,50 @@ V.goalPerformanceSheet=(goalId,options={})=>{
       foot.querySelector('[data-save]').onclick=save;
     }});
 };
+/** Today's goal a recording can be made for (the recorder's "목표: …" line); null for an unknown or another day's goal. */
+V.recordGoal=id=>{const g=(V.db.dailyGoals||[]).find(g=>g?.id===id);return g&&g.date===V.today()?g:null;};
+const sourceLabel=g=>g.source==='homework'?'숙제':g.source==='recommendation'?'추천':R.routineOf(g)?'반복':'개인';
+/** Today's unfinished goals for "어느 목표의 연습인가요?": at most five, the ones for the recording's song first. */
+V.unfinishedGoals=songId=>{
+  const today=V.today(),Home=window.VzipStudentHomeModel;
+  const goals=(Home?Home.build(V.db,{today}).goals:(V.db.dailyGoals||[]).filter(g=>g?.date===today)).filter(g=>g.completed!==true);
+  return [...goals.filter(g=>songId&&g.songId===songId),...goals.filter(g=>!(songId&&g.songId===songId))].slice(0,5);
+};
+/** Called by the recorder after a practice take was saved (never for lesson takes or imports).
+ * - Made for a goal (mic on the goal row): the take is linked to that goal's record, then the 시간·녹음 sheet opens with
+ *   it ticked and its length preselected; 저장 ticks the goal, 건너뛰기 leaves it unticked with the take linked.
+ * - A plain take: when today has unfinished goals, one optional step asks which goal it was for; "목표 없이 저장"
+ *   (also closing) changes nothing. Not asked while 오늘 연습 세트 is running (it links its own takes) or for a take
+ *   dated another day.
+ * Resolves {goalId, linked, completed} or null when no goal was involved. */
+V.goalRecordingSaved=({mediaId,goalId,songId,durationSeconds,date}={})=>new Promise(resolve=>{
+  const offer=id=>{
+    try{R.linkRecording(structuredClone(V.db),id,mediaId);}catch(e){V.toast(e.message,'error');return resolve(null);}
+    if(!V.change(db=>{R.linkRecording(db,id,mediaId);},{silent:true}))return resolve(null);
+    const sheet=V.goalPerformanceSheet(id,{complete:true,recording:{id:mediaId,minutes:R.recordingMinutes(durationSeconds)},onDone:result=>{
+      if(result.saved)V.todayPracticePopup?.({addedMinutes:result.addedMinutes});else V.toast('녹음만 목표에 연결했어요.');
+      resolve({goalId:id,linked:true,completed:!!result.saved});
+    }});
+    if(!sheet)resolve({goalId:id,linked:true,completed:false});
+  };
+  if(!mediaId)return resolve(null);
+  // The recorder's "저장했어요" card stays; its toast would only cover the sheet that opens now.
+  const quiet=()=>document.querySelector('.toast:not(.error)')?.remove();
+  if(goalId&&V.recordGoal(goalId)){quiet();return offer(goalId);}
+  if(date&&date!==V.today()||V.practiceSetClock?.state?.())return resolve(null);
+  const goals=V.unfinishedGoals(songId);
+  if(!goals.length)return resolve(null);
+  let chosen='';quiet();
+  V.sheet({title:'어느 목표의 연습인가요?',variant:'compact',
+    body:'<div class="vz-goal-pick" role="group" aria-label="오늘 아직 안 한 목표">'+goals.map(g=>
+      '<button type="button" class="vz-goal-pick-row" data-goal-pick="'+esc(g.id)+'"><span>'+esc(g.title||'목표')+'</span><small>'+sourceLabel(g)+'</small><i class="ph ph-caret-right" aria-hidden="true"></i></button>').join('')+
+      '</div><p class="vz-time-help">목표를 고르면 연습 시간을 적고 바로 완료할 수 있어요.</p>',
+    foot:'<button type="button" class="btn block" data-no-goal autofocus>목표 없이 저장</button>',
+    onClose:()=>{if(!chosen)resolve(null);},
+    onMount:(el,close)=>{
+      el.classList.add('vz-plan-sheet','vz-time-sheet','vz-goal-pick-sheet');
+      el.parentNode.querySelector('[data-no-goal]').onclick=close;
+      el.querySelectorAll('[data-goal-pick]').forEach(b=>{b.onclick=()=>{chosen=b.dataset.goalPick;close();offer(chosen);};});
+    }});
+});
 })();

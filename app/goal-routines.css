@@ -35,3 +35,20 @@
 .vz-routine.is-ended{background:#F8F6FD;border-color:#F2EFF7;padding-right:12px}
 .vz-routine.is-ended strong{color:#475467}
 @media (prefers-reduced-motion:reduce){.vz-routines-ended summary i{transition:none}}
+/* 목표 녹음 (2026-11-13): the recorder's "목표: …" line (dark studio) and the "어느 목표의 연습인가요?" list. */
+.vz-record-goal{display:flex;align-items:center;gap:8px;min-width:0;min-height:44px;padding:0 0 0 14px;border-radius:14px;background:#F3ECFF;color:#344054;font-size:14px;line-height:20px;font-weight:600}
+.vz-record-goal>i{flex:none;font-size:18px;color:#7A32F5}
+.vz-record-goal-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vz-record-goal .icon-btn{flex:none;width:44px;height:44px;padding:0;border:0;border-radius:12px;background:none;color:#667085;font-size:18px}
+body.vz-record-mode .vz-record-goal{background:rgba(122,50,245,.16);color:#f7f5fc}
+body.vz-record-mode .vz-record-goal>i{color:#ae7aff}
+body.vz-record-mode .vz-record-goal .icon-btn{color:#aaa3b7}
+.vz-record-goal .icon-btn:focus-visible{outline:2px solid #DCC4FF;outline-offset:-2px}
+.vz-goal-pick{display:grid;gap:8px}
+.vz-goal-pick-row{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 12px 8px 16px;border:0;border-radius:14px;background:#F8F6FD;color:#101828;font-family:inherit;font-size:14px;line-height:20px;font-weight:600;text-align:left;cursor:pointer}
+.vz-goal-pick-row:active{background:#F3ECFF}
+.vz-goal-pick-row:focus-visible{outline:2px solid #DCC4FF;outline-offset:0}
+.vz-goal-pick-row>span{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.vz-goal-pick-row>small{flex:none;padding:3px 6px;border-radius:6px;background:#F2F4F7;color:#667085;font-size:11px;line-height:1.6;font-weight:400;white-space:nowrap}
+.vz-goal-pick-row>i{flex:none;font-size:15px;color:#98A2B3}
+
