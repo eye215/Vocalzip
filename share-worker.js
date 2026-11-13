@@ -2,8 +2,9 @@ importScripts('chunk-media-core.js');
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 /* App shell cache (offline launch). Online the app is never older than the server:
  * - pages (navigations): network first; the kept copy is used only when the network fails
- * - same-origin files with ?v= (and the two version-pinned CDN libraries): kept copy first, they never change under one version
- * - other same-origin static files (icons, fonts, css without ?v=): network first, kept copy when the network fails
+ * - same-origin static files (with or without ?v=): network first, kept copy only when the network fails, so a file
+ *   changed without a ?v= bump is never stuck on an old copy (the browser's own HTTP cache works as before)
+ * - the version-pinned CDN libraries (exact x.y.z in the address): kept copy first, they never change
  * Never kept: POST, range requests, media, the playback stream, share inbox, Supabase/R2/Worker/API calls (other origins). */
 const SHELL='vzip-shell-v1',SHELL_PREFIX='vzip-shell-';
 const STATIC=/\.(?:js|mjs|css|html|svg|png|jpe?g|webp|gif|ico|woff2?|webmanifest)$/i;
@@ -22,8 +23,15 @@ async function keep(key,response){
 const kept=async key=>(await caches.open(SHELL)).match(key);
 const pinnedFetch=url=>fetch(url,{mode:'cors',credentials:'omit'});
 async function networkFirst(request,key){
- try{const response=await fetch(request);if(usable(response))await keep(key,response.clone()).catch(()=>{});return response}
- catch(error){const copy=await kept(key);if(copy)return copy;throw error}
+ try{
+  const response=await fetch(request);
+  if(usable(response)){
+   // Rewrite the kept copy only when the server's file changed (same ETag = same file), not on every launch.
+   const tag=response.headers.get('etag'),old=tag?await kept(key).catch(()=>null):null;
+   if(!old||old.headers.get('etag')!==tag)await keep(key,response.clone()).catch(()=>{});
+  }
+  return response;
+ }catch(error){const copy=await kept(key);if(copy)return copy;throw error}
 }
 async function cacheFirst(request,key,load=()=>fetch(request)){
  const copy=await kept(key);if(copy)return copy;
@@ -102,6 +110,6 @@ self.addEventListener('fetch',event=>{
   event.respondWith((async()=>{try{const form=await event.request.formData();const files=form.getAll('files').filter(x=>x instanceof File);if(!files.length)throw Error('No files');await store(files);return Response.redirect(scope.href+'?shared=1',303)}catch{return Response.redirect(scope.href+'?share_error=1',303)}})());
  }else if(event.request.method==='GET'&&!event.request.headers.has('range')&&u.pathname.startsWith(scope.pathname)){
   if(event.request.mode==='navigate')event.respondWith(networkFirst(event.request,pageKey(u)));
-  else if(STATIC.test(u.pathname))event.respondWith(u.searchParams.has('v')?cacheFirst(event.request,u.href):networkFirst(event.request,u.origin+u.pathname));
+  else if(STATIC.test(u.pathname))event.respondWith(networkFirst(event.request,u.searchParams.has('v')?u.href:u.origin+u.pathname));
  }
 });

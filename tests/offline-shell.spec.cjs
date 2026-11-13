@@ -40,12 +40,12 @@ test('online: the page comes from the network, a changed ?v= fetches the new fil
  await boot(page,context);
  await expect.poll(async()=>(await keptUrls(page)).some(u=>/\/app\/app\.js\?v=/.test(u)),{timeout:20000}).toBe(true);
  const old=(await keptUrls(page)).find(u=>/\/app\/metric-help\.js\?v=/.test(u));expect(old).toBeTruthy();
- // Same version: served from the kept copy even when the server would now answer differently.
+ // Same version, file changed on the server without a ?v= bump: online the server's file wins (never stuck on the kept copy).
  let hits=0;await context.route('**/app/metric-help.js?v=*',r=>{hits++;return r.fulfill({contentType:'application/javascript',body:'window.__metricHelp="'+new URL(r.request().url()).searchParams.get('v')+'"'})});
- expect(await page.evaluate(u=>fetch(u).then(r=>r.text()),old)).not.toContain('__metricHelp');expect(hits).toBe(0);
+ expect(await page.evaluate(u=>fetch(u,{cache:'no-store'}).then(r=>r.text()),old)).toContain('__metricHelp');expect(hits).toBe(1);
  // New version: fetched from the network, kept, and the old version is removed.
  const next=old.replace(/\?v=.*/,'?v=next-test');
- expect(await page.evaluate(u=>fetch(u).then(r=>r.text()),next)).toContain('next-test');expect(hits).toBe(1);
+ expect(await page.evaluate(u=>fetch(u).then(r=>r.text()),next)).toContain('next-test');expect(hits).toBe(2);
  await expect.poll(async()=>(await keptUrls(page)).filter(u=>u.includes('/app/metric-help.js'))).toEqual([next]);
  // The page itself is always asked from the network while online.
  const html=await (await context.request.get('/')).text();
