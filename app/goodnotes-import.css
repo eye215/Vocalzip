@@ -79,3 +79,5 @@ body .gn-row .gn-target select:not(.pick-native){flex:1;min-width:0;width:auto;h
 .gn-progress-btn:disabled{opacity:.6;cursor:default}
 .gn-progress-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.gn-progress-bar span{transition:none}}
+
+.gn-diag{margin:8px 0;font-size:12px;color:var(--ink-3)}.gn-diag summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.gn-diag p{margin:2px 0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
