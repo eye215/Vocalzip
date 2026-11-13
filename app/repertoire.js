@@ -17,9 +17,11 @@ function message(error){V.toast(error.message||String(error),'error')}
 function save(fn){if(!owner())throw Error('로그인 후 저장해 주세요.');if(!V.change(fn,{silent:true}))throw Error('저장하지 못했어요. 입력은 화면에 남아 있어요.');V.softRender()}
 function panel(title,body,onSave,{wide=false,submit='저장'}={}){
  let dirty=false,busy=false,approved=false;const account=owner();let api;
- api=V.sheet({title,body:'<form class="archive-form">'+body+'<p class="archive-error" role="alert"></p><button type="submit" class="btn block">'+submit+'</button></form>',
+ api=V.sheet({title,confirmClose:false,body:'<form class="archive-form">'+body+'<p class="archive-error" role="alert"></p><button type="submit" class="btn block">'+submit+'</button></form>',
  onMount:(el,close)=>{el.classList.add('archive-sheet');if(wide)el.classList.add('archive-full');const form=el.querySelector('form');form.oninput=()=>{dirty=true};form.onchange=()=>{dirty=true};
- const guard=e=>{if((e.type==='keydown'&&e.key==='Escape')||(e.type==='click'&&(e.target===el.parentNode||e.target.closest('[data-close]')))){if(busy||dirty&&!confirm('저장하지 않은 입력을 버릴까요?')){e.preventDefault();e.stopImmediatePropagation()}}};
+ // This sheet asks by itself (it also waits while saving): the same question as every other sheet, in the app's own popup.
+ let asking=false;
+ const guard=e=>{if((e.type==='keydown'&&e.key==='Escape')||(e.type==='click'&&(e.target===el.parentNode||e.target.closest('[data-close]')))){if(busy||dirty){e.preventDefault();e.stopImmediatePropagation();if(!busy&&!asking){asking=true;V.confirmDiscard().then(ok=>{asking=false;if(ok){approved=true;close();V.toast('취소했어요.')}})}}}};
  el.parentNode.addEventListener('click',guard,true);el.parentNode.addEventListener('keydown',guard,true);
  const unload=e=>{if(dirty&&!approved){e.preventDefault();e.returnValue=''}};
  V.setGuard(()=>dirty&&!approved?'저장하지 않은 입력을 버릴까요?':'');

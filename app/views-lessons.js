@@ -94,7 +94,9 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
   const l = lesson, db = VZ.db, selected = new Set(l ? VZ.lessonSongIds(l) : songId && VZ.song(songId) ? [songId] : []);
   const last = [...db.lessons].filter(x => x.place || x.teacher).sort((a, b) => VZ.lessonSort(b, a))[0];
   const st = l ? VZ.lessonStatus(l) : 'scheduled';
-  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', body:'<form id="lesson-form">' +
+  let status = st;
+  // Picked songs and the status buttons are not form fields: count them as edits when closing.
+  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
     '<label class="field"><span>레슨 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(l?.date || date || VZ.today()) + '"></label>' +
     '<div class="two"><label class="field"><span>시작 시간' + (l ? '' : ' <span class="req">*</span>') + '</span><input type="time" name="start" ' + (l ? '' : 'required') + ' value="' + esc(l?.startTime || '') + '"></label><label class="field"><span>종료 시간</span><input type="time" name="end" value="' + esc(l?.endTime || '') + '"></label></div>' +
     '<div class="two"><label class="field"><span>장소</span><input type="text" name="place" maxlength="100" value="' + esc(l ? l.place || '' : last?.place || '') + '"></label><label class="field"><span>선생님</span><input type="text" name="teacher" maxlength="60" value="' + esc(l ? l.teacher || '' : last?.teacher || '') + '"></label></div>' +
@@ -104,7 +106,6 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
-      let status = st;
       const drawSongs = () => {
         songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song data-pick="song"><option value="">곡을 선택해 추가하세요</option>' +
           VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
