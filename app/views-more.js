@@ -115,12 +115,15 @@ VZ.importSheet = ({songId = '', files:initialFiles = null} = {}) => {
 /* ---------- 보관함 ---------- */
 const lib = {kind:'all', category:'all', song:'', month:'', q:''};
 const monthTitle = ym => ym ? Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월' : '날짜 미상';
+const libSongOptions = () => '<option value="">곡 전체</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('');
+/** Set while 보관함 is mounted: updates the list where it is (VZ.softRender uses it instead of drawing the screen again). */
+let libRefresh = null;
 VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() => '<button type="button" class="icon-btn" data-imp aria-label="파일 가져오기"><i class="ph ph-plus"></i></button><input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.webm,.mov,.mp4,.m4v" class="sr-only" data-imp-native aria-label="가져올 음성·영상 선택">', render() {
   const seg = (k, opts, label) => '<div class="seg lib-seg" role="group" aria-label="' + label + '">' + opts.map(([v, t]) => '<button type="button" data-f="' + k + '" data-v="' + v + '" aria-pressed="' + (lib[k] === v) + '">' + t + '</button>').join('') + '</div>';
   return VZ.songsSwitch('library') + '<div hidden class="search" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="제목·곡·메모 검색" aria-label="전체 녹음 검색" data-q value="' + esc(lib.q) + '"></div>' +
     '<div class="vz-library-tabs">'+seg('category', [['all', '전체'], ...M.RECORDING_CATEGORIES], '녹음 유형별 보기')+'</div>' +
-    '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 녹음·레슨 녹음 찾기 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p><a href="#/processing-log" class="small" style="color:var(--accent)">처리 내역 · 분석 상태 보기 ›</a></div><button type="button" class="icon-btn vz-filter-icon" data-library-filter aria-label="전체 녹음 필터" aria-pressed="false"><i class="ph ph-funnel"></i></button><button type="button" class="icon-btn" data-library-search aria-label="전체 녹음 검색"><i class="ph ph-magnifying-glass"></i></button></div><div class="lib-selects" hidden><select aria-label="형식 필터" data-kind><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>파일 형식 전체</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select><select aria-label="곡 필터" data-song><option value="">곡 전체</option><option value="__none"' + (lib.song === '__none' ? ' selected' : '') + '>곡 미지정</option>' + VZ.songsNewest().map(s => '<option value="' + esc(s.id) + '"' + (lib.song === s.id ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('') + '</select></div><div class="lib-selection-tools" aria-label="녹음 선택"><button type="button" class="lib-select-start" data-select-mode>선택</button><span class="lib-selection-total" data-lib-total-count>총 0개</span><div class="lib-selection-left" hidden><button type="button" class="lib-select-all" data-lib-select-all aria-pressed="false"><span class="lib-check" aria-hidden="true"></span>전체 선택</button><button type="button" class="lib-select-cancel" data-lib-select-cancel hidden>취소</button></div><div class="lib-selection-meta" hidden><strong data-lib-selected-count>0개 선택</strong><button type="button" class="lib-bulk-more" data-lib-bulk-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three"></i></button></div></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
-}, async mount(main) {
+    '<div data-server-analysis data-compact></div>' + '<a class="vz-review-fallback" href="#/song-suggest">곡 녹음·레슨 녹음 찾기 <i class="ph ph-caret-right"></i></a><div data-name-dates></div><div class="lib-tools"><div class="lib-summary"><p data-count></p><p class="small muted" data-backup></p><a href="#/processing-log" class="small" style="color:var(--accent)">처리 내역 · 분석 상태 보기 ›</a></div><button type="button" class="icon-btn vz-filter-icon" data-library-filter aria-label="전체 녹음 필터" aria-pressed="false"><i class="ph ph-funnel"></i></button><button type="button" class="icon-btn" data-library-search aria-label="전체 녹음 검색"><i class="ph ph-magnifying-glass"></i></button></div><div class="lib-selects" hidden><select aria-label="형식 필터" data-kind><option value="all"' + (lib.kind === 'all' ? ' selected' : '') + '>파일 형식 전체</option><option value="audio"' + (lib.kind === 'audio' ? ' selected' : '') + '>음성만</option><option value="video"' + (lib.kind === 'video' ? ' selected' : '') + '>영상만</option></select><select aria-label="곡 필터" data-song>' + libSongOptions() + '</select></div><div class="lib-selection-tools" aria-label="녹음 선택"><button type="button" class="lib-select-start" data-select-mode>선택</button><span class="lib-selection-total" data-lib-total-count>총 0개</span><div class="lib-selection-left" hidden><button type="button" class="lib-select-all" data-lib-select-all aria-pressed="false"><span class="lib-check" aria-hidden="true"></span>전체 선택</button><button type="button" class="lib-select-cancel" data-lib-select-cancel hidden>취소</button></div><div class="lib-selection-meta" hidden><strong data-lib-selected-count>0개 선택</strong><button type="button" class="lib-bulk-more" data-lib-bulk-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three"></i></button></div></div><div data-l><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>';
+}, softRefresh() { if (libRefresh) libRefresh(); else VZ.render(); }, async mount(main) {
   VZ.serverAnalysisCard?.(main.querySelector('[data-server-analysis]')); // app/server-analysis.js
   const importPicker = document.querySelector('[data-imp-native]');
   document.querySelector('[data-imp]').onclick = () => importPicker.click();
@@ -136,9 +139,26 @@ VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() =
     sheet.querySelector('[data-filter-month]').onclick=()=>{close();VZ.collectionChoice('기간 선택',[['','전체 기간'],['this','이번 달'],...months.filter(m=>m!==ym).map(m=>[m,monthTitle(m)])],lib.month,value=>{lib.month=value;M.stopAll();draw();});};
     sheet.querySelector('[data-filter-reset]').onclick=()=>{kind.value='all';song.value='';lib.kind='all';lib.song='';lib.month='';M.stopAll();close();draw();};
   }});};
+  // Type tabs: when they do not all fit, the row scrolls sideways — the faded right edge says there is more.
+  const tabs = main.querySelector('.vz-library-tabs');
+  const tabsEdge = () => { if (!tabs.isConnected) { removeEventListener('resize', tabsEdge); return; } tabs.classList.toggle('vz-more-right', tabs.scrollWidth - tabs.clientWidth - tabs.scrollLeft > 4); };
+  tabs.addEventListener('scroll', tabsEdge, {passive:true}); addEventListener('resize', tabsEdge); document.fonts?.ready?.then(tabsEdge); tabsEdge();
+  tabs.querySelector('[aria-pressed=true]')?.scrollIntoView?.({block:'nearest', inline:'nearest'});
   const l = main.querySelector('[data-l]');
-  let media = [], drawn = [];
-  const draw = () => {
+  let media = [], drawn = [], shownRows = 0, drawnFrom = null, drawnSig = '';
+  const sig = list => list.map(m => [m.id, m.name, M.dateOf(m), m.durationSeconds, m.songId, m.occasion, m.recordingCategory, m.cloud ? 1 : 0].join(':')).join('|');
+  /** Count and cloud-backup line above the list (also updated alone while a backup runs, without touching the rows). */
+  const status = () => {
+    const list = drawn, local = M.localOnly(media).length, b = M.backupStatus();
+    const seconds = list.reduce((a, m) => a + (Number(m.durationSeconds) || 0), 0);
+    main.querySelector('[data-count]').innerHTML = '<b>' + list.length + '개</b>' + (list.length !== media.length ? ' <span class="muted">/ 전체 ' + media.length + '개</span>' : '') + (seconds >= 60 ? ' · 총 ' + VZ.minutes(seconds / 60) : '');
+    main.querySelector('[data-backup]').textContent = [M.cloudError(), b.running ? '클라우드 백업 중 ' + (b.done + b.failed) + '/' + b.total : local ? '기기에만 있는 파일 ' + local + '개' + (window.vzipCloudSignedIn?.() ? ' · 곧 자동 백업' : ' · 로그인하면 클라우드에 자동 백업돼요') : window.vzipCloudSignedIn?.() && media.length ? '모두 클라우드에 백업됨' : ''].filter(Boolean).join(' · ');
+  };
+  /** keep: a refresh of the same view — the rows already drawn and the scroll position stay as they are. */
+  const draw = ({keep = false} = {}) => {
+    const keepRows = keep ? shownRows : 0, keepY = window.scrollY;
+    shownRows = 0;
+    if (media !== drawnFrom) { drawnFrom = media; drawnSig = sig(media); }
     libraryFilter.setAttribute('aria-pressed',String(lib.kind!=='all'||!!lib.song||!!lib.month));
     main.querySelector('[data-library-search]').setAttribute('aria-pressed',String(!!lib.q.trim()));
     const q = lib.q.trim().toLowerCase();
@@ -146,10 +166,7 @@ VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() =
       (!lib.song || (lib.song === '__none' ? !VZ.song(m.songId) : m.songId === lib.song)) && (!lib.month || (M.dateOf(m)||'').slice(0,7)===(lib.month==='this'?VZ.ymd(new Date()).slice(0,7):lib.month)) && (!q || (M.label(m) + ' ' + (m.review || '') + ' ' + VZ.songTitle(m.songId)).toLowerCase().includes(q)));
     drawn = list;
     VZ.collectionCount?.(media.length,'개');
-    const local = M.localOnly(media).length, b = M.backupStatus();
-    const seconds = list.reduce((a, m) => a + (Number(m.durationSeconds) || 0), 0);
-    main.querySelector('[data-count]').innerHTML = '<b>' + list.length + '개</b>' + (list.length !== media.length ? ' <span class="muted">/ 전체 ' + media.length + '개</span>' : '') + (seconds >= 60 ? ' · 총 ' + VZ.minutes(seconds / 60) : '');
-    main.querySelector('[data-backup]').textContent = [M.cloudError(), b.running ? '클라우드 백업 중 ' + (b.done + b.failed) + '/' + b.total : local ? '기기에만 있는 파일 ' + local + '개' + (window.vzipCloudSignedIn?.() ? ' · 곧 자동 백업' : ' · 로그인하면 클라우드에 자동 백업돼요') : window.vzipCloudSignedIn?.() && media.length ? '모두 클라우드에 백업됨' : ''].filter(Boolean).join(' · ');
+    status();
     if (!list.length) { l.innerHTML = VZ.empty('waveform', media.length ? '조건에 맞는 파일이 없어요.' : '아직 저장된 녹음이 없어요.', media.length ? '<button type="button" class="btn sm secondary" data-reset>필터 초기화</button>' : '<a class="btn sm" href="#/record">녹음하기</a>'); l.querySelector('[data-reset]')?.addEventListener('click', () => { Object.assign(lib, {kind:'all', category:'all', song:'', month:'', q:''}); VZ.render(); }); return; }
     // Newest recording month first; each month shows how many files and how long.
     const groups = new Map();
@@ -168,28 +185,53 @@ VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() =
         while (shown < end && order[shown][0] === k) html += VZ.mediaRow(order[shown++][1], {library:true});
         root.lastElementChild.querySelector('.list').insertAdjacentHTML('beforeend', html);
       }
-      root.vzPrefetch?.();
+      root.vzPrefetch?.(); shownRows = shown;
       if (shown >= order.length) { io?.disconnect(); l.querySelector('[data-more]')?.remove(); }
     };
     l._io?.disconnect();
     const io = l._io = window.IntersectionObserver ? new IntersectionObserver(es => { if (es.some(x => x.isIntersecting)) more(120); }, {rootMargin:'800px'}) : null;
-    more(60);
+    more(Math.max(60, keepRows));
     if (shown < order.length) { if (io) io.observe(l.querySelector('[data-more]')); else more(order.length); }
     drawn = list;
+    if (keep) window.scrollTo(0, keepY);
   };
+  /* Background refresh (a media event, the device backup, a sync from another device): the list is updated where it
+   * is — scroll position, the number of rows drawn and the ticked rows stay — and nothing is redrawn when nothing
+   * shown has changed. An open player is never closed: the refresh waits for the next event. */
+  let dataChanged = false, refreshing = false, refreshAgain = false, nameFix = null;
+  const onData = () => { if (!l.isConnected) { window.removeEventListener('vzip:data-changed', onData); window.removeEventListener('storage', onData); return; } dataChanged = true; };
+  window.addEventListener('vzip:data-changed', onData); window.addEventListener('storage', onData);
+  const refresh = async () => {
+    if (!l.isConnected) return;
+    if (refreshing) { refreshAgain = true; return; }
+    refreshing = true;
+    try {
+      do {
+        refreshAgain = false;
+        const fresh = await M.list().catch(() => media);
+        if (!l.isConnected) return;
+        const changed = dataChanged || (fresh !== drawnFrom && sig(fresh) !== drawnSig);
+        media = fresh;
+        if (!changed) { status(); continue; }
+        if (l.querySelector('.media-open:not([hidden])')) { VZ.pendingRender = true; continue; }
+        if (dataChanged) { dataChanged = false; const song = main.querySelector('[data-song]'); if (song) song.innerHTML = libSongOptions(); }
+        draw({keep:true}); nameFix?.();
+      } while (refreshAgain);
+    } finally { refreshing = false; }
+  };
+  libRefresh = refresh;
   let selectionControl=null;
-  main.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { lib[b.dataset.f] = b.dataset.v; main.querySelectorAll('[data-f="' + b.dataset.f + '"]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); selectionControl?.clear(); M.stopAll(); draw(); selectionControl?.refresh(); });
+  main.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { lib[b.dataset.f] = b.dataset.v; main.querySelectorAll('[data-f="' + b.dataset.f + '"]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); selectionControl?.clear(); M.stopAll(); draw(); selectionControl?.refresh(); b.scrollIntoView?.({block:'nearest', inline:'nearest'}); });
   main.querySelector('[data-kind]').onchange = e => { lib.kind = e.target.value; M.stopAll(); draw(); };
   main.querySelector('[data-song]').onchange = e => { lib.song = e.target.value; M.stopAll(); draw(); };
   main.querySelector('[data-q]').oninput = e => { lib.q = e.target.value; draw(); };
   // 선택 모드 (app/library-select.js): the ticked rows are among what the filters show now.
-  selectionControl=VZ.librarySelect?.(main, {list:() => drawn, done:async () => { media = await M.list().catch(() => media); if (l.isConnected) draw(); }});
+  selectionControl=VZ.librarySelect?.(main, {list:() => drawn, all:() => media, done:async () => { media = await M.list().catch(() => media); if (l.isConnected) draw({keep:true}); }});
   // The list kept on this device is drawn at once; the fresh one replaces it only if something changed and no player is open.
-  const sig = list => list.map(m => [m.id, m.name, M.dateOf(m), m.durationSeconds, m.songId, m.occasion, m.recordingCategory, m.cloud ? 1 : 0].join(':')).join('|');
   const peek = await M.peek().catch(() => null);
   if (peek?.length && l.isConnected) { media = peek; draw(); }
   const fresh = await M.list().catch(() => media);
-  if (l.isConnected && (!peek?.length || sig(fresh) !== sig(media)) && !l.querySelector('.media-open:not([hidden])')) { media = fresh; draw(); } else media = fresh;
+  if (l.isConnected && (!peek?.length || sig(fresh) !== drawnSig) && !l.querySelector('.media-open:not([hidden])')) { media = fresh; draw({keep:!!peek?.length}); } else media = fresh;
   // Recordings named yyyy-MM-dd_HH-mm-ss that sit on another date (imported before names were read): one tap moves them.
   const nameHost = main.querySelector('[data-name-dates]');
   const drawNameFix = () => {
@@ -213,8 +255,10 @@ VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() =
       if (l.isConnected) { draw(); drawNameFix(); }
     };
   };
-  if (l.isConnected) drawNameFix();
-  const onBackup = async () => { if (!l.isConnected) { window.removeEventListener('vzip:v6-backup', onBackup); return; } if (!M.backupStatus().running) media = await M.list().catch(() => media); if (l.isConnected && !l.querySelector('.media-open:not([hidden])')) draw(); };
+  nameFix = () => { if (l.isConnected) drawNameFix(); };
+  nameFix();
+  // Backup progress only changes the status line; when the backup ends the list is refreshed where it is.
+  const onBackup = () => { if (!l.isConnected) { window.removeEventListener('vzip:v6-backup', onBackup); return; } if (M.backupStatus().running) status(); else refresh(); };
   window.addEventListener('vzip:v6-backup', onBackup);
   if (M.localOnly(media).length) M.scheduleBackup(500);
   // Show filled lengths, but never close a player the user has open.

@@ -693,3 +693,8 @@ body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a:focus-visible{
     background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;
   }
 }
+/* 처리 내역: long file names wrap or shorten inside the card instead of widening the page (320px). */
+[data-processing-log] .stack{grid-template-columns:minmax(0,1fr)}
+[data-processing-log] .row>.ellipsis{min-width:0}
+[data-processing-log] .row>.badge,[data-processing-log] .row>.btn{flex:none}
+[data-processing-log] .small{overflow-wrap:anywhere}
