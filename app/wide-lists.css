@@ -34,9 +34,11 @@
   body[data-vz-route="lessons"] #view>.list>.item{min-width:0}
   body[data-vz-route="lesson"] #view:has(>.card:first-child){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;align-content:start;align-items:start}
   body[data-vz-route="lesson"] #view>*{grid-column:2;min-width:0}
+  body[data-vz-route="lesson"] #view>.card{overflow-wrap:anywhere}
   body[data-vz-route="lesson"] #view>.card:first-child{grid-column:1;grid-row:1 / span 8}
   body[data-vz-route="lesson"] #view>[data-del-lesson]{grid-column:1/-1}
   body[data-vz-route="lesson"] #view>.sec :is(button,a){min-height:44px;display:inline-flex;align-items:center}
+  body[data-vz-route="growth"] :is([data-month-prev],[data-month-next],[data-chart-prev],[data-chart-next]){min-width:44px;min-height:44px}
   body[data-vz-route="settings"] .vz-settings{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
   body[data-vz-route="settings"] .vz-settings-section:last-of-type,body[data-vz-route="settings"] .vz-settings-version{grid-column:1/-1}
 }
