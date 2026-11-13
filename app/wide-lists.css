@@ -19,9 +19,12 @@
 
   /* 기록 */
   /* The last row is 1fr so a long day list grows that row only and never opens gaps between summary and calendar. */
-  body.vz-calendar-mode #view{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-rows:auto auto 1fr;column-gap:24px;align-items:start}
+  body.vz-calendar-mode #view{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-rows:auto auto auto 1fr;column-gap:24px;align-items:start}
   body.vz-calendar-mode #view>*{grid-column:1;min-width:0}
-  body.vz-calendar-mode #view>[data-day]{grid-column:2;grid-row:1/4}
+  /* The entry row (레슨 · 숙제 · 연습 기록 · 나의 공연) sits above both columns. */
+  body.vz-calendar-mode #view>.vz-record-links{grid-column:1/-1}
+  body.vz-calendar-mode .vz-record-links a{flex:0 0 auto;padding:0 16px}
+  body.vz-calendar-mode #view>[data-day]{grid-column:2;grid-row:2/5}
   body.vz-calendar-mode .vz-calendar-day-head{margin-top:0}
 }
 

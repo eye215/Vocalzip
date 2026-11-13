@@ -26,3 +26,19 @@ test('설정: 하루 연습 목표 시간을 저장하면 목록의 값도 바�
  // Opening it again starts from the saved value.
  await row.click();await expect(sheet.locator('input[name=minutes]')).toHaveValue('45');
 });
+
+test('기록 탭 첫 화면: 레슨·숙제·연습 기록·나의 공연으로 가는 한 줄 메뉴',async({page})=>{
+ await boot(page);const links=page.locator('.vz-record-links a');
+ await expect(links).toHaveText(['레슨','숙제','연습 기록','나의 공연']);
+ expect(await links.evaluateAll(list=>list.map(a=>a.getAttribute('href')))).toEqual(['#/lessons','#/homework','#/practices','#/performances']);
+ for(const width of [320,375]){
+  await page.setViewportSize({width,height:812});
+  const boxes=await links.evaluateAll(list=>list.map(a=>{const r=a.getBoundingClientRect();return {top:Math.round(r.top),h:r.height,right:r.right}}));
+  expect(new Set(boxes.map(b=>b.top)).size).toBe(1);
+  for(const b of boxes){expect(b.h).toBeGreaterThanOrEqual(44);expect(b.right).toBeLessThanOrEqual(width);}
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ }
+ await links.nth(1).click();await expect(page.locator('#top h1')).toHaveText('숙제');
+ await expect(page.locator('.v-nav a[data-nav=calendar]')).toHaveAttribute('aria-current','page');
+ await page.goBack();await links.nth(3).click();await expect(page.locator('#top h1')).toHaveText('나의 공연');
+});
