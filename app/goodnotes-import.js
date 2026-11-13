@@ -106,7 +106,7 @@ const summary=report=>[
 /** Counts only (no titles, no content): what the reader found in the file, for telling why an import looks wrong. */
 const diagnosis=(model,file)=>{const r=model.report,list=o=>Object.entries(o||{}).map(([k,n])=>k+'×'+n).join(' ')||'없음';
  return ['읽기 버전 '+(r.reader||'?')+' · 굿노트 형식 '+(r.schema??'?')+' · 파일 '+Math.round((file?.size||0)/1024)+'KB',
-  '쪽 기록 '+r.pageEvents+' · 지움 표시 '+r.removedPages+' · 가져올 쪽 '+model.pages.length+' · PDF 쪽 번호 '+model.pages.map(p=>p.pdf?p.pdf.page:'-').join(','),
+  '쪽 기록 '+r.pageEvents+' · 옮긴 쪽 '+(r.movedPages||0)+' · 지움 표시 '+r.removedPages+' · 가져올 쪽 '+model.pages.length+' · PDF 쪽 번호 '+model.pages.map(p=>p.pdf?p.pdf.page:'-').join(','),
   '필기 '+r.strokes+'획 · 못 읽음 '+r.unsupported+' · 지운 필기 '+r.deleted+' · 짝 없는 묶음 '+r.unmatchedNotes,
   '필기 종류 '+list(r.inkKinds),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)];};
 /**

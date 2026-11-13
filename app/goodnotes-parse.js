@@ -84,6 +84,16 @@ const f32=v=>new DataView(v.buffer,v.byteOffset,4).getFloat32(0,true);
 function records(b){const out=[];let i=0;while(i<b.length){let n;[n,i]=varint(b,i);if(i+n>b.length)throw fail('굿노트 파일이 손상됐어요.','format');out.push(b.subarray(i,i+n));i+=n;}return out;}
 /** A register is {1: value, 2: clock}; the value may be text. */
 const reg=(list,field)=>{const inner=sub(list,field);return inner?str(first(inner,1,2)):'';};
+/** A register with its clock: {bytes, text, counter}. A later edit of the same value (a page moved, a page removed)
+ * comes as a new register with a higher counter; the highest counter wins, the later event on a tie. */
+const regClock=(list,field)=>{
+ const inner=sub(list,field);if(!inner)return null;
+ const bytes=first(inner,1,2)||null,clock=sub(inner,2);
+ return {bytes,text:bytes?str(bytes):'',number:first(inner,1,0),counter:clock?Number(first(clock,1,0))||0:0};
+};
+const newer=(next,old)=>!!next&&(!old||next.counter>=old.counter);
+/** Order keys are byte strings compared byte by byte (a moved page gets a key between its new neighbours). */
+const compareBytes=(a,b)=>{const n=Math.min(a.length,b.length);for(let i=0;i<n;i++)if(a[i]!==b[i])return a[i]-b[i];return a.length-b.length;};
 
 /* ---------- Apple LZ4 frames ("bv41" compressed, "bv4-" stored, "bv4$" end) ---------- */
 function lz4(src,size){
@@ -253,7 +263,7 @@ async function read(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
  if(!eventsBytes)throw fail('굿노트 파일이 아니에요. 굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 골라 주세요.','format');
- const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,unknownEvents:{},schema:null,reader:3,events:{},pageEvents:0,inkKinds:{}};
+ const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,movedPages:0,unknownEvents:{},schema:null,reader:5,events:{},pageEvents:0,inkKinds:{}};
  const schemaBytes=await zip.read('schema.pb');if(schemaBytes){try{report.schema=first(fields(schemaBytes),1,0)??null;}catch{}}
  const index=async name=>{const map=new Map(),data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r);map.set(str(first(f,1,2)).toUpperCase(),str(first(f,2,2)));}catch{}}return map;};
  const [attachmentPaths,notePaths]=[await index('index.attachments.pb'),await index('index.notes.pb')];
@@ -270,24 +280,32 @@ async function read(input){
    backgrounds.set(id,{...old,attachment:str(first(body,4,2)).toUpperCase()||old.attachment||'',page:first(body,5,0)||old.page||0,
     width:size&&first(size,1,5)?f32(first(size,1,5)):old.width||0,height:size&&first(size,2,5)?f32(first(size,2,5)):old.height||0});
   }else if(kind===54){
-   const id=str(first(body,2,2)).toUpperCase(),old=pages.get(id)||{};
-   pages.set(id,{id,background:reg(body,3).toUpperCase()||old.background||'',order:reg(body,4)||old.order||''});
+   const id=str(first(body,2,2)).toUpperCase(),page=pages.get(id)||{id,background:null,order:null};
+   const background=regClock(body,3),order=regClock(body,4);
+   if(background?.bytes&&newer(background,page.background))page.background=background;
+   if(order?.bytes&&newer(order,page.order))page.order=order;
+   pages.set(id,page);
+  }else if(kind===55){
+   // "Page moved": a new order key for an existing page. Without it a moved page stays where it was first put.
+   const id=str(first(body,2,2)).toUpperCase(),order=regClock(body,3),page=pages.get(id)||{id,background:null,order:null};
+   if(id&&order?.bytes&&newer(order,page.order)){page.order=order;pages.set(id,page);report.movedPages++;}
   }else if(kind===56){
-   // "Page removed" register: {value, clock}. The page event stays in the log; a later 0 would bring the page back.
-   const id=str(first(body,2,2)).toUpperCase(),state=sub(body,3);
-   if(id&&state)removed.set(id,!!first(state,1,0));
+   // "Page removed" register: {value, clock}. The page event stays in the log; a later 0 brings the page back.
+   const id=str(first(body,2,2)).toUpperCase(),state=regClock(body,3);
+   if(id&&state&&newer(state,removed.get(id)))removed.set(id,state);
   }else if(kind===65){
    const id=str(first(body,2,2)).toUpperCase(),old=outline.get(id)||{};
    outline.set(id,{id,pageId:str(first(body,1,2)).toUpperCase()||old.pageId||'',title:reg(body,5)||old.title||'',order:reg(body,4)||old.order||''});
   }else if(![6,10,15,34,38,102,103,104,105,106,121].includes(kind))report.unknownEvents[kind]=(report.unknownEvents[kind]||0)+1;
  }
  const compare=(a,b)=>a<b?-1:a>b?1:0;
- const ordered=[...pages.values()].filter(p=>!removed.get(p.id)).sort((a,b)=>compare(a.order,b.order)||compare(a.id,b.id));
+ const empty=new Uint8Array(0);
+ const ordered=[...pages.values()].filter(p=>!removed.get(p.id)?.number).sort((a,b)=>compareBytes(a.order?.bytes||empty,b.order?.bytes||empty)||compare(a.id,b.id));
  report.removedPages=pages.size-ordered.length;report.pageEvents=pages.size;
  if(!ordered.length)throw fail('이 굿노트 파일에서 페이지를 찾지 못했어요.','empty');
  const usedNotes=new Set(),result=[];
  for(const p of ordered){
-  const bg=backgrounds.get(p.background)||{},file=attachmentPaths.get(bg.attachment)||'';
+  const bg=backgrounds.get((p.background?.text||'').toUpperCase())||{},file=attachmentPaths.get(bg.attachment)||'';
   const page={id:p.id,width:bg.width>0?bg.width:595,height:bg.height>0?bg.height:842,pdf:file&&bg.page>=1&&zip.entries.has(file)?{file,page:bg.page}:null,strokes:[]};
   if(!page.pdf)report.pagesWithoutPdf++;
   // The page's ink file has the page id + 1. With a single page and a single ink file they belong together.
@@ -297,7 +315,7 @@ async function read(input){
   if(path){usedNotes.add(noteId);const data=await zip.read(path);if(data){try{page.strokes=readInk(data,page,report);}catch{report.unsupported++;}}}
   result.push(page);
  }
- for(const p of pages.values())if(removed.get(p.id))usedNotes.add(nextId(p.id)); // a removed page's ink is left out with it
+ for(const p of pages.values())if(removed.get(p.id)?.number)usedNotes.add(nextId(p.id)); // a removed page's ink is left out with it
  report.unmatchedNotes=[...notePaths.keys()].filter(id=>!usedNotes.has(id)).length;
  const at=new Map(result.map((p,i)=>[p.id,i]));
  const marks=[...outline.values()].filter(o=>o.title.trim()&&at.has(o.pageId)).sort((a,b)=>at.get(a.pageId)-at.get(b.pageId)||compare(a.order,b.order));
@@ -327,7 +345,7 @@ async function structure(input){
  const list=async name=>{const out=[],data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r),path=str(first(f,2,2));out.push([str(first(f,1,2)),path,zip.entries.get(path)?.length??null]);}catch{}}return out;};
  const events=[];for(const record of records(eventsBytes)){if(events.length>=300000)break;try{events.push(plain(record,0));}catch{events.push({bad:record.length});}}
  const schemaBytes=await zip.read('schema.pb');let schema=null;if(schemaBytes){try{schema=first(fields(schemaBytes),1,0)??null;}catch{}}
- return {format:'vocalzip-goodnotes-structure',version:1,reader:4,schema,fileSize:bytes.length,entries:zip.entries.size,
+ return {format:'vocalzip-goodnotes-structure',version:1,reader:5,schema,fileSize:bytes.length,entries:zip.entries.size,
   attachments:await list('index.attachments.pb'),notes:await list('index.notes.pb'),events};
 }
 return {read,structure,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
