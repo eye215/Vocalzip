@@ -571,6 +571,14 @@ test('with reduced motion pages turn at once, without sliding',async({page})=>{
  await expect(pageLabel).toHaveText('2 / 2쪽');
 });
 test('reopening a score uses the device copy: no second PDF download',async({page})=>{
+ // WebKit's ephemeral context discards Cache Storage when its last same-origin document unloads.
+ // Keep a real cache handle in a second tab so open() can reload without evicting the device copy.
+ // No PDF response is mocked here: the application still writes, validates and reads its own cache.
+ // https://github.com/microsoft/playwright/issues/41618
+ const keeper=await page.context().newPage();
+ await keeper.route('**/__score-cache-owner',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Score cache owner</title>'}));
+ await keeper.goto('/__score-cache-owner');
+ await keeper.evaluate(async()=>{window.scoreCache=await caches.open('vzip-score-pdf-v1');});
  const r2=await setup(page);let dialog=await open(page);
  await expect.poll(()=>page.evaluate(async()=>(await (await caches.open('vzip-score-pdf-v1')).keys()).length)).toBe(1);
  await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
@@ -584,6 +592,7 @@ test('reopening a score uses the device copy: no second PDF download',async({pag
  await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();
  await page.evaluate(()=>window.VZ.deleteScoreWithInk('s1',window.VZ.song('s1').scores[0]));
  await expect.poll(()=>page.evaluate(async()=>(await (await caches.open('vzip-score-pdf-v1')).keys()).length)).toBe(0);
+ await keeper.close();
 });
 test('the viewer has no 완료 button; ← closes it',async({page})=>{
  await setup(page);const dialog=await open(page);
