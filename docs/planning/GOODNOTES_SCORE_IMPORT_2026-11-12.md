@@ -93,6 +93,14 @@ Two real notebooks (one with a known edit history: shuffle pages, insert a secon
 - **Removed pages** (56) confirmed on 13 pages of known history.
 - With these, the reconstructed order of the known-history notebook equals the history exactly (first PDF p1, copy p2–p4, first PDF p5 moved to place 5, copy p6–p13, third PDF p1–p4).
 
+### 2026-11-14: the owner's real notebook (293 pages, 95 PDFs, schema 35), from its structure export
+
+The structure export (events only) of the notebook that imported wrongly was re-encoded into a minimal archive and read with the real reader:
+
+- 340 page events − 47 removed = **293 pages**, the count GoodNotes shows; 81 move events applied; the song the owner photographed at GoodNotes page 183 comes out at page 183, and its neighbours are the right single-page PDFs.
+- Event kinds seen there and now treated as known (not counted as unknown): **57** (a flag register on the first page of a song) and **160/161/163/164** (named items pointing at pages: create, add a page reference, delete, rename) are page **bookmarks**; **62** marks a page brought in from another notebook (name + order key) — such pages also have their normal page event.
+- None of these change page order or removal.
+
 ### Not verified yet
 
 - First real file: 1 page, 1 outline entry, highlighter strokes (see the 2026-11-13 section above for the second file). **Text boxes, images, lasso-moved ink, several PDFs in one notebook, page moves in the event log** have not been seen. Pen width falls back to the median of the per-point values when the single width is 0 (a guess).
