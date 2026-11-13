@@ -230,6 +230,33 @@ VZ.openRecordingAnalysisSheet = item => {
   });
 };
 /* ---------- view ---------- */
+/** 측정 방식별 비교: the result just computed on this device, the saved one (server: MR removed / AI separated) and the
+ * one before it (history), side by side, so the change a method made can be checked against the recording itself.
+ * Read-only; '' when there is nothing to compare. The AI-separated voice is never stored, so only its numbers show. */
+const methodOf = x => x?.confidence?.aiSeparated ? 'AI 분리 후' : x?.confidence?.mrRemoved ? 'MR 빼고' : '녹음 그대로';
+const trusted = x => x?.version != null ? reliableResult(x) : !!VZ.analysisReliable?.(x);
+VZ.analysisCompare = (result, saved) => {
+  const cols = [{label:'지금 이 기기', x:result}];
+  if (saved?.v) cols.push({label:'저장된 결과', x:saved});
+  const prev = Array.isArray(saved?.history) ? saved.history[saved.history.length - 1] : null;
+  if (prev?.metrics) cols.push({label:'그 전 결과', x:prev});
+  if (cols.length < 2) return '';
+  const num = (v, unit = '') => v == null || !Number.isFinite(Number(v)) ? '—' : esc(String(v)) + unit;
+  const rows = [
+    ['측정 방식', x => esc(methodOf(x))],
+    ['성장 판정', x => trusted(x) ? '판정' : '<span class="ana-cmp-held">보류</span>'],
+    ['피치 신뢰도', x => x.confidence?.pitchConfidence == null ? '—' : Math.round(x.confidence.pitchConfidence * 100) + '%'],
+    ['노래한 시간', x => num(x.metrics?.voicedSeconds == null ? null : Math.round(x.metrics.voicedSeconds), '초')],
+    ['음정 정확도', x => num(x.metrics?.intonation?.meanAbsCents, ' cent')],
+    ['지속음 흔들림', x => num(x.metrics?.stability?.wobbleCents, ' cent')],
+    ['유효 최고음', x => esc(x.metrics?.range?.validHigh?.note || '—')],
+  ];
+  return '<details class="card ana-cmp" data-ana-compare><summary><i class="ph ph-columns" aria-hidden="true"></i> 측정 방식별 비교</summary>' +
+    '<div class="ana-cmp-scroll"><table><thead><tr><th scope="col"></th>' + cols.map(c => '<th scope="col">' + c.label + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(([k, f]) => '<tr><th scope="row">' + k + '</th>' + cols.map(c => '<td>' + f(c.x) + '</td>').join('') + '</tr>').join('') +
+    '</tbody></table></div><p class="small muted">음정 정확도·흔들림은 작을수록 정확해요. AI로 나눈 목소리는 저장하지 않아서 숫자만 남아요. 원본 녹음은 위에서 들을 수 있어요.</p></details>';
+};
+/* ---------- view ---------- */
 VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefresh:true,
   render() { return '<div data-ana><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>'; },
   async mount(main, r) {
@@ -290,6 +317,7 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
     const saved = async () => ((await M.list().catch(() => [])).find(m => m.id === id) || item).analysis;
     const before = await saved();
     if (!alive()) return;
+    note.insertAdjacentHTML('beforebegin', VZ.analysisCompare(result, before));
     // A held-back saved result is replaced by one that can be trusted now (e.g. measured with the song's MR removed);
     // a result the server measured after AI separation stays unless the person asks.
     if (!VZ.analysisCurrent(before, result.version) || (!VZ.analysisReliable(before) && !before?.confidence?.aiSeparated && reliableResult(result))) { await keep(before); return; }
