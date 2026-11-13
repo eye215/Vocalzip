@@ -17,4 +17,4 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
       - run: npx playwright test tests/cache-context-diagnostic.spec.cjs --project=webkit-mobile --workers=1 --reporter=list
-      - run: npx playwright test tests/v6.spec.cjs --grep 'Song sheet keeps aliases' --project=webkit-mobile --workers=1 --repeat-each=30 --reporter=list
+      - run: npx playwright test tests/v6.spec.cjs --grep 'Song sheet keeps aliases' --project=webkit-mobile --workers=2 --repeat-each=100 --reporter=list
