@@ -83,7 +83,8 @@ export async function separateOne(db, row, {cmd} = {}) {
     const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
     if (previous?.v) { const {history:ignored, ...kept} = previous; history.push(kept); }
     const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server',
-      ...(history.length ? {history:history.slice(-5)} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 44100, separationTried:true, separationResult:'separated'}};
+      ...(history.length ? {history} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 44100, separationTried:true, separationResult:'separated',
+        ...(previous?.scope?.unreliableReanalysis ? {unreliableReanalysis:previous.scope.unreliableReanalysis} : {})}};
     return await save(db, row, summary) ? 'separated' : 'changed';
   } catch {
     // A file that cannot be read now stays waiting for the next run.
