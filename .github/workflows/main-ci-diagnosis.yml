@@ -1,0 +1,38 @@
+name: Main CI independent diagnosis
+on:
+  push:
+    branches: [codex/fix-main-ci]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm install --prefix /tmp/vzip-signalsmith --ignore-scripts signalsmith-stretch@1.3.2 mediabunny@1.65.1
+      - name: Run each reported test independently on unmodified application code
+        env:
+          VZ_SIGNALSMITH: /tmp/vzip-signalsmith/node_modules/signalsmith-stretch/SignalsmithStretch.mjs
+          VZ_MEDIABUNNY: /tmp/vzip-signalsmith/node_modules/mediabunny/dist/bundles/mediabunny.min.mjs
+        shell: bash
+        run: |
+          mkdir -p diagnosis
+          status=0
+          for target in tests/recover.spec.cjs:3 tests/snapshot-bridge.spec.cjs:264 tests/voice-check.spec.cjs:49 tests/song-mr.spec.cjs:117 tests/song-mr.spec.cjs:142; do
+            npx playwright test "$target" --workers=1 --reporter=list 2>&1 | tee "diagnosis/$(basename "$target").log"
+            result=${PIPESTATUS[0]}
+            echo "$target exit=$result" | tee -a diagnosis/summary.txt
+            if [ "$result" -ne 0 ]; then status=1; fi
+          done
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: main-ci-independent-diagnosis
+          path: diagnosis/
