@@ -382,8 +382,12 @@ VZ.rerender = () => VZ.render();
 VZ.softRender = () => {
   const main = document.getElementById('view');
   const typing = main?.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
-  if (VZ.isBusy?.() || main?.classList.contains('lib-selecting') || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
-  VZ.pendingRender = false; VZ.render();
+  // A route with softRefresh (보관함) updates itself where it is: scroll position, drawn rows and ticked rows stay.
+  // Without it, rows being ticked (lib-selection-active) are never wiped by a background refresh.
+  const inPlace = current?.def.softRefresh && current.key === location.hash;
+  if (VZ.isBusy?.() || (!inPlace && main?.classList.contains('lib-selection-active')) || document.querySelector('.sheet-back') || main?.dataset.dirty || typing || main?.querySelector('.media-open:not([hidden])') || VZ.media?.playing?.() || current?.def.noAutoRefresh) { VZ.pendingRender = true; return; }
+  VZ.pendingRender = false;
+  if (inPlace) current.def.softRefresh(main); else VZ.render();
 };
 document.addEventListener('input', e => { const main = document.getElementById('view'); if (main?.contains(e.target) && !e.target.matches('[type=search],[data-q]')) main.dataset.dirty = '1'; });
 // Icon fonts render private-use glyphs; keep them out of accessible names.

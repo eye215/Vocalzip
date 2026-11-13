@@ -46,6 +46,10 @@ const counts = rows => {
 /** Errors that are not the file's fault: wait and try again instead of counting a failure. */
 const isAuth = e => /로그인|auth|JWT|401|403/i.test(e?.message || '');
 const isBusy = e => /다른 파일을 업로드/.test(e?.message || '');
+/** Another upload (this tab's backup finishing its file, or another tab) still holds the one upload slot.
+ * Unknown (no Web Locks) counts as free, so the retry and its server check run as before. */
+const slotBusy = async () => { try { return !!(await navigator.locks?.query?.())?.held?.some(l => l.name === 'vzip-cloud-media-upload'); } catch { return false; } };
+const busyMsg = row => { const waited = Math.round((Date.now() - row.busySince) / 1000); return waited < 90 ? '다른 업로드가 끝나길 기다리는 중…' : '다른 업로드가 끝나길 기다리는 중 (' + Math.floor(waited / 60) + '분) · 다른 탭이나 홈 화면 앱에서 올리고 있다면 그쪽을 끝내 주세요'; };
 const isNetwork = e => e?.name === 'TypeError' || /network|load failed|fetch|연결|timeout|중단/i.test(e?.message || '');
 function conditionsFor(source) {
   let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}')[source] || {}; } catch {}
@@ -158,7 +162,7 @@ async function runAuto(files) {
   if (files) { hub.pendingFiles = files.slice(); hub.totalFiles = files.length; hub.batchCount = Math.ceil(files.length / BATCH()); hub.batchNo = 0; }
   hub.auto = true; hub.phase = 'importing'; hub.paused = false; hub.notice = ''; hub.batch ||= VZ.uid(); hub.startedAt ||= Date.now(); hub.autoRunning = true;
   M.keepAwake(true); M.holdBackup?.(true); draw();
-  try { await autoLoop(); } finally { hub.autoRunning = false; hub.inBatch = 0; M.keepAwake(false); M.holdBackup?.(false); hub.stage = ''; saveQueue(true); if (host()) draw(); }
+  try { await autoLoop(); } finally { hub.autoRunning = false; hub.inBatch = 0; M.keepAwake(false); M.holdBackup?.(false); hub.stage = ''; saveQueue(true); if (host()) draw(); laterDone(); }
 }
 async function autoLoop() {
   hub.known ||= await knownFiles();
@@ -182,16 +186,18 @@ async function autoLoop() {
       saveQueue(true); break;
     }
     hub.stage = '묶음 ' + hub.batchNo + '/' + hub.batchCount + ' · 올리는 중';
-    await runImport(rows.filter(r => !r.error && r.state !== 'skipped'), {more:!!hub.pendingFiles.length});
+    await runImport(rows.filter(r => !r.error && r.state !== 'skipped'), {more:() => !!hub.pendingFiles.length});
   }
   if (!hub.paused && !hub.pendingFiles?.length && hub.phase !== 'done') { hub.phase = 'done'; M.invalidate(); }
 }
+/** A row the user may tick: 25 seconds or longer, or a length that could not be read (their tick decides). */
+const importable = r => r.duration == null || Number(r.duration) >= 25;
 /** ok | dup | needs-date | out | error */
 function evaluate(row) {
   const c = hub.cond;
   row.reasons = [];
   if (row.error) { row.status = 'error'; return; }
-  if (row.duration == null) row.reasons.push('길이 확인 불가');
+  if (row.duration == null) row.reasons.push('길이 확인 불가 · 체크하면 가져와요');
   else if (row.duration < Math.max(25, c.min) || row.duration > c.max) row.reasons.push(row.duration < 25 ? '25초 미만 · 가져오지 않음' : '길이 ' + mmss(row.duration));
   if (row.dateOk && row.date && ((c.start && row.date < c.start) || (c.end && row.date > c.end))) row.reasons.push('기간 밖 ' + VZ.dateLabel(row.date));
   row.status = row.reasons.length ? 'out' : row.dup ? 'dup' : !row.dateOk ? 'needs-date' : 'ok';
@@ -207,7 +213,7 @@ async function runImport(rows, {more = false} = {}) {
   for (const r of rows) { if (r.state === 'skipped') continue; r.queued = true; if (r.state !== 'done') { Object.assign(r, r.dup ? {state:'dup', msg:'중복 제외 · ' + r.dup} : {state:'waiting', msg:''}); r.tries = 0; } }
   hub.phase = 'importing'; hub.paused = false; hub.notice = ''; hub.running = true; draw(); saveQueue(true);
   M.keepAwake(true); M.holdBackup?.(true);
-  try { await importRows(rows); } finally { hub.running = false; M.keepAwake(false); M.holdBackup?.(false); saveQueue(true); if (host()) draw(); }
+  try { await importRows(rows); } finally { hub.running = false; M.keepAwake(false); M.holdBackup?.(false); saveQueue(true); if (host()) draw(); laterDone(); }
 }
 /** One file at a time from the picked File (no device copy); done = the server confirmed it. */
 async function importRows(rows) {
@@ -216,9 +222,19 @@ async function importRows(rows) {
     const row = rows[i];
     if (hub.paused) break;
     if (row.state === 'done' || row.state === 'dup' || row.state === 'skipped') continue;
-    if (!(Number(row.duration) >= 25)) { row.state = 'skipped'; row.msg = row.duration != null && row.duration < 25 ? '25초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음'; row.file = null; drawRow(row); continue; }
+    // Under 25 seconds is never imported. A file whose length could not be read is left out by default, but imported
+    // when the user ticked it in the review list.
+    if (row.duration == null ? !row.selected : !(Number(row.duration) >= 25)) { row.state = 'skipped'; row.msg = row.duration != null && row.duration < 25 ? '25초 미만이라 가져오지 않음' : '길이를 확인할 수 없어 가져오지 않음'; row.file = null; drawRow(row); continue; }
     if (direct && !window.vzipCloudSignedIn?.()) { hub.paused = true; hub.notice = '로그인이 풀렸어요. 다시 로그인한 뒤 "이어서 올리기"를 눌러 주세요. 완료된 파일은 그대로예요.'; break; }
     if (!row.file) { row.state = 'failed'; row.msg = '원본 파일을 다시 선택해야 해요.'; continue; }
+    // A file waiting for the upload slot: while the slot is still taken the retry cannot start, so keep waiting —
+    // without downloading the whole list again and without a new journal line every few seconds.
+    if (row.busySince && await slotBusy()) {
+      row.msg = busyMsg(row); drawRow(row);
+      await new Promise(r => setTimeout(r, 5000));
+      if (!hub.paused) rows.splice(i + 1, 0, row);
+      continue;
+    }
     row.state = 'uploading'; row.msg = '준비 중…'; hub.current = row; drawRow(row);
     VZ.processingLog?.record(row.id, {state:'uploading', originalName:row.name, songId:row.song, songSource:row.song?(row.suggestions?.[0]?.id===row.song?'파일명 추천 · 확인 후 저장':'직접 지정'):'미지정', date:row.date, dateSource:row.dateSource});
     // A file that waited for the upload slot may meanwhile have been uploaded elsewhere (the same import started in
@@ -244,9 +260,8 @@ async function importRows(rows) {
         // Another upload (the background device backup finishing its current file, or another tab / the home-screen
         // app) holds the one upload slot. Waiting is not a failure: keep the file first in line until the slot frees.
         row.busySince ||= Date.now();
-        const waited = Math.round((Date.now() - row.busySince) / 1000);
         row.state = 'waiting';
-        row.msg = waited < 90 ? '다른 업로드가 끝나길 기다리는 중…' : '다른 업로드가 끝나길 기다리는 중 (' + Math.floor(waited / 60) + '분) · 다른 탭이나 홈 화면 앱에서 올리고 있다면 그쪽을 끝내 주세요';
+        row.msg = busyMsg(row);
         drawRow(row);
         await new Promise(r => setTimeout(r, 5000));
         if (!hub.paused) { rows.splice(i + 1, 0, row); } // same file again next, order kept
@@ -277,8 +292,31 @@ async function importRows(rows) {
   // Files approved as that day's lesson recording go into the lesson (once).
   const toLesson = rows.filter(r => r.state === 'done' && r.lessonId).filter(r => { const l = VZ.db.lessons.find(x => x.id === r.lessonId); return l && !(l.recordings || []).some(x => x.id === r.id); });
   if (toLesson.length && VZ.change(d => { for (const r of toLesson) { const l = d.lessons.find(x => x.id === r.lessonId); if (l && !(l.recordings || []).some(x => x.id === r.id)) { l.recordings ||= []; l.recordings.push({id:r.id, note:''}); } } }, {silent:true})) hub.linked = (hub.linked || 0) + toLesson.length;
-  if (hub.more) { M.invalidate(); return; } // the next batch follows
+  if (typeof hub.more === 'function' ? hub.more() : hub.more) { M.invalidate(); return; } // the next batch follows
   hub.phase = 'done'; M.invalidate(); draw();
+}
+/* Files picked (+ in 전체 녹음, 처리 내역) while an import is running are kept, not dropped: a bulk upload without a
+ * review step takes them as further batches; otherwise they wait and their review opens from the result card. */
+function addWhileImporting(files, review) {
+  const media = mediaOnly(files), skipped = files.length - media.length;
+  if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 건너뛰었어요.');
+  if (!media.length) return;
+  if (hub.auto && !review && hub.pendingFiles) {
+    hub.pendingFiles.push(...media); hub.totalFiles = (hub.totalFiles || 0) + media.length; hub.batchCount = (hub.batchNo || 0) + Math.ceil(hub.pendingFiles.length / BATCH());
+    VZ.toast('지금 올리는 파일 뒤에 ' + media.length + '개를 더했어요.');
+  } else {
+    hub.later = (hub.later || []).concat(media);
+    VZ.toast('가져오는 중이에요. 방금 고른 ' + media.length + '개는 지금 가져오기가 끝나면 이어서 확인할 수 있어요.');
+  }
+  saveQueue(); if (host()) draw();
+}
+function laterDone() { if (hub.phase === 'done' && hub.later?.length && !hub.laterTold) { hub.laterTold = true; VZ.toast('가져오기가 끝났어요. 추가로 고른 파일 ' + hub.later.length + '개를 확인해 주세요.'); } }
+function startFiles(files, review) {
+  hub = fresh();
+  hub.source = 'drive'; hub.cond = {start:'', end:'', min:25, max:24 * 3600}; VZ.nav('#/import-hub');
+  const media = mediaOnly(files), skipped = files.length - media.length;
+  if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 건너뛰었어요.');
+  setTimeout(() => review ? analyze(media) : runAuto(media), 0);
 }
 
 /* ---------- view ---------- */
@@ -288,7 +326,7 @@ VZ.route('import-hub', {title:'기존 자료 가져오기', back:true, tab:'reco
     VZ.setGuard(() => hub.phase === 'review' && hub.rows.some(r => r.selected) ? '분석한 파일을 아직 가져오지 않았어요. 나가면 선택이 사라져요. 나갈까요?' : hub.phase === 'importing' ? '가져오는 중이에요. 나가면 남은 파일은 가져오지 않아요. 나갈까요?' : '');
     draw();
   },
-  leave() { if (hub.phase !== 'importing') { M.destroyAll(); if (hub.phase === 'source' || hub.phase === 'done' && !hub.rows.some(r => r.state === 'failed' && r.file)) hub = fresh(); } }});
+  leave() { if (hub.phase !== 'importing') { M.destroyAll(); if (hub.phase === 'source' || hub.phase === 'done' && !hub.later?.length && !hub.rows.some(r => r.state === 'failed' && r.file)) hub = fresh(); } }});
 VZ.retryImportFailures = async () => {
   if (hub.running || hub.autoRunning) return {retried:0, missing:0};
   const failed = hub.rows.filter(r => r.state === 'failed'), ready = failed.filter(r => r.file);
@@ -358,7 +396,7 @@ function draw() {
   const rowHtml = r => {
     const sug = r.suggestions?.[0], sugSong = sug && VZ.song(sug.id);
     const badge = {ok:'', dup:'<span class="badge warn">중복 의심 · ' + esc(r.dup) + '</span>', 'needs-date':'<span class="badge warn">날짜 확인 필요</span>', out:'<span class="badge">' + esc(r.reasons.join(' · ')) + '</span>', error:'<span class="badge danger">' + esc(r.error || '읽기 실패') + '</span>'}[r.status];
-    return '<div class="hub-row" data-row="' + r.id + '"><label class="hub-check"><input type="checkbox" data-sel' + (r.selected ? ' checked' : '') + (r.status === 'error' || r.state === 'done' || !(Number(r.duration) >= 25) ? ' disabled' : '') + ' aria-label="' + esc(r.name) + ' 선택"></label><div class="hub-main">' +
+    return '<div class="hub-row" data-row="' + r.id + '"><label class="hub-check"><input type="checkbox" data-sel' + (r.selected ? ' checked' : '') + (r.status === 'error' || r.state === 'done' || !importable(r) ? ' disabled' : '') + ' aria-label="' + esc(r.name) + ' 선택"></label><div class="hub-main">' +
       '<div class="hub-top"><strong>' + (r.dateOk ? esc(VZ.dateLabel(r.date)) : '날짜 미확인') + '</strong><span class="small muted">' + mmss(r.duration) + (r.video ? ' · 영상→음성' : '') + '</span></div>' +
       '<div class="small muted hub-name" title="' + esc(r.name) + '">' + esc(r.name) + '</div>' + (badge ? '<div>' + badge + '</div>' : '') +
       (r.status === 'needs-date' || r.dateSource === 'filename' ? '<label class="hub-date"><span class="small">녹음 날짜' + (r.dateSource === 'filename' ? ' (파일명)' : r.date ? ' · 파일 수정일 ' + esc(r.date) + '을 넣어 뒀어요' : '') + '</span><input type="date" data-date value="' + esc(r.date || '') + '"></label>' : '') +
@@ -398,6 +436,7 @@ function resultHtml() {
     '<div class="btn-row"><a class="btn" href="#/library">전체 녹음 보기</a><a class="btn secondary" href="#/processing-log">처리 내역</a><button type="button" class="btn secondary" data-report>결과 보고서 저장</button></div>' +
     (hub.made ? '<p class="small muted" style="margin:0">연습 기록 ' + hub.made + '개 생성</p>' : '') +
     (hub.linked ? '<p class="small muted" style="margin:0">레슨 녹음 ' + hub.linked + '개 연결</p>' : '') +
+    (hub.later?.length ? '<button type="button" class="btn block" data-later>추가로 고른 파일 ' + hub.later.length + '개 확인하기</button>' : '') +
     '<button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button></div>';
 }
 function dashHtml() {
@@ -412,6 +451,7 @@ function dashHtml() {
     (hub.stage ? '<p class="small" style="margin:0;font-weight:600">' + esc(hub.stage) + '</p>' : '') +
     (cur ? '<p class="small ellipsis" style="margin:0" data-current>지금: ' + esc(cur.name) + ' · ' + esc(cur.msg || '') + '</p>' : '') +
     (hub.notice ? '<p class="small" style="margin:0;color:var(--warn)">' + esc(hub.notice) + '</p>' : '') +
+    (hub.later?.length ? '<p class="small" style="margin:0" data-later-note>추가로 고른 파일 ' + hub.later.length + '개는 지금 가져오기가 끝나면 이어서 확인할 수 있어요.</p>' : '') +
     '<p class="small muted" style="margin:0">완료는 서버에 저장된 것을 확인한 파일만 세요. 멈추거나 중단돼도 완료된 파일은 그대로예요.</p>' +
     '<div class="btn-row">' + (importing ? (running ? '<button type="button" class="btn secondary" data-pause>일시정지</button>' : hub.running || hub.autoRunning ? '' : '<button type="button" class="btn" data-resume>이어서 올리기</button>') : '') +
       (failed && !hub.running && !hub.autoRunning && !hub.pendingFiles?.length ? '<button type="button" class="btn secondary" data-retry>실패한 ' + failed + '개만 다시</button>' : '') + '</div>' +
@@ -436,6 +476,7 @@ function wireDash(h) {
   h.querySelector('[data-retry]')?.addEventListener('click', () => runImport(hub.rows.filter(r => r.queued && r.state === 'failed')));
   h.querySelector('[data-report]')?.addEventListener('click', report);
   h.querySelector('[data-more]')?.addEventListener('click', () => { hub = fresh(); draw(); });
+  h.querySelector('[data-later]')?.addEventListener('click', () => startFiles(hub.later, true));
 }
 function drawProgress() { const p = host()?.querySelector('[data-progress]'); if (p) p.textContent = hub.progress; else draw(); }
 function drawRow(row) {
@@ -479,7 +520,7 @@ function wireReview(h) {
     Object.assign(r, {date:inp.value, dateOk:true, dateSource:r.dateSource === 'filename' ? 'filename' : 'user'}); evaluate(r); if (r.status === 'ok') r.selected = true; draw();
   });
   h.querySelector('[data-import]').onclick = () => {
-    const rows = hub.rows.filter(r => r.selected && r.state !== 'done' && Number(r.duration) >= 25);
+    const rows = hub.rows.filter(r => r.selected && r.state !== 'done' && importable(r));
     const undated = rows.filter(r => !r.dateOk);
     if (undated.length) { VZ.toast('날짜를 확인하지 않은 파일 ' + undated.length + '개가 있어요. 날짜를 정하거나 선택을 해제해 주세요.', 'error'); hub.filter = 'needs-date'; draw(); return; }
     runImport(rows);
@@ -487,15 +528,12 @@ function wireReview(h) {
   wirePlay(h);
 }
 VZ.openImportHub = ({files, review = false} = {}) => {
-  if (hub.phase === 'importing') { VZ.nav('#/import-hub'); return; }
-  hub = fresh();
+  if (hub.phase === 'importing') { if (files?.length) addWhileImporting(files, review); VZ.nav('#/import-hub'); return; }
   // Files handed over from the library still exclude recordings shorter than 25 seconds.
-  if (files?.length) {
-    hub.source = 'drive'; hub.cond = {start:'', end:'', min:25, max:24 * 3600}; VZ.nav('#/import-hub');
-    const media = mediaOnly(files), skipped = files.length - media.length;
-    if (skipped) VZ.toast('음성·영상이 아닌 파일 ' + skipped + '개는 건너뛰었어요.');
-    setTimeout(() => review ? analyze(media) : runAuto(media), 0); return;
-  }
+  // Files that were picked during the import that just ended and not looked at yet come along.
+  if (files?.length) { const waiting = hub.phase === 'done' ? hub.later || [] : []; startFiles([...waiting, ...files], review || !!waiting.length); return; }
+  if (hub.phase === 'done' && hub.later?.length) { VZ.nav('#/import-hub'); return; }
+  hub = fresh();
   VZ.nav('#/import-hub');
 };
 })();

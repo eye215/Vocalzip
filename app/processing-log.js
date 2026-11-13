@@ -30,11 +30,29 @@ const jobLine=(job,review)=>{
 let stop=null;
 VZ.route('processing-log',{title:'처리 내역',back:true,tab:'home',noAutoRefresh:true,
  render(){return '<div data-processing-log><p class="muted">처리 상태를 불러오는 중…</p></div>';},
- mount(main){stop?.();let live=true,busy=false,retrying=false,feedback='';const host=main.querySelector('[data-processing-log]');
-  async function refresh(){if(!live||busy||!host.isConnected)return;busy=true;
+ mount(main){stop?.();let live=true,retrying=false,feedback='';const host=main.querySelector('[data-processing-log]');
+  /* The server is asked once when the screen opens and when 새로고침 is pressed (a full recording list each time).
+   * After that a journal line (every upload step writes one) only redraws from what is already here, and a media or
+   * analysis event reloads with the kept list at most once per LOAD_GAP — not once per event. */
+  const LOAD_GAP=5000,PAINT_GAP=400;
+  let data=null,loading=false,pending=false,wantForce=false,lastLoad=0,loadTimer=0,lastPaint=0,paintTimer=0;
+  async function load(force){
+   if(!live||!host.isConnected)return;
+   if(force)wantForce=true;
+   if(loading){pending=true;return;}
+   loading=true;if(loadTimer){clearTimeout(loadTimer);loadTimer=0;}
    try{
-    const [media,jobs,usage,stt,auto]=await Promise.all([M.list(true).catch(()=>M.cached()),window.vzipAnalysisJobs?window.vzipAnalysisJobs().catch(()=>null):Promise.resolve(null),window.VzipR2?.configured?.()&&window.vzipCloudSignedIn?.()?window.VzipR2.usage().catch(()=>null):Promise.resolve(null),window.vzipSttUsage?window.vzipSttUsage().catch(()=>null):Promise.resolve(null),window.vzipAutoSttUsage?window.vzipAutoSttUsage().catch(()=>null):Promise.resolve(null)]);
+    const fresh=wantForce;wantForce=false;pending=false;lastLoad=Date.now();
+    const [media,jobs,usage,stt,auto]=await Promise.all([M.list(fresh).catch(()=>M.cached()),window.vzipAnalysisJobs?window.vzipAnalysisJobs().catch(()=>null):Promise.resolve(null),window.VzipR2?.configured?.()&&window.vzipCloudSignedIn?.()?window.VzipR2.usage().catch(()=>null):Promise.resolve(null),window.vzipSttUsage?window.vzipSttUsage().catch(()=>null):Promise.resolve(null),window.vzipAutoSttUsage?window.vzipAutoSttUsage().catch(()=>null):Promise.resolve(null)]);
     if(!live||!host.isConnected)return;
+    data={media,jobs,usage,stt,auto};paint();
+   }finally{loading=false;if(pending&&live)loadLater();}
+  }
+  const loadLater=()=>{if(!live)return;if(loading){pending=true;return;}if(loadTimer)return;loadTimer=setTimeout(()=>{loadTimer=0;load().catch(()=>{})},wantForce?0:Math.max(0,lastLoad+LOAD_GAP-Date.now()));};
+  const paintLater=()=>{if(!live||!data||paintTimer)return;paintTimer=setTimeout(()=>{paintTimer=0;paint()},Math.max(0,lastPaint+PAINT_GAP-Date.now()));};
+  function paint(){if(!live||!data||!host.isConnected)return;lastPaint=Date.now();
+   {
+    const {media,jobs,usage,stt,auto}=data;
     const journal=read(),byId=new Map((media||[]).map(m=>[m.id,m]));
     const missingOriginal=journal.some(r=>r.state==='failed'&&!byId.has(r.id));
     const rows=new Map(journal.map(r=>[r.id,r]));
@@ -61,9 +79,10 @@ VZ.route('processing-log',{title:'처리 내역',back:true,tab:'home',noAutoRefr
     host.innerHTML='<div class="card stack" style="margin-bottom:12px"><div class="row between"><strong>현재 분석 상태</strong><button type="button" class="btn sm secondary" data-retry-all'+(retrying?' disabled':'')+'><i class="ph ph-arrow-clockwise"></i> '+(retrying?'다시 확인 중…':'새로고침')+'</button></div><p class="small" style="margin:0">서버 작업 · 대기 '+counts.queued+' · 진행 '+counts.running+' · 곡 확인 '+counts.review+' · 완료 '+counts.done+' · 실패 '+counts.failed+'</p><p class="small muted" style="margin:0">기기 분석 · '+esc(device?.running?'진행 중: '+device.current:device?.enabled?'대기 중 또는 완료':'꺼짐')+'</p>'+(feedback?'<p class="small muted" role="status" style="margin:0">'+esc(feedback)+'</p>':'')+(missingOriginal?'<label class="btn sm ghost" style="cursor:pointer">원본 파일 다시 선택<input type="file" multiple accept="audio/*,video/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.webm,.mov,.mp4,.m4v" class="sr-only" data-repick></label><p class="small muted" style="margin:0">브라우저를 다시 연 뒤에는 업로드 실패 파일의 원본을 다시 골라야 해요. 날짜·곡 확인 후 올릴 수 있어요.</p>':'')+'</div>'+
      '<div class="card stack" style="margin-bottom:20px"><strong>사용량 기준 대략적인 비용</strong><p class="small" style="margin:0">R2 저장 '+(r2Bytes==null?'서버 조회 불가 (전체 녹음 기준 '+size(stored)+')':size(r2Bytes))+' · '+(estimate.storageUsd==null?'월 보관료 계산 불가':'현재 용량 유지 시 약 $'+usd(estimate.storageUsd,2)+'/월')+'</p><p class="small" style="margin:0">유료 가사 인식 '+(stt?'누적 '+stt.total+'회 · 약 $'+usd(estimate.sttUsd):'호출 횟수 조회 불가')+'</p>'+(auto?'<p class="small" style="margin:0">서버 자동 가사 인식 이번 달 (모든 계정 합계) $'+usd(auto.spent,3)+' / $'+auto.cap.toFixed(2)+' · '+auto.clips+'회'+(auto.spent+0.0015>auto.cap?' · 한도 도달, 다음 달까지 자동 인식 중지':'')+'</p>':'')+'<p class="small" style="margin:0">서버 분석 작업에 기록된 비용 · '+(jobs?'$'+usd(estimate.jobUsd):'조회 불가')+'</p><p class="small muted" style="margin:0">R2 Standard 무료 10 GB·초과 $0.015/GB·월, 가사 인식은 회당 30초×$0.003/분으로 계산했어요. 가사 인식 호출에는 실패한 시도도 포함될 수 있어요. R2 요청량·다른 버킷·Supabase·Workers 요금과 실제 청구액은 별도예요.</p></div>'+
      '<h2 class="sec">파일별 처리 내역</h2>'+(rows.size?[...rows.values()].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,100).map(article).join(''):'<p class="muted">처리된 파일이 없어요.</p>');
-   }finally{busy=false}}
-  const on=()=>refresh().catch(()=>{});['vzip:processing-log','vzip:server-analysis-updated','vzip:cloud-media-changed','vzip:media-saved'].forEach(n=>window.addEventListener(n,on));
-  host.onclick=async e=>{if(!e.target.closest('[data-retry-all]')||retrying)return;retrying=true;feedback='실패한 작업을 확인하는 중…';await refresh();
+   }}
+  const DATA_EVENTS=['vzip:server-analysis-updated','vzip:cloud-media-changed','vzip:media-saved'];
+  window.addEventListener('vzip:processing-log',paintLater);DATA_EVENTS.forEach(n=>window.addEventListener(n,loadLater));
+  host.onclick=async e=>{if(!e.target.closest('[data-retry-all]')||retrying)return;retrying=true;feedback='실패한 작업을 확인하는 중…';paint();
    const notes=[];
    try{const r=await VZ.retryImportFailures?.();if(r?.retried)notes.push('업로드 '+r.retried+'개 다시 시도');if(r?.missing)notes.push('원본 파일 재선택 필요 '+r.missing+'개');}
    catch(err){notes.push('업로드 재시도 실패: '+(err.message||err));}
@@ -71,10 +90,10 @@ VZ.route('processing-log',{title:'처리 내역',back:true,tab:'home',noAutoRefr
    catch(err){notes.push('백업 확인 실패: '+(err.message||err));}
    if(Number(host.dataset.failedJobs)>0){try{const n=await window.vzipAnalysisRetry?.();notes.push(n?'서버 분석 '+n+'개 다시 대기열에 등록':'서버에서 다시 시도할 실패 작업 없음');}
    catch(err){notes.push('서버 분석 재시도 실패: '+(err.message||err));}}
-   retrying=false;feedback=notes.join(' · ')||'최신 상태를 확인했어요.';await refresh().catch(()=>{});
+   retrying=false;feedback=notes.join(' · ')||'최신 상태를 확인했어요.';paint();await load(true).catch(()=>{});
   };
   host.onchange=e=>{if(!e.target.matches('[data-repick]'))return;const files=[...e.target.files];e.target.value='';if(files.length)VZ.openImportHub({files,review:true});};
-  const poll=setInterval(()=>{if(document.visibilityState==='visible')on()},60000);on();
-  stop=()=>{live=false;clearInterval(poll);['vzip:processing-log','vzip:server-analysis-updated','vzip:cloud-media-changed','vzip:media-saved'].forEach(n=>window.removeEventListener(n,on))};
+  const poll=setInterval(()=>{if(document.visibilityState==='visible')loadLater()},60000);load(true).catch(()=>{});
+  stop=()=>{live=false;clearInterval(poll);if(loadTimer)clearTimeout(loadTimer);if(paintTimer)clearTimeout(paintTimer);window.removeEventListener('vzip:processing-log',paintLater);DATA_EVENTS.forEach(n=>window.removeEventListener(n,loadLater))};
  },leave(){stop?.();stop=null}});
 })();

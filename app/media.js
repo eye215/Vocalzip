@@ -129,10 +129,25 @@ M.label = item => item.name || '이름 없는 녹음';
 M.sourceLabel = s => ({practice:'연습', record:'연습', lesson:'레슨', import:'가져옴'})[s] || '연습';
 /** Recordings belong to a lesson or a practice: the record they are linked to, else their origin.
  * Files not linked anywhere count as practice (like their time does). */
+/* One id → lesson / practice lookup for all recordings instead of scanning every lesson and practice per recording
+ * (a 2,000-file list asks this for each row). Dropped when the data changes and at the end of the current task, so an
+ * edit is never answered from an old lookup. First lesson / practice in saved order wins, as before. */
+let ownerIndex = null;
+const dropOwnerIndex = () => { ownerIndex = null; };
+window.addEventListener('vzip:data-changed', dropOwnerIndex);
+const owners = () => {
+  const db = VZ.db;
+  if (ownerIndex?.db === db) return ownerIndex;
+  const lessons = new Map(), practices = new Map();
+  for (const l of db.lessons) for (const r of l.recordings || []) if (r && !lessons.has(r.id)) lessons.set(r.id, l);
+  for (const p of db.practices) for (const id of p.mediaIds || []) if (!practices.has(id)) practices.set(id, p);
+  ownerIndex = {db, lessons, practices};
+  queueMicrotask(dropOwnerIndex);
+  return ownerIndex;
+};
 M.owner = item => {
-  const db = VZ.db, id = item.id;
-  const lesson = db.lessons.find(l => (l.recordings || []).some(r => r.id === id));
-  const practice = db.practices.find(p => (p.mediaIds || []).includes(id));
+  const index = owners(), id = item.id;
+  const lesson = index.lessons.get(id), practice = index.practices.get(id);
   if (lesson) return {kind:'lesson', lesson, practice};
   if (practice) return {kind:'practice', practice};
   return {kind:item.source === 'lesson' ? 'lesson' : 'practice'};
