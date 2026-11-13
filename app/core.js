@@ -179,7 +179,9 @@ if (vv) {
   kb();
 }
 /** Full-page workflow by default; short action menus and confirmations are explicit variants. */
-VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor}) => {
+/** A page sheet with a form and a save button asks before X / backdrop / Escape / back throws away edits
+ * (confirmClose:false, or setting VZ.setGuard while mounting, for sheets that ask themselves; dirtyState() adds state kept outside form fields). */
+VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor, confirmClose = true, dirtyState}) => {
   const previous = document.activeElement;
   const back = document.createElement('div');
   back.className = 'sheet-back sheet-' + variant;
@@ -194,10 +196,21 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
     // A refresh that waited for this sheet runs now.
     if (!sheets.length && VZ.pendingRender) setTimeout(() => VZ.softRender(), 50);
   };
-  const api = {el, close};
-  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) { close(); if (variant === 'page') VZ.toast('취소했어요.'); } });
+  // Unsaved edits: something in the sheet was used and its fields no longer match what they were when it opened.
+  let baseline = null, touched = false;
+  const signature = () => JSON.stringify([...el.querySelectorAll('.sheet-body input,.sheet-body textarea,.sheet-body select')]
+    .filter(f => !f.matches('[type=search],[type=button],[type=submit],[type=reset],[data-q],[data-search]'))
+    .map(f => f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.type === 'file' ? f.files.length : f.value)) + '|' + (dirtyState?.() ?? '');
+  const dirty = () => { try { return !closed && baseline !== null && touched && signature() !== baseline; } catch { return false; } };
+  const dismiss = () => {
+    if (closed) return;
+    if (!dirty()) { close(); if (variant === 'page') VZ.toast('취소했어요.'); return; }
+    if (!discardAsking) VZ.confirmDiscard().then(ok => { if (ok) { close(); VZ.toast('취소했어요.'); } });
+  };
+  const api = {el, close, dirty};
+  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) dismiss(); });
   back.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { e.preventDefault(); close(); if (variant === 'page') VZ.toast('취소했어요.'); }
+    if (e.key === 'Escape') { e.preventDefault(); dismiss(); }
     if (e.key === 'Tab') {
       const nodes = [...el.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled && n.offsetParent);
       if (!nodes.length) return;
@@ -207,7 +220,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
   });
   document.body.append(back); if (variant !== 'menu') lockPage();
   sheets.push(api);
+  // A sheet that sets its own leave question while mounting (VZ.setGuard) asks by itself: no second question here.
+  const guardBefore = guard;
   onMount?.(el, close);
+  if (guard !== guardBefore) confirmClose = false;
   if (variant === 'page' && !foot) {
     const form = el.querySelector('.sheet-body form');
     const submit = form?.querySelector('button[type="submit"],input[type="submit"]');
@@ -232,6 +248,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
       form.addEventListener('input',sync); form.addEventListener('change',sync); sync();
     }
   }
+  if (variant === 'page' && confirmClose && el.classList.contains('sheet-form-page')) {
+    for (const type of ['input', 'change', 'click']) el.querySelector('.sheet-body').addEventListener(type, () => { touched = true; });
+    baseline = signature();
+  }
   if (variant === 'menu') {
     const target = anchor || previous;
     const rect = target?.getBoundingClientRect?.();
@@ -248,13 +268,19 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
 };
 VZ.menu = options => VZ.sheet({...options, variant:'menu'});
 VZ.closeSheets = () => [...sheets].forEach(s => s.close());
-VZ.confirm = (title, message, {ok = '확인', danger} = {}) => new Promise(resolve => {
+VZ.confirm = (title, message, {ok = '확인', cancel = '취소', danger} = {}) => new Promise(resolve => {
   let result = false;
   VZ.sheet({title, label:title, variant:'alert', body:'<p class="muted" style="white-space:pre-line">' + VZ.esc(message) + '</p>',
-    foot:'<div class="btn-row"><button type="button" class="btn ghost" data-close>취소</button><button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-ok>' + VZ.esc(ok) + '</button></div>',
+    foot:'<div class="btn-row"><button type="button" class="btn ghost" data-close>' + VZ.esc(cancel) + '</button><button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-ok>' + VZ.esc(ok) + '</button></div>',
     onMount:(el, close) => el.parentNode.querySelector('[data-ok]').onclick = () => { result = true; close(); },
     onClose:() => resolve(result)});
 });
+/** One question for every "close with unsaved edits" case. */
+let discardAsking = false;
+VZ.confirmDiscard = () => {
+  discardAsking = true;
+  return VZ.confirm('작성 중인 내용이 있어요', '닫으면 입력한 내용이 저장되지 않아요. 닫을까요?', {ok:'닫기', cancel:'계속 작성', danger:true}).finally(() => { discardAsking = false; });
+};
 VZ.empty = (icon, text, action = '') => '<div class="empty"><i class="ph ph-' + icon + '"></i><div>' + VZ.esc(text) + '</div>' + action + '</div>';
 
 /** Song <select> with "새 곡 추가" option; returns html. Use VZ.readSong(form, name) to resolve. */
@@ -320,7 +346,23 @@ VZ.render = () => {
   def.mount?.(main, r);
   window.scrollTo(0, scroll);
 };
+// Where this screen sits in the browser history, when the browser tells (Navigation API): lets a refused "back" be undone exactly.
+const navIndex = () => { try { return window.navigation?.currentEntry?.index ?? null; } catch { return null; } };
+let lastIndex = navIndex(), restoring = false, restoreTimer;
 window.addEventListener('hashchange', () => {
+  if (restoring) { restoring = false; clearTimeout(restoreTimer); return; }
+  // Back / swipe-back with unsaved edits in an open sheet: stay, ask once, then go on.
+  if (location.hash !== lastHash && sheets.some(s => s.dirty())) {
+    const target = location.hash, index = navIndex(), delta = index !== null && lastIndex !== null ? lastIndex - index : 0;
+    if (delta) { restoring = true; clearTimeout(restoreTimer); restoreTimer = setTimeout(() => { restoring = false; }, 1500); history.go(delta); }
+    else history.replaceState(null, '', lastHash || '#/home');
+    if (!discardAsking) VZ.confirmDiscard().then(ok => {
+      if (!ok) return;
+      VZ.closeSheets(); restoring = false; clearTimeout(restoreTimer);
+      if (delta) history.go(-delta); else location.hash = target;
+    });
+    return;
+  }
   if (guard) {
     const message = guard();
     if (message) {
@@ -330,7 +372,7 @@ window.addEventListener('hashchange', () => {
       return;
     }
   }
-  guard = null; lastHash = location.hash; VZ.closeSheets(); VZ.render();
+  guard = null; lastHash = location.hash; lastIndex = navIndex(); VZ.closeSheets(); VZ.render();
 });
 document.addEventListener('click', e => {
   if (e.target.closest('[data-back]')) { history.length > 1 ? history.back() : VZ.nav('#/home'); }

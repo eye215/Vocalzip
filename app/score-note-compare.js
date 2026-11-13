@@ -70,7 +70,7 @@ function body(song, item, playable) {
   const button = (label, attr = 'data-note-run') => '<button type="button" class="vl-chip-play vl-note-run" ' + attr + (job?.status === 'running' ? ' disabled' : '') + '>' + label + '</button>';
   const head = '<div class="vl-measure"><span>음표 단위 비교 <small>시험판 · 자동 악보 인식과 정렬이라 틀릴 수 있어요</small></span>' + button(job?.status === 'done' ? '다시 비교' : '비교하기') + '</div>';
   if (!job) {
-    const last = saved ? '<p class="vl-muted" data-note-saved-summary>저장된 결과 · ' + (saved.state === 'ok' ? '맞은 음 ' + saved.pct + '% (' + saved.ok + '/' + saved.judged + '음)' : '판정 보류') + ' · ' + saved.cover[0] + '/' + saved.cover[1] + '마디' + (saved.at ? ' · ' + esc(VZ.dateLabel?.(new Date(saved.at).toISOString().slice(0, 10)) || '') : '') + '</p>' : '';
+    const last = saved ? '<p class="vl-muted" data-note-saved-summary>저장된 결과 · ' + (saved.state === 'ok' ? '맞은 음 ' + saved.pct + '% (' + saved.ok + '/' + saved.judged + '음)' : '판정 보류') + ' · ' + saved.cover[0] + '/' + saved.cover[1] + '마디' + (saved.at ? ' · ' + esc(VZ.dateLabel?.(VZ.ymd(new Date(saved.at))) || '') : '') + '</p>' : '';
     return head + last + '<p class="vl-muted">악보 "' + esc(ref.part || '보컬') + '" 파트의 음표와 이 녹음에서 부른 음을 마디별로 맞춰 봐요. 이 기기에서 계산하고, 저장된 분석은 바꾸지 않아요.</p>';
   }
   if (job.status === 'running') return head + '<p class="vl-muted" role="status" data-note-status>' + esc(job.stage || '준비 중…') + '</p>';

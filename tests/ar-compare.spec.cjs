@@ -148,7 +148,8 @@ test('upload the original in 레퍼런스, extract its melody once (cached on th
   await page.getByRole('button', {name:'원곡 음원 원곡 파일 삭제'}).click();
   await page.locator('[data-ok]').click();
   await expect(page.getByRole('group', {name:'원곡 파일'})).toContainText('원곡 음원 파일을 올리면');
-  expect(await page.evaluate(() => window.__removed)).toEqual([file.r2Key]);
+  // Only R2 keys count here: the background move of the practice recording out of the old storage may also remove its old copy.
+  expect(await page.evaluate(() => window.__removed.filter(key => key.startsWith('u/')))).toEqual([file.r2Key]);
   const after = await stored(page);
   expect(after.arFile).toBeUndefined(); expect(after.arReference).toBeUndefined();
 });

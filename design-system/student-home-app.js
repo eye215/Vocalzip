@@ -208,7 +208,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     V.empty('timer','아직 연습 기록이 없어요.','<button type="button" class="btn" data-home-add-practice>연습 기록 추가</button>');
   },mount(main){document.querySelectorAll('[data-home-add-practice]').forEach(b=>b.onclick=()=>V.practiceSheet());}});
  applyTheme();
- if((location.hash.replace(/^#\/?/,'').split(/[/?]/)[0]||'home')==='home')V.softRender();
+ // This module registers its routes after the first render: draw again when the address is one of them (reload / deep link).
+ if(['home','practices'].includes(location.hash.replace(/^#\/?/,'').split(/[/?]/)[0]||'home'))V.softRender();
 }
 
 

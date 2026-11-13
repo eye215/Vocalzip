@@ -90,7 +90,7 @@ function refLine(song) {
   if (stage) return '<p class="vz-arfile-state" role="status" data-ar-ref-state="running">' + esc(stage) + '</p>';
   if (!ref) return '<p class="vz-arfile-state" data-ar-ref-state="none">원곡 멜로디: 아직 뽑지 않았어요' + (saved ? ' (파일이 바뀌어 다시 뽑아야 해요)' : '') + '. <button type="button" class="vz-arfile-btn" data-ar-extract>멜로디 추출</button></p>';
   const st = ref.stats || {}, range = st.low != null ? ' · ' + AM_NAME(st.low) + '–' + AM_NAME(st.high) : '';
-  const when = ref.at ? ' · ' + esc(V.dateLabel?.(new Date(ref.at).toISOString().slice(0, 10)) || '') : '';
+  const when = ref.at ? ' · ' + esc(V.dateLabel?.(V.ymd(new Date(ref.at))) || '') : '';
   return ref.state === 'ok'
     ? '<p class="vz-arfile-state" data-ar-ref-state="ok">원곡 가수의 멜로디(자동 추출): 음 ' + (st.notes || 0) + '개' + range + when + ' <button type="button" class="vz-arfile-btn" data-ar-extract>다시 추출</button></p>'
     : '<p class="vz-arfile-state hold" data-ar-ref-state="hold">원곡 멜로디 판정 보류: ' + esc(AM.holdRefText(ref.reason)) + '. 이 파일로는 비교하지 않아요. <button type="button" class="vz-arfile-btn" data-ar-extract>다시 추출</button></p>';

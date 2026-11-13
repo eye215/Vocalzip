@@ -350,7 +350,9 @@ test('Homework has a period; each practice in it asks whether it was done, how m
   await page.locator('[data-log]').click();
   await sheet(page).locator('[name=date]').fill(day(10)); await sheet(page).locator('[name=date]').dispatchEvent('change');
   await expect(sheet(page).locator('.hw-ask')).toHaveCount(0);
-  await sheet(page).locator('[data-close]').first().click();
+  // The date was edited: closing asks first (sheet dirty guard).
+  await page.locator('.sheet-page [data-close]').first().click();
+  await page.getByRole('dialog', {name:'작성 중인 내용이 있어요'}).getByRole('button', {name:'닫기', exact:true}).click();
   // The homework shows the period, the total and each time with its memo.
   await page.goto('/#/homework');
   await expect(page.locator('[data-task="' + task.id + '"]')).toContainText('3회 했어요');

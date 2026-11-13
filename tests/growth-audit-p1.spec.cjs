@@ -212,11 +212,13 @@ test('small things: AI label after an error, chart at the newest point, 44px tap
   const head = page.locator('.vl-player-head');
   await expect(head).toContainText('7 / 7');
   const carousel = page.locator('[data-carousel]'), box = await carousel.boundingBox(), top = (await page.locator('.vl-player').boundingBox()).y - box.y + 5;
-  await carousel.tap({position:{x:40, y:top}});                     // inside the card, 40px from the left edge
+  const touch = await page.evaluate(() => navigator.maxTouchPoints > 0); // the desktop project has no touch: a click there
+  const press = position => touch ? carousel.tap({position}) : carousel.click({position});
+  await press({x:40, y:top});                     // inside the card, 40px from the left edge
   await expect(head).toContainText('6 / 7');
-  await carousel.tap({position:{x:box.width - 40, y:top}});
+  await press({x:box.width - 40, y:top});
   await expect(head).toContainText('7 / 7');
-  await carousel.tap({position:{x:box.width / 2, y:top}});          // the middle does nothing
+  await press({x:box.width / 2, y:top});          // the middle does nothing
   await page.waitForTimeout(200);
   await expect(head).toContainText('7 / 7');
   // The two buttons under 추천 연습 no longer touch.

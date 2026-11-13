@@ -175,9 +175,11 @@ test('Performance upload retries preserve video bytes and isolate metadata from 
 });
 test('Archive sheets preserve unsaved inputs and fit phone width',async({page})=>{
  await boot(page);await page.goto('/#/performances');await page.locator('[data-new-show]').click();await dialog(page).getByLabel('작품명',{exact:true}).fill('저장 전 제목');
- page.once('dialog',d=>d.dismiss());await dialog(page).getByRole('button',{name:'돌아가기',exact:true}).click();await expect(dialog(page).getByLabel('작품명',{exact:true})).toHaveValue('저장 전 제목');
+ // The question comes in the app's own popup (no native confirm).
+ const ask=page.getByRole('dialog',{name:'작성 중인 내용이 있어요',exact:true});let native=0;page.on('dialog',d=>{native++;d.dismiss()});
+ await dialog(page).getByRole('button',{name:'돌아가기',exact:true}).click();await ask.getByRole('button',{name:'계속 작성',exact:true}).click();await expect(ask).toHaveCount(0);await expect(dialog(page).getByLabel('작품명',{exact:true})).toHaveValue('저장 전 제목');
  for(const width of [320,390]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);expect(await dialog(page).evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true)}
- page.once('dialog',d=>d.accept());await dialog(page).getByRole('button',{name:'돌아가기',exact:true}).click();await expect(dialog(page)).toHaveCount(0);expect((await db(page)).performances||[]).toHaveLength(0);
+ await dialog(page).getByRole('button',{name:'돌아가기',exact:true}).click();await expect(ask).toHaveCount(1);await ask.getByRole('button',{name:'닫기',exact:true}).click();await expect(dialog(page)).toHaveCount(0);expect((await db(page)).performances||[]).toHaveLength(0);expect(native).toBe(0);
 });
 
 test('Changing account while deletion confirmation is open preserves the original session',async({page})=>{

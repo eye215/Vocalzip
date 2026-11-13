@@ -2,7 +2,11 @@
 (() => {
 'use strict';
 const VZ = window.VZ;
-if ('serviceWorker' in navigator) navigator.serviceWorker.register(new URL('share-worker.js', location.href), {scope:new URL('./', location.href).pathname}).catch(() => {});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register(new URL('share-worker.js', location.href), {scope:new URL('./', location.href).pathname}).catch(() => {});
+  // Keep the app's own files for an offline launch (the worker skips what it already has).
+  addEventListener('load', () => navigator.serviceWorker.ready.then(r => r.active?.postMessage({type:'vzip-shell-warm'})).catch(() => {}));
+}
 if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/home');
 VZ.render();
 VZ.receiveShared?.();

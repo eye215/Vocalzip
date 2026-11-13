@@ -94,7 +94,9 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
   const l = lesson, db = VZ.db, selected = new Set(l ? VZ.lessonSongIds(l) : songId && VZ.song(songId) ? [songId] : []);
   const last = [...db.lessons].filter(x => x.place || x.teacher).sort((a, b) => VZ.lessonSort(b, a))[0];
   const st = l ? VZ.lessonStatus(l) : 'scheduled';
-  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', body:'<form id="lesson-form">' +
+  let status = st;
+  // Picked songs and the status buttons are not form fields: count them as edits when closing.
+  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
     '<label class="field"><span>레슨 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(l?.date || date || VZ.today()) + '"></label>' +
     '<div class="two"><label class="field"><span>시작 시간' + (l ? '' : ' <span class="req">*</span>') + '</span><input type="time" name="start" ' + (l ? '' : 'required') + ' value="' + esc(l?.startTime || '') + '"></label><label class="field"><span>종료 시간</span><input type="time" name="end" value="' + esc(l?.endTime || '') + '"></label></div>' +
     '<div class="two"><label class="field"><span>장소</span><input type="text" name="place" maxlength="100" value="' + esc(l ? l.place || '' : last?.place || '') + '"></label><label class="field"><span>선생님</span><input type="text" name="teacher" maxlength="60" value="' + esc(l ? l.teacher || '' : last?.teacher || '') + '"></label></div>' +
@@ -104,7 +106,6 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
-      let status = st;
       const drawSongs = () => {
         songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song data-pick="song"><option value="">곡을 선택해 추가하세요</option>' +
           VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
@@ -309,7 +310,9 @@ VZ.route('calendar', {title:'기록', tab:'calendar', actions:() => '<a class="i
   if(date&&VZ.ymd(date)===requested){calDay=requested;calMonth=requested.slice(0,7);}
   calDay ||= today;
   calMonth ||= today.slice(0, 7);
-  return '<div data-calendar-summary></div><div class="card vz-calendar-month"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="vz-calendar-footer"><div class="legend"><span><i class="s"></i>공연·오디션</span><span><i class="l"></i>레슨</span><span><i class="p"></i>연습</span></div><button type="button" data-today>오늘</button></div></div><div data-day></div>';
+  // 기록 holds lessons, homework, practices and performances (V4 IA): one small row of ways in.
+  const links = '<nav class="vz-record-links" aria-label="기록 바로가기"><a href="#/lessons">레슨</a><a href="#/homework">숙제</a><a href="#/practices">연습 기록</a><a href="#/performances">나의 공연</a></nav>';
+  return links + '<div data-calendar-summary></div><div class="card vz-calendar-month"><div class="cal-head"><button type="button" class="icon-btn" data-mv="-1" aria-label="이전 달"><i class="ph ph-caret-left"></i></button><strong data-title></strong><button type="button" class="icon-btn" data-mv="1" aria-label="다음 달"><i class="ph ph-caret-right"></i></button></div><div class="cal-grid" data-grid></div><div class="vz-calendar-footer"><div class="legend"><span><i class="s"></i>공연·오디션</span><span><i class="l"></i>레슨</span><span><i class="p"></i>연습</span></div><button type="button" data-today>오늘</button></div></div><div data-day></div>';
 }, async mount(main) {
   const grid = main.querySelector('[data-grid]'), dayHost = main.querySelector('[data-day]');
   let media = M.cached();

@@ -396,7 +396,10 @@ VZ.route('settings', {title:'설정', back:true, tab:'home', noAutoRefresh:true,
 }, mount(main) {
   // Daily time target: chosen at signup (account metadata), changeable here; stored on this account's records.
   main.querySelector('[data-daily-target]').onclick=()=>VZ.sheet({title:'하루 연습 목표 시간',body:'<form id="daily-target-form"><label class="field"><span>하루에 몇 분 연습할까요?</span><input name="minutes" type="number" min="1" max="1440" required inputmode="numeric" value="'+VZ.esc(VZ.db.settings?.dailyTargetMinutes ?? window.vzipCloudUserDailyTarget?.() ?? 30)+'"></label><p class="small muted">주간 연습에서 매일의 시간 목표로 사용해요.</p><p role="alert" data-target-error></p></form>',foot:'<button type="submit" form="daily-target-form" class="btn block">저장</button>',onMount:(el,close)=>{
-    el.querySelector('form').onsubmit=e=>{e.preventDefault();const input=e.target.elements.namedItem('minutes'),value=Number(input.value);if(!Number.isInteger(value)||value<1||value>1440){el.querySelector('[data-target-error]').textContent='1분부터 1,440분 사이로 입력해 주세요.';return;}const ok=VZ.change(db=>{db.settings||={};db.settings.dailyTargetMinutes=value;},{silent:true});if(ok){close();VZ.softRender();VZ.toast('하루 목표 시간을 저장했어요.');}};
+    el.querySelector('form').onsubmit=e=>{e.preventDefault();const input=e.target.elements.namedItem('minutes'),value=Number(input.value);if(!Number.isInteger(value)||value<1||value>1440){el.querySelector('[data-target-error]').textContent='1분부터 1,440분 사이로 입력해 주세요.';return;}const ok=VZ.change(db=>{db.settings||={};db.settings.dailyTargetMinutes=value;},{silent:true});if(ok){close();
+      // 설정 does not redraw by itself (noAutoRefresh): show the saved value in the row right away.
+      const sub=main.querySelector('[data-daily-target] .item-sub');if(sub)sub.textContent='현재 '+value+'분 · 언제든 바꿀 수 있어요';
+      VZ.softRender();VZ.toast('하루 목표 시간을 저장했어요.');}};
   }});
   const journey = main.querySelector('[data-journey]');
   const drawJourney = media => {
