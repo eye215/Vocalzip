@@ -1,7 +1,10 @@
 /* 오늘 연습 세트 (#/practice-set): one guided session made of today's items in order, with a timer per step.
  * Model and save rules: app/practice-set-model.js. The running session lives in memory and, while it runs, in this
  * device's account-scoped storage (a UI draft like the daily goal prompt), so a reload or a trip to the recorder
- * resumes it; nothing is written to the synced records until the singer saves the summary. Reuses the recorder route
+ * resumes it; nothing is written to the synced records until the singer saves the summary.
+ * The timer follows the wall clock: it keeps running on other screens, in another app, with the phone locked and
+ * across a reload; only the pause button stops it. Other screens show it as a small pill (app/practice-set-mini.js),
+ * which reads V.practiceSetClock below. Reuses the recorder route
  * (#/record?song=…), MR playback (VZ.renderSongMR) and the guided-practice category rule (VZ.guidedCategory). */
 (()=>{
 'use strict';
@@ -14,12 +17,17 @@ const KEY=()=>'vzip_practice_set_live:'+owner();
 const KIND={warmup:'웜업',goal:'오늘의 목표',song:'곡 구간',record:'녹음'};
 const SOURCE={homework:'숙제',personal:'개인',recommendation:'추천'};
 const DAYS='일월화수목금토';
-let session=null,loadedFor='',draft=null,reorder=false,saved=null,timer=null,awake=false,toRecorder=false,alerted='';
+let session=null,loadedFor='',draft=null,reorder=false,saved=null,timer=null,awake=false,alerted='';
+const watchers=new Set();
+const routeName=()=>document.body.dataset.vzRoute||'';
+const changed=()=>{for(const fn of watchers){try{fn();}catch(e){console.error(e);}}};
 
 function load(){
   if(loadedFor===owner())return session;
   loadedFor=owner();session=null;
   try{session=P.restore(JSON.parse(store().getItem(KEY())||'null'));}catch{session=null;}
+  // Reloaded (or reopened by iOS) while running: the time away is counted once, from the stored moment.
+  if(session?.running){count(true);syncAwake();}
   return session;
 }
 function persist(){
@@ -29,24 +37,46 @@ function keepAwake(on){
   if(on===awake)return;awake=on;
   try{V.media?.keepAwake?.(on);}catch{}
 }
-/** One clock for the whole app: counts while the session runs and the page is visible, also on the recorder. */
+/** The screen stays awake while the timer is on screen (the set, or the recorder opened from it). */
+function syncAwake(){keepAwake(!!session?.running&&['practice-set','record'].includes(routeName()));}
+/** Count the time since the last count. away: the timer was not being watched — the app is in front again after
+ * another app, a locked screen or a reload, or the singer is on another screen. */
+function count(away=false){
+  if(!session?.running)return;
+  const mark=session.overAway;
+  P.tick(session,Date.now(),{away});
+  // A set that comes back on another day is closed there: its summary saves under the day it was practised.
+  if(away&&session.running&&session.date!==V.today())P.end(session,Date.now());
+  // Stored when more than the time changed: the time itself is the stored moment plus the clock.
+  if(!session.running||session.overAway!==mark)persist();
+  if(session.running)ensureTimer();
+}
+/** One clock for the whole app. It only draws: the time itself comes from the wall clock (P.tick), so a tick that
+ * never ran (suspended page) loses nothing. */
 function ensureTimer(){
   if(timer)return;
   timer=setInterval(()=>{
     if(!session?.running){clearInterval(timer);timer=null;return;}
-    P.tick(session,Date.now());persist();paintClock();
+    if(document.hidden)return;
+    count(routeName()!=='practice-set');
+    if(session.running){paintClock();changed();}else{syncAwake();paint();changed();}
   },1000);
 }
-function play(){P.play(session,Date.now());persist();keepAwake(true);ensureTimer();}
-function pause(){if(!session)return;P.pause(session,Date.now());persist();keepAwake(false);}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&session?.running){pause();paint();}});
-window.addEventListener('pagehide',()=>{if(session?.running)pause();});
-// The clock keeps running only on the way to the recorder and back; any other screen pauses it.
-window.addEventListener('hashchange',()=>{
-  const route=location.hash.replace(/^#\/?/,'').split(/[/?]/)[0];
-  if(toRecorder&&route!=='record'&&route!=='practice-set'){toRecorder=false;if(session?.running)pause();}
-});
-window.VzipAccountScope?.beforeLeave?.(()=>{if(session?.running)pause();session=null;loadedFor='';draft=null;saved=null;keepAwake(false);});
+function play(){P.play(session,Date.now());delete session.overAway;persist();syncAwake();ensureTimer();changed();}
+function pause(){if(!session)return;P.pause(session,Date.now());delete session.overAway;persist();syncAwake();changed();}
+/** Back in front: count the stretch away in one piece and redraw. Leaving only stores the moment. */
+function front(){
+  if(!session?.running||loadedFor!==owner())return;
+  if(document.hidden){P.tick(session,Date.now());persist();return;}
+  count(true);syncAwake();paint();changed();
+}
+document.addEventListener('visibilitychange',front);
+// Another screen: the clock goes on; the screen is only kept awake where the timer itself is on screen.
+window.addEventListener('hashchange',()=>setTimeout(syncAwake,0));
+window.addEventListener('pageshow',e=>{if(e.persisted)front();});
+window.addEventListener('pagehide',()=>{if(session?.running){P.tick(session,Date.now());persist();}});
+// Signing out pauses the set: time in a signed-out app is not practice.
+window.VzipAccountScope?.beforeLeave?.(()=>{if(session?.running)pause();session=null;loadedFor='';draft=null;saved=null;keepAwake(false);changed();});
 
 const total=steps=>steps.reduce((n,s)=>n+(Number(s.minutes)||0),0);
 const songTitle=id=>V.songTitle?.(id)||V.song?.(id)?.title||'';
@@ -62,6 +92,17 @@ function fresh(){
   const slot=built.template?.slot||'';
   return {today,steps:built.steps,base:built.base,slot,remember:slot||'default'};
 }
+/* Today against the daily target comes from the shared helper (app/today-practice.js: VZ.todayPractice,
+ * VZ.todayPracticeText, VZ.todayPracticePopup). Without it nothing extra is shown. Only saved minutes count there. */
+function todayOf(date){
+  if(date!==V.today())return null;
+  try{const t=V.todayPractice?.(date);return t&&Number.isFinite(Number(t.minutes))?{minutes:Number(t.minutes),targetMinutes:Number(t.targetMinutes)>0?Number(t.targetMinutes):null,percent:t.percent??null}:null;}catch(e){console.error(e);return null;}
+}
+const plus=(t,add)=>{const minutes=t.minutes+add;return {minutes,targetMinutes:t.targetMinutes,percent:t.targetMinutes?Math.round(minutes/t.targetMinutes*100):null};};
+function todayText(t){
+  try{const text=V.todayPracticeText?.(t);if(text)return String(text);}catch(e){console.error(e);}
+  return t.targetMinutes?'오늘 '+t.minutes+'분 / 목표 '+t.targetMinutes+'분 · '+t.percent+'%':'오늘 '+t.minutes+'분 · 목표 없음';
+}
 /** Home entry: what the compact "오늘 연습 시작" row says. Null when nothing can be built. */
 V.practiceSetEntry=()=>{
   try{
@@ -72,6 +113,26 @@ V.practiceSetEntry=()=>{
     const minutes=total(f.steps);
     return {state:'new',title:'오늘 연습 시작',line:f.steps.length+'단계 · 약 '+minutes+'분',label:'오늘 연습 시작, '+f.steps.length+'단계 약 '+minutes+'분'};
   }catch(error){console.error(error);return null;}
+};
+/** What the small timer on other screens shows: null unless today's set is in its steps (running or paused).
+ * seconds/target are for the current step; left<0 means the step is over its planned time. */
+V.practiceSetClock={
+  state(){
+    try{
+      const s=load();
+      if(!s||s.phase!=='run'||s.date!==V.today())return null;
+      const st=s.steps[s.index],seconds=P.elapsedNow(s,Date.now()),target=st.minutes*60;
+      return {id:s.id,index:s.index,total:s.steps.length,title:shortTitle(st),running:s.running,away:!!s.away,seconds,target,left:target-seconds,
+        text:countdown(target-seconds)};
+    }catch(error){console.error(error);return null;}
+  },
+  /** The pause button: the only thing that stops the clock. */
+  toggle(){
+    if(!session||session.phase!=='run'||session.away)return;
+    if(session.running)pause();else play();
+    paint();
+  },
+  watch(fn){watchers.add(fn);return ()=>watchers.delete(fn);}
 };
 
 /* ---------- 시작 전: 편집 목록 ---------- */
@@ -159,11 +220,14 @@ function addSheet(){
 
 /* ---------- 진행 중 ---------- */
 const clock=sec=>{sec=Math.max(0,Math.floor(sec));return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');};
+/** Time left on a step as the timer shows it: 2:00 … 0:00, then +0:01 once the planned time has passed. */
+const countdown=left=>(left<0?'+':'')+clock(Math.abs(left<0?Math.floor(-left):Math.ceil(left)));
+const span=sec=>{sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60);return h?h+'시간'+(m?' '+m+'분':''):m?m+'분':sec+'초';};
 function paintClock(){
   const host=document.querySelector('[data-pset-run]');if(!host||!session)return;
   const st=session.steps[session.index],target=st.minutes*60,left=target-st.elapsed,over=left<0;
   const value=host.querySelector('[data-clock]'),sub=host.querySelector('[data-clock-sub]'),bar=host.querySelector('[data-meter]');
-  if(value)value.textContent=(over?'+':'')+clock(Math.abs(over?Math.floor(-left):Math.ceil(left)));
+  if(value)value.textContent=countdown(left);
   if(sub)sub.textContent=over?'목표 '+st.minutes+'분 지남 · 연습 '+clock(st.elapsed):'남음 · 목표 '+st.minutes+'분';
   host.querySelector('.pset-clock')?.classList.toggle('is-over',over);
   if(bar)bar.style.width=Math.min(100,Math.round(st.elapsed/Math.max(1,target)*100))+'%';
@@ -188,12 +252,14 @@ function helperHtml(st){
   return html;
 }
 function runHtml(){
-  const s=session,st=s.steps[s.index],next=s.steps[s.index+1],last=s.index===s.steps.length-1;
+  const s=session,st=s.steps[s.index],next=s.steps[s.index+1],last=s.index===s.steps.length-1,today=todayOf(s.date);
   return '<section class="pset pset-run" data-pset-run aria-labelledby="pset-step-title">'+
     '<div class="pset-progress"><span>'+(s.index+1)+' / '+s.steps.length+'</span><ol class="pset-dots" aria-hidden="true">'+s.steps.map((x,i)=>'<li class="'+(i===s.index?'is-now':x.done?'is-done':'')+'"></li>').join('')+'</ol></div>'+
     '<p class="pset-kicker">'+esc(KIND[st.kind]||'연습')+(st.kind==='goal'?' · '+esc(kindLabel(st)):'')+(st.optional?' · 선택':'')+'</p>'+
     '<h2 id="pset-step-title" class="pset-step-title">'+esc(shortTitle(st))+'</h2>'+
     '<div class="pset-clock" role="timer" aria-label="단계 타이머"><strong data-clock>0:00</strong><small data-clock-sub></small><div class="pset-meter"><i data-meter></i></div></div>'+
+    (s.overAway===st.id?'<p class="pset-over-note" role="status" data-over-note><i class="ph ph-clock-countdown" aria-hidden="true"></i><span>다른 곳에 있는 동안 계획한 '+st.minutes+'분이 지났어요. 단계는 그대로 두었어요. 더 하거나 다음으로 넘어가요.</span></p>':'')+
+    (today?'<p class="pset-today" data-pset-today>오늘 '+today.minutes+'분'+(today.targetMinutes?' / 목표 '+today.targetMinutes+'분':'')+' · 이 세트는 저장하면 더해져요</p>':'')+
     '<div class="pset-helper">'+helperHtml(st)+'</div>'+
     '<div class="pset-controls"><button type="button" class="pset-ctl" data-prev'+(s.index?'':' disabled')+'><i class="ph ph-caret-left" aria-hidden="true"></i>이전</button>'+
       '<button type="button" class="pset-play" data-toggle aria-label="'+(s.running?'일시정지':'계속')+'"><i class="ph-fill ph-'+(s.running?'pause':'play')+'" aria-hidden="true"></i></button>'+
@@ -217,24 +283,43 @@ function linkRecordings(){
 function bindRun(host){
   paintClock();
   const s=session;
-  host.querySelector('[data-toggle]').onclick=()=>{if(session.running)pause();else play();paint();host.isConnected&&document.querySelector('[data-toggle]')?.focus();};
-  host.querySelector('[data-prev]').onclick=()=>{P.go(session,session.index-1,Date.now());persist();paint();document.querySelector('[data-pset-run] [data-prev]:not(:disabled),[data-pset-run] [data-next]')?.focus();};
+  host.querySelector('[data-toggle]').onclick=()=>{if(session.running)pause();else play();paint();host.isConnected&&document.querySelector('[data-pset-run] [data-toggle]')?.focus();};
+  host.querySelector('[data-prev]').onclick=()=>{P.go(session,session.index-1,Date.now());persist();paint();changed();document.querySelector('[data-pset-run] [data-prev]:not(:disabled),[data-pset-run] [data-next]')?.focus();};
   host.querySelector('[data-next]').onclick=()=>{
     if(session.index===session.steps.length-1)return finishRun();
-    P.go(session,session.index+1,Date.now());session.steps[session.index].openedAt||=Date.now();persist();paint();
+    P.go(session,session.index+1,Date.now());session.steps[session.index].openedAt||=Date.now();persist();paint();changed();
     document.querySelector('[data-pset-run] [data-next]')?.focus();
   };
   host.querySelector('[data-finish]').onclick=finishRun;
   host.querySelector('[data-record]')?.addEventListener('click',()=>{
     const st=s.steps[s.index];st.openedAt=Date.now();persist();
     // The session keeps running while the singer records (real elapsed time, not the recording's length).
-    toRecorder=true;V.nav('#/record'+(st.songId?'?song='+encodeURIComponent(st.songId):''));
+    V.nav('#/record'+(st.songId?'?song='+encodeURIComponent(st.songId):''));
   });
   const mr=host.querySelector('[data-mr-host]'),song=V.song(s.steps[s.index].songId);
   if(mr&&song)try{V.renderSongMR(mr,song);}catch(e){console.error(e);}
 }
 function finishRun(){
-  P.end(session,Date.now());persist();keepAwake(false);paint();
+  P.end(session,Date.now());persist();syncAwake();paint();changed();
+}
+/* A long stretch away (P.LONG_GAP_MS) is never counted by itself: the singer says how to count it. */
+function awayHtml(){
+  const a=P.awayInfo(session),left=Math.round(a.planned);
+  const choice=(key,title,line)=>'<button type="button" class="pset-away-choice" data-away="'+key+'"><span><strong>'+title+'</strong><small>'+esc(line)+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
+  return '<section class="pset pset-away" data-pset-away aria-labelledby="pset-away-title"><span class="pset-away-mark" aria-hidden="true"><i class="ph ph-clock-countdown"></i></span>'+
+    '<h2 id="pset-away-title">오래 자리를 비웠어요</h2>'+
+    '<p class="pset-help">‘'+esc(shortTitle(a.step))+'’ 타이머를 켜 둔 채 '+esc(span(a.seconds))+'이 지났어요. 이 시간을 어떻게 셀지 골라 주세요. 고르기 전에는 아무것도 기록하지 않아요.</p>'+
+    '<div class="pset-away-list">'+
+      (left>0?choice('planned','계획한 시간까지만 세기','계획한 '+a.step.minutes+'분까지 '+span(left)+'만 더해요'):'')+
+      choice('all','지금까지 모두 세기',span(a.seconds)+'을 모두 더해요')+
+      choice('none','세지 않기','자리를 비운 시간은 빼요')+'</div>'+
+    '<p class="pset-note">타이머는 멈춰 두었어요. 고른 뒤에 이어서 할 수 있고, 시간은 저장하기 전에 고칠 수 있어요.</p></section>';
+}
+function bindAway(host){
+  host.querySelectorAll('[data-away]').forEach(b=>b.onclick=()=>{
+    P.resolveAway(session,b.dataset.away);persist();paint();changed();
+    document.querySelector('[data-pset-run] [data-toggle],.pset-summary [data-save]')?.focus();
+  });
 }
 
 /* ---------- 요약·저장 ---------- */
@@ -248,18 +333,25 @@ function summaryHtml(){
         (r.mediaIds.length?'<em>녹음 '+r.mediaIds.length+'개 연결</em>':'')+'</span>'+
         '<label class="pset-min"><input type="number" inputmode="numeric" min="0" max="600" value="'+r.minutes+'" data-min aria-label="'+esc(r.title)+' 연습한 시간(분)"><span>분</span></label></li>';}).join('')+'</ul>'+
     '<p class="pset-sum-total">합계 <b data-sum>'+rows.reduce((n,r)=>n+r.minutes,0)+'분</b></p>'+
+    '<p class="pset-sum-today" data-sum-today></p>'+
     '<p role="alert" class="pset-error" data-pset-error></p>'+
     '<button type="button" class="btn block" data-save>기록 저장</button>'+
     '<div class="pset-sum-tools"><button type="button" class="pset-quiet" data-resume>이어서 하기</button><button type="button" class="pset-quiet is-danger" data-discard>저장하지 않고 끝내기</button></div></section>';
 }
 function bindSummary(host){
   const read=()=>[...host.querySelectorAll('.pset-row')].map(row=>({id:row.dataset.step,minutes:Number(row.querySelector('[data-min]').value),done:row.querySelector('[data-done]')?row.querySelector('[data-done]').checked:undefined}));
-  const sum=()=>{host.querySelector('[data-sum]').textContent=read().reduce((n,r)=>n+(Number.isFinite(r.minutes)&&r.minutes>0?Math.round(r.minutes):0),0)+'분';};
-  host.querySelectorAll('[data-min]').forEach(i=>i.addEventListener('input',sum));
-  host.querySelector('[data-resume]').onclick=()=>{session.phase='run';persist();paint();};
+  const today=todayOf(session.date);
+  const sum=()=>{
+    const n=read().reduce((n,r)=>n+(Number.isFinite(r.minutes)&&r.minutes>0?Math.round(r.minutes):0),0);
+    host.querySelector('[data-sum]').textContent=n+'분';
+    // Before saving: what today becomes with this set (today's saved minutes + this set's minutes).
+    host.querySelector('[data-sum-today]').textContent=today?'이 세트 '+n+'분을 저장하면 '+todayText(plus(today,n)):'';
+  };
+  host.querySelectorAll('[data-min]').forEach(i=>i.addEventListener('input',sum));sum();
+  host.querySelector('[data-resume]').onclick=()=>{session.phase='run';persist();paint();changed();};
   host.querySelector('[data-discard]').onclick=async()=>{
     if(!await V.confirm('연습 세트 끝내기','이번 연습 세트를 기록하지 않고 끝낼까요? 저장한 녹음은 그대로 남아요.',{ok:'끝내기',danger:true}))return;
-    session=null;persist();keepAwake(false);V.nav('#/home');
+    session=null;persist();syncAwake();changed();V.nav('#/home');
   };
   host.querySelector('[data-save]').onclick=()=>{
     const error=host.querySelector('[data-pset-error]'),button=host.querySelector('[data-save]');error.textContent='';
@@ -271,13 +363,20 @@ function bindSummary(host){
       button.disabled=true;
       if(!V.change(db=>{result=P.save(db,session,rows,{category});},{silent:true}))throw Error('기록을 저장하지 못했어요. 입력은 그대로 있어요. 다시 시도해 주세요.');
     }catch(e){error.textContent=e.message;button.disabled=false;return;}
-    saved={...result,date:session.date};session=null;persist();paint();
-    V.toast(result.minutes?'연습 '+result.minutes+'분을 기록했어요.':'연습 세트를 저장했어요.');
+    // Today against the target: the shared popup when it is loaded, else one line with a thin bar on the done screen.
+    const date=session.date;let popup=false;
+    if(date===V.today()&&typeof V.todayPracticePopup==='function'){try{V.todayPracticePopup({addedMinutes:result.minutes,title:'오늘 연습 세트'});popup=true;}catch(e){console.error(e);}}
+    saved={...result,date,today:popup?null:todayOf(date)};session=null;persist();syncAwake();paint();changed();
+    if(!popup)V.toast(result.minutes?'연습 '+result.minutes+'분을 기록했어요.':'연습 세트를 저장했어요.');
   };
 }
 function doneHtml(){
+  const t=saved.today,percent=t?.targetMinutes?Number(t.percent)||0:null;
+  const today=t?'<div class="pset-done-today" data-done-today><p>'+esc(todayText(t))+'</p>'+
+    (percent!=null?'<div class="pset-done-bar" role="progressbar" aria-label="오늘 목표" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.min(100,percent)+'"><i style="width:'+Math.min(100,percent)+'%"></i></div>'+
+      (percent>=100?'<small>오늘 목표를 채웠어요</small>':''):'')+'</div>':'';
   return '<section class="pset pset-done" aria-labelledby="pset-done-title"><span class="pset-done-mark" aria-hidden="true"><i class="ph ph-check"></i></span>'+
-    '<h2 id="pset-done-title">오늘 연습을 기록했어요</h2><p class="pset-help">연습 '+saved.minutes+'분'+(saved.goals?' · 목표 '+saved.goals+'개 체크':'')+'</p>'+
+    '<h2 id="pset-done-title">오늘 연습을 기록했어요</h2><p class="pset-help">연습 '+saved.minutes+'분'+(saved.goals?' · 목표 '+saved.goals+'개 체크':'')+'</p>'+today+
     '<a class="btn block" href="#/home">홈으로</a><a class="btn secondary block" href="#/practices">연습 기록 보기</a></section>';
 }
 
@@ -285,9 +384,10 @@ function doneHtml(){
 function paint(){
   const host=document.querySelector('[data-pset-host]');if(!host)return;
   load();
-  if(session){
+  if(session?.away&&P.awayInfo(session)){host.innerHTML=awayHtml();bindAway(host);}
+  else if(session){
     // A set left running past midnight is closed: its summary saves under the day it was practised.
-    if(session.phase==='run'&&session.date!==V.today()&&!session.running){P.end(session,Date.now());persist();}
+    if(session.phase==='run'&&session.date!==V.today()&&!session.running){P.end(session,Date.now());persist();changed();}
     host.innerHTML=session.phase==='summary'?summaryHtml():runHtml();
     if(session.phase==='summary')bindSummary(host);else bindRun(host);
   }else if(saved){host.innerHTML=doneHtml();}
@@ -301,13 +401,12 @@ V.route('practice-set',{title:'오늘 연습 세트',back:true,tab:'home',noSett
   mount(){
     load();
     // Back from the recorder (or reopened after iOS reloaded the page): link the takes saved since the step opened.
-    toRecorder=false;linkRecordings();
+    linkRecordings();
     if(!session&&saved&&saved.date!==V.today())saved=null;
-    paint();
+    count();syncAwake();paint();
   },
   leave(){
-    // Leaving for the recorder keeps the clock running; any other screen pauses the session (it can be resumed).
-    if(session?.running&&!toRecorder){pause();}
+    // Leaving keeps the clock running (the small timer shows it on other screens); only the pause button stops it.
     if(!session){saved=null;draft=null;}
   }});
 })();

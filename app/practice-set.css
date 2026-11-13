@@ -94,5 +94,65 @@
 .pset-done{display:grid;justify-items:center;gap:12px;padding-top:32px;text-align:center;}
 .pset-done .btn{width:100%;}
 .pset-done-mark{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:#E3F4EC;color:#23855C;font-size:32px;}
+/* planned time ran out while away / long gap question */
+.pset-over-note{display:flex;align-items:flex-start;gap:8px;margin:12px 0 0;padding:12px 14px;border-radius:16px;background:#F3ECFF;color:#344054;font-size:13px;line-height:18px;}
+.pset-over-note i{flex:none;margin-top:1px;color:var(--vz-color-accent,#7A32F5);font-size:18px;}
+.pset-today{margin:10px 4px 0;color:var(--vz-color-ink-muted,#667085);font-size:13px;line-height:18px;text-align:center;font-variant-numeric:tabular-nums;}
+.pset-away{display:grid;justify-items:center;gap:8px;padding-top:24px;text-align:center;}
+.pset-away .pset-help{margin:0 0 8px;font-size:14px;line-height:20px;}
+.pset-away-mark{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font-size:32px;}
+.pset-away-list{display:grid;gap:8px;width:100%;}
+.pset-away-choice{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:8px 12px 8px 16px;border:0;border-radius:16px;background:#fff;color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
+.pset-away-choice:active{background:#F3ECFF;}
+.pset-away-choice span{flex:1;min-width:0;display:flex;flex-direction:column;}
+.pset-away-choice strong{font-size:15px;line-height:21px;font-weight:600;}
+.pset-away-choice small{color:#667085;font-size:13px;line-height:18px;}
+.pset-away-choice i{flex:none;color:#98A2B3;font-size:18px;}
+/* today vs target (VZ.todayPractice) */
+.pset-sum-today{margin:0 4px 12px;color:#475467;font-size:13px;line-height:18px;font-variant-numeric:tabular-nums;}
+.pset-sum-today:empty{display:none;}
+.pset-done-today{width:100%;}
+.pset-done-today p{margin:0;color:#344054;font-size:14px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums;}
+.pset-done-today small{display:block;margin-top:6px;color:#23855C;font-size:13px;line-height:18px;font-weight:600;}
+.pset-done-bar{height:6px;margin-top:8px;border-radius:99px;background:#F2EFF7;overflow:hidden;}
+.pset-done-bar i{display:block;height:100%;border-radius:99px;background:var(--vz-color-accent,#7A32F5);}
+/* small timer on other screens (app/practice-set-mini.js): left of the floating mic, above the bottom nav */
+.pset-mini{position:fixed;z-index:var(--vz-z-floating,41);box-sizing:border-box;display:flex;align-items:center;
+  left:max(16px,calc((100vw - var(--vz-content-max,560px))/2 + 16px));right:max(80px,calc((100vw - var(--vz-content-max,560px))/2 + 80px));
+  bottom:calc(max(12px,env(safe-area-inset-bottom)) + 86px);max-width:320px;height:48px;padding:0 2px 0 0;
+  border:1px solid rgba(255,255,255,.8);border-radius:999px;background:rgba(255,255,255,.96);color:var(--vz-color-ink,#101828);
+  box-shadow:0 5px 20px rgba(55,33,85,.12);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);}
+.pset-mini[hidden],.pset-mini [hidden]{display:none!important;}
+.pset-mini-body{flex:1;min-width:0;display:flex;align-items:center;gap:6px;height:100%;padding:0 6px 0 16px;border-radius:999px 0 0 999px;color:inherit;text-decoration:none;-webkit-tap-highlight-color:transparent;}
+.pset-mini-step{flex:none;color:var(--vz-color-accent,#7A32F5);font-size:13px;line-height:18px;font-weight:700;font-variant-numeric:tabular-nums;}
+.pset-mini-step:empty{display:none;}
+.pset-mini-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;font-weight:600;}
+.pset-mini-time{flex:none;min-width:38px;text-align:right;font-size:15px;line-height:20px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;}
+.pset-mini.is-over .pset-mini-time,.pset-mini[data-state=away] .pset-mini-time{color:var(--vz-color-accent,#7A32F5);}
+.pset-mini[data-state=pause] .pset-mini-time{color:#667085;}
+.pset-mini[data-state=away] .pset-mini-body{padding-right:16px;border-radius:999px;}
+.pset-mini-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+.pset-mini-toggle{flex:none;display:grid;place-items:center;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:50%;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font-size:18px;cursor:pointer;}
+.pset-mini-toggle:active{background:#EDE1FF;}
+.pset-mini-body:focus-visible,.pset-mini-toggle:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px;}
+.pset-mini-icon{display:none;flex:none;font-size:18px;}
+/* Recorder (dark studio, no nav): a chip in the header row that scrolls with it — step and time only. */
+body.vz-record-mode .pset-mini{position:absolute;top:max(8px,env(safe-area-inset-top));bottom:auto;left:auto;right:max(12px,calc((100vw - var(--vz-content-max,560px))/2 + 12px));
+  height:44px;max-width:calc(100vw - 150px);padding:0;border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:#F7F5FC;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;}
+body.vz-record-mode .pset-mini-body{padding:0 14px 0 12px;border-radius:999px;}
+body.vz-record-mode .pset-mini-icon{display:block;color:#C9B2F7;}
+body.vz-record-mode .pset-mini-step{color:#C9B2F7;}
+body.vz-record-mode .pset-mini-time{min-width:0;}
+body.vz-record-mode .pset-mini:not([data-state=away]) .pset-mini-name,body.vz-record-mode .pset-mini-toggle{display:none;}
+body.vz-record-mode .pset-mini.is-over .pset-mini-time,body.vz-record-mode .pset-mini[data-state=away] .pset-mini-time{color:#C9B2F7;}
+body.vz-record-mode .pset-mini[data-state=pause] .pset-mini-time{color:#A9A3B8;}
+/* Under sheets and menus; out of the way of selection bars. */
+body:has(>.sheet-back) .pset-mini,body.vz-media-selecting .pset-mini,body:has(.sel-bar:not([hidden])) .pset-mini{display:none;}
+/* The cloud-upload pill uses the same strip: the timer moves above it. A toast shows above the timer, not on it. */
+body:not(.vz-record-mode):has(#vz-upload-pill) .pset-mini{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 146px);}
+body:not(.vz-record-mode):has(.pset-mini:not([hidden])) .toast{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 146px);}
+/* Home on wide screens uses the 1040px column. */
+@media(min-width:768px){body.vz-home-mode .pset-mini{left:max(16px,calc((100vw - 1040px)/2 + 16px));}}
 @media(max-width:355px){.pset-clock strong{font-size:48px;line-height:56px;}.pset-step-title{font-size:23px!important;line-height:30px!important;}}
 @media(prefers-reduced-motion:reduce){.pset-meter i{transition:none;}}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){.pset-mini{background:#fff;border-color:#E4E7EC;-webkit-backdrop-filter:none;backdrop-filter:none;}}

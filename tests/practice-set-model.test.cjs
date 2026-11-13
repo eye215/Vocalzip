@@ -1,4 +1,4 @@
-// 오늘 연습 세트: default set, real-time accounting, goal links and idempotent saves (app/practice-set-model.js).
+// 오늘 연습 세트: default set, wall-clock time accounting, goal links and idempotent saves (app/practice-set-model.js).
 const test=require('node:test'),assert=require('node:assert/strict');
 const P=require('../app/practice-set-model.js'),Time=require('../app/practice-time-model.js'),R=require('../app/goal-routines.js');
 const TODAY='2026-11-04'; // Wednesday
@@ -81,17 +81,74 @@ test('templates remember order, removed fixed steps, minutes and added song sect
   assert.throws(()=>P.saveTemplate(db,'monday',steps,base),/세트/);
 });
 
-test('only real running time counts: pauses, long suspended gaps and recordings add nothing',()=>{
+test('the clock is the wall clock: time away and a reload count once, a pause stops it, recordings add nothing',()=>{
   const s=P.start(P.build(seed(),{today:TODAY}).steps,{id:'set1',date:TODAY,now:0});
   P.play(s,1000);P.tick(s,2000);P.tick(s,3000);
-  P.tick(s,3000+10*60*1000); // the phone slept for ten minutes: at most one tick gap counts
-  assert.equal(s.steps[0].elapsed,2+P.MAX_GAP_MS/1000);
-  P.pause(s,603500);P.tick(s,900000);assert.equal(s.steps[0].elapsed,4.5);
-  // A restored session is paused; time while the page was closed is not counted.
-  P.play(s,900000);const restored=P.restore(JSON.parse(JSON.stringify(s)));
-  assert.equal(restored.running,false);P.tick(restored,2_000_000);assert.equal(restored.steps[0].elapsed,4.5);
-  restored.steps[4].mediaIds=['rec1'];
-  const rows=P.summary(restored);assert.equal(rows[0].minutes,0);assert.equal(rows[4].minutes,0);assert.deepEqual(rows[4].mediaIds,['rec1']);
+  P.tick(s,3000+2*60*1000); // another app for two minutes: the whole stretch counts on the running step
+  assert.equal(s.steps[0].elapsed,122);
+  assert.equal(P.elapsedNow(s,3000+2*60*1000+500),122.5); // a display between counts changes nothing
+  assert.equal(s.steps[0].elapsed,122);
+  // Reload while running: the stored session is still running and the gap is counted exactly once.
+  const stored=JSON.stringify(s),restored=P.restore(JSON.parse(stored));
+  assert.equal(restored.running,true);assert.equal(restored.lastAt,s.lastAt);
+  P.tick(restored,123000+30000);assert.equal(restored.steps[0].elapsed,152);
+  P.tick(restored,123000+30000);assert.equal(restored.steps[0].elapsed,152);
+  const again=P.restore(JSON.parse(JSON.stringify(restored)));P.tick(again,153000);assert.equal(again.steps[0].elapsed,152);
+  // The pause button stops it: nothing is counted until play, however long, also across a reload.
+  P.pause(restored,160000);assert.equal(restored.steps[0].elapsed,159);
+  P.tick(restored,900000);assert.equal(restored.steps[0].elapsed,159);
+  const paused=P.restore(JSON.parse(JSON.stringify(restored)));
+  assert.equal(paused.running,false);P.tick(paused,5_000_000);assert.equal(paused.steps[0].elapsed,159);
+  P.play(paused,5_000_000);P.tick(paused,5_001_000);assert.equal(paused.steps[0].elapsed,160);
+  // A clock that jumped backwards never takes time away.
+  P.tick(paused,4_000_000);assert.equal(paused.steps[0].elapsed,160);
+  paused.steps[4].mediaIds=['rec1'];
+  const rows=P.summary(paused);assert.equal(rows[0].minutes,3);assert.equal(rows[4].minutes,0);assert.deepEqual(rows[4].mediaIds,['rec1']);
+  // A session stored by the earlier version (it stopped whenever the page was hidden) comes back paused.
+  const old=P.restore({...JSON.parse(stored),v:1});
+  assert.equal(old.running,false);assert.equal(old.v,2);P.tick(old,9_000_000);assert.equal(old.steps[0].elapsed,122);
+  assert.equal(P.restore({...JSON.parse(stored),v:3}),null);
+});
+
+test('a planned time that ran out while away is marked, never skipped; moving on clears the mark',()=>{
+  const s=P.start(P.build(seed(),{today:TODAY}).steps,{id:'set1',date:TODAY,now:0});
+  const target=s.steps[0].minutes*60;
+  const T=1_000_000;
+  P.play(s,T);P.tick(s,T+60000);
+  P.tick(s,T+60000+20*60*1000,{away:true}); // back after twenty minutes on a five-minute step
+  assert.equal(s.steps[0].elapsed,21*60);assert.ok(s.steps[0].elapsed>target);
+  assert.equal(s.overAway,s.steps[0].id);assert.equal(s.index,0);assert.equal(s.running,true);assert.equal(s.steps[0].done,false);
+  P.go(s,1,T+1_500_000);assert.equal(s.overAway,undefined);
+  // Watching the timer pass its planned time (not away) is not marked; coming back to a step already over is not marked again.
+  P.tick(s,T+1_500_000+s.steps[1].minutes*60000+1000);assert.equal(s.overAway,undefined);
+  P.tick(s,T+1_500_000+s.steps[1].minutes*60000+90000,{away:true});assert.equal(s.overAway,undefined);
+});
+
+test('away longer than three hours is not counted until the singer chooses: planned end, all of it, or nothing',()=>{
+  const HOURS=3600000,T=1_000_000;
+  const make=()=>{const s=P.start(P.build(seed(),{today:TODAY}).steps,{id:'set1',date:TODAY,now:T});P.play(s,T);P.tick(s,T+120000);return s;};
+  assert.equal(P.LONG_GAP_MS,3*HOURS);
+  const short=make();P.tick(short,T+120000+3*HOURS,{away:true}); // exactly the limit still counts by itself
+  assert.equal(short.away,undefined);assert.equal(short.steps[0].elapsed,120+3*3600);
+  const s=make();P.tick(s,T+120000+5*HOURS,{away:true});
+  assert.equal(s.running,false);assert.equal(s.steps[0].elapsed,120); // nothing counted yet
+  const info=P.awayInfo(s);assert.equal(info.step.id,s.steps[0].id);assert.equal(info.seconds,5*3600);assert.equal(info.planned,s.steps[0].minutes*60-120);
+  P.play(s,T+120000+5*HOURS);assert.equal(s.running,false); // it waits for the answer
+  // The question survives a reload and the stretch is still not counted.
+  const kept=P.restore(JSON.parse(JSON.stringify(s)));assert.ok(P.awayInfo(kept));assert.equal(kept.running,false);
+  P.tick(kept,T+120000+9*HOURS);assert.equal(kept.steps[0].elapsed,120);
+  assert.throws(()=>P.resolveAway(kept,'maybe'),/골라/);assert.ok(kept.away);
+  P.resolveAway(kept,'planned');assert.equal(kept.steps[0].elapsed,kept.steps[0].minutes*60);assert.equal(kept.away,undefined);assert.equal(kept.running,false);
+  assert.equal(kept.overAway,kept.steps[0].id);
+  const all=P.restore(JSON.parse(JSON.stringify(s)));P.resolveAway(all,'all');assert.equal(all.steps[0].elapsed,120+5*3600);
+  assert.equal(P.summary(all)[0].minutes,302);
+  const none=P.restore(JSON.parse(JSON.stringify(s)));P.resolveAway(none,'none');assert.equal(none.steps[0].elapsed,120);assert.equal(none.overAway,undefined);
+  P.play(none,T+120000+5*HOURS);P.tick(none,T+121000+5*HOURS);assert.equal(none.steps[0].elapsed,121);
+  // Noticed first by a tap on 다음 or 마치기: the stretch still waits, on the step it belongs to.
+  const moved=make();P.go(moved,1,T+120000+4*HOURS);
+  assert.equal(moved.index,1);assert.equal(moved.running,false);assert.equal(P.awayInfo(moved).step.id,moved.steps[0].id);assert.equal(moved.steps[1].elapsed,0);
+  const ended=make();P.end(ended,T+120000+4*HOURS);
+  assert.equal(ended.phase,'summary');assert.equal(P.summary(ended)[0].minutes,2);P.resolveAway(ended,'none');assert.equal(P.summary(ended)[0].minutes,2);
 });
 
 test('saving checks finished goals through perform, links homework without completing it, and is idempotent',()=>{

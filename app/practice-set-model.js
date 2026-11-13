@@ -1,7 +1,10 @@
 /* 오늘 연습 세트: pure model (no DOM, storage or network). One guided session made of today's items in order:
  * 웜업/발성 → 오늘의 목표(숙제·매일 반복·개인·추천) → 곡 구간 → 녹음(선택).
  * Time rules (app/practice-time-model.js): only real elapsed seconds on a running step, or minutes the singer typed,
- * count as practice time; recording length is never added. Saving is idempotent per session and step:
+ * count as practice time; recording length is never added.
+ * The clock is the wall clock: a running session keeps the moment it was last counted (lastAt) next to the seconds
+ * already counted, so time in another app, with the phone locked, or across a reload is counted once when the app
+ * comes back. Only the pause button stops it. Away longer than LONG_GAP_MS is not counted until the singer says how. Saving is idempotent per session and step:
  *  - a step done for a daily goal checks that goal and writes its one practice row 'goal:<goalId>' through
  *    VzipGoalRoutines.perform (homework goals link the session to the assignment, never mark it done);
  *  - every other step writes 'practice-set:<sessionId>:<stepId>'.
@@ -21,7 +24,7 @@ const Routines=()=>node?require('./goal-routines.js'):globalThis.VzipGoalRoutine
 const list=v=>Array.isArray(v)?v:[];
 const copy=v=>v==null?v:JSON.parse(JSON.stringify(v));
 const isDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v);
-const MAX_GAP_MS=2000,MAX_MINUTES=600,MAX_STEPS=12;
+const LONG_GAP_MS=3*60*60*1000,MAX_MINUTES=600,MAX_STEPS=12;
 const KINDS=['warmup','goal','song','record'];
 const SLOT_DEFAULT_MINUTES={warmup:5,goal:5,song:10,record:3,first:2};
 const providers=[];
@@ -154,31 +157,67 @@ function start(steps,{id,date,now=Date.now()}={}){
   if(!id||!isDate(date))throw Error('연습 세트를 시작할 수 없어요.');
   const items=finish(steps||[]);
   if(!items.length)throw Error('연습할 항목을 하나 이상 남겨 주세요.');
-  return {v:1,id:String(id),date,startedAt:now,index:0,running:false,lastAt:0,phase:'run',savedAt:0,
+  return {v:2,id:String(id),date,startedAt:now,index:0,running:false,lastAt:0,phase:'run',savedAt:0,
     steps:items.map(s=>({...s,elapsed:0,done:false,mediaIds:Array.isArray(s.mediaIds)?s.mediaIds.map(String):[]}))};
 }
-/** Count real time on the current step. A gap longer than MAX_GAP_MS (suspended tab, locked phone) is not counted. */
-function tick(s,now=Date.now()){
+const seconds=n=>Math.round(n*1000)/1000;
+const targetOf=st=>(Number(st.minutes)||0)*60;
+/** Count the time since the session was last counted on the current step (wall clock, any length up to LONG_GAP_MS).
+ * options.away: the app is coming back (another app, locked screen, reload) — a planned time that ran out meanwhile
+ * is marked (overAway) so the screen can say so. A longer gap stops the clock and waits for resolveAway(). */
+function tick(s,now=Date.now(),{away=false}={}){
   if(!s||!s.running)return s;
-  const gap=Math.max(0,now-(s.lastAt||now));
-  s.steps[s.index].elapsed=Math.round((s.steps[s.index].elapsed+Math.min(gap,MAX_GAP_MS)/1000)*1000)/1000;
-  s.lastAt=now;return s;
+  const st=s.steps[s.index],gap=Math.max(0,now-(s.lastAt||now));
+  if(gap>LONG_GAP_MS){s.away={step:st.id,from:s.lastAt,to:now};s.running=false;s.lastAt=0;return s;}
+  const before=st.elapsed;
+  st.elapsed=seconds(before+gap/1000);s.lastAt=now;
+  if(away&&before<targetOf(st)&&st.elapsed>=targetOf(st))s.overAway=st.id;
+  return s;
 }
-function play(s,now=Date.now()){if(s.phase!=='run')return s;s.running=true;s.lastAt=now;return s;}
+/** Seconds on the current step right now, without changing the session (for a display between counts). */
+function elapsedNow(s,now=Date.now()){
+  const st=s.steps[s.index];
+  return s.running?seconds(st.elapsed+Math.min(LONG_GAP_MS,Math.max(0,now-(s.lastAt||now)))/1000):st.elapsed;
+}
+/** The stretch waiting for an answer: {step,seconds,planned} (planned: seconds left to the step's planned end). */
+function awayInfo(s){
+  if(!s?.away)return null;
+  const st=s.steps.find(x=>x.id===s.away.step);if(!st)return null;
+  const gap=Math.max(0,(Number(s.away.to)||0)-(Number(s.away.from)||0))/1000;
+  return {step:st,seconds:gap,planned:Math.min(gap,Math.max(0,targetOf(st)-st.elapsed))};
+}
+/** Answer a long gap: 'planned' counts up to the step's planned end, 'all' the whole stretch, 'none' nothing.
+ * The session stays paused; the singer resumes it. */
+function resolveAway(s,choice){
+  const info=awayInfo(s);
+  if(!['planned','all','none'].includes(choice))throw Error('어떻게 셀지 골라 주세요.');
+  if(info){
+    const add=choice==='all'?info.seconds:choice==='planned'?info.planned:0,before=info.step.elapsed;
+    info.step.elapsed=seconds(before+add);
+    if(add>0&&before<targetOf(info.step)&&info.step.elapsed>=targetOf(info.step)&&s.steps[s.index]===info.step&&s.phase==='run')s.overAway=info.step.id;
+  }
+  delete s.away;return s;
+}
+function play(s,now=Date.now()){if(s.phase!=='run'||s.away)return s;s.running=true;s.lastAt=now;return s;}
 function pause(s,now=Date.now()){tick(s,now);s.running=false;s.lastAt=0;return s;}
 /** Move to another step. Moving forward marks the step left behind as done. */
 function go(s,index,now=Date.now()){
   if(index<0||index>=s.steps.length||index===s.index)return s;
-  const running=s.running;tick(s,now);
+  tick(s,now);
   if(index>s.index)s.steps[s.index].done=true;
-  s.index=index;s.lastAt=running?now:0;return s;
+  s.index=index;s.lastAt=s.running?now:0;delete s.overAway;return s;
 }
-function end(s,now=Date.now()){tick(s,now);s.steps[s.index].done=true;s.running=false;s.lastAt=0;s.phase='summary';return s;}
-/** After a reload the session is paused: time while the page was gone is not counted. */
+function end(s,now=Date.now()){tick(s,now);s.steps[s.index].done=true;s.running=false;s.lastAt=0;s.phase='summary';delete s.overAway;return s;}
+/** After a reload a running session is still running: the time away is counted by the next tick().
+ * A session stored by the earlier version (v1, which stopped whenever the page was hidden) comes back paused. */
 function restore(raw){
-  if(!raw||raw.v!==1||!raw.id||!isDate(raw.date)||!Array.isArray(raw.steps)||!raw.steps.length)return null;
-  const s=copy(raw);s.running=false;s.lastAt=0;s.index=Math.min(Math.max(0,Number(s.index)||0),s.steps.length-1);
+  if(!raw||!(raw.v===1||raw.v===2)||!raw.id||!isDate(raw.date)||!Array.isArray(raw.steps)||!raw.steps.length)return null;
+  const s=copy(raw);s.index=Math.min(Math.max(0,Number(s.index)||0),s.steps.length-1);
   for(const st of s.steps){st.elapsed=Math.max(0,Number(st.elapsed)||0);st.mediaIds=list(st.mediaIds).map(String);st.done=st.done===true;}
+  const lastAt=Number(s.lastAt);
+  s.running=raw.v===2&&s.running===true&&s.phase==='run'&&!s.away&&Number.isFinite(lastAt)&&lastAt>0;
+  s.lastAt=s.running?lastAt:0;s.v=2;
+  if(s.away&&!awayInfo(s))delete s.away;
   return s;
 }
 /** Summary rows: minutes from real elapsed seconds (rounded), never from recordings. */
@@ -228,6 +267,6 @@ function save(db,s,rows,{now=Date.now(),category=null}={}){
   }
   return {minutes:total,goals,rows:written};
 }
-return {KINDS,MAX_GAP_MS,registerStep,providers,defaults,build,applyTemplate,templateFor,templateFrom,saveTemplate,templateId,weekday,
-  activePlans,normalize:finish,start,tick,play,pause,go,end,restore,summary,save,rowId,segmentLabel,slotOf};
+return {KINDS,LONG_GAP_MS,registerStep,providers,defaults,build,applyTemplate,templateFor,templateFrom,saveTemplate,templateId,weekday,
+  activePlans,normalize:finish,start,tick,elapsedNow,awayInfo,resolveAway,play,pause,go,end,restore,summary,save,rowId,segmentLabel,slotOf};
 });
