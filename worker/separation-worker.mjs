@@ -109,6 +109,9 @@ export async function run({db, maxJobs = Number(env.SEPARATE_MAX_JOBS) || 12, bu
   log('separation worker: ' + JSON.stringify(counts));
   return counts;
 }
+/** Recordings this run settled (separated, not better, failed or changed meanwhile). 'error' (file unreadable now) does
+ * not count, so a run that only met unreadable files never starts the next one and cannot loop. */
+export const progressed = counts => Object.entries(counts || {}).reduce((n, [k, v]) => k === 'error' ? n : n + v, 0);
 
 /** Self-test without any user data: a synthetic take (song-like MR 8 dB over a sung melody) is separated with the real
  * separator and measured before and after. Prints timings and confidences only. */
@@ -141,6 +144,9 @@ if (import.meta.url === 'file://' + process.argv[1] && process.argv.includes('--
       const n = (await waiting(db)).length;
       console.log('separation worker: ' + n + ' recording(s) waiting');
       if (env.GITHUB_OUTPUT) (await import('node:fs')).appendFileSync(env.GITHUB_OUTPUT, 'waiting=' + n + '\n');
-    } else await run({db});
+    } else {
+      const counts = await run({db});
+      if (env.GITHUB_OUTPUT) (await import('node:fs')).appendFileSync(env.GITHUB_OUTPUT, 'progressed=' + progressed(counts) + '\n');
+    }
   } finally { await db.end(); }
 }
