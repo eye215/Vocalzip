@@ -1786,9 +1786,15 @@ test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
   await boot(page, {media:false});
   await page.evaluate(() => VZ.songSheet(VZ.song('s2')));
   await sheet(page).getByLabel('별칭 (쉼표로 구분)').fill('온마이오운, On my own , 온마이오운');
+  await expect(sheet(page).getByLabel('별칭 (쉼표로 구분)')).toHaveValue('온마이오운, On my own , 온마이오운');
+  await expect(sheet(page).locator('[name=title]')).toHaveValue('On My Own');
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await data(page)).songs.find(s => s.id === 's2').aliases).toEqual(['온마이오운', 'On my own']);
   expect(await page.evaluate(() => VZ.suggestSongs('온마이오운_0412.m4a')[0])).toMatchObject({id:'s2'});
+  await expect(sheet(page)).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await expect.poll(async () => (await data(page)).songs.find(s => s.id === 's2')).toMatchObject({title:'On My Own', aliases:['온마이오운', 'On my own']});
 });
 
 test('Library groups files by recording month with counts, and filters fit on a phone', async ({page}) => {

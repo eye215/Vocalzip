@@ -188,6 +188,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
   back.className = 'sheet-back sheet-' + variant;
   back.innerHTML = '<section class="sheet" role="dialog" aria-modal="true" aria-label="' + VZ.esc(label || title) + '"><div class="sheet-grab"></div><header class="sheet-head"><button type="button" class="icon-btn" data-close aria-label="돌아가기"><i class="ph ph-arrow-left"></i></button><h2>' + VZ.esc(title) + '</h2><span aria-hidden="true"></span></header><div class="sheet-body">' + body + '</div>' + (foot ? '<footer class="sheet-foot">' + foot + '</footer>' : '') + '</section>';
   const el = back.querySelector('.sheet');
+  // Focus once, synchronously below. A queued native autofocus in WebKit can otherwise
+  // steal focus after the user has already moved to a different field in this sheet.
+  const autofocus = el.querySelector('[autofocus]');
+  el.querySelectorAll('[autofocus]').forEach(field => field.removeAttribute('autofocus'));
   let closed = false;
   const close = () => {
     if (closed) return; closed = true; back.remove();
@@ -264,7 +268,7 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
   }
   // Keep a focused field above the iOS keyboard.
   // Do not force-scroll focused fields. iOS/browser handles keyboard visibility natively.
-  (el.querySelector('[autofocus]') || el.querySelector('[data-close]') || el.querySelector('button'))?.focus({preventScroll:true});
+  (autofocus || el.querySelector('[data-close]') || el.querySelector('button'))?.focus({preventScroll:true});
   return api;
 };
 VZ.menu = options => VZ.sheet({...options, variant:'menu'});
