@@ -17,7 +17,7 @@ function uploadSheet(p){
  const forget=id=>localStorage.setItem(journal,JSON.stringify(pending().filter(x=>x.asset.id!==id)));
  rows=pending().filter(x=>x.performanceId===p.id).map(x=>({id:x.asset.id,asset:x.asset,file:null,status:'메타데이터 저장 대기',done:false}));
  const api=V.sheet({title:'공연 자료 업로드',body:'<div class="archive-page"><label class="field"><span>포스터·사진·공연 영상·PDF·문서</span><input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.gif,.heic,.mp4,.mov,.webm,.pdf,.txt,.docx" data-files></label><p class="small muted">공연 영상은 영상 그대로 보관합니다. 파일당 최대 1GB이며 비공개 R2에 저장해요.</p><div data-queue></div></div>',
- onMount:el=>{
+ onMount:(el,close)=>{
   el.classList.add('archive-sheet');
   el.querySelector('[data-files]').onchange=e=>{if(running)return;rows=rows.filter(r=>r.asset&&!r.done).concat([...e.target.files].map(file=>({file,id:'performance-'+V.uid(),status:'대기',done:false,asset:null})));draw()};
   function draw(){el.querySelector('[data-queue]').innerHTML=rows.map((r,i)=>'<div class="archive-asset"><strong>'+E(r.file?.name||r.asset.name)+'</strong><span>'+E(r.status)+'</span><button class="btn sm secondary" data-upload="'+i+'"'+(r.done||running?' disabled':'')+'>'+(r.done?'저장 완료':r.asset?'메타데이터 저장 재시도':'업로드·재시도')+'</button></div>').join('');el.querySelectorAll('[data-upload]').forEach(b=>b.onclick=()=>run(rows[+b.dataset.upload]))}
@@ -31,7 +31,7 @@ function uploadSheet(p){
    }catch(e){r.status=e.message||'실패'}finally{running=false;el.querySelector('[data-files]').disabled=false;draw()}
   }
   draw();
-  const stop=e=>{if(!unsaved())return;if(e.type==='keydown'&&e.key!=='Escape')return;if(e.type==='click'&&e.target!==el.parentNode&&!e.target.closest('[data-close]'))return;if(!confirm('저장하지 않은 파일 선택을 닫을까요? 진행 중인 업로드는 중지됩니다.')){e.preventDefault();e.stopImmediatePropagation();return}abort?.abort()};
+  const stop=e=>{if(!unsaved())return;if(e.type==='keydown'&&e.key!=='Escape')return;if(e.type==='click'&&e.target!==el.parentNode&&!e.target.closest('[data-close]'))return;e.preventDefault();e.stopImmediatePropagation();V.confirm('공연 자료 닫기','저장하지 않은 파일 선택을 닫을까요? 진행 중인 업로드는 중지됩니다.',{ok:'닫기'}).then(ok=>{if(ok){abort?.abort();close()}})};
   el.parentNode.addEventListener('click',stop,true);el.parentNode.addEventListener('keydown',stop,true);
  },onClose:()=>{abort?.abort();V.setGuard(null);window.removeEventListener('beforeunload',unload);V.softRender()}});
 }

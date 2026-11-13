@@ -410,7 +410,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     mainBtn.disabled = true; status.textContent = '마이크 준비 중…';
     try {
       state.session = await M.capture({onTick:s => { timeEl.textContent = VZ.clock(s); }, onLevel:v => { state.waveLive.push(v); if (state.waveLive.length > 400) state.waveLive.shift(); M.drawWave(wave, state.waveLive, '#A65CFF'); }});
-      state.session.start(); setUI('recording');
+      state.session.start(); state.startedAt = Date.now(); setUI('recording');
       status.innerHTML = '<span class="rec-dot"></span>녹음 중 · 다시 누르면 종료';
     } catch (e) { state.session = null; status.textContent = e.message; VZ.toast(e.message, 'error'); setUI('idle'); }
     finally { mainBtn.disabled = false; }
@@ -431,8 +431,8 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     showReview();
   }
   function showReview() {
-    const res = state.result, now = new Date();
-    const defName = state.songId ? M.autoName(VZ.songTitle(state.songId), VZ.today()) : (lessonId ? '레슨 녹음' : '녹음') + ' ' + (now.getMonth() + 1) + '.' + now.getDate() + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const res = state.result, now = new Date(state.startedAt || Date.now()); // the take belongs to the moment it started
+    const defName = state.songId ? M.autoName(VZ.songTitle(state.songId), VZ.ymd(now)) : (lessonId ? '레슨 녹음' : '녹음') + ' ' + (now.getMonth() + 1) + '.' + now.getDate() + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     setUI('review'); status.textContent = '미리 듣고 저장하세요.';
     M.drawWave(wave, res.waveform, '#A65CFF');
     review.hidden = false;
@@ -445,7 +445,7 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
   async function save(pl) {
     const res = state.result, btn = review.querySelector('[data-save]'), fail = review.querySelector('[data-fail]');
     const id = state.savedId ||= VZ.uid();
-    const item = {id, ...(window.VzipAccountScope?{accountOwner:res.accountOwner}:{}), name:review.querySelector('[name=name]').value.trim() || '녹음', created:Date.now(), recordedDate:VZ.today(), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
+    const item = {id, ...(window.VzipAccountScope?{accountOwner:res.accountOwner}:{}), name:review.querySelector('[name=name]').value.trim() || '녹음', created:state.startedAt || Date.now(), recordedDate:VZ.ymd(new Date(state.startedAt || Date.now())), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
     btn.disabled = true; btn.textContent = '저장 중…'; fail.hidden = true;
     try {
       await M.saveBlob(item, p => { btn.textContent = '클라우드 저장 ' + p + '%'; });
