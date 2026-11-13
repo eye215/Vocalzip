@@ -115,3 +115,36 @@ test('leaving the analysis screen stops the on-device analysis worker', async ({
   await expect.poll(async () => (await mine())[0].stopped).toBe(true);
   expect(await stored(page, 'slow')).toBeFalsy(); // nothing was saved
 });
+
+// 측정 방식별 비교: a server result measured after AI separation, with the held original (recording as is) before it.
+const AISEP = {v:2, at:3333, by:'server', seconds:20, metrics:{voicedSeconds:14, intonation:{meanAbsCents:11, within20:85, notes:8},
+  stability:{wobbleCents:14, notes:5}, range:{validHigh:{note:'A4'}}, phrases:{v:1, rows:[[1, 3, 64, 9, 5]]}},
+  confidence:{pitchConfidence:.86, aiSeparated:{model:'htdemucs'}},
+  history:[{v:2, at:3000, metrics:{voicedSeconds:6, intonation:{meanAbsCents:31, within20:40, notes:3}, phrases:{v:1, rows:[]}}, confidence:{pitchConfidence:.52, voiceOverMrDb:1}}],
+  scope:{kind:'whole-recording', cut:false, separationTried:true, separationResult:'separated'}};
+test('측정 방식별 비교: this device, the saved AI-separated result and the held one before it side by side; nothing is written', async ({page}) => {
+  test.setTimeout(120000);
+  await boot(page, [['sep', AISEP]]);
+  await page.goto('/#/analysis/sep');
+  const cmp = page.locator('[data-out] [data-ana-compare]');
+  await expect(cmp).toBeVisible({timeout:60000});
+  await cmp.locator('summary').click();
+  await expect(cmp.locator('thead th')).toHaveText(['', '지금 이 기기', '저장된 결과', '그 전 결과']);
+  const row = name => cmp.locator('tbody tr', {has:page.locator('th', {hasText:name})}).locator('td');
+  await expect(row('측정 방식')).toHaveText(['녹음 그대로', 'AI 분리 후', '녹음 그대로']);
+  await expect(row('성장 판정').nth(1)).toHaveText('판정');
+  await expect(row('성장 판정').nth(2)).toHaveText('보류');
+  await expect(row('피치 신뢰도').nth(1)).toHaveText('86%');
+  await expect(row('음정 정확도').nth(2)).toHaveText('31 cent');
+  await expect(row('유효 최고음').nth(1)).toHaveText('A4');
+  if (process.env.VZ_SHOTS) { await cmp.scrollIntoViewIfNeeded(); await page.screenshot({path:process.env.VZ_SHOTS + '/analysis-compare.png'}); }
+  await page.waitForTimeout(300);
+  expect(await stored(page, 'sep')).toEqual(AISEP);
+});
+test('no comparison when nothing was saved before', async ({page}) => {
+  test.setTimeout(120000);
+  await boot(page, [['first', null]]);
+  await page.goto('/#/analysis/first');
+  await expect(page.locator('[data-out] [data-saved]')).toContainText('저장했어요', {timeout:60000});
+  await expect(page.locator('[data-out] [data-ana-compare]')).toHaveCount(0);
+});
