@@ -256,12 +256,28 @@ export async function requeueOldAnalyses(db) {
 }
 /** This analyzer's version with the growth-report detail present (key exists even when a short take has no rows). */
 export const isCurrentAnalysis = a => !!a && Number(a.v) >= VA.VERSION && !!a.metrics && Object.prototype.hasOwnProperty.call(a.metrics, 'phrases');
+/** The app's rule (app/analysis.js VZ.analysisReliable): enough singing, voice not drowned by the MR, v2 pitch confidence. */
+export const reliableResult = r => !!r?.metrics?.voicedSeconds && r.metrics.voicedSeconds >= 10 && (r.confidence?.voiceOverMrDb == null || r.confidence.voiceOverMrDb >= 3) && ((r.version ?? r.v) < 2 || Number(r.confidence?.pitchConfidence) >= 0.8);
+/** 알고 있는 MR 빼기 on the server, as in the app: the song's uploaded MR files (this account's R2 folder only) are
+ * lined up with the take and subtracted (app/mr-cancel.js via VA.analyzeWithoutMr). null when none fits. */
+async function withoutMr(db, owner, songId, samples) {
+  const {songs} = await references(db, owner);
+  const tracks = (songs.find(s => s.id === songId)?.mrTracks || []).filter(t => t && !t.deleted && t.kind === 'file' && typeof t.r2Key === 'string' && t.r2Key.startsWith('u/' + owner + '/')).slice(0, 3);
+  const mrs = [];
+  for (const t of tracks) { try { mrs.push({id:t.id, samples:await decode(await getR2(t.r2Key), {rate:16000}), sampleRate:16000}); } catch {} }
+  return mrs.length ? VA.analyzeWithoutMr(samples, 16000, mrs).result : null;
+}
 async function vocalJob(db, job, meta, audio) {
   // A current analysis (this analyzer version, with the per-phrase / per-semitone detail the growth report needs) is
   // reused. An older one (v1, or v2 saved before the detail rows existed) is analysed again; it is kept in history.
   if (isCurrentAnalysis(meta.analysis)) return finish(db, job, 'done', {reused:true});
   const samples = await audio();
-  const r = VA.analyze(samples, 16000);
+  let r = VA.analyze(samples, 16000);
+  // The MR drowned the voice: measure again with the song's own MR file taken out (kept only when clearly better).
+  if (!reliableResult(r) && meta.songId) {
+    const cleaned = await withoutMr(db, job.user_id, meta.songId, samples).catch(() => null);
+    if (cleaned && (reliableResult(cleaned) || (cleaned.confidence?.pitchConfidence || 0) > (r.confidence?.pitchConfidence || 0) + 0.1)) r = cleaned;
+  }
   const previous = meta.analysis?.v ? meta.analysis : null;
   const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
   if (previous) { const {history:ignored, ...saved} = previous; history.push(saved); }
@@ -271,7 +287,7 @@ async function vocalJob(db, job, meta, audio) {
   // written only while it still holds the analysis this job read (none, or the same older one).
   await db.query("update public.vocal_media set metadata = jsonb_set(metadata, '{analysis}', $3::jsonb), updated_at = now() where id = $1 and user_id = $2 and coalesce(metadata -> 'analysis' ->> 'at', '') = $4",
     [job.media_id, job.user_id, JSON.stringify(summary), previous?.at != null ? String(previous.at) : '']);
-  return finish(db, job, 'done', {voicedSeconds:r.metrics.voicedSeconds, confidence:r.confidence});
+  return finish(db, job, 'done', {voicedSeconds:r.metrics.voicedSeconds, confidence:r.confidence, ...(r.confidence?.mrRemoved ? {mrRemoved:true} : {})});
 }
 async function songJob(db, job, meta, audio, stt) {
   if (meta.songId || meta.song) return finish(db, job, 'skipped', {reason:'already assigned'});
