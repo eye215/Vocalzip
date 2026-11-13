@@ -81,13 +81,39 @@ function uploadSheet(song, redraw) {
       };
     }});
 }
+/* 악보 조표로 키 제안: a converted score (음표로 변환) carries its key signature. It is shown as a suggestion under the
+ * two key fields; a button only fills the field, and nothing is saved until 저장. The app cannot tell whether an
+ * uploaded score is in the original key or already transposed, so the owner chooses 원키 or 연습 키. */
+async function keySuggestion(score, form, host) {
+  const R = window.VzipScoreRange;
+  if (!host || !R?.readKey || !VZ.vocalRangeLoadScore || !window.VzipR2?.enabled?.() || !window.VzipR2.omr) return;
+  let key = null;
+  try { const loaded = await VZ.vocalRangeLoadScore(score); key = loaded?.xml ? R.readKey(loaded.xml) : null; } catch { return; } // no suggestion is not an error
+  if (!key || !host.isConnected) return;
+  const names = {major:key.major + ' (장조)', minor:key.minor + ' (단조)'}, value = {major:key.major, minor:key.minor};
+  let pick = key.likely || 'major';
+  const draw = () => {
+    host.innerHTML = '<p class="score-key-title"><i class="ph ph-music-notes" aria-hidden="true"></i> 악보 조표로 보면</p>' +
+      '<div class="score-key-picks" role="group" aria-label="악보 조표의 키">' + ['major', 'minor'].map(k => '<button type="button" class="chip' + (k === pick ? ' active' : '') + '" data-key-pick="' + k + '" aria-pressed="' + (k === pick) + '">' + esc(names[k]) + '</button>').join('') + '</div>' +
+      '<p class="small muted">' + (key.likely ? '음표로 보면 ' + esc(value[key.likely]) + ' 쪽이에요. ' : '조표만으로는 장조인지 단조인지 알 수 없어요. ') + (key.changes ? '곡 중간에 조표가 바뀌어요(처음 조표 기준). ' : '') + '자동 인식이라 틀릴 수 있어요.</p>' +
+      '<div class="btn-row"><button type="button" class="btn sm secondary" data-key-to="originalKey">원키로 넣기</button><button type="button" class="btn sm secondary" data-key-to="practiceKey">연습 키로 넣기</button></div>';
+    host.querySelectorAll('[data-key-pick]').forEach(b => b.onclick = () => { pick = b.dataset.keyPick; draw(); });
+    host.querySelectorAll('[data-key-to]').forEach(b => b.onclick = () => {
+      const field = form.elements[b.dataset.keyTo]; field.value = value[pick]; field.dispatchEvent(new Event('change', {bubbles:true}));
+      VZ.toast((b.dataset.keyTo === 'originalKey' ? '원키' : '연습 키') + '에 ' + value[pick] + '을(를) 넣었어요. 저장을 눌러야 반영돼요.');
+    });
+  };
+  draw(); host.hidden = false;
+}
 function editSheet(song, score, redraw) {
   VZ.sheet({title:'악보 정보', body:'<form id="score-edit" class="stack">' +
       '<label class="field"><span>제목</span><input type="text" name="title" maxlength="120" required value="' + esc(score.title) + '"></label>' +
-      '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey', score.originalKey) + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey', score.practiceKey) + '</label></div></form>',
+      '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey', score.originalKey) + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey', score.practiceKey) + '</label></div>' +
+      '<div class="score-key-suggest" data-key-suggest hidden></div></form>',
     foot:'<button type="submit" form="score-edit" class="btn block">저장</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form');
+      keySuggestion(score, form, el.querySelector('[data-key-suggest]'));
       form.onsubmit = e => {
         e.preventDefault();
         const changes = {title:form.title.value.trim() || score.title, originalKey:form.originalKey.value, practiceKey:form.practiceKey.value, updatedAt:Date.now()};
