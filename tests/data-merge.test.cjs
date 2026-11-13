@@ -85,12 +85,17 @@ test('Lessons, songs and other permanently deleted records stay deleted even if 
 });
 test('core.js records when each tombstone was made and which version it removed', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../app/core.js'), 'utf8');
-  const body = src.slice(src.indexOf('const ARRAYS'), src.indexOf('\n', src.indexOf('const ARRAYS'))) + '\nconst TRACKED = ARRAYS;\n' + src.slice(src.indexOf('function stamp('), src.indexOf('VZ.change ='));
-  const stamp = new Function(body + '\nreturn stamp;')();
+  // The save's own code: the tracked lists, then everything from TRACKED up to VZ.change (snapshot, stampedText).
+  const body = src.slice(src.indexOf('const ARRAYS'), src.indexOf('\n', src.indexOf('const ARRAYS'))) + '\n' + src.slice(src.indexOf('const TRACKED'), src.indexOf('VZ.change ='));
+  const stamp = new Function(body + '\nreturn (before, after) => stampedText(snapshot(before), after);')();
   const before = {dailyGoals:[{id:'g1', updatedAt:42}, {id:'g2'}, {id:'g3'}]}, after = {dailyGoals:[{id:'g3'}], deleted:{dailyGoals:['old']}, deletedAt:{dailyGoals:{old:{at:5, seen:2}}}};
   const t0 = Date.now(); stamp(before, after);
   assert.deepEqual(after.deleted.dailyGoals, ['old', 'g1', 'g2']);
   assert.deepEqual(after.deletedAt.dailyGoals.old, {at:5, seen:2});
   assert.equal(after.deletedAt.dailyGoals.g1.seen, 42);assert.equal(after.deletedAt.dailyGoals.g2.seen, 0);
   assert.ok(after.deletedAt.dailyGoals.g1.at >= t0 && after.deletedAt.dailyGoals.g1.at <= Date.now());
+  // The text a save stores is the stamped state, character for character.
+  const next = {dailyGoals:[{id:'g3', title:'바뀜'}, {id:'g4'}], settings:{a:1}};
+  assert.equal(stamp({dailyGoals:[{id:'g3'}], settings:{a:1}}, next), JSON.stringify(next));
+  assert.ok(next.dailyGoals[0].updatedAt >= t0 && next.dailyGoals[1].updatedAt >= t0);
 });
