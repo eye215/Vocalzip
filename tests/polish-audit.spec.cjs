@@ -139,7 +139,8 @@ test('10. iOS gets a 180px PNG home-screen icon; the manifest has PNG icons', as
   for (const n of [192, 512]) { const i = icons.find(x => x.sizes === n + 'x' + n && x.type === 'image/png'); expect(i, n + 'px').toBeTruthy(); expect(size(i.src.replace(/^\//, ''))).toBe(n + 'x' + n); }
 });
 
-test('11. a saved recording carries the time recording started', async ({page}) => {
+test('11. a saved recording carries the time recording started', async ({page, browserName}) => {
+  test.skip(browserName === 'webkit', 'the recorder needs the fake microphone, which only the Chromium projects have');
   await boot(page, '#/record');
   await page.evaluate(() => { window.__saved = null; VZ.media.saveBlob = async item => { window.__saved = {created:item.created, recordedDate:item.recordedDate}; }; });
   const main = page.locator('.rec-controls [data-main]');

@@ -28,6 +28,28 @@ function group(items) {
 const valid = m => [1,2].includes(m.analysis?.v) && V.analysisReliable?.(m.analysis);
 const takeOf = m => ({id:m.id, a:m.analysis, date:String(M.dateOf(m)||'').slice(0,10), created:m.created, ok:!!valid(m)});
 const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
+/** 성장 통합 (#385): ONE model pass for 결과 리포트 and the 보컬 분석 tab (app/growth-hub.js), so switching tabs
+ * never runs the per-song reports again. The result is never older than what it was built from: the song takes are
+ * picked from the list on every call, and the stored model is reused only when every input it read is still the
+ * same — each take (the recording, its song, its analysis, its date) and each song's title and confirmed range.
+ * A recording added, analysed, moved to another song, or a song added or changed therefore gives a new model, with
+ * or without a change event and also when the list is the same array as before. */
+let shared=null;
+for(const name of ['vzip:data-changed','vzip:analysis-saved','vzip:v6-media'])window.addEventListener(name,()=>{shared=null;});
+function modelInputs(songItems){
+ const key=[],songs=new Set();
+ for(const m of songItems){key.push(m,m.songId,m.analysis,M.dateOf(m),m.created);songs.add(m.songId);}
+ for(const id of songs)key.push(id,V.songTitle(id),JSON.stringify(referenceOf(id)));
+ return key;
+}
+V.growthModel=items=>{
+ const songItems=items.filter(isSongTake),key=modelInputs(songItems);
+ if(shared&&shared.key.length===key.length&&key.every((x,i)=>Object.is(x,shared.key[i])))return shared;
+ let overall;
+ return shared={items,songItems,key,get overall(){
+  return overall??=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid,reference:referenceOf,title:id=>V.songTitle(id)})||null;
+ }};
+};
 /** This month's own values (no comparison): mean over reliable takes, one value per take. */
 function measure(items,d){
  const vals=items.filter(valid).map(m=>{
@@ -179,23 +201,29 @@ async function mount(host){
  const my=++request;
  try {
   const items=await M.list();if(my!==request||!host.isConnected)return;
-  const songItems=items.filter(isSongTake);
+  const songItems=V.growthModel(items).songItems;
   const months=group(songItems); archiveMonths(months);
   const keys=[...new Set([ym(V.today()),...months.keys(),...(V.db.monthlyGrowthReports||[]).map(r=>r.month),...(V.db.practicePlans||[]).filter(p=>p.kind==='monthly-vocal').map(p=>ym(p.sourceMonth||p.startDate))].filter(Boolean))].sort().reverse();
   const currentKey=ym(V.today());
   let selected=keys.includes(currentKey)?currentKey:keys[0];
   // 주간 요약 (its own route) links back here with ?mode=monthly.
   let mode=new URLSearchParams(location.hash.split('?')[1]||'').get('mode')==='monthly'?'monthly':'overall';
-  const overall=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid,reference:referenceOf,title:id=>V.songTitle(id)});
+  // After archiveMonths (it may save a past month's report): the model is asked for again, never taken from before.
+  const overall=V.growthModel(items).overall;
   const overallUi=window.VzipOverallGrowthUI;
   const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>'+(V.voiceCheck?.entryHtml?.()||'');
-  const tabs=()=>'<div class="growth-view-tabs" role="group" aria-label="성장 분석 범위">'+
+  // The period control of 결과 리포트 (design guide §26): smaller than the 성장 tabs above and inside the content.
+  const tabs=()=>'<div class="growth-view-tabs growth-range" role="group" aria-label="성장 분석 범위"><span class="growth-range-label" aria-hidden="true">기간</span>'+
    '<button type="button" data-growth-mode="overall" aria-pressed="'+(mode==='overall')+'" class="'+(mode==='overall'?'active':'')+'">전체 분석</button>'+
    '<button type="button" data-growth-mode="monthly" aria-pressed="'+(mode==='monthly')+'" class="'+(mode==='monthly'?'active':'')+'">월별 분석</button>'+
-   (window.VzipWeeklySummary?'<a class="growth-weekly-tab" href="#/weekly-summary">주간 요약</a>':'')+'</div>';
+   (window.VzipWeeklySummary?'<a class="growth-weekly-tab" href="#/weekly-summary" data-growth-replace>주간 요약</a>':'')+'</div>';
   const bindTabs=()=>host.querySelectorAll('[data-growth-mode]').forEach(btn=>btn.onclick=()=>{
    if(btn.dataset.growthMode===mode)return;
-   mode=btn.dataset.growthMode;render();
+   mode=btn.dataset.growthMode;
+   // The address follows the period (no new history entry), so a reload or 뒤로 from a screen opened here keeps it.
+   // window.history: this file has its own history() (the 월별 기록 card).
+   try{window.history.replaceState(null,'',mode==='monthly'?'#/vocal-growth?mode=monthly':'#/vocal-growth');}catch{}
+   render();
   });
   let renderSerial=0;
   const render=()=>{
@@ -293,8 +321,13 @@ async function mount(host){
 // 성장 통합 (#385): the three 성장 tabs sit above this screen (app/growth-hub.js); 전체·월별·주간 below is the period row.
 V.route('vocal-growth',{title:'성장',tab:'growth',noAutoRefresh:true,
  render:()=>(V.growthTabs?.('report')||'')+'<div data-growth class="growth-page"><div class="empty compact">분석 기록을 불러오는 중…</div></div>',
- mount(main){mount(main.querySelector('[data-growth]'));},
+ mount(main,r){
+  // #/vocal-growth/analysis and /training are other spellings of the two tab addresses.
+  const alias={analysis:'#/vocal-analysis',training:'#/vocal-training'}[r?.params?.[0]];
+  if(alias&&V.growthHub){location.replace(alias);return;}
+  mount(main.querySelector('[data-growth]'));
+ },
  leave(){request++;}
 });
-window.addEventListener('vzip:analysis-saved',()=>{if(location.hash==='#/vocal-growth'){const host=document.querySelector('[data-growth]');if(host)mount(host);}});
+window.addEventListener('vzip:analysis-saved',()=>{if(document.body.dataset.vzRoute==='vocal-growth'){const host=document.querySelector('[data-growth]');if(host)mount(host);}});
 })();

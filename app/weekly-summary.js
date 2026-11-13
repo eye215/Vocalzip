@@ -112,7 +112,7 @@ function optionalCards(s){
 }
 function page(s){
  const b=badge(s);
- return '<div class="growth-view-tabs ws-tabs" role="group" aria-label="성장 분석 범위">'+
+ return '<div class="growth-view-tabs growth-range ws-tabs" role="group" aria-label="성장 분석 범위"><span class="growth-range-label" aria-hidden="true">기간</span>'+
    '<button type="button" data-ws-tab="#/vocal-growth">전체 분석</button><button type="button" data-ws-tab="#/vocal-growth?mode=monthly">월별 분석</button>'+
    '<button type="button" class="active" aria-pressed="true">주간 요약</button></div>'+
   '<nav class="ws-week" aria-label="주 선택"><button type="button" class="ws-nav" data-ws-move="-1" aria-label="이전 주"'+(s.canPrevious?'':' disabled')+'><i class="ph ph-caret-left" aria-hidden="true"></i></button>'+
@@ -195,7 +195,8 @@ async function mount(host,query){
   if(!host.isConnected||my!==request)return;
   host.innerHTML=page(s);host.dataset.week=s.start;
   if(s.previousWeek)markSeen(s.start); // the home "지난주 요약" row has done its job
-  host.querySelectorAll('[data-ws-tab]').forEach(b=>b.onclick=()=>V.nav(b.dataset.wsTab));
+  // 전체·월별·주간 are one place in the history (성장 통합): switching replaces the address instead of adding to it.
+  host.querySelectorAll('[data-ws-tab]').forEach(b=>b.onclick=()=>(V.growthHub?.go||V.nav)(b.dataset.wsTab));
   host.querySelectorAll('[data-ws-move]').forEach(b=>b.onclick=()=>{
    if(b.disabled)return;
    weekStart=W.shift(s.start,7*Number(b.dataset.wsMove));
@@ -222,7 +223,7 @@ async function mount(host,query){
  try{const fresh=await M.list();if(my!==request||!host.isConnected)return;items=fresh;paint();}
  catch(err){if(my===request&&host.isConnected&&!items.length)host.insertAdjacentHTML('afterbegin','<p class="ws-note" role="status">녹음 목록을 불러오지 못해 녹음·성장 항목은 빠졌을 수 있어요.</p>');}
 }
-V.route('weekly-summary',{title:'주간 요약',tab:'growth',noAutoRefresh:true,
+V.route('weekly-summary',{title:'성장',tab:'growth',noAutoRefresh:true,
  render:()=>(V.growthTabs?.('report')||'')+'<div class="ws-page" data-weekly-summary></div>',
  mount(main,r){mount(main.querySelector('[data-weekly-summary]'),r?.query);},
  leave(){request++;}

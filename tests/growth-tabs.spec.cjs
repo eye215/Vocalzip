@@ -104,7 +104,9 @@ test('보컬 분석: songs with recordings and their real counts, then the exist
   expect(await rows.evaluateAll(els => els.map(e => e.dataset.hubSong))).toEqual(['s1', 's2', 's3', 's4', 's5']);
   await expect(rows.nth(0)).toContainText('Defying Gravity');
   await expect(rows.nth(0)).toContainText('녹음 7개 · 분석 7개');
-  await expect(rows.nth(3)).toContainText('녹음 2개 · 분석 전');      // unanalysed takes are said, not scored
+  // Unanalysed takes are said (the 분석 전 chip), not scored; the count line then has no analysis part.
+  await expect(rows.nth(3).locator('.growth-hub-chip')).toHaveText('분석 전');
+  await expect(rows.nth(3).locator('.item-sub')).toHaveText(/^녹음 2개 · 최근 /);
   await expect(page.locator('[data-hub-reports]')).toContainText('저장한 리포트 1개');
   await expect(page.locator('[data-hub-reports]')).toHaveAttribute('href', '#/lab-reports');
   expect(await overflow(page)).toEqual({wide:false, over:0});

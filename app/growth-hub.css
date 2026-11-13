@@ -1,11 +1,18 @@
 /* 성장 통합 탭 (design guide §26). The three 성장 tabs reuse the screen-tab box of 곡 상세 (.seg: surface-2 box R14,
- * 44px items R10, selected #EDE1FF / #7A32F5) as links; the 전체·월별·주간 row under 결과 리포트 stays the §8 capsule
- * row, so the two levels never look like one set of equal tabs. */
+ * 44px items R10, selected #EDE1FF / #7A32F5) as links. The 전체·월별·주간 choice under 결과 리포트 is a period control,
+ * not a second row of tabs: a small white box inside the content with a "기간" label and 13px items. */
 .growth-top-tabs{display:flex;gap:4px;padding:4px;margin:0 0 14px;border-radius:14px;background:var(--surface-2)}
 .growth-top-tabs a{flex:1 1 0;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;padding:0 6px;border-radius:10px;color:var(--ink-2);font-size:14px;font-weight:600;line-height:1.2;text-align:center;text-decoration:none;white-space:nowrap}
 .growth-top-tabs a[aria-current="page"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent)}
 .growth-top-tabs a:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:2px}
 @media (max-width:350px){.growth-top-tabs a{font-size:13px;padding:0 2px}}
+/* 기간 선택 (결과 리포트 · 주간 요약). Each item is a 44px target; the chosen one is drawn 36px high inside it. */
+.growth-view-tabs.growth-range{display:flex;align-items:center;gap:0;width:max-content;max-width:100%;margin:0;padding:0 4px 0 0;border-radius:14px;background:var(--surface)}
+.growth-range-label{flex:none;padding:0 6px 0 14px;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px;font-weight:600}
+.growth-view-tabs.growth-range :is(button,a.growth-weekly-tab){flex:none;display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border:0;border-radius:14px;background:transparent;box-shadow:none;color:var(--ink-2);font-family:inherit;font-size:13px;line-height:18px;font-weight:600;white-space:nowrap;text-decoration:none}
+.growth-view-tabs.growth-range button.active{background:var(--vz-color-accent-soft);color:var(--vz-color-accent);box-shadow:inset 0 0 0 4px var(--surface)}
+.growth-view-tabs.growth-range :is(button,a):focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:-2px}
+@media (max-width:350px){.growth-view-tabs.growth-range :is(button,a.growth-weekly-tab){padding:0 8px}.growth-range-label{padding:0 4px 0 10px}}
 /* 보컬 분석 · 보컬 트레이닝 entry screens: shared white list rows (설정 › 관리 recipe), 12px between cards. */
 .growth-hub{display:grid;gap:12px;min-width:0;padding:0 0 46px;overflow-wrap:anywhere}
 .growth-hub .sec{margin:8px 0 0}
@@ -17,3 +24,17 @@
 .growth-hub-more summary{display:flex;align-items:center;min-height:44px;padding:0 4px;color:var(--ink-2);font-size:14px;font-weight:600;cursor:pointer}
 .growth-hub-more[open] summary{margin-bottom:8px}
 .growth-hub-all{margin-top:4px}
+/* Two groups per tab: one column on phones, side by side from 768px (app/wide-lists.css). */
+.growth-hub-cols,.growth-hub-col{display:grid;gap:12px;min-width:0;align-content:start}
+.growth-hub-title{display:flex;align-items:center;gap:8px;min-width:0}
+.growth-hub-title .item-title{min-width:0}
+.growth-hub-list .item-sub{white-space:normal}
+/* 비교 가능 · 판정 보류 · 분석 전: a state word, never a score. */
+.growth-hub-chip{flex:none;padding:2px 8px;border-radius:99px;font-size:11px;line-height:16px;font-weight:600;white-space:nowrap}
+.growth-hub-chip[data-state="ok"]{background:#E3F4EC;color:#147D56}
+.growth-hub-chip[data-state="hold"]{background:#FFF3DC;color:#8A5A00}
+.growth-hub-chip[data-state="none"]{background:#F2EFF7;color:#475467}
+.growth-hub-empty .btn{margin-top:12px}
+.growth-hub-caption{margin:0 4px}
+.growth-hub-hint{display:none;gap:10px;align-items:flex-start;margin:8px 0 0;padding:14px 16px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--ink-2);font-size:13px;line-height:20px}
+.growth-hub-hint i{flex:none;margin-top:1px;color:var(--vz-color-accent);font-size:18px}
