@@ -64,5 +64,3 @@ test('tablet columns and controls return to phone layout',async({page})=>{
  expect((await journey.boundingBox()).y).toBeGreaterThan((await account.boundingBox()).y);
  await page.setViewportSize({width:820,height:1180});expect((await journey.boundingBox()).x).toBeGreaterThan((await account.boundingBox()).x);
 });
-
-

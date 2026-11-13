@@ -40,4 +40,3 @@
   body[data-vz-route="settings"] .vz-settings{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
   body[data-vz-route="settings"] .vz-settings-section:last-of-type,body[data-vz-route="settings"] .vz-settings-version{grid-column:1/-1}
 }
-
