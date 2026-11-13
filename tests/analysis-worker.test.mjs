@@ -218,6 +218,32 @@ test('Older analyses (v1, or v2 without detail) are analysed again with history 
   assert.equal((await row('ra1')).songId, 's1', 'nothing but analysis changes');
 });
 
+test('A take whose MR drowns the voice is measured with the song\'s own MR file taken out (알고 있는 MR 빼기)', {skip}, async () => {
+  // Its own account (no cached song list from earlier tests): one song with an uploaded MR file, one without.
+  const U3 = '44444444-4444-4444-8444-444444444444', Y = require('./helpers/mr-synth.cjs');
+  await db.query('insert into auth.users (id) values ($1) on conflict do nothing', [U3]);
+  const pcm = x => { let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:11, db:8}).x;
+  files.set('u/' + U3 + '/mr-1/original.wav', pcm(mr));
+  for (const id of ['mx1', 'mx2']) files.set(key(U3, id, 'wav'), pcm(take));
+  await db.query('insert into public.vocal_data (user_id, payload) values ($1, $2)', [U3, JSON.stringify({songs:[
+    {id:'with-mr', title:'MR 있는 곡', mrTracks:[{id:'mr-1', kind:'file', title:'연습 MR', r2Key:'u/' + U3 + '/mr-1/original.wav'}, {id:'yt', kind:'youtube', videoId:'x'}]},
+    {id:'no-mr', title:'MR 없는 곡'}], lessons:[], practices:[], assignments:[], categories:[]})]);
+  await media('mx1', {name:'MR 큰 녹음', type:'audio/wav', storageProvider:'r2', r2Key:key(U3, 'mx1', 'wav'), songId:'with-mr'}, U3);
+  await media('mx2', {name:'MR 파일 없는 곡', type:'audio/wav', storageProvider:'r2', r2Key:key(U3, 'mx2', 'wav'), songId:'no-mr'}, U3);
+  await work();
+  const a1 = (await row('mx1')).analysis, a2 = (await row('mx2')).analysis;
+  assert.equal(a1.confidence.mrRemoved.trackId, 'mr-1');
+  assert.ok(Math.abs(a1.confidence.mrRemoved.offsetSeconds - 11) < 0.01, 'offset ' + a1.confidence.mrRemoved.offsetSeconds);
+  assert.ok(a1.confidence.pitchConfidence >= 0.8, 'cleaned ' + a1.confidence.pitchConfidence);
+  assert.equal(a1.voice, undefined); assert.equal(a1.by, 'server');
+  assert.equal((await jobs('mx1')).vocal.result.mrRemoved, true);
+  // Without an MR file the take is measured as recorded (held back by the app's confidence rule), nothing invented.
+  assert.equal(a2.confidence.mrRemoved, undefined);
+  assert.ok(a2.confidence.pitchConfidence < 0.8, 'as recorded ' + a2.confidence.pitchConfidence);
+  assert.equal((await row('mx1')).songId, 'with-mr', 'nothing but analysis changes');
+});
+
 test('A file that cannot be read is retried and then marked failed; a paid transcript survives a later failure', {skip}, async () => {
   await media('x1', {name:'사라진 파일', storageProvider:'r2', r2Key:key(U1, 'x1', 'wav')});
   // A failed job waits 30 minutes before the next try (not retried inside the same run).
