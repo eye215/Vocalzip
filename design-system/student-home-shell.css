@@ -37,6 +37,11 @@ body.vz-home-mode [data-home-retry]{min-height:44px;}
 .vz-plan-sheet input:focus-visible+.vz-plan-check{outline:3px solid #d9c5fa;outline-offset:3px;}
 .vz-plan-sheet .vz-plan-title{min-width:0;overflow-wrap:anywhere;color:var(--vz-color-primary);font-size:15px;font-weight:500;line-height:1.6;}
 .vz-plan-sheet .vz-plan-source{align-self:start;margin-top:1px;padding:3px 6px;border-radius:6px;background:#f2f4f7;color:var(--vz-color-ink-muted);font-size:11px;line-height:1.6;white-space:nowrap;}
+/* Completed / recorded goals stay in today's list: shown ticked, not changeable. */
+.vz-plan-sheet .vz-plan-option.is-kept{cursor:default;}
+.vz-plan-sheet .vz-plan-option.is-kept .vz-plan-check{opacity:.45;}
+.vz-plan-sheet .vz-plan-option.is-kept .vz-plan-title{color:var(--vz-color-ink-muted);}
+.vz-plan-sheet .vz-plan-source b{color:var(--vz-color-accent);font-weight:600;}
 .vz-plan-sheet .field{margin:0;gap:8px;}
 .vz-plan-sheet .field>span{color:var(--vz-color-primary);font-size:14px;font-weight:600;}
 .vz-plan-sheet .field>span>small,.vz-plan-sheet summary>small{margin-left:6px;color:var(--vz-color-faint);font-size:12px;font-weight:400;}

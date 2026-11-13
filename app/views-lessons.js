@@ -148,9 +148,18 @@ VZ.overdueCard = (max = 3) => {
   return '<div class="card stack overdue-card" data-overdue><div class="row" style="gap:8px"><i class="ph ph-warning-circle" style="font-size:20px;color:var(--warn)"></i><strong class="grow">지난 레슨 결과를 기록해 주세요</strong>' + (list.length > max ? '<a class="small" href="#/lessons">전체 ' + list.length + '</a>' : '') + '</div>' +
     list.slice(0, max).map(l => { const songs = VZ.lessonSongIds(l).map(VZ.songTitle).filter(Boolean); return '<div class="row overdue-row" style="gap:8px"><a class="grow" href="#/lesson/' + esc(l.id) + '" style="color:inherit;text-decoration:none;min-width:0"><span style="display:block;font-weight:650">' + esc(VZ.dateLabel(l.date)) + (l.startTime ? ' ' + esc(VZ.timeRange(l)) : '') + '</span><span class="small muted ellipsis" style="display:block">' + esc([songs.join(', '), l.place, l.teacher].filter(Boolean).join(' · ') || '레슨') + '</span></a><button type="button" class="btn sm" data-resolve="done" data-id="' + esc(l.id) + '">완료</button><button type="button" class="btn sm ghost" data-resolve="cancelled" data-id="' + esc(l.id) + '">취소</button></div>'; }).join('') + '</div>';
 };
-document.addEventListener('click', e => {
-  const b = e.target.closest('[data-resolve]'); if (!b) return;
+let resolving = false;
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-resolve]'); if (!b || resolving) return;
   const to = b.dataset.resolve, id = b.dataset.id;
+  if (to === 'done') {
+    // Completing a lesson can deduct the lesson fee by itself: say what will be deducted and ask first.
+    resolving = true;
+    try {
+      const l = VZ.db.lessons.find(y => y.id === id), fee = l ? await VZ.billingAutoPreview?.(l).catch(() => null) : null;
+      if (fee && !await VZ.confirm('레슨 완료', VZ.dateLabel(l.date) + ' 레슨을 완료로 기록할까요?\n레슨비 정산에서 레슨권 ' + fee.text + '가 차감돼요.', {ok:'완료로 기록'})) return;
+    } finally { resolving = false; }
+  }
   if (VZ.change(d => { const x = d.lessons.find(y => y.id === id); if (!x) return; x.status = to; if (to === 'done') x.completedAt = Date.now(); }))
     VZ.toast(to === 'done' ? '레슨을 완료로 기록했어요.' : '레슨을 취소로 기록했어요.');
 });
@@ -241,10 +250,18 @@ function feedbackSheet(l) {
   VZ.sheet({title:'레슨 피드백', body:'<form id="fb-form"><label class="field"><span>전체 피드백</span><textarea name="feedback" rows="5" maxlength="10000" placeholder="선생님이 말씀하신 내용">' + esc(l.feedback || '') + '</textarea></label>' +
     songIds.map(id => '<label class="field"><span>' + esc(VZ.songTitle(id) || '곡') + ' 피드백</span><textarea name="song_' + esc(id) + '" rows="3" maxlength="5000" style="min-height:72px">' + esc(l.songFeedback?.[id] || '') + '</textarea></label>').join('') +
     '<label class="field"><span>내 메모</span><textarea name="memo" rows="3" maxlength="5000" style="min-height:72px">' + esc(l.memo || '') + '</textarea></label>' +
-    (VZ.lessonStatus(l) === 'scheduled' && l.date <= VZ.today() ? '<label class="item" style="padding:0 0 8px"><input type="checkbox" name="complete" checked style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main">레슨 완료로 표시</span></label>' : '') + '</form>',
+    (VZ.lessonStatus(l) === 'scheduled' && l.date <= VZ.today() ? '<label class="item" style="padding:0 0 8px"><input type="checkbox" name="complete" style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main">레슨 완료로 표시</span></label><p class="small muted" data-complete-note hidden style="margin:0 0 8px"></p>' : '') + '</form>',
     foot:'<button type="submit" form="fb-form" class="btn block">피드백 저장</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form');
+      // Saving feedback does not complete the lesson unless the box is ticked; ticking it says what completing deducts.
+      const box = form.complete, note = el.querySelector('[data-complete-note]');
+      if (box) {
+        let fee = null;
+        const show = () => { note.hidden = !(box.checked && fee); };
+        box.onchange = show;
+        VZ.billingAutoPreview?.(l).then(p => { if (!p) return; fee = p; note.textContent = '완료로 저장하면 레슨비 정산에서 레슨권 ' + p.text + '가 차감돼요.'; show(); }).catch(() => {});
+      }
       form.onsubmit = e => {
         e.preventDefault();
         const ok = VZ.change(d => {

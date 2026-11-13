@@ -592,8 +592,53 @@ test('goal selection remains keyboard accessible and leaves source homework unch
  await check.focus();await page.keyboard.press('Space');await expect(check).not.toBeChecked();
  await expect(sheet.locator('[data-plan-count]')).toHaveText('2개 선택');
  await sheet.getByRole('button',{name:'목표 저장',exact:true}).click();
- const after=await db(page);expect(after.dailyGoals.some(g=>g.id==='g1')).toBe(false);
+ await page.getByRole('dialog',{name:'목표 빼기',exact:true}).getByRole('button',{name:'빼기',exact:true}).click();
+ await expect(sheet).toHaveCount(0);
+ const after=await db(page);expect(after.dailyGoals.some(g=>g.id==='g1')).toBe(false);expect(after.dailyGoals.some(g=>g.id==='g2'&&g.completed===true)).toBe(true);
  expect(after.assignments).toEqual(before.assignments);expect(after.practices).toEqual(before.practices);
+});
+test('goal sheet locks completed and recorded goals and asks once before removing the others',async({page})=>{
+ const value=seed();
+ // g2: completed with a 수행 기록 (12 typed minutes). r:TODAY: today's completed day of a running routine.
+ value.dailyGoals[1].performance={minutes:12,mediaIds:[],at:1};
+ value.practices.push({id:'goal:g2',date:TODAY,minutes:12,manualMinutes:12,practiceTimeSource:'goal',practiceMode:'training',songId:'',mediaIds:[],memo:'[목표] 곡의 가사를 천천히 읽기',goalId:'g2',goalSource:'personal',completed:[],assignmentReps:{},assignmentNotes:{},technique:[],created:1,performedAt:1});
+ value.practicePlans.push({id:'routine:r',kind:'routine',title:'립트릴',days:3,startDate:TODAY,endDate:'2026-11-06',created:1,archived:false,changes:[]});
+ for(const [i,date] of [TODAY,'2026-11-05','2026-11-06'].entries())value.dailyGoals.push({id:'routine:r:'+date,date,title:'립트릴',source:'personal',sourceId:'routine:r',routineId:'routine:r',routine:true,completed:i===0,order:3,created:1});
+ await boot(page,value);const before=await db(page);
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true}),save=sheet.getByRole('button',{name:'목표 저장',exact:true});
+ const row=id=>sheet.locator('.vz-plan-option').filter({has:page.locator('input[value="existing:'+id+'"]')});
+ // Completed goals read as done and cannot be unticked.
+ for(const id of ['g2','routine:r:'+TODAY]){
+  await expect(row(id).locator('input')).toBeChecked();await expect(row(id).locator('input')).toBeDisabled();
+  await expect(row(id).locator('.vz-plan-source')).toContainText('완료');
+  await row(id).click({force:true});await expect(row(id).locator('input')).toBeChecked();
+ }
+ await expect(row('g1').locator('input')).toBeEnabled();await expect(row('g1').locator('.vz-plan-source')).not.toContainText('완료');
+ await row('g1').click();await row('g3').click();
+ await expect(sheet.locator('[data-plan-count]')).toHaveText('2개 선택');
+ // One question for both removals; 취소 changes nothing and keeps the sheet and the choices.
+ await save.click();
+ let ask=page.getByRole('dialog',{name:'목표 빼기',exact:true});
+ await expect(ask).toContainText('목표 2개');await expect(ask).toContainText('호흡을 길게 유지하기');await expect(ask).toContainText('후렴 연결 연습하기');
+ await ask.getByRole('button',{name:'취소',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'목표 빼기',exact:true})).toHaveCount(0);
+ await expect(sheet).toBeVisible();await expect(save).toBeEnabled();await expect(row('g1').locator('input')).not.toBeChecked();
+ expect((await db(page)).dailyGoals).toEqual(before.dailyGoals);
+ await save.click();ask=page.getByRole('dialog',{name:'목표 빼기',exact:true});
+ await ask.getByRole('button',{name:'빼기',exact:true}).click();
+ await expect(sheet).toHaveCount(0);
+ const after=await db(page),ids=after.dailyGoals.map(g=>g.id);
+ expect(ids).not.toContain('g1');expect(ids).not.toContain('g3');
+ // Completed goals, their record and practice row, and the routine's other days are untouched.
+ for(const id of ['g2','routine:r:'+TODAY,'routine:r:2026-11-05','routine:r:2026-11-06'])expect(after.dailyGoals.find(g=>g.id===id)).toMatchObject(before.dailyGoals.find(g=>g.id===id));
+ expect(after.practices).toEqual(before.practices);expect(after.assignments).toEqual(before.assignments);
+ for(const p of after.practices.filter(p=>p.goalId))expect(ids).toContain(p.goalId);
+ // Saving without removing anything does not ask.
+ await page.getByRole('button',{name:'오늘의 목표 설정',exact:true}).click();
+ await sheet.getByLabel('개인 목표',{exact:true}).fill('새 목표');await save.click();
+ await expect(sheet).toHaveCount(0);await expect(page.getByRole('dialog',{name:'목표 빼기',exact:true})).toHaveCount(0);
+ expect((await db(page)).dailyGoals.some(g=>g.title==='새 목표')).toBe(true);
 });
 test('continue practice preselects the recent song with and without a recording and preserves history',async({page})=>{
  await boot(page);

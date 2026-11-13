@@ -2180,7 +2180,112 @@ test('The first lesson completed after the update is deducted even if 레슨비 
   // As on a device where billing was last opened before auto-deduction existed.
   await page.evaluate(() => localStorage.removeItem('vzip_billing_auto_deduct_v1'));
   await page.locator('[data-resolve="done"][data-id="l-over"]').click();
+  await page.getByRole('dialog', {name:'레슨 완료'}).locator('[data-ok]').click(); // it says 1회 will be deducted and asks first
   await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+});
+
+/* ---------- lesson fee is never deducted by accident (audit 2026-11-13) ---------- */
+async function passOf10(page) {
+  await page.evaluate(() => localStorage.setItem('sb-chxnbtiyuyhiywzeshis-auth-token', JSON.stringify({user:{id:'ui-test-user', email:'test@example.invalid'}})));
+  await page.goto('/billing/');
+  await expect(page.locator('#message')).toContainText('불러왔어요');
+  await page.locator('[data-panel="passes"]').click(); await page.locator('[data-open-form="pass"]').click();
+  await page.locator('#pass-name').fill('10회권'); await page.locator('#pass-totalUnits').fill('10'); await page.locator('#pass-amount').fill('500000');
+  await page.locator('#pass-form [type=submit]').click(); await expect(page.locator('#message')).toContainText('저장했어요');
+}
+const billingRows = page => page.evaluate(async () => { const db = await new Promise(r => { const q = indexedDB.open('vocalzip_billing_v1'); q.onsuccess = () => r(q.result); }); const doc = await new Promise(r => { const q = db.transaction('documents').objectStore('documents').get('user:ui-test-user'); q.onsuccess = () => r(q.result); }); db.close(); return (doc?.deductions || []).filter(d => !d.voidedAt).map(d => [d.lessonId, d.units]); });
+/** Counts every background run of 레슨비 정산 (the hidden frame) from now on. */
+const watchBillingRuns = page => page.evaluate(() => { window.__billingRuns = 0; new MutationObserver(list => { for (const m of list) for (const n of m.addedNodes) if (n.tagName === 'IFRAME' && /billing\//.test(n.src)) window.__billingRuns++; }).observe(document.body, {childList:true}); });
+
+test('Lesson feedback: 레슨 완료로 표시 starts unticked, saving feedback alone neither completes nor deducts, and ticking it says what is deducted', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  // No 레슨비 정산 yet: the box is unticked and there is nothing to warn about.
+  await page.goto('/#/lesson/l-over');
+  await page.locator('[data-fb],[data-fb2]').first().click();
+  await expect(sheet(page).locator('[name=complete]')).not.toBeChecked();
+  await sheet(page).locator('[name=complete]').check();
+  await expect(sheet(page).locator('[data-complete-note]')).toBeHidden();
+  await sheet(page).locator('[data-close]').click();
+  await passOf10(page);
+  await page.goto('/#/lesson/l-over');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await watchBillingRuns(page);
+  await page.locator('[data-fb],[data-fb2]').first().click();
+  const box = sheet(page).locator('[name=complete]'), note = sheet(page).locator('[data-complete-note]');
+  await expect(box).not.toBeChecked();
+  await expect(note).toBeHidden();
+  await sheet(page).locator('[name=feedback]').fill('호흡이 좋아짐');
+  await sheet(page).getByRole('button', {name:'피드백 저장'}).click();
+  await expect(page.locator('.toast').last()).toContainText('피드백을 저장했어요');
+  let l = (await data(page)).lessons.find(x => x.id === 'l-over');
+  expect(l).toMatchObject({status:'scheduled', feedback:'호흡이 좋아짐'}); expect(l.completedAt).toBeUndefined();
+  await page.waitForTimeout(3000);
+  expect(await page.evaluate(() => window.__billingRuns)).toBe(0);
+  expect(await billingRows(page)).toEqual([]);
+  // Ticking it tells what completing costs; saving then completes and deducts once.
+  await page.locator('[data-fb],[data-fb2]').first().click();
+  await expect(sheet(page).locator('[name=feedback]')).toHaveValue('호흡이 좋아짐');
+  await box.check();
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('1회');
+  await box.uncheck(); await expect(note).toBeHidden(); await box.check();
+  await sheet(page).getByRole('button', {name:'피드백 저장'}).click();
+  await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+  l = (await data(page)).lessons.find(x => x.id === 'l-over');
+  expect(l.status).toBe('done'); expect(l.completedAt).toBeGreaterThan(0);
+  expect(await billingRows(page)).toEqual([['l-over', 100]]);
+});
+
+test('Overdue lesson card: 완료 asks first when it will deduct from the pass; 취소 keeps the lesson and the pass as they were', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  await passOf10(page);
+  await page.goto('/#/lessons');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await watchBillingRuns(page);
+  const done = page.locator('[data-resolve="done"][data-id="l-over"]');
+  await done.click();
+  const ask = page.getByRole('dialog', {name:'레슨 완료'});
+  await expect(ask).toContainText('1회');
+  await expect(ask).toContainText('차감');
+  await ask.getByRole('button', {name:'취소'}).click();
+  await expect(ask).toHaveCount(0);
+  expect((await data(page)).lessons.find(x => x.id === 'l-over').status).toBe('scheduled');
+  await page.waitForTimeout(2500);
+  expect(await page.evaluate(() => window.__billingRuns)).toBe(0);
+  expect(await billingRows(page)).toEqual([]);
+  await done.click();
+  await page.getByRole('dialog', {name:'레슨 완료'}).locator('[data-ok]').click();
+  await expect(page.locator('.toast').last()).toContainText('레슨비 정산에서 1회 차감했어요', {timeout:20000});
+  expect((await data(page)).lessons.find(x => x.id === 'l-over').status).toBe('done');
+  expect(await billingRows(page)).toEqual([['l-over', 100]]);
+});
+
+test('A lesson completed on another device and merged in from the cloud is not deducted again on this device', async ({page}) => {
+  test.setTimeout(60000);
+  await boot(page, {media:false});
+  await passOf10(page);
+  await page.goto('/#/home');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await watchBillingRuns(page);
+  // What cloud-sync does after a merge: the merged data is written and announced as 'cloud-merge'. The lesson was
+  // completed seconds ago on the other device, which deducted it there (that ledger has not reached this device yet).
+  await page.evaluate(k => {
+    const d = JSON.parse(localStorage.getItem(k));
+    d.lessons.push({id:'done-elsewhere', date:VZ.today(), startTime:'19:00', endTime:'20:00', status:'done', songIds:[], songId:'', feedback:'', memo:'', recordings:[], created:Date.now() - 60000, completedAt:Date.now() - 2000, updatedAt:Date.now() - 2000});
+    localStorage.setItem(k, JSON.stringify(d));
+    window.dispatchEvent(new CustomEvent('vzip:data-changed', {detail:{source:'cloud-merge'}}));
+  }, KEY);
+  expect((await page.evaluate(() => VZ.db.lessons.find(l => l.id === 'done-elsewhere')?.status))).toBe('done');
+  // An unrelated edit on this device right after the merge must not pick that lesson up either.
+  await page.evaluate(() => VZ.change(d => { d.songs[0].memo = '메모'; }));
+  await page.waitForTimeout(4000);
+  expect(await page.evaluate(() => window.__billingRuns)).toBe(0);
+  expect(await billingRows(page)).toEqual([]);
+  // A lesson completed on this device is still deducted, once, and only that one.
+  await page.evaluate(() => VZ.change(d => { d.lessons.push({id:'done-here', date:VZ.today(), startTime:'10:00', endTime:'11:00', status:'done', songIds:[], songId:'', feedback:'', memo:'', recordings:[], created:Date.now()}); }));
+  await expect.poll(() => page.evaluate(() => window.__billingRuns), {timeout:10000}).toBe(1);
 });
 
 test('Home shows lessons left the way 레슨비 정산 counts them (payments ÷ hourly rate)', async ({page}) => {
