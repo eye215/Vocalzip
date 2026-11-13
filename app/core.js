@@ -180,7 +180,7 @@ if (vv) {
 }
 /** Full-page workflow by default; short action menus and confirmations are explicit variants. */
 /** A page sheet with a form and a save button asks before X / backdrop / Escape / back throws away edits
- * (confirmClose:false for sheets that ask themselves; dirtyState() adds state kept outside form fields). */
+ * (confirmClose:false, or setting VZ.setGuard while mounting, for sheets that ask themselves; dirtyState() adds state kept outside form fields). */
 VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', anchor, confirmClose = true, dirtyState}) => {
   const previous = document.activeElement;
   const back = document.createElement('div');
@@ -220,7 +220,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
   });
   document.body.append(back); if (variant !== 'menu') lockPage();
   sheets.push(api);
+  // A sheet that sets its own leave question while mounting (VZ.setGuard) asks by itself: no second question here.
+  const guardBefore = guard;
   onMount?.(el, close);
+  if (guard !== guardBefore) confirmClose = false;
   if (variant === 'page' && !foot) {
     const form = el.querySelector('.sheet-body form');
     const submit = form?.querySelector('button[type="submit"],input[type="submit"]');
