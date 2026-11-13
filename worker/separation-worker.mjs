@@ -28,17 +28,18 @@ export async function waiting(db, limit = 1000) {
   return rows;
 }
 /** Run the separator on a WAV; resolves with the path of the separated voice. */
-function separate(input, outDir, cmd = env.DEMUCS_CMD || 'python3 -m demucs') {
+function separate(input, outDir, cmd = env.DEMUCS_CMD || 'python3 -m demucs', diagnostic = false) {
   return new Promise((resolve, reject) => {
     const [bin, ...pre] = cmd.split(' ').filter(Boolean);
     const args = [...pre, '--two-stems', 'vocals', '-n', MODEL, '-d', 'cpu', '-o', outDir, input];
     const p = spawn(bin, args, {stdio:['ignore', 'ignore', 'pipe']});
-    let err = ''; p.stderr.on('data', d => { err = (err + d).slice(-400); });
+    let err = ''; p.stderr.on('data', d => { err = (err + d).slice(-4000); });
     const kill = setTimeout(() => p.kill('SIGKILL'), SEPARATE_TIMEOUT_MS);
     p.on('error', e => { clearTimeout(kill); reject(e); });
     p.on('close', async code => {
       clearTimeout(kill);
-      if (code !== 0) return reject(new Error('separation failed (' + code + ')'));
+      // Only synthetic selftests may expose stderr. Real recordings keep counts-only logs.
+      if (code !== 0) return reject(new Error('separation failed (' + code + ')' + (diagnostic ? ': ' + err.trim() : '')));
       // Demucs writes <out>/<model>/<input name>/vocals.wav
       try {
         const base = join(outDir, MODEL), dirs = await readdir(base);
@@ -113,7 +114,7 @@ export async function selftest({cmd, log = console.log} = {}) {
     const input = join(dir, 'take8k.wav'); await writeFile(input, wav(take, Y.SR));
     const up = await decode(await readFile(input), {rate:44100, seconds:MAX_SECONDS});
     const wav44 = join(dir, 'take.wav'); await writeFile(wav44, wav(up, 44100));
-    const t0 = Date.now(), voicePath = await separate(wav44, join(dir, 'out'), cmd), seconds = (Date.now() - t0) / 1000;
+    const t0 = Date.now(), voicePath = await separate(wav44, join(dir, 'out'), cmd, true), seconds = (Date.now() - t0) / 1000;
     const after = VA.analyze(await decode(await readFile(voicePath), {rate:16000, seconds:MAX_SECONDS}), 16000);
     const result = {audioSeconds:30, separateSeconds:Math.round(seconds), pitchConfidence:{before:before.confidence.pitchConfidence, after:after.confidence.pitchConfidence},
       reliable:{before:reliableResult(before), after:reliableResult(after)}, notes:{before:before.metrics.intonation?.notes ?? 0, after:after.metrics.intonation?.notes ?? 0}};
