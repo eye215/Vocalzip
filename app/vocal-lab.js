@@ -91,7 +91,7 @@ function sizePlots(host) {
 const G=window.VzipGrowthMetrics;
 const songReference=song=>{const r=(V.song?.(song?.id)||song)?.vocalRange;return r&&Number.isFinite(r.highMidi)?r:null;};
 const labTakes=s=>s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m))
- .map(m=>({id:m.id,a:analysis(m),date:String(M.dateOf(m)||'').slice(0,10),ok:!!V.analysisReliable(analysis(m))}));
+ .map(m=>({id:m.id,a:analysis(m),date:String(M.dateOf(m)||'').slice(0,10),created:m.created,ok:!!V.analysisReliable(analysis(m))}));
 const labReport=s=>G?G.songReport(labTakes(s),{reference:songReference(s.song),scoreNotes:(V.song?.(s.song.id)||s.song)?.noteCompare?.takes||null,arNotes:(V.song?.(s.song.id)||s.song)?.arCompare?.takes||null}):null;
 const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+s.selected.slice().sort().join(',');
 const savedGrowthReport=s=>(V.db.practicePlans||[]).find(x=>x.id===labGrowthId(s)&&x.period==='vocal-growth-ai'&&x.evidenceKey===growthEvidenceKey(s));
@@ -547,7 +547,7 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefre
     }
     document.querySelector('[data-lab-more]').onclick=()=>V.menu({title:'보컬 연구소',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/lab-reports">리포트 보관함 <i class="ph ph-caret-right"></i></a><a class="vz-choice" href="#/song/'+encodeURIComponent(song.id)+'">곡 상세 <i class="ph ph-caret-right"></i></a></div>'});
     const requested=r.query.get('selection')==='1' ? new Set(selectionIds()) : null;
-    const items=(await M.list().catch(()=>M.cached())).filter(m=>m.songId===song.id && (!M.isVideo(m) || requested?.has(String(m.id)))).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(a.created||0)-(b.created||0));
+    const items=(await M.list().catch(()=>M.cached())).filter(m=>m.songId===song.id && (!M.isVideo(m) || requested?.has(String(m.id)))).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(Number(a.created)||0)-(Number(b.created)||0)||String(a.id).localeCompare(String(b.id)));
     if(id!==instance||!host.isConnected)return;
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
     const pair=[r.query.get('a'),r.query.get('b')].filter(key=>items.some(m=>String(m.id)===key));

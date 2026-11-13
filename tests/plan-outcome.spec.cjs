@@ -140,3 +140,14 @@ test('backward compatibility: old saved reports are recognised; new ones keep ev
  assert.deepEqual(db.vocalPlanReports[0].measurement.afterIds,[]);
  assert.equal(JSON.stringify(db.vocalPlanReports[0]).includes('"during"'),false);
 });
+test('same-day takes inside the plan: the later recording (created) is compared, not the larger id',()=>{
+ const at=(date,time)=>Date.parse(date+'T'+time+':00+09:00');
+ const rec=(id,date,time,wobble)=>({...audio(id,date,wobble),created:at(date,time)});
+ const recordings=[rec('before','2026-10-29','10:00',27),rec('z-morning','2026-11-03','09:00',35),rec('a-evening','2026-11-03','21:00',19)];
+ for(const list of [recordings,recordings.slice().reverse()]){
+  const m=report({...args,recordings:list}).measurement;
+  assert.deepEqual(m.afterIds,['a-evening']);
+  assert.equal(m.after,19);
+  assert.equal(m.change,'better');
+ }
+});

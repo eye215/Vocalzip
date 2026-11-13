@@ -8,14 +8,14 @@ const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
 const WORKER = 'app/vocal-analysis.js?v=7', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
-let job = 0;
+let job = 0, stop = null; // stop: ends the screen's on-device analysis when the screen is left
 
 /** Mono samples of a recording, decoded by the browser. */
-async function decode(item, onStage) {
+async function decode(item, onStage, signal) {
   onStage('파일 불러오는 중…');
   const src = await M.src(item);
   let bytes;
-  try { const res = await fetch(src.url); if (!res.ok) throw Error('파일을 받지 못했어요 (' + res.status + ').'); bytes = await res.arrayBuffer(); }
+  try { const res = await fetch(src.url, signal ? {signal} : undefined); if (!res.ok) throw Error('파일을 받지 못했어요 (' + res.status + ').'); bytes = await res.arrayBuffer(); }
   finally { if (src.revoke) URL.revokeObjectURL(src.url); }
   onStage('소리 꺼내는 중…');
   return decodeBytes(bytes);
@@ -60,18 +60,21 @@ const summaryOf = (result, previous) => {
     ...(history.length?{history:history.slice(-HISTORY_KEEP)}:{}),scope:{kind:'whole-recording',cut:!!result.cut}};
 };
 VZ.analysisSummary = summaryOf;
+/** A saved result that is not analysed over: the current analyzer version with the detail rows. The same rule as
+ * the server worker (worker/analysis-worker.mjs isCurrentAnalysis). */
+VZ.analysisCurrent = (a, version = 2) => !!a && Number(a.v) >= version && !!a.metrics && Object.prototype.hasOwnProperty.call(a.metrics, 'phrases');
 /* ---------- 알고 있는 MR 빼기 ----------
  * A take the analysis cannot trust (the MR drowned the voice) is analysed again with the song's own MR files
  * subtracted (app/mr-cancel.js in the worker). Only uploaded MR files can be used (a YouTube MR has no file). The MR
  * and the recording stay as they are; the cleaned voice is kept only for listening on this screen. */
 const reliableResult = r => !!VZ.analysisReliable?.({v:r.version, metrics:r.metrics, confidence:r.confidence});
 const mrFilesOf = item => window.VzipR2?.enabled?.() ? (VZ.song(item?.songId)?.mrTracks || []).filter(t => t && !t.deleted && t.kind === 'file' && t.r2Key).slice(0, 3) : [];
-async function withoutMr(samples, sampleRate, tracks, onStage, onProgress) {
+async function withoutMr(samples, sampleRate, tracks, onStage, onProgress, signal) {
   onStage('곡 MR 불러오는 중… (반주를 빼고 다시 분석)');
   const mrs = [];
   for (const t of tracks) {
     try {
-      const url = await window.VzipR2.url(t.r2Key), res = await fetch(url);
+      const url = await window.VzipR2.url(t.r2Key), res = await fetch(url, signal ? {signal} : undefined);
       if (!res.ok) continue;
       const d = await decodeBytes(await res.arrayBuffer());
       mrs.push({id:t.id, samples:d.samples, sampleRate:d.sampleRate});
@@ -79,19 +82,20 @@ async function withoutMr(samples, sampleRate, tracks, onStage, onProgress) {
   }
   if (!mrs.length) return null;
   onStage('반주(MR) 빼는 중…');
-  const d = await post({samples, sampleRate, mrs}, [samples.buffer, ...mrs.map(m => m.samples.buffer)], onProgress);
+  const d = await post({samples, sampleRate, mrs}, [samples.buffer, ...mrs.map(m => m.samples.buffer)], onProgress, signal);
   return d.result || null;
 }
 VZ.analysisWithoutMrAvailable = item => mrFilesOf(item).length > 0;
 /** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).
- * Used by the analysis screen and the song page's "analyze all". Returns the full result (with curve). */
-VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, save = true} = {}) => {
-  const {samples, sampleRate, cut} = await decode(item, onStage), tracks = mrFilesOf(item), keep = tracks.length ? samples.slice() : null;
+ * Used by the analysis screen and the song page's "analyze all". Returns the full result (with curve).
+ * signal (AbortSignal) stops the download and the worker; nothing is saved then. */
+VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, save = true, signal} = {}) => {
+  const {samples, sampleRate, cut} = await decode(item, onStage, signal), tracks = mrFilesOf(item), keep = tracks.length ? samples.slice() : null;
   onStage('목소리 찾는 중… (반주와 구분)');
-  let result = await runWorker(samples, sampleRate, onProgress);
+  let result = await runWorker(samples, sampleRate, onProgress, {signal});
   if (keep && !reliableResult(result)) {
     // Kept only when it is trustworthy, or at least clearly better read than the take as recorded.
-    const cleaned = await withoutMr(keep, sampleRate, tracks, onStage, onProgress).catch(() => null);
+    const cleaned = await withoutMr(keep, sampleRate, tracks, onStage, onProgress, signal).catch(e => { if (e?.name === 'AbortError') throw e; return null; });
     if (cleaned && (reliableResult(cleaned) || (cleaned.confidence?.pitchConfidence || 0) > (result.confidence?.pitchConfidence || 0) + 0.1)) result = cleaned;
   }
   result.cut = cut; result.summary = summaryOf(result, item.analysis);
@@ -229,6 +233,7 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
   render() { return '<div data-ana><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>'; },
   async mount(main, r) {
     const id = r.params[0], my = ++job, host = main.querySelector('[data-ana]');
+    stop?.abort(); const ctl = stop = typeof AbortController === 'function' ? new AbortController() : null;
     const alive = () => my === job && document.body.contains(host);
     const allItems = await M.list().catch(() => []), item = allItems.find(m => m.id === id);
     if (!alive()) return;
@@ -245,7 +250,7 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
     const out = host.querySelector('[data-out]'), stage = t => { const s = out.querySelector('[data-stage]'); if (s) s.textContent = t; }, bar = p => { const b = out.querySelector('[data-bar]'); if (b) b.style.width = Math.round(p * 100) + '%'; };
     let result;
     try {
-      result = await VZ.analyzeRecording(item, {onStage:stage, onProgress:p => { if (alive()) bar(p); }, save:false});
+      result = await VZ.analyzeRecording(item, {onStage:stage, onProgress:p => { if (alive()) bar(p); }, save:false, signal:ctl?.signal});
     } catch (e) {
       if (alive()) out.innerHTML = '<div class="ana-note warn"><i class="ph ph-warning"></i><span>분석하지 못했어요: ' + esc(e.message) + '</span></div>';
       return;
@@ -272,11 +277,28 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
     out.addEventListener('click', e => {
       const b = e.target.closest('[data-seek-at]'); if (b) VZ.analysisPlayAt(player, b.dataset.seekAt);
     });
-    // Keep the summary with the recording (only this field changes; other devices' edits stay).
-    const summary = result.summary;
-    try { await M.update(item, {analysis:summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:summary}})); if (alive()) out.querySelector('[data-saved]').textContent = '분석 v2를 저장했어요. 이전 결과는 분석 이력에 보존했어요.'; }
-    catch (e) { if (alive()) out.querySelector('[data-saved]').textContent = '결과를 저장하지 못했어요: ' + e.message; }
+    // Keep the summary with the recording (only this field changes; other devices' edits stay) — but never over a
+    // current saved result (the server's included): that one changes only when the person asks for it.
+    const note = out.querySelector('[data-saved]');
+    const keep = async previous => {
+      const summary = summaryOf(result, previous);
+      try { await M.update(item, {analysis:summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:summary}})); if (alive()) note.textContent = '분석 v' + result.version + '를 저장했어요.' + (previous?.v ? ' 이전 결과는 분석 이력에 보존했어요.' : ''); return true; }
+      catch (e) { if (alive()) note.textContent = '결과를 저장하지 못했어요: ' + e.message; return false; }
+    };
+    // The result saved right now (the server may have saved one while this screen was analysing).
+    const saved = async () => ((await M.list().catch(() => [])).find(m => m.id === id) || item).analysis;
+    const before = await saved();
+    if (!alive()) return;
+    if (!VZ.analysisCurrent(before, result.version)) { await keep(before); return; }
+    note.textContent = '저장된 분석 결과는 그대로 두었어요. 위 그래프와 값은 이 기기에서 방금 계산해 보여 드린 거예요.';
+    note.insertAdjacentHTML('afterend', '<div data-ana-redo><button type="button" class="btn sm ghost" data-ana-reanalyze><i class="ph ph-arrows-clockwise" aria-hidden="true"></i> 다시 분석해서 저장</button>' +
+      '<p class="small muted" style="margin-top:6px">누르면 저장된 결과를 이 기기의 결과로 바꿔요. 이전 결과는 이력으로 남겨요.</p></div>');
+    const redo = out.querySelector('[data-ana-reanalyze]');
+    redo.onclick = async () => {
+      redo.disabled = true;
+      if (await keep(await saved())) out.querySelector('[data-ana-redo]')?.remove(); else redo.disabled = false;
+    };
   },
-  leave() { job++; }
+  leave() { job++; stop?.abort(); stop = null; }
 });
 })();

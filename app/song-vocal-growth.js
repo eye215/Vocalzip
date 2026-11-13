@@ -51,7 +51,7 @@ const analysisOf = m => fresh.get(m.id) || m.analysis || null;
 const usable = m => { const a = analysisOf(m); return [1,2].includes(a?.v) && a.metrics; };
 function points(media) {
   return media.filter(usable).map(m => ({m, a:analysisOf(m), date:M.dateOf(m) || '', ok:VZ.analysisReliable(analysisOf(m)), guess:m.dateSource === 'file-modified'}))
-    .sort((x, y) => x.date.localeCompare(y.date) || (x.m.created || 0) - (y.m.created || 0));
+    .sort((x, y) => x.date.localeCompare(y.date) || (Number(x.m.created) || 0) - (Number(y.m.created) || 0) || String(x.m.id).localeCompare(String(y.m.id)));
 }
 /** Change from first to latest (takes {id, a, date, ok}). Growth measures ask the model; 유효 최고음 is a neutral note
  * difference shown only when both takes are comparable. */
@@ -65,7 +65,7 @@ function change(metric, first, last, {pair = false} = {}) {
   const amount = metric.step ? Math.abs(Math.round(d / 100)) + '반음' : Math.abs(d) + (metric.unit ? ' ' + metric.unit : '');
   return '<span class="vg-same">' + (d > 0 ? '▲ ' : '▼ ') + amount + (metric.step ? ' · 실력 판정 아님' : '') + '</span>';
 }
-const takeOfPoint = p => ({id:p.m.id, songId:p.m.songId, a:p.a, date:String(p.date || '').slice(0, 10), ok:p.ok});
+const takeOfPoint = p => ({id:p.m.id, songId:p.m.songId, a:p.a, date:String(p.date || '').slice(0, 10), created:p.m.created, ok:p.ok});
 /** A small line chart of one measurement, oldest → newest; tap a point to open that recording's analysis. */
 function spark(metric, pts) {
   const rows = pts.map(p => ({p, v:metric.get(p.a)})).filter(r => r.v != null);
@@ -87,7 +87,7 @@ VZ.measureTable = (first, second) => {
   const a = first && analysisOf(first), b = second && analysisOf(second);
   if (!a?.metrics || !b?.metrics) return '';
   const sameSong=!!first.songId&&first.songId===second.songId;
-  const take = (m, x) => ({id:m.id, songId:m.songId, a:x, date:String(M.dateOf?.(m) || '').slice(0, 10), ok:!!VZ.analysisReliable?.(x)});
+  const take = (m, x) => ({id:m.id, songId:m.songId, a:x, date:String(M.dateOf?.(m) || '').slice(0, 10), created:m.created, ok:!!VZ.analysisReliable?.(x)});
   const ta = take(first, a), tb = take(second, b);
   const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,ta,tb,{pair:true}):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
   let extra = '';

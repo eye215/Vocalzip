@@ -122,13 +122,15 @@ function build(db={},media=[],options={}){
  const byCategory=Object.fromEntries(CATEGORIES.map(([k])=>[k,0]));
  for(const m of weekItems)byCategory[CATEGORIES.some(([k])=>k===m.category)?m.category:'song']++;
  const recordings={total:weekItems.length,byCategory,
-  analyses:items.filter(m=>m.analysis&&inWeek(kstDate(m.analysis.at))).length,
+  // Recordings made this week that have an analysis. The analysis time (analysis.at) is not used: the server
+  // re-analyses older recordings in bulk, and those are not this week's work.
+  analyses:weekItems.filter(m=>m.analysis&&(m.analysis.v||m.analysis.metrics)).length,
   newSongs:songs.filter(s=>inWeek(kstDate(s.created))).map(s=>({id:s.id,title:text(s.title)}))};
 
  /* 성장: this week's takes of a song vs its earlier takes; at most 3 songs */
  const reference=id=>{const r=songs.find(s=>s.id===id)?.vocalRange;return r&&Number.isFinite(r.highMidi)?r:null;};
  const takes=items.filter(m=>m.songTake&&m.songId&&m.analysis?.metrics&&isDate(m.date));
- const takeOf=m=>({id:m.id,a:m.analysis,date:m.date,ok:!!m.ok});
+ const takeOf=m=>({id:m.id,a:m.analysis,date:m.date,created:m.created,ok:!!m.ok});
  const growthSongs=[...new Set(takes.filter(m=>inWeek(m.date)).map(m=>m.songId))];
  const reports=G&&options.growth!==false?growthSongs.map(songId=>{
   const before=takes.filter(t=>t.songId===songId&&t.date<start).map(takeOf),after=takes.filter(t=>t.songId===songId&&inWeek(t.date)).map(takeOf);

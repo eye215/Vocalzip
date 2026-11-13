@@ -299,10 +299,14 @@ function scoreNoteBasis(x, y) {
 }
 
 /* ---------- picking the takes ---------- */
-/** takes: [{id, a, date, ok}] of ONE song. Earliest and latest takes usable for the metric, same analysis version,
+/** Oldest → newest: the recorded date, then the recording time (take.created = the recording's own `created`
+ * timestamp; never the upload or analysis time), then the id so every screen gets the same order. */
+const byDay = (x, y) => String(x.date || '').localeCompare(String(y.date || '')) || (Number(x.created) || 0) - (Number(y.created) || 0);
+const takeOrder = (x, y) => byDay(x, y) || String(x.id || '').localeCompare(String(y.id || ''));
+/** takes: [{id, a, date, created, ok}] of ONE song. Earliest and latest takes usable for the metric, same analysis version,
  * different days. When none qualifies, the reason it is withheld. */
 function pickPair(takes, id) {
-  const list = takes.filter(t => t.a?.metrics).slice().sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')) || String(x.id || '').localeCompare(String(y.id || '')));
+  const list = takes.filter(t => t.a?.metrics).slice().sort(takeOrder);
   if (!list.length) return {reason:'no-data'};
   const usable = list.filter(t => !availability(t.a, id, t.ok));
   if (!usable.length) {
@@ -322,7 +326,7 @@ function songReport(takes, {reference = null, scoreNotes = null, arNotes = null}
   const out = {};
   for (const d of METRICS) {
     if (d.reference) {
-      const withData = takes.filter(t => t.a?.metrics).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+      const withData = takes.filter(t => t.a?.metrics).sort(takeOrder);
       const latest = withData.slice().reverse().find(t => hasDetail(t.a)) || withData.at(-1);
       out[d.id] = latest ? {id:d.id, state:'reference', latest:passaggioOf(latest.a), lastId:latest.id, to:latest.date} : {id:d.id, state:'hold', reason:'no-data'};
       continue;
@@ -336,7 +340,7 @@ function songReport(takes, {reference = null, scoreNotes = null, arNotes = null}
 /** One song across two periods (monthly view): the latest usable take of the earlier period vs the latest of the
  * later one, same analysis version. Songs missing from the earlier period are not compared. */
 function periodReport(beforeTakes, afterTakes, {reference = null} = {}) {
-  const sort = l => l.filter(t => t.a?.metrics).slice().sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+  const sort = l => l.filter(t => t.a?.metrics).slice().sort(takeOrder);
   const before = sort(beforeTakes), after = sort(afterTakes), out = {};
   const why = (list, id) => { const r = list.map(t => availability(t.a, id, t.ok)); return ['reanalyze', 'v1', 'confidence', 'few-notes', 'few-phrases', 'no-stable'].find(x => r.includes(x)) || 'no-data'; };
   for (const d of METRICS) {
@@ -352,7 +356,7 @@ function periodReport(beforeTakes, afterTakes, {reference = null} = {}) {
 }
 /** Two takes chosen by the person (vocal lab A/B): the same rules, no pair picking. */
 function comparePair(first, second, {reference = null, scoreNotes = null, arNotes = null} = {}) {
-  const [x, y] = [first, second].sort((p, q) => String(p.date || '').localeCompare(String(q.date || '')));
+  const [x, y] = [first, second].sort(byDay); // same day and no recording time: the order the person gave
   // The person picked these two takes: the same-day rule (meant for automatic pairing) does not apply.
   return Object.fromEntries(METRICS.map(d => [d.id, compareMetric(d.id, x, y, {reference, sameDay:true, scoreNotes, arNotes})]));
 }
@@ -429,5 +433,5 @@ function aiMetrics(aggs) {
   });
 }
 return {VERSION:2, RULES, METRICS, HOLD, STATE, MR_REMOVED_NOTE, noteName, midiOf, semitones, hasDetail, availability, value, single, zoneStats, keyShift, passaggioOf,
-  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, pickPair, songReport, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, stateLabel, holdText, aiMetrics};
+  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, stateLabel, holdText, aiMetrics};
 });
