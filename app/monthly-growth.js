@@ -290,8 +290,9 @@ async function mount(host){
   render();
  }catch(err){if(my===request)host.innerHTML='<div class="empty"><p>녹음 목록을 불러오지 못했어요.</p><p class="small muted">'+e(err.message)+'</p></div>';}
 }
-V.route('vocal-growth',{title:'보컬 성장',tab:'growth',noAutoRefresh:true,
- render:()=>'<div data-growth class="growth-page"><div class="empty compact">분석 기록을 불러오는 중…</div></div>',
+// 성장 통합 (#385): the three 성장 tabs sit above this screen (app/growth-hub.js); 전체·월별·주간 below is the period row.
+V.route('vocal-growth',{title:'성장',tab:'growth',noAutoRefresh:true,
+ render:()=>(V.growthTabs?.('report')||'')+'<div data-growth class="growth-page"><div class="empty compact">분석 기록을 불러오는 중…</div></div>',
  mount(main){mount(main.querySelector('[data-growth]'));},
  leave(){request++;}
 });
