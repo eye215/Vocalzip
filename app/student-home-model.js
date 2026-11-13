@@ -163,6 +163,13 @@ function planSnapshot(db,date){
       p.period==='day'&&p.date>=start&&p.date<=end||p.period==='week'&&p.date===start)))
   });
 }
+/** 'done' for a completed goal, 'recorded' for a goal with a 수행 기록 (its record or its practice row 'goal:<id>'),
+ * '' otherwise. The plan editor never drops these, so a check and its minutes are not left without their goal. */
+function keptGoal(db,goal){
+  if(!goal)return '';
+  if(goal.completed===true)return 'done';
+  return goal.performance||list(db?.practices).some(p=>p&&p.id==='goal:'+goal.id)?'recorded':'';
+}
 function savePlan(db,input){
   const date=input?.date;
   if(!parse(date))throw Error('목표 날짜를 확인해 주세요.');
@@ -181,7 +188,9 @@ function savePlan(db,input){
       return {...old,...(!old&&g.recommendation?{songId:String(g.songId||''),recommendation:copy(g.recommendation)}:{}),id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
         completed:typeof g.completed==='boolean'?g.completed:old?.completed===true,order:old?Number(old.order)||0:nextOrder++};
     });
-    goals=goals.filter(g=>g.date!==date).concat(next);
+    // Leaving a goal out removes it, except completed goals and goals with a 수행 기록: those stay as they are.
+    const kept=[...previous.values()].filter(g=>!seen.has(g.id)&&keptGoal(db,g));
+    goals=goals.filter(g=>g.date!==date).concat(kept,next);
   }
   for(const [key,period,planDate] of [['targetMinutes','day',date],['weekTargetMinutes','week',monday(date)]]){
     if(!has(input,key))continue;
@@ -194,6 +203,6 @@ function savePlan(db,input){
   if(has(input,'targetMinutes')||has(input,'weekTargetMinutes'))db.practicePlans=plans;
   return true;
 }
-return {build,weekBounds,setGoal,savePlan,planSnapshot};
+return {build,weekBounds,setGoal,savePlan,planSnapshot,keptGoal};
 });
 
