@@ -230,6 +230,42 @@ function choose(list) {
   if (plain.length === 1) return {pick:plain[0].id, ambiguous:false, guess:true};
   return {pick:null, ambiguous:true, guess:false};
 }
+// ---------- key signature ----------
+const KEY_NAMES = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B']; // the 원키 / 연습 키 choices (app/scores.js)
+/** The key the score is written in, from its first key signature: {fifths, major, minor, likely, changes}, or null
+ * when the file has no key signature. One signature fits a major key and its relative minor: `likely` is 'major' or
+ * 'minor' when the file says so (<mode>) or the notes clearly lean to one tonic (time spent on it, and where the
+ * last note lands), else null. `changes` counts later signatures that differ (a key change inside the piece). */
+function keyOf(doc) {
+  const {streams} = scoreOf(doc);
+  let seen = null, mode = '', lastPc = null;
+  const weight = new Array(12).fill(0);
+  for (const [, measures] of streams) {
+    const own = [];
+    for (const {el} of measures) {
+      for (const attr of kids(el, 'attributes')) for (const key of kids(attr, 'key')) {
+        const raw = text(key, 'fifths'), f = Number(raw);
+        if (raw === '' || !Number.isInteger(f) || f < -7 || f > 7) continue;
+        if (!own.length && !seen) mode = text(key, 'mode').toLowerCase();
+        if (own.at(-1) !== f) own.push(f);
+      }
+      for (const node of kids(el, 'note')) {
+        const pitch = first(node, 'pitch');
+        if (!pitch || first(node, 'rest') || first(node, 'grace') || first(node, 'cue') || !(text(pitch, 'step') in STEP)) continue;
+        const pc = (((STEP[text(pitch, 'step')] + (Number(text(pitch, 'alter')) || 0)) % 12) + 12) % 12;
+        weight[pc] += Math.max(1, Number(text(node, 'duration')) || 1);
+        if (!seen) lastPc = pc; // the last note of the first part that carries the key (the melody in a song score)
+      }
+    }
+    if (!seen && own.length) seen = own;
+  }
+  if (!seen) return null;
+  const fifths = seen[0], majorPc = (((fifths * 7) % 12) + 12) % 12, minorPc = (majorPc + 9) % 12;
+  const total = weight.reduce((n, w) => n + w, 0), lean = pc => weight[pc] + (lastPc === pc ? total * .1 : 0);
+  const likely = /maj/.test(mode) ? 'major' : /min/.test(mode) ? 'minor' : !total ? null : lean(majorPc) > lean(minorPc) * 1.25 ? 'major' : lean(minorPc) > lean(majorPc) * 1.25 ? 'minor' : null;
+  return {fifths, major:KEY_NAMES[majorPc], minor:KEY_NAMES[minorPc] + 'm', likely, changes:seen.length - 1};
+}
+const readKey = (xml, parse = s => new DOMParser().parseFromString(s, 'application/xml')) => keyOf(parse(xml));
 /** Parse helper for the app (DOMParser) — the tests pass their own parser. */
 function read(xml, parse = s => new DOMParser().parseFromString(s, 'application/xml')) {
   const list = parts(parse(xml)), choice = choose(list);
@@ -272,5 +308,5 @@ function reference({low, high, source, scoreId = '', part = '', partId = '', tra
   return {version:1, low:noteName(lo), high:noteName(hi), lowMidi:lo, highMidi:hi, source:source === 'score' ? 'score' : 'manual',
     ...(source === 'score' ? {scoreId, part, partId, transposition} : {}), confirmedByUser:true, updatedAt:now};
 }
-return {NAMES, noteName, unzip, parts, melody, choose, read, compare, diffText, verdictText, reference, midiOf, RULES:{MATCH, RECHECK}};
+return {NAMES, noteName, unzip, parts, melody, choose, read, keyOf, readKey, compare, diffText, verdictText, reference, midiOf, RULES:{MATCH, RECHECK}};
 });

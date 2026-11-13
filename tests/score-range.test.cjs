@@ -171,3 +171,28 @@ test('판정 보류: low confidence, no valid note, v1 result; nothing without a
   assert.equal(R.compare(ref, null).state, 'no-analysis');
   assert.equal(R.compare(null, v2(72)).state, 'no-reference');
 });
+
+// ---- 악보 조표로 키 제안 (keyOf) ----
+const keyOf = xml => R.readKey(xml, parseXml);
+test('key signature: two sharps is D or Bm; the notes decide which one is likely; no signature gives null', () => {
+  const key = (fifths, mode = '') => '<key><fifths>' + fifths + '</fifths>' + (mode ? '<mode>' + mode + '</mode>' : '') + '</key>';
+  // Melody resting on D and ending on D: D major.
+  const major = score([scorePart('P1', 'Voice')], [part('P1', [note('D', 4) + note('F', 4, {alter:1}) + note('A', 4) + note('D', 5), note('E', 4) + note('D', 4) + note('D', 4)], key(2))]);
+  assert.deepEqual(keyOf(major), {fifths:2, major:'D', minor:'Bm', likely:'major', changes:0});
+  // The same signature with a melody on B, ending on B: B minor.
+  const minor = score([scorePart('P1', 'Voice')], [part('P1', [note('B', 3) + note('D', 4) + note('F', 4, {alter:1}) + note('B', 4), note('C', 4, {alter:1}) + note('B', 3) + note('B', 3)], key(2))]);
+  assert.equal(keyOf(minor).likely, 'minor');
+  // The file's own <mode> wins over the notes.
+  assert.equal(keyOf(minor.replace('</fifths>', '</fifths><mode>major</mode>')).likely, 'major');
+  // Flats: three flats is Eb or Cm, named like the 원키 choices.
+  const flats = keyOf(score([scorePart('P1', 'Voice')], [part('P1', [note('G', 4) + note('F', 4)], key(-3))]));
+  assert.deepEqual([flats.major, flats.minor, flats.likely], ['D#/Eb', 'Cm', null]);
+  // No key signature at all (some scans): nothing is suggested.
+  assert.equal(keyOf(score([scorePart('P1', 'Voice')], [part('P1', [note('C', 4)])])), null);
+});
+test('key signature: a later different signature is counted as a key change; other parts repeating it are not', () => {
+  const body = m => '<measure number="1"><attributes><divisions>4</divisions><key><fifths>0</fifths></key></attributes>' + note('C', 4) + '</measure>' +
+    (m ? '<measure number="2"><attributes><key><fifths>1</fifths></key></attributes>' + note('G', 4) + '</measure>' : '');
+  const two = '<?xml version="1.0"?><score-partwise version="3.1"><part-list>' + scorePart('P1', 'Voice') + scorePart('P2', 'Piano') + '</part-list><part id="P1">' + body(true) + '</part><part id="P2">' + body(true) + '</part></score-partwise>';
+  assert.deepEqual([keyOf(two).fifths, keyOf(two).major, keyOf(two).changes], [0, 'C', 1]);
+});
