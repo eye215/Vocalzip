@@ -24,16 +24,52 @@ window.VzipAccountScope?.beforeLeave(()=>{accountFrozen=true;});
 /** Apply a mutation; on storage failure restore the previous state and report false. */
 /** Mark changed records with updatedAt and remember deliberately removed ids, so a cloud
  * merge (data-merge.js) never brings back what the user deleted nor drops what they added. */
-const TRACKED = ARRAYS;
-function stamp(before, after) {
-  const now = Date.now();
-  for (const k of TRACKED) {
-    const old = new Map((before[k] || []).filter(x => x && x.id != null).map(x => [String(x.id), JSON.stringify(x)]));
-    const ids = new Set();
-    for (const x of after[k] || []) {
+const TRACKED = new Set(ARRAYS);
+const text = value => JSON.stringify(value);
+/* One save reads every record as JSON text once before the change and once after it. Those texts tell which records
+ * changed (updatedAt) and which were removed (deleted / deletedAt), make up the stored text — the same characters
+ * JSON.stringify(db) writes — and rebuild the previous state only when a save fails. Before this, every save cloned
+ * the whole store and turned it into text three times. */
+/** The store as texts, in key order: tracked lists row by row (with each row's id), everything else whole.
+ * A row is written the way JSON.stringify writes an array item: a hole, undefined or a function is null. */
+function snapshot(data) {
+  return Object.keys(data).map(key => {
+    const list = data[key];
+    if (!TRACKED.has(key) || !Array.isArray(list)) return {key, whole:text(list)};
+    const rows = new Array(list.length), ids = new Array(list.length);
+    // By index, not map(): map() skips holes and would leave them without a text or an id.
+    for (let i = 0; i < list.length; i++) { const x = list[i]; rows[i] = text(x) ?? 'null'; ids[i] = x && x.id != null ? String(x.id) : null; }
+    return {key, rows, ids};
+  });
+}
+// A key whose value has no JSON text (undefined, a function) is left out, as JSON.stringify leaves it out.
+const storeText = parts => '{' + parts.filter(p => p.rows || p.whole !== undefined).map(p => text(p.key) + ':' + (p.rows ? '[' + p.rows.join(',') + ']' : p.whole)).join(',') + '}';
+/** Stamp changed records, remember removed ids, and return the text to store. `before` is snapshot(db) taken before the change. */
+function stampedText(before, after) {
+  const now = Date.now(), parts = new Map();
+  const beforeRows = new Map(before.filter(p => p.rows).map(p => [p.key, p]));
+  for (const k of ARRAYS) {
+    // id → text of the record before the change (the last one wins when an id repeats)
+    const old = new Map(), was = beforeRows.get(k);
+    if (was) for (let i = 0; i < was.ids.length; i++) if (was.ids[i] !== null) old.set(was.ids[i], was.rows[i]);
+    const ids = new Set(), list = after[k];
+    if (Array.isArray(list)) {
+      const rows = new Array(list.length);
+      for (let i = 0; i < list.length; i++) {
+        const x = list[i];
+        let row = text(x) ?? 'null';
+        if (x && x.id != null) {
+          const id = String(x.id);
+          ids.add(id);
+          if (old.get(id) !== row) { x.updatedAt = now; row = text(x) ?? 'null'; }
+        }
+        rows[i] = row;
+      }
+      parts.set(k, rows);
+    } else for (const x of list || []) {
       if (!x || x.id == null) continue;
       ids.add(String(x.id));
-      if (old.get(String(x.id)) !== JSON.stringify(x)) x.updatedAt = now;
+      if (old.get(String(x.id)) !== text(x)) x.updatedAt = now;
     }
     const removed = [...old.keys()].filter(id => !ids.has(id));
     if (removed.length) {
@@ -41,23 +77,26 @@ function stamp(before, after) {
       // Each tombstone also records when it was made and which version of the row this device saw (its updatedAt):
       // an edit made on another device that this deletion never saw wins the merge (data-merge.js). Kept beside
       // the id list so older app versions still read deleted[k] unchanged.
-      const seen = new Map((before[k] || []).filter(x => x && x.id != null).map(x => [String(x.id), Number(x.updatedAt) || 0]));
       after.deletedAt ||= {}; const at = after.deletedAt[k] = {...(after.deletedAt[k] || {})};
-      for (const id of removed) at[id] = {at:now, seen:seen.get(id) || 0};
+      for (const id of removed) at[id] = {at:now, seen:Number(JSON.parse(old.get(id)).updatedAt) || 0};
     }
   }
+  // Everything else (settings, deleted, deletedAt …) is read after stamping, which may have just changed it.
+  return storeText(Object.keys(after).map(key => parts.has(key) ? {key, rows:parts.get(key)} : {key, whole:text(after[key])}));
 }
 VZ.change = (mutate, {silent} = {}) => {
   if(accountFrozen)return false;
-  const previous = structuredClone(db);
+  let before = null;
   try {
+    before = snapshot(db);
     mutate(db);
     window.VzipArchive?.reconcile(db);
-    stamp(previous, db);
+    const stored = stampedText(before, db);
     if(window.VzipAccountScope)localStorage.setItem('vzip_account_dirty','1');
-    localStorage.setItem(KEY, JSON.stringify(db));
+    localStorage.setItem(KEY, stored);
   } catch (error) {
-    db = previous;
+    // Back to the state before the change, rebuilt from its text (the store is JSON: this is what a reload would read).
+    if (before) db = JSON.parse(storeText(before));
     VZ.toast('저장하지 못했어요. 저장 공간을 확인하고 다시 시도해 주세요.', 'error');
     console.error(error);
     return false;
