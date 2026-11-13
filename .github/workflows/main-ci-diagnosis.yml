@@ -24,6 +24,7 @@ jobs:
         run: |
           mkdir -p diagnosis
           status=0
+          set +e
           for target in tests/recover.spec.cjs:3 tests/snapshot-bridge.spec.cjs:264 tests/voice-check.spec.cjs:49 tests/song-mr.spec.cjs:117 tests/song-mr.spec.cjs:142; do
             npx playwright test "$target" --workers=1 --reporter=list 2>&1 | tee "diagnosis/$(basename "$target").log"
             result=${PIPESTATUS[0]}
