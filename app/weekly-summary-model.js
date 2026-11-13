@@ -135,11 +135,11 @@ function build(db={},media=[],options={}){
  const reports=G&&options.growth!==false?growthSongs.map(songId=>{
   const before=takes.filter(t=>t.songId===songId&&t.date<start).map(takeOf),after=takes.filter(t=>t.songId===songId&&inWeek(t.date)).map(takeOf);
   const title=songTitle(songId)||'삭제된 곡';
-  if(!before.length)return {songId,title,rank:0,lines:[],hold:'no-earlier',holdText:'이번 주 전에 분석한 같은 곡 녹음이 없어 비교를 보류해요'};
+  if(!before.length)return {songId,title,rank:0,lines:[],hold:'no-earlier',holdText:G.holdText('no-earlier')};
   const report=G.periodReport(before,after,{reference:reference(songId)});
   const rows=JUDGED.map(id=>report[id]).filter(Boolean),compared=rows.filter(x=>COMPARED.includes(x.state));
   const moved=compared.filter(x=>x.state==='better'||x.state==='worse');
-  const lines=[...moved,...compared.filter(x=>!moved.includes(x))].slice(0,2).map(x=>({id:x.id,title:G.METRICS.find(d=>d.id===x.id)?.title||x.id,state:x.state,label:G.stateLabel(x),text:G.changeText(x)}));
+  const lines=[...moved,...compared.filter(x=>!moved.includes(x))].slice(0,2).map(x=>({id:x.id,title:G.METRICS.find(d=>d.id===x.id)?.title||x.id,state:x.state,label:G.stateLabel(x),text:G.changeText(x),basis:G.basisText(x)}));
   const holds={};for(const x of rows.filter(x=>x.state==='hold'))holds[x.reason]=(holds[x.reason]||0)+1;
   const reason=Object.entries(holds).sort((a,b)=>b[1]-a[1])[0]?.[0]||'no-pair';
   return {songId,title,rank:moved.length?2:compared.length?1:0,lines,hold:lines.length?null:reason,holdText:lines.length?'':G.holdText(reason)};

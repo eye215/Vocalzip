@@ -109,7 +109,7 @@ test('v2 holds: confidence, version mix, v1 and missing detail, tempo, no take b
   assert.equal(r.measurement.mixedVersions,reason==='version-mixed');
   assert.equal(r.recommendation,'collect');
  }
- assert.match(G.holdText('version-mixed'),/판정 보류/);
+ assert.match(G.holdLine('version-mixed'),/^판정 보류 · 분석 버전/);assert.doesNotMatch(G.holdText('version-mixed'),/판정 보류/);
 });
 test('breath compares the same phrases with the tempo corrected',()=>{
  const recordings=[rec('a','2026-10-28',v2()),rec('b','2026-11-03',v2({phrases:PHR({stretch:1.1})}))];

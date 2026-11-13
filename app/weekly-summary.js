@@ -91,7 +91,7 @@ function growthCard(s){
  const g=s.growth;
  if(!g.songs)return card('growth','성장','<p class="ws-empty">이번 주에 분석한 곡 녹음이 없어요. 같은 곡을 다른 날 다시 녹음하고 분석하면 변화를 비교해요.</p>');
  const items=g.items.map(x=>'<li class="ws-growth"><strong>'+e(x.title)+'</strong>'+
-  (x.lines.length?x.lines.map(l=>'<p><span class="ws-state '+(STATE_CLASS[l.state]||'neutral')+'">'+e(l.title+' · '+l.label)+'</span><small>'+e(l.text)+'</small></p>').join('')
+  (x.lines.length?x.lines.map(l=>'<p><span class="ws-state '+(STATE_CLASS[l.state]||'neutral')+'">'+e(l.title+' · '+l.label)+'</span><small>'+e(l.text)+'</small>'+(l.basis?'<small class="ws-basis">'+e(l.basis)+'</small>':'')+'</p>').join('')
    :'<p><span class="ws-state hold">판정 보류</span><small>'+e(x.holdText)+'</small></p>')+'</li>').join('');
  return card('growth','성장','<ul class="ws-growth-list">'+items+'</ul>'+(g.more?'<p class="ws-note">분석한 곡 '+g.more+'곡 더 · <a href="#/vocal-growth">성장 분석 보기</a></p>':'')+
   '<p class="ws-note">이번 주 녹음과 그 전에 부른 같은 곡을 비교해요. 최고음이나 파사지오로는 판단하지 않아요.</p>');

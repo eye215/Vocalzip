@@ -54,7 +54,12 @@ function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
  });
  const judged=metrics.filter(m=>m.judged&&m.pairedSongs>0);
  const strong=judged.filter(m=>m.improved>m.worsened).sort((a,b)=>(b.improved-b.worsened)/b.pairedSongs-(a.improved-a.worsened)/a.pairedSongs);
- const watch=judged.filter(m=>m.worsened).sort((a,b)=>b.worsened-a.worsened);
+ // 우선 확인할 항목: a measure that is not improving overall. A measure that improved overall (the strength, or any
+ // "좋아진 방향" card) is never also the priority item — its worse songs are named instead (watchSongs).
+ const worsening=judged.filter(m=>m.worsened).sort((a,b)=>b.worsened-a.worsened);
+ const watch=[...worsening.filter(m=>m.state!=='better'),...worsening.filter(m=>m.state==='better')];
+ const topWatch=watch.find(m=>m.state!=='better'&&m!==strong[0])||null;
+ const watchSongs=topWatch?null:worsening.map(m=>({id:m.id,title:m.title,songs:m.rows.filter(x=>x.state==='worse').map(x=>({songId:x.songId,title:x.title||''}))})).find(x=>x.songs.length)||null;
  const recommendations=[...watch,...judged.filter(m=>!watch.includes(m)),
    ...metrics.filter(m=>m.judged&&!m.pairedSongs&&m.current!=null)].slice(0,3);
  return {recordings:recordings.length,analysisCount:eligible.length,songCount:songIds.size,
@@ -63,7 +68,7 @@ function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
   v1Count:analyzed.filter(m=>!(m.analysis.v>=2)).length,
   detailMissing:analyzed.filter(m=>m.analysis.v>=2&&!G.hasDetail(m.analysis)).length,
   excludedFromTrend:eligible.length-trendTakes.length,
-  metrics,reports,topStrength:strong[0]||null,topWatch:watch[0]||null,
+  metrics,reports,topStrength:strong[0]||null,topWatch,watchSongs,
   recommendations,months:[...months.keys()].sort()};
 }
 return {DEFINITIONS,TREND,calculate,value};
