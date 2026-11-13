@@ -42,7 +42,8 @@ const TONE = {better:'vg-good', worse:'vg-bad'};
 function shortChange(x) {
   if (!x || x.state === 'hold') return '<span class="vg-same">판정 보류 · ' + esc(G.holdText(x?.reason)) + '</span>';
   if (x.id === 'range') return '<span class="vg-same">' + (x.delta ? (x.delta > 0 ? '▲ ' : '▼ ') + Math.abs(x.delta) + '반음' : '같은 음') + ' · 실력 판정 아님</span>';
-  const mrNote = x.note === 'mr-removed' ? '<small class="vg-basis">' + esc(G.MR_REMOVED_NOTE || '반주를 뺀 녹음이라 참고') + '</small>' : '';
+  const mrNote = x.note === 'mr-removed' ? '<small class="vg-basis">' + esc(G.MR_REMOVED_NOTE || '반주를 뺀 녹음이라 참고') + '</small>'
+    : x.note === 'ai-separated' ? '<small class="vg-basis">' + esc(G.AI_SEPARATED_NOTE || 'AI 분리 후 측정(참고)') + '</small>' : '';
   if (x.id === 'high') return '<span class="' + (TONE[x.state] || 'vg-same') + '">' + esc(G.stateLabel(x)) + ' · ' + esc(x.zone) + '</span>' + mrNote;
   const unit = x.id === 'phrase' ? '초' : ' cent', amount = x.delta ? (x.delta > 0 ? '▲ ' : '▼ ') + Math.abs(x.delta) + unit + ' ' : '';
   return '<span class="' + (TONE[x.state] || 'vg-same') + '">' + esc(amount + G.stateLabel(x)) + '</span>' + mrNote + (x.basis === 'phrases' ? '<small class="vg-basis">같은 프레이즈 ' + x.matched + '개</small>' : x.basis === 'whole' ? '<small class="vg-basis">곡 전체</small>' : '');

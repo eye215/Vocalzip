@@ -520,6 +520,41 @@ test('보컬 분석: a take whose MR drowns the voice is measured again with the
   expect(saved).not.toHaveProperty('voice'); // the cleaned voice is never kept
 });
 
+test('보컬 분석: a held-back saved result is replaced when the MR can now be removed; an AI-separated one is kept and labelled', async ({page}) => {
+  test.setTimeout(120000);
+  const Y = require('./helpers/mr-synth.cjs');
+  const wav = x => { const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:6, db:8}).x;
+  await page.route('**/__heldtake.wav', r => r.fulfill({contentType:'audio/wav', body:wav(take)}));
+  await page.route('**/__mrfile.wav', r => r.fulfill({contentType:'audio/wav', body:wav(mr)}));
+  await boot(page, {media:false});
+  // Saved results (current analyzer version with detail rows): one held back (MR drowned the voice), one measured by
+  // the server after AI separation.
+  const detail = {voicedSeconds:15, phrases:{rows:[]}, pitchBands:{rows:[]}, intonation:{meanAbsCents:8, notes:12}};
+  await page.evaluate(async ([detail]) => {
+    window.VzipR2.enabled = () => true; window.VzipR2.url = async () => '/__mrfile.wav';
+    VZ.change(d => { d.songs[0].mrTracks = [{id:'mr-1', kind:'file', title:'연습 MR', r2Key:'u/test/mr-1.m4a', type:'audio/wav', created:Date.now()}]; });
+    const blob = await (await fetch('/__heldtake.wav')).blob();
+    await window.vzipStorePracticeMedia({id:'held', name:'보류된 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'s1', blob,
+      analysis:{v:2, at:111, metrics:detail, confidence:{pitchConfidence:0.42, voiceOverMrDb:0.5}, scope:{kind:'whole-recording', separationWanted:true}}});
+    await window.vzipStorePracticeMedia({id:'aisep', name:'AI 분리된 녹음', created:Date.now(), type:'audio/wav', source:'practice', songId:'', blob,
+      analysis:{v:2, at:222, by:'server', metrics:detail, confidence:{pitchConfidence:0.93, aiSeparated:{model:'htdemucs'}}, scope:{kind:'whole-recording', separationTried:true}}});
+    VZ.media.invalidate();
+  }, [detail]);
+  await page.goto('/#/analysis/held');
+  const out = page.locator('[data-out]');
+  await expect(out.locator('[data-mr-removed]')).toBeVisible({timeout:90000});
+  await expect(out.locator('[data-saved]')).toContainText('저장했어요');
+  const held = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'held').analysis);
+  expect(held.confidence.mrRemoved).toMatchObject({trackId:'mr-1'}); expect(held.history.at(-1).at).toBe(111);
+  // The AI-separated result is not overwritten by the take as recorded (no MR file for it); it is labelled.
+  await page.goto('/#/analysis/aisep');
+  await expect(out.locator('[data-ai-separated]')).toContainText('AI 분리 후 측정(참고)', {timeout:90000});
+  await expect(out.locator('[data-saved]')).toContainText('그대로 두었어요');
+  const kept = await page.evaluate(async () => (await window.vzipReadMedia()).find(x => x.id === 'aisep').analysis);
+  expect(kept.at).toBe(222); expect(kept.confidence.aiSeparated).toEqual({model:'htdemucs'});
+});
+
 test('곡별 보컬 측정 변화: the recordings of a song are analyzed on the device and charted by date; first vs latest is compared and saved', async ({page}) => {
   test.setTimeout(180000);
   const {synth} = require('./synth-vocal.cjs');

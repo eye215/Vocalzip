@@ -149,7 +149,7 @@ async function download(url, headers) {
   if (bytes.length > MAX_BYTES) throw new Error('file too large');
   return bytes;
 }
-async function readMedia(meta, owner) {
+export async function readMedia(meta, owner) {
   if (meta.storageProvider === 'r2' && meta.r2Key) {
     if (!meta.r2Key.startsWith('u/' + owner + '/')) throw new Error('R2 key belongs to another account');
     return getR2(meta.r2Key);
@@ -282,7 +282,9 @@ async function vocalJob(db, job, meta, audio) {
   const history = Array.isArray(previous?.history) ? previous.history.slice() : [];
   if (previous) { const {history:ignored, ...saved} = previous; history.push(saved); }
   const summary = {v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence, by:'server',
-    ...(history.length ? {history:history.slice(-5)} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 16000}};
+    ...(history.length ? {history:history.slice(-5)} : {}), scope:{kind:'whole-recording', cut:samples.length >= MAX_SECONDS * 16000,
+      // Still held back and no MR file fitted: the separate AI-separation worker (worker/separation-worker.mjs) takes it.
+      ...(!reliableResult(r) && !r.confidence?.mrRemoved && r.metrics?.voicedSeconds > 0 ? {separationWanted:true} : {})}};
   // Only the analysis key changes, on the row as it is now; an analysis saved meanwhile (app) is kept: the row is
   // written only while it still holds the analysis this job read (none, or the same older one).
   await db.query("update public.vocal_media set metadata = jsonb_set(metadata, '{analysis}', $3::jsonb), updated_at = now() where id = $1 and user_id = $2 and coalesce(metadata -> 'analysis' ->> 'at', '') = $4",

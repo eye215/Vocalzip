@@ -191,6 +191,7 @@ function mrNote(r) {
 }
 function confidence(r) {
   const c = r.confidence;
+  if (c.aiSeparated) return '<div class="ana-note ok" data-ai-separated><i class="ph ph-sparkle"></i><span><b>AI 분리 후 측정(참고)</b> · 곡 MR 파일이 없어 서버에서 AI로 반주와 목소리를 나눈 뒤 목소리만 측정했어요. 분리 흔적이 섞일 수 있어요. 원본 녹음은 그대로예요.</span></div>';
   if (c.mrRemoved) return mrNote(r) + (c.pitchConfidence < .8 ? '<div class="ana-note warn"><span>반주를 빼고도 피치 신뢰도가 낮아 성장 판정을 보류해요.</span></div>' : '');
   if (c.pitchConfidence < .8) return '<div class="ana-note warn"><span>피치 신뢰도가 낮아 성장 판정을 보류해요. 원본을 들으며 확인해 주세요.</span></div>';
   if (c.voiceOverMrDb == null) return '<p class="small muted">반주만 따로 들리는 구간이 없어서 목소리와 반주의 크기 차이는 재지 못했어요.</p>';
@@ -289,8 +290,11 @@ VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefr
     const saved = async () => ((await M.list().catch(() => [])).find(m => m.id === id) || item).analysis;
     const before = await saved();
     if (!alive()) return;
-    if (!VZ.analysisCurrent(before, result.version)) { await keep(before); return; }
+    // A held-back saved result is replaced by one that can be trusted now (e.g. measured with the song's MR removed);
+    // a result the server measured after AI separation stays unless the person asks.
+    if (!VZ.analysisCurrent(before, result.version) || (!VZ.analysisReliable(before) && !before?.confidence?.aiSeparated && reliableResult(result))) { await keep(before); return; }
     note.textContent = '저장된 분석 결과는 그대로 두었어요. 위 그래프와 값은 이 기기에서 방금 계산해 보여 드린 거예요.';
+    if (before?.confidence?.aiSeparated) note.insertAdjacentHTML('beforebegin', '<div class="ana-note ok" data-ai-separated><i class="ph ph-sparkle"></i><span><b>저장된 결과: AI 분리 후 측정(참고)</b> · 서버에서 AI로 반주와 목소리를 나눈 뒤 목소리만 측정한 결과예요. 위 값은 녹음 그대로 이 기기에서 계산한 거예요.</span></div>');
     note.insertAdjacentHTML('afterend', '<div data-ana-redo><button type="button" class="btn sm ghost" data-ana-reanalyze><i class="ph ph-arrows-clockwise" aria-hidden="true"></i> 다시 분석해서 저장</button>' +
       '<p class="small muted" style="margin-top:6px">누르면 저장된 결과를 이 기기의 결과로 바꿔요. 이전 결과는 이력으로 남겨요.</p></div>');
     const redo = out.querySelector('[data-ana-reanalyze]');
