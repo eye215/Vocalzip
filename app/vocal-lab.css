@@ -84,6 +84,7 @@ body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports
 
 
 .vl-tip-list[data-ai-tip]:not(:empty){margin-top:12px}
+.vl-recommend-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.vl-recommend-actions .vl-repeat-practice{margin-top:0}
 
 /* Measured trend direction: favorable green, unfavorable red, contextual neutral. */
 .vl-metric-guide{display:grid;gap:5px;margin:10px 0 12px;padding:12px 14px;border-radius:14px;background:#231b2e;color:#d8cde5;font-size:13px;line-height:1.5}

@@ -35,7 +35,12 @@ function jumpNav(){
 function summaryCard(report){
  const valid=report.analysisCount>0;
  const complete=report.metrics.some(m=>m.pairedSongs>0);
- const strength=report.topStrength,watch=report.topWatch;
+ const strength=report.topStrength,watch=report.topWatch,songs=report.watchSongs;
+ // A measure never shows as both: when the only worse songs belong to a measure that improved overall, name the song.
+ const songName=x=>x.title||V.songTitle?.(x.songId)||'곡';
+ const second=watch?['우선 확인할 항목',watch.title,'아쉬운 방향인 곡 '+watch.worsened+'곡']:
+  songs?['우선 확인할 곡',songName(songs.songs[0])+(songs.songs.length>1?' 외 '+(songs.songs.length-1)+'곡':''),songs.title+' · '+(songs.songs.length>1?'이 곡들만':'이 곡만')+' 아쉬운 방향이에요']:
+  ['우선 확인할 항목','보완 여부 판단 전','측정값만으로 약점을 단정하지 않아요'];
  return '<section class="growth-hero" aria-label="전체 성장 요약">'+
   '<p class="growth-eyebrow">MY VOCAL ARCHIVE</p><h2>지금까지의 목소리</h2>'+
   '<p class="growth-hero-lead">'+(valid?(complete?'같은 곡의 첫 녹음과 최근 녹음으로 변화를 살펴봤어요.':'분석된 녹음이 있어요. 같은 곡을 다른 날 다시 부르면 변화를 비교할 수 있어요.'):'분석된 곡 녹음이 쌓이면 내 목소리의 변화를 정리해 줄게요.')+'</p>'+
@@ -47,8 +52,8 @@ function summaryCard(report){
   '<p class="growth-period-label">'+(report.firstDate?'기록 기간 '+longDate(report.firstDate)+' ~ '+longDate(report.lastDate):'아직 날짜가 있는 곡 녹음이 없어요.')+'</p>'+
   '<div class="growth-coverage"><span>수치가 있는 녹음 <strong>'+report.analysisCount+' / '+report.recordings+'</strong></span>'+
   '<div class="growth-coverage-track" role="progressbar" aria-label="분석된 녹음 비율" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+(report.recordings?Math.round(report.analysisCount/report.recordings*100):0)+'"><i style="width:'+(report.recordings?Math.round(report.analysisCount/report.recordings*100):0)+'%"></i></div></div>'+
-  '<div class="growth-highlights"><div class="growth-highlight"><span>좋아진 방향</span><strong>'+esc(strength?.title||'비교 기록 필요')+'</strong><small>'+(strength?'동일 곡 '+strength.pairedSongs+'곡의 첫·최근 비교':'동일 곡을 다른 날 녹음하면 확인 가능')+'</small></div>'+
-  '<div class="growth-highlight"><span>우선 확인할 항목</span><strong>'+esc(watch?.title||'보완 여부 판단 전')+'</strong><small>'+(watch?'변화가 필요한 곡 '+watch.worsened+'곡':'측정값만으로 약점을 단정하지 않아요')+'</small></div></div></section>';
+  '<div class="growth-highlights"><div class="growth-highlight" data-growth-strength="'+(strength?.id||'none')+'"><span>좋아진 방향</span><strong>'+esc(strength?.title||'비교 기록 필요')+'</strong><small>'+(strength?'동일 곡 '+strength.pairedSongs+'곡의 첫·최근 비교':'동일 곡을 다른 날 녹음하면 확인 가능')+'</small></div>'+
+  '<div class="growth-highlight" data-growth-watch="'+(watch?watch.id:songs?'song':'none')+'"><span>'+second[0]+'</span><strong>'+esc(second[1])+'</strong><small>'+esc(second[2])+'</small></div></div></section>';
 }
 const TONE={better:'good',worse:'bad',mixed:'neutral',similar:'neutral',changed:'neutral',reference:'ref',hold:'insufficient'};
 /** Per-song evidence for one measure: what was compared, on what basis, or why it was withheld. */
@@ -81,9 +86,13 @@ function metricCard(m,{scope='overall',tag='article',cls='growth-stat'}={}){
   const shown=m.compared&&m.after!=null?m.after:m.current;
   number=fmt(shown,m);
   const own=scope==='monthly'?'이번 달 유효 측정 '+m.currentSongs+'개':'최근 분석 기준 · '+m.currentSongs+'곡';
-  sub=m.compared&&m.after!=null?(m.id==='phrase'?'같은 프레이즈 지속시간 · '+afterLabel:m.id==='high'?'같은 고음 구간 흔들림 · '+afterLabel:'비교한 곡의 '+afterLabel+' · '+m.compared+'곡'):
+  // The big number is an average of the compared songs' latest takes on the comparison basis — say which basis.
+  const basis=m.basis==='phrases'?'같은 프레이즈 기준 · ':m.basis==='whole'?'녹음 전체 기준 · ':'';
+  sub=m.compared&&m.after!=null?(m.id==='phrase'?'같은 프레이즈 지속시간 · '+afterLabel:m.id==='high'?'같은 고음 구간 흔들림 · '+afterLabel:basis+'비교한 '+m.compared+'곡의 '+afterLabel+' 평균'):
    m.current!=null?(m.id==='phrase'?'프레이즈 길이 중앙값 · 같은 프레이즈 비교 전':m.id==='high'?'고음 구간 흔들림 · 비교 전':own+' (변화 판정 전)'):'측정 없음';
   if(m.compared&&m.before!=null)compare='<div class="growth-stat-comparison"><div><span>'+beforeLabel+'</span><strong>'+esc(fmt(m.before,m))+'</strong></div><i class="ph ph-arrow-right" aria-hidden="true"></i><div><span>'+afterLabel+'</span><strong>'+esc(fmt(m.after,m))+'</strong></div></div>'+
+   // 고음 안정성 is judged from wobble and hold time together: without the hold time "±4.6 → ±4.6 · 좋아진 방향" reads wrong.
+   (m.id==='high'&&G.heldText(m.heldBefore,m.heldAfter)?'<p class="growth-stat-sub growth-stat-held" data-growth-held>'+esc(G.heldText(m.heldBefore,m.heldAfter))+' (평균) · 흔들림과 유지 시간을 함께 봐요</p>':'')+
    '<p class="growth-stat-sub">같은 곡 '+m.compared+'곡 · 좋아짐 '+m.better+' / 아쉬움 '+m.worse+' / 비슷 '+m.similar+(m.mixed?' / 혼재 '+m.mixed:'')+'</p>';
  }
  const help=V.metricInfo?V.metricInfo(m.help,m.title):'';
@@ -119,13 +128,14 @@ function evidence(report){
   (report.detailMissing?'<p><strong>다시 분석하면 좋은 녹음 '+report.detailMissing+'개</strong><br><small>프레이즈·음높이별 세부 측정이 없는 v2 분석 · 보컬 연구소에서 다시 분석할 수 있어요</small></p>':'')+'</div>'+
   '<p class="small muted">동일 곡의 서로 다른 날짜에서 측정한 첫·최근 녹음을 비교하고, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 실력 변화를 판단하지 않고, 신뢰도가 낮거나 데이터가 부족하면 판정을 보류해요. 곡별 가중치는 동일하며 녹음 환경, 반주, 컨디션에 따라 결과가 달라질 수 있어요.</p></section>';
 }
+const aiRunLabel=()=>(V.db.overallAiReports||[]).some(x=>x.id==='overall-ai:all')?'전체 코치 다시 분석':'AI 전체 종합 분석하기';
 function coachCard(){
  const found=(V.db.overallAiReports||[]).find(x=>x.id==='overall-ai:all');
  return '<section class="growth-panel growth-coach" data-overall-ai><header class="growth-panel-head"><div><p class="growth-eyebrow">AI VOCAL REVIEW</p><h2>AI 전체 종합 코치</h2></div><span class="growth-state">직접 요청</span></header>'+
  (found?'<p class="small muted">마지막 저장 '+esc(found.createdDate||'')+'</p>'+noteHtml(found.note):
   '<p>현재까지의 같은 곡 성장 지표와 저장된 청취 코멘트를 함께 보고, 다음 연습 방향을 제안해요.</p>')+
  '<p class="small muted">버튼을 눌렀을 때만 음정 정확도·음정 안정성·호흡 유지의 비교 결과(판정 보류 포함)와 기존 AI 코멘트 최대 5건을 전송해요. 음역·최고음·고음·파사지오 값은 보내지 않아요. 원본 음성은 전송하지 않아요. 새로운 녹음을 AI가 직접 듣는 분석이 아닙니다.</p>'+
- '<button type="button" class="btn block" data-overall-ai-run>'+(found?'전체 코치 다시 분석':'AI 전체 종합 분석하기')+'</button><p role="status" class="small muted" data-overall-ai-state></p></section>';
+ '<button type="button" class="btn block" data-overall-ai-run>'+aiRunLabel()+'</button><p role="status" class="small muted" data-overall-ai-state></p></section>';
 }
 function recommendations(report){
  const rows=report.recommendations;
@@ -221,7 +231,8 @@ function bind(host,report,{rerender,ownerIdentity}={}){
    if(host.isConnected)rerender?.();
    V.toast('전체 AI 분석을 저장했어요.');
   }catch(err){if(status?.isConnected)status.textContent=err.message||'분석에 실패했어요.';V.toast('전체 AI 분석에 실패했어요. 기존 기록은 유지돼요.','error');}
-  finally{if(run.isConnected){run.disabled=false;run.textContent='AI 전체 종합 분석하기';}}
+  // After an error the saved result (if any) is still on screen: keep the matching label.
+  finally{if(run.isConnected){run.disabled=false;run.textContent=aiRunLabel();}}
  };
 }
 function bindChart(host,report){
