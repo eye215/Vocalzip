@@ -271,9 +271,37 @@ test('saving a plan preserves old IDs, ordering, completion and other dates; sav
   M.savePlan(db,{date:today,targetMinutes:null});
   assert.equal(build(db).goals.length,3);
   assert.equal(db.practicePlans.find(p=>p.id==='day:'+today).targetMinutes,null);
+  // Leaving every goal out removes the open ones; the completed goal stays.
   M.savePlan(db,{date:today,goals:[]});
-  assert.equal(build(db).goals.length,0);
+  assert.deepEqual(build(db).goals.map(g=>[g.id,g.completed]),[['a',true]]);
   assert.equal(db.practicePlans.find(p=>p.id==='week:2026-11-02').targetMinutes,240);
+});
+
+test('saving a plan never drops a completed goal or a goal with a 수행 기록, and leaves practice rows alone',()=>{
+  const db={dailyGoals:[
+    {id:'done',date:today,title:'완료',source:'personal',completed:true,order:0,performance:{minutes:12,mediaIds:['m1'],at:5}},
+    {id:'r:'+today,date:today,title:'반복',source:'personal',sourceId:'r',routineId:'r',routine:true,completed:true,order:1},
+    {id:'r:2026-11-08',date:'2026-11-08',title:'반복',source:'personal',sourceId:'r',routineId:'r',routine:true,completed:false,order:0},
+    {id:'unchecked',date:today,title:'체크를 푼 목표',source:'homework',sourceId:'hw',completed:false,order:2},
+    {id:'open',date:today,title:'아직',source:'personal',completed:false,order:3}],
+    practicePlans:[{id:'r',kind:'routine',title:'반복',days:2,startDate:today,endDate:'2026-11-08',archived:false,changes:[]}],
+    practices:[{id:'goal:done',date:today,manualMinutes:12,goalId:'done'},{id:'goal:unchecked',date:today,manualMinutes:7,goalId:'unchecked'}]};
+  assert.equal(M.keptGoal(db,db.dailyGoals[0]),'done');
+  assert.equal(M.keptGoal(db,db.dailyGoals[3]),'recorded');
+  assert.equal(M.keptGoal(db,db.dailyGoals[4]),'');
+  const rows=()=>hash(db.dailyGoals.filter(g=>!['open','new'].includes(g.id)).sort((a,b)=>a.id.localeCompare(b.id)));
+  const kept=rows(),practices=hash(db.practices),plans=hash(db.practicePlans);
+  M.savePlan(db,{date:today,goals:[{id:'new',title:'새 목표'}]});
+  assert.equal(rows(),kept);
+  assert.deepEqual(build(db).goals.map(g=>g.id),['done','r:'+today,'unchecked','new']);
+  assert.equal(hash(db.practices),practices);
+  assert.equal(hash(db.practicePlans),plans);
+  // Every goal practice row still has its goal.
+  for(const p of db.practices)assert.ok(db.dailyGoals.some(g=>g.id===p.goalId));
+  // A kept goal passed back by the editor is written once, not twice.
+  M.savePlan(db,{date:today,goals:build(db).goals});
+  assert.deepEqual(build(db).goals.map(g=>g.id),['done','r:'+today,'unchecked','new']);
+  assert.equal(db.dailyGoals.filter(g=>g.date===today).length,4);
 });
 
 test('invalid plan writes are atomic and cannot reuse a goal ID from another date',()=>{

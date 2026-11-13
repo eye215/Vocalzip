@@ -78,7 +78,8 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const automatic=options?.automatic===true;
   const s=state(),expectedSnapshot=M.planSnapshot(V.db,s.today),existing=s.goals;
   const suggestions=s.recommendationCandidates.filter(c=>c.source==='recommendation'&&!existing.some(g=>g.source===c.source&&g.sourceId===c.sourceId));
-  const choices=[...existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true})),...suggestions.map((g,i)=>({key:'candidate:'+i,goal:g,checked:false}))];
+  // Completed goals and goals with a 수행 기록 are shown as kept (locked): unticking must never drop a check or its minutes.
+  const choices=[...existing.map(g=>({key:'existing:'+g.id,goal:g,checked:true,kept:M.keptGoal(V.db,g)})),...suggestions.map((g,i)=>({key:'candidate:'+i,goal:g,checked:false}))];
   let recommended=[];
   const routine=g=>!!window.VzipGoalRoutines?.routineOf(g);
   const label=g=>g.source==='homework'?(routine(g)?'숙제·반복':'숙제'):g.source==='recommendation'?'추천':routine(g)?'반복':'개인';
@@ -87,7 +88,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   const explicit=state(undefined,null,{withDefault:false}).week,dayTarget=explicit.days.find(d=>d.today)?.targetMinutes,weekTarget=explicit.targetMinutes;
   const defaultTarget=dailyTarget();
   const body='<form id="student-home-plan"><p class="vz-plan-intro">오늘 연습할 항목을 골라주세요.'+(automatic?' 하루 연습 시간은 설정에서 바꿀 수 있어요.':'')+'</p><div data-guided-recommendations></div>'+
-   (choices.length?'<fieldset class="vz-plan-section"><legend>오늘 할 목표 <span data-plan-count>'+existing.length+'개 선택</span></legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+'><span class="vz-plan-check" aria-hidden="true"></span><span class="vz-plan-title">'+esc(c.goal.title)+'</span><small class="vz-plan-source">'+label(c.goal)+'</small></label>').join('')+'</div><p class="vz-plan-help">수행 체크는 숙제 완료나 연습 시간과 별도로 기록돼요.</p></fieldset>':'')+
+   (choices.length?'<fieldset class="vz-plan-section"><legend>오늘 할 목표 <span data-plan-count>'+existing.length+'개 선택</span></legend><div class="vz-plan-options">'+choices.map(c=>'<label class="vz-plan-option'+(c.kept?' is-kept':'')+'"><input type="checkbox" name="goal" value="'+esc(c.key)+'"'+(c.checked?' checked':'')+(c.kept?' disabled':'')+'><span class="vz-plan-check" aria-hidden="true"></span><span class="vz-plan-title">'+esc(c.goal.title)+'</span><small class="vz-plan-source">'+(c.kept?'<b>'+(c.kept==='done'?'완료':'기록 있음')+'</b> · ':'')+label(c.goal)+'</small></label>').join('')+'</div><p class="vz-plan-help">수행 체크는 숙제 완료나 연습 시간과 별도로 기록돼요.'+(choices.some(c=>c.kept)?' 완료했거나 수행 기록이 있는 목표는 오늘 목록에 그대로 남아요.':'')+'</p></fieldset>':'')+
    '<label class="field vz-plan-personal"><span>개인 목표 <small>추가</small></span><textarea name="personal" aria-label="개인 목표" rows="2" maxlength="10000" placeholder="예: 후렴 고음에서 힘 빼기" aria-describedby="vz-plan-personal-help"></textarea><small id="vz-plan-personal-help" class="vz-plan-help">여러 목표는 한 줄에 하나씩 적어주세요.</small></label>'+
    (V.routineFields?.()||'')+
    (automatic?'':'<details class="vz-plan-time"'+(dayTarget!=null||weekTarget!=null?' open':'')+'><summary>연습 시간 목표 <small>선택</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="two"><label class="field"><span>오늘 목표 시간(분)</span><input type="number" name="dayMinutes" min="0" max="1440" inputmode="numeric" value="'+(dayTarget??'')+'" placeholder="기본 '+defaultTarget+'분"></label>'+
@@ -110,10 +111,11 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
     el.parentNode.addEventListener('click',guard,true);
     el.parentNode.addEventListener('keydown',guard,true);
     V.setGuard(()=>dirty&&!approved?'저장하지 않은 목표 설정이 있어요. 나갈까요?':'');
-    form.onsubmit=e=>{
-      e.preventDefault();const button=el.parentNode.querySelector('[type=submit]');button.disabled=true;
+    form.onsubmit=async e=>{
+      e.preventDefault();const button=el.parentNode.querySelector('[type=submit]');if(button.disabled)return;button.disabled=true;
      try{
-      const data=new FormData(form),selected=new Set(data.getAll('goal')),goals=choices.filter(c=>selected.has(c.key)).map(c=>c.checked?{...c.goal}:{...c.goal,id:V.uid(),completed:false});
+      // Kept (disabled) rows are not part of FormData: they always stay selected.
+      const data=new FormData(form),selected=new Set([...data.getAll('goal'),...choices.filter(c=>c.kept).map(c=>c.key)]),goals=choices.filter(c=>selected.has(c.key)).map(c=>c.checked?{...c.goal}:{...c.goal,id:V.uid(),completed:false});
       const guided=new Set(data.getAll('guided-recommendation'));
       for(const c of recommended.filter(c=>guided.has(c.key)))goals.push({id:V.uid(),title:c.title,source:c.assignmentId?'homework':'recommendation',sourceId:c.assignmentId||c.key,...(c.kind==='room'?{songId:c.songId,recommendation:{reason:c.reason,action:c.action,minutes:c.minutes,days:c.days,section:c.section,task:c.task,sourceId:c.sourceId}}:{}),completed:false});
       const personal=form.personal.value.split(/\r?\n/).map(t=>t.trim()).filter(Boolean),repeatDays=V.routineChoice?.(form)??null;
@@ -127,6 +129,11 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
       if(form.dayMinutes&&form.dayMinutes.value!==String(dayTarget??''))times.targetMinutes=n(form.dayMinutes.value,1440);
       if(form.weekMinutes&&form.weekMinutes.value!==String(weekTarget??''))times.weekTargetMinutes=n(form.weekMinutes.value,10080);
       if(!goals.length&&!repeatDays&&!existing.length&&!Object.keys(times).length)throw Error('숙제나 추천 목표를 선택하거나 목표를 직접 입력해 주세요.');
+      // Unticking an existing goal removes it from today: ask once for all of them before saving.
+      const removed=choices.filter(c=>c.checked&&!selected.has(c.key)).map(c=>c.goal);
+      if(removed.length&&!await V.confirm('목표 빼기','목표 '+removed.length+'개를 오늘 목록에서 뺄까요?\n'+removed.slice(0,3).map(g=>'· '+g.title).join('\n')+(removed.length>3?'\n· 그 밖에 '+(removed.length-3)+'개':'')+
+        (removed.some(routine)?'\n반복 목표는 오늘 것만 빠지고 내일부터는 그대로 반복해요.':'')+'\n완료한 목표와 연습 기록은 그대로 남아요.',{ok:'빼기'})){button.disabled=false;return;}
+      if(!form.isConnected)return;
       const ok=V.change(db=>{M.savePlan(db,{date:s.today,expectedSnapshot,goals,...times});
        if(repeatDays)window.VzipGoalRoutines.create(db,{titles:personal,days:repeatDays,today:s.today,uid:V.uid});},{silent:true});
       if(!ok)throw Error('목표를 저장하지 못했어요. 입력은 그대로 있어요. 다시 시도해 주세요.');

@@ -4,9 +4,10 @@
 // migration (20261115), automatic STT within the monthly cap: reservation, per-run limit, category rules.
 import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {readFileSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
@@ -15,10 +16,28 @@ import {signV4, decide, AUTO, describeDbUrl, r2Endpoint, describeSecret, network
 
 const require = createRequire(import.meta.url);
 const {synth} = require('./synth-vocal.cjs');
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const U1 = '11111111-1111-4111-8111-111111111111', U2 = '22222222-2222-4222-8222-222222222222';
 const LYRICS_A = 'There is a moment when the world stands still and every dream I ever had comes rushing in like morning light across the hills I will not wait another day this is the moment this is the day when I send all my doubts away';
 const LYRICS_B = 'Something has changed within me something is not the same I am through with playing by the rules of someone elses game too late for second guessing too late to go back to sleep';
+
+test('Held-result reanalysis accepts only current, readable, unprocessed recordings', async () => {
+  const {unreliableCandidate, UNRELIABLE_CAMPAIGN} = await import('../worker/analysis-worker.mjs');
+  const analysis = {v:2, at:123, metrics:{phrases:null, voicedSeconds:20}, confidence:{pitchConfidence:0.4}};
+  const row = {user_id:U1, metadata:{type:'audio/wav', storageProvider:'r2', r2Key:'u/' + U1 + '/a.wav', analysis}};
+  assert.equal(unreliableCandidate(row), true);
+  const withMeta = patch => ({...row, metadata:{...row.metadata, ...patch}});
+  assert.equal(unreliableCandidate(withMeta({analysis:{...analysis, confidence:{pitchConfidence:0.9}}})), false);
+  assert.equal(unreliableCandidate(withMeta({analysis:{...analysis, v:1}})), false);
+  assert.equal(unreliableCandidate(withMeta({analysis:{...analysis, scope:{unreliableReanalysis:UNRELIABLE_CAMPAIGN}}})), false);
+  assert.equal(unreliableCandidate(withMeta({r2Key:'u/' + U2 + '/a.wav'})), false);
+  assert.equal(unreliableCandidate(withMeta({r2Key:''})), false);
+  assert.equal(unreliableCandidate(withMeta({type:'application/pdf'})), false);
+  assert.equal(unreliableCandidate(withMeta({deleted:true})), false);
+  assert.equal(unreliableCandidate(withMeta({analysis:{...analysis, scope:{separationWanted:true}}})), false);
+  assert.equal(unreliableCandidate(withMeta({storageProvider:'supabase', path:U1 + '/a.wav'})), true);
+  assert.equal(unreliableCandidate(withMeta({storageProvider:'supabase', storageVersion:2, parts:[{path:U1 + '/1'}, {path:U2 + '/2'}]})), false);
+});
 
 test('Signature V4 matches the AWS S3 GET example', () => {
   const auth = signV4({method:'GET', path:'/test.txt', headers:{host:'examplebucket.s3.amazonaws.com', range:'bytes=0-9', 'x-amz-content-sha256':'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'x-amz-date':'20130524T000000Z'},
@@ -216,6 +235,111 @@ test('Older analyses (v1, or v2 without detail) are analysed again with history 
   }
   assert.deepEqual((await row('ra3')).analysis, current, 'current analysis untouched');
   assert.equal((await row('ra1')).songId, 's1', 'nothing but analysis changes');
+});
+
+test('Held-result backfill previews without writes, queues once, preserves all history, and processes current results', {skip}, async () => {
+  const {requeueUnreliableAnalyses, UNRELIABLE_CAMPAIGN} = await import('../worker/analysis-worker.mjs');
+  const owner = '77777777-7777-4777-8777-777777777777';
+  await db.query('insert into auth.users (id) values ($1)', [owner]);
+  const history = Array.from({length:7}, (_, i) => ({v:1, at:i + 1, metrics:{voicedSeconds:i}}));
+  const held = {v:2, at:700, metrics:{phrases:null, voicedSeconds:20}, confidence:{pitchConfidence:0.3}, history};
+  for (const id of ['held-1', 'held-2', 'held-running', 'held-changed']) {
+    files.set(key(owner, id, 'wav'), wav());
+    await media(id, {name:id, type:'audio/wav', songId:'s1', storageProvider:'r2', r2Key:key(owner, id, 'wav'), analysis:held}, owner);
+  }
+  await db.query("insert into public.vocal_analysis_jobs (user_id,media_id,kind,status) values ($1,'held-running','vocal','running')", [owner]);
+  const snapshot = async () => (await db.query('select id, metadata from public.vocal_media where user_id=$1 order by id', [owner])).rows;
+  const before = await snapshot();
+  const preview = await requeueUnreliableAnalyses(db, {limit:500});
+  assert.equal(preview.dryRun, true); assert.equal(preview.queued, 0); assert.ok(preview.eligible >= 3);
+  assert.deepEqual(await snapshot(), before);
+  assert.deepEqual(Object.keys(await jobs('held-1')), []);
+  await assert.rejects(requeueUnreliableAnalyses(db, {apply:true, limit:0}), /1 to 500/);
+  const second = new pg.Client({connectionString:DB.replace(/\/[^/]*$/, '/' + dbName)});
+  await second.connect();
+  let applied;
+  try { applied = await Promise.all([db, second].map(client => requeueUnreliableAnalyses(client, {apply:true, limit:500}))); }
+  finally { await second.end(); }
+  assert.ok(applied.reduce((n, c) => n + c.queued, 0) >= 3);
+  assert.equal((await jobs('held-1')).vocal.status, 'queued');
+  assert.equal((await jobs('held-running')).vocal.status, 'running');
+  assert.deepEqual(await snapshot(), before, 'enqueue never mutates a previous analysis');
+  assert.equal((await requeueUnreliableAnalyses(db, {apply:true, limit:500})).queued, 0, 'rerun does not reset pending jobs');
+  // Even an edit with the same timestamp invalidates the request fingerprint.
+  const edited = {...held, confidence:{pitchConfidence:0.5}};
+  await db.query("update public.vocal_media set metadata=jsonb_set(metadata,'{analysis}',$1) where id='held-changed'", [JSON.stringify(edited)]);
+  await work();
+  assert.deepEqual((await row('held-changed')).analysis, edited);
+  for (const id of ['held-1', 'held-2']) {
+    const current = (await row(id)).analysis;
+    assert.equal(current.scope.unreliableReanalysis, UNRELIABLE_CAMPAIGN);
+    assert.equal(current.by, 'server');
+    assert.deepEqual(current.history.slice(0, 7), history);
+    const {history:ignored, ...old} = held;
+    assert.deepEqual(current.history.at(-1), old);
+    assert.equal((await jobs(id)).vocal.result.reanalyze.campaign, UNRELIABLE_CAMPAIGN);
+  }
+  assert.equal((await requeueUnreliableAnalyses(db, {apply:true, limit:500})).queued, 1, 'only the newly edited source is eligible again');
+  assert.equal((await requeueUnreliableAnalyses(db, {apply:true, limit:500})).queued, 0);
+});
+
+test('A take whose MR drowns the voice is measured with the song\'s own MR file taken out (알고 있는 MR 빼기)', {skip}, async () => {
+  // Its own account (no cached song list from earlier tests): one song with an uploaded MR file, one without.
+  const U3 = '44444444-4444-4444-8444-444444444444', Y = require('./helpers/mr-synth.cjs');
+  await db.query('insert into auth.users (id) values ($1) on conflict do nothing', [U3]);
+  const pcm = x => { let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:11, db:8}).x;
+  files.set('u/' + U3 + '/mr-1/original.wav', pcm(mr));
+  for (const id of ['mx1', 'mx2']) files.set(key(U3, id, 'wav'), pcm(take));
+  await db.query('insert into public.vocal_data (user_id, payload) values ($1, $2)', [U3, JSON.stringify({songs:[
+    {id:'with-mr', title:'MR 있는 곡', mrTracks:[{id:'mr-1', kind:'file', title:'연습 MR', r2Key:'u/' + U3 + '/mr-1/original.wav'}, {id:'yt', kind:'youtube', videoId:'x'}]},
+    {id:'no-mr', title:'MR 없는 곡'}], lessons:[], practices:[], assignments:[], categories:[]})]);
+  await media('mx1', {name:'MR 큰 녹음', type:'audio/wav', storageProvider:'r2', r2Key:key(U3, 'mx1', 'wav'), songId:'with-mr'}, U3);
+  await media('mx2', {name:'MR 파일 없는 곡', type:'audio/wav', storageProvider:'r2', r2Key:key(U3, 'mx2', 'wav'), songId:'no-mr'}, U3);
+  await work();
+  const a1 = (await row('mx1')).analysis, a2 = (await row('mx2')).analysis;
+  assert.equal(a1.confidence.mrRemoved.trackId, 'mr-1');
+  assert.ok(Math.abs(a1.confidence.mrRemoved.offsetSeconds - 11) < 0.01, 'offset ' + a1.confidence.mrRemoved.offsetSeconds);
+  assert.ok(a1.confidence.pitchConfidence >= 0.8, 'cleaned ' + a1.confidence.pitchConfidence);
+  assert.equal(a1.voice, undefined); assert.equal(a1.by, 'server');
+  assert.equal((await jobs('mx1')).vocal.result.mrRemoved, true);
+  // Without an MR file the take is measured as recorded (held back by the app's confidence rule), nothing invented.
+  assert.equal(a2.confidence.mrRemoved, undefined);
+  assert.ok(a2.confidence.pitchConfidence < 0.8, 'as recorded ' + a2.confidence.pitchConfidence);
+  assert.equal((await row('mx1')).songId, 'with-mr', 'nothing but analysis changes');
+});
+
+test('A take still held back without a song MR file is separated by AI and measured on the voice (AI 분리 후 측정)', {skip}, async () => {
+  const U6 = '66666666-6666-4666-8666-666666666666', Y = require('./helpers/mr-synth.cjs'), sep = await import('../worker/separation-worker.mjs');
+  await db.query('insert into auth.users (id) values ($1) on conflict do nothing', [U6]);
+  const pcm = x => { let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  const voice = Y.vocal(20).x, take = Y.record(voice, Y.mr(60), {offset:4, db:8}).x;
+  for (const id of ['sx1', 'sx2']) files.set(key(U6, id, 'wav'), pcm(take));
+  await db.query('insert into public.vocal_data (user_id, payload) values ($1, $2)', [U6, JSON.stringify({songs:[{id:'yt-only', title:'유튜브 MR로 부른 곡', mrTracks:[{id:'yt', kind:'youtube', videoId:'x'}]}], lessons:[], practices:[], assignments:[], categories:[]})]);
+  for (const id of ['sx1', 'sx2']) await media(id, {name:'MR 큰 녹음', type:'audio/wav', storageProvider:'r2', r2Key:key(U6, id, 'wav'), songId:'yt-only'}, U6);
+  await work();
+  const held = (await row('sx1')).analysis;
+  assert.ok(held.confidence.pitchConfidence < 0.8); assert.equal(held.confidence.mrRemoved, undefined);
+  assert.equal(held.scope.separationWanted, true, 'no MR file fitted: waits for AI separation');
+  const rows = (await sep.waiting(db)).filter(r => r.user_id === U6);
+  assert.deepEqual(rows.map(r => r.id).sort(), ['sx1', 'sx2']);
+  // The separator (a stand-in writing the clean voice) succeeds for sx1 and fails for sx2.
+  const dir = mkdtempSync(join(tmpdir(), 'vzv-')), vocals = join(dir, 'vocals.wav'); writeFileSync(vocals, pcm(voice));
+  const cmd = 'node ' + ROOT + 'tests/helpers/fake-demucs.cjs';
+  process.env.FAKE_VOCALS = vocals;
+  assert.equal(await sep.separateOne(db, rows.find(r => r.id === 'sx1'), {cmd}), 'separated');
+  process.env.FAKE_FAIL = '1';
+  assert.equal(await sep.separateOne(db, rows.find(r => r.id === 'sx2'), {cmd}), 'failed');
+  delete process.env.FAKE_FAIL; rmSync(dir, {recursive:true});
+  const a1 = (await row('sx1')).analysis, a2 = (await row('sx2')).analysis;
+  assert.deepEqual(a1.confidence.aiSeparated, {model:'htdemucs'});
+  assert.ok(a1.confidence.pitchConfidence >= 0.8, 'separated ' + a1.confidence.pitchConfidence);
+  assert.equal(a1.by, 'server'); assert.equal(a1.scope.separationWanted, undefined); assert.equal(a1.scope.separationResult, 'separated');
+  assert.equal(a1.history.at(-1).at, held.at, 'the held-back result is kept in history');
+  // A failed separation keeps the measurement as it was and is not tried again.
+  assert.equal(a2.confidence.aiSeparated, undefined); assert.equal(a2.scope.separationTried, true); assert.equal(a2.scope.separationWanted, false);
+  assert.deepEqual((await sep.waiting(db)).filter(r => r.user_id === U6), []);
+  assert.equal((await row('sx1')).songId, 'yt-only', 'nothing but analysis changes');
 });
 
 test('A file that cannot be read is retried and then marked failed; a paid transcript survives a later failure', {skip}, async () => {

@@ -1,0 +1,92 @@
+# VOCAL.zip AI 분리 후 측정 (worker/separation-worker.mjs): recordings whose voice the MR drowned and that had no song MR
+# file to subtract are split with Demucs (open-source, CPU) and the voice is measured. Free on GitHub-hosted runners for
+# this public repository; nothing is installed when no recording waits. Same secrets as the analysis worker
+# (SUPABASE_DB_URL, R2 read-only token); without SUPABASE_DB_URL it does nothing. Logs show counts only.
+name: Separation worker
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      max_jobs:
+        description: 'How many recordings at most'
+        default: ''
+      selftest:
+        description: 'Only check the separator on a synthetic take (no user data): install, timing, before/after confidence'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: separation-worker
+  cancel-in-progress: false
+jobs:
+  separate:
+    if: github.repository == 'eye215/Vocalzip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Anything waiting?
+        if: ${{ !inputs.selftest }}
+        id: peek
+        run: node worker/separation-worker.mjs --peek
+      - name: Cache ffmpeg
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
+        uses: actions/cache@v4
+        with:
+          path: ~/ffmpeg-static
+          key: ffmpeg-static-5.2.0-${{ runner.os }}
+      - name: Install ffmpeg
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
+        timeout-minutes: 8
+        run: |
+          if [ ! -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
+            npm install --prefix ~/ffmpeg-static --no-save --no-audit --no-fund ffmpeg-static@5.2.0 || true
+          fi
+          if [ -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
+            echo "FFMPEG_PATH=$HOME/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg" >> "$GITHUB_ENV"
+            echo "$HOME/ffmpeg-static/node_modules/ffmpeg-static" >> "$GITHUB_PATH"
+          else
+            command -v ffmpeg || timeout 300 sudo apt-get install -y -q --no-install-recommends ffmpeg
+          fi
+      - uses: actions/setup-python@v5
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
+        with:
+          python-version: '3.11'
+      # CPU-only PyTorch and Demucs (pinned) plus the model weights, cached between runs.
+      - name: Cache Demucs
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/torch
+          key: demucs-4.0.1-torch-2.3.1-cpu-${{ runner.os }}
+      - name: Install Demucs
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
+        timeout-minutes: 15
+        run: |
+          python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 torchaudio==2.3.1
+          python -m pip install --quiet demucs==4.0.1 soundfile
+          echo "DEMUCS_CMD=python -m demucs" >> "$GITHUB_ENV"
+      - name: Self-test (synthetic take only)
+        if: inputs.selftest
+        timeout-minutes: 20
+        run: node worker/separation-worker.mjs --selftest
+      - name: Separate and measure
+        if: ${{ !inputs.selftest && steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0' }}
+        timeout-minutes: 55
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SEPARATE_MAX_JOBS: ${{ inputs.max_jobs }}
+        run: node worker/separation-worker.mjs

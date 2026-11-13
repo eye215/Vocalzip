@@ -221,8 +221,22 @@ function direction(d, delta, rule, before) {
   if (Math.abs(delta) < threshold(rule, before)) return 'similar';
   return Math.sign(delta) === d.direction ? 'better' : 'worse';
 }
+/** A take measured after subtracting its MR (app/mr-cancel.js): wobble-type measures may carry the subtraction's
+ * traces, so their change is shown as observed only (변화 관찰) until checked on real recordings. */
+const MR_REMOVED_NOTE = '반주를 뺀 녹음이라 흔들림 변화는 참고로만 보여요';
+const mrRemoved = t => !!t?.a?.confidence?.mrRemoved;
+/** A take measured on the voice that the server's AI separation (Demucs) split from the accompaniment. */
+const AI_SEPARATED_NOTE = 'AI 분리 후 측정(참고)';
+const aiSeparated = t => !!t?.a?.confidence?.aiSeparated;
 /** Compare one metric for two takes (first = earlier). Both are {a, date, ok}. */
-function compareMetric(id, first, last, {reference = null, sameDay = false, scoreNotes = null, arNotes = null} = {}) {
+function compareMetric(id, first, last, options = {}) {
+  const x = compareMetricRaw(id, first, last, options);
+  if ((id === 'stability' || id === 'high') && ['better', 'worse', 'similar', 'mixed'].includes(x.state) && (mrRemoved(first) || mrRemoved(last))) return {...x, state:'changed', judged:x.state, note:'mr-removed'};
+  // AI-separated takes are judged like any other; the change only carries the label.
+  if (x.state !== 'hold' && (aiSeparated(first) || aiSeparated(last))) return {...x, note:'ai-separated'};
+  return x;
+}
+function compareMetricRaw(id, first, last, {reference = null, sameDay = false, scoreNotes = null, arNotes = null} = {}) {
   const d = byId[id], a = first.a, b = last.a;
   if (d.reference) return {id, state:'reference', latest:passaggioOf(b), earlier:passaggioOf(a)};
   if (!sameDay && first.date && last.date && first.date === last.date) return {id, state:'hold', reason:'same-day'};
@@ -444,6 +458,6 @@ function aiMetrics(aggs) {
       improvedSongs:judged ? x.better : 0, worsenedSongs:judged ? x.worse : 0};
   });
 }
-return {VERSION:2, RULES, METRICS, HOLD, STATE, noteName, midiOf, semitones, hasDetail, availability, value, single, zoneStats, keyShift, passaggioOf,
+return {VERSION:2, RULES, METRICS, HOLD, STATE, MR_REMOVED_NOTE, AI_SEPARATED_NOTE, noteName, midiOf, semitones, hasDetail, availability, value, single, zoneStats, keyShift, passaggioOf,
   matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, stateLabel, holdText, holdLine, pairHold, HOLD_LABEL, heldText, wholeText, aiMetrics};
 });
