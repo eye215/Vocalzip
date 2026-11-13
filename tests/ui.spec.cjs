@@ -442,8 +442,9 @@ test('Each recording saves its own song, satisfaction and listening notes',async
   const updated=await page.evaluate(()=>window.__cloudUpdates.at(-1).payload.metadata);
   expect(updated.song).toBe('The Winner Takes It All');
   expect(updated.rating).toBe(4);
-  // Choosing a song renames the take automatically; the previous title is kept under the listening notes.
-  expect(updated.review).toBe('저음 안정적, 후렴 호흡 아쉬움\n이전 제목: 첫 번째 테이크');
+  // A title typed for a recorded take stays when a song is chosen: nothing is added to the listening notes.
+  expect(updated.name).toBe('첫 번째 테이크');
+  expect(updated.review).toBe('저음 안정적, 후렴 호흡 아쉬움');
   expect(updated.id).toBe('take-a');
   await page.locator('[data-id="take-b"] [data-action="edit"]').click();
   await expect(page.locator('.vzip-media-edit-sheet [name="rating"]')).toHaveValue('');

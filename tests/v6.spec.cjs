@@ -1290,14 +1290,20 @@ test('Import with song and date saves the generated title and appends the origin
   expect(saved).toMatchObject({name:'On My Own 2026.11.09',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인\n이전 제목: SODA_123'});
 });
 
-test('Editing both song and date updates a saved title while retaining the old title in the memo', async ({page}) => {
+test('Editing both song and date updates a saved file title while retaining the old title in the memo; a typed title stays', async ({page}) => {
   await boot(page);
   const saved=await page.evaluate(async()=>{
-    const item=(await window.vzipReadMedia()).find(m=>m.id==='m1');
-    await VZ.media.update({...item,local:true},{songId:'s2',song:'On My Own',recordedDate:'2026-11-09',dateSource:'manual',review:'호흡 확인',normalizeTitle:true});
-    return (await window.vzipReadMedia()).find(m=>m.id==='m1');
+    // A file imported before titles were marked: its title is the file name.
+    await window.vzipStorePracticeMedia({id:'old-import',name:'SODA_777',created:Date.now()-864e5,type:'audio/wav',source:'import',songId:'',song:'',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+    const changes={songId:'s2',song:'On My Own',recordedDate:'2026-11-09',dateSource:'manual',review:'호흡 확인',normalizeTitle:true};
+    for(const id of ['old-import','m1'])await VZ.media.update({...(await window.vzipReadMedia()).find(m=>m.id===id),local:true},changes);
+    const all=await window.vzipReadMedia();
+    return {file:all.find(m=>m.id==='old-import'),typed:all.find(m=>m.id==='m1')};
   });
-  expect(saved).toMatchObject({name:'On My Own 2026.11.09',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인\n이전 제목: 레슨 시범'});
+  expect(saved.file).toMatchObject({name:'On My Own 2026.11.09',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인\n이전 제목: SODA_777'});
+  // "레슨 시범" was typed in the lesson recorder: the song and date change, the title and memo do not gain anything.
+  expect(saved.typed).toMatchObject({name:'레슨 시범',songId:'s2',recordedDate:'2026-11-09',review:'호흡 확인'});
+  expect(saved.typed.nameMode).toBeUndefined();
 });
 
 test('Song pickers list the most recently registered song first', async ({page}) => {
