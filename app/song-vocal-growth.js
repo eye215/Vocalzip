@@ -48,6 +48,17 @@ function shortChange(x) {
   const unit = x.id === 'phrase' ? '초' : ' cent', amount = x.delta ? (x.delta > 0 ? '▲ ' : '▼ ') + Math.abs(x.delta) + unit + ' ' : '';
   return '<span class="' + (TONE[x.state] || 'vg-same') + '">' + esc(amount + G.stateLabel(x)) + '</span>' + mrNote + (x.basis === 'phrases' ? '<small class="vg-basis">같은 프레이즈 ' + x.matched + '개</small>' : x.basis === 'whole' ? '<small class="vg-basis">곡 전체</small>' : '');
 }
+/** Why one take's measurement is not trusted, in plain words with its own numbers. The rule itself is
+ * VZ.analysisReliable (app/analysis.js): 10s of voice, voice 3 dB over the backing, pitch confidence 80%. */
+function unreliableWhy(a) {
+  if (!a?.metrics || VZ.analysisReliable?.(a)) return '';
+  const out = [], sec = Number(a.metrics.voicedSeconds) || 0, db = a.confidence?.voiceOverMrDb, pc = Number(a.confidence?.pitchConfidence), one = n => Math.round(n * 10) / 10;
+  if (sec < 10) out.push('목소리로 잡힌 구간이 ' + Math.round(sec) + '초뿐이에요 (10초 이상 필요)');
+  if (db != null && db < 3) out.push(db < 0 ? '반주가 목소리보다 ' + one(-db) + ' dB 커요' : '목소리가 반주보다 ' + one(db) + ' dB만 커요 (3 dB 이상 필요)');
+  if (a.v >= 2 && !(pc >= .8)) out.push(Number.isFinite(pc) ? '음높이 인식 신뢰도 ' + Math.round(pc * 100) + '% (80% 이상 필요)' : '음높이 인식 신뢰도가 낮아요');
+  const tried = a.confidence?.mrRemoved ? '반주를 뺀 뒤에도 ' : a.confidence?.separated || a.confidence?.aiSeparated ? 'AI로 목소리를 분리한 뒤에도 ' : '';
+  return tried + (out.join(' · ') || '측정 신뢰도가 낮아요');
+}
 const analysisOf = m => fresh.get(m.id) || m.analysis || null;
 const usable = m => { const a = analysisOf(m); return [1,2].includes(a?.v) && a.metrics; };
 function points(media) {
@@ -90,11 +101,15 @@ VZ.measureTable = (first, second) => {
   const sameSong=!!first.songId&&first.songId===second.songId;
   const take = (m, x) => ({id:m.id, songId:m.songId, a:x, date:String(M.dateOf?.(m) || '').slice(0, 10), created:m.created, ok:!!VZ.analysisReliable?.(x)});
   const ta = take(first, a), tb = take(second, b);
-  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (sameSong?change(m,ta,tb,{pair:true}):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
+  // Both takes are held for the same reason (low confidence): each row says 판정 보류 once and the reason, with each
+  // take's own numbers, is written once under the table instead of in every row.
+  const lowConfidence = sameSong && G?.pairHold?.(a, b, x => !!VZ.analysisReliable?.(x)) === 'confidence';
+  const held = '<span class="vg-same">판정 보류</span>';
+  const rows = [...METRICS, VIB].map(m => { const x = m.get(a), y = m.get(b); return x == null && y == null ? '' : '<tr><th>' + m.label + (VZ.metricInfo ? VZ.metricInfo(['high','stable'].includes(m.key) ? 'range' : m.key, m.label) : '') + '</th><td>' + (x == null ? '–' : esc(m.fmt(x))) + '</td><td>' + (y == null ? '–' : esc(m.fmt(y))) + '</td><td>' + (lowConfidence?held:sameSong?change(m,ta,tb,{pair:true}):'판정 보류 · 같은 곡 확인') + '</td></tr>'; }).join('');
   let extra = '';
   if (G && sameSong) {
     const r = G.comparePair(ta, tb, {reference:referenceOf(first.songId)});
-    const row = (label, x, before, after) => '<tr><th>' + label + '</th><td>' + esc(before) + '</td><td>' + esc(after) + '</td><td>' + shortChange(x) + '</td></tr>';
+    const row = (label, x, before, after) => '<tr><th>' + label + '</th><td>' + esc(before) + '</td><td>' + esc(after) + '</td><td>' + (lowConfidence ? held : shortChange(x)) + '</td></tr>';
     extra = row('호흡 유지', r.phrase, r.phrase.before != null ? r.phrase.before + '초' : '–', r.phrase.after != null ? r.phrase.after + '초' : '–') +
       row('고음 안정성', r.high, r.high.before != null ? '±' + r.high.before : '–', r.high.after != null ? '±' + r.high.after : '–');
     const p = r.passaggio.latest;
@@ -102,7 +117,10 @@ VZ.measureTable = (first, second) => {
   }
   const weak = !comparable(a,b) || !first.songId || first.songId!==second.songId;
   return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + extra + '</tbody></table>' +
-    (weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '') +
+    (lowConfidence ? '<div class="vg-hold-why" data-hold-why><strong>판정 보류 · 측정 신뢰도가 낮아요</strong><ul>' +
+        [[first, a], [second, b]].map(([m, x]) => { const why = unreliableWhy(x); return why ? '<li>' + esc(VZ.dateLabel(M.dateOf(m))) + ' 녹음: ' + esc(why) + '</li>' : ''; }).join('') +
+        '</ul><p class="small muted">다시 분석해도 같은 결과예요. 곡에 MR 파일을 올려 두면 서버가 반주를 빼고 다시 재요. MR 파일이 없는 녹음은 서버가 차례대로 AI로 목소리를 분리해 다시 재고, 그래도 기준에 못 미치면 판정 보류로 남아요.</p></div>'
+      : weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '') +
     '<p class="small muted">최고음은 참고로만 보여 주고 실력 판정에 쓰지 않아요. 판정 보류는 근거가 부족하다는 뜻이에요.</p>';
 };
 /** Measurement summary saved with a comparison report (numbers only). */
