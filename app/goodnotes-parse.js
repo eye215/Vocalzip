@@ -263,7 +263,7 @@ async function read(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
  if(!eventsBytes)throw fail('굿노트 파일이 아니에요. 굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 골라 주세요.','format');
- const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,movedPages:0,unknownEvents:{},schema:null,reader:5,events:{},pageEvents:0,inkKinds:{}};
+ const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,movedPages:0,unknownEvents:{},schema:null,reader:6,events:{},pageEvents:0,inkKinds:{}};
  const schemaBytes=await zip.read('schema.pb');if(schemaBytes){try{report.schema=first(fields(schemaBytes),1,0)??null;}catch{}}
  const index=async name=>{const map=new Map(),data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r);map.set(str(first(f,1,2)).toUpperCase(),str(first(f,2,2)));}catch{}}return map;};
  const [attachmentPaths,notePaths]=[await index('index.attachments.pb'),await index('index.notes.pb')];
@@ -296,7 +296,8 @@ async function read(input){
   }else if(kind===65){
    const id=str(first(body,2,2)).toUpperCase(),old=outline.get(id)||{};
    outline.set(id,{id,pageId:str(first(body,1,2)).toUpperCase()||old.pageId||'',title:reg(body,5)||old.title||'',order:reg(body,4)||old.order||''});
-  }else if(![6,10,15,34,38,102,103,104,105,106,121].includes(kind))report.unknownEvents[kind]=(report.unknownEvents[kind]||0)+1;
+  }else if(![6,10,15,34,38,57,62,102,103,104,105,106,121,160,161,163,164].includes(kind)) // 57 + 160–164: page bookmarks; 62: a page brought in from another notebook (it also has its page event)
+  report.unknownEvents[kind]=(report.unknownEvents[kind]||0)+1;
  }
  const compare=(a,b)=>a<b?-1:a>b?1:0;
  const empty=new Uint8Array(0);
@@ -345,7 +346,7 @@ async function structure(input){
  const list=async name=>{const out=[],data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r),path=str(first(f,2,2));out.push([str(first(f,1,2)),path,zip.entries.get(path)?.length??null]);}catch{}}return out;};
  const events=[];for(const record of records(eventsBytes)){if(events.length>=300000)break;try{events.push(plain(record,0));}catch{events.push({bad:record.length});}}
  const schemaBytes=await zip.read('schema.pb');let schema=null;if(schemaBytes){try{schema=first(fields(schemaBytes),1,0)??null;}catch{}}
- return {format:'vocalzip-goodnotes-structure',version:1,reader:5,schema,fileSize:bytes.length,entries:zip.entries.size,
+ return {format:'vocalzip-goodnotes-structure',version:1,reader:6,schema,fileSize:bytes.length,entries:zip.entries.size,
   attachments:await list('index.attachments.pb'),notes:await list('index.notes.pb'),events};
 }
 return {read,structure,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
