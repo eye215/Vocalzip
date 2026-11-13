@@ -1936,7 +1936,7 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   expect(headings.map(h => h.trim())).toEqual(['연습 목표', '분석', '관리']);
   await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();
   await expect(page.locator('#cloud-upload')).toBeHidden();
-  await expect(page.locator('#cloud-logout')).toBeHidden();
+  await expect(page.locator('#cloud-logout')).toBeVisible(); // 로그아웃 is a plain row, not inside the folded tools
   await expect(page.locator('#cloud-media-upload')).toBeHidden();
   await page.getByText('동기화·백업 도구').click();
   await expect(page.locator('#cloud-logout')).toBeVisible();
@@ -2144,7 +2144,9 @@ test('Billing attendance records go into 레슨 기록 and the calendar by thems
   for (let i = 0; i < 24 && !(await page.locator('.cal-day[data-d="2026-10-04"]').count()); i++) await page.locator('[data-mv="' + (new Date() > new Date(2026, 9, 31) ? -1 : 1) + '"]').click();
   await expect(page.locator('.cal-day[data-d="2026-10-04"] .dots i.l')).toHaveCount(1);
   await page.locator('.cal-day[data-d="2026-10-04"]').click();
-  await expect(page.getByText('00:00 – 02:00').or(page.getByText('00:00–02:00')).first()).toBeVisible();
+  // The stored 00:00 start is a placeholder: the row says the time is not set.
+  await expect(page.locator('.cal-own[data-kind=lesson] .item-title').first()).toContainText('시간 미정');
+  await expect(page.locator('.cal-own[data-kind=lesson]').first()).not.toContainText('00:00');
   // Nothing is added twice, and a lesson the user deletes does not come back.
   await page.evaluate(() => VZ.change(db => { db.lessons = db.lessons.filter(l => l.id !== 'bill-d2'); }));
   await page.goto('/#/home'); await page.goto('/#/lessons');

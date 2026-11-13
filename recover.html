@@ -39,7 +39,7 @@ button,a.btn{min-height:44px;padding:0 14px;border:0;border-radius:12px;backgrou
     db.close();
     rows.sort((a, b) => (b.created || 0) - (a.created || 0));
     total += rows.length;
-    const who = name === 'vocalzip_media_v1' ? '이전 공용 저장소' : /_unclaimed$/.test(name) ? '로그인 확인 전 저장소 (unclaimed)' : '계정 저장소';
+    const who = name === 'vocalzip_media_v1' ? '기기 공용 저장소' : /_unclaimed$/.test(name) ? '로그인 확인 전 저장소 (unclaimed)' : '계정 저장소';
     html += '<div class="card"><h2>' + who + ' · ' + rows.length + '개</h2><div class="muted">' + esc(name) + '</div>' +
       rows.map((r, i) => { const b = blobOf(r), d = r.created ? new Date(r.created) : null;
         return '<div class="row' + (d && d.toDateString() === today ? ' today' : '') + '"><div class="t"><b>' + esc(r.name || r.id) + '</b><span>' + (d ? d.toLocaleString('ko-KR') : '날짜 없음') + (b ? ' · ' + size(b.size) : ' · 파일이 이 저장소에 없음(클라우드 또는 분할 저장)') + (r.cloud || r.uploaded ? ' · 클라우드 업로드됨' : '') + '</span></div>' +
