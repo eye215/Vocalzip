@@ -103,6 +103,12 @@ const summary=report=>[
  report.unmatchedNotes?'어느 쪽의 필기인지 확인하지 못한 묶음 '+report.unmatchedNotes+'개는 가져오지 않아요.':'',
  report.pagesWithoutPdf?'PDF가 아닌 쪽 '+report.pagesWithoutPdf+'장은 빈 쪽으로 들어가요.':''].filter(Boolean);
 
+/** Counts only (no titles, no content): what the reader found in the file, for telling why an import looks wrong. */
+const diagnosis=(model,file)=>{const r=model.report,list=o=>Object.entries(o||{}).map(([k,n])=>k+'×'+n).join(' ')||'없음';
+ return ['읽기 버전 '+(r.reader||'?')+' · 굿노트 형식 '+(r.schema??'?')+' · 파일 '+Math.round((file?.size||0)/1024)+'KB',
+  '쪽 기록 '+r.pageEvents+' · 지움 표시 '+r.removedPages+' · 가져올 쪽 '+model.pages.length+' · PDF 쪽 번호 '+model.pages.map(p=>p.pdf?p.pdf.page:'-').join(','),
+  '필기 '+r.strokes+'획 · 못 읽음 '+r.unsupported+' · 지운 필기 '+r.deleted+' · 짝 없는 묶음 '+r.unmatchedNotes,
+  '필기 종류 '+list(r.inkKinds),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)];};
 /**
  * @param {File} file a .goodnotes file
  * @param {{song?:object, onDone?:Function}} [options] song: the song page the import was started from
@@ -154,6 +160,8 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
    '<section class="gn-summary"><strong>'+esc(model.title||file.name)+'</strong><p data-gn-summary>'+esc(meta)+'</p>'+
    '<p>'+(model.outline.length?'곡을 골라 가져오거나, 한 곡이 여러 줄로 나뉘었으면 이어진 줄을 골라 합치세요.':'개요가 없어서 전체를 한 곡으로 가져와요. 굿노트에서 곡마다 개요를 넣으면 곡별로 나눠져요.')+'</p>'+
    notes.map(t=>'<p class="gn-warn">'+esc(t)+'</p>').join('')+
+   '<details class="gn-diag" data-gn-diag><summary>진단 정보</summary>'+diagnosis(model,file).map(t=>'<p>'+esc(t)+'</p>').join('')+
+    '<button type="button" class="btn sm secondary" data-gn-structure>진단 파일 저장</button><p>쪽 순서·지움 같은 구조 기록만 담아요. 악보 PDF와 필기 내용은 들어가지 않아요(노트·개요 제목은 들어가요).</p></details>'+
    '<p>파일은 이 기기에서만 읽고, 곡별 PDF와 필기만 올라가요. 필기는 모두 수정할 수 있어요.</p></section>'+
    '<div class="gn-bar" data-gn-bar><button type="button" class="gn-all" data-gn-all aria-pressed="false"><span class="gn-box" aria-hidden="true"></span><span data-gn-alltext>전체 선택</span></button>'+
    '<span class="gn-count" data-gn-count></span><span class="gn-merge" data-gn-mergebar hidden><button type="button" class="gn-merge-btn" data-gn-merge>한 곡으로 합치기</button><span data-gn-mergehint></span></span></div>'+
@@ -164,6 +172,18 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
    const form=el.querySelector('form'),msg=el.querySelector('[data-gn-msg]'),go=el.querySelector('[data-gn-go]'),list=el.querySelector('[data-gn-list]');
    const bar=el.querySelector('[data-gn-mergebar]'),mergeButton=el.querySelector('[data-gn-merge]'),hint=el.querySelector('[data-gn-mergehint]'),all=el.querySelector('[data-gn-all]');
    const count=el.querySelector('[data-gn-count]'),allText=el.querySelector('[data-gn-alltext]');
+   const structureButton=el.querySelector('[data-gn-structure]');
+   if(structureButton)structureButton.onclick=async()=>{
+    structureButton.disabled=true;
+    try{
+     const data=JSON.stringify(await G.structure(new Uint8Array(await file.arrayBuffer())));
+     const out=new File([data],'goodnotes-structure.json',{type:'application/json'});
+     if(navigator.canShare?.({files:[out]})&&navigator.share){try{await navigator.share({files:[out],title:'굿노트 진단 파일'});return;}catch(error){if(error?.name==='AbortError')return;}}
+     const url=URL.createObjectURL(out),link=document.createElement('a');link.href=url;link.download=out.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+     VZ.toast('진단 파일을 저장했어요.');
+    }catch(error){VZ.toast('진단 파일을 만들지 못했어요: '+(error.message||error),'error');}
+    finally{structureButton.disabled=false;}
+   };
    /** One line above the button: progress, results and errors stay in view however long the list is. */
    const say=(text,tone='')=>{msg.textContent=text||'';msg.hidden=!text;msg.dataset.tone=tone;};
    /* Progress popup over the page while importing: song n/total, its step, an overall bar and 멈추기. It blocks the page

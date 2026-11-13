@@ -221,7 +221,9 @@ function readInk(bytes,page,report){
   if(!item)continue; // the id/clock header before each item
   const payload=first(item,2,2);
   if(!payload||!payload.length)continue;
-  let read;try{read=inkPaths(payload,item);}catch{read=null;}
+  let read,tag='?';try{const t=tuple(unframe(payload));tag=t.schema===PATH_SCHEMA?'path':t.schema===PEN_SCHEMA?'pen':t.schema===BRUSH_SCHEMA?'brush':'other:'+t.schema.length;}catch{tag='unreadable';}
+  tag+=(first(item,3,0)?'/t'+first(item,3,0):'')+(sub(item,9)?.length?'/shape':'')+(first(item,14,0)?'/erased':'');report.inkKinds[tag]=(report.inkKinds[tag]||0)+1;
+  try{read=inkPaths(payload,item);}catch{read=null;}
   if(!read){report.unsupported++;continue;}
   const paths=read.paths;
   if(!paths.length||first(item,14,0))  {if(paths.length)report.deleted++;continue;} // an erased item keeps an empty path and a flag
@@ -251,7 +253,7 @@ async function read(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
  if(!eventsBytes)throw fail('굿노트 파일이 아니에요. 굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 골라 주세요.','format');
- const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,unknownEvents:{},schema:null};
+ const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,unknownEvents:{},schema:null,reader:3,events:{},pageEvents:0,inkKinds:{}};
  const schemaBytes=await zip.read('schema.pb');if(schemaBytes){try{report.schema=first(fields(schemaBytes),1,0)??null;}catch{}}
  const index=async name=>{const map=new Map(),data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r);map.set(str(first(f,1,2)).toUpperCase(),str(first(f,2,2)));}catch{}}return map;};
  const [attachmentPaths,notePaths]=[await index('index.attachments.pb'),await index('index.notes.pb')];
@@ -261,6 +263,7 @@ async function read(input){
   const event=top.find(x=>x[0]!==1&&x[1]===2);if(!event)continue;
   let body;try{body=fields(event[2]);}catch{continue;}
   const kind=event[0];
+  report.events[kind]=(report.events[kind]||0)+1; // counts only, for the 진단 정보 line
   if(kind===30||kind===31){const name=reg(body,2);if(name)title=name;}
   else if(kind===2){
    const id=str(first(body,2,2)).toUpperCase(),size=sub(body,8),old=backgrounds.get(id)||{};
@@ -280,7 +283,7 @@ async function read(input){
  }
  const compare=(a,b)=>a<b?-1:a>b?1:0;
  const ordered=[...pages.values()].filter(p=>!removed.get(p.id)).sort((a,b)=>compare(a.order,b.order)||compare(a.id,b.id));
- report.removedPages=pages.size-ordered.length;
+ report.removedPages=pages.size-ordered.length;report.pageEvents=pages.size;
  if(!ordered.length)throw fail('이 굿노트 파일에서 페이지를 찾지 못했어요.','empty');
  const usedNotes=new Set(),result=[];
  for(const p of ordered){
@@ -308,5 +311,24 @@ async function read(input){
  }
  return {title,pages:result,outline:marks.map(m=>({title:m.title.trim(),page:at.get(m.pageId)+1})),sections,report,readFile:name=>zip.read(name,LIMIT.entry)};
 }
-return {read,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
+/* ---------- 진단 파일: the notebook's structure without its content ----------
+ * Every index event decoded generically (numbers, short texts, nested messages; long binary values only as a length),
+ * plus the id → path lists with file sizes. No PDF, no ink, no thumbnails. Titles (notebook, outline) are included
+ * because they are part of the events. Used to find out why an import differs from what GoodNotes shows. */
+function plain(bytes,depth){
+ if(bytes.length&&bytes.length<=400){const t=str(bytes);if(!/[\u0000-\u0008\u000e-\u001f\ufffd]/.test(t))return t.length>160?t.slice(0,160)+'…':t;}
+ if(depth<6&&bytes.length){try{const list=fields(bytes);if(list.length&&list.every(x=>x[0]<4096))return list.map(([f,w,v])=>[f,w===0?v:w===2?plain(v,depth+1):w===5?Math.round(f32(v)*1000)/1000:new DataView(v.buffer,v.byteOffset,8).getFloat64(0,true)]);}catch{}}
+ return {bytes:bytes.length};
+}
+async function structure(input){
+ const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
+ const eventsBytes=await zip.read('index.events.pb');
+ if(!eventsBytes)throw fail('굿노트 파일이 아니에요.','format');
+ const list=async name=>{const out=[],data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r),path=str(first(f,2,2));out.push([str(first(f,1,2)),path,zip.entries.get(path)?.length??null]);}catch{}}return out;};
+ const events=[];for(const record of records(eventsBytes)){if(events.length>=300000)break;try{events.push(plain(record,0));}catch{events.push({bad:record.length});}}
+ const schemaBytes=await zip.read('schema.pb');let schema=null;if(schemaBytes){try{schema=first(fields(schemaBytes),1,0)??null;}catch{}}
+ return {format:'vocalzip-goodnotes-structure',version:1,reader:4,schema,fileSize:bytes.length,entries:zip.entries.size,
+  attachments:await list('index.attachments.pb'),notes:await list('index.notes.pb'),events};
+}
+return {read,structure,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
 });
