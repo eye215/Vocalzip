@@ -309,6 +309,13 @@ test('A take whose MR drowns the voice is measured with the song\'s own MR file 
   assert.equal((await row('mx1')).songId, 'with-mr', 'nothing but analysis changes');
 });
 
+test('AI 분리 runs chain only after settling recordings: unreadable-only runs never start the next one', async () => {
+  const {progressed} = await import('../worker/separation-worker.mjs');
+  assert.equal(progressed({separated:36, 'not-better':2}), 38);
+  assert.equal(progressed({error:5}), 0);
+  assert.equal(progressed({error:2, failed:1}), 1);
+  assert.equal(progressed({}), 0);
+});
 test('A take still held back without a song MR file is separated by AI and measured on the voice (AI 분리 후 측정)', {skip}, async () => {
   const U6 = '66666666-6666-4666-8666-666666666666', Y = require('./helpers/mr-synth.cjs'), sep = await import('../worker/separation-worker.mjs');
   await db.query('insert into auth.users (id) values ($1) on conflict do nothing', [U6]);

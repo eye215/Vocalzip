@@ -17,6 +17,7 @@ on:
         default: false
 permissions:
   contents: read
+  actions: write # only to start the next run of this workflow while recordings are still waiting
 concurrency:
   group: separation-worker
   cancel-in-progress: false
@@ -89,4 +90,15 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SEPARATE_MAX_JOBS: ${{ inputs.max_jobs }}
+        id: separate
         run: node worker/separation-worker.mjs
+      # The hourly schedule takes 12 at a time and can lag. A run that settled recordings starts the next run itself
+      # (40 at a time) while more are waiting; a run that only met unreadable files stops, so it cannot loop.
+      - name: Continue while recordings wait
+        if: ${{ !inputs.selftest && success() && steps.separate.outputs.progressed != '' && steps.separate.outputs.progressed != '0' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(GITHUB_OUTPUT=/dev/null node worker/separation-worker.mjs --peek | sed -n 's/.*: \([0-9]*\) recording(s) waiting.*/\1/p')
+          echo "waiting after this run: ${n:-0}"
+          if [ "${n:-0}" -gt 0 ]; then gh workflow run separation-worker.yml --ref "${{ github.ref_name }}" -R "$GITHUB_REPOSITORY" -f max_jobs="${{ inputs.max_jobs || '40' }}" && echo "started the next run"; fi
