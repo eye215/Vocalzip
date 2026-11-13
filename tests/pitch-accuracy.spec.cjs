@@ -47,5 +47,10 @@ test('growth holds low confidence/version mismatch and shows a neutral four-semi
  },{weak,version});
  await render();await expect(page.locator('#test-host')).toContainText('4반음');await expect(page.locator('#test-host')).not.toContainText('나빠짐');
  await render(true);await expect(page.locator('#test-host')).toContainText('판정 보류');await expect(page.locator('#test-host')).not.toContainText('4반음');
+ // Low confidence: the reason is written once under the table with that take's own number, not in every row, and it does not offer a re-analysis that cannot help.
+ await expect(page.locator('#test-host [data-hold-why]')).toContainText('음높이 인식 신뢰도 40% (80% 이상 필요)');
+ await expect(page.locator('#test-host [data-hold-why] li')).toHaveCount(1);
+ expect(await page.locator('#test-host').evaluate(e=>(e.textContent.match(/측정 신뢰도가 낮아요/g)||[]).length)).toBe(1);
+ await expect(page.locator('#test-host')).not.toContainText('v2로 재분석');
  await render(false,1);await expect(page.locator('#test-host')).toContainText('분석 버전');
 });
