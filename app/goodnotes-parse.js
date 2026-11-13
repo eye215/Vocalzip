@@ -6,9 +6,13 @@
  *        │                   page background = attachment + PDF page + size (2), page + order key (54), outline entry (65)
  *        ├ index.attachments.pb / index.notes.pb   id → path inside the zip
  *        ├ attachments/<id>  the original PDF
- *        └ notes/<id>        one page's ink: items with a colour and an Apple-LZ4 ("bv41") "tpl" path
- *                            (move + quadratic curves, one width).
- * Anything that is not recognised is counted and reported, never guessed. */
+ *        └ notes/<id>        one page's ink: items with a colour and an Apple-LZ4 ("bv41") "tpl" path.
+ * Seen in real exports (schema 24–26): the plain path (straight highlighter, simple strokes: move + quadratic
+ * curves, one width), the pressure pen (points carry half the stroke width), the freehand highlighter (points carry
+ * the full width), the brush pen (schema 25) and the shape line (corner points in the item, no path).
+ * A removed page keeps its page event and gets a "removed" register (56): such pages are left out.
+ * Text boxes and images have not been seen and are not read. Anything that is not recognised is counted and
+ * reported, never guessed. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipGoodnotes=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const LIMIT={archive:400*1024*1024,entry:200*1024*1024,small:64*1024*1024,entries:20000,points:2048};
@@ -141,10 +145,57 @@ function tuple(raw){
 }
 const PATH_SCHEMA='vuA(v)A(S(uu))A(S(uuuu))vA(f)';
 const bits=new DataView(new ArrayBuffer(4)),float=u=>{bits.setUint32(0,u,true);return bits.getFloat32(0,true);};
-/** One ink item → sub-paths in page units: [{width, points:[[x,y]…]}]; null when the shape is not one we know. */
-function inkPaths(payload){
+const PEN_SCHEMA='vA(v)A(u)A(u)A(v)A(v)A(u)A(u)A(u)A(u)A(v)',BRUSH_SCHEMA='vuA(v)A(S(uuuuu))A(S(uuuuuuuuuuu))A(S(uu))A(v)A(S(uu))A(S(uuuu))A(u)';
+const median=list=>{const sorted=list.filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);return sorted.length?sorted[Math.floor(sorted.length/2)]:0;};
+/** Adds a quadratic curve to a path: the end point, and intermediate points only where the curve really bends. */
+function curveTo(points,cx,cy,x,y){
+ const [x0,y0]=points.at(-1),bend=Math.hypot(cx-(x0+x)/2,cy-(y0+y)/2),steps=bend>0.35?Math.min(8,2+Math.floor(bend/2)):1;
+ for(let s=1;s<=steps;s++){const t=s/steps,a=(1-t)*(1-t),b=2*(1-t)*t,d=t*t;points.push([a*x0+b*cx+d*x,a*y0+b*cy+d*y]);}
+}
+const finite=paths=>paths.filter(p=>p.points.every(q=>q.every(Number.isFinite)));
+/** Pressure pen and freehand highlighter. kinds 0/1 = move/curve with points (x, y, half width); kinds 4/5 = the
+ * highlighter's move/curve with points (x, y, full width). A curve is control point + end point (+ unused values). */
+function penPaths(values){
+ const [,kinds,start,segments]=values,curves=kinds.filter(k=>k===1||k===5).length,moves=kinds.filter(k=>k===0||k===4).length;
+ if(!kinds.length)return {paths:[],highlighter:false};
+ if(moves!==1||(kinds[0]!==0&&kinds[0]!==4)||curves!==kinds.length-1||start.length<3)return null;
+ const highlighter=kinds[0]===4,size=curves?segments.length/curves:0;
+ if(curves&&(!Number.isInteger(size)||size<6))return null;
+ const points=[[float(start[0]),float(start[1])]],widths=[float(start[2])];
+ for(let n=0;n<curves;n++){const at=n*size,q=i=>float(segments[at+i]);curveTo(points,q(0),q(1),q(3),q(4));widths.push(q(2),q(5));}
+ return {paths:finite([{width:median(widths)*(highlighter?1:2),points}]),highlighter};
+}
+/** Brush pen (schema 25): one move (x, y, …) and curves (flag, control x, y, …3 values, end x, y, …); one width. */
+function brushPaths(values){
+ const [,widthBits,kinds,moves,curves]=values,paths=[];let m=0,c=0,current=null;
+ for(const kind of kinds){
+  if(kind===0){const p=moves[m++];if(!p)return null;current={width:float(widthBits),points:[[float(p[0]),float(p[1])]]};paths.push(current);}
+  else if(kind===1){const q=curves[c++];if(!q||!current)return null;curveTo(current.points,float(q[1]),float(q[2]),float(q[6]),float(q[7]));}
+  else return null;
+ }
+ if(m!==moves.length||c!==curves.length)return null;
+ return finite(paths);
+}
+/** A shape (a line drawn with the shape tool or straightened): corner points and a width in the item itself. */
+function shapePaths(item){
+ const shape=sub(item,9);if(!shape)return null;
+ const corners=sub(shape,1);if(!corners)return null;
+ const points=corners.filter(x=>x[0]===1&&x[1]===2).map(x=>{try{const f=fields(x[2]),px=first(f,1,5),py=first(f,2,5);return px&&py?[f32(px),f32(py)]:null;}catch{return null;}});
+ if(points.length<2||points.some(p=>!p))return null;
+ const width=first(shape,15,5);
+ return finite([{width:width?f32(width):0,points}]);
+}
+/** One ink item → {paths:[{width, points:[[x,y]…]}] in page units, highlighter}; null when the shape is not one we know. */
+function inkPaths(payload,item){
  const {schema,values}=tuple(unframe(payload));
+ if(schema===PEN_SCHEMA)return penPaths(values);
+ if(schema===BRUSH_SCHEMA){const paths=brushPaths(values);return paths&&{paths,highlighter:false};}
  if(schema!==PATH_SCHEMA)return null;
+ const plain=plainPaths(values);
+ if(plain&&!plain.length&&item){const shape=shapePaths(item);if(shape)return {paths:shape.map(p=>({...p,width:p.width||float(values[1])})),highlighter:false};}
+ return plain&&{paths:plain,highlighter:false};
+}
+function plainPaths(values){
  const [,widthBits,kinds,moves,curves,,widths]=values;let width=float(widthBits);
  if(!(width>0)&&widths.length){const sorted=widths.filter(Number.isFinite).sort((a,b)=>a-b);width=sorted[Math.floor(sorted.length/2)]||0;}
  const paths=[];let m=0,c=0,current=null;
@@ -152,10 +203,8 @@ function inkPaths(payload){
   if(kind===0){const p=moves[m++];if(!p)return null;current={width,points:[[float(p[0]),float(p[1])]]};paths.push(current);}
   else if(kind===1){
    const q=curves[c++];if(!q||!current)return null;
-   const [x0,y0]=current.points.at(-1),cx=float(q[0]),cy=float(q[1]),x=float(q[2]),y=float(q[3]);
    // Dense strokes are almost straight between samples: keep the end point, and the midpoint of a real bend.
-   const bend=Math.hypot(cx-(x0+x)/2,cy-(y0+y)/2),steps=bend>0.35?Math.min(8,2+Math.floor(bend/2)):1;
-   for(let s=1;s<=steps;s++){const t=s/steps,a=(1-t)*(1-t),b=2*(1-t)*t,d=t*t;current.points.push([a*x0+b*cx+d*x,a*y0+b*cy+d*y]);}
+   curveTo(current.points,float(q[0]),float(q[1]),float(q[2]),float(q[3]));
   }else return null;
  }
  if(m!==moves.length||c!==curves.length)return null;
@@ -172,11 +221,13 @@ function readInk(bytes,page,report){
   if(!item)continue; // the id/clock header before each item
   const payload=first(item,2,2);
   if(!payload||!payload.length)continue;
-  let paths;try{paths=inkPaths(payload);}catch{paths=null;}
-  if(!paths){report.unsupported++;continue;}
+  let read;try{read=inkPaths(payload,item);}catch{read=null;}
+  if(!read){report.unsupported++;continue;}
+  const paths=read.paths;
   if(!paths.length||first(item,14,0))  {if(paths.length)report.deleted++;continue;} // an erased item keeps an empty path and a flag
   const colour=sub(item,4)||[],rgba=[1,2,3,4].map(f=>{const v=first(colour,f,5);return v?f32(v):0;});
-  const alpha=rgba[3]>0?rgba[3]:1,tool=alpha<0.999?'highlighter':'pen';
+  // The freehand highlighter is stored with a solid colour and drawn see-through by GoodNotes.
+  const alpha=rgba[3]>0&&rgba[3]<0.999?rgba[3]:read.highlighter?0.5:1,tool=alpha<0.999?'highlighter':'pen';
   for(const path of paths){
    const width=Math.max(0.001,Math.min(0.06,(path.width>0?path.width:2)/page.width)),points=[];
    for(const [x,y] of path.points){const p=[unit(x/page.width),unit(y/page.height),0.5],last=points.at(-1);if(!last||last[0]!==p[0]||last[1]!==p[1])points.push(p);}
@@ -200,11 +251,11 @@ async function read(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
  if(!eventsBytes)throw fail('굿노트 파일이 아니에요. 굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 골라 주세요.','format');
- const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,unknownEvents:{},schema:null};
+ const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,unknownEvents:{},schema:null};
  const schemaBytes=await zip.read('schema.pb');if(schemaBytes){try{report.schema=first(fields(schemaBytes),1,0)??null;}catch{}}
  const index=async name=>{const map=new Map(),data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r);map.set(str(first(f,1,2)).toUpperCase(),str(first(f,2,2)));}catch{}}return map;};
  const [attachmentPaths,notePaths]=[await index('index.attachments.pb'),await index('index.notes.pb')];
- let title='';const backgrounds=new Map(),pages=new Map(),outline=new Map();
+ let title='';const backgrounds=new Map(),pages=new Map(),outline=new Map(),removed=new Map();
  for(const record of records(eventsBytes)){
   let top;try{top=fields(record);}catch{continue;}
   const event=top.find(x=>x[0]!==1&&x[1]===2);if(!event)continue;
@@ -218,13 +269,18 @@ async function read(input){
   }else if(kind===54){
    const id=str(first(body,2,2)).toUpperCase(),old=pages.get(id)||{};
    pages.set(id,{id,background:reg(body,3).toUpperCase()||old.background||'',order:reg(body,4)||old.order||''});
+  }else if(kind===56){
+   // "Page removed" register: {value, clock}. The page event stays in the log; a later 0 would bring the page back.
+   const id=str(first(body,2,2)).toUpperCase(),state=sub(body,3);
+   if(id&&state)removed.set(id,!!first(state,1,0));
   }else if(kind===65){
    const id=str(first(body,2,2)).toUpperCase(),old=outline.get(id)||{};
    outline.set(id,{id,pageId:str(first(body,1,2)).toUpperCase()||old.pageId||'',title:reg(body,5)||old.title||'',order:reg(body,4)||old.order||''});
-  }else if(![6,10,15,34,38,102,104,105,106,121].includes(kind))report.unknownEvents[kind]=(report.unknownEvents[kind]||0)+1;
+  }else if(![6,10,15,34,38,102,103,104,105,106,121].includes(kind))report.unknownEvents[kind]=(report.unknownEvents[kind]||0)+1;
  }
  const compare=(a,b)=>a<b?-1:a>b?1:0;
- const ordered=[...pages.values()].sort((a,b)=>compare(a.order,b.order)||compare(a.id,b.id));
+ const ordered=[...pages.values()].filter(p=>!removed.get(p.id)).sort((a,b)=>compare(a.order,b.order)||compare(a.id,b.id));
+ report.removedPages=pages.size-ordered.length;
  if(!ordered.length)throw fail('이 굿노트 파일에서 페이지를 찾지 못했어요.','empty');
  const usedNotes=new Set(),result=[];
  for(const p of ordered){
@@ -238,6 +294,7 @@ async function read(input){
   if(path){usedNotes.add(noteId);const data=await zip.read(path);if(data){try{page.strokes=readInk(data,page,report);}catch{report.unsupported++;}}}
   result.push(page);
  }
+ for(const p of pages.values())if(removed.get(p.id))usedNotes.add(nextId(p.id)); // a removed page's ink is left out with it
  report.unmatchedNotes=[...notePaths.keys()].filter(id=>!usedNotes.has(id)).length;
  const at=new Map(result.map((p,i)=>[p.id,i]));
  const marks=[...outline.values()].filter(o=>o.title.trim()&&at.has(o.pageId)).sort((a,b)=>at.get(a.pageId)-at.get(b.pageId)||compare(a.order,b.order));
