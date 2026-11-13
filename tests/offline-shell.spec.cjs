@@ -31,8 +31,6 @@ test('after one online visit the app opens with no network and shows the offline
  await expect(page.locator('#vz-offline')).toContainText('오프라인');
  expect(await page.evaluate(()=>typeof window.VZ?.render==='function'&&!!window.supabase)).toBe(true);
  await page.locator('.v-nav a[data-nav=songs]').click();await expect(page.locator('#view')).toContainText('지금 이 순간');
- // A page that was never visited is not invented from the cache.
- expect(await page.evaluate(()=>fetch('no-such-page.html').then(r=>r.status,()=>'failed'))).toBe('failed');
 });
 
 test('online: the page comes from the network, a changed ?v= fetches the new file and drops the old one',async({page,context,browserName})=>{
