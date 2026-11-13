@@ -1778,6 +1778,14 @@ test('Library import skips 24 seconds and includes 25 seconds', async ({page}) =
 });
 
 test('Song sheet keeps aliases used for import suggestions', async ({page}) => {
+  await page.addInitScript(()=>{
+    window.__aliasTrace=[];
+    const record=(kind,extra={})=>window.__aliasTrace.push({t:performance.now(),kind,value:document.querySelector('[name=aliases]')?.value,active:document.activeElement?.name,...extra});
+    for(const kind of ['input','change','focusin','focusout','click','submit'])document.addEventListener(kind,e=>record(kind,{target:e.target.name||e.target.textContent?.slice(0,20)}),true);
+    const set=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(k,v){if(k.includes('vocal-zip_mvp_v1'))try{record('storage',{key:k,aliases:JSON.parse(v).songs?.find(s=>s.id==='s2')?.aliases,stack:new Error().stack});}catch{}return set.call(this,k,v);};
+  });
+
   await boot(page, {media:false});
   await page.evaluate(() => VZ.songSheet(VZ.song('s2')));
   await sheet(page).getByLabel('별칭 (쉼표로 구분)').fill('온마이오운, On my own , 온마이오운');
@@ -2918,3 +2926,5 @@ test('v4 IA: 보관함 survives as 내 곡 › 전체 녹음 with the old route 
  expect(await page.evaluate(()=>localStorage.getItem('vocal-zip_mvp_v1'))).toBe(before);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
+
+test.afterEach(async({page},info)=>{if(info.title.includes('Song sheet keeps aliases')&&info.status!==info.expectedStatus)console.log('ALIAS TRACE',JSON.stringify(await page.evaluate(()=>({trace:window.__aliasTrace,live:VZ.db.songs.find(s=>s.id==='s2'),form:document.querySelector('#song-form')?.outerHTML,errors:window.__errors}))))});
