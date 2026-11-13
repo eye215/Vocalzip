@@ -37,6 +37,17 @@ on:
         description: 'Queue again song jobs that waited for an app STT request (automatic STT then applies, within the monthly cap)'
         type: boolean
         default: false
+      reanalyze_unreliable:
+        description: 'Preview current held-back, readable recordings only; skips normal processing in this run'
+        type: boolean
+        default: false
+      reanalyze_apply:
+        description: 'OWNER APPROVAL REQUIRED: enqueue the previewed candidates (default is read-only)'
+        type: boolean
+        default: false
+      reanalyze_limit:
+        description: 'Maximum held-back recordings to preview/enqueue (1–500); normal queue runs later'
+        default: '50'
   repository_dispatch:
     types: [analyze]
 permissions:
@@ -59,17 +70,24 @@ jobs:
           node-version: '22'
       - run: npm ci --omit=dev --ignore-scripts
       - name: Anything waiting?
+        if: ${{ !inputs.reanalyze_unreliable }}
         id: peek
         run: node worker/analysis-worker.mjs --peek
+      - name: Preview or enqueue held-back recordings
+        if: inputs.reanalyze_unreliable
+        env:
+          WORKER_REANALYZE_APPLY: ${{ inputs.reanalyze_apply && '1' || '' }}
+          WORKER_REANALYZE_LIMIT: ${{ inputs.reanalyze_limit }}
+        run: node worker/analysis-worker.mjs --reanalyze-unreliable
       # A pinned prebuilt ffmpeg (npm ffmpeg-static), cached between runs: apt mirrors once took 38 minutes.
       - name: Cache ffmpeg
-        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal
+        if: ${{ !inputs.reanalyze_unreliable && ((steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal) }}
         uses: actions/cache@v4
         with:
           path: ~/ffmpeg-static
           key: ffmpeg-static-5.2.0-${{ runner.os }}
       - name: Install ffmpeg
-        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal
+        if: ${{ !inputs.reanalyze_unreliable && ((steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal) }}
         timeout-minutes: 8
         run: |
           if [ ! -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
@@ -82,7 +100,7 @@ jobs:
           fi
       - name: Analyze
         id: analyze
-        if: (steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal
+        if: ${{ !inputs.reanalyze_unreliable && ((steps.peek.outputs.jobs != '' && steps.peek.outputs.jobs != '0') || inputs.requeue_network_failures || inputs.requeue_stt_requests || inputs.reanalyze_old_vocal) }}
         timeout-minutes: 48
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -100,7 +118,7 @@ jobs:
       # GitHub's 10-minute schedule can lag for hours. A run that got through recordings (and did not stop on repeated
       # failures) starts the next run itself while more are waiting; single-file checks (max_jobs) never chain.
       - name: Continue while recordings wait
-        if: success() && steps.analyze.outputs.processed != '' && steps.analyze.outputs.processed != '0' && steps.analyze.outputs.stopped != 'true' && inputs.max_jobs == ''
+        if: ${{ !inputs.reanalyze_unreliable && success() && steps.analyze.outputs.processed != '' && steps.analyze.outputs.processed != '0' && steps.analyze.outputs.stopped != 'true' && inputs.max_jobs == '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

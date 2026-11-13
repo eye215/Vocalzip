@@ -237,6 +237,9 @@ async function buildPart(part) {
   }
   while (pj.next < part.files.length) {
     if (job?.partJob !== pj) throw abortError(); // cancelled (or replaced) while a file was being read
+    // A pause (잠시 멈추기, or leaving the screen) that arrived while nothing was downloading, e.g. while a file was being
+    // written into the ZIP, had no request to abort: stop here instead of carrying on with the next file.
+    if (job.pauseRequested) throw abortError();
     const f = part.files[pj.next], base = {path:f.path, kind:f.kind, id:f.id, songId:f.songId ?? null, performanceId:f.performanceId ?? null, date:f.date || null, source:f.source || 'cloud', r2Key:f.r2Key || null};
     if (job.skip === f) { job.skip = null; pj.rows.push({...base, status:'skipped', error:job.failure?.message || ''}); job.failure = null; pj.next++; part.filesDone++; continue; }
     const controller = job.controller = new AbortController();
@@ -420,8 +423,11 @@ VZ.route('data-export', {title:'내 데이터 내보내기', back:true, tab:'hom
       '</div>';
   },
   mount(main) {
-    main.addEventListener('click', onClick);
-    main.addEventListener('change', e => { if (e.target.name === 'vz-export-mode') state.mode = e.target.value; });
+    // Listen on this screen's own root, not on #view: #view outlives the screen, and other screens use the same
+    // data-* names (녹음 취소, 연습 세트 시작하기 …), which must never reach the export.
+    const root = main.querySelector('.vz-export');
+    root.addEventListener('click', onClick);
+    root.addEventListener('change', e => { if (e.target.name === 'vz-export-mode') state.mode = e.target.value; });
     const records = async kind => {
       try {
         if (!state.cat) await load();
