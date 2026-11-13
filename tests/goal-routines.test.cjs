@@ -63,3 +63,53 @@ test('otherMinutes shows time already saved by guided practice for the same home
   db.practices.push({id:'guided:x',date:'2026-11-11',manualMinutes:4,completed:['a1']},{id:'other',date:'2026-11-10',manualMinutes:9,completed:['a1']});
   assert.equal(R.otherMinutes(db,goal),4);
 });
+
+// 완료 직후 시간 묻기 (2026-11-13): what the sheet opens with, and the time shown on the goal row.
+test('titleMinutes reads only a duration that ends the goal text',()=>{
+  for(const [text,minutes] of [['립트릴 (8분)',8],['허밍 5분',5],['고음 1시간 30분',90],['발성 (1시간)',60],['호흡 (8분) ',8],
+    ['3분 지점부터 다시',null],['10분씩 3일',null],['가사 읽기',null],['쉬기 0분',null],['너무 긴 999분',null],['',null],[null,null]])
+    assert.equal(R.titleMinutes(text),minutes,String(text));
+});
+
+test('suggestMinutes prefers the saved time, then the goal itself, then the last time for the same goal',()=>{
+  const db=base();
+  db.dailyGoals.push(
+    {id:'r:10',date:'2026-11-10',title:'가사 읽기',source:'personal',sourceId:'routine:r',routineId:'routine:r',routine:true,completed:true},
+    {id:'r:11',date:'2026-11-11',title:'가사 읽기',source:'personal',sourceId:'routine:r',routineId:'routine:r',routine:true,completed:true},
+    {id:'h0',date:'2026-11-09',title:'립트릴',source:'homework',sourceId:'a1',completed:true},
+    {id:'h1',date:'2026-11-11',title:'립트릴 다시',source:'homework',sourceId:'a1',completed:true},
+    {id:'t1',date:'2026-11-11',title:'호흡 (8분)',source:'personal',completed:true},
+    {id:'rec',date:'2026-11-11',title:'후렴 · 힘 빼기 · 10분씩 3일',source:'recommendation',sourceId:'rec:1',recommendation:{minutes:10},completed:true},
+    {id:'new',date:'2026-11-11',title:'처음 하는 목표',source:'personal',completed:true});
+  const goal=id=>db.dailyGoals.find(g=>g.id===id);
+  assert.deepEqual(R.suggestMinutes(db,goal('new')),{minutes:null,from:''});
+  assert.deepEqual(R.suggestMinutes(db,goal('t1')),{minutes:8,from:'goal'});
+  assert.deepEqual(R.suggestMinutes(db,goal('rec')),{minutes:10,from:'goal'});
+  assert.deepEqual(R.suggestMinutes(db,goal('r:11')),{minutes:null,from:''});
+  // The same routine yesterday and the same homework two days ago were saved with a time.
+  R.perform(db,'r:10',{minutes:7},1);R.perform(db,'h0',{minutes:25},2);
+  assert.deepEqual(R.suggestMinutes(db,goal('r:11')),{minutes:7,from:'last'});
+  assert.deepEqual(R.suggestMinutes(db,goal('h1')),{minutes:25,from:'last'});
+  assert.deepEqual(R.suggestMinutes(db,goal('new')),{minutes:null,from:''},'another goal is never guessed from');
+  // Its own saved time always wins, and a suggestion alone never creates practice time.
+  const before=JSON.stringify(db);
+  R.suggestMinutes(db,goal('t1'));assert.equal(JSON.stringify(db),before);
+  R.perform(db,'t1',{minutes:12},3);
+  assert.deepEqual(R.suggestMinutes(db,goal('t1')),{minutes:12,from:'saved'});
+  assert.equal(R.savedMinutes(db,goal('t1')),12);assert.equal(R.savedMinutes(db,goal('new')),null);
+  R.perform(db,'t1',{minutes:null},4);
+  assert.equal(R.savedMinutes(db,goal('t1')),null,'a cleared time is not shown as saved');
+  assert.deepEqual(R.suggestMinutes(db,goal('t1')),{minutes:8,from:'goal'});
+});
+
+test('suggestMinutes preselects nothing when another flow already recorded this goal\'s time; savedMinutes follows the practice row',()=>{
+  const db=base();
+  db.dailyGoals.push({id:'h1',date:'2026-11-11',title:'립트릴 (8분)',source:'homework',sourceId:'a1',completed:true});
+  db.practices.push({id:'guided:x',date:'2026-11-11',manualMinutes:4,completed:['a1']});
+  assert.deepEqual(R.suggestMinutes(db,db.dailyGoals.at(-1)),{minutes:null,from:''});
+  // The counted time is the practice row 'goal:<id>' (one rule with practice-time-model): an unconfirmed row counts as none.
+  db.practices.push({id:'goal:h1',date:'2026-11-11',manualMinutes:9,practiceTimeSource:'unconfirmed'});
+  assert.equal(R.savedMinutes(db,db.dailyGoals.at(-1)),null);
+  db.practices.at(-1).practiceTimeSource='goal';
+  assert.equal(R.savedMinutes(db,db.dailyGoals.at(-1)),9);
+});

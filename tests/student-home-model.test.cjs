@@ -349,3 +349,40 @@ test('unconfirmed imports cannot satisfy a goal even when an adapter supplies ol
  const result=M.build({practices:[pending]},{today,timeEntries:[{date:today,minutes:99,kind:'practice',ref:pending}]});
  assert.equal(result.week.actualMinutes,0);
 });
+
+// 2026-11-13: the home says where the week target comes from, and one helper gives today's time against its target.
+test('week target source: this week\'s plan, the daily setting on all seven days, or a sum that includes day plans',()=>{
+  const weekly={id:'week:2026-11-02',period:'week',date:'2026-11-02',targetMinutes:180};
+  const pick=w=>[w.targetMinutes,w.targetSource,w.dailyTargetMinutes];
+  assert.deepEqual(pick(build({},{defaultDailyTargetMinutes:30}).week),[210,'daily',30]);
+  assert.deepEqual(pick(build({practicePlans:[weekly]},{defaultDailyTargetMinutes:30}).week),[180,'week',30]);
+  assert.deepEqual(pick(build({practicePlans:[day(today,45)]},{defaultDailyTargetMinutes:30}).week),[225,'days',30]);
+  // No daily setting: only past days fall back to 30 minutes, so this week has no target yet.
+  assert.deepEqual(pick(build({}).week),[null,null,null]);
+  assert.deepEqual(pick(M.build({},{today:'2026-11-09',weekStart:'2026-11-02'}).week),[210,'days',null]);
+});
+
+const Today=require('../app/today-practice.js');
+test('today practice helper: minutes, target and percent come from the home week model',()=>{
+  const db={practices:[practice('a',today,99,{manualMinutes:22}),practice('b','2026-11-06',40),practice('c',today,50,{practiceTimeSource:'unconfirmed'})],practicePlans:[]};
+  const before=JSON.stringify(db),options={date:today,today,defaultDailyTargetMinutes:30};
+  assert.deepEqual(Today.compute(db,options),{minutes:22,targetMinutes:30,percent:73});
+  assert.equal(Today.compute(db,options).minutes,build(db,{defaultDailyTargetMinutes:30}).week.days.find(d=>d.today).minutes,'no second counting rule');
+  assert.equal(Today.text(Today.compute(db,options)),'오늘 22분 / 목표 30분 · 73%');
+  // A day plan wins over the daily setting; another day is read by its own date.
+  assert.deepEqual(Today.compute({...db,practicePlans:[day(today,20)]},options),{minutes:22,targetMinutes:20,percent:110});
+  assert.deepEqual(Today.compute(db,{...options,date:'2026-11-06'}),{minutes:40,targetMinutes:30,percent:133});
+  // No target: null target and percent, and the text says so.
+  assert.deepEqual(Today.compute(db,{date:today,today}),{minutes:22,targetMinutes:null,percent:null});
+  assert.equal(Today.text(Today.compute(db,{date:today,today})),'오늘 22분 · 목표 없음');
+  assert.deepEqual(Today.compute({...db,practicePlans:[day(today,0)]},{date:today,today}),{minutes:22,targetMinutes:null,percent:null});
+  // 0 minutes and more than 100%.
+  assert.deepEqual(Today.compute({},options),{minutes:0,targetMinutes:30,percent:0});
+  assert.equal(Today.text(Today.compute({},options)),'오늘 0분 / 목표 30분 · 0%');
+  assert.equal(Today.text(Today.compute({},{date:today,today})),'오늘 0분 · 목표 없음');
+  const over=Today.compute({practices:[practice('x',today,65)]},options);
+  assert.deepEqual(over,{minutes:65,targetMinutes:30,percent:217});
+  assert.equal(Today.text(over),'오늘 1시간 5분 / 목표 30분 · 217%');
+  assert.equal(Today.text({minutes:60,targetMinutes:90,percent:67}),'오늘 1시간 / 목표 1시간 30분 · 67%');
+  assert.equal(JSON.stringify(db),before);
+});
