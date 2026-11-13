@@ -329,6 +329,59 @@ test('보컬 분석: songs with their state from the report model (one list read
   await expect(page.locator('[data-hub-song="s4"] .item-sub')).toContainText('녹음 2개 · 분석 1개');
 });
 
+test('recordings added or analysed after the first open show up without a reload, on both tabs', async ({page}) => {
+  await boot(page);
+  const kpi = () => page.locator('.growth-hero .growth-kpi-grid strong').allTextContents();   // 곡 녹음 · 분석 완료 · 분석한 곡 · 분석한 월
+  const row = id => page.locator('[data-hub-song="' + id + '"]');
+  await page.goto('/#/vocal-growth');
+  await expect(page.locator('[data-overall-body]')).toBeVisible();
+  expect((await kpi()).slice(0, 3)).toEqual(['11', '9', '3']);
+  await tabs(page).nth(1).click();
+  await expect(row('s4').locator('.growth-hub-chip')).toHaveText('분석 전');
+  // 1) An analysis lands on a take while the list in memory stays the very same array and no event is sent:
+  //    the model must notice from the take itself.
+  await page.evaluate(async a => { window.__list = await VZ.media.list(); window.__list.find(m => m.id === 'd2').analysis = a; }, v2({into:20}));
+  await tabs(page).nth(0).click();
+  await expect(page.locator('[data-overall-body]')).toBeVisible();
+  expect((await kpi()).slice(0, 3)).toEqual(['11', '10', '4']);
+  await tabs(page).nth(1).click();
+  await expect(row('s4').locator('.growth-hub-chip')).toHaveText('판정 보류');
+  await expect(row('s4').locator('.item-sub')).toContainText('녹음 2개 · 분석 1개');
+  // 2) A song added to the records without a change event, and an analysed take moved to it in place.
+  await page.evaluate(() => { VZ.db.songs.push({id:'s9', title:'나중에 추가한 곡', created:Date.now()}); window.__list.find(m => m.id === 'a5').songId = 's9'; });
+  await tabs(page).nth(0).click();
+  await expect(page.locator('[data-overall-body]')).toBeVisible();
+  expect((await kpi()).slice(0, 3)).toEqual(['11', '10', '5']);
+  await tabs(page).nth(1).click();
+  await expect(row('s9')).toContainText('나중에 추가한 곡');
+  await expect(row('s9').locator('.item-sub')).toContainText('녹음 1개 · 분석 1개');
+  await expect(row('s1').locator('.item-sub')).toContainText('녹음 5개 · 분석 5개');
+  expect(await page.evaluate(async () => (await VZ.media.list()) === window.__list)).toBe(true);   // all of the above on one and the same list
+  // 3) A new recording saved and analysed the ordinary way while 보컬 분석 is open: the open tab follows.
+  await page.evaluate(async ([a, date]) => {
+    const sr = 8000, n = sr, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+    await window.vzipStorePracticeMedia({id:'new1', name:'방금 녹음', created:Date.now(), recordedDate:date, dateSource:'metadata', type:'audio/wav', source:'practice', songId:'s4', song:'', blob:new Blob([buf], {type:'audio/wav'}), durationSeconds:120});
+    window.dispatchEvent(new CustomEvent('vzip:media-saved', {detail:{id:'new1'}}));
+    const m = (await VZ.media.list()).find(x => x.id === 'new1');
+    await VZ.media.update(m, {analysis:a});
+  }, [v2({into:14}), ago(0)]);
+  // The list was read again from storage, so only what was really saved counts: the unsaved edits of 1) and 2)
+  // are gone (d2 has no analysis, a5 is back with its song) and the new take is there with its analysis.
+  await expect(row('s4').locator('.item-sub')).toContainText('녹음 3개 · 분석 1개');
+  await expect(row('s4').locator('.growth-hub-chip')).toHaveText('판정 보류');
+  await expect(row('s1').locator('.item-sub')).toContainText('녹음 6개 · 분석 6개');
+  await expect(row('s9')).toHaveCount(0);
+  await expect(page.locator('[data-hub-take]').first()).toHaveAttribute('data-hub-take', 'new1');
+  await tabs(page).nth(0).click();
+  await expect(page.locator('[data-overall-body]')).toBeVisible();
+  expect((await kpi()).slice(0, 3)).toEqual(['12', '10', '4']);
+  // 보컬 트레이닝 counts the new analyses for its 추천 연습 as well (nothing kept from an earlier draw).
+  await tabs(page).nth(2).click();
+  const expected = await page.evaluate(async () => VZ.practiceTips(await VZ.media.list()).tips.slice(0, 2).map(t => t.key));
+  expect(await page.locator('[data-hub-tip]').evaluateAll(els => els.map(e => e.dataset.hubTip))).toEqual(expected);
+});
+
 test('보컬 트레이닝: entries only — 연습실 · 보이스 체크 · 연습 세트 · 추천 연습 — and the newest five 트레이닝 recordings', async ({page}) => {
   await boot(page, {extra:{practices:ROOM}});
   await page.goto('/#/vocal-training');

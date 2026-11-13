@@ -28,15 +28,25 @@ function group(items) {
 const valid = m => [1,2].includes(m.analysis?.v) && V.analysisReliable?.(m.analysis);
 const takeOf = m => ({id:m.id, a:m.analysis, date:String(M.dateOf(m)||'').slice(0,10), created:m.created, ok:!!valid(m)});
 const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
-/** 성장 통합 (#385): ONE model pass per media list. 결과 리포트 and the 보컬 분석 tab (app/growth-hub.js) read the same
- * song takes and per-song reports, so switching tabs never runs them again. M.list() hands out the same array until a
- * recording changes; a record change (song, range, practice link) or a newly saved analysis drops the result too. */
+/** 성장 통합 (#385): ONE model pass for 결과 리포트 and the 보컬 분석 tab (app/growth-hub.js), so switching tabs
+ * never runs the per-song reports again. The result is never older than what it was built from: the song takes are
+ * picked from the list on every call, and the stored model is reused only when every input it read is still the
+ * same — each take (the recording, its song, its analysis, its date) and each song's title and confirmed range.
+ * A recording added, analysed, moved to another song, or a song added or changed therefore gives a new model, with
+ * or without a change event and also when the list is the same array as before. */
 let shared=null;
-for(const name of ['vzip:data-changed','vzip:analysis-saved'])window.addEventListener(name,()=>{shared=null;});
+for(const name of ['vzip:data-changed','vzip:analysis-saved','vzip:v6-media'])window.addEventListener(name,()=>{shared=null;});
+function modelInputs(songItems){
+ const key=[],songs=new Set();
+ for(const m of songItems){key.push(m,m.songId,m.analysis,M.dateOf(m),m.created);songs.add(m.songId);}
+ for(const id of songs)key.push(id,V.songTitle(id),JSON.stringify(referenceOf(id)));
+ return key;
+}
 V.growthModel=items=>{
- if(shared?.items===items)return shared;
- const songItems=items.filter(isSongTake);let overall;
- return shared={items,songItems,get overall(){
+ const songItems=items.filter(isSongTake),key=modelInputs(songItems);
+ if(shared&&shared.key.length===key.length&&key.every((x,i)=>Object.is(x,shared.key[i])))return shared;
+ let overall;
+ return shared={items,songItems,key,get overall(){
   return overall??=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid,reference:referenceOf,title:id=>V.songTitle(id)})||null;
  }};
 };
@@ -198,7 +208,7 @@ async function mount(host){
   let selected=keys.includes(currentKey)?currentKey:keys[0];
   // 주간 요약 (its own route) links back here with ?mode=monthly.
   let mode=new URLSearchParams(location.hash.split('?')[1]||'').get('mode')==='monthly'?'monthly':'overall';
-  // After archiveMonths (it may save, which drops the shared result): the songs are filtered once more at most.
+  // After archiveMonths (it may save a past month's report): the model is asked for again, never taken from before.
   const overall=V.growthModel(items).overall;
   const overallUi=window.VzipOverallGrowthUI;
   const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>'+(V.voiceCheck?.entryHtml?.()||'');

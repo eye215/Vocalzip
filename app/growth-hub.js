@@ -64,7 +64,8 @@ async function mountAnalysis(host) {
   let items, failed = false;
   try { items = await M.list(); } catch { items = M.cached(); failed = true; }
   if (my !== request || !host.isConnected) return;
-  // One pass over the list 결과 리포트 reads, and its model (one M.list(), one set of song reports for both tabs).
+  // One pass over the list 결과 리포트 reads, and its model (one M.list(), one set of song reports for both tabs;
+  // V.growthModel checks its inputs on every call, so this is never older than the list and the records).
   const reports = new Map((V.growthModel?.(items)?.overall?.reports || []).map(r => [r.songId, r.report]));
   const bySong = new Map(), recent = [];
   for (const m of items) {
@@ -107,11 +108,10 @@ V.route('vocal-analysis', {title:'성장', tab:'growth', noAutoRefresh:true,
 // 노래 연습실 submissions live on practice rows (app/practice-room-model.js record()).
 const roomRows = () => (V.db.practices || []).filter(p => p?.practiceRoom && !p.practiceRoom.demo && !gone('practices', p.id))
   .sort((a, b) => String(b.practiceRoom.date || b.date || '').localeCompare(String(a.practiceRoom.date || a.date || '')) || (b.created || 0) - (a.created || 0));
-// 추천 연습 (app/practice-tips.js) for the list in hand: worked out once per list, not on every redraw.
-let tipsFor = null, tipsResult = null;
-const tipsOf = items => { if (tipsFor !== items) { tipsFor = items; tipsResult = V.practiceTips?.(items) || null; } return tipsResult; };
+// 추천 연습 (app/practice-tips.js), worked out from the list in hand on every draw: nothing is kept between draws,
+// so an analysis saved meanwhile is counted.
 function tipsHtml(items) {
-  const r = items && tipsOf(items);
+  const r = items && V.practiceTips?.(items);
   if (!r) return '';
   // Where a recommended exercise is practised today: 연습 따라 하기 (app/guided-practice.js).
   const guided = key => '#/guided-practice/' + encodeURIComponent('analysis:' + key);
