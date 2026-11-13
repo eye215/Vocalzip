@@ -4,7 +4,7 @@
 // migration (20261115), automatic STT within the monthly cap: reservation, per-run limit, category rules.
 import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync, mkdtempSync, rmSync} from 'node:fs';
+import {readFileSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
@@ -242,6 +242,39 @@ test('A take whose MR drowns the voice is measured with the song\'s own MR file 
   assert.equal(a2.confidence.mrRemoved, undefined);
   assert.ok(a2.confidence.pitchConfidence < 0.8, 'as recorded ' + a2.confidence.pitchConfidence);
   assert.equal((await row('mx1')).songId, 'with-mr', 'nothing but analysis changes');
+});
+
+test('A take still held back without a song MR file is separated by AI and measured on the voice (AI 분리 후 측정)', {skip}, async () => {
+  const U6 = '66666666-6666-4666-8666-666666666666', Y = require('./helpers/mr-synth.cjs'), sep = await import('../worker/separation-worker.mjs');
+  await db.query('insert into auth.users (id) values ($1) on conflict do nothing', [U6]);
+  const pcm = x => { let peak = 0; for (const v of x) peak = Math.max(peak, Math.abs(v)); const b = Buffer.alloc(44 + x.length * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40); for (let i = 0; i < x.length; i++) b.writeInt16LE(Math.round(x[i] / peak * 0.9 * 32767), 44 + i * 2); return b; };
+  const voice = Y.vocal(20).x, take = Y.record(voice, Y.mr(60), {offset:4, db:8}).x;
+  for (const id of ['sx1', 'sx2']) files.set(key(U6, id, 'wav'), pcm(take));
+  await db.query('insert into public.vocal_data (user_id, payload) values ($1, $2)', [U6, JSON.stringify({songs:[{id:'yt-only', title:'유튜브 MR로 부른 곡', mrTracks:[{id:'yt', kind:'youtube', videoId:'x'}]}], lessons:[], practices:[], assignments:[], categories:[]})]);
+  for (const id of ['sx1', 'sx2']) await media(id, {name:'MR 큰 녹음', type:'audio/wav', storageProvider:'r2', r2Key:key(U6, id, 'wav'), songId:'yt-only'}, U6);
+  await work();
+  const held = (await row('sx1')).analysis;
+  assert.ok(held.confidence.pitchConfidence < 0.8); assert.equal(held.confidence.mrRemoved, undefined);
+  assert.equal(held.scope.separationWanted, true, 'no MR file fitted: waits for AI separation');
+  const rows = (await sep.waiting(db)).filter(r => r.user_id === U6);
+  assert.deepEqual(rows.map(r => r.id).sort(), ['sx1', 'sx2']);
+  // The separator (a stand-in writing the clean voice) succeeds for sx1 and fails for sx2.
+  const dir = mkdtempSync(join(tmpdir(), 'vzv-')), vocals = join(dir, 'vocals.wav'); writeFileSync(vocals, pcm(voice));
+  const cmd = process.execPath + ' ' + ROOT + 'tests/helpers/fake-demucs.cjs';
+  process.env.FAKE_VOCALS = vocals;
+  assert.equal(await sep.separateOne(db, rows.find(r => r.id === 'sx1'), {cmd}), 'separated');
+  process.env.FAKE_FAIL = '1';
+  assert.equal(await sep.separateOne(db, rows.find(r => r.id === 'sx2'), {cmd}), 'failed');
+  delete process.env.FAKE_FAIL; rmSync(dir, {recursive:true});
+  const a1 = (await row('sx1')).analysis, a2 = (await row('sx2')).analysis;
+  assert.deepEqual(a1.confidence.aiSeparated, {model:'htdemucs'});
+  assert.ok(a1.confidence.pitchConfidence >= 0.8, 'separated ' + a1.confidence.pitchConfidence);
+  assert.equal(a1.by, 'server'); assert.equal(a1.scope.separationWanted, undefined); assert.equal(a1.scope.separationResult, 'separated');
+  assert.equal(a1.history.at(-1).at, held.at, 'the held-back result is kept in history');
+  // A failed separation keeps the measurement as it was and is not tried again.
+  assert.equal(a2.confidence.aiSeparated, undefined); assert.equal(a2.scope.separationTried, true); assert.equal(a2.scope.separationWanted, false);
+  assert.deepEqual((await sep.waiting(db)).filter(r => r.user_id === U6), []);
+  assert.equal((await row('sx1')).songId, 'yt-only', 'nothing but analysis changes');
 });
 
 test('A file that cannot be read is retried and then marked failed; a paid transcript survives a later failure', {skip}, async () => {

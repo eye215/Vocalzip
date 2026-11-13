@@ -80,3 +80,14 @@ test('wobble-type changes of a take measured with its MR removed are shown as ob
   assert.notEqual(G.compareMetric('intonation', take('a', '2026-10-01', 12, false), take('b', '2026-11-01', 6, true)).state, 'changed');
   assert.match(G.MR_REMOVED_NOTE, /참고/);
 });
+
+test('a take measured after AI separation is judged as usual and labelled AI 분리 후 측정(참고)', () => {
+  const G = require('../app/growth-metrics-model.js');
+  const take = (id, date, wobble, ai) => ({id, date, ok:true, a:{v:2, metrics:{stability:{wobbleCents:wobble, notes:20}, intonation:{meanAbsCents:wobble, notes:20}}, confidence:{pitchConfidence:0.95, ...(ai ? {aiSeparated:{model:'htdemucs'}} : {})}}});
+  for (const id of ['stability', 'intonation']) {
+    const x = G.compareMetric(id, take('a', '2026-10-01', 14, false), take('b', '2026-11-01', 6, true));
+    assert.equal(x.state, 'better', id); assert.equal(x.note, 'ai-separated', id);
+  }
+  assert.equal(G.compareMetric('stability', take('a', '2026-10-01', 14, false), take('b', '2026-11-01', 6, false)).note, undefined);
+  assert.equal(G.AI_SEPARATED_NOTE, 'AI 분리 후 측정(참고)');
+});
