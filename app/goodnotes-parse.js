@@ -311,5 +311,24 @@ async function read(input){
  }
  return {title,pages:result,outline:marks.map(m=>({title:m.title.trim(),page:at.get(m.pageId)+1})),sections,report,readFile:name=>zip.read(name,LIMIT.entry)};
 }
-return {read,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
+/* ---------- 진단 파일: the notebook's structure without its content ----------
+ * Every index event decoded generically (numbers, short texts, nested messages; long binary values only as a length),
+ * plus the id → path lists with file sizes. No PDF, no ink, no thumbnails. Titles (notebook, outline) are included
+ * because they are part of the events. Used to find out why an import differs from what GoodNotes shows. */
+function plain(bytes,depth){
+ if(bytes.length&&bytes.length<=400){const t=str(bytes);if(!/[\u0000-\u0008\u000e-\u001f\ufffd]/.test(t))return t.length>160?t.slice(0,160)+'…':t;}
+ if(depth<6&&bytes.length){try{const list=fields(bytes);if(list.length&&list.every(x=>x[0]<4096))return list.map(([f,w,v])=>[f,w===0?v:w===2?plain(v,depth+1):w===5?Math.round(f32(v)*1000)/1000:new DataView(v.buffer,v.byteOffset,8).getFloat64(0,true)]);}catch{}}
+ return {bytes:bytes.length};
+}
+async function structure(input){
+ const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
+ const eventsBytes=await zip.read('index.events.pb');
+ if(!eventsBytes)throw fail('굿노트 파일이 아니에요.','format');
+ const list=async name=>{const out=[],data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r),path=str(first(f,2,2));out.push([str(first(f,1,2)),path,zip.entries.get(path)?.length??null]);}catch{}}return out;};
+ const events=[];for(const record of records(eventsBytes)){if(events.length>=300000)break;try{events.push(plain(record,0));}catch{events.push({bad:record.length});}}
+ const schemaBytes=await zip.read('schema.pb');let schema=null;if(schemaBytes){try{schema=first(fields(schemaBytes),1,0)??null;}catch{}}
+ return {format:'vocalzip-goodnotes-structure',version:1,reader:4,schema,fileSize:bytes.length,entries:zip.entries.size,
+  attachments:await list('index.attachments.pb'),notes:await list('index.notes.pb'),events};
+}
+return {read,structure,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
 });
