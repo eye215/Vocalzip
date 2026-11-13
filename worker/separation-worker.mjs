@@ -102,7 +102,29 @@ export async function run({db, maxJobs = Number(env.SEPARATE_MAX_JOBS) || 12, bu
   return counts;
 }
 
-if (import.meta.url === 'file://' + process.argv[1]) {
+/** Self-test without any user data: a synthetic take (song-like MR 8 dB over a sung melody) is separated with the real
+ * separator and measured before and after. Prints timings and confidences only. */
+export async function selftest({cmd, log = console.log} = {}) {
+  const Y = require('../tests/helpers/mr-synth.cjs'), dir = await mkdtemp(join(tmpdir(), 'vzself-'));
+  try {
+    const take = Y.record(Y.vocal(30).x, Y.mr(60), {offset:5, db:8}).x;
+    const before = VA.analyze(take, Y.SR);
+    // 8 kHz synthetic → 44.1 kHz WAV like a real take (ffmpeg resamples).
+    const input = join(dir, 'take8k.wav'); await writeFile(input, wav(take, Y.SR));
+    const up = await decode(await readFile(input), {rate:44100, seconds:MAX_SECONDS});
+    const wav44 = join(dir, 'take.wav'); await writeFile(wav44, wav(up, 44100));
+    const t0 = Date.now(), voicePath = await separate(wav44, join(dir, 'out'), cmd), seconds = (Date.now() - t0) / 1000;
+    const after = VA.analyze(await decode(await readFile(voicePath), {rate:16000, seconds:MAX_SECONDS}), 16000);
+    const result = {audioSeconds:30, separateSeconds:Math.round(seconds), pitchConfidence:{before:before.confidence.pitchConfidence, after:after.confidence.pitchConfidence},
+      reliable:{before:reliableResult(before), after:reliableResult(after)}, notes:{before:before.metrics.intonation?.notes ?? 0, after:after.metrics.intonation?.notes ?? 0}};
+    log('separation selftest: ' + JSON.stringify(result));
+    return result;
+  } finally { await rm(dir, {recursive:true, force:true}); }
+}
+
+if (import.meta.url === 'file://' + process.argv[1] && process.argv.includes('--selftest')) {
+  await selftest();
+} else if (import.meta.url === 'file://' + process.argv[1]) {
   if (!env.SUPABASE_DB_URL) { console.log('separation worker: SUPABASE_DB_URL is not set; nothing to do'); process.exit(0); }
   const db = new pg.Client({connectionString:env.SUPABASE_DB_URL, ssl:env.SUPABASE_DB_SSL === 'off' ? false : {rejectUnauthorized:false}});
   try { await db.connect(); } catch (e) { console.log('separation worker: cannot connect to the database (' + e.message + ')'); process.exit(1); }

@@ -11,6 +11,10 @@ on:
       max_jobs:
         description: 'How many recordings at most'
         default: ''
+      selftest:
+        description: 'Only check the separator on a synthetic take (no user data): install, timing, before/after confidence'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -33,13 +37,13 @@ jobs:
         id: peek
         run: node worker/separation-worker.mjs --peek
       - name: Cache ffmpeg
-        if: steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0'
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
         uses: actions/cache@v4
         with:
           path: ~/ffmpeg-static
           key: ffmpeg-static-5.2.0-${{ runner.os }}
       - name: Install ffmpeg
-        if: steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0'
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
         timeout-minutes: 8
         run: |
           if [ ! -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
@@ -52,12 +56,12 @@ jobs:
             command -v ffmpeg || timeout 300 sudo apt-get install -y -q --no-install-recommends ffmpeg
           fi
       - uses: actions/setup-python@v5
-        if: steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0'
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
         with:
           python-version: '3.11'
       # CPU-only PyTorch and Demucs (pinned) plus the model weights, cached between runs.
       - name: Cache Demucs
-        if: steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0'
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
         uses: actions/cache@v4
         with:
           path: |
@@ -65,14 +69,18 @@ jobs:
             ~/.cache/torch
           key: demucs-4.0.1-torch-2.3.1-cpu-${{ runner.os }}
       - name: Install Demucs
-        if: steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0'
+        if: inputs.selftest || (steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0')
         timeout-minutes: 15
         run: |
           python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 torchaudio==2.3.1
           python -m pip install --quiet demucs==4.0.1 soundfile
           echo "DEMUCS_CMD=python -m demucs" >> "$GITHUB_ENV"
+      - name: Self-test (synthetic take only)
+        if: inputs.selftest
+        timeout-minutes: 20
+        run: node worker/separation-worker.mjs --selftest
       - name: Separate and measure
-        if: steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0'
+        if: ${{ !inputs.selftest && steps.peek.outputs.waiting != '' && steps.peek.outputs.waiting != '0' }}
         timeout-minutes: 55
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
