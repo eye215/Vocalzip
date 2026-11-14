@@ -24,7 +24,8 @@ const get = (entity, field) => read(keyOf(entity, field));
 const clear = (entity, fields) => fields.forEach(f => drop(keyOf(entity, f)));
 
 /**
- * Keep the named fields of a form as drafts.
+ * Keep the named fields of a form as drafts. Call clear() after saving and discard() when the sheet is closed
+ * without saving (onClose), so only text lost by a reload, crash or killed app is brought back.
  * @param form     the <form>
  * @param entity   stable id of what is edited, e.g. 'lesson:<id>:feedback'
  * @param fields   [{name, saved}] — field name and the text currently saved for it
@@ -64,7 +65,11 @@ function wire(form, entity, fields) {
   };
   els.forEach(f => f.el.addEventListener('input', () => save(f)));
   if (restored) { status.hidden = false; status.textContent = '이 기기에만 임시 저장됨 · 저장 버튼을 눌러야 반영돼요'; }
-  return {restored, clear() { els.forEach(f => drop(f.key)); }};
+  return {restored,
+    clear() { els.forEach(f => drop(f.key)); },
+    // The sheet was closed on purpose (닫기/돌아가기): the text is not offered again, but kept as the previous copy.
+    // A reload or the app being killed never reaches this, so the draft comes back there.
+    discard() { els.forEach(f => { const d = read(f.key); if (d) { write(f.key + ':prev', {...d, discardedAt:Date.now()}); drop(f.key); } }); }};
 }
 VZ.fieldDraft = {wire, get, clear, keyOf};
 })();

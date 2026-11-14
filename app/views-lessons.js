@@ -96,7 +96,8 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
   const st = l ? VZ.lessonStatus(l) : 'scheduled';
   let status = st;
   // Picked songs and the status buttons are not form fields: count them as edits when closing.
-  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
+  let draft = null;
+  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', onClose:() => draft?.discard(), dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
     '<label class="field"><span>레슨 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(l?.date || date || VZ.today()) + '"></label>' +
     '<div class="two"><label class="field"><span>시작 시간' + (l ? '' : ' <span class="req">*</span>') + '</span><input type="time" name="start" ' + (l ? '' : 'required') + ' value="' + esc(l?.startTime || '') + '"></label><label class="field"><span>종료 시간</span><input type="time" name="end" value="' + esc(l?.endTime || '') + '"></label></div>' +
     '<div class="two"><label class="field"><span>장소</span><input type="text" name="place" maxlength="100" value="' + esc(l ? l.place || '' : last?.place || '') + '"></label><label class="field"><span>선생님</span><input type="text" name="teacher" maxlength="60" value="' + esc(l ? l.teacher || '' : last?.teacher || '') + '"></label></div>' +
@@ -106,7 +107,7 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
-      const draft = l ? VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':prep', [{name:'prep', saved:l.prepMemo || ''}]) : null;
+      draft = l ? VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':prep', [{name:'prep', saved:l.prepMemo || ''}]) : null;
       const drawSongs = () => {
         songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song data-pick="song"><option value="">곡을 선택해 추가하세요</option>' +
           VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
@@ -249,7 +250,8 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
   }});
 function feedbackSheet(l) {
   const songIds = VZ.lessonSongIds(l);
-  VZ.sheet({title:'레슨 피드백', body:'<form id="fb-form"><label class="field"><span>전체 피드백</span><textarea name="feedback" rows="5" maxlength="10000" placeholder="선생님이 말씀하신 내용">' + esc(l.feedback || '') + '</textarea></label>' +
+  let draft = null;
+  VZ.sheet({title:'레슨 피드백', onClose:() => draft?.discard(), body:'<form id="fb-form"><label class="field"><span>전체 피드백</span><textarea name="feedback" rows="5" maxlength="10000" placeholder="선생님이 말씀하신 내용">' + esc(l.feedback || '') + '</textarea></label>' +
     songIds.map(id => '<label class="field"><span>' + esc(VZ.songTitle(id) || '곡') + ' 피드백</span><textarea name="song_' + esc(id) + '" rows="3" maxlength="5000" style="min-height:72px">' + esc(l.songFeedback?.[id] || '') + '</textarea></label>').join('') +
     '<label class="field"><span>내 메모</span><textarea name="memo" rows="3" maxlength="5000" style="min-height:72px">' + esc(l.memo || '') + '</textarea></label>' +
     (VZ.lessonStatus(l) === 'scheduled' && l.date <= VZ.today() ? '<label class="item" style="padding:0 0 8px"><input type="checkbox" name="complete" style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main">레슨 완료로 표시</span></label><p class="small muted" data-complete-note hidden style="margin:0 0 8px"></p>' : '') + '</form>',
@@ -257,7 +259,7 @@ function feedbackSheet(l) {
     onMount:(el, close) => {
       const form = el.querySelector('form');
       // 05-A: typing is kept on this device until saved (closing, reload or the app being killed loses nothing).
-      const draft = VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':feedback', [{name:'feedback', saved:l.feedback || ''}, {name:'memo', saved:l.memo || ''},
+      draft = VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':feedback', [{name:'feedback', saved:l.feedback || ''}, {name:'memo', saved:l.memo || ''},
         ...songIds.map(id => ({name:'song_' + id, saved:l.songFeedback?.[id] || ''}))]);
       // Saving feedback does not complete the lesson unless the box is ticked; ticking it says what completing deducts.
       const box = form.complete, note = el.querySelector('[data-complete-note]');
