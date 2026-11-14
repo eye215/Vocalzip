@@ -106,6 +106,7 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
+      const draft = l ? VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':prep', [{name:'prep', saved:l.prepMemo || ''}]) : null;
       const drawSongs = () => {
         songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song data-pick="song"><option value="">곡을 선택해 추가하세요</option>' +
           VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
@@ -137,7 +138,7 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
           if (l) { const x = d.lessons.find(y => y.id === l.id); if (x) { Object.assign(x, fields); if (!songIds.length && l.songId && !(l.songIds || []).length) x.songId = ''; } }
           else { id = VZ.uid(); d.lessons.push({id, ...fields, feedback:'', memo:'', recordings:[], created:Date.now()}); }
         });
-        if (ok) { close(); VZ.toast(l ? '레슨 일정을 저장했어요.' : '레슨 일정을 추가했어요.'); if (!l) VZ.nav('#/lesson/' + id); }
+        if (ok) { draft?.clear(); close(); VZ.toast(l ? '레슨 일정을 저장했어요.' : '레슨 일정을 추가했어요.'); if (!l) VZ.nav('#/lesson/' + id); }
       };
     }});
 };
@@ -255,6 +256,9 @@ function feedbackSheet(l) {
     foot:'<button type="submit" form="fb-form" class="btn block">피드백 저장</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form');
+      // 05-A: typing is kept on this device until saved (closing, reload or the app being killed loses nothing).
+      const draft = VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':feedback', [{name:'feedback', saved:l.feedback || ''}, {name:'memo', saved:l.memo || ''},
+        ...songIds.map(id => ({name:'song_' + id, saved:l.songFeedback?.[id] || ''}))]);
       // Saving feedback does not complete the lesson unless the box is ticked; ticking it says what completing deducts.
       const box = form.complete, note = el.querySelector('[data-complete-note]');
       if (box) {
@@ -273,7 +277,7 @@ function feedbackSheet(l) {
           x.songFeedback = sf;
           if (form.complete?.checked) { x.status = 'done'; x.completedAt = Date.now(); }
         });
-        if (ok) { close(); VZ.toast('피드백을 저장했어요.'); }
+        if (ok) { draft?.clear(); close(); VZ.toast('피드백을 저장했어요.'); }
       };
     }});
 }
