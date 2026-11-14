@@ -86,7 +86,7 @@ function render(host,plan,items,action){
   const message=host.querySelector('[data-outcome-status]');
   try{
    const updated=Model.report({plan,goals:V.db.dailyGoals||[],recordings:items,dateOf:M.dateOf,
-    valid:m=>[1,2].includes(m.analysis?.v)&&V.analysisReliable?.(m.analysis),asOf:V.today()});
+    valid:V.growthDataset.ok,asOf:V.today()});
    updated.created=Date.now();updated.createdDate=V.today();
    if(!V.change(db=>{
     db.vocalPlanReports ||= [];

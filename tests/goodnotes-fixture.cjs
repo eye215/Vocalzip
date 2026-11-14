@@ -76,11 +76,18 @@ function zip(files) {
 }
 
 const uuid = n => '00000000-0000-4000-8000-' + n.toString(16).toUpperCase().padStart(12, '0');
+/** A few bytes that start like a GoodNotes recording: an MP4 `ftyp` box (M4A), then filler that differs per seed. */
+const m4a = (seed = 1, size = 96) => Buffer.concat([u32(0), Buffer.from('ftypM4A '), u32(0), Buffer.from('M4A mp42isom'), Buffer.from(Array.from({length:size}, (_, i) => (i * 31 + seed * 17) & 255))]).fill(Buffer.from([0, 0, 0, 28]), 0, 4);
+const FLICKS = 705600000;
 /**
  * pages: [{pdfPage, order, ink?: [inkItem…]}], outline: [{page: index, title, order}]
  * Page ids are even numbers so that "page id + 1" (the ink file id) never collides with another page.
+ * recordings: [{title, seconds, deleted, bytes, renames?: [{title, counter}], missing?}] — audio recorded in the notebook:
+ *   event 160 (created: recording id, attachment id, document id, length in flicks), 164 (title register), 163 (deleted),
+ *   161 (a stroke tied to a moment; ignored by the reader), plus the attachment event/row/file. A deleted recording has
+ *   no file; `missing` keeps the attachment row but leaves the file out of the archive.
  */
-function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n% synthetic\n'), pages, outline = [], width = 600, height = 800, rename = ''}) {
+function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n% synthetic\n'), pages, outline = [], width = 600, height = 800, rename = '', recordings = []}) {
   const DOC = uuid(0xD0C), ATT = uuid(0xA77), FILE = uuid(0xF11E);
   const events = [event(DOC, 30, msg(s(1, DOC), reg(2, title), s(9, 'ko_KR'))),
     event(ATT, 6, msg(s(1, ATT), s(2, FILE), s(6, DOC)))];
@@ -101,10 +108,23 @@ function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n%
   });
   outline.forEach((o, i) => events.push(event(uuid(0x1000 + o.page * 2), 65, msg(s(1, uuid(0x1000 + o.page * 2)), s(2, uuid(0xE000 + i)), ld(4, msg(s(1, o.order || String(i)))), ld(5, msg(s(1, o.title)))))));
   if (rename) events.push(event(DOC, 31, msg(s(1, DOC), reg(2, rename))));
+  const audio = [], audioFiles = [];
+  recordings.forEach((r, i) => {
+    const id = uuid(0x5000 + i), att = uuid(0x6000 + i), file = uuid(0x6100 + i);
+    const name = (text, counter) => event(id, 164, msg(s(1, id), s(2, DOC), ld(3, msg(s(1, text), ld(2, msg(num(1, counter), num(2, 7)))))));
+    events.push(event(att, 6, msg(s(1, att), s(2, file), s(6, DOC))));
+    events.push(event(id, 160, msg(s(1, id), s(2, att), s(3, DOC), num(4, Math.round((r.seconds ?? 60) * FLICKS)))));
+    if (r.title) events.push(name(r.title, 1));
+    for (const n of r.renames || []) events.push(name(n.title, n.counter ?? 2));
+    events.push(event(uuid(0x5800 + i), 161, msg(s(1, uuid(0x5800 + i)), s(2, id), s(3, DOC), num(4, FLICKS))));
+    if (r.deleted) { events.push(event(id, 163, msg(s(1, id), s(2, DOC)))); return; }
+    audio.push(msg(s(1, att), s(2, 'attachments/' + file)));
+    if (!r.missing) audioFiles.push(['attachments/' + file, r.bytes || m4a(i + 1), false]);
+  });
   // Event kinds the reader does not know must simply be counted.
   events.push(event(DOC, 99, msg(s(1, DOC))));
   return zip([['schema.pb', num(1, 26), false], ['index.events.pb', stream(events), true],
-    ['index.attachments.pb', stream([msg(s(1, ATT), s(2, 'attachments/' + FILE))]), false],
-    ['index.notes.pb', stream(notes), false], ['attachments/' + FILE, pdf, false], ...files]);
+    ['index.attachments.pb', stream([msg(s(1, ATT), s(2, 'attachments/' + FILE)), ...audio]), false],
+    ['index.notes.pb', stream(notes), false], ['attachments/' + FILE, pdf, false], ...audioFiles, ...files]);
 }
-module.exports = {notebook, inkItem, pathTuple, penTuple, brushTuple, stored, lz4Literals, zip, uuid};
+module.exports = {notebook, inkItem, pathTuple, penTuple, brushTuple, stored, lz4Literals, zip, uuid, m4a};

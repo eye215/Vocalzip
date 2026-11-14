@@ -5,18 +5,17 @@ const V = window.VZ, M = V?.media;
 if (!V || !M) return;
 const e = V.esc;
 const G = window.VzipGrowthMetrics;
-if (!G) return;
+if (!G || !V.growthDataset) return;
 // 성장 리포트 v2: the six separated measures (app/growth-metrics-model.js). ids intonation/stability/phrase stay the
 // practice-plan keys; range/high/passaggio are shown but never planned (range neutral, passaggio reference only).
 const definitions = G.METRICS;
 const ym = s => /^\d{4}-\d{2}/.test(String(s||'')) ? String(s).slice(0,7) : '';
 const avg = xs => xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
 let request = 0;
-function isSongTake(m) {
- if(!m.songId||!V.song(m.songId))return false;
- const practice=M.owner?.(m)?.practice;
- return !practice?.practiceRoom && practice?.practiceMode!=='training';
-}
+/* Which recordings count, whether an analysis is reliable and what a take is are decided in ONE place,
+ * app/growth-dataset.js. This screen reads rule 'verdict': the song's recordings, without 노래 연습실 submissions and
+ * 트레이닝 practices. */
+const songRowsOf = items => V.growthDataset(items).pick('verdict');
 function group(items) {
  const months = new Map();
  for(const m of items){
@@ -25,8 +24,7 @@ function group(items) {
  }
  return months;
 }
-const valid = m => [1,2].includes(m.analysis?.v) && V.analysisReliable?.(m.analysis);
-const takeOf = m => ({id:m.id, a:m.analysis, date:String(M.dateOf(m)||'').slice(0,10), created:m.created, ok:!!valid(m)});
+const valid = V.growthDataset.ok, takeOf = V.growthDataset.take;
 const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
 /** 성장 통합 (#385): ONE model pass for 결과 리포트 and the 보컬 분석 tab (app/growth-hub.js), so switching tabs
  * never runs the per-song reports again. The result is never older than what it was built from: the song takes are
@@ -36,15 +34,16 @@ const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r &
  * or without a change event and also when the list is the same array as before. */
 let shared=null;
 for(const name of ['vzip:data-changed','vzip:analysis-saved','vzip:v6-media'])window.addEventListener(name,()=>{shared=null;});
-function modelInputs(songItems){
+function modelInputs(rows){
  const key=[],songs=new Set();
- for(const m of songItems){key.push(m,m.songId,m.analysis,M.dateOf(m),m.created);songs.add(m.songId);}
+ for(const r of rows){key.push(r.m,r.songId,r.a,r.date,r.m.created);songs.add(r.songId);}
  for(const id of songs)key.push(id,V.songTitle(id),JSON.stringify(referenceOf(id)));
  return key;
 }
 V.growthModel=items=>{
- const songItems=items.filter(isSongTake),key=modelInputs(songItems);
+ const rows=songRowsOf(items),key=modelInputs(rows);
  if(shared&&shared.key.length===key.length&&key.every((x,i)=>Object.is(x,shared.key[i])))return shared;
+ const songItems=rows.map(r=>r.m);
  let overall;
  return shared={items,songItems,key,get overall(){
   return overall??=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid,reference:referenceOf,title:id=>V.songTitle(id)})||null;

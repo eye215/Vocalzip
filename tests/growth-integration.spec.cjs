@@ -12,7 +12,7 @@ test('new vocal growth route does not replace existing statistics growth',()=>{
 });
 test('dependencies load in correct order',()=>{
  const html=file('index.html');
- const files=['app/analysis.js','app/growth-metrics-model.js','app/weak-phrase.js','app/segment-ab-model.js',
+ const files=['app/analysis.js','app/growth-metrics-model.js','app/growth-dataset.js','app/weak-phrase.js','app/segment-ab-model.js',
   'app/segment-ab-ui.js','app/plan-outcome-model.js','app/plan-outcome-ui.js',
   'app/monthly-practice-plans.js','app/monthly-growth.js'];
  const indexes=files.map(p=>html.indexOf('src="'+p+'?'));
@@ -26,12 +26,18 @@ test('all synced report arrays exist in core and conflict merge',()=>{
  }
 });
 test('song reports exclude unlabeled training and exercise takes',()=>{
+ // The rule now lives in app/growth-dataset.js ('verdict'); the month view reads it and passes those takes on.
  const js=file('app/monthly-growth.js');
- assert.match(js,/if\(!m\.songId\|\|!V\.song\(m\.songId\)\)return false/);
- assert.match(js,/!practice\?\.practiceRoom/);
- assert.match(js,/practice\?\.practiceMode!=='training'/);
- assert.match(js,/songItems=items\.filter\(isSongTake\)/);
+ assert.match(js,/V\.growthDataset\(items\)\.pick\('verdict'\)/);
+ assert.match(js,/rows=songRowsOf\(items\)/);assert.match(js,/songItems=rows\.map\(r=>r\.m\)/);
  assert.match(js,/selected,songItems,rows/);
+ assert.doesNotMatch(js,/function isSongTake|M\.owner/,'the month view no longer decides this itself');
+ const D=require('../app/growth-dataset.js');
+ const db={songs:[{id:'s'}],practices:[{id:'room',mediaIds:['r'],practiceRoom:{id:'x'}},{id:'tr',mediaIds:['t'],practiceMode:'training'}]};
+ const media=[{id:'a',songId:'s'},{id:'r',songId:'s'},{id:'t',songId:'s'},{id:'n',songId:''},{id:'gone',songId:'deleted-song'}];
+ const ds=D.build(media,db,{reliable:()=>true});
+ assert.deepEqual(ds.items('verdict').map(m=>m.id),['a']);
+ assert.deepEqual(ds.rows.map(r=>ds.why(r,'verdict')),['','practice-room','training-practice','no-song','song-missing']);
 });
 test('AI reports remain explicit opt-in with no direct audio upload',()=>{
  const js=file('app/monthly-growth.js');
@@ -105,3 +111,5 @@ test('overall AI is explicit, durable and does not upload audio',()=>{
  assert.ok(api.indexOf("input.mode === 'overall'")<api.indexOf('const audio = input.audio'));
  assert.match(api,/overall\?'overall':'monthly'/);
 });
+// The growth dataset's own tests (inclusion rules, takes, the range selection) run with this file wherever it runs.
+require('./growth-dataset.test.cjs');

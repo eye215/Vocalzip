@@ -47,8 +47,6 @@ const empty = (title, text, action = '') => '<div class="growth-hub-empty"><stro
 let request = 0;
 
 /* ---------- 보컬 분석 ---------- */
-// The same recordings 보컬 연구소 lists for a song (app/vocal-lab.js): the song's own, without videos.
-const analysed = m => !!m.analysis?.metrics;
 /** 비교 가능 / 판정 보류 / 분석 전 from the per-song reports 결과 리포트 already made (V.growthModel) — nothing is
  * calculated again per row. 비교 가능: at least one measure has two takes it could compare. */
 const STATE = {ok:'비교 가능', hold:G?.HOLD_LABEL || '판정 보류', none:'분석 전'};
@@ -67,14 +65,16 @@ async function mountAnalysis(host) {
   // One pass over the list 결과 리포트 reads, and its model (one M.list(), one set of song reports for both tabs;
   // V.growthModel checks its inputs on every call, so this is never older than the list and the records).
   const reports = new Map((V.growthModel?.(items)?.overall?.reports || []).map(r => [r.songId, r.report]));
-  const bySong = new Map(), recent = [];
-  for (const m of items) {
-    if (analysed(m) && recent.length < 5) recent.push(m);            // the list is newest recording first
-    if (!m.songId || M.isVideo(m) || !V.song(m.songId)) continue;
-    const s = bySong.get(m.songId) || {count:0, analysed:0, latest:''};
-    s.count++; if (analysed(m)) s.analysed++;
-    const date = M.dateOf(m) || ''; if (date > s.latest) s.latest = date;
-    bySong.set(m.songId, s);
+  // Which recordings a song row counts is the dataset's rule 'songList' (app/growth-dataset.js): the song's own,
+  // without videos — 연습실 and 트레이닝 recordings of the song included, as 보컬 연구소 lists them.
+  const ds = V.growthDataset(items), bySong = new Map(), recent = [];
+  for (const r of ds.rows) {
+    if (r.analysed && recent.length < 5) recent.push(r.m);           // the list is newest recording first
+    if (ds.why(r, 'songList')) continue;
+    const s = bySong.get(r.songId) || {count:0, analysed:0, latest:''};
+    s.count++; if (r.analysed) s.analysed++;
+    if (r.date > s.latest) s.latest = r.date;
+    bySong.set(r.songId, s);
   }
   // Songs with recordings first, the most recently recorded on top; the rest keep the 내 곡 order.
   const withTakes = songs.filter(s => bySong.has(s.id)).sort((a, b) => bySong.get(b.id).latest.localeCompare(bySong.get(a.id).latest));
