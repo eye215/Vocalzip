@@ -37,6 +37,12 @@ function defaultDue() {
   if (next) return next.date;
   const d = new Date(); d.setDate(d.getDate() + 7); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
+VZ.taskDefaultDue = defaultDue;
+/** A new 숙제, as 숙제 추가 saves it. Call inside VZ.change. */
+VZ.addTask = (d, {title, songId = '', lessonId = '', startDate = '', dueDate = ''}) => {
+  const task = {id:VZ.uid(), lessonId, lessonIds:lessonId ? [lessonId] : [], title, status:'active', songId, startDate, dueDate, created:Date.now()};
+  d.assignments.push(task); return task;
+};
 VZ.taskSheet = ({task, songId = '', lessonId = ''} = {}) => {
   const db = VZ.db, t = task;
   const lessons = [...db.lessons].sort((a, b) => VZ.lessonSort(b, a)).slice(0, 40);
@@ -70,7 +76,7 @@ VZ.taskSheet = ({task, songId = '', lessonId = ''} = {}) => {
             const ids = VZ.taskLessons(x).filter(id => id !== VZ.taskLessons(t)[0]);
             x.lessonIds = lid ? [lid, ...ids.filter(id => id !== lid)] : ids; x.lessonId = x.lessonIds[0] || '';
             const done = form.done?.checked; if (done && x.status !== 'done') x.doneAt = Date.now(); if (!done) delete x.doneAt; x.status = done ? 'done' : 'active';
-          } else d.assignments.push({id:VZ.uid(), lessonId:lid, lessonIds:lid ? [lid] : [], title, status:'active', songId:sid, startDate, dueDate, created:Date.now()});
+          } else VZ.addTask(d, {title, songId:sid, lessonId:lid, startDate, dueDate});
         });
         if (ok) { close(); VZ.toast(t ? '숙제를 저장했어요.' : '숙제를 추가했어요.'); }
       };

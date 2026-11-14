@@ -29,10 +29,11 @@ async function make({document:source,binding,annotations,check=()=>{},onProgress
   try{
    // 스티커 메모 go under the handwriting, as in the viewer. Viewer page space → canvas, whatever the page rotation.
    const notes=annotations.filter(s=>s.page===number&&Ink.isNote(s));
+   const at=(vx,vy)=>{const [x,y]=viewport.convertToPdfPoint(vx,vy);return [(x-crop.x)*scale,(crop.y+crop.height-y)*scale];};
+   const o=at(0,0),ex=at(1,0),ey=at(0,1),unit=Math.hypot(ex[0]-o[0],ex[1]-o[1]);
+   const viewerSpace=()=>{ctx.save();ctx.setTransform(ex[0]-o[0],ex[1]-o[1],ey[0]-o[0],ey[1]-o[1],o[0],o[1]);};
    if(notes.length){
-    const at=(vx,vy)=>{const [x,y]=viewport.convertToPdfPoint(vx,vy);return [(x-crop.x)*scale,(crop.y+crop.height-y)*scale];};
-    const o=at(0,0),ex=at(1,0),ey=at(0,1),unit=Math.hypot(ex[0]-o[0],ex[1]-o[1]);
-    ctx.save();ctx.setTransform(ex[0]-o[0],ex[1]-o[1],ey[0]-o[0],ey[1]-o[1],o[0],o[1]);
+    viewerSpace();
     for(const n of notes){
      check();const m=Ink.noteLayout(n,viewport.width,viewport.height,ctx),r=Math.min(m.radius,m.w/2,m.h/2);
      ctx.beginPath();ctx.moveTo(m.x+r,m.y);ctx.arcTo(m.x+m.w,m.y,m.x+m.w,m.y+m.h,r);ctx.arcTo(m.x+m.w,m.y+m.h,m.x,m.y+m.h,r);ctx.arcTo(m.x,m.y+m.h,m.x,m.y,r);ctx.arcTo(m.x,m.y,m.x+m.w,m.y,r);ctx.closePath();
@@ -42,7 +43,15 @@ async function make({document:source,binding,annotations,check=()=>{},onProgress
     ctx.restore();
    }
    for(const s of annotations.filter(s=>s.page===number&&!Ink.isNote(s))){
-    check();ctx.strokeStyle=s.color;ctx.globalAlpha=Ink.opacity(s);const origin=viewport.convertToPdfPoint(0,0),edge=viewport.convertToPdfPoint(s.width*viewport.width,0);ctx.lineWidth=Math.hypot(edge[0]-origin[0],edge[1]-origin[1])*scale;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
+    check();
+    if(s.glyph){
+     // 악보 표기 written as characters: the same place, size and boldness as in the viewer.
+     const g=Ink.glyphLayout(s,viewport.width,viewport.height);
+     viewerSpace();ctx.globalAlpha=Ink.opacity(s);ctx.fillStyle=ctx.strokeStyle=s.color;ctx.font='700 '+g.size+'px '+Ink.NOTE_FAMILY;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.lineJoin='round';
+     if(g.bold>0){ctx.lineWidth=g.bold;ctx.strokeText(g.text,g.x,g.y);}
+     ctx.fillText(g.text,g.x,g.y);ctx.restore();continue;
+    }
+    ctx.strokeStyle=s.color;ctx.globalAlpha=Ink.opacity(s);const origin=viewport.convertToPdfPoint(0,0),edge=viewport.convertToPdfPoint(s.width*viewport.width,0);ctx.lineWidth=Math.hypot(edge[0]-origin[0],edge[1]-origin[1])*scale;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
     let first;
     s.points.forEach((p,i)=>{
      const [x,y]=viewport.convertToPdfPoint(p[0]*viewport.width,p[1]*viewport.height),px=(x-crop.x)*scale,py=(crop.y+crop.height-y)*scale;

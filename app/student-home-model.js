@@ -190,7 +190,8 @@ function savePlan(db,input){
       seen.add(g.id);
       const old=previous.get(g.id),title=String(g.title??old?.title??'').trim(),source=g.source||old?.source||'personal';
       if(!title||!['homework','personal','recommendation'].includes(source))throw Error('목표 내용과 출처를 확인해 주세요.');
-      return {...old,...(!old&&g.recommendation?{songId:String(g.songId||''),recommendation:copy(g.recommendation)}:{}),id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
+      // A new goal may name its song (a recommendation always does; a goal made from a score memo does too).
+      return {...old,...(!old&&g.recommendation?{songId:String(g.songId||''),recommendation:copy(g.recommendation)}:!old&&g.songId?{songId:String(g.songId)}:{}),id:g.id,date,title,source,sourceId:String(g.sourceId??old?.sourceId??''),
         completed:typeof g.completed==='boolean'?g.completed:old?.completed===true,order:old?Number(old.order)||0:nextOrder++};
     });
     // Leaving a goal out removes it, except completed goals and goals with a 수행 기록: those stay as they are.

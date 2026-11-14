@@ -186,3 +186,63 @@ test('memos are saved, listed, synced, tombstoned and restored like strokes; an 
  const c=fixture();c.hooks.failChange=true;assert.equal(c.store.commit({add:[m]}),false);c.hooks.failChange=false;
  assert.equal(Ink.create(c.options).restore(),true);assert.deepEqual(c.data.scoreAnnotations.map(s=>s.tool),['note']);
 });
+/* 악보 표기 (marks): strokes laid out from a preset, carrying their own look and what they are. */
+const look=(extra={})=>({form:'symbol',shape:'v',color:'#7a32f5',width:.006,type:'pen',...extra});
+const mark=(id,l,a,b,extra={})=>({version:1,id,...binding,page:1,...Ink.markStroke(l,a,b,4/3),mark:'breath',createdAt:1,...extra});
+test('the four built-in looks lay out exactly as before: 숨표 V, 시작점 circle, 컷 band, 반복 bracket',()=>{
+ const a=[.5,.5,.5],b=[.8,.6,.5],h=.017/(4/3),r=n=>Math.round(n*100000)/100000;
+ assert.deepEqual(Ink.markStroke(look(),a,null,4/3),{tool:'pen',color:'#7a32f5',opacity:1,width:.006,points:[[.484,r(.5-h),.5],[.5,r(.5+h),.5],[.516,r(.5-h),.5]]});
+ const circle=Ink.markStroke(look({shape:'circle'}),a,null,4/3);
+ assert.equal(circle.points.length,21);assert.deepEqual(circle.points[0],[.518,.5,.5]);assert.deepEqual(circle.points[20],circle.points[0]);
+ assert.deepEqual(Ink.markStroke(look({form:'cover',type:'highlighter',width:.04}),a,b,4/3),{tool:'highlighter',color:'#7a32f5',opacity:.25,width:.04,points:[[.5,.5,.5],[.8,.6,.5]]});
+ assert.deepEqual(Ink.markStroke(look({form:'cover',type:'highlighter',width:.04}),a,null,4/3).points,[[.5,.5,.5],[.57,.5,.5]]); // a tap: the standard length
+ const k=.023/(4/3);
+ assert.deepEqual(Ink.markStroke(look({form:'bracket'}),a,b,4/3).points,[[.5,r(.5-k),.5],[.5,r(.5+k),.5],[.8,r(.6+k),.5],[.8,r(.6-k),.5]]);
+});
+test('every form is a valid ordinary stroke inside the page, so a client that knows nothing of marks draws it as it is',()=>{
+ const forms=[look({shape:'comma'}),look({shape:'check'}),look({shape:'dot'}),look({shape:'triangle'}),look({shape:'star'}),look({shape:'diamond'}),look({shape:'circle'}),
+  look({form:'line'}),look({form:'wave'}),look({form:'box'}),look({form:'cover',type:'highlighter',width:.04}),look({form:'bracket'})];
+ for(const l of forms)for(const [a,b] of [[[.3,.4,.5],[.7,.45,.5]],[[.999,.001,.5],[0,1,.5]],[[.5,.5,.5],null]]){
+  const row=mark('m',l,a,b),{mark:_,...plain}=row;
+  assert.ok(Ink.valid(row),JSON.stringify([l,a,b]));assert.ok(Ink.valid(plain));
+  assert.ok(['pen','highlighter'].includes(row.tool));assert.equal(row.glyph,undefined);assert.ok(row.points.every(p=>p.every(n=>n>=0&&n<=1)));
+ }
+ assert.equal(Ink.markStroke(look({form:'box'}),[.2,.2,.5],[.6,.5,.5],1).points.length,5);
+ const wave=Ink.markStroke(look({form:'wave'}),[.2,.5,.5],[.5,.5,.5],1).points;
+ assert.equal(wave.length,81);assert.deepEqual([wave[0],wave.at(-1)],[[.2,.5,.5],[.5,.5,.5]]);assert.ok(wave.some(p=>p[1]>.506)&&wave.some(p=>p[1]<.494));
+ assert.ok(Ink.markStroke(look({form:'wave'}),[0,0,.5],[1,1,.5],1.4).points.length<=Ink.MAX_POINTS);
+ // 점: one point whose thickness is its size; a see-through mark is a highlighter stroke.
+ assert.deepEqual(Ink.markStroke(look({shape:'dot'}),[.5,.5,.5],null,1),{tool:'pen',color:'#7a32f5',opacity:1,width:.024,points:[[.5,.5,.5]]});
+ assert.equal(Ink.opacity(mark('h',look({type:'highlighter'}),[.5,.5,.5],null)),.25);
+});
+test('typed characters are a one-point stroke with glyph and size: validated, measured, moved and scaled with the rest',()=>{
+ const g=mark('g',look({shape:'text',text:'mf'}),[.5,.5,.5],null,{mark:'m-1'});
+ assert.deepEqual([g.glyph,g.size,g.points,g.tool],['mf',.04,[[.5,.5,.5]],'pen']);assert.ok(Ink.valid(g));
+ for(const bad of [{glyph:''},{glyph:'12345'},{glyph:'a b'},{glyph:5},{size:undefined},{size:.5},{size:0},{points:[[.1,.1,.5],[.2,.2,.5]]},{mark:''},{mark:7}])assert.equal(Ink.valid({...g,...bad}),false,JSON.stringify(bad));
+ assert.equal(Ink.valid({...stroke('s'),size:.04}),false); // size only belongs to a glyph
+ assert.ok(Ink.valid({...g,glyph:'가나다라'}));assert.ok(Ink.valid({...g,glyph:'𝆑𝆏'})); // counted in characters
+ assert.equal(Ink.same(g,{...g}),true);assert.equal(Ink.same(g,{...g,glyph:'mp'}),false);assert.equal(Ink.same(g,{...g,mark:'start'}),false);assert.equal(Ink.same(g,{...g,size:.05}),false);
+ // The letters, not the single point, are what the eraser and the selection find.
+ assert.equal(Ink.hit(g,[.53,.5,.5],1,.001),true);assert.equal(Ink.hit(g,[.6,.5,.5],1,.001),false);
+ assert.deepEqual(Ink.inRect([g],{x:.52,y:.49,w:.2,h:.02},1).map(s=>s.id),['g']);assert.deepEqual(Ink.inRect([g],{x:.56,y:.49,w:.2,h:.02},1),[]);
+ const b=Ink.bounds([g],1);assert.ok(b.w>.07&&b.h>.04);
+ const moved=Ink.transform([g],{dx:.1,dy:-.2},1)[0];assert.deepEqual([moved.points[0][0],moved.points[0][1],moved.size,moved.glyph,moved.mark],[.6,.3,.04,'mf','m-1']);
+ assert.equal(Ink.transform([g],{scale:2},1)[0].size,.08);assert.equal(Ink.transform([g],{scale:100},1)[0].size<=Ink.GLYPH_MAX,true);assert.equal(Ink.transform([g],{scale:.01},1)[0].size,Ink.GLYPH_MIN);
+ assert.deepEqual(Ink.glyphLayout(g,1000,1300),{text:'mf',x:500,y:650+40*.36,size:40,bold:1.5});
+});
+test('marks are saved, synced and restored like any stroke, with what they are',()=>{
+ const a=fixture(),b=fixture(),rows=[mark('v',look(),[.3,.3,.5],null),mark('t',look({shape:'text',text:'A1'}),[.6,.6,.5],null,{mark:'m-9',createdAt:2})];
+ assert.equal(a.store.commit({add:rows}),true);b.store.commit({add:[stroke('b')]});
+ const merged=Merge.merge(a.data,b.data).data;b.setData(merged);assert.equal(b.store.restore(),true);
+ assert.deepEqual(b.store.list(binding).map(s=>[s.id,s.mark,s.glyph]),[['b',undefined,undefined],['v','breath',undefined],['t','m-9','A1']]);
+ assert.throws(()=>a.store.commit({add:[{...rows[0],mark:'cut'}]}),{code:'conflict'}); // never changed in place
+});
+/* 목표로 넣기: a memo's text as a list. */
+test('memo lines become a list: one per line break, bullets, numbers and tick boxes stripped, blanks and repeats left out',()=>{
+ assert.deepEqual(Ink.noteGoalLines('- 2절 숨 크게\n1. 박자  주의\n\n• [ ] 고음 힘 빼기\n(3) 끝음 길게\r\n2) 호흡\n2절 숨 크게\n   \n*\n① 가사 외우기\n- - 3번 반복'),
+  ['2절 숨 크게','박자 주의','고음 힘 빼기','끝음 길게','호흡','가사 외우기','3번 반복']);
+ // Numbers that belong to the sentence stay.
+ assert.deepEqual(Ink.noteGoalLines('-5도 올리기\n1.5배 빠르게\n3번 반복\n2절부터'),['-5도 올리기','1.5배 빠르게','3번 반복','2절부터']);
+ assert.deepEqual(Ink.noteGoalLines('-박자\n2.호흡'),['박자','호흡']);
+ assert.deepEqual(Ink.noteGoalLines(''),[]);assert.deepEqual(Ink.noteGoalLines(undefined),[]);assert.deepEqual(Ink.noteGoalLines('\n \n-\n'),[]);
+});

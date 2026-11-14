@@ -12,8 +12,14 @@
  *          text (optional string, at most NOTE_TEXT_MAX; drawn wrapped inside the memo, NOTE_FONT of page width),
  *          note (optional): its link key. A memo without it is linked by its id; a moved/edited copy keeps the key.
  *          An importer writes {tool:'note', id, color, rect, mode:'pen'} and strokes carrying note:<that id>.
+ * Mark     악보 표기 (숨표·반복·컷·시작점 and the user's own): an ordinary stroke whose points were laid out from the
+ *          marker preset when it was placed (markStroke), so it keeps its own look whatever the preset becomes later.
+ *          mark (optional): what it is — 'breath' | 'repeat' | 'cut' | 'start', or the id of a user preset. A mark is
+ *          told apart by this, never by how it looks. Marks placed before 2026-11-14 have no `mark`.
+ *          glyph (optional, with size): 1–4 characters drawn centred on the single point instead of the line;
+ *          size is the letter height of page width (GLYPH_MIN–GLYPH_MAX), width its extra boldness.
  * Clients older than memos skip records they do not know when listing (valid() is false), so they neither show nor
- * remove a memo; strokes carrying `note` are ordinary strokes to them. */
+ * remove a memo; strokes carrying `note` or `mark` are ordinary strokes to them (a glyph mark is a dot there). */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipScoreInk=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const COLLECTION='scoreAnnotations',PREFIX='vzip_score_ink_v1:',MAX_BYTES=2*1024*1024,MAX_POINTS=2048;
@@ -25,6 +31,15 @@ const NOTE_TEXT_MAX=2000,NOTE_MIN=0.02,NOTE_SIZE=0.235,NOTE_SMALLEST=0.1,NOTE_FO
 const NOTE_FAMILY='Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif';
 const NOTE_COLORS=[['#fbe88c','노랑'],['#fbcfe0','분홍'],['#c9ecc9','초록'],['#cfe3fb','파랑']];
 const isNote=s=>s?.tool==='note';
+/* 악보 표기. MARK_UNIT: half the size of a 기호 (of page width). */
+const MARK_UNIT=0.018,MARK_OPACITY=0.25,GLYPH_SIZE=0.04,GLYPH_MIN=0.01,GLYPH_MAX=0.2,GLYPH_CHARS=4;
+const glyphChars=t=>typeof t==='string'?[...t]:[];
+const validGlyph=s=>{const n=glyphChars(s.glyph).length;return n>=1&&n<=GLYPH_CHARS&&!/\s/.test(s.glyph)&&Number.isFinite(s.size)&&s.size>=GLYPH_MIN&&s.size<=GLYPH_MAX&&s.points?.length===1;};
+/** Half the room a stroke takes around its points, across and down, of page width. */
+function reach(s){
+ if(!s.glyph)return [s.width/2,s.width/2];
+ return [Math.max(s.width/2,s.size*Math.max(.5,glyphChars(s.glyph).length*.45)),Math.max(s.width/2,s.size*.55)];
+}
 function validNote(s){
  const r=s.rect;
  return Array.isArray(r)&&r.length===4&&r.every(Number.isFinite)&&r[0]>=0&&r[1]>=0&&r[2]>=NOTE_MIN&&r[3]>=NOTE_MIN&&r[0]+r[2]<=1.00001&&r[1]+r[3]<=1.00001&&
@@ -38,9 +53,10 @@ function valid(s){
   (isNote(s)?validNote(s):
   ['pen','highlighter'].includes(s.tool)&&Number.isFinite(s.width)&&s.width>=0.001&&s.width<=0.06&&
   (s.opacity===undefined||Number.isFinite(s.opacity)&&s.opacity>=0.05&&s.opacity<=1)&&
-  Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit)));
+  Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit))&&
+  (s.mark===undefined||validId(s.mark))&&(s.glyph===undefined?s.size===undefined:validGlyph(s)));
 }
-const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text'];
+const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text','mark','glyph','size'];
 const same=(a,b)=>JSON.stringify(FIELDS.map(k=>a[k]))===JSON.stringify(FIELDS.map(k=>b[k]));
 const opacity=s=>isNote(s)?1:s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
 const round=n=>Math.round(n*100000)/100000;
@@ -95,6 +111,7 @@ function noteLayout(n,W,H,ctx){
 function hit(s,p,aspect=1,radius=0.018){
  if(isNote(s))return false; // the eraser and the stroke selection never take a memo's background
  const x=p[0],y=p[1]*aspect,r=Math.max(s.width/2,radius),pts=s.points;
+ if(s.glyph){const [rx,ry]=reach(s);return Math.abs(x-pts[0][0])<=Math.max(rx,radius)&&Math.abs(y-pts[0][1]*aspect)<=Math.max(ry,radius);}
  const dist=(a,b)=>{
   const ax=a[0],ay=a[1]*aspect,bx=b[0],by=b[1]*aspect,dx=bx-ax,dy=by-ay,den=dx*dx+dy*dy,t=den?Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/den)):0;
   return Math.hypot(x-ax-t*dx,y-ay-t*dy);
@@ -110,14 +127,14 @@ function bounds(rows,aspect=1){
  if(!rows.length||!Number.isFinite(aspect)||aspect<=0)return null;
  let x=Infinity,y=Infinity,right=-Infinity,bottom=-Infinity;
  for(const s of rows)if(isNote(s)){x=Math.min(x,s.rect[0]);y=Math.min(y,s.rect[1]);right=Math.max(right,s.rect[0]+s.rect[2]);bottom=Math.max(bottom,s.rect[1]+s.rect[3]);}
- else for(const p of s.points){const r=s.width/2;x=Math.min(x,p[0]-r);right=Math.max(right,p[0]+r);y=Math.min(y,p[1]-r/aspect);bottom=Math.max(bottom,p[1]+r/aspect);}
+ else{const [rx,ry]=reach(s);for(const p of s.points){x=Math.min(x,p[0]-rx);right=Math.max(right,p[0]+rx);y=Math.min(y,p[1]-ry/aspect);bottom=Math.max(bottom,p[1]+ry/aspect);}}
  return {x,y,w:right-x,h:bottom-y};
 }
 function inRect(rows,rect,aspect=1){
  const x=Math.min(rect.x,rect.x+rect.w),y=Math.min(rect.y,rect.y+rect.h),right=Math.max(rect.x,rect.x+rect.w),bottom=Math.max(rect.y,rect.y+rect.h);
  return rows.filter(s=>{
   if(isNote(s))return false;
-  const r=s.width/2,left=x-r,top=y-r/aspect,w=right-x+2*r,h=bottom-y+2*r/aspect;
+  const [rx,ry]=reach(s),left=x-rx,top=y-ry/aspect,w=right-x+2*rx,h=bottom-y+2*ry/aspect;
   return s.points.some((b,i)=>{
    const a=s.points[Math.max(0,i-1)],dx=b[0]-a[0],dy=b[1]-a[1];let lo=0,hi=1;
    for(const [p,q]of [[-dx,a[0]-left],[dx,left+w-a[0]],[-dy,a[1]-top],[dy,top+h-a[1]]]){
@@ -129,14 +146,71 @@ function inRect(rows,rect,aspect=1){
 }
 function transform(rows,{dx=0,dy=0,scale=1}={},aspect=1){
  if(!rows.length||!rows.every(valid)||![dx,dy,scale,aspect].every(Number.isFinite)||scale<=0||aspect<=0)throw fail('선택한 필기 범위를 확인해 주세요.','geometry');
- const b=bounds(rows,aspect),min=Math.max(...rows.map(s=>isNote(s)?NOTE_MIN/Math.min(s.rect[2],s.rect[3]):.001/s.width)),max=Math.min(1/b.w,1/b.h,...rows.map(s=>isNote(s)?Infinity:.06/s.width));
+ const b=bounds(rows,aspect),min=Math.max(...rows.map(s=>isNote(s)?NOTE_MIN/Math.min(s.rect[2],s.rect[3]):Math.max(.001/s.width,s.glyph?GLYPH_MIN/s.size:0))),max=Math.min(1/b.w,1/b.h,...rows.map(s=>isNote(s)?Infinity:Math.min(.06/s.width,s.glyph?GLYPH_MAX/s.size:Infinity)));
  if(max<min)throw fail('이 필기는 더 줄일 수 없어요.','geometry');
  const k=Math.max(min,Math.min(max,scale)),x=Math.max(0,Math.min(1-b.w*k,b.x+dx)),y=Math.max(0,Math.min(1-b.h*k,b.y+dy));
  return rows.map(s=>{
-  if(!isNote(s))return {...clone(s),width:Math.max(.001,Math.min(.06,s.width*k)),points:s.points.map(p=>[point(x+(p[0]-b.x)*k,0)[0],point(0,y+(p[1]-b.y)*k)[1],p[2]])};
+  if(!isNote(s))return {...clone(s),width:Math.max(.001,Math.min(.06,s.width*k)),...(s.glyph?{size:Math.max(GLYPH_MIN,Math.min(GLYPH_MAX,round(s.size*k)))}:{}),points:s.points.map(p=>[point(x+(p[0]-b.x)*k,0)[0],point(0,y+(p[1]-b.y)*k)[1],p[2]])};
   const left=round(x+(s.rect[0]-b.x)*k),top=round(y+(s.rect[1]-b.y)*k);
   return {...clone(s),rect:[left,top,Math.min(round(s.rect[2]*k),round(1-left)),Math.min(round(s.rect[3]*k),round(1-top))]};
  });
+}
+/* 기호 shapes as one line through these corners, in MARK_UNIT around the pressed point (y down). */
+const MARK_SHAPES={
+ check:[[-.9,.05],[-.3,.8],[.95,-.8]],
+ comma:[[.2,-.9],[.335,-.6],[.372,-.3],[.312,0],[.155,.3],[-.1,.6],[-.45,.9]],
+ triangle:[[-.95,-.8],[.95,-.8],[0,.85],[-.95,-.8]],
+ star:Array.from({length:11},(_,i)=>{const t=-Math.PI/2+i*Math.PI/5,r=i%2?.42:1;return [r*Math.cos(t),r*Math.sin(t)];}),
+ diamond:[[0,-1],[.72,0],[0,1],[-.72,0],[0,-1]]
+};
+/** What a marker preset leaves on the page, as the fields of a stroke record: tool, color, opacity, width, points
+ *  (and glyph + size for typed characters). look = {form, shape, text, color, width, type}; a is where the press
+ *  began (the first tap of a 구간 괄호), b where it ended (the second tap) or null for a plain tap.
+ *  form 'symbol' (shape v | comma | check | circle | dot | triangle | star | diamond | text) is one point,
+ *  'line' | 'wave' | 'box' | 'cover' follow a drag from a to b, 'bracket' spans two taps. */
+function markStroke(look,a,b,aspect=1){
+ const k=Number.isFinite(aspect)&&aspect>0?aspect:1,at=(x,y)=>point(a[0]+x,a[1]+y/k),pen=look.type!=='highlighter';
+ const out={tool:pen?'pen':'highlighter',color:look.color,opacity:pen?1:MARK_OPACITY,width:look.width};
+ const form=look.form,shape=look.shape;
+ if(form==='bracket'){
+  const e=b||[a[0]+.09,a[1]],h=.023/k;
+  out.points=[point(a[0],a[1]-h),point(a[0],a[1]+h),point(e[0],e[1]+h),point(e[0],e[1]-h)];
+ }else if(form==='box'){
+  const e=b||[a[0]+.09,a[1]+.05/k];
+  out.points=[point(a[0],a[1]),point(e[0],a[1]),point(e[0],e[1]),point(a[0],e[1]),point(a[0],a[1])];
+ }else if(form==='wave'){
+  const e=b||[a[0]+.09,a[1]],dx=e[0]-a[0],dy=(e[1]-a[1])*k,length=Math.hypot(dx,dy)||.0001,waves=Math.max(1,Math.round(length/.03)),steps=Math.min(480,waves*8),rise=.007;
+  out.points=Array.from({length:steps+1},(_,i)=>{const t=i/steps,off=rise*Math.sin(t*waves*2*Math.PI);return point(a[0]+dx*t-dy/length*off,a[1]+(dy*t+dx/length*off)/k);});
+ }else if(form==='line'||form==='cover'){
+  out.points=[point(a[0],a[1]),b?point(b[0],b[1]):at(.07,0)];
+ }else if(shape==='text'){
+  out.points=[at(0,0)];out.glyph=glyphChars(look.text).slice(0,GLYPH_CHARS).join('');out.size=GLYPH_SIZE;
+ }else if(shape==='dot'){
+  out.points=[at(0,0)];out.width=Math.max(.012,Math.min(.06,look.width*4));
+ }else if(shape==='circle'){
+  out.points=Array.from({length:21},(_,i)=>{const t=i/20*Math.PI*2;return at(MARK_UNIT*Math.cos(t),MARK_UNIT*Math.sin(t));});
+ }else if(MARK_SHAPES[shape]){
+  out.points=MARK_SHAPES[shape].map(([x,y])=>at(x*MARK_UNIT,y*MARK_UNIT));
+ }else out.points=[at(-.016,-.017),at(0,.017),at(.016,-.017)]; // 'v', the breath mark
+ return out;
+}
+/** Where a glyph mark's characters go on a page W wide and H high: centre x, baseline y, letter size and the extra
+ *  outline that makes them bolder. The viewer (SVG) and the PDF export (canvas) both draw from this. */
+function glyphLayout(s,W,H){
+ const size=s.size*W;
+ return {text:s.glyph,x:s.points[0][0]*W,y:s.points[0][1]*H+size*.36,size,bold:Math.min(size*.12,s.width*W*.25)};
+}
+/** A memo's text as a list: one entry per non-empty line, without a leading bullet, number or tick box
+ *  ("- ", "• ", "1. ", "2) ", "[ ] "), each line once. "-5도" and "1.5배" keep their number. */
+function noteGoalLines(text){
+ const out=[];
+ for(const raw of String(text||'').split(/\r?\n/)){
+  let line=raw.trim(),before;
+  do{before=line;line=line.replace(/^(?:[-*+](?!\d)|[•·∙▪▫◦‣○●□■☐☑✓✔–—]+|\d{1,3}[.)](?!\d)|[(（]\d{1,3}[)）]|[①-⑳]|\[[ xX✓]?\])\s*/,'');}while(line!==before);
+  line=line.replace(/\s+/g,' ');
+  if(line&&!out.includes(line))out.push(line);
+ }
+ return out;
 }
 function create({storage,identity,getData,change}){
  const start=identity(),owner=start?.owner,session=start?.session;
@@ -214,5 +288,6 @@ function create({storage,identity,getData,change}){
  return {restore,list,commit,removeScore,gone,key};
 }
 return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
+ markStroke,glyphLayout,noteGoalLines,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
  isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
 });
