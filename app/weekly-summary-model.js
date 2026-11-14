@@ -7,9 +7,10 @@
  const node=typeof module==='object'&&module.exports;
  const api=factory(node?require('./practice-time-model.js'):root.VzipPracticeTime,
   node?require('./growth-metrics-model.js'):root.VzipGrowthMetrics,
-  node?require('./goal-routines.js'):root.VzipGoalRoutines);
+  node?require('./goal-routines.js'):root.VzipGoalRoutines,
+  node?require('./growth-dataset.js'):root.VzipGrowthDataset);
  if(node)module.exports=api;else root.VzipWeeklySummary=api;
-})(globalThis,(Time,G,R)=>{
+})(globalThis,(Time,G,R,D)=>{
 'use strict';
 const DAY=86400000,KST=9*3600000;
 const list=v=>Array.isArray(v)?v:[];
@@ -130,7 +131,8 @@ function build(db={},media=[],options={}){
  /* 성장: this week's takes of a song vs its earlier takes; at most 3 songs */
  const reference=id=>{const r=songs.find(s=>s.id===id)?.vocalRange;return r&&Number.isFinite(r.highMidi)?r:null;};
  const takes=items.filter(m=>m.songTake&&m.songId&&m.analysis?.metrics&&isDate(m.date));
- const takeOf=m=>({id:m.id,a:m.analysis,date:m.date,created:m.created,ok:!!m.ok});
+ // The take shape is the dataset's; the day is this model's Korea day (mediaDate), as the week boundaries are.
+ const takeOf=m=>D.take(m,m.analysis,m.date,m.ok);
  const growthSongs=[...new Set(takes.filter(m=>inWeek(m.date)).map(m=>m.songId))];
  const reports=G&&options.growth!==false?growthSongs.map(songId=>{
   const before=takes.filter(t=>t.songId===songId&&t.date<start).map(takeOf),after=takes.filter(t=>t.songId===songId&&inWeek(t.date)).map(takeOf);

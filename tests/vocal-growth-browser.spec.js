@@ -4,7 +4,7 @@ const path=require('node:path');
 const scripts=[
  'app/weak-phrase.js','app/segment-ab-model.js','app/segment-ab-ui.js',
  'app/plan-outcome-model.js','app/plan-outcome-ui.js',
- 'app/growth-metrics-model.js','app/overall-growth-model.js','app/overall-growth-ui.js',
+ 'app/growth-metrics-model.js','app/growth-dataset.js','app/overall-growth-model.js','app/overall-growth-ui.js',
  'app/monthly-practice-plans.js','app/monthly-growth.js'
 ];
 async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[],view='monthly'}={}){

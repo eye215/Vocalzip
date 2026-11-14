@@ -6,18 +6,16 @@
 (() => {
 'use strict';
 const V=window.VZ,M=V?.media,W=window.VzipWeeklySummary;
-if(!V||!M||!W)return;
+if(!V||!M||!W||!V.growthDataset)return;
 const e=V.esc;
 let request=0;
-const valid=m=>[1,2].includes(m.analysis?.v)&&!!V.analysisReliable?.(m.analysis);
-function isSongTake(m){
- if(!m.songId||!V.song(m.songId))return false;
- const practice=M.owner?.(m)?.practice;
- return !practice?.practiceRoom&&practice?.practiceMode!=='training';
-}
-/** Plain copies of the recordings with only what the week model reads. */
-const plain=items=>(items||[]).map(m=>({id:m.id,recordedDate:m.recordedDate,created:m.created,category:M.recordingCategory?.(m)||'song',
- songId:m.songId||'',songTake:isSongTake(m),analysis:m.analysis||null,ok:valid(m),voiceCheck:m.voiceCheck||null,raw:m}));
+/** Plain copies of the recordings with only what the week model reads. Category, whether a recording is a song take
+ * (rule 'verdict') and whether its analysis is reliable come from app/growth-dataset.js, like every growth screen. */
+const plain=items=>{
+ const ds=V.growthDataset(items||[]);
+ return ds.rows.map(r=>({id:r.id,recordedDate:r.m.recordedDate,created:r.m.created,category:r.category,
+  songId:r.songId,songTake:!ds.why(r,'verdict'),analysis:r.m.analysis||null,ok:r.ok,voiceCheck:r.m.voiceCheck||null,raw:r.m}));
+};
 /** 매일 보이스 체크 (built in parallel): use its own summary when the API exists; tolerate any shape or absence. */
 function voiceCheckLines(items){
  const api=V.voiceCheck;if(!api)return [];
