@@ -5,6 +5,7 @@
  *   ds.rows                 one row per recording, in list order: song, date, category, analysis, reliability, take
  *   ds.pick(rule)           the rows a screen counts (list order);  ds.items(rule) the recordings themselves
  *   ds.why(row, rule)       '' when the row counts, otherwise the reason it does not (REASONS)
+ *                           A recording whose id is in the deleted list (db.deleted.media) counts for no rule.
  *   ds.tally(rule)          how many rows each reason kept out
  *   ds.bySong(rule)         Map songId → rows of that song, oldest first (G.takeOrder)
  *   ds.takes(rule, songId)  that song's analysed takes, oldest first
@@ -19,7 +20,9 @@
  *
  * env (the app passes VZ.media's own functions, tests pass simple ones):
  *   reliable(analysis) → boolean                       required
- *   dateOf(m) → 'YYYY-MM-DD' | ''                      default: m.recordedDate when it is a date
+ *   dateOf(m) → 'YYYY-MM-DD' | ''                      default: VzipGrowthDataset.dateOf — the recorded date, or for a
+ *                                                      recording without one the KOREA day it was made (never the
+ *                                                      device's day: every growth screen dates a recording alike)
  *   owner(m) → {practice?, lesson?}                    default: the first practice / lesson that lists the recording
  *   category(m) → 'song'|'lesson'|'training'|'room'    default: m.recordingCategory, else 'song'
  *   isVideo(m) → boolean                               default: m.type starts with 'video/'
@@ -38,7 +41,7 @@ else{
   * change, so an answer is never older than the list and the records it was built from. */
  const V=root.VZ;
  if(V){
-  const env=()=>{const M=V.media||{};return {reliable:a=>!!V.analysisReliable?.(a),dateOf:M.dateOf,owner:M.owner,
+  const env=()=>{const M=V.media||{};return {reliable:a=>!!V.analysisReliable?.(a),dateOf:api.dateOf,owner:M.owner,
    category:M.recordingCategory&&(m=>M.recordingCategory(m)||'song'),isVideo:M.isVideo,song:V.song};};
   let last=null;
   const drop=()=>{last=null;};
@@ -52,7 +55,9 @@ else{
   };
   /** One recording's reliability and take, by the same rules as the rows. */
   V.growthDataset.ok=m=>api.reliable(m?.analysis,env().reliable);
-  V.growthDataset.take=m=>{const e=env();return api.take(m,m.analysis,api.day(e.dateOf?e.dateOf(m):m?.recordedDate),api.reliable(m?.analysis,e.reliable));};
+  V.growthDataset.take=m=>api.take(m,m.analysis,api.dateOf(m),api.reliable(m?.analysis,env().reliable));
+  /** The day of a recording on every growth screen (recorded date, else the Korea day it was made). */
+  V.growthDataset.dateOf=api.dateOf;
  }
 }
 })(typeof self!=='undefined'?self:globalThis,metrics=>{
@@ -61,6 +66,12 @@ const VERSIONS=[1,2];                       // the analysis versions the growth 
 const isDay=s=>/^\d{4}-\d{2}-\d{2}/.test(String(s||''));
 /** 'YYYY-MM-DD' of a date string, '' when it is not one. */
 const day=s=>isDay(s)?String(s).slice(0,10):'';
+/** Calendar day in Korea (UTC+9, no DST) of a millisecond timestamp; '' when there is none. */
+const KST=9*3600000;
+const koreaDay=ms=>{const n=Number(ms);return ms!=null&&ms!==''&&Number.isFinite(n)&&n>0?new Date(n+KST).toISOString().slice(0,10):'';};
+/** A recording's day: the date it was recorded on when it has one, otherwise the Korea day of its `created` time —
+ * the same on every device, wherever it is (as 주간 요약 always did). '' when it has neither. */
+const dateOf=m=>/^\d{4}-\d{2}-\d{2}$/.test(m?.recordedDate||'')?m.recordedDate:koreaDay(m?.created);
 /** The reliability of a take: a version the growth rules read, trusted by the analyser's own check (passed in). */
 const reliable=(a,check)=>VERSIONS.includes(a?.v)&&!!check?.(a);
 /** The one shape of a take. `ok` is given by the caller only where a screen has its own rule (the A/B table). */
@@ -87,13 +98,16 @@ const RULES={
  // and 트레이닝 practices. Videos count. A recording tagged 트레이닝/연습실 by hand, or a lesson recording, counts
  // as long as it has a song (only the linked practice record is looked at).
  verdict:{room:false,training:false,video:true},
- // 보컬 분석 탭의 곡 행 (the list 보컬 연구소 opens with): every recording of the song except videos.
- songList:{room:true,training:true,video:false},
+ // 보컬 분석 탭의 곡 행 and the recordings 보컬 연구소 lists for a song: every recording of the song — 연습실
+ // submissions and 트레이닝 practices too (row.practiceTake: shown with a 연습 label, because the verdict screens
+ // leave them out) and videos (as the verdict screens count them; shown with a 영상 label).
+ songList:{room:true,training:true,video:true},
  // 곡별 "보컬 측정 변화" 카드: every recording handed in for the song; videos only when they are in the cloud.
  songCard:{room:true,training:true,video:'cloud',unknownSong:true,unassigned:true}
 };
 const ruleOf=rule=>typeof rule==='string'?RULES[rule]:rule;
 function decide(r,rule){
+ if(r.deleted)return 'deleted';               // every rule: a recording in the deleted list is gone, whatever the media list says
  if(!r.songId&&!rule.unassigned)return 'no-song';
  if(r.songId&&!rule.unknownSong&&!r.hasSong)return 'song-missing';
  if(!rule.room&&r.room)return 'practice-room';
@@ -115,7 +129,7 @@ function build(media,db={},env={}){
  const G=metrics();
  const order=env.takeOrder||G?.takeOrder;
  if(typeof order!=='function')throw Error('녹음 순서 기준(takeOrder)을 불러오지 못했어요.');
- const dateOf=env.dateOf||(m=>m?.recordedDate),owner=env.owner||ownerIndex(db),isVideo=env.isVideo||(m=>String(m?.type||'').startsWith('video/'));
+ const dayOf=env.dateOf||dateOf,owner=env.owner||ownerIndex(db),isVideo=env.isVideo||(m=>String(m?.type||'').startsWith('video/'));
  const category=env.category||(m=>CATEGORIES.includes(m?.recordingCategory)?m.recordingCategory:'song');
  const analysisOf=env.analysisOf||(m=>m?.analysis),findSong=env.song||(id=>(db?.songs||[]).find(s=>s.id===id));
  const songs=new Map(),hasSong=id=>{let x=songs.get(id);if(x===undefined)songs.set(id,x=!!findSong(id));return x;};
@@ -129,7 +143,7 @@ function build(media,db={},env={}){
    this.practice=practice||null;
    this.room=!!practice?.practiceRoom;                 // a 노래 연습실 submission
    this.training=practice?.practiceMode==='training';  // a 트레이닝 practice (보이스 체크 included)
-   this.date=day(dateOf(m));
+   this.date=day(dayOf(m));
    this.a=analysisOf(m)||null;
    this.analysed=!!this.a?.metrics;
   }
@@ -140,6 +154,9 @@ function build(media,db={},env={}){
   get take(){return this._take??=take(this.m,this.a,this.date,this.ok);}
   get category(){return this._category??=category(this.m)||'song';}
   get video(){return this._video??=!!isVideo(this.m);}
+  /** A 노래 연습실 submission or the recording of a 트레이닝 practice: 보컬 분석 lists it (marked 연습), the verdict
+   * screens (결과 리포트 · 주간 요약 · 계획 결과) do not count it. */
+  get practiceTake(){return this.room||this.training;}
   get cloud(){return !!this.m.cloud;}
   /** A 매일 보이스 체크 recording: marked on the file, or the file of a voice-check practice. */
   get voiceCheck(){return !!this.m.voiceCheck||this.m.origin==='voice-check'||(!!this.practice?.voiceCheck&&this.practice.voiceCheck.mediaId===this.id);}
@@ -176,24 +193,25 @@ function build(media,db={},env={}){
   takes:(rule,songId)=>(ds.bySong(rule).get(songId)||[]).filter(r=>r.analysed).map(r=>r.take),
   /** 음역 변화 (step 2): reliable, dated analyses of song recordings, 매일 보이스 체크, 트레이닝 and lesson recordings.
    * Files that belong nowhere (no song, not a lesson, training or voice check), 연습실 submissions and recordings in
-   * the deleted list stay out. Oldest first; each take carries its group. */
+   * the deleted list stay out. Oldest first; each take carries its group. `left` names the recordings that do belong
+   * to a group but are not takes (not analysed, unreliable, no date), with their group and day, so a month can say
+   * how many it left out and why. */
   forRange(){
-   const takes=[],counts={song:0,'voice-check':0,training:0,lesson:0},excluded={};
+   const takes=[],left=[],counts={song:0,'voice-check':0,training:0,lesson:0},excluded={};
    const out=why=>{excluded[why]=(excluded[why]||0)+1;};
    for(const r of rows){
     if(r.deleted){out('deleted');continue;}
     const kind=r.category;
     const group=r.voiceCheck?'voice-check':kind==='lesson'?'lesson':kind==='training'||r.training?'training':r.room||kind==='room'?'':r.songId&&r.hasSong?'song':'';
     if(!group){out(r.room||kind==='room'?'practice-room':r.songId?'song-missing':'unassigned');continue;}
-    if(!r.analysed){out('no-analysis');continue;}
-    if(!r.ok){out('unreliable');continue;}
-    if(!r.date){out('no-date');continue;}
+    const why=!r.analysed?'no-analysis':!r.ok?'unreliable':!r.date?'no-date':'';
+    if(why){out(why);left.push({id:r.id,group,date:r.date,why});continue;}
     counts[group]++;takes.push({...r.take,group});
    }
-   return {takes:takes.sort(order),counts,excluded};
+   return {takes:takes.sort(order),counts,excluded,left};
   }
  };
  return ds;
 }
-return {VERSION:1,VERSIONS,RULES,REASONS,build,take,reliable,day,decide};
+return {VERSION:2,VERSIONS,RULES,REASONS,build,take,reliable,day,decide,dateOf,koreaDay};
 });

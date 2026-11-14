@@ -1,0 +1,89 @@
+/* 전체 음역 흐름 (design guide §26 · 성장 2단계). A white R20 panel like the other 결과 리포트 panels: kind chips (44px
+ * targets, R99, on = accent-soft + accent), three plain stats, a compact note chart (months on x, notes on y; the last
+ * 6 months on phones, 12 from 600px), one plain-words line, and two closed lists. No horizontal scrolling. */
+.range-flow{min-width:0;overflow-wrap:anywhere}
+.range-flow .growth-panel-head{margin-bottom:12px}
+.range-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.range-chip{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px 0 12px;border:0;border-radius:99px;background:var(--surface-2,#F2EFF7);color:var(--vz-color-ink-muted,#667085);font:inherit;font-size:13px;line-height:18px;font-weight:600;white-space:nowrap;cursor:pointer}
+.range-chip i{font-size:15px}
+.range-chip b{font-weight:700;font-variant-numeric:tabular-nums}
+.range-chip[aria-pressed="true"]{background:var(--vz-color-accent-soft,#F3ECFF);color:var(--vz-color-accent,#7A32F5)}
+.range-chip:active{background:var(--vz-color-selected-bg,#EDE1FF);color:var(--vz-color-accent,#7A32F5)}
+.range-chip:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px}
+@media (max-width:350px){.range-chip{padding:0 11px 0 9px}}
+.range-stats{display:flex;flex-wrap:wrap;gap:12px 28px;margin:0}
+.range-stats>div{flex:0 1 auto;min-width:96px}
+.range-stats span{display:block;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
+.range-stats strong{display:block;color:var(--ink,#101828);font-size:20px;line-height:28px;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+.range-period{margin:6px 0 0;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px;font-variant-numeric:tabular-nums}
+/* The chart. --range-h is the plot height; values sit in .range-area, 16px inside the top and bottom so the note
+ * labels above and below a band are never cut. */
+.range-chart{--range-h:196px;display:grid;grid-template-columns:34px minmax(0,1fr);margin:16px 0 0}
+.range-axis{position:relative;height:var(--range-h)}
+.range-area{position:absolute;inset:16px 0}
+.range-axis span{position:absolute;right:6px;transform:translateY(-50%);color:var(--vz-color-ink-muted,#667085);font-size:11px;line-height:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.range-plot{position:relative;min-width:0}
+.range-lines{position:absolute;left:0;right:0;top:16px;height:calc(var(--range-h) - 32px)}
+.range-lines span{position:absolute;left:0;right:0;border-top:1px solid var(--surface-2,#F2EFF7)}
+.range-cols{position:relative;display:grid;grid-template-columns:repeat(var(--range-cols,6),minmax(0,1fr))}
+.range-col{display:grid;justify-items:center;min-width:0}
+.range-track{position:relative;width:100%;height:var(--range-h)}
+.range-band,.range-main,.range-stable,.range-lone,.range-hi,.range-lo{position:absolute;left:50%;transform:translateX(-50%)}
+.range-band{width:min(22px,56%);min-height:3px;border-radius:6px;background:var(--vz-color-selected-bg,#EDE1FF)}
+.range-band.is-point{height:3px!important;border-radius:2px;background:var(--vz-color-accent,#7A32F5)}
+.range-main{width:min(22px,56%);min-height:3px;border-radius:5px;background:var(--vz-color-accent,#7A32F5)}
+.range-stable{width:min(30px,76%);height:0;border-top:2px solid #078994}
+.range-lone{width:9px;height:9px;margin-top:-4.5px;border:2px solid var(--vz-color-accent,#7A32F5);border-radius:50%;background:var(--surface,#fff)}
+.range-hi,.range-lo{color:var(--ink-2,#475467);font-size:11px;line-height:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.range-hi{margin-top:-15px}
+.range-lo{margin-top:1px}
+/* Fewer than 3 recordings: the same marks, lighter and outlined — a small sample, not a different value. */
+.range-col.is-small .range-band{background:transparent;box-shadow:inset 0 0 0 1.5px var(--vz-color-selected-bg,#EDE1FF)}
+.range-col.is-small .range-main{opacity:.45}
+.range-col.is-small :is(.range-hi,.range-lo){color:var(--vz-color-ink-muted,#667085);font-weight:400}
+.range-month{margin-top:4px;color:var(--ink-2,#475467);font-size:12px;line-height:16px;font-weight:600;text-align:center;white-space:nowrap}
+.range-month small{display:block;height:12px;color:var(--vz-color-faint,#98A2B3);font-size:10px;line-height:12px;font-weight:400}
+.range-count{color:var(--vz-color-ink-muted,#667085);font-size:11px;line-height:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.range-col.is-empty .range-count{color:var(--vz-color-faint,#98A2B3)}
+.range-col.is-empty .range-track::after{content:"";position:absolute;left:50%;top:16px;bottom:16px;border-left:1px dashed var(--line,#E8E4F0)}
+.range-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:10px 0 0;color:var(--vz-color-ink-muted,#667085);font-size:11px;line-height:16px}
+.range-legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.range-legend i{display:inline-block;flex:none;width:12px;height:8px;border-radius:3px}
+.range-legend .k-band{background:var(--vz-color-selected-bg,#EDE1FF)}
+.range-legend .k-main{background:var(--vz-color-accent,#7A32F5)}
+.range-legend .k-stable{height:0;border-radius:0;border-top:2px solid #078994}
+.range-legend .k-lone{width:9px;height:9px;border:2px solid var(--vz-color-accent,#7A32F5);border-radius:50%;box-sizing:border-box}
+.range-legend .k-small{box-shadow:inset 0 0 0 1.5px var(--vz-color-selected-bg,#EDE1FF)}
+/* Phones: the last 6 months (the list below has every month). */
+@media (max-width:599px){
+  .range-col:nth-last-child(n+7){display:none}
+  .range-cols{grid-template-columns:repeat(var(--range-cols-narrow,6),minmax(0,1fr))}
+}
+@media (min-width:600px){
+  .range-year-narrow small{visibility:hidden}
+  .range-chart{--range-h:228px}
+}
+.range-change{display:flex;gap:8px;align-items:flex-start;margin:14px 0 0;padding:12px 14px;border-radius:16px;background:var(--vz-color-accent-soft,#F3ECFF);color:var(--ink,#101828);font-size:14px;line-height:20px;font-weight:600}
+.range-change i{flex:none;margin-top:1px;color:var(--vz-color-accent,#7A32F5);font-size:18px}
+.range-change[data-state="short"],.range-change[data-state="none"]{background:var(--surface-2,#F2EFF7);color:var(--ink-2,#475467);font-weight:400}
+.range-change[data-state="short"] i,.range-change[data-state="none"] i{color:var(--vz-color-ink-muted,#667085)}
+.range-note{margin:8px 0 0;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
+.range-details summary{font-size:13px}
+.range-details h3{margin:12px 0 4px;color:var(--ink-2,#344054);font-size:13px;line-height:18px;font-weight:600}
+.range-details ul{list-style:none;margin:0;padding:0;display:grid;gap:4px;color:var(--ink-2,#475467);font-size:12px;line-height:18px}
+.range-details ul b{color:var(--ink,#101828);font-weight:600;font-variant-numeric:tabular-nums}
+.range-details .range-method{gap:8px}
+.range-details .range-method b{display:block}
+.range-rows li{display:grid;gap:2px;padding:8px 0;border-top:1px solid var(--surface-2,#F2EFF7)}
+.range-rows li:first-child{border-top:0}
+.range-rows strong{color:var(--ink,#101828);font-size:13px;line-height:18px;font-weight:600}
+.range-rows p{margin:0;color:var(--ink-2,#475467);font-size:13px;line-height:19px}
+.range-rows small{color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
+.range-empty{padding:16px;border-radius:16px;background:var(--surface-2,#F2EFF7)}
+.range-empty strong{display:block;margin-bottom:2px;color:var(--ink,#101828);font-size:15px;line-height:21px}
+.range-empty p{margin:0;color:var(--ink-2,#475467);font-size:13px;line-height:20px}
+/* 월별 분석: the month's row. */
+.range-month-card{overflow-wrap:anywhere}
+.range-month-card p[data-range-values]{margin:0 0 4px;color:var(--ink,#101828);font-size:15px;line-height:22px;font-weight:600}
+.range-month-card small{display:block;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
+.range-month-card p.small{margin:8px 0 0}

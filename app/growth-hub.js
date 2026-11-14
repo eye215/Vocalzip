@@ -45,6 +45,8 @@ const shortDate = d => d ? V.dateLabel(d).replace(/ \(.*$/, '') : '';
 const cols = (main, side) => '<div class="growth-hub-cols"><div class="growth-hub-col" data-hub-col="main">' + main + '</div><div class="growth-hub-col" data-hub-col="side">' + side + '</div></div>';
 const empty = (title, text, action = '') => '<div class="growth-hub-empty"><strong>' + e(title) + '</strong><p>' + e(text) + '</p>' + action + '</div>';
 let request = 0;
+// A recording's day as every growth screen reads it (app/growth-dataset.js): recorded date, else the Korea day it was made.
+const dayOf = m => window.VzipGrowthDataset?.dateOf(m) ?? M.dateOf(m);
 
 /* ---------- 보컬 분석 ---------- */
 /** 비교 가능 / 판정 보류 / 분석 전 from the per-song reports 결과 리포트 already made (V.growthModel) — nothing is
@@ -52,6 +54,9 @@ let request = 0;
 const STATE = {ok:'비교 가능', hold:G?.HOLD_LABEL || '판정 보류', none:'분석 전'};
 const stateOf = (count, report) => !count ? 'none' : report && (G?.METRICS || []).some(d => !d.reference && report[d.id] && report[d.id].state !== 'hold') ? 'ok' : 'hold';
 const chip = state => '<span class="growth-hub-chip" data-state="' + state + '">' + e(STATE[state]) + '</span>';
+/** A small word after a recording's name: 연습 (not counted by 결과 리포트) · 영상. A kind, not a state or a score. */
+const KIND = {practice:['연습', '연습 녹음 · 결과 리포트에는 넣지 않아요'], video:['영상', '영상 녹음']};
+const kindChip = kind => '<span class="growth-hub-chip" data-state="none" data-hub-kind="' + kind + '" title="' + e(KIND[kind][1]) + '">' + KIND[kind][0] + '</span>';
 async function mountAnalysis(host) {
   const my = ++request, songs = V.songsNewest();
   const saved = (V.db.comparisonReports || []).filter(r => !gone('comparisonReports', r.id)).length;
@@ -66,13 +71,16 @@ async function mountAnalysis(host) {
   // V.growthModel checks its inputs on every call, so this is never older than the list and the records).
   const reports = new Map((V.growthModel?.(items)?.overall?.reports || []).map(r => [r.songId, r.report]));
   // Which recordings a song row counts is the dataset's rule 'songList' (app/growth-dataset.js): the song's own,
-  // without videos — 연습실 and 트레이닝 recordings of the song included, as 보컬 연구소 lists them.
+  // videos too — 연습실 and 트레이닝 recordings of the song included, as 보컬 연구소 lists them. Those are said
+  // (연습 N개 포함): 결과 리포트 does not count them, and the row should not look as if it did.
   const ds = V.growthDataset(items), bySong = new Map(), recent = [];
   for (const r of ds.rows) {
+    if (r.deleted) continue;                                           // in the deleted list: gone on every growth screen
     if (r.analysed && recent.length < 5) recent.push(r.m);           // the list is newest recording first
     if (ds.why(r, 'songList')) continue;
-    const s = bySong.get(r.songId) || {count:0, analysed:0, latest:''};
+    const s = bySong.get(r.songId) || {count:0, analysed:0, latest:'', practice:0, video:0};
     s.count++; if (r.analysed) s.analysed++;
+    if (r.practiceTake) s.practice++; if (r.video) s.video++;
     if (r.date > s.latest) s.latest = r.date;
     bySong.set(r.songId, s);
   }
@@ -82,13 +90,18 @@ async function mountAnalysis(host) {
   const songRow = s => {
     const t = bySong.get(s.id), state = stateOf(t.analysed, reports.get(s.id));
     // Counts as they are: an unanalysed recording is said (the 분석 전 chip), never shown as a result.
-    const sub = '녹음 ' + t.count + '개' + (t.analysed ? ' · 분석 ' + t.analysed + '개' : '') + (t.latest ? ' · 최근 ' + shortDate(t.latest) : '');
+    const part = [t.practice ? '연습 ' + t.practice + '개' : '', t.video ? '영상 ' + t.video + '개' : ''].filter(Boolean).join(' · ');
+    const sub = '녹음 ' + t.count + '개' + (part ? ' (' + part + ' 포함)' : '') + (t.analysed ? ' · 분석 ' + t.analysed + '개' : '') + (t.latest ? ' · 최근 ' + shortDate(t.latest) : '');
     return row('#/vocal-lab/' + encodeURIComponent(s.id), 'waveform', s.title, sub, ' data-hub-song="' + e(s.id) + '" data-hub-state="' + state + '"', chip(state));
   };
+  // 연습: a 연습실 · 트레이닝 연습 recording of a song (in 보컬 분석, not in 결과 리포트). 영상: a video.
+  const kinds = m => { const r = ds.row(m); return (r?.hasSong && r.practiceTake ? kindChip('practice') : '') + (r?.video ? kindChip('video') : ''); };
   const takeRow = m => row('#/analysis/' + encodeURIComponent(m.id), 'chart-line', M.label(m),
-    [m.songId && V.song(m.songId) ? V.songTitle(m.songId) : '곡 미지정', shortDate(M.dateOf(m))].filter(Boolean).join(' · '), ' data-hub-take="' + e(m.id) + '"');
+    [m.songId && V.song(m.songId) ? V.songTitle(m.songId) : '곡 미지정', shortDate(dayOf(m))].filter(Boolean).join(' · '), ' data-hub-take="' + e(m.id) + '"', kinds(m));
+  const practised = withTakes.some(s => bySong.get(s.id).practice);
   const main = '<h2 class="sec">곡별 분석 <span class="small muted" style="font-weight:500">녹음이 있는 곡 ' + withTakes.length + '</span></h2>' +
-    (withTakes.length ? '<div class="list icons growth-hub-list" data-hub-songs>' + withTakes.map(songRow).join('') + '</div>'
+    (withTakes.length ? '<div class="list icons growth-hub-list" data-hub-songs>' + withTakes.map(songRow).join('') + '</div>' +
+        (practised ? '<p class="small muted growth-hub-caption" data-hub-practice-note>연습은 노래 연습실·트레이닝 연습으로 남긴 녹음이에요. 여기서는 함께 보고, 결과 리포트·주간 요약·계획 결과에는 넣지 않아요.</p>' : '')
       : empty('아직 곡에 연결된 녹음이 없어요', '곡을 지정해 녹음하거나, 전체 녹음에서 곡을 지정하면 여기에서 변화와 비교를 볼 수 있어요.', '<a class="btn secondary block" href="#/record" data-hub-empty-action>곡 녹음하러 가기</a>')) +
     (without.length ? '<details class="growth-hub-more"><summary>녹음이 없는 곡 ' + without.length + '</summary><div class="list growth-hub-list">' +
       without.map(s => '<a class="item" href="#/song/' + encodeURIComponent(s.id) + '"><span class="item-main"><span class="item-title">' + e(s.title) + '</span><span class="item-sub">곡 상세에서 녹음을 추가해요</span></span>' + chev + '</a>').join('') + '</div></details>' : '');
@@ -133,9 +146,9 @@ function trainingHtml(items) {
     return row('#/practice-room?result=' + encodeURIComponent(r.id), 'check-circle', r.title || '연습실 과제', sub, ' data-hub-result="' + e(r.id) + '"');
   }).join('');
   // 트레이닝 recordings (녹음 종류 = 트레이닝), newest first as the list is.
-  const takes = items ? items.filter(m => M.recordingCategory(m) === 'training') : null;
+  const takes = items ? V.growthDataset(items).rows.filter(r => !r.deleted && r.category === 'training').map(r => r.m) : null;
   const takeRows = (takes || []).slice(0, 5).map(m => row('#/recording/' + encodeURIComponent(m.id), 'microphone', M.label(m),
-    [V.dateLabel(M.dateOf(m)), Number(m.durationSeconds) > 0 ? V.minutes(Math.max(1, Math.round(m.durationSeconds / 60))) : ''].filter(Boolean).join(' · '), ' data-hub-training-take="' + e(m.id) + '"')).join('');
+    [V.dateLabel(dayOf(m)), Number(m.durationSeconds) > 0 ? V.minutes(Math.max(1, Math.round(m.durationSeconds / 60))) : ''].filter(Boolean).join(' · '), ' data-hub-training-take="' + e(m.id) + '"')).join('');
   const main = '<h2 class="sec">측정하고 연습하기</h2>' + entries + tipsHtml(items);
   const side = '<h2 class="sec">최근 트레이닝 녹음' + (takes ? ' <span class="small muted" style="font-weight:500">' + takes.length + '</span>' : '') + '</h2>' +
     (takeRows ? '<div class="list icons growth-hub-list" data-hub-training-takes>' + takeRows + '</div>'

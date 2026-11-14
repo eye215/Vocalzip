@@ -64,6 +64,8 @@ const analysisOf = m => fresh.get(m.id) || m.analysis || null;
  * (rule 'songCard': every recording handed in, videos only when they are in the cloud), read with the analyses saved
  * in this session. A point is a recording whose analysis the growth rules can read (v1 or v2). */
 const dataset = media => VZ.growthDataset(media, {analysisOf});
+/** A recording's day as every growth screen reads it: the recorded date, else the Korea day it was made. */
+const dayOf = m => window.VzipGrowthDataset.dateOf(m);
 const usable = (m, ds) => !!ds.row(m)?.readable;
 function points(ds) {
   return ds.pick('songCard').filter(r => r.readable).sort((x, y) => G.takeOrder(x.take, y.take))
@@ -104,7 +106,7 @@ VZ.measureTable = (first, second) => {
   if (!a?.metrics || !b?.metrics) return '';
   const sameSong=!!first.songId&&first.songId===second.songId;
   // Two recordings the person chose: the dataset's take shape, with this table's own trust check (any version).
-  const take = (m, x) => window.VzipGrowthDataset.take(m, x, String(M.dateOf?.(m) || '').slice(0, 10), VZ.analysisReliable?.(x));
+  const take = (m, x) => window.VzipGrowthDataset.take(m, x, dayOf(m), VZ.analysisReliable?.(x));
   const ta = take(first, a), tb = take(second, b);
   // Both takes are held for the same reason (low confidence): each row says 판정 보류 once and the reason, with each
   // take's own numbers, is written once under the table instead of in every row.
@@ -121,9 +123,9 @@ VZ.measureTable = (first, second) => {
     extra += '<tr class="vg-ref"><th>파사지오</th><td colspan="3">' + esc(G.passaggioText(p)) + '<small>' + esc(G.PASSAGGIO_NOTE) + '</small></td></tr>';
   }
   const weak = !comparable(a,b) || !first.songId || first.songId!==second.songId;
-  return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(M.dateOf(first))) + '</th><th>' + esc(VZ.dateLabel(M.dateOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + extra + '</tbody></table>' +
+  return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(dayOf(first))) + '</th><th>' + esc(VZ.dateLabel(dayOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + extra + '</tbody></table>' +
     (lowConfidence ? '<div class="vg-hold-why" data-hold-why><strong>판정 보류 · 측정 신뢰도가 낮아요</strong><ul>' +
-        [[first, a], [second, b]].map(([m, x]) => { const why = unreliableWhy(x); return why ? '<li>' + esc(VZ.dateLabel(M.dateOf(m))) + ' 녹음: ' + esc(why) + '</li>' : ''; }).join('') +
+        [[first, a], [second, b]].map(([m, x]) => { const why = unreliableWhy(x); return why ? '<li>' + esc(VZ.dateLabel(dayOf(m))) + ' 녹음: ' + esc(why) + '</li>' : ''; }).join('') +
         '</ul><p class="small muted">다시 분석해도 같은 결과예요. 곡에 MR 파일을 올려 두면 서버가 반주를 빼고 다시 재요. MR 파일이 없는 녹음은 서버가 차례대로 AI로 목소리를 분리해 다시 재고, 그래도 기준에 못 미치면 판정 보류로 남아요.</p></div>'
       : weak ? '<p class="small muted">분석 버전 또는 신뢰도를 확인해야 해요. 이전 결과를 보존하며 v2로 재분석할 수 있어요.</p>' : '') +
     '<p class="small muted">최고음은 참고로만 보여 주고 실력 판정에 쓰지 않아요. 판정 보류는 근거가 부족하다는 뜻이에요.</p>';

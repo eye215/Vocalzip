@@ -3,8 +3,13 @@
 // app/growth-dataset.js existed; the refactor has to leave every value as it was. Screens covered: 전체 분석 (model
 // and screen), 월별 분석 (every month, plans and plan outcomes, the archived month reports), 주간 요약 (six weeks and
 // the 홈 row), 보컬 분석 탭, 보컬 트레이닝 탭, 곡별 "보컬 측정 변화" 카드.
-// Two time zones: Korea (the owner's) and UTC — a recording without a recorded date is dated by the device day in
-// most screens and by the Korea day in 주간 요약, and both behaviours are pinned.
+// Two time zones: Korea (the owner's) and UTC. Step 2 (part B) changed two rules on purpose, and only the values
+// below moved in the snapshot:
+//  - a recording whose id is in the deleted list (g1) is counted by no growth screen (before: only 주간 요약 left it out);
+//  - a recording without a recorded date (b4) has its Korea day on every screen (before: the device's day everywhere
+//    but 주간 요약), so the UTC run now shows what the Korea run shows.
+// Part C changed the 보컬 분석 tab only: videos count in its song rows (새 곡: 녹음 2개 · 분석 전 → 녹음 4개 (영상 2개
+// 포함) · 분석 2개 · 비교 가능), and rows with 연습실·트레이닝 연습 recordings say so (Home: "(연습 2개 포함)", one note line).
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
@@ -14,8 +19,10 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 const {NOW, MEDIA, DB} = require('./growth-characterization.fixture.cjs');
-/** Every text fragment under root, in document order (hidden details included): what the screen says. */
-const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
+/** Every text fragment under root, in document order (hidden details included): what the screen says.
+ * The 전체 음역 흐름 section and its month row (step 2, [data-range-flow]) are new and have their own spec
+ * (tests/growth-range.spec.cjs): they are not part of what was pinned, so every older value stays comparable. */
+const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style,[data-range-flow]')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
 async function boot(page) {
   page.__errors = [];
   page.on('pageerror', e => page.__errors.push(e.message));
@@ -52,7 +59,7 @@ async function collect(page) {
   // 계획 결과: the report the app would save for every plan that has ended, from the takes the month view passes on.
   out.planOutcomes = await page.evaluate(async () => {
     const items = VZ.growthModel(await VZ.media.list()).songItems, valid = m => [1, 2].includes(m.analysis?.v) && VZ.analysisReliable(m.analysis);
-    return VZ.db.practicePlans.filter(p => p.kind === 'monthly-vocal').map(plan => { try { return window.VzipPlanOutcome.report({plan, goals:VZ.db.dailyGoals, recordings:items, dateOf:VZ.media.dateOf, valid, asOf:VZ.today()}); } catch (e) { return {planId:plan.id, error:e.message}; } });
+    return VZ.db.practicePlans.filter(p => p.kind === 'monthly-vocal').map(plan => { try { return window.VzipPlanOutcome.report({plan, goals:VZ.db.dailyGoals, recordings:items, dateOf:VZ.growthDataset.dateOf, valid, asOf:VZ.today()}); } catch (e) { return {planId:plan.id, error:e.message}; } });
   });
   // 주간 요약: six weeks, and the 홈 row.
   out.weekly = {};

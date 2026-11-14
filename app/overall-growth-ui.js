@@ -27,10 +27,10 @@ function noteHtml(text){
    '<p>'+esc(slice||'비교 가능한 근거가 부족해요.').replace(/\n/g,'<br>')+'</p></article>';
  }).join('')+'</div>';
 }
-function jumpNav(){
+function jumpNav(range){
  return '<nav class="growth-jumps" aria-label="성장 분석 빠른 이동">'+
-  [['overview','요약'],['skills','역량'],['coach','AI 분석'],['trend','그래프'],['practice','연습']].map(([id,label])=>
-   '<button type="button" data-growth-jump="'+id+'">'+label+'</button>').join('')+'</nav>';
+  [['overview','요약'],['skills','역량'],['coach','AI 분석'],['trend','그래프'],...(range?[['range','음역']]:[]),['practice','연습']].map(([id,label])=>
+   '<button type="button" data-growth-jump="'+id+'"'+(id==='range'?' data-range-flow':'')+'>'+label+'</button>').join('')+'</nav>';
 }
 function summaryCard(report){
  const valid=report.analysisCount>0;
@@ -165,14 +165,16 @@ function aiEvidence(report){
   analyzedSongs:report.analyzedSongs,periodStart:report.firstDate,periodEnd:report.lastDate,
   metrics:G.aiMetrics(report.metrics),observations:observationEvidence()};
 }
-function render(report,metric){
- return '<div data-growth-anchor="overview">'+summaryCard(report)+'</div>'+jumpNav()+
+/** slots.range: the 전체 음역 흐름 section (app/growth-range-ui.js), placed under the monthly graph. */
+function render(report,metric,slots={}){
+ return '<div data-growth-anchor="overview">'+summaryCard(report)+'</div>'+jumpNav(!!slots.range)+
   '<section class="growth-section-set" data-growth-anchor="skills"><header class="growth-panel-head"><div><p class="growth-eyebrow">VOICE METRICS</p><h2>6가지 성장 지표</h2><p class="growth-section-caption">같은 곡의 처음과 최근 녹음을, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.</p></div></header>'+
   // No measured song recording yet: one short note instead of six identical "측정 없음" cards.
   (report.analysisCount?'<div class="growth-stats-grid">'+report.metrics.map(m=>metricCard(m)).join('')+'</div>':
    '<div class="growth-stats-empty"><i class="ph ph-waveform" aria-hidden="true"></i><p><strong>아직 측정된 곡 녹음이 없어요</strong>곡이 지정된 녹음을 분석하면 음정 정확도·음정 안정성·음역·호흡 유지·고음 안정성이 여기에 쌓여요.</p><a class="btn sm secondary" href="#/library">전체 녹음에서 분석하기</a></div>')+'</section>'+
   '<div data-growth-anchor="coach">'+coachCard()+'</div>'+
   '<div data-growth-anchor="trend">'+trends(report,metric||'intonation')+'</div>'+
+  (slots.range?'<div data-growth-anchor="range">'+slots.range+'</div>':'')+
   '<div data-growth-anchor="practice">'+recommendations(report)+'</div>'+evidence(report);
 }
 function bind(host,report,{rerender,ownerIdentity}={}){

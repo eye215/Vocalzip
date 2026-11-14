@@ -57,7 +57,7 @@ function compareSongTakes(plan,items){
  // The exact measurement the saved outcome report uses (growth report v2 rules, 판정 보류 reasons included).
  // items: the month view's song takes; reliability: the growth dataset's one rule (app/growth-dataset.js).
  try{
-  return V.planOutcomePreview(plan,model.measurement(plan,items,M.dateOf,V.growthDataset.ok));
+  return V.planOutcomePreview(plan,model.measurement(plan,items,V.growthDataset.dateOf,V.growthDataset.ok));
  }catch{return '<p class="small muted">저장된 계획의 날짜나 측정 기준을 확인해 주세요.</p>';}
 }
 
@@ -141,7 +141,7 @@ function render(host,month,items,rows){
   stopReview(); weakToken++;statusEl.textContent='';formEl.elements.sourceRecording.value='';
   const available=items.filter(m=>m.songId===songInput.value&&!M.isVideo(m)&&(!m.size||m.size<=60*1024*1024));
   recordInput.innerHTML='<option value="">녹음 선택</option>'+available.map(m=>
-   '<option value="'+E(m.id)+'">'+E((M.dateOf(m)||'날짜 없음')+' · '+M.label(m))+'</option>').join('');
+   '<option value="'+E(m.id)+'">'+E((V.growthDataset.dateOf(m)||'날짜 없음')+' · '+M.label(m))+'</option>').join('');
   button.disabled=!available.length;
   if(!available.length)statusEl.textContent='분석 가능한 해당 곡의 녹음이 아직 없어요. 구간을 직접 입력해 계획을 등록할 수 있어요.';
  }
