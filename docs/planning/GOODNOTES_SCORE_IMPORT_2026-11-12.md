@@ -98,8 +98,19 @@ Two real notebooks (one with a known edit history: shuffle pages, insert a secon
 The structure export (events only) of the notebook that imported wrongly was re-encoded into a minimal archive and read with the real reader:
 
 - 340 page events − 47 removed = **293 pages**, the count GoodNotes shows; 81 move events applied; the song the owner photographed at GoodNotes page 183 comes out at page 183, and its neighbours are the right single-page PDFs.
-- Event kinds seen there and now treated as known (not counted as unknown): **57** (a flag register on the first page of a song) and **160/161/163/164** (named items pointing at pages: create, add a page reference, delete, rename) are page **bookmarks**; **62** marks a page brought in from another notebook (name + order key) — such pages also have their normal page event.
+- Event kinds seen there and now treated as known (not counted as unknown): **160/161/163/164** are **audio recordings made in the notebook** (corrected 2026-11-14 with a lesson notebook: 160 = created, field 4 is the length in flicks — 705,600,000 per second; 164 = title, e.g. a song name; 163 = deleted; 161 = a stroke/element id tied to a moment of a recording and a page, thousands per recording); **57** is a flag register on some pages (meaning not established); **62** marks a page brought in from another notebook (name + order key) — such pages also have their normal page event. (At that point the audio was not imported; see the recordings section below.)
 - None of these change page order or removal.
+
+### 2026-11-14: recordings imported as each song's MR (reader 8)
+
+The owner records each song's MR inside GoodNotes, titled with the song ("21. The winner takes it all"). These are now offered in the import screen under the score rows ("MR 녹음 N개").
+
+- **Format** (index.events.pb): **160** created `{1: recording id, 2: attachment id, 3: document id, 4: length in flicks}` (705,600,000 flicks = 1 s); **164** title `{1: recording id, 2: document id, 3: {1: text, 2: clock}}` (a register: highest clock counter wins); **163** deleted `{1: recording id, 2: document id}` (the file is gone); **161** ties a stroke to a moment (ignored). The attachment id is registered by a kind 6 event and listed in `index.attachments.pb` like a PDF; the file is MP4 audio (starts with an `ftyp` box).
+- **Reader**: `read()` returns `recordings: [{id, title, seconds, file, size}]` for recordings that are not deleted and whose file is in the archive (event order; title `''` when none). `report.recordings`, `report.recordingsSkipped` (deleted + without a file), `report.recordingsDeleted`. The audio bytes are not read until a row is imported (`model.readFile`).
+- **Verified on a real notebook** (schema 35, 17 pages): one 160 event, no 164 (untitled), file 47,870 bytes `ftyp mp42`, length 3.6 s — returned exactly so.
+- **Where an MR goes by default**: the song its score row goes to (same title, leading track numbers "03. ", "3) ", "03 - " aside — including a new song made by that row in the same import); otherwise the song the title names (`matchSong`, with and without the track number); otherwise 가져오지 않기. Untitled recordings show as "제목 없는 녹음" and are never placed automatically.
+- **Import**: the archive's bytes go unchanged through `VZ.songMR.addFile` (app/song-mr.js, the same path as MR 추가): file name `<title>.m4a`, type `audio/mp4`, title = the recording's title, and the entry is marked `source:'goodnotes'`, `sourceId:<recording id>`. A later import recognises it by that mark (same recording id, or same file name and size) on any song: "이미 가져온 MR이에요", 가져오지 않기 preselected. A file that does not start with `ftyp` is not uploaded. A recording that fails is named and the others still go in.
+- **Sticker memos**: a notes record whose field 20 is a message is the sticker memo itself (still counted as "record 20", not imported); a header whose field 20 is an id text only says the stroke sits on that sticker (a header field, like 4, 6 and 10). Text boxes (field 12) are not imported.
 
 ### Not verified yet
 

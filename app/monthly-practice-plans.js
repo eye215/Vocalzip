@@ -55,8 +55,9 @@ function compareSongTakes(plan,items){
  const model=window.VzipPlanOutcome;
  if(!model?.measurement||!V.planOutcomePreview)return '';
  // The exact measurement the saved outcome report uses (growth report v2 rules, 판정 보류 reasons included).
+ // items: the month view's song takes; reliability: the growth dataset's one rule (app/growth-dataset.js).
  try{
-  return V.planOutcomePreview(plan,model.measurement(plan,items,M.dateOf,x=>[1,2].includes(x.analysis?.v)&&V.analysisReliable?.(x.analysis)));
+  return V.planOutcomePreview(plan,model.measurement(plan,items,M.dateOf,V.growthDataset.ok));
  }catch{return '<p class="small muted">저장된 계획의 날짜나 측정 기준을 확인해 주세요.</p>';}
 }
 

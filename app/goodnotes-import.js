@@ -6,8 +6,13 @@
  * kept on one device only. The viewer shows it as ordinary editable strokes (app/score-ink.js); erasing or moving
  * one is recorded with the account's synced ink records, so edits sync too.
  *
- * Only adds: new score PDFs, new score entries (and a new song when the user chooses that). Nothing existing is
- * replaced; the .goodnotes file itself is never uploaded. Anything that cannot be placed exactly stops the import. */
+ * Audio recorded in the notebook (the owner records each song's MR there, titled with the song) is offered under the
+ * scores as "MR 녹음": each recording the user leaves switched on is added to a song's MR list through
+ * VZ.songMR.addFile (app/song-mr.js) with its original bytes — nothing is re-encoded.
+ *
+ * Only adds: new score PDFs, new score entries, new MR files (and a new song when the user chooses that). Nothing
+ * existing is replaced; the .goodnotes file itself is never uploaded. Anything that cannot be placed exactly stops
+ * the import. */
 (() => {
 'use strict';
 const VZ=window.VZ,G=window.VzipGoodnotes,Ink=window.VzipScoreInk;
@@ -40,6 +45,16 @@ function matchSong(title,songs){
  }
  return tie?null:best;
 }
+/** "03. Honey Honey", "3) Honey Honey", "03 - Honey Honey" → "Honey Honey": a leading track number is not part of the name. */
+const untrack=title=>{const t=String(title||'').trim(),rest=t.replace(/^\d{1,3}\s*(?:[.)]\s*|[-–—:]\s+)(?=\D)/,'').trim();return rest||t;};
+/** The song a recording's title names, with or without its track number; null when none or several fit (never guessed). */
+const matchTitle=(title,songs)=>matchSong(title,songs)||matchSong(untrack(title),songs);
+const sameTitle=(a,b)=>{const x=plain(untrack(a));return x.length>=2&&x===plain(untrack(b));};
+const clock=seconds=>{const n=Math.max(0,Math.round(seconds||0));return Math.floor(n/60)+':'+String(n%60).padStart(2,'0');};
+const sizeLabel=bytes=>bytes>=1048576?(bytes/1048576).toFixed(1)+'MB':Math.max(1,Math.round(bytes/1024))+'KB';
+const safeName=title=>String(title).replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'_').slice(0,80);
+/** GoodNotes recordings are MP4 audio (.m4a): the file starts with an `ftyp` box. Anything else is not uploaded as one. */
+const isMp4=bytes=>bytes.length>12&&bytes[4]===0x66&&bytes[5]===0x74&&bytes[6]===0x79&&bytes[7]===0x70;
 /** Drops points that do not change the line visibly (Ramer–Douglas–Peucker, 0.06% of the page width). */
 function simplify(points,tolerance=0.0006){
  if(points.length<3)return points;
@@ -101,14 +116,16 @@ const summary=report=>[
  report.removedPages?'굿노트에서 지운 쪽 '+report.removedPages+'장은 빼고 가져와요.':'',
  report.unsupported?'알 수 없는 형식의 필기 '+report.unsupported+'개는 가져오지 않아요.':'',
  report.unmatchedNotes?'어느 쪽의 필기인지 확인하지 못한 묶음 '+report.unmatchedNotes+'개는 가져오지 않아요.':'',
- report.pagesWithoutPdf?'PDF가 아닌 쪽 '+report.pagesWithoutPdf+'장은 빈 쪽으로 들어가요.':''].filter(Boolean);
+ report.pagesWithoutPdf?'PDF가 아닌 쪽 '+report.pagesWithoutPdf+'장은 빈 쪽으로 들어가요.':'',
+ report.recordingsSkipped>report.recordingsDeleted?'파일이 남아 있지 않은 녹음 '+(report.recordingsSkipped-report.recordingsDeleted)+'개는 가져올 수 없어요.':''].filter(Boolean);
 
 /** Counts only (no titles, no content): what the reader found in the file, for telling why an import looks wrong. */
 const diagnosis=(model,file)=>{const r=model.report,list=o=>Object.entries(o||{}).map(([k,n])=>k+'×'+n).join(' ')||'없음';
  return ['읽기 버전 '+(r.reader||'?')+' · 굿노트 형식 '+(r.schema??'?')+' · 파일 '+Math.round((file?.size||0)/1024)+'KB',
   '쪽 기록 '+r.pageEvents+' · 옮긴 쪽 '+(r.movedPages||0)+' · 지움 표시 '+r.removedPages+' · 가져올 쪽 '+model.pages.length+' · PDF 쪽 번호 '+model.pages.map(p=>p.pdf?p.pdf.page:'-').join(','),
   '필기 '+r.strokes+'획 · 못 읽음 '+r.unsupported+' · 지운 필기 '+r.deleted+' · 짝 없는 묶음 '+r.unmatchedNotes,
-  '필기 종류 '+list(r.inkKinds),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)];};
+  '녹음 '+(r.recordings||0)+'개(지운 것 '+(r.recordingsDeleted||0)+')'+(r.recordingsSkipped>r.recordingsDeleted?' · 파일 없음 '+(r.recordingsSkipped-r.recordingsDeleted):''),
+  '필기 종류 '+list(r.inkKinds),'필기가 아닌 것(스티커·이미지·글상자 등, 아직 가져오지 않아요) '+list(r.elements),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)];};
 /**
  * @param {File} file a .goodnotes file
  * @param {{song?:object, onDone?:Function}} [options] song: the song page the import was started from
@@ -140,6 +157,39 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
  const runs=[];for(const a of atoms){const last=runs.at(-1);if(last&&!a.untitled&&!last[0].untitled&&plain(a.title)&&plain(a.title)===plain(last[0].title))last.push(a);else runs.push([a]);}
  let items=runs.map(list=>decorate(join(list)));
  const total=atoms.reduce((k,i)=>k+i.count,0),notes=summary(model.report),run={busy:false,cancelled:false,finished:false},picked=new Set();
+ /* One row per recording (an MR). choice: what the user picked in 넣을 곡 ('auto' until they do); target: what the
+  * row shows and does now — a song id, 'score' (the new song its score row creates in this import) or 'skip'. */
+ const mrs=(model.recordings||[]).map((rec,i)=>{const title=rec.title||'굿노트 녹음';
+  return {key:'m'+i,rec,title,label:rec.title||'제목 없는 녹음',name:safeName(title)+'.m4a',choice:'auto',target:'skip',duplicate:false,state:{id:'mr-'+VZ.uid(),receipt:null,done:false}};});
+ const songOf=id=>songs().find(s=>s.id===id)||null;
+ /** The score row with the same title (track numbers aside): the MR goes where that score goes. */
+ const linked=mr=>mr.rec.title?items.find(i=>!i.untitled&&sameTitle(i.title,mr.rec.title))||null:null;
+ /** The song that already holds this recording from an earlier import (marked source 'goodnotes'; same recording, or same file name and size). */
+ const stored=mr=>songs().find(s=>(s.mrTracks||[]).some(t=>!t.deleted&&t.kind==='file'&&t.source==='goodnotes'&&(t.sourceId===mr.rec.id||t.fileName===mr.name&&t.size===mr.rec.size)))||null;
+ /** Where a recording goes when the user has not chosen: with its score; else the song its title names; else nowhere. */
+ const follow=mr=>{
+  const row=linked(mr);
+  if(row&&row.target!=='skip')return row.target==='new'&&!row.state.done?'score':songOf(row.target)?row.target:'skip';
+  return mr.rec.title?matchTitle(mr.rec.title,songs())?.id||'skip':'skip';
+ };
+ const settle=mr=>{if(mr.state.done)return;mr.duplicate=!!stored(mr);mr.target=mr.choice==='auto'?mr.duplicate?'skip':follow(mr):songOf(mr.choice)||mr.choice==='skip'?mr.choice:'skip';};
+ /** At import time: the song itself (a score row imported a moment ago has its real song by now). */
+ const destination=mr=>{
+  if(mr.choice!=='auto'&&mr.choice!=='skip')return songOf(mr.choice);
+  const row=linked(mr);
+  if(row&&row.target!=='skip'&&row.target!=='new')return songOf(row.target);
+  return mr.rec.title?matchTitle(mr.rec.title,songs()):null;
+ };
+ const mrOptions=mr=>'<option value="score" data-pick-always'+(mr.target==='score'?' selected':' disabled')+'>악보와 같은 새 곡</option>'+
+  songs().map(s=>'<option value="'+esc(s.id)+'"'+(mr.target===s.id?' selected':'')+'>'+esc(VZ.songLabel?VZ.songLabel(s):s.title)+'</option>').join('')+
+  '<option value="skip" data-pick-always'+(mr.target==='skip'?' selected':'')+'>가져오지 않기</option>';
+ const mrHtml=mr=>{settle(mr);const done=mr.state.done,off=done?' disabled':'';
+  return '<div class="gn-row gn-mr-row" data-gn-rec="'+mr.key+'"'+(done?' data-done="true"':'')+'>'+
+  '<label class="gn-pick"><input type="checkbox" data-gn-pick'+(picked.has(mr.key)?' checked':'')+off+' aria-label="'+esc(mr.label)+' MR 선택"><span class="gn-box" aria-hidden="true"></span></label>'+
+  '<div class="gn-main"><div class="gn-head"><strong class="gn-mr-title">'+esc(mr.label)+'</strong></div>'+
+  '<p class="gn-meta" data-gn-info>길이 '+clock(mr.rec.seconds)+' · '+sizeLabel(mr.rec.size)+(done?' · 가져왔어요':'')+'</p>'+
+  (mr.duplicate&&!done?'<p class="gn-note">이미 가져온 MR이에요</p>':'')+
+  '<label class="gn-target"><span>넣을 곡</span><select data-gn-mrtarget data-pick="song" data-pick-title="넣을 곡" aria-label="'+esc(mr.label)+' MR 넣을 곡"'+off+'>'+mrOptions(mr)+'</select></label></div></div>';};
  const options=item=>'<option value="new" data-pick-always'+(item.target==='new'?' selected':'')+'>새 곡으로 추가</option>'+
   songs().map(s=>'<option value="'+esc(s.id)+'"'+(item.target===s.id?' selected':'')+'>'+esc(VZ.songLabel?VZ.songLabel(s):s.title)+'</option>').join('')+
   '<option value="skip" data-pick-always'+(item.target==='skip'?' selected':'')+'>가져오지 않기</option>';
@@ -154,24 +204,27 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
   '<p class="gn-meta" data-gn-info>'+pagesLabel(item)+' · '+inkLabel(item)+(item.atoms.length>1?' · '+item.atoms.length+'개 합침':'')+(done?' · 가져왔어요':'')+'</p>'+
   (item.duplicate&&!done?'<p class="gn-note">이미 가져온 악보예요</p>':'')+
   '<label class="gn-target"><span>넣을 곡</span><select data-gn-target data-pick="song" data-pick-title="넣을 곡" aria-label="'+esc(item.title)+' 넣을 곡"'+off+'>'+options(item)+'</select></label></div></div>';};
- const meta=model.pages.length+'쪽 · '+(model.outline.length?atoms.filter(a=>!a.untitled).length+'곡':'개요 없음')+' · 필기 '+total.toLocaleString('ko-KR')+'획';
+ const meta=model.pages.length+'쪽 · '+(model.outline.length?atoms.filter(a=>!a.untitled).length+'곡':'개요 없음')+' · 필기 '+total.toLocaleString('ko-KR')+'획'+(mrs.length?' · 녹음 '+mrs.length+'개':'');
  VZ.sheet({title:'굿노트 가져오기',label:'굿노트 가져오기',
   body:'<form id="gn-import" class="gn-import">'+
    '<section class="gn-summary"><strong>'+esc(model.title||file.name)+'</strong><p data-gn-summary>'+esc(meta)+'</p>'+
    '<p>'+(model.outline.length?'곡을 골라 가져오거나, 한 곡이 여러 줄로 나뉘었으면 이어진 줄을 골라 합치세요.':'개요가 없어서 전체를 한 곡으로 가져와요. 굿노트에서 곡마다 개요를 넣으면 곡별로 나눠져요.')+'</p>'+
    notes.map(t=>'<p class="gn-warn">'+esc(t)+'</p>').join('')+
    '<details class="gn-diag" data-gn-diag><summary>진단 정보</summary>'+diagnosis(model,file).map(t=>'<p>'+esc(t)+'</p>').join('')+
-    '<button type="button" class="btn sm secondary" data-gn-structure>진단 파일 저장</button><p>쪽 순서·지움 같은 구조 기록만 담아요. 악보 PDF와 필기 내용은 들어가지 않아요(노트·개요 제목은 들어가요).</p></details>'+
-   '<p>파일은 이 기기에서만 읽고, 곡별 PDF와 필기만 올라가요. 필기는 모두 수정할 수 있어요.</p></section>'+
+    '<button type="button" class="btn sm secondary" data-gn-structure>진단 파일 저장</button><p>쪽 순서·지움 같은 구조 기록과, 스티커·글상자의 위치·크기만 담아요. 악보 PDF, 필기, 글상자에 쓴 글은 들어가지 않아요(노트·개요 제목은 들어가요).</p></details>'+
+   '<p>파일은 이 기기에서만 읽고, '+(mrs.length?'곡별 PDF와 필기, 고른 MR 녹음만 올라가요.':'곡별 PDF와 필기만 올라가요.')+' 필기는 모두 수정할 수 있어요.</p></section>'+
    '<div class="gn-bar" data-gn-bar><button type="button" class="gn-all" data-gn-all aria-pressed="false"><span class="gn-box" aria-hidden="true"></span><span data-gn-alltext>전체 선택</span></button>'+
    '<span class="gn-count" data-gn-count></span><span class="gn-merge" data-gn-mergebar hidden><button type="button" class="gn-merge-btn" data-gn-merge>한 곡으로 합치기</button><span data-gn-mergehint></span></span></div>'+
-   '<div class="gn-list" data-gn-list></div></form>',
+   '<div class="gn-list" data-gn-list></div>'+
+   '<section class="gn-mr" data-gn-mr aria-labelledby="gn-mr-title"'+(mrs.length?'':' hidden')+'><div class="gn-summary"><strong id="gn-mr-title">MR 녹음 '+mrs.length+'개</strong>'+
+   '<p>굿노트에서 녹음한 파일이에요. 넣을 곡을 고르면 그 곡의 MR로 원본 그대로 들어가요.</p></div><div class="gn-list" data-gn-mrlist></div></section></form>',
   foot:'<p class="gn-msg" data-gn-msg role="status" aria-live="polite" hidden></p><button type="submit" form="gn-import" class="btn block" data-gn-go>가져오기</button>',
   onClose:()=>{run.cancelled=true;},
   onMount:(el,close)=>{
    const form=el.querySelector('form'),msg=el.querySelector('[data-gn-msg]'),go=el.querySelector('[data-gn-go]'),list=el.querySelector('[data-gn-list]');
    const bar=el.querySelector('[data-gn-mergebar]'),mergeButton=el.querySelector('[data-gn-merge]'),hint=el.querySelector('[data-gn-mergehint]'),all=el.querySelector('[data-gn-all]');
    const count=el.querySelector('[data-gn-count]'),allText=el.querySelector('[data-gn-alltext]');
+   const mrList=el.querySelector('[data-gn-mrlist]');
    const structureButton=el.querySelector('[data-gn-structure]');
    if(structureButton)structureButton.onclick=async()=>{
     structureButton.disabled=true;
@@ -203,8 +256,10 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     if(pop.dataset.state!=='busy'){progress.hide();go.focus();return;}
     run.cancelled=true;popButton.disabled=true;popButton.textContent='지금 단계를 마치고 멈춰요';
    };
-   const open=()=>items.filter(i=>!i.state.done);
-   const rowOf=item=>list.querySelector('[data-gn-section="'+item.key+'"]');
+   const open=()=>items.filter(i=>!i.state.done),openMr=()=>mrs.filter(m=>!m.state.done);
+   const rowOf=item=>list.querySelector('[data-gn-section="'+item.key+'"]'),mrRowOf=mr=>mrList.querySelector('[data-gn-rec="'+mr.key+'"]');
+   /** "악보 27 · MR 12"; recordings alone "MR 12개"; scores alone keep the short "27곡". */
+   const amount=(scores,mr)=>mr?scores?'악보 '+scores+' · MR '+mr:'MR '+mr+'개':scores+'곡';
    /** The ticked rows, if they sit next to each other and none is imported yet. */
    const selection=()=>{const at=items.map((item,i)=>picked.has(item.key)?i:-1).filter(i=>i>=0);
     return {at,ok:at.length>=2&&at.every((v,k)=>!k||v===at[k-1]+1)&&at.every(i=>!items[i].state.done)};};
@@ -212,16 +267,34 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
    const sync=()=>{
     read();
     // Ticked rows decide what is imported; with nothing ticked, every row not set to 가져오지 않기 is.
+    // A recording the user has not placed follows its score row (or the song its title names) as the rows above change.
+    for(const mr of openMr()){
+     settle(mr);const row=mrRowOf(mr),select=row?.querySelector('[data-gn-mrtarget]');if(!select)continue;
+     select.querySelector('option[value="score"]').disabled=mr.target!=='score';
+     if(select.value!==mr.target)select.value=mr.target;
+    }
     const chosen=open().filter(i=>picked.has(i.key)).length,left=open().filter(i=>i.target!=='skip').length;
-    go.textContent=chosen?'선택한 '+chosen+'곡 가져오기':left?'가져오기 ('+left+'곡)':'가져올 곡을 골라 주세요';go.disabled=run.busy||!(chosen||left);
+    const chosenMr=openMr().filter(m=>picked.has(m.key)).length,leftMr=openMr().filter(m=>m.target!=='skip').length;
+    go.textContent=chosen||chosenMr?'선택한 '+amount(chosen,chosenMr)+' 가져오기':left||leftMr?'가져오기 ('+amount(left,leftMr)+')':mrs.length?'가져올 곡이나 MR을 골라 주세요':'가져올 곡을 골라 주세요';
+    go.disabled=run.busy||!(chosen||chosenMr||left||leftMr);
     const sel=selection();bar.hidden=run.busy||sel.at.length<2;mergeButton.hidden=!sel.ok;mergeButton.disabled=!sel.ok;
     mergeButton.textContent='한 곡으로 합치기';hint.textContent=sel.ok?'':'이웃한 줄만 합칠 수 있어요';
-    count.textContent=chosen?chosen+'곡 선택':'';
-    const every=open().length>0&&open().every(i=>picked.has(i.key));all.setAttribute('aria-pressed',String(every));allText.textContent=every?'선택 해제':'전체 선택';all.disabled=run.busy||!open().length;
+    count.textContent=chosen||chosenMr?amount(chosen,chosenMr)+' 선택':'';
+    const rows=open().length+openMr().length,every=rows>0&&open().every(i=>picked.has(i.key))&&openMr().every(m=>picked.has(m.key));
+    all.setAttribute('aria-pressed',String(every));allText.textContent=every?'선택 해제':'전체 선택';all.disabled=run.busy||!rows;
     // A row set to 가져오지 않기 is dimmed unless it is ticked (a ticked row is imported anyway).
     for(const item of items){const row=rowOf(item);if(row)row.dataset.skip=String(item.target==='skip'&&!picked.has(item.key)&&!item.state.done);}
+    for(const mr of mrs){const row=mrRowOf(mr);if(row)row.dataset.skip=String(mr.target==='skip'&&!picked.has(mr.key)&&!mr.state.done);}
    };
-   const draw=()=>{list.innerHTML=items.map(rowHtml).join('');sync();};
+   const draw=()=>{list.innerHTML=items.map(rowHtml).join('');mrList.innerHTML=mrs.map(mrHtml).join('');sync();};
+   const mrOf=node=>mrs.find(m=>m.key===node.closest('[data-gn-rec]')?.dataset.gnRec);
+   // 넣을 곡 of a recording: the user's own choice from now on ("악보와 같은 새 곡" hands it back to following the score).
+   // Both events, and before the form's handler: that one re-applies the followed target to rows still on 'auto'.
+   for(const type of ['input','change'])mrList.addEventListener(type,event=>{
+    const select=event.target.closest('[data-gn-mrtarget]'),box=event.target.closest('[data-gn-pick]'),mr=mrOf(event.target);if(!mr)return;
+    if(select)mr.choice=select.value==='score'?'auto':select.value;
+    if(box&&type==='change'){box.checked?picked.add(mr.key):picked.delete(mr.key);sync();}
+   });
    list.addEventListener('change',event=>{const box=event.target.closest('[data-gn-pick]');if(!box)return;const key=box.closest('[data-gn-section]').dataset.gnSection;box.checked?picked.add(key):picked.delete(key);sync();});
    list.addEventListener('click',event=>{
     const button=event.target.closest('[data-gn-split]');if(!button||run.busy)return;read();
@@ -234,26 +307,28 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     items.splice(sel.at[0],sel.at.length,joined);picked.clear();draw();
     say('“'+joined.title+'” '+pagesLabel(joined)+'을 한 악보로 합쳤어요.');
    };
-   all.onclick=()=>{read();const every=open().every(i=>picked.has(i.key));picked.clear();if(!every)for(const i of open())picked.add(i.key);draw();};
+   all.onclick=()=>{read();const rows=[...open(),...openMr()],every=rows.every(i=>picked.has(i.key));picked.clear();if(!every)for(const i of rows)picked.add(i.key);draw();};
    form.oninput=form.onchange=sync;draw();
    form.onsubmit=async event=>{
     event.preventDefault();if(run.busy)return;sync();
     const account=window.vzipCloudUserId?.()||'';
     if(!window.VzipR2?.enabled?.()||!account||!window.vzipCloudSignedIn?.()){say('올리려면 로그인과 클라우드 연결을 확인해 주세요.','error');return;}
     if(account!==owner){say('로그인 계정이 바뀌었어요. 창을 닫고 다시 열어 주세요.','error');return;}
-    const guard=()=>{if(run.cancelled)throw Object.assign(Error('가져오기를 멈췄어요.'),{stopped:true});if(window.vzipCloudUserId?.()!==owner||!window.vzipCloudSignedIn?.()||window.VzipAccountScope?.leaving)throw Error('로그인 계정이 바뀌어 멈췄어요.');};
+    // halt: the whole import stops here (the user stopped it, or the account changed) — unlike one recording that fails.
+    const guard=()=>{if(run.cancelled)throw Object.assign(Error('가져오기를 멈췄어요.'),{stopped:true,halt:true});if(window.vzipCloudUserId?.()!==owner||!window.vzipCloudSignedIn?.()||window.VzipAccountScope?.leaving)throw Object.assign(Error('로그인 계정이 바뀌어 멈췄어요.'),{halt:true});};
     run.busy=true;run.cancelled=false;go.disabled=true;for(const control of form.elements)control.disabled=true;
     // A ticked row is imported even if it was set to 가져오지 않기: it goes to its matching song, or a new one.
-    const chosen=open().filter(i=>picked.has(i.key));
+    const chosen=open().filter(i=>picked.has(i.key)),chosenMr=openMr().filter(m=>picked.has(m.key)),ticked=chosen.length+chosenMr.length;
     for(const item of chosen)if(item.target==='skip'){const hit=matchSong(item.title,songs())||(single?song:null);item.target=hit?hit.id:'new';}
-    const todo=chosen.length?chosen:open().filter(i=>i.target!=='skip'),result={scores:0,ink:0};
+    const todo=ticked?chosen:open().filter(i=>i.target!=='skip'),todoMr=ticked?chosenMr:openMr().filter(m=>m.target!=='skip'),result={scores:0,ink:0,mr:0},failed=[];
+    const units=todo.length+todoMr.length,got=()=>[result.scores?'악보 '+result.scores+'개':'',result.mr?'MR '+result.mr+'개':''].filter(Boolean).join(' · ');
     picked.clear();bar.hidden=true;
     try{
-     say('');progress.show();progress.set('PDF 도구를 준비하고 있어요.','',0);
-     const lib=await library(),sources=new Map();guard();
+     say('');progress.show();if(todo.length)progress.set('PDF 도구를 준비하고 있어요.','',0);
+     const lib=todo.length?await library():null,sources=new Map();guard();
      for(const [n,item] of todo.entries()){
       // Overall bar: each song is an equal share; within a song, making the PDF ≈10%, uploading ≈85%, saving the rest.
-      const step=(text,part)=>progress.set((n+1)+' / '+todo.length+'곡 · '+item.title,text,(n+part)/todo.length);
+      const step=(text,part)=>progress.set((n+1)+' / '+todo.length+'곡 · '+item.title,text,(n+part)/units);
       step('PDF 만드는 중',0);
       const ink=inkFile(item,item.state.id,item.state.createdAt),bad=ink.strokes.find(s=>!Ink.valid({...s,version:1,ownerId:owner,songId:'song',scoreId:item.state.id,r2Key:'u/'+owner+'/'+item.state.id+'/original.pdf',pdfHash:'0'.repeat(64)}));
       if(bad)throw Error('“'+item.title+'” '+bad.page+'쪽에 앱에서 다룰 수 없는 필기가 있어요. 필기를 빠뜨리지 않도록 가져오기를 멈췄어요.');
@@ -273,17 +348,45 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
       item.state.done=true;item.state.pdf=null;
       const done=rowOf(item);if(done){done.dataset.done='true';done.querySelector('[data-gn-info]').textContent+=' · 가져왔어요';for(const control of done.querySelectorAll('input,select,button'))control.disabled=true;}
      }
-     // Only some songs were picked: keep the sheet open so the rest can still be imported.
-     if(chosen.length&&open().length)say('악보 '+result.scores+'개를 가져왔어요. 남은 곡도 골라서 가져올 수 있어요.','done');
-     else{run.finished=true;close();}
-     progress.hide();
-     VZ.toast('악보 '+result.scores+'개를 가져왔어요'+(result.ink?' · 수정 가능한 필기 '+result.ink+'획':'')+'.');
-     onDone(result);
+     /* Recordings, after the scores (so a song created above exists). Each is read from the notebook only now and goes
+      * to its song through the MR list's own upload path, unchanged. One that fails is named and the rest go on. */
+     for(const [n,mr] of todoMr.entries()){
+      guard();
+      const step=(text,part)=>progress.set('MR '+(n+1)+' / '+todoMr.length+' · '+mr.label,text,(todo.length+n+part)/units);
+      popTitle.textContent='MR 가져오는 중';step('녹음 파일 읽는 중',0);
+      try{
+       const target=destination(mr);
+       if(!target)throw Error(linked(mr)?'악보를 먼저 가져오거나 넣을 곡을 골라 주세요.':'넣을 곡을 골라 주세요.');
+       const bytes=await model.readFile(mr.rec.file);guard();
+       if(!bytes||!bytes.length)throw Error('굿노트 파일 안에서 녹음 파일을 찾지 못했어요.');
+       if(!isMp4(bytes))throw Error('M4A 오디오 파일이 아니라서 올리지 않았어요.');
+       // The archive's bytes as they are: no decoding, no re-encoding.
+       await VZ.songMR.addFile(target.id,new File([bytes],mr.name,{type:'audio/mp4'}),{title:mr.title,pending:mr.state,guard,source:'goodnotes',sourceId:mr.rec.id,
+        onProgress:p=>step('올리는 중 '+Math.round(p)+'%',.05+.9*Math.max(0,Math.min(100,p))/100)});
+       mr.state.done=true;mr.target=target.id;result.mr++;
+       const done=mrRowOf(mr);if(done){done.dataset.done='true';done.querySelector('[data-gn-info]').textContent+=' · 가져왔어요';for(const control of done.querySelectorAll('input,select,button'))control.disabled=true;}
+      }catch(error){
+       if(error.halt||run.cancelled)throw error.halt?error:Object.assign(Error('가져오기를 멈췄어요.'),{stopped:true,halt:true});
+       failed.push('“'+mr.label+'” ('+(error.message||String(error))+')');
+      }
+     }
+     const about=got()?got()+'를 가져왔어요':'';
+     if(failed.length){
+      const why='MR '+failed.length+'개는 가져오지 못했어요: '+failed.join(', ')+'. '+(about?about+'. ':'')+'다시 누르면 남은 것만 다시 해요.';
+      say(why,'error');progress.end('일부 MR을 가져오지 못했어요',why,'error');
+     }else{
+      // Only some rows were picked: keep the sheet open so the rest can still be imported.
+      if(ticked&&open().length+openMr().length)say(about+'. 남은 '+(mrs.length?'것':'곡')+'도 골라서 가져올 수 있어요.','done');
+      else{run.finished=true;close();}
+      progress.hide();
+     }
+     if(about)VZ.toast(about+(result.ink?' · 수정 가능한 필기 '+result.ink+'획':'')+'.');
+     if(about||!failed.length)onDone(result);
     }catch(error){
-     const why=(error.message||String(error))+(result.scores?' 앞의 '+result.scores+'곡은 가져왔어요.':'')+' 다시 누르면 이어서 해요.';
+     const why=(error.message||String(error))+(result.mr?' 앞의 '+got()+'는 가져왔어요.':result.scores?' 앞의 '+result.scores+'곡은 가져왔어요.':'')+' 다시 누르면 이어서 해요.';
      say((error.stopped?'':'가져오지 못했어요: ')+why,error.stopped?'':'error');
      progress.end(error.stopped?'가져오기를 멈췄어요':'가져오지 못했어요',error.stopped?why.replace(/^가져오기를 멈췄어요\.\s*/,''):why,error.stopped?'stopped':'error');
-     if(result.scores)onDone(result);
+     if(result.scores||result.mr)onDone(result);
     }finally{
      run.busy=false;
      if(!run.finished)draw();
@@ -292,5 +395,5 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
   }});
 };
 VZ.goodnotesImport.plan=plan;VZ.goodnotesImport.buildPdf=buildPdf;VZ.goodnotesImport.inkFile=inkFile;VZ.goodnotesImport.library=library;
-VZ.goodnotesImport.matchSong=matchSong;VZ.goodnotesImport.openSource=openSource;VZ.goodnotesImport.simplify=simplify;VZ.goodnotesImport.ATTACHMENT=ATTACHMENT;
+VZ.goodnotesImport.matchSong=matchSong;VZ.goodnotesImport.untrack=untrack;VZ.goodnotesImport.openSource=openSource;VZ.goodnotesImport.simplify=simplify;VZ.goodnotesImport.ATTACHMENT=ATTACHMENT;
 })();

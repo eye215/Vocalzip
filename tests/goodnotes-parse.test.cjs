@@ -181,3 +181,63 @@ test('moved and removed together: the kept pages come out in their final places,
   assert.deepEqual(m.pages.map(p => p.pdf.page), [1, 2, 3, 3, 4]);
   assert.deepEqual([m.report.removedPages, m.report.movedPages], [3, 2]);
 });
+
+test('elements that are not ink are counted and listed by shape only: no text, no bytes', async () => {
+  const mark = F.inkItem(F.uuid(1), {payload:F.stored(F.pathTuple({width:3, ...line(60, 80, 300, 400)}))});
+  // A made-up text box: an item (field 7) with no ink payload, a text (field 13); and a record of another kind (field 12).
+  const enc = (f, w, b) => Buffer.concat([Buffer.from([f * 8 + w]), Buffer.from([b.length]), b]);
+  const textBox = [Buffer.concat([enc(7, 2, Buffer.concat([enc(1, 2, Buffer.from(F.uuid(9))), enc(13, 2, Buffer.from('비밀 메모 내용', 'utf8'))]))])];
+  const other = [Buffer.concat([enc(12, 2, Buffer.concat([enc(1, 2, Buffer.from(F.uuid(8)))]))])];
+  const bytes = new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', ink:[mark, textBox, other]}]}));
+  const m = await G.read(bytes);
+  assert.equal(m.pages[0].strokes.length, 1);
+  assert.deepEqual(m.report.elements, {'item without ink (13)':1, 'record 12':1});
+  const x = await G.structure(bytes);
+  assert.equal(x.elements.length, 2);
+  const text = JSON.stringify(x);
+  assert.ok(!text.includes('비밀 메모 내용') && text.includes('{"text":8}'));
+  assert.equal(x.attachments[0][3], 'pdf');
+});
+
+// ---- Audio recordings made in the notebook (events 160/164/163, found in the owner's notebooks, 2026-11-14). ----
+test('recordings are listed with title, length and file: deleted ones and ones without a file are left out and counted', async () => {
+  const bytes = F.m4a(7);
+  const file = F.notebook({pages:[{pdfPage:1, order:'a'}], outline:[{page:0, title:'03. Honey Honey'}], recordings:[
+    {title:'03. Honey Honey', seconds:56, bytes},
+    {title:'지운 녹음', seconds:120, deleted:true},
+    {title:'옛 이름', seconds:260.5, renames:[{title:'21. The winner takes it all', counter:5}, {title:'중간 이름', counter:3}]},
+    {title:'파일 없는 녹음', seconds:90, missing:true},
+    {seconds:61}]});
+  const m = await G.read(new Uint8Array(file));
+  assert.deepEqual(m.recordings.map(r => [r.title, r.seconds, r.size]), [['03. Honey Honey', 56, bytes.length], ['21. The winner takes it all', 260.5, F.m4a(3).length], ['', 61, F.m4a(5).length]]);
+  assert.deepEqual([m.report.recordings, m.report.recordingsSkipped, m.report.recordingsDeleted], [3, 2, 1]);
+  assert.deepEqual(m.report.unknownEvents, {99:1}); // 160/161/163/164 are known
+  // The audio is not read by read(); readFile gives the original bytes, unchanged, starting with the MP4 `ftyp` box.
+  const audio = Buffer.from(await m.readFile(m.recordings[0].file));
+  assert.ok(audio.equals(bytes));
+  assert.equal(audio.subarray(4, 8).toString(), 'ftyp');
+  assert.ok(m.recordings.every(r => /^[0-9A-F-]{36}$/.test(r.id) && r.file.startsWith('attachments/')));
+  // The pages and the outline are unaffected by recordings.
+  assert.deepEqual(m.sections.map(s => [s.title, s.from, s.to]), [['03. Honey Honey', 1, 1]]);
+});
+test('a notebook without recordings has an empty list', async () => {
+  const m = await G.read(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a'}]})));
+  assert.deepEqual([m.recordings, m.report.recordings, m.report.recordingsSkipped], [[], 0, 0]);
+});
+test('header records with fields 4, 6, 10 and a sticker id in 20 are not counted as elements; a text box (12), field 21 and the sticker memo itself (20 = a message) still are', async () => {
+  const mark = F.inkItem(F.uuid(1), {payload:F.stored(F.pathTuple({width:3, ...line(60, 80, 300, 400)}))});
+  const enc = (f, w, b) => Buffer.concat([Buffer.from(f * 8 + w < 128 ? [f * 8 + w] : [(f * 8 + w) & 127 | 128, (f * 8 + w) >> 7]), ...(w === 2 ? [Buffer.from([b.length]), b] : [Buffer.from([b])])]);
+  const id = n => enc(1, 2, Buffer.from(F.uuid(n))), clock = enc(2, 2, Buffer.from([8, 2, 16, 9]));
+  // As in the real notebooks: headers that also carry 4, 6, 10, or 20 = the id of the sticker memo the stroke sits on.
+  const headers = [[Buffer.concat([id(20), clock, enc(6, 2, Buffer.from([8, 1]))])], [Buffer.concat([id(21), clock, enc(20, 2, Buffer.from(F.uuid(0x57)))])],
+    [Buffer.concat([id(22), clock, enc(4, 0, 1)])], [Buffer.concat([id(23), clock, enc(10, 2, Buffer.from([8, 1]))])]];
+  const textBox = [Buffer.concat([id(24), enc(12, 2, id(8))])], other = [Buffer.concat([id(25), enc(21, 2, id(9))])];
+  // The sticker memo itself: a record whose field 20 is a message (position, size, colour), not an id.
+  const sticker = [Buffer.concat([enc(20, 2, Buffer.concat([id(0x57), enc(2, 2, Buffer.from([13, 0, 0, 200, 66, 21, 0, 0, 72, 67]))]))])];
+  const ink = [mark, ...headers, textBox, other, sticker];
+  const m = await G.read(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', ink}]})));
+  assert.equal(m.pages[0].strokes.length, 1);
+  assert.deepEqual(m.report.elements, {'record 12':1, 'record 21':1, 'record 20':1});
+  const x = await G.structure(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', ink}]})));
+  assert.equal(x.elements.length, 3);
+});

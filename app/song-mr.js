@@ -16,6 +16,24 @@ function youtube(value){
  }catch{return null;}
 }
 const save=(id,mutate)=>V.change(d=>{const song=d.songs.find(s=>s.id===id);if(!song)throw Error('곡을 찾을 수 없어요.');song.mrTracks||=[];mutate(song.mrTracks);});
+const problem=file=>!file||!file.size?'오디오 파일을 골라 주세요.'
+ :!/^audio\//.test(file.type)&&! /\.(mp3|m4a|wav|aac|flac|ogg|webm|caf)$/i.test(file.name)?'오디오 파일만 올릴 수 있어요.'
+ :file.size>MAX?'100MB 이하 파일을 골라 주세요.'
+ :!window.vzipCloudSignedIn?.()||!window.VzipR2?.enabled?.()?'파일 업로드는 로그인과 클라우드 연결이 필요해요.':'';
+/** Uploads an audio file exactly as it is and adds it to the song's MR list: the one way a file becomes an MR
+ * (the MR 추가 sheet and the GoodNotes import both use it). `pending` {id, receipt} survives a retry, so a finished
+ * upload is not sent again; `source`/`sourceId` say where an imported file came from. */
+async function addFile(songId,file,{title='',pending={id:'mr-'+V.uid(),receipt:null},signal,onProgress=()=>{},guard=()=>{},source='',sourceId=''}={}){
+ const bad=problem(file);if(bad)throw Error(bad);
+ if(!V.song(songId))throw Error('곡을 찾을 수 없어요.');
+ const type=V.media.typeOf(file);
+ pending.receipt||=await window.VzipR2.upload(file,{mediaId:pending.id,type,signal,onProgress});
+ guard();if(!pending.receipt?.key)throw Error('업로드 결과를 확인하지 못했어요.');
+ const entry={id:pending.id,kind:'file',title:title||file.name.replace(/\.[^.]+$/,''),fileName:file.name,type,r2Key:pending.receipt.key,size:file.size,created:Date.now(),...(source?{source}:{}),...(sourceId?{sourceId}:{})};
+ guard();if(!save(songId,list=>{if(!list.some(x=>x.id===entry.id))list.push(entry)}))throw Error('MR 목록을 저장하지 못했어요. 다시 저장해 주세요.');
+ return entry;
+}
+V.songMR={addFile};
 function add(song,redraw){
  const account=identity(),controller=new AbortController();let closed=false,pending=null,busy=false;
  const abort=()=>controller.abort(),release=window.VzipAccountScope?.beforeLeave?.(abort);
@@ -36,24 +54,16 @@ function add(song,redraw){
     e.preventDefault();if(busy)return;try{guard()}catch(error){status.textContent=error.message;return;}
     const kind=field('kind').value,title=field('title').value.trim(),file=field('file').files[0],link=youtube(field('url').value);
     if(kind==='youtube'&&!link){status.textContent='유효한 유튜브 영상 링크를 입력해 주세요.';return;}
-    if(kind==='file'){
-     if(!file||!file.size){status.textContent='오디오 파일을 골라 주세요.';return;}
-     if(!/^audio\//.test(file.type)&&! /\.(mp3|m4a|wav|aac|flac|ogg|webm|caf)$/i.test(file.name)){status.textContent='오디오 파일만 올릴 수 있어요.';return;}
-     if(file.size>MAX){status.textContent='100MB 이하 파일을 골라 주세요.';return;}
-     if(!window.vzipCloudSignedIn?.()||!window.VzipR2?.enabled?.()){status.textContent='파일 업로드는 로그인과 클라우드 연결이 필요해요.';return;}
-    }
+    if(kind==='file'){const bad=problem(file);if(bad){status.textContent=bad;return;}}
     busy=true;go.disabled=true;for(const control of form.elements)control.disabled=true;
     try{
-     let entry;
-     if(kind==='youtube')entry={id:'mr-'+V.uid(),kind,...link,title:title||'유튜브 MR',created:Date.now()};
-     else{
-      pending||={id:'mr-'+V.uid(),receipt:null};
-      const type=V.media.typeOf(file);status.textContent='업로드를 준비하고 있어요.';
-      pending.receipt||=await window.VzipR2.upload(file,{mediaId:pending.id,type,signal:controller.signal,onProgress:p=>{if(!closed)status.textContent='올리는 중 '+Math.round(p)+'%'}});
-      guard();if(!pending.receipt?.key)throw Error('업로드 결과를 확인하지 못했어요.');
-      entry={id:pending.id,kind:'file',title:title||file.name.replace(/\.[^.]+$/,''),fileName:file.name,type,r2Key:pending.receipt.key,size:file.size,created:Date.now()};
+     if(kind==='youtube'){
+      const entry={id:'mr-'+V.uid(),kind,...link,title:title||'유튜브 MR',created:Date.now()};
+      guard();if(!save(song.id,list=>{if(!list.some(x=>x.id===entry.id))list.push(entry)}))throw Error('MR 목록을 저장하지 못했어요. 다시 저장해 주세요.');
+     }else{
+      pending||={id:'mr-'+V.uid(),receipt:null};status.textContent='업로드를 준비하고 있어요.';
+      await addFile(song.id,file,{title,pending,signal:controller.signal,guard,onProgress:p=>{if(!closed)status.textContent='올리는 중 '+Math.round(p)+'%'}});
      }
-     guard();if(!save(song.id,list=>{if(!list.some(x=>x.id===entry.id))list.push(entry)}))throw Error('MR 목록을 저장하지 못했어요. 다시 저장해 주세요.');
      close();V.toast('MR을 저장했어요.');redraw();
     }catch(error){if(!closed)status.textContent=error.message||'저장하지 못했어요.';}
     finally{busy=false;if(!closed){for(const control of form.elements)control.disabled=false;update();}}

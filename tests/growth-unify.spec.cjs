@@ -379,7 +379,8 @@ test('recordings added or analysed after the first open show up without a reload
   // 보컬 트레이닝 counts the new analyses for its 추천 연습 as well (nothing kept from an earlier draw).
   await tabs(page).nth(2).click();
   const expected = await page.evaluate(async () => VZ.practiceTips(await VZ.media.list()).tips.slice(0, 2).map(t => t.key));
-  expect(await page.locator('[data-hub-tip]').evaluateAll(els => els.map(e => e.dataset.hubTip))).toEqual(expected);
+  // Polled: the tab is drawn a moment after the press (read at once, the list was sometimes still empty).
+  await expect.poll(() => page.locator('[data-hub-tip]').evaluateAll(els => els.map(e => e.dataset.hubTip))).toEqual(expected);
 });
 
 test('보컬 트레이닝: entries only — 연습실 · 보이스 체크 · 연습 세트 · 추천 연습 — and the newest five 트레이닝 recordings', async ({page}) => {

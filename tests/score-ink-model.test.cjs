@@ -124,3 +124,65 @@ test('transformed immutable replacements recover atomically after root failure a
  assert.deepEqual(f.store.list(binding).map(s=>s.id).sort(),['other','replacement']);
  assert.equal(f.data.lessons[0].note,'keep');assert.equal(f.data.practices[0].minutes,12);
 });
+/* 스티커 메모: one more record in the same list. */
+const memo=(id='memo',extra={})=>({version:1,id,...binding,page:1,tool:'note',color:'#fbe88c',rect:[.1,.1,.235,.18],mode:'pen',createdAt:1,...extra});
+test('a memo is a valid record; a bad rect, colour, mode, text or link key is refused and stroke rules are unchanged',()=>{
+ assert.equal(Ink.valid(memo()),true);assert.equal(Ink.valid(memo('m',{mode:'text',text:'가'.repeat(Ink.NOTE_TEXT_MAX),note:'m'})),true);
+ assert.equal(Ink.valid(stroke('on',{note:'memo'})),true);assert.equal(Ink.valid(stroke()),true);
+ for(const bad of [{rect:[.1,.1,.2]},{rect:[.9,.1,.235,.18]},{rect:[.1,.9,.235,.18]},{rect:[-.01,.1,.2,.2]},{rect:[.1,.1,0,.2]},{rect:[.1,.1,.2,NaN]},{rect:'x'},{rect:undefined},
+  {color:'yellow'},{color:'#ff'},{mode:'draw'},{mode:undefined},{text:1},{text:'x'.repeat(Ink.NOTE_TEXT_MAX+1)},{note:''},{note:{}},{page:0},{ownerId:'mallory'},{pdfHash:'bad'}])
+  assert.equal(Ink.valid(memo('bad',bad)),false,JSON.stringify(bad));
+ // A memo needs no width/points; a stroke still does, and a stroke cannot borrow the memo shape.
+ for(const bad of [{width:undefined},{points:undefined},{note:''},{tool:'note'},{tool:'marker'}])assert.equal(Ink.valid(stroke('bad',bad)),false,JSON.stringify(bad));
+ assert.equal(Ink.same(memo(),memo()),true);for(const change of [{text:'a'},{rect:[.1,.1,.2,.18]},{mode:'text'},{note:'k'},{color:'#fbcfe0'}])assert.equal(Ink.same(memo(),memo('memo',change)),false);
+ assert.equal(Ink.same(stroke(),stroke('line',{note:'memo'})),false);assert.equal(Ink.opacity(memo()),1);
+});
+test('the eraser and the stroke selection never take a memo; a memo is found by its rect and its strokes by its key',()=>{
+ const m=memo(),on=stroke('on',{note:'memo',points:[[.15,.15,.5],[.2,.2,.5]]}),off=stroke('off',{points:[[.6,.6,.5],[.7,.7,.5]]});
+ assert.equal(Ink.hit(m,[.15,.15]),false);assert.deepEqual(Ink.inRect([m,on,off],{x:0,y:0,w:1,h:1}).map(s=>s.id),['on','off']);
+ assert.equal(Ink.noteAt([m,on,off],[.2,.2]).id,'memo');assert.equal(Ink.noteAt([m,on,off],[.6,.6]),undefined);
+ assert.equal(Ink.noteAt([m,memo('top',{rect:[.15,.15,.2,.2]})],[.2,.2]).id,'top');
+ assert.deepEqual(Ink.linked([m,on,off],m).map(s=>s.id),['on']);
+ // A moved copy keeps the key; a memo without `note` is linked by its id (the importer's shape).
+ assert.deepEqual(Ink.linked([memo('copy',{note:'memo'}),on],memo('copy',{note:'memo'})).map(s=>s.id),['on']);
+ // Two copies with one key (edited on two devices): neither takes the handwriting with it. Other pages are left alone.
+ assert.deepEqual(Ink.linked([m,memo('twin',{note:'memo'}),on],m),[]);assert.deepEqual(Ink.linked([m,stroke('p2',{note:'memo',page:2})],m),[]);
+});
+test('a memo moves with the strokes written on it, stays inside the page and keeps its size; resizing has a smallest size',()=>{
+ const m=memo(),on=stroke('on',{note:'memo',points:[[.15,.15,.5],[.2,.2,.5]]}),[a,b]=Ink.transform([m,on],{dx:.2,dy:.3},1.3);
+ assert.deepEqual(a.rect,[.3,.4,.235,.18]);assert.deepEqual(b.points,[[.35,.45,.5],[.4,.5,.5]]);assert.equal(b.note,'memo');assert.ok(Ink.valid(a)&&Ink.valid(b));
+ const [edge,carried]=Ink.transform([m,on],{dx:5,dy:5},1.3);
+ assert.deepEqual(edge.rect,[.765,.82,.235,.18]);assert.ok(Math.abs(carried.points[0][0]-edge.rect[0]-.05)<1e-9);assert.ok(Ink.valid(edge));
+ const box=Ink.bounds([m],1.3);assert.deepEqual([box.x,box.y,+box.w.toFixed(9),+box.h.toFixed(9)],[.1,.1,.235,.18]);
+ assert.deepEqual(Ink.noteRect(.5,.5,.01,.01,2),[.5,.5,Ink.NOTE_SMALLEST,Ink.NOTE_SMALLEST/2]);
+ assert.deepEqual(Ink.noteRect(.95,.95,.235,.18,1.3),[.765,.82,.235,.18]);assert.deepEqual(Ink.noteRect(-1,-1,3,3,1),[0,0,1,1]);
+ for(const r of [Ink.noteRect(.5,.5,.01,.01,2),Ink.noteRect(.99999,.99999,.3,.3,1.41),Ink.noteRect(.123456789,.2,.333333333,.4444444,1.3)])assert.ok(Ink.valid(memo('r',{rect:r})),JSON.stringify(r));
+});
+test('memo text wraps at spaces where it can and anywhere otherwise, and stops at the line limit',()=>{
+ const measure=t=>t.length;
+ assert.deepEqual(Ink.noteLines('hello world this is\n가나다라마바사',5,measure),['hello','world','this','is','가나다라마','바사']);
+ assert.deepEqual(Ink.noteLines('a\n\nb',5,measure),['a','','b']);assert.deepEqual(Ink.noteLines('',5,measure),['']);
+ assert.equal(Ink.noteLines('x'.repeat(1000),5,measure,3).length,3);
+ const layout=Ink.noteLayout(memo('t',{mode:'text',text:'가나다'}),1000,1300,{measureText:t=>({width:t.length*100})});
+ assert.deepEqual([layout.x,layout.y,layout.w,layout.h],[100,130,235,234]);assert.equal(layout.lines.length,1);assert.equal(layout.lines[0].text,'가나다');
+ assert.deepEqual(Ink.noteLayout(memo(),1000,1300,null).lines,[]);
+});
+test('memos are saved, listed, synced, tombstoned and restored like strokes; an edit is a new record',()=>{
+ const a=fixture(),b=fixture(),m=memo(),on=stroke('on',{note:'memo',createdAt:2});
+ assert.equal(a.store.commit({add:[m,on]}),true);
+ assert.deepEqual(a.store.list(binding,1).map(s=>s.id),['memo','on']);assert.deepEqual(a.store.list(binding,1)[0].rect,m.rect);
+ assert.deepEqual(JSON.parse([...a.memory.values()][0]).records.map(s=>s.tool),['note','pen']);
+ assert.throws(()=>a.store.commit({add:[memo('memo',{text:'changed'})]}),{code:'conflict'}); // never overwritten in place
+ assert.throws(()=>a.store.commit({add:[memo('bad',{rect:[.9,.9,.5,.5]})]}),{code:'binding'});
+ const edited=memo('memo-2',{note:'memo',mode:'text',text:'숨'});a.store.commit({add:[edited],remove:['memo']});
+ b.store.commit({add:[stroke('b')]});
+ const merged=Merge.merge(a.data,b.data).data;
+ assert.deepEqual(merged.scoreAnnotations.map(s=>s.id).sort(),['b','memo-2','on']);assert.ok(merged.deleted.scoreAnnotations.includes('memo'));
+ assert.deepEqual(merged.scoreAnnotations.find(s=>s.id==='memo-2').rect,m.rect);assert.equal(merged.scoreAnnotations.find(s=>s.id==='memo-2').text,'숨');
+ b.setData(merged);assert.equal(b.store.restore(),true);
+ assert.deepEqual(b.store.list(binding).map(s=>s.id).sort(),['b','memo-2','on']);
+ assert.deepEqual(Ink.linked(b.store.list(binding),b.store.list(binding).find(Ink.isNote)).map(s=>s.id),['on']);
+ // A reopened device restores the memo from its recovery copy when the shared save had failed.
+ const c=fixture();c.hooks.failChange=true;assert.equal(c.store.commit({add:[m]}),false);c.hooks.failChange=false;
+ assert.equal(Ink.create(c.options).restore(),true);assert.deepEqual(c.data.scoreAnnotations.map(s=>s.tool),['note']);
+});
