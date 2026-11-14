@@ -5,6 +5,7 @@ on:
       - 'app/monthly-*.js'
       - 'app/overall-growth-*.js'
       - 'app/growth-metrics-*.js'
+      - 'app/growth-dataset.js'
       - 'design-system/shared-nav.css'
       - 'app/monthly-*.css'
       - 'app/weak-phrase.js'
@@ -35,7 +36,7 @@ jobs:
           node-version: '22'
       - name: Parse newly integrated browser scripts
         run: |
-          for file in app/monthly-growth.js app/growth-metrics-model.js app/overall-growth-model.js app/overall-growth-ui.js app/monthly-practice-plans.js app/weak-phrase.js app/segment-ab-model.js app/segment-ab-ui.js app/plan-outcome-model.js app/plan-outcome-ui.js app/practice-room-model.js practice-room/app.js; do
+          for file in app/monthly-growth.js app/growth-metrics-model.js app/growth-dataset.js app/overall-growth-model.js app/overall-growth-ui.js app/monthly-practice-plans.js app/weak-phrase.js app/segment-ab-model.js app/segment-ab-ui.js app/plan-outcome-model.js app/plan-outcome-ui.js app/practice-room-model.js practice-room/app.js; do
             node --check "$file"
           done
       - name: Test growth models and app integration
