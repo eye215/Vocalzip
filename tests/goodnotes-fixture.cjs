@@ -52,12 +52,24 @@ function lz4Literals(raw) {
   const block = Buffer.concat([Buffer.from(head), raw]);
   return Buffer.concat([Buffer.from('bv41'), u32(raw.length), u32(block.length), block, Buffer.from('bv4$')]);
 }
-/** One ink item: [header record, body record] as in notes/<id>. */
-function inkItem(id, {color = [1, 0, 0, 1], deleted = false, payload, type = 0, shape = null}) {
+/** One ink item: [header record, body record] as in notes/<id>. `memo`: the id of the sticker memo the stroke was
+ *  written on — the header carries it as field 20 (a text). */
+function inkItem(id, {color = [1, 0, 0, 1], deleted = false, payload, type = 0, shape = null, memo = ''}) {
   const colour = msg(...color.map((c, i) => c ? f32(i + 1, c) : Buffer.alloc(0)));
   // A shape keeps its corner points and width in field 9: {1:{1:{x,y}…} 15:width}.
   const geometry = shape ? [ld(9, msg(ld(1, msg(...shape.points.map(([x, y]) => ld(1, msg(f32(1, x), f32(2, y)))))), f32(15, shape.width)))] : [];
-  return [msg(s(1, id), ld(2, msg(num(1, 2), num(2, 9)))), msg(ld(7, msg(s(1, id), ld(2, payload), ...(type ? [num(3, type)] : []), ld(4, colour), num(5, 1), ...geometry, ...(deleted ? [num(14, 1)] : []), num(21, 24))))];
+  return [msg(s(1, id), ld(2, msg(num(1, 2), num(2, 9))), ...(memo ? [s(20, memo)] : [])), msg(ld(7, msg(s(1, id), ld(2, payload), ...(type ? [num(3, type)] : []), ld(4, colour), num(5, 1), ...geometry, ...(deleted ? [num(14, 1)] : []), num(21, 24))))];
+}
+/** A sticker memo as in notes/<id>: [header record, {20: memo}]. x, y: top-left corner in page units; w, h: the size
+ *  before `scale` (GoodNotes shows w·scale × h·scale); color: r, g, b, a floats; counter: the register clock (a later
+ *  version of the same memo has a higher one); typed: the typed-text blob is not the 96 bytes of an empty memo. */
+function stickerItem(id, {x, y, w = 256, h = 256, scale = 1, color = [0.98, 0.906, 0.471, 1], counter = 3, erased = false, typed = false, author = 'Fixture Author'}) {
+  const clock = ld(3, msg(num(1, counter), num(2, 4255771838)));
+  const body = msg(s(1, id), num(2, 35), clock,
+    ld(20, msg(ld(1, msg(f32(1, x), f32(2, y))), f32(3, scale))), ld(21, msg(ld(2, msg(f32(1, w), f32(2, h))))),
+    ld(30, msg(...color.map((c, i) => f32(i + 1, c)))), ld(31, msg(ld(1, msg(ld(2, Buffer.alloc(typed ? 140 : 96, 7)), num(4, 1))))),
+    s(33, author), ...(erased ? [num(14, 1)] : []), num(40, 1), num(41, 1));
+  return [msg(s(1, id), ld(2, msg(num(1, counter), num(2, 4255771838))), num(16, 35)), msg(ld(20, body))];
 }
 
 function zip(files) {
@@ -76,6 +88,8 @@ function zip(files) {
 }
 
 const uuid = n => '00000000-0000-4000-8000-' + n.toString(16).toUpperCase().padStart(12, '0');
+/** The id of the k-th sticker memo on page i (both from 0) when the test gives none. */
+const memoId = (i, k) => uuid(0x80000 + i * 256 + k);
 /** A few bytes that start like a GoodNotes recording: an MP4 `ftyp` box (M4A), then filler that differs per seed. */
 const m4a = (seed = 1, size = 96) => Buffer.concat([u32(0), Buffer.from('ftypM4A '), u32(0), Buffer.from('M4A mp42isom'), Buffer.from(Array.from({length:size}, (_, i) => (i * 31 + seed * 17) & 255))]).fill(Buffer.from([0, 0, 0, 28]), 0, 4);
 const FLICKS = 705600000;
@@ -86,6 +100,10 @@ const FLICKS = 705600000;
  *   event 160 (created: recording id, attachment id, document id, length in flicks), 164 (title register), 163 (deleted),
  *   161 (a stroke tied to a moment; ignored by the reader), plus the attachment event/row/file. A deleted recording has
  *   no file; `missing` keeps the attachment row but leaves the file out of the archive.
+ * pages[i].memos: [{x, y, w, h, scale, color, strokes: n, id?, versions?: [{…changed fields, counter}], erased?, typed?}] —
+ *   sticker memos (see stickerItem). `strokes` adds n straight pen strokes across the memo as it is shown (page
+ *   coordinates, like every stroke), each linked to the memo by its header; they come before the memo's own record,
+ *   as in real files. `versions` are later records of the same memo.
  */
 function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n% synthetic\n'), pages, outline = [], width = 600, height = 800, rename = '', recordings = []}) {
   const DOC = uuid(0xD0C), ATT = uuid(0xA77), FILE = uuid(0xF11E);
@@ -100,10 +118,17 @@ function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n%
     for (const m of p.moves || []) events.push(event(pageId, 55, msg(s(1, DOC), s(2, pageId), ld(3, msg(s(1, m.order), ld(2, msg(num(1, m.counter ?? 2), num(2, 6))))))));
     // A page removed in GoodNotes keeps its page event and gets a "removed" register (kind 56).
     if (p.removed != null) events.push(event(pageId, 56, msg(s(1, DOC), s(2, pageId), ld(3, msg(num(1, p.removed ? 1 : 0), ld(2, msg(num(1, 1), num(2, 5))))), s(4, uuid(0x7000 + i)))));
-    if (p.ink) {
+    const memoRecords = (p.memos || []).flatMap((m, k) => {
+      const id = m.id || memoId(i, k), sw = (m.w ?? 256) * (m.scale ?? 1), sh = (m.h ?? 256) * (m.scale ?? 1), n = m.strokes || 0;
+      const lines = Array.from({length: n}, (_, j) => { const y = m.y + sh * (j + 1) / (n + 1), x0 = m.x + sw * 0.15, x1 = m.x + sw * 0.85;
+        return inkItem(uuid(0x90000 + i * 4096 + k * 256 + j), {color: m.ink || [0.74, 0.1, 0.1, 1], memo: id,
+          payload: stored(pathTuple({width: 3, kinds: [0, 1], moves: [[x0, y]], curves: [[(x0 + x1) / 2, y, x1, y]]}))}); });
+      return [...lines, stickerItem(id, m), ...(m.versions || []).map(v => stickerItem(id, {...m, ...v}))];
+    });
+    if (p.ink || memoRecords.length) {
       const noteId = uuid(0x1000 + i * 2 + 1);
       notes.push(msg(s(1, noteId), s(2, 'notes/' + noteId)));
-      files.push(['notes/' + noteId, stream(p.ink.flat()), true]);
+      files.push(['notes/' + noteId, stream([...(p.ink || []), ...memoRecords].flat()), true]);
     }
   });
   outline.forEach((o, i) => events.push(event(uuid(0x1000 + o.page * 2), 65, msg(s(1, uuid(0x1000 + o.page * 2)), s(2, uuid(0xE000 + i)), ld(4, msg(s(1, o.order || String(i)))), ld(5, msg(s(1, o.title)))))));
@@ -127,4 +152,4 @@ function notebook({title = '테스트 악보집', pdf = Buffer.from('%PDF-1.4\n%
     ['index.attachments.pb', stream([msg(s(1, ATT), s(2, 'attachments/' + FILE)), ...audio]), false],
     ['index.notes.pb', stream(notes), false], ['attachments/' + FILE, pdf, false], ...audioFiles, ...files]);
 }
-module.exports = {notebook, inkItem, pathTuple, penTuple, brushTuple, stored, lz4Literals, zip, uuid, m4a};
+module.exports = {notebook, inkItem, stickerItem, memoId, pathTuple, penTuple, brushTuple, stored, lz4Literals, zip, uuid, m4a};

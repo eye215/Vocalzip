@@ -4,7 +4,8 @@
  * The handwriting goes INTO that PDF as an attached file (vocalzip-ink.json). The PDF is stored in R2 like every
  * score, so the handwriting reaches every device with it, however much there is: nothing is capped, flattened or
  * kept on one device only. The viewer shows it as ordinary editable strokes (app/score-ink.js); erasing or moving
- * one is recorded with the account's synced ink records, so edits sync too.
+ * one is recorded with the account's synced ink records, so edits sync too. A GoodNotes sticker memo goes into the
+ * same file as the app's own sticker memo (a 펜 memo), and the strokes written on it stay linked to it.
  *
  * Audio recorded in the notebook (the owner records each song's MR there, titled with the song) is offered under the
  * scores as "MR 녹음": each recording the user leaves switched on is added to a song's MR list through
@@ -69,16 +70,29 @@ function simplify(points,tolerance=0.0006){
 /** Sections with their ink simplified. Every stroke stays editable. */
 function plan(model){
  return model.sections.map((section,index)=>{
-  const pages=section.pages.map((p,i)=>({source:model.pages[p],number:i+1,strokes:model.pages[p].strokes.map(s=>({...s,points:simplify(s.points)}))}));
-  return {index,title:section.title,from:section.from,to:section.to,untitled:section.untitled,pages,count:pages.reduce((n,p)=>n+p.strokes.length,0)};
+  const pages=section.pages.map((p,i)=>({source:model.pages[p],number:i+1,strokes:model.pages[p].strokes.map(s=>({...s,points:simplify(s.points)})),memos:model.pages[p].memos||[]}));
+  return {index,title:section.title,from:section.from,to:section.to,untitled:section.untitled,pages,count:pages.reduce((n,p)=>n+p.strokes.length,0),memos:pages.reduce((n,p)=>n+p.memos.length,0)};
  });
 }
-/** The attachment: strokes in page units, without account or PDF binding (the viewer adds those when it opens the
- * score, because the binding includes this very PDF's hash). Ids are stable per score, so a re-import of the same
- * section cannot collide with another score's strokes. */
+/** A GoodNotes memo's place as a memo rect of the viewer: its own size (at least the smallest a memo may be), moved
+ * inside the page if it hangs over an edge. */
+function memoRect(memo){
+ const round=n=>Math.round(n*100000)/100000,w=Math.max(Ink.NOTE_MIN,Math.min(1,memo.w)),h=Math.max(Ink.NOTE_MIN,Math.min(1,memo.h));
+ const x=round(Math.max(0,Math.min(1-w,memo.x))),y=round(Math.max(0,Math.min(1-h,memo.y)));
+ return [x,y,Math.min(round(w),round(1-x)),Math.min(round(h),round(1-y))];
+}
+/** The attachment: strokes and sticker memos in page units, without account or PDF binding (the viewer adds those
+ * when it opens the score, because the binding includes this very PDF's hash). Ids are stable per score, so a
+ * re-import of the same section cannot collide with another score's records. Each page's memos come before its
+ * strokes (a 펜 memo: {tool:'note', rect, mode:'pen', note}); a stroke written on a memo carries the memo's `note`,
+ * so it moves and is deleted with it. The list is called `strokes` because the viewer reads it under that name. */
 function inkFile(item,scoreId,createdAt){
- let n=0;
- const strokes=item.pages.flatMap(page=>page.strokes.map(s=>({id:'gn-'+scoreId+'-'+(n++),page:page.number,tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,points:s.points,createdAt:createdAt+n})));
+ let n=0,m=0;const total=item.pages.reduce((k,page)=>k+(page.memos||[]).length,0);
+ const strokes=item.pages.flatMap(page=>{
+  const keys=new Map();
+  const memos=(page.memos||[]).map(memo=>{const id='gn-'+scoreId+'-m'+m;keys.set(memo.id,id);return {id,page:page.number,tool:'note',color:memo.color,rect:memoRect(memo),mode:'pen',note:id,createdAt:createdAt-total+(m++)};});
+  return [...memos,...page.strokes.map(s=>({id:'gn-'+scoreId+'-'+(n++),page:page.number,tool:s.tool,color:s.color,opacity:s.opacity,width:s.width,points:s.points,...(keys.has(s.memo)?{note:keys.get(s.memo)}:{}),createdAt:createdAt+n}))];
+ });
  return {format:'vocalzip-ink',version:1,source:'goodnotes',strokes};
 }
 /** The notebook's PDF for page copying. Bought scores are often locked with an owner password only (they open without
@@ -101,7 +115,7 @@ async function buildPdf(item,model,lib,sources,ink){
    if(ref.page<1||ref.page>source.getPageCount())throw Error('굿노트 파일의 쪽 번호가 PDF와 맞지 않아요.');
    [added]=await out.copyPages(source,[ref.page-1]);out.addPage(added);
   }else added=out.addPage([page.source.width,page.source.height]);
-  if(page.strokes.length){
+  if(page.strokes.length||page.memos?.length){
    // GoodNotes places ink on the upright page as it shows it. A rotated or cropped PDF page would put the strokes
    // somewhere else, so such a page stops the import instead of silently misplacing (or dropping) them.
    const {width,height}=added.getSize(),box=added.getCropBox?.()||{x:0,y:0,width,height},turned=added.getRotation?.().angle||0;
@@ -117,6 +131,7 @@ const summary=report=>[
  report.unsupported?'알 수 없는 형식의 필기 '+report.unsupported+'개는 가져오지 않아요.':'',
  report.unmatchedNotes?'어느 쪽의 필기인지 확인하지 못한 묶음 '+report.unmatchedNotes+'개는 가져오지 않아요.':'',
  report.pagesWithoutPdf?'PDF가 아닌 쪽 '+report.pagesWithoutPdf+'장은 빈 쪽으로 들어가요.':'',
+ report.memoTexts?'글자를 쓴 것으로 보이는 스티커 메모 '+report.memoTexts+'개는 글자 없이 들어가요. 펜으로 쓴 것은 그대로 가져와요.':'',
  report.recordingsSkipped>report.recordingsDeleted?'파일이 남아 있지 않은 녹음 '+(report.recordingsSkipped-report.recordingsDeleted)+'개는 가져올 수 없어요.':''].filter(Boolean);
 
 /** Counts only (no titles, no content): what the reader found in the file, for telling why an import looks wrong. */
@@ -125,7 +140,8 @@ const diagnosis=(model,file)=>{const r=model.report,list=o=>Object.entries(o||{}
   '쪽 기록 '+r.pageEvents+' · 옮긴 쪽 '+(r.movedPages||0)+' · 지움 표시 '+r.removedPages+' · 가져올 쪽 '+model.pages.length+' · PDF 쪽 번호 '+model.pages.map(p=>p.pdf?p.pdf.page:'-').join(','),
   '필기 '+r.strokes+'획 · 못 읽음 '+r.unsupported+' · 지운 필기 '+r.deleted+' · 짝 없는 묶음 '+r.unmatchedNotes,
   '녹음 '+(r.recordings||0)+'개(지운 것 '+(r.recordingsDeleted||0)+')'+(r.recordingsSkipped>r.recordingsDeleted?' · 파일 없음 '+(r.recordingsSkipped-r.recordingsDeleted):''),
-  '필기 종류 '+list(r.inkKinds),'필기가 아닌 것(스티커·이미지·글상자 등, 아직 가져오지 않아요) '+list(r.elements),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)];};
+  r.memos||r.memosDeleted?'스티커 메모 '+(r.memos||0)+'개'+(r.memosDeleted?'(지운 것 '+r.memosDeleted+')':'')+(r.memoTexts?' · 글자 있음 '+r.memoTexts:''):'',
+  '필기 종류 '+list(r.inkKinds),'필기가 아닌 것(이미지·글상자 등, 아직 가져오지 않아요) '+list(r.elements),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)].filter(Boolean);};
 /**
  * @param {File} file a .goodnotes file
  * @param {{song?:object, onDone?:Function}} [options] song: the song page the import was started from
@@ -144,7 +160,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
   * names every page of a song the same) start out joined. */
  let n=0;
  const join=list=>{let page=0;const pages=list.flatMap(a=>a.pages).map(p=>({...p,number:++page}));
-  return {key:'r'+(n++),atoms:list,title:list[0].title,from:list[0].from,to:list.at(-1).to,untitled:list.every(a=>a.untitled),pages,count:pages.reduce((k,p)=>k+p.strokes.length,0)};};
+  return {key:'r'+(n++),atoms:list,title:list[0].title,from:list[0].from,to:list.at(-1).to,untitled:list.every(a=>a.untitled),pages,count:pages.reduce((k,p)=>k+p.strokes.length,0),memos:pages.reduce((k,p)=>k+p.memos.length,0)};};
  const decorate=(item,{target,title}={})=>{
   if(title)item.title=title;
   // A title that names one of the songs goes there; a lone section started from a song's page goes to that song.
@@ -156,7 +172,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
  };
  const runs=[];for(const a of atoms){const last=runs.at(-1);if(last&&!a.untitled&&!last[0].untitled&&plain(a.title)&&plain(a.title)===plain(last[0].title))last.push(a);else runs.push([a]);}
  let items=runs.map(list=>decorate(join(list)));
- const total=atoms.reduce((k,i)=>k+i.count,0),notes=summary(model.report),run={busy:false,cancelled:false,finished:false},picked=new Set();
+ const total=atoms.reduce((k,i)=>k+i.count,0),memoTotal=atoms.reduce((k,i)=>k+i.memos,0),notes=summary(model.report),run={busy:false,cancelled:false,finished:false},picked=new Set();
  /* One row per recording (an MR). choice: what the user picked in 넣을 곡 ('auto' until they do); target: what the
   * row shows and does now — a song id, 'score' (the new song its score row creates in this import) or 'skip'. */
  const mrs=(model.recordings||[]).map((rec,i)=>{const title=rec.title||'굿노트 녹음';
@@ -193,7 +209,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
  const options=item=>'<option value="new" data-pick-always'+(item.target==='new'?' selected':'')+'>새 곡으로 추가</option>'+
   songs().map(s=>'<option value="'+esc(s.id)+'"'+(item.target===s.id?' selected':'')+'>'+esc(VZ.songLabel?VZ.songLabel(s):s.title)+'</option>').join('')+
   '<option value="skip" data-pick-always'+(item.target==='skip'?' selected':'')+'>가져오지 않기</option>';
- const inkLabel=item=>item.count?'필기 '+item.count+'획':'필기 없음';
+ const inkLabel=item=>(item.count?'필기 '+item.count+'획':'필기 없음')+(item.memos?' · 스티커 메모 '+item.memos+'개':'');
  const pagesLabel=item=>item.from===item.to?item.from+'쪽':item.from+'–'+item.to+'쪽';
  /* One compact white card per score: tick · title (editable) · 나누기, then pages/ink, then 넣을 곡. */
  const rowHtml=(item,i)=>{const done=item.state.done,off=done?' disabled':'';
@@ -204,14 +220,14 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
   '<p class="gn-meta" data-gn-info>'+pagesLabel(item)+' · '+inkLabel(item)+(item.atoms.length>1?' · '+item.atoms.length+'개 합침':'')+(done?' · 가져왔어요':'')+'</p>'+
   (item.duplicate&&!done?'<p class="gn-note">이미 가져온 악보예요</p>':'')+
   '<label class="gn-target"><span>넣을 곡</span><select data-gn-target data-pick="song" data-pick-title="넣을 곡" aria-label="'+esc(item.title)+' 넣을 곡"'+off+'>'+options(item)+'</select></label></div></div>';};
- const meta=model.pages.length+'쪽 · '+(model.outline.length?atoms.filter(a=>!a.untitled).length+'곡':'개요 없음')+' · 필기 '+total.toLocaleString('ko-KR')+'획'+(mrs.length?' · 녹음 '+mrs.length+'개':'');
+ const meta=model.pages.length+'쪽 · '+(model.outline.length?atoms.filter(a=>!a.untitled).length+'곡':'개요 없음')+' · 필기 '+total.toLocaleString('ko-KR')+'획'+(memoTotal?' · 스티커 메모 '+memoTotal+'개':'')+(mrs.length?' · 녹음 '+mrs.length+'개':'');
  VZ.sheet({title:'굿노트 가져오기',label:'굿노트 가져오기',
   body:'<form id="gn-import" class="gn-import">'+
    '<section class="gn-summary"><strong>'+esc(model.title||file.name)+'</strong><p data-gn-summary>'+esc(meta)+'</p>'+
    '<p>'+(model.outline.length?'곡을 골라 가져오거나, 한 곡이 여러 줄로 나뉘었으면 이어진 줄을 골라 합치세요.':'개요가 없어서 전체를 한 곡으로 가져와요. 굿노트에서 곡마다 개요를 넣으면 곡별로 나눠져요.')+'</p>'+
    notes.map(t=>'<p class="gn-warn">'+esc(t)+'</p>').join('')+
    '<details class="gn-diag" data-gn-diag><summary>진단 정보</summary>'+diagnosis(model,file).map(t=>'<p>'+esc(t)+'</p>').join('')+
-    '<button type="button" class="btn sm secondary" data-gn-structure>진단 파일 저장</button><p>쪽 순서·지움 같은 구조 기록과, 스티커·글상자의 위치·크기만 담아요. 악보 PDF, 필기, 글상자에 쓴 글은 들어가지 않아요(노트·개요 제목은 들어가요).</p></details>'+
+    '<button type="button" class="btn sm secondary" data-gn-structure>진단 파일 저장</button><p>쪽 순서·지움 같은 구조 기록과, 스티커·글상자의 위치·크기, 스티커에 쓴 필기가 차지한 범위(숫자)만 담아요. 악보 PDF, 필기, 글상자·스티커에 쓴 글은 들어가지 않아요(노트·개요 제목은 들어가요).</p></details>'+
    '<p>파일은 이 기기에서만 읽고, '+(mrs.length?'곡별 PDF와 필기, 고른 MR 녹음만 올라가요.':'곡별 PDF와 필기만 올라가요.')+' 필기는 모두 수정할 수 있어요.</p></section>'+
    '<div class="gn-bar" data-gn-bar><button type="button" class="gn-all" data-gn-all aria-pressed="false"><span class="gn-box" aria-hidden="true"></span><span data-gn-alltext>전체 선택</span></button>'+
    '<span class="gn-count" data-gn-count></span><span class="gn-merge" data-gn-mergebar hidden><button type="button" class="gn-merge-btn" data-gn-merge>한 곡으로 합치기</button><span data-gn-mergehint></span></span></div>'+
@@ -320,7 +336,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
     // A ticked row is imported even if it was set to 가져오지 않기: it goes to its matching song, or a new one.
     const chosen=open().filter(i=>picked.has(i.key)),chosenMr=openMr().filter(m=>picked.has(m.key)),ticked=chosen.length+chosenMr.length;
     for(const item of chosen)if(item.target==='skip'){const hit=matchSong(item.title,songs())||(single?song:null);item.target=hit?hit.id:'new';}
-    const todo=ticked?chosen:open().filter(i=>i.target!=='skip'),todoMr=ticked?chosenMr:openMr().filter(m=>m.target!=='skip'),result={scores:0,ink:0,mr:0},failed=[];
+    const todo=ticked?chosen:open().filter(i=>i.target!=='skip'),todoMr=ticked?chosenMr:openMr().filter(m=>m.target!=='skip'),result={scores:0,ink:0,memos:0,mr:0},failed=[];
     const units=todo.length+todoMr.length,got=()=>[result.scores?'악보 '+result.scores+'개':'',result.mr?'MR '+result.mr+'개':''].filter(Boolean).join(' · ');
     picked.clear();bar.hidden=true;
     try{
@@ -330,8 +346,8 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
       // Overall bar: each song is an equal share; within a song, making the PDF ≈10%, uploading ≈85%, saving the rest.
       const step=(text,part)=>progress.set((n+1)+' / '+todo.length+'곡 · '+item.title,text,(n+part)/units);
       step('PDF 만드는 중',0);
-      const ink=inkFile(item,item.state.id,item.state.createdAt),bad=ink.strokes.find(s=>!Ink.valid({...s,version:1,ownerId:owner,songId:'song',scoreId:item.state.id,r2Key:'u/'+owner+'/'+item.state.id+'/original.pdf',pdfHash:'0'.repeat(64)}));
-      if(bad)throw Error('“'+item.title+'” '+bad.page+'쪽에 앱에서 다룰 수 없는 필기가 있어요. 필기를 빠뜨리지 않도록 가져오기를 멈췄어요.');
+      const ink=inkFile(item,item.state.id,item.state.createdAt),marks=ink.strokes.filter(Ink.isNote).length,bad=ink.strokes.find(s=>!Ink.valid({...s,version:1,ownerId:owner,songId:'song',scoreId:item.state.id,r2Key:'u/'+owner+'/'+item.state.id+'/original.pdf',pdfHash:'0'.repeat(64)}));
+      if(bad)throw Error('“'+item.title+'” '+bad.page+'쪽에 앱에서 다룰 수 없는 '+(Ink.isNote(bad)?'스티커 메모':'필기')+'가 있어요. 필기를 빠뜨리지 않도록 가져오기를 멈췄어요.');
       item.state.pdf||=await buildPdf(item,model,lib,sources,ink);guard();
       const bytes=item.state.pdf;
       if(bytes.length>MAX_PDF)throw Error('“'+item.title+'” PDF가 50MB를 넘어요. 굿노트에서 나눠서 내보내 주세요.');
@@ -342,9 +358,9 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
       const target=item.target==='new'?VZ.addSong(item.title):songs().find(s=>s.id===item.target);
       if(!target)throw Error('넣을 곡을 찾지 못했어요.');
       item.target=target.id;
-      const entry={id:item.state.id,songId:target.id,title:item.title,originalKey:'',practiceKey:'',fileName:name,r2Key:item.state.receipt.key,size:bytes.length,pages:item.pages.length,source:'goodnotes',importedStrokes:ink.strokes.length,uploadedAt:Date.now(),updatedAt:Date.now()};
+      const entry={id:item.state.id,songId:target.id,title:item.title,originalKey:'',practiceKey:'',fileName:name,r2Key:item.state.receipt.key,size:bytes.length,pages:item.pages.length,source:'goodnotes',importedStrokes:ink.strokes.length-marks,uploadedAt:Date.now(),updatedAt:Date.now()};
       if(!VZ.change(d=>{const s=d.songs.find(x=>x.id===target.id);if(!s)throw Error('곡을 찾을 수 없어요.');s.scores||=[];if(!s.scores.some(x=>x.id===entry.id))s.scores.push(entry);}))throw Error('목록에 저장하지 못했어요.');
-      result.scores++;result.ink+=ink.strokes.length;
+      result.scores++;result.ink+=ink.strokes.length-marks;result.memos+=marks;
       item.state.done=true;item.state.pdf=null;
       const done=rowOf(item);if(done){done.dataset.done='true';done.querySelector('[data-gn-info]').textContent+=' · 가져왔어요';for(const control of done.querySelectorAll('input,select,button'))control.disabled=true;}
      }
@@ -380,7 +396,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
       else{run.finished=true;close();}
       progress.hide();
      }
-     if(about)VZ.toast(about+(result.ink?' · 수정 가능한 필기 '+result.ink+'획':'')+'.');
+     if(about)VZ.toast(about+(result.ink?' · 수정 가능한 필기 '+result.ink+'획':'')+(result.memos?' · 스티커 메모 '+result.memos+'개':'')+'.');
      if(about||!failed.length)onDone(result);
     }catch(error){
      const why=(error.message||String(error))+(result.mr?' 앞의 '+got()+'는 가져왔어요.':result.scores?' 앞의 '+result.scores+'곡은 가져왔어요.':'')+' 다시 누르면 이어서 해요.';
@@ -394,6 +410,6 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
    };
   }});
 };
-VZ.goodnotesImport.plan=plan;VZ.goodnotesImport.buildPdf=buildPdf;VZ.goodnotesImport.inkFile=inkFile;VZ.goodnotesImport.library=library;
+VZ.goodnotesImport.plan=plan;VZ.goodnotesImport.buildPdf=buildPdf;VZ.goodnotesImport.inkFile=inkFile;VZ.goodnotesImport.memoRect=memoRect;VZ.goodnotesImport.library=library;
 VZ.goodnotesImport.matchSong=matchSong;VZ.goodnotesImport.untrack=untrack;VZ.goodnotesImport.openSource=openSource;VZ.goodnotesImport.simplify=simplify;VZ.goodnotesImport.ATTACHMENT=ATTACHMENT;
 })();

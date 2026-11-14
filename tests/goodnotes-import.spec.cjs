@@ -504,3 +504,115 @@ test('a notebook without recordings shows no MR section and the button reads as 
  await expect(sheet.locator('button[type=submit]')).toHaveText('가져오기 (1곡)');
  await expect(sheet.locator('[data-gn-diag]')).toContainText('녹음 0개(지운 것 0)');
 });
+
+// ---- Sticker memos (a notes record whose field 20 is a message): imported as the app's own 펜 memo. ----
+test('a GoodNotes sticker memo comes in as a memo under its strokes, at its place; it moves with its strokes and is deleted after a confirm; a second import adds nothing',async({page},testInfo)=>{
+ const r2=await setup(page);
+ // Page 300×400. Song 1: a yellow memo at (180, 80), 80×80, with two strokes written on it and a third that runs over
+ // its right edge; one stroke beside it. Song 2: nothing but a resized blue memo that hangs over the page corner.
+ const over=F.inkItem(F.uuid(7),{color:[.74,.1,.1,1],memo:F.memoId(0,0),payload:F.stored(F.pathTuple({width:3,...line(200,150,270,150)}))});
+ const notebook=F.notebook({title:'메모 악보집',pdf:pdf(2),width:300,height:400,pages:[
+  {pdfPage:1,order:'a',ink:[ink(1,[0,0,1,1],3,30,300,120,300),over],memos:[{x:180,y:80,w:80,h:80,strokes:2}]},
+  {pdfPage:2,order:'b',memos:[{x:250,y:350,w:100,h:100,scale:.8,color:[.6,.8,1,1]}]}],
+  outline:[{page:0,title:'Defying Gravity'},{page:1,title:'The River'}]});
+ await pick(page,'메모 악보집.goodnotes',notebook);
+ let sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
+ await expect(sheet.locator('[data-gn-summary]')).toHaveText('2쪽 · 2곡 · 필기 4획 · 스티커 메모 2개');
+ const rows=sheet.locator('[data-gn-section]');
+ await expect(rows.nth(0).locator('[data-gn-info]')).toHaveText('1쪽 · 필기 4획 · 스티커 메모 1개');
+ await expect(rows.nth(1).locator('[data-gn-info]')).toHaveText('2쪽 · 필기 없음 · 스티커 메모 1개');
+ await expect(sheet.locator('[data-gn-diag]')).toContainText('스티커 메모 2개');
+ await expect(sheet.locator('[data-gn-diag]')).toContainText('필기가 아닌 것(이미지·글상자 등, 아직 가져오지 않아요) 없음');
+ await sheet.getByRole('button',{name:'가져오기 (2곡)'}).click();
+ await expect(page.locator('.toast')).toContainText('악보 2개를 가져왔어요 · 수정 가능한 필기 4획 · 스티커 메모 2개');
+ await expect(sheet).toHaveCount(0);
+
+ const [mine,river]=await page.evaluate(()=>window.VZ.db.songs.map(s=>s.scores[0]));
+ expect([mine.importedStrokes,river.importedStrokes]).toEqual([4,0]);
+ // Each page's memo comes before its strokes; the strokes written on it carry its link key; ids belong to the score.
+ const a=await attached(r2.store.get(mine.r2Key).bytes),b=await attached(r2.store.get(river.r2Key).bytes),key='gn-'+mine.id+'-m0';
+ expect(a.strokes.map(s=>[s.id,s.tool,s.note])).toEqual([[key,'note',key],['gn-'+mine.id+'-0','pen',undefined],['gn-'+mine.id+'-1','pen',key],['gn-'+mine.id+'-2','pen',key],['gn-'+mine.id+'-3','pen',key]]);
+ expect(a.strokes[0]).toMatchObject({page:1,color:'#fae778',rect:[0.6,0.2,0.26667,0.2],mode:'pen'});
+ expect(Object.keys(a.strokes[0]).sort()).toEqual(['color','createdAt','id','mode','note','page','rect','tool']); // no text, no author
+ expect(a.strokes[0].createdAt).toBeLessThan(a.strokes[1].createdAt);
+ expect(a.strokes.every(s=>s.memo===undefined)).toBe(true);
+ // A song whose only handwriting is a memo still gets its attachment; a memo over the page edge is moved inside, same size.
+ expect(b.strokes).toHaveLength(1);
+ expect(b.strokes[0]).toMatchObject({id:'gn-'+river.id+'-m0',page:1,tool:'note',color:'#99ccff',rect:[0.73333,0.8,0.26667,0.2],mode:'pen',note:'gn-'+river.id+'-m0'});
+ expect(await page.evaluate(([list,owner])=>list.every(s=>window.VzipScoreInk.valid({...s,version:1,ownerId:owner,songId:'s',scoreId:'x',r2Key:'u/'+owner+'/x/original.pdf',pdfHash:'0'.repeat(64)})),[[...a.strokes,...b.strokes],'ui-test-user'])).toBe(true);
+ expect(await page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).length)).toBe(0);
+
+ // The viewer: the memo where GoodNotes had it (within a pixel), under the handwriting, strokes on top.
+ let viewer=await open(page,'Defying Gravity');
+ const note=viewer.locator('[data-ink-note]'),svg=viewer.locator('[data-ink-svg]');
+ await expect(note).toHaveCount(1);await expect(strokesIn(viewer)).toHaveCount(4);
+ const placed=async()=>{const p=await svg.boundingBox(),m=await note.locator('.score-ink-note-bg').boundingBox();return [(m.x-p.x)/p.width,(m.y-p.y)/p.height,m.width/p.width,m.height/p.height,p.width,p.height];};
+ let at=await placed();
+ [0.6,0.2,0.26667,0.2].forEach((v,i)=>expect(Math.abs(at[i]-v)*(i%2?at[5]:at[4]),'memo rect value '+i).toBeLessThanOrEqual(1));
+ expect(await svg.evaluate(el=>{const all=[...el.children],memo=all.findIndex(n=>n.matches('[data-ink-note]')),first=all.findIndex(n=>n.matches('path[data-stroke]'));return memo>=0&&memo<first;})).toBe(true);
+ expect(await note.locator('.score-ink-note-bg').evaluate(n=>n.getAttribute('fill')||getComputedStyle(n).fill)).toMatch(/#fae778|rgb\(250, 231, 120\)/);
+ // The stroke that runs over the memo's right edge is drawn past it, as in GoodNotes.
+ const right=await note.locator('.score-ink-note-bg').evaluate(n=>n.getBoundingClientRect().right);
+ expect(Math.max(...await strokesIn(viewer).evaluateAll(list=>list.map(n=>n.getBoundingClientRect().right)))).toBeGreaterThan(right+2);
+ await viewer.locator('[data-ink-box]').screenshot({path:testInfo.outputPath('goodnotes-sticker-memo.png')});
+
+ // 선택 tool: dragging the memo moves it and the three strokes written on it together; the stroke beside it stays.
+ const press=async(x,y)=>{const p=await svg.boundingBox();return [p.x+p.width*x,p.y+p.height*y];};
+ // Where each stroke starts, as a part of the page (the page itself shifts when the memo bar opens above it).
+ const corners=()=>svg.evaluate(el=>{const p=el.getBoundingClientRect();return [...el.querySelectorAll('path[data-stroke]')].map(n=>{const r=n.getBoundingClientRect();return [(r.x-p.x)/p.width,(r.y-p.y)/p.height];}).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);});
+ const before=await corners();
+ await act(viewer,'선택');
+ let from=await press(.63,.38),to=await press(.43,.58);
+ await page.mouse.move(...from);await page.mouse.down();await page.mouse.move((from[0]+to[0])/2,(from[1]+to[1])/2,{steps:4});await page.mouse.move(...to,{steps:4});await page.mouse.up();
+ await expect.poll(async()=>(await page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).filter(s=>s.tool==='note').map(s=>s.rect[0])))[0]).toBeCloseTo(0.4,2);
+ const saved=await page.evaluate(()=>window.VZ.db.scoreAnnotations),moved=saved.find(s=>s.tool==='note'),carried=saved.filter(s=>s.tool!=='note');
+ expect(moved.rect[1]).toBeCloseTo(0.4,2);expect(moved.rect.slice(2)).toEqual([0.26667,0.2]);expect([moved.note,moved.mode,moved.color]).toEqual([key,'pen','#fae778']);
+ expect(carried.map(s=>s.note)).toEqual([key,key,key]); // still linked to the memo
+ expect(await page.evaluate(ids=>ids.every(id=>window.VZ.db.deleted.scoreAnnotations.includes(id)),a.strokes.filter(s=>s.note).map(s=>s.id))).toBe(true);
+ await expect(note).toHaveCount(1);await expect(strokesIn(viewer)).toHaveCount(4);
+ at=await placed();
+ const shift=[at[0]-0.6,at[1]-0.2];expect(shift[0]).toBeCloseTo(-0.2,2);expect(shift[1]).toBeCloseTo(0.2,2);
+ const after=await corners(),near=(p,q)=>Math.abs(p[0]-q[0])*at[4]<1.5&&Math.abs(p[1]-q[1])*at[5]<1.5;
+ const beside=before.at(-1); // the lowest stroke on the page is the one beside the memo
+ expect(after.filter(p=>near(p,beside))).toHaveLength(1);
+ for(const p of before.slice(0,3))expect(after.filter(q=>near(q,[p[0]+shift[0],p[1]+shift[1]])),'stroke moved with the memo').toHaveLength(1);
+
+ // Deleting the memo names the handwriting on it and waits for the confirm.
+ const tap=await press(.45,.58);await page.mouse.click(...tap);
+ const bar=viewer.locator('[data-ink-memo-bar]');
+ await bar.getByRole('button',{name:'메모 삭제',exact:true}).click();
+ const confirm=page.getByRole('alertdialog').or(page.getByRole('dialog',{name:'메모 삭제'})).last();
+ await expect(confirm).toContainText('이 메모와 그 위에 쓴 필기 3개를 함께 지울까요?');
+ await confirm.getByRole('button',{name:'취소',exact:true}).click();
+ await expect(note).toHaveCount(1);await expect(strokesIn(viewer)).toHaveCount(4);
+ await bar.getByRole('button',{name:'메모 삭제',exact:true}).click();
+ await confirm.getByRole('button',{name:'삭제',exact:true}).click();
+ await expect(note).toHaveCount(0);await expect(strokesIn(viewer)).toHaveCount(1);
+ await viewer.getByRole('button',{name:'돌아가기',exact:true}).click();
+
+ // The memo-only song: its memo arrived with the PDF.
+ await page.goto('/#/song/'+river.songId);await page.getByRole('tab',{name:'악보',exact:true}).click();
+ viewer=await open(page,'The River');
+ await expect(viewer.locator('[data-ink-note]')).toHaveCount(1);await expect(strokesIn(viewer)).toHaveCount(0);
+ const corner=await viewer.locator('[data-ink-note] .score-ink-note-bg').boundingBox(),whole=await viewer.locator('[data-ink-svg]').boundingBox();
+ expect(Math.abs(corner.x+corner.width-whole.x-whole.width)).toBeLessThanOrEqual(1);expect(Math.abs(corner.y+corner.height-whole.y-whole.height)).toBeLessThanOrEqual(1);
+ await viewer.getByRole('button',{name:'돌아가기',exact:true}).click();
+
+ // The same notebook again: both rows are recognised and nothing is uploaded a second time.
+ await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await pick(page,'메모 악보집.goodnotes',notebook);
+ sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
+ await expect(sheet.locator('[data-gn-section]').nth(0)).toContainText('이미 가져온 악보예요');await expect(sheet.locator('[data-gn-section]').nth(1)).toContainText('이미 가져온 악보예요');
+ expect(await sheet.locator('[data-gn-target]').evaluateAll(list=>list.map(s=>s.value))).toEqual(['skip','skip']);
+ await expect(sheet.locator('[data-gn-go]')).toBeDisabled();
+ expect(r2.store.size).toBe(2);
+ expect(page.__errors).toEqual([]);
+});
+test('a notebook without sticker memos reads as before: no memo wording in the summary or the diagnosis',async({page})=>{
+ await setup(page);
+ await pick(page,'한 곡.goodnotes',F.notebook({title:'한 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a',ink:[ink(1,[1,0,0,1],3,60,60,240,60)]}],outline:[{page:0,title:'Song A'}]}));
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
+ await expect(sheet.locator('[data-gn-summary]')).toHaveText('1쪽 · 1곡 · 필기 1획');
+ await expect(sheet.locator('[data-gn-section] [data-gn-info]')).toHaveText('1쪽 · 필기 1획');
+ await expect(sheet.locator('[data-gn-diag]')).not.toContainText('스티커 메모');
+});

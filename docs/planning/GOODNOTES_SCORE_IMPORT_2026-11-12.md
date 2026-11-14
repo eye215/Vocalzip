@@ -110,7 +110,40 @@ The owner records each song's MR inside GoodNotes, titled with the song ("21. Th
 - **Verified on a real notebook** (schema 35, 17 pages): one 160 event, no 164 (untitled), file 47,870 bytes `ftyp mp42`, length 3.6 s — returned exactly so.
 - **Where an MR goes by default**: the song its score row goes to (same title, leading track numbers "03. ", "3) ", "03 - " aside — including a new song made by that row in the same import); otherwise the song the title names (`matchSong`, with and without the track number); otherwise 가져오지 않기. Untitled recordings show as "제목 없는 녹음" and are never placed automatically.
 - **Import**: the archive's bytes go unchanged through `VZ.songMR.addFile` (app/song-mr.js, the same path as MR 추가): file name `<title>.m4a`, type `audio/mp4`, title = the recording's title, and the entry is marked `source:'goodnotes'`, `sourceId:<recording id>`. A later import recognises it by that mark (same recording id, or same file name and size) on any song: "이미 가져온 MR이에요", 가져오지 않기 preselected. A file that does not start with `ftyp` is not uploaded. A recording that fails is named and the others still go in.
-- **Sticker memos**: a notes record whose field 20 is a message is the sticker memo itself (still counted as "record 20", not imported); a header whose field 20 is an id text only says the stroke sits on that sticker (a header field, like 4, 6 and 10). Text boxes (field 12) are not imported.
+- **Sticker memos**: a notes record whose field 20 is a message is the sticker memo itself (at reader 8 still counted as "record 20" and not imported — imported since reader 9, next section); a header whose field 20 is an id text only says the stroke sits on that sticker (a header field, like 4, 6 and 10). Text boxes (field 12) are not imported.
+
+### 2026-11-14: sticker memos imported as the app's own sticker memos (reader 9)
+
+The app has its own sticker memo now (`tool:'note'` records, app/score-ink-model.js). A GoodNotes sticker memo comes in as one, with the pen strokes written on it still attached to it.
+
+- **Format** (`notes/<id>`, the page's ink file). A sticker memo is a record whose field **20 is a message**; a header record with the same id comes right before it, as for ink items.
+
+  | Field | Meaning |
+  |---|---|
+  | 20.1 | id (UUID text) |
+  | 20.2 | schema number |
+  | 20.3 | register clock `{1: counter, 2: replica}` |
+  | 20.20 | `{1: {1: x, 2: y}, 3: scale}` — top-left corner in page units (the units of ink points); `scale` is 1 until the memo is resized |
+  | 20.21 | `{2: {1: w, 2: h}}` — size before the scale; the memo is shown `w·scale` × `h·scale` |
+  | 20.30 | `{1: r, 2: g, 3: b, 4: a}` floats 0–1 |
+  | 20.31 | typed text (a blob; 96 bytes when nothing is typed). **Not decoded.** |
+  | 20.33 | author name. **Not read, not imported, not shown.** |
+  | 20.7, 20.32, 20.40, 20.41 | seen, meaning not established, ignored |
+
+  A pen stroke written on a memo is an ordinary ink record whose **header** carries field 20 = the memo's id (text). Its points are page coordinates like every stroke.
+- **Reader** (`app/goodnotes-parse.js`): `pages[i].memos = [{id, x, y, w, h, color}]` — `x`, `w` of the page width and `y`, `h` of the page height (scale applied, not clamped), `color` `#rrggbb`; a stroke written on a memo carries `memo: <id>`. `sections[i].memos`, `report.memos`, `report.memosDeleted`, `report.memoTexts`. A field-20 message that is read is no longer counted in `report.elements`; one without a corner, a size or a colour still is ("record 20") and is not imported.
+- **Importer** (`app/goodnotes-import.js`, `inkFile`): each memo becomes `{id: 'gn-<score id>-m<k>', tool: 'note', color, rect, mode: 'pen', note: <its id>}` before the strokes of its page in the score PDF's `vocalzip-ink.json`; strokes written on it carry the same `note`, so the viewer moves and deletes them with the memo. The colour is the stored one. The rect keeps the memo's size and is moved inside the page if it hangs over an edge (the strokes are not moved with it). A song whose pages have memos but no strokes still gets its attachment. The row, the summary, the toast and 진단 정보 say "스티커 메모 N개" when there are any.
+- **Structure export** (`structure()`, version 3): each sticker element gets `memo: {strokes, unread, strokeBox: [minX, minY, maxX, maxY]}` — how many strokes name it and the box they cover in page units, numbers only. Together with the memo's own corner, size and scale this will show how strokes on a resized memo are stored.
+
+**Verified on a real notebook** (schema 35, page 1091.34 × 1543.46 units): one yellow memo (0.98, 0.906, 0.471 → `#fae778`) at (668.86, 360.47), 256 × 256, scale 1, with 15 pen strokes whose headers name it; their box is x 697.7–932.8, y 377.3–581.5, so they sit on the memo and run 8 units past its right edge (924.9) — exactly what GoodNotes shows. Imported through the real import and opened in the viewer, the memo and the strokes are where GoodNotes draws them; the memo is under the strokes, moves with all 15 and is deleted with them after the confirm. Three more real memos (resized) only fit inside their page with the scale applied to the size, which is why the size is `w·scale`.
+
+**Assumed, not seen**
+
+- *A deleted memo.* No deleted memo has been seen. The reader follows its existing conventions: the same id twice → the higher clock counter wins (the later record on a tie); a memo record carrying field 14 (the flag an erased ink item carries) is left out and counted (`report.memosDeleted`), and its strokes come in as ordinary strokes. If GoodNotes marks deletion another way, a deleted memo is imported as a memo (nothing is lost; it can be deleted in the viewer).
+- *Strokes on a resized memo.* Strokes are taken as stored (page coordinates). Whether GoodNotes stores them already resized, or resizes them when drawing, is unknown: the only memo with strokes was never resized. If it resizes when drawing, strokes on a resized memo will come in at their old size and place. The structure export's `strokeBox` answers this from one diagnosis file.
+- *Typed text.* The text blob is not decoded, so typed text is not imported; the memo comes in empty (with its pen strokes). All four real memos are empty (96 bytes). A memo whose blob has another length is counted (`report.memoTexts`) and the import screen says that it comes in without its text — a hint from the length only.
+- Overlapping memos keep the file's order; rotation of a memo has not been seen.
+- Tests: `tests/goodnotes-parse.test.cjs` (corner, size × scale, colour, linked strokes, two versions of one memo, erased, not an element, structure box), `tests/goodnotes-import.spec.cjs` (memo in the viewer within 1 px of its place and under its strokes, a stroke past its edge, moving it moves its strokes, delete with confirm, memo-only song, second import adds nothing, wording).
 
 ### Not verified yet
 
