@@ -98,7 +98,7 @@ Two real notebooks (one with a known edit history: shuffle pages, insert a secon
 The structure export (events only) of the notebook that imported wrongly was re-encoded into a minimal archive and read with the real reader:
 
 - 340 page events − 47 removed = **293 pages**, the count GoodNotes shows; 81 move events applied; the song the owner photographed at GoodNotes page 183 comes out at page 183, and its neighbours are the right single-page PDFs.
-- Event kinds seen there and now treated as known (not counted as unknown): **57** (a flag register on the first page of a song) and **160/161/163/164** (named items pointing at pages: create, add a page reference, delete, rename) are page **bookmarks**; **62** marks a page brought in from another notebook (name + order key) — such pages also have their normal page event.
+- Event kinds seen there and now treated as known (not counted as unknown): **160/161/163/164** are **audio recordings made in the notebook** (corrected 2026-11-14 with a lesson notebook: 160 = created, field 4 is the length in flicks — 705,600,000 per second; 164 = title, e.g. a song name; 163 = deleted; 161 = a stroke/element id tied to a moment of a recording and a page, thousands per recording); **57** is a flag register on some pages (meaning not established); **62** marks a page brought in from another notebook (name + order key) — such pages also have their normal page event. The audio itself is not imported.
 - None of these change page order or removal.
 
 ### Not verified yet

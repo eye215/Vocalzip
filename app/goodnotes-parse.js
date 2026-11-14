@@ -223,14 +223,21 @@ function plainPaths(values){
 const hex=n=>Math.round(Math.max(0,Math.min(1,n||0))*255).toString(16).padStart(2,'0');
 const nextId=id=>{try{const raw=id.replace(/-/g,'');if(!/^[0-9a-f]{32}$/i.test(raw))return '';const n=(BigInt('0x'+raw)+1n).toString(16).padStart(32,'0').slice(-32).toUpperCase();return [n.slice(0,8),n.slice(8,12),n.slice(12,16),n.slice(16,20),n.slice(20)].join('-');}catch{return '';}};
 
+// A header record before each item: id, clock and device/counter fields (seen: 3, 8, 9, 14, 16).
+const HEADER_FIELDS=[1,2,3,8,9,14,16];
 /** Ink of one notes file, converted to page-normalised strokes the score viewer can edit. */
 function readInk(bytes,page,report){
  const strokes=[],unit=n=>Math.round(Math.max(0,Math.min(1,n))*100000)/100000;
  for(const record of records(bytes)){
-  let item;try{item=sub(fields(record),7);}catch{item=null;}
-  if(!item)continue; // the id/clock header before each item
+  let top;try{top=fields(record);}catch{top=[];}
+  const item=sub(top,7);
+  const note=tag=>{report.elements[tag]=(report.elements[tag]||0)+1;};
+  if(!item){ // the id/clock header before each item — or an element that is not ink (counted, not read)
+   const other=[...new Set(top.map(x=>x[0]))].filter(f=>!HEADER_FIELDS.includes(f));if(other.length)note('record '+other.join('+'));
+   continue;
+  }
   const payload=first(item,2,2);
-  if(!payload||!payload.length)continue;
+  if(!payload||!payload.length){if(!first(item,14,0))note('item without ink ('+[...new Set(item.map(x=>x[0]))].filter(f=>![1,4,5,6,7,15,20,21].includes(f)).join('+')+')');continue;}
   let read,tag='?';try{const t=tuple(unframe(payload));tag=t.schema===PATH_SCHEMA?'path':t.schema===PEN_SCHEMA?'pen':t.schema===BRUSH_SCHEMA?'brush':'other:'+t.schema.length;}catch{tag='unreadable';}
   tag+=(first(item,3,0)?'/t'+first(item,3,0):'')+(sub(item,9)?.length?'/shape':'')+(first(item,14,0)?'/erased':'');report.inkKinds[tag]=(report.inkKinds[tag]||0)+1;
   try{read=inkPaths(payload,item);}catch{read=null;}
@@ -263,7 +270,7 @@ async function read(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
  if(!eventsBytes)throw fail('굿노트 파일이 아니에요. 굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 골라 주세요.','format');
- const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,movedPages:0,unknownEvents:{},schema:null,reader:6,events:{},pageEvents:0,inkKinds:{}};
+ const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,movedPages:0,unknownEvents:{},schema:null,reader:7,events:{},pageEvents:0,inkKinds:{},elements:{}};
  const schemaBytes=await zip.read('schema.pb');if(schemaBytes){try{report.schema=first(fields(schemaBytes),1,0)??null;}catch{}}
  const index=async name=>{const map=new Map(),data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r);map.set(str(first(f,1,2)).toUpperCase(),str(first(f,2,2)));}catch{}}return map;};
  const [attachmentPaths,notePaths]=[await index('index.attachments.pb'),await index('index.notes.pb')];
@@ -296,7 +303,7 @@ async function read(input){
   }else if(kind===65){
    const id=str(first(body,2,2)).toUpperCase(),old=outline.get(id)||{};
    outline.set(id,{id,pageId:str(first(body,1,2)).toUpperCase()||old.pageId||'',title:reg(body,5)||old.title||'',order:reg(body,4)||old.order||''});
-  }else if(![6,10,15,34,38,57,62,102,103,104,105,106,121,160,161,163,164].includes(kind)) // 57 + 160–164: page bookmarks; 62: a page brought in from another notebook (it also has its page event)
+  }else if(![6,10,15,34,38,57,62,102,103,104,105,106,121,160,161,163,164].includes(kind)) // 160–164: audio recordings made in the notebook (160 created with its length in flicks, 164 title, 163 deleted, 161 a stroke tied to a moment of a recording); 57: a flag on pages; 62: a page brought in from another notebook (it also has its page event)
   report.unknownEvents[kind]=(report.unknownEvents[kind]||0)+1;
  }
  const compare=(a,b)=>a<b?-1:a>b?1:0;
@@ -339,6 +346,14 @@ function plain(bytes,depth){
  if(depth<6&&bytes.length){try{const list=fields(bytes);if(list.length&&list.every(x=>x[0]<4096))return list.map(([f,w,v])=>[f,w===0?v:w===2?plain(v,depth+1):w===5?Math.round(f32(v)*1000)/1000:new DataView(v.buffer,v.byteOffset,8).getFloat64(0,true)]);}catch{}}
  return {bytes:bytes.length};
 }
+/** Like plain(), with every text replaced by its length: for page elements, whose texts are the owner's notes. */
+function redact(bytes,depth){
+ if(bytes.length&&bytes.length<=400){const t=str(bytes);if(!/[\u0000-\u0008\u000e-\u001f\ufffd]/.test(t))return /^[0-9A-F]{8}-[0-9A-F-]{27}$/i.test(t)?t:{text:t.length};}
+ if(depth<7&&bytes.length){try{const list=fields(bytes);if(list.length&&list.every(x=>x[0]<4096))return list.map(([f,w,v])=>[f,w===0?v:w===2?redact(v,depth+1):w===5?Math.round(f32(v)*1000)/1000:new DataView(v.buffer,v.byteOffset,8).getFloat64(0,true)]);}catch{}}
+ return {bytes:bytes.length};
+}
+const magic=b=>{const h=[...b.subarray(0,12)].map(x=>x.toString(16).padStart(2,'0')).join('');
+ return h.startsWith('25504446')?'pdf':h.startsWith('89504e47')?'png':h.startsWith('ffd8ff')?'jpeg':h.slice(8,16)==='66747970'?'heic/mp4':h.startsWith('47494638')?'gif':h.startsWith('52494646')?'riff':'?'+h.slice(0,16);};
 async function structure(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
@@ -346,8 +361,32 @@ async function structure(input){
  const list=async name=>{const out=[],data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r),path=str(first(f,2,2));out.push([str(first(f,1,2)),path,zip.entries.get(path)?.length??null]);}catch{}}return out;};
  const events=[];for(const record of records(eventsBytes)){if(events.length>=300000)break;try{events.push(plain(record,0));}catch{events.push({bad:record.length});}}
  const schemaBytes=await zip.read('schema.pb');let schema=null;if(schemaBytes){try{schema=first(fields(schemaBytes),1,0)??null;}catch{}}
- return {format:'vocalzip-goodnotes-structure',version:1,reader:6,schema,fileSize:bytes.length,entries:zip.entries.size,
-  attachments:await list('index.attachments.pb'),notes:await list('index.notes.pb'),events};
+ // What else the archive holds, by folder: how many files, their total size and the kind of the first small one
+ // (recordings, images … live outside attachments/ in some versions). Names of files are ids, not content.
+ const folders={};
+ for(const e of zip.entries.values()){
+  const top=e.name.includes('/')?e.name.slice(0,e.name.indexOf('/')):'(root) '+e.name,f=folders[top]||(folders[top]={files:0,bytes:0,kind:null,sample:null});
+  f.files++;f.bytes+=e.length;
+  if(!f.kind&&e.length>16&&e.length<=4*1024*1024&&!/^(notes|search)$/.test(top)){try{f.kind=magic(await zip.read(e.name,LIMIT.entry));f.sample=e.length;}catch{f.kind='unreadable';}}
+ }
+ // What each attachment is (first bytes only; large files are not unpacked for this).
+ const kinds=async rows=>{for(const row of rows){const size=row[2];if(size==null)row.push('missing');else if(size>4*1024*1024)row.push('large');else{try{row.push(magic(await zip.read(row[1],LIMIT.entry)));}catch{row.push('unreadable');}}}return rows;};
+ // Page elements that are not ink (stickers, images, text boxes …): their shape with texts as lengths, at most 3000.
+ const noteList=await list('index.notes.pb'),elements=[];
+ for(const [id,path,size] of noteList){
+  if(!size||elements.length>=3000)continue;
+  let data;try{data=await zip.read(path,LIMIT.entry);}catch{continue;}
+  let n=0;
+  for(const record of records(data)){
+   n++;let top;try{top=fields(record);}catch{continue;}
+   const item=sub(top,7),payload=item&&first(item,2,2);
+   const header=!item&&top.every(x=>HEADER_FIELDS.includes(x[0]));
+   if(header||(payload&&payload.length)||(item&&first(item,14,0)))continue;
+   elements.push({notes:id,record:n,shape:redact(record,0)});if(elements.length>=3000)break;
+  }
+ }
+ return {format:'vocalzip-goodnotes-structure',version:2,reader:7,schema,fileSize:bytes.length,entries:zip.entries.size,
+  attachments:await kinds(await list('index.attachments.pb')),notes:noteList,elements,folders,events};
 }
 return {read,structure,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
 });
