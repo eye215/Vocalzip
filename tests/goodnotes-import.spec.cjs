@@ -352,3 +352,155 @@ test('a file that is not a GoodNotes notebook is refused and nothing is uploaded
  await expect(page.getByRole('dialog',{name:'굿노트 가져오기'})).toHaveCount(0);
  expect(r2.store.size).toBe(0);
 });
+
+/* ---- MR 녹음: audio recorded in the notebook (the owner records each song's MR there, titled with the song). ---- */
+const mrRows=sheet=>sheet.locator('[data-gn-rec]');
+const mrTargets=sheet=>mrRows(sheet).locator('[data-gn-mrtarget]').evaluateAll(list=>list.map(s=>s.value));
+const mrOf=(page,id)=>page.evaluate(id=>(window.VZ.song(id).mrTracks||[]).filter(t=>!t.deleted).map(t=>({title:t.title,fileName:t.fileName,type:t.type,kind:t.kind,size:t.size,source:t.source,r2Key:t.r2Key})),id);
+test('the notebook’s recordings are offered as MR: each goes to the song its title or its score names, with the original bytes; a second import recognises them',async({page})=>{
+ const r2=await setup(page);
+ const honey=await page.evaluate(()=>window.VZ.addSong('Honey Honey').id);
+ const audio=[F.m4a(1,300),F.m4a(2,2000),F.m4a(3,700),F.m4a(4,90),F.m4a(5,64)];
+ const notebook=F.notebook({title:'레슨 노트',pdf:pdf(3),width:300,height:400,pages:[{pdfPage:1,order:'a'},{pdfPage:2,order:'b'},{pdfPage:3,order:'c'}],
+  outline:[{page:0,title:'03. Honey Honey'},{page:1,title:'21. The winner takes it all'}],
+  recordings:[
+   {title:'03. Honey Honey',seconds:56,bytes:audio[0]},              // its score row goes to the song "Honey Honey"
+   {title:'옛 이름',renames:[{title:'21. The winner takes it all',counter:4}],seconds:260,bytes:audio[1]}, // its score row makes a new song
+   {title:'지운 녹음',seconds:99,deleted:true},
+   {title:'07) Defying Gravity',seconds:125,bytes:audio[2]},         // no score row: the song the title names
+   {title:'모르는 노래',seconds:61,bytes:audio[3]},                    // names nothing: never guessed
+   {seconds:3.6,bytes:audio[4]}]});                                  // no title
+ await pick(page,'레슨 노트.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'}),rows=mrRows(sheet),go=sheet.locator('button[type=submit]');
+ await expect(sheet.locator('[data-gn-summary]')).toHaveText('3쪽 · 2곡 · 필기 0획 · 녹음 5개');
+ await expect(sheet.locator('[data-gn-mr]')).toContainText('MR 녹음 5개');
+ await expect(rows).toHaveCount(5);
+ await expect(rows.locator('.gn-mr-title')).toHaveText(['03. Honey Honey','21. The winner takes it all','07) Defying Gravity','모르는 노래','제목 없는 녹음']);
+ await expect(rows.locator('[data-gn-info]')).toHaveText([/^길이 0:56 · /,/^길이 4:20 · /,/^길이 2:05 · /,/^길이 1:01 · /,/^길이 0:04 · /]);
+ expect(await sheet.locator('[data-gn-target]').evaluateAll(list=>list.map(s=>s.value))).toEqual([honey,'new']);
+ expect(await mrTargets(sheet)).toEqual([honey,'score','s1','skip','skip']);
+ await expect(rows.nth(1).locator('.pick-btn')).toContainText('악보와 같은 새 곡');
+ await expect(go).toHaveText('가져오기 (악보 2 · MR 3)');
+ await expect(sheet.locator('[data-gn-diag]')).toContainText('녹음 5개(지운 것 1)');
+ // The MR follows its score row: not imported → nowhere (nothing else names that song); a song chosen there → that song.
+ const winner=sheet.locator('[data-gn-section]').nth(1).locator('[data-gn-target]');
+ await winner.selectOption('skip');
+ expect(await mrTargets(sheet)).toEqual([honey,'skip','s1','skip','skip']);
+ await expect(go).toHaveText('가져오기 (악보 1 · MR 2)');
+ await winner.selectOption('s1');
+ expect(await mrTargets(sheet)).toEqual([honey,'s1','s1','skip','skip']);
+ await winner.selectOption('new');
+ expect(await mrTargets(sheet)).toEqual([honey,'score','s1','skip','skip']);
+ // 전체 선택 counts both kinds; rows that are not ticked are imported by their 넣을 곡.
+ await sheet.getByRole('button',{name:'전체 선택'}).click();
+ await expect(sheet.locator('[data-gn-count]')).toHaveText('악보 2 · MR 5 선택');
+ await expect(go).toHaveText('선택한 악보 2 · MR 5 가져오기');
+ await sheet.getByRole('button',{name:'선택 해제'}).click();
+ await rows.nth(0).locator('[data-gn-pick]').check();
+ await expect(go).toHaveText('선택한 MR 1개 가져오기');
+ await rows.nth(0).locator('[data-gn-pick]').uncheck();
+ await expect(go).toHaveText('가져오기 (악보 2 · MR 3)');
+ // A narrow phone: nothing runs off the side.
+ const size=page.viewportSize();
+ await page.setViewportSize({width:320,height:700});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+ for(const edge of await sheet.locator('[data-gn-rec],[data-gn-rec] .pick-btn,[data-gn-mr] .gn-summary').evaluateAll(list=>list.map(e=>e.getBoundingClientRect().right)))expect(edge).toBeLessThanOrEqual(320);
+ await page.setViewportSize(size);
+ // Nothing leaves the device before 가져오기.
+ expect(r2.store.size).toBe(0);
+ expect(await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>s.mrTracks||[]).length)).toBe(0);
+ await go.click();
+ await expect(page.locator('.toast')).toContainText('악보 2개 · MR 3개를 가져왔어요');
+ await expect(sheet).toHaveCount(0);
+
+ const created=await page.evaluate(()=>window.VZ.db.songs.find(s=>s.title==='21. The winner takes it all')?.id);
+ expect(created).toBeTruthy();
+ const [a,b,c]=[await mrOf(page,honey),await mrOf(page,created),await mrOf(page,'s1')];
+ expect(a.map(t=>[t.title,t.fileName,t.type,t.kind,t.size,t.source])).toEqual([['03. Honey Honey','03. Honey Honey.m4a','audio/mp4','file',audio[0].length,'goodnotes']]);
+ expect(b.map(t=>[t.title,t.fileName,t.size,t.source])).toEqual([['21. The winner takes it all','21. The winner takes it all.m4a',audio[1].length,'goodnotes']]);
+ expect(c.map(t=>[t.title,t.fileName,t.size,t.source])).toEqual([['07) Defying Gravity','07) Defying Gravity.m4a',audio[2].length,'goodnotes']]);
+ // The stored files are the notebook's bytes, untouched; the unmatched and untitled recordings were not uploaded.
+ for(const [track,bytes] of [[a[0],audio[0]],[b[0],audio[1]],[c[0],audio[2]]]){
+  const stored=r2.store.get(track.r2Key);
+  expect(stored.type).toBe('audio/mp4');expect(track.r2Key.endsWith('.m4a')).toBe(true);
+  expect(Buffer.compare(stored.bytes,bytes)).toBe(0);
+ }
+ expect(r2.store.size).toBe(5); // two score PDFs + three MR files
+ expect(await page.evaluate(id=>window.VZ.song(id).scores.length,created)).toBe(1); // the MR went to the song its score made
+
+ // It is in the song's 레퍼런스 › MR list like a file the user added.
+ await page.goto('/#/song/s1');await page.locator('[data-tab=ar]').click();
+ await expect(page.locator('.vz-mr-links [data-mr-open]')).toContainText('07) Defying Gravity');
+ await expect(page.locator('.vz-mr-links [data-mr-open] small')).toHaveText('07) Defying Gravity.m4a');
+
+ // The same notebook again: the three are recognised and left out; one of the others can still be placed by hand.
+ await page.getByRole('tab',{name:'악보',exact:true}).click();
+ await pick(page,'레슨 노트.goodnotes',notebook);
+ const again=page.getByRole('dialog',{name:'굿노트 가져오기'}),rows2=mrRows(again),go2=again.locator('button[type=submit]');
+ await expect(rows2).toHaveCount(5);
+ for(const i of [0,1,2])await expect(rows2.nth(i)).toContainText('이미 가져온 MR이에요');
+ for(const i of [3,4])await expect(rows2.nth(i)).not.toContainText('이미 가져온 MR이에요');
+ expect(await mrTargets(again)).toEqual(['skip','skip','skip','skip','skip']);
+ await expect(go2).toBeDisabled();
+ await rows2.nth(3).locator('[data-gn-mrtarget]').selectOption('s1');
+ await expect(go2).toHaveText('가져오기 (MR 1개)');
+ await go2.click();
+ await expect(page.locator('.toast')).toContainText('MR 1개를 가져왔어요');
+ await expect(again).toHaveCount(0);
+ expect(r2.store.size).toBe(6);
+ expect((await mrOf(page,'s1')).map(t=>t.title)).toEqual(['07) Defying Gravity','모르는 노래']);
+ expect(page.__errors).toEqual([]);
+});
+test('a recording that cannot be imported is named and the others still go in; the progress popup can stop an MR upload and resume without uploading twice',async({page})=>{
+ const r2=await setup(page);
+ let release,held=0;const gate=new Promise(r=>{release=r;});
+ await page.route(R2+'/**',async route=>{if(/\/v1\/uploads\/[^/]+\/complete$/.test(new URL(route.request().url()).pathname)&&!held++)await gate;return route.fallback();});
+ const good=F.m4a(9,500),other=F.m4a(8,400);
+ const notebook=F.notebook({title:'녹음만',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a'}],outline:[{page:0,title:'악보 한 장'}],recordings:[
+  {title:'1. Defying Gravity',seconds:30,bytes:good},
+  {title:'Defying Gravity 2절',seconds:40,bytes:Buffer.from('this is not an audio file at all, only text')},
+  {title:'02 - Defying Gravity',seconds:50,bytes:other}]});
+ await pick(page,'녹음만.goodnotes',notebook);
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'}),rows=mrRows(sheet),go=sheet.locator('button[type=submit]');
+ await expect(rows).toHaveCount(3);
+ expect(await mrTargets(sheet)).toEqual(['s1','s1','s1']);
+ // Only the recordings: the score row is left out, so no PDF tool is needed.
+ await sheet.locator('[data-gn-section] [data-gn-target]').selectOption('skip');
+ await expect(go).toHaveText('가져오기 (MR 3개)');
+ await go.click();
+ const pop=page.getByRole('alertdialog',{name:'MR 가져오는 중'});
+ await expect(pop).toContainText('MR 1 / 3 · 1. Defying Gravity');
+ await expect(pop.locator('[data-gn-pstep]')).toContainText('올리는 중');
+ await pop.getByRole('button',{name:'멈추기'}).click();
+ release();
+ const stopped=page.getByRole('alertdialog',{name:'가져오기를 멈췄어요'});
+ await expect(stopped).toContainText('다시 누르면 이어서 해요');
+ expect(await mrOf(page,'s1')).toEqual([]); // stopped before the list was saved
+ expect(r2.store.size).toBe(1);
+ await stopped.getByRole('button',{name:'확인'}).click();
+ // Resume: the finished upload is reused; the file that is not audio is named, the two real ones are in.
+ await go.click();
+ const failed=page.getByRole('alertdialog',{name:'일부 MR을 가져오지 못했어요'});
+ await expect(failed).toContainText('MR 1개는 가져오지 못했어요: “Defying Gravity 2절” (M4A 오디오 파일이 아니라서 올리지 않았어요.)');
+ await expect(failed).toContainText('MR 2개를 가져왔어요');
+ await failed.getByRole('button',{name:'확인'}).click();
+ await expect(sheet.locator('[data-gn-msg]')).toContainText('“Defying Gravity 2절”');
+ await expect(rows.nth(0)).toContainText('가져왔어요');await expect(rows.nth(2)).toContainText('가져왔어요');
+ await expect(rows.nth(1)).not.toContainText('가져왔어요');
+ await expect(rows.nth(0).locator('[data-gn-pick]')).toBeDisabled();
+ const tracks=await mrOf(page,'s1');
+ expect(tracks.map(t=>t.title)).toEqual(['1. Defying Gravity','02 - Defying Gravity']);
+ expect(r2.store.size).toBe(2); // the first upload was not sent twice, the text file was never sent
+ expect(Buffer.compare(r2.store.get(tracks[0].r2Key).bytes,good)).toBe(0);
+ expect(Buffer.compare(r2.store.get(tracks[1].r2Key).bytes,other)).toBe(0);
+ expect(await page.evaluate(()=>window.VZ.db.songs.flatMap(s=>s.scores||[]).length)).toBe(0);
+ expect(page.__errors).toEqual([]);
+});
+test('a notebook without recordings shows no MR section and the button reads as before',async({page})=>{
+ await setup(page);
+ await pick(page,'한 곡.goodnotes',F.notebook({title:'한 곡',pdf:pdf(1),width:300,height:400,pages:[{pdfPage:1,order:'a'}],outline:[{page:0,title:'Song A'}]}));
+ const sheet=page.getByRole('dialog',{name:'굿노트 가져오기'});
+ await expect(sheet.locator('[data-gn-mr]')).toBeHidden();
+ await expect(sheet.locator('button[type=submit]')).toHaveText('가져오기 (1곡)');
+ await expect(sheet.locator('[data-gn-diag]')).toContainText('녹음 0개(지운 것 0)');
+});
