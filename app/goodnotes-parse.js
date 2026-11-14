@@ -13,8 +13,9 @@
  * A removed page keeps its page event and gets a "removed" register (56): such pages are left out.
  * Audio recordings made in the notebook (160 created: recording id, attachment id, length in flicks; 164 title;
  * 163 deleted) are listed with their file inside the archive; the audio itself is only read when it is imported.
- * Text boxes and images have not been seen and are not read. Anything that is not recognised is counted and
- * reported, never guessed. */
+ * A sticker memo is a notes record whose field 20 is a message (corner, size × scale, colour); the pen strokes written
+ * on it are ordinary ink whose header names the memo's id. Both are read; the memo's typed text is not.
+ * Text boxes and images are not read. Anything that is not recognised is counted and reported, never guessed. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipGoodnotes=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const LIMIT={archive:400*1024*1024,entry:200*1024*1024,small:64*1024*1024,entries:20000,points:2048};
@@ -230,17 +231,51 @@ const nextId=id=>{try{const raw=id.replace(/-/g,'');if(!/^[0-9a-f]{32}$/i.test(r
 const HEADER_FIELDS=[1,2,3,4,6,8,9,10,14,16];
 const UUID=/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
 /** Field 20 on a header is the id (a text) of the sticker memo the stroke sits on. A record whose field 20 is a
- * message is the sticker memo itself (position, size, colour): an element, still counted and not read. */
+ * message is the sticker memo itself (see sticker()). */
+const memoOf=top=>{const hit=top.find(x=>x[0]===20&&x[1]===2&&UUID.test(str(x[2])));return hit?str(hit[2]).toUpperCase():'';};
 const headerField=x=>HEADER_FIELDS.includes(x[0])||x[0]===20&&x[1]===2&&UUID.test(str(x[2]));
-/** GoodNotes counts recording lengths in flicks. */
-const FLICKS_PER_SECOND=705600000;
-/** Ink of one notes file, converted to page-normalised strokes the score viewer can edit. */
-function readInk(bytes,page,report){
- const strokes=[],unit=n=>Math.round(Math.max(0,Math.min(1,n))*100000)/100000;
+/** A typed-text blob of this many bytes is an empty one (all real memos seen so far); the text itself is never read. */
+const MEMO_TEXT_EMPTY=96;
+/** A sticker memo: a record {20: {1: id, 3: clock {1: counter}, 20: {1: {1: x, 2: y}, 3: scale}, 21: {2: {1: w, 2: h}},
+ * 30: {1: r, 2: g, 3: b, 4: a}, 31: typed text (not read), 33: author (not read)}}, in page units. The size on the
+ * page is w × scale by h × scale (scale 1 until the memo is resized). Field 14 (the flag an erased ink item carries) is
+ * taken to mean an erased memo — no erased memo has been seen. null when the record is not a memo we can place. */
+function sticker(top){
+ const m=sub(top,20);if(!m)return null;
+ const id=str(first(m,1,2)).toUpperCase(),place=sub(m,20),box=sub(m,21),size=box&&sub(box,2),colour=sub(m,30);
+ if(!UUID.test(id)||!place||!size||!colour)return null;
+ const number=(list,field,missing=0)=>{const v=first(list,field,5);return v?f32(v):missing;};
+ const corner=sub(place,1)||[],scale=number(place,3,1),x=number(corner,1),y=number(corner,2),w=number(size,1)*scale,h=number(size,2)*scale;
+ if(![x,y,w,h].every(Number.isFinite)||!(w>0)||!(h>0))return null;
+ const clock=sub(m,3),typed=first(sub(sub(m,31)||[],1)||[],2,2);
+ return {id,x,y,w,h,scale,color:'#'+hex(number(colour,1))+hex(number(colour,2))+hex(number(colour,3)),counter:clock?Number(first(clock,1,0))||0:0,
+  erased:!!first(m,14,0),typed:!!typed&&typed.length!==MEMO_TEXT_EMPTY};
+}
+/** Records of a notes file with what the reader needs to tell them apart: an ink item comes with the memo its header
+ * names (the header is the record right before it, with the same id). */
+function* inkRecords(bytes){
+ let head=null;
  for(const record of records(bytes)){
   let top;try{top=fields(record);}catch{top=[];}
   const item=sub(top,7);
+  if(item){const id=str(first(item,1,2)).toUpperCase(),memo=head&&head.memo&&(!id||!head.id||head.id===id)?head.memo:'';head=null;yield {record,top,item,memo};continue;}
+  const memo=sticker(top);
+  if(memo){head=null;yield {record,top,sticker:memo};continue;}
+  head={id:str(first(top,1,2)).toUpperCase(),memo:memoOf(top)};
+  yield {record,top};
+ }
+}
+/** GoodNotes counts recording lengths in flicks. */
+const FLICKS_PER_SECOND=705600000;
+/** Ink and sticker memos of one notes file: page-normalised strokes the score viewer can edit (a stroke written on a
+ * memo carries `memo`: that memo's id) and memos {id, x, y, w, h, color} (x, w of the page width; y, h of its height;
+ * as stored — the importer keeps them inside the page). */
+function readInk(bytes,page,report){
+ const strokes=[],stickers=new Map(),unit=n=>Math.round(Math.max(0,Math.min(1,n))*100000)/100000,part=n=>Math.round(n*100000)/100000;
+ for(const {top,item,memo,sticker:found} of inkRecords(bytes)){
   const note=tag=>{report.elements[tag]=(report.elements[tag]||0)+1;};
+  // The same memo again (moved, recoloured, resized): the higher clock counter wins, the later record on a tie.
+  if(found){const old=stickers.get(found.id);if(!old||found.counter>=old.counter)stickers.set(found.id,found);continue;}
   if(!item){ // the id/clock header before each item — or an element that is not ink (counted, not read)
    const other=[...new Set(top.filter(x=>!headerField(x)).map(x=>x[0]))];if(other.length)note('record '+other.join('+'));
    continue;
@@ -260,20 +295,30 @@ function readInk(bytes,page,report){
    const width=Math.max(0.001,Math.min(0.06,(path.width>0?path.width:2)/page.width)),points=[];
    for(const [x,y] of path.points){const p=[unit(x/page.width),unit(y/page.height),0.5],last=points.at(-1);if(!last||last[0]!==p[0]||last[1]!==p[1])points.push(p);}
    for(let at=0;at<points.length;at+=LIMIT.points-1){
-    const part=points.slice(at,at+LIMIT.points);if(at&&part.length<2)break;
-    strokes.push({tool,color:'#'+hex(rgba[0])+hex(rgba[1])+hex(rgba[2]),opacity:Math.round(Math.max(0.05,Math.min(1,alpha))*1000)/1000,width:Math.round(width*100000)/100000,points:part});
+    const piece=points.slice(at,at+LIMIT.points);if(at&&piece.length<2)break;
+    strokes.push({tool,color:'#'+hex(rgba[0])+hex(rgba[1])+hex(rgba[2]),opacity:Math.round(Math.max(0.05,Math.min(1,alpha))*1000)/1000,width:Math.round(width*100000)/100000,points:piece,...(memo?{memo}:{})});
    }
    report.strokes++;
   }
  }
- return strokes;
+ const memos=[];
+ for(const m of stickers.values()){
+  if(m.erased){report.memosDeleted++;continue;}
+  memos.push({id:m.id,x:part(m.x/page.width),y:part(m.y/page.height),w:part(m.w/page.width),h:part(m.h/page.height),color:m.color});
+  report.memos++;if(m.typed)report.memoTexts++;
+ }
+ // A stroke whose memo is not on this page (erased, or not readable) is an ordinary stroke.
+ const kept=new Set(memos.map(m=>m.id));
+ for(const s of strokes)if(s.memo&&!kept.has(s.memo))delete s.memo;
+ return {strokes,memos};
 }
 
 /**
  * @param {ArrayBuffer|Uint8Array} input the .goodnotes file
  * @returns {Promise<{title:string, pages:Array, outline:Array, sections:Array, recordings:Array, report:object, readFile:Function}>}
- *   pages: [{id, width, height, pdf:{file, page}|null, strokes:[…]}] in notebook order
- *   sections: [{title, from, to, pages:[index…], strokes, untitled}] — the outline cut into songs
+ *   pages: [{id, width, height, pdf:{file, page}|null, strokes:[…], memos:[{id, x, y, w, h, color}]}] in notebook order
+ *     (a stroke written on a sticker memo carries `memo`: that memo's id)
+ *   sections: [{title, from, to, pages:[index…], strokes, memos, untitled}] — the outline cut into songs
  *   recordings: [{id, title, seconds, file, size}] — audio recorded in the notebook that is not deleted and whose file
  *     is in the archive, in the order they were made (file: the path for readFile; the bytes are not read here)
  */
@@ -281,7 +326,7 @@ async function read(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input),zip=directory(bytes);
  const eventsBytes=await zip.read('index.events.pb');
  if(!eventsBytes)throw fail('굿노트 파일이 아니에요. 굿노트에서 ‘GoodNotes 문서’로 내보낸 파일을 골라 주세요.','format');
- const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,movedPages:0,unknownEvents:{},schema:null,reader:8,events:{},pageEvents:0,inkKinds:{},elements:{},recordings:0,recordingsSkipped:0,recordingsDeleted:0};
+ const report={strokes:0,deleted:0,unsupported:0,unmatchedNotes:0,pagesWithoutPdf:0,removedPages:0,movedPages:0,unknownEvents:{},schema:null,reader:9,events:{},pageEvents:0,inkKinds:{},elements:{},recordings:0,recordingsSkipped:0,recordingsDeleted:0,memos:0,memosDeleted:0,memoTexts:0};
  const schemaBytes=await zip.read('schema.pb');if(schemaBytes){try{report.schema=first(fields(schemaBytes),1,0)??null;}catch{}}
  const index=async name=>{const map=new Map(),data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r);map.set(str(first(f,1,2)).toUpperCase(),str(first(f,2,2)));}catch{}}return map;};
  const [attachmentPaths,notePaths]=[await index('index.attachments.pb'),await index('index.notes.pb')];
@@ -334,20 +379,20 @@ async function read(input){
  const usedNotes=new Set(),result=[];
  for(const p of ordered){
   const bg=backgrounds.get((p.background?.text||'').toUpperCase())||{},file=attachmentPaths.get(bg.attachment)||'';
-  const page={id:p.id,width:bg.width>0?bg.width:595,height:bg.height>0?bg.height:842,pdf:file&&bg.page>=1&&zip.entries.has(file)?{file,page:bg.page}:null,strokes:[]};
+  const page={id:p.id,width:bg.width>0?bg.width:595,height:bg.height>0?bg.height:842,pdf:file&&bg.page>=1&&zip.entries.has(file)?{file,page:bg.page}:null,strokes:[],memos:[]};
   if(!page.pdf)report.pagesWithoutPdf++;
   // The page's ink file has the page id + 1. With a single page and a single ink file they belong together.
   let noteId=nextId(p.id);
   if(!notePaths.has(noteId)&&ordered.length===1&&notePaths.size===1)noteId=[...notePaths.keys()][0];
   const path=notePaths.get(noteId);
-  if(path){usedNotes.add(noteId);const data=await zip.read(path);if(data){try{page.strokes=readInk(data,page,report);}catch{report.unsupported++;}}}
+  if(path){usedNotes.add(noteId);const data=await zip.read(path);if(data){try{const ink=readInk(data,page,report);page.strokes=ink.strokes;page.memos=ink.memos;}catch{report.unsupported++;}}}
   result.push(page);
  }
  for(const p of pages.values())if(removed.get(p.id)?.number)usedNotes.add(nextId(p.id)); // a removed page's ink is left out with it
  report.unmatchedNotes=[...notePaths.keys()].filter(id=>!usedNotes.has(id)).length;
  const at=new Map(result.map((p,i)=>[p.id,i]));
  const marks=[...outline.values()].filter(o=>o.title.trim()&&at.has(o.pageId)).sort((a,b)=>at.get(a.pageId)-at.get(b.pageId)||compare(a.order,b.order));
- const sections=[],span=(name,from,to,untitled=false)=>{const list=[];for(let i=from;i<=to;i++)list.push(i);sections.push({title:name,from:from+1,to:to+1,pages:list,strokes:list.reduce((n,i)=>n+result[i].strokes.length,0),untitled});};
+ const sections=[],span=(name,from,to,untitled=false)=>{const list=[];for(let i=from;i<=to;i++)list.push(i);sections.push({title:name,from:from+1,to:to+1,pages:list,strokes:list.reduce((n,i)=>n+result[i].strokes.length,0),memos:list.reduce((n,i)=>n+result[i].memos.length,0),untitled});};
  if(!marks.length)span(title||'굿노트 악보',0,result.length-1,true);
  else{
   // Several outline entries on one page: the first names the section.
@@ -405,16 +450,29 @@ async function structure(input){
  for(const [id,path,size] of noteList){
   if(!size||elements.length>=3000)continue;
   let data;try{data=await zip.read(path,LIMIT.entry);}catch{continue;}
-  let n=0;
-  for(const record of records(data)){
-   n++;let top;try{top=fields(record);}catch{continue;}
-   const item=sub(top,7),payload=item&&first(item,2,2);
-   const header=!item&&top.every(headerField);
-   if(header||(payload&&payload.length)||(item&&first(item,14,0)))continue;
-   elements.push({notes:id,record:n,shape:redact(record,0)});if(elements.length>=3000)break;
+  // For each sticker memo: how many strokes name it and the box they cover, in page units (numbers only). With the
+  // memo's own corner, size and scale this shows whether strokes on a resized memo are stored already resized.
+  const boxes=new Map();let n=0,rows;
+  try{rows=[...inkRecords(data)];}catch{continue;}
+  for(const {item,memo} of rows){
+   const payload=item&&first(item,2,2);if(!memo||!payload||!payload.length||first(item,14,0))continue;
+   let read;try{read=inkPaths(payload,item);}catch{read=null;}
+   const box=boxes.get(memo)||{strokes:0,unread:0,box:null};boxes.set(memo,box);
+   if(!read||!read.paths.length){box.unread++;continue;}
+   box.strokes++;
+   for(const path of read.paths)for(const [x,y] of path.points){const b=box.box||(box.box=[x,y,x,y]);b[0]=Math.min(b[0],x);b[1]=Math.min(b[1],y);b[2]=Math.max(b[2],x);b[3]=Math.max(b[3],y);}
+  }
+  for(const {record,top,item,sticker:found} of rows){
+   n++;
+   const payload=item&&first(item,2,2);
+   const header=!item&&top.length>0&&top.every(headerField);
+   if(!top.length||header||(payload&&payload.length)||(item&&first(item,14,0)))continue;
+   const element={notes:id,record:n,shape:redact(record,0)};
+   if(found){const b=boxes.get(found.id);element.memo={strokes:b?.strokes||0,unread:b?.unread||0,strokeBox:b?.box?b.box.map(v=>Math.round(v*100)/100):null};}
+   elements.push(element);if(elements.length>=3000)break;
   }
  }
- return {format:'vocalzip-goodnotes-structure',version:2,reader:8,schema,fileSize:bytes.length,entries:zip.entries.size,
+ return {format:'vocalzip-goodnotes-structure',version:3,reader:9,schema,fileSize:bytes.length,entries:zip.entries.size,
   attachments:await kinds(await list('index.attachments.pb')),notes:noteList,elements,folders,events};
 }
 return {read,structure,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
