@@ -85,7 +85,7 @@ function render(host,plan,items,action){
  if(button)button.onclick=()=>{
   const message=host.querySelector('[data-outcome-status]');
   try{
-   const updated=Model.report({plan,goals:V.db.dailyGoals||[],recordings:items,dateOf:M.dateOf,
+   const updated=Model.report({plan,goals:V.db.dailyGoals||[],recordings:items,dateOf:V.growthDataset.dateOf,
     valid:V.growthDataset.ok,asOf:V.today()});
    updated.created=Date.now();updated.createdDate=V.today();
    if(!V.change(db=>{

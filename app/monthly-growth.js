@@ -16,10 +16,12 @@ let request = 0;
  * app/growth-dataset.js. This screen reads rule 'verdict': the song's recordings, without 노래 연습실 submissions and
  * 트레이닝 practices. */
 const songRowsOf = items => V.growthDataset(items).pick('verdict');
+// A recording's day is the dataset's too: its recorded date, else the Korea day it was made (not the device's day).
+const dayOf = V.growthDataset.dateOf;
 function group(items) {
  const months = new Map();
  for(const m of items){
-  const date=ym(M.dateOf(m));if(!date)continue;
+  const date=ym(dayOf(m));if(!date)continue;
   const slot=months.get(date)||[];slot.push(m);months.set(date,slot);
  }
  return months;
@@ -46,7 +48,7 @@ V.growthModel=items=>{
  const songItems=rows.map(r=>r.m);
  let overall;
  return shared={items,songItems,key,get overall(){
-  return overall??=window.VzipOverallGrowth?.calculate(songItems,{getDate:M.dateOf,valid,reference:referenceOf,title:id=>V.songTitle(id)})||null;
+  return overall??=window.VzipOverallGrowth?.calculate(songItems,{getDate:dayOf,valid,reference:referenceOf,title:id=>V.songTitle(id)})||null;
  }};
 };
 /** This month's own values (no comparison): mean over reliable takes, one value per take. */

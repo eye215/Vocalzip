@@ -61,15 +61,15 @@ test('a take is {id, songId, a, date, created, ok}; a song\'s takes come oldest 
   assert.deepEqual(ds.takes('verdict', 'nobody'), []);
 });
 
-test('rule "verdict" (전체 · 월별 · 주간 성장 · 계획 결과): 26 of 37 recordings, each exclusion with its reason', () => {
+test('rule "verdict" (전체 · 월별 · 주간 성장 · 계획 결과): 25 of 37 recordings, each exclusion with its reason', () => {
   const ds = build();
-  assert.deepEqual(ds.tally('verdict'), {included:26, 'no-song':7, 'song-missing':2, 'practice-room':1, 'training-practice':1});
-  assert.deepEqual(ids(ds.pick('verdict')), ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'b1', 'b2', 'b3', 'b4', 'b5', 'c1', 'c2', 'd1', 'd2', 'dc', 'dv', 'e1', 'e2', 'ex', 'ey', 'g1', 'la']);
+  assert.deepEqual(ds.tally('verdict'), {included:25, deleted:1, 'no-song':7, 'song-missing':2, 'practice-room':1, 'training-practice':1});
+  assert.deepEqual(ids(ds.pick('verdict')), ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'b1', 'b2', 'b3', 'b4', 'b5', 'c1', 'c2', 'd1', 'd2', 'dc', 'dv', 'e1', 'e2', 'ex', 'ey', 'la']);
   assert.deepEqual(ds.items('verdict').map(m => m.id), MEDIA.filter(m => ds.pick('verdict').some(r => r.m === m)).map(m => m.id));   // list order kept
   assert.deepEqual(['er', 'et', 'f1', 'u1', 'vc1', 'a1'].map(id => ds.why(ds.row(id), 'verdict')), ['practice-room', 'training-practice', 'song-missing', 'no-song', 'no-song', '']);
   for (const why of Object.keys(ds.tally('verdict'))) if (why !== 'included') assert.ok(D.REASONS[why], why);
   // What this rule lets through on purpose today (only the linked practice record is looked at):
-  assert.deepEqual(['ex', 'ey', 'la', 'dv', 'dc', 'g1', 'a8', 'b5'].map(id => ds.why(ds.row(id), 'verdict')), Array(8).fill(''));
+  assert.deepEqual(['ex', 'ey', 'la', 'dv', 'dc', 'a8', 'b5'].map(id => ds.why(ds.row(id), 'verdict')), Array(7).fill(''));
 });
 
 test('where the screens differ today, counted on this data set', () => {
@@ -80,11 +80,16 @@ test('where the screens differ today, counted on this data set', () => {
   assert.deepEqual(only('verdict', 'songList'), ['dc', 'dv']);
   assert.deepEqual(ids(ds.pick('songList').filter(r => r.video)), []);
   assert.deepEqual(ids(ds.pick('songCard').filter(r => r.video)), ['dc']);
-  assert.deepEqual(ds.tally('songList'), {included:26, 'no-song':7, 'song-missing':2, video:2});
+  assert.deepEqual(ds.tally('songList'), {included:25, deleted:1, 'no-song':7, 'song-missing':2, video:2});
   // 3) The song card takes whatever recordings it is handed: a deleted song's too (f1, f2) and ones without a song.
-  assert.deepEqual(ds.tally('songCard'), {included:36, video:1});
-  // 4) A recording in the deleted list (g1): 주간 요약 leaves it out itself; every other screen counts it.
-  assert.equal(ds.why(ds.row('g1'), 'verdict'), ''); assert.equal(ds.row('g1').deleted, true);
+  assert.deepEqual(ds.tally('songCard'), {included:35, deleted:1, video:1});
+  // 4) A recording in the deleted list (g1) — no longer a difference (step 2, part B): 주간 요약 always left it out,
+  //    now every rule does, with the reason 'deleted' before any other.
+  assert.equal(ds.row('g1').deleted, true);
+  for (const rule of ['verdict', 'songList', 'songCard']) { assert.equal(ds.why(ds.row('g1'), rule), 'deleted', rule); assert.equal(ds.pick(rule).some(r => r.id === 'g1'), false, rule); }
+  assert.deepEqual(ds.takes('verdict', 's2').map(t => t.id), ['b1', 'b2', 'b5', 'b4', 'b3']);
+  const kept = build(MEDIA, {...DB, deleted:{}});
+  assert.equal(kept.why(kept.row('g1'), 'verdict'), '');                                  // not in the list: an ordinary take
   // 5) No date at all (a8): a row and a take everywhere, but 전체·월별 need a day and the song card puts it first.
   assert.equal(ds.row('a8').take.date, '');
   // 6) A later analysis version (b5): analysed but never reliable; the song card does not draw it as a point.
@@ -121,11 +126,29 @@ test('pure and never stale: nothing is changed, and a new build reads the record
   ds.pick('verdict'); ds.bySong('songList'); ds.forRange(); ds.rows.forEach(r => [r.ok, r.take, r.category, r.video, r.voiceCheck, r.deleted]);
   assert.equal(JSON.stringify([media, db]), before);
   assert.equal(ds.pick('verdict'), ds.pick('verdict'));               // one pass per rule
-  assert.deepEqual(ds.tally('verdict'), {included:26, 'no-song':7, 'song-missing':2, 'practice-room':1, 'training-practice':1});   // same answer with the defaults
+  assert.deepEqual(ds.tally('verdict'), {included:25, deleted:1, 'no-song':7, 'song-missing':2, 'practice-room':1, 'training-practice':1});   // same answer with the defaults
   // The same list and the same db object after a song was added in place: a new build sees it (no identity cache here).
   db.songs.push({id:'s6', title:'돌아온 곡'});
-  assert.equal(D.build(media, db, {reliable}).tally('verdict').included, 28);
-  assert.equal(ds.tally('verdict').included, 26);                     // the old answer stays what it was built from
+  assert.equal(D.build(media, db, {reliable}).tally('verdict').included, 27);
+  assert.equal(ds.tally('verdict').included, 25);                     // the old answer stays what it was built from
   // A rule can be given as options too.
   assert.deepEqual(ids(ds.pick({room:true, training:true, video:true})), ids(ds.pick('verdict')).concat(['er', 'et']).sort());
+});
+
+test('a recording without a recorded date is dated by the Korea day it was made, on every device (step 2, part B)', () => {
+  // 2026-11-08 16:30 UTC is Monday 01:30 in Korea: the 9th, whatever the device's time zone is.
+  const made = Date.parse('2026-11-08T16:30:00Z');
+  assert.equal(D.dateOf({created:made}), '2026-11-09');
+  assert.equal(D.koreaDay(Date.parse('2026-10-31T14:59:59Z')), '2026-10-31');           // 23:59 in Korea
+  assert.equal(D.koreaDay(Date.parse('2026-10-31T15:00:00Z')), '2026-11-01');           // 00:00 in Korea: the next month
+  assert.equal(D.dateOf({recordedDate:'2026-10-02', created:made}), '2026-10-02');      // the recorded date always wins
+  assert.equal(D.dateOf({recordedDate:'', created:0}), ''); assert.equal(D.dateOf({}), ''); assert.equal(D.dateOf(null), '');
+  assert.equal(D.dateOf({recordedDate:'어제', created:made}), '2026-11-09');
+  // The module's own default (no app functions): the same rule, so b4 has its Korea day and a8 has none.
+  const ds = D.build(MEDIA, DB, {reliable});
+  assert.equal(ds.row('b4').date, '2026-11-09'); assert.equal(ds.row('a8').date, ''); assert.equal(ds.row('a6').date, '2026-11-10');
+  // The answer does not depend on the process time zone.
+  const tz = process.env.TZ;
+  try { for (const zone of ['UTC', 'America/Los_Angeles', 'Asia/Seoul']) { process.env.TZ = zone; assert.equal(D.dateOf({created:made}), '2026-11-09', zone); } }
+  finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }
 });

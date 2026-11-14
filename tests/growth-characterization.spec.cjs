@@ -3,8 +3,11 @@
 // app/growth-dataset.js existed; the refactor has to leave every value as it was. Screens covered: 전체 분석 (model
 // and screen), 월별 분석 (every month, plans and plan outcomes, the archived month reports), 주간 요약 (six weeks and
 // the 홈 row), 보컬 분석 탭, 보컬 트레이닝 탭, 곡별 "보컬 측정 변화" 카드.
-// Two time zones: Korea (the owner's) and UTC — a recording without a recorded date is dated by the device day in
-// most screens and by the Korea day in 주간 요약, and both behaviours are pinned.
+// Two time zones: Korea (the owner's) and UTC. Step 2 (part B) changed two rules on purpose, and only the values
+// below moved in the snapshot:
+//  - a recording whose id is in the deleted list (g1) is counted by no growth screen (before: only 주간 요약 left it out);
+//  - a recording without a recorded date (b4) has its Korea day on every screen (before: the device's day everywhere
+//    but 주간 요약), so the UTC run now shows what the Korea run shows.
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
@@ -52,7 +55,7 @@ async function collect(page) {
   // 계획 결과: the report the app would save for every plan that has ended, from the takes the month view passes on.
   out.planOutcomes = await page.evaluate(async () => {
     const items = VZ.growthModel(await VZ.media.list()).songItems, valid = m => [1, 2].includes(m.analysis?.v) && VZ.analysisReliable(m.analysis);
-    return VZ.db.practicePlans.filter(p => p.kind === 'monthly-vocal').map(plan => { try { return window.VzipPlanOutcome.report({plan, goals:VZ.db.dailyGoals, recordings:items, dateOf:VZ.media.dateOf, valid, asOf:VZ.today()}); } catch (e) { return {planId:plan.id, error:e.message}; } });
+    return VZ.db.practicePlans.filter(p => p.kind === 'monthly-vocal').map(plan => { try { return window.VzipPlanOutcome.report({plan, goals:VZ.db.dailyGoals, recordings:items, dateOf:VZ.growthDataset.dateOf, valid, asOf:VZ.today()}); } catch (e) { return {planId:plan.id, error:e.message}; } });
   });
   // 주간 요약: six weeks, and the 홈 row.
   out.weekly = {};
