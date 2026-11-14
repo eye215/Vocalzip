@@ -123,6 +123,8 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
     foot:'<button type="submit" form="practice-log" class="btn block">' + (p ? '수정 저장' : '연습 기록 저장') + '</button>',
     onMount:async (el, close) => {
       const form = el.querySelector('form');
+      // 05-A: the memo is kept on this device until saved.
+      const draft = VZ.fieldDraft?.wire(form, 'practice:' + (p?.id || 'new'), [{name:'memo', saved:form.elements.memo.defaultValue}]);
       let current = mode, rating = p?.rating || null;
       const setMode = m => { current = m; el.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m))); el.querySelector('[data-song-part]').hidden = m !== 'song'; el.querySelector('[data-train-part]').hidden = m !== 'training'; };
       el.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode)); setMode(mode);
@@ -289,7 +291,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
           recommendationSource:current === 'training' ? chosenRecommendation?.source || '' : '', recommendationSourceId:current === 'training' ? chosenRecommendation?.sourceId || chosenRecommendation?.key || '' : '',
           rating:rating || 0, memo:form.memo.value, completed, assignmentReps, assignmentNotes};
         const ok = VZ.change(d => { learn(d); if (p) Object.assign(d.practices.find(x => x.id === p.id) || {}, entry); else d.practices.push({id:VZ.uid(), ...entry}); });
-        if (ok) { close(); VZ.toast(p ? '연습 기록을 수정했어요.' : '연습 기록을 저장했어요.'); window.dispatchEvent(new Event('vzip:practice-saved')); }
+        if (ok) { draft?.clear(); close(); VZ.toast(p ? '연습 기록을 수정했어요.' : '연습 기록을 저장했어요.'); window.dispatchEvent(new Event('vzip:practice-saved')); }
       };
     }});
 };
