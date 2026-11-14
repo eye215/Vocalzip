@@ -181,3 +181,20 @@ test('moved and removed together: the kept pages come out in their final places,
   assert.deepEqual(m.pages.map(p => p.pdf.page), [1, 2, 3, 3, 4]);
   assert.deepEqual([m.report.removedPages, m.report.movedPages], [3, 2]);
 });
+
+test('elements that are not ink are counted and listed by shape only: no text, no bytes', async () => {
+  const mark = F.inkItem(F.uuid(1), {payload:F.stored(F.pathTuple({width:3, ...line(60, 80, 300, 400)}))});
+  // A made-up text box: an item (field 7) with no ink payload, a text (field 13); and a record of another kind (field 12).
+  const enc = (f, w, b) => Buffer.concat([Buffer.from([f * 8 + w]), Buffer.from([b.length]), b]);
+  const textBox = [Buffer.concat([enc(7, 2, Buffer.concat([enc(1, 2, Buffer.from(F.uuid(9))), enc(13, 2, Buffer.from('비밀 메모 내용', 'utf8'))]))])];
+  const other = [Buffer.concat([enc(12, 2, Buffer.concat([enc(1, 2, Buffer.from(F.uuid(8)))]))])];
+  const bytes = new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', ink:[mark, textBox, other]}]}));
+  const m = await G.read(bytes);
+  assert.equal(m.pages[0].strokes.length, 1);
+  assert.deepEqual(m.report.elements, {'item without ink (13)':1, 'record 12':1});
+  const x = await G.structure(bytes);
+  assert.equal(x.elements.length, 2);
+  const text = JSON.stringify(x);
+  assert.ok(!text.includes('비밀 메모 내용') && text.includes('{"text":8}'));
+  assert.equal(x.attachments[0][3], 'pdf');
+});
