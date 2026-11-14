@@ -88,3 +88,19 @@ test('the lesson preparation memo is kept the same way', async ({page}) => {
   await expect(page.locator('#lesson-form [name=prep]')).toHaveValue('질문: 믹스보이스');
   await expect(page.locator('#lesson-form [data-field-draft-restored]')).toBeVisible();
 });
+
+test('a practice memo being written is kept the same way and cleared once the practice is saved', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/home');
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.evaluate(() => VZ.practiceSheet({songId:'s1'}));
+  await page.locator('#practice-log [name=memo]').fill('후렴 고음 연결 좋아짐');
+  await page.reload();
+  await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  await page.evaluate(() => VZ.practiceSheet({songId:'s1'}));
+  await expect(page.locator('#practice-log [name=memo]')).toHaveValue('후렴 고음 연결 좋아짐');
+  await expect(page.locator('#practice-log [data-field-draft-restored]')).toBeVisible();
+  await page.locator('button[form=practice-log]').click();
+  await expect.poll(() => page.evaluate(k => JSON.parse(localStorage.getItem(k)).practices.map(p => p.memo), KEY)).toEqual(['후렴 고음 연결 좋아짐']);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('vzip_field_draft_v1:') && !k.endsWith(':prev')).length)).toBe(0);
+});
