@@ -111,7 +111,8 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
   const initialMinutes = p ? VZ.practiceMinutes(p) : preset?.minutes || 30;
   const quick = [10, 20, 30, 60].map(n => '<button type="button" data-min="' + n + '" aria-pressed="' + (Number(initialMinutes) === n) + '">' + n + '분</button>').join('');
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + ((p?.rating || 0) >= n) + '"><i class="' + ((p?.rating || 0) >= n ? 'ph-fill' : 'ph') + ' ph-star" aria-hidden="true"></i></button>').join('');
-  VZ.sheet({title:p ? '연습 기록 수정' : '연습 기록', body:'<form id="practice-log">' +
+  let draft = null;
+  VZ.sheet({title:p ? '연습 기록 수정' : '연습 기록', onClose:() => draft?.discard(), body:'<form id="practice-log">' +
     '<div class="vz-library-tabs vz-practice-tabs"><div class="lib-seg" role="group" aria-label="연습 종류"><button type="button" data-mode="song" aria-pressed="' + (mode === 'song') + '">곡 연습</button><button type="button" data-mode="training" aria-pressed="' + (mode === 'training') + '">보컬 트레이닝</button></div></div>' +
     '<div data-song-part>' + VZ.songSelect('song', p?.songId || songId) + '</div>' +
     '<div data-train-part><label class="field"><span>훈련 내용</span><select name="recommendation" data-recommendation><option value="">추천 연습 또는 직접 입력 선택</option><option value="__custom">직접 입력</option></select></label><div class="vz-practice-recommendation" data-recommendation-info hidden></div><div data-custom-training hidden>' + level('분류', 'category', catOpts, '새 분류 이름 (예: 고음)') + level('세부 항목', 'detail', '', '새 세부 항목 (예: 립트릴)') + level('세부 항목 2 <span class="small muted">(선택)</span>', 'detail2', '', '새 항목 (예: 저음 5도)') + '</div></div>' +
@@ -124,7 +125,7 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
     onMount:async (el, close) => {
       const form = el.querySelector('form');
       // 05-A: the memo is kept on this device until saved.
-      const draft = VZ.fieldDraft?.wire(form, 'practice:' + (p?.id || 'new'), [{name:'memo', saved:form.elements.memo.defaultValue}]);
+      draft = VZ.fieldDraft?.wire(form, 'practice:' + (p?.id || 'new'), [{name:'memo', saved:form.elements.memo.defaultValue}]);
       let current = mode, rating = p?.rating || null;
       const setMode = m => { current = m; el.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m))); el.querySelector('[data-song-part]').hidden = m !== 'song'; el.querySelector('[data-train-part]').hidden = m !== 'training'; };
       el.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode)); setMode(mode);
