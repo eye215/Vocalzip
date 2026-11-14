@@ -17,8 +17,10 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
  storage:{from:()=>({createSignedUrl:async()=>({data:{signedUrl:'/x.wav'},error:null}),upload:async()=>({error:null}),remove:async()=>({error:null})})},
  from:()=>{const c={};for(const m of ['select','eq','is','order','range','upsert','update','delete','maybeSingle'])c[m]=()=>c;c.then=r=>r({data:[],error:null});return c}})};`;
 const {NOW, MEDIA, DB} = require('./growth-characterization.fixture.cjs');
-/** Every text fragment under root, in document order (hidden details included): what the screen says. */
-const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
+/** Every text fragment under root, in document order (hidden details included): what the screen says.
+ * The 전체 음역 흐름 section and its month row (step 2, [data-range-flow]) are new and have their own spec
+ * (tests/growth-range.spec.cjs): they are not part of what was pinned, so every older value stays comparable. */
+const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style,[data-range-flow]')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
 async function boot(page) {
   page.__errors = [];
   page.on('pageerror', e => page.__errors.push(e.message));

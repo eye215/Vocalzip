@@ -212,6 +212,8 @@ async function mount(host){
   // After archiveMonths (it may save a past month's report): the model is asked for again, never taken from before.
   const overall=V.growthModel(items).overall;
   const overallUi=window.VzipOverallGrowthUI;
+  // 전체 음역 흐름 (app/growth-range-ui.js): its own selection of the whole list (곡·보이스 체크·트레이닝·레슨 녹음).
+  const rangeUi=window.VzipGrowthRangeUI;
   const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>'+(V.voiceCheck?.entryHtml?.()||'');
   // The period control of 결과 리포트 (design guide §26): smaller than the 성장 tabs above and inside the content.
   const tabs=()=>'<div class="growth-view-tabs growth-range" role="group" aria-label="성장 분석 범위"><span class="growth-range-label" aria-hidden="true">기간</span>'+
@@ -231,10 +233,11 @@ async function mount(host){
    renderSerial++;
    const visibleSerial=renderSerial;
    if(mode==='overall'&&overall&&overallUi){
-    host.innerHTML=pageHead+tabs()+'<div data-overall-body>'+overallUi.render(overall)+'</div>'+
+    host.innerHTML=pageHead+tabs()+'<div data-overall-body>'+overallUi.render(overall,undefined,{range:rangeUi?.html(items)||''})+'</div>'+
       '<p class="small muted growth-disclaimer">표시되는 수치는 음성 측정에 기반한 참고 정보이며 발성 건강, 감정 표현 또는 악보 대비 정확성을 평가하지 않아요. 전·후 비교는 서로 다른 날 부른 동일 곡을 사용합니다.</p>';
     bindTabs();
     overallUi.bind(host.querySelector('[data-overall-body]'),overall,{rerender:render});
+    rangeUi?.bind(host,items);
     return;
    }
    if(!keys.length){host.innerHTML=pageHead+tabs()+'<div class="empty"><p>아직 날짜가 있는 녹음이 없어요.</p></div>';bindTabs();return;}
@@ -254,7 +257,8 @@ async function mount(host){
      '<button type="button" data-monthly-jump="practice">추천·계획</button>'+
      '<button type="button" data-monthly-jump="history">지난 기록</button></nav>'+
    '<div class="growth-month-group" data-month-section="results">'+narrative(rows,selected,previous.length?prev:'')+
-     '<div class="growth-month-section-title"><h3>6가지 성장 지표</h3><small>지난달과 같은 곡만 비교 · 근거가 부족하면 판정 보류</small></div>'+rowsHtml(rows)+'</div>'+
+     '<div class="growth-month-section-title"><h3>6가지 성장 지표</h3><small>지난달과 같은 곡만 비교 · 근거가 부족하면 판정 보류</small></div>'+rowsHtml(rows)+
+     (rangeUi?.monthHtml(items,selected)||'')+'</div>'+
    '<div data-month-section="ai">'+monthlyAiCard(selected)+'</div>'+
    '<div class="growth-month-group" data-month-section="practice">'+prescriptions(rows)+'<div data-monthly-plans></div></div>'+
    '<details class="growth-secondary"><summary><span><i class="ph ph-waveform" aria-hidden="true"></i> AI 청취 기록</span><small>저장된 청취 의견</small></summary>'+listeningEvidence(selected)+'</details>'+

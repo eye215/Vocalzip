@@ -188,21 +188,22 @@ function build(media,db={},env={}){
   takes:(rule,songId)=>(ds.bySong(rule).get(songId)||[]).filter(r=>r.analysed).map(r=>r.take),
   /** 음역 변화 (step 2): reliable, dated analyses of song recordings, 매일 보이스 체크, 트레이닝 and lesson recordings.
    * Files that belong nowhere (no song, not a lesson, training or voice check), 연습실 submissions and recordings in
-   * the deleted list stay out. Oldest first; each take carries its group. */
+   * the deleted list stay out. Oldest first; each take carries its group. `left` names the recordings that do belong
+   * to a group but are not takes (not analysed, unreliable, no date), with their group and day, so a month can say
+   * how many it left out and why. */
   forRange(){
-   const takes=[],counts={song:0,'voice-check':0,training:0,lesson:0},excluded={};
+   const takes=[],left=[],counts={song:0,'voice-check':0,training:0,lesson:0},excluded={};
    const out=why=>{excluded[why]=(excluded[why]||0)+1;};
    for(const r of rows){
     if(r.deleted){out('deleted');continue;}
     const kind=r.category;
     const group=r.voiceCheck?'voice-check':kind==='lesson'?'lesson':kind==='training'||r.training?'training':r.room||kind==='room'?'':r.songId&&r.hasSong?'song':'';
     if(!group){out(r.room||kind==='room'?'practice-room':r.songId?'song-missing':'unassigned');continue;}
-    if(!r.analysed){out('no-analysis');continue;}
-    if(!r.ok){out('unreliable');continue;}
-    if(!r.date){out('no-date');continue;}
+    const why=!r.analysed?'no-analysis':!r.ok?'unreliable':!r.date?'no-date':'';
+    if(why){out(why);left.push({id:r.id,group,date:r.date,why});continue;}
     counts[group]++;takes.push({...r.take,group});
    }
-   return {takes:takes.sort(order),counts,excluded};
+   return {takes:takes.sort(order),counts,excluded,left};
   }
  };
  return ds;
