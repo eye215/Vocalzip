@@ -227,7 +227,8 @@ test('a user marker is added, used, changed and deleted; presets are still there
  const letters=dialog.locator('text[data-stroke="'+glyph.id+'"]');
  await expect(letters).toHaveText('mf');await expect(letters).toHaveAttribute('fill',GREEN);
  // The letters are centred on the tap and scale with the page.
- const box=await letters.boundingBox(),[cx,cy]=await at(dialog,[.5,.3]);
+ // Measured in the page (getBoundingClientRect): the driver's own box for SVG text differs between engines.
+ const box=await letters.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}),[cx,cy]=await at(dialog,[.5,.3]);
  expect(Math.abs(box.x+box.width/2-cx)).toBeLessThan(4);expect(Math.abs(box.y+box.height/2-cy)).toBeLessThan(box.height*.45);
  // In the palette: after the built-in ones, marked as the one in use.
  await showPalette(dialog);
