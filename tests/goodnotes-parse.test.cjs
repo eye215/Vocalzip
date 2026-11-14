@@ -224,7 +224,7 @@ test('a notebook without recordings has an empty list', async () => {
   const m = await G.read(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a'}]})));
   assert.deepEqual([m.recordings, m.report.recordings, m.report.recordingsSkipped], [[], 0, 0]);
 });
-test('header records with fields 4, 6, 10 and a sticker id in 20 are not counted as elements; a text box (12), field 21 and the sticker memo itself (20 = a message) still are', async () => {
+test('header records with fields 4, 6, 10 and a sticker id in 20 are not counted as elements; a text box (12), field 21 and a field-20 message that is not a readable sticker memo still are', async () => {
   const mark = F.inkItem(F.uuid(1), {payload:F.stored(F.pathTuple({width:3, ...line(60, 80, 300, 400)}))});
   const enc = (f, w, b) => Buffer.concat([Buffer.from(f * 8 + w < 128 ? [f * 8 + w] : [(f * 8 + w) & 127 | 128, (f * 8 + w) >> 7]), ...(w === 2 ? [Buffer.from([b.length]), b] : [Buffer.from([b])])]);
   const id = n => enc(1, 2, Buffer.from(F.uuid(n))), clock = enc(2, 2, Buffer.from([8, 2, 16, 9]));
@@ -232,12 +232,56 @@ test('header records with fields 4, 6, 10 and a sticker id in 20 are not counted
   const headers = [[Buffer.concat([id(20), clock, enc(6, 2, Buffer.from([8, 1]))])], [Buffer.concat([id(21), clock, enc(20, 2, Buffer.from(F.uuid(0x57)))])],
     [Buffer.concat([id(22), clock, enc(4, 0, 1)])], [Buffer.concat([id(23), clock, enc(10, 2, Buffer.from([8, 1]))])]];
   const textBox = [Buffer.concat([id(24), enc(12, 2, id(8))])], other = [Buffer.concat([id(25), enc(21, 2, id(9))])];
-  // The sticker memo itself: a record whose field 20 is a message (position, size, colour), not an id.
+  // A field-20 message without a memo's corner, size and colour: not placed, so still counted.
   const sticker = [Buffer.concat([enc(20, 2, Buffer.concat([id(0x57), enc(2, 2, Buffer.from([13, 0, 0, 200, 66, 21, 0, 0, 72, 67]))]))])];
   const ink = [mark, ...headers, textBox, other, sticker];
   const m = await G.read(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', ink}]})));
   assert.equal(m.pages[0].strokes.length, 1);
   assert.deepEqual(m.report.elements, {'record 12':1, 'record 21':1, 'record 20':1});
+  assert.deepEqual([m.pages[0].memos, m.report.memos], [[], 0]);
   const x = await G.structure(new Uint8Array(F.notebook({pages:[{pdfPage:1, order:'a', ink}]})));
   assert.equal(x.elements.length, 3);
+});
+
+// ---- Sticker memos (found in the owner's notebooks, 2026-11-14): a record whose field 20 is a message. ----
+test('a sticker memo is read with its corner, size × scale and colour; the strokes written on it name it; it is not counted as an element', async () => {
+  const beside = F.inkItem(F.uuid(1), {payload:F.stored(F.pathTuple({width:3, ...line(60, 80, 300, 400)}))});
+  // As in the real file (page 1091.34 × 1543.46): yellow, never resized, three pen strokes on it.
+  const real = {x:668.86, y:360.47, w:256, h:256, scale:1, color:[0.98, 0.906, 0.471, 1], strokes:3};
+  // Resized to half: the stored size stays 256 and the scale says 0.5.
+  const small = {x:100, y:1000, w:256, h:200, scale:0.5, color:[0.6, 0.8, 1, 1], strokes:1};
+  const bytes = new Uint8Array(F.notebook({width:1091.34, height:1543.46, pages:[{pdfPage:1, order:'a', ink:[beside], memos:[real, small]}, {pdfPage:2, order:'b', memos:[{x:0, y:0, color:[0, 0, 0, 1]}]}], outline:[{page:0, title:'곡'}]}));
+  const m = await G.read(bytes), [page, second] = m.pages;
+  assert.deepEqual(page.memos.map(k => [k.id, k.color]), [[F.memoId(0, 0), '#fae778'], [F.memoId(0, 1), '#99ccff']]);
+  const px = k => [k.x * page.width, k.y * page.height, k.w * page.width, k.h * page.height];
+  px(page.memos[0]).forEach((v, i) => assert.ok(Math.abs(v - [668.86, 360.47, 256, 256][i]) < 0.02, 'memo 1 value ' + i + ' = ' + v));
+  px(page.memos[1]).forEach((v, i) => assert.ok(Math.abs(v - [100, 1000, 128, 100][i]) < 0.02, 'memo 2 value ' + i + ' = ' + v)); // the scale is applied
+  assert.deepEqual(Object.keys(page.memos[0]).sort(), ['color', 'h', 'id', 'w', 'x', 'y']); // no author name, no text
+  // Strokes stay in page coordinates and carry the id of the memo they were written on; the stroke beside them does not.
+  assert.deepEqual(page.strokes.map(s => s.memo), [undefined, F.memoId(0, 0), F.memoId(0, 0), F.memoId(0, 0), F.memoId(0, 1)]);
+  const on = page.strokes[1];
+  assert.ok(on.points[0][0] > page.memos[0].x && on.points.at(-1)[0] < page.memos[0].x + page.memos[0].w && on.points[0][1] > page.memos[0].y && on.points[0][1] < page.memos[0].y + page.memos[0].h);
+  // A memo in the corner with no strokes, on a page without any ink.
+  assert.deepEqual(second.memos, [{id:F.memoId(1, 0), x:0, y:0, w:0.23457, h:0.16586, color:'#000000'}]);
+  assert.deepEqual([m.report.memos, m.report.memosDeleted, m.report.memoTexts, m.report.strokes, m.report.elements], [3, 0, 0, 5, {}]);
+  assert.deepEqual(m.sections.map(x => [x.strokes, x.memos]), [[5, 3]]);
+  assert.ok(!JSON.stringify(m.pages).includes('Fixture Author'));
+});
+test('two records of one memo: the higher clock wins whatever their order; an erased memo is left out and its strokes become ordinary strokes', async () => {
+  const moved = {x:100, y:100, w:200, h:200, color:[1, 1, 0, 1], counter:3, strokes:2, versions:[{x:300, y:400, scale:1.5, color:[1, 0.5, 0.5, 1], counter:7}, {x:50, y:50, counter:5}]};
+  const erased = {x:20, y:500, w:100, h:100, counter:2, strokes:1, versions:[{erased:true, counter:4}]};
+  const typed = {x:400, y:20, w:100, h:100, typed:true};
+  const m = await G.read(new Uint8Array(F.notebook({width:600, height:800, pages:[{pdfPage:1, order:'a', memos:[moved, erased, typed]}]})));
+  assert.deepEqual(m.pages[0].memos, [{id:F.memoId(0, 0), x:0.5, y:0.5, w:0.5, h:0.375, color:'#ff8080'}, {id:F.memoId(0, 2), x:0.66667, y:0.025, w:0.16667, h:0.125, color:'#fae778'}]);
+  assert.deepEqual(m.pages[0].strokes.map(s => s.memo), [F.memoId(0, 0), F.memoId(0, 0), undefined]);
+  assert.deepEqual([m.report.memos, m.report.memosDeleted, m.report.memoTexts, m.report.strokes, m.report.elements], [2, 1, 1, 3, {}]);
+});
+test('the structure export lists each sticker memo with the box its strokes cover, as numbers only', async () => {
+  const bytes = new Uint8Array(F.notebook({width:600, height:800, pages:[{pdfPage:1, order:'a', memos:[{x:100, y:200, w:200, h:100, scale:2, strokes:3}, {x:10, y:10, w:50, h:50}]}]}));
+  const x = await G.structure(bytes);
+  assert.deepEqual([x.version, x.reader], [3, 9]);
+  assert.deepEqual(x.elements.map(e => e.memo), [{strokes:3, unread:0, strokeBox:[160, 250, 440, 350]}, {strokes:0, unread:0, strokeBox:null}]);
+  const text = JSON.stringify(x);
+  assert.ok(!text.includes('Fixture Author') && !text.includes('tpl'));
+  assert.ok(text.includes('[20,[[1,[[1,100],[2,200]]],[3,2]]]')); // the memo's own corner and scale are in its shape
 });
