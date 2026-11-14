@@ -6,7 +6,7 @@ const PALETTES={
  pen:[['#101828','검정'],['#b42318','진한 빨강'],['#175cd3','파랑'],['#1849a9','남색'],['#067647','진한 초록'],['#5925dc','진한 보라'],['#854a0e','갈색'],['#851651','자주']],
  highlighter:[['#fef08a','파스텔 노랑'],['#fbcfe8','파스텔 분홍'],['#bae6fd','파스텔 하늘'],['#bbf7d0','파스텔 초록'],['#ddd6fe','파스텔 보라'],['#fed7aa','파스텔 주황'],['#99f6e4','파스텔 민트'],['#e9d5ff','파스텔 라일락']]
 };
-const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},eraser:{size:0.018},penOnly:false});
+const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},eraser:{size:0.018},memo:{mode:'text',color:'#fbe88c'},penOnly:false});
 function create({storage,identity,defaultPenOnly=false}){
  const initial=identity(),owner=initial?.owner,session=initial?.session;
  if(!owner||!session)throw Error('로그인이 필요해요.');
@@ -24,11 +24,18 @@ function create({storage,identity,defaultPenOnly=false}){
    for(const name of ['recent','custom'])if(Array.isArray(p[name]))fallback[tool][name]=[...new Set(p[name].filter(c=>typeof c==='string'&&HEX.test(c)).map(c=>c.toLowerCase()))].slice(0,name==='recent'?8:24);
   }
   if(Number.isFinite(data.eraser?.size)&&data.eraser.size>=0.008&&data.eraser.size<=0.06)fallback.eraser.size=data.eraser.size;
+  // 스티커 메모: the last way of writing (글자/펜) and colour, offered first next time.
+  if(['text','pen'].includes(data.memo?.mode))fallback.memo.mode=data.memo.mode;
+  if(typeof data.memo?.color==='string'&&HEX.test(data.memo.color))fallback.memo.color=data.memo.color.toLowerCase();
   if(typeof data.penOnly==='boolean')fallback.penOnly=data.penOnly;return fallback;
  }
  function write(tool,patch={},options={}){
   current();const data=read();
   if(tool==='input'){data.penOnly=patch.penOnly===true;}
+  else if(tool==='memo'){
+   if(patch.mode!==undefined){if(!['text','pen'].includes(patch.mode))throw Error('메모 쓰는 방법을 확인해 주세요.');data.memo.mode=patch.mode;}
+   if(patch.color!==undefined){if(typeof patch.color!=='string'||!HEX.test(patch.color))throw Error('#RRGGBB 형식의 색상을 입력해 주세요.');data.memo.color=patch.color.toLowerCase();}
+  }
   else if(tool==='eraser'){
    if(!Number.isFinite(patch.size)||patch.size<0.008||patch.size>0.06)throw Error('지우개 크기를 확인해 주세요.');
    data.eraser.size=patch.size;

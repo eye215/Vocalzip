@@ -1,24 +1,99 @@
-/* Private, immutable PDF strokes. No original PDF bytes, signed URLs or account tokens. */
+/* Private, immutable PDF strokes. No original PDF bytes, signed URLs or account tokens.
+ *
+ * Records in one list (root.scoreAnnotations, the device recovery copy, and an imported PDF's vocalzip-ink.json).
+ * Every record: version 1, id, ownerId, songId, scoreId, r2Key, pdfHash, page (1-based), color '#rrggbb', createdAt.
+ * A record is never changed in place: an edit removes it and adds a copy with a new id.
+ *
+ * Stroke   tool 'pen' | 'highlighter', width (of page width, 0.001–0.06), opacity (optional, 0.05–1),
+ *          points [[x, y, pressure], …] with x of page width and y of page height (0–1),
+ *          note (optional): link key of the memo it was written on — it moves and is deleted with that memo.
+ * Memo     tool 'note' (스티커 메모), rect [x, y, w, h] in the same units (x, w of page width; y, h of page height;
+ *          inside the page), mode 'text' | 'pen' (what tapping it does: type/Scribble, or write with the pen),
+ *          text (optional string, at most NOTE_TEXT_MAX; drawn wrapped inside the memo, NOTE_FONT of page width),
+ *          note (optional): its link key. A memo without it is linked by its id; a moved/edited copy keeps the key.
+ *          An importer writes {tool:'note', id, color, rect, mode:'pen'} and strokes carrying note:<that id>.
+ * Clients older than memos skip records they do not know when listing (valid() is false), so they neither show nor
+ * remove a memo; strokes carrying `note` are ordinary strokes to them. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipScoreInk=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const COLLECTION='scoreAnnotations',PREFIX='vzip_score_ink_v1:',MAX_BYTES=2*1024*1024,MAX_POINTS=2048;
 const clone=x=>JSON.parse(JSON.stringify(x)),fail=(message,code)=>Object.assign(Error(message),{code});
 const unit=n=>Number.isFinite(n)&&n>=0&&n<=1;
 const validId=x=>typeof x==='string'&&x.length>0&&x.length<=200;
+/* 스티커 메모. Sizes are fractions of the page width unless a rect says otherwise. */
+const NOTE_TEXT_MAX=2000,NOTE_MIN=0.02,NOTE_SIZE=0.235,NOTE_SMALLEST=0.1,NOTE_FONT=0.026,NOTE_LINE=1.35,NOTE_PAD=0.012,NOTE_RADIUS=0.006,NOTE_INK='#101828';
+const NOTE_FAMILY='Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif';
+const NOTE_COLORS=[['#fbe88c','노랑'],['#fbcfe0','분홍'],['#c9ecc9','초록'],['#cfe3fb','파랑']];
+const isNote=s=>s?.tool==='note';
+function validNote(s){
+ const r=s.rect;
+ return Array.isArray(r)&&r.length===4&&r.every(Number.isFinite)&&r[0]>=0&&r[1]>=0&&r[2]>=NOTE_MIN&&r[3]>=NOTE_MIN&&r[0]+r[2]<=1.00001&&r[1]+r[3]<=1.00001&&
+  ['text','pen'].includes(s.mode)&&(s.text===undefined||typeof s.text==='string'&&s.text.length<=NOTE_TEXT_MAX);
+}
 function valid(s){
  return s?.version===1&&validId(s.id)&&validId(s.ownerId)&&validId(s.songId)&&validId(s.scoreId)&&
   typeof s.r2Key==='string'&&s.r2Key.startsWith('u/'+s.ownerId+'/'+s.scoreId+'/')&&!s.r2Key.includes('..')&&s.r2Key.length<=300&&
   /^[0-9a-f]{64}$/.test(s.pdfHash||'')&&Number.isInteger(s.page)&&s.page>=1&&s.page<=2000&&
-  ['pen','highlighter'].includes(s.tool)&&/^#[0-9a-f]{6}$/i.test(s.color||'')&&Number.isFinite(s.width)&&s.width>=0.001&&s.width<=0.06&&
+  /^#[0-9a-f]{6}$/i.test(s.color||'')&&(s.note===undefined||validId(s.note))&&Number.isFinite(s.createdAt)&&s.createdAt>0&&
+  (isNote(s)?validNote(s):
+  ['pen','highlighter'].includes(s.tool)&&Number.isFinite(s.width)&&s.width>=0.001&&s.width<=0.06&&
   (s.opacity===undefined||Number.isFinite(s.opacity)&&s.opacity>=0.05&&s.opacity<=1)&&
-  Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit))&&
-  Number.isFinite(s.createdAt)&&s.createdAt>0;
+  Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit)));
 }
-const same=(a,b)=>JSON.stringify(['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt'].map(k=>a[k]))===JSON.stringify(['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt'].map(k=>b[k]));
-const opacity=s=>s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
+const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text'];
+const same=(a,b)=>JSON.stringify(FIELDS.map(k=>a[k]))===JSON.stringify(FIELDS.map(k=>b[k]));
+const opacity=s=>isNote(s)?1:s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
+const round=n=>Math.round(n*100000)/100000;
+/** The key strokes written on a memo carry in `note`. */
+const noteKey=s=>s.note||s.id;
+/** Topmost memo under a point (page-normalised), or undefined. */
+function noteAt(rows,p){return rows.filter(isNote).reverse().find(s=>p[0]>=s.rect[0]&&p[0]<=s.rect[0]+s.rect[2]&&p[1]>=s.rect[1]&&p[1]<=s.rect[1]+s.rect[3]);}
+/** Strokes on the memo's page that were written on it. Empty when another memo there shares the key (two devices
+ *  edited the same memo), so removing one copy never takes the handwriting with it. */
+function linked(rows,memo){
+ const key=noteKey(memo);
+ if(rows.some(s=>isNote(s)&&s.id!==memo.id&&s.page===memo.page&&noteKey(s)===key))return [];
+ return rows.filter(s=>!isNote(s)&&s.page===memo.page&&s.note===key);
+}
+/** A memo rect kept inside the page and no smaller than NOTE_SMALLEST of the page width each way. */
+function noteRect(x,y,w,h,aspect=1){
+ const minH=Math.max(NOTE_MIN,Math.min(1,NOTE_SMALLEST/aspect));
+ w=Math.max(NOTE_SMALLEST,Math.min(1,w));h=Math.max(minH,Math.min(1,h));
+ x=Math.max(0,Math.min(1-w,x));y=Math.max(0,Math.min(1-h,y));
+ x=round(x);y=round(y);return [x,y,Math.min(round(w),round(1-x)),Math.min(round(h),round(1-y))];
+}
+/** Memo text broken into lines no wider than `width`; measure(text) returns a width in the same unit. Breaks at
+ *  spaces where it can, anywhere otherwise (Korean). Used by the viewer and the PDF export, so both wrap alike. */
+function noteLines(text,width,measure,limit=200){
+ const out=[];
+ for(const part of String(text||'').split('\n')){
+  let line='';
+  for(const ch of part){
+   if(!line||measure(line+ch)<=width){line+=ch;continue;}
+   const cut=ch===' '?-1:line.lastIndexOf(' ');
+   if(cut>0&&/[!-~]/.test(ch)){out.push(line.slice(0,cut));line=line.slice(cut+1)+ch;}
+   else{out.push(line);line=ch===' '?'':ch;}
+   if(out.length>=limit)return out;
+  }
+  out.push(line);if(out.length>=limit)return out;
+ }
+ return out;
+}
 function scope(s,b){return s.songId===b.songId&&s.scoreId===b.scoreId&&s.r2Key===b.r2Key&&s.pdfHash===b.pdfHash&&s.ownerId===b.ownerId;}
 function point(x,y,pressure=0.5){return [x,y,pressure].map(n=>Math.round(Math.max(0,Math.min(1,Number.isFinite(n)?n:0.5))*100000)/100000);}
+/** Where a memo and its text go on a page W wide and H high (any unit). `ctx` is a 2D canvas context used only to
+ *  measure, always at one reference size, so the viewer and the PDF export break lines at the same places. */
+function noteLayout(n,W,H,ctx){
+ const x=n.rect[0]*W,y=n.rect[1]*H,w=n.rect[2]*W,h=n.rect[3]*H,pad=NOTE_PAD*W,size=NOTE_FONT*W,step=size*NOTE_LINE,lines=[];
+ if(n.text&&ctx){
+  ctx.font='400 100px '+NOTE_FAMILY;
+  const all=noteLines(n.text,Math.max(size,w-2*pad),t=>ctx.measureText(t).width*size/100,Math.ceil(h/step)+1);
+  all.forEach((text,i)=>{if(pad+i*step<h&&text)lines.push({text,x:x+pad,y:y+pad+size*.82+i*step});});
+ }
+ return {x,y,w,h,radius:NOTE_RADIUS*W,size,lines};
+}
 function hit(s,p,aspect=1,radius=0.018){
+ if(isNote(s))return false; // the eraser and the stroke selection never take a memo's background
  const x=p[0],y=p[1]*aspect,r=Math.max(s.width/2,radius),pts=s.points;
  const dist=(a,b)=>{
   const ax=a[0],ay=a[1]*aspect,bx=b[0],by=b[1]*aspect,dx=bx-ax,dy=by-ay,den=dx*dx+dy*dy,t=den?Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/den)):0;
@@ -34,12 +109,14 @@ function path(s,aspect=1){
 function bounds(rows,aspect=1){
  if(!rows.length||!Number.isFinite(aspect)||aspect<=0)return null;
  let x=Infinity,y=Infinity,right=-Infinity,bottom=-Infinity;
- for(const s of rows)for(const p of s.points){const r=s.width/2;x=Math.min(x,p[0]-r);right=Math.max(right,p[0]+r);y=Math.min(y,p[1]-r/aspect);bottom=Math.max(bottom,p[1]+r/aspect);}
+ for(const s of rows)if(isNote(s)){x=Math.min(x,s.rect[0]);y=Math.min(y,s.rect[1]);right=Math.max(right,s.rect[0]+s.rect[2]);bottom=Math.max(bottom,s.rect[1]+s.rect[3]);}
+ else for(const p of s.points){const r=s.width/2;x=Math.min(x,p[0]-r);right=Math.max(right,p[0]+r);y=Math.min(y,p[1]-r/aspect);bottom=Math.max(bottom,p[1]+r/aspect);}
  return {x,y,w:right-x,h:bottom-y};
 }
 function inRect(rows,rect,aspect=1){
  const x=Math.min(rect.x,rect.x+rect.w),y=Math.min(rect.y,rect.y+rect.h),right=Math.max(rect.x,rect.x+rect.w),bottom=Math.max(rect.y,rect.y+rect.h);
  return rows.filter(s=>{
+  if(isNote(s))return false;
   const r=s.width/2,left=x-r,top=y-r/aspect,w=right-x+2*r,h=bottom-y+2*r/aspect;
   return s.points.some((b,i)=>{
    const a=s.points[Math.max(0,i-1)],dx=b[0]-a[0],dy=b[1]-a[1];let lo=0,hi=1;
@@ -52,10 +129,14 @@ function inRect(rows,rect,aspect=1){
 }
 function transform(rows,{dx=0,dy=0,scale=1}={},aspect=1){
  if(!rows.length||!rows.every(valid)||![dx,dy,scale,aspect].every(Number.isFinite)||scale<=0||aspect<=0)throw fail('선택한 필기 범위를 확인해 주세요.','geometry');
- const b=bounds(rows,aspect),min=Math.max(...rows.map(s=>.001/s.width)),max=Math.min(1/b.w,1/b.h,...rows.map(s=>.06/s.width));
+ const b=bounds(rows,aspect),min=Math.max(...rows.map(s=>isNote(s)?NOTE_MIN/Math.min(s.rect[2],s.rect[3]):.001/s.width)),max=Math.min(1/b.w,1/b.h,...rows.map(s=>isNote(s)?Infinity:.06/s.width));
  if(max<min)throw fail('이 필기는 더 줄일 수 없어요.','geometry');
  const k=Math.max(min,Math.min(max,scale)),x=Math.max(0,Math.min(1-b.w*k,b.x+dx)),y=Math.max(0,Math.min(1-b.h*k,b.y+dy));
- return rows.map(s=>({...clone(s),width:Math.max(.001,Math.min(.06,s.width*k)),points:s.points.map(p=>[point(x+(p[0]-b.x)*k,0)[0],point(0,y+(p[1]-b.y)*k)[1],p[2]])}));
+ return rows.map(s=>{
+  if(!isNote(s))return {...clone(s),width:Math.max(.001,Math.min(.06,s.width*k)),points:s.points.map(p=>[point(x+(p[0]-b.x)*k,0)[0],point(0,y+(p[1]-b.y)*k)[1],p[2]])};
+  const left=round(x+(s.rect[0]-b.x)*k),top=round(y+(s.rect[1]-b.y)*k);
+  return {...clone(s),rect:[left,top,Math.min(round(s.rect[2]*k),round(1-left)),Math.min(round(s.rect[3]*k),round(1-top))]};
+ });
 }
 function create({storage,identity,getData,change}){
  const start=identity(),owner=start?.owner,session=start?.session;
@@ -132,5 +213,6 @@ function create({storage,identity,getData,change}){
  function gone(){const d=data();return new Set([...(d.deleted?.[COLLECTION]||[]),...read().deleted]);}
  return {restore,list,commit,removeScore,gone,key};
 }
-return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES};
+return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
+ isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
 });

@@ -47,3 +47,13 @@ test('tablet pen-only default applies only until the user chooses an input prefe
  const f=fixture(),tablet=create({...f.options,defaultPenOnly:true});assert.equal(tablet.read().penOnly,true);
  tablet.write('input',{penOnly:false});assert.equal(create({...f.options,defaultPenOnly:true}).read().penOnly,false);
 });
+test('the last way of writing a memo (글자/펜) and its colour are remembered; bad values keep the earlier choice',()=>{
+ const f=fixture();assert.deepEqual(f.api.read().memo,{mode:'text',color:'#fbe88c'});
+ f.api.write('memo',{mode:'pen',color:'#FBCFE0'});assert.deepEqual(create(f.options).read().memo,{mode:'pen',color:'#fbcfe0'});
+ for(const patch of [{mode:'draw'},{color:'pink'},{color:'#fff'}])assert.throws(()=>f.api.write('memo',patch));
+ assert.deepEqual(f.api.read().memo,{mode:'pen',color:'#fbcfe0'});
+ // Other tools keep their own settings, and settings saved before memos existed still read.
+ f.api.write('pen',{color:'#123456'});assert.equal(f.api.read().memo.mode,'pen');assert.equal(f.api.read().pen.color,'#123456');
+ const key=[...f.memory.keys()][0],old=JSON.parse(f.memory.get(key));delete old.memo;f.memory.set(key,JSON.stringify(old));
+ assert.deepEqual(f.api.read().memo,{mode:'text',color:'#fbe88c'});assert.equal(f.api.read().pen.color,'#123456');
+});
