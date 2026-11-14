@@ -27,7 +27,21 @@ async function make({document:source,binding,annotations,check=()=>{},onProgress
   const scale=Math.min(2.5,2048/Math.max(crop.width,crop.height),Math.sqrt(4000000/(crop.width*crop.height))),canvas=document.createElement('canvas');
   canvas.width=Math.max(1,Math.ceil(crop.width*scale));canvas.height=Math.max(1,Math.ceil(crop.height*scale));const ctx=canvas.getContext('2d');
   try{
-   for(const s of annotations.filter(s=>s.page===number)){
+   // 스티커 메모 go under the handwriting, as in the viewer. Viewer page space → canvas, whatever the page rotation.
+   const notes=annotations.filter(s=>s.page===number&&Ink.isNote(s));
+   if(notes.length){
+    const at=(vx,vy)=>{const [x,y]=viewport.convertToPdfPoint(vx,vy);return [(x-crop.x)*scale,(crop.y+crop.height-y)*scale];};
+    const o=at(0,0),ex=at(1,0),ey=at(0,1),unit=Math.hypot(ex[0]-o[0],ex[1]-o[1]);
+    ctx.save();ctx.setTransform(ex[0]-o[0],ex[1]-o[1],ey[0]-o[0],ey[1]-o[1],o[0],o[1]);
+    for(const n of notes){
+     check();const m=Ink.noteLayout(n,viewport.width,viewport.height,ctx),r=Math.min(m.radius,m.w/2,m.h/2);
+     ctx.beginPath();ctx.moveTo(m.x+r,m.y);ctx.arcTo(m.x+m.w,m.y,m.x+m.w,m.y+m.h,r);ctx.arcTo(m.x+m.w,m.y+m.h,m.x,m.y+m.h,r);ctx.arcTo(m.x,m.y+m.h,m.x,m.y,r);ctx.arcTo(m.x,m.y,m.x+m.w,m.y,r);ctx.closePath();
+     ctx.save();ctx.shadowColor='rgba(16,24,40,.18)';ctx.shadowBlur=.006*viewport.width*unit;ctx.shadowOffsetY=.002*viewport.width*unit;ctx.fillStyle=n.color;ctx.fill();ctx.restore();
+     if(m.lines.length){ctx.save();ctx.clip();ctx.fillStyle=Ink.NOTE_INK;ctx.font='400 '+m.size+'px '+Ink.NOTE_FAMILY;ctx.textBaseline='alphabetic';for(const line of m.lines)ctx.fillText(line.text,line.x,line.y);ctx.restore();}
+    }
+    ctx.restore();
+   }
+   for(const s of annotations.filter(s=>s.page===number&&!Ink.isNote(s))){
     check();ctx.strokeStyle=s.color;ctx.globalAlpha=Ink.opacity(s);const origin=viewport.convertToPdfPoint(0,0),edge=viewport.convertToPdfPoint(s.width*viewport.width,0);ctx.lineWidth=Math.hypot(edge[0]-origin[0],edge[1]-origin[1])*scale;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
     let first;
     s.points.forEach((p,i)=>{
