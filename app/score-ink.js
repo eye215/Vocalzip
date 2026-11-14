@@ -148,7 +148,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '<section class="score-ink-thumbnails" data-ink-thumbnails aria-label="악보 페이지 미리보기" hidden><div class="score-ink-thumbnails-head"><strong>페이지 이동</strong>'+button('thumb-close','x','페이지 미리보기 닫기')+'</div><form data-ink-jump-form><label>페이지 번호 <input type="number" data-ink-jump-input min="1" inputmode="numeric" aria-label="이동할 페이지 번호"></label><button type="submit">이동</button></form><div class="score-ink-thumb-grid" data-ink-thumb-grid></div><div class="score-ink-thumb-nav">'+button('thumb-prev','caret-left','앞 페이지 목록')+'<span data-ink-thumb-range></span>'+button('thumb-next','caret-right','다음 페이지 목록')+'</div></section>'+
   '<div class="score-ink-selection-bar" data-ink-selection-bar role="group" aria-label="선택한 필기" hidden><span data-ink-selection-count></span><button type="button" data-ink-recognize hidden>텍스트로 변환</button>'+button('selection-smaller','minus','선택 필기 축소')+button('selection-larger','plus','선택 필기 확대')+button('selection-delete','trash','선택 필기 삭제')+button('selection-clear','x','필기 선택 해제')+'</div>'+
   '<div class="score-ink-memo-bar" data-ink-memo-bar role="group" aria-label="메모" hidden><p data-ink-memo-hint>메모를 붙일 곳을 눌러 주세요.</p><div class="score-ink-memo-colors" data-ink-memo-colors role="group" aria-label="메모 색"></div>'+
-  '<div class="score-ink-memo-modes"><button type="button" data-ink-memo-mode="text" aria-pressed="false"><i class="ph ph-text-aa" aria-hidden="true"></i>글자로 쓰기</button><button type="button" data-ink-memo-mode="pen" aria-pressed="false"><i class="ph ph-pen" aria-hidden="true"></i>펜으로 쓰기</button><button type="button" data-ink-memo-done hidden>완료</button></div>'+
+  '<div class="score-ink-memo-modes"><button type="button" data-ink-memo-mode="text" aria-pressed="false"><i class="ph ph-text-aa" aria-hidden="true"></i>글자로 쓰기</button><button type="button" data-ink-memo-mode="pen" aria-pressed="false"><i class="ph ph-pen" aria-hidden="true"></i>펜으로 쓰기</button><button type="button" data-ink-memo-done hidden>완료</button><button type="button" data-ink-memo-goals hidden><i class="ph ph-target" aria-hidden="true"></i>목표로 넣기</button></div>'+
   button('memo-delete','trash','메모 삭제')+button('memo-close','x','메모 선택 해제')+'</div>'+
   '<p class="score-ink-status" data-ink-status role="status" aria-live="polite">PDF를 준비하고 있어요.</p><a class="score-ink-original-quick" data-ink-original-quick target="_blank" rel="noopener" hidden>원본 PDF 열기</a>'+
   '<div class="score-ink-stage" data-ink-stage tabindex="0" aria-label="악보 페이지"><div class="score-ink-page" data-ink-box hidden><canvas data-ink-pdf aria-label="PDF 악보"></canvas><svg xmlns="http://www.w3.org/2000/svg" data-ink-svg role="img" aria-label="개인 필기 영역"></svg><div class="score-ink-text-layer" data-ink-text-layer></div><div class="score-ink-vision-rect" data-ink-vision-rect hidden></div></div></div>'+ 
@@ -511,6 +511,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   bar.querySelectorAll('[data-ink-memo-color]').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.inkMemoColor===target?.color));b.disabled=locked;});
   bar.querySelectorAll('[data-ink-memo-mode]').forEach(b=>{b.hidden=!target||!!memoEdit;b.setAttribute('aria-pressed',String(b.dataset.inkMemoMode===mode));b.disabled=locked;});
   bar.querySelector('[data-ink-memo-done]').hidden=!memoEdit;
+  // 목표로 넣기: only a 글자 memo has lines to turn into goals.
+  const goals=bar.querySelector('[data-ink-memo-goals]');goals.hidden=!row||row.mode!=='text'||!(row.text||memoEdit);goals.disabled=locked;
   const remove=bar.querySelector('[data-ink-memo-delete]'),close=bar.querySelector('[data-ink-memo-close]');
   remove.hidden=!row;remove.disabled=locked;close.hidden=!target||!!memoEdit;
   close.setAttribute('aria-label',draft?'메모 붙이기 취소':'메모 선택 해제');close.title=close.getAttribute('aria-label');
@@ -1037,6 +1039,61 @@ VZ.openScoreInk=(songId,scoreId)=>{
    });
   }});
  }
+ /* 목표로 넣기: the lines of a 글자 memo become goals of this score's song, through the same code a goal made by hand
+  * uses — 오늘의 목표 (VzipStudentHomeModel.savePlan, a personal goal for today) or 숙제 (VZ.addTask, period from today
+  * to the usual due day). Nothing is saved before 넣기; a line that is already there for this song is not added again. */
+ async function memoGoals(){
+  if(busy||exportBusy||pending||!memoEditEnd())return;
+  const row=memoRow();if(!row||row.mode!=='text')return;
+  const lines=Ink.noteGoalLines(row.text),Home=window.VzipStudentHomeModel,LIMIT=500;
+  if(!lines.length){VZ.toast('목표로 넣을 내용이 없어요. 메모에 한 줄 이상 적어 주세요.','error');return;}
+  if(!Home||!VZ.addTask||!VZ.song(songId)){VZ.toast('목표를 넣을 곡을 찾지 못했어요.','error');return;}
+  await outside();if(closed)return;
+  const esc=VZ.esc,same=t=>String(t||'').trim().replace(/\s+/g,' '),today=VZ.today(),due=VZ.taskDefaultDue(),md=d=>{const [,m,day]=d.split('-');return Number(m)+'/'+Number(day);};
+  const exists={
+   today:line=>Home.build(VZ.db,{today}).goals.some(g=>same(g.title)===line&&(!g.songId||g.songId===songId)),
+   homework:line=>(VZ.db.assignments||[]).some(t=>t.status!=='done'&&same(t.title)===line&&VZ.taskSongId(t)===songId)
+  };
+  const help={today:'오늘의 목표에 개인 목표로 들어가요.',homework:'이 곡의 숙제로 들어가요. 기간은 오늘부터 '+md(due)+'까지예요.'};
+  const body='<form id="ink-goal-form"><p class="vz-plan-intro">메모 한 줄이 목표 하나가 돼요. 넣을 줄을 골라 주세요.</p>'+
+   '<fieldset class="vz-plan-section ink-goal-target"><legend>넣을 곳</legend><div class="ink-marker-choices ink-marker-types"><label><input type="radio" name="target" value="today"'+(profiles.goalTarget==='homework'?'':' checked')+'><span>오늘의 목표</span></label><label><input type="radio" name="target" value="homework"'+(profiles.goalTarget==='homework'?' checked':'')+'><span>숙제</span></label></div>'+
+   '<p class="vz-plan-help" data-goal-help></p></fieldset>'+
+   '<fieldset class="vz-plan-section"><legend>'+esc(VZ.songTitle?.(songId)||'이 곡')+' <span data-goal-count></span></legend><div class="vz-plan-options">'+lines.map((line,i)=>'<label class="vz-plan-option"><input type="checkbox" name="line" value="'+i+'" checked><span class="vz-plan-check" aria-hidden="true"></span><span class="vz-plan-title">'+esc(line)+'</span><small class="vz-plan-source" data-goal-state hidden></small></label>').join('')+'</div></fieldset>'+
+   '<p class="ink-marker-error" role="alert" data-goal-error></p></form>';
+  VZ.sheet({title:'목표로 넣기',label:'메모를 목표로 넣기',body,foot:'<button type="submit" form="ink-goal-form" class="btn block" data-goal-save>넣기</button>',onMount:(node,close)=>{
+   node.classList.add('vz-plan-sheet','ink-goal-sheet');
+   const form=node.querySelector('form'),boxes=[...form.querySelectorAll('[name=line]')],error=node.querySelector('[data-goal-error]'),save=node.parentNode.querySelector('[data-goal-save]'),wanted=new Set(lines.map((_,i)=>i));
+   const sync=()=>{
+    const target=form.elements.target.value;node.querySelector('[data-goal-help]').textContent=help[target];
+    boxes.forEach((box,i)=>{
+     const there=exists[target](lines[i]),long=lines[i].length>LIMIT,state=box.parentNode.querySelector('[data-goal-state]');
+     box.disabled=there||long;box.checked=!box.disabled&&wanted.has(i);box.parentNode.classList.toggle('is-kept',box.disabled);
+     state.hidden=!box.disabled;state.textContent=there?'이미 있어요':long?LIMIT+'자까지 넣을 수 있어요':'';
+    });
+    const count=boxes.filter(b=>b.checked).length;node.querySelector('[data-goal-count]').textContent=count+'개 선택';
+    save.textContent=count?'목표 '+count+'개 넣기':'넣기';save.disabled=!count;
+   };
+   form.addEventListener('change',event=>{error.textContent='';if(event.target.name==='line'){const i=Number(event.target.value);if(event.target.checked)wanted.add(i);else wanted.delete(i);}sync();});
+   sync();
+   form.onsubmit=event=>{
+    event.preventDefault();
+    const target=form.elements.target.value,picked=lines.filter((_,i)=>boxes[i].checked&&!boxes[i].disabled);
+    if(!picked.length){error.textContent='넣을 줄을 하나 이상 골라 주세요.';return;}
+    let ok=false;
+    try{
+     current();if(!VZ.song(songId))throw Error('곡을 찾지 못했어요.');
+     if(target==='today'){
+      const goals=[...Home.build(VZ.db,{today}).goals.map(g=>({...g})),...picked.map(title=>({id:VZ.uid(),title,source:'personal',sourceId:'',songId,completed:false}))];
+      Home.savePlan({...VZ.db},{date:today,goals}); // checked on a copy first: VZ.change would hide what is wrong
+      ok=VZ.change(db=>{Home.savePlan(db,{date:today,goals});},{silent:true});
+     }else ok=VZ.change(db=>{for(const title of picked)VZ.addTask(db,{title,songId,startDate:today,dueDate:due});},{silent:true});
+    }catch(e){error.textContent=e.message;return;}
+    if(!ok){error.textContent='목표를 넣지 못했어요. 다시 시도해 주세요.';return;}
+    try{profiles=prefs.write('goal',{target});}catch{}
+    close();VZ.softRender?.();VZ.toast((target==='today'?'오늘의 목표에 ':'숙제에 ')+picked.length+'개를 넣었어요.');
+   };
+  }});
+ }
  function closeThumbnails(){
   const panel=el?.querySelector('[data-ink-thumbnails]');if(!panel)return;
   panel.hidden=true;el.querySelector('[data-ink-page]').setAttribute('aria-expanded','false');
@@ -1307,6 +1364,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    bar.addEventListener('mousedown',event=>{if(memoEdit)event.preventDefault();});
    bar.querySelectorAll('[data-ink-memo-mode]').forEach(b=>b.onclick=()=>memoMode(b.dataset.inkMemoMode));
    bar.querySelector('[data-ink-memo-done]').onclick=()=>memoEditEnd();
+   bar.querySelector('[data-ink-memo-goals]').onclick=memoGoals;
    bar.querySelector('[data-ink-memo-delete]').onclick=memoDelete;
    bar.querySelector('[data-ink-memo-close]').onclick=()=>{memoEnd();paint();};}
   el.querySelector('[data-ink-selection-smaller]').onclick=()=>resizeSelection(.9);

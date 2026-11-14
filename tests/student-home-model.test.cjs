@@ -386,3 +386,14 @@ test('today practice helper: minutes, target and percent come from the home week
   assert.equal(Today.text({minutes:60,targetMinutes:90,percent:67}),'오늘 1시간 / 목표 1시간 30분 · 67%');
   assert.equal(JSON.stringify(db),before);
 });
+
+test('a new personal goal may name its song (목표로 넣기 from a score memo); goals made without one are unchanged',()=>{
+  const db={dailyGoals:[{id:'a',date:today,title:'A',source:'personal',sourceId:'',completed:false,order:0}],practicePlans:[],practices:[]};
+  M.savePlan(db,{date:today,goals:[...build(db).goals,{id:'memo',title:'2절 숨 크게',source:'personal',sourceId:'',songId:'s1',completed:false},{id:'hand',title:'손으로 적은 목표',source:'personal',sourceId:'',completed:false}]});
+  assert.deepEqual(db.dailyGoals.map(g=>[g.id,g.songId,g.order]),[['a',undefined,0],['memo','s1',1],['hand',undefined,2]]);
+  // Same fields as a goal typed in 오늘의 목표, plus the song.
+  assert.deepEqual(Object.keys(db.dailyGoals[1]).sort(),[...Object.keys(db.dailyGoals[2]),'songId'].sort());
+  // Saving the day again keeps the song; an existing goal does not pick one up.
+  M.savePlan(db,{date:today,goals:build(db).goals.map(g=>g.id==='a'?{...g,songId:'s9'}:g)});
+  assert.deepEqual(db.dailyGoals.map(g=>[g.id,g.songId]),[['a',undefined],['memo','s1'],['hand',undefined]]);
+});

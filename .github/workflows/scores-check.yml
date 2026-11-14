@@ -11,6 +11,8 @@ on:
       - 'tests/score-ink*'
       - 'tests/score-memo*'
       - 'tests/score-markers*'
+      - 'app/student-home-model.js'
+      - 'app/views-lessons.js'
       - 'tests/scores.spec.cjs'
       - '.github/workflows/scores-check.yml'
   workflow_dispatch:
@@ -31,10 +33,10 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/score-ink-model.test.cjs tests/score-ink-settings.test.cjs tests/data-merge.test.cjs
+      - run: node --test tests/score-ink-model.test.cjs tests/score-ink-settings.test.cjs tests/data-merge.test.cjs tests/student-home-model.test.cjs
       - name: Pinned PDF.js renderer for actual browser PDF tests
         run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
-      - run: npx playwright test tests/scores.spec.cjs tests/score-ink.spec.cjs tests/score-memo.spec.cjs tests/score-markers.spec.cjs --workers=2
+      - run: npx playwright test tests/scores.spec.cjs tests/score-ink.spec.cjs tests/score-memo.spec.cjs tests/score-markers.spec.cjs tests/score-memo-goals.spec.cjs --workers=2
         env:
           VZ_INK_PREVIEW: '1'
       # Previous full-suite run timed out in this existing WebKit calendar route.

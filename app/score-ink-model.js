@@ -200,6 +200,18 @@ function glyphLayout(s,W,H){
  const size=s.size*W;
  return {text:s.glyph,x:s.points[0][0]*W,y:s.points[0][1]*H+size*.36,size,bold:Math.min(size*.12,s.width*W*.25)};
 }
+/** A memo's text as a list: one entry per non-empty line, without a leading bullet, number or tick box
+ *  ("- ", "• ", "1. ", "2) ", "[ ] "), each line once. "-5도" and "1.5배" keep their number. */
+function noteGoalLines(text){
+ const out=[];
+ for(const raw of String(text||'').split(/\r?\n/)){
+  let line=raw.trim(),before;
+  do{before=line;line=line.replace(/^(?:[-*+](?!\d)|[•·∙▪▫◦‣○●□■☐☑✓✔–—]+|\d{1,3}[.)](?!\d)|[(（]\d{1,3}[)）]|[①-⑳]|\[[ xX✓]?\])\s*/,'');}while(line!==before);
+  line=line.replace(/\s+/g,' ');
+  if(line&&!out.includes(line))out.push(line);
+ }
+ return out;
+}
 function create({storage,identity,getData,change}){
  const start=identity(),owner=start?.owner,session=start?.session;
  if(!owner||!session)throw fail('필기하려면 로그인해 주세요.','identity');
@@ -276,6 +288,6 @@ function create({storage,identity,getData,change}){
  return {restore,list,commit,removeScore,gone,key};
 }
 return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
- markStroke,glyphLayout,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
+ markStroke,glyphLayout,noteGoalLines,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
  isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
 });

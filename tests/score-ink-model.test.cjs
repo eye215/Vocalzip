@@ -237,3 +237,12 @@ test('marks are saved, synced and restored like any stroke, with what they are',
  assert.deepEqual(b.store.list(binding).map(s=>[s.id,s.mark,s.glyph]),[['b',undefined,undefined],['v','breath',undefined],['t','m-9','A1']]);
  assert.throws(()=>a.store.commit({add:[{...rows[0],mark:'cut'}]}),{code:'conflict'}); // never changed in place
 });
+/* 목표로 넣기: a memo's text as a list. */
+test('memo lines become a list: one per line break, bullets, numbers and tick boxes stripped, blanks and repeats left out',()=>{
+ assert.deepEqual(Ink.noteGoalLines('- 2절 숨 크게\n1. 박자  주의\n\n• [ ] 고음 힘 빼기\n(3) 끝음 길게\r\n2) 호흡\n2절 숨 크게\n   \n*\n① 가사 외우기\n- - 3번 반복'),
+  ['2절 숨 크게','박자 주의','고음 힘 빼기','끝음 길게','호흡','가사 외우기','3번 반복']);
+ // Numbers that belong to the sentence stay.
+ assert.deepEqual(Ink.noteGoalLines('-5도 올리기\n1.5배 빠르게\n3번 반복\n2절부터'),['-5도 올리기','1.5배 빠르게','3번 반복','2절부터']);
+ assert.deepEqual(Ink.noteGoalLines('-박자\n2.호흡'),['박자','호흡']);
+ assert.deepEqual(Ink.noteGoalLines(''),[]);assert.deepEqual(Ink.noteGoalLines(undefined),[]);assert.deepEqual(Ink.noteGoalLines('\n \n-\n'),[]);
+});

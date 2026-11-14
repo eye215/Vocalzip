@@ -258,6 +258,8 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-note{margin:0;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
 .ink-marker-error{margin:0;font-size:13px;line-height:18px;color:#c4322a}
 .ink-marker-error:empty{display:none}
+/* 목표로 넣기 (메모 → 오늘의 목표 / 숙제): the home goal sheet's rows; a line that is already there is greyed. */
+.ink-goal-sheet .vz-plan-option:has(input:disabled){background:#f9fafb}
 .score-ink-performance .score-ink-marker-palette,.score-ink-performance .score-ink-vision-tools,.score-ink-performance .score-ink-vision-result{display:none!important}
 
 /* Keep every drawing tool reachable on narrow full-screen score views. */
@@ -409,6 +411,8 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
 .score-ink-memo-modes button{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;gap:4px;border:0;border-radius:12px;padding:0 8px;background:var(--vz-color-selected-bg,#ede1ff);color:var(--vz-color-accent,#7a32f5);font-size:13px;font-weight:700;white-space:nowrap}
 .score-ink-memo-modes button i{font-size:18px}
 .score-ink-memo-modes button[aria-pressed=true],.score-ink-memo-modes [data-ink-memo-done]{background:var(--vz-color-accent,#7a32f5);color:#fff}
+.score-ink-memo-modes [data-ink-memo-goals]{flex:1.15 1 0;padding:0 6px;background:#fff;box-shadow:inset 0 0 0 1px var(--vz-color-accent,#7a32f5)}
+.score-ink-memo-modes:has([data-ink-memo-goals]:not([hidden])){flex-basis:400px}
 .score-ink-memo-bar>button{display:grid;place-items:center;width:44px;height:44px;min-width:44px;border:0;border-radius:12px;background:#fff;color:var(--vz-color-primary,#344054);font-size:20px}
 .score-ink-memo-bar button:disabled{opacity:.35}
 .score-ink-memo-bar [data-ink-memo-delete]{color:#c4322a}

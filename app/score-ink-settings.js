@@ -59,7 +59,7 @@ function markers(stored){
 }
 const plainMarker=({builtin,changed,id,...look})=>look;
 const packMarkers=list=>({builtin:Object.fromEntries(list.filter(m=>m.builtin&&m.changed).map(m=>[m.id,plainMarker(m)])),user:list.filter(m=>!m.builtin).map(m=>({id:m.id,...plainMarker(m)}))});
-const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},eraser:{size:0.018},memo:{mode:'text',color:'#fbe88c'},markers:markers(null),penOnly:false});
+const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},eraser:{size:0.018},memo:{mode:'text',color:'#fbe88c'},goalTarget:'today',markers:markers(null),penOnly:false});
 function create({storage,identity,defaultPenOnly=false}){
  const initial=identity(),owner=initial?.owner,session=initial?.session;
  if(!owner||!session)throw Error('로그인이 필요해요.');
@@ -80,6 +80,8 @@ function create({storage,identity,defaultPenOnly=false}){
   // 스티커 메모: the last way of writing (글자/펜) and colour, offered first next time.
   if(['text','pen'].includes(data.memo?.mode))fallback.memo.mode=data.memo.mode;
   if(typeof data.memo?.color==='string'&&HEX.test(data.memo.color))fallback.memo.color=data.memo.color.toLowerCase();
+  // 목표로 넣기: where the lines went last time (오늘의 목표 or 숙제).
+  if(['today','homework'].includes(data.goalTarget))fallback.goalTarget=data.goalTarget;
   fallback.markers=markers(data.markers);
   if(typeof data.penOnly==='boolean')fallback.penOnly=data.penOnly;return fallback;
  }
@@ -89,6 +91,10 @@ function create({storage,identity,defaultPenOnly=false}){
   else if(tool==='memo'){
    if(patch.mode!==undefined){if(!['text','pen'].includes(patch.mode))throw Error('메모 쓰는 방법을 확인해 주세요.');data.memo.mode=patch.mode;}
    if(patch.color!==undefined){if(typeof patch.color!=='string'||!HEX.test(patch.color))throw Error('#RRGGBB 형식의 색상을 입력해 주세요.');data.memo.color=patch.color.toLowerCase();}
+  }
+  else if(tool==='goal'){
+   if(!['today','homework'].includes(patch.target))throw Error('목표를 넣을 곳을 확인해 주세요.');
+   data.goalTarget=patch.target;
   }
   else if(tool==='marker'){
    // {id, …look}: changes that preset, or adds a user preset under a new id. options.reset puts a built-in one back,
