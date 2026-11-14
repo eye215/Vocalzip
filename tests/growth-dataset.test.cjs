@@ -74,13 +74,20 @@ test('rule "verdict" (전체 · 월별 · 주간 성장 · 계획 결과): 25 of
 
 test('where the screens differ today, counted on this data set', () => {
   const ds = build(), only = (a, b) => ids(ds.pick(a).filter(r => !ds.pick(b).includes(r)));
-  // 1) 연습실 submissions and 트레이닝 practices of a song: out of the verdict screens, in the 보컬 분석 rows and the song card.
+  // 1) 연습실 submissions and 트레이닝 practices of a song: out of the verdict screens, in the 보컬 분석 rows and the song
+  //    card. Kept as it is (step 2, part C) — the rows carry `practiceTake`, so 보컬 분석 can label them 연습.
   assert.deepEqual(only('songList', 'verdict'), ['er', 'et']);
-  // 2) Videos: in the verdict screens, out of the 보컬 분석 rows; the song card keeps the one in the cloud.
-  assert.deepEqual(only('verdict', 'songList'), ['dc', 'dv']);
-  assert.deepEqual(ids(ds.pick('songList').filter(r => r.video)), []);
+  assert.deepEqual(ids(ds.pick('songList').filter(r => r.practiceTake)), ['er', 'et']);
+  assert.deepEqual(ids(ds.pick('verdict').filter(r => r.practiceTake)), []);                // never in the verdict screens
+  assert.deepEqual(['ex', 'ey', 'a6', 'dv'].map(id => ds.row(id).practiceTake), [false, false, false, false]);   // a tag by hand is not a practice record
+  // 2) Videos — no longer a difference between the verdict screens and the 보컬 분석 rows (step 2, part C): both count
+  //    them. The song card still keeps only the one in the cloud.
+  assert.deepEqual(only('verdict', 'songList'), []);
+  assert.deepEqual(ids(ds.pick('songList').filter(r => r.video)), ['dc', 'dv']);
+  assert.deepEqual(ids(ds.pick('verdict').filter(r => r.video)), ['dc', 'dv']);
   assert.deepEqual(ids(ds.pick('songCard').filter(r => r.video)), ['dc']);
-  assert.deepEqual(ds.tally('songList'), {included:25, deleted:1, 'no-song':7, 'song-missing':2, video:2});
+  assert.deepEqual(ds.tally('songList'), {included:27, deleted:1, 'no-song':7, 'song-missing':2});
+  assert.deepEqual(ds.bySong('songList').get('s4').map(r => r.id), ['d1', 'dv', 'dc', 'd2']);   // what 보컬 연구소 lists for 새 곡
   // 3) The song card takes whatever recordings it is handed: a deleted song's too (f1, f2) and ones without a song.
   assert.deepEqual(ds.tally('songCard'), {included:35, deleted:1, video:1});
   // 4) A recording in the deleted list (g1) — no longer a difference (step 2, part B): 주간 요약 always left it out,
@@ -136,6 +143,7 @@ test('pure and never stale: nothing is changed, and a new build reads the record
   assert.equal(ds.tally('verdict').included, 25);                     // the old answer stays what it was built from
   // A rule can be given as options too.
   assert.deepEqual(ids(ds.pick({room:true, training:true, video:true})), ids(ds.pick('verdict')).concat(['er', 'et']).sort());
+  assert.deepEqual(ids(ds.pick({room:true, training:true, video:false})), ids(ds.pick('songList')).filter(id => !['dc', 'dv'].includes(id)));   // the rule before part C
 });
 
 test('a recording without a recorded date is dated by the Korea day it was made, on every device (step 2, part B)', () => {

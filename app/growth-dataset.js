@@ -98,8 +98,10 @@ const RULES={
  // and 트레이닝 practices. Videos count. A recording tagged 트레이닝/연습실 by hand, or a lesson recording, counts
  // as long as it has a song (only the linked practice record is looked at).
  verdict:{room:false,training:false,video:true},
- // 보컬 분석 탭의 곡 행 (the list 보컬 연구소 opens with): every recording of the song except videos.
- songList:{room:true,training:true,video:false},
+ // 보컬 분석 탭의 곡 행 and the recordings 보컬 연구소 lists for a song: every recording of the song — 연습실
+ // submissions and 트레이닝 practices too (row.practiceTake: shown with a 연습 label, because the verdict screens
+ // leave them out) and videos (as the verdict screens count them; shown with a 영상 label).
+ songList:{room:true,training:true,video:true},
  // 곡별 "보컬 측정 변화" 카드: every recording handed in for the song; videos only when they are in the cloud.
  songCard:{room:true,training:true,video:'cloud',unknownSong:true,unassigned:true}
 };
@@ -152,6 +154,9 @@ function build(media,db={},env={}){
   get take(){return this._take??=take(this.m,this.a,this.date,this.ok);}
   get category(){return this._category??=category(this.m)||'song';}
   get video(){return this._video??=!!isVideo(this.m);}
+  /** A 노래 연습실 submission or the recording of a 트레이닝 practice: 보컬 분석 lists it (marked 연습), the verdict
+   * screens (결과 리포트 · 주간 요약 · 계획 결과) do not count it. */
+  get practiceTake(){return this.room||this.training;}
   get cloud(){return !!this.m.cloud;}
   /** A 매일 보이스 체크 recording: marked on the file, or the file of a voice-check practice. */
   get voiceCheck(){return !!this.m.voiceCheck||this.m.origin==='voice-check'||(!!this.practice?.voiceCheck&&this.practice.voiceCheck.mediaId===this.id);}

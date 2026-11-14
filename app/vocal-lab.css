@@ -17,6 +17,7 @@ body[data-vz-route="vocal-lab"] .v-top .icon-btn,body[data-vz-route="lab-reports
 .vl-dates{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity;padding-bottom:2px}
 .vl-dates::-webkit-scrollbar,.vl-metrics::-webkit-scrollbar{display:none}
 .vl-dates button,.vl-metrics button{flex:none;min-height:44px;border:1px solid #4b4056;border-radius:999px;background:#211b2b;color:#e5ddec;padding:0 14px;font-size:13px;white-space:nowrap;scroll-snap-align:center;transition:background .32s cubic-bezier(.2,.8,.2,1),transform .32s cubic-bezier(.2,.8,.2,1),border-color .32s}
+.vl-kind{margin-left:4px;padding:1px 6px;border-radius:99px;background:rgba(255,255,255,.14);color:inherit;font-size:11px;line-height:16px;font-weight:600}
 .vl-dates button[aria-pressed=true],.vl-metrics button[aria-pressed=true]{color:#fff;background:var(--vz-color-accent);border-color:#a66aff}
 .vl-dates button:active,.vl-metrics button:active{transform:scale(.96)}
 .vl-empty{min-height:208px;display:grid;align-content:center;justify-items:center;text-align:center;border-radius:20px;background:#1b1724;padding:24px;color:#e5ddec;font-size:16px;line-height:24px}

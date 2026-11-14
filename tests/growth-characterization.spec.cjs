@@ -8,6 +8,8 @@
 //  - a recording whose id is in the deleted list (g1) is counted by no growth screen (before: only 주간 요약 left it out);
 //  - a recording without a recorded date (b4) has its Korea day on every screen (before: the device's day everywhere
 //    but 주간 요약), so the UTC run now shows what the Korea run shows.
+// Part C changed the 보컬 분석 tab only: videos count in its song rows (새 곡: 녹음 2개 · 분석 전 → 녹음 4개 (영상 2개
+// 포함) · 분석 2개 · 비교 가능), and rows with 연습실·트레이닝 연습 recordings say so (Home: "(연습 2개 포함)", one note line).
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
