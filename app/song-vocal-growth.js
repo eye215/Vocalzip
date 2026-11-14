@@ -60,10 +60,14 @@ function unreliableWhy(a) {
   return tried + (out.join(' · ') || '측정 신뢰도가 낮아요');
 }
 const analysisOf = m => fresh.get(m.id) || m.analysis || null;
-const usable = m => { const a = analysisOf(m); return [1,2].includes(a?.v) && a.metrics; };
-function points(media) {
-  return media.filter(usable).map(m => ({m, a:analysisOf(m), date:M.dateOf(m) || '', ok:VZ.analysisReliable(analysisOf(m)), guess:m.dateSource === 'file-modified'}))
-    .sort((x, y) => x.date.localeCompare(y.date) || (Number(x.m.created) || 0) - (Number(y.m.created) || 0) || String(x.m.id).localeCompare(String(y.m.id)));
+/* Which of the song's recordings this card counts, their order and their takes come from app/growth-dataset.js
+ * (rule 'songCard': every recording handed in, videos only when they are in the cloud), read with the analyses saved
+ * in this session. A point is a recording whose analysis the growth rules can read (v1 or v2). */
+const dataset = media => VZ.growthDataset(media, {analysisOf});
+const usable = (m, ds) => !!ds.row(m)?.readable;
+function points(ds) {
+  return ds.pick('songCard').filter(r => r.readable).sort((x, y) => G.takeOrder(x.take, y.take))
+    .map(r => ({m:r.m, a:r.a, date:r.date, ok:r.ok, take:r.take, guess:r.m.dateSource === 'file-modified'}));
 }
 /** Change from first to latest (takes {id, a, date, ok}). Growth measures ask the model; 유효 최고음 is a neutral note
  * difference shown only when both takes are comparable. */
@@ -77,7 +81,7 @@ function change(metric, first, last, {pair = false} = {}) {
   const amount = metric.step ? Math.abs(Math.round(d / 100)) + '반음' : Math.abs(d) + (metric.unit ? ' ' + metric.unit : '');
   return '<span class="vg-same">' + (d > 0 ? '▲ ' : '▼ ') + amount + (metric.step ? ' · 실력 판정 아님' : '') + '</span>';
 }
-const takeOfPoint = p => ({id:p.m.id, songId:p.m.songId, a:p.a, date:String(p.date || '').slice(0, 10), created:p.m.created, ok:p.ok});
+const takeOfPoint = p => p.take;
 /** A small line chart of one measurement, oldest → newest; tap a point to open that recording's analysis. */
 function spark(metric, pts) {
   const rows = pts.map(p => ({p, v:metric.get(p.a)})).filter(r => r.v != null);
@@ -99,7 +103,8 @@ VZ.measureTable = (first, second) => {
   const a = first && analysisOf(first), b = second && analysisOf(second);
   if (!a?.metrics || !b?.metrics) return '';
   const sameSong=!!first.songId&&first.songId===second.songId;
-  const take = (m, x) => ({id:m.id, songId:m.songId, a:x, date:String(M.dateOf?.(m) || '').slice(0, 10), created:m.created, ok:!!VZ.analysisReliable?.(x)});
+  // Two recordings the person chose: the dataset's take shape, with this table's own trust check (any version).
+  const take = (m, x) => window.VzipGrowthDataset.take(m, x, String(M.dateOf?.(m) || '').slice(0, 10), VZ.analysisReliable?.(x));
   const ta = take(first, a), tb = take(second, b);
   // Both takes are held for the same reason (low confidence): each row says 판정 보류 once and the reason, with each
   // take's own numbers, is written once under the table instead of in every row.
@@ -150,8 +155,8 @@ function paint() { if (last && document.body.contains(last.host)) VZ.songVocalGr
 VZ.songVocalGrowth = (host, song, media) => {
   if (!host) return;
   last = {host, song, media};
-  const audio = media.filter(m => !M.isVideo(m) || m.cloud), pts = points(audio);
-  const todo = audio.filter(m => !usable(m) || analysisOf(m)?.v < 2 || (G && !G.hasDetail(analysisOf(m)))), running = batch.running && batch.songId === song.id;
+  const ds = dataset(media), audio = ds.items('songCard'), pts = points(ds);
+  const todo = audio.filter(m => !usable(m, ds) || analysisOf(m)?.v < 2 || (G && !G.hasDetail(analysisOf(m)))), running = batch.running && batch.songId === song.id;
   if (!audio.length) { host.innerHTML = ''; return; }
   const reliable = pts.filter(p => p.ok);
   let body = '';

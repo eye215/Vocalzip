@@ -12,10 +12,11 @@
 (function(root,factory){
 'use strict';
 const growth=()=>root.VzipGrowthMetrics||(typeof module==='object'&&module.exports&&typeof require==='function'?require('./growth-metrics-model.js'):null);
-const model=factory(growth);
+const dataset=()=>root.VzipGrowthDataset||(typeof module==='object'&&module.exports&&typeof require==='function'?require('./growth-dataset.js'):null);
+const model=factory(growth,dataset);
 if(typeof module==='object'&&module.exports)module.exports=model;
 else root.VzipPlanOutcome=model;
-})(typeof self!=='undefined'?self:globalThis,growth=>{
+})(typeof self!=='undefined'?self:globalThis,(growth,dataset)=>{
 'use strict';
 const RULES=2;
 const PATHS={intonation:['intonation','meanAbsCents'],stability:['stability','wobbleCents'],
@@ -68,8 +69,12 @@ function measurement(plan,recordings=[],dateOf,valid){
  if(!endDate)throw Error('연습 계획 날짜를 확인해 주세요.');
  const G=growth();
  if(!G&&GROWTH[plan.metric])throw Error('성장 지표 기준을 불러오지 못했어요.');
+ const D=dataset();
+ if(!D)throw Error('녹음 기준을 불러오지 못했어요.');
+ // Which recordings reach here is the caller's list (the month view passes the dataset's 'verdict' takes); the take
+ // shape is the dataset's.
  const takes=recordings.filter(m=>m?.songId===plan.songId&&m.analysis?.metrics)
-  .map(m=>({id:m.id,a:m.analysis,date:String(dateOf(m)||'').slice(0,10),created:m.created,ok:!!valid(m)}))
+  .map(m=>D.take(m,m.analysis,String(dateOf(m)||'').slice(0,10),valid(m)))
   .filter(t=>/^\d{4}-\d{2}-\d{2}$/.test(t.date));
  const before=takes.filter(t=>t.date<plan.startDate),during=takes.filter(t=>t.date>=plan.startDate&&t.date<=endDate);
  const id=GROWTH[plan.metric]||'';
