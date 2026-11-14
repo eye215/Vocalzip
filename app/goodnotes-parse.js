@@ -303,7 +303,7 @@ async function read(input){
   }else if(kind===65){
    const id=str(first(body,2,2)).toUpperCase(),old=outline.get(id)||{};
    outline.set(id,{id,pageId:str(first(body,1,2)).toUpperCase()||old.pageId||'',title:reg(body,5)||old.title||'',order:reg(body,4)||old.order||''});
-  }else if(![6,10,15,34,38,57,62,102,103,104,105,106,121,160,161,163,164].includes(kind)) // 57 + 160–164: page bookmarks; 62: a page brought in from another notebook (it also has its page event)
+  }else if(![6,10,15,34,38,57,62,102,103,104,105,106,121,160,161,163,164].includes(kind)) // 160–164: audio recordings made in the notebook (160 created with its length in flicks, 164 title, 163 deleted, 161 a stroke tied to a moment of a recording); 57: a flag on pages; 62: a page brought in from another notebook (it also has its page event)
   report.unknownEvents[kind]=(report.unknownEvents[kind]||0)+1;
  }
  const compare=(a,b)=>a<b?-1:a>b?1:0;
@@ -361,6 +361,14 @@ async function structure(input){
  const list=async name=>{const out=[],data=await zip.read(name);if(data)for(const r of records(data)){try{const f=fields(r),path=str(first(f,2,2));out.push([str(first(f,1,2)),path,zip.entries.get(path)?.length??null]);}catch{}}return out;};
  const events=[];for(const record of records(eventsBytes)){if(events.length>=300000)break;try{events.push(plain(record,0));}catch{events.push({bad:record.length});}}
  const schemaBytes=await zip.read('schema.pb');let schema=null;if(schemaBytes){try{schema=first(fields(schemaBytes),1,0)??null;}catch{}}
+ // What else the archive holds, by folder: how many files, their total size and the kind of the first small one
+ // (recordings, images … live outside attachments/ in some versions). Names of files are ids, not content.
+ const folders={};
+ for(const e of zip.entries.values()){
+  const top=e.name.includes('/')?e.name.slice(0,e.name.indexOf('/')):'(root) '+e.name,f=folders[top]||(folders[top]={files:0,bytes:0,kind:null,sample:null});
+  f.files++;f.bytes+=e.length;
+  if(!f.kind&&e.length>16&&e.length<=4*1024*1024&&!/^(notes|search)$/.test(top)){try{f.kind=magic(await zip.read(e.name,LIMIT.entry));f.sample=e.length;}catch{f.kind='unreadable';}}
+ }
  // What each attachment is (first bytes only; large files are not unpacked for this).
  const kinds=async rows=>{for(const row of rows){const size=row[2];if(size==null)row.push('missing');else if(size>4*1024*1024)row.push('large');else{try{row.push(magic(await zip.read(row[1],LIMIT.entry)));}catch{row.push('unreadable');}}}return rows;};
  // Page elements that are not ink (stickers, images, text boxes …): their shape with texts as lengths, at most 3000.
@@ -378,7 +386,7 @@ async function structure(input){
   }
  }
  return {format:'vocalzip-goodnotes-structure',version:2,reader:7,schema,fileSize:bytes.length,entries:zip.entries.size,
-  attachments:await kinds(await list('index.attachments.pb')),notes:noteList,elements,events};
+  attachments:await kinds(await list('index.attachments.pb')),notes:noteList,elements,folders,events};
 }
 return {read,structure,LIMIT,_internal:{lz4,unframe,tuple,inkPaths,fields,records,nextId}};
 });
