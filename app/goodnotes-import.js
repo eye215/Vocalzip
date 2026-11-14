@@ -108,7 +108,7 @@ const diagnosis=(model,file)=>{const r=model.report,list=o=>Object.entries(o||{}
  return ['읽기 버전 '+(r.reader||'?')+' · 굿노트 형식 '+(r.schema??'?')+' · 파일 '+Math.round((file?.size||0)/1024)+'KB',
   '쪽 기록 '+r.pageEvents+' · 옮긴 쪽 '+(r.movedPages||0)+' · 지움 표시 '+r.removedPages+' · 가져올 쪽 '+model.pages.length+' · PDF 쪽 번호 '+model.pages.map(p=>p.pdf?p.pdf.page:'-').join(','),
   '필기 '+r.strokes+'획 · 못 읽음 '+r.unsupported+' · 지운 필기 '+r.deleted+' · 짝 없는 묶음 '+r.unmatchedNotes,
-  '필기 종류 '+list(r.inkKinds),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)];};
+  '필기 종류 '+list(r.inkKinds),'필기가 아닌 것(스티커·이미지·글상자 등, 아직 가져오지 않아요) '+list(r.elements),'기록 종류 '+list(r.events),'모르는 기록 '+list(r.unknownEvents)];};
 /**
  * @param {File} file a .goodnotes file
  * @param {{song?:object, onDone?:Function}} [options] song: the song page the import was started from
@@ -161,7 +161,7 @@ VZ.goodnotesImport=async(file,{song=null,onDone=()=>{}}={})=>{
    '<p>'+(model.outline.length?'곡을 골라 가져오거나, 한 곡이 여러 줄로 나뉘었으면 이어진 줄을 골라 합치세요.':'개요가 없어서 전체를 한 곡으로 가져와요. 굿노트에서 곡마다 개요를 넣으면 곡별로 나눠져요.')+'</p>'+
    notes.map(t=>'<p class="gn-warn">'+esc(t)+'</p>').join('')+
    '<details class="gn-diag" data-gn-diag><summary>진단 정보</summary>'+diagnosis(model,file).map(t=>'<p>'+esc(t)+'</p>').join('')+
-    '<button type="button" class="btn sm secondary" data-gn-structure>진단 파일 저장</button><p>쪽 순서·지움 같은 구조 기록만 담아요. 악보 PDF와 필기 내용은 들어가지 않아요(노트·개요 제목은 들어가요).</p></details>'+
+    '<button type="button" class="btn sm secondary" data-gn-structure>진단 파일 저장</button><p>쪽 순서·지움 같은 구조 기록과, 스티커·글상자의 위치·크기만 담아요. 악보 PDF, 필기, 글상자에 쓴 글은 들어가지 않아요(노트·개요 제목은 들어가요).</p></details>'+
    '<p>파일은 이 기기에서만 읽고, 곡별 PDF와 필기만 올라가요. 필기는 모두 수정할 수 있어요.</p></section>'+
    '<div class="gn-bar" data-gn-bar><button type="button" class="gn-all" data-gn-all aria-pressed="false"><span class="gn-box" aria-hidden="true"></span><span data-gn-alltext>전체 선택</span></button>'+
    '<span class="gn-count" data-gn-count></span><span class="gn-merge" data-gn-mergebar hidden><button type="button" class="gn-merge-btn" data-gn-merge>한 곡으로 합치기</button><span data-gn-mergehint></span></span></div>'+
