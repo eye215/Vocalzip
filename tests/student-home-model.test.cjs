@@ -387,6 +387,63 @@ test('today practice helper: minutes, target and percent come from the home week
   assert.equal(JSON.stringify(db),before);
 });
 
+test('result popup data: the last seven days and the target streak are the home week model\'s own days',()=>{
+  // today = 2026-11-07 (토). Target 30: 11-01 일 30 ✓ · 11-02 월 0 · 11-03 화 45 ✓ · 11-04 수 29 · 11-05 목 30 ✓ · 11-06 금 60 ✓ · 11-07 토 20
+  const minutes={'2026-10-31':99,'2026-11-01':30,'2026-11-03':45,'2026-11-04':29,'2026-11-05':30,'2026-11-06':60,'2026-11-07':20,'2026-11-08':500};
+  const db={practices:Object.entries(minutes).map(([date,n],i)=>practice('p'+i,date,n)),practicePlans:[]};
+  const before=JSON.stringify(db),options={date:today,today,defaultDailyTargetMinutes:30};
+  const days=Today.recent(db,options);
+  assert.deepEqual(days.map(d=>[d.date,d.label,d.minutes,d.met]),[['2026-11-01','일',30,true],['2026-11-02','월',0,false],['2026-11-03','화',45,true],['2026-11-04','수',29,false],['2026-11-05','목',30,true],['2026-11-06','금',60,true],['2026-11-07','토',20,false]]);
+  assert.deepEqual(days.map(d=>d.today),[false,false,false,false,false,false,true]);
+  assert.ok(days.every(d=>d.targetMinutes===30));
+  // No second counting rule: each day equals the week model's day, across the Monday boundary.
+  for(const d of days){const m=M.build(db,{today,weekStart:d.date,defaultDailyTargetMinutes:30}).week.days.find(x=>x.date===d.date);assert.deepEqual([d.minutes,d.met],[m.minutes,m.timeMet]);}
+  assert.equal(days.at(-1).minutes,Today.compute(db,options).minutes);
+  // A day plan decides that day's target; tomorrow's practice is never counted.
+  assert.deepEqual(Today.recent({...db,practicePlans:[day('2026-11-04',25)]},options).map(d=>d.met),[true,false,true,true,true,true,false]);
+  assert.deepEqual(Today.recent(db,{...options,count:3}).map(d=>d.date),['2026-11-05','2026-11-06','2026-11-07']);
+  // Streak: today has not reached 30 yet, so the run is the one that ended yesterday (금·목); 수 broke it.
+  assert.deepEqual(Today.streak(db,options),{days:2,open:true});
+  const more={...db,practices:[...db.practices,practice('more',today,10)]};
+  assert.deepEqual(Today.streak(more,options),{days:3,open:false});
+  assert.deepEqual(Today.streak({...more,practicePlans:[day('2026-11-04',25)]},options),{days:5,open:false}); // 수 reached its own 25: 화 … 토
+  assert.deepEqual(Today.streak({},options),{days:0,open:true});
+  assert.deepEqual(Today.streak({practices:[practice('only',today,30)]},options),{days:1,open:false});
+  // A long run crosses many weeks and stops at the first day that missed.
+  const long={practices:Array.from({length:40},(_,i)=>{const d=new Date(2026,10,7-i,12);return practice('l'+i,d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),30);})};
+  assert.deepEqual(Today.streak(long,options),{days:40,open:false});
+  assert.deepEqual(Today.streak(long,{...options,limit:10}),{days:11,open:false});
+  assert.equal(JSON.stringify(db),before);
+});
+
+test('result popup moment: before = now − added, the five states, the celebration only when this record crosses 100%',()=>{
+  const at=(minutes,target,added,run)=>Today.moment({minutes,targetMinutes:target,percent:target?Math.round(minutes/target*100):null},added,run);
+  const pick=m=>[m.state,m.before,m.beforePercent,m.percent,m.headline,m.hint];
+  assert.deepEqual(pick(at(0,40)),['empty',0,0,0,'아직 기록한 시간이 없어요','연습 시간을 적으면 여기에 쌓여요']);
+  assert.deepEqual(pick(at(6,40,6)),['start',0,0,15,'오늘 첫 연습이에요','목표까지 34분 남았어요']);
+  assert.deepEqual(pick(at(16,40,10)),['progress',6,15,40,'잘 쌓이고 있어요','목표까지 24분 남았어요']);
+  assert.deepEqual(pick(at(16,40)),['progress',16,40,40,'잘 쌓이고 있어요','목표까지 24분 남았어요']); // nothing added: nothing to sweep
+  assert.deepEqual(pick(at(32,40,16)),['almost',16,40,80,'거의 다 왔어요','목표까지 8분 남았어요']);
+  assert.deepEqual(pick(at(34,40,34)),['almost',0,0,85,'거의 다 왔어요','목표까지 6분 남았어요']); // a first practice that is already close
+  assert.deepEqual(pick(at(40,40,8)),['goal',32,80,100,'오늘 목표를 채웠어요','목표 40분을 다 채웠어요']);
+  assert.deepEqual(pick(at(43,40,11)),['goal',32,80,108,'오늘 목표를 채웠어요','목표보다 3분 더 했어요']);
+  assert.deepEqual(pick(at(90,40,90)),['goal',0,0,225,'오늘 목표를 채웠어요','목표보다 50분 더 했어요']);
+  assert.deepEqual(pick(at(40,40)),['over',40,100,100,'오늘 목표를 채웠어요','']);
+  assert.deepEqual(pick(at(52,40,9)),['over',43,108,130,'목표보다 더 연습했어요','목표보다 12분 더 했어요']);
+  assert.deepEqual(pick(at(12,null,5)),['free',7,null,null,'오늘 연습을 기록했어요','']);
+  assert.deepEqual(pick(at(0,null)),['empty',0,null,null,'아직 기록한 시간이 없어요','연습 시간을 적으면 여기에 쌓여요']);
+  // Added more than today holds (a replaced record): the start never goes below 0. Negative or broken input adds nothing.
+  assert.deepEqual([at(10,40,25).before,at(10,40,-5).before,at(10,40,'x').before,at(10,40,-5).added],[0,10,10,0]);
+  assert.deepEqual([at(40,40,8).met,at(39,40,8).met,at(12,null,5).met],[true,false,false]);
+  // Streak line: only a real run of two or more days, and never without a target.
+  assert.equal(at(40,40,8,{days:3,open:false}).streakText,'3일 연속 목표 달성');
+  assert.equal(at(32,40,8,{days:2,open:true}).streakText,'어제까지 2일 연속 목표 달성');
+  assert.deepEqual([at(40,40,8,{days:1,open:false}).streakText,at(40,40,8,null).streakText,at(40,40,8).streakText,at(12,null,5,{days:4,open:true}).streakText],['','','','']);
+  assert.equal(at(32,40,8).summary,'오늘 32분, 목표 40분의 80%');
+  assert.equal(at(125,90,60,{days:3,open:false}).summary,'오늘 2시간 5분, 목표 1시간 30분의 139%. 3일 연속 목표 달성');
+  assert.equal(at(12,null,5).summary,'오늘 12분, 목표 없음');
+});
+
 test('a new personal goal may name its song (목표로 넣기 from a score memo); goals made without one are unchanged',()=>{
   const db={dailyGoals:[{id:'a',date:today,title:'A',source:'personal',sourceId:'',completed:false,order:0}],practicePlans:[],practices:[]};
   M.savePlan(db,{date:today,goals:[...build(db).goals,{id:'memo',title:'2절 숨 크게',source:'personal',sourceId:'',songId:'s1',completed:false},{id:'hand',title:'손으로 적은 목표',source:'personal',sourceId:'',completed:false}]});
