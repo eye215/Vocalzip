@@ -927,7 +927,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  /* 악보 표기. The marker in use is a preset (profiles.markers, kept on this device): its form says how it is placed —
   * one tap, a drag, or two taps — and Ink.markStroke lays the mark out. The mark is saved as one stroke carrying its own
-  * look and `mark` (what it is), so changing or deleting the preset later leaves it as it is. A user preset with a
+  * look and `mark` (what it is), so changing or deleting the preset later leaves it as it is. A 직접 그리기 preset
+  * (a symbol the user drew in the editor) leaves one stroke per stroke of the drawing, linked by `group`: one mark. A user preset with a
   * 기능 also gives the mark its `role` (시작점 · 반복 구간 · 건너뛰기, app/score-mark-model.js). */
  const markerNow=()=>profiles.markers.find(m=>m.id===markerId)||profiles.markers[0];
  /* 마디 선택 (a preset's 찍는 방식): a tap takes the measure under it, a drag every measure from where it began to
@@ -960,14 +961,19 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const m=markerNow(),input=Settings.markInput(m.form);
   if(input==='two'&&!markerStart){markerStart=start;paint();say('구간의 끝을 눌러 주세요.');return;}
   const first=input==='two'?markerStart:start,last=input==='two'?end:input==='drag'?markEnd(start,end):null;markerStart=null;
-  apply({add:[{version:1,id:VZ.uid(),...binding,page:pageNo,...Ink.markStroke(m,first,last,aspect),mark:m.id,...(!m.builtin&&m.role?{role:m.role}:{}),createdAt:Date.now()}],remove:[]});
+  const shapes=Ink.markShapes(m,first,last,aspect);if(!shapes.length)return;
+  const group=shapes.length>1?VZ.uid():null,now=Date.now();
+  apply({add:shapes.map(shape=>({version:1,id:VZ.uid(),...binding,page:pageNo,...shape,mark:m.id,...(!m.builtin&&m.role?{role:m.role}:{}),...(group?{group}:{}),createdAt:now})),remove:[]});
  }
  /** A small drawing of what a marker leaves, for the palette and the editor (viewBox 64×48, in thousandths of a page). */
  function markerSample(m){
   const at=(x,y)=>[x/1000,y/1000,.5],input=Settings.markInput(m.form);
+  const sample=svgNode('svg',{viewBox:'0 0 64 48',class:'score-ink-marker-sample','aria-hidden':'true'});
+  // A drawn symbol is shown as it was drawn, small enough for the sample whatever its 크기.
+  if(m.form==='draw'){for(const shape of Ink.markStamp({...m,size:'s'},at(32,24),1))sample.append(strokeNode(shape,1));return sample;}
   const look=input==='tap'?Ink.markStroke(m,at(32,24),null,1):m.form==='box'?Ink.markStroke(m,at(10,10),at(54,38),1):m.form==='bracket'?Ink.markStroke(m,at(12,24),at(52,24),1):Ink.markStroke(m,at(8,24),at(56,24),1);
   if(look.glyph)look.size=Math.min(look.size,.058/Math.max(1,[...look.glyph].length*.95));
-  const sample=svgNode('svg',{viewBox:'0 0 64 48',class:'score-ink-marker-sample','aria-hidden':'true'});sample.append(strokeNode(look,1));return sample;
+  sample.append(strokeNode(look,1));return sample;
  }
  function syncMarkers(){
   const host=el.querySelector('[data-ink-marker-list]');host.replaceChildren();
@@ -1014,6 +1020,12 @@ VZ.openScoreInk=(songId,scoreId)=>{
    '<fieldset class="ink-marker-set"><legend>남기는 형태</legend><div class="ink-marker-choices">'+Settings.MARK_FORMS.map(f=>choice('form',f[0],f[1],f[0]===from.form)).join('')+'</div></fieldset>'+
    '<fieldset class="ink-marker-set" data-marker-shapes><legend>기호</legend><div class="ink-marker-choices ink-marker-shapes">'+Settings.MARK_SHAPES.map(f=>choice('shape',f[0],f[1],f[0]===(from.shape||'check'),f[0]==='text'?'':'icon')).join('')+'</div>'+
    '<label class="field" data-marker-text hidden><span>기호로 쓸 글자 <small>1~'+Settings.MARK_TEXT_MAX+'자</small></span><input type="text" name="text" maxlength="'+Settings.MARK_TEXT_MAX*2+'" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: mf" value="'+esc(from.text||'')+'"></label></fieldset>'+
+   // 직접 그리기: a pad to draw the symbol on (finger or pencil; the light lines are a staff, as a size guide).
+   '<fieldset class="ink-marker-set" data-marker-draw hidden><legend>직접 그리기</legend>'+
+    '<div class="ink-marker-pad" data-marker-pad role="img" aria-label="표기를 그리는 곳"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" aria-hidden="true"></svg></div>'+
+    '<div class="ink-marker-pad-tools"><button type="button" data-marker-pad-undo aria-label="한 획 되돌리기"><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>되돌리기</button><button type="button" data-marker-pad-clear><i class="ph ph-trash" aria-hidden="true"></i>모두 지우기</button></div>'+
+    '<p class="ink-marker-role-note" data-marker-pad-note role="status"></p><input type="hidden" name="art" value=""></fieldset>'+
+   '<fieldset class="ink-marker-set" data-marker-size hidden><legend>크기</legend><div class="ink-marker-choices ink-marker-sizes">'+Settings.MARK_SIZES.map(z=>'<label><input type="radio" name="size" value="'+z[0]+'"'+(z[0]===(from.size||'m')?' checked':'')+'><span>'+esc(z[1])+'</span></label>').join('')+'</div></fieldset>'+
    '<fieldset class="ink-marker-set"><legend>필기구</legend><div class="ink-marker-choices ink-marker-types"><label><input type="radio" name="type" value="pen"'+(from.type==='pen'?' checked':'')+'><span><i class="ph ph-pen" aria-hidden="true"></i>펜<small>또렷하게</small></span></label><label><input type="radio" name="type" value="highlighter"'+(from.type==='highlighter'?' checked':'')+'><span><i class="ph ph-highlighter" aria-hidden="true"></i>형광펜<small>비치게</small></span></label></div></fieldset>'+
    '<fieldset class="ink-marker-set"><legend>색</legend><div class="ink-marker-colors">'+Settings.MARK_COLORS.map(c=>'<label style="--sample-color:'+c[0]+'"><input type="radio" name="color" value="'+c[0]+'" aria-label="'+esc(c[1])+'"'+(c[0]===from.color?' checked':'')+'><span></span></label>').join('')+
    '<label class="ink-marker-custom"><input type="radio" name="color" value="custom" tabindex="-1" aria-hidden="true"'+(known?'':' checked')+'><input type="color" name="custom" aria-label="다른 색 고르기" value="'+esc(from.color)+'"></label></div></fieldset>'+
@@ -1033,10 +1045,41 @@ VZ.openScoreInk=(songId,scoreId)=>{
   VZ.sheet({title:old?'표기 편집':'표기 추가',label:'악보 표기 편집',body,foot:'<button type="submit" form="ink-marker-form" class="btn block">저장</button>',onMount:(node,close)=>{
    node.classList.add('ink-marker-sheet');
    const form=node.querySelector('form'),error=node.querySelector('[data-marker-error]');
-   const read=()=>{const f=form.elements,shape=f.shape.value;return {name:f.name.value,color:f.color.value==='custom'?f.custom.value:f.color.value,width:Number(f.width.value)/1000,type:f.type.value,form:f.form.value,...(f.form.value==='symbol'?{shape,...(shape==='text'?{text:f.text.value.trim()}:{})}:{}),...(f.role?{role:f.role.value}:{}),pick:Settings.MARK_PICK_FORMS.includes(f.form.value)?f.pick.value:''};};
+   // The drawing in hand, in the pad's own units (0–1000 each way): one list of points per stroke.
+   const pad=node.querySelector('[data-marker-pad]'),padSvg=pad.querySelector('svg'),padNote=node.querySelector('[data-marker-pad-note]');
+   let padLines=Ink.validArt(from.art)?Ink.artLines(from.art,500,500,from.art.a<=1?560:560/from.art.a):[],padActive=null,padSaid='';
+   form.elements.art.value=JSON.stringify(Ink.artFrom(padLines));
+   const read=()=>{const f=form.elements,shape=f.shape.value;return {name:f.name.value,color:f.color.value==='custom'?f.custom.value:f.color.value,width:Number(f.width.value)/1000,type:f.type.value,form:f.form.value,...(f.form.value==='symbol'?{shape,...(shape==='text'?{text:f.text.value.trim()}:{})}:{}),...(f.role?{role:f.role.value}:{}),pick:Settings.MARK_PICK_FORMS.includes(f.form.value)?f.pick.value:'',
+    ...(f.form.value==='draw'?{art:Ink.artFrom(padLines),size:f.size.value}:{})};};
+   const paintPad=color=>{
+    padSvg.replaceChildren(...[380,440,500,560,620].map(y=>svgNode('line',{x1:60,x2:940,y1:y,y2:y,stroke:'#e4e0ee','stroke-width':3})));
+    for(const line of padLines)padSvg.append(svgNode('path',{'data-pad-stroke':'',d:line.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ')+(line.length===1?' l0.01 0':''),fill:'none',stroke:color,'stroke-width':16,'stroke-linecap':'round','stroke-linejoin':'round'}));
+    node.querySelector('[data-marker-pad-undo]').disabled=node.querySelector('[data-marker-pad-clear]').disabled=!padLines.length;
+    padNote.textContent=padSaid||(padLines.length?'획 '+padLines.length+'개 · '+Ink.ART_STROKES+'개까지 그릴 수 있어요.':'손가락이나 펜슬로 표기를 그려 주세요. 옅은 줄은 오선이에요.');
+   };
+   /** The drawing changed: the form knows (its unsaved-changes question, the previews). */
+   const padChanged=(said='')=>{padSaid=said;form.elements.art.value=JSON.stringify(Ink.artFrom(padLines));form.dispatchEvent(new Event('change',{bubbles:true}));};
+   const padPoint=e=>{const r=padSvg.getBoundingClientRect();return [Math.max(0,Math.min(1000,(e.clientX-r.left)/r.width*1000)),Math.max(0,Math.min(1000,(e.clientY-r.top)/r.height*1000))];};
+   pad.addEventListener('pointerdown',e=>{
+    if(e.button>0||padActive)return; // one stroke at a time: a second finger is not a stroke
+    e.preventDefault();error.textContent='';
+    if(padLines.length>=Ink.ART_STROKES){padSaid='획은 '+Ink.ART_STROKES+'개까지예요. 되돌리거나 지운 뒤에 그려 주세요.';paintPad(read().color);return;}
+    padActive={id:e.pointerId,line:[padPoint(e)]};padLines.push(padActive.line);padSaid='';
+    try{pad.setPointerCapture(e.pointerId);}catch{}paintPad(read().color);
+   });
+   pad.addEventListener('pointermove',e=>{
+    if(padActive?.id!==e.pointerId)return;e.preventDefault();
+    for(const item of e.getCoalescedEvents?.().length?e.getCoalescedEvents():[e]){const p=padPoint(item),last=padActive.line.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>=4&&padActive.line.length<4000)padActive.line.push(p);}
+    paintPad(read().color);
+   });
+   for(const type of ['pointerup','pointercancel'])pad.addEventListener(type,e=>{if(padActive?.id!==e.pointerId)return;padActive=null;padChanged();});
+   node.querySelector('[data-marker-pad-undo]').onclick=()=>{if(padActive||!padLines.length)return;padLines.pop();padChanged();};
+   node.querySelector('[data-marker-pad-clear]').onclick=()=>{if(padActive||!padLines.length)return;padLines=[];padChanged();};
    const draw=()=>{
     const look=read(),input=Settings.markInput(look.form),at=(x,y)=>[x/1000,y/1000,.5],preview=node.querySelector('[data-marker-preview]');
     node.querySelector('[data-marker-shapes]').hidden=look.form!=='symbol';node.querySelector('[data-marker-text]').hidden=look.shape!=='text';
+    node.querySelector('[data-marker-draw]').hidden=node.querySelector('[data-marker-size]').hidden=look.form!=='draw';
+    const art=Ink.artFrom(padLines);paintPad(look.color);
     node.querySelector('[data-marker-width-label]').textContent=String(Math.round(look.width*1000));
     const own=Settings.MARK_INPUTS[input],way=Settings.markWay(look);
     node.querySelector('[data-marker-input]').textContent='찍는 방식 · '+Settings.MARK_INPUTS[way];
@@ -1046,12 +1089,19 @@ VZ.openScoreInk=(songId,scoreId)=>{
     if(roleNote)roleNote.textContent=Settings.MARK_ROLES.find(r=>r[0]===(look.role||''))[2]+(look.role?' 마디와 MR을 맞춘 악보에서 써요.':'');
     preview.replaceChildren(...[35,45,55,65,75].map(y=>svgNode('line',{x1:16,x2:284,y1:y,y2:y,stroke:'#d0d5dd','stroke-width':1})));
     const shown={...look,text:look.text||'가'};
-    preview.append(strokeNode(input==='tap'?Ink.markStroke(shown,at(150,55),null,1):look.form==='box'?Ink.markStroke(shown,at(70,24),at(230,86),1):look.form==='bracket'?Ink.markStroke(shown,at(70,55),at(230,55),1):Ink.markStroke(shown,at(60,look.form==='cover'?55:88),at(240,look.form==='cover'?55:88),1),1));
+    // A drawn symbol: as it will be stamped — its real size against the staff, in its colour, pen and 굵기.
+    if(look.form==='draw'){for(const shape of Ink.markStamp(shown,at(150,55),1))preview.append(strokeNode(shape,1));}
+    else preview.append(strokeNode(input==='tap'?Ink.markStroke(shown,at(150,55),null,1):look.form==='box'?Ink.markStroke(shown,at(70,24),at(230,86),1):look.form==='bracket'?Ink.markStroke(shown,at(70,55),at(230,55),1):Ink.markStroke(shown,at(60,look.form==='cover'?55:88),at(240,look.form==='cover'?55:88),1),1));
     // The form and symbol choices are drawn in the colour chosen so far, with a plain line so the shape stays clear
     // (the preview above shows the real width and pen type).
     const plain={...shown,width:.005,type:'pen'};
     for(const span of node.querySelectorAll('[data-sample]')){
      const [name,value]=span.dataset.sample.split(':');if(name==='shape'&&value==='text'){span.textContent='글자';continue;}
+     if(value==='draw'){
+      // 직접 그리기: the drawing so far, or a pencil until there is one.
+      const icon=document.createElement('i');icon.className='ph ph-scribble-loop';icon.setAttribute('aria-hidden','true');
+      span.replaceChildren(art?markerSample({...plain,form:'draw',art}):icon,document.createTextNode('직접 그리기'));continue;
+     }
      const sample=markerSample(name==='shape'?{...plain,form:'symbol',shape:value}:value==='cover'?{...plain,form:value,width:.04,type:'highlighter'}:{...plain,form:value,shape:look.shape||'check'});
      if(name==='form')span.replaceChildren(sample,document.createTextNode(Settings.MARK_FORMS.find(f=>f[0]===value)[1]));else span.replaceChildren(sample);
     }

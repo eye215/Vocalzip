@@ -27,6 +27,9 @@
  *          group (optional): link key of the pieces of one such mark that runs over several lines of music — one
  *          record per line, all with the same `measures`; they are erased, selected and listed as one. A piece that
  *          is moved or resized by hand loses `measures` and `group` and is a freehand mark from then on.
+ *          A mark stamped from a 직접 그리기 preset (several strokes the user drew, markStamp) is linked by `group`
+ *          the same way and has no `measures`: it is erased, selected, moved and listed as one, and keeps its
+ *          `group` when moved.
  *          glyph (optional, with size): 1–4 characters drawn centred on the single point instead of the line;
  *          size is the letter height of page width (GLYPH_MIN–GLYPH_MAX), width its extra boldness.
  * Clients older than memos skip records they do not know when listing (valid() is false), so they neither show nor
@@ -54,8 +57,58 @@ const MEASURES_MAX=100000;
 const validMeasures=m=>Array.isArray(m)&&m.length===3&&m.every(Number.isInteger)&&m[0]>=0&&m[0]<=m[1]&&m[1]<=MEASURES_MAX&&m[2]>=1&&m[2]<=MEASURES_MAX;
 /** The other records of the mark `s` is a piece of (same page, same link key), s included; [s] when it stands alone. */
 const grouped=(rows,s)=>s?.group===undefined?[s]:[s,...rows.filter(r=>r.id!==s.id&&r.page===s.page&&r.group===s.group&&!isNote(r))];
-/** A copy that no longer claims measures: what a mark becomes once it is moved or resized by hand. */
-const freehand=({measures,group,...s})=>s;
+/** What a mark is once it was moved or resized by hand: one placed on measures no longer claims them (nor its other
+ *  pieces, which lie on other lines); a stamped drawing stays one mark. */
+const freehand=s=>{if(s.measures===undefined)return s;const {measures,group,...rest}=s;return rest;};
+/* 직접 그리기: a symbol the user drew, kept in a preset as {a, s}: a = height / width of the drawing, s = its strokes
+ * as [x0, y0, x1, y1, …] in whole numbers 0–ART_GRID across the drawing's own box. ART_SIZES: the longer side of a
+ * stamped mark, of page width. */
+const ART_STROKES=12,ART_POINTS=400,ART_GRID=1000,ART_SIZES={s:.03,m:.05,l:.08},ART_FLAT=.05;
+/** Drops the points that do not change a line visibly (Ramer–Douglas–Peucker): every point left out lies within
+ *  `tolerance` of the line that remains. points: [[x, y, …], …]; the first and last are always kept. */
+function simplifyLine(points,tolerance){
+ if(points.length<3||!(tolerance>0))return points.slice();
+ const keep=new Uint8Array(points.length),stack=[[0,points.length-1]];keep[0]=keep[points.length-1]=1;
+ while(stack.length){
+  const [a,z]=stack.pop(),ax=points[a][0],ay=points[a][1],dx=points[z][0]-ax,dy=points[z][1]-ay,den=dx*dx+dy*dy;
+  let far=0,at=-1;
+  for(let i=a+1;i<z;i++){
+   const px=points[i][0]-ax,py=points[i][1]-ay,t=den?Math.max(0,Math.min(1,(px*dx+py*dy)/den)):0,d=Math.hypot(px-t*dx,py-t*dy);
+   if(d>far){far=d;at=i;}
+  }
+  if(at>0&&far>tolerance){keep[at]=1;stack.push([a,at],[at,z]);}
+ }
+ return points.filter((_,i)=>keep[i]);
+}
+/** A drawing as a preset stores it. strokes: [[[x, y], …], …] in any unit (y down), in the order drawn. At most
+ *  ART_STROKES strokes are kept and ART_POINTS points in all (lines are simplified, more and more coarsely, until
+ *  they fit). Null when nothing was drawn. */
+function artFrom(strokes){
+ const lines=(Array.isArray(strokes)?strokes:[]).map(line=>(Array.isArray(line)?line:[]).filter(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1])).map(p=>[p[0],p[1]])).filter(line=>line.length).slice(0,ART_STROKES);
+ if(!lines.length)return null;
+ let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+ for(const line of lines)for(const p of line){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
+ const w=x1-x0,h=y1-y0,size=Math.max(w,h);
+ if(!(size>0))return {a:1,s:[[ART_GRID/2,ART_GRID/2]]}; // a single dot
+ let out=lines,tolerance=size*.004;
+ for(let i=0;i<24;i++){out=lines.map(line=>simplifyLine(line,tolerance));if(out.reduce((n,line)=>n+line.length,0)<=ART_POINTS)break;tolerance*=1.5;}
+ // A line straight across or straight down has no box of its own: it gets a thin one, so it keeps its direction.
+ const a=Math.max(ART_FLAT,Math.min(1/ART_FLAT,w>0?h/w:1/ART_FLAT)),grid=(v,from,span)=>span>0?Math.round((v-from)/span*ART_GRID):ART_GRID/2;
+ return {a:Math.round(a*1000)/1000,s:out.map(line=>{
+  const flat=[];
+  for(const p of line){const x=grid(p[0],x0,w),y=grid(p[1],y0,h);if(flat.length<2||flat.at(-2)!==x||flat.at(-1)!==y)flat.push(x,y);}
+  return flat;
+ })};
+}
+function validArt(art){
+ return !!art&&typeof art==='object'&&Number.isFinite(art.a)&&art.a>=ART_FLAT&&art.a<=1/ART_FLAT&&Array.isArray(art.s)&&art.s.length>=1&&art.s.length<=ART_STROKES&&
+  art.s.every(line=>Array.isArray(line)&&line.length>=2&&line.length%2===0&&line.every(v=>Number.isInteger(v)&&v>=0&&v<=ART_GRID))&&art.s.reduce((n,line)=>n+line.length/2,0)<=ART_POINTS;
+}
+/** The strokes of a stored drawing laid into a box W wide around (cx, cy): [[[x, y], …], …]; H = W × art.a. */
+function artLines(art,cx,cy,W){
+ const H=W*art.a;
+ return art.s.map(line=>{const out=[];for(let i=0;i<line.length;i+=2)out.push([cx+(line[i]/ART_GRID-.5)*W,cy+(line[i+1]/ART_GRID-.5)*H]);return out;});
+}
 const glyphChars=t=>typeof t==='string'?[...t]:[];
 const validGlyph=s=>{const n=glyphChars(s.glyph).length;return n>=1&&n<=GLYPH_CHARS&&!/\s/.test(s.glyph)&&Number.isFinite(s.size)&&s.size>=GLYPH_MIN&&s.size<=GLYPH_MAX&&s.points?.length===1;};
 /** Half the room a stroke takes around its points, across and down, of page width. */
@@ -217,6 +270,16 @@ function markStroke(look,a,b,aspect=1){
  }else out.points=[at(-.016,-.017),at(0,.017),at(.016,-.017)]; // 'v', the breath mark
  return out;
 }
+/** What a 직접 그리기 preset leaves where it is tapped: the strokes of its drawing, each as the fields of a stroke
+ *  record, centred on the tap, the drawing's longer side as long as the preset's 크기 says. look = {art, size, color,
+ *  width, type}; at: the tap (page fractions); aspect: page height / width. */
+function markStamp(look,at,aspect=1){
+ if(!validArt(look?.art))return [];
+ const k=Number.isFinite(aspect)&&aspect>0?aspect:1,pen=look.type!=='highlighter',long=ART_SIZES[look.size]||ART_SIZES.m,W=look.art.a<=1?long:long/look.art.a;
+ return artLines(look.art,0,0,W).map(line=>({tool:pen?'pen':'highlighter',color:look.color,opacity:pen?1:MARK_OPACITY,width:look.width,points:line.map(p=>point(at[0]+p[0],at[1]+p[1]/k))}));
+}
+/** Everything a preset leaves for one placing: the strokes of a drawn symbol, or the one stroke of any other form. */
+const markShapes=(look,a,b,aspect=1)=>look?.form==='draw'?markStamp(look,a,aspect):[markStroke(look,a,b,aspect)];
 /** Where a glyph mark's characters go on a page W wide and H high: centre x, baseline y, letter size and the extra
  *  outline that makes them bolder. The viewer (SVG) and the PDF export (canvas) both draw from this. */
 function glyphLayout(s,W,H){
@@ -311,6 +374,7 @@ function create({storage,identity,getData,change}){
  return {restore,list,commit,removeScore,gone,key};
 }
 return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
- markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,validMeasures,grouped,freehand,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
+ markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,validMeasures,grouped,freehand,
+ simplifyLine,artFrom,validArt,artLines,markStamp,markShapes,ART_STROKES,ART_POINTS,ART_GRID,ART_SIZES,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
  isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
 });

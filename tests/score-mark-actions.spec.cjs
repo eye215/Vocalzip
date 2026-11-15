@@ -1,6 +1,7 @@
-/* 표기의 기능 and 마디 선택 (app/score-mark-model.js, app/score-sync.js, the play bar in app/score-audio.js, the 기능 field of the
+/* 표기의 기능, 마디 선택 and 직접 그리기 (app/score-mark-model.js, app/score-sync.js, the play bar in app/score-audio.js, the 기능 field of the
  * marker editor in app/score-ink.js): 시작점 · 반복 · 컷 marks do something once the score is matched with an MR,
- * and a mark can be placed on whole measures (마디 선택 — 컷 by default, a preset's 찍는 방식 in 표기 편집).
+ * a mark can be placed on whole measures (마디 선택 — 컷 by default, a preset's 찍는 방식 in 표기 편집; on a score
+ * of several staves per line it covers them all), and a preset can be a symbol the user drew (직접 그리기).
  * The fixtures are those of tests/score-sync.spec.cjs: 12 measures of 4/4 in three lines (1–4 and 5–8 on page 1,
  * 9–12 on page 2) and a generated tone as the MR, matched one measure a second (measure n starts at n seconds).
  * WebKit: every test that plays the MR is skipped there (PLAYS), as in tests/score-sync.spec.cjs; the tests that only
@@ -11,7 +12,9 @@ const {boot,fakeR2,R2,KEY:STORE,wav}=require('./helpers/r2-fixture.cjs');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const PDFROOT=process.env.VZ_PDFJS_ROOT||'/tmp/vzip-score-pdfjs/node_modules/pdfjs-dist';
 const PLAYS='plays the MR: real audio playback and seeking are checked in Chromium';
-const PW=300,PH=400,UNIT=.4,STAFF=16;
+const PW=300,PH=400,UNIT=.4,STAFF=16,STAFFGAP=20;
+/** How high a system is: its staves (voice + piano = 3) with the room between them. */
+const tall=s=>(s.staves||1)*STAFF+((s.staves||1)-1)*STAFFGAP;
 const SYSTEMS=[
  {page:1,y:80,x0:30,x1:270,measures:[[1,250],[2,250],[3,250],[4,250]]},
  {page:1,y:200,x0:30,x1:270,measures:[[5,250],[6,250],[7,250],[8,250]]},
@@ -19,7 +22,7 @@ const SYSTEMS=[
 ];
 function pdf(systems=SYSTEMS,pages=2){
  const stream=text=>'<< /Length '+Buffer.byteLength(text)+' >>\nstream\n'+text+'\nendstream';
- const content=n=>'BT /F1 10 Tf 20 380 Td (VOCAL.zip Score '+n+') Tj ET\n0 0 0 RG 1 w\n'+systems.filter(s=>s.page===n).map(s=>[0,1,2,3,4].map(l=>s.x0+' '+(PH-s.y-l*4)+' m '+s.x1+' '+(PH-s.y-l*4)+' l S').join('\n')).join('\n');
+ const content=n=>'BT /F1 10 Tf 20 380 Td (VOCAL.zip Score '+n+') Tj ET\n0 0 0 RG 1 w\n'+systems.filter(s=>s.page===n).map(s=>Array.from({length:s.staves||1},(_,k)=>[0,1,2,3,4].map(l=>{const y=PH-s.y-k*(STAFF+STAFFGAP)-l*4;return s.x0+' '+y+' m '+s.x1+' '+y+' l S';}).join('\n')).join('\n')).join('\n');
  const kids=Array.from({length:pages},(_,i)=>(3+i*2)+' 0 R').join(' '),font=3+pages*2;
  const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids ['+kids+'] /Count '+pages+' >>'];
  for(let n=1;n<=pages;n++)objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PW+' '+PH+'] /Resources << /Font << /F1 '+font+' 0 R >> >> /Contents '+(2+n*2)+' 0 R >>',stream(content(n)));
@@ -33,10 +36,11 @@ function pdf(systems=SYSTEMS,pages=2){
 function musicxml(systems=SYSTEMS){
  let last=null,body='';
  for(const s of systems){
-  const first=!last||last.page!==s.page,gap=first?'<top-system-distance>'+s.y/UNIT+'</top-system-distance>':'<system-distance>'+(s.y-last.y-STAFF)/UNIT+'</system-distance>';
+  const first=!last||last.page!==s.page,gap=first?'<top-system-distance>'+s.y/UNIT+'</top-system-distance>':'<system-distance>'+(s.y-last.y-tall(last))/UNIT+'</system-distance>';
   s.measures.forEach(([number,width],i)=>{
-   body+='<measure number="'+number+'" width="'+width+'">'+(i?'':'<print'+(!last?'':first?' new-page="yes"':' new-system="yes"')+'><system-layout><system-margins><left-margin>'+s.x0/UNIT+'</left-margin><right-margin>'+(PW-s.x1)/UNIT+'</right-margin></system-margins>'+gap+'</system-layout></print>')+
-    (number===systems[0].measures[0][0]?'<attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>':'')+
+   body+='<measure number="'+number+'" width="'+width+'">'+(i?'':'<print'+(!last?'':first?' new-page="yes"':' new-system="yes"')+'><system-layout><system-margins><left-margin>'+s.x0/UNIT+'</left-margin><right-margin>'+(PW-s.x1)/UNIT+'</right-margin></system-margins>'+gap+'</system-layout>'+
+    Array.from({length:(s.staves||1)-1},(_,j)=>'<staff-layout number="'+(j+2)+'"><staff-distance>'+STAFFGAP/UNIT+'</staff-distance></staff-layout>').join('')+'</print>')+
+    (number===systems[0].measures[0][0]?'<attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>'+(systems[0].staves>1?'<staves>'+systems[0].staves+'</staves>':'')+'<clef><sign>G</sign><line>2</line></clef></attributes>':'')+
     '<note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><type>whole</type></note></measure>';
   });
   last=s;
@@ -93,6 +97,7 @@ async function setup(page,{tracks=[FILE],sync=null,rows=[],boxes=false,conversio
   if(!suffix||suffix.includes('..')||!fs.existsSync(file))return route.abort();
   return route.fulfill({path:file,contentType:file.endsWith('.mjs')?'text/javascript':'application/octet-stream',headers:{'access-control-allow-origin':'*'}});
  });
+ await page.context().route('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/**',route=>route.fulfill({path:path.join(PDFROOT,'../pdf-lib/dist/pdf-lib.min.js'),contentType:'text/javascript',headers:{'access-control-allow-origin':'*'}}));
  // Every player the app makes is kept, so a test can read (and move) the MR's real time.
  await page.addInitScript(()=>{window.__players=[];const wait=setInterval(()=>{const M=window.VZ?.media;if(!M?.player||M.player.__kept)return;const make=M.player;M.player=(...a)=>{const p=make(...a);window.__players.push(p);return p;};M.player.__kept=true;clearInterval(wait);},5);});
  await boot(page);
@@ -529,7 +534,12 @@ for(const [width,height] of [[1024,768],[820,1180]])test('tablet '+width+'×'+he
 // ---------- 마디 선택: marks placed on whole measures ----------
 const status=dialog=>dialog.locator('[data-ink-status]'),layer=dialog=>dialog.locator('[data-ink-measures]');
 const pickMarker=async(dialog,id)=>{await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker="'+id+'"]').click();};
-const editMarker=async(page,dialog,id)=>{await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-edit]').click();await dialog.locator('[data-ink-marker="'+id+'"]').click();const sheet=page.getByRole('dialog',{name:'악보 표기 편집'});await expect(sheet).toBeVisible();return sheet;};
+/** Opens the editor of a preset: the palette, 편집 on (it stays on after an editor is closed without saving), the preset. */
+const editMarker=async(page,dialog,id)=>{
+ if(await dialog.locator('[data-ink-marker-palette]').isHidden())await dialog.locator('[data-ink-marker-mode]').click();
+ const toggle=dialog.locator('[data-ink-marker-edit]');if(await toggle.getAttribute('aria-pressed')!=='true')await toggle.click();
+ await dialog.locator('[data-ink-marker="'+id+'"]').click();const sheet=page.getByRole('dialog',{name:'악보 표기 편집'});await expect(sheet).toBeVisible();return sheet;
+};
 async function drag(page,dialog,from,to){const a=await spot(dialog,...from),b=await spot(dialog,...to);await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move((a.x+b.x)/2,(a.y+b.y)/2,{steps:3});await page.mouse.move(b.x,b.y,{steps:3});return ()=>page.mouse.up();}
 const marks=page=>page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).map(s=>({id:s.id,mark:s.mark,tool:s.tool,measures:s.measures||null,group:s.group||'',role:s.role||'',page:s.page,valid:window.VzipScoreInk.valid(s),
  x:[Math.min(...s.points.map(p=>p[0])),Math.max(...s.points.map(p=>p[0]))],y:[Math.min(...s.points.map(p=>p[1])),Math.max(...s.points.map(p=>p[1]))],width:s.width,n:s.points.length})));
@@ -718,6 +728,289 @@ test('320px: placing by 마디 선택 and the 찍는 방식 field stay inside th
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&[...document.querySelectorAll('.sheet')].every(s=>s.scrollWidth<=s.clientWidth+1))).toBe(true);
 });
 
+// ---------- 마디 선택 on a score of several staves per line (voice + piano) ----------
+/** Two lines of three staves on page 1 (measures 1–4 at y 60–148, 5–8 at y 220–308), one on page 2. */
+const GRAND=[{page:1,y:60,staves:3,x0:30,x1:270,measures:[[1,250],[2,250],[3,250],[4,250]]},{page:1,y:220,staves:3,x0:30,x1:270,measures:[[5,250],[6,250],[7,250],[8,250]]},
+ {page:2,y:100,staves:3,x0:30,x1:270,measures:[[9,250],[10,250],[11,250],[12,250]]}];
+/** Where the ink of a mark ends, top and bottom, as shares of the page height (ASPECT: page height / width). */
+const ROOM=STAFF*.25/PH; // the little room a measure box has around its staff lines (seen on the page)
+const ASPECT=PH/PW,inkTop=r=>r.y[0]-r.width/2/ASPECT,inkBottom=r=>r.y[1]+r.width/2/ASPECT;
+
+test('마디 선택 on three staves per line: the mark covers the measure across the whole system, for every form',async({page})=>{
+ await setup(page,{sync:EVEN,conversion:musicxml(GRAND),bytes:pdf(GRAND)});const dialog=await open(page);
+ await pickMarker(dialog,'cut');
+ // The boxes shown while placing are the system's boxes: top of the top staff to bottom of the bottom staff.
+ const boxes=await layer(dialog).locator('.score-measure-box').evaluateAll(list=>list.slice(0,2).map(n=>{const v=n.ownerSVGElement.viewBox.baseVal;return [n.y.baseVal.value/v.height,(n.y.baseVal.value+n.height.baseVal.value)/v.height,n.x.baseVal.value/v.width];}));
+ about(boxes[0][0],Y(60)-ROOM,.006);about(boxes[0][1],Y(148)+ROOM,.006);
+ // A tap on the middle staff of measure 2: 구간 덮기 fills that box — all three staves, barline to barline.
+ await tap(page,dialog,120,104);
+ let rows=await placed(page,1);
+ expect(rows[0]).toMatchObject({mark:'cut',tool:'highlighter',measures:[1,1,12],group:'',valid:true});
+ about(inkTop(rows[0]),boxes[0][0],.004);about(inkBottom(rows[0]),boxes[0][1],.004);
+ about(rows[0].x[0]-rows[0].width/2,X(90));about(rows[0].x[1]+rows[0].width/2,X(150));
+ expect(rows[0].width).toBeLessThanOrEqual(.06);expect(rows[0].n).toBeGreaterThanOrEqual(6); // rows that lie edge to edge, in one stroke
+ // On screen it is one see-through band over the three staves.
+ const drawn=await dialog.locator('[data-ink-svg] path[data-stroke="'+rows[0].id+'"]').boundingBox(),stage=await dialog.locator('[data-ink-box]').boundingBox();
+ about((drawn.y-stage.y)/stage.height,Y(60),.03);about((drawn.y+drawn.height-stage.y)/stage.height,Y(148),.03);expect(drawn.height/stage.height).toBeGreaterThan(Y(148)-Y(60)-.03);
+ // Across the line break: one piece per line, each over its whole system.
+ await (await drag(page,dialog,[240,70],[60,300]))();rows=await placed(page,3);
+ const [upper,lower]=[rows[1],rows[2]].sort((a,b)=>a.y[0]-b.y[0]);
+ expect(upper.group).not.toBe('');expect(lower.group).toBe(upper.group);expect(upper.measures).toEqual([3,4,12]);
+ about(inkTop(upper),Y(60)-ROOM,.006);about(inkBottom(upper),Y(148)+ROOM,.006);about(inkTop(lower),Y(220)-ROOM,.006);about(inkBottom(lower),Y(308)+ROOM,.006);
+ about(upper.x[0]-upper.width/2,X(210));about(lower.x[1]+lower.width/2,X(90));
+ // The other forms: a frame round the three staves, a line under the lowest, a bracket over the highest.
+ const make=async(name,form)=>{
+  await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+  const sheet=page.getByRole('dialog',{name:'악보 표기 편집'});
+  await sheet.locator('[name=name]').fill(name);await sheet.locator('[name=form][value='+form+']').check();await sheet.locator('[name=pick][value=measure]').check();
+  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ };
+ await make('상자','box');await tap(page,dialog,180,250);rows=await placed(page,4);
+ about(rows[3].y[0],Y(220)-ROOM,.006);about(rows[3].y[1],Y(308)+ROOM,.006);about(rows[3].x[0],X(150));about(rows[3].x[1],X(210));expect(rows[3].n).toBe(5);
+ await make('밑줄','line');await tap(page,dialog,180,250);rows=await placed(page,5);
+ about(rows[4].y[0],Y(308)+ROOM,.006);about(rows[4].y[1],Y(308)+ROOM,.006);
+ await make('괄호','bracket');await tap(page,dialog,180,250);rows=await placed(page,6);
+ about(rows[5].y[1],Y(220)-ROOM,.006);expect(rows[5].y[0]).toBeLessThan(Y(212));
+ // The list reads the measures as placed.
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ const list=await openList(page,dialog);
+ await expect(list.locator('[data-measure-row] .score-measure-where')).toHaveText(['2마디','4–5마디','7마디','7마디','7마디']);
+});
+
+// ---------- 직접 그리기: a symbol the user drew ----------
+const editorOf=page=>page.getByRole('dialog',{name:'악보 표기 편집'});
+const pad=sheet=>sheet.locator('[data-marker-pad]'),padStrokes=sheet=>sheet.locator('[data-marker-pad] [data-pad-stroke]');
+/** Draws one stroke on the pad with the pointer; points are shares of the pad (0–1). */
+async function padStroke(page,sheet,points){
+ await pad(sheet).evaluate(n=>n.scrollIntoView({block:'center'}));
+ const r=await pad(sheet).boundingBox(),at=p=>[r.x+p[0]*r.width,r.y+p[1]*r.height];
+ await page.mouse.move(...at(points[0]));await page.mouse.down();for(const p of points.slice(1))await page.mouse.move(...at(p),{steps:5});await page.mouse.up();
+}
+/** A T: a bar across the top and a stem down from its middle. */
+const drawT=async(page,sheet)=>{await padStroke(page,sheet,[[.3,.25],[.7,.25]]);await padStroke(page,sheet,[[.5,.25],[.5,.75]]);};
+const userPresets=page=>page.evaluate(k=>JSON.parse(localStorage.getItem(k)||'{}').markers?.user||[],PRESETS);
+const sampleOf=(dialog,id)=>dialog.locator('[data-ink-marker="'+id+'"] svg path');
+
+test('직접 그리기: the pad in 표기 편집 — strokes, 되돌리기, 모두 지우기, an empty drawing cannot be saved; the preset keeps the drawing and its 크기',async({page})=>{
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+ const sheet=editorOf(page);
+ await expect(sheet.locator('[data-marker-draw]')).toBeHidden();await expect(sheet.locator('[data-marker-size]')).toBeHidden();
+ await expect(sheet.locator('[name=form]')).toHaveCount(7);await expect(sheet.locator('label:has([name=form][value=draw])')).toHaveText('직접 그리기');
+ await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();
+ // The pad: a square of at least 240px with a faint staff, nothing on it yet; shapes of 기호 and 찍는 방식 are not offered.
+ await expect(sheet.locator('[data-marker-draw]')).toBeVisible();await expect(sheet.locator('[data-marker-shapes]')).toBeHidden();await expect(sheet.locator('[data-marker-pick]')).toBeHidden();
+ await expect(sheet.locator('[data-marker-input]')).toHaveText('찍는 방식 · 한 번 누르기');
+ await pad(sheet).evaluate(n=>n.scrollIntoView({block:'center'}));
+ const size=await pad(sheet).boundingBox();expect(size.width).toBeGreaterThanOrEqual(240);expect(Math.abs(size.width-size.height)).toBeLessThan(1);
+ await expect(pad(sheet).locator('line')).toHaveCount(5);await expect(padStrokes(sheet)).toHaveCount(0);
+ expect(await pad(sheet).evaluate(n=>getComputedStyle(n).touchAction)).toBe('none');
+ const undo=sheet.getByRole('button',{name:'한 획 되돌리기',exact:true}),clear=sheet.getByRole('button',{name:'모두 지우기',exact:true}),note=sheet.locator('[data-marker-pad-note]');
+ await expect(undo).toBeDisabled();await expect(clear).toBeDisabled();await expect(note).toHaveText('손가락이나 펜슬로 표기를 그려 주세요. 옅은 줄은 오선이에요.');
+ for(const b of [undo,clear])expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ // Nothing drawn: 저장 says why it cannot.
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();
+ await expect(sheet.locator('[data-marker-error]')).toHaveText('표기를 그려 주세요. 그린 것이 없으면 저장할 수 없어요.');expect(await userPresets(page)).toEqual([]);
+ // Three strokes; the top preview shows the drawing as it will be stamped.
+ await drawT(page,sheet);await padStroke(page,sheet,[[.3,.75],[.7,.75]]);
+ await expect(padStrokes(sheet)).toHaveCount(3);await expect(note).toHaveText('획 3개 · 12개까지 그릴 수 있어요.');await expect(sheet.locator('[data-marker-error]')).toHaveText('');
+ await expect(sheet.locator('[data-marker-preview] path')).toHaveCount(3);
+ await expect(sheet.locator('label:has([name=form][value=draw]) svg path')).toHaveCount(3); // and so does its choice
+ // 되돌리기 takes the last stroke, 모두 지우기 all of them.
+ await undo.click();await expect(padStrokes(sheet)).toHaveCount(2);await expect(sheet.locator('[data-marker-preview] path')).toHaveCount(2);
+ await clear.click();await expect(padStrokes(sheet)).toHaveCount(0);await expect(undo).toBeDisabled();
+ // A pencil and a finger both draw (pressure is ignored); a tap is a dot.
+ await pad(sheet).evaluate(n=>{
+  const r=n.getBoundingClientRect(),fire=(type,pointerType,id,x,y,pressure)=>n.dispatchEvent(new PointerEvent(type,{pointerType,pointerId:id,clientX:r.left+x*r.width,clientY:r.top+y*r.height,pressure,bubbles:true,cancelable:true,isPrimary:true}));
+  fire('pointerdown','pen',41,.3,.25,.9);fire('pointermove','pen',41,.5,.25,.1);fire('pointermove','pen',41,.7,.25,1);fire('pointerup','pen',41,.7,.25,0);
+  fire('pointerdown','touch',42,.5,.25,0);fire('pointermove','touch',42,.5,.5,0);fire('pointermove','touch',42,.5,.75,0);fire('pointerup','touch',42,.5,.75,0);
+ });
+ await expect(padStrokes(sheet)).toHaveCount(2);
+ // 크기 and colour; saved.
+ await expect(sheet.locator('[data-marker-size] label')).toHaveText(['작게','보통','크게']);await expect(sheet.locator('[name=size][value=m]')).toBeChecked();
+ await sheet.locator('[name=size][value=l]').check();await sheet.locator('[name=color][value="#b42318"]').check();
+ await expect(padStrokes(sheet).first()).toHaveAttribute('stroke','#b42318');
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);await expect(page.locator('.toast')).toHaveText('표기를 추가했어요.');
+ const [preset]=await userPresets(page);
+ expect(preset).toMatchObject({name:'내 기호',form:'draw',size:'l',color:'#b42318',type:'pen'});
+ expect(preset.art.s).toHaveLength(2);expect(preset.art.a).toBeGreaterThan(1.15);expect(preset.art.a).toBeLessThan(1.35); // 0.4 wide, 0.5 high
+ expect(preset.art.s.flat().every(v=>Number.isInteger(v)&&v>=0&&v<=1000)).toBe(true);
+ expect(preset.art.s[0].slice(0,2)).toEqual([0,0]);expect(preset.art.s[1].at(-1)).toBe(1000); // the bar starts top-left, the stem ends at the bottom
+ // The palette draws the real shape.
+ await dialog.locator('[data-ink-marker-mode]').click();
+ await expect(sampleOf(dialog,preset.id)).toHaveCount(2);await expect(sampleOf(dialog,preset.id).first()).toHaveAttribute('stroke','#b42318');
+});
+
+test('a drawn mark is stamped where it is tapped, at its 크기, as ONE mark: one undo, one erase, one selection that moves it whole, one row',async({page})=>{
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+ const sheet=editorOf(page);
+ await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();await drawT(page,sheet);
+ await sheet.locator('[name=size][value=l]').check();await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ const [preset]=await userPresets(page);
+ // A tap above measure 2: two strokes, linked, each an ordinary pen stroke that says what it is.
+ await tap(page,dialog,120,60);
+ let rows=await placed(page,2);
+ expect(rows.every(r=>r.mark===preset.id&&r.tool==='pen'&&r.valid&&r.measures===null&&r.role==='')).toBe(true);expect(rows[0].group).not.toBe('');expect(rows[1].group).toBe(rows[0].group);
+ const extent=rows=>({x:[Math.min(...rows.map(r=>r.x[0])),Math.max(...rows.map(r=>r.x[1]))],y:[Math.min(...rows.map(r=>r.y[0])),Math.max(...rows.map(r=>r.y[1]))]});
+ let e=extent(rows);
+ about((e.y[1]-e.y[0])*ASPECT,.08,.006);about(e.x[1]-e.x[0],.064,.008);       // 크게: its longer side is .08 of the page width; it is 4:5
+ about((e.x[0]+e.x[1])/2,X(120),.006);about((e.y[0]+e.y[1])/2,Y(60),.006);    // centred on the tap
+ await expect(dialog.locator('[data-ink-svg] path[data-stroke]')).toHaveCount(2);
+ // One undo, one redo.
+ await more(dialog);await dialog.locator('[data-ink-undo]').click();await placed(page,0);
+ await more(dialog);await dialog.locator('[data-ink-redo]').click();rows=await placed(page,2);expect(new Set(rows.map(r=>r.group)).size).toBe(1);
+ // The eraser on the stem takes the bar too.
+ await dialog.getByRole('button',{name:'지우개',exact:true}).click();await tap(page,dialog,120,66);await placed(page,0);
+ await more(dialog);await dialog.locator('[data-ink-undo]').click();await placed(page,2);
+ // Selecting one stroke selects the mark; moved, it is still one mark.
+ await dialog.getByRole('button',{name:'선택',exact:true}).click();await tap(page,dialog,120,66);
+ await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('2개 선택');
+ const a=await spot(dialog,120,62),b=await spot(dialog,180,62);
+ await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move(b.x,b.y,{steps:4});await page.mouse.up();
+ await expect.poll(async()=>extent(await marks(page)).x[0]).toBeGreaterThan(X(160));
+ rows=await marks(page);expect(rows).toHaveLength(2);expect(rows[0].group).not.toBe('');expect(rows[1].group).toBe(rows[0].group);
+ e=extent(rows);about((e.x[0]+e.x[1])/2,X(180),.008);about((e.y[1]-e.y[0])*ASPECT,.08,.006);
+ // A second stamp; the list has one row per mark, named after the preset.
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();
+ await tap(page,dialog,60,180);await placed(page,4);
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ const list=await openList(page,dialog);
+ await expect(list.locator('[data-measure-row]')).toHaveText([/^3마디\s*내 기호$/,/^5마디\s*내 기호$/]);
+});
+
+test('editing a drawing changes only the marks stamped afterwards; it is still there after a reload; leaving with an unsaved drawing asks first',async({page})=>{
+ await setup(page,{sync:EVEN});let dialog=await open(page);
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+ let sheet=editorOf(page);
+ await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();await drawT(page,sheet);
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ const [preset]=await userPresets(page);
+ await tap(page,dialog,120,60);const before=JSON.stringify(await page.evaluate(()=>window.VZ.db.scoreAnnotations));expect((await marks(page)).length).toBe(2);
+ // After a reload the palette still draws it and the editor opens with the drawing on the pad.
+ await page.reload();dialog=await open(page);
+ await dialog.locator('[data-ink-marker-mode]').click();await expect(sampleOf(dialog,preset.id)).toHaveCount(2);
+ await dialog.locator('[data-ink-marker-edit]').click();await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();sheet=editorOf(page);
+ await expect(sheet.locator('[name=form][value=draw]')).toBeChecked();await expect(padStrokes(sheet)).toHaveCount(2);await expect(sheet.locator('[data-marker-preview] path')).toHaveCount(2);
+ // Opened and closed untouched: no question. With one more stroke: it asks, and 닫기 keeps the old drawing.
+ await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();sheet=editorOf(page);
+ await padStroke(page,sheet,[[.3,.75],[.7,.75]]);await expect(padStrokes(sheet)).toHaveCount(3);
+ await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();
+ const ask=page.getByRole('dialog',{name:'작성 중인 내용이 있어요'});await expect(ask).toBeVisible();
+ await ask.getByRole('button',{name:'계속 작성',exact:true}).click();await expect(padStrokes(sheet)).toHaveCount(3);
+ await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await ask.getByRole('button',{name:'닫기',exact:true}).click();await expect(sheet).toHaveCount(0);
+ expect((await userPresets(page))[0].art.s).toHaveLength(2);
+ // Saved with the third stroke: the mark already on the score is untouched; the next stamp has three strokes.
+ await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();sheet=editorOf(page);
+ await padStroke(page,sheet,[[.3,.75],[.7,.75]]);await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ expect((await userPresets(page))[0].art.s).toHaveLength(3);expect(JSON.stringify(await page.evaluate(()=>window.VZ.db.scoreAnnotations))).toBe(before);
+ await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();await tap(page,dialog,240,60);
+ const rows=await placed(page,5);expect(new Set(rows.slice(2).map(r=>r.group)).size).toBe(1);expect(rows[2].group).not.toBe(rows[0].group);
+});
+
+test('a drawn mark with a 기능 does it; a built-in mark can be drawn too and 기본값으로 되돌리기 brings its own shape back; at most 12 strokes',async({page})=>{
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+ let sheet=editorOf(page);
+ await sheet.locator('[name=name]').fill('내 시작');await sheet.locator('[name=form][value=draw]').check();await drawT(page,sheet);
+ await sheet.locator('[name=role][value=start]').check();await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await tap(page,dialog,180,112);
+ const rows=await placed(page,2);expect(rows.map(r=>r.role)).toEqual(['start','start']);
+ // It is a 시작점 at measure 3: the bar offers it, and a tap on either stroke opens its menu.
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ await expect(opts(dialog)).toBeVisible({timeout:5000});await opts(dialog).click();
+ await expect(starts(page)).toHaveText(['처음부터','시작점 3마디에서1쪽']);await closeMenu(page);
+ await tap(page,dialog,180,105);
+ await expect(page.getByRole('dialog',{name:'내 시작 · 3마디 메뉴'}).getByRole('button')).toHaveText([/여기서 재생/]);await closeMenu(page);
+ const list=await openList(page,dialog);
+ await expect(list.locator('[data-measure-row]')).toHaveText([/^3마디\s*내 시작$/]);await expect(list.getByRole('button',{name:'3마디 여기서 재생',exact:true})).toBeEnabled();
+ await list.getByRole('button',{name:'돌아가기',exact:true}).click();
+ // 숨표 drawn by hand, then put back.
+ sheet=await editMarker(page,dialog,'breath');
+ await sheet.locator('[name=form][value=draw]').check();
+ // The 13th stroke is refused and says so.
+ for(let i=0;i<12;i++)await padStroke(page,sheet,[[.1+i*.07,.3],[.1+i*.07,.6]]);
+ await expect(padStrokes(sheet)).toHaveCount(12);
+ await padStroke(page,sheet,[[.2,.8],[.8,.8]]);await expect(padStrokes(sheet)).toHaveCount(12);
+ await expect(sheet.locator('[data-marker-pad-note]')).toHaveText('획은 12개까지예요. 되돌리거나 지운 뒤에 그려 주세요.');
+ await sheet.getByRole('button',{name:'모두 지우기',exact:true}).click();await drawT(page,sheet);
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await expect(sampleOf(dialog,'breath')).toHaveCount(2);
+ expect(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)).markers.builtin.breath.form,PRESETS)).toBe('draw');
+ sheet=await editMarker(page,dialog,'breath');await expect(padStrokes(sheet)).toHaveCount(2);
+ await sheet.locator('[data-marker-reset]').click();await page.getByRole('dialog',{name:'기본값으로 되돌리기'}).getByRole('button',{name:'되돌리기',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await expect(sampleOf(dialog,'breath')).toHaveCount(1);expect(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)).markers.builtin,PRESETS)).toEqual({});
+});
+
+test('필기 PDF 만들기 draws a stamped mark: every stroke of the drawing, in its colour and place',async({page})=>{
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+ const sheet=editorOf(page);
+ await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();await drawT(page,sheet);
+ await sheet.locator('[name=size][value=l]').check();await sheet.locator('[name=color][value="#b42318"]').check();await sheet.locator('[name=width]').fill('8');
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await tap(page,dialog,150,300);await placed(page,2);
+ await more(dialog);await dialog.getByRole('button',{name:'색상·굵기·투명도 설정',exact:true}).click();
+ const panel=dialog.getByRole('region',{name:'필기 설정',exact:true});await panel.getByRole('tab',{name:'기타',exact:true}).click();
+ await panel.getByRole('button',{name:'필기 PDF 만들기',exact:true}).click();
+ const link=panel.getByRole('link',{name:'만든 PDF 저장',exact:true});await expect(link).toBeVisible({timeout:20000});
+ const rendered=await link.evaluate(async a=>{
+  const data=new Uint8Array(await(await fetch(a.href)).arrayBuffer());
+  const pdf=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs');
+  const document=await pdf.getDocument({data,isEvalSupported:false,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/standard_fonts/'}).promise;
+  try{
+   const page=await document.getPage(1),view=page.getViewport({scale:2}),canvas=window.document.createElement('canvas');canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
+   await page.render({canvasContext:canvas.getContext('2d'),viewport:view}).promise;
+   const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+   const red=i=>Math.abs(pixels[i]-0xb4)<40&&Math.abs(pixels[i+1]-0x23)<40&&Math.abs(pixels[i+2]-0x18)<40;
+   const count=([x0,y0,x1,y1])=>{let n=0;for(let i=0;i<pixels.length;i+=4){if(!red(i))continue;const x=(i/4%canvas.width)/canvas.width,y=Math.floor(i/4/canvas.width)/canvas.height;if(x>=x0&&x<=x1&&y>=y0&&y<=y1)n++;}return n;};
+   // The T is .064 wide and .08 high (of the page width) around (.5, .75): its bar across the top, its stem down the middle.
+   return {all:count([0,0,1,1]),mark:count([.45,.70,.55,.80]),bar:count([.46,.705,.54,.73]),stem:count([.485,.73,.515,.79]),beside:count([.46,.745,.48,.79])};
+  }finally{await document.destroy();}
+ });
+ expect(rendered.mark).toBeGreaterThan(150);expect(rendered.mark/rendered.all).toBeGreaterThan(.97);
+ expect(rendered.bar).toBeGreaterThan(50);expect(rendered.stem).toBeGreaterThan(50);expect(rendered.beside).toBe(0);
+});
+
+test('320px: the drawing pad, its tools and the 크기 choice stay inside the screen and the pad is still 240px',async({page})=>{
+ await page.setViewportSize({width:320,height:640});
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ const inside=async locator=>{const r=await locator.boundingBox();expect(r.x).toBeGreaterThanOrEqual(-.5);expect(r.x+r.width).toBeLessThanOrEqual(320.5);return r;};
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+ const sheet=editorOf(page);
+ await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();
+ for(const l of await sheet.locator('label:has([name=form])').all())expect((await inside(l)).height).toBeGreaterThanOrEqual(44);
+ await pad(sheet).evaluate(n=>n.scrollIntoView({block:'center'}));
+ const size=await inside(pad(sheet));expect(size.width).toBeGreaterThanOrEqual(240);expect(Math.abs(size.width-size.height)).toBeLessThan(1);
+ expect(size.y).toBeGreaterThanOrEqual(0);expect(size.y+size.height).toBeLessThanOrEqual(640); // the whole pad is on screen at once
+ await drawT(page,sheet);await expect(padStrokes(sheet)).toHaveCount(2);
+ for(const b of await sheet.locator('.ink-marker-pad-tools button').all())expect((await inside(b)).height).toBeGreaterThanOrEqual(44);
+ await sheet.locator('[data-marker-size]').scrollIntoViewIfNeeded();
+ for(const l of await sheet.locator('[data-marker-size] label').all())expect((await inside(l)).height).toBeGreaterThanOrEqual(44);
+ await inside(sheet.locator('[data-marker-pad-note]'));
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&[...document.querySelectorAll('.sheet')].every(s=>s.scrollWidth<=s.clientWidth+1))).toBe(true);
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await tap(page,dialog,120,60);await placed(page,2); // the new marker is in hand
+});
+
+for(const [width,height] of [[1024,768],[820,1180]])test('tablet '+width+'×'+height+': the drawing pad is a centred square in the form, drawn on with the pointer',async({page},info)=>{
+ test.skip(info.project.name!=='chromium-desktop','sizes are set explicitly');
+ await page.setViewportSize({width,height});
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+ const sheet=editorOf(page);
+ await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();
+ await pad(sheet).evaluate(n=>n.scrollIntoView({block:'center'}));
+ const size=await pad(sheet).boundingBox(),form=await sheet.locator('form').boundingBox();
+ expect(size.width).toBeGreaterThanOrEqual(240);expect(size.width).toBeLessThanOrEqual(341);expect(Math.abs(size.width-size.height)).toBeLessThan(1);
+ expect(Math.abs(size.x+size.width/2-(form.x+form.width/2))).toBeLessThan(2);expect(form.width).toBeLessThanOrEqual(560);
+ await drawT(page,sheet);await expect(padStrokes(sheet)).toHaveCount(2);
+ await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await tap(page,dialog,120,60);await placed(page,2);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test.describe('screens for review (only with VZ_SHOTS)',()=>{
  test.use({deviceScaleFactor:2});
  test('phone 375',async({page},info)=>{
@@ -768,5 +1061,31 @@ test.describe('screens for review (only with VZ_SHOTS)',()=>{
   const sheet=await editMarker(page,dialog,'cut');
   await sheet.locator('[data-marker-pick]').scrollIntoViewIfNeeded();await page.waitForTimeout(300);
   await page.screenshot({path:process.env.VZ_SHOTS+'/measure-pick-editor-375.png'});
+ });
+ test('phone 375: 직접 그리기',async({page},info)=>{
+  test.skip(!process.env.VZ_SHOTS||info.project.name!=='chromium-mobile','only when screenshots are asked for');
+  test.setTimeout(90000);
+  await page.setViewportSize({width:375,height:812});
+  await setup(page,{sync:EVEN});const dialog=await open(page);
+  await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
+  const sheet=editorOf(page);
+  await sheet.locator('[name=name]').fill('강세');await sheet.locator('[name=form][value=draw]').check();
+  // An accent: a wedge, with a short line under it.
+  await padStroke(page,sheet,[[.25,.3],[.75,.45],[.25,.6]]);await padStroke(page,sheet,[[.3,.75],[.7,.75]]);
+  await sheet.locator('[name=color][value="#b42318"]').check();await pad(sheet).evaluate(n=>n.scrollIntoView({block:'center'}));await page.waitForTimeout(300);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/draw-pad-375.png'});
+  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+  for(const [x,y] of [[60,62],[150,62],[240,182],[120,182]])await tap(page,dialog,x,y);
+  await placed(page,8);await page.waitForTimeout(2800);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/draw-stamped-375.png'});
+  await dialog.locator('[data-ink-marker-mode]').click();await page.waitForTimeout(300);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/draw-palette-375.png'});
+ });
+ test('phone 375: 마디 선택 on three staves',async({page},info)=>{
+  test.skip(!process.env.VZ_SHOTS||info.project.name!=='chromium-mobile','only when screenshots are asked for');
+  await page.setViewportSize({width:375,height:812});
+  await setup(page,{sync:EVEN,conversion:musicxml(GRAND),bytes:pdf(GRAND)});const dialog=await open(page);
+  await pickMarker(dialog,'cut');await tap(page,dialog,120,104);await (await drag(page,dialog,[240,70],[60,300]))();await placed(page,3);await page.waitForTimeout(400);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/staves3-cut-375.png'});
  });
 });
