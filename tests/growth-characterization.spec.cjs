@@ -10,6 +10,9 @@
 //    but 주간 요약), so the UTC run now shows what the Korea run shows.
 // Part C changed the 보컬 분석 tab only: videos count in its song rows (새 곡: 녹음 2개 · 분석 전 → 녹음 4개 (영상 2개
 // 포함) · 분석 2개 · 비교 가능), and rows with 연습실·트레이닝 연습 recordings say so (Home: "(연습 2개 포함)", one note line).
+// 판정 기준 재검토 (2026-11-15) changed one rule on purpose: a wobble / high-note wobble change between an AI-separated
+// take and one as recorded is 변화 관찰 (state changed, judged kept, note ai-mixed) instead of being judged; only the
+// fixture's one mixed song moved (비슷함 → 변화 관찰, its 비슷 counts −1).
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
