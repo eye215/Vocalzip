@@ -102,7 +102,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   return [...extra,...rows].sort((a,c)=>a.createdAt-c.createdAt||a.id.localeCompare(c.id));
  }};}
  const controller=new AbortController();let quickFolded=false,audioBar=null,doc,loadingTask,renderTask,prepared=new Map(),prepareTask=null,prepareTimer=0,closed=false,binding,ready=false,viewReady=false,busy=false,pageNo=1,zoom=1,aspect=1.414,baseWidth=0,spreadOn=false,spreadBox=null;
- let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerId='breath',markerEditing=false,markFrame=0,markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[],memo=null,memoEdit=null,memoFrame=0,noteCtx=null,noteClip=0,pageMemos=[],measures=null;
+ let thumbBatch=0,thumbObserver=null,thumbGeneration=0,thumbTasks=new Set(),selection=null,selectionFrame=0,exportUrl=null,exportStamp='',exportBusy=false,lastSaveMessage='',tool=profiles.penOnly?'pen':'pan',paintTool='pen',settingsTab='pen',full=false,performance=false,performanceOriginFull=false,performanceTimer=0,hadNative=false,fullGeneration=0,touchPan=null,pageSwipe=null,twoSwipe=null,touchSwipe=null,touchInkStart=null,touchEraser=null,touches=new Map(),pinch=null,pinchDirty=false,markerId='breath',markerEditing=false,markFrame=0,markerStart=null,markerDrag=null,active=null,pending=null,undo=[],redo=[],frame=0,renderNumber=0,cleanupHook=()=>{},resizeObserver,resizeTimer,sheet,el,svg,canvas,box,stage,status,done,visionDrag=null,scoreRect=null,visionBusy=false,visionController=null,visionAvailable=false,notes=[],notesHistory=[],memo=null,memoEdit=null,memoFrame=0,noteCtx=null,noteClip=0,pageMemos=[],measures=null,inkAt=0;
  const viewKey='vzip_score_view_v1:'+owner+':'+scoreId;
  const viewStorage=scope?.storage||localStorage;
  const notesKey='vzip_score_text_v1:'+owner+':'+scoreId;
@@ -759,7 +759,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   });
  }
  function apply(action,kind='normal'){
-  pending={action,kind};saveState('저장 중…','pending');
+  pending={action,kind};inkAt=Date.now();saveState('저장 중…','pending');
   try{
    current();
    if(!store.commit({add:action.add,remove:action.remove.map(s=>s.id)}))throw Error('필기 복구 기록은 보존했어요. 저장 공간을 확인하고 다시 저장해 주세요.');
@@ -1205,7 +1205,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
   try{audioBar=window.VzipScoreAudio?.mount(stage,{songId,scoreTitle:score.title||score.fileName||''})||null;}catch{audioBar=null;}
   compactLayout();
   // 마디 위치 보기 · 표시한 마디 (app/score-measures.js): read from the score's conversion, nothing is saved.
-  try{measures=window.VzipScoreMeasuresUI?.mount({el,box,canvas,stage,score,owner,storage:viewStorage,pages:()=>doc?.numPages||0,page:()=>pageNo,aspect:()=>aspect,
+  // 마디와 MR 맞추기 (app/score-sync.js) rides on it: the audio bar, whether the user is writing right now (a stroke,
+  // a memo or a selection in hand, or handwriting saved in the last 3 s), whether a held pointer is free (it cannot
+  // draw: 이동, or a finger with 펜만 필기), and a page drawn into another canvas.
+  try{measures=window.VzipScoreMeasuresUI?.mount({el,box,canvas,stage,score,songId,owner,storage:viewStorage,audio:()=>audioBar,
+   writing:()=>!!(active||memoEdit||memo?.drag||selection?.drag||markerDrag||visionDrag||touchEraser||pending)||Date.now()-inkAt<3000,
+   canHold:event=>ready&&!busy&&!performance&&!exportBusy&&!active&&!selection?.drag&&!memo?.drag&&event.isPrimary!==false&&(tool==='pan'||profiles.penOnly&&event.pointerType==='touch'),
+   draw:async(n,target,width)=>{if(closed||!doc)throw Error('closed');const page=await doc.getPage(n),natural=page.getViewport({scale:1}),ratio=natural.height/natural.width,viewport=page.getViewport({scale:width/natural.width*Math.min(devicePixelRatio||1,2,Math.sqrt(4000000/(width*width*ratio)))});
+    target.width=Math.max(1,Math.floor(viewport.width));target.height=Math.max(1,Math.floor(viewport.height));await page.render({canvasContext:target.getContext('2d'),viewport}).promise;return ratio;},pages:()=>doc?.numPages||0,page:()=>pageNo,aspect:()=>aspect,
    pageAspect:async n=>{const v=(await doc.getPage(n)).getViewport({scale:1});return v.height/v.width;},rows:()=>binding?store.list(binding):[],markers:()=>profiles.markers,outside,
    go:async n=>{if(closed||!doc||!viewReady&&!busy||!Number.isInteger(n)||n<1||n>doc.numPages)return false;if(n!==pageNo){pageNo=n;closeThumbnails();await renderPage();}return !closed&&pageNo===n;}})||null;}catch{measures=null;}
   // 악보 표기 palette: its own row under the tools (inside the one-line tool row it squeezed the tools away).

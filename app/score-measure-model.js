@@ -11,6 +11,7 @@
  * - findStaves(image)      the five-line staves seen in a rendered page (cheap row scan), in page fractions
  * - snap(page, staves)     the same page laid onto the staves actually seen; unchanged when they do not match
  * - summary(pages, rows)   what the user put where: marks, memos, highlighter and pen writing by measure
+ * - sequence(layout)       every measure box in file order with its length in quarter notes (app/score-sync-model.js)
  *
  * Units. Audiveris measures everything from the top-left of the page image it read, in tenths of that page's own
  * staff space; <page-layout> describes the first page as that image plus a fixed 80-tenth margin on every side
@@ -34,16 +35,34 @@ const median = (list, upper = false) => { const s = [...list].sort((a, b) => a -
 function streams(root) {
   const parts = [];
   if (local(root) === 'score-partwise') {
-    for (const part of kids(root, 'part')) parts.push(kids(part, 'measure').map(m => ({el:m, number:m.getAttribute('number'), width:Number(m.getAttribute('width'))})));
+    for (const part of kids(root, 'part')) parts.push(kids(part, 'measure').map(m => ({el:m, number:m.getAttribute('number'), width:Number(m.getAttribute('width')), implicit:m.getAttribute('implicit') === 'yes'})));
   } else {
     const at = new Map();
     for (const m of kids(root, 'measure')) for (const part of kids(m, 'part')) {
       const id = part.getAttribute('id') || '';
       if (!at.has(id)) { at.set(id, parts.length); parts.push([]); }
-      parts[at.get(id)].push({el:part, number:m.getAttribute('number'), width:Number(m.getAttribute('width'))});
+      parts[at.get(id)].push({el:part, number:m.getAttribute('number'), width:Number(m.getAttribute('width')), implicit:m.getAttribute('implicit') === 'yes'});
     }
   }
   return parts;
+}
+/** Length of a time signature in quarter notes (3/4 → 3, 6/8 → 3, 2+3/8 → 2.5); NaN when it has none (senza misura). */
+function timeLength(time) {
+  const beats = kids(time, 'beats'), types = kids(time, 'beat-type');
+  let sum = 0;
+  beats.forEach((b, i) => { const n = text(b).split('+').reduce((a, x) => a + Number(x), 0), d = Number(text(types[i])); sum += n > 0 && d > 0 ? n * 4 / d : NaN; });
+  return beats.length ? sum : NaN;
+}
+/** How long the notes of one measure of a part run, in quarter notes (the furthest point any voice reaches). */
+function played(el, divisions) {
+  let pos = 0, max = 0;
+  for (const c of kids(el)) {
+    const name = local(c), d = num(c, 'duration');
+    if (!(d > 0)) continue;
+    if (name === 'backup') pos = Math.max(0, pos - d);
+    else if (name === 'forward' || name === 'note' && !first(c, 'chord') && !first(c, 'grace')) { pos += d; max = Math.max(max, pos); }
+  }
+  return divisions > 0 ? max / divisions : NaN;
 }
 /** The printed layout of a parsed MusicXML document (DOMParser in the app; the tests pass a tree with the same small
  * surface), or null when the file cannot place its systems on a page: no page size, or no system layout at all. */
@@ -64,7 +83,8 @@ function layout(doc) {
   const parts = streams(root), count = Math.max(0, ...parts.map(p => p.length));
   if (!count) return null;
 
-  const staves = parts.map(() => 1), lastGap = new Map(), systems = [];
+  const staves = parts.map(() => 1), divisions = parts.map(() => 1), lastGap = new Map(), systems = [];
+  let quarters = 4; // length of a measure in quarter notes under the time signature in force
   let pageNo = 0, laidOut = false, swallow = null, last = {lm:base.lm, rm:base.rm, sd:base.sd};
   for (let i = 0; i < count; i++) {
     const cells = parts.map(p => p[i] || null), prints = cells.map(c => c ? kids(c.el, 'print') : []);
@@ -74,6 +94,8 @@ function layout(doc) {
     let rest = 0;
     cells.forEach((c, k) => { for (const a of c ? kids(c.el, 'attributes') : []) {
       const s = num(a, 'staves'); if (s >= 1) staves[k] = Math.round(s);
+      const dv = num(a, 'divisions'); if (dv > 0) divisions[k] = dv;
+      const q = timeLength(first(a, 'time')); if (q > 0) quarters = q;
       if (kids(a, 'staff-details').some(d => d.getAttribute('print-object') === 'no')) hidden[k] = true;
       for (const style of kids(a, 'measure-style')) { const r = num(style, 'multiple-rest'); if (r >= 2) rest = Math.max(rest, Math.round(r)); }
     } });
@@ -110,7 +132,10 @@ function layout(doc) {
       swallow.measure.last = number; swallow.left--; continue;
     }
     const visibleWidth = cells.map(c => c?.width).find(w => w > 0);
-    const measure = {index:i, number, width:visibleWidth > 0 ? visibleWidth : NaN, ...(rest ? {rest} : {})};
+    // Length in quarter notes: the time signature (a multi-rest: all its measures); a pickup: what its notes add up to.
+    let beats = quarters * (rest || 1);
+    if (!rest && head?.implicit) { const own = played(head.el, divisions[cells.indexOf(head)]); if (own > 0 && own < quarters) beats = own; }
+    const measure = {index:i, number, width:visibleWidth > 0 ? visibleWidth : NaN, beats, ...(rest ? {rest} : {})};
     sys.measures.push(measure);
     swallow = rest ? {measure, left:rest - 1} : null;
   }
@@ -138,6 +163,14 @@ function layout(doc) {
 }
 /** Whether the layout's pages are the PDF's pages one to one (same count, no page skipped by the conversion). */
 const fits = (lay, pdfPages) => !!lay && lay.pages.length === pdfPages && lay.pages.every(p => p?.systems?.length) && (!lay.sheets.length || lay.sheets.length === pdfPages && lay.sheets.every((n, i) => n === i + 1));
+/** Every measure box in file order: its place in that order (ord), file index, printed number(s), length in quarter
+ * notes, page, system on that page and whether it starts the system. */
+function sequence(lay) {
+  const out = [];
+  (lay?.pages || []).forEach((p, pi) => (p?.systems || []).forEach((sys, si) => sys.measures.forEach((m, mi) =>
+    out.push({ord:out.length, index:m.index, number:m.number, ...(m.last ? {last:m.last} : {}), beats:m.beats > 0 ? m.beats : 4, page:pi + 1, system:si, first:mi === 0}))));
+  return out;
+}
 const parse = xml => new DOMParser().parseFromString(xml, 'application/xml');
 /** Parse helper for the app (DOMParser) — the tests pass their own parser. */
 const read = (xml, parser = parse) => layout(parser(xml));
@@ -367,5 +400,5 @@ function summary(pageOf, rows, {markName = () => ''} = {}) {
   }
   return {items, measures:marked.size};
 }
-return {STAFF, layout, read, fits, page, geometry, bands, measureAt, measuresIn, findStaves, snap, summary, strokeBox};
+return {STAFF, layout, read, fits, sequence, page, geometry, bands, measureAt, measuresIn, findStaves, snap, summary, strokeBox};
 });

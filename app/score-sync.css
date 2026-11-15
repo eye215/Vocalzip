@@ -1,0 +1,93 @@
+/* 마디와 MR 맞추기 (app/score-sync.js, loop bar in app/score-audio.js).
+ * In the viewer the measure sounding now is a light accent wash (the grey boxes of 마디 위치 보기 stay the quiet guide);
+ * the 맞추기 screen is a page sheet: score on top, one big 다음 마디 button in thumb reach, 취소 / 저장 in the foot. */
+.score-measure-now{fill:rgba(122,50,245,.14);stroke:rgba(122,50,245,.6);stroke-width:1.5px;vector-effect:non-scaling-stroke}
+.score-sync-menu-note{display:block;margin-top:2px;color:#b26a00;font-size:11px;line-height:14px;font-weight:700}
+.score-ink-compact .score-ink-full-actions .score-ink-actions>button[data-ink-measure-follow][aria-pressed=true],.score-ink-fullscreen .score-ink-full-actions .score-ink-actions>button[data-ink-measure-follow][aria-pressed=true]{background:#ede1ff;color:#7a32f5}
+
+/* 마디 반복 bar: floats where the live chip does. */
+.score-ink-sheet .score-audio.is-live[data-mode=loop],.score-audio.is-live[data-mode=loop]{max-width:min(420px,calc(100% - 24px))}
+.score-audio-loop{display:flex;flex-direction:column;gap:2px;padding:2px 6px 6px 14px;border-radius:24px;background:rgba(16,24,40,.88);color:#fff;box-shadow:0 8px 20px rgba(16,24,40,.22);letter-spacing:-.02em}
+.score-audio-loop-head{display:flex;align-items:center;gap:8px;min-height:48px}
+.score-audio-loop-head .score-audio-dot{flex:none}
+.score-audio-loop-label{flex:1;min-width:0;font-size:14px;line-height:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score-audio-loop .score-audio-time{flex:none;font-size:13px;font-weight:700;color:#e4d7ff;font-variant-numeric:tabular-nums}
+.score-audio-loop-stop{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:#fff;color:#101828;font-size:13px;font-weight:700;cursor:pointer}
+.score-audio-loop-tools{display:flex;flex-wrap:wrap;gap:6px;padding-right:8px}
+.score-audio-loop-tools button{min-height:44px;padding:0 12px;border:1px solid rgba(255,255,255,.3);border-radius:99px;background:transparent;color:#fff;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
+.score-audio-loop-tools button[aria-pressed=true]{background:#ede1ff;border-color:#ede1ff;color:#6528ca}
+.score-audio-loop-tools small{font-size:12px;opacity:.8;font-variant-numeric:tabular-nums}
+
+/* 표시한 마디: ▶ per row, or one line that leads to 맞추기. */
+.score-sync-need{display:flex;align-items:center;gap:8px;margin:0;padding:8px 8px 8px 14px;border-radius:16px;background:#fff;color:#475467;font-size:13px;line-height:18px}
+.score-sync-need>i{flex:none;color:#7a32f5;font-size:18px}
+.score-sync-need>span{flex:1;min-width:0}
+.score-sync-need[data-state=stale]{background:#fff3dc}
+.score-sync-need[data-state=stale]>i,.score-sync-need[data-state=stale] strong{color:#b26a00}
+.score-sync-need button{flex:none;min-height:44px;padding:0 14px;border:0;border-radius:14px;background:#f3ecff;color:#7a32f5;font-size:13px;font-weight:700;white-space:nowrap;cursor:pointer}
+.score-sync-need[data-state=stale] button{background:#fff}
+.score-measure-line{display:flex;align-items:center;gap:4px;border-top:1px solid #f2eff7}
+.score-measure-line:first-child{border-top:0}
+.score-measure-line>.score-measure-row{flex:1;min-width:0;border-top:0}
+.score-measure-play{flex:none;display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#f3ecff;color:#7a32f5;font-size:16px;cursor:pointer}
+.score-measure-play:disabled{background:#f2eff7;color:#98a2b3;cursor:default}
+/* Press-and-hold menu of a measure box (dark action popover). */
+.score-sync-menu .score-sync-menu-title{margin:6px 14px 2px;color:#e0d9e7;font-size:13px;line-height:18px;font-weight:700;font-variant-numeric:tabular-nums}
+.score-sync-menu .score-sync-menu-text{margin:0 14px 6px;font-size:13px;line-height:18px}
+.score-sync-menu .vz-choice:disabled{opacity:.45}
+
+/* 맞추기 화면 */
+@media(min-width:768px){body .sheet-page>.sheet.score-sync-sheet{max-width:none}}
+body .score-sync-sheet .sheet-body{display:flex;flex-direction:column;overflow:hidden;padding:0 12px}
+.score-sync{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;color:#344054;letter-spacing:-.02em}
+.score-sync [hidden]{display:none!important}
+.score-sync button{font-family:inherit;letter-spacing:inherit;cursor:pointer}
+.score-sync-head{flex:none;display:flex;align-items:center;gap:8px}
+.score-sync-modes{flex:none;display:flex;gap:3px}
+.score-sync-modes button{min-height:44px;padding:0 16px;border:0;border-radius:99px;background:transparent;color:#475467;font-size:14px;line-height:20px;font-weight:600}
+.score-sync-modes button[aria-pressed=true]{background:#ede1ff;color:#7a32f5}
+.score-sync-track{flex:1;min-width:0;min-height:44px;padding:0 12px;border:0;border-radius:14px;background:#f2eff7;color:#344054;font-size:14px}
+.score-sync-track-name{flex:1;min-width:0;color:#667085;font-size:13px;line-height:18px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score-sync-guide{flex:none;margin:0;padding:10px 14px;border-radius:16px;background:#f3ecff;color:#475467;font-size:13px;line-height:18px}
+.score-sync-guide[data-note=true]{background:#fff3dc;color:#b26a00;font-weight:600}
+.score-sync-status{flex:none;display:flex;align-items:center;gap:10px;min-height:44px;color:#667085;font-size:13px;line-height:18px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.score-sync-status strong{color:#7a32f5;font-size:15px;line-height:21px;font-weight:700;overflow:hidden;text-overflow:ellipsis}
+.score-sync-pages{flex:none;display:flex;align-items:center;margin-left:auto}
+.score-sync-pages .icon-btn{width:44px;height:44px;border:0;background:none;color:#475467;font-size:18px}
+.score-sync-pages .icon-btn:disabled{opacity:.35}
+.score-sync-stage{flex:1;min-height:120px;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:8px;border-radius:12px;background:#e8e4f0;box-sizing:border-box}
+.score-sync-page{position:relative;margin:0 auto;background:#fff}
+.score-sync-page canvas,.score-sync-page svg{display:block;position:absolute;inset:0;width:100%;height:100%}
+.score-sync-page svg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.score-sync-page text{pointer-events:none}
+.score-sync-box{fill:rgba(71,84,103,.04);stroke:rgba(71,84,103,.45);stroke-width:1px;vector-effect:non-scaling-stroke;cursor:pointer}
+.score-sync-box[data-state=done]{fill:rgba(122,50,245,.1);stroke:rgba(122,50,245,.45)}
+.score-sync-box[data-state=next]{fill:rgba(122,50,245,.03);stroke:#7a32f5;stroke-width:2px;stroke-dasharray:6 5}
+.score-sync-box[data-state=now]{fill:rgba(122,50,245,.3);stroke:#7a32f5;stroke-width:2.5px}
+.score-sync-panel{flex:none;display:flex;flex-direction:column;gap:8px;padding-bottom:2px}
+.score-sync-tools{display:flex;gap:6px}
+.score-sync-tools button{flex:1 1 0;min-width:0;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px 2px;border:0;border-radius:14px;background:#fff;color:#344054;font-size:12px;line-height:14px;font-weight:600;text-align:center;word-break:keep-all}
+.score-sync-tools button i{font-size:20px}
+.score-sync-tools button[aria-pressed=true]{background:#ede1ff;color:#7a32f5}
+.score-sync-tools button:disabled{opacity:.45;cursor:default}
+.score-sync-nudge{display:flex;align-items:center;gap:6px}
+.score-sync-nudge button{flex:1 1 0;min-width:0;min-height:48px;display:flex;align-items:center;justify-content:center;gap:4px;padding:0 8px;border:0;border-radius:14px;background:#f3ecff;color:#7a32f5;font-size:14px;line-height:20px;font-weight:600;white-space:nowrap}
+.score-sync-nudge button[data-sync-later]{flex-direction:row-reverse}
+.score-sync-nudge button:disabled{background:#f2eff7;color:#98a2b3;cursor:default}
+.score-sync-nudge output{flex:none;min-width:68px;color:#101828;font-size:15px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+.score-sync-tap{flex:none;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:0;border-radius:16px;background:#7a32f5;color:#fff;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.score-sync-tap strong{font-size:18px;line-height:26px;font-weight:700}
+.score-sync-tap small{font-size:13px;line-height:18px;opacity:.88;font-variant-numeric:tabular-nums}
+.score-sync-tap:active{background:#6528ca}
+.score-sync-tap:focus-visible{outline:3px solid #dcc4ff;outline-offset:2px}
+.score-sync-tap:disabled{background:#d9d1e3;color:#7a7285;cursor:default}
+body .sheet-page .score-sync-sheet .sheet-foot{padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
+@media(max-width:350px){.score-sync-tools button{font-size:11px}.score-sync-nudge button{font-size:13px;padding:0 4px}.score-sync-modes button{padding:0 12px}.score-sync-status{gap:6px}}
+/* Tablets lying down: the score on the left at full height, the controls beside it. */
+@media(min-width:900px) and (orientation:landscape){
+ .score-sync{display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto auto auto minmax(0,1fr) auto;column-gap:16px;row-gap:8px}
+ .score-sync-stage{grid-column:1;grid-row:1/-1;min-height:0}
+ .score-sync-head{grid-column:2;grid-row:1}.score-sync-guide{grid-column:2;grid-row:2}.score-sync-status{grid-column:2;grid-row:3}.score-sync-panel{grid-column:2;grid-row:5}
+ .score-sync-tap{min-height:96px}
+}
+@media(prefers-reduced-motion:reduce){.score-sync-stage{scroll-behavior:auto}}
