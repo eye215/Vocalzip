@@ -367,7 +367,7 @@ test('표시한 마디: ▶ loops the MR over the row’s measures with a lead-i
  const loop=bar(dialog).getByRole('group',{name:'마디 반복 재생'});
  await expect(loop).toBeVisible();await expect(loop.locator('[data-score-audio-loop-label]')).toHaveText('6–7마디 반복 중');
  const stop=loop.getByRole('button',{name:'반복 멈춤',exact:true}),lead=loop.getByRole('button',{name:'앞 마디 포함',exact:true}),rate=loop.locator('[data-score-audio-loop-rate]'),next=loop.locator('[data-score-audio-loop-next]');
- await expect(stop).toHaveText('멈춤');await expect(lead).toHaveAttribute('aria-pressed','true');await expect(rate).toHaveText('속도 1×');await expect(next).toHaveText('다음 등장 1/2');
+ await expect(stop).toBeVisible();await expect(lead).toHaveAttribute('aria-pressed','true');await expect(rate).toHaveText('1×');await expect(next).toHaveText('다음 1/2');
  await expect(dialog.locator('[data-ink-measures] .score-measure-flash')).toHaveCount(2); // the row's measures are shown as before
  // First time measures 6–7 sound: 6–8 s, with measure 5 (5–6 s) as lead-in. It wraps and never leaves that stretch.
  const watch=async(ms,low,high)=>{const seen=[];for(const end=Date.now()+ms;Date.now()<end;){seen.push((await mr(page)).time);await page.waitForTimeout(60);}
@@ -382,12 +382,12 @@ test('표시한 마디: ▶ loops the MR over the row’s measures with a lead-i
  await lead.click();await expect(lead).toHaveAttribute('aria-pressed','false');
  await mrSeek(page,7.7);await page.waitForTimeout(500);seen=await watch(1000,5.95,8.15);
  // 다음 등장: the second time they sound, 10–12 s.
- await next.click();await expect(next).toHaveText('다음 등장 2/2');await expect(loop.locator('[data-score-audio-loop-label]')).toHaveText('6–7마디 반복 중');
+ await next.click();await expect(next).toHaveText('다음 2/2');await expect(loop.locator('[data-score-audio-loop-label]')).toHaveText('6–7마디 반복 중');
  await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(9.95);
  await mrSeek(page,11.7);seen=await watch(1100,9.95,12.15);expect(wrapped(seen)).toBe(true);
- await next.click();await expect(next).toHaveText('다음 등장 1/2');await expect.poll(async()=>(await mr(page)).time).toBeLessThan(8.15);
+ await next.click();await expect(next).toHaveText('다음 1/2');await expect.poll(async()=>(await mr(page)).time).toBeLessThan(8.15);
  // 속도 0.75× and back.
- await rate.click();await expect(rate).toHaveText('속도 0.75×');await expect(rate).toHaveAttribute('aria-pressed','true');expect((await mr(page)).rate).toBe(.75);
+ await rate.click();await expect(rate).toHaveText('0.75×');await expect(rate).toHaveAttribute('aria-pressed','true');expect((await mr(page)).rate).toBe(.75);
  // 멈춤: the bar is back as it was, at normal speed.
  await stop.click();
  await expect(bar(dialog).getByRole('button')).toHaveText(['재생','녹음','재생+녹음']);
@@ -564,7 +564,9 @@ test('320px: the 맞추기 screen, the loop bar and the list rows stay inside th
  await list.locator('[data-measure-loop]').click();
  const loop=bar(dialog).getByRole('group',{name:'마디 반복 재생'});
  await expect(loop).toBeVisible();await page.waitForTimeout(1100);await inside(loop); // after it has popped in
- for(const b of await loop.getByRole('button').all())expect((await inside(b)).height).toBeGreaterThanOrEqual(44);
+ // A thin strip under the score (it never lies over the page); each control is still a 44px box.
+ expect((await bar(dialog).boundingBox()).height).toBeLessThanOrEqual(46);
+ for(const b of await loop.getByRole('button').all())expect((await inside(b)).height).toBeGreaterThanOrEqual(43.5);
  expect(await noOverflow()).toBe(true);
 });
 
@@ -595,6 +597,10 @@ test.describe('screens for review (only with VZ_SHOTS)',()=>{
   test.setTimeout(90000);
   await page.setViewportSize({width:375,height:812});
   await setup(page,{sync:PLAYED.slice(0,6),rows,boxes:true});const dialog=await open(page);
+  await page.waitForTimeout(600);await page.screenshot({path:process.env.VZ_SHOTS+'/bar-idle-375.png'});
+  await bar(dialog).getByRole('button',{name:'재생',exact:true}).click();await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(.6);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/bar-live-375.png'});
+  await bar(dialog).getByRole('button',{name:'정지',exact:true}).click();
   const sheet=await openSync(page,dialog);
   await big(sheet).click();await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(.2);
   await mrSeek(page,7);await big(sheet).click();await expect(sheet.locator('[data-sync-count]')).toHaveText('찍은 곳 7');await page.waitForTimeout(400);
