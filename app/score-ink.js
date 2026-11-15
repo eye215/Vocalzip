@@ -70,7 +70,7 @@ async function attachedInk(doc,binding){
   const data=JSON.parse(new TextDecoder().decode(file.content));
   if(data?.format!=='vocalzip-ink'||data.version!==1||!Array.isArray(data.strokes)||data.strokes.length>200000)return [];
   const rows=data.strokes.map(s=>({version:1,id:String(s?.id||''),ownerId:binding.ownerId,songId:binding.songId,scoreId:binding.scoreId,r2Key:binding.r2Key,pdfHash:binding.pdfHash,
-   page:s?.page,tool:s?.tool,color:s?.color,...(s?.opacity===undefined?{}:{opacity:s.opacity}),width:s?.width,points:s?.points,...Object.fromEntries(['note','rect','mode','text','mark','glyph','size'].filter(k=>s?.[k]!==undefined).map(k=>[k,s[k]])),createdAt:s?.createdAt}));
+   page:s?.page,tool:s?.tool,color:s?.color,...(s?.opacity===undefined?{}:{opacity:s.opacity}),width:s?.width,points:s?.points,...Object.fromEntries(['note','rect','mode','text','mark','glyph','size','role'].filter(k=>s?.[k]!==undefined).map(k=>[k,s[k]])),createdAt:s?.createdAt}));
   if(!rows.every(Ink.valid)||rows.some(s=>s.page>doc.numPages)||new Set(rows.map(s=>s.id)).size!==rows.length)return [];
   return rows;
  }catch{return [];}
@@ -920,7 +920,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  /* 악보 표기. The marker in use is a preset (profiles.markers, kept on this device): its form says how it is placed —
   * one tap, a drag, or two taps — and Ink.markStroke lays the mark out. The mark is saved as one stroke carrying its own
-  * look and `mark` (what it is), so changing or deleting the preset later leaves it as it is. */
+  * look and `mark` (what it is), so changing or deleting the preset later leaves it as it is. A user preset with a
+  * 기능 also gives the mark its `role` (시작점 · 반복 구간 · 건너뛰기, app/score-mark-model.js). */
  const markerNow=()=>profiles.markers.find(m=>m.id===markerId)||profiles.markers[0];
  /** A drag shorter than 8px on screen is a tap: the mark then gets its standard length. */
  const markEnd=(start,end)=>Math.hypot((end[0]-start[0])*box.clientWidth,(end[1]-start[1])*box.clientHeight)<8?null:end;
@@ -935,7 +936,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const m=markerNow(),input=Settings.markInput(m.form);
   if(input==='two'&&!markerStart){markerStart=start;paint();say('구간의 끝을 눌러 주세요.');return;}
   const first=input==='two'?markerStart:start,last=input==='two'?end:input==='drag'?markEnd(start,end):null;markerStart=null;
-  apply({add:[{version:1,id:VZ.uid(),...binding,page:pageNo,...Ink.markStroke(m,first,last,aspect),mark:m.id,createdAt:Date.now()}],remove:[]});
+  apply({add:[{version:1,id:VZ.uid(),...binding,page:pageNo,...Ink.markStroke(m,first,last,aspect),mark:m.id,...(!m.builtin&&m.role?{role:m.role}:{}),createdAt:Date.now()}],remove:[]});
  }
  /** A small drawing of what a marker leaves, for the palette and the editor (viewBox 64×48, in thousandths of a page). */
  function markerSample(m){
@@ -978,7 +979,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(!old&&profiles.markers.filter(m=>!m.builtin).length>=Settings.MARK_USER_MAX){VZ.toast('직접 만든 표기는 '+Settings.MARK_USER_MAX+'개까지예요. 안 쓰는 표기를 먼저 지워 주세요.','error');return;}
   await outside();if(closed)return;
   const from=old||{name:'',color:Settings.MARK_COLORS[0][0],width:.006,type:'pen',form:'symbol',shape:'check',text:''};
-  const esc=VZ.esc,known=Settings.MARK_COLORS.some(c=>c[0]===from.color);
+  const esc=VZ.esc,known=Settings.MARK_COLORS.some(c=>c[0]===from.color),roleName=id=>Settings.MARK_ROLES.find(r=>r[0]===id)?.[1]||'없음';
   const choice=(name,value,label,checked,extra='')=>'<label><input type="radio" name="'+name+'" value="'+value+'"'+(checked?' checked':'')+(extra?' aria-label="'+esc(label)+'"':'')+'><span data-sample="'+name+':'+value+'">'+(extra?'':esc(label))+'</span></label>';
   const body='<form id="ink-marker-form" class="ink-marker-form">'+
    '<div class="ink-marker-preview"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 110" role="img" aria-label="표기 미리보기" data-marker-preview></svg><p data-marker-input></p></div>'+
@@ -990,18 +991,24 @@ VZ.openScoreInk=(songId,scoreId)=>{
    '<fieldset class="ink-marker-set"><legend>색</legend><div class="ink-marker-colors">'+Settings.MARK_COLORS.map(c=>'<label style="--sample-color:'+c[0]+'"><input type="radio" name="color" value="'+c[0]+'" aria-label="'+esc(c[1])+'"'+(c[0]===from.color?' checked':'')+'><span></span></label>').join('')+
    '<label class="ink-marker-custom"><input type="radio" name="color" value="custom" tabindex="-1" aria-hidden="true"'+(known?'':' checked')+'><input type="color" name="custom" aria-label="다른 색 고르기" value="'+esc(from.color)+'"></label></div></fieldset>'+
    '<label class="score-ink-slider ink-marker-width">굵기 <output data-marker-width-label></output><input type="range" name="width" aria-label="표기 굵기" min="1" max="60" step="1" value="'+Math.round(from.width*1000)+'"></label>'+
+   // 기능: what the marks do once the score is matched with an MR. Chosen for a user preset, fixed for a built-in one.
+   (old?.builtin?'<div class="ink-marker-role-fixed" data-marker-role-fixed><span>기능</span><strong>'+esc(roleName(Settings.markerRole(old)))+'</strong><small>기본 표기의 기능은 바꿀 수 없어요.</small></div>'
+    :'<fieldset class="ink-marker-set" data-marker-role><legend>기능 <small>선택</small></legend><div class="ink-marker-choices ink-marker-roles">'+Settings.MARK_ROLES.map(r=>'<label><input type="radio" name="role" value="'+r[0]+'"'+(r[0]===(from.role||'')?' checked':'')+'><span>'+esc(r[1])+(r[0]?'':'<small>기본</small>')+'</span></label>').join('')+'</div>'+
+     '<p class="ink-marker-role-note" data-marker-role-note></p></fieldset>')+
    '<p class="ink-marker-note">저장한 뒤에 찍는 표기부터 바뀌어요. 악보에 이미 찍은 표기는 그대로예요.</p>'+
    (old?.builtin?'<button type="button" class="btn ghost block" data-marker-reset'+(old.changed?'':' disabled')+'>기본값으로 되돌리기</button>':old?'<button type="button" class="btn danger block" data-marker-delete>이 표기 삭제</button>':'')+
    '<p class="ink-marker-error" role="alert" data-marker-error></p></form>';
   VZ.sheet({title:old?'표기 편집':'표기 추가',label:'악보 표기 편집',body,foot:'<button type="submit" form="ink-marker-form" class="btn block">저장</button>',onMount:(node,close)=>{
    node.classList.add('ink-marker-sheet');
    const form=node.querySelector('form'),error=node.querySelector('[data-marker-error]');
-   const read=()=>{const f=form.elements,shape=f.shape.value;return {name:f.name.value,color:f.color.value==='custom'?f.custom.value:f.color.value,width:Number(f.width.value)/1000,type:f.type.value,form:f.form.value,...(f.form.value==='symbol'?{shape,...(shape==='text'?{text:f.text.value.trim()}:{})}:{})};};
+   const read=()=>{const f=form.elements,shape=f.shape.value;return {name:f.name.value,color:f.color.value==='custom'?f.custom.value:f.color.value,width:Number(f.width.value)/1000,type:f.type.value,form:f.form.value,...(f.form.value==='symbol'?{shape,...(shape==='text'?{text:f.text.value.trim()}:{})}:{}),...(f.role?{role:f.role.value}:{})};};
    const draw=()=>{
     const look=read(),input=Settings.markInput(look.form),at=(x,y)=>[x/1000,y/1000,.5],preview=node.querySelector('[data-marker-preview]');
     node.querySelector('[data-marker-shapes]').hidden=look.form!=='symbol';node.querySelector('[data-marker-text]').hidden=look.shape!=='text';
     node.querySelector('[data-marker-width-label]').textContent=String(Math.round(look.width*1000));
     node.querySelector('[data-marker-input]').textContent='찍는 방식 · '+Settings.MARK_INPUTS[input];
+    const roleNote=node.querySelector('[data-marker-role-note]');
+    if(roleNote)roleNote.textContent=Settings.MARK_ROLES.find(r=>r[0]===(look.role||''))[2]+(look.role?' 마디와 MR을 맞춘 악보에서 써요.':'');
     preview.replaceChildren(...[35,45,55,65,75].map(y=>svgNode('line',{x1:16,x2:284,y1:y,y2:y,stroke:'#d0d5dd','stroke-width':1})));
     const shown={...look,text:look.text||'가'};
     preview.append(strokeNode(input==='tap'?Ink.markStroke(shown,at(150,55),null,1):look.form==='box'?Ink.markStroke(shown,at(70,24),at(230,86),1):look.form==='bracket'?Ink.markStroke(shown,at(70,55),at(230,55),1):Ink.markStroke(shown,at(60,look.form==='cover'?55:88),at(240,look.form==='cover'?55:88),1),1));
@@ -1027,7 +1034,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    form.onsubmit=event=>{
     event.preventDefault();
     let look;try{look=Settings.marker(read());}catch(e){error.textContent=e.message;return;}
-    try{current();const next=old?.id||'m-'+VZ.uid();profiles=prefs.write('marker',{id:next,...look});close();markerEditing=false;if(old)syncMarkers();else pickMarker(next);VZ.toast(old?'표기를 저장했어요.':'표기를 추가했어요.');}
+    try{current();const next=old?.id||'m-'+VZ.uid();profiles=prefs.write('marker',{id:next,...look,...(form.elements.role?{role:look.role||''}:{})});close();markerEditing=false;if(old)syncMarkers();else pickMarker(next);VZ.toast(old?'표기를 저장했어요.':'표기를 추가했어요.');}
     catch(e){error.textContent='표기를 저장하지 못했어요: '+e.message;}
    };
    node.querySelector('[data-marker-reset]')?.addEventListener('click',async()=>{

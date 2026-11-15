@@ -2,7 +2,9 @@
  * Kept on this device (localStorage, one entry per account); nothing here is synced.
  * 악보 표기 presets (markers): the four built-in ones (숨표·반복·컷·시작점) keep their id and can be changed and put
  * back, never removed; the user's own are added, changed and removed. A preset only decides what the next mark looks
- * like: a mark already on a score carries its own look. Stored as {builtin:{id:changed fields}, user:[…]}. */
+ * like: a mark already on a score carries its own look. Stored as {builtin:{id:changed fields}, user:[…]}.
+ * 기능 (role, optional, user presets only): what the marks placed with it do once the score is matched with an MR —
+ * 시작점 · 반복 구간 · 건너뛰기 (app/score-mark-model.js). The built-in 시작점 · 반복 · 컷 have theirs fixed. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipScoreInkSettings=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const HEX=/^#[0-9a-f]{6}$/i,PREFIX='vzip_score_ink_settings_v1:';
@@ -14,6 +16,9 @@ const PALETTES={
 const MARK_FORMS=[['symbol','기호','tap'],['line','밑줄','drag'],['wave','물결선','drag'],['box','테두리 상자','drag'],['cover','구간 덮기','drag'],['bracket','구간 괄호','two']];
 const MARK_SHAPES=[['v','브이'],['comma','쉼표'],['check','체크'],['circle','동그라미'],['dot','점'],['triangle','세모'],['star','별'],['diamond','마름모'],['text','글자']];
 const MARK_INPUTS={tap:'한 번 누르기',drag:'따라 긋기',two:'시작과 끝을 차례로 누르기'};
+/* 기능: [role stored on the preset and on its marks ('' = none), name, what it does]. */
+const MARK_ROLES=[['','없음','표시만 남겨요.'],['start','시작점','이 표기가 있는 마디부터 재생할 수 있어요.'],['repeat','반복 구간','표기가 걸친 마디를 반복해서 들을 수 있어요.'],['cut','건너뛰기','재생할 때 표기가 걸친 마디를 건너뛰어요.']];
+const MARK_BUILTIN_ROLES={breath:'',repeat:'repeat',cut:'cut',start:'start'};
 const MARK_COLOR='#7a32f5',MARK_COLORS=[[MARK_COLOR,'보라'],...PALETTES.pen],MARK_USER_MAX=20,MARK_NAME_MAX=12,MARK_TEXT_MAX=4;
 const MARKERS=[
  {id:'breath',name:'숨표',color:MARK_COLOR,width:0.006,type:'pen',form:'symbol',shape:'v'},
@@ -40,13 +45,18 @@ function marker(raw){
    out.text=text;
   }
  }
+ // A role this version does not know is left out (the preset then only draws).
+ if(typeof raw.role==='string'&&raw.role&&MARK_ROLES.some(r=>r[0]===raw.role))out.role=raw.role;
  return out;
 }
+/** What marks placed with this preset do: the built-in ones by what they are, a user preset by its `role`. */
+const markerRole=m=>!m?'':m.builtin||Object.prototype.hasOwnProperty.call(MARK_BUILTIN_ROLES,m.id)?MARK_BUILTIN_ROLES[m.id]||'':m.role||'';
 const sameMarker=(a,b)=>['name','color','width','type','form','shape','text'].every(k=>a[k]===b[k]);
+const lookOnly=({role,...look})=>look;
 function markers(stored){
  const list=MARKERS.map(m=>{
   let now=m;
-  try{const patch=stored?.builtin?.[m.id];if(patch&&typeof patch==='object')now=marker({...m,...patch});}catch{}
+  try{const patch=stored?.builtin?.[m.id];if(patch&&typeof patch==='object')now=lookOnly(marker({...m,...patch}));}catch{}
   return {...now,id:m.id,builtin:true,changed:!sameMarker(now,m)};
  });
  const ids=new Set(list.map(m=>m.id));
@@ -108,7 +118,7 @@ function create({storage,identity,defaultPenOnly=false}){
     if(old.builtin)throw Error('기본 표기는 지울 수 없어요. 모양은 바꿀 수 있어요.');
     data.markers.splice(at,1);
    }else if(old){
-    const next=marker({...old,...patch});
+    const made=marker({...old,...patch}),next=old.builtin?lookOnly(made):made;
     data.markers[at]={...next,id:old.id,builtin:old.builtin,...(old.builtin?{changed:!sameMarker(next,MARKERS.find(m=>m.id===old.id))}:{})};
    }else{
     if(typeof patch.id!=='string'||!/^[\w:-]{1,64}$/.test(patch.id))throw Error('표기를 확인해 주세요.');
@@ -134,5 +144,5 @@ function create({storage,identity,defaultPenOnly=false}){
  }
  return {read,write,key};
 }
-return {create,PALETTES,defaults,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,markInput,marker};
+return {create,PALETTES,defaults,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,markInput,marker,markerRole};
 });

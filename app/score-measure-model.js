@@ -353,9 +353,11 @@ const POINT_MARK = .05, NEAR = .012, PREVIEW = 40;
  * - 스티커 메모: the measure under its centre, with the start of its text. Writing on a memo belongs to the memo.
  * - 형광펜 / 펜 필기: strokes that touch or lie close together are one piece of writing, listed once over the
  *   measures it overlaps.
- * Returns {items:[{page, kind, label, where, detail, count, from, to, measures:[index…]}], measures: distinct
+ * A 표기 with a function (roleOf(record) → 'start' | 'repeat' | 'cut', app/score-mark-model.js) is listed over the
+ * measures that function uses (spanOf(page, record, role)) and its row says which (`role`).
+ * Returns {items:[{page, kind, label, where, detail, count, from, to, measures:[index…], role?}], measures: distinct
  * measures that carry something}. */
-function summary(pageOf, rows, {markName = () => ''} = {}) {
+function summary(pageOf, rows, {markName = () => '', roleOf = null, spanOf = null} = {}) {
   const byPage = new Map();
   for (const s of rows || []) if (s && Number.isInteger(s.page)) (byPage.get(s.page) || byPage.set(s.page, []).get(s.page)).push(s);
   const items = [], marked = new Set();
@@ -363,12 +365,12 @@ function summary(pageOf, rows, {markName = () => ''} = {}) {
     const pg = pageOf(n); if (!pg?.systems?.length) continue;
     const list = byPage.get(n), memos = list.filter(s => s.tool === 'note' && Array.isArray(s.rect)), memoKeys = new Set(memos.map(s => s.note || s.id));
     const found = [];
-    const add = (kind, label, hits, detail = '') => {
+    const add = (kind, label, hits, detail = '', role = '') => {
       if (!hits.length) return;
-      const same = found.find(f => f.kind === kind && f.label === label && !detail && !f.detail && f.measures.join() === hits.map(h => h.index).join());
+      const same = found.find(f => f.kind === kind && f.label === label && (f.role || '') === role && !detail && !f.detail && f.measures.join() === hits.map(h => h.index).join());
       if (same) { same.count++; return; }
       const a = hits[0], z = hits.at(-1);
-      found.push({page:n, kind, label, detail, count:1, from:a.number, to:z.last || z.number, where:numberText(a.number, hits.length > 1 || z.last ? z.last || z.number : a.number), measures:hits.map(h => h.index), order:a.index});
+      found.push({page:n, kind, label, detail, count:1, from:a.number, to:z.last || z.number, where:numberText(a.number, hits.length > 1 || z.last ? z.last || z.number : a.number), measures:hits.map(h => h.index), order:a.index, ...(role ? {role} : {})});
     };
     for (const s of memos) {
       const at = measureAt(pg, s.rect[0] + s.rect[2] / 2, s.rect[1] + s.rect[3] / 2), line = String(s.text || '').trim().split('\n').find(t => t.trim())?.trim() || '';
@@ -379,8 +381,10 @@ function summary(pageOf, rows, {markName = () => ''} = {}) {
       if (s.tool === 'note' || s.note && memoKeys.has(s.note)) continue;
       const box = strokeBox(s); if (!box) continue;
       if (s.mark !== undefined || s.glyph !== undefined) {
+        const role = roleOf && spanOf ? roleOf(s) || '' : '', name = (s.mark !== undefined && markName(s.mark, s)) || '표기';
+        if (role) { add('mark', name, spanOf(pg, s, role), '', role); continue; }
         const small = box.w <= POINT_MARK && box.h <= POINT_MARK, at = small ? measureAt(pg, box.x + box.w / 2, box.y + box.h / 2) : null;
-        add('mark', (s.mark !== undefined && markName(s.mark)) || '표기', small ? (at ? [at] : []) : measuresIn(pg, box));
+        add('mark', name, small ? (at ? [at] : []) : measuresIn(pg, box));
       } else if (loose[s.tool]) loose[s.tool].push(box);
     }
     for (const [tool, boxes] of Object.entries(loose)) {

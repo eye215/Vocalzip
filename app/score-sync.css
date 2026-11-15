@@ -31,6 +31,24 @@
 .score-measure-line>.score-measure-row{flex:1;min-width:0;border-top:0}
 .score-measure-play{flex:none;display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:50%;background:#f3ecff;color:#7a32f5;font-size:16px;cursor:pointer}
 .score-measure-play:disabled{background:#f2eff7;color:#98a2b3;cursor:default}
+/* 표기의 기능 (시작점 · 반복 · 컷): 재생 옵션 in the play bar's one row, the list actions and the cut line.
+ * With the options button the three buttons take the room their words need instead of equal thirds. */
+.score-audio-row.has-opts>.score-audio-btn{flex:1 1 auto}
+.score-audio-row>.score-audio-btn.score-audio-opts{flex:0 0 auto;min-width:44px;background-color:#fff;color:#475467}
+.score-audio-opts[data-lit=true]{background-color:#ede1ff;color:#7a32f5}
+.score-audio-opts span{font-variant-numeric:tabular-nums}
+@media(max-width:420px){.score-audio-opts span{display:none}}
+.score-measure-act{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px;border:0;border-radius:99px;background:#f3ecff;color:#7a32f5;font-family:inherit;font-size:13px;line-height:18px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;cursor:pointer}
+.score-measure-act i{font-size:14px}
+.score-measure-act:disabled{background:#f2eff7;color:#98a2b3;cursor:default}
+.score-measure-skip{flex:none;padding:4px 10px;border-radius:99px;background:#f2eff7;color:#667085;font-size:12px;line-height:18px;font-weight:700;white-space:nowrap}
+.score-measure-skip[data-on=true]{background:#ede1ff;color:#6528ca}
+.score-mark-cuts strong{color:#344054;font-weight:700}
+.score-mark-cuts button[aria-pressed=true]{background:#7a32f5;color:#fff}
+.score-sync-need+.score-sync-need{margin-top:-8px}
+.score-sync-menu .vz-choice>span{display:flex;flex-direction:column;min-width:0}
+.score-sync-menu .vz-choice small{color:#e0d9e7;font-size:12px;line-height:16px;font-weight:500}
+@media(max-width:350px){.score-measure-act{padding:0 10px}}
 /* Press-and-hold menu of a measure box (dark action popover). */
 .score-sync-menu .score-sync-menu-title{margin:6px 14px 2px;color:#e0d9e7;font-size:13px;line-height:18px;font-weight:700;font-variant-numeric:tabular-nums}
 .score-sync-menu .score-sync-menu-text{margin:0 14px 6px;font-size:13px;line-height:18px}

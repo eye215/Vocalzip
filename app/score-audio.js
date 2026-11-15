@@ -6,7 +6,14 @@
  * them, so 재생+녹음 uses uploaded MR files). A take is saved like any recording of the song (M.saveBlob → library +
  * backup) only when 저장 is pressed; a take left unsaved when the viewer closes is kept instead of being thrown away.
  * 마디 반복 (app/score-sync.js): a file MR can also loop over a range of seconds (playback only, never while a take
- * runs). The loop bar floats like the chip: "12–14마디 반복 중 · 멈춤", 속도 1×/0.75×, 앞 마디 포함, 다음 등장. */
+ * runs). The loop bar floats like the chip: "12–14마디 반복 중 · 멈춤", 속도 1×/0.75×, 앞 마디 포함, 다음 등장.
+ * 표기의 기능 (app/score-sync.js → setPlan, rules in app/score-mark-model.js): when the score has 시작점 or 컷 marks
+ * and a file MR, one more button in the row (재생 옵션) opens a menu with where 재생 and 재생+녹음 start (처음부터 /
+ * 시작점 N마디에서) and 컷 건너뛰기 — the bar stays one row. While the MR runs, a cut stretch is jumped over (looked
+ * at every 40 ms).
+ * 재생+녹음 with cuts: the take is the microphone in real time, so it holds exactly what was played and sung — the
+ * jump is in the MR, not in the take. Where the MR started and what it jumped over is noted on the saved take
+ * (withMr.from, withMr.skipped: MR seconds), so the take can still be laid against the MR later. */
 (() => {
 'use strict';
 const VZ = window.VZ;
@@ -36,7 +43,10 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
   const engine = document.createElement('div');
   engine.hidden = true;
   const s = {mode:'idle', was:'', trackId:'', mr:null, mrFor:'', take:null, preview:null, capture:null, withMr:null, timer:0, closed:false, busy:false,
-    loop:null, slow:false, lead:true, watch:0};
+    loop:null, slow:false, lead:true, watch:0,
+    // 표기의 기능: what the sync offers (plan), the second this playback was started at on purpose (from), the cut
+    // stretches in force (run), and for a take with the MR where the MR began and what it jumped over.
+    plan:null, planKey:'', from:null, run:[], began:0, skipped:[]};
   const ticks = new Set(), changes = new Set();
   const tracks = () => tracksOf(songId);
   const track = () => tracks().find(t => t.id === s.trackId) || null;
@@ -49,6 +59,16 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     return s.mr;
   }
   const seconds = () => s.capture ? s.capture.seconds?.() || 0 : s.mr?.el?.currentTime || 0;
+  /** The sync's plan, when it is for the MR file the bar plays. */
+  const planNow = () => { const t = track(); return s.plan && t && t.kind !== 'youtube' && s.plan.trackId === t.id ? s.plan : null; };
+  /** Where the bar's own 재생 / 재생+녹음 starts: the 시작점 chosen, the beginning when 처음부터 is, or null (as before). */
+  const startNow = () => { const p = planNow(); return p && !p.need && p.start ? {time:p.start.time ?? 0, marked:p.start.time != null} : null; };
+  /** Sets the cut stretches in force for what runs now (app/score-mark-model.js: what was started on purpose is played). */
+  function arm() {
+    const p = planNow(), K = window.VzipScoreMarks;
+    s.run = K && p && !p.need && p.cuts?.on && RUNS.includes(s.mode) ? K.skipsFor(p.cuts.skips, {from:s.from, loop:s.mode === 'loop' && s.loop ? {start:s.loop.start, end:s.loop.end} : null}) : [];
+  }
+  const cutNote = list => list.length ? '컷 ' + (window.VzipScoreMarks?.text(list.map(k => k.label)) || '') + ' 건너뜀' : '';
   function tick() { const el = bar.querySelector('[data-score-audio-time]'); if (el) el.textContent = VZ.clock(seconds()); }
 
   function paint() {
@@ -56,14 +76,16 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     const list = tracks();
     if (!list.some(t => t.id === s.trackId)) { s.trackId = (list.find(t => t.kind !== 'youtube') || list[0])?.id || ''; }
     const t = track(), file = t && t.kind !== 'youtube', canRecord = !!M?.canRecord?.(), live = LIVE.includes(s.mode) || s.mode === 'loop';
+    if (!RUNS.includes(s.mode) && s.mode !== 'paused') { s.run = []; s.from = null; }
     bar.dataset.mode = s.mode;
     bar.classList.toggle('is-live', live);
     clearInterval(s.timer);
     if (live) place(); else { bar.style.removeProperty('bottom'); }
-    let html;
+    let html, opts = '';
     if (s.mode === 'loop') {
       const L = s.loop;
-      html = '<div class="score-audio-loop" role="group" aria-label="마디 반복 재생"><div class="score-audio-loop-head"><span class="score-audio-dot is-play" aria-hidden="true"></span>' +
+      // Cut stretches a round of this loop meets are jumped over (a loop inside a cut plays it): named for the sync, which says so.
+      html = '<div class="score-audio-loop" role="group" aria-label="마디 반복 재생" data-score-audio-loop-cuts="' + esc(inLoop().map(k => k.label).join(', ')) + '"><div class="score-audio-loop-head"><span class="score-audio-dot is-play" aria-hidden="true"></span>' +
         '<strong class="score-audio-loop-label" data-score-audio-loop-label>' + esc(L.label) + ' 반복 중</strong><span class="score-audio-time" role="timer" data-score-audio-time>' + VZ.clock(seconds()) + '</span>' +
         '<button type="button" class="score-audio-loop-stop" data-score-audio-stop aria-label="반복 멈춤"><i class="ph-fill ph-stop" aria-hidden="true"></i><span>멈춤</span></button></div>' +
         '<div class="score-audio-loop-tools"><button type="button" data-score-audio-loop-rate aria-pressed="' + s.slow + '" aria-label="느리게 듣기 0.75배">속도 ' + (s.slow ? SLOW + '×' : '1×') + '</button>' +
@@ -81,10 +103,16 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       html = '<div class="score-audio-row"><div class="score-audio-player" data-score-audio-preview></div>' + pill('save', 'check', '저장') + pill('discard', 'trash', '버리기') + '</div>';
     } else {
       const select = list.length > 1 ? '<select class="score-audio-select" data-score-audio-track aria-label="MR 선택">' + list.map(x => '<option value="' + esc(x.id) + '"' + (x.id === s.trackId ? ' selected' : '') + '>' + esc(x.title || 'MR') + (x.kind === 'youtube' ? ' (유튜브)' : '') + '</option>').join('') + '</select>' : '';
-      html = select + '<div class="score-audio-row">' +
+      // 표기의 기능: one button that opens 재생 옵션 (where playback starts, 컷 건너뛰기) — only for a score with such
+      // marks and a file MR. It shows the 시작점 chosen and is lit while a 시작점 or 컷 건너뛰기 is in force.
+      const p = planNow(), lit = !!p && !p.need && (p.start?.time != null || !!p.cuts?.on && p.cuts.skips?.length > 0);
+      const says = p ? [p.need ? '' : p.start?.label, p.cuts && !p.need ? '컷 건너뛰기 ' + (p.cuts.on ? '켜짐' : '꺼짐') : ''].filter(Boolean).join(', ') : '';
+      opts = p && (p.start || p.cuts) ? '<button type="button" class="score-audio-btn score-audio-opts" data-score-audio-opts aria-haspopup="dialog" aria-label="재생 옵션' + (says ? ': ' + esc(says) : '') + '" title="재생 옵션"' + (p.need ? ' data-need' : '') + ' data-lit="' + lit + '">' +
+        '<i class="ph ph-sliders-horizontal" aria-hidden="true"></i>' + (!p.need && p.start?.short ? '<span>' + esc(p.start.short) + '</span>' : '') + '</button>' : '';
+      html = select + '<div class="score-audio-row' + (opts ? ' has-opts' : '') + '">' +
         pill('play', t?.kind === 'youtube' ? 'youtube-logo' : 'play', '재생', t && !s.busy ? '' : ' disabled') +
         pill('rec', 'microphone', '녹음', canRecord && !s.busy ? '' : ' disabled') +
-        pill('mrrec', 'microphone-stage', '재생+녹음', canRecord && file && !s.busy ? '' : ' disabled') + '</div>';
+        pill('mrrec', 'microphone-stage', '재생+녹음', canRecord && file && !s.busy ? '' : ' disabled') + opts + '</div>';
     }
     const frame = s.mode === 'idle' ? bar.querySelector('[data-score-audio-frame]') : null;
     bar.innerHTML = html + '<p class="score-audio-hint" data-score-audio-hint role="status"></p>';
@@ -116,10 +144,17 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     on('loop-rate', () => { s.slow = !s.slow; if (s.mr?.el) s.mr.el.playbackRate = s.slow ? SLOW : 1; paint(); });
     on('loop-lead', () => { s.lead = !s.lead; paint(); });
     on('loop-next', () => s.loop?.next?.());
-    if (s.mode === 'mrrec') hint('이어폰을 끼면 MR이 녹음에 섞이지 않아요.');
+    // Before a sync exists the button only says what matching gives.
+    on('opts', () => { const p = planNow(), b = bar.querySelector('[data-score-audio-opts]'); if (p?.need) p.explain?.(b); else p?.open?.(b); });
+    if (s.mode === 'mrrec' || s.mode === 'mr') liveHint();
     else if (s.mode === 'idle' && t?.kind === 'youtube') hint('유튜브 MR은 재생만 돼요. 재생+녹음은 업로드한 MR 파일로 할 수 있어요.');
     else if (s.mode === 'idle' && !t) hint('MR은 곡의 레퍼런스 탭에서 추가할 수 있어요.');
     else if (s.mode === 'idle' && !M?.canRecord?.()) hint('이 브라우저는 녹음을 지원하지 않아요.');
+  }
+  /** While the MR runs: what a take needs to know, and which cut stretches are being jumped over. */
+  function liveHint() {
+    if (s.mode === 'mrrec') hint('이어폰을 끼면 MR이 녹음에 섞이지 않아요.' + (s.run.length ? ' ' + cutNote(s.run) + '.' : ''));
+    else if (s.mode === 'mr') hint(cutNote(s.run));
   }
   function hint(text, error = false) { const h = bar.querySelector('[data-score-audio-hint]'); if (h) { h.textContent = text; h.dataset.error = String(error); } }
   function fail(e) {
@@ -139,12 +174,15 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     box.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + esc(id) + '?autoplay=1&playsinline=1" title="' + esc(t.title || 'MR') + '" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>';
     bar.append(box);
   }
-  async function playMr(t) {
+  /** from: the second it was sent to on purpose (여기서 재생); left out for the bar's own 재생, which starts at the
+   * 시작점 chosen (or at the beginning when the score has 시작점 marks and 처음부터 is chosen). */
+  async function playMr(t, from) {
     if (!t || s.mode !== 'idle') return;
     audioSession('playback');
-    const mr = mrPlayer(t);
+    const mr = mrPlayer(t), start = from === undefined ? startNow() : null;
+    if (start) seekTo(mr, start.time);
     mr.el.addEventListener('ended', () => { if (s.mode === 'mr' || s.mode === 'paused' && s.was === 'mr') { s.mode = 'idle'; paint(); } }, {once:true});
-    s.mode = 'mr'; paint();
+    s.mode = 'mr'; s.from = from !== undefined ? from : start?.marked ? start.time : null; arm(); paint();
     await mr.play();
   }
 
@@ -159,13 +197,15 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     if (mr) await mr.load();
     const capture = await M.capture({onTick:() => tick()});
     if (s.closed) { capture.cancel(); return; }
+    const start = mr ? startNow() : null;
     s.capture = capture; s.withMr = t ? {id:t.id, title:t.title || 'MR'} : null; s.busy = false;
-    s.mode = withMr ? 'mrrec' : 'rec'; paint();
+    s.began = start?.time || 0; s.skipped = [];
+    s.mode = withMr ? 'mrrec' : 'rec'; s.from = start?.marked ? start.time : null; arm(); paint();
     capture.start();
     if (mr) {
       // The take ends with the MR, so a full run needs no second tap.
       mr.el.addEventListener('ended', () => { if (s.capture === capture) stop().catch(fail); }, {once:true});
-      mr.seek(0);
+      if (s.began > 0) seekTo(mr, s.began); else mr.seek(0);
       await mr.play();
     }
   }
@@ -177,20 +217,23 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
   }
   async function resume() {
     if (s.mode !== 'paused') return;
-    s.mode = s.was; paint();
+    s.mode = s.was; arm(); paint();
     s.capture?.resume?.();
     if (s.was !== 'rec' && s.mr) await s.mr.play();
   }
+  /** What is kept about the MR of a take: which one, and — only when it did not simply run from its beginning — the
+   * MR second it began at and the stretches it jumped over ([from, to] in MR seconds). */
+  const takeMr = () => s.withMr ? {...s.withMr, ...(s.began > 0 ? {from:Math.round(s.began * 100) / 100} : {}), ...(s.skipped.length ? {skipped:s.skipped.slice()} : {})} : null;
   /** ■ stops everything together: an MR alone returns to the bar, a take goes to 저장 / 버리기. */
   async function stop() {
     const capture = s.capture;
     s.mr?.pause?.(); endLoop();
     if (!capture) { s.mode = 'idle'; paint(); return; }
     s.capture = null; s.busy = true; s.mode = 'idle'; paint();
-    const res = await capture.stop();
+    const withMr = takeMr(), res = await capture.stop();
     audioSession('auto');
     s.busy = false;
-    const take = {res, withMr:s.withMr, id:VZ.uid()};
+    const take = {res, withMr, id:VZ.uid()};
     if (s.closed) { await keep(take); return; }
     s.take = take; s.mode = 'review'; paint();
   }
@@ -200,15 +243,25 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
   const taking = () => !!(s.capture || s.busy || s.take) || ['rec', 'mrrec', 'review'].includes(s.mode) || s.mode === 'paused' && s.was !== 'mr';
   function endLoop() { if (!s.loop) return; s.loop = null; try { if (s.mr?.el) s.mr.el.playbackRate = 1; } catch {} }
   const loopFrom = () => s.lead ? Math.max(0, s.loop.start - (s.loop.lead > 0 ? s.loop.lead : LEAD)) : s.loop.start;
-  /** Runs while the MR does: wraps a loop at its end and tells the listeners the time (40 ms: a measure is far longer). */
+  /** The cut stretches in force that a round of the loop meets. */
+  const inLoop = () => s.mode === 'loop' && s.loop ? s.run.filter(k => k.end > loopFrom() + .01 && k.start < s.loop.end - .01) : [];
+  /** Runs while the MR does: wraps a loop at its end, jumps over a cut stretch and tells the listeners the time
+   * (40 ms: a measure is far longer). */
   function step() {
     const el = s.mr?.el;
     if (!el || s.closed) return;
     if (s.mode === 'loop' && s.loop && (el.ended || el.currentTime >= s.loop.end - .01)) { try { el.currentTime = loopFrom(); } catch {} if (el.paused) el.play().catch(() => {}); }
+    if (s.run.length && RUNS.includes(s.mode) && !el.ended) {
+      const at = el.currentTime, to = window.VzipScoreMarks?.jump(s.run, at, s.mode === 'loop' && s.loop ? {from:loopFrom(), end:s.loop.end} : null);
+      if (to != null) {
+        try { el.currentTime = to; } catch {}
+        if (s.capture && s.mode === 'mrrec') s.skipped.push([Math.round(at * 100) / 100, Math.round(to * 100) / 100]);
+      }
+    }
     if (RUNS.includes(s.mode)) for (const fn of ticks) try { fn(el.currentTime, s.mode); } catch {}
   }
   function watch() {
-    const on = !s.closed && (s.mode === 'loop' || RUNS.includes(s.mode) && ticks.size > 0);
+    const on = !s.closed && (s.mode === 'loop' || RUNS.includes(s.mode) && (ticks.size > 0 || s.run.length > 0));
     if (!on) { clearInterval(s.watch); s.watch = 0; } else s.watch ||= setInterval(step, 40);
   }
   /** The file MR to play: `id` when given (it becomes the bar's choice), else the bar's choice. */
@@ -230,7 +283,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     const t = fileFor(id);
     if (s.mode !== 'idle') { s.mr?.pause?.(); endLoop(); s.mode = 'idle'; }
     seekTo(mrPlayer(t), time);
-    await playMr(t);
+    await playMr(t, time);
   }
   /** 이 마디 반복: plays start → end again and again until 멈춤. spec: {label, start, end, lead (seconds of the measure
    * before, or null), occurrence, occurrences, next (starts the next occurrence, or null)}. */
@@ -240,7 +293,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     if (s.mode !== 'idle') { s.mr?.pause?.(); endLoop(); }
     audioSession('playback');
     const mr = mrPlayer(t);
-    s.loop = {...spec}; s.mode = 'loop'; paint();
+    s.loop = {...spec}; s.mode = 'loop'; s.from = null; arm(); paint();
     mr.el.playbackRate = s.slow ? SLOW : 1;
     seekTo(mr, loopFrom());
     await mr.play();
@@ -282,6 +335,20 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     el:bar,
     // For app/score-sync.js. onTick(fn(time, mode)) runs while the MR plays; onChange(fn(mode)) after every repaint.
     track, mode:() => s.mode, quiet, playFrom, loop,
+    /** The cut stretches the loop now running jumps over on every round (their names), for the sync to say. */
+    loopCuts:() => inLoop().map(k => k.label),
+    /** 표기의 기능: what the bar offers for this score's 시작점 and 컷 marks, or null for nothing. plan: {trackId (the
+     * file MR it is for), need (not matched yet: the button only explains → explain(anchor)), start: {label, short,
+     * time (MR second, null = 처음부터)} | null, cuts: {on, note, skips:[{start, end, label}]} | null, open(anchor)
+     * (the 재생 옵션 menu)}. */
+    setPlan(plan) {
+      if (s.closed) return;
+      const key = plan ? JSON.stringify([plan.trackId, !!plan.need, plan.start, plan.cuts]) : '';
+      s.plan = plan || null;
+      if (key === s.planKey) return;
+      s.planKey = key; arm();
+      if (s.mode === 'idle' && !s.busy && !bar.querySelector('iframe')) paint(); else if (s.mode === 'loop') paint(); else { watch(); liveHint(); }
+    },
     duration:() => { const d = s.mr?.el?.duration; return Number.isFinite(d) && d > 0 ? d : null; },
     /** Gets the file MR ready, so a later tap can start it at once (iPhone Safari plays only inside the tap). */
     prepare(id) { try { if (id && id !== s.trackId || s.mode !== 'idle') return; mrPlayer(fileFor()).load?.()?.catch?.(() => {}); } catch {} },
@@ -295,7 +362,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       const capture = s.capture, take = s.take;
       s.capture = null; s.take = null; s.mr?.destroy?.(); s.mr = null; s.preview?.destroy?.();
       try {
-        if (capture) await keep({res:await capture.stop(), withMr:s.withMr, id:VZ.uid()});
+        if (capture) { const withMr = takeMr(); await keep({res:await capture.stop(), withMr, id:VZ.uid()}); }
         else if (take) await keep(take);
       } finally { audioSession('auto'); bar.remove(); }
     }

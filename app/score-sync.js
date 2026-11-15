@@ -9,22 +9,28 @@
  * - 표시한 마디 rows get ▶ 이 마디 반복 (the loop bar lives in app/score-audio.js).
  * - With 마디 위치 보기 on, pressing and holding a measure box (where a finger or the 이동 tool cannot draw) offers
  *   여기서 재생 and 이 마디 반복.
+ * - 표기의 기능 (app/score-mark-model.js): 시작점 · 반복 · 컷 marks (and user marks with a 기능) do something. The play
+ *   bar gets one button, 재생 옵션: 처음부터 / 시작점 N마디에서 and 컷 건너뛰기 (both kept per score on this
+ *   device, app/score-audio.js setPlan); 표시한 마디 rows get ▶ 여기서 재생 / ▶ 이 구간 반복 / 건너뜀; tapping such a mark
+ *   where the pointer cannot draw offers the same. Without a usable sync these places say that matching is needed.
  * YouTube MRs cannot be matched: the app never learns where a YouTube player is.
- *   window.VzipScoreSync.attach(context) → {refresh, menu, now, list, destroy} — called by app/score-measures.js */
+ *   window.VzipScoreSync.attach(context) → {refresh, menu, now, list, marked, destroy} — called by app/score-measures.js */
 (() => {
 'use strict';
-const VZ = window.VZ, M = window.VzipScoreMeasures, S = window.VzipScoreSyncModel;
+const VZ = window.VZ, M = window.VzipScoreMeasures, S = window.VzipScoreSyncModel, K = window.VzipScoreMarks || null;
 if (!VZ || !M || !S) return;
 const esc = VZ.esc, NS = 'http://www.w3.org/2000/svg';
 const node = (tag, attrs = {}) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
-const NEED = 'MR과 맞추면 이 마디만 반복해서 들을 수 있어요.', AGAIN = '다시 맞춰야 해요';
+const NEED = 'MR과 맞추면 이 마디만 반복해서 들을 수 있어요.', AGAIN = '다시 맞춰야 해요', MARK_NEED = '시작점·반복·컷 표기는 MR과 맞추면 쓸 수 있어요.';
 const WHY = {measures:'악보를 다시 변환해서 마디 수가 달라졌어요.', length:'MR 파일 길이가 맞출 때와 달라요.', broken:'전에 맞춘 내용을 읽을 수 없어요.', mr:'맞춘 MR이 지워졌어요.'};
-const TAP_GAP = .08, HOLD_MS = 550, HOLD_MOVE = 10, SLOW = .75, BACK = 2;
+const TAP_GAP = .08, HOLD_MS = 550, HOLD_MOVE = 10, SLOW = .75, BACK = 2, MARK_REACH = 14;
 const seconds = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2) + '초';
 
 function attach(c) {
   const {v} = c, {score, songId, owner, storage, stage} = v;
-  const key = 'vzip_score_sync_v1:' + owner;
+  const key = 'vzip_score_sync_v1:' + owner, markKey = 'vzip_score_marks_v1:' + owner;
+  /** The score's marks with a function (K.collect) and the pages they are on. */
+  let fn = {starts:[], repeats:[], cuts:[]}, rolePages = new Set();
   let alive = true, seq = [], seqFor = null, ordOf = new Map(), state = {state:'none'}, model = null, stamp = '', lengthFor = '', now = null, sheet = null;
   let syncButton = null, followButton = null, hold = null, offTick = null;
   let prefs = {follow:true};
@@ -49,6 +55,7 @@ function attach(c) {
       model = state.state === 'ok' ? S.build(seq, state.data.anchors, {offset:state.data.offset}) : null;
       if (state.state === 'ok' && !model) state = {state:'stale', why:'broken'};
       if (!model) now = null;
+      plan();
     }
     // The MR's time is listened to only while there is something to follow.
     const a = audio();
@@ -60,7 +67,7 @@ function attach(c) {
     const t = track(), d = audio()?.duration?.();
     if (!model || !t || !d || lengthFor === t.id) return;
     lengthFor = t.id;
-    if (Math.abs(d - state.data.duration) > S.LENGTH_ROOM) { state = {state:'stale', why:'length'}; model = null; now = null; c.menu(); c.repaint(); }
+    if (Math.abs(d - state.data.duration) > S.LENGTH_ROOM) { state = {state:'stale', why:'length'}; model = null; now = null; plan(); c.menu(); c.repaint(); }
   }
 
   // ---------- ⋯ menu ----------
@@ -117,6 +124,9 @@ function attach(c) {
     try {
       await a.loop({label:S.label(seq, r.from, r.to), start:r.start, end:r.end, lead:r.lead, occurrence:r.occurrence, occurrences:r.occurrences,
         next:r.occurrences > 1 ? () => startLoop(from, to, (occurrence + 1) % r.occurrences) : null}, t.id);
+      // A cut the loop only meets (it does not lie inside it) is jumped over on every round: said once.
+      const cuts = K && !occurrence ? a.loopCuts?.() || [] : [];
+      if (cuts.length) VZ.toast('반복하는 동안 컷 ' + K.text(cuts) + ' 건너뜀');
     } catch (e) { VZ.toast(e?.message || '재생하지 못했어요.', 'error'); }
   }
   async function playHere(ord) {
@@ -125,21 +135,151 @@ function attach(c) {
     if (time == null || !a || !t) { VZ.toast('이 마디는 MR에서 위치를 알 수 없어요.', 'error'); return; }
     try { await a.playFrom(time, t.id); } catch (e) { VZ.toast(e?.message || '재생하지 못했어요.', 'error'); }
   }
-  /** What the 표시한 마디 list adds: ▶ per row with a sync, one line with a way to 맞추기 without. Null: nothing. */
+  /** What the 표시한 마디 list adds: ▶ per row with a sync (a 표기 with a function gets its own action), one line with a
+   * way to 맞추기 without. Null: nothing. */
   function list(items) {
     refresh();
     if (!tracks().some(t => t && !t.deleted)) return null; // a song without any MR
+    const roles = !!K && items.some(it => it.role);
     if (state.state !== 'ok') {
       const stale = state.state === 'stale';
       return {rows:null, head:'<p class="score-sync-need" data-sync-need data-state="' + state.state + '"><i class="ph ph-' + (stale ? 'warning' : 'repeat') + '" aria-hidden="true"></i><span>' +
-        (stale ? '<strong>' + AGAIN + '.</strong> ' + esc(WHY[state.why] || '') + ' ' : '') + NEED + '</span><button type="button" data-sync-open>' + (stale ? '다시 맞추기' : '맞추기') + '</button></p>',
+        (stale ? '<strong>' + AGAIN + '.</strong> ' + esc(WHY[state.why] || '') + ' ' : '') + NEED + (roles ? ' ' + MARK_NEED : '') + '</span><button type="button" data-sync-open>' + (stale ? '다시 맞추기' : '맞추기') + '</button></p>',
         wire:(host, close) => { host.querySelector('[data-sync-open]').onclick = () => { close(); openSheet(); }; }};
     }
     const ranges = items.map(it => { const ords = it.measures.map(i => ordOf.get(i)).filter(Number.isInteger); return ords.length ? {from:Math.min(...ords), to:Math.max(...ords)} : null; });
     audio()?.prepare?.(track()?.id);
-    return {head:'', rows:items.map((it, i) => '<button type="button" class="score-measure-play" data-measure-loop="' + i + '" title="이 마디 반복" aria-label="' + esc(it.where) + ' 반복 재생"' +
+    const act = (name, i, text, label, ok) => '<button type="button" class="score-measure-act" data-mark-' + name + '="' + i + '" aria-label="' + esc(label) + '"' + (ok ? '' : ' disabled') + '><i class="ph-fill ph-play" aria-hidden="true"></i><span>' + text + '</span></button>';
+    const skipped = i => !!ranges[i] && model.occurrences(ranges[i].from) > 0;
+    const badge = i => { const on = K.prefs(stored(), score.id).cut; return !skipped(i) ? '위치 모름' : on ? '건너뜀' : '건너뛰기 꺼짐'; };
+    const cutHint = () => { const cut = cutInfo(), on = K.prefs(stored(), score.id).cut;
+      return (cut.skips.length ? on ? '재생할 때 <strong>' + esc(cut.text) + ' 건너뜀</strong>. 반복해서 듣거나 그 마디에서 재생하면 건너뛰지 않아요.' : '컷 건너뛰기가 꺼져 있어요. ' + esc(cut.text) + '도 그대로 재생해요.' : '컷 표시한 마디는 MR에서 위치를 알 수 없어서 건너뛰지 못해요.'); };
+    return {head:roles && items.some(it => it.role === 'cut') ? '<p class="score-sync-need score-mark-cuts" data-mark-cut-hint><i class="ph ph-scissors" aria-hidden="true"></i><span data-mark-cut-text>' + cutHint() + '</span>' +
+        (cutInfo().skips.length ? '<button type="button" data-mark-cut-toggle aria-pressed="' + K.prefs(stored(), score.id).cut + '">컷 건너뛰기</button>' : '') + '</p>' : '',
+      rows:items.map((it, i) => roles && it.role === 'start' ? act('start', i, '여기서 재생', it.where + ' 여기서 재생', !!ranges[i] && model.timeOf(ranges[i].from) != null)
+        : roles && it.role === 'repeat' ? act('repeat', i, '이 구간 반복', it.where + ' 이 구간 반복', !!ranges[i] && !!model.rangeOf(ranges[i].from, ranges[i].to))
+        : roles && it.role === 'cut' ? '<span class="score-measure-skip" data-mark-cut="' + i + '" data-on="' + (badge(i) === '건너뜀') + '">' + badge(i) + '</span>'
+        : '<button type="button" class="score-measure-play" data-measure-loop="' + i + '" title="이 마디 반복" aria-label="' + esc(it.where) + ' 반복 재생"' +
         (ranges[i] && model.rangeOf(ranges[i].from, ranges[i].to) ? '' : ' disabled') + '><i class="ph-fill ph-play" aria-hidden="true"></i></button>'),
-      wire:(host, close) => host.querySelectorAll('[data-measure-loop]').forEach(b => b.onclick = () => { const i = Number(b.dataset.measureLoop); close(); c.reveal(items[i]); startLoop(ranges[i].from, ranges[i].to); })};
+      wire:(host, close) => {
+        const on = (name, run) => host.querySelectorAll('[data-' + name + ']').forEach(b => b.onclick = () => { const i = Number(b.getAttribute('data-' + name)); close(); c.reveal(items[i]); run(ranges[i]); });
+        on('measure-loop', r => startLoop(r.from, r.to)); on('mark-repeat', r => startLoop(r.from, r.to)); on('mark-start', r => playHere(r.from));
+        const toggle = host.querySelector('[data-mark-cut-toggle]');
+        if (toggle) toggle.onclick = () => {
+          setCuts(!K.prefs(stored(), score.id).cut, false);
+          toggle.setAttribute('aria-pressed', String(K.prefs(stored(), score.id).cut)); host.querySelector('[data-mark-cut-text]').innerHTML = cutHint();
+          host.querySelectorAll('[data-mark-cut]').forEach(b => { const text = badge(Number(b.dataset.markCut)); b.textContent = text; b.dataset.on = String(text === '건너뜀'); });
+        };
+      }};
+  }
+
+  // ---------- 표기의 기능: 시작점 · 반복 · 컷 ----------
+  const stored = () => { try { return storage.getItem(markKey); } catch { return null; } };
+  const keep = patch => { try { storage.setItem(markKey, K.withPrefs(stored(), score.id, patch)); } catch {} };
+  /** The 표시한 마디 rows were read again (the viewer opened, or the handwriting changed). */
+  function marked(items) {
+    if (!K || !alive) return;
+    refresh();
+    fn = K.collect(items, ordOf); rolePages = new Set((items || []).filter(it => it.role).map(it => it.page));
+    plan();
+  }
+  /** The cut stretches the MR in use can skip (each with its name) and one line naming their measures. */
+  function cutInfo() {
+    if (!model) return {skips:[], text:''};
+    const name = k => k.to >= k.from ? S.label(seq, k.from, k.to) : S.label(seq, k.from) + ', ' + S.label(seq, k.to);
+    return {skips:K.skips(model.spans, fn.cuts).map(k => ({start:k.start, end:k.end, label:name(k)})),
+      text:K.text(K.runs(fn.cuts.filter(m => model.occurrences(m) > 0)).map(r => S.label(seq, r.from, r.to)))};
+  }
+  /** The 시작점 remembered for this score, while it is still there and the MR has a time for it. */
+  const chosenStart = () => { const at = K.prefs(stored(), score.id).start; return model && at != null ? fn.starts.find(x => x.ord === at && model.timeOf(x.ord) != null) || null : null; };
+  /** Tells the play bar what it offers besides its buttons: where 재생 starts and which stretches it jumps over. */
+  function plan() {
+    const a = audio();
+    if (!a?.setPlan) return;
+    const t = K && c.layout() && (fn.starts.length || fn.cuts.length) ? track() : null;
+    if (!t) { a.setPlan(null); return; }
+    if (state.state !== 'ok' || !model) {
+      a.setPlan({trackId:t.id, need:true, start:fn.starts.length ? {label:'시작점'} : null, cuts:fn.cuts.length ? {on:false, note:''} : null, explain:anchor => needMenu('재생 옵션', anchor)});
+      return;
+    }
+    const chosen = chosenStart(), cut = cutInfo(), on = K.prefs(stored(), score.id).cut;
+    a.setPlan({trackId:t.id, need:false,
+      start:fn.starts.length ? {label:chosen ? '시작점 ' + S.label(seq, chosen.ord) + '에서' : '처음부터', short:chosen ? S.label(seq, chosen.ord) + '부터' : '', time:chosen ? model.timeOf(chosen.ord) : null} : null,
+      cuts:fn.cuts.length ? {on, note:!cut.skips.length ? '위치 모름' : on ? cut.text + ' 건너뜀' : '꺼짐', skips:cut.skips} : null,
+      open:anchor => optionsMenu(anchor)});
+  }
+  function setCuts(on, say = true) {
+    keep({cut:!!on}); plan();
+    const cut = cutInfo();
+    if (say) VZ.toast(!cut.skips.length ? '컷 표시한 마디는 MR에서 위치를 알 수 없어요.' : on ? '재생할 때 ' + cut.text + ' 건너뜀' : '컷 건너뛰기를 껐어요. ' + cut.text + '도 재생해요.');
+  }
+  /** 재생 옵션 (from the play bar): 처음부터 / 시작점 N마디에서 — the 시작점 of the page in view first, then the others
+   * by page and measure — and 컷 건너뛰기 with the measures it skips. */
+  async function optionsMenu(anchor) {
+    try { await v.outside(); } catch {}
+    if (!alive) return;
+    refresh();
+    if (state.state !== 'ok' || !model) { needMenu('재생 옵션', anchor); return; }
+    const chosen = chosenStart(), cut = cutInfo(), on = K.prefs(stored(), score.id).cut;
+    const row = (attrs, text, note, pressed, ok = true, icon = '') => '<button type="button" class="vz-choice" ' + attrs + ' aria-pressed="' + pressed + '"' + (ok ? '' : ' disabled') + '>' + (icon ? '<i class="ph ph-' + icon + '" aria-hidden="true"></i>' : '') +
+      '<span>' + esc(text) + (note ? '<small>' + esc(note) + '</small>' : '') + '</span>' + (pressed ? '<i class="ph ph-check" aria-hidden="true"></i>' : '') + '</button>';
+    const body = (fn.starts.length ? '<p class="score-sync-menu-title">재생을 시작할 곳</p><div class="vz-choice-list" role="group" aria-label="재생을 시작할 곳">' + row('data-mark-start-pick=""', '처음부터', '', !chosen) +
+        K.orderStarts(fn.starts, v.page()).map(x => { const ok = model.timeOf(x.ord) != null; return row('data-mark-start-pick="' + x.ord + '"', '시작점 ' + S.label(seq, x.ord) + '에서', x.page + '쪽' + (ok ? '' : ' · MR에서 위치를 알 수 없어요'), chosen?.ord === x.ord, ok); }).join('') + '</div>' : '') +
+      (fn.cuts.length ? '<p class="score-sync-menu-title">컷</p><div class="vz-choice-list" role="group" aria-label="컷">' +
+        row('data-mark-cut-pick', '컷 건너뛰기', !cut.skips.length ? 'MR에서 위치를 알 수 없어요' : on ? cut.text + ' 건너뜀' : '꺼짐 · ' + cut.text + '도 재생', on && cut.skips.length > 0, cut.skips.length > 0, 'scissors') + '</div>' : '');
+    VZ.menu({title:'재생 옵션', label:'재생 옵션', anchor, body, onMount:(host, close) => {
+      host.classList.add('score-sync-menu');
+      host.querySelectorAll('[data-mark-start-pick]').forEach(b => b.onclick = () => { close(); keep({start:b.dataset.markStartPick === '' ? null : Number(b.dataset.markStartPick)}); plan(); });
+      const toggle = host.querySelector('[data-mark-cut-pick]'); if (toggle) toggle.onclick = () => { close(); setCuts(!on); };
+    }});
+  }
+  /** Not matched (yet, or any more): what matching gives, with the way to the 맞추기 screen. */
+  function needMenu(title, anchor) {
+    const stale = state.state === 'stale';
+    const body = '<p class="score-sync-menu-title">' + esc(title) + '</p><p class="small muted score-sync-menu-text" data-sync-need>' + (stale ? AGAIN + '. ' + esc(WHY[state.why] || '') + ' ' : '') + MARK_NEED + '</p>' +
+      '<div class="vz-choice-list"><button type="button" class="vz-choice" data-sync-open><i class="ph ph-hand-tap" aria-hidden="true"></i> ' + (stale ? '다시 맞추기' : 'MR과 맞추기') + '</button></div>';
+    VZ.menu({title, label:title + ' 메뉴', anchor, body, onMount:(host, close) => { host.classList.add('score-sync-menu'); host.querySelector('[data-sync-open]').onclick = () => { close(); openSheet(); }; }});
+  }
+  /** The topmost mark with a function under a point of the screen, on the page now shown. */
+  function markAt(x, y) {
+    const n = v.page();
+    if (!K || !c.layout() || !rolePages.has(n)) return null;
+    const r = v.box.getBoundingClientRect(), aspect = v.aspect();
+    if (!(r.width > 0 && r.height > 0 && aspect > 0)) return null;
+    const fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
+    let rows; try { rows = v.rows(); } catch { return null; }
+    for (const row of rows.reverse()) {
+      const b = row.page === n && K.roleOf(row) ? M.strokeBox(row) : null;
+      if (!b) continue;
+      const reach = Math.max(MARK_REACH / r.width, (row.width || 0) / 2);
+      if (fx >= b.x - reach && fx <= b.x + b.w + reach && fy >= b.y - reach / aspect && fy <= b.y + b.h + reach / aspect) return row;
+    }
+    return null;
+  }
+  /** A tap on a 시작점 · 반복 · 컷 mark: 여기서 재생 / 이 구간 반복 / what is skipped. */
+  async function markMenu(row, x, y) {
+    try { await v.outside(); } catch {}
+    if (!alive || sheet) return;
+    refresh();
+    if (!tracks().some(t => t && !t.deleted)) return; // a song without any MR: the mark stays a drawing
+    const role = K.roleOf(row), ords = K.span(c.geometry(row.page), row, role).map(h => ordOf.get(h.index)).filter(Number.isInteger);
+    if (!ords.length) return;
+    const from = Math.min(...ords), to = Math.max(...ords), where = S.label(seq, from, to);
+    const title = ((v.markers() || []).find(m => m.id === row.mark)?.name || K.ROLE_NAMES[role]) + ' · ' + where, anchor = {getBoundingClientRect:() => ({left:x, right:x, top:y, bottom:y, width:0, height:0})};
+    if (state.state !== 'ok' || !model) { needMenu(title, anchor); return; }
+    audio()?.prepare?.(track()?.id);
+    const choice = (name, icon, text, ok = true, pressed = '') => '<button type="button" class="vz-choice" data-mark-' + name + (ok ? '' : ' disabled') + (pressed === '' ? '' : ' aria-pressed="' + pressed + '"') + '><i class="ph ph-' + icon + '" aria-hidden="true"></i> ' + text + '</button>';
+    const lost = '<p class="small muted score-sync-menu-text">이 마디는 MR에서 위치를 알 수 없어요.</p>', cut = cutInfo(), on = K.prefs(stored(), score.id).cut, known = model.timeOf(from) != null;
+    const body = '<p class="score-sync-menu-title">' + esc(title) + '</p>' + (
+      role === 'start' ? (known ? '' : lost) + '<div class="vz-choice-list">' + choice('here', 'play', '여기서 재생', known) + '</div>'
+      : role === 'repeat' ? (model.rangeOf(from, to) ? '' : lost) + '<div class="vz-choice-list">' + choice('loop', 'repeat', '이 구간 반복', !!model.rangeOf(from, to)) + '</div>'
+      : '<p class="small muted score-sync-menu-text" data-mark-cut-text>' + (!model.occurrences(from) ? '이 마디는 MR에서 위치를 알 수 없어서 건너뛰지 못해요.' : on ? '재생할 때 ' + esc(cut.text) + ' 건너뜀' : '컷 건너뛰기가 꺼져 있어요.') + '</p>' +
+        '<div class="vz-choice-list">' + choice('cuts', 'scissors', '컷 건너뛰기 ' + (on ? '끄기' : '켜기'), cut.skips.length > 0) + '</div>');
+    VZ.menu({title, label:title + ' 메뉴', anchor, body, onMount:(host, close) => {
+      host.classList.add('score-sync-menu');
+      const act = (name, run) => { const b = host.querySelector('[data-mark-' + name + ']'); if (b) b.onclick = () => { close(); run(); }; };
+      act('here', () => playHere(from)); act('loop', () => startLoop(from, to)); act('cuts', () => setCuts(!on));
+    }});
   }
   /** Press-and-hold menu of a measure box (마디 위치 보기 on). */
   async function measureMenu(hit, x, y) {
@@ -163,18 +303,28 @@ function attach(c) {
     }});
   }
   // A held pointer that cannot draw (이동, or a finger with 펜만 필기) and has not moved: no existing gesture uses it.
+  // The same pointer lifted again without having moved, before the hold ran out: a tap — on a 표기 with a function
+  // it opens that mark's menu. A page that scrolls under the pointer ends the hold but not a tap: the score also
+  // scrolls by itself while it follows the MR.
   const drop = () => { if (hold) { clearTimeout(hold.timer); hold = null; } };
+  const scrolled = () => { if (hold) { clearTimeout(hold.timer); hold.timer = 0; } };
   const down = e => {
     if (hold) { drop(); return; } // a second finger: a pinch or a two-finger swipe
-    if (!alive || sheet || e.button > 0 || !c.boxes() || !v.canHold?.(e)) return;
-    const hit = c.boxAt(e.clientX, e.clientY);
-    if (!hit) return;
-    const mine = hold = {id:e.pointerId, x:e.clientX, y:e.clientY, timer:setTimeout(() => { if (hold !== mine) return; hold = null; if (alive && c.boxes() && v.canHold?.(e)) measureMenu(hit, mine.x, mine.y); }, HOLD_MS)};
+    if (!alive || sheet || e.button > 0 || !v.canHold?.(e)) return;
+    const hit = c.boxes() ? c.boxAt(e.clientX, e.clientY) : null;
+    if (!hit && !rolePages.has(v.page())) return;
+    const mine = hold = {id:e.pointerId, x:e.clientX, y:e.clientY, at:Date.now(), timer:hit ? setTimeout(() => { if (hold !== mine) return; hold = null; if (alive && c.boxes() && v.canHold?.(e)) measureMenu(hit, mine.x, mine.y); }, HOLD_MS) : 0};
   };
   const move = e => { if (hold && e.pointerId === hold.id && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > HOLD_MOVE) drop(); };
-  const up = e => { if (hold && e.pointerId === hold.id) drop(); };
+  const up = e => {
+    if (!hold || e.pointerId !== hold.id) return;
+    const press = hold; drop();
+    if (e.type !== 'pointerup' || !alive || sheet || Date.now() - press.at >= HOLD_MS || !v.canHold?.(e)) return;
+    const row = markAt(e.clientX, e.clientY);
+    if (row) markMenu(row, e.clientX, e.clientY);
+  };
   stage.addEventListener('pointerdown', down, true); stage.addEventListener('pointermove', move, true);
-  stage.addEventListener('pointerup', up, true); stage.addEventListener('pointercancel', up, true); stage.addEventListener('scroll', drop, {passive:true});
+  stage.addEventListener('pointerup', up, true); stage.addEventListener('pointercancel', up, true); stage.addEventListener('scroll', scrolled, {passive:true});
 
   // ---------- 맞추기 화면 ----------
   /** No MR file to match with: say what is needed. */
@@ -433,11 +583,11 @@ function attach(c) {
   }
 
   return {
-    refresh, menu, list,
+    refresh, menu, list, marked,
     /** The measure (file index) sounding now on page n, or null. */
     now:n => now && seq[now.m]?.page === n ? seq[now.m].index : null,
-    destroy() { alive = false; drop(); offTick?.(); offChange?.(); try { sheet?.close(); } catch {}
-      stage.removeEventListener('pointerdown', down, true); stage.removeEventListener('pointermove', move, true); stage.removeEventListener('pointerup', up, true); stage.removeEventListener('pointercancel', up, true); stage.removeEventListener('scroll', drop);
+    destroy() { alive = false; drop(); offTick?.(); offChange?.(); try { audio()?.setPlan?.(null); } catch {} try { sheet?.close(); } catch {}
+      stage.removeEventListener('pointerdown', down, true); stage.removeEventListener('pointermove', move, true); stage.removeEventListener('pointerup', up, true); stage.removeEventListener('pointercancel', up, true); stage.removeEventListener('scroll', scrolled);
       syncButton?.remove(); followButton?.remove(); }
   };
 }
