@@ -2,7 +2,12 @@
  * Kept on this device (localStorage, one entry per account); nothing here is synced.
  * 악보 표기 presets (markers): the four built-in ones (숨표·반복·컷·시작점) keep their id and can be changed and put
  * back, never removed; the user's own are added, changed and removed. A preset only decides what the next mark looks
- * like: a mark already on a score carries its own look. Stored as {builtin:{id:changed fields}, user:[…]}. */
+ * like: a mark already on a score carries its own look. Stored as {builtin:{id:changed fields}, user:[…]}.
+ * 기능 (role, optional, user presets only): what the marks placed with it do once the score is matched with an MR —
+ * 시작점 · 반복 구간 · 건너뛰기 (app/score-mark-model.js). The built-in 시작점 · 반복 · 컷 have theirs fixed.
+ * 찍는 방식 (pick, optional): 'measure' = 마디 선택 — a tap takes a whole measure, a drag a run of measures, and the
+ * mark is drawn over them (needs the score's conversion; without it the form's own way is used). For the forms in
+ * MARK_PICK_FORMS; 컷 has it by default. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipScoreInkSettings=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const HEX=/^#[0-9a-f]{6}$/i,PREFIX='vzip_score_ink_settings_v1:';
@@ -13,15 +18,22 @@ const PALETTES={
 /* 남기는 형태: [id, name, how it is placed — 'tap' 한 번 누르기, 'drag' 따라 긋기, 'two' 시작·끝 두 번 누르기]. */
 const MARK_FORMS=[['symbol','기호','tap'],['line','밑줄','drag'],['wave','물결선','drag'],['box','테두리 상자','drag'],['cover','구간 덮기','drag'],['bracket','구간 괄호','two']];
 const MARK_SHAPES=[['v','브이'],['comma','쉼표'],['check','체크'],['circle','동그라미'],['dot','점'],['triangle','세모'],['star','별'],['diamond','마름모'],['text','글자']];
-const MARK_INPUTS={tap:'한 번 누르기',drag:'따라 긋기',two:'시작과 끝을 차례로 누르기'};
+const MARK_INPUTS={tap:'한 번 누르기',drag:'따라 긋기',two:'시작과 끝을 차례로 누르기',measure:'마디 선택'};
+/* 마디 선택 is offered for the forms that mark a stretch. */
+const MARK_PICK_FORMS=['line','box','cover','bracket'];
+/* 기능: [role stored on the preset and on its marks ('' = none), name, what it does]. */
+const MARK_ROLES=[['','없음','표시만 남겨요.'],['start','시작점','이 표기가 있는 마디부터 재생할 수 있어요.'],['repeat','반복 구간','표기가 걸친 마디를 반복해서 들을 수 있어요.'],['cut','건너뛰기','재생할 때 표기가 걸친 마디를 건너뛰어요.']];
+const MARK_BUILTIN_ROLES={breath:'',repeat:'repeat',cut:'cut',start:'start'};
 const MARK_COLOR='#7a32f5',MARK_COLORS=[[MARK_COLOR,'보라'],...PALETTES.pen],MARK_USER_MAX=20,MARK_NAME_MAX=12,MARK_TEXT_MAX=4;
 const MARKERS=[
  {id:'breath',name:'숨표',color:MARK_COLOR,width:0.006,type:'pen',form:'symbol',shape:'v'},
  {id:'repeat',name:'반복',color:MARK_COLOR,width:0.006,type:'pen',form:'bracket'},
- {id:'cut',name:'컷',color:MARK_COLOR,width:0.04,type:'highlighter',form:'cover'},
+ {id:'cut',name:'컷',color:MARK_COLOR,width:0.04,type:'highlighter',form:'cover',pick:'measure'},
  {id:'start',name:'시작점',color:MARK_COLOR,width:0.006,type:'pen',form:'symbol',shape:'circle'}
 ];
 const markInput=form=>MARK_FORMS.find(f=>f[0]===form)?.[2]||'tap';
+/** How a preset is placed: 'measure' (마디 선택) when it asks for it and its form allows it, else its form's own way. */
+const markWay=m=>m?.pick==='measure'&&MARK_PICK_FORMS.includes(m.form)?'measure':markInput(m?.form);
 /** A complete, valid marker preset from loose input, or an Error saying what to fix. */
 function marker(raw){
  const name=typeof raw?.name==='string'?raw.name.trim().replace(/\s+/g,' '):'';
@@ -40,13 +52,19 @@ function marker(raw){
    out.text=text;
   }
  }
+ if(raw.pick==='measure'&&MARK_PICK_FORMS.includes(raw.form))out.pick='measure';
+ // A role this version does not know is left out (the preset then only draws).
+ if(typeof raw.role==='string'&&raw.role&&MARK_ROLES.some(r=>r[0]===raw.role))out.role=raw.role;
  return out;
 }
-const sameMarker=(a,b)=>['name','color','width','type','form','shape','text'].every(k=>a[k]===b[k]);
+/** What marks placed with this preset do: the built-in ones by what they are, a user preset by its `role`. */
+const markerRole=m=>!m?'':m.builtin||Object.prototype.hasOwnProperty.call(MARK_BUILTIN_ROLES,m.id)?MARK_BUILTIN_ROLES[m.id]||'':m.role||'';
+const sameMarker=(a,b)=>['name','color','width','type','form','shape','text','pick'].every(k=>a[k]===b[k]);
+const lookOnly=({role,...look})=>look;
 function markers(stored){
  const list=MARKERS.map(m=>{
   let now=m;
-  try{const patch=stored?.builtin?.[m.id];if(patch&&typeof patch==='object')now=marker({...m,...patch});}catch{}
+  try{const patch=stored?.builtin?.[m.id];if(patch&&typeof patch==='object')now=lookOnly(marker({...m,...patch}));}catch{}
   return {...now,id:m.id,builtin:true,changed:!sameMarker(now,m)};
  });
  const ids=new Set(list.map(m=>m.id));
@@ -58,7 +76,8 @@ function markers(stored){
  return list;
 }
 const plainMarker=({builtin,changed,id,...look})=>look;
-const packMarkers=list=>({builtin:Object.fromEntries(list.filter(m=>m.builtin&&m.changed).map(m=>[m.id,plainMarker(m)])),user:list.filter(m=>!m.builtin).map(m=>({id:m.id,...plainMarker(m)}))});
+// A changed built-in whose default is 마디 선택 (컷) says its way outright, so "off" is not lost when read with the default.
+const packMarkers=list=>({builtin:Object.fromEntries(list.filter(m=>m.builtin&&m.changed).map(m=>[m.id,{...plainMarker(m),...(MARKERS.find(d=>d.id===m.id)?.pick?{pick:m.pick||''}:{})}])),user:list.filter(m=>!m.builtin).map(m=>({id:m.id,...plainMarker(m)}))});
 const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},eraser:{size:0.018},memo:{mode:'text',color:'#fbe88c'},goalTarget:'today',markers:markers(null),penOnly:false});
 function create({storage,identity,defaultPenOnly=false}){
  const initial=identity(),owner=initial?.owner,session=initial?.session;
@@ -108,7 +127,7 @@ function create({storage,identity,defaultPenOnly=false}){
     if(old.builtin)throw Error('기본 표기는 지울 수 없어요. 모양은 바꿀 수 있어요.');
     data.markers.splice(at,1);
    }else if(old){
-    const next=marker({...old,...patch});
+    const made=marker({...old,...patch}),next=old.builtin?lookOnly(made):made;
     data.markers[at]={...next,id:old.id,builtin:old.builtin,...(old.builtin?{changed:!sameMarker(next,MARKERS.find(m=>m.id===old.id))}:{})};
    }else{
     if(typeof patch.id!=='string'||!/^[\w:-]{1,64}$/.test(patch.id))throw Error('표기를 확인해 주세요.');
@@ -134,5 +153,5 @@ function create({storage,identity,defaultPenOnly=false}){
  }
  return {read,write,key};
 }
-return {create,PALETTES,defaults,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,markInput,marker};
+return {create,PALETTES,defaults,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_PICK_FORMS,markInput,markWay,marker,markerRole};
 });
