@@ -173,7 +173,7 @@ test('마디 위치 보기: numbered boxes on the measures, under the handwritin
  await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(dialog).toHaveCount(0);
  await expect(page.locator('.toast')).toHaveText('필기 화면을 닫았어요.');
  dialog=await open(page);await ready(dialog);
- await expect(boxes(dialog)).toHaveCount(2);await expect(page.locator('.toast')).not.toHaveText(NOTE);
+ await expect(boxes(dialog)).toHaveCount(2);await expect(page.locator('.toast').filter({hasText:NOTE})).toHaveCount(0);
  await more(dialog);await expect(toggle(dialog)).toHaveAttribute('aria-pressed','true');
  await toggle(dialog).click();await expect(layer(dialog)).toBeHidden();await expect(boxes(dialog)).toHaveCount(0);
  expect(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)),PREF)).toEqual({on:false,noted:true});
