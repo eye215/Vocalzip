@@ -28,12 +28,11 @@
 .range-cols{position:relative;display:grid;grid-template-columns:repeat(var(--range-cols,6),minmax(0,1fr))}
 .range-col{display:grid;justify-items:center;min-width:0}
 .range-track{position:relative;width:100%;height:var(--range-h)}
-.range-band,.range-main,.range-stable,.range-lone,.range-hi,.range-lo{position:absolute;left:50%;transform:translateX(-50%)}
+.range-band,.range-main,.range-stable,.range-hi,.range-lo{position:absolute;left:50%;transform:translateX(-50%)}
 .range-band{width:min(22px,56%);min-height:3px;border-radius:6px;background:var(--vz-color-selected-bg,#EDE1FF)}
 .range-band.is-point{height:3px!important;border-radius:2px;background:var(--vz-color-accent,#7A32F5)}
 .range-main{width:min(22px,56%);min-height:3px;border-radius:5px;background:var(--vz-color-accent,#7A32F5)}
 .range-stable{width:min(30px,76%);height:0;border-top:2px solid #078994}
-.range-lone{width:9px;height:9px;margin-top:-4.5px;border:2px solid var(--vz-color-accent,#7A32F5);border-radius:50%;background:var(--surface,#fff)}
 .range-hi,.range-lo{color:var(--ink-2,#475467);font-size:11px;line-height:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .range-hi{margin-top:-15px}
 .range-lo{margin-top:1px}
@@ -52,7 +51,6 @@
 .range-legend .k-band{background:var(--vz-color-selected-bg,#EDE1FF)}
 .range-legend .k-main{background:var(--vz-color-accent,#7A32F5)}
 .range-legend .k-stable{height:0;border-radius:0;border-top:2px solid #078994}
-.range-legend .k-lone{width:9px;height:9px;border:2px solid var(--vz-color-accent,#7A32F5);border-radius:50%;box-sizing:border-box}
 .range-legend .k-small{box-shadow:inset 0 0 0 1.5px var(--vz-color-selected-bg,#EDE1FF)}
 /* Phones: the last 6 months (the list below has every month). */
 @media (max-width:599px){
@@ -63,6 +61,12 @@
   .range-year-narrow small{visibility:hidden}
   .range-chart{--range-h:228px}
 }
+.range-used{display:flex;gap:6px;align-items:flex-start;margin:10px 0 0;color:var(--ink-2,#475467);font-size:13px;line-height:18px}
+.range-used i{flex:none;margin-top:1px;color:#23855C;font-size:16px}
+.range-used b{color:var(--ink,#101828);font-weight:600;font-variant-numeric:tabular-nums}
+.range-diag{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--surface-2,#F2EFF7)}
+.range-diag .btn{min-height:44px}
+.range-diag p{margin:8px 0 0;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
 .range-change{display:flex;gap:8px;align-items:flex-start;margin:14px 0 0;padding:12px 14px;border-radius:16px;background:var(--vz-color-accent-soft,#F3ECFF);color:var(--ink,#101828);font-size:14px;line-height:20px;font-weight:600}
 .range-change i{flex:none;margin-top:1px;color:var(--vz-color-accent,#7A32F5);font-size:18px}
 .range-change[data-state="short"],.range-change[data-state="none"]{background:var(--surface-2,#F2EFF7);color:var(--ink-2,#475467);font-weight:400}

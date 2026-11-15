@@ -194,8 +194,8 @@ function build(media,db={},env={}){
   /** 음역 변화 (step 2): reliable, dated analyses of song recordings, 매일 보이스 체크, 트레이닝 and lesson recordings.
    * Files that belong nowhere (no song, not a lesson, training or voice check), 연습실 submissions and recordings in
    * the deleted list stay out. Oldest first; each take carries its group. `left` names the recordings that do belong
-   * to a group but are not takes (not analysed, unreliable, no date), with their group and day, so a month can say
-   * how many it left out and why. */
+   * to a group but are not takes (not analysed, unreliable, no date), with their group, day and analysis (null when
+   * there is none), so a month can say how many it left out and why. */
   forRange(){
    const takes=[],left=[],counts={song:0,'voice-check':0,training:0,lesson:0},excluded={};
    const out=why=>{excluded[why]=(excluded[why]||0)+1;};
@@ -205,7 +205,7 @@ function build(media,db={},env={}){
     const group=r.voiceCheck?'voice-check':kind==='lesson'?'lesson':kind==='training'||r.training?'training':r.room||kind==='room'?'':r.songId&&r.hasSong?'song':'';
     if(!group){out(r.room||kind==='room'?'practice-room':r.songId?'song-missing':'unassigned');continue;}
     const why=!r.analysed?'no-analysis':!r.ok?'unreliable':!r.date?'no-date':'';
-    if(why){out(why);left.push({id:r.id,group,date:r.date,why});continue;}
+    if(why){out(why);left.push({id:r.id,group,date:r.date,why,a:r.a});continue;}
     counts[group]++;takes.push({...r.take,group});
    }
    return {takes:takes.sort(order),counts,excluded,left};
