@@ -38,7 +38,7 @@ on:
         type: boolean
         default: false
       reanalyze_unreliable:
-        description: 'Preview current held-back, readable recordings only; skips normal processing in this run'
+        description: 'Preview current held-back, readable recordings only (with read-only judgement-review numbers); skips normal processing in this run'
         type: boolean
         default: false
       reanalyze_apply:
