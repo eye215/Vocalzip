@@ -39,7 +39,10 @@ const RULES = {
   high:{belowScoreTop:2, minNotes:2},
   keyShift:2,
   scoreNotes:8,       // common score notes judged in both takes before 악보 기준 맞은 음 비율 is shown
-  passaggio:{minBands:4, ratio:1.5, plus:4}
+  passaggio:{minBands:4, ratio:1.5, plus:4},
+  // 파사지오 over many recordings: the zone must come back in at least `share` of at least `min` recordings (the
+  // latest `cap`), a zone counting as the same within ± `tolerance` semitones.
+  passaggioRecur:{cap:40, min:5, share:.5, tolerance:1}
 };
 
 const METRICS = [
@@ -59,7 +62,7 @@ const METRICS = [
     method:'두 녹음의 같은 고음 구간에서 지속음의 흔들림과 유지시간을 함께 비교해요.',
     practice:'곡의 고음 구간을 편한 세기로 짧게 유지하며 같은 조건으로 다시 녹음하기', minutes:6},
   {id:'passaggio', title:'파사지오(전환 구간)', unit:'cent', direction:0, judged:false, reference:true, help:'pass',
-    method:'음높이별 지속음 흔들림에서 흔들림이 커지는 음역대를 찾아 보여 줘요. 음정 데이터만으로 판별 불가, 선생님 판단 참고.',
+    method:'녹음마다 지속음 흔들림이 커지는 음역대를 찾고, 믿을 만한 녹음 5개 이상 가운데 절반 이상에서 되풀이되는 곳만 보여 줘요. 녹음마다 다르면 판정을 보류해요. 음정 데이터만으로 판별 불가, 선생님 판단 참고.',
     practice:'', minutes:0}
 ];
 const byId = Object.fromEntries(METRICS.map(m => [m.id, m]));
@@ -81,7 +84,9 @@ const HOLD = {
   'key-shift':'주 가창 음역 전체가 옮겨져 키가 달랐을 수 있어요',
   'no-stable':'안정 최고음이 없어요',
   'few-high':'같은 고음 구간에서 지속한 음이 적어요',
-  'few-bands':'여러 음높이의 지속음이 부족해요'
+  'few-bands':'여러 음높이의 지속음이 부족해요',
+  'few-recordings':'세부 측정이 있는 믿을 만한 녹음이 5개는 있어야 해요',
+  'scattered':'녹음마다 다르게 나와요'
 };
 const HOLD_LABEL = '판정 보류';
 /** The reason only — for places that already show the 판정 보류 label (chip, heading). */
@@ -154,6 +159,31 @@ function passaggioOf(a) {
   const worst = groups.reduce((x, y) => Math.max(...y.map(r => r[5])) > Math.max(...x.map(r => r[5])) ? y : x);
   const lo = worst[0][0], hi = worst.at(-1)[0];
   return {state:'reference', found:true, from:noteName(lo), to:noteName(hi), fromMidi:lo, toMidi:hi, wobble:r1(Math.max(...worst.map(r => r[5]))), baseline:r1(base), bands:rows.length};
+}
+/** 파사지오 over the recordings of a period (a song's takes, or every counted take): the zone that RECURS.
+ * One recording's zone (passaggioOf) moves with the song and the day; this reads it over the reliable, detailed takes
+ * (the latest RULES.passaggioRecur.cap) and reports the most frequent zone — zones within ± 1 semitone of each other
+ * count as the same — only when it comes back in at least half of at least 5 recordings. Otherwise 판정 보류
+ * ('few-recordings' | 'scattered'), with the counts. When most recordings show no zone at all, that is what recurs
+ * (found:false). Reference only, never a verdict. takes: [{a, ok, date, created, id}]. */
+function passaggioRecurring(takes) {
+  const rule = RULES.passaggioRecur;
+  const rows = (takes || []).filter(t => t.ok && hasDetail(t.a)).slice().sort(takeOrder).slice(-rule.cap).map(t => passaggioOf(t.a)).filter(p => p.state === 'reference');
+  const of = rows.length;
+  if (of < rule.min) return {state:'hold', reason:'few-recordings', of, need:rule.min};
+  const found = rows.filter(p => p.found), none = of - found.length;
+  let best = null;
+  for (const c of found) {
+    const hits = found.filter(p => p.fromMidi <= c.toMidi + rule.tolerance && p.toMidi >= c.fromMidi - rule.tolerance);
+    if (!best || hits.length > best.hits.length || (hits.length === best.hits.length && (c.fromMidi - best.c.fromMidi || c.toMidi - best.c.toMidi) < 0)) best = {c, hits};
+  }
+  const top = best ? best.hits.length : 0;
+  if (none >= top && none / of >= rule.share) return {state:'reference', found:false, count:none, of, baseline:r1(median(rows.filter(p => !p.found).map(p => p.baseline)))};
+  if (top / of < rule.share) return {state:'hold', reason:'scattered', of, count:top};
+  const from = Math.round(median(best.hits.map(p => p.fromMidi))), to = Math.max(from, Math.round(median(best.hits.map(p => p.toMidi))));
+  const low = Math.min(...best.hits.map(p => p.fromMidi)), high = Math.max(...best.hits.map(p => p.toMidi));
+  return {state:'reference', found:true, from:noteName(from), to:noteName(to), fromMidi:from, toMidi:to, count:top, of, share:Math.round(top / of * 100) / 100,
+    spread:{from:noteName(low), to:noteName(high), fromMidi:low, toMidi:high}, wobble:r1(median(best.hits.map(p => p.wobble))), baseline:r1(median(best.hits.map(p => p.baseline)))};
 }
 /** One take on its own (no comparison): what each measure shows. reference = song.vocalRange or null. */
 function single(a, {reliable = false, reference = null} = {}) {
@@ -228,6 +258,8 @@ const mrRemoved = t => !!t?.a?.confidence?.mrRemoved;
 /** A take measured on the voice that the server's AI separation (Demucs) split from the accompaniment. */
 const AI_SEPARATED_NOTE = 'AI 분리 후 측정(참고)';
 const aiSeparated = t => !!t?.a?.confidence?.aiSeparated;
+/** A comparison in which a side is a day's mean (같은 날 녹음: 하루 평균): said as its basis, with the takes behind each side. */
+const dayMean = (first, last) => first.day?.basis === 'mean' || last.day?.basis === 'mean' ? {basis:'day-mean', dayCounts:[first.day?.basis === 'mean' ? first.day.reliable : 1, last.day?.basis === 'mean' ? last.day.reliable : 1]} : {};
 /** Compare one metric for two takes (first = earlier). Both are {a, date, ok}. */
 function compareMetric(id, first, last, options = {}) {
   const x = compareMetricRaw(id, first, last, options);
@@ -259,7 +291,7 @@ function compareMetricRaw(id, first, last, {reference = null, sameDay = false, s
     // The score is preferred; else the original singer's extracted melody (원곡 기준), never the two mixed.
     let score = id === 'intonation' && scoreNotes ? scoreNoteBasis(scoreNotes[first.id], scoreNotes[last.id]) : null;
     if (!score && id === 'intonation' && arNotes) { const ar = scoreNoteBasis(arNotes[first.id], arNotes[last.id]); if (ar) score = {...ar, source:'ar'}; }
-    return {...base, state:direction(d, delta, RULES[id], before), before, after, delta, basis, matched, ...(basis === 'phrases' ? {whole} : {}), ...(score ? {score} : {})};
+    return {...base, state:direction(d, delta, RULES[id], before), before, after, delta, basis, matched, ...(basis === 'phrases' ? {whole} : {}), ...(score ? {score} : {}), ...dayMean(first, last)};
   }
   if (id === 'phrase') {
     const pairs = matchPhrases(a.metrics.phrases.rows, b.metrics.phrases.rows);
@@ -275,7 +307,7 @@ function compareMetricRaw(id, first, last, {reference = null, sameDay = false, s
     const ga = a.metrics.range, gb = b.metrics.range, s = semitones(ga.stableHigh.cents, gb.stableHigh.cents);
     const ma = mainMidi(a), mb = mainMidi(b);
     const vsScore = reference && Number.isFinite(reference.highMidi) ? {scoreHigh:reference.high, before:midiOf(ga.stableHigh.cents) - reference.highMidi, after:midiOf(gb.stableHigh.cents) - reference.highMidi} : null;
-    return {...base, state:s === 0 ? 'similar' : 'changed', before:ga.stableHigh.note || noteName(midiOf(ga.stableHigh.cents)), after:gb.stableHigh.note || noteName(midiOf(gb.stableHigh.cents)), delta:s,
+    return {...base, ...dayMean(first, last), state:s === 0 ? 'similar' : 'changed', before:ga.stableHigh.note || noteName(midiOf(ga.stableHigh.cents)), after:gb.stableHigh.note || noteName(midiOf(gb.stableHigh.cents)), delta:s,
       main:ma && mb && ma.high != null && mb.high != null ? {before:ga.main.low + '–' + ga.main.high, after:gb.main.low + '–' + gb.main.high, highDelta:mb.high - ma.high, lowDelta:mb.low - ma.low} : null, vsScore};
   }
   if (id === 'high') {
@@ -336,14 +368,111 @@ function pickPair(takes, id) {
   if (list.some(t => t !== last && t.date === last.date)) return {reason:'same-day', last};
   return {reason:'no-pair', last};
 }
-/** All six measures for one song's takes. reference = song.vocalRange (confirmed) or null. */
-function songReport(takes, {reference = null, scoreNotes = null, arNotes = null} = {}) {
+/* ---------- several takes of one song on one day (같은 날 녹음) ----------
+ * How the takes of ONE song sung on ONE day count. 'all' (the default) is every take as before. The other three
+ * give each day ONE value per measure, made from that day's RELIABLE takes only:
+ *   average   하루 평균    the mean of the day's values; a note-valued measure (최고음) uses the median note (중앙값).
+ *                         Same-phrase and high-zone comparisons cannot be averaged: they use the day's most reliable take.
+ *   reliable  신뢰도 높은 것  the take with the highest pitch confidence; ties → more voiced seconds, then the later take.
+ *   best      가장 좋은 것   per measure, the take with the best value in that measure's good direction (METRICS
+ *                         direction; for the stable highest note, which has no direction, the higher note).
+ * A day with no reliable take is represented by its latest take as it is (ok:false), so it stays 판정 보류. A day
+ * with one reliable take is that take, whatever the mode. Nothing here changes a take. */
+const SAME_DAY = [['all', '모두'], ['average', '하루 평균'], ['reliable', '신뢰도 높은 것'], ['best', '가장 좋은 것']];
+const SAME_DAY_NOTE = {
+  average:'하루 평균은 그날 신뢰도 높은 녹음만으로 내요. 음으로 나타내는 값(최고음)은 중앙값을 써요.',
+  reliable:'그날 음높이 인식 신뢰도가 가장 높은 녹음 하나로 봐요. 같으면 목소리가 더 긴 녹음, 그다음 나중 녹음이에요.',
+  best:'하루에 여러 번 부를수록 가장 좋은 값은 좋아지기 쉬워요. 날끼리 공평하게 보려면 하루 평균이 좋아요.'
+};
+const sameDayMode = mode => SAME_DAY.some(([id]) => id === mode) ? mode : 'all';
+/** The days of one song's takes, oldest first: {date, takes (oldest first), reliable}. A take without a date is a day of its own. */
+function days(takes) {
+  const out = [], byDate = new Map();
+  for (const t of takes.slice().sort(takeOrder)) {
+    let d = t.date ? byDate.get(t.date) : null;
+    if (!d) { d = {date:t.date || '', takes:[]}; if (t.date) byDate.set(t.date, d); out.push(d); }
+    d.takes.push(t);
+  }
+  for (const d of out) d.reliable = d.takes.filter(t => t.ok && t.a?.metrics);
+  return out;
+}
+/** Highest pitch confidence; ties → more voiced seconds, then the later take. */
+function mostReliable(takes) {
+  const conf = t => { const c = Number(t.a?.confidence?.pitchConfidence); return Number.isFinite(c) ? c : -1; }, voiced = t => num(t.a?.metrics?.voicedSeconds) || 0;
+  return takes.reduce((best, t) => { const c = conf(t) - conf(best) || voiced(t) - voiced(best); return c > 0 || (c === 0 && takeOrder(t, best) > 0) ? t : best; });
+}
+/* The one number of a take that a day value of each measure is made from. */
+const DAY_SCALAR = {
+  intonation:a => num(a.metrics.intonation?.meanAbsCents), stability:a => num(a.metrics.stability?.wobbleCents),
+  range:a => a.v >= 2 ? num(a.metrics.range?.stableHigh?.cents) : null, phrase:a => num(a.metrics.breath?.medianPhrase),
+  high:(a, reference) => { const h = single(a, {reference}).high; return h?.state === 'reference' ? num(h.wobble) : null; }
+};
+const AVERAGED = ['intonation', 'stability', 'range'];   // the measures a day mean can stand for (whole-recording values)
+/** The mean analysis of a day's reliable takes (newest version present only): whole-recording values, no phrase detail. */
+function meanAnalysis(takes) {
+  const v = takes.some(t => t.a.v >= 2) ? 2 : 1, list = takes.filter(t => (t.a.v >= 2 ? 2 : 1) === v).map(t => t.a);
+  const vals = get => list.map(get).filter(x => x != null);
+  const mean = get => { const xs = vals(get); return xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null; };
+  const mid = get => { const xs = vals(get); return xs.length ? Math.round(median(xs)) : null; };
+  const sum = get => list.reduce((s, a) => s + (num(get(a)) || 0), 0);
+  const point = cents => cents == null ? null : {note:noteName(midiOf(cents)), cents};
+  const into = mean(a => num(a.metrics.intonation?.meanAbsCents)), wob = mean(a => num(a.metrics.stability?.wobbleCents)), phr = mean(a => num(a.metrics.breath?.medianPhrase));
+  const lo = mid(a => num(a.metrics.range?.main?.lowCents)), hi = mid(a => num(a.metrics.range?.main?.highCents)), conf = mean(a => num(a.confidence?.pitchConfidence));
+  const dbs = vals(a => num(a.confidence?.voiceOverMrDb));
+  return {v:list[0].v, dayAverage:{n:list.length}, metrics:{voicedSeconds:r1(mean(a => num(a.metrics.voicedSeconds))),
+      intonation:into == null ? null : {meanAbsCents:r1(into), notes:sum(a => a.metrics.intonation?.notes)}, stability:wob == null ? null : {wobbleCents:r1(wob), notes:sum(a => a.metrics.stability?.notes)},
+      range:v >= 2 ? {validHigh:point(mid(a => num(a.metrics.range?.validHigh?.cents))), stableHigh:point(mid(a => num(a.metrics.range?.stableHigh?.cents))),
+        main:lo != null && hi != null ? {low:noteName(midiOf(lo)), high:noteName(midiOf(hi)), lowCents:lo, highCents:hi} : null} : null,
+      breath:phr == null ? null : {medianPhrase:r1(phr)}},
+    confidence:{...(conf == null ? {} : {pitchConfidence:Math.round(conf * 1000) / 1000}), voiceOverMrDb:dbs.length ? Math.min(...dbs) : null}};
+}
+/** takes of ONE song → one take per day for measure `id` (see above). mode 'all': the takes themselves. Each returned
+ * take carries `day`: {n (takes that day), reliable, basis: 'take' | 'mean' | 'reliable' | 'best' | 'unreliable', ids?}. */
+function dayTakes(takes, mode, id, {reference = null} = {}) {
+  mode = sameDayMode(mode);
+  if (mode === 'all') return takes;
+  return days(takes.filter(t => t.a?.metrics)).map(day => {
+    const info = {n:day.takes.length, reliable:day.reliable.length};
+    if (!day.reliable.length) return {...day.takes.at(-1), day:{...info, basis:'unreliable'}};
+    if (day.reliable.length === 1) return {...day.reliable[0], day:{...info, basis:'take'}};
+    if (mode === 'average' && AVERAGED.includes(id)) {
+      const last = day.reliable.at(-1);
+      return {id:'day:' + day.date, songId:last.songId || '', a:meanAnalysis(day.reliable), date:day.date, created:last.created, ok:true, day:{...info, basis:'mean', ids:day.reliable.map(t => t.id)}};
+    }
+    if (mode === 'best' && DAY_SCALAR[id]) {
+      const dir = byId[id].direction || 1, rows = day.reliable.map(t => ({t, v:DAY_SCALAR[id](t.a, reference)})).filter(x => x.v != null);
+      if (rows.length) { const top = rows.reduce((b, x) => (x.v - b.v) * dir > 0 ? x : b).v; return {...mostReliable(rows.filter(x => x.v === top).map(x => x.t)), day:{...info, basis:'best'}}; }
+    }
+    return {...mostReliable(day.reliable), day:{...info, basis:'reliable'}};
+  });
+}
+/** One day's value of one measure for a chart. get(take) → number | null; better: −1 lower, 1 higher (가장 좋은 것);
+ * note: a note-valued measure (cents) → 하루 평균 is the median; all: not a measurement (내 만족도) — every take counts.
+ * → {value, basis: 'take' | 'mean' | 'median' | 'reliable' | 'best' | 'unreliable' | 'none', used (take or null), n, count}. */
+function dayValue(day, mode, {get, better = 1, note = false, all = false} = {}) {
+  const pool = all ? day.takes : day.reliable, rows = pool.map(t => ({t, v:get(t)})).filter(x => x.v != null), n = day.takes.length;
+  if (!rows.length) { // no reliable take with a value: the day's latest take as it is — never a day value
+    const last = all ? null : day.takes.slice().reverse().find(t => get(t) != null);
+    return last ? {value:get(last), basis:'unreliable', used:last, n, count:0} : {value:null, basis:'none', used:null, n, count:0};
+  }
+  const count = rows.length, pickOf = list => mostReliable(list.map(x => x.t));
+  if (count === 1) return {value:rows[0].v, basis:'take', used:rows[0].t, n, count};
+  if (mode === 'average') return note ? {value:Math.round(median(rows.map(x => x.v))), basis:'median', used:null, n, count}
+    : {value:r1(rows.reduce((s, x) => s + x.v, 0) / count), basis:'mean', used:null, n, count};
+  if (mode === 'best') { const top = rows.reduce((b, x) => (x.v - b.v) * (better < 0 ? -1 : 1) > 0 ? x : b).v, used = pickOf(rows.filter(x => x.v === top)); return {value:top, basis:'best', used, n, count}; }
+  const used = pickOf(rows); return {value:get(used), basis:'reliable', used, n, count};
+}
+
+/** All six measures for one song's takes. reference = song.vocalRange (confirmed) or null. sameDay: how several
+ * takes of one day count ('all' — the default — is every take as before). */
+function songReport(allTakes, {reference = null, scoreNotes = null, arNotes = null, sameDay = 'all'} = {}) {
   const out = {};
   for (const d of METRICS) {
+    const takes = dayTakes(allTakes, sameDay, d.id, {reference});
     if (d.reference) {
       const withData = takes.filter(t => t.a?.metrics).sort(takeOrder);
       const latest = withData.slice().reverse().find(t => hasDetail(t.a)) || withData.at(-1);
-      out[d.id] = latest ? {id:d.id, state:'reference', latest:passaggioOf(latest.a), lastId:latest.id, to:latest.date} : {id:d.id, state:'hold', reason:'no-data'};
+      out[d.id] = latest ? {id:d.id, state:'reference', latest:passaggioOf(latest.a), lastId:latest.id, to:latest.date, recurring:passaggioRecurring(takes)} : {id:d.id, state:'hold', reason:'no-data'};
       continue;
     }
     const p = pickPair(takes, d.id);
@@ -359,7 +488,7 @@ function periodReport(beforeTakes, afterTakes, {reference = null} = {}) {
   const before = sort(beforeTakes), after = sort(afterTakes), out = {};
   const why = (list, id) => { const r = list.map(t => availability(t.a, id, t.ok)); return ['reanalyze', 'v1', 'confidence', 'few-notes', 'few-phrases', 'no-stable'].find(x => r.includes(x)) || 'no-data'; };
   for (const d of METRICS) {
-    if (d.reference) { const last = after.filter(t => hasDetail(t.a)).at(-1) || after.at(-1); out[d.id] = last ? {id:d.id, state:'reference', latest:passaggioOf(last.a), lastId:last.id} : {id:d.id, state:'hold', reason:'no-data'}; continue; }
+    if (d.reference) { const last = after.filter(t => hasDetail(t.a)).at(-1) || after.at(-1); out[d.id] = last ? {id:d.id, state:'reference', latest:passaggioOf(last.a), lastId:last.id, recurring:passaggioRecurring(after)} : {id:d.id, state:'hold', reason:'no-data'}; continue; }
     if (!before.length) continue;
     const last = after.filter(t => !availability(t.a, d.id, t.ok)).at(-1);
     if (!last) { out[d.id] = {id:d.id, state:'hold', reason:why(after, d.id)}; continue; }
@@ -432,6 +561,7 @@ const heldText = (before, after) => before == null || after == null ? '' : '유�
 const wholeText = x => x?.whole && num(x.whole.before) != null && num(x.whole.after) != null ? '녹음 전체로는 ' + fmt(x.id, x.whole.before) + ' → ' + fmt(x.id, x.whole.after) : '';
 function basisText(x) {
   if (!x || x.state === 'hold' || x.state === 'reference') return '';
+  if (x.basis === 'day-mean') return (x.id === 'range' ? '그날 녹음의 중앙값끼리 비교' : '하루 평균끼리 비교 · 녹음 전체 값') + ' (녹음 ' + x.dayCounts[0] + '개 → ' + x.dayCounts[1] + '개)';
   const whole = wholeText(x) ? ' · ' + wholeText(x) : '';
   if (x.score) return (x.score.source === 'ar' ? '원곡 기준 맞은 음 비율 ' : '악보 기준 맞은 음 비율 ') + x.score.before + '% → ' + x.score.after + '% (' + (x.score.source === 'ar' ? '같은 원곡 멜로디(자동 추출) 음 ' : '같은 악보 음 ') + x.score.notes + '개 · ±50 cent) · cent 비교는 ' + (x.basis === 'phrases' ? '같은 프레이즈 ' + x.matched + '개' : '곡 전체') + whole;
   if (x.basis === 'phrases') return '같은 프레이즈 ' + x.matched + '개 비교' + (x.id === 'phrase' && x.tempo && x.tempo !== 1 ? ' · 템포 보정' : '') + whole;
@@ -445,6 +575,21 @@ function passaggioText(p) {
   return (p.from === p.to ? p.from : p.from + '–' + p.to) + ' 부근에서 지속음 흔들림이 커요 (±' + p.wobble + ' cent, 평소 ±' + p.baseline + ' cent)';
 }
 const PASSAGGIO_NOTE = '음정 데이터만으로 판별 불가, 선생님 판단 참고';
+/** A value read from ONE recording (녹음 상세, 두 녹음 비교): it moves with the song and the day. */
+const PASSAGGIO_SINGLE = '이 녹음에서만 본 참고값';
+/** "최근 24개 중 15개에서 E4~F4 근처 …", or 판정 보류 with the counts. */
+function passaggioRecurringText(r) {
+  if (!r) return holdLine('no-data');
+  if (r.state === 'hold') return holdLine(r.reason) + (r.reason === 'few-recordings' ? ' (지금 ' + r.of + '개)' : r.reason === 'scattered' ? ' (최근 ' + r.of + '개 중 가장 많이 겹친 곳도 ' + r.count + '개)' : '');
+  const head = '최근 ' + r.of + '개 중 ' + r.count + '개에서 ';
+  if (!r.found) return head + '흔들림이 크게 달라지는 구간이 보이지 않았어요 (평소 ±' + r.baseline + ' cent)';
+  const zone = r.from === r.to ? r.from : r.from + '~' + r.to, wide = r.spread.fromMidi !== r.fromMidi || r.spread.toMidi !== r.toMidi;
+  return head + zone + ' 근처' + (wide ? ' (나온 범위 ' + r.spread.from + '~' + r.spread.to + ')' : '') + ' · 지속음 흔들림 ±' + r.wobble + ' cent, 평소 ±' + r.baseline + ' cent';
+}
+/** The 파사지오 line of a report over several takes: what recurs (never one recording's value). */
+const passaggioReportText = x => x?.state === 'hold' ? holdLine(x.reason)
+  // Nothing to read at all (older analyses, no band detail): the reason the latest recording gives, as before.
+  : x?.recurring?.state === 'hold' && !x.recurring.of && x.latest?.state === 'hold' ? holdLine(x.latest.reason) : passaggioRecurringText(x?.recurring);
 function stateLabel(x) { return STATE[x?.state] || HOLD_LABEL; }
 /** AI coach input (server "overall" mode accepts only intonation/stability/phrase/vibrato; range, high-note and
  * passaggio are never sent, so the model cannot judge from the highest note). Withheld → state unknown. */
@@ -459,5 +604,5 @@ function aiMetrics(aggs) {
   });
 }
 return {VERSION:2, RULES, METRICS, HOLD, STATE, MR_REMOVED_NOTE, AI_SEPARATED_NOTE, noteName, midiOf, semitones, hasDetail, availability, value, single, zoneStats, keyShift, passaggioOf,
-  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, stateLabel, holdText, holdLine, pairHold, HOLD_LABEL, heldText, wholeText, aiMetrics};
+  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, SAME_DAY, SAME_DAY_NOTE, sameDayMode, days, mostReliable, dayTakes, dayValue, meanAnalysis, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, PASSAGGIO_SINGLE, passaggioRecurring, passaggioRecurringText, passaggioReportText, stateLabel, holdText, holdLine, pairHold, HOLD_LABEL, heldText, wholeText, aiMetrics};
 });
