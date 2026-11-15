@@ -5,6 +5,8 @@
  *   보기 or an exported PDF). The boxes are laid onto the staff lines seen in the rendered page when those can be
  *   found, otherwise drawn where the file says with a little room around. On/off is kept on this device.
  * - 표시한 마디: what is on the score (표기, 스티커 메모, 형광펜, 펜 필기) by page and measure; a row goes to its place.
+ * - 마디와 MR 맞추기 (app/score-sync.js) hangs on the same conversion: its menu items, the measure that sounds now
+ *   (drawn in this layer), ▶ on the list rows and the press-and-hold menu of a measure box.
  *   window.VzipScoreMeasuresUI.mount(viewer) → {load, shown, changed, destroy} — called by app/score-ink.js */
 (() => {
 'use strict';
@@ -41,7 +43,7 @@ function mount(v) {
   const aspects = new Map(), plain = new Map(), seen = new Map(); // page → aspect, geometry from the file, geometry on the seen staves
   const layer = node('svg', {'data-ink-measures':'', 'aria-hidden':'true'});
   layer.setAttribute('hidden', ''); canvas.after(layer);
-  let toggle = null, list = null;
+  let toggle = null, list = null, sync = null;
 
   /** Geometry of a page: on the staves seen in its picture when it was shown, else from the file. */
   const geometry = n => {
@@ -50,24 +52,44 @@ function mount(v) {
     if (!plain.has(n) && aspects.has(n)) plain.set(n, M.page(layout, n, aspects.get(n)));
     return plain.get(n) || null;
   };
-  /** The rendered page as pixels, at most 1000 wide (enough to tell staff lines apart, cheap to scan). */
-  function pixels() {
-    if (!(canvas.width > 160 && canvas.height > 160)) return null;
-    const k = Math.min(1, 1000 / canvas.width), small = document.createElement('canvas');
-    small.width = Math.round(canvas.width * k); small.height = Math.round(canvas.height * k);
+  /** A rendered page as pixels, at most 1000 wide (enough to tell staff lines apart, cheap to scan). */
+  function pixels(source) {
+    if (!(source.width > 160 && source.height > 160)) return null;
+    const k = Math.min(1, 1000 / source.width), small = document.createElement('canvas');
+    small.width = Math.round(source.width * k); small.height = Math.round(source.height * k);
     const ctx = small.getContext('2d', {willReadFrequently:true});
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, small.width, small.height); ctx.drawImage(canvas, 0, 0, small.width, small.height);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, small.width, small.height); ctx.drawImage(source, 0, 0, small.width, small.height);
     const data = ctx.getImageData(0, 0, small.width, small.height); small.width = small.height = 0;
     return data;
   }
-  /** Reads the staves of the page now on screen once, and lays its measures onto them. */
-  function look(n) {
-    if (!layout || !n || seen.has(n) || n !== v.page() || n !== shownPage) return;
-    aspects.set(n, v.aspect()); plain.delete(n);
+  /** Reads the staves of page n once from a picture of it (the viewer's page, or the 맞추기 screen's), and lays its
+   * measures onto them. */
+  function see(n, source, aspect) {
+    if (!layout || !n || seen.has(n)) return;
+    aspects.set(n, aspect); plain.delete(n);
     const base = geometry(n); if (!base) return;
     let out = base;
-    try { const image = pixels(); if (image) out = M.snap(base, M.findStaves(image)); } catch {}
+    try { const image = pixels(source); if (image) out = M.snap(base, M.findStaves(image)); } catch {}
     seen.set(n, out);
+  }
+  function look(n) { if (n === v.page() && n === shownPage) see(n, canvas, v.aspect()); }
+  /** Room drawn around a system's staff lines: little on staves that were seen, more when placed from the file alone. */
+  const room = pg => pg.staff * (pg.snapped ? .25 : .6);
+  /** The measure box under a point of the screen on the page now shown, or null. */
+  function boxAt(x, y) {
+    const n = v.page(), pg = shownPage === n ? geometry(n) : null, r = box.getBoundingClientRect();
+    if (!pg || !(r.width > 0 && r.height > 0)) return null;
+    const fx = (x - r.left) / r.width, fy = (y - r.top) / r.height, pad = room(pg);
+    for (const sys of pg.systems) if (fy >= sys.top - pad && fy <= sys.bottom + pad) for (const m of sys.measures) if (fx >= m.x0 && fx < m.x1) return {page:n, index:m.index};
+    return null;
+  }
+  /** Brings a measure of the page now shown into view when its line is not fully on screen. */
+  function show(index) {
+    const pg = shownPage === v.page() ? geometry(shownPage) : null, sys = pg?.systems.find(s => s.measures.some(m => m.index === index));
+    if (!sys) return;
+    const pad = room(pg) + .02, top = box.offsetTop + (sys.top - pad) * box.clientHeight, bottom = box.offsetTop + (sys.bottom + pad) * box.clientHeight;
+    if (top >= stage.scrollTop && bottom <= stage.scrollTop + stage.clientHeight) return;
+    stage.scrollTo({top:Math.max(0, top - stage.clientHeight * .25), behavior:'smooth'});
   }
   const markName = id => (v.markers() || []).find(m => m.id === id)?.name || window.VzipScoreInkSettings?.MARKERS?.find(m => m.id === id)?.name || '';
   /** Page sizes of every page that carries something, so those pages can be read without being shown. */
@@ -79,13 +101,13 @@ function mount(v) {
   function paintLayer() {
     const n = v.page(), pg = shownPage === n ? geometry(n) : null, aspect = v.aspect(), H = 1000 * aspect;
     layer.replaceChildren();
-    const boxes = prefs.on && !!pg, flash = flashed?.page === n && pg ? flashed : null;
-    layer.toggleAttribute('hidden', !boxes && !flash);
+    const boxes = prefs.on && !!pg, flash = flashed?.page === n && pg ? flashed : null, live = pg ? sync?.now(n) ?? null : null;
+    layer.toggleAttribute('hidden', !boxes && !flash && live === null);
     layer.dataset.on = String(boxes); layer.dataset.snapped = String(!!pg?.snapped);
-    if (!boxes && !flash) return;
+    if (!boxes && !flash && live === null) return;
     layer.setAttribute('viewBox', '0 0 1000 ' + H);
     // Seen staff lines: one staff space around. From the file alone: more room, as the place is less exact.
-    const pad = pg.staff * (pg.snapped ? .25 : .6), size = Math.max(24, Math.min(34, pg.staff * H * .9));
+    const pad = room(pg), size = Math.max(24, Math.min(34, pg.staff * H * .9));
     pg.systems.forEach((sys, si) => {
       const y = Math.max(0, sys.top - pad) * H, h = Math.min(1, sys.bottom + pad) * H - y;
       sys.measures.forEach((m, mi) => {
@@ -96,12 +118,14 @@ function mount(v) {
           label.textContent = m.last ? m.number + '–' + m.last : m.number; layer.append(label);
         }
         if (hit) layer.append(node('rect', {class:'score-measure-flash', 'data-flash':m.index, x:x.toFixed(2), y:y.toFixed(2), width:w.toFixed(2), height:h.toFixed(2), rx:6}));
+        // 재생 위치 따라가기: the measure sounding now, lightly.
+        if (m.index === live) layer.append(node('rect', {class:'score-measure-now', 'data-now':m.index, 'data-number':m.number, x:x.toFixed(2), y:y.toFixed(2), width:w.toFixed(2), height:h.toFixed(2), rx:6}));
       });
     });
   }
   function syncMenu(count) {
     const ok = !!layout;
-    if (!ok) { toggle?.remove(); list?.remove(); toggle = list = null; return; }
+    if (!ok) { toggle?.remove(); list?.remove(); toggle = list = null; sync?.menu(null); return; }
     const actions = el.querySelector('.score-ink-actions'); if (!actions) return;
     if (!toggle) {
       const make = (name, icon) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn'; b.setAttribute('data-ink-' + name, ''); b.innerHTML = '<i class="ph ph-' + icon + '" aria-hidden="true"></i><span class="score-ink-menu-label"></span>'; return b; };
@@ -113,6 +137,7 @@ function mount(v) {
     label(toggle, '마디 위치 보기'); toggle.setAttribute('aria-pressed', String(prefs.on));
     if (count !== undefined) list.dataset.count = String(count);
     label(list, '표시한 마디' + (Number(list.dataset.count) > 0 ? ' ' + list.dataset.count : ''));
+    sync?.menu(actions);
   }
   function setOn(next) {
     prefs.on = !!next;
@@ -147,17 +172,22 @@ function mount(v) {
       data = summarize(rows); syncMenu(data.measures);
     } catch { VZ.toast('표시한 마디를 불러오지 못했어요. 다시 시도해 주세요.', 'error'); return; }
     const pages = [...new Set(data.items.map(i => i.page))];
-    const body = '<div class="score-measure-list" data-measure-list><p class="score-measure-note"><i class="ph ph-info" aria-hidden="true"></i><span>변환된 악보의 마디 번호로 모았어요. ' + NOTE + '</span></p>' +
+    // With the MR matched to the measures (app/score-sync.js) a row also gets ▶ 이 마디 반복; without it one line says so.
+    const extra = data.items.length ? sync?.list(data.items) || null : null;
+    const row = (it, i) => '<button type="button" class="score-measure-row" data-measure-row="' + i + '" data-kind="' + it.kind + '"><span class="score-measure-where">' + esc(it.where) + '</span>' +
+      '<span class="score-measure-what"><strong>' + esc(it.label) + (it.count > 1 ? ' ' + it.count + '개' : '') + '</strong>' + (it.detail ? '<small>' + esc(it.detail) + '</small>' : '') + '</span>' + (extra?.rows ? '' : '<i class="ph ph-caret-right" aria-hidden="true"></i>') + '</button>';
+    const body = '<div class="score-measure-list" data-measure-list><p class="score-measure-note"><i class="ph ph-info" aria-hidden="true"></i><span>변환된 악보의 마디 번호로 모았어요. ' + NOTE + '</span></p>' + (extra?.head || '') +
       (data.items.length ? pages.map(n => '<section aria-label="' + n + '쪽"><h3>' + n + '쪽</h3><div class="score-measure-rows">' + data.items.map((it, i) => it.page !== n ? '' :
-        '<button type="button" class="score-measure-row" data-measure-row="' + i + '" data-kind="' + it.kind + '"><span class="score-measure-where">' + esc(it.where) + '</span>' +
-        '<span class="score-measure-what"><strong>' + esc(it.label) + (it.count > 1 ? ' ' + it.count + '개' : '') + '</strong>' + (it.detail ? '<small>' + esc(it.detail) + '</small>' : '') + '</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>').join('') + '</div></section>').join('')
+        extra?.rows ? '<div class="score-measure-line">' + row(it, i) + extra.rows[i] + '</div>' : row(it, i)).join('') + '</div></section>').join('')
         : '<p class="score-measure-empty" data-measure-empty>아직 표시한 마디가 없어요.<br>악보에 표기·형광펜·메모를 남기면 마디 번호로 여기에 모여요.</p>') + '</div>';
     sheet = VZ.sheet({title:'표시한 마디', body, onClose:() => { sheet = null; }, onMount:(host, close) => {
       host.classList.add('score-measure-sheet');
       host.querySelectorAll('[data-measure-row]').forEach(b => b.onclick = () => { const item = data.items[Number(b.dataset.measureRow)]; close(); reveal(item); });
+      extra?.wire(host, close);
     }});
   }
 
+  try { sync = window.VzipScoreSync?.attach({v, layout:() => layout, geometry, see, reveal, repaint:paintLayer, show, boxAt, boxes:() => prefs.on && !!layout, menu:() => syncMenu()}) || null; } catch { sync = null; }
   return {
     /** Reads the conversion once the first page is on screen. Quiet when there is none or it does not fit. */
     async load() {
@@ -168,7 +198,7 @@ function mount(v) {
         layout = M.fits(next, v.pages()) ? next : null;
         plain.clear(); seen.clear();
         if (layout && shownPage === v.page()) look(shownPage);
-        syncMenu(0); paintLayer(); count();
+        sync?.refresh(); syncMenu(0); paintLayer(); count();
       } catch { layout = null; }
     },
     /** The viewer drew page n. */
@@ -176,11 +206,11 @@ function mount(v) {
       if (!alive) return;
       shownPage = n; clearTimeout(lookTimer);
       // With the boxes on the staves are read before they are drawn; otherwise a moment later, off the page turn.
-      try { if (prefs.on || flashed) look(n); else if (layout) lookTimer = setTimeout(() => { if (alive) try { look(n); } catch {} }, 400); paintLayer(); } catch {}
+      try { if (prefs.on || flashed || sync?.now(n) != null) look(n); else if (layout) lookTimer = setTimeout(() => { if (alive) try { look(n); } catch {} }, 400); paintLayer(); } catch {}
     },
     /** Handwriting changed (or was repainted): the count follows shortly. */
     changed() { if (!alive || !layout || timer) return; timer = setTimeout(() => { timer = 0; count(); }, 300); },
-    destroy() { alive = false; clearTimeout(timer); clearTimeout(lookTimer); clearTimeout(flashTimer); try { sheet?.close(); } catch {} layer.remove(); toggle?.remove(); list?.remove(); }
+    destroy() { alive = false; clearTimeout(timer); clearTimeout(lookTimer); clearTimeout(flashTimer); try { sheet?.close(); } catch {} try { sync?.destroy(); } catch {} layer.remove(); toggle?.remove(); list?.remove(); }
   };
 }
 window.VzipScoreMeasuresUI = {mount};
