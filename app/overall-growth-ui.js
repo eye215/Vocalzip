@@ -61,10 +61,12 @@ function songRows(m){
  const rows=(m.rows||[]).filter(x=>x.state);
  if(!rows.length)return '';
  return '<ul class="growth-song-rows">'+rows.map(x=>{
-  const text=m.id==='passaggio'?G.passaggioText(x.latest):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
+  // 파사지오: what recurs over the song's recordings (never one recording's value); 판정 보류 when it does not recur.
+  const text=m.id==='passaggio'?G.passaggioReportText(x).replace(/^판정 보류 · /,''):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
+  const state=m.id==='passaggio'&&x.state!=='hold'?(x.recurring?.state==='reference'?'reference':'hold'):x.state;
   const vs=m.id==='range'&&x.vsScore?' · 악보 최고음 '+x.vsScore.scoreHigh+' 대비 '+signedSemi(x.vsScore.before)+' → '+signedSemi(x.vsScore.after):'';
   const basis=G.basisText(x);
-  return '<li><strong>'+esc(x.title||V.songTitle?.(x.songId)||'곡')+'</strong><span class="growth-state '+TONE[x.state]+'">'+esc(G.stateLabel(x))+'</span>'+
+  return '<li><strong>'+esc(x.title||V.songTitle?.(x.songId)||'곡')+'</strong><span class="growth-state '+TONE[state]+'">'+esc(G.stateLabel({state}))+'</span>'+
    '<p>'+esc(text+vs)+'</p>'+(basis?'<small>'+esc(basis)+'</small>':'')+'</li>';
  }).join('')+'</ul>';
 }
@@ -76,8 +78,10 @@ function metricCard(m,{scope='overall',tag='article',cls='growth-stat'}={}){
  const beforeLabel=scope==='monthly'?'지난달':'첫 녹음',afterLabel=scope==='monthly'?'이번 달':'최근 녹음';
  let number,sub,compare='';
  if(m.id==='passaggio'){
-  const found=(m.rows||[]).filter(x=>x.latest?.found).length;
-  number='참고용';sub=found?'흔들림이 커지는 음역대가 보인 곡 '+found+'곡':'곡별 결과는 아래에서 확인해요';
+  // Only a zone that comes back over a song's recordings counts (one recording's zone moves with the song and the day).
+  const found=(m.rows||[]).filter(x=>x.recurring?.found).length;
+  number='참고용';sub=found?'여러 녹음에서 같은 음역대가 되풀이된 곡 '+found+'곡':'곡별 결과는 아래에서 확인해요';
+  if(m.recurring)compare='<p class="growth-stat-sub" data-passaggio-overall>전체 녹음 · '+esc(G.passaggioRecurringText(m.recurring))+'</p>';
  }else if(m.id==='range'){
   number=m.compared?(m.changed?'변화 '+m.changed+'곡':'같은 음역'):'비교 전';
   sub='안정 최고음·주 가창 음역 기준 · 순간 최고음 제외';
@@ -101,23 +105,41 @@ function metricCard(m,{scope='overall',tag='article',cls='growth-stat'}={}){
   (m.id==='passaggio'?'<p class="growth-ref-note"><i class="ph ph-chalkboard-teacher" aria-hidden="true"></i>'+esc(G.PASSAGGIO_NOTE)+'</p>':'')+
   '<details class="growth-measure-help"><summary>분석 방법·곡별 근거</summary><p>'+esc(m.method)+'</p>'+songRows(m)+'</details></'+tag+'>';
 }
+const nextMonth=key=>{const [y,m]=key.split('-').map(Number);return (m===12?y+1:y)+'-'+String(m===12?1:m+1).padStart(2,'0');};
+/** 월별 측정 흐름: a line through the months that have a value. A month without one is a gap — the line stops and
+ * starts again, nothing is drawn across it. A month made from one song only is a hollow point. Same numbers as the
+ * model's trend (the monthly mean of whole-recording values); tapping a point shows that month's value and song count. */
 function trends(report,selected){
  const list=report.metrics.filter(m=>Model.TREND.includes(m.id));
  const metric=list.find(m=>m.id===selected)||list[0];
  const pts=metric?.trend||[];
  const vals=pts.map(x=>x.value);
- const lo=Math.min(...vals),hi=Math.max(...vals);
- const floor=Number.isFinite(lo)?Math.min(0,lo):0;
- const span=Number.isFinite(hi)?Math.max(hi-floor,0.00001):1;
+ const lo=Math.min(...vals),hi=Math.max(...vals),span=hi-lo;
+ // Every calendar month from the first value to the last (at most the latest 12): the ones without a value are gaps.
+ const byMonth=new Map(pts.map(p=>[p.month,p])),cols=[];
+ if(pts.length)for(let key=pts[0].month;key<=pts.at(-1).month;key=nextMonth(key))cols.push({month:key,p:byMonth.get(key)||null});
+ const shown=cols.slice(-12),n=shown.length;
+ const y=v=>span>0?8+(hi-v)/span*84:50,x=i=>(i+.5)/n*100;
+ const runs=[];shown.forEach((c,i)=>{if(!c.p)return;const last=runs.at(-1);if(last&&last.at(-1).i===i-1)last.push({i,c});else runs.push([{i,c}]);});
+ const lines=runs.filter(r=>r.length>1).map(r=>'<polyline points="'+r.map(({i,c})=>x(i).toFixed(2)+','+y(c.p.value).toFixed(2)).join(' ')+'"/>').join('');
+ const better=metric?.direction===-1?['arrow-down','낮을수록 좋아요']:metric?.direction===1?['arrow-up','높을수록 좋아요']:null;
+ const small=shown.some(c=>c.p&&c.p.songs<2),gaps=shown.some(c=>!c.p);
  return '<section class="growth-panel" data-overall-trend><header class="growth-panel-head"><div><p class="growth-eyebrow">TRACK YOUR VOICE</p><h2>월별 측정 흐름</h2></div>'+
   (pts.length?'<div class="growth-chart-current"><span>최근 기록</span><strong>'+esc(fmt(pts.at(-1).value,metric))+'</strong><small>'+esc(pts.at(-1).month)+'</small></div>':'')+'</header>'+
  '<div class="growth-metric-picks" role="group" aria-label="표시할 지표">'+list.map(m=>
   '<button type="button" data-overall-metric="'+m.id+'" class="'+(m.id===metric.id?'active':'')+'" aria-pressed="'+(m.id===metric.id)+'">'+esc(m.title)+'</button>').join('')+'</div>'+
- (pts.length?'<p class="small muted">달마다 녹음한 곡이 다를 수 있어요. 막대 높이는 곡 전체 측정값의 월 평균이며 실력 향상 판정이 아니에요.'+(report.excludedFromTrend?' 이전 분석(v'+(metric.trendVersion===2?1:2)+') 녹음 '+report.excludedFromTrend+'개는 분석 방식이 달라 그래프에서 뺐어요.':'')+'</p>'+
- '<div class="growth-chart" role="group" aria-label="월별 측정값" style="--growth-point-count:'+pts.length+'">'+pts.map((p,i)=>{
-  const height=Math.max(8,Math.round(((p.value-floor)/span)*85)+8);
-  return '<button type="button" class="growth-chart-point" data-overall-month="'+esc(p.month)+'" data-overall-value="'+esc(fmt(p.value,metric))+'" data-overall-count="'+p.songs+'" aria-label="'+esc(p.month)+' '+esc(fmt(p.value,metric))+' '+p.songs+'곡" title="'+esc(p.month)+' '+esc(fmt(p.value,metric))+'"><span class="growth-chart-track"><i style="height:'+height+'%"></i></span><small>'+esc(p.month.slice(5))+'월</small></button>';
- }).join('')+'</div><p class="small muted">그래프의 막대를 누르면 해당 월의 수치와 사용된 곡 수를 확인할 수 있어요.</p>':
+ (better?'<p class="growth-trend-dir" data-overall-direction><i class="ph ph-'+better[0]+'" aria-hidden="true"></i>'+better[1]+'</p>':'')+
+ (pts.length?'<p class="small muted">달마다 녹음한 곡이 다를 수 있어요. 점 높이는 곡 전체 측정값의 월 평균이며 실력 향상 판정이 아니에요.'+(report.excludedFromTrend?' 이전 분석(v'+(metric.trendVersion===2?1:2)+') 녹음 '+report.excludedFromTrend+'개는 분석 방식이 달라 그래프에서 뺐어요.':'')+'</p>'+
+ '<div class="growth-chart growth-line" role="group" aria-label="월별 측정값 꺾은선 그래프" data-overall-line style="--growth-point-count:'+n+'">'+
+  '<svg class="growth-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">'+lines+'</svg>'+shown.map(({month,p})=>{
+  const label='<small>'+esc(month.slice(5))+'월</small>';
+  if(!p)return '<span class="growth-chart-gap" data-overall-gap="'+esc(month)+'" aria-label="'+esc(month)+' 값 없음"><span class="growth-chart-track"></span>'+label+'</span>';
+  return '<button type="button" class="growth-chart-point'+(p.songs<2?' is-small':'')+'" data-overall-month="'+esc(p.month)+'" data-overall-value="'+esc(fmt(p.value,metric))+'" data-overall-count="'+p.songs+'" aria-label="'+esc(p.month)+' '+esc(fmt(p.value,metric))+' '+p.songs+'곡" title="'+esc(p.month)+' '+esc(fmt(p.value,metric))+'"><span class="growth-chart-track"><i class="growth-line-dot" style="top:'+y(p.value).toFixed(2)+'%"></i></span>'+label+'</button>';
+ }).join('')+'</div>'+
+ (small||gaps?'<p class="growth-line-legend small muted">'+(small?'<span><i class="growth-line-key is-small"></i>속이 빈 점은 한 곡만으로 낸 달</span>':'')+(gaps?'<span><i class="growth-line-key is-gap"></i>값이 없는 달은 선을 잇지 않아요</span>':'')+'</p>':'')+
+ '<p class="small muted">그래프의 점을 누르면 해당 월의 수치와 사용된 곡 수를 확인할 수 있어요.</p>'+
+ '<details class="growth-measure-help growth-trend-table" data-overall-trend-table><summary>달별 값 보기</summary><table><thead><tr><th scope="col">달</th><th scope="col">'+esc(metric.title)+'</th><th scope="col">곡 수</th></tr></thead><tbody>'+
+  shown.map(({month,p})=>'<tr><th scope="row">'+esc(month)+'</th>'+(p?'<td>'+esc(fmt(p.value,metric))+'</td><td>'+p.songs+'곡</td>':'<td colspan="2">값 없음</td>')+'</tr>').join('')+'</tbody></table></details>':
  '<div class="growth-chart-empty">분석 가능한 월별 녹음이 아직 없어요.</div>')+'</section>';
 }
 function evidence(report){
