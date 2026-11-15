@@ -133,6 +133,8 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       html = '<div class="score-audio-chip" role="group" aria-label="' + (s.mode === 'mr' ? 'MR 재생 중' : '녹음 중') + '">' +
         '<span class="score-audio-dot' + (s.mode === 'mr' ? ' is-play' : '') + '" aria-hidden="true"></span>' +
         '<span class="score-audio-time" role="timer" data-score-audio-time>' + timeText() + '</span>' +
+        // Cut stretches are being jumped over: a small sign in the chip (the bar stays one row).
+        (s.run.length ? '<span class="score-audio-cutting" data-score-audio-cutting role="img" aria-label="' + esc(cutNote(s.run)) + '" title="' + esc(cutNote(s.run)) + '"><i class="ph ph-scissors" aria-hidden="true"></i></span>' : '') +
         icon('pause', 'pause', '일시정지') + icon('stop', 'stop', '정지') + '</div>';
     } else if (s.mode === 'paused') {
       html = '<div class="score-audio-row"><span class="score-audio-label"><span class="score-audio-time" data-score-audio-time>' + VZ.clock(seconds()) + '</span> ' + (s.was === 'mr' ? 'MR 일시정지' : '녹음 일시정지') + '</span>' +
@@ -181,16 +183,13 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     on('loop-next', () => s.loop?.next?.());
     // Before a sync exists the button only says what matching gives.
     on('opts', () => { const p = planNow(), b = bar.querySelector('[data-score-audio-opts]'); if (p?.need) p.explain?.(b); else p?.open?.(b); });
-    if (s.mode === 'mrrec' || s.mode === 'mr') liveHint();
+    if (s.mode === 'mrrec') liveHint();
     else if (s.mode === 'idle' && t?.kind === 'youtube') hint('유튜브 MR은 재생만 돼요. 재생+녹음은 업로드한 MR 파일로 할 수 있어요.');
     else if (s.mode === 'idle' && !t) hint('MR은 곡의 레퍼런스 탭에서 추가할 수 있어요.');
     else if (s.mode === 'idle' && !M?.canRecord?.()) hint('이 브라우저는 녹음을 지원하지 않아요.');
   }
-  /** While the MR runs: what a take needs to know, and which cut stretches are being jumped over. */
-  function liveHint() {
-    if (s.mode === 'mrrec') hint('이어폰을 끼면 MR이 녹음에 섞이지 않아요.' + (s.run.length ? ' ' + cutNote(s.run) + '.' : ''));
-    else if (s.mode === 'mr') hint(cutNote(s.run));
-  }
+  /** While a take runs with the MR: what it needs to know, and which cut stretches are being jumped over. */
+  function liveHint() { if (s.mode === 'mrrec') hint('이어폰을 끼면 MR이 녹음에 섞이지 않아요.' + (s.run.length ? ' ' + cutNote(s.run) + '.' : '')); }
   function hint(text, error = false) { const h = bar.querySelector('[data-score-audio-hint]'); if (h) { h.textContent = text; h.dataset.error = String(error); } }
   function fail(e) {
     if (s.closed) return;
@@ -393,7 +392,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       s.plan = plan || null;
       if (key === s.planKey) return;
       s.planKey = key; arm();
-      if (s.mode === 'idle' && !s.busy && !bar.querySelector('iframe')) paint(); else if (s.mode === 'loop') paint(); else { watch(); liveHint(); }
+      if (s.mode === 'idle' && !s.busy && !bar.querySelector('iframe')) paint(); else if (s.mode === 'loop' || s.mode === 'mr') paint(); else { watch(); liveHint(); }
     },
     duration:() => { const d = s.mr?.el?.duration; return Number.isFinite(d) && d > 0 ? d : null; },
     /** Gets the file MR ready, so a later tap can start it at once (iPhone Safari plays only inside the tap). */

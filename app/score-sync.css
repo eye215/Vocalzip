@@ -49,6 +49,7 @@
 .score-audio-row>.score-audio-btn.score-audio-opts{flex:0 0 auto;min-width:44px;background-color:#fff;color:#475467}
 .score-audio-opts[data-lit=true]{background-color:#ede1ff;color:#7a32f5}
 .score-audio-opts span{font-variant-numeric:tabular-nums}
+.score-audio-cutting{flex:none;display:grid;place-items:center;width:20px;color:#d6bbff;font-size:15px}
 @media(max-width:420px){.score-audio-opts span{display:none}}
 .score-measure-act{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px;border:0;border-radius:99px;background:#f3ecff;color:#7a32f5;font-family:inherit;font-size:13px;line-height:18px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;cursor:pointer}
 .score-measure-act i{font-size:14px}
