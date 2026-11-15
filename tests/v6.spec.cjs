@@ -116,8 +116,11 @@ test('Vocal lab stays a standalone screen and uses selected recordings for repor
  await expect(page.locator('.vl-report')).toHaveCount(1);
  await page.locator('.vl-report').click();
  await expect(page.locator('.vl-player-head')).toContainText('2 / 2');
+ // The song page holds no lab content of its own: one link in the 녹음 heading leads to the lab (nothing is ticked by default any more).
  await page.goto('/#/song/s1');
- await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(0);
+ await expect(page.locator('#view [href^="#/vocal-lab/"]')).toHaveCount(1);
+ await expect(page.locator('#view .vz-song-lab')).toHaveAttribute('href', '#/vocal-lab/s1');
+ await expect(page.locator('#view .vl-player, #view .vl-dates')).toHaveCount(0);
 });
 
 test('Vocal lab growth AI asks the server for a measured same-song report (overall mode)', async ({page}) => {

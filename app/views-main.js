@@ -567,7 +567,8 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
     const tabs = [['media', '녹음'], ['lyrics', '가사'], ['scores', '악보'], ['timeline', '활동 기록'], ['ar', '레퍼런스']];
-    return '<div class="song-head vz-song-detail-hero"><span class="vz-song-detail-eyebrow">곡 상세</span><strong class="vz-song-detail-title">' + esc(s.title) + '</strong>' + '<span class="vz-song-detail-summary" data-summary></span></div>' +
+    // The page header already says 곡 상세: the card shows the title, 작품 / 아티스트 and the totals.
+    return '<div class="song-head vz-song-detail-hero"><strong class="vz-song-detail-title">' + esc(s.title) + '</strong><span class="vz-song-detail-sub" data-song-show' + (s.show ? '' : ' hidden') + '>' + esc(s.show || '') + '</span><span class="vz-song-detail-summary" data-summary></span></div>' +
       '<div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
@@ -576,9 +577,10 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     // `s` is the song as it was when this screen opened. Synced data replaces VZ.db, so anything shown or saved reads the
     // current song by id; for a song deleted on another device the screen says so instead of writing it back.
     const live = () => VZ.song(s.id) || (VZ.render(), null);
+    const head = cur => { main.querySelector('.vz-song-detail-title').textContent = cur.title; const show = main.querySelector('[data-song-show]'); show.textContent = cur.show || ''; show.hidden = !cur.show; };
     const refresh = () => {
       const cur = VZ.song(s.id); if (!cur) { VZ.render(); return; }
-      main.querySelector('.vz-song-detail-title').textContent = cur.title;
+      head(cur);
       if (!selectionTouched) { VZ.mediaSelection?.clear(); draw(); } // a selection the user made is kept, as after loading the list
     };
     document.querySelector('[data-song-menu]')?.addEventListener('click', () => VZ.menu({title:(VZ.song(s.id) || s).title, body:'<div class="list"><button type="button" class="item" data-e><i class="ph ph-pencil-simple"></i><span class="item-main">곡 정보 수정</span></button><button type="button" class="item" data-rep-menu><i class="ph ph-music-notes"></i><span class="item-main">나의 레퍼토리 설정</span></button><button type="button" class="item" data-d style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">곡 삭제</span></button></div>',
@@ -594,59 +596,103 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       }}));
     const body = main.querySelector('[data-body]');
     let media = M.cached().filter(m => m.songId === s.id), selectionTouched = false;
+    // 녹음 draws 50 rows at a time (더 보기, or scrolling near the end of the list). The list is built once: a redraw that
+    // changes nothing that is shown leaves the rows alone, with their selection, open player and scroll position.
+    const PAGE = 50, SEP = '\u0002';
+    let shown = PAGE, built = '', mediaList = [], syncMedia = null, watcher = null, practices = [], lessons = [];
+    const fb = l => l.songFeedback?.[s.id] || l.feedback || '';
+    /** The lesson or practice record a recording belongs to, if any. */
+    const linked = m => {
+      const lesson = lessons.find(l => (l.recordings || []).some(x => x.id === m.id));
+      if (lesson) return {kind:'lesson', date:lesson.date, summary:fb(lesson) || '피드백 미작성', minutes:'', rating:''};
+      const practice = practices.find(p => (p.mediaIds || []).includes(m.id));
+      if (practice) return {kind:'practice', date:practice.date, summary:practice.memo || '메모 없음', minutes:VZ.minutes(VZ.practiceMinutes(practice)), rating:practice.rating ? '★'+practice.rating : ''};
+      return null;
+    };
+    /** What the first n rows show: used to tell whether a redraw would change anything on screen. */
+    const signature = (list, n) => [(VZ.song(s.id) || s).title, list.length, ...list.slice(0, n).map(m => { const record = linked(m); return VZ.mediaRow(m) + (record ? record.kind + record.date : ''); })].join(SEP);
     const draw = () => {
       const db = VZ.db;
-      const practices = db.practices.filter(p => p.songId === s.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      const lessons = db.lessons.filter(l => VZ.lessonSongIds(l).includes(s.id) || l.songFeedback?.[s.id]).sort((a, b) => VZ.lessonSort(b, a));
+      practices = db.practices.filter(p => p.songId === s.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      lessons = db.lessons.filter(l => VZ.lessonSongIds(l).includes(s.id) || l.songFeedback?.[s.id]).sort((a, b) => VZ.lessonSort(b, a));
       const tasks = db.assignments.filter(t => VZ.taskSongId(t) === s.id);
       const minutes = VZ.sumMinutes(VZ.timeEntries(media).filter(e => e.songId === s.id && !e.training));
       main.querySelector('[data-summary]').textContent = [minutes ? '연습 ' + VZ.minutes(minutes) : '', practices.length ? '기록 ' + practices.length + '회' : '', media.length ? '녹음 ' + media.length + '개' : '', (n => n ? '레슨 ' + n + '회' : '')(lessons.filter(l => VZ.lessonStatus(l) === 'done').length)].filter(Boolean).join(' · ') || '아직 기록이 없어요';
       VZ.repertoire?.songPanel(main.querySelector('[data-repertoire]'), VZ.song(s.id) || s, media);
       main.querySelectorAll('[data-tab]').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.tab === songTab)); b.setAttribute('aria-selected', String(b.dataset.tab === songTab)); });
-      const fb = l => l.songFeedback?.[s.id] || l.feedback || '';
-      // Recordings live inside lessons and practices: each tab lists its records with their recordings.
-      const lessonMedia = media.filter(m => M.occasion(m) === 'lesson'), practiceMedia = media.filter(m => M.occasion(m) === 'practice'), stageMedia = media.filter(m => M.occasion(m) === 'performance');
-      const recList = (items, empty) => items.length ? '<div class="list" data-r>' + items.map(VZ.mediaRow).join('') + '</div>' : '<p class="small muted" style="margin:0 4px">' + empty + '</p>';
       if (songTab === 'media') {
         const visible = media.slice().sort((a,b) => String(M.dateOf(b) || '').localeCompare(String(M.dateOf(a) || '')) || (b.created || 0) - (a.created || 0));
-        body.innerHTML = '<div class="vz-song-section"><h2>녹음 <span>' + visible.length + '</span></h2></div>' +
-          (visible.length ? '<div class="vz-song-select-row"><label><input type="checkbox" data-all aria-label="녹음 전체선택"> 전체선택</label><div class="vz-song-selection-actions"><span data-selected-count>선택 0개</span></div></div><div class="vz-song-media-list" data-r data-song-media>' + visible.map(VZ.mediaRow).join('') + '</div>' : VZ.empty('waveform', '이 곡의 녹음이 없어요.', '<a class="btn sm" href="#/record?song=' + encodeURIComponent(s.id) + '">녹음 시작</a>'));
+        shown = Math.max(PAGE, shown);
+        const count = Math.min(shown, visible.length), next = signature(visible, count);
+        if (next === built && body.querySelector('[data-song-media]')) {
+          // Nothing shown has changed: keep the rows, and let them (and the rows still to come) use the fresh list.
+          mediaList.splice(0, mediaList.length, ...visible);
+          syncMedia?.(); VZ.mediaSelection?.showSongAction();
+          return;
+        }
+        watcher?.disconnect(); watcher = null;
+        built = next; shown = count; mediaList = visible;
+        // Nothing is ticked to begin with: 보컬 분석하기 appears once recordings are chosen. The lab link is always here.
+        body.innerHTML = '<div class="vz-song-section"><h2>녹음 <span>' + visible.length + '</span></h2>' + (visible.length ? '<a class="vz-song-lab" href="#/vocal-lab/' + encodeURIComponent(s.id) + '">분석·비교 보기<i class="ph ph-caret-right" aria-hidden="true"></i></a>' : '') + '</div>' +
+          (visible.length ? '<div class="vz-song-select-row"><label><input type="checkbox" data-all aria-label="녹음 전체선택"> <span data-all-label>전체선택</span></label><div class="vz-song-selection-actions"><span data-selected-count>선택 0개</span></div></div><div class="vz-song-media-list" data-r data-song-media></div><button type="button" class="btn secondary block vz-song-more-rows" data-more-rows hidden></button>' : VZ.empty('waveform', '이 곡의 녹음이 없어요.', '<a class="btn sm" href="#/record?song=' + encodeURIComponent(s.id) + '">녹음 시작</a>'));
         const host = body.querySelector('[data-song-media]');
         if (host) {
-          const linked = m => {
-            const lesson = lessons.find(l => (l.recordings || []).some(x => x.id === m.id));
-            if (lesson) return {kind:'lesson', date:lesson.date, summary:fb(lesson) || '피드백 미작성', minutes:'', rating:''};
-            const practice = practices.find(p => (p.mediaIds || []).includes(m.id));
-            if (practice) return {kind:'practice', date:practice.date, summary:practice.memo || '메모 없음', minutes:VZ.minutes(VZ.practiceMinutes(practice)), rating:practice.rating ? '★'+practice.rating : ''};
-            return null;
+          const all = body.querySelector('[data-all]'), allLabel = body.querySelector('[data-all-label]'), more = body.querySelector('[data-more-rows]');
+          const decorate = (row, item) => {
+            // On the song's own page its title is not repeated: "곡 제목 2026-11-01" reads "2026-11-01".
+            const name = row.querySelector('.vz-record-name'), label = M.label(item), title = (VZ.song(s.id) || s).title;
+            const rest = title && label.startsWith(title) ? label.slice(title.length).replace(/^[\s·\-–—_,:]+/, '') : '';
+            if (rest) { name.textContent = rest; name.title = label; }
+            // The chip is the kind of recording (연습 · 레슨 · 공연). It says "기록" and opens the record only when a lesson or
+            // practice record really holds this recording.
+            const occasion = M.occasion(item), record = linked(item);
+            const chip = document.createElement('span');
+            chip.className = 'vz-song-kind ' + occasion;
+            chip.textContent = ({performance:'공연', audition:'오디션'})[occasion] || (record ? (record.kind === 'lesson' ? '레슨 기록' : '연습 기록') : M.occasionLabel(occasion));
+            if (record) { chip.dataset.linkedRecord = item.id; chip.tabIndex = 0; chip.setAttribute('role','button'); chip.setAttribute('aria-label',chip.textContent+' 보기'); chip.addEventListener('keydown',e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chip.click(); } }); }
+            row.querySelector('.item-title').append(chip);
+          };
+          const add = items => {
+            host.insertAdjacentHTML('beforeend', items.map(VZ.mediaRow).join(''));
+            [...host.children].slice(-items.length).forEach((row, i) => decorate(row, items[i]));
+          };
+          const sync = () => {
+            const rows = host.querySelectorAll(':scope > [data-media]').length, picked = VZ.mediaSelection?.count(host) || 0, left = mediaList.length - shown;
+            body.querySelector('[data-selected-count]').textContent = '선택 ' + picked + '개';
+            all.checked = rows > 0 && picked === rows; all.indeterminate = picked > 0 && picked < rows;
+            // 전체선택 ticks the rows that are drawn; with more to come it says so.
+            allLabel.textContent = left > 0 ? '보이는 ' + shown + '개 선택' : '전체선택';
+            all.setAttribute('aria-label', left > 0 ? '보이는 녹음 ' + shown + '개 선택' : '녹음 전체선택');
+            more.hidden = left <= 0; more.textContent = '더 보기 (' + Math.max(0, left).toLocaleString('ko-KR') + '개 남음)';
+          };
+          const grow = () => {
+            // Rows are added under the ones already there: scroll position, ticked rows and an open player stay as they are.
+            if (shown >= mediaList.length) return;
+            const items = mediaList.slice(shown, shown + PAGE);
+            shown += items.length; add(items); built = signature(mediaList, shown);
+            M.prefetch(items); sync();
           };
           host.addEventListener('click', e => {
             const chip = e.target.closest('[data-linked-record]');
             if (!chip) return;
             e.preventDefault(); e.stopImmediatePropagation();
-            const item = visible.find(m => String(m.id) === chip.dataset.linkedRecord), record = item && linked(item);
+            const item = mediaList.find(m => String(m.id) === chip.dataset.linkedRecord), record = item && linked(item);
             if (!record) return;
             const title = record.kind === 'lesson' ? '레슨 기록' : '연습 기록';
             VZ.sheet({title, body:'<div class="vz-song-linked-sheet"><p class="small muted">'+esc(VZ.dateLabel(record.date))+' · '+esc((VZ.song(s.id) || s).title)+'</p><strong>'+esc([record.minutes,record.rating].filter(Boolean).join(' · ') || title)+'</strong><div class="vz-song-linked-note">'+esc(record.summary)+'</div></div>'});
           }, true);
           host.addEventListener('click', e => { if (e.target.closest('.vz-media-select, [data-toggle]')) { selectionTouched = true; setTimeout(sync, 0); } }, true);
-          VZ.wireMedia(host, visible);
-          host.querySelectorAll('[data-media]').forEach(row => {
-            const item = visible.find(m => String(m.id) === row.dataset.media), name = row.querySelector('.item-title');
-            if (!item || !name) return;
-            const occasion = M.occasion(item), relation = linked(item);
-            const chip = document.createElement('span');
-            chip.className = 'vz-song-kind ' + occasion;
-            chip.textContent = ({lesson:'레슨 기록',practice:'연습 기록',performance:'공연',audition:'오디션'})[occasion] || M.occasionLabel(occasion);
-            if (relation) { chip.dataset.linkedRecord = item.id; chip.tabIndex = 0; chip.setAttribute('role','button'); chip.setAttribute('aria-label',chip.textContent+' 보기'); chip.addEventListener('keydown',e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chip.click(); } }); }
-            name.append(chip);
-          });
-          const all = body.querySelector('[data-all]');
-          const sync = () => { const count = VZ.mediaSelection?.count(host) || 0; body.querySelector('[data-selected-count]').textContent = '선택 ' + count + '개'; all.checked = count === visible.length; all.indeterminate = count > 0 && count < visible.length; };
-          all.onchange = () => { selectionTouched = true; VZ.mediaSelection?.selectAll(host, visible, all.checked); sync(); };
-          VZ.mediaSelection?.selectAll(host, visible, true);
-          sync();
-        }
+          add(mediaList.slice(0, shown));
+          VZ.wireMedia(host, mediaList);
+          all.onchange = () => { selectionTouched = true; VZ.mediaSelection?.selectAll(host, mediaList.slice(0, shown), all.checked); sync(); };
+          more.onclick = grow;
+          if (window.IntersectionObserver) {
+            // Near the end of the list the next rows come by themselves. Watching again after each step asks once more, in case the button is still near.
+            const near = new IntersectionObserver(entries => { if (!entries.some(e => e.isIntersecting)) return; grow(); near.unobserve(more); if (shown < mediaList.length) near.observe(more); }, {rootMargin:'600px 0px'});
+            near.observe(more); watcher = near;
+          }
+          syncMedia = sync; sync();
+        } else syncMedia = null;
         VZ.mediaSelection?.showSongAction();
         return;
       }
@@ -709,7 +755,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     // The tab bar sticks to the top: a tab chosen further down starts its list right under the bar.
     main.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
       VZ.mediaSelection?.hideSongAction();
-      songTab = b.dataset.tab; selectionTouched = false; draw();
+      songTab = b.dataset.tab; selectionTouched = false; shown = PAGE; built = ''; watcher?.disconnect(); watcher = null; draw();
       // Keep the user's current scroll position when changing tabs.
     });
     draw();
@@ -722,7 +768,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       if (e.detail?.source === 'v6') return; // this app's own save redraws where it was made
       const cur = VZ.song(s.id), active = main.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
       const held = document.querySelector('.sheet-back') || active || main.dataset.dirty || body.querySelector('.media-open:not([hidden]), audio, video, iframe') || M.playing?.() || VZ.lyricsMemo?.isOpen(s.id);
-      if (!held) refresh(); else if (cur) main.querySelector('.vz-song-detail-title').textContent = cur.title;
+      if (!held) refresh(); else if (cur) head(cur);
     };
     window.addEventListener('vzip:data-changed', songSynced);
     media = (await M.list().catch(() => [])).filter(m => m.songId === s.id);
