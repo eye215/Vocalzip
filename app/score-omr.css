@@ -1,5 +1,5 @@
 /* 음표로 변환 (OMR PoC) — design guide colours, 44px targets. */
-.omr-sheet{display:grid;gap:12px}
+.omr-sheet{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .omr-file{display:flex;align-items:center;gap:8px;margin:0;font-size:15px;font-weight:600;color:#101828}
 .omr-file i{font-size:20px;color:#7A32F5;flex:none}
 .omr-file span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -11,7 +11,15 @@
 .omr-wait i{font-size:24px;color:#7A32F5;flex:none}
 .omr-wait strong{display:block;font-size:15px;color:#101828}
 .omr-wait p{margin:2px 0 0;font-size:13px;color:#475467}
-.omr-preview{min-height:160px;max-height:60vh;overflow:auto;border:1px solid #E4E7EC;border-radius:14px;background:#fff;padding:8px;margin-bottom:12px}
-.omr-preview svg{max-width:100%;height:auto}
+/* Line-break switch (.seg) and zoom tools above the preview. The preview scrolls both ways when zoomed; pinch stays free. */
+.omr-tools{display:grid;gap:8px;margin-bottom:8px}
+.omr-tools[hidden],.omr-mode[hidden]{display:none}
+.omr-zoom{display:flex;align-items:center;gap:4px}
+.omr-zoom .icon-btn{flex:none;color:#344054}
+.omr-zoom .icon-btn:disabled{opacity:.35}
+.omr-zoom [data-omr-scale]{flex:none;min-width:44px;text-align:center;font-size:14px;line-height:20px;font-weight:600;color:#475467;font-variant-numeric:tabular-nums}
+.omr-zoom .btn{flex:none;margin-left:auto}
+.omr-preview{min-height:160px;max-height:60vh;overflow:auto;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y pinch-zoom;border:1px solid #E4E7EC;border-radius:14px;background:#fff;padding:8px;margin-bottom:12px}
+.omr-preview svg{display:block;max-width:none}
 .omr-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .omr-actions .btn{min-height:44px}
