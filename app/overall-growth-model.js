@@ -51,6 +51,8 @@ function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
     return {month,value:avg(means),songs:means.length};
    }).filter(x=>x.value!=null).slice(-12);
   }
+  // 파사지오: what recurs over every counted take (the latest 40), next to the per-song lines. Reference only.
+  if(agg.reference)agg={...agg,recurring:G.passaggioRecurring([...perSong.values()].flat())};
   return {...agg,current:agg.latestValue,currentSongs:agg.measured,pairedSongs:agg.compared,
    improved:agg.better,worsened:agg.worse,pairs:agg.rows,trend,trendVersion:newest};
  });

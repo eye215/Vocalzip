@@ -110,6 +110,27 @@
 .growth-chart-track i{display:block;width:100%;max-width:21px;min-height:7px;border-radius:7px 7px 3px 3px;background:linear-gradient(#bd95ff,#7c49d1);box-shadow:0 0 12px rgba(139,87,219,.22);transition:height .2s}
 .growth-chart-point:active .growth-chart-track i{background:#e2c8ff}
 .growth-chart-point small{font-size:10px;color:#b5a9cb;text-align:center}
+/* 월별 측정 흐름 as a line: one point per month with a value, joined by a line; a month without one is a gap. */
+.growth-chart.growth-line{position:relative;gap:0;align-items:start;min-height:0}
+.growth-line-svg{position:absolute;left:13px;top:25px;width:calc(100% - 26px);height:130px;overflow:visible;pointer-events:none}
+.growth-line-svg polyline{fill:none;stroke:#bd95ff;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+.growth-line .growth-chart-point,.growth-chart-gap{display:grid;grid-template-rows:130px auto;align-items:start;gap:7px;height:auto;min-width:0;padding:0 0 2px}
+.growth-line .growth-chart-track{position:relative;display:block}
+.growth-line .growth-chart-track i.growth-line-dot{position:absolute;left:50%;width:11px;max-width:none;height:11px;min-height:0;margin:-5.5px 0 0 -5.5px;border-radius:50%;background:#e2d0ff;box-shadow:0 0 0 3px rgba(189,149,255,.24);transition:none}
+.growth-line .growth-chart-point.is-small .growth-chart-track i.growth-line-dot{background:#1f1b30;box-shadow:inset 0 0 0 2px #e2d0ff}
+.growth-line .growth-chart-point:active .growth-chart-track i.growth-line-dot{background:#fff}
+.growth-chart-gap small{font-size:10px;color:#7f7496;text-align:center}
+.growth-chart-gap .growth-chart-track{border-bottom-style:dashed}
+.growth-trend-dir{display:inline-flex;align-items:center;gap:4px;margin:8px 0 0;padding:3px 9px;border-radius:99px;background:#F2EFF7;color:#475467;font-size:12px;line-height:18px;font-weight:600}
+.growth-trend-dir i{font-size:13px}
+.growth-line-legend{display:flex;flex-wrap:wrap;gap:4px 12px}
+.growth-line-legend span{display:inline-flex;align-items:center;gap:5px}
+.growth-line-key{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%}
+.growth-line-key.is-small{box-shadow:inset 0 0 0 2px #7c49d1}
+.growth-line-key.is-gap{width:14px;height:0;border-radius:0;border-top:2px dashed #b5a9cb}
+.growth-trend-table table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.growth-trend-table th,.growth-trend-table td{padding:8px 4px;border-top:1px solid #f0ebf4;text-align:left;font-weight:400;color:#475467}
+.growth-trend-table thead th{border-top:0;color:#766b84;font-weight:600}
 .growth-chart-empty{border-radius:15px;background:#f5f1f9;padding:26px 15px;text-align:center;font-size:13px;color:#817390}
 .growth-chart-dialog{line-height:1.65}.growth-chart-value{font-size:26px;font-weight:800;color:#6743ae}
 .growth-coach{border-color:#dcd0ee;background:linear-gradient(155deg,#fff 40%,#f8f4ff)}

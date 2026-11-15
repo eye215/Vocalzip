@@ -41,11 +41,40 @@ function updateSong(id,values,shared={}){
  // The kept list can be cold (a refresh or a cloud read that was not kept): read it again rather than show the chosen take as missing.
  if(next.takeId&&!cached.some(m=>m.id===next.takeId))M.list().then(draw).catch(()=>{});
 }
+/* 키 정보 from the song's converted score (MusicXML): the key signature fills an empty 원키 (nothing is saved until
+ * 저장), and the sung part's lowest/highest notes are shown. A key the owner already set on a score (악보 정보) wins
+ * over the automatic reading; the song's confirmed 악보 기준 음역 wins over the automatic part range. */
+async function scoreKey(song,host){
+ const R=window.VzipScoreRange;if(!host||!R)return;
+ const scores=(song.scores||[]).filter(x=>x&&x.id);
+ const range=song.vocalRange&&Number.isFinite(song.vocalRange.lowMidi)?{low:song.vocalRange.low,high:song.vocalRange.high,how:'악보 기준 음역(확인함)'}:null;
+ let key=scores.map(x=>x.originalKey).find(Boolean)?{name:scores.map(x=>x.originalKey).find(Boolean),how:'악보 정보에 넣은 원키'}:null,auto=null,partRange=null;
+ if((!key||!range)&&V.vocalRangeLoadScore&&window.VzipR2?.enabled?.()&&window.VzipR2.omr){
+  for(const sc of scores){
+   try{const loaded=await V.vocalRangeLoadScore(sc);if(!loaded?.xml)continue;
+    auto=R.readKey?.(loaded.xml)||null;const res=loaded.result,part=res?.parts?.find(p=>p.id===res.pick);
+    if(part?.low&&part?.high)partRange={low:part.low,high:part.high,how:'악보 '+(part.name?'"'+part.name+'" ':'')+'파트(자동 인식)'};
+    break;
+   }catch{}
+  }
+ }
+ if(!key&&auto){const minor=auto.likely==='minor';key={name:minor?auto.minor:auto.major,how:'악보 조표(자동 인식)',other:minor?auto.major:auto.minor,sure:!!auto.likely,changes:auto.changes}}
+ const show=range||partRange;
+ if(!host.isConnected||(!key&&!show))return;
+ const form=host.closest('form'),input=form?.elements.originalKey;
+ const filled=key&&input&&!input.value.trim();
+ if(filled){input.value=key.name;input.dispatchEvent(new Event('input',{bubbles:true}))}
+ host.innerHTML='<p class="score-key-title"><i class="ph ph-music-notes" aria-hidden="true"></i> 악보에서 찾았어요</p>'+
+  (key?'<p class="small" data-rep-key>원키 <b>'+E(key.name)+'</b> · '+E(key.how)+(filled?' · 원키 칸에 넣었어요. 저장을 눌러야 반영돼요.':'')+'</p>'+
+   (key.other&&!key.sure?'<p class="small muted">조표만으로는 장조·단조를 가릴 수 없어요. 단조라면 '+E(key.other)+'예요.</p>':'')+(key.changes?'<p class="small muted">곡 중간에 조가 바뀌어요(처음 조표 기준).</p>':''):'')+
+  (show?'<p class="small" data-rep-range>최저음 <b>'+E(show.low)+'</b> · 최고음 <b>'+E(show.high)+'</b> · '+E(show.how)+'</p>':'');
+ host.hidden=false;
+}
 function editRepertoire(id,kind){
  const s=V.song(id);if(!s)return;const r=info(s);
  if(kind==='status')return panel('레퍼토리 상태',select('상태','status',A.states,r.status),v=>updateSong(id,v));
  if(kind==='skills')return panel('나의 숙련도', '<p class="small muted">직접 평가하는 항목입니다. AI 분석 점수와 별도로 저장해요.</p>'+Object.entries(A.skills).map(([k,n])=>select(n,k,{'1':'1','2':'2','3':'3','4':'4','5':'5'},String(r.skills?.[k]||''))).join(''),v=>updateSong(id,{skills:v}));
- if(kind==='keys')return panel('키 정보',field('원키','originalKey',r.originalKey)+field('연습키','practiceKey',r.practiceKey)+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote),v=>updateSong(id,v));
+ if(kind==='keys'){panel('키 정보','<div class="rep-score-key" data-rep-score-key hidden></div>'+field('원키','originalKey',r.originalKey)+field('연습키','practiceKey',r.practiceKey)+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote),v=>updateSong(id,v));scoreKey(s,document.querySelector('.archive-sheet [data-rep-score-key]'));return}
  const values=[...new Set(V.db.songs.map(x=>x.show).filter(Boolean))];
  const showOptions='<datalist id="archive-show">'+values.map(v=>'<option value="'+E(v)+'"></option>').join('')+'</datalist>';
  panel('곡 정보',field('곡명','title',s.title,'text',true)+field('뮤지컬 작품명','show',s.show).replace('name="show"','name="show" list="archive-show"')+showOptions+select('구분','kind',A.kinds,r.kind)+field('원어','language',r.language)+area('개인 메모','memo',r.memo),v=>{const {title,show,...rest}=v;if(!title.trim())throw Error('곡명을 입력해 주세요.');updateSong(id,rest,{title:title.trim(),show:show.trim()})});
