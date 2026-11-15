@@ -120,7 +120,10 @@ test('a lyrics form page stays full screen while the keyboard is up and after it
  await expect(form.getByRole('button',{name:'저장'})).toBeVisible();
 });
 test('Repertoire persists metadata ratings keys and filters without rewriting original records',async({page})=>{
- await boot(page);await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('나의 레퍼토리');expect(await page.locator('[data-repertoire] .archive-song-row').count()).toBe(3);await expect(page.locator('[data-repertoire] .archive-song-take')).toBeVisible();await expect(page.locator('[data-repertoire]')).not.toContainText('공연 이력');await page.locator('[data-rep=status]').click();await dialog(page).getByLabel('상태',{exact:true}).selectOption('ready');await save(page);
+ await boot(page);await page.goto('/#/song/song1');await expect(page.locator('[data-repertoire]')).toContainText('나의 레퍼토리');
+ // The panel is one summary card; its rows (상태 · 숙련도 · 키 정보 · 메모) open under it and stay open while saving.
+ await expect(page.locator('[data-repertoire] .archive-song-row').first()).toBeHidden();await page.locator('[data-rep-toggle]').click();
+ expect(await page.locator('[data-repertoire] .archive-song-row').count()).toBe(4);await expect(page.locator('[data-repertoire] .archive-song-take')).toBeVisible();await expect(page.locator('[data-repertoire]')).not.toContainText('공연 이력');await page.locator('[data-rep=status]').click();await dialog(page).getByLabel('상태',{exact:true}).selectOption('ready');await save(page);
  await page.locator('[data-rep=skills]').click();await dialog(page).getByLabel('가사 암보',{exact:true}).selectOption('5');await dialog(page).getByLabel('전체 완성도',{exact:true}).selectOption('4');await save(page);
  await page.locator('[data-rep=keys]').click();await dialog(page).getByLabel('원키',{exact:true}).fill('Db');await dialog(page).getByLabel('연습키',{exact:true}).fill('C');await save(page);
  await page.reload();await expect(page.locator('[data-repertoire]')).toContainText('4.5/5');await expect(page.locator('[data-repertoire]')).toContainText('원키 Db');
@@ -150,7 +153,7 @@ test('Representative take references the original file and deletion clears only 
   write(0,'RIFF');view.setUint32(4,bytes.length-8,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,bytes.length-44,true);
   await window.vzipStorePracticeMedia({id:'take1',name:'대표 녹음',songId:'song1',type:'audio/wav',durationSeconds:3,created:Date.now(),blob:new Blob([bytes],{type:'audio/wav'})});VZ.media.invalidate();
  });
- await page.goto('/#/song/song1');await page.locator('[data-take]').click();await dialog(page).getByLabel('기존 녹음',{exact:true}).selectOption('take1');
+ await page.goto('/#/song/song1');await page.locator('[data-rep-toggle]').click();await page.locator('[data-take]').click();await dialog(page).getByLabel('기존 녹음',{exact:true}).selectOption('take1');
  // A background refresh can drop the kept list while the sheet is open (seen intermittently on WebKit): the take must still show.
  await page.evaluate(()=>VZ.media.invalidate());await save(page);
  await expect(page.locator('[data-take-player]')).toContainText('대표 녹음');expect((await page.evaluate(()=>vzipReadMedia())).length).toBe(1);

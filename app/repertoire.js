@@ -99,18 +99,32 @@ V.repertoire={
  score:s=>A.proficiency({repertoire:info(s)})||0,
  card:s=>{const r=info(s),score=A.proficiency({repertoire:r});return '<span class="archive-card-meta">'+E([r.role,A.states[r.status],score?'숙련도 '+score.toFixed(1)+'/5':''].filter(Boolean).join(' · '))+'</span>'},
  wireList:(main,draw)=>{const el=main.querySelector('[data-rep-filter]');if(el)el.onchange=()=>{filter=el.value;draw()}},
+ // Song page: one compact card (two lines at most) above the tabs; the rows open under it and stay open while this song is shown.
  songPanel:(host,s,media)=>{
   if(!host)return;const r=info(s),score=A.proficiency({repertoire:r}),take=media.find(m=>m.id===r.takeId&&!V.db.deleted?.media?.includes(m.id));
-  const keys=[r.originalKey&&'원키 '+r.originalKey,r.practiceKey&&'연습키 '+r.practiceKey,r.stageKey&&'공연키 '+r.stageKey].filter(Boolean).join(' · ');
-  const row=(key,label,value,extra='')=>'<button type="button" class="archive-song-row '+extra+'" data-rep="'+key+'"><strong>'+label+'</strong><span class="archive-song-value '+(value?'':'is-empty')+'">'+E(value||({status:'상태 지정',info:'입력하기',skills:'미평가',keys:'미입력'}[key]))+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
-  host.innerHTML='<section class="archive-song" aria-label="나의 레퍼토리">' +
-    '<h2 class="archive-song-title">나의 레퍼토리</h2>' +
+  const keys=Keys.summary({...s,repertoire:r});
+  if(panelOpen.id!==s.id)panelOpen={id:s.id,on:false};
+  const row=(key,label,value,extra='')=>'<button type="button" class="archive-song-row '+extra+'" data-rep="'+key+'"><strong>'+label+'</strong><span class="archive-song-value '+(value?'':'is-empty')+'">'+E(value||({status:'상태 지정',skills:'미평가',keys:'미입력',memo:'메모 적기'}[key]))+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
+  const first=[A.states[r.status],score?'숙련도 '+score.toFixed(1)+'/5':''].filter(Boolean).join(' · ');
+  const second=[keys,(r.memo||'').trim().replace(/\s+/g,' ')||(take?'대표 테이크 '+M.label(take):'')].filter(Boolean).join(' · ');
+  const html='<section class="archive-song" aria-label="나의 레퍼토리">' +
+    '<button type="button" class="archive-song-summary" data-rep-toggle aria-expanded="false" aria-controls="archive-song-detail"><span class="archive-song-summary-top"><strong>나의 레퍼토리</strong><span class="archive-song-value '+(first?'':'is-empty')+'">'+E(first||'상태·숙련도·키 적기')+'</span></span>'+(second?'<span class="archive-song-summary-note">'+E(second)+'</span>':'')+'<i class="ph ph-caret-down" aria-hidden="true"></i></button>' +
+    '<div class="archive-song-detail" id="archive-song-detail" data-rep-detail hidden>' +
     row('status','상태',A.states[r.status]||'','archive-song-status') +
     row('skills','숙련도',score?score.toFixed(1)+'/5':'') +
     row('keys','키 정보',keys) +
-    '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'녹음을 불러올 수 없어요':'아직 지정한 녹음이 없어요')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
-    (r.memo?'<p class="archive-note">'+E(r.memo)+'</p>':'') +
-    '<div data-take-player>'+(take?'<div class="list">'+V.mediaRow(take)+'</div>':r.takeId?'<p class="small muted">원본 연결은 유지됩니다.</p>':'')+'</div></section>';
+    // The chosen take stays chosen while its recording cannot be read (offline, list not loaded yet).
+    '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'지금은 녹음을 불러올 수 없어요. 지정은 그대로예요.':'아직 지정한 녹음이 없어요')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
+    '<div data-take-player>'+(take?'<div class="list">'+V.mediaRow(take)+'</div>':'')+'</div>' +
+    '<button type="button" class="archive-song-row archive-song-memo" data-rep="memo"><strong>메모</strong><span class="archive-song-value '+(r.memo?'':'is-empty')+'">'+E(r.memo||'메모 적기')+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
+    '</div></section>';
+  // The song page redraws on every data event: nothing is rebuilt (an open take player keeps playing) unless what is shown changed.
+  const same=host.__panel===html&&!!host.firstElementChild;
+  if(!same){host.__panel=html;host.innerHTML=html}
+  const toggle=host.querySelector('[data-rep-toggle]'),detail=host.querySelector('[data-rep-detail]');
+  const open=()=>{detail.hidden=!panelOpen.on;toggle.setAttribute('aria-expanded',String(panelOpen.on))};
+  open();if(same)return;
+  toggle.onclick=()=>{panelOpen.on=!panelOpen.on;open()};
   host.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>editRepertoire(s.id,b.dataset.rep));host.querySelector('[data-take]').onclick=()=>chooseTake(s.id);if(take)V.wireMedia(host.querySelector('[data-take-player] .list'),[take]);
  }
 };
