@@ -39,7 +39,10 @@ const RULES = {
   high:{belowScoreTop:2, minNotes:2},
   keyShift:2,
   scoreNotes:8,       // common score notes judged in both takes before 악보 기준 맞은 음 비율 is shown
-  passaggio:{minBands:4, ratio:1.5, plus:4}
+  passaggio:{minBands:4, ratio:1.5, plus:4},
+  // 파사지오 over many recordings: the zone must come back in at least `share` of at least `min` recordings (the
+  // latest `cap`), a zone counting as the same within ± `tolerance` semitones.
+  passaggioRecur:{cap:40, min:5, share:.5, tolerance:1}
 };
 
 const METRICS = [
@@ -59,7 +62,7 @@ const METRICS = [
     method:'두 녹음의 같은 고음 구간에서 지속음의 흔들림과 유지시간을 함께 비교해요.',
     practice:'곡의 고음 구간을 편한 세기로 짧게 유지하며 같은 조건으로 다시 녹음하기', minutes:6},
   {id:'passaggio', title:'파사지오(전환 구간)', unit:'cent', direction:0, judged:false, reference:true, help:'pass',
-    method:'음높이별 지속음 흔들림에서 흔들림이 커지는 음역대를 찾아 보여 줘요. 음정 데이터만으로 판별 불가, 선생님 판단 참고.',
+    method:'녹음마다 지속음 흔들림이 커지는 음역대를 찾고, 믿을 만한 녹음 5개 이상 가운데 절반 이상에서 되풀이되는 곳만 보여 줘요. 녹음마다 다르면 판정을 보류해요. 음정 데이터만으로 판별 불가, 선생님 판단 참고.',
     practice:'', minutes:0}
 ];
 const byId = Object.fromEntries(METRICS.map(m => [m.id, m]));
@@ -81,7 +84,9 @@ const HOLD = {
   'key-shift':'주 가창 음역 전체가 옮겨져 키가 달랐을 수 있어요',
   'no-stable':'안정 최고음이 없어요',
   'few-high':'같은 고음 구간에서 지속한 음이 적어요',
-  'few-bands':'여러 음높이의 지속음이 부족해요'
+  'few-bands':'여러 음높이의 지속음이 부족해요',
+  'few-recordings':'세부 측정이 있는 믿을 만한 녹음이 5개는 있어야 해요',
+  'scattered':'녹음마다 다르게 나와요'
 };
 const HOLD_LABEL = '판정 보류';
 /** The reason only — for places that already show the 판정 보류 label (chip, heading). */
@@ -154,6 +159,31 @@ function passaggioOf(a) {
   const worst = groups.reduce((x, y) => Math.max(...y.map(r => r[5])) > Math.max(...x.map(r => r[5])) ? y : x);
   const lo = worst[0][0], hi = worst.at(-1)[0];
   return {state:'reference', found:true, from:noteName(lo), to:noteName(hi), fromMidi:lo, toMidi:hi, wobble:r1(Math.max(...worst.map(r => r[5]))), baseline:r1(base), bands:rows.length};
+}
+/** 파사지오 over the recordings of a period (a song's takes, or every counted take): the zone that RECURS.
+ * One recording's zone (passaggioOf) moves with the song and the day; this reads it over the reliable, detailed takes
+ * (the latest RULES.passaggioRecur.cap) and reports the most frequent zone — zones within ± 1 semitone of each other
+ * count as the same — only when it comes back in at least half of at least 5 recordings. Otherwise 판정 보류
+ * ('few-recordings' | 'scattered'), with the counts. When most recordings show no zone at all, that is what recurs
+ * (found:false). Reference only, never a verdict. takes: [{a, ok, date, created, id}]. */
+function passaggioRecurring(takes) {
+  const rule = RULES.passaggioRecur;
+  const rows = (takes || []).filter(t => t.ok && hasDetail(t.a)).slice().sort(takeOrder).slice(-rule.cap).map(t => passaggioOf(t.a)).filter(p => p.state === 'reference');
+  const of = rows.length;
+  if (of < rule.min) return {state:'hold', reason:'few-recordings', of, need:rule.min};
+  const found = rows.filter(p => p.found), none = of - found.length;
+  let best = null;
+  for (const c of found) {
+    const hits = found.filter(p => p.fromMidi <= c.toMidi + rule.tolerance && p.toMidi >= c.fromMidi - rule.tolerance);
+    if (!best || hits.length > best.hits.length || (hits.length === best.hits.length && (c.fromMidi - best.c.fromMidi || c.toMidi - best.c.toMidi) < 0)) best = {c, hits};
+  }
+  const top = best ? best.hits.length : 0;
+  if (none >= top && none / of >= rule.share) return {state:'reference', found:false, count:none, of, baseline:r1(median(rows.filter(p => !p.found).map(p => p.baseline)))};
+  if (top / of < rule.share) return {state:'hold', reason:'scattered', of, count:top};
+  const from = Math.round(median(best.hits.map(p => p.fromMidi))), to = Math.max(from, Math.round(median(best.hits.map(p => p.toMidi))));
+  const low = Math.min(...best.hits.map(p => p.fromMidi)), high = Math.max(...best.hits.map(p => p.toMidi));
+  return {state:'reference', found:true, from:noteName(from), to:noteName(to), fromMidi:from, toMidi:to, count:top, of, share:Math.round(top / of * 100) / 100,
+    spread:{from:noteName(low), to:noteName(high), fromMidi:low, toMidi:high}, wobble:r1(median(best.hits.map(p => p.wobble))), baseline:r1(median(best.hits.map(p => p.baseline)))};
 }
 /** One take on its own (no comparison): what each measure shows. reference = song.vocalRange or null. */
 function single(a, {reliable = false, reference = null} = {}) {
@@ -442,7 +472,7 @@ function songReport(allTakes, {reference = null, scoreNotes = null, arNotes = nu
     if (d.reference) {
       const withData = takes.filter(t => t.a?.metrics).sort(takeOrder);
       const latest = withData.slice().reverse().find(t => hasDetail(t.a)) || withData.at(-1);
-      out[d.id] = latest ? {id:d.id, state:'reference', latest:passaggioOf(latest.a), lastId:latest.id, to:latest.date} : {id:d.id, state:'hold', reason:'no-data'};
+      out[d.id] = latest ? {id:d.id, state:'reference', latest:passaggioOf(latest.a), lastId:latest.id, to:latest.date, recurring:passaggioRecurring(takes)} : {id:d.id, state:'hold', reason:'no-data'};
       continue;
     }
     const p = pickPair(takes, d.id);
@@ -458,7 +488,7 @@ function periodReport(beforeTakes, afterTakes, {reference = null} = {}) {
   const before = sort(beforeTakes), after = sort(afterTakes), out = {};
   const why = (list, id) => { const r = list.map(t => availability(t.a, id, t.ok)); return ['reanalyze', 'v1', 'confidence', 'few-notes', 'few-phrases', 'no-stable'].find(x => r.includes(x)) || 'no-data'; };
   for (const d of METRICS) {
-    if (d.reference) { const last = after.filter(t => hasDetail(t.a)).at(-1) || after.at(-1); out[d.id] = last ? {id:d.id, state:'reference', latest:passaggioOf(last.a), lastId:last.id} : {id:d.id, state:'hold', reason:'no-data'}; continue; }
+    if (d.reference) { const last = after.filter(t => hasDetail(t.a)).at(-1) || after.at(-1); out[d.id] = last ? {id:d.id, state:'reference', latest:passaggioOf(last.a), lastId:last.id, recurring:passaggioRecurring(after)} : {id:d.id, state:'hold', reason:'no-data'}; continue; }
     if (!before.length) continue;
     const last = after.filter(t => !availability(t.a, d.id, t.ok)).at(-1);
     if (!last) { out[d.id] = {id:d.id, state:'hold', reason:why(after, d.id)}; continue; }
@@ -545,6 +575,21 @@ function passaggioText(p) {
   return (p.from === p.to ? p.from : p.from + '–' + p.to) + ' 부근에서 지속음 흔들림이 커요 (±' + p.wobble + ' cent, 평소 ±' + p.baseline + ' cent)';
 }
 const PASSAGGIO_NOTE = '음정 데이터만으로 판별 불가, 선생님 판단 참고';
+/** A value read from ONE recording (녹음 상세, 두 녹음 비교): it moves with the song and the day. */
+const PASSAGGIO_SINGLE = '이 녹음에서만 본 참고값';
+/** "최근 24개 중 15개에서 E4~F4 근처 …", or 판정 보류 with the counts. */
+function passaggioRecurringText(r) {
+  if (!r) return holdLine('no-data');
+  if (r.state === 'hold') return holdLine(r.reason) + (r.reason === 'few-recordings' ? ' (지금 ' + r.of + '개)' : r.reason === 'scattered' ? ' (최근 ' + r.of + '개 중 가장 많이 겹친 곳도 ' + r.count + '개)' : '');
+  const head = '최근 ' + r.of + '개 중 ' + r.count + '개에서 ';
+  if (!r.found) return head + '흔들림이 크게 달라지는 구간이 보이지 않았어요 (평소 ±' + r.baseline + ' cent)';
+  const zone = r.from === r.to ? r.from : r.from + '~' + r.to, wide = r.spread.fromMidi !== r.fromMidi || r.spread.toMidi !== r.toMidi;
+  return head + zone + ' 근처' + (wide ? ' (나온 범위 ' + r.spread.from + '~' + r.spread.to + ')' : '') + ' · 지속음 흔들림 ±' + r.wobble + ' cent, 평소 ±' + r.baseline + ' cent';
+}
+/** The 파사지오 line of a report over several takes: what recurs (never one recording's value). */
+const passaggioReportText = x => x?.state === 'hold' ? holdLine(x.reason)
+  // Nothing to read at all (older analyses, no band detail): the reason the latest recording gives, as before.
+  : x?.recurring?.state === 'hold' && !x.recurring.of && x.latest?.state === 'hold' ? holdLine(x.latest.reason) : passaggioRecurringText(x?.recurring);
 function stateLabel(x) { return STATE[x?.state] || HOLD_LABEL; }
 /** AI coach input (server "overall" mode accepts only intonation/stability/phrase/vibrato; range, high-note and
  * passaggio are never sent, so the model cannot judge from the highest note). Withheld → state unknown. */
@@ -559,5 +604,5 @@ function aiMetrics(aggs) {
   });
 }
 return {VERSION:2, RULES, METRICS, HOLD, STATE, MR_REMOVED_NOTE, AI_SEPARATED_NOTE, noteName, midiOf, semitones, hasDetail, availability, value, single, zoneStats, keyShift, passaggioOf,
-  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, SAME_DAY, SAME_DAY_NOTE, sameDayMode, days, mostReliable, dayTakes, dayValue, meanAnalysis, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, stateLabel, holdText, holdLine, pairHold, HOLD_LABEL, heldText, wholeText, aiMetrics};
+  matchPhrases, tempoRatio, scoreNoteBasis, compareMetric, takeOrder, pickPair, songReport, SAME_DAY, SAME_DAY_NOTE, sameDayMode, days, mostReliable, dayTakes, dayValue, meanAnalysis, periodReport, comparePair, aggregate, mainHold, fmt, changeText, basisText, passaggioText, PASSAGGIO_NOTE, PASSAGGIO_SINGLE, passaggioRecurring, passaggioRecurringText, passaggioReportText, stateLabel, holdText, holdLine, pairHold, HOLD_LABEL, heldText, wholeText, aiMetrics};
 });

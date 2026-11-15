@@ -125,7 +125,8 @@ function growthReport(s){
  const saved=savedGrowthReport(s),ref=songReference(s.song);
  const items=G.METRICS.map(d=>({d,x:report[d.id]}));
  const line=({d,x})=>{
-  let text=d.reference?G.passaggioText(x.latest):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
+  // 파사지오: what recurs over the chosen recordings, never the latest recording's value alone.
+  let text=d.reference?G.passaggioReportText(x):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
   if(d.id==='range'&&x.vsScore)text+=' · 악보 최고음 '+x.vsScore.scoreHigh+' 대비 '+(x.vsScore.after===0?'같은 음':(x.vsScore.after>0?'+':'−')+Math.abs(x.vsScore.after)+'반음');
   const note=d.reference?G.PASSAGGIO_NOTE:G.basisText(x)||(x.state==='hold'?'':d.method);
   return '<li class="vl-growth-row '+TONE[x.state]+'" data-growth-row="'+d.id+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(d.title)+'</strong><p>'+esc(text)+'</p>'+(note?'<small>'+esc(note)+'</small>':'')+'</div></li>';
@@ -219,7 +220,7 @@ function singleDetail(s,a){
  const one=G.single(a,{reliable:V.analysisReliable(a),reference:songReference(s.song)}),h=one.high,p=one.passaggio;
  const high=h.state==='hold'?G.holdLine(h.reason):h.zone+' 구간 흔들림 ±'+h.wobble+' cent · 평균 유지 '+h.held+'초 (음 '+h.notes+'개'+(h.fromScore?', 악보 최고음 기준':'')+')';
  return '<ul class="vl-detail-list"><li><strong>고음 안정성</strong><span>'+esc(high)+'</span></li>'+
-  '<li><strong>파사지오 <em>참고</em></strong><span>'+esc(G.passaggioText(p))+'</span><small>'+esc(G.PASSAGGIO_NOTE)+'</small></li></ul>';
+  '<li data-single-passaggio><strong>파사지오 <em>참고</em></strong><span>'+esc(G.passaggioText(p))+'</span><small>'+esc(G.PASSAGGIO_SINGLE+' · '+G.PASSAGGIO_NOTE)+'</small></li></ul>';
 }
 function observationCurve(result) {
  // Saved summaries contain no waveform: draw only actual measured pitch samples.

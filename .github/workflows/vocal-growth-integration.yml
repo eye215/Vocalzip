@@ -42,7 +42,7 @@ jobs:
           done
       - name: Test growth models and app integration
         run: |
-          node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs tests/overall-growth.spec.cjs tests/growth-metrics.test.cjs tests/growth-dataset.test.cjs tests/growth-range.test.cjs tests/growth-same-day.test.cjs
+          node --test tests/weak-phrase.spec.cjs tests/segment-ab.spec.cjs tests/plan-outcome.spec.cjs tests/growth-integration.spec.cjs tests/vocal-growth-sync.spec.cjs tests/overall-growth.spec.cjs tests/growth-metrics.test.cjs tests/growth-dataset.test.cjs tests/growth-range.test.cjs tests/growth-passaggio.test.cjs tests/growth-same-day.test.cjs
   browser-smoke:
     # Playwright 1.56.1 is not compatible with ubuntu-26.04 runners.
     runs-on: ubuntu-24.04
