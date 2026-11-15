@@ -183,3 +183,43 @@ test('a browser without recording keeps MR playback and explains why recording i
   await expect(button(bar, '재생')).toBeEnabled();
   await expect(bar.locator('[data-score-audio-hint]')).toContainText('녹음을 지원하지 않아요');
 });
+
+// iPhone Safari starts sound only inside the tap. These tests stand in for a browser that refuses to start the MR
+// (play() settles but the element stays paused, as the shared player reports a blocked start).
+const blockPlay = page => page.evaluate(() => {
+  const real = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function () { window.__log.push(this.muted ? 'el-play:muted' : 'el-play:blocked'); return this.muted ? real.call(this) : Promise.resolve(); };
+});
+test('the MR address is fetched before any tap, and the file is unlocked inside the 재생+녹음 tap', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);   // ready ahead of the tap
+  await page.evaluate(() => { const real = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { window.__log.push(this.muted ? 'el-play:muted' : 'el-play'); return real.call(this); }; });
+  await button(bar, '재생+녹음').click();
+  await expect.poll(() => log(page)).toContain('play:mr-file');
+  const l = await log(page);
+  expect(l.indexOf('el-play:muted')).toBeGreaterThan(-1);
+  expect(l.indexOf('el-play:muted')).toBeLessThan(l.indexOf('capture-open:play-and-record'));   // before the microphone opens
+  await button(bar, '정지').click();
+});
+test('재생 that the browser refused goes back to the bar and says so instead of pretending to play', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
+  await blockPlay(page);
+  await button(bar, '재생').click();
+  await expect(bar.locator('[data-score-audio-hint]')).toContainText('MR 소리가 시작되지 않았어요');
+  await expect(bar.locator('[data-score-audio-hint]')).toHaveAttribute('data-error', 'true');
+  await expect(bar).not.toHaveClass(/is-live/);
+  await expect(button(bar, '재생')).toBeEnabled();
+});
+test('재생+녹음 never records on without the MR: the empty take is thrown away and the reason shown', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
+  await blockPlay(page);
+  await button(bar, '재생+녹음').click();
+  await expect(bar.locator('[data-score-audio-hint]')).toContainText('MR 소리가 시작되지 않아 녹음을 멈췄어요');
+  const l = await log(page);
+  expect(l).toContain('capture-start'); expect(l).toContain('capture-cancel'); expect(l).not.toContain('capture-stop');
+  await expect(bar).not.toHaveClass(/is-live/);
+  await expect(button(bar, '재생+녹음')).toBeEnabled();
+  expect(await page.evaluate(() => [navigator.audioSession.type, window.__saved.length])).toEqual(['auto', 0]);
+});

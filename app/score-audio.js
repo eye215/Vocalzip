@@ -48,6 +48,25 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     s.mr?.destroy?.(); s.mr = M.player(engine, mrItem(t), {}); s.mrFor = t.id;
     return s.mr;
   }
+  /** iPhone Safari starts sound only inside the tap, and a file whose address is still being fetched misses it.
+   * So the chosen file MR is made ready as soon as the bar shows it (address only; the audio loads on play). */
+  function warm() {
+    const t = track();
+    if (s.closed || s.mode !== 'idle' || !t || t.kind === 'youtube') return;
+    try { mrPlayer(t).load?.()?.catch?.(() => {}); } catch {}
+  }
+  /** Lets this file start later without a tap (재생+녹음 starts the MR after the microphone opened): a muted
+   * play inside the tap is what iPhone Safari accepts as the user's go-ahead for this audio element. */
+  function unlock(mr) {
+    const el = mr.el;
+    if (!el.src || !el.paused) return Promise.resolve();
+    el.muted = true;
+    let p; try { p = el.play(); } catch { p = null; }
+    const done = () => { try { el.pause(); el.currentTime = 0; } catch {} el.muted = false; };
+    return p?.then ? p.then(done, done) : (done(), Promise.resolve());
+  }
+  /** The MR did not start although play was asked (blocked by the browser, or the file cannot be played). */
+  const silent = mr => !mr || mr.el.paused || !!mr.el.error;
   const seconds = () => s.capture ? s.capture.seconds?.() || 0 : s.mr?.el?.currentTime || 0;
   function tick() { const el = bar.querySelector('[data-score-audio-time]'); if (el) el.textContent = VZ.clock(seconds()); }
 
@@ -90,6 +109,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     bar.innerHTML = html + '<p class="score-audio-hint" data-score-audio-hint role="status"></p>';
     if (frame) bar.append(frame);
     wire(t);
+    if (s.mode === 'idle' && s.warmed !== s.trackId) { s.warmed = s.trackId; warm(); }
     if (live || s.mode === 'paused') s.timer = setInterval(tick, 250);
     watch();
     for (const fn of changes) try { fn(s.mode); } catch {}
@@ -146,6 +166,8 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     mr.el.addEventListener('ended', () => { if (s.mode === 'mr' || s.mode === 'paused' && s.was === 'mr') { s.mode = 'idle'; paint(); } }, {once:true});
     s.mode = 'mr'; paint();
     await mr.play();
+    if (s.closed || s.mode !== 'mr') return;
+    if (silent(mr)) { s.mode = 'idle'; paint(); hint(mr.el.error ? '이 MR 파일을 재생할 수 없어요. 파일 형식을 확인해 주세요.' : 'MR 소리가 시작되지 않았어요. 재생을 한 번 더 눌러 주세요.', true); }
   }
 
   async function startRecording(withMr) {
@@ -156,7 +178,8 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     // iOS Safari needs play-and-record before the microphone opens, or MR playback and capture fight over the route.
     audioSession('play-and-record');
     const mr = withMr ? mrPlayer(t) : null;
-    if (mr) await mr.load();
+    const go = mr ? unlock(mr) : null;   // inside the tap, before anything is awaited
+    if (mr) { await go; await mr.load(); }
     const capture = await M.capture({onTick:() => tick()});
     if (s.closed) { capture.cancel(); return; }
     s.capture = capture; s.withMr = t ? {id:t.id, title:t.title || 'MR'} : null; s.busy = false;
@@ -167,6 +190,11 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       mr.el.addEventListener('ended', () => { if (s.capture === capture) stop().catch(fail); }, {once:true});
       mr.seek(0);
       await mr.play();
+      if (s.capture === capture && silent(mr)) {
+        // Recording on without the MR would look like it worked: stop, throw the empty take away and say why.
+        capture.cancel(); s.capture = null; s.withMr = null; s.mode = 'idle'; audioSession('auto'); paint();
+        hint(mr.el.error ? '이 MR 파일을 재생할 수 없어 녹음을 시작하지 않았어요.' : 'MR 소리가 시작되지 않아 녹음을 멈췄어요. 재생+녹음을 한 번 더 눌러 주세요.', true);
+      }
     }
   }
   /** ⏸ pauses everything that runs (MR and recording together) and brings the full bar back. */
