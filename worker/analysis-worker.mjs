@@ -311,9 +311,12 @@ export async function analysisStats(db) {
     where not coalesce((metadata ->> 'deleted')::boolean, false) and metadata -> 'analysis' -> 'metrics' ? 'phrases'`);
   const med = xs => { const v = xs.filter(Number.isFinite).sort((a, b) => a - b); if (!v.length) return null; const m = v.length >> 1; return Math.round((v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2) * 100) / 100; };
   const groupOf = a => a.confidence?.aiSeparated ? 'aiSeparated' : a.confidence?.mrRemoved ? 'mrRemoved' : reliableResult(a) ? 'asRecorded' : 'held';
-  const pick = a => ({pc:a.confidence?.pitchConfidence, cents:a.metrics?.intonation?.meanAbsCents, w20:a.metrics?.intonation?.within20, wob:a.metrics?.stability?.wobbleCents, voiced:a.metrics?.voicedSeconds, notes:a.metrics?.intonation?.notes});
-  const keys = ['pc', 'cents', 'w20', 'wob', 'voiced', 'notes'];
-  const groups = {}, songs = new Map(), results = {}, deltas = {pc:[], cents:[], wob:[]};
+  // Note names (C4, F#5, Bb3) → MIDI numbers, so ranges can be compared in semitones.
+  const midi = n => { const m = /^([A-G])([#b]?)(-?\d)$/.exec(String(n || '')); return m ? 12 * (Number(m[3]) + 1) + {C:0, D:2, E:4, F:5, G:7, A:9, B:11}[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) : NaN; };
+  const pick = a => { const g = a.metrics?.range || {}; return {pc:a.confidence?.pitchConfidence, cents:a.metrics?.intonation?.meanAbsCents, w20:a.metrics?.intonation?.within20, wob:a.metrics?.stability?.wobbleCents, voiced:a.metrics?.voicedSeconds, notes:a.metrics?.intonation?.notes,
+    mainLow:midi(g.main?.low), mainHigh:midi(g.main?.high), validHigh:midi(g.validHigh?.note)}; };
+  const keys = ['pc', 'cents', 'w20', 'wob', 'voiced', 'notes', 'mainLow', 'mainHigh', 'validHigh'];
+  const groups = {}, songs = new Map(), results = {}, deltas = {pc:[], cents:[], wob:[], mainLow:[], mainHigh:[], validHigh:[]};
   for (const {user_id, song, a} of rows) {
     if (!a || Number(a.v) < 2) continue;
     const g = groupOf(a), m = pick(a);
@@ -326,7 +329,7 @@ export async function analysisStats(db) {
   // Same song, same person: AI-separated (or MR-removed) takes against takes that were reliable as recorded.
   const paired = {};
   for (const g of ['aiSeparated', 'mrRemoved']) {
-    const diff = {cents:[], wob:[], w20:[]}; let n = 0;
+    const diff = {cents:[], wob:[], w20:[], mainLow:[], mainHigh:[], validHigh:[]}; let n = 0;
     for (const s of songs.values()) {
       if (!s[g] || !s.asRecorded) continue; n++;
       for (const k of Object.keys(diff)) { const x = med(s[g].map(v => v[k])), y = med(s.asRecorded.map(v => v[k])); if (x != null && y != null) diff[k].push(x - y); }

@@ -35,7 +35,7 @@ test('Judgement-review numbers group saved analyses by method and pair the same 
   assert.deepEqual(Object.fromEntries(Object.entries(out.groups).map(([k, v]) => [k, v.n])), {asRecorded:1, aiSeparated:1, held:1, mrRemoved:1});
   assert.deepEqual(out.separationResult, {separated:1, 'not-better':1});
   assert.equal(out.aiSeparatedMinusBefore.cents, -16);
-  assert.deepEqual(out.paired.aiSeparatedVsAsRecorded, {songs:1, cents:4, wob:6, w20:0});
+  assert.deepEqual({...out.paired.aiSeparatedVsAsRecorded, mainLow:undefined, mainHigh:undefined, validHigh:undefined}, {songs:1, cents:4, wob:6, w20:0, mainLow:undefined, mainHigh:undefined, validHigh:undefined});
   assert.equal(out.paired.mrRemovedVsAsRecorded.songs, 0);
   const text = JSON.stringify(out);
   assert.ok(!text.includes(U1) && !text.includes('s1'));
