@@ -12,7 +12,7 @@ const wav = seconds => {
   return 'data:audio/wav;base64,' + b.toString('base64');
 };
 
-async function open(page, {tracks = [], canRecord = true, mrSeconds = 0.4} = {}) {
+async function open(page, {tracks = [], canRecord = true, mrSeconds = 0.4, url = ''} = {}) {
   await page.goto('about:blank');
   await page.setContent('<main class="score-ink-editor" style="position:relative;display:flex;flex-direction:column;width:358px;height:600px"><div class="score-ink-stage" id="stage" style="flex:1">score</div></main>');
   await page.evaluate(({tracks, canRecord, wav}) => {
@@ -24,7 +24,7 @@ async function open(page, {tracks = [], canRecord = true, mrSeconds = 0.4} = {})
     // Stand-in for the shared player (M.player): an <audio> with load/play/pause/seek/destroy.
     const player = (host, item) => {
       host.innerHTML = '<div class="player"><button type="button" class="player-btn" data-play aria-label="재생">▶</button></div>';
-      const el = new Audio(); let ready = null;
+      const el = new Audio(); let ready = null; window.__lastSrc = () => el.src;
       const api = {el, item,
         load:() => ready ||= (item.blob ? Promise.resolve(URL.createObjectURL(item.blob)) : window.VzipR2.url(item.r2Key)).then(u => { el.src = u; }),
         play:() => api.load().then(() => { window.__log.push('play:' + item.id); return el.play(); }),
@@ -52,7 +52,7 @@ async function open(page, {tracks = [], canRecord = true, mrSeconds = 0.4} = {})
         }
       }
     };
-  }, {tracks, canRecord, wav:wav(mrSeconds)});
+  }, {tracks, canRecord, wav:url || wav(mrSeconds)});
   await page.addStyleTag({path:path.join(__dirname, '..', 'app', 'score-ink.css')});
   await page.addScriptTag({path:path.join(__dirname, '..', 'app', 'score-audio.js')});
   await page.evaluate(() => { window.__bar = window.VzipScoreAudio.mount(document.getElementById('stage'), {songId:'s1'}); });
@@ -182,6 +182,72 @@ test('a browser without recording keeps MR playback and explains why recording i
   await expect(button(bar, '재생+녹음')).toBeDisabled();
   await expect(button(bar, '재생')).toBeEnabled();
   await expect(bar.locator('[data-score-audio-hint]')).toContainText('녹음을 지원하지 않아요');
+});
+
+// iPhone Safari starts sound only inside the tap. These tests stand in for a browser that refuses to start the MR
+// (play() settles but the element stays paused, as the shared player reports a blocked start).
+const blockPlay = page => page.evaluate(() => {
+  const real = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function () { window.__log.push(this.muted ? 'el-play:muted' : 'el-play:blocked'); return this.muted ? real.call(this) : Promise.resolve(); };
+});
+test('the MR address is fetched before any tap, and the file is unlocked inside the 재생+녹음 tap', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);   // ready ahead of the tap
+  await page.evaluate(() => { const real = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { window.__log.push(this.muted ? 'el-play:muted' : 'el-play'); return real.call(this); }; });
+  await button(bar, '재생+녹음').click();
+  await expect.poll(() => log(page)).toContain('play:mr-file');
+  const l = await log(page);
+  expect(l.indexOf('el-play:muted')).toBeGreaterThan(-1);
+  expect(l.indexOf('el-play:muted')).toBeLessThan(l.indexOf('capture-open:play-and-record'));   // before the microphone opens
+  await button(bar, '정지').click();
+});
+test('재생 that the browser refused goes back to the bar and says so instead of pretending to play', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
+  await blockPlay(page);
+  await button(bar, '재생').click();
+  await expect(bar.locator('[data-score-audio-hint]')).toContainText('MR 소리가 시작되지 않았어요');
+  await expect(bar.locator('[data-score-audio-hint]')).toHaveAttribute('data-error', 'true');
+  await expect(bar).not.toHaveClass(/is-live/);
+  await expect(button(bar, '재생')).toBeEnabled();
+});
+test('a loop (이 구간 반복) that the browser refused goes back to the bar and says so', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
+  await blockPlay(page);
+  await page.evaluate(() => window.__bar.loop({label:'6–7마디', start:2, end:4, lead:1, occurrence:0, occurrences:1, next:null}, 'mr-file'));
+  await expect(bar.locator('[data-score-audio-hint]')).toContainText('MR 소리가 시작되지 않았어요');
+  await expect(bar).not.toHaveClass(/is-live/); await expect(button(bar, '재생')).toBeEnabled();
+});
+test('재생+녹음 never records on without the MR: the empty take is thrown away and the reason shown', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
+  await blockPlay(page);
+  await button(bar, '재생+녹음').click();
+  await expect(bar.locator('[data-score-audio-hint]')).toContainText('MR 소리가 시작되지 않아 녹음을 멈췄어요');
+  const l = await log(page);
+  expect(l).toContain('capture-start'); expect(l).toContain('capture-cancel'); expect(l).not.toContain('capture-stop');
+  await expect(bar).not.toHaveClass(/is-live/);
+  await expect(button(bar, '재생+녹음')).toBeEnabled();
+  expect(await page.evaluate(() => [navigator.audioSession.type, window.__saved.length])).toEqual(['auto', 0]);
+});
+test('an ordinary-size file MR is fetched whole while the score is open and then plays from memory', async ({page}) => {
+  const bytes = Buffer.from(wav(6).split(',')[1], 'base64');
+  let hits = 0;
+  await page.route('https://mr.test/**', route => { hits++; route.fulfill({status:200, contentType:'audio/wav', headers:{'access-control-allow-origin':'*'}, body:bytes}); });
+  const bar = await open(page, {tracks:[{...FILE, size:bytes.length}], mrSeconds:6, url:'https://mr.test/mr.wav'});
+  await expect.poll(() => page.evaluate(() => window.__lastSrc?.() || '')).toMatch(/^blob:/);
+  expect(hits).toBeGreaterThan(0);
+  await button(bar, '재생').click();
+  await expect(bar).toHaveClass(/is-live/);
+  await expect.poll(() => page.evaluate(() => window.__lastSrc())).toMatch(/^blob:/);   // still the copy in memory
+  await button(bar, '정지').click();
+  // A file without a known size, or a large one, keeps streaming.
+  const big = await open(page, {tracks:[{...FILE, size:31 * 1024 * 1024}], mrSeconds:6, url:'https://mr.test/mr.wav'});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__lastSrc())).toBe('https://mr.test/mr.wav');
+  await expect(button(big, '재생')).toBeEnabled();
 });
 
 // 표기의 기능 (app/score-sync.js hands the bar a plan through setPlan; rules in app/score-mark-model.js).

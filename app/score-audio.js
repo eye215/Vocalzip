@@ -28,6 +28,8 @@ const LIVE = ['mr', 'rec', 'mrrec'];
 /** Modes in which the MR runs, so its time says where the music is (재생 위치 따라가기). */
 const RUNS = ['mr', 'mrrec', 'loop'];
 const SLOW = .75, LEAD = 2;
+/** Largest MR fetched whole ahead of the tap (ordinary MR files are 3–15 MB). */
+const AHEAD_MAX = 30 * 1024 * 1024;
 /** Seeks once the file knows its length (iPhone Safari drops a time set before that). */
 const seekTo = (mr, time) => { const el = mr.el, go = () => { try { el.currentTime = Math.max(0, time); } catch {} }; if (el.readyState >= 1) go(); else el.addEventListener('loadedmetadata', go, {once:true}); };
 
@@ -58,6 +60,39 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     s.mr?.destroy?.(); s.mr = M.player(engine, mrItem(t), {}); s.mrFor = t.id;
     return s.mr;
   }
+  /** iPhone Safari starts sound only inside the tap, and a file whose address is still being fetched misses it.
+   * So the chosen file MR is made ready as soon as the bar shows it (address only; the audio loads on play). */
+  function warm() {
+    const t = track();
+    if (s.closed || s.mode !== 'idle' || !t || t.kind === 'youtube') return;
+    try { const mr = mrPlayer(t); mr.load?.()?.then?.(() => ahead(mr, t), () => {}); } catch {}
+  }
+  /** iPhone Safari loads no audio before the tap, so a streamed MR starts seconds late. A file of ordinary size is
+   * therefore fetched whole while the score is open and played from memory: it starts at once and seeks at once
+   * (마디 반복). A larger file, or one already playing, keeps streaming. Nothing is stored on the device. */
+  function ahead(mr, t) {
+    if (mr.ahead || !(Number(t.size) > 0 && Number(t.size) <= AHEAD_MAX) || typeof fetch !== 'function' || !mr.el.src || /^(blob|data):/.test(mr.el.src)) return;
+    const ctl = new AbortController(), a = mr.ahead = {url:''}, destroy = mr.destroy;
+    mr.destroy = () => { ctl.abort(); destroy.call(mr); if (a.url) URL.revokeObjectURL(a.url); };
+    fetch(mr.el.src, {signal:ctl.signal}).then(r => r.ok ? r.blob() : Promise.reject(Error('fetch'))).then(blob => {
+      // In use by now (playing, paused part-way, a take running): leave the stream alone.
+      if (s.closed || s.mr !== mr || s.mode !== 'idle' || !mr.el.paused || mr.el.currentTime > 0) return;
+      a.url = URL.createObjectURL(blob.type ? blob : new Blob([blob], {type:t.type || 'audio/mp4'}));
+      mr.el.src = a.url;
+    }).catch(() => {});
+  }
+  /** Lets this file start later without a tap (재생+녹음 starts the MR after the microphone opened): a muted
+   * play inside the tap is what iPhone Safari accepts as the user's go-ahead for this audio element. */
+  function unlock(mr) {
+    const el = mr.el;
+    if (!el.src || !el.paused) return Promise.resolve();
+    el.muted = true;
+    let p; try { p = el.play(); } catch { p = null; }
+    const done = () => { try { el.pause(); el.currentTime = 0; } catch {} el.muted = false; };
+    return p?.then ? p.then(done, done) : (done(), Promise.resolve());
+  }
+  /** The MR did not start although play was asked (blocked by the browser, or the file cannot be played). */
+  const silent = mr => !mr || mr.el.paused || !!mr.el.error;
   const seconds = () => s.capture ? s.capture.seconds?.() || 0 : s.mr?.el?.currentTime || 0;
   /** The sync's plan, when it is for the MR file the bar plays. */
   const planNow = () => { const t = track(); return s.plan && t && t.kind !== 'youtube' && s.plan.trackId === t.id ? s.plan : null; };
@@ -69,7 +104,10 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     s.run = K && p && !p.need && p.cuts?.on && RUNS.includes(s.mode) ? K.skipsFor(p.cuts.skips, {from:s.from, loop:s.mode === 'loop' && s.loop ? {start:s.loop.start, end:s.loop.end} : null}) : [];
   }
   const cutNote = list => list.length ? '컷 ' + (window.VzipScoreMarks?.text(list.map(k => k.label)) || '') + ' 건너뜀' : '';
-  function tick() { const el = bar.querySelector('[data-score-audio-time]'); if (el) el.textContent = VZ.clock(seconds()); }
+  /** The MR was asked to play but no sound has come yet (the file is still arriving): say so instead of 0:00. */
+  const arriving = () => (s.mode === 'mr' || s.mode === 'loop') && !!s.mr && !s.mr.el.paused && s.mr.el.currentTime === 0 && s.mr.el.readyState < 3;
+  const timeText = () => arriving() ? '불러오는 중…' : VZ.clock(seconds());
+  function tick() { const el = bar.querySelector('[data-score-audio-time]'); if (el) el.textContent = timeText(); }
 
   function paint() {
     if (s.closed) return;
@@ -94,7 +132,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     } else if (live) {
       html = '<div class="score-audio-chip" role="group" aria-label="' + (s.mode === 'mr' ? 'MR 재생 중' : '녹음 중') + '">' +
         '<span class="score-audio-dot' + (s.mode === 'mr' ? ' is-play' : '') + '" aria-hidden="true"></span>' +
-        '<span class="score-audio-time" role="timer" data-score-audio-time>' + VZ.clock(seconds()) + '</span>' +
+        '<span class="score-audio-time" role="timer" data-score-audio-time>' + timeText() + '</span>' +
         icon('pause', 'pause', '일시정지') + icon('stop', 'stop', '정지') + '</div>';
     } else if (s.mode === 'paused') {
       html = '<div class="score-audio-row"><span class="score-audio-label"><span class="score-audio-time" data-score-audio-time>' + VZ.clock(seconds()) + '</span> ' + (s.was === 'mr' ? 'MR 일시정지' : '녹음 일시정지') + '</span>' +
@@ -118,6 +156,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     bar.innerHTML = html + '<p class="score-audio-hint" data-score-audio-hint role="status"></p>';
     if (frame) bar.append(frame);
     wire(t);
+    if (s.mode === 'idle' && s.warmed !== s.trackId) { s.warmed = s.trackId; warm(); }
     if (live || s.mode === 'paused') s.timer = setInterval(tick, 250);
     watch();
     for (const fn of changes) try { fn(s.mode); } catch {}
@@ -184,6 +223,8 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     mr.el.addEventListener('ended', () => { if (s.mode === 'mr' || s.mode === 'paused' && s.was === 'mr') { s.mode = 'idle'; paint(); } }, {once:true});
     s.mode = 'mr'; s.from = from !== undefined ? from : start?.marked ? start.time : null; arm(); paint();
     await mr.play();
+    if (s.closed || s.mode !== 'mr') return;
+    if (silent(mr)) { s.mode = 'idle'; paint(); hint(mr.el.error ? '이 MR 파일을 재생할 수 없어요. 파일 형식을 확인해 주세요.' : 'MR 소리가 시작되지 않았어요. 재생을 한 번 더 눌러 주세요.', true); }
   }
 
   async function startRecording(withMr) {
@@ -194,7 +235,8 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     // iOS Safari needs play-and-record before the microphone opens, or MR playback and capture fight over the route.
     audioSession('play-and-record');
     const mr = withMr ? mrPlayer(t) : null;
-    if (mr) await mr.load();
+    const go = mr ? unlock(mr) : null;   // inside the tap, before anything is awaited
+    if (mr) { await go; await mr.load(); }
     const capture = await M.capture({onTick:() => tick()});
     if (s.closed) { capture.cancel(); return; }
     const start = mr ? startNow() : null;
@@ -207,6 +249,11 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       mr.el.addEventListener('ended', () => { if (s.capture === capture) stop().catch(fail); }, {once:true});
       if (s.began > 0) seekTo(mr, s.began); else mr.seek(0);
       await mr.play();
+      if (s.capture === capture && silent(mr)) {
+        // Recording on without the MR would look like it worked: stop, throw the empty take away and say why.
+        capture.cancel(); s.capture = null; s.withMr = null; s.mode = 'idle'; audioSession('auto'); paint();
+        hint(mr.el.error ? '이 MR 파일을 재생할 수 없어 녹음을 시작하지 않았어요.' : 'MR 소리가 시작되지 않아 녹음을 멈췄어요. 재생+녹음을 한 번 더 눌러 주세요.', true);
+      }
     }
   }
   /** ⏸ pauses everything that runs (MR and recording together) and brings the full bar back. */
@@ -297,6 +344,9 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     mr.el.playbackRate = s.slow ? SLOW : 1;
     seekTo(mr, loopFrom());
     await mr.play();
+    if (s.closed || s.mode !== 'loop' || s.mr !== mr) return;
+    // The browser did not start the MR: back to the bar with the reason, instead of a loop bar that plays nothing.
+    if (silent(mr)) { endLoop(); s.mode = 'idle'; paint(); hint(mr.el.error ? '이 MR 파일을 재생할 수 없어요. 파일 형식을 확인해 주세요.' : 'MR 소리가 시작되지 않았어요. 한 번 더 눌러 주세요.', true); }
   }
 
   function itemFor(take) {
