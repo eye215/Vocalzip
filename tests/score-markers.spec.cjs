@@ -386,7 +386,7 @@ test('tablet 1024×768: the palette is one row that keeps the page size, and the
  for(const b of await palette(dialog).locator('button').all()){const r=await b.boundingBox();expect(r.width).toBeGreaterThanOrEqual(43.5);expect(r.height).toBeGreaterThanOrEqual(43.5);}
  const sheet=await edit(page,dialog,'컷');
  await expect(sheet.locator('[name=form][value=cover]')).toBeChecked();await expect(sheet.locator('[name=type][value=highlighter]')).toBeChecked();
- await expect(sheet.locator('[data-marker-input]')).toHaveText('찍는 방식 · 따라 긋기');
+ await expect(sheet.locator('[data-marker-input]')).toHaveText('찍는 방식 · 마디 선택'); // 컷 is placed on whole measures by default (tests/score-mark-actions.spec.cjs)
  const form=await sheet.locator('form').boundingBox();expect(form.width).toBeLessThanOrEqual(560);expect(Math.abs(form.x+form.width/2-512)).toBeLessThan(2);
  for(const label of await sheet.locator('.ink-marker-choices label:visible, .ink-marker-colors label').all()){const r=await label.boundingBox();expect(r.width).toBeGreaterThanOrEqual(43.5);expect(r.height).toBeGreaterThanOrEqual(43.5);}
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);

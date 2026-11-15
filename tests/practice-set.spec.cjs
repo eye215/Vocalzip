@@ -555,6 +555,15 @@ test('with the real today helper: the set screens show today against the target 
   expect(after.minutes).toBe(before.minutes + 3);
   await expect(popup.locator('[data-today-text]')).toHaveText(await page.evaluate(() => VZ.todayPracticeText(VZ.todayPractice())));
   await expect(page.locator('[data-done-today]')).toHaveCount(0);
+  // The ring starts where today stood before the set (the clock is paused: first frame) and ends on today's numbers.
+  await expect(popup).toHaveAttribute('data-phase','run');
+  await expect(popup.locator('[data-today-percent]')).toHaveText(before.percent + '%');
+  await page.clock.runFor(1500);
+  await expect(popup).toHaveAttribute('data-phase','done');
+  await expect(popup.locator('[data-today-percent]')).toHaveText(after.percent + '%');
+  await expect(popup.locator('[data-today-summary]')).toHaveText('오늘 ' + after.minutes + '분, 목표 ' + after.targetMinutes + '분의 ' + after.percent + '%');
+  await expect(popup.locator('.vz-tp-day[data-today]')).toHaveAttribute('data-minutes', String(after.minutes));
+  await expect(page.locator('.sheet.vz-today-popup .sheet-head h2')).toHaveText('오늘 연습 세트');
   await page.locator('[data-ok]').click();
   await expect(popup).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();

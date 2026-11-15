@@ -6,6 +6,9 @@
 .score-measure-box{fill:rgba(71,84,103,.05);stroke:rgba(71,84,103,.5);stroke-width:1px;vector-effect:non-scaling-stroke}
 .score-measure-box[data-tone=b]{fill:rgba(71,84,103,.11)}
 .score-measure-number{fill:#475467;font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;font-weight:700;letter-spacing:0;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+/* 마디 선택 is placing a mark: the boxes show lightly (dashed, in the accent colour) even with 마디 위치 보기 off. */
+[data-ink-measures][data-peek=true] .score-measure-box,[data-ink-measures][data-peek=true] .score-measure-box[data-tone=b]{fill:rgba(122,50,245,.03);stroke:rgba(122,50,245,.4);stroke-dasharray:4 4}
+[data-ink-measures][data-peek=true] .score-measure-number{fill:#7a32f5;opacity:.6}
 .score-measure-flash{fill:rgba(122,50,245,.26);stroke:#7a32f5;stroke-width:2px;vector-effect:non-scaling-stroke;animation:score-measure-flash 2.2s ease-out forwards}
 @keyframes score-measure-flash{0%{opacity:0}10%,65%{opacity:1}100%{opacity:0}}
 @media(prefers-reduced-motion:reduce){.score-measure-flash{animation:none}}

@@ -7,10 +7,15 @@
  * - 표시한 마디: what is on the score (표기, 스티커 메모, 형광펜, 펜 필기) by page and measure; a row goes to its place.
  * - 마디와 MR 맞추기 (app/score-sync.js) hangs on the same conversion: its menu items, the measure that sounds now
  *   (drawn in this layer), ▶ on the list rows and the press-and-hold menu of a measure box.
- *   window.VzipScoreMeasuresUI.mount(viewer) → {load, shown, changed, destroy} — called by app/score-ink.js */
+ * - 표기의 기능 (app/score-mark-model.js): a 시작점 · 반복 · 컷 mark is listed over the measures its function uses, and
+ *   every time the marks are read they are handed to the sync, which gives them their actions.
+ * - 마디 선택 (a way of placing 표기, app/score-ink.js): while such a marker is in hand the boxes show lightly even
+ *   with 마디 위치 보기 off (peek), and the viewer asks which measure lies under a point and what the mark draws.
+ *   window.VzipScoreMeasuresUI.mount(viewer) → {load, shown, changed, ready, peek, measureAt, pieces, count, destroy}
+ *   — called by app/score-ink.js */
 (() => {
 'use strict';
-const VZ = window.VZ, M = window.VzipScoreMeasures;
+const VZ = window.VZ, M = window.VzipScoreMeasures, K = window.VzipScoreMarks || null;
 if (!VZ || !M) return;
 const esc = VZ.esc, NS = 'http://www.w3.org/2000/svg', ACCENT = '#7a32f5';
 const NOTE = '자동 인식 기준이라 어긋날 수 있어요.';
@@ -36,6 +41,7 @@ async function conversion(score) {
 function mount(v) {
   const {el, box, canvas, stage, score, owner, storage} = v;
   const key = 'vzip_score_measures_v1:' + owner;
+  let peeking = false; // 마디 선택 is placing: the boxes show without 마디 위치 보기
   let alive = true, layout = null, shownPage = 0, timer = 0, lookTimer = 0, flashTimer = 0, flashed = null, sheet = null, generation = 0;
   let prefs = {on:false, noted:false};
   try { const p = JSON.parse(storage.getItem(key) || 'null'); if (p && typeof p === 'object') prefs = {on:p.on === true, noted:p.noted === true}; } catch {}
@@ -91,19 +97,20 @@ function mount(v) {
     if (top >= stage.scrollTop && bottom <= stage.scrollTop + stage.clientHeight) return;
     stage.scrollTo({top:Math.max(0, top - stage.clientHeight * .25), behavior:'smooth'});
   }
-  const markName = id => (v.markers() || []).find(m => m.id === id)?.name || window.VzipScoreInkSettings?.MARKERS?.find(m => m.id === id)?.name || '';
+  /** A mark is named after its preset; one made on another device with a preset this device lacks, after its function. */
+  const markName = (id, s) => (v.markers() || []).find(m => m.id === id)?.name || window.VzipScoreInkSettings?.MARKERS?.find(m => m.id === id)?.name || K?.ROLE_NAMES[K.roleOf(s)] || '';
   /** Page sizes of every page that carries something, so those pages can be read without being shown. */
   async function sizes(rows) {
     for (const n of new Set(rows.map(s => s.page))) if (!aspects.has(n) && Number.isInteger(n) && n >= 1 && n <= v.pages()) { try { aspects.set(n, await v.pageAspect(n)); } catch {} if (!alive) return; }
   }
-  const summarize = rows => M.summary(geometry, rows, {markName});
+  const summarize = rows => M.summary(geometry, rows, {markName, ...(K ? {roleOf:K.roleOf, spanOf:(pg, s, role) => K.span(pg, s, role, layout?.measures), fixedOf:(pg, s) => K.fixed(pg, s, layout?.measures)} : {})});
 
   function paintLayer() {
     const n = v.page(), pg = shownPage === n ? geometry(n) : null, aspect = v.aspect(), H = 1000 * aspect;
     layer.replaceChildren();
-    const boxes = prefs.on && !!pg, flash = flashed?.page === n && pg ? flashed : null, live = pg ? sync?.now(n) ?? null : null;
+    const boxes = (prefs.on || peeking) && !!pg, flash = flashed?.page === n && pg ? flashed : null, live = pg ? sync?.now(n) ?? null : null;
     layer.toggleAttribute('hidden', !boxes && !flash && live === null);
-    layer.dataset.on = String(boxes); layer.dataset.snapped = String(!!pg?.snapped);
+    layer.dataset.on = String(boxes); layer.dataset.snapped = String(!!pg?.snapped); layer.dataset.peek = String(boxes && !prefs.on);
     if (!boxes && !flash && live === null) return;
     layer.setAttribute('viewBox', '0 0 1000 ' + H);
     // Seen staff lines: one staff space around. From the file alone: more room, as the place is less exact.
@@ -149,7 +156,8 @@ function mount(v) {
     try {
       const mine = ++generation, rows = v.rows();
       await sizes(rows); if (!alive || mine !== generation || !layout) return;
-      syncMenu(summarize(rows).measures);
+      const data = summarize(rows);
+      syncMenu(data.measures); sync?.marked?.(data.items);
     } catch {}
   }
   /** Shows the measures of a list row: goes to the page, brings them into view and marks them for a moment. */
@@ -169,7 +177,7 @@ function mount(v) {
     try {
       await v.outside(); if (!alive) return;
       const rows = v.rows(); await sizes(rows); if (!alive || !layout || sheet) return;
-      data = summarize(rows); syncMenu(data.measures);
+      data = summarize(rows); syncMenu(data.measures); sync?.marked?.(data.items);
     } catch { VZ.toast('표시한 마디를 불러오지 못했어요. 다시 시도해 주세요.', 'error'); return; }
     const pages = [...new Set(data.items.map(i => i.page))];
     // With the MR matched to the measures (app/score-sync.js) a row also gets ▶ 이 마디 반복; without it one line says so.
@@ -206,8 +214,19 @@ function mount(v) {
       if (!alive) return;
       shownPage = n; clearTimeout(lookTimer);
       // With the boxes on the staves are read before they are drawn; otherwise a moment later, off the page turn.
-      try { if (prefs.on || flashed || sync?.now(n) != null) look(n); else if (layout) lookTimer = setTimeout(() => { if (alive) try { look(n); } catch {} }, 400); paintLayer(); } catch {}
+      try { if (prefs.on || peeking || flashed || sync?.now(n) != null) look(n); else if (layout) lookTimer = setTimeout(() => { if (alive) try { look(n); } catch {} }, 400); paintLayer(); } catch {}
     },
+    // ---- 마디 선택 (app/score-ink.js) ----
+    /** Whether this score has measure boxes to place marks on. */
+    ready:() => alive && !!layout,
+    /** Shows the measure boxes lightly while a marker placed by 마디 선택 is in hand. */
+    peek(on) { on = !!on; if (!alive || peeking === on) return; peeking = on; try { if (on) look(v.page()); paintLayer(); } catch {} },
+    /** The measure (file index) a point of the page now shown belongs to (page fractions), or null. */
+    measureAt(x, y) { const n = v.page(); if (!layout || shownPage !== n) return null; look(n); return M.measureAt(geometry(n), x, y)?.index ?? null; },
+    /** What a mark over the measures a..b (file indexes) of the page now shown draws: one shape per line of music. */
+    pieces(preset, a, b) { const n = v.page(); return K && layout && shownPage === n ? K.pieces(geometry(n), preset, a, b, v.aspect()) : []; },
+    /** How many measure boxes the conversion has (stored with a mark, so a later conversion is told apart). */
+    count:() => layout?.measures || 0,
     /** Handwriting changed (or was repainted): the count follows shortly. */
     changed() { if (!alive || !layout || timer) return; timer = setTimeout(() => { timer = 0; count(); }, 300); },
     destroy() { alive = false; clearTimeout(timer); clearTimeout(lookTimer); clearTimeout(flashTimer); try { sheet?.close(); } catch {} try { sync?.destroy(); } catch {} layer.remove(); toggle?.remove(); list?.remove(); }
