@@ -124,7 +124,9 @@ const syncSheet=page=>page.getByRole('dialog',{name:'마디와 MR 맞추기'});
 async function openSync(page,dialog){await more(dialog);await syncItem(dialog).click();const sheet=syncSheet(page);await expect(sheet.locator('[data-sync-page]')).toBeVisible({timeout:15000});await expect(sheet.locator('.score-sync-box').first()).toBeVisible();return sheet;}
 const big=sheet=>sheet.locator('[data-sync-tap]');
 /** The MR that was made last: its real time and state. */
-const mr=page=>page.evaluate(()=>{const p=window.__players.at(-1);return p?{time:p.el.currentTime,paused:p.el.paused,rate:p.el.playbackRate,duration:p.el.duration,id:p.item.id}:null;});
+// The player that is sounding, else the newest one: the bar now gets its MR ready before the first tap, so the
+// newest player is not always the one in use.
+const mr=page=>page.evaluate(()=>{const p=[...window.__players].reverse().find(x=>!x.el.paused)||window.__players.at(-1);return p?{time:p.el.currentTime,paused:p.el.paused,rate:p.el.playbackRate,duration:p.el.duration,id:p.item.id}:null;});
 const mrSeek=(page,time)=>page.evaluate(t=>{window.__players.at(-1).el.currentTime=t;},time);
 const savedSync=(page,id='mr-1')=>page.evaluate(id=>{const e=window.VZ.db.songs[0].scores[0].mrSync?.[id];return e?{raw:e,read:window.VzipScoreSyncModel.read(e)}:null;},id);
 const bar=dialog=>dialog.locator('[data-score-audio]');
