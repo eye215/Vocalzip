@@ -8,6 +8,7 @@ on:
       - 'app/score-ink*'
       - 'app/score-measure*'
       - 'app/score-sync*'
+      - 'app/score-mark*'
       - 'app/score-audio.js'
       - 'app/core.js'
       - 'data-merge.js'
@@ -16,6 +17,8 @@ on:
       - 'tests/score-markers*'
       - 'tests/score-measure*'
       - 'tests/score-sync*'
+      - 'tests/score-mark*'
+      - 'tests/score-audio*'
       - 'app/student-home-model.js'
       - 'app/views-lessons.js'
       - 'tests/scores.spec.cjs'
@@ -38,12 +41,14 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/score-ink-model.test.cjs tests/score-ink-settings.test.cjs tests/score-measure-model.test.cjs tests/score-sync-model.test.cjs tests/data-merge.test.cjs tests/student-home-model.test.cjs
+      - run: node --test tests/score-ink-model.test.cjs tests/score-ink-settings.test.cjs tests/score-measure-model.test.cjs tests/score-sync-model.test.cjs tests/score-mark-model.test.cjs tests/data-merge.test.cjs tests/student-home-model.test.cjs
       - name: Pinned PDF.js renderer for actual browser PDF tests
         run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
-      - run: npx playwright test tests/scores.spec.cjs tests/score-ink.spec.cjs tests/score-memo.spec.cjs tests/score-markers.spec.cjs tests/score-memo-goals.spec.cjs tests/score-measures.spec.cjs tests/score-sync.spec.cjs --workers=2
+      - run: npx playwright test tests/scores.spec.cjs tests/score-ink.spec.cjs tests/score-memo.spec.cjs tests/score-markers.spec.cjs tests/score-memo-goals.spec.cjs tests/score-measures.spec.cjs tests/score-sync.spec.cjs tests/score-mark-actions.spec.cjs --workers=2
         env:
           VZ_INK_PREVIEW: '1'
+      # The play bar on its own page (stand-in player): its tests play a short WAV, which is checked in Chromium.
+      - run: npx playwright test tests/score-audio.spec.cjs --project=chromium-mobile --project=chromium-desktop --workers=2
       # Previous full-suite run timed out in this existing WebKit calendar route.
       - name: Repeat metadata date edit regression in WebKit
         run: npx playwright test tests/ui.spec.cjs --project=webkit-mobile --grep 'Metadata-derived dates remain editable' --repeat-each=3 --workers=1

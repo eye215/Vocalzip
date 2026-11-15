@@ -121,7 +121,7 @@ VZ.measureTable = (first, second) => {
     extra = row('호흡 유지', r.phrase, r.phrase.before != null ? r.phrase.before + '초' : '–', r.phrase.after != null ? r.phrase.after + '초' : '–') +
       row('고음 안정성', r.high, r.high.before != null ? '±' + r.high.before : '–', r.high.after != null ? '±' + r.high.after : '–');
     const p = r.passaggio.latest;
-    extra += '<tr class="vg-ref"><th>파사지오</th><td colspan="3">' + esc(G.passaggioText(p)) + '<small>' + esc(G.PASSAGGIO_NOTE) + '</small></td></tr>';
+    extra += '<tr class="vg-ref"><th>파사지오</th><td colspan="3">' + esc(G.passaggioText(p)) + '<small>' + esc(G.PASSAGGIO_SINGLE + ' (최근 쪽 녹음) · ' + G.PASSAGGIO_NOTE) + '</small></td></tr>';
   }
   const weak = !comparable(a,b) || !first.songId || first.songId!==second.songId;
   return '<table class="vg-table"><thead><tr><th></th><th>' + esc(VZ.dateLabel(dayOf(first))) + '</th><th>' + esc(VZ.dateLabel(dayOf(second))) + '</th><th>변화</th></tr></thead><tbody>' + rows + extra + '</tbody></table>' +
@@ -167,7 +167,7 @@ VZ.songVocalGrowth = (host, song, media) => {
     if (G) {
       const report = G.songReport(pts.map(takeOfPoint), {reference:referenceOf(song.id)});
       body += '<ul class="vg-growth" aria-label="성장 지표">' + G.METRICS.map(d => { const x = report[d.id];
-        return '<li><span>' + esc(d.title) + '</span>' + (d.reference ? '<span class="vg-same">' + esc(G.passaggioText(x.latest)) + ' · ' + esc(G.PASSAGGIO_NOTE) + '</span>' : shortChange(x)) + '</li>'; }).join('') + '</ul>';
+        return '<li><span>' + esc(d.title) + '</span>' + (d.reference ? '<span class="vg-same">' + esc(G.passaggioReportText(x)) + ' · ' + esc(G.PASSAGGIO_NOTE) + '</span>' : shortChange(x)) + '</li>'; }).join('') + '</ul>';
     }
     body += '<div class="vg-grid">' + METRICS.map(m => spark(m, pts)).join('') + '</div>';
     if (reliable.length >= 2) {

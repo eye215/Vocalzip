@@ -214,6 +214,14 @@ test('재생 that the browser refused goes back to the bar and says so instead o
   await expect(bar).not.toHaveClass(/is-live/);
   await expect(button(bar, '재생')).toBeEnabled();
 });
+test('a loop (이 구간 반복) that the browser refused goes back to the bar and says so', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
+  await blockPlay(page);
+  await page.evaluate(() => window.__bar.loop({label:'6–7마디', start:2, end:4, lead:1, occurrence:0, occurrences:1, next:null}, 'mr-file'));
+  await expect(bar.locator('[data-score-audio-hint]')).toContainText('MR 소리가 시작되지 않았어요');
+  await expect(bar).not.toHaveClass(/is-live/); await expect(button(bar, '재생')).toBeEnabled();
+});
 test('재생+녹음 never records on without the MR: the empty take is thrown away and the reason shown', async ({page}) => {
   const bar = await open(page, {tracks:[FILE], mrSeconds:6});
   await expect.poll(() => log(page)).toContain('sign:' + FILE.r2Key);
@@ -243,4 +251,67 @@ test('an ordinary-size file MR is fetched whole while the score is open and then
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => window.__lastSrc())).toBe('https://mr.test/mr.wav');
   await expect(button(big, '재생')).toBeEnabled();
+});
+
+// 표기의 기능 (app/score-sync.js hands the bar a plan through setPlan; rules in app/score-mark-model.js).
+const withPlan = async (page, plan) => {
+  await page.addScriptTag({path:path.join(__dirname, '..', 'app', 'score-mark-model.js')});
+  await page.addStyleTag({path:path.join(__dirname, '..', 'app', 'score-sync.css')});
+  await page.evaluate(plan => { window.__asked = []; window.__bar.setPlan({...plan, explain:() => window.__asked.push('explain'), open:() => window.__asked.push('open')}); }, plan);
+};
+
+test('재생 옵션: one more button in the same row, only for the MR file the plan is for', async ({page}) => {
+  const bar = await open(page, {tracks:[FILE, TUBE], mrSeconds:6});
+  const opts = bar.locator('[data-score-audio-opts]');
+  const plan = {trackId:'mr-file', need:false, start:{label:'시작점 3마디에서', short:'3마디부터', time:2}, cuts:{on:true, note:'5마디 건너뜀', skips:[{start:3, end:4.5, label:'5마디'}]}};
+  await withPlan(page, plan);
+  await expect(bar.locator('.score-audio-row').getByRole('button')).toHaveText(['재생', '녹음', '재생+녹음', /^(3마디부터)?$/]);
+  await expect(opts).toHaveAttribute('aria-label', '재생 옵션: 시작점 3마디에서, 컷 건너뛰기 켜짐'); await expect(opts).toHaveAttribute('data-lit', 'true');
+  for (const b of await bar.locator('.score-audio-btn').all()) { const r = await b.boundingBox(); expect(Math.round(r.height)).toBeGreaterThanOrEqual(44); expect(Math.round(r.width)).toBeGreaterThanOrEqual(44); }
+  expect(await bar.locator('.score-audio-btn').evaluateAll(list => list.every(b => b.scrollWidth <= b.clientWidth + 1))).toBe(true);
+  expect(new Set(await bar.locator('.score-audio-btn').evaluateAll(list => list.map(b => Math.round(b.getBoundingClientRect().top)))).size).toBe(1); // still one row
+  await opts.click();
+  expect(await page.evaluate(() => window.__asked)).toEqual(['open']);
+  // The same plan again changes nothing; a YouTube MR chosen: no button; a plan for another MR: no button.
+  await page.evaluate(plan => window.__bar.setPlan(plan), plan);
+  await bar.getByLabel('MR 선택').selectOption('mr-tube'); await expect(opts).toHaveCount(0);
+  await bar.getByLabel('MR 선택').selectOption('mr-file'); await expect(opts).toHaveCount(1);
+  await page.evaluate(plan => window.__bar.setPlan({...plan, trackId:'another'}), plan); await expect(opts).toHaveCount(0);
+  // 처음부터 with 컷 건너뛰기 off: not lit.
+  await withPlan(page, {...plan, start:{label:'처음부터', short:'', time:null}, cuts:{...plan.cuts, on:false, note:'꺼짐'}});
+  await expect(opts).toHaveAttribute('aria-label', '재생 옵션: 처음부터, 컷 건너뛰기 꺼짐'); await expect(opts).toHaveAttribute('data-lit', 'false'); await expect(opts).toHaveText('');
+  // Not matched yet: the button only explains, and 재생 does what it always did.
+  await withPlan(page, {trackId:'mr-file', need:true, start:{label:'시작점'}, cuts:{on:false, note:''}});
+  await expect(opts).toHaveAttribute('data-need', ''); await expect(opts).toHaveAttribute('aria-label', '재생 옵션');
+  await opts.click();
+  expect(await page.evaluate(() => window.__asked)).toEqual(['explain']);
+  await page.evaluate(() => window.__bar.setPlan(null)); await expect(opts).toHaveCount(0);
+  await expect(bar.getByRole('button')).toHaveText(['재생', '녹음', '재생+녹음']);
+});
+
+test('재생+녹음 with a 시작점 and a cut: the take notes where the MR began and what it jumped over', async ({page, browserName}) => {
+  test.skip(browserName === 'webkit', 'plays the MR: real audio playback and seeking are checked in Chromium');
+  const bar = await open(page, {tracks:[FILE], mrSeconds:6});
+  await withPlan(page, {trackId:'mr-file', need:false, start:{label:'시작점 3마디에서', time:2}, cuts:{on:true, note:'5마디 건너뜀', skips:[{start:3, end:4.5, label:'5마디'}]}});
+  const started = Date.now();
+  await button(bar, '재생+녹음').click();
+  await expect(bar).toHaveClass(/is-live/);
+  await expect(bar.locator('[data-score-audio-hint]')).toHaveText('이어폰을 끼면 MR이 녹음에 섞이지 않아요. 컷 5마디 건너뜀.');
+  // 2 → 3 s, the jump to 4.5 s, then to the end at 6 s: about 2.5 s instead of 4.
+  await expect(button(bar, '저장')).toBeVisible({timeout:8000});
+  const took = (Date.now() - started) / 1000; expect(took).toBeGreaterThan(2); expect(took).toBeLessThan(3.9);
+  await button(bar, '저장').click();
+  await expect.poll(() => page.evaluate(() => window.__saved.length)).toBe(1);
+  const {withMr} = (await page.evaluate(() => window.__saved))[0];
+  expect(withMr).toMatchObject({id:'mr-file', title:'Gravity MR', from:2});
+  expect(withMr.skipped).toHaveLength(1);
+  expect(withMr.skipped[0][0]).toBeGreaterThan(2.9); expect(withMr.skipped[0][0]).toBeLessThan(3.2); expect(withMr.skipped[0][1]).toBe(4.5);
+  // 컷 건너뛰기 off and 처음부터: the take is noted as before (the MR ran from its beginning).
+  await withPlan(page, {trackId:'mr-file', need:false, start:{label:'처음부터', time:null}, cuts:{on:false, note:'꺼짐', skips:[{start:3, end:4.5, label:'5마디'}]}});
+  await button(bar, '재생+녹음').click();
+  await expect(bar.locator('[data-score-audio-hint]')).toHaveText('이어폰을 끼면 MR이 녹음에 섞이지 않아요.');
+  await button(bar, '정지').click(); await expect(button(bar, '저장')).toBeVisible();
+  await button(bar, '저장').click();
+  await expect.poll(() => page.evaluate(() => window.__saved.length)).toBe(2);
+  expect((await page.evaluate(() => window.__saved))[1].withMr).toEqual({id:'mr-file', title:'Gravity MR'});
 });

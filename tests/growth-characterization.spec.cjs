@@ -10,6 +10,11 @@
 //    but 주간 요약), so the UTC run now shows what the Korea run shows.
 // Part C changed the 보컬 분석 tab only: videos count in its song rows (새 곡: 녹음 2개 · 분석 전 → 녹음 4개 (영상 2개
 // 포함) · 분석 2개 · 비교 가능), and rows with 연습실·트레이닝 연습 recordings say so (Home: "(연습 2개 포함)", one note line).
+// 2026-11-15 (꺾은선 · 파사지오): no number of any measure moved. Wording only — 월별 측정 흐름 ("막대" → "점", the
+// 낮을수록 좋아요 mark and the 달별 값 보기 table with the same three values), and every 파사지오 line: one recording's
+// zone ("D5 부근에서…") became what recurs over the recordings ("최근 7개 중 7개에서 D5 근처 …") or 판정 보류 with the
+// count, the card's sub line and method text, "이 녹음에서만 본 참고값" in the two-recording table; overallModel gained
+// `recurring` beside each passaggio entry.
 // 판정 기준 재검토 (2026-11-15) changed one rule on purpose: a wobble / high-note wobble change between an AI-separated
 // take and one as recorded is 변화 관찰 (state changed, judged kept, note ai-mixed) instead of being judged; only the
 // fixture's one mixed song moved (비슷함 → 변화 관찰, its 비슷 counts −1).

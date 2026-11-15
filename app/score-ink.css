@@ -256,6 +256,17 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-custom input[type=color]::-moz-color-swatch{border:2px solid #fff;border-radius:50%}
 .ink-marker-width{font-size:14px;font-weight:600}
 .ink-marker-note{margin:0;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
+/* 기능 (표기의 기능): four choices for a user preset, one fixed line for a built-in one. */
+.ink-marker-set legend small{margin-left:4px;font-size:12px;font-weight:400;color:var(--vz-color-muted,#667085)}
+.ink-marker-types label>span b{font-weight:600}
+.ink-marker-roles{grid-template-columns:repeat(4,minmax(0,1fr))}
+.ink-marker-roles label>span{min-height:52px}
+.ink-marker-role-note{margin:8px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
+.ink-marker-role-fixed{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-height:52px;box-sizing:border-box;padding:8px 14px;border-radius:14px;background:#fff;font-size:14px;line-height:20px;color:var(--vz-color-primary,#344054)}
+.ink-marker-role-fixed span{font-weight:600}
+.ink-marker-role-fixed strong{font-weight:700;color:var(--vz-color-accent,#7a32f5)}
+.ink-marker-role-fixed small{flex-basis:100%;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
+@media(max-width:350px){.ink-marker-roles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .ink-marker-error{margin:0;font-size:13px;line-height:18px;color:#c4322a}
 .ink-marker-error:empty{display:none}
 /* 목표로 넣기 (메모 → 오늘의 목표 / 숙제): the home goal sheet's rows; a line that is already there is greyed. */
