@@ -43,6 +43,7 @@ function shortChange(x) {
   if (!x || x.state === 'hold') return '<span class="vg-same">판정 보류 · ' + esc(G.holdText(x?.reason)) + '</span>';
   if (x.id === 'range') return '<span class="vg-same">' + (x.delta ? (x.delta > 0 ? '▲ ' : '▼ ') + Math.abs(x.delta) + '반음' : '같은 음') + ' · 실력 판정 아님</span>';
   const mrNote = x.note === 'mr-removed' ? '<small class="vg-basis">' + esc(G.MR_REMOVED_NOTE || '반주를 뺀 녹음이라 참고') + '</small>'
+    : x.note === 'ai-mixed' ? '<small class="vg-basis">' + esc(G.AI_MIXED_NOTE || 'AI 분리한 녹음과 비교라 참고') + '</small>'
     : x.note === 'ai-separated' ? '<small class="vg-basis">' + esc(G.AI_SEPARATED_NOTE || 'AI 분리 후 측정(참고)') + '</small>' : '';
   if (x.id === 'high') return '<span class="' + (TONE[x.state] || 'vg-same') + '">' + esc(G.stateLabel(x)) + ' · ' + esc(x.zone) + '</span>' + mrNote;
   const unit = x.id === 'phrase' ? '초' : ' cent', amount = x.delta ? (x.delta > 0 ? '▲ ' : '▼ ') + Math.abs(x.delta) + unit + ' ' : '';

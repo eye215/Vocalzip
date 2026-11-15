@@ -84,10 +84,19 @@ test('wobble-type changes of a take measured with its MR removed are shown as ob
 test('a take measured after AI separation is judged as usual and labelled AI 분리 후 측정(참고)', () => {
   const G = require('../app/growth-metrics-model.js');
   const take = (id, date, wobble, ai) => ({id, date, ok:true, a:{v:2, metrics:{stability:{wobbleCents:wobble, notes:20}, intonation:{meanAbsCents:wobble, notes:20}}, confidence:{pitchConfidence:0.95, ...(ai ? {aiSeparated:{model:'htdemucs'}} : {})}}});
-  for (const id of ['stability', 'intonation']) {
-    const x = G.compareMetric(id, take('a', '2026-10-01', 14, false), take('b', '2026-11-01', 6, true));
-    assert.equal(x.state, 'better', id); assert.equal(x.note, 'ai-separated', id);
+  // Pitch accuracy is judged even when one take is separated and the other is not.
+  const into = G.compareMetric('intonation', take('a', '2026-10-01', 14, false), take('b', '2026-11-01', 6, true));
+  assert.equal(into.state, 'better'); assert.equal(into.note, 'ai-separated');
+  // Both separated: wobble judged as usual.
+  const both = G.compareMetric('stability', take('a', '2026-10-01', 14, true), take('b', '2026-11-01', 6, true));
+  assert.equal(both.state, 'better'); assert.equal(both.note, 'ai-separated');
+  // One separated, one as recorded: wobble is observed only (the separated voice reads ~1.7 cent more wobble).
+  for (const [a, b] of [[false, true], [true, false]]) {
+    const mixed = G.compareMetric('stability', take('a', '2026-10-01', 14, a), take('b', '2026-11-01', 6, b));
+    assert.equal(mixed.state, 'changed'); assert.equal(mixed.note, 'ai-mixed'); assert.equal(mixed.judged, 'better');
+    assert.equal(mixed.before, 14); assert.equal(mixed.after, 6);
   }
+  assert.match(G.AI_MIXED_NOTE, /참고/);
   assert.equal(G.compareMetric('stability', take('a', '2026-10-01', 14, false), take('b', '2026-11-01', 6, false)).note, undefined);
   assert.equal(G.AI_SEPARATED_NOTE, 'AI 분리 후 측정(참고)');
 });
