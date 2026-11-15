@@ -1,0 +1,28 @@
+/* 마디 위치 보기 · 표시한 마디 (app/score-measures.js). Boxes sit under the handwriting and never take a touch.
+ * They are a quiet grey guide, so the user's own marks (purple by default) stay the thing that stands out; only the
+ * measure a list row points at is shown in the accent colour for a moment. */
+.score-ink-page svg[data-ink-measures]{pointer-events:none}
+.score-ink-performance [data-ink-measures]{display:none!important}
+.score-measure-box{fill:rgba(71,84,103,.05);stroke:rgba(71,84,103,.5);stroke-width:1px;vector-effect:non-scaling-stroke}
+.score-measure-box[data-tone=b]{fill:rgba(71,84,103,.11)}
+.score-measure-number{fill:#475467;font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;font-weight:700;letter-spacing:0;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.score-measure-flash{fill:rgba(122,50,245,.26);stroke:#7a32f5;stroke-width:2px;vector-effect:non-scaling-stroke;animation:score-measure-flash 2.2s ease-out forwards}
+@keyframes score-measure-flash{0%{opacity:0}10%,65%{opacity:1}100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.score-measure-flash{animation:none}}
+.score-ink-compact .score-ink-full-actions .score-ink-actions>button[data-ink-measure-boxes][aria-pressed=true],.score-ink-fullscreen .score-ink-full-actions .score-ink-actions>button[data-ink-measure-boxes][aria-pressed=true]{background:#ede1ff;color:#7a32f5}
+/* 표시한 마디 sheet: one white card per page, rows by measure (Home summary rows rhythm). */
+.score-measure-list{display:flex;flex-direction:column;gap:16px;color:#344054;letter-spacing:-.02em}
+.score-measure-note{display:flex;align-items:flex-start;gap:8px;margin:0;padding:12px 14px;border-radius:16px;background:#f3ecff;color:#475467;font-size:13px;line-height:18px}
+.score-measure-note i{flex:none;margin-top:1px;color:#7a32f5;font-size:16px}
+.score-measure-list section{min-width:0}
+.score-measure-list h3{margin:0 4px 8px;color:#667085;font-size:13px;line-height:18px;font-weight:600}
+.score-measure-rows{padding:4px 8px 4px 12px;border-radius:20px;background:#fff}
+.score-measure-row{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:8px 0;border:0;border-top:1px solid #f2eff7;border-radius:0;background:none;color:inherit;font:inherit;letter-spacing:inherit;text-align:left;cursor:pointer}
+.score-measure-row:first-child{border-top:0}
+.score-measure-row:focus-visible{outline:2px solid #dcc4ff;outline-offset:2px;border-radius:12px}
+.score-measure-where{flex:none;min-width:68px;padding:4px 10px;border-radius:99px;background:#f3ecff;color:#7a32f5;font-size:13px;line-height:18px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;box-sizing:border-box}
+.score-measure-what{flex:1;min-width:0;display:flex;flex-direction:column}
+.score-measure-what strong{color:#101828;font-size:15px;line-height:21px;font-weight:600}
+.score-measure-what small{color:#667085;font-size:12px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score-measure-row>i{flex:none;width:28px;color:#98a2b3;font-size:16px;text-align:center}
+.score-measure-empty{margin:0;padding:40px 16px;color:#667085;font-size:14px;line-height:20px;text-align:center}
