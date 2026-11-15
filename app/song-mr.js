@@ -1,5 +1,6 @@
 /* Song accompaniment attachments: private R2 files and explicit YouTube links.
- * Stored on songs[].mrTracks, never in the recording/analysis library. */
+ * Stored on songs[].mrTracks, never in the recording/analysis library.
+ * Also the song's AR 레퍼런스 links (songs[].arLinks), listed under the MRs. */
 (() => {
 'use strict';
 const V=window.VZ;if(!V)return;
@@ -173,6 +174,64 @@ V.renderSongMR=(host,song)=>{
      if(save(song.id,all=>{const found=all.find(x=>x.id===track.id);if(found){found.deleted=true;found.updatedAt=Date.now()}})){V.toast('MR을 삭제했어요.');draw();}
     }catch(error){V.toast(error.message,'error');}
    };
+  }
+ };
+ draw();
+};
+/* AR 레퍼런스 links (songs[].arLinks: {id, label, url}): a web address to listen to or watch, opened in the browser.
+ * Each link has its own small sheet (add / edit) and a menu (수정 · 삭제), like the MR list above. */
+const httpUrl=value=>{try{const u=new URL(String(value||'').trim());return ['https:','http:'].includes(u.protocol)?u.href:'';}catch{return '';}};
+const arName=(link,i)=>link.label||'AR 레퍼런스 '+(i+1);
+/** Where a shown link is in the song as it is now: by id, or (older links without one) by its place while it still reads the same. */
+const arIndex=(song,link,index)=>{const list=song?.arLinks||[];if(link.id)return list.findIndex(x=>x.id===link.id);const at=list[index];return at&&!at.id&&at.url===link.url&&(at.label||'')===(link.label||'')?index:-1;};
+const AR_MOVED='다른 기기에서 이 링크가 바뀌었어요. 목록을 다시 확인해 주세요.';
+function arSheet(song,entry,redraw){
+ V.sheet({title:entry?'AR 링크 수정':'AR 링크 추가',body:'<form id="song-ar-link" novalidate><label class="field"><span>이름 (선택)</span><input type="text" name="label" maxlength="80" placeholder="예: 원곡 영상" value="'+esc(entry?.link.label||'')+'"></label><label class="field"><span>링크 <span class="req">*</span></span><input type="url" name="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="2000" placeholder="https://" aria-describedby="song-ar-status" value="'+esc(entry?.link.url||'')+'"></label><p class="small vz-ar-status" id="song-ar-status" data-ar-status role="alert"></p></form>',
+  foot:'<button type="submit" form="song-ar-link" class="btn block" data-ar-save>저장</button>',
+  onMount:(el,close)=>{
+   const form=el.querySelector('form'),status=el.querySelector('[data-ar-status]'),input=form.elements.url;
+   const fail=text=>{status.textContent=text;input.setAttribute('aria-invalid','true');input.focus();};
+   input.addEventListener('input',()=>{status.textContent='';input.removeAttribute('aria-invalid');});
+   form.onsubmit=e=>{
+    e.preventDefault();
+    // Checked before anything is written: VZ.change hides errors thrown inside it.
+    const label=form.elements.label.value.trim(),raw=input.value.trim(),url=httpUrl(raw);
+    if(!raw)return fail('링크 주소를 입력해 주세요.');
+    if(!url)return fail('http:// 또는 https://로 시작하는 주소를 입력해 주세요.');
+    const current=V.song(song.id);if(!current)return fail('곡을 찾을 수 없어요.');
+    const at=entry?arIndex(current,entry.link,entry.index):-1;
+    if(entry&&at<0)return fail(AR_MOVED);
+    if(!V.change(d=>{const s=d.songs.find(x=>x.id===song.id);s.arLinks||=[];if(entry)s.arLinks[at]={...s.arLinks[at],id:s.arLinks[at].id||V.uid(),label,url};else s.arLinks.push({id:V.uid(),label,url});},{silent:true}))return fail('저장하지 못했어요. 다시 시도해 주세요.');
+    close();V.toast(entry?'링크를 수정했어요.':'링크를 추가했어요.');redraw();
+   };
+  }});
+}
+V.renderSongArLinks=(host,song)=>{
+ const draw=()=>{
+  if(!host.isConnected)return;
+  const list=(V.song(song.id)?.arLinks||[]).map((link,index)=>({link,index,name:arName(link,index),url:httpUrl(link.url)}));
+  host.innerHTML='<section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>'+list.length+'</span></strong><button type="button" data-add-song-ar aria-label="AR 레퍼런스 링크 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
+   (list.length?'<div class="vz-ar-list">'+list.map((x,i)=>'<div class="vz-ar-item" data-ar="'+i+'">'+
+    // A link that is not a web address (older data) cannot be opened; it can still be corrected or deleted.
+    (x.url?'<a href="'+esc(x.url)+'" target="_blank" rel="noopener noreferrer"><span><strong>'+esc(x.name)+'</strong><small>'+esc(x.link.url)+'</small></span><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>'
+     :'<div class="vz-ar-broken"><span><strong>'+esc(x.name)+'</strong><small>열 수 없는 주소예요. 수정해 주세요.</small></span></div>')+
+    (x.url&&V.shareUrl?'<button type="button" class="icon-btn vz-ar-share" data-ar-share aria-label="'+esc(x.name)+' 링크 보내기"><i class="ph ph-share" aria-hidden="true"></i></button>':'')+
+    '<button type="button" class="icon-btn" data-ar-more aria-label="'+esc(x.name)+' 수정·삭제"><i class="ph ph-dots-three" aria-hidden="true"></i></button></div>').join('')+'</div>':'<p>링크를 추가하면 여기서 바로 열 수 있어요.</p>')+'</section>';
+  host.querySelector('[data-add-song-ar]').onclick=()=>{if(V.song(song.id))arSheet(song,null,draw);};
+  for(const row of host.querySelectorAll('[data-ar]')){
+   const entry=list[+row.dataset.ar];
+   row.querySelector('[data-ar-share]')?.addEventListener('click',()=>V.shareUrl(entry.link.label||(V.song(song.id)?.title||song.title)+' 레퍼런스',entry.url));
+   row.querySelector('[data-ar-more]').onclick=()=>V.menu({title:entry.name,body:'<div class="list"><button type="button" class="item" data-ar-edit><i class="ph ph-pencil-simple"></i><span class="item-main">수정</span></button><button type="button" class="item" data-ar-delete style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">삭제</span></button></div>',
+    onMount:(el,close)=>{
+     el.querySelector('[data-ar-edit]').onclick=()=>{close();arSheet(song,entry,draw);};
+     el.querySelector('[data-ar-delete]').onclick=async()=>{
+      close();
+      if(!await V.confirm('AR 링크 삭제','"'+entry.name+'" 링크를 이 곡에서 삭제할까요? 링크가 가리키는 영상이나 파일은 그대로예요.',{ok:'삭제',danger:true}))return;
+      const at=arIndex(V.song(song.id),entry.link,entry.index);
+      if(at<0){V.toast(AR_MOVED,'error');draw();return;}
+      if(V.change(d=>{d.songs.find(x=>x.id===song.id).arLinks.splice(at,1);},{silent:true})){V.toast('링크를 삭제했어요.');draw();}
+     };
+    }});
   }
  };
  draw();

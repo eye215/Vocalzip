@@ -494,8 +494,8 @@ VZ.pickSong = (value, onPick) => {
 /* ---------- 내 곡 ---------- */
 const songArUrl = value => { try { const url = new URL(String(value || '').trim()); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; } };
 const songArRow = (link = {}) => '<div class="vz-ar-edit-row" data-ar-row data-id="' + esc(link.id || '') + '"><label class="field"><span>이름 (선택)</span><input type="text" data-ar-label maxlength="80" placeholder="예: 연습용 반주" value="' + esc(link.label || '') + '"></label><label class="field"><span>링크</span><input type="url" data-ar-url inputmode="url" maxlength="2000" placeholder="https://" value="' + esc(link.url || '') + '"></label><button type="button" class="icon-btn" data-remove-ar aria-label="AR 링크 삭제"><i class="ph ph-x" aria-hidden="true"></i></button></div>';
-VZ.songSheet = (song, onSaved, {hideShow = false, focusAr = false} = {}) => {
-  VZ.sheet({title:song ? '곡 수정' : '곡 추가', body:'<form id="song-form"><label class="field"><span>곡 제목 <span class="req">*</span></span><input type="text" name="title" maxlength="150" required autofocus value="' + esc(song?.title || '') + '"></label>' + (hideShow ? '' : '<label class="field"><span>작품 / 아티스트</span><input type="text" name="show" maxlength="150" placeholder="예: 레미제라블" value="' + esc(song?.show || '') + '"></label>') + '<label class="field"><span>별칭 (쉼표로 구분)</span><input type="text" name="aliases" maxlength="300" placeholder="예: 원데이모어, One Day" value="' + esc((song?.aliases || []).join(', ')) + '"><small class="small muted">파일 이름에 별칭이 들어 있으면 가져올 때 이 곡을 추천해요.</small></label><div class="vz-ar-edit"><div class="row between"><strong>AR 레퍼런스</strong><button type="button" class="btn sm secondary" data-add-ar>+ 링크 추가</button></div><div data-ar-rows>' + (song?.arLinks || []).map(songArRow).join('') + '</div></div></form>',
+VZ.songSheet = (song, onSaved) => {
+  VZ.sheet({title:song ? '곡 수정' : '곡 추가', body:'<form id="song-form"><label class="field"><span>곡 제목 <span class="req">*</span></span><input type="text" name="title" maxlength="150" required autofocus value="' + esc(song?.title || '') + '"></label><label class="field"><span>작품 / 아티스트</span><input type="text" name="show" maxlength="150" placeholder="예: 레미제라블" value="' + esc(song?.show || '') + '"></label><label class="field"><span>별칭 (쉼표로 구분)</span><input type="text" name="aliases" maxlength="300" placeholder="예: 원데이모어, One Day" value="' + esc((song?.aliases || []).join(', ')) + '"><small class="small muted">파일 이름에 별칭이 들어 있으면 가져올 때 이 곡을 추천해요.</small></label><div class="vz-ar-edit"><div class="row between"><strong>AR 레퍼런스</strong><button type="button" class="btn sm secondary" data-add-ar>+ 링크 추가</button></div><div data-ar-rows>' + (song?.arLinks || []).map(songArRow).join('') + '</div></div></form>',
     foot:'<button type="submit" form="song-form" class="btn block">' + (song ? '저장' : '곡 추가') + '</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form');
@@ -503,10 +503,9 @@ VZ.songSheet = (song, onSaved, {hideShow = false, focusAr = false} = {}) => {
       const addAr = () => { rows.insertAdjacentHTML('beforeend', songArRow()); rows.lastElementChild.querySelector('[data-ar-url]').focus(); };
       form.querySelector('[data-add-ar]').onclick = addAr;
       rows.onclick = e => { const button = e.target.closest('[data-remove-ar]'); if (button) button.closest('[data-ar-row]').remove(); };
-      if (focusAr) addAr();
-      form.onsubmit = e => {
+      form.onsubmit = async e => {
         e.preventDefault();
-        const title = form.title.value.trim(), show = hideShow ? (song?.show || '') : form.show.value.trim(), aliases = [...new Set(form.aliases.value.split(/[,，]/).map(x => x.trim()).filter(Boolean))].slice(0, 20);
+        const title = form.title.value.trim(), show = form.show.value.trim(), aliases = [...new Set(form.aliases.value.split(/[,，]/).map(x => x.trim()).filter(Boolean))].slice(0, 20);
         const arLinks = [];
         for (const row of rows.querySelectorAll('[data-ar-row]')) {
           const label = row.querySelector('[data-ar-label]').value.trim(), input = row.querySelector('[data-ar-url]'), raw = input.value.trim();
@@ -518,7 +517,7 @@ VZ.songSheet = (song, onSaved, {hideShow = false, focusAr = false} = {}) => {
         if (!title) return;
         if (!song && VZ.db.songs.some(s => s.title.trim().toLowerCase() === title.toLowerCase() && (s.show || '') === show)) { VZ.toast('이미 같은 곡이 있어요.', 'error'); return; }
         let id = song?.id;
-        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), hideShow ? {title, aliases, arLinks} : {title, show, aliases, arLinks}); else { id = VZ.uid(); d.songs.push({id, title, show, aliases, arLinks, created:Date.now()}); } });
+        const ok = VZ.change(d => { if (song) Object.assign(d.songs.find(s => s.id === song.id), {title, show, aliases, arLinks}); else { id = VZ.uid(); d.songs.push({id, title, show, aliases, arLinks, created:Date.now()}); } });
         if (ok) { close(); VZ.toast(song ? '곡을 수정했어요.' : '곡을 추가했어요.'); onSaved?.(id); }
       };
     }});
@@ -653,13 +652,11 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       }
       if (songTab === 'ar') {
         const current = VZ.song(s.id) || s;
-        const links = (current.arLinks || []).filter(link => songArUrl(link.url));
-        body.innerHTML = '<div data-song-mr></div><section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>' + links.length + '</span></strong><button type="button" data-add-song-ar aria-label="AR 레퍼런스 링크 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>' +
-          (links.length ? '<div class="vz-ar-list">' + links.map((link, i) => '<div class="vz-ar-item"><a href="' + esc(songArUrl(link.url)) + '" target="_blank" rel="noopener noreferrer"><span><strong>' + esc(link.label || 'AR 레퍼런스 ' + (i + 1)) + '</strong><small>' + esc(link.url) + '</small></span><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>' + (VZ.shareUrl ? '<button type="button" class="icon-btn vz-ar-share" data-ar-share="' + i + '" aria-label="' + esc(link.label || 'AR 레퍼런스 ' + (i + 1)) + ' 링크 보내기"><i class="ph ph-share" aria-hidden="true"></i></button>' : '') + '</div>').join('') + '</div>' : '<p>링크를 추가하면 여기서 바로 열 수 있어요.</p>') + '</section><div data-song-ar-file></div>';
+        // MR files, AR links (each with its own sheet and menu: app/song-mr.js) and the original recording for note comparison.
+        body.innerHTML = '<div data-song-mr></div><div data-song-ar-links></div><div data-song-ar-file></div>';
         VZ.renderSongMR?.(body.querySelector('[data-song-mr]'),current);
+        VZ.renderSongArLinks?.(body.querySelector('[data-song-ar-links]'),current);
         VZ.renderSongAr?.(body.querySelector('[data-song-ar-file]'),current);
-        body.querySelectorAll('[data-ar-share]').forEach(b => b.onclick = () => { const link = links[+b.dataset.arShare]; VZ.shareUrl(link.label || current.title + ' 레퍼런스', songArUrl(link.url)); });
-        body.querySelector('[data-add-song-ar]').onclick = () => { const cur = live(); if (cur) VZ.songSheet(cur, refresh, {hideShow:true, focusAr:true}); };
         VZ.mediaSelection?.hideSongAction();
         return;
       }

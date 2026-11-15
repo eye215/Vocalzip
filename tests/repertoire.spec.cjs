@@ -27,14 +27,14 @@ test.afterEach(async({page})=>expect(page._archiveErrors||[]).toEqual([]));
 test('A song keeps multiple AR links, including repeated URLs, across edit and reload',async({page})=>{
  await boot(page);await page.goto('/#/song/song1');
  await page.locator('[data-tab=ar]').click();
- await page.locator('[data-add-song-ar]').click();
- let form=page.locator('#song-form');
- await form.locator('[data-ar-row]').first().locator('[data-ar-label]').fill('연습용');
- await form.locator('[data-ar-row]').first().locator('[data-ar-url]').fill('https://example.com/ar');
- await form.locator('[data-add-ar]').click();
- await form.locator('[data-ar-row]').last().locator('[data-ar-label]').fill('공연용');
- await form.locator('[data-ar-row]').last().locator('[data-ar-url]').fill('https://example.com/ar');
- await page.locator('.sheet [form="song-form"]').click();
+ // + opens the small AR link sheet (one link at a time), not the whole 곡 수정 sheet.
+ for(const label of ['연습용','공연용']){
+  await page.locator('[data-add-song-ar]').click();
+  const link=page.locator('#song-ar-link');await expect(page.locator('#song-form')).toHaveCount(0);
+  await link.getByLabel('이름 (선택)').fill(label);await link.locator('[name=url]').fill('https://example.com/ar');
+  await page.locator('.sheet [form="song-ar-link"]').click();await expect(link).toHaveCount(0);
+ }
+ let form;
  await expect(page.locator('.vz-ar-list a')).toHaveCount(2);
  expect((await db(page)).songs[0].arLinks.map(x=>x.label)).toEqual(['연습용','공연용']);
  await page.reload();await page.locator('[data-tab=ar]').click();await expect(page.locator('.vz-ar-list a')).toHaveCount(2);
