@@ -11,6 +11,12 @@
 .range-chip:active{background:var(--vz-color-selected-bg,#EDE1FF);color:var(--vz-color-accent,#7A32F5)}
 .range-chip:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px}
 @media (max-width:350px){.range-chip{padding:0 11px 0 9px}}
+/* 달별 흐름 | 처음·지금: a small two-way switch (44px targets, selected #EDE1FF / #7A32F5), as wide as its words. */
+.range-views{display:inline-flex;gap:4px;max-width:100%;margin:0 0 16px;padding:4px;border-radius:14px;background:var(--surface-2,#F2EFF7)}
+.range-views button{min-height:44px;padding:0 16px;border:0;border-radius:10px;background:transparent;color:var(--ink-2,#475467);font:inherit;font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;cursor:pointer}
+.range-views button[aria-pressed="true"]{background:var(--vz-color-selected-bg,#EDE1FF);color:var(--vz-color-accent,#7A32F5)}
+.range-views button:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px}
+@media (max-width:350px){.range-views button{padding:0 12px;font-size:13px}}
 .range-stats{display:flex;flex-wrap:wrap;gap:12px 28px;margin:0}
 .range-stats>div{flex:0 1 auto;min-width:96px}
 .range-stats span{display:block;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
@@ -28,12 +34,11 @@
 .range-cols{position:relative;display:grid;grid-template-columns:repeat(var(--range-cols,6),minmax(0,1fr))}
 .range-col{display:grid;justify-items:center;min-width:0}
 .range-track{position:relative;width:100%;height:var(--range-h)}
-.range-band,.range-main,.range-stable,.range-lone,.range-hi,.range-lo{position:absolute;left:50%;transform:translateX(-50%)}
+.range-band,.range-main,.range-stable,.range-hi,.range-lo{position:absolute;left:50%;transform:translateX(-50%)}
 .range-band{width:min(22px,56%);min-height:3px;border-radius:6px;background:var(--vz-color-selected-bg,#EDE1FF)}
 .range-band.is-point{height:3px!important;border-radius:2px;background:var(--vz-color-accent,#7A32F5)}
 .range-main{width:min(22px,56%);min-height:3px;border-radius:5px;background:var(--vz-color-accent,#7A32F5)}
 .range-stable{width:min(30px,76%);height:0;border-top:2px solid #078994}
-.range-lone{width:9px;height:9px;margin-top:-4.5px;border:2px solid var(--vz-color-accent,#7A32F5);border-radius:50%;background:var(--surface,#fff)}
 .range-hi,.range-lo{color:var(--ink-2,#475467);font-size:11px;line-height:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .range-hi{margin-top:-15px}
 .range-lo{margin-top:1px}
@@ -52,7 +57,6 @@
 .range-legend .k-band{background:var(--vz-color-selected-bg,#EDE1FF)}
 .range-legend .k-main{background:var(--vz-color-accent,#7A32F5)}
 .range-legend .k-stable{height:0;border-radius:0;border-top:2px solid #078994}
-.range-legend .k-lone{width:9px;height:9px;border:2px solid var(--vz-color-accent,#7A32F5);border-radius:50%;box-sizing:border-box}
 .range-legend .k-small{box-shadow:inset 0 0 0 1.5px var(--vz-color-selected-bg,#EDE1FF)}
 /* Phones: the last 6 months (the list below has every month). */
 @media (max-width:599px){
@@ -63,6 +67,12 @@
   .range-year-narrow small{visibility:hidden}
   .range-chart{--range-h:228px}
 }
+.range-used{display:flex;gap:6px;align-items:flex-start;margin:10px 0 0;color:var(--ink-2,#475467);font-size:13px;line-height:18px}
+.range-used i{flex:none;margin-top:1px;color:#23855C;font-size:16px}
+.range-used b{color:var(--ink,#101828);font-weight:600;font-variant-numeric:tabular-nums}
+.range-diag{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--surface-2,#F2EFF7)}
+.range-diag .btn{min-height:44px}
+.range-diag p{margin:8px 0 0;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
 .range-change{display:flex;gap:8px;align-items:flex-start;margin:14px 0 0;padding:12px 14px;border-radius:16px;background:var(--vz-color-accent-soft,#F3ECFF);color:var(--ink,#101828);font-size:14px;line-height:20px;font-weight:600}
 .range-change i{flex:none;margin-top:1px;color:var(--vz-color-accent,#7A32F5);font-size:18px}
 .range-change[data-state="short"],.range-change[data-state="none"]{background:var(--surface-2,#F2EFF7);color:var(--ink-2,#475467);font-weight:400}
@@ -87,3 +97,15 @@
 .range-month-card p[data-range-values]{margin:0 0 4px;color:var(--ink,#101828);font-size:15px;line-height:22px;font-weight:600}
 .range-month-card small{display:block;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
 .range-month-card p.small{margin:8px 0 0}
+/* 처음·지금: two columns on the same note axis, and the table of the same values. */
+.range-pair .range-cols{max-width:360px}
+.range-pair .range-band,.range-pair .range-main{width:min(34px,40%)}
+.range-pair .range-stable{width:min(46px,54%)}
+.range-pair .range-month{font-size:13px;line-height:18px}
+.range-table{width:100%;margin:14px 0 0;border-collapse:collapse;font-size:13px;line-height:18px;font-variant-numeric:tabular-nums}
+.range-table th,.range-table td{padding:10px 6px;border-top:1px solid var(--surface-2,#F2EFF7);text-align:right;vertical-align:top;color:var(--ink,#101828);font-weight:600;white-space:nowrap}
+.range-table thead th{border-top:0;padding-top:0;color:var(--vz-color-ink-muted,#667085);font-size:12px;font-weight:600}
+.range-table th[scope="row"]{padding-left:0;text-align:left;color:var(--ink-2,#475467);font-weight:400;white-space:normal}
+.range-table td:last-child{padding-right:0;color:var(--ink-2,#475467);font-weight:400}
+.range-dash{color:var(--vz-color-faint,#98A2B3)}
+.range-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
