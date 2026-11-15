@@ -3,31 +3,23 @@
  * only while a shift is chosen, its output goes through a pitch shifter in Web Audio (MediaElementSource →
  * Signalsmith Stretch AudioWorklet → speakers). Long files stay streamed (no full-file decode).
  * Library: signalsmith-stretch@1.3.2 (MIT, Geraint Luff), loaded on first use from jsDelivr.
- * The chosen shift is kept per song as songs[].mrKeyShift (see app/song-mr.js). */
+ * The chosen shift is kept per MR as songs[].mrTracks[].keyShift (see app/song-mr.js); an MR without its own value
+ * uses the song's older songs[].mrKeyShift. */
 (() => {
 'use strict';
 const V = window.VZ;
-if (!V) return;
+if (!V || !window.VzipSongKeys) return;
 const LIB = 'https://cdn.jsdelivr.net/npm/signalsmith-stretch@1.3.2/SignalsmithStretch.mjs';
 const MIN = -6, MAX = 6;
 const clamp = n => Math.max(MIN, Math.min(MAX, Math.round(Number(n) || 0)));
 const label = n => (n = clamp(n)) ? (n > 0 ? '+' : '−') + Math.abs(n) : '원키';
 const spoken = n => (n = clamp(n)) ? '원키에서 반음 ' + Math.abs(n) + '개 ' + (n > 0 ? '올림' : '내림') : '원키';
-const NOTES = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
-/** Semitones from one key name (scores.js / repertoire style: "D", "F#/Gb", "Am") to another, nearest way round. */
-function interval(from, to) {
-  const at = k => NOTES.indexOf(String(k || '').trim().replace(/m$/, ''));
-  const a = at(from), b = at(to);
-  if (a < 0 || b < 0) return null;
-  const d = ((b - a) % 12 + 12) % 12;
-  return d > 6 ? d - 12 : d;
-}
-/** The song's keys: repertoire first, then the first score that has them. */
-function keysOf(song) {
-  const r = song?.repertoire || {}, score = (song?.scores || []).find(s => !s.deleted && (s.practiceKey || s.originalKey)) || {};
-  const practiceKey = r.practiceKey || score.practiceKey || '', originalKey = r.originalKey || score.originalKey || '';
-  return {practiceKey, originalKey, suggested:practiceKey && originalKey ? interval(originalKey, practiceKey) : null};
-}
+// Keys are read and understood in one place (app/song-keys.js): "F#", "G♭", "F#m", "Gb장조", "올림 바 장조", "-2키" …
+const Keys = window.VzipSongKeys;
+/** Semitones from one key to another, the nearest way round; null when a key is not written in a way the app understands. */
+const interval = (from, to) => Keys.interval(from, to);
+/** The song's 원키 · 연습키 as typed, and how far an original-key MR moves to reach the practice key. */
+const keysOf = song => { const k = Keys.of(song); return {practiceKey:k.practiceKey, originalKey:k.originalKey, suggested:k.suggested}; };
 
 let ctx = null, lib = null;
 /** Creates or wakes the shared AudioContext. Call it synchronously inside a tap: iPhone Safari only starts audio there. */

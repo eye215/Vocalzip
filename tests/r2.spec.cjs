@@ -290,7 +290,9 @@ test('악보: a PDF is uploaded to R2 under the song, delegates its full row to 
   await expect(row).toContainText('원키 C#/Db · 연습 C');
   const saved = await page.evaluate(k => JSON.parse(localStorage.getItem(k)).songs.find(s => s.id === 's1').scores, KEY);
   expect(saved).toHaveLength(1);
-  expect(saved[0]).toMatchObject({songId:'s1', fileName:'Defying Gravity vocal.pdf', originalKey:'C#/Db', practiceKey:'C'});
+  expect(saved[0]).toMatchObject({songId:'s1', fileName:'Defying Gravity vocal.pdf'});
+  // The keys are the song's: saved on the song, shown on its scores.
+  expect(await page.evaluate(k => JSON.parse(localStorage.getItem(k)).songs.find(s => s.id === 's1').repertoire, KEY)).toMatchObject({originalKey:'C#/Db', practiceKey:'C'});
   expect(saved[0].r2Key).toMatch(/^u\/ui-test-user\/score-[0-9a-f-]+\/original\.pdf$/);
   expect(r2.store.get(saved[0].r2Key).bytes.toString()).toContain('%PDF');
   // The current row delegates to the editor; source download remains signed.

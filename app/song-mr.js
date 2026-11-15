@@ -74,7 +74,9 @@ function add(song,redraw){
 // Their .media-open marker (while not hidden) holds off background re-renders, as an open recording does.
 const live=new WeakMap();
 const closePlayer=el=>{live.get(el)?.();live.delete(el);el.replaceChildren();el.hidden=true;};
-const shiftOf=id=>V.mrKey?V.mrKey.clamp(V.song(id)?.mrKeyShift):0;
+// Each MR remembers its own key shift (mrTracks[].keyShift): MRs of one song can be in different keys. An MR that has
+// none yet uses the value the song had when one shift served all its MRs (songs[].mrKeyShift, left as it is).
+const shiftOf=(id,trackId)=>{if(!V.mrKey)return 0;const song=V.song(id),own=(song?.mrTracks||[]).find(x=>x.id===trackId)?.keyShift;return V.mrKey.clamp(own??song?.mrKeyShift);};
 /** File MR: the stored file streams through <audio> untouched; the key capsule only changes how it is played. */
 function filePlayer(player,song,track,url,account,row){
  const K=V.mrKey,make=cors=>{const audio=document.createElement('audio');audio.controls=true;audio.preload='none';if(cors)audio.crossOrigin='anonymous';audio.src=url;audio.setAttribute('aria-label',track.title+' MR 재생');return audio;};
@@ -86,12 +88,12 @@ function filePlayer(player,song,track,url,account,row){
   (keys.practiceKey?'<button type="button" class="vz-mr-key-practice" data-mr-key-practice><span>연습 키 <b>'+esc(keys.practiceKey)+'</b></span><small data-mr-key-suggest></small></button>':'')+'</div><p class="vz-mr-key-msg" data-mr-key-msg role="status"></p>';
  player.replaceChildren(audio,box);
  const down=box.querySelector('[data-mr-key-down]'),up=box.querySelector('[data-mr-key-up]'),value=box.querySelector('[data-mr-key-value]'),msg=box.querySelector('[data-mr-key-msg]'),practice=box.querySelector('[data-mr-key-practice]');
- let n=shiftOf(song.id),timer=0,engine=null,off=false;
+ let n=shiftOf(song.id,track.id),timer=0,engine=null,off=false;
  const persist=()=>{
   clearTimeout(timer);timer=0;if(identity()!==account||window.VzipAccountScope?.leaving)return;
-  const current=V.song(song.id);if(!current||current.mrKeyShift===n||(!n&&current.mrKeyShift==null))return;
+  const current=V.song(song.id),saved=(current?.mrTracks||[]).find(x=>x.id===track.id);if(!saved||saved.keyShift===n||(saved.keyShift==null&&shiftOf(song.id,track.id)===n))return;
   // Silent: a full re-render would tear down the player that is playing right now.
-  if(!V.change(d=>{const s=d.songs.find(x=>x.id===song.id);if(s)s.mrKeyShift=n;},{silent:true}))msg.textContent='키 설정을 저장하지 못했어요.';
+  if(!V.change(d=>{const t=d.songs.find(x=>x.id===song.id)?.mrTracks?.find(x=>x.id===track.id);if(t)t.keyShift=n;},{silent:true}))msg.textContent='키 설정을 저장하지 못했어요.';
  };
  const paint=()=>{
   value.textContent=K.label(n);value.setAttribute('aria-label','현재 '+K.spoken(n)+(n?'. 누르면 원키로 돌아가요':''));value.disabled=off||!n;
@@ -99,7 +101,8 @@ function filePlayer(player,song,track,url,account,row){
   if(practice){
    const s=keys.suggested,hint=practice.querySelector('[data-mr-key-suggest]');
    const to=s==null?'':K.label(s)+([3,6].includes(Math.abs(s))?'으로':'로');
-   hint.textContent=s==null?'':s===n?'MR 맞춤':'MR '+to+' 맞추기';
+   // Why there is no suggestion: the MR is taken to be in the original key, so both keys are needed in a form the app understands.
+   hint.textContent=s==null?(keys.originalKey?'키 표기를 알아볼 수 없어 직접 맞춰 주세요':'원키를 적으면 맞춰 드려요'):s===n?'MR 맞춤':'MR '+to+' 맞추기';
    practice.disabled=off||s==null||s===n;
    practice.setAttribute('aria-label','연습 키 '+keys.practiceKey+(s!=null&&s!==n?'. MR을 '+to+' 맞추기':''));
   }
@@ -136,7 +139,7 @@ V.renderSongMR=(host,song)=>{
   if(!host.isConnected)return;
   const list=tracks(song.id),account=identity();
   host.innerHTML='<section class="vz-ar-links vz-mr-links" aria-label="MR 반주"><div class="vz-ar-heading"><strong>MR 반주 <span>'+list.length+'</span></strong><button type="button" data-mr-add aria-label="MR 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
-   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id)?' · 키 '+V.mrKey.label(shiftOf(song.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
+   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id,x.id)?' · 키 '+V.mrKey.label(shiftOf(song.id,x.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
   host.querySelector('[data-mr-add]').onclick=()=>add(song,draw);
   window.VzipR2?.prefetch?.(list.filter(x=>x.kind==='file').slice(0,5).map(x=>x.r2Key)).catch(()=>{});
   for(const row of host.querySelectorAll('[data-mr]')){
@@ -152,7 +155,7 @@ V.renderSongMR=(host,song)=>{
     }
     player.textContent='MR을 불러오는 중…';
     // A remembered key shift needs Web Audio: wake it while this tap still counts as a user gesture (iPhone Safari).
-    if(shiftOf(song.id)){V.mrKey.context();V.mrKey.load().catch(()=>{});}
+    if(shiftOf(song.id,track.id)){V.mrKey.context();V.mrKey.load().catch(()=>{});}
     try{
      const url=await window.VzipR2.url(track.r2Key);
      if(!player.isConnected||player.hidden||identity()!==account||window.VzipAccountScope?.leaving)return;
