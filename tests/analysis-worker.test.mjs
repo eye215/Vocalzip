@@ -21,6 +21,25 @@ const U1 = '11111111-1111-4111-8111-111111111111', U2 = '22222222-2222-4222-8222
 const LYRICS_A = 'There is a moment when the world stands still and every dream I ever had comes rushing in like morning light across the hills I will not wait another day this is the moment this is the day when I send all my doubts away';
 const LYRICS_B = 'Something has changed within me something is not the same I am through with playing by the rules of someone elses game too late for second guessing too late to go back to sleep';
 
+test('Judgement-review numbers group saved analyses by method and pair the same song, with no ids in the output', async () => {
+  const {analysisStats} = await import('../worker/analysis-worker.mjs');
+  const a = (pc, cents, wob, extra = {}) => ({v:2, metrics:{phrases:{v:1, rows:[]}, voicedSeconds:30, intonation:{meanAbsCents:cents, within20:80, notes:10}, stability:{wobbleCents:wob}}, confidence:{pitchConfidence:pc, ...extra}});
+  const rows = [
+    {user_id:U1, song:'s1', a:a(.95, 10, 12)},
+    {user_id:U1, song:'s1', a:{...a(.9, 14, 18, {aiSeparated:{model:'htdemucs'}}), history:[a(.5, 30, 25)], scope:{separationResult:'separated'}}},
+    {user_id:U1, song:'s2', a:{...a(.6, 25, 30), scope:{separationResult:'not-better'}}},
+    {user_id:U2, song:'s1', a:a(.92, 12, 14, {mrRemoved:{removedDb:9}})},
+    {user_id:U2, song:'s3', a:{v:1, metrics:{phrases:null}}},
+  ];
+  const out = await analysisStats({query:async () => ({rows})});
+  assert.deepEqual(Object.fromEntries(Object.entries(out.groups).map(([k, v]) => [k, v.n])), {asRecorded:1, aiSeparated:1, held:1, mrRemoved:1});
+  assert.deepEqual(out.separationResult, {separated:1, 'not-better':1});
+  assert.equal(out.aiSeparatedMinusBefore.cents, -16);
+  assert.deepEqual({...out.paired.aiSeparatedVsAsRecorded, mainLow:undefined, mainHigh:undefined, validHigh:undefined}, {songs:1, cents:4, wob:6, w20:0, mainLow:undefined, mainHigh:undefined, validHigh:undefined});
+  assert.equal(out.paired.mrRemovedVsAsRecorded.songs, 0);
+  const text = JSON.stringify(out);
+  assert.ok(!text.includes(U1) && !text.includes('s1'));
+});
 test('Held-result reanalysis accepts only current, readable, unprocessed recordings', async () => {
   const {unreliableCandidate, UNRELIABLE_CAMPAIGN} = await import('../worker/analysis-worker.mjs');
   const analysis = {v:2, at:123, metrics:{phrases:null, voicedSeconds:20}, confidence:{pitchConfidence:0.4}};

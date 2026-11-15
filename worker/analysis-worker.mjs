@@ -304,6 +304,40 @@ export async function requeueUnreliableAnalyses(db, {apply = false, limit = 50} 
   }
   return counts;
 }
+/** Read-only numbers for reviewing the judgement rules (판정 기준 재검토): saved analyses grouped by how they were
+ * measured, plus the same song measured both ways. Counts and medians only: no ids, names or text (public logs). */
+export async function analysisStats(db) {
+  const {rows} = await db.query(`select user_id, metadata -> 'songId' as song, metadata -> 'analysis' as a from public.vocal_media
+    where not coalesce((metadata ->> 'deleted')::boolean, false) and metadata -> 'analysis' -> 'metrics' ? 'phrases'`);
+  const med = xs => { const v = xs.filter(Number.isFinite).sort((a, b) => a - b); if (!v.length) return null; const m = v.length >> 1; return Math.round((v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2) * 100) / 100; };
+  const groupOf = a => a.confidence?.aiSeparated ? 'aiSeparated' : a.confidence?.mrRemoved ? 'mrRemoved' : reliableResult(a) ? 'asRecorded' : 'held';
+  // Note names (C4, F#5, Bb3) → MIDI numbers, so ranges can be compared in semitones.
+  const midi = n => { const m = /^([A-G])([#b]?)(-?\d)$/.exec(String(n || '')); return m ? 12 * (Number(m[3]) + 1) + {C:0, D:2, E:4, F:5, G:7, A:9, B:11}[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) : NaN; };
+  const pick = a => { const g = a.metrics?.range || {}; return {pc:a.confidence?.pitchConfidence, cents:a.metrics?.intonation?.meanAbsCents, w20:a.metrics?.intonation?.within20, wob:a.metrics?.stability?.wobbleCents, voiced:a.metrics?.voicedSeconds, notes:a.metrics?.intonation?.notes,
+    mainLow:midi(g.main?.low), mainHigh:midi(g.main?.high), validHigh:midi(g.validHigh?.note)}; };
+  const keys = ['pc', 'cents', 'w20', 'wob', 'voiced', 'notes', 'mainLow', 'mainHigh', 'validHigh'];
+  const groups = {}, songs = new Map(), results = {}, deltas = {pc:[], cents:[], wob:[], mainLow:[], mainHigh:[], validHigh:[]};
+  for (const {user_id, song, a} of rows) {
+    if (!a || Number(a.v) < 2) continue;
+    const g = groupOf(a), m = pick(a);
+    (groups[g] ||= []).push(m);
+    const r = a.scope?.separationResult; if (r) results[r] = (results[r] || 0) + 1;
+    if (g === 'aiSeparated') { const prev = (a.history || []).at(-1); if (prev?.metrics) { const p = pick(prev); for (const k of Object.keys(deltas)) if (Number.isFinite(m[k]) && Number.isFinite(p[k])) deltas[k].push(m[k] - p[k]); } }
+    if (song && (g === 'aiSeparated' || g === 'asRecorded' || g === 'mrRemoved')) { const k = user_id + '|' + song; if (!songs.has(k)) songs.set(k, {}); (songs.get(k)[g] ||= []).push(m); }
+  }
+  const summary = Object.fromEntries(Object.entries(groups).map(([g, xs]) => [g, {n:xs.length, ...Object.fromEntries(keys.map(k => [k, med(xs.map(x => x[k]))]))}]));
+  // Same song, same person: AI-separated (or MR-removed) takes against takes that were reliable as recorded.
+  const paired = {};
+  for (const g of ['aiSeparated', 'mrRemoved']) {
+    const diff = {cents:[], wob:[], w20:[], mainLow:[], mainHigh:[], validHigh:[]}; let n = 0;
+    for (const s of songs.values()) {
+      if (!s[g] || !s.asRecorded) continue; n++;
+      for (const k of Object.keys(diff)) { const x = med(s[g].map(v => v[k])), y = med(s.asRecorded.map(v => v[k])); if (x != null && y != null) diff[k].push(x - y); }
+    }
+    paired[g + 'VsAsRecorded'] = {songs:n, ...Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, med(v)]))};
+  }
+  return {groups:summary, separationResult:results, aiSeparatedMinusBefore:Object.fromEntries(Object.entries(deltas).map(([k, v]) => [k, med(v)])), paired};
+}
 /** 알고 있는 MR 빼기 on the server, as in the app: the song's uploaded MR files (this account's R2 folder only) are
  * lined up with the take and subtracted (app/mr-cancel.js via VA.analyzeWithoutMr). null when none fits. */
 async function withoutMr(db, owner, songId, samples) {
@@ -519,6 +553,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       // This command only previews/enqueues; the scheduled worker handles the queue later. Never runs STT.
       const counts = await requeueUnreliableAnalyses(db, {apply:env.WORKER_REANALYZE_APPLY === '1', limit:env.WORKER_REANALYZE_LIMIT || 50});
       console.log('unreliable reanalysis: ' + JSON.stringify(counts));
+      if (env.WORKER_REANALYZE_APPLY !== '1') console.log('analysis stats: ' + JSON.stringify(await analysisStats(db)));
     } else {
       // Settings first: with a broken R2 setting no job is touched (nothing used up, nothing marked failed).
       const {notes, problems} = preflight();
