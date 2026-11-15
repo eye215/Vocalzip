@@ -223,6 +223,82 @@ test.describe('phone 375', () => {
     await shot(page, 'robust-375.png');
   });
 
+  test('처음·지금: the switch shows the earliest and the latest window side by side with a table, and is remembered', async ({page}) => {
+    await boot(page, FULL);
+    const section = () => page.locator('[data-range-section]');
+    // 달별 흐름 is the default; the switch is two 44px buttons.
+    await expect(section()).toHaveAttribute('data-range-view-now', 'flow');
+    expect(await section().locator('[data-range-view]').evaluateAll(els => els.map(e => [e.dataset.rangeView, e.textContent, e.getAttribute('aria-pressed'), e.getBoundingClientRect().height >= 44])))
+      .toEqual([['flow', '달별 흐름', 'true', true], ['compare', '처음·지금', 'false', true]]);
+    await section().locator('[data-range-view="compare"]').click();
+    await expect(section()).toHaveAttribute('data-range-view-now', 'compare');
+    await expect(section().locator('[data-range-view="compare"]')).toBeFocused(); await expect(section().locator('[data-range-view="compare"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(section().locator('[data-range-chart], [data-range-change], [data-range-months]')).toHaveCount(0);   // the month chart and its list belong to the other view
+    const c = (await modelOf(page)).compare;
+    expect([c.state, c.first.period, c.first.n, c.now.period, c.now.n]).toEqual(['ok', '2025.12–2026.03', 7, '2026.09–11', 14]);
+    // Two columns on one note axis, each with its period and how many recordings it used.
+    expect(await section().locator('[data-range-side]').evaluateAll(els => els.map(e => [e.dataset.rangeSide, e.querySelector('.range-month').textContent, e.querySelector('[data-range-side-period]').textContent, e.querySelector('[data-range-side-n]').textContent,
+      e.dataset.rangeLow, e.dataset.rangeHigh, e.querySelector('.range-hi').textContent, e.querySelector('.range-lo').textContent, !!e.querySelector('.range-main'), !!e.querySelector('.range-stable')])))
+      .toEqual([['first', '처음', '2025.12–2026.03', '녹음 7개', 'G3', 'A4', 'A4', 'G3', true, true], ['now', '지금', '2026.09–11', '녹음 14개', 'F3', 'B4', 'B4', 'F3', true, true]]);
+    const tops = await section().locator('[data-range-side] .range-hi').evaluateAll(els => els.map(e => e.getBoundingClientRect().top));
+    expect(tops[1]).toBeLessThan(tops[0]);                                               // B4 is drawn above A4: the same axis
+    expect(await section().locator('[data-range-compare-chart]').getAttribute('aria-label')).toContain('처음 2025.12–2026.03 G3 ~ A4, 녹음 7개. 지금 2026.09–11 F3 ~ B4, 녹음 14개');
+    // The line about the two windows, and the table: 처음 · 지금 · 차이.
+    await expect(section().locator('[data-range-compare-line]')).toHaveText('처음(2025.12–2026.03) → 지금(2026.09–11) 주로 부른 음역 C4–F4 → C4–F4');
+    await expect(section().locator('[data-range-compare-line]')).toHaveText(await page.evaluate(x => VzipGrowthRange.compareText(x), c));
+    const table = await section().locator('[data-range-compare-row]').evaluateAll(els => els.map(e => [e.dataset.rangeCompareRow, ...[...e.children].map(x => x.textContent)]));
+    expect(table).toEqual(c.rows.map(r => [r.key, r.label, r.first || '—', r.now || '—', r.delta == null ? '—' : r.delta === 0 ? '같음' : (r.delta > 0 ? '+' : '−') + Math.abs(r.delta) + '반음']));
+    expect(table).toEqual([['mainLow', '주로 부른 음역 아래', 'C4', 'C4', '같음'], ['mainHigh', '주로 부른 음역 위', 'F4', 'F4', '같음'], ['low', '관측 최저음', 'G3', 'F3', '−2반음'], ['high', '관측 최고음', 'A4', 'B4', '+2반음'], ['stable', '안정 최고음', 'G4', 'G4', '같음']]);
+    await expect(section().locator('[data-range-compare-table] thead th')).toHaveText(['', '처음', '지금', '차이']);
+    await expect(section().locator('[data-range-used]')).toHaveText('신뢰도 높은 녹음 가운데 처음 7개, 지금 14개로 계산했어요 (전체 38개 중 34개가 신뢰도 높은 녹음)');
+    const text = await section().innerText();
+    expect(text).not.toMatch(/성장|향상|확정|좋아졌|나빠졌/); expect(text).toContain('실력 변화로 판정하지 않아요'); expect(text).toContain('두 기간에 부른 곡이 달라서');
+    await noOverflow(page); await inside(page, '[data-range-section] *');
+    await shot(page, 'first-now-375.png');
+    // The kind chips apply to this view too: without lessons 지금 is made of 12 recordings and its top is still B4, its bottom F#3.
+    await section().locator('[data-range-group="lesson"]').click();
+    await expect(section()).toHaveAttribute('data-range-view-now', 'compare');
+    await expect(section().locator('[data-range-side="now"] [data-range-side-n]')).toHaveText('녹음 12개');
+    await expect(section().locator('[data-range-compare-row="low"] td').nth(1)).toHaveText((await modelOf(page)).compare.rows[2].now);
+    await expect(section().locator('[data-range-compare-row="low"] td').nth(1)).toHaveText('F#3');
+    await section().locator('[data-range-group="lesson"]').click();
+    // 무엇을 셌나요 and the all-time values are in both views.
+    await expect(section().locator('[data-range-what], .range-stats')).toHaveCount(2);
+    // Remembered on this device: a reload opens the same view; switching back is remembered too.
+    await page.reload();
+    await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+    await page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); location.hash = '#/home'; }, FULL);
+    await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+    await expect(section()).toHaveAttribute('data-range-view-now', 'compare');
+    await expect(section().locator('[data-range-compare-table]')).toBeVisible();
+    await section().locator('[data-range-view="flow"]').click();
+    await expect(section().locator('[data-range-chart]')).toBeVisible(); await expect(section().locator('[data-range-compare-table]')).toHaveCount(0);
+    expect(await page.evaluate(() => (window.VzipAccountScope?.storage || localStorage).getItem('vzip_range_view'))).toBe('flow');
+    expect(page.__errors).toEqual([]);
+  });
+
+  test('처음·지금: too short a record says so with what is missing; a missing value is a dash, not a guess', async ({page}) => {
+    await boot(page, FEW);
+    const section = () => page.locator('[data-range-section]');
+    await section().locator('[data-range-view="compare"]').click();
+    await expect(section().locator('[data-range-compare-short] strong')).toHaveText('아직 비교할 만큼 기간이 쌓이지 않았어요');
+    await expect(section().locator('[data-range-compare-short]')).toContainText('처음(2026.09–11)과 지금(2026.09–11) 기간이 겹쳐요 · 녹음이 있는 달이 더 쌓이면 비교할 수 있어요 (지금 2개월)');
+    await expect(section().locator('[data-range-compare-short]')).toContainText('녹음이 있는 달을 3개(또는 녹음 30개가 찰 때)까지 묶고');
+    await expect(section().locator('[data-range-compare-table], [data-range-compare-chart]')).toHaveCount(0);
+    await noOverflow(page);
+    // 처음 has no highest note that enough recordings share (all on the detector's ceiling): "—" with the reason.
+    const day = i => String(1 + i % 28).padStart(2, '0');
+    const month = (ym, low, high) => Array.from({length:30}, (_, i) => rec(ym + '-' + day(i), v2(low, high, {main:['C4', 'A4'], stable:'C5'})));
+    await boot(page, [...month('2026-01', 'G3', 'C6'), ...month('2026-11', 'A3', 'D5')]);
+    await expect(section()).toHaveAttribute('data-range-view-now', 'compare');           // still the view chosen above
+    const rows = await section().locator('[data-range-compare-row]').evaluateAll(els => els.map(e => [...e.children].map(x => x.textContent)));
+    expect(rows).toEqual([['주로 부른 음역 아래', 'C4', 'C4', '같음'], ['주로 부른 음역 위', 'A4', 'A4', '같음'], ['관측 최저음', 'G3', 'A3', '+2반음'], ['관측 최고음', '—', 'D5', '—'], ['안정 최고음', '—', 'C5', '—']]);
+    await expect(section().locator('[data-range-compare-row="high"] .range-dash').first()).toHaveAttribute('title', '처음 기간에 여러 녹음에 함께 나온 값이 없어요');
+    await expect(section().locator('[data-range-compare-missing]')).toContainText('한두 녹음의 값으로 채우지 않아요');
+    await expect(section().locator('[data-range-side="first"] .range-hi')).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+
   test('too few recordings: values are shown as they are, the comparison says what is missing', async ({page}) => {
     await boot(page, FEW);
     const m = await modelOf(page), section = page.locator('[data-range-section]');
@@ -296,6 +372,12 @@ test.describe('phone 320', () => {
       return shown.every((r, i) => !i || r.left >= shown[i - 1].right - .5 || r.bottom <= shown[i - 1].top || r.top >= shown[i - 1].bottom); })).toBe(true);
     for (const sel of ['[data-range-months] summary', '[data-range-what] summary']) { await section.locator(sel).click(); expect((await section.locator(sel).boundingBox()).height).toBeGreaterThanOrEqual(44); }
     await noOverflow(page); await inside(page, '[data-range-section] *');
+    // 처음·지금 at 320px: the switch, the two columns and the table all fit.
+    await section.locator('[data-range-view="compare"]').click();
+    await expect(page.locator('[data-range-compare-table]')).toBeVisible();
+    expect(await page.locator('[data-range-view]').evaluateAll(els => els.every(e => e.getBoundingClientRect().height >= 44))).toBe(true);
+    await noOverflow(page); await inside(page, '[data-range-section] *');
+    await page.locator('[data-range-view="flow"]').click();
     await page.locator('[data-growth-mode="monthly"]').click();
     await expect(page.locator('[data-range-month]')).toBeVisible();
     await noOverflow(page);

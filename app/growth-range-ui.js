@@ -9,6 +9,11 @@ const V = window.VZ, R = window.VzipGrowthRange, D = window.VzipGrowthDataset;
 if (!V || !R || !D || !V.growthDataset) return;
 const e = V.esc;
 const off = new Set();                                   // kinds turned off on this visit
+// 달별 흐름 | 처음·지금 — remembered on this device (a convenience only; the page works without storage).
+const VIEW_KEY = 'vzip_range_view', VIEWS = [['flow', '달별 흐름'], ['compare', '처음·지금']];
+const store = () => { try { return window.VzipAccountScope?.storage || window.localStorage; } catch { return null; } };
+let view = (() => { try { return store()?.getItem(VIEW_KEY) === 'compare' ? 'compare' : 'flow'; } catch { return 'flow'; } })();
+const setView = next => { view = next === 'compare' ? 'compare' : 'flow'; try { store()?.setItem(VIEW_KEY, view); } catch {} };
 const today = () => D.koreaDay(Date.now());              // the series runs to this month in Korea
 const chosen = () => R.GROUPS.map(([id]) => id).filter(id => !off.has(id));
 /** The model for the list in hand. all:true ignores the chips (the month row always counts every kind). */
@@ -31,6 +36,20 @@ function stats(model) {
     (a.stable ? cell('stable', '안정 최고음', a.stable.note) : '') + '</div>' +
     '<p class="range-period" data-range-period>' + e(longDate(a.firstDate) + ' ~ ' + longDate(a.lastDate) + ' · 녹음 ' + a.n + '개 · ' + a.months + '개월') + '</p>';
 }
+/** The marks of one period on the note axis (y: MIDI → % from the top): observed band, main band, stable line, labels. */
+function marks(m, y) {
+  // The observed band needs an end to hang on: both ends → a band; one end → a short mark at that note.
+  const ends = [m.high, m.low].filter(Boolean), top = ends.length ? y(Math.max(...ends.map(x => x.midi))) : null, bottom = ends.length ? y(Math.min(...ends.map(x => x.midi))) : null;
+  return '<div class="range-track"><div class="range-area">' +
+    (ends.length ? '<span class="range-band' + (ends.length === 2 ? '' : ' is-point') + '" style="top:' + top + '%;height:' + (bottom - top).toFixed(2) + '%"></span>' : '') +
+    (m.main ? '<span class="range-main" style="top:' + y(m.main.high.midi) + '%;height:' + (y(m.main.low.midi) - y(m.main.high.midi)).toFixed(2) + '%"></span>' : '') +
+    (m.stable ? '<span class="range-stable" style="top:' + y(m.stable.midi) + '%"></span>' : '') +
+    (m.high ? '<span class="range-hi" style="top:' + y(m.high.midi) + '%">' + m.high.note + '</span>' : '') +
+    (m.low ? '<span class="range-lo" style="top:' + y(m.low.midi) + '%">' + m.low.note + '</span>' : '') +
+    '</div></div>';
+}
+const legend = (list, small) => '<p class="range-legend" aria-hidden="true"><span><i class="k-band"></i>관측 음역</span>' + (list.some(m => m.main) ? '<span><i class="k-main"></i>주로 부른 음역</span>' : '') +
+  (list.some(m => m.stable) ? '<span><i class="k-stable"></i>안정 최고음</span>' : '') + (small ? '<span><i class="k-small"></i>녹음 3개 미만</span>' : '') + '</p>';
 /** Months on x, notes on y: a light band from the lowest to the highest observed note, the darker band where most of
  * the singing was, a line at the stable highest note. A month whose recordings share no highest or lowest note
  * (fewer than K have that end) is drawn without that end, never with a guessed one. */
@@ -44,26 +63,15 @@ function chart(model) {
     const foot = '<span class="range-month' + year + '"><small>' + (year ? m.month.slice(0, 4) : '') + '</small>' + Number(m.month.slice(5, 7)) + '월</span>' +
       '<span class="range-count">' + (m.n ? m.n + '개' : '없음') + '</span>';
     if (!m.n) return '<div class="range-col is-empty" data-range-col="' + m.month + '" data-range-n="0"><div class="range-track"></div>' + foot + '</div>';
-    // The observed band needs an end to hang on: both ends → a band; one end → a short mark at that note.
-    const ends = [m.high, m.low].filter(Boolean), top = ends.length ? y(Math.max(...ends.map(x => x.midi))) : null, bottom = ends.length ? y(Math.min(...ends.map(x => x.midi))) : null;
     return '<div class="range-col' + (m.enough ? '' : ' is-small') + '" data-range-col="' + m.month + '" data-range-n="' + m.n + '" data-range-high="' + (m.high?.note || '') + '" data-range-low="' + (m.low?.note || '') + '">' +
-      '<div class="range-track"><div class="range-area">' +
-      (ends.length ? '<span class="range-band' + (ends.length === 2 ? '' : ' is-point') + '" style="top:' + top + '%;height:' + (bottom - top).toFixed(2) + '%"></span>' : '') +
-      (m.main ? '<span class="range-main" style="top:' + y(m.main.high.midi) + '%;height:' + (y(m.main.low.midi) - y(m.main.high.midi)).toFixed(2) + '%"></span>' : '') +
-      (m.stable ? '<span class="range-stable" style="top:' + y(m.stable.midi) + '%"></span>' : '') +
-      (m.high ? '<span class="range-hi" style="top:' + y(m.high.midi) + '%">' + m.high.note + '</span>' : '') +
-      (m.low ? '<span class="range-lo" style="top:' + y(m.low.midi) + '%">' + m.low.note + '</span>' : '') +
-      '</div></div>' + foot + '</div>';
+      marks(m, y) + foot + '</div>';
   };
   const label = '달별 관측 음역. ' + months.map(m => Number(m.month.slice(5, 7)) + '월 ' + (m.n ? (m.low && m.high ? span(m.low, m.high) : m.high ? '최고음 ' + m.high.note : m.low ? '최저음 ' + m.low.note : '함께 나온 음 없음') + ', 녹음 ' + m.n + '개' : '셀 수 있는 녹음 없음')).join('. ') + '. 자세한 값은 아래 달별 값 보기에 있어요.';
-  const any = key => months.some(m => m[key]);
   return '<div class="range-chart" role="img" aria-label="' + e(label) + '" data-range-chart>' +
     '<div class="range-axis" aria-hidden="true"><div class="range-area">' + ax.ticks.map(t => '<span style="top:' + y(t.midi) + '%">' + t.note + '</span>').join('') + '</div></div>' +
     '<div class="range-plot"><div class="range-lines" aria-hidden="true">' + ax.ticks.map(t => '<span style="top:' + y(t.midi) + '%"></span>').join('') + '</div>' +
     '<div class="range-cols" style="--range-cols:' + months.length + ';--range-cols-narrow:' + Math.min(6, months.length) + '">' + months.map(col).join('') + '</div></div></div>' +
-    '<p class="range-legend" aria-hidden="true"><span><i class="k-band"></i>관측 음역</span>' + (any('main') ? '<span><i class="k-main"></i>주로 부른 음역</span>' : '') +
-    (any('stable') ? '<span><i class="k-stable"></i>안정 최고음</span>' : '') +
-    (months.some(m => m.n && !m.enough) ? '<span><i class="k-small"></i>녹음 3개 미만</span>' : '') + '</p>' + usedLine(model);
+    legend(months, months.some(m => m.n && !m.enough)) + usedLine(model);
 }
 /** What the numbers were made from: only the recordings that passed the range rules, out of all of the chosen kinds. */
 const usedLine = model => '<p class="range-used" data-range-used><i class="ph ph-seal-check" aria-hidden="true"></i><span>신뢰도 높은 녹음 <b>' + model.used.counted + '개</b>로 계산했어요 (전체 ' + model.used.total + '개 중)</span></p>';
@@ -71,6 +79,32 @@ function changeLine(model) {
   const c = model.change;
   return '<p class="range-change" data-range-change data-state="' + c.state + '"><i class="ph ' + (c.state === 'ok' ? 'ph-arrows-vertical' : 'ph-hourglass-low') + '" aria-hidden="true"></i><span>' + e(R.changeText(c)) + '</span></p>' +
     '<p class="range-note">달마다 부른 곡이 달라서 음역도 달라 보일 수 있어요. 높아지거나 낮아진 것을 실력 변화로 판정하지 않아요. 같은 곡끼리 본 변화는 위 6가지 지표의 음역 확장에 있어요.</p>';
+}
+/* ---------- 처음 · 지금 ---------- */
+const switchHtml = () => '<div class="range-views" role="group" aria-label="음역을 보는 방법">' + VIEWS.map(([id, label]) =>
+  '<button type="button" data-range-view="' + id + '" aria-pressed="' + (view === id) + '">' + label + '</button>').join('') + '</div>';
+/** The earliest and the latest window side by side on one note axis, the line about the two, and the table. */
+function compareHtml(model) {
+  const c = model.compare;
+  if (c.state !== 'ok') return '<div class="range-empty" data-range-compare-short><strong>아직 비교할 만큼 기간이 쌓이지 않았어요</strong><p>' +
+    e(R.compareText(c).replace(/^아직 비교할 만큼 기간이 쌓이지 않았어요 · /, '')) + '</p><p>처음과 지금은 각각 녹음이 있는 달을 ' + c.need.months + '개(또는 녹음 ' + c.need.recordings + '개가 찰 때)까지 묶고, 두 기간이 겹치지 않아야 비교해요.</p></div>';
+  const ax = c.axis, y = midi => ((ax.max - midi) / (ax.max - ax.min) * 100).toFixed(2);
+  const col = (key, name, s) => '<div class="range-col" data-range-side="' + key + '" data-range-n="' + s.n + '" data-range-high="' + (s.high?.note || '') + '" data-range-low="' + (s.low?.note || '') + '">' + marks(s, y) +
+    '<span class="range-month">' + name + '</span><span class="range-count" data-range-side-period>' + e(s.period) + '</span><span class="range-count" data-range-side-n>녹음 ' + s.n + '개</span></div>';
+  const words = s => (s.low && s.high ? span(s.low, s.high) : s.high ? '최고음 ' + s.high.note : s.low ? '최저음 ' + s.low.note : '함께 나온 음 없음') + ', 녹음 ' + s.n + '개';
+  const label = '처음과 지금의 관측 음역. 처음 ' + c.first.period + ' ' + words(c.first) + '. 지금 ' + c.now.period + ' ' + words(c.now) + '. 자세한 값은 아래 표에 있어요.';
+  const cell = (row, side) => row[side] ? e(row[side]) : '<span class="range-dash" title="' + e(R.missingText(row)) + '">—</span>';
+  return (ax ? '<div class="range-chart range-pair" role="img" aria-label="' + e(label) + '" data-range-compare-chart>' +
+      '<div class="range-axis" aria-hidden="true"><div class="range-area">' + ax.ticks.map(t => '<span style="top:' + y(t.midi) + '%">' + t.note + '</span>').join('') + '</div></div>' +
+      '<div class="range-plot"><div class="range-lines" aria-hidden="true">' + ax.ticks.map(t => '<span style="top:' + y(t.midi) + '%"></span>').join('') + '</div>' +
+      '<div class="range-cols" style="--range-cols:2;--range-cols-narrow:2">' + col('first', '처음', c.first) + col('now', '지금', c.now) + '</div></div></div>' + legend([c.first, c.now], false) : '') +
+    '<p class="range-used" data-range-used><i class="ph ph-seal-check" aria-hidden="true"></i><span>신뢰도 높은 녹음 가운데 처음 <b>' + c.first.n + '개</b>, 지금 <b>' + c.now.n + '개</b>로 계산했어요 (전체 ' + model.used.total + '개 중 ' + model.used.counted + '개가 신뢰도 높은 녹음)</span></p>' +
+    '<p class="range-change" data-range-compare-line data-state="ok"><i class="ph ph-arrows-left-right" aria-hidden="true"></i><span>' + e(R.compareText(c)) + '</span></p>' +
+    '<p class="range-note">두 기간에 부른 곡이 달라서 음역도 달라 보일 수 있어요. 높아지거나 낮아진 것을 실력 변화로 판정하지 않아요. 사이의 달은 채우지 않고 두 기간만 봐요.</p>' +
+    '<table class="range-table" data-range-compare-table><caption class="range-sr">처음과 지금의 음역 값</caption><thead><tr><th scope="col"></th><th scope="col">처음</th><th scope="col">지금</th><th scope="col">차이</th></tr></thead><tbody>' +
+    c.rows.map(row => '<tr data-range-compare-row="' + row.key + '"><th scope="row">' + row.label + '</th><td>' + cell(row, 'first') + '</td><td>' + cell(row, 'now') + '</td><td>' +
+      (row.delta == null ? '<span class="range-dash">—</span>' : e(R.deltaText(row))) + '</td></tr>').join('') + '</tbody></table>' +
+    (c.rows.some(r => r.missing) ? '<p class="range-note" data-range-compare-missing>— 는 그 기간에 여러 녹음(K개)에 함께 나온 값이 없다는 뜻이에요. 한두 녹음의 값으로 채우지 않아요.</p>' : '');
 }
 /** One month in words (the text form of the chart, and the 월별 분석 row). */
 function monthLines(m) {
@@ -112,10 +146,10 @@ function html(items) {
   if (model.none) body = '<div class="range-empty" data-range-empty="none"><strong>고른 종류가 없어요</strong><p>위에서 셀 녹음 종류를 하나 이상 골라 주세요.</p></div>';
   else if (model.empty) body = '<div class="range-empty" data-range-empty="empty"><strong>아직 음역을 셀 수 있는 녹음이 없어요</strong><p>분석한 곡 녹음·보이스 체크·트레이닝·레슨 녹음이 생기면 달마다 여기에 쌓여요.' +
     (R.leftText(model.left) ? ' ' + e(R.leftText(model.left)) + '.' : '') + '</p></div>' + what(model);
-  else body = stats(model) + chart(model) + changeLine(model) + monthList(model) + what(model);
-  return '<section class="growth-panel range-flow" data-range-flow data-range-section aria-labelledby="range-flow-title">' + head + chips(model) + body + '</section>';
+  else body = switchHtml() + stats(model) + (view === 'compare' ? compareHtml(model) : chart(model) + changeLine(model) + monthList(model)) + what(model);
+  return '<section class="growth-panel range-flow" data-range-flow data-range-section data-range-view-now="' + view + '" aria-labelledby="range-flow-title">' + head + chips(model) + body + '</section>';
 }
-/** Chips: turn a kind on or off and draw the section again (the open lists stay open, the chip keeps the focus). */
+/** Chips (turn a kind on or off), the 달별 흐름 | 처음·지금 switch and the diagnosis file. */
 function bind(host, items) {
   const section = host?.querySelector?.('[data-range-section]');
   if (!section) return;
@@ -131,16 +165,25 @@ function bind(host, items) {
     } catch (error) { V.toast('진단 파일을 만들지 못했어요: ' + (error.message || error), 'error'); }
     finally { if (save.isConnected) save.disabled = false; }
   };
-  section.querySelectorAll('[data-range-group]').forEach(button => button.onclick = () => {
-    const id = button.dataset.rangeGroup;
-    if (off.has(id)) off.delete(id); else off.add(id);
+  // Draw the section again (the open lists stay open, the control that was used keeps the focus).
+  const redraw = focus => {
     const open = ['[data-range-months]', '[data-range-what]'].filter(sel => section.querySelector(sel)?.open);
     const wrap = document.createElement('div'); wrap.innerHTML = html(items);
     const next = wrap.firstElementChild;
     for (const sel of open) { const d = next.querySelector(sel); if (d) d.open = true; }
     section.replaceWith(next);
     bind(host, items);
-    next.querySelector('[data-range-group="' + id + '"]')?.focus({preventScroll:true});
+    next.querySelector(focus)?.focus({preventScroll:true});
+  };
+  section.querySelectorAll('[data-range-group]').forEach(button => button.onclick = () => {
+    const id = button.dataset.rangeGroup;
+    if (off.has(id)) off.delete(id); else off.add(id);
+    redraw('[data-range-group="' + id + '"]');
+  });
+  section.querySelectorAll('[data-range-view]').forEach(button => button.onclick = () => {
+    if (button.dataset.rangeView === view) return;
+    setView(button.dataset.rangeView);
+    redraw('[data-range-view="' + view + '"]');
   });
 }
 /** 월별 분석: that month's row (every kind counted — this view has no chips; the line says what it was made of). */
@@ -149,5 +192,5 @@ function monthHtml(items, month) {
   return '<section class="card growth-section range-month-card" data-range-flow data-range-month="' + e(month) + '"><h2>이 달의 음역</h2>' + monthLines(m) +
     '<p class="small muted">관측한 값이고 실력 판정이 아니에요. 달별 흐름은 전체 분석의 전체 음역 흐름에서 볼 수 있어요.</p></section>';
 }
-window.VzipGrowthRangeUI = {html, bind, monthHtml, model:modelOf, reset:() => off.clear()};
+window.VzipGrowthRangeUI = {html, bind, monthHtml, model:modelOf, reset:() => { off.clear(); setView('flow'); }};
 })();

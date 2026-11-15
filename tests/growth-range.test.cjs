@@ -319,6 +319,72 @@ test('a real-like library: 300 recordings a month, 80 % over a loud MR carrying 
   assert.deepEqual([Math.min(...naive.map(g => g.lowCents)), Math.max(...naive.map(g => g.highCents))], [3900, 8400]);
 });
 
+test('처음·지금: the earliest and the latest window — 3 months with recordings or 30 recordings, whichever comes first', () => {
+  const many = (ym, n, low, high, extra = {}) => Array.from({length:n}, (_, i) => rec(ym + '-' + day(i), v2(low, high, {main:['C4', 'A#4'], stable:'A4', ...extra})));
+  // Uneven counts over 16 months (two of them empty): 처음 needs three months to get anywhere, 지금 has 35 in its last month alone.
+  const media = [...many('2025-08', 2, 'A3', 'A4'), ...many('2025-09', 5, 'A3', 'A4'), /* 2025-10: none */ ...many('2025-11', 40, 'A3', 'B4'), ...many('2025-12', 4, 'C3', 'E5'),
+    ...many('2026-03', 6, 'C3', 'E5'), ...many('2026-09', 10, 'G3', 'C5'), ...many('2026-10', 12, 'G3', 'C5'), ...many('2026-11', 35, 'G3', 'D5', {main:['C#4', 'A#4'], stable:'C5'})];
+  const c = model(media, {today:'2026-11-13'}).compare;
+  assert.deepEqual([c.state, c.dataMonths, c.first.months, c.first.n, c.first.period, c.now.months, c.now.n, c.now.period], ['ok', 8, ['2025-08', '2025-09', '2025-11'], 47, '2025.08–11', ['2026-11'], 35, '2026.11']);
+  // Each window by the same rules as a month: K over the window (47 → 3, 35 → 3).
+  assert.deepEqual([c.first.k, c.first.low.note, c.first.high.note, c.first.stable.note, c.now.low.note, c.now.high.note, c.now.stable.note], [3, 'A3', 'B4', 'A4', 'G3', 'D5', 'C5']);
+  assert.deepEqual(c.rows, [
+    {key:'mainLow', label:'주로 부른 음역 아래', first:'C4', now:'C#4', delta:1, missing:''}, {key:'mainHigh', label:'주로 부른 음역 위', first:'A#4', now:'A#4', delta:0, missing:''},
+    {key:'low', label:'관측 최저음', first:'A3', now:'G3', delta:-2, missing:''}, {key:'high', label:'관측 최고음', first:'B4', now:'D5', delta:3, missing:''},
+    {key:'stable', label:'안정 최고음', first:'A4', now:'C5', delta:3, missing:''}]);
+  assert.deepEqual(c.rows.map(R.deltaText), ['+1반음', '같음', '−2반음', '+3반음', '+3반음']);
+  assert.equal(R.compareText(c), '처음(2025.08–11) → 지금(2026.11) 주로 부른 음역 C4–A#4 → C#4–A#4');
+  assert.doesNotMatch(R.compareText(c), /성장|향상|확정|좋아|나빠/);
+  assert.deepEqual([c.axis.min, c.axis.max], [54, 75]);                                  // one note axis for both columns: G3 − 1 … D5 + 1
+  // The months in between are not part of either side, and nothing is filled in.
+  assert.equal([...c.first.months, ...c.now.months].includes('2026-03'), false);
+  // 30 recordings come first: with 30+ a month each side is one month, so two months are enough.
+  const two = model([...many('2026-10', 31, 'G3', 'C5'), ...many('2026-11', 30, 'G3', 'D5')]).compare;
+  assert.deepEqual([two.state, two.first.period, two.now.period, two.first.n, two.now.n], ['ok', '2026.10', '2026.11', 31, 30]);
+  // Three months each: six months with recordings, however few.
+  const six = model(['2026-01', '2026-02', '2026-04', '2026-08', '2026-10', '2026-11'].flatMap(ym => many(ym, 1, 'G3', 'C5'))).compare;
+  assert.deepEqual([six.state, six.first.period, six.first.n, six.now.period, six.now.n, six.first.enough], ['ok', '2026.01–04', 3, '2026.08–11', 3, true]);
+  assert.deepEqual([R.periodLabel('2025-11', '2026-01'), R.periodLabel('2026-09', '2026-11'), R.periodLabel('2026-11', '2026-11')], ['2025.11–2026.01', '2026.09–11', '2026.11']);
+});
+
+test('처음·지금: windows that would share a month are not compared, and it says what is missing', () => {
+  const few = (ym, n = 3) => Array.from({length:n}, (_, i) => rec(ym + '-0' + (i + 1), v2('G3', 'C5')));
+  // Four months of three recordings: 처음 = months 1–3, 지금 = months 2–4.
+  const four = model(['2026-08', '2026-09', '2026-10', '2026-11'].flatMap(ym => few(ym))).compare;
+  assert.deepEqual([four.state, four.dataMonths, four.first.period, four.now.period, four.rows, four.axis], ['short', 4, '2026.08–10', '2026.09–11', undefined, undefined]);
+  assert.equal(R.compareText(four), '아직 비교할 만큼 기간이 쌓이지 않았어요 · 처음(2026.08–10)과 지금(2026.09–11) 기간이 겹쳐요 · 녹음이 있는 달이 더 쌓이면 비교할 수 있어요 (지금 4개월)');
+  assert.deepEqual(four.need, {months:3, recordings:30});
+  // One month, or none.
+  const one = model(few('2026-11', 12)).compare;
+  assert.deepEqual([one.state, one.dataMonths], ['short', 1]);
+  assert.equal(R.compareText(one), '아직 비교할 만큼 기간이 쌓이지 않았어요 · 녹음이 있는 달이 1개뿐이에요');
+  assert.deepEqual(model([]).compare, {state:'none', dataMonths:0, need:{months:3, recordings:30}});
+  assert.equal(R.compareText(model([]).compare), '아직 음역을 셀 수 있는 녹음이 없어요.');
+  // Months whose recordings all fail the range rules are not months with recordings.
+  const weak = model([...few('2026-06'), ...['2026-07', '2026-08', '2026-09', '2026-10', '2026-11'].flatMap(ym => few(ym).map(m => ({...m, analysis:v2('D#2', 'C6', {db:5})})))]).compare;
+  assert.deepEqual([weak.state, weak.dataMonths], ['short', 1]);
+});
+
+test('처음·지금: a value one side does not have is "—" with the reason, never taken from fewer recordings; the kinds chosen apply', () => {
+  const many = (ym, n, low, high, extra = {}, more = {}) => Array.from({length:n}, (_, i) => rec(ym + '-' + day(i), v2(low, high, extra), more));
+  // 처음: every highest note on the detector's ceiling → no 관측 최고음 and no 안정 최고음 there.
+  const media = [...many('2026-01', 30, 'G3', 'C6', {main:['C4', 'A4']}), ...many('2026-11', 30, 'A3', 'D5', {main:['C4', 'A4'], stable:'C5'}),
+    ...many('2026-11', 30, 'C3', 'E5', {main:['A3', 'G4'], stable:'E5'}, {songId:'', source:'lesson', recordingCategory:'lesson'})];
+  const c = model(media, {groups:['song']}).compare;
+  assert.deepEqual(c.rows.map(r => [r.key, r.first, r.now, r.delta, r.missing]), [['mainLow', 'C4', 'C4', 0, ''], ['mainHigh', 'A4', 'A4', 0, ''], ['low', 'G3', 'A3', 2, ''], ['high', null, 'D5', null, 'first'], ['stable', null, 'C5', null, 'first']]);
+  assert.deepEqual(c.rows.map(R.deltaText), ['같음', '같음', '+2반음', '—', '—']);
+  assert.equal(R.missingText(c.rows[3]), '처음 기간에 여러 녹음에 함께 나온 값이 없어요'); assert.equal(R.missingText(c.rows[0]), '');
+  assert.equal(R.missingText({missing:'both'}), '두 기간 모두 여러 녹음에 함께 나온 값이 없어요'); assert.equal(R.missingText({missing:'now'}), '지금 기간에 여러 녹음에 함께 나온 값이 없어요');
+  assert.equal(R.compareText(c), '처음(2026.01) → 지금(2026.11) 주로 부른 음역 C4–A4 → C4–A4');
+  // With the lesson recordings counted too, 지금 is made of 60 recordings and its values move.
+  const all = model(media).compare;
+  assert.deepEqual([all.now.n, all.now.k, all.now.low.note, all.now.high.note, all.first.n], [60, 3, 'C3', 'E5', 30]);
+  // No main range on one side: the line falls back to the observed range, or says there is nothing to put side by side.
+  const bare = (ym, high) => Array.from({length:30}, (_, i) => rec(ym + '-' + day(i), {v:2, metrics:{voicedSeconds:30, range:{validHigh:{note:high, cents:midi(high) * 100}, lowCents:midi('G3') * 100}}, confidence:{pitchConfidence:.9}}));
+  assert.equal(R.compareText(model([...bare('2026-01', 'C5'), ...bare('2026-11', 'D5')]).compare), '처음(2026.01) → 지금(2026.11) 관측 음역 G3–C5 → G3–D5');
+  assert.equal(R.compareText(model([...bare('2026-01', 'C6'), ...bare('2026-11', 'D5')]).compare), '처음(2026.01) → 지금(2026.11) 두 기간에 함께 잴 수 있는 음역이 아직 없어요');
+});
+
 test('on the characterization data set: what is counted, what is left out, and nothing is changed', () => {
   const media = JSON.parse(JSON.stringify(FIX.MEDIA)), db = JSON.parse(JSON.stringify(FIX.DB)), before = JSON.stringify([media, db]);
   const m = R.build(D.build(media, db, {reliable}).forRange(), {today:'2026-11-13'});

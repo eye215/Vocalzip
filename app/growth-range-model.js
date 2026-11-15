@@ -7,6 +7,7 @@
  *   model.shown    the last 12 of them (the chart)        model.all     the same summary over every counted take
  *   model.change   the first and the last month of the latest 3-month window, or what is missing to compare them
  *   model.groups   [{id, label, on, counted}]             model.left / model.excluded   what was not counted, and why
+ *   model.compare  처음·지금: the earliest and the latest window of months side by side (same rules), or what is missing
  *
  * WHAT AN ANALYSIS REALLY HOLDS (audited in app/vocal-analysis.js rangeOf, v2), and so what is shown:
  *   관측 최고음 · 관측 최저음   range.validHigh.cents / range.lowCents — the highest and lowest note held ≥ 0.2 s as one
@@ -56,7 +57,10 @@ const RULES = {
   separationDb:10,  // voice over accompaniment (dB) from which the voice is clearly apart (null = none found: counts)
   boundSemitones:1, // an end within this many semitones of the detector's bound note is the search edge, not a note
   months:12,        // months on the chart
-  window:3          // the plain-words line compares the first and last month of the latest 3 months
+  window:3,         // the plain-words line compares the first and last month of the latest 3 months
+  // 처음·지금: each side takes whole months with recordings from its end until it has this many months or this many
+  // counted recordings, whichever comes first — enough for K to mean something, short enough to still be "then"/"now".
+  compareMonths:3, compareRecordings:30
 };
 /* The pitch detector's search range. app/vocal-analysis.js keeps FMIN/FMAX to itself, so they are written here and
  * tests/growth-range.test.cjs reads that file and fails when they differ. Cents are MIDI × 100, as in the analysis. */
@@ -179,6 +183,7 @@ function build(range, {groups, today} = {}) {
     months, shown, axis:axisOf(shown),
     all:{...all, firstDate:dates[0] || '', lastDate:dates.at(-1) || '', months:months.filter(m => m.n).length},
     change:changeOf(months, today),
+    compare:compareOf(mine),
     left:tally(mineLeft),                                   // recordings of the chosen groups that are not counted
     used:{counted:mine.length, total:mine.length + mineLeft.length},   // "신뢰도 높은 녹음 N개 (전체 M개 중)"
     excluded:Object.fromEntries(Object.keys(EXCLUDED).filter(k => range?.excluded?.[k]).map(k => [k, range.excluded[k]])),
@@ -201,6 +206,50 @@ function changeOf(months, today) {
   // Enough recordings, but no note that enough of them share at either end: nothing to compare.
   return high || low ? {...base, state:'ok', high, low} : {...base, state:'short', missing:[], unshared:true};
 }
+
+/* ---------- 처음 · 지금 ---------- */
+const COMPARE_ROWS = [['mainLow', '주로 부른 음역 아래', s => s.main?.low], ['mainHigh', '주로 부른 음역 위', s => s.main?.high],
+  ['low', '관측 최저음', s => s.low], ['high', '관측 최고음', s => s.high], ['stable', '안정 최고음', s => s.stable]];
+/** "2025.08–10", "2025.11–2026.01", "2026.11". */
+const periodLabel = (from, to) => { const a = from.replace('-', '.'), b = to.replace('-', '.'); return from === to ? a : from.slice(0, 4) === to.slice(0, 4) ? a + '–' + b.slice(5) : a + '–' + b; };
+/**
+ * The earliest window against the latest one, each summarized by the same rules as a month (K over the window).
+ * A window is whole months that have counted recordings, taken from its end of the record until it holds
+ * RULES.compareMonths such months or RULES.compareRecordings recordings, whichever comes first. The two must not share
+ * a month (a window always holds at least RULES.minSamples recordings then); otherwise nothing is compared and the
+ * result says what is short.
+ * rows: the counted recordings of the chosen kinds (each with .month).
+ */
+function compareOf(rows) {
+  const byMonth = new Map();
+  for (const r of rows) { const list = byMonth.get(r.month) || []; list.push(r); byMonth.set(r.month, list); }
+  const keys = [...byMonth.keys()].sort();
+  const take = list => { const out = []; let n = 0; for (const key of list) { if (out.length >= RULES.compareMonths || n >= RULES.compareRecordings) break; out.push(key); n += byMonth.get(key).length; } return out.sort(); };
+  const need = {months:RULES.compareMonths, recordings:RULES.compareRecordings};
+  if (!keys.length) return {state:'none', dataMonths:0, need};
+  const first = take(keys), now = take(keys.slice().reverse());
+  const side = months => { const s = named(summarize(months.flatMap(key => byMonth.get(key)))); return {...s, from:months[0], to:months.at(-1), months, period:periodLabel(months[0], months.at(-1))}; };
+  const a = side(first), b = side(now);
+  // Sharing a month means the record is too short for a "then" and a "now" (fewer than 3 + 3 months, or 30 + 30 recordings).
+  if (first.at(-1) >= now[0]) return {state:'short', dataMonths:keys.length, first:{from:a.from, to:a.to, period:a.period, n:a.n}, now:{from:b.from, to:b.to, period:b.period, n:b.n}, need};
+  const table = COMPARE_ROWS.map(([key, label, get]) => { const x = get(a) || null, y = get(b) || null;
+    return {key, label, first:x?.note || null, now:y?.note || null, delta:x && y ? y.midi - x.midi : null, missing:x && y ? '' : !x && !y ? 'both' : x ? 'now' : 'first'}; });
+  return {state:'ok', dataMonths:keys.length, first:a, now:b, rows:table, axis:axisOf([a, b]), need};
+}
+/** "처음(2025.08–10) → 지금(2026.09–11) 주로 부른 음역 C4–A#4 → C#4–A#4", or what is missing. */
+function compareText(c) {
+  if (!c || c.state === 'none') return '아직 음역을 셀 수 있는 녹음이 없어요.';
+  if (c.state === 'short') return '아직 비교할 만큼 기간이 쌓이지 않았어요 · ' + (c.dataMonths < 2 ? '녹음이 있는 달이 ' + c.dataMonths + '개뿐이에요'
+    : '처음(' + c.first.period + ')과 지금(' + c.now.period + ') 기간이 겹쳐요 · 녹음이 있는 달이 더 쌓이면 비교할 수 있어요 (지금 ' + c.dataMonths + '개월)');
+  const dash = x => x.low.note === x.high.note ? x.low.note : x.low.note + '–' + x.high.note, head = '처음(' + c.first.period + ') → 지금(' + c.now.period + ') ';
+  if (c.first.main && c.now.main) return head + '주로 부른 음역 ' + dash(c.first.main) + ' → ' + dash(c.now.main);
+  const both = (a, b) => a.low && a.high && b.low && b.high;
+  return both(c.first, c.now) ? head + '관측 음역 ' + dash(c.first) + ' → ' + dash(c.now) : head + '두 기간에 함께 잴 수 있는 음역이 아직 없어요';
+}
+/** The 차이 cell of the table: "같음", "+2반음", or "—". */
+const deltaText = row => row.delta == null ? '—' : signed(row.delta);
+/** Why a cell of the table is empty. */
+const missingText = row => row.missing ? (row.missing === 'both' ? '두 기간 모두' : row.missing === 'first' ? '처음 기간에' : '지금 기간에') + ' 여러 녹음에 함께 나온 값이 없어요' : '';
 
 /* ---------- wording (plain 해요체; 관측, never a verdict) ---------- */
 const monthLabel = (key, withYear = false) => (withYear ? key.slice(0, 4) + '년 ' : '') + Number(key.slice(5, 7)) + '월';
@@ -268,5 +317,6 @@ function diagnosis(range, {generatedMonth = ''} = {}) {
       neverCounted:Object.fromEntries(Object.keys(EXCLUDED).filter(k => range?.excluded?.[k]).map(k => [k, range.excluded[k]]))},
     rows};
 }
-return {VERSION, GROUPS, RULES, DETECTOR, LEFT, DROPPED, EXCLUDED, read, separated, needOf, edge, summarize, axisOf, build, changeOf, shiftMonth, monthLabel, changeText, valuesText, sampleText, leftText, droppedText, diagnosis};
+return {VERSION, GROUPS, RULES, DETECTOR, LEFT, DROPPED, EXCLUDED, read, separated, needOf, edge, summarize, axisOf, build, changeOf, shiftMonth, monthLabel, changeText, valuesText, sampleText, leftText, droppedText, diagnosis,
+  compareOf, compareText, deltaText, missingText, periodLabel};
 });
