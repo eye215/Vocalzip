@@ -119,8 +119,11 @@ test('forRange (step 2, selection only): song + 보이스 체크 + 트레이닝 
   for (const id of ['u1', 'er', 'ey', 'f1', 'f2', 'g1', 'd1', 'd2', 'a4', 'b5', 'a8']) assert.equal(group(id), undefined, id);
   for (const why of Object.keys(r.excluded)) assert.ok(D.REASONS[why], why);
   // The ones that belong to a group but are not takes are named, with their group and day (a month can say what it left out).
-  assert.deepEqual(r.left, [{id:'a4', group:'song', date:'2026-10-20', why:'unreliable'}, {id:'a8', group:'song', date:'', why:'no-date'}, {id:'b5', group:'song', date:'2026-11-05', why:'unreliable'},
+  assert.deepEqual(r.left.map(({a, ...x}) => x), [{id:'a4', group:'song', date:'2026-10-20', why:'unreliable'}, {id:'a8', group:'song', date:'', why:'no-date'}, {id:'b5', group:'song', date:'2026-11-05', why:'unreliable'},
     {id:'d1', group:'song', date:'2026-11-02', why:'no-analysis'}, {id:'d2', group:'song', date:'2026-11-09', why:'no-analysis'}]);
+  // …with the analysis they have (null when not analysed), so the range diagnosis can say why in numbers.
+  assert.deepEqual(r.left.map(x => x.a?.confidence?.pitchConfidence ?? null), [.3, .95, .95, null, null]);
+  assert.equal(r.left[0].a, MEDIA.find(m => m.id === 'a4').analysis);
   assert.equal(r.takes.length + Object.values(r.excluded).reduce((a, b) => a + b, 0), 37);               // every recording is accounted for
   // A voice check is known by its mark on the file, by its origin, or by the practice that owns the file.
   const bare = {id:'vx', songId:'', recordedDate:'2026-11-12', created:1, type:'audio/mp4', analysis:v2({into:10})};

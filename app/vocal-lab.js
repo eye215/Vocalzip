@@ -29,6 +29,13 @@ const metricChangeText=(metric,previous,current)=>{
 const speedStore = window.VzipAccountScope?.storage || localStorage;
 const speedKey = 'vzip_vocal_lab_rates_v1';
 const rates = () => { try { return JSON.parse(speedStore.getItem(speedKey)) || {}; } catch { return {}; } };
+/* 같은 날 녹음: how several takes of the song on one day count in this screen's chart and growth report
+ * (app/growth-metrics-model.js: 모두 · 하루 평균 · 신뢰도 높은 것 · 가장 좋은 것). Remembered on this device; 모두 is
+ * the default and is what the screen always did. 결과 리포트 · 월별 · 주간 never read this choice. */
+const sameDayKey = 'vzip_same_day_mode_v1';
+const sameDay = () => { try { return window.VzipGrowthMetrics?.sameDayMode?.(speedStore.getItem(sameDayKey)) || 'all'; } catch { return 'all'; } };
+const setSameDay = mode => { try { speedStore.setItem(sameDayKey, window.VzipGrowthMetrics.sameDayMode(mode)); } catch {} };
+const DAY_BETTER = {wob:-1, into:-1, high:1, stable:1, phr:1, rating:1};   // 가장 좋은 것: which way is the better value
 const time = s => V.clock(Math.max(0,s||0));
 const day = m => (M.dateOf(m)||'').slice(5).replace('-','.');
 const valid = n => n == null || n === '' ? null : Number.isFinite(Number(n)) ? Number(n) : null;
@@ -71,7 +78,7 @@ function plot(vals, {height=142, highlighted=-1, interactive=false}={}) {
     const cls='vl-dot '+(rows[i].tone||'neutral')+(i===highlighted?' active':'');
     const cx=p[0].toFixed(1),cy=p[1].toFixed(1);
     if(!interactive)return '<circle class="'+cls+'" cx="'+cx+'" cy="'+cy+'" r="'+(i===highlighted?6:4)+'"/>';
-    return '<g role="button" tabindex="0" data-point="'+esc(rows[i].id)+'" aria-label="'+esc(rows[i].label+' 상세 보기')+'"><circle class="vl-hit" cx="'+cx+'" cy="'+cy+'" r="19"/><circle class="'+cls+'" cx="'+cx+'" cy="'+cy+'" r="'+(i===highlighted?6:5)+'"/></g>';
+    return '<g role="button" tabindex="0" data-point="'+esc(rows[i].id)+'"'+(rows[i].day?' data-day="'+esc(rows[i].day)+'"':'')+' aria-label=""'+esc(rows[i].label+' 상세 보기')+'"><circle class="vl-hit" cx="'+cx+'" cy="'+cy+'" r="19"/><circle class="'+cls+'" cx="'+cx+'" cy="'+cy+'" r="'+(i===highlighted?6:5)+'"/></g>';
   }).join('');
   return '<svg class="vl-plot" style="height:'+H+'px" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="'+(interactive?'group':'img')+'" aria-label="'+esc(rows.map(p=>p.label+' '+p.value).join(', '))+'"><line class="vl-mid" x1="0" x2="340" y1="'+H/2+'" y2="'+H/2+'"/>'+line+dots+'</svg>';
 }
@@ -95,7 +102,7 @@ const pairHoldLine=(a,b)=>G?.holdLine?G.holdLine(G.pairHold(a,b,x=>!!V.analysisR
 const songReference=song=>{const r=(V.song?.(song?.id)||song)?.vocalRange;return r&&Number.isFinite(r.highMidi)?r:null;};
 const labTakes=s=>s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m))
  .map(m=>({id:m.id,a:analysis(m),date:String(M.dateOf(m)||'').slice(0,10),created:m.created,ok:!!V.analysisReliable(analysis(m))}));
-const labReport=s=>G?G.songReport(labTakes(s),{reference:songReference(s.song),scoreNotes:(V.song?.(s.song.id)||s.song)?.noteCompare?.takes||null,arNotes:(V.song?.(s.song.id)||s.song)?.arCompare?.takes||null}):null;
+const labReport=s=>G?G.songReport(labTakes(s),{sameDay:sameDay(),reference:songReference(s.song),scoreNotes:(V.song?.(s.song.id)||s.song)?.noteCompare?.takes||null,arNotes:(V.song?.(s.song.id)||s.song)?.arCompare?.takes||null}):null;
 const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+s.selected.slice().sort().join(',');
 const savedGrowthReport=s=>(V.db.practicePlans||[]).find(x=>x.id===labGrowthId(s)&&x.period==='vocal-growth-ai'&&x.evidenceKey===growthEvidenceKey(s));
 function growthEvidenceKey(s){
@@ -105,6 +112,12 @@ function growthEvidenceKey(s){
  }).join('|');
 }
 const TONE={better:'good',worse:'bad',similar:'neutral',mixed:'neutral',changed:'neutral',hold:'hold',reference:'ref'};
+/** "28개 중 처음·최근 비교" — or, when a day counts once, "9일 중 처음·최근 비교". */
+function growthCount(s,analyzed){
+ if(sameDay()==='all'||!G?.days)return analyzed>2?analyzed+'개 중 처음·최근 비교':analyzed+'개 분석';
+ const n=G.days(labTakes(s)).filter(d=>d.reliable.length).length;
+ return n>1?n+'일 중 처음·최근 비교':n+'일 분석';
+}
 function growthReport(s){
  const report=labReport(s);
  if(!report)return '';
@@ -112,7 +125,8 @@ function growthReport(s){
  const saved=savedGrowthReport(s),ref=songReference(s.song);
  const items=G.METRICS.map(d=>({d,x:report[d.id]}));
  const line=({d,x})=>{
-  let text=d.reference?G.passaggioText(x.latest):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
+  // 파사지오: what recurs over the chosen recordings, never the latest recording's value alone.
+  let text=d.reference?G.passaggioReportText(x):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
   if(d.id==='range'&&x.vsScore)text+=' · 악보 최고음 '+x.vsScore.scoreHigh+' 대비 '+(x.vsScore.after===0?'같은 음':(x.vsScore.after>0?'+':'−')+Math.abs(x.vsScore.after)+'반음');
   const note=d.reference?G.PASSAGGIO_NOTE:G.basisText(x)||(x.state==='hold'?'':d.method);
   return '<li class="vl-growth-row '+TONE[x.state]+'" data-growth-row="'+d.id+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(d.title)+'</strong><p>'+esc(text)+'</p>'+(note?'<small>'+esc(note)+'</small>':'')+'</div></li>';
@@ -128,8 +142,8 @@ function growthReport(s){
   '<button type="button" data-growth-reanalyze'+(s.reanalyzing?' disabled':'')+'><i class="ph ph-arrows-clockwise" aria-hidden="true"></i> '+(s.reanalyzing?'다시 분석하는 중…':stale.length+'개 다시 분석')+'</button><p class="vl-muted" role="status" data-growth-reanalyze-status></p></div>':'';
  const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(line).join('')+'</ul></div>':'';
  return '<section class="vl-section vl-growth" data-growth-report aria-label="AI 종합 성장 리포트"><div class="vl-divider"></div>'+
-  '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>성장 리포트</h2></div><span class="vl-growth-count">'+(analyzed.length>2?analyzed.length+'개 중 처음·최근 비교':analyzed.length+'개 분석')+'</span></div>'+
-  '<p class="vl-growth-intro">'+(strong.length+weak.length+neutral.length?'처음과 최근 녹음을 6가지 지표로 나눠 비교했어요':'비교할 분석 기록이 더 필요해요')+' <small>같은 곡·같은 분석 버전·다른 날의 녹음만, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.'+(ref?' 악보 기준 음역 '+esc(ref.low+'–'+ref.high)+'을 함께 봐요.':'')+'</small></p>'+
+  '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>성장 리포트</h2></div><span class="vl-growth-count" data-growth-count>'+growthCount(s,analyzed.length)+'</span></div>'+
+  '<p class="vl-growth-intro">'+(strong.length+weak.length+neutral.length?(sameDay()==='all'?'처음과 최근 녹음을 6가지 지표로 나눠 비교했어요':'처음과 최근 날을 6가지 지표로 나눠 비교했어요 (같은 날 녹음: '+G.SAME_DAY.find(x=>x[0]===sameDay())[1]+')'):'비교할 분석 기록이 더 필요해요')+' <small>같은 곡·같은 분석 버전·다른 날의 녹음만, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.'+(ref?' 악보 기준 음역 '+esc(ref.low+'–'+ref.high)+'을 함께 봐요.':'')+'</small></p>'+
   redo+section('좋아진 부분',strong,'good')+section('아쉬운 부분',weak,'bad')+section('비슷함·변화 관찰',neutral,'neutral')+section('판정 보류',held,'hold')+section('참고',refs,'ref')+rating+
   '<p class="vl-growth-caution">판정 보류는 신뢰도·데이터·같은 프레이즈·분석 버전 중 근거가 부족하다는 뜻이에요. 최고음의 변화는 곡의 구간·발성 방식에 따라 달라지며, 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
   (judged?'<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
@@ -138,24 +152,59 @@ function growthReport(s){
     '<p class="vl-muted">분석 신뢰도가 충분한 같은 버전의 녹음이 다른 날 두 개 이상 있어야 AI 해석을 요청할 수 있어요.</p>')+
   '</section>';
 }
-function trendRows(s,metric){
- return s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean)
+/** The points of 녹음별 변화, oldest first. mode 'all': one per recording (as always). Otherwise one per DAY, by the
+ * model's day rule: {m: the recording the value came from (or the day's latest reliable one for an average), value,
+ * day: {date, n, count, basis, usedId, ids}}. */
+function trendRows(s,metric,mode=sameDay()){
+ const picked=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean);
+ if(mode==='all'||!G?.days)return picked
   .map(m=>({m,value:valid(metric.get(analysis(m),m))}))
   .filter(x=>x.value!=null)
   .sort((a,b)=>(M.dateOf(a.m)||'').localeCompare(M.dateOf(b.m)||'')||(Number(a.m.created)||0)-(Number(b.m.created)||0)||String(a.m.id).localeCompare(String(b.m.id)));
+ const takes=picked.map(m=>({id:m.id,m,a:analysis(m),date:String(M.dateOf(m)||'').slice(0,10),created:m.created,ok:!!analysis(m)&&!!V.analysisReliable(analysis(m))}));
+ const opt={get:t=>valid(metric.get(t.a,t.m)),better:DAY_BETTER[metric.key]||1,note:metric.key==='high'||metric.key==='stable',all:metric.key==='rating'};
+ return G.days(takes).map(d=>{
+  const r=G.dayValue(d,mode,opt);
+  if(r.value==null)return null;
+  return {m:(r.used||d.reliable.at(-1)||d.takes.at(-1)).m,value:r.value,day:{date:d.date,n:d.takes.length,count:r.count,basis:r.basis,usedId:r.used?.id??null,ids:d.takes.map(t=>t.id)}};
+ }).filter(Boolean);
+}
+/** A point's value in words. A day value of a note-valued measure is named from the value itself (중앙값 for an average). */
+const pointValue=(metric,x)=>x.day&&(metric.key==='high'||metric.key==='stable')?G.noteName(Math.round(x.value/100))+(x.day.basis==='median'?' (중앙값)':''):metric.fmt(x.value,analysis(x.m));
+/** "11.13", or once per day with the count: "11.13 · 8개". */
+const pointLabel=x=>day(x.m)+(x.day&&x.day.n>1?' · '+x.day.n+'개':'');
+const DAY_BASIS={mean:'하루 평균',median:'하루 중앙값',reliable:'신뢰도 높은 것',best:'가장 좋은 것',take:'녹음 1개',unreliable:'신뢰도 높은 녹음 없음 · 판정 보류'};
+/** A day with several takes: the list of that day's takes — which one the day value came from, or that it is an average. */
+function dayList(s,date){
+ const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],point=trendRows(s,metric).find(x=>x.day?.date===date);
+ if(!point)return;
+ const takes=point.day.ids.map(id=>s.items.find(m=>m.id===id)).filter(Boolean),averaged=point.day.basis==='mean'||point.day.basis==='median';
+ const row=m=>{
+  const a=analysis(m),v=valid(metric.get(a,m)),reliable=!!a&&!!V.analysisReliable(a),used=point.day.usedId===m.id;
+  const state=metric.key!=='rating'&&!reliable?(a?'신뢰도 낮음 · 날 값에서 제외':'분석 전'):used?'이 녹음의 값을 썼어요':averaged&&v!=null?'평균에 포함':'';
+  return '<button type="button" class="vl-day-take'+(used?' used':'')+'" data-day-take="'+esc(m.id)+'"><span><strong>'+esc(M.label(m)||'녹음')+'</strong><small>'+esc(state)+'</small></span><b>'+esc(v==null?'—':metric.fmt(v,a))+'</b></button>';
+ };
+ V.sheet({title:day(point.m)+' 녹음 '+takes.length+'개',variant:'compact',
+  body:'<div class="vl-day-list" data-day-list><p class="vl-day-head"><span>'+esc(metric.label+' · '+DAY_BASIS[point.day.basis])+'</span><strong data-day-value>'+esc(pointValue(metric,point))+'</strong>'+
+   (averaged?'<small>신뢰도 높은 녹음 '+point.day.count+'개'+(point.day.basis==='median'?'의 중앙값':'의 평균')+'이에요.</small>':'')+'</p>'+takes.map(row).join('')+
+   '<p class="vl-day-foot">녹음을 누르면 그 녹음의 상세를 볼 수 있어요.</p></div>',
+  onMount:(el,close)=>el.querySelectorAll('[data-day-take]').forEach(b=>b.onclick=()=>{const m=s.items.find(x=>x.id===b.dataset.dayTake);close();if(m&&!s.dead)observe(s,m);})});
 }
 function trend(s) {
  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],measured=trendRows(s,metric);
- const series=measured.map((x,i)=>({id:x.m.id,value:x.value,label:day(x.m),tone:metric.key==='rating'||comparable(analysis(measured[i-1]?.m||{}),analysis(x.m))?metricColor(metric,measured[i-1]?.value,x.value):'neutral'}));
+ const mode=sameDay();
+ const series=measured.map((x,i)=>({id:x.m.id,day:x.day&&x.day.n>1?x.day.date:'',value:x.value,label:pointLabel(x),tone:metric.key==='rating'||comparable(analysis(measured[i-1]?.m||{}),analysis(x.m))?metricColor(metric,measured[i-1]?.value,x.value):'neutral'}));
  const last=measured.at(-1),prev=measured.at(-2);
  const state=last&&(metric.key==='rating'||comparable(analysis(prev?.m||{}),analysis(last.m)))?metricColor(metric,prev?.value,last.value):'neutral';
- const explanation=last&&prev&&!comparable(analysis(prev.m),analysis(last.m))?pairHoldLine(analysis(prev.m),analysis(last.m)):last?metricChangeText(metric,prev?.value,last.value):'분석된 값이 없어요';
- return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2><div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
+ const explanation=last&&prev&&!comparable(analysis(prev.m),analysis(last.m))?pairHoldLine(analysis(prev.m),analysis(last.m)):last?metricChangeText(metric,prev?.value,last.value).replace(/이전 녹음/g,mode==='all'?'이전 녹음':'이전 날'):'분석된 값이 없어요';
+ const choice=G?.SAME_DAY?'<label class="vl-sameday"><span>같은 날 녹음</span><select data-same-day aria-label="같은 날 여러 번 부른 녹음을 세는 방법">'+G.SAME_DAY.map(([id,label])=>'<option value="'+id+'"'+(id===mode?' selected':'')+'>'+label+'</option>').join('')+'</select></label>'+
+  (mode==='all'?'':'<p class="vl-sameday-note" data-same-day-note><strong>'+esc(G.SAME_DAY_NOTE[mode])+'</strong> 이 선택은 이 화면의 그래프와 성장 리포트에만 적용돼요. 결과 리포트·월별·주간 요약은 지금처럼 모든 녹음으로 계산해요.</p>'):'';
+ return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2>'+choice+'<div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
   '<p class="vl-metric-guide"><strong>'+esc(metric.label)+' · '+esc(metric.better===-1?'낮을수록 좋아요':metric.better===1?'대체로 높을수록 좋아요':'높낮이만으로 판단하지 않아요')+'</strong><span>'+esc(metric.guide)+'</span></p>'+
   (last?'<p class="vl-change '+state+'" role="status">'+esc('최근 변화 · '+explanation)+'</p>':'')+
   '<p class="vl-legend"><span class="good">● 좋아진 방향</span><span class="bad">● 아쉬운 방향</span><span class="neutral">● 비슷함·판단 보류</span></p>'+
-  (measured.length?'<div class="vl-plot-scroll" tabindex="0" role="region" aria-label="녹음별 변화 그래프, 좌우로 스크롤 가능"><div class="vl-plot-track" style="--vl-points:'+measured.length+'">'+plot(series,{highlighted:measured.findIndex(x=>x.m.id===s.active),interactive:true})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'" aria-label="'+esc(day(x.m)+' '+metric.label+' '+metric.fmt(x.value,analysis(x.m))+' 상세 보기')+'">'+esc(day(x.m))+'</button>').join('')+'</div></div></div>':'<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
-  (measured.length?'<p class="vl-muted">그래프의 점이나 날짜를 누르면 해당 녹음의 상세 팝업을 볼 수 있어요. 색상은 이전 녹음과의 비교이며 첫 점은 중립이에요.</p>':'')+'</section>';
+  (measured.length?'<div class="vl-plot-scroll" tabindex="0" role="region" aria-label="녹음별 변화 그래프, 좌우로 스크롤 가능"><div class="vl-plot-track" style="--vl-points:'+measured.length+'">'+plot(series,{highlighted:measured.findIndex(x=>x.day?x.day.ids.includes(s.active):x.m.id===s.active),interactive:true})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'"'+(x.day&&x.day.n>1?' data-day="'+esc(x.day.date)+'"':'')+' aria-label="'+esc(pointLabel(x)+' '+metric.label+' '+pointValue(metric,x)+(x.day&&x.day.n>1?' · 그날 녹음 보기':' 상세 보기'))+'">'+esc(pointLabel(x))+'</button>').join('')+'</div></div></div>':'<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
+  (measured.length?'<p class="vl-muted">'+(mode==='all'?'그래프의 점이나 날짜를 누르면 해당 녹음의 상세 팝업을 볼 수 있어요. 색상은 이전 녹음과의 비교이며 첫 점은 중립이에요.':'하루에 점 하나예요. 점이나 날짜를 누르면 그날 녹음 목록(여러 번 부른 날)이나 녹음 상세가 열려요. 색상은 이전 날과의 비교이며 첫 점은 중립이에요.')+'</p>':'')+'</section>';
 }
 function single(s,m) {
   const a=analysis(m);
@@ -171,7 +220,7 @@ function singleDetail(s,a){
  const one=G.single(a,{reliable:V.analysisReliable(a),reference:songReference(s.song)}),h=one.high,p=one.passaggio;
  const high=h.state==='hold'?G.holdLine(h.reason):h.zone+' 구간 흔들림 ±'+h.wobble+' cent · 평균 유지 '+h.held+'초 (음 '+h.notes+'개'+(h.fromScore?', 악보 최고음 기준':'')+')';
  return '<ul class="vl-detail-list"><li><strong>고음 안정성</strong><span>'+esc(high)+'</span></li>'+
-  '<li><strong>파사지오 <em>참고</em></strong><span>'+esc(G.passaggioText(p))+'</span><small>'+esc(G.PASSAGGIO_NOTE)+'</small></li></ul>';
+  '<li data-single-passaggio><strong>파사지오 <em>참고</em></strong><span>'+esc(G.passaggioText(p))+'</span><small>'+esc(G.PASSAGGIO_SINGLE+' · '+G.PASSAGGIO_NOTE)+'</small></li></ul>';
 }
 function observationCurve(result) {
  // Saved summaries contain no waveform: draw only actual measured pitch samples.
@@ -206,7 +255,7 @@ function observationCurve(result) {
 }
 function observe(s,m) {
  const metric=METRICS.find(x=>x.key===s.metric)||METRICS[0],current=valid(metric.get(analysis(m),m));
- const ordered=trendRows(s,metric),idx=ordered.findIndex(x=>x.m.id===m.id);
+ const ordered=trendRows(s,metric,'all'),idx=ordered.findIndex(x=>x.m.id===m.id);   // one recording against the first recording, whatever the day choice
  const first=ordered[0],baseline=first?.m.id!==m.id?first:null;
  const isComparable=metric.key==='rating'||comparable(analysis(baseline?.m||{}),analysis(m));
  const initial=isComparable?(baseline?.value??null):null,difference=initial!=null&&current!=null?current-initial:null;
@@ -439,8 +488,10 @@ function screen(s) {
     catch(err){if(!s.dead){btn.disabled=false;status.textContent='분석하지 못했어요: '+err.message;}}
   });
   host.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{s.metric=b.dataset.metric;screen(s);});
+  const dayChoice=host.querySelector('[data-same-day]');
+  if(dayChoice)dayChoice.onchange=()=>{setSameDay(dayChoice.value);screen(s);if(!s.dead)s.host.querySelector('[data-same-day]')?.focus({preventScroll:true});};
   host.querySelectorAll('[data-point]').forEach(b=>{
-    const open=()=>{const chosen=s.items.find(x=>x.id===b.dataset.point);if(chosen)observe(s,chosen);};
+    const open=()=>{if(b.dataset.day){dayList(s,b.dataset.day);return;}const chosen=s.items.find(x=>x.id===b.dataset.point);if(chosen)observe(s,chosen);};
     b.addEventListener('click',open);
     b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });

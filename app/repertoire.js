@@ -41,6 +41,38 @@ function updateSong(id,values,shared={}){
  // The kept list can be cold (a refresh or a cloud read that was not kept): read it again rather than show the chosen take as missing.
  if(next.takeId&&!cached.some(m=>m.id===next.takeId))M.list().then(draw).catch(()=>{});
 }
+/* 키 정보 from the song's converted score (MusicXML): the key signature fills an empty 원키 (nothing is saved until
+ * 저장), and the sung part's lowest/highest notes are shown. A key the owner already set on a score (악보 정보) wins
+ * over the automatic reading; the song's confirmed 악보 기준 음역 wins over the automatic part range. */
+async function scoreKey(song,host){
+ const R=window.VzipScoreRange;if(!host||!R)return;
+ // Reading the score takes a moment: a 원키 the owner typed or cleared meanwhile is left alone.
+ const form=host.closest('form'),input=form?.elements.originalKey;let typed=false;input?.addEventListener('input',()=>{typed=true},{once:true});
+ const scores=(song.scores||[]).filter(x=>x&&x.id);
+ const range=song.vocalRange&&Number.isFinite(song.vocalRange.lowMidi)?{low:song.vocalRange.low,high:song.vocalRange.high,how:'악보 기준 음역(확인함)'}:null;
+ // A key typed on a score (older data) counts until the song's keys were saved here (keysAt): after that 키 정보 is the one place.
+ const typedOnScore=info(song).keysAt?'':scores.map(x=>x.originalKey).find(Boolean);
+ let key=typedOnScore?{name:typedOnScore,how:'악보 정보에 넣은 원키'}:null,auto=null,partRange=null;
+ if((!key||!range)&&V.vocalRangeLoadScore&&window.VzipR2?.enabled?.()&&window.VzipR2.omr){
+  for(const sc of scores){
+   try{const loaded=await V.vocalRangeLoadScore(sc);if(!loaded?.xml)continue;
+    auto=R.readKey?.(loaded.xml)||null;const res=loaded.result,part=res?.parts?.find(p=>p.id===res.pick);
+    if(part?.low&&part?.high)partRange={low:part.low,high:part.high,how:'악보 '+(part.name?'"'+part.name+'" ':'')+'파트(자동 인식)'};
+    break;
+   }catch{}
+  }
+ }
+ if(!key&&auto){const minor=auto.likely==='minor';key={name:minor?auto.minor:auto.major,how:'악보 조표(자동 인식)',other:minor?auto.major:auto.minor,sure:!!auto.likely,changes:auto.changes}}
+ const show=range||partRange;
+ if(!host.isConnected||(!key&&!show))return;
+ const filled=key&&input&&!typed&&!input.value.trim();
+ if(filled){input.value=key.name;input.dispatchEvent(new Event('input',{bubbles:true}))}
+ host.innerHTML='<p class="score-key-title"><i class="ph ph-music-notes" aria-hidden="true"></i> 악보에서 찾았어요</p>'+
+  (key?'<p class="small" data-rep-key>원키 <b>'+E(key.name)+'</b> · '+E(key.how)+(filled?' · 원키 칸에 넣었어요. 저장을 눌러야 반영돼요.':'')+'</p>'+
+   (key.other&&!key.sure?'<p class="small muted">조표만으로는 장조·단조를 가릴 수 없어요. 단조라면 '+E(key.other)+'예요.</p>':'')+(key.changes?'<p class="small muted">곡 중간에 조가 바뀌어요(처음 조표 기준).</p>':''):'')+
+  (show?'<p class="small" data-rep-range>최저음 <b>'+E(show.low)+'</b> · 최고음 <b>'+E(show.high)+'</b> · '+E(show.how)+'</p>':'');
+ host.hidden=false;
+}
 function editRepertoire(id,kind){
  const s=V.song(id);if(!s)return;const r=info(s);
  if(kind==='status')return panel('레퍼토리 상태',select('상태','status',A.states,r.status),v=>updateSong(id,v));
@@ -57,10 +89,11 @@ function editRepertoire(id,kind){
 const KEY_HELP='C, F#, Gb, Am, "Eb major", "내림 마 장조", "-2키"처럼 적으면 MR 키 맞추기에 쓸 수 있어요.';
 function keysPanel(id){
  const s=V.song(id);if(!s)return;const r=info(s),k=Keys.of({...s,repertoire:r});
- const api=panel('키 정보',field('원키','originalKey',k.originalKey)+'<p class="small muted archive-key-note" data-key-note="originalKey" hidden></p>'+field('연습키','practiceKey',k.practiceKey)+'<p class="small muted archive-key-note" data-key-note="practiceKey" hidden></p>'+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote)+'<p class="small muted">'+E(KEY_HELP)+' 이 곡의 악보와 MR에도 같은 키를 써요.</p>',v=>saveKeys(id,v));
+ const api=panel('키 정보','<div class="rep-score-key" data-rep-score-key hidden></div>'+field('원키','originalKey',k.originalKey)+'<p class="small muted archive-key-note" data-key-note="originalKey" hidden></p>'+field('연습키','practiceKey',k.practiceKey)+'<p class="small muted archive-key-note" data-key-note="practiceKey" hidden></p>'+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote)+'<p class="small muted">'+E(KEY_HELP)+' 이 곡의 악보와 MR에도 같은 키를 써요.</p>',v=>saveKeys(id,v));
  const form=api.el.querySelector('form');
  const note=name=>{const value=form.elements[name].value.trim(),el=form.querySelector('[data-key-note="'+name+'"]'),known=!value||Keys.parse(value)||(name==='practiceKey'&&Keys.relative(value)!=null);el.hidden=!!known;if(!known)el.textContent='이 표기는 MR 키 맞추기에 쓸 수 없어요. 적은 그대로 메모처럼 보관해요.'};
  for(const name of ['originalKey','practiceKey']){form.elements[name].addEventListener('input',()=>note(name));note(name)}
+ scoreKey(s,form.querySelector('[data-rep-score-key]'));
  return api;
 }
 /** Saves the song's keys; `values` holds any of originalKey, practiceKey, stageKey, transposeNote. Throws when it cannot save. */
