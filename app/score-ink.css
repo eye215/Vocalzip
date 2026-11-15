@@ -258,6 +258,7 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-note{margin:0;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
 /* 기능 (표기의 기능): four choices for a user preset, one fixed line for a built-in one. */
 .ink-marker-set legend small{margin-left:4px;font-size:12px;font-weight:400;color:var(--vz-color-muted,#667085)}
+.ink-marker-types label>span b{font-weight:600}
 .ink-marker-roles{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ink-marker-roles label>span{min-height:52px}
 .ink-marker-role-note{margin:8px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}

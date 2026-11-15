@@ -5,7 +5,9 @@
  * boxes, app/score-measure-model.js) and, for times, a sync with an MR file (app/score-sync-model.js).
  *
  * - roleOf(stroke)                 'start' | 'repeat' | 'cut' | ''
- * - span(page, stroke, role)       the measures the mark stands on (whole measures, in file order)
+ * - span(page, stroke, role, count) the measures the mark stands on (whole measures, in file order)
+ * - fixed(page, stroke, count)      the measures a mark placed by 마디 선택 says it covers, or null
+ * - pieces(page, look, from, to)    what such a mark draws: one shape per line of music, over the measure boxes
  * - collect(items, ordOf)          the score's functional marks from the 표시한 마디 rows → {starts, repeats, cuts}
  * - runs(ords)                     consecutive measures as [{from, to}]
  * - skips(spans, cuts)             the stretches of MR time to jump over, merged, in play order
@@ -13,6 +15,11 @@
  * - jump(skips, time, loop)        where playback has to go now, or null
  * - orderStarts(starts, page)      시작점 for the chooser: the page in view first, then by page · measure
  * - prefs / withPrefs              per score, on this device: the start last chosen and 컷 건너뛰기 on/off
+ *
+ * 마디 선택. A mark placed that way carries the measures it was placed on (`measures`: first and last file index
+ * and how many measure boxes the conversion had). That range is what its function uses — nothing is estimated —
+ * as long as the conversion still has that many boxes; after another conversion, and for every freehand mark, the
+ * measures are read from where the mark lies, as described next.
  *
  * Measures. 시작점 is one place: the measure under the mark (of a long mark its first measure). 반복 and 컷 cover
  * every measure the mark overlaps — whole measures only, so a cut drawn inside a measure skips that whole measure.
@@ -38,12 +45,24 @@
 'use strict';
 const ROLES = ['start', 'repeat', 'cut'], ROLE_NAMES = {start:'시작점', repeat:'반복 구간', cut:'건너뛰기'};
 /** A 기호 no larger than this (of the page, both ways) stands on one measure; a sliver under this share is not counted. */
-const POINT = .05, SLIVER = .15, SAME = 1e-6;
+const POINT = .05, SLIVER = .15, SAME = 1e-6, INSET = .004;
 /** A jump is made this long before a cut starts (the MR is looked at every 40 ms) and not within this of its end. */
 const AHEAD = .02, EDGE = .01, MAX_SCORES = 60;
 const roleOf = s => Ink.markRole(s);
 
-function span(pg, s, role) {
+const hitOf = (pg, si, mi) => { const m = pg.systems[si].measures[mi]; return {page:pg.page, system:si, measure:mi, index:m.index, number:m.number, ...(m.last ? {last:m.last} : {})}; };
+/** The measures of this page a mark placed by 마디 선택 covers, or null: no stored range, a conversion with another
+ * number of measure boxes (count), or none of them on this page. */
+function fixed(pg, s, count) {
+  const m = s?.measures;
+  if (!Ink.validMeasures(m) || m[2] !== count || !pg?.systems?.length) return null;
+  const out = [];
+  pg.systems.forEach((sys, si) => sys.measures.forEach((x, mi) => { if (x.index >= m[0] && x.index <= m[1]) out.push(hitOf(pg, si, mi)); }));
+  return out.length ? out : null;
+}
+function span(pg, s, role, count) {
+  const stored = fixed(pg, s, count);
+  if (stored) return role === 'start' ? stored.slice(0, 1) : stored;
   const box = M.strokeBox(s);
   if (!box || !pg?.systems?.length) return [];
   let hits;
@@ -68,9 +87,36 @@ function across(pg, s, hits) {
   const out = [];
   for (let si = first.system; si <= last.system; si++) pg.systems[si].measures.forEach((m, mi) => {
     if (si === first.system && mi < first.measure || si === last.system && mi > last.measure) return;
-    out.push({page:pg.page, system:si, measure:mi, index:m.index, number:m.number, ...(m.last ? {last:m.last} : {})});
+    out.push(hitOf(pg, si, mi));
   });
   return out.length ? out : hits;
+}
+/** What a mark placed by 마디 선택 draws over the measures from..to (file indexes) of a page: one shape per line of
+ * music, as the fields of a stroke each (tool, color, opacity, width, points). look: the preset; aspect: page height
+ * / width. The shapes follow the measure boxes — the staff lines seen on the page when it was snapped:
+ * 구간 덮기 a band over the top staff (at least as thick as that staff), 테두리 상자 a frame around the line of music,
+ * 밑줄 a line under it, 구간 괄호 a bracket over it. */
+function pieces(pg, look, from, to, aspect = 1) {
+  const k = aspect > 0 ? aspect : 1, pen = look.type !== 'highlighter', lo = Math.min(from, to), hi = Math.max(from, to);
+  const base = {tool:pen ? 'pen' : 'highlighter', color:look.color, opacity:pen ? 1 : Ink.MARK_OPACITY, width:look.width};
+  const pad = (pg?.staff || 0) * (pg?.snapped ? .25 : .6), out = [];
+  for (const sys of pg?.systems || []) {
+    const ms = sys.measures.filter(m => m.index >= lo && m.index <= hi);
+    if (!ms.length) continue;
+    const left = ms[0].x0, right = ms.at(-1).x1, gap = Math.min(INSET, (right - left) / 4), x0 = left + gap, x1 = right - gap;
+    const top = Math.max(0, sys.top - pad), bottom = Math.min(1, sys.bottom + pad);
+    let piece;
+    if (look.form === 'box') piece = {...base, points:[[x0, top], [x1, top], [x1, bottom], [x0, bottom], [x0, top]]};
+    else if (look.form === 'line') piece = {...base, points:[[x0, bottom], [x1, bottom]]};
+    else if (look.form === 'bracket') { const h = Math.min(.046 / k, top); piece = {...base, points:[[x0, top - h], [x0, top], [x1, top], [x1, top - h]]}; }
+    else {
+      const staff = sys.staves?.[0] || [sys.top, sys.bottom], width = Math.max(.001, Math.min(.06, Math.max(look.width, (staff[1] - staff[0]) * k * 1.3)));
+      const y = (staff[0] + staff[1]) / 2, half = Math.min(width / 2, (x1 - x0) / 2); // round ends: the band stops at the barlines
+      piece = {...base, width, points:[[x0 + half, y], [x1 - half, y]]};
+    }
+    out.push({...piece, points:piece.points.map(p => Ink.point(p[0], p[1]))});
+  }
+  return out;
 }
 
 /** The score's functional marks. items: rows of VzipScoreMeasures.summary made with roleOf / span (each {role, page,
@@ -145,5 +191,5 @@ function withPrefs(stored, scoreId, patch, now = Date.now()) {
   for (const id of ids.slice(MAX_SCORES)) delete all[id];
   return JSON.stringify(all);
 }
-return {ROLES, ROLE_NAMES, AHEAD, EDGE, MAX_SCORES, roleOf, span, collect, runs, text, skips, skipsFor, jump, orderStarts, prefs, withPrefs};
+return {ROLES, ROLE_NAMES, AHEAD, EDGE, MAX_SCORES, roleOf, span, fixed, pieces, collect, runs, text, skips, skipsFor, jump, orderStarts, prefs, withPrefs};
 });

@@ -215,3 +215,102 @@ test('per score on this device: the start last chosen and 컷 건너뛰기, on u
   const all = JSON.parse(text);
   assert.equal(Object.keys(all).length, K.MAX_SCORES); assert.equal('a' in all, false); assert.equal('n0' in all, false); assert.deepEqual(K.prefs(text, 'n' + (K.MAX_SCORES + 4)).start, K.MAX_SCORES + 4);
 });
+
+// ---- 마디 선택: a mark placed on whole measures carries its range and is drawn over the measure boxes ----
+const base = {version:1, id:'a', ownerId:'u1', songId:'s', scoreId:'sc', r2Key:'u/u1/sc/original.pdf', pdfHash:'a'.repeat(64), page:1, tool:'highlighter', color:'#7a32f5', width:.04, points:[P(.3, .2), P(.5, .2)], createdAt:1, mark:'cut'};
+
+test('a stored mark may carry its measures and a link to its other pieces; both are optional and checked', () => {
+  assert.equal(Ink.valid({...base, measures:[1, 2, 8]}), true); assert.equal(Ink.valid({...base, measures:[3, 3, 8], group:'g1'}), true);
+  assert.equal(Ink.valid({...base, measures:[0, 9, 4]}), true); // file indexes may run past the number of boxes (multi-rests)
+  for (const measures of [[2, 1, 8], [1, 2], [1, 2, 0], [-1, 2, 8], [1.5, 2, 8], ['1', 2, 8], 'x', null, [1, 2, 8, 9], [1, 200000, 8]]) assert.equal(Ink.valid({...base, measures}), false, JSON.stringify(measures));
+  for (const group of ['', 5, null, 'x'.repeat(201)]) assert.equal(Ink.valid({...base, group}), false, String(group));
+  assert.equal(Ink.same({...base, measures:[1, 2, 8]}, {...base, measures:[1, 2, 8]}), true); assert.equal(Ink.same({...base, measures:[1, 2, 8]}, {...base, measures:[1, 3, 8]}), false);
+  assert.equal(Ink.same({...base, group:'a'}, {...base, group:'b'}), false);
+  // The pieces of one mark, and what a moved mark keeps.
+  const rows = [{...base, id:'a', group:'g'}, {...base, id:'b', group:'g'}, {...base, id:'c', group:'g', page:2}, {...base, id:'d'}, {...base, id:'e', group:'h'}];
+  assert.deepEqual(Ink.grouped(rows, rows[0]).map(s => s.id), ['a', 'b']); assert.deepEqual(Ink.grouped(rows, rows[3]).map(s => s.id), ['d']); assert.deepEqual(Ink.grouped(rows, rows[4]).map(s => s.id), ['e']);
+  const free = Ink.freehand({...base, measures:[1, 2, 8], group:'g', role:'cut'});
+  assert.equal('measures' in free, false); assert.equal('group' in free, false); assert.equal(free.role, 'cut'); assert.equal(free.mark, 'cut'); assert.equal(Ink.valid(free), true);
+});
+
+test('컷 is placed by 마디 선택 by default; the way is kept per preset, only for forms that mark a stretch, and reset puts it back', () => {
+  const store = new Map(), storage = {getItem:k => store.has(k) ? store.get(k) : null, setItem:(k, v) => store.set(k, v)};
+  const prefs = Settings.create({storage, identity:() => ({owner:'u1', session:'s1'})});
+  const of = id => prefs.read().markers.find(m => m.id === id);
+  assert.deepEqual(prefs.read().markers.map(m => [m.id, Settings.markWay(m)]), [['breath', 'tap'], ['repeat', 'two'], ['cut', 'measure'], ['start', 'tap']]);
+  assert.equal(of('cut').changed, false);
+  // 컷 back to its own way: kept (the default would otherwise bring 마디 선택 back), and it counts as changed.
+  prefs.write('marker', {id:'cut', pick:''});
+  assert.equal(Settings.markWay(of('cut')), 'drag'); assert.equal(of('cut').changed, true); assert.equal(JSON.parse(store.get(prefs.key)).markers.builtin.cut.pick, '');
+  prefs.write('marker', {id:'cut', color:'#b42318'}); assert.equal(Settings.markWay(of('cut')), 'drag');
+  prefs.write('marker', {id:'cut'}, {reset:true}); assert.equal(Settings.markWay(of('cut')), 'measure'); assert.equal(of('cut').changed, false); assert.deepEqual(JSON.parse(store.get(prefs.key)).markers.builtin, {});
+  // A change made before this version (no way stored) keeps the new default.
+  store.set(prefs.key, JSON.stringify({version:1, owner:'u1', markers:{builtin:{cut:{name:'컷', color:'#b42318', width:.04, type:'highlighter', form:'cover'}}}}));
+  assert.equal(Settings.markWay(of('cut')), 'measure'); assert.equal(of('cut').color, '#b42318');
+  store.delete(prefs.key);
+  // 반복 can take it; a 기호 cannot; a built-in other than 컷 stores it only when it has it.
+  prefs.write('marker', {id:'repeat', pick:'measure'}); assert.equal(Settings.markWay(of('repeat')), 'measure'); assert.equal(of('repeat').changed, true);
+  prefs.write('marker', {id:'repeat', pick:''}); assert.equal(Settings.markWay(of('repeat')), 'two'); assert.equal(of('repeat').changed, false); assert.deepEqual(JSON.parse(store.get(prefs.key)).markers.builtin, {});
+  prefs.write('marker', {id:'breath', pick:'measure'}); assert.equal('pick' in of('breath'), false);
+  const look = {name:'밑줄', color:'#175cd3', width:.006, type:'pen', form:'line'};
+  prefs.write('marker', {id:'m-1', ...look, pick:'measure'}); assert.equal(of('m-1').pick, 'measure');
+  prefs.write('marker', {id:'m-1', form:'wave'}); assert.equal('pick' in of('m-1'), false); assert.equal(Settings.markWay(of('m-1')), 'drag'); // 물결선 has no 마디 선택
+  assert.deepEqual(Settings.MARK_PICK_FORMS, ['line', 'box', 'cover', 'bracket']);
+  for (const form of ['symbol', 'wave']) assert.equal(Settings.markWay({form, pick:'measure'}), Settings.markInput(form));
+});
+
+test('what a mark placed by 마디 선택 draws: one shape per line of music, exactly over the measures', () => {
+  const xs = piece => [Math.min(...piece.points.map(p => p[0])), Math.max(...piece.points.map(p => p[0]))], ys = piece => [Math.min(...piece.points.map(p => p[1])), Math.max(...piece.points.map(p => p[1]))];
+  const near = (a, b, eps = 1e-4) => assert.ok(Math.abs(a - b) <= eps, a + ' ≈ ' + b);
+  const cover = {form:'cover', color:'#7a32f5', width:.04, type:'highlighter'};
+  // One measure (index 1: x .3–.5 on the line at y .2–.25): a band over the staff that stops at the barlines.
+  let [one, ...rest] = K.pieces(PAGE, cover, 1, 1, 1.4);
+  assert.equal(rest.length, 0); assert.equal(one.tool, 'highlighter'); assert.equal(one.opacity, Ink.MARK_OPACITY);
+  assert.equal(one.width, .06);                                                                   // as thick as the staff, up to the widest stroke there is
+  const low = {...PAGE, systems:[{...PAGE.systems[0], staves:[[.2, .22]]}]};                      // a staff .028 of the page width high
+  near(K.pieces(low, cover, 1, 1, 1.4)[0].width, .04); near(K.pieces(low, {...cover, width:.012}, 1, 1, 1.4)[0].width, .02 * 1.4 * 1.3); // the preset's width, or the staff's when that is more
+  near(xs(one)[0] - one.width / 2, .3 + .004); near(xs(one)[1] + one.width / 2, .5 - .004);       // its round ends reach the barlines, not past them
+  near(ys(one)[0], .225); near(ys(one)[1], .225);
+  // A narrow measure never gets a band wider than itself.
+  const tight = {...PAGE, systems:[{...PAGE.systems[0], measures:[{index:0, number:'1', x0:.1, x1:.12}]}]};
+  const dot = K.pieces(tight, cover, 0, 0, 1.4)[0]; assert.ok(xs(dot)[1] - xs(dot)[0] < 1e-6); near(xs(dot)[0], .11);
+  // A range on one line is one shape; from line 1 into line 2 it is one shape per line.
+  assert.equal(K.pieces(PAGE, cover, 1, 2, 1.4).length, 1); near(xs(K.pieces(PAGE, cover, 2, 1, 1.4)[0])[1] + K.pieces(PAGE, cover, 2, 1, 1.4)[0].width / 2, .7 - .004);
+  const two = K.pieces(PAGE, cover, 2, 5, 1.4);
+  assert.equal(two.length, 2); near(ys(two[0])[0], .225); near(ys(two[1])[0], .525);
+  near(xs(two[0])[1] + two[0].width / 2, .9 - .004); near(xs(two[1])[0] - two[1].width / 2, .1 + .004); near(xs(two[1])[1] + two[1].width / 2, .5 - .004);
+  // The other forms: a frame around the line of music, a line under it, a bracket over it — all between the barlines.
+  const pen = form => ({form, color:'#175cd3', width:.006, type:'pen'}), pad = PAGE.staff * .25;
+  const box = K.pieces(PAGE, pen('box'), 1, 2, 1.4)[0];
+  assert.equal(box.points.length, 5); assert.deepEqual(box.points[0], box.points[4]); near(xs(box)[0], .304); near(xs(box)[1], .696); near(ys(box)[0], .2 - pad); near(ys(box)[1], .25 + pad);
+  const line = K.pieces(PAGE, pen('line'), 1, 2, 1.4)[0]; assert.equal(line.points.length, 2); near(ys(line)[0], .25 + pad); near(xs(line)[0], .304); assert.equal(line.tool, 'pen'); assert.equal(line.width, .006);
+  const bracket = K.pieces(PAGE, pen('bracket'), 1, 2, 1.4)[0]; assert.equal(bracket.points.length, 4); near(ys(bracket)[1], .2 - pad); assert.ok(ys(bracket)[0] < .2 - pad); near(xs(bracket)[1], .696);
+  // A page read from the file alone (not laid onto seen staff lines) leaves more room, as its boxes do.
+  near(ys(K.pieces({...PAGE, snapped:false}, pen('line'), 1, 2, 1.4)[0])[0], .25 + PAGE.staff * .6);
+  for (const piece of [one, ...two, box, line, bracket]) assert.equal(Ink.valid({...base, id:'p', ...piece}), true);
+  assert.deepEqual(K.pieces(PAGE, cover, 20, 22, 1.4), []); assert.deepEqual(K.pieces(null, cover, 0, 1, 1.4), []);
+});
+
+test('the function of a mark placed by 마디 선택 reads its stored measures; a freehand or outdated mark is read from where it lies', () => {
+  // Drawn over measure 2 only, but placed on measures 2–3: the stored range counts.
+  const placed = {...stroke([P(.32, .225), P(.48, .225)], {tool:'highlighter', width:.04}), mark:'cut', measures:[1, 2, 8]};
+  assert.deepEqual(idx(K.fixed(PAGE, placed, 8)), [1, 2]); assert.deepEqual(idx(K.span(PAGE, placed, 'cut', 8)), [1, 2]);
+  assert.deepEqual(idx(K.span(PAGE, placed, 'start', 8)), [1]);
+  // Converted again (another number of boxes), no conversion count, a damaged range, or measures not on this page: by geometry.
+  assert.equal(K.fixed(PAGE, placed, 9), null); assert.deepEqual(idx(K.span(PAGE, placed, 'cut', 9)), [1]);
+  assert.equal(K.fixed(PAGE, placed, undefined), null); assert.deepEqual(idx(K.span(PAGE, placed, 'cut')), [1]);
+  assert.equal(K.fixed(PAGE, {...placed, measures:[2, 1, 8]}, 8), null); assert.equal(K.fixed(PAGE, {...placed, measures:[40, 41, 8]}, 8), null);
+  assert.equal(K.fixed(PAGE, stroke([P(.32, .225), P(.48, .225)]), 8), null);
+  // In the list: pieces of one mark on two lines are one row over the whole range; without a function too.
+  const pieces = K.pieces(PAGE, {form:'cover', color:'#7a32f5', width:.04, type:'highlighter'}, 2, 5, 1.4).map((shape, i) => ({...stroke([]), ...shape, id:'p' + i, mark:'cut', measures:[2, 5, 8], group:'g1'}));
+  const under = K.pieces(PAGE, {form:'line', color:'#175cd3', width:.006, type:'pen'}, 6, 7, 1.4).map((shape, i) => ({...stroke([]), ...shape, id:'u' + i, mark:'m-under', measures:[6, 7, 8]}));
+  const options = count => ({markName:id => ({cut:'컷', 'm-under':'밑줄'}[id] || ''), roleOf:K.roleOf, spanOf:(pg, s, role) => K.span(pg, s, role, count), fixedOf:(pg, s) => K.fixed(pg, s, count)});
+  let items = M.summary(() => PAGE, [...pieces, ...under], options(8)).items;
+  assert.deepEqual(items.map(i => [i.label, i.where, i.count, i.role || '', i.measures]), [['컷', '3–6마디', 1, 'cut', [2, 3, 4, 5]], ['밑줄', '7–8마디', 1, '', [6, 7]]]);
+  assert.deepEqual(K.collect(items, new Map([0, 1, 2, 3, 4, 5, 6, 7].map(i => [i, i]))).cuts, [2, 3, 4, 5]);
+  // Two separate marks over the same measures are still counted (컷 2개); after another conversion each piece is read where it lies.
+  items = M.summary(() => PAGE, [...pieces, ...pieces.map(p => ({...p, id:p.id + 'x', group:'g2'}))], options(8)).items;
+  assert.deepEqual(items.map(i => [i.where, i.count]), [['3–6마디', 2]]);
+  items = M.summary(() => PAGE, pieces, options(9)).items;
+  assert.deepEqual(items.map(i => [i.where, i.role]), [['3–4마디', 'cut'], ['5–6마디', 'cut']]);
+});

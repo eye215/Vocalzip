@@ -1,5 +1,6 @@
-/* 표기의 기능 (app/score-mark-model.js, app/score-sync.js, the play bar in app/score-audio.js, the 기능 field of the
- * marker editor in app/score-ink.js): 시작점 · 반복 · 컷 marks do something once the score is matched with an MR.
+/* 표기의 기능 and 마디 선택 (app/score-mark-model.js, app/score-sync.js, the play bar in app/score-audio.js, the 기능 field of the
+ * marker editor in app/score-ink.js): 시작점 · 반복 · 컷 marks do something once the score is matched with an MR,
+ * and a mark can be placed on whole measures (마디 선택 — 컷 by default, a preset's 찍는 방식 in 표기 편집).
  * The fixtures are those of tests/score-sync.spec.cjs: 12 measures of 4/4 in three lines (1–4 and 5–8 on page 1,
  * 9–12 on page 2) and a generated tone as the MR, matched one measure a second (measure n starts at n seconds).
  * WebKit: every test that plays the MR is skipped there (PLAYS), as in tests/score-sync.spec.cjs; the tests that only
@@ -85,7 +86,7 @@ async function setup(page,{tracks=[FILE],sync=null,rows=[],boxes=false,conversio
  });
  const omr={job:null,put(xml,n=1){const file=mxl(xml);r2.store.set(MXL,{bytes:file,type:'application/vnd.recordare.musicxml',etag:'"mxl'+n+'"'});
   omr.job={id:String(n).repeat(24),scoreId:SCORE,status:'done',created:n,finished:n+1,error:null,resultKey:MXL,resultSize:file.length,movements:1};}};
- omr.put(conversion);
+ if(conversion)omr.put(conversion); // conversion: null → the score was never converted
  await page.route(R2+'/v1/omr**',route=>route.fulfill({json:{job:omr.job},headers:{'access-control-allow-origin':'*'}}));
  await page.context().route('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/**',route=>{
   const suffix=new URL(route.request().url()).pathname.split('pdfjs-dist@4.10.38/')[1],file=path.join(PDFROOT,suffix);
@@ -304,7 +305,8 @@ test('컷 건너뛰기: playback jumps over the cut measure, plays it when the s
  const inCut=seen=>seen.filter(t=>t>4.12&&t<4.95);
  // On (the default for a score with cut marks): from measure 3 the MR goes on at measure 5.
  await play(dialog).click();await expect(bar(dialog).getByRole('group',{name:'MR 재생 중'})).toBeVisible();
- await expect(bar(dialog).locator('[data-score-audio-hint]')).toHaveText('컷 4마디 건너뜀');
+ await expect(bar(dialog).locator('[data-score-audio-cutting]')).toHaveAttribute('aria-label','컷 4마디 건너뜀');await expect(bar(dialog).locator('[data-score-audio-hint]')).toHaveText('');
+ expect((await bar(dialog).boundingBox()).height).toBeLessThanOrEqual(60); // still one row while it plays
  await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(.2);
  await mrSeek(page,3.45);let seen=await watch(page,1500);
  expect(inCut(seen)).toEqual([]);expect(Math.max(...seen)).toBeGreaterThan(5.2);expect(Math.max(...seen)).toBeLessThan(6.3); // about 0.55 s of measure 3, then measure 5
@@ -317,7 +319,7 @@ test('컷 건너뛰기: playback jumps over the cut measure, plays it when the s
  await opts(dialog).click();await expect(cutSwitch(page)).toHaveText('컷 건너뛰기꺼짐 · 4마디도 재생');await expect(cutSwitch(page)).toHaveAttribute('aria-pressed','false');await closeMenu(page);
  expect((await prefs(page))[SCORE].c).toBe(0);
  await play(dialog).click();await expect.poll(async()=>(await mr(page)).paused).toBe(false);
- await expect(bar(dialog).locator('[data-score-audio-hint]')).toHaveText('');
+ await expect(bar(dialog).locator('[data-score-audio-cutting]')).toHaveCount(0);
  await mrSeek(page,3.45);seen=await watch(page,1500);
  expect(inCut(seen).length).toBeGreaterThan(5);
  await stopPlay(dialog).click();
@@ -389,8 +391,8 @@ test('표기 편집: a user preset gets a 기능 and its marks carry it; a built
  await expect(roles.locator('[name=role][value=""]')).toBeChecked();await expect(sheet.locator('[data-marker-role-note]')).toHaveText('표시만 남겨요.');
  for(const l of await roles.locator('label').all())expect((await l.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await sheet.locator('[name=name]').fill('건너뛸 곳');
- await sheet.locator('[name=form][value=cover]').check({force:true});
- await roles.locator('[name=role][value=cut]').check({force:true});
+ await sheet.locator('[name=form][value=cover]').check();
+ await roles.locator('[name=role][value=cut]').check();
  await expect(sheet.locator('[data-marker-role-note]')).toHaveText('재생할 때 표기가 걸친 마디를 건너뛰어요. 마디와 MR을 맞춘 악보에서 써요.');
  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
  const preset=(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)).markers.user,PRESETS))[0];
@@ -410,7 +412,7 @@ test('표기 편집: a user preset gets a 기능 and its marks carry it; a built
  // Back to 없음: marks placed from now on have no function; the one already there keeps its own.
  await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-edit]').click();await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();
  await expect(roles.locator('[name=role][value=cut]')).toBeChecked();
- await roles.locator('[name=role][value=""]').check({force:true});await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await roles.locator('[name=role][value=""]').check();await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
  expect('role' in (await page.evaluate(k=>JSON.parse(localStorage.getItem(k)).markers.user,PRESETS))[0]).toBe(false);
  await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();
  const c=await spot(dialog,160,208),d=await spot(dialog,200,208);
@@ -524,6 +526,198 @@ for(const [width,height] of [[1024,768],[820,1180]])test('tablet '+width+'×'+he
  await bar(dialog).getByRole('button',{name:'반복 멈춤',exact:true}).click();await expect(opts(dialog)).toBeVisible();
 });
 
+// ---------- 마디 선택: marks placed on whole measures ----------
+const status=dialog=>dialog.locator('[data-ink-status]'),layer=dialog=>dialog.locator('[data-ink-measures]');
+const pickMarker=async(dialog,id)=>{await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker="'+id+'"]').click();};
+const editMarker=async(page,dialog,id)=>{await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-edit]').click();await dialog.locator('[data-ink-marker="'+id+'"]').click();const sheet=page.getByRole('dialog',{name:'악보 표기 편집'});await expect(sheet).toBeVisible();return sheet;};
+async function drag(page,dialog,from,to){const a=await spot(dialog,...from),b=await spot(dialog,...to);await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move((a.x+b.x)/2,(a.y+b.y)/2,{steps:3});await page.mouse.move(b.x,b.y,{steps:3});return ()=>page.mouse.up();}
+const marks=page=>page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).map(s=>({id:s.id,mark:s.mark,tool:s.tool,measures:s.measures||null,group:s.group||'',role:s.role||'',page:s.page,valid:window.VzipScoreInk.valid(s),
+ x:[Math.min(...s.points.map(p=>p[0])),Math.max(...s.points.map(p=>p[0]))],y:[Math.min(...s.points.map(p=>p[1])),Math.max(...s.points.map(p=>p[1]))],width:s.width,n:s.points.length})));
+/** The x of a barline (PDF units) as a share of the page width, and how far a band of that width stops short of it. */
+const X=x=>x/PW,Y=y=>y/PH;
+const about=(value,want,room=.012)=>{expect(value).toBeGreaterThan(want-room);expect(value).toBeLessThan(want+room);};
+const placed=async(page,count)=>{await expect.poll(async()=>(await marks(page)).length).toBe(count);return marks(page);};
+
+test('마디 선택: 컷 takes the whole measure that is tapped, or every measure a drag passes; the boxes show lightly while placing',async({page})=>{
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ await expect(layer(dialog)).toBeHidden();
+ await pickMarker(dialog,'cut');
+ await expect(status(dialog)).toHaveText('컷: 마디를 누르거나, 여러 마디는 끌어서 골라 주세요.');
+ // The measure boxes of the page show without 마디 위치 보기 being on, lightly, and take no touch.
+ await expect(layer(dialog)).toBeVisible();await expect(layer(dialog)).toHaveAttribute('data-peek','true');await expect(layer(dialog).locator('.score-measure-box')).toHaveCount(8);
+ expect(await layer(dialog).locator('.score-measure-box').first().evaluate(n=>[getComputedStyle(n).strokeDasharray!=='none',getComputedStyle(n.ownerSVGElement).pointerEvents])).toEqual([true,'none']);
+ await more(dialog);await expect(dialog.locator('[data-ink-measure-boxes]')).toHaveAttribute('aria-pressed','false');await dialog.locator('[data-ink-more]').click();
+ expect(await page.evaluate(k=>localStorage.getItem(k),BOXES)).toBeNull();await expect(layer(dialog)).toBeVisible();
+ // A tap well below the staff, near the right edge of measure 4: the mark is the whole measure, on the staff.
+ await tap(page,dialog,262,128);
+ let rows=await placed(page,1);
+ expect(rows[0]).toMatchObject({mark:'cut',tool:'highlighter',measures:[3,3,12],group:'',role:'',page:1,valid:true,n:2});
+ about(rows[0].x[0]-rows[0].width/2,X(210));about(rows[0].x[1]+rows[0].width/2,X(270));about(rows[0].y[0],Y(88),.006);about(rows[0].y[1],Y(88),.006);
+ expect(rows[0].width).toBeGreaterThanOrEqual(.04);
+ // A drag from measure 6 to measure 7: one mark over both; while dragging it is shown as it will be.
+ const release=await drag(page,dialog,[100,236],[200,170]);
+ await expect(dialog.locator('path[data-stroke="mark-preview-0"]')).toHaveCount(1);expect((await marks(page)).length).toBe(1);
+ await release();rows=await placed(page,2);
+ expect(rows[1]).toMatchObject({mark:'cut',measures:[5,6,12],group:'',valid:true});
+ about(rows[1].x[0]-rows[1].width/2,X(90));about(rows[1].x[1]+rows[1].width/2,X(210));about(rows[1].y[0],Y(208),.006);
+ await expect(dialog.locator('path[data-stroke="mark-preview-0"]')).toHaveCount(0);
+ // Dragged backwards (7 → 5) it is the same kind of mark.
+ await (await drag(page,dialog,[160,200],[40,215]))();rows=await placed(page,3);expect(rows[2].measures).toEqual([4,6,12]);
+ // It is 컷: the list has one row per mark with its measures, and the bar skips exactly those.
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ await expect(layer(dialog)).toBeHidden(); // the boxes go with the marker
+ const list=await openList(page,dialog);
+ await expect(list.locator('[data-measure-row]')).toHaveText([/^4마디\s*컷$/,/^5–7마디\s*컷$/,/^6–7마디\s*컷$/]);await expect(list.locator('[data-mark-cut]')).toHaveText(['건너뜀','건너뜀','건너뜀']);
+ await list.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await expect(opts(dialog)).toHaveAttribute('aria-label','재생 옵션: 컷 건너뛰기 켜짐');
+ await opts(dialog).click();await expect(cutSwitch(page)).toHaveText('컷 건너뛰기4–7마디 건너뜀');await closeMenu(page);
+ // With 마디 위치 보기 on the boxes are the usual ones, also while placing.
+ await more(dialog);await dialog.locator('[data-ink-measure-boxes]').click();
+ await pickMarker(dialog,'cut');await expect(layer(dialog)).toHaveAttribute('data-peek','false');await expect(layer(dialog).locator('.score-measure-box')).toHaveCount(8);
+});
+
+test('마디 선택 across a line break: one mark drawn as one piece per line — one row, one undo, one erase, one selection',async({page})=>{
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ await pickMarker(dialog,'cut');
+ // From measure 3 (line 1) to measure 6 (line 2).
+ const release=await drag(page,dialog,[180,88],[120,208]);
+ await expect(dialog.locator('path[data-stroke^="mark-preview-"]')).toHaveCount(2);
+ await release();
+ let rows=await placed(page,2);
+ expect(rows.map(r=>r.measures)).toEqual([[2,5,12],[2,5,12]]);expect(rows[0].group).not.toBe('');expect(rows[1].group).toBe(rows[0].group);expect(rows.every(r=>r.valid&&r.mark==='cut')).toBe(true);
+ const [upper,lower]=rows[0].y[0]<rows[1].y[0]?rows:[rows[1],rows[0]];
+ about(upper.x[0]-upper.width/2,X(150));about(upper.x[1]+upper.width/2,X(270));about(upper.y[0],Y(88),.006);   // measures 3–4 to the end of the line
+ about(lower.x[0]-lower.width/2,X(30));about(lower.x[1]+lower.width/2,X(150));about(lower.y[0],Y(208),.006);   // measures 5–6 from its start
+ await expect(dialog.locator('[data-ink-svg] path[data-stroke]')).toHaveCount(2);
+ // One row.
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ let list=await openList(page,dialog);
+ await expect(list.locator('[data-measure-row]')).toHaveText([/^3–6마디\s*컷$/]);await expect(list.locator('[data-mark-cut-hint]')).toContainText('재생할 때 3–6마디 건너뜀');
+ await list.getByRole('button',{name:'돌아가기',exact:true}).click();
+ // One undo and one redo.
+ await more(dialog);await dialog.locator('[data-ink-undo]').click();await placed(page,0);
+ await more(dialog);await dialog.locator('[data-ink-redo]').click();rows=await placed(page,2);expect(new Set(rows.map(r=>r.group)).size).toBe(1);expect(rows.map(r=>r.measures)).toEqual([[2,5,12],[2,5,12]]);
+ // The eraser on the lower piece takes the whole mark; undo brings both back.
+ await dialog.getByRole('button',{name:'지우개',exact:true}).click();await tap(page,dialog,90,208);await placed(page,0);
+ await more(dialog);await dialog.locator('[data-ink-undo]').click();await placed(page,2);
+ // Selecting one piece selects the mark. Moved by hand it no longer lies on its measures: it becomes a freehand mark
+ // (still 컷, now read from where it lies).
+ await dialog.getByRole('button',{name:'선택',exact:true}).click();await tap(page,dialog,240,88);
+ await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('2개 선택');
+ const a=await spot(dialog,240,88),b=await spot(dialog,240,60);
+ await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move(b.x,b.y,{steps:4});await page.mouse.up();
+ await expect.poll(async()=>(await marks(page)).map(r=>[r.mark,r.measures,r.group])).toEqual([['cut',null,''],['cut',null,'']]);
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ list=await openList(page,dialog);await expect(list.locator('[data-measure-row]')).toHaveCount(2);
+});
+
+test('컷 건너뛰기 uses the measures a mark was placed on, not where its shape happens to lie',async({page,browserName})=>{
+ // Drawn over measure 2, but placed on measure 4; another one from a conversion that had 11 measure boxes.
+ const MOVED=cover(1,100,88,140,{mark:'cut',measures:[3,3,12]}),OUTDATED=cover(1,100,208,140,{mark:'cut',measures:[0,0,11]});
+ await setup(page,{sync:EVEN,rows:[MOVED,OUTDATED]});const dialog=await openMarked(page);
+ await opts(dialog).click();await expect(cutSwitch(page)).toHaveText('컷 건너뛰기4마디, 6마디 건너뜀');await closeMenu(page); // 6: the outdated one, read from where it lies
+ const list=await openList(page,dialog);
+ await expect(list.locator('[data-measure-row] .score-measure-where')).toHaveText(['4마디','6마디']);
+ await list.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await tap(page,dialog,120,88);await expect(page.getByRole('dialog',{name:'컷 · 4마디 메뉴'})).toBeVisible();await closeMenu(page);
+ if(browserName==='webkit')return; // the rest plays the MR
+ await play(dialog).click();await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(.2);
+ await mrSeek(page,1.5);const seen=await watch(page,3200);
+ expect(seen.filter(t=>t>2.2&&t<2.9).length).toBeGreaterThan(5);   // measure 2 is played
+ expect(seen.filter(t=>t>4.12&&t<4.95)).toEqual([]);               // measure 4 is not
+ expect(Math.max(...seen)).toBeGreaterThan(5.2);
+ await stopPlay(dialog).click();
+});
+
+test('표기 편집 › 찍는 방식: 컷 can go back to its own way and be reset; 반복 and a user preset can take 마디 선택; a 기호 cannot',async({page})=>{
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ const pick=sheet=>sheet.locator('[data-marker-pick]'),save=sheet=>sheet.getByRole('button',{name:'저장',exact:true});
+ const builtin=page=>page.evaluate(k=>JSON.parse(localStorage.getItem(k)||'{}').markers?.builtin||{},PRESETS);
+ // 컷: 마디 선택 is on by default.
+ let sheet=await editMarker(page,dialog,'cut');
+ await expect(pick(sheet).locator('legend')).toHaveText('찍는 방식');await expect(pick(sheet).locator('label')).toHaveText(['따라 긋기손으로 자리를 정해요','마디 선택마디를 누르거나 끌어요']);
+ await expect(pick(sheet).locator('[name=pick][value=measure]')).toBeChecked();await expect(sheet.locator('[data-marker-input]')).toHaveText('찍는 방식 · 마디 선택');
+ await expect(sheet.locator('[data-marker-pick-note]')).toHaveText('표기가 고른 마디에 딱 맞게 그려져요. 음표로 변환하지 않은 악보에서는 ‘따라 긋기’로 찍어요.');
+ await expect(sheet.locator('[data-marker-reset]')).toBeDisabled();
+ for(const l of await pick(sheet).locator('label').all())expect((await l.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await pick(sheet).locator('[name=pick][value=""]').check();
+ await expect(sheet.locator('[data-marker-input]')).toHaveText('찍는 방식 · 따라 긋기');await expect(sheet.locator('[data-marker-pick-note]')).toHaveText('마디 선택은 음표로 변환한 악보에서 쓸 수 있어요.');
+ await save(sheet).click();await expect(sheet).toHaveCount(0);
+ expect((await builtin(page)).cut.pick).toBe('');
+ // Now it is drawn by hand again: no boxes, a line where the finger went, no measures on the mark.
+ await dialog.locator('[data-ink-marker="cut"]').click();
+ await expect(status(dialog)).toHaveText('컷: 표시할 곳을 따라 그어 주세요.');await expect(layer(dialog)).toBeHidden();
+ await (await drag(page,dialog,[100,120],[140,120]))();
+ let rows=await placed(page,1);expect(rows[0]).toMatchObject({mark:'cut',measures:null,group:''});about(rows[0].x[0],X(100));about(rows[0].x[1],X(140));about(rows[0].y[0],Y(120),.006);
+ // 기본값으로 되돌리기 brings 마디 선택 back.
+ sheet=await editMarker(page,dialog,'cut');
+ await expect(pick(sheet).locator('[name=pick][value=""]')).toBeChecked();await expect(sheet.locator('[data-marker-reset]')).toBeEnabled();
+ await sheet.locator('[data-marker-reset]').click();await page.getByRole('dialog',{name:'기본값으로 되돌리기'}).getByRole('button',{name:'되돌리기',exact:true}).click();await expect(sheet).toHaveCount(0);
+ expect(await builtin(page)).toEqual({});
+ await dialog.locator('[data-ink-marker="cut"]').click();await expect(status(dialog)).toContainText('마디를 누르거나');
+ await tap(page,dialog,60,88);rows=await placed(page,2);expect(rows[1].measures).toEqual([0,0,12]);
+ // 반복 keeps its two taps unless 마디 선택 is chosen; then the bracket sits over the measures and does what 반복 does.
+ sheet=await editMarker(page,dialog,'repeat');
+ await expect(pick(sheet).locator('label')).toHaveText(['시작과 끝을 차례로 누르기손으로 자리를 정해요','마디 선택마디를 누르거나 끌어요']);await expect(pick(sheet).locator('[name=pick][value=""]')).toBeChecked();
+ await pick(sheet).locator('[name=pick][value=measure]').check();await save(sheet).click();await expect(sheet).toHaveCount(0);
+ expect((await builtin(page)).repeat.pick).toBe('measure');
+ await dialog.locator('[data-ink-marker="repeat"]').click();
+ await (await drag(page,dialog,[120,208],[180,208]))();rows=await placed(page,3);
+ expect(rows[2]).toMatchObject({mark:'repeat',tool:'pen',measures:[5,6,12],n:4,valid:true});about(rows[2].x[0],X(90));about(rows[2].x[1],X(210));expect(rows[2].y[1]).toBeLessThan(Y(200)); // over the staff
+ // A 기호 has no such choice; a user preset (밑줄) can have it, and its mark is a line under the measures.
+ sheet=await editMarker(page,dialog,'breath');await expect(pick(sheet)).toBeHidden();
+ await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await dialog.locator('[data-ink-marker-add]').click();sheet=page.getByRole('dialog',{name:'악보 표기 편집'});
+ await expect(pick(sheet)).toBeHidden(); // 기호 by default
+ await sheet.locator('[name=name]').fill('밑줄');await sheet.locator('[name=form][value=line]').check();
+ await expect(pick(sheet)).toBeVisible();await expect(pick(sheet).locator('[name=pick][value=""]')).toBeChecked();
+ await pick(sheet).locator('[name=pick][value=measure]').check();
+ await sheet.locator('[name=form][value=wave]').check();await expect(pick(sheet)).toBeHidden();await expect(sheet.locator('[data-marker-input]')).toHaveText('찍는 방식 · 따라 긋기'); // 물결선: its own way only
+ await sheet.locator('[name=form][value=line]').check();await expect(pick(sheet).locator('[name=pick][value=measure]')).toBeChecked();
+ await save(sheet).click();await expect(sheet).toHaveCount(0);
+ const user=(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)).markers.user,PRESETS))[0];expect(user).toMatchObject({name:'밑줄',form:'line',pick:'measure'});
+ await tap(page,dialog,240,208);rows=await placed(page,4);
+ expect(rows[3]).toMatchObject({mark:user.id,tool:'pen',measures:[7,7,12],n:2,role:''});about(rows[3].x[0],X(210));about(rows[3].x[1],X(270));expect(rows[3].y[0]).toBeGreaterThan(Y(216)); // under the staff
+ // The list: the mark placed on measures 6–7 is 반복 with its action, the 밑줄 has its row.
+ await dialog.getByRole('button',{name:'이동',exact:true}).click();
+ const list=await openList(page,dialog);
+ await expect(list.getByRole('button',{name:'6–7마디 이 구간 반복',exact:true})).toBeEnabled();await expect(list.locator('[data-measure-row]').last()).toHaveText(/^8마디\s*밑줄$/);
+});
+
+test('without a conversion (or one whose pages are not the PDF’s) 마디 선택 falls back to the form’s own way, and the palette says so',async({page})=>{
+ for(const conversion of [null,musicxml(SYSTEMS.slice(0,2))]){ // never converted; converted from a one-page file
+  await setup(page,{conversion});
+  await page.goto('/#/song/s1');await page.getByRole('tab',{name:'악보',exact:true}).click();await page.getByRole('button',{name:'연습 악보 열기',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'악보 개인 필기'});
+  await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨',{timeout:20000});await page.waitForTimeout(800);
+  await expect(dialog.locator('[data-ink-measure-list]')).toHaveCount(0);
+  await dialog.locator('[data-ink-marker-mode]').click();
+  const note=dialog.locator('[data-ink-marker-measure-note]');
+  await expect(note).toHaveText('마디 선택은 음표로 변환한 악보에서 쓸 수 있어요.');await expect(note).toBeVisible();
+  const r=await note.boundingBox();expect(r.x).toBeGreaterThanOrEqual(0);expect(r.x+r.width).toBeLessThanOrEqual(page.viewportSize().width+.5);
+  await dialog.locator('[data-ink-marker="cut"]').click();
+  await expect(status(dialog)).toHaveText('마디 선택은 음표로 변환한 악보에서 쓸 수 있어요. 컷: 표시할 곳을 따라 그어 주세요.');
+  await expect(layer(dialog)).toBeHidden();
+  await (await drag(page,dialog,[100,120],[140,120]))();
+  const rows=await placed(page,1);expect(rows[0]).toMatchObject({mark:'cut',tool:'highlighter',measures:null,group:'',valid:true});about(rows[0].x[0],X(100));about(rows[0].x[1],X(140));
+  await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(dialog).toHaveCount(0);
+ }
+});
+
+test('320px: placing by 마디 선택 and the 찍는 방식 field stay inside the screen',async({page})=>{
+ await page.setViewportSize({width:320,height:640});
+ await setup(page,{sync:EVEN});const dialog=await open(page);
+ const inside=async locator=>{const r=await locator.boundingBox();expect(r.x).toBeGreaterThanOrEqual(-.5);expect(r.x+r.width).toBeLessThanOrEqual(320.5);return r;};
+ await pickMarker(dialog,'cut');await inside(layer(dialog));
+ await expect(layer(dialog).locator('.score-measure-box')).toHaveCount(8);
+ await tap(page,dialog,120,88);const rows=await placed(page,1);expect(rows[0].measures).toEqual([1,1,12]);
+ const sheet=await editMarker(page,dialog,'cut');
+ await sheet.locator('[data-marker-pick]').scrollIntoViewIfNeeded();
+ for(const l of await sheet.locator('[data-marker-pick] label').all())expect((await inside(l)).height).toBeGreaterThanOrEqual(44);
+ await inside(sheet.locator('[data-marker-pick-note]'));
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&[...document.querySelectorAll('.sheet')].every(s=>s.scrollWidth<=s.clientWidth+1))).toBe(true);
+});
+
 test.describe('screens for review (only with VZ_SHOTS)',()=>{
  test.use({deviceScaleFactor:2});
  test('phone 375',async({page},info)=>{
@@ -543,13 +737,13 @@ test.describe('screens for review (only with VZ_SHOTS)',()=>{
   await tap(page,dialog,150,186);await expect(page.locator('.sheet-menu')).toBeVisible();await page.waitForTimeout(300);
   await page.screenshot({path:process.env.VZ_SHOTS+'/mark-tap-menu-375.png'});
   await closeMenu(page);
-  await play(dialog).click();await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(3.2);await page.waitForTimeout(1200);
+  await page.waitForTimeout(2800);await play(dialog).click();await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(3.2);await page.waitForTimeout(1200);
   await page.screenshot({path:process.env.VZ_SHOTS+'/mark-playing-375.png'});
   await stopPlay(dialog).click();
   await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
   const sheet=page.getByRole('dialog',{name:'악보 표기 편집'});
-  await sheet.locator('[name=name]').fill('건너뛸 곳');await sheet.locator('[name=form][value=cover]').check({force:true});
-  await sheet.locator('[name=role][value=cut]').check({force:true});
+  await sheet.locator('[name=name]').fill('건너뛸 곳');await sheet.locator('[name=form][value=cover]').check();
+  await sheet.locator('[name=role][value=cut]').check();
   await sheet.locator('[data-marker-role]').scrollIntoViewIfNeeded();await sheet.locator('.ink-marker-note').scrollIntoViewIfNeeded();await page.waitForTimeout(300);
   await page.screenshot({path:process.env.VZ_SHOTS+'/mark-editor-role-375.png'});
   await page.keyboard.press('Escape');
@@ -557,5 +751,22 @@ test.describe('screens for review (only with VZ_SHOTS)',()=>{
   await dialog.locator('[data-ink-marker-edit]').click();await dialog.locator('[data-ink-marker="cut"]').click();
   await sheet.locator('[data-marker-role-fixed]').scrollIntoViewIfNeeded();await page.waitForTimeout(300);
   await page.screenshot({path:process.env.VZ_SHOTS+'/mark-editor-builtin-375.png'});
+ });
+ test('phone 375: 마디 선택',async({page},info)=>{
+  test.skip(!process.env.VZ_SHOTS||info.project.name!=='chromium-mobile','only when screenshots are asked for');
+  test.setTimeout(90000);
+  await page.setViewportSize({width:375,height:812});
+  await setup(page,{sync:EVEN,rows:[START3]});const dialog=await openMarked(page);
+  await pickMarker(dialog,'cut');await tap(page,dialog,60,208);await placed(page,2);
+  const release=await drag(page,dialog,[180,88],[120,208]);await page.waitForTimeout(300);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/measure-pick-dragging-375.png'});
+  await release();await placed(page,4);await page.waitForTimeout(300);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/measure-pick-placed-375.png'});
+  await dialog.getByRole('button',{name:'이동',exact:true}).click();
+  const list=await openList(page,dialog);await page.waitForTimeout(300);await page.screenshot({path:process.env.VZ_SHOTS+'/measure-pick-list-375.png'});
+  await list.getByRole('button',{name:'돌아가기',exact:true}).click();
+  const sheet=await editMarker(page,dialog,'cut');
+  await sheet.locator('[data-marker-pick]').scrollIntoViewIfNeeded();await page.waitForTimeout(300);
+  await page.screenshot({path:process.env.VZ_SHOTS+'/measure-pick-editor-375.png'});
  });
 });

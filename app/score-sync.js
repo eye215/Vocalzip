@@ -262,7 +262,7 @@ function attach(c) {
     if (!alive || sheet) return;
     refresh();
     if (!tracks().some(t => t && !t.deleted)) return; // a song without any MR: the mark stays a drawing
-    const role = K.roleOf(row), ords = K.span(c.geometry(row.page), row, role).map(h => ordOf.get(h.index)).filter(Number.isInteger);
+    const role = K.roleOf(row), ords = K.span(c.geometry(row.page), row, role, c.layout()?.measures).map(h => ordOf.get(h.index)).filter(Number.isInteger);
     if (!ords.length) return;
     const from = Math.min(...ords), to = Math.max(...ords), where = S.label(seq, from, to);
     const title = ((v.markers() || []).find(m => m.id === row.mark)?.name || K.ROLE_NAMES[role]) + ' · ' + where, anchor = {getBoundingClientRect:() => ({left:x, right:x, top:y, bottom:y, width:0, height:0})};

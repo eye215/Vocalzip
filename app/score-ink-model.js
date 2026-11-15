@@ -20,10 +20,17 @@
  *          시작점 · 반복 구간 · 건너뛰기, app/score-mark-model.js). Copied from the preset when the mark is placed, so
  *          it works on every device. The built-in 시작점 · 반복 · 컷 have theirs by their `mark` and carry none.
  *          A role this client does not know is kept and does nothing.
+ *          measures (optional): [first, last, count] — a mark placed by 마디 선택 covers exactly these measure boxes
+ *          (file indexes as in app/score-measure-model.js, both included) of a conversion that had `count` measure
+ *          boxes. Its points are the shape drawn over those boxes when it was placed, so it shows without the
+ *          conversion and on older clients. The range is used only while the conversion still has that many boxes.
+ *          group (optional): link key of the pieces of one such mark that runs over several lines of music — one
+ *          record per line, all with the same `measures`; they are erased, selected and listed as one. A piece that
+ *          is moved or resized by hand loses `measures` and `group` and is a freehand mark from then on.
  *          glyph (optional, with size): 1–4 characters drawn centred on the single point instead of the line;
  *          size is the letter height of page width (GLYPH_MIN–GLYPH_MAX), width its extra boldness.
  * Clients older than memos skip records they do not know when listing (valid() is false), so they neither show nor
- * remove a memo; strokes carrying `note`, `mark` or `role` are ordinary strokes to them (a glyph mark is a dot there). */
+ * remove a memo; strokes carrying `note`, `mark`, `role`, `measures` or `group` are ordinary strokes to them (a glyph mark is a dot there). */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipScoreInk=api;})(typeof window==='object'?window:globalThis,function(){
 'use strict';
 const COLLECTION='scoreAnnotations',PREFIX='vzip_score_ink_v1:',MAX_BYTES=2*1024*1024,MAX_POINTS=2048;
@@ -42,6 +49,13 @@ const MARK_ROLES=['start','repeat','cut'],MARK_BUILTIN_ROLES={breath:'',repeat:'
 const validRole=r=>typeof r==='string'&&/^[a-z][a-z0-9-]{0,23}$/.test(r);
 /** What a placed mark does: 'start' | 'repeat' | 'cut', or '' for a drawing (no `mark`, 숨표, a plain user mark). */
 const markRole=s=>typeof s?.mark!=='string'?'':Object.prototype.hasOwnProperty.call(MARK_BUILTIN_ROLES,s.mark)?MARK_BUILTIN_ROLES[s.mark]:MARK_ROLES.includes(s.role)?s.role:'';
+/* 마디 선택: the measure boxes a mark was placed on, and the pieces of one mark. */
+const MEASURES_MAX=100000;
+const validMeasures=m=>Array.isArray(m)&&m.length===3&&m.every(Number.isInteger)&&m[0]>=0&&m[0]<=m[1]&&m[1]<=MEASURES_MAX&&m[2]>=1&&m[2]<=MEASURES_MAX;
+/** The other records of the mark `s` is a piece of (same page, same link key), s included; [s] when it stands alone. */
+const grouped=(rows,s)=>s?.group===undefined?[s]:[s,...rows.filter(r=>r.id!==s.id&&r.page===s.page&&r.group===s.group&&!isNote(r))];
+/** A copy that no longer claims measures: what a mark becomes once it is moved or resized by hand. */
+const freehand=({measures,group,...s})=>s;
 const glyphChars=t=>typeof t==='string'?[...t]:[];
 const validGlyph=s=>{const n=glyphChars(s.glyph).length;return n>=1&&n<=GLYPH_CHARS&&!/\s/.test(s.glyph)&&Number.isFinite(s.size)&&s.size>=GLYPH_MIN&&s.size<=GLYPH_MAX&&s.points?.length===1;};
 /** Half the room a stroke takes around its points, across and down, of page width. */
@@ -63,9 +77,9 @@ function valid(s){
   ['pen','highlighter'].includes(s.tool)&&Number.isFinite(s.width)&&s.width>=0.001&&s.width<=0.06&&
   (s.opacity===undefined||Number.isFinite(s.opacity)&&s.opacity>=0.05&&s.opacity<=1)&&
   Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit))&&
-  (s.mark===undefined||validId(s.mark))&&(s.role===undefined||validRole(s.role))&&(s.glyph===undefined?s.size===undefined:validGlyph(s)));
+  (s.mark===undefined||validId(s.mark))&&(s.role===undefined||validRole(s.role))&&(s.measures===undefined||validMeasures(s.measures))&&(s.group===undefined||validId(s.group))&&(s.glyph===undefined?s.size===undefined:validGlyph(s)));
 }
-const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text','mark','glyph','size','role'];
+const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text','mark','glyph','size','role','measures','group'];
 const same=(a,b)=>JSON.stringify(FIELDS.map(k=>a[k]))===JSON.stringify(FIELDS.map(k=>b[k]));
 const opacity=s=>isNote(s)?1:s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
 const round=n=>Math.round(n*100000)/100000;
@@ -297,6 +311,6 @@ function create({storage,identity,getData,change}){
  return {restore,list,commit,removeScore,gone,key};
 }
 return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
- markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
+ markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,validMeasures,grouped,freehand,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
  isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
 });
