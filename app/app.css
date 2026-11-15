@@ -710,3 +710,4 @@ body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a:focus-visible{
 .ana-cmp thead th{font-size:12px;color:#667085;font-weight:600}
 .ana-cmp tbody th{font-weight:500;color:#475467}
 .ana-cmp-held{color:#b54708;font-weight:600}
+.rep-score-key{margin:0 0 12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;display:grid;gap:6px}.rep-score-key p{margin:0}
