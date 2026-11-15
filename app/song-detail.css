@@ -132,3 +132,9 @@ body[data-vz-route="song"] .vz-media-selection [data-lab-link]:focus-visible{out
 .vz-mr-key-msg{margin:4px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-ink-muted)}
 .vz-mr-key-msg:empty{display:none}
 .vz-mr-key-off{margin:4px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-ink-muted)}
+/* 악보 list: the conversion state tints the 음표 변환 tool; on a 320px phone the three tools go under the title instead of squeezing it. */
+body[data-vz-route="song"] .score-row [data-omr="done"]{color:var(--vz-color-accent)}
+body[data-vz-route="song"] .score-row [data-omr="failed"]{color:var(--vz-color-danger,#C93A3A)}
+@media(max-width:359px){body[data-vz-route="song"] .score-row{flex-wrap:wrap}body[data-vz-route="song"] .score-row [data-score-open]{flex-basis:100%}body[data-vz-route="song"] .score-row .score-actions{margin-left:auto}}
+.vz-ar-item>a{padding-left:4px}
+

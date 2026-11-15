@@ -69,7 +69,8 @@ test('Score row offers 음표로 변환; nothing is requested until the owner as
   const sheet = page.getByRole('dialog', {name:'음표로 변환'});
   await expect(sheet).toContainText('GitHub 실행 환경');
   expect(omr.posts).toEqual([]);
-  await sheet.getByRole('button', {name:'변환 요청'}).click();
+  await expect(sheet).toContainText('서버가 차례로 자동 변환하니 기다려도 되고');
+  await sheet.getByRole('button', {name:'지금 변환하기'}).click();
   await expect(sheet).toContainText('변환 차례를 기다리는 중이에요');
   expect(omr.posts).toEqual([{key:PDF}]);
   omr.job = {...omr.job, status:'done', resultKey:MXL, resultSize:500, movements:1};

@@ -170,6 +170,30 @@ VZ.clearGoodnotesScores = async ({onProgress = () => {}} = {}) => {
   return result;
 };
 
+/* 음표 변환 state on each score row: asked from the conversion server once per score and kept for a minute, so drawing
+ * the list again (tab change, upload) does not ask again. A row without an answer simply shows no state. */
+const OMR_STATE = {none:'변환 전', queued:'변환 대기', running:'변환 중', failed:'변환 실패', done:'음표 변환됨'};
+const omrSeen = new Map();
+const omrStateOf = job => !job ? 'none' : ['queued', 'running', 'failed'].includes(job.status) ? job.status : 'done';
+function paintOmr(row, state) {
+  const label = row.querySelector('[data-omr-state]'), button = row.querySelector('[data-omr]');
+  if (label) label.textContent = OMR_STATE[state] + ' · ';
+  if (button) { button.dataset.omr = state; button.querySelector('i').className = 'ph ph-' + ({queued:'hourglass-medium', running:'hourglass-medium', failed:'warning'}[state] || 'music-notes'); button.setAttribute('aria-label', button.dataset.title + ' 음표로 변환 (' + OMR_STATE[state] + ')'); }
+}
+async function omrStates(host, list) {
+  if (!window.VzipR2?.enabled?.() || !window.VzipR2.omr) return;
+  for (const score of list.slice(0, 12)) {
+    if (!host.isConnected) return;
+    if (!/\/original\.pdf$/.test(score.r2Key || '')) continue;
+    let seen = omrSeen.get(score.id);
+    if (!seen || Date.now() - seen.at > 60000) {
+      try { seen = {at:Date.now(), state:omrStateOf(await window.VzipR2.omr.status(score.id))}; omrSeen.set(score.id, seen); }
+      catch { continue; }
+    }
+    const row = [...host.querySelectorAll('[data-score]')].find(r => r.dataset.score === score.id);
+    if (row) paintOmr(row, seen.state);
+  }
+}
 /** The complete PDF row opens the integrated viewer; secondary actions remain independent. */
 VZ.renderScores = (host, song) => {
  const draw=()=>{
@@ -187,10 +211,12 @@ VZ.renderScores = (host, song) => {
   host.querySelectorAll('[data-score]').forEach(row=>{
    const score=list.find(s=>s.id===row.dataset.score);
    row.onclick=event=>{if(!event.target.closest('[data-edit],[data-del],[data-omr]'))VZ.openScoreInk(song.id,score.id);};
-   row.querySelector('[data-omr]')?.addEventListener('click',event=>{event.stopPropagation();VZ.scoreOmrSheet(song,score);});
+   // The state is asked again after the conversion sheet was open (a conversion may have been requested there).
+   row.querySelector('[data-omr]')?.addEventListener('click',event=>{event.stopPropagation();omrSeen.delete(score.id);VZ.scoreOmrSheet(song,score);});
    row.querySelector('[data-edit]').onclick=event=>{event.stopPropagation();editSheet(song,score,draw);};
    row.querySelector('[data-del]').onclick=event=>{event.stopPropagation();remove(song,score,draw);};
   });
+  omrStates(host,list);
  };
  draw();
 };

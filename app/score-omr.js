@@ -136,8 +136,10 @@ VZ.scoreOmrSheet = (song, score) => {
         if (!job || job.status === 'failed') {
           body.innerHTML = (job ? '<p class="omr-note omr-error" role="alert">' + esc(FAIL[job.error] || FAIL.engine) + '</p>' : '') +
             '<p class="omr-note">PDF의 음표를 읽어 MusicXML(다른 악보 앱에서 열 수 있는 형식)로 바꿔요. 인쇄된 악보에서 가장 잘 되고, 자동 인식이라 틀린 음표가 있을 수 있어요.</p>' +
-            '<p class="omr-note small">올린 악보는 서버에서 차례로 자동 변환돼요(이미 올린 악보 포함). 변환하면 이 PDF를 VOCAL.zip 변환 서버(GitHub 실행 환경)에서 처리해요. 끝나면 서버에서 지우고, 결과는 원본 옆에 저장해요. 원본 PDF는 바뀌지 않아요.</p>' +
-            '<button type="button" class="btn block" data-omr-start><i class="ph ph-music-notes" aria-hidden="true"></i>' + (job ? '다시 변환하기' : '변환 요청') + '</button>';
+            // One story for both cases: scores are converted automatically in turn; the button only skips the wait (or retries a failure).
+            '<p class="omr-note small">' + (job ? '실패한 악보는 자동으로 다시 변환하지 않아요. 아래 버튼으로 다시 시도할 수 있어요.' : '아직 변환 전이에요. 올린 악보는 서버가 차례로 자동 변환하니 기다려도 되고, 아래 버튼으로 지금 시작할 수도 있어요.') +
+            ' 변환할 때 이 PDF를 VOCAL.zip 변환 서버(GitHub 실행 환경)에서 처리해요. 끝나면 서버에서 지우고, 결과는 원본 옆에 저장해요. 원본 PDF는 바뀌지 않아요.</p>' +
+            '<button type="button" class="btn block" data-omr-start><i class="ph ph-music-notes" aria-hidden="true"></i>' + (job ? '다시 변환하기' : '지금 변환하기') + '</button>';
           body.querySelector('[data-omr-start]').onclick = start;
           return;
         }
@@ -169,7 +171,7 @@ VZ.scoreOmrSheet = (song, score) => {
       };
       const start = async () => {
         const button = body.querySelector('[data-omr-start]'); if (button) { button.disabled = true; button.textContent = '요청하는 중…'; }
-        try { await window.VzipR2.omr.request(score.r2Key); VZ.toast('변환을 요청했어요. 끝나면 여기서 볼 수 있어요.'); }
+        try { await window.VzipR2.omr.request(score.r2Key); VZ.toast('변환을 시작했어요. 끝나면 여기서 볼 수 있어요.'); }
         catch (e) { VZ.toast(e.status === 429 ? '변환을 기다리는 악보가 많아요. 하나가 끝난 뒤 다시 요청해 주세요.' : '요청하지 못했어요: ' + e.message, 'error'); }
         draw();
       };
