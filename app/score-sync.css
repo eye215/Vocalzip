@@ -17,6 +17,18 @@
 .score-audio-loop-tools button{min-height:44px;padding:0 12px;border:1px solid rgba(255,255,255,.3);border-radius:99px;background:transparent;color:#fff;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
 .score-audio-loop-tools button[aria-pressed=true]{background:#ede1ff;border-color:#ede1ff;color:#6528ca}
 .score-audio-loop-tools small{font-size:12px;opacity:.8;font-variant-numeric:tabular-nums}
+/* Thin strip (2026-11-15): one row under the score that looks 34px tall; its controls stay 44px boxes
+ * (transparent border above and below, as in the bar). */
+.score-audio-loop{flex:1;min-width:0;flex-direction:row;align-items:center;gap:4px;min-height:44px;padding:0 4px 0 10px;border:solid transparent;border-width:5px 0;background-clip:padding-box;border-radius:17px;box-shadow:none;box-sizing:border-box}
+.score-audio-loop-head{display:contents}
+.score-audio-loop-label{font-size:12.5px;line-height:18px}
+.score-audio-loop .score-audio-time{font-size:12px}
+.score-audio-loop-tools{order:2;flex:0 1 auto;min-width:0;flex-wrap:nowrap;gap:4px;padding:0}
+.score-audio-loop-tools button,.score-audio-loop-stop{min-height:44px;margin:-5px 0;padding:0 8px;border:solid transparent;border-width:9px 0;background-clip:padding-box;font-size:12px;box-sizing:border-box}
+.score-audio-loop-tools button{box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+.score-audio-loop-tools button[aria-pressed=true]{border-color:transparent;background-clip:padding-box;box-shadow:none}
+.score-audio-loop-stop{order:3;min-width:34px;justify-content:center}
+@media(max-width:380px){.score-audio-loop{gap:3px;padding-left:8px}.score-audio-loop .score-audio-time{display:none}.score-audio-loop-tools button{padding:0 6px}}
 
 /* 표시한 마디: ▶ per row, or one line that leads to 맞추기. */
 .score-sync-need{display:flex;align-items:center;gap:8px;margin:0;padding:8px 8px 8px 14px;border-radius:16px;background:#fff;color:#475467;font-size:13px;line-height:18px}

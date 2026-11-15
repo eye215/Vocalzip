@@ -125,10 +125,10 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       // Cut stretches a round of this loop meets are jumped over (a loop inside a cut plays it): named for the sync, which says so.
       html = '<div class="score-audio-loop" role="group" aria-label="마디 반복 재생" data-score-audio-loop-cuts="' + esc(inLoop().map(k => k.label).join(', ')) + '"><div class="score-audio-loop-head"><span class="score-audio-dot is-play" aria-hidden="true"></span>' +
         '<strong class="score-audio-loop-label" data-score-audio-loop-label>' + esc(L.label) + ' 반복 중</strong><span class="score-audio-time" role="timer" data-score-audio-time>' + VZ.clock(seconds()) + '</span>' +
-        '<button type="button" class="score-audio-loop-stop" data-score-audio-stop aria-label="반복 멈춤"><i class="ph-fill ph-stop" aria-hidden="true"></i><span>멈춤</span></button></div>' +
-        '<div class="score-audio-loop-tools"><button type="button" data-score-audio-loop-rate aria-pressed="' + s.slow + '" aria-label="느리게 듣기 0.75배">속도 ' + (s.slow ? SLOW + '×' : '1×') + '</button>' +
-        '<button type="button" data-score-audio-loop-lead aria-pressed="' + s.lead + '">앞 마디 포함</button>' +
-        (L.next ? '<button type="button" data-score-audio-loop-next aria-label="이 마디가 다음에 나오는 곳">다음 등장 <small>' + (L.occurrence + 1) + '/' + L.occurrences + '</small></button>' : '') + '</div></div>';
+        '<button type="button" class="score-audio-loop-stop" data-score-audio-stop aria-label="반복 멈춤"><i class="ph-fill ph-stop" aria-hidden="true"></i></button></div>' +
+        '<div class="score-audio-loop-tools"><button type="button" data-score-audio-loop-rate aria-pressed="' + s.slow + '" aria-label="느리게 듣기 0.75배">' + (s.slow ? SLOW + '×' : '1×') + '</button>' +
+        '<button type="button" data-score-audio-loop-lead aria-pressed="' + s.lead + '" aria-label="앞 마디 포함">앞마디</button>' +
+        (L.next ? '<button type="button" data-score-audio-loop-next aria-label="이 마디가 다음에 나오는 곳">다음 <small>' + (L.occurrence + 1) + '/' + L.occurrences + '</small></button>' : '') + '</div></div>';
     } else if (live) {
       html = '<div class="score-audio-chip" role="group" aria-label="' + (s.mode === 'mr' ? 'MR 재생 중' : '녹음 중') + '">' +
         '<span class="score-audio-dot' + (s.mode === 'mr' ? ' is-play' : '') + '" aria-hidden="true"></span>' +
@@ -161,12 +161,8 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     watch();
     for (const fn of changes) try { fn(s.mode); } catch {}
   }
-  /** The live chip floats over the bottom-left of the score (above the page row) so the score takes the bar's room. */
-  function place() {
-    const editor = bar.parentElement, rect = editor?.getBoundingClientRect(), stage = anchor.getBoundingClientRect();
-    if (!rect) return;
-    bar.style.bottom = Math.max(8, rect.bottom - stage.bottom + 10) + 'px';
-  }
+  /** While something runs the bar is one thin strip under the score: it never lies over the page. */
+  function place() { bar.style.removeProperty('bottom'); }
   function wire(t) {
     const on = (name, fn) => { const b = bar.querySelector('[data-score-audio-' + name + ']'); if (b) b.onclick = () => Promise.resolve().then(fn).catch(fail); };
     bar.querySelector('[data-score-audio-track]')?.addEventListener('change', e => { s.trackId = e.target.value; s.mr?.destroy?.(); s.mr = null; s.mrFor = ''; bar.querySelector('[data-score-audio-frame]')?.remove(); paint(); });

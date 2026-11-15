@@ -67,7 +67,7 @@ test('one row under the score: 재생, 녹음 and 재생+녹음, each a 44px tap
   const bar = await open(page, {tracks:[FILE]});
   expect(await page.evaluate(() => document.getElementById('stage').nextElementSibling?.hasAttribute('data-score-audio'))).toBe(true);
   await expect(bar.getByRole('button')).toHaveText(['재생', '녹음', '재생+녹음']);
-  expect((await bar.boundingBox()).height).toBeLessThanOrEqual(60);
+  expect((await bar.boundingBox()).height).toBeLessThanOrEqual(46);   // a thin band: the score keeps its room
   for (const b of await bar.getByRole('button').all()) expect(Math.round((await b.boundingBox()).height)).toBeGreaterThanOrEqual(44);
 });
 
@@ -77,9 +77,12 @@ test('재생 shrinks to a floating chip with the time; ⏸ brings the bar back a
   await button(bar, '재생').click();
   await expect(bar).toHaveClass(/is-live/);
   await expect(bar.getByRole('timer')).toBeVisible();
-  await expect(bar).toHaveCSS('position', 'absolute');
-  // The score takes the bar's room while the chip floats over it.
-  expect((await page.locator('#stage').boundingBox()).height).toBeGreaterThan(before.height + 30);
+  // One thin strip under the score: it never lies over the page, and its controls are still 44px boxes.
+  const live = await bar.boundingBox(), stage = await page.locator('#stage').boundingBox();
+  expect(live.height).toBeLessThanOrEqual(46);
+  expect(live.y).toBeGreaterThanOrEqual(stage.y + stage.height - .5);
+  expect(stage.height).toBeGreaterThanOrEqual(before.height - .5);
+  for (const b of await bar.getByRole('button').all()) expect(Math.round((await b.boundingBox()).height)).toBeGreaterThanOrEqual(44);
   expect(await log(page)).toContain('play:mr-file');
   await button(bar, '일시정지').click();
   await expect(button(bar, '계속')).toBeVisible();
