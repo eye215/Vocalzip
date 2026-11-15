@@ -132,7 +132,8 @@ const weekRow = page => page.locator('.vz-summary-row[data-row=week]');
 // Checking a goal on home opens the 시간·녹음 sheet at once; afterwards a small popup shows today's result.
 const timeSheet = page => page.getByRole('dialog',{name:'연습 시간·녹음',exact:true});
 const resultPopup = page => page.locator('.sheet.vz-today-popup');
-const closePopup = async page => {await resultPopup(page).getByRole('button',{name:'확인',exact:true}).click();await expect(resultPopup(page)).toHaveCount(0);};
+// 계속 comes in after the ring's motion (about a second); the click waits for it.
+const closePopup = async page => {await resultPopup(page).getByRole('button',{name:'계속',exact:true}).click();await expect(resultPopup(page)).toHaveCount(0);};
 const skipTime = async page => {await timeSheet(page).getByRole('button',{name:'건너뛰기',exact:true}).click();await closePopup(page);};
 // Text that only exists in the approved HTML mock; real records must never bring it back.
 const SAMPLE_TEXT = ['레미제라블','위키드','Defying Gravity','11월 10일','2절 고음 연습','가사 암기','6일 연속','최근 연습곡','계속 연습하기','레슨노트','연습기록'];
@@ -599,13 +600,20 @@ test('checking a goal asks for the time at once: chip, 저장, then the row, tod
  await expect(sheet.getByRole('button',{name:'10분',exact:true})).toHaveAttribute('aria-pressed','true');
  expect((await db(page)).practices).toEqual(before.practices); // choosing alone records nothing
  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
- // Result popup: today against the target, the thin bar and what was just added.
+ // Result popup: today against the target (ring, numbers, spoken summary) and what was just added.
  const popup=resultPopup(page);await expect(popup).toBeVisible();
  await expect(popup.locator('.sheet-head h2')).toHaveText('완료했어요');
  await expect(popup.locator('[data-today-text]')).toHaveText('오늘 22분 / 목표 30분 · 73%');
  await expect(popup.getByRole('progressbar')).toHaveAttribute('aria-valuenow','73');
  await expect(popup.locator('[data-today-added]')).toHaveText('이번 기록 +10분');
  expect(await page.evaluate(()=>VZ.todayPracticeText(VZ.todayPractice()))).toBe('오늘 22분 / 목표 30분 · 73%');
+ // The ring ends on the same numbers; the moment has its own words and the seven-day bars end on today.
+ await expect(popup.locator('[data-today-summary]')).toHaveText('오늘 22분, 목표 30분의 73%');
+ await expect(popup.locator('.vz-today-result')).toHaveAttribute('data-phase','done');
+ await expect(popup.locator('[data-today-percent]')).toHaveText('73%');await expect(popup.locator('[data-today-total]')).toHaveText('22분');
+ await expect(popup.locator('[data-today-headline]')).toHaveText('잘 쌓이고 있어요');await expect(popup.locator('[data-today-hint]')).toHaveText('목표까지 8분 남았어요');
+ await expect(popup.locator('.vz-tp-day')).toHaveCount(7);await expect(popup.locator('.vz-tp-day[data-today]')).toHaveAttribute('data-minutes','22');
+ await expect(popup.locator('[data-today-streak]')).toHaveCount(0);
  await closePopup(page);
  await expect.poll(()=>focusedGoal(page)).toBe('후렴 연결 연습하기'); // focus is back on the goal list
  // Home is already up to date: the row, today, this week and its percentage.
@@ -628,6 +636,7 @@ test('checking a goal asks for the time at once: chip, 저장, then the row, tod
  await sheet.getByRole('button',{name:'15분',exact:true}).click();await sheet.getByRole('button',{name:'저장',exact:true}).click();
  await expect(popup.locator('.sheet-head h2')).toHaveText('저장했어요');
  await expect(popup.locator('[data-today-text]')).toHaveText('오늘 27분 / 목표 30분 · 90%');await expect(popup.locator('[data-today-added]')).toHaveText('이번 기록 +5분');
+ await expect(popup.locator('[data-today-headline]')).toHaveText('거의 다 왔어요');
  await closePopup(page);
  await expect(row.locator('.vz-goal-record')).toHaveText('15분');await expect(week.locator('.vz-summary-copy')).toHaveText('오늘 27분 / 30분 · 이번 주 27분 / 목표 3시간');
  value=await db(page);
@@ -641,9 +650,10 @@ test('checking a goal asks for the time at once: chip, 저장, then the row, tod
  await expect(popup.locator('[data-today-added]')).toHaveCount(0);await closePopup(page);
  await expect(row.locator('.vz-goal-record')).toHaveText('15분');
  expect((await db(page)).practices.filter(p=>p.goalId==='g3').map(p=>p.manualMinutes)).toEqual([15]);
- // Reaching the day target changes the popup title.
+ // Reaching the day target is its own moment: the words change and it is celebrated once.
  await row.locator('.vz-goal-record').click();await sheet.getByRole('button',{name:'20분',exact:true}).click();await sheet.getByRole('button',{name:'저장',exact:true}).click();
- await expect(popup.locator('.sheet-head h2')).toHaveText('오늘 목표를 채웠어요');await expect(popup.locator('[data-today-text]')).toHaveText('오늘 32분 / 목표 30분 · 107%');
+ await expect(popup.locator('.sheet-head h2')).toHaveText('저장했어요');await expect(popup.locator('[data-today-headline]')).toHaveText('오늘 목표를 채웠어요');await expect(popup.locator('[data-today-text]')).toHaveText('오늘 32분 / 목표 30분 · 107%');
+ await expect(popup.locator('.vz-today-result')).toHaveAttribute('data-state','goal');await expect(popup.locator('.vz-today-result')).toHaveAttribute('data-celebrated','1');await expect(popup.locator('[data-today-percent]')).toHaveText('107%');
  await expect(popup.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');await closePopup(page);
  await noOverflow(page);
 });
@@ -655,8 +665,9 @@ test('건너뛰기 or closing keeps the check without time; the result popup sti
  await timeSheet(page).getByRole('button',{name:'건너뛰기',exact:true}).click();
  await expect(popup.locator('.sheet-head h2')).toHaveText('완료했어요');
  await expect(popup.locator('[data-today-text]')).toHaveText('오늘 12분 / 목표 30분 · 40%');await expect(popup.locator('[data-today-added]')).toHaveCount(0);
- // No tap: it goes away by itself after about four seconds and the focus returns to the goal.
- await expect(popup).toHaveCount(0,{timeout:7000});
+ // No tap: it goes away by itself after about six seconds and the focus returns to the goal.
+ await expect(popup.locator('[data-today-headline]')).toHaveText('잘 쌓이고 있어요');await expect(popup.locator('[data-today-plus]')).toHaveCount(0);
+ await expect(popup).toHaveCount(0,{timeout:9000});
  await expect.poll(()=>focusedGoal(page)).toBe('호흡을 길게 유지하기');
  let value=await db(page);
  expect(value.dailyGoals.find(g=>g.id==='g1').completed).toBe(true);expect(value.dailyGoals.find(g=>g.id==='g1').performance).toBeUndefined();
