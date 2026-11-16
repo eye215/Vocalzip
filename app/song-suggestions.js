@@ -214,16 +214,15 @@ function eligible(item){return M.songSearchEligible(item)&&!item.songId&&!item.s
 function kindHint(item){
  return window.VzipRecordingKind?.guess(item,{lessons:VZ.db?.lessons||[],dateOf:M.dateOf,transcript:resultFor(item)?.transcript||'',current:M.recordingCategory(item)})||null;
 }
-const KIND_LABEL={lesson:'레슨 녹음',training:'트레이닝'};
+/* Accepting the suggestion is the same as choosing that 녹음 유형 in 정보 수정 or the ⋯ menu (app/recording-kind-menu.js):
+ * the type and the lesson label kept for the calendar are saved together, and 레슨 녹음 asks whether to link the file to
+ * that day's lesson. A suggestion never links anything by itself. */
 async function applyKind(main,item,kind){
- try{
-  await M.update(item,{recordingCategory:kind},{quiet:true});
-  item.recordingCategory=kind;
-  if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
-  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 전체 녹음에서 다시 바꿀 수 있어요.');
-  window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:{recordingCategory:kind}}}));
- }catch(error){VZ.toast('옮기지 못했어요: '+String(error.message||error),'error')}
+ await VZ.recordingType.set([item],kind,{link:false});
+ const moved=M.recordingCategory(item)===kind;
+ if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
  if(main.isConnected)draw(main);
+ if(moved&&kind==='lesson')await VZ.recordingType.offerLessonLink([item]);
 }
 function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);saveCheckpoint();}
 /** Where the singing is: the on-device vocal analysis (app/analysis.js) follows the voice over the
@@ -413,8 +412,9 @@ function draw(main){
   card.innerHTML='<div class="vz-sc-record-main"><div class="vz-sc-record-head"><label class="vz-sc-record-check"><input type="checkbox" aria-label="'+esc(name)+' 선택"'+(state.chosen.has(item.id)?' checked':'')+'><span class="vz-sc-checkbox" aria-hidden="true"></span></label><div class="vz-sc-record-name"><strong title="'+esc(name)+'">'+esc(name)+'</strong><small>'+esc(date)+' · '+esc(duration)+' · 음성</small></div><button type="button" class="vz-sc-menu" aria-label="'+esc(name)+' 더 보기"><i class="ph ph-dots-three-vertical"></i></button></div><div class="vz-sc-player-placeholder"><button type="button" class="vz-sc-play-trigger" aria-label="'+esc(name)+' 재생"><i class="ph-fill ph-play"></i></button><span class="vz-sc-track" aria-hidden="true"></span><span class="vz-sc-time">0:00 / '+esc(duration)+'</span></div><div class="vz-sc-player-host" hidden></div></div><button type="button" class="vz-sc-recommend'+(kind==='failed'||kind==='unknown'?' failed':'')+'" aria-label="'+esc(name)+' 곡 선택"><span class="tag">'+status+'</span><span class="divider"></span><span class="song">'+esc(title)+'</span><i class="ph ph-caret-right"></i></button>';
   const hint=kindHint(item);
   if(hint){const row=document.createElement('button');row.type='button';row.className='vz-sc-kind';row.dataset.kind=hint.kind;
-   row.setAttribute('aria-label',KIND_LABEL[hint.kind]+'로 옮기기: '+hint.why);
-   row.innerHTML='<span class="vz-sc-kind-text"><strong>'+KIND_LABEL[hint.kind]+' 같아요</strong><small>'+esc(hint.why)+'</small></span><span class="vz-sc-kind-go">'+(hint.kind==='lesson'?'레슨으로':'트레이닝으로')+' 옮기기</span>';
+   const typeName=M.recordingTypeName(hint.kind);
+   row.setAttribute('aria-label','녹음 유형을 '+typeName+'(으)로 바꾸기: '+hint.why);
+   row.innerHTML='<span class="vz-sc-kind-text"><strong>'+typeName+' 같아요</strong><small>'+esc(hint.why)+'</small></span><span class="vz-sc-kind-go">'+typeName+'으로 바꾸기</span>';
    row.onclick=()=>{if(!state.running)applyKind(main,item,hint.kind)};card.append(row)}
   card.querySelector('input').onchange=e=>{e.target.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   card.querySelector('.vz-sc-play-trigger').onclick=()=>{const host=card.querySelector('.vz-sc-player-host');try{const player=M.player(host,item,{prefetch:false,tools:false});inlinePlayers.set(item.id,player);card.querySelector('.vz-sc-player-placeholder').hidden=true;host.hidden=false;player.play()}catch(error){VZ.toast('재생할 수 없어요: '+String(error.message||error),'error')}};

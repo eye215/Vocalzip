@@ -64,8 +64,8 @@ const save = async (items, changesOf) => {
   M.invalidate?.();
   return {ok, failed};
 };
-/** Give these recordings a type. 레슨 녹음 then offers the lesson link. */
-VZ.setRecordingKind = T.set = async (items, kind) => {
+/** Give these recordings a type. 레슨 녹음 then offers the lesson link (link:false — the caller asks, after redrawing). */
+VZ.setRecordingKind = T.set = async (items, kind, {link = true} = {}) => {
   if (!ICONS[kind] || !items.length) return;
   const {ok, failed} = await save(items, m => {
     const changes = T.changes(m, kind);
@@ -73,7 +73,7 @@ VZ.setRecordingKind = T.set = async (items, kind) => {
     return !Object.keys(changes).length && kind === 'lesson' && m.occasion !== 'lesson' && m.occasion !== 'performance' ? {recordingCategory:kind, occasion:'lesson'} : changes;
   });
   VZ.toast('녹음 유형을 ' + name(kind) + '(으)로 바꿨어요: ' + ok + '개' + (failed ? ' · ' + failed + '개는 바꾸지 못했어요' : ''), failed ? 'error' : undefined);
-  if (kind === 'lesson') await T.offerLessonLink(items);
+  if (kind === 'lesson' && link) await T.offerLessonLink(items);
 };
 /** Put the 공연 tag on these recordings, or take it off. Their type stays. */
 T.setPerformance = async (items, on) => {
