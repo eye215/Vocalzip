@@ -54,8 +54,8 @@ async function analyze(){
  if(!V.precisionAnalyze){message='정밀 분석 모듈이 아직 연결되지 않았어요. 녹음은 보관돼 있어요.';paint();return;}
  busy=true;controller=new AbortController();t.state='analyzing';persist();paint();const atOwner=owner();
  try{const item=(await V.media.list()).find(m=>m.id===attempt.mediaId);if(!item)throw Error('saved media not available');
-  const result=await V.precisionAnalyze(item,{signal:controller.signal,context:{source:'clean',owner:atOwner,task:t.task,vowel:t.vowel,environment:t.environment,targetMidi:t.targetMidi,loudness:t.loudness}});
-  if(atOwner!==owner())return;S.result(session,t.id,result,result.metrics?.f0?.value!=null?'complete':'failed');persist();message=t.state==='complete'?'과제 분석을 보관했어요.':'신뢰할 수 있는 값이 부족해요. 이 과제만 다시 녹음할 수 있어요.';
+  const result=await V.precisionAnalyze(item,{signal:controller.signal,context:{source:'clean',owner:atOwner,task:t.task,vowel:t.vowel,environment:t.environment,targetMidi:t.targetMidi,loudness:t.loudness,measurementId:session.id,trial:t.id}});
+  if(atOwner!==owner())return;const summary={engineVersion:result.engineVersion,archiveId:result.archiveId,metrics:result.metrics,quality:result.quality};S.result(session,t.id,summary,result.metrics?.f0?.value!=null?'complete':'failed');persist();message=t.state==='complete'?'과제 분석을 보관했어요.':'신뢰할 수 있는 값이 부족해요. 이 과제만 다시 녹음할 수 있어요.';
  }catch(err){if(atOwner===owner()){t.state='failed';persist();message=err.name==='AbortError'?'분석을 멈췄어요. 보관된 녹음으로 다시 분석할 수 있어요.':'분석하지 못했어요. 녹음은 보관돼 있어요.';}}finally{busy=false;controller=null;paint();}
 }
 V.precisionMeasurement={summary:()=>{load();return session?S.summary(session):null;}};
