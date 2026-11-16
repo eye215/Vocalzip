@@ -558,18 +558,19 @@ test('마디 선택: 컷 takes the whole measure that is tapped, or every measur
  expect(await layer(dialog).locator('.score-measure-box').first().evaluate(n=>[getComputedStyle(n).strokeDasharray!=='none',getComputedStyle(n.ownerSVGElement).pointerEvents])).toEqual([true,'none']);
  await more(dialog);await expect(dialog.locator('[data-ink-measure-boxes]')).toHaveAttribute('aria-pressed','false');await dialog.locator('[data-ink-more]').click();
  expect(await page.evaluate(k=>localStorage.getItem(k),BOXES)).toBeNull();await expect(layer(dialog)).toBeVisible();
- // A tap well below the staff, near the right edge of measure 4: the mark is the whole measure, on the staff.
+ // A tap well below the staff, near the right edge of measure 4: the mark fills that measure's box — the staff with
+ // the little room the boxes have, barline to barline (the box is higher than a stroke may be wide: two rows, one stroke).
  await tap(page,dialog,262,128);
  let rows=await placed(page,1);
- expect(rows[0]).toMatchObject({mark:'cut',tool:'highlighter',measures:[3,3,12],group:'',role:'',page:1,valid:true,n:2});
- about(rows[0].x[0]-rows[0].width/2,X(210));about(rows[0].x[1]+rows[0].width/2,X(270));about(rows[0].y[0],Y(88),.006);about(rows[0].y[1],Y(88),.006);
- expect(rows[0].width).toBeGreaterThanOrEqual(.04);
+ expect(rows[0]).toMatchObject({mark:'cut',tool:'highlighter',measures:[3,3,12],group:'',role:'',page:1,valid:true,n:5});
+ about(rows[0].x[0]-rows[0].width/2,X(210));about(rows[0].x[1]+rows[0].width/2,X(270));about(inkTop(rows[0]),Y(80)-ROOM,.006);about(inkBottom(rows[0]),Y(96)+ROOM,.006);
+ expect(rows[0].width).toBeLessThanOrEqual(.06);
  // A drag from measure 6 to measure 7: one mark over both; while dragging it is shown as it will be.
  const release=await drag(page,dialog,[100,236],[200,170]);
  await expect(dialog.locator('path[data-stroke="mark-preview-0"]')).toHaveCount(1);expect((await marks(page)).length).toBe(1);
  await release();rows=await placed(page,2);
  expect(rows[1]).toMatchObject({mark:'cut',measures:[5,6,12],group:'',valid:true});
- about(rows[1].x[0]-rows[1].width/2,X(90));about(rows[1].x[1]+rows[1].width/2,X(210));about(rows[1].y[0],Y(208),.006);
+ about(rows[1].x[0]-rows[1].width/2,X(90));about(rows[1].x[1]+rows[1].width/2,X(210));about(inkTop(rows[1]),Y(200)-ROOM,.006);about(inkBottom(rows[1]),Y(216)+ROOM,.006);
  await expect(dialog.locator('path[data-stroke="mark-preview-0"]')).toHaveCount(0);
  // Dragged backwards (7 → 5) it is the same kind of mark.
  await (await drag(page,dialog,[160,200],[40,215]))();rows=await placed(page,3);expect(rows[2].measures).toEqual([4,6,12]);
@@ -596,8 +597,8 @@ test('마디 선택 across a line break: one mark drawn as one piece per line �
  let rows=await placed(page,2);
  expect(rows.map(r=>r.measures)).toEqual([[2,5,12],[2,5,12]]);expect(rows[0].group).not.toBe('');expect(rows[1].group).toBe(rows[0].group);expect(rows.every(r=>r.valid&&r.mark==='cut')).toBe(true);
  const [upper,lower]=rows[0].y[0]<rows[1].y[0]?rows:[rows[1],rows[0]];
- about(upper.x[0]-upper.width/2,X(150));about(upper.x[1]+upper.width/2,X(270));about(upper.y[0],Y(88),.006);   // measures 3–4 to the end of the line
- about(lower.x[0]-lower.width/2,X(30));about(lower.x[1]+lower.width/2,X(150));about(lower.y[0],Y(208),.006);   // measures 5–6 from its start
+ about(upper.x[0]-upper.width/2,X(150));about(upper.x[1]+upper.width/2,X(270));about(inkTop(upper),Y(80)-ROOM,.006);about(inkBottom(upper),Y(96)+ROOM,.006);   // measures 3–4 to the end of the line
+ about(lower.x[0]-lower.width/2,X(30));about(lower.x[1]+lower.width/2,X(150));about(inkTop(lower),Y(200)-ROOM,.006);about(inkBottom(lower),Y(216)+ROOM,.006);   // measures 5–6 from its start
  await expect(dialog.locator('[data-ink-svg] path[data-stroke]')).toHaveCount(2);
  // One row.
  await dialog.getByRole('button',{name:'이동',exact:true}).click();
