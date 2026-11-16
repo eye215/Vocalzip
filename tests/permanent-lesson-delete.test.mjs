@@ -1,13 +1,17 @@
 // Disposable PostgreSQL only. Never connects to an operating database or uses real accounts.
-import {test,before,after} from 'node:test';
+import {test as base,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import C from '../billing/core.js';
+import need from './helpers/prerequisites.cjs';
 const url=process.env.VZ_DELETE_TEST_DB;
-if(!url||!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Disposable local PostgreSQL is required');
-const db=new pg.Client({connectionString:url});await db.connect();
+// No database on this machine: every test is skipped with the reason (in CI that is an error). A URL that is set must still be local.
+const skip=need.nodeSkip(!!url,'needs a disposable local PostgreSQL: set VZ_DELETE_TEST_DB=postgres://…@localhost:5432/… (see .github/workflows/permanent-delete-db-check.yml).');
+if(!skip&&!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Disposable local PostgreSQL is required');
+const test=skip?name=>base(name,{skip},()=>{}):base;
+const db=skip?null:new pg.Client({connectionString:url});if(db)await db.connect();
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
 const json=x=>JSON.stringify(x),source='supabase/migrations/20261114_permanent_lesson_delete.sql';
 const payload=(id='lesson')=>({categories:[],songs:[{id:'keep-song'}],lessons:[{id,feedback:'erase private text',billingDeductionId:'billing-source',recordings:[]},{id:'keep',feedback:'keep feedback'}],
@@ -24,6 +28,7 @@ async function remove(id='lesson',at=null,operation=randomUUID(),link='billing-s
  return (await db.query('select public.vzip_delete_lesson($1,$2,$3,$4) result',[id,operation,version,link])).rows[0].result;
 }
 before(async()=>{
+ if(skip)return;
  await db.query(await readFile('billing/tests/sql-setup.sql','utf8'));
  await db.query(await readFile('supabase/tests/app-tables.sql','utf8'));
  await db.query(await readFile('billing/migrations/20261104_billing_cloud.sql','utf8'));
@@ -34,7 +39,7 @@ before(async()=>{
  begin if not public.vzip_session_read_allowed() then raise exception 'inactive session' using errcode='42501';end if;end;$$;`);
  const migration=await readFile(source,'utf8');await db.query(migration);await db.query(migration);
 });
-after(async()=>{await db.end();});
+after(async()=>{await db?.end();});
 test('migration is re-runnable and does not backfill or mutate existing user records',async()=>{
  await admin();assert.equal((await db.query('select count(*) n from public.vzip_permanent_delete_guards')).rows[0].n,'0');
  assert.equal((await row()).payload.songs[0].id,'s1');

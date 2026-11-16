@@ -1,5 +1,8 @@
 const {test,expect}=require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
+// Let context.route answer the worker's own requests too (Chromium), as tests/offline-shell.spec.cjs does. Without it
+// the worker's part requests leave the test and fail ("Failed to fetch") wherever the variable is not set outside.
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS='1';
 test.use({serviceWorkers:'allow'});
 function wav(){
  const samples=16000,b=Buffer.alloc(44+samples*2);b.write('RIFF');b.writeUInt32LE(b.length-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(8000,24);b.writeUInt32LE(16000,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(samples*2,40);return b;

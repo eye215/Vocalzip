@@ -2048,6 +2048,7 @@ test('A recording is marked 레슨 녹음 or 트레이닝 from its menu; 레슨 
 test('WAV imports are stored as FLAC only after every sample is checked against the original', async ({page, browserName}) => {
   test.setTimeout(120000);
   await boot(page, {media:false});
+  await require('./helpers/prerequisites.cjs').mediabunny(test, page); // no parser, no FLAC: skipped with the reason (an error in CI)
   // 26 s of 16-bit stereo with noise so FLAC has real work to do (imports leave out takes under 25 seconds).
   const sr = 44100, frames = sr * 26, ch = 2, b = Buffer.alloc(44 + frames * ch * 2); b.write('RIFF', 0); b.writeUInt32LE(36 + frames * ch * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(ch, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * ch * 2, 28); b.writeUInt16LE(ch * 2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(frames * ch * 2, 40);
   let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
