@@ -18,9 +18,11 @@ function mrSetup({fail=false,abortOnUrl,sampleLength=8000}={}) {
  const window={VZ:{media:{src:async()=>({url:'take'})},song:()=>({mrTracks:tracks})},VzipR2:{enabled:()=>true,url:async()=>{abortOnUrl?.();return 'mr';}}};
  class OfflineAudioContext {decodeAudioData(bytes,ok){counts.decode++;ok({length:sampleLength,sampleRate:8000,numberOfChannels:1,getChannelData:()=>new Float32Array(sampleLength)});}}
  window.OfflineAudioContext=OfflineAudioContext;
+ const fakeFetch=async url=>{if(url==='mr')counts.mrFetch++;return {ok:!(fail&&url==='mr'),status:fail?404:200,arrayBuffer:async()=>new ArrayBuffer(8)};};
+ const loader=require('../app/audio-file-loader.js');window.VzipAudioFile={...loader,read:options=>loader.read({...options,fetch:fakeFetch})};
  class Worker {postMessage(message,transfer){if(message.mrs){counts.transfers.push(message.mrs[0].samples.length);structuredClone(message,{transfer});}queueMicrotask(()=>this.onmessage({data:{result:{version:2,metrics:{voicedSeconds:0},confidence:{pitchConfidence:0}}}}));}terminate(){}}
  const source=fs.readFileSync('app/analysis.js','utf8').split('/* ---------- drawing ---------- */')[0]+'})();';
- vm.runInNewContext(source,{window,Worker,DOMException,Float32Array,fetch:async url=>{if(url==='mr')counts.mrFetch++;return {ok:!(fail&&url==='mr'),arrayBuffer:async()=>new ArrayBuffer(8)};}});
+ vm.runInNewContext(source,{window,Worker,DOMException,Float32Array});
  return {VZ:window.VZ,counts,tracks};
 }
 test('a batch downloads and decodes each MR once; worker transfer does not detach the cached samples',async()=>{

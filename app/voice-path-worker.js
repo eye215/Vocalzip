@@ -10,7 +10,7 @@
  * An MR file:
  *   {mono:{channels, rate}}             → {mono:Float32Array at 8 kHz} (transferred)
  * Any failure → {error}. Buffers are dropped as soon as the next step has what it needs. */
-importScripts('voice-path-model.js?v=2');
+importScripts('voice-path-model.js?v=4');
 const P = self.VzipVoicePath, SR = P.THRESHOLDS.SR, MR_RATE = 8000;
 let job = null;
 const mix = channels => {

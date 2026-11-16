@@ -4,7 +4,7 @@
  * The summary (no curve) is saved on the recording as `analysis` (changed field only). */
 (() => {
 'use strict';
-const VZ = window.VZ, M = VZ.media, esc = VZ.esc;
+const VZ = window.VZ, M = VZ.media, esc = VZ.esc, L = window.VzipAudioFile;
 const WORKER = 'app/vocal-analysis.js?v=8', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
@@ -13,12 +13,10 @@ let job = 0, stop = null; // stop: ends the screen's on-device analysis when the
 /** Mono samples of a recording, decoded by the browser. */
 async function decode(item, onStage, signal) {
   onStage('파일 불러오는 중…');
-  const src = await M.src(item);
-  let bytes;
-  try { const res = await fetch(src.url, signal ? {signal} : undefined); if (!res.ok) throw Error('파일을 받지 못했어요 (' + res.status + ').'); bytes = await res.arrayBuffer(); }
-  finally { if (src.revoke) URL.revokeObjectURL(src.url); }
+  const bytes = await L.read({source:L.recordingSource(M,item),signal,maxBytes:MAX_BYTES,
+    onRetry:() => onStage('파일 연결을 다시 시도하는 중…')});
   onStage('소리 꺼내는 중…');
-  return decodeBytes(bytes);
+  return L.task(() => decodeBytes(bytes),{signal,stage:'decode'});
 }
 async function decodeBytes(bytes) {
   if (bytes.byteLength > MAX_BYTES) throw Error('파일이 너무 커요. 250MB 이하 녹음만 분석할 수 있어요.');
@@ -80,12 +78,9 @@ async function withoutMr(samples, sampleRate, tracks, onStage, onProgress, signa
       const key = JSON.stringify([t.id,t.r2Key,t.size,t.created,t.updated,t.updatedAt,t.etag]);
       let d = mrCache?.get(key);
       if (!d) {
-        const url = await window.VzipR2.url(t.r2Key);
-        checkAbort(signal);
-        const res = await fetch(url, signal ? {signal} : undefined);
-        checkAbort(signal);
-        if (!res.ok) continue;
-        d = await decodeBytes(await res.arrayBuffer());
+        const bytes = await L.read({source:async ({signal,attempt}) => ({url:await window.VzipR2.url(t.r2Key,{signal,refresh:attempt>1})}),signal,maxBytes:MAX_BYTES,
+          onRetry:() => onStage('MR 연결을 다시 시도하는 중…')});
+        d = await L.task(() => decodeBytes(bytes),{signal,stage:'decode'});
         checkAbort(signal);
         if (mrCache && d.samples.byteLength <= MR_CACHE_BYTES) {
           let bytes = [...mrCache.values()].reduce((n,v) => n + v.samples.byteLength, 0);
