@@ -388,13 +388,13 @@ test('a take where the accompaniment is as loud as the voice is refused: no numb
 
 /* ---------- the song's own MR taken out ---------- */
 /** Two takes of a melody sung over the song's MR (8 kHz WAVs from tests/helpers/mr-synth.cjs), and the MR files. */
-async function bootMr(page) {
+async function bootMr(page, {third = false} = {}) {
   await boot(page, {takes:[]});
   await page.evaluate(MR_SYNTH);
-  await page.evaluate(async stored => {
+  await page.evaluate(async ([stored, third]) => {
     const Y = window.mrSynth, wav = x => window.vpTake.wav(x, Y.SR), MR = Y.mr(70), other = Y.mr(70, 99), voice = Y.vocal(40).x;
     window.__mr = {'mr/own':URL.createObjectURL(new Blob([wav(MR)], {type:'audio/wav'})), 'mr/other':URL.createObjectURL(new Blob([wav(other)], {type:'audio/wav'}))};
-    const takes = [['m-a', '작년 MR 녹음', '2025-08-14', 12.345, 6], ['m-b', '올해 MR 녹음', '2026-11-09', 3.2, 3]];
+    const takes = [['m-a', '작년 MR 녹음', '2025-08-14', 12.345, 6], ['m-b', '올해 MR 녹음', '2026-11-09', 3.2, 3], ...(third ? [['m-c', '이번 주 MR 녹음', '2026-11-12', 5.5, 3]] : [])];
     for (const [id, name, date, offset, db] of takes) await window.vzipStorePracticeMedia({id, name, created:new Date(date + 'T10:00:00').getTime(), type:'audio/wav', source:'practice', songId:'s1', song:'지금 이 순간',
       blob:new Blob([wav(Y.record(voice, MR, {offset, db}).x)], {type:'audio/wav'}), durationSeconds:40});
     window.dispatchEvent(new Event('vzip:media-updated'));
@@ -404,14 +404,23 @@ async function bootMr(page) {
     VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks = [{id:'t-own', kind:'file', title:'내 MR SECRETMR', fileName:'secret.wav', type:'audio/wav', r2Key:'mr/own', size:1111, created:1}]; }, {silent:true});
     // The song's MR files are read through the R2 helper, as the app's analysis does.
     window.VzipR2.enabled = () => true; window.VzipR2.url = async key => window.__mr[key];
-  }, stored({voiceOverMrDb:2, pitchConfidence:0.6}));
+  }, [stored({voiceOverMrDb:2, pitchConfidence:0.6}), third]);
 }
+/** The song gets a second MR file, of another arrangement (not in the takes), listed first. */
+const addOtherMr = page => page.evaluate(() => VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks.unshift({id:'t-other', kind:'file', title:'다른 편곡 MR', r2Key:'mr/other', size:3333, created:2}); }, {silent:true}));
+const mrChoices = page => page.evaluate(() => JSON.parse((window.VzipAccountScope?.storage || localStorage).getItem('vzip_voice_path_mr_v1') || 'null'));
 test('a song with an MR file: the MR is taken out of each take and all traces of the voice are shown', async ({page}) => {
   test.setTimeout(90000);
   await bootMr(page);
   await open(page);
-  await expect(page.locator('[data-vp-mr]')).toContainText('곡 MR 빼고 재기');
-  await expect(page.locator('[data-vp-mr-pick]')).toHaveValue('auto');
+  // Each take has its own choice (one MR file: 자동, that file, 빼지 않기); there is no shared one.
+  for (const role of ['a', 'b']) {
+    await expect(page.locator('[data-vp-slot="' + role + '"] [data-vp-mr="' + role + '"]')).toContainText('이 녹음에서 뺄 MR');
+    await expect(page.locator('[data-vp-mr-pick="' + role + '"]')).toHaveValue('auto');
+    await expect(page.locator('[data-vp-mr-pick="' + role + '"] option')).toHaveText(['자동 · 가장 많이 빠지는 MR', '내 MR SECRETMR', '빼지 않기']);
+  }
+  await expect(page.locator('[data-vp-mr-pick]')).toHaveCount(2);
+  await expect(page.locator('[data-vp-picker] > [data-vp-mr]')).toHaveCount(0);
   await measure(page);
   const stages = await page.evaluate(() => window.__stages);
   for (const name of ['곡 MR 불러오는 중', '곡 MR 빼는 중', '목소리 재는 중']) expect(stages.some(t => t.startsWith('a:' + name)), name + ' in ' + stages.join(' | ')).toBe(true);
@@ -432,6 +441,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   // The file: how each take was read, the removal's numbers — and no MR id, title or file name.
   const d = await page.evaluate(() => VZ.voicePathDiagnosis()), text = JSON.stringify(d);
   expect(d.takes.map(t => t.source)).toEqual(['mr-removed', 'mr-removed']);
+  expect(d.takes.map(t => t.mrMode)).toEqual(['auto', 'auto']);
   expect(d.takes[0].mrRemoval).toMatchObject({removedDb:expect.any(Number), offsetSeconds:expect.any(Number), speed:expect.any(Number)});
   expect(Math.abs(d.takes[0].mrRemoval.offsetSeconds - 12.345)).toBeLessThan(0.01);
   expect(d.takes[0].mrTries).toEqual([{ok:true, reason:null, removedDb:d.takes[0].mrRemoval.removedDb}]);
@@ -454,37 +464,100 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   expect(page.__errors).toEqual([]);
 });
 
-test('an MR that does not match is said so, and the take falls back to the gate; another MR can be chosen', async ({page}) => {
+test('each take has its own MR: changing 비교\'s MR measures only 비교 again; a take that does not match is said so', async ({page}) => {
   test.setTimeout(90000);
   await bootMr(page);
-  await page.evaluate(() => VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks.unshift({id:'t-other', kind:'file', title:'다른 편곡 MR', r2Key:'mr/other', size:3333, created:2}); }, {silent:true}));
+  await addOtherMr(page);
   await open(page);
-  // Two MR files: by default both are tried and the one that removes the most is used.
-  await expect(page.locator('[data-vp-mr-pick] option')).toHaveText(['자동 · 가장 많이 빠지는 MR', '다른 편곡 MR', '내 MR SECRETMR', 'MR을 빼지 않고 재기']);
+  // Two MR files: by default both are tried for each take and the one that removes the most is used.
+  for (const role of ['a', 'b']) await expect(page.locator('[data-vp-mr-pick="' + role + '"] option')).toHaveText(['자동 · 가장 많이 빠지는 MR', '다른 편곡 MR', '내 MR SECRETMR', '빼지 않기']);
+  await expect(page.locator('[data-vp-mr-help]')).toHaveCount(1);
   await measure(page);
-  await expect(page.locator('[data-vp-take="a"] [data-vp-mr-note]')).toContainText('곡 MR(내 MR SECRETMR)을');
-  // Only the MR that is not in the takes: it does not come out. The reason, the usual cause, and the gate (refused).
-  await page.locator('[data-vp-mr-pick]').selectOption('t-other');
-  await expect(page.locator('[data-vp-results]')).toHaveCount(0);                   // measured against other MR files: not shown
+  for (const role of ['a', 'b']) await expect(page.locator('[data-vp-take="' + role + '"] [data-vp-mr-note]')).toContainText('곡 MR(내 MR SECRETMR)을');
+  await expect(page.locator('[data-vp-take="a"] [data-vp-mr-note]')).toContainText('자동으로 가장 많이 빠지는 MR을 골랐어요.');   // 자동 names the one that won
+  await expect.poll(async () => (await kept(page)).length).toBe(2);
+  const atA = (await kept(page)).find(r => r.id === 'm-a').at;
+  // 비교 only: the MR that is not in it. 기준 keeps its result and is not read again.
+  await page.evaluate(() => { window.__decodes = 0; window.__stages = []; });
+  await page.locator('[data-vp-mr-pick="b"]').selectOption('t-other');
+  await expect(page.locator('[data-vp-mr-pick="a"]')).toHaveValue('auto');
+  await expect(page.locator('[data-vp-take="a"]')).toHaveAttribute('data-vp-source', 'mr-removed');
+  await expect(page.locator('[data-vp-take="b"] [data-vp-pending]')).toHaveText('아직 재지 않았어요.');
   await expect(page.locator('[data-vp-run]')).toHaveText('흔적 재기');
   await measure(page);
-  for (const role of ['a', 'b']) {
-    const take = page.locator('[data-vp-take="' + role + '"]');
-    await expect(take).toHaveAttribute('data-vp-source', 'mixed');
-    await expect(take.locator('[data-vp-mr-failed]')).toHaveText('곡 MR을 빼지 못했어요: MR과 맞지 않아요. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요. 녹음 파일을 그대로 읽었어요.');
-    await expect(take.locator('[data-vp-refused]')).toHaveText(REFUSED);
-  }
-  await expect(page.locator('[data-vp-row]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__decodes)).toBe(1);                       // 비교 only (the MR file was already read)
+  const stages = await page.evaluate(() => window.__stages);
+  expect(stages.some(t => t.startsWith('a:')), stages.join(' | ')).toBe(false);
+  expect(stages.some(t => t.startsWith('b:')), stages.join(' | ')).toBe(true);
+  expect((await kept(page)).find(r => r.id === 'm-a').at).toBe(atA);
+  await expect(page.locator('[data-vp-take="a"]')).toHaveAttribute('data-vp-source', 'mr-removed');
+  const take = page.locator('[data-vp-take="b"]');
+  await expect(take).toHaveAttribute('data-vp-source', 'mixed');
+  // The reason, the usual cause, and the gate (refused).
+  await expect(take.locator('[data-vp-mr-failed]')).toHaveText('곡 MR을 빼지 못했어요: MR과 맞지 않아요. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요. 녹음 파일을 그대로 읽었어요.');
+  await expect(take.locator('[data-vp-refused]')).toHaveText(REFUSED);
   expect(await page.locator('[data-vp]').innerText()).not.toMatch(DIRECTION);
-  const d = await page.evaluate(() => VZ.voicePathDiagnosis());
-  expect(d.takes[0]).toMatchObject({source:'mixed', measurable:false, mrRemoval:null});
-  expect(d.takes[0].mrTries).toEqual([{ok:false, reason:'no-match', removedDb:expect.anything()}]);
+  let d = await page.evaluate(() => VZ.voicePathDiagnosis()), text = JSON.stringify(d);
+  expect(d.takes.map(t => t.mrMode)).toEqual(['auto', 'chosen']);
+  expect(d.takes[1]).toMatchObject({source:'mixed', measurable:false, mrRemoval:null});
+  expect(d.takes[1].mrTries).toEqual([{ok:false, reason:'no-match', removedDb:expect.anything()}]);
   expect(d.comparison).toBeNull();
-  // Without any MR: the file as recorded, the same gate, no MR sentence.
-  await page.locator('[data-vp-mr-pick]').selectOption('none');
+  for (const hidden of ['t-other', 'mr/other', '다른 편곡', 't-own', 'SECRETMR']) expect(text).not.toContain(hidden);
+  // 빼지 않기 for 비교: the file as recorded, said so, the same gate; 기준 still not read again.
+  await page.locator('[data-vp-mr-pick="b"]').selectOption('none');
   await measure(page);
-  await expect(page.locator('[data-vp-mr-failed], [data-vp-mr-note]')).toHaveCount(0);
-  await expect(page.locator('[data-vp-refused]')).toHaveCount(2);
+  expect(await page.evaluate(() => window.__decodes)).toBe(2);
+  await expect(take.locator('[data-vp-mr-none]')).toHaveText('MR을 빼지 않고 쟀어요.');
+  await expect(take.locator('[data-vp-mr-failed], [data-vp-mr-note]')).toHaveCount(0);
+  await expect(take.locator('[data-vp-refused]')).toHaveCount(1);
+  await expect(page.locator('[data-vp-take="a"] [data-vp-mr-note]')).toHaveCount(1);
+  await expect(page.locator('[data-vp-take="a"] [data-vp-mr-none]')).toHaveCount(0);
+  d = await page.evaluate(() => VZ.voicePathDiagnosis());
+  expect(d.takes.map(t => t.mrMode)).toEqual(['auto', 'none']);
+  expect(d.takes[1].mrTries).toEqual([]);
+  expect(page.__errors).toEqual([]);
+});
+
+test('a take\'s MR is remembered on this device: after a reload, paired with another take, and back to 자동 when its file is gone', async ({page}) => {
+  await bootMr(page, {third:true});
+  await addOtherMr(page);
+  await open(page, '?a=m-a&b=m-b');
+  await page.locator('[data-vp-mr-pick="b"]').selectOption('t-other');
+  await page.locator('[data-vp-mr-pick="a"]').selectOption('none');
+  expect(await mrChoices(page)).toEqual({'m-b':'t-other', 'm-a':'none'});
+  expect(JSON.stringify(await data(page))).not.toContain('vzip_voice_path_mr');      // not in the synced records
+  // 자동 is no entry.
+  await page.locator('[data-vp-mr-pick="a"]').selectOption('auto');
+  expect(await mrChoices(page)).toEqual({'m-b':'t-other'});
+  await page.reload();
+  await expect(page.locator('[data-vp-picker]')).toBeVisible();
+  await page.evaluate(() => { window.VzipR2.enabled = () => true; window.VzipR2.url = async key => window.__mr[key]; VZ.render(); });
+  await expect(page.locator('[data-vp-mr-pick="b"]')).toHaveValue('t-other');
+  await expect(page.locator('[data-vp-mr-pick="a"]')).toHaveValue('auto');
+  // m-b as 기준 next to another take: it keeps its MR; the new 비교 has its own (자동).
+  await page.locator('[data-vp-pick="b"]').selectOption('m-c');
+  await page.locator('[data-vp-pick="a"]').selectOption('m-b');
+  await expect(page.locator('[data-vp-mr-pick="a"]')).toHaveValue('t-other');
+  await expect(page.locator('[data-vp-mr-pick="b"]')).toHaveValue('auto');
+  await expect(page.locator('[data-vp-mr-gone]')).toHaveCount(0);
+  // The chosen file is taken off the song: 자동 again, said once in that slot, and forgotten.
+  await page.evaluate(() => VZ.change(d => { const s = d.songs.find(x => x.id === 's1'); s.mrTracks = s.mrTracks.filter(t => t.id !== 't-other'); }, {silent:true}));
+  await open(page, '?a=m-b&b=m-c');
+  await expect(page.locator('[data-vp-pick="a"]')).toHaveValue('m-b');
+  await expect(page.locator('[data-vp-mr-pick="a"]')).toHaveValue('auto');
+  await expect(page.locator('[data-vp-mr-pick="a"] option')).toHaveText(['자동 · 가장 많이 빠지는 MR', '내 MR SECRETMR', '빼지 않기']);
+  await expect(page.locator('[data-vp-slot="a"] [data-vp-mr-gone]')).toHaveText('이 녹음에 골라 둔 MR 파일이 곡에 없어서 자동으로 바꿨어요.');
+  await expect(page.locator('[data-vp-slot="b"] [data-vp-mr-gone]')).toHaveCount(0);
+  expect(await mrChoices(page)).toEqual({});
+  await page.reload();
+  await expect(page.locator('[data-vp-picker]')).toBeVisible();
+  await page.evaluate(() => { window.VzipR2.enabled = () => true; window.VzipR2.url = async key => window.__mr[key]; VZ.render(); });
+  await expect(page.locator('[data-vp-mr-pick="a"]')).toHaveCount(1);
+  await expect(page.locator('[data-vp-mr-gone]')).toHaveCount(0);
+  // A song without MR files: no choice at all, the explanation as before.
+  await page.evaluate(() => { VZ.change(d => { delete d.songs.find(x => x.id === 's1').mrTracks; }, {silent:true}); VZ.render(); });
+  await expect(page.locator('[data-vp-picker]')).toBeVisible();
+  await expect(page.locator('[data-vp-mr-pick], [data-vp-mr], [data-vp-mr-help]')).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
 
@@ -563,6 +636,36 @@ test('320px: nothing runs off the screen and every control is at least 44px', as
     }
   }
   expect(page.__errors).toEqual([]);
+});
+
+test('320px with MR files: both takes\' MR selects fit and are at least 44px', async ({page}) => {
+  await page.setViewportSize({width:320, height:700});
+  await bootMr(page);
+  await page.evaluate(() => VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks.unshift({id:'t-long', kind:'file', title:'아주 긴 이름의 다른 편곡 MR 파일 (반키 낮춤, 템포 느리게, 코러스 없는 버전)', r2Key:'mr/other', size:3333, created:2}); }, {silent:true}));
+  await open(page);
+  await page.locator('[data-vp-mr-pick="b"]').selectOption('t-long');
+  await expect(page.locator('[data-vp-mr-pick]')).toHaveCount(2);
+  await noOverflow(page);
+  for (const box of await page.locator('[data-vp-mr-pick]').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return {w:r.width, h:r.height, right:r.right}; }))) {
+    expect(box.h).toBeGreaterThanOrEqual(44); expect(box.w).toBeGreaterThanOrEqual(44); expect(box.right).toBeLessThanOrEqual(320.5);
+  }
+  expect(page.__errors).toEqual([]);
+});
+
+test.describe('screenshot', () => {
+  test.use({deviceScaleFactor:2});
+  test('375px: both takes\' MR selects (written only when VP_SHOT names a file)', async ({page}, info) => {
+    test.skip(!process.env.VP_SHOT || info.project.name !== 'chromium-mobile', 'a picture for the owner, on request');
+    await page.setViewportSize({width:375, height:812});
+    await bootMr(page);
+    await addOtherMr(page);
+    await open(page);
+    await page.locator('[data-vp-mr-pick="b"]').selectOption('t-other');
+    await noOverflow(page);
+    await page.locator('[data-vp-slot="a"]').scrollIntoViewIfNeeded();
+    await page.evaluate(() => { const r = document.querySelector('[data-vp-slot="a"]').getBoundingClientRect(); window.scrollBy(0, r.top - 70); });
+    await page.screenshot({path:process.env.VP_SHOT});
+  });
 });
 
 test('tablet: the picker sits beside the results in the 성장 column', async ({page}, info) => {
