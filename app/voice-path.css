@@ -23,10 +23,11 @@
 .vp-picker h2{margin:0}
 .vp-slot{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0;padding:0 0 12px;border-bottom:1px solid #F2EFF7}
 /* One column that may shrink: in Safari a select's longest option otherwise widens the track past the screen. */
-.vp-field{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
+.vp-field{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0;overflow-x:clip}
 .vp-field>span{color:var(--vz-color-primary,#344054);font-size:13px;line-height:18px;font-weight:600}
-.vp-field select{width:100%;min-width:0;min-height:52px;padding:0 36px 0 16px;border:0;border-radius:15px;background-color:var(--vz-input-bg,#F2EFF7);color:var(--vz-color-primary,#344054);font:inherit;font-size:14px;line-height:20px;text-overflow:ellipsis;appearance:none;-webkit-appearance:none}
-.vp-field select:focus-visible{outline:2px solid var(--vz-color-input-focus,#DCC4FF);outline-offset:0}
+/* Safari lays a select's text out at the longest option's width; without clipping it counts as page overflow. */
+.vp-field select{width:100%;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;min-height:52px;padding:0 36px 0 16px;border:0;border-radius:15px;background-color:var(--vz-input-bg,#F2EFF7);color:var(--vz-color-primary,#344054);font:inherit;font-size:14px;line-height:20px;text-overflow:ellipsis;appearance:none;-webkit-appearance:none}
+.vp-field select:focus-visible{outline:2px solid var(--vz-color-input-focus,#DCC4FF);outline-offset:-2px}
 .vp-field select:disabled{opacity:.6}
 .vp-meta{margin:0;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px;font-variant-numeric:tabular-nums}
 .vp-check{display:flex;align-items:center;gap:10px;min-height:44px;color:var(--vz-color-primary,#344054);font-size:14px;line-height:20px;cursor:pointer}
