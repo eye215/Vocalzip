@@ -309,11 +309,26 @@ function highEvidence(m) {
     (g.validHigh?row('유효 최고음',g.validHigh,'0.2초 이상'):'<p class="vl-muted">유효 최고음 판정 보류</p>')+
     row('순간 최고음',g.instantaneous,'평가에 쓰지 않음')+'</div>';
 }
+/** How this take's saved result was measured: 녹음 그대로 · MR 빼고 (which MR) · AI 분리 후. */
+function methodLine(m){
+  const a=analysis(m),method=a&&V.mrReanalyze?.method(a);
+  if(!method)return '';
+  const id=a.confidence?.mrRemoved?.trackId,track=id&&(V.db.songs||[]).flatMap(x=>x.mrTracks||[]).find(t=>String(t.id)===String(id))?.title;
+  return '<p class="vl-muted vl-method" data-lab-method>측정 방식 · '+esc(method+(track?' ('+track+')':''))+'</p>';
+}
+/** MR로 다시 분석 (app/mr-reanalyze.js): the song's recordings measured again with its MR file removed. The date chips
+ * that are on count as "고른 녹음". The lab's own recordings are updated in place, then the screen is drawn again. */
+function remrRow(s){
+  const n=V.mrReanalyze?.count(s.song,s.items);
+  if(!n||!n.all)return '';
+  return '<button type="button" class="vl-remr" data-lab-remr><i class="ph ph-music-notes-minus" aria-hidden="true"></i><span><strong>MR로 다시 분석</strong><small>'+(n.held?'판정 보류·분석 전 '+n.held+'개 · ':'')+'곡 MR을 빼고 다시 재요</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
+}
+const openRemr=s=>s.reanalyzing?V.toast('다시 분석이 끝난 뒤 눌러 주세요.'):V.mrReanalyze?.open(s.song,{items:s.items,picked:s.selected,onSaved:m=>s.results.delete(m.id),onClose:run=>{if(run&&!s.dead)screen(s);}});
 function makeSegment(s,m) {
   const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
   const slice=full?.curve?.map((v,i)=>({t:i/full.fps,value:v==null?null:((v%100)+150)%100-50})).filter(p=>p.t>=start&&p.t<=end&&p.value!=null)||[];
   const sampled=slice.filter((_,i)=>i%Math.max(1,Math.ceil(slice.length/25))===0);
-  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+highEvidence(m)+(V.vocalRangeCompare?V.vocalRangeCompare(s.song,analysis(m),{playable:true}):'')+(V.scoreNoteBlock?V.scoreNoteBlock(s.song,m):'')+(V.arNoteBlock?V.arNoteBlock(s.song,m):'')+
+  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+methodLine(m)+highEvidence(m)+(V.vocalRangeCompare?V.vocalRangeCompare(s.song,analysis(m),{playable:true}):'')+(V.scoreNoteBlock?V.scoreNoteBlock(s.song,m):'')+(V.arNoteBlock?V.arNoteBlock(s.song,m):'')+
     '<div class="vl-ruler" aria-hidden="true"><span>−50</span><i></i><span>0</span><i></i><span>+50</span></div>'+
     (full?(sampled.length?'<div class="vl-segment-chart"><div class="vl-chart-heading">선택 구간의 음정 편차 (cent)</div>'+plot(sampled.map(x=>({value:x.value,label:time(x.t)})),{height:115})+'</div>':'<p class="vl-muted">이 구간에서 목소리를 측정하지 못했어요.</p>'):'<button type="button" class="vl-analyze" data-analyze>이 구간 그래프 보기 <i class="ph ph-arrow-right"></i></button>')+
     '<label class="vl-range-label">분석할 구간 이동<input type="range" min="0" max="'+Math.max(0,Math.floor(total-16))+'" value="'+Math.min(start,Math.max(0,Math.floor(total-16)))+'" data-start aria-label="구간 시작 위치"></label><p class="vl-muted" data-analyze-status aria-live="polite">'+(full?'파형과 수치는 실제 녹음 분석 결과예요.':'그래프는 이 녹음을 분석하면 표시돼요.')+'</p></section>';
@@ -380,7 +395,7 @@ function screen(s) {
   s.plotObserver?.disconnect(); s.plotObserver=null;
   host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+
       // 연습: a 연습실·트레이닝 연습 recording (not counted by 결과 리포트). 영상: a video.
-      (s.kinds?.get(x.id)||[]).map(k=>' <small class="vl-kind" data-lab-kind>'+k+'</small>').join('')+'</button>').join('')+'</div></div>'+
+      (s.kinds?.get(x.id)||[]).map(k=>' <small class="vl-kind" data-lab-kind>'+k+'</small>').join('')+'</button>').join('')+'</div></div>'+remrRow(s)+
     (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s)+growthReport(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
       comparePanel(s)+(V.voicePathLink?V.voicePathLink(s.song,m):'')+recommendationList(recs,s.song.id,savedAITip(s))+
@@ -400,6 +415,7 @@ function screen(s) {
     if(s.selected.includes(id))s.active=id;
     screen(s);
   });
+  host.querySelector('[data-lab-remr]')?.addEventListener('click',()=>openRemr(s));
   if(!m)return;
   const dateStrip=host.querySelector('.vl-dates'), activeDate=host.querySelector('[data-date="'+CSS.escape(m.id)+'"]');
   if(activeDate){const strip=dateStrip.getBoundingClientRect(), chip=activeDate.getBoundingClientRect();if(chip.left<strip.left)dateStrip.scrollLeft+=chip.left-strip.left;else if(chip.right>strip.right)dateStrip.scrollLeft+=chip.right-strip.right;}
@@ -623,7 +639,9 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefre
       host.innerHTML=songs.length?'<div class="vl-song"><i class="ph ph-waveform"></i><strong>보컬 연구소</strong></div><p class="vl-muted">분석할 곡을 선택해 주세요.</p>'+songs.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.id)+'"><strong>'+esc(x.title)+'</strong><i class="ph ph-caret-right"></i></a>').join(''):V.empty('music-notes','먼저 곡을 추가해 주세요.');
       return;
     }
-    document.querySelector('[data-lab-more]').onclick=()=>V.menu({title:'보컬 연구소',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/lab-reports">리포트 보관함 <i class="ph ph-caret-right"></i></a><a class="vz-choice" href="#/song/'+encodeURIComponent(song.id)+'">곡 상세 <i class="ph ph-caret-right"></i></a></div>'});
+    document.querySelector('[data-lab-more]').onclick=()=>V.menu({title:'보컬 연구소',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/lab-reports">리포트 보관함 <i class="ph ph-caret-right"></i></a><a class="vz-choice" href="#/song/'+encodeURIComponent(song.id)+'">곡 상세 <i class="ph ph-caret-right"></i></a>'+
+      (V.mrReanalyze?.count(song,[])?'<button type="button" class="vz-choice" data-lab-remr-menu>MR로 다시 분석 <i class="ph ph-caret-right"></i></button>':'')+'</div>',
+      onMount:(el,close)=>el.querySelector('[data-lab-remr-menu]')?.addEventListener('click',()=>{close();if(current&&!current.dead&&current.song.id===song.id)openRemr(current);})});
     // Which of the song's recordings are listed is the dataset's rule 'songList' (app/growth-dataset.js), the same
     // one the 보컬 분석 tab counts its song rows with: videos too, 연습실·트레이닝 연습 recordings too (labelled).
     const lab=V.growthDataset(await M.list().catch(()=>M.cached()));
