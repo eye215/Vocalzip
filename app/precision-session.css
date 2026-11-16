@@ -1,0 +1,16 @@
+.precision-session{max-width:560px;margin:auto;word-break:keep-all;padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+.precision-session .precision-panel{background:var(--vz-color-surface,#fff);border-radius:20px;padding:16px;margin:12px 0}
+.precision-session h2{font-size:18px;line-height:26px;margin:0 0 12px;color:var(--vz-color-ink)}
+.precision-session p{font-size:14px;line-height:20px;color:var(--vz-color-ink-secondary)}
+.precision-session label{display:grid;gap:8px;margin:12px 0;font-size:13px}
+.precision-session input,.precision-session select{width:100%;max-width:100%;min-height:52px;border:0;border-radius:15px;background:var(--vz-color-input,#F2EFF7);font:inherit;padding:12px;box-sizing:border-box}
+.precision-session button,.precision-session a.btn{min-height:52px;border-radius:16px}
+.precision-session .precision-task-list{display:grid;gap:8px;padding:0;list-style:none}
+.precision-session .precision-task-list button{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:52px;text-align:left;background:var(--vz-color-surface,#fff);color:var(--vz-color-primary);border:0;padding:12px;font:inherit}
+.precision-session .precision-task-list button[aria-current=true]{background:var(--vz-color-accent-soft);color:var(--vz-color-accent)}
+.precision-session progress{width:100%;height:8px;accent-color:var(--vz-color-accent)}
+.precision-session .precision-actions{display:grid;gap:8px;margin-top:12px}
+.precision-session [role=alert]{color:var(--vz-color-danger,#C93A3A)}
+body[data-vz-route=precision-measurement] .vz-collection-record,body[data-vz-route=precision-measurement]>.v-nav{display:none!important}
+.precision-session [data-count]{font-size:27px;font-variant-numeric:tabular-nums;color:var(--vz-color-accent)}
+@media(min-width:768px){.precision-session{max-width:1040px}.precision-session .precision-session-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}}
