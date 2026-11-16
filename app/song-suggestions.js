@@ -214,16 +214,15 @@ function eligible(item){return M.songSearchEligible(item)&&!item.songId&&!item.s
 function kindHint(item){
  return window.VzipRecordingKind?.guess(item,{lessons:VZ.db?.lessons||[],dateOf:M.dateOf,transcript:resultFor(item)?.transcript||'',current:M.recordingCategory(item)})||null;
 }
-const KIND_LABEL={lesson:'레슨 녹음',training:'트레이닝'};
+/* Accepting the suggestion is the same as choosing that 녹음 유형 in 정보 수정 or the ⋯ menu (app/recording-kind-menu.js):
+ * the type and the lesson label kept for the calendar are saved together, and 레슨 녹음 asks whether to link the file to
+ * that day's lesson. A suggestion never links anything by itself. */
 async function applyKind(main,item,kind){
- try{
-  await M.update(item,{recordingCategory:kind},{quiet:true});
-  item.recordingCategory=kind;
-  if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
-  VZ.toast(KIND_LABEL[kind]+'(으)로 옮겼어요. 전체 녹음에서 다시 바꿀 수 있어요.');
-  window.dispatchEvent(new CustomEvent('vzip:media-updated',{detail:{id:item.id,changes:{recordingCategory:kind}}}));
- }catch(error){VZ.toast('옮기지 못했어요: '+String(error.message||error),'error')}
+ await VZ.recordingType.set([item],kind,{link:false});
+ const moved=M.recordingCategory(item)===kind;
+ if(!eligible(item)){state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);saveCheckpoint()}
  if(main.isConnected)draw(main);
+ if(moved&&kind==='lesson')await VZ.recordingType.offerLessonLink([item]);
 }
 function setResult(item,result){state.results.set(item.id,result);writeCache(item,result);saveCheckpoint();}
 /** Where the singing is: the on-device vocal analysis (app/analysis.js) follows the voice over the
@@ -378,24 +377,25 @@ function pickSong(main,item){
   el.querySelector('[data-pick-select]').onchange=e=>choose(e.target.value);
  }});
 }
-// A short action menu: the shared dark popover next to the ⋯ button (design system §공통 작업 화면과 메뉴), delete last.
-function openRecordMenu(main,item,anchor){
- VZ.menu({title:M.label(item),anchor,body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-transcript-view><i class="ph ph-text-align-left"></i> 전사 확인</button>'+(VZ.recordingKindButtons?.([item])||'')+'<button type="button" class="vz-choice" data-file-delete><i class="ph ph-trash"></i> 파일 삭제</button></div>',onMount:(el,close)=>{
-  el.querySelector('[data-transcript-view]').onclick=()=>{close();VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))};
-  VZ.bindRecordingKind?.(el,close,[item],()=>{if(main.isConnected){saveCheckpoint();draw(main)}});
-  el.querySelector('[data-file-delete]').onclick=()=>{close();exclusive(main,async(_main,check)=>{
+// The shared ⋯ menu (app/recording-menu.js): the same items and order as 전체 녹음 and 곡 상세, opened at the ⋯ button.
+// 곡 지정 goes through this screen's own choice (saved with ‘추천대로 곡 지정’); 전사 확인 is this screen's extra item.
+function openRecordMenu(main,item,anchor,card){
+ VZ.recordingMenu(item,{anchor,player:()=>inlinePlayers.get(item.id)||null,play:()=>card.querySelector('.vz-sc-play-trigger').click(),
+  assignSong:()=>pickSong(main,item),
+  changed:()=>{if(main.isConnected){saveCheckpoint();draw(main)}},
+  extra:[{key:'transcript',icon:'ph-text-align-left',label:'전사 확인',run:()=>VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))}],
+  remove:()=>exclusive(main,async(_main,check)=>{
    if(state.running||!await M.confirmRemove(item))return;check();await M.remove(item);check();
    state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);state.results.delete(item.id);state.recognitions.delete(item.id);
    saveCheckpoint();draw(main);VZ.toast('파일을 삭제했어요. 연습·레슨 기록은 남아 있어요.');
-  })};
- }});
+  })});
 }
 function openSelectionMenu(main){
  const root=main.querySelector('[data-suggest]'),count=state.chosen.size;
  if(!count||state.running)return;
  const ready=categoryItems().some(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate);
- VZ.menu({title:'선택한 녹음 '+count+'개',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-selection-analyze>분석 시작 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-apply'+(ready?'':' disabled')+'>추천대로 곡 지정 <i class="ph ph-arrow-right"></i></button>'+(VZ.recordingKindButtons?.(state.items.filter(m=>state.chosen.has(m.id)))||'')+'<button type="button" class="vz-choice" data-selection-clear>선택 해제 <i class="ph ph-x"></i></button></div>',onMount:(el,close)=>{
-  VZ.bindRecordingKind?.(el,close,state.items.filter(m=>state.chosen.has(m.id)),()=>{state.chosen.clear();if(main.isConnected){saveCheckpoint();draw(main)}});
+ VZ.menu({title:'선택한 녹음 '+count+'개',anchor:root.querySelector('[data-selection-more]'),body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-selection-analyze>분석 시작 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-apply'+(ready?'':' disabled')+'>추천대로 곡 지정 <i class="ph ph-arrow-right"></i></button>'+VZ.recordingType.menuRow(state.items.filter(m=>state.chosen.has(m.id)))+'<button type="button" class="vz-choice" data-selection-clear>선택 해제 <i class="ph ph-x"></i></button></div>',onMount:(el,close)=>{
+  VZ.recordingType.bindMenuRow(el,close,state.items.filter(m=>state.chosen.has(m.id)),{anchor:root.querySelector('[data-selection-more]'),after:()=>{state.chosen.clear();if(main.isConnected){saveCheckpoint();draw(main)}}});
   el.querySelector('[data-selection-analyze]').onclick=()=>{close();root.querySelector('[data-analyze]').click()};
   el.querySelector('[data-selection-apply]').onclick=()=>{close();root.querySelector('[data-apply]').click()};
   el.querySelector('[data-selection-clear]').onclick=()=>{close();state.chosen.clear();saveCheckpoint();draw(main)};
@@ -413,13 +413,14 @@ function draw(main){
   card.innerHTML='<div class="vz-sc-record-main"><div class="vz-sc-record-head"><label class="vz-sc-record-check"><input type="checkbox" aria-label="'+esc(name)+' 선택"'+(state.chosen.has(item.id)?' checked':'')+'><span class="vz-sc-checkbox" aria-hidden="true"></span></label><div class="vz-sc-record-name"><strong title="'+esc(name)+'">'+esc(name)+'</strong><small>'+esc(date)+' · '+esc(duration)+' · 음성</small></div><button type="button" class="vz-sc-menu" aria-label="'+esc(name)+' 더 보기"><i class="ph ph-dots-three-vertical"></i></button></div><div class="vz-sc-player-placeholder"><button type="button" class="vz-sc-play-trigger" aria-label="'+esc(name)+' 재생"><i class="ph-fill ph-play"></i></button><span class="vz-sc-track" aria-hidden="true"></span><span class="vz-sc-time">0:00 / '+esc(duration)+'</span></div><div class="vz-sc-player-host" hidden></div></div><button type="button" class="vz-sc-recommend'+(kind==='failed'||kind==='unknown'?' failed':'')+'" aria-label="'+esc(name)+' 곡 선택"><span class="tag">'+status+'</span><span class="divider"></span><span class="song">'+esc(title)+'</span><i class="ph ph-caret-right"></i></button>';
   const hint=kindHint(item);
   if(hint){const row=document.createElement('button');row.type='button';row.className='vz-sc-kind';row.dataset.kind=hint.kind;
-   row.setAttribute('aria-label',KIND_LABEL[hint.kind]+'로 옮기기: '+hint.why);
-   row.innerHTML='<span class="vz-sc-kind-text"><strong>'+KIND_LABEL[hint.kind]+' 같아요</strong><small>'+esc(hint.why)+'</small></span><span class="vz-sc-kind-go">'+(hint.kind==='lesson'?'레슨으로':'트레이닝으로')+' 옮기기</span>';
+   const typeName=M.recordingTypeName(hint.kind);
+   row.setAttribute('aria-label','녹음 유형을 '+typeName+'(으)로 바꾸기: '+hint.why);
+   row.innerHTML='<span class="vz-sc-kind-text"><strong>'+typeName+' 같아요</strong><small>'+esc(hint.why)+'</small></span><span class="vz-sc-kind-go">'+typeName+'으로 바꾸기</span>';
    row.onclick=()=>{if(!state.running)applyKind(main,item,hint.kind)};card.append(row)}
   card.querySelector('input').onchange=e=>{e.target.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   card.querySelector('.vz-sc-play-trigger').onclick=()=>{const host=card.querySelector('.vz-sc-player-host');try{const player=M.player(host,item,{prefetch:false,tools:false});inlinePlayers.set(item.id,player);card.querySelector('.vz-sc-player-placeholder').hidden=true;host.hidden=false;player.play()}catch(error){VZ.toast('재생할 수 없어요: '+String(error.message||error),'error')}};
   card.querySelector('.vz-sc-recommend').onclick=()=>pickSong(main,item);
-  card.querySelector('.vz-sc-menu').onclick=e=>openRecordMenu(main,item,e.currentTarget);
+  card.querySelector('.vz-sc-menu').onclick=e=>openRecordMenu(main,item,e.currentTarget,card);
   list.append(card);
  }
  if(!shown.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=state.items.length?'해당 상태의 녹음이 없어요.':'곡을 확인할 미지정 녹음이 없어요.';list.append(empty)}
@@ -635,7 +636,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
  <div class="vz-sc-metrics"><div class="vz-sc-metric"><strong data-review-count>—</strong><span>확인 필요</span></div><div class="vz-sc-metric"><strong data-auto-count>—</strong><span>곡 자동 지정</span></div><div class="vz-sc-metric"><strong data-wait-count>—</strong><span>대기·분석 중</span></div></div>
  <div class="vz-sc-status-foot"><span>곡 지정은 확인 후 적용</span><span data-spend hidden></span></div></div>
  <div class="vz-sc-sticky"><div class="vz-sc-section-head"><h2>미지정 녹음</h2><span>식별 실패·분석 실패 포함</span></div>
- <div class="vz-sc-tabs" role="tablist" aria-label="곡 찾기 대상"><button class="vz-sc-tab" type="button" role="tab" data-category="song" aria-selected="true">곡 녹음</button><button class="vz-sc-tab" type="button" role="tab" data-category="lesson" aria-selected="false">레슨 녹음</button></div>
+ <div class="vz-sc-tabs" role="tablist" aria-label="녹음 유형"><button class="vz-sc-tab" type="button" role="tab" data-category="song" aria-selected="true">곡 녹음</button><button class="vz-sc-tab" type="button" role="tab" data-category="lesson" aria-selected="false">레슨 녹음</button></div>
  <div class="vz-sc-tabs" role="tablist" aria-label="분석 상태"><button class="vz-sc-tab" role="tab" type="button" data-filter="all" aria-selected="true">전체 0</button><button class="vz-sc-tab" role="tab" type="button" data-filter="unknown" aria-selected="false">식별 불가</button><button class="vz-sc-tab" role="tab" type="button" data-filter="failed" aria-selected="false">분석 실패</button><button class="vz-sc-tab" role="tab" type="button" data-filter="complete" aria-selected="false">분석 완료</button></div>
  <div class="vz-sc-selection"><button type="button" class="vz-sc-select-all" data-select-all aria-pressed="false"><span class="vz-sc-checkbox" aria-hidden="true"></span>전체선택</button><div class="vz-sc-selection-end"><span data-counter></span><button type="button" class="vz-sc-selection-more" data-selection-more aria-label="선택한 녹음 더보기" disabled><i class="ph ph-dots-three" aria-hidden="true"></i></button></div></div></div>
  <div class="vz-sc-list" data-suggest-list></div><button type="button" class="vz-sc-more" data-more hidden>더 보기 <i class="ph ph-caret-down"></i></button><span class="sr-only" data-page-count aria-live="polite"></span>
