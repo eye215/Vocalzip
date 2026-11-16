@@ -41,7 +41,12 @@
 .vp-progress [data-vp-stage]{margin:0;color:var(--vz-color-primary,#344054);font-size:14px;line-height:20px;font-weight:600}
 .vp-bar{height:8px;border-radius:99px;background:var(--surface-2,#F2EFF7);overflow:hidden}
 .vp-bar span{display:block;height:100%;border-radius:99px;background:var(--vz-color-accent,#7A32F5);transition:width .15s}
-@media (prefers-reduced-motion:reduce){.vp-bar span{transition:none}}
+/* A stage with no percentage (reading the sound, taking the MR out): a full bar that breathes. */
+.vp-bar.busy span{animation:vp-busy 1.2s ease-in-out infinite alternate}
+@keyframes vp-busy{from{opacity:.35}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.vp-bar span{transition:none}.vp-bar.busy span{animation:none;opacity:.6}}
+.vp-slot .vp-progress{margin-top:4px}
+.vp-mr{display:grid;gap:6px;min-width:0}
 /* takes */
 .vp-take{display:grid;gap:8px}
 .vp-take-head{display:flex;align-items:center;gap:8px;min-width:0}
@@ -51,6 +56,8 @@
 .vp-take .player input[type=range]{min-width:0}
 .vp-unclean{display:flex;gap:8px;align-items:flex-start;margin:0;padding:12px 14px;border-radius:14px;background:var(--vz-color-warning-soft,#FFF3DC);color:#8A5A00;font-size:13px;line-height:19px}
 .vp-unclean i{flex:none;margin-top:1px;font-size:17px}
+.vp-unclean[data-vp-mr-note]{background:var(--vz-color-success-soft,#E3F4EC);color:#147D56}
+.vp-unclean b{font-weight:600}
 /* rows */
 .vp-group ul{display:grid;gap:0;margin:8px 0 0;padding:0;list-style:none}
 .vp-row{display:grid;gap:8px;padding:14px 0;border-top:1px solid #F2EFF7}

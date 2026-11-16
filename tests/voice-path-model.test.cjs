@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../app/voice-path-model.js');
+const C = require('../app/mr-cancel.js'), Y = require('./helpers/mr-synth.cjs'), AUDIO = require('./helpers/voice-path-audio.cjs').make();
 const SR = 16000, T = P.THRESHOLDS;
 const hz = midi => 440 * 2 ** ((midi - 69) / 12);
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
@@ -228,23 +229,154 @@ test('diagnosis file: numbers, flags and months only — no ids, titles, names, 
   const stored = {v:2, at:1731400000000, seconds:40, metrics:{voicedSeconds:28, stability:{wobbleCents:22}, intonation:{meanAbsCents:19}}, scope:{kind:'whole-recording', cut:false},
     confidence:{pitchConfidence:0.91, voiceOverMrDb:7.5, voicedShare:70, separated:true, mrRemoved:{trackId:'SECRET-TRACK-ID', offsetSeconds:1.2, removedDb:8.4}}, history:[{v:1, secret:'OLD'}]};
   const d = P.diagnosis([
-    {role:'base', date:'2025-08-14', result:a, clean:P.cleanOf({analysis:stored}), stored, reliable:true, guide:{version:2, confidence:{pitchConfidence:0.9, voiceOverMrDb:7, voicedShare:68}}},
-    {role:'comp', date:'2026-11-09', result:b, clean:P.cleanOf({analysis:null, ticked:true}), stored:null, reliable:false, guide:null}
+    {role:'base', date:'2025-08-14', result:a, clean:P.cleanOf({analysis:stored}), source:'mixed', measurable:P.measurable(a, false), stored, reliable:true,
+      mr:null, mrTries:[{key:'SECRET-TRACK-ID:mr/key:99', ok:false, reason:'no-match', removedDb:1.2}], mixed:null, stagesMs:{fetch:12, decode:340, resample:20, model:800, total:1200}},
+    {role:'comp', date:'2026-11-09', result:b, clean:{clean:true, why:'song-mr-removed'}, source:'mr-removed', measurable:{ok:true, why:'song-mr-removed'}, stored:null, reliable:false,
+      mr:{removedDb:7.4, offsetSeconds:12.345, speed:1, score:0.97, key:'SECRET-TRACK-ID:mr/key:99'}, mrTries:[{key:'SECRET-TRACK-ID:mr/key:99', ok:true, reason:'', removedDb:7.4}], mixed:a, stagesMs:{fetch:1, decode:2, model:3, cancel:4, voice:5, total:15}, fromDeviceCache:true}
   ], {generatedMonth:'2026-11'});
   const text = JSON.stringify(d);
   assert.equal(d.kind, 'vocalzip-voice-path-diagnosis');
   assert.deepEqual(d.takes.map(t => t.month), ['2025-08', '2026-11']);
-  assert.ok(!/2025-08-14|2026-11-09|SECRET|OLD|trackId|"id"|"name"|"title"|"song"|"songId"|"file"|"history"/.test(text), 'no identifying field');
+  assert.ok(!/2025-08-14|2026-11-09|SECRET|OLD|trackId|mr\/key|"id"|"key"|"name"|"title"|"song"|"songId"|"file"|"history"/.test(text), 'no identifying field');
+  assert.deepEqual(d.takes.map(t => t.source), ['mixed', 'mr-removed']);
   assert.equal(d.takes[0].clean, false); assert.equal(d.takes[0].cleanWhy, 'mr-removed-numbers-only');
   assert.equal(d.takes[0].resonance, null, 'voice-only numbers are left out of a take that is not clean');
   assert.equal(d.takes[0].storedAnalysis.mrRemoved, true); assert.equal(d.takes[0].storedAnalysis.mrRemovedDb, 8.4); assert.equal(d.takes[0].storedAnalysis.pitchConfidence, 0.91);
-  assert.equal(d.takes[1].clean, true); assert.equal(d.takes[1].storedAnalysis, null);
+  assert.deepEqual(d.takes[0].mrTries, [{ok:false, reason:'no-match', removedDb:1.2}]);
+  assert.deepEqual(d.takes[0].stagesMs, {fetch:12, decode:340, resample:20, model:800, total:1200});
+  assert.equal(d.takes[0].measurable, true); assert.equal(d.takes[0].measurableWhy, 'mixed-voice-on-top');
+  assert.equal(d.takes[1].clean, true); assert.equal(d.takes[1].storedAnalysis, null); assert.equal(d.takes[1].fromDeviceCache, true);
+  assert.deepEqual(d.takes[1].mrRemoval, {removedDb:7.4, offsetSeconds:12.345, speed:1, score:0.97});
+  assert.equal(d.takes[1].asRecorded.voicedSeconds, a.voicedSeconds); assert.ok(d.takes[1].asRecorded.confidence.meanStrength > 0);
   assert.ok(d.takes[1].resonance.centroidHz > 0); assert.ok(d.takes[1].semitoneBands.length >= 5); assert.ok(d.takes[1].zones.low.seconds > 0);
   assert.ok(d.takes[1].coverage.high.seconds >= 0 && typeof d.takes[1].coverage.high.enough === 'boolean');
-  assert.equal(d.thresholds.BREAK_MIN_MS, 40); assert.equal(d.thresholds.SIMILAR.hnrDb, 2);
+  assert.equal(d.thresholds.BREAK_MIN_MS, 40); assert.equal(d.thresholds.SIMILAR.hnrDb, 2); assert.equal(d.thresholds.HOP, 320);
   assert.equal(d.modelVersion, P.VERSION);
   assert.equal(d.comparison.length, 10); assert.ok(d.comparison.every(r => ['similar', 'different', 'hold'].includes(r.state)));
+  // A take that cannot be measured: its numbers are still in the file (to calibrate the gate), but no comparison is made.
+  const refused = P.diagnosis([{role:'base', date:'2025-08', result:a, clean:{clean:false, why:'accompaniment-heard'}, source:'mixed', measurable:{ok:false, why:'weak-pitch'}, stored:null},
+    {role:'comp', date:'2026-11', result:b, clean:{clean:true, why:'user-said-voice-only'}, source:'clean', measurable:{ok:true, why:'voice-only'}, stored:null}]);
+  assert.equal(refused.comparison, null); assert.equal(refused.takes[0].measurable, false); assert.equal(refused.takes[0].measurableWhy, 'weak-pitch');
+  assert.ok(refused.takes[0].confidence.meanStrength > 0);
   assert.equal(P.monthOf('2026-11-09'), '2026-11'); assert.equal(P.monthOf(''), null);
+});
+
+/* ---------- fed in pieces ---------- */
+test('a take fed in pieces of any size gives exactly what the whole take gives (nothing is cut, memory stays flat)', () => {
+  const x = AUDIO.samples('worse', 70), whole = P.analyze(x, SR);
+  const stream = P.createStream();
+  for (let a = 0, k = 0; a < x.length; k++) { const n = [16000 * 7 + 13, 999, 16000 * 31, 320, 51234][k % 5]; stream.push(x.subarray(a, Math.min(x.length, a + n))); a += n; }
+  assert.equal(stream.seconds, 70);
+  assert.deepEqual(stream.finish(), whole);
+  assert.equal(whole.seconds, 70);
+  assert.ok(whole.transitions.breaks.at(-1).t > 60, 'the last dropout, near the end, is found: ' + whole.transitions.breaks.at(-1).t);
+  assert.equal(whole.transitions.breakCount, 7); assert.equal(whole.transitions.flipCount, 7);
+});
+
+test('16 kHz → 8 kHz in pieces: the same as in one go, 1 kHz kept, 6 kHz gone', () => {
+  const n = SR * 3, x = new Float32Array(n);
+  for (let i = 0; i < n; i++) x[i] = Math.sin(2 * Math.PI * 1000 * i / SR) + Math.sin(2 * Math.PI * 6000 * i / SR);
+  const one = P.createHalver(), whole = [...one.push(x), ...one.finish()];
+  const two = P.createHalver(), parts = [];
+  for (let a = 0; a < n; a += 7777) parts.push(...two.push(x.subarray(a, Math.min(n, a + 7777))));
+  parts.push(...two.finish());
+  assert.equal(whole.length, n / 2); assert.equal(parts.length, n / 2);
+  assert.ok(whole.every((v, i) => Math.abs(v - parts[i]) < 1e-6));
+  let e = 0; for (let i = 4000; i < 20000; i++) e += whole[i] * whole[i];
+  assert.ok(Math.abs(Math.sqrt(e / 16000) - Math.SQRT1_2) < 0.02, 'only the 1 kHz tone is left: rms ' + Math.sqrt(e / 16000));
+});
+
+/* ---------- a take with an accompaniment ---------- */
+test('voice with a louder bass line is refused; with the bass 15 dB below it is measured and the bass is not followed', () => {
+  const voice = P.analyze(AUDIO.samples('better', 34), SR);
+  const loud = P.analyze(AUDIO.samples('bass', 34, SR, 4), SR), under = P.analyze(AUDIO.samples('bass', 34, SR, -15), SR);
+  assert.equal(P.measurable(loud, false).ok, false, JSON.stringify(loud.confidence));
+  for (const db of [0, -6, -10]) assert.equal(P.measurable(P.analyze(AUDIO.samples('bass', 34, SR, db), SR), false).ok, false, 'bass at ' + db + ' dB');
+  assert.deepEqual(P.measurable(under, false), {ok:true, why:'mixed-voice-on-top'}, JSON.stringify(under.confidence));
+  // The bass (D2–A2) is nowhere in what was read: the range, the notes and the seconds are the voice's.
+  assert.equal(under.range.lowNote, 'A3'); assert.equal(under.range.highNote, voice.range.highNote);
+  assert.ok(under.bands.every(b => b.midi >= 56), JSON.stringify(under.bands.map(b => b.midi)));
+  assert.ok(Math.abs(under.voicedSeconds - voice.voicedSeconds) < 1, under.voicedSeconds + ' vs ' + voice.voicedSeconds);
+  assert.equal(under.sustain.notes, voice.sustain.notes); assert.equal(under.transitions.flipCount, 0); assert.equal(under.transitions.breakCount, 0);
+  // The bass heard between the phrases is quiet: it is not read, and not held against the take.
+  assert.ok(under.confidence.outsideBandShare < 0.05, 'outside ' + under.confidence.outsideBandShare);
+  // A clean take is never refused, whatever it holds; a take with no voice is.
+  assert.deepEqual(P.measurable(loud, true), {ok:true, why:'voice-only'});
+  assert.deepEqual(P.measurable(P.analyze(blank(2), SR), true), {ok:false, why:'no-voice'});
+});
+
+test('the gate on numbers like the first real diagnosis: the take that followed the accompaniment is refused', () => {
+  const reading = c => ({voicedSeconds:150, confidence:c});
+  // 2026-11 take: weak periodicity, many glitches, a third of the sound far below the voice.
+  assert.equal(P.measurable(reading({meanStrength:0.799, glitchShare:0.036, outsideBandShare:0.31, jumpsPerMin:330, flatNoteShare:0}), false).ok, false);
+  for (const one of [{outsideBandShare:0.31}, {meanStrength:0.799}, {glitchShare:0.036}, {jumpsPerMin:112.6}, {flatNoteShare:0.8}])
+    assert.equal(P.measurable(reading({meanStrength:0.95, glitchShare:0.002, outsideBandShare:0.01, jumpsPerMin:3, flatNoteShare:0, ...one}), false).ok, false, JSON.stringify(one));
+  // 2025-08 take (strength 0.877, glitches 0.9 %, 3–4 % far below, 39.7 flips a minute): just under the strength
+  // line and far over the jump line — refused as well.
+  assert.deepEqual(P.measurable(reading({meanStrength:0.877, glitchShare:0.009, outsideBandShare:0.035, jumpsPerMin:39.7, flatNoteShare:0}), false), {ok:false, why:'weak-pitch'});
+  assert.deepEqual(P.measurable(reading({meanStrength:0.93, glitchShare:0.009, outsideBandShare:0.035, jumpsPerMin:39.7, flatNoteShare:0}), false), {ok:false, why:'pitch-jumps'});
+  assert.deepEqual(P.measurable(reading({meanStrength:0.93, glitchShare:0.009, outsideBandShare:0.035, jumpsPerMin:6, flatNoteShare:0.1}), false), {ok:true, why:'mixed-voice-on-top'});
+  assert.match(P.REFUSED_NOTE, /^반주가 목소리만큼 크게 들어가 있어 이 녹음은 잴 수 없어요\. 이어폰을 끼고 녹음한 것\(목소리만 들어간 것\)으로 비교해 주세요\.$/);
+});
+
+test('an octave apart, a jump is a flip only when the upper octave is clearly less periodic on the lower side', () => {
+  // Even harmonics dominate (the octave above is almost as periodic as the note itself); for 100 ms only they sound.
+  const even = odd => h => (h % 2 ? odd : 1) / h, x = blank(3);
+  tone(x, 0.3, 0.7, 57, {amp:even(0.1), release:0.001}); tone(x, 1.0, 0.1, 57, {amp:even(0), attack:0.001, release:0.001}); tone(x, 1.1, 1.6, 57, {amp:even(0.1), attack:0.001});
+  const r = P.analyze(x, SR);
+  assert.equal(r.transitions.flipCount, 0, JSON.stringify(r.transitions.flips));
+  assert.equal(r.confidence.octaveHesitations, 1);
+  assert.ok(r.confidence.jumpsPerMin > 0, 'it still counts as a jump for the gate');
+});
+
+test('one take alone: its own values, nothing said about the other side', () => {
+  const r = P.analyze(take({worse:true}), SR);
+  const rows = P.alone(r, 'base', {marker:'재는 중', line:'다른 녹음을 다 재면 나란히 보여 드려요', other:'재는 중…'});
+  assert.equal(rows.length, 10);
+  assert.ok(rows.every(x => x.state === 'alone' && x.marker === '재는 중' && x.comp === '재는 중…' && x.compValue === null));
+  assert.equal(rows[0].base, '분당 ' + r.transitions.breaksPerMin + '회 (3곳)');
+  assert.ok(!/늘었어요|줄었어요|커졌어요|작아졌어요|비슷해요/.test(JSON.stringify(rows)));
+  assert.equal(P.alone(r, 'comp', {marker:'잴 수 없음', line:'x', other:'잴 수 없어요'})[0].base, '잴 수 없어요');
+  assert.deepEqual(P.compare(r, null), []); assert.deepEqual(P.compare(null, r), []);
+});
+
+/* ---------- the song's MR taken out (the real app/mr-cancel.js) ---------- */
+test('a take sung over the song\'s MR: the MR is taken out and every trace of the voice that is left is close to the voice alone', () => {
+  const MR = Y.mr(70), V = Y.vocal(40), rec = Y.record(V.x, MR, {offset:12.345, db:6});
+  const out = C.cancel(rec.x, MR);
+  assert.equal(out.ok, true, JSON.stringify(out.reason));
+  assert.ok(out.report.removedDb >= P.THRESHOLDS.MR_MIN_REMOVED_DB, 'removed ' + out.report.removedDb + ' dB');
+  assert.equal(P.THRESHOLDS.MR_MIN_REMOVED_DB, C.RULES.minRemoved, 'the same line the cancel itself draws');
+  const alone = P.analyze(V.x, Y.SR), mixed = P.analyze(rec.x, Y.SR), left = P.analyze(out.voice, Y.SR);
+  // As recorded (MR 6 dB over the voice) the take cannot be measured.
+  assert.equal(P.measurable(mixed, false).ok, false);
+  // What is left after the MR is a voice again: 8 kHz sound, so 울림 is read up to 3.6 kHz.
+  assert.equal(left.confidence.bandwidthHz, 3600); assert.equal(alone.confidence.bandwidthHz, 3600);
+  assert.ok(left.confidence.meanStrength > 0.95, 'strength ' + left.confidence.meanStrength);
+  assert.ok(Math.abs(left.sustain.notes - alone.sustain.notes) <= 4, left.sustain.notes + ' vs ' + alone.sustain.notes);
+  assert.ok(Math.abs(left.sustain.pitchSdCents - alone.sustain.pitchSdCents) <= 2, left.sustain.pitchSdCents + ' vs ' + alone.sustain.pitchSdCents);
+  assert.ok(Math.abs(left.sustain.vibrato.share - alone.sustain.vibrato.share) <= 10); assert.ok(Math.abs(left.sustain.vibrato.extentCents - alone.sustain.vibrato.extentCents) <= 3);
+  assert.equal(left.transitions.flipCount, 0);
+  assert.ok(Math.abs(left.resonance.ratioDb - alone.resonance.ratioDb) <= 2, left.resonance.ratioDb + ' vs ' + alone.resonance.ratioDb);
+  assert.ok(Math.abs(left.resonance.centroidHz - alone.resonance.centroidHz) <= 100, left.resonance.centroidHz + ' vs ' + alone.resonance.centroidHz);
+  assert.ok(Math.abs(left.resonance.tiltDbPerOct - alone.resonance.tiltDbPerOct) <= 1);
+  assert.ok(left.breath.hnrDb > 15 && left.breath.hnrDb <= alone.breath.hnrDb + 1, 'a little of the MR is left: ' + left.breath.hnrDb + ' vs ' + alone.breath.hnrDb);
+  assert.ok(left.onsets.count >= 5, 'onsets ' + left.onsets.count);
+  assert.equal(left.range.lowNote, alone.range.lowNote); assert.equal(left.range.highNote, alone.range.highNote);
+  // Two takes over the same MR are compared on every row; a cleaned take against a take read at full band is not compared on 울림.
+  const other = P.analyze(C.cancel(Y.record(V.x, MR, {offset:3.2, db:3}).x, MR).voice, Y.SR);
+  const rows = P.compare(left, other);
+  assert.ok(rows.every(r => r.marker !== '잴 수 없음'), JSON.stringify(rows.map(r => [r.id, r.marker])));
+  const cross = P.compare(left, P.analyze(AUDIO.samples('better', 34), SR)), by = id => cross.find(r => r.id === id);
+  for (const id of ['zoneSpread', 'brightness']) { assert.equal(by(id).marker, '잴 수 없음'); assert.equal(by(id).line, '한쪽만 곡 MR을 빼고 재서 울림은 나란히 볼 수 없어요'); }
+  assert.notEqual(by('breaks').marker, '잴 수 없음'); assert.notEqual(by('breath').marker, '잴 수 없음');
+});
+
+test('an MR that is not the one in the take does not come out: the reason is given and the take falls back to the gate', () => {
+  const MR = Y.mr(70), V = Y.vocal(40), rec = Y.record(V.x, MR, {offset:12.345, db:6});
+  const wrong = C.cancel(rec.x, Y.mr(70, 99));
+  assert.equal(wrong.ok, false); assert.equal(wrong.reason, 'no-match');
+  assert.equal(P.measurable(P.analyze(rec.x, Y.SR), false).ok, false, 'and as recorded it is refused');
 });
 
 test('silence and a wrong sample rate are handled', () => {
