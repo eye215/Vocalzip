@@ -1,14 +1,26 @@
 /* VOCAL.zip 악보 (Phase 8A): PDF scores kept with a song.
  * The PDF goes to Cloudflare R2 (u/<user>/<scoreId>/original.pdf, the same private upload path as recordings);
  * the list lives on the song (songs[].scores) and syncs like every other record.
- * Each entry keeps what a later PDF → MusicXML conversion needs: id, songId, r2Key, file name, size, upload time. */
+ * Each entry keeps what a later PDF → MusicXML conversion needs: id, songId, r2Key, file name, size, upload time.
+ * 원키 · 연습 키 belong to the song, not to one PDF: the sheets here show and save the song's keys (app/song-keys.js,
+ * 나의 레퍼토리 › 키 정보). Keys that older scores carry stay on them and are read until the song's keys are first saved. */
 (() => {
 'use strict';
 const VZ = window.VZ;
-if (!VZ) return;
+if (!VZ || !window.VzipSongKeys) return;
 const esc = VZ.esc, MAX = 50 * 1024 * 1024;
-const KEYS = ['', 'C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'].flatMap(k => k ? [k, k + 'm'] : ['']);
-const keySelect = (name, value) => '<select name="' + name + '" aria-label="' + (name === 'originalKey' ? '원키' : '연습 키') + '">' + KEYS.map(k => '<option value="' + esc(k) + '"' + (k === (value || '') ? ' selected' : '') + '>' + (k || '선택 안 함') + '</option>').join('') + '</select>';
+const Keys = window.VzipSongKeys, KEYS = ['', ...Keys.OPTIONS];
+// A key typed elsewhere in another form ("F# major", "여자 키") is offered as it is, so opening and saving this sheet never rewrites it.
+const keySelect = (name, value = '') => '<select name="' + name + '" aria-label="' + (name === 'originalKey' ? '원키' : '연습 키') + '">' + (KEYS.includes(value) ? KEYS : [value, ...KEYS]).map(k => '<option value="' + esc(k) + '"' + (k === value ? ' selected' : '') + '>' + esc(k || '선택 안 함') + '</option>').join('') + '</select>';
+const songKeys = id => Keys.of(VZ.song(id));
+/** Saves the keys chosen in a score sheet on the song, only when they differ from what the song has. Returns an error message or ''. */
+const saveSongKeys = (songId, form) => {
+  const now = songKeys(songId), next = {originalKey:form.originalKey.value, practiceKey:form.practiceKey.value};
+  if (next.originalKey === now.originalKey && next.practiceKey === now.practiceKey) return '';
+  try { if (!VZ.repertoire?.saveKeys) throw Error('키 정보를 저장할 수 없어요.'); VZ.repertoire.saveKeys(songId, next); return ''; }
+  catch (err) { return err.message || String(err); }
+};
+const KEY_NOTE = '<p class="small muted">키는 곡에 저장돼요. 나의 레퍼토리의 키 정보, MR 키 맞추기와 같은 값이에요.</p>';
 const scoresOf = id => (VZ.song(id)?.scores || []).filter(s => !s.deleted);
 const size = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
 const save = (songId, mutate) => VZ.change(d => { const song = d.songs.find(x => x.id === songId); if (!song) throw Error('곡을 찾을 수 없어요.'); song.scores ||= []; mutate(song.scores, song); });
@@ -21,7 +33,7 @@ function uploadSheet(song, redraw) {
       '<input type="file" name="file" aria-label="PDF 파일" accept="application/pdf,.pdf" required style="position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer"></span></label>' +
       '<p class="small muted" data-file-name aria-live="polite" style="overflow-wrap:anywhere">선택한 파일이 없어요.</p>' +
       '<label class="field"><span>제목</span><input type="text" name="title" maxlength="120" placeholder="비워 두면 파일 이름"></label>' +
-      '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey') + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey') + '</label></div>' +
+      '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey', songKeys(song.id).originalKey) + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey', songKeys(song.id).practiceKey) + '</label></div>' + KEY_NOTE +
       '<p class="small muted" data-msg role="status">PDF 한 개, 50MB까지. 이 계정에서만 볼 수 있어요. 올리면 음표 변환(시험판)도 자동으로 시작돼요.</p></form>' +
       // A GoodNotes notebook is cut into songs by its outline; its own picker has no type filter because iOS greys out unknown types.
       (VZ.goodnotesImport ? '<div class="stack" style="margin-top:16px"><span class="btn ghost" style="position:relative;overflow:hidden;min-height:44px"><i class="ph ph-notebook" aria-hidden="true"></i>굿노트 파일에서 가져오기' +
@@ -54,7 +66,7 @@ function uploadSheet(song, redraw) {
         if (pending && pending.owner !== account) { msg.textContent = '로그인 계정이 바뀌었어요. 창을 닫고 다시 열어 주세요.'; return; }
         pending ||= {file, owner:account, id:'score-' + VZ.uid(), receipt:null};
         const current = pending;
-        const details = {title:field('title').value.trim() || file.name.replace(/\.pdf$/i, ''), originalKey:field('originalKey').value, practiceKey:field('practiceKey').value};
+        const details = {title:field('title').value.trim() || file.name.replace(/\.pdf$/i, '')};
         busy = true; go.disabled = true;
         for (const control of form.elements) control.disabled = true;
         msg.textContent = '업로드를 준비하고 있어요.';
@@ -70,7 +82,9 @@ function uploadSheet(song, redraw) {
           // Decided 2026-11-11: a new score starts its note conversion (OMR) right away; failures never affect the upload.
           const converting = !!window.VzipR2.omr && /\/original\.pdf$/.test(entry.r2Key);
           if (converting) window.VzipR2.omr.request(entry.r2Key).catch(() => {});
+          const keyError = saveSongKeys(song.id, form);
           close(); VZ.toast(converting ? '악보를 올렸어요. 음표 변환도 시작했어요.' : '악보를 올렸어요.'); redraw();
+          if (keyError) VZ.toast('악보는 올렸지만 키는 저장하지 못했어요: ' + keyError, 'error');
         } catch (err) {
           msg.textContent = '올리지 못했어요: ' + err.message + ' · 선택한 파일은 유지돼요.';
           go.textContent = '다시 시도';
@@ -108,15 +122,18 @@ async function keySuggestion(score, form, host) {
 function editSheet(song, score, redraw) {
   VZ.sheet({title:'악보 정보', body:'<form id="score-edit" class="stack">' +
       '<label class="field"><span>제목</span><input type="text" name="title" maxlength="120" required value="' + esc(score.title) + '"></label>' +
-      '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey', score.originalKey) + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey', score.practiceKey) + '</label></div>' +
-      '<div class="score-key-suggest" data-key-suggest hidden></div></form>',
+      '<div class="two"><label class="field"><span>원키</span>' + keySelect('originalKey', songKeys(song.id).originalKey) + '</label><label class="field"><span>연습 키</span>' + keySelect('practiceKey', songKeys(song.id).practiceKey) + '</label></div>' + KEY_NOTE +
+      '<div class="score-key-suggest" data-key-suggest hidden></div><p class="archive-error" role="alert" data-score-edit-error></p></form>',
     foot:'<button type="submit" form="score-edit" class="btn block">저장</button>',
     onMount:(el, close) => {
       const form = el.querySelector('form');
       keySuggestion(score, form, el.querySelector('[data-key-suggest]'));
       form.onsubmit = e => {
         e.preventDefault();
-        const changes = {title:form.title.value.trim() || score.title, originalKey:form.originalKey.value, practiceKey:form.practiceKey.value, updatedAt:Date.now()};
+        // Keys first: they are checked before anything is written (not signed in → message, the sheet stays open).
+        const keyError = saveSongKeys(song.id, form);
+        if (keyError) { form.querySelector('[data-score-edit-error]').textContent = keyError; return; }
+        const changes = {title:form.title.value.trim() || score.title, updatedAt:Date.now()};
         if (save(song.id, list => Object.assign(list.find(x => x.id === score.id) || {}, changes))) { close(); VZ.toast('저장했어요.'); redraw(); }
       };
     }});
@@ -153,27 +170,53 @@ VZ.clearGoodnotesScores = async ({onProgress = () => {}} = {}) => {
   return result;
 };
 
+/* 음표 변환 state on each score row: asked from the conversion server once per score and kept for a minute, so drawing
+ * the list again (tab change, upload) does not ask again. A row without an answer simply shows no state. */
+const OMR_STATE = {none:'변환 전', queued:'변환 대기', running:'변환 중', failed:'변환 실패', done:'음표 변환됨'};
+const omrSeen = new Map();
+const omrStateOf = job => !job ? 'none' : ['queued', 'running', 'failed'].includes(job.status) ? job.status : 'done';
+function paintOmr(row, state) {
+  const label = row.querySelector('[data-omr-state]'), button = row.querySelector('[data-omr]');
+  if (label) label.textContent = OMR_STATE[state] + ' · ';
+  if (button) { button.dataset.omr = state; button.querySelector('i').className = 'ph ph-' + ({queued:'hourglass-medium', running:'hourglass-medium', failed:'warning'}[state] || 'music-notes'); button.setAttribute('aria-label', button.dataset.title + ' 음표로 변환 (' + OMR_STATE[state] + ')'); }
+}
+async function omrStates(host, list) {
+  if (!window.VzipR2?.enabled?.() || !window.VzipR2.omr) return;
+  for (const score of list.slice(0, 12)) {
+    if (!host.isConnected) return;
+    if (!/\/original\.pdf$/.test(score.r2Key || '')) continue;
+    let seen = omrSeen.get(score.id);
+    if (!seen || Date.now() - seen.at > 60000) {
+      try { seen = {at:Date.now(), state:omrStateOf(await window.VzipR2.omr.status(score.id))}; omrSeen.set(score.id, seen); }
+      catch { continue; }
+    }
+    const row = [...host.querySelectorAll('[data-score]')].find(r => r.dataset.score === score.id);
+    if (row) paintOmr(row, seen.state);
+  }
+}
 /** The complete PDF row opens the integrated viewer; secondary actions remain independent. */
 VZ.renderScores = (host, song) => {
  const draw=()=>{
-  const list=scoresOf(song.id);
+  const list=scoresOf(song.id),keys=songKeys(song.id);
   if(list.length){
    VZ.preloadScoreInk?.();
    window.VzipR2?.prefetch?.(list.slice(0,5).map(s=>s.r2Key)).catch(()=>{});
   }
   host.innerHTML='<div class="row between" style="margin:4px 4px 10px"><h2 class="sec" style="margin:0">악보 '+list.length+'</h2><button type="button" class="btn sm" data-score-add><i class="ph ph-file-arrow-up"></i>PDF 올리기</button></div>'+
-   (list.length?'<div class="list">'+list.map(s=>'<div class="item score-row" data-score="'+esc(s.id)+'"><button type="button" data-score-open aria-label="'+esc(s.title)+' 열기"><span class="avatar"><i class="ph ph-file-pdf"></i></span><span class="item-main"><span class="item-title">'+esc(s.title)+'</span><span class="item-sub">'+
-   esc([s.originalKey?'원키 '+s.originalKey:'',s.practiceKey?'연습 '+s.practiceKey:'',VZ.dateLabel(VZ.ymd(new Date(s.uploadedAt))),size(s.size||0)].filter(Boolean).join(' · '))+'</span></span></button>'+
-   '<span class="score-actions">'+(VZ.scoreOmrSheet&&s.r2Key?'<button type="button" class="icon-btn" data-omr aria-label="'+esc(s.title)+' 음표로 변환"><i class="ph ph-music-notes"></i></button>':'')+'<button type="button" class="icon-btn" data-edit aria-label="정보 수정"><i class="ph ph-pencil-simple"></i></button><button type="button" class="icon-btn" data-del aria-label="삭제"><i class="ph ph-trash"></i></button></span></div>').join('')+'</div>':
+   (list.length?'<div class="list">'+list.map(s=>'<div class="item score-row" data-score="'+esc(s.id)+'"><button type="button" data-score-open aria-label="'+esc(s.title)+' 열기"><span class="avatar"><i class="ph ph-file-pdf"></i></span><span class="item-main"><span class="item-title">'+esc(s.title)+'</span><span class="item-sub"><span data-omr-state></span>'+
+   esc([keys.originalKey?'원키 '+keys.originalKey:'',keys.practiceKey?'연습 '+keys.practiceKey:'',VZ.dateLabel(VZ.ymd(new Date(s.uploadedAt))),size(s.size||0)].filter(Boolean).join(' · '))+'</span></span></button>'+
+   '<span class="score-actions">'+(VZ.scoreOmrSheet&&s.r2Key?'<button type="button" class="icon-btn" data-omr data-title="'+esc(s.title)+'" aria-label="'+esc(s.title)+' 음표로 변환"><i class="ph ph-music-notes"></i></button>':'')+'<button type="button" class="icon-btn" data-edit aria-label="정보 수정"><i class="ph ph-pencil-simple"></i></button><button type="button" class="icon-btn" data-del aria-label="삭제"><i class="ph ph-trash"></i></button></span></div>').join('')+'</div>':
    VZ.empty('music-notes','아직 악보가 없어요. PDF를 올려 두면 이 곡에서 바로 열어 볼 수 있어요.'));
   host.querySelector('[data-score-add]').onclick=()=>uploadSheet(song,draw);
   host.querySelectorAll('[data-score]').forEach(row=>{
    const score=list.find(s=>s.id===row.dataset.score);
    row.onclick=event=>{if(!event.target.closest('[data-edit],[data-del],[data-omr]'))VZ.openScoreInk(song.id,score.id);};
-   row.querySelector('[data-omr]')?.addEventListener('click',event=>{event.stopPropagation();VZ.scoreOmrSheet(song,score);});
+   // The state is asked again after the conversion sheet was open (a conversion may have been requested there).
+   row.querySelector('[data-omr]')?.addEventListener('click',event=>{event.stopPropagation();omrSeen.delete(score.id);VZ.scoreOmrSheet(song,score);});
    row.querySelector('[data-edit]').onclick=event=>{event.stopPropagation();editSheet(song,score,draw);};
    row.querySelector('[data-del]').onclick=event=>{event.stopPropagation();remove(song,score,draw);};
   });
+  omrStates(host,list);
  };
  draw();
 };

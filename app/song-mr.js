@@ -1,5 +1,6 @@
 /* Song accompaniment attachments: private R2 files and explicit YouTube links.
- * Stored on songs[].mrTracks, never in the recording/analysis library. */
+ * Stored on songs[].mrTracks, never in the recording/analysis library.
+ * Also the song's AR 레퍼런스 links (songs[].arLinks), listed under the MRs. */
 (() => {
 'use strict';
 const V=window.VZ;if(!V)return;
@@ -74,7 +75,9 @@ function add(song,redraw){
 // Their .media-open marker (while not hidden) holds off background re-renders, as an open recording does.
 const live=new WeakMap();
 const closePlayer=el=>{live.get(el)?.();live.delete(el);el.replaceChildren();el.hidden=true;};
-const shiftOf=id=>V.mrKey?V.mrKey.clamp(V.song(id)?.mrKeyShift):0;
+// Each MR remembers its own key shift (mrTracks[].keyShift): MRs of one song can be in different keys. An MR that has
+// none yet uses the value the song had when one shift served all its MRs (songs[].mrKeyShift, left as it is).
+const shiftOf=(id,trackId)=>{if(!V.mrKey)return 0;const song=V.song(id),own=(song?.mrTracks||[]).find(x=>x.id===trackId)?.keyShift;return V.mrKey.clamp(own??song?.mrKeyShift);};
 /** File MR: the stored file streams through <audio> untouched; the key capsule only changes how it is played. */
 function filePlayer(player,song,track,url,account,row){
  const K=V.mrKey,make=cors=>{const audio=document.createElement('audio');audio.controls=true;audio.preload='none';if(cors)audio.crossOrigin='anonymous';audio.src=url;audio.setAttribute('aria-label',track.title+' MR 재생');return audio;};
@@ -86,12 +89,12 @@ function filePlayer(player,song,track,url,account,row){
   (keys.practiceKey?'<button type="button" class="vz-mr-key-practice" data-mr-key-practice><span>연습 키 <b>'+esc(keys.practiceKey)+'</b></span><small data-mr-key-suggest></small></button>':'')+'</div><p class="vz-mr-key-msg" data-mr-key-msg role="status"></p>';
  player.replaceChildren(audio,box);
  const down=box.querySelector('[data-mr-key-down]'),up=box.querySelector('[data-mr-key-up]'),value=box.querySelector('[data-mr-key-value]'),msg=box.querySelector('[data-mr-key-msg]'),practice=box.querySelector('[data-mr-key-practice]');
- let n=shiftOf(song.id),timer=0,engine=null,off=false;
+ let n=shiftOf(song.id,track.id),timer=0,engine=null,off=false;
  const persist=()=>{
   clearTimeout(timer);timer=0;if(identity()!==account||window.VzipAccountScope?.leaving)return;
-  const current=V.song(song.id);if(!current||current.mrKeyShift===n||(!n&&current.mrKeyShift==null))return;
+  const current=V.song(song.id),saved=(current?.mrTracks||[]).find(x=>x.id===track.id);if(!saved||saved.keyShift===n||(saved.keyShift==null&&shiftOf(song.id,track.id)===n))return;
   // Silent: a full re-render would tear down the player that is playing right now.
-  if(!V.change(d=>{const s=d.songs.find(x=>x.id===song.id);if(s)s.mrKeyShift=n;},{silent:true}))msg.textContent='키 설정을 저장하지 못했어요.';
+  if(!V.change(d=>{const t=d.songs.find(x=>x.id===song.id)?.mrTracks?.find(x=>x.id===track.id);if(t)t.keyShift=n;},{silent:true}))msg.textContent='키 설정을 저장하지 못했어요.';
  };
  const paint=()=>{
   value.textContent=K.label(n);value.setAttribute('aria-label','현재 '+K.spoken(n)+(n?'. 누르면 원키로 돌아가요':''));value.disabled=off||!n;
@@ -99,7 +102,8 @@ function filePlayer(player,song,track,url,account,row){
   if(practice){
    const s=keys.suggested,hint=practice.querySelector('[data-mr-key-suggest]');
    const to=s==null?'':K.label(s)+([3,6].includes(Math.abs(s))?'으로':'로');
-   hint.textContent=s==null?'':s===n?'MR 맞춤':'MR '+to+' 맞추기';
+   // Why there is no suggestion: the MR is taken to be in the original key, so both keys are needed in a form the app understands.
+   hint.textContent=s==null?(keys.originalKey?'키 표기를 알아볼 수 없어 직접 맞춰 주세요':'원키를 적으면 맞춰 드려요'):s===n?'MR 맞춤':'MR '+to+' 맞추기';
    practice.disabled=off||s==null||s===n;
    practice.setAttribute('aria-label','연습 키 '+keys.practiceKey+(s!=null&&s!==n?'. MR을 '+to+' 맞추기':''));
   }
@@ -136,7 +140,7 @@ V.renderSongMR=(host,song)=>{
   if(!host.isConnected)return;
   const list=tracks(song.id),account=identity();
   host.innerHTML='<section class="vz-ar-links vz-mr-links" aria-label="MR 반주"><div class="vz-ar-heading"><strong>MR 반주 <span>'+list.length+'</span></strong><button type="button" data-mr-add aria-label="MR 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
-   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id)?' · 키 '+V.mrKey.label(shiftOf(song.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
+   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id,x.id)?' · 키 '+V.mrKey.label(shiftOf(song.id,x.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
   host.querySelector('[data-mr-add]').onclick=()=>add(song,draw);
   window.VzipR2?.prefetch?.(list.filter(x=>x.kind==='file').slice(0,5).map(x=>x.r2Key)).catch(()=>{});
   for(const row of host.querySelectorAll('[data-mr]')){
@@ -152,7 +156,7 @@ V.renderSongMR=(host,song)=>{
     }
     player.textContent='MR을 불러오는 중…';
     // A remembered key shift needs Web Audio: wake it while this tap still counts as a user gesture (iPhone Safari).
-    if(shiftOf(song.id)){V.mrKey.context();V.mrKey.load().catch(()=>{});}
+    if(shiftOf(song.id,track.id)){V.mrKey.context();V.mrKey.load().catch(()=>{});}
     try{
      const url=await window.VzipR2.url(track.r2Key);
      if(!player.isConnected||player.hidden||identity()!==account||window.VzipAccountScope?.leaving)return;
@@ -170,6 +174,64 @@ V.renderSongMR=(host,song)=>{
      if(save(song.id,all=>{const found=all.find(x=>x.id===track.id);if(found){found.deleted=true;found.updatedAt=Date.now()}})){V.toast('MR을 삭제했어요.');draw();}
     }catch(error){V.toast(error.message,'error');}
    };
+  }
+ };
+ draw();
+};
+/* AR 레퍼런스 links (songs[].arLinks: {id, label, url}): a web address to listen to or watch, opened in the browser.
+ * Each link has its own small sheet (add / edit) and a menu (수정 · 삭제), like the MR list above. */
+const httpUrl=value=>{try{const u=new URL(String(value||'').trim());return ['https:','http:'].includes(u.protocol)?u.href:'';}catch{return '';}};
+const arName=(link,i)=>link.label||'AR 레퍼런스 '+(i+1);
+/** Where a shown link is in the song as it is now: by id, or (older links without one) by its place while it still reads the same. */
+const arIndex=(song,link,index)=>{const list=song?.arLinks||[];if(link.id)return list.findIndex(x=>x.id===link.id);const at=list[index];return at&&!at.id&&at.url===link.url&&(at.label||'')===(link.label||'')?index:-1;};
+const AR_MOVED='다른 기기에서 이 링크가 바뀌었어요. 목록을 다시 확인해 주세요.';
+function arSheet(song,entry,redraw){
+ V.sheet({title:entry?'AR 링크 수정':'AR 링크 추가',body:'<form id="song-ar-link" novalidate><label class="field"><span>이름 (선택)</span><input type="text" name="label" maxlength="80" placeholder="예: 원곡 영상" value="'+esc(entry?.link.label||'')+'"></label><label class="field"><span>링크 <span class="req">*</span></span><input type="url" name="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="2000" placeholder="https://" aria-describedby="song-ar-status" value="'+esc(entry?.link.url||'')+'"></label><p class="small vz-ar-status" id="song-ar-status" data-ar-status role="alert"></p></form>',
+  foot:'<button type="submit" form="song-ar-link" class="btn block" data-ar-save>저장</button>',
+  onMount:(el,close)=>{
+   const form=el.querySelector('form'),status=el.querySelector('[data-ar-status]'),input=form.elements.url;
+   const fail=text=>{status.textContent=text;input.setAttribute('aria-invalid','true');input.focus();};
+   input.addEventListener('input',()=>{status.textContent='';input.removeAttribute('aria-invalid');});
+   form.onsubmit=e=>{
+    e.preventDefault();
+    // Checked before anything is written: VZ.change hides errors thrown inside it.
+    const label=form.elements.label.value.trim(),raw=input.value.trim(),url=httpUrl(raw);
+    if(!raw)return fail('링크 주소를 입력해 주세요.');
+    if(!url)return fail('http:// 또는 https://로 시작하는 주소를 입력해 주세요.');
+    const current=V.song(song.id);if(!current)return fail('곡을 찾을 수 없어요.');
+    const at=entry?arIndex(current,entry.link,entry.index):-1;
+    if(entry&&at<0)return fail(AR_MOVED);
+    if(!V.change(d=>{const s=d.songs.find(x=>x.id===song.id);s.arLinks||=[];if(entry)s.arLinks[at]={...s.arLinks[at],id:s.arLinks[at].id||V.uid(),label,url};else s.arLinks.push({id:V.uid(),label,url});},{silent:true}))return fail('저장하지 못했어요. 다시 시도해 주세요.');
+    close();V.toast(entry?'링크를 수정했어요.':'링크를 추가했어요.');redraw();
+   };
+  }});
+}
+V.renderSongArLinks=(host,song)=>{
+ const draw=()=>{
+  if(!host.isConnected)return;
+  const list=(V.song(song.id)?.arLinks||[]).map((link,index)=>({link,index,name:arName(link,index),url:httpUrl(link.url)}));
+  host.innerHTML='<section class="vz-ar-links" aria-label="AR 레퍼런스"><div class="vz-ar-heading"><strong>AR 레퍼런스 <span>'+list.length+'</span></strong><button type="button" data-add-song-ar aria-label="AR 레퍼런스 링크 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
+   (list.length?'<div class="vz-ar-list">'+list.map((x,i)=>'<div class="vz-ar-item" data-ar="'+i+'">'+
+    // A link that is not a web address (older data) cannot be opened; it can still be corrected or deleted.
+    (x.url?'<a href="'+esc(x.url)+'" target="_blank" rel="noopener noreferrer"><span><strong>'+esc(x.name)+'</strong><small>'+esc(x.link.url)+'</small></span><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>'
+     :'<div class="vz-ar-broken"><span><strong>'+esc(x.name)+'</strong><small>열 수 없는 주소예요. 수정해 주세요.</small></span></div>')+
+    (x.url&&V.shareUrl?'<button type="button" class="icon-btn vz-ar-share" data-ar-share aria-label="'+esc(x.name)+' 링크 보내기"><i class="ph ph-share" aria-hidden="true"></i></button>':'')+
+    '<button type="button" class="icon-btn" data-ar-more aria-label="'+esc(x.name)+' 수정·삭제"><i class="ph ph-dots-three" aria-hidden="true"></i></button></div>').join('')+'</div>':'<p>링크를 추가하면 여기서 바로 열 수 있어요.</p>')+'</section>';
+  host.querySelector('[data-add-song-ar]').onclick=()=>{if(V.song(song.id))arSheet(song,null,draw);};
+  for(const row of host.querySelectorAll('[data-ar]')){
+   const entry=list[+row.dataset.ar];
+   row.querySelector('[data-ar-share]')?.addEventListener('click',()=>V.shareUrl(entry.link.label||(V.song(song.id)?.title||song.title)+' 레퍼런스',entry.url));
+   row.querySelector('[data-ar-more]').onclick=()=>V.menu({title:entry.name,body:'<div class="list"><button type="button" class="item" data-ar-edit><i class="ph ph-pencil-simple"></i><span class="item-main">수정</span></button><button type="button" class="item" data-ar-delete style="color:var(--danger)"><i class="ph ph-trash"></i><span class="item-main">삭제</span></button></div>',
+    onMount:(el,close)=>{
+     el.querySelector('[data-ar-edit]').onclick=()=>{close();arSheet(song,entry,draw);};
+     el.querySelector('[data-ar-delete]').onclick=async()=>{
+      close();
+      if(!await V.confirm('AR 링크 삭제','"'+entry.name+'" 링크를 이 곡에서 삭제할까요? 링크가 가리키는 영상이나 파일은 그대로예요.',{ok:'삭제',danger:true}))return;
+      const at=arIndex(V.song(song.id),entry.link,entry.index);
+      if(at<0){V.toast(AR_MOVED,'error');draw();return;}
+      if(V.change(d=>{d.songs.find(x=>x.id===song.id).arLinks.splice(at,1);},{silent:true})){V.toast('링크를 삭제했어요.');draw();}
+     };
+    }});
   }
  };
  draw();

@@ -5,17 +5,19 @@ body[data-vz-route="song"] #top{position:static;min-height:44px;padding:0;margin
 body[data-vz-route="song"] #top h1{font-size:26px;line-height:34px;font-weight:700;color:var(--vz-color-ink)}
 body[data-vz-route="song"] #view{padding:0}
 body[data-vz-route="song"] .icon-btn{min-width:44px;min-height:44px;background:transparent;border:0;color:var(--vz-color-ink-muted)}
-body[data-vz-route="song"] .vz-song-detail-hero{position:relative;display:flex;flex-direction:column;gap:4px;min-height:148px;padding:18px 20px;border-radius:20px;background:linear-gradient(125deg,#A65CFF,var(--vz-color-accent) 52%,#6D2BE5);color:#fff;overflow:hidden}
+body[data-vz-route="song"] .vz-song-detail-hero{position:relative;display:flex;flex-direction:column;gap:4px;min-height:104px;padding:16px 20px;border-radius:20px;background:linear-gradient(125deg,#A65CFF,var(--vz-color-accent) 52%,#6D2BE5);color:#fff;overflow:hidden}
 .vz-song-detail-eyebrow{font-size:13px;font-weight:600}
 .vz-song-detail-title{font-size:23px;line-height:29px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vz-song-detail-sub{font-size:13px;opacity:.94}
-.vz-song-detail-summary{margin-top:auto;font-size:12px;opacity:.9}
+.vz-song-detail-sub{font-size:13px;line-height:18px;opacity:.94;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vz-song-detail-sub[hidden]{display:none}
+.vz-song-detail-summary{margin-top:auto;padding-top:6px;font-size:12px;line-height:18px;opacity:.9}
 .vz-ar-links{margin:0 0 16px;background:transparent}
 .vz-ar-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:0 4px}
 .vz-ar-heading strong{font-size:18px;color:var(--vz-color-ink)}.vz-ar-heading strong span{color:var(--vz-color-ink-muted);font-size:13px;font-weight:600}
 .vz-ar-heading button{display:grid;place-items:center;flex:none;width:44px;height:44px;padding:0;border:0;background:transparent;color:var(--vz-color-ink-muted);font-size:21px;cursor:pointer}
 .vz-ar-links>p{margin:8px 4px 0;color:var(--vz-color-ink-muted);font-size:13px}
-.vz-ar-list{display:grid;margin-top:4px}.vz-ar-list a{display:flex;align-items:center;gap:10px;min-height:54px;padding:7px 0;color:var(--vz-color-ink);text-decoration:none}
+/* A long address never widens the page: one column that can shrink; names and addresses end in … */
+.vz-ar-list{display:grid;grid-template-columns:minmax(0,1fr);margin-top:4px}.vz-ar-broken{flex:1;min-width:0;display:flex;align-items:center;min-height:54px;padding:7px 0}.vz-ar-broken>span{flex:1;min-width:0}.vz-ar-broken strong,.vz-ar-broken small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vz-ar-broken strong{font-size:14px;font-weight:600}.vz-ar-broken small{font-size:12px;color:var(--vz-color-danger,#C93A3A)}.vz-ar-status{margin:-6px 0 0;color:var(--vz-color-danger,#C93A3A)}.vz-ar-status:empty{display:none}
+.vz-ar-list a{display:flex;align-items:center;gap:10px;min-height:54px;padding:7px 0;color:var(--vz-color-ink);text-decoration:none}
 .vz-ar-list a+a{border-top:1px solid var(--vz-color-border)}.vz-ar-list a>span{flex:1;min-width:0}.vz-ar-list a strong,.vz-ar-list a small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vz-ar-list a strong{font-size:14px;font-weight:600}.vz-ar-list a small{font-size:12px;color:var(--vz-color-ink-muted)}.vz-ar-list a>i{font-size:17px;color:var(--vz-color-faint)}
 .vz-ar-edit{display:grid;gap:10px;margin-top:16px}.vz-ar-edit>.row strong{font-size:15px}.vz-ar-edit-row{display:grid;grid-template-columns:1fr 44px;gap:6px 8px;padding:12px;border-radius:14px;background:var(--vz-color-canvas)}.vz-ar-edit-row .field{margin:0;min-width:0}.vz-ar-edit-row .field:nth-child(2){grid-column:1}.vz-ar-edit-row [data-remove-ar]{grid-column:2;grid-row:1/3;align-self:center;color:var(--vz-color-ink-muted)}
 .vz-song-detail-actions{display:flex;justify-content:flex-end;margin:0 0 4px}
@@ -24,6 +26,9 @@ body[data-vz-route="song"] .vz-song-detail-hero{position:relative;display:flex;f
 .vz-song-section{display:flex;align-items:center;justify-content:space-between;min-height:44px;margin:16px 4px 8px}
 .vz-song-section h2{margin:0;font-size:18px;line-height:26px;font-weight:700;color:var(--vz-color-ink)}
 .vz-song-section h2 span{font-size:13px;font-weight:600;color:var(--vz-color-ink-muted)}
+.vz-song-lab{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding:0 4px;color:var(--vz-color-accent);font-size:13px;line-height:18px;font-weight:600;text-decoration:none}.vz-song-lab i{font-size:14px}
+.vz-song-lab:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:2px;border-radius:8px}
+.vz-song-more-rows{margin-top:12px}.vz-song-more-rows[hidden]{display:none}
 .vz-song-dashboard{padding:16px;border:0;border-radius:20px;background:#fff;box-shadow:none}
 .vz-song-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;text-align:center}
 .vz-song-stats div{display:flex;flex-direction:column;gap:3px;padding:6px 2px;min-width:0}
@@ -54,6 +59,8 @@ body[data-vz-route="song"] .song-tabs button[aria-selected="true"]{background:va
 .vz-song-media-list .vz-song-kind{display:inline-flex;align-items:center;flex:none;min-height:23px;padding:0 7px;border-radius:7px;font-size:11px;font-weight:600;white-space:nowrap;background:var(--vz-category-practice-soft);color:var(--vz-category-practice)}
 .vz-song-media-list .vz-song-kind.lesson{background:var(--vz-category-lesson-soft);color:var(--vz-category-lesson)}
 .vz-song-media-list .vz-song-kind.performance,.vz-song-media-list .vz-song-kind.audition{background:#FFF0E9;color:#DE3E0A}
+/* The record chip is 23px to look at and 44px to touch: the title line must not clip the touch area (the name keeps its own …). */
+#view .vz-song-media-list .vz-record .item-title{overflow:visible}
 .vz-song-media-list .vz-song-kind[role="button"]{position:relative;cursor:pointer}
 .vz-song-media-list .vz-song-kind[role="button"]::before{content:"";position:absolute;left:-5px;right:-5px;top:50%;height:44px;transform:translateY(-50%)}
 .vz-song-media-list .vz-song-kind:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:2px}
@@ -76,6 +83,8 @@ body[data-vz-route="song"] .sheet-back{z-index:62}
 .vz-analysis-selected-scroll a{display:block;flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:10px 13px;border-radius:99px;background:var(--vz-color-accent-soft);color:var(--vz-color-ink-secondary);text-decoration:none;font-size:12px}
 .vz-analysis-selected-scroll a[aria-current="true"]{background:var(--vz-color-selected-bg);color:var(--vz-color-accent);font-weight:700}
 @media(max-width:350px){.vz-song-stats b{font-size:15px}.vz-song-detail-title{font-size:21px}}
+/* 320px phones: all five tabs fit without scrolling. */
+@media(max-width:359px){body[data-vz-route="song"] .song-tabs button{padding:0 8px}}
 
 .vz-song-more{margin:0 0 8px;border-radius:16px;background:#fff}
 .vz-song-more>summary{display:flex;align-items:center;justify-content:space-between;min-height:48px;padding:0 16px;color:var(--vz-color-ink-secondary);font-size:13px;font-weight:600;list-style:none;cursor:pointer}
@@ -123,3 +132,9 @@ body[data-vz-route="song"] .vz-media-selection [data-lab-link]:focus-visible{out
 .vz-mr-key-msg{margin:4px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-ink-muted)}
 .vz-mr-key-msg:empty{display:none}
 .vz-mr-key-off{margin:4px 0 0;font-size:12px;line-height:18px;color:var(--vz-color-ink-muted)}
+/* 악보 list: the conversion state tints the 음표 변환 tool; on a 320px phone the three tools go under the title instead of squeezing it. */
+body[data-vz-route="song"] .score-row [data-omr="done"]{color:var(--vz-color-accent)}
+body[data-vz-route="song"] .score-row [data-omr="failed"]{color:var(--vz-color-danger,#C93A3A)}
+@media(max-width:359px){body[data-vz-route="song"] .score-row{flex-wrap:wrap}body[data-vz-route="song"] .score-row [data-score-open]{flex-basis:100%}body[data-vz-route="song"] .score-row .score-actions{margin-left:auto}}
+.vz-ar-item>a{padding-left:4px}
+
