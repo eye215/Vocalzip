@@ -65,7 +65,15 @@ const open = async (page, query = '') => {
 const done = page => expect(page.locator('[data-vp-results][data-vp-complete="true"]')).toBeVisible({timeout:60000});
 const measure = async page => { await page.locator('[data-vp-run]').click(); await done(page); await expect(page.locator('[data-vp-status]')).toHaveText('다 쟀어요.'); };
 const row = (page, id) => page.locator('[data-vp-row="' + id + '"]');
-const noOverflow = async page => expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+// Names what runs off the screen (the deepest elements past the right edge), so a failure on an engine that cannot be
+// run locally still says where to look.
+const noOverflow = async page => expect(await page.evaluate(() => {
+  const w = document.documentElement.clientWidth, over = document.documentElement.scrollWidth - w;
+  if (over <= 1) return [];
+  const bad = [...document.body.querySelectorAll('*')].filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.right > w + 1; });
+  return ['overflow ' + over + 'px'].concat(bad.filter(el => !bad.some(o => o !== el && el.contains(o))).slice(0, 8).map(el => { const r = el.getBoundingClientRect();
+    return el.tagName.toLowerCase() + '.' + String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className).trim().replace(/\s+/g, '.') + [...el.attributes].filter(a => a.name.startsWith('data-')).map(a => '[' + a.name + ']').join('') + ' left ' + Math.round(r.left) + ' width ' + Math.round(r.width) + ' "' + (el.textContent || '').trim().slice(0, 24) + '"'; }));
+})).toEqual([]);
 const BANNED = /좋아졌|나빠졌|좋아진|나빠진|나아졌|향상|악화|개선|길이 맞|길을 찾았|잘했어요|못했어요/;
 const DIRECTION = /늘었어요|줄었어요|커졌어요|작아졌어요/;
 const REFUSED = '반주가 목소리만큼 크게 들어가 있어 이 녹음은 잴 수 없어요. 이어폰을 끼고 녹음한 것(목소리만 들어간 것)으로 비교해 주세요.';
