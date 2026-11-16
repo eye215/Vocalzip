@@ -61,7 +61,9 @@ async function mountAnalysis(host) {
   const my = ++request, songs = V.songsNewest();
   const saved = (V.db.comparisonReports || []).filter(r => !gone('comparisonReports', r.id)).length;
   const foot = '<div class="list icons growth-hub-list">' + row('#/lab-reports', 'folder-open', '리포트 보관함', saved ? '저장한 리포트 ' + saved + '개' : '저장한 리포트가 아직 없어요', ' data-hub-reports') +
-    row('#/library', 'list-checks', '녹음을 직접 골라 분석', '전체 녹음에서 선택한 뒤 분석을 눌러요', ' data-hub-library') + '</div>';
+    row('#/library', 'list-checks', '녹음을 직접 골라 분석', '전체 녹음에서 선택한 뒤 분석을 눌러요', ' data-hub-library') +
+    // 소리 길 흔적 (시험판, app/voice-path.js): two takes of a song side by side.
+    (window.VzipVoicePath ? row('#/voice-path', 'path', '소리 길 흔적 · 시험판', '두 녹음에서 들리는 흔적을 나란히 봐요', ' data-hub-voice-path') : '') + '</div>';
   if (!songs.length) { host.innerHTML = V.empty('music-notes', '먼저 곡을 추가해 주세요.', '<a class="btn" href="#/songs">내 곡으로 가기</a>') + foot; return; }
   if (!M.cached().length) host.innerHTML = '<p class="growth-hub-note" role="status">녹음을 불러오는 중…</p>';
   let items, failed = false;
