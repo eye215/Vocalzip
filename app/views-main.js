@@ -714,7 +714,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
         const current = VZ.song(s.id) || s;
         // MR files, AR links (each with its own sheet and menu: app/song-mr.js) and the original recording for note comparison.
         body.innerHTML = '<div data-song-mr></div><div data-song-ar-links></div><div data-song-ar-file></div>';
-        VZ.renderSongMR?.(body.querySelector('[data-song-mr]'),current);
+        VZ.renderSongMR?.(body.querySelector('[data-song-mr]'),current,{reanalyze:true});
         VZ.renderSongArLinks?.(body.querySelector('[data-song-ar-links]'),current);
         VZ.renderSongAr?.(body.querySelector('[data-song-ar-file]'),current);
         VZ.mediaSelection?.hideSongAction();
