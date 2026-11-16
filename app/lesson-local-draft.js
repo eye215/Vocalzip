@@ -11,7 +11,7 @@ const current=()=>{
  const scope=window.VzipAccountScope,owner=window.vzipCloudUserId?.(),session=window.vzipCloudSessionId?.();
  return scope&&!scope.leaving&&owner&&owner===scope.owner&&window.vzipCloudSignedIn?.()&&session?{owner,session,storage:scope.storage}:null;
 };
-const same=c=>{const now=current();return !!now&&now.owner===c.owner&&now.session===c.session;};
+const same=c=>{const now=current();return !!c&&!!now&&now.owner===c.owner&&now.session===c.session;};
 const receiptKey=c=>'vzip_lesson_draft_receipts_v1:'+encodeURIComponent(c.owner);
 const memoryKey=(owner,key)=>owner+':'+key;
 function receipts(c){
@@ -49,11 +49,16 @@ async function verify(){
   const r=receipts(c),acknowledged=[];
   for(const [key,p] of Object.entries(before.pending)){
    const lesson=baseline?.payload?.lessons?.find(x=>x.id===p.lessonId);
-   if(!lesson||!Object.entries(p.values).every(([f,t])=>(lesson[f]||'')===t))continue;
+   if(!lesson)continue;
    // A later submission of the same field must not be consumed by an older server response.
    if(JSON.stringify(r.pending[key])!==JSON.stringify(p))continue;
-   for(const ref of p.records)r.done[ref.key]=Math.max(r.done[ref.key]||0,ref.revision);
-   delete r.pending[key];acknowledged.push(key);
+   const confirmed=new Set(Object.entries(p.values).filter(([f,t])=>(lesson[f]||'')===t).map(([f])=>f));
+   if(!confirmed.size)continue;
+   for(const ref of p.records)if(confirmed.has(JSON.parse(ref.key)[1]))r.done[ref.key]=Math.max(r.done[ref.key]||0,ref.revision);
+   const values=Object.fromEntries(Object.entries(p.values).filter(([f])=>!confirmed.has(f)));
+   if(Object.keys(values).length)r.pending[key]={...p,values,records:p.records.filter(ref=>!confirmed.has(JSON.parse(ref.key)[1]))};
+   else delete r.pending[key];
+   acknowledged.push(key);
   }
   writeReceipts(c,r);
   for(const key of acknowledged)volatileReceipts.delete(key);
@@ -67,7 +72,7 @@ window.addEventListener('vzip:data-changed',e=>{if(e.detail?.source==='cloud-mer
 V.lessonLocalDraft={bind({form,lessonId,inputs}){
  const c=current(),editorId=crypto.randomUUID();
  let entityId=lessonId||'new:'+crypto.randomUUID(),closed=false;
- const controller=new AbortController(),signal=controller.signal,entries=[];
+ const controller=new AbortController(),signal=controller.signal,entries=[],observed=new Map();
  const warning=document.createElement('p');warning.className='small muted';warning.setAttribute('role','status');warning.hidden=true;form.prepend(warning);
  const warn=()=>{warning.hidden=false;warning.textContent='초안을 기기에 저장하지 못했어요. 새로고침 전에 입력 내용을 복사해 주세요.';};
  let outbox=null;
@@ -111,6 +116,7 @@ V.lessonLocalDraft={bind({form,lessonId,inputs}){
  function paint(entry){
   if(!allowed())return;
   const list=pendingRecords().filter(r=>r.field===entry.field&&r.editorId!==editorId).sort((a,b)=>b.updatedAt-a.updatedAt);
+  for(const r of list)observed.set(recordKey(r),r);
   // Equal text from repeated explicit restores is one choice; completion still tracks every record.
   const options=list.filter((r,i)=>list.findIndex(x=>x.text===r.text)===i);
   entry.notice.replaceChildren();entry.notice.hidden=!options.length;
@@ -150,11 +156,16 @@ V.lessonLocalDraft={bind({form,lessonId,inputs}){
  function dispose(){if(closed)return;flush();closed=true;controller.abort();release?.();bindings.delete(api);}
  const api={
   get lessonId(){return lessonId||entityId.slice(4);},
-  value(field,confirmed){const entry=entries.find(x=>x.field===field);return entry?.touched?entry.input.value:confirmed||'';},
+  value(field,confirmed){const entry=entries.find(x=>x.field===field);return entry&&(entry.touched||entry.input.value!==entry.base)?entry.input.value:confirmed||'';},
   prepare(values){
    flush();if(!allowed())return null;
-   const records=pendingRecords().filter(r=>fields.has(r.field)&&Object.hasOwn(values,r.field)&&(lessonId||r.entityId===entityId));
-   return records.length?{id:crypto.randomUUID(),lessonId:api.lessonId,values,records:records.map(r=>({key:recordKey(r),revision:r.localRevision}))}:null;
+   // Only acknowledge revisions offered in this form, plus this editor's own input. Another tab's
+   // later/unseen revision remains a draft even if it appeared while the save was being prepared.
+   const seen=new Map(observed);
+   for(const r of pendingRecords())if(r.editorId===editorId)seen.set(recordKey(r),r);
+   const records=[...seen.values()].filter(r=>Object.hasOwn(values,r.field)&&(lessonId||r.entityId===entityId));
+   const submittedFields=new Set(records.map(r=>r.field)),submittedValues=Object.fromEntries(Object.entries(values).filter(([f])=>submittedFields.has(f)));
+   return records.length?{id:crypto.randomUUID(),lessonId:api.lessonId,values:submittedValues,records:records.map(r=>({key:recordKey(r),revision:r.localRevision}))}:null;
   },
   accepted(ticket){
    if(!ticket||!allowed())return;
@@ -162,7 +173,7 @@ V.lessonLocalDraft={bind({form,lessonId,inputs}){
    try{const r=receipts(c);r.pending[id]=receipt;writeReceipts(c,r);}catch{warn();}
    scheduleVerification();
   },
-  canSave(){if(!c||allowed())return true;V.toast('계정이 바뀌었어요. 원래 계정에서 다시 열어 주세요.','error');return false;},
+  canSave(){if(c?allowed():!closed&&!current()&&!window.VzipAccountScope?.leaving)return true;V.toast('계정이 바뀌었어요. 원래 계정에서 다시 열어 주세요.','error');return false;},
   refresh(){for(const entry of entries)if(!entry.touched)paint(entry);},
   dispose
  };

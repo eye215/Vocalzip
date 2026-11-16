@@ -1,4 +1,4 @@
-/* Headless account-scoped field draft outbox. Not loaded by the application yet. */
+/* Headless account-scoped field draft outbox. server_draft is not a committed lesson body. */
 (function(root,factory){
  if(typeof module==='object'&&module.exports)module.exports=factory();
  else root.VzipFieldDraftOutbox=factory();

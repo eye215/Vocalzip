@@ -16,7 +16,7 @@ window.supabase={createClient:()=>({
  rpc:async name=>({data:name==='vzip_register_session'?{status:'active',current_session:'${SESSION}',sessions:[]}:name==='vzip_session_is_active'?true:null,error:null}),
  from:table=>{
   let write=null,requestedOwner=owner(),single=false;
-  const q={};for(const method of ['select','eq','is','order','range','in','upsert','insert','update','delete','maybeSingle'])q[method]=(...args)=>{
+  const q={};for(const method of ['select','eq','is','order','range','limit','in','upsert','insert','update','delete','maybeSingle'])q[method]=(...args)=>{
    if(method==='eq'&&args[0]==='user_id')requestedOwner=args[1];
    if(method==='maybeSingle')single=true;
    if(['upsert','insert','update','delete'].includes(method))write={method,value:args[0]};return q;
@@ -55,7 +55,11 @@ async function setup(page,{owner=A}={}){
 }
 const feedback=async page=>{await page.locator('[data-fb]').click();await expect(page.locator('#fb-form')).toBeVisible();};
 const schedule=async page=>{await page.locator('[data-edit-lesson]').click();await expect(page.locator('#lesson-form')).toBeVisible();};
-const close=async page=>{await page.locator('.sheet [data-close]').last().click();};
+const close=async page=>{
+ await page.locator('.sheet [data-close]').last().click();
+ const confirm=page.getByRole('button',{name:'닫기',exact:true});
+ if(await confirm.isVisible())await confirm.click();
+};
 const drafts=page=>page.evaluate(()=>{
  const s=VzipAccountScope.storage,rows=[];
  for(let i=0;i<s.length;i++){const k=s.key(i);if(k.startsWith('vzip_field_outbox_v1:'))rows.push(JSON.parse(s.getItem(k)));}
