@@ -75,3 +75,9 @@ test('recording retries bypass an old cached R2 link and renew it, while a devic
   assert.equal((await source({attempt:2,signal:ctl.signal})).url,'blob:local');assert.equal(seen.length,1);
  }finally{global.VzipR2=saved;}
 });
+test('legacy chunk assembly is allowed to finish beyond the short URL-signing deadline',async()=>{
+ let calls=0;
+ const source=L.recordingSource({src:async()=>{calls++;await new Promise(r=>setTimeout(r,70));return {url:'assembled-file'};}},{storageVersion:2});
+ const result=await L.read({source,policy,fetch:async()=>new Response(new Uint8Array([1]))});
+ assert.equal(calls,1);assert.equal(result.byteLength,1);
+});

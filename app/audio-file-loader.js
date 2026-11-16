@@ -37,7 +37,8 @@ async function read({source, signal, onProgress=()=>{}, onEvent=()=>{}, onRetry=
     };
     signal?.addEventListener('abort',stop,{once:true});
     try {
-      arm(rules.resolveMs,'resolve-timeout');
+      // Legacy chunk storage assembles the whole file before returning its URL. It is not a short signing call.
+      arm(source.assemblesFile ? rules.totalMs : rules.resolveMs,'resolve-timeout');
       const finding=Promise.resolve().then(()=>{if(ctl.signal.aborted)throw ctl.signal.reason;return source({signal:ctl.signal,attempt});});
       // A non-cancellable provider can return an object URL after the caller left. Release it too.
       finding.then(late=>{if(ctl.signal.aborted&&late?.revoke)root.URL.revokeObjectURL(late.url);},()=>{});
@@ -91,13 +92,13 @@ async function task(work,{signal,ms=30000,stage='decode'}={}) {
   catch(error){throw signal?.aborted?aborted():timeout || error;}
   finally{clearTimeout(timer);signal?.removeEventListener('abort',stop);ctl.abort();}
 }
-const recordingSource = (media,item) => async ({signal,attempt}) => {
+const recordingSource = (media,item) => Object.assign(async ({signal,attempt}) => {
   const now=media.srcNow?.(item);
   if(now?.revoke || (attempt===1&&now))return now;
   if(item.storageProvider==='r2' && item.r2Key && typeof root.VzipR2?.url==='function')
     return {url:await root.VzipR2.url(item.r2Key,{signal,refresh:attempt>1}),revoke:false};
   return media.src(item);
-};
+}, {assemblesFile:item.storageProvider!=='r2' && item.storageVersion===2});
 const api={read,task,recordingSource,POLICY};
 if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipAudioFile=api;
 })(typeof window==='object'?window:globalThis);
