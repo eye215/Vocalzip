@@ -1,7 +1,7 @@
 name: Precision reports
 on:
   pull_request:
-    paths: ['app/precision-report*', 'app/precision-analysis.js', 'app/precision-result-store.js', 'supabase/functions/vzip-precision-coach/**', 'tests/precision-report*', 'tests/precision-coach*', '.github/workflows/precision-reports.yml']
+    paths: ['app/precision-report*', 'app/precision-analysis.js', 'app/precision-result-store.js', 'supabase/functions/vzip-precision-coach/**', 'tests/precision-report*', 'tests/precision-coach*', 'tests/precision-integration*', 'tests/precision.playwright.config.cjs', '.github/workflows/precision-reports.yml']
   workflow_dispatch:
 jobs:
   models:
@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - run: node --test tests/precision-report.test.cjs tests/precision-coach.test.mjs
+      - run: node --test tests/precision-report.test.cjs tests/precision-coach.test.mjs tests/precision-integration.test.cjs
   browser:
     runs-on: ubuntu-24.04
     steps:
