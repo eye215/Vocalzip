@@ -11,14 +11,17 @@ jobs:
     timeout-minutes: 50
     env:
       PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: '1'
+      # The media parser the import worker loads: the tests answer the CDN address from this pinned copy
+      # (tests/legacy-session-mode.cjs), so a slow CDN cannot fail a test.
+      VZ_MEDIABUNNY: /tmp/vzip-mediabunny/package/dist/bundles/mediabunny.min.mjs
     steps:
+      # ---- Setup. A failure here stops the job: nothing below can run without it. ----
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/collection-routes.test.cjs
       - name: Provide FFmpeg and FFprobe for media fixtures
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
@@ -28,17 +31,70 @@ jobs:
             echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
           fi
       - run: node tests/make-audio-fixtures.cjs
-      - run: node --test tests/repertoire-model.test.cjs tests/song-keys.test.cjs tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs tests/data-merge.test.cjs tests/media-delete.test.cjs tests/flac-encode.test.cjs tests/vocal-analysis.test.cjs tests/goal-routines.test.cjs tests/data-export.test.cjs
-      - run: npx playwright test tests/v6.spec.cjs --project=chromium-mobile --grep 'Settings' --workers=1
-      - run: npx playwright test tests/repertoire.spec.cjs --workers=2
-      - run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Video import copies|201MiB video extraction|Real queue extracts|Metadata-derived dates'
       - name: Pinned PDF renderer/export libraries for full score regression
         run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
       - name: Pinned MusicXML preview library (bundled file only) for the score conversion preview
         run: mkdir -p /tmp/vzip-osmd && npm pack opensheetmusicdisplay@2.2.1 --pack-destination /tmp/vzip-osmd -q && tar -xzf /tmp/vzip-osmd/opensheetmusicdisplay-2.2.1.tgz -C /tmp/vzip-osmd
       - name: Pinned MR key-shift library (bundled file only) for the MR key test
         run: mkdir -p /tmp/vzip-signalsmith && npm pack signalsmith-stretch@1.3.2 --pack-destination /tmp/vzip-signalsmith -q && tar -xzf /tmp/vzip-signalsmith/signalsmith-stretch-1.3.2.tgz -C /tmp/vzip-signalsmith
-      - run: npm run test:ui
+      - name: Pinned media parser (bundled file only) for every import test
+        id: ready
+        run: mkdir -p /tmp/vzip-mediabunny && npm pack mediabunny@1.65.1 --pack-destination /tmp/vzip-mediabunny -q && tar -xzf /tmp/vzip-mediabunny/mediabunny-1.65.1.tgz -C /tmp/vzip-mediabunny package/dist/bundles/mediabunny.min.mjs && test -s "$VZ_MEDIABUNNY"
+
+      # ---- Checks. Each one runs and reports whatever the others did (one failing step used to hide every later
+      # step, the ~2,000 tests of the full run included). A failed step still fails the job; the last step lists
+      # them. Every Playwright step keeps its own results folder so a later step does not erase an earlier trace. ----
+      - name: Node tests
+        id: node
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: node --test tests/collection-routes.test.cjs tests/repertoire-model.test.cjs tests/song-keys.test.cjs tests/chunk-media.test.cjs tests/media-date.test.cjs tests/bounded-byte-writer.test.cjs tests/data-merge.test.cjs tests/media-delete.test.cjs tests/flac-encode.test.cjs tests/vocal-analysis.test.cjs tests/goal-routines.test.cjs tests/data-export.test.cjs
+      - name: Node tests that no workflow ran before
+        id: node_more
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: node --test tests/ar-compare.test.cjs tests/goal-routines-sync.test.cjs tests/growth-audit-p1.test.cjs tests/lesson-ai-model.test.cjs tests/local-day-labels.test.cjs tests/lyrics-memo-model.test.cjs tests/metronome.test.cjs tests/practice-coach-edge.test.mjs tests/practice-recommendations.test.cjs tests/practice-review-model.test.cjs tests/practice-room-model.test.cjs tests/processing-cost.test.cjs tests/processing-retry.test.cjs tests/score-align.test.cjs tests/score-vision-edge.test.mjs tests/server-analysis.test.cjs tests/voice-check-model.test.cjs tests/weekly-summary.test.cjs
+      - name: Settings (chromium-mobile, one at a time)
+        id: settings
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/settings
+        run: npx playwright test tests/v6.spec.cjs --project=chromium-mobile --grep 'Settings' --workers=1 --output=test-results/settings
+      - name: Repertoire (all browsers)
+        id: repertoire
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/repertoire
+        run: npx playwright test tests/repertoire.spec.cjs --workers=2 --output=test-results/repertoire
+      - name: Large media imports (chromium-desktop, one at a time)
+        id: media
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/media
+        run: npx playwright test --project=chromium-desktop --workers=1 --grep 'Video import copies|201MiB video extraction|Real queue extracts|Metadata-derived dates' --output=test-results/media
+      - name: Full browser run
+        id: full
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/full
+        run: npm run test:ui -- --output=test-results/full
+      - name: Every check passed
+        if: ${{ !cancelled() }}
+        env:
+          READY: ${{ steps.ready.outcome }}
+          NODE: ${{ steps.node.outcome }}
+          NODE_MORE: ${{ steps.node_more.outcome }}
+          SETTINGS: ${{ steps.settings.outcome }}
+          REPERTOIRE: ${{ steps.repertoire.outcome }}
+          MEDIA: ${{ steps.media.outcome }}
+          FULL: ${{ steps.full.outcome }}
+        run: |
+          failed=0
+          for pair in "Setup=$READY" "Node tests=$NODE" "Node tests that no workflow ran before=$NODE_MORE" "Settings=$SETTINGS" "Repertoire=$REPERTOIRE" "Large media imports=$MEDIA" "Full browser run=$FULL"; do
+            name=${pair%%=*}; outcome=${pair#*=}
+            echo "$name: ${outcome:-not run}"
+            echo "- $name: ${outcome:-not run}" >> "$GITHUB_STEP_SUMMARY"
+            [ "$outcome" = success ] || failed=1
+          done
+          exit $failed
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -47,4 +103,3 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
-

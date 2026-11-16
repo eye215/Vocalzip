@@ -1,5 +1,6 @@
 const {test,expect}=require('@playwright/test'),path=require('node:path');
 require('./legacy-session-mode.cjs')(test);
+const need=require('./helpers/prerequisites.cjs'); // generated media files and the parser bundle: skipped with the reason when missing (an error in CI)
 test.beforeEach(async({page})=>{
  page.__errors=[];page.on('pageerror',error=>page.__errors.push(error.message));
  await page.route('**/supabase.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:null}}),onAuthStateChange:()=>({})}})}'}));
@@ -7,9 +8,10 @@ test.beforeEach(async({page})=>{
  await page.route('**/tus.min.js',route=>route.fulfill({contentType:'application/javascript',body:'window.tus={}'}));
  if(process.env.VZ_MEDIABUNNY)await page.context().route('**/mediabunny@1.65.1/dist/bundles/mediabunny.min.mjs',route=>route.fulfill({path:process.env.VZ_MEDIABUNNY,contentType:'text/javascript'}));
  await page.goto('/legacy.html');
+ await need.mediabunny(test,page);
 });
 test.afterEach(async({page})=>expect(page.__errors).toEqual([]));
-async function selected(page,name,queue=false){if(!queue)await page.evaluate(()=>document.querySelector('#vzip-hub-upload').onchange=null);await page.locator('#vzip-hub-upload').setInputFiles(path.resolve('tests/fixtures/'+name))}
+async function selected(page,name,queue=false){if(!queue)await page.evaluate(()=>document.querySelector('#vzip-hub-upload').onchange=null);await page.locator('#vzip-hub-upload').setInputFiles(need.fixture(test,name))}
 test('Video import copies exact original AAC into audio-only output and keeps capture date',async({page})=>{
  test.setTimeout(90000);await selected(page,'dated-video.mp4');
  const result=await page.evaluate(async()=>{

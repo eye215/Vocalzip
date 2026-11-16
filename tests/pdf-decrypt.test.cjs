@@ -1,11 +1,15 @@
 // Encrypted-but-openable PDFs (owner password only, as many bought scores are) are opened for page copying by
 // app/pdf-decrypt.js. Fixtures were encrypted by an independent writer (qpdf via pikepdf, see encrypted-pdf/make.py).
-const {test} = require('node:test');
+const base = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const D = require('../app/pdf-decrypt.js');
 const PDFROOT = process.env.VZ_PDFJS_ROOT || '/tmp/vzip-score-pdfjs/node_modules/pdfjs-dist';
-const lib = require(path.join(PDFROOT, '../pdf-lib/dist/pdf-lib.min.js')); // the same build the app loads
+const LIB = path.join(PDFROOT, '../pdf-lib/dist/pdf-lib.min.js');
+// pdf-lib is not a project dependency (the app loads it from the CDN). Without it the tests are skipped with the reason; in CI that is an error.
+const skip = require('./helpers/prerequisites.cjs').nodeSkip(fs.existsSync(LIB), 'pdf-lib@1.17.1 is not at ' + LIB + ': run `npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1` (or set VZ_PDFJS_ROOT).');
+const test = skip ? name => base.test(name, {skip}, () => {}) : base.test;
+const lib = skip ? null : require(LIB); // the same build the app loads
 const dir = path.join(__dirname, 'encrypted-pdf');
 const read = name => new Uint8Array(fs.readFileSync(path.join(dir, name + '.pdf')));
 const OPENABLE = ['rc4-40', 'rc4-128', 'aes-128', 'aes-128-classic', 'rc4-128-r4-plain-metadata', 'aes-256'];

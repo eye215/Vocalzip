@@ -237,8 +237,10 @@ VZ.sheet = ({title, body, foot = '', onMount, onClose, label, variant = 'page', 
     sheets.splice(sheets.indexOf(api), 1);
     if (!sheets.length) unlockPage();
     onClose?.(); if (previous?.isConnected) previous.focus();
-    // A refresh that waited for this sheet runs now.
-    if (!sheets.length && VZ.pendingRender) setTimeout(() => VZ.softRender(), 50);
+    // A refresh that waited for this sheet runs now — unless the caller already redrew the screen meanwhile (save
+    // sheets do, right after closing). A second redraw 50 ms later replaced the buttons under a finger: a press that
+    // started before it and ended after it was dropped.
+    if (!sheets.length && VZ.pendingRender) setTimeout(() => { if (VZ.pendingRender) VZ.softRender(); }, 50);
   };
   // Unsaved edits: something in the sheet was used and its fields no longer match what they were when it opened.
   let baseline = null, touched = false;

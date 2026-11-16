@@ -132,6 +132,24 @@ test('Repertoire persists metadata ratings keys and filters without rewriting or
  await page.locator('[data-song-search]').click();await expect(page.getByRole('searchbox',{name:'곡 검색',exact:true})).toBeFocused();await page.getByRole('searchbox',{name:'곡 검색',exact:true}).fill('지킬');await expect(page.locator('[data-l] a')).toHaveCount(1);await page.getByRole('searchbox',{name:'곡 검색',exact:true}).press('Enter');await expect(page.locator('[data-l]')).toContainText('This Is the Moment');await expect(page.locator('[data-song-search]')).toHaveCSS('color','rgb(122, 50, 245)');expect(await page.locator('[data-song-search]').evaluate(el=>getComputedStyle(el,'::after').content)).toBe('none');await expect(page.locator('[data-song-filter]')).toHaveCSS('color','rgb(122, 50, 245)');
  await page.locator('[data-song-filter]').click();await page.locator('[data-filter-sort]').click();await page.getByRole('button',{name:'숙련도순',exact:true}).click();await expect(page.locator('[data-l]')).toContainText('공연 가능');
 });
+// A press that starts before a redraw of the screen and ends after it is dropped (the button under the finger is
+// replaced), which is how "회차 추가" right after 저장 now and then did nothing in WebKit. The refresh that waited for
+// an open sheet therefore runs once: not again 50 ms later when the caller already redrew after closing.
+test('A refresh that waited for a sheet runs once after it closes, not again when the caller already redrew',async({page})=>{
+ await boot(page);await page.goto('/#/performances');await expect(page.locator('[data-new-show]')).toBeVisible();
+ const draws=await page.evaluate(async()=>{
+  let n=0;const render=VZ.render;VZ.render=function(){n++;return render.apply(this,arguments)};
+  // The waiting refresh is a 50 ms timer in VZ.sheet's close: give it four times that before counting.
+  const settled=async()=>{await new Promise(r=>setTimeout(r,200));const count=n;n=0;return count};
+  try{
+   let sheet=VZ.sheet({title:'확인',body:'<p>내용</p>'});VZ.softRender();const whileOpen=n;   // waits for the sheet
+   sheet.close();const alone=await settled();                                               // nobody else redraws: once
+   sheet=VZ.sheet({title:'확인',body:'<p>내용</p>'});VZ.softRender();sheet.close();VZ.softRender(); // a save sheet: close, then redraw
+   return {whileOpen,alone,withCaller:await settled()};
+  }finally{VZ.render=render}
+ });
+ expect(draws).toEqual({whileOpen:0,alone:1,withCaller:1});
+});
 test('Performance CRUD, distinct sessions, bidirectional song links and safe deletion',async({page})=>{
  await boot(page);const id=await newShow(page);await addSession(page,'14:00','1');await addSession(page,'19:00','2');
  await page.locator('[data-edit-session]').first().click();await dialog(page).getByLabel('시작 시간',{exact:true}).fill('15:00');await save(page);expect((await db(page)).performances[0].sessions.some(s=>s.time==='15:00')).toBe(true);

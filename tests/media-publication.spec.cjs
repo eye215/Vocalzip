@@ -48,6 +48,11 @@ test('R2-required practice audio never falls back to Supabase Storage when readi
 });
 test('failed publication survives reload and retries without re-reading or re-uploading a source file',async({page})=>{
  const server=await publicationServer(page,{failOnce:true});await boot(page);
+ // The app retries by itself 1.5 s after sign-in (cloud-sync.js scheduleReceiptRecovery). On a slow run that retry ran on
+ // THIS page before the reload: it either finished here (nothing left for the reload to recover) or was cut off by the
+ // reload, which WebKit reports as "… /v2/media/publish due to access control checks." Hold it back on this page only, so
+ // the recovery this test is about is the one after the reload (the reloaded page has the real function again).
+ await page.evaluate(()=>{window.vzipRecoverMediaUploads=async()=>[];});
  const failed=await page.evaluate(async bytes=>{
   try{await window.vzipCloudImport(new File([new Uint8Array(bytes)],'original.wav',{type:'audio/wav'}),{id:'publish-retry',name:'복구할 제목',songId:'s1'});return false;}catch{return true;}
  },[...wav(1)]);
