@@ -10,7 +10,7 @@
  * An MR file:
  *   {mono:{channels, rate}}             → {mono:Float32Array at 8 kHz} (transferred)
  * Any failure → {error}. Buffers are dropped as soon as the next step has what it needs. */
-importScripts('voice-path-model.js?v=2');
+importScripts('voice-path-model.js?v=4');
 const P = self.VzipVoicePath, SR = P.THRESHOLDS.SR, MR_RATE = 8000;
 let job = null;
 const mix = channels => {
@@ -47,9 +47,9 @@ self.onmessage = e => {
         const n = job.low.reduce((s, x) => s + x.length, 0), rec = new Float32Array(n); let o = 0;
         for (const x of job.low) { rec.set(x, o); o += x.length; }
         job.low = null; job.halver = null;
-        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=1');
-        for (const mr of d.end.mrs) {
-          let out; try { out = self.VzipMrCancel.cancel(rec, mr.samples); } catch (err) { out = {ok:false, reason:'error'}; }
+        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=2');
+        for (const [i, mr] of d.end.mrs.entries()) {
+          let out; try { out = self.VzipMrCancel.cancel(rec, mr.samples, {onProgress:p => self.postMessage({stage:'cancel', progress:(i + p) / d.end.mrs.length})}); } catch (err) { out = {ok:false, reason:'error'}; }
           mr.samples = null;                                          // this MR copy is not needed again
           const removedDb = out.ok ? out.report.removedDb : out.removedDb ?? null, ok = !!out.ok && removedDb >= P.THRESHOLDS.MR_MIN_REMOVED_DB;
           tries.push({key:mr.key, ok, reason:ok ? '' : out.ok ? 'little' : out.reason || 'no-match', removedDb});

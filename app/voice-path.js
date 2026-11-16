@@ -24,8 +24,8 @@
 'use strict';
 const V = window.VZ, M = V?.media, P = window.VzipVoicePath;
 if (!V || !M || !P) return;
-const esc = V.esc, T = P.THRESHOLDS;
-const WORKER = 'app/voice-path-worker.js?v=2';
+const esc = V.esc, T = P.THRESHOLDS, L = window.VzipAudioFile;
+const WORKER = 'app/voice-path-worker.js?v=4';
 const MAX_BYTES = 250 * 1024 * 1024;     // the same limit as the app's analysis; a larger file is refused, never cut
 const BLOCK_SECONDS = 30;                // decoded sound handed to the worker at a time
 const CACHE_CAP = 60;                    // takes kept on the device
@@ -122,23 +122,20 @@ const mrSamples = new Map();             // mrKey → Promise<Float32Array 8 kHz
 const decoder = rates => { const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext; for (const rate of rates) { try { return new Ctx(1, rate, rate); } catch {} } throw Error('이 브라우저는 소리를 꺼내 읽지 못해요.'); };
 const decode = (ctx, bytes) => new Promise((resolve, reject) => { const p = ctx.decodeAudioData(bytes, resolve, reject); if (p?.then) p.then(resolve, reject); });
 const aborted = () => new DOMException('그만둠', 'AbortError');
-/** The promise, or a rejection the moment the signal fires (reading a file into sound cannot itself be stopped). */
-const orStopped = (promise, signal) => new Promise((resolve, reject) => { if (signal.aborted) { reject(aborted()); return; } const stop = () => reject(aborted()); signal.addEventListener('abort', stop, {once:true}); promise.then(v => { signal.removeEventListener('abort', stop); resolve(v); }, e => { signal.removeEventListener('abort', stop); reject(e); }); });
-function loadMr(track, signal) {
+function loadMr(track, signal, onEvent = () => {}, onRetry = () => {}) {
   const key = mrKey(track);
   if (!mrSamples.has(key)) {
     const job = (async () => {
-      const url = await window.VzipR2.url(track.r2Key), res = await fetch(url, {signal});
-      if (!res.ok) throw Error('MR 파일을 받지 못했어요 (' + res.status + ').');
-      const buf = await orStopped(decode(decoder([8000, 16000, 44100]), await res.arrayBuffer()), signal);
+      const bytes = await L.read({source:async ({signal,attempt}) => ({url:await window.VzipR2.url(track.r2Key,{signal,refresh:attempt>1})}), signal, onEvent, onRetry, maxBytes:MAX_BYTES});
+      const buf = await L.task(() => decode(decoder([8000, 16000, 44100]), bytes), {signal,stage:'decode'});
       const channels = []; for (let ch = 0; ch < buf.numberOfChannels; ch++) channels.push(buf.getChannelData(ch).slice());
-      return await new Promise((resolve, reject) => {
+      return await L.task(signal => new Promise((resolve, reject) => {
         const w = new Worker(WORKER), end = () => { signal.removeEventListener('abort', quit); w.terminate(); }, quit = () => { end(); reject(aborted()); };
         signal.addEventListener('abort', quit, {once:true});
         w.onmessage = e => { end(); e.data.error ? reject(Error(e.data.error)) : resolve(e.data.mono); };
         w.onerror = e => { end(); reject(Error(e.message || 'MR을 읽지 못했어요.')); };
         w.postMessage({mono:{channels, rate:buf.sampleRate}}, channels.map(c => c.buffer));
-      });
+      }), {signal,stage:'mr-mono'});
     })();
     job.catch(() => mrSamples.delete(key));                           // a failed or stopped load is tried again next time
     mrSamples.set(key, job);
@@ -148,23 +145,8 @@ function loadMr(track, signal) {
 
 /* ---------- measuring one take ---------- */
 /** The file's bytes: a source already on the device first (no network), else the cloud link, read with progress. */
-async function fileOf(item, signal, onProgress) {
-  const src = M.srcNow?.(item) || await M.src(item);
-  try {
-    const res = await fetch(src.url, {signal});
-    if (!res.ok) throw Error('파일을 받지 못했어요 (' + res.status + ').');
-    const total = Number(res.headers.get('content-length')) || 0;
-    if (total > MAX_BYTES) throw Error('파일이 너무 커요. 250MB 이하 녹음만 잴 수 있어요.');
-    if (src.revoke || !res.body?.getReader) { const all = await res.arrayBuffer(); if (all.byteLength > MAX_BYTES) throw Error('파일이 너무 커요. 250MB 이하 녹음만 잴 수 있어요.'); onProgress(1); return all; }
-    const reader = res.body.getReader(), parts = []; let got = 0;
-    for (;;) {
-      const {done, value} = await reader.read(); if (done) break;
-      parts.push(value); got += value.length;
-      if (got > MAX_BYTES) { reader.cancel().catch(() => {}); throw Error('파일이 너무 커요. 250MB 이하 녹음만 잴 수 있어요.'); }
-      onProgress(total ? Math.min(1, got / total) : null);
-    }
-    return await new Blob(parts).arrayBuffer();                       // joined off this thread
-  } finally { if (src.revoke) URL.revokeObjectURL(src.url); }
+async function fileOf(item, signal, onProgress, onEvent, onRetry) {
+  return L.read({source:L.recordingSource(M,item),signal,onProgress,onEvent,onRetry,maxBytes:MAX_BYTES});
 }
 /** Hand the decoded sound to the worker 30 s at a time (each piece is copied once and transferred), then finish. */
 function measureIn(s, buf, mrs, onStage) {
@@ -199,15 +181,15 @@ async function measure(s, item, bytesPromise, plan, onStage) {
   if (signal.aborted) throw aborted();
   onStage('decode', null);
   let t = performance.now();
-  let buf = await orStopped(decode(decoder([T.SR, 22050, 44100]), bytes), signal);
+  let buf = await L.task(() => decode(decoder([T.SR, 22050, 44100]), bytes), {signal,stage:'decode'});
   ms.decode = Math.round(performance.now() - t);
   if (signal.aborted) throw aborted();
   const seconds = buf.length / buf.sampleRate, tries = [], mrs = [];
   if (plan.pick.length) {
     onStage('mr', null); t = performance.now();
     for (const track of plan.pick) {
-      try { mrs.push({key:mrKey(track), samples:(await loadMr(track, signal)).slice()}); }
-      catch (error) { if (error?.name === 'AbortError') throw error; tries.push({key:mrKey(track), ok:false, reason:'load', removedDb:null}); }
+      try { mrs.push({key:mrKey(track), samples:(await loadMr(track, signal, e => s.fileLoads.push({role:item.id===s.a?'base':'comp',kind:'mr',...e}), () => onStage('mrRetry',null))).slice()}); }
+      catch (error) { if (error?.name === 'AbortError') throw error; tries.push({key:mrKey(track), ok:false, reason:'load', removedDb:null, ...(error?.diagnostic?{loadFailure:error.diagnostic}:{})}); }
     }
     ms.mrLoad = Math.round(performance.now() - t);
   }
@@ -243,7 +225,7 @@ function viewOf(s, role) {
 /* ---------- drawing ---------- */
 const noteBanner = () => '<p class="vp-note" data-vp-note><i class="ph ph-ear" aria-hidden="true"></i><span>' + NOTE + '</span></p>';
 const trial = '<span class="vp-trial">시험판</span>';
-const STAGE = {wait:'차례를 기다리는 중', file:'파일 받는 중', decode:'소리 읽는 중', mr:'곡 MR 불러오는 중', model:'재는 중', cancel:'곡 MR 빼는 중', voice:'목소리 재는 중'};
+const STAGE = {wait:'차례를 기다리는 중', file:'파일 받는 중', fileRetry:'파일 연결을 다시 시도하는 중', decode:'소리 읽는 중', mr:'곡 MR 불러오는 중', mrRetry:'MR 연결을 다시 시도하는 중', model:'재는 중', cancel:'곡 MR 빼는 중', voice:'목소리 재는 중'};
 const stageText = j => STAGE[j.stage] + (j.pct != null ? ' ' + Math.round(j.pct * 100) + '%' : '') + (j.stage === 'model' && j.at != null && j.of ? ' · ' + clock(j.at) + ' / ' + clock(j.of) : '');
 function progressHtml(s, role) {
   const j = s.jobs?.[s[role]]; if (!j) return '';
@@ -285,12 +267,13 @@ function mrChoice(s, role, id) {
 const mrHelp = s => mrFilesOf(s.song).length ? '<p class="vp-muted" data-vp-mr-help>녹음마다 뺄 MR을 따로 골라요. 이 곡에 올린 MR 파일을 녹음에서 빼고 목소리만 재요. 녹음할 때 MR의 키나 빠르기를 바꿨다면 빠지지 않아요.</p>' : '';
 function picker(s) {
   const ids = [s.a, s.b].filter(Boolean), missing = ids.filter(id => !recordOf(s, id));
+  const status = '<p class="vp-muted" data-vp-status role="status">' + esc(s.status || (missing.length ? '이 기기 안에서만 재요. 한 번 잰 녹음은 이 기기에 남겨 두어 다음에는 바로 보여요.' : '이 기기에 남겨 둔 결과예요. 다시 재기를 누르면 처음부터 새로 재요.')) + '</p>';
+  const attention = !!s.status && missing.length > 0;
   return '<section class="vp-card vp-picker" data-vp-picker aria-label="녹음 고르기"><h2>녹음 두 개 고르기</h2>' +
     (s.items.length < 2 ? '<p class="vp-muted" data-vp-need>이 곡의 녹음이 두 개 있어야 나란히 볼 수 있어요. 지금 ' + s.items.length + '개예요.</p>' :
       (s.defaulted ? '<p class="vp-muted" data-vp-default>' + esc(s.defaulted) + '</p>' : '') + slot(s, 'a') + slot(s, 'b') + mrHelp(s) +
       (s.running ? '<button type="button" class="btn secondary block" data-vp-cancel>그만하기</button><p class="vp-muted">이 기기 안에서만 재요. 파일이 밖으로 나가지 않아요.</p>'
-        : '<button type="button" class="btn block vp-run" data-vp-run="' + (missing.length ? 'missing' : 'again') + '">' + (missing.length ? '흔적 재기' : '다시 재기') + '</button>' +
-          '<p class="vp-muted" data-vp-status role="status">' + esc(s.status || (missing.length ? '이 기기 안에서만 재요. 한 번 잰 녹음은 이 기기에 남겨 두어 다음에는 바로 보여요.' : '이 기기에 남겨 둔 결과예요. 다시 재기를 누르면 처음부터 새로 재요.')) + '</p>')) +
+        : (attention ? status : '') + '<button type="button" class="btn block vp-run" data-vp-run="' + (missing.length ? 'missing' : 'again') + '">' + (missing.length ? '흔적 재기' : '다시 재기') + '</button>' + (attention ? '' : status))) +
     '</section>';
 }
 function timesHtml(role, label, list, kindLabel) {
@@ -307,10 +290,10 @@ const GROUP_NOTE = {
   '시작':'구절을 시작할 때 소리가 아주 빨리 켜지면서 음이 위로 튀었는지를 세요.'
 };
 /** Rows: a comparison when both takes can be measured; else one take's own values with nothing said about the other. */
-function rowsHtml(A, B) {
+function rowsHtml(A, B, running) {
   const usable = v => v?.state === 'ready' && v.ok.ok, a = usable(A) ? A.shown : null, b = usable(B) ? B.shown : null;
   if (!a && !b) return '';
-  const why = v => v?.state === 'ready' ? ['잴 수 없음', '한쪽 녹음을 잴 수 없어 나란히 보지 않아요', '잴 수 없어요'] : ['재는 중', '다른 녹음을 다 재면 나란히 보여 드려요', '재는 중…'];
+  const why = v => v?.state === 'ready' ? ['잴 수 없음', '한쪽 녹음을 잴 수 없어 나란히 보지 않아요', '잴 수 없어요'] : running ? ['재는 중', '다른 녹음을 다 재면 나란히 보여 드려요', '재는 중…'] : ['아직 못 잼', '한쪽 녹음을 아직 재지 못해 나란히 보지 않아요', '아직 재지 못했어요'];
   const one = (side, v) => { const [marker, line, other] = why(v); return P.alone(side === 'base' ? a : b, side, {marker, line, other}); };
   const rows = a && b ? P.compare(a, b) : a ? one('base', B) : one('comp', A), groups = [...new Set(rows.map(r => r.group))];
   const times = id => { const key = id === 'breaks' ? ['breaks', '끊김'] : id === 'flips' ? ['flips', '뒤집힘'] : null; return key ? timesHtml('a', '기준', a?.transitions[key[0]], key[1]) + timesHtml('b', '비교', b?.transitions[key[0]], key[1]) : ''; };
@@ -347,7 +330,7 @@ function takeCard(s, role, label, v) {
   const mrNote = v.source === 'mr-removed' ? info('data-vp-mr-note', 'music-notes-minus', '<b>깨끗함: 곡 MR을 빼고 잰 소리</b> · 곡 MR(' + esc(v.track?.title || '곡 MR') + ')을 ' + esc(String(v.rec.removed.report.removedDb)) + ' dB 빼고 쟀어요.' +
       (v.mode === 'auto' && v.plan.pick.length > 1 ? ' 자동으로 가장 많이 빠지는 MR을 골랐어요.' : '') + ' 반주가 조금 남아 있을 수 있어요.')
     : v.mode === 'none' ? '<p class="vp-muted" data-vp-mr-none>MR을 빼지 않고 쟀어요.</p>'
-    : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + '. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요. 녹음 파일을 그대로 읽었어요.') : '';
+    : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + (failed.some(t=>t.reason==='load') ? '. 파일 연결을 확인한 뒤 다시 재기를 눌러 주세요.' : '. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요.') + ' 녹음 파일을 그대로 읽었어요.') : '';
   const state = !v.ok.ok ? info('data-vp-refused', 'prohibit', v.ok.why === 'no-voice' ? '이 녹음에서 목소리를 찾지 못했어요. 반주만 있거나 목소리가 작게 녹음됐을 수 있어요.' : esc(P.REFUSED_NOTE))
     : v.source === 'mixed' ? info('data-vp-unclean', 'info', esc(P.UNCLEAN_NOTE) + '. 끊김·뒤집힘에도 반주를 잘못 읽은 곳이 섞일 수 있어요.') : '';
   return head + '<p class="vp-meta">' + esc([day(m), v.ok.ok ? '목소리 ' + Math.round(r.voicedSeconds) + '초' : '', '녹음 ' + clock(v.rec.seconds) + ' 전체를 쟀어요'].filter(Boolean).join(' · ')) + '</p>' + mrNote + state + storedNote(v) +
@@ -358,7 +341,7 @@ function resultsHtml(s) {
   if (!A || !B || (A.state !== 'ready' && B.state !== 'ready')) return '';
   const both = A.state === 'ready' && B.state === 'ready', shown = [A, B].filter(v => v.state === 'ready' && v.ok.ok);
   return '<div class="vp-results" data-vp-results data-vp-complete="' + both + '"><div class="vp-takes">' + takeCard(s, 'a', '기준', A) + takeCard(s, 'b', '비교', B) + '</div>' +
-    rowsHtml(A, B) +
+    rowsHtml(A, B, s.running) +
     (shown.length ? '<section class="vp-card" data-vp-zone-card><details><summary>음역별로 보기 <i class="ph ph-caret-down" aria-hidden="true"></i></summary><p class="vp-muted">녹음마다 부른 음의 범위를 셋으로 나눠 봤어요. 소리가 ' + T.MIN_ZONE_SECONDS + '초보다 적은 구간은 표본 부족으로 두고 비교하지 않아요.</p>' +
       (A.state === 'ready' && A.ok.ok ? zonesHtml('기준', A.shown) : '') + (B.state === 'ready' && B.ok.ok ? zonesHtml('비교', B.shown) : '') + '</details></section>' : '') +
     (both ? '<section class="vp-card vp-diag"><button type="button" class="btn sm secondary" data-vp-diagnosis><i class="ph ph-file-arrow-down" aria-hidden="true"></i> 진단 파일 저장</button>' +
@@ -370,7 +353,9 @@ function draw(s) {
   s.players?.forEach(p => p.destroy?.()); s.players = new Map();
   settleChoices(s);
   const keep = document.scrollingElement?.scrollTop ?? 0;
-  s.host.innerHTML = noteBanner() + '<div class="vp-song"><strong>' + esc(s.song.title) + '</strong>' + trial + '</div><div class="vp-cols">' + picker(s) + resultsHtml(s) + '</div>';
+  const failedLoad = !s.running && s.fileLoads?.length && !(viewOf(s,'a')?.state==='ready'&&viewOf(s,'b')?.state==='ready')
+    ? '<section class="vp-card vp-diag"><button type="button" class="btn sm secondary" data-vp-diagnosis><i class="ph ph-file-arrow-down" aria-hidden="true"></i> 진단 파일 저장</button><p class="vp-muted">파일을 불러오지 못한 단계와 연결 상태를 담아요. 음성과 파일 주소는 담지 않아요.</p></section>' : '';
+  s.host.innerHTML = noteBanner() + '<div class="vp-song"><strong>' + esc(s.song.title) + '</strong>' + trial + '</div><div class="vp-cols">' + picker(s) + resultsHtml(s) + '</div>' + failedLoad;
   if (document.scrollingElement) document.scrollingElement.scrollTop = keep;
   bind(s);
 }
@@ -381,19 +366,21 @@ async function run(s, force) {
   if (s.running) return;
   const todo = [...new Set([s.a, s.b].filter(Boolean))].filter(id => force || !recordOf(s, id));
   if (!todo.length) return;
-  s.running = true; s.status = ''; s.abort = new AbortController(); s.jobs = {};
+  s.running = true; s.status = ''; s.abort = new AbortController(); s.jobs = {}; s.fileLoads = [];
   const roleOf = id => id === s.a ? 'a' : 'b';
   const stage = (id, name, pct, at) => { if (s.dead) return; const j = s.jobs[id]; if (!j) return; j.stage = name; j.pct = pct; j.at = at ?? null; paintProgress(s, roleOf(id)); };
   const files = new Map();
   for (const id of todo) {
     const item = s.items.find(x => x.id === id), t0 = performance.now();
     s.jobs[id] = {stage:'file', pct:null, at:null, of:Number(item.durationSeconds) || 0};
-    const p = fileOf(item, s.abort.signal, pct => { if (s.jobs[id]?.stage === 'file') stage(id, 'file', pct); }).then(bytes => { p.ms = Math.round(performance.now() - t0); if (s.jobs[id]?.stage === 'file' && id !== todo[0]) stage(id, 'wait', null); return bytes; });
+    const p = fileOf(item, s.abort.signal, pct => { if (['file','fileRetry'].includes(s.jobs[id]?.stage)) stage(id, 'file', pct); }, e => s.fileLoads.push({role:id===s.a?'base':'comp',kind:'recording',...e}), () => stage(id,'fileRetry',null)).then(bytes => { p.ms = Math.round(performance.now() - t0); if (s.jobs[id]?.stage === 'file' && id !== todo[0]) stage(id, 'wait', null); return bytes; });
     p.catch(() => {}); files.set(id, p);
   }
   draw(s);
+  let measuring = todo[0];
   try {
     for (const id of todo) {
+      measuring = id;
       const item = s.items.find(x => x.id === id);
       const rec = await measure(s, item, files.get(id), mrPlan(s, id), (name, pct, at) => stage(id, name, pct, at));
       if (s.dead) return;
@@ -404,17 +391,19 @@ async function run(s, force) {
     s.status = '다 쟀어요.';
   } catch (error) {
     if (s.dead) return;
+    if(error?.diagnostic && !s.fileLoads.some(e=>e.code===error.diagnostic.code&&e.stage===error.diagnostic.stage&&e.attempt===error.diagnostic.attempt))
+      s.fileLoads.push({role:measuring===s.a?'base':'comp',kind:'recording',...error.diagnostic});
     s.abort.abort();                                                  // stop the other download too
     s.status = error?.name === 'AbortError' ? '그만뒀어요. 다시 재려면 흔적 재기를 눌러 주세요.' : '재지 못했어요: ' + String(error?.message || error);
   } finally { if (!s.dead) { s.running = false; s.abort = null; s.jobs = {}; draw(s); } }
 }
 function bind(s) {
   const host = s.host, q = sel => host.querySelector(sel);
-  host.querySelectorAll('[data-vp-pick]').forEach(sel => sel.onchange = () => { s[sel.dataset.vpPick] = sel.value; s.defaulted = ''; s.status = ''; draw(s); host.querySelector('[data-vp-pick="' + sel.dataset.vpPick + '"]')?.focus({preventScroll:true}); });
+  host.querySelectorAll('[data-vp-pick]').forEach(sel => sel.onchange = () => { s[sel.dataset.vpPick] = sel.value; s.defaulted = ''; s.status = ''; s.fileLoads = []; draw(s); host.querySelector('[data-vp-pick="' + sel.dataset.vpPick + '"]')?.focus({preventScroll:true}); });
   host.querySelectorAll('[data-vp-mr-pick]').forEach(sel => sel.onchange = () => {
     const role = sel.dataset.vpMrPick, id = s[role];
     if (!setMrChoice(id, sel.value)) V.toast('고른 MR을 저장하지 못했어요.', 'error');
-    mrGone.delete(id); s.status = ''; draw(s); host.querySelector('[data-vp-mr-pick="' + role + '"]')?.focus({preventScroll:true});
+    mrGone.delete(id); s.status = ''; s.fileLoads = []; draw(s); host.querySelector('[data-vp-mr-pick="' + role + '"]')?.focus({preventScroll:true});
   });
   host.querySelectorAll('[data-vp-clean]').forEach(box => box.onchange = () => {
     const id = s[box.dataset.vpClean];
@@ -463,11 +452,12 @@ function bind(s) {
 /** Numbers only: see P.diagnosis. Dates are cut to the month and MR track ids are left out before they reach the file. */
 function diagnosisOf(s) {
   const take = (role, key) => { const v = viewOf(s, key);
+    if(v?.state!=='ready')return null;
     return {role, date:P.monthOf(M.dateOf(v.m)), result:v.result, clean:v.clean, source:v.source, measurable:v.ok, stored:analysisOf(v.m), reliable:reliable(v.m),
       mr:v.rec.removed?.report || null, mrTries:v.rec.tries, mrMode:v.mode, mixed:v.source === 'mr-removed' ? v.rec.mixed : null, stagesMs:v.rec.stages, fromDeviceCache:!!v.rec.fromDevice}; };
-  return P.diagnosis([take('base', 'a'), take('comp', 'b')], {generatedMonth:V.today().slice(0, 7)});
+  return P.diagnosis([take('base', 'a'), take('comp', 'b')].filter(Boolean), {generatedMonth:V.today().slice(0, 7),fileLoads:s.fileLoads || []});
 }
-V.voicePathDiagnosis = () => current && viewOf(current, 'a')?.state === 'ready' && viewOf(current, 'b')?.state === 'ready' ? diagnosisOf(current) : null;   // for tests
+V.voicePathDiagnosis = () => current && (viewOf(current,'a')?.state==='ready' || viewOf(current,'b')?.state==='ready' || current.fileLoads?.length) ? diagnosisOf(current) : null;
 
 /* ---------- routes ---------- */
 /** The song's recordings as 보컬 연구소 lists them (dataset rule 'songList'), oldest first. */
