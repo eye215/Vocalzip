@@ -15,6 +15,9 @@
 // zone ("D5 부근에서…") became what recurs over the recordings ("최근 7개 중 7개에서 D5 근처 …") or 판정 보류 with the
 // count, the card's sub line and method text, "이 녹음에서만 본 참고값" in the two-recording table; overallModel gained
 // `recurring` beside each passaggio entry.
+// 판정 기준 재검토 (2026-11-15) changed one rule on purpose: a wobble / high-note wobble change between an AI-separated
+// take and one as recorded is 변화 관찰 (state changed, judged kept, note ai-mixed) instead of being judged; only the
+// fixture's one mixed song moved (비슷함 → 변화 관찰, its 비슷 counts −1).
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
