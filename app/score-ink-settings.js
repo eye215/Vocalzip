@@ -7,16 +7,21 @@
  * 시작점 · 반복 구간 · 건너뛰기 (app/score-mark-model.js). The built-in 시작점 · 반복 · 컷 have theirs fixed.
  * 찍는 방식 (pick, optional): 'measure' = 마디 선택 — a tap takes a whole measure, a drag a run of measures, and the
  * mark is drawn over them (needs the score's conversion; without it the form's own way is used). For the forms in
- * MARK_PICK_FORMS; 컷 has it by default. */
-(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.VzipScoreInkSettings=api;})(typeof window==='object'?window:globalThis,function(){
+ * MARK_PICK_FORMS; 컷 has it by default.
+ * 직접 그리기 (form 'draw'): the preset carries the symbol the user drew (art, see app/score-ink-model.js artFrom) and
+ * its 크기 (size 's' | 'm' | 'l'); a tap stamps it. Drawings make the stored settings larger than they used to be,
+ * so up to MAX_TEXT characters are read. */
+(function(root,factory){const node=typeof module==='object'&&module.exports,api=factory(node?require('./score-ink-model.js'):root.VzipScoreInk);if(node)module.exports=api;else root.VzipScoreInkSettings=api;})(typeof window==='object'?window:globalThis,function(Ink){
 'use strict';
-const HEX=/^#[0-9a-f]{6}$/i,PREFIX='vzip_score_ink_settings_v1:';
+const HEX=/^#[0-9a-f]{6}$/i,PREFIX='vzip_score_ink_settings_v1:',MAX_TEXT=600000;
 const PALETTES={
  pen:[['#101828','검정'],['#b42318','진한 빨강'],['#175cd3','파랑'],['#1849a9','남색'],['#067647','진한 초록'],['#5925dc','진한 보라'],['#854a0e','갈색'],['#851651','자주']],
  highlighter:[['#fef08a','파스텔 노랑'],['#fbcfe8','파스텔 분홍'],['#bae6fd','파스텔 하늘'],['#bbf7d0','파스텔 초록'],['#ddd6fe','파스텔 보라'],['#fed7aa','파스텔 주황'],['#99f6e4','파스텔 민트'],['#e9d5ff','파스텔 라일락']]
 };
 /* 남기는 형태: [id, name, how it is placed — 'tap' 한 번 누르기, 'drag' 따라 긋기, 'two' 시작·끝 두 번 누르기]. */
-const MARK_FORMS=[['symbol','기호','tap'],['line','밑줄','drag'],['wave','물결선','drag'],['box','테두리 상자','drag'],['cover','구간 덮기','drag'],['bracket','구간 괄호','two']];
+const MARK_FORMS=[['symbol','기호','tap'],['line','밑줄','drag'],['wave','물결선','drag'],['box','테두리 상자','drag'],['cover','구간 덮기','drag'],['bracket','구간 괄호','two'],['draw','직접 그리기','tap']];
+/* 크기 of a drawn symbol: [id, name]; how large each is on the page is Ink.ART_SIZES. */
+const MARK_SIZES=[['s','작게'],['m','보통'],['l','크게']];
 const MARK_SHAPES=[['v','브이'],['comma','쉼표'],['check','체크'],['circle','동그라미'],['dot','점'],['triangle','세모'],['star','별'],['diamond','마름모'],['text','글자']];
 const MARK_INPUTS={tap:'한 번 누르기',drag:'따라 긋기',two:'시작과 끝을 차례로 누르기',measure:'마디 선택'};
 /* 마디 선택 is offered for the forms that mark a stretch. */
@@ -52,6 +57,10 @@ function marker(raw){
    out.text=text;
   }
  }
+ if(raw.form==='draw'){
+  if(!Ink.validArt(raw.art))throw Error('표기를 그려 주세요. 그린 것이 없으면 저장할 수 없어요.');
+  out.art={a:raw.art.a,s:raw.art.s.map(line=>line.slice())};out.size=MARK_SIZES.some(z=>z[0]===raw.size)?raw.size:'m';
+ }
  if(raw.pick==='measure'&&MARK_PICK_FORMS.includes(raw.form))out.pick='measure';
  // A role this version does not know is left out (the preset then only draws).
  if(typeof raw.role==='string'&&raw.role&&MARK_ROLES.some(r=>r[0]===raw.role))out.role=raw.role;
@@ -59,7 +68,7 @@ function marker(raw){
 }
 /** What marks placed with this preset do: the built-in ones by what they are, a user preset by its `role`. */
 const markerRole=m=>!m?'':m.builtin||Object.prototype.hasOwnProperty.call(MARK_BUILTIN_ROLES,m.id)?MARK_BUILTIN_ROLES[m.id]||'':m.role||'';
-const sameMarker=(a,b)=>['name','color','width','type','form','shape','text','pick'].every(k=>a[k]===b[k]);
+const sameMarker=(a,b)=>['name','color','width','type','form','shape','text','pick','size'].every(k=>a[k]===b[k])&&JSON.stringify(a.art||null)===JSON.stringify(b.art||null);
 const lookOnly=({role,...look})=>look;
 function markers(stored){
  const list=MARKERS.map(m=>{
@@ -86,7 +95,7 @@ function create({storage,identity,defaultPenOnly=false}){
  const current=()=>{const now=identity();if(now?.owner!==owner||now?.session!==session)throw Error('로그인이 바뀌어 도구 설정을 중단했어요.');};
  function read(){
   current();const fallback=defaults();fallback.penOnly=defaultPenOnly===true;let data;
-  try{const text=storage.getItem(key);if(!text||text.length>16000)return fallback;data=JSON.parse(text);}catch{return fallback;}
+  try{const text=storage.getItem(key);if(!text||text.length>MAX_TEXT)return fallback;data=JSON.parse(text);}catch{return fallback;}
   if(data?.version!==1||data.owner!==owner)return fallback;
   for(const tool of ['pen','highlighter']){
    const p=data[tool];if(!p)continue;
@@ -153,5 +162,5 @@ function create({storage,identity,defaultPenOnly=false}){
  }
  return {read,write,key};
 }
-return {create,PALETTES,defaults,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_PICK_FORMS,markInput,markWay,marker,markerRole};
+return {create,PALETTES,defaults,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_PICK_FORMS,MARK_SIZES,markInput,markWay,marker,markerRole};
 });

@@ -357,6 +357,7 @@ const POINT_MARK = .05, NEAR = .012, PREVIEW = 40;
  * measures that function uses (spanOf(page, record, role)) and its row says which (`role`).
  * A 표기 placed by 마디 선택 is listed over the measures it was placed on (fixedOf(page, record) → hits, or null
  * when that range cannot be trusted); its pieces on several lines (`group`) are one row.
+ * The strokes of one stamped 표기 (a drawn symbol: `group` without `measures`) are one mark where they lie together.
  * Returns {items:[{page, kind, label, where, detail, count, from, to, measures:[index…], role?}], measures: distinct
  * measures that carry something}. */
 function summary(pageOf, rows, {markName = () => '', roleOf = null, spanOf = null, fixedOf = null} = {}) {
@@ -378,18 +379,24 @@ function summary(pageOf, rows, {markName = () => '', roleOf = null, spanOf = nul
       const at = measureAt(pg, s.rect[0] + s.rect[2] / 2, s.rect[1] + s.rect[3] / 2), line = String(s.text || '').trim().split('\n').find(t => t.trim())?.trim() || '';
       if (at) add('memo', '스티커 메모', [at], line ? (line.length > PREVIEW ? line.slice(0, PREVIEW) + '…' : line) : s.mode === 'pen' ? '손글씨' : '빈 메모');
     }
-    const loose = {pen:[], highlighter:[]}, groups = new Set();
+    const loose = {pen:[], highlighter:[]}, groups = new Set(), stamps = new Map();
+    for (const s of list) if (s.group !== undefined && s.measures === undefined && s.mark !== undefined && s.tool !== 'note') (stamps.get(s.group) || stamps.set(s.group, []).get(s.group)).push(s);
     for (const s of list) {
       if (s.tool === 'note' || s.note && memoKeys.has(s.note)) continue;
-      const box = strokeBox(s); if (!box) continue;
+      let box = strokeBox(s); if (!box) continue;
       if (s.mark !== undefined || s.glyph !== undefined) {
+        let whole = s;
+        if (stamps.get(s.group)?.length > 1) {
+          if (groups.has(s.group)) continue;
+          groups.add(s.group); whole = {...s, points:stamps.get(s.group).flatMap(x => x.points || [])}; box = strokeBox(whole);
+        }
         const role = roleOf && spanOf ? roleOf(s) || '' : '', name = (s.mark !== undefined && markName(s.mark, s)) || '표기';
         const fixed = fixedOf ? fixedOf(pg, s) : null;
         if (fixed) {
           if (s.group !== undefined) { if (groups.has(s.group)) continue; groups.add(s.group); }
           add('mark', name, role === 'start' ? fixed.slice(0, 1) : fixed, '', role); continue;
         }
-        if (role) { add('mark', name, spanOf(pg, s, role), '', role); continue; }
+        if (role) { add('mark', name, spanOf(pg, whole, role), '', role); continue; }
         const small = box.w <= POINT_MARK && box.h <= POINT_MARK, at = small ? measureAt(pg, box.x + box.w / 2, box.y + box.h / 2) : null;
         add('mark', name, small ? (at ? [at] : []) : measuresIn(pg, box));
       } else if (loose[s.tool]) loose[s.tool].push(box);

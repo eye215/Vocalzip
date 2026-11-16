@@ -248,11 +248,13 @@ function attach(c) {
     if (!(r.width > 0 && r.height > 0 && aspect > 0)) return null;
     const fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
     let rows; try { rows = v.rows(); } catch { return null; }
-    for (const row of rows.reverse()) {
-      const b = row.page === n && K.roleOf(row) ? M.strokeBox(row) : null;
+    rows = rows.filter(row => row.page === n);
+    for (const row of rows.slice().reverse()) {
+      const b = K.roleOf(row) ? M.strokeBox(row) : null;
       if (!b) continue;
       const reach = Math.max(MARK_REACH / r.width, (row.width || 0) / 2);
-      if (fx >= b.x - reach && fx <= b.x + b.w + reach && fy >= b.y - reach / aspect && fy <= b.y + b.h + reach / aspect) return row;
+      // A stamped symbol of several strokes is one mark: it stands where its whole drawing lies.
+      if (fx >= b.x - reach && fx <= b.x + b.w + reach && fy >= b.y - reach / aspect && fy <= b.y + b.h + reach / aspect) return K.whole(rows, row);
     }
     return null;
   }

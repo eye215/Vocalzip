@@ -8,6 +8,7 @@
  * - span(page, stroke, role, count) the measures the mark stands on (whole measures, in file order)
  * - fixed(page, stroke, count)      the measures a mark placed by 마디 선택 says it covers, or null
  * - pieces(page, look, from, to)    what such a mark draws: one shape per line of music, over the measure boxes
+ * - whole(rows, stroke)             a stamped mark (a drawn symbol of several strokes) as one stroke with all its points
  * - collect(items, ordOf)          the score's functional marks from the 표시한 마디 rows → {starts, repeats, cuts}
  * - runs(ords)                     consecutive measures as [{from, to}]
  * - skips(spans, cuts)             the stretches of MR time to jump over, merged, in play order
@@ -46,6 +47,8 @@
 const ROLES = ['start', 'repeat', 'cut'], ROLE_NAMES = {start:'시작점', repeat:'반복 구간', cut:'건너뛰기'};
 /** A 기호 no larger than this (of the page, both ways) stands on one measure; a sliver under this share is not counted. */
 const POINT = .05, SLIVER = .15, SAME = 1e-6, INSET = .004;
+/** The narrowest and widest a stroke may be, of the page width (app/score-ink-model.js). */
+const MIN_WIDTH = .001, MAX_WIDTH = .06;
 /** A jump is made this long before a cut starts (the MR is looked at every 40 ms) and not within this of its end. */
 const AHEAD = .02, EDGE = .01, MAX_SCORES = 60;
 const roleOf = s => Ink.markRole(s);
@@ -60,6 +63,9 @@ function fixed(pg, s, count) {
   pg.systems.forEach((sys, si) => sys.measures.forEach((x, mi) => { if (x.index >= m[0] && x.index <= m[1]) out.push(hitOf(pg, si, mi)); }));
   return out.length ? out : null;
 }
+/** A mark stamped from a drawn symbol is several strokes linked by `group`: all of them as one, so that the mark
+ * stands where its whole drawing lies. Any other stroke is returned as it is. rows: the records of its page. */
+const whole = (rows, s) => s?.group === undefined || s.measures !== undefined ? s : {...s, points:Ink.grouped(rows || [], s).flatMap(r => r.points || [])};
 function span(pg, s, role, count) {
   const stored = fixed(pg, s, count);
   if (stored) return role === 'start' ? stored.slice(0, 1) : stored;
@@ -93,9 +99,13 @@ function across(pg, s, hits) {
 }
 /** What a mark placed by 마디 선택 draws over the measures from..to (file indexes) of a page: one shape per line of
  * music, as the fields of a stroke each (tool, color, opacity, width, points). look: the preset; aspect: page height
- * / width. The shapes follow the measure boxes — the staff lines seen on the page when it was snapped:
- * 구간 덮기 a band over the top staff (at least as thick as that staff), 테두리 상자 a frame around the line of music,
- * 밑줄 a line under it, 구간 괄호 a bracket over it. */
+ * / width. Every shape follows the measure box of 마디 위치 보기 — the whole system, from the top line of its top staff
+ * to the bottom line of its bottom staff (voice + piano is one box), on the staff lines seen on the page when it was
+ * snapped, with the same little room around:
+ * - 구간 덮기 fills the box. A stroke is at most MAX_WIDTH wide, so a tall box is filled by one line that goes round
+ *   its outside and then to and fro in rows that lie edge to edge (one stroke: it is see-through evenly, with no
+ *   darker seams, and its sides are straight);
+ * - 테두리 상자 frames the box, 밑줄 runs under the bottom staff, 구간 괄호 sits over the top staff. */
 function pieces(pg, look, from, to, aspect = 1) {
   const k = aspect > 0 ? aspect : 1, pen = look.type !== 'highlighter', lo = Math.min(from, to), hi = Math.max(from, to);
   const base = {tool:pen ? 'pen' : 'highlighter', color:look.color, opacity:pen ? 1 : Ink.MARK_OPACITY, width:look.width};
@@ -110,15 +120,18 @@ function pieces(pg, look, from, to, aspect = 1) {
     else if (look.form === 'line') piece = {...base, points:[[x0, bottom], [x1, bottom]]};
     else if (look.form === 'bracket') { const h = Math.min(.046 / k, top); piece = {...base, points:[[x0, top - h], [x0, top], [x1, top], [x1, top - h]]}; }
     else {
-      const staff = sys.staves?.[0] || [sys.top, sys.bottom], width = Math.max(.001, Math.min(.06, Math.max(look.width, (staff[1] - staff[0]) * k * 1.3)));
-      const y = (staff[0] + staff[1]) / 2, half = Math.min(width / 2, (x1 - x0) / 2); // round ends: the band stops at the barlines
-      piece = {...base, width, points:[[x0 + half, y], [x1 - half, y]]};
+      // Rows of equal height, each as wide as a stroke may be at most; the round ends stop at the barlines.
+      const tall = Math.max(MIN_WIDTH, (bottom - top) * k), rows = Math.max(1, Math.ceil(tall / MAX_WIDTH - 1e-9)), width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, tall / rows));
+      const half = Math.min(width / 2, (x1 - x0) / 2), a = x0 + half, z = x1 - half, y = i => top + (i + .5) * (bottom - top) / rows;
+      // One row is a line. More: round the outside first (so both sides are straight), then the rows between.
+      const points = rows === 1 ? [[a, y(0)], [z, y(0)]] : [[a, y(0)], [a, y(rows - 1)], [z, y(rows - 1)], [z, y(0)], [a, y(0)]];
+      for (let i = 1; i < rows - 1; i++) points.push(i % 2 ? [a, y(i)] : [z, y(i)], i % 2 ? [z, y(i)] : [a, y(i)]);
+      piece = {...base, width, points};
     }
     out.push({...piece, points:piece.points.map(p => Ink.point(p[0], p[1]))});
   }
   return out;
 }
-
 /** The score's functional marks. items: rows of VzipScoreMeasures.summary made with roleOf / span (each {role, page,
  * measures: file indexes}); ordOf: Map file index → place in play-order numbering (VzipScoreMeasures.sequence).
  * → {starts:[{ord, page}] one per measure, repeats:[{from, to, page}], cuts:[ord…]} — all sorted by measure. */
@@ -191,5 +204,5 @@ function withPrefs(stored, scoreId, patch, now = Date.now()) {
   for (const id of ids.slice(MAX_SCORES)) delete all[id];
   return JSON.stringify(all);
 }
-return {ROLES, ROLE_NAMES, AHEAD, EDGE, MAX_SCORES, roleOf, span, fixed, pieces, collect, runs, text, skips, skipsFor, jump, orderStarts, prefs, withPrefs};
+return {ROLES, ROLE_NAMES, AHEAD, EDGE, MAX_SCORES, roleOf, span, fixed, pieces, whole, collect, runs, text, skips, skipsFor, jump, orderStarts, prefs, withPrefs};
 });
