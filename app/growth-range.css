@@ -82,6 +82,7 @@
 .range-details h3{margin:12px 0 4px;color:var(--ink-2,#344054);font-size:13px;line-height:18px;font-weight:600}
 .range-details ul{list-style:none;margin:0;padding:0;display:grid;gap:4px;color:var(--ink-2,#475467);font-size:12px;line-height:18px}
 .range-details ul b{color:var(--ink,#101828);font-weight:600;font-variant-numeric:tabular-nums}
+.range-details ul+ul{margin-top:4px}
 .range-details .range-method{gap:8px}
 .range-details .range-method b{display:block}
 .range-rows li{display:grid;gap:2px;padding:8px 0;border-top:1px solid var(--surface-2,#F2EFF7)}
