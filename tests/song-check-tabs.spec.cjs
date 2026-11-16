@@ -87,9 +87,10 @@ test('a recording ⋯ opens the small dark popover by the button, not a full pag
  expect(box.width).toBeLessThanOrEqual(304);expect(box.width).toBeLessThan(vw);
  expect(Math.abs(box.y-(button.y+button.height+8))<2||Math.abs(box.y+box.height-(button.y-8))<2).toBe(true); // attached to ⋯
  const rows=menu.locator('.vz-choice');
- await expect(rows).toHaveText([/전사 확인/,/녹음 유형\s*곡 녹음/,/파일 삭제/]); // delete is last
+ // The shared recording menu (same order as 전체 녹음 · 곡 상세), with this screen's 전사 확인; delete is last.
+ await expect(rows).toHaveText([/재생/,/정보 수정/,/곡 지정/,/녹음 유형\s*곡 녹음/,/전사 확인/,/음원 다운로드/,/파일 삭제/]);
  expect(await rows.last().evaluate(el=>getComputedStyle(el).color)).not.toBe(await rows.first().evaluate(el=>getComputedStyle(el).color));
- await rows.first().click();
+ await menu.getByRole('button',{name:'전사 확인'}).click();
  await expect(page).toHaveURL(/#\/song-transcript\/m-free$/);
 });
 

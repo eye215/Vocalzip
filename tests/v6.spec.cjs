@@ -2402,8 +2402,8 @@ test('File deletion cancels safely, deletes one file and preserves linked practi
  await boot(page);
  await page.goto('/#/library');
  const row=page.locator('[data-media="m1"]').first();
- // 파일 삭제 sits under the recording's 더보기 → 기타 작업.
- const askDelete=async()=>{await row.locator('[data-lib-row-more]').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByText('기타 작업').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByRole('button',{name:'파일 삭제'}).click();};
+ // 파일 삭제 is the last row of the recording's 더보기 (the shared menu, app/recording-menu.js).
+ const askDelete=async()=>{await row.locator('[data-lib-row-more]').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByRole('button',{name:'파일 삭제'}).click();};
  await row.locator('[data-toggle]').click();
  await askDelete();
  await expect(sheet(page)).toContainText('연습·레슨 기록, 메모와 연습 시간은 남아요');

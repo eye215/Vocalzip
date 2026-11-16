@@ -377,23 +377,24 @@ function pickSong(main,item){
   el.querySelector('[data-pick-select]').onchange=e=>choose(e.target.value);
  }});
 }
-// A short action menu: the shared dark popover next to the ⋯ button (design system §공통 작업 화면과 메뉴), delete last.
-function openRecordMenu(main,item,anchor){
- VZ.menu({title:M.label(item),anchor,body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-transcript-view><i class="ph ph-text-align-left"></i> 전사 확인</button>'+VZ.recordingType.menuRow([item])+'<button type="button" class="vz-choice" data-file-delete><i class="ph ph-trash"></i> 파일 삭제</button></div>',onMount:(el,close)=>{
-  el.querySelector('[data-transcript-view]').onclick=()=>{close();VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))};
-  VZ.recordingType.bindMenuRow(el,close,[item],{anchor,after:()=>{if(main.isConnected){saveCheckpoint();draw(main)}}});
-  el.querySelector('[data-file-delete]').onclick=()=>{close();exclusive(main,async(_main,check)=>{
+// The shared ⋯ menu (app/recording-menu.js): the same items and order as 전체 녹음 and 곡 상세, opened at the ⋯ button.
+// 곡 지정 goes through this screen's own choice (saved with ‘추천대로 곡 지정’); 전사 확인 is this screen's extra item.
+function openRecordMenu(main,item,anchor,card){
+ VZ.recordingMenu(item,{anchor,player:()=>inlinePlayers.get(item.id)||null,play:()=>card.querySelector('.vz-sc-play-trigger').click(),
+  assignSong:()=>pickSong(main,item),
+  changed:()=>{if(main.isConnected){saveCheckpoint();draw(main)}},
+  extra:[{key:'transcript',icon:'ph-text-align-left',label:'전사 확인',run:()=>VZ.nav('#/song-transcript/'+encodeURIComponent(item.id))}],
+  remove:()=>exclusive(main,async(_main,check)=>{
    if(state.running||!await M.confirmRemove(item))return;check();await M.remove(item);check();
    state.items=state.items.filter(x=>x.id!==item.id);state.chosen.delete(item.id);state.results.delete(item.id);state.recognitions.delete(item.id);
    saveCheckpoint();draw(main);VZ.toast('파일을 삭제했어요. 연습·레슨 기록은 남아 있어요.');
-  })};
- }});
+  })});
 }
 function openSelectionMenu(main){
  const root=main.querySelector('[data-suggest]'),count=state.chosen.size;
  if(!count||state.running)return;
  const ready=categoryItems().some(m=>state.chosen.has(m.id)&&resultFor(m)?.candidate);
- VZ.menu({title:'선택한 녹음 '+count+'개',body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-selection-analyze>분석 시작 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-apply'+(ready?'':' disabled')+'>추천대로 곡 지정 <i class="ph ph-arrow-right"></i></button>'+VZ.recordingType.menuRow(state.items.filter(m=>state.chosen.has(m.id)))+'<button type="button" class="vz-choice" data-selection-clear>선택 해제 <i class="ph ph-x"></i></button></div>',onMount:(el,close)=>{
+ VZ.menu({title:'선택한 녹음 '+count+'개',anchor:root.querySelector('[data-selection-more]'),body:'<div class="vz-choice-list"><button type="button" class="vz-choice" data-selection-analyze>분석 시작 <i class="ph ph-arrow-right"></i></button><button type="button" class="vz-choice" data-selection-apply'+(ready?'':' disabled')+'>추천대로 곡 지정 <i class="ph ph-arrow-right"></i></button>'+VZ.recordingType.menuRow(state.items.filter(m=>state.chosen.has(m.id)))+'<button type="button" class="vz-choice" data-selection-clear>선택 해제 <i class="ph ph-x"></i></button></div>',onMount:(el,close)=>{
   VZ.recordingType.bindMenuRow(el,close,state.items.filter(m=>state.chosen.has(m.id)),{anchor:root.querySelector('[data-selection-more]'),after:()=>{state.chosen.clear();if(main.isConnected){saveCheckpoint();draw(main)}}});
   el.querySelector('[data-selection-analyze]').onclick=()=>{close();root.querySelector('[data-analyze]').click()};
   el.querySelector('[data-selection-apply]').onclick=()=>{close();root.querySelector('[data-apply]').click()};
@@ -419,7 +420,7 @@ function draw(main){
   card.querySelector('input').onchange=e=>{e.target.checked?state.chosen.add(item.id):state.chosen.delete(item.id);saveCheckpoint();controls(main)};
   card.querySelector('.vz-sc-play-trigger').onclick=()=>{const host=card.querySelector('.vz-sc-player-host');try{const player=M.player(host,item,{prefetch:false,tools:false});inlinePlayers.set(item.id,player);card.querySelector('.vz-sc-player-placeholder').hidden=true;host.hidden=false;player.play()}catch(error){VZ.toast('재생할 수 없어요: '+String(error.message||error),'error')}};
   card.querySelector('.vz-sc-recommend').onclick=()=>pickSong(main,item);
-  card.querySelector('.vz-sc-menu').onclick=e=>openRecordMenu(main,item,e.currentTarget);
+  card.querySelector('.vz-sc-menu').onclick=e=>openRecordMenu(main,item,e.currentTarget,card);
   list.append(card);
  }
  if(!shown.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=state.items.length?'해당 상태의 녹음이 없어요.':'곡을 확인할 미지정 녹음이 없어요.';list.append(empty)}

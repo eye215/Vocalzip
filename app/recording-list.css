@@ -39,3 +39,5 @@
 .vz-type-performance small{display:block;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px;font-weight:400}
 .vz-type-performance:has(input:disabled){opacity:.45;cursor:default}
 body .sheet-menu .vz-choice .vz-choice-value{margin-left:auto;padding-left:12px;color:#e0d9e7;font-size:13px;font-weight:500;white-space:nowrap}
+/* 녹음 더보기 (app/recording-menu.js): up to nine rows. All of them show on a small phone; only a screen shorter than the menu scrolls inside it. */
+body .sheet-menu>.sheet.vz-recording-menu{max-height:calc(100dvh - 24px)}
