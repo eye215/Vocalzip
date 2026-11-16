@@ -164,3 +164,27 @@ for (const [width, height] of [[834, 1194], [1280, 900]]) test('Tablet ' + width
     await close(page);
   }
 });
+
+test('A 연습실 recording has a way back: ⋯ › 연습실에서 보기 opens its submission in 노래 연습실', async ({page}) => {
+  await open(page);
+  // The recording of a submission that is still in the records opens that result.
+  let more = await SCREENS['녹음 재생'](page, 'roomsubmit1-0');
+  await more.click();
+  expect(await acts(page)).toEqual(['play', 'edit', 'type', 'share', 'room', 'download', 'delete']);
+  await expect(menu(page).locator('[data-act=room]')).toHaveText(/^\s*연습실에서 보기\s*$/);
+  await menu(page).locator('[data-act=room]').click();
+  await expect(page).toHaveURL(/#\/practice-room\?result=roomsubmit1$/);
+  await expect(page.locator('iframe.vzip-practice-room-frame')).toHaveAttribute('src', /[?&]result=roomsubmit1(&|$)/);
+  await expect(page.frameLocator('iframe.vzip-practice-room-frame').locator('body')).toContainText('편한 소리로 한 구절 남기기'); // that submission's result
+  // 뒤로 returns to the recording.
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/recording\/roomsubmit1-0$/);
+  // A 연습실 recording without a matching submission opens 노래 연습실 itself; other types have no such row.
+  more = await SCREENS['전체 녹음'](page, 'row-source-room');
+  await more.click();
+  await menu(page).locator('[data-act=room]').click();
+  await expect(page).toHaveURL(/#\/practice-room$/);
+  more = await SCREENS['전체 녹음'](page, 'row-plain');
+  await more.click();
+  await expect(menu(page).locator('[data-act=room]')).toHaveCount(0);
+});

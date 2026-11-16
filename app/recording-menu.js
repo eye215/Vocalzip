@@ -1,7 +1,8 @@
 /* 녹음 더보기 (2026-11-16): the ⋯ menu of one recording is built here for every screen — 전체 녹음, 곡 상세 and the other
  * recording lists, the 녹음 재생 page, 곡 확인 — so it has the same items in the same order wherever they apply:
- *   재생 · 정보 수정 · 곡 지정 · 녹음 유형 · 공유 링크 · 보컬 분석 · (screen extras) · 음원 다운로드 · 파일 삭제
- * 곡 지정 is for 곡 녹음 · 레슨 녹음, 공유 링크 for files in the cloud store, 보컬 분석 only when the recording has a song.
+ *   재생 · 정보 수정 · 곡 지정 · 녹음 유형 · 공유 링크 · 보컬 분석 · (screen extras) · 연습실에서 보기 · 음원 다운로드 · 파일 삭제
+ * 곡 지정 is for 곡 녹음 · 레슨 녹음, 공유 링크 for files in the cloud store, 보컬 분석 only when the recording has a song,
+ * 연습실에서 보기 only for a 연습실 recording.
  * 파일 삭제 is always last, in the danger colour, and still goes through the screen's own delete (its confirmation and
  * list update are not changed here).
  * The popover opens at the button that was pressed (options.anchor), not at whatever happens to have focus; when the
@@ -24,6 +25,8 @@ VZ.pickRecordingSong = async items => {
 /** Save that song on one recording (the title follows the song as everywhere: media-naming.js). */
 VZ.saveRecordingSong = (m, v) => { const song = VZ.song(v); return (m.songId || '') === v ? null : M.assignSongSafe(m, {songId:v, song:song ? VZ.songLabel(song) : ''}, {expectedSongId:m.songId || '', expectedSong:m.song || ''}); };
 
+/** The 노래 연습실 submission a recording was made for (its id is '<submission id>-0|1'), while it is still in the records. */
+const roomResult = item => { const id = String(item.id || '').replace(/-[01]$/, ''); return (VZ.db.practices || []).some(p => p.practiceRoom?.id === id) ? id : ''; };
 const canAnalyze = item => M.songSearchEligible(item) && !!item.songId && !!VZ.song(item.songId);
 
 /**
@@ -46,6 +49,8 @@ VZ.recordingMenu = (item, {anchor, player, play, remove, changed, analyze, assig
   if (item.r2Key && VZ.shareSheet) add('share', 'ph-link', '공유 링크', () => VZ.shareSheet(item), ' data-share');
   if (canAnalyze(item)) add('analyze', 'ph-chart-line', '보컬 분석', analyze || (() => VZ.openAnalysisSelection([item])), ' data-analyze');
   for (const x of extra) add(x.key, x.icon, esc(x.label), x.run);
+  // A 연습실 recording had no way back to where it was made: its submission's result, or 노래 연습실 itself.
+  if (M.recordingCategory(item) === 'room') add('room', 'ph-microphone-stage', '연습실에서 보기', () => { const id = roomResult(item); VZ.nav('#/practice-room' + (id ? '?result=' + encodeURIComponent(id) : '')); });
   add('download', 'ph-download-simple', '음원 다운로드', () => M.download(item).catch(e => VZ.toast('저장하지 못했어요: ' + e.message, 'error')), ' data-download');
   add('delete', 'ph-trash', '파일 삭제', remove, ' data-delete');
   const menu = VZ.menu({title:'녹음 더보기', label:M.label(item) + ' · 녹음 더보기', anchor, body:'<div class="vz-choice-list vz-media-action-sheet">' + rows.map(r => r.html).join('') + '</div>',

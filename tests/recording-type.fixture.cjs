@@ -8,6 +8,10 @@ const SOURCE = [undefined, 'practice', 'record', 'lesson', 'import', 'practice-r
 const ROOM_ID = [false, true];
 const DAY = '2026-11-09';
 
+// A 노래 연습실 submission as app/practice-room-model.js stores it; its recording is 'roomsubmit1-0'.
+const ROOM = {id:'roomsubmit1', task:'basics', chapterId:'comfortable-voice', title:'편한 소리로 한 구절 남기기', songId:'', date:DAY + 'T10:00:00.000Z', analysis:{status:'reflection', summary:''}, recommendation:'reflection', mood:'', summary:'',
+  aiCoach:'', aiConditionCheck:false, aiNextTask:'', draft:{difficulty:'', comfort:'', symptoms:[], memo:'', answers:[]}, demo:false, audioIds:[{id:'roomsubmit1-0', name:'녹음', duration:60, cloud:true}], seconds:300, variant:'normal'};
+
 /** Every combination, in a fixed order. `key` names the combination in a failure message. */
 function combos() {
   const out = [];
@@ -30,7 +34,7 @@ function db(list = combos()) {
     practices:[
       practice('p-song', {songId:'s1', practiceMode:'song', mediaIds:[...ids('practice-song'), 'row-practice-song']}),
       practice('p-training', {practiceMode:'training', mediaIds:[...ids('practice-training'), 'row-practice-training']}),
-      practice('practice-room:roomsubmit1', {practiceMode:'training', mediaIds:[...ids('practice-room'), 'row-practice-room'], practiceRoom:{id:'roomsubmit1', task:'basics', title:'편한 소리로 한 구절 남기기', songId:'', date:DAY + 'T10:00:00.000Z', audioIds:[], seconds:300}})]};
+      practice('practice-room:roomsubmit1', {practiceMode:'training', mediaIds:[...ids('practice-room'), 'row-practice-room'], practiceRoom:ROOM})]};
 }
 /** Cloud rows as the app lists them: one per way a recording gets its type today. */
 function rows() {
