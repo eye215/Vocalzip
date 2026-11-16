@@ -412,11 +412,11 @@ test('곡 상세: 작품 in the header card, recording rows without the repeated
   await expect(row('m2').locator('.vz-record-name')).toHaveText('갈라 리허설');       // its own name
   await expect(row('m3').locator('.vz-record-name')).toHaveText('This Is the Moment'); // nothing else to show
   // m0 belongs to a practice record: "연습 기록", and the chip opens it. m1 and m3 are plain recordings: the chip only
-  // says the kind (연습) and is not a button. m2 is 공연.
+  // says the 녹음 유형 (곡 녹음) and is not a button. m2 is 공연.
   const chip = row('m0').locator('.vz-song-kind');
   await expect(chip).toHaveText('연습 기록');
   await expect(chip).toHaveAttribute('role', 'button');
-  for (const id of ['m1', 'm3']) { await expect(row(id).locator('.vz-song-kind')).toHaveText('연습'); await expect(row(id).locator('.vz-song-kind')).not.toHaveAttribute('role', 'button'); }
+  for (const id of ['m1', 'm3']) { await expect(row(id).locator('.vz-song-kind')).toHaveText('곡 녹음'); await expect(row(id).locator('.vz-song-kind')).not.toHaveAttribute('role', 'button'); }
   await expect(row('m2').locator('.vz-song-kind.performance')).toHaveText('공연');
   await expect(row('m2').locator('.vz-song-kind')).not.toHaveAttribute('role', 'button');
   // The chip is small to look at, 44px to touch.
