@@ -202,7 +202,7 @@ test('악보 정보: the converted score\'s key signature is offered as a sugges
   if (process.env.KEY_SHOT) await page.screenshot({path:process.env.KEY_SHOT});
   // Nothing is filled or saved by itself.
   await expect(sheet.locator('[name=originalKey]')).toHaveValue('');
-  expect((await song(page, 'song-r')).scores[0].originalKey).toBeUndefined();
+  expect((await song(page, 'song-r')).repertoire?.originalKey).toBeUndefined();
   // The owner picks the major reading for 원키 and the minor one for 연습 키.
   await box.getByRole('button', {name:'F (장조)'}).click();
   await box.getByRole('button', {name:'원키로 넣기'}).click();
@@ -210,9 +210,9 @@ test('악보 정보: the converted score\'s key signature is offered as a sugges
   await box.getByRole('button', {name:'Dm (단조)'}).click();
   await box.getByRole('button', {name:'연습 키로 넣기'}).click();
   await expect(sheet.locator('[name=practiceKey]')).toHaveValue('Dm');
-  expect((await song(page, 'song-r')).scores[0].originalKey).toBeUndefined(); // still not saved
+  expect((await song(page, 'song-r')).repertoire?.originalKey).toBeUndefined(); // still not saved
   await sheet.getByRole('button', {name:'저장'}).click();
-  const saved = (await song(page, 'song-r')).scores[0];
+  const saved = (await song(page, 'song-r')).repertoire; // the keys are saved on the song
   expect([saved.originalKey, saved.practiceKey]).toEqual(['F', 'Dm']);
   // A score with no key signature in its conversion shows no suggestion (the fixture as it is).
   fake.store.set(MXL, {bytes:mxl([['META-INF/container.xml', CONTAINER], ['score.xml', SCORE]]), type:'application/vnd.recordare.musicxml'});

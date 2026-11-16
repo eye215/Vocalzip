@@ -1,7 +1,7 @@
 /* Phase 8C: pure repertoire/performance data helpers. No audio or AI mutation. */
 (function(root,factory){const api=factory();root.VzipArchive=api;if(typeof module==='object')module.exports=api})(globalThis,()=>{
 'use strict';
-const states={interest:'💜 관심곡',planned:'📋 연습 예정',practicing:'🎤 연습 중',ready:'⭐ 공연 가능',paused:'📦 보류'};
+const states={interest:'관심곡',planned:'연습 예정',practicing:'연습 중',ready:'공연 가능',paused:'보류'};
 const skills={lyrics:'가사 암보',melody:'멜로디 숙지',breathing:'호흡·프레이징',expression:'표현·감정',overall:'전체 완성도'};
 const kinds={solo:'솔로',duet:'듀엣',ensemble:'앙상블'};
 const stages={preparing:'준비 중',completed:'공연 완료',cancelled:'취소'};

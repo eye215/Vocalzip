@@ -1,7 +1,7 @@
 /* Phase 8C UI: integrated with existing songs; independent sheets and performance routes. */
 (()=>{
 'use strict';
-const V=window.VZ,A=window.VzipArchive,M=V.media,E=V.esc;
+const V=window.VZ,A=window.VzipArchive,M=V.media,E=V.esc,Keys=window.VzipSongKeys;
 // Before sign-in is confirmed (app just opened, offline) the account this device last synced with is used.
 const owner=()=>window.vzipCloudUserId?.()||(()=>{try{return localStorage.getItem('vzip_cloud_linked_user')||''}catch{return ''}})();
 const mine=p=>p.ownerId===owner()&&!!owner();
@@ -46,9 +46,13 @@ function updateSong(id,values,shared={}){
  * over the automatic reading; the song's confirmed 악보 기준 음역 wins over the automatic part range. */
 async function scoreKey(song,host){
  const R=window.VzipScoreRange;if(!host||!R)return;
+ // Reading the score takes a moment: a 원키 the owner typed or cleared meanwhile is left alone.
+ const form=host.closest('form'),input=form?.elements.originalKey;let typed=false;input?.addEventListener('input',()=>{typed=true},{once:true});
  const scores=(song.scores||[]).filter(x=>x&&x.id);
  const range=song.vocalRange&&Number.isFinite(song.vocalRange.lowMidi)?{low:song.vocalRange.low,high:song.vocalRange.high,how:'악보 기준 음역(확인함)'}:null;
- let key=scores.map(x=>x.originalKey).find(Boolean)?{name:scores.map(x=>x.originalKey).find(Boolean),how:'악보 정보에 넣은 원키'}:null,auto=null,partRange=null;
+ // A key typed on a score (older data) counts until the song's keys were saved here (keysAt): after that 키 정보 is the one place.
+ const typedOnScore=info(song).keysAt?'':scores.map(x=>x.originalKey).find(Boolean);
+ let key=typedOnScore?{name:typedOnScore,how:'악보 정보에 넣은 원키'}:null,auto=null,partRange=null;
  if((!key||!range)&&V.vocalRangeLoadScore&&window.VzipR2?.enabled?.()&&window.VzipR2.omr){
   for(const sc of scores){
    try{const loaded=await V.vocalRangeLoadScore(sc);if(!loaded?.xml)continue;
@@ -61,8 +65,7 @@ async function scoreKey(song,host){
  if(!key&&auto){const minor=auto.likely==='minor';key={name:minor?auto.minor:auto.major,how:'악보 조표(자동 인식)',other:minor?auto.major:auto.minor,sure:!!auto.likely,changes:auto.changes}}
  const show=range||partRange;
  if(!host.isConnected||(!key&&!show))return;
- const form=host.closest('form'),input=form?.elements.originalKey;
- const filled=key&&input&&!input.value.trim();
+ const filled=key&&input&&!typed&&!input.value.trim();
  if(filled){input.value=key.name;input.dispatchEvent(new Event('input',{bubbles:true}))}
  host.innerHTML='<p class="score-key-title"><i class="ph ph-music-notes" aria-hidden="true"></i> 악보에서 찾았어요</p>'+
   (key?'<p class="small" data-rep-key>원키 <b>'+E(key.name)+'</b> · '+E(key.how)+(filled?' · 원키 칸에 넣었어요. 저장을 눌러야 반영돼요.':'')+'</p>'+
@@ -74,10 +77,31 @@ function editRepertoire(id,kind){
  const s=V.song(id);if(!s)return;const r=info(s);
  if(kind==='status')return panel('레퍼토리 상태',select('상태','status',A.states,r.status),v=>updateSong(id,v));
  if(kind==='skills')return panel('나의 숙련도', '<p class="small muted">직접 평가하는 항목입니다. AI 분석 점수와 별도로 저장해요.</p>'+Object.entries(A.skills).map(([k,n])=>select(n,k,{'1':'1','2':'2','3':'3','4':'4','5':'5'},String(r.skills?.[k]||''))).join(''),v=>updateSong(id,{skills:v}));
- if(kind==='keys'){panel('키 정보','<div class="rep-score-key" data-rep-score-key hidden></div>'+field('원키','originalKey',r.originalKey)+field('연습키','practiceKey',r.practiceKey)+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote),v=>updateSong(id,v));scoreKey(s,document.querySelector('.archive-sheet [data-rep-score-key]'));return}
+ if(kind==='keys')return keysPanel(id);
+ if(kind==='memo')return panel('레퍼토리 메모',area('메모','memo',r.memo),v=>updateSong(id,v));
  const values=[...new Set(V.db.songs.map(x=>x.show).filter(Boolean))];
  const showOptions='<datalist id="archive-show">'+values.map(v=>'<option value="'+E(v)+'"></option>').join('')+'</datalist>';
  panel('곡 정보',field('곡명','title',s.title,'text',true)+field('뮤지컬 작품명','show',s.show).replace('name="show"','name="show" list="archive-show"')+showOptions+select('구분','kind',A.kinds,r.kind)+field('원어','language',r.language)+area('개인 메모','memo',r.memo),v=>{const {title,show,...rest}=v;if(!title.trim())throw Error('곡명을 입력해 주세요.');updateSong(id,rest,{title:title.trim(),show:show.trim()})});
+}
+/* 키 정보: the one place a song's keys are kept (songs[].repertoire). The score sheet and the MR key suggestion read the
+ * same values (app/song-keys.js). Keys are free text and saved exactly as typed; a key written in a way the app does not
+ * understand stays as a note. Keys that older data kept on a score are shown here and move to the song on 저장. */
+const KEY_HELP='C, F#, Gb, Am, "Eb major", "내림 마 장조", "-2키"처럼 적으면 MR 키 맞추기에 쓸 수 있어요.';
+function keysPanel(id){
+ const s=V.song(id);if(!s)return;const r=info(s),k=Keys.of({...s,repertoire:r});
+ const api=panel('키 정보','<div class="rep-score-key" data-rep-score-key hidden></div>'+field('원키','originalKey',k.originalKey)+'<p class="small muted archive-key-note" data-key-note="originalKey" hidden></p>'+field('연습키','practiceKey',k.practiceKey)+'<p class="small muted archive-key-note" data-key-note="practiceKey" hidden></p>'+field('공연키','stageKey',r.stageKey)+area('조옮김 메모','transposeNote',r.transposeNote)+'<p class="small muted">'+E(KEY_HELP)+' 이 곡의 악보와 MR에도 같은 키를 써요.</p>',v=>saveKeys(id,v));
+ const form=api.el.querySelector('form');
+ const note=name=>{const value=form.elements[name].value.trim(),el=form.querySelector('[data-key-note="'+name+'"]'),known=!value||Keys.parse(value)||(name==='practiceKey'&&Keys.relative(value)!=null);el.hidden=!!known;if(!known)el.textContent='이 표기는 MR 키 맞추기에 쓸 수 없어요. 적은 그대로 메모처럼 보관해요.'};
+ for(const name of ['originalKey','practiceKey']){form.elements[name].addEventListener('input',()=>note(name));note(name)}
+ scoreKey(s,form.querySelector('[data-rep-score-key]'));
+ return api;
+}
+/** Saves the song's keys; `values` holds any of originalKey, practiceKey, stageKey, transposeNote. Throws when it cannot save. */
+function saveKeys(id,values){
+ const s=V.song(id);if(!s)throw Error('곡을 찾을 수 없어요.');
+ // The first save on the song keeps what was read from a score, so nothing shown so far is lost.
+ const k=Keys.of({...s,repertoire:info(s)});
+ updateSong(id,{originalKey:k.originalKey,practiceKey:k.practiceKey,...values,keysAt:Date.now()});
 }
 async function chooseTake(id){
  try{const media=(await M.list()).filter(m=>m.songId===id&&!V.db.deleted?.media?.includes(m.id));const s=V.song(id);if(!s)return;
@@ -92,8 +116,9 @@ function days(p){
 }
 /* Library recordings marked 공연 on one of the production's days. */
 const stageMedia=(p,media)=>{const d=days(p);return media.filter(m=>M.occasion(m)==='performance'&&d.has(M.dateOf(m))&&!V.db.deleted?.media?.includes(m.id))};
-let filter='';
+let filter='',panelOpen={id:'',on:false};
 V.repertoire={
+ saveKeys,
  edit:editRepertoire,
  chooseTake,
  toolbar:()=>'<div class="archive-toolbar"><a class="btn secondary" href="#/performances">나의 공연</a><label class="field"><span>레퍼토리 상태</span><select data-rep-filter aria-label="레퍼토리 상태">'+opt(A.states,filter,'전체')+'</select></label></div>',
@@ -107,18 +132,32 @@ V.repertoire={
  score:s=>A.proficiency({repertoire:info(s)})||0,
  card:s=>{const r=info(s),score=A.proficiency({repertoire:r});return '<span class="archive-card-meta">'+E([r.role,A.states[r.status],score?'숙련도 '+score.toFixed(1)+'/5':''].filter(Boolean).join(' · '))+'</span>'},
  wireList:(main,draw)=>{const el=main.querySelector('[data-rep-filter]');if(el)el.onchange=()=>{filter=el.value;draw()}},
+ // Song page: one compact card (two lines at most) above the tabs; the rows open under it and stay open while this song is shown.
  songPanel:(host,s,media)=>{
   if(!host)return;const r=info(s),score=A.proficiency({repertoire:r}),take=media.find(m=>m.id===r.takeId&&!V.db.deleted?.media?.includes(m.id));
-  const keys=[r.originalKey&&'원키 '+r.originalKey,r.practiceKey&&'연습키 '+r.practiceKey,r.stageKey&&'공연키 '+r.stageKey].filter(Boolean).join(' · ');
-  const row=(key,label,value,extra='')=>'<button type="button" class="archive-song-row '+extra+'" data-rep="'+key+'"><strong>'+label+'</strong><span class="archive-song-value '+(value?'':'is-empty')+'">'+E(value||({status:'상태 지정',info:'입력하기',skills:'미평가',keys:'미입력'}[key]))+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
-  host.innerHTML='<section class="archive-song" aria-label="나의 레퍼토리">' +
-    '<h2 class="archive-song-title">나의 레퍼토리</h2>' +
+  const keys=Keys.summary({...s,repertoire:r});
+  if(panelOpen.id!==s.id)panelOpen={id:s.id,on:false};
+  const row=(key,label,value,extra='')=>'<button type="button" class="archive-song-row '+extra+'" data-rep="'+key+'"><strong>'+label+'</strong><span class="archive-song-value '+(value?'':'is-empty')+'">'+E(value||({status:'상태 지정',skills:'미평가',keys:'미입력',memo:'메모 적기'}[key]))+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
+  const first=[A.states[r.status],score?'숙련도 '+score.toFixed(1)+'/5':''].filter(Boolean).join(' · ');
+  const second=[keys,(r.memo||'').trim().replace(/\s+/g,' ')||(take?'대표 테이크 '+M.label(take):'')].filter(Boolean).join(' · ');
+  const html='<section class="archive-song" aria-label="나의 레퍼토리">' +
+    '<button type="button" class="archive-song-summary" data-rep-toggle aria-expanded="false" aria-controls="archive-song-detail"><span class="archive-song-summary-top"><strong>나의 레퍼토리</strong><span class="archive-song-value '+(first?'':'is-empty')+'">'+E(first||'상태·숙련도·키 적기')+'</span></span>'+(second?'<span class="archive-song-summary-note">'+E(second)+'</span>':'')+'<i class="ph ph-caret-down" aria-hidden="true"></i></button>' +
+    '<div class="archive-song-detail" id="archive-song-detail" data-rep-detail hidden>' +
     row('status','상태',A.states[r.status]||'','archive-song-status') +
     row('skills','숙련도',score?score.toFixed(1)+'/5':'') +
     row('keys','키 정보',keys) +
-    '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'녹음을 불러올 수 없어요':'아직 지정한 녹음이 없어요')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
-    (r.memo?'<p class="archive-note">'+E(r.memo)+'</p>':'') +
-    '<div data-take-player>'+(take?'<div class="list">'+V.mediaRow(take)+'</div>':r.takeId?'<p class="small muted">원본 연결은 유지됩니다.</p>':'')+'</div></section>';
+    // The chosen take stays chosen while its recording cannot be read (offline, list not loaded yet).
+    '<button type="button" class="archive-song-take" data-take><span class="archive-song-take-icon"><i class="ph ph-music-note" aria-hidden="true"></i></span><span class="archive-song-take-copy"><strong>대표 테이크</strong><small>'+E(take?M.label(take):r.takeId?'지금은 녹음을 불러올 수 없어요. 지정은 그대로예요.':'아직 지정한 녹음이 없어요')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
+    '<div data-take-player>'+(take?'<div class="list">'+V.mediaRow(take)+'</div>':'')+'</div>' +
+    '<button type="button" class="archive-song-row archive-song-memo" data-rep="memo"><strong>메모</strong><span class="archive-song-value '+(r.memo?'':'is-empty')+'">'+E(r.memo||'메모 적기')+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
+    '</div></section>';
+  // The song page redraws on every data event: nothing is rebuilt (an open take player keeps playing) unless what is shown changed.
+  const same=host.__panel===html&&!!host.firstElementChild;
+  if(!same){host.__panel=html;host.innerHTML=html}
+  const toggle=host.querySelector('[data-rep-toggle]'),detail=host.querySelector('[data-rep-detail]');
+  const open=()=>{detail.hidden=!panelOpen.on;toggle.setAttribute('aria-expanded',String(panelOpen.on))};
+  open();if(same)return;
+  toggle.onclick=()=>{panelOpen.on=!panelOpen.on;open()};
   host.querySelectorAll('[data-rep]').forEach(b=>b.onclick=()=>editRepertoire(s.id,b.dataset.rep));host.querySelector('[data-take]').onclick=()=>chooseTake(s.id);if(take)V.wireMedia(host.querySelector('[data-take-player] .list'),[take]);
  }
 };
@@ -152,7 +191,11 @@ function linkSongs(pid){
   if(!get(pid))throw Error('공연이 삭제됐어요.');
   save(db=>{const p=writable(db,pid);if(p.songLinks.some(l=>l.songId===id))throw Error('이미 연결된 곡이에요.');p.songLinks.push({id:V.uid(),songId:id,title:song.title,show:song.show||'',kind:v.kind||'solo',key:v.key.trim()})});
  });
- const form=api.el.querySelector('form'),q=form.querySelector('[data-search]'),draw=()=>{
+ const form=api.el.querySelector('form'),q=form.querySelector('[data-search]');
+ // 공연 당시 키 starts from the chosen song's 공연키 (or 연습키) in 키 정보, until something is typed; it stays this performance's own record.
+ let typedKey=false;form.elements.key.addEventListener('input',()=>{typedKey=true});
+ form.addEventListener('change',e=>{if(e.target.name!=='songId'||typedKey)return;const song=V.song(e.target.value),k=song?Keys.of({...song,repertoire:info(song)}):null;form.elements.key.value=k?k.stageKey||k.practiceKey:''});
+ const draw=()=>{
  const candidates=V.db.songs.filter(s=>!existing.has(s.id)&&(!q.value||(s.title+' '+s.show).toLowerCase().includes(q.value.toLowerCase())));
  form.querySelector('[data-results]').innerHTML=select('연결할 기존 곡','songId',Object.fromEntries(candidates.map(s=>[s.id,V.songLabel(s)])),'');
  };q.oninput=draw;draw();

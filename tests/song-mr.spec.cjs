@@ -139,7 +139,7 @@ test('MR key shifter moves A4 by semitones without changing its length', async (
   expect(Math.abs(r.length / 2 - 1), JSON.stringify(r)).toBeLessThan(0.01);
  }
 });
-test('File MR key capsule shifts playback, is remembered per song, and never touches the stored file', async ({page}) => {
+test('File MR key capsule shifts playback, is remembered per MR, and never touches the stored file', async ({page}) => {
  const seed = legacy(), track = {id:'mr1', kind:'file', title:'연습 MR', fileName:'반주.wav', type:'audio/wav', r2Key:'u/mr-owner/mr1/original.wav', size:264644, created:1};
  seed.songs[0].mrTracks = [track]; seed.songs[0].repertoire = {originalKey:'D', practiceKey:'F'};
  const body = wav(), mediaRequests = [];
@@ -164,19 +164,19 @@ test('File MR key capsule shifts playback, is remembered per song, and never tou
  await key.locator('[data-mr-key-up]').click(); await key.locator('[data-mr-key-up]').click();
  await expect(value).toHaveText('+2');
  await expect(audio).toHaveAttribute('data-mr-key-route', 'shifted');
- await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(2);
+ await expect.poll(async () => (await data(page)).songs[0].mrTracks[0].keyShift).toBe(2);
  await audio.evaluate(el => el.play());
  await expect.poll(() => audio.evaluate(el => el.currentTime)).toBeGreaterThan(0.3);
  expect(await page.evaluate(() => VZ.mrKey.context().state)).toBe('running');
  await key.locator('[data-mr-key-practice]').click();
  await expect(value).toHaveText('+3'); await expect(key.locator('[data-mr-key-practice]')).toContainText('MR 맞춤');
- await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(3);
+ await expect.poll(async () => (await data(page)).songs[0].mrTracks[0].keyShift).toBe(3);
  for (let i = 0; i < 12; i++) if (await key.locator('[data-mr-key-up]').isEnabled()) await key.locator('[data-mr-key-up]').click();
  await expect(value).toHaveText('+6'); await expect(key.locator('[data-mr-key-up]')).toBeDisabled();
  for (let i = 0; i < 9; i++) await key.locator('[data-mr-key-down]').click();
  await expect(value).toHaveText('−3');
- await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(-3);
- // Remembered per song: a fresh page opens the MR in the same key and the row says so before opening.
+ await expect.poll(async () => (await data(page)).songs[0].mrTracks[0].keyShift).toBe(-3);
+ // Remembered per MR: a fresh page opens the MR in the same key and the row says so before opening.
  await page.reload(); await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
  await page.evaluate(stubR2);
  await page.locator('[data-tab=ar]').click();
@@ -184,12 +184,12 @@ test('File MR key capsule shifts playback, is remembered per song, and never tou
  await page.locator('[data-mr-open]').click();
  await expect(value).toHaveText('−3'); await expect(audio).toHaveAttribute('data-mr-key-route', 'shifted');
  await value.click(); await expect(value).toHaveText('원키'); await expect(audio).toHaveAttribute('data-mr-key-route', 'direct');
- await expect.poll(async () => (await data(page)).songs[0].mrKeyShift).toBe(0);
+ await expect.poll(async () => (await data(page)).songs[0].mrTracks[0].keyShift).toBe(0);
  // Closing the player tears the graph down.
  await page.locator('[data-mr-open]').click(); await expect(key).toHaveCount(0);
- // The stored MR is untouched: same entry, no upload/delete, and the file was only ever read.
+ // The stored MR is untouched: same entry (plus its remembered key), no upload/delete, and the file was only ever read.
  const saved = await data(page);
- expect(saved.songs[0].mrTracks).toEqual([track]);
+ expect(saved.songs[0].mrTracks).toEqual([{...track, keyShift:0}]); expect(saved.songs[0].mrKeyShift).toBeUndefined();
  expect(await page.evaluate(() => [window.__mrUploads, window.__mrRemoved])).toEqual([0, 0]);
  expect(mediaRequests.length).toBeGreaterThan(0); expect(mediaRequests.every(m => m === 'GET')).toBe(true);
  expect(page.__errors).toEqual([]);
