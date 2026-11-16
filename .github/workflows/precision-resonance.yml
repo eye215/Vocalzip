@@ -1,0 +1,13 @@
+name: Precision resonance
+on:
+  pull_request:
+    paths: ['app/precision-resonance.js', 'tests/precision-resonance.test.cjs', '.github/workflows/precision-resonance.yml']
+  workflow_dispatch:
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/precision-resonance.test.cjs
