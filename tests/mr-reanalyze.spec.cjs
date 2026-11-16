@@ -309,8 +309,9 @@ test('several MR files: the page says the best-fitting one is chosen per recordi
   await boot(page, {tracks:[TRACK, later, {id:'mr-y', kind:'youtube', videoId:'dQw4w9WgXcQ', url:'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title:'유튜브 반주', created:1}]});
   await openFromSong(page);
   const s = sheet(page);
-  await expect(s.locator('[data-remr-track]')).toHaveText('MR 파일 2개 중 녹음마다 반주가 가장 많이 빠지는 것');
-  await expect(s.locator('.vz-remr-card')).toContainText('연습 MR · 반키 올린 MR');
+  await expect(s.locator('[data-remr-track]')).toHaveText('MR 파일 2개 중 하나');   // the YouTube MR has no file
+  await shot(page, 'confirm-several');
+  await expect(s.locator('[data-remr-tracks]')).toHaveText('연습 MR · 반키 올린 MR 중에서 녹음마다 반주가 가장 많이 빠지는 것을 골라요.');
   // 'done' was measured with mr-1 at 9000, before mr-2 was added (9500): it is measured again.
   await expect(s.locator('.vz-remr-scope label').nth(1)).toHaveText(/모든 녹음 · 8개/);
   await expect(s.locator('[data-remr-skipped] summary')).toHaveText('건너뛰는 녹음 2개');
@@ -323,6 +324,7 @@ test('320px: the confirm, running and summary pages fit', async ({page}) => {
   const s = sheet(page);
   await s.locator('[name="vz-remr-scope"][value="all"]').check();
   await noOverflow(page);
+  await shot(page, 'confirm-320');
   for (const label of await s.locator('.vz-remr-scope label').all()) expect((await label.boundingBox()).height).toBeGreaterThanOrEqual(44);
   expect((await s.locator('[data-remr-skipped] summary').boundingBox()).height).toBeGreaterThanOrEqual(44);
   await s.locator('[data-remr-start]').click();
@@ -353,20 +355,24 @@ test('the real analyser: a held take is measured with the song\'s MR file subtra
   test.setTimeout(120000);
   const Y = require('./helpers/mr-synth.cjs');
   // Synthetic only: a song-like MR file and a phone take of a melody sung over it, the MR 8 dB louder than the voice.
-  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:6, db:8}).x;
+  // A second take is sung over a different backing track: the song's MR is not in it.
+  const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:6, db:8}).x, other = Y.record(Y.vocal(20, 11).x, Y.mr(60, 5), {offset:6, db:8}).x;
   await page.route('**/__mrfile.wav', r => r.fulfill({contentType:'audio/wav', body:wav(mr)}));
   await page.route('**/__heldtake.wav', r => r.fulfill({contentType:'audio/wav', body:wav(take)}));
+  await page.route('**/__othertake.wav', r => r.fulfill({contentType:'audio/wav', body:wav(other)}));
   await boot(page, {recordings:[], real:true});
   await page.evaluate(async held => {
     await window.vzipStorePracticeMedia({id:'mixed', name:'MR 크게 들어간 녹음', created:Date.now(), recordedDate:'2026-10-01', type:'audio/wav', source:'practice', songId:'s1',
       blob:await (await fetch('/__heldtake.wav')).blob(), durationSeconds:20, analysis:held});
+    await window.vzipStorePracticeMedia({id:'other', name:'다른 반주로 부른 녹음', created:Date.now(), recordedDate:'2026-10-02', type:'audio/wav', source:'practice', songId:'s1',
+      blob:await (await fetch('/__othertake.wav')).blob(), durationSeconds:20, analysis:{...held, at:112}});
     VZ.media.invalidate();
   }, HELD);
   await openFromSong(page);
   const s = sheet(page);
-  await expect(s.locator('[data-remr-count]')).toHaveText('1개');
+  await expect(s.locator('[data-remr-count]')).toHaveText('2개');
   await s.locator('[data-remr-start]').click();
-  await expect(s.locator('[data-remr-done]')).toHaveText('1개 중 1개를 마쳤어요', {timeout:90000});
+  await expect(s.locator('[data-remr-done]')).toHaveText('2개 중 2개를 마쳤어요', {timeout:90000});
   await expect(s.locator('[data-remr-results] [data-remr-row="mixed"]')).toContainText('MR을 빼고 다시 쟀어요 · 판정 보류였던 결과를 바꿨어요');
   const saved = await stored(page, 'mixed');
   expect(saved.confidence.mrRemoved).toMatchObject({trackId:'mr-1'});
@@ -374,4 +380,8 @@ test('the real analyser: a held take is measured with the song\'s MR file subtra
   expect(saved.confidence.pitchConfidence).toBeGreaterThanOrEqual(0.8);
   expect(saved.history).toEqual([HELD]);
   expect(saved).not.toHaveProperty('voice'); expect(saved).not.toHaveProperty('curve');
+  // The song's MR is not in the other take: said so, and its saved result is as it was.
+  await expect(s.locator('[data-remr-results] [data-remr-row="other"]')).toContainText('MR과 맞지 않아요 · 저장된 결과 그대로');
+  await expect(s.locator('[data-remr-total="nomatch"]')).toHaveText('1개');
+  expect(await stored(page, 'other')).toEqual({...HELD, at:112});
 });

@@ -161,7 +161,8 @@ const GROUP = {held:'kept', fine:'kept', nomatch:'nomatch', failed:'failed'};
 const tally = rows => rows.reduce((t, r) => { t[r.save ? 'again' : GROUP[r.kind]]++; return t; }, {again:0, nomatch:0, kept:0, failed:0});
 /** How far the run is, 0–100: finished recordings plus the one being measured (as recorded first, then with the MR removed). */
 const percent = run => Math.round((run.done + (run.phase * 0.5 + Math.min(1, run.part || 0) * 0.5) * 0.95) / run.list.length * 100);
-const doneLine = run => (run.stopped ? '멈췄어요 · ' : '') + run.list.length + '개 중 ' + run.done + '개를 마쳤어요';
+/** "40개 중 40개를 마쳤어요" — or, read after 멈춤 / leaving the screen, "멈췄어요 · 40개 중 12개를 마쳤어요". */
+const doneLine = run => (run.done < run.list.length ? '멈췄어요 · ' : '') + run.list.length + '개 중 ' + run.done + '개를 마쳤어요';
 
 /* ---------- screen ---------- */
 const rowHtml = (m, text, tone = '') => '<li' + (tone ? ' data-tone="' + tone + '"' : '') + ' data-remr-row="' + esc(m.id) + '"><b>' + esc(M.label(m)) + '</b><span>' + esc([V.dateLabel?.(M.dateOf(m)) || '', text].filter(Boolean).join(' · ')) + '</span></li>';
@@ -169,14 +170,14 @@ const tone = r => r.kind === 'failed' ? 'bad' : r.kind === 'mr' || r.kind === 'p
 function confirmHtml(p, scope, eta) {
   const list = p.scopes[scope], unmeasured = p.scopes.held.filter(m => !savedOf(m)).length;
   const ai = list.filter(m => savedOf(m)?.confidence?.aiSeparated).length;
-  const which = p.tracks.length === 1 ? esc(mrTitle(p.tracks[0])) : 'MR 파일 ' + p.tracks.length + '개 중 녹음마다 반주가 가장 많이 빠지는 것';
+  const which = p.tracks.length === 1 ? esc(mrTitle(p.tracks[0])) : 'MR 파일 ' + p.tracks.length + '개 중 하나';
   const option = (id, label, n, small) => '<label><input type="radio" name="vz-remr-scope" value="' + id + '"' + (scope === id ? ' checked' : '') + (n ? '' : ' disabled') + '><span><b>' + label + ' · ' + n + '개</b>' + (small ? '<small>' + small + '</small>' : '') + '</span></label>';
   return '<p class="vz-remr-lead">곡에 올려 둔 MR 파일로 반주를 빼고 이 곡 녹음을 다시 재요. 녹음 하나의 보컬 분석을 열 때와 같은 방식이에요.</p>' +
     '<div class="vz-remr-card"><dl class="vz-remr-stats">' +
       '<div><dt>다시 잴 녹음</dt><dd data-remr-count>' + list.length + '개</dd></div>' +
       '<div><dt>쓰는 MR</dt><dd data-remr-track>' + which + '</dd></div>' +
       '<div><dt>예상 시간</dt><dd data-remr-eta>' + esc(eta.text) + '</dd></div></dl>' +
-      (p.tracks.length > 1 ? '<p class="vz-remr-note">' + esc(p.tracks.map(mrTitle).join(' · ')) + '</p>' : '') +
+      (p.tracks.length > 1 ? '<p class="vz-remr-note" data-remr-tracks>' + esc(p.tracks.map(mrTitle).join(' · ')) + ' 중에서 녹음마다 반주가 가장 많이 빠지는 것을 골라요.</p>' : '') +
       (eta.note ? '<p class="vz-remr-note" data-remr-eta-note>' + esc(eta.note) + '</p>' : '') + '</div>' +
     '<fieldset class="vz-remr-scope"><legend>다시 잴 범위</legend>' +
       option('held', '판정 보류인 녹음만', p.scopes.held.length, unmeasured ? '아직 분석하지 않은 녹음 ' + unmeasured + '개 포함' : '') +
@@ -192,7 +193,7 @@ function confirmHtml(p, scope, eta) {
 }
 function runningHtml(run) {
   const at = Math.min(run.list.length, run.done + 1), elapsed = (performance.now() - run.started) / 1000;
-  const left = run.done ? minutes(elapsed / run.refDone * (referenceSeconds(run.list) - run.refDone)) : '';
+  const left = run.done ? minutes(elapsed / run.refDone * Math.max(0, referenceSeconds(run.list) - run.refDone)) : '';
   return '<div class="vz-remr-card" aria-live="polite"><p class="vz-remr-progress" data-remr-progress role="status">' + at + ' / ' + run.list.length + ' · ' + esc((run.stage || '준비 중…').replace(/\s*\([^)]*\)\s*$/, '')) + '</p>' +
     '<div class="vz-remr-bar" data-remr-bar style="--p:' + percent(run) + '%"></div>' +
     '<p class="vz-remr-note" data-remr-now>' + esc(run.current ? M.label(run.current) : '') + (left ? ' · 남은 시간 ' + left : '') + '</p></div>' +
@@ -244,7 +245,7 @@ function open(song, {items, picked = [], onSaved, onClose} = {}) {
       };
       const summary = () => {
         view('summary', summaryHtml(run), '<button type="button" class="btn block" data-remr-close>닫기</button>');
-        foot.querySelector('[data-remr-close]').onclick = close;
+        const done = foot.querySelector('[data-remr-close]'); done.onclick = close; done.focus({preventScroll:true});
       };
       function start() {
         const list = p.scopes[scope];
@@ -252,7 +253,7 @@ function open(song, {items, picked = [], onSaved, onClose} = {}) {
         if (active || V.vocalBatchRunning?.()) { V.toast('다른 분석이 진행 중이에요. 끝난 뒤 다시 눌러 주세요.', 'error'); return; }
         run = active = {list, rows:[], done:0, refDone:0, running:true, stopped:false, ctl:new AbortController(), started:performance.now(), stage:'', part:0, phase:0, onSaved};
         view('running', runningHtml(run), '<button type="button" class="btn secondary block" data-remr-stop><i class="ph ph-stop" aria-hidden="true"></i>멈춤</button>');
-        foot.querySelector('[data-remr-stop]').onclick = e => { e.currentTarget.disabled = true; run.ctl.abort(); };
+        const stop = foot.querySelector('[data-remr-stop]'); stop.onclick = () => { stop.disabled = true; run.ctl.abort(); }; stop.focus({preventScroll:true});
         runAll(run, paint);
       }
       try { items = items || await songItems(song); } catch { items = []; }
