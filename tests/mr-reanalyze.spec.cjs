@@ -37,8 +37,17 @@ const RECORDINGS = [
   ['vid', '기기에만 있는 영상', '2026-10-10', null, {result:plain(.9, 12)}],
 ];
 
-async function boot(page, {tracks = [TRACK], recordings = RECORDINGS, delay = 0, real = false} = {}) {
+/** bytes: the device store refuses Blobs, as Playwright's WebKit does, so the app keeps every recording as raw bytes
+ * (VZ_BYTES=1 runs the whole file that way on any engine). */
+async function boot(page, {tracks = [TRACK], recordings = RECORDINGS, delay = 0, real = false, bytes = !!process.env.VZ_BYTES} = {}) {
   page.__errors = [];
+  if (bytes) await page.addInitScript(() => {
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, ...rest) {
+      if (value?.blob instanceof Blob) throw new DOMException('Error preparing Blob/File data to be stored in object store', 'DataCloneError');
+      return put.call(this, value, ...rest);
+    };
+  });
   page.on('pageerror', e => page.__errors.push(e.message));
   await page.route('**/supabase.min.js', r => r.fulfill({contentType:'application/javascript', body:stub}));
   await page.route('**/r2-config.js*', r => r.fulfill({contentType:'application/javascript', body:"window.VZIP_R2_ENDPOINT='';"}));
@@ -56,7 +65,8 @@ async function boot(page, {tracks = [TRACK], recordings = RECORDINGS, delay = 0,
     const blob = await (await fetch('/__tone.wav')).blob();
     for (const [id, name, date, analysis] of list)
       await window.vzipStorePracticeMedia({id, name, created:Date.parse(date + 'T03:00:00Z'), recordedDate:date, type:id === 'vid' ? 'video/mp4' : 'audio/wav', source:'practice', songId:'s1', blob, durationSeconds:200, ...(analysis ? {analysis} : {})});
-    for (const m of await VZ.media.list(true)) if (m.id === 'nofile') await VZ.media.update(m, {blob:null}, {quiet:true});
+    // No file in either form the device store keeps one (a Blob, or raw bytes where Blobs cannot be stored: WebKit).
+    for (const m of await VZ.media.list(true)) if (m.id === 'nofile') await VZ.media.update(m, {blob:null, bytes:null}, {quiet:true});
     VZ.media.invalidate();
     window.__calls = []; window.__saves = []; window.__awake = [];
     window.addEventListener('vzip:analysis-saved', e => window.__saves.push(e.detail.id));
@@ -302,6 +312,24 @@ test('after an MR file is added the MR section asks; without an MR file there is
   await expect(s.locator('[data-remr-track]')).toHaveText('새 반주');
   await expect(s.locator('.vz-remr-scope label').nth(1)).toHaveText(/모든 녹음 · 8개/);
   await expect(s.locator('[data-remr-skipped] summary')).toHaveText('건너뛰는 녹음 2개');
+});
+
+test('recordings the device keeps as raw bytes (WebKit) are files like any other: same counts, same run', async ({page}) => {
+  await boot(page, {bytes:true});
+  expect(await page.evaluate(async () => (await window.vzipReadMedia()).map(m => [m.id, m.blob instanceof Blob, !!m.bytes]).filter(x => x[0] === 'held' || x[0] === 'nofile'))).toEqual([['held', false, true], ['nofile', false, false]]);
+  await openFromSong(page);
+  const s = sheet(page);
+  await expect(s.locator('[data-remr-count]')).toHaveText('4개');
+  await expect(s.locator('.vz-remr-scope label').nth(1)).toHaveText(/모든 녹음 · 7개/);
+  await s.locator('[data-remr-skipped] summary').click();
+  await expect(s.locator('[data-remr-skipped] [data-remr-row]')).toHaveCount(3);
+  await expect(s.locator('[data-remr-skipped] [data-remr-row="nofile"]')).toContainText('파일이 없어요');
+  await s.locator('[data-remr-start]').click();
+  await expect(s.locator('[data-remr-done]')).toHaveText('4개 중 4개를 마쳤어요');
+  const held = await stored(page, 'held');
+  expect(held.confidence.mrRemoved).toMatchObject({trackId:'mr-1'}); expect(held.history).toEqual([HELD]);
+  // The recording itself is still there, as it was kept.
+  expect(await page.evaluate(async () => { const m = (await window.vzipReadMedia()).find(x => x.id === 'held'); return [m.blob instanceof Blob, (m.bytes?.byteLength ?? m.bytes?.length) > 44]; })).toEqual([false, true]);
 });
 
 test('several MR files: the page says the best-fitting one is chosen per recording; an MR added after a result is not "already measured"', async ({page}) => {
