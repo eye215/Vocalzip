@@ -170,6 +170,11 @@ M.recordingCategory=item=>{
  return 'song';
 };
 M.songSearchEligible=item=>['song','lesson'].includes(M.recordingCategory(item));
+/** 녹음 유형 as it is written everywhere (tabs, rows, sheets, menus): the category's name. 공연 is a tag on a recording
+ * (occasion 'performance'), not another type. app/recording-kind-menu.js changes them. */
+M.recordingTypeName=kind=>(M.RECORDING_CATEGORIES.find(([key])=>key===kind)||M.RECORDING_CATEGORIES[0])[1];
+M.isPerformance=item=>item?.occasion==='performance';
+M.recordingTypeText=item=>M.recordingTypeName(M.recordingCategory(item))+(M.isPerformance(item)?' · 공연':'');
 
 const changed = () => { M.invalidate(); window.dispatchEvent(new Event('vzip:v6-media')); };
 ['vzip:cloud-media-changed', 'vzip:media-saved', 'vzip:media-updated', 'vzip:auth-changed'].forEach(n => window.addEventListener(n, changed));

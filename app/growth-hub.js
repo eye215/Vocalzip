@@ -147,14 +147,14 @@ function trainingHtml(items) {
     const sub = [V.dateLabel(p.date), song, Number(p.minutes) > 0 ? V.minutes(Number(p.minutes)) : ''].filter(Boolean).join(' · ');
     return row('#/practice-room?result=' + encodeURIComponent(r.id), 'check-circle', r.title || '연습실 과제', sub, ' data-hub-result="' + e(r.id) + '"');
   }).join('');
-  // 트레이닝 recordings (녹음 종류 = 트레이닝), newest first as the list is.
+  // 트레이닝 recordings (녹음 유형 = 트레이닝), newest first as the list is.
   const takes = items ? V.growthDataset(items).rows.filter(r => !r.deleted && r.category === 'training').map(r => r.m) : null;
   const takeRows = (takes || []).slice(0, 5).map(m => row('#/recording/' + encodeURIComponent(m.id), 'microphone', M.label(m),
     [V.dateLabel(dayOf(m)), Number(m.durationSeconds) > 0 ? V.minutes(Math.max(1, Math.round(m.durationSeconds / 60))) : ''].filter(Boolean).join(' · '), ' data-hub-training-take="' + e(m.id) + '"')).join('');
   const main = '<h2 class="sec">측정하고 연습하기</h2>' + entries + tipsHtml(items);
   const side = '<h2 class="sec">최근 트레이닝 녹음' + (takes ? ' <span class="small muted" style="font-weight:500">' + takes.length + '</span>' : '') + '</h2>' +
     (takeRows ? '<div class="list icons growth-hub-list" data-hub-training-takes>' + takeRows + '</div>'
-      : takes ? empty('아직 트레이닝 녹음이 없어요', '발성·스케일 연습을 녹음하고 종류를 트레이닝으로 정하면 여기에 모여요.') : '<p class="growth-hub-note" role="status">녹음을 불러오는 중…</p>') +
+      : takes ? empty('아직 트레이닝 녹음이 없어요', '발성·스케일 연습을 녹음하고 녹음 유형을 트레이닝으로 정하면 여기에 모여요.') : '<p class="growth-hub-note" role="status">녹음을 불러오는 중…</p>') +
     '<h2 class="sec">최근 연습실 기록 <span class="small muted" style="font-weight:500">' + rooms.length + '</span></h2>' +
     (recent ? '<div class="list icons growth-hub-list" data-hub-results>' + recent + '</div>'
       : empty('아직 제출한 과제가 없어요', '노래 연습실에서 과제를 제출하면 여기에 최근 기록이 쌓여요.')) +

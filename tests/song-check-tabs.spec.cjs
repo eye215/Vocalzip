@@ -87,9 +87,10 @@ test('a recording ⋯ opens the small dark popover by the button, not a full pag
  expect(box.width).toBeLessThanOrEqual(304);expect(box.width).toBeLessThan(vw);
  expect(Math.abs(box.y-(button.y+button.height+8))<2||Math.abs(box.y+box.height-(button.y-8))<2).toBe(true); // attached to ⋯
  const rows=menu.locator('.vz-choice');
- await expect(rows).toHaveText([/전사 확인/,/레슨 녹음으로 지정/,/트레이닝으로 지정/,/파일 삭제/]); // delete is last
+ // The shared recording menu (same order as 전체 녹음 · 곡 상세), with this screen's 전사 확인; delete is last.
+ await expect(rows).toHaveText([/재생/,/정보 수정/,/곡 지정/,/녹음 유형\s*곡 녹음/,/전사 확인/,/음원 다운로드/,/파일 삭제/]);
  expect(await rows.last().evaluate(el=>getComputedStyle(el).color)).not.toBe(await rows.first().evaluate(el=>getComputedStyle(el).color));
- await rows.first().click();
+ await menu.getByRole('button',{name:'전사 확인'}).click();
  await expect(page).toHaveURL(/#\/song-transcript\/m-free$/);
 });
 
@@ -112,7 +113,13 @@ test('an unsorted recording made at lesson time is suggested as a lesson recordi
  expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-lesson').recordingCategory).toBeUndefined();
  await card('새 녹음 3').locator('.vz-sc-kind').click();
  await expect(card('새 녹음 3')).toHaveCount(0); // it left the 곡 녹음 tab
- expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-lesson').recordingCategory).toBe('lesson');
+ // Like choosing 레슨 녹음 in 정보 수정: the lesson label is saved with the type, and linking the day's lesson is asked.
+ const ask=page.getByRole('dialog',{name:'레슨에 연결'});
+ await expect(ask).toContainText('10:00 레슨');
+ await ask.getByRole('button',{name:'취소'}).click();
+ const saved=(await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-lesson');
+ expect([saved.recordingCategory,saved.occasion]).toEqual(['lesson','lesson']);
+ expect(await page.evaluate(()=>VZ.db.lessons.find(l=>l.id==='l-over').recordings.length)).toBe(0); // declined: nothing linked
  await page.locator('[data-category=lesson]').click();
  await expect(card('새 녹음 3')).toBeVisible();
  await expect(card('새 녹음 3').locator('.vz-sc-kind')).toHaveCount(0);
@@ -120,4 +127,36 @@ test('an unsorted recording made at lesson time is suggested as a lesson recordi
  await card('립트릴 스케일').locator('.vz-sc-kind').click();
  await expect(card('립트릴 스케일')).toHaveCount(0); // training recordings are not searched for songs
  expect((await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-warm').recordingCategory).toBe('training');
+ await expect(page.getByRole('dialog',{name:'레슨에 연결'})).toHaveCount(0); // 트레이닝 asks nothing
+});
+
+test('곡 확인: accepting a 레슨 녹음 suggestion links the lesson only after the user confirms',async({page})=>{
+ await boot(page);
+ await page.evaluate(async()=>{
+  const lesson=VZ.db.lessons.find(l=>l.id==='l-over'),[y,m,d]=lesson.date.split('-').map(Number);
+  for(const [id,name,hour] of [['m-a','레슨 녹음 가',10],['m-b','레슨 녹음 나',11]])await window.vzipStorePracticeMedia({id,name,created:new Date(y,m-1,d,hour,15).getTime(),type:'audio/wav',source:'practice',songId:'',song:'',occasion:'practice',blob:new Blob([window.__wav],{type:'audio/wav'}),durationSeconds:1});
+  window.dispatchEvent(new Event('vzip:media-updated'));
+ });
+ await page.goto('/#/song-suggest');
+ const card=name=>page.locator('.vz-sc-record').filter({hasText:name}),ask=page.getByRole('dialog',{name:'레슨에 연결'});
+ const linked=()=>page.evaluate(()=>VZ.db.lessons.find(l=>l.id==='l-over').recordings.map(r=>r.id));
+ // The suggestion row uses the type's name, and nothing is linked before the question is answered.
+ await expect(card('레슨 녹음 가').locator('.vz-sc-kind')).toContainText('레슨 녹음으로 바꾸기');
+ await card('레슨 녹음 가').locator('.vz-sc-kind').click();
+ await expect(ask).toContainText('1개 녹음을 같은 날');
+ expect(await linked()).toEqual([]);
+ await ask.getByRole('button',{name:'연결'}).click();
+ await expect.poll(linked).toEqual(['m-a']);
+ // The explicit 연습 label it was imported with follows the type (the row no longer reads as practice elsewhere).
+ const a=(await page.evaluate(()=>window.vzipReadMedia())).find(m=>m.id==='m-a');
+ expect([a.recordingCategory,a.occasion,a.name]).toEqual(['lesson','lesson','레슨 녹음 가']);
+ // The second file: the same question again, and Escape leaves it unlinked.
+ await card('레슨 녹음 나').locator('.vz-sc-kind').click();
+ await expect(ask).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(ask).toHaveCount(0);
+ expect(await linked()).toEqual(['m-a']);
+ await page.locator('[data-category=lesson]').click();
+ await expect(card('레슨 녹음 가')).toBeVisible();await expect(card('레슨 녹음 나')).toBeVisible();
+ expect(page.__errors).toEqual([]);
 });

@@ -49,25 +49,13 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
   };
   const canAnalyze = items => items.length > 0 && items.every(m=>M.songSearchEligible(m)) && !!items[0].songId && !!VZ.song(items[0].songId) && items.every(m => m.songId === items[0].songId);
   const analyze = items => { if (canAnalyze(items)) VZ.openAnalysisSelection(items); };
-  const singleMenu = (item, row) => VZ.menu({title:'녹음 더보기', body:
-    '<div class="vz-choice-list vz-media-action-sheet">' +
-    '<button type="button" class="vz-choice" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button>' +
-    '<button type="button" class="vz-choice" data-download><i class="ph ph-download-simple"></i> 음원 다운로드</button>' +
-    (VZ.recordingKindButtons?.([item]) || '') +
-    (canAnalyze([item]) ? '<button type="button" class="vz-choice" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">곡을 지정하면 보컬 분석을 할 수 있어요.</p>') +
-    '</div><details class="vz-media-other"><summary>기타 작업</summary><div class="vz-choice-list">' +
-    '<button type="button" class="vz-choice" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div></details>',
-    onMount:(sheet, close) => {
-      sheet.querySelector('[data-edit]').onclick = () => { close(); VZ.editMedia(item); };
-      VZ.bindRecordingKind?.(sheet, close, [item], () => done());
-      sheet.querySelector('[data-download]').onclick = () => { close(); M.download(item).catch(e => VZ.toast('저장하지 못했어요: ' + e.message, 'error')); };
-      sheet.querySelector('[data-analyze]')?.addEventListener('click', () => { close(); analyze([item]); });
-      sheet.querySelector('[data-delete]').onclick = async () => {
-        close(); try { if (!await M.confirmRemove(item)) return; await M.remove(item); picked.delete(String(item.id)); row.remove(); paint(); await done(); VZ.toast('파일을 삭제했어요.'); }
-        catch(e) { VZ.toast('삭제하지 못했어요: ' + e.message, 'error'); }
-      };
-    }
-  });
+  // One recording's ⋯: the shared menu (app/recording-menu.js), opened at the row's button.
+  const singleMenu = (item, row) => VZ.recordingMenu(item, {anchor:row.querySelector('[data-lib-row-more]'), player:() => row.querySelector('.media-open')?._player,
+    changed:() => done(), analyze:() => analyze([item]),
+    remove:async () => {
+      try { if (!await M.confirmRemove(item)) return; await M.remove(item); picked.delete(String(item.id)); row.remove(); paint(); await done(); VZ.toast('파일을 삭제했어요.'); }
+      catch(e) { VZ.toast('삭제하지 못했어요: ' + e.message, 'error'); }
+    }});
   host.addEventListener('click', e => {
     const row = e.target.closest('[data-media].lib-record'); if (!row || !host.contains(row)) return;
     const item = list().find(m => String(m.id) === row.dataset.media) || picked.get(row.dataset.media);
@@ -83,14 +71,14 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
     clearOffscreen(); const items = activeChosen(); if (!items.length) return;
     // 곡 지정 is for 곡 녹음·레슨 녹음: with 트레이닝·연습실 files ticked too, it stays and says how many it applies to.
     const songItems = items.filter(m => M.songSearchEligible(m)), others = items.length - songItems.length;
-    VZ.menu({title:'선택한 녹음 ' + items.length + '개', body:
+    VZ.menu({title:'선택한 녹음 ' + items.length + '개', anchor:bulk, body:
       '<div class="vz-choice-list vz-media-action-sheet">' +
-      (songItems.length ? '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정' + (others ? ' <span class="small" style="margin-left:auto;font-weight:500;opacity:.75">곡·레슨 녹음 ' + songItems.length + '개만</span>' : '') + '</button>' : '<p class="small muted" data-song-note style="margin:8px 12px">트레이닝·연습실 녹음에는 곡을 지정하지 않아요. 곡 녹음으로 지정하면 곡을 고를 수 있어요.</p>') +
-      (VZ.recordingKindButtons?.(items) || '') +
+      (songItems.length ? '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정' + (others ? ' <span class="small" style="margin-left:auto;font-weight:500;opacity:.75">곡·레슨 녹음 ' + songItems.length + '개만</span>' : '') + '</button>' : '<p class="small muted" data-song-note style="margin:8px 12px">트레이닝·연습실 녹음에는 곡을 지정하지 않아요. 녹음 유형을 곡 녹음으로 바꾸면 곡을 고를 수 있어요.</p>') +
+      VZ.recordingType.menuRow(items) +
       (canAnalyze(items) ? '<button type="button" class="vz-choice" data-analyze-bulk><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">같은 곡으로 지정된 녹음만 분석할 수 있어요.</p>') + '</div>',
       onMount:(sheet, close) => {
         sheet.querySelector('[data-song]')?.addEventListener('click',() => { close(); setSong(songItems); });
-        VZ.bindRecordingKind?.(sheet, close, items, async () => { picked.clear(); paint(); await done(); });
+        VZ.recordingType.bindMenuRow(sheet, close, items, {anchor:bulk, after:async () => { picked.clear(); paint(); await done(); }});
         sheet.querySelector('[data-analyze-bulk]')?.addEventListener('click', () => { if (!canAnalyze(items)) return; close(); analyze(items); });
       }
     });
@@ -103,12 +91,9 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
     VZ.toast(label + ' ' + ok + '개' + (failed ? ' · ' + failed + '개는 변경하지 못했어요' : ''), failed ? 'error' : undefined);
   };
   async function setSong(items) {
-    const v = await VZ.pickSheet({title:'곡 지정', placeholder:'곡 제목·작품 검색', value:null,
-      options:[{value:'', label:'곡 미지정', always:true}, ...VZ.songsNewest().map(s => ({value:s.id, label:s.title, sub:s.show || '', keywords:(s.aliases || []).join(' ')}))]});
+    const v = await VZ.pickRecordingSong(items);
     if (v == null) return;
-    const song = VZ.song(v);
-    if (!await VZ.confirm('곡 지정', items.length + '개 녹음의 곡을 "' + (song ? VZ.songLabel(song) : '곡 미지정') + '"(으)로 바꿀까요?', {ok:'바꾸기'})) return;
-    await run('곡을 바꿨어요:', m => (m.songId || '') === v ? null : M.assignSongSafe(m, {songId:v, song:song ? VZ.songLabel(song) : ''}, {expectedSongId:m.songId || '', expectedSong:m.song || ''}), items);
+    await run('곡을 바꿨어요:', m => VZ.saveRecordingSong(m, v), items);
   }
   paint();
   return {clear:() => { picked.clear(); paint(); }, refresh:paint};

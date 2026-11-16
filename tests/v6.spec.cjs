@@ -1994,15 +1994,16 @@ test('Signed-in imports are kept on the device first and the cloud upload resume
   await expect(page.locator('#vz-upload-pill')).toHaveCount(0);
 });
 
-test('Recordings can be marked 공연·레슨·연습; performances are filtered and not counted as practice time', async ({page}) => {
+test('Recordings can be tagged 공연 in 정보 수정; performances are filtered and not counted as practice time', async ({page}) => {
   await boot(page);
   await page.goto('/#/library');
   // m2 is an unlinked practice recording; its length never adds to actual practice time.
   await page.locator('[data-media="m2"] [data-toggle]').click();
   await page.locator('[data-media="m2"] [data-lib-row-more]').click();
   await sheet(page).getByRole('button', {name:/정보 수정/}).click();
-  await expect(sheet(page).getByRole('radio', {name:'연습'})).toHaveAttribute('aria-checked', 'true');
-  await sheet(page).getByRole('radio', {name:'공연'}).click();
+  // 녹음 유형 is the tab's word (곡 녹음); 공연 is a tag under it.
+  await expect(sheet(page).getByRole('radio', {name:'곡 녹음'})).toHaveAttribute('aria-checked', 'true');
+  await sheet(page).getByRole('checkbox', {name:/공연 녹음/}).check();
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm2').occasion).toBe('performance');
   // The library tabs are recording kinds now; the row still says 공연, and the song's recording list marks it.
@@ -2030,13 +2031,19 @@ test('A recording is marked 레슨 녹음 or 트레이닝 from its menu; 레슨 
   await page.goto('/#/library');
   await page.locator('[data-media="m2"] [data-toggle]').click();
   await page.locator('[data-media="m2"] [data-lib-row-more]').click();
-  await sheet(page).getByRole('button', {name:/트레이닝으로 지정/}).click();
+  // ⋯ › 녹음 유형 lists the types with the tab's words; the current one is marked.
+  await expect(sheet(page).getByRole('button', {name:/녹음 유형/})).toContainText('곡 녹음');
+  await sheet(page).getByRole('button', {name:/녹음 유형/}).click();
+  await expect(sheet(page).getByRole('button', {name:'곡 녹음'})).toHaveAttribute('aria-pressed', 'true');
+  await sheet(page).getByRole('button', {name:'트레이닝'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm2').recordingCategory).toBe('training');
   await page.goto('/#/library');
   await page.locator('[data-media="m2"] [data-toggle]').click();
   await page.locator('[data-media="m2"] [data-lib-row-more]').click();
-  await expect(sheet(page).getByRole('button', {name:/트레이닝으로 지정/})).toHaveCount(0);
-  await sheet(page).getByRole('button', {name:/레슨 녹음으로 지정/}).click();
+  await expect(sheet(page).getByRole('button', {name:/녹음 유형/})).toContainText('트레이닝');
+  await sheet(page).getByRole('button', {name:/녹음 유형/}).click();
+  await expect(sheet(page).getByRole('button', {name:'트레이닝'})).toHaveAttribute('aria-pressed', 'true');
+  await sheet(page).getByRole('button', {name:'레슨 녹음'}).click();
   const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog', {name:'레슨에 연결'}));
   await expect(confirm).toContainText('15:00 레슨');
   await confirm.getByRole('button', {name:'연결'}).click();
@@ -2395,8 +2402,8 @@ test('File deletion cancels safely, deletes one file and preserves linked practi
  await boot(page);
  await page.goto('/#/library');
  const row=page.locator('[data-media="m1"]').first();
- // 파일 삭제 sits under the recording's 더보기 → 기타 작업.
- const askDelete=async()=>{await row.locator('[data-lib-row-more]').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByText('기타 작업').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByRole('button',{name:'파일 삭제'}).click();};
+ // 파일 삭제 is the last row of the recording's 더보기 (the shared menu, app/recording-menu.js).
+ const askDelete=async()=>{await row.locator('[data-lib-row-more]').click();await page.getByRole('dialog',{name:'녹음 더보기'}).getByRole('button',{name:'파일 삭제'}).click();};
  await row.locator('[data-toggle]').click();
  await askDelete();
  await expect(sheet(page)).toContainText('연습·레슨 기록, 메모와 연습 시간은 남아요');
@@ -2629,7 +2636,7 @@ test('A practice record made by an import follows its file: new day and song mov
   const sheet = page.getByRole('dialog', {name:'녹음 정보'});
   await sheet.locator('input[name="date"]').fill('2026-01-24');
   await sheet.locator('select[name="song"]').selectOption('s2');
-  await sheet.getByRole('radio', {name:'공연'}).click();
+  await sheet.getByRole('checkbox', {name:/공연 녹음/}).check();
   await sheet.getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await practice('auto-m2'))?.date).toBe('2026-01-24');
   expect((await practice('auto-m2')).songId).toBe('s2');
