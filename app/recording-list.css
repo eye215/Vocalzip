@@ -32,3 +32,10 @@
 #view .vz-song-media-list .vz-record:not(.lib-record) .item-title>.vz-song-kind{flex:none}
 @media(max-width:350px){#view .vz-record:not(.lib-record) .player-row{gap:3px;padding-left:3px}#view .vz-record:not(.lib-record) .player-row .time{font-size:10px}#view .vz-record:not(.lib-record) .vz-row-more{width:44px}}
 
+
+/* 녹음 유형 (app/recording-kind-menu.js): the 공연 tag under the type choice in 정보 수정 / 가져오기, and the current type on the right of the ⋯ menu row. */
+.vz-type-performance{display:flex;align-items:center;gap:10px;min-height:44px;margin-top:6px;padding:0 4px;color:var(--vz-color-primary,#344054);font-size:14px;line-height:20px;font-weight:600;cursor:pointer}
+.vz-type-performance input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--vz-color-accent,#7A32F5)}
+.vz-type-performance small{display:block;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px;font-weight:400}
+.vz-type-performance:has(input:disabled){opacity:.45;cursor:default}
+body .sheet-menu .vz-choice .vz-choice-value{margin-left:auto;padding-left:12px;color:#e0d9e7;font-size:13px;font-weight:500;white-space:nowrap}

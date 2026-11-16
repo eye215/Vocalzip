@@ -53,13 +53,13 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
     '<div class="vz-choice-list vz-media-action-sheet">' +
     '<button type="button" class="vz-choice" data-edit><i class="ph ph-pencil-simple"></i> 정보 수정</button>' +
     '<button type="button" class="vz-choice" data-download><i class="ph ph-download-simple"></i> 음원 다운로드</button>' +
-    (VZ.recordingKindButtons?.([item]) || '') +
+    VZ.recordingType.menuRow([item]) +
     (canAnalyze([item]) ? '<button type="button" class="vz-choice" data-analyze><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">곡을 지정하면 보컬 분석을 할 수 있어요.</p>') +
     '</div><details class="vz-media-other"><summary>기타 작업</summary><div class="vz-choice-list">' +
     '<button type="button" class="vz-choice" data-delete><i class="ph ph-trash"></i> 파일 삭제</button></div></details>',
     onMount:(sheet, close) => {
       sheet.querySelector('[data-edit]').onclick = () => { close(); VZ.editMedia(item); };
-      VZ.bindRecordingKind?.(sheet, close, [item], () => done());
+      VZ.recordingType.bindMenuRow(sheet, close, [item], {anchor:row.querySelector('[data-lib-row-more]'), after:() => done()});
       sheet.querySelector('[data-download]').onclick = () => { close(); M.download(item).catch(e => VZ.toast('저장하지 못했어요: ' + e.message, 'error')); };
       sheet.querySelector('[data-analyze]')?.addEventListener('click', () => { close(); analyze([item]); });
       sheet.querySelector('[data-delete]').onclick = async () => {
@@ -85,12 +85,12 @@ VZ.librarySelect = (main, {list, all = list, done}) => {
     const songItems = items.filter(m => M.songSearchEligible(m)), others = items.length - songItems.length;
     VZ.menu({title:'선택한 녹음 ' + items.length + '개', body:
       '<div class="vz-choice-list vz-media-action-sheet">' +
-      (songItems.length ? '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정' + (others ? ' <span class="small" style="margin-left:auto;font-weight:500;opacity:.75">곡·레슨 녹음 ' + songItems.length + '개만</span>' : '') + '</button>' : '<p class="small muted" data-song-note style="margin:8px 12px">트레이닝·연습실 녹음에는 곡을 지정하지 않아요. 곡 녹음으로 지정하면 곡을 고를 수 있어요.</p>') +
-      (VZ.recordingKindButtons?.(items) || '') +
+      (songItems.length ? '<button type="button" class="vz-choice" data-song><i class="ph ph-music-notes"></i> 곡 지정' + (others ? ' <span class="small" style="margin-left:auto;font-weight:500;opacity:.75">곡·레슨 녹음 ' + songItems.length + '개만</span>' : '') + '</button>' : '<p class="small muted" data-song-note style="margin:8px 12px">트레이닝·연습실 녹음에는 곡을 지정하지 않아요. 녹음 유형을 곡 녹음으로 바꾸면 곡을 고를 수 있어요.</p>') +
+      VZ.recordingType.menuRow(items) +
       (canAnalyze(items) ? '<button type="button" class="vz-choice" data-analyze-bulk><i class="ph ph-chart-line"></i> 보컬 분석</button>' : '<p class="small muted" style="margin:8px 12px">같은 곡으로 지정된 녹음만 분석할 수 있어요.</p>') + '</div>',
       onMount:(sheet, close) => {
         sheet.querySelector('[data-song]')?.addEventListener('click',() => { close(); setSong(songItems); });
-        VZ.bindRecordingKind?.(sheet, close, items, async () => { picked.clear(); paint(); await done(); });
+        VZ.recordingType.bindMenuRow(sheet, close, items, {anchor:bulk, after:async () => { picked.clear(); paint(); await done(); }});
         sheet.querySelector('[data-analyze-bulk]')?.addEventListener('click', () => { if (!canAnalyze(items)) return; close(); analyze(items); });
       }
     });
