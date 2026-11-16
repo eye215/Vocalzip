@@ -463,6 +463,9 @@ test('a stalled recording URL stops waiting, exports the failure, and retry pres
   }
  }
  const decodes=await page.evaluate(()=>window.__decodes);
+ await page.locator('[data-vp-pick="b"]').selectOption('m-mid');
+ expect((await page.evaluate(()=>VZ.voicePathDiagnosis())).fileLoads).toBeUndefined();
+ await page.locator('[data-vp-pick="b"]').selectOption('m-new');
  await page.evaluate(()=>window.__restoreSource());await measure(page);
  expect(await page.evaluate(()=>window.__decodes)).toBe(decodes+1);
  expect(page.__errors).toEqual([]);

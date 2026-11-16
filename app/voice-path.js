@@ -399,11 +399,11 @@ async function run(s, force) {
 }
 function bind(s) {
   const host = s.host, q = sel => host.querySelector(sel);
-  host.querySelectorAll('[data-vp-pick]').forEach(sel => sel.onchange = () => { s[sel.dataset.vpPick] = sel.value; s.defaulted = ''; s.status = ''; draw(s); host.querySelector('[data-vp-pick="' + sel.dataset.vpPick + '"]')?.focus({preventScroll:true}); });
+  host.querySelectorAll('[data-vp-pick]').forEach(sel => sel.onchange = () => { s[sel.dataset.vpPick] = sel.value; s.defaulted = ''; s.status = ''; s.fileLoads = []; draw(s); host.querySelector('[data-vp-pick="' + sel.dataset.vpPick + '"]')?.focus({preventScroll:true}); });
   host.querySelectorAll('[data-vp-mr-pick]').forEach(sel => sel.onchange = () => {
     const role = sel.dataset.vpMrPick, id = s[role];
     if (!setMrChoice(id, sel.value)) V.toast('고른 MR을 저장하지 못했어요.', 'error');
-    mrGone.delete(id); s.status = ''; draw(s); host.querySelector('[data-vp-mr-pick="' + role + '"]')?.focus({preventScroll:true});
+    mrGone.delete(id); s.status = ''; s.fileLoads = []; draw(s); host.querySelector('[data-vp-mr-pick="' + role + '"]')?.focus({preventScroll:true});
   });
   host.querySelectorAll('[data-vp-clean]').forEach(box => box.onchange = () => {
     const id = s[box.dataset.vpClean];
