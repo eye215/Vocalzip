@@ -415,6 +415,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   await measure(page);
   const stages = await page.evaluate(() => window.__stages);
   for (const name of ['곡 MR 불러오는 중', '곡 MR 빼는 중', '목소리 재는 중']) expect(stages.some(t => t.startsWith('a:' + name)), name + ' in ' + stages.join(' | ')).toBe(true);
+  expect(stages.some(t => /^a:곡 MR 빼는 중 [1-9]\d?%$/.test(t))).toBe(true);
   for (const role of ['a', 'b']) {
     const take = page.locator('[data-vp-take="' + role + '"]');
     await expect(take).toHaveAttribute('data-vp-source', 'mr-removed');

@@ -25,7 +25,7 @@
 const V = window.VZ, M = V?.media, P = window.VzipVoicePath;
 if (!V || !M || !P) return;
 const esc = V.esc, T = P.THRESHOLDS;
-const WORKER = 'app/voice-path-worker.js?v=2';
+const WORKER = 'app/voice-path-worker.js?v=3';
 const MAX_BYTES = 250 * 1024 * 1024;     // the same limit as the app's analysis; a larger file is refused, never cut
 const BLOCK_SECONDS = 30;                // decoded sound handed to the worker at a time
 const CACHE_CAP = 60;                    // takes kept on the device
