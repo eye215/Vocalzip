@@ -1,0 +1,13 @@
+name: Precision acoustic transitions
+on:
+  pull_request:
+    paths: ['app/precision-transitions.js', 'tests/precision-transitions.test.cjs', '.github/workflows/precision-transitions.yml']
+  workflow_dispatch:
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/precision-transitions.test.cjs
