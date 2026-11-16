@@ -3,7 +3,7 @@
  * Diagnostics contain only fixed codes, HTTP status, attempt count and byte counts. */
 (function(root){
 'use strict';
-const POLICY = Object.freeze({resolveMs:15000, idleMs:20000, totalMs:180000, attempts:2});
+const POLICY = Object.freeze({resolveMs:15000, idleMs:20000, totalMs:600000, attempts:2});
 const MESSAGE = {network:'파일 연결이 끊겼어요. 연결을 확인하고 다시 시도해 주세요.',
   'resolve-timeout':'파일 주소를 받지 못했어요. 잠시 후 다시 시도해 주세요.',
   'idle-timeout':'파일을 받는 동안 연결이 멈췄어요. 다시 시도해 주세요.',
