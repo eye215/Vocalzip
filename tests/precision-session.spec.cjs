@@ -31,3 +31,9 @@ test('permission refusal and leaving preserve the uncompleted task and existing 
  await page.evaluate(()=>VZ.nav('#/vocal-training'));await expect(page.locator('[data-precision-entry]')).toBeVisible();await page.locator('[data-precision-entry]').click();
  await expect(page.locator('[data-precision-session]')).toContainText('0 / 20');expect(page.__errors).toEqual([]);
 });
+test('pagehide stops and preserves a partial synthetic take without completing or timing the task',async({page})=>{
+ await start(page);await page.evaluate(()=>{window.__partial=[];VZ.media.capture=async()=>({start(){},cancel(){throw Error('must preserve');},stop:async()=>({blob:new Blob(['fake audio only'],{type:'audio/wav'}),durationSeconds:1,type:'audio/wav'})});VZ.media.saveBlob=async item=>{__partial.push(item);return item;};});
+ const before=await page.evaluate(()=>JSON.stringify(VZ.db));await page.getByRole('button',{name:'녹음 시작',exact:true}).click();await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
+ await expect(page.locator('[data-precision-error]')).toContainText('화면을 벗어나기 전까지');expect(await page.evaluate(()=>__partial.length)).toBe(1);
+ await expect(page.locator('[data-precision-session]')).toContainText('0 / 20');expect(await page.evaluate(()=>JSON.stringify(VZ.db))).toBe(before);expect(page.__errors).toEqual([]);
+});
