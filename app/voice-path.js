@@ -197,8 +197,9 @@ async function measure(s, item, bytesPromise, plan, onStage) {
 }
 
 /* ---------- what a take shows ---------- */
+// The words app/mr-reanalyze.js uses for the same outcomes, where it has them.
 const MR_REASON = {
-  'no-match':'녹음 속 반주가 이 MR과 맞지 않았어요',
+  'no-match':'MR과 맞지 않아요',
   short:'녹음이나 MR이 너무 짧아요',
   little:'MR을 빼도 소리가 거의 줄지 않았어요',
   load:'MR 파일을 불러오지 못했어요',

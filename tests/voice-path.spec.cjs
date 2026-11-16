@@ -462,7 +462,7 @@ test('an MR that does not match is said so, and the take falls back to the gate;
   for (const role of ['a', 'b']) {
     const take = page.locator('[data-vp-take="' + role + '"]');
     await expect(take).toHaveAttribute('data-vp-source', 'mixed');
-    await expect(take.locator('[data-vp-mr-failed]')).toHaveText('곡 MR을 빼지 못했어요: 녹음 속 반주가 이 MR과 맞지 않았어요. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요. 녹음 파일을 그대로 읽었어요.');
+    await expect(take.locator('[data-vp-mr-failed]')).toHaveText('곡 MR을 빼지 못했어요: MR과 맞지 않아요. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요. 녹음 파일을 그대로 읽었어요.');
     await expect(take.locator('[data-vp-refused]')).toHaveText(REFUSED);
   }
   await expect(page.locator('[data-vp-row]')).toHaveCount(0);

@@ -65,7 +65,7 @@ function add(song,redraw){
       pending||={id:'mr-'+V.uid(),receipt:null};status.textContent='업로드를 준비하고 있어요.';
       await addFile(song.id,file,{title,pending,signal:controller.signal,guard,onProgress:p=>{if(!closed)status.textContent='올리는 중 '+Math.round(p)+'%'}});
      }
-     close();V.toast('MR을 저장했어요.');redraw();
+     close();V.toast('MR을 저장했어요.');redraw(kind);
     }catch(error){if(!closed)status.textContent=error.message||'저장하지 못했어요.';}
     finally{busy=false;if(!closed){for(const control of form.elements)control.disabled=false;update();}}
    };
@@ -135,13 +135,20 @@ function filePlayer(player,song,track,url,account,row){
  if(practice)practice.onclick=()=>{if(keys.suggested!=null)apply(keys.suggested);};
  live.set(player,()=>{if(timer)persist();engine?.destroy();});
 }
-V.renderSongMR=(host,song)=>{
+// Songs a file MR was added to in this visit (saving it redraws the whole song page, so this is kept here).
+const justAdded=new Set();
+/* options.reanalyze (the song page only): under the list, one quiet line that recordings are not measured again by
+ * themselves when an MR is added, with the MR로 다시 분석 button (app/mr-reanalyze.js); it asks right after a file MR
+ * was added here. */
+V.renderSongMR=(host,song,options={})=>{
+ const reanalyze=()=>{const slot=host.querySelector('[data-mr-reanalyze]');if(slot)V.mrReanalyze?.prompt(slot,song,{added:justAdded.has(song.id),onDone:()=>{justAdded.delete(song.id);reanalyze();}});};
  const draw=()=>{
   if(!host.isConnected)return;
   const list=tracks(song.id),account=identity();
   host.innerHTML='<section class="vz-ar-links vz-mr-links" aria-label="MR 반주"><div class="vz-ar-heading"><strong>MR 반주 <span>'+list.length+'</span></strong><button type="button" data-mr-add aria-label="MR 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
-   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id,x.id)?' · 키 '+V.mrKey.label(shiftOf(song.id,x.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+'</section>';
-  host.querySelector('[data-mr-add]').onclick=()=>add(song,draw);
+   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id,x.id)?' · 키 '+V.mrKey.label(shiftOf(song.id,x.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+(options.reanalyze?'<div data-mr-reanalyze></div>':'')+'</section>';
+  host.querySelector('[data-mr-add]').onclick=()=>add(song,kind=>{if(kind==='file')justAdded.add(song.id);draw();});
+  reanalyze();
   window.VzipR2?.prefetch?.(list.filter(x=>x.kind==='file').slice(0,5).map(x=>x.r2Key)).catch(()=>{});
   for(const row of host.querySelectorAll('[data-mr]')){
    const track=list.find(x=>x.id===row.dataset.mr),player=row.querySelector('[data-mr-player]'),button=row.querySelector('[data-mr-open]');
