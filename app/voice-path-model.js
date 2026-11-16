@@ -718,7 +718,8 @@ function storedNumbers(a, reliable) {
  * takes: [{role:'base'|'comp', date, result (the reading that is shown, un-gated), clean:{clean, why},
  *   source:'mr-removed'|'clean'|'mixed', measurable:{ok, why}, stored, reliable,
  *   mr:{removedDb, offsetSeconds, speed, score}|null, mrTries:[{ok, reason, removedDb}], mixed (the reading of the
- *   file as recorded, when the shown one is the voice left after the MR), stagesMs, fromDeviceCache}]
+ *   file as recorded, when the shown one is the voice left after the MR), stagesMs, fromDeviceCache,
+ *   mrMode:'auto'|'chosen'|'none'|null (this take's own MR choice; null when the song has no MR file)}]
  * Holds no id (recording, song or MR track), title, song or file name, no day of the month and no audio.
  */
 function diagnosis(takes, {generatedMonth = null} = {}) {
@@ -728,6 +729,7 @@ function diagnosis(takes, {generatedMonth = null} = {}) {
     const r = shown(t);
     return {role:t.role, month:monthOf(t.date), source:t.source, clean:t.clean.clean, cleanWhy:t.clean.why, measurable:!!t.measurable?.ok, measurableWhy:t.measurable?.why ?? null,
       storedAnalysis:storedNumbers(t.stored, t.reliable),
+      mrMode:['auto', 'chosen', 'none'].includes(t.mrMode) ? t.mrMode : null,
       mrRemoval:t.mr ? {removedDb:n(t.mr.removedDb), offsetSeconds:n(t.mr.offsetSeconds), speed:n(t.mr.speed), score:n(t.mr.score)} : null,
       mrTries:(t.mrTries || []).map(x => ({ok:!!x.ok, reason:x.ok ? null : String(x.reason || ''), removedDb:n(x.removedDb)})),
       asRecorded:t.mixed ? {voicedSeconds:t.mixed.voicedSeconds, confidence:t.mixed.confidence, breaksPerMin:t.mixed.transitions.breaksPerMin, flipsPerMin:t.mixed.transitions.flipsPerMin} : null,

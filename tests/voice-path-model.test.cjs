@@ -230,9 +230,9 @@ test('diagnosis file: numbers, flags and months only — no ids, titles, names, 
     confidence:{pitchConfidence:0.91, voiceOverMrDb:7.5, voicedShare:70, separated:true, mrRemoved:{trackId:'SECRET-TRACK-ID', offsetSeconds:1.2, removedDb:8.4}}, history:[{v:1, secret:'OLD'}]};
   const d = P.diagnosis([
     {role:'base', date:'2025-08-14', result:a, clean:P.cleanOf({analysis:stored}), source:'mixed', measurable:P.measurable(a, false), stored, reliable:true,
-      mr:null, mrTries:[{key:'SECRET-TRACK-ID:mr/key:99', ok:false, reason:'no-match', removedDb:1.2}], mixed:null, stagesMs:{fetch:12, decode:340, resample:20, model:800, total:1200}},
+      mr:null, mrTries:[{key:'SECRET-TRACK-ID:mr/key:99', ok:false, reason:'no-match', removedDb:1.2}], mixed:null, stagesMs:{fetch:12, decode:340, resample:20, model:800, total:1200}, mrMode:'none'},
     {role:'comp', date:'2026-11-09', result:b, clean:{clean:true, why:'song-mr-removed'}, source:'mr-removed', measurable:{ok:true, why:'song-mr-removed'}, stored:null, reliable:false,
-      mr:{removedDb:7.4, offsetSeconds:12.345, speed:1, score:0.97, key:'SECRET-TRACK-ID:mr/key:99'}, mrTries:[{key:'SECRET-TRACK-ID:mr/key:99', ok:true, reason:'', removedDb:7.4}], mixed:a, stagesMs:{fetch:1, decode:2, model:3, cancel:4, voice:5, total:15}, fromDeviceCache:true}
+      mr:{removedDb:7.4, offsetSeconds:12.345, speed:1, score:0.97, key:'SECRET-TRACK-ID:mr/key:99'}, mrTries:[{key:'SECRET-TRACK-ID:mr/key:99', ok:true, reason:'', removedDb:7.4}], mixed:a, stagesMs:{fetch:1, decode:2, model:3, cancel:4, voice:5, total:15}, fromDeviceCache:true, mrMode:'SECRET-TRACK-ID'}
   ], {generatedMonth:'2026-11'});
   const text = JSON.stringify(d);
   assert.equal(d.kind, 'vocalzip-voice-path-diagnosis');
@@ -245,6 +245,8 @@ test('diagnosis file: numbers, flags and months only — no ids, titles, names, 
   assert.deepEqual(d.takes[0].mrTries, [{ok:false, reason:'no-match', removedDb:1.2}]);
   assert.deepEqual(d.takes[0].stagesMs, {fetch:12, decode:340, resample:20, model:800, total:1200});
   assert.equal(d.takes[0].measurable, true); assert.equal(d.takes[0].measurableWhy, 'mixed-voice-on-top');
+  // Each take's own MR choice, as a mode only: never the chosen file's id or title.
+  assert.equal(d.takes[0].mrMode, 'none'); assert.equal(d.takes[1].mrMode, null);
   assert.equal(d.takes[1].clean, true); assert.equal(d.takes[1].storedAnalysis, null); assert.equal(d.takes[1].fromDeviceCache, true);
   assert.deepEqual(d.takes[1].mrRemoval, {removedDb:7.4, offsetSeconds:12.345, speed:1, score:0.97});
   assert.equal(d.takes[1].asRecorded.voicedSeconds, a.voicedSeconds); assert.ok(d.takes[1].asRecorded.confidence.meanStrength > 0);
@@ -256,6 +258,7 @@ test('diagnosis file: numbers, flags and months only — no ids, titles, names, 
   // A take that cannot be measured: its numbers are still in the file (to calibrate the gate), but no comparison is made.
   const refused = P.diagnosis([{role:'base', date:'2025-08', result:a, clean:{clean:false, why:'accompaniment-heard'}, source:'mixed', measurable:{ok:false, why:'weak-pitch'}, stored:null},
     {role:'comp', date:'2026-11', result:b, clean:{clean:true, why:'user-said-voice-only'}, source:'clean', measurable:{ok:true, why:'voice-only'}, stored:null}]);
+  assert.equal(refused.takes[0].mrMode, null);
   assert.equal(refused.comparison, null); assert.equal(refused.takes[0].measurable, false); assert.equal(refused.takes[0].measurableWhy, 'weak-pitch');
   assert.ok(refused.takes[0].confidence.meanStrength > 0);
   assert.equal(P.monthOf('2026-11-09'), '2026-11'); assert.equal(P.monthOf(''), null);

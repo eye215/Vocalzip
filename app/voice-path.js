@@ -18,7 +18,7 @@
  * Kept on this device only (own small IndexedDB store, not the synced records and not the media store): each take's
  * result with the model version and which MR files it was measured against — at most CACHE_CAP takes, oldest dropped.
  * Stored with the song (VZ.change, syncs): the 기준 녹음 mark (songs[].voicePathBaseIds). In device storage: the
- * "목소리만" tick per recording.
+ * "목소리만" tick and the MR to take out ("이 녹음에서 뺄 MR": an MR track id or 'none'; 자동 is no entry), per recording.
  * The screen never says whether the 길 was found: 비슷함 / 다름 and the direction in words, nothing more. */
 (() => {
 'use strict';
@@ -36,6 +36,10 @@ const NOTE = '소리의 길은 선생님 귀로 판단해요. 이 화면은 다�
 const scope = window.VzipAccountScope, store = scope?.storage || localStorage, CLEAN_KEY = 'vzip_voice_path_clean_v1';
 const ticks = () => { try { const v = JSON.parse(store.getItem(CLEAN_KEY)); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
 const setTick = (id, value) => { try { const all = ticks(); all[id] = value; store.setItem(CLEAN_KEY, JSON.stringify(all)); return true; } catch { return false; } };
+const MR_KEY = 'vzip_voice_path_mr_v1';
+const mrChoices = () => { try { const v = JSON.parse(store.getItem(MR_KEY)); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+/** Remember a recording's MR choice ('auto' removes the entry). */
+const setMrChoice = (id, value) => { try { const all = mrChoices(); if (value === 'auto') delete all[id]; else all[id] = String(value); store.setItem(MR_KEY, JSON.stringify(all)); return true; } catch { return false; } };
 const day = m => (M.dateOf(m) || '').replace(/-/g, '.');
 const clock = t => V.clock(Math.max(0, Number(t) || 0));
 const analysisOf = m => m?.analysis?.metrics ? m.analysis : null;
@@ -91,10 +95,28 @@ V.voicePathCache = cache;                                              // for te
 /** File MRs of the song, as the app's analysis picks them (uploaded files only; a YouTube MR has no file). */
 const mrFilesOf = song => window.VzipR2?.enabled?.() ? (V.song(song.id)?.mrTracks || []).filter(t => t && !t.deleted && t.kind === 'file' && t.r2Key) : [];
 const mrKey = t => String(t.id) + ':' + t.r2Key + ':' + (t.size || 0);  // changes when the file behind an MR is replaced
-/** Which MRs a take is measured against now: the chosen one, or the first MAX_MRS. sig '' = none. */
-function mrPlan(s) {
-  const files = mrFilesOf(s.song), pick = s.mrChoice === 'none' ? [] : s.mrChoice && s.mrChoice !== 'auto' ? files.filter(t => String(t.id) === s.mrChoice) : files.slice(0, MAX_MRS);
-  return {files, pick, sig:pick.map(mrKey).join('|')};
+/** The take's own MR choice: 'auto', 'none' or a track id of the song. A remembered file the song no longer has
+ * counts as 자동 (settleChoices forgets it and says so in the slot). */
+function choiceOf(s, id) {
+  const c = mrChoices()[id], files = mrFilesOf(s.song);
+  return c === 'none' ? 'none' : c != null && files.some(t => String(t.id) === String(c)) ? String(c) : 'auto';
+}
+const modeOf = choice => choice === 'auto' || choice === 'none' ? choice : 'chosen';
+/** Which MRs a take is measured against now: its chosen one, none, or the first MAX_MRS. sig '' = none. The sig is the
+ * cache key of the take's result, so it changes with that take's own choice only. */
+function mrPlan(s, id) {
+  const files = mrFilesOf(s.song), choice = choiceOf(s, id), pick = choice === 'none' ? [] : choice !== 'auto' ? files.filter(t => String(t.id) === choice) : files.slice(0, MAX_MRS);
+  return {files, choice, pick, sig:pick.map(mrKey).join('|')};
+}
+/** A remembered MR file that is gone from the song: back to 자동 (forgotten), said in that slot for the rest of this
+ * session or until another MR is picked there. Only while the song's MR files can be read (without them nothing can be told). */
+const mrGone = new Set();                // recording ids
+function settleChoices(s) {
+  const files = mrFilesOf(s.song); if (!files.length) return;
+  for (const id of [s.a, s.b]) {
+    const c = mrChoices()[id];
+    if (c != null && c !== 'none' && !files.some(t => String(t.id) === String(c))) { setMrChoice(id, 'auto'); mrGone.add(id); }
+  }
 }
 const mrSamples = new Map();             // mrKey → Promise<Float32Array 8 kHz mono> (this session, memory only)
 const decoder = rates => { const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext; for (const rate of rates) { try { return new Ctx(1, rate, rate); } catch {} } throw Error('이 브라우저는 소리를 꺼내 읽지 못해요.'); };
@@ -206,16 +228,16 @@ const MR_REASON = {
   error:'MR을 빼는 중 오류가 났어요'
 };
 /** The record of a take if it was measured with this model against the MR files the song has now. */
-const recordOf = (s, id) => { const r = results.get(id); return r && r.model === P.VERSION && r.mrSig === mrPlan(s).sig ? r : null; };
+const recordOf = (s, id) => { const r = results.get(id); return r && r.model === P.VERSION && r.mrSig === mrPlan(s, id).sig ? r : null; };
 /** Everything the screen says about one side. state: 'none' | 'ready'. */
 function viewOf(s, role) {
   const m = s.items.find(x => x.id === s[role]); if (!m) return null;
-  const rec = recordOf(s, m.id), stored = cleanOf(m), files = mrFilesOf(s.song);
-  if (!rec) return {m, state:'none', stored, files};
+  const rec = recordOf(s, m.id), stored = cleanOf(m), plan = mrPlan(s, m.id), files = plan.files, mode = files.length ? modeOf(plan.choice) : null;
+  if (!rec) return {m, state:'none', stored, files, plan, mode};
   const track = rec.removed ? files.find(t => mrKey(t) === rec.removed.key) : null;
-  if (rec.removed) return {m, rec, state:'ready', source:'mr-removed', result:rec.removed.result, shown:rec.removed.result, clean:{clean:true, why:'song-mr-removed'}, ok:{ok:true, why:'song-mr-removed'}, track, stored, files};
+  if (rec.removed) return {m, rec, state:'ready', source:'mr-removed', result:rec.removed.result, shown:rec.removed.result, clean:{clean:true, why:'song-mr-removed'}, ok:{ok:true, why:'song-mr-removed'}, track, stored, files, plan, mode};
   const ok = P.measurable(rec.mixed, stored.clean);
-  return {m, rec, state:'ready', source:stored.clean ? 'clean' : 'mixed', result:rec.mixed, shown:P.gate(rec.mixed, stored.clean), clean:stored, ok, stored, files};
+  return {m, rec, state:'ready', source:stored.clean ? 'clean' : 'mixed', result:rec.mixed, shown:P.gate(rec.mixed, stored.clean), clean:stored, ok, stored, files, plan, mode};
 }
 
 /* ---------- drawing ---------- */
@@ -246,23 +268,26 @@ function slot(s, role) {
   return '<div class="vp-slot" data-vp-slot="' + role + '"><label class="vp-field"><span>' + label + ' 녹음</span><select data-vp-pick="' + role + '" aria-label="' + label + ' 녹음 고르기"' + (s.running ? ' disabled' : '') + '>' + options + '</select></label>' +
     '<p class="vp-meta" data-vp-meta>' + esc(meta) + (rec && !s.jobs?.[id] ? ' · <span data-vp-kept>이 기기에 잰 결과가 있어요</span>' : '') + '</p>' +
     '<label class="vp-check"><input type="checkbox" data-vp-clean="' + role + '"' + (c.clean ? ' checked' : '') + (s.running ? ' disabled' : '') + '><span>이 녹음은 목소리만 들어가 있어요</span></label>' +
-    '<p class="vp-why" data-vp-why>' + esc(P.CLEAN_TEXT[c.why]) + (c.clean ? '' : mrPlan(s).pick.length ? ' · 곡 MR이 빠지면 이 표시와 상관없이 울림·숨소리까지 재요' : ' · ' + esc(P.UNCLEAN_NOTE)) + '</p>' +
+    '<p class="vp-why" data-vp-why>' + esc(P.CLEAN_TEXT[c.why]) + (c.clean ? '' : mrPlan(s, m.id).pick.length ? ' · 곡 MR이 빠지면 이 표시와 상관없이 울림·숨소리까지 재요' : ' · ' + esc(P.UNCLEAN_NOTE)) + '</p>' +
+    mrChoice(s, role, m.id) +
     '<button type="button" class="vp-mark-base" data-vp-base="' + role + '" aria-pressed="' + marked + '"><i class="ph' + (marked ? '-fill' : '') + ' ph-bookmark-simple" aria-hidden="true"></i>' + (marked ? '이 곡의 기준 녹음이에요' : '이 곡의 기준 녹음으로 표시') + '</button>' +
     progressHtml(s, role) + '</div>';
 }
-function mrChoice(s) {
-  const {files} = mrPlan(s); if (!files.length) return '';
-  const now = s.mrChoice || 'auto';
-  const opt = (value, text) => '<option value="' + esc(value) + '"' + (value === now ? ' selected' : '') + '>' + esc(text) + '</option>';
-  return '<div class="vp-mr" data-vp-mr><label class="vp-field"><span>곡 MR 빼고 재기</span><select data-vp-mr-pick aria-label="뺄 곡 MR 고르기"' + (s.running ? ' disabled' : '') + '>' +
-    opt('auto', files.length > 1 ? '자동 · 가장 많이 빠지는 MR' : (files[0].title || '곡 MR')) + (files.length > 1 ? files.map(t => opt(String(t.id), t.title || '곡 MR')).join('') : '') + opt('none', 'MR을 빼지 않고 재기') + '</select></label>' +
-    '<p class="vp-muted">이 곡에 올린 MR 파일을 녹음에서 빼고 목소리만 재요. 녹음할 때 MR의 키나 빠르기를 바꿨다면 빠지지 않아요.</p></div>';
+/** "이 녹음에서 뺄 MR" in a take's slot: 자동, each MR file of the song, or 빼지 않기 (nothing when the song has none). */
+function mrChoice(s, role, id) {
+  const {files, choice} = mrPlan(s, id); if (!files.length) return '';
+  const label = role === 'a' ? '기준' : '비교';
+  const opt = (value, text) => '<option value="' + esc(value) + '"' + (value === choice ? ' selected' : '') + '>' + esc(text) + '</option>';
+  return '<div class="vp-mr" data-vp-mr="' + role + '"><label class="vp-field"><span>이 녹음에서 뺄 MR</span><select data-vp-mr-pick="' + role + '" aria-label="' + label + ' 녹음에서 뺄 MR 고르기"' + (s.running ? ' disabled' : '') + '>' +
+    opt('auto', '자동 · 가장 많이 빠지는 MR') + files.map(t => opt(String(t.id), t.title || '곡 MR')).join('') + opt('none', '빼지 않기') + '</select></label>' +
+    (mrGone.has(id) ? '<p class="vp-muted" data-vp-mr-gone role="status">이 녹음에 골라 둔 MR 파일이 곡에 없어서 자동으로 바꿨어요.</p>' : '') + '</div>';
 }
+const mrHelp = s => mrFilesOf(s.song).length ? '<p class="vp-muted" data-vp-mr-help>녹음마다 뺄 MR을 따로 골라요. 이 곡에 올린 MR 파일을 녹음에서 빼고 목소리만 재요. 녹음할 때 MR의 키나 빠르기를 바꿨다면 빠지지 않아요.</p>' : '';
 function picker(s) {
   const ids = [s.a, s.b].filter(Boolean), missing = ids.filter(id => !recordOf(s, id));
   return '<section class="vp-card vp-picker" data-vp-picker aria-label="녹음 고르기"><h2>녹음 두 개 고르기</h2>' +
     (s.items.length < 2 ? '<p class="vp-muted" data-vp-need>이 곡의 녹음이 두 개 있어야 나란히 볼 수 있어요. 지금 ' + s.items.length + '개예요.</p>' :
-      (s.defaulted ? '<p class="vp-muted" data-vp-default>' + esc(s.defaulted) + '</p>' : '') + slot(s, 'a') + slot(s, 'b') + mrChoice(s) +
+      (s.defaulted ? '<p class="vp-muted" data-vp-default>' + esc(s.defaulted) + '</p>' : '') + slot(s, 'a') + slot(s, 'b') + mrHelp(s) +
       (s.running ? '<button type="button" class="btn secondary block" data-vp-cancel>그만하기</button><p class="vp-muted">이 기기 안에서만 재요. 파일이 밖으로 나가지 않아요.</p>'
         : '<button type="button" class="btn block vp-run" data-vp-run="' + (missing.length ? 'missing' : 'again') + '">' + (missing.length ? '흔적 재기' : '다시 재기') + '</button>' +
           '<p class="vp-muted" data-vp-status role="status">' + esc(s.status || (missing.length ? '이 기기 안에서만 재요. 한 번 잰 녹음은 이 기기에 남겨 두어 다음에는 바로 보여요.' : '이 기기에 남겨 둔 결과예요. 다시 재기를 누르면 처음부터 새로 재요.')) + '</p>')) +
@@ -319,7 +344,9 @@ function takeCard(s, role, label, v) {
   const m = v.m, head = '<section class="vp-card vp-take" data-vp-take="' + role + '" data-vp-source="' + (v.source || 'none') + '"><div class="vp-take-head"><span class="vp-role">' + label + '</span><strong>' + esc(M.label(m)) + '</strong></div>';
   if (v.state !== 'ready') return head + '<p class="vp-meta">' + esc(day(m)) + '</p>' + (s.jobs?.[m.id] ? '<p class="vp-muted" data-vp-pending>재는 중이에요. 끝나는 대로 여기에 보여 드려요.</p>' : '<p class="vp-muted" data-vp-pending>아직 재지 않았어요.</p>') + '</section>';
   const r = v.result, failed = v.rec.tries.filter(t => !t.ok);
-  const mrNote = v.source === 'mr-removed' ? info('data-vp-mr-note', 'music-notes-minus', '<b>깨끗함: 곡 MR을 빼고 잰 소리</b> · 곡 MR(' + esc(v.track?.title || '곡 MR') + ')을 ' + esc(String(v.rec.removed.report.removedDb)) + ' dB 빼고 쟀어요. 반주가 조금 남아 있을 수 있어요.')
+  const mrNote = v.source === 'mr-removed' ? info('data-vp-mr-note', 'music-notes-minus', '<b>깨끗함: 곡 MR을 빼고 잰 소리</b> · 곡 MR(' + esc(v.track?.title || '곡 MR') + ')을 ' + esc(String(v.rec.removed.report.removedDb)) + ' dB 빼고 쟀어요.' +
+      (v.mode === 'auto' && v.plan.pick.length > 1 ? ' 자동으로 가장 많이 빠지는 MR을 골랐어요.' : '') + ' 반주가 조금 남아 있을 수 있어요.')
+    : v.mode === 'none' ? '<p class="vp-muted" data-vp-mr-none>MR을 빼지 않고 쟀어요.</p>'
     : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + '. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요. 녹음 파일을 그대로 읽었어요.') : '';
   const state = !v.ok.ok ? info('data-vp-refused', 'prohibit', v.ok.why === 'no-voice' ? '이 녹음에서 목소리를 찾지 못했어요. 반주만 있거나 목소리가 작게 녹음됐을 수 있어요.' : esc(P.REFUSED_NOTE))
     : v.source === 'mixed' ? info('data-vp-unclean', 'info', esc(P.UNCLEAN_NOTE) + '. 끊김·뒤집힘에도 반주를 잘못 읽은 곳이 섞일 수 있어요.') : '';
@@ -341,6 +368,7 @@ function resultsHtml(s) {
 function draw(s) {
   if (s.dead) return;
   s.players?.forEach(p => p.destroy?.()); s.players = new Map();
+  settleChoices(s);
   const keep = document.scrollingElement?.scrollTop ?? 0;
   s.host.innerHTML = noteBanner() + '<div class="vp-song"><strong>' + esc(s.song.title) + '</strong>' + trial + '</div><div class="vp-cols">' + picker(s) + resultsHtml(s) + '</div>';
   if (document.scrollingElement) document.scrollingElement.scrollTop = keep;
@@ -351,7 +379,7 @@ function draw(s) {
  * each take is shown as soon as it is done. */
 async function run(s, force) {
   if (s.running) return;
-  const plan = mrPlan(s), todo = [...new Set([s.a, s.b].filter(Boolean))].filter(id => force || !recordOf(s, id));
+  const todo = [...new Set([s.a, s.b].filter(Boolean))].filter(id => force || !recordOf(s, id));
   if (!todo.length) return;
   s.running = true; s.status = ''; s.abort = new AbortController(); s.jobs = {};
   const roleOf = id => id === s.a ? 'a' : 'b';
@@ -367,7 +395,7 @@ async function run(s, force) {
   try {
     for (const id of todo) {
       const item = s.items.find(x => x.id === id);
-      const rec = await measure(s, item, files.get(id), plan, (name, pct, at) => stage(id, name, pct, at));
+      const rec = await measure(s, item, files.get(id), mrPlan(s, id), (name, pct, at) => stage(id, name, pct, at));
       if (s.dead) return;
       results.set(id, rec); delete s.jobs[id];
       cache.put(rec);                                                 // kept on this device; not awaited
@@ -383,7 +411,11 @@ async function run(s, force) {
 function bind(s) {
   const host = s.host, q = sel => host.querySelector(sel);
   host.querySelectorAll('[data-vp-pick]').forEach(sel => sel.onchange = () => { s[sel.dataset.vpPick] = sel.value; s.defaulted = ''; s.status = ''; draw(s); host.querySelector('[data-vp-pick="' + sel.dataset.vpPick + '"]')?.focus({preventScroll:true}); });
-  const mr = q('[data-vp-mr-pick]'); if (mr) mr.onchange = () => { s.mrChoice = mr.value; s.status = ''; draw(s); q('[data-vp-mr-pick]')?.focus({preventScroll:true}); };
+  host.querySelectorAll('[data-vp-mr-pick]').forEach(sel => sel.onchange = () => {
+    const role = sel.dataset.vpMrPick, id = s[role];
+    if (!setMrChoice(id, sel.value)) V.toast('고른 MR을 저장하지 못했어요.', 'error');
+    mrGone.delete(id); s.status = ''; draw(s); host.querySelector('[data-vp-mr-pick="' + role + '"]')?.focus({preventScroll:true});
+  });
   host.querySelectorAll('[data-vp-clean]').forEach(box => box.onchange = () => {
     const id = s[box.dataset.vpClean];
     if (!setTick(id, box.checked)) V.toast('표시를 저장하지 못했어요.', 'error');
@@ -432,7 +464,7 @@ function bind(s) {
 function diagnosisOf(s) {
   const take = (role, key) => { const v = viewOf(s, key);
     return {role, date:P.monthOf(M.dateOf(v.m)), result:v.result, clean:v.clean, source:v.source, measurable:v.ok, stored:analysisOf(v.m), reliable:reliable(v.m),
-      mr:v.rec.removed?.report || null, mrTries:v.rec.tries, mixed:v.source === 'mr-removed' ? v.rec.mixed : null, stagesMs:v.rec.stages, fromDeviceCache:!!v.rec.fromDevice}; };
+      mr:v.rec.removed?.report || null, mrTries:v.rec.tries, mrMode:v.mode, mixed:v.source === 'mr-removed' ? v.rec.mixed : null, stagesMs:v.rec.stages, fromDeviceCache:!!v.rec.fromDevice}; };
   return P.diagnosis([take('base', 'a'), take('comp', 'b')], {generatedMonth:V.today().slice(0, 7)});
 }
 V.voicePathDiagnosis = () => current && viewOf(current, 'a')?.state === 'ready' && viewOf(current, 'b')?.state === 'ready' ? diagnosisOf(current) : null;   // for tests
@@ -474,7 +506,7 @@ V.route('voice-path', {title:'소리 길 흔적', back:true, tab:'growth', noAut
     const [items] = await Promise.all([takesOf(song), loaded ||= cache.load()]);
     if (my !== serial || !host.isConnected) return;
     const d = defaults(song, items, r.query);
-    current = {host, song, items, a:d.a, b:d.b, defaulted:d.why, mrChoice:'auto', running:false, dead:false, jobs:{}, players:new Map()};
+    current = {host, song, items, a:d.a, b:d.b, defaulted:d.why, running:false, dead:false, jobs:{}, players:new Map()};
     draw(current);
   },
   leave
