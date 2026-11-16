@@ -102,8 +102,8 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
   const st = l ? VZ.lessonStatus(l) : 'scheduled';
   let status = st;
   // Picked songs and the status buttons are not form fields: count them as edits when closing.
-  let draft = null;
-  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', onClose:() => draft?.discard(), dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
+  let drafts;
+  VZ.sheet({title:l ? '레슨 일정 수정' : '레슨 일정 추가', dirtyState:() => [...selected].join(',') + '|' + status, body:'<form id="lesson-form">' +
     '<label class="field"><span>레슨 날짜 <span class="req">*</span></span><input type="date" name="date" required value="' + esc(l?.date || date || VZ.today()) + '"></label>' +
     '<div class="two"><label class="field"><span>시작 시간' + (l ? '' : ' <span class="req">*</span>') + '</span><input type="time" name="start" ' + (l ? '' : 'required') + ' value="' + esc(l?.startTime || '') + '"></label><label class="field"><span>종료 시간</span><input type="time" name="end" value="' + esc(l?.endTime || '') + '"></label></div>' +
     '<div class="two"><label class="field"><span>장소</span><input type="text" name="place" maxlength="100" value="' + esc(l ? l.place || '' : last?.place || '') + '"></label><label class="field"><span>선생님</span><input type="text" name="teacher" maxlength="60" value="' + esc(l ? l.teacher || '' : last?.teacher || '') + '"></label></div>' +
@@ -111,9 +111,10 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
     '<label class="field"><span>준비 메모</span><textarea name="prep" rows="2" maxlength="2000" placeholder="레슨 전에 준비할 것, 질문할 것" style="min-height:64px">' + esc(l?.prepMemo || '') + '</textarea></label>' +
     (l ? '<fieldset class="field" style="border:0;padding:0"><legend>상태</legend><div class="seg" data-status>' + ['scheduled', 'done', 'cancelled'].map(s => '<button type="button" data-st="' + s + '" aria-pressed="' + (st === s) + '">' + VZ.statusLabel[s] + '</button>').join('') + '</div></fieldset>' : '') + '</form>',
     foot:'<button type="submit" form="lesson-form" class="btn block">' + (l ? '저장' : '일정 추가') + '</button>',
+    onClose:() => drafts?.dispose(),
     onMount:(el, close) => {
       const form = el.querySelector('form'), songsHost = el.querySelector('[data-songs]');
-      draft = l ? VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':prep', [{name:'prep', saved:l.prepMemo || ''}]) : null;
+      drafts = VZ.lessonLocalDraft?.bind({form, lessonId:l?.id, inputs:{prepMemo:form.prep}});
       const drawSongs = () => {
         songsHost.innerHTML = '<select aria-label="레슨 곡 추가" data-lesson-song data-pick="song"><option value="">곡을 선택해 추가하세요</option>' +
           VZ.songsNewest().filter(s => !selected.has(s.id)).map(s => '<option value="' + esc(s.id) + '">' + esc(VZ.songLabel(s)) + '</option>').join('') +
@@ -133,19 +134,23 @@ VZ.lessonSheet = ({lesson, date, songId} = {}) => {
       el.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { status = b.dataset.st; el.querySelectorAll('[data-st]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
       form.onsubmit = e => {
         e.preventDefault();
+        if (drafts && !drafts.canSave()) return;
         if (!form.date.value) return;
         if (form.end.value && form.start.value && form.end.value <= form.start.value) { VZ.toast('종료 시간은 시작 시간보다 늦어야 해요.', 'error'); return; }
         const songIds = [...selected];
-        const fields = {date:form.date.value, startTime:form.start.value, endTime:form.end.value, place:form.place.value.trim(), teacher:form.teacher.value.trim(), songIds, songId:songIds[0] || '', prepMemo:form.prep.value, status};
+        const current = l && VZ.db.lessons.find(x => x.id === l.id);
+        if (l && !current) { VZ.toast('레슨을 찾을 수 없어요. 입력 내용은 화면에 남아 있어요.', 'error'); return; }
+        const fields = {date:form.date.value, startTime:form.start.value, endTime:form.end.value, place:form.place.value.trim(), teacher:form.teacher.value.trim(), songIds, songId:songIds[0] || '', prepMemo:drafts ? drafts.value('prepMemo',current?.prepMemo) : form.prep.value, status};
         // Never stamp a status onto a legacy lesson unless the user changed it:
         // billing asks the user before deducting lessons that have no status.
         if (l && !l.status && status === st) delete fields.status;
-        let id = l?.id;
+        let id = l?.id || drafts?.lessonId || VZ.uid();
+        const ticket = drafts?.prepare({prepMemo:fields.prepMemo});
         const ok = VZ.change(d => {
           if (l) { const x = d.lessons.find(y => y.id === l.id); if (x) { Object.assign(x, fields); if (!songIds.length && l.songId && !(l.songIds || []).length) x.songId = ''; } }
-          else { id = VZ.uid(); d.lessons.push({id, ...fields, feedback:'', memo:'', recordings:[], created:Date.now()}); }
+          else { if (d.lessons.some(x => x.id === id)) throw Error('레슨 식별자를 다시 확인해 주세요.'); d.lessons.push({id, ...fields, feedback:'', memo:'', recordings:[], created:Date.now()}); }
         });
-        if (ok) { draft?.clear(); close(); VZ.toast(l ? '레슨 일정을 저장했어요.' : '레슨 일정을 추가했어요.'); if (!l) VZ.nav('#/lesson/' + id); }
+        if (ok) { drafts?.accepted(ticket); close(); VZ.toast(l ? '레슨 일정을 저장했어요.' : '레슨 일정을 추가했어요.'); if (!l) VZ.nav('#/lesson/' + id); }
       };
     }});
 };
@@ -256,17 +261,18 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
   }});
 function feedbackSheet(l) {
   const songIds = VZ.lessonSongIds(l);
-  let draft = null;
-  VZ.sheet({title:'레슨 피드백', onClose:() => draft?.discard(), body:'<form id="fb-form"><label class="field"><span>전체 피드백</span><textarea name="feedback" rows="5" maxlength="10000" placeholder="선생님이 말씀하신 내용">' + esc(l.feedback || '') + '</textarea></label>' +
+  let drafts, songDraft;
+  VZ.sheet({title:'레슨 피드백', body:'<form id="fb-form"><label class="field"><span>전체 피드백</span><textarea name="feedback" rows="5" maxlength="10000" placeholder="선생님이 말씀하신 내용">' + esc(l.feedback || '') + '</textarea></label>' +
     songIds.map(id => '<label class="field"><span>' + esc(VZ.songTitle(id) || '곡') + ' 피드백</span><textarea name="song_' + esc(id) + '" rows="3" maxlength="5000" style="min-height:72px">' + esc(l.songFeedback?.[id] || '') + '</textarea></label>').join('') +
     '<label class="field"><span>내 메모</span><textarea name="memo" rows="3" maxlength="5000" style="min-height:72px">' + esc(l.memo || '') + '</textarea></label>' +
     (VZ.lessonStatus(l) === 'scheduled' && l.date <= VZ.today() ? '<label class="item" style="padding:0 0 8px"><input type="checkbox" name="complete" style="width:22px;height:22px;accent-color:var(--accent)"><span class="item-main">레슨 완료로 표시</span></label><p class="small muted" data-complete-note hidden style="margin:0 0 8px"></p>' : '') + '</form>',
     foot:'<button type="submit" form="fb-form" class="btn block">피드백 저장</button>',
+    onClose:() => { drafts?.dispose(); songDraft?.discard(); },
     onMount:(el, close) => {
       const form = el.querySelector('form');
-      // 05-A: typing is kept on this device until saved (closing, reload or the app being killed loses nothing).
-      draft = VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':feedback', [{name:'feedback', saved:l.feedback || ''}, {name:'memo', saved:l.memo || ''},
-        ...songIds.map(id => ({name:'song_' + id, saved:l.songFeedback?.[id] || ''}))]);
+      // Keep the existing, separate per-song draft behavior; do not migrate it into lesson fields.
+      songDraft = VZ.fieldDraft?.wire(form, 'lesson:' + l.id + ':feedback', songIds.map(id => ({name:'song_' + id, saved:l.songFeedback?.[id] || ''})));
+      drafts = VZ.lessonLocalDraft?.bind({form, lessonId:l.id, inputs:{feedback:form.feedback, memo:form.memo}});
       // Saving feedback does not complete the lesson unless the box is ticked; ticking it says what completing deducts.
       const box = form.complete, note = el.querySelector('[data-complete-note]');
       if (box) {
@@ -277,15 +283,20 @@ function feedbackSheet(l) {
       }
       form.onsubmit = e => {
         e.preventDefault();
+        if (drafts && !drafts.canSave()) return;
+        const current = VZ.db.lessons.find(x => x.id === l.id);
+        if (!current) { VZ.toast('레슨을 찾을 수 없어요. 입력 내용은 화면에 남아 있어요.', 'error'); return; }
+        const values = {feedback:drafts ? drafts.value('feedback',current.feedback) : form.feedback.value, memo:drafts ? drafts.value('memo',current.memo) : form.memo.value};
+        const ticket = drafts?.prepare(values);
         const ok = VZ.change(d => {
           const x = d.lessons.find(y => y.id === l.id); if (!x) return;
-          x.feedback = form.feedback.value; x.memo = form.memo.value;
+          x.feedback = values.feedback; x.memo = values.memo;
           const sf = {...(x.songFeedback || {})};
           songIds.forEach(id => { const v = form.elements['song_' + id].value; if (v.trim()) sf[id] = v; else delete sf[id]; });
           x.songFeedback = sf;
           if (form.complete?.checked) { x.status = 'done'; x.completedAt = Date.now(); }
         });
-        if (ok) { draft?.clear(); close(); VZ.toast('피드백을 저장했어요.'); }
+        if (ok) { drafts?.accepted(ticket); songDraft?.clear(); close(); VZ.toast('피드백을 저장했어요.'); }
       };
     }});
 }
