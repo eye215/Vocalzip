@@ -489,15 +489,13 @@ for (const [width, height] of [[820, 1180], [1180, 820]]) test('tablet ' + width
   expect(Math.abs(report.practice.top - report.coach.top)).toBeLessThan(2);
   expect(report.tabs).toBeLessThan(report.view);                     // the tab box keeps a phone-like width
   expect(await overflow(page)).toEqual({wide:false, over:0});
-  // 주간 요약: cards in two columns.
+  // 주간 요약: cards in two columns. The fixture's practice is yesterday, which is last week on a Monday: open the
+  // week that holds it (a fixed week, not "this week", so the test does not fail every Monday).
   await page.locator('.growth-weekly-tab').click();
   await expect(page.locator('.ws-week')).toBeVisible();
-  // The fixture dates are "N days ago", and a week runs Monday–Sunday in Korea time: on a Monday the newest record
-  // (yesterday) belongs to last week, so 이번 주 is the single full-width "기록이 없는 주예요" card and there is nothing to
-  // lay out in columns. Open the week of the newest record, which has cards on every day of the week.
-  await page.goto('/#/weekly-summary?week=' + ago(1));
-  await expect(page.locator('[data-weekly-summary] [data-ws-section]').first()).toBeVisible();
-  await expect(page.locator('[data-ws-empty]')).toHaveCount(0);
+  const week = (d => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() - (t.getUTCDay() + 6) % 7); return t.toISOString().slice(0, 10); })(ago(1));
+  await page.goto('/#/weekly-summary?week=' + week);
+  await expect(page.locator('[data-weekly-summary] .ws-empty-card')).toHaveCount(0);
   const lefts = await page.locator('[data-weekly-summary] .ws-card').evaluateAll(els => [...new Set(els.map(e => Math.round(e.getBoundingClientRect().left)))]);
   expect(lefts.length).toBe(2);
   expect(await overflow(page)).toEqual({wide:false, over:0});
