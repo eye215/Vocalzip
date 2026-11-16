@@ -1,0 +1,46 @@
+name: Vocal lab screens checks
+# 소리 길 흔적 and MR로 다시 분석 on every browser project before merge (they were only in the long ui job, so a
+# WebKit-only failure was found after deployment).
+on:
+  pull_request:
+    paths:
+      - 'app/voice-path*'
+      - 'app/mr-reanalyze*'
+      - 'app/mr-cancel.js'
+      - 'app/vocal-lab.js'
+      - 'app/song-mr.js'
+      - 'app/analysis.js'
+      - 'app/vocal-analysis.js'
+      - 'app/core.js'
+      - 'tests/voice-path*'
+      - 'tests/mr-reanalyze*'
+      - 'tests/helpers/voice-path-audio.cjs'
+      - '.github/workflows/vocal-lab-screens-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vocal-lab-screens-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  lab-screens:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:syntax
+      - run: node --test tests/voice-path-model.test.cjs
+      - run: npx playwright test tests/voice-path.spec.cjs tests/mr-reanalyze.spec.cjs --workers=2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vocal-lab-screens-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
