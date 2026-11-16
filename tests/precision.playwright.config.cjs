@@ -1,0 +1,3 @@
+const {defineConfig}=require('@playwright/test'),path=require('node:path');
+const port=Number(process.env.VZIP_PRECISION_PORT||4195);
+module.exports=defineConfig({testDir:__dirname,testMatch:'precision-*.spec.cjs',timeout:30000,workers:1,reporter:[['list']],use:{baseURL:'http://127.0.0.1:'+port,serviceWorkers:'block',screenshot:'only-on-failure',trace:'retain-on-failure'},projects:[{name:'chromium-mobile',use:{browserName:'chromium',viewport:{width:375,height:812},isMobile:true,hasTouch:true}},{name:'webkit-mobile',use:{browserName:'webkit',viewport:{width:375,height:812},isMobile:true,hasTouch:true}}],webServer:{command:'python3 -m http.server '+port+' --bind 127.0.0.1',cwd:path.resolve(__dirname,'..'),url:'http://127.0.0.1:'+port,reuseExistingServer:false}});

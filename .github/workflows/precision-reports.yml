@@ -19,4 +19,4 @@ jobs:
         with: {node-version: '22', cache: npm}
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test tests/precision-report.spec.cjs --project=chromium-mobile --workers=1
+      - run: npx playwright test --config=tests/precision.playwright.config.cjs --project=chromium-mobile

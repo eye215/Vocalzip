@@ -10,7 +10,8 @@ function line(rows,key,label){
  const vals=rows.map(r=>r[key]).filter(Number.isFinite);if(vals.length<2)return '<p class="pr-held">'+e(label)+' · 측정 가능한 구간이 부족해요.</p>';
  const lo=Math.min(...vals),hi=Math.max(...vals),span=Math.max(hi-lo,.01),x=i=>28+i*280/Math.max(1,rows.length-1),y=v=>150-(v-lo)/span*120;let d='',open=false;
  rows.forEach((r,i)=>{const v=r[key];if(!Number.isFinite(v)){open=false;return;}d+=(open?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1);open=true;});
- return '<figure><figcaption>'+e(label)+'</figcaption><svg viewBox="0 0 340 180" role="img" aria-label="'+e(label+' · 시간별 실측값, 누락 구간은 빈칸')+'"><text x="0" y="24">'+hi.toFixed(1)+'</text><text x="0" y="155">'+lo.toFixed(1)+'</text><path class="pr-line" d="'+d+'"/><text x="28" y="176">'+Number(rows[0]?.t||0).toFixed(1)+'초</text><text x="275" y="176">'+Number(rows.at(-1)?.t||0).toFixed(1)+'초</text></svg></figure>';
+ const first=rows[0]?.date||Number(rows[0]?.t||0).toFixed(1)+'초',last=rows.at(-1)?.date||Number(rows.at(-1)?.t||0).toFixed(1)+'초';
+ return '<figure><figcaption>'+e(label)+'</figcaption><svg viewBox="0 0 340 180" role="img" aria-label="'+e(label+' · 시간별 실측값, 누락 구간은 빈칸')+'"><text x="0" y="24">'+hi.toFixed(1)+'</text><text x="0" y="155">'+lo.toFixed(1)+'</text><path class="pr-line" d="'+d+'"/><text x="28" y="176">'+e(first)+'</text><text x="250" y="176">'+e(last)+'</text></svg></figure>';
 }
 function formants(r){const dots=r.resonance?.f1f2||[];if(!dots.length)return '<p class="pr-held">신뢰할 수 있는 포먼트 표본이 없어요. 높은 음이나 반주가 포함된 소리에서는 측정을 보류해요.</p>';
  const max1=Math.max(1000,...dots.map(d=>d.f1)),max2=Math.max(3000,...dots.map(d=>d.f2));
