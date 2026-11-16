@@ -1,0 +1,22 @@
+name: Precision reports
+on:
+  pull_request:
+    paths: ['app/precision-report*', 'app/precision-analysis.js', 'app/precision-result-store.js', 'supabase/functions/vzip-precision-coach/**', 'tests/precision-report*', 'tests/precision-coach*', '.github/workflows/precision-reports.yml']
+  workflow_dispatch:
+jobs:
+  models:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/precision-report.test.cjs tests/precision-coach.test.mjs
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm}
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/precision-report.spec.cjs --project=chromium-mobile --workers=1
