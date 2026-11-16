@@ -14,7 +14,7 @@ async function read(item,signal){
  }finally{if(src.revoke)URL.revokeObjectURL(src.url);}
 }
 function worker(samples,sampleRate,options,signal,onProgress){return new Promise((resolve,reject)=>{
- const w=new Worker('app/precision-report-worker.js?v=1'),end=()=>{w.terminate();signal.removeEventListener('abort',abort);},abort=()=>{end();reject(abortError());};
+ const w=new Worker('app/precision-report-worker.js?v=2'),end=()=>{w.terminate();signal.removeEventListener('abort',abort);},abort=()=>{end();reject(abortError());};
  if(signal.aborted){abort();return;}signal.addEventListener('abort',abort,{once:true});
  w.onmessage=({data})=>{if(data.progress!=null){onProgress(data.progress);return;}end();data.error?reject(Error(data.error)):resolve(data.result);};w.onerror=()=>{end();reject(Error('정밀 분석 모듈을 불러오지 못했어요. 관련 PR 적용 상태를 확인해 주세요.'));};
  w.postMessage({samples,sampleRate,options},[samples.buffer]);

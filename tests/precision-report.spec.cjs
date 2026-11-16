@@ -37,8 +37,15 @@ test('combined: real synthetic PCM -> legacy F0 -> spectral/LPC/change modules -
   const context={source:'clean',task:'sustain',vowel:'a',environment:'fixture',loudness:'normal'};
   const a=await VZ.precisionAnalyze(item,{context}),b=await VZ.precisionAnalyze(item,{context});
   const controller=new AbortController();controller.abort();let aborted=false;try{await VZ.precisionAnalyze(item,{context,signal:controller.signal});}catch(e){aborted=e.name==='AbortError';}
-  URL.revokeObjectURL(url);return {a,b,aborted,before,after:JSON.stringify(VZ.db),stored:(await VzipPrecisionStore.list(vzipCloudUserId())).length};
+  const during=new AbortController(),pending=VZ.precisionAnalyze(item,{context,force:true,signal:during.signal});setTimeout(()=>during.abort(),1);let midAbort=false;try{await pending;}catch(e){midAbort=e.name==='AbortError';}
+  const segment=await VZ.precisionAnalyze(item,{context,start:1,end:2.5});
+  URL.revokeObjectURL(url);return {a,b,aborted,midAbort,segment,before,after:JSON.stringify(VZ.db),stored:(await VzipPrecisionStore.list(vzipCloudUserId())).length};
  },audio);
  expect(result.a.metrics.f0.value).toBeGreaterThan(100);expect(result.a.legacy.version).toBe(2);expect(result.a.resonance.version).toBe('pr-1.0.0');expect(result.a.transitions.version).toBe('pt-1.0.0');
- expect(result.b.fromCache).toBe(true);expect(result.stored).toBe(1);expect(result.aborted).toBe(true);expect(result.after).toBe(result.before);expect(page.__errors).toEqual([]);
+ expect(result.b.fromCache).toBe(true);expect(result.stored).toBe(2);expect(result.aborted).toBe(true);expect(result.midAbort).toBe(true);expect(result.segment.frames[0].t).toBeGreaterThanOrEqual(1);expect(result.after).toBe(result.before);expect(page.__errors).toEqual([]);
+});
+test('independent: absent engine dependencies fail without saving or modifying original records',async({page})=>{
+ test.skip(combined,'The integration worktree has the actual engines');await go(page);const audio=wav(2,16000).toString('base64');
+ const result=await page.evaluate(async audio=>{const before=JSON.stringify(VZ.db),url=URL.createObjectURL(new Blob([Uint8Array.from(atob(audio),c=>c.charCodeAt(0))],{type:'audio/wav'}));VZ.media.src=async()=>({url});let failed=false;try{await VZ.precisionAnalyze({id:'missing-engine',durationSeconds:2,recordedDate:'2026-11-01'});}catch{failed=true;}URL.revokeObjectURL(url);return {before,after:JSON.stringify(VZ.db),failed,count:(await VzipPrecisionStore.list(vzipCloudUserId())).length};},audio);
+ expect(result.failed).toBe(true);expect(result.count).toBe(0);expect(result.after).toBe(result.before);expect(page.__errors).toEqual([]);
 });
