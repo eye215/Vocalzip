@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc, L = window.VzipAudioFile;
-const WORKER = 'app/vocal-analysis.js?v=10', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=11', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0, stop = null; // stop: ends the screen's on-device analysis when the screen is left

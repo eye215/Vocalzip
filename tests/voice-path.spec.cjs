@@ -455,16 +455,39 @@ test('a drifting quiet MR reaches the screen, invalidates older MR caches and ex
  const diagnosis=await page.evaluate(()=>VZ.voicePathDiagnosis());
  for(const role of['a','b'])await expect(page.locator('[data-vp-take="'+role+'"]')).toHaveAttribute('data-vp-source','mr-removed');
  for(const take of diagnosis.takes){expect(take.mrRemoval).toMatchObject({method:'local',coverage:expect.any(Number),localWindows:expect.any(Number),phasePeak:expect.any(Number)});expect(take.mrRemoval.coverage).toBeGreaterThan(.9);}
- expect((await kept(page)).every(x=>x.mrSig.startsWith('cancel-v4|'))).toBe(true);
+ expect((await kept(page)).every(x=>x.mrSig.startsWith('cancel-v5|'))).toBe(true);
  await expect(page.locator('[data-vp-mr-note]').first()).not.toContainText('dB');
  if(process.env.VZ_MR_ALIGNMENT_SHOTS&&testInfo.project.name==='chromium-mobile'){
   for(const width of[390,320]){await page.setViewportSize({width,height:844});await noOverflow(page);await page.screenshot({path:process.env.VZ_MR_ALIGNMENT_SHOTS+'/local-mr-'+width+'.png',fullPage:true});}
  }
  const previous=(await kept(page)).find(x=>x.id==='m-a').at;
- await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-a');q.onsuccess=()=>s.put({...q.result,mrSig:q.result.mrSig.replace('cancel-v4|','cancel-v3|')});tx.oncomplete=()=>{o.result.close();resolve();};};});});
+ await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-a');q.onsuccess=()=>s.put({...q.result,mrSig:q.result.mrSig.replace('cancel-v5|','cancel-v4|')});tx.oncomplete=()=>{o.result.close();resolve();};};});});
  await page.reload();await page.evaluate(()=>{VzipR2.enabled=()=>true;VzipR2.url=async key=>window.__mr[key];VZ.render();});
  await expect(page.locator('[data-vp-take="a"] [data-vp-pending]')).toHaveText('아직 재지 않았어요.');
  expect((await kept(page)).find(x=>x.id==='m-a')?.at??previous).toBe(previous);
+ expect(page.__errors).toEqual([]);
+});
+test('a missed onset candidate is recovered by automatic whole-MR start search on the actual screen',async({page},info)=>{
+ test.setTimeout(120000);await bootMr(page,{quiet:true});
+ await page.evaluate(async()=>{
+  const Y=window.mrSynth;let seed=23,slow=0;
+  const mr=Float32Array.from({length:75*Y.SR},()=>{seed=(seed*1664525+1013904223)>>>0;slow=.8*slow+.2*(seed/4294967296*2-1);return slow;});
+  window.__mr['mr/own']=URL.createObjectURL(new Blob([vpTake.wav(mr,Y.SR)],{type:'audio/wav'}));
+  for(const [id,date,offset]of[['m-flat-a','2025-08-13',23.456],['m-flat-b','2026-11-10',37.891]]){
+   const samples=Y.record(Y.vocal(24).x,mr,{offset,db:-12}).x;
+   await window.vzipStorePracticeMedia({id,name:'합성 시작점 자동 정렬',created:new Date(date+'T10:00:00').getTime(),type:'audio/wav',source:'practice',songId:'s1',song:'지금 이 순간',blob:new Blob([vpTake.wav(samples,Y.SR)],{type:'audio/wav'}),durationSeconds:24});
+  }
+  await VZ.media.list(true);window.dispatchEvent(new Event('vzip:media-updated'));
+ });
+ const before=await page.evaluate(async()=>JSON.stringify((await VZ.media.list()).map(m=>[m.id,m.analysis])));
+ await open(page,'?a=m-flat-a&b=m-flat-b');await measure(page);
+ for(const role of['a','b'])await expect(page.locator('[data-vp-take="'+role+'"]')).toHaveAttribute('data-vp-source','mr-removed');
+ await expect(page.locator('[data-vp-mr-failed]')).toHaveCount(0);
+ const diagnosis=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ expect(diagnosis.takes[0].mrRemoval.offsetSeconds).toBeCloseTo(23.456,2);
+ expect(diagnosis.takes[1].mrRemoval.offsetSeconds).toBeCloseTo(37.891,2);
+ expect(await page.evaluate(async()=>JSON.stringify((await VZ.media.list()).map(m=>[m.id,m.analysis])))).toBe(before);
+ for(const [width,height]of[[375,812],[320,640]]){await page.setViewportSize({width,height});await noOverflow(page);await page.locator('[data-vp-take="a"]').evaluate(el=>el.scrollIntoView({block:'start'}));await page.screenshot({path:info.outputPath('automatic-start-'+width+'.png')});}
  expect(page.__errors).toEqual([]);
 });
 test('MR loading retries an expired URL once and then measures both original takes without changing saved analysis',async({page})=>{
@@ -567,7 +590,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   await expect(row(page, 'breath').locator('.vp-vals dd').first()).toContainText('배음 대 잡음');
   // The MR file was read once for both takes; the device store remembers which MR each take was measured against.
   expect(await page.evaluate(() => window.__decodes)).toBe(3);
-  await expect.poll(async () => (await kept(page)).map(r => r.mrSig)).toEqual(['cancel-v4|t-own:mr/own:1111', 'cancel-v4|t-own:mr/own:1111']);
+  await expect.poll(async () => (await kept(page)).map(r => r.mrSig)).toEqual(['cancel-v5|t-own:mr/own:1111', 'cancel-v5|t-own:mr/own:1111']);
   // The file: how each take was read, the removal's numbers — and no MR id, title or file name.
   const d = await page.evaluate(() => VZ.voicePathDiagnosis()), text = JSON.stringify(d);
   expect(d.takes.map(t => t.source)).toEqual(['mr-removed', 'mr-removed']);

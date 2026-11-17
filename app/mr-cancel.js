@@ -2,7 +2,8 @@
  * The MR the singer heard is known (songs[].mrTracks), so instead of guessing what is voice (AI source separation)
  * the MR itself is lined up with the recording and subtracted:
  *  1. coarse alignment: onset envelopes (log spectral flux, 100 per second) of both, cross-correlated over every lag
- *     (the take may start anywhere in the MR, or before it). A weak or ambiguous peak means "not this MR": stop.
+ *     (the take may start anywhere in the MR, or before it). If those candidates do not verify, waveform anchors
+ *     search the whole MR independently; an onset miss alone is not proof that the reference differs.
  *  2. fine alignment: GCC-PHAT in a few windows spread over the overlap gives the lag to a fraction of a sample and
  *     the speed ratio (a YouTube copy and the uploaded file can differ by a few tenths of a percent).
  *  3. subtraction: per frequency bin, the way the MR reached the microphone (speaker, room, level) is estimated as a
@@ -27,6 +28,7 @@ const RULES = {
   localCoverage:0.85, transferRadius:16, // ~50 s of neighbouring context; current block is held out
   fineWin:4096, fineSearch:0.05,   // GCC-PHAT windows (0.5 s) and ± search around the coarse lag (s)
   fineCount:7,
+  searchFactor:16, searchSeconds:128, searchAnchorSeconds:2, searchAnchors:5,
   win:512, hop:128,                // STFT 64 ms / 16 ms
   block:96,                        // frames per transfer estimate (~1.5 s)
   residual:0.12, floor:0.08        // leftover MR power assumed after subtraction, and the lowest gain
@@ -117,6 +119,51 @@ function coarse(rec, mr) {
   return {ok:picked.length > 0, reason:picked.length ? '' : 'no-match', score:topScore, candidates:picked.slice(0, RULES.candidates)};
 }
 
+/** Independent start-position proposals, not acceptance evidence. Search the entire MR
+ * with short, low-pass 500 Hz waveform anchors. Reuse a bounded FFT workspace even for
+ * long files; all proposals still require the original 8 kHz verification below. */
+function waveformCandidates(rec, mr, onProgress = () => {}) {
+  const factor = RULES.searchFactor, rate = SR / factor, taps = 65, filter = new Float64Array(taps), cutoff = .4 / factor;
+  let sum = 0;
+  for (let j = 0; j < taps; j++) { const t = j - (taps - 1) / 2; filter[j] = (t ? Math.sin(2*Math.PI*cutoff*t)/(Math.PI*t) : 2*cutoff) * (.5-.5*Math.cos(2*Math.PI*j/(taps-1))); sum += filter[j]; }
+  for (let j = 0; j < taps; j++) filter[j] /= sum;
+  const low = input => Float32Array.from({length:Math.ceil(input.length/factor)}, (_,i) => {
+    let v = 0; for (let j = 0; j < taps; j++) v += (input[i*factor+j-(taps-1)/2] || 0) * filter[j]; return v;
+  });
+  const a = low(rec), b = low(mr), length = Math.min(a.length,Math.round(RULES.searchAnchorSeconds*rate));
+  if (length < rate || b.length < length) return [];
+  const block = Math.round(RULES.searchSeconds*rate), step = block-length+1, size = pow2(Math.min(block,b.length)+length), window = hann(length);
+  const ar = new Float64Array(size), ai = new Float64Array(size), br = new Float64Array(size), bi = new Float64Array(size), found = [];
+  const starts = [...new Set(Array.from({length:RULES.searchAnchors},(_,i)=>Math.round((a.length-length)*i/(RULES.searchAnchors-1))))];
+  const blocks = Math.ceil(Math.max(1,b.length-length+1)/step), overlap = Math.min(rec.length,mr.length,RULES.minOverlap*SR);
+  for (let base = 0, part = 0; base+length <= b.length; base += step,part++) {
+    const count = Math.min(block,b.length-base);br.fill(0);bi.fill(0);br.set(b.subarray(base,base+count));fft(br,bi);
+    for (const [index,start] of starts.entries()) {
+      ar.fill(0);ai.fill(0);let energy = 0;
+      for (let i = 0; i < length; i++) { ar[i] = a[start+i]*window[i]; energy += ar[i]*ar[i]; }
+      if (energy > 1e-10) {
+        fft(ar,ai);
+        for (let k = 0; k < size; k++) { const re=ar[k]*br[k]+ai[k]*bi[k],im=ar[k]*bi[k]-ai[k]*br[k],mag=Math.hypot(re,im)||1;ar[k]=re/mag;ai[k]=im/mag; }
+        fft(ar,ai,true);
+        const peaks = [];
+        for (let pick = 0; pick < 2; pick++) {
+          let best = -1, peak = 0;
+          for (let j = 0; j <= count-length; j++) if (ar[j]>peak && peaks.every(p=>Math.abs(p-j)>.5*rate)) { best=j;peak=ar[j]; }
+          if (best < 0 || peak < 1e-5) break;
+          peaks.push(best);const lag=(base+best-start)*factor;
+          if (Math.min(rec.length,mr.length-lag)-Math.max(0,-lag)<overlap) continue;
+          const near = found.find(p=>Math.abs(p.lag-lag)<.25*SR);
+          if (near) { near.votes++;if(peak>near.score){near.lag=lag;near.score=peak;} }
+          else found.push({lag,score:peak,votes:1,search:'waveform'});
+        }
+      }
+      onProgress((part+(index+1)/starts.length)/blocks);
+    }
+  }
+  onProgress(1);
+  return found.sort((x,y)=>y.votes-x.votes||y.score-x.score).slice(0,RULES.candidates);
+}
+
 /* ---------- 2. fine alignment ---------- */
 /** GCC-PHAT lag (samples, sub-sample) between rec[start…] and mr[start + guess…], searched within ±range. */
 function lagReader(N) {
@@ -203,8 +250,12 @@ function findAnchors(rec, mr, candidates, onProgress) {
       if (g.peak >= 0.07) points.push([start + N / 2, g.lag, g.peak]);
     }
     const line = robustLine(points);
-    if (line && line.phasePeak >= RULES.anchorPeak && line.errorSamples <= RULES.anchorError && line.span >= (to - from) * 0.4)
-      found.push({...line, score:candidate.score});
+    // Whole-file search has no independent onset agreement. Require strong correspondence
+    // in nearly every anchor; a different arrangement can share several exact chord passages.
+    const required = candidate.search ? Math.ceil(RULES.anchorCount*.85) : RULES.anchorWindows;
+    const peak = candidate.search ? RULES.verifiedPeak : RULES.anchorPeak;
+    if (line && line.points >= required && line.phasePeak >= peak && line.errorSamples <= RULES.anchorError && line.span >= (to - from) * 0.4)
+      found.push({...line, score:candidate.score, ...(candidate.search ? {search:candidate.search} : {})});
     onProgress((index + 1) / candidates.length);
   }
   return found.sort((a,b) => b.phasePeak - a.phasePeak)[0] || null;
@@ -286,7 +337,7 @@ function cancelLocally(rec, mr, candidates, onProgress) {
   if (reduction < 0.05) return null;
   return {ok:true,voice:result.voice,report:{offsetSeconds:round(line.lag/SR,3),speed:round(line.ratio,5),score:round(line.score,3),
     windows:line.points,tried:candidates.length,removedDb:round(reduction,1),alignmentVerified:true,
-    method:'local',localWindows:track.points,coverage:round(track.coverage,3),phasePeak:round(line.phasePeak,3)}};
+    method:'local',localWindows:track.points,coverage:round(track.coverage,3),phasePeak:round(line.phasePeak,3),...(line.search ? {search:line.search} : {})}};
 }
 
 /* ---------- 3. subtraction ---------- */
@@ -404,35 +455,41 @@ function cancel(rec, mr, {onProgress = () => {}} = {}) {
   const alignment = (stage, f) => ({stage, score:round(f?.score ?? c.score, 3),
     offsetSeconds:f ? round(f.lag / SR, 3) : null, speed:f ? round(f.ratio, 5) : null,
     windows:f?.points || 0, phasePeak:round(f?.phasePeak, 3), errorSamples:round(f?.errorSamples, 3)});
-  if (!c.ok) return {ok:false, reason:c.reason, score:round(c.score, 3), alignment:alignment('coarse')};
   // Try each candidate on the same excerpt of the take; the true position removes the most level.
   const tries = [];
-  for (const [index, cand] of c.candidates.entries()) {
-    onProgress(0.05 + 0.45 * index / c.candidates.length);
+  const examine = (candidates,begin,finish) => {for (const [index, cand] of candidates.entries()) {
+    onProgress(begin + (finish-begin) * index / candidates.length);
     const f = fine(rec, mr, cand.lag);
     if (!f.points || Math.abs(f.ratio - 1) > 0.02) continue;
     const from = Math.max(0, Math.ceil(-f.lag / f.ratio)), to = Math.min(rec.length, Math.floor((mr.length - f.lag) / f.ratio));
     const len = Math.min(to - from, RULES.trySeconds * SR), start = from + Math.max(0, Math.floor((to - from - len) / 2));
     if (len < SR * 2) continue;
     const part = rec.subarray(start, start + len), heard = alignedMr(mr, len, f.lag + start * f.ratio, f.ratio);
-    const verified = f.points >= RULES.verifiedWindows && f.phasePeak >= RULES.verifiedPeak && f.errorSamples <= RULES.verifiedError;
-    tries.push({...f, verified, score:cand.score, removed:subtract(part, heard).removedDb || 0});
+    const required = cand.search ? Math.ceil(RULES.fineCount*.85) : RULES.verifiedWindows;
+    const verified = f.points >= required && f.phasePeak >= RULES.verifiedPeak && f.errorSamples <= RULES.verifiedError;
+    tries.push({...f, verified, score:cand.score, removed:subtract(part, heard).removedDb || 0,...(cand.search ? {search:cand.search} : {})});
+  }};
+  examine(c.candidates,0.05,0.35);
+  let extra = [];
+  if (!tries.some(t=>t.verified)) {
+    extra=waveformCandidates(rec,mr,p=>onProgress(0.35+.1*p));
+    examine(extra,0.45,0.5);
   }
   // Prefer consistent waveform alignment to a loudness drop: a wrong repeated phrase can also
   // lose energy in a fitted filter. A quieter but verified MR is not a different source file.
   tries.sort((x, y) => Number(y.verified) - Number(x.verified) || (x.verified ? y.phasePeak - x.phasePeak : y.removed - x.removed));
   const best = tries[0];
   if (!best || !best.verified) {
-    const local = cancelLocally(rec,mr,c.candidates,onProgress);
+    const local = cancelLocally(rec,mr,[...c.candidates,...extra],onProgress);
     if (local) return local;
-    return {ok:false, reason:'no-match', score:round(c.score, 3), removedDb:best ? round(best.removed, 1) : null, alignment:alignment(best ? 'validation' : 'fine', best)};
+    return {ok:false, reason:'no-match', score:round(c.score, 3), removedDb:best ? round(best.removed, 1) : null, alignment:alignment(best ? 'validation' : c.ok ? 'fine' : 'coarse', best)};
   }
   const s = subtract(rec, alignedMr(mr, rec.length, best.lag, best.ratio), p => onProgress(0.5 + p * 0.5), {sharedTransfer:best.removed < RULES.minRemoved});
-  return {ok:true, voice:s.voice, report:{offsetSeconds:round(best.lag / SR, 3), speed:round(best.ratio, 5), score:round(best.score, 3), windows:best.points, tried:tries.length, removedDb:s.removedDb, alignmentVerified:best.verified}};
+  return {ok:true, voice:s.voice, report:{offsetSeconds:round(best.lag / SR, 3), speed:round(best.ratio, 5), score:round(best.score, 3), windows:best.points, tried:tries.length, removedDb:s.removedDb, alignmentVerified:best.verified,...(best.search ? {search:best.search} : {})}};
 }
 const round = (x, d = 0) => Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : null;
 
-const api = {SR, RULES, cancel, coarse, fine, subtract, alignedMr, envelope, fft, localTrack};
+const api = {SR, RULES, cancel, coarse, fine, subtract, alignedMr, envelope, fft, localTrack, waveformCandidates};
 if (typeof module === 'object' && module.exports) module.exports = api;
 else root.VzipMrCancel = api;
 })(typeof self !== 'undefined' ? self : globalThis);
