@@ -18,6 +18,8 @@
 // 판정 기준 재검토 (2026-11-15) changed one rule on purpose: a wobble / high-note wobble change between an AI-separated
 // take and one as recorded is 변화 관찰 (state changed, judged kept, note ai-mixed) instead of being judged; only the
 // fixture's one mixed song moved (비슷함 → 변화 관찰, its 비슷 counts −1).
+// 지표 목표 (2026-11-17) only added text: 월별 측정 흐름 gained a target row (목표를 정하면… · 목표 정하기). No number
+// or verdict moved.
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');

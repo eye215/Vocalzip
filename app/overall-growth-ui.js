@@ -109,11 +109,49 @@ const nextMonth=key=>{const [y,m]=key.split('-').map(Number);return (m===12?y+1:
 /** 월별 측정 흐름: a line through the months that have a value. A month without one is a gap — the line stops and
  * starts again, nothing is drawn across it. A month made from one song only is a hollow point. Same numbers as the
  * model's trend (the monthly mean of whole-recording values); tapping a point shows that month's value and song count. */
+/** 지표 목표 (personal target for a monthly-trend measure): kept in settings.growthTargets[id] = {value, at}. A reference
+ * line on the chart and "남은 거리" from the latest month — never a skill verdict, and it changes no measurement. */
+const targetOf=id=>{const t=V.db?.settings?.growthTargets?.[id];return t&&Number.isFinite(Number(t.value))?Number(t.value):null;};
+const round1=n=>Math.round(n*10)/10;
+/** Where the latest monthly value stands against the target: {reached, left} (left in the measure's unit, ≥ 0). */
+function targetGap(metric,latest,target){
+ if(target==null||latest==null||!metric?.direction)return null;
+ latest=round1(latest); // the shown precision, so "남은 거리" matches the numbers on screen
+ const left=round1(metric.direction===-1?latest-target:target-latest);
+ return {reached:left<=0,left:round1(Math.max(0,left))};
+}
+function targetRow(metric,pts){
+ if(!metric?.direction)return '';
+ const target=targetOf(metric.id),latest=pts.at(-1)?.value??null,gap=targetGap(metric,latest,target);
+ const unit=metric.unit==='cent'?' cent':metric.unit==='초'?'초':'';
+ const text=target==null?'목표를 정하면 그래프에 기준선을 그리고 남은 거리를 알려 드려요.':
+  '목표 '+esc(fmt(target,metric))+(gap?(gap.reached?' · 최근 달 기준 목표에 닿았어요':' · 최근 달 기준 '+gap.left+unit+' 남았어요'):' · 아직 월별 값이 없어요');
+ return '<div class="growth-target-row" data-growth-target-row="'+metric.id+'"><p class="small">'+text+'</p>'+
+  '<button type="button" class="btn sm ghost" data-growth-target="'+metric.id+'">'+(target==null?'목표 정하기':'목표 바꾸기')+'</button></div>';
+}
+function targetSheet(metric,latest,done){
+ const current=targetOf(metric.id),unit=metric.unit==='cent'?'cent':metric.unit;
+ // Suggestion: 10% better than the latest month, rounded to a tenth.
+ const suggest=latest==null?'':round1(metric.direction===-1?latest*.9:latest*1.1);
+ V.sheet({title:metric.title+' 목표',body:'<form id="growth-target-form" class="stack"><label class="field"><span>목표 ('+esc(unit)+', '+(metric.direction===-1?'낮을수록 좋아요':'높을수록 좋아요')+')</span>'+
+   '<input type="number" name="value" inputmode="decimal" step="0.1" min="0" max="'+(metric.unit==='cent'?200:120)+'" required value="'+esc(current??suggest)+'"></label>'+
+   '<p class="small muted">'+(latest!=null?'최근 달 '+esc(fmt(latest,metric))+(current==null?' · 10% 나아진 값을 넣어 두었어요.':''):'')+' 참고용 목표예요. 실력 판정이 아니고 측정값은 바뀌지 않아요.</p>'+
+   (current!=null?'<button type="button" class="btn ghost block" data-target-clear>목표 지우기</button>':'')+'</form>',
+  foot:'<button type="submit" form="growth-target-form" class="btn block">저장</button>',
+  onMount:(el,close)=>{
+   const form=el.querySelector('form'),save=value=>V.change(d=>{d.settings||={};d.settings.growthTargets={...(d.settings.growthTargets||{})};
+    if(value==null)delete d.settings.growthTargets[metric.id];else d.settings.growthTargets[metric.id]={value,at:Date.now()};},{silent:true});
+   form.onsubmit=e=>{e.preventDefault();const v=Number(form.value.value);if(!Number.isFinite(v)||v<0)return;
+    if(save(round1(v))){close();V.toast('목표를 저장했어요.');done();}else V.toast('목표를 저장하지 못했어요.','error');};
+   el.querySelector('[data-target-clear]')?.addEventListener('click',()=>{if(save(null)){close();V.toast('목표를 지웠어요.');done();}});
+  }});
+}
 function trends(report,selected){
  const list=report.metrics.filter(m=>Model.TREND.includes(m.id));
  const metric=list.find(m=>m.id===selected)||list[0];
  const pts=metric?.trend||[];
- const vals=pts.map(x=>x.value);
+ const target=metric?.direction?targetOf(metric.id):null;
+ const vals=pts.map(x=>x.value).concat(target!=null&&pts.length?[target]:[]);
  const lo=Math.min(...vals),hi=Math.max(...vals),span=hi-lo;
  // Every calendar month from the first value to the last (at most the latest 12): the ones without a value are gaps.
  const byMonth=new Map(pts.map(p=>[p.month,p])),cols=[];
@@ -128,10 +166,11 @@ function trends(report,selected){
   (pts.length?'<div class="growth-chart-current"><span>최근 기록</span><strong>'+esc(fmt(pts.at(-1).value,metric))+'</strong><small>'+esc(pts.at(-1).month)+'</small></div>':'')+'</header>'+
  '<div class="growth-metric-picks" role="group" aria-label="표시할 지표">'+list.map(m=>
   '<button type="button" data-overall-metric="'+m.id+'" class="'+(m.id===metric.id?'active':'')+'" aria-pressed="'+(m.id===metric.id)+'">'+esc(m.title)+'</button>').join('')+'</div>'+
+ targetRow(metric,pts)+
  (better?'<p class="growth-trend-dir" data-overall-direction><i class="ph ph-'+better[0]+'" aria-hidden="true"></i>'+better[1]+'</p>':'')+
  (pts.length?'<p class="small muted">달마다 녹음한 곡이 다를 수 있어요. 점 높이는 곡 전체 측정값의 월 평균이며 실력 향상 판정이 아니에요.'+(report.excludedFromTrend?' 이전 분석(v'+(metric.trendVersion===2?1:2)+') 녹음 '+report.excludedFromTrend+'개는 분석 방식이 달라 그래프에서 뺐어요.':'')+'</p>'+
  '<div class="growth-chart growth-line" role="group" aria-label="월별 측정값 꺾은선 그래프" data-overall-line style="--growth-point-count:'+n+'">'+
-  '<svg class="growth-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">'+lines+'</svg>'+shown.map(({month,p})=>{
+  '<svg class="growth-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">'+lines+(target!=null&&pts.length?'<line class="growth-target-line" data-growth-target-line x1="0" x2="100" y1="'+y(target).toFixed(2)+'" y2="'+y(target).toFixed(2)+'"/>':'')+'</svg>'+shown.map(({month,p})=>{
   const label='<small>'+esc(month.slice(5))+'월</small>';
   if(!p)return '<span class="growth-chart-gap" data-overall-gap="'+esc(month)+'" aria-label="'+esc(month)+' 값 없음"><span class="growth-chart-track"></span>'+label+'</span>';
   return '<button type="button" class="growth-chart-point'+(p.songs<2?' is-small':'')+'" data-overall-month="'+esc(p.month)+'" data-overall-value="'+esc(fmt(p.value,metric))+'" data-overall-count="'+p.songs+'" aria-label="'+esc(p.month)+' '+esc(fmt(p.value,metric))+' '+p.songs+'곡" title="'+esc(p.month)+' '+esc(fmt(p.value,metric))+'"><span class="growth-chart-track"><i class="growth-line-dot" style="top:'+y(p.value).toFixed(2)+'%"></i></span>'+label+'</button>';
@@ -213,6 +252,13 @@ function bind(host,report,{rerender,ownerIdentity}={}){
    const wrap=document.createElement('div');wrap.innerHTML=trends(report,id);
    chart.replaceWith(wrap.firstElementChild);
    wireTrend();
+  });
+  host.querySelectorAll('[data-growth-target]').forEach(btn=>btn.onclick=()=>{
+   const metric=report.metrics.find(m=>m.id===btn.dataset.growthTarget);if(!metric)return;
+   targetSheet(metric,metric.trend?.at(-1)?.value??null,()=>{
+    const chart=host.querySelector('[data-overall-trend]');if(!chart)return;
+    const wrap=document.createElement('div');wrap.innerHTML=trends(report,metric.id);chart.replaceWith(wrap.firstElementChild);wireTrend();
+   });
   });
   bindChart(host,report);
  };
