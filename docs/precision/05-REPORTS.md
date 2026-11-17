@@ -4,7 +4,7 @@ main `5600a16` 기준 독립 PR5. 1–3의 엔진 파일을 이 PR에 복사하�
 
 ## 연결과 보존
 
-- `precision-analysis.js` → 기존 media.src의 원본 **읽기만** → 16kHz OfflineAudioContext decode → 별도 worker. 기존 8kHz pitch 엔진을 그대로 재사용하고 원래 `analysis`·history·원본을 쓰지 않는다.
+- `precision-analysis.js` → 공통 VzipAudioFile의 로컬 우선·연결 갱신 원본 **읽기만** → 16kHz OfflineAudioContext decode → 별도 worker. 기존 8kHz pitch 엔진을 그대로 재사용하고 원래 `analysis`·history·원본을 쓰지 않는다.
 - `precision-report-worker.js`: PR1의 full result에 PR2 전환 후보와 PR3 공명 특성을 추가. 실패·abort 후 저장하지 않는다.
 - `precision-result-store.js`: 새 IndexedDB `vocalzip_precision_v1/results`. 기존 media DB를 열거나 upgrade하지 않는다. owner를 모든 get/list/cache에 적용, add만 사용하고 update/delete는 없다. 결과 버전·원본 SHA256·엔진/문맥/구간 캐시 키가 같으면 재사용. force 재계산은 새 ID로 보존한다. 클라우드 동기화·백업이라고 표시하지 않는다.
 - 리포트는 성장 → 보컬 분석 및 연구소의 새 진입 행, 직접 `#/precision-report`. 기존 과제를 통한 녹음은 PR4 링크로 연결한다. 잠겨 있는 `vocal-lab.js`, `core.js`, `cloud-sync.js`는 수정하지 않는다.
@@ -27,7 +27,7 @@ Supabase 조사: 2026-11-16 changelog 및 Edge Functions auth 문서 확인. 11/
 
 ## 처리 한도·미완료 인수
 
-브라우저 한 작업은 60초 이내 명시 구간, 원본 수신25MiB, decode 전 metadata 길이180초 한도, 전체90초 abort. 파일 decoder는 전체 파일을 읽으므로 긴 압축 파일의 streaming decode/server queue 연결은 남아 있다. 무거운 torchcrepe·Praat·Demucs를 iPhone에서 새로 실행하지 않는다. PCM·FFT·frame 및 기존 F0 계산만 사용한다.
+브라우저 한 작업은 60초 이내 명시 구간, 원본 수신25MiB, decode 전 metadata 및 실제 길이600초(10분) 한도·모노/스테레오·decode 결과80MiB 한도, 전체90초 abort. 파일 decoder는 전체 파일을 읽으므로 긴 압축 파일의 streaming decode/server queue 연결은 남아 있다. 무거운 torchcrepe·Praat·Demucs를 iPhone에서 새로 실행하지 않는다. PCM·FFT·frame 및 기존 F0 계산만 사용한다.
 
 실제 사람 음원·전문가/EGG reference·다중 마이크/AGC·clinical CPP/HNR·분리 artifact 정량 검증은 남아 있다. 실제 근육 활성/접촉률/점막/후두 높이/공기역학적 효율은 직접 측정 불가다. subharmonic event 확정·음소 자동 인식·절대 SPL·호흡량 계산도 구현하지 않는다. 추천 훈련은 보수적인 동일 과제 반복 및 편안한 음역에 한정한다.
 
