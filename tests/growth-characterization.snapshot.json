@@ -28,6 +28,8 @@
    "기록 기간 2026.08.10 ~ 2026.11.12",
    "수치가 있는 녹음",
    "20 / 24",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
+   "(AI 분리 후는 참고 표시가 붙어요)",
    "좋아진 방향",
    "음정 정확도",
    "동일 곡 5곡의 첫·최근 비교",
@@ -53,6 +55,7 @@
    "같은 곡 5곡 · 좋아짐 3 / 아쉬움 1 / 비슷 1",
    "분석 방법·곡별 근거",
    "가장 가까운 반음과의 평균 음정 오차(cent)로 재요. 이 값만으로는 맞는 음을 불렀는지는 판단하지 않아요. 두 녹음 모두 음표 단위 악보 비교(또는 원곡 기준 비교)를 저장했다면 악보(원곡) 기준 맞은 음 비율을 근거로 함께 보여요.",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "좋아진 방향",
    "±30 cent → ±12 cent",
@@ -84,6 +87,7 @@
    "같은 곡 5곡 · 좋아짐 0 / 아쉬움 0 / 비슷 4",
    "분석 방법·곡별 근거",
    "0.5초 넘게 지속한 음에서 비브라토를 뺀 피치 흔들림이에요. 음정 정확도와 따로 봐요.",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "변화 관찰",
    "±10 cent → ±10 cent",
@@ -112,6 +116,7 @@
    "판정 보류 1곡 · 이전 분석(v1) 결과라 이 지표는 계산하지 않아요 · 다시 분석하면 확인할 수 있어요",
    "분석 방법·곡별 근거",
    "안정 최고음(0.5초 이상, 흔들림 작음)과 주 가창 음역(노래한 시간의 10~90%)의 변화예요. 순간 최고음은 쓰지 않고, 좋고 나쁨을 판정하지 않아요.",
+   "측정 방식 · 녹음 그대로 15 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "비슷함",
    "안정 최고음 F5 → F5 (같음) · 주 가창 음역 C4–D5 그대로 · 실력 판정 아님 · 악보 최고음 undefined 대비 +3반음 → +3반음",
@@ -139,6 +144,7 @@
    "판정 보류 1곡 · 이전 분석(v1) 결과라 이 지표는 계산하지 않아요 · 다시 분석하면 확인할 수 있어요",
    "분석 방법·곡별 근거",
    "같은 곡의 같은(위치·음높이가 비슷한) 프레이즈끼리 지속시간을 비교하고 템포 차이는 보정해요. 같은 프레이즈를 찾지 못하면 판정을 보류해요.",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "비슷함",
    "3초 → 3초",
@@ -287,6 +293,11 @@
    "v1Count": 3,
    "detailMissing": 0,
    "excludedFromTrend": 3,
+   "methods": {
+    "asRecorded": 18,
+    "mrRemoved": 1,
+    "aiSeparated": 1
+   },
    "metrics": [
     {
      "id": "intonation",
@@ -421,6 +432,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 22.4,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -688,6 +704,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 11.8,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -996,6 +1017,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 15,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": null,
      "currentSongs": 0,
      "pairedSongs": 4,
@@ -1264,6 +1290,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 3.4,
      "currentSongs": 4,
      "pairedSongs": 4,
@@ -1533,6 +1564,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 0,
+      "mrRemoved": 0,
+      "aiSeparated": 0
+     },
      "current": null,
      "currentSongs": 0,
      "pairedSongs": 4,
@@ -1865,6 +1901,7 @@
       "wobble": 12,
       "baseline": 6
      },
+     "methods": null,
      "current": null,
      "currentSongs": 0,
      "pairedSongs": 0,
@@ -2833,6 +2870,11 @@
       }
      }
     ],
+    "methods": {
+     "asRecorded": 18,
+     "mrRemoved": 1,
+     "aiSeparated": 1
+    },
     "current": 22.4,
     "currentSongs": 5,
     "pairedSongs": 5,
@@ -3111,6 +3153,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 22.4,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -3378,6 +3425,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 11.8,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -3624,6 +3676,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 3.4,
      "currentSongs": 4,
      "pairedSongs": 4,
@@ -6202,6 +6259,8 @@
    "기록 기간 2026.08.10 ~ 2026.11.12",
    "수치가 있는 녹음",
    "20 / 24",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
+   "(AI 분리 후는 참고 표시가 붙어요)",
    "좋아진 방향",
    "음정 정확도",
    "동일 곡 5곡의 첫·최근 비교",
@@ -6227,6 +6286,7 @@
    "같은 곡 5곡 · 좋아짐 3 / 아쉬움 1 / 비슷 1",
    "분석 방법·곡별 근거",
    "가장 가까운 반음과의 평균 음정 오차(cent)로 재요. 이 값만으로는 맞는 음을 불렀는지는 판단하지 않아요. 두 녹음 모두 음표 단위 악보 비교(또는 원곡 기준 비교)를 저장했다면 악보(원곡) 기준 맞은 음 비율을 근거로 함께 보여요.",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "좋아진 방향",
    "±30 cent → ±12 cent",
@@ -6258,6 +6318,7 @@
    "같은 곡 5곡 · 좋아짐 0 / 아쉬움 0 / 비슷 4",
    "분석 방법·곡별 근거",
    "0.5초 넘게 지속한 음에서 비브라토를 뺀 피치 흔들림이에요. 음정 정확도와 따로 봐요.",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "변화 관찰",
    "±10 cent → ±10 cent",
@@ -6286,6 +6347,7 @@
    "판정 보류 1곡 · 이전 분석(v1) 결과라 이 지표는 계산하지 않아요 · 다시 분석하면 확인할 수 있어요",
    "분석 방법·곡별 근거",
    "안정 최고음(0.5초 이상, 흔들림 작음)과 주 가창 음역(노래한 시간의 10~90%)의 변화예요. 순간 최고음은 쓰지 않고, 좋고 나쁨을 판정하지 않아요.",
+   "측정 방식 · 녹음 그대로 15 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "비슷함",
    "안정 최고음 F5 → F5 (같음) · 주 가창 음역 C4–D5 그대로 · 실력 판정 아님 · 악보 최고음 undefined 대비 +3반음 → +3반음",
@@ -6313,6 +6375,7 @@
    "판정 보류 1곡 · 이전 분석(v1) 결과라 이 지표는 계산하지 않아요 · 다시 분석하면 확인할 수 있어요",
    "분석 방법·곡별 근거",
    "같은 곡의 같은(위치·음높이가 비슷한) 프레이즈끼리 지속시간을 비교하고 템포 차이는 보정해요. 같은 프레이즈를 찾지 못하면 판정을 보류해요.",
+   "측정 방식 · 녹음 그대로 18 · MR 빼고 1 · AI 분리 후 1",
    "Defying Gravity",
    "비슷함",
    "3초 → 3초",
@@ -6461,6 +6524,11 @@
    "v1Count": 3,
    "detailMissing": 0,
    "excludedFromTrend": 3,
+   "methods": {
+    "asRecorded": 18,
+    "mrRemoved": 1,
+    "aiSeparated": 1
+   },
    "metrics": [
     {
      "id": "intonation",
@@ -6595,6 +6663,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 22.4,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -6862,6 +6935,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 11.8,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -7170,6 +7248,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 15,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": null,
      "currentSongs": 0,
      "pairedSongs": 4,
@@ -7438,6 +7521,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 3.4,
      "currentSongs": 4,
      "pairedSongs": 4,
@@ -7707,6 +7795,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 0,
+      "mrRemoved": 0,
+      "aiSeparated": 0
+     },
      "current": null,
      "currentSongs": 0,
      "pairedSongs": 4,
@@ -8039,6 +8132,7 @@
       "wobble": 12,
       "baseline": 6
      },
+     "methods": null,
      "current": null,
      "currentSongs": 0,
      "pairedSongs": 0,
@@ -9007,6 +9101,11 @@
       }
      }
     ],
+    "methods": {
+     "asRecorded": 18,
+     "mrRemoved": 1,
+     "aiSeparated": 1
+    },
     "current": 22.4,
     "currentSongs": 5,
     "pairedSongs": 5,
@@ -9285,6 +9384,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 22.4,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -9552,6 +9656,11 @@
        }
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 11.8,
      "currentSongs": 5,
      "pairedSongs": 5,
@@ -9798,6 +9907,11 @@
        "reason": "v1"
       }
      ],
+     "methods": {
+      "asRecorded": 18,
+      "mrRemoved": 1,
+      "aiSeparated": 1
+     },
      "current": 3.4,
      "currentSongs": 4,
      "pairedSongs": 4,
