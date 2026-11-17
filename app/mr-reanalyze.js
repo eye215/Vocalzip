@@ -110,12 +110,12 @@ function estimate(list, measured) {
 /* ---------- the run ---------- */
 let active = null;  // the one run in progress
 /** One recording through the single analysis and its save. null when the run was stopped meanwhile. */
-async function measureOne(m, signal, onStage, onProgress) {
+async function measureOne(m, signal, onStage, onProgress, mrCache) {
   const mr = {tried:false, loaded:false};
   // The single analysis says where it is in words: "곡 MR 불러오는 중…" then "반주(MR) 빼는 중…" once an MR file was read.
   const stage = text => { if (/MR 불러오는/.test(text)) mr.tried = true; if (/빼는 중/.test(text)) mr.loaded = true; onStage(text); };
   let result;
-  try { result = await V.analyzeRecording(m, {save:false, signal, onStage:stage, onProgress}); }
+  try { result = await V.analyzeRecording(m, {save:false, signal, onStage:stage, onProgress, mrCache}); }
   catch (e) { return e?.name === 'AbortError' || signal.aborted ? null : {m, kind:'failed', save:false, text:String(e?.message || e || '분석하지 못했어요')}; }
   if (signal.aborted) return null;
   // The result saved right now (the server may have saved one while this was measured), as the analysis screen reads it.
@@ -131,6 +131,7 @@ async function measureOne(m, signal, onStage, onProgress) {
   return {m, ...outcome};
 }
 async function runAll(run, paint) {
+  const mrCache = new Map();
   M.keepAwake?.(true);
   const release = window.VzipAccountScope?.beforeLeave?.(() => run.ctl.abort()), auth = () => run.ctl.abort();
   window.addEventListener('vzip:auth-changed', auth);
@@ -138,12 +139,13 @@ async function runAll(run, paint) {
     for (const m of run.list) {
       if (run.ctl.signal.aborted) break;
       Object.assign(run, {current:m, stage:'파일 불러오는 중…', part:0, phase:0}); paint();
-      const row = await measureOne(m, run.ctl.signal, text => { if (/MR 불러오는/.test(text)) { run.phase = 1; run.part = 0; } run.stage = text; paint(); }, p => { run.part = p; paint(true); });
+      const row = await measureOne(m, run.ctl.signal, text => { if (/MR 불러오는/.test(text)) { run.phase = 1; run.part = 0; } run.stage = text; paint(); }, p => { run.part = p; paint(true); }, mrCache);
       if (!row) break;
       run.rows.push(row); run.done++; run.refDone += REF.base + REF.perSecond * (durationOf(m) || 180);
       if (row.save) run.onSaved?.(m);
     }
   } finally {
+    mrCache.clear();
     window.removeEventListener('vzip:auth-changed', auth); release?.();
     M.keepAwake?.(false);
     run.running = false; run.current = null; run.stopped = run.done < run.list.length;

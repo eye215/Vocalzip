@@ -15,6 +15,7 @@ async function open(page){
   M.update=async(m,patch)=>{window.saved=patch.analysis;localStorage.setItem('test-analysis',JSON.stringify(patch.analysis));};
   M.player=host=>{const audio=document.createElement('audio');host.append(audio);return{el:audio,play:()=>{window.played=(window.played||0)+1;}};};
  });
+ await page.addScriptTag({url:'/app/audio-file-loader.js'});
  await page.addScriptTag({url:'/app/analysis.js'});
 }
 test('real audio decoder and Worker render distinct range metrics and retain prior analysis on reload',async({page})=>{

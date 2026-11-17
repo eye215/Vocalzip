@@ -165,72 +165,86 @@ function alignedMr(mr, length, lag, ratio) {
   for (let n = 0; n < length; n++) { const p = lag + n * ratio, i = Math.floor(p), f = p - i; if (i >= 0 && i + 1 < mr.length) out[n] = mr[i] * (1 - f) + mr[i + 1] * f; }
   return out;
 }
-function stft(x, frames) {
+function stft(x, frames, start = 0, reuse) {
   const N = RULES.win, hop = RULES.hop, w = hann(N), half = N / 2 + 1;
-  const re = Array.from({length:frames}, () => new Float64Array(half)), im = Array.from({length:frames}, () => new Float64Array(half));
+  const re = reuse?.re || Array.from({length:RULES.block}, () => new Float64Array(half)), im = reuse?.im || Array.from({length:RULES.block}, () => new Float64Array(half));
   const br = new Float64Array(N), bi = new Float64Array(N);
   for (let f = 0; f < frames; f++) {
-    for (let i = 0; i < N; i++) { const j = f * hop + i; br[i] = (j < x.length ? x[j] : 0) * w[i]; bi[i] = 0; }
+    for (let i = 0; i < N; i++) { const j = (start + f) * hop + i; br[i] = (j < x.length ? x[j] : 0) * w[i]; bi[i] = 0; }
     fft(br, bi);
     re[f].set(br.subarray(0, half)); im[f].set(bi.subarray(0, half));
   }
   return {re, im};
 }
 /** Subtract the lined-up MR. Returns the voice estimate and how much MR was removed. */
-function subtract(rec, mrAligned) {
+function subtract(rec, mrAligned, onProgress = () => {}) {
   const N = RULES.win, hop = RULES.hop, half = N / 2 + 1, frames = Math.ceil(Math.max(0, rec.length - N) / hop) + 1;
-  const X = stft(rec, frames), R = stft(mrAligned, frames), B = RULES.block;
-  const out = new Float64Array((frames - 1) * hop + N), w = hann(N), br = new Float64Array(N), bi = new Float64Array(N);
+  const B = RULES.block;
+  const out = new Float64Array(N), voice = new Float32Array(rec.length), mask = N - 1;
+  const norm = 1.5 * (RULES.hop * 4 / N); // Σ hann² over a 75 % overlap
+  const w = hann(N), br = new Float64Array(N), bi = new Float64Array(N);
   let before = 0, after = 0, mrPow = 0;
-  const blocks = Math.ceil(frames / B), Hr = [], Hi = [];
+  const blocks = Math.ceil(frames / B), pending = new Map();
+  let spare = null;
   // Complex gain per block and bin, least squares: H = Σ X·conj(R) / Σ |R|², smoothed over neighbouring blocks.
-  const sxr = [], sxi = [], srr = [];
-  for (let b = 0; b < blocks; b++) {
+  // Keep only the current and next block's spectra. Whole-take STFTs used hundreds of MB on long phone takes.
+  function block(b) {
+    if (pending.has(b)) return pending.get(b);
+    const count = Math.min(B, frames - b * B), X = stft(rec, count, b * B, spare?.X), R = stft(mrAligned, count, b * B, spare?.R);
+    spare = null;
     const a = new Float64Array(half), c = new Float64Array(half), d = new Float64Array(half);
-    for (let f = b * B; f < Math.min(frames, (b + 1) * B); f++) for (let k = 0; k < half; k++) {
+    for (let f = 0; f < count; f++) for (let k = 0; k < half; k++) {
       const xr = X.re[f][k], xi = X.im[f][k], rr = R.re[f][k], ri = R.im[f][k];
       a[k] += xr * rr + xi * ri; c[k] += xi * rr - xr * ri; d[k] += rr * rr + ri * ri;
     }
-    sxr.push(a); sxi.push(c); srr.push(d);
+    const value = {X, R, a, c, d, count}; pending.set(b, value); return value;
   }
   for (let b = 0; b < blocks; b++) {
+    const current = block(b), {X, R, count} = current;
+    if (b + 1 < blocks) block(b + 1);
     const hr = new Float64Array(half), hi = new Float64Array(half);
     for (let k = 0; k < half; k++) {
       let a = 0, c = 0, d = 0;
-      for (let j = Math.max(0, b - 1); j <= Math.min(blocks - 1, b + 1); j++) { const wgt = j === b ? 2 : 1; a += wgt * sxr[j][k]; c += wgt * sxi[j][k]; d += wgt * srr[j][k]; }
+      for (let j = Math.max(0, b - 1); j <= Math.min(blocks - 1, b + 1); j++) { const wgt = j === b ? 2 : 1, s = pending.get(j); a += wgt * s.a[k]; c += wgt * s.c[k]; d += wgt * s.d[k]; }
       if (d > 1e-9) { hr[k] = a / d; hi[k] = c / d; }
     }
-    Hr.push(hr); Hi.push(hi);
-  }
-  for (let f = 0; f < frames; f++) {
-    const hr = Hr[Math.floor(f / B)], hi = Hi[Math.floor(f / B)];
-    for (let k = 0; k < half; k++) {
-      const xr = X.re[f][k], xi = X.im[f][k], rr = R.re[f][k], ri = R.im[f][k];
-      const mr = hr[k] * rr - hi[k] * ri, mi = hr[k] * ri + hi[k] * rr; // H·R: the MR as the microphone heard it
-      let er = xr - mr, ei = xi - mi;
-      const pe = er * er + ei * ei, pm = mr * mr + mi * mi;
-      const g = pe > 0 ? Math.max(RULES.floor, Math.sqrt(Math.max(0, 1 - RULES.residual * pm / pe))) : 0;
-      er *= g; ei *= g;
-      before += xr * xr + xi * xi; after += er * er + ei * ei; mrPow += pm;
-      br[k] = er; bi[k] = ei; if (k && k < half - 1) { br[N - k] = er; bi[N - k] = -ei; }
+    for (let f = 0; f < count; f++) {
+      for (let k = 0; k < half; k++) {
+        const xr = X.re[f][k], xi = X.im[f][k], rr = R.re[f][k], ri = R.im[f][k];
+        const mr = hr[k] * rr - hi[k] * ri, mi = hr[k] * ri + hi[k] * rr; // H·R: the MR as the microphone heard it
+        let er = xr - mr, ei = xi - mi;
+        const pe = er * er + ei * ei, pm = mr * mr + mi * mi;
+        const g = pe > 0 ? Math.max(RULES.floor, Math.sqrt(Math.max(0, 1 - RULES.residual * pm / pe))) : 0;
+        er *= g; ei *= g;
+        before += xr * xr + xi * xi; after += er * er + ei * ei; mrPow += pm;
+        br[k] = er; bi[k] = ei; if (k && k < half - 1) { br[N - k] = er; bi[N - k] = -ei; }
+      }
+      fft(br, bi, true);
+      const start = (b * B + f) * hop;
+      for (let i = 0; i < N; i++) out[(start + i) & mask] += br[i] * w[i];
+      // Future windows start at start + hop. These samples are complete; recycle the overlap-add ring.
+      for (let i = start; i < Math.min(rec.length, start + hop); i++) { voice[i] = out[i & mask] / norm; out[i & mask] = 0; }
     }
-    fft(br, bi, true);
-    for (let i = 0; i < N; i++) out[f * hop + i] += br[i] * w[i];
+    spare = {X, R};
+    current.X = current.R = null; // retain neighbouring statistics, recycle spectra for the next block
+    pending.delete(b - 1);
+    onProgress((b + 1) / blocks);
   }
-  const norm = 1.5 * (RULES.hop * 4 / N); // Σ hann² over a 75 % overlap
-  const voice = new Float32Array(rec.length);
-  for (let i = 0; i < rec.length; i++) voice[i] = out[i] / norm;
+  for (let i = frames * hop; i < rec.length; i++) voice[i] = out[i & mask] / norm;
   return {voice, removedDb:after > 0 ? Math.round(10 * Math.log10(before / after) * 10) / 10 : null, mrShareDb:mrPow > 0 && after > 0 ? Math.round(10 * Math.log10(mrPow / after) * 10) / 10 : null};
 }
 
 /** Whole pipeline. rec and mr are 8 kHz mono Float32Arrays. {ok:false, reason} when the MR is not in the take. */
-function cancel(rec, mr) {
+function cancel(rec, mr, {onProgress = () => {}} = {}) {
+  onProgress(0);
   if (rec.length < SR * 3 || mr.length < SR * 3) return {ok:false, reason:'short'};
   const c = coarse(rec, mr);
+  onProgress(0.05);
   if (!c.ok) return {ok:false, reason:c.reason, score:round(c.score, 3)};
   // Try each candidate on the same excerpt of the take; the true position removes the most level.
   const tries = [];
-  for (const cand of c.candidates) {
+  for (const [index, cand] of c.candidates.entries()) {
+    onProgress(0.05 + 0.45 * index / c.candidates.length);
     const f = fine(rec, mr, cand.lag);
     if (!f.points || Math.abs(f.ratio - 1) > 0.02) continue;
     const from = Math.max(0, Math.ceil(-f.lag / f.ratio)), to = Math.min(rec.length, Math.floor((mr.length - f.lag) / f.ratio));
@@ -242,7 +256,7 @@ function cancel(rec, mr) {
   tries.sort((x, y) => y.removed - x.removed);
   const best = tries[0];
   if (!best || best.removed < RULES.minRemoved) return {ok:false, reason:'no-match', score:round(c.score, 3), removedDb:best ? round(best.removed, 1) : null};
-  const s = subtract(rec, alignedMr(mr, rec.length, best.lag, best.ratio));
+  const s = subtract(rec, alignedMr(mr, rec.length, best.lag, best.ratio), p => onProgress(0.5 + p * 0.5));
   return {ok:true, voice:s.voice, report:{offsetSeconds:round(best.lag / SR, 3), speed:round(best.ratio, 5), score:round(best.score, 3), windows:best.points, tried:tries.length, removedDb:s.removedDb}};
 }
 const round = (x, d = 0) => Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : null;

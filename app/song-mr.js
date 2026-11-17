@@ -146,7 +146,7 @@ V.renderSongMR=(host,song,options={})=>{
   if(!host.isConnected)return;
   const list=tracks(song.id),account=identity();
   host.innerHTML='<section class="vz-ar-links vz-mr-links" aria-label="MR 반주"><div class="vz-ar-heading"><strong>MR 반주 <span>'+list.length+'</span></strong><button type="button" data-mr-add aria-label="MR 추가"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
-   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id,x.id)?' · 키 '+V.mrKey.label(shiftOf(song.id,x.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+(options.reanalyze?'<div data-mr-reanalyze></div>':'')+'</section>';
+   (list.length?'<div class="vz-mr-list">'+list.map(x=>'<div class="vz-mr-row" data-mr="'+esc(x.id)+'"><div class="vz-mr-row-head"><button type="button" data-mr-open><i class="ph ph-'+(x.kind==='youtube'?'youtube-logo':'music-notes')+'" aria-hidden="true"></i><span><strong>'+esc(x.title)+'</strong><small>'+esc(x.kind==='youtube'?'유튜브 영상':(x.fileName||'오디오 파일')+(shiftOf(song.id,x.id)?' · 키 '+V.mrKey.label(shiftOf(song.id,x.id)):''))+'</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button>'+(x.kind==='file'?'<button type="button" class="icon-btn" data-mr-download aria-label="'+esc(x.title)+' MR 다운로드"><i class="ph ph-download-simple" aria-hidden="true"></i></button>':'')+'<button type="button" class="icon-btn" data-mr-share aria-label="'+esc(x.title)+' MR 공유"><i class="ph ph-share" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-mr-remove aria-label="'+esc(x.title)+' MR 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-mr-player class="media-open" hidden></div></div>').join('')+'</div>':'<p>반주 파일이나 유튜브 영상을 추가해 주세요.</p>')+(options.reanalyze?'<div data-mr-reanalyze></div>':'')+'</section>';
   host.querySelector('[data-mr-add]').onclick=()=>add(song,kind=>{if(kind==='file')justAdded.add(song.id);draw();});
   reanalyze();
   window.VzipR2?.prefetch?.(list.filter(x=>x.kind==='file').slice(0,5).map(x=>x.r2Key)).catch(()=>{});
@@ -169,6 +169,17 @@ V.renderSongMR=(host,song,options={})=>{
      if(!player.isConnected||player.hidden||identity()!==account||window.VzipAccountScope?.leaving)return;
      filePlayer(player,song,track,url,account,row);
     }catch(error){if(player.isConnected&&!player.hidden)player.textContent='재생하지 못했어요: '+error.message;}
+   };
+   const download=row.querySelector('[data-mr-download]');
+   if(download)download.onclick=async()=>{
+    if(download.disabled)return;
+    download.disabled=true;download.setAttribute('aria-busy','true');
+    try{
+     await V.media.download({id:track.id,name:track.title,type:track.type,cloud:true,storageProvider:'r2',r2Key:track.r2Key,size:track.size},{filename:track.fileName,guard:()=>{
+      if(!row.isConnected||identity()!==account||window.VzipAccountScope?.leaving||!tracks(song.id).some(x=>x.id===track.id))throw Error('화면 또는 계정이 바뀌어 다운로드를 멈췄어요.');
+     }});
+    }catch(error){if(row.isConnected&&identity()===account&&!window.VzipAccountScope?.leaving)V.toast(error.message,'error');}
+    finally{download.disabled=false;download.removeAttribute('aria-busy');}
    };
    // File MR: a revocable link like a recording; YouTube MR: send the video link itself.
    row.querySelector('[data-mr-share]').onclick=()=>track.kind==='youtube'?V.shareUrl?.(track.title||'유튜브 MR',track.url):V.shareSheet?.({id:track.id,name:track.title,r2Key:track.r2Key},{title:(song.title?song.title+' · ':'')+(track.title||'MR')});

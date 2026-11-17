@@ -139,10 +139,13 @@ const keep = (key, link, expires) => { if(window.VzipAccountScope&&!new URL(link
 window.addEventListener('vzip:auth-changed',()=>{if(!window.VzipAccountScope)return;const next=window.vzipCloudSessionId?.()||'',old=localStorage.getItem('vzip_r2_link_session_v2')||'';if(old!==next||!next){signed.clear();localStorage.removeItem(SKEY);localStorage.setItem('vzip_r2_link_session_v2',next);}});
 function cachedUrl(key) { if(window.VzipAccountScope&&!window.vzipCloudSignedIn?.())return '';const hit = signed.get(key); return hit && hit.until > Date.now() ? hit.url : ''; }
 const asking = new Map();
-const single = key => api('/v1/sign', {method:'POST', body:{key, ttl:TTL}}).then(r => { keep(key, r.url, r.expires); return r.url; });
+const single = (key, signal) => api('/v1/sign', {method:'POST', body:{key, ttl:TTL}, signal}).then(r => { if(signal?.aborted)throw new DOMException('분석 중단','AbortError');keep(key, r.url, r.expires); return r.url; });
 /** A playback URL usable in <audio src> (signed for a few hours). */
-async function url(key) {
-  const hit = cachedUrl(key); if (hit) return hit;
+async function url(key, {signal, refresh = false} = {}) {
+  if(signal?.aborted)throw new DOMException('분석 중단','AbortError');
+  const hit = !refresh && cachedUrl(key); if (hit) return hit;
+  // A cancellable analysis must not inherit another screen's unbounded signing request.
+  if(signal || refresh)return single(key,signal);
   if (asking.has(key)) return asking.get(key);
   const p = single(key); asking.set(key, p);
   try { return await p; } finally { if (asking.get(key) === p) asking.delete(key); }

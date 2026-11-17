@@ -525,14 +525,15 @@ function analyzeWithoutMr(samples, sampleRate, mrs, {onProgress} = {}) {
   if (!C || !Array.isArray(mrs) || !mrs.length) return {result:null, reasons:['unavailable']};
   const rec = resample(samples, sampleRate), reasons = [];
   let best = null;
-  for (const mr of mrs.slice(0, 3)) {
-    const out = C.cancel(rec, resample(mr.samples, mr.sampleRate));
+  const tracks = mrs.slice(0, 3);
+  for (const [i, mr] of tracks.entries()) {
+    const out = C.cancel(rec, resample(mr.samples, mr.sampleRate), {onProgress:p => onProgress?.(0.7 * (i + p) / tracks.length)});
     if (!out.ok) { reasons.push(out.reason); continue; }
     if (!best || out.report.removedDb > best.report.removedDb) best = {...out, id:mr.id};
   }
-  onProgress?.(0.15);
+  onProgress?.(0.7);
   if (!best) return {result:null, reasons};
-  const result = analyze(best.voice, SR, {onProgress:p => onProgress?.(0.15 + p * 0.85)});
+  const result = analyze(best.voice, SR, {onProgress:p => onProgress?.(0.7 + p * 0.3)});
   result.confidence.mrRemoved = {trackId:String(best.id || ''), offsetSeconds:best.report.offsetSeconds, speed:best.report.speed, removedDb:best.report.removedDb};
   result.voice = best.voice; result.voiceRate = SR;
   return {result, reasons};
@@ -546,7 +547,7 @@ if (typeof window === 'undefined' && typeof self === 'object' && typeof importSc
     try {
       const {samples, sampleRate, voiceOnly, mrs} = e.data, onProgress = p => self.postMessage({progress:p});
       if (Array.isArray(mrs)) {
-        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=1');
+        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=2');
         const out = analyzeWithoutMr(samples, sampleRate, mrs, {onProgress});
         self.postMessage({result:out.result, reasons:out.reasons}, out.result?.voice ? [out.result.voice.buffer] : []);
         return;

@@ -1,0 +1,13 @@
+name: Precision acoustics
+on:
+  pull_request:
+    paths: ['app/precision-acoustics*', 'tools/precision/**', 'tests/precision-acoustics*', '.github/workflows/precision-acoustics.yml']
+  workflow_dispatch:
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/precision-acoustics.test.cjs tests/vocal-analysis.test.cjs tests/pitch-ground-truth.test.cjs tests/analysis-prefix-median.test.cjs
