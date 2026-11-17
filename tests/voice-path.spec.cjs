@@ -462,13 +462,13 @@ test('a drifting quiet MR reaches the screen, invalidates older MR caches and ex
  const diagnosis=await page.evaluate(()=>VZ.voicePathDiagnosis());
  for(const role of['a','b'])await expect(page.locator('[data-vp-take="'+role+'"]')).toHaveAttribute('data-vp-source','mr-removed');
  for(const take of diagnosis.takes){expect(take.mrRemoval).toMatchObject({method:'local',coverage:expect.any(Number),localWindows:expect.any(Number),phasePeak:expect.any(Number)});expect(take.mrRemoval.coverage).toBeGreaterThan(.9);}
- expect((await kept(page)).every(x=>x.mrSig.startsWith('cancel-v5|'))).toBe(true);
+ expect((await kept(page)).every(x=>x.mrSig.startsWith('cancel-v6|'))).toBe(true);
  await expect(page.locator('[data-vp-mr-note]').first()).not.toContainText('dB');
  if(process.env.VZ_MR_ALIGNMENT_SHOTS&&testInfo.project.name==='chromium-mobile'){
   for(const width of[390,320]){await page.setViewportSize({width,height:844});await noOverflow(page);await page.screenshot({path:process.env.VZ_MR_ALIGNMENT_SHOTS+'/local-mr-'+width+'.png',fullPage:true});}
  }
  const previous=(await kept(page)).find(x=>x.id==='m-a').at;
- await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-a');q.onsuccess=()=>s.put({...q.result,mrSig:q.result.mrSig.replace('cancel-v5|','cancel-v4|')});tx.oncomplete=()=>{o.result.close();resolve();};};});});
+ await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-a');q.onsuccess=()=>s.put({...q.result,mrSig:q.result.mrSig.replace('cancel-v6|','cancel-v5|')});tx.oncomplete=()=>{o.result.close();resolve();};};});});
  await page.reload();await page.evaluate(()=>{VzipR2.enabled=()=>true;VzipR2.url=async key=>window.__mr[key];VZ.render();});
  await expect(page.locator('[data-vp-take="a"] [data-vp-pending]')).toHaveText('아직 재지 않았어요.');
  expect((await kept(page)).find(x=>x.id==='m-a')?.at??previous).toBe(previous);
@@ -597,7 +597,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   await expect(row(page, 'breath').locator('.vp-vals dd').first()).toContainText('배음 대 잡음');
   // The MR file was read once for both takes; the device store remembers which MR each take was measured against.
   expect(await page.evaluate(() => window.__decodes)).toBe(3);
-  await expect.poll(async () => (await kept(page)).map(r => r.mrSig)).toEqual(['cancel-v5|t-own:mr/own:1111', 'cancel-v5|t-own:mr/own:1111']);
+  await expect.poll(async () => (await kept(page)).map(r => r.mrSig)).toEqual(['cancel-v6|t-own:mr/own:1111', 'cancel-v6|t-own:mr/own:1111']);
   // The file: how each take was read, the removal's numbers — and no MR id, title or file name.
   const d = await page.evaluate(() => VZ.voicePathDiagnosis()), text = JSON.stringify(d);
   expect(d.takes.map(t => t.source)).toEqual(['mr-removed', 'mr-removed']);
@@ -613,7 +613,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
     expect(t.input).toMatchObject({bytes:40*8000*2+44, sampleRate:16000, channels:1});
     expect(Math.abs(t.input.frames - 40*16000)).toBeLessThanOrEqual(1);
     expect(t.input.seconds).toBe(t.input.frames / t.input.sampleRate);
-    expect(t.runtime).toEqual({pageRevision:8, workerRevision:8, mrModuleRevision:5});
+    expect(t.runtime).toEqual({pageRevision:9, workerRevision:9, mrModuleRevision:6});
   }
   expect(d.takes[0].asRecorded.confidence.meanStrength).toEqual(expect.any(Number));
   expect(d.takes[0].stagesMs).toMatchObject({fetch:expect.any(Number), decode:expect.any(Number), mrLoad:expect.any(Number), resample:expect.any(Number), model:expect.any(Number), cancel:expect.any(Number), voice:expect.any(Number), total:expect.any(Number)});

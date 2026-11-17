@@ -258,7 +258,7 @@ function findAnchors(rec, mr, candidates, onProgress) {
       found.push({...line, score:candidate.score, ...(candidate.search ? {search:candidate.search} : {})});
     onProgress((index + 1) / candidates.length);
   }
-  return found.sort((a,b) => b.phasePeak - a.phasePeak)[0] || null;
+  return found.sort((a,b) => b.phasePeak - a.phasePeak);
 }
 const median = values => values.sort((a,b) => a - b)[Math.floor(values.length / 2)];
 /** Confidence-weighted local quadratic fit. Downweight ambiguous peaks; a straight blur
@@ -324,20 +324,36 @@ function localTrack(rec, mr, line, onProgress = () => {}) {
   }};
 }
 function cancelLocally(rec, mr, candidates, onProgress) {
-  const line = findAnchors(rec,mr,candidates,p => onProgress(0.5 + 0.15*p));
-  if (!line) return null;
-  const track = localTrack(rec,mr,line,p => onProgress(0.65 + 0.15*p));
-  if (!track) return null;
-  const result = subtract(rec,track.heard,p => onProgress(0.8 + 0.2*p),{transferRadius:RULES.transferRadius,excludeCurrent:true,residual:0});
-  track.blend(result.voice);
-  let before = 0, after = 0;
-  for (let n = 0; n < rec.length; n++) { before += rec[n] ** 2; after += result.voice[n] ** 2; }
-  // This is a held-out prediction check, not a claim about the amount of MR removed.
-  const reduction = before > 0 && after > 0 ? 10*Math.log10(before/after) : 0;
-  if (reduction < 0.05) return null;
-  return {ok:true,voice:result.voice,report:{offsetSeconds:round(line.lag/SR,3),speed:round(line.ratio,5),score:round(line.score,3),
+  const seen = new Set(), lines = findAnchors(rec,mr,candidates,p => onProgress(0.5 + 0.15*p)).filter(line => {
+    // Identical integer search windows produce identical local tracks. Do not reprocess
+    // the same match proposed independently by the onset and waveform searches.
+    const from = Math.max(0,Math.ceil(-line.lag/line.ratio)), to = Math.min(rec.length,Math.floor((mr.length-line.lag)/line.ratio))-RULES.fineWin;
+    let key = from+':'+to;
+    for(let start=from;start<=to;start+=RULES.localStep)key+=','+Math.round(line.lag+(line.ratio-1)*(start+RULES.fineWin/2));
+    if(seen.has(key))return false;seen.add(key);return true;
+  });
+  let before = 0, best = null, bestReduction = -Infinity;
+  for (let n = 0; n < rec.length; n++) before += rec[n] ** 2;
+  onProgress(0.65);
+  for(const [index,line] of lines.entries()){
+    const begin=.65+.35*index/lines.length, finish=.65+.35*(index+1)/lines.length;
+    const progress = p => onProgress(Math.min(finish,begin+(finish-begin)*p));
+    const track = localTrack(rec,mr,line,p => progress(.4*p));
+    if(!track){onProgress(finish);continue;}
+    const result = subtract(rec,track.heard,p => progress(.4+.6*p),{transferRadius:RULES.transferRadius,excludeCurrent:true,residual:0});
+    track.blend(result.voice);
+    let after = 0;for(let n=0;n<rec.length;n++)after+=result.voice[n]**2;
+    // Compare every independently validated match by held-out whole-take prediction,
+    // not its short anchor peak. Keep only the best residual, never all candidate audio.
+    const reduction = before > 0 && after > 0 ? 10*Math.log10(before/after) : 0;
+    if(reduction>=.05 && reduction>bestReduction){bestReduction=reduction;
+      best={ok:true,voice:result.voice,report:{offsetSeconds:round(line.lag/SR,3),speed:round(line.ratio,5),score:round(line.score,3),
     windows:line.points,tried:candidates.length,removedDb:round(reduction,1),alignmentVerified:true,
     method:'local',localWindows:track.points,coverage:round(track.coverage,3),phasePeak:round(line.phasePeak,3),...(line.search ? {search:line.search} : {})}};
+    }
+    onProgress(finish);
+  }
+  return best;
 }
 
 /* ---------- 3. subtraction ---------- */
