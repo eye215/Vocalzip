@@ -1,0 +1,26 @@
+# VOCAL.zip 보컬 분석 품질 점검 (weekly, read-only): saved analyses grouped by how they were measured (as recorded /
+# MR removed / AI separated / held), the same song measured both ways, and warnings when a gap reaches a growth-rule
+# floor (2-cent wobble, 3-cent pitch) or held takes pass 10%. SELECT only; logs and the run summary hold counts and
+# medians, never ids, names or text (this repository is public). Needs SUPABASE_DB_URL; without it it does nothing.
+name: Analysis quality
+on:
+  schedule:
+    - cron: '17 21 * * 0'   # Monday 06:17 Korea time
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality:
+    if: github.repository == 'eye215/Vocalzip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Quality check (read-only)
+        run: node worker/analysis-worker.mjs --quality

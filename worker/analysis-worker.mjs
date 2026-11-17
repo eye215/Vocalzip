@@ -338,6 +338,24 @@ export async function analysisStats(db) {
   }
   return {groups:summary, separationResult:results, aiSeparatedMinusBefore:Object.fromEntries(Object.entries(deltas).map(([k, v]) => [k, med(v)])), paired};
 }
+/** Weekly quality check (판정 품질 점검): the stats as a short markdown summary with warnings when a measure drifts.
+ * Thresholds follow the growth rules: a mixed-method gap at or above the 2-cent wobble / 3-cent pitch floor, or a
+ * held share above 10%. Counts and medians only. */
+export function qualityReport(stats) {
+  const g = stats.groups || {}, total = Object.values(g).reduce((n, x) => n + (x.n || 0), 0), pct = n => total ? Math.round(n / total * 1000) / 10 : 0;
+  const note = midi => { if (!Number.isFinite(midi)) return '—'; const n = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']; return n[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1); };
+  const label = {asRecorded:'녹음 그대로', mrRemoved:'MR 빼고', aiSeparated:'AI 분리 후', held:'판정 보류'};
+  const rows = ['asRecorded', 'mrRemoved', 'aiSeparated', 'held'].filter(k => g[k]).map(k => { const x = g[k]; return `| ${label[k]} | ${x.n} (${pct(x.n)}%) | ${x.pc ?? '—'} | ${x.cents ?? '—'} | ${x.wob ?? '—'} | ${note(x.mainLow)}~${note(x.mainHigh)} |`; });
+  const warnings = [], ai = stats.paired?.aiSeparatedVsAsRecorded, mr = stats.paired?.mrRemovedVsAsRecorded;
+  if (ai?.songs >= 10 && Math.abs(ai.wob ?? 0) >= 2) warnings.push(`AI 분리 후 흔들림이 같은 곡 녹음 그대로보다 ${ai.wob} cent 달라요 (기준 2 cent, ${ai.songs}곡).`);
+  if (ai?.songs >= 10 && Math.abs(ai.cents ?? 0) >= 3) warnings.push(`AI 분리 후 음정 오차가 같은 곡 녹음 그대로보다 ${ai.cents} cent 달라요 (기준 3 cent, ${ai.songs}곡).`);
+  if (mr?.songs >= 10 && Math.abs(mr.wob ?? 0) >= 2) warnings.push(`MR 빼고 잰 흔들림이 같은 곡 녹음 그대로보다 ${mr.wob} cent 달라요 (기준 2 cent, ${mr.songs}곡).`);
+  if (g.held && pct(g.held.n) > 10) warnings.push(`판정 보류가 전체의 ${pct(g.held.n)}%예요 (기준 10%).`);
+  const text = ['### 보컬 분석 품질 점검', '', `분석 ${total}개 · 같은 곡 비교 AI ${ai?.songs ?? 0}곡 · MR ${mr?.songs ?? 0}곡`, '',
+    '| 측정 방식 | 개수 | 피치 신뢰도 | 음정 오차 | 흔들림 | 주 가창 음역 |', '|---|---|---|---|---|---|', ...rows, '',
+    warnings.length ? '**확인 필요**\n' + warnings.map(w => '- ' + w).join('\n') : '기준을 넘는 차이는 없어요.'].join('\n');
+  return {text, warnings};
+}
 /** 알고 있는 MR 빼기 on the server, as in the app: the song's uploaded MR files (this account's R2 folder only) are
  * lined up with the take and subtracted (app/mr-cancel.js via VA.analyzeWithoutMr). null when none fits. */
 async function withoutMr(db, owner, songId, samples) {
@@ -549,6 +567,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const {rows:[r]} = await db.query("select count(*)::int as n from public.vocal_analysis_jobs where attempts < 3 and kind = any($1) and (status = 'queued' or (status = 'running' and locked_at < now() - interval '30 minutes'))", [kinds]);
       console.log('analysis worker: ' + r.n + ' job(s) waiting');
       if (env.GITHUB_OUTPUT) (await import('node:fs')).appendFileSync(env.GITHUB_OUTPUT, 'jobs=' + r.n + '\n');
+    } else if (process.argv.includes('--quality')) {
+      // Read-only weekly check: never queues, writes or contacts STT.
+      const stats = await analysisStats(db), report = qualityReport(stats);
+      console.log('analysis stats: ' + JSON.stringify(stats));
+      console.log(report.text);
+      if (env.GITHUB_STEP_SUMMARY) (await import('node:fs')).appendFileSync(env.GITHUB_STEP_SUMMARY, report.text + '\n');
+      if (env.GITHUB_OUTPUT) (await import('node:fs')).appendFileSync(env.GITHUB_OUTPUT, 'warnings=' + report.warnings.length + '\n');
     } else if (process.argv.includes('--reanalyze-unreliable')) {
       // This command only previews/enqueues; the scheduled worker handles the queue later. Never runs STT.
       const counts = await requeueUnreliableAnalyses(db, {apply:env.WORKER_REANALYZE_APPLY === '1', limit:env.WORKER_REANALYZE_LIMIT || 50});

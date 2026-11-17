@@ -40,6 +40,18 @@ test('Judgement-review numbers group saved analyses by method and pair the same 
   const text = JSON.stringify(out);
   assert.ok(!text.includes(U1) && !text.includes('s1'));
 });
+test('Weekly quality check: a markdown summary, warnings only when a gap reaches a growth-rule floor', async () => {
+  const {qualityReport} = await import('../worker/analysis-worker.mjs');
+  const base = {groups:{asRecorded:{n:900, pc:.86, cents:22, wob:18, mainLow:60, mainHigh:70}, aiSeparated:{n:80, pc:.9, cents:23, wob:19.5, mainLow:60, mainHigh:70}, held:{n:20, pc:.7}},
+    paired:{aiSeparatedVsAsRecorded:{songs:50, cents:.8, wob:1.7}, mrRemovedVsAsRecorded:{songs:3, cents:-2, wob:-.7}}};
+  const ok = qualityReport(base);
+  assert.equal(ok.warnings.length, 0);
+  assert.match(ok.text, /\| 녹음 그대로 \| 900 \(90%\) \| 0\.86 \| 22 \| 18 \| C4~A#4 \|/);
+  assert.match(ok.text, /기준을 넘는 차이는 없어요/);
+  const drift = qualityReport({...base, groups:{...base.groups, held:{n:200}}, paired:{aiSeparatedVsAsRecorded:{songs:50, cents:3.2, wob:2.4}, mrRemovedVsAsRecorded:{songs:4, wob:5}}});
+  assert.equal(drift.warnings.length, 3); // AI wobble, AI pitch, held share; MR with 4 songs is too few to warn
+  assert.match(drift.text, /확인 필요/);
+});
 test('Held-result reanalysis accepts only current, readable, unprocessed recordings', async () => {
   const {unreliableCandidate, UNRELIABLE_CAMPAIGN} = await import('../worker/analysis-worker.mjs');
   const analysis = {v:2, at:123, metrics:{phrases:null, voicedSeconds:20}, confidence:{pitchConfidence:0.4}};
