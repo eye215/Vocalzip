@@ -36,3 +36,8 @@
 .growth-month-section-title{flex-wrap:wrap;row-gap:2px}
 .growth-month-section-title h3{white-space:nowrap}
 .growth-method-line{margin:8px 0 0;font-size:12px;line-height:18px;color:#667085}.growth-method-line small{font-size:12px}
+/* 지표 목표 (월별 측정 흐름) */
+.growth-target-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}
+.growth-target-row p{margin:0}
+.growth-target-row .btn{min-height:44px;flex:none}
+.growth-line-svg .growth-target-line{stroke:#7C3AED;stroke-width:1.5;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;fill:none;opacity:.8}

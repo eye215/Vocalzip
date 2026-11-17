@@ -21,6 +21,8 @@
 // 측정 근거 표시 (2026-11-17) only added text: 결과 리포트 says how the counted takes were measured (측정 방식 · 녹음
 // 그대로 N · MR 빼고 N · AI 분리 후 N) under the coverage bar and in each measure's 분석 방법·곡별 근거, and the model
 // gained `methods`. No number or verdict moved.
+// 지표 목표 (2026-11-17) only added text: 월별 측정 흐름 gained a target row (목표를 정하면… · 목표 정하기). No number
+// or verdict moved.
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
