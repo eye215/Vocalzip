@@ -5,6 +5,7 @@ const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const AUDIO = require('./helpers/voice-path-audio.cjs');
 const MR_SYNTH = require('node:fs').readFileSync(require('node:path').join(__dirname, 'helpers/mr-synth.cjs'), 'utf8').replace(/module\.exports[^\n]*/, 'window.mrSynth = {SR, mr, vocal, record, rms};');
+const MR_DRIFT = require('node:fs').readFileSync(require('node:path').join(__dirname, 'helpers/mr-drift.cjs'), 'utf8').replace("const Y=require('./mr-synth.cjs');",'const Y=window.mrSynth;').replace(/module\.exports[^\n]*/,'window.driftRecording=driftRecording;');
 const KEY = 'vocal-zip_mvp_v1';
 const NOTE = '소리의 길은 선생님 귀로 판단해요. 이 화면은 다시 들어볼 곳을 찾는 참고예요.';
 const stub = `window.__up=[];window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -388,15 +389,16 @@ test('a take where the accompaniment is as loud as the voice is refused: no numb
 
 /* ---------- the song's own MR taken out ---------- */
 /** Two takes of a melody sung over the song's MR (8 kHz WAVs from tests/helpers/mr-synth.cjs), and the MR files. */
-async function bootMr(page, {third = false} = {}) {
+async function bootMr(page, {third = false, quiet = false, drift = false} = {}) {
   await boot(page, {takes:[]});
   await page.evaluate(MR_SYNTH);
-  await page.evaluate(async ([stored, third]) => {
+  await page.evaluate(MR_DRIFT);
+  await page.evaluate(async ([stored, third, quiet, drift]) => {
     const Y = window.mrSynth, wav = x => window.vpTake.wav(x, Y.SR), MR = Y.mr(70), other = Y.mr(70, 99), voice = Y.vocal(40).x;
     window.__mr = {'mr/own':URL.createObjectURL(new Blob([wav(MR)], {type:'audio/wav'})), 'mr/other':URL.createObjectURL(new Blob([wav(other)], {type:'audio/wav'}))};
     const takes = [['m-a', '작년 MR 녹음', '2025-08-14', 12.345, 6], ['m-b', '올해 MR 녹음', '2026-11-09', 3.2, 3], ...(third ? [['m-c', '이번 주 MR 녹음', '2026-11-12', 5.5, 3]] : [])];
     for (const [id, name, date, offset, db] of takes) await window.vzipStorePracticeMedia({id, name, created:new Date(date + 'T10:00:00').getTime(), type:'audio/wav', source:'practice', songId:'s1', song:'지금 이 순간',
-      blob:new Blob([wav(Y.record(voice, MR, {offset, db}).x)], {type:'audio/wav'}), durationSeconds:40});
+      blob:new Blob([wav((drift ? window.driftRecording : Y.record)(voice, MR, {offset, db:quiet ? -6 : db}).x)], {type:'audio/wav'}), durationSeconds:40});
     window.dispatchEvent(new Event('vzip:media-updated'));
     for (const m of await VZ.media.list(true)) { const t = takes.find(x => x[0] === m.id); if (t) await VZ.media.update(m, {recordedDate:t[2], analysis:stored}, {quiet:true}); }
     for (const m of await VZ.media.list(true)) { const t = takes.find(x => x[0] === m.id); if (t) await VZ.media.update(m, {name:t[1]}, {quiet:true}); }
@@ -404,11 +406,43 @@ async function bootMr(page, {third = false} = {}) {
     VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks = [{id:'t-own', kind:'file', title:'내 MR SECRETMR', fileName:'secret.wav', type:'audio/wav', r2Key:'mr/own', size:1111, created:1}]; }, {silent:true});
     // The song's MR files are read through the R2 helper, as the app's analysis does.
     window.VzipR2.enabled = () => true; window.VzipR2.url = async key => window.__mr[key];
-  }, [stored({voiceOverMrDb:2, pitchConfidence:0.6}), third]);
+  }, [stored({voiceOverMrDb:2, pitchConfidence:0.6}), third, quiet, drift]);
 }
 /** The song gets a second MR file, of another arrangement (not in the takes), listed first. */
 const addOtherMr = page => page.evaluate(() => VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks.unshift({id:'t-other', kind:'file', title:'다른 편곡 MR', r2Key:'mr/other', size:3333, created:2}); }, {silent:true}));
 const mrChoices = page => page.evaluate(() => JSON.parse((window.VzipAccountScope?.storage || localStorage).getItem('vzip_voice_path_mr_v1') || 'null'));
+test('the same MR below the singer reaches both comparison results even with less than 3 dB total drop',async({page},testInfo)=>{
+ test.setTimeout(120000);
+ await bootMr(page,{quiet:true});await open(page);await measure(page);
+ for(const role of ['a','b'])await expect(page.locator('[data-vp-take="'+role+'"]').first()).toHaveAttribute('data-vp-source','mr-removed');
+ await expect(page.locator('[data-vp-mr-failed]')).toHaveCount(0);
+ await expect(page.locator('[data-vp-mr-note]').first()).not.toContainText('dB');
+ const diagnosis=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ expect(diagnosis.takes.every(t=>t.mrRemoval.removedDb<3)).toBe(true);
+ expect(Math.abs(diagnosis.takes[0].mrRemoval.offsetSeconds-12.345)).toBeLessThan(.01);
+ expect(Math.abs(diagnosis.takes[1].mrRemoval.offsetSeconds-3.2)).toBeLessThan(.01);
+ expect(await page.evaluate(async()=>(await VZ.media.list()).map(m=>m.analysis.at))).toEqual([1763000000000,1763000000000]);
+ if(process.env.VZ_MR_ALIGNMENT_SHOTS&&testInfo.project.name==='chromium-mobile'){
+  await page.locator('[data-vp-take="a"]').evaluate(el=>el.scrollIntoView({block:'center'}));
+  await page.locator('[data-vp-take="a"]').screenshot({path:process.env.VZ_MR_ALIGNMENT_SHOTS+'/mr-removed.png'});
+ }
+});
+
+test('a drifting quiet MR reaches the screen, invalidates older MR caches and exports numeric local evidence',async({page},testInfo)=>{
+ test.setTimeout(120000);await bootMr(page,{quiet:true,drift:true});await open(page);await measure(page);
+ const diagnosis=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ for(const role of['a','b'])await expect(page.locator('[data-vp-take="'+role+'"]')).toHaveAttribute('data-vp-source','mr-removed');
+ for(const take of diagnosis.takes){expect(take.mrRemoval).toMatchObject({method:'local',coverage:expect.any(Number),localWindows:expect.any(Number),phasePeak:expect.any(Number)});expect(take.mrRemoval.coverage).toBeGreaterThan(.9);}
+ expect((await kept(page)).every(x=>x.mrSig.startsWith('cancel-v4|'))).toBe(true);
+ await expect(page.locator('[data-vp-mr-note]').first()).not.toContainText('dB');
+ const previous=(await kept(page)).find(x=>x.id==='m-a').at;
+ await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-a');q.onsuccess=()=>s.put({...q.result,mrSig:q.result.mrSig.replace('cancel-v4|','cancel-v3|')});tx.oncomplete=()=>{o.result.close();resolve();};};});});
+ await page.reload();await page.evaluate(()=>{VzipR2.enabled=()=>true;VzipR2.url=async key=>window.__mr[key];VZ.render();});
+ await expect(page.locator('[data-vp-take="a"] [data-vp-pending]')).toHaveText('아직 재지 않았어요.');
+ expect((await kept(page)).find(x=>x.id==='m-a')?.at??previous).toBe(previous);
+ expect(page.__errors).toEqual([]);
+ if(process.env.VZ_MR_ALIGNMENT_SHOTS&&testInfo.project.name==='chromium-mobile')await page.screenshot({path:process.env.VZ_MR_ALIGNMENT_SHOTS+'/local-mr-cache-invalidated.png',fullPage:true});
+});
 test('MR loading retries an expired URL once and then measures both original takes without changing saved analysis',async({page})=>{
  await page.route('**/__expired-mr*',r=>r.fulfill({status:403,body:'expired'}));
  await bootMr(page);
@@ -499,7 +533,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   for (const role of ['a', 'b']) {
     const take = page.locator('[data-vp-take="' + role + '"]');
     await expect(take).toHaveAttribute('data-vp-source', 'mr-removed');
-    await expect(take.locator('[data-vp-mr-note]')).toHaveText(/^깨끗함: 곡 MR을 빼고 잰 소리 · 곡 MR\(내 MR SECRETMR\)을 \d+(\.\d)? dB 빼고 쟀어요\. 반주가 조금 남아 있을 수 있어요\.$/);
+    await expect(take.locator('[data-vp-mr-note]')).toHaveText('반주 줄임: 곡 MR을 빼고 잰 소리 · 곡 MR(내 MR SECRETMR)을 녹음에 맞춰 반주를 줄였어요. 반주가 조금 남아 있을 수 있어요.');
   }
   await expect(page.locator('[data-vp-refused], [data-vp-unclean], [data-vp-mr-failed]')).toHaveCount(0);
   // Every trace applies (울림 · 숨소리 · 시작 too), although the stored analyses say an accompaniment was heard.
@@ -509,7 +543,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   await expect(row(page, 'breath').locator('.vp-vals dd').first()).toContainText('배음 대 잡음');
   // The MR file was read once for both takes; the device store remembers which MR each take was measured against.
   expect(await page.evaluate(() => window.__decodes)).toBe(3);
-  await expect.poll(async () => (await kept(page)).map(r => r.mrSig)).toEqual(['t-own:mr/own:1111', 't-own:mr/own:1111']);
+  await expect.poll(async () => (await kept(page)).map(r => r.mrSig)).toEqual(['cancel-v4|t-own:mr/own:1111', 'cancel-v4|t-own:mr/own:1111']);
   // The file: how each take was read, the removal's numbers — and no MR id, title or file name.
   const d = await page.evaluate(() => VZ.voicePathDiagnosis()), text = JSON.stringify(d);
   expect(d.takes.map(t => t.source)).toEqual(['mr-removed', 'mr-removed']);
@@ -566,13 +600,13 @@ test('each take has its own MR: changing 비교\'s MR measures only 비교 again
   const take = page.locator('[data-vp-take="b"]');
   await expect(take).toHaveAttribute('data-vp-source', 'mixed');
   // The reason, the usual cause, and the gate (refused).
-  await expect(take.locator('[data-vp-mr-failed]')).toHaveText('곡 MR을 빼지 못했어요: MR과 맞지 않아요. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요. 녹음 파일을 그대로 읽었어요.');
+  await expect(take.locator('[data-vp-mr-failed]')).toHaveText('곡 MR을 빼지 못했어요: MR과 맞지 않아요. 같은 MR이어도 시작점이나 녹음된 소리가 달라 정렬이 실패할 수 있어요. 녹음 파일을 그대로 읽었어요.');
   await expect(take.locator('[data-vp-refused]')).toHaveText(REFUSED);
   expect(await page.locator('[data-vp]').innerText()).not.toMatch(DIRECTION);
   let d = await page.evaluate(() => VZ.voicePathDiagnosis()), text = JSON.stringify(d);
   expect(d.takes.map(t => t.mrMode)).toEqual(['auto', 'chosen']);
   expect(d.takes[1]).toMatchObject({source:'mixed', measurable:false, mrRemoval:null});
-  expect(d.takes[1].mrTries).toEqual([{ok:false, reason:'no-match', removedDb:expect.anything()}]);
+  expect(d.takes[1].mrTries).toEqual([expect.objectContaining({ok:false, reason:'no-match', removedDb:expect.anything(), alignment:expect.objectContaining({stage:expect.any(String),score:expect.any(Number),windows:expect.any(Number)})})]);
   expect(d.comparison).toBeNull();
   for (const hidden of ['t-other', 'mr/other', '다른 편곡', 't-own', 'SECRETMR']) expect(text).not.toContain(hidden);
   // 빼지 않기 for 비교: the file as recorded, said so, the same gate; 기준 still not read again.

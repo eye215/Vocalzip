@@ -514,7 +514,7 @@ test('보컬 분석: a take whose MR drowns the voice is measured again with the
   const out = page.locator('[data-out]');
   await expect(out.locator('.ana-grid')).toBeVisible({timeout:90000});
   const note = out.locator('[data-mr-removed]');
-  await expect(note).toContainText('반주(MR)를 빼고 목소리만 측정했어요');
+  await expect(note).toContainText('곡 MR에 맞춰 반주를 줄인 소리로 측정했어요');
   await expect(note).toContainText('연습 MR');
   await expect(note).toContainText(/MR 0:(09|10)부터/);
   await expect(note.locator('audio[data-voice-only]')).toHaveAttribute('src', /^blob:/);
