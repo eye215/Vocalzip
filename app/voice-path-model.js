@@ -731,11 +731,17 @@ function storedNumbers(a, reliable) {
  *   source:'mr-removed'|'clean'|'mixed', measurable:{ok, why}, stored, reliable,
  *   mr:{removedDb, offsetSeconds, speed, score}|null, mrTries:[{ok, reason, removedDb}], mixed (the reading of the
  *   file as recorded, when the shown one is the voice left after the MR), stagesMs, fromDeviceCache,
+ *   input:{bytes,sampleRate,channels,frames,seconds}, runtime:{pageRevision,workerRevision,mrModuleRevision};
+ *   these optional dimensions/revisions describe the measured input, not today's file or page. Older cached
+ *   readings have null metadata; exporting them never guesses values or starts another measurement.
  *   mrMode:'auto'|'chosen'|'none'|null (this take's own MR choice; null when the song has no MR file)}]
  * Holds no id (recording, song or MR track), title, song or file name, no day of the month and no audio.
  */
 function diagnosis(takes, {generatedMonth = null, fileLoads = []} = {}) {
   const n = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const positive = v => n(v) !== null && v > 0 ? v : null;
+  const integer = v => Number.isSafeInteger(v) && v >= 0 ? v : null;
+  const input = d => d ? {bytes:integer(d.bytes), sampleRate:positive(d.sampleRate), channels:integer(d.channels), frames:integer(d.frames), seconds:positive(d.seconds)} : null;
   const load = d => ({code:['network','http','resolve-timeout','idle-timeout','total-timeout','size','processing-timeout','recovered'].includes(d.code)?d.code:'unknown',
     stage:['source','headers','body','decode','mr-mono'].includes(d.stage)?d.stage:'unknown',
     attempt:d.attempt===1||d.attempt===2?d.attempt:null,status:Number.isInteger(d.status)&&d.status>=100&&d.status<=599?d.status:null,bytes:n(d.bytes)});
@@ -746,10 +752,11 @@ function diagnosis(takes, {generatedMonth = null, fileLoads = []} = {}) {
     const r = shown(t);
     return {role:t.role, month:monthOf(t.date), source:t.source, clean:t.clean.clean, cleanWhy:t.clean.why, measurable:!!t.measurable?.ok, measurableWhy:t.measurable?.why ?? null,
       storedAnalysis:storedNumbers(t.stored, t.reliable),
+      input:input(t.input), runtime:t.runtime ? {pageRevision:integer(t.runtime.pageRevision), workerRevision:integer(t.runtime.workerRevision), mrModuleRevision:integer(t.runtime.mrModuleRevision)} : null,
       mrMode:['auto', 'chosen', 'none'].includes(t.mrMode) ? t.mrMode : null,
       mrRemoval:t.mr ? {removedDb:n(t.mr.removedDb), offsetSeconds:n(t.mr.offsetSeconds), speed:n(t.mr.speed), score:n(t.mr.score),
         ...(t.mr.method === 'local' ? {method:'local',coverage:n(t.mr.coverage),localWindows:n(t.mr.localWindows),phasePeak:n(t.mr.phasePeak)} : {})} : null,
-      mrTries:(t.mrTries || []).map(x => ({ok:!!x.ok, reason:x.ok ? null : String(x.reason || ''), removedDb:n(x.removedDb),...(x.loadFailure?{loadFailure:load(x.loadFailure)}:{}),...(x.alignment?{alignment:alignment(x.alignment)}:{})})),
+      mrTries:(t.mrTries || []).map(x => ({ok:!!x.ok, reason:x.ok ? null : String(x.reason || ''), removedDb:n(x.removedDb),...(x.input?{input:input(x.input)}:{}),...(x.loadFailure?{loadFailure:load(x.loadFailure)}:{}),...(x.alignment?{alignment:alignment(x.alignment)}:{})})),
       asRecorded:t.mixed ? {voicedSeconds:t.mixed.voicedSeconds, confidence:t.mixed.confidence, breaksPerMin:t.mixed.transitions.breaksPerMin, flipsPerMin:t.mixed.transitions.flipsPerMin} : null,
       stagesMs:t.stagesMs ? Object.fromEntries(Object.entries(t.stagesMs).map(([k, v]) => [k, n(v)])) : null, fromDeviceCache:!!t.fromDeviceCache,
       modelVersion:r.version, durationSeconds:r.seconds, voicedSeconds:r.voicedSeconds, confidence:r.confidence, range:r.range,
