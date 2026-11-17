@@ -108,6 +108,10 @@ VZ.editMedia = item => {
 };
 
 /* ---------- shared: practice log sheet ---------- */
+/** 짧은 녹음 안내: '' unless a song take is under 10 seconds (the analysis needs 10 s of singing to judge growth). */
+VZ.SHORT_TAKE_SECONDS = 10;
+VZ.shortTakeNote = (seconds, songId) => songId && Number.isFinite(Number(seconds)) && Number(seconds) > 0 && Number(seconds) < VZ.SHORT_TAKE_SECONDS
+  ? '<p class="ana-note warn" data-short-take><i class="ph ph-timer" aria-hidden="true"></i><span>' + Math.round(Number(seconds)) + '초 녹음이에요. 성장 분석은 노래한 시간이 10초 이상이어야 판정해요. 이대로 저장하면 판정 보류로 남아요. 한 프레이즈 더 불러도 좋아요.</span></p>' : '';
 VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = null, preset = null} = {}) => {
   const db = VZ.db, p = practice;
   const mode = p?.practiceMode || (songId || !p ? 'song' : 'training');
@@ -454,6 +458,8 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     finally { mainBtn.disabled = false; }
     showReview();
   }
+  /** A song take shorter than the 10 seconds of singing the growth analysis needs is held (판정 보류): say so before
+   * saving, so the person can sing one more phrase. Other recordings (lesson, free) are not judged and get no note. */
   function showReview() {
     const res = state.result, now = new Date(state.startedAt || Date.now()); // the take belongs to the moment it started
     const defName = state.songId ? M.autoName(VZ.songTitle(state.songId), VZ.ymd(now)) : (lessonId ? '레슨 녹음' : '녹음') + ' ' + (now.getMonth() + 1) + '.' + now.getDate() + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -461,6 +467,8 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     M.drawWave(wave, res.waveform, '#A65CFF');
     review.hidden = false;
     review.innerHTML = '<div class="card stack"><div data-p></div><label class="field" style="margin:0"><span>제목</span><input type="text" name="name" maxlength="150" value="' + esc(defName) + '"></label><label class="field" style="margin:0"><span>메모 (선택)</span><textarea name="memo" rows="2" maxlength="3000" placeholder="잘된 점, 고칠 점" style="min-height:64px"></textarea></label><div class="btn-row"><button type="button" class="btn ghost" data-redo><i class="ph ph-arrow-counter-clockwise"></i>다시</button><button type="button" class="btn" data-save style="flex:2"><i class="ph ph-check"></i>저장</button></div><div data-fail hidden></div></div>';
+    const short = VZ.shortTakeNote?.(res.durationSeconds, state.songId);
+    if (short) review.querySelector('[data-p]').insertAdjacentHTML('afterend', short);
     const tmp = {id:'preview', name:defName, type:res.type, blob:res.blob, durationSeconds:res.durationSeconds};
     const pl = M.player(review.querySelector('[data-p]'), tmp, {});
     review.querySelector('[data-redo]').onclick = async () => { if (await VZ.confirm('다시 녹음', '이번 녹음을 버리고 다시 녹음할까요?', {ok:'다시 녹음', danger:true})) { pl.destroy(); reset(); } };
