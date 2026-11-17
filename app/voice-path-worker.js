@@ -10,8 +10,8 @@
  * An MR file:
  *   {mono:{channels, rate}}             → {mono:Float32Array at 8 kHz} (transferred)
  * Any failure → {error}. Buffers are dropped as soon as the next step has what it needs. */
-importScripts('voice-path-model.js?v=7');
-const WORKER_REVISION = 9, MR_MODULE_REVISION = 6;
+importScripts('voice-path-model.js?v=8');
+const WORKER_REVISION = 10, MR_MODULE_REVISION = 7;
 const P = self.VzipVoicePath, SR = P.THRESHOLDS.SR, MR_RATE = 8000;
 let job = null;
 const mix = channels => {
@@ -56,7 +56,7 @@ self.onmessage = e => {
           mr.samples = null;                                          // this MR copy is not needed again
           const removedDb = out.ok ? out.report.removedDb : out.removedDb ?? null;
           const ok = !!out.ok && (removedDb >= P.THRESHOLDS.MR_MIN_REMOVED_DB || out.report.alignmentVerified === true);
-          tries.push({key:mr.key, ok, reason:ok ? '' : out.ok ? 'little' : out.reason || 'no-match', removedDb, ...(out.alignment ? {alignment:out.alignment} : {})});
+          tries.push({key:mr.key, ok, reason:ok ? '' : out.ok ? 'little' : out.reason || 'no-match', removedDb, ...(out.alignment ? {alignment:out.alignment} : {}),...(out.search?{search:out.search}:{})});
           if (ok && (!best || removedDb > best.report.removedDb)) best = {voice:out.voice, report:out.report, key:mr.key};
         }
         job.ms.cancel = performance.now() - t;

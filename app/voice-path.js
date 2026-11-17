@@ -25,7 +25,7 @@
 const V = window.VZ, M = V?.media, P = window.VzipVoicePath;
 if (!V || !M || !P) return;
 const esc = V.esc, T = P.THRESHOLDS, L = window.VzipAudioFile;
-const PAGE_REVISION = 9, WORKER = 'app/voice-path-worker.js?v=9';
+const PAGE_REVISION = 10, WORKER = 'app/voice-path-worker.js?v=10';
 const MAX_BYTES = 250 * 1024 * 1024;     // the same limit as the app's analysis; a larger file is refused, never cut
 const BLOCK_SECONDS = 30;                // decoded sound handed to the worker at a time
 const CACHE_CAP = 60;                    // takes kept on the device
@@ -106,7 +106,7 @@ const modeOf = choice => choice === 'auto' || choice === 'none' ? choice : 'chos
  * cache key of the take's result, so it changes with that take's own choice only. */
 function mrPlan(s, id) {
   const files = mrFilesOf(s.song), choice = choiceOf(s, id), pick = choice === 'none' ? [] : choice !== 'auto' ? files.filter(t => String(t.id) === choice) : files.slice(0, MAX_MRS);
-  return {files, choice, pick, sig:pick.length ? 'cancel-v6|' + pick.map(mrKey).join('|') : ''};
+  return {files, choice, pick, sig:pick.length ? 'cancel-v7|' + pick.map(mrKey).join('|') : ''};
 }
 /** A remembered MR file that is gone from the song: back to 자동 (forgotten), said in that slot for the rest of this
  * session or until another MR is picked there. Only while the song's MR files can be read (without them nothing can be told). */
