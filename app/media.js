@@ -383,19 +383,41 @@ M.src = async item => {
   if (item.cloud) return {url:await window.vzipCloudMediaUrl(item), revoke:false};
   throw Error('이 기기와 클라우드 모두에서 원본을 찾지 못했어요.');
 };
-M.download = async item => {
-  const {url, revoke} = await M.src(item);
+M.download = async (item, {filename:originalName, guard:checkCurrent=()=>{}}={}) => {
+  const identity=()=>[window.vzipCloudUserId?.()||'device',window.vzipCloudSessionId?.()||'',window.VzipAccountScope?.owner||''].join(':');
+  const account=identity(),owner=window.VzipAccountScope?.owner||window.vzipCloudUserId?.()||'device';
+  const guard=()=>{
+    if(identity()!==account||window.VzipAccountScope?.leaving||item.accountOwner&&item.accountOwner!==owner)throw Error('계정이 바뀌어 다운로드를 멈췄어요.');
+    checkCurrent();
+  };
+  guard();
   const suffix = {'audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav','audio/x-wav':'wav','audio/flac':'flac','audio/aac':'aac','audio/ogg':'ogg','audio/webm':'webm','audio/x-caf':'caf','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'}[typeOf(item).split(';')[0]] || 'bin';
-  const filename = M.label(item).replace(/[\\/:*?"<>|\r\n]/g,'_').replace(/\.(mov|mp4|m4v|wav|mp3|m4a|flac|aac|ogg|webm|caf)$/i,'') + '.' + suffix;
+  const safe=String(originalName||M.label(item)).replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g,'_').trim();
+  const ext=originalName&&safe.match(/\.[a-z0-9]{1,8}$/i)?.[0]||'.'+suffix;
+  const stem=(originalName&&safe.endsWith(ext)?safe.slice(0,-ext.length):safe.replace(/(?:\.(mov|mp4|m4v|wav|mp3|m4a|flac|aac|ogg|webm|caf|bin))+$/i,'')).trim()||'녹음';
+  // Keep one useful extension and leave room for UTF-8 filenames on mobile filesystems.
+  const encoder=new TextEncoder();let base='',length=encoder.encode(ext).length;
+  for(const char of stem){length+=encoder.encode(char).length;if(length>180)break;base+=char;}
+  const filename=base.trimEnd()+ext;
+  const {url, revoke} = await M.src(item);
   let href=url, local=revoke;
   try {
-    // Cross-origin signed URLs ignore the anchor's download filename. A same-origin blob URL preserves it.
-    if (!revoke && (Number(item.savedSize||item.size)||0) > 0 && (Number(item.savedSize||item.size)||0) <= 200*1024*1024) {
-      const response=await fetch(url);if(!response.ok)throw Error('파일 다운로드 실패 ('+response.status+')');
-      href=URL.createObjectURL(await response.blob());local=true;
-    } else if (!revoke && item.storageProvider==='r2') {
-      const signed=new URL(url);signed.searchParams.set('download',filename);href=signed.href;
+    guard();
+    const remote=!revoke&&/^https?:$/.test(new URL(url,location.href).protocol);
+    if(remote){
+      // Both storage providers serve attachments. Never navigate to a bare playback URL.
+      const signed=new URL(url,location.href);signed.searchParams.set('download',filename);href=signed.href;
+      // WebKit can still hand a cross-origin audio attachment to its full-screen player.
+      // Use a same-origin binary download for normal-size files, including legacy rows without size metadata.
+      // The shared reader bounds unknown lengths, stalled transfers and retries; large files retain native streaming.
+      if((Number(item.savedSize||item.size)||0)<=200*1024*1024){
+        try{
+          const bytes=await window.VzipAudioFile.read({source:async()=>{guard();return {url:href,revoke:false};},maxBytes:200*1024*1024});
+          guard();href=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'}));local=true;
+        }catch(error){if(error.diagnostic?.code!=='size')throw error;}
+      }
     }
+    guard();
     const a = document.createElement('a'); a.href = href; a.download = filename; document.body.append(a); a.click(); a.remove();
   } finally {if(local)setTimeout(() => URL.revokeObjectURL(href), 10000);}
 };

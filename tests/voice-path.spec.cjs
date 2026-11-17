@@ -409,6 +409,77 @@ async function bootMr(page, {third = false} = {}) {
 /** The song gets a second MR file, of another arrangement (not in the takes), listed first. */
 const addOtherMr = page => page.evaluate(() => VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks.unshift({id:'t-other', kind:'file', title:'다른 편곡 MR', r2Key:'mr/other', size:3333, created:2}); }, {silent:true}));
 const mrChoices = page => page.evaluate(() => JSON.parse((window.VzipAccountScope?.storage || localStorage).getItem('vzip_voice_path_mr_v1') || 'null'));
+test('MR loading retries an expired URL once and then measures both original takes without changing saved analysis',async({page})=>{
+ await page.route('**/__expired-mr*',r=>r.fulfill({status:403,body:'expired'}));
+ await bootMr(page);
+ await page.evaluate(()=>{
+  const url=VzipR2.url;window.__mrRequests=[];
+  VzipR2.url=async(key,options)=>{window.__mrRequests.push({attempt:window.__mrRequests.length+1,refresh:!!options?.refresh});return window.__mrRequests.length===1?'/__expired-mr?cap=SECRET':url(key);};
+ });
+ await open(page);await measure(page);
+ const d=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ expect(d.takes.map(t=>t.source)).toEqual(['mr-removed','mr-removed']);
+ expect(d.fileLoads).toEqual(expect.arrayContaining([expect.objectContaining({kind:'mr',code:'http',status:403,attempt:1}),expect.objectContaining({kind:'mr',code:'recovered',attempt:2})]));
+ expect(await page.evaluate(()=>window.__mrRequests)).toEqual([{attempt:1,refresh:false},{attempt:2,refresh:true}]);
+ expect(JSON.stringify(d)).not.toContain('SECRET');
+ expect(await page.evaluate(async()=> (await VZ.media.list()).map(m=>m.analysis.at))).toEqual([1763000000000,1763000000000]);
+});
+
+test('a missing MR is reported as a file-load failure with safe HTTP details, without a key/speed explanation',async({page})=>{
+ await page.route('**/__missing-mr*',r=>r.fulfill({status:404,body:'missing SECRET'}));
+ await bootMr(page);await page.evaluate(()=>{VzipR2.url=async()=>'/__missing-mr?cap=SECRET';});
+ await open(page);await measure(page);
+ await expect(page.locator('[data-vp-mr-failed]').first()).toContainText('파일 연결을 확인한 뒤 다시 재기를');
+ await expect(page.locator('[data-vp-mr-failed]').first()).not.toContainText('키나 빠르기');
+ const d=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ expect(d.takes[0].mrTries[0]).toMatchObject({reason:'load',loadFailure:{code:'http',stage:'headers',status:404,attempt:1}});
+ expect(JSON.stringify(d)).not.toContain('SECRET');
+});
+
+test('a stalled recording URL stops waiting, exports the failure, and retry preserves the already measured take',async({page})=>{
+ await boot(page);
+ await page.evaluate(()=>{
+  const read=VzipAudioFile.read;VzipAudioFile.read=o=>read({...o,policy:{resolveMs:300,idleMs:300,totalMs:3000,attempts:2}});
+  const src=VZ.media.src,now=VZ.media.srcNow;
+  VZ.media.srcNow=m=>m.id==='m-new'?null:now(m);
+  VZ.media.src=m=>m.id==='m-new'?new Promise(()=>{}):src(m);
+  window.__restoreSource=()=>{VZ.media.src=src;VZ.media.srcNow=now;};
+ });
+ await open(page);await page.locator('[data-vp-run]').click();
+ await expect(page.locator('[data-vp-status]')).toContainText('파일 주소를 받지 못했어요');
+ expect(await page.locator('.vp-mark').allTextContents()).not.toContain('재는 중');
+ const errorBox=await page.locator('[data-vp-status]').boundingBox(),retryBox=await page.locator('[data-vp-run]').boundingBox();
+ expect(errorBox.y+errorBox.height).toBeLessThanOrEqual(retryBox.y);
+ await expect(page.locator('[data-vp-take="a"] .vp-meta')).toContainText('전체를 쟀어요');
+ await expect(page.locator('[data-vp-diagnosis]')).toBeVisible();
+ const d=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ expect(d.fileLoads).toEqual([expect.objectContaining({role:'comp',kind:'recording',code:'resolve-timeout',attempt:1}),expect.objectContaining({role:'comp',kind:'recording',code:'resolve-timeout',attempt:2})]);
+ expect(d.takes).toHaveLength(1);expect(d.comparison).toBeNull();
+ if(process.env.VZ_FAILURE_SHOTS){
+  const dir=process.env.VZ_FAILURE_SHOTS;require('node:fs').mkdirSync(dir,{recursive:true});
+  for(const [width,height]of [[375,812],[320,640]]){
+   await page.setViewportSize({width,height});await noOverflow(page);
+   await page.screenshot({path:dir+'/load-failure-'+width+'.png',fullPage:true});
+  }
+ }
+ const decodes=await page.evaluate(()=>window.__decodes);
+ await page.locator('[data-vp-pick="b"]').selectOption('m-mid');
+ expect((await page.evaluate(()=>VZ.voicePathDiagnosis())).fileLoads).toBeUndefined();
+ await page.locator('[data-vp-pick="b"]').selectOption('m-new');
+ await page.evaluate(()=>window.__restoreSource());await measure(page);
+ expect(await page.evaluate(()=>window.__decodes)).toBe(decodes+1);
+ expect(page.__errors).toEqual([]);
+});
+
+test('stopping during a non-responsive MR URL lookup returns immediately without saving a new reading',async({page})=>{
+ await bootMr(page);await page.evaluate(()=>{VzipR2.url=()=>new Promise(()=>{});});
+ await open(page);await page.locator('[data-vp-run]').click();
+ await expect(page.locator('[data-vp-stage]').first()).toHaveText('곡 MR 불러오는 중');
+ await page.locator('[data-vp-cancel]').click();
+ await expect(page.locator('[data-vp-status]')).toContainText('그만뒀어요',{timeout:2000});
+ expect(await kept(page)).toEqual([]);expect(page.__errors).toEqual([]);
+});
+
 test('a song with an MR file: the MR is taken out of each take and all traces of the voice are shown', async ({page}) => {
   test.setTimeout(90000);
   await bootMr(page);
@@ -424,6 +495,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   await measure(page);
   const stages = await page.evaluate(() => window.__stages);
   for (const name of ['곡 MR 불러오는 중', '곡 MR 빼는 중', '목소리 재는 중']) expect(stages.some(t => t.startsWith('a:' + name)), name + ' in ' + stages.join(' | ')).toBe(true);
+  expect(stages.some(t => /^a:곡 MR 빼는 중 [1-9]\d?%$/.test(t))).toBe(true);
   for (const role of ['a', 'b']) {
     const take = page.locator('[data-vp-take="' + role + '"]');
     await expect(take).toHaveAttribute('data-vp-source', 'mr-removed');

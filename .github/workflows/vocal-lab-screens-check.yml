@@ -10,10 +10,17 @@ on:
       - 'app/vocal-lab.js'
       - 'app/song-mr.js'
       - 'app/analysis.js'
+      - 'app/audio-file-loader.js'
+      - 'r2-storage.js'
       - 'app/vocal-analysis.js'
       - 'app/core.js'
       - 'tests/voice-path*'
       - 'tests/mr-reanalyze*'
+      - 'tests/mr-progress.test.cjs'
+      - 'tests/analysis-cancel.test.cjs'
+      - 'tests/audio-file-loader.test.cjs'
+      - 'tests/r2-analysis-url.test.cjs'
+      - 'tests/helpers/mr-subtract-reference.json'
       - 'tests/helpers/voice-path-audio.cjs'
       - '.github/workflows/vocal-lab-screens-check.yml'
   workflow_dispatch:
@@ -34,7 +41,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/voice-path-model.test.cjs
+      - run: node --test tests/voice-path-model.test.cjs tests/mr-cancel.test.cjs tests/mr-progress.test.cjs tests/analysis-cancel.test.cjs tests/audio-file-loader.test.cjs tests/r2-analysis-url.test.cjs
       - run: npx playwright test tests/voice-path.spec.cjs tests/mr-reanalyze.spec.cjs --workers=2
       - uses: actions/upload-artifact@v4
         if: always()

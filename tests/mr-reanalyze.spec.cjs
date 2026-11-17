@@ -385,7 +385,8 @@ test('the real analyser: a held take is measured with the song\'s MR file subtra
   // Synthetic only: a song-like MR file and a phone take of a melody sung over it, the MR 8 dB louder than the voice.
   // A second take is sung over a different backing track: the song's MR is not in it.
   const mr = Y.mr(60), take = Y.record(Y.vocal(20).x, mr, {offset:6, db:8}).x, other = Y.record(Y.vocal(20, 11).x, Y.mr(60, 5), {offset:6, db:8}).x;
-  await page.route('**/__mrfile.wav', r => r.fulfill({contentType:'audio/wav', body:wav(mr)}));
+  let mrDownloads = 0;
+  await page.route('**/__mrfile.wav', r => { mrDownloads++; return r.fulfill({contentType:'audio/wav', body:wav(mr)}); });
   await page.route('**/__heldtake.wav', r => r.fulfill({contentType:'audio/wav', body:wav(take)}));
   await page.route('**/__othertake.wav', r => r.fulfill({contentType:'audio/wav', body:wav(other)}));
   await boot(page, {recordings:[], real:true});
@@ -396,6 +397,14 @@ test('the real analyser: a held take is measured with the song\'s MR file subtra
       blob:await (await fetch('/__othertake.wav')).blob(), durationSeconds:20, analysis:{...held, at:112}});
     VZ.media.invalidate();
   }, HELD);
+  await page.evaluate(() => {
+    window.__mrProgress = [];
+    const run = VZ.analyzeRecording;
+    VZ.analyzeRecording = (m, options) => {
+      let removing = false;
+      return run(m, {...options, onStage:s => { removing = /빼는 중/.test(s); options.onStage(s); }, onProgress:p => { if (removing) window.__mrProgress.push(p); options.onProgress(p); }});
+    };
+  });
   await openFromSong(page);
   const s = sheet(page);
   await expect(s.locator('[data-remr-count]')).toHaveText('2개');
@@ -412,4 +421,6 @@ test('the real analyser: a held take is measured with the song\'s MR file subtra
   await expect(s.locator('[data-remr-results] [data-remr-row="other"]')).toContainText('MR과 맞지 않아요 · 저장된 결과 그대로');
   await expect(s.locator('[data-remr-total="nomatch"]')).toHaveText('1개');
   expect(await stored(page, 'other')).toEqual({...HELD, at:112});
+  expect(mrDownloads).toBe(1);
+  expect(await page.evaluate(() => window.__mrProgress.filter(p => p > 0 && p < .7).length)).toBeGreaterThan(10);
 });

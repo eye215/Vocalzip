@@ -224,6 +224,13 @@ test('comparison rows: 비슷함 / 다름 with the direction in words, never a v
   assert.equal(P.compare(tiny, better).find(r => r.id === 'pitchSd').marker, '표본 부족');
 });
 
+test('file-loading diagnostics allow only codes and counts, including when no take could be read',()=>{
+ const d=P.diagnosis([],{fileLoads:[{role:'comp',kind:'recording',code:'http',stage:'headers',attempt:2,status:403,bytes:1024,url:'SECRET-URL',message:'SECRET-MESSAGE'},
+  {role:'SECRET-ID',kind:'SECRET-FILE',code:'SECRET-TOKEN',stage:'SECRET-URL',attempt:99,status:999,bytes:null}]});
+ assert.equal(d.comparison,null);assert.equal(d.takes.length,0);assert.equal(d.fileLoads[0].status,403);
+ assert.deepEqual(d.fileLoads[1],{role:null,kind:null,code:'unknown',stage:'unknown',attempt:null,status:null,bytes:null});
+ assert.ok(!JSON.stringify(d).includes('SECRET'));
+});
 test('diagnosis file: numbers, flags and months only — no ids, titles, names, days or audio', () => {
   const a = P.analyze(take({worse:true}), SR), b = P.analyze(take({worse:false}), SR);
   const stored = {v:2, at:1731400000000, seconds:40, metrics:{voicedSeconds:28, stability:{wobbleCents:22}, intonation:{meanAbsCents:19}}, scope:{kind:'whole-recording', cut:false},
