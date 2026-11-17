@@ -30,9 +30,16 @@ async function boot(page, {takes = TAKES, seconds = 34, rate = 16000} = {}) {
   await page.addInitScript(([k, s]) => {
     if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, s); sessionStorage.setItem('seeded', '1'); }
     // Counters the tests read: decodes (how often a file was turned into sound) and this screen's workers.
-    window.__decodes = 0; window.__workers = {made:0, ended:0};
+    window.__decodes = 0; window.__decodedInputs = []; window.__workers = {made:0, ended:0};
     const C = window.OfflineAudioContext, decode = C.prototype.decodeAudioData;
-    C.prototype.decodeAudioData = function (...a) { const n = ++window.__decodes, hold = window.__holdDecode?.(n); return hold ? hold.then(() => decode.apply(this, a)) : decode.apply(this, a); };
+    C.prototype.decodeAudioData = function (...a) {
+      const n = ++window.__decodes, hold = window.__holdDecode?.(n), read = () => {
+        const bytes = a[0].byteLength, p = decode.apply(this, a);
+        p?.then(buf => window.__decodedInputs.push({bytes, sampleRate:buf.sampleRate, channels:buf.numberOfChannels, frames:buf.length, seconds:buf.length / buf.sampleRate}), () => {});
+        return p;
+      };
+      return hold ? hold.then(read) : read();
+    };
     const W = window.Worker;
     window.Worker = function (url, o) { const w = new W(url, o); if (String(url).includes('voice-path-worker')) { window.__workers.made++; const end = w.terminate.bind(w); w.terminate = () => { window.__workers.ended++; end(); }; } return w; };
     window.Worker.prototype = W.prototype;
@@ -599,8 +606,13 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   expect(Math.abs(d.takes[0].mrRemoval.offsetSeconds - 12.345)).toBeLessThan(0.01);
   expect(d.takes[0].mrTries).toEqual([{ok:true, reason:null, removedDb:d.takes[0].mrRemoval.removedDb,
     input:{bytes:70*8000*2+44, sampleRate:8000, channels:1, frames:70*8000, seconds:70}}]);
+  const decoded = await page.evaluate(() => window.__decodedInputs);
   for (const t of d.takes) {
-    expect(t.input).toEqual({bytes:40*8000*2+44, sampleRate:16000, channels:1, frames:40*16000, seconds:40});
+    // WebKit's WAV resampler may return one fewer frame. Preserve the actual buffer dimensions, without rounding.
+    expect(t.input).toEqual(decoded.find(x => x.bytes === 40*8000*2+44));
+    expect(t.input).toMatchObject({bytes:40*8000*2+44, sampleRate:16000, channels:1});
+    expect(Math.abs(t.input.frames - 40*16000)).toBeLessThanOrEqual(1);
+    expect(t.input.seconds).toBe(t.input.frames / t.input.sampleRate);
     expect(t.runtime).toEqual({pageRevision:8, workerRevision:8, mrModuleRevision:5});
   }
   expect(d.takes[0].asRecorded.confidence.meanStrength).toEqual(expect.any(Number));
