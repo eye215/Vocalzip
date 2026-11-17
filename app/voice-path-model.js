@@ -589,7 +589,19 @@ function measurable(result, clean) {
   if ((c.flatNoteShare ?? 0) > T.MIXED_MAX_FLAT_NOTE_SHARE) return {ok:false, why:'instrument-like'};
   return {ok:true, why:'mixed-voice-on-top'};
 }
-const REFUSED_NOTE = '반주가 목소리만큼 크게 들어가 있어 이 녹음은 잴 수 없어요. 이어폰을 끼고 녹음한 것(목소리만 들어간 것)으로 비교해 주세요.';
+const REFUSED_NOTE = '원본 음원에서 목소리를 안정적으로 구분하지 못해 소리 길 비교를 보류해요.';
+function refusedText(result, reason) {
+  const c=result?.confidence || {}, percent=x=>Number.isFinite(x)?Math.floor(x*1000)/10+'%':'확인되지 않음';
+  const why={
+    'no-voice':'원본 음원에서 목소리를 찾지 못했어요.',
+    'weak-pitch':'원본 음원의 음높이 검출 일관성이 '+percent(c.meanStrength)+'예요 (기준 '+percent(T.MIXED_MIN_STRENGTH)+').',
+    'many-glitches':'원본 음원에서 불안정하게 잡힌 음높이 구간이 많아요.',
+    'pitch-jumps':'원본 음원에서 큰 음높이 도약이 자주 검출돼요. 실제 선율과 검출 오류를 구분하기 어려워요.',
+    'follows-accompaniment':'원본 음원에서 중심 음역을 벗어난 소리가 많이 검출돼요. 목소리인지 구분하기 어려워요.',
+    'instrument-like':'원본 음원에서 목소리와 다른 악기의 음을 안정적으로 구분하지 못했어요.'
+  }[reason];
+  return why ? why+' 소리 길 비교를 보류해요.' : REFUSED_NOTE;
+}
 
 /* ---------- cleanliness ---------- */
 /**
@@ -748,7 +760,7 @@ function diagnosis(takes, {generatedMonth = null, fileLoads = []} = {}) {
     ...(fileLoads.length?{fileLoads:fileLoads.slice(-24).map(d=>({role:['base','comp'].includes(d.role)?d.role:null,kind:['mr','recording'].includes(d.kind)?d.kind:null,...load(d)}))}:{})};
 }
 
-const api = {VERSION, THRESHOLDS:T, analyze, createStream, createHalver, measurable, REFUSED_NOTE, BAND_NOTE, alone, resample, cleanOf, CLEAN_TEXT, UNCLEAN_NOTE, gate, compare, diagnosis, monthOf, noteName, ZONE_LABEL};
+const api = {VERSION, THRESHOLDS:T, analyze, createStream, createHalver, measurable, refusedText, REFUSED_NOTE, BAND_NOTE, alone, resample, cleanOf, CLEAN_TEXT, UNCLEAN_NOTE, gate, compare, diagnosis, monthOf, noteName, ZONE_LABEL};
 if (typeof module === 'object' && module.exports) module.exports = api;
 else root.VzipVoicePath = api;
 })(typeof self !== 'undefined' ? self : this);

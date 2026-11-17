@@ -3,6 +3,17 @@ require('./legacy-session-mode.cjs')(test);
 const {boot,wav}=require('./helpers/r2-fixture.cjs');
 async function go(page){await boot(page);await page.evaluate(()=>VZ.nav('#/precision-report'));await expect(page.locator('[data-precision-report]')).toContainText('원본을 보존');}
 const combined=fs.existsSync(require('node:path').join(__dirname,'../app/precision-acoustics.js'));
+test('a four-minute recording analyzes only the explicitly chosen interval through the real decoder and engines',async({page})=>{
+ test.setTimeout(90000);await go(page);
+ const audio=wav(248,8000).toString('base64');
+ const out=await page.evaluate(async audio=>{
+  const source=Uint8Array.from(atob(audio),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([source],{type:'audio/wav'}));
+  const before=JSON.stringify(VZ.db);VZ.media.srcNow=()=>({url,revoke:false});VZ.media.src=async()=>({url,revoke:false});
+  const result=await VZ.precisionAnalyze({id:'synthetic-four-minutes',durationSeconds:248,recordedDate:'2026-11-01'},{start:120,end:122,context:{source:'clean',task:'sustain'}});
+  URL.revokeObjectURL(url);return {scope:result.scope,frames:result.frames.length,first:result.frames[0].t,last:result.frames.at(-1).t,before,after:JSON.stringify(VZ.db)};
+ },audio);
+ expect(out.scope.start).toBe(120);expect(out.scope.end).toBe(122);expect(out.frames).toBeLessThan(100);expect(out.first).toBeGreaterThanOrEqual(120);expect(out.last).toBeLessThan(122);expect(out.after).toBe(out.before);expect(page.__errors).toEqual([]);
+});
 test('precision navigation stays in the analysis hub and lab, outside the saved report archive',async({page})=>{
  await boot(page);
  await page.evaluate(()=>{VZ.db.comparisonReports=[{id:'fixture-saved-report',kind:'vocal-lab',songId:'s1',song:'가짜 곡',mediaIds:['fixture-take'],created:Date.now()}];VZ.nav('#/lab-reports');});
@@ -41,6 +52,22 @@ test('account partition, append-only results, charts and null gaps work at 320/3
  await page.locator('[data-pr-ai]').click();await expect(page.locator('[data-pr-ai-status]')).toContainText('unsafe AI claim');await expect(page.locator('[data-pr-ai-output]')).toBeEmpty();
  expect(await page.evaluate(()=>JSON.stringify(VZ.db))).toBe(before);expect(page.__errors).toEqual([]);
 });
+test('manual interval links remain visible with an existing report and never substitute a missing recording',async({page})=>{
+ await go(page);
+ await page.evaluate(async()=>{
+  const owner=vzipCloudUserId(),result={engineVersion:'pa-1.0.0',recordedDate:'2026-11-01',source:{id:'synthetic',revision:'r1'},context:{owner,task:'song'},metrics:{},limitations:[],frames:[],scope:{start:0,end:2}};
+  await VzipPrecisionStore.append({id:'existing',owner,key:'existing',result});
+  VZ.nav('#/precision-report?media=missing-recording&start=120&end=122');
+ });
+ const form=page.locator('[data-pr-analyze]');await expect(form).toBeVisible();
+ await expect(form.locator('[name=media]')).toHaveValue('');await expect(form.locator('[name=media]')).toContainText('녹음을 다시 골라 주세요');
+ await expect(form.locator('[name=start]')).toHaveValue('120');await expect(form.locator('[name=end]')).toHaveValue('122');
+ expect(await form.locator('[name=clean]').isChecked()).toBe(false);
+ await form.locator('[name=start]').fill('121');await page.locator('[data-pr-tab=stability]').click();
+ await expect(page.locator('[data-pr-analyze] [name=start]')).toHaveValue('121');
+ expect(page.__errors).toEqual([]);
+});
+
 test('combined: real synthetic PCM -> legacy F0 -> spectral/LPC/change modules -> archive, cache and cancellation',async({page})=>{
  test.skip(!combined,'PR1–3 dependencies are tested together in the integration worktree');
  await go(page);const audio=wav(3,16000).toString('base64');
