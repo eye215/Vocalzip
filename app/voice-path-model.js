@@ -109,7 +109,7 @@ const T = Object.freeze({
   MIXED_FLAT_NOTE_CENTS:4,     // a held note steadier than this (raw pitch SD) is an instrument, not a voice …
   MIXED_MAX_FLAT_NOTE_SHARE:0.5,// … and a take whose held notes are mostly like that is the accompaniment being read
   MIXED_MAX_JUMPS_PER_MIN:15,  // flips + octave hesitations + glitches per minute of singing: more is a tracker hopping between voice and accompaniment
-  MR_MIN_REMOVED_DB:3,         // the song's MR counts as taken out when the level fell at least this much (mr-cancel's own minRemoved)
+  MR_MIN_REMOVED_DB:3,         // fallback level-drop gate when waveform alignment is not independently verified
   SIMILAR_RELATIVE:0.2,        // within 20% of the larger value = 비슷함 …
   SIMILAR:{                    // … or within these absolute amounts, whichever is wider
     breaksPerMin:1, flipsPerMin:0.5, pitchSdCents:3, driftCentsPerS:5, loudSdDb:0.5, vibratoShare:15,
@@ -739,14 +739,17 @@ function diagnosis(takes, {generatedMonth = null, fileLoads = []} = {}) {
   const load = d => ({code:['network','http','resolve-timeout','idle-timeout','total-timeout','size','processing-timeout','recovered'].includes(d.code)?d.code:'unknown',
     stage:['source','headers','body','decode','mr-mono'].includes(d.stage)?d.stage:'unknown',
     attempt:d.attempt===1||d.attempt===2?d.attempt:null,status:Number.isInteger(d.status)&&d.status>=100&&d.status<=599?d.status:null,bytes:n(d.bytes)});
+  const alignment = d => ({stage:['coarse','fine','validation'].includes(d.stage)?d.stage:'unknown', score:n(d.score),
+    offsetSeconds:n(d.offsetSeconds),speed:n(d.speed),windows:n(d.windows),phasePeak:n(d.phasePeak),errorSamples:n(d.errorSamples)});
   const shown = t => gate(t.result, t.clean.clean);
   const out = takes.map(t => {
     const r = shown(t);
     return {role:t.role, month:monthOf(t.date), source:t.source, clean:t.clean.clean, cleanWhy:t.clean.why, measurable:!!t.measurable?.ok, measurableWhy:t.measurable?.why ?? null,
       storedAnalysis:storedNumbers(t.stored, t.reliable),
       mrMode:['auto', 'chosen', 'none'].includes(t.mrMode) ? t.mrMode : null,
-      mrRemoval:t.mr ? {removedDb:n(t.mr.removedDb), offsetSeconds:n(t.mr.offsetSeconds), speed:n(t.mr.speed), score:n(t.mr.score)} : null,
-      mrTries:(t.mrTries || []).map(x => ({ok:!!x.ok, reason:x.ok ? null : String(x.reason || ''), removedDb:n(x.removedDb),...(x.loadFailure?{loadFailure:load(x.loadFailure)}:{})})),
+      mrRemoval:t.mr ? {removedDb:n(t.mr.removedDb), offsetSeconds:n(t.mr.offsetSeconds), speed:n(t.mr.speed), score:n(t.mr.score),
+        ...(t.mr.method === 'local' ? {method:'local',coverage:n(t.mr.coverage),localWindows:n(t.mr.localWindows),phasePeak:n(t.mr.phasePeak)} : {})} : null,
+      mrTries:(t.mrTries || []).map(x => ({ok:!!x.ok, reason:x.ok ? null : String(x.reason || ''), removedDb:n(x.removedDb),...(x.loadFailure?{loadFailure:load(x.loadFailure)}:{}),...(x.alignment?{alignment:alignment(x.alignment)}:{})})),
       asRecorded:t.mixed ? {voicedSeconds:t.mixed.voicedSeconds, confidence:t.mixed.confidence, breaksPerMin:t.mixed.transitions.breaksPerMin, flipsPerMin:t.mixed.transitions.flipsPerMin} : null,
       stagesMs:t.stagesMs ? Object.fromEntries(Object.entries(t.stagesMs).map(([k, v]) => [k, n(v)])) : null, fromDeviceCache:!!t.fromDeviceCache,
       modelVersion:r.version, durationSeconds:r.seconds, voicedSeconds:r.voicedSeconds, confidence:r.confidence, range:r.range,

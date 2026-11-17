@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const VZ = window.VZ, M = VZ.media, esc = VZ.esc, L = window.VzipAudioFile;
-const WORKER = 'app/vocal-analysis.js?v=8', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
+const WORKER = 'app/vocal-analysis.js?v=10', MAX_BYTES = 250 * 1024 * 1024, MAX_SECONDS = 15 * 60;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = c => { const m = Math.round(c / 100); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); };
 let job = 0, stop = null; // stop: ends the screen's on-device analysis when the screen is left
@@ -198,8 +198,8 @@ function mrNote(r) {
   const track = (VZ.db.songs.flatMap(s => s.mrTracks || []).find(t => String(t.id) === m.trackId)?.title) || '곡 MR';
   const at = Number.isFinite(m.offsetSeconds) ? (m.offsetSeconds >= 0 ? 'MR ' + clock(m.offsetSeconds) + '부터' : 'MR보다 ' + clock(-m.offsetSeconds) + ' 먼저 시작') : '';
   const listen = r.voice ? '<audio class="ana-voice" controls preload="none" data-voice-only aria-label="반주를 뺀 목소리 듣기" src="' + wavUrl(r.voice, r.voiceRate || 8000) + '"></audio>' : '';
-  return '<div class="ana-note ok" data-mr-removed><i class="ph ph-music-notes-minus"></i><span><b>반주(MR)를 빼고 목소리만 측정했어요.</b> ' + esc(track) + (at ? ' · ' + esc(at) : '') + (m.removedDb != null ? ' · 소리 ' + esc(m.removedDb) + 'dB 줄임' : '') +
-    '<br><small>지속음 흔들림·비브라토는 뺀 흔적이 섞일 수 있어 참고로만 봐 주세요. 원본 녹음과 MR 파일은 그대로예요.</small>' + (listen ? '<br><small>목소리만 들어 보기</small>' + listen : '') + '</span></div>';
+  return '<div class="ana-note ok" data-mr-removed><i class="ph ph-music-notes-minus"></i><span><b>곡 MR에 맞춰 반주를 줄인 소리로 측정했어요.</b> ' + esc(track) + (at ? ' · ' + esc(at) : '') +
+    '<br><small>반주가 남거나 분리 흔적이 섞일 수 있어요. 지속음 흔들림·비브라토는 참고로만 봐 주세요. 원본 녹음과 MR 파일은 그대로예요.</small>' + (listen ? '<br><small>반주를 줄인 소리 들어 보기</small>' + listen : '') + '</span></div>';
 }
 function confidence(r) {
   const c = r.confidence;
