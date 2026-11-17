@@ -206,3 +206,138 @@ test('YouTube MR hides the key capsule and says why', async ({page}) => {
  await expect(page.locator('[data-mr-key]')).toHaveCount(0);
  await expect(page.locator('[data-mr-key-off]')).toContainText('유튜브 MR은 키를 바꿀 수 없어요');
 });
+
+// Private downloads: fake audio only. A bare cross-origin audio URL plays in Safari;
+// our mock storage only sends attachment when the existing download contract is requested.
+const downloadHost='https://media-download.example.invalid';
+async function privateDownloads(page,{tracks=true}={}){
+ const seed=legacy();
+ if(tracks)seed.songs[0].mrTracks=[
+  {id:'mr-download',kind:'file',title:'테스트 MR',fileName:'테스트 원본.WAV',type:'audio/wav',r2Key:'u/test-owner/mr-download/original.wav',size:12345,keyShift:3},
+  {id:'mr-video',kind:'youtube',title:'테스트 영상',url:'https://youtu.be/dQw4w9WgXcQ'}
+ ];
+ const bytes=wav(1),requests=[];
+ await page.route(downloadHost+'/**',async route=>{
+  const url=new URL(route.request().url());requests.push(url);
+  const name=url.searchParams.get('download'),headers={'access-control-allow-origin':'*'};
+  if(name)headers['content-disposition']="attachment; filename=\"fixture.wav\"; filename*=UTF-8''"+encodeURIComponent(name);
+  await route.fulfill({contentType:'audio/wav',headers,body:bytes});
+ });
+ await boot(page,{seed,media:false});
+ await page.evaluate(host=>{
+  window.__downloadOwner='test-owner';window.__downloadSession='test-session';
+  window.vzipCloudUserId=()=>window.__downloadOwner;window.vzipCloudSessionId=()=>window.__downloadSession;
+  window.vzipCloudSignedIn=()=>true;window.__downloadSigns=[];
+  window.VzipR2={prefetch:async()=>{},url:async key=>{window.__downloadSigns.push(key);if(window.__signError)throw Error('테스트 연결 실패');if(window.__holdSign)await new Promise(resolve=>window.__releaseSign=resolve);return host+'/original.wav?sig=fake';}};
+  window.vzipCloudMediaUrl=item=>window.VzipR2.url(item.r2Key);
+ },downloadHost);
+ await openReferences(page);
+ return {bytes,requests};
+}
+test('Uploaded MR downloads original bytes and filename, not its playback key shift',async({page})=>{
+ const {bytes,requests}=await privateDownloads(page),before=await data(page);
+ const downloadButton=page.getByRole('button',{name:'테스트 MR MR 다운로드',exact:true});
+ await expect(downloadButton).toBeVisible();
+ expect(await page.locator('[data-mr="mr-video"] [data-mr-download]').count()).toBe(0);
+ const [download]=await Promise.all([page.waitForEvent('download'),downloadButton.click()]);
+ expect(download.suggestedFilename()).toMatch(/^(테스트 원본\.WAV|download)$/);
+ expect(fs.readFileSync(await download.path())).toEqual(bytes);
+ expect(requests.at(-1).searchParams.get('download')).toBe('테스트 원본.WAV');
+ expect(await data(page)).toEqual(before);
+ expect(await media(page)).toEqual([]);
+ await expect(page.locator('.vz-mr-links audio')).toHaveCount(0);
+});
+test('MR signing failure retries and repeated taps make only one pending download',async({page})=>{
+ await privateDownloads(page);const button=page.locator('[data-mr-download]');
+ await page.evaluate(()=>window.__signError=true);
+ await button.click();await expect(page.locator('.toast').last()).toContainText('테스트 연결 실패');await expect(button).toBeEnabled();
+ await page.evaluate(()=>{window.__signError=false;window.__holdSign=true;});
+ await button.evaluate(el=>{el.click();el.click();});await expect(button).toBeDisabled();
+ expect(await page.evaluate(()=>window.__downloadSigns.length)).toBe(2);
+ const pending=page.waitForEvent('download');await page.evaluate(()=>window.__releaseSign());await pending;
+ await expect(button).toBeEnabled();
+});
+for(const leave of ['account','session','logout','screen'])test('Pending MR download stops after '+leave+' changes',async({page})=>{
+ await privateDownloads(page);const downloads=[];page.on('download',d=>downloads.push(d));
+ await page.evaluate(()=>window.__holdSign=true);await page.locator('[data-mr-download]').click();
+ await expect.poll(()=>page.evaluate(()=>!!window.__releaseSign)).toBe(true);
+ if(leave==='screen'){await page.goto('/#/home');}else await page.evaluate(leave=>{
+  if(leave==='session')window.__downloadSession='another-session';else window.__downloadOwner=leave==='logout'?'':'another-owner';
+ },leave);
+ await page.evaluate(()=>window.__releaseSign());
+ await expect.poll(()=>page.evaluate(()=>document.querySelector('[data-mr-download]')?.disabled||false)).toBe(false);
+ expect(downloads).toHaveLength(0);
+});
+test('Legacy cloud recording with unknown size downloads instead of opening a Safari media page',async({page})=>{
+ const {bytes,requests}=await privateDownloads(page,{tracks:false});
+ const [download]=await Promise.all([page.waitForEvent('download'),page.evaluate(()=>VZ.media.download({id:'test-recording',name:'테스트 녹음',type:'audio/wav',cloud:true,path:'test-owner/original.wav'}))]);
+ expect(fs.readFileSync(await download.path())).toEqual(bytes);
+ expect(requests.at(-1).searchParams.get('download')).toBe('테스트 녹음.wav');
+ expect(new URL(page.url()).hash).toBe('#/song/s1');
+});
+test('Recording download strips stale bin and duplicate audio suffixes without changing metadata',async({page})=>{
+ await boot(page,{media:false});
+ const names=await page.evaluate(async()=>{
+  const names=[],original=HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click=function(){names.push(this.download)};
+  try{
+   for(const name of ['테스트 녹음.bin','테스트 녹음.bin.m4a','테스트 녹음.M4A','테스트 녹음.bin.bin'])await VZ.media.download({name,type:'audio/mp4',bytes:new Uint8Array([1,2,3])});
+  }finally{HTMLAnchorElement.prototype.click=original;}
+  return names;
+ });
+ expect(names).toEqual(Array(4).fill('테스트 녹음.m4a'));
+});
+test('Long recording download filename fits a filesystem component and retains the audio extension',async({page})=>{
+ await boot(page,{media:false});
+ const name=await page.evaluate(async()=>{
+  let name;const original=HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click=function(){name=this.download};
+  try{await VZ.media.download({name:'테스트 녹음'.repeat(50)+'.bin',type:'audio/mp4',bytes:new Uint8Array([1,2,3])});}finally{HTMLAnchorElement.prototype.click=original;}
+  return name;
+ });
+ expect(Buffer.byteLength(name,'utf8')).toBeLessThanOrEqual(180);
+ expect(name.endsWith('.m4a')).toBe(true);expect(name).not.toContain('.bin');
+});
+test('MR download controls keep 44px targets and no overflow on narrow phones',async({page})=>{
+ await privateDownloads(page);
+ for(const width of [320,390,430]){
+  await page.setViewportSize({width,height:844});
+  const geometry=await page.locator('[data-mr="mr-download"] .vz-mr-row-head').evaluate(el=>({
+   overflow:document.documentElement.scrollWidth>innerWidth,
+   buttons:[...el.querySelectorAll('button')].map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height}))
+  }));
+  expect(geometry.overflow).toBe(false);
+  for(const button of geometry.buttons){expect(button.width).toBeGreaterThanOrEqual(44);expect(button.height).toBeGreaterThanOrEqual(44);}
+ }
+ if(process.env.VZIP_DOWNLOAD_EVIDENCE){
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:path.join(process.env.VZIP_DOWNLOAD_EVIDENCE,'mr-download.png'),fullPage:true});
+ }
+});
+test('Unavailable recording download keeps the app and data, and does not download an error page',async({page})=>{
+ await privateDownloads(page,{tracks:false});const before=await data(page),downloads=[];page.on('download',d=>downloads.push(d));
+ await page.route(downloadHost+'/**',r=>r.fulfill({status:404,headers:{'access-control-allow-origin':'*'},body:'fake missing file'}));
+ const error=await page.evaluate(()=>VZ.media.download({id:'test-missing',name:'테스트 녹음',cloud:true,type:'audio/wav'}).then(()=>null,e=>e.message));
+ expect(error).toContain('404');expect(downloads).toHaveLength(0);expect(await data(page)).toEqual(before);
+ expect(new URL(page.url()).hash).toBe('#/song/s1');
+});
+test('Recording download refuses a different account before reading its bytes',async({page})=>{
+ await privateDownloads(page,{tracks:false});
+ const error=await page.evaluate(()=>VZ.media.download({id:'foreign',accountOwner:'different-owner',name:'테스트 녹음',type:'audio/wav',bytes:new Uint8Array([1,2,3])}).then(()=>null,e=>e.message));
+ expect(error).toContain('계정');expect(await page.evaluate(()=>window.__downloadSigns)).toEqual([]);
+});
+test('Local recording downloads unchanged bytes with one m4a suffix',async({page})=>{
+ await boot(page,{media:false});const before=await data(page);
+ const [download]=await Promise.all([page.waitForEvent('download'),page.evaluate(()=>VZ.media.download({id:'test-local',name:'테스트 녹음.bin.m4a',type:'audio/mp4',bytes:new Uint8Array([11,22,33,44])}))]);
+ expect(download.suggestedFilename()).toMatch(/^(테스트 녹음\.m4a|download)$/);
+ expect(fs.readFileSync(await download.path())).toEqual(Buffer.from([11,22,33,44]));
+ expect(await data(page)).toEqual(before);
+});
+test('Recording download stops if account changes while audio bytes are arriving',async({page})=>{
+ await privateDownloads(page,{tracks:false});let release,started;const gate=new Promise(r=>release=r),ready=new Promise(r=>started=r);
+ const downloads=[];page.on('download',d=>downloads.push(d));
+ await page.route(downloadHost+'/**',async route=>{started();await gate;await route.fulfill({contentType:'audio/wav',headers:{'access-control-allow-origin':'*'},body:wav(1)});});
+ await page.evaluate(()=>{window.__downloadJob=VZ.media.download({id:'test-inflight',name:'테스트 녹음',cloud:true,storageProvider:'r2',type:'audio/wav',r2Key:'u/test-owner/test-inflight/original.wav'}).then(()=>null,e=>e.message);});
+ await ready;await page.evaluate(()=>window.__downloadOwner='another-owner');release();
+ expect(await page.evaluate(()=>window.__downloadJob)).toContain('계정');expect(downloads).toHaveLength(0);
+});
