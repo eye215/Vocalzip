@@ -457,13 +457,15 @@ test('a drifting quiet MR reaches the screen, invalidates older MR caches and ex
  for(const take of diagnosis.takes){expect(take.mrRemoval).toMatchObject({method:'local',coverage:expect.any(Number),localWindows:expect.any(Number),phasePeak:expect.any(Number)});expect(take.mrRemoval.coverage).toBeGreaterThan(.9);}
  expect((await kept(page)).every(x=>x.mrSig.startsWith('cancel-v4|'))).toBe(true);
  await expect(page.locator('[data-vp-mr-note]').first()).not.toContainText('dB');
+ if(process.env.VZ_MR_ALIGNMENT_SHOTS&&testInfo.project.name==='chromium-mobile'){
+  for(const width of[390,320]){await page.setViewportSize({width,height:844});await noOverflow(page);await page.screenshot({path:process.env.VZ_MR_ALIGNMENT_SHOTS+'/local-mr-'+width+'.png',fullPage:true});}
+ }
  const previous=(await kept(page)).find(x=>x.id==='m-a').at;
  await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-a');q.onsuccess=()=>s.put({...q.result,mrSig:q.result.mrSig.replace('cancel-v4|','cancel-v3|')});tx.oncomplete=()=>{o.result.close();resolve();};};});});
  await page.reload();await page.evaluate(()=>{VzipR2.enabled=()=>true;VzipR2.url=async key=>window.__mr[key];VZ.render();});
  await expect(page.locator('[data-vp-take="a"] [data-vp-pending]')).toHaveText('아직 재지 않았어요.');
  expect((await kept(page)).find(x=>x.id==='m-a')?.at??previous).toBe(previous);
  expect(page.__errors).toEqual([]);
- if(process.env.VZ_MR_ALIGNMENT_SHOTS&&testInfo.project.name==='chromium-mobile')await page.screenshot({path:process.env.VZ_MR_ALIGNMENT_SHOTS+'/local-mr-cache-invalidated.png',fullPage:true});
 });
 test('MR loading retries an expired URL once and then measures both original takes without changing saved analysis',async({page})=>{
  await page.route('**/__expired-mr*',r=>r.fulfill({status:403,body:'expired'}));
