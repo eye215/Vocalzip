@@ -72,3 +72,11 @@ Node v24.22.1, Cloud Linux, 16kHz 합성 harmonic source, PR1 분석만 1회씩.
 검증 자료: 동의된 참가자의 dry vowel/sustain/up-down siren/세 음량 과제를 동일 장비로3회 이상 수집, noise·반주·다른 마이크 control 포함. 가능 시 EGG와 전문가의 **음향 변화 구간 라벨**을 별도 보관하고 train/calibration/test 참가자를 분리한다. 실제 생리학적 확정 라벨로 가공하지 않는다. 공개 데이터는 라이선스·동의·과제 조건을 먼저 확인하고, 동의 없이 사용자 원음을 CI·GitHub에 올리지 않는다.
 
 모든 PR은 draft로 제출하며 검토 전 병합/운영 배포하지 않는다. 실제 iPhone Safari/PWA 검증은 수행하지 못했다.
+
+## 후속 공통 CI 회귀 보완
+
+초기 공통 UI CI가 완료된 뒤 PR4의 실패6개(새 training 진입 행 snapshot 차이), PR5의 실패15개(새 analysis 진입 행 snapshot 차이 + 보관함의 실제 report 행 수 증가)를 확인했다. 전용 모델 CI 성공을 공통 UI CI 성공으로 취급하지 않는다.
+
+PR5의 보관함 문제는 `.vl-report`만 보고 링크를 삽입하던 selector가 원인이었다. 진입 행은 명시적인 `[data-lab]` 안에만 추가하며, 분석 hub에서는 기존 ‘보관함과 다른 분석’ 목록에 넣는다. 저장된 report 목록·선택 녹음·기존 deep link는 그대로 유지한다. 새 진입 경로 테스트를 먼저 실패시킨 뒤 수정하여 통과했다. 기존 growth snapshot JSON은 재생성하지 않았다. 수치 수집에서 새 두 navigation 행만 제외하고, 그 행의 label·href·위치·이동은 별도 테스트로 검증한다.
+
+Chromium 단독: 정밀 report4 통과/결합 전용1 제외, 기존 수치·deep-link·저장 report 회귀5 통과. PR4는 저장 공간 부족 실패·원본 보존·재시도 테스트를 추가했다. Chromium/WebKit 전용 CI에 기존 growth와 archive 회귀를 함께 넣었다. WebKit 자동 검사 성공과 실제 iPhone Safari/PWA 인수는 별개다. 통합 검증 결과와 최신 CI 상태는 PR 본문을 확인한다.

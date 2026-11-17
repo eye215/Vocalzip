@@ -3,6 +3,19 @@ require('./legacy-session-mode.cjs')(test);
 const {boot,wav}=require('./helpers/r2-fixture.cjs');
 async function go(page){await boot(page);await page.evaluate(()=>VZ.nav('#/precision-report'));await expect(page.locator('[data-precision-report]')).toContainText('원본을 보존');}
 const combined=fs.existsSync(require('node:path').join(__dirname,'../app/precision-acoustics.js'));
+test('precision navigation stays in the analysis hub and lab, outside the saved report archive',async({page})=>{
+ await boot(page);
+ await page.evaluate(()=>{VZ.db.comparisonReports=[{id:'fixture-saved-report',kind:'vocal-lab',songId:'s1',song:'가짜 곡',mediaIds:['fixture-take'],created:Date.now()}];VZ.nav('#/lab-reports');});
+ await expect(page.locator('.vl-reports .vl-report')).toHaveCount(1);
+ await expect(page.locator('[data-precision-lab-entry]')).toHaveCount(0);
+ await page.evaluate(()=>VZ.nav('#/vocal-lab/s1'));
+ await expect(page.locator('[data-lab] [data-precision-lab-entry]')).toHaveCount(1);
+ await page.locator('[data-precision-lab-entry]').click();await expect(page.locator('[data-precision-report]')).toBeVisible();
+ await page.evaluate(()=>VZ.nav('#/vocal-analysis'));
+ const link=page.locator('[data-precision-report-entry]');await expect(link).toHaveCount(1);await expect(link).toHaveAttribute('href','#/precision-report');
+ expect(await link.evaluate(el=>!!el.parentElement.querySelector('[data-hub-reports]'))).toBe(true);
+ expect(page.__errors).toEqual([]);
+});
 test('empty report and independent module failure never invent results or change existing data',async({page})=>{
  await go(page);const before=await page.evaluate(()=>JSON.stringify(VZ.db));await expect(page.locator('[data-pr-result]')).toContainText('아직 측정 없음');
  await expect(page.locator('[data-pr-tab]')).toHaveCount(0);expect(await page.evaluate(()=>JSON.stringify(VZ.db))).toBe(before);expect(page.__errors).toEqual([]);
