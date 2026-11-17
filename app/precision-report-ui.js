@@ -61,7 +61,7 @@ async function mount(host,query){
   host.querySelector('[data-pr-export]')?.addEventListener('click',()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(r,null,2)],{type:'application/json'}));a.href=url;a.download='vocalzip-precision.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   host.querySelector('[data-pr-ai]')?.addEventListener('click',async event=>{
    const status=host.querySelector('[data-pr-ai-status]'),button=event.currentTarget;button.disabled=true;try{
-    if(window.VZIP_PRECISION_COACH_ENABLED!==true)throw Error('정밀 해석 서버가 아직 활성화되지 않았어요. 측정 결과는 계속 볼 수 있어요.');
+    if(window.VZIP_PRECISION_COACH_ENABLED===false)throw Error('이 기기에서 AI 해석이 꺼져 있어요. 측정 결과는 계속 볼 수 있어요.');
     const payload=R.evidence(r,previous);if(!payload.measurements.length)throw Error('해석할 유효한 측정값이 없어요.');
     const token=await window.vzipCloudAccessToken?.();if(!token)throw Error('로그인을 확인해 주세요.');
     status.textContent='측정값을 바탕으로 해석하고 있어요.';
