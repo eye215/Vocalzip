@@ -383,6 +383,8 @@ M.src = async item => {
   if (item.cloud) return {url:await window.vzipCloudMediaUrl(item), revoke:false};
   throw Error('이 기기와 클라우드 모두에서 원본을 찾지 못했어요.');
 };
+// A .bin label or generic server MIME is not an audio format. Only trust the explicit M4A brand.
+const downloadType=(bytes,fallback)=>bytes.length>=16&&new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(0)>=16&&String.fromCharCode(...bytes.subarray(4,12))==='ftypM4A '?'audio/mp4':fallback;
 M.download = async (item, {filename:originalName, guard:checkCurrent=()=>{}}={}) => {
   const identity=()=>[window.vzipCloudUserId?.()||'device',window.vzipCloudSessionId?.()||'',window.VzipAccountScope?.owner||''].join(':');
   const account=identity(),owner=window.VzipAccountScope?.owner||window.vzipCloudUserId?.()||'device';
@@ -391,15 +393,20 @@ M.download = async (item, {filename:originalName, guard:checkCurrent=()=>{}}={})
     checkCurrent();
   };
   guard();
-  const suffix = {'audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav','audio/x-wav':'wav','audio/flac':'flac','audio/aac':'aac','audio/ogg':'ogg','audio/webm':'webm','audio/x-caf':'caf','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'}[typeOf(item).split(';')[0]] || 'bin';
-  const safe=String(originalName||M.label(item)).replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g,'_').trim();
-  const ext=originalName&&safe.match(/\.[a-z0-9]{1,8}$/i)?.[0]||'.'+suffix;
-  const stem=(originalName&&safe.endsWith(ext)?safe.slice(0,-ext.length):safe.replace(/(?:\.(mov|mp4|m4v|wav|mp3|m4a|flac|aac|ogg|webm|caf|bin))+$/i,'')).trim()||'녹음';
-  // Keep one useful extension and leave room for UTF-8 filenames on mobile filesystems.
-  const encoder=new TextEncoder();let base='',length=encoder.encode(ext).length;
-  for(const char of stem){length+=encoder.encode(char).length;if(length>180)break;base+=char;}
-  const filename=base.trimEnd()+ext;
-  const {url, revoke} = await M.src(item);
+  const filenameFor=mime=>{
+    const suffix = {'audio/mp4':'m4a','audio/mpeg':'mp3','audio/wav':'wav','audio/x-wav':'wav','audio/flac':'flac','audio/aac':'aac','audio/ogg':'ogg','audio/webm':'webm','audio/x-caf':'caf','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'}[mime.split(';')[0]] || 'bin';
+    const safe=String(originalName||M.label(item)).replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g,'_').trim();
+    const ext=originalName&&safe.match(/\.[a-z0-9]{1,8}$/i)?.[0]||'.'+suffix;
+    const stem=(originalName&&safe.endsWith(ext)?safe.slice(0,-ext.length):safe.replace(/(?:\.(mov|mp4|m4v|wav|mp3|m4a|flac|aac|ogg|webm|caf|bin))+$/i,'')).trim()||'녹음';
+    // Keep one useful extension and leave room for UTF-8 filenames on mobile filesystems.
+    const encoder=new TextEncoder();let base='',length=encoder.encode(ext).length;
+    for(const char of stem){length+=encoder.encode(char).length;if(length>180)break;base+=char;}
+    return base.trimEnd()+ext;
+  };
+  let mime=typeOf(item);const localBlob=blobOf(item);
+  if(localBlob)mime=downloadType(new Uint8Array(await localBlob.slice(0,64).arrayBuffer()),mime);
+  guard();let filename=filenameFor(mime);
+  const {url, revoke} = await M.src(mime===typeOf(item)?item:{...item,type:mime});
   let href=url, local=revoke;
   try {
     guard();
@@ -408,12 +415,13 @@ M.download = async (item, {filename:originalName, guard:checkCurrent=()=>{}}={})
       // Both storage providers serve attachments. Never navigate to a bare playback URL.
       const signed=new URL(url,location.href);signed.searchParams.set('download',filename);href=signed.href;
       // WebKit can still hand a cross-origin audio attachment to its full-screen player.
-      // Use a same-origin binary download for normal-size files, including legacy rows without size metadata.
+      // Use a same-origin download with the actual audio MIME for normal-size files, including legacy rows without size metadata.
       // The shared reader bounds unknown lengths, stalled transfers and retries; large files retain native streaming.
       if((Number(item.savedSize||item.size)||0)<=200*1024*1024){
         try{
           const bytes=await window.VzipAudioFile.read({source:async()=>{guard();return {url:href,revoke:false};},maxBytes:200*1024*1024});
-          guard();href=URL.createObjectURL(new Blob([bytes],{type:'application/octet-stream'}));local=true;
+          guard();mime=downloadType(new Uint8Array(bytes,0,Math.min(64,bytes.byteLength)),mime);filename=filenameFor(mime);
+          href=URL.createObjectURL(new Blob([bytes],{type:mime}));local=true;
         }catch(error){if(error.diagnostic?.code!=='size')throw error;}
       }
     }
