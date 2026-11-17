@@ -341,3 +341,24 @@ test('Recording download stops if account changes while audio bytes are arriving
  await ready;await page.evaluate(()=>window.__downloadOwner='another-owner');release();
  expect(await page.evaluate(()=>window.__downloadJob)).toContain('계정');expect(downloads).toHaveLength(0);
 });
+function fakeM4aHeader(brand='M4A '){
+ const b=Buffer.alloc(64);b.writeUInt32BE(28,0);b.write('ftyp',4);b.write(brand,8);b.write('M4A isommp42',16);return b;
+}
+for(const source of ['local','cloud'])test('M4A bytes with missing format metadata download as m4a from '+source,async({page})=>{
+ const bytes=fakeM4aHeader();await privateDownloads(page,{tracks:false});const before=await data(page);
+ await page.route(downloadHost+'/**',r=>r.fulfill({contentType:'application/octet-stream',headers:{'access-control-allow-origin':'*'},body:bytes}));
+ await page.evaluate(()=>{const click=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){window.__savedAudioName=this.download;window.__savedAudioMime=fetch(this.href).then(r=>r.blob()).then(b=>b.type);return click.call(this);};});
+ const [download]=await Promise.all([page.waitForEvent('download'),page.evaluate(([source,bytes])=>VZ.media.download({id:'fake-unknown-m4a',name:'테스트 녹음.bin',type:'application/octet-stream',...(source==='local'?{bytes:new Uint8Array(bytes)}:{cloud:true,storageProvider:'r2',r2Key:'u/test-owner/fake-unknown-m4a/original.bin'})}),[source,[...bytes]])]);
+ expect(await page.evaluate(()=>window.__savedAudioName)).toBe('테스트 녹음.m4a');
+ expect(await page.evaluate(()=>window.__savedAudioMime)).toBe('audio/mp4');
+ expect(fs.readFileSync(await download.path())).toEqual(bytes);expect(await data(page)).toEqual(before);
+});
+test('Unknown bytes and a generic MP4 brand are not mislabeled as audio M4A',async({page})=>{
+ await boot(page,{media:false});
+ const names=await page.evaluate(async examples=>{
+  const names=[],original=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){names.push(this.download)};
+  try{for(const bytes of examples)await VZ.media.download({name:'테스트 파일.bin',type:'application/octet-stream',bytes:new Uint8Array(bytes)});}finally{HTMLAnchorElement.prototype.click=original;}
+  return names;
+ },[[1,2,3],[...fakeM4aHeader('isom')]]);
+ expect(names).toEqual(['테스트 파일.bin','테스트 파일.bin']);
+});
