@@ -67,8 +67,8 @@ whitelisted in diagnostics. Latest main's saved-analysis fallback remains separa
 - An independently injected synthetic voice isolates vocal alteration from residual MR:
   signal-to-error ratio approximately **19.4 dB**, projection level change **−0.05 dB**.
   This is a controlled fixture result, not proof of unchanged real voices.
-- Final Chromium mobile/desktop screen regression results are recorded in the PR after
-  the integrated run. Separate analysis/MR-result replacement cases: **4 passed**.
+- Final Chromium mobile/desktop screen regressions after the #452 merge: **73 passed,
+  5 conditional skips**. Separate analysis/MR-result replacement cases: **4 passed**.
 - Windows automated WebKit lacks the usable Web Audio context in this setup. Related
   baseline main checks fail too. The unavailable engine's remaining run was stopped;
   it is not reported as a passing WebKit suite. Bundled Chromium also cannot decode the
