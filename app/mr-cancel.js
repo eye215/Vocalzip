@@ -19,7 +19,8 @@ const RULES = {
   minScore:0.2,                    // correlation of the onset envelopes at a candidate lag
   candidates:12,                   // best distinct lags tried by actually subtracting (repeated choruses look alike)
   trySeconds:8,                    // excerpt used to compare candidates
-  minRemoved:3,                    // dB of level an excerpt must lose for the MR to count as found
+  minRemoved:3,                    // fallback level-drop gate when independent waveform alignment is not verified
+  verifiedWindows:4, verifiedPeak:0.2, verifiedError:4, // independent waveform matches; samples of fit error at 8 kHz
   fineWin:4096, fineSearch:0.05,   // GCC-PHAT windows (0.5 s) and ± search around the coarse lag (s)
   fineCount:7,
   win:512, hop:128,                // STFT 64 ms / 16 ms
@@ -97,7 +98,11 @@ function coarse(rec, mr) {
   let topScore = 0;
   for (const p0 of starts) {
     const a = ea.subarray(p0, p0 + piece), c = xcorr(a, b), cands = [];
-    for (let lag = -Math.floor(piece * 0.2); lag <= b.length - piece * 0.8; lag++) cands.push([lag, c(lag)]);
+    // Require ten seconds of actual overlap, including the envelope window's edges. The old
+    // 80%-of-piece bounds excluded the correct lag when playback started late in a short take.
+    const overlap = Math.min(piece, Math.floor((RULES.minOverlap * SR - RULES.envWin) / RULES.envHop) + 1);
+    if (b.length < overlap) continue;
+    for (let lag = overlap - piece; lag <= b.length - overlap; lag++) cands.push([lag, c(lag)]);
     cands.sort((x, y) => y[1] - x[1]);
     const scored = cands.slice(0, 120).map(([lag]) => ({lag, ...corrAt(a, b, lag)})).sort((x, y) => y.r - x.r), mine = [];
     topScore = Math.max(topScore, scored[0]?.r || 0);
@@ -138,7 +143,7 @@ function fine(rec, mr, coarseLag) {
     const start = Math.round(from + (to - from) * (k + 0.5) / RULES.fineCount);
     const est = pts.length >= 2 ? fit(pts).lag + (fit(pts).ratio - 1) * start : pts.length ? pts[0][1] : coarseLag;
     const g = gccLag(rec, mr, start, est, range);
-    if (g.peak > 0.05) pts.push([start, g.lag]);
+    if (g.peak > 0.05) pts.push([start, g.lag, g.peak]);
   }
   if (!pts.length) return {lag:coarseLag, ratio:1, points:0};
   // Drop windows off the line by > 10 ms (a window of silence or of solo voice); the line itself may slope (speed).
@@ -148,7 +153,9 @@ function fine(rec, mr, coarseLag) {
     if (kept.length < 2 || kept.length === good.length) break;
     good = kept; line = fit(good);
   }
-  return {...line, points:good.length};
+  return {...line, points:good.length,
+    phasePeak:good.reduce((s, p) => s + p[2], 0) / good.length,
+    errorSamples:Math.sqrt(good.reduce((s, [x,y]) => s + (line.lag + (line.ratio - 1) * x - y) ** 2, 0) / good.length)};
 }
 function fit(pts) {
   if (pts.length < 2) return {lag:pts[0][1], ratio:1};
@@ -177,7 +184,7 @@ function stft(x, frames, start = 0, reuse) {
   return {re, im};
 }
 /** Subtract the lined-up MR. Returns the voice estimate and how much MR was removed. */
-function subtract(rec, mrAligned, onProgress = () => {}) {
+function subtract(rec, mrAligned, onProgress = () => {}, {sharedTransfer = false} = {}) {
   const N = RULES.win, hop = RULES.hop, half = N / 2 + 1, frames = Math.ceil(Math.max(0, rec.length - N) / hop) + 1;
   const B = RULES.block;
   const out = new Float64Array(N), voice = new Float32Array(rec.length), mask = N - 1;
@@ -199,6 +206,19 @@ function subtract(rec, mrAligned, onProgress = () => {}) {
     }
     const value = {X, R, a, c, d, count}; pending.set(b, value); return value;
   }
+  // With a quieter MR, fitting a different gain in each short block can fit away the singer.
+  // Estimate one room response over the take instead. Reuse the same bounded spectra; neither
+  // this extra pass nor the subtraction allocates a whole-take spectrogram.
+  let shared = null;
+  if (sharedTransfer) {
+    shared = {a:new Float64Array(half), c:new Float64Array(half), d:new Float64Array(half)};
+    for (let b = 0; b < blocks; b++) {
+      const s = block(b);
+      for (let k = 0; k < half; k++) { shared.a[k] += s.a[k]; shared.c[k] += s.c[k]; shared.d[k] += s.d[k]; }
+      spare = {X:s.X, R:s.R}; pending.delete(b);
+      onProgress(0.25 * (b + 1) / blocks);
+    }
+  }
   for (let b = 0; b < blocks; b++) {
     const current = block(b), {X, R, count} = current;
     if (b + 1 < blocks) block(b + 1);
@@ -206,6 +226,7 @@ function subtract(rec, mrAligned, onProgress = () => {}) {
     for (let k = 0; k < half; k++) {
       let a = 0, c = 0, d = 0;
       for (let j = Math.max(0, b - 1); j <= Math.min(blocks - 1, b + 1); j++) { const wgt = j === b ? 2 : 1, s = pending.get(j); a += wgt * s.a[k]; c += wgt * s.c[k]; d += wgt * s.d[k]; }
+      if (shared) { a = shared.a[k]; c = shared.c[k]; d = shared.d[k]; }
       if (d > 1e-9) { hr[k] = a / d; hi[k] = c / d; }
     }
     for (let f = 0; f < count; f++) {
@@ -228,7 +249,7 @@ function subtract(rec, mrAligned, onProgress = () => {}) {
     spare = {X, R};
     current.X = current.R = null; // retain neighbouring statistics, recycle spectra for the next block
     pending.delete(b - 1);
-    onProgress((b + 1) / blocks);
+    onProgress((shared ? 0.25 : 0) + (shared ? 0.75 : 1) * (b + 1) / blocks);
   }
   for (let i = frames * hop; i < rec.length; i++) voice[i] = out[i & mask] / norm;
   return {voice, removedDb:after > 0 ? Math.round(10 * Math.log10(before / after) * 10) / 10 : null, mrShareDb:mrPow > 0 && after > 0 ? Math.round(10 * Math.log10(mrPow / after) * 10) / 10 : null};
@@ -240,7 +261,10 @@ function cancel(rec, mr, {onProgress = () => {}} = {}) {
   if (rec.length < SR * 3 || mr.length < SR * 3) return {ok:false, reason:'short'};
   const c = coarse(rec, mr);
   onProgress(0.05);
-  if (!c.ok) return {ok:false, reason:c.reason, score:round(c.score, 3)};
+  const alignment = (stage, f) => ({stage, score:round(f?.score ?? c.score, 3),
+    offsetSeconds:f ? round(f.lag / SR, 3) : null, speed:f ? round(f.ratio, 5) : null,
+    windows:f?.points || 0, phasePeak:round(f?.phasePeak, 3), errorSamples:round(f?.errorSamples, 3)});
+  if (!c.ok) return {ok:false, reason:c.reason, score:round(c.score, 3), alignment:alignment('coarse')};
   // Try each candidate on the same excerpt of the take; the true position removes the most level.
   const tries = [];
   for (const [index, cand] of c.candidates.entries()) {
@@ -251,13 +275,16 @@ function cancel(rec, mr, {onProgress = () => {}} = {}) {
     const len = Math.min(to - from, RULES.trySeconds * SR), start = from + Math.max(0, Math.floor((to - from - len) / 2));
     if (len < SR * 2) continue;
     const part = rec.subarray(start, start + len), heard = alignedMr(mr, len, f.lag + start * f.ratio, f.ratio);
-    tries.push({...f, score:cand.score, removed:subtract(part, heard).removedDb || 0});
+    const verified = f.points >= RULES.verifiedWindows && f.phasePeak >= RULES.verifiedPeak && f.errorSamples <= RULES.verifiedError;
+    tries.push({...f, verified, score:cand.score, removed:subtract(part, heard).removedDb || 0});
   }
-  tries.sort((x, y) => y.removed - x.removed);
+  // Prefer consistent waveform alignment to a loudness drop: a wrong repeated phrase can also
+  // lose energy in a fitted filter. A quieter but verified MR is not a different source file.
+  tries.sort((x, y) => Number(y.verified) - Number(x.verified) || (x.verified ? y.phasePeak - x.phasePeak : y.removed - x.removed));
   const best = tries[0];
-  if (!best || best.removed < RULES.minRemoved) return {ok:false, reason:'no-match', score:round(c.score, 3), removedDb:best ? round(best.removed, 1) : null};
-  const s = subtract(rec, alignedMr(mr, rec.length, best.lag, best.ratio), p => onProgress(0.5 + p * 0.5));
-  return {ok:true, voice:s.voice, report:{offsetSeconds:round(best.lag / SR, 3), speed:round(best.ratio, 5), score:round(best.score, 3), windows:best.points, tried:tries.length, removedDb:s.removedDb}};
+  if (!best || !best.verified && best.removed < RULES.minRemoved) return {ok:false, reason:'no-match', score:round(c.score, 3), removedDb:best ? round(best.removed, 1) : null, alignment:alignment(best ? 'validation' : 'fine', best)};
+  const s = subtract(rec, alignedMr(mr, rec.length, best.lag, best.ratio), p => onProgress(0.5 + p * 0.5), {sharedTransfer:best.removed < RULES.minRemoved});
+  return {ok:true, voice:s.voice, report:{offsetSeconds:round(best.lag / SR, 3), speed:round(best.ratio, 5), score:round(best.score, 3), windows:best.points, tried:tries.length, removedDb:s.removedDb, alignmentVerified:best.verified}};
 }
 const round = (x, d = 0) => Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : null;
 

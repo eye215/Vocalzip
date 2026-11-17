@@ -25,7 +25,7 @@
 const V = window.VZ, M = V?.media, P = window.VzipVoicePath;
 if (!V || !M || !P) return;
 const esc = V.esc, T = P.THRESHOLDS, L = window.VzipAudioFile;
-const WORKER = 'app/voice-path-worker.js?v=4';
+const WORKER = 'app/voice-path-worker.js?v=5';
 const MAX_BYTES = 250 * 1024 * 1024;     // the same limit as the app's analysis; a larger file is refused, never cut
 const BLOCK_SECONDS = 30;                // decoded sound handed to the worker at a time
 const CACHE_CAP = 60;                    // takes kept on the device
@@ -106,7 +106,7 @@ const modeOf = choice => choice === 'auto' || choice === 'none' ? choice : 'chos
  * cache key of the take's result, so it changes with that take's own choice only. */
 function mrPlan(s, id) {
   const files = mrFilesOf(s.song), choice = choiceOf(s, id), pick = choice === 'none' ? [] : choice !== 'auto' ? files.filter(t => String(t.id) === choice) : files.slice(0, MAX_MRS);
-  return {files, choice, pick, sig:pick.map(mrKey).join('|')};
+  return {files, choice, pick, sig:pick.length ? 'cancel-v3|' + pick.map(mrKey).join('|') : ''};
 }
 /** A remembered MR file that is gone from the song: back to 자동 (forgotten), said in that slot for the rest of this
  * session or until another MR is picked there. Only while the song's MR files can be read (without them nothing can be told). */
@@ -327,10 +327,10 @@ function takeCard(s, role, label, v) {
   const m = v.m, head = '<section class="vp-card vp-take" data-vp-take="' + role + '" data-vp-source="' + (v.source || 'none') + '"><div class="vp-take-head"><span class="vp-role">' + label + '</span><strong>' + esc(M.label(m)) + '</strong></div>';
   if (v.state !== 'ready') return head + '<p class="vp-meta">' + esc(day(m)) + '</p>' + (s.jobs?.[m.id] ? '<p class="vp-muted" data-vp-pending>재는 중이에요. 끝나는 대로 여기에 보여 드려요.</p>' : '<p class="vp-muted" data-vp-pending>아직 재지 않았어요.</p>') + '</section>';
   const r = v.result, failed = v.rec.tries.filter(t => !t.ok);
-  const mrNote = v.source === 'mr-removed' ? info('data-vp-mr-note', 'music-notes-minus', '<b>깨끗함: 곡 MR을 빼고 잰 소리</b> · 곡 MR(' + esc(v.track?.title || '곡 MR') + ')을 ' + esc(String(v.rec.removed.report.removedDb)) + ' dB 빼고 쟀어요.' +
+  const mrNote = v.source === 'mr-removed' ? info('data-vp-mr-note', 'music-notes-minus', '<b>반주 줄임: 곡 MR을 빼고 잰 소리</b> · 곡 MR(' + esc(v.track?.title || '곡 MR') + ')을 녹음에 맞춰 반주를 줄였어요.' +
       (v.mode === 'auto' && v.plan.pick.length > 1 ? ' 자동으로 가장 많이 빠지는 MR을 골랐어요.' : '') + ' 반주가 조금 남아 있을 수 있어요.')
     : v.mode === 'none' ? '<p class="vp-muted" data-vp-mr-none>MR을 빼지 않고 쟀어요.</p>'
-    : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + (failed.some(t=>t.reason==='load') ? '. 파일 연결을 확인한 뒤 다시 재기를 눌러 주세요.' : '. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요.') + ' 녹음 파일을 그대로 읽었어요.') : '';
+    : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + (failed.some(t=>t.reason==='load') ? '. 파일 연결을 확인한 뒤 다시 재기를 눌러 주세요.' : '. 같은 MR이어도 시작점이나 녹음된 소리가 달라 정렬이 실패할 수 있어요.') + ' 녹음 파일을 그대로 읽었어요.') : '';
   const state = !v.ok.ok ? info('data-vp-refused', 'prohibit', v.ok.why === 'no-voice' ? '이 녹음에서 목소리를 찾지 못했어요. 반주만 있거나 목소리가 작게 녹음됐을 수 있어요.' : esc(P.REFUSED_NOTE))
     : v.source === 'mixed' ? info('data-vp-unclean', 'info', esc(P.UNCLEAN_NOTE) + '. 끊김·뒤집힘에도 반주를 잘못 읽은 곳이 섞일 수 있어요.') : '';
   return head + '<p class="vp-meta">' + esc([day(m), v.ok.ok ? '목소리 ' + Math.round(r.voicedSeconds) + '초' : '', '녹음 ' + clock(v.rec.seconds) + ' 전체를 쟀어요'].filter(Boolean).join(' · ')) + '</p>' + mrNote + state + storedNote(v) +

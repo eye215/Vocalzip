@@ -547,7 +547,7 @@ if (typeof window === 'undefined' && typeof self === 'object' && typeof importSc
     try {
       const {samples, sampleRate, voiceOnly, mrs} = e.data, onProgress = p => self.postMessage({progress:p});
       if (Array.isArray(mrs)) {
-        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=2');
+        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=3');
         const out = analyzeWithoutMr(samples, sampleRate, mrs, {onProgress});
         self.postMessage({result:out.result, reasons:out.reasons}, out.result?.voice ? [out.result.voice.buffer] : []);
         return;
