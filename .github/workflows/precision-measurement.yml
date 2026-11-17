@@ -1,16 +1,20 @@
 name: Precision measurement
 on:
   pull_request:
-    paths: ['app/precision-session*', 'tests/precision-session*', '.github/workflows/precision-measurement.yml']
+    paths: ['app/precision-session*', 'tests/precision-session*', 'tests/growth-characterization.spec.cjs', '.github/workflows/precision-measurement.yml']
   workflow_dispatch:
 jobs:
   measurement:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: npm}
       - run: npm ci
       - run: node --test tests/precision-session.test.cjs
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test tests/precision-session.spec.cjs --project=chromium-mobile --workers=1
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npx playwright test tests/precision-session.spec.cjs tests/growth-characterization.spec.cjs --project=${{ matrix.browser }}-mobile --workers=1

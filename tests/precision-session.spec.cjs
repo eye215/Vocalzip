@@ -37,3 +37,21 @@ test('pagehide stops and preserves a partial synthetic take without completing o
  await expect(page.locator('[data-precision-error]')).toContainText('화면을 벗어나기 전까지');expect(await page.evaluate(()=>__partial.length)).toBe(1);
  await expect(page.locator('[data-precision-session]')).toContainText('0 / 20');expect(await page.evaluate(()=>JSON.stringify(VZ.db))).toBe(before);expect(page.__errors).toEqual([]);
 });
+test('quota failure while saving analysis progress releases controls and preserves the saved take for retry',async({page})=>{
+ await start(page);
+ await page.evaluate(()=>{
+  window.__quotaSaves=[];window.__analysisCalls=0;window.__quota=false;
+  const set=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(window.__quota&&String(k).includes('vzip_precision_session:'))throw new DOMException('fixture quota','QuotaExceededError');return set.call(this,k,v);};
+  VZ.media.capture=async()=>({start(){},cancel(){},stop:async()=>({blob:new Blob(['synthetic fixture'],{type:'audio/wav'}),durationSeconds:2,type:'audio/wav'})});
+  VZ.media.saveBlob=async item=>{__quotaSaves.push(item);return item;};VZ.media.list=async()=>__quotaSaves;
+  VZ.precisionAnalyze=async()=>{__analysisCalls++;throw Error('fixture analysis not ready');};
+ });
+ await page.getByRole('button',{name:'녹음 시작',exact:true}).click();await page.getByRole('button',{name:'여기까지 녹음하고 보관'}).click();
+ await expect(page.locator('[data-precision-error]')).toContainText('분석하지 못했어요');
+ await page.evaluate(()=>{__quota=true;});await page.getByRole('button',{name:'보관된 녹음 분석'}).click();
+ await expect(page.locator('[data-precision-error]')).toContainText('저장 공간');
+ await expect(page.getByRole('button',{name:'보관된 녹음 분석'})).toBeEnabled();expect(await page.evaluate(()=>__quotaSaves.length)).toBe(1);
+ await page.evaluate(()=>{__quota=false;VZ.precisionAnalyze=async()=>({metrics:{f0:{value:220}},quality:{state:'high'}});});
+ await page.getByRole('button',{name:'보관된 녹음 분석'}).click();await expect(page.locator('[data-precision-error]')).toContainText('과제 분석을 보관');
+ expect(await page.evaluate(()=>__quotaSaves.length)).toBe(1);expect(page.__errors).toEqual([]);
+});
