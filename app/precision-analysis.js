@@ -23,8 +23,13 @@ V.precisionAnalyze=async(item,{context={},signal,onProgress=()=>{},start=0,end=n
  if(item.durationSeconds>60&&end==null)throw Error('긴 녹음은 시작과 끝을 지정해 60초 이내 구간을 골라 주세요.');
  const current=owner(),controller=new AbortController(),relay=()=>controller.abort(),timeout=setTimeout(()=>controller.abort(),90000);signal?.addEventListener('abort',relay,{once:true});running=true;
  try{
-  const race=promise=>Promise.race([promise,new Promise((_,reject)=>{if(controller.signal.aborted)reject(abortError());else controller.signal.addEventListener('abort',()=>reject(abortError()),{once:true});})]);
-  let bytes=await race(read(item,controller.signal));const revision='sha256:'+await digest(bytes);if(owner()!==current)throw abortError();
+  // Finished reads must release their abort closures so full bytes/decoded audio are not retained through the worker.
+  const race=promise=>new Promise((resolve,reject)=>{
+   const signal=controller.signal,release=()=>signal.removeEventListener('abort',abort),abort=()=>{release();reject(abortError());};
+   if(signal.aborted){reject(abortError());return;}signal.addEventListener('abort',abort,{once:true});
+   Promise.resolve(promise).then(value=>{release();resolve(value);},error=>{release();reject(error);});
+  });
+  let bytes=await race(read(item,controller.signal));const revision='sha256:'+await digest(bytes);if(controller.signal.aborted||owner()!==current)throw abortError();
   const C=window.OfflineAudioContext||window.webkitOfflineAudioContext;if(!C)throw Error('이 브라우저에서 오디오 분석을 지원하지 않아요.');
   // Decode at 16 kHz for spectral analysis, unlike the 8 kHz pitch-only path. Original bytes remain unmodified.
   const ctx=new C(1,1,16000);let audio=await race(ctx.decodeAudioData(bytes.slice(0)));bytes=null;const actualEnd=end??audio.duration;
