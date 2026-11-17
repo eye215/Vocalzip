@@ -276,10 +276,12 @@ test('diagnosis preserves measured input dimensions and runtime revisions withou
   const result = P.analyze(tone(blank(3), .3, 2.4, 60), SR);
   const input = {bytes:123456, sampleRate:16000, channels:2, frames:48000, seconds:3, name:'SECRET', url:'SECRET', samples:[1,2]};
   const take = {role:'base', result, clean:{clean:true, why:'user-said-voice-only'}, measurable:{ok:true}, source:'clean',
-    input, runtime:{pageRevision:8, workerRevision:8, mrModuleRevision:5, url:'SECRET'}, mrTries:[{ok:false, reason:'no-match', input}]};
+    input, runtime:{pageRevision:8, workerRevision:8, mrModuleRevision:5, url:'SECRET'}, mrTries:[{ok:false, reason:'no-match', input,
+      search:{candidates:12,repeatVotes:7,anchorMatches:2,bestLocalFraction:.9,bestCoverage:.95,url:'SECRET'}}]};
   const d = P.diagnosis([take]).takes[0];
   const expected = {bytes:123456, sampleRate:16000, channels:2, frames:48000, seconds:3};
   assert.deepEqual(d.input, expected); assert.deepEqual(d.mrTries[0].input, expected);
+  assert.deepEqual(d.mrTries[0].search,{candidates:12,repeatVotes:7,anchorMatches:2,bestLocalFraction:.9,bestCoverage:.95});
   assert.deepEqual(d.runtime, {pageRevision:8, workerRevision:8, mrModuleRevision:5});
   assert.ok(!JSON.stringify(d).includes('SECRET')); assert.ok(!JSON.stringify(d).includes('samples'));
   const old = P.diagnosis([{...take, input:undefined, runtime:undefined, mrTries:[{ok:false}]}]).takes[0];

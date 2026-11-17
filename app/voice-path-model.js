@@ -742,6 +742,7 @@ function diagnosis(takes, {generatedMonth = null, fileLoads = []} = {}) {
   const positive = v => n(v) !== null && v > 0 ? v : null;
   const integer = v => Number.isSafeInteger(v) && v >= 0 ? v : null;
   const input = d => d ? {bytes:integer(d.bytes), sampleRate:positive(d.sampleRate), channels:integer(d.channels), frames:integer(d.frames), seconds:positive(d.seconds)} : null;
+  const search = d => ({candidates:integer(d.candidates),repeatVotes:integer(d.repeatVotes),anchorMatches:integer(d.anchorMatches),bestLocalFraction:n(d.bestLocalFraction),bestCoverage:n(d.bestCoverage)});
   const load = d => ({code:['network','http','resolve-timeout','idle-timeout','total-timeout','size','processing-timeout','recovered'].includes(d.code)?d.code:'unknown',
     stage:['source','headers','body','decode','mr-mono'].includes(d.stage)?d.stage:'unknown',
     attempt:d.attempt===1||d.attempt===2?d.attempt:null,status:Number.isInteger(d.status)&&d.status>=100&&d.status<=599?d.status:null,bytes:n(d.bytes)});
@@ -756,7 +757,7 @@ function diagnosis(takes, {generatedMonth = null, fileLoads = []} = {}) {
       mrMode:['auto', 'chosen', 'none'].includes(t.mrMode) ? t.mrMode : null,
       mrRemoval:t.mr ? {removedDb:n(t.mr.removedDb), offsetSeconds:n(t.mr.offsetSeconds), speed:n(t.mr.speed), score:n(t.mr.score),
         ...(t.mr.method === 'local' ? {method:'local',coverage:n(t.mr.coverage),localWindows:n(t.mr.localWindows),phasePeak:n(t.mr.phasePeak)} : {})} : null,
-      mrTries:(t.mrTries || []).map(x => ({ok:!!x.ok, reason:x.ok ? null : String(x.reason || ''), removedDb:n(x.removedDb),...(x.input?{input:input(x.input)}:{}),...(x.loadFailure?{loadFailure:load(x.loadFailure)}:{}),...(x.alignment?{alignment:alignment(x.alignment)}:{})})),
+      mrTries:(t.mrTries || []).map(x => ({ok:!!x.ok, reason:x.ok ? null : String(x.reason || ''), removedDb:n(x.removedDb),...(x.input?{input:input(x.input)}:{}),...(x.loadFailure?{loadFailure:load(x.loadFailure)}:{}),...(x.alignment?{alignment:alignment(x.alignment)}:{}),...(x.search?{search:search(x.search)}:{})})),
       asRecorded:t.mixed ? {voicedSeconds:t.mixed.voicedSeconds, confidence:t.mixed.confidence, breaksPerMin:t.mixed.transitions.breaksPerMin, flipsPerMin:t.mixed.transitions.flipsPerMin} : null,
       stagesMs:t.stagesMs ? Object.fromEntries(Object.entries(t.stagesMs).map(([k, v]) => [k, n(v)])) : null, fromDeviceCache:!!t.fromDeviceCache,
       modelVersion:r.version, durationSeconds:r.seconds, voicedSeconds:r.voicedSeconds, confidence:r.confidence, range:r.range,

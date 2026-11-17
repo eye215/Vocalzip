@@ -19,6 +19,8 @@ const RULES = {
   minOverlap:10,                   // seconds of the take that must lie inside the MR
   minScore:0.2,                    // correlation of the onset envelopes at a candidate lag
   candidates:12,                   // best distinct lags tried by actually subtracting (repeated choruses look alike)
+  onsetGridWindows:64,              // bounded full-take rescue after both ordinary searches fail
+  onsetGridMinMatch:0.85,            // direct valid local windows, not interpolated coverage
   trySeconds:8,                    // excerpt used to compare candidates
   minRemoved:3,                    // use one shared response for a quiet, globally verified MR
   verifiedWindows:4, verifiedPeak:0.2, verifiedError:4, // independent waveform matches; samples of fit error at 8 kHz
@@ -98,11 +100,13 @@ function xcorr(a, b) {
 /** Where the take (rec) may sit in the MR: candidate lags (samples) such that rec sample n ↔ MR sample n + lag.
  * Pieces of the take (≈15 s: start, middle, end) are matched on their own, so a speed difference that builds up over
  * a long take does not blur the match; each piece keeps its few best distinct lags. */
-function coarse(rec, mr) {
+function coarse(rec, mr, {dense = false, onProgress = () => {}} = {}) {
   const ea = blur(envelope(rec)), b = blur(envelope(mr)), piece = Math.min(ea.length, 1500), picked = [];
-  const starts = [...new Set([0, Math.floor((ea.length - piece) / 2), ea.length - piece].map(x => Math.max(0, x)))];
+  const regular = [0, Math.floor((ea.length - piece) / 2), ea.length - piece].map(x => Math.max(0, x));
+  const span = Math.max(0,ea.length-piece), step = Math.max(500,Math.ceil(span/(RULES.onsetGridWindows-1)/500)*500);
+  const starts = [...new Set([...regular,...(dense?Array.from({length:Math.floor(span/step)+1},(_,i)=>i*step):[])])];
   let topScore = 0;
-  for (const p0 of starts) {
+  for (const [index,p0] of starts.entries()) {
     const a = ea.subarray(p0, p0 + piece), c = xcorr(a, b), cands = [];
     // Require ten seconds of actual overlap, including the envelope window's edges. The old
     // 80%-of-piece bounds excluded the correct lag when playback started late in a short take.
@@ -113,10 +117,20 @@ function coarse(rec, mr) {
     const scored = cands.slice(0, 120).map(([lag]) => ({lag, ...corrAt(a, b, lag)})).sort((x, y) => y.r - x.r), mine = [];
     topScore = Math.max(topScore, scored[0]?.r || 0);
     for (const s of scored) { if (s.r < RULES.minScore) break; if (mine.every(m => Math.abs(m.lag - s.lag) > 50)) mine.push(s); if (mine.length >= RULES.candidates / 2) break; }
-    for (const m of mine) { const lag = (m.lag - p0) * RULES.envHop; if (picked.every(q => Math.abs(q.lag - lag) > 0.3 * SR)) picked.push({lag, score:m.r}); }
+    for (const m of mine) {
+      const lag = (m.lag - p0) * RULES.envHop, prior = picked.find(q => Math.abs(q.lag-lag)<=.3*SR);
+      if(!prior)picked.push({lag,score:m.r,...(dense?{votes:1,lastWindow:index}:{})});
+      else if(dense){
+        if(prior.lastWindow!==index){prior.votes++;prior.lastWindow=index;}
+        if(m.r>prior.score){prior.lag=lag;prior.score=m.r;}
+      }
+    }
+    onProgress((index+1)/starts.length);
   }
-  picked.sort((x, y) => y.score - x.score);
-  return {ok:picked.length > 0, reason:picked.length ? '' : 'no-match', score:topScore, candidates:picked.slice(0, RULES.candidates)};
+  picked.sort((x, y) => (dense?y.votes-x.votes:0) || y.score-x.score);
+  onProgress(1);
+  return {ok:picked.length > 0, reason:picked.length ? '' : 'no-match', score:topScore,
+    candidates:picked.slice(0,RULES.candidates).map(({lastWindow,...candidate})=>candidate)};
 }
 
 /** Independent start-position proposals, not acceptance evidence. Search the entire MR
@@ -282,7 +296,7 @@ function smoothTrack(points) {
     return [point[0],point[1] + a[0][3],point[2],a[1][3] / SR];
   });
 }
-function localTrack(rec, mr, line, onProgress = () => {}) {
+function localTrack(rec, mr, line, onProgress = () => {}, stats = null) {
   const N = RULES.fineWin, read = lagReader(N), points = [];
   const from = Math.max(0, Math.ceil(-line.lag / line.ratio)), to = Math.min(rec.length, Math.floor((mr.length - line.lag) / line.ratio)) - N;
   for (let start = from; start <= to; start += RULES.localStep) {
@@ -294,6 +308,8 @@ function localTrack(rec, mr, line, onProgress = () => {}) {
     const radius = Math.min(3,i,points.length - 1 - i);
     return peak >= RULES.localPeak && Math.abs(y - median(points.slice(i - radius,i + radius + 1).map(p => p[1]))) <= RULES.localOutlier;
   });
+  const matchedFraction=points.length?selected.length/points.length:0;
+  if(stats)stats.bestLocalFraction=Math.max(stats.bestLocalFraction||0,matchedFraction);
   if (selected.length < RULES.anchorWindows) return null;
   // A low-confidence gap must not be bridged with an arbitrary delay. Large jumps also split
   // the trusted stretches; no reference is subtracted in their unsupported middle.
@@ -317,13 +333,14 @@ function localTrack(rec, mr, line, onProgress = () => {}) {
     if (weight > 0 && i >= 0 && i + 1 < mr.length) { heard[n] = (mr[i]*(1-f) + mr[i+1]*f) * weight; covered++; }
   }
   const coverage = covered / rec.length;
+  if(stats)stats.bestCoverage=Math.max(stats.bestCoverage||0,coverage);
   if (coverage < RULES.localCoverage) return null;
-  return {heard, coverage, points:good.length, blend(voice) {
+  return {heard, coverage, matchedFraction, points:good.length, blend(voice) {
     index = 0;
     for (let n = 0; n < rec.length; n++) { const {weight} = at(n); voice[n] = rec[n] + weight * (voice[n] - rec[n]); }
   }};
 }
-function cancelLocally(rec, mr, candidates, onProgress) {
+function cancelLocally(rec, mr, candidates, onProgress, {minMatchFraction=0,stats=null}={}) {
   const seen = new Set(), lines = findAnchors(rec,mr,candidates,p => onProgress(0.5 + 0.15*p)).filter(line => {
     // Identical integer search windows produce identical local tracks. Do not reprocess
     // the same match proposed independently by the onset and waveform searches.
@@ -332,14 +349,15 @@ function cancelLocally(rec, mr, candidates, onProgress) {
     for(let start=from;start<=to;start+=RULES.localStep)key+=','+Math.round(line.lag+(line.ratio-1)*(start+RULES.fineWin/2));
     if(seen.has(key))return false;seen.add(key);return true;
   });
+  if(stats)stats.anchorMatches=lines.length;
   let before = 0, best = null, bestReduction = -Infinity;
   for (let n = 0; n < rec.length; n++) before += rec[n] ** 2;
   onProgress(0.65);
   for(const [index,line] of lines.entries()){
     const begin=.65+.35*index/lines.length, finish=.65+.35*(index+1)/lines.length;
     const progress = p => onProgress(Math.min(finish,begin+(finish-begin)*p));
-    const track = localTrack(rec,mr,line,p => progress(.4*p));
-    if(!track){onProgress(finish);continue;}
+    const track = localTrack(rec,mr,line,p => progress(.4*p),stats);
+    if(!track || track.matchedFraction<minMatchFraction){onProgress(finish);continue;}
     const result = subtract(rec,track.heard,p => progress(.4+.6*p),{transferRadius:RULES.transferRadius,excludeCurrent:true,residual:0});
     track.blend(result.voice);
     let after = 0;for(let n=0;n<rec.length;n++)after+=result.voice[n]**2;
@@ -494,13 +512,22 @@ function cancel(rec, mr, {onProgress = () => {}} = {}) {
   // Prefer consistent waveform alignment to a loudness drop: a wrong repeated phrase can also
   // lose energy in a fitted filter. A quieter but verified MR is not a different source file.
   tries.sort((x, y) => Number(y.verified) - Number(x.verified) || (x.verified ? y.phasePeak - x.phasePeak : y.removed - x.removed));
-  const best = tries[0];
+  const best=tries[0];
   if (!best || !best.verified) {
-    const local = cancelLocally(rec,mr,[...c.candidates,...extra],onProgress);
-    if (local) return local;
-    return {ok:false, reason:'no-match', score:round(c.score, 3), removedDb:best ? round(best.removed, 1) : null, alignment:alignment(best ? 'validation' : c.ok ? 'fine' : 'coarse', best)};
+    const local = cancelLocally(rec,mr,[...c.candidates,...extra],p=>onProgress(.5+(p-.5)*.5));
+    if (local) {onProgress(1);return local;}
+    // A three-window onset miss and a five-anchor waveform miss are not evidence
+    // that the MR differs. Repeated agreement elsewhere can still locate it.
+    onProgress(.75);
+    const grid=coarse(rec,mr,{dense:true,onProgress:p=>onProgress(.75+.1*p)});
+    const stats={candidates:grid.candidates.length,repeatVotes:grid.candidates[0]?.votes||0};
+    const rescued=cancelLocally(rec,mr,grid.candidates,p=>onProgress(.85+(p-.5)*.3),{minMatchFraction:RULES.onsetGridMinMatch,stats});
+    onProgress(1);
+    if(rescued){rescued.report.tried+=c.candidates.length+extra.length;rescued.report.search='onset-grid';return rescued;}
+    return {ok:false, reason:'no-match', score:round(c.score, 3), removedDb:best ? round(best.removed, 1) : null,
+      alignment:alignment(best ? 'validation' : c.ok ? 'fine' : 'coarse', best),search:stats};
   }
-  const s = subtract(rec, alignedMr(mr, rec.length, best.lag, best.ratio), p => onProgress(0.5 + p * 0.5), {sharedTransfer:best.removed < RULES.minRemoved});
+  const s = subtract(rec, alignedMr(mr, rec.length, best.lag, best.ratio), p => onProgress(.5+p*.5), {sharedTransfer:best.removed < RULES.minRemoved});
   return {ok:true, voice:s.voice, report:{offsetSeconds:round(best.lag / SR, 3), speed:round(best.ratio, 5), score:round(best.score, 3), windows:best.points, tried:tries.length, removedDb:s.removedDb, alignmentVerified:best.verified,...(best.search ? {search:best.search} : {})}};
 }
 const round = (x, d = 0) => Number.isFinite(x) ? Math.round(x * 10 ** d) / 10 ** d : null;
