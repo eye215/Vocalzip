@@ -52,6 +52,7 @@ function summaryCard(report){
   '<p class="growth-period-label">'+(report.firstDate?'기록 기간 '+longDate(report.firstDate)+' ~ '+longDate(report.lastDate):'아직 날짜가 있는 곡 녹음이 없어요.')+'</p>'+
   '<div class="growth-coverage"><span>수치가 있는 녹음 <strong>'+report.analysisCount+' / '+report.recordings+'</strong></span>'+
   '<div class="growth-coverage-track" role="progressbar" aria-label="분석된 녹음 비율" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+(report.recordings?Math.round(report.analysisCount/report.recordings*100):0)+'"><i style="width:'+(report.recordings?Math.round(report.analysisCount/report.recordings*100):0)+'%"></i></div></div>'+
+  (methodLine(report.methods)?'<p class="growth-method-line" data-growth-methods>측정 방식 · '+esc(methodLine(report.methods))+' <small>(AI 분리 후는 참고 표시가 붙어요)</small></p>':'')+
   '<div class="growth-highlights"><div class="growth-highlight" data-growth-strength="'+(strength?.id||'none')+'"><span>좋아진 방향</span><strong>'+esc(strength?.title||'비교 기록 필요')+'</strong><small>'+(strength?'동일 곡 '+strength.pairedSongs+'곡의 첫·최근 비교':'동일 곡을 다른 날 녹음하면 확인 가능')+'</small></div>'+
   '<div class="growth-highlight" data-growth-watch="'+(watch?watch.id:songs?'song':'none')+'"><span>'+second[0]+'</span><strong>'+esc(second[1])+'</strong><small>'+esc(second[2])+'</small></div></div></section>';
 }
@@ -103,8 +104,11 @@ function metricCard(m,{scope='overall',tag='article',cls='growth-stat'}={}){
  return '<'+tag+' class="'+cls+' growth-stat-v2" data-growth-metric="'+m.id+'"><div class="growth-stat-top"><span>'+esc(m.title)+help+'</span><span class="growth-state '+tone+'">'+esc(label)+'</span></div>'+
   '<strong class="growth-stat-number">'+esc(number)+'</strong><p class="growth-stat-sub">'+esc(sub)+'</p>'+compare+holdLine+
   (m.id==='passaggio'?'<p class="growth-ref-note"><i class="ph ph-chalkboard-teacher" aria-hidden="true"></i>'+esc(G.PASSAGGIO_NOTE)+'</p>':'')+
-  '<details class="growth-measure-help"><summary>분석 방법·곡별 근거</summary><p>'+esc(m.method)+'</p>'+songRows(m)+'</details></'+tag+'>';
+  '<details class="growth-measure-help"><summary>분석 방법·곡별 근거</summary><p>'+esc(m.method)+'</p>'+(methodLine(m.methods)?'<p class="growth-method-line" data-growth-methods>측정 방식 · '+esc(methodLine(m.methods))+'</p>':'')+songRows(m)+'</details></'+tag+'>';
 }
+/** 측정 방식 한 줄: "녹음 그대로 12 · MR 빼고 1 · AI 분리 후 5". '' when every take was measured as recorded. */
+const METHOD_LABEL={asRecorded:'녹음 그대로',mrRemoved:'MR 빼고',aiSeparated:'AI 분리 후'};
+const methodLine=c=>!c||(!c.mrRemoved&&!c.aiSeparated)?'':Object.keys(METHOD_LABEL).filter(k=>c[k]).map(k=>METHOD_LABEL[k]+' '+c[k]).join(' · ');
 const nextMonth=key=>{const [y,m]=key.split('-').map(Number);return (m===12?y+1:y)+'-'+String(m===12?1:m+1).padStart(2,'0');};
 /** 월별 측정 흐름: a line through the months that have a value. A month without one is a gap — the line stops and
  * starts again, nothing is drawn across it. A month made from one song only is a hollow point. Same numbers as the

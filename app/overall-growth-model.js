@@ -21,6 +21,9 @@ function dateOf(m,getDate){
 }
 /** items: song recordings. getDate(m) → 'YYYY-MM-DD'; valid(m) → analysis is reliable enough to compare;
  * reference(songId) → confirmed song.vocalRange or null; title(songId) → song title. */
+/** 측정 방식: how a saved analysis was measured — as recorded, with the song's MR removed, or after AI separation. */
+const methodOf=a=>a?.confidence?.aiSeparated?'aiSeparated':a?.confidence?.mrRemoved?'mrRemoved':'asRecorded';
+const methodCounts=list=>{const out={asRecorded:0,mrRemoved:0,aiSeparated:0};for(const m of list)out[methodOf(m.analysis)]++;return out;};
 function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
  if(typeof getDate!=='function'||typeof valid!=='function')throw Error('녹음 날짜와 분석 신뢰도 함수가 필요해요.');
  const recordings=items.filter(m=>m?.songId&&dateOf(m,getDate));
@@ -53,7 +56,9 @@ function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
   }
   // 파사지오: what recurs over every counted take (the latest 40), next to the per-song lines. Reference only.
   if(agg.reference)agg={...agg,recurring:G.passaggioRecurring([...perSong.values()].flat())};
-  return {...agg,current:agg.latestValue,currentSongs:agg.measured,pairedSongs:agg.compared,
+  // Which measurement methods the counted takes of this measure came from (shown under 분석 방법·곡별 근거).
+  const methods=agg.reference?null:methodCounts(eligible.filter(m=>value(m,agg.id)!=null));
+  return {...agg,methods,current:agg.latestValue,currentSongs:agg.measured,pairedSongs:agg.compared,
    improved:agg.better,worsened:agg.worse,pairs:agg.rows,trend,trendVersion:newest};
  });
  const judged=metrics.filter(m=>m.judged&&m.pairedSongs>0);
@@ -71,9 +76,9 @@ function calculate(items,{getDate,valid,reference=()=>null,title=()=>''}={}){
   firstDate:dates[0]||'',lastDate:dates.at(-1)||'',
   v1Count:analyzed.filter(m=>!(m.analysis.v>=2)).length,
   detailMissing:analyzed.filter(m=>m.analysis.v>=2&&!G.hasDetail(m.analysis)).length,
-  excludedFromTrend:eligible.length-trendTakes.length,
+  excludedFromTrend:eligible.length-trendTakes.length,methods:methodCounts(eligible),
   metrics,reports,topStrength:strong[0]||null,topWatch,watchSongs,
   recommendations,months:[...months.keys()].sort()};
 }
-return {DEFINITIONS,TREND,calculate,value};
+return {DEFINITIONS,TREND,calculate,value,methodOf,methodCounts};
 });
