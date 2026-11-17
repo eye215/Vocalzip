@@ -4,13 +4,14 @@
  *   {start:{rate, keep8k}}             begin; keep8k: also keep an 8 kHz copy (needed to take the song's MR out)
  *   {block:[Float32Array per channel]}  30 s of decoded sound (transferred) → {progress:seconds measured}
  *   {end:{mrs:[{key, samples}]}}        finish. mrs: the song's MR files at 8 kHz mono (transferred), may be empty
- *        → {stage:'cancel'} · {stage:'voice', progress} … → {done:{mixed, removed, tries, stages}}
+ *        → {stage:'cancel'} · {stage:'voice', progress} … → {done:{mixed, removed, tries, stages, runtime}}
  *      mixed: the reading of the take as recorded. removed: {result, report, key} when one of the MRs could be taken
  *      out (app/mr-cancel.js, called as it is; the one that removes the most) and the voice that was left was read.
  * An MR file:
  *   {mono:{channels, rate}}             → {mono:Float32Array at 8 kHz} (transferred)
  * Any failure → {error}. Buffers are dropped as soon as the next step has what it needs. */
-importScripts('voice-path-model.js?v=6');
+importScripts('voice-path-model.js?v=7');
+const WORKER_REVISION = 8, MR_MODULE_REVISION = 5;
 const P = self.VzipVoicePath, SR = P.THRESHOLDS.SR, MR_RATE = 8000;
 let job = null;
 const mix = channels => {
@@ -40,6 +41,7 @@ self.onmessage = e => {
       const mixed = job.stream.finish(); job.stream = null;
       job.ms.model += performance.now() - t;
       const tries = []; let best = null;
+      let mrModuleRevision = null;
       if (job.halver && d.end.mrs && d.end.mrs.length) {
         self.postMessage({stage:'cancel'});
         t = performance.now();
@@ -47,7 +49,8 @@ self.onmessage = e => {
         const n = job.low.reduce((s, x) => s + x.length, 0), rec = new Float32Array(n); let o = 0;
         for (const x of job.low) { rec.set(x, o); o += x.length; }
         job.low = null; job.halver = null;
-        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=5');
+        if (!self.VzipMrCancel) importScripts('mr-cancel.js?v=' + MR_MODULE_REVISION);
+        mrModuleRevision = MR_MODULE_REVISION;
         for (const [i, mr] of d.end.mrs.entries()) {
           let out; try { out = self.VzipMrCancel.cancel(rec, mr.samples, {onProgress:p => self.postMessage({stage:'cancel', progress:(i + p) / d.end.mrs.length})}); } catch (err) { out = {ok:false, reason:'error'}; }
           mr.samples = null;                                          // this MR copy is not needed again
@@ -69,7 +72,7 @@ self.onmessage = e => {
       }
       const stages = Object.fromEntries(Object.entries(job.ms).map(([k, v]) => [k, Math.round(v)]));
       job = null;
-      self.postMessage({done:{mixed, removed, tries, stages}});
+      self.postMessage({done:{mixed, removed, tries, stages, runtime:{workerRevision:WORKER_REVISION, mrModuleRevision}}});
     }
   } catch (err) { self.postMessage({error:err.message || String(err)}); }
 };

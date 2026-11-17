@@ -597,7 +597,12 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   expect(d.takes.map(t => t.mrMode)).toEqual(['auto', 'auto']);
   expect(d.takes[0].mrRemoval).toMatchObject({removedDb:expect.any(Number), offsetSeconds:expect.any(Number), speed:expect.any(Number)});
   expect(Math.abs(d.takes[0].mrRemoval.offsetSeconds - 12.345)).toBeLessThan(0.01);
-  expect(d.takes[0].mrTries).toEqual([{ok:true, reason:null, removedDb:d.takes[0].mrRemoval.removedDb}]);
+  expect(d.takes[0].mrTries).toEqual([{ok:true, reason:null, removedDb:d.takes[0].mrRemoval.removedDb,
+    input:{bytes:70*8000*2+44, sampleRate:8000, channels:1, frames:70*8000, seconds:70}}]);
+  for (const t of d.takes) {
+    expect(t.input).toEqual({bytes:40*8000*2+44, sampleRate:16000, channels:1, frames:40*16000, seconds:40});
+    expect(t.runtime).toEqual({pageRevision:8, workerRevision:8, mrModuleRevision:5});
+  }
   expect(d.takes[0].asRecorded.confidence.meanStrength).toEqual(expect.any(Number));
   expect(d.takes[0].stagesMs).toMatchObject({fetch:expect.any(Number), decode:expect.any(Number), mrLoad:expect.any(Number), resample:expect.any(Number), model:expect.any(Number), cancel:expect.any(Number), voice:expect.any(Number), total:expect.any(Number)});
   expect(d.takes[0].confidence.bandwidthHz).toBe(3600);
@@ -611,6 +616,13 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
   await page.evaluate(() => VZ.render());
   await done(page);
   expect(await page.evaluate(() => window.__decodes)).toBe(0);
+  const restored = await page.evaluate(() => VZ.voicePathDiagnosis());
+  for (let i = 0; i < 2; i++) {
+    expect(restored.takes[i].fromDeviceCache).toBe(true);
+    expect(restored.takes[i].input).toEqual(d.takes[i].input);
+    expect(restored.takes[i].runtime).toEqual(d.takes[i].runtime);
+    expect(restored.takes[i].mrTries[0].input).toEqual(d.takes[i].mrTries[0].input);
+  }
   await page.evaluate(() => { VZ.change(d => { d.songs.find(s => s.id === 's1').mrTracks[0].size = 2222; }, {silent:true}); VZ.render(); });
   await expect(page.locator('[data-vp-run]')).toHaveText('흔적 재기');
   await expect(page.locator('[data-vp-results]')).toHaveCount(0);

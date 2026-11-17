@@ -272,6 +272,22 @@ test('diagnosis file: numbers, flags and months only — no ids, titles, names, 
 });
 
 /* ---------- fed in pieces ---------- */
+test('diagnosis preserves measured input dimensions and runtime revisions without file identity or audio', () => {
+  const result = P.analyze(tone(blank(3), .3, 2.4, 60), SR);
+  const input = {bytes:123456, sampleRate:16000, channels:2, frames:48000, seconds:3, name:'SECRET', url:'SECRET', samples:[1,2]};
+  const take = {role:'base', result, clean:{clean:true, why:'user-said-voice-only'}, measurable:{ok:true}, source:'clean',
+    input, runtime:{pageRevision:8, workerRevision:8, mrModuleRevision:5, url:'SECRET'}, mrTries:[{ok:false, reason:'no-match', input}]};
+  const d = P.diagnosis([take]).takes[0];
+  const expected = {bytes:123456, sampleRate:16000, channels:2, frames:48000, seconds:3};
+  assert.deepEqual(d.input, expected); assert.deepEqual(d.mrTries[0].input, expected);
+  assert.deepEqual(d.runtime, {pageRevision:8, workerRevision:8, mrModuleRevision:5});
+  assert.ok(!JSON.stringify(d).includes('SECRET')); assert.ok(!JSON.stringify(d).includes('samples'));
+  const old = P.diagnosis([{...take, input:undefined, runtime:undefined, mrTries:[{ok:false}]}]).takes[0];
+  assert.equal(old.input, null); assert.equal(old.runtime, null); assert.ok(!('input' in old.mrTries[0]));
+  const bad = P.diagnosis([{...take, input:{bytes:-1, sampleRate:Infinity, channels:'2', frames:NaN, seconds:-3}}]).takes[0];
+  assert.deepEqual(bad.input, {bytes:null, sampleRate:null, channels:null, frames:null, seconds:null});
+});
+
 test('a take fed in pieces of any size gives exactly what the whole take gives (nothing is cut, memory stays flat)', () => {
   const x = AUDIO.samples('worse', 70), whole = P.analyze(x, SR);
   const stream = P.createStream();

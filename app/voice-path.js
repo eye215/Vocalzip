@@ -25,7 +25,7 @@
 const V = window.VZ, M = V?.media, P = window.VzipVoicePath;
 if (!V || !M || !P) return;
 const esc = V.esc, T = P.THRESHOLDS, L = window.VzipAudioFile;
-const WORKER = 'app/voice-path-worker.js?v=7';
+const PAGE_REVISION = 8, WORKER = 'app/voice-path-worker.js?v=8';
 const MAX_BYTES = 250 * 1024 * 1024;     // the same limit as the app's analysis; a larger file is refused, never cut
 const BLOCK_SECONDS = 30;                // decoded sound handed to the worker at a time
 const CACHE_CAP = 60;                    // takes kept on the device
@@ -118,7 +118,9 @@ function settleChoices(s) {
     if (c != null && c !== 'none' && !files.some(t => String(t.id) === String(c))) { setMrChoice(id, 'auto'); mrGone.add(id); }
   }
 }
-const mrSamples = new Map();             // mrKey → Promise<Float32Array 8 kHz mono> (this session, memory only)
+const mrSamples = new Map();             // mrKey → Promise<{samples:8 kHz mono,input}> (this session, memory only)
+// Capture dimensions before decodeAudioData detaches the bytes. No file names, ids, URLs or audio go in diagnostics.
+const inputOf = (bytes, buf) => ({bytes, sampleRate:buf.sampleRate, channels:buf.numberOfChannels, frames:buf.length, seconds:buf.length / buf.sampleRate});
 const decoder = rates => { const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext; for (const rate of rates) { try { return new Ctx(1, rate, rate); } catch {} } throw Error('이 브라우저는 소리를 꺼내 읽지 못해요.'); };
 const decode = (ctx, bytes) => new Promise((resolve, reject) => { const p = ctx.decodeAudioData(bytes, resolve, reject); if (p?.then) p.then(resolve, reject); });
 const aborted = () => new DOMException('그만둠', 'AbortError');
@@ -127,15 +129,18 @@ function loadMr(track, signal, onEvent = () => {}, onRetry = () => {}) {
   if (!mrSamples.has(key)) {
     const job = (async () => {
       const bytes = await L.read({source:async ({signal,attempt}) => ({url:await window.VzipR2.url(track.r2Key,{signal,refresh:attempt>1})}), signal, onEvent, onRetry, maxBytes:MAX_BYTES});
+      const byteLength = bytes.byteLength;
       const buf = await L.task(() => decode(decoder([8000, 16000, 44100]), bytes), {signal,stage:'decode'});
+      const input = inputOf(byteLength, buf);
       const channels = []; for (let ch = 0; ch < buf.numberOfChannels; ch++) channels.push(buf.getChannelData(ch).slice());
-      return await L.task(signal => new Promise((resolve, reject) => {
+      const samples = await L.task(signal => new Promise((resolve, reject) => {
         const w = new Worker(WORKER), end = () => { signal.removeEventListener('abort', quit); w.terminate(); }, quit = () => { end(); reject(aborted()); };
         signal.addEventListener('abort', quit, {once:true});
         w.onmessage = e => { end(); e.data.error ? reject(Error(e.data.error)) : resolve(e.data.mono); };
         w.onerror = e => { end(); reject(Error(e.message || 'MR을 읽지 못했어요.')); };
         w.postMessage({mono:{channels, rate:buf.sampleRate}}, channels.map(c => c.buffer));
       }), {signal,stage:'mr-mono'});
+      return {samples, input};
     })();
     job.catch(() => mrSamples.delete(key));                           // a failed or stopped load is tried again next time
     mrSamples.set(key, job);
@@ -178,17 +183,21 @@ function measureIn(s, buf, mrs, onStage) {
 async function measure(s, item, bytesPromise, plan, onStage) {
   const signal = s.abort.signal, t0 = performance.now(), ms = {};
   const bytes = await bytesPromise; ms.fetch = bytesPromise.ms;
+  const byteLength = bytes.byteLength;
   if (signal.aborted) throw aborted();
   onStage('decode', null);
   let t = performance.now();
   let buf = await L.task(() => decode(decoder([T.SR, 22050, 44100]), bytes), {signal,stage:'decode'});
   ms.decode = Math.round(performance.now() - t);
   if (signal.aborted) throw aborted();
-  const seconds = buf.length / buf.sampleRate, tries = [], mrs = [];
+  const input = inputOf(byteLength, buf), seconds = input.seconds, tries = [], mrs = [], mrInputs = new Map();
   if (plan.pick.length) {
     onStage('mr', null); t = performance.now();
     for (const track of plan.pick) {
-      try { mrs.push({key:mrKey(track), samples:(await loadMr(track, signal, e => s.fileLoads.push({role:item.id===s.a?'base':'comp',kind:'mr',...e}), () => onStage('mrRetry',null))).slice()}); }
+      try {
+        const loaded = await loadMr(track, signal, e => s.fileLoads.push({role:item.id===s.a?'base':'comp',kind:'mr',...e}), () => onStage('mrRetry',null));
+        const key = mrKey(track); mrInputs.set(key, loaded.input); mrs.push({key, samples:loaded.samples.slice()});
+      }
       catch (error) { if (error?.name === 'AbortError') throw error; tries.push({key:mrKey(track), ok:false, reason:'load', removedDb:null, ...(error?.diagnostic?{loadFailure:error.diagnostic}:{})}); }
     }
     ms.mrLoad = Math.round(performance.now() - t);
@@ -197,7 +206,8 @@ async function measure(s, item, bytesPromise, plan, onStage) {
   const out = await measureIn(s, buf, mrs, onStage);
   buf = null;
   Object.assign(ms, out.stages, {total:Math.round(performance.now() - t0)});
-  return {id:item.id, model:P.VERSION, at:Date.now(), seconds:Math.round(seconds * 10) / 10, mrSig:plan.sig, mixed:out.mixed, removed:out.removed, tries:[...tries, ...out.tries], stages:ms};
+  return {id:item.id, model:P.VERSION, at:Date.now(), seconds:Math.round(seconds * 10) / 10, mrSig:plan.sig, mixed:out.mixed, removed:out.removed,
+    input, runtime:{pageRevision:PAGE_REVISION, ...out.runtime}, tries:[...tries, ...out.tries.map(x => ({...x, input:mrInputs.get(x.key)}))], stages:ms};
 }
 
 /* ---------- what a take shows ---------- */
@@ -470,7 +480,8 @@ function diagnosisOf(s) {
   const take = (role, key) => { const v = viewOf(s, key);
     if(v?.state!=='ready')return null;
     return {role, date:P.monthOf(M.dateOf(v.m)), result:v.result, clean:v.clean, source:v.source, measurable:v.ok, stored:analysisOf(v.m), reliable:reliable(v.m),
-      mr:v.rec.removed?.report || null, mrTries:v.rec.tries, mrMode:v.mode, mixed:v.source === 'mr-removed' ? v.rec.mixed : null, stagesMs:v.rec.stages, fromDeviceCache:!!v.rec.fromDevice}; };
+      mr:v.rec.removed?.report || null, mrTries:v.rec.tries, mrMode:v.mode, input:v.rec.input, runtime:v.rec.runtime,
+      mixed:v.source === 'mr-removed' ? v.rec.mixed : null, stagesMs:v.rec.stages, fromDeviceCache:!!v.rec.fromDevice}; };
   return P.diagnosis([take('base', 'a'), take('comp', 'b')].filter(Boolean), {generatedMonth:V.today().slice(0, 7),fileLoads:s.fileLoads || []});
 }
 V.voicePathDiagnosis = () => current && (viewOf(current,'a')?.state==='ready' || viewOf(current,'b')?.state==='ready' || current.fileLoads?.length) ? diagnosisOf(current) : null;
