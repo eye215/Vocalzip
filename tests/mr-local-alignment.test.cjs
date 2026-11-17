@@ -7,6 +7,24 @@ const quality=(out,voice,mrPart)=>{
  for(let i=0;i<voice.length;i++){error+=(out[i]-voice[i])**2;energy+=voice[i]**2;cross+=out[i]*voice[i];mrEnergy+=mrPart?.[i]**2||0;}
  return {suppression:10*Math.log10(mrEnergy/error),voiceSER:10*Math.log10(energy/error),levelDb:20*Math.log10(cross/energy)};
 };
+test('a stronger partial-repeat anchor cannot hide the full-take MR match',()=>{
+ const source=Y.mr(65),v=Y.vocal(40).x,rec=driftRecording(v,source,{db:-6}),reference=new Float32Array(110*Y.SR);
+ reference.set(source);
+ // Another passage repeats the same room-coloured accompaniment at the nine anchor
+ // positions, but not between them. Its stronger peaks are insufficient whole-take evidence.
+ const N=C.RULES.anchorWin;
+ for(let k=0;k<9;k++){
+  const start=Math.round((rec.x.length-N)*(k+.5)/9),jitter=Math.round(40*Math.sin(k*2));
+  for(let n=0;n<N;n++)reference[65*Y.SR+start+n+jitter]=rec.mrPart[start+n];
+ }
+ const before=rec.x.slice(),original=reference.slice(),progress=[];
+ const out=C.cancel(rec.x,reference,{onProgress:p=>progress.push(p)});
+ assert.equal(out.ok,true);assert.equal(out.report.method,'local');
+ assert.ok(Math.abs(out.report.offsetSeconds-5)<.02,JSON.stringify(out.report));
+ const q=quality(out.voice,v,rec.mrPart);assert.ok(q.suppression>=10,JSON.stringify(q));
+ assert.deepEqual(rec.x,before);assert.deepEqual(reference,original);assert.equal(out.voice.length,rec.x.length);
+ assert.equal(progress.at(-1),1);assert.ok(progress.every((p,i)=>p>=0&&p<=1&&(!i||p>=progress[i-1])));
+});
 test('nonlinear delay is followed rather than accepting a loose global line',()=>{
  for(const db of[6,-6]){
   const rec=driftRecording(voice,mr,{db}),before=rec.x.slice(),original=mr.slice(),progress=[];
