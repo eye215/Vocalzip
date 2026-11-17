@@ -99,6 +99,11 @@
 .vp-zone dt{color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px}
 .vp-zone dd{margin:0;color:var(--vz-color-primary,#344054);font-size:13px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
 .vp-diag{display:grid;gap:8px;justify-items:start}
+.vp-saved{min-width:0;display:grid;gap:12px}.vp-saved h2{margin:0;font-size:18px;line-height:26px}
+.vp-saved table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;line-height:18px}
+.vp-saved th,.vp-saved td{padding:10px 6px;text-align:left;overflow-wrap:anywhere;vertical-align:top;border-bottom:1px solid var(--vz-color-line,#E8E4F0)}
+.vp-saved th:first-child{width:30%}.vp-saved small{display:block;font-weight:400;color:var(--vz-color-ink-muted,#667085)}
+.vp-take [data-vp-precision]{min-height:44px;white-space:normal}
 @media (max-width:350px){.vp-card{padding:14px}.vp-vals>div{padding:8px 10px}.vp-times{grid-template-columns:32px minmax(0,1fr)}}
 /* Tablet and wider: the 성장 column (1040px, 24px gutters); the picker stays on the left, results on the right. */
 @media (min-width:768px){

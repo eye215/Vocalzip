@@ -77,7 +77,7 @@ const noOverflow = async page => expect(await page.evaluate(() => {
 })).toEqual([]);
 const BANNED = /좋아졌|나빠졌|좋아진|나빠진|나아졌|향상|악화|개선|길이 맞|길을 찾았|잘했어요|못했어요/;
 const DIRECTION = /늘었어요|줄었어요|커졌어요|작아졌어요/;
-const REFUSED = '반주가 목소리만큼 크게 들어가 있어 이 녹음은 잴 수 없어요. 이어폰을 끼고 녹음한 것(목소리만 들어간 것)으로 비교해 주세요.';
+const REFUSED = /원본 음원.*소리 길 비교를 보류해요/;
 /** The device store of this screen, read straight from IndexedDB. */
 const kept = page => page.evaluate(async () => {
   const name = (await indexedDB.databases()).map(d => d.name).find(n => n.startsWith('vocalzip_voice_path_v1'));
@@ -347,6 +347,28 @@ test('a take with an accompaniment shows only the pitch-based rows until it is t
   await page.locator('[data-vp-clean="a"]').uncheck();
   await expect(page.locator('[data-vp-slot="a"] [data-vp-why]')).toContainText('반주가 있다고 직접 표시했어요');
   expect(page.__errors).toEqual([]);
+});
+
+test('stored AI measurements remain readable when a fresh mix is held; the original audio is never marked clean automatically',async({page},info)=>{
+ await boot(page,{takes:[{...TAKES[0],name:'합성 기준 녹음'},{id:'m-loud',name:'AI 측정이 저장된 혼합 녹음',kind:'bass',date:'2026-11-10',analysis:stored({voiceOverMrDb:28.4,pitchConfidence:.919,aiSeparated:{model:'test'}})}]});
+ const before=await page.evaluate(async()=>JSON.stringify((await VZ.media.list()).map(m=>[m.id,m.analysis])));
+ await open(page);await measure(page);
+ const saved=page.locator('[data-vp-saved-comparison]');
+ await expect(saved).toBeVisible();await expect(saved).toContainText('AI 분리 후 측정(참고)');await expect(saved).toContainText('음정 평균 오차');await expect(saved).toContainText('18 cent');
+ await expect(page.locator('[data-vp-refused]')).not.toContainText('반주가 목소리만큼');
+ expect(await page.evaluate(()=>VZ.voicePathDiagnosis().comparison)).toBeNull();
+ expect(await page.evaluate(async()=>JSON.stringify((await VZ.media.list()).map(m=>[m.id,m.analysis])))).toBe(before);
+ for(const [width,height]of [[375,812],[320,640]]){await page.setViewportSize({width,height});await noOverflow(page);await page.screenshot({path:info.outputPath('saved-comparison-'+width+'.png'),fullPage:true});}
+ const link=page.locator('[data-vp-take="b"] [data-vp-precision]');
+ await link.click();await expect(page.locator('[data-pr-analyze] [name="media"]')).toHaveValue('m-loud');
+ await expect(page.locator('[data-pr-analyze] [name="start"]')).toHaveValue('0');await expect(page.locator('[data-pr-analyze] [name="end"]')).toHaveValue('34');
+ expect(await page.locator('[data-pr-analyze] [name="clean"]').isChecked()).toBe(false);
+});
+
+test('unreliable saved analyses never become a fallback comparison',async({page})=>{
+ await boot(page,{takes:[{...TAKES[0],kind:'bass',analysis:stored({pitchConfidence:.4,voiceOverMrDb:1})},{...TAKES[2],kind:'bass',analysis:stored({pitchConfidence:.4,voiceOverMrDb:1,aiSeparated:{model:'test'}})}]});
+ await open(page);await measure(page);await expect(page.locator('[data-vp-saved-comparison]')).toHaveCount(0);
+ expect(await page.evaluate(()=>VZ.voicePathDiagnosis().comparison)).toBeNull();expect(page.__errors).toEqual([]);
 });
 
 test('a take where the accompaniment is as loud as the voice is refused: no numbers for it, no comparison, no direction words', async ({page}) => {

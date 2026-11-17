@@ -326,7 +326,7 @@ test('the gate on numbers like the first real diagnosis: the take that followed 
   assert.deepEqual(P.measurable(reading({meanStrength:0.877, glitchShare:0.009, outsideBandShare:0.035, jumpsPerMin:39.7, flatNoteShare:0}), false), {ok:false, why:'weak-pitch'});
   assert.deepEqual(P.measurable(reading({meanStrength:0.93, glitchShare:0.009, outsideBandShare:0.035, jumpsPerMin:39.7, flatNoteShare:0}), false), {ok:false, why:'pitch-jumps'});
   assert.deepEqual(P.measurable(reading({meanStrength:0.93, glitchShare:0.009, outsideBandShare:0.035, jumpsPerMin:6, flatNoteShare:0.1}), false), {ok:true, why:'mixed-voice-on-top'});
-  assert.match(P.REFUSED_NOTE, /^반주가 목소리만큼 크게 들어가 있어 이 녹음은 잴 수 없어요\. 이어폰을 끼고 녹음한 것\(목소리만 들어간 것\)으로 비교해 주세요\.$/);
+  assert.equal(P.REFUSED_NOTE, '원본 음원에서 목소리를 안정적으로 구분하지 못해 소리 길 비교를 보류해요.');
 });
 
 test('an octave apart, a jump is a flip only when the upper octave is clearly less periodic on the lower side', () => {

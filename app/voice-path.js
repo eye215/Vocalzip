@@ -323,6 +323,20 @@ function storedNote(v) {
   const how = c.aiSeparated ? '서버에서 AI로 목소리만 분리해' : '곡 MR을 빼고';
   return '<p class="vp-muted" data-vp-stored-note>이 녹음에 저장된 분석 수치는 ' + how + ' 잰 값이에요. 이 화면은 ' + (v.source === 'mr-removed' ? '원본 파일에서 곡 MR을 직접 빼고 읽어요.' : '반주가 섞인 원본 파일을 그대로 읽어요.') + '</p>';
 }
+/** Saved summaries remain useful even when a fresh reading of the original mix is held. Never replace traces. */
+function savedComparison(s) {
+  const items=[s.items.find(m=>m.id===s.a),s.items.find(m=>m.id===s.b)];
+  if(!items.some(reliable))return '';
+  const analyses=items.map(analysisOf),method=a=>!a?'저장된 분석 없음':a.confidence?.aiSeparated?'AI 분리 후 측정(참고)':a.confidence?.mrRemoved?'MR 제거 후 측정(참고)':'녹음 그대로 측정';
+  const number=(n,unit)=>Number.isFinite(n)?Math.round(n*10)/10+unit:'—';
+  const defs=[['목소리 구간',a=>number(a.metrics.voicedSeconds,'초')],['음정 평균 오차',a=>number(a.metrics.intonation?.meanAbsCents,' cent')],
+    ['지속음 흔들림 · 참고',a=>number(a.metrics.stability?.wobbleCents,' cent')],['비브라토 비율 · 참고',a=>number(a.metrics.vibrato?.share,'%')],
+    ['유효 최고음',a=>a.metrics.range?.validHigh?.note||'—'],['안정 최고음',a=>a.metrics.range?.stableHigh?.note||'—']];
+  const rows=defs.filter(([,get])=>analyses.some((a,i)=>reliable(items[i])&&get(a)!=='—')).map(([label,get])=>'<tr><th scope="row">'+esc(label)+'</th>'+analyses.map((a,i)=>'<td>'+esc(reliable(items[i])?get(a):'판정 보류')+'</td>').join('')+'</tr>').join('');
+  return '<section class="vp-card vp-saved" data-vp-saved-comparison><h2>저장된 보컬 분석</h2><p class="vp-muted">이미 저장된 측정값을 나란히 보여 드려요. 위에서 새로 읽은 원본 음원의 소리 길 결과와는 측정 방식이 다를 수 있어요.</p>'+
+    '<table><thead><tr><th scope="col">측정값</th>'+analyses.map((a,i)=>'<th scope="col">'+(i?'비교':'기준')+'<small>'+esc(method(a))+'</small></th>').join('')+'</tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<p class="vp-muted">측정 방식이 다른 값의 차이는 실력 변화로 판단하지 않아요. 끊김·울림·숨소리는 원본 재측정의 보류 상태를 유지해요.</p></section>';
+}
 function takeCard(s, role, label, v) {
   const m = v.m, head = '<section class="vp-card vp-take" data-vp-take="' + role + '" data-vp-source="' + (v.source || 'none') + '"><div class="vp-take-head"><span class="vp-role">' + label + '</span><strong>' + esc(M.label(m)) + '</strong></div>';
   if (v.state !== 'ready') return head + '<p class="vp-meta">' + esc(day(m)) + '</p>' + (s.jobs?.[m.id] ? '<p class="vp-muted" data-vp-pending>재는 중이에요. 끝나는 대로 여기에 보여 드려요.</p>' : '<p class="vp-muted" data-vp-pending>아직 재지 않았어요.</p>') + '</section>';
@@ -331,9 +345,11 @@ function takeCard(s, role, label, v) {
       (v.mode === 'auto' && v.plan.pick.length > 1 ? ' 자동으로 가장 많이 빠지는 MR을 골랐어요.' : '') + ' 반주가 조금 남아 있을 수 있어요.')
     : v.mode === 'none' ? '<p class="vp-muted" data-vp-mr-none>MR을 빼지 않고 쟀어요.</p>'
     : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + (failed.some(t=>t.reason==='load') ? '. 파일 연결을 확인한 뒤 다시 재기를 눌러 주세요.' : '. 녹음할 때 MR의 키나 빠르기가 달랐다면 보통 이렇게 돼요.') + ' 녹음 파일을 그대로 읽었어요.') : '';
-  const state = !v.ok.ok ? info('data-vp-refused', 'prohibit', v.ok.why === 'no-voice' ? '이 녹음에서 목소리를 찾지 못했어요. 반주만 있거나 목소리가 작게 녹음됐을 수 있어요.' : esc(P.REFUSED_NOTE))
+  const state = !v.ok.ok ? info('data-vp-refused', 'prohibit', esc(P.refusedText(v.result,v.ok.why)))
     : v.source === 'mixed' ? info('data-vp-unclean', 'info', esc(P.UNCLEAN_NOTE) + '. 끊김·뒤집힘에도 반주를 잘못 읽은 곳이 섞일 수 있어요.') : '';
-  return head + '<p class="vp-meta">' + esc([day(m), v.ok.ok ? '목소리 ' + Math.round(r.voicedSeconds) + '초' : '', '녹음 ' + clock(v.rec.seconds) + ' 전체를 쟀어요'].filter(Boolean).join(' · ')) + '</p>' + mrNote + state + storedNote(v) +
+  const segment=!v.ok.ok&&V.precisionAnalyze&&!(m.durationSeconds>600)&&!(m.size>25*1024*1024)
+    ? '<a class="btn secondary" data-vp-precision href="#/precision-report?media='+encodeURIComponent(m.id)+'&amp;start=0&amp;end='+Math.min(60,Number(m.durationSeconds)||60)+'">구간을 골라 정밀 분석</a>' : '';
+  return head + '<p class="vp-meta">' + esc([day(m), v.ok.ok ? '목소리 ' + Math.round(r.voicedSeconds) + '초' : '', '녹음 ' + clock(v.rec.seconds) + ' 전체를 쟀어요'].filter(Boolean).join(' · ')) + '</p>' + mrNote + state + storedNote(v) + segment +
     '<div data-vp-player="' + role + '"></div><p class="vp-muted" data-vp-playing="' + role + '" role="status"></p></section>';
 }
 function resultsHtml(s) {
@@ -341,7 +357,7 @@ function resultsHtml(s) {
   if (!A || !B || (A.state !== 'ready' && B.state !== 'ready')) return '';
   const both = A.state === 'ready' && B.state === 'ready', shown = [A, B].filter(v => v.state === 'ready' && v.ok.ok);
   return '<div class="vp-results" data-vp-results data-vp-complete="' + both + '"><div class="vp-takes">' + takeCard(s, 'a', '기준', A) + takeCard(s, 'b', '비교', B) + '</div>' +
-    rowsHtml(A, B, s.running) +
+    (!s.running && (!A.ok?.ok || !B.ok?.ok) ? savedComparison(s) : '') + rowsHtml(A, B, s.running) +
     (shown.length ? '<section class="vp-card" data-vp-zone-card><details><summary>음역별로 보기 <i class="ph ph-caret-down" aria-hidden="true"></i></summary><p class="vp-muted">녹음마다 부른 음의 범위를 셋으로 나눠 봤어요. 소리가 ' + T.MIN_ZONE_SECONDS + '초보다 적은 구간은 표본 부족으로 두고 비교하지 않아요.</p>' +
       (A.state === 'ready' && A.ok.ok ? zonesHtml('기준', A.shown) : '') + (B.state === 'ready' && B.ok.ok ? zonesHtml('비교', B.shown) : '') + '</details></section>' : '') +
     (both ? '<section class="vp-card vp-diag"><button type="button" class="btn sm secondary" data-vp-diagnosis><i class="ph ph-file-arrow-down" aria-hidden="true"></i> 진단 파일 저장</button>' +
