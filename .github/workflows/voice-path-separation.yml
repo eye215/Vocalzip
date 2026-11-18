@@ -1,0 +1,101 @@
+name: Requested voice path separation
+on:
+  pull_request:
+    paths: ['app/voice-path*.js', 'worker/voice-path-separation-worker.mjs', 'supabase/functions/vzip-voice-path/**', 'tests/voice-path-separation-*', '.github/workflows/voice-path-separation.yml']
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      recording_bytes:
+        description: 'Optional operational validation: exact source bytes from diagnosis'
+        type: string
+      recording_month:
+        description: 'Required with bytes: diagnosis recording month YYYY-MM'
+        type: string
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm ci --ignore-scripts
+      - run: node --test tests/voice-path-separation-*.test.* tests/voice-path-model.test.cjs tests/voice-path-refusal.test.cjs
+      - run: npm run test:syntax
+  browser:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm ci --ignore-scripts
+      - run: npx playwright test tests/voice-path.spec.cjs --workers=2
+  fallback:
+    if: github.repository == 'eye215/Vocalzip' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: synthetic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    concurrency:
+      group: requested-voice-path-separation
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm ci --ignore-scripts
+      - name: Inspect requested work
+        id: peek
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RECORDING_BYTES: ${{ inputs.recording_bytes }}
+          RECORDING_MONTH: ${{ inputs.recording_month }}
+        run: |
+          if [ -n "$RECORDING_BYTES" ]; then
+            node worker/voice-path-separation-worker.mjs --queue-diagnosis --peek
+          else
+            node worker/voice-path-separation-worker.mjs --peek
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.peek.outputs.waiting != '0'
+        with: {python-version: '3.11'}
+      - uses: actions/cache@v4
+        if: steps.peek.outputs.waiting != '0'
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/torch
+          key: demucs-4.0.1-torch-2.3.1-cpu-${{ runner.os }}
+      - uses: actions/cache@v4
+        if: steps.peek.outputs.waiting != '0'
+        with:
+          path: ~/ffmpeg-static
+          key: ffmpeg-static-5.2.0-${{ runner.os }}
+      - name: Install existing pinned tools
+        if: steps.peek.outputs.waiting != '0'
+        timeout-minutes: 15
+        run: |
+          if [ ! -x ~/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg ]; then
+            npm install --prefix ~/ffmpeg-static --no-save --no-audit --no-fund ffmpeg-static@5.2.0
+          fi
+          echo "FFMPEG_PATH=$HOME/ffmpeg-static/node_modules/ffmpeg-static/ffmpeg" >> "$GITHUB_ENV"
+          python -m pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 torchaudio==2.3.1
+          python -m pip install --quiet demucs==4.0.1 soundfile
+      - name: Separate one requested source and save only its pitch report
+        if: steps.peek.outputs.waiting != '0'
+        timeout-minutes: 22
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RECORDING_BYTES: ${{ inputs.recording_bytes }}
+          RECORDING_MONTH: ${{ inputs.recording_month }}
+        run: node worker/voice-path-separation-worker.mjs
