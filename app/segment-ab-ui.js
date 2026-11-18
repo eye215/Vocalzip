@@ -1,4 +1,5 @@
-/* Explicit A/B review UI; segments are manually aligned per recording. */
+/* Explicit A/B review UI; segments are manually aligned per recording.
+   들어 보고 평가 남기기 hands the two chosen recordings and their sections to the listening sheet (app/listen-verdict.js). */
 (()=>{
 'use strict';
 const V=window.VZ,M=V?.media,Model=window.VzipSegmentAB;if(!V||!M||!Model)return;
@@ -47,6 +48,7 @@ function panel(host,plan,items){
  '<label class="field"><span>종료 초</span><input type="number" data-ab-end="'+i+'" min="1" value="'+end+'"></label></div>'+
  '<button type="button" class="btn sm ghost" data-ab-play="'+i+'">▶ 해당 구간 듣기</button><div data-ab-player="'+i+'"></div></div>').join('')+'</div>'+
  '<button type="button" class="btn block" data-ab-run>선택 구간 측정 비교</button>'+
+ (V.listenCompare?'<button type="button" class="btn block secondary" data-ab-listen>이 구간 들어 보고 평가 남기기</button>':'')+
  '<div role="status" data-ab-result class="growth-ab-result"></div></div>';
  const pick=i=>{
   const select=host.querySelector('[data-ab-record="'+i+'"]');
@@ -94,6 +96,13 @@ function panel(host,plan,items){
   }catch(error){if(token===serial&&host.isConnected)el.textContent=error.message||'구간을 비교하지 못했어요.';}
   finally{if(button.isConnected)button.disabled=false;}
  };
+ host.querySelector('[data-ab-listen]')?.addEventListener('click',()=>{
+  let a,b;
+  try{a=pick(0);b=pick(1);if(a.m.id===b.m.id)throw Error('서로 다른 녹음 두 개를 선택해 주세요.');}
+  catch(error){V.toast(error.message,'error');return;}
+  stop();
+  V.listenCompare.open({songId:plan.songId,a:a.m.id,b:b.m.id,ranges:{[a.m.id]:{start:a.start,end:a.end},[b.m.id]:{start:b.start,end:b.end}}});
+ });
 }
 V.segmentABStop=stop;
 V.segmentABPanel=panel;

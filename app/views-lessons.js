@@ -253,6 +253,8 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
     const items = recs.map(x => media.find(m => m.id === x.id)).filter(Boolean);
     host.innerHTML = '<div class="list">' + recs.map(x => { const m = media.find(y => y.id === x.id); return m ? VZ.mediaRow(m).replace('<div class="media-open"', (x.note ? '<p class="small muted" style="margin:-6px 16px 10px 68px;white-space:pre-wrap">' + esc(x.note) + '</p>' : '') + '<div class="media-open"') : '<div class="item small muted">찾을 수 없는 녹음 (삭제됐거나 다른 기기에만 있어요)</div>'; }).join('') + '</div>';
     VZ.wireMedia(host.firstChild, items);
+    // 선생님 평가 남기기: two takes of a song heard and judged by the teacher (app/listen-verdict.js).
+    VZ.listenLesson?.(host, l, media);
   }});
 function feedbackSheet(l) {
   const songIds = VZ.lessonSongIds(l);
