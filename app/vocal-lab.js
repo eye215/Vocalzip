@@ -364,7 +364,8 @@ function comparePanel(s) {
   const picked=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean);
   const first=picked[0], last=picked.at(-1);
   const a=s.items.find(m=>m.id===s.compareA)||first, b=s.items.find(m=>m.id===s.compareB)||last;
-  const saved=(V.db.comparisonReports||[]).find(x=>x.kind!=='vocal-lab'&&x.firstId===a.id&&x.secondId===b.id);
+  // 들어 보고 남긴 평가 (kind listen-verdict, app/listen-verdict.js) shares the list: never read as this memo.
+  const saved=(V.db.comparisonReports||[]).find(x=>x.kind!=='vocal-lab'&&x.kind!=='listen-verdict'&&x.firstId===a.id&&x.secondId===b.id);
   const options=selected=>picked.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===selected.id?' selected':'')+'>'+esc(day(m)+' · '+M.label(m))+'</option>').join('');
   return '<section class="vl-section vl-compare"><details data-compare-panel'+(s.compareOpen?' open':'')+'><summary>두 녹음 자세히 비교 <i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-compare-body"><p class="vl-muted">A/B를 누르면 재생 위치를 유지한 채 해당 녹음으로 전환해요.</p><div class="vl-compare-picks"><label>A 녹음<select data-compare-a>'+options(a)+'</select></label><label>B 녹음<select data-compare-b>'+options(b)+'</select></label></div><div class="vl-compare-actions"><button type="button" data-compare-switch>같은 위치에서 '+(s.active===a.id?'B':'A')+' 듣기</button><button type="button" data-compare-first>첫 녹음 ↔ 최근 녹음</button></div>'+
     (V.measureTable?.(a,b)||'<p class="vl-muted">두 녹음의 측정 결과가 있으면 비교표가 나타나요.</p>')+
@@ -398,7 +399,7 @@ function screen(s) {
       (s.kinds?.get(x.id)||[]).map(k=>' <small class="vl-kind" data-lab-kind>'+k+'</small>').join('')+'</button>').join('')+'</div></div>'+remrRow(s)+
     (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s)+growthReport(s):single(s,m))+
       '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
-      comparePanel(s)+(V.voicePathLink?V.voicePathLink(s.song,m):'')+recommendationList(recs,s.song.id,savedAITip(s))+
+      comparePanel(s)+(V.listenEntry?V.listenEntry(s.song,s.items):'')+(V.voicePathLink?V.voicePathLink(s.song,m):'')+recommendationList(recs,s.song.id,savedAITip(s))+
       '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
   sizePlots(host);
   // The trend chart scrolls sideways: show the active (or newest) point, not the oldest.
@@ -664,7 +665,8 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefre
 });
 // Older comparison memos carry no songId: they open through 비교, which finds the song from the two recordings.
 V.route('lab-reports',{title:'리포트 보관함',back:true,tab:'growth',render(){
-  const reports=(V.db.comparisonReports||[]).sort((a,b)=>(b.created||0)-(a.created||0));
+  // 들어 보고 남긴 평가 are not reports of this list (they are shown in 결과 리포트 › 무엇이 달라졌나).
+  const reports=(V.db.comparisonReports||[]).filter(x=>x.kind!=='listen-verdict').sort((a,b)=>(b.created||0)-(a.created||0));
   return '<div class="vl vl-reports">'+(reports.length?reports.map(x=>'<a class="vl-report" href="'+(x.kind!=='vocal-lab'&&!x.songId?'#/compare?a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId):'#/vocal-lab/'+encodeURIComponent(x.songId||'')+'?'+(x.kind==='vocal-lab'?'report='+encodeURIComponent(x.id):'a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId)+'&compare=1'))+'"><strong>'+esc(x.song||'삭제된 곡')+'</strong><span>'+esc(new Date(x.created).toLocaleDateString('ko-KR'))+' · '+(x.kind==='vocal-lab'?'녹음 '+(x.mediaIds||[]).length+'개':'비교 메모')+'</span><i class="ph ph-caret-right"></i></a>').join(''):'<div class="vl-empty">저장한 리포트가 없어요.<br><small>보컬 연구소에서 리포트를 저장하면 여기에 모여요.</small></div>')+'</div>';
 }});
 })();

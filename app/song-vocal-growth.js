@@ -194,7 +194,7 @@ VZ.songVocalGrowth = (host, song, media) => {
     const first = reliable[0].m, latest = reliable.at(-1).m;
     const entry = {firstId:first.id, secondId:latest.id, firstName:M.label(first), secondName:M.label(latest), firstDate:first.created, secondDate:latest.created, song:song.title, songId:song.id,
       measures:{first:VZ.measureSnapshot(first), second:VZ.measureSnapshot(latest)}};
-    const ok = VZ.change(d => { d.comparisonReports ||= []; const x = d.comparisonReports.find(y => y.firstId === first.id && y.secondId === latest.id); if (x) Object.assign(x, entry); else d.comparisonReports.push({id:VZ.uid(), created:Date.now(), notes:'', goal:'', ...entry}); }, {silent:true});
+    const ok = VZ.change(d => { d.comparisonReports ||= []; const x = d.comparisonReports.find(y => y.kind !== 'listen-verdict' && y.firstId === first.id && y.secondId === latest.id); if (x) Object.assign(x, entry); else d.comparisonReports.push({id:VZ.uid(), created:Date.now(), notes:'', goal:'', ...entry}); }, {silent:true});
     if (ok) VZ.toast('측정값 비교를 저장했어요. 녹음 비교 화면의 "저장한 비교"에서 다시 볼 수 있어요.');
   });
 };

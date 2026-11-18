@@ -59,7 +59,8 @@ const KIND = {practice:['연습', '연습 녹음 · 결과 리포트에는 넣�
 const kindChip = kind => '<span class="growth-hub-chip" data-state="none" data-hub-kind="' + kind + '" title="' + e(KIND[kind][1]) + '">' + KIND[kind][0] + '</span>';
 async function mountAnalysis(host) {
   const my = ++request, songs = V.songsNewest();
-  const saved = (V.db.comparisonReports || []).filter(r => !gone('comparisonReports', r.id)).length;
+  // 들어 보고 남긴 평가 (kind listen-verdict) live in the same list but are not 보관함 reports.
+  const saved = (V.db.comparisonReports || []).filter(r => r.kind !== 'listen-verdict' && !gone('comparisonReports', r.id)).length;
   const foot = '<div class="list icons growth-hub-list">' + row('#/lab-reports', 'folder-open', '리포트 보관함', saved ? '저장한 리포트 ' + saved + '개' : '저장한 리포트가 아직 없어요', ' data-hub-reports') +
     row('#/library', 'list-checks', '녹음을 직접 골라 분석', '전체 녹음에서 선택한 뒤 분석을 눌러요', ' data-hub-library') +
     // 소리 길 흔적 (시험판, app/voice-path.js): two takes of a song side by side.

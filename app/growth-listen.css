@@ -1,0 +1,113 @@
+/* 들어 보고 남기는 평가 (app/listen-verdict.js) and 무엇이 달라졌나 (app/growth-changes-ui.js).
+ * Light common screens (design guide §5 · v4): white R20 cards, 16px padding, 12px gaps; 52px R15 inputs on #F2EFF7;
+ * segmented choices as the selected-tab segment (44px, R10 inside a #F2EFF7 R14 box, selected #EDE1FF / #7A32F5);
+ * chips R99 44px on #F3ECFF / #7A32F5; meta 12/18 #667085. No good/bad colours: a human verdict is quoted, numbers
+ * are observations. */
+
+/* ---------- the listening sheet ---------- */
+.lc{display:grid;gap:12px;min-width:0}
+.lc-card{min-width:0;padding:16px;border-radius:20px;background:#fff;overflow-wrap:anywhere}
+.lc-card h3{margin:0 0 12px;color:#101828;font-size:16px;line-height:22px;font-weight:600}
+.lc-card .field{margin-bottom:12px}
+.lc-card select{width:100%;min-width:0;text-overflow:ellipsis}
+.lc-help{margin:4px 0 12px;color:#667085;font-size:12px;line-height:18px}
+.lc-error{margin:0;color:#C93A3A;font-size:12px;line-height:18px}
+.lc-error:empty{display:none}
+.lc-sub{margin:16px 0 8px;color:#475467;font-size:13px;line-height:18px;font-weight:600}
+.lc-fixed{display:grid;gap:4px;margin:0;color:#344054;font-size:14px;line-height:20px}
+.lc-check{display:flex;align-items:flex-start;gap:12px;min-height:44px;padding:10px 0;cursor:pointer}
+.lc-check input{flex:none;width:22px;height:22px;margin:0;accent-color:#7A32F5}
+.lc-check span{display:grid;gap:2px;min-width:0}
+.lc-check strong{color:#101828;font-size:14px;line-height:20px;font-weight:600}
+.lc-check small{color:#667085;font-size:12px;line-height:18px}
+.lc-ranges{margin-top:4px;border-top:1px solid #F2EFF7}
+.lc-ranges summary{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;color:#344054;font-size:14px;line-height:20px;font-weight:600;cursor:pointer;list-style:none}
+.lc-ranges summary::-webkit-details-marker{display:none}
+.lc-ranges summary small{color:#667085;font-size:12px;font-weight:400}
+.lc-range-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px;min-width:0;margin:0 0 4px;padding:0;border:0}
+.lc-range-row legend{grid-column:1/-1;margin-bottom:6px;color:#475467;font-size:13px;line-height:18px;font-weight:600}
+.lc-range-row .field{margin-bottom:8px;min-width:0}
+.lc-range-row input{width:100%;min-width:0;font-variant-numeric:tabular-nums}
+.lc-range-row input[aria-invalid="true"]{background:#FDEAEA;outline:1px solid #C93A3A}
+.lc-side{min-width:0;margin:0 0 12px;padding:12px;border-radius:16px;background:#F8F6FD;outline:2px solid transparent;transition:outline-color .15s,background .15s}
+.lc-side[data-active]{background:#F3ECFF;outline-color:#DCC4FF}
+.lc-side-head{display:flex;align-items:center;gap:10px;min-width:0;margin-bottom:8px}
+.lc-side-head span{min-width:0;color:#475467;font-size:13px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-badge{flex:none;display:inline-grid;place-items:center;width:28px;height:28px;border-radius:99px;background:#7A32F5;color:#fff;font-size:14px;line-height:1;font-weight:700}
+.lc-player .player{margin:0;background:transparent;padding:0}
+.lc-player .player-row{min-width:0}
+.lc-player input[type=range]{min-width:0}
+.lc-flip{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px}
+.lc-flip i{font-size:20px}
+.lc-overall,.lc-tag,.lc-judge{min-width:0;margin:0 0 12px;padding:0;border:0}
+.lc-overall legend,.lc-tag legend,.lc-judge legend{margin-bottom:6px;color:#344054;font-size:13px;line-height:18px;font-weight:600}
+.lc-tag legend small{color:#667085;font-weight:400}
+.lc-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border-radius:14px;background:#F2EFF7}
+.lc-seg-two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lc-seg-item{position:relative;display:block;min-width:0;cursor:pointer}
+.lc-seg-item input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.lc-seg-item span{display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 4px;border-radius:10px;color:#475467;font-size:14px;line-height:20px;font-weight:600;text-align:center;white-space:nowrap}
+.lc-seg-item input:checked+span{background:#EDE1FF;color:#7A32F5}
+.lc-seg-item input:focus-visible+span{outline:2px solid #7A32F5;outline-offset:1px}
+@media (max-width:350px){.lc-seg-item span{font-size:13px;padding:0 2px}}
+.lc-card textarea{min-height:96px}
+.lc-delete{margin-top:4px;color:#C93A3A}
+.lc-delete i{margin-right:6px}
+.lc-reveal{display:grid;gap:10px}
+.lc-reveal p{display:flex;align-items:center;gap:10px;margin:0;color:#344054;font-size:14px;line-height:20px}
+.lc-reveal .lc-reveal-line{display:block;margin-top:4px;padding:12px;border-radius:14px;background:#F3ECFF;color:#101828}
+@media (prefers-reduced-motion:reduce){.lc-side{transition:none}}
+
+/* ---------- entries ---------- */
+.vl-report.lc-lab-entry{width:100%;border:0;font:inherit;text-align:left;cursor:pointer}
+.lc-lesson{display:grid;gap:8px;margin:12px 0 0}
+.lc-lesson-title{margin:8px 4px 0;color:#101828;font-size:16px;line-height:22px;font-weight:600}
+.lc-lesson-open{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;min-width:0}
+.lc-lesson-open span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-lesson-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.lc-lesson-list li{display:grid;gap:4px;padding:12px 16px;border-radius:16px;background:#fff;overflow-wrap:anywhere}
+.lc-lesson-list p{margin:0;color:#344054;font-size:14px;line-height:20px}
+.lc-lesson-list small{color:#667085;font-size:12px;line-height:18px}
+.lc-chip,.gc-chip{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;min-width:44px;padding:0 14px;border:0;border-radius:99px;background:#F3ECFF;color:#7A32F5;font:inherit;font-size:13px;line-height:18px;font-weight:600;text-decoration:none;white-space:nowrap;cursor:pointer}
+.lc-chip{justify-self:start}
+.lc-chip:active,.gc-chip:active{background:#EDE1FF}
+.lc-chip:focus-visible,.gc-chip:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
+.gc-chip i{font-size:16px}
+
+/* ---------- 무엇이 달라졌나 ---------- */
+.gc-host:empty{display:none}
+.gc-card{min-width:0;overflow-wrap:anywhere}
+.gc-head h2{margin:0;color:#101828;font-size:18px;line-height:26px;font-weight:700;letter-spacing:-.02em}
+.gc-head p{margin:4px 0 0;color:#667085;font-size:12px;line-height:18px}
+.gc-groups{display:grid;gap:16px;margin-top:16px;min-width:0}
+.gc-group{min-width:0}
+.gc-group h3{display:flex;align-items:center;gap:6px;margin:0 0 4px;color:#344054;font-size:14px;line-height:20px;font-weight:600}
+.gc-group h3 i{color:#7A32F5;font-size:18px}
+.gc-line{min-width:0;padding:12px 0;border-top:1px solid #F2EFF7}
+.gc-group h3+.gc-line{border-top:0;padding-top:8px}
+.gc-basis{margin:0 0 6px;color:#667085;font-size:12px;line-height:18px}
+.gc-quote{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0;color:#101828;font-size:14px;line-height:20px}
+.gc-quote q{quotes:"“" "”"}
+.gc-who{flex:none;padding:1px 8px;border-radius:99px;background:#F3ECFF;color:#7A32F5;font-size:12px;line-height:18px;font-weight:600}
+.gc-who[data-judge="teacher"]{background:#E8F6F6;color:#078994}
+.gc-tags{margin:4px 0 0;color:#344054;font-size:13px;line-height:18px}
+.gc-memo{margin:4px 0 0;padding:8px 12px;border-radius:12px;background:#F8F6FD;color:#475467;font-size:13px;line-height:18px;white-space:pre-wrap}
+.gc-obs{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.gc-obs li{display:grid;gap:1px;min-width:0;color:#344054;font-size:14px;line-height:20px}
+.gc-obs li[data-similar]{color:#475467}
+.gc-obs small{color:#667085;font-size:12px;line-height:18px;font-variant-numeric:tabular-nums}
+.gc-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.gc-player:empty{display:none}
+.gc-player{margin-top:8px}
+.gc-player .player{margin:0}
+.gc-empty{margin:4px 0 8px;padding:12px;border-radius:14px;background:#F8F6FD;color:#475467;font-size:13px;line-height:18px}
+.gc-group [data-gc-precision-entry]{margin-top:4px}
+.gc-more summary,.gc-excluded summary{display:flex;align-items:center;min-height:44px;color:#475467;font-size:13px;line-height:18px;font-weight:600;cursor:pointer}
+.gc-excluded{margin-top:8px;border-top:1px solid #F2EFF7}
+.gc-excluded ul{display:grid;gap:8px;margin:0 0 4px;padding:0;list-style:none}
+.gc-excluded li{display:grid;gap:2px;min-width:0;font-size:12px;line-height:18px;color:#475467}
+.gc-excluded strong{color:#344054;font-weight:600}
+@media (min-width:768px){
+  .gc-groups{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px}
+  .gc-group[data-gc-group="verdicts"]{grid-column:1/-1}
+}

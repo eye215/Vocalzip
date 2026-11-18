@@ -14,7 +14,7 @@ function context(db,{today,start,songId='',media=[],entries=[]}){
  const performances=live(db,'performances').filter(p=>(p.status||'preparing')==='preparing').map(p=>({title:p.title,songs:p.songLinks||[],dates:(p.sessions||[]).filter(x=>x.date>=today&&!['cancelled','completed'].includes(x.status)).map(x=>x.date),start:p.start})).filter(p=>p.dates.length||p.start>=today).slice(0,3);
  return {homework,performances,period:{start,end:today},song:live(db,'songs').find(s=>s.id===songId)?.title||'',songId,pair,actualMinutes:Math.round(seconds/60),
   goals:goals.map(g=>({title:g.title,completed:g.completed===true})),
-  reports:live(db,'comparisonReports').filter(r=>songId&&r.songId===songId).slice(-3).map(r=>({notes:r.notes,goal:r.goal})),
+  reports:live(db,'comparisonReports').filter(r=>songId&&r.songId===songId&&r.kind!=='listen-verdict').slice(-3).map(r=>({notes:r.notes,goal:r.goal})),
   practice:practices.slice(-10).map(p=>({date:p.date,memo:p.memo,report:p.practiceRoom?.draft,aiObservation:p.practiceRoom?.aiCoach||''})),
   skipped:history.filter(p=>p.status==='skipped').map(p=>p.proposal?.action||''),
   caution:practices.some(p=>/목.{0,5}(아프|아파|통증|쉬었|잠겼)|쉰\s*(소리|목소리)/.test(p.practiceRoom?.draft?.memo||p.memo||'')||p.practiceRoom?.draft?.symptoms?.length||['불편해','조금 힘들어'].includes(p.practiceRoom?.draft?.comfort))};

@@ -36,7 +36,9 @@ const {NOW, MEDIA, DB} = require('./growth-characterization.fixture.cjs');
  * The 전체 음역 흐름 section and its month row (step 2, [data-range-flow]) are new and have their own spec
  * (tests/growth-range.spec.cjs): they are not part of what was pinned, so every older value stays comparable. */
 // Precision navigation has separate entry/route tests; keep the original metric snapshot byte-for-byte.
-const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style,[data-range-flow],[data-precision-entry],[data-precision-report-entry]')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
+// 무엇이 달라졌나 ([data-growth-changes], app/growth-changes-ui.js) is a new card above 전체 분석 with its own spec
+// (tests/growth-listen.spec.cjs): left out here so every pinned value stays comparable.
+const texts = () => (root => { const out = [], w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.parentElement.closest('script,style,[data-range-flow],[data-precision-entry],[data-precision-report-entry],[data-growth-changes]')) continue; const t = n.nodeValue.replace(/\s+/g, ' ').trim(); if (t) out.push(t); } return out; });
 async function boot(page) {
   page.__errors = [];
   page.on('pageerror', e => page.__errors.push(e.message));
