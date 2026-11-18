@@ -176,7 +176,7 @@ const openList=async(page,dialog)=>{await more(dialog);await listItem(dialog).cl
 /** The MR's time every 50 ms for a while. */
 async function watch(page,ms){const seen=[];for(const end=Date.now()+ms;Date.now()<end;){seen.push((await mr(page)).time);await page.waitForTimeout(50);}return seen;}
 const prefs=page=>page.evaluate(k=>JSON.parse(localStorage.getItem(k)||'null'),MARKS);
-const annotations=page=>page.evaluate(()=>JSON.stringify(window.VZ.db.scoreAnnotations||[]));
+const annotations=page=>page.evaluate(()=>JSON.stringify((window.VZ.db.scoreAnnotations||[]).filter(s=>s.kind!=='marker-preset')));
 
 test('시작점: 재생 옵션 in the play bar offers 처음부터 / 시작점 N마디에서, 재생 starts there, and the choice is remembered for the score',async({page,browserName})=>{
  test.skip(browserName==='webkit',PLAYS);
@@ -252,9 +252,9 @@ test('tapping a 시작점 or 반복 mark with the 이동 tool offers 여기서 �
  await expect(cut.locator('[data-mark-cut-text]')).toHaveText('재생할 때 4마디 건너뜀');await expect(cut.getByRole('button')).toHaveText([/컷 건너뛰기 끄기/]);
  await closeMenu(page);await expect(cut).toHaveCount(0);
  // With the pen the same tap writes (a dot) and opens nothing.
- const count=await page.evaluate(()=>window.VZ.db.scoreAnnotations.length);
+ const count=await page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset').length);
  await dialog.getByRole('button',{name:'펜',exact:true}).click();await tap(page,dialog,180,112);
- await expect.poll(()=>page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(count+1);await expect(page.locator('.sheet-menu')).toHaveCount(0);
+ await expect.poll(()=>page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset').length)).toBe(count+1);await expect(page.locator('.sheet-menu')).toHaveCount(0);
 });
 
 test('표시한 마디: 시작점 → ▶ 여기서 재생, 반복 → ▶ 이 구간 반복, 컷 → 건너뜀 with one line about it; marks without a function are as before',async({page,browserName})=>{
@@ -405,8 +405,8 @@ test('표기 편집: a user preset gets a 기능 and its marks carry it; a built
  // Placed over measure 2 (a drag): the mark carries what it is and what it does.
  const a=await spot(dialog,100,88),b=await spot(dialog,140,88);
  await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move(b.x,b.y,{steps:4});await page.mouse.up();
- await expect.poll(()=>page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(1);
- expect(await page.evaluate(()=>{const s=window.VZ.db.scoreAnnotations[0];return [s.mark,s.role,window.VzipScoreInk.valid(s)];})).toEqual([preset.id,'cut',true]);
+ await expect.poll(()=>page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset').length)).toBe(1);
+ expect(await page.evaluate(()=>{const s=window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset')[0];return [s.mark,s.role,window.VzipScoreInk.valid(s)];})).toEqual([preset.id,'cut',true]);
  // It works like 컷: the bar offers 컷 건너뛰기 for measure 2, the list says 건너뜀.
  await expect(opts(dialog)).toHaveAttribute('aria-label','재생 옵션: 컷 건너뛰기 켜짐',{timeout:5000});
  await dialog.getByRole('button',{name:'이동',exact:true}).click();await opts(dialog).click();
@@ -422,8 +422,8 @@ test('표기 편집: a user preset gets a 기능 and its marks carry it; a built
  await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();
  const c=await spot(dialog,160,208),d=await spot(dialog,200,208);
  await page.mouse.move(c.x,c.y);await page.mouse.down();await page.mouse.move(d.x,d.y,{steps:4});await page.mouse.up();
- await expect.poll(()=>page.evaluate(()=>window.VZ.db.scoreAnnotations.length)).toBe(2);
- expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.map(s=>s.role||''))).toEqual(['cut','']);
+ await expect.poll(()=>page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset').length)).toBe(2);
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset').map(s=>s.role||''))).toEqual(['cut','']);
  await page.waitForTimeout(500);await dialog.getByRole('button',{name:'이동',exact:true}).click();await opts(dialog).click();
  await expect(cutSwitch(page)).toHaveText('컷 건너뛰기2마디 건너뜀');await closeMenu(page);
 });
@@ -541,7 +541,7 @@ const editMarker=async(page,dialog,id)=>{
  await dialog.locator('[data-ink-marker="'+id+'"]').click();const sheet=page.getByRole('dialog',{name:'악보 표기 편집'});await expect(sheet).toBeVisible();return sheet;
 };
 async function drag(page,dialog,from,to){const a=await spot(dialog,...from),b=await spot(dialog,...to);await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move((a.x+b.x)/2,(a.y+b.y)/2,{steps:3});await page.mouse.move(b.x,b.y,{steps:3});return ()=>page.mouse.up();}
-const marks=page=>page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).map(s=>({id:s.id,mark:s.mark,tool:s.tool,measures:s.measures||null,group:s.group||'',role:s.role||'',page:s.page,valid:window.VzipScoreInk.valid(s),
+const marks=page=>page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).filter(s=>s.kind!=='marker-preset').map(s=>({id:s.id,mark:s.mark,tool:s.tool,measures:s.measures||null,group:s.group||'',role:s.role||'',page:s.page,valid:window.VzipScoreInk.valid(s),
  x:[Math.min(...s.points.map(p=>p[0])),Math.max(...s.points.map(p=>p[0]))],y:[Math.min(...s.points.map(p=>p[1])),Math.max(...s.points.map(p=>p[1]))],width:s.width,n:s.points.length})));
 /** The x of a barline (PDF units) as a share of the page width, and how far a band of that width stops short of it. */
 const X=x=>x/PW,Y=y=>y/PH;
@@ -887,7 +887,7 @@ test('editing a drawing changes only the marks stamped afterwards; it is still t
  await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();await drawT(page,sheet);
  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
  const [preset]=await userPresets(page);
- await tap(page,dialog,120,60);const before=JSON.stringify(await page.evaluate(()=>window.VZ.db.scoreAnnotations));expect((await marks(page)).length).toBe(2);
+ await tap(page,dialog,120,60);const before=JSON.stringify(await page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset')));expect((await marks(page)).length).toBe(2);
  // After a reload the palette still draws it and the editor opens with the drawing on the pad.
  await page.reload();dialog=await open(page);
  await dialog.locator('[data-ink-marker-mode]').click();await expect(sampleOf(dialog,preset.id)).toHaveCount(2);
@@ -905,7 +905,7 @@ test('editing a drawing changes only the marks stamped afterwards; it is still t
  // Saved with the third stroke: the mark already on the score is untouched; the next stamp has three strokes.
  await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();sheet=editorOf(page);
  await padStroke(page,sheet,[[.3,.75],[.7,.75]]);await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
- expect((await userPresets(page))[0].art.s).toHaveLength(3);expect(JSON.stringify(await page.evaluate(()=>window.VZ.db.scoreAnnotations))).toBe(before);
+ expect((await userPresets(page))[0].art.s).toHaveLength(3);expect(JSON.stringify(await page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset')))).toBe(before);
  await dialog.locator('[data-ink-marker="'+preset.id+'"]').click();await tap(page,dialog,240,60);
  const rows=await placed(page,5);expect(new Set(rows.slice(2).map(r=>r.group)).size).toBe(1);expect(rows[2].group).not.toBe(rows[0].group);
 });
