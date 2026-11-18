@@ -267,3 +267,12 @@ test('필기감: a finished stroke keeps only the points that change it visibly,
  const straight=Array.from({length:50},(_,i)=>[i/49*.5,.2,.5]);assert.equal(Ink.simplifyStroke(straight).length,2);
  assert.equal(Ink.valid(stroke('s',{points:kept,smooth:true,pressure:true})),true);
 });
+test('붙여넣은 그림: a memo carries only the R2 key and size of its picture, never its bytes',()=>{
+ const memo={version:1,id:'pic',...binding,page:1,tool:'note',color:'#ffffff',rect:[.1,.1,.3,.1],mode:'pen',note:'pic',createdAt:1};
+ const pic={...memo,imageKey:Ink.pictureKey(owner,'scorepic-1'),imageW:400,imageH:200,imageBytes:5000};
+ assert.equal(pic.imageKey,'u/alice/scorepic-1/original.png');assert.equal(Ink.valid(pic),true);assert.equal(Ink.isNote(pic),true);
+ for(const bad of [{imageKey:'u/bob/scorepic-1/original.png'},{imageKey:'u/alice/score/original.pdf'},{imageKey:'data:image/png;base64,AAAA'},{imageW:Ink.PICTURE_SIDE+1},{imageH:0},{imageBytes:Ink.PICTURE_BYTES+1},{imageBytes:undefined}])
+  assert.equal(Ink.valid({...pic,...bad}),false,JSON.stringify(bad));
+ assert.equal(Ink.valid({...memo,imageW:400}),false); // size without a picture
+ assert.equal(Ink.same(pic,{...pic,imageKey:Ink.pictureKey(owner,'scorepic-2')}),false);
+});

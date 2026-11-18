@@ -468,3 +468,8 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
 .score-ink-page svg .score-ink-eraser-cursor{fill:#7a32f514;stroke:#7a32f5;stroke-width:1.5px;pointer-events:none}
 .score-ink-page svg .score-ink-eraser-cursor[data-down]{fill:#7a32f526}
 .score-ink-page svg [data-ink-erasing]{opacity:.2}
+/* 붙여넣은 그림 */
+.score-ink-page svg image.score-ink-note-image{pointer-events:none}
+.score-ink-page svg .score-ink-picture-wait{fill:#f2f4f7b3;stroke:#98a2b3;stroke-width:1px;stroke-dasharray:4 3}
+.score-ink-memo-bar [data-ink-memo-paste]{display:inline-flex;align-items:center;gap:6px;width:auto;min-height:44px;font-size:13px;padding:0 14px;border:1px solid #dfc7ff;border-radius:12px;background:#f5efff;color:#7a32f5;font-weight:700}
+.score-ink-memo-bar [data-ink-memo-paste][hidden]{display:none}

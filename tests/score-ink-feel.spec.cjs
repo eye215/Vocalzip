@@ -1,6 +1,7 @@
 /* 악보 필기감 (app/score-ink*.js): no text or block selection while writing, smooth pressure strokes, the eraser's
- * circle, and the microphone question in fullscreen. Real Apple Pencil latency cannot run here: pen input is
- * synthetic PointerEvents. */
+ * circle, the microphone question in fullscreen, and 붙여넣기 (a picture copied in GoodNotes, kept on the device and
+ * uploaded to R2). Real Apple Pencil latency and the exact clipboard GoodNotes writes cannot run here: pen input is
+ * synthetic PointerEvents, the clipboard a stub with a fake PNG, and R2 the test stand-in. */
 const {test,expect}=require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const {boot,fakeR2}=require('./helpers/r2-fixture.cjs');
@@ -229,6 +230,116 @@ test('the eraser shows how far it reaches at any zoom and erases what it passes 
  await page.mouse.move(2,2);await expect(cursor).toHaveCount(0);
 });
 
+/** A see-through PNG (dark ink on nothing), w × h, made in the page. */
+const fakePng=(page,w=400,h=200)=>page.evaluate(([w,h])=>new Promise(resolve=>{
+ const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.strokeStyle='#101828';x.lineWidth=8;x.beginPath();x.moveTo(20,h/2);x.bezierCurveTo(w/3,0,w/2,h,w-20,h/2);x.stroke();
+ c.toBlob(b=>{window.__fakePng=b;resolve(b.size);},'image/png');
+}),[w,h]);
+const stubClipboard=(page,kind)=>page.evaluate(kind=>{
+ const item=kind==='png'?{types:['image/png'],getType:async()=>window.__fakePng}:{types:['text/plain'],getType:async()=>new Blob(['가사'],{type:'text/plain'})};
+ Object.defineProperty(navigator,'clipboard',{configurable:true,value:{read:async()=>[item],readText:async()=>''}});
+},kind);
+const pictures=async page=>(await records(page)).filter(s=>s.tool==='note'&&s.imageKey);
+const queued=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('vzip_score_picture_pending_v1:ui-test-user')||'[]'));
+async function otherDevice(browser,page,info){
+ const u=info.project.use,context=await browser.newContext({viewport:u.viewport,isMobile:u.isMobile,hasTouch:u.hasTouch,deviceScaleFactor:u.deviceScaleFactor,userAgent:u.userAgent,baseURL:new URL(page.url()).origin});
+ await context.addInitScript(()=>{window.VZIP_DEVICE_SESSIONS_ENABLED=false;window.VZIP_APPROVED_HOME_ENABLED=false;});
+ const other=await context.newPage();const r2=await setup(other);return {other,r2};
+}
+const sync=(page,remote)=>page.evaluate(remote=>{
+ const storage=window.VzipAccountScope?.storage||localStorage,merged=window.VzipDataMerge.merge(window.VZ.db,remote).data;
+ storage.setItem('vocal-zip_mvp_v1',JSON.stringify(merged));window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}));
+},remote);
+
+test('붙여넣기 keeps the picture on this device at once (offline too), uploads it to R2 later, and another device loads it from R2',async({page,browser,context},info)=>{
+ test.setTimeout(90000);
+ const r2=await setup(page);let dialog=await open(page);await tool(dialog,'펜');
+ await fakePng(page,400,200);await stubClipboard(page,'png');
+ // The middle of what is on screen of the page, before the picture's row opens above it.
+ const view=await dialog.locator('[data-ink-stage]').boundingBox(),box=await dialog.locator('[data-ink-box]').boundingBox();
+ const mid=[((Math.max(box.x,view.x)+Math.min(box.x+box.width,view.x+view.width))/2-box.x)/box.width,((Math.max(box.y,view.y)+Math.min(box.y+box.height,view.y+view.height))/2-box.y)/box.height];
+ await context.setOffline(true);
+ await act(dialog,'붙여넣기');
+ await expect.poll(async()=>(await pictures(page)).length).toBe(1);
+ const [pic]=await pictures(page);
+ expect(pic).toMatchObject({tool:'note',mode:'pen',color:'#ffffff',page:1,songId:'s1',scoreId:'score-ink',imageW:400,imageH:200});
+ expect(pic.imageKey).toMatch(/^u\/ui-test-user\/scorepic-[\w-]+\/original\.png$/);expect(pic.imageBytes).toBeGreaterThan(100);
+ // The synced record carries no picture bytes.
+ expect(await page.evaluate(()=>JSON.stringify(window.VZ.db))).not.toContain('data:image');
+ expect(JSON.stringify(pic).length).toBeLessThan(800);
+ // Shown at once from this device's copy, while offline; listed for upload, not in R2 yet.
+ const shown=dialog.locator('[data-ink-note][data-ink-picture]');await expect(shown.locator('image')).toHaveAttribute('href',/^blob:/);
+ await expect(shown.locator('rect')).toHaveCount(0);
+ expect(await queued(page)).toEqual([pic.imageKey]);expect(r2.store.has(pic.imageKey)).toBe(false);
+ const aspect=4/3;expect(pic.rect[2]/(pic.rect[3]*aspect)).toBeCloseTo(2,1);
+ expect(pic.rect[0]+pic.rect[2]/2).toBeCloseTo(mid[0],2);expect(pic.rect[1]+pic.rect[3]/2).toBeCloseTo(mid[1],2);
+ // Back online: uploaded as a PNG (see-through kept) under the owner's folder; the list empties.
+ await context.setOffline(false);
+ await expect.poll(()=>r2.store.has(pic.imageKey)).toBe(true);await expect.poll(()=>queued(page)).toEqual([]);
+ const stored=r2.store.get(pic.imageKey);expect(stored.type).toBe('image/png');expect(stored.bytes.subarray(1,4).toString()).toBe('PNG');
+ expect(await page.evaluate(b64=>new Promise(r=>{const i=new Image();i.onload=()=>{const c=document.createElement('canvas');c.width=i.width;c.height=i.height;const x=c.getContext('2d');x.drawImage(i,0,0);r(x.getImageData(1,1,1,1).data[3]);};i.src='data:image/png;base64,'+b64;}),stored.bytes.toString('base64'))).toBe(0);
+ // Selected with 선택: drag to move …
+ await expect(dialog.getByRole('button',{name:'선택',exact:true})).toHaveAttribute('aria-pressed','true');
+ const bar=dialog.locator('[data-ink-memo-bar]');await expect(bar.getByRole('button',{name:'그림 삭제',exact:true})).toBeVisible();
+ await expect(bar.locator('[data-ink-memo-colors]')).toBeHidden();await expect(bar.getByRole('button',{name:'글자로 쓰기',exact:true})).toBeHidden();
+ const c=[pic.rect[0]+pic.rect[2]/2,pic.rect[1]+pic.rect[3]/2];
+ await line(page,dialog,c,[c[0]-.1,c[1]+.1]);
+ await expect.poll(async()=>(await pictures(page))[0]?.id).not.toBe(pic.id);
+ const [moved]=await pictures(page);
+ expect(moved.rect[0]).toBeCloseTo(pic.rect[0]-.1,2);expect(moved.rect[1]).toBeCloseTo(pic.rect[1]+.1,2);expect(moved.rect[2]).toBeCloseTo(pic.rect[2],5);expect(moved.imageKey).toBe(pic.imageKey);
+ // … and its corner to resize, keeping the proportions.
+ const handle=await dialog.locator('rect[data-ink-note-handle]').boundingBox();
+ await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();
+ const svg=await dialog.locator('[data-ink-svg]').boundingBox();await page.mouse.move(handle.x+handle.width/2+svg.width*.1,handle.y+handle.height/2+svg.height*.02,{steps:6});await page.mouse.up();
+ await expect.poll(async()=>(await pictures(page))[0]?.id).not.toBe(moved.id);
+ const [bigger]=await pictures(page);expect(bigger.rect[2]).toBeGreaterThan(moved.rect[2]+.05);expect(bigger.rect[2]/(bigger.rect[3]*aspect)).toBeCloseTo(2,1);
+ // Kept on this device (reload, no download), and another device loads it from R2 through a signed address.
+ const reads=()=>r2.calls.filter(c=>c==='GET /v1/media/'+pic.imageKey).length;
+ await page.reload();dialog=await open(page);await expect(dialog.locator('[data-ink-picture] image')).toHaveAttribute('href',/^blob:/);expect(reads()).toBe(0);
+ const {other,r2:far}=await otherDevice(browser,page,info);
+ far.store.set(pic.imageKey,stored);await sync(other,await page.evaluate(()=>window.VZ.db));
+ const there=await open(other);await expect(there.locator('[data-ink-picture] image')).toHaveAttribute('href',/^blob:/);
+ expect(far.calls).toContain('GET /v1/media/'+pic.imageKey);
+ await other.context().close();
+ // 그림 삭제 in its row: the record goes (tombstoned); the PNG stays in R2.
+ await tool(dialog,'선택');const [x,y]=await at(dialog,[bigger.rect[0]+bigger.rect[2]/2,bigger.rect[1]+bigger.rect[3]/2]);await page.mouse.click(x,y);
+ await dialog.locator('[data-ink-memo-bar]').getByRole('button',{name:'그림 삭제',exact:true}).click();
+ await expect.poll(async()=>(await pictures(page)).length).toBe(0);await expect(dialog.locator('[data-ink-picture]')).toHaveCount(0);
+ expect(await page.evaluate(id=>window.VZ.db.deleted.scoreAnnotations.includes(id),bigger.id)).toBe(true);
+ expect(r2.store.has(pic.imageKey)).toBe(true);expect(r2.calls.some(c=>c.startsWith('DELETE'))).toBe(false);
+});
+
+test('a picture another device has not uploaded yet shows as a light frame, not an error',async({page})=>{
+ await setup(page);
+ await page.evaluate(([hash,key])=>window.VZ.change(d=>{(d.scoreAnnotations||=[]).push({version:1,id:'far-pic',ownerId:'ui-test-user',songId:'s1',scoreId:'score-ink',r2Key:key,pdfHash:hash,page:1,tool:'note',color:'#ffffff',rect:[.2,.2,.3,.1],mode:'pen',note:'far-pic',imageKey:'u/ui-test-user/scorepic-far/original.png',imageW:300,imageH:100,imageBytes:900,createdAt:1763000000000});}),[PDF_HASH,key]);
+ const dialog=await open(page);
+ await expect(dialog.locator('[data-ink-picture]')).toHaveAttribute('data-ink-picture-state','missing');
+ await expect(dialog.locator('[data-ink-picture] .score-ink-picture-wait')).toHaveCount(1);
+});
+
+test('⌘V pastes a picture; a clipboard with only text says so; text fields paste text as usual',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ await fakePng(page,120,300);
+ await page.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File([window.__fakePng],'goodnotes.png',{type:'image/png'}));document.querySelector('[data-ink-svg]').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));});
+ await expect.poll(async()=>(await pictures(page)).length).toBe(1);
+ const [pic]=await pictures(page);expect(pic.rect[3]*4/3/pic.rect[2]).toBeCloseTo(2.5,1);expect(pic).toMatchObject({imageW:120,imageH:300});
+ // Only text on the clipboard: nothing is added and the owner is told what to do.
+ await stubClipboard(page,'text');await act(dialog,'붙여넣기');
+ await expect(page.locator('.toast').last()).toContainText('클립보드에 글자만 있어요');
+ await page.evaluate(()=>{const dt=new DataTransfer();dt.setData('text/plain','가사');document.querySelector('[data-ink-svg]').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));});
+ await expect(dialog.locator('[data-ink-status]')).toContainText('클립보드에 글자만 있어요');
+ // The memo bar offers it too (메모 tool), and a paste into the page number field is left alone.
+ await tool(dialog,'메모');await expect(dialog.locator('[data-ink-memo-bar]').getByRole('button',{name:'그림 붙여넣기',exact:true})).toBeVisible();
+ await dialog.locator('[data-ink-page]').click();
+ const kept=await dialog.locator('[data-ink-jump-input]').evaluate(e=>{const dt=new DataTransfer();dt.items.add(new File([window.__fakePng],'x.png',{type:'image/png'}));const ev=new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt});e.dispatchEvent(ev);return ev.defaultPrevented;});
+ expect(kept).toBe(false);expect((await pictures(page)).length).toBe(1);
+ // The PDF copy carries the picture.
+ await dialog.locator('[data-ink-thumb-close]').click();
+ await act(dialog,'색상·굵기·투명도 설정');const panel=dialog.getByRole('region',{name:'필기 설정',exact:true});
+ await panel.getByRole('tab',{name:'기타',exact:true}).click();await panel.getByRole('button',{name:'필기 PDF 만들기',exact:true}).click();
+ await expect(panel.getByRole('link',{name:'만든 PDF 저장',exact:true})).toBeVisible({timeout:20000});
+});
+
 for(const [name,size]of [['phone 390',{width:390,height:844}],['iPad 820',{width:820,height:1180}]])test('44px targets and no sideways scroll on '+name,async({page})=>{
  await page.setViewportSize(size);await setup(page);const dialog=await open(page);
  const wide=()=>page.evaluate(()=>[document.documentElement.scrollWidth<=innerWidth,[...document.querySelectorAll('.score-ink-sheet')].every(e=>e.scrollWidth<=e.clientWidth+1)]);
@@ -239,6 +350,14 @@ for(const [name,size]of [['phone 390',{width:390,height:844}],['iPad 820',{width
  }
  await tool(dialog,'지우개');
  const [x,y]=await at(dialog,[.5,.5]);await page.mouse.move(x,y);await expect(dialog.locator('[data-ink-eraser-cursor]')).toHaveCount(1);
+ expect(await wide()).toEqual([true,true]); await dialog.locator('[data-ink-more]').click();
+ const paste=dialog.locator('.score-ink-actions [data-ink-paste]');await expect(paste).toBeVisible();
+ let b=await paste.boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);expect(b.width).toBeGreaterThanOrEqual(44);
+ await dialog.locator('[data-ink-more]').click();
+ await tool(dialog,'메모');b=await dialog.locator('[data-ink-memo-paste]').boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);
+ await fakePng(page);await stubClipboard(page,'png');await dialog.locator('[data-ink-memo-paste]').click();
+ await expect(dialog.getByRole('button',{name:'그림 삭제',exact:true})).toBeVisible();
+ for(const label of ['그림 삭제','그림 선택 해제']){b=await dialog.getByRole('button',{name:label,exact:true}).boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);expect(b.width).toBeGreaterThanOrEqual(44);}
  expect(await wide()).toEqual([true,true]);
 });
 
