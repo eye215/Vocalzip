@@ -21,7 +21,7 @@ permissions:
 jobs:
   home:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
     permissions:
       contents: write
     env:
