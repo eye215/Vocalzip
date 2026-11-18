@@ -5,6 +5,9 @@ on:
       - 'app/views-main.js'
       - 'app/media.js'
       - 'tests/v6.spec.cjs'
+      - 'app/bt-route-test.js'
+      - 'app/bt-route-test.css'
+      - 'tests/bt-route-test.spec.cjs'
       - '.github/workflows/recording-safety-check.yml'
   workflow_dispatch:
 permissions:
@@ -23,6 +26,8 @@ jobs:
       - run: npx playwright install --with-deps chromium webkit
       - name: Recorder IDs, failure retry, original preservation and lesson links
         run: npx playwright test tests/v6.spec.cjs --grep 'One-touch recording|New recording after save|Lesson recording retry|Recording from a lesson|Denied microphone' --workers=2
+      - name: Bluetooth route test screen (stubbed microphone and audio session)
+        run: npx playwright test tests/bt-route-test.spec.cjs --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:

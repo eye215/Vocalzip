@@ -1,0 +1,36 @@
+/* 설정 › 녹음 중 블루투스 시험 (app/bt-route-test.js). */
+body[data-vz-route="bt-test"]{background:var(--vz-color-canvas)}
+body[data-vz-route="bt-test"] .v-app{max-width:720px;padding-right:12px;padding-left:12px}
+body[data-vz-route="bt-test"] .v-nav,body[data-vz-route="bt-test"] .vz-collection-record{display:none!important}
+.vz-bt{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding-bottom:24px;min-width:0}
+.vz-bt p{margin:0;font-size:14px;line-height:21px;color:var(--vz-color-ink-secondary);overflow-wrap:anywhere}
+.vz-bt-intro{padding:0 4px}
+.vz-bt-card{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0;padding:16px;border-radius:20px;background:var(--vz-color-surface)}
+.vz-bt-card h2{margin:0;font-size:17px;line-height:24px;font-weight:700;color:var(--vz-color-ink)}
+.vz-bt .btn{min-height:44px}
+.vz-bt-answers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.vz-bt-answers.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.vz-bt-answers .btn{padding:0 8px;white-space:normal;line-height:18px;min-height:48px}
+.vz-bt-done{color:var(--vz-color-success)!important}
+.vz-bt-skip,.vz-bt-unsupported{padding:10px 12px;border-radius:12px;background:var(--vz-color-warning-soft);color:var(--vz-color-warning)!important}
+.vz-bt-methods{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.vz-bt-method{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0;padding:12px;border:1px solid var(--vz-color-border);border-radius:16px}
+.vz-bt-method[data-running]{border-color:var(--vz-color-accent);background:var(--vz-color-accent-soft)}
+.vz-bt-method-head{display:flex;gap:10px;align-items:flex-start;min-width:0}
+.vz-bt-method-head>div{display:grid;gap:2px;min-width:0}
+.vz-bt-method-head strong{font-size:15px;line-height:21px;color:var(--vz-color-ink)}
+.vz-bt-method-head small{font-size:12px;line-height:17px;color:var(--vz-color-ink-muted);overflow-wrap:anywhere}
+.vz-bt-note{color:var(--vz-color-warning)!important}
+.vz-bt-num{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--vz-color-accent-soft);color:var(--vz-color-accent);font-size:13px;font-weight:700}
+.vz-bt-run{display:grid;gap:10px;min-width:0}
+.vz-bt-meter{height:12px;border-radius:999px;background:var(--vz-color-border);overflow:hidden}
+.vz-bt-meter span{display:block;width:0;height:100%;border-radius:inherit;background:var(--vz-color-accent);transition:width .06s linear}
+.vz-bt-ask{display:grid;gap:8px}
+.vz-bt-ask[hidden]{display:none}
+.vz-bt-ask>p{font-weight:700;color:var(--vz-color-ink)}
+.vz-bt-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;line-height:18px}
+.vz-bt-table th,.vz-bt-table td{padding:8px 4px;border-bottom:1px solid var(--vz-color-border);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.vz-bt-table thead th{color:var(--vz-color-ink-muted);font-weight:600}
+.vz-bt-table th:first-child{width:44px}
+.vz-bt-table th:nth-child(2),.vz-bt-table th:nth-child(3){width:23%}
+.vz-bt-table small{font-size:11px;line-height:15px;color:var(--vz-color-ink-muted)}
