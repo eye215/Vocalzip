@@ -118,7 +118,8 @@ test('real PDF renders, ink persists after reload and original PDF/lesson/practi
  await expect(dialog.getByRole('button',{name:'펜',exact:true})).toHaveCSS('background-color','rgb(237, 225, 255)');
  const saved=await page.evaluate(()=>window.VZ.db.scoreAnnotations);
  expect(saved[0]).toMatchObject({ownerId:'ui-test-user',scoreId:'score-ink',page:1,tool:'pen',pdfHash:crypto.createHash('sha256').update(bytes).digest('hex')});
- expect(saved[0].points.length).toBeGreaterThan(2);
+ // A straight line keeps only its ends once the stroke is thinned (app/score-ink-model.js simplifyStroke).
+ expect(saved[0].points.length).toBeGreaterThanOrEqual(2);expect(saved[0].smooth).toBe(true);
  await dialog.getByRole('button',{name:'돌아가기',exact:true}).click();await page.reload();const again=await open(page);
  await expect(again.locator('path[data-stroke]')).toHaveCount(1);
  expect(await page.evaluate(()=>({songs:window.VZ.db.songs,lessons:window.VZ.db.lessons,practices:window.VZ.db.practices}))).toEqual(before);

@@ -246,3 +246,24 @@ test('memo lines become a list: one per line break, bullets, numbers and tick bo
  assert.deepEqual(Ink.noteGoalLines('-박자\n2.호흡'),['박자','호흡']);
  assert.deepEqual(Ink.noteGoalLines(''),[]);assert.deepEqual(Ink.noteGoalLines(undefined),[]);assert.deepEqual(Ink.noteGoalLines('\n \n-\n'),[]);
 });
+test('필기감: smooth and pressure strokes validate, draw as curves or a filled shape, and older strokes draw as before',()=>{
+ const old=stroke('old',{points:[[.1,.1,.5],[.2,.3,.5],[.4,.2,.5]]});
+ assert.deepEqual(Ink.strokeShape(old,1.5),{d:Ink.path(old,1.5),fill:false});
+ const smooth={...old,id:'smooth',smooth:true},pressure={...old,id:'pressure',smooth:true,pressure:true};
+ assert.equal(Ink.valid(smooth),true);assert.equal(Ink.valid(pressure),true);
+ for(const bad of [{smooth:1},{smooth:false},{pressure:'yes'}])assert.equal(Ink.valid({...old,...bad}),false);
+ assert.match(Ink.strokeShape(smooth,1).d,/^M100\.00 100\.00 L150\.00 200\.00 Q200\.00 300\.00 300\.00 250\.00 L400\.00 200\.00$/);
+ const shape=Ink.strokeShape(pressure,1);assert.equal(shape.fill,true);assert.match(shape.d,/ A[\d.]+ [\d.]+ 0 0 0 /);
+ // A copy that differs only in the flags is a different record.
+ assert.equal(Ink.same(smooth,old),false);assert.equal(Ink.same(smooth,{...smooth}),true);
+ // Harder pressure, wider line; one point is a dot.
+ assert.ok(Ink.pressureWidth(.9)>Ink.pressureWidth(.33)&&Ink.pressureWidth(.33)>Ink.pressureWidth(.05));
+ assert.match(Ink.outlinePath([[.5,.5,.5]],.004,1),/^M[\d. ]+a/);
+});
+test('필기감: a finished stroke keeps only the points that change it visibly, within the tolerance',()=>{
+ const raw=Array.from({length:600},(_,i)=>{const t=i/599;return [.1+.8*t,.4+.05*Math.sin(t*12),.3+.4*t];});
+ const kept=Ink.simplifyStroke(raw,{aspect:1.3,width:.004,pressure:true});
+ assert.ok(kept.length<120&&kept.length>10,String(kept.length));assert.deepEqual(kept[0],raw[0]);assert.deepEqual(kept.at(-1),raw.at(-1));
+ const straight=Array.from({length:50},(_,i)=>[i/49*.5,.2,.5]);assert.equal(Ink.simplifyStroke(straight).length,2);
+ assert.equal(Ink.valid(stroke('s',{points:kept,smooth:true,pressure:true})),true);
+});

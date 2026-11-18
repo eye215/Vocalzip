@@ -222,6 +222,16 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     if (silent(mr)) { s.mode = 'idle'; paint(); hint(mr.el.error ? '이 MR 파일을 재생할 수 없어요. 파일 형식을 확인해 주세요.' : 'MR 소리가 시작되지 않았어요. 재생을 한 번 더 눌러 주세요.', true); }
   }
 
+  /** In the browser's own fullscreen nothing outside the score viewer is drawn, so Safari's microphone question never
+   * shows: the viewer leaves it first (VZ.scoreInkBeforeOutside, app/score-ink.js; it keeps its screen-filling look),
+   * unless the microphone is already allowed. Quick, so the tap that asked is still the one that opens the mic. */
+  async function micFront() {
+    const leave = VZ.scoreInkBeforeOutside;
+    if (typeof leave !== 'function' || !document.fullscreenElement) return;
+    let state = '';
+    try { state = (await navigator.permissions?.query?.({name:'microphone'}))?.state || ''; } catch {}
+    if (state !== 'granted') await leave();
+  }
   async function startRecording(withMr) {
     if (s.mode !== 'idle' || s.busy) return;
     const t = withMr ? track() : null;
@@ -232,6 +242,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     const mr = withMr ? mrPlayer(t) : null;
     const go = mr ? unlock(mr) : null;   // inside the tap, before anything is awaited
     if (mr) { await go; await mr.load(); }
+    await micFront();
     const capture = await M.capture({onTick:() => tick()});
     if (s.closed) { capture.cancel(); return; }
     const start = mr ? startNow() : null;

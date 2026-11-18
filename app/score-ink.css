@@ -458,3 +458,13 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
  padding:max(6px,calc(var(--ink-page-w,0px)*.012));border:0;border-radius:6px;outline:2px solid var(--vz-color-accent,#7a32f5);outline-offset:0;box-shadow:0 8px 22px #23143c26;resize:none;overflow:auto;-webkit-appearance:none;appearance:none;
  color:#101828;font:400 max(16px,calc(var(--ink-page-w,0px)*.026))/1.35 Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;letter-spacing:0;touch-action:auto;-webkit-user-select:text;user-select:text}
 .score-ink-memo-input::placeholder{color:#10182866}
+/* Writing never selects (iOS: blue boxes, loupe, callout while the pen rests on the page). Text fields still select. */
+.score-ink-sheet,.score-ink-editor,.score-ink-stage,.score-ink-page,.score-ink-page canvas,.score-ink-page svg,.score-ink-page .score-ink-text-layer,.score-ink-text-note{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.score-ink-sheet input,.score-ink-sheet textarea,.score-ink-sheet select,.score-ink-page .score-ink-memo-input,.score-ink-vision-result{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.score-ink-editor button{touch-action:manipulation}
+/* The page's text memos (AI 변환 글자) never sit in the way of the pen: with a writing tool they let it through. */
+.score-ink-page svg:is([data-tool=pen],[data-tool=highlighter],[data-tool=eraser],[data-tool=marker])~.score-ink-text-layer .score-ink-text-note{pointer-events:none}
+/* 지우개: how far it reaches, and the strokes it will erase (faded until the pen lifts). */
+.score-ink-page svg .score-ink-eraser-cursor{fill:#7a32f514;stroke:#7a32f5;stroke-width:1.5px;pointer-events:none}
+.score-ink-page svg .score-ink-eraser-cursor[data-down]{fill:#7a32f526}
+.score-ink-page svg [data-ink-erasing]{opacity:.2}

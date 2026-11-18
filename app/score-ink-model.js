@@ -130,9 +130,9 @@ function valid(s){
   ['pen','highlighter'].includes(s.tool)&&Number.isFinite(s.width)&&s.width>=0.001&&s.width<=0.06&&
   (s.opacity===undefined||Number.isFinite(s.opacity)&&s.opacity>=0.05&&s.opacity<=1)&&
   Array.isArray(s.points)&&s.points.length>=1&&s.points.length<=MAX_POINTS&&s.points.every(p=>Array.isArray(p)&&p.length===3&&p.every(unit))&&
-  (s.mark===undefined||validId(s.mark))&&(s.role===undefined||validRole(s.role))&&(s.measures===undefined||validMeasures(s.measures))&&(s.group===undefined||validId(s.group))&&(s.glyph===undefined?s.size===undefined:validGlyph(s)));
+  (s.smooth===undefined||s.smooth===true)&&(s.pressure===undefined||s.pressure===true)&&(s.mark===undefined||validId(s.mark))&&(s.role===undefined||validRole(s.role))&&(s.measures===undefined||validMeasures(s.measures))&&(s.group===undefined||validId(s.group))&&(s.glyph===undefined?s.size===undefined:validGlyph(s)));
 }
-const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text','mark','glyph','size','role','measures','group'];
+const FIELDS=['version','id','ownerId','songId','scoreId','r2Key','pdfHash','page','tool','color','width','opacity','points','createdAt','note','rect','mode','text','mark','glyph','size','role','measures','group','smooth','pressure'];
 const same=(a,b)=>JSON.stringify(FIELDS.map(k=>a[k]))===JSON.stringify(FIELDS.map(k=>b[k]));
 const opacity=s=>isNote(s)?1:s.opacity===undefined?(s.tool==='highlighter'?0.28:1):s.opacity;
 const round=n=>Math.round(n*100000)/100000;
@@ -197,6 +197,93 @@ function hit(s,p,aspect=1,radius=0.018){
 function path(s,aspect=1){
  const pts=s.points.map(p=>[p[0]*1000,p[1]*aspect*1000]);
  return pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(2)+' '+p[1].toFixed(2)).join(' ')+(pts.length===1?' l0.01 0':'');
+}
+/* 필기감 (strokes written from 2026-11-18). Two optional flags on a freehand pen/highlighter stroke, both `true` or absent:
+ *  smooth    the points are joined by curves through their midpoints (quadratic), not straight lines.
+ *  pressure  (Apple Pencil) the width follows each point's pressure: PRESSURE_WIDTH(p) × width, 1 × at p = 0.33.
+ * A stroke without them is drawn exactly as before (path(): straight lines, one width), and older clients draw a
+ * flagged stroke that way too: the points and `width` mean the same. Units of the drawn path: 1000 per page width. */
+const PRESSURE_MIN=0.6,PRESSURE_MAX=1.5,SIMPLIFY=0.0005;
+const pressureWidth=p=>Math.max(PRESSURE_MIN,Math.min(PRESSURE_MAX,0.64+1.1*(Number.isFinite(p)?p:0.33)));
+const xy=(p,aspect)=>[p[0]*1000,p[1]*aspect*1000];
+const f2=n=>n.toFixed(2);
+/** The centre line through the points: a curve through the midpoints, each point its control point. */
+function smoothPath(points,aspect=1){
+ const pts=points.map(p=>xy(p,aspect)),n=pts.length;
+ if(n===1)return 'M'+f2(pts[0][0])+' '+f2(pts[0][1])+' l0.01 0';
+ let d='M'+f2(pts[0][0])+' '+f2(pts[0][1]);
+ if(n===2)return d+' L'+f2(pts[1][0])+' '+f2(pts[1][1]);
+ d+=' L'+f2((pts[0][0]+pts[1][0])/2)+' '+f2((pts[0][1]+pts[1][1])/2);
+ for(let i=1;i<n-1;i++)d+=' Q'+f2(pts[i][0])+' '+f2(pts[i][1])+' '+f2((pts[i][0]+pts[i+1][0])/2)+' '+f2((pts[i][1]+pts[i+1][1])/2);
+ return d+' L'+f2(pts[n-1][0])+' '+f2(pts[n-1][1]);
+}
+/** The same curve as dense samples [x, y, half width] (path units), with the pressure (averaged over neighbours) as width. */
+function samples(points,width,aspect=1){
+ const pts=points.map(p=>xy(p,aspect)),n=pts.length,half=width*500;
+ const r=points.map((_,i)=>half*(pressureWidth(points[Math.max(0,i-1)][2])+2*pressureWidth(points[i][2])+pressureWidth(points[Math.min(n-1,i+1)][2]))/4);
+ if(n<3)return pts.map((p,i)=>[p[0],p[1],r[i]]);
+ const out=[[pts[0][0],pts[0][1],r[0]]],mid=(i,k)=>(pts[i][k]+pts[i+1][k])/2;
+ out.push([mid(0,0),mid(0,1),(r[0]+r[1])/2]);
+ for(let i=1;i<n-1;i++){
+  const a=[mid(i-1,0),mid(i-1,1)],c=[pts[i][0],pts[i][1]],b=[mid(i,0),mid(i,1)],ra=(r[i-1]+r[i])/2,rb=(r[i]+r[i+1])/2;
+  const steps=Math.max(1,Math.min(8,Math.ceil((Math.hypot(c[0]-a[0],c[1]-a[1])+Math.hypot(b[0]-c[0],b[1]-c[1]))/3)));
+  for(let k=1;k<=steps;k++){const t=k/steps,u=1-t;out.push([u*u*a[0]+2*u*t*c[0]+t*t*b[0],u*u*a[1]+2*u*t*c[1]+t*t*b[1],u*u*ra+2*u*t*r[i]+t*t*rb]);}
+ }
+ out.push([pts[n-1][0],pts[n-1][1],r[n-1]]);
+ return out;
+}
+/** A pressure stroke as one filled shape: its two edges joined by round ends, in runs that are each one outline
+ *  (bands that only touched left faint seams in Chrome). Where the line turns sharply — tighter than its own width —
+ *  a run ends and a round dot covers the turn. All parts wind the same way, so (nonzero) they fill as one. */
+function outlinePath(points,width,aspect=1){
+ const dot=([x,y,r])=>'M'+f2(x-r)+' '+f2(y)+' a'+f2(r)+' '+f2(r)+' 0 1 0 '+f2(2*r)+' 0 a'+f2(r)+' '+f2(r)+' 0 1 0 '+f2(-2*r)+' 0Z';
+ const q=[];
+ for(const p of samples(points,width,aspect)){const l=q.at(-1);if(l&&Math.hypot(p[0]-l[0],p[1]-l[1])<0.05)l[2]=Math.max(l[2],p[2]);else q.push(p.slice());}
+ if(q.length===1)return dot(q[0]);
+ const dir=q.slice(1).map((p,i)=>{const dx=p[0]-q[i][0],dy=p[1]-q[i][1],l=Math.hypot(dx,dy);return [dx/l,dy/l,l];});
+ const cuts=[];
+ for(let i=1;i<q.length-1;i++){
+  const c=dir[i-1][0]*dir[i][0]+dir[i-1][1]*dir[i][1],turn=Math.acos(Math.max(-1,Math.min(1,c)));
+  if(c<0.8||turn*1.5*q[i][2]>Math.min(dir[i-1][2],dir[i][2]))cuts.push(i);
+ }
+ const parts=[],ends=[0,...cuts,q.length-1];
+ for(let k=0;k<ends.length-1;k++){
+  const a=ends[k],z=ends[k+1],left=[],right=[];
+  for(let i=a;i<=z;i++){
+   const u=i===a?dir[a]:i===z?dir[z-1]:[dir[i-1][0]+dir[i][0],dir[i-1][1]+dir[i][1]],ul=Math.hypot(u[0],u[1])||1,nx=-u[1]/ul,ny=u[0]/ul;
+   // Between two bands the edge is pushed out a little (miter), so the line keeps its width through a bend.
+   const k2=i===a||i===z?1:Math.min(2,1/Math.max(.5,nx*-dir[i][1]+ny*dir[i][0])),r=q[i][2]*k2;
+   left.push([q[i][0]+nx*r,q[i][1]+ny*r]);right.push([q[i][0]-nx*r,q[i][1]-ny*r]);
+  }
+  const ra=q[a][2],rz=q[z][2];
+  parts.push('M'+left.map(p=>f2(p[0])+' '+f2(p[1])).join(' L')+' A'+f2(rz)+' '+f2(rz)+' 0 0 0 '+f2(right.at(-1)[0])+' '+f2(right.at(-1)[1])+
+   ' L'+right.reverse().map(p=>f2(p[0])+' '+f2(p[1])).join(' L')+' A'+f2(ra)+' '+f2(ra)+' 0 0 0 '+f2(left[0][0])+' '+f2(left[0][1])+'Z');
+ }
+ for(const i of cuts)parts.push(dot(q[i]));
+ return parts.join(' ');
+}
+/** How a stroke is drawn: {d, fill} — fill true: fill d with the colour; false: stroke d, s.width × 1000 wide, round. */
+function strokeShape(s,aspect=1){
+ if(s.pressure===true&&!s.glyph)return {d:outlinePath(s.points,s.width,aspect),fill:true};
+ if(s.smooth===true&&!s.glyph)return {d:smoothPath(s.points,aspect),fill:false};
+ return {d:path(s,aspect),fill:false};
+}
+/** Points of a finished stroke with the ones that change nothing visible left out (Ramer–Douglas–Peucker over x, y
+ *  and, for a pressure stroke, the half width): every dropped point lies within `tolerance` (of page width) of the
+ *  line kept. The first and last point always stay. */
+function simplifyStroke(points,{aspect=1,width=0,pressure=false,tolerance=SIMPLIFY}={}){
+ if(points.length<3)return points.map(p=>p.slice());
+ const q=points.map(p=>[p[0],p[1]*aspect,pressure?pressureWidth(p[2])*width/2:0]),keep=new Uint8Array(q.length),stack=[[0,q.length-1]];
+ keep[0]=keep[q.length-1]=1;
+ while(stack.length){
+  const [a,z]=stack.pop(),A=q[a],D=[q[z][0]-A[0],q[z][1]-A[1],q[z][2]-A[2]],den=D[0]*D[0]+D[1]*D[1]+D[2]*D[2];let far=0,at=-1;
+  for(let i=a+1;i<z;i++){
+   const P=[q[i][0]-A[0],q[i][1]-A[1],q[i][2]-A[2]],t=den?Math.max(0,Math.min(1,(P[0]*D[0]+P[1]*D[1]+P[2]*D[2])/den)):0,d=Math.hypot(P[0]-t*D[0],P[1]-t*D[1],P[2]-t*D[2]);
+   if(d>far){far=d;at=i;}
+  }
+  if(at>0&&far>tolerance){keep[at]=1;stack.push([a,at],[at,z]);}
+ }
+ return points.filter((_,i)=>keep[i]).map(p=>p.slice());
 }
 // Page-normalized geometry; stroke thickness is measured against page width.
 function bounds(rows,aspect=1){
@@ -373,7 +460,7 @@ function create({storage,identity,getData,change}){
  function gone(){const d=data();return new Set([...(d.deleted?.[COLLECTION]||[]),...read().deleted]);}
  return {restore,list,commit,removeScore,gone,key};
 }
-return {COLLECTION,valid,same,opacity,point,hit,path,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
+return {COLLECTION,valid,same,opacity,point,hit,path,smoothPath,outlinePath,strokeShape,simplifyStroke,pressureWidth,SIMPLIFY,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
  markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,validMeasures,grouped,freehand,
  simplifyLine,artFrom,validArt,artLines,markStamp,markShapes,ART_STROKES,ART_POINTS,ART_GRID,ART_SIZES,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
  isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
