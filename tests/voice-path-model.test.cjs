@@ -271,6 +271,26 @@ test('diagnosis file: numbers, flags and months only — no ids, titles, names, 
   assert.equal(P.monthOf('2026-11-09'), '2026-11'); assert.equal(P.monthOf(''), null);
 });
 
+test('a voice left after taking the MR out is gated like a mixed take: the real 1.5 dB reading is refused, with the MR wording', () => {
+  const b = P.analyze(take({worse:false}), SR);
+  const unclear = {...b, confidence:{...b.confidence, meanStrength:0.777, glitchShare:0.0494, outsideBandShare:0, mainBand:{low:42, high:70.7}, jumpsPerMin:229.1, flatNoteShare:0.06, bandwidthHz:3600}};
+  const read = P.measurable(unclear, false);
+  assert.deepEqual(read, {ok:false, why:'weak-pitch'});
+  assert.equal(P.measurable(b, false).ok, true, 'a clear voice after the MR is still measured');
+  const text = P.removedRefusedText(unclear, 'mr-removed-' + read.why, 1.5);
+  assert.equal(text, '곡 MR을 1.5 dB 빼도 목소리를 안정적으로 읽지 못했어요 (음높이 검출 일관성 77.7%, 기준 88%). 소리 길 비교를 보류해요.');
+  assert.ok(!text.includes('원본'));
+  for (const why of ['no-voice', 'many-glitches', 'pitch-jumps', 'follows-accompaniment', 'instrument-like']) assert.match(P.removedRefusedText(unclear, why, 1.5), /^곡 MR을 1\.5 dB 빼도 .+\(.+\)\. 소리 길 비교를 보류해요\.$/, why);
+  assert.equal(P.removedRefusedText(unclear, 'weak-pitch', null).startsWith('곡 MR을 빼도'), true);
+  assert.match(P.refusedText(unclear, 'weak-pitch'), /^원본 음원/, 'the sentence for a take as recorded is unchanged');
+  // No comparison, and the reason says the MR was taken out.
+  const d = P.diagnosis([{role:'base', date:'2026-03', result:b, clean:{clean:true, why:'user-said-voice-only'}, source:'clean', measurable:{ok:true, why:'voice-only'}, stored:null},
+    {role:'comp', date:'2026-11', result:unclear, clean:{clean:false, why:'song-mr-removed'}, source:'mr-removed', measurable:{ok:false, why:'mr-removed-' + read.why}, stored:null, mr:{removedDb:1.5}}]);
+  assert.equal(d.comparison, null);
+  assert.equal(d.takes[1].measurable, false); assert.equal(d.takes[1].measurableWhy, 'mr-removed-weak-pitch');
+  assert.equal(d.takes[1].breath, null); assert.equal(d.takes[1].resonance, null);
+});
+
 /* ---------- fed in pieces ---------- */
 test('diagnosis preserves measured input dimensions and runtime revisions without file identity or audio', () => {
   const result = P.analyze(tone(blank(3), .3, 2.4, 60), SR);

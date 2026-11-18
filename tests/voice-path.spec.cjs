@@ -509,6 +509,31 @@ test('the same MR below the singer reaches both comparison results even with les
  }
 });
 
+test('a voice left after taking the MR out still passes the mixed-take gate: read like the real 1.5 dB take, it is refused and nothing is compared',async({page})=>{
+ test.setTimeout(120000);
+ await bootMr(page,{quiet:true});await open(page);await measure(page);
+ // A clear voice after the MR is measured as before.
+ for(const role of['a','b'])await expect(page.locator('[data-vp-take="'+role+'"]')).toHaveAttribute('data-vp-source','mr-removed');
+ await expect(page.locator('[data-vp-refused]')).toHaveCount(0);
+ expect((await page.evaluate(()=>VZ.voicePathDiagnosis())).takes.map(t=>[t.measurable,t.measurableWhy])).toEqual([[true,'song-mr-removed'],[true,'song-mr-removed']]);
+ // The 비교 take now reads like the owner's real diagnosis: 1.5 dB removed, the voice left behind still unclear.
+ await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-b');q.onsuccess=()=>{const r=q.result;r.removed.report.removedDb=1.5;
+  r.removed.result.confidence={...r.removed.result.confidence,meanStrength:0.777,glitchShare:0.0494,outsideBandShare:0,mainBand:{low:42,high:70.7},jumpsPerMin:229.1,flatNoteShare:0.06,bandwidthHz:3600};s.put(r);};tx.oncomplete=()=>{o.result.close();resolve();};};});});
+ await page.reload();await page.evaluate(()=>{VzipR2.enabled=()=>true;VzipR2.url=async key=>window.__mr[key];VZ.render();});
+ const take=page.locator('[data-vp-take="b"]');
+ await expect(take).toHaveAttribute('data-vp-source','mr-removed');
+ await expect(take.locator('[data-vp-refused]')).toHaveText('곡 MR을 1.5 dB 빼도 목소리를 안정적으로 읽지 못했어요 (음높이 검출 일관성 77.7%, 기준 88%). 소리 길 비교를 보류해요.');
+ await expect(take.locator('[data-vp-mr-note]')).toContainText('내 MR SECRETMR');
+ await expect(take.locator('.vp-meta')).not.toContainText('목소리');
+ await expect(page.locator('[data-vp-take="a"] [data-vp-refused]')).toHaveCount(0);
+ for(const r of await page.locator('[data-vp-row]').all())await expect(r).toHaveAttribute('data-state','alone');
+ expect(await page.locator('[data-vp]').innerText()).not.toMatch(DIRECTION);
+ const d=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ expect(d.comparison).toBeNull();
+ expect(d.takes[1]).toMatchObject({source:'mr-removed',clean:false,measurable:false,measurableWhy:'mr-removed-weak-pitch',mrRemoval:{removedDb:1.5},resonance:null,breath:null});
+ expect(d.takes[0]).toMatchObject({source:'mr-removed',measurable:true});
+ expect(page.__errors).toEqual([]);
+});
 test('a drifting quiet MR reaches the screen, invalidates older MR caches and exports numeric local evidence',async({page},testInfo)=>{
  test.setTimeout(120000);await bootMr(page,{quiet:true,drift:true});await open(page);await measure(page);
  const diagnosis=await page.evaluate(()=>VZ.voicePathDiagnosis());
