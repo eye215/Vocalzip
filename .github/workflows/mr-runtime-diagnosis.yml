@@ -1,0 +1,46 @@
+name: MR read-only operational diagnosis
+on:
+  pull_request:
+    paths:
+      - 'worker/mr-runtime-diagnosis.mjs'
+      - 'tests/mr-runtime-diagnosis.test.cjs'
+      - '.github/workflows/mr-runtime-diagnosis.yml'
+  workflow_dispatch:
+    inputs:
+      recording_bytes:
+        description: 'Exact recording byte count; reads one owner/song only, no writes or audio artifacts'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: node --test tests/mr-runtime-diagnosis.test.cjs
+      - run: node worker/mr-runtime-diagnosis.mjs --synthetic
+  read-only:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'eye215/Vocalzip' && github.ref == 'refs/heads/main'
+    needs: synthetic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - name: Read exact originals and run isolated native-browser Worker
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RECORDING_BYTES: ${{ inputs.recording_bytes }}
+        run: node worker/mr-runtime-diagnosis.mjs
