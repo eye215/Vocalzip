@@ -422,6 +422,8 @@ function create({storage,identity,getData,change}){
  }
  const isQuota=e=>e?.name==='QuotaExceededError'||e?.code===22||/quota/i.test(e?.message||'');
  function restore(){
+  // Duplicates of what the root holds go first: on a full device the root can only be saved once they are gone.
+  prune();
   const d=data(),ledger=read(),rows=d[COLLECTION]||[],gone=new Set([...(d.deleted?.[COLLECTION]||[]),...ledger.deleted]);
   const retained=ledger.records.filter(s=>!gone.has(s.id));
   if(retained.length!==ledger.records.length)put({...ledger,records:retained,deleted:[...gone]});
