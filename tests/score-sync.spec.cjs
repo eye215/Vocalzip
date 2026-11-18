@@ -418,7 +418,7 @@ test('마디 위치 보기 on: pressing and holding a measure box offers 여기�
  await expect(page.locator('.sheet-menu')).toHaveCount(0);
  await hold(2);
  await expect(menu(2)).toBeVisible();await expect(menu(2).locator('.score-sync-menu-title')).toHaveText('2마디');
- await expect(menu(2).getByRole('button')).toHaveText([/여기서 재생/,/이 마디 반복/]);
+ await expect(menu(2).getByRole('button')).toHaveText([/여기서 재생/,/이 마디 반복/,/이 마디에 지적 추가/]); // the last: app/score-points.js
  for(const b of await menu(2).getByRole('button').all())expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await menu(2).getByRole('button',{name:'여기서 재생'}).click();
  await expect(bar(dialog).getByRole('group',{name:'MR 재생 중'})).toBeVisible();
@@ -451,7 +451,7 @@ test('without a sync the list and the held measure say what matching gives, with
  const p=await boxCentre(dialog,6);await page.mouse.move(p.x,p.y);await page.mouse.down();await page.waitForTimeout(750);await page.mouse.up();
  const menu=page.getByRole('dialog',{name:'6마디 메뉴'});
  await expect(menu.locator('[data-sync-need]')).toHaveText('MR과 맞추면 이 마디만 반복해서 들을 수 있어요.');
- await expect(menu.getByRole('button')).toHaveText([/MR과 맞추기/]);
+ await expect(menu.getByRole('button')).toHaveText([/MR과 맞추기/,/이 마디에 지적 추가/]);
  await menu.getByRole('button',{name:'MR과 맞추기'}).click();await expect(syncSheet(page).locator('[data-sync-page]')).toBeVisible({timeout:15000});
 });
 

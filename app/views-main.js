@@ -594,7 +594,7 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     if (asked && tabs.some(([k]) => k === asked)) songTab = asked;
     // The page header already says 곡 상세: the card shows the title, 작품 / 아티스트 and the totals.
     return '<div class="song-head vz-song-detail-hero"><strong class="vz-song-detail-title">' + esc(s.title) + '</strong><span class="vz-song-detail-sub" data-song-show' + (s.show ? '' : ' hidden') + '>' + esc(s.show || '') + '</span><span class="vz-song-detail-summary" data-summary></span></div>' +
-      '<div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
+      '<div data-repertoire></div><div data-score-points></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
     const s = VZ.song(r.params[0]); if (!s) return;
@@ -786,6 +786,8 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
       // Keep the user's current scroll position when changing tabs.
     });
     draw();
+    // 레슨 지적 체크 (app/score-points.js): its card redraws itself.
+    VZ.scorePoints?.card(main.querySelector('[data-score-points]'), s.id);
     // Data from another device arrives as vzip:data-changed. This screen is not re-rendered in the background (selection,
     // open tab), so it redraws itself in place, unless that would interrupt typing, an open sheet, a selection or playback:
     // then the title is refreshed now and the list on its next draw.
