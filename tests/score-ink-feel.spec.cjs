@@ -243,15 +243,19 @@ for(const [name,size]of [['phone 390',{width:390,height:844}],['iPad 820',{width
 });
 
 test('녹음 in the viewer fullscreen leaves the browser fullscreen first (mic question shows) and keeps the full layout',async({page})=>{
- await setup(page);const dialog=await open(page);
+ await setup(page);
  await page.evaluate(()=>{
-  window.__log=[];let fs=null;const sheet=document.querySelector('.score-ink-sheet');
-  Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>fs});Object.defineProperty(document,'fullscreenEnabled',{configurable:true,get:()=>true});
-  sheet.requestFullscreen=async()=>{fs=sheet;document.dispatchEvent(new Event('fullscreenchange'));};
-  document.exitFullscreen=async()=>{window.__log.push('exit-fullscreen');fs=null;document.dispatchEvent(new Event('fullscreenchange'));};
+  window.__log=[];
   window.__state='prompt';Object.defineProperty(navigator,'permissions',{configurable:true,value:{query:async()=>({state:window.__state})}});
   window.VZ.media.canRecord=()=>true;
   window.VZ.media.capture=async()=>{window.__log.push('capture:'+(document.fullscreenElement?'fullscreen':'outside'));return {start(){},pause(){},resume(){},seconds:()=>1,state:'recording',stop:async()=>({blob:new Blob(['x']),type:'audio/mp4',durationSeconds:1}),cancel(){window.__log.push('cancel');}};};
+ });
+ const dialog=await open(page);
+ await page.evaluate(()=>{
+  let fs=null;const sheet=document.querySelector('.score-ink-sheet');
+  Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>fs});Object.defineProperty(document,'fullscreenEnabled',{configurable:true,get:()=>true});
+  sheet.requestFullscreen=async()=>{fs=sheet;document.dispatchEvent(new Event('fullscreenchange'));};
+  document.exitFullscreen=async()=>{window.__log.push('exit-fullscreen');fs=null;document.dispatchEvent(new Event('fullscreenchange'));};
  });
  await act(dialog,'전체화면');await expect(dialog).toHaveClass(/score-ink-fullscreen/);
  expect(await page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
