@@ -107,6 +107,53 @@
 .gc-excluded ul{display:grid;gap:8px;margin:0 0 4px;padding:0;list-style:none}
 .gc-excluded li{display:grid;gap:2px;min-width:0;font-size:12px;line-height:18px;color:#475467}
 .gc-excluded strong{color:#344054;font-weight:600}
+/* 귀와 숫자 (app/growth-changes-ui.js · app/ear-agreement-model.js): under 무엇이 달라졌나, closed to one line. Neutral
+   colours: agreeing is not "good" and disagreeing is not "bad" — the badges only say which way. */
+.gc-ear{margin-top:12px;overflow-wrap:anywhere}
+.gc-ear-box>summary{display:grid;grid-template-columns:minmax(0,1fr) 24px;align-items:center;gap:2px 8px;min-height:44px;cursor:pointer;list-style:none}
+.gc-ear-box>summary::-webkit-details-marker{display:none}
+.gc-ear-box>summary:focus-visible,.gc-ear-detail>summary:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px}
+.gc-ear-title{display:flex;align-items:center;gap:6px;color:#101828;font-size:16px;line-height:22px;font-weight:600}
+.gc-ear-title i{color:#7A32F5;font-size:20px}
+.gc-ear-sum{grid-column:1;color:#475467;font-size:13px;line-height:18px}
+.gc-ear-caret{grid-column:2;grid-row:1/span 2;justify-self:center;color:#667085;font-size:16px;transition:transform .15s}
+.gc-ear-box[open] .gc-ear-caret{transform:rotate(180deg)}
+.gc-ear-body{display:grid;gap:12px;margin-top:12px;min-width:0}
+.gc-ear-help,.gc-ear-note{margin:0;color:#667085;font-size:12px;line-height:18px}
+.gc-ear-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px;line-height:18px}
+.gc-ear-table th,.gc-ear-table td{padding:8px 4px;border-top:1px solid #F2EFF7;text-align:center;vertical-align:top;font-variant-numeric:tabular-nums}
+.gc-ear-table thead th{border-top:0;color:#667085;font-size:12px;font-weight:600}
+.gc-ear-table thead th:first-child{text-align:left;padding-left:0}
+.gc-ear-table th:not(:first-child),.gc-ear-table td{width:52px}
+.gc-ear-table tbody th{padding-left:0;text-align:left;font-weight:400}
+.gc-ear-table tbody th span{display:block;color:#344054;font-size:14px;line-height:20px;font-weight:600}
+.gc-ear-table tbody th small{display:block;margin-top:2px;color:#667085;font-size:12px;line-height:18px}
+.gc-ear-table td{color:#344054;font-size:14px;line-height:20px}
+.gc-ear-sub{margin:0;color:#344054;font-size:14px;line-height:20px;font-weight:600}
+.gc-ear-tags{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.gc-ear-tags li{display:grid;gap:1px;min-width:0;color:#344054;font-size:13px;line-height:18px}
+.gc-ear-tags small{color:#667085;font-size:12px;line-height:18px}
+.gc-ear-excluded{border-top:1px solid #F2EFF7}
+.gc-ear-excluded ul{display:grid;gap:8px;margin:0 0 4px;padding:0;list-style:none}
+.gc-ear-excluded li{display:grid;gap:2px;min-width:0;font-size:12px;line-height:18px;color:#475467}
+.gc-ear-excluded strong{color:#344054;font-weight:600}
+.gc-ear-detail{margin-top:8px;padding:0 12px;border-radius:14px;background:#F8F6FD}
+.gc-ear-detail>summary{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;min-height:44px;color:#344054;font-size:13px;line-height:18px;font-weight:600;cursor:pointer}
+.gc-ear-detail>summary small{color:#667085;font-size:12px;font-weight:400;font-variant-numeric:tabular-nums}
+.gc-ear-basis,.gc-ear-why{margin:0 0 8px;color:#475467;font-size:12px;line-height:18px}
+.gc-ear-detail .gc-ear-note{padding-bottom:12px}
+.gc-ear-rows{display:grid;gap:0;margin:0 0 8px;padding:0;list-style:none}
+.gc-ear-rows li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 8px;min-width:0;padding:8px 0;border-top:1px solid #EDE8F5;font-size:13px;line-height:18px;color:#344054}
+.gc-ear-rows li:first-child{border-top:0}
+.gc-ear-rows li>*:not(.gc-ear-badge){grid-column:1}
+.gc-ear-name{font-weight:600}
+.gc-ear-rows small{color:#667085;font-size:12px;line-height:18px;font-variant-numeric:tabular-nums}
+.gc-ear-badge{grid-column:2;grid-row:1;align-self:start;padding:1px 8px;border-radius:99px;background:#F2EFF7;color:#475467;font-size:12px;line-height:18px;font-weight:600;white-space:nowrap}
+.gc-ear-badge[data-result="agree"]{background:#F3ECFF;color:#7A32F5}
+.gc-ear-badge[data-result="disagree"]{background:#FFF3DC;color:#8A5200}
+.gc-ear-mark{display:inline-flex;align-items:center;justify-self:start;gap:4px;margin-top:2px;padding:1px 8px;border-radius:99px;background:#F3ECFF;color:#7A32F5;font-size:12px;line-height:18px;font-style:normal;font-weight:600}
+.gc-ear-mark i{font-size:14px}
+@media (prefers-reduced-motion:reduce){.gc-ear-caret{transition:none}}
 @media (min-width:768px){
   .gc-groups{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px}
   .gc-group[data-gc-group="verdicts"]{grid-column:1/-1}
