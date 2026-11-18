@@ -147,13 +147,13 @@ VZ.openScoreInk=(songId,scoreId)=>{
   '<div class="score-ink-pages">'+button('first','skip-back','첫 악보 페이지')+button('prev','caret-left','이전 악보 페이지')+'<button type="button" class="score-ink-page-jump" data-ink-page aria-label="페이지 미리보기와 바로 이동" aria-expanded="false">불러오는 중</button>'+button('next','caret-right','다음 악보 페이지')+button('last','skip-forward','마지막 악보 페이지')+
   '<select data-ink-zoom aria-label="악보 확대"><option value="1">화면 맞춤</option><option value="1.5">150%</option><option value="2">200%</option></select></div>'+
   '<section class="score-ink-thumbnails" data-ink-thumbnails aria-label="악보 페이지 미리보기" hidden><div class="score-ink-thumbnails-head"><strong>페이지 이동</strong>'+button('thumb-close','x','페이지 미리보기 닫기')+'</div><form data-ink-jump-form><label>페이지 번호 <input type="number" data-ink-jump-input min="1" inputmode="numeric" aria-label="이동할 페이지 번호"></label><button type="submit">이동</button></form><div class="score-ink-thumb-grid" data-ink-thumb-grid></div><div class="score-ink-thumb-nav">'+button('thumb-prev','caret-left','앞 페이지 목록')+'<span data-ink-thumb-range></span>'+button('thumb-next','caret-right','다음 페이지 목록')+'</div></section>'+
-  '<div class="score-ink-selection-bar" data-ink-selection-bar role="group" aria-label="선택한 필기" hidden><span data-ink-selection-count></span><button type="button" data-ink-recognize hidden>텍스트로 변환</button>'+button('selection-smaller','minus','선택 필기 축소')+button('selection-larger','plus','선택 필기 확대')+button('selection-delete','trash','선택 필기 삭제')+button('selection-clear','x','필기 선택 해제')+'</div>'+
+  '<div class="score-ink-selection-bar" data-ink-selection-bar role="group" aria-label="선택한 필기" hidden><span data-ink-selection-count></span><button type="button" data-ink-recognize hidden>텍스트로 변환</button><button type="button" data-ink-to-point hidden>지적으로</button>'+button('selection-smaller','minus','선택 필기 축소')+button('selection-larger','plus','선택 필기 확대')+button('selection-delete','trash','선택 필기 삭제')+button('selection-clear','x','필기 선택 해제')+'</div>'+
   '<div class="score-ink-memo-bar" data-ink-memo-bar role="group" aria-label="메모" hidden><p data-ink-memo-hint>메모를 붙일 곳을 눌러 주세요.</p><div class="score-ink-memo-colors" data-ink-memo-colors role="group" aria-label="메모 색"></div>'+
   '<div class="score-ink-memo-modes"><button type="button" data-ink-memo-mode="text" aria-pressed="false"><i class="ph ph-text-aa" aria-hidden="true"></i>글자로 쓰기</button><button type="button" data-ink-memo-mode="pen" aria-pressed="false"><i class="ph ph-pen" aria-hidden="true"></i>펜으로 쓰기</button><button type="button" data-ink-memo-done hidden>완료</button><button type="button" data-ink-memo-goals hidden><i class="ph ph-target" aria-hidden="true"></i>목표로 넣기</button></div>'+
   button('memo-delete','trash','메모 삭제')+button('memo-close','x','메모 선택 해제')+'</div>'+
   '<p class="score-ink-status" data-ink-status role="status" aria-live="polite">PDF를 준비하고 있어요.</p><a class="score-ink-original-quick" data-ink-original-quick target="_blank" rel="noopener" hidden>원본 PDF 열기</a>'+
   '<div class="score-ink-stage" data-ink-stage tabindex="0" aria-label="악보 페이지"><div class="score-ink-page" data-ink-box hidden><canvas data-ink-pdf aria-label="PDF 악보"></canvas><svg xmlns="http://www.w3.org/2000/svg" data-ink-svg role="img" aria-label="개인 필기 영역"></svg><div class="score-ink-text-layer" data-ink-text-layer></div><div class="score-ink-vision-rect" data-ink-vision-rect hidden></div></div></div>'+ 
-  '<section class="score-ink-vision-result" data-ink-vision-result aria-label="인식 결과" hidden><strong data-ink-vision-heading></strong><p data-ink-vision-explanation></p><button type="button" class="score-ink-vision-more" data-ink-vision-more aria-expanded="false" hidden>더보기</button><label data-ink-vision-text-label hidden>변환된 글자 확인·수정<textarea data-ink-vision-text rows="3" maxlength="1200"></textarea></label><p class="score-ink-vision-disclosure">선택 영역만 OpenAI API로 전송해 인식해요. 결과는 틀릴 수 있으니 확인해 주세요.</p><div class="score-ink-vision-buttons"><button type="button" data-ink-vision-save hidden>텍스트 메모 저장</button><button type="button" data-ink-vision-replace hidden>저장 후 원래 필기 대체</button><button type="button" data-ink-vision-delete hidden>메모 삭제</button><button type="button" data-ink-vision-cancel>닫기</button></div></section>'+ 
+  '<section class="score-ink-vision-result" data-ink-vision-result aria-label="인식 결과" hidden><strong data-ink-vision-heading></strong><p data-ink-vision-explanation></p><button type="button" class="score-ink-vision-more" data-ink-vision-more aria-expanded="false" hidden>더보기</button><label data-ink-vision-text-label hidden>변환된 글자 확인·수정<textarea data-ink-vision-text rows="3" maxlength="1200"></textarea></label><p class="score-ink-vision-disclosure">선택 영역만 OpenAI API로 전송해 인식해요. 결과는 틀릴 수 있으니 확인해 주세요.</p><div class="score-ink-vision-buttons"><button type="button" data-ink-vision-save hidden>텍스트 메모 저장</button><button type="button" data-ink-vision-replace hidden>저장 후 원래 필기 대체</button><button type="button" data-ink-vision-point hidden>레슨 지적으로 저장</button><button type="button" data-ink-vision-delete hidden>메모 삭제</button><button type="button" data-ink-vision-cancel>닫기</button></div></section>'+ 
   '<div class="score-ink-performance-controls" data-ink-performance-controls hidden>'+button('performance-prev','caret-left','이전 페이지')+'<span data-ink-performance-page></span>'+button('performance-next','caret-right','다음 페이지')+'<button type="button" data-ink-performance-exit>편집으로 돌아가기</button></div>'+
   '<p class="score-ink-help">손가락 두 개로 좌우 스와이프해 페이지를 넘겨요. ‘펜만 필기’가 켜져 있으면 한 손가락도 사용할 수 있어요.</p></div>';
  function say(text,error=false){if(!closed){status.textContent=text;status.dataset.error=error?'true':'false';done.textContent=pending?'다시 저장':'완료';el.toggleAttribute('data-ink-save-error',!!pending);}}
@@ -443,6 +443,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   el.querySelector('[data-ink-selection-count]').textContent=rows.length+'개 선택';
   el.querySelector('[data-ink-recognize]').hidden=!visionAvailable||!rows.length;
   panel.querySelectorAll('button').forEach(b=>b.disabled=busy||exportBusy||!!pending||!!selection?.drag);
+  const toPoint=el.querySelector('[data-ink-to-point]');toPoint.hidden=!rows.length||!VZ.scorePoints?.editor;toPoint.textContent='busy' in toPoint.dataset?'인식 중…':'지적으로';if(visionBusy)toPoint.disabled=true;
   if(!selection||tool!=='select')return;
   const drag=selection.drag,preview=selection.preview||rows;
   let b=preview.length?Ink.bounds(preview,aspect):null;
@@ -655,7 +656,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const more=el.querySelector('[data-ink-vision-more]'),description=el.querySelector('[data-ink-vision-explanation]');panel.dataset.expanded='false';more.hidden=true;more.textContent='더보기';more.setAttribute('aria-expanded','false');
   if(result.mode==='notation')requestAnimationFrame(()=>{if(panel.hidden||panel._result!==result)return;more.hidden=description.scrollHeight<=description.clientHeight+2;});
   el.querySelector('[data-ink-vision-text-label]').hidden=!isText;el.querySelector('[data-ink-vision-text]').value=result.text||'';
-  el.querySelector('[data-ink-vision-save]').hidden=!isText;el.querySelector('[data-ink-vision-replace]').hidden=result.mode!=='handwriting';el.querySelector('[data-ink-vision-delete]').hidden=result.mode!=='edit';
+  el.querySelector('[data-ink-vision-save]').hidden=!isText;el.querySelector('[data-ink-vision-replace]').hidden=result.mode!=='handwriting';el.querySelector('[data-ink-vision-delete]').hidden=result.mode!=='edit';el.querySelector('[data-ink-vision-point]').hidden=result.mode!=='handwriting'||!VZ.scorePoints?.editor;
   el.querySelector('.score-ink-vision-disclosure').textContent=result.mode==='notation'?'선택한 악보 영역만 NVIDIA AI로 보내 설명해요. 결과는 직접 확인해 주세요.':'선택한 필기만 OpenAI API로 보내 인식해요. 결과는 직접 확인해 주세요.';
   el.querySelector('[data-ink-vision-cancel]').textContent='닫기';visionPanel(true);
  }
@@ -690,6 +691,46 @@ VZ.openScoreInk=(songId,scoreId)=>{
    say(mode==='notation'?'표기 설명을 확인해 주세요.':'변환 결과를 확인하고 수정해 주세요.');
   }catch(e){if(e.name!=='AbortError')say('인식하지 못했어요: '+e.message,true);}
   finally{visionBusy=false;visionController=null;if(!closed)saveState('이 기기에 저장됨','local');}
+ }
+ /* 레슨 지적 (app/score-points.js) from handwriting: the selected strokes' words (recognized, or typed by the person)
+  * and the printed measures under them open the 지적 추가 form. Nothing is saved before its 저장, and the strokes stay
+  * on the score unless the form is told to remove them. */
+ function pointMeasures(rows,page){
+  const hits=page===pageNo&&rows?.length?measures?.measuresIn?.(Ink.bounds(rows,aspect))||[]:[],n=hits.flatMap(h=>[parseInt(h.number,10),parseInt(h.last??h.number,10)]).filter(Number.isFinite);
+  return n.length?{from:Math.min(...n),to:Math.max(...n)}:{from:'',to:''};
+ }
+ async function openPoint(rows,page,text,note){
+  const at=pointMeasures(rows,page),bound=binding?.pdfHash;await outside();if(closed)return;
+  VZ.scorePoints.editor(songId,{...at,scoreId:score.id,text,note,ink:true},(row,choice)=>{
+   if(!choice?.removeInk)return;
+   try{
+    if(closed||binding?.pdfHash!==bound)throw Error('악보가 바뀌었어요.');
+    current();if(pending||!rows.every(s=>store.list(binding,page).some(r=>r.id===s.id&&Ink.same(r,s))))throw Error('원래 필기가 바뀌었어요.');
+    apply({add:[],remove:rows});if(selection?.rows.some(s=>rows.some(r=>r.id===s.id)))clearSelection();paint();
+   }catch(e){VZ.toast('지적은 저장했고 손글씨는 그대로 두었어요. '+e.message,'error');}
+  });
+ }
+ /** 지적으로 (selection bar): recognition, when it can be used, then the form; without it the form with an empty field. */
+ async function toPoint(){
+  const rows=selection?.rows?.map(s=>({...s})),page=pageNo,button=el.querySelector('[data-ink-to-point]');
+  if(!rows?.length||!VZ.scorePoints?.editor)return;
+  if(visionBusy||!ready||busy||pending||performance){say('악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.',true);return;}
+  let text='',note='';
+  // The same question as 텍스트로 변환 (recognize) before anything is sent; 취소 opens the form to write by hand.
+  const send=visionAvailable&&navigator.onLine!==false&&await VZ.confirm('선택 영역 인식','선택한 손글씨 획만 OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.',{ok:'인식하기'});
+  if(closed)return;
+  if(send){
+   visionBusy=true;visionController=new AbortController();button.dataset.busy='';saveState('인식 중…','pending');say('선택한 손글씨를 글자로 바꾸고 있어요.');paint();
+   try{
+    current();const image=cropHandwriting(rows).image;if(image.length>600000)throw Error('선택 영역이 너무 커요.');
+    const result=await window.VzipR2.scoreVision('handwriting',image,visionController.signal);
+    text=String(result?.text||'').trim();
+    note=text?(result.confidence==='low'?'손글씨 인식이 불확실해요. 글자를 확인하고 고쳐 주세요.':'손글씨를 글자로 바꿨어요. 맞는지 확인해 주세요.'):'손글씨에서 글자를 찾지 못했어요. 직접 적어 주세요.';
+   }catch(e){if(e.name==='AbortError'||closed)return;note='손글씨를 인식하지 못했어요 ('+e.message+'). 직접 적어 주세요.';}
+   finally{visionBusy=false;visionController=null;delete button.dataset.busy;if(!closed){saveState('이 기기에 저장됨','local');say('지적 내용을 확인해 주세요.');paint();}}
+  }
+  else if(visionAvailable&&navigator.onLine===false)note='인터넷에 연결되지 않아 글자 인식은 건너뛰었어요. 직접 적어 주세요.';
+  if(!closed)await openPoint(rows,page,text,note);
  }
  function invalidateExport(){
   if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=null;exportStamp='';
@@ -1486,6 +1527,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(!text||result?.page!==pageNo||!ready||pending||!result?.rows?.length){say('변환 결과와 원래 필기를 확인해 주세요.',true);return;}
    try{current();if(!result.rows.every(s=>store.list(binding,pageNo).some(r=>r.id===s.id&&Ink.same(r,s))))throw Error('원래 필기가 바뀌었어요. 다시 선택해 주세요.');const note={id:VZ.uid(),page:pageNo,text:text.slice(0,1200),x:Math.max(0,Math.min(.92,result.rect.x)),y:Math.max(0,Math.min(.95,result.rect.y))};saveNotes([...notes,note]);apply({add:[],remove:result.rows});visionPanel(false);clearSelection();}catch(e){say('필기 대체를 완료하지 못했어요: '+e.message,true);}
   };
+  el.querySelector('[data-ink-to-point]').onclick=toPoint;
+  el.querySelector('[data-ink-vision-point]').onclick=()=>{const result=el.querySelector('[data-ink-vision-result]')._result;if(result?.mode!=='handwriting'||!VZ.scorePoints?.editor)return;visionPanel(false);openPoint(result.rows||[],result.page,el.querySelector('[data-ink-vision-text]').value.trim(),'');};
   el.querySelector('[data-ink-recognize]').onclick=()=>{if(selection?.rows.length)recognize('handwriting',null,selection.rows);};
   el.querySelector('[data-ink-explain-selection]').onclick=()=>{if(scoreRect)recognize('notation',scoreRect);};
   el.querySelector('[data-ink-notation]').onclick=()=>{if(tool==='notation'){el.querySelector('[data-ink-tool="pan"]').click();say('악보 표기 AI 분석을 껐어요.');return;}memoEnd();selectionEnd(false);clearSelection();clearScoreRect();finishStroke();resetGestures();markerStart=null;markerDrag=null;markerPalette(false);el.querySelector('[data-ink-marker-mode]').setAttribute('aria-pressed','false');tool='notation';svg.dataset.tool=tool;stage.dataset.notation='true';el.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed','false'));el.querySelector('[data-ink-notation]').setAttribute('aria-pressed','true');syncQuick();say('궁금한 표기를 손가락으로 사각형으로 둘러 주세요.');};
