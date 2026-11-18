@@ -23,7 +23,7 @@ async function boot(page, {session = true, hash = '#/bt-test'} = {}) {
     } else Object.defineProperty(navigator, 'audioSession', {configurable:true, value:undefined});
     let md = navigator.mediaDevices;
     if (!md) { md = {}; Object.defineProperty(navigator, 'mediaDevices', {configurable:true, value:md}); }
-    md.getUserMedia = async constraints => {
+    const fakeMic = async constraints => {
       window.__ev.push('mic'); window.__constraints.push(constraints);
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       let stream;
@@ -38,6 +38,9 @@ async function boot(page, {session = true, hash = '#/bt-test'} = {}) {
       ctx.resume?.()?.catch?.(() => {}); // never awaited: headless engines may leave it pending
       window.__tracks.push(...stream.getTracks()); return stream;
     };
+    // WebKit keeps getUserMedia on MediaDevices.prototype and may ignore a plain assignment: define it on both.
+    Object.defineProperty(md, 'getUserMedia', {configurable:true, writable:true, value:fakeMic});
+    try { if (window.MediaDevices) Object.defineProperty(MediaDevices.prototype, 'getUserMedia', {configurable:true, writable:true, value:fakeMic}); } catch {}
     HTMLMediaElement.prototype.play = function () { window.__ev.push('play'); return Promise.resolve(); };
     const start = AudioBufferSourceNode.prototype.start;
     AudioBufferSourceNode.prototype.start = function (...a) { window.__ev.push('webaudio'); return start.apply(this, a); };

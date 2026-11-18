@@ -224,7 +224,12 @@ VZ.route('bt-test', {title:'녹음 중 블루투스 시험', back:true, tab:'kee
         }
         if (m.order !== 'session-after' && (needsSession(m) || supported())) { setType(m.session); r.steps.push(['set', readType()]); }
         if (!navigator.mediaDevices?.getUserMedia) { const e = Error('getUserMedia 없음'); e.name = 'NotSupportedError'; throw e; }
-        r.stream = await navigator.mediaDevices.getUserMedia({audio:m.mic === 'raw' ? RAW : true});
+        // Like the app's recorder (app/media.js M.capture): an engine that rejects the raw-voice constraints gets the defaults.
+        try { r.stream = await navigator.mediaDevices.getUserMedia({audio:m.mic === 'raw' ? RAW : true}); }
+        catch (first) {
+          if (m.mic !== 'raw' || !(first?.name === 'OverconstrainedError' || first?.name === 'TypeError' || /constraint/i.test(first?.message || ''))) throw first;
+          r.error ||= 'mic:raw-' + first.name; r.stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        }
         if (active !== r) { r.stream.getTracks().forEach(t => t.stop()); return; }
         r.steps.push(['mic', readType()]);
         try { r.meter = makeMeter(r.stream, level => { if (active === r) { showLevel(level); if (r.order === 'session-after' && r.afterMax != null) r.afterMax = Math.max(r.afterMax, level); } }); }
