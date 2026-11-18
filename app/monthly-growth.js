@@ -233,11 +233,13 @@ async function mount(host){
    renderSerial++;
    const visibleSerial=renderSerial;
    if(mode==='overall'&&overall&&overallUi){
-    host.innerHTML=pageHead+tabs()+'<div data-overall-body>'+overallUi.render(overall,undefined,{range:rangeUi?.html(items)||''})+'</div>'+
+    // 무엇이 달라졌나 (app/growth-changes-ui.js): only comparable changes, above the existing report (whose numbers it leaves alone).
+    host.innerHTML=pageHead+tabs()+(window.VzipGrowthChangesUI?'<div class="gc-host" data-growth-changes></div>':'')+'<div data-overall-body>'+overallUi.render(overall,undefined,{range:rangeUi?.html(items)||''})+'</div>'+
       '<p class="small muted growth-disclaimer">표시되는 수치는 음성 측정에 기반한 참고 정보이며 발성 건강, 감정 표현 또는 악보 대비 정확성을 평가하지 않아요. 전·후 비교는 서로 다른 날 부른 동일 곡을 사용합니다.</p>';
     bindTabs();
     overallUi.bind(host.querySelector('[data-overall-body]'),overall,{rerender:render});
     rangeUi?.bind(host,items);
+    window.VzipGrowthChangesUI?.mount(host.querySelector('[data-growth-changes]'),items);
     return;
    }
    if(!keys.length){host.innerHTML=pageHead+tabs()+'<div class="empty"><p>아직 날짜가 있는 녹음이 없어요.</p></div>';bindTabs();return;}

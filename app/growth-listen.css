@@ -74,3 +74,40 @@
 .lc-chip:focus-visible,.gc-chip:focus-visible{outline:2px solid #7A32F5;outline-offset:2px}
 .gc-chip i{font-size:16px}
 
+/* ---------- 무엇이 달라졌나 ---------- */
+.gc-host:empty{display:none}
+.gc-card{min-width:0;overflow-wrap:anywhere}
+.gc-head h2{margin:0;color:#101828;font-size:18px;line-height:26px;font-weight:700;letter-spacing:-.02em}
+.gc-head p{margin:4px 0 0;color:#667085;font-size:12px;line-height:18px}
+.gc-groups{display:grid;gap:16px;margin-top:16px;min-width:0}
+.gc-group{min-width:0}
+.gc-group h3{display:flex;align-items:center;gap:6px;margin:0 0 4px;color:#344054;font-size:14px;line-height:20px;font-weight:600}
+.gc-group h3 i{color:#7A32F5;font-size:18px}
+.gc-line{min-width:0;padding:12px 0;border-top:1px solid #F2EFF7}
+.gc-group h3+.gc-line{border-top:0;padding-top:8px}
+.gc-basis{margin:0 0 6px;color:#667085;font-size:12px;line-height:18px}
+.gc-quote{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0;color:#101828;font-size:14px;line-height:20px}
+.gc-quote q{quotes:"“" "”"}
+.gc-who{flex:none;padding:1px 8px;border-radius:99px;background:#F3ECFF;color:#7A32F5;font-size:12px;line-height:18px;font-weight:600}
+.gc-who[data-judge="teacher"]{background:#E8F6F6;color:#078994}
+.gc-tags{margin:4px 0 0;color:#344054;font-size:13px;line-height:18px}
+.gc-memo{margin:4px 0 0;padding:8px 12px;border-radius:12px;background:#F8F6FD;color:#475467;font-size:13px;line-height:18px;white-space:pre-wrap}
+.gc-obs{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.gc-obs li{display:grid;gap:1px;min-width:0;color:#344054;font-size:14px;line-height:20px}
+.gc-obs li[data-similar]{color:#475467}
+.gc-obs small{color:#667085;font-size:12px;line-height:18px;font-variant-numeric:tabular-nums}
+.gc-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.gc-player:empty{display:none}
+.gc-player{margin-top:8px}
+.gc-player .player{margin:0}
+.gc-empty{margin:4px 0 8px;padding:12px;border-radius:14px;background:#F8F6FD;color:#475467;font-size:13px;line-height:18px}
+.gc-group [data-gc-precision-entry]{margin-top:4px}
+.gc-more summary,.gc-excluded summary{display:flex;align-items:center;min-height:44px;color:#475467;font-size:13px;line-height:18px;font-weight:600;cursor:pointer}
+.gc-excluded{margin-top:8px;border-top:1px solid #F2EFF7}
+.gc-excluded ul{display:grid;gap:8px;margin:0 0 4px;padding:0;list-style:none}
+.gc-excluded li{display:grid;gap:2px;min-width:0;font-size:12px;line-height:18px;color:#475467}
+.gc-excluded strong{color:#344054;font-weight:600}
+@media (min-width:768px){
+  .gc-groups{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px}
+  .gc-group[data-gc-group="verdicts"]{grid-column:1/-1}
+}
