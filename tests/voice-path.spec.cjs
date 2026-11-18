@@ -93,6 +93,54 @@ const kept = page => page.evaluate(async () => {
   return await new Promise(resolve => { const o = indexedDB.open(name); o.onsuccess = () => { const q = o.result.transaction('takes').objectStore('takes').getAll(); q.onsuccess = () => { o.result.close(); resolve(q.result.map(r => ({id:r.id, model:r.model, at:r.at, mrSig:r.mrSig}))); }; }; });
 });
 
+async function seedServerPitch(page,id,state='done'){
+ await page.evaluate(async([id,state])=>{
+  const P=window.VzipVoicePath,m=(await VZ.media.list(true)).find(x=>x.id===id),source={provider:'r2',key:'u/fake-owner/'+id,bytes:128};
+  const result=P.gate(P.analyze(window.vpTake.samples('better',34,16000),16000),false);
+  await VZ.media.update(m,{storageProvider:'r2',r2Key:source.key,size:128,voicePathSeparation:{version:'vp-sep-1',requestId:'fake-request',source,state,requestedAt:100,engine:{model:'htdemucs'},processingMs:10,...(state==='done'?{result}:{})}},{quiet:true});
+  await VZ.media.list(true);
+ },[id,state]);
+}
+test('server-separated pitch is reused without decoding its original and keeps timbre withheld',async({page},info)=>{
+ await boot(page,{takes:[{...TAKES[0],analysis:stored({voiceOverMrDb:8})},TAKES[2]]});await seedServerPitch(page,'m-old');await open(page);
+ await measure(page);await expect(page.locator('[data-vp-take="a"]')).toHaveAttribute('data-vp-source','ai-separated');
+ expect(await page.evaluate(()=>window.__decodes)).toBe(1);await expect(page.locator('[data-vp-ai-note]')).toContainText('AI 분리 후 음높이 측정');
+ for(const id of['brightness','breath','onsets','loudSd'])await expect(row(page,id)).toHaveAttribute('data-state','hold');
+ await expect(row(page,'pitchSd')).not.toHaveAttribute('data-state','hold');
+ const d=await page.evaluate(()=>VZ.voicePathDiagnosis());expect(d.takes[0]).toMatchObject({source:'ai-separated',clean:false,measurable:true,serverSeparation:{state:'done',model:'htdemucs',pitchOnly:true}});expect(d.takes[0].resonance).toBeNull();expect(d.takes[0].mrRemoval).toBeNull();expect(JSON.stringify(d)).not.toContain('fake-owner');expect(JSON.stringify(d)).not.toContain('fake-request');
+ for(const [width,height]of[[375,812],[320,640]]){await page.setViewportSize({width,height});await noOverflow(page);await page.locator('[data-vp-take="a"]').evaluate(el=>el.scrollIntoView({block:'start'}));await page.screenshot({path:info.outputPath('server-separated-'+width+'.png')});}
+ expect(page.__errors).toEqual([]);
+});
+test('a failed raw reading requests separation once and receives the result without reloading',async({page})=>{
+ await boot(page,{takes:[TAKES[0],{...TAKES[2],id:'m-loud',kind:'bass',analysis:stored({voiceOverMrDb:8})}]});
+ await page.evaluate(async()=>{
+  const m=(await VZ.media.list(true)).find(x=>x.id==='m-loud');await VZ.media.update(m,{storageProvider:'r2',r2Key:'u/fake-owner/m-loud',size:128},{quiet:true});await VZ.media.list(true);
+  const interval=window.setInterval;window.setInterval=(fn,ms,...args)=>interval(fn,ms===15000?50:ms,...args);
+  const player=VZ.media.player;VZ.media.player=(...args)=>{const api=player(...args);Object.defineProperty(api.el,'paused',{get:()=>!window.__playing});return api;};
+  window.__serverRequests=0;VZ.voicePathServerAvailable=m=>m.id==='m-loud';VZ.voicePathServerRequest=async m=>{window.__serverRequests++;const q=window.VzipVoicePathSeparation.request(m,'fake-request',100);await VZ.media.update(m,{voicePathSeparation:q},{quiet:true});return {state:'queued'};};
+ });
+ await open(page);await page.locator('[data-vp-run]').click();await done(page);await expect(page.locator('[data-vp-server-pending]')).toBeVisible();
+ expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);await page.evaluate(()=>{window.__playing=true;});await seedServerPitch(page,'m-loud');await page.waitForTimeout(200);await expect(page.locator('[data-vp-ai-note]')).toHaveCount(0);await page.evaluate(()=>{window.__playing=false;});
+ await expect(page.locator('[data-vp-take="b"]')).toHaveAttribute('data-vp-source','ai-separated');await expect(page.locator('[data-vp-server-pending]')).toHaveCount(0);expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);expect(page.__errors).toEqual([]);
+});
+test('a replaced source cannot reuse the old server report',async({page})=>{
+ await boot(page,{takes:[{...TAKES[0],analysis:stored({voiceOverMrDb:8})},TAKES[2]]});await seedServerPitch(page,'m-old');
+ await page.evaluate(async()=>{const m=(await VZ.media.list(true)).find(x=>x.id==='m-old');await VZ.media.update(m,{r2Key:'u/fake-owner/replaced'},{quiet:true});await VZ.media.list(true);});
+ await open(page);await expect(page.locator('[data-vp-ai-note]')).toHaveCount(0);expect(page.__errors).toEqual([]);
+});
+test('queued server work is visible again after leaving before a local reading exists',async({page})=>{
+ await boot(page,{takes:[{...TAKES[0],analysis:stored({voiceOverMrDb:8})},TAKES[2]]});await seedServerPitch(page,'m-old','queued');await open(page);
+ await expect(page.locator('[data-vp-server-pending]')).toBeVisible();await page.evaluate(()=>{location.hash='#/home';});await expect(page.locator('[data-vp-picker]')).toHaveCount(0);await open(page);await expect(page.locator('[data-vp-server-pending]')).toBeVisible();expect(page.__errors).toEqual([]);
+});
+test('server request sends only the existing source identity and rejects an account change',async({page})=>{
+ await boot(page);let payload;
+ await page.route('**/functions/v1/vzip-voice-path',async route=>{payload=route.request().postDataJSON();await route.fulfill({status:202,contentType:'application/json',body:'{"state":"queued"}'});});
+ await page.evaluate(async()=>{window.vzipCloudSignedIn=()=>true;window.vzipCloudUserId=()=> 'fake-owner';window.vzipCloudSessionId=()=> 'fake-session';window.vzipCloudAccessToken=async()=> 'fake-token';await VZ.voicePathServerRequest({id:'fake-take',cloud:true,storageProvider:'r2',r2Key:'u/fake-owner/fake-take',size:128});});
+ expect(Object.keys(payload).sort()).toEqual(['mediaId','retry','source']);expect(payload).toMatchObject({mediaId:'fake-take',retry:false,source:{provider:'r2',bytes:128}});expect(JSON.stringify(payload)).not.toMatch(/audio|blob|analysis/);
+ await page.route('**/functions/v1/vzip-voice-path',async route=>{await page.evaluate(()=>{window.vzipCloudUserId=()=> 'other-owner';});await route.fulfill({status:202,contentType:'application/json',body:'{"state":"queued"}'});});
+ const error=await page.evaluate(async()=>{try{await VZ.voicePathServerRequest({id:'fake-take',cloud:true,storageProvider:'r2',r2Key:'u/fake-owner/fake-take',size:128});return '';}catch(e){return e.message;}});expect(error).toContain('계정이 변경');
+});
+
 test('성장 › 보컬 분석 opens it; the default pair is the earliest and the latest reliable take', async ({page}) => {
   await boot(page);
   await page.evaluate(() => { location.hash = '#/vocal-analysis'; });
@@ -613,7 +661,7 @@ test('a song with an MR file: the MR is taken out of each take and all traces of
     expect(t.input).toMatchObject({bytes:40*8000*2+44, sampleRate:16000, channels:1});
     expect(Math.abs(t.input.frames - 40*16000)).toBeLessThanOrEqual(1);
     expect(t.input.seconds).toBe(t.input.frames / t.input.sampleRate);
-    expect(t.runtime).toEqual({pageRevision:10, workerRevision:10, mrModuleRevision:7});
+    expect(t.runtime).toEqual({pageRevision:11, workerRevision:10, mrModuleRevision:7});
   }
   expect(d.takes[0].asRecorded.confidence.meanStrength).toEqual(expect.any(Number));
   expect(d.takes[0].stagesMs).toMatchObject({fetch:expect.any(Number), decode:expect.any(Number), mrLoad:expect.any(Number), resample:expect.any(Number), model:expect.any(Number), cancel:expect.any(Number), voice:expect.any(Number), total:expect.any(Number)});

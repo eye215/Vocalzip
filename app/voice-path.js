@@ -25,7 +25,8 @@
 const V = window.VZ, M = V?.media, P = window.VzipVoicePath;
 if (!V || !M || !P) return;
 const esc = V.esc, T = P.THRESHOLDS, L = window.VzipAudioFile;
-const PAGE_REVISION = 10, WORKER = 'app/voice-path-worker.js?v=10';
+const PAGE_REVISION = 11, WORKER = 'app/voice-path-worker.js?v=10';
+const S = window.VzipVoicePathSeparation;
 const MAX_BYTES = 250 * 1024 * 1024;     // the same limit as the app's analysis; a larger file is refused, never cut
 const BLOCK_SECONDS = 30;                // decoded sound handed to the worker at a time
 const CACHE_CAP = 60;                    // takes kept on the device
@@ -47,7 +48,7 @@ const reliable = m => !!analysisOf(m) && !!V.analysisReliable?.(m.analysis);
 const cleanOf = m => { const t = ticks()[m.id]; return P.cleanOf({analysis:analysisOf(m), ticked:typeof t === 'boolean' ? t : null}); };
 const marksOf = song => Array.isArray(V.song(song.id)?.voicePathBaseIds) ? V.song(song.id).voicePathBaseIds.map(String) : [];
 let current = null, serial = 0;
-function leave() { current?.abort?.abort(); current?.players?.forEach(p => p.destroy?.()); if (current) current.dead = true; current = null; serial++; }
+function leave() { clearInterval(current?.serverPoll); current?.abort?.abort(); current?.players?.forEach(p => p.destroy?.()); if (current) current.dead = true; current = null; serial++; }
 
 /** Link shown under a recording in 보컬 연구소 (dark screen; its own list-row style). */
 V.voicePathLink = (song, item) => !song?.id ? '' : '<section class="vl-section"><a class="vl-report" data-voice-path-link href="#/voice-path/' + encodeURIComponent(song.id) + (item?.id ? '?b=' + encodeURIComponent(item.id) : '') +
@@ -220,7 +221,16 @@ const MR_REASON = {
   error:'MR을 빼는 중 오류가 났어요'
 };
 /** The record of a take if it was measured with this model against the MR files the song has now. */
-const recordOf = (s, id) => { const r = results.get(id); return r && r.model === P.VERSION && r.mrSig === mrPlan(s, id).sig ? r : null; };
+function serverOf(s,m){
+ if(!S||!m||cleanOf(m).clean||choiceOf(s,m.id)==='none')return null;
+ const q=S.current(m),r=q?.result;
+ return q?.state==='done'&&S.quality(r).ok&&Array.isArray(r.bands)&&Array.isArray(r.sustain?.list)&&Array.isArray(r.transitions?.breaks)&&Array.isArray(r.transitions?.flips)&&['low','mid','high'].every(k=>r.zones?.[k])?q:null;
+}
+const recordOf = (s, id) => {
+ const r=results.get(id),plan=mrPlan(s,id);if(r&&r.model===P.VERSION&&r.mrSig===plan.sig)return r;
+ const q=serverOf(s,s.items.find(m=>m.id===id));
+ return q?{id,model:P.VERSION,mrSig:plan.sig,seconds:q.result.seconds,mixed:null,removed:null,tries:[],stages:{server:q.processingMs},runtime:{pageRevision:PAGE_REVISION},serverOnly:true}:null;
+};
 /** Everything the screen says about one side. state: 'none' | 'ready'. */
 function viewOf(s, role) {
   const m = s.items.find(x => x.id === s[role]); if (!m) return null;
@@ -228,6 +238,8 @@ function viewOf(s, role) {
   if (!rec) return {m, state:'none', stored, files, plan, mode};
   const track = rec.removed ? files.find(t => mrKey(t) === rec.removed.key) : null;
   if (rec.removed) return {m, rec, state:'ready', source:'mr-removed', result:rec.removed.result, shown:rec.removed.result, clean:{clean:true, why:'song-mr-removed'}, ok:{ok:true, why:'song-mr-removed'}, track, stored, files, plan, mode};
+  const server=serverOf(s,m);
+  if(server)return {m,rec,state:'ready',source:'ai-separated',result:server.result,shown:P.gate(server.result,false),clean:{clean:false,why:'ai-separated-pitch-only'},ok:S.quality(server.result),server,track,stored,files,plan,mode};
   const ok = P.measurable(rec.mixed, stored.clean);
   return {m, rec, state:'ready', source:stored.clean ? 'clean' : 'mixed', result:rec.mixed, shown:P.gate(rec.mixed, stored.clean), clean:stored, ok, stored, files, plan, mode};
 }
@@ -258,7 +270,7 @@ function slot(s, role) {
     esc([day(x), M.label(x), marks.includes(String(x.id)) ? '기준 녹음' : '', analysisOf(x) ? (reliable(x) ? '' : '신뢰도 낮음') : '분석 전', recordOf(s, x.id) ? '잰 녹음' : ''].filter(Boolean).join(' · ')) + '</option>').join('');
   const meta = [day(m) || '날짜 없음', m.durationSeconds ? clock(m.durationSeconds) : '', !a ? '분석 전' : reliable(m) ? '' : '신뢰도 낮음'].filter(Boolean).join(' · ');
   return '<div class="vp-slot" data-vp-slot="' + role + '"><label class="vp-field"><span>' + label + ' 녹음</span><select data-vp-pick="' + role + '" aria-label="' + label + ' 녹음 고르기"' + (s.running ? ' disabled' : '') + '>' + options + '</select></label>' +
-    '<p class="vp-meta" data-vp-meta>' + esc(meta) + (rec && !s.jobs?.[id] ? ' · <span data-vp-kept>이 기기에 잰 결과가 있어요</span>' : '') + '</p>' +
+    '<p class="vp-meta" data-vp-meta>' + esc(meta) + (rec && !s.jobs?.[id] ? ' · <span data-vp-kept>'+(serverOf(s,m)&&!rec.removed?'서버 분리 결과가 있어요':'이 기기에 잰 결과가 있어요')+'</span>' : '') + '</p>' +
     '<label class="vp-check"><input type="checkbox" data-vp-clean="' + role + '"' + (c.clean ? ' checked' : '') + (s.running ? ' disabled' : '') + '><span>이 녹음은 목소리만 들어가 있어요</span></label>' +
     '<p class="vp-why" data-vp-why>' + esc(P.CLEAN_TEXT[c.why]) + (c.clean ? '' : mrPlan(s, m.id).pick.length ? ' · 곡 MR이 빠지면 이 표시와 상관없이 울림·숨소리까지 재요' : ' · ' + esc(P.UNCLEAN_NOTE)) + '</p>' +
     mrChoice(s, role, m.id) +
@@ -274,15 +286,16 @@ function mrChoice(s, role, id) {
     opt('auto', '자동 · 가장 많이 빠지는 MR') + files.map(t => opt(String(t.id), t.title || '곡 MR')).join('') + opt('none', '빼지 않기') + '</select></label>' +
     (mrGone.has(id) ? '<p class="vp-muted" data-vp-mr-gone role="status">이 녹음에 골라 둔 MR 파일이 곡에 없어서 자동으로 바꿨어요.</p>' : '') + '</div>';
 }
-const mrHelp = s => mrFilesOf(s.song).length ? '<p class="vp-muted" data-vp-mr-help>녹음마다 뺄 MR을 따로 골라요. 이 곡에 올린 MR 파일을 녹음에서 빼고 목소리만 재요. 녹음할 때 MR의 키나 빠르기를 바꿨다면 빠지지 않아요.</p>' : '';
+const mrHelp = s => mrFilesOf(s.song).length ? '<p class="vp-muted" data-vp-mr-help>녹음마다 뺄 MR을 따로 골라요. 곡 MR 정렬과 원본 측정이 어려우면 클라우드 녹음의 목소리를 서버에서 분리해 음높이를 다시 재요.</p>' : '';
 function picker(s) {
   const ids = [s.a, s.b].filter(Boolean), missing = ids.filter(id => !recordOf(s, id));
-  const status = '<p class="vp-muted" data-vp-status role="status">' + esc(s.status || (missing.length ? '이 기기 안에서만 재요. 한 번 잰 녹음은 이 기기에 남겨 두어 다음에는 바로 보여요.' : '이 기기에 남겨 둔 결과예요. 다시 재기를 누르면 처음부터 새로 재요.')) + '</p>';
+  const server=ids.some(id=>serverOf(s,s.items.find(m=>m.id===id)));
+  const status = '<p class="vp-muted" data-vp-status role="status">' + esc(s.status || (missing.length ? '먼저 이 기기에서 재요. 목소리 구분이 어려운 클라우드 녹음은 서버에서 분리해 다시 재요.' : server?'서버에서 분리한 음높이 결과가 있어요. 같은 원본은 반복 분리하지 않아요.':'이 기기에 남겨 둔 결과예요. 다시 재기를 누르면 처음부터 새로 재요.')) + '</p>';
   const attention = !!s.status && missing.length > 0;
   return '<section class="vp-card vp-picker" data-vp-picker aria-label="녹음 고르기"><h2>녹음 두 개 고르기</h2>' +
     (s.items.length < 2 ? '<p class="vp-muted" data-vp-need>이 곡의 녹음이 두 개 있어야 나란히 볼 수 있어요. 지금 ' + s.items.length + '개예요.</p>' :
       (s.defaulted ? '<p class="vp-muted" data-vp-default>' + esc(s.defaulted) + '</p>' : '') + slot(s, 'a') + slot(s, 'b') + mrHelp(s) +
-      (s.running ? '<button type="button" class="btn secondary block" data-vp-cancel>그만하기</button><p class="vp-muted">이 기기 안에서만 재요. 파일이 밖으로 나가지 않아요.</p>'
+      (s.running ? '<button type="button" class="btn secondary block" data-vp-cancel>그만하기</button><p class="vp-muted">기기 측정을 중단해요. 이미 요청한 서버 분리는 앱을 닫아도 계속돼요.</p>'
         : (attention ? status : '') + '<button type="button" class="btn block vp-run" data-vp-run="' + (missing.length ? 'missing' : 'again') + '">' + (missing.length ? '흔적 재기' : '다시 재기') + '</button>' + (attention ? '' : status))) +
     '</section>';
 }
@@ -306,6 +319,7 @@ function rowsHtml(A, B, running) {
   const why = v => v?.state === 'ready' ? ['잴 수 없음', '한쪽 녹음을 잴 수 없어 나란히 보지 않아요', '잴 수 없어요'] : running ? ['재는 중', '다른 녹음을 다 재면 나란히 보여 드려요', '재는 중…'] : ['아직 못 잼', '한쪽 녹음을 아직 재지 못해 나란히 보지 않아요', '아직 재지 못했어요'];
   const one = (side, v) => { const [marker, line, other] = why(v); return P.alone(side === 'base' ? a : b, side, {marker, line, other}); };
   const rows = a && b ? P.compare(a, b) : a ? one('base', B) : one('comp', A), groups = [...new Set(rows.map(r => r.group))];
+  if(A?.source==='ai-separated'||B?.source==='ai-separated')for(const r of rows)if(r.line===P.UNCLEAN_NOTE)r.line='AI 분리 흔적의 영향을 받는 울림·숨소리·음량·시작은 비교하지 않아요';
   const times = id => { const key = id === 'breaks' ? ['breaks', '끊김'] : id === 'flips' ? ['flips', '뒤집힘'] : null; return key ? timesHtml('a', '기준', a?.transitions[key[0]], key[1]) + timesHtml('b', '비교', b?.transitions[key[0]], key[1]) : ''; };
   return groups.map(g => '<section class="vp-card vp-group" data-vp-group="' + esc(g) + '"><h2>' + esc(g) + '</h2><p class="vp-muted">' + esc(GROUP_NOTE[g] || '') + '</p><ul>' +
     rows.filter(r => r.group === g).map(r => '<li class="vp-row" data-vp-row="' + r.id + '" data-state="' + r.state + '"><div class="vp-row-head"><strong>' + esc(r.title) + '</strong><span class="vp-mark" data-vp-mark="' + (r.state === 'alone' ? 'hold' : r.state) + '">' + esc(r.marker) + '</span></div>' +
@@ -328,6 +342,7 @@ function zonesHtml(label, R) {
 const info = (attr, icon, text) => '<p class="vp-unclean" ' + attr + '><i class="ph ph-' + icon + '" aria-hidden="true"></i><span>' + text + '</span></p>';
 /** What the stored analysis of a take was measured on, when that is not what this screen reads. */
 function storedNote(v) {
+  if(v.source==='ai-separated')return '';
   const c = analysisOf(v.m)?.confidence;
   if (!c?.aiSeparated && !c?.mrRemoved) return '';
   const how = c.aiSeparated ? '서버에서 AI로 목소리만 분리해' : '곡 MR을 빼고';
@@ -347,11 +362,18 @@ function savedComparison(s) {
     '<table><thead><tr><th scope="col">측정값</th>'+analyses.map((a,i)=>'<th scope="col">'+(i?'비교':'기준')+'<small>'+esc(method(a))+'</small></th>').join('')+'</tr></thead><tbody>'+rows+'</tbody></table>'+
     '<p class="vp-muted">측정 방식이 다른 값의 차이는 실력 변화로 판단하지 않아요. 끊김·울림·숨소리는 원본 재측정의 보류 상태를 유지해요.</p></section>';
 }
+function serverNote(s,role,v){
+ const q=S?.current(v.m),pending=q&&['queued','running'].includes(q.state),failed=q&&['failed','withheld'].includes(q.state);
+ return pending?info('data-vp-server-pending','cloud','서버에서 목소리 분리를 '+(q.state==='queued'?'기다리고 있어요. 시작까지 시간이 걸릴 수 있어요.':'진행하고 있어요.')+' 끝나면 자동으로 보여 드려요. 앱을 닫아도 계속돼요.')
+  :failed?info('data-vp-server-failed','info','서버 분리 '+(q.state==='withheld'?'후에도 음높이를 안정적으로 잡지 못했어요.':'중 오류가 있었어요.')+' 원본과 기존 결과는 그대로예요.')+'<button type="button" class="btn secondary" data-vp-server-retry="'+role+'">서버 분리 다시 시도</button>'
+  :v.rec?.serverError?info('data-vp-server-failed','info',esc(v.rec.serverError)):'';
+}
 function takeCard(s, role, label, v) {
   const m = v.m, head = '<section class="vp-card vp-take" data-vp-take="' + role + '" data-vp-source="' + (v.source || 'none') + '"><div class="vp-take-head"><span class="vp-role">' + label + '</span><strong>' + esc(M.label(m)) + '</strong></div>';
-  if (v.state !== 'ready') return head + '<p class="vp-meta">' + esc(day(m)) + '</p>' + (s.jobs?.[m.id] ? '<p class="vp-muted" data-vp-pending>재는 중이에요. 끝나는 대로 여기에 보여 드려요.</p>' : '<p class="vp-muted" data-vp-pending>아직 재지 않았어요.</p>') + '</section>';
+  if (v.state !== 'ready') return head + '<p class="vp-meta">' + esc(day(m)) + '</p>' + (serverNote(s,role,v)||(s.jobs?.[m.id] ? '<p class="vp-muted" data-vp-pending>재는 중이에요. 끝나는 대로 여기에 보여 드려요.</p>' : '<p class="vp-muted" data-vp-pending>아직 재지 않았어요.</p>')) + '</section>';
   const r = v.result, failed = v.rec.tries.filter(t => !t.ok);
-  const mrNote = v.source === 'mr-removed' ? info('data-vp-mr-note', 'music-notes-minus', '<b>반주 줄임: 곡 MR을 빼고 잰 소리</b> · 곡 MR(' + esc(v.track?.title || '곡 MR') + ')을 녹음에 맞춰 반주를 줄였어요.' +
+  const mrNote = v.source === 'ai-separated' ? info('data-vp-ai-note','sparkle','<b>AI 분리 후 음높이 측정(참고)</b> · 곡 MR 정렬 대신 서버에서 목소리를 분리했어요. 끊김·뒤집힘에도 분리 흔적이나 검출 오류가 섞일 수 있어요. 울림·숨소리·음량·시작은 비교하지 않아요. 원본은 그대로예요.')
+    : v.source === 'mr-removed' ? info('data-vp-mr-note', 'music-notes-minus', '<b>반주 줄임: 곡 MR을 빼고 잰 소리</b> · 곡 MR(' + esc(v.track?.title || '곡 MR') + ')을 녹음에 맞춰 반주를 줄였어요.' +
       (v.mode === 'auto' && v.plan.pick.length > 1 ? ' 자동으로 가장 많이 빠지는 MR을 골랐어요.' : '') + ' 반주가 조금 남아 있을 수 있어요.')
     : v.mode === 'none' ? '<p class="vp-muted" data-vp-mr-none>MR을 빼지 않고 쟀어요.</p>'
     : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + (failed.some(t=>t.reason==='load') ? '. 파일 연결을 확인한 뒤 다시 재기를 눌러 주세요.' : '. 같은 MR이어도 시작점이나 녹음된 소리가 달라 정렬이 실패할 수 있어요.') + ' 녹음 파일을 그대로 읽었어요.') : '';
@@ -359,12 +381,12 @@ function takeCard(s, role, label, v) {
     : v.source === 'mixed' ? info('data-vp-unclean', 'info', esc(P.UNCLEAN_NOTE) + '. 끊김·뒤집힘에도 반주를 잘못 읽은 곳이 섞일 수 있어요.') : '';
   const segment=!v.ok.ok&&V.precisionAnalyze&&!(m.durationSeconds>600)&&!(m.size>25*1024*1024)
     ? '<a class="btn secondary" data-vp-precision href="#/precision-report?media='+encodeURIComponent(m.id)+'&amp;start=0&amp;end='+Math.min(60,Number(m.durationSeconds)||60)+'">구간을 골라 정밀 분석</a>' : '';
-  return head + '<p class="vp-meta">' + esc([day(m), v.ok.ok ? '목소리 ' + Math.round(r.voicedSeconds) + '초' : '', '녹음 ' + clock(v.rec.seconds) + ' 전체를 쟀어요'].filter(Boolean).join(' · ')) + '</p>' + mrNote + state + storedNote(v) + segment +
+  return head + '<p class="vp-meta">' + esc([day(m), v.ok.ok ? '목소리 ' + Math.round(r.voicedSeconds) + '초' : '', '녹음 ' + clock(v.rec.seconds) + ' 전체를 쟀어요'].filter(Boolean).join(' · ')) + '</p>' + mrNote + serverNote(s,role,v) + state + storedNote(v) + segment +
     '<div data-vp-player="' + role + '"></div><p class="vp-muted" data-vp-playing="' + role + '" role="status"></p></section>';
 }
 function resultsHtml(s) {
   const A = viewOf(s, 'a'), B = viewOf(s, 'b');
-  if (!A || !B || (A.state !== 'ready' && B.state !== 'ready')) return '';
+  if (!A || !B || (A.state !== 'ready' && B.state !== 'ready' && ![A,B].some(v=>['queued','running','failed','withheld'].includes(S?.current(v.m)?.state)))) return '';
   const both = A.state === 'ready' && B.state === 'ready', shown = [A, B].filter(v => v.state === 'ready' && v.ok.ok);
   return '<div class="vp-results" data-vp-results data-vp-complete="' + both + '"><div class="vp-takes">' + takeCard(s, 'a', '기준', A) + takeCard(s, 'b', '비교', B) + '</div>' +
     (!s.running && (!A.ok?.ok || !B.ok?.ok) ? savedComparison(s) : '') + rowsHtml(A, B, s.running) +
@@ -411,10 +433,13 @@ async function run(s, force) {
       const rec = await measure(s, item, files.get(id), mrPlan(s, id), (name, pct, at) => stage(id, name, pct, at));
       if (s.dead) return;
       results.set(id, rec); delete s.jobs[id];
+      if(!rec.removed&&!cleanOf(item).clean&&!P.measurable(rec.mixed,false).ok&&choiceOf(s,id)!=='none'&&!S?.current(item)&&V.voicePathServerAvailable?.(item)){
+        try{await V.voicePathServerRequest(item,{signal:s.abort.signal});await refreshServer(s,true);}catch(error){if(error?.name==='AbortError')throw error;rec.serverError=String(error.message||'서버 분리를 요청하지 못했어요.');}
+      }
       cache.put(rec);                                                 // kept on this device; not awaited
       draw(s);                                                        // this take is shown while the next one is measured
     }
-    s.status = '다 쟀어요.';
+    s.status = s.items.some(m=>[s.a,s.b].includes(m.id)&&['queued','running'].includes(S?.current(m)?.state))?'기기 측정을 마쳤어요. 서버 분리가 끝나면 자동으로 보여 드려요.':'다 쟀어요.';
   } catch (error) {
     if (s.dead) return;
     if(error?.diagnostic && !s.fileLoads.some(e=>e.code===error.diagnostic.code&&e.stage===error.diagnostic.stage&&e.attempt===error.diagnostic.attempt))
@@ -425,6 +450,9 @@ async function run(s, force) {
 }
 function bind(s) {
   const host = s.host, q = sel => host.querySelector(sel);
+  host.querySelectorAll('[data-vp-server-retry]').forEach(button=>button.onclick=async()=>{
+    button.disabled=true;try{const item=s.items.find(m=>m.id===s[button.dataset.vpServerRetry]);await V.voicePathServerRequest(item,{retry:true});await refreshServer(s,true);if(!s.dead)draw(s);}catch(error){if(!s.dead){s.status=String(error.message||'서버 분리를 요청하지 못했어요.');draw(s);}}
+  });
   host.querySelectorAll('[data-vp-pick]').forEach(sel => sel.onchange = () => { s[sel.dataset.vpPick] = sel.value; s.defaulted = ''; s.status = ''; s.fileLoads = []; draw(s); host.querySelector('[data-vp-pick="' + sel.dataset.vpPick + '"]')?.focus({preventScroll:true}); });
   host.querySelectorAll('[data-vp-mr-pick]').forEach(sel => sel.onchange = () => {
     const role = sel.dataset.vpMrPick, id = s[role];
@@ -482,7 +510,9 @@ function diagnosisOf(s) {
     return {role, date:P.monthOf(M.dateOf(v.m)), result:v.result, clean:v.clean, source:v.source, measurable:v.ok, stored:analysisOf(v.m), reliable:reliable(v.m),
       mr:v.rec.removed?.report || null, mrTries:v.rec.tries, mrMode:v.mode, input:v.rec.input, runtime:v.rec.runtime,
       mixed:v.source === 'mr-removed' ? v.rec.mixed : null, stagesMs:v.rec.stages, fromDeviceCache:!!v.rec.fromDevice}; };
-  return P.diagnosis([take('base', 'a'), take('comp', 'b')].filter(Boolean), {generatedMonth:V.today().slice(0, 7),fileLoads:s.fileLoads || []});
+  const out=P.diagnosis([take('base', 'a'), take('comp', 'b')].filter(Boolean), {generatedMonth:V.today().slice(0, 7),fileLoads:s.fileLoads || []});
+  for(const t of out.takes){const m=s.items.find(m=>m.id===s[t.role==='base'?'a':'b']),q=S?.current(m);if(q)t.serverSeparation={state:q.state,version:S.VERSION,model:q.engine?.model==='htdemucs'?'htdemucs':null,processingMs:Number.isFinite(q.processingMs)?q.processingMs:null,pitchOnly:true};}
+  return out;
 }
 V.voicePathDiagnosis = () => current && (viewOf(current,'a')?.state==='ready' || viewOf(current,'b')?.state==='ready' || current.fileLoads?.length) ? diagnosisOf(current) : null;
 
@@ -512,9 +542,16 @@ async function songList(host, my) {
   host.innerHTML = noteBanner() + '<div class="vp-song"><strong>곡 고르기</strong>' + trial + '</div>' +
     (withTakes.length ? '<div class="list icons vp-songs" data-vp-songs>' + withTakes.map(x => '<a class="item" href="#/voice-path/' + encodeURIComponent(x.id) + '" data-vp-song="' + esc(x.id) + '"><i class="ph ph-path" aria-hidden="true"></i><span class="item-main"><span class="item-title">' + esc(x.title) + '</span><span class="item-sub">녹음 ' + count.get(x.id) + '개' + (count.get(x.id) < 2 ? ' · 두 개가 있어야 나란히 볼 수 있어요' : '') + '</span></span><i class="ph ph-caret-right chev" aria-hidden="true"></i></a>').join('') + '</div>'
       : '<div class="vp-card"><p class="vp-muted">곡에 연결된 녹음이 아직 없어요. 곡을 지정해 녹음하면 여기에서 고를 수 있어요.</p></div>') +
-    '<p class="vp-muted vp-foot">같은 곡을 다른 때 부른 두 녹음을 골라, 귀로 들리는 흔적(끊김·뒤집힘·긴 음의 흔들림·울림·숨소리·시작)을 나란히 봐요. 모두 이 기기 안에서만 재요.</p>';
+    '<p class="vp-muted vp-foot">같은 곡을 다른 때 부른 두 녹음을 골라, 귀로 들리는 흔적을 나란히 봐요. 먼저 이 기기에서 재고, 필요한 클라우드 녹음만 서버에서 분리해 음높이를 다시 재요.</p>';
 }
 let loaded = null;
+async function refreshServer(s,force=false){
+ if(s.dead||s.refreshing||s.owner!==window.vzipCloudUserId?.()||(!force&&(s.running||(!s.serverDirty&&!s.items.some(m=>[s.a,s.b].includes(m.id)&&['queued','running'].includes(S?.current(m)?.state))))))return;
+ s.refreshing=true;try{const all=await M.list(true);if(s.dead||s.owner!==window.vzipCloudUserId?.())return;const before=JSON.stringify(s.items.map(m=>m[S?.FIELD]));s.items=s.items.map(m=>all.find(x=>x.id===m.id)||m);
+  if(before!==JSON.stringify(s.items.map(m=>m[S?.FIELD])))s.serverDirty=true;
+  if(!s.running&&s.serverDirty&&![...s.players.values()].some(p=>p.el&&!p.el.paused)){s.serverDirty=false;s.status='서버 분리 결과를 확인했어요.';draw(s);}
+ }catch{}finally{s.refreshing=false;}
+}
 V.route('voice-path', {title:'소리 길 흔적', back:true, tab:'growth', noAutoRefresh:true,
   render:() => '<div class="vp" data-vp><p class="vp-muted" role="status">녹음을 불러오는 중…</p></div>',
   async mount(main, r) {
@@ -523,7 +560,8 @@ V.route('voice-path', {title:'소리 길 흔적', back:true, tab:'growth', noAut
     const [items] = await Promise.all([takesOf(song), loaded ||= cache.load()]);
     if (my !== serial || !host.isConnected) return;
     const d = defaults(song, items, r.query);
-    current = {host, song, items, a:d.a, b:d.b, defaulted:d.why, running:false, dead:false, jobs:{}, players:new Map()};
+    current = {host, song, items, a:d.a, b:d.b, defaulted:d.why, running:false, dead:false, jobs:{}, players:new Map(),owner:window.vzipCloudUserId?.()};
+    const state=current;state.serverPoll=setInterval(()=>refreshServer(state),15000);
     draw(current);
   },
   leave
