@@ -19,7 +19,7 @@ permissions:
 jobs:
   deletion:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
+    timeout-minutes: 35  # the apt step of the browser install alone sometimes takes 15+ minutes on a busy runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

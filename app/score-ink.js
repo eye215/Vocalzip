@@ -619,7 +619,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(preview.every((s,i)=>Ink.same(s,old[i]))){paint();return;}
   const add=preview.map(reissue);memo.id=add[0].id;apply({add,remove:old});
  }
- const exportSignature=rows=>JSON.stringify(rows.map(s=>[s.id,s.page,s.tool,s.color,s.width,Ink.opacity(s),s.points,s.rect,s.mode,s.text,s.glyph,s.size]));
+ const exportSignature=rows=>JSON.stringify(rows.map(s=>[s.id,s.page,s.tool,s.color,s.width,Ink.opacity(s),s.points,s.rect,s.mode,s.text,s.glyph,s.size,s.smooth,s.pressure]));
  function readNotes(){
   try{const saved=JSON.parse(viewStorage.getItem(notesKey)||'null');notes=saved?.pdfHash===binding?.pdfHash&&saved?.r2Key===score.r2Key&&Array.isArray(saved.notes)?saved.notes.filter(n=>n&&n.page>=1&&n.page<=2000&&typeof n.text==='string'&&n.text.length<=1200&&n.x>=0&&n.x<=1&&n.y>=0&&n.y<=1).slice(0,300):[];}catch{notes=[];}
  }
@@ -721,9 +721,22 @@ VZ.openScoreInk=(songId,scoreId)=>{
   else if(tool==='marker'&&markerStart){const m=markerNow();rows.push({id:'mark-start',...Ink.markStroke(m,markerStart,markerStart,aspect)});}
   return rows;
  }
+ /* Records never change in place, so a stroke's drawn shape is kept by what it is (id, size, ends) and not worked out
+  * again on every redraw (a pressure shape is the costly one). */
+ const shapes=new Map();
+ function shapeOf(s,pageAspect){
+  if(s.smooth!==true&&s.pressure!==true)return Ink.strokeShape(s,pageAspect);
+  const key=[s.id,pageAspect,s.width,s.points.length,s.points[0],s.points.at(-1)].join('|');let shape=shapes.get(key);
+  if(!shape){if(shapes.size>3000)shapes.clear();shape=Ink.strokeShape(s,pageAspect);shapes.set(key,shape);}
+  return shape;
+ }
  /** One stroke as an SVG node: its line, or the characters of a glyph mark. */
  function strokeNode(s,pageAspect){
-  if(!s.glyph)return svgNode('path',{d:Ink.path(s,pageAspect),fill:'none',stroke:s.color,'stroke-width':s.width*1000,'stroke-linecap':'round','stroke-linejoin':'round',opacity:String(Ink.opacity(s))});
+  if(!s.glyph){
+   // 필기감 strokes are curves, a pressure stroke a filled shape (Ink.strokeShape); older strokes are drawn as before.
+   const shape=shapeOf(s,pageAspect);
+   return svgNode('path',shape.fill?{d:shape.d,fill:s.color,'fill-rule':'nonzero',stroke:'none',opacity:String(Ink.opacity(s))}:{d:shape.d,fill:'none',stroke:s.color,'stroke-width':s.width*1000,'stroke-linecap':'round','stroke-linejoin':'round',opacity:String(Ink.opacity(s))});
+  }
   const g=Ink.glyphLayout(s,1000,1000*pageAspect),text=svgNode('text',{class:'score-ink-glyph',x:g.x,y:g.y,'text-anchor':'middle','font-size':g.size,'font-family':Ink.NOTE_FAMILY,'font-weight':'700',fill:s.color,stroke:s.color,'stroke-width':g.bold,'stroke-linejoin':'round',opacity:String(Ink.opacity(s))});
   text.textContent=g.text;return text;
  }
@@ -740,11 +753,20 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(isNote(s))continue;
    const node=strokeNode(s,aspect);node.dataset.stroke=s.id;svg.append(node);
   }
-  selectionOverlay();memoOverlay(rows);memoBar(rows);
+  selectionOverlay();memoOverlay(rows);memoBar(rows);fadeErasing();eraserCursor();
   paintNotes();
   el.querySelector('[data-ink-undo]').disabled=!ready||busy||exportBusy||!!pending||!undo.length;
   el.querySelector('[data-ink-redo]').disabled=!ready||busy||exportBusy||!!pending||!redo.length;
   measures?.changed();
+ }
+ /* The stroke being written is drawn on its own: only its element changes, once per frame. A pressure stroke is drawn
+  * in pieces of LIVE_PIECE points (a filled shape over thousands of points each frame was slow): the pieces before the
+  * last stay as they are. Points the browser predicts (getPredictedEvents) are drawn ahead of the pen and never saved. */
+ const LIVE_PIECE=48;
+ function liveShape(s,points){return Ink.strokeShape({...s,points},aspect);}
+ function liveNode(s){
+  const fill=s.pressure===true,attrs=fill?{fill:s.color,stroke:'none'}:{fill:'none',stroke:s.color,'stroke-width':s.width*1000,'stroke-linecap':'round','stroke-linejoin':'round'};
+  return svgNode('path',{...attrs,'data-ink-live-piece':''});
  }
  function schedule(){
   if(frame)return;
@@ -753,15 +775,19 @@ VZ.openScoreInk=(songId,scoreId)=>{
    try{
     if(!active){paint();return;}
     const s=active.stroke;
-    if(!active.path?.isConnected){
-     active.path=svg.querySelector('[data-stroke="'+s.id+'"]');
-     if(!active.path){
-      const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.dataset.stroke=s.id;p.setAttribute('fill','none');p.setAttribute('stroke',s.color);
-      p.setAttribute('stroke-width',s.width*1000);p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');p.setAttribute('opacity',String(Ink.opacity(s)));
-      svg.append(p);active.path=p;
-     }
+    if(!active.node?.isConnected){
+     svg.querySelector('[data-stroke="'+s.id+'"]')?.remove();
+     // One group per live stroke, so a see-through pen or highlighter never darkens where its pieces overlap.
+     active.node=svgNode('g',{'data-stroke':s.id,'data-ink-live':'',opacity:String(Ink.opacity(s))});active.from=0;active.tail=null;
+     svg.append(active.node);
     }
-    active.path.setAttribute('d',Ink.path(s,aspect));
+    const pts=s.points;
+    if(s.pressure===true)while(pts.length-active.from>LIVE_PIECE+2){
+     const to=active.from+LIVE_PIECE,piece=active.tail||active.node.appendChild(liveNode(s));
+     piece.setAttribute('d',liveShape(s,pts.slice(active.from,to+1)).d);active.tail=null;active.from=to-1;
+    }
+    if(!active.tail)active.tail=active.node.appendChild(liveNode(s));
+    active.tail.setAttribute('d',liveShape(s,[...pts.slice(active.from),...(active.predicted||[])]).d);
    }catch(e){say(e.message,true);}
   });
  }
@@ -786,12 +812,44 @@ VZ.openScoreInk=(songId,scoreId)=>{
  function inverse(action){return {add:action.remove.map(reissue),remove:action.add};}
  function finishStroke(){
   if(!active)return;const s=active.stroke;active=null;
+  // The pen gives a point every few milliseconds; the ones that change nothing visible are left out before saving.
+  if(s?.smooth)s.points=Ink.simplifyStroke(s.points,{aspect,width:s.width,pressure:s.pressure===true});
   if(s?.points.length){
    // Fold the color/width row once writing has started (after the stroke, so the page never moves under the pen).
    if(s.tool==='pen'||s.tool==='highlighter')quickFolded=true;
    apply({add:[s],remove:[]});
    if(!pending)try{profiles=prefs.write(s.tool,{},{recent:true});syncSettings();}catch{say('필기는 이 기기에 저장됨 · 최근 색상 설정은 저장하지 못했어요.');}
   }
+ }
+ /* 지우개: a circle shows how far it reaches (profiles.eraser.size of the page width, the radius Ink.hit erases with),
+  * at the pen or the mouse while it hovers, and under the pen or finger while erasing. */
+ let eraserView=null;
+ function eraserCursor(){
+  let node=svg.querySelector('[data-ink-eraser-cursor]');
+  if(!eraserView||tool!=='eraser'||performance||!ready){node?.remove();return;}
+  if(!node)node=svgNode('circle',{class:'score-ink-eraser-cursor','data-ink-eraser-cursor':'','vector-effect':'non-scaling-stroke','aria-hidden':'true'});
+  node.setAttribute('cx',eraserView[0]*1000);node.setAttribute('cy',eraserView[1]*aspect*1000);node.setAttribute('r',profiles.eraser.size*1000);
+  node.toggleAttribute('data-down',!!touchEraser);
+  if(node!==svg.lastElementChild)svg.append(node);
+ }
+ /** The strokes the eraser touches between two points (checked every half radius), faded until it lifts. */
+ function eraseAlong(a,b){
+  const size=profiles.eraser.size,rows=strokes(),all=store.list(binding,pageNo),hits=touchEraser.hits;
+  const steps=Math.max(1,Math.min(200,Math.ceil(Math.hypot(b[0]-a[0],(b[1]-a[1])*aspect)/(size/2))));
+  for(let i=steps===1&&a===b?1:0;i<=steps;i++){
+   const t=i/steps,p=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+   for(const s of rows)if(!hits.has(s.id)&&!(active&&s.id===active.stroke.id)&&Ink.hit(s,p,aspect,size))for(const g of Ink.grouped(all,s))hits.set(g.id,rows.find(r=>r.id===g.id)||g);
+  }
+  fadeErasing();
+ }
+ function fadeErasing(){if(touchEraser)for(const id of touchEraser.hits.keys())svg.querySelector('[data-stroke="'+CSS.escape(id)+'"]')?.setAttribute('data-ink-erasing','');}
+ /** One more point for the stroke in hand. A very long stroke is thinned (as when it ends) to make room rather than
+  *  cut short at Ink.MAX_POINTS. */
+ function addPoint(p){
+  const pts=active.stroke.points,last=pts.at(-1);
+  if(Math.hypot(p[0]-last[0],p[1]-last[1])<=0.0008)return;
+  if(pts.length>=Ink.MAX_POINTS&&active.stroke.smooth){active.stroke.points=Ink.simplifyStroke(pts,{aspect,width:active.stroke.width,pressure:active.stroke.pressure===true});active.from=0;active.node?.remove();active.node=null;}
+  if(active.stroke.points.length<Ink.MAX_POINTS)active.stroke.points.push(p);
  }
  function coords(event){const r=svg.getBoundingClientRect();return Ink.point((event.clientX-r.left)/r.width,(event.clientY-r.top)/r.height,event.pressure||0.5);}
  function clearScoreRect(){scoreRect=null;const rect=el?.querySelector('[data-ink-vision-rect]');if(rect)rect.hidden=true;const action=el?.querySelector('[data-ink-explain-action]');if(action)action.hidden=true;}
@@ -1281,12 +1339,15 @@ VZ.openScoreInk=(songId,scoreId)=>{
   audioBar?.destroy()?.catch?.(()=>{});audioBar=null;measures?.destroy();measures=null;
   closed=true;memoEdit=null;visionController?.abort();clearTimeout(performanceTimer);clearTimeout(prepareTimer);prepareTask?.cancel();prepared.clear();closeThumbnails();clearSelection();invalidateExport();document.removeEventListener('fullscreenchange',nativeFullscreenChanged);if(document.fullscreenElement===el)document.exitFullscreen?.().catch(()=>{});controller.abort();resizeObserver?.disconnect();clearTimeout(resizeTimer);cancelAnimationFrame(frame);resetGestures();renderTask?.cancel();loadingTask?.destroy()?.catch?.(()=>{});doc?.destroy()?.catch?.(()=>{});
   if(canvas){canvas.width=0;canvas.height=0;}cleanupHook();window.removeEventListener('vzip:auth-changed',changed);window.removeEventListener('vzip:data-changed',changed);
+  if(VZ.scoreInkBeforeOutside===outside)delete VZ.scoreInkBeforeOutside;
   window.removeEventListener('beforeunload',unload);document.removeEventListener('visibilitychange',hidden);VZ.setGuard(null);
  }
  function unload(event){selectionEnd();finishStroke();memoEditEnd();if(pending){event.preventDefault();event.returnValue='';}}
  function hidden(){if(document.visibilityState==='hidden'){selectionEnd();finishStroke();memoEditEnd();}}
  sheet=VZ.sheet({title:VZ.songTitle?.(songId)||score.title||score.fileName||'악보',label:'악보 개인 필기',body,foot:'<button type="button" class="btn block" data-ink-done>완료</button>',onClose:cleanup,onMount:(node)=>{
   el=node;el.classList.add('score-ink-sheet');
+  // The recording bar asks the microphone outside the browser's fullscreen (app/score-audio.js micFront).
+  VZ.scoreInkBeforeOutside=outside;
   // Quick samples sit below the whole toolbar, independent of fullscreen toolbar layout.
   const toolbar=el.querySelector('.score-ink-bar');
   toolbar.after(el.querySelector('[data-ink-quick]'),el.querySelector('[data-ink-full-actions]'),el.querySelector('[data-ink-vision-tools]'));
@@ -1342,7 +1403,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(fingers.length!==2&&!(fingers.length===1&&fingerTurns()))return;
    if(fingers.length===2){
     if(active&&touchInkStart?.pointer===active.pointer){active=null;cancelAnimationFrame(frame);frame=0;paint();}
-    touchEraser=null;markerCancel();
+    if(touchEraser){touchEraser=null;eraserView=null;paint();}markerCancel();
     if(selection?.drag)selectionEnd(false);
     if(memo?.drag)memoUp(false);
    }
@@ -1489,8 +1550,21 @@ VZ.openScoreInk=(songId,scoreId)=>{
     try{current();clearSelection();memoClear();apply({add:[],remove:rows});}catch(e){say(e.message,true);}
    }
   };
+  /* Writing never selects: iOS would otherwise start a text or block selection (blue boxes, the loupe, the callout)
+   * when the pen rests or presses long on the page. Text fields (memo text, page number, colour code) still select. */
+  const editable=target=>{const node=target?.nodeType===1?target:target?.parentElement;return !!node?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable=false]),.score-ink-vision-result');};
+  el.addEventListener('selectstart',event=>{if(!editable(event.target))event.preventDefault();});
+  stage.addEventListener('contextmenu',event=>{if(!editable(event.target))event.preventDefault();});
+  svg.addEventListener('touchstart',event=>{
+   // With the drawing tools: Apple Pencil always, a finger when it writes (no 펜만 필기). Pointer events still follow.
+   // 메모·선택 keep the default, so a tap can still open the memo text field with its keyboard.
+   if(!ready||performance||!['pen','highlighter','eraser','marker','pan'].includes(tool))return;
+   const pencil=[...event.changedTouches].some(t=>t.touchType==='stylus');
+   if(event.cancelable&&(pencil||event.touches.length===1&&tool!=='pan'&&!profiles.penOnly))event.preventDefault();
+  },{passive:false});
   svg.onpointerdown=event=>{
    if(!ready||busy||exportBusy||pending||event.button>0)return;
+   if(!editable(document.activeElement))try{const picked=getSelection();if(picked?.rangeCount)picked.removeAllRanges();}catch{}
    if(tool!=='notation'&&event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size&&event.width<=50&&event.height<=50&&Date.now()-touchInkStart.time<280&&(!active||active.stroke.points.length<4)){
     if(active?.pointer===touchInkStart.pointer){active=null;cancelAnimationFrame(frame);frame=0;}
     touchEraser=null;markerDrag=null;
@@ -1506,7 +1580,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
     gestureDown(event);return;
    }
-   if(tool==='pan'||active||selection?.drag||memo?.drag||event.isPrimary===false)return;
+   if(tool==='pan'||active||touchEraser||selection?.drag||memo?.drag||event.isPrimary===false)return;
    if(!el.querySelector('section[data-ink-settings]').hidden){settingsOpen(false);return;}
    if(profiles.penOnly&&event.pointerType!=='pen'&&tool!=='notation')return;
    resetGestures();
@@ -1528,13 +1602,15 @@ VZ.openScoreInk=(songId,scoreId)=>{
      try{svg.setPointerCapture?.(event.pointerId);}catch{}return;
     }
     if(tool==='eraser'){
-     if(event.pointerType==='touch'){touchEraser={pointer:event.pointerId,point:p};try{svg.setPointerCapture?.(event.pointerId);}catch{}return;}
-     const found=strokes().reverse().find(s=>Ink.hit(s,p,aspect,profiles.eraser.size));if(found)apply({add:[],remove:Ink.grouped(store.list(binding,pageNo),found)});return;
+     // Everything the circle passes over fades, and is erased (one undo step) when the pen or finger lifts.
+     touchEraser={pointer:event.pointerId,point:p,hits:new Map()};eraserView=p;eraseAlong(p,p);eraserCursor();
+     try{svg.setPointerCapture?.(event.pointerId);}catch{}return;
     }
     const config=profiles[tool],host=Ink.noteAt(pageMemos,p);
-    // A stroke that starts on a memo belongs to it: it moves and is deleted with the memo.
+    // A stroke that starts on a memo belongs to it: it moves and is deleted with the memo. Joined by curves (smooth);
+    // with Apple Pencil the pen's width follows the pressure (finger and mouse keep one width).
     const stroke={version:1,id:VZ.uid(),...binding,page:pageNo,tool,color:config.color,opacity:config.opacity,
-     width:config.width,points:[p],...(host?{note:Ink.noteKey(host)}:{}),createdAt:Date.now()};
+     width:config.width,points:[p],...(host?{note:Ink.noteKey(host)}:{}),smooth:true,...(tool==='pen'&&event.pointerType==='pen'?{pressure:true}:{}),createdAt:Date.now()};
     active={pointer:event.pointerId,stroke};try{svg.setPointerCapture?.(event.pointerId);}catch{}schedule();
    }catch(e){say(e.message,true);}
   };
@@ -1542,6 +1618,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(visionDrag?.pointer===event.pointerId){event.preventDefault();visionMove(coords(event));return;}
    try{if(memoMove(event))return;}catch(e){memoUp(false);say(e.message,true);return;}
    try{if(selectionMove(event))return;}catch(e){selectionEnd(false);say(e.message,true);return;}
+   if(touchEraser?.pointer===event.pointerId){
+    event.preventDefault();
+    const samples=event.getCoalescedEvents?.(),events=samples?.length?samples:[event];
+    for(const item of events){const p=coords(item);eraseAlong(touchEraser.point,p);touchEraser.point=p;}
+    eraserView=touchEraser.point;eraserCursor();return;
+   }
+   // Apple Pencil hover and the mouse show where the eraser would go before it touches.
+   if(tool==='eraser'&&!touchEraser&&!event.buttons&&(event.pointerType==='pen'||event.pointerType==='mouse')){eraserView=coords(event);eraserCursor();return;}
    if(!active&&gestureMove(event))return;
    if(markerDrag?.pointer===event.pointerId){
     event.preventDefault();const p=coords(event);
@@ -1549,14 +1633,21 @@ VZ.openScoreInk=(songId,scoreId)=>{
     markerDrag.end=p;markPreview();return;
    }
    if(active?.pointer!==event.pointerId)return;event.preventDefault();
+   // Every point the pen reported since the last event (Apple Pencil: up to 240 a second), not only the last one.
    const samples=event.getCoalescedEvents?.();const events=samples?.length?samples:[event];
-   for(const item of events){const p=coords(item),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008&&active.stroke.points.length<Ink.MAX_POINTS)active.stroke.points.push(p);}
-   schedule();
+   for(const item of events)addPoint(coords(item));
+   let ahead=[];try{ahead=(event.getPredictedEvents?.()||[]).slice(0,3).map(coords);}catch{}
+   active.predicted=ahead;schedule();
   };
+  svg.onpointerleave=()=>{if(!touchEraser&&eraserView){eraserView=null;eraserCursor();}};
   svg.onpointerup=svg.onpointercancel=svg.onlostpointercapture=event=>{
    if(visionDrag?.pointer===event.pointerId){visionEnd(coords(event),event.type==='pointerup');return;}
    if(touchInkStart?.pointer===event.pointerId)touchInkStart=null;
-   if(touchEraser?.pointer===event.pointerId){const point=touchEraser.point;touchEraser=null;if(event.type==='pointerup'){try{const found=strokes().reverse().find(s=>Ink.hit(s,point,aspect,profiles.eraser.size));if(found)apply({add:[],remove:Ink.grouped(store.list(binding,pageNo),found)});}catch(e){say(e.message,true);}}return;}
+   if(touchEraser?.pointer===event.pointerId){
+    const hits=[...touchEraser.hits.values()];touchEraser=null;eraserView=null;
+    if(event.type==='pointerup'&&hits.length){try{current();apply({add:[],remove:hits});}catch(e){say(e.message,true);paint();}}else paint();
+    return;
+   }
    if(memo?.drag?.pointer===event.pointerId){event.preventDefault();try{memoUp(event.type==='pointerup');}catch(e){memoClear();paint();say(e.message,true);}return;}
    if(selection?.drag?.pointer===event.pointerId){event.preventDefault();try{selectionEnd(event.type==='pointerup');}catch(e){selectionEnd(false);say(e.message,true);}return;}
    if(gestureEnd(event))return;
@@ -1566,7 +1657,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
     return;
    }
    if(active?.pointer!==event.pointerId)return;
-   if(event.type==='pointerup'&&active.stroke.points.length<Ink.MAX_POINTS){const p=coords(event),last=active.stroke.points.at(-1);if(Math.hypot(p[0]-last[0],p[1]-last[1])>0.0008)active.stroke.points.push(p);}
+   if(event.type==='pointerup')addPoint(coords(event));
    finishStroke();
   };
  }});

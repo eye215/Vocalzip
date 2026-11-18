@@ -315,3 +315,18 @@ test('재생+녹음 with a 시작점 and a cut: the take notes where the MR bega
   await expect.poll(() => page.evaluate(() => window.__saved.length)).toBe(2);
   expect((await page.evaluate(() => window.__saved))[1].withMr).toEqual({id:'mr-file', title:'Gravity MR'});
 });
+test('in the browser fullscreen, 녹음 leaves it before the microphone opens unless the microphone is already allowed', async ({page}) => {
+  for (const state of ['prompt', 'granted', 'unsupported']) {
+    const bar = await open(page, {tracks:[FILE]});
+    await page.evaluate(state => {
+      const viewer = document.querySelector('.score-ink-editor');let fs = viewer;
+      Object.defineProperty(document, 'fullscreenElement', {configurable:true, get:() => fs});
+      window.VZ.scoreInkBeforeOutside = async () => { window.__log.push('leave-fullscreen'); fs = null; };
+      Object.defineProperty(navigator, 'permissions', {configurable:true, value:state === 'unsupported' ? undefined : {query:async q => { window.__log.push('ask:' + q.name); return {state}; }}});
+    }, state);
+    await button(bar, '녹음').click();
+    await expect(bar.getByRole('group', {name:'녹음 중'})).toBeVisible();
+    const steps = (await log(page)).filter(x => /leave-fullscreen|capture-open/.test(x));
+    expect(steps, state).toEqual(state === 'granted' ? ['capture-open:play-and-record'] : ['leave-fullscreen', 'capture-open:play-and-record']);
+  }
+});
