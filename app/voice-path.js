@@ -4,14 +4,16 @@
  *   #/voice-path/<songId>        pick 기준 · 비교, measure, read the rows (optional ?a=<id>&b=<id>)
  *
  * Entered from 성장 › 보컬 분석 (app/growth-hub.js) and from a recording in 보컬 연구소 (VZ.voicePathLink).
- * Model: app/voice-path-model.js, run in app/voice-path-worker.js. Nothing is uploaded; no stored analysis is changed.
+ * Model: app/voice-path-model.js, run in app/voice-path-worker.js. Existing vocal analyses are never changed.
+ * An unreadable mix can request a separate server pitch report from its existing cloud original (no audio upload).
  *
  * What is measured for a take, in this order:
  *   1. the song has MR files (songs[].mrTracks, kind 'file') → the MR is taken out of the take with the app's own
  *      app/mr-cancel.js and the voice that is left is measured (all traces);
  *   2. otherwise the file as recorded: all traces when it is voice only (stored analysis heard no accompaniment, or
  *      the person ticked it), the pitch-based ones when the voice is clearly on top in this reading, and nothing at
- *      all when it is not (the take is refused, and no comparison is made).
+ *      all when it is not. For an eligible cloud original, server Demucs then measures isolated pitch; spectral,
+ *      breath, loudness and onset rows remain withheld. The versioned result never pretends to be MR removal.
  * The whole recording is always measured: the decoded sound is handed to the worker 30 s at a time and never copied
  * whole on this thread.
  *

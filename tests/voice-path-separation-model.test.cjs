@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const S=require('../app/voice-path-separation-model.js');
 const meta=()=>({id:'fake-take',storageProvider:'r2',r2Key:'u/fake-owner/fake-take',size:128,analysis:{version:2,at:17,metrics:{voicedSeconds:9}},review:'keep'});
 test('only a cloud source with a stable identity can request the versioned fallback',()=>{
- for(const x of[{}, {...meta(),r2Key:''},{...meta(),size:0},{...meta(),size:300*1024*1024}])assert.equal(S.source(x),null);
+ for(const x of[{}, {...meta(),r2Key:''},{...meta(),size:0},{...meta(),size:300*1024*1024},{...meta(),durationSeconds:901}])assert.equal(S.source(x),null);
  const m=meta(),copy=structuredClone(m),q=S.request(m,'fake-request',100);assert.equal(q.state,'queued');assert.deepEqual(q.source,S.source(m));assert.deepEqual(m,copy);
 });
 test('queued, running, completed and failed work is not automatically repeated',()=>{

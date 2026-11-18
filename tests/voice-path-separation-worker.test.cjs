@@ -31,3 +31,9 @@ test('the full synthetic isolated signal is measured while timbre, breath and lo
 test('a truncated separated signal is rejected instead of reported as a whole recording',async()=>{
  const {analyze}=await api();await assert.rejects(analyze(Buffer.from('fake'),{separator:async()=>Buffer.from('fake separated'),decoder:async(_,{rate})=>new Float32Array(rate*(rate===44100?12:10))}),/duration-changed/);
 });
+test('selection stays bound to the diagnosed source and interrupted work is settled without an automatic retry',async()=>{
+ const {waiting}=await api(),queued=row(),expired=row(),active=row(),calls=[];expired.id='fake-expired';active.id='fake-active';
+ expired.metadata[S.FIELD]={...expired.metadata[S.FIELD],state:'running',startedAt:Date.now()-31*60000};active.metadata[S.FIELD]={...active.metadata[S.FIELD],state:'running',startedAt:Date.now()};
+ const copy=structuredClone([queued,expired,active]),db={query:async(sql,args)=>{calls.push({sql,args});return sql.startsWith('select')?{rows:[queued,expired,active]}:{rowCount:1};}};
+ assert.deepEqual(await waiting(db,{size:128,month:'2025-08'}),[queued]);assert.deepEqual(calls[0].args,[S.VERSION,'128','2025-08']);assert.equal(calls.length,2);assert.equal(calls[1].args[0],'fake-expired');assert.equal(JSON.parse(calls[1].args[5]).state,'failed');assert.deepEqual([queued,expired,active],copy);
+});
