@@ -117,10 +117,11 @@ test('a failed raw reading requests separation once and receives the result with
   const m=(await VZ.media.list(true)).find(x=>x.id==='m-loud');await VZ.media.update(m,{storageProvider:'r2',r2Key:'u/fake-owner/m-loud',size:128},{quiet:true});await VZ.media.list(true);
   const interval=window.setInterval;window.setInterval=(fn,ms,...args)=>interval(fn,ms===15000?50:ms,...args);
   const player=VZ.media.player;VZ.media.player=(...args)=>{const api=player(...args);Object.defineProperty(api.el,'paused',{get:()=>!window.__playing});return api;};
-  window.__serverRequests=0;VZ.voicePathServerAvailable=m=>m.id==='m-loud';VZ.voicePathServerRequest=async m=>{window.__serverRequests++;const q=window.VzipVoicePathSeparation.request(m,'fake-request',100);await VZ.media.update(m,{voicePathSeparation:q},{quiet:true});return {state:'queued'};};
+  const list=VZ.media.list;VZ.media.list=(...args)=>{if(window.__cloudUnavailable)return Promise.reject(Error('fake network failure'));return list(...args);};
+  window.__serverRequests=0;VZ.voicePathServerAvailable=m=>m.id==='m-loud';VZ.voicePathServerRequest=async m=>{window.__serverRequests++;const q=window.VzipVoicePathSeparation.request(m,'fake-request',100);await VZ.media.update(m,{voicePathSeparation:q},{quiet:true});window.__cloudUnavailable=true;return {state:'queued'};};
  });
  await open(page);await page.locator('[data-vp-run]').click();await done(page);await expect(page.locator('[data-vp-server-pending]')).toBeVisible();
- expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);await page.evaluate(()=>{window.__playing=true;});await seedServerPitch(page,'m-loud');await page.waitForTimeout(200);await expect(page.locator('[data-vp-ai-note]')).toHaveCount(0);await page.evaluate(()=>{window.__playing=false;});
+ expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);await page.evaluate(()=>{window.__cloudUnavailable=false;window.__playing=true;});await seedServerPitch(page,'m-loud');await page.waitForTimeout(200);await expect(page.locator('[data-vp-ai-note]')).toHaveCount(0);await page.evaluate(()=>{window.__playing=false;});
  await expect(page.locator('[data-vp-take="b"]')).toHaveAttribute('data-vp-source','ai-separated');await expect(page.locator('[data-vp-server-pending]')).toHaveCount(0);expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);expect(page.__errors).toEqual([]);
 });
 test('a replaced source cannot reuse the old server report',async({page})=>{

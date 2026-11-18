@@ -9,6 +9,6 @@ V.voicePathServerRequest=async(item,{signal,retry=false}={})=>{
  const response=await fetch('https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vzip-voice-path',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({mediaId:item.id,source:S.source(item),retry}),signal,cache:'no-store'});
  let data={};try{data=await response.json();}catch{}
  if(owner!==window.vzipCloudUserId?.()||session!==window.vzipCloudSessionId?.())throw Error('계정이 변경되어 요청을 중단했어요.');
- if(!response.ok)throw Error(data.error||'서버 분리를 요청하지 못했어요.');return data;
+ if(!response.ok)throw Error(data.error||'서버 분리를 요청하지 못했어요.');if(!['queued','running','done','failed','withheld'].includes(data.state))throw Error('서버 분리 상태를 확인하지 못했어요.');return data;
 };
 })();

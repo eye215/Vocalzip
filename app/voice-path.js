@@ -208,6 +208,7 @@ async function measure(s, item, bytesPromise, plan, onStage) {
   buf = null;
   Object.assign(ms, out.stages, {total:Math.round(performance.now() - t0)});
   return {id:item.id, model:P.VERSION, at:Date.now(), seconds:Math.round(seconds * 10) / 10, mrSig:plan.sig, mixed:out.mixed, removed:out.removed,
+    sourceIdentity:S?.source(item),
     input, runtime:{pageRevision:PAGE_REVISION, ...out.runtime}, tries:[...tries, ...out.tries.map(x => ({...x, input:mrInputs.get(x.key)}))], stages:ms};
 }
 
@@ -226,8 +227,9 @@ function serverOf(s,m){
  const q=S.current(m),r=q?.result;
  return q?.state==='done'&&S.quality(r).ok&&Array.isArray(r.bands)&&Array.isArray(r.sustain?.list)&&Array.isArray(r.transitions?.breaks)&&Array.isArray(r.transitions?.flips)&&['low','mid','high'].every(k=>r.zones?.[k])?q:null;
 }
+function pendingServer(s,m){const q=S?.current(m),r=results.get(m.id);return ['queued','running'].includes(q?.state??(S?.same(r?.sourceIdentity,S?.source(m))?r?.serverRequested?.state:null));}
 const recordOf = (s, id) => {
- const r=results.get(id),plan=mrPlan(s,id);if(r&&r.model===P.VERSION&&r.mrSig===plan.sig)return r;
+ const r=results.get(id),plan=mrPlan(s,id),m=s.items.find(m=>m.id===id);if(r&&r.model===P.VERSION&&r.mrSig===plan.sig&&(!r.sourceIdentity||S?.same(r.sourceIdentity,S?.source(m))))return r;
  const q=serverOf(s,s.items.find(m=>m.id===id));
  return q?{id,model:P.VERSION,mrSig:plan.sig,seconds:q.result.seconds,mixed:null,removed:null,tries:[],stages:{server:q.processingMs},runtime:{pageRevision:PAGE_REVISION},serverOnly:true}:null;
 };
@@ -363,7 +365,7 @@ function savedComparison(s) {
     '<p class="vp-muted">측정 방식이 다른 값의 차이는 실력 변화로 판단하지 않아요. 끊김·울림·숨소리는 원본 재측정의 보류 상태를 유지해요.</p></section>';
 }
 function serverNote(s,role,v){
- const q=S?.current(v.m),pending=q&&['queued','running'].includes(q.state),failed=q&&['failed','withheld'].includes(q.state);
+ const q=S?.current(v.m)??(pendingServer(s,v.m)?v.rec?.serverRequested:null),pending=q&&['queued','running'].includes(q.state),failed=q&&['failed','withheld'].includes(q.state);
  return pending?info('data-vp-server-pending','cloud','서버에서 목소리 분리를 '+(q.state==='queued'?'기다리고 있어요. 시작까지 시간이 걸릴 수 있어요.':'진행하고 있어요.')+' 끝나면 자동으로 보여 드려요. 앱을 닫아도 계속돼요.')
   :failed?info('data-vp-server-failed','info','서버 분리 '+(q.state==='withheld'?'후에도 음높이를 안정적으로 잡지 못했어요.':'중 오류가 있었어요.')+' 원본과 기존 결과는 그대로예요.')+'<button type="button" class="btn secondary" data-vp-server-retry="'+role+'">서버 분리 다시 시도</button>'
   :v.rec?.serverError?info('data-vp-server-failed','info',esc(v.rec.serverError)):'';
@@ -434,12 +436,12 @@ async function run(s, force) {
       if (s.dead) return;
       results.set(id, rec); delete s.jobs[id];
       if(!rec.removed&&!cleanOf(item).clean&&!P.measurable(rec.mixed,false).ok&&choiceOf(s,id)!=='none'&&!S?.current(item)&&V.voicePathServerAvailable?.(item)){
-        try{await V.voicePathServerRequest(item,{signal:s.abort.signal});await refreshServer(s,true);}catch(error){if(error?.name==='AbortError')throw error;rec.serverError=String(error.message||'서버 분리를 요청하지 못했어요.');}
+        try{const response=await V.voicePathServerRequest(item,{signal:s.abort.signal});rec.serverRequested={state:response.state};await refreshServer(s,true);}catch(error){if(error?.name==='AbortError')throw error;rec.serverError=String(error.message||'서버 분리를 요청하지 못했어요.');}
       }
       cache.put(rec);                                                 // kept on this device; not awaited
       draw(s);                                                        // this take is shown while the next one is measured
     }
-    s.status = s.items.some(m=>[s.a,s.b].includes(m.id)&&['queued','running'].includes(S?.current(m)?.state))?'기기 측정을 마쳤어요. 서버 분리가 끝나면 자동으로 보여 드려요.':'다 쟀어요.';
+    s.status = s.items.some(m=>[s.a,s.b].includes(m.id)&&pendingServer(s,m))?'기기 측정을 마쳤어요. 서버 분리가 끝나면 자동으로 보여 드려요.':'다 쟀어요.';
   } catch (error) {
     if (s.dead) return;
     if(error?.diagnostic && !s.fileLoads.some(e=>e.code===error.diagnostic.code&&e.stage===error.diagnostic.stage&&e.attempt===error.diagnostic.attempt))
@@ -546,7 +548,7 @@ async function songList(host, my) {
 }
 let loaded = null;
 async function refreshServer(s,force=false){
- if(s.dead||s.refreshing||s.owner!==window.vzipCloudUserId?.()||(!force&&(s.running||(!s.serverDirty&&!s.items.some(m=>[s.a,s.b].includes(m.id)&&['queued','running'].includes(S?.current(m)?.state))))))return;
+ if(s.dead||s.refreshing||s.owner!==window.vzipCloudUserId?.()||(!force&&(s.running||(!s.serverDirty&&!s.items.some(m=>[s.a,s.b].includes(m.id)&&pendingServer(s,m))))))return;
  s.refreshing=true;try{const all=await M.list(true);if(s.dead||s.owner!==window.vzipCloudUserId?.())return;const before=JSON.stringify(s.items.map(m=>m[S?.FIELD]));s.items=s.items.map(m=>all.find(x=>x.id===m.id)||m);
   if(before!==JSON.stringify(s.items.map(m=>m[S?.FIELD])))s.serverDirty=true;
   if(!s.running&&s.serverDirty&&![...s.players.values()].some(p=>p.el&&!p.el.paused)){s.serverDirty=false;s.status='서버 분리 결과를 확인했어요.';draw(s);}
