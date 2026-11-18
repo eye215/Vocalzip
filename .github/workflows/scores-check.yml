@@ -51,6 +51,8 @@ jobs:
           VZ_INK_PREVIEW: '1'
       # The play bar on its own page (stand-in player): its tests play a short WAV, which is checked in Chromium.
       - run: npx playwright test tests/score-audio.spec.cjs --project=chromium-mobile --project=chromium-desktop --workers=2
+      # The iPad's 악보 표기 editor and two-finger pinch: real touches come from Chromium's DevTools protocol.
+      - run: npx playwright test tests/score-marker-preset-save.spec.cjs tests/score-ink-pinch.spec.cjs --project=chromium-mobile --project=chromium-desktop --workers=2
       # Previous full-suite run timed out in this existing WebKit calendar route.
       - name: Repeat metadata date edit regression in WebKit
         run: npx playwright test tests/ui.spec.cjs --project=webkit-mobile --grep 'Metadata-derived dates remain editable' --repeat-each=3 --workers=1

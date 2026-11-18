@@ -297,17 +297,29 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(![...select.options].some(o=>o.value===value)){const option=new Option(Math.round(zoom*100)+'%',value);option.dataset.inkFreeZoom='';select.add(option);}
   select.value=value;
  }
- function beginPinch(){
-  const points=[...touches.values()];if(points.length<2)return;
-  const [a,b]=points,r=box.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
-  if(distance<8)return;
-  pinch={distance,zoom,x:((a.x+b.x)/2-r.left)/r.width,y:((a.y+b.y)/2-r.top)/r.height};
+ /** Where a pinch starts: the fingers' distance, the zoom, and the point between them as a share of the page. */
+ function pinchStart(a,b){
+  const r=box.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
+  return distance<8?null:{distance,zoom,x:((a.x+b.x)/2-r.left)/r.width,y:((a.y+b.y)/2-r.top)/r.height};
+ }
+ function beginPinch(){const points=[...touches.values()];if(points.length>=2)pinch=pinchStart(points[0],points[1]);}
+ /** The page follows two fingers at a and b: sized by CSS only, around the point between them (the PDF is drawn again
+  *  once, when the fingers lift). */
+ function pinchTo(from,a,b){
+  const r=stage.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
+  zoom=Math.round(Math.max(.75,Math.min(4,from.zoom*distance/from.distance))*100)/100;zoomValue();
+  const width=baseWidth*zoom,height=width*aspect;box.style.width=width+'px';box.style.height=height+'px';box.style.setProperty('--ink-page-w',width+'px');
+  stage.scrollLeft=box.offsetLeft+from.x*width-((a.x+b.x)/2-r.left);
+  stage.scrollTop=box.offsetTop+from.y*height-((a.y+b.y)/2-r.top);fitMark();
  }
  /** One finger turns pages whenever a finger cannot draw: 펜만 필기, 무대용 보기, or the 이동 tool. With a drawing tool
   *  and no 펜만 필기 a finger writes, so pages turn with two fingers. */
  const fingerTurns=()=>profiles.penOnly||performance||tool==='pan';
+ /** A palm, not a finger: Safari reports a touch's width as twice its radius, and a thumb in a pinch is often 60–85px
+  *  wide (the old 50px limit dropped it, so the pinch never started). */
+ const palm=event=>event.width>120||event.height>120;
  function gestureDown(event){
-  if(touches.size>=2||event.width>50||event.height>50)return;
+  if(touches.size>=2||palm(event))return;
   event.preventDefault();touches.set(event.pointerId,{x:event.clientX,y:event.clientY});touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
   if(touches.size===1)pageSwipe={pointer:event.pointerId,x:event.clientX,y:event.clientY,time:Date.now(),atLeft:stage.scrollLeft<=2,atRight:stage.scrollLeft>=stage.scrollWidth-stage.clientWidth-2};
   if(touches.size===2){
@@ -323,12 +335,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(twoSwipe?.ends.has(event.pointerId))twoSwipe.ends.set(event.pointerId,{x:event.clientX,y:event.clientY});
   if(touches.size===2&&!swipeLock){
    if(!pinch)beginPinch();if(!pinch)return true;
-   const [a,b]=[...touches.values()],r=stage.getBoundingClientRect(),distance=Math.hypot(a.x-b.x,a.y-b.y);
-   zoom=Math.round(Math.max(.75,Math.min(4,pinch.zoom*distance/pinch.distance))*100)/100;zoomValue();
-   const width=baseWidth*zoom,height=width*aspect;box.style.width=width+'px';box.style.height=height+'px';box.style.setProperty('--ink-page-w',width+'px');
-   stage.scrollLeft=box.offsetLeft+pinch.x*width-((a.x+b.x)/2-r.left);
-   stage.scrollTop=box.offsetTop+pinch.y*height-((a.y+b.y)/2-r.top);pinchDirty=true;fitMark();
-  }else if(!swipeLock&&touches.size===1){
+   const [a,b]=[...touches.values()];pinchTo(pinch,a,b);pinchDirty=true;
+  }else if(!swipeLock&&touches.size===1&&!touchSwipe?.pinch){
    stage.scrollLeft-=event.clientX-old.x;stage.scrollTop-=event.clientY-old.y;
    touchPan={pointer:event.pointerId,x:event.clientX,y:event.clientY};
   }
@@ -714,6 +722,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
  async function toPoint(){
   const rows=selection?.rows?.map(s=>({...s})),page=pageNo,button=el.querySelector('[data-ink-to-point]');
   if(!rows?.length||!VZ.scorePoints?.editor)return;
+  // The page is being drawn again (the iPad turned, the window or zoom changed): wait for it instead of doing nothing.
+  for(let i=0;busy&&!closed&&i<100;i++)await new Promise(r=>setTimeout(r,50));
+  if(closed)return;
   if(visionBusy||!ready||busy||pending||performance){say('악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.',true);return;}
   let text='',note='';
   // The same question as 텍스트로 변환 (recognize) before anything is sent; 취소 opens the form to write by hand.
@@ -1144,6 +1155,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
   VZ.sheet({title:old?'표기 편집':'표기 추가',label:'악보 표기 편집',body,foot:'<button type="submit" form="ink-marker-form" class="btn block">저장</button>',onMount:(node,close)=>{
    node.classList.add('ink-marker-sheet');
    const form=node.querySelector('form'),error=node.querySelector('[data-marker-error]');
+   // The error line sits at the end of a long form, below the fold on a phone or iPad: it is scrolled into view, or a
+   // 저장 that failed (a name or drawing to fix, the storage full) looked as if nothing happened.
+   const fail=text=>{error.textContent=text;error.scrollIntoView?.({block:'nearest'});};
    // The drawing in hand, in the pad's own units (0–1000 each way): one list of points per stroke.
    const pad=node.querySelector('[data-marker-pad]'),padSvg=pad.querySelector('svg'),padNote=node.querySelector('[data-marker-pad-note]');
    let padLines=Ink.validArt(from.art)?Ink.artLines(from.art,500,500,from.art.a<=1?560:560/from.art.a):[],padActive=null,padSaid='';
@@ -1217,17 +1231,17 @@ VZ.openScoreInk=(songId,scoreId)=>{
    draw();
    form.onsubmit=event=>{
     event.preventDefault();
-    let look;try{look=Settings.marker(read());}catch(e){error.textContent=e.message;return;}
+    let look;try{look=Settings.marker(read());}catch(e){fail(e.message);return;}
     try{current();const next=old?.id||'m-'+VZ.uid();profiles=prefs.write('marker',{id:next,...look,...(form.elements.role?{role:look.role||''}:{}),pick:look.pick||''});close();markerEditing=false;if(old)syncMarkers();else pickMarker(next);VZ.toast(old?'표기를 저장했어요.':'표기를 추가했어요.');}
-    catch(e){error.textContent='표기를 저장하지 못했어요: '+e.message;}
+    catch(e){fail('표기를 저장하지 못했어요: '+e.message);}
    };
    node.querySelector('[data-marker-reset]')?.addEventListener('click',async()=>{
     if(!await VZ.confirm('기본값으로 되돌리기','‘'+old.name+'’ 표기를 처음 모양으로 되돌릴까요? 악보에 이미 찍은 표기는 그대로예요.',{ok:'되돌리기'}))return;
-    try{current();profiles=prefs.write('marker',{id:old.id},{reset:true});close();markerEditing=false;syncMarkers();VZ.toast('처음 모양으로 되돌렸어요.');}catch(e){error.textContent='되돌리지 못했어요: '+e.message;}
+    try{current();profiles=prefs.write('marker',{id:old.id},{reset:true});close();markerEditing=false;syncMarkers();VZ.toast('처음 모양으로 되돌렸어요.');}catch(e){fail('되돌리지 못했어요: '+e.message);}
    });
    node.querySelector('[data-marker-delete]')?.addEventListener('click',async()=>{
     if(!await VZ.confirm('표기 삭제','‘'+old.name+'’ 표기를 지울까요? 악보에 이미 찍은 표기는 그대로 남아요.',{ok:'삭제',danger:true}))return;
-    try{current();profiles=prefs.write('marker',{id:old.id},{remove:true});if(markerId===old.id){markerId=profiles.markers[0].id;markerStart=null;}close();markerEditing=false;syncMarkers();paint();VZ.toast('표기를 지웠어요.');}catch(e){error.textContent='지우지 못했어요: '+e.message;}
+    try{current();profiles=prefs.write('marker',{id:old.id},{remove:true});if(markerId===old.id){markerId=profiles.markers[0].id;markerStart=null;}close();markerEditing=false;syncMarkers();paint();VZ.toast('표기를 지웠어요.');}catch(e){fail('지우지 못했어요: '+e.message);}
    });
   }});
  }
@@ -1465,7 +1479,13 @@ VZ.openScoreInk=(songId,scoreId)=>{
    const dx=dxs.reduce((a,b)=>a+b,0)/ids.length,dy=dys.reduce((a,b)=>a+b,0)/ids.length;
    if(swipe.count===2){
     const [a,b]=ids.map(id=>swipe.start.get(id)),[c,d]=ids.map(id=>swipe.end.get(id)),from=Math.hypot(a.x-b.x,a.y-b.y);
-    if(dxs[0]*dxs[1]<0||Math.abs(Math.hypot(c.x-d.x,c.y-d.y)-from)>=Math.max(25,from*.18)){if(swipe.locked){swipe.locked=false;swipeLock=false;springBack();}swipe.pinched=true;return;}
+    if(dxs[0]*dxs[1]<0||Math.abs(Math.hypot(c.x-d.x,c.y-d.y)-from)>=Math.max(25,from*.18)){
+     if(swipe.locked){swipe.locked=false;swipeLock=false;springBack();}swipe.pinched=true;
+     // Fingers the pointer handlers do not follow (one on the grey margin, on a memo, or the select or memo tool with
+     // finger writing) still pinch: the zoom follows the touches.
+     if(swipe.pinch||touches.size<2&&!pinch){swipe.pinch||=pinchStart(c,d);if(swipe.pinch){pinchTo(swipe.pinch,c,d);swipe.needsRedraw=true;}}
+     return;
+    }
    }
    if(!swipe.locked&&!swipe.pinched&&Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)*1.4){
     const fits=stage.scrollWidth-stage.clientWidth<=8;
@@ -1479,7 +1499,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   for(const type of ['touchend','touchcancel'])stage.addEventListener(type,event=>{
    const swipe=touchSwipe;if(!swipe)return;
    for(const t of event.changedTouches)if(swipe.end.has(t.identifier))swipe.end.set(t.identifier,{x:t.clientX,y:t.clientY});
-   if(type==='touchcancel'){touchSwipe=null;swipeLock=false;springBack();return;}
+   if(type==='touchcancel'){touchSwipe=null;swipeLock=false;springBack();if(swipe.needsRedraw&&!busy&&pageNo===swipe.page)renderPage({keepScroll:true});return;}
    if([...event.touches].some(t=>swipe.start.has(t.identifier)))return;
    touchSwipe=null;swipeLock=false;
    const restore=()=>{springBack();if(swipe.needsRedraw&&!busy&&pageNo===swipe.page)renderPage({keepScroll:true});};
@@ -1608,7 +1628,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   svg.onpointerdown=event=>{
    if(!ready||busy||exportBusy||pending||event.button>0)return;
    if(!editable(document.activeElement))try{const picked=getSelection();if(picked?.rangeCount)picked.removeAllRanges();}catch{}
-   if(tool!=='notation'&&event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size&&event.width<=50&&event.height<=50&&Date.now()-touchInkStart.time<280&&(!active||active.stroke.points.length<4)){
+   if(tool!=='notation'&&event.pointerType==='touch'&&touchInkStart&&touchInkStart.pointer!==event.pointerId&&!touches.size&&!palm(event)){
+    // A second finger, however late: two fingers never write. The first finger's stroke is dropped and both pinch.
     if(active?.pointer===touchInkStart.pointer){active=null;cancelAnimationFrame(frame);frame=0;}
     touchEraser=null;markerDrag=null;
     if(selection?.drag?.pointer===touchInkStart.pointer)selectionEnd(false);
@@ -1658,6 +1679,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    }catch(e){say(e.message,true);}
   };
   svg.onpointermove=event=>{
+   if(touchInkStart?.pointer===event.pointerId){touchInkStart.x=event.clientX;touchInkStart.y=event.clientY;} // where a late pinch starts
    if(visionDrag?.pointer===event.pointerId){event.preventDefault();visionMove(coords(event));return;}
    try{if(memoMove(event))return;}catch(e){memoUp(false);say(e.message,true);return;}
    try{if(selectionMove(event))return;}catch(e){selectionEnd(false);say(e.message,true);return;}
