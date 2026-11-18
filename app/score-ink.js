@@ -90,7 +90,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const current=()=>{const i=identity(),s=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted);if(i?.owner!==owner||i.session!==initialSession||!s||s.r2Key!==score.r2Key)throw Error('계정이나 악보가 바뀌어 필기를 중단했어요.');};
  let store,prefs,profiles,imported=[];
- try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});profiles=prefs.read();}
+ try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())throw Error('필기 복구 기록을 저장하지 못했어요. 공간을 확인한 뒤 다시 열어 주세요.');prefs=Settings.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true}),defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});prefs.migrate();profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  /* Handwriting imported with the PDF (an attached vocalzip-ink.json, e.g. from GoodNotes) is part of the score file
   * itself: it reaches every device with the PDF. It is shown with the account's own strokes and edited the same way;
@@ -1273,6 +1273,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  function changed(){
   if(closed)return;
+  // 악보 표기 presets follow the account: one changed on another device shows once the sync brings it.
+  try{current();profiles=prefs.read();if(!el.querySelector('[data-ink-marker-palette]').hidden)syncMarkers();}catch{}
   try{current();store.restore();if(selection&&!selectionFresh()){clearSelection();say('선택한 필기가 다른 곳에서 바뀌었어요. 다시 선택해 주세요.',true);}if(memo?.id&&!memo.drag&&!memoEdit&&!memoRow())memoClear();if(exportUrl&&exportSignature(store.list(binding))!==exportStamp)invalidateExport();paint();}catch{sheet.close();}
  }
  function cleanup(){

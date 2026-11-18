@@ -41,7 +41,8 @@ async function open(page){
  await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨',{timeout:20000});
  return dialog;
 }
-const records=page=>page.evaluate(()=>window.VZ.db.scoreAnnotations||[]);
+// The strokes on the score (preset rows share the list: they follow the account, see score-marker-presets-sync).
+const records=page=>page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).filter(s=>s.kind!=='marker-preset'));
 const stored=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('vzip_score_ink_settings_v1:ui-test-user')||'null')?.markers||null);
 const palette=dialog=>dialog.locator('[data-ink-marker-palette]');
 const editor=page=>page.getByRole('dialog',{name:'악보 표기 편집'});

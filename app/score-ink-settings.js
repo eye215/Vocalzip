@@ -1,8 +1,19 @@
 /* Account-bound tool preferences only. No PDF, stroke data, URLs or login credentials.
- * Kept on this device (localStorage, one entry per account); nothing here is synced.
+ * Pen/highlighter/eraser/memo settings stay on this device (localStorage, one entry per account); they are not synced.
  * 악보 표기 presets (markers): the four built-in ones (숨표·반복·컷·시작점) keep their id and can be changed and put
  * back, never removed; the user's own are added, changed and removed. A preset only decides what the next mark looks
- * like: a mark already on a score carries its own look. Stored as {builtin:{id:changed fields}, user:[…]}.
+ * like: a mark already on a score carries its own look. In the device entry they are stored as {builtin:{id:changed
+ * fields}, user:[…]}.
+ * Presets follow the account (when create() is given getData and change, as the score viewer does): each one is a row
+ * of the synced list scoreAnnotations, so data-merge.js merges it like a stroke — by id, the newer updatedAt (stamped
+ * by app/core.js) wins, and a removed row leaves a tombstone that wins. A row:
+ *   {id:'marker-preset:'+preset id, kind:'marker-preset', ownerId, preset:'breath'|'repeat'|'cut'|'start'|user id,
+ *    look:{name, color, …}|null, createdAt}
+ * A built-in preset's row is never removed: 기본값으로 되돌리기 sets look to null (a tombstone would stop the preset
+ * from ever being changed again). A user preset's row is removed when it is deleted. Rows are not strokes:
+ * VzipScoreInk.valid() is false for them, so every client (also older ones) skips them when showing and erasing.
+ * The device entry keeps being written too (a copy for older app versions, which read only it). On a device's first
+ * run with sync, migrate() copies the presets found there and not yet synced (MOVED_PREFIX marks it done).
  * 기능 (role, optional, user presets only): what the marks placed with it do once the score is matched with an MR —
  * 시작점 · 반복 구간 · 건너뛰기 (app/score-mark-model.js). The built-in 시작점 · 반복 · 컷 have theirs fixed.
  * 찍는 방식 (pick, optional): 'measure' = 마디 선택 — a tap takes a whole measure, a drag a run of measures, and the
@@ -14,6 +25,8 @@
 (function(root,factory){const node=typeof module==='object'&&module.exports,api=factory(node?require('./score-ink-model.js'):root.VzipScoreInk);if(node)module.exports=api;else root.VzipScoreInkSettings=api;})(typeof window==='object'?window:globalThis,function(Ink){
 'use strict';
 const HEX=/^#[0-9a-f]{6}$/i,PREFIX='vzip_score_ink_settings_v1:',MAX_TEXT=600000;
+/* Synced presets: rows of this list (see the top); MOVED_PREFIX + owner = this device's presets were copied up. */
+const LIST='scoreAnnotations',ROW='marker-preset',ROW_PREFIX=ROW+':',MOVED_PREFIX='vzip_score_markers_moved_v1:',PRESET_ID=/^[\w:-]{1,64}$/;
 const PALETTES={
  pen:[['#101828','검정'],['#b42318','진한 빨강'],['#175cd3','파랑'],['#1849a9','남색'],['#067647','진한 초록'],['#5925dc','진한 보라'],['#854a0e','갈색'],['#851651','자주']],
  highlighter:[['#fef08a','파스텔 노랑'],['#fbcfe8','파스텔 분홍'],['#bae6fd','파스텔 하늘'],['#bbf7d0','파스텔 초록'],['#ddd6fe','파스텔 보라'],['#fed7aa','파스텔 주황'],['#99f6e4','파스텔 민트'],['#e9d5ff','파스텔 라일락']]
@@ -88,15 +101,69 @@ const plainMarker=({builtin,changed,id,...look})=>look;
 // A changed built-in whose default is 마디 선택 (컷) says its way outright, so "off" is not lost when read with the default.
 const packMarkers=list=>({builtin:Object.fromEntries(list.filter(m=>m.builtin&&m.changed).map(m=>[m.id,{...plainMarker(m),...(MARKERS.find(d=>d.id===m.id)?.pick?{pick:m.pick||''}:{})}])),user:list.filter(m=>!m.builtin).map(m=>({id:m.id,...plainMarker(m)}))});
 const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},eraser:{size:0.018},memo:{mode:'text',color:'#fbe88c'},goalTarget:'today',markers:markers(null),penOnly:false});
-function create({storage,identity,defaultPenOnly=false}){
+/* Synced presets (rows of LIST, see the top). */
+const BUILTIN_IDS=new Set(MARKERS.map(m=>m.id));
+/** What a row keeps of a preset: a user one whole; a built-in one what packMarkers keeps, or null when it is as at first. */
+const rowLook=m=>m.builtin?(m.changed?packMarkers([m]).builtin[m.id]:null):plainMarker(m);
+/** The preset rows of `owner` in the app record, by preset id. Rows that do not read as one are left where they are. */
+function presetRows(data,owner){
+ const out=new Map();
+ for(const r of Array.isArray(data?.[LIST])?data[LIST]:[])
+  if(r?.kind===ROW&&r.ownerId===owner&&typeof r.preset==='string'&&PRESET_ID.test(r.preset)&&r.id===ROW_PREFIX+r.preset)out.set(r.preset,r);
+ return out;
+}
+const removedRows=data=>new Set((Array.isArray(data?.deleted?.[LIST])?data.deleted[LIST]:[]).map(String));
+/** Rows as the device entry stores presets (what markers() reads): user presets in the order they were made. */
+function storedFromRows(rows){
+ const builtin={},user=[];
+ for(const r of rows.values()){
+  if(!r.look||typeof r.look!=='object'||Array.isArray(r.look))continue;
+  if(BUILTIN_IDS.has(r.preset))builtin[r.preset]=r.look;else user.push({...r.look,id:r.preset,made:Number(r.createdAt)||0});
+ }
+ user.sort((a,b)=>a.made-b.made||(a.id<b.id?-1:a.id>b.id?1:0));
+ return {builtin,user:user.map(({made,...u})=>u)};
+}
+/** The rows to write so the presets in a device entry (`stored`) reach the synced list. at: when this version last
+ *  wrote a preset there (markersAt); 0 for older versions, which is older than any synced row. A preset synced already
+ *  stays unless the device copy is newer; one deleted on any device stays deleted; at most MARK_USER_MAX user presets. */
+function migration(stored,at,rows,removed,owner,now){
+ const out=[];let users=[...rows.values()].filter(r=>!BUILTIN_IDS.has(r.preset)&&r.look).length;
+ markers(stored).forEach((m,i)=>{
+  const id=ROW_PREFIX+m.id,row=rows.get(m.id),look=rowLook(m);
+  if(removed.has(id)||row&&!(at>(Number(row.updatedAt)||0)))return;
+  if(!row){if(!look)return;if(!m.builtin){if(users>=MARK_USER_MAX)return;users++;}}
+  out.push({...row,id,kind:ROW,ownerId:owner,preset:m.id,look,createdAt:Number(row?.createdAt)||now+i});
+ });
+ return out;
+}
+/** Puts rows into the app record `next` in place of those with the same id; a null row for an id removes it. */
+function putRows(next,rows){
+ if(!Array.isArray(next[LIST]))next[LIST]=[];const list=next[LIST];
+ for(const [id,row] of rows){const at=list.findIndex(r=>r?.id===id);if(!row){if(at>=0)list.splice(at,1);}else if(at>=0)list[at]=row;else list.push(row);}
+}
+function create({storage,identity,defaultPenOnly=false,getData,change}){
  const initial=identity(),owner=initial?.owner,session=initial?.session;
  if(!owner||!session)throw Error('로그인이 필요해요.');
  const key=PREFIX+encodeURIComponent(owner);
  const current=()=>{const now=identity();if(now?.owner!==owner||now?.session!==session)throw Error('로그인이 바뀌어 도구 설정을 중단했어요.');};
+ // Presets follow the account when the app record is given; without it (older callers, tests) they stay here.
+ const synced=typeof getData==='function'&&typeof change==='function',movedKey=MOVED_PREFIX+encodeURIComponent(owner);
+ /** This account's device entry, or null when there is none or it does not read. */
+ function entry(){
+  try{const text=storage.getItem(key);if(!text||text.length>MAX_TEXT)return null;const data=JSON.parse(text);return data?.version===1&&data.owner===owner?data:null;}catch{return null;}
+ }
+ const moved=()=>{try{return storage.getItem(movedKey)==='1';}catch{return false;}};
+ const localAt=data=>Number.isFinite(data?.markersAt)?data.markersAt:0;
+ /** The synced preset rows; before this device's presets were copied up, with them as the copy would put them. */
+ function rows(){
+  const d=getData(),out=presetRows(d,owner);
+  if(!moved()){const data=entry();for(const r of migration(data?.markers,localAt(data),out,removedRows(d),owner,Date.now()))out.set(r.preset,r);}
+  return out;
+ }
  function read(){
-  current();const fallback=defaults();fallback.penOnly=defaultPenOnly===true;let data;
-  try{const text=storage.getItem(key);if(!text||text.length>MAX_TEXT)return fallback;data=JSON.parse(text);}catch{return fallback;}
-  if(data?.version!==1||data.owner!==owner)return fallback;
+  current();const fallback=defaults();fallback.penOnly=defaultPenOnly===true;const data=entry();
+  if(synced)fallback.markers=markers(storedFromRows(rows()));
+  if(!data)return fallback;
   for(const tool of ['pen','highlighter']){
    const p=data[tool];if(!p)continue;
    if(HEX.test(p.color||''))fallback[tool].color=p.color.toLowerCase();
@@ -110,11 +177,21 @@ function create({storage,identity,defaultPenOnly=false}){
   if(typeof data.memo?.color==='string'&&HEX.test(data.memo.color))fallback.memo.color=data.memo.color.toLowerCase();
   // 목표로 넣기: where the lines went last time (오늘의 목표 or 숙제).
   if(['today','homework'].includes(data.goalTarget))fallback.goalTarget=data.goalTarget;
-  fallback.markers=markers(data.markers);
+  if(!synced)fallback.markers=markers(data.markers);
   if(typeof data.penOnly==='boolean')fallback.penOnly=data.penOnly;return fallback;
  }
+ /** First run with sync on this device: copies the presets kept here and not synced yet (see migration()) into the
+  *  app record, once. The device entry is left as it is. False when the app record could not be saved. */
+ function migrate(){
+  current();if(!synced||moved())return true;
+  const d=getData(),data=entry(),add=migration(data?.markers,localAt(data),presetRows(d,owner),removedRows(d),owner,Date.now());
+  if(add.length&&!change(next=>putRows(next,add.map(r=>[r.id,r]))))return false;
+  current();try{storage.setItem(movedKey,'1');}catch{} // not marked: it is tried again, and finds nothing newer to copy
+  return true;
+ }
  function write(tool,patch={},options={}){
-  current();const data=read();
+  current();if(tool==='marker'&&synced&&!migrate())throw Error('표기 설정을 저장하지 못했어요. 저장 공간을 확인해 주세요.');
+  const data=read();
   if(tool==='input'){data.penOnly=patch.penOnly===true;}
   else if(tool==='memo'){
    if(patch.mode!==undefined){if(!['text','pen'].includes(patch.mode))throw Error('메모 쓰는 방법을 확인해 주세요.');data.memo.mode=patch.mode;}
@@ -158,9 +235,22 @@ function create({storage,identity,defaultPenOnly=false}){
    if(options.removeCustom)p.custom=p.custom.filter(c=>c!==p.color);
    if(options.recent)p.recent=[p.color,...p.recent.filter(c=>c!==p.color)].slice(0,8);
   }
-  current();storage.setItem(key,JSON.stringify({version:1,owner,...data,markers:packMarkers(data.markers)}));current();return clone(data);
+  let at=localAt(entry());
+  if(tool==='marker'){
+   at=Date.now();
+   if(synced){
+    // The preset's row in the app record (VZ.change stamps updatedAt); then the device entry, kept for older versions.
+    const d=getData(),now=data.markers.find(m=>m.id===patch.id),id=ROW_PREFIX+patch.id,old=presetRows(d,owner).get(patch.id);
+    if(now&&removedRows(d).has(id))throw Error('다른 기기에서 지운 표기예요.');
+    const row=now?{...old,id,kind:ROW,ownerId:owner,preset:now.id,look:rowLook(now),createdAt:Number(old?.createdAt)||at}:null;
+    current();if(!change(next=>putRows(next,[[id,row]])))throw Error('표기 설정을 저장하지 못했어요. 저장 공간을 확인해 주세요.');
+    try{current();storage.setItem(key,JSON.stringify({version:1,owner,...data,markers:packMarkers(data.markers),markersAt:at}));}catch{}
+    current();return clone(read());
+   }
+  }
+  current();storage.setItem(key,JSON.stringify({version:1,owner,...data,markers:packMarkers(data.markers),...(at?{markersAt:at}:{})}));current();return clone(data);
  }
- return {read,write,key};
+ return {read,write,migrate,key,movedKey};
 }
-return {create,PALETTES,defaults,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_PICK_FORMS,MARK_SIZES,markInput,markWay,marker,markerRole};
+return {create,PALETTES,defaults,ROW,ROW_PREFIX,MOVED_PREFIX,presetRows,migration,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_PICK_FORMS,MARK_SIZES,markInput,markWay,marker,markerRole};
 });
