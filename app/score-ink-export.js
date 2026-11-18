@@ -51,6 +51,13 @@ async function make({document:source,binding,annotations,check=()=>{},onProgress
      if(g.bold>0){ctx.lineWidth=g.bold;ctx.strokeText(g.text,g.x,g.y);}
      ctx.fillText(g.text,g.x,g.y);ctx.restore();continue;
     }
+    if(s.smooth===true||s.pressure===true){
+     // 필기감 strokes: the viewer's own curve (and pressure outline), in viewer space at 1000 units per page width.
+     const shape=Ink.strokeShape(s,viewport.height/viewport.width);
+     viewerSpace();ctx.scale(viewport.width/1000,viewport.width/1000);ctx.globalAlpha=Ink.opacity(s);ctx.fillStyle=ctx.strokeStyle=s.color;
+     if(shape.fill)ctx.fill(new Path2D(shape.d));else{ctx.lineWidth=s.width*1000;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke(new Path2D(shape.d));}
+     ctx.restore();continue;
+    }
     ctx.strokeStyle=s.color;ctx.globalAlpha=Ink.opacity(s);const origin=viewport.convertToPdfPoint(0,0),edge=viewport.convertToPdfPoint(s.width*viewport.width,0);ctx.lineWidth=Math.hypot(edge[0]-origin[0],edge[1]-origin[1])*scale;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
     let first;
     s.points.forEach((p,i)=>{
