@@ -241,7 +241,12 @@ function viewOf(s, role) {
   const rec = recordOf(s, m.id), stored = cleanOf(m), plan = mrPlan(s, m.id), files = plan.files, mode = files.length ? modeOf(plan.choice) : null;
   if (!rec) return {m, state:'none', stored, files, plan, mode};
   const track = rec.removed ? files.find(t => mrKey(t) === rec.removed.key) : null;
-  if (rec.removed) return {m, rec, state:'ready', source:'mr-removed', result:rec.removed.result, shown:rec.removed.result, clean:{clean:true, why:'song-mr-removed'}, ok:{ok:true, why:'song-mr-removed'}, track, stored, files, plan, mode};
+  if (rec.removed) {
+    // What is left of the accompaniment is still accompaniment: the voice must read as clearly as in a mixed take.
+    const r = rec.removed.result, read = P.measurable(r, false);
+    if (!read.ok) return {m, rec, state:'ready', source:'mr-removed', result:r, shown:P.gate(r, false), clean:{clean:false, why:'song-mr-removed'}, ok:{ok:false, why:'mr-removed-' + read.why}, track, stored, files, plan, mode};
+    return {m, rec, state:'ready', source:'mr-removed', result:r, shown:r, clean:{clean:true, why:'song-mr-removed'}, ok:{ok:true, why:'song-mr-removed'}, track, stored, files, plan, mode};
+  }
   const server=serverOf(s,m);
   if(server)return {m,rec,state:'ready',source:'ai-separated',result:server.result,shown:P.gate(server.result,false),clean:{clean:false,why:'ai-separated-pitch-only'},ok:S.quality(server.result),server,track,stored,files,plan,mode};
   const ok = P.measurable(rec.mixed, stored.clean);
@@ -381,7 +386,7 @@ function takeCard(s, role, label, v) {
       (v.mode === 'auto' && v.plan.pick.length > 1 ? ' 자동으로 가장 많이 빠지는 MR을 골랐어요.' : '') + ' 반주가 조금 남아 있을 수 있어요.')
     : v.mode === 'none' ? '<p class="vp-muted" data-vp-mr-none>MR을 빼지 않고 쟀어요.</p>'
     : failed.length ? info('data-vp-mr-failed', 'info', '곡 MR을 빼지 못했어요: ' + esc([...new Set(failed.map(t => MR_REASON[t.reason] || MR_REASON['no-match']))].join(', ')) + (failed.some(t=>t.reason==='load') ? '. 파일 연결을 확인한 뒤 다시 재기를 눌러 주세요.' : '. 같은 MR이어도 시작점이나 녹음된 소리가 달라 정렬이 실패할 수 있어요.') + ' 녹음 파일을 그대로 읽었어요.') : '';
-  const state = !v.ok.ok ? info('data-vp-refused', 'prohibit', esc(P.refusedText(v.result,v.ok.why)))
+  const state = !v.ok.ok ? info('data-vp-refused', 'prohibit', esc(v.source === 'mr-removed' ? P.removedRefusedText(v.result, v.ok.why, v.rec.removed?.report?.removedDb) : P.refusedText(v.result,v.ok.why)))
     : v.source === 'mixed' ? info('data-vp-unclean', 'info', esc(P.UNCLEAN_NOTE) + '. 끊김·뒤집힘에도 반주를 잘못 읽은 곳이 섞일 수 있어요.') : '';
   const segment=!v.ok.ok&&V.precisionAnalyze&&!(m.durationSeconds>600)&&!(m.size>25*1024*1024)
     ? '<a class="btn secondary" data-vp-precision href="#/precision-report?media='+encodeURIComponent(m.id)+'&amp;start=0&amp;end='+Math.min(60,Number(m.durationSeconds)||60)+'">구간을 골라 정밀 분석</a>' : '';

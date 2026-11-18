@@ -602,6 +602,21 @@ function refusedText(result, reason) {
   }[reason];
   return why ? why+' 소리 길 비교를 보류해요.' : REFUSED_NOTE;
 }
+/** The same refusal for the voice left after taking the song's MR out (reason with or without 'mr-removed-'): what
+ * remains of the accompaniment is still accompaniment, so that voice passes the same checks as a mixed take. */
+function removedRefusedText(result, reason, removedDb) {
+  const c=result?.confidence || {}, percent=x=>Number.isFinite(x)?Math.floor(x*1000)/10+'%':'확인되지 않음';
+  const why={
+    'no-voice':'남은 소리에서 목소리를 찾지 못했어요',
+    'weak-pitch':'음높이 검출 일관성 '+percent(c.meanStrength)+', 기준 '+percent(T.MIXED_MIN_STRENGTH),
+    'many-glitches':'불안정하게 잡힌 음높이 구간이 많아요',
+    'pitch-jumps':'큰 음높이 도약이 자주 검출돼요',
+    'follows-accompaniment':'중심 음역을 벗어난 소리가 많이 검출돼요',
+    'instrument-like':'남은 반주의 음과 목소리를 구분하지 못했어요'
+  }[String(reason || '').replace(/^mr-removed-/, '')];
+  const amount=Number.isFinite(removedDb)?' '+Math.round(removedDb*10)/10+' dB':'';
+  return '곡 MR을'+amount+' 빼도 목소리를 안정적으로 읽지 못했어요'+(why?' ('+why+')':'')+'. 소리 길 비교를 보류해요.';
+}
 
 /* ---------- cleanliness ---------- */
 /**
@@ -771,7 +786,7 @@ function diagnosis(takes, {generatedMonth = null, fileLoads = []} = {}) {
     ...(fileLoads.length?{fileLoads:fileLoads.slice(-24).map(d=>({role:['base','comp'].includes(d.role)?d.role:null,kind:['mr','recording'].includes(d.kind)?d.kind:null,...load(d)}))}:{})};
 }
 
-const api = {VERSION, THRESHOLDS:T, analyze, createStream, createHalver, measurable, refusedText, REFUSED_NOTE, BAND_NOTE, alone, resample, cleanOf, CLEAN_TEXT, UNCLEAN_NOTE, gate, compare, diagnosis, monthOf, noteName, ZONE_LABEL};
+const api = {VERSION, THRESHOLDS:T, analyze, createStream, createHalver, measurable, refusedText, removedRefusedText, REFUSED_NOTE, BAND_NOTE, alone, resample, cleanOf, CLEAN_TEXT, UNCLEAN_NOTE, gate, compare, diagnosis, monthOf, noteName, ZONE_LABEL};
 if (typeof module === 'object' && module.exports) module.exports = api;
 else root.VzipVoicePath = api;
 })(typeof self !== 'undefined' ? self : this);
