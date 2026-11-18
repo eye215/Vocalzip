@@ -36,7 +36,11 @@ function dots(recent) {
 const meta = p => [p.lessonId ? lessonName(p.lessonId) : '', P.tagName(p.tag)].filter(Boolean).join(' · ');
 
 // ---------- 지적 추가 · 수정 ----------
-/** preset: {point} to edit, or {from, to, lessonId, scoreId, feedback} for a new one. */
+/** iPad: Apple Pencil handwriting (Scribble) turns into letters in any text field — the system's own, nothing sent. */
+const iPad = () => /iPad/.test(navigator.userAgent || '') || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+/** preset: {point} to edit, or {from, to, lessonId, scoreId, feedback, text, note, ink} for a new one. note: a line on
+ * top (what the handwriting recognition did); ink: the point comes from handwriting selected on the score — the form
+ * asks whether to keep it (the default) or remove it after 저장, and onDone(row, {removeInk}) does that. */
 function editor(songId, preset = {}, onDone) {
   const old = preset.point ? pointById(preset.point.id) || preset.point : null;
   const lessons = lessonsOf(songId), latest = P.latestLesson(VZ.db.lessons, songId, VZ.today());
@@ -46,14 +50,18 @@ function editor(songId, preset = {}, onDone) {
   const lessonOptions = '<option value="">선택 안 함</option>' + lessons.map(l => '<option value="' + esc(l.id) + '"' + (l.id === lessonId ? ' selected' : '') + '>' + esc(VZ.dateLabel(l.date) + ' 레슨') + '</option>').join('') +
     (lessonId && !lessons.some(l => l.id === lessonId) ? '<option value="' + esc(lessonId) + '" selected>' + esc(lessonName(lessonId) || '지난 레슨') + '</option>' : '');
   const body = '<form id="vz-pts-form" class="vz-pts-form" novalidate>' +
+    (preset.note ? '<p class="vz-pts-note" role="status" data-pts-note>' + esc(preset.note) + '</p>' : '') +
     (preset.feedback ? '<div class="vz-pts-feedback"><span>레슨 피드백</span><p>' + esc(preset.feedback) + '</p></div>' : '') +
     '<div class="two"><label class="field"><span>시작 마디</span><input type="text" name="from" inputmode="numeric" autocomplete="off" maxlength="4" required value="' + esc(from) + '"' + (from ? '' : ' autofocus') + '></label>' +
     '<label class="field"><span>끝 마디</span><input type="text" name="to" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="한 마디면 비워 두기" value="' + esc(to) + '"></label></div>' +
     '<p class="vz-pts-hint">악보에 적힌 마디 번호예요.</p>' +
     '<label class="field"><span>지적</span><textarea name="text" rows="2" maxlength="' + P.TEXT_MAX + '" required placeholder="예: 여기서 숨 미리, 턱 내리기"' + (from ? ' autofocus' : '') + '>' + esc(old?.text || preset.text || '') + '</textarea></label>' +
+    (iPad() ? '<p class="vz-pts-hint" data-pts-scribble>애플펜슬로 이 칸에 바로 써도 글자로 바뀌어요 (iPad 설정 › Apple Pencil › 손글씨 입력)</p>' : '') +
     '<label class="field"><span>어느 레슨에서</span><select name="lessonId">' + lessonOptions + '</select></label>' +
     '<fieldset class="field vz-pts-tags"><legend>분류 (골라도 되고 안 골라도 돼요)</legend><div class="vz-pts-tag-row">' +
     [['', '없음'], ...P.TAGS].map(([k, name]) => '<label class="vz-pts-tag"><input type="radio" name="tag" value="' + k + '"' + (k === tag ? ' checked' : '') + '><span>' + esc(name) + '</span></label>').join('') + '</div></fieldset>' +
+    (preset.ink && !old ? '<fieldset class="field vz-pts-tags" data-pts-ink><legend>악보의 손글씨</legend><div class="vz-pts-tag-row">' +
+      '<label class="vz-pts-tag"><input type="radio" name="ink" value="keep" checked><span>그대로 두기</span></label><label class="vz-pts-tag"><input type="radio" name="ink" value="remove"><span>저장하고 지우기</span></label></div></fieldset>' : '') +
     '<p class="archive-error" role="alert" data-pts-error></p>' +
     (old ? '<div class="vz-pts-edit-actions">' + (old.retired
       ? '<button type="button" class="btn secondary block" data-pts-unretire><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>다시 체크하기</button>'
@@ -63,7 +71,7 @@ function editor(songId, preset = {}, onDone) {
   VZ.sheet({title:old ? '지적 수정' : '지적 추가', body, foot:'<button type="submit" form="vz-pts-form" class="btn block">저장</button>', onMount:(el, close) => {
     el.classList.add('vz-pts-editor');
     const form = el.querySelector('form'), error = el.querySelector('[data-pts-error]');
-    const done = message => { close(); VZ.toast(message); announce(); onDone?.(); };
+    const done = (message, ...after) => { close(); VZ.toast(message); announce(); onDone?.(...after); };
     form.onsubmit = e => {
       e.preventDefault();
       const raw = {songId, measures:{from:form.elements.from.value, to:form.elements.to.value}, text:form.elements.text.value, lessonId:form.elements.lessonId.value || null, tag:form.querySelector('[name=tag]:checked')?.value || null};
@@ -72,7 +80,7 @@ function editor(songId, preset = {}, onDone) {
         if (old) { const cur = pointById(old.id); if (!cur) throw Error('다른 기기에서 지운 지적이에요.'); row = P.edit(cur, raw); }
         else row = P.point({...raw, ...(preset.scoreId ? {scoreId:preset.scoreId} : {})}, {uid:VZ.uid()});
       } catch (err) { error.textContent = err.message; return; }
-      if (put(row)) done(old ? '지적을 고쳤어요.' : '지적을 추가했어요.');
+      if (put(row)) done(old ? '지적을 고쳤어요.' : '지적을 추가했어요.', row, {removeInk:form.querySelector('[name=ink]:checked')?.value === 'remove'});
     };
     const change = (patch, message) => { const cur = pointById(old.id); if (!cur) { error.textContent = '다른 기기에서 지운 지적이에요.'; return; } let row; try { row = P.edit(cur, patch); } catch (err) { error.textContent = err.message; return; } if (put(row)) done(message); };
     el.querySelector('[data-pts-retire]')?.addEventListener('click', () => change({retired:Date.now()}, '이제 체크에서 빼 둘게요. 기록은 남아 있어요.'));

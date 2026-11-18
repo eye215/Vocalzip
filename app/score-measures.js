@@ -11,7 +11,7 @@
  *   every time the marks are read they are handed to the sync, which gives them their actions.
  * - 마디 선택 (a way of placing 표기, app/score-ink.js): while such a marker is in hand the boxes show lightly even
  *   with 마디 위치 보기 off (peek), and the viewer asks which measure lies under a point and what the mark draws.
- *   window.VzipScoreMeasuresUI.mount(viewer) → {load, shown, changed, ready, peek, measureAt, pieces, count, destroy}
+ *   window.VzipScoreMeasuresUI.mount(viewer) → {load, shown, changed, ready, peek, measureAt, measuresIn, pieces, count, destroy}
  *   — called by app/score-ink.js */
 (() => {
 'use strict';
@@ -223,6 +223,9 @@ function mount(v) {
     peek(on) { on = !!on; if (!alive || peeking === on) return; peeking = on; try { if (on) look(v.page()); paintLayer(); } catch {} },
     /** The measure (file index) a point of the page now shown belongs to (page fractions), or null. */
     measureAt(x, y) { const n = v.page(); if (!layout || shownPage !== n) return null; look(n); return M.measureAt(geometry(n), x, y)?.index ?? null; },
+    /** Every measure a box {x, y, w, h} (page fractions) of the page now shown overlaps, with its printed numbers
+     * (레슨 지적 from handwriting, app/score-ink.js). [] without the conversion. */
+    measuresIn(b) { const n = v.page(); if (!layout || shownPage !== n || !b) return []; look(n); return M.measuresIn(geometry(n), b); },
     /** What a mark over the measures a..b (file indexes) of the page now shown draws: one shape per line of music. */
     pieces(preset, a, b) { const n = v.page(); return K && layout && shownPage === n ? K.pieces(geometry(n), preset, a, b, v.aspect()) : []; },
     /** How many measure boxes the conversion has (stored with a mark, so a later conversion is told apart). */
