@@ -110,3 +110,34 @@ test('finger writing: two fingers zoom and never write, also when the second fin
  await expect(dialog.locator('[data-ink-save-state]')).toContainText('필기 준비됨',{timeout:20000});
  expect(await strokes(page)).toBe(0);
 });
+
+/** Apple Pencil along y = .3 of the page from x0 to x1 (shares of the page). */
+const pen=(dialog,x0,x1,id)=>dialog.locator('[data-ink-svg]').evaluate((svg,[x0,x1,id])=>{
+ const r=svg.getBoundingClientRect(),o={bubbles:true,cancelable:true,pointerId:id,pointerType:'pen',isPrimary:true,pressure:.5,buttons:1},at=(x,y)=>({clientX:r.x+r.width*x,clientY:r.y+r.height*y});
+ svg.dispatchEvent(new PointerEvent('pointerdown',{...o,...at(x0,.3)}));
+ for(let i=1;i<=6;i++)svg.dispatchEvent(new PointerEvent('pointermove',{...o,...at(x0+(x1-x0)*i/6,.3+(i%2)*.01)}));
+ svg.dispatchEvent(new PointerEvent('pointerup',{...o,buttons:0,...at(x1,.3)}));
+},[x0,x1,id]);
+test('iPad taps: toolbar and selection-bar buttons work with touch; 지적으로 while the page is drawn again waits for it',async({page})=>{
+ const dialog=await start(page,true),bar=dialog.locator('[data-ink-selection-bar]');
+ await pen(dialog,.2,.5,71);await expect.poll(()=>strokes(page)).toBe(1);
+ // A finger tap on the toolbar, then the pencil draws a selection box.
+ await dialog.getByRole('button',{name:'선택',exact:true}).tap();
+ await expect(dialog.getByRole('button',{name:'선택',exact:true})).toHaveAttribute('aria-pressed','true');
+ const box=async()=>dialog.locator('[data-ink-svg]').evaluate(svg=>{
+  const r=svg.getBoundingClientRect(),o={bubbles:true,cancelable:true,pointerId:72,pointerType:'pen',isPrimary:true,buttons:1},at=(x,y)=>({clientX:r.x+r.width*x,clientY:r.y+r.height*y});
+  svg.dispatchEvent(new PointerEvent('pointerdown',{...o,...at(.1,.2)}));
+  for(let i=1;i<=6;i++)svg.dispatchEvent(new PointerEvent('pointermove',{...o,...at(.1+.5*i/6,.2+.2*i/6)}));
+  svg.dispatchEvent(new PointerEvent('pointerup',{...o,buttons:0,...at(.6,.4)}));
+ });
+ await box();await expect(bar.locator('[data-ink-selection-count]')).toHaveText('1개 선택');
+ // A finger tap on the selection bar.
+ await bar.locator('[data-ink-selection-delete]').tap();await expect.poll(()=>strokes(page)).toBe(0);
+ await dialog.getByRole('button',{name:'펜',exact:true}).tap();await pen(dialog,.2,.5,73);await expect.poll(()=>strokes(page)).toBe(1);
+ await dialog.getByRole('button',{name:'선택',exact:true}).tap();await box();await expect(bar.locator('[data-ink-selection-count]')).toHaveText('1개 선택');
+ // The page is drawn again (the zoom changed, as when the iPad turns) and 지적으로 is tapped meanwhile: it waits, then asks.
+ const go=bar.locator('[data-ink-to-point]');await expect(go).toBeVisible();
+ // (The press lands in the same moment the redraw starts.)
+ expect(await dialog.evaluate(el=>{const zoom=el.querySelector('[data-ink-zoom]');zoom.value='2';zoom.dispatchEvent(new Event('change'));el.querySelector('[data-ink-to-point]').click();return el.querySelector('[data-ink-save-state]')!=null;})).toBe(true);
+ await expect(page.getByRole('dialog',{name:/^(지적 추가|선택 영역 인식)$/})).toBeVisible();
+});

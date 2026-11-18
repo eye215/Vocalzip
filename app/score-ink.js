@@ -722,6 +722,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
  async function toPoint(){
   const rows=selection?.rows?.map(s=>({...s})),page=pageNo,button=el.querySelector('[data-ink-to-point]');
   if(!rows?.length||!VZ.scorePoints?.editor)return;
+  // The page is being drawn again (the iPad turned, the window or zoom changed): wait for it instead of doing nothing.
+  for(let i=0;busy&&!closed&&i<100;i++)await new Promise(r=>setTimeout(r,50));
+  if(closed)return;
   if(visionBusy||!ready||busy||pending||performance){say('악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.',true);return;}
   let text='',note='';
   // The same question as 텍스트로 변환 (recognize) before anything is sent; 취소 opens the form to write by hand.
