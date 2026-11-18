@@ -56,7 +56,11 @@ async function runAndAnswer(page, id, answer, {waitLevel = true} = {}) {
   await page.evaluate(() => { window.__ev.length = 0; });
   await card(page, id).getByRole('button', {name:/시험하기/}).click();
   const ask = card(page, id).locator('[data-ask]');
-  await expect(ask).toBeVisible({timeout:12000});
+  try { await expect(ask).toBeVisible({timeout:12000}); }
+  catch (e) { // say what the screen showed instead (CI artifacts cannot be read)
+    const seen = await page.evaluate(id => ({card:document.querySelector('[data-method="' + id + '"]')?.innerText, toast:[...document.querySelectorAll('.toast, [role=status], [role=alert]')].map(x => x.innerText).join(' | '), ev:window.__ev, errors:window.__errs || []}), id);
+    throw Error('no question: ' + JSON.stringify(seen) + ' · page errors: ' + JSON.stringify(page.__errors || []));
+  }
   let live = false;
   if (waitLevel) {
     const level = () => card(page, id).locator('[role=meter]').getAttribute('aria-valuenow').then(Number).catch(() => 0);
