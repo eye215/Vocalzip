@@ -5,10 +5,12 @@
  * Under the card, 귀와 숫자 (app/ear-agreement-model.js): whether the numbers moved the way the verdicts heard — one
  * closed line, a table when opened, 이 평가와 숫자 under each verdict, and a small "귀와 자주 같아요" mark on a same-song
  * line whose measure went with the ear at least 3 times and never against it. Derived on the fly; nothing is stored.
+ * Under each song pair and each verdict, 그 사이에 한 것 (app/growth-between-model.js): closed, what was recorded between
+ * the two takes' days — lessons, practice days with the minutes the person entered, goals done, recordings of the song.
  *   VzipGrowthChangesUI.mount(host, items) — host: an element inside 결과 리포트; items: the whole media list. */
 (() => {
 'use strict';
-const V = window.VZ, M = V?.media, C = window.VzipGrowthChanges, L = window.VzipListenVerdict, E = window.VzipEarAgreement;
+const V = window.VZ, M = V?.media, C = window.VzipGrowthChanges, L = window.VzipListenVerdict, E = window.VzipEarAgreement, B = window.VzipGrowthBetween;
 if (!V || !M || !C || !L || !V.growthDataset) return;
 const e = V.esc;
 const SHOWN_VERDICTS = 3, SHOWN_SONGS = 4;
@@ -32,6 +34,19 @@ const precisionApi = () => ({compare:window.VzipPrecisionReport?.compare, labels
 const hasPrecision = () => !!(window.VzipPrecisionStore && window.VzipPrecisionReport && window.VzipPrecisionSession);
 const model = (items, precision) => C.build({verdicts:L.list(V.db), songs:songsOf(items), precision:Array.isArray(precision) ? precision : null,
   precisionApi:precisionApi(), range:rangeOf(items), titleOf:V.songTitle});
+/** The song's recordings for 그 사이에 한 것: every recording of a song not in the deleted list, with its day. */
+const recordingsOf = items => V.growthDataset(items).rows.filter(r => !r.deleted && r.songId).map(r => ({id:r.id, songId:r.songId, date:r.date}));
+/** 그 사이에 한 것 — closed; plain observations, never a cause. '' when the two takes have no day between them. */
+function betweenHtml(ctx, kind, id, songId, from, to, ids) {
+  if (!B || !ctx) return '';
+  let t;
+  try { t = B.lines(B.between(V.db, {songId, from, to, recordings:ctx.recordings, exclude:ids})); } catch (error) { console.error(error); return ''; }
+  if (!t) return '';
+  return '<details class="gc-between" data-gc-between="' + e(kind + ':' + id) + '"' + (t.empty ? ' data-empty' : '') + '><summary><span>그 사이에 한 것</span><small>' + e(t.summary) + '</small></summary>' +
+    '<p class="gc-between-head">' + e(B.HEAD) + '</p><p class="gc-between-range">' + e(t.range) + '</p>' +
+    (t.empty ? '<p class="gc-between-empty" data-gc-between-empty>' + e(t.empty) + '</p>'
+      : '<ul class="gc-between-rows">' + t.rows.map(r => '<li data-gc-between-row="' + e(r.key) + '">' + e(r.text) + '</li>').join('') + '</ul>') + '</details>';
+}
 /** 귀와 숫자 for the verdicts: each take as the growth screens read it (the same `ok` rule), null when it is gone. */
 function earOf(items) {
   if (!E) return null;
@@ -71,23 +86,24 @@ function earPairHtml(p) {
       : '<p class="gc-ear-why" data-gc-ear-why="' + e(p.reason) + '">' + e(p.text) + '</p>' + (p.reason === 'method-mixed' ? remeasureHtml(p.songId, p.methods, p.remeasure) : '')) +
     '<p class="gc-ear-note">숫자가 맞거나 틀렸다는 뜻은 아니에요. 이 두 녹음에서 숫자가 어느 쪽으로 움직였는지만 적었어요.</p></details>';
 }
-function verdictHtml(v, ear) {
+function verdictHtml(v, ear, ctx) {
   const [l1, l2] = L.dayLabels(v.firstDate, v.secondDate);
   return '<article class="gc-line" data-gc-verdict="' + e(v.id) + '"><p class="gc-basis">' + e('같은 곡 ' + v.title + ' · ' + L.basisText(v.verdict, V.clock)) + '</p>' +
     '<p class="gc-quote"><span class="gc-who" data-judge="' + e(v.judge) + '">' + e(v.who) + '</span><q>' + e(v.overall) + '</q></p>' +
     (v.tags ? '<p class="gc-tags">' + e(v.tags) + '</p>' : '') + (v.memo ? '<p class="gc-memo">' + e(v.memo) + '</p>' : '') +
-    earPairHtml(ear?.byVerdict.get(v.id)) +
+    earPairHtml(ear?.byVerdict.get(v.id)) + betweenHtml(ctx, 'verdict', v.id, v.songId, v.firstDate, v.secondDate, [v.firstId, v.secondId]) +
     '<div class="gc-actions">' + play(v.firstId, l1) + play(v.secondId, l2) + chip('data-listen-edit="' + e(v.id) + '"', '고치기', 'pencil-simple') + '</div><div class="gc-player" data-gc-player></div></article>';
 }
 /** The small mark on a same-song line whose measure went with the ear ≥ 3 times and never against it. */
 const earMark = (ear, id) => ear?.measures.find(x => x.id === id)?.often ? '<em class="gc-ear-mark" data-gc-ear-mark><i class="ph ph-ear" aria-hidden="true"></i>귀와 자주 같아요</em>' : '';
-function songHtml(s, ear) {
+function songHtml(s, ear, ctx) {
   const [l1, l2] = L.dayLabels(s.firstDate, s.lastDate);
   return '<article class="gc-line" data-gc-song="' + e(s.songId) + '" data-gc-method="' + e(s.method) + '"><p class="gc-basis">' + e(s.basis) + '</p>' +
     // What moved, one line each with its numbers; what stayed about the same, gathered in one line.
     '<ul class="gc-obs">' + s.changes.filter(c => !c.similar).map(c => '<li data-gc-obs="' + e(c.id) + '"><span>' + e(c.text) + '</span>' +
       (c.numbers || c.basis ? '<small>' + e([c.numbers, c.basis].filter(Boolean).join(' · ')) + '</small>' : '') + earMark(ear, c.id) + '</li>').join('') +
     (s.changes.some(c => c.similar) ? '<li data-gc-obs="similar" data-similar><span>비슷해요 · ' + e(s.changes.filter(c => c.similar).map(c => c.name).join(' · ')) + '</span></li>' : '') + '</ul>' +
+    betweenHtml(ctx, 'song', s.songId, s.songId, s.firstDate, s.lastDate, [s.firstId, s.lastId]) +
     '<div class="gc-actions">' + play(s.firstId, l1) + play(s.lastId, l2) +
     chip('data-listen-open data-song="' + e(s.songId) + '" data-a="' + e(s.firstId) + '" data-b="' + e(s.lastId) + '"', '들어 보고 평가', 'ear') + '</div><div class="gc-player" data-gc-player></div></article>';
 }
@@ -113,9 +129,9 @@ function earHtml(ear) {
     '<div class="gc-ear-body"><p class="gc-ear-help">들어 본 평가에서 낫다고 고른 녹음 쪽으로 숫자도 움직였는지 세어 봤어요. 같은 방법·같은 분석 버전으로 잰 두 녹음만 견주고, 판정 보류된 숫자는 세지 않아요. 숫자가 맞거나 틀렸다는 뜻은 아니에요.</p>' +
     table + tagList + '<p class="gc-ear-note">어느 숫자를 음정·호흡·소리 길 중 어느 항목과 견줄지는 처음 정해 본 것이에요. 평가가 쌓이면 바뀔 수 있어요.</p>' + exList + '</div></details></section>';
 }
-function html(m, precision, ear = null) {
+function html(m, precision, ear = null, ctx = null) {
   const group = (key, icon, title, body) => '<section class="gc-group" data-gc-group="' + key + '"><h3><i class="ph ph-' + icon + '" aria-hidden="true"></i>' + title + '</h3>' + body + '</section>';
-  const verdictRow = v => verdictHtml(v, ear), songRow = s => songHtml(s, ear);
+  const verdictRow = v => verdictHtml(v, ear, ctx), songRow = s => songHtml(s, ear, ctx);
   const verdicts = m.verdicts.length ? m.verdicts.slice(0, SHOWN_VERDICTS).map(verdictRow).join('') + more('남긴 평가 모두 보기 (' + m.verdicts.length + ')', m.verdicts.slice(SHOWN_VERDICTS).map(verdictRow).join(''))
     : '<p class="gc-empty" data-gc-empty="verdicts">아직 들어 보고 남긴 평가가 없어요. 아래 곡의 <b>들어 보고 평가</b>나 보컬 연구소에서 두 녹음을 가리고 들어 보고 남길 수 있어요.</p>';
   const songs = m.songs.length ? m.songs.slice(0, SHOWN_SONGS).map(songRow).join('') + more('곡 더 보기 (' + (m.songs.length - SHOWN_SONGS) + ')', m.songs.slice(SHOWN_SONGS).map(songRow).join(''))
@@ -143,7 +159,9 @@ function paint() {
   let m, ear = null;
   try { m = model(s.items, s.precision); } catch (error) { console.error(error); s.host.innerHTML = ''; return; }
   try { ear = earOf(s.items); } catch (error) { console.error(error); }   // 귀와 숫자 is extra: the card stands without it
-  s.host.innerHTML = html(m, s.precision, ear);
+  let ctx = null;
+  try { ctx = {recordings:recordingsOf(s.items)}; } catch (error) { console.error(error); }   // so is 그 사이에 한 것
+  s.host.innerHTML = html(m, s.precision, ear, ctx);
   // A redraw (a verdict saved, the late precision read) keeps 귀와 숫자 open when it was.
   s.host.querySelector('[data-gc-ear]')?.addEventListener('toggle', ev => { s.earOpen = ev.target.open; });
   // 이 녹음도 MR 빼고 재기: the song's MR re-analysis with only this take picked. A saved result redraws 결과 리포트
@@ -187,7 +205,7 @@ window.VzipGrowthChangesUI = {
     state.precision = late;
     paint();
   },
-  html:(items, precision = null) => html(model(items, precision), precision, earOf(items))
+  html:(items, precision = null) => html(model(items, precision), precision, earOf(items), {recordings:recordingsOf(items)})
 };
 window.addEventListener('vzip:listen-verdicts', () => { if (state?.host?.isConnected) paint(); });
 window.addEventListener('hashchange', stopPlayer);
