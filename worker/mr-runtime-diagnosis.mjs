@@ -39,7 +39,12 @@ export async function measureBundle(bundle,{guidanceOnly=false}={}){
  const server=createServer(async(req,res)=>{
   try{
    const path=new URL(req.url,'http://localhost').pathname;let data,type;
-   if(path==='/'){data='<!doctype html><script src="/app/voice-path-model.js"></script><script src="/app/mr-cancel.js"></script><script src="/app/vocal-analysis.js"></script>';type='text/html';}
+   if(path==='/'){data='<!doctype html><script src="/app/voice-path-model.js"></script><script src="/diagnosis/mr-observer.js"></script><script src="/app/vocal-analysis.js"></script>';type='text/html';}
+   else if(path==='/diagnosis/mr-observer.js'){
+    const source=await readFile(new URL('../app/mr-cancel.js',import.meta.url),'utf8');
+    if(!source.includes('const api = {SR,'))throw Error('observer unavailable');
+    data=source.replace('const api = {SR,','const api = {lagReader,robustLine,SR,');type='application/javascript';
+   }
    else if(path==='/input/recording'){data=bundle.recording;type='application/octet-stream';}
    else if(/^\/input\/reference-\d+$/.test(path)){data=bundle.references[Number(path.split('-').at(-1))];type='application/octet-stream';}
    else if(path.startsWith('/app/')&&allowed.has(path.slice(5))){data=await readFile(new URL('../app/'+path.slice(5),import.meta.url));type='application/javascript';}
@@ -80,6 +85,26 @@ export async function measureBundle(bundle,{guidanceOnly=false}={}){
     const summarize=r=>({measurable:P.measurable(r,false).ok,reason:P.measurable(r,false).why,pitchSource:r.confidence.pitchSource,strength:r.confidence.meanStrength,voicedSeconds:r.voicedSeconds,outsideBandShare:r.confidence.outsideBandShare,glitchShare:r.confidence.glitchShare,jumpsPerMin:r.confidence.jumpsPerMin});
     result.guidance={legacyVersion:legacy.version,legacyPitchConfidence:legacy.confidence.pitchConfidence,legacyVoiceOverMrDb:legacy.confidence.voiceOverMrDb,
      rawGuided:summarize(P.analyze(mixed,16000,{guide})),highpass:summarize(P.analyze(filtered,16000)),highpassGuided:summarize(P.analyze(filtered,16000,{guide}))};
+    // The observer exposes existing pure helpers only on this localhost page, never in the app Worker.
+    const calibrationHalver=P.createHalver(),first=calibrationHalver.push(mixed),last=calibrationHalver.finish(),calibration=new Float32Array(first.length+last.length);calibration.set(first);calibration.set(last,first.length);
+    result.voiceFreeTiming=[];
+    for(const candidate of C.coarse(calibration,mrs[0].samples,{dense:true}).candidates.slice(0,3)){
+     const f=C.fine(calibration,mrs[0].samples,candidate.lag),seed=f.points>=2&&Math.abs(f.ratio-1)<=.02?f:{lag:candidate.lag,ratio:1};
+     const N=C.RULES.fineWin,read=C.lagReader(N),from=Math.max(0,Math.ceil(-seed.lag/seed.ratio)),to=Math.min(calibration.length,Math.floor((mrs[0].samples.length-seed.lag)/seed.ratio))-N;
+     const strong=[];let freeWindows=0;
+     for(let start=from;start<=to;start+=C.RULES.localStep){
+      let voiced=false;for(let i=Math.floor(start/8000*guide.fps);i<Math.ceil((start+N)/8000*guide.fps);i++)if(guide.curve[i]!=null){voiced=true;break;}
+      if(voiced)continue;freeWindows++;
+      const at=start+N/2,g=read(calibration,mrs[0].samples,start,seed.lag+(seed.ratio-1)*at,Math.round(C.RULES.anchorSearch*8000));
+      if(g.peak>=C.RULES.verifiedPeak)strong.push([at,g.lag,g.peak]);
+     }
+     const line=C.robustLine(strong),item={offsetSeconds:candidate.lag/8000,freeWindows,strongWindows:strong.length,fit:line?{offsetSeconds:line.lag/8000,speed:line.ratio,windows:line.points,phasePeak:line.phasePeak,errorSamples:line.errorSamples,spanFraction:line.span/calibration.length,strongFreeFraction:freeWindows?line.points/freeWindows:null}:null};
+     if(line&&line.span>=calibration.length*.4){
+      const stats={},track=C.localTrack(calibration,mrs[0].samples,line,()=>{},stats);item.bestLocalFraction=stats.bestLocalFraction??null;item.bestCoverage=stats.bestCoverage??null;
+      if(track){const residual=C.subtract(calibration,track.heard,()=>{},{transferRadius:C.RULES.transferRadius,excludeCurrent:true,residual:0});track.blend(residual.voice);let before=0,after=0;for(let i=0;i<calibration.length;i++){before+=calibration[i]**2;after+=residual.voice[i]**2;}item.heldoutDb=10*Math.log10(before/after);const voice=P.analyze(residual.voice,8000);item.voicePresent=voice.voicedSeconds>0;item.voicePitchStrength=voice.confidence.meanStrength;}
+     }
+     result.voiceFreeTiming.push(item);
+    }
     if(guidanceOnly)return result;
     result.probes=[];
     if(rec.b.numberOfChannels===2)for(let channel=0;channel<2;channel++)result.probes.push({channel,...await measure(rec,[rec.b.getChannelData(channel)])});
