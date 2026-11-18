@@ -10,15 +10,16 @@ import {readMedia} from './analysis-worker.mjs';
 const require=createRequire(import.meta.url),MAX_BYTES=250*1024*1024;
 export class DiagnosticError extends Error {constructor(code){super(code);this.code=code;}}
 export const parseSize=value=>{const n=Number(value);if(!Number.isSafeInteger(n)||n<44||n>MAX_BYTES)throw new DiagnosticError('invalid-size');return n;};
-const codes=new Set(['invalid-size','selection-ambiguous','song-ambiguous','no-references','source-size-mismatch','selection-content-differs','reference-too-large','synthetic-failed']);
+export const parseMonth=value=>{if(typeof value!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(value))throw new DiagnosticError('invalid-month');return value;};
+const codes=new Set(['invalid-size','invalid-month','selection-ambiguous','song-ambiguous','no-references','source-size-mismatch','selection-content-differs','reference-too-large','synthetic-failed']);
 export const safeFailure=error=>({status:'failed',code:error instanceof DiagnosticError&&codes.has(error.code)?error.code:'operation-failed'});
 
-export async function loadBundle(db,size,read=readMedia){
- size=parseSize(size);let rows,tracks;
+export async function loadBundle(db,size,read=readMedia,month=null){
+ size=parseSize(size);if(month!==null)month=parseMonth(month);let rows,tracks;
  await db.query('BEGIN READ ONLY');
  try{
   await db.query("SET LOCAL statement_timeout='15s'");
-  ({rows}=await db.query("select user_id,metadata from public.vocal_media where metadata->>'size'=$1 and metadata->>'storageProvider'='r2' order by updated_at desc limit 3",[String(size)]));
+  ({rows}=await db.query("select user_id,metadata from public.vocal_media where metadata->>'size'=$1 and metadata->>'storageProvider'='r2' and ($2::text is null or left(metadata->>'recordedDate',7)=$2) order by updated_at desc limit 3",[String(size),month]));
   if(!rows.length||rows.length>2||new Set(rows.map(r=>r.user_id+':'+r.metadata.songId)).size!==1)throw new DiagnosticError('selection-ambiguous');
   const song=await db.query("select s->'mrTracks' as tracks from public.vocal_data d cross join lateral jsonb_array_elements(d.payload->'songs') s where d.user_id=$1 and s->>'id'=$2",[rows[0].user_id,rows[0].metadata.songId]);
   if(song.rows.length!==1)throw new DiagnosticError('song-ambiguous');
@@ -78,8 +79,8 @@ async function main(){
   const Y=require('../tests/helpers/mr-synth.cjs'),A=require('../tests/helpers/voice-path-audio.cjs').make(),mr=Y.mr(45),rec=Y.record(Y.vocal(20).x,mr,{offset:5,db:6});
   bundle={recording:Buffer.from(A.wav(rec.x,Y.SR)),references:[Buffer.from(A.wav(mr,Y.SR))]};
  }else{
-  const size=parseSize(process.env.RECORDING_BYTES),db=new pg.Client({connectionString:process.env.SUPABASE_DB_URL,ssl:process.env.SUPABASE_DB_SSL==='off'?false:{rejectUnauthorized:false}});
-  try{await db.connect();bundle=await loadBundle(db,size);}finally{await db.end();}
+  const size=parseSize(process.env.RECORDING_BYTES),month=parseMonth(process.env.RECORDING_MONTH),db=new pg.Client({connectionString:process.env.SUPABASE_DB_URL,ssl:process.env.SUPABASE_DB_SSL==='off'?false:{rejectUnauthorized:false}});
+  try{await db.connect();bundle=await loadBundle(db,size,readMedia,month);}finally{await db.end();}
  }
  const receipt=await measureBundle(bundle);console.log(JSON.stringify(receipt));
  if(process.argv.includes('--synthetic')&&!receipt.measurable)throw new DiagnosticError('synthetic-failed');

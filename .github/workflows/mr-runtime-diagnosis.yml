@@ -11,6 +11,10 @@ on:
         description: 'Exact recording byte count; reads one owner/song only, no writes or audio artifacts'
         required: true
         type: string
+      recording_month:
+        description: 'Recording month from the diagnosis (YYYY-MM); no day or media identifier'
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -43,4 +47,5 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           RECORDING_BYTES: ${{ inputs.recording_bytes }}
+          RECORDING_MONTH: ${{ inputs.recording_month }}
         run: node worker/mr-runtime-diagnosis.mjs
