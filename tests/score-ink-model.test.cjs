@@ -300,3 +300,20 @@ test('필기감: a finished stroke keeps only the points that change it visibly,
  const straight=Array.from({length:50},(_,i)=>[i/49*.5,.2,.5]);assert.equal(Ink.simplifyStroke(straight).length,2);
  assert.equal(Ink.valid(stroke('s',{points:kept,smooth:true,pressure:true})),true);
 });
+test('a device full of duplicated strokes opens: duplicates are dropped first, then the root is saved',()=>{
+ // One storage for the recovery copy and the root, with a size limit like Safari's.
+ const memory=new Map(),limit={max:Infinity},used=()=>[...memory.values()].reduce((n,v)=>n+v.length,0);
+ const storage={getItem:k=>memory.get(k)??null,setItem:(k,v)=>{const before=memory.get(k);memory.set(k,v);if(used()>limit.max){before==null?memory.delete(k):memory.set(k,before);throw Object.assign(Error('full'),{name:'QuotaExceededError'});}},removeItem:k=>memory.delete(k)};
+ let data={categories:[],songs:[{id:'song',title:'Song',scores:[{id:'score',r2Key:binding.r2Key}]}],lessons:[],practices:[],assignments:[]};
+ const change=fn=>{const next=structuredClone(data);fn(next);try{storage.setItem('root',JSON.stringify(next));}catch{return false;}data=next;return true;};
+ const store=Ink.create({storage,identity:()=>({owner,session:'s'}),getData:()=>data,change});
+ const many=Array.from({length:40},(_,i)=>stroke('s'+i,{points:Array.from({length:60},(_,j)=>[j/60,i/40,.5])}));
+ assert.equal(store.commit({add:many}),true);
+ // An older version left every stroke in the recovery copy as well, and one more stroke the root never got.
+ const extra=stroke('late');memory.set(store.key,JSON.stringify({version:1,owner,records:[...data.scoreAnnotations.map(s=>structuredClone(s)),extra],deleted:[]}));
+ // The device is now full: saving the root with one more stroke does not fit while the duplicates are there.
+ limit.max=used()+200;
+ assert.equal(store.restore(),true);
+ assert.ok(data.scoreAnnotations.some(s=>s.id==='late'));
+ assert.deepEqual(JSON.parse(memory.get(store.key)||'{"records":[]}').records,[]);
+});
