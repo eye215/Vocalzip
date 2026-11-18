@@ -233,6 +233,7 @@ VZ.route('lesson', {title:'레슨', back:true, tab:'calendar',
     });
     VZ.billingLessonCard?.(main.querySelector('[data-billing-status]'), l);
     main.querySelectorAll('[data-fb],[data-fb2]').forEach(b => b.onclick = () => feedbackSheet(l));
+    VZ.scorePoints?.lessonEntry(main, l); // 마디별 지적으로 적기 (app/score-points.js)
     main.querySelector('[data-add-task]')?.addEventListener('click', () => VZ.taskSheet({lessonId:id, songId:VZ.lessonSongIds(l)[0] || ''}));
     main.querySelector('[data-del-lesson]').onclick = () => VZ.lessonDeletion.open(id);
     const query=new URLSearchParams(location.hash.split('?')[1]||''),deductionId=query.get('settlementDelete');

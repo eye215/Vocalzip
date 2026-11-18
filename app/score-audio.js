@@ -363,9 +363,11 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
       source:'practice', recordingCategory:'song', songId, song:VZ.songLabel ? VZ.songLabel(VZ.song(songId)) : (VZ.songTitle?.(songId) || ''),
       blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, origin:'score', ...(withMr ? {withMr} : {})};
   }
+  /** A take became a recording of the song: 레슨 지적 체크 (app/score-points.js) links it to the run it was sung in. */
+  const told = take => { try { window.dispatchEvent(new CustomEvent('vzip:score-take-saved', {detail:{songId, id:take.id}})); } catch {} };
   /** Viewer closed with an unsaved take: keep it as a recording of the song rather than losing it. */
   async function keep(take) {
-    try { await M.saveBlob(itemFor(take)); take.res.releaseProtection?.(); VZ.toast('저장하지 않은 악보 녹음을 이 곡의 녹음으로 보관했어요.'); }
+    try { await M.saveBlob(itemFor(take)); take.res.releaseProtection?.(); told(take); VZ.toast('저장하지 않은 악보 녹음을 이 곡의 녹음으로 보관했어요.'); }
     catch (e) { VZ.toast('악보 녹음을 보관하지 못했어요: ' + e.message, 'error'); }
   }
   async function save() {
@@ -374,7 +376,7 @@ function mount(anchor, {songId, scoreTitle = ''} = {}) {
     s.busy = true; const button = bar.querySelector('[data-score-audio-save]'); if (button) button.disabled = true;
     try {
       await M.saveBlob(itemFor(take), p => hint('클라우드 저장 ' + p + '%'));
-      take.res.releaseProtection?.(); s.preview?.destroy?.(); s.preview = null; s.take = null; s.mode = 'idle'; s.busy = false;
+      take.res.releaseProtection?.(); told(take); s.preview?.destroy?.(); s.preview = null; s.take = null; s.mode = 'idle'; s.busy = false;
       paint(); hint('저장했어요 · 이 곡의 녹음 탭과 전체 녹음에서 볼 수 있어요.');
       VZ.toast('악보 녹음을 저장했어요.');
     } catch (e) { s.busy = false; if (button) button.disabled = false; hint('저장 실패: ' + e.message + ' · 녹음은 이 화면에 그대로 있어요.', true); }

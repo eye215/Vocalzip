@@ -72,7 +72,7 @@ function attach(c) {
 
   // ---------- ⋯ menu ----------
   function menu(actions) {
-    if (!actions) { syncButton?.remove(); followButton?.remove(); syncButton = followButton = null; return; }
+    if (!actions) { syncButton?.remove(); followButton?.remove(); syncButton = followButton = null; points?.menu(null); return; }
     refresh();
     const make = (name, icon, run) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn'; b.setAttribute('data-ink-' + name, ''); b.innerHTML = '<i class="ph ph-' + icon + '" aria-hidden="true"></i><span class="score-ink-menu-label"></span>'; b.onclick = run; return b; };
     if (!syncButton) actions.append(syncButton = make('measure-sync', 'hand-tap', () => openSheet()));
@@ -87,6 +87,7 @@ function attach(c) {
     label(syncButton, '마디와 MR 맞추기', state.state === 'stale' ? AGAIN : '');
     syncButton.dataset.state = state.state;
     if (followButton) { label(followButton, '재생 위치 따라가기'); followButton.setAttribute('aria-pressed', String(prefs.follow)); }
+    points?.menu(actions);
   }
   function setFollow(next) { prefs.follow = !!next; remember(); now = null; refresh(); c.menu(); c.repaint(); }
 
@@ -115,6 +116,9 @@ function attach(c) {
     if (!['mr', 'mrrec', 'loop', 'paused'].includes(mode) && now) { now = null; c.repaint(); }
   }
   const offChange = audio()?.onChange?.(onMode) || null;
+  // 레슨 지적 체크 (app/score-points.js): 부르면서 체크 follows the MR through this sync; a measure box can take a point.
+  let points = null;
+  try { points = window.VzipScorePoints?.viewer({songId, scoreId:score.id, audio, outside:() => v.outside?.(), timing:() => ({seq, model})}) || null; } catch { points = null; }
 
   // ---------- 여기서 재생 · 이 마디 반복 ----------
   async function startLoop(from, to, occurrence = 0) {
@@ -297,11 +301,12 @@ function attach(c) {
         '<div class="vz-choice-list"><button type="button" class="vz-choice" data-sync-here' + (known ? '' : ' disabled') + '><i class="ph ph-play" aria-hidden="true"></i> 여기서 재생</button>' +
         '<button type="button" class="vz-choice" data-sync-loop' + (known ? '' : ' disabled') + '><i class="ph ph-repeat" aria-hidden="true"></i> 이 마디 반복</button></div>'
       : '<p class="small muted score-sync-menu-text" data-sync-need>' + (stale ? AGAIN + '. ' + esc(WHY[state.why] || '') + ' ' : '') + NEED + '</p>' +
-        '<div class="vz-choice-list"><button type="button" class="vz-choice" data-sync-open><i class="ph ph-hand-tap" aria-hidden="true"></i> ' + (stale ? '다시 맞추기' : 'MR과 맞추기') + '</button></div>');
+        '<div class="vz-choice-list"><button type="button" class="vz-choice" data-sync-open><i class="ph ph-hand-tap" aria-hidden="true"></i> ' + (stale ? '다시 맞추기' : 'MR과 맞추기') + '</button></div>') +
+      (points ? '<div class="vz-choice-list"><button type="button" class="vz-choice" data-sync-point><i class="ph ph-chat-circle-text" aria-hidden="true"></i> 이 마디에 지적 추가</button></div>' : '');
     VZ.menu({title:name, label:name + ' 메뉴', anchor:{getBoundingClientRect:() => ({left:x, right:x, top:y, bottom:y, width:0, height:0})}, body, onMount:(host, close) => {
       host.classList.add('score-sync-menu');
       const on = (what, fn) => { const b = host.querySelector('[data-sync-' + what + ']'); if (b) b.onclick = () => { close(); fn(); }; };
-      on('here', () => playHere(ord)); on('loop', () => startLoop(ord, ord)); on('open', () => openSheet());
+      on('here', () => playHere(ord)); on('loop', () => startLoop(ord, ord)); on('open', () => openSheet()); on('point', () => points?.add(seq[ord]));
     }});
   }
   // A held pointer that cannot draw (이동, or a finger with 펜만 필기) and has not moved: no existing gesture uses it.
@@ -588,7 +593,7 @@ function attach(c) {
     refresh, menu, list, marked,
     /** The measure (file index) sounding now on page n, or null. */
     now:n => now && seq[now.m]?.page === n ? seq[now.m].index : null,
-    destroy() { alive = false; drop(); offTick?.(); offChange?.(); try { audio()?.setPlan?.(null); } catch {} try { sheet?.close(); } catch {}
+    destroy() { alive = false; drop(); offTick?.(); offChange?.(); try { points?.destroy(); } catch {} try { audio()?.setPlan?.(null); } catch {} try { sheet?.close(); } catch {}
       stage.removeEventListener('pointerdown', down, true); stage.removeEventListener('pointermove', move, true); stage.removeEventListener('pointerup', up, true); stage.removeEventListener('pointercancel', up, true); stage.removeEventListener('scroll', scrolled);
       syncButton?.remove(); followButton?.remove(); }
   };

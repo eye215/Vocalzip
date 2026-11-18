@@ -1,0 +1,110 @@
+/* 레슨 지적 체크 (app/score-points.js). Student light v4 tokens; the run keeps its own surface so it reads over the score. */
+.vz-pts-card,.vz-pts-run,.vz-pts-manage,.vz-pts-form{--pts-bg:#fff;--pts-ink:#101828;--pts-body:#344054;--pts-muted:#667085;--pts-soft:#F3ECFF;--pts-line:#F2EFF7;--pts-accent:#7A32F5;
+ --pts-ok:#23855C;--pts-ok-soft:#E3F4EC;--pts-miss:#B42318;--pts-miss-soft:#FDECEA;--pts-warn:#B26A00;--pts-warn-soft:#FFF3DC;letter-spacing:-.02em}
+.vz-pts-card *,.vz-pts-run *,.vz-pts-manage *{box-sizing:border-box}
+.vz-pts-card button,.vz-pts-run button,.vz-pts-manage button{font:inherit;letter-spacing:inherit;-webkit-tap-highlight-color:transparent;cursor:pointer}
+.vz-pts-card button:focus-visible,.vz-pts-run button:focus-visible,.vz-pts-manage button:focus-visible{outline:2px solid var(--pts-accent);outline-offset:2px}
+
+/* 곡 화면 카드 */
+.vz-pts-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;margin:0 0 12px;padding:8px 8px 8px 4px;border-radius:20px;background:var(--pts-bg);box-shadow:0 1px 4px rgba(55,33,85,.06);min-width:0}
+.vz-pts-card-head{display:flex;align-items:center;gap:10px;min-width:0;min-height:48px;padding:0 4px 0 8px;border:0;border-radius:14px;background:transparent;color:var(--pts-ink);text-align:left}
+.vz-pts-card-head>.ph-caret-right{flex:none;color:var(--pts-muted);font-size:16px}
+.vz-pts-card-icon{display:inline-grid;place-items:center;flex:none;width:36px;height:36px;border-radius:12px;background:var(--pts-soft);color:var(--pts-accent);font-size:20px}
+.vz-pts-card-main{display:grid;gap:2px;min-width:0;flex:1}
+.vz-pts-card-main strong{font-size:15px;line-height:21px;font-weight:700}
+.vz-pts-card-main small{color:var(--pts-muted);font-size:12px;line-height:17px;overflow-wrap:anywhere}
+.vz-pts-start{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px;padding:0 16px;border:0;border-radius:14px;background:var(--pts-accent);color:#fff;font-size:15px;line-height:20px;font-weight:700;white-space:nowrap}
+.vz-pts-start.is-soft{background:var(--pts-soft);color:var(--pts-accent)}
+
+/* 레슨 지적 목록 · 편집 */
+.vz-pts-manage{display:grid;gap:12px;min-width:0}
+.vz-pts-hint{margin:0;color:var(--pts-muted,#667085);font-size:13px;line-height:19px}
+.vz-pts-form .vz-pts-hint{margin:-8px 0 14px}
+.vz-pts-empty{margin:0;padding:18px;border-radius:16px;background:var(--pts-line);color:var(--pts-muted);font-size:14px;text-align:center}
+.vz-pts-rows{display:grid;gap:8px;min-width:0}
+.vz-pts-row{display:grid;gap:4px;min-width:0;padding:4px 4px 10px;border-radius:16px;background:var(--pts-bg);box-shadow:inset 0 0 0 1px var(--pts-line)}
+.vz-pts-row[data-retired]{opacity:.8}
+.vz-pts-row-main{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;min-height:52px;padding:6px 8px;border:0;border-radius:12px;background:transparent;color:var(--pts-ink);text-align:left}
+.vz-pts-row-main>.ph-caret-right{color:var(--pts-muted)}
+.vz-pts-where{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border-radius:99px;background:var(--pts-soft);color:var(--pts-accent);font-size:13px;line-height:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vz-pts-what{display:grid;gap:2px;min-width:0}
+.vz-pts-what strong{font-size:15px;line-height:21px;font-weight:600;overflow-wrap:anywhere}
+.vz-pts-what small{color:var(--pts-muted);font-size:12px;line-height:17px}
+.vz-pts-row-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;padding:0 12px}
+.vz-pts-record{color:var(--pts-muted);font-size:12px;line-height:17px;font-weight:600}
+.vz-pts-dots{display:inline-flex;gap:3px}
+.vz-pts-dot{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-size:11px;font-style:normal}
+.vz-pts-dot.is-kept{background:var(--pts-ok-soft);color:var(--pts-ok)}
+.vz-pts-dot.is-missed{background:var(--pts-miss-soft);color:var(--pts-miss)}
+.vz-pts-suggest{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;margin:4px 8px 0;padding:6px 6px 6px 12px;border-radius:14px;background:var(--pts-ok-soft);color:var(--pts-ok);font-size:13px;line-height:18px;font-weight:600}
+.vz-pts-suggest-actions{display:flex;gap:6px}
+.vz-pts-suggest button,.vz-pts-small{min-height:44px;padding:0 12px;border:0;border-radius:12px;background:#fff;color:var(--pts-ok);font-size:13px;font-weight:700}
+.vz-pts-small{background:var(--pts-soft);color:var(--pts-accent)}
+.vz-pts-retired summary{display:flex;align-items:center;min-height:44px;padding:0 4px;color:var(--pts-muted);font-size:14px;font-weight:600;cursor:pointer}
+.vz-pts-feedback{margin:0 0 14px;padding:10px 12px;border-radius:12px;background:var(--surface-2,#F6F3FB)}
+.vz-pts-feedback span{display:block;color:var(--pts-muted);font-size:12px;font-weight:600}
+.vz-pts-feedback p{margin:4px 0 0;max-height:120px;overflow:auto;white-space:pre-wrap;font-size:14px;line-height:20px;color:var(--pts-body)}
+.vz-pts-tags{border:0;margin:0 0 14px;padding:0;min-width:0}
+.vz-pts-tag-row{display:flex;flex-wrap:wrap;gap:6px}
+.vz-pts-tag{position:relative;display:inline-flex}
+.vz-pts-tag input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.vz-pts-tag span{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:99px;background:var(--pts-line);color:var(--pts-body);font-size:14px;font-weight:600}
+.vz-pts-tag input:checked+span{background:var(--pts-soft);color:var(--pts-accent);box-shadow:inset 0 0 0 1.5px var(--pts-accent)}
+.vz-pts-tag input:focus-visible+span{outline:2px solid var(--pts-accent);outline-offset:2px}
+.vz-pts-edit-actions{display:grid;gap:8px;margin-top:8px}
+.vz-pts-danger{color:var(--danger,#B42318)}
+.vz-pts-lesson{margin-bottom:10px}
+
+/* 부르면서 체크 */
+.vz-pts-run{position:fixed;z-index:var(--vz-z-overlay,60);color:var(--pts-ink);font-size:16px}
+.vz-pts-run.is-list{inset:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:#F7F4FC;padding:0 0 calc(var(--safe-b,0px) + 8px)}
+.vz-pts-run-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px;min-width:0;padding:calc(var(--safe-t,0px) + 10px) 16px 10px;background:rgba(247,244,252,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.vz-pts-run-title{display:grid;gap:2px;flex:1;min-width:0}
+.vz-pts-run-title strong{font-size:18px;line-height:25px;font-weight:700}
+.vz-pts-run-title small{color:var(--pts-muted);font-size:13px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.vz-pts-tool{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;min-width:56px;min-height:48px;padding:0 14px;border:0;border-radius:14px;background:var(--pts-soft);color:var(--pts-accent);font-size:15px;font-weight:700;white-space:nowrap}
+.vz-pts-tool.is-strong{background:var(--pts-ink);color:#fff}
+.vz-pts-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:12px;margin:0;padding:4px 16px 12px;list-style:none;min-width:0}
+.vz-pts-item{display:grid;gap:10px;align-content:start;min-width:0;padding:16px;border-radius:20px;background:var(--pts-bg);box-shadow:0 1px 4px rgba(55,33,85,.06)}
+.vz-pts-item-head{display:flex;align-items:center;gap:8px;min-width:0}
+.vz-pts-item-head small{color:var(--pts-muted);font-size:13px;font-weight:600}
+.vz-pts-item .vz-pts-where{min-height:32px;font-size:16px}
+.vz-pts-text{margin:0;font-size:24px;line-height:33px;font-weight:700;overflow-wrap:anywhere;word-break:keep-all}
+.vz-pts-marks{display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:0}
+.vz-pts-mark{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:64px;padding:0 10px;border:0;border-radius:18px;background:var(--pts-line);color:var(--pts-body);font-size:18px;line-height:24px;font-weight:700;touch-action:manipulation}
+.vz-pts-mark i{font-size:26px}
+.vz-pts-mark.is-kept[aria-pressed="true"]{background:var(--pts-ok);color:#fff}
+.vz-pts-mark.is-missed[aria-pressed="true"]{background:var(--pts-miss);color:#fff}
+.vz-pts-run-foot{position:sticky;bottom:0;display:flex;gap:8px;padding:10px 16px calc(var(--safe-b,0px) + 10px);background:rgba(247,244,252,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.vz-pts-run-foot.two{display:grid;grid-template-columns:auto minmax(0,1fr)}
+.vz-pts-done{flex:1;min-height:56px;padding:0 16px;border:0;border-radius:16px;background:var(--pts-accent);color:#fff;font-size:17px;font-weight:700}
+.vz-pts-done:disabled{opacity:.45;cursor:default}
+.vz-pts-summary{display:grid;gap:8px;padding:0 16px 8px}
+.vz-pts-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.vz-pts-counts span{display:grid;justify-items:center;gap:2px;padding:12px 4px;border-radius:16px;background:var(--pts-bg);color:var(--pts-muted);font-size:13px;font-weight:600}
+.vz-pts-counts b{color:var(--pts-ink);font-size:28px;line-height:34px;font-variant-numeric:tabular-nums}
+.vz-pts-counts .is-kept b{color:var(--pts-ok)}
+.vz-pts-counts .is-missed b{color:var(--pts-miss)}
+.vz-pts-linked{display:flex;align-items:center;gap:6px;margin:0;color:var(--pts-muted);font-size:13px;font-weight:600}
+.vz-pts-summary~.vz-pts-list .vz-pts-text{font-size:18px;line-height:26px}
+.vz-pts-summary~.vz-pts-list .vz-pts-mark{min-height:56px;font-size:16px}
+.vz-pts-summary~.vz-pts-list .vz-pts-row-foot{padding:0}
+.vz-pts-summary~.vz-pts-list .vz-pts-suggest{margin:0}
+
+/* Over the score: a panel at the top while the MR plays; the score and the play bar stay visible below. */
+.vz-pts-run.is-panel{left:0;right:0;top:0;display:flex;justify-content:center;padding:calc(var(--safe-t,0px) + 8px) 12px 0;pointer-events:none}
+.vz-pts-panel{pointer-events:auto;display:grid;gap:10px;width:100%;max-width:720px;min-width:0;padding:10px 12px 12px;border-radius:22px;background:rgba(255,255,255,.97);box-shadow:0 10px 32px rgba(40,24,90,.22);border:1px solid var(--pts-line)}
+.vz-pts-panel-top{display:flex;align-items:center;gap:6px;min-width:0}
+.vz-pts-panel-top strong{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vz-pts-panel-progress{color:var(--pts-muted);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vz-pts-wait,.vz-pts-next{margin:0;color:var(--pts-body);font-size:15px;line-height:22px;overflow-wrap:anywhere}
+.vz-pts-next{color:var(--pts-muted);font-weight:600}
+.vz-pts-cue{display:grid;gap:2px;padding:12px 14px;border-radius:16px;background:var(--pts-warn-soft);min-width:0}
+.vz-pts-cue[data-pts-cue="now"]{background:var(--pts-soft)}
+.vz-pts-cue-when{color:var(--pts-warn);font-size:14px;font-weight:700}
+.vz-pts-cue[data-pts-cue="now"] .vz-pts-cue-when{color:var(--pts-accent)}
+.vz-pts-cue-text{font-size:26px;line-height:34px;font-weight:800;overflow-wrap:anywhere;word-break:keep-all}
+.vz-pts-ask{display:grid;gap:8px;min-width:0}
+.vz-pts-ask-when{color:var(--pts-body);font-size:15px;line-height:21px;font-weight:600;overflow-wrap:anywhere}
+@media (orientation:landscape) and (max-height:520px){.vz-pts-cue-text{font-size:21px;line-height:28px}.vz-pts-mark{min-height:56px}.vz-pts-panel{gap:6px;padding:8px 10px 10px}}
+@media (min-width:760px){.vz-pts-run-head,.vz-pts-list,.vz-pts-summary,.vz-pts-run-foot{padding-left:24px;padding-right:24px}}
