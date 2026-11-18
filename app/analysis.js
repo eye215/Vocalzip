@@ -101,7 +101,9 @@ VZ.analysisWithoutMrAvailable = item => mrFilesOf(item).length > 0;
 /** Decode + analyze one recording and keep the summary on it (only the `analysis` field changes).
  * Used by the analysis screen and the song page's "analyze all". Returns the full result (with curve).
  * signal (AbortSignal) stops the download and the worker; nothing is saved then. */
-VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, save = true, signal, mrCache} = {}) => {
+/* alsoMr (성장's 이 녹음도 MR 빼고 재기): a take trusted as recorded is also measured with the MR removed; a trusted result
+ * of that is attached as result.mrAlt. The result itself stays the one as recorded. */
+VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, save = true, signal, mrCache, alsoMr = false} = {}) => {
   const {samples, sampleRate, cut} = await decode(item, onStage, signal), tracks = mrFilesOf(item), keep = tracks.length ? samples.slice() : null;
   onStage('목소리 찾는 중… (반주와 구분)');
   let result = await runWorker(samples, sampleRate, onProgress, {signal});
@@ -109,6 +111,9 @@ VZ.analyzeRecording = async (item, {onStage = () => {}, onProgress = () => {}, s
     // Kept only when it is trustworthy, or at least clearly better read than the take as recorded.
     const cleaned = await withoutMr(keep, sampleRate, tracks, onStage, onProgress, signal, mrCache).catch(e => { if (e?.name === 'AbortError') throw e; return null; });
     if (cleaned && (reliableResult(cleaned) || (cleaned.confidence?.pitchConfidence || 0) > (result.confidence?.pitchConfidence || 0) + 0.1)) result = cleaned;
+  } else if (keep && alsoMr) {
+    const cleaned = await withoutMr(keep, sampleRate, tracks, onStage, onProgress, signal, mrCache).catch(e => { if (e?.name === 'AbortError') throw e; return null; });
+    if (cleaned?.confidence?.mrRemoved && reliableResult(cleaned)) result.mrAlt = cleaned;
   }
   result.cut = cut; result.summary = summaryOf(result, item.analysis);
   if (save) { await M.update(item, {analysis:result.summary}, {quiet:true}); window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:item.id, analysis:result.summary}})); }

@@ -1,7 +1,8 @@
 // A pair left out of 무엇이 달라졌나 / 귀와 숫자 because its two takes were measured differently (녹음 그대로 vs MR 빼고,
 // AI 분리 후 vs MR 빼고) offers 이 녹음도 MR 빼고 재기: the song's MR re-analysis (app/mr-reanalyze.js) with only the take
 // that is not MR 빼고 picked. Without an MR file on the song it says so, with a link to the song's MR files. After a
-// (stubbed) re-analysis the pair is compared. Set-up of tests/growth-ear.spec.cjs and tests/mr-reanalyze.spec.cjs.
+// (stubbed) re-analysis the pair is compared: a take trusted as recorded keeps its result and gets the measurement
+// with the MR removed next to it (analysis.mrAlt). Set-up of tests/growth-ear.spec.cjs and tests/mr-reanalyze.spec.cjs.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test);
 const {v2} = require('./growth-characterization.fixture.cjs');
@@ -54,12 +55,16 @@ async function boot(page, {mr = true} = {}) {
     for (const m of await VZ.media.list(true)) { const t = takes.find(x => x.id === m.id); if (t) await VZ.media.update(m, {recordedDate:t.date, analysis:t.analysis}, {quiet:true}); }
     for (const m of await VZ.media.list(true)) { const t = takes.find(x => x.id === m.id); if (t) await VZ.media.update(m, {name:t.name}, {quiet:true}); }
     await VZ.media.list(true);
-    // The single analysis, stubbed: the take measured again with the MR removed, trusted (the current analyzer's shape).
+    // The single analysis, stubbed (the current analyzer's shape): trusted as recorded; with alsoMr, a trusted
+    // measurement with the MR removed attached as mrAlt (none when window.__noAlt).
     window.__calls = [];
     VZ.analyzeRecording = async (item, o = {}) => {
-      window.__calls.push(item.id);
+      window.__calls.push([item.id, !!o.alsoMr]);
+      o.onStage?.('목소리 찾는 중… (반주와 구분)');
+      const raw = {version:2, seconds:120, fps:20, curve:[], notes:[], metrics:item.analysis.metrics, confidence:{pitchConfidence:.95, voiceOverMrDb:12}};
+      if (!o.alsoMr) return raw;
       o.onStage?.('곡 MR 불러오는 중… (반주를 빼고 다시 분석)'); o.onStage?.('반주(MR) 빼는 중…');
-      return {version:2, seconds:120, fps:20, curve:[], notes:[], metrics:after.metrics, confidence:{pitchConfidence:.95, mrRemoved:{trackId:'mr-1', offsetSeconds:2, removedDb:14}}};
+      return window.__noAlt ? raw : {...raw, mrAlt:{version:2, seconds:120, fps:20, curve:[], notes:[], metrics:after.metrics, confidence:{pitchConfidence:.95, mrRemoved:{trackId:'mr-1', offsetSeconds:2, removedDb:14}}}};
     };
   }, [TAKES, v2({into:24, wob:20})]);
 }
@@ -91,15 +96,19 @@ test('무엇이 달라졌나: the mixed pair offers 이 녹음도 MR 빼고 재�
   await expect(s.locator('[data-remr-start]')).toHaveText('1개 다시 분석 시작');
   await s.locator('[data-remr-start]').click();
   await expect(s.locator('[data-remr-done]')).toHaveText('1개 중 1개를 마쳤어요');
-  expect(await page.evaluate(() => window.__calls)).toEqual(['s2-aug']);
-  expect((await stored(page, 's2-aug')).confidence.mrRemoved.trackId).toBe('mr-1');
-  expect((await stored(page, 's2-aug')).history).toHaveLength(1);   // the as-recorded result stays in the history
+  await expect(s.locator('[data-remr-row="s2-aug"]')).toContainText('MR 빼고 잰 결과를 따로 저장했어요 · 원래 결과는 그대로예요');
+  expect(await page.evaluate(() => window.__calls)).toEqual([['s2-aug', true]]);
+  // The saved result exactly as it was, plus the second measurement next to it (no history entry).
+  const before = TAKES.find(t => t.id === 's2-aug').analysis, saved = await stored(page, 's2-aug');
+  const {mrAlt, ...rest} = saved;
+  expect(rest).toEqual(before);
+  expect([mrAlt.v, mrAlt.confidence.mrRemoved.trackId, mrAlt.metrics.intonation.meanAbsCents]).toEqual([2, 'mr-1', 27]);
   await s.locator('[data-remr-close]').click();
   await expect(s).toHaveCount(0);
   // Back on the card (redrawn on the saved result): s2 is compared as MR 빼고, no longer left out.
   const line = card.locator('[data-gc-song="s2"]');
   await expect(line).toHaveAttribute('data-gc-method', 'mrRemoved');
-  await expect(line.locator('.gc-basis')).toHaveText('같은 곡 On My Own · MR 빼고 잰 녹음 2개 · 2025년 8월 → 2026년 11월');
+  await expect(line.locator('.gc-basis')).toHaveText('같은 곡 On My Own · MR 빼고 잰 녹음 2개 (MR 빼고 따로 잰 결과로 견줌) · 2025년 8월 → 2026년 11월');
   await expect(page.locator('[data-gc-excluded-item="song:s2"]')).toHaveCount(0);
 });
 
@@ -130,12 +139,13 @@ test('귀와 숫자 and 이 평가와 숫자: the owner\'s 8월 vs 11월 pair, t
   await s.locator('[data-remr-start]').click();
   await expect(s.locator('[data-remr-done]')).toHaveText('1개 중 1개를 마쳤어요');
   await s.locator('[data-remr-close]').click();
-  expect(await page.evaluate(() => window.__calls)).toEqual(['s1-aug']);
+  expect(await page.evaluate(() => window.__calls)).toEqual([['s1-aug', true]]);
+  expect((await stored(page, 's1-aug')).confidence.mrRemoved).toBeUndefined();   // still measured as recorded
   // Redrawn: the verdict is compared now, both MR 빼고.
   const after = page.locator('[data-gc-verdict="listen:mixed"] [data-gc-ear-verdict]');
   await expect(after.locator('summary')).toHaveText(/이 평가와 숫자\s*같은 쪽 \d+ · 반대 \d+ · 차이 없음 \d+/);
   await after.locator('summary').click();
-  await expect(after.locator('.gc-ear-basis')).toHaveText('MR 빼고 잰 두 녹음 · 분석 v2');
+  await expect(after.locator('.gc-ear-basis')).toHaveText('MR 빼고 잰 두 녹음 (MR 빼고 따로 잰 결과로 견줌) · 분석 v2');
   await expect(page.locator('[data-gc-ear-excluded-item="listen:mixed"]')).toHaveCount(0);
   await expect(page.locator('[data-gc-ear-excluded-item="listen:ai"]')).toHaveCount(1);
 });
@@ -161,4 +171,30 @@ test('no MR file on the song: says so and links to the song\'s MR files', async 
   expect(await page.evaluate(() => location.hash)).toBe('#/song/s2');
   await page.setViewportSize({width:320, height:640});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('alsoMr without a trusted measurement with the MR removed: said, nothing saved; decide keeps every other outcome', async ({page}) => {
+  await boot(page);
+  await report(page);
+  await page.evaluate(() => { window.__noAlt = true; });
+  const card = page.locator('[data-growth-changes-card]');
+  await card.locator('[data-gc-excluded] summary').click();
+  const before = await stored(page, 's2-aug');
+  await card.locator('[data-gc-excluded-item="song:s2"] [data-gc-remr]').click();
+  const s = sheet(page);
+  await s.locator('[data-remr-start]').click();
+  await expect(s.locator('[data-remr-row="s2-aug"]')).toContainText('MR을 빼고 재도 믿을 만큼 읽히지 않아 견줄 수 없어요 · 원래 결과는 그대로예요');
+  await expect(s.locator('[data-remr-total="again"]')).toHaveText('0개');
+  expect(await stored(page, 's2-aug')).toEqual(before);
+  await s.locator('[data-remr-close]').click();
+  await expect(page.locator('[data-gc-excluded-item="song:s2"]')).toHaveCount(1);
+  // decide(), directly: 'alt' / 'noalt' only when the run asked for it and the saved result is trusted as recorded.
+  const out = await page.evaluate(() => {
+    const d = VZ.mrReanalyze.decide, conf = {pitchConfidence:.95, voiceOverMrDb:12}, metrics = {voicedSeconds:60};
+    const good = {v:2, at:1, metrics, confidence:conf}, ai = {v:2, at:1, metrics, confidence:{...conf, aiSeparated:true}};
+    const raw = {version:2, seconds:20, metrics, confidence:conf}, alt = {...raw, mrAlt:{version:2, seconds:20, metrics, confidence:{pitchConfidence:.9, mrRemoved:{trackId:'mr-1'}}}};
+    const pick = r => [r.kind, r.save, r.alt ? r.alt.v + ':' + !!r.alt.confidence.mrRemoved : ''];
+    return [pick(d(good, alt, {also:true})), pick(d(good, raw, {also:true})), pick(d(good, alt, {})), pick(d(ai, alt, {also:true})), pick(d(null, alt, {also:true}))];
+  });
+  expect(out).toEqual([['alt', true, '2:true'], ['noalt', false, ''], ['fine', false, ''], ['fine', false, ''], ['plain', true, '']]);
 });

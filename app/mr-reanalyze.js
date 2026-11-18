@@ -10,7 +10,9 @@
  * Nothing here decodes audio or measures by itself. Nothing starts before the person confirms.
  * Replacement rule: a new result replaces the saved one only when it can be trusted (VZ.analysisReliable). A saved
  * AI-separated result is replaced only by a trusted result measured with the MR removed (the person asked for this
- * run). A result that cannot be trusted never replaces a saved one; it is kept only where nothing current was saved. */
+ * run). A result that cannot be trusted never replaces a saved one; it is kept only where nothing current was saved.
+ * alsoMr (성장's 이 녹음도 MR 빼고 재기, one take): a take trusted as recorded keeps its result; a trusted measurement with
+ * the MR removed (VZ.analyzeRecording alsoMr → result.mrAlt) is kept next to it as analysis.mrAlt, nothing else changed. */
 (() => {
 'use strict';
 const V = window.VZ, M = V?.media;
@@ -57,12 +59,19 @@ async function songItems(song) {
   return rows.sort((a, b) => (M.dateOf(a) || '').localeCompare(M.dateOf(b) || '') || (Number(a.created) || 0) - (Number(b.created) || 0) || String(a.id).localeCompare(String(b.id)));
 }
 
-/** What happens to the saved result once a recording was measured. `mr` says how far the MR step got. */
+/** The second measurement kept next to a result as recorded (analysis.mrAlt). */
+const altOf = r => ({v:r.version, at:Date.now(), seconds:r.seconds, metrics:r.metrics, confidence:r.confidence});
+/** What happens to the saved result once a recording was measured. `mr` says how far the MR step got; mr.also: the run
+ * asked for a measurement with the MR removed next to a result trusted as recorded. */
 function decide(before, result, mr = {}) {
   if (!result?.metrics?.voicedSeconds) return {kind:'failed', save:false, text:'목소리를 찾지 못했어요'};
   const good = reliable({v:result.version, metrics:result.metrics, confidence:result.confidence}), used = !!result.confidence?.mrRemoved;
   const ai = !!before?.confidence?.aiSeparated, savedGood = reliable(before), none = !before?.v;
   if (used && good) return {kind:'mr', save:true, text:'MR을 빼고 다시 쟀어요' + (ai ? ' · AI 분리 결과를 바꿨어요' : none ? '' : savedGood ? ' · 저장된 결과를 바꿨어요' : ' · 판정 보류였던 결과를 바꿨어요')};
+  // Trusted as recorded, before and now: the saved result stays; the MR-removed measurement is kept next to it.
+  if (good && mr.also && savedGood && !ai && !before.confidence?.mrRemoved) return result.mrAlt
+    ? {kind:'alt', save:true, alt:altOf(result.mrAlt), text:'MR 빼고 잰 결과를 따로 저장했어요 · 원래 결과는 그대로예요'}
+    : {kind:'noalt', save:false, text:'MR을 빼고 재도 믿을 만큼 읽히지 않아 견줄 수 없어요 · 원래 결과는 그대로예요'};
   if (good) return savedGood || ai
     ? {kind:'fine', save:false, text:'녹음 그대로도 믿을 수 있게 재져서 MR을 빼지 않았어요 · 저장된 결과 그대로'}
     : {kind:'plain', save:true, text:'녹음 그대로 재도 믿을 수 있어요 · ' + (none ? '그 결과를 저장했어요' : '판정 보류였던 결과를 바꿨어요') + ' (MR 안 뺌)'};
@@ -110,19 +119,20 @@ function estimate(list, measured) {
 /* ---------- the run ---------- */
 let active = null;  // the one run in progress
 /** One recording through the single analysis and its save. null when the run was stopped meanwhile. */
-async function measureOne(m, signal, onStage, onProgress, mrCache) {
+async function measureOne(m, signal, onStage, onProgress, mrCache, alsoMr = false) {
   const mr = {tried:false, loaded:false};
   // The single analysis says where it is in words: "곡 MR 불러오는 중…" then "반주(MR) 빼는 중…" once an MR file was read.
   const stage = text => { if (/MR 불러오는/.test(text)) mr.tried = true; if (/빼는 중/.test(text)) mr.loaded = true; onStage(text); };
   let result;
-  try { result = await V.analyzeRecording(m, {save:false, signal, onStage:stage, onProgress, mrCache}); }
+  try { result = await V.analyzeRecording(m, {save:false, signal, onStage:stage, onProgress, mrCache, ...(alsoMr ? {alsoMr:true} : {})}); }
   catch (e) { return e?.name === 'AbortError' || signal.aborted ? null : {m, kind:'failed', save:false, text:String(e?.message || e || '분석하지 못했어요')}; }
   if (signal.aborted) return null;
   // The result saved right now (the server may have saved one while this was measured), as the analysis screen reads it.
   const before = ((await M.list().catch(() => [])).find(x => x.id === m.id) || m).analysis;
-  const outcome = decide(before, result, mr);
+  const outcome = decide(before, result, {...mr, also:alsoMr});
   if (outcome.save) {
-    const summary = V.analysisSummary(result, before);
+    // 'alt': the saved result exactly as it was (no history entry), with the second measurement next to it.
+    const summary = outcome.kind === 'alt' ? {...before, mrAlt:outcome.alt} : V.analysisSummary(result, before);
     try { await M.update(m, {analysis:summary}, {quiet:true}); }
     catch (e) { return {m, kind:'failed', save:false, text:'결과를 저장하지 못했어요: ' + String(e?.message || e)}; }
     window.dispatchEvent(new CustomEvent('vzip:analysis-saved', {detail:{id:m.id, analysis:summary}}));
@@ -139,7 +149,7 @@ async function runAll(run, paint) {
     for (const m of run.list) {
       if (run.ctl.signal.aborted) break;
       Object.assign(run, {current:m, stage:'파일 불러오는 중…', part:0, phase:0}); paint();
-      const row = await measureOne(m, run.ctl.signal, text => { if (/MR 불러오는/.test(text)) { run.phase = 1; run.part = 0; } run.stage = text; paint(); }, p => { run.part = p; paint(true); }, mrCache);
+      const row = await measureOne(m, run.ctl.signal, text => { if (/MR 불러오는/.test(text)) { run.phase = 1; run.part = 0; } run.stage = text; paint(); }, p => { run.part = p; paint(true); }, mrCache, run.alsoMr);
       if (!row) break;
       run.rows.push(row); run.done++; run.refDone += REF.base + REF.perSecond * (durationOf(m) || 180);
       if (row.save) run.onSaved?.(m);
@@ -159,7 +169,7 @@ async function runAll(run, paint) {
 }
 /* The summary's four counts: a saved result (다시 잰 것) · left as it was because the MR is not in the take · left as it
  * was for another reason (the row says which) · failed. */
-const GROUP = {held:'kept', fine:'kept', nomatch:'nomatch', failed:'failed'};
+const GROUP = {held:'kept', fine:'kept', noalt:'kept', nomatch:'nomatch', failed:'failed'};
 const tally = rows => rows.reduce((t, r) => { t[r.save ? 'again' : GROUP[r.kind]]++; return t; }, {again:0, nomatch:0, kept:0, failed:0});
 /** How far the run is, 0–100: finished recordings plus the one being measured (as recorded first, then with the MR removed). */
 const percent = run => Math.round((run.done + (run.phase * 0.5 + Math.min(1, run.part || 0) * 0.5) * 0.95) / run.list.length * 100);
@@ -168,7 +178,7 @@ const doneLine = run => (run.done < run.list.length ? '멈췄어요 · ' : '') +
 
 /* ---------- screen ---------- */
 const rowHtml = (m, text, tone = '') => '<li' + (tone ? ' data-tone="' + tone + '"' : '') + ' data-remr-row="' + esc(m.id) + '"><b>' + esc(M.label(m)) + '</b><span>' + esc([V.dateLabel?.(M.dateOf(m)) || '', text].filter(Boolean).join(' · ')) + '</span></li>';
-const tone = r => r.kind === 'failed' ? 'bad' : r.kind === 'mr' || r.kind === 'plain' ? 'ok' : '';
+const tone = r => r.kind === 'failed' ? 'bad' : r.kind === 'mr' || r.kind === 'plain' || r.kind === 'alt' ? 'ok' : '';
 function confirmHtml(p, scope, eta) {
   const list = p.scopes[scope], unmeasured = p.scopes.held.filter(m => !savedOf(m)).length;
   const ai = list.filter(m => savedOf(m)?.confidence?.aiSeparated).length;
@@ -214,8 +224,9 @@ function summaryHtml(run) {
 
 /** Opens the confirm page. items: the song's recordings when the caller already has them (보컬 연구소 passes its own,
  * so they are updated in place); picked: ids ticked there; scope: the range first chosen ('picked' for one take a
- * growth screen asks about), else the usual default; onSaved(m) after each saved result; onClose(run) at the end. */
-function open(song, {items, picked = [], scope:asked, onSaved, onClose} = {}) {
+ * growth screen asks about), else the usual default; alsoMr: keep a measurement with the MR removed next to a result
+ * trusted as recorded (see decide); onSaved(m) after each saved result; onClose(run) at the end. */
+function open(song, {items, picked = [], scope:asked, alsoMr = false, onSaved, onClose} = {}) {
   song = V.song(song?.id) || song;
   if (!song) return;
   let run = null, closed = false, p = null, scope = 'held', measured;
@@ -254,7 +265,7 @@ function open(song, {items, picked = [], scope:asked, onSaved, onClose} = {}) {
         const list = p.scopes[scope];
         if (!list.length || run) return;
         if (active || V.vocalBatchRunning?.()) { V.toast('다른 분석이 진행 중이에요. 끝난 뒤 다시 눌러 주세요.', 'error'); return; }
-        run = active = {list, rows:[], done:0, refDone:0, running:true, stopped:false, ctl:new AbortController(), started:performance.now(), stage:'', part:0, phase:0, onSaved};
+        run = active = {list, rows:[], done:0, refDone:0, running:true, stopped:false, ctl:new AbortController(), started:performance.now(), stage:'', part:0, phase:0, onSaved, alsoMr};
         view('running', runningHtml(run), '<button type="button" class="btn secondary block" data-remr-stop><i class="ph ph-stop" aria-hidden="true"></i>멈춤</button>');
         const stop = foot.querySelector('[data-remr-stop]'); stop.onclick = () => { stop.disabled = true; run.ctl.abort(); }; stop.focus({preventScroll:true});
         runAll(run, paint);

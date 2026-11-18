@@ -16,10 +16,12 @@ let state = null;   // {host, items, precision: undefined (reading) | null (no s
 const owner = () => window.vzipCloudUserId?.() || window.VzipAccountScope?.owner || 'local';
 const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
 const today = () => window.VzipGrowthDataset?.koreaDay?.(Date.now()) || V.today();
+/** A take with its second measurement with the MR removed (analysis.mrAlt) as `alt`, when the growth `ok` rule trusts it. */
+const withAlt = t => { const alt = t?.a?.mrAlt; return alt && V.growthDataset.ok?.({analysis:alt}) ? {...t, alt} : t; };
 function songsOf(items) {
   // 결과 리포트's own selection (app/growth-dataset.js rule 'verdict'): the song's recordings without 연습실 · 트레이닝 연습.
   return [...V.growthDataset(items).bySong('verdict')].filter(([id]) => id && V.song(id))
-    .map(([songId, rows]) => ({songId, title:V.songTitle(songId), takes:rows.filter(r => r.analysed).map(r => r.take), reference:referenceOf(songId)}));
+    .map(([songId, rows]) => ({songId, title:V.songTitle(songId), takes:rows.filter(r => r.analysed).map(r => withAlt(r.take)), reference:referenceOf(songId)}));
 }
 function rangeOf(items) {
   const R = window.VzipGrowthRange;
@@ -34,7 +36,7 @@ const model = (items, precision) => C.build({verdicts:L.list(V.db), songs:songsO
 function earOf(items) {
   if (!E) return null;
   const ds = V.growthDataset(items);
-  const takeOf = id => { const row = ds.row(id); return row && !row.deleted ? row.take : null; };
+  const takeOf = id => { const row = ds.row(id); return row && !row.deleted ? withAlt(row.take) : null; };
   return E.build({verdicts:L.list(V.db), takeOf, reference:referenceOf});
 }
 
@@ -49,7 +51,7 @@ function remeasureHtml(songId, methods = [], target = null) {
   if (!target || !song || !V.mrReanalyze) return box(help);
   if (!V.mrReanalyze.has(song)) return box(help + '<p class="gc-remr-note" data-gc-remr-none>이 곡에 MR 파일을 올리면 같은 방법으로 견줄 수 있어요</p>' +
     '<a class="gc-chip" href="#/song/' + encodeURIComponent(songId) + '?tab=ar" data-gc-remr-link><i class="ph ph-music-notes-plus" aria-hidden="true"></i><span>곡의 MR 파일로 가기</span></a>');
-  return box(help + '<p class="gc-remr-note">' + e(target.label + ' 녹음 하나만 곡의 MR 파일로 반주를 빼고 다시 재요. 반주를 빼지 않아도 또렷하게 재지는 녹음은 그대로 둬요.') + '</p>' +
+  return box(help + '<p class="gc-remr-note">' + e(target.label + ' 녹음 하나만 곡의 MR 파일로 반주를 빼고 다시 재요. 녹음 그대로 잰 결과가 또렷하면 그 결과는 두고, 반주를 뺀 결과를 따로 남겨 견줘요.') + '</p>' +
     '<button type="button" class="gc-chip" data-gc-remr="' + e(target.id) + '" data-song="' + e(songId) + '"><i class="ph ph-music-notes-minus" aria-hidden="true"></i><span>이 녹음도 MR 빼고 재기</span></button>');
 }
 const chip = (attrs, label, icon = '') => '<button type="button" class="gc-chip" ' + attrs + '>' + (icon ? '<i class="ph ph-' + icon + '" aria-hidden="true"></i>' : '') + '<span>' + label + '</span></button>';
@@ -149,7 +151,8 @@ function paint() {
   s.host.querySelectorAll('[data-gc-remr]').forEach(b => b.onclick = () => {
     if (V.mrReanalyze.running()) { V.toast('다른 분석이 진행 중이에요. 끝난 뒤 다시 눌러 주세요.', 'error'); return; }
     stopPlayer();
-    V.mrReanalyze.open(V.song(b.dataset.song), {picked:[b.dataset.gcRemr], scope:'picked'});
+    // alsoMr: a take trusted as recorded keeps its result and gets a second measurement with the MR removed next to it.
+    V.mrReanalyze.open(V.song(b.dataset.song), {picked:[b.dataset.gcRemr], scope:'picked', alsoMr:true});
   });
   s.host.querySelectorAll('[data-gc-play]').forEach(b => b.onclick = () => {
     const item = s.items.find(x => x.id === b.dataset.gcPlay);
