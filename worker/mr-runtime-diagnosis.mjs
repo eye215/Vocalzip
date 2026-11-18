@@ -34,12 +34,17 @@ export async function loadBundle(db,size,read=readMedia,month=null){
  return {recording:recordings[0],references};
 }
 
-export async function measureBundle(bundle){
- const allowed=new Set(['voice-path-model.js','voice-path-worker.js','mr-cancel.js']);
+export async function measureBundle(bundle,{guidanceOnly=false}={}){
+ const allowed=new Set(['voice-path-model.js','voice-path-worker.js','mr-cancel.js','vocal-analysis.js']);
  const server=createServer(async(req,res)=>{
   try{
    const path=new URL(req.url,'http://localhost').pathname;let data,type;
-   if(path==='/'){data='<!doctype html><script src="/app/voice-path-model.js"></script><script src="/app/mr-cancel.js"></script>';type='text/html';}
+   if(path==='/'){data='<!doctype html><script src="/app/voice-path-model.js"></script><script src="/diagnosis/mr-observer.js"></script><script src="/app/vocal-analysis.js"></script>';type='text/html';}
+   else if(path==='/diagnosis/mr-observer.js'){
+    const source=await readFile(new URL('../app/mr-cancel.js',import.meta.url),'utf8');
+    if(!source.includes('const api = {SR,'))throw Error('observer unavailable');
+    data=source.replace('const api = {SR,','const api = {lagReader,robustLine,SR,');type='application/javascript';
+   }
    else if(path==='/input/recording'){data=bundle.recording;type='application/octet-stream';}
    else if(/^\/input\/reference-\d+$/.test(path)){data=bundle.references[Number(path.split('-').at(-1))];type='application/octet-stream';}
    else if(path.startsWith('/app/')&&allowed.has(path.slice(5))){data=await readFile(new URL('../app/'+path.slice(5),import.meta.url));type='application/javascript';}
@@ -52,7 +57,7 @@ export async function measureBundle(bundle){
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   browser=await chromium.launch(process.env.VZIP_DIAG_BROWSER?{executablePath:process.env.VZIP_DIAG_BROWSER}:{channel:'chrome'});
   const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);
-  return await page.evaluate(async count=>{
+  return await page.evaluate(async({count,guidanceOnly})=>{
    const input=(bytes,b)=>({bytes,sampleRate:b.sampleRate,channels:b.numberOfChannels,frames:b.length,seconds:b.length/b.sampleRate});
    async function decode(url,rate){const bytes=await(await fetch(url,{cache:'no-store'})).arrayBuffer(),size=bytes.byteLength,b=await new OfflineAudioContext(1,rate,rate).decodeAudioData(bytes);if(b.duration>900)throw Error('duration');return {b,input:input(size,b)};}
    function mono(b){return new Promise((resolve,reject)=>{const w=new Worker('/app/voice-path-worker.js'),timer=setTimeout(()=>{w.terminate();reject(Error('timeout'));},60000);const end=()=>{clearTimeout(timer);w.terminate();};w.onmessage=e=>{end();e.data.error?reject(Error('mono')):resolve(e.data.mono);};w.onerror=()=>{end();reject(Error('mono'));};const channels=Array.from({length:b.numberOfChannels},(_,i)=>b.getChannelData(i).slice());w.postMessage({mono:{channels,rate:b.sampleRate}},channels.map(c=>c.buffer));});}
@@ -74,12 +79,37 @@ export async function measureBundle(bundle){
    }
    const result=await measure(rec);
    if(!result.removal){
+    const P=window.VzipVoicePath,C=window.VzipMrCancel,VA=window.VzipVocalAnalysis,mixed=new Float32Array(rec.b.length);
+    for(let ch=0;ch<rec.b.numberOfChannels;ch++){const x=rec.b.getChannelData(ch);for(let i=0;i<mixed.length;i++)mixed[i]+=x[i]/rec.b.numberOfChannels;}
+    const legacy=VA.analyze(mixed,16000),guide={curve:legacy.curve,fps:legacy.fps},filtered=VA._internal.highpass(mixed);
+    const summarize=r=>({measurable:P.measurable(r,false).ok,reason:P.measurable(r,false).why,pitchSource:r.confidence.pitchSource,strength:r.confidence.meanStrength,voicedSeconds:r.voicedSeconds,outsideBandShare:r.confidence.outsideBandShare,glitchShare:r.confidence.glitchShare,jumpsPerMin:r.confidence.jumpsPerMin});
+    result.guidance={legacyVersion:legacy.version,legacyPitchConfidence:legacy.confidence.pitchConfidence,legacyVoiceOverMrDb:legacy.confidence.voiceOverMrDb,
+     rawGuided:summarize(P.analyze(mixed,16000,{guide})),highpass:summarize(P.analyze(filtered,16000)),highpassGuided:summarize(P.analyze(filtered,16000,{guide}))};
+    // The observer exposes existing pure helpers only on this localhost page, never in the app Worker.
+    const calibrationHalver=P.createHalver(),first=calibrationHalver.push(mixed),last=calibrationHalver.finish(),calibration=new Float32Array(first.length+last.length);calibration.set(first);calibration.set(last,first.length);
+    result.voiceFreeTiming=[];
+    for(const candidate of C.coarse(calibration,mrs[0].samples,{dense:true}).candidates.slice(0,3)){
+     const f=C.fine(calibration,mrs[0].samples,candidate.lag),seed=f.points>=2&&Math.abs(f.ratio-1)<=.02?f:{lag:candidate.lag,ratio:1};
+     const N=C.RULES.fineWin,read=C.lagReader(N),from=Math.max(0,Math.ceil(-seed.lag/seed.ratio)),to=Math.min(calibration.length,Math.floor((mrs[0].samples.length-seed.lag)/seed.ratio))-N;
+     const strong=[];let freeWindows=0;
+     for(let start=from;start<=to;start+=C.RULES.localStep){
+      let voiced=false;for(let i=Math.floor(start/8000*guide.fps);i<Math.ceil((start+N)/8000*guide.fps);i++)if(guide.curve[i]!=null){voiced=true;break;}
+      if(voiced)continue;freeWindows++;
+      const at=start+N/2,g=read(calibration,mrs[0].samples,start,seed.lag+(seed.ratio-1)*at,Math.round(C.RULES.anchorSearch*8000));
+      if(g.peak>=C.RULES.verifiedPeak)strong.push([at,g.lag,g.peak]);
+     }
+     const line=C.robustLine(strong),item={offsetSeconds:candidate.lag/8000,freeWindows,strongWindows:strong.length,fit:line?{offsetSeconds:line.lag/8000,speed:line.ratio,windows:line.points,phasePeak:line.phasePeak,errorSamples:line.errorSamples,spanFraction:line.span/calibration.length,strongFreeFraction:freeWindows?line.points/freeWindows:null}:null};
+     if(line&&line.span>=calibration.length*.4){
+      const stats={},track=C.localTrack(calibration,mrs[0].samples,line,()=>{},stats);item.bestLocalFraction=stats.bestLocalFraction??null;item.bestCoverage=stats.bestCoverage??null;
+      if(track){const residual=C.subtract(calibration,track.heard,()=>{},{transferRadius:C.RULES.transferRadius,excludeCurrent:true,residual:0});track.blend(residual.voice);let before=0,after=0;for(let i=0;i<calibration.length;i++){before+=calibration[i]**2;after+=residual.voice[i]**2;}item.heldoutDb=10*Math.log10(before/after);const voice=P.analyze(residual.voice,8000);item.voicePresent=voice.voicedSeconds>0;item.voicePitchStrength=voice.confidence.meanStrength;}
+     }
+     result.voiceFreeTiming.push(item);
+    }
+    if(guidanceOnly)return result;
     result.probes=[];
     if(rec.b.numberOfChannels===2)for(let channel=0;channel<2;channel++)result.probes.push({channel,...await measure(rec,[rec.b.getChannelData(channel)])});
     if(!result.probes.some(p=>p.removal))for(const rate of[48000,8000])result.probes.push({decodeRate:rate,...await measure(await decode('/input/recording',rate))});
     // Inspect existing fine-window timing evidence without relaxing any application gate.
-    const P=window.VzipVoicePath,C=window.VzipMrCancel,mixed=new Float32Array(rec.b.length);
-    for(let ch=0;ch<rec.b.numberOfChannels;ch++){const x=rec.b.getChannelData(ch);for(let i=0;i<mixed.length;i++)mixed[i]+=x[i]/rec.b.numberOfChannels;}
     const h=P.createHalver(),a=h.push(mixed),b=h.finish(),low=new Float32Array(a.length+b.length);low.set(a);low.set(b,a.length);
     result.timingProbes=[];
     for(const candidate of C.coarse(low,mrs[0].samples,{dense:true}).candidates.slice(0,3)){
@@ -95,17 +125,17 @@ export async function measureBundle(bundle){
     }
    }
    return result;
-  },bundle.references.length);
+  },{count:bundle.references.length,guidanceOnly});
  }finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 }
 
 async function main(){
  let bundle;
- const synthetic=process.argv.includes('--synthetic')||process.argv.includes('--synthetic-channels');
+ const synthetic=process.argv.includes('--synthetic')||process.argv.includes('--synthetic-channels')||process.argv.includes('--synthetic-guidance');
  if(synthetic){
   const Y=require('../tests/helpers/mr-synth.cjs'),A=require('../tests/helpers/voice-path-audio.cjs').make(),mr=Y.mr(45),rec=Y.record(Y.vocal(20).x,mr,{offset:5,db:6});
   bundle={recording:Buffer.from(A.wav(rec.x,Y.SR)),references:[Buffer.from(A.wav(mr,Y.SR))]};
-  if(process.argv.includes('--synthetic-channels')){
+  if(process.argv.includes('--synthetic-channels')||process.argv.includes('--synthetic-guidance')){
    const v=Y.vocal(20).x,left=rec.x,right=Float32Array.from(v,(x,i)=>2*x-left[i]),n=left.length,wav=Buffer.alloc(44+n*4);
    wav.write('RIFF');wav.writeUInt32LE(36+n*4,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(2,22);wav.writeUInt32LE(Y.SR,24);wav.writeUInt32LE(Y.SR*4,28);wav.writeUInt16LE(4,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(n*4,40);
    let peak=1;for(let i=0;i<n;i++)peak=Math.max(peak,Math.abs(left[i]),Math.abs(right[i]));for(let i=0;i<n;i++){wav.writeInt16LE(Math.round(left[i]/peak*.95*32767),44+i*4);wav.writeInt16LE(Math.round(right[i]/peak*.95*32767),46+i*4);}bundle.recording=wav;
@@ -114,8 +144,9 @@ async function main(){
   const size=parseSize(process.env.RECORDING_BYTES),month=parseMonth(process.env.RECORDING_MONTH),db=new pg.Client({connectionString:process.env.SUPABASE_DB_URL,ssl:process.env.SUPABASE_DB_SSL==='off'?false:{rejectUnauthorized:false}});
   try{await db.connect();bundle=await loadBundle(db,size,readMedia,month);}finally{await db.end();}
  }
- const receipt=await measureBundle(bundle);console.log(JSON.stringify(receipt));
+ const receipt=await measureBundle(bundle,{guidanceOnly:process.env.DIAG_MODE==='pitch-guidance'||process.argv.includes('--synthetic-guidance')});console.log(JSON.stringify(receipt));
  if(synthetic&&!receipt.measurable)throw new DiagnosticError('synthetic-failed');
  if(process.argv.includes('--synthetic-channels')&&(receipt.removal||!receipt.probes?.some(p=>p.removal&&p.voicePresent)))throw new DiagnosticError('synthetic-failed');
+ if(process.argv.includes('--synthetic-guidance')&&receipt.guidance?.highpassGuided?.pitchSource!=='guide+autocorrelation')throw new DiagnosticError('synthetic-failed');
 }
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href)main().catch(error=>{console.error(JSON.stringify(safeFailure(error)));process.exitCode=1;});
