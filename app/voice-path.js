@@ -515,7 +515,7 @@ function diagnosisOf(s) {
       mr:v.rec.removed?.report || null, mrTries:v.rec.tries, mrMode:v.mode, input:v.rec.input, runtime:v.rec.runtime,
       mixed:v.source === 'mr-removed' ? v.rec.mixed : null, stagesMs:v.rec.stages, fromDeviceCache:!!v.rec.fromDevice}; };
   const out=P.diagnosis([take('base', 'a'), take('comp', 'b')].filter(Boolean), {generatedMonth:V.today().slice(0, 7),fileLoads:s.fileLoads || []});
-  for(const t of out.takes){const m=s.items.find(m=>m.id===s[t.role==='base'?'a':'b']),q=S?.current(m);if(q)t.serverSeparation={state:q.state,version:S.VERSION,model:q.engine?.model==='htdemucs'?'htdemucs':null,processingMs:Number.isFinite(q.processingMs)?q.processingMs:null,pitchOnly:true};}
+  for(const t of out.takes){const m=s.items.find(m=>m.id===s[t.role==='base'?'a':'b']),q=S?.current(m);if(q)t.serverSeparation={state:['queued','running','done','failed','withheld'].includes(q.state)?q.state:'unknown',version:S.VERSION,model:q.engine?.model==='htdemucs'?'htdemucs':null,processingMs:Number.isFinite(q.processingMs)?q.processingMs:null,pitchOnly:true};}
   return out;
 }
 V.voicePathDiagnosis = () => current && (viewOf(current,'a')?.state==='ready' || viewOf(current,'b')?.state==='ready' || current.fileLoads?.length) ? diagnosisOf(current) : null;
@@ -551,9 +551,15 @@ async function songList(host, my) {
 let loaded = null;
 async function refreshServer(s,force=false){
  if(s.dead||s.refreshing||s.owner!==window.vzipCloudUserId?.()||(!force&&(s.running||(!s.serverDirty&&!s.items.some(m=>[s.a,s.b].includes(m.id)&&pendingServer(s,m))))))return;
- s.refreshing=true;try{const all=await M.list(true);if(s.dead||s.owner!==window.vzipCloudUserId?.())return;const before=JSON.stringify(s.items.map(m=>m[S?.FIELD]));s.items=s.items.map(m=>all.find(x=>x.id===m.id)||m);
-  if(before!==JSON.stringify(s.items.map(m=>m[S?.FIELD])))s.serverDirty=true;
-  if(!s.running&&s.serverDirty&&![...s.players.values()].some(p=>p.el&&!p.el.paused)){s.serverDirty=false;s.status='서버 분리 결과를 확인했어요.';draw(s);}
+ const stamp=()=>JSON.stringify(s.items.map(m=>({source:S?.source(m),report:m[S?.FIELD]})));
+ s.refreshing=true;try{const before=stamp(),selected=s.items.filter(m=>[s.a,s.b].includes(m.id)&&V.voicePathServerAvailable?.(m));
+  if(selected.length&&V.voicePathServerStatus){
+   const updates=await Promise.all(selected.map(async m=>{try{return {id:m.id,...await V.voicePathServerStatus(m)};}catch(error){if([404,409].includes(error.status))return {id:m.id,sourceChanged:true};throw error;}}));if(s.dead||s.owner!==window.vzipCloudUserId?.())return;
+   if(updates.some(x=>x.sourceChanged)){const all=await M.list(true);if(s.dead||s.owner!==window.vzipCloudUserId?.())return;s.items=s.items.map(m=>all.find(x=>x.id===m.id)||m);}
+   else s.items=s.items.map(m=>{const update=updates.find(x=>x.id===m.id);return update?.report?{...m,[S.FIELD]:update.report}:m;});
+  }else{const all=await M.list(true);if(s.dead||s.owner!==window.vzipCloudUserId?.())return;s.items=s.items.map(m=>all.find(x=>x.id===m.id)||m);}
+  if(before!==stamp())s.serverDirty=true;
+  if(!s.running&&s.serverDirty&&![...s.players.values()].some(p=>p.el&&!p.el.paused)){s.serverDirty=false;M.invalidate();s.status='서버 분리 결과를 확인했어요.';draw(s);}
  }catch{}finally{s.refreshing=false;}
 }
 V.route('voice-path', {title:'소리 길 흔적', back:true, tab:'growth', noAutoRefresh:true,
@@ -567,6 +573,7 @@ V.route('voice-path', {title:'소리 길 흔적', back:true, tab:'growth', noAut
     current = {host, song, items, a:d.a, b:d.b, defaulted:d.why, running:false, dead:false, jobs:{}, players:new Map(),owner:window.vzipCloudUserId?.()};
     const state=current;state.serverPoll=setInterval(()=>refreshServer(state),15000);
     draw(current);
+    if(items.some(m=>[state.a,state.b].includes(m.id)&&pendingServer(state,m)))refreshServer(state,true);
   },
   leave
 });

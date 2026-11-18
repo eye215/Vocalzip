@@ -118,11 +118,14 @@ test('a failed raw reading requests separation once and receives the result with
   const interval=window.setInterval;window.setInterval=(fn,ms,...args)=>interval(fn,ms===15000?50:ms,...args);
   const player=VZ.media.player;VZ.media.player=(...args)=>{const api=player(...args);Object.defineProperty(api.el,'paused',{get:()=>!window.__playing});return api;};
   const list=VZ.media.list;VZ.media.list=(...args)=>{if(window.__cloudUnavailable)return Promise.reject(Error('fake network failure'));return list(...args);};
+  VZ.voicePathServerStatus=async m=>{if(window.__cloudUnavailable)throw Error('fake network failure');const fresh=(await list(true)).find(x=>x.id===m.id);return {report:fresh.voicePathSeparation};};
   window.__serverRequests=0;VZ.voicePathServerAvailable=m=>m.id==='m-loud';VZ.voicePathServerRequest=async m=>{window.__serverRequests++;const q=window.VzipVoicePathSeparation.request(m,'fake-request',100);await VZ.media.update(m,{voicePathSeparation:q},{quiet:true});window.__cloudUnavailable=true;return {state:'queued'};};
  });
  await open(page);await page.locator('[data-vp-run]').click();await done(page);await expect(page.locator('[data-vp-server-pending]')).toBeVisible();
  expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);await page.evaluate(()=>{window.__cloudUnavailable=false;window.__playing=true;});await seedServerPitch(page,'m-loud');await page.waitForTimeout(200);await expect(page.locator('[data-vp-ai-note]')).toHaveCount(0);await page.evaluate(()=>{window.__playing=false;});
  await expect(page.locator('[data-vp-take="b"]')).toHaveAttribute('data-vp-source','ai-separated');await expect(page.locator('[data-vp-server-pending]')).toHaveCount(0);expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);expect(page.__errors).toEqual([]);
+ await page.evaluate(async()=>{const m=(await VZ.media.list(true)).find(m=>m.id==='m-loud');await VZ.media.update(m,{voicePathSeparation:{...m.voicePathSeparation,state:'PRIVATE-STATE'}},{quiet:true});await VZ.media.list(true);VZ.render();});await done(page);
+ const diagnostic=await page.evaluate(()=>VZ.voicePathDiagnosis());expect(JSON.stringify(diagnostic)).not.toContain('PRIVATE-STATE');expect(diagnostic.takes[1].serverSeparation.state).toBe('unknown');
 });
 test('a replaced source cannot reuse the old server report',async({page})=>{
  await boot(page,{takes:[{...TAKES[0],analysis:stored({voiceOverMrDb:8})},TAKES[2]]});await seedServerPitch(page,'m-old');

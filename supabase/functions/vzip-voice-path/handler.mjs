@@ -10,9 +10,10 @@ export function createHandler({authenticate,load,save,contract,uuid=()=>crypto.r
    if(Number(req.headers.get('content-length')||0)>2048)return reply(413,{error:'요청이 너무 커요.'});
    const reader=req.body?.getReader();if(!reader)return reply(400,{error:'요청이 없어요.'});let bytes=0,text='';const decoder=new TextDecoder();
    try{while(true){const {value,done}=await reader.read();if(done)break;bytes+=value.length;if(bytes>2048){await reader.cancel();return reply(413,{error:'요청이 너무 커요.'});}text+=decoder.decode(value,{stream:true});}text+=decoder.decode();}finally{reader.releaseLock();}
-   const body=JSON.parse(text);if(!body||Object.keys(body).some(k=>!['mediaId','source','retry'].includes(k))||typeof body.mediaId!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(body.mediaId)||body.retry!=null&&typeof body.retry!=='boolean')return reply(400,{error:'요청 형식을 확인해 주세요.'});
+   const body=JSON.parse(text);if(!body||Object.keys(body).some(k=>!['mediaId','source','retry','mode'].includes(k))||body.mode!=null&&body.mode!=='status'||typeof body.mediaId!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(body.mediaId)||body.retry!=null&&typeof body.retry!=='boolean')return reply(400,{error:'요청 형식을 확인해 주세요.'});
    for(let attempt=0;attempt<3;attempt++){
     const row=await load(user.id,body.mediaId);if(!row?.metadata||!contract.same(body.source,contract.source(row.metadata))||!String(body.source?.key).startsWith('u/'+user.id+'/'))return reply(404,{error:'선택한 원본이 변경됐거나 접근할 수 없어요.'});
+    if(body.mode==='status'){const q=contract.current(row.metadata);return reply(200,{report:q?Object.fromEntries(['version','source','state','result','engine','processingMs'].filter(k=>Object.hasOwn(q,k)).map(k=>[k,q[k]])):null});}
     const q=contract.request(row.metadata,uuid(),now(),{retry:body.retry===true});
     if(!q){const current=contract.current(row.metadata);return reply(200,{state:current?.state||'unavailable',queued:false});}
     if(await save(user.id,body.mediaId,row,q))return reply(202,{state:'queued',queued:true});
