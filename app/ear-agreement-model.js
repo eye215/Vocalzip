@@ -96,13 +96,17 @@ function pair(v, {takeOf = () => null, reference = () => null} = {}) {
     text:EXCLUDE[reason](sides.length === 2 ? l1 + '·' + l2 + ' 녹음' : (sides[0] === 'first' ? l1 : l2) + ' 녹음'), rows:[], ...extra});
   // Which of the two takes a reason is about: 'first', 'second' or both.
   const which = (x, y, bad) => [bad(x) && 'first', bad(y) && 'second'].filter(Boolean);
-  const x = v.firstId ? takeOf(v.firstId) : null, y = v.secondId ? takeOf(v.secondId) : null;
+  let x = v.firstId ? takeOf(v.firstId) : null, y = v.secondId ? takeOf(v.secondId) : null;
   for (const [reason, bad] of [['missing', t => !t], ['no-analysis', t => !t.a?.metrics], ['unreliable', t => !t.ok]]) {
     const sides = which(x, y, bad);
     if (sides.length) return out(reason, sides);
   }
-  const mx = C.methodOf(x.a), my = C.methodOf(y.a);
+  let mx = C.methodOf(x.a), my = C.methodOf(y.a);
+  // The take that is not MR 빼고 may have a second measurement with the MR removed (take.alt): used for this pair only.
+  const alt = mx !== my ? C.viaAlt(x, y) : null;
+  if (alt) { [x, y] = alt; mx = my = 'mrRemoved'; }
   if (mx !== my) return {...out('version-mixed'), reason:'method-mixed', methods:[mx, my],
+    remeasure:C.remeasure({id:v.firstId, method:mx, label:l1}, {id:v.secondId, method:my, label:l2}),
     text:l1 + ' 녹음은 ' + C.METHOD[mx] + ', ' + l2 + ' 녹음은 ' + C.METHOD[my] + ' 잰 것이라 견주지 않아요 · 같은 방법으로 잰 녹음끼리만 견줘요'};
   if ((x.a.v ?? null) !== (y.a.v ?? null)) return out('version-mixed');
   // comparePair's rules on the verdict's own order (first = the take judged as the earlier one), never re-sorted: the
@@ -119,7 +123,7 @@ function pair(v, {takeOf = () => null, reference = () => null} = {}) {
     return row;
   });
   if (!rows.some(r => r.move !== 'hold')) { const o = out('no-metric', [], {method:mx, version:x.a.v ?? null}); return {...o, text:o.text + ' · ' + G.holdText(rows.find(r => r.reason)?.reason)}; }
-  return {id:v.id, songId:v.songId, verdict:v, usable:true, method:mx, version:x.a.v ?? null, rows};
+  return {id:v.id, songId:v.songId, verdict:v, usable:true, method:mx, version:x.a.v ?? null, rows, ...(alt ? {viaAlt:alt[2]} : {})};
 }
 
 const count = (list, key) => ({agree:list.filter(r => r[key] === 'agree').length, disagree:list.filter(r => r[key] === 'disagree').length, none:list.filter(r => r[key] === 'none').length});
@@ -166,7 +170,7 @@ function moveText(row, v) {
 /** The basis of a verdict's comparison: "MR 빼고 잰 두 녹음 · 분석 v2" (+ that the numbers cover more than was heard). */
 function pairBasis(p) {
   const v = p.verdict, part = v.firstRange || v.secondRange;
-  return C.METHOD[p.method] + ' 잰 두 녹음 · 분석 v' + (p.version ?? '?') + (part ? ' · 평가는 고른 구간만 들었고, 숫자는 녹음 전체(같은 프레이즈)로 잰 값이에요' : '');
+  return C.METHOD[p.method] + ' 잰 두 녹음' + (p.viaAlt ? ' ' + C.VIA_ALT : '') + ' · 분석 v' + (p.version ?? '?') + (part ? ' · 평가는 고른 구간만 들었고, 숫자는 녹음 전체(같은 프레이즈)로 잰 값이에요' : '');
 }
 /** The one line on a verdict's 이 평가와 숫자: "같은 쪽 2 · 반대 1 · 차이 없음 3" or why it is not compared. */
 function pairLine(p) {

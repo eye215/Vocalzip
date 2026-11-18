@@ -178,7 +178,7 @@ test.describe('phone 375', () => {
     await expect(card.locator('[data-gc-task]')).toHaveCount(0);
     // Observations only: no verdict words on numbers.
     expect(await card.locator('[data-gc-group="songs"]').innerText()).not.toMatch(BANNED);
-    for (const b of await card.locator('.gc-chip').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    for (const b of await card.locator('.gc-chip:visible').all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await page.setViewportSize({width:320, height:640});
     await noOverflow(page);
     await page.setViewportSize({width:375, height:812});

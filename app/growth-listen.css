@@ -107,6 +107,9 @@
 .gc-excluded ul{display:grid;gap:8px;margin:0 0 4px;padding:0;list-style:none}
 .gc-excluded li{display:grid;gap:2px;min-width:0;font-size:12px;line-height:18px;color:#475467}
 .gc-excluded strong{color:#344054;font-weight:600}
+/* Under a pair measured two ways: what the methods mean (AI 분리 후) and 이 녹음도 MR 빼고 재기, or where to add an MR file. */
+.gc-remr{display:grid;justify-items:start;gap:6px;min-width:0;margin:4px 0 8px}
+.gc-remr-help,.gc-remr-note{margin:0;color:#667085;font-size:12px;line-height:18px}
 /* 귀와 숫자 (app/growth-changes-ui.js · app/ear-agreement-model.js): under 무엇이 달라졌나, closed to one line. Neutral
    colours: agreeing is not "good" and disagreeing is not "bad" — the badges only say which way. */
 .gc-ear{margin-top:12px;overflow-wrap:anywhere}
