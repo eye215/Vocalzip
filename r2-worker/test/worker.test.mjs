@@ -195,6 +195,12 @@ test('performance attachments use private R2 and reject active content',async()=
  for(const contentType of ['text/html','image/svg+xml','application/javascript'])assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-bad',purpose:'performance',contentType,size:10,ext:'bin'}})).status,400);
  assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'regular',purpose:'performance',contentType:'image/png',size:10,ext:'png'}})).status,400);
  assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'performance-no-purpose',contentType:'image/png',size:10,ext:'png'}})).status,400);
+ // A picture pasted on a score: PNG under the scorepic- prefix only, at most 8 MB, .png only.
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'scorepic-test',contentType:'image/png',size:10,ext:'png'}})).status,200);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'scorepic-big',contentType:'image/png',size:9*1024**2,ext:'png'}})).status,400);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'scorepic-ext',contentType:'image/png',size:10,ext:'html'}})).status,400);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'scorepic-svg',contentType:'image/svg+xml',size:10,ext:'png'}})).status,400);
+ assert.equal((await call('/v1/uploads',{method:'POST',auth:alice,body:{mediaId:'other-pic',contentType:'image/png',size:10,ext:'png'}})).status,400);
  assert.equal((await call('/v1/media/'+start.key,{method:'DELETE',auth:alice})).status,200);
 });
 
