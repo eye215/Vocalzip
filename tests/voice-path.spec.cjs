@@ -534,6 +534,39 @@ test('a voice left after taking the MR out still passes the mixed-take gate: rea
  expect(d.takes[0]).toMatchObject({source:'mr-removed',measurable:true});
  expect(page.__errors).toEqual([]);
 });
+test('a take refused after the MR came out is offered the server separation and is then read from the separated voice',async({page})=>{
+ test.setTimeout(120000);
+ await bootMr(page,{quiet:true});await open(page);await measure(page);
+ // The owner's case: the MR removed only 1.5 dB, and the take as recorded was not readable either.
+ await page.evaluate(async()=>{const name=(await indexedDB.databases()).map(d=>d.name).find(n=>n.startsWith('vocalzip_voice_path_v1'));await new Promise(resolve=>{const o=indexedDB.open(name);o.onsuccess=()=>{const tx=o.result.transaction('takes','readwrite'),s=tx.objectStore('takes'),q=s.get('m-b');q.onsuccess=()=>{const r=q.result;r.removed.report.removedDb=1.5;
+  const weak={meanStrength:0.777,glitchShare:0.0494,outsideBandShare:0,mainBand:{low:42,high:70.7},jumpsPerMin:229.1,flatNoteShare:0.06,bandwidthHz:3600};
+  r.removed.result.confidence={...r.removed.result.confidence,...weak};if(r.mixed)r.mixed.confidence={...r.mixed.confidence,...weak};s.put(r);};tx.oncomplete=()=>{o.result.close();resolve();};};});});
+ // The separated voice the fake server will return (the test helpers are gone after the reload).
+ await page.evaluate(()=>{const P=window.VzipVoicePath;sessionStorage.setItem('fake-separated',JSON.stringify(P.gate(P.analyze(window.vpTake.samples('better',34,16000),16000),false)));});
+ await page.reload();
+ await page.evaluate(async()=>{VzipR2.enabled=()=>true;VzipR2.url=async key=>window.__mr[key];
+  const m=(await VZ.media.list(true)).find(x=>x.id==='m-b');await VZ.media.update(m,{storageProvider:'r2',r2Key:'u/fake-owner/m-b',size:128},{quiet:true});await VZ.media.list(true);
+  window.__serverRequests=0;VZ.voicePathServerAvailable=m=>m.id==='m-b';
+  VZ.voicePathServerRequest=async m=>{window.__serverRequests++;const source={provider:'r2',key:'u/fake-owner/m-b',bytes:128},result=JSON.parse(sessionStorage.getItem('fake-separated'));
+   const fresh=(await VZ.media.list(true)).find(x=>x.id===m.id);await VZ.media.update(fresh,{voicePathSeparation:{version:'vp-sep-1',requestId:'fake-request',source,state:'done',requestedAt:100,engine:{model:'htdemucs'},processingMs:10,result}},{quiet:true});await VZ.media.list(true);return {state:'queued'};};
+  VZ.voicePathServerStatus=async m=>({report:(await VZ.media.list(true)).find(x=>x.id===m.id).voicePathSeparation});
+  VZ.render();});
+ const take=page.locator('[data-vp-take="b"]');
+ await expect(take).toHaveAttribute('data-vp-source','mr-removed');
+ await expect(take.locator('[data-vp-refused]')).toBeVisible();
+ await expect(take.locator('[data-vp-server-offer]')).toContainText('서버에서 AI로 목소리만 분리');
+ const button=take.locator('[data-vp-server-start]');
+ expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await button.click();
+ await expect(page.locator('[data-vp-take="b"]')).toHaveAttribute('data-vp-source','ai-separated');
+ await expect(page.locator('[data-vp-take="b"] [data-vp-refused]')).toHaveCount(0);
+ await expect(page.locator('[data-vp-take="b"] [data-vp-ai-note]')).toContainText('AI 분리 후 음높이 측정');
+ expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);
+ await expect(page.locator('[data-vp-server-offer]')).toHaveCount(0);
+ const d=await page.evaluate(()=>VZ.voicePathDiagnosis());
+ expect(d.takes[1]).toMatchObject({source:'ai-separated',measurable:true});
+ expect(page.__errors).toEqual([]);
+});
 test('a drifting quiet MR reaches the screen, invalidates older MR caches and exports numeric local evidence',async({page},testInfo)=>{
  test.setTimeout(120000);await bootMr(page,{quiet:true,drift:true});await open(page);await measure(page);
  const diagnosis=await page.evaluate(()=>VZ.voicePathDiagnosis());

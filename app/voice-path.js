@@ -241,13 +241,14 @@ function viewOf(s, role) {
   const rec = recordOf(s, m.id), stored = cleanOf(m), plan = mrPlan(s, m.id), files = plan.files, mode = files.length ? modeOf(plan.choice) : null;
   if (!rec) return {m, state:'none', stored, files, plan, mode};
   const track = rec.removed ? files.find(t => mrKey(t) === rec.removed.key) : null;
+  const server=serverOf(s,m);
   if (rec.removed) {
     // What is left of the accompaniment is still accompaniment: the voice must read as clearly as in a mixed take.
     const r = rec.removed.result, read = P.measurable(r, false);
-    if (!read.ok) return {m, rec, state:'ready', source:'mr-removed', result:r, shown:P.gate(r, false), clean:{clean:false, why:'song-mr-removed'}, ok:{ok:false, why:'mr-removed-' + read.why}, track, stored, files, plan, mode};
-    return {m, rec, state:'ready', source:'mr-removed', result:r, shown:r, clean:{clean:true, why:'song-mr-removed'}, ok:{ok:true, why:'song-mr-removed'}, track, stored, files, plan, mode};
+    if (read.ok) return {m, rec, state:'ready', source:'mr-removed', result:r, shown:r, clean:{clean:true, why:'song-mr-removed'}, ok:{ok:true, why:'song-mr-removed'}, track, stored, files, plan, mode};
+    // Refused after the MR came out: the server's separated voice, when there is one, is read instead.
+    if (!server) return {m, rec, state:'ready', source:'mr-removed', result:r, shown:P.gate(r, false), clean:{clean:false, why:'song-mr-removed'}, ok:{ok:false, why:'mr-removed-' + read.why}, track, stored, files, plan, mode};
   }
-  const server=serverOf(s,m);
   if(server)return {m,rec,state:'ready',source:'ai-separated',result:server.result,shown:P.gate(server.result,false),clean:{clean:false,why:'ai-separated-pitch-only'},ok:S.quality(server.result),server,track,stored,files,plan,mode};
   const ok = P.measurable(rec.mixed, stored.clean);
   return {m, rec, state:'ready', source:stored.clean ? 'clean' : 'mixed', result:rec.mixed, shown:P.gate(rec.mixed, stored.clean), clean:stored, ok, stored, files, plan, mode};
@@ -279,7 +280,7 @@ function slot(s, role) {
     esc([day(x), M.label(x), marks.includes(String(x.id)) ? '기준 녹음' : '', analysisOf(x) ? (reliable(x) ? '' : '신뢰도 낮음') : '분석 전', recordOf(s, x.id) ? '잰 녹음' : ''].filter(Boolean).join(' · ')) + '</option>').join('');
   const meta = [day(m) || '날짜 없음', m.durationSeconds ? clock(m.durationSeconds) : '', !a ? '분석 전' : reliable(m) ? '' : '신뢰도 낮음'].filter(Boolean).join(' · ');
   return '<div class="vp-slot" data-vp-slot="' + role + '"><label class="vp-field"><span>' + label + ' 녹음</span><select data-vp-pick="' + role + '" aria-label="' + label + ' 녹음 고르기"' + (s.running ? ' disabled' : '') + '>' + options + '</select></label>' +
-    '<p class="vp-meta" data-vp-meta>' + esc(meta) + (rec && !s.jobs?.[id] ? ' · <span data-vp-kept>'+(serverOf(s,m)&&!rec.removed?'서버 분리 결과가 있어요':'이 기기에 잰 결과가 있어요')+'</span>' : '') + '</p>' +
+    '<p class="vp-meta" data-vp-meta>' + esc(meta) + (rec && !s.jobs?.[id] ? ' · <span data-vp-kept>'+(serverOf(s,m)&&!(rec.removed&&P.measurable(rec.removed.result,false).ok)?'서버 분리 결과가 있어요':'이 기기에 잰 결과가 있어요')+'</span>' : '') + '</p>' +
     '<label class="vp-check"><input type="checkbox" data-vp-clean="' + role + '"' + (c.clean ? ' checked' : '') + (s.running ? ' disabled' : '') + '><span>이 녹음은 목소리만 들어가 있어요</span></label>' +
     '<p class="vp-why" data-vp-why>' + esc(P.CLEAN_TEXT[c.why]) + (c.clean ? '' : mrPlan(s, m.id).pick.length ? ' · 곡 MR이 빠지면 이 표시와 상관없이 울림·숨소리까지 재요' : ' · ' + esc(P.UNCLEAN_NOTE)) + '</p>' +
     mrChoice(s, role, m.id) +
@@ -375,7 +376,9 @@ function serverNote(s,role,v){
  const q=S?.current(v.m)??(pendingServer(s,v.m)?v.rec?.serverRequested:null),pending=q&&['queued','running'].includes(q.state),failed=q&&['failed','withheld'].includes(q.state);
  return pending?info('data-vp-server-pending','cloud','서버에서 목소리 분리를 '+(q.state==='queued'?'기다리고 있어요. 시작까지 시간이 걸릴 수 있어요.':'진행하고 있어요.')+' 끝나면 자동으로 보여 드려요. 앱을 닫아도 계속돼요.')
   :failed?info('data-vp-server-failed','info','서버 분리 '+(q.state==='withheld'?'후에도 음높이를 안정적으로 잡지 못했어요.':'중 오류가 있었어요.')+' 원본과 기존 결과는 그대로예요.')+'<button type="button" class="btn secondary" data-vp-server-retry="'+role+'">서버 분리 다시 시도</button>'
-  :v.rec?.serverError?info('data-vp-server-failed','info',esc(v.rec.serverError)):'';
+  :v.rec?.serverError?info('data-vp-server-failed','info',esc(v.rec.serverError))
+  // Measured before the separation was offered after a refused MR removal (or it could not be asked then): ask now.
+  :v.source==='mr-removed'&&!v.ok.ok&&!q&&v.rec&&!P.measurable(v.rec.mixed,false).ok&&V.voicePathServerAvailable?.(v.m)?info('data-vp-server-offer','cloud','서버에서 AI로 목소리만 분리해 음높이를 다시 잴 수 있어요. 녹음을 다시 올리지 않고, 원본은 그대로예요.')+'<button type="button" class="btn secondary" data-vp-server-start="'+role+'">서버에서 분리해 다시 재기</button>':'';
 }
 function takeCard(s, role, label, v) {
   const m = v.m, head = '<section class="vp-card vp-take" data-vp-take="' + role + '" data-vp-source="' + (v.source || 'none') + '"><div class="vp-take-head"><span class="vp-role">' + label + '</span><strong>' + esc(M.label(m)) + '</strong></div>';
@@ -442,7 +445,7 @@ async function run(s, force) {
       const rec = await measure(s, item, files.get(id), mrPlan(s, id), (name, pct, at) => stage(id, name, pct, at));
       if (s.dead) return;
       results.set(id, rec); delete s.jobs[id];
-      if(!rec.removed&&!cleanOf(item).clean&&!P.measurable(rec.mixed,false).ok&&choiceOf(s,id)!=='none'&&!S?.current(item)&&V.voicePathServerAvailable?.(item)){
+      if(!(rec.removed&&P.measurable(rec.removed.result,false).ok)&&!cleanOf(item).clean&&!P.measurable(rec.mixed,false).ok&&choiceOf(s,id)!=='none'&&!S?.current(item)&&V.voicePathServerAvailable?.(item)){
         try{const response=await V.voicePathServerRequest(item,{signal:s.abort.signal});rec.serverRequested={state:response.state};await refreshServer(s,true);}catch(error){if(error?.name==='AbortError')throw error;rec.serverError=String(error.message||'서버 분리를 요청하지 못했어요.');}
       }
       cache.put(rec);                                                 // kept on this device; not awaited
@@ -461,6 +464,11 @@ function bind(s) {
   const host = s.host, q = sel => host.querySelector(sel);
   host.querySelectorAll('[data-vp-server-retry]').forEach(button=>button.onclick=async()=>{
     button.disabled=true;try{const item=s.items.find(m=>m.id===s[button.dataset.vpServerRetry]);await V.voicePathServerRequest(item,{retry:true});await refreshServer(s,true);if(!s.dead)draw(s);}catch(error){if(!s.dead){s.status=String(error.message||'서버 분리를 요청하지 못했어요.');draw(s);}}
+  });
+  host.querySelectorAll('[data-vp-server-start]').forEach(button=>button.onclick=async()=>{
+    button.disabled=true;const item=s.items.find(m=>m.id===s[button.dataset.vpServerStart]),rec=item&&recordOf(s,item.id);
+    try{const response=await V.voicePathServerRequest(item,{signal:s.abort?.signal});if(rec){rec.serverRequested={state:response.state};delete rec.serverError;cache.put(rec);}await refreshServer(s,true);if(!s.dead)draw(s);}
+    catch(error){if(error?.name==='AbortError'||s.dead)return;if(rec)rec.serverError=String(error.message||'서버 분리를 요청하지 못했어요.');draw(s);}
   });
   host.querySelectorAll('[data-vp-pick]').forEach(sel => sel.onchange = () => { s[sel.dataset.vpPick] = sel.value; s.defaulted = ''; s.status = ''; s.fileLoads = []; draw(s); host.querySelector('[data-vp-pick="' + sel.dataset.vpPick + '"]')?.focus({preventScroll:true}); });
   host.querySelectorAll('[data-vp-mr-pick]').forEach(sel => sel.onchange = () => {
