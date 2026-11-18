@@ -213,8 +213,9 @@ function summaryHtml(run) {
 }
 
 /** Opens the confirm page. items: the song's recordings when the caller already has them (보컬 연구소 passes its own,
- * so they are updated in place); picked: ids ticked there; onSaved(m) after each saved result; onClose(run) at the end. */
-function open(song, {items, picked = [], onSaved, onClose} = {}) {
+ * so they are updated in place); picked: ids ticked there; scope: the range first chosen ('picked' for one take a
+ * growth screen asks about), else the usual default; onSaved(m) after each saved result; onClose(run) at the end. */
+function open(song, {items, picked = [], scope:asked, onSaved, onClose} = {}) {
   song = V.song(song?.id) || song;
   if (!song) return;
   let run = null, closed = false, p = null, scope = 'held', measured;
@@ -263,7 +264,9 @@ function open(song, {items, picked = [], onSaved, onClose} = {}) {
       p = plan(song, items, picked);
       if (!p.tracks.length) { view('empty', '<p class="vz-remr-note" data-remr-empty>이 곡에 올려 둔 MR 파일이 없어요. 곡 › 레퍼런스에서 MR 파일을 올리면 반주를 빼고 다시 잴 수 있어요. 유튜브 MR은 쓸 수 없어요.</p>', '<button type="button" class="btn block" data-remr-close>닫기</button>'); foot.querySelector('[data-remr-close]').onclick = close; return; }
       // 판정 보류인 녹음만 is the default; with none of those, the first scope that has recordings.
-      scope = p.scopes.held.length ? 'held' : p.hasPicked && p.scopes.picked.length ? 'picked' : p.scopes.all.length ? 'all' : 'held';
+      // A caller asking for 고른 녹음만 gets it even when it is empty (the take is skipped and the row says why).
+      scope = asked && p.scopes[asked] && (asked !== 'picked' || p.hasPicked) ? asked
+        : p.scopes.held.length ? 'held' : p.hasPicked && p.scopes.picked.length ? 'picked' : p.scopes.all.length ? 'all' : 'held';
       ask();
       if (!lastRate()) { await deviceSpeed().then(s => { measured = s; }); if (!closed && !run && host.dataset.remrView === 'confirm') { const eta = estimate(p.scopes[scope], measured); host.querySelector('[data-remr-eta]').textContent = eta.text; const note = host.querySelector('[data-remr-eta-note]'); if (note) note.textContent = eta.note; } }
     }});
@@ -286,5 +289,7 @@ async function prompt(host, song, {added = false, onDone} = {}) {
 }
 /** For 보컬 연구소: how many of these recordings a run could measure ({held, all}), null without an MR file. */
 const count = (song, items) => { if (!mrFiles(song).length) return null; const p = plan(song, items); return {held:p.scopes.held.length, all:p.scopes.all.length}; };
-V.mrReanalyze = {open, prompt, plan, decide, count, method, running:() => !!active};
+/** Whether the song has an MR file a run can use (the growth screens offer the run, or say to add one). */
+const has = song => mrFiles(song).length > 0;
+V.mrReanalyze = {open, prompt, plan, decide, count, method, has, running:() => !!active};
 })();

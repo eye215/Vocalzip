@@ -589,12 +589,17 @@ VZ.route('song', {title:'곡 상세', tab:'songs', back:true, noAutoRefresh:true
     const s = VZ.song(r.params[0]);
     if (!s) return VZ.empty('music-notes', '곡을 찾을 수 없어요. 삭제됐을 수 있어요.', '<a class="btn sm" href="#/songs">내 곡으로</a>');
     const tabs = [['media', '녹음'], ['lyrics', '가사'], ['scores', '악보'], ['timeline', '활동 기록'], ['ar', '레퍼런스']];
+    // #/song/<id>?tab=ar opens on that tab (성장 › 결과 리포트 links to the song's MR files this way).
+    const asked = r.query?.get('tab');
+    if (asked && tabs.some(([k]) => k === asked)) songTab = asked;
     // The page header already says 곡 상세: the card shows the title, 작품 / 아티스트 and the totals.
     return '<div class="song-head vz-song-detail-hero"><strong class="vz-song-detail-title">' + esc(s.title) + '</strong><span class="vz-song-detail-sub" data-song-show' + (s.show ? '' : ' hidden') + '>' + esc(s.show || '') + '</span><span class="vz-song-detail-summary" data-summary></span></div>' +
       '<div data-repertoire></div><div class="seg song-tabs" role="tablist">' + tabs.map(([k, v]) => '<button type="button" role="tab" data-tab="' + k + '" aria-pressed="' + (songTab === k) + '" aria-selected="' + (songTab === k) + '">' + v + '</button>').join('') + '</div><div data-body></div>';
   },
   async mount(main, r) {
     const s = VZ.song(r.params[0]); if (!s) return;
+    // The ?tab= of the address is read once (render): a reload or 뒤로 opens the song as usual afterwards.
+    if (r.query?.has('tab')) { try { history.replaceState(history.state, '', '#/song/' + encodeURIComponent(s.id)); } catch {} }
     document.querySelector('.vz-collection-record')?.setAttribute('href','#/record?song='+encodeURIComponent(s.id));
     // `s` is the song as it was when this screen opened. Synced data replaces VZ.db, so anything shown or saved reads the
     // current song by id; for a song deleted on another device the screen says so instead of writing it back.

@@ -103,6 +103,7 @@ function pair(v, {takeOf = () => null, reference = () => null} = {}) {
   }
   const mx = C.methodOf(x.a), my = C.methodOf(y.a);
   if (mx !== my) return {...out('version-mixed'), reason:'method-mixed', methods:[mx, my],
+    remeasure:C.remeasure({id:v.firstId, method:mx, label:l1}, {id:v.secondId, method:my, label:l2}),
     text:l1 + ' 녹음은 ' + C.METHOD[mx] + ', ' + l2 + ' 녹음은 ' + C.METHOD[my] + ' 잰 것이라 견주지 않아요 · 같은 방법으로 잰 녹음끼리만 견줘요'};
   if ((x.a.v ?? null) !== (y.a.v ?? null)) return out('version-mixed');
   // comparePair's rules on the verdict's own order (first = the take judged as the earlier one), never re-sorted: the

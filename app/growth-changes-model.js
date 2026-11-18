@@ -6,7 +6,8 @@
  *                      빼고 (analysis.confidence.mrRemoved) or both AI 분리 (confidence.aiSeparated), the way
  *                      app/overall-growth-model.js methodOf reads it — and of the same analysis version, on different days.
  *                      The method is the one of the song's latest reliable take; earlier takes measured another way are
- *                      never paired with it (the song is listed under 비교할 수 없어 뺀 것 with the two methods). The pair
+ *                      never paired with it (the song is listed under 비교할 수 없어 뺀 것 with the two methods and the take
+ *                      to measure again with the MR removed: remeasure). The pair
  *                      is compared by app/growth-metrics-model.js comparePair (the 결과 리포트 rules, 판정 보류 included).
  *   3. 같은 과제        발성 정밀 측정 results (app/precision-session-model.js tasks): per task · vowel · loudness, the latest
  *                      result and the earliest result of an earlier day that app/precision-report-model.js compare calls
@@ -24,6 +25,18 @@ const methodOf = a => O?.methodOf ? O.methodOf(a) : a?.confidence?.aiSeparated ?
 /** How a take was measured, as said after it: "MR 빼고 잰 녹음". */
 const METHOD = {asRecorded:'녹음 그대로', mrRemoved:'MR 빼고', aiSeparated:'AI 분리 후'};
 const measured = m => METHOD[m] + ' 잰';
+/** What each method means, said where a pair measured two ways is left out and one of them is AI 분리 후. */
+const METHOD_HELP = {asRecorded:'녹음 그대로: 반주가 섞인 녹음을 그대로 잰 것', mrRemoved:'MR 빼고: 곡에 올린 MR 파일로 반주를 빼고 잰 것',
+  aiSeparated:'AI 분리 후: AI가 목소리만 따로 떼어 낸 뒤 잰 것'};
+/**
+ * Two takes measured different ways ({id, method, label}): the one to measure again with the song's MR removed — the
+ * one that is not MR 빼고 (MR removal is the method the person controls: an MR file on the song). null when neither
+ * is MR 빼고 (녹음 그대로 vs AI 분리 후) or both are measured the same way.
+ */
+function remeasure(x, y) {
+  if (!x?.id || !y?.id || x.method === y.method) return null;
+  return x.method === 'mrRemoved' ? y : y.method === 'mrRemoved' ? x : null;
+}
 const ARROW = ' → ';
 
 /* ---------- 2. 같은 곡 같은 방법 ---------- */
@@ -62,8 +75,9 @@ function songChange({songId, title = '', takes = [], reference = null}) {
   const earlier = list.filter(t => t.date < last.date), same = earlier.filter(t => methodOf(t.a) === method);
   if (!earlier.length) return out({reason:list.length > 1 ? 'same-day' : 'no-pair', text:G.holdText(list.length > 1 ? 'same-day' : 'no-pair')});
   if (!same.length) {
-    const other = methodOf(earlier[0].a);
+    const other = methodOf(earlier[0].a), [l1, l2] = L.dayLabels(earlier[0].date, last.date);
     return out({reason:'method-mixed', method, other,
+      remeasure:remeasure({id:earlier[0].id, method:other, label:l1}, {id:last.id, method, label:l2}),
       text:'최근 녹음은 ' + METHOD[method] + ', 그 전 녹음은 ' + METHOD[other] + ' 잰 것이라 비교하지 않아요 · 같은 방법으로 잰 녹음끼리만 비교해요'});
   }
   const first = same.find(t => t.a.v === last.a.v);
@@ -159,5 +173,5 @@ function build({verdicts = [], songs = [], precision = null, precisionApi = {}, 
     overall:L.overallText(v), tags:L.tagsText(v), memo:v.memo || '', firstId:v.firstId || '', secondId:v.secondId || '', firstDate:v.firstDate, secondDate:v.secondDate, verdict:v}));
   return {verdicts:verdictItems, songs:songItems, tasks:t.items, invite:Array.isArray(precision) && !precision.length, range:r.item, excluded};
 }
-return {METHOD, OBS, NAME, PRECISION_REASON, methodOf, observation, songChange, taskChanges, rangeChange, build};
+return {METHOD, METHOD_HELP, remeasure, OBS, NAME, PRECISION_REASON, methodOf, observation, songChange, taskChanges, rangeChange, build};
 });
