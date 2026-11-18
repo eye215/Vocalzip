@@ -186,7 +186,8 @@ test('explicit PDF deletion removes its annotation vectors and keeps lesson/prac
  expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations)).toEqual([]);
  expect(await page.evaluate(()=>window.VZ.db.lessons[0].note)).toBe('기존 레슨 메모');
  expect(await page.evaluate(()=>window.VZ.db.practices[0].minutes)).toBe(17);expect(r2.store.has(key)).toBe(false);
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vzip_score_ink_v1:ui-test-user')).records)).toEqual([]);
+ // The recovery copy holds nothing the root has: it is gone, or empty.
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('vzip_score_ink_v1:ui-test-user')||'{"records":[]}').records)).toEqual([]);
 });
 
 /** Actions live in the viewer's 더보기 menu (compact layout); open it when the button is not on screen. */

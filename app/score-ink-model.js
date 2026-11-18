@@ -409,6 +409,18 @@ function create({storage,identity,getData,change}){
   current();const text=JSON.stringify(ledger);if(text.length*2>MAX_BYTES||ledger.records.length>4000||ledger.deleted.length>10000)throw fail('필기 보관 공간이 가득 찼어요. 기존 필기는 유지돼요.','capacity');
   storage.setItem(key,text);current();
  }
+ /** The recovery copy only has to hold what the shared root does not hold yet: strokes it has with the same content and
+  *  erasures it has recorded are dropped from it (they used to stay forever, so every stroke was kept twice on the
+  *  device and Safari's storage filled up). Never throws: a copy that cannot be read or rewritten stays as it is. */
+ function prune(){
+  try{
+   const d=data(),ledger=read(),rows=new Map((d[COLLECTION]||[]).map(r=>[r?.id,r])),dead=new Set(d.deleted?.[COLLECTION]||[]);
+   const records=ledger.records.filter(s=>{const r=rows.get(s.id);return !dead.has(s.id)&&!(r&&same(r,s));}),deleted=ledger.deleted.filter(id=>!dead.has(id));
+   if(records.length===ledger.records.length&&deleted.length===ledger.deleted.length)return;
+   current();if(!records.length&&!deleted.length&&typeof storage.removeItem==='function')storage.removeItem(key);else storage.setItem(key,JSON.stringify({...ledger,records,deleted}));
+  }catch{}
+ }
+ const isQuota=e=>e?.name==='QuotaExceededError'||e?.code===22||/quota/i.test(e?.message||'');
  function restore(){
   const d=data(),ledger=read(),rows=d[COLLECTION]||[],gone=new Set([...(d.deleted?.[COLLECTION]||[]),...ledger.deleted]);
   const retained=ledger.records.filter(s=>!gone.has(s.id));
@@ -416,13 +428,14 @@ function create({storage,identity,getData,change}){
   const additions=retained.filter(s=>!gone.has(s.id)&&exists(d,s)&&!rows.some(r=>r.id===s.id));
   const remove=rows.filter(s=>s.ownerId===owner&&gone.has(s.id)).map(s=>s.id);
   const freshGone=ledger.deleted.filter(id=>!(d.deleted?.[COLLECTION]||[]).includes(id));
-  if(!additions.length&&!remove.length&&!freshGone.length)return true;
-  current();return change(next=>{
+  if(!additions.length&&!remove.length&&!freshGone.length){prune();return true;}
+  current();const saved=change(next=>{
    const dead=new Set([...(next.deleted?.[COLLECTION]||[]),...ledger.deleted]);
    next[COLLECTION]=(next[COLLECTION]||[]).filter(s=>s.ownerId!==owner||!dead.has(s.id));
    for(const s of additions)if(!dead.has(s.id)&&exists(next,s)&&!next[COLLECTION].some(r=>r.id===s.id))next[COLLECTION].push(clone(s));
    next.deleted||={};next.deleted[COLLECTION]=[...dead];
   });
+  if(saved)prune();return saved;
  }
  function list(binding,page){
   const d=data(),ledger=read(),gone=new Set([...(d.deleted?.[COLLECTION]||[]),...ledger.deleted]),map=new Map();
@@ -439,8 +452,16 @@ function create({storage,identity,getData,change}){
    if(old&&!same(old,s))throw fail('같은 필기 ID의 다른 내용은 덮어쓰지 않아요.','conflict');
    map.set(s.id,clone(s));
   }
-  // Account-scoped recovery copy is durable before updating the shared root.
-  put({version:1,owner,records:[...map.values()].filter(s=>!gone.has(s.id)),deleted:[...gone]});
+  // Account-scoped recovery copy is durable before updating the shared root. When the device storage is full, the
+  // shared root is still tried (it is the copy that syncs); the recovery copy is pruned once that is saved.
+  const copy=()=>put({version:1,owner,records:[...map.values()].filter(s=>!gone.has(s.id)),deleted:[...gone]});
+  try{copy();}
+  catch(e){
+   if(!isQuota(e))throw e;
+   // Full: drop what the shared root already holds from the copy (frees the space the duplicates took), try once more.
+   prune();for(const s of rows)if(map.has(s.id)&&same(map.get(s.id),s)&&!add.some(a=>a.id===s.id))map.delete(s.id);
+   try{copy();}catch(again){if(!isQuota(again))throw again;}
+  }
   const saved=change(next=>{
    for(const s of add)if(!exists(next,s))throw fail('악보가 변경됐어요.','binding');
    next[COLLECTION]=(next[COLLECTION]||[]).filter(s=>!remove.includes(s.id));
@@ -448,7 +469,7 @@ function create({storage,identity,getData,change}){
    next.deleted||={};next.deleted[COLLECTION]=[...new Set([...(next.deleted[COLLECTION]||[]),...remove])];
    mutate?.(next);
   });
-  current();return saved;
+  current();if(saved)prune();return saved;
  }
  function removeScore(b){
   const d=data();if(b.ownerId!==owner||!exists(d,b))throw fail('악보가 변경됐어요. 다시 확인해 주세요.','binding');
@@ -458,7 +479,7 @@ function create({storage,identity,getData,change}){
  /** Ids erased on any device (synced) or on this one (recovery copy). Strokes that live outside the records — the
   * handwriting attached to an imported PDF — use it to stay erased. */
  function gone(){const d=data();return new Set([...(d.deleted?.[COLLECTION]||[]),...read().deleted]);}
- return {restore,list,commit,removeScore,gone,key};
+ return {restore,list,commit,removeScore,gone,key,prune};
 }
 return {COLLECTION,valid,same,opacity,point,hit,path,smoothPath,outlinePath,strokeShape,simplifyStroke,pressureWidth,SIMPLIFY,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
  markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,validMeasures,grouped,freehand,

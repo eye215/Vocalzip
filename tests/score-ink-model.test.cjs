@@ -38,11 +38,44 @@ test('failed root write is recovered from the durable account ledger after reloa
  const f=fixture();f.hooks.failChange=true;assert.equal(f.store.commit({add:[stroke()]}),false);assert.equal(f.data.scoreAnnotations,undefined);
  f.hooks.failChange=false;const next=Ink.create(f.options);assert.equal(next.restore(),true);assert.equal(f.data.scoreAnnotations[0].id,'line');
 });
-test('a quota failure leaves the existing root and recovery copy unchanged',()=>{
- const f=fixture();f.store.commit({add:[stroke()]});const raw=[...f.memory.values()][0],before=structuredClone(f.data);
+test('a full device still saves to the shared root; when that fails too nothing changes',()=>{
+ const f=fixture();f.store.commit({add:[stroke()]});const before=structuredClone(f.data);
  f.hooks.write=()=>{throw Object.assign(Error('full'),{name:'QuotaExceededError'});};
- assert.throws(()=>f.store.commit({add:[stroke('second')]}),{name:'QuotaExceededError'});
- assert.deepEqual(f.data,before);assert.equal([...f.memory.values()][0],raw);
+ // The shared root still takes it (it is the copy that syncs).
+ assert.equal(f.store.commit({add:[stroke('second')]}),true);
+ assert.deepEqual(f.data.scoreAnnotations.map(s=>s.id).sort(),[stroke().id,stroke('second').id].sort());
+ // Both full: false, the root is as it was, and the recovery copy too.
+ const g=fixture();g.store.commit({add:[stroke()]});const raw=[...g.memory.values()][0],root=structuredClone(g.data);
+ g.hooks.write=()=>{throw Object.assign(Error('full'),{name:'QuotaExceededError'});};g.hooks.failChange=true;
+ assert.equal(g.store.commit({add:[stroke('second')]}),false);
+ assert.deepEqual(g.data,root);assert.equal([...g.memory.values()][0],raw);
+ // Another storage error still stops the save.
+ const h=fixture();h.hooks.write=()=>{throw Object.assign(Error('denied'),{name:'SecurityError'});};
+ assert.throws(()=>h.store.commit({add:[stroke('third')]}),{name:'SecurityError'});
+});
+const copyOf=f=>{const t=f.memory.get(f.store.key);return t?JSON.parse(t):{records:[],deleted:[]};};
+test('the recovery copy keeps only what the shared root does not hold yet',()=>{
+ const f=fixture();f.store.commit({add:[stroke('a'),stroke('b')]});
+ // Saved to the root: nothing is left in the copy (it used to keep every stroke a second time).
+ assert.deepEqual(copyOf(f).records,[]);
+ // The root write failed: the copy keeps the stroke, and the next open puts it back into the root and prunes.
+ f.hooks.failChange=true;assert.equal(f.store.commit({add:[stroke('c')]}),false);
+ assert.deepEqual(copyOf(f).records.map(s=>s.id),['c']);
+ f.hooks.failChange=false;assert.equal(f.store.restore(),true);
+ assert.ok(f.data.scoreAnnotations.some(s=>s.id==='c'));assert.deepEqual(copyOf(f).records,[]);
+ // An erasure saved to the root is not kept in the copy either.
+ assert.equal(f.store.commit({remove:['a']}),true);assert.deepEqual(copyOf(f).deleted,[]);
+ assert.ok(f.data.deleted.scoreAnnotations.includes('a'));assert.equal(f.store.list(binding).some(s=>s.id==='a'),false);
+ // The root failed to record an erasure: the copy keeps it, so the stroke stays erased.
+ f.hooks.failChange=true;assert.equal(f.store.commit({remove:['b']}),false);assert.ok(copyOf(f).deleted.includes('b'));
+ assert.equal(f.store.list(binding).some(s=>s.id==='b'),false);
+});
+test('an old recovery copy full of strokes the root already holds is pruned on open; one with its own removeItem is removed',()=>{
+ const f=fixture();f.store.commit({add:[stroke('a')]});
+ f.memory.set(f.store.key,JSON.stringify({version:1,owner,records:f.data.scoreAnnotations.map(s=>structuredClone(s)),deleted:[]}));
+ assert.equal(f.store.restore(),true);assert.deepEqual(copyOf(f).records,[]);assert.equal(f.store.list(binding).length,1);
+ const g=fixture();g.options.storage.removeItem=k=>g.memory.delete(k);const store=Ink.create(g.options);store.commit({add:[stroke('x')]});
+ assert.equal(g.memory.has(store.key),false);
 });
 test('two devices merge independent strokes even if song metadata was edited on the other device',()=>{
  const a=fixture(),b=fixture();a.store.commit({add:[stroke('a')]});b.store.commit({add:[stroke('b')]});b.data.songs[0].title='new title';b.data.songs[0].updatedAt=200;
@@ -171,7 +204,7 @@ test('memos are saved, listed, synced, tombstoned and restored like strokes; an 
  const a=fixture(),b=fixture(),m=memo(),on=stroke('on',{note:'memo',createdAt:2});
  assert.equal(a.store.commit({add:[m,on]}),true);
  assert.deepEqual(a.store.list(binding,1).map(s=>s.id),['memo','on']);assert.deepEqual(a.store.list(binding,1)[0].rect,m.rect);
- assert.deepEqual(JSON.parse([...a.memory.values()][0]).records.map(s=>s.tool),['note','pen']);
+ assert.deepEqual(JSON.parse([...a.memory.values()][0]).records,[]); // saved to the root: not kept a second time
  assert.throws(()=>a.store.commit({add:[memo('memo',{text:'changed'})]}),{code:'conflict'}); // never overwritten in place
  assert.throws(()=>a.store.commit({add:[memo('bad',{rect:[.9,.9,.5,.5]})]}),{code:'binding'});
  const edited=memo('memo-2',{note:'memo',mode:'text',text:'숨'});a.store.commit({add:[edited],remove:['memo']});
