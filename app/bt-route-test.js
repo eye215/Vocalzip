@@ -59,6 +59,9 @@ function wavBlob(seconds) {
   return new Blob([buf], {type:'audio/wav'});
 }
 const AC = () => window.AudioContext || window.webkitAudioContext;
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+// Some engines never settle play() or resume() (no audio device, blocked autoplay): wait at most `ms`, then go on.
+const within = (promise, ms) => Promise.race([Promise.resolve(promise).then(() => true), sleep(ms).then(() => false)]);
 
 /** One player: <audio> with a generated WAV, or an AudioBufferSourceNode. stop() releases everything. */
 function makePlayer(kind) {
@@ -70,10 +73,10 @@ function makePlayer(kind) {
         if (!audio) { audio = new Audio(); audio.setAttribute('playsinline', ''); }
         if (url) URL.revokeObjectURL(url);
         url = URL.createObjectURL(wavBlob(seconds)); audio.src = url;
-        await audio.play();
+        await audio.play(); // may reject (NotAllowedError) or never settle; the caller times it
       } else {
         if (!ctx) ctx = new (AC())();
-        if (ctx.state !== 'running') await ctx.resume().catch(() => {});
+        if (ctx.state !== 'running') await within(ctx.resume().catch(() => {}), 800);
         const data = melody(ctx.sampleRate, seconds), buffer = ctx.createBuffer(1, data.length, ctx.sampleRate);
         buffer.getChannelData(0).set(data);
         src = ctx.createBufferSource(); src.buffer = buffer; src.connect(ctx.destination); src.start();
@@ -92,8 +95,8 @@ function makePlayer(kind) {
 function makeMeter(stream, onLevel) {
   const ctx = new (AC())(), source = ctx.createMediaStreamSource(stream), analyser = ctx.createAnalyser();
   analyser.fftSize = 1024; source.connect(analyser); // not connected to the speakers
-  ctx.resume?.().catch(() => {});
   const f = analyser.getFloatTimeDomainData ? new Float32Array(analyser.fftSize) : null, b = new Uint8Array(analyser.fftSize);
+  try { ctx.resume?.()?.catch?.(() => {}); } catch {}
   const meter = {max:0, level:0, stop() { clearInterval(timer); try { source.disconnect(); } catch {} ctx.close().catch(() => {}); }, reset() { this.max = 0; }};
   const timer = setInterval(() => {
     let peak = 0;
@@ -139,7 +142,7 @@ async function finish(answer) {
   const run = active; if (!run) return;
   active = null;
   try { run.player?.stop(); } catch {}
-  run.micState = run.stream ? run.stream.getAudioTracks().map(t => t.readyState === 'ended' ? 'ended' : t.muted ? 'muted' : 'live').join(',') : '';
+  run.micState = run.stream ? (run.stream.getAudioTracks?.() || run.stream.getTracks()).map(t => t.readyState === 'ended' ? 'ended' : t.muted ? 'muted' : 'live').join(',') : '';
   run.stream?.getTracks().forEach(t => { try { t.stop(); } catch {} });
   const max = run.meter ? (run.order === 'session-after' ? run.afterMax ?? run.meter.max : run.meter.max) : 0;
   run.meter?.stop();
@@ -205,27 +208,34 @@ VZ.route('bt-test', {title:'녹음 중 블루투스 시험', back:true, tab:'kee
       const r = active = {method:m, order:m.order, steps:[['start', readType()]], error:'', player:makePlayer(m.player)};
       status[m.id] = '준비 중이에요…'; paint();
       const seconds = m.order === 'play-first' ? 8 : 4;
-      const play = async () => { try { await r.player.play(seconds); } catch (err) { r.error ||= err?.name || 'Error'; } r.steps.push(['play', readType()]); };
+      // The planned length is the source of truth: the question comes once playback has started, or after `seconds`
+      // at the latest when play() never settles. A rejected play() is kept as the result's error.
+      const play = async () => {
+        const started = await within(r.player.play(seconds).catch(err => { r.error ||= 'play:' + (err?.name || 'Error'); }), seconds * 1000);
+        if (!started) r.error ||= 'play:Timeout';
+        r.steps.push(['play', readType()]);
+      };
       try {
         if (document.fullscreenElement || document.webkitFullscreenElement) await leaveFullscreen();
         if (m.order === 'play-first') {
           await play(); if (active !== r) return;
           setStatus(m.id, '소리가 나오는 중이에요. 곧 마이크를 켜요…');
-          await new Promise(res => setTimeout(res, 1500)); if (active !== r) return;
+          await sleep(1500); if (active !== r) return;
         }
         if (m.order !== 'session-after' && (needsSession(m) || supported())) { setType(m.session); r.steps.push(['set', readType()]); }
         if (!navigator.mediaDevices?.getUserMedia) { const e = Error('getUserMedia 없음'); e.name = 'NotSupportedError'; throw e; }
         r.stream = await navigator.mediaDevices.getUserMedia({audio:m.mic === 'raw' ? RAW : true});
         if (active !== r) { r.stream.getTracks().forEach(t => t.stop()); return; }
         r.steps.push(['mic', readType()]);
-        r.meter = makeMeter(r.stream, level => { if (active === r) { showLevel(level); if (r.order === 'session-after' && r.afterMax != null) r.afterMax = Math.max(r.afterMax, level); } });
+        try { r.meter = makeMeter(r.stream, level => { if (active === r) { showLevel(level); if (r.order === 'session-after' && r.afterMax != null) r.afterMax = Math.max(r.afterMax, level); } }); }
+        catch (err) { r.error ||= 'meter:' + (err?.name || 'Error'); } // no level meter: the test still runs, the mic counts as not moved
         if (m.order === 'session-after') {
-          await new Promise(res => setTimeout(res, 500)); if (active !== r) return;
+          await sleep(500); if (active !== r) return;
           setType(m.session); r.steps.push(['after', readType()]); r.afterMax = 0;
         }
         if (m.order !== 'play-first') await play();
         if (active !== r) return;
-        setStatus(m.id, r.error ? '소리를 틀지 못했어요 (' + r.error + '). 들린 곳을 골라 주세요.' : '소리를 듣고 어디서 들렸는지 골라 주세요. 소리를 내 보면 막대가 움직여요.');
+        setStatus(m.id, /^play:/.test(r.error) ? '소리를 틀지 못했을 수 있어요 (' + r.error + '). 들린 곳을 골라 주세요.' : '소리를 듣고 어디서 들렸는지 골라 주세요. 소리를 내 보면 막대가 움직여요.');
         const ask = host.querySelector('[data-running] [data-ask]'); if (ask) ask.hidden = false;
       } catch (err) {
         if (active !== r) return;
@@ -240,7 +250,9 @@ VZ.route('bt-test', {title:'녹음 중 블루투스 시험', back:true, tab:'kee
       const t = e.target.closest('button'); if (!t || t.disabled) return;
       if (t.matches('[data-baseline]')) {
         baselinePlayer?.stop(); baselinePlayer = makePlayer('audio');
-        try { await baselinePlayer.play(4); } catch (err) { VZ.toast('소리를 틀지 못했어요: ' + (err?.name || 'Error'), 'error'); }
+        let failed = '';
+        await within(baselinePlayer.play(4).catch(err => { failed = err?.name || 'Error'; }), 4000);
+        if (failed) VZ.toast('소리를 틀지 못했어요: ' + failed, 'error');
         baselineAsked = true; paint();
       } else if (t.dataset.baselineAnswer) {
         baselinePlayer?.stop(); baselinePlayer = null; baselineAsked = false;
@@ -250,7 +262,7 @@ VZ.route('bt-test', {title:'녹음 중 블루투스 시험', back:true, tab:'kee
       } else if (t.dataset.answer) {
         await finish(t.dataset.answer); paint();
       } else if (t.matches('[data-replay]') && active) {
-        try { await active.player.play(4); } catch (err) { active.error ||= err?.name || 'Error'; }
+        const run = active; await within(run.player.play(4).catch(err => { run.error ||= 'play:' + (err?.name || 'Error'); }), 4000);
       } else if (t.matches('[data-copy]')) {
         VZ.toast(await copyText(report(load())) ? '결과를 복사했어요.' : '복사하지 못했어요.', undefined);
       } else if (t.matches('[data-clear]')) {
