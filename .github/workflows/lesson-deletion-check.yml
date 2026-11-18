@@ -28,7 +28,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
       - run: node --test tests/lesson-deletion.test.cjs tests/media-delete.test.cjs tests/data-merge.test.cjs tests/cloud-sync.test.cjs billing/tests/*.test.cjs
-      - run: npx playwright install --with-deps chromium webkit
+      # The apt step of this install sometimes stalls on a busy runner and the job then hits its timeout;
+      # give each try 5 minutes and try three times.
+      - name: Install browsers (retried)
+        run: for i in 1 2 3; do timeout 300 npx playwright install --with-deps chromium webkit && exit 0; echo "install try $i failed"; sleep 10; done; exit 1
       - name: Existing lesson deletion preserves unselected records
         run: npx playwright test tests/v6.spec.cjs --grep 'Lesson delete keeps|Lesson deletion' --workers=2
       - name: Cloud cancellation acknowledgement and restore guards
@@ -57,7 +60,10 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: npx playwright install --with-deps chromium webkit
+      # The apt step of this install sometimes stalls on a busy runner and the job then hits its timeout;
+      # give each try 5 minutes and try three times.
+      - name: Install browsers (retried)
+        run: for i in 1 2 3; do timeout 300 npx playwright install --with-deps chromium webkit && exit 0; echo "install try $i failed"; sleep 10; done; exit 1
       - run: npx playwright test tests/account-session.spec.cjs --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
@@ -82,7 +88,10 @@ jobs:
       - name: JavaScript syntax
         run: |
           for file in billing/*.js; do node --check "$file"; done
-      - run: npx playwright install --with-deps chromium webkit
+      # The apt step of this install sometimes stalls on a busy runner and the job then hits its timeout;
+      # give each try 5 minutes and try three times.
+      - name: Install browsers (retried)
+        run: for i in 1 2 3; do timeout 300 npx playwright install --with-deps chromium webkit && exit 0; echo "install try $i failed"; sleep 10; done; exit 1
       - name: Billing browser tests
         run: npx playwright test --config=billing/playwright.config.cjs
       - uses: actions/upload-artifact@v4
