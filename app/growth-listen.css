@@ -161,3 +161,14 @@
   .gc-groups{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px}
   .gc-group[data-gc-group="verdicts"]{grid-column:1/-1}
 }
+/* 그 사이에 한 것 (app/growth-changes-ui.js · app/growth-between-model.js): under a song pair or a verdict, closed to one
+   line. What was recorded between the two takes — plain notes, never a cause. */
+.gc-between{margin-top:8px;padding:0 12px;border-radius:14px;background:#F8F6FD;overflow-wrap:anywhere}
+.gc-between>summary{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;min-height:44px;color:#344054;font-size:13px;line-height:18px;font-weight:600;cursor:pointer}
+.gc-between>summary small{color:#667085;font-size:12px;font-weight:400;font-variant-numeric:tabular-nums}
+.gc-between>summary:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px}
+.gc-between-head,.gc-between-range,.gc-between-empty{margin:0 0 6px;color:#475467;font-size:12px;line-height:18px}
+.gc-between-range{color:#667085}
+.gc-between-empty{padding-bottom:6px;color:#344054;font-size:13px}
+.gc-between-rows{display:grid;gap:6px;margin:0;padding:0 0 12px;list-style:none}
+.gc-between-rows li{min-width:0;color:#344054;font-size:13px;line-height:18px}
