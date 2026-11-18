@@ -108,6 +108,13 @@ async function selectPhrase(page,dialog){
  await page.mouse.move(r.x+r.width*.49,r.y+r.height*.57,{steps:8});await page.mouse.up();
  await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('1개 선택');
 }
+/** The question 텍스트로 변환 asks before the handwriting goes to OpenAI: the same for 지적으로. */
+async function consent(page,answer){
+ const ask=page.getByRole('dialog',{name:'선택 영역 인식',exact:true});
+ await expect(ask).toContainText('선택한 손글씨 획만 OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.');
+ expect(await page.evaluate(()=>window.__vision.length)).toBe(0); // nothing sent before the answer
+ await ask.getByRole('button',{name:answer,exact:true}).click();await expect(ask).toHaveCount(0);
+}
 const rows=(page,kind)=>page.evaluate(k=>(window.VZ.db.scoreAnnotations||[]).filter(r=>r.kind===k),kind);
 const strokeIds=page=>page.evaluate(()=>(window.VZ.db.scoreAnnotations||[]).filter(r=>r.ownerId&&r.points).map(r=>r.id).sort());
 const form=page=>page.getByRole('dialog',{name:'지적 추가',exact:true});
@@ -131,7 +138,7 @@ test('지적으로: recognized words and measures 5–6 fill the form, 저장 ma
  await page.setViewportSize({width:390,height:844});
  // Recognition is slow: 인식 중… on the button meanwhile.
  await page.evaluate(()=>{const real=window.vzipCloudScoreVision;window.__release=null;window.vzipCloudScoreVision=async(mode,image)=>{if(!mode)return real();await new Promise(r=>{window.__release=r;});return real(mode,image);};});
- await go.click();
+ await go.click();await consent(page,'인식하기');
  await expect(bar.locator('[data-ink-to-point]')).toHaveText('인식 중…');await expect(bar.locator('[data-ink-to-point]')).toBeDisabled();
  await expect(dialog.locator('[data-ink-save-state]')).toHaveText('인식 중…');
  await page.evaluate(()=>window.__release());
@@ -160,7 +167,7 @@ test('지적으로: recognized words and measures 5–6 fill the form, 저장 ma
 test('recognition fails: the form opens with an empty field and says so; 저장하고 지우기 removes only the selected strokes',async({page})=>{
  await setup(page,{vision:'fail'});const dialog=await open(page);
  await selectPhrase(page,dialog);
- await dialog.locator('[data-ink-selection-bar]').getByRole('button',{name:'지적으로',exact:true}).click();
+ await dialog.locator('[data-ink-selection-bar]').getByRole('button',{name:'지적으로',exact:true}).click();await consent(page,'인식하기');
  const sheet=form(page);await expect(sheet).toBeVisible();
  await expect(sheet.locator('[data-pts-note]')).toContainText('손글씨를 인식하지 못했어요');
  await expect(sheet.locator('textarea[name=text]')).toHaveValue('');
@@ -180,6 +187,21 @@ test('recognition fails: the form opens with an empty field and says so; 저장�
  await undo.click();await expect(dialog.locator('[data-stroke]')).toHaveCount(2);
 });
 
+test('지적으로, 취소 on the question: nothing is sent, the form opens with the measures and an empty field',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ await selectPhrase(page,dialog);
+ await dialog.locator('[data-ink-selection-bar]').getByRole('button',{name:'지적으로',exact:true}).click();await consent(page,'취소');
+ const sheet=form(page);await expect(sheet).toBeVisible();
+ expect(await page.evaluate(()=>window.__vision.length)).toBe(0);
+ await expect(sheet.locator('[data-pts-note]')).toHaveCount(0);
+ await expect(sheet.locator('textarea[name=text]')).toHaveValue('');
+ await expect(sheet.getByLabel('시작 마디')).toHaveValue('5');await expect(sheet.getByLabel('끝 마디')).toHaveValue('6');
+ await expect(dialog.locator('[data-ink-to-point]')).toHaveText('지적으로');
+ await sheet.locator('textarea[name=text]').fill('숨 미리');await sheet.getByRole('button',{name:'저장'}).click();await expect(sheet).toHaveCount(0);
+ expect(await rows(page,'score-point')).toMatchObject([{measures:{from:5,to:6},text:'숨 미리'}]);
+ expect(await strokeIds(page)).toEqual(['stroke-a','stroke-b']);
+});
+
 test('no measure conversion and no recognition: 지적으로 opens the form with empty measures and text',async({page})=>{
  await setup(page,{conversion:false,vision:'off'});const dialog=await open(page,{conversion:false});
  await selectPhrase(page,dialog);
@@ -187,6 +209,7 @@ test('no measure conversion and no recognition: 지적으로 opens the form with
  await expect(bar.locator('[data-ink-recognize]')).toBeHidden();
  await bar.getByRole('button',{name:'지적으로',exact:true}).click();
  const sheet=form(page);await expect(sheet).toBeVisible();
+ await expect(page.getByRole('dialog',{name:'선택 영역 인식',exact:true})).toHaveCount(0); // nothing to send, nothing to ask
  expect(await page.evaluate(()=>window.__vision.length)).toBe(0);
  await expect(sheet.locator('[data-pts-note]')).toHaveCount(0);
  await expect(sheet.getByLabel('시작 마디')).toHaveValue('');await expect(sheet.getByLabel('끝 마디')).toHaveValue('');

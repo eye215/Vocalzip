@@ -716,17 +716,20 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(!rows?.length||!VZ.scorePoints?.editor)return;
   if(visionBusy||!ready||busy||pending||performance){say('악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.',true);return;}
   let text='',note='';
-  if(visionAvailable&&navigator.onLine!==false){
+  // The same question as 텍스트로 변환 (recognize) before anything is sent; 취소 opens the form to write by hand.
+  const send=visionAvailable&&navigator.onLine!==false&&await VZ.confirm('선택 영역 인식','선택한 손글씨 획만 OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.',{ok:'인식하기'});
+  if(closed)return;
+  if(send){
    visionBusy=true;visionController=new AbortController();button.dataset.busy='';saveState('인식 중…','pending');say('선택한 손글씨를 글자로 바꾸고 있어요.');paint();
    try{
     current();const image=cropHandwriting(rows).image;if(image.length>600000)throw Error('선택 영역이 너무 커요.');
     const result=await window.VzipR2.scoreVision('handwriting',image,visionController.signal);
     text=String(result?.text||'').trim();
-    note=text?(result.confidence==='low'?'손글씨 인식이 불확실해요. 글자를 확인하고 고쳐 주세요.':'손글씨를 글자로 바꿨어요. 맞는지 확인해 주세요.')+' (선택한 필기만 OpenAI API로 보냈어요)':'손글씨에서 글자를 찾지 못했어요. 직접 적어 주세요.';
+    note=text?(result.confidence==='low'?'손글씨 인식이 불확실해요. 글자를 확인하고 고쳐 주세요.':'손글씨를 글자로 바꿨어요. 맞는지 확인해 주세요.'):'손글씨에서 글자를 찾지 못했어요. 직접 적어 주세요.';
    }catch(e){if(e.name==='AbortError'||closed)return;note='손글씨를 인식하지 못했어요 ('+e.message+'). 직접 적어 주세요.';}
    finally{visionBusy=false;visionController=null;delete button.dataset.busy;if(!closed){saveState('이 기기에 저장됨','local');say('지적 내용을 확인해 주세요.');paint();}}
   }
-  else if(visionAvailable)note='인터넷에 연결되지 않아 글자 인식은 건너뛰었어요. 직접 적어 주세요.';
+  else if(visionAvailable&&navigator.onLine===false)note='인터넷에 연결되지 않아 글자 인식은 건너뛰었어요. 직접 적어 주세요.';
   if(!closed)await openPoint(rows,page,text,note);
  }
  function invalidateExport(){
