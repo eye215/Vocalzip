@@ -21,7 +21,12 @@
  * MARK_PICK_FORMS; 컷 has it by default.
  * 직접 그리기 (form 'draw'): the preset carries the symbol the user drew (art, see app/score-ink-model.js artFrom) and
  * its 크기 (size 's' | 'm' | 'l'); a tap stamps it. Drawings make the stored settings larger than they used to be,
- * so up to MAX_TEXT characters are read. */
+ * so up to MAX_TEXT characters are read.
+ * 크기 (size) of a 기호 too: a factor of the usual size (markSize). Older versions draw a 기호 at the usual size and a
+ * drawing whose size is not s | m | l at 보통 (they keep the preset; saving it there drops the factor).
+ * 투명도 (opacity, optional, 0.05–1): how see-through the marks are. Without it a highlighter preset's marks have
+ * Ink.MARK_OPACITY and a pen preset's 1, as before it could be set. Older app versions skip the field (marker() keeps
+ * only what it knows): they still show the preset, with the default 투명도, and saving it there drops the field. */
 (function(root,factory){const node=typeof module==='object'&&module.exports,api=factory(node?require('./score-ink-model.js'):root.VzipScoreInk);if(node)module.exports=api;else root.VzipScoreInkSettings=api;})(typeof window==='object'?window:globalThis,function(Ink){
 'use strict';
 const HEX=/^#[0-9a-f]{6}$/i,PREFIX='vzip_score_ink_settings_v1:',MAX_TEXT=600000;
@@ -33,8 +38,17 @@ const PALETTES={
 };
 /* 남기는 형태: [id, name, how it is placed — 'tap' 한 번 누르기, 'drag' 따라 긋기, 'two' 시작·끝 두 번 누르기]. */
 const MARK_FORMS=[['symbol','기호','tap'],['line','밑줄','drag'],['wave','물결선','drag'],['box','테두리 상자','drag'],['cover','구간 덮기','drag'],['bracket','구간 괄호','two'],['draw','직접 그리기','tap']];
-/* 크기 of a drawn symbol: [id, name]; how large each is on the page is Ink.ART_SIZES. */
+/* 크기 of a drawn symbol as it was first stored: [id, name]; how large each is on the page is Ink.ART_SIZES. Now the
+ * size is a factor of the usual one (markSize below), and these three are its steps that older versions also read. */
 const MARK_SIZES=[['s','작게'],['m','보통'],['l','크게']];
+/** 크기 of a 기호 or 직접 그리기 preset, as stored: a factor of the usual size, Ink.MARK_SIZE_MIN–MAX in steps of 0.1.
+ *  A drawing at one of the three old steps keeps its letter (s | m | l) so older versions draw it as large; a 기호 at
+ *  the usual size has none (as before it could be set). Anything unreadable is the usual size. */
+function markSize(form,size){
+ const z=Number.isFinite(size)?Math.round(Math.max(Ink.MARK_SIZE_MIN,Math.min(Ink.MARK_SIZE_MAX,size))*10)/10:Ink.ART_SCALES[size]||1;
+ if(form==='draw')return MARK_SIZES.find(([id])=>Ink.ART_SCALES[id]===z)?.[0]||z;
+ return z===1?undefined:z;
+}
 const MARK_SHAPES=[['v','브이'],['comma','쉼표'],['check','체크'],['circle','동그라미'],['dot','점'],['triangle','세모'],['star','별'],['diamond','마름모'],['text','글자']];
 const MARK_INPUTS={tap:'한 번 누르기',drag:'따라 긋기',two:'시작과 끝을 차례로 누르기',measure:'마디 선택'};
 /* 마디 선택 is offered for the forms that mark a stretch. */
@@ -69,10 +83,16 @@ function marker(raw){
    if(!count||count>MARK_TEXT_MAX||/\s/.test(text))throw Error('기호로 쓸 글자를 1~'+MARK_TEXT_MAX+'자로 적어 주세요.');
    out.text=text;
   }
+  const size=markSize('symbol',raw.size);if(size!==undefined)out.size=size;
  }
  if(raw.form==='draw'){
   if(!Ink.validArt(raw.art))throw Error('표기를 그려 주세요. 그린 것이 없으면 저장할 수 없어요.');
-  out.art={a:raw.art.a,s:raw.art.s.map(line=>line.slice())};out.size=MARK_SIZES.some(z=>z[0]===raw.size)?raw.size:'m';
+  out.art={a:raw.art.a,s:raw.art.s.map(line=>line.slice())};out.size=markSize('draw',raw.size);
+ }
+ // 투명도 (optional): kept to two decimals, and only when it is not what the marks have anyway (Ink.markOpacity).
+ if(raw.opacity!==undefined&&raw.opacity!==null){
+  if(!Number.isFinite(raw.opacity)||raw.opacity<0.05||raw.opacity>1)throw Error('투명도를 확인해 주세요.');
+  const opacity=Math.round(raw.opacity*100)/100;if(opacity!==Ink.markOpacity({type:out.type}))out.opacity=opacity;
  }
  if(raw.pick==='measure'&&MARK_PICK_FORMS.includes(raw.form))out.pick='measure';
  // A role this version does not know is left out (the preset then only draws).
@@ -81,7 +101,8 @@ function marker(raw){
 }
 /** What marks placed with this preset do: the built-in ones by what they are, a user preset by its `role`. */
 const markerRole=m=>!m?'':m.builtin||Object.prototype.hasOwnProperty.call(MARK_BUILTIN_ROLES,m.id)?MARK_BUILTIN_ROLES[m.id]||'':m.role||'';
-const sameMarker=(a,b)=>['name','color','width','type','form','shape','text','pick','size'].every(k=>a[k]===b[k])&&JSON.stringify(a.art||null)===JSON.stringify(b.art||null);
+// 투명도 and 크기 are compared as the marks would have them, so a preset that names the default is the same as one without it.
+const sameMarker=(a,b)=>['name','color','width','type','form','shape','text','pick'].every(k=>a[k]===b[k])&&Ink.markOpacity(a)===Ink.markOpacity(b)&&Ink.markSize(a)===Ink.markSize(b)&&JSON.stringify(a.art||null)===JSON.stringify(b.art||null);
 const lookOnly=({role,...look})=>look;
 function markers(stored){
  const list=MARKERS.map(m=>{
@@ -252,5 +273,5 @@ function create({storage,identity,defaultPenOnly=false,getData,change}){
  }
  return {read,write,migrate,key,movedKey};
 }
-return {create,PALETTES,defaults,ROW,ROW_PREFIX,MOVED_PREFIX,presetRows,migration,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_PICK_FORMS,MARK_SIZES,markInput,markWay,marker,markerRole};
+return {create,PALETTES,defaults,ROW,ROW_PREFIX,MOVED_PREFIX,presetRows,migration,MARKERS,MARK_FORMS,MARK_SHAPES,MARK_INPUTS,MARK_COLORS,MARK_USER_MAX,MARK_NAME_MAX,MARK_TEXT_MAX,MARK_ROLES,MARK_BUILTIN_ROLES,MARK_PICK_FORMS,MARK_SIZES,markInput,markWay,marker,markerRole,markerOpacity:Ink.markOpacity};
 });

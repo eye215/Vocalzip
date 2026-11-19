@@ -326,6 +326,13 @@ const MARK_SHAPES={
  star:Array.from({length:11},(_,i)=>{const t=-Math.PI/2+i*Math.PI/5,r=i%2?.42:1;return [r*Math.cos(t),r*Math.sin(t)];}),
  diamond:[[0,-1],[.72,0],[0,1],[-.72,0],[0,-1]]
 };
+/** How large a 기호 or 직접 그리기 preset's marks are, as a factor of the usual size (보통 = 1): its own `size` — a number
+ *  MARK_SIZE_MIN–MARK_SIZE_MAX, or 's' | 'm' | 'l' as drawn presets had before (ART_SCALES) — else 1. */
+const MARK_SIZE_MIN=.5,MARK_SIZE_MAX=2.5,ART_SCALES={s:.6,m:1,l:1.6};
+const markSize=look=>Number.isFinite(look?.size)?Math.max(MARK_SIZE_MIN,Math.min(MARK_SIZE_MAX,look.size)):ART_SCALES[look?.size]||1;
+/** How see-through the marks of a preset are: its own `opacity` (0.05–1) when it has one, else what marks have always
+ *  had — MARK_OPACITY for a highlighter preset, 1 for a pen one. Placed marks carry it, so changing it later leaves them. */
+const markOpacity=look=>Number.isFinite(look?.opacity)&&look.opacity>=0.05&&look.opacity<=1?look.opacity:look?.type==='highlighter'?MARK_OPACITY:1;
 /** What a marker preset leaves on the page, as the fields of a stroke record: tool, color, opacity, width, points
  *  (and glyph + size for typed characters). look = {form, shape, text, color, width, type}; a is where the press
  *  began (the first tap of a 구간 괄호), b where it ended (the second tap) or null for a plain tap.
@@ -333,8 +340,8 @@ const MARK_SHAPES={
  *  'line' | 'wave' | 'box' | 'cover' follow a drag from a to b, 'bracket' spans two taps. */
 function markStroke(look,a,b,aspect=1){
  const k=Number.isFinite(aspect)&&aspect>0?aspect:1,at=(x,y)=>point(a[0]+x,a[1]+y/k),pen=look.type!=='highlighter';
- const out={tool:pen?'pen':'highlighter',color:look.color,opacity:pen?1:MARK_OPACITY,width:look.width};
- const form=look.form,shape=look.shape;
+ const out={tool:pen?'pen':'highlighter',color:look.color,opacity:markOpacity(look),width:look.width};
+ const form=look.form,shape=look.shape,z=form==='symbol'?markSize(look):1,u=MARK_UNIT*z; // 크기 of a 기호
  if(form==='bracket'){
   const e=b||[a[0]+.09,a[1]],h=.023/k;
   out.points=[point(a[0],a[1]-h),point(a[0],a[1]+h),point(e[0],e[1]+h),point(e[0],e[1]-h)];
@@ -347,14 +354,14 @@ function markStroke(look,a,b,aspect=1){
  }else if(form==='line'||form==='cover'){
   out.points=[point(a[0],a[1]),b?point(b[0],b[1]):at(.07,0)];
  }else if(shape==='text'){
-  out.points=[at(0,0)];out.glyph=glyphChars(look.text).slice(0,GLYPH_CHARS).join('');out.size=GLYPH_SIZE;
+  out.points=[at(0,0)];out.glyph=glyphChars(look.text).slice(0,GLYPH_CHARS).join('');out.size=Math.round(GLYPH_SIZE*z*1e4)/1e4;
  }else if(shape==='dot'){
-  out.points=[at(0,0)];out.width=Math.max(.012,Math.min(.06,look.width*4));
+  out.points=[at(0,0)];out.width=Math.min(.06,Math.max(.012,look.width*4)*z);
  }else if(shape==='circle'){
-  out.points=Array.from({length:21},(_,i)=>{const t=i/20*Math.PI*2;return at(MARK_UNIT*Math.cos(t),MARK_UNIT*Math.sin(t));});
+  out.points=Array.from({length:21},(_,i)=>{const t=i/20*Math.PI*2;return at(u*Math.cos(t),u*Math.sin(t));});
  }else if(MARK_SHAPES[shape]){
-  out.points=MARK_SHAPES[shape].map(([x,y])=>at(x*MARK_UNIT,y*MARK_UNIT));
- }else out.points=[at(-.016,-.017),at(0,.017),at(.016,-.017)]; // 'v', the breath mark
+  out.points=MARK_SHAPES[shape].map(([x,y])=>at(x*u,y*u));
+ }else out.points=[at(-.016*z,-.017*z),at(0,.017*z),at(.016*z,-.017*z)]; // 'v', the breath mark
  return out;
 }
 /** What a 직접 그리기 preset leaves where it is tapped: the strokes of its drawing, each as the fields of a stroke
@@ -362,8 +369,8 @@ function markStroke(look,a,b,aspect=1){
  *  width, type}; at: the tap (page fractions); aspect: page height / width. */
 function markStamp(look,at,aspect=1){
  if(!validArt(look?.art))return [];
- const k=Number.isFinite(aspect)&&aspect>0?aspect:1,pen=look.type!=='highlighter',long=ART_SIZES[look.size]||ART_SIZES.m,W=look.art.a<=1?long:long/look.art.a;
- return artLines(look.art,0,0,W).map(line=>({tool:pen?'pen':'highlighter',color:look.color,opacity:pen?1:MARK_OPACITY,width:look.width,points:line.map(p=>point(at[0]+p[0],at[1]+p[1]/k))}));
+ const k=Number.isFinite(aspect)&&aspect>0?aspect:1,pen=look.type!=='highlighter',long=ART_SIZES[look.size]||Math.round(ART_SIZES.m*markSize(look)*1e4)/1e4,W=look.art.a<=1?long:long/look.art.a;
+ return artLines(look.art,0,0,W).map(line=>({tool:pen?'pen':'highlighter',color:look.color,opacity:markOpacity(look),width:look.width,points:line.map(p=>point(at[0]+p[0],at[1]+p[1]/k))}));
 }
 /** Everything a preset leaves for one placing: the strokes of a drawn symbol, or the one stroke of any other form. */
 const markShapes=(look,a,b,aspect=1)=>look?.form==='draw'?markStamp(look,a,aspect):[markStroke(look,a,b,aspect)];
@@ -485,6 +492,6 @@ function create({storage,identity,getData,change}){
 }
 return {COLLECTION,valid,same,opacity,point,hit,path,smoothPath,outlinePath,strokeShape,simplifyStroke,pressureWidth,SIMPLIFY,bounds,inRect,transform,create,MAX_POINTS,MAX_BYTES,
  markStroke,glyphLayout,noteGoalLines,markRole,MARK_ROLES,MARK_BUILTIN_ROLES,validMeasures,grouped,freehand,
- simplifyLine,artFrom,validArt,artLines,markStamp,markShapes,ART_STROKES,ART_POINTS,ART_GRID,ART_SIZES,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
+ simplifyLine,artFrom,validArt,artLines,markStamp,markShapes,markOpacity,markSize,MARK_SIZE_MIN,MARK_SIZE_MAX,ART_SCALES,ART_STROKES,ART_POINTS,ART_GRID,ART_SIZES,MARK_UNIT,MARK_OPACITY,GLYPH_SIZE,GLYPH_MIN,GLYPH_MAX,GLYPH_CHARS,
  isNote,noteKey,noteAt,linked,noteRect,noteLines,noteLayout,NOTE_TEXT_MAX,NOTE_MIN,NOTE_SIZE,NOTE_SMALLEST,NOTE_FONT,NOTE_LINE,NOTE_PAD,NOTE_RADIUS,NOTE_INK,NOTE_FAMILY,NOTE_COLORS};
 });

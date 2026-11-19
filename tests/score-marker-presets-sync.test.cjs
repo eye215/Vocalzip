@@ -135,3 +135,24 @@ test('ten presets with drawings stay small in the synced record',()=>{
  assert.ok(one<4000,'largest '+one);assert.ok(typical<1500,'usual '+typical);assert.ok(bytes<20000,'all '+bytes);
  assert.ok(rows(a)[0].look.art.s.flat().every(Number.isInteger)); // whole numbers on a 0–1000 grid
 });
+
+test('투명도 travels with the preset row; a field this version does not know does not lose the preset',()=>{
+ const a=device('ipad'),b=device('iphone');
+ a.api().write('marker',mine('m-1',{type:'highlighter',form:'cover',opacity:.3}));a.api().write('marker',{id:'cut',opacity:.8});pull(b,a);
+ assert.equal(rows(b).find(r=>r.preset==='m-1').look.opacity,.3);assert.deepEqual(rows(b).find(r=>r.preset==='cut').look.opacity,.8);
+ const list=b.api().read().markers;assert.equal(list.find(m=>m.id==='m-1').opacity,.3);assert.deepEqual([list[2].opacity,list[2].changed],[.8,true]);
+ // The device copy (what older versions read) has it too.
+ assert.equal(a.local().read().markers.find(m=>m.id==='m-1').opacity,.3);
+ b.api().write('marker',{id:'cut'},{reset:true});pull(a,b);assert.deepEqual([a.api().read().markers[2].opacity,a.api().read().markers[2].changed],[undefined,false]);
+ // A row from a newer version, with a field unknown here: the preset still reads, without that field.
+ const row=a.db.scoreAnnotations.find(r=>r.preset==='m-1');row.look={...row.look,glow:2};
+ assert.deepEqual(a.api().read().markers.find(m=>m.id==='m-1'),{name:'강세',color:'#b42318',width:.005,type:'highlighter',form:'cover',opacity:.3,id:'m-1',builtin:false});
+});
+
+test('크기 travels with the preset row, for a user 기호 and a built-in one',()=>{
+ const a=device('ipad'),b=device('iphone');
+ a.api().write('marker',mine('m-1',{size:2}));a.api().write('marker',{id:'breath',size:.5});pull(b,a);
+ assert.equal(rows(b).find(r=>r.preset==='m-1').look.size,2);assert.equal(rows(b).find(r=>r.preset==='breath').look.size,.5);
+ const list=b.api().read().markers;assert.equal(list.find(m=>m.id==='m-1').size,2);assert.deepEqual([list[0].size,list[0].changed],[.5,true]);
+ assert.equal(a.local().read().markers.find(m=>m.id==='m-1').size,2);
+});

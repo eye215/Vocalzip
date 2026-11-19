@@ -796,7 +796,7 @@ test('직접 그리기: the pad in 표기 편집 — strokes, 되돌리기, 모�
  await setup(page,{sync:EVEN});const dialog=await open(page);
  await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
  const sheet=editorOf(page);
- await expect(sheet.locator('[data-marker-draw]')).toBeHidden();await expect(sheet.locator('[data-marker-size]')).toBeHidden();
+ await expect(sheet.locator('[data-marker-draw]')).toBeHidden();await expect(sheet.locator('[data-marker-size]')).toBeVisible(); // 크기: a 기호 has it too
  await expect(sheet.locator('[name=form]')).toHaveCount(7);await expect(sheet.locator('label:has([name=form][value=draw])')).toHaveText('직접 그리기');
  await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();
  // The pad: a square of at least 240px with a faint staff, nothing on it yet; shapes of 기호 and 찍는 방식 are not offered.
@@ -828,8 +828,8 @@ test('직접 그리기: the pad in 표기 편집 — strokes, 되돌리기, 모�
  });
  await expect(padStrokes(sheet)).toHaveCount(2);
  // 크기 and colour; saved.
- await expect(sheet.locator('[data-marker-size] label')).toHaveText(['작게','보통','크게']);await expect(sheet.locator('[name=size][value=m]')).toBeChecked();
- await sheet.locator('[name=size][value=l]').check();await sheet.locator('[name=color][value="#b42318"]').check();
+ await expect(sheet.locator('[name=size]')).toHaveValue('100');await expect(sheet.locator('[data-marker-size-label]')).toHaveText('100%');
+ await sheet.locator('[name=size]').fill('160');await expect(sheet.locator('[data-marker-size-label]')).toHaveText('160%');await sheet.locator('[name=color][value="#b42318"]').check();
  await expect(padStrokes(sheet).first()).toHaveAttribute('stroke','#b42318');
  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);await expect(page.locator('.toast')).toHaveText('표기를 추가했어요.');
  const [preset]=await userPresets(page);
@@ -847,7 +847,7 @@ test('a drawn mark is stamped where it is tapped, at its 크기, as ONE mark: on
  await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
  const sheet=editorOf(page);
  await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();await drawT(page,sheet);
- await sheet.locator('[name=size][value=l]').check();await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
+ await sheet.locator('[name=size]').fill('160');await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
  const [preset]=await userPresets(page);
  // A tap above measure 2: two strokes, linked, each an ordinary pen stroke that says what it is.
  await tap(page,dialog,120,60);
@@ -949,7 +949,7 @@ test('필기 PDF 만들기 draws a stamped mark: every stroke of the drawing, in
  await dialog.locator('[data-ink-marker-mode]').click();await dialog.locator('[data-ink-marker-add]').click();
  const sheet=editorOf(page);
  await sheet.locator('[name=name]').fill('내 기호');await sheet.locator('[name=form][value=draw]').check();await drawT(page,sheet);
- await sheet.locator('[name=size][value=l]').check();await sheet.locator('[name=color][value="#b42318"]').check();await sheet.locator('[name=width]').fill('8');
+ await sheet.locator('[name=size]').fill('160');await sheet.locator('[name=color][value="#b42318"]').check();await sheet.locator('[name=width]').fill('8');
  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);
  await tap(page,dialog,150,300);await placed(page,2);
  await more(dialog);await dialog.getByRole('button',{name:'색상·굵기·투명도 설정',exact:true}).click();
@@ -988,7 +988,7 @@ test('320px: the drawing pad, its tools and the 크기 choice stay inside the sc
  await drawT(page,sheet);await expect(padStrokes(sheet)).toHaveCount(2);
  for(const b of await sheet.locator('.ink-marker-pad-tools button').all())expect((await inside(b)).height).toBeGreaterThanOrEqual(44);
  await sheet.locator('[data-marker-size]').scrollIntoViewIfNeeded();
- for(const l of await sheet.locator('[data-marker-size] label').all())expect((await inside(l)).height).toBeGreaterThanOrEqual(44);
+ expect((await inside(sheet.locator('[name=size]'))).height).toBeGreaterThanOrEqual(44);
  await inside(sheet.locator('[data-marker-pad-note]'));
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&[...document.querySelectorAll('.sheet')].every(s=>s.scrollWidth<=s.clientWidth+1))).toBe(true);
  await sheet.getByRole('button',{name:'저장',exact:true}).click();await expect(sheet).toHaveCount(0);

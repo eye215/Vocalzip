@@ -405,3 +405,73 @@ test('tablet 1024×768: the palette is one row that keeps the page size, and the
  await dialog.locator('[data-ink-prev]').click();await expect(dialog.locator('[data-ink-page]')).toHaveText('1 / 2쪽');
  await expect(dialog.locator('[data-ink-spread] path[data-spread-stroke]')).toHaveCount(1);
 });
+
+/* 투명도 and 크기 of a preset (app/score-ink-settings.js marker, Ink.markOpacity / markSize). The 투명도 slider reads as
+ * in 색상·굵기·투명도: 0% is solid, so 70% leaves an opacity of .3. */
+const opacityOf=(dialog,id)=>dialog.locator('[data-stroke="'+id+'"]').first().getAttribute('opacity');
+test('투명도 of a 표기: a highlighter preset at 70% leaves marks of opacity .3, kept after a reload; marks already placed keep theirs',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ // A 컷 placed before any change: the opacity marks have always had.
+ await pick(dialog,'컷');await drag(page,dialog,[.2,.3],[.6,.3]);await expect.poll(async()=>(await records(page)).length).toBe(1);
+ const [cutOld]=await records(page);expect(cutOld).toMatchObject({mark:'cut',tool:'highlighter',opacity:.25});
+ let sheet=await add(page,dialog);await fill(sheet,{name:'형광 별',shape:'star'});
+ const slider=sheet.getByLabel('표기 투명도',{exact:true}),label=sheet.locator('[data-marker-opacity-label]');
+ await expect(slider).toHaveValue('0');await expect(label).toHaveText('0%'); // a pen: solid
+ await fill(sheet,{type:'highlighter'});await expect(slider).toHaveValue('75');await expect(label).toHaveText('75%'); // a highlighter's usual
+ expect((await slider.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await slider.fill('70');await expect(label).toHaveText('70%');
+ await expect(sheet.locator('[data-marker-preview] path[stroke]')).toHaveAttribute('opacity','0.3'); // the preview shows it at once
+ // Picking the type again does not undo a 투명도 chosen by hand.
+ await fill(sheet,{type:'pen'});await fill(sheet,{type:'highlighter'});await expect(slider).toHaveValue('70');
+ await save(page);await expect(editor(page)).toHaveCount(0);
+ const id=(await stored(page)).user[0].id;expect((await stored(page)).user[0]).toMatchObject({type:'highlighter',opacity:.3});
+ await click(page,dialog,[.5,.6]);await expect.poll(async()=>(await records(page)).length).toBe(2);
+ const star=(await records(page)).find(s=>s.mark===id);expect(star).toMatchObject({tool:'highlighter',opacity:.3});
+ await expect.poll(()=>opacityOf(dialog,star.id)).toBe('0.3');
+ // The 컷 changed to 20% (opacity .8): 되돌리기 is offered; the 컷 already placed stays as it was.
+ sheet=await edit(page,dialog,'컷');await expect(sheet.getByLabel('표기 투명도',{exact:true})).toHaveValue('75');
+ await expect(sheet.getByRole('button',{name:'기본값으로 되돌리기',exact:true})).toBeDisabled();
+ await sheet.getByLabel('표기 투명도',{exact:true}).fill('20');await save(page);await expect(editor(page)).toHaveCount(0);
+ expect((await stored(page)).builtin.cut).toMatchObject({opacity:.8});
+ await pick(dialog,'컷');await drag(page,dialog,[.2,.8],[.6,.8]);await expect.poll(async()=>(await records(page)).length).toBe(3);
+ let rows=await records(page);expect(rows.find(s=>s.id===cutOld.id)).toEqual(cutOld);expect(rows.at(-1)).toMatchObject({mark:'cut',opacity:.8});
+ // A reload keeps the presets and every mark as it was.
+ await page.reload();const again=await open(page);
+ expect(await records(page)).toEqual(rows);await expect.poll(()=>opacityOf(again,star.id)).toBe('0.3');await expect.poll(()=>opacityOf(again,cutOld.id)).toBe('0.25');
+ sheet=await edit(page,again,'형광 별');await expect(sheet.getByLabel('표기 투명도',{exact:true})).toHaveValue('70');
+ await editor(page).getByRole('button',{name:'돌아가기',exact:true}).click();await expect(editor(page)).toHaveCount(0);
+ sheet=await edit(page,again,'컷');await expect(sheet.getByLabel('표기 투명도',{exact:true})).toHaveValue('20');
+ const reset=sheet.getByRole('button',{name:'기본값으로 되돌리기',exact:true});await expect(reset).toBeEnabled();
+ await reset.click();await page.locator('.sheet-alert [data-ok]').click();await expect(editor(page)).toHaveCount(0);
+ expect((await stored(page)).builtin.cut).toBeUndefined();
+ sheet=await edit(page,again,'컷');await expect(sheet.getByLabel('표기 투명도',{exact:true})).toHaveValue('75');
+ expect(await records(page)).toEqual(rows); // marks are never rewritten
+});
+
+test('크기 of a 기호: a star at 200% is drawn twice as large; one placed star can be resized afterwards by selection',async({page})=>{
+ await setup(page);const dialog=await open(page);
+ const span=s=>{const xs=s.points.map(p=>p[0]);return Math.max(...xs)-Math.min(...xs);};
+ // The usual star first (no 크기 on the preset: as before).
+ let sheet=await add(page,dialog);await fill(sheet,{name:'별',shape:'star'});
+ const size=sheet.getByLabel('표기 크기',{exact:true});await expect(size).toHaveValue('100');await expect(sheet.locator('[data-marker-size-label]')).toHaveText('100%');
+ expect((await size.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ const previewWidth=async()=>(await sheet.locator('[data-marker-preview] path[stroke]').boundingBox()).width;
+ const small=await previewWidth();
+ await save(page);await click(page,dialog,[.3,.3]);await expect.poll(async()=>(await records(page)).length).toBe(1);
+ const [usual]=await records(page);expect((await stored(page)).user[0].size).toBeUndefined();
+ // The same star at 200%: the preview and the mark are twice as large.
+ sheet=await edit(page,dialog,'별');await sheet.getByLabel('표기 크기',{exact:true}).fill('200');await expect(sheet.locator('[data-marker-size-label]')).toHaveText('200%');
+ await expect.poll(async()=>(await previewWidth())/small).toBeGreaterThan(1.8);
+ await save(page);await expect(editor(page)).toHaveCount(0);expect((await stored(page)).user[0].size).toBe(2);
+ await pick(dialog,'별');await click(page,dialog,[.6,.6]);await expect.poll(async()=>(await records(page)).length).toBe(2);
+ let [first,big]=await records(page);expect(first).toEqual(usual);expect(span(big)/span(usual)).toBeCloseTo(2,1);
+ // 글자 gets 크기 too.
+ sheet=await add(page,dialog);await fill(sheet,{name:'셈',shape:'text',text:'f'});await sheet.getByLabel('표기 크기',{exact:true}).fill('150');await save(page);
+ await click(page,dialog,[.3,.8]);await expect.poll(async()=>(await records(page)).length).toBe(3);expect((await records(page))[2]).toMatchObject({glyph:'f',size:.06});
+ // One placed star, selected alone and made larger: only it grows.
+ await dialog.getByRole('button',{name:'선택',exact:true}).click();
+ await click(page,dialog,big.points[0]);await expect(dialog.locator('[data-ink-selection-count]')).toHaveText('1개 선택');
+ await dialog.getByRole('button',{name:'선택 필기 확대',exact:true}).click();
+ await expect.poll(async()=>{const rows=await records(page),star=rows.find(s=>s.mark===big.mark&&s.id!==usual.id&&!s.glyph);return star?span(star)/span(big):0;}).toBeCloseTo(1.1,1);
+ const rows=await records(page);expect(rows.find(s=>s.id===usual.id)).toEqual(usual);expect(rows).toHaveLength(3);
+});
