@@ -221,7 +221,8 @@ test('a second run skips notes that are points already: from memory without send
  await expect(page.locator('[data-bulk-save]')).toHaveText('선택한 0개 지적으로 저장');await expect(page.locator('[data-bulk-save]')).toBeDisabled();
  await page.keyboard.press('Escape');await expect(review(page)).toHaveCount(0);
  // After a reload the notes are read again and the duplicates are still skipped.
- await page.reload();await stub(page);dialog=await open(page,count);
+ // WebKit treats goto() to the very same URL as a reload, which would drop the stub: leave the song page first.
+ await page.reload();await page.evaluate(()=>{location.hash='#/';});await stub(page);dialog=await open(page,count);
  await bulk(page,dialog);await consent(page,'인식하기');
  await expect(review(page).locator('[data-bulk-status]')).toContainText('손글씨 3곳은 이미 지적으로 있어 건너뛰었어요.');
  await expect(notes(page)).toHaveCount(1);
