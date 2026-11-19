@@ -137,9 +137,10 @@ function statusText(c) {
 /**
  * Every verdict. verdicts: VzipListenVerdict.list(db). → {pairs (per verdict, same order), byVerdict (Map id → pair),
  * usable, total, ready, measures: [{id, name, agree, disagree, none, held, text, often, tag}], top, summary, need}.
+ * period {from, to} (optional): only the verdicts of that period (app/growth-changes-model.js verdictInPeriod).
  */
-function build({verdicts = [], takeOf = () => null, reference = () => null} = {}) {
-  const pairs = verdicts.map(v => pair(v, {takeOf, reference}));
+function build({verdicts = [], takeOf = () => null, reference = () => null, period = null} = {}) {
+  const pairs = verdicts.filter(v => C.verdictInPeriod(v, period)).map(v => pair(v, {takeOf, reference}));
   const usable = pairs.filter(p => p.usable), ready = usable.length >= MIN_VERDICTS;
   const measures = MEASURES.map(m => {
     const rows = usable.map(p => p.rows.find(r => r.id === m.id)).filter(Boolean);
