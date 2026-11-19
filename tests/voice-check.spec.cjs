@@ -1,5 +1,6 @@
 // 매일 보이스 체크: injected 30-second recording (synthesized steady check), saved as a training recording with its tag,
-// analysed on the device, kept out of song growth; home card hides after today's check; trend renders at 320px.
+// analysed on the device, kept out of song growth; the 오늘 › 연습하기 row says today's state (오늘 아직 → 오늘 완료);
+// trend renders at 320px.
 const {test,expect}=require('@playwright/test');
 require('./legacy-session-mode.cjs')(test,{approvedHome:true});
 const {boot}=require('./helpers/r2-fixture.cjs');
@@ -46,13 +47,16 @@ async function runCheck(page,{type='테너',rating=4,tag='피곤',shots=false}={
  await expect(page.locator('.vc-done .vc-result')).toBeVisible({timeout:30000});
 }
 
-test('daily check: home card → 30-second check saved as training with its tag, analysed, home card gone',async({page})=>{
+test('daily check: 오늘 › 연습하기 row → 30-second check saved as training with its tag, analysed, the row says 오늘 완료',async({page})=>{
  test.setTimeout(90000);
  await boot(page);
  await fakeMic(page);
  const card=page.locator('.vz-student-home [data-row="voice-check"]');
  await expect(card).toBeVisible();
- await expect(card).toContainText('오늘 보이스 체크');
+ // One row of the 연습하기 section (not a card of its own any more), with today's state.
+ await expect(page.locator('.vz-student-home [data-home-practice] [data-row="voice-check"]')).toHaveCount(1);
+ await expect(page.locator('.vz-student-home [data-voice-check-card]')).toHaveCount(0);
+ await expect(card).toContainText('매일 보이스 체크');await expect(card).toContainText('오늘 아직 · 30초');
  expect((await card.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await page.screenshot({path:test.info().outputPath('home.png')});
  await card.click();
@@ -83,12 +87,21 @@ test('daily check: home card → 30-second check saved as training with its tag,
  expect(saved.category).toBe('training');expect(saved.songSearch).toBe(false);expect(saved.activity).toEqual([]);
  expect(saved.entries).toEqual([{training:true,songId:''}]);
  expect(saved.prefs).toMatchObject({voiceType:'tenor',refNote:57,highNote:66,tones:true});
- // 성장 entry says today's check is done; the home card is gone.
+ // 성장 no longer has an entry to the check (지난 흐름 is for results); the bottom menu stayed on 오늘 during the check.
+ await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current','page');
  await page.evaluate(()=>window.VZ.nav('#/growth-flow?period=all'));
- await expect(page.locator('.vc-entry')).toContainText('오늘 완료');
+ await expect(page.locator('[data-overall-body]')).toBeVisible();
+ await expect(page.locator('.vc-entry')).toHaveCount(0);
+ // 오늘: the row stays and says today's check is done; now it opens the page with the result and the last 30 days.
  await page.evaluate(()=>window.VZ.nav('#/home'));
  await expect(page.locator('.vz-student-home .vz-today-line')).toBeVisible();
- await expect(page.locator('.vz-student-home [data-row="voice-check"]')).toHaveCount(0);
+ await expect(card).toHaveCount(1);await expect(card).toContainText('오늘 완료 · 연속 1일');
+ await card.click();
+ await expect(page).toHaveURL(/#\/voice-check$/);
+ await expect(page.locator('.vc-today-state')).toHaveText('완료');
+ await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current','page');
+ await page.locator('[data-back]').click();
+ await expect(page).toHaveURL(/#\/home$/);
  expect(page.__errors).toEqual([]);
 });
 

@@ -174,15 +174,24 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-guided-copy strong{color:var(--vz-color-ink);font-size:13px;line-height:19px;}
 #vocalzip-refined-preview .vz-guided-copy small{color:var(--vz-color-ink-muted);font-size:11px;line-height:17px;margin-top:2px;}
 #vocalzip-refined-preview .vz-guided-item button{flex:none;min-height:44px;border:0;border-radius:12px;padding:0 10px;background:var(--vz-color-selected-bg,#eee5ff);color:var(--vz-color-accent);font-size:12px;font-weight:700;cursor:pointer;}
-#vocalzip-refined-preview .vz-pset-entry{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:0 12px 0 16px;border:0;border-radius:16px;background:var(--vz-color-accent-soft,#F3ECFF);color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
-#vocalzip-refined-preview .vz-pset-entry[hidden]{display:none;}
-#vocalzip-refined-preview .vz-pset-entry:active{background:#EDE1FF;}
-#vocalzip-refined-preview .vz-pset-entry:focus-visible{outline:2px solid #DCC4FF;outline-offset:0;}
-#vocalzip-refined-preview .vz-pset-entry>.vz-ui-icon:first-child{flex:none;width:20px;font-size:20px;color:var(--vz-color-accent,#7A32F5);}
-#vocalzip-refined-preview .vz-pset-copy{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;}
-#vocalzip-refined-preview .vz-pset-copy strong{flex:none;color:var(--vz-color-accent,#7A32F5);font-size:14px;line-height:20px;font-weight:600;}
-#vocalzip-refined-preview .vz-pset-copy small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vz-color-ink-secondary,#475467);font-size:13px;line-height:18px;font-variant-numeric:tabular-nums;}
-#vocalzip-refined-preview .vz-pset-chevron{flex:none;font-size:16px;color:var(--vz-color-accent,#7A32F5);}
+/* 연습하기: one compact card of the things you do. Rows follow the Home summary rows recipe (white R20, 20px accent
+ * icon, 14/20 name + state, chevron); each row is a 48px target. */
+#vocalzip-refined-preview .vz-practice{display:block;padding:14px 12px 6px 16px;border-radius:20px;background:#fff;scroll-margin-top:12px;}
+#vocalzip-refined-preview .vz-practice[hidden]{display:none;}
+#vocalzip-refined-preview .vz-practice-title{margin:0 0 4px;font-size:15px;line-height:21px;font-weight:600;color:var(--vz-color-ink,#101828);outline:none;}
+#vocalzip-refined-preview .vz-practice-row{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;margin:0;padding:0;border:0;background:none;color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
+#vocalzip-refined-preview .vz-practice-row+.vz-practice-row{border-top:1px solid #F2EFF7;}
+#vocalzip-refined-preview .vz-practice-row>.vz-ui-icon:first-child{flex:none;width:20px;font-size:20px;color:var(--vz-color-accent,#7A32F5);}
+#vocalzip-refined-preview .vz-practice-row>.vz-ui-icon:last-child{flex:none;font-size:15px;color:#98A2B3;}
+#vocalzip-refined-preview .vz-practice-copy{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;}
+#vocalzip-refined-preview .vz-practice-copy strong{flex:none;font-size:14px;line-height:20px;font-weight:600;}
+#vocalzip-refined-preview .vz-practice-copy small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:20px;color:var(--vz-color-ink-secondary,#475467);font-variant-numeric:tabular-nums;}
+#vocalzip-refined-preview .vz-practice-row[data-tone="done"] small{color:var(--vz-color-success,#23855C);}
+#vocalzip-refined-preview .vz-practice-row[data-tone="live"] small{color:var(--vz-color-accent,#7A32F5);font-weight:600;}
+#vocalzip-refined-preview .vz-practice-row:active{background:#F7F5FB;}
+#vocalzip-refined-preview .vz-practice-row:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px;}
+#vocalzip-refined-preview .vz-practice.is-shown{box-shadow:0 0 0 2px #DCC4FF;}
+@media(max-width:355px){#vocalzip-refined-preview .vz-practice-copy{flex-direction:column;align-items:flex-start;gap:0;padding:6px 0;}#vocalzip-refined-preview .vz-practice-copy small{max-width:100%;}}
 @media(max-width:355px){#vocalzip-refined-preview .vz-event h2{line-height:1.45454545;}#vocalzip-refined-preview .vz-card h2{line-height:1.625;}}
 /* Wide screens (after the rules above so it wins): two columns. */
 #vocalzip-refined-preview .vz-col{display:contents;}
@@ -210,6 +219,12 @@ const adaptations=String.raw`
  #vocalzip-refined-preview .vz-summary-copy strong,#vocalzip-refined-preview .vz-summary-value{font-size:16px;line-height:24px;}
  #vocalzip-refined-preview .vz-summary-badge{font-size:15px;line-height:22px;}
  #vocalzip-refined-preview .vz-summary-row>.vz-ui-icon:first-child{width:24px;font-size:24px;}
+ #vocalzip-refined-preview .vz-col>.vz-practice{padding:20px 20px 12px 24px;}
+ #vocalzip-refined-preview .vz-practice-title{margin-bottom:6px;font-size:20px;line-height:28px;}
+ #vocalzip-refined-preview .vz-practice-row{min-height:60px;gap:14px;}
+ #vocalzip-refined-preview .vz-practice-copy strong{font-size:16px;line-height:24px;}
+ #vocalzip-refined-preview .vz-practice-copy small{font-size:15px;line-height:22px;}
+ #vocalzip-refined-preview .vz-practice-row>.vz-ui-icon:first-child{width:24px;font-size:24px;}
  #vocalzip-refined-preview .vz-recent{margin-top:20px;}
  #vocalzip-refined-preview .vz-recent-heading{margin-bottom:10px;font-size:18px;line-height:26px;}
  #vocalzip-refined-preview .vz-recent-pills{flex-wrap:wrap;gap:10px;overflow:visible;}
@@ -280,24 +295,51 @@ export async function createFloatingHome(opts={}){
   action(now,item.label||item.title||"지금 할 것",item.action);
  };
  host.updateNow(opts.now);
- /* 오늘 연습 세트 (app/practice-set.js): one compact row under 지금 할 것 that starts or resumes today's guided set. */
- const practiceSet=el("button",null,"vz-pset-entry");practiceSet.type="button";now.after(practiceSet);
- host.updatePracticeSet=item=>{
-  practiceSet.hidden=!item;if(!item)return;
-  practiceSet.dataset.state=item.state||"new";practiceSet.setAttribute("aria-label",item.label||item.title||"오늘 연습 시작");
-  const icon=el("i","","vz-ui-icon");icon.setAttribute("aria-hidden","true");icon.textContent="\ue3d0";
-  const copy=el("span",null,"vz-pset-copy");copy.append(el("strong",item.title||"오늘 연습 시작"),el("small",item.line||""));
-  const chevron=el("i","\ue13a","vz-ui-icon vz-pset-chevron");chevron.setAttribute("aria-hidden","true");
-  practiceSet.replaceChildren(icon,copy,chevron);practiceSet.onclick=()=>opts.onPracticeSet?.();
+ /* 연습하기 (성장 개편 안 B, phase 4): ONE compact card under 지금 할 것 with the things you do — 오늘 연습 세트, 매일
+  * 보이스 체크, 노래 연습실, 보컬 트레이닝. A row: icon · name · state ("오늘 아직 · 연속 3일") · chevron. It takes the place
+  * of the single 연습 세트 row and the separate 보이스 체크 card, so nothing is shown twice. The rows come from the app
+  * (design-system/student-home-app.js): [{key, icon, title, state, tone, label, action}]. */
+ const practice=el("section",null,"vz-card vz-practice");practice.dataset.homePractice="";practice.setAttribute("aria-labelledby","vz-practice-title");
+ const practiceTitle=el("h2","연습하기","vz-practice-title");practiceTitle.id="vz-practice-title";practiceTitle.tabIndex=-1;
+ const practiceList=el("div",null,"vz-practice-list");practice.append(practiceTitle,practiceList);
+ host.updatePractice=rows=>{
+  const list=(Array.isArray(rows)?rows:[]).filter(r=>r&&r.title);practice.hidden=!list.length;
+  // Rows are kept and updated in place (same key), so a row under a finger or holding the focus is never replaced.
+  const old=new Map([...practiceList.children].map(b=>[b.dataset.row,b]));
+  const next=list.map(row=>{
+   let button=old.get(row.key);
+   if(!button){
+    button=el("button",null,"vz-practice-row");button.type="button";button.dataset.row=row.key;
+    const icon=el("i","","vz-ui-icon");icon.setAttribute("aria-hidden","true");
+    const copy=el("span",null,"vz-practice-copy");copy.append(el("strong"),el("small"));
+    const chevron=el("i","\ue13a","vz-ui-icon");chevron.setAttribute("aria-hidden","true");
+    button.append(icon,copy,chevron);
+   }
+   const [icon,copy]=button.children,[name,state]=copy.children;
+   if(icon.textContent!==(row.icon||""))icon.textContent=row.icon||"";
+   if(name.textContent!==row.title)name.textContent=row.title;
+   if(state.textContent!==(row.state||""))state.textContent=row.state||"";
+   button.dataset.tone=row.tone||"";button.setAttribute("aria-label",row.label||[row.title,row.state].filter(Boolean).join(", "));
+   button.onclick=()=>row.action?.();
+   return button;
+  });
+  if(next.length!==practiceList.childElementCount||next.some((b,i)=>practiceList.children[i]!==b))practiceList.replaceChildren(...next);
  };
- host.updatePracticeSet(opts.practiceSet);
+ host.updatePractice(opts.practice);
+ /** Bring 연습하기 into view (the former 보컬 트레이닝 addresses and "연습은 오늘 탭에서 해요" lead here). */
+ host.showPractice=()=>{
+  if(practice.hidden)return false;
+  practice.scrollIntoView({block:"start"});practiceTitle.focus({preventScroll:true});
+  practice.classList.add("is-shown");setTimeout(()=>practice.classList.remove("is-shown"),1600);
+  return true;
+ };
  const summary=el("section",null,"vz-card vz-summary");summary.setAttribute("aria-label","요약");
  const recentWrap=el("section",null,"vz-recent");recentWrap.setAttribute("aria-label","최근 곡");
  q(".vz-goals").after(summary,recentWrap);
- // Two columns on wide screens (tablet landscape, desktop): 지금 할 것 + 오늘의 목표 | 요약 + 최근 곡. On phones the
+ // Two columns on wide screens (tablet landscape, desktop): 지금 할 것 + 연습하기 + 오늘의 목표 | 요약 + 최근 곡. On phones the
  // columns are display:contents, so the order and spacing stay exactly as before.
  const mainColumn=el("div",null,"vz-col vz-col-main"),sideColumn=el("div",null,"vz-col vz-col-side");
- section.before(mainColumn);mainColumn.append(section,q(".vz-goals"));mainColumn.after(sideColumn);sideColumn.append(summary,weekCard,recentWrap);
+ section.before(mainColumn);mainColumn.append(section,practice,q(".vz-goals"));mainColumn.after(sideColumn);sideColumn.append(summary,weekCard,recentWrap);
  const glyph=g=>{const i=el("i",g,"vz-ui-icon");i.setAttribute("aria-hidden","true");return i;};
  let summaryRows=Array.isArray(opts.summary)?opts.summary:[],weekRow=null;
  /** One line per row: icon · label · value · trailing badge · chevron. A row without an action is not a button. */
@@ -425,7 +467,7 @@ export async function createFloatingHome(opts={}){
  const list=q(".vz-goal-list"),prototype=list.firstElementChild.cloneNode(true),items=(opts.goals||[]).map(g=>({...g,completed:Boolean(g.completed)}));list.replaceChildren();list.dataset.many=String(items.length>6);
  if(items.length>6){list.tabIndex=0;list.setAttribute("role","region");list.setAttribute("aria-label","오늘의 목표 목록, 내부 스크롤");}
  const error=el("p","","vz-save-error");error.setAttribute("role","status");error.setAttribute("aria-live","polite");list.after(error);
- const guided=el("div",null,"vz-guided-recs");guided.hidden=true;guided.setAttribute("aria-label","추천 연습");error.after(guided);
+ const guided=el("div",null,"vz-guided-recs");guided.hidden=true;guided.setAttribute("aria-label","다음 연습");error.after(guided);
  host.updateRecommendations=rows=>{
   const seen=new Set([...(opts.goals||[]).map(g=>String(g.title||"").trim()),String(now.querySelector("h2")?.textContent||"").trim()].filter(Boolean));
   guided.replaceChildren();const items=(rows||[]).filter(r=>!seen.has(String(r.title||"").trim())).slice(0,1);guided.hidden=!items.length;if(!items.length)return;

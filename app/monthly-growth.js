@@ -84,7 +84,7 @@ function prescriptions(rows){
  const judged=rows.filter(r=>r.d.judged&&r.d.practice);
  const ranked=judged.filter(r=>r.c?.state==='worse').concat(judged.filter(r=>r.c&&r.c.state!=='worse')).concat(judged.filter(r=>!r.c&&r.current.value!=null));
  const chosen=ranked.slice(0,3);
- return '<section class="card growth-section"><h2>추천 연습</h2>'+(chosen.length?'<p class="small muted">실측 변화에 기반한 규칙형 추천입니다. AI 청취 진단이나 의학적 판단이 아니에요.</p>'+chosen.map((r,i)=>'<div class="growth-task"><span class="growth-task-number">'+(i+1)+'</span><div><strong>'+e(r.d.title)+'</strong><p>'+e(r.d.practice)+'</p><p class="small muted">권장 '+r.d.minutes+'분 · '+(r.c?.state==='worse'?'전월 대비 악화된 지표':r.c?'유지·강화':'비교 데이터 부족')+'</p><button type="button" class="btn sm ghost" data-growth-goal="'+r.d.id+'">오늘의 목표에 추가</button></div></div>').join('')+'<a class="btn block" href="#/practice-room">노래 연습실에서 연습하기</a>':'<p>분석된 녹음이 쌓이면 우선 연습 과제를 제안할게요.</p>')+'</section>';
+ return '<section class="card growth-section"><h2>다음 연습</h2>'+(chosen.length?'<p class="small muted">실측 변화에 기반해 규칙으로 고른 연습이에요. AI 청취 진단이나 의학적 판단이 아니에요.</p>'+chosen.map((r,i)=>'<div class="growth-task"><span class="growth-task-number">'+(i+1)+'</span><div><strong>'+e(r.d.title)+'</strong><p>'+e(r.d.practice)+'</p><p class="small muted">권장 '+r.d.minutes+'분 · '+(r.c?.state==='worse'?'전월 대비 악화된 지표':r.c?'유지·강화':'비교 데이터 부족')+'</p><button type="button" class="btn sm ghost" data-growth-goal="'+r.d.id+'">오늘의 목표에 추가</button></div></div>').join('')+'<a class="btn block" href="#/practice-room">노래 연습실에서 연습하기</a>':'<p>분석된 녹음이 쌓이면 우선 연습 과제를 제안할게요.</p>')+'</section>';
 }
 
 const previousMonth = k => { const [y,m]=k.split('-').map(Number);return (m===1?y-1:y)+'-'+String(m===1?12:m-1).padStart(2,'0'); };
@@ -259,7 +259,7 @@ async function mount(host){
   const overallUi=window.VzipOverallGrowthUI;
   // 전체 음역 흐름 (app/growth-range-ui.js): its own selection of the whole list (곡·보이스 체크·트레이닝·레슨 녹음).
   const rangeUi=window.VzipGrowthRangeUI;
-  const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>'+(V.voiceCheck?.entryHtml?.()||'');
+  const pageHead='<header class="growth-page-header"><div><p class="growth-eyebrow">VOCAL.zip · GROWTH</p><h2>보컬 성장</h2><p>녹음에서 확인한 변화와 다음 연습을 한곳에서</p></div></header>';
   // The period control of 결과 리포트 (design guide §26): smaller than the 성장 tabs above and inside the content.
   const tabs=()=>'<div class="growth-view-tabs growth-range" role="group" aria-label="성장 분석 범위"><span class="growth-range-label" aria-hidden="true">기간</span>'+
    '<button type="button" data-growth-mode="overall" aria-pressed="'+(mode==='overall')+'" class="'+(mode==='overall'?'active':'')+'">전체 분석</button>'+
@@ -313,7 +313,7 @@ async function mount(host){
      '<div><span>같은 곡 비교</span><strong>'+rows.filter(r=>r.c).length+'</strong><small>항목</small></div></div>';
    const songLinks=songOn?'<div class="growth-song-links"><a class="btn sm ghost" href="#/vocal-lab/'+encodeURIComponent(songPick)+'" data-mbs-link="lab"><i class="ph ph-waveform" aria-hidden="true"></i>이 곡 자세히</a>'+
      (changeIds.includes(songPick)?'<a class="btn sm ghost" href="#/growth-flow?period=all&amp;gc='+encodeURIComponent(songPick)+'" data-growth-replace data-mbs-link="changes"><i class="ph ph-arrows-left-right" aria-hidden="true"></i>무엇이 달라졌나</a>':'')+'</div>'+
-     '<p class="small muted growth-song-note" data-mbs-only>곡별 보기는 변화만 보여요. AI 코치·추천·계획·지난 기록은 전체에서 볼 수 있어요.</p>':'';
+     '<p class="small muted growth-song-note" data-mbs-only>곡별 보기는 변화만 보여요. AI 코치·다음 연습·계획·지난 기록은 전체에서 볼 수 있어요.</p>':'';
    host.innerHTML=pageHead+tabs()+
    '<header class="growth-intro"><div><p class="growth-eyebrow">MONTHLY REVIEW</p><h2>이번 달의 변화</h2></div>'+
     '<label class="field"><span>분석 월</span><select data-growth-select>'+keys.map(k=>'<option value="'+k+'" '+(k===selected?'selected':'')+'>'+e(k.replace('-','년 ')+'월')+'</option>').join('')+'</select></label></header>'+
@@ -323,7 +323,7 @@ async function mount(host){
    '<nav class="growth-jumps growth-month-jumps" aria-label="월별 성장 빠른 이동">'+
      '<button type="button" data-monthly-jump="results">변화</button>'+
      '<button type="button" data-monthly-jump="ai">AI 코치</button>'+
-     '<button type="button" data-monthly-jump="practice">추천·계획</button>'+
+     '<button type="button" data-monthly-jump="practice">다음 연습</button>'+
      '<button type="button" data-monthly-jump="history">지난 기록</button></nav>'+
    '<div class="growth-month-group" data-month-section="results">'+narrative(rows,selected,previous.length?prev:'')+
      '<div class="growth-month-section-title"><h3>6가지 성장 지표</h3><small>지난달과 같은 곡만 비교 · 근거가 부족하면 판정 보류</small></div>'+rowsHtml(rows)+

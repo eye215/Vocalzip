@@ -81,8 +81,8 @@ test('three tabs with their own addresses; switching never piles up history and 
   await expect(current(page)).toHaveText('이번 달');
   await expect(page.locator('[data-gm-section="done"]')).toBeVisible();
   const entered = await depth(page);
-  for (const [i, url, label, mark] of [[1, /#\/vocal-analysis$/, '곡', '[data-hub-song]'], [2, /#\/growth-lab$/, '연구소', '[data-hub-room]'],
-    [0, /#\/vocal-growth$/, '이번 달', '[data-gm-section="done"]'], [2, /#\/growth-lab$/, '연구소', '[data-hub-room]'], [1, /#\/vocal-analysis$/, '곡', '[data-hub-song]']]) {
+  for (const [i, url, label, mark] of [[1, /#\/vocal-analysis$/, '곡', '[data-hub-song]'], [2, /#\/growth-lab$/, '연구소', '[data-lab-tool="reports"]'],
+    [0, /#\/vocal-growth$/, '이번 달', '[data-gm-section="done"]'], [2, /#\/growth-lab$/, '연구소', '[data-lab-tool="reports"]'], [1, /#\/vocal-analysis$/, '곡', '[data-hub-song]']]) {
     await tabs(page).nth(i).click();
     await expect(page).toHaveURL(url);
     await expect(current(page)).toHaveText(label);
@@ -109,7 +109,7 @@ test('three tabs with their own addresses; switching never piles up history and 
 
 test('a reload stays on the same tab and period; the /analysis and /training spellings land on their tabs', async ({page}) => {
   await boot(page);
-  for (const [hash, label, mark] of [['#/vocal-growth', '이번 달', '[data-gm-section="done"]'], ['#/vocal-analysis', '곡', '[data-hub-song]'], ['#/growth-lab', '연구소', '[data-hub-room]']]) {
+  for (const [hash, label, mark] of [['#/vocal-growth', '이번 달', '[data-gm-section="done"]'], ['#/vocal-analysis', '곡', '[data-hub-song]'], ['#/growth-lab', '연구소', '[data-lab-tool="reports"]']]) {
     await page.goto('/' + hash);
     await expect(page.locator(mark).first()).toBeVisible();
     await page.reload();
@@ -151,9 +151,12 @@ test('a reload stays on the same tab and period; the /analysis and /training spe
   await expect(current(page)).toHaveText('곡');
   await page.goBack();
   await expect(page).toHaveURL(/#\/home$/);
+  // The former 보컬 트레이닝 spelling: practice is on 오늘 now (tests/growth-b4-lab.spec.cjs follows it into 연습하기).
+  await page.evaluate(() => { location.hash = '#/vocal-growth'; });
   await page.evaluate(() => { location.hash = '#/vocal-growth/training'; });
-  await expect(page).toHaveURL(/#\/growth-lab$/);
-  await expect(current(page)).toHaveText('연구소');
+  await expect(page).toHaveURL(/#\/home$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/vocal-growth$/);
 });
 
 test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit on the way', async ({page}) => {
@@ -183,18 +186,15 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
   await back(/#\/lab-reports$/);
   await back(/#\/vocal-analysis$/);
   await expect(page.locator('[data-hub-song]').first()).toBeVisible();
-  // 연구소 (the former 보컬 트레이닝) → 노래 연습실 (its own guard untouched) → 뒤로
+  // 연구소 → a deep tool (리포트 보관함, 귀와 숫자, 분석 기준) → 뒤로
   await tabs(page).nth(2).click();
-  await page.locator('[data-hub-room]').click();
-  await expect(page).toHaveURL(/#\/practice-room$/);
-  await expect(page.locator('iframe.vzip-practice-room-frame')).toBeVisible();
-  await expect(dock(page)).toHaveAttribute('aria-current', 'page');
-  await back(/#\/growth-lab$/);
-  await expect(current(page)).toHaveText('연구소');
-  await page.locator('[data-hub-check]').click();
-  await expect(page).toHaveURL(/#\/voice-check$/);
-  await expect(dock(page)).toHaveAttribute('aria-current', 'page');
-  await back(/#\/growth-lab$/);
+  for (const [key, url] of [['reports', /#\/lab-reports$/], ['ear', /#\/growth-ear$/], ['basis', /#\/growth-basis$/]]) {
+    await page.locator('[data-lab-tool="' + key + '"]').click();
+    await expect(page).toHaveURL(url);
+    await expect(dock(page)).toHaveAttribute('aria-current', 'page');
+    await back(/#\/growth-lab$/);
+    await expect(current(page)).toHaveText('연구소');
+  }
   // 이번 달 → 지난 흐름 (월별, the default period) → 연습실 → 뒤로 keeps the month view; 뒤로 again is 이번 달.
   await tabs(page).nth(0).click();
   await page.locator('[data-gm-flow]').click();
@@ -203,11 +203,13 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
   await expect(dock(page)).toHaveAttribute('aria-current', 'page');
   await page.locator('#view a[href="#/practice-room"]').first().click();
   await expect(page).toHaveURL(/#\/practice-room$/);
+  await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');   // a practice screen: 오늘's (phase 4)
   await back(/#\/growth-flow\?period=month$/);
+  await expect(dock(page)).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('[data-growth-mode="monthly"]')).toHaveAttribute('aria-pressed', 'true');
   await back(/#\/vocal-growth$/);
   await expect(current(page)).toHaveText('이번 달');
-  // 오늘 → 노래 연습실 keeps 오늘 lit, as before.
+  // 오늘 → 노래 연습실 keeps 오늘 lit.
   await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/practice-room'; });
   await expect(page.locator('iframe.vzip-practice-room-frame')).toBeVisible();
   await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');
@@ -255,7 +257,7 @@ test('older deep links land where they did', async ({page}) => {
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s1?selection=1');
   await expect(page.locator('.vl-dates button[aria-pressed="true"]')).toHaveCount(1);
   // #/lab-reports, #/practice-room (also with a result), #/vocal-growth and its ?mode=monthly / ?gc=, #/weekly-summary,
-  // #/growth and #/vocal-training: the last ones lead into the new tabs (replaced, not added to the history).
+  // #/growth and #/vocal-training: the last ones lead into the new places (replaced, not added to the history).
   await page.goto('/#/home'); await page.goto('/#/lab-reports');
   await expect(page.locator('#top h1')).toHaveText('리포트 보관함');
   await expect(page.locator('.vl-reports .vl-report')).toHaveCount(1);
@@ -277,10 +279,11 @@ test('older deep links land where they did', async ({page}) => {
   await page.goto('/#/home'); await page.goto('/#/growth');
   await expect(page).toHaveURL(/#\/vocal-growth$/);
   await expect(current(page)).toHaveText('이번 달');
-  await page.goto('/#/home'); await page.goto('/#/vocal-training');
-  await expect(page).toHaveURL(/#\/growth-lab$/);
-  await page.goBack();
+  // The former 보컬 트레이닝 address: practice is on 오늘 now. Replaced, so 뒤로 returns to where it was typed.
+  await page.goto('/#/home'); await page.goto('/#/vocal-growth'); await page.evaluate(() => { location.hash = '#/vocal-training'; });
   await expect(page).toHaveURL(/#\/home$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/vocal-growth$/);
   // 곡 상세의 "분석과 비교 보기" (#/vocal-lab/<곡>): the newest analysed takes, and 뒤로 returns to the song.
   await page.goto('/#/home'); await page.goto('/#/song/s1');
   await page.evaluate(() => { location.hash = '#/vocal-lab/s1'; });
@@ -421,43 +424,38 @@ test('recordings added or analysed after the first open show up without a reload
   await to(page, REPORT_ALL);
   await expect(page.locator('[data-overall-body]')).toBeVisible();
   expect((await kpi()).slice(0, 3)).toEqual(['12', '10', '4']);
-  // 연구소 (보컬 트레이닝 content) counts the new analyses for its 추천 연습 as well (nothing kept from an earlier draw).
+  // 연구소 counts what is there now for its state words as well (nothing kept from an earlier draw).
   await to(page, '#/growth-lab');
-  const expected = await page.evaluate(async () => VZ.practiceTips(await VZ.media.list()).tips.slice(0, 2).map(t => t.key));
-  // Polled: the tab is drawn a moment after the press (read at once, the list was sometimes still empty).
-  await expect.poll(() => page.locator('[data-hub-tip]').evaluateAll(els => els.map(e => e.dataset.hubTip))).toEqual(expected);
+  const analysed = await page.evaluate(async () => VZ.growthDataset(await VZ.media.list()).rows.filter(r => !r.deleted && r.analysed).length);
+  await expect(page.locator('[data-lab-state="take"]')).toHaveText('분석한 녹음 ' + analysed + '개');
 });
 
-test('연구소 (보컬 트레이닝 content): entries only — 연습실 · 보이스 체크 · 연습 세트 · 추천 연습 — and the newest five 트레이닝 recordings', async ({page}) => {
+test('연구소 holds no practice entries; the practice screens open from 성장 with 오늘 lit and 뒤로 returns', async ({page}) => {
   await boot(page, {extra:{practices:ROOM}});
   await page.goto('/#/growth-lab');
-  await expect(page.locator('[data-hub-room]')).toHaveAttribute('href', '#/practice-room');
-  await expect(page.locator('[data-hub-check]')).toHaveAttribute('href', '#/voice-check');
-  await expect(page.locator('[data-hub-set]')).toHaveAttribute('href', '#/practice-set');
-  await expect(page.locator('[data-hub-review]')).toHaveAttribute('href', '#/practice-review');
+  await expect(page.locator('[data-lab-tool="reports"]')).toBeVisible();
+  for (const sel of ['[data-hub-room]', '[data-hub-check]', '[data-hub-set]', '[data-hub-review]', '[data-hub-tip]', '[data-hub-training-take]', '[data-hub-result]', '[data-precision-entry]'])
+    await expect(page.locator(sel)).toHaveCount(0);
   await expect(page.locator('#view iframe')).toHaveCount(0);         // nothing embedded
-  // 추천 연습 from the saved measurements (app/practice-tips.js), opening where it is practised (연습 따라 하기).
-  const expected = await page.evaluate(async () => VZ.practiceTips(await VZ.media.list()).tips.slice(0, 2).map(t => [t.key, t.name]));
-  expect(expected.length).toBeGreaterThan(0);
-  const tips = page.locator('[data-hub-tip]');
-  expect(await tips.evaluateAll(els => els.map(e => [e.dataset.hubTip, e.querySelector('.item-title').textContent]))).toEqual(expected);
-  await expect(tips.first()).toHaveAttribute('href', '#/guided-practice/' + encodeURIComponent('analysis:' + expected[0][0]));
-  // 트레이닝 recordings: six exist, the newest five are listed with their dates.
-  const takes = page.locator('[data-hub-training-take]');
-  expect(await takes.evaluateAll(els => els.map(e => e.dataset.hubTrainingTake))).toEqual(['t1', 't2', 't3', 't4', 't5']);
-  const day = await page.evaluate(d => VZ.dateLabel(d), ago(3));
-  await expect(takes.first()).toContainText(day);
-  await expect(takes.first()).toHaveAttribute('href', '#/recording/t1');
-  await expect(page.locator('[data-hub-result]')).toHaveCount(1);
-  await expect(page.locator('[data-hub-result]')).toHaveAttribute('href', '#/practice-room?result=roomaaaa1111');
-  await tips.first().click();
+  // 이번 달 › 다음 연습 keeps starting a measured exercise where it is practised (연습 따라 하기) — a screen of 오늘 now.
+  await tabs(page).nth(0).click();
+  await expect(page.locator('[data-gm-today]')).toHaveText('연습은 오늘 탭에서 해요');
+  await expect(page.locator('[data-gm-today]')).toHaveAttribute('href', '#/home');
+  const key = await page.evaluate(async () => VZ.practiceTips(await VZ.media.list()).tips[0].key);
+  await to(page, '#/guided-practice/' + encodeURIComponent('analysis:' + key));
   await expect(page.locator('#top h1')).toHaveText('연습 따라 하기');
   await expect(page.locator('#view')).not.toContainText('연습을 찾을 수 없어요');
+  await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');
   await page.locator('[data-back]').click();
-  await expect(page).toHaveURL(/#\/growth-lab$/);
-  await page.locator('[data-hub-set]').click();
-  await expect(page).toHaveURL(/#\/practice-set$/);
-  await expect(page.locator('#top h1')).toHaveText('오늘 연습 세트');
+  await expect(page).toHaveURL(/#\/vocal-growth$/);
+  for (const [hash, title] of [['#/practice-set', '오늘 연습 세트'], ['#/voice-check', '보이스 체크'], ['#/practice-room', '노래 연습실']]) {
+    await to(page, hash);
+    await expect(page.locator('#top h1')).toHaveText(title);
+    await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');
+    await page.locator('[data-back]').click();
+    await expect(page).toHaveURL(/#\/vocal-growth$/);
+    await expect(dock(page)).toHaveAttribute('aria-current', 'page');
+  }
 });
 
 test('empty states say what is missing and offer one way forward', async ({page}) => {
@@ -468,11 +466,8 @@ test('empty states say what is missing and offer one way forward', async ({page}
   await expect(page.locator('[data-growth-analysis] .empty a.btn')).toHaveAttribute('href', '#/songs');
   await expect(page.locator('[data-hub-reports]')).toContainText('저장한 리포트가 아직 없어요');
   await tabs(page).nth(2).click();
-  await expect(page.locator('[data-hub-room]')).toContainText('아직 제출 전');
-  await expect(page.locator('[data-growth-training]')).toContainText('아직 트레이닝 녹음이 없어요');
-  await expect(page.locator('[data-growth-training]')).toContainText('아직 제출한 과제가 없어요');
-  await expect(page.locator('[data-hub-tips-empty]')).toContainText('지금 0개');
-  await expect(page.locator('[data-hub-tip]')).toHaveCount(0);
+  for (const key of ['take', 'reports', 'ear']) await expect(page.locator('[data-lab-state="' + key + '"]')).toHaveText('아직 없음');
+  await expect(page.locator('[data-lab-state][data-state="ok"]')).toHaveCount(0);                 // nothing made up
   await tabs(page).nth(0).click();
   await expect(page.locator('[data-gm-tile="recordings"] strong')).toHaveText('0개');
   await expect(page.locator('[data-gm-section="next"] [data-gm-chip="숙제"]')).toHaveCount(0);   // nothing made up
@@ -493,7 +488,7 @@ test('empty states say what is missing and offer one way forward', async ({page}
 for (const width of [320, 375]) test('phone ' + width + 'px: every tab fits without sideways scroll and keeps 44px tabs', async ({page}) => {
   await page.setViewportSize({width, height:width === 320 ? 640 : 812});
   await boot(page, {extra:{...REPORT, practices:ROOM}});
-  for (const [hash, mark] of [['#/vocal-growth', '[data-gm-section="next"]'], [REPORT_ALL, '[data-overall-body]'], ['#/growth-flow?period=month', '[data-growth-select]'], ['#/growth-flow?period=week', '.ws-week'], ['#/vocal-analysis', '[data-hub-song]'], ['#/growth-lab', '[data-hub-training-take]']]) {
+  for (const [hash, mark] of [['#/vocal-growth', '[data-gm-section="next"]'], [REPORT_ALL, '[data-overall-body]'], ['#/growth-flow?period=month', '[data-growth-select]'], ['#/growth-flow?period=week', '.ws-week'], ['#/vocal-analysis', '[data-hub-song]'], ['#/growth-lab', '[data-lab-tool="reports"]']]) {
     await page.goto('/#/home'); await page.goto('/' + hash);
     await expect(page.locator(mark).first()).toBeVisible();
     expect(await overflow(page), hash).toEqual({wide:false, over:0});
@@ -511,10 +506,11 @@ for (const [width, height] of [[820, 1180], [1180, 820]]) test('tablet ' + width
   await page.setViewportSize({width, height});
   await boot(page, {extra:{...REPORT, practices:ROOM}});
   const column = Math.min(width, 1040) - 48;
-  for (const [hash, mark] of [['#/vocal-analysis', '[data-hub-song]'], ['#/growth-lab', '[data-hub-training-take]']]) {
+  // 곡: its two columns. 연구소: its two groups (소리 깊이 보기 | 기록·기준).
+  for (const [hash, mark, cols] of [['#/vocal-analysis', '[data-hub-song]', '.growth-hub-col'], ['#/growth-lab', '[data-lab-tool="reports"]', '.growth-lab-group']]) {
     await page.goto('/#/home'); await page.goto('/' + hash);
     await expect(page.locator(mark).first()).toBeVisible();
-    const box = await page.evaluate(() => { const [a, b] = [...document.querySelectorAll('.growth-hub-col')].map(e => e.getBoundingClientRect()); return {a:{l:a.left, r:a.right, t:a.top}, b:{l:b.left, r:b.right, t:b.top}, view:document.getElementById('view').getBoundingClientRect().width}; });
+    const box = await page.evaluate(sel => { const [a, b] = [...document.querySelectorAll(sel)].map(e => e.getBoundingClientRect()); return {a:{l:a.left, r:a.right, t:a.top}, b:{l:b.left, r:b.right, t:b.top}, view:document.getElementById('view').getBoundingClientRect().width}; }, cols);
     expect(Math.round(box.view), hash).toBe(column);
     expect(box.b.l, hash).toBeGreaterThan(box.a.r);                  // side by side…
     expect(Math.abs(box.a.t - box.b.t), hash).toBeLessThan(2);       // …from the same line

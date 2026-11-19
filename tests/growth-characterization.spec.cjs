@@ -28,6 +28,17 @@
 // 성장 개편 안 B, phase 2 (2026-11-19) moved screens only, no text: 전체 · 월별 분석 and 주간 요약 are the sub-page 지난
 // 흐름 (#/growth-flow?period=all|month|week) under the new 이번 달 tab, 보컬 트레이닝 is part of 연구소 (#/growth-lab). This
 // spec reads them at their new addresses; the snapshot file is byte-for-byte what it was.
+// 성장 개편 안 B, phase 4 (2026-11-19): no number or verdict moved. What changed in the snapshot, all of it:
+//  - labels renamed to ONE name, "다음 연습": 전체 분석 "다음에 연습할 것" → "다음 연습"; 월별 분석 (each month) "추천 연습" →
+//    "다음 연습", its jump "추천·계획" → "다음 연습", and "실측 변화에 기반한 규칙형 추천입니다. …" → "실측 변화에 기반해
+//    규칙으로 고른 연습이에요. …";
+//  - the 매일 보이스 체크 entry line at the top of 지난 흐름 (전체 · 월별: "매일 보이스 체크", "오늘 아직 · 30초 · 연속 3일")
+//    left the screen — practice is started from 오늘 › 연습하기;
+//  - the 보컬 트레이닝 content of 연구소 is gone (same reason): its section `trainingTab` left the snapshot, and the
+//    numbers it showed stay pinned as `practiceNumbers` — the two measured exercises with their values (±11 cent · 8분,
+//    ±14.5 cent · 10분), 연습실 submissions 1, 보이스 체크 records 3, the practice set line, the seven 트레이닝 recordings:
+//    the same values as before;
+//  - new: `labStates`, the state words of the 연구소 rows.
 // 성장 개편 안 B, phase 3 (2026-11-19) changed the 곡 tab on purpose, and only its two entries moved (analysisTab,
 // analysisRows; tests/growth-b1-models.test.cjs pins the rest of the file by hash): a song row says ONE word from the
 // verdict 이번 달 shows (좋아진 방향 · 아쉬운 방향 · 엇갈림 · 비슷함 · 판정 보류 · 녹음 하나 — before: 비교 가능 / 판정 보류 / 분석 전
@@ -102,8 +113,19 @@ async function collect(page) {
   out.analysisTab = await page.locator('[data-growth-analysis]').evaluate(texts());
   out.analysisRows = await page.locator('[data-hub-song]').evaluateAll(els => els.map(e => [e.dataset.hubSong, e.dataset.hubState, e.querySelector('.item-sub').textContent]));
   out.analysisRecent = await page.locator('[data-hub-take]').evaluateAll(els => els.map(e => e.dataset.hubTake));
-  await go(page, '#/growth-lab', '[data-hub-training-take]');
-  out.trainingTab = await page.locator('[data-growth-training]').evaluate(texts());
+  // 연구소 (phase 4): the state words of its rows. The former 보컬 트레이닝 content left 성장 (practice is on 오늘 ›
+  // 연습하기); the numbers that tab showed are pinned from where they are worked out (practiceNumbers).
+  await go(page, '#/growth-lab', '[data-lab-tool="reports"]');
+  await expect(page.locator('[data-lab-state="take"]')).toBeVisible();
+  await expect(page.locator('[data-lab-state="precision-report"]')).toBeVisible();
+  out.labStates = await page.locator('[data-lab-state]').evaluateAll(els => els.map(e => [e.dataset.labState, e.textContent, e.dataset.state]));
+  out.practiceNumbers = await page.evaluate(async () => {
+    const items = await VZ.media.list(), gone = VZ.db.deleted?.practices || [];
+    return {tips:VZ.practiceTips(items).tips.slice(0, 2).map(t => [t.name, t.metric + ' ' + t.value + ' · ' + t.basis + ' · 권장 ' + t.minutes + '분']),
+      roomSubmissions:VZ.db.practices.filter(p => p?.practiceRoom && !p.practiceRoom.demo && !gone.includes(p.id)).length,
+      voiceChecks:VZ.voiceCheck.checks().length, practiceSet:VZ.practiceSetEntry()?.line || '',
+      trainingTakes:VZ.growthDataset(items).rows.filter(r => !r.deleted && r.category === 'training').map(r => r.id)};
+  });
   // 곡별 "보컬 측정 변화" card, for every song (and the deleted one), from that song's recordings.
   out.songCards = {};
   for (const id of ['s1', 's2', 's3', 's4', 's5', 's6']) {

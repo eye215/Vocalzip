@@ -171,7 +171,9 @@ function introHtml(s){
   '<ol class="vc-steps">'+steps+'</ol>'+setupHtml(s)+
   (s.message?'<p class="vc-flag" data-tone="warn" role="alert"><i class="ph ph-warning-circle" aria-hidden="true"></i><span>'+esc(s.message)+'</span></p>':'')+
   '<p class="vc-privacy">트레이닝 녹음으로 저장돼 곡 성장 분석에는 들어가지 않아요. 분석은 이 기기에서 해요.</p>'+
-  '<div class="vc-actions"><button type="button" class="vc-primary vc-block" data-vc-go'+(p?'':' disabled')+'><i class="ph ph-microphone" aria-hidden="true"></i>30초 체크 시작</button></div></div>';
+  '<div class="vc-actions"><button type="button" class="vc-primary vc-block" data-vc-go'+(p?'':' disabled')+'><i class="ph ph-microphone" aria-hidden="true"></i>30초 체크 시작</button>'+
+  // Opened straight from 오늘 › 연습하기: the way to the page with earlier results (not inside another flow's check).
+  (!s.onDone&&list().length?'<a class="vc-secondary vc-block" href="#/voice-check" data-vc-records>지난 기록 보기</a>':'')+'</div></div>';
 }
 function recHtml(){
  const scale=P.parts.find(p=>p.kind==='scale');
@@ -324,7 +326,8 @@ function clear(){
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&live?.capture)abort(live,'화면을 벗어나서 체크를 멈췄어요. 같은 순서로 다시 시작해 주세요.');});
 window.addEventListener('pagehide',()=>{if(live?.capture)abort(live,'');});
 
-V.route('voice-check',{title:r=>r.params[0]==='run'?'보이스 체크 · 30초':'보이스 체크',back:true,tab:'growth',noSettings:true,noAutoRefresh:true,
+// 오늘 › 연습하기 opens it (성장 개편 안 B, phase 4): the bottom menu stays on 오늘 and 뒤로 returns there.
+V.route('voice-check',{title:r=>r.params[0]==='run'?'보이스 체크 · 30초':'보이스 체크',back:true,tab:'home',noSettings:true,noAutoRefresh:true,
  render:r=>r.params[0]==='run'?'<div data-vc-host class="vc-host"></div>':'<div data-vc-host class="vc-host">'+summaryPage()+'</div>',
  mount(main,r){
   const host=main.querySelector('[data-vc-host]');
@@ -341,45 +344,12 @@ function open({onDone,onCancel}={}){
  pending=onDone||onCancel?{onDone:typeof onDone==='function'?onDone:null,onCancel:typeof onCancel==='function'?onCancel:null}:null;
  V.nav('#/voice-check/run');
 }
-function entryHtml(){
+/** What 오늘 › 연습하기 shows for the check (design-system/student-home-app.js): {done, streak, count, line}. The
+ * row is drawn by the home itself; nothing is added to another screen from here. */
+function status(){
  const all=list(),done=all.some(c=>c.date===V.today()),streak=C.streak(all,V.today());
- return '<a class="vc-entry" href="#/voice-check"><i class="ph ph-waveform" aria-hidden="true"></i><span><strong>매일 보이스 체크</strong><small>'+(done?'오늘 완료':'오늘 아직 · 30초')+(streak?' · 연속 '+streak+'일':'')+'</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></a>';
+ return {done,streak,count:all.length,line:(done?'오늘 완료':'오늘 아직 · 30초')+(streak?' · 연속 '+streak+'일':'')};
 }
-// Same recipe as the Home summary rows (V4: white R20, row min-height 52px, 20px accent icon, 14/20 label + value).
-const HOME_CSS=`#vocalzip-refined-preview .vz-vc-card{display:block;margin:0 0 12px;padding:4px 12px 4px 16px;border-radius:20px;background:#fff}
-#vocalzip-refined-preview .vz-vc-row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:0;border:0;background:none;color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer}
-#vocalzip-refined-preview .vz-vc-row>.vz-ui-icon:first-child{flex:none;width:20px;font-size:20px;color:var(--vz-color-accent,#7A32F5)}
-#vocalzip-refined-preview .vz-vc-row>.vz-ui-icon:last-child{flex:none;font-size:15px;color:#98A2B3}
-#vocalzip-refined-preview .vz-vc-copy{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0}
-#vocalzip-refined-preview .vz-vc-copy strong{flex:none;font-size:14px;line-height:20px;font-weight:600}
-#vocalzip-refined-preview .vz-vc-copy span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;color:#475467}
-#vocalzip-refined-preview .vz-vc-row:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px}
-@media (min-width:768px){#vocalzip-refined-preview .vz-vc-row{min-height:64px}#vocalzip-refined-preview .vz-vc-copy strong,#vocalzip-refined-preview .vz-vc-copy span{font-size:16px;line-height:22px}}`;
-/* Home: one compact row under 지금 할 것, only until today's check is done. The home is a shadow root built by
- * design-system/student-home-html.js; the row adds its own small style there instead of editing that file. */
-function homeCard(){
- const root=document.querySelector('#view .vz-student-home')?.shadowRoot;if(!root)return;
- let card=root.querySelector('[data-voice-check-card]');
- if(doneToday()){card?.remove();return;}
- if(card)return;
- const el=(tag,cls,text)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(text!=null)x.textContent=text;return x;};
- if(!root.querySelector('style[data-voice-check]')){const style=el('style',null,HOME_CSS);style.dataset.voiceCheck='';root.append(style);}
- card=el('section','vz-vc-card');card.dataset.voiceCheckCard='';card.setAttribute('aria-label','오늘 보이스 체크');
- const row=el('button','vz-vc-row');row.type='button';row.dataset.row='voice-check';row.setAttribute('aria-label','오늘 보이스 체크 30초 시작하기');
- const icon=el('i','vz-ui-icon','\ue802'),chev=el('i','vz-ui-icon','\ue13a'),copy=el('span','vz-vc-copy');
- icon.setAttribute('aria-hidden','true');chev.setAttribute('aria-hidden','true');
- copy.append(el('strong',null,'오늘 보이스 체크'),el('span',null,'30초'));
- row.append(icon,copy,chev);row.onclick=()=>open();card.append(row);
- const anchor=root.querySelector('.vz-schedule');
- if(anchor&&!anchor.hidden){anchor.after(card);}
- else{(root.querySelector('.vz-col-main')||root.querySelector('main'))?.prepend(card);}
-}
-const view=document.getElementById('view');
-if(view)new MutationObserver(records=>{
- if(document.body.dataset.vzRoute!=='home')return;
- if(records.some(r=>[...r.addedNodes].some(n=>n.nodeType===1&&(n.classList.contains('vz-student-home')||n.querySelector?.('.vz-student-home')))))homeCard();
-}).observe(view,{childList:true,subtree:true});
-window.addEventListener('vzip:data-changed',()=>{if(document.body.dataset.vzRoute==='home')homeCard();});
 
-V.voiceCheck={open,doneToday,checks:list,entryHtml,latest:()=>{const c=list().at(-1);return c?resultOf({practiceId:c.id}):null;}};
+V.voiceCheck={open,doneToday,checks:list,status,latest:()=>{const c=list().at(-1);return c?resultOf({practiceId:c.id}):null;}};
 })();

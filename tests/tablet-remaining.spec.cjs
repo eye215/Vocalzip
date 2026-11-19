@@ -34,7 +34,7 @@ const firstRow=async items=>{const boxes=await items.evaluateAll(els=>els.map(el
 
 
 
-for(const [route,marker] of [['song/song1','.vz-song-detail-hero'],['lessons','.lesson-tabs'],['lesson/lesson1','[data-del-lesson]'],['growth','.growth-shell'],['settings','.vz-settings']]){
+for(const [route,marker] of [['song/song1','.vz-song-detail-hero'],['lessons','.lesson-tabs'],['lesson/lesson1','[data-del-lesson]'],['practice-stats','.growth-shell'],['settings','.vz-settings']]){
  test(route+' responds without overflow and preserves phone width',async({page})=>{
   await page.setViewportSize({width:820,height:1180});await boot(page);await page.goto('/#/'+route);await expect(page.locator(marker)).toBeVisible();
   for(const width of [820,1040,1180,767,390]){

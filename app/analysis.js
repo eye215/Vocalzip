@@ -241,7 +241,7 @@ VZ.openRecordingAnalysisSheet = item => {
         status.textContent='녹음 전체 · '+VZ.clock(result.seconds||item.durationSeconds||0);
         out.innerHTML=chart(result)+confidence(result)+(result.cut?'<p class="small muted">앞 15분만 분석했어요.</p>':'')+
           '<div class="ana-grid">'+cards(result)+'</div>'+
-          '<p class="small muted">그래프는 기존 보컬 분석 화면과 같은 방식으로 이 기기에서 계산했어요. 저장된 녹음이나 측정 결과는 변경하지 않았어요.</p>';
+          '<p class="small muted">그래프는 녹음 분석 화면과 같은 방식으로 이 기기에서 계산했어요. 저장된 녹음이나 측정 결과는 변경하지 않았어요.</p>';
       }catch(error){if(alive&&el.isConnected)status.textContent='전체 그래프를 불러오지 못했어요: '+String(error?.message||error);}
     }
   });
@@ -274,7 +274,7 @@ VZ.analysisCompare = (result, saved) => {
     '</tbody></table></div><p class="small muted">음정 정확도·흔들림은 작을수록 정확해요. AI로 나눈 목소리는 저장하지 않아서 숫자만 남아요. 원본 녹음은 위에서 들을 수 있어요.</p></details>';
 };
 /* ---------- view ---------- */
-VZ.route('analysis', {title:'보컬 분석', back:true, tab:'growth', noAutoRefresh:true,
+VZ.route('analysis', {title:'녹음 분석', back:true, tab:'growth', noAutoRefresh:true,
   render() { return '<div data-ana><div class="empty compact"><span class="muted">불러오는 중…</span></div></div>'; },
   async mount(main, r) {
     const id = r.params[0], my = ++job, host = main.querySelector('[data-ana]');

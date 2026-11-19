@@ -29,7 +29,7 @@ V.guidedRecommendations=async({date=V.today(),songId='',media=null}={})=>{
   const safe=room.some(c=>c.vocal===false);
   return [...(safe?[]:homework.slice(0,2)),...room,...(safe?[]:homework.slice(2)),...(safe?[]:tips).filter(t=>!duplicate(t))].slice(0,3).map(c=>({...c,video:videoFor(c)}));
 };
-V.guidedRecommendationCards=(rows,{selectable=false,showStart=true}={})=>'<div class="gp-recommendations"><h3>추천 연습 <small>최대 3개</small></h3>'+rows.map(c=>
+V.guidedRecommendationCards=(rows,{selectable=false,showStart=true}={})=>'<div class="gp-recommendations"><h3>다음 연습 <small>최대 3개</small></h3>'+rows.map(c=>
   '<div class="gp-rec" data-guided-key="'+esc(c.key)+'">'+(selectable?'<label class="gp-rec-select"><input type="checkbox" name="guided-recommendation" value="'+esc(c.key)+'" aria-label="'+esc(c.title)+' 목표에 담기"><span class="gp-rec-check" aria-hidden="true"></span><span class="gp-rec-copy"><strong>'+esc((c.label|| (c.kind==='homework'?'숙제':'분석 추천'))+' · '+c.title)+'</strong><small>'+esc(c.subtitle+(c.kind==='room'?'':' · '+(c.video?'영상 포함':'타이머 안내')))+'</small></span></label>':'<div class="gp-rec-copy"><strong>'+esc((c.label||(c.kind==='homework'?'숙제':'분석 추천'))+' · '+c.title)+'</strong><small>'+esc(c.subtitle+(c.kind==='room'?'':' · '+(c.video?'영상 포함':'타이머 안내')))+'</small></div>')+
     (showStart?'<a href="'+esc(path(c))+'" aria-label="'+esc(c.title)+' 따라 하기">따라 하기 <i class="ph ph-arrow-up-right"></i></a>':'')+'</div>').join('')+'</div>';
 
@@ -269,7 +269,7 @@ function paint(s){
   if(step.reference&&!step.reference.notes.includes(s.referenceNote))s.referenceNote=step.reference.initial;
   const current=step.video?Math.min(step.duration,s.watched/(s.videoDuration||step.duration)*step.duration):Math.min(step.duration,s.elapsed);
   const progress=s.finished?100:Math.min(99,Math.round((before+current)/target*100));
-  s.host.innerHTML='<div class="gp-screen"><p class="gp-eyebrow">'+esc(c.kind==='homework'?'레슨 숙제':c.kind==='ai'?'AI 추가 추천 연습':'분석 추천 연습')+'</p><h2>'+esc(c.title)+'</h2><p class="gp-reason">'+esc(c.subtitle)+'</p>'+
+  s.host.innerHTML='<div class="gp-screen"><p class="gp-eyebrow">'+esc(c.kind==='homework'?'레슨 숙제':c.kind==='ai'?'다음 연습 · AI 초안':'다음 연습 · 측정 기반')+'</p><h2>'+esc(c.title)+'</h2><p class="gp-reason">'+esc(c.subtitle)+'</p>'+
     (c.range?'<p class="gp-range-note">최근 녹음에서 감지된 음역 '+esc(c.range)+' · 편한 높이만 선택하세요.</p>':'')+
     '<div class="gp-progress"><span>'+(s.finished?'연습 완료':(s.index+1)+' / '+s.steps.length+' 단계')+'</span><strong>'+progress+'%</strong></div><div class="gp-meter"><i style="width:'+progress+'%"></i></div>'+
     (s.finished?'<div class="gp-done"><i class="ph ph-check-circle"></i><h3>모든 단계를 마쳤어요</h3><p>실제 연습 '+seconds(s.completedSeconds)+' · '+(s.saved?'연습 기록과 목표를 저장했어요.':'저장하지 못했어요. 다시 시도해 주세요.')+'</p></div><div class="gp-actions"><button type="button" class="gp-primary" '+(s.saved?'data-gp-record':'data-gp-retry')+'>'+(s.saved?'연습 기록 보기':'다시 저장')+'</button></div>':
@@ -323,7 +323,7 @@ V.route('guided-practice',{title:'연습 따라 하기',back:true,tab:'home',noS
       if(tip)c={kind:'analysis',key,tipKey:tip.key,title:tip.name,subtitle:'최근 녹음 '+tip.frequency+'회 · '+tip.metric+' '+tip.value,songId,steps:tip.steps,minutes:tip.minutes,goal:tip.goal,range:tip.range||''};
       else if(key==='analysis:maintain')c={kind:'analysis',key,tipKey:'maintain',title:'롱톤 유지 연습',subtitle:'편안한 음역에서 일정한 소리 유지',songId,steps:['편한 음역에서 롱톤 5초씩 5회','같은 세기와 편안한 호흡으로 유지'],minutes:5};
     }
-    if(!host.isConnected)return;if(!c){host.innerHTML='<p>연습을 찾을 수 없어요. 추천 목록에서 다시 선택해 주세요.</p>';return}
+    if(!host.isConnected)return;if(!c){host.innerHTML='<p>연습을 찾을 수 없어요. 다음 연습 목록에서 다시 골라 주세요.</p>';return}
     c.video=videoFor(c);const s={c,host,index:0,steps:stepList(c),running:false,ended:false,finished:false,saved:false,elapsed:0,completedSeconds:0,watched:0,videoDuration:0,startedAt:Date.now(),clock:null,watchClock:null,player:null,lastVideoTime:0};live=s;
     if(!c.nonVocal&&window.VzipMetronome&&/메트로놈|metronome|BPM|리듬|박자|템포/i.test([c.title,...c.steps].join(' '))){
       const config=window.VzipMetronome.settings([c.title,...c.steps].join(' '));s.metroBpm=config.bpm;s.metroBeats=config.beats;

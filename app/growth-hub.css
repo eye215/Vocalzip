@@ -23,7 +23,6 @@
 .growth-hub-empty p{margin:0;font-size:13px;line-height:20px;color:var(--ink-2)}
 .growth-hub-more summary{display:flex;align-items:center;min-height:44px;padding:0 4px;color:var(--ink-2);font-size:14px;font-weight:600;cursor:pointer}
 .growth-hub-more[open] summary{margin-bottom:8px}
-.growth-hub-all{margin-top:4px}
 /* Two groups per tab: one column on phones, side by side from 768px (app/wide-lists.css). */
 .growth-hub-cols,.growth-hub-col{display:grid;gap:12px;min-width:0;align-content:start}
 .growth-hub-title{display:flex;align-items:center;gap:8px;min-width:0}
@@ -38,9 +37,30 @@
 .growth-hub-caption{margin:0 4px}
 .growth-hub-hint{display:none;gap:10px;align-items:flex-start;margin:8px 0 0;padding:14px 16px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--ink-2);font-size:13px;line-height:20px}
 .growth-hub-hint i{flex:none;margin-top:1px;color:var(--vz-color-accent);font-size:18px}
-/* 연구소 (성장 개편 안 B, phase 2): the deep tools above the former 보컬 트레이닝 content. */
-.growth-hub-inner{display:grid;gap:12px;min-width:0}
+/* 연구소 (성장 개편 안 B, phase 4, app/growth-lab.js): two small groups of tools; each row a name, the state word
+ * beside it (wrapping under the name when the row is narrow) and one line of what it answers. */
 .growth-hub-note i{color:var(--vz-color-accent)}
+.growth-lab-lead{margin:0 4px;color:var(--ink-2);font-size:13px;line-height:20px}
+.growth-lab-lead a{color:var(--vz-color-accent);font-weight:650;text-decoration:underline;text-underline-offset:2px}
+.growth-lab-group{display:grid;gap:12px;min-width:0}
+.growth-lab .growth-hub-title{flex-wrap:wrap;gap:4px 8px}
+.growth-lab button.item{width:100%;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.growth-lab-state[hidden]{display:none}
+.growth-lab-sheet-note{margin:0 0 12px;color:var(--ink-2);font-size:14px;line-height:21px}
+.growth-lab-pick{display:grid;gap:12px;min-width:0}
+.growth-lab-pick .growth-lab-sheet-note{margin:0}
+.growth-lab-pick .growth-hub-title{flex-wrap:wrap;gap:4px 8px}
+/* 귀와 숫자 · 분석 기준·뺀 것: the folded parts of 달라진 것 on their own page. */
+.growth-lab-rule{margin:0;padding:12px 16px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--ink-2);font-size:13px;line-height:20px}
+.growth-lab-page .gc-ear-page,.growth-lab-excluded{padding:18px 16px;border-radius:20px;background:var(--vz-color-surface,#fff);border:1px solid var(--vz-color-border,#eae3f1)}
+.growth-lab-page .gc-ear-page>.gc-ear-sum{display:block;margin:0 0 10px;color:var(--vz-color-ink,#282033);font-size:15px;line-height:22px;font-weight:650}
+.growth-lab-excluded h2{margin:0 0 4px;font-size:18px;line-height:24px;letter-spacing:-.03em;color:var(--vz-color-ink,#282033)}
+.growth-lab-excluded h2 small{color:var(--vz-color-ink-muted,#667085);font-size:13px;font-weight:600}
+.growth-lab-excluded>.small{margin:0 0 10px}
+@media (min-width:768px){
+  .growth-lab{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;align-items:start}
+  .growth-lab>.growth-lab-lead,.growth-lab>.growth-disclaimer{grid-column:1/-1}
+}
 /* 곡 (성장 개편 안 B, phase 3): one word per song from the shared verdict — a state, never a score. */
 .growth-hub-chip[data-state="better"]{background:#E3F4EC;color:#147D56}
 .growth-hub-chip[data-state="worse"]{background:#FDECEC;color:#B42318}

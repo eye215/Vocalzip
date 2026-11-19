@@ -1,16 +1,17 @@
-/* 성장 (#385 통합, then 성장 개편 안 B — scratchpad GROWTH_B_PLAN, phase 2): one 성장 menu with three tabs.
+/* 성장 (#385 통합, then 성장 개편 안 B — scratchpad GROWTH_B_PLAN, phases 2–4): one 성장 menu with three tabs.
  *   이번 달  #/vocal-growth — app/growth-month.js: 한 것 · 달라진 것 · 다음 연습 · 지난 흐름 보기 (주간·월별·전체 inside).
  *            지난 흐름 (#/growth-flow?period=week|month|all) is its sub-page: the former 결과 리포트 screens, unchanged.
  *   곡       #/vocal-analysis — the songs with an analysed take, each with ONE word (좋아진 방향 · 비슷함 · 판정 보류 ·
  *            녹음 하나 …) from the verdict every 성장 screen shares (VZ.growthSong below, app/growth-song-model.js), then
  *            곡 하나 (#/vocal-lab/<songId>, app/vocal-lab.js): 이 곡의 변화 · 약한 곳 · 두 녹음 비교 · 깊이 보기
- *   연구소   #/growth-lab — for now a list of the deep tools and the former 보컬 트레이닝 content (phase 4 moves the
- *            practice screens to 오늘)
- * Older addresses lead into the new tabs: #/vocal-training and #/vocal-growth/training → 연구소, #/vocal-growth/analysis
- * → 곡, #/weekly-summary(?week=) → 지난 흐름 주간, #/vocal-growth?mode=monthly → 지난 흐름 월별, #/vocal-growth?gc= →
- * 지난 흐름 전체 (that song's line), #/growth (the old practice-time page) → 이번 달. #/lab-reports, #/vocal-lab…,
- * #/compare, #/practice-room… keep their own screens; opened with nothing behind them, 뒤로 goes to the tab they
- * belong to (보관함 and the other deep tools → 연구소).
+ *   연구소   #/growth-lab — app/growth-lab.js: the second-tier tools (소리 깊이 보기 · 기록·기준), each with its state
+ * The things you DO (오늘 연습 세트 · 매일 보이스 체크 · 노래 연습실 · 보컬 트레이닝) are on 오늘 › 연습하기
+ * (design-system/student-home-app.js); their screens belong to the 오늘 tab.
+ * Older addresses lead into the new places: #/vocal-training and #/vocal-growth/training → 오늘 › 연습하기,
+ * #/vocal-growth/analysis → 곡, #/weekly-summary(?week=) → 지난 흐름 주간, #/vocal-growth?mode=monthly → 지난 흐름 월별,
+ * #/vocal-growth?gc= → 지난 흐름 전체 (that song's line), #/growth (the old practice-time page) → 이번 달. #/lab-reports,
+ * #/vocal-lab…, #/compare, #/practice-room… keep their own screens; opened with nothing behind them, 뒤로 goes to the
+ * tab they belong to (보관함 and the other deep tools → 연구소).
  * Nothing is stored, moved or deleted here; it only reads (the 성장 period is a per-device convenience).
  * History: the three tabs are ONE place in the browser history — switching between them replaces the address, so 뒤로
  * from a screen opened here returns to the tab it was opened from and 뒤로 on a tab leaves 성장 in one step. The
@@ -33,7 +34,7 @@ V.growthPeriod = {
   get() { try { const p = localStorage.getItem(PERIOD_KEY); return PERIODS.includes(p) ? p : 'month'; } catch { return 'month'; } },
   set(p) { if (!PERIODS.includes(p)) return; try { localStorage.setItem(PERIOD_KEY, p); } catch {} }
 };
-const ROOTS = ['vocal-growth', 'vocal-analysis', 'growth-lab', 'vocal-training'];
+const ROOTS = ['vocal-growth', 'vocal-analysis', 'growth-lab'];
 const route = () => document.body.dataset.vzRoute;
 document.addEventListener('click', ev => {
   if (ev.defaultPrevented || ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
@@ -42,11 +43,12 @@ document.addEventListener('click', ev => {
   if (!a) return;
   ev.preventDefault(); go(a.getAttribute('href'));
 });
-// 뒤로 on a screen that belongs to 성장 (연구소 · 분석 · 보관함 · 보이스 체크 …) opened with nothing behind it (a pasted
+// 뒤로 on a screen that belongs to 성장 (곡 분석 · 녹음 분석 · 보관함 · 정밀 측정 …) opened with nothing behind it (a pasted
 // link, a fresh window): the 성장 tab it belongs to instead of 오늘 — a song's screens → 곡, the deep tools → 연구소,
-// anything else → 이번 달. With a history it is the ordinary 뒤로 (app/core.js).
+// anything else → 이번 달. With a history it is the ordinary 뒤로 (app/core.js). The practice screens (보이스 체크,
+// 노래 연습실, 연습 세트, 따라 하기) belong to 오늘, where the ordinary 뒤로 already leads.
 const HOME_OF = {'vocal-lab':'#/vocal-analysis', analysis:'#/vocal-analysis', 'lab-reports':'#/growth-lab', 'voice-path':'#/growth-lab',
-  'precision-measurement':'#/growth-lab', 'precision-report':'#/growth-lab'};
+  'precision-measurement':'#/growth-lab', 'precision-report':'#/growth-lab', 'growth-ear':'#/growth-lab', 'growth-basis':'#/growth-lab'};
 document.addEventListener('click', ev => {
   if (!ev.target.closest?.('[data-back]') || history.length > 1) return;
   if (!document.querySelector('.v-nav a[data-nav="growth"][aria-current="page"]')) return;
@@ -197,88 +199,20 @@ V.route('vocal-analysis', {title:'성장', tab:'growth', noAutoRefresh:true,
   leave() { request++; }
 });
 
-/* ---------- 연구소 (for now: the deep tools and the former 보컬 트레이닝 content) ---------- */
-// 노래 연습실 submissions live on practice rows (app/practice-room-model.js record()).
-const roomRows = () => (V.db.practices || []).filter(p => p?.practiceRoom && !p.practiceRoom.demo && !gone('practices', p.id))
-  .sort((a, b) => String(b.practiceRoom.date || b.date || '').localeCompare(String(a.practiceRoom.date || a.date || '')) || (b.created || 0) - (a.created || 0));
-// 추천 연습 (app/practice-tips.js), worked out from the list in hand on every draw: nothing is kept between draws,
-// so an analysis saved meanwhile is counted.
-function tipsHtml(items) {
-  const r = items && V.practiceTips?.(items);
-  if (!r) return '';
-  // Where a recommended exercise is practised today: 연습 따라 하기 (app/guided-practice.js).
-  const guided = key => '#/guided-practice/' + encodeURIComponent('analysis:' + key);
-  const rows = !r.enough ? '' : r.tips.length ? r.tips.slice(0, 2).map(t => row(guided(t.key), 'target', t.name, t.metric + ' ' + t.value + ' · ' + t.basis + ' · 권장 ' + t.minutes + '분', ' data-hub-tip="' + e(t.key) + '"')).join('')
-    : row(guided('maintain'), 'target', '롱톤 유지 연습', '측정값이 고르게 안정적이에요 · 권장 5분', ' data-hub-tip="maintain"');
-  return '<h2 class="sec">추천 연습</h2>' + (rows ? '<div class="list icons growth-hub-list" data-hub-tips>' + rows + '</div><p class="small muted growth-hub-caption">측정값을 참고한 일반 연습 가이드예요. 통증이나 쉰 목소리가 있으면 쉬어 주세요.</p>'
-    : '<p class="growth-hub-note" data-hub-tips-empty>분석된 녹음이 3개 이상 모이면 맞춤 연습을 추천해요 (지금 ' + r.count + '개).</p>');
-}
-function trainingHtml(items) {
-  const rooms = roomRows(), checks = V.voiceCheck?.checks?.() || [], checked = !!V.voiceCheck?.doneToday?.(), set = V.practiceSetEntry?.();
-  const entries = '<div class="list icons growth-hub-list" data-hub-training>' +
-    row('#/practice-room', 'microphone-stage', '노래 연습실', '9단계 과제 · ' + (rooms.length ? '제출 ' + rooms.length + '개' : '아직 제출 전'), ' data-hub-room') +
-    (V.voiceCheck ? row('#/voice-check', 'waveform', '매일 보이스 체크', (checked ? '오늘 완료' : '오늘 아직 · 30초') + (checks.length ? ' · 기록 ' + checks.length + '개' : ''), ' data-hub-check') : '') +
-    (V.practiceSetEntry ? row('#/practice-set', 'play-circle', '오늘 연습 세트', set ? (set.state === 'new' ? set.line : set.title + ' · ' + set.line) : '워밍업부터 곡 연습까지 순서대로', ' data-hub-set') : '') +
-    row('#/practice-review', 'compass', '다음 연습 추천', '기록과 분석을 바탕으로 고른 연습', ' data-hub-review') + '</div>';
-  const recent = rooms.slice(0, 5).map(p => {
-    const r = p.practiceRoom, song = r.songId ? V.songTitle(r.songId) : '';
-    const sub = [V.dateLabel(p.date), song, Number(p.minutes) > 0 ? V.minutes(Number(p.minutes)) : ''].filter(Boolean).join(' · ');
-    return row('#/practice-room?result=' + encodeURIComponent(r.id), 'check-circle', r.title || '연습실 과제', sub, ' data-hub-result="' + e(r.id) + '"');
-  }).join('');
-  // 트레이닝 recordings (녹음 유형 = 트레이닝), newest first as the list is.
-  const takes = items ? V.growthDataset(items).rows.filter(r => !r.deleted && r.category === 'training').map(r => r.m) : null;
-  const takeRows = (takes || []).slice(0, 5).map(m => row('#/recording/' + encodeURIComponent(m.id), 'microphone', M.label(m),
-    [V.dateLabel(dayOf(m)), Number(m.durationSeconds) > 0 ? V.minutes(Math.max(1, Math.round(m.durationSeconds / 60))) : ''].filter(Boolean).join(' · '), ' data-hub-training-take="' + e(m.id) + '"')).join('');
-  const main = '<h2 class="sec">측정하고 연습하기</h2>' + entries + tipsHtml(items);
-  const side = '<h2 class="sec">최근 트레이닝 녹음' + (takes ? ' <span class="small muted" style="font-weight:500">' + takes.length + '</span>' : '') + '</h2>' +
-    (takeRows ? '<div class="list icons growth-hub-list" data-hub-training-takes>' + takeRows + '</div>'
-      : takes ? empty('아직 트레이닝 녹음이 없어요', '발성·스케일 연습을 녹음하고 녹음 유형을 트레이닝으로 정하면 여기에 모여요.') : '<p class="growth-hub-note" role="status">녹음을 불러오는 중…</p>') +
-    '<h2 class="sec">최근 연습실 기록 <span class="small muted" style="font-weight:500">' + rooms.length + '</span></h2>' +
-    (recent ? '<div class="list icons growth-hub-list" data-hub-results>' + recent + '</div>'
-      : empty('아직 제출한 과제가 없어요', '노래 연습실에서 과제를 제출하면 여기에 최근 기록이 쌓여요.')) +
-    '<a class="btn secondary block growth-hub-all" href="#/practices">연습 기록 전체 보기</a>';
-  return cols(main, side) + '<p class="small muted growth-disclaimer">연습실의 자동 확인은 기초 분석이에요. 보컬 채점이나 발성 건강 진단이 아니에요.</p>';
-}
-let trainingItems = null;
-async function mountTraining(host) {
-  const my = ++request;
-  // Entries first (no waiting), with the list already in memory when there is one; then the fresh list.
-  trainingItems = M.cached().length ? M.cached() : null;
-  host.innerHTML = trainingHtml(trainingItems);
-  let items;
-  try { items = await M.list(); } catch { items = M.cached(); }
-  if (my !== request || !host.isConnected || items === trainingItems) return;
-  trainingItems = items; host.innerHTML = trainingHtml(items);
-}
-/** The deep tools, each opening its existing screen. 정밀 측정 itself is added to the practice list below by
- * app/precision-session-ui.js, 정밀 리포트 to the 곡 tab's 보관함 list by app/precision-report-ui.js. */
-function labToolsHtml() {
-  const saved = (V.db.comparisonReports || []).filter(r => r.kind !== 'listen-verdict' && !gone('comparisonReports', r.id)).length;
-  return '<p class="growth-hub-note" data-lab-note><i class="ph ph-info" aria-hidden="true"></i> 연구소는 아직 정리 중이에요. 노래 연습실·보이스 체크·연습 세트 같은 연습 화면은 다음 단계에서 오늘 탭으로 옮겨요.</p>' +
-    '<h2 class="sec">깊이 보기</h2><div class="list icons growth-hub-list" data-lab-tools>' +
-    row('#/growth-flow?period=' + V.growthPeriod.get(), 'chart-line-up', '지난 흐름', '그래프 · 음역 흐름 · AI 코치 · 지난 기록', ' data-lab-tool="flow"') +
-    row('#/lab-reports', 'folder-open', '리포트 보관함', saved ? '저장한 리포트 ' + saved + '개' : '저장한 리포트가 아직 없어요', ' data-lab-tool="reports"') +
-    row('#/library', 'list-checks', '녹음을 직접 골라 분석', '전체 녹음에서 선택한 뒤 분석을 눌러요', ' data-lab-tool="library"') +
-    (window.VzipVoicePath ? row('#/voice-path', 'path', '소리 길 흔적 · 시험판', '두 녹음에서 들리는 흔적을 나란히 봐요', ' data-lab-tool="voice-path"') : '') +
-    (window.VzipPrecisionReport ? row('#/precision-report', 'waveform', '발성 정밀 리포트', '정밀 측정 결과를 과제별로 비교해요', ' data-lab-tool="precision-report"') : '') + '</div>';
-}
-V.route('growth-lab', {title:'성장', tab:'growth', noAutoRefresh:true,
-  render:() => V.growthTabs('lab') + '<div class="growth-hub growth-lab">' + labToolsHtml() + '<div class="growth-hub-inner" data-growth-training></div></div>',
-  mount(main) { mountTraining(main.querySelector('[data-growth-training]')); },
-  leave() { request++; }
-});
-// The former 보컬 트레이닝 tab is 연구소 now.
-V.route('vocal-training', {title:'성장', tab:'growth', render:() => '', mount() { location.replace('#/growth-lab'); }});
-// A record that arrives while the tab is open (another device, a finished submission) shows without leaving the tab.
-window.addEventListener('vzip:data-changed', () => {
-  const host = route() === 'growth-lab' && document.querySelector('[data-growth-training]');
-  if (host) host.innerHTML = trainingHtml(trainingItems);
-});
-// So does a recording that was added, analysed or re-sorted meanwhile.
+/* ---------- 연구소 is app/growth-lab.js. The former 보컬 트레이닝 tab was practice: that is 오늘 › 연습하기 now. ---------- */
+/** Ask 오늘 to bring a part into view when it is drawn next ('practice' = 연습하기). Home reads the ask once
+ * (design-system/student-home-app.js); it is a moment's note in memory, nothing is stored. */
+V.homeShow = what => { V.homeWants = {what, at:Date.now()}; };
+// A link to 오늘 that means its 연습하기 section (연구소's lead, 이번 달 › 다음 연습): <a href="#/home" data-home-practice>.
+document.addEventListener('click', ev => {
+  if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+  if (ev.target.closest?.('a[data-home-practice]')) V.homeShow('practice');
+}, true);
+// One history entry, replaced: 뒤로 from 오늘 does not come back here and forward again.
+V.route('vocal-training', {title:'오늘', tab:'home', render:() => '', mount() { V.homeShow('practice'); location.replace('#/home'); }});
+// A recording that was added, analysed or re-sorted meanwhile shows without leaving the tab.
 for (const name of ['vzip:v6-media', 'vzip:analysis-saved']) window.addEventListener(name, () => {
   const analysis = route() === 'vocal-analysis' && document.querySelector('[data-growth-analysis]');
   if (analysis) mountAnalysis(analysis);
-  const training = route() === 'growth-lab' && document.querySelector('[data-growth-training]');
-  if (training) mountTraining(training);
 });
 })();

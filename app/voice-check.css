@@ -85,9 +85,4 @@
 .vc-rating button[aria-pressed="true"]{background:var(--vc-selected);color:var(--vc-accent)}
 .vc-tags{border:0;padding:0;margin:0}
 .vc-sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-/* 성장 entry */
-.vc-entry{display:flex;align-items:center;gap:12px;min-height:52px;margin:0 0 12px;padding:4px 12px 4px 16px;border-radius:20px;background:#fff;color:var(--vz-color-ink,#101828);text-decoration:none}
-.vc-entry>i:first-child{font-size:20px;color:var(--vz-color-accent,#7A32F5)}.vc-entry>i:last-child{font-size:15px;color:#98A2B3}
-.vc-entry span{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px}.vc-entry strong{flex:none;font-size:14px;line-height:20px;font-weight:600}
-.vc-entry small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;color:#475467}
 @media (prefers-reduced-motion:reduce){.vc-level i{transition:none}}

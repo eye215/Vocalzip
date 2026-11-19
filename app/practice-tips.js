@@ -72,7 +72,7 @@ VZ.practiceTips = (media, {songId = '', exclude = []} = {}) => {
   return {enough:true, count:takes.length, range, tips, skipped, version:newest};
 };
 const doneToday = tip => VZ.db.practices.some(p => p.date === VZ.today() && String(p.memo || '').includes('[추천 연습] ' + tip.name));
-const card = (tip, songId) => '<div class="card tip" data-tip-key="' + esc(tip.key) + '"><div class="row between"><span class="tip-k">🎯 ' + (songId ? '이 곡 추천 연습' : '오늘의 추천 연습') + '</span><span class="badge accent">' + esc(tip.metric) + ' ' + esc(tip.value) + '</span></div>' +
+const card = (tip, songId) => '<div class="card tip" data-tip-key="' + esc(tip.key) + '"><div class="row between"><span class="tip-k">🎯 ' + (songId ? '이 곡 다음 연습' : '오늘의 다음 연습') + '</span><span class="badge accent">' + esc(tip.metric) + ' ' + esc(tip.value) + '</span></div>' +
   '<h3 class="tip-name">' + esc(tip.name) + '</h3><p class="small" style="margin:0 0 6px">' + esc(tip.reason) + '</p>' +
   '<ol class="tip-steps">' + tip.steps.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>' +
   '<div class="row between" style="gap:8px"><span class="small muted">목표: ' + esc(tip.goal) + ' · 권장 ' + tip.minutes + '분</span>' +
@@ -88,7 +88,7 @@ VZ.renderTips = async (host, {songId = '', limit = 1} = {}) => {
     return;
   }
   const tips = r.tips.slice(0, limit);
-  host.innerHTML = (tips.length ? tips.map(t => card(t, songId)).join('') : '<div class="card tip"><span class="tip-k">🎯 ' + (songId ? '이 곡' : '오늘의') + ' 추천 연습</span><p class="small" style="margin:6px 0 0">측정값이 고르게 안정적이에요 👍 편한 음역' + (r.range ? '(' + esc(r.range) + ')' : '') + '에서 롱톤 5분으로 유지해 보세요.</p></div>') +
+  host.innerHTML = (tips.length ? tips.map(t => card(t, songId)).join('') : '<div class="card tip"><span class="tip-k">🎯 ' + (songId ? '이 곡' : '오늘의') + ' 다음 연습</span><p class="small" style="margin:6px 0 0">측정값이 고르게 안정적이에요 👍 편한 음역' + (r.range ? '(' + esc(r.range) + ')' : '') + '에서 롱톤 5분으로 유지해 보세요.</p></div>') +
     '<p class="small muted tip-note">측정값을 참고한 일반 연습 가이드예요. 통증이나 쉰 목소리가 있으면 쉬어 주세요.</p>';
   host.querySelectorAll('[data-tip-start]').forEach(b => b.onclick = () => {
     const tip = tips.find(t => t.key === b.closest('[data-tip-key]').dataset.tipKey);

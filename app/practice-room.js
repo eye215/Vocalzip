@@ -24,9 +24,9 @@ window.VocalzipPracticeRoom={
 };
 window.VzipAccountScope?.beforeLeave(()=>{locked=true;frame?.contentWindow?.postMessage({type:'vocalzip:room-lock'},location.origin);});
 for(const event of ['vzip:auth-changed','vzip:data-changed'])window.addEventListener(event,()=>{if(frame?.isConnected&&!locked)frame.contentWindow?.postMessage({type:'vocalzip:room-refresh'},location.origin);});
-// tab:'keep' — opened from 성장 › 보컬 트레이닝 the 성장 tab stays lit, from 오늘 the 오늘 tab (as before).
-V.route('practice-room',{title:'노래 연습실',back:true,tab:'keep',noSettings:true,noAutoRefresh:true,
- render:r=>'<iframe class="vzip-practice-room-frame" title="노래 연습실 · 과제와 제출" src="practice-room/index.html?v=15'+(r?.query?.get('result')?'&result='+encodeURIComponent(r?.query?.get('result')):'')+'" allow="microphone"></iframe>',
+// 오늘 › 연습하기 opens it (성장 개편 안 B, phase 4): the bottom menu stays on 오늘 wherever it was opened from.
+V.route('practice-room',{title:'노래 연습실',back:true,tab:'home',noSettings:true,noAutoRefresh:true,
+ render:r=>'<iframe class="vzip-practice-room-frame" title="노래 연습실 · 과제와 제출" src="practice-room/index.html?v=16'+(r?.query?.get('result')?'&result='+encodeURIComponent(r?.query?.get('result')):'')+'" allow="microphone"></iframe>',
  mount(host){frame=host.querySelector('iframe');V.setGuard(()=>{try{return frame?.contentWindow?.VocalzipRoomBusy?.()?'진행 중인 연습이 있어요. 제출 전 녹음은 화면을 나가면 사라져요. 나갈까요?':'';}catch{return '';}});},
  leave(){frame?.contentWindow?.postMessage({type:'vocalzip:room-lock'},location.origin);frame=null;V.setGuard(null);}
 });

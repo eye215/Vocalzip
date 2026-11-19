@@ -239,7 +239,7 @@ test('empty state removes all sample data and connects songs and goal setup',asy
  const setup=page.getByRole('button',{name:'오늘의 목표 정하기',exact:true});
  await page.goto('/#/home');await ready(page);await expect(setup).toHaveCount(1);await setup.click();
  const sheet=page.getByRole('dialog',{name:'오늘의 목표',exact:true});await expect(sheet).toBeVisible();await sheet.getByRole('button',{name:'돌아가기',exact:true}).click();await expect(sheet).toHaveCount(0);
- await page.getByRole('button',{name:'추천 연습 호흡과 발성 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/practice-room$/);await expect(page.locator('#top h1')).toHaveText('노래 연습실');
+ await page.getByRole('button',{name:'다음 연습 호흡과 발성 연습하기',exact:true}).click();await expect(page).toHaveURL(/#\/practice-room$/);await expect(page.locator('#top h1')).toHaveText('노래 연습실');
  const after=await db(page);for(const key of ['songs','lessons','assignments','practices','performances'])expect(after[key]).toEqual([]);
  expect(after.dailyGoals||[]).toEqual([]);expect(after.practicePlans||[]).toEqual([]);
 });
@@ -955,7 +955,7 @@ test('no goal step after a take for a lesson recording or while the practice set
  // Lesson recording: it belongs to the lesson, the goals are not asked about (even with ?goal= in the address).
  await page.goto('/#/record?lesson=l1&goal=g1');await takeLength(page,30);await recordTake(page);await noDialog(page);
  // 오늘 연습 세트 is running: it links its own takes when the singer comes back.
- await page.goto('/#/home');await ready(page);await page.locator('.vz-pset-entry').click();await page.getByRole('button',{name:'시작하기'}).click();
+ await page.goto('/#/home');await ready(page);await page.locator('[data-home-practice] [data-row="practice-set"]').click();await page.getByRole('button',{name:'시작하기'}).click();
  await expect.poll(()=>page.evaluate(()=>!!VZ.practiceSetClock.state())).toBe(true);
  await page.goto('/#/record');await takeLength(page,30);await recordTake(page);await noDialog(page);
  const value=await db(page);

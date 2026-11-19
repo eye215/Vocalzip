@@ -87,7 +87,7 @@ test('측정 기반: 전체 분석 recommendations, a month\'s kept 추천 연�
   const x = N.fromMeasures({overall:OVERALL, tips:TIPS, monthly:{month:'2026-10', recommendations:[{key:'phrase', title:'호흡 유지', practice:'한 프레이즈를 무리 없는 호흡으로 끝까지 연결해 부르기', minutes:8}]}});
   const m = N.merge(x, {limit:10});
   assert.deepEqual(m.items.map(i => i.action.metric), ['stability', 'phrase']);
-  assert.equal(m.items[1].why, '측정 기반 · 호흡 유지 · 2026-10 추천 연습 · 권장 8분');
+  assert.equal(m.items[1].why, '측정 기반 · 호흡 유지 · 2026-10 다음 연습 · 권장 8분');
   assert.deepEqual(m.items[0].action, {kind:'add-goal', metric:'stability', title:'편안한 음에서 5초 지속음을 같은 조건으로 녹음하기', minutes:8});
   // Not enough measured takes for tips: no tip.
   assert.deepEqual(N.fromMeasures({tips:{enough:false, count:2, tips:[]}}), []);

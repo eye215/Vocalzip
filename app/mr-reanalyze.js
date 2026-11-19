@@ -184,7 +184,7 @@ function confirmHtml(p, scope, eta) {
   const ai = list.filter(m => savedOf(m)?.confidence?.aiSeparated).length;
   const which = p.tracks.length === 1 ? esc(mrTitle(p.tracks[0])) : 'MR 파일 ' + p.tracks.length + '개 중 하나';
   const option = (id, label, n, small) => '<label><input type="radio" name="vz-remr-scope" value="' + id + '"' + (scope === id ? ' checked' : '') + (n ? '' : ' disabled') + '><span><b>' + label + ' · ' + n + '개</b>' + (small ? '<small>' + small + '</small>' : '') + '</span></label>';
-  return '<p class="vz-remr-lead">곡에 올려 둔 MR 파일로 반주를 빼고 이 곡 녹음을 다시 재요. 녹음 하나의 보컬 분석을 열 때와 같은 방식이에요.</p>' +
+  return '<p class="vz-remr-lead">곡에 올려 둔 MR 파일로 반주를 빼고 이 곡 녹음을 다시 재요. 녹음 하나의 녹음 분석을 열 때와 같은 방식이에요.</p>' +
     '<div class="vz-remr-card"><dl class="vz-remr-stats">' +
       '<div><dt>다시 잴 녹음</dt><dd data-remr-count>' + list.length + '개</dd></div>' +
       '<div><dt>쓰는 MR</dt><dd data-remr-track>' + which + '</dd></div>' +

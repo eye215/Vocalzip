@@ -80,7 +80,8 @@ async function ready(page) {
   await expect(page.locator('.vz-student-home')).toBeVisible();
 }
 const db = page => page.evaluate(() => JSON.parse(JSON.stringify(VZ.db)));
-const entry = page => page.locator('.vz-pset-entry');
+// The 오늘 연습 세트 row of 오늘 › 연습하기 (one row of the section since 성장 개편 안 B phase 4; it was a row of its own).
+const entry = page => page.locator('.vz-student-home [data-home-practice] [data-row="practice-set"]');
 const rows = page => page.locator('.pset-plan .pset-row');
 async function noOverflow(page) {
   expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth,document.body.scrollWidth) - innerWidth)).toBeLessThanOrEqual(1);
@@ -113,7 +114,7 @@ test('one tap from home opens today\'s set; edit, run steps on a clock, save rec
   await boot(page);
   const before = await db(page);
   await expect(entry(page)).toBeVisible();
-  await expect(entry(page)).toContainText('오늘 연습 시작');
+  await expect(entry(page)).toContainText('오늘 연습 세트');await expect(entry(page)).toHaveAccessibleName(/^오늘 연습 시작/);
   await expect(entry(page)).toContainText('5단계');
   expect((await entry(page).boundingBox()).height).toBeGreaterThanOrEqual(44);
   // Reading home writes nothing.
@@ -222,7 +223,7 @@ test('the timer follows the clock: another app and a reload count the real time 
   await expect(run.locator('[data-clock-sub]')).toHaveText('목표 5분 지남 · 연습 7:30');
   await page.goto('/#/home');
   await ready(page);
-  await expect(entry(page)).toContainText('연습 세트 이어서 하기');
+  await expect(entry(page)).toContainText('이어서 하기');await expect(entry(page)).toHaveAccessibleName(/^연습 세트 이어서 하기/);
   await expect(entry(page)).toContainText('1/5');
   await entry(page).click();
   await expect(run.locator('[data-clock]')).toHaveText('+2:30'); // the visit to home neither paused nor double counted
@@ -260,7 +261,7 @@ test('the timer follows the clock: another app and a reload count the real time 
   await ready(page);
   await page.reload();
   await ready(page);
-  await expect(entry(page)).toContainText('오늘 연습 시작');
+  await expect(entry(page)).toContainText('오늘 연습 세트');await expect(entry(page)).toHaveAccessibleName(/^오늘 연습 시작/);
   await expect(pill(page)).toBeHidden();
   expect(total((await db(page)).practices)).toBe(15);
 });
@@ -276,7 +277,7 @@ test('leaving the summary keeps it; discarding writes nothing', async({page}) =>
   await page.clock.resume();
   await page.goto('/#/home');
   await ready(page);
-  await expect(entry(page)).toContainText('연습 세트 기록 저장하기');
+  await expect(entry(page)).toContainText('기록 저장하기');await expect(entry(page)).toHaveAccessibleName('연습 세트 기록 저장하기');
   await expect(pill(page)).toBeHidden(); // the set has ended: no small timer
   await entry(page).click();
   await expect(page.locator('.pset-summary [data-min]').first()).toHaveValue('2');
@@ -284,7 +285,7 @@ test('leaving the summary keeps it; discarding writes nothing', async({page}) =>
   await page.getByRole('button',{name:'저장하지 않고 끝내기'}).click();
   await page.getByRole('button',{name:'끝내기',exact:true}).click();
   await ready(page);
-  await expect(entry(page)).toContainText('오늘 연습 시작');
+  await expect(entry(page)).toContainText('오늘 연습 세트');await expect(entry(page)).toHaveAccessibleName(/^오늘 연습 시작/);
   await expect(pill(page)).toBeHidden();
   const after = await db(page);
   for (const key of ['practices','dailyGoals','assignments','practicePlans']) expect(after[key]).toEqual(before[key]);

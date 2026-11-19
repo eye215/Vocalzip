@@ -28,8 +28,18 @@ test('permission refusal and leaving preserve the uncompleted task and existing 
  await page.evaluate(()=>{VZ.media.capture=async()=>{throw new DOMException('fixture refusal','NotAllowedError');};});
  await page.getByRole('button',{name:'녹음 시작',exact:true}).click();await expect(page.locator('[data-precision-error]')).toContainText('권한이 거절');
  await expect(page.locator('[data-precision-session]')).toContainText('0 / 20');expect(await page.evaluate(()=>JSON.stringify(VZ.db))).toBe(before);
- await page.evaluate(()=>VZ.nav('#/vocal-training'));await expect(page.locator('[data-precision-entry]')).toBeVisible();await page.locator('[data-precision-entry]').click();
- await expect(page.locator('[data-precision-session]')).toContainText('0 / 20');expect(page.__errors).toEqual([]);
+ // 성장 › 연구소 lists 발성 정밀 측정 as its own row (성장 개편 안 B, phase 4): it is in the tab as drawn — the same turn
+ // the address changes, nothing added to the list afterwards — and says how far the measurement is.
+ expect(await page.evaluate(()=>{location.hash='#/growth-lab';VZ.render();
+  const row=document.querySelector('#view [data-lab-group="deep"] a[data-lab-tool="precision"]');return row&&{href:row.getAttribute('href'),title:row.querySelector('.item-title').textContent,sub:row.querySelector('.item-sub').textContent,state:row.querySelector('[data-lab-state]').textContent};}))
+  .toEqual({href:'#/precision-measurement',title:'발성 정밀 측정',sub:'편안한 음역에서 8가지 과제로 목소리를 재요',state:'과제 0/20 완료'});
+ await page.waitForTimeout(300);await expect(page.locator('[data-precision-entry]')).toHaveCount(0);await expect(page.locator('[data-lab-tool="precision"]')).toHaveCount(1);
+ expect((await page.locator('[data-lab-tool="precision"]').boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await page.locator('[data-lab-tool="precision"]').click();await expect(page).toHaveURL(/#\/precision-measurement$/);
+ await expect(page.locator('[data-precision-session]')).toContainText('0 / 20');
+ // The former 보컬 트레이닝 address no longer shows it (practice is on 오늘).
+ await page.evaluate(()=>VZ.nav('#/vocal-training'));await expect(page).toHaveURL(/#\/home$/);await expect(page.locator('[data-precision-entry]')).toHaveCount(0);
+ expect(page.__errors).toEqual([]);
 });
 test('pagehide stops and preserves a partial synthetic take without completing or timing the task',async({page})=>{
  await start(page);await page.evaluate(()=>{window.__partial=[];VZ.media.capture=async()=>({start(){},cancel(){throw Error('must preserve');},stop:async()=>({blob:new Blob(['fake audio only'],{type:'audio/wav'}),durationSeconds:1,type:'audio/wav'})});VZ.media.saveBlob=async item=>{__partial.push(item);return item;};});

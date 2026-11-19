@@ -20,19 +20,33 @@ const dateOf = m => /^\d{4}-\d{2}-\d{2}$/.test(m.recordedDate || '') ? m.recorde
 const build = () => D.build(CH.MEDIA, CH.DB, {reliable, dateOf});
 const ids = rows => rows.map(r => r.id).sort();
 
-test('the snapshot of every 결과 리포트 number is byte-for-byte what it was (only the 곡 tab entries were retaken, phase 3)', () => {
+test('the snapshot of every 결과 리포트 number is byte-for-byte what it was (phase 3 retook the 곡 tab entries, phase 4 renamed labels only)', () => {
   // Retaken on purpose only (see tests/growth-characterization.spec.cjs); then this hash changes with it.
   // 월별 분석 › 전체 · 곡별 (claude/monthly-by-song, merged with 성장 개편 phase 2) added only the two chip labels
   // (전체 · 곡별) to the 월별 texts; no number moved. Phase 2 itself leaves the file as it is.
   // Phase 3 (곡 tab, 2026-11-19) retook ONLY the 곡 tab's two entries (analysisTab, analysisRows: the song rows now say the
-  // shared verdict's word and count the takes of the "늘었나" rule). Everything else — 결과 리포트 전체 · 월별 · 주간, 계획
-  // 결과, 연구소의 트레이닝 목록, 곡별 카드 — is byte-for-byte what it was: `rest` below is the hash of the file without those
-  // two entries, taken from the file as it was before phase 3 (3b373b88…) and unchanged since.
+  // shared verdict's word and count the takes of the "늘었나" rule).
+  // Phase 4 (연구소 · 연습 화면은 오늘, 2026-11-19) moved no number: labels were renamed to "다음 연습", the 매일 보이스 체크
+  // entry line left 지난 흐름, and the 보컬 트레이닝 section of 연구소 (trainingTab) gave way to labStates · practiceNumbers.
+  // `numbers` below is the file without the 곡 tab entries, without those three sections and without the label strings
+  // listed here (old and new spelling alike): its hash is the one the file had BEFORE phase 4 (worked out from the file
+  // at 8664d0c4, where the whole-file hash was 5f3a7388…) — so every other value is byte-for-byte what it was.
   const file = fs.readFileSync(path.join(__dirname, 'growth-characterization.snapshot.json'));
-  const SONG_TAB = ['analysisTab', 'analysisRows'];
-  const rest = JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(file)).map(([zone, v]) => [zone, Object.fromEntries(Object.entries(v).filter(([k]) => !SONG_TAB.includes(k)))])), null, 1);
-  assert.equal(crypto.createHash('sha256').update(rest).digest('hex'), 'e0fffcaaf4f8107e322b0c50175f9130a732a39b2cc09b6de1b698f097090aaa');
-  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '5f3a7388ecef9fe49120b2d46d26d34228db677d59db72cc96b3050630039f6d');
+  const SONG_TAB = ['analysisTab', 'analysisRows'], PHASE4_SECTIONS = ['trainingTab', 'labStates', 'practiceNumbers'];
+  const PHASE4_LABELS = new Set(['다음에 연습할 것', '추천 연습', '추천·계획', '다음 연습',
+    '실측 변화에 기반한 규칙형 추천입니다. AI 청취 진단이나 의학적 판단이 아니에요.', '실측 변화에 기반해 규칙으로 고른 연습이에요. AI 청취 진단이나 의학적 판단이 아니에요.',
+    '매일 보이스 체크', '오늘 아직 · 30초 · 연속 3일']);
+  const strip = v => Array.isArray(v) ? v.filter(x => !(typeof x === 'string' && PHASE4_LABELS.has(x))).map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, strip(x)])) : v;
+  const parsed = JSON.parse(file);
+  const numbers = JSON.stringify(strip(Object.fromEntries(Object.entries(parsed).map(([zone, v]) => [zone, Object.fromEntries(Object.entries(v).filter(([k]) => !SONG_TAB.includes(k) && !PHASE4_SECTIONS.includes(k)))]))), null, 1);
+  assert.equal(crypto.createHash('sha256').update(numbers).digest('hex'), '9c3c42fc22c300ab86a8d79d91e7e14f41423a8e9e71c47eb2a6af72283e8c69');
+  // The numbers the removed 보컬 트레이닝 section showed, as they were: the two measured exercises, 연습실 submissions,
+  // 보이스 체크 records, the practice set line and the 트레이닝 recordings (newest first) — the same in both time zones.
+  for (const zone of Object.keys(parsed)) assert.deepEqual(parsed[zone].practiceNumbers, {
+    tips:[['음정 안정성 (롱톤) 연습', '지속음 흔들림 ±11 cent · 최근 8개 중간값 · 권장 8분'], ['음정 정확도 연습', '음정 오차 ±14.5 cent · 최근 8개 중간값 · 권장 10분']],
+    roomSubmissions:1, voiceChecks:3, practiceSet:'3단계 · 약 18분', trainingTakes:['vc3', 'vc2', 'vc1', 't1', 'et', 'ex', 't2']});
+  for (const zone of Object.keys(parsed)) assert.equal(JSON.stringify(parsed[zone]).includes('보컬 연구소'), false);
+  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '1d8baf3d28e7aa35eb5857b8142c2953f28c276f1bc5cf93bde1513cb2366bc4');
 });
 
 test('"늘었나" take filter: switch off = 결과 리포트 rule verdict; on = 연습실 · 트레이닝 연습 takes too', () => {

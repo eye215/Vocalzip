@@ -42,7 +42,9 @@ function doneHtml(v) {
     tile('minutes', '연습 시간', GM.minutesText(d.minutes), '직접 적은 시간') + tile('days', '연습한 날', d.days + '일') +
     tile('recordings', '녹음', d.recordings + '개') + tile('voice-check', '보이스 체크', d.voiceCheckDays + '일') +
     tile('lessons', '레슨', d.lessons + '번') +
-    tile('points', '레슨 지적 체크', pts.runs + '번', pts.runs ? '지켰어요 ' + pts.kept + ' · 놓쳤어요 ' + pts.missed : '부르면서 체크한 기록') + '</ul></section>';
+    tile('points', '레슨 지적 체크', pts.runs + '번', pts.runs ? '지켰어요 ' + pts.kept + ' · 놓쳤어요 ' + pts.missed : '부르면서 체크한 기록') + '</ul>' +
+    // 연습 시간 자세히 (#/practice-stats, app/views-more.js): 날짜별 막대와 곡별 연습량 — what the six numbers above do not show.
+    '<a class="gm-more-link" href="#/practice-stats" data-gm-practice-stats><i class="ph ph-chart-bar" aria-hidden="true"></i><span>연습 시간 자세히</span><i class="ph ph-caret-right" aria-hidden="true"></i></a></section>';
 }
 
 /* ---------- ⓑ 달라진 것 ---------- */
@@ -147,7 +149,7 @@ function actionHtml(it, i) {
       const ref = a.ref?.kind;
       if (ref === 'overall-ai') return link('#/growth-flow?period=all', 'AI 코치 보기');
       if (ref === 'monthly-ai') return link('#/growth-flow?period=month', 'AI 코치 보기');
-      return link(a.href || '#/practice-review', ref === 'ai-review' ? '추천 보기' : '곡 분석에서 보기');
+      return link(a.href || '#/practice-review', ref === 'ai-review' ? 'AI 초안 보기' : '곡 분석에서 보기');
     }
     default: return '';
   }
@@ -165,7 +167,9 @@ function nextHtml(v) {
     : '<ol class="gm-next">' + items.slice(0, SHOWN).map(itemHtml).join('') + '</ol>' + (items.length > SHOWN ? '<details class="gm-more" data-gm-more><summary>더 보기 (' + (items.length - SHOWN) + ')</summary><ol class="gm-next">' +
       items.slice(SHOWN).map((it, k) => itemHtml(it, SHOWN + k)).join('') + '</ol></details>' : '');
   return '<section class="gm-section gm-next-box" data-gm-section="next" aria-labelledby="gm-next-title"><header class="gm-head"><h2 id="gm-next-title">다음 연습</h2>' +
-    '<p class="gm-basis" data-gm-basis="next">오늘 기준 · 숙제를 먼저, 그다음 레슨 지적·측정·계획·AI 초안 순서 · 겹치는 것은 하나로</p></header>' + body + '</section>';
+    '<p class="gm-basis" data-gm-basis="next">오늘 기준 · 숙제를 먼저, 그다음 레슨 지적·측정·계획·AI 초안 순서 · 겹치는 것은 하나로</p></header>' + body +
+    // The screens you practise on (연습 세트 · 보이스 체크 · 노래 연습실 · 보컬 트레이닝) live on 오늘 › 연습하기.
+    '<a class="gm-more-link gm-today-link" href="#/home" data-home-practice data-gm-today><span>연습은 오늘 탭에서 해요</span><i class="ph ph-arrow-right" aria-hidden="true"></i></a></section>';
 }
 function bindNext(v, section) {
   section.querySelectorAll('[data-gm-goal]').forEach(b => b.onclick = () => {
@@ -245,7 +249,9 @@ V.route('vocal-growth', {title:'성장', tab:'growth', noAutoRefresh:true,
   render:() => (V.growthTabs?.('month') || '') + '<div class="gm" data-growth-month></div>',
   mount(main, r) {
     // Older addresses of 결과 리포트 lead to where their content is now (one history entry, replaced).
-    const alias = {analysis:'#/vocal-analysis', training:'#/growth-lab'}[r?.params?.[0]];
+    // #/vocal-growth/training (the former 보컬 트레이닝): practice is on 오늘 › 연습하기 now.
+    if (r?.params?.[0] === 'training') { V.homeShow?.('practice'); location.replace('#/home'); return; }
+    const alias = {analysis:'#/vocal-analysis'}[r?.params?.[0]];
     const q = r?.query, gc = q?.get('gc');
     const to = alias || (gc ? '#/growth-flow?period=all&gc=' + encodeURIComponent(gc) : q?.get('mode') === 'monthly' ? '#/growth-flow?period=month' : '');
     if (to) { location.replace(to); return; }
