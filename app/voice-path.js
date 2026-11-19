@@ -378,7 +378,20 @@ function serverNote(s,role,v){
   :failed?info('data-vp-server-failed','info','서버 분리 '+(q.state==='withheld'?'후에도 음높이를 안정적으로 잡지 못했어요.':'중 오류가 있었어요.')+' 원본과 기존 결과는 그대로예요.')+'<button type="button" class="btn secondary" data-vp-server-retry="'+role+'">서버 분리 다시 시도</button>'
   :v.rec?.serverError?info('data-vp-server-failed','info',esc(v.rec.serverError))
   // Measured before the separation was offered after a refused MR removal (or it could not be asked then): ask now.
-  :v.source==='mr-removed'&&!v.ok.ok&&!q&&v.rec&&!P.measurable(v.rec.mixed,false).ok&&V.voicePathServerAvailable?.(v.m)?info('data-vp-server-offer','cloud','서버에서 AI로 목소리만 분리해 음높이를 다시 잴 수 있어요. 녹음을 다시 올리지 않고, 원본은 그대로예요.')+'<button type="button" class="btn secondary" data-vp-server-start="'+role+'">서버에서 분리해 다시 재기</button>':'';
+  // Refused, and nothing was asked of the server yet (measured before the separation existed, or it could not be asked
+  // then): ask now — after a refused MR removal and when the MR did not match at all. Where it cannot be asked, say why.
+  :serverWanted(s,v)&&!q?(V.voicePathServerAvailable?.(v.m)?info('data-vp-server-offer','cloud','서버에서 AI로 목소리만 분리해 음높이를 다시 잴 수 있어요. 녹음을 다시 올리지 않고, 원본은 그대로예요.')+'<button type="button" class="btn secondary" data-vp-server-start="'+role+'">서버에서 분리해 다시 재기</button>'
+   :info('data-vp-server-unavailable','info',esc(serverWhyNot(v.m)))):'';
+}
+/** A take that was refused as it stands and could be read from a separated voice: not marked 목소리만, an MR is wanted. */
+const serverWanted=(s,v)=>!!v.rec&&!v.ok.ok&&['mr-removed','mixed'].includes(v.source)&&!cleanOf(v.m).clean&&choiceOf(s,v.m.id)!=='none'&&!P.measurable(v.rec.mixed,false).ok;
+/** Why the server separation cannot be asked for this take, in the person's words. */
+function serverWhyNot(m){
+ if(!window.vzipCloudSignedIn?.())return '로그인하면 서버에서 AI로 목소리만 분리해 다시 잴 수 있어요.';
+ if(!m?.cloud||m.storageProvider!=='r2'||!m.r2Key)return '이 녹음은 아직 클라우드에 원본이 없어 서버 분리를 쓸 수 없어요. 녹음이 클라우드에 올라간 뒤 다시 재 주세요.';
+ if(Number(m.durationSeconds)>900)return '15분이 넘는 녹음은 서버 분리를 쓸 수 없어요.';
+ if(Number(m.size)>250*1024*1024)return '250MB가 넘는 녹음은 서버 분리를 쓸 수 없어요.';
+ return '이 녹음은 서버 분리를 쓸 수 없어요.';
 }
 function takeCard(s, role, label, v) {
   const m = v.m, head = '<section class="vp-card vp-take" data-vp-take="' + role + '" data-vp-source="' + (v.source || 'none') + '"><div class="vp-take-head"><span class="vp-role">' + label + '</span><strong>' + esc(M.label(m)) + '</strong></div>';
