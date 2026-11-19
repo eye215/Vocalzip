@@ -725,12 +725,12 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const scale=Math.min(3,1024/Math.max(src.w,src.h)),out=document.createElement('canvas');out.width=Math.max(1,Math.floor(src.w*scale));out.height=Math.max(1,Math.floor(src.h*scale));
   out.getContext('2d').drawImage(canvas,src.x,src.y,src.w,src.h,0,0,out.width,out.height);return out.toDataURL('image/jpeg',.86);
  }
- function cropHandwriting(rows){
-  const bounds=Ink.bounds(rows,aspect),pad=.03,x=Math.max(0,bounds.x-pad),y=Math.max(0,bounds.y-pad),w=Math.min(1-x,bounds.w+2*pad),h=Math.min(1-y,bounds.h+2*pad);
+ function cropHandwriting(rows,pageAspect=aspect){
+  const bounds=Ink.bounds(rows,pageAspect),pad=.03,x=Math.max(0,bounds.x-pad),y=Math.max(0,bounds.y-pad),w=Math.min(1-x,bounds.w+2*pad),h=Math.min(1-y,bounds.h+2*pad);
   if(w<.008||h<.008)throw Error('선택한 필기를 확인해 주세요.');
-  const out=document.createElement('canvas'),scale=Math.min(1024/Math.max(w,h*aspect),1800);out.width=Math.max(64,Math.ceil(w*scale));out.height=Math.max(64,Math.ceil(h*aspect*scale));const ctx=out.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,out.width,out.height);
-  ctx.save();ctx.scale(scale/1000,scale/1000);ctx.translate(-x*1000,-y*aspect*1000);
-  for(const stroke of rows){ctx.strokeStyle=stroke.color;ctx.globalAlpha=Ink.opacity(stroke);ctx.lineWidth=stroke.width*1000;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke(new Path2D(Ink.path(stroke,aspect)));}ctx.restore();
+  const out=document.createElement('canvas'),scale=Math.min(1024/Math.max(w,h*pageAspect),1800);out.width=Math.max(64,Math.ceil(w*scale));out.height=Math.max(64,Math.ceil(h*pageAspect*scale));const ctx=out.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,out.width,out.height);
+  ctx.save();ctx.scale(scale/1000,scale/1000);ctx.translate(-x*1000,-y*pageAspect*1000);
+  for(const stroke of rows){ctx.strokeStyle=stroke.color;ctx.globalAlpha=Ink.opacity(stroke);ctx.lineWidth=stroke.width*1000;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke(new Path2D(Ink.path(stroke,pageAspect)));}ctx.restore();
   return {image:out.toDataURL('image/jpeg',.82),rect:{x,y,w,h}};
  }
  async function recognize(mode,rect,rows){
@@ -1474,6 +1474,11 @@ VZ.openScoreInk=(songId,scoreId)=>{
     target.width=Math.max(1,Math.floor(viewport.width));target.height=Math.max(1,Math.floor(viewport.height));await page.render({canvasContext:target.getContext('2d'),viewport}).promise;return ratio;},pages:()=>doc?.numPages||0,page:()=>pageNo,aspect:()=>aspect,
    pageAspect:async n=>{const v=(await doc.getPage(n)).getViewport({scale:1});return v.height/v.width;},rows:()=>binding?store.list(binding):[],markers:()=>profiles.markers,outside,
    go:async n=>{if(closed||!doc||!viewReady&&!busy||!Number.isInteger(n)||n<1||n>doc.numPages)return false;if(n!==pageNo){pageNo=n;closeThumbnails();await renderPage();}return !closed&&pageNo===n;}})||null;}catch{measures=null;}
+  // 더보기 › 필기를 지적으로 가져오기 (app/score-ink-points-bulk.js): reads the strokes and marks, never changes them.
+  try{window.VzipScoreInkBulk?.attach({el,menu:el.querySelector('.score-ink-actions'),songId,score,signal:controller.signal,closed:()=>closed,current,outside,say,
+   ready:()=>ready&&!busy&&!pending&&!performance&&!visionBusy&&!!binding&&!!doc,vision:()=>visionAvailable,rows:n=>binding?store.list(binding,n):[],page:()=>pageNo,pages:()=>doc?.numPages||0,
+   pageAspect:async n=>{const v=(await doc.getPage(n)).getViewport({scale:1});return v.height/v.width;},crop:(rows,a)=>cropHandwriting(rows,a).image,
+   measuresOn:(n,b)=>measures?.measuresOn?.(n,b)||[],marks:rows=>measures?.marks?.(rows)||[],hasMeasures:()=>!!measures?.ready?.()});}catch{}
   // 악보 표기 palette: its own row under the tools (inside the one-line tool row it squeezed the tools away).
   toolbar.after(el.querySelector('[data-ink-marker-palette]'));syncMarkers();
   // Fullscreen: the page row floats over the score and hides after 2.5 s without touch, swipe, scroll or keys.

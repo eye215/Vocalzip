@@ -44,10 +44,10 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/score-ink-model.test.cjs tests/score-ink-settings.test.cjs tests/score-measure-model.test.cjs tests/score-sync-model.test.cjs tests/score-mark-model.test.cjs tests/score-marker-presets-sync.test.cjs tests/score-points-model.test.cjs tests/data-merge.test.cjs tests/student-home-model.test.cjs
+      - run: node --test tests/score-ink-model.test.cjs tests/score-ink-settings.test.cjs tests/score-measure-model.test.cjs tests/score-sync-model.test.cjs tests/score-mark-model.test.cjs tests/score-marker-presets-sync.test.cjs tests/score-points-model.test.cjs tests/score-ink-points-bulk-model.test.cjs tests/data-merge.test.cjs tests/student-home-model.test.cjs
       - name: Pinned PDF.js renderer for actual browser PDF tests
         run: npm install --prefix /tmp/vzip-score-pdfjs --ignore-scripts --omit=optional pdfjs-dist@4.10.38 pdf-lib@1.17.1
-      - run: npx playwright test tests/scores.spec.cjs tests/score-ink.spec.cjs tests/score-memo.spec.cjs tests/score-markers.spec.cjs tests/score-memo-goals.spec.cjs tests/score-measures.spec.cjs tests/score-sync.spec.cjs tests/score-mark-actions.spec.cjs tests/score-marker-presets-sync.spec.cjs tests/score-ink-feel.spec.cjs tests/score-points.spec.cjs tests/score-ink-points.spec.cjs --workers=2
+      - run: npx playwright test tests/scores.spec.cjs tests/score-ink.spec.cjs tests/score-memo.spec.cjs tests/score-markers.spec.cjs tests/score-memo-goals.spec.cjs tests/score-measures.spec.cjs tests/score-sync.spec.cjs tests/score-mark-actions.spec.cjs tests/score-marker-presets-sync.spec.cjs tests/score-ink-feel.spec.cjs tests/score-points.spec.cjs tests/score-ink-points.spec.cjs tests/score-ink-points-bulk.spec.cjs --workers=2
         env:
           VZ_INK_PREVIEW: '1'
       # The play bar on its own page (stand-in player): its tests play a short WAV, which is checked in Chromium.
