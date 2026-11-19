@@ -28,6 +28,8 @@ on:
       - 'tests/r2-analysis-url.test.cjs'
       - 'tests/helpers/mr-subtract-reference.json'
       - 'tests/helpers/voice-path-audio.cjs'
+      - 'tests/helpers/song-screen.cjs'
+      - 'app/vocal-lab.css'
       - '.github/workflows/vocal-lab-screens-check.yml'
   workflow_dispatch:
 permissions:

@@ -200,7 +200,9 @@ test('Vocal lab keeps the viewport on date, metric, and satisfaction selection',
  await boot(page);
  await page.goto('/#/vocal-lab/s1');
  await labClear(page); await page.locator('.vl-dates button').first().click();
- await page.evaluate(() => window.scrollTo(0, 70));
+ // The date chips sit under 이 곡의 변화 now (곡 하나): bring them into view first, then a tap must not move the page.
+ await page.locator('.vl-dates button').nth(1).scrollIntoViewIfNeeded();
+ await page.evaluate(() => window.scrollBy(0, 70));
  const beforeDate=await page.evaluate(() => window.scrollY);
  await page.locator('.vl-dates button').nth(1).click();
  expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(beforeDate, 0);
@@ -1121,13 +1123,14 @@ test('Library filters, edit and play; compare A/B with memo saved in v5 report s
   await sheet(page).locator('[name=review]').fill('선생님 시범 좋음');
   await sheet(page).getByRole('button', {name:'저장'}).click();
   await expect.poll(async () => (await media(page)).find(m => m.id === 'm1').rating).toBe(5);
-  // 비교 now opens the 보컬 연구소 compare panel for the two recordings.
+  // 비교 now opens 곡 하나 (the former 보컬 연구소) at 두 녹음 비교 for the two recordings: the two takes are picked in
+  // the section, the table and the memo are in its panel (open).
   await page.goto('/#/compare?a=m1&b=m2');
   await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=m1&b=m2&compare=1$/);
-  const cmp = page.locator('[data-compare-panel]');
+  const cmp = page.locator('[data-compare-panel]'), picks = page.locator('[data-song-section="compare"]');
   await expect(cmp).toHaveAttribute('open', '');
-  await expect(cmp.locator('[data-compare-a]')).toHaveValue('m1'); // 레슨 시범
-  await expect(cmp.locator('[data-compare-b]')).toHaveValue('m2'); // 연습 녹음
+  await expect(picks.locator('[data-compare-a]')).toHaveValue('m1'); // 레슨 시범
+  await expect(picks.locator('[data-compare-b]')).toHaveValue('m2'); // 연습 녹음
   await cmp.locator('[data-compare-switch]').click();
   await cmp.locator('[name=notes]').fill('호흡이 길어졌다');
   // A background media refresh must not wipe what the user is typing.

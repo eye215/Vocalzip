@@ -161,10 +161,10 @@ test('뒤로 from the screens a tab opens returns to that tab, with 성장 lit o
   await dock(page).click();
   await tabs(page).nth(1).click();
   const back = async url => { await page.locator('[data-back]').click(); await expect(page).toHaveURL(url); };
-  // 보컬 분석 → 보컬 연구소 (dark, as before) → 뒤로
+  // 곡 → 곡 하나 (the former 보컬 연구소: dark, as before) → 뒤로
   await page.locator('[data-hub-song="s1"]').click();
   await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
-  await expect(page.locator('#top h1')).toHaveText('보컬 연구소');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await expect(dock(page)).toHaveAttribute('aria-current', 'page');
   expect(await page.evaluate(() => getComputedStyle(document.body).colorScheme)).toContain('dark');
   await back(/#\/vocal-analysis$/);
@@ -226,7 +226,7 @@ test('a 성장 screen opened with nothing behind it: 뒤로 goes to its 성장 t
   await expect(page).toHaveURL(/#\/growth-lab$/);                   // 리포트 보관함 belongs to 연구소
   await expect(current(page)).toHaveText('연구소');
   await page.evaluate(() => { location.hash = '#/vocal-lab/s1'; });
-  await expect(page.locator('#top h1')).toHaveText('보컬 연구소');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-analysis$/);               // a song's 연구소 belongs to 곡
   await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; });
@@ -246,7 +246,7 @@ test('older deep links land where they did', async ({page}) => {
   // #/compare → the lab's comparison of the two takes.
   await page.goto('/#/compare?a=a5&b=a6');
   await expect(page).toHaveURL(/#\/vocal-lab\/s1\?a=a5&b=a6&compare=1$/);
-  await expect(page.locator('#top h1')).toHaveText('보컬 연구소');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
   // #/vocal-lab?selection=1 → the chosen recordings.
   await page.evaluate(() => sessionStorage.setItem('vocalzip-vocal-lab-selected-media-v1', JSON.stringify(['a5', 'b2'])));
   await page.goto('/#/home'); await page.goto('/#/vocal-lab?selection=1');
@@ -330,7 +330,7 @@ test('이번 달: 주간 · 월별 · 전체 as a period control smaller than th
   await expect(page.locator('[data-overall-body]')).toBeVisible();
 });
 
-test('곡 (보컬 분석): songs with their state from the report model (one list read, one model pass), recent takes, 보관함', async ({page}) => {
+test('곡: songs with their one word from the shared verdict (one list read, one model pass), recent takes, 보관함', async ({page}) => {
   await boot(page, {extra:REPORT});
   await page.evaluate(() => {
     window.__reads = 0; window.__passes = 0;
@@ -343,13 +343,17 @@ test('곡 (보컬 분석): songs with their state from the report model (one lis
   await tabs(page).nth(1).click();
   const rows = page.locator('[data-hub-song]');
   await expect(rows).toHaveCount(4);                                 // s3 has no recording
-  expect(await rows.evaluateAll(els => els.map(e => [e.dataset.hubSong, e.dataset.hubState]))).toEqual([['s1', 'ok'], ['s2', 'ok'], ['s4', 'none'], ['s5', 'hold']]);
+  // 성장 개편 phase 3: the word is the song's verdict as 이번 달 says it (처음·최근, same method and version) —
+  // before: 비교 가능 / 판정 보류 / 분석 전 from the 결과 리포트 model. Analysed songs first; s4 (no analysis) is folded.
+  expect(await rows.evaluateAll(els => els.map(e => [e.dataset.hubSong, e.dataset.hubState]))).toEqual([['s1', 'better'], ['s2', 'worse'], ['s5', 'one'], ['s4', 'none']]);
   await expect(rows.nth(0)).toContainText('Defying Gravity');
-  await expect(rows.nth(0).locator('.growth-hub-chip')).toHaveText('비교 가능');
-  await expect(rows.nth(0)).toContainText('녹음 6개 · 분석 6개 · 최근 ');
-  await expect(rows.nth(2).locator('.growth-hub-chip')).toHaveText('분석 전');   // said, never scored
-  await expect(rows.nth(2).locator('.item-sub')).toHaveText(/^녹음 2개 · 최근 /);
-  await expect(rows.nth(3).locator('.growth-hub-chip')).toHaveText('판정 보류');
+  await expect(rows.nth(0).locator('.growth-hub-chip')).toHaveText('좋아진 방향');
+  await expect(rows.nth(0)).toContainText('분석한 녹음 6개 · 최근 ');
+  await expect(rows.nth(1).locator('.growth-hub-chip')).toHaveText('아쉬운 방향');
+  await expect(rows.nth(2).locator('.growth-hub-chip')).toHaveText('녹음 하나');
+  await expect(rows.nth(3).locator('.growth-hub-chip')).toHaveText('분석 전');   // said, never scored
+  await expect(rows.nth(3).locator('.item-sub')).toHaveText(/^녹음 2개 · 최근 /);
+  await expect(page.locator('[data-hub-waiting] summary')).toHaveText('아직 분석 전인 곡 1');
   await expect(rows.nth(0)).toHaveAttribute('href', '#/vocal-lab/s1');
   // 최근 분석한 녹음: the five newest recordings that have an analysis.
   const takes = page.locator('[data-hub-take]');
@@ -358,15 +362,16 @@ test('곡 (보컬 분석): songs with their state from the report model (one lis
   await expect(takes.nth(1)).toContainText('On My Own');
   await expect(page.locator('[data-hub-reports]')).toHaveAttribute('href', '#/lab-reports');
   await expect(page.locator('[data-hub-reports]')).toContainText('저장한 리포트 1개');
-  await expect(page.locator('.growth-hub-more summary')).toHaveText('녹음이 없는 곡 1');
+  await expect(page.locator('.growth-hub-more:not([data-hub-waiting]) summary')).toHaveText('녹음이 없는 곡 1');
   // Back and forth between the tabs: still the one read and the one pass (이번 달's 다음 연습 reads the same model).
   await tabs(page).nth(0).click(); await expect(page.locator('[data-gm-section="next"]')).toBeVisible();
   await tabs(page).nth(1).click(); await expect(rows).toHaveCount(4);
   expect(await page.evaluate(() => [window.__reads, window.__passes])).toEqual([1, 1]);
   // A new analysis arrives while the tab is open: the row follows.
   await page.evaluate(async a => { const m = (await VZ.media.list()).find(x => x.id === 'd2'); await VZ.media.update(m, {analysis:a}); }, v2({into:20}));
-  await expect(page.locator('[data-hub-song="s4"] .growth-hub-chip')).toHaveText('판정 보류');
-  await expect(page.locator('[data-hub-song="s4"] .item-sub')).toContainText('녹음 2개 · 분석 1개');
+  await expect(page.locator('[data-hub-song="s4"] .growth-hub-chip')).toHaveText('녹음 하나');
+  await expect(page.locator('[data-hub-song="s4"] .item-sub')).toContainText('분석한 녹음 1개 · 분석 전 1개');
+  await expect(page.locator('[data-hub-waiting]')).toHaveCount(0);
 });
 
 test('recordings added or analysed after the first open show up without a reload, on 지난 흐름 and 곡', async ({page}) => {
@@ -385,8 +390,8 @@ test('recordings added or analysed after the first open show up without a reload
   await expect(page.locator('[data-overall-body]')).toBeVisible();
   expect((await kpi()).slice(0, 3)).toEqual(['11', '10', '4']);
   await to(page, '#/vocal-analysis');
-  await expect(row('s4').locator('.growth-hub-chip')).toHaveText('판정 보류');
-  await expect(row('s4').locator('.item-sub')).toContainText('녹음 2개 · 분석 1개');
+  await expect(row('s4').locator('.growth-hub-chip')).toHaveText('녹음 하나');
+  await expect(row('s4').locator('.item-sub')).toContainText('분석한 녹음 1개 · 분석 전 1개');
   // 2) A song added to the records without a change event, and an analysed take moved to it in place.
   await page.evaluate(() => { VZ.db.songs.push({id:'s9', title:'나중에 추가한 곡', created:Date.now()}); window.__list.find(m => m.id === 'a5').songId = 's9'; });
   await to(page, REPORT_ALL);
@@ -394,8 +399,8 @@ test('recordings added or analysed after the first open show up without a reload
   expect((await kpi()).slice(0, 3)).toEqual(['11', '10', '5']);
   await to(page, '#/vocal-analysis');
   await expect(row('s9')).toContainText('나중에 추가한 곡');
-  await expect(row('s9').locator('.item-sub')).toContainText('녹음 1개 · 분석 1개');
-  await expect(row('s1').locator('.item-sub')).toContainText('녹음 5개 · 분석 5개');
+  await expect(row('s9').locator('.item-sub')).toContainText('분석한 녹음 1개');
+  await expect(row('s1').locator('.item-sub')).toContainText('분석한 녹음 5개');
   expect(await page.evaluate(async () => (await VZ.media.list()) === window.__list)).toBe(true);   // all of the above on one and the same list
   // 3) A new recording saved and analysed the ordinary way while 보컬 분석 is open: the open tab follows.
   await page.evaluate(async ([a, date]) => {
@@ -408,9 +413,9 @@ test('recordings added or analysed after the first open show up without a reload
   }, [v2({into:14}), ago(0)]);
   // The list was read again from storage, so only what was really saved counts: the unsaved edits of 1) and 2)
   // are gone (d2 has no analysis, a5 is back with its song) and the new take is there with its analysis.
-  await expect(row('s4').locator('.item-sub')).toContainText('녹음 3개 · 분석 1개');
-  await expect(row('s4').locator('.growth-hub-chip')).toHaveText('판정 보류');
-  await expect(row('s1').locator('.item-sub')).toContainText('녹음 6개 · 분석 6개');
+  await expect(row('s4').locator('.item-sub')).toContainText('분석한 녹음 1개 · 분석 전 2개');
+  await expect(row('s4').locator('.growth-hub-chip')).toHaveText('녹음 하나');
+  await expect(row('s1').locator('.item-sub')).toContainText('분석한 녹음 6개');
   await expect(row('s9')).toHaveCount(0);
   await expect(page.locator('[data-hub-take]').first()).toHaveAttribute('data-hub-take', 'new1');
   await to(page, REPORT_ALL);

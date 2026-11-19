@@ -1,4 +1,14 @@
-/* A song's recordings, measured with the existing on-device analyzer. No demo values are shown. */
+/* 성장 › 곡 › 곡 하나 (#/vocal-lab/<songId>; the former 보컬 연구소, 성장 개편 안 B phase 3). One song, one screen:
+ *   이 곡의 변화   ONE verdict, the one 이번 달 and the 곡 list show (VZ.growthSong, app/growth-hub.js; rule
+ *                 VzipGrowthDataset.verdictRule({practice}) with the shared 연습 녹음 포함 switch; model
+ *                 app/growth-song-model.js): 처음·최근 through 무엇이 달라졌나 for this song (app/growth-changes-ui.js),
+ *                 지난달 대비, the measures of that pair, then the song's recordings (date chips, player) with
+ *                 이 녹음 자세히 and 자세히 · 녹음별 변화 (the screen's own per-take numbers, labelled as such) folded.
+ *   약한 곳        파사지오 참고 · 음높이 확인 구간 (app/weak-phrase.js) · 레슨 지적 (app/score-points.js) · 구간 A/B
+ *                 (app/segment-ab-ui.js, reachable without a plan) · 추천 연습
+ *   두 녹음 비교   any two takes → 가리고 듣고 평가 (app/listen-verdict.js) · 측정값 나란히 보기 · 메모
+ *   깊이 보기      (folded) 소리 길 흔적 · MR로 다시 분석 · 정밀 리포트 · 리포트 보관함 · 리포트 저장 · 같은 날 녹음 세기 · 분석 기준
+ * Recordings are measured with the existing on-device analyzer. No demo values are shown. */
 (() => {
 'use strict';
 const V = window.VZ, M = V?.media, esc = V?.esc;
@@ -8,7 +18,7 @@ const METRICS = [
   {key:'into',label:'음정 정확도',unit:'cent',get:a=>a?.metrics?.intonation?.meanAbsCents,fmt:v=>'±'+v+' cent',better:-1,tolerance:.5,guide:'가장 가까운 반음과의 평균 오차(cent)입니다. 이 값만으로는 맞는 음을 불렀는지는 판단하지 않아요(악보나 원곡과 음 단위로 맞춰 보려면 구간 분석의 음표 단위 비교·원곡 기준 비교를 쓰세요). 낮을수록 반음 칸에 정확히 맞아요.'},
   {key:'high',label:'유효 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.validHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.validHigh?.note||'—',better:0,tolerance:50,guide:'0.2초 이상 지속되고 신뢰도·연속성 조건을 충족한 음입니다. 순간 최고음은 성장 평가에 쓰지 않아요.'},
   {key:'stable',label:'안정 최고음',unit:'',get:a=>a?.v>=2?a?.metrics?.range?.stableHigh?.cents:null,fmt:(v,a)=>a?.metrics?.range?.stableHigh?.note||'—',better:0,tolerance:50,guide:'0.5초 이상 지속되고 흔들림·신뢰도 조건을 충족한 음입니다. 실력의 좋고 나쁨을 단정하지 않아요.'},
-  {key:'phr',label:'프레이즈 길이',unit:'초',get:a=>a?.metrics?.breath?.medianPhrase,fmt:v=>v+'초',better:0,tolerance:.2,guide:'한 구절을 이어 부른 시간의 중앙값(참고값)입니다. 호흡 유지는 아래 성장 리포트에서 같은 프레이즈끼리 템포를 보정해 비교해요.'},
+  {key:'phr',label:'프레이즈 길이',unit:'초',get:a=>a?.metrics?.breath?.medianPhrase,fmt:v=>v+'초',better:0,tolerance:.2,guide:'한 구절을 이어 부른 시간의 중앙값(참고값)입니다. 호흡 유지는 위 ‘이 곡의 변화’에서 같은 프레이즈끼리 템포를 보정해 비교해요.'},
   {key:'rating',label:'만족도',unit:'점',get:(a,m)=>m?.rating,fmt:v=>v+'/5',better:1,tolerance:.1,guide:'녹음 후 직접 기록한 만족도입니다. 높을수록 스스로 만족한 녹음이에요. 객관적 발성 점수는 아니에요.'}
 ];
 const metricColor=(metric,previous,current)=>{
@@ -35,6 +45,19 @@ const rates = () => { try { return JSON.parse(speedStore.getItem(speedKey)) || {
 const sameDayKey = 'vzip_same_day_mode_v1';
 const sameDay = () => { try { return window.VzipGrowthMetrics?.sameDayMode?.(speedStore.getItem(sameDayKey)) || 'all'; } catch { return 'all'; } };
 const setSameDay = mode => { try { speedStore.setItem(sameDayKey, window.VzipGrowthMetrics.sameDayMode(mode)); } catch {} };
+/* Which folds of 곡 하나 are open (이 녹음 자세히 · 자세히 녹음별 변화 · 깊이 보기): remembered on this device, so someone
+ * who always reads the per-take detail does not open it again for every song. Closed until opened once. */
+const foldKey = 'vzip_song_folds_v1';
+const folds = () => { try { const v = JSON.parse(speedStore.getItem(foldKey)); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+const setFold = (key, open) => { try { speedStore.setItem(foldKey, JSON.stringify({...folds(), [key]:!!open})); } catch {} };
+/** Open now: what the person did on this visit (s.open), else what this device remembers. */
+const foldOpen = (s, key) => s.open[key] ?? !!folds()[key];
+/** Remembers a fold the person opened or closed. A fold drawn open sends `toggle` too: only a change from what was
+ * drawn counts, so a fold opened for one visit (녹음을 골라 들어온 화면) is not remembered as the person's choice. */
+function watchFold(s, d, key, after) {
+  let last = d.open;
+  d.addEventListener('toggle', () => { if (d.open !== last) { last = d.open; s.open[key] = d.open; setFold(key, d.open); } after?.(); });
+}
 const DAY_BETTER = {wob:-1, into:-1, high:1, stable:1, phr:1, rating:1};   // 가장 좋은 것: which way is the better value
 const time = s => V.clock(Math.max(0,s||0));
 const day = m => (M.dateOf(m)||'').slice(5).replace('-','.');
@@ -57,7 +80,7 @@ V.openAnalysisSelection = items => {
   return true;
 };
 let current = null, instance = 0;
-const clean = () => { current?.player?.destroy(); if (current) current.dead = true; current = null; instance++; };
+const clean = () => { current?.player?.destroy(); if (current) { current.dead = true; stopWeak(current); V.segmentABStop?.(); } current = null; instance++; };
 function waveform(m) {
   const data = Array.isArray(m.waveform) ? m.waveform : [];
   if (!data.length) return '<div class="vl-wave-empty" aria-label="저장된 파형 정보가 없어요"><i class="ph ph-waveform"></i><span>파형 정보 없음</span></div>';
@@ -102,55 +125,107 @@ const pairHoldLine=(a,b)=>G?.holdLine?G.holdLine(G.pairHold(a,b,x=>!!V.analysisR
 const songReference=song=>{const r=(V.song?.(song?.id)||song)?.vocalRange;return r&&Number.isFinite(r.highMidi)?r:null;};
 const labTakes=s=>s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m))
  .map(m=>({id:m.id,a:analysis(m),date:String(M.dateOf(m)||'').slice(0,10),created:m.created,ok:!!V.analysisReliable(analysis(m))}));
-const labReport=s=>G?G.songReport(labTakes(s),{sameDay:sameDay(),reference:songReference(s.song),scoreNotes:(V.song?.(s.song.id)||s.song)?.noteCompare?.takes||null,arNotes:(V.song?.(s.song.id)||s.song)?.arCompare?.takes||null}):null;
-const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+s.selected.slice().sort().join(',');
+/* ----- 이 곡의 변화: the shared verdict. s.all is the whole media list (the 성장 screens read the same one). ----- */
+/** The song's recordings the verdict counts: VzipGrowthDataset.verdictRule({practice}) — 연습 takes only with the switch on. */
+const ruleItems=s=>(V.growthDataset(s.all).bySong(V.growthDataset.verdictRule({practice:s.practice})).get(s.song.id)||[]).map(r=>r.m);
+const growthMedia=s=>ruleItems(s).filter(m=>analysis(m));
+/** The pair's measures (app/growth-song-model.js verdict().report); null while there is no pair. */
+const labReport=s=>s.v?.now?.report||null;
+/** For the AI wording and G.aggregate: the pair's report with each compared measure's latest value, as songReport gives it. */
+const aiReport=report=>Object.fromEntries(Object.entries(report).map(([k,x])=>[k,x.state!=='hold'&&Number.isFinite(x.after)?{...x,latest:{value:x.after}}:x]));
+// One saved AI wording per song and take filter; evidenceKey says whether it was made from the takes counted now.
+const labGrowthId=s=>'vocal-growth-ai:'+s.song.id+':'+(s.practice?'with-practice':'song-takes');
 const savedGrowthReport=s=>(V.db.practicePlans||[]).find(x=>x.id===labGrowthId(s)&&x.period==='vocal-growth-ai'&&x.evidenceKey===growthEvidenceKey(s));
+/** An AI wording saved earlier for this song from other takes (an older selection, before a new recording): still shown, said as such. */
+const olderGrowthReport=s=>(V.db.practicePlans||[]).filter(x=>x?.period==='vocal-growth-ai'&&x.songId===s.song.id&&x.text&&!(V.db.deleted?.practicePlans||[]).includes(x.id)).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))[0]||null;
 function growthEvidenceKey(s){
- return s.selected.map(id=>{
-  const m=s.items.find(x=>x.id===id),a=m&&analysis(m);
-  return id+':'+(a?.at||0)+':'+(m?.rating??'');
- }).join('|');
+ return growthMedia(s).map(m=>m.id+':'+(analysis(m)?.at||0)+':'+(m.rating??'')).join('|');
 }
 const TONE={better:'good',worse:'bad',similar:'neutral',mixed:'neutral',changed:'neutral',hold:'hold',reference:'ref'};
-/** "28개 중 처음·최근 비교" — or, when a day counts once, "9일 중 처음·최근 비교". */
-function growthCount(s,analyzed){
- if(sameDay()==='all'||!G?.days)return analyzed>2?analyzed+'개 중 처음·최근 비교':analyzed+'개 분석';
- const n=G.days(labTakes(s)).filter(d=>d.reliable.length).length;
- return n>1?n+'일 중 처음·최근 비교':n+'일 분석';
-}
+/** 지표별로 보기 — the measures of the ONE pair of 이 곡의 변화 (처음·최근, same method and version), 판정 보류 with its
+ * reason, the way to re-analyse older results, and the optional AI wording of exactly these measures. */
 function growthReport(s){
- const report=labReport(s);
- if(!report)return '';
- const analyzed=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&V.analysisReliable(analysis(m)));
- const saved=savedGrowthReport(s),ref=songReference(s.song);
- const items=G.METRICS.map(d=>({d,x:report[d.id]}));
- const line=({d,x})=>{
-  // 파사지오: what recurs over the chosen recordings, never the latest recording's value alone.
-  let text=d.reference?G.passaggioReportText(x):x.state==='hold'?G.holdText(x.reason):G.changeText(x);
-  if(d.id==='range'&&x.vsScore)text+=' · 악보 최고음 '+x.vsScore.scoreHigh+' 대비 '+(x.vsScore.after===0?'같은 음':(x.vsScore.after>0?'+':'−')+Math.abs(x.vsScore.after)+'반음');
-  const note=d.reference?G.PASSAGGIO_NOTE:G.basisText(x)||(x.state==='hold'?'':d.method);
-  return '<li class="vl-growth-row '+TONE[x.state]+'" data-growth-row="'+d.id+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(d.title)+'</strong><p>'+esc(text)+'</p>'+(note?'<small>'+esc(note)+'</small>':'')+'</div></li>';
+ const v=s.v?.now;
+ if(!v||!G)return '';
+ const media=growthMedia(s),report=v.report||null,rows=v.rows||[],ref=songReference(s.song);
+ const saved=savedGrowthReport(s),older=saved?null:olderGrowthReport(s);
+ const line=x=>{
+  let text=x.text;
+  const vs=x.id==='range'&&report?.range?.vsScore;
+  if(vs)text+=' · 악보 최고음 '+vs.scoreHigh+' 대비 '+(vs.after===0?'같은 음':(vs.after>0?'+':'−')+Math.abs(vs.after)+'반음');
+  return '<li class="vl-growth-row '+TONE[x.state]+'" data-growth-row="'+x.id+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(x.title)+'</strong><p>'+esc(text)+'</p>'+(x.note?'<small>'+esc(x.note)+'</small>':'')+'</div></li>';
  };
- const pick=states=>items.filter(({d,x})=>!d.reference&&states.includes(x.state));
- const strong=pick(['better']),weak=pick(['worse']),neutral=pick(['similar','mixed','changed']),held=pick(['hold']),refs=items.filter(({d})=>d.reference);
- const rated=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&Number(m.rating)>0);
- const rating=rated.length>=2?'<p class="vl-growth-rating">내 만족도 '+rated[0].rating+'/5 → '+rated.at(-1).rating+'/5 · 직접 기록한 체감이에요.</p>':'';
- const judged=G.aiMetrics(G.aggregate([{songId:s.song.id,report}])).some(x=>x.state!=='unknown');
- // Older (v1) or detail-less results hold every comparison back: offer to re-analyse them right here, on this device.
- const stale=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m)&&!G.hasDetail(analysis(m)));
- const redo=stale.length&&held.length?'<div class="vl-growth-reanalyze"><p>이전 방식으로 분석된 녹음 <strong>'+stale.length+'개</strong>를 새 방식으로 다시 분석하면 비교할 수 있어요. 이 기기에서 분석하고, 이전 결과는 이력으로 남겨요.</p>'+
+ const pick=states=>rows.filter(x=>states.includes(x.state));
+ const strong=pick(['better']),weak=pick(['worse']),neutral=pick(['similar','mixed','changed']),held=pick(['hold']);
+ const first=v.item&&s.all.find(m=>m.id===v.item.firstId),last=v.item&&s.all.find(m=>m.id===v.item.lastId);
+ const rating=first&&last&&Number(first.rating)>0&&Number(last.rating)>0?'<p class="vl-growth-rating">내 만족도 '+first.rating+'/5 → '+last.rating+'/5 · 직접 기록한 체감이에요.</p>':'';
+ const judged=!!report&&G.aiMetrics(G.aggregate([{songId:s.song.id,report:aiReport(report)}])).some(x=>x.state!=='unknown');
+ // Older (v1) or detail-less results hold comparisons back: offer to re-analyse them right here, on this device.
+ const stale=media.filter(m=>!G.hasDetail(analysis(m)));
+ const redo=stale.length&&(!report||held.length)?'<div class="vl-growth-reanalyze"><p>이전 방식으로 분석된 녹음 <strong>'+stale.length+'개</strong>를 새 방식으로 다시 분석하면 비교할 수 있어요. 이 기기에서 분석하고, 이전 결과는 이력으로 남겨요.</p>'+
   '<button type="button" data-growth-reanalyze'+(s.reanalyzing?' disabled':'')+'><i class="ph ph-arrows-clockwise" aria-hidden="true"></i> '+(s.reanalyzing?'다시 분석하는 중…':stale.length+'개 다시 분석')+'</button><p class="vl-muted" role="status" data-growth-reanalyze-status></p></div>':'';
- const section=(heading,rows,cls)=>rows.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+rows.length+'</span></h3><ul>'+rows.map(line).join('')+'</ul></div>':'';
- return '<section class="vl-section vl-growth" data-growth-report aria-label="AI 종합 성장 리포트"><div class="vl-divider"></div>'+
-  '<div class="vl-growth-top"><div><span class="vl-growth-kicker"><i class="ph ph-sparkle" aria-hidden="true"></i> 성장 분석</span><h2>성장 리포트</h2></div><span class="vl-growth-count" data-growth-count>'+growthCount(s,analyzed.length)+'</span></div>'+
-  '<p class="vl-growth-intro">'+(strong.length+weak.length+neutral.length?(sameDay()==='all'?'처음과 최근 녹음을 6가지 지표로 나눠 비교했어요':'처음과 최근 날을 6가지 지표로 나눠 비교했어요 (같은 날 녹음: '+G.SAME_DAY.find(x=>x[0]===sameDay())[1]+')'):'비교할 분석 기록이 더 필요해요')+' <small>같은 곡·같은 분석 버전·다른 날의 녹음만, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.'+(ref?' 악보 기준 음역 '+esc(ref.low+'–'+ref.high)+'을 함께 봐요.':'')+'</small></p>'+
-  redo+section('좋아진 부분',strong,'good')+section('아쉬운 부분',weak,'bad')+section('비슷함·변화 관찰',neutral,'neutral')+section('판정 보류',held,'hold')+section('참고',refs,'ref')+rating+
-  '<p class="vl-growth-caution">판정 보류는 신뢰도·데이터·같은 프레이즈·분석 버전 중 근거가 부족하다는 뜻이에요. 최고음의 변화는 곡의 구간·발성 방식에 따라 달라지며, 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>'+
+ const section=(heading,list,cls)=>list.length?'<div class="vl-growth-group"><h3 class="'+cls+'">'+heading+' <span>'+list.length+'</span></h3><ul>'+list.map(line).join('')+'</ul></div>':'';
+ const count=v.item?(v.item.count>2?v.item.count+'개 중 처음·최근 비교':'녹음 2개 비교'):media.length+'개 분석';
+ const intro=v.item?'처음('+esc(day(first||{})||'—')+')과 최근('+esc(day(last||{})||'—')+') 녹음을 지표마다 나눠 봤어요':esc((G.HOLD_LABEL||'판정 보류')+' · '+v.text);
+ return '<section class="vl-growth" data-growth-report aria-label="지표별로 보기">'+
+  '<div class="vl-growth-top"><h3 class="vl-growth-title">지표별로 보기</h3><span class="vl-growth-count" data-growth-count>'+count+'</span></div>'+
+  '<p class="vl-growth-intro">'+intro+' <small>같은 곡·같은 측정 방법·같은 분석 버전·다른 날의 녹음만, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 판단하지 않아요.'+(ref?' 악보 기준 음역 '+esc(ref.low+'–'+ref.high)+'을 함께 봐요.':'')+'</small></p>'+
+  redo+section('좋아진 부분',strong,'good')+section('아쉬운 부분',weak,'bad')+section('비슷함·변화 관찰',neutral,'neutral')+section('판정 보류',held,'hold')+rating+
+  (rows.length?'<p class="vl-growth-caution">판정 보류는 신뢰도·데이터·같은 프레이즈·분석 버전 중 근거가 부족하다는 뜻이에요. 최고음의 변화는 곡의 구간·발성 방식에 따라 달라지며, 측정값만으로 실력 향상이나 악화를 단정하지 않아요.</p>':'')+
   (judged?'<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong><button type="button" data-growth-ai '+(s.growthPending?'disabled':'')+'>'+(saved?'다시 생성':'AI로 종합 해석')+'</button></div>'+
-    '<p class="vl-growth-ai-status" data-growth-ai-status role="status">'+(s.growthPending?'AI가 측정 기록을 해석하고 있어요…':saved?'선택한 녹음의 AI 해석을 저장해 두었어요.':'음정 정확도·음정 안정성·호흡 유지의 비교 결과(판정 보류 포함)만 보내 해석해요. 음역·최고음은 보내지 않아요.')+'</p>'+
-    (saved?'<div class="vl-growth-ai-text">'+esc(saved.text)+'</div>':'<div class="vl-growth-ai-text" data-growth-ai-result hidden></div>')+'</div>':
-    '<p class="vl-muted">분석 신뢰도가 충분한 같은 버전의 녹음이 다른 날 두 개 이상 있어야 AI 해석을 요청할 수 있어요.</p>')+
+    '<p class="vl-growth-ai-status" data-growth-ai-status role="status">'+(s.growthPending?'AI가 측정 기록을 해석하고 있어요…':saved?'이 비교의 AI 해석을 저장해 두었어요.':older?'예전에 저장한 해석이에요. 그때 고른 녹음 기준이라 지금 비교와 다를 수 있어요.':'음정 정확도·음정 안정성·호흡 유지의 비교 결과(판정 보류 포함)만 보내 해석해요. 음역·최고음은 보내지 않아요.')+'</p>'+
+    (saved||older?'<div class="vl-growth-ai-text"'+(saved?'':' data-growth-ai-older')+'>'+esc((saved||older).text)+'</div>':'<div class="vl-growth-ai-text" data-growth-ai-result hidden></div>')+'</div>':
+    older?'<div class="vl-growth-ai"><div class="vl-growth-ai-head"><strong>AI 해석</strong></div><p class="vl-growth-ai-status">예전에 저장한 해석이에요. 그때 고른 녹음 기준이라 지금 비교와 다를 수 있어요.</p><div class="vl-growth-ai-text" data-growth-ai-older>'+esc(older.text)+'</div></div>':
+    '<p class="vl-muted">같은 방법·같은 버전으로 잰, 믿을 만한 녹음이 다른 날 두 개 이상 있어야 AI 해석을 요청할 수 있어요.</p>')+
   '</section>';
+}
+/** 이 곡의 변화, the part that does not depend on which take is being played: the word, the switch, 처음·최근 through
+ * 무엇이 달라졌나 for this song, 지난달 대비 and the measures. Drawn again only when a take, an analysis or the switch changes. */
+function verdictHtml(s){
+ let x=null,month=null;
+ try{x=V.growthSong?.of(s.all,s.song.id,s.practice)||null;}catch(error){console.error(error);}
+ s.v=x;
+ // A song without any recording yet has no entry: it is 분석 전, said the same way.
+ const v=x?.now||window.VzipGrowthSong?.verdict({songId:s.song.id,takes:[]})||null;
+ try{month=v?.item?V.growthSong.month(s.all,s.song.id,s.practice):null;}catch(error){console.error(error);}
+ const note=s.practice?'노래 연습실·트레이닝 연습 녹음도 넣어 견줘요. 끄면 결과 리포트와 같은 기준이에요.':'곡 녹음만 견줘요. 노래 연습실·트레이닝 연습 녹음은 빼요.';
+ return '<header class="vl-part-head"><h2 id="vl-changes-title">이 곡의 변화</h2>'+(v?'<span class="vl-verdict" data-song-verdict="'+v.state+'">'+esc(v.word)+'</span>':'')+'</header>'+
+  (v?'<p class="vl-part-basis" data-song-basis>'+esc(v.text)+'</p>':'')+
+  '<p class="vl-muted vl-part-rule" data-song-rule>처음과 최근 녹음을 같은 방법·같은 분석 버전으로 잰 것끼리 견줘요. 이번 달과 같은 기준이에요.</p>'+
+  '<label class="gm-switch vl-switch"><input type="checkbox" role="switch" data-song-practice'+(s.practice?' checked':'')+'><span>연습 녹음 포함</span></label>'+
+  '<p class="vl-muted vl-switch-note" data-song-practice-note>'+note+'</p>'+
+  (x?.effect?'<p class="vl-effect" data-song-practice-effect role="status">'+esc(x.effect)+'</p>':'')+
+  (window.VzipGrowthChangesUI?'<div class="vl-light"><div class="gc-host" data-growth-changes></div></div>':'')+
+  (month?'<p class="vl-month" data-song-month data-state="'+month.state+'"><strong>지난달 대비</strong><span>'+esc(month.word+' · '+month.text)+'</span><small>'+esc(month.basis)+'</small></p>':'')+
+  growthReport(s);
+}
+/** 파사지오 참고 (약한 곳): what recurs over the song's counted recordings — never one recording's value, never a verdict. */
+function passHtml(s){
+ if(!G)return '';
+ let x=null;
+ try{x=G.songReport(growthMedia(s).map(m=>V.growthDataset.take(m)),{reference:songReference(s.song)}).passaggio;}catch(error){console.error(error);}
+ if(!x)return '';
+ return '<ul class="vl-weak-list"><li class="vl-growth-row ref" data-growth-row="passaggio" data-weak="passaggio"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>파사지오(전환 구간) <em>참고</em></strong><p>'+esc(G.passaggioReportText(x))+'</p><small>'+esc(G.PASSAGGIO_NOTE)+'</small></div></li></ul>';
+}
+/** 날짜별 처음·최근 — only with a 같은 날 녹음 세기 other than 모두 (깊이 보기): the open takes counted once per day, the
+ * first day against the latest (app/growth-metrics-model.js songReport with sameDay). This screen's own comparison,
+ * kept under 자세히 and labelled: 이 곡의 변화 never reads the choice, so it stays what 이번 달 shows. */
+function dayReport(s){
+ const mode=sameDay();
+ if(mode==='all'||!G?.days||!G.SAME_DAY)return '';
+ const takes=labTakes(s);
+ let report=null;
+ try{report=G.songReport(takes,{sameDay:mode,reference:songReference(s.song),scoreNotes:(V.song?.(s.song.id)||s.song)?.noteCompare?.takes||null,arNotes:(V.song?.(s.song.id)||s.song)?.arCompare?.takes||null});}catch(error){console.error(error);}
+ if(!report)return '';
+ const n=G.days(takes).filter(d=>d.reliable.length).length,label=G.SAME_DAY.find(x=>x[0]===mode)[1];
+ const line=d=>{
+  const x=report[d.id];
+  const text=x.state==='hold'?G.holdLine(x.reason):G.changeText(x),note=G.basisText(x);
+  return '<li class="vl-growth-row '+TONE[x.state]+'" data-day-row="'+d.id+'"><span class="vl-growth-indicator" aria-hidden="true"></span><div><strong>'+esc(d.title)+'</strong><p>'+esc(text)+'</p>'+(note?'<small>'+esc(note)+'</small>':'')+'</div></li>';
+ };
+ return '<section class="vl-day-report" data-day-report><div class="vl-growth-top"><h3 class="vl-growth-title">날짜별 처음·최근</h3><span class="vl-growth-count" data-day-count>'+(n>1?n+'일 중 처음·최근 비교':n+'일 분석')+'</span></div>'+
+  '<p class="vl-muted vl-day-intro" data-day-intro>위에서 고른 녹음을 하루에 하나로 세어 처음과 최근 날을 지표마다 나눠 비교했어요 (같은 날 녹음: '+esc(label)+'). 이 화면에서만 보는 참고예요.</p>'+
+  '<div class="vl-growth-group"><ul>'+G.METRICS.filter(d=>!d.reference).map(line).join('')+'</ul></div></section>';
 }
 /** The points of 녹음별 변화, oldest first. mode 'all': one per recording (as always). Otherwise one per DAY, by the
  * model's day rule: {m: the recording the value came from (or the day's latest reliable one for an average), value,
@@ -197,18 +272,19 @@ function trend(s) {
  const last=measured.at(-1),prev=measured.at(-2);
  const state=last&&(metric.key==='rating'||comparable(analysis(prev?.m||{}),analysis(last.m)))?metricColor(metric,prev?.value,last.value):'neutral';
  const explanation=last&&prev&&!comparable(analysis(prev.m),analysis(last.m))?pairHoldLine(analysis(prev.m),analysis(last.m)):last?metricChangeText(metric,prev?.value,last.value).replace(/이전 녹음/g,mode==='all'?'이전 녹음':'이전 날'):'분석된 값이 없어요';
- const choice=G?.SAME_DAY?'<label class="vl-sameday"><span>같은 날 녹음</span><select data-same-day aria-label="같은 날 여러 번 부른 녹음을 세는 방법">'+G.SAME_DAY.map(([id,label])=>'<option value="'+id+'"'+(id===mode?' selected':'')+'>'+label+'</option>').join('')+'</select></label>'+
-  (mode==='all'?'':'<p class="vl-sameday-note" data-same-day-note><strong>'+esc(G.SAME_DAY_NOTE[mode])+'</strong> 이 선택은 이 화면의 그래프와 성장 리포트에만 적용돼요. 결과 리포트·월별·주간 요약은 지금처럼 모든 녹음으로 계산해요.</p>'):'';
- return '<section class="vl-section vl-trend"><div class="vl-divider"></div><h2>녹음별 변화</h2>'+choice+'<div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
+ // 같은 날 녹음 세기 is chosen under 깊이 보기; what it does to this chart is said here.
+ const choice='<p class="vl-muted vl-trend-basis" data-song-trend-basis>위에서 고른 녹음을 바로 앞 녹음과 견준 참고 그래프예요. 연습 녹음도 들어가고, 위 ‘이 곡의 변화’와는 기준이 달라요. 같은 날 여러 번 부른 녹음을 세는 방법은 깊이 보기에서 바꿔요.</p>'+
+  (mode==='all'||!G?.SAME_DAY_NOTE?'':'<p class="vl-sameday-note" data-same-day-note><strong>'+esc(G.SAME_DAY_NOTE[mode])+'</strong> 이 선택은 이 그래프와 아래 날짜별 처음·최근에만 적용돼요. ‘이 곡의 변화’와 이번 달·결과 리포트는 모든 녹음으로 계산해요.</p>');
+ return '<section class="vl-trend">'+choice+'<div class="vl-metrics" role="group" aria-label="변화 지표">'+METRICS.map(x=>'<button type="button" data-metric="'+x.key+'" aria-pressed="'+(s.metric===x.key)+'">'+x.label+'</button>').join('')+'</div>'+
   '<p class="vl-metric-guide"><strong>'+esc(metric.label)+' · '+esc(metric.better===-1?'낮을수록 좋아요':metric.better===1?'대체로 높을수록 좋아요':'높낮이만으로 판단하지 않아요')+'</strong><span>'+esc(metric.guide)+'</span></p>'+
   (last?'<p class="vl-change '+state+'" role="status">'+esc('최근 변화 · '+explanation)+'</p>':'')+
   '<p class="vl-legend"><span class="good">● 좋아진 방향</span><span class="bad">● 아쉬운 방향</span><span class="neutral">● 비슷함·판단 보류</span></p>'+
   (measured.length?'<div class="vl-plot-scroll" tabindex="0" role="region" aria-label="녹음별 변화 그래프, 좌우로 스크롤 가능"><div class="vl-plot-track" style="--vl-points:'+measured.length+'">'+plot(series,{highlighted:measured.findIndex(x=>x.day?x.day.ids.includes(s.active):x.m.id===s.active),interactive:true})+'<div class="vl-plot-dates">'+measured.map(x=>'<button type="button" data-point="'+esc(x.m.id)+'"'+(x.day&&x.day.n>1?' data-day="'+esc(x.day.date)+'"':'')+' aria-label="'+esc(pointLabel(x)+' '+metric.label+' '+pointValue(metric,x)+(x.day&&x.day.n>1?' · 그날 녹음 보기':' 상세 보기'))+'">'+esc(pointLabel(x))+'</button>').join('')+'</div></div></div>':'<p class="vl-muted">분석된 녹음이 없어요. 녹음을 선택해 분석을 시작해 주세요.</p>')+
-  (measured.length?'<p class="vl-muted">'+(mode==='all'?'그래프의 점이나 날짜를 누르면 해당 녹음의 상세 팝업을 볼 수 있어요. 색상은 이전 녹음과의 비교이며 첫 점은 중립이에요.':'하루에 점 하나예요. 점이나 날짜를 누르면 그날 녹음 목록(여러 번 부른 날)이나 녹음 상세가 열려요. 색상은 이전 날과의 비교이며 첫 점은 중립이에요.')+'</p>':'')+'</section>';
+  (measured.length?'<p class="vl-muted">'+(mode==='all'?'그래프의 점이나 날짜를 누르면 해당 녹음의 상세 팝업을 볼 수 있어요. 색상은 이전 녹음과의 비교이며 첫 점은 중립이에요.':'하루에 점 하나예요. 점이나 날짜를 누르면 그날 녹음 목록(여러 번 부른 날)이나 녹음 상세가 열려요. 색상은 이전 날과의 비교이며 첫 점은 중립이에요.')+'</p>':'')+dayReport(s)+'</section>';
 }
 function single(s,m) {
   const a=analysis(m);
-  return '<section class="vl-section vl-single"><div class="vl-divider"></div><h2>'+esc(day(m))+' 분석 관찰</h2>'+
+  return '<section class="vl-single"><h3 class="vl-sub">'+esc(day(m))+' 분석 관찰</h3>'+
     (!a?'<p class="vl-muted">이 녹음의 분석 결과가 아직 없어요. 위의 구간 분석을 시작해 주세요.</p>':'<div class="vl-metric-grid">'+METRICS.filter(x=>x.key!=='rating').map(metric=>{
       const v=metric.get(a,m), count=metric.key==='wob'?a.metrics.stability?.notes:metric.key==='into'?a.metrics.intonation?.notes:null;
       return '<div class="vl-stat"><span>'+metric.label+'</span><strong>'+esc(v==null?'측정 안 됨':metric.fmt(v,a))+'</strong><div class="vl-stat-visual" aria-hidden="true"><span style="width:'+Math.min(94,Math.max(8,(Number(v)||0)/(metric.key==='high'?10000:metric.key==='phr'?12:50)*100))+'%"></span></div>'+(count?'<small>측정한 음 '+count+'개</small>':'')+'</div>';
@@ -323,25 +399,25 @@ function remrRow(s){
   if(!n||!n.all)return '';
   return '<button type="button" class="vl-remr" data-lab-remr><i class="ph ph-music-notes-minus" aria-hidden="true"></i><span><strong>MR로 다시 분석</strong><small>'+(n.held?'판정 보류·분석 전 '+n.held+'개 · ':'')+'곡 MR을 빼고 다시 재요</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>';
 }
-const openRemr=s=>s.reanalyzing?V.toast('다시 분석이 끝난 뒤 눌러 주세요.'):V.mrReanalyze?.open(s.song,{items:s.items,picked:s.selected,onSaved:m=>s.results.delete(m.id),onClose:run=>{if(run&&!s.dead)screen(s);}});
+const openRemr=s=>s.reanalyzing?V.toast('다시 분석이 끝난 뒤 눌러 주세요.'):V.mrReanalyze?.open(s.song,{items:s.items,picked:s.selected,onSaved:m=>s.results.delete(m.id),onClose:run=>{if(run&&!s.dead){s.dirty=true;screen(s);}}});
 function makeSegment(s,m) {
   const total=Math.max(0,Number(m.durationSeconds)||0), start=s.start[m.id]??0, end=Math.min(total,start+16), full=s.results.get(m.id);
   const slice=full?.curve?.map((v,i)=>({t:i/full.fps,value:v==null?null:((v%100)+150)%100-50})).filter(p=>p.t>=start&&p.t<=end&&p.value!=null)||[];
   const sampled=slice.filter((_,i)=>i%Math.max(1,Math.ceil(slice.length/25))===0);
-  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-section vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+methodLine(m)+highEvidence(m)+(V.vocalRangeCompare?V.vocalRangeCompare(s.song,analysis(m),{playable:true}):'')+(V.scoreNoteBlock?V.scoreNoteBlock(s.song,m):'')+(V.arNoteBlock?V.arNoteBlock(s.song,m):'')+
+  return (m.analysis?.v===1?'<p class="vl-muted">이전 v1 결과를 보존하고 있어요. 아래 분석 버튼으로 v2 유효·안정 최고음을 다시 확인하세요.</p>':'')+'<section class="vl-segment"><h2>구간 분석 <span>'+time(start)+'–'+time(end)+'</span></h2><div class="vl-measure"><span>지속음 흔들림 <small>전체 녹음 기준</small></span><strong>'+esc(analysis(m)?.metrics?.stability?.wobbleCents==null?'분석 전':'±'+analysis(m).metrics.stability.wobbleCents+' cent')+'</strong></div>'+methodLine(m)+highEvidence(m)+(V.vocalRangeCompare?V.vocalRangeCompare(s.song,analysis(m),{playable:true}):'')+(V.scoreNoteBlock?V.scoreNoteBlock(s.song,m):'')+(V.arNoteBlock?V.arNoteBlock(s.song,m):'')+
     '<div class="vl-ruler" aria-hidden="true"><span>−50</span><i></i><span>0</span><i></i><span>+50</span></div>'+
     (full?(sampled.length?'<div class="vl-segment-chart"><div class="vl-chart-heading">선택 구간의 음정 편차 (cent)</div>'+plot(sampled.map(x=>({value:x.value,label:time(x.t)})),{height:115})+'</div>':'<p class="vl-muted">이 구간에서 목소리를 측정하지 못했어요.</p>'):'<button type="button" class="vl-analyze" data-analyze>이 구간 그래프 보기 <i class="ph ph-arrow-right"></i></button>')+
     '<label class="vl-range-label">분석할 구간 이동<input type="range" min="0" max="'+Math.max(0,Math.floor(total-16))+'" value="'+Math.min(start,Math.max(0,Math.floor(total-16)))+'" data-start aria-label="구간 시작 위치"></label><p class="vl-muted" data-analyze-status aria-live="polite">'+(full?'파형과 수치는 실제 녹음 분석 결과예요.':'그래프는 이 녹음을 분석하면 표시돼요.')+'</p></section>';
 }
 const TIP_METRIC={into:'intonation',wob:'stability',phr:'phrase'};
 function recommendations(s) {
-  // A measure the growth report on this screen shows as 좋아진 방향 is not recommended right under it: the next one is.
-  const report=s.selected.length>1?labReport(s):null;
+  // A measure 이 곡의 변화 shows as 좋아진 방향 is not recommended on the same screen: the next one is.
+  const report=labReport(s);
   const improved=Object.keys(TIP_METRIC).filter(key=>report?.[TIP_METRIC[key]]?.state==='better');
   const result=V.practiceTips(s.items,{songId:s.song.id,exclude:improved});
   if (!result.enough) return {count:result.count, tips:[]};
   const skipped=(result.skipped||[]).map(key=>G?.METRICS.find(d=>d.id===TIP_METRIC[key])?.title).filter(Boolean);
-  const note=skipped.length?'위 성장 리포트에서 좋아진 방향인 항목('+skipped.join('·')+')은 추천에서 뺐어요.':'';
+  const note=skipped.length?'위 ‘이 곡의 변화’에서 좋아진 방향인 항목('+skipped.join('·')+')은 추천에서 뺐어요.':'';
   const tips=result.tips.length?result.tips.slice(0,2):[{
     key:'maintain', name:'롱톤 유지 연습', metric:'유지 연습', value:'',
     reason:'최근 측정값이 고르게 안정적이에요.', goal:'편안한 음역에서 일정한 소리 유지', minutes:5,
@@ -354,22 +430,100 @@ const aiContext=s=>String(s.active)+':'+(s.start[s.active]||0);
 const savedAITip=s=>s.aiTips?.get(aiContext(s))||[...(s.aiTips||new Map())].reverse().find(([key])=>key.startsWith(String(s.active)+':'))?.[1];
 function recommendationList(recs,songId,aiTip=null) {
   const items=recs.tips.map(t=>tipCard(t,songId)).join('');
-  return '<section class="vl-section vl-recommend"><h2>추천 연습</h2>'+
+  return '<section class="vl-weak-block vl-recommend"><h3 class="vl-sub">추천 연습</h3>'+
     (items?'<div class="vl-tip-list">'+items+'</div>':'<p class="vl-muted">이 곡의 신뢰할 수 있는 분석 녹음이 3개 이상 모이면 맞춤 연습 목록이 나와요. 현재 '+recs.count+'개예요.</p>')+
     (recs.note?'<p class="vl-muted" data-tip-skipped>'+esc(recs.note)+'</p>':'')+
     '<div class="vl-tip-list" data-ai-tip>'+(aiTip?tipCard(aiTip,songId):'')+'</div><div class="vl-recommend-actions"><button type="button" class="vl-repeat-practice" data-repeat-practice>이 구간 반복 듣기</button><button type="button" class="vl-repeat-practice" data-ai-exercise>다른 연습 하나 AI 추천받기</button></div><p class="vl-muted" data-ai-status role="status">기록을 바탕으로 기존 목록에 없는 연습 한 가지를 추천해요.</p></section>';
 }
+/** 두 녹음 비교: any two of the song's recordings → 가리고 듣고 평가 (the listening sheet, app/listen-verdict.js),
+ * 측정값 나란히 보기 (the A/B table) and a memo for the pair. A take picked here joins the chips above so it can be played. */
+function comparePair(s){
+  const picked=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean),pool=picked.length>1?picked:s.items;
+  const a=s.items.find(m=>m.id===s.compareA)||pool[0],b=s.items.find(m=>m.id===s.compareB)||pool.at(-1);
+  return [a,b];
+}
 function comparePanel(s) {
-  if(s.selected.length<2)return '';
-  const picked=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean);
-  const first=picked[0], last=picked.at(-1);
-  const a=s.items.find(m=>m.id===s.compareA)||first, b=s.items.find(m=>m.id===s.compareB)||last;
+  if(s.items.length<2)return '<p class="vl-muted" data-song-compare-empty>이 곡의 녹음이 두 개 이상이면 두 녹음을 골라 가리고 듣거나 측정값을 나란히 볼 수 있어요.</p>';
+  const [a,b]=comparePair(s);
   // 들어 보고 남긴 평가 (kind listen-verdict, app/listen-verdict.js) shares the list: never read as this memo.
   const saved=(V.db.comparisonReports||[]).find(x=>x.kind!=='vocal-lab'&&x.kind!=='listen-verdict'&&x.firstId===a.id&&x.secondId===b.id);
-  const options=selected=>picked.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===selected.id?' selected':'')+'>'+esc(day(m)+' · '+M.label(m))+'</option>').join('');
-  return '<section class="vl-section vl-compare"><details data-compare-panel'+(s.compareOpen?' open':'')+'><summary>두 녹음 자세히 비교 <i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-compare-body"><p class="vl-muted">A/B를 누르면 재생 위치를 유지한 채 해당 녹음으로 전환해요.</p><div class="vl-compare-picks"><label>A 녹음<select data-compare-a>'+options(a)+'</select></label><label>B 녹음<select data-compare-b>'+options(b)+'</select></label></div><div class="vl-compare-actions"><button type="button" data-compare-switch>같은 위치에서 '+(s.active===a.id?'B':'A')+' 듣기</button><button type="button" data-compare-first>첫 녹음 ↔ 최근 녹음</button></div>'+
+  const options=selected=>s.items.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===selected.id?' selected':'')+'>'+esc(day(m)+' · '+M.label(m)+((s.kinds?.get(m.id)||[]).length?' ('+s.kinds.get(m.id).join('·')+')':''))+'</option>').join('');
+  const verdicts=window.VzipListenVerdict?.list?.(V.db,{songId:s.song.id}).length||0;
+  return '<p class="vl-part-basis">이 곡의 녹음 가운데 두 개를 골라요. 가리고 들으면 어느 쪽이 나은지 귀로 먼저 정할 수 있어요.</p>'+
+    '<div class="vl-compare-picks"><label>A 녹음<select data-compare-a>'+options(a)+'</select></label><label>B 녹음<select data-compare-b>'+options(b)+'</select></label></div>'+
+    '<div class="vl-compare-actions"><button type="button" data-compare-first>첫 녹음 ↔ 최근 녹음</button></div>'+
+    (V.listenCompare?'<button type="button" class="vl-report lc-lab-entry" data-listen-open data-song="'+esc(s.song.id)+'" data-a="'+esc(a.id)+'" data-b="'+esc(b.id)+'"><strong>가리고 듣고 평가하기</strong><span>'+(verdicts?'남긴 평가 '+verdicts+'개':'가리고 듣고 평가를 남겨요')+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>':'')+
+    '<details data-compare-panel'+(s.compareOpen?' open':'')+'><summary>측정값 나란히 보기 · 메모 <i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-compare-body"><p class="vl-muted">A/B를 누르면 재생 위치를 유지한 채 해당 녹음으로 전환해요.</p><div class="vl-compare-actions"><button type="button" data-compare-switch>같은 위치에서 '+(s.active===a.id?'B':'A')+' 듣기</button></div>'+
     (V.measureTable?.(a,b)||'<p class="vl-muted">두 녹음의 측정 결과가 있으면 비교표가 나타나요.</p>')+
-    '<form data-compare-form><label>달라진 점<textarea name="notes" maxlength="5000" placeholder="직접 느낀 변화를 적어주세요">'+esc(saved?.notes||'')+'</textarea></label><label>다음 연습 목표<textarea name="goal" maxlength="3000">'+esc(saved?.goal||'')+'</textarea></label><div class="vl-compare-actions"><button type="button" data-compare-ai>메모 AI 정리</button><button type="submit">비교 메모 저장</button></div><p class="vl-muted" data-compare-output aria-live="polite"></p></form></div></details></section>';
+    '<form data-compare-form><label>달라진 점<textarea name="notes" maxlength="5000" placeholder="직접 느낀 변화를 적어주세요">'+esc(saved?.notes||'')+'</textarea></label><label>다음 연습 목표<textarea name="goal" maxlength="3000">'+esc(saved?.goal||'')+'</textarea></label><div class="vl-compare-actions"><button type="button" data-compare-ai>메모 AI 정리</button><button type="submit">비교 메모 저장</button></div><p class="vl-muted" data-compare-output aria-live="polite"></p></form></div></details>';
+}
+/* ---------- 약한 곳 ---------- */
+const fold=(key,title,sub,body,open)=>'<details class="vl-fold" data-song-fold="'+key+'"'+(open?' open':'')+'><summary><span>'+title+'</span>'+(sub?'<small>'+sub+'</small>':'')+'<i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-fold-body">'+body+'</div></details>';
+/** The recordings a section can be listened to in (audio the device can open; as the plan screen picks them), newest first. */
+const audible=s=>s.items.filter(m=>!M.isVideo?.(m)&&(!m.size||m.size<=60*1024*1024)).slice().reverse();
+function stopWeak(s){s.weakToken=(s.weakToken||0)+1;const w=s.weakAudio;if(w){try{w.audio.pause();w.audio.removeAttribute('src');w.audio.load();}catch{}w.revoke?.();}s.weakAudio=null;}
+/** 음높이 확인 구간 (app/weak-phrase.js): places in ONE recording far from the nearest semitone, to listen to — candidates, never a verdict. */
+function paintPhrases(s){
+  const host=s.slots.phrases,list=audible(s);
+  if(!host)return;
+  if(!window.VzipWeakPhrase||!list.length){host.innerHTML='<h3 class="vl-sub">음높이 확인 구간</h3><p class="vl-muted">'+(list.length?'이 기기에서는 구간 찾기를 쓸 수 없어요.':'들어 볼 수 있는 이 곡 녹음이 아직 없어요.')+'</p>';return;}
+  const pickId=list.some(m=>m.id===s.weakId)?s.weakId:list[0].id;
+  host.innerHTML='<h3 class="vl-sub">음높이 확인 구간</h3><p class="vl-muted">녹음 하나에서 가까운 반음과 차이가 큰 곳을 찾아 들려 드려요. 들어 볼 후보예요. 정답 판정이 아니에요.</p>'+
+    '<div class="vl-weak-pick"><label class="sr-only" for="vl-weak-take">구간을 찾을 녹음</label><select id="vl-weak-take" data-weak-take>'+list.map(m=>'<option value="'+esc(m.id)+'"'+(m.id===pickId?' selected':'')+'>'+esc(day(m)+' · '+M.label(m))+'</option>').join('')+'</select>'+
+    '<button type="button" data-weak-find>구간 찾기</button></div><div class="vl-weak-results" data-weak-results role="status"></div>';
+  const select=host.querySelector('[data-weak-take]'),button=host.querySelector('[data-weak-find]'),out=host.querySelector('[data-weak-results]');
+  const show=(item,found)=>{
+    out.innerHTML='<p class="vl-muted">음높이 확인 후보 '+found.length+'개 · 듣고 실제로 연습할 곳인지 확인해 주세요.</p>'+
+      found.map((seg,i)=>'<div class="vl-weak-item"><button type="button" class="vl-chip-play" data-weak-play="'+i+'" aria-label="'+esc(time(seg.start)+'부터 '+time(seg.end)+'까지 듣기')+'"><i class="ph-fill ph-play" aria-hidden="true"></i> '+esc(time(Math.floor(seg.start))+'–'+time(Math.ceil(seg.end)))+'</button>'+
+        '<span>가까운 반음과 '+(seg.deviation>0?'+':'')+seg.deviation+' cent · 정답 판정 아님</span></div>').join('')+'<div class="vl-weak-player" data-weak-player></div>';
+    out.querySelectorAll('[data-weak-play]').forEach(b=>b.onclick=async()=>{
+      const seg=found[Number(b.dataset.weakPlay)],box=out.querySelector('[data-weak-player]');
+      stopWeak(s);const token=s.weakToken;box.textContent='파일을 여는 중…';
+      try{
+        const src=await M.src(item);
+        if(token!==s.weakToken||s.dead||!box.isConnected){if(src.revoke)URL.revokeObjectURL(src.url);return;}
+        const audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';audio.src=src.url;audio.setAttribute('aria-label','확인 구간 듣기');
+        s.weakAudio={audio,revoke:src.revoke?()=>URL.revokeObjectURL(src.url):null};box.replaceChildren(audio);
+        audio.addEventListener('loadedmetadata',()=>{audio.currentTime=Math.min(seg.start,Number.isFinite(audio.duration)?Math.max(0,audio.duration-.1):seg.start);},{once:true});
+        audio.addEventListener('timeupdate',()=>{if(audio.currentTime>=seg.end)audio.pause();});
+        audio.play().catch(()=>{});
+      }catch(error){if(token===s.weakToken&&box.isConnected)box.textContent=error.message||'재생할 수 없어요.';}
+    });
+  };
+  if(s.weak?.id===pickId&&s.weak.found?.length)show(list.find(m=>m.id===pickId),s.weak.found);
+  select.onchange=()=>{stopWeak(s);s.weakId=select.value;out.textContent='';};
+  button.onclick=async()=>{
+    const item=list.find(m=>m.id===select.value);
+    if(!item)return;
+    stopWeak(s);const token=s.weakToken;s.weakId=item.id;button.disabled=true;out.textContent='이 기기에서 녹음을 살펴보고 있어요…';
+    try{
+      const result=s.results.get(item.id)?.notes?s.results.get(item.id):await V.analyzeRecording(item,{save:false,onProgress:p=>{if(token===s.weakToken&&out.isConnected)out.textContent='구간 확인 중 · '+Math.round(Math.min(1,Math.max(0,p))*100)+'%';}});
+      if(token!==s.weakToken||s.dead||!out.isConnected)return;
+      if(!V.analysisReliable(result.summary)){out.textContent='목소리가 짧거나 반주가 커서 구간 찾기를 보류했어요.';return;}
+      const found=window.VzipWeakPhrase.candidates(result)||[];
+      s.weak={id:item.id,found};
+      if(!found.length){out.textContent='확인해 볼 만큼 차이가 큰 곳을 찾지 못했어요.';return;}
+      show(item,found);
+    }catch(error){if(token===s.weakToken&&out.isConnected)out.textContent=error.message||'녹음을 살펴보지 못했어요.';}
+    finally{if(button.isConnected)button.disabled=false;}
+  };
+}
+/** 레슨 지적 (app/score-points.js): how many points the song has and how the last checks went, with the song page's own
+ * card under it (부르면서 체크 · 지적 추가). Read-only here. */
+function paintPoints(s){
+  const host=s.slots?.points,P=window.VzipScorePointsModel;
+  if(!host)return;
+  if(!P||!V.scorePoints){host.innerHTML='';return;}
+  const on=P.active(P.points(V.db,s.song.id)),runs=P.runs(V.db,s.song.id);
+  const rows=on.map(p=>({p,r:P.record(runs,p.id)}));
+  const kept=rows.reduce((n,x)=>n+x.r.kept,0),total=rows.reduce((n,x)=>n+x.r.total,0);
+  // The points missed most in the last checks first: those are the weak places.
+  const shown=rows.filter(x=>x.r.total).sort((x,y)=>(y.r.total-y.r.kept)-(x.r.total-x.r.kept)).slice(0,3);
+  host.innerHTML='<h3 class="vl-sub">레슨 지적</h3>'+
+    '<p class="vl-muted" data-weak-points-sum>'+(on.length?'지적 '+on.length+'개 · '+(total?'최근 체크 '+total+'번 중 '+kept+'번 지켰어요':'아직 부르면서 체크한 적이 없어요'):'이 곡에 적어 둔 레슨 지적이 아직 없어요.')+'</p>'+
+    (shown.length?'<ul class="vl-points">'+shown.map(({p,r})=>'<li data-weak-point="'+esc(p.id)+'"><strong>'+esc(P.label(p.measures))+'</strong><span>'+esc(p.text)+'</span><small>'+esc(P.recordText(r))+'</small></li>').join('')+'</ul>':'')+
+    '<div class="vl-light vl-points-card" data-weak-points-card></div>';
+  V.scorePoints.card(host.querySelector('[data-weak-points-card]'),s.song.id);
 }
 function playerCard(s,m) {
   const idx=s.selected.indexOf(m.id),total=Math.max(0,Number(m.durationSeconds)||0);
@@ -388,27 +542,189 @@ function playerCard(s,m) {
     '<div class="vl-controls"><button type="button" data-loop aria-label="구간 반복" aria-pressed="false"><i class="ph ph-repeat"></i></button><button type="button" data-previous aria-label="이전 녹음"'+(!previous?' disabled':'')+'><i class="ph ph-skip-back"></i></button><button type="button" class="vl-play" data-play aria-label="재생"><i class="ph-fill ph-play"></i></button><button type="button" data-next aria-label="다음 녹음"'+(!next?' disabled':'')+'><i class="ph ph-skip-forward"></i></button><button type="button" class="vl-speed" data-speed aria-label="재생 속도">1.0×</button></div>'+
     '<div class="vl-internal-player" data-player></div><p class="vl-muted vl-player-status" data-player-status role="status"></p></div>'+hint(next,'right');
 }
+/** The fixed frame of the screen: the four sections in order, with a slot for each part. A slot is filled by its own
+ * painter, so a section that holds something typed or playing (구간 A/B, 음높이 확인 구간) is not redrawn by a tap elsewhere. */
+const JUMPS=[['changes','변화'],['weak','약한 곳'],['compare','두 녹음 비교'],['deep','깊이 보기']];
+function frame(s){
+  return '<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div>'+
+    '<nav class="vl-jump" aria-label="이 화면에서 바로 가기">'+JUMPS.map(([key,label])=>'<button type="button" data-song-jump="'+key+'">'+label+'</button>').join('')+'</nav>'+
+    '<section class="vl-part" data-song-section="changes" aria-labelledby="vl-changes-title"><div data-slot="verdict"></div><div data-slot="takes"></div></section>'+
+    '<section class="vl-part" data-song-section="weak" aria-labelledby="vl-weak-title"><header class="vl-part-head"><h2 id="vl-weak-title">약한 곳</h2></header>'+
+      '<p class="vl-part-basis">되풀이해 흔들리는 곳, 레슨에서 들은 지적, 구간끼리 듣기를 한자리에 모았어요. 숫자는 참고예요.</p>'+
+      '<div data-slot="pass"></div><div class="vl-weak-block" data-slot="phrases" data-weak="phrases"></div><div class="vl-weak-block" data-slot="points" data-weak="points"></div>'+
+      '<details class="vl-fold" data-song-fold="ab" data-weak="ab"><summary><span>구간 A/B</span><small>두 녹음의 같은 구간을 맞춰 번갈아 들어요</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div class="vl-fold-body vl-light" data-ab-host></div></details>'+
+      '<div data-slot="tips"></div></section>'+
+    '<section class="vl-part vl-compare" data-song-section="compare" aria-labelledby="vl-compare-title"><header class="vl-part-head"><h2 id="vl-compare-title">두 녹음 비교</h2></header><div data-slot="compare"></div></section>'+
+    '<details class="vl-part vl-deep" data-song-section="deep"'+(foldOpen(s,'deep')?' open':'')+'><summary><h2>깊이 보기</h2><small>소리 길 흔적 · MR로 다시 분석 · 정밀 리포트 · 보관함 · 분석 기준</small><i class="ph ph-caret-down" aria-hidden="true"></i></summary><div data-slot="deep"></div></details>';
+}
+function bindFrame(s){
+  const host=s.host;
+  host.querySelectorAll('[data-song-jump]').forEach(b=>b.onclick=()=>{
+    const target=host.querySelector('[data-song-section="'+b.dataset.songJump+'"]');
+    if(!target)return;
+    if(target.tagName==='DETAILS')target.open=true;
+    target.scrollIntoView({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+  });
+  watchFold(s,host.querySelector('[data-song-section="deep"]'),'deep');
+  // 구간 A/B (app/segment-ab-ui.js) straight from the song: the panel a 집중 연습 계획 opens, without a plan.
+  const ab=host.querySelector('[data-song-fold="ab"]'),abHost=ab.querySelector('[data-ab-host]');
+  ab.addEventListener('toggle',()=>{
+    if(!ab.open){V.segmentABStop?.();abHost.replaceChildren();return;}
+    if(abHost.childElementCount)return;
+    if(!V.segmentABPanel||s.items.length<2){abHost.innerHTML='<p class="vl-ab-empty" data-ab-empty>'+(V.segmentABPanel?'이 곡의 녹음이 두 개 이상이면 같은 구간을 맞춰 들어 볼 수 있어요.':'이 기기에서는 구간 A/B를 쓸 수 없어요.')+'</p>';return;}
+    V.segmentABPanel(abHost,{songId:s.song.id},s.items);
+  });
+}
+/** 이 곡의 변화 (the verdict part) and 파사지오 참고: drawn when a take, an analysis or the switch changed (s.dirty). */
+function paintVerdict(s){
+  const box=s.slots.verdict;
+  box.innerHTML=verdictHtml(s);
+  s.slots.pass.innerHTML=passHtml(s);
+  const gc=box.querySelector('[data-growth-changes]');
+  if(gc)window.VzipGrowthChangesUI.mount(gc,s.all,{songId:s.song.id,practice:s.practice,head:false,
+    empty:{verdicts:'이 곡에 남긴 들어 본 평가가 아직 없어요. 아래 ‘두 녹음 비교’에서 가리고 듣고 남길 수 있어요.',songs:'같은 방법으로 잰 이 곡 녹음이 다른 날 두 개 이상 모이면 처음과 최근을 견줘 보여 드려요.'}});
+  const sw=box.querySelector('[data-song-practice]');
+  sw.onchange=()=>{s.practice=sw.checked;V.growthSong?.setPractice(s.practice);s.dirty=true;screen(s);s.slots.verdict.querySelector('[data-song-practice]')?.focus({preventScroll:true});};
+  const redoButton=box.querySelector('[data-growth-reanalyze]');
+  if(redoButton)redoButton.onclick=async()=>{
+    if(s.reanalyzing)return;
+    const todo=growthMedia(s).filter(m=>!G.hasDetail(analysis(m)));
+    if(!todo.length)return;
+    s.reanalyzing=true;redoButton.disabled=true;
+    const status=box.querySelector('[data-growth-reanalyze-status]');
+    let done=0,failed=0;
+    for(const m of todo){
+      if(s.dead)break;
+      const note=s.slots.verdict.querySelector('[data-growth-reanalyze-status]')||status;
+      if(note?.isConnected)note.textContent=(done+failed+1)+'/'+todo.length+' 분석 중 · '+M.label(m);
+      try{const r=await V.analyzeRecording(m,{save:true});m.analysis=r.summary;done++;}
+      catch(e){failed++;}
+    }
+    s.reanalyzing=false;
+    if(s.dead)return;
+    V.toast(failed?'다시 분석 '+done+'개 완료 · '+failed+'개는 분석하지 못했어요':'다시 분석 '+done+'개를 마쳤어요',failed?'error':undefined);
+    s.dirty=true;screen(s);
+  };
+  const growthButton=box.querySelector('[data-growth-ai]');
+  if(growthButton){
+    growthButton.onclick=async()=>{
+      if(s.growthPending)return;
+      const key=growthEvidenceKey(s),id=labGrowthId(s);
+      const pairReport=labReport(s);
+      const status=box.querySelector('[data-growth-ai-status]'),output=box.querySelector('[data-growth-ai-result]')||box.querySelector('.vl-growth-ai-text');
+      if(!pairReport){status.textContent='비교할 신뢰도 높은 측정값이 부족해요.';return;}
+      if(typeof window.vzipCloudCoach!=='function'){status.textContent='AI 연결을 사용할 수 없어요. 위의 측정 기반 변화 요약은 계속 볼 수 있어요.';return;}
+      s.growthPending=true;growthButton.disabled=true;status.textContent='AI가 녹음별 측정 변화를 정리하고 있어요…';
+      try{
+        // Server "overall" mode: a validated four-line report (요약/좋아진 점/보완할 점/다음 연습) built only from the
+        // separated measures of ONE song (음정 정확도·음정 안정성·호흡 유지; withheld ones as "unknown"). Range,
+        // highest notes, high-note zone and passaggio are never sent. No audio is sent.
+        const measured=G.aiMetrics(G.aggregate([{songId:s.song.id,report:aiReport(pairReport)}]));
+        if(!measured.some(x=>x.state!=='unknown'))throw Error('AI가 해석할 비교 가능한 음정·안정성·호흡 측정값이 부족해요.');
+        const records=growthMedia(s).slice().sort((x,y)=>(M.dateOf(x)||'').localeCompare(M.dateOf(y)||''));
+        const response=await window.vzipCloudCoach({
+          mode:'overall',recordingCount:records.length,analysisCount:records.filter(m=>V.analysisReliable(analysis(m))).length,analyzedSongs:1,
+          periodStart:M.dateOf(records[0])||'',periodEnd:M.dateOf(records.at(-1))||'',metrics:measured,observations:[]
+        });
+        if(s.dead||!host0(s)||growthEvidenceKey(s)!==key||labGrowthId(s)!==id)return;
+        if(response?.mode!=='overall')throw Error('AI 결과 형식이 달라요. 다시 생성해 주세요.');
+        const textResult=String(response.note||'').trim();
+        if(!textResult)throw Error('AI 해석이 비어 있어요. 다시 생성해 주세요.');
+        const report={id,period:'vocal-growth-ai',songId:s.song.id,mediaIds:records.map(m=>m.id),evidenceKey:key,text:textResult.slice(0,5000),updatedAt:Date.now()};
+        const stored=V.change(db=>{db.practicePlans||=[];const existing=db.practicePlans.find(p=>p.id===id);if(existing)Object.assign(existing,report);else db.practicePlans.push(report);},{silent:true});
+        if(!stored)throw Error('AI 리포트 저장에 실패했어요.');
+        if(output?.isConnected){output.hidden=false;output.removeAttribute('data-growth-ai-older');output.textContent=report.text;}
+        if(status.isConnected)status.textContent='AI 종합 리포트를 저장했어요. 다시 열어도 확인할 수 있어요.';
+        growthButton.textContent='다시 생성';
+      }catch(e){if(!s.dead&&status.isConnected)status.textContent='AI 해석 생성 실패: '+String(e?.message||e)+' · 위 측정 기반 요약은 그대로 볼 수 있어요.';}
+      finally{s.growthPending=false;if(growthButton.isConnected)growthButton.disabled=false;}
+    };
+  }
+}
+const host0=s=>s.host.isConnected;
+/** The song's recordings: date chips (which takes are open), the player of the active one, its rating, then — folded —
+ * 이 녹음 자세히 (구간 분석, 최고음, 악보·원곡과 비교) and 자세히 · 녹음별 변화 (this screen's own per-take numbers). */
+function takesHtml(s,m){
+  const chips='<div class="vl-select"><h3 class="vl-sub">이 곡의 녹음 <span>'+s.items.length+'</span></h3><span>날짜를 눌러 들을 녹음을 골라요</span><div class="vl-dates" role="group" aria-label="들을 녹음 날짜">'+s.items.map(x=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+
+      // 연습: a 연습실·트레이닝 연습 recording (counted only with 연습 녹음 포함). 영상: a video.
+      (s.kinds?.get(x.id)||[]).map(k=>' <small class="vl-kind" data-lab-kind>'+k+'</small>').join('')+'</button>').join('')+'</div></div>';
+  if(!m)return chips+'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>';
+  const many=s.selected.length>1;
+  return chips+'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+
+    (many?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+
+    '<section class="vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
+    fold('take','이 녹음 자세히','구간 분석 · 최고음 확인 · 악보·원곡과 비교',makeSegment(s,m)+(many?'':single(s,m)),foldOpen(s,'take'))+
+    (many?fold('trend','자세히 · 녹음별 변화','고른 녹음을 바로 앞 녹음과 견준 참고 그래프',trend(s),foldOpen(s,'trend')):'');
+}
+/** 깊이 보기: every deeper tool of this song, each on its own existing screen or sheet. */
+function deepHtml(s,m){
+  const reports=(V.db.comparisonReports||[]).filter(r=>r.kind!=='listen-verdict'&&!(V.db.deleted?.comparisonReports||[]).includes(r.id)).length;
+  const link=(key,href,title,sub,attr='')=>'<a class="vl-report" data-song-deep="'+key+'"'+attr+' href="'+href+'"><strong>'+title+'</strong><span>'+sub+'</span><i class="ph ph-caret-right" aria-hidden="true"></i></a>';
+  const mode=sameDay(),mr=V.mrReanalyze?.count(s.song,s.items);
+  return (V.voicePathLink?V.voicePathLink(s.song,m):'')+
+    (remrRow(s)||(V.mrReanalyze&&!mr?link('mr-add','#/song/'+encodeURIComponent(s.song.id)+'?tab=ar','MR로 다시 분석','곡에 MR 파일을 올리면 반주를 빼고 다시 잴 수 있어요'):''))+
+    // data-precision-lab-entry: app/precision-report-ui.js adds its own link to this screen unless one is here already.
+    (window.VzipPrecisionReport?link('precision','#/precision-report','발성 정밀 리포트','표준 과제로 잰 결과를 과제별로 비교해요',' data-precision-lab-entry'):'')+
+    link('reports','#/lab-reports','리포트 보관함',reports?'저장한 리포트 '+reports+'개':'저장한 리포트가 아직 없어요')+
+    (m?'<div class="vl-save"><span>지금 고른 녹음과 분석을 보관함에 남겨요</span><button type="button" data-save-report>리포트 저장</button></div>':'')+
+    (G?.SAME_DAY?'<div class="vl-deep-block"><label class="vl-sameday"><span>같은 날 녹음 세기</span><select data-same-day aria-label="같은 날 여러 번 부른 녹음을 세는 방법">'+G.SAME_DAY.map(([id,label])=>'<option value="'+id+'"'+(id===mode?' selected':'')+'>'+label+'</option>').join('')+'</select></label>'+
+      '<p class="vl-muted" data-same-day-scope>하루에 여러 번 부른 날을 ‘자세히 · 녹음별 변화’의 그래프와 날짜별 처음·최근에서 어떻게 셀지 정해요. ‘이 곡의 변화’ 판정은 바뀌지 않아요.</p></div>':'')+
+    link('basis','#/growth-flow?period=all','분석 기준','어떤 녹음을 세고 빼는지 · 지난 흐름 전체의 맨 아래에 있어요')+
+    link('library','#/library','녹음을 직접 골라 분석','전체 녹음에서 선택한 뒤 분석을 눌러요')+
+    link('song','#/song/'+encodeURIComponent(s.song.id),'곡 상세','악보 · MR · 레슨 지적 · 녹음 목록');
+}
+/** 두 녹음 비교: the two selects, 첫 녹음 ↔ 최근 녹음, the A/B switch on the player above, the table and the memo. */
+function bindCompare(s){
+  const box=s.slots.compare,selA=box.querySelector('[data-compare-a]'),selB=box.querySelector('[data-compare-b]');
+  if(!selA||!selB)return;
+  // A take picked here joins the chips (in date order), so the player can switch to it.
+  const include=id=>{if(id&&!s.selected.includes(id))s.selected=s.items.filter(x=>s.selected.includes(x.id)||x.id===id).map(x=>x.id);if(!s.active)s.active=id;};
+  const cmp=box.querySelector('[data-compare-panel]');
+  cmp.ontoggle=()=>{s.compareOpen=cmp.open};
+  const switchTo=id=>{if(id===s.active)return;const el=s.player?.el,position=el?.currentTime||0,wasPlaying=!!el&&!el.paused;include(id);s.compareOpen=true;s.active=id;screen(s);s.player?.load().then(()=>{s.player.seek(position);if(wasPlaying)s.player.play()}).catch(()=>{});};
+  selA.onchange=e=>{s.compareA=e.target.value;s.compareB=selB.value;include(s.compareA);screen(s)};
+  selB.onchange=e=>{s.compareB=e.target.value;s.compareA=selA.value;include(s.compareB);screen(s)};
+  box.querySelector('[data-compare-first]').onclick=()=>{s.compareA=s.items[0].id;s.compareB=s.items.at(-1).id;include(s.compareA);include(s.compareB);screen(s)};
+  cmp.querySelector('[data-compare-switch]').onclick=()=>{const a=selA.value,b=selB.value;include(a);include(b);switchTo(s.active===a?b:a)};
+  const form=cmp.querySelector('[data-compare-form]'),output=cmp.querySelector('[data-compare-output]');
+  // 05-A: 달라진 점·다음 목표 are kept on this device per pair of recordings until saved.
+  const draft=V.fieldDraft?.wire(form,'compare:'+selA.value+':'+selB.value,[{name:'notes',saved:form.elements.notes.defaultValue},{name:'goal',saved:form.elements.goal.defaultValue}]);
+  form.onsubmit=e=>{e.preventDefault();const a=s.items.find(x=>x.id===selA.value),b=s.items.find(x=>x.id===selB.value);if(!a||!b||a.id===b.id){output.textContent='서로 다른 녹음 두 개를 선택해 주세요.';return}const entry={firstId:a.id,secondId:b.id,firstName:M.label(a),secondName:M.label(b),firstDate:a.created,secondDate:b.created,song:s.song.title,songId:s.song.id,measures:{first:V.measureSnapshot?.(a)||null,second:V.measureSnapshot?.(b)||null},notes:form.elements.notes.value,goal:form.elements.goal.value,firstRating:a.rating??null,secondRating:b.rating??null,firstReview:a.review||'',secondReview:b.review||''};if(V.change(d=>{d.comparisonReports||=[];const old=d.comparisonReports.find(x=>x.kind!=='vocal-lab'&&x.firstId===a.id&&x.secondId===b.id);if(old)Object.assign(old,entry);else d.comparisonReports.push({id:V.uid(),created:Date.now(),...entry})},{silent:true})){draft?.clear();V.toast('비교 메모를 저장했어요.');}};
+  cmp.querySelector('[data-compare-ai]').onclick=async e=>{const notes=form.elements.notes.value.trim(),btn=e.currentTarget;if(notes.length<10){output.textContent='정리할 메모를 10자 이상 작성해 주세요.';return}const token=await window.vzipCloudAccessToken?.();if(!token){output.textContent='로그인 후 사용할 수 있어요.';return}btn.disabled=true;output.textContent='메모를 정리하는 중…';try{const res=await fetch('https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vocal-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,apikey:V.anonKey},body:JSON.stringify({mode:'comparison',notes})});const json=await res.json();if(!res.ok)throw Error(json.error||'AI 정리 실패');output.textContent=json.analysis+'\n\n※ 작성한 메모를 정리한 결과예요.'}catch(err){output.textContent='AI 정리 실패: '+err.message}finally{btn.disabled=false}};
+}
 function screen(s) {
   const host=s.host, m=s.items.find(x=>x.id===s.active);
   const scrollTop=document.scrollingElement?.scrollTop??0;
-  const recs=m?recommendations(s):null;
   s.player?.destroy(); s.player=null;
   s.plotObserver?.disconnect(); s.plotObserver=null;
-  host.innerHTML='<div class="vl-song"><i class="ph ph-waveform" aria-hidden="true"></i><strong>'+esc(s.song.title)+'</strong></div><div class="vl-select"><span>녹음 날짜</span><div class="vl-dates" role="group" aria-label="분석할 녹음 날짜">'+s.items.map((x,i)=>'<button type="button" data-date="'+esc(x.id)+'" aria-pressed="'+s.selected.includes(x.id)+'">'+esc(day(x)||'날짜 없음')+(s.items.filter(y=>day(y)===day(x)).length>1?' · '+(s.items.filter(y=>day(y)===day(x)).findIndex(y=>y.id===x.id)+1):'')+
-      // 연습: a 연습실·트레이닝 연습 recording (not counted by 결과 리포트). 영상: a video.
-      (s.kinds?.get(x.id)||[]).map(k=>' <small class="vl-kind" data-lab-kind>'+k+'</small>').join('')+'</button>').join('')+'</div></div>'+remrRow(s)+
-    (!m?'<div class="vl-empty">'+(s.items.length?'날짜를 선택해 주세요<br><small>선택한 녹음의 플레이어와 분석이 여기에 나타나요.</small>':'이 곡에 연결된 녹음이 없어요<br><a href="#/record?song='+encodeURIComponent(s.song.id)+'">녹음하러 가기</a>')+'</div>':'<div class="vl-carousel" data-carousel aria-label="선택한 녹음 플레이어, 좌우로 넘기기">'+playerCard(s,m)+'</div>'+(s.selected.length>1?'<div class="vl-swipe-guide" aria-hidden="true"><i class="ph ph-arrow-left"></i><span>이전 녹음</span><span class="vl-swipe-track"><b style="width:'+(((s.selected.indexOf(s.active)+1)/s.selected.length)*100)+'%"></b></span><span>최근 녹음</span><i class="ph ph-arrow-right"></i></div>':'')+makeSegment(s,m)+(s.selected.length>1?trend(s)+growthReport(s):single(s,m))+
-      '<section class="vl-section vl-rating"><span>내 만족도 · '+esc(day(m))+'</span><div class="vl-stars" role="group" aria-label="만족도">'+[1,2,3,4,5].map(n=>'<button type="button" data-rating="'+n+'" aria-pressed="'+(n<=Number(m.rating||0))+'" aria-label="'+n+'점">★</button>').join('')+'</div><b>'+(m.rating?m.rating+'/5':'—')+'</b></section>'+
-      comparePanel(s)+(V.listenEntry?V.listenEntry(s.song,s.items):'')+(V.voicePathLink?V.voicePathLink(s.song,m):'')+recommendationList(recs,s.song.id,savedAITip(s))+
-      '<div class="vl-save"><span>이 분석을 남겨둘까요?</span><button type="button" data-save-report>리포트 저장</button></div>');
+  if(!s.slots){
+    host.innerHTML=frame(s);
+    s.slots=Object.fromEntries([...host.querySelectorAll('[data-slot]')].map(el=>[el.dataset.slot,el]));
+    s.dirty=true;bindFrame(s);paintPhrases(s);paintPoints(s);
+  }
+  if(s.dirty){s.dirty=false;paintVerdict(s);}
+  const recs=m?recommendations(s):null;
+  // T: the recordings part. Its player, chips and folds are looked up in it only — 이 곡의 변화 above can hold a player
+  // of its own (처음·최근 듣기) with the same control names.
+  const T=s.slots.takes;
+  T.innerHTML=takesHtml(s,m);
+  s.slots.tips.innerHTML=m?recommendationList(recs,s.song.id,savedAITip(s)):'';
+  s.slots.compare.innerHTML=comparePanel(s);
+  s.slots.deep.innerHTML=deepHtml(s,m);
   sizePlots(host);
   // The trend chart scrolls sideways: show the active (or newest) point, not the oldest.
-  const plotScroll=host.querySelector('.vl-plot-scroll');
-  if(plotScroll){const dot=plotScroll.querySelector('.vl-plot-dates [data-point="'+CSS.escape(String(s.active))+'"]')||plotScroll.querySelector('.vl-plot-dates [data-point]:last-child');
-    if(dot){const box=dot.getBoundingClientRect();plotScroll.scrollLeft=Math.max(0,box.left+box.width/2-plotScroll.getBoundingClientRect().left+plotScroll.scrollLeft-plotScroll.clientWidth/2);}}
+  const centrePlot=()=>{
+    const plotScroll=host.querySelector('.vl-plot-scroll');
+    if(!plotScroll)return;
+    const dot=plotScroll.querySelector('.vl-plot-dates [data-point="'+CSS.escape(String(s.active))+'"]')||plotScroll.querySelector('.vl-plot-dates [data-point]:last-child');
+    if(dot){const box=dot.getBoundingClientRect();plotScroll.scrollLeft=Math.max(0,box.left+box.width/2-plotScroll.getBoundingClientRect().left+plotScroll.scrollLeft-plotScroll.clientWidth/2);}
+  };
+  centrePlot();
   if(window.ResizeObserver){s.plotObserver=new ResizeObserver(()=>sizePlots(host));host.querySelectorAll('.vl-plot').forEach(svg=>s.plotObserver.observe(svg));}
   if(document.scrollingElement)document.scrollingElement.scrollTop=scrollTop;
-  host.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{
+  // The folds stay as the person left them through a redraw; a chart is measured once its fold is open.
+  T.querySelectorAll('[data-song-fold]').forEach(d=>watchFold(s,d,d.dataset.songFold,()=>{if(d.open&&d.isConnected){sizePlots(host);centrePlot();}}));
+  T.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{
     const id=b.dataset.date;
     if(s.selected.includes(id))s.selected=s.selected.filter(x=>x!==id); else s.selected=s.items.filter(x=>s.selected.includes(x.id)||x.id===id).map(x=>x.id);
     if(!s.selected.includes(s.active))s.active=s.selected.at(-1)||null;
@@ -417,24 +733,27 @@ function screen(s) {
     screen(s);
   });
   host.querySelector('[data-lab-remr]')?.addEventListener('click',()=>openRemr(s));
+  const dayChoice=host.querySelector('[data-same-day]');
+  if(dayChoice)dayChoice.onchange=()=>{setSameDay(dayChoice.value);screen(s);if(!s.dead)s.host.querySelector('[data-same-day]')?.focus({preventScroll:true});};
+  bindCompare(s);
   if(!m)return;
-  const dateStrip=host.querySelector('.vl-dates'), activeDate=host.querySelector('[data-date="'+CSS.escape(m.id)+'"]');
+  const dateStrip=T.querySelector('.vl-dates'), activeDate=T.querySelector('[data-date="'+CSS.escape(m.id)+'"]');
   if(activeDate){const strip=dateStrip.getBoundingClientRect(), chip=activeDate.getBoundingClientRect();if(chip.left<strip.left)dateStrip.scrollLeft+=chip.left-strip.left;else if(chip.right>strip.right)dateStrip.scrollLeft+=chip.right-strip.right;}
-  const carrier=host.querySelector('[data-carousel]'), player=M.player(host.querySelector('[data-player]'),m,{prefetch:true}); s.player=player;
-  const el=player.el, play=host.querySelector('[data-play]'), seek=host.querySelector('[data-seek]'), status=host.querySelector('[data-player-status]');
-  const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;const timeEl=host.querySelector('[data-time]'),durationEl=host.querySelector('[data-duration]');if(!timeEl||!durationEl)return;/* the lab was redrawn (selection changed) while this player's audio was still reporting */seek.value=d?Math.round(el.currentTime/d*1000):0;timeEl.textContent=time(el.currentTime);durationEl.textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=host.querySelector('[data-player] [data-msg]')?.textContent||'';};
+  const carrier=T.querySelector('[data-carousel]'), player=M.player(T.querySelector('[data-player]'),m,{prefetch:true}); s.player=player;
+  const el=player.el, play=T.querySelector('[data-play]'), seek=T.querySelector('[data-seek]'), status=T.querySelector('[data-player-status]');
+  const paint=()=>{const d=el.duration||Number(m.durationSeconds)||0;const timeEl=T.querySelector('[data-time]'),durationEl=T.querySelector('[data-duration]');if(!timeEl||!durationEl)return;/* the lab was redrawn (selection changed) while this player's audio was still reporting */seek.value=d?Math.round(el.currentTime/d*1000):0;timeEl.textContent=time(el.currentTime);durationEl.textContent=time(d);const running=!el.paused;play.setAttribute('aria-label',running?'일시정지':'재생');play.innerHTML='<i class="ph-fill ph-'+(running?'pause':'play')+'"></i>';status.textContent=T.querySelector('[data-player] [data-msg]')?.textContent||'';};
   el.addEventListener('timeupdate',()=>{if(s.loop&&el.currentTime>=Math.min(el.duration||Infinity,(s.start[m.id]||0)+16))el.currentTime=s.start[m.id]||0;paint();}); el.addEventListener('play',paint);el.addEventListener('pause',paint);el.addEventListener('loadedmetadata',paint); el.addEventListener('error',paint);paint();
-  V.vocalRangeBind?.(host,s.song,()=>{if(!s.dead)screen(s);});
-  V.scoreNoteBind?.(host,{song:s.song,item:m,player,full:()=>s.results.get(m.id),keep:full=>{if(!s.dead)s.results.set(m.id,full);}});
-  V.arNoteBind?.(host,{song:s.song,item:m,player,full:()=>s.results.get(m.id),keep:full=>{if(!s.dead)s.results.set(m.id,full);}});
-  host.querySelectorAll('[data-seek-at]').forEach(b=>b.onclick=()=>{
+  V.vocalRangeBind?.(T,s.song,()=>{if(!s.dead)screen(s);});
+  V.scoreNoteBind?.(T,{song:s.song,item:m,player,full:()=>s.results.get(m.id),keep:full=>{if(!s.dead)s.results.set(m.id,full);}});
+  V.arNoteBind?.(T,{song:s.song,item:m,player,full:()=>s.results.get(m.id),keep:full=>{if(!s.dead)s.results.set(m.id,full);}});
+  T.querySelectorAll('[data-seek-at]').forEach(b=>b.onclick=()=>{
     if(V.analysisPlayAt)V.analysisPlayAt(player,b.dataset.seekAt);
     else{player.seek(Math.max(0,Number(b.dataset.seekAt)-1));if(el.paused)player.play();}
   });
   play.onclick=()=>el.paused?player.play():player.pause();seek.oninput=()=>player.seek(Number(seek.value)/1000*(el.duration||m.durationSeconds||0));
   const move=step=>{const n=s.selected.indexOf(s.active)+step;if(n<0||n>=s.selected.length)return;s.carouselDirection=step;s.active=s.selected[n];screen(s);};
-  host.querySelector('[data-previous]').onclick=()=>move(-1);host.querySelector('[data-next]').onclick=()=>move(1);
-  host.querySelector('[data-prev]')?.addEventListener('click',()=>move(-1));host.querySelector('[data-next-peek]')?.addEventListener('click',()=>move(1));
+  T.querySelector('[data-previous]').onclick=()=>move(-1);T.querySelector('[data-next]').onclick=()=>move(1);
+  T.querySelector('[data-prev]')?.addEventListener('click',()=>move(-1));T.querySelector('[data-next-peek]')?.addEventListener('click',()=>move(1));
   // Date tabs run oldest → newest. Swipe finger left to advance to a newer recording.
   // Keep page's vertical scrolling and playback sliders completely native.
   const card=carrier.querySelector('[data-card]'), reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false;
@@ -495,93 +814,23 @@ function screen(s) {
     card.animate([{transform:'translate3d('+(enter===1?46:-46)+'px,0,0) scale(.975)',opacity:.6},{transform:'translate3d(0,0,0) scale(1)',opacity:1}],{duration:300,easing:'cubic-bezier(.18,1,.2,1)'});
   }
   carrier.tabIndex=0;carrier.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();move(e.key==='ArrowLeft'?-1:1);}};
-  const savedRate=Number(rates()[m.id])||1;player.setRate(savedRate);host.querySelector('[data-speed]').textContent=savedRate.toFixed(1)+'×';
-  host.querySelector('[data-speed]').onclick=()=>V.collectionChoice('이 녹음의 배속',[[.5,'0.5×'],[.75,'0.75×'],[1,'1.0×'],[1.25,'1.25×'],[1.5,'1.5×']].map(([v,l])=>[String(v),l]),String(player.el.playbackRate),value=>{const rate=Number(value);player.setRate(rate);host.querySelector('[data-speed]').textContent=rate.toFixed(rate%1?2:1).replace(/0×$/,'×');try{speedStore.setItem(speedKey,JSON.stringify({...rates(),[m.id]:rate}));}catch{V.toast('배속을 저장하지 못했어요.','error');}});
-  host.querySelector('[data-loop]').onclick=e=>{s.loop=!s.loop;e.currentTarget.setAttribute('aria-pressed',String(s.loop));if(s.loop)player.seek(s.start[m.id]||0);};
-  host.querySelector('[data-start]').onchange=e=>{s.start[m.id]=Number(e.target.value);const pos=el.currentTime;screen(s);s.player.seek(pos);};
-  host.querySelector('[data-analyze]')?.addEventListener('click',async e=>{
+  const savedRate=Number(rates()[m.id])||1;player.setRate(savedRate);T.querySelector('[data-speed]').textContent=savedRate.toFixed(1)+'×';
+  T.querySelector('[data-speed]').onclick=()=>V.collectionChoice('이 녹음의 배속',[[.5,'0.5×'],[.75,'0.75×'],[1,'1.0×'],[1.25,'1.25×'],[1.5,'1.5×']].map(([v,l])=>[String(v),l]),String(player.el.playbackRate),value=>{const rate=Number(value);player.setRate(rate);T.querySelector('[data-speed]').textContent=rate.toFixed(rate%1?2:1).replace(/0×$/,'×');try{speedStore.setItem(speedKey,JSON.stringify({...rates(),[m.id]:rate}));}catch{V.toast('배속을 저장하지 못했어요.','error');}});
+  T.querySelector('[data-loop]').onclick=e=>{s.loop=!s.loop;e.currentTarget.setAttribute('aria-pressed',String(s.loop));if(s.loop)player.seek(s.start[m.id]||0);};
+  T.querySelector('[data-start]').onchange=e=>{s.start[m.id]=Number(e.target.value);const pos=el.currentTime;screen(s);s.player.seek(pos);};
+  T.querySelector('[data-analyze]')?.addEventListener('click',async e=>{
     const btn=e.currentTarget;btn.disabled=true;status.textContent='녹음을 분석하고 있어요…';
-    try{const full=await V.analyzeRecording(m,{onStage:t=>{if(!s.dead)status.textContent=t;}});if(s.dead||s.active!==m.id)return;s.results.set(m.id,full);m.analysis=full.summary;screen(s);}
+    try{const full=await V.analyzeRecording(m,{onStage:t=>{if(!s.dead)status.textContent=t;}});if(s.dead||s.active!==m.id)return;s.results.set(m.id,full);m.analysis=full.summary;s.dirty=true;screen(s);}
     catch(err){if(!s.dead){btn.disabled=false;status.textContent='분석하지 못했어요: '+err.message;}}
   });
-  host.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{s.metric=b.dataset.metric;screen(s);});
-  const dayChoice=host.querySelector('[data-same-day]');
-  if(dayChoice)dayChoice.onchange=()=>{setSameDay(dayChoice.value);screen(s);if(!s.dead)s.host.querySelector('[data-same-day]')?.focus({preventScroll:true});};
-  host.querySelectorAll('[data-point]').forEach(b=>{
+  T.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{s.metric=b.dataset.metric;screen(s);});
+  T.querySelectorAll('[data-point]').forEach(b=>{
     const open=()=>{if(b.dataset.day){dayList(s,b.dataset.day);return;}const chosen=s.items.find(x=>x.id===b.dataset.point);if(chosen)observe(s,chosen);};
     b.addEventListener('click',open);
     b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });
-  const redoButton=host.querySelector('[data-growth-reanalyze]');
-  if(redoButton)redoButton.onclick=async()=>{
-    if(s.reanalyzing)return;
-    const todo=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(m=>m&&analysis(m)&&!G.hasDetail(analysis(m)));
-    if(!todo.length)return;
-    s.reanalyzing=true;redoButton.disabled=true;
-    const status=host.querySelector('[data-growth-reanalyze-status]');
-    let done=0,failed=0;
-    for(const m of todo){
-      if(s.dead)break;
-      if(status?.isConnected)status.textContent=(done+failed+1)+'/'+todo.length+' 분석 중 · '+M.label(m);
-      try{const r=await V.analyzeRecording(m,{save:true});m.analysis=r.summary;done++;}
-      catch(e){failed++;}
-    }
-    s.reanalyzing=false;
-    if(s.dead)return;
-    V.toast(failed?'다시 분석 '+done+'개 완료 · '+failed+'개는 분석하지 못했어요':'다시 분석 '+done+'개를 마쳤어요',failed?'error':undefined);
-    screen(s);
-  };
-  const growthButton=host.querySelector('[data-growth-ai]');
-  if(growthButton){
-    growthButton.onclick=async()=>{
-      if(s.growthPending)return;
-      const key=growthEvidenceKey(s),id=labGrowthId(s);
-      const songReport=labReport(s);
-      const status=host.querySelector('[data-growth-ai-status]'),output=host.querySelector('[data-growth-ai-result]')||host.querySelector('.vl-growth-ai-text');
-      if(!songReport){status.textContent='비교할 신뢰도 높은 측정값이 부족해요.';return;}
-      if(typeof window.vzipCloudCoach!=='function'){status.textContent='AI 연결을 사용할 수 없어요. 위의 측정 기반 변화 요약은 계속 볼 수 있어요.';return;}
-      s.growthPending=true;growthButton.disabled=true;status.textContent='AI가 녹음별 측정 변화를 정리하고 있어요…';
-      try{
-        // Server "overall" mode: a validated four-line report (요약/좋아진 점/보완할 점/다음 연습) built only from the
-        // separated measures of ONE song (음정 정확도·음정 안정성·호흡 유지; withheld ones as "unknown"). Range,
-        // highest notes, high-note zone and passaggio are never sent. No audio is sent.
-        const measured=G.aiMetrics(G.aggregate([{songId:s.song.id,report:songReport}]));
-        if(!measured.some(x=>x.state!=='unknown'))throw Error('AI가 해석할 비교 가능한 음정·안정성·호흡 측정값이 부족해요.');
-        const records=s.selected.map(id=>s.items.find(m=>m.id===id)).filter(Boolean);
-        const response=await window.vzipCloudCoach({
-          mode:'overall',recordingCount:records.length,analysisCount:records.filter(m=>V.analysisReliable(analysis(m))).length,analyzedSongs:1,
-          periodStart:M.dateOf(records[0])||'',periodEnd:M.dateOf(records.at(-1))||'',metrics:measured,observations:[]
-        });
-        if(s.dead||!host.isConnected||growthEvidenceKey(s)!==key||labGrowthId(s)!==id)return;
-        if(response?.mode!=='overall')throw Error('AI 결과 형식이 달라요. 다시 생성해 주세요.');
-        const textResult=String(response.note||'').trim();
-        if(!textResult)throw Error('AI 해석이 비어 있어요. 다시 생성해 주세요.');
-        const report={id,period:'vocal-growth-ai',songId:s.song.id,mediaIds:s.selected.slice(),evidenceKey:key,text:textResult.slice(0,5000),updatedAt:Date.now()};
-        const stored=V.change(db=>{db.practicePlans||=[];const existing=db.practicePlans.find(p=>p.id===id);if(existing)Object.assign(existing,report);else db.practicePlans.push(report);},{silent:true});
-        if(!stored)throw Error('AI 리포트 저장에 실패했어요.');
-        if(output){output.hidden=false;output.textContent=report.text;}
-        status.textContent='AI 종합 리포트를 저장했어요. 다시 열어도 확인할 수 있어요.';
-        growthButton.textContent='다시 생성';
-      }catch(e){if(!s.dead&&host.isConnected)status.textContent='AI 해석 생성 실패: '+String(e?.message||e)+' · 위 측정 기반 요약은 그대로 볼 수 있어요.';}
-      finally{s.growthPending=false;if(growthButton.isConnected)growthButton.disabled=false;}
-    };
-  }
-  const cmp=host.querySelector('[data-compare-panel]');
-  if(cmp){
-    cmp.ontoggle=()=>{s.compareOpen=cmp.open};
-    const switchTo=id=>{if(id===s.active)return;const position=el.currentTime, wasPlaying=!el.paused;s.compareOpen=true;s.active=id;screen(s);s.player?.load().then(()=>{s.player.seek(position);if(wasPlaying)s.player.play()}).catch(()=>{});};
-    cmp.querySelector('[data-compare-a]').onchange=e=>{s.compareA=e.target.value;s.compareOpen=true;screen(s)};
-    cmp.querySelector('[data-compare-b]').onchange=e=>{s.compareB=e.target.value;s.compareOpen=true;screen(s)};
-    cmp.querySelector('[data-compare-first]').onclick=()=>{s.compareA=s.selected[0];s.compareB=s.selected.at(-1);s.compareOpen=true;screen(s)};
-    cmp.querySelector('[data-compare-switch]').onclick=()=>{const a=cmp.querySelector('[data-compare-a]').value,b=cmp.querySelector('[data-compare-b]').value;switchTo(s.active===a?b:a)};
-    const form=cmp.querySelector('[data-compare-form]'),output=cmp.querySelector('[data-compare-output]');
-    // 05-A: 달라진 점·다음 목표 are kept on this device per pair of recordings until saved.
-    const draft=V.fieldDraft?.wire(form,'compare:'+cmp.querySelector('[data-compare-a]').value+':'+cmp.querySelector('[data-compare-b]').value,[{name:'notes',saved:form.elements.notes.defaultValue},{name:'goal',saved:form.elements.goal.defaultValue}]);
-    form.onsubmit=e=>{e.preventDefault();const a=s.items.find(x=>x.id===cmp.querySelector('[data-compare-a]').value),b=s.items.find(x=>x.id===cmp.querySelector('[data-compare-b]').value);if(!a||!b||a.id===b.id){output.textContent='서로 다른 녹음 두 개를 선택해 주세요.';return}const entry={firstId:a.id,secondId:b.id,firstName:M.label(a),secondName:M.label(b),firstDate:a.created,secondDate:b.created,song:s.song.title,songId:s.song.id,measures:{first:V.measureSnapshot?.(a)||null,second:V.measureSnapshot?.(b)||null},notes:form.elements.notes.value,goal:form.elements.goal.value,firstRating:a.rating??null,secondRating:b.rating??null,firstReview:a.review||'',secondReview:b.review||''};if(V.change(d=>{d.comparisonReports||=[];const old=d.comparisonReports.find(x=>x.kind!=='vocal-lab'&&x.firstId===a.id&&x.secondId===b.id);if(old)Object.assign(old,entry);else d.comparisonReports.push({id:V.uid(),created:Date.now(),...entry})},{silent:true})){draft?.clear();V.toast('비교 메모를 저장했어요.');}};
-    cmp.querySelector('[data-compare-ai]').onclick=async e=>{const notes=form.elements.notes.value.trim(),btn=e.currentTarget;if(notes.length<10){output.textContent='정리할 메모를 10자 이상 작성해 주세요.';return}const token=await window.vzipCloudAccessToken?.();if(!token){output.textContent='로그인 후 사용할 수 있어요.';return}btn.disabled=true;output.textContent='메모를 정리하는 중…';try{const res=await fetch('https://chxnbtiyuyhiywzeshis.supabase.co/functions/v1/vocal-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,apikey:V.anonKey},body:JSON.stringify({mode:'comparison',notes})});const json=await res.json();if(!res.ok)throw Error(json.error||'AI 정리 실패');output.textContent=json.analysis+'\n\n※ 작성한 메모를 정리한 결과예요.'}catch(err){output.textContent='AI 정리 실패: '+err.message}finally{btn.disabled=false}};
-  }
-  host.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;host.querySelectorAll('[data-rating]').forEach(star=>star.setAttribute('aria-pressed',String(Number(star.dataset.rating)<=score)));host.querySelector('.vl-rating b').textContent=score+'/5';}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
-  host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;host.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
+  T.querySelectorAll('[data-rating]').forEach(b=>b.onclick=async()=>{const score=Number(b.dataset.rating);try{await M.update(m,{rating:score});m.rating=score;T.querySelectorAll('[data-rating]').forEach(star=>star.setAttribute('aria-pressed',String(Number(star.dataset.rating)<=score)));T.querySelector('.vl-rating b').textContent=score+'/5';}catch(err){V.toast('만족도를 저장하지 못했어요: '+err.message,'error');}});
+  host.querySelector('[data-repeat-practice]').onclick=()=>{s.loop=true;T.querySelector('[data-loop]').setAttribute('aria-pressed','true');player.seek(s.start[m.id]||0);player.play();};
   host.querySelectorAll('[data-practice-tip]').forEach(button=>button.onclick=()=>{
     const tip=[...recs.tips,savedAITip(s)].filter(Boolean).find(x=>x.key===button.dataset.practiceTip);
     if(!tip)return;
@@ -612,7 +861,7 @@ function screen(s) {
     if(V.change(d=>{d.comparisonReports||=[];d.comparisonReports.push({id:V.uid(),created:Date.now(),...record});},{silent:true}))V.toast('리포트를 전체 녹음에 저장했어요.');
   };
 }
-V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefresh:true,
+V.route('vocal-lab',{title:'곡 분석',back:true,tab:'growth',noAutoRefresh:true,
   actions:()=>'<button type="button" class="icon-btn" data-lab-more aria-label="더보기"><i class="ph ph-dots-three-outline"></i></button>',
   render:()=>'<div class="vl" data-lab><p class="vl-muted">녹음을 불러오는 중…</p></div>',
   async mount(main,r){
@@ -637,15 +886,16 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefre
       // 성장 통합 (#385): choosing a song is the 보컬 분석 tab now. replace(), so 뒤로 does not come back here.
       if(V.growthHub){location.replace('#/vocal-analysis');return;}
       const songs=V.songsNewest();
-      host.innerHTML=songs.length?'<div class="vl-song"><i class="ph ph-waveform"></i><strong>보컬 연구소</strong></div><p class="vl-muted">분석할 곡을 선택해 주세요.</p>'+songs.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.id)+'"><strong>'+esc(x.title)+'</strong><i class="ph ph-caret-right"></i></a>').join(''):V.empty('music-notes','먼저 곡을 추가해 주세요.');
+      host.innerHTML=songs.length?'<div class="vl-song"><i class="ph ph-waveform"></i><strong>곡 분석</strong></div><p class="vl-muted">분석할 곡을 선택해 주세요.</p>'+songs.map(x=>'<a class="vl-report" href="#/vocal-lab/'+encodeURIComponent(x.id)+'"><strong>'+esc(x.title)+'</strong><i class="ph ph-caret-right"></i></a>').join(''):V.empty('music-notes','먼저 곡을 추가해 주세요.');
       return;
     }
-    document.querySelector('[data-lab-more]').onclick=()=>V.menu({title:'보컬 연구소',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/lab-reports">리포트 보관함 <i class="ph ph-caret-right"></i></a><a class="vz-choice" href="#/song/'+encodeURIComponent(song.id)+'">곡 상세 <i class="ph ph-caret-right"></i></a>'+
+    document.querySelector('[data-lab-more]').onclick=()=>V.menu({title:'곡 분석',body:'<div class="vz-choice-list"><a class="vz-choice" href="#/lab-reports">리포트 보관함 <i class="ph ph-caret-right"></i></a><a class="vz-choice" href="#/song/'+encodeURIComponent(song.id)+'">곡 상세 <i class="ph ph-caret-right"></i></a>'+
       (V.mrReanalyze?.count(song,[])?'<button type="button" class="vz-choice" data-lab-remr-menu>MR로 다시 분석 <i class="ph ph-caret-right"></i></button>':'')+'</div>',
       onMount:(el,close)=>el.querySelector('[data-lab-remr-menu]')?.addEventListener('click',()=>{close();if(current&&!current.dead&&current.song.id===song.id)openRemr(current);})});
-    // Which of the song's recordings are listed is the dataset's rule 'songList' (app/growth-dataset.js), the same
-    // one the 보컬 분석 tab counts its song rows with: videos too, 연습실·트레이닝 연습 recordings too (labelled).
-    const lab=V.growthDataset(await M.list().catch(()=>M.cached()));
+    // Which of the song's recordings are listed is the dataset's rule 'songList' (app/growth-dataset.js): videos too,
+    // 연습실·트레이닝 연습 recordings too (labelled 연습). Whether those count for 이 곡의 변화 is the 연습 녹음 포함 switch.
+    const all=await M.list().catch(()=>M.cached());
+    const lab=V.growthDataset(all);
     const kinds=new Map(),items=lab.pick('songList').filter(row=>row.songId===song.id).map(row=>{kinds.set(row.m.id,[row.practiceTake?'연습':'',row.video?'영상':''].filter(Boolean));return row.m;}).sort((a,b)=>(M.dateOf(a)||'').localeCompare(M.dateOf(b)||'')||(Number(a.created)||0)-(Number(b.created)||0)||String(a.id).localeCompare(String(b.id)));
     if(id!==instance||!host.isConnected)return;
     const report=(V.db.comparisonReports||[]).find(x=>x.kind==='vocal-lab'&&x.id===r.query.get('report')&&x.songId===song.id);
@@ -659,14 +909,31 @@ V.route('vocal-lab',{title:'보컬 연구소',back:true,tab:'growth',noAutoRefre
     const aiTips=new Map();
     const savedPlans=(V.db.practicePlans||[]).filter(p=>p.period==='ai-exercise'&&p.songId===song.id&&p.tip&&items.some(m=>m.id===p.mediaId)&&!(V.db.deleted?.practicePlans||[]).includes(p.id)).slice().sort((a,b)=>(a.created||0)-(b.created||0));
     for(const plan of savedPlans)aiTips.set(String(plan.mediaId)+':'+(plan.segmentStart||0),plan.tip);
-    current={host,song,items,kinds,aiTips,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null,compareOpen:r.query.get('compare')==='1',compareA:r.query.get('a'),compareB:r.query.get('b')};
+    // 연습 녹음 포함 is the one device setting of 성장 (VZ.growthSong, app/growth-hub.js): flipped in 이번 달, it is flipped here.
+    const chosen=r.query.get('selection')==='1'||!!report;
+    current={all,practice:!!V.growthSong?.practice(),open:chosen?{trend:true}:{},slots:null,dirty:true,host,song,items,kinds,aiTips,selected,active:selected.includes(report?.activeId)?report.activeId:selected.at(-1)||null,metric:report?.metric||'wob',results:new Map(),start:{},loop:false,dead:false,player:null,compareOpen:r.query.get('compare')==='1',compareA:r.query.get('a'),compareB:r.query.get('b')};
     screen(current);
+    // 비교 메모·보관함 links (?compare=1) open at 두 녹음 비교.
+    if(current.compareOpen)host.querySelector('[data-song-section="compare"]')?.scrollIntoView({block:'start'});
   },leave:clean
 });
+/** The screen that is open now (not left, not replaced). */
+const live=()=>current&&!current.dead&&current.slots&&current.host.isConnected?current:null;
+// An analysis saved while the screen is open — here, or by a sheet over it (이 녹음도 MR 빼고 재기): the take gets the new
+// result and 이 곡의 변화 is worked out again. The player and anything being typed stay as they are.
+window.addEventListener('vzip:analysis-saved',e=>{
+  const s=live(),m=s&&s.all.find(x=>x.id===e.detail?.id);
+  if(!m)return;
+  if(e.detail.analysis)m.analysis=e.detail.analysis;
+  s.dirty=true;
+  setTimeout(()=>{if(live()===s&&s.dirty&&!s.reanalyzing){s.dirty=false;paintVerdict(s);}},0);
+});
+// A 레슨 지적 added, retired or checked meanwhile.
+for(const name of ['vzip:score-points','vzip:data-changed'])window.addEventListener(name,()=>{const s=live();if(s)paintPoints(s);});
 // Older comparison memos carry no songId: they open through 비교, which finds the song from the two recordings.
 V.route('lab-reports',{title:'리포트 보관함',back:true,tab:'growth',render(){
   // 들어 보고 남긴 평가 are not reports of this list (they are shown in 결과 리포트 › 무엇이 달라졌나).
   const reports=(V.db.comparisonReports||[]).filter(x=>x.kind!=='listen-verdict').sort((a,b)=>(b.created||0)-(a.created||0));
-  return '<div class="vl vl-reports">'+(reports.length?reports.map(x=>'<a class="vl-report" href="'+(x.kind!=='vocal-lab'&&!x.songId?'#/compare?a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId):'#/vocal-lab/'+encodeURIComponent(x.songId||'')+'?'+(x.kind==='vocal-lab'?'report='+encodeURIComponent(x.id):'a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId)+'&compare=1'))+'"><strong>'+esc(x.song||'삭제된 곡')+'</strong><span>'+esc(new Date(x.created).toLocaleDateString('ko-KR'))+' · '+(x.kind==='vocal-lab'?'녹음 '+(x.mediaIds||[]).length+'개':'비교 메모')+'</span><i class="ph ph-caret-right"></i></a>').join(''):'<div class="vl-empty">저장한 리포트가 없어요.<br><small>보컬 연구소에서 리포트를 저장하면 여기에 모여요.</small></div>')+'</div>';
+  return '<div class="vl vl-reports">'+(reports.length?reports.map(x=>'<a class="vl-report" href="'+(x.kind!=='vocal-lab'&&!x.songId?'#/compare?a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId):'#/vocal-lab/'+encodeURIComponent(x.songId||'')+'?'+(x.kind==='vocal-lab'?'report='+encodeURIComponent(x.id):'a='+encodeURIComponent(x.firstId)+'&b='+encodeURIComponent(x.secondId)+'&compare=1'))+'"><strong>'+esc(x.song||'삭제된 곡')+'</strong><span>'+esc(new Date(x.created).toLocaleDateString('ko-KR'))+' · '+(x.kind==='vocal-lab'?'녹음 '+(x.mediaIds||[]).length+'개':'비교 메모')+'</span><i class="ph ph-caret-right"></i></a>').join(''):'<div class="vl-empty">저장한 리포트가 없어요.<br><small>곡 분석의 깊이 보기에서 리포트를 저장하면 여기에 모여요.</small></div>')+'</div>';
 }});
 })();

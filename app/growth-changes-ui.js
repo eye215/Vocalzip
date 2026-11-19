@@ -12,7 +12,8 @@
  *   period {from, to}  지난 기간 vs 이번 기간 (app/growth-changes-model.js build period), verdicts of the period only;
  *   practice true      the 연습 녹음 포함 switch: the takes of VzipGrowthDataset.verdictRule({practice:true});
  *   songId             전체 · 곡별: that song's lines and verdicts only (같은 과제 and 음역 are not per song: left out);
- *   head false         no card heading (the screen has its own); empty: {verdicts, songs} words for an empty group. */
+ *   head false         no card heading (the screen has its own); empty: {verdicts, songs} words for an empty group.
+ * 성장 › 곡 › 곡 하나 (app/vocal-lab.js) mounts it with songId and no period: that song's 처음·최근. */
 (() => {
 'use strict';
 const V = window.VZ, M = V?.media, C = window.VzipGrowthChanges, L = window.VzipListenVerdict, E = window.VzipEarAgreement, B = window.VzipGrowthBetween;
@@ -146,7 +147,7 @@ function html(m, precision, ear = null, ctx = null, opts = {}) {
   const group = (key, icon, title, body) => '<section class="gc-group" data-gc-group="' + key + '"><h3><i class="ph ph-' + icon + '" aria-hidden="true"></i>' + title + '</h3>' + body + '</section>';
   const verdictRow = v => verdictHtml(v, ear, ctx), songRow = s => songHtml(s, ear, ctx);
   const verdicts = m.verdicts.length ? m.verdicts.slice(0, SHOWN_VERDICTS).map(verdictRow).join('') + more('남긴 평가 모두 보기 (' + m.verdicts.length + ')', m.verdicts.slice(SHOWN_VERDICTS).map(verdictRow).join(''))
-    : '<p class="gc-empty" data-gc-empty="verdicts">' + (opts.empty?.verdicts ? e(opts.empty.verdicts) : '아직 들어 보고 남긴 평가가 없어요. 아래 곡의 <b>들어 보고 평가</b>나 보컬 연구소에서 두 녹음을 가리고 들어 보고 남길 수 있어요.') + '</p>';
+    : '<p class="gc-empty" data-gc-empty="verdicts">' + (opts.empty?.verdicts ? e(opts.empty.verdicts) : '아직 들어 보고 남긴 평가가 없어요. 아래 곡의 <b>들어 보고 평가</b>나 곡 분석의 두 녹음 비교에서 가리고 들어 보고 남길 수 있어요.') + '</p>';
   const songs = m.songs.length ? m.songs.slice(0, SHOWN_SONGS).map(songRow).join('') + more('곡 더 보기 (' + (m.songs.length - SHOWN_SONGS) + ')', m.songs.slice(SHOWN_SONGS).map(songRow).join(''))
     : '<p class="gc-empty" data-gc-empty="songs">' + e(opts.empty?.songs || '같은 방법으로 잰 같은 곡 녹음이 다른 날 두 개 이상 모이면 여기에 보여 드려요.') + '</p>';
   let tasks = '';
@@ -219,6 +220,9 @@ window.VzipGrowthChangesUI = {
     paint();
   },
   html:(items, precision = null, opts = {}) => html(model(items, precision, opts), precision, earOf(items, opts), {recordings:recordingsOf(items)}, opts),
+  /** Every song's takes as this card compares them ([{songId, title, takes, reference}], the 연습 녹음 포함 switch as
+   * `practice`): what 성장 › 곡 hands to app/growth-song-model.js, so a song's verdict there is this card's. */
+  songTakes:(items, practice = false) => songsOf(items || [], practice === true),
   /** The songs that have a 같은 곡 같은 방법 line (월별 분석 › 곡별 links to it); [] when the model cannot be built. */
   songs:(items, opts = {}) => { try { return model(items || [], null, opts).songs.map(s => s.songId); } catch (error) { console.error(error); return []; } },
   /**

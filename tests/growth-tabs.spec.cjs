@@ -94,7 +94,7 @@ test('성장 opens on 이번 달 with three tabs; the period control stays a sep
   expect(page.__errors).toEqual([]);
 });
 
-test('곡 (보컬 분석): songs with recordings and their real counts, then the existing 보컬 연구소; 뒤로 returns to the tab', async ({page}) => {
+test('곡: songs with an analysed take and their real counts (the rest folded as 분석 전), then 곡 하나; 뒤로 returns to the tab', async ({page}) => {
   await page.setViewportSize({width:375, height:812});
   await boot(page, {comparisonReports:[{id:'r1', kind:'vocal-lab', songId:'s1', song:'Defying Gravity', created:Date.now(), mediaIds:['a5', 'a6'], snapshots:[]}]});
   await page.goto('/#/vocal-growth');
@@ -105,20 +105,24 @@ test('곡 (보컬 분석): songs with recordings and their real counts, then the
   await expect(page.locator('.v-nav')).toBeVisible();
   const rows = page.locator('[data-hub-song]');
   await expect(rows).toHaveCount(5);
-  // Most recently recorded first: s1 (yesterday), s2 (2 days), s3 (3), s4 (4), s5 (5).
-  expect(await rows.evaluateAll(els => els.map(e => e.dataset.hubSong))).toEqual(['s1', 's2', 's3', 's4', 's5']);
+  // Songs with an analysed take, the most recently sung first: s1 (yesterday), s2 (2 days), s3 (3), s5 (5). s4 has
+  // recordings but no analysis: it waits in its own fold (성장 개편 phase 3).
+  expect(await page.locator('[data-hub-songs] [data-hub-song]').evaluateAll(els => els.map(e => e.dataset.hubSong))).toEqual(['s1', 's2', 's3', 's5']);
+  expect(await rows.evaluateAll(els => els.map(e => e.dataset.hubSong))).toEqual(['s1', 's2', 's3', 's5', 's4']);
   await expect(rows.nth(0)).toContainText('Defying Gravity');
-  await expect(rows.nth(0)).toContainText('녹음 7개 · 분석 7개');
+  await expect(rows.nth(0)).toContainText('분석한 녹음 7개 · 최근 ');
   // Unanalysed takes are said (the 분석 전 chip), not scored; the count line then has no analysis part.
-  await expect(rows.nth(3).locator('.growth-hub-chip')).toHaveText('분석 전');
-  await expect(rows.nth(3).locator('.item-sub')).toHaveText(/^녹음 2개 · 최근 /);
+  await expect(page.locator('[data-hub-waiting] summary')).toHaveText('아직 분석 전인 곡 1');
+  await expect(rows.nth(4).locator('.growth-hub-chip')).toHaveText('분석 전');
+  await expect(rows.nth(4).locator('.item-sub')).toHaveText(/^녹음 2개 · 최근 /);
   await expect(page.locator('[data-hub-reports]')).toContainText('저장한 리포트 1개');
   await expect(page.locator('[data-hub-reports]')).toHaveAttribute('href', '#/lab-reports');
   expect(await overflow(page)).toEqual({wide:false, over:0});
   await rows.nth(0).click();
   await expect(page).toHaveURL(/#\/vocal-lab\/s1$/);
   await expect(page.locator('[data-lab] .vl-song, [data-lab] .vl-player, [data-lab]').first()).toBeVisible();
-  await expect(page.locator('#top h1')).toHaveText('보컬 연구소');
+  await expect(page.locator('#top h1')).toHaveText('곡 분석');
+  await expect(page.locator('[data-song-section="changes"]')).toBeVisible();
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-analysis$/);
   await expect(rows).toHaveCount(5);

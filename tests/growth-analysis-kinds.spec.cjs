@@ -1,3 +1,5 @@
+// 성장 개편 안 B, phase 3 (2026-11-19): the 곡 tab counts the analysed takes of the ONE "늘었나" rule — 연습 녹음 are left
+// out (and said) until the 연습 녹음 포함 switch is on — and 곡 하나 lists every recording of the song with its 연습 · 영상 mark.
 // 성장 2단계 C — 보컬 분석이 세는 녹음을 결과 리포트와 나란히 읽을 수 있게:
 //  1) 노래 연습실 제출·트레이닝 연습 녹음은 지금처럼 보컬 분석에는 있고 결과 리포트·주간 요약·계획 결과에는 없다.
 //     보컬 분석(곡 행, 최근 분석한 녹음, 보컬 연구소의 녹음 날짜)에 `연습` 표시를 붙여 왜 리포트에 없는지 보이게 한다.
@@ -28,7 +30,7 @@ async function boot(page, media = MEDIA) {
 const go = async (page, hash, mark) => { await page.evaluate(h => { location.hash = h; }, hash); await expect(page.locator(mark).first()).toBeVisible(); };
 const sub = (page, id) => page.locator('[data-hub-song="' + id + '"] .item-sub');
 
-test('보컬 분석 곡 행: 연습 녹음과 영상을 세고, 몇 개가 연습·영상인지 말한다 — 결과 리포트 숫자는 그대로', async ({page}) => {
+test('곡 행: 판정이 세는 분석한 녹음을 세고, 연습을 뺐는지 넣었는지와 영상 수를 말한다 — 결과 리포트 숫자는 그대로', async ({page}) => {
   await boot(page);
   // 결과 리포트 first: what it counts does not change (24 song recordings, 20 reliable analyses).
   await go(page, '#/growth-flow?period=all', '[data-overall-body]');
@@ -38,16 +40,26 @@ test('보컬 분석 곡 행: 연습 녹음과 영상을 세고, 몇 개가 연�
   expect(overall.ids).not.toContain('er'); expect(overall.ids).not.toContain('et');     // 연습 recordings stay out of the report
   expect(overall.ids).toEqual(expect.arrayContaining(['dv', 'dc']));                    // videos were always in it
   await go(page, '#/vocal-analysis', '[data-hub-song]');
-  // Home: 4 takes + the 연습실 submission + the 트레이닝 practice recording. The count is what it was; now it says so.
-  await expect(sub(page, 's5')).toHaveText('녹음 6개 (연습 2개 포함) · 분석 6개 · 최근 11월 9일');
-  // 새 곡: two unanalysed recordings and two analysed videos — the videos are counted now, as 결과 리포트 counts them.
-  await expect(sub(page, 's4')).toHaveText('녹음 4개 (영상 2개 포함) · 분석 2개 · 최근 11월 9일');
-  await expect(page.locator('[data-hub-song="s4"]')).toHaveAttribute('data-hub-state', 'ok');
-  // Songs without either read as before.
-  await expect(sub(page, 's1')).toHaveText('녹음 10개 · 분석 10개 · 최근 11월 12일');
-  await expect(sub(page, 's2')).toHaveText('녹음 5개 · 분석 5개 · 최근 11월 11일');
-  await expect(page.locator('[data-hub-practice-note]')).toHaveText('연습은 노래 연습실·트레이닝 연습으로 남긴 녹음이에요. 여기서는 함께 보고, 결과 리포트·주간 요약·계획 결과에는 넣지 않아요.');
-  // The row counts are the dataset's rule, the same list 보컬 연구소 shows.
+  // Home: 4 takes + the 연습실 submission + the 트레이닝 practice recording. Switch off (the default): the four song
+  // takes count, as in 결과 리포트, and the two 연습 takes are said to be left out.
+  await expect(page.locator('[data-hub-practice]')).not.toBeChecked();
+  await expect(sub(page, 's5')).toHaveText('분석한 녹음 4개 · 연습 2개는 빼고 봐요 · 최근 11월 9일');
+  // 새 곡: two unanalysed recordings and two analysed videos — the videos count, as 결과 리포트 counts them.
+  await expect(sub(page, 's4')).toHaveText('분석한 녹음 2개 (영상 2개 포함) · 분석 전 2개 · 최근 11월 7일');
+  await expect(page.locator('[data-hub-song="s4"]')).toHaveAttribute('data-hub-state', 'similar');
+  // Songs without either.
+  await expect(sub(page, 's1')).toHaveText('분석한 녹음 10개 · 최근 11월 12일');
+  await expect(sub(page, 's2')).toHaveText('분석한 녹음 5개 · 최근 11월 11일');
+  await expect(page.locator('[data-hub-rule-note]')).toContainText('이번 달과 같은 기준이에요. 노래 연습실·트레이닝 연습 녹음은 빼고 견줘요.');
+  // 연습 녹음 포함 on: the two 연습 takes count and the row says so. It is the switch of 이번 달 (one device setting).
+  await page.locator('[data-hub-practice]').check();
+  await expect(sub(page, 's5')).toHaveText('분석한 녹음 6개 (연습 2개 포함) · 최근 11월 9일');
+  await expect(page.locator('[data-hub-rule-note]')).toContainText('노래 연습실·트레이닝 연습 녹음도 넣어 견줘요.');
+  expect(await page.evaluate(() => localStorage.getItem('vzip:growth-practice'))).toBe('1');
+  await page.locator('[data-hub-practice]').uncheck();
+  await expect(sub(page, 's5')).toHaveText('분석한 녹음 4개 · 연습 2개는 빼고 봐요 · 최근 11월 9일');
+  expect(await page.evaluate(() => localStorage.getItem('vzip:growth-practice'))).toBe(null);
+  // Which recordings belong to a song is still the dataset's rule songList, the list 곡 하나 shows.
   const counts = await page.evaluate(async () => { const ds = VZ.growthDataset(await VZ.media.list()); return Object.fromEntries([...ds.bySong('songList')].map(([id, rows]) => [id, rows.length])); });
   expect(counts).toEqual({s1:10, s2:5, s3:2, s4:4, s5:6});
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
@@ -65,15 +77,16 @@ test('최근 분석한 녹음: 곡의 연습 녹음에는 연습, 영상에는 �
   await page.setViewportSize({width:320, height:640});
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   expect(await page.locator('[data-hub-take="er"]').evaluate(el => { const row = el.getBoundingClientRect(), chip = el.querySelector('[data-hub-kind]').getBoundingClientRect(); return chip.right <= row.right && chip.left >= row.left; })).toBe(true);
-  // Without any 연습 recording the note is not shown.
+  // Without any 연습 recording there is no switch and nothing about 연습 in the note.
   await boot(page, MEDIA.filter(m => ['e1', 'e2'].includes(m.id)));
   await go(page, '#/vocal-analysis', '[data-hub-song]');
-  await expect(page.locator('[data-hub-practice-note]')).toHaveCount(0);
-  await expect(sub(page, 's5')).toHaveText('녹음 2개 · 분석 2개 · 최근 11월 9일');
+  await expect(page.locator('[data-hub-practice]')).toHaveCount(0);
+  await expect(page.locator('[data-hub-rule-note]')).not.toContainText('연습');
+  await expect(sub(page, 's5')).toHaveText('분석한 녹음 2개 · 최근 11월 9일');
   expect(page.__errors).toEqual([]);
 });
 
-test('보컬 연구소: 곡의 녹음 목록은 같은 규칙 — 영상도 있고, 연습·영상 표시가 붙고, 삭제 목록의 녹음은 없다', async ({page}) => {
+test('곡 하나: 곡의 녹음 목록은 같은 규칙 — 영상도 있고, 연습·영상 표시가 붙고, 삭제 목록의 녹음은 없다', async ({page}) => {
   await boot(page);
   const dates = () => page.locator('.vl-dates [data-date]').evaluateAll(els => els.map(e => [e.dataset.date, e.textContent.replace(/\s+/g, ' ').trim()]));
   await go(page, '#/vocal-lab/s5', '.vl-dates [data-date]');

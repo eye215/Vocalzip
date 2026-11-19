@@ -219,7 +219,7 @@ function summaryHtml(run) {
       (t.kept ? stat('그 밖에 그대로 둔 것', t.kept, 'kept') : '') + stat('실패', t.failed, 'failed') + '</dl></div>' +
     (run.stopped ? '<p class="vz-remr-note">남은 녹음은 MR로 다시 분석을 다시 누르면 이어서 잴 수 있어요. 이미 이 MR로 잰 녹음은 건너뛰어요.</p>' : '') +
     (run.rows.length ? '<ul class="vz-remr-rows" data-remr-results>' + run.rows.map(r => rowHtml(r.m, r.text, tone(r))).join('') + '</ul>' : '') +
-    '<p class="vz-remr-note">성장 화면과 보컬 연구소는 새 결과로 다시 계산돼요.</p>';
+    '<p class="vz-remr-note">성장 화면과 곡 분석은 새 결과로 다시 계산돼요.</p>';
 }
 
 /** Opens the confirm page. items: the song's recordings when the caller already has them (보컬 연구소 passes its own,

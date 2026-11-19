@@ -174,6 +174,8 @@ test('a recording in 보컬 연구소 links to it with that recording as 비교'
   const link = page.locator('[data-voice-path-link]');
   await expect(link).toContainText('소리 길 흔적 · 시험판');
   await expect(link).toHaveAttribute('href', '#/voice-path/s1?b=m-mid');
+  // 곡 하나 (성장 개편 phase 3): the link is a row of 깊이 보기 (folded until opened).
+  await page.locator('[data-song-section="deep"] > summary').click();
   await link.click();
   await expect(page.locator('[data-vp-pick="b"]')).toHaveValue('m-mid');
   await expect(page.locator('[data-vp-pick="a"]')).toHaveValue('m-old');
