@@ -38,8 +38,8 @@ VZ.vocalRangeCard = (host, song) => {
   host.innerHTML = '<section class="vrange-card" aria-label="악보 기준 음역"><div class="vrange-head"><h2>악보 기준 음역</h2>' +
     '<button type="button" class="icon-btn" data-vrange-edit aria-label="악보 기준 음역 설정"><i class="ph ph-' + (r ? 'pencil-simple' : 'plus') + '" aria-hidden="true"></i></button></div>' +
     (r ? '<p class="vrange-value" data-vrange-value>' + esc(r.low) + ' – ' + esc(r.high) + '</p><p class="vrange-sub">' + esc(sourceText(song, r)) + ' · 내가 확인함</p>' +
-      '<p class="vrange-sub">보컬 연구소에서 녹음의 최고음과 비교해요. 실력 판정이 아니라 참고용이에요.</p>'
-      : '<p class="vrange-sub">변환된 악보의 보컬 파트에서 가져오거나 직접 입력하면, 보컬 연구소에서 녹음 최고음과 비교해요.</p>') + '</section>';
+      '<p class="vrange-sub">곡 분석에서 녹음의 최고음과 비교해요. 실력 판정이 아니라 참고용이에요.</p>'
+      : '<p class="vrange-sub">변환된 악보의 보컬 파트에서 가져오거나 직접 입력하면, 곡 분석에서 녹음 최고음과 비교해요.</p>') + '</section>';
   host.querySelector('[data-vrange-edit]').onclick = () => VZ.vocalRangeSheet(song, () => VZ.vocalRangeCard(host, VZ.song(song.id) || song));
 };
 

@@ -142,7 +142,7 @@ V.renderSongAr = (host, songArg) => {
     const player = host.querySelector('[data-arfile-player]'), keepPlayer = player && !player.hidden && player.firstChild ? player : null;
     host.innerHTML = '<div class="vz-ar-links vz-arfile" role="group" aria-label="원곡 파일"><div class="vz-ar-heading"><strong>원곡 파일 <span>음정 비교용</span></strong>' + (f ? '' : '<button type="button" data-ar-file-add aria-label="원곡 파일 올리기"><i class="ph ph-plus" aria-hidden="true"></i></button>') + '</div>' +
       (f ? '<div class="vz-mr-list"><div class="vz-mr-row" data-arfile="' + esc(f.id) + '"><div class="vz-mr-row-head"><button type="button" data-arfile-open aria-expanded="false"><i class="ph ph-vinyl-record" aria-hidden="true"></i><span><strong>' + esc(f.title) + '</strong><small>' + esc(f.fileName || '오디오 파일') + '</small></span><i class="ph ph-play-circle" aria-hidden="true"></i></button><button type="button" class="icon-btn" data-arfile-remove aria-label="' + esc(f.title) + ' 원곡 파일 삭제"><i class="ph ph-trash" aria-hidden="true"></i></button></div><div data-arfile-player hidden></div>' +
-          refLine(song) + '<p class="vz-arfile-note">원곡 가수의 멜로디를 자동으로 뽑아 내 녹음과 비교하는 데만 써요. 애드리브·화음·창법 차이와 추출 오류가 섞일 수 있어 정답 악보가 아니에요. 비교는 보컬 연구소의 구간 분석에서 해요.</p></div></div>'
+          refLine(song) + '<p class="vz-arfile-note">원곡 가수의 멜로디를 자동으로 뽑아 내 녹음과 비교하는 데만 써요. 애드리브·화음·창법 차이와 추출 오류가 섞일 수 있어 정답 악보가 아니에요. 비교는 곡 분석의 구간 분석에서 해요.</p></div></div>'
         : '<p>원곡 음원 파일을 올리면 곡 분석에서 내 녹음과 원곡 멜로디를 음 단위로 비교할 수 있어요. 유튜브 같은 링크는 분석할 수 없어요.</p>') + '</div>';
     host.querySelector('[data-ar-file-add]')?.addEventListener('click', () => add(song, draw));
     if (!f) return;

@@ -213,7 +213,11 @@ test('전체 · 곡별 ▾ narrows 달라진 것 and 지표 자세히 to one son
   await expect(page.locator('[data-gm-scope="all"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-growth-changes] [data-gc-song]')).toHaveCount(3);
   // A song without a take in the period: 전체 with a note, the choice kept.
+  // The stored choice is read when the tab is drawn: draw it again (before, this only passed when a late list event
+  // happened to redraw the tab after the line below — it failed about one run in six).
   await page.evaluate(() => localStorage.setItem('vzip:monthly-growth-song', 's3'));
+  await reload(page);
+  await expect(page.locator('[data-gm-section="changes"]')).toBeVisible();
   await page.locator('[data-gm-period="week"]').click();
   await expect(page.locator('[data-gm-song-fallback]')).toHaveText('Memory 녹음이 이 기간에는 없어 전체를 보여 드려요.');
 });
@@ -223,7 +227,8 @@ const toHome = async page => { await page.evaluate(() => { if (location.hash !==
 test('older addresses lead into the new tabs, and 뒤로 is what it was', async ({page}) => {
   await boot(page, {hash:''});
   for (const [from, to] of [['#/vocal-growth?mode=monthly', /#\/growth-flow\?period=month$/], ['#/weekly-summary?week=2026-11-02', /#\/growth-flow\?period=week&week=2026-11-02$/],
-    ['#/weekly-summary', /#\/growth-flow\?period=week$/], ['#/growth', /#\/vocal-growth$/], ['#/vocal-training', /#\/growth-lab$/], ['#/vocal-growth/training', /#\/growth-lab$/],
+    ['#/weekly-summary', /#\/growth-flow\?period=week$/], ['#/growth', /#\/vocal-growth$/], ['#/vocal-training', /#\/home$/], ['#/vocal-growth/training', /#\/home$/],   // practice is on 오늘 › 연습하기 (phase 4)
+   
     ['#/vocal-growth/analysis', /#\/vocal-analysis$/], ['#/vocal-growth?gc=s2', /#\/growth-flow\?period=all$/]]) {
     await toHome(page);
     await page.evaluate(h => { location.hash = h; }, from);
@@ -245,9 +250,17 @@ test('older addresses lead into the new tabs, and 뒤로 is what it was', async 
   await expect(page.locator('#top h1')).toHaveText('리포트 보관함');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/growth-lab$/);
-  // The old practice-time page is still there for anyone who kept its address.
-  await toHome(page); await page.evaluate(() => { location.hash = '#/practice-stats'; });
+  // The old practice-time page is 연습 시간 자세히 now: opened from 이번 달 › 한 것, 성장 lit, 뒤로 returns.
+  await toHome(page); await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+  await expect(page.locator('[data-gm-practice-stats]')).toHaveText('연습 시간 자세히');
+  expect((await page.locator('[data-gm-practice-stats]').boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await page.locator('[data-gm-practice-stats]').click();
+  await expect(page).toHaveURL(/#\/practice-stats$/);
+  await expect(page.locator('#top h1')).toHaveText('연습 시간');
   await expect(page.locator('[data-pd="week"]')).toBeVisible();
+  await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
+  await page.locator('[data-back]').click();
+  await expect(page).toHaveURL(/#\/vocal-growth$/);
   // Tabs replace the address; 이번 달 → 지난 흐름 → 뒤로 → 이번 달 → 뒤로 leaves 성장.
   await toHome(page); await page.evaluate(() => { location.hash = '#/vocal-growth'; });
   await page.locator('.growth-top-tabs a').nth(1).click();

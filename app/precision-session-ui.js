@@ -64,6 +64,5 @@ V.route('precision-measurement',{title:'발성 정밀 측정',back:true,tab:'gro
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){controller?.abort();if(live)finish(true);}});
 window.addEventListener('pagehide',()=>{controller?.abort();if(live)finish(true);});
 window.VzipAccountScope?.beforeLeave?.(()=>{controller?.abort();if(live)finish(true);});
-function entry(){const host=document.querySelector('[data-hub-training]');if(!host||host.querySelector('[data-precision-entry]'))return;const link=document.createElement('a');link.className='item';link.href='#/precision-measurement';link.dataset.precisionEntry='';link.innerHTML='<i class="ph ph-waveform" aria-hidden="true"></i><span class="item-main"><span class="item-title">발성 정밀 측정</span><span class="item-sub">편안한 음역에서 8가지 과제</span></span><i class="ph ph-caret-right" aria-hidden="true"></i>';host.append(link);}
-const view=document.getElementById('view');if(view)new MutationObserver(entry).observe(view,{childList:true,subtree:true});
+// 성장 › 연구소 lists 발성 정밀 측정 as its own row (app/growth-lab.js); nothing is added to another screen from here.
 })();

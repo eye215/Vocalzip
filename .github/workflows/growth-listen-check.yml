@@ -5,6 +5,7 @@ name: Growth listening checks
 # (phase 2: app/growth-month*.js, tests/growth-month.test.cjs, tests/growth-month.spec.cjs). New specs that ran only in the long ui job let WebKit-only failures reach the
 # iPhone before. Phase 3: the 곡 tab — 곡 목록 and 곡 하나, the former 보컬 연구소 (app/growth-song-model.js, app/growth-hub.js,
 # app/vocal-lab.js; tests/growth-song.test.cjs, tests/growth-song.spec.cjs).
+# Phase 4 (연구소 · 연습 화면은 오늘): app/growth-lab.js, the 연습하기 section of design-system/student-home-*.js; tests/growth-b4-lab.spec.cjs.
 on:
   pull_request:
     paths:
@@ -25,6 +26,12 @@ on:
       - 'app/vocal-lab.css'
       - 'app/growth-month*'
       - 'app/growth-hub.*'
+      - 'app/growth-lab.js'
+      - 'app/voice-check.js'
+      - 'app/practice-room.js'
+      - 'app/views-more.js'
+      - 'design-system/student-home-app.js'
+      - 'design-system/student-home-html.js'
       - 'app/weekly-summary*'
       - 'app/practice-review-model.js'
       - 'app/score-points-model.js'
@@ -51,6 +58,7 @@ on:
       - 'tests/growth-monthly*'
       - 'tests/growth-month.*'
       - 'tests/growth-song*'
+      - 'tests/growth-b4*'
       - 'tests/helpers/song-screen.cjs'
       - 'tests/lab-clear-selection.cjs'
       - '.github/workflows/growth-listen-check.yml'
@@ -74,7 +82,7 @@ jobs:
       - run: npm run test:syntax
       - run: node --test tests/growth-listen.test.cjs tests/growth-ear.test.cjs tests/segment-ab.spec.cjs tests/growth-metrics.test.cjs tests/growth-dataset.test.cjs tests/growth-method-fix.test.cjs tests/growth-between.test.cjs tests/growth-b1-models.test.cjs tests/growth-next.test.cjs tests/growth-month.test.cjs tests/growth-song.test.cjs
       # Every project of playwright.config.cjs: chromium-mobile, webkit-mobile and chromium-desktop.
-      - run: npx playwright test tests/growth-listen.spec.cjs tests/growth-ear.spec.cjs tests/growth-method-fix.spec.cjs tests/growth-between.spec.cjs tests/growth-monthly-song.spec.cjs tests/growth-month.spec.cjs tests/growth-song.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
+      - run: npx playwright test tests/growth-listen.spec.cjs tests/growth-ear.spec.cjs tests/growth-method-fix.spec.cjs tests/growth-between.spec.cjs tests/growth-monthly-song.spec.cjs tests/growth-month.spec.cjs tests/growth-song.spec.cjs tests/growth-b4-lab.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:

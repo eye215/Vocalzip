@@ -1,6 +1,7 @@
 // 성장 통합 탭 (#385, docs/audit/2026-11-13-growth-unification.md PR B) in the real app: one 성장 menu with three tabs —
-// since 성장 개편 안 B phase 2: 이번 달 · 곡 · 연구소 (곡 is the former 보컬 분석, 연구소 holds the former 보컬 트레이닝
-// content), the period control inside 이번 달 and inside its sub-page 지난 흐름 (the former 결과 리포트), every older link
+// since 성장 개편 안 B: 이번 달 · 곡 · 연구소 (곡 is the former 보컬 분석; 연구소 is the second-tier tools since phase 4 —
+// the former 보컬 트레이닝 practice screens are on 오늘 › 연습하기, tests/growth-b4-lab.spec.cjs), the period control inside
+// 이번 달 and inside its sub-page 지난 흐름 (the former 결과 리포트), every older link
 // still opening its own screen or leading into the new tabs, counts shown as they are (분석 전 is said, never a made-up
 // result). Fake data only.
 const {test, expect} = require('@playwright/test');
@@ -153,38 +154,119 @@ test('older links keep their screens; a bare #/vocal-lab lands on 곡 without tr
   expect(page.__errors).toEqual([]);
 });
 
-test('연구소: the deep tools, then the existing 연습실 · 보이스 체크 · 추천 entries and recent 연습실 records; fits 320px', async ({page}) => {
+test('연구소: two small groups of tools, each with what it answers and its state; no practice screens; fits 320px', async ({page}) => {
   await page.setViewportSize({width:320, height:640});
-  await boot(page, {practices:ROOM});
-  await page.goto('/#/vocal-training');                               // the former 보컬 트레이닝 address
+  await boot(page, {practices:ROOM, comparisonReports:[{id:'r1', kind:'vocal-lab', songId:'s1', song:'Defying Gravity', created:Date.now(), mediaIds:['a5', 'a6'], snapshots:[]}]});
+  await page.evaluate(() => { location.hash = '#/growth-lab'; });
   await expect(page).toHaveURL(/#\/growth-lab$/);
   await expect(current(page)).toHaveText('연구소');
-  await expect(page.locator('[data-lab-note]')).toContainText('오늘 탭으로 옮겨요');
-  await expect(page.locator('[data-lab-tool="reports"]')).toHaveAttribute('href', '#/lab-reports');
-  await expect(page.locator('[data-lab-tool="flow"]')).toHaveAttribute('href', /#\/growth-flow\?period=(week|month|all)$/);
   await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('[data-hub-room]')).toHaveAttribute('href', '#/practice-room');
-  await expect(page.locator('[data-hub-room]')).toContainText('제출 2개');
-  await expect(page.locator('[data-hub-check]')).toHaveAttribute('href', '#/voice-check');
-  await expect(page.locator('[data-hub-review]')).toHaveAttribute('href', '#/practice-review');
-  const results = page.locator('[data-hub-result]');
-  await expect(results).toHaveCount(2);                              // 연습실 submissions only, not the plain practice
-  await expect(results.nth(0)).toContainText('기준음 따라 부르기');
-  await expect(results.nth(0)).toContainText('Defying Gravity');
-  await expect(results.nth(0)).toHaveAttribute('href', '#/practice-room?result=roomaaaa1111');
-  await expect(results.nth(1)).toContainText('표현을 담은 한 구절 제출');
-  await expect(page.locator('.growth-hub-all')).toHaveAttribute('href', '#/practices');
+  // 소리 깊이 보기 · 기록·기준, in this order (성장 개편 안 B, phase 4).
+  await expect(page.locator('[data-lab-group] h2')).toHaveText(['소리 깊이 보기', '기록·기준']);
+  expect(await page.locator('[data-lab-group="deep"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['voice-path', 'precision', 'precision-report', 'mr', 'take']);
+  expect(await page.locator('[data-lab-group="records"] [data-lab-tool]').evaluateAll(els => els.map(e => e.dataset.labTool))).toEqual(['reports', 'ear', 'basis']);
+  await expect(page.locator('[data-lab-tool] .item-title')).toHaveText(['소리 길 흔적 · 시험판', '발성 정밀 측정', '발성 정밀 리포트', 'MR로 다시 분석', '녹음 하나 분석', '리포트 보관함', '귀와 숫자 표 전체', '분석 기준·뺀 것 목록']);
+  for (const row of await page.locator('[data-lab-tool]').all()) {
+    expect((await row.locator('.item-sub').innerText()).trim().length).toBeGreaterThan(8);   // one line of what it answers
+    expect((await row.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  }
+  for (const [key, href] of [['voice-path', '#/voice-path'], ['precision', '#/precision-measurement'], ['precision-report', '#/precision-report'], ['reports', '#/lab-reports'], ['ear', '#/growth-ear'], ['basis', '#/growth-basis']])
+    await expect(page.locator('[data-lab-tool="' + key + '"]')).toHaveAttribute('href', href);
+  // States are what is really there: counted, or said to be nothing yet — never a made-up number.
+  const state = key => page.locator('[data-lab-state="' + key + '"]');
+  await expect(state('reports')).toHaveText('저장 1개');
+  await expect(state('take')).toHaveText('분석한 녹음 13개');            // 15 recordings, d1 and d2 not analysed
+  await expect(state('precision')).toHaveText('아직 없음');
+  await expect(state('precision-report')).toHaveText('아직 없음');
+  await expect(state('voice-path')).toHaveText('아직 없음');
+  await expect(state('mr')).toHaveText('MR 올린 곡 없음');
+  await expect(state('ear')).toHaveText('아직 없음');
+  await expect(state('reports')).toHaveAttribute('data-state', 'ok');
+  await expect(state('ear')).toHaveAttribute('data-state', 'none');
+  // No practice screens here any more: they are on 오늘 › 연습하기, and the lead says so.
+  for (const sel of ['[data-hub-room]', '[data-hub-check]', '[data-hub-set]', '[data-hub-review]', '[data-hub-result]', '[data-hub-training]', '[data-precision-entry]', '[data-lab-note]', '[data-lab-tool="flow"]'])
+    await expect(page.locator(sel)).toHaveCount(0);
+  await expect(page.locator('#view')).not.toContainText(/노래 연습실|보이스 체크|연습 세트|보컬 트레이닝|추천 연습/);
+  await expect(page.locator('[data-lab-lead]')).toContainText('연습은 오늘 탭에서 해요');
   expect(await overflow(page)).toEqual({wide:false, over:0});
   for (const a of await tabs(page).all()) { const b = await a.boundingBox(); expect(b.height).toBeGreaterThanOrEqual(44); expect(b.x + b.width).toBeLessThanOrEqual(320); }
   expect(await tabs(page).evaluateAll(els => els.every(e => e.scrollWidth <= e.clientWidth))).toBe(true);   // no clipped label
-  // A record that arrives while the tab is open shows up; one that is removed goes away.
-  await page.evaluate(() => VZ.change(d => { d.practices.push({id:'practice-room:roomcccc3333', date:VZ.today(), minutes:5, created:9, practiceRoom:{id:'roomcccc3333', task:'melody', title:'짧은 선율 따라 부르기', songId:'', date:new Date().toISOString(), demo:false}}); }, {silent:true}));
-  await expect(results).toHaveCount(3);
-  await expect(results.nth(0)).toContainText('짧은 선율 따라 부르기');
-  await expect(page.locator('[data-hub-room]')).toContainText('제출 3개');
-  await results.nth(1).click();
-  await expect(page).toHaveURL(/#\/practice-room\?result=roomaaaa1111$/);
-  await expect(page.locator('iframe.vzip-practice-room-frame')).toHaveAttribute('src', /result=roomaaaa1111/);
+  // A report saved while the tab is open: the state word follows, the rows stay where they are.
+  await page.evaluate(() => VZ.change(d => { d.comparisonReports.push({id:'r2', kind:'vocal-lab', songId:'s2', song:'On My Own', created:Date.now(), mediaIds:['b1', 'b2'], snapshots:[]}); }, {silent:true}));
+  await expect(state('reports')).toHaveText('저장 2개');
+  await page.locator('[data-lab-tool="reports"]').click();
+  await expect(page).toHaveURL(/#\/lab-reports$/);
+  await expect(page.locator('.vl-reports .vl-report')).toHaveCount(2);
+  await page.locator('[data-back]').click();
+  await expect(page).toHaveURL(/#\/growth-lab$/);
+  expect(page.__errors).toEqual([]);
+});
+
+test('연구소 › 녹음 하나 분석 picks a recording; MR로 다시 분석 says what is missing or asks which song', async ({page}) => {
+  await page.setViewportSize({width:390, height:844});
+  await boot(page);
+  await page.evaluate(() => { location.hash = '#/growth-lab'; });
+  await page.locator('[data-lab-tool="take"]').click();
+  const pick = page.getByRole('dialog', {name:'녹음 하나 분석'});
+  await expect(pick.locator('[data-lab-take]')).toHaveCount(15);
+  await expect(pick.locator('[data-lab-take]').first()).toContainText('Defying Gravity');     // newest first: a6, yesterday
+  await expect(pick.locator('[data-lab-take="d1"] .growth-hub-chip')).toHaveText('분석 전');
+  await expect(pick.locator('[data-lab-take="a6"] .growth-hub-chip')).toHaveText('분석함');
+  await pick.locator('[data-lab-take-q]').fill('memory');
+  await expect(pick.locator('[data-lab-take]:visible')).toHaveCount(2);
+  await pick.locator('[data-lab-take-q]').fill('없는 이름');
+  await expect(pick.locator('[data-lab-take-none]')).toBeVisible();
+  await pick.locator('[data-lab-take-q]').fill('on my own');
+  for (const a of await pick.locator('[data-lab-take]:visible').all()) expect((await a.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await pick.locator('[data-lab-take="b2"]').click();
+  await expect(page).toHaveURL(/#\/analysis\/b2$/);
+  await expect(page.locator('#top h1')).toHaveText('녹음 분석');      // not 보컬 분석: that was a tab's name too
+  await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
+  await page.locator('[data-back]').click();
+  await expect(page).toHaveURL(/#\/growth-lab$/);
+  // No song has an MR file: the row says so and the sheet says where to add one.
+  await page.locator('[data-lab-tool="mr"]').click();
+  await expect(page.locator('[data-lab-mr-empty]')).toContainText('MR 파일을 올린 곡이 아직 없어요');
+  await expect(page.locator('[data-lab-mr-songs]')).toHaveAttribute('href', '#/songs');
+  await page.getByRole('dialog', {name:'MR로 다시 분석'}).getByRole('button', {name:'돌아가기'}).click();
+  // With an MR file on a song: which song, then the same sheet 곡 분석 opens.
+  await page.evaluate(() => { const has = VZ.mrReanalyze.has; VZ.mrReanalyze.has = song => song?.id === 's2' || has(song); window.dispatchEvent(new Event('vzip:data-changed')); });
+  await expect(page.locator('[data-lab-state="mr"]')).toHaveText('MR 있는 곡 1개');
+  await page.locator('[data-lab-tool="mr"]').click();
+  await expect(page.locator('[data-lab-mr-song]')).toHaveText(/On My Own/);
+  await page.locator('[data-lab-mr-song="s2"]').click();
+  await expect(page.getByRole('dialog', {name:'MR로 다시 분석'}).locator('[data-remr]')).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+test('연구소 › 귀와 숫자 표 전체 and 분석 기준·뺀 것 목록 open the folded parts of 달라진 것 on their own pages', async ({page}) => {
+  await page.setViewportSize({width:390, height:844});
+  await boot(page);
+  await page.evaluate(() => { location.hash = '#/growth-lab'; });
+  await expect(page.locator('[data-lab-state="basis"]')).toHaveText(/^뺀 것 \d+개$/);
+  const excluded = Number((await page.locator('[data-lab-state="basis"]').innerText()).match(/\d+/)[0]);
+  await page.locator('[data-lab-tool="basis"]').click();
+  await expect(page).toHaveURL(/#\/growth-basis$/);
+  await expect(page.locator('#top h1')).toHaveText('분석 기준·뺀 것');
+  await expect(page.locator('.growth-top-tabs')).toHaveCount(0);
+  await expect(page.locator('.v-nav a[data-nav="growth"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('[data-lab-basis]')).toContainText('분석 기준');
+  await expect(page.locator('[data-lab-basis]')).toContainText('누적 곡 녹음 15개');
+  await expect(page.locator('[data-lab-basis]')).toContainText('이전 분석(v1) 1개');
+  await expect(page.locator('[data-lab-rule]')).toContainText('곡 녹음만 셌어요');
+  await expect(page.locator('[data-gc-excluded-page] [data-gc-excluded-item]')).toHaveCount(excluded);   // the same list 달라진 것 folds away
+  await expect(page.locator('[data-gc-excluded-page] [data-gc-excluded-item]').first().locator('span')).not.toBeEmpty();   // each with its reason
+  expect(await overflow(page)).toEqual({wide:false, over:0});
+  await page.locator('[data-back]').click();
+  await expect(page).toHaveURL(/#\/growth-lab$/);
+  // 귀와 숫자: nothing made up without a verdict; the page says how to leave one.
+  await page.locator('[data-lab-tool="ear"]').click();
+  await expect(page).toHaveURL(/#\/growth-ear$/);
+  await expect(page.locator('#top h1')).toHaveText('귀와 숫자');
+  await expect(page.locator('[data-gc-ear-none]')).toBeVisible();
+  await expect(page.locator('[data-gc-ear-table]')).toHaveCount(0);
+  await expect(page.locator('[data-lab-ear-songs]')).toHaveAttribute('href', '#/vocal-analysis');
+  expect(await overflow(page)).toEqual({wide:false, over:0});
   expect(page.__errors).toEqual([]);
 });
 
@@ -200,8 +282,11 @@ test('empty account: each tab says what is missing instead of showing numbers', 
   await expect(page.locator('[data-growth-analysis]')).toContainText('먼저 곡을 추가해 주세요.');
   await expect(page.locator('[data-hub-reports]')).toContainText('저장한 리포트가 아직 없어요');
   await tabs(page).nth(2).click();
-  await expect(page.locator('[data-hub-room]')).toContainText('아직 제출 전');
-  await expect(page.locator('[data-growth-training]')).toContainText('아직 제출한 과제가 없어요');
+  await expect(page).toHaveURL(/#\/growth-lab$/);
+  for (const key of ['voice-path', 'precision', 'precision-report', 'take', 'reports', 'ear']) await expect(page.locator('[data-lab-state="' + key + '"]')).toHaveText('아직 없음');
+  await expect(page.locator('[data-lab-state="mr"]')).toHaveText('MR 올린 곡 없음');
+  await expect(page.locator('[data-lab-state="basis"]')).toHaveText('뺀 것 없음');
+  await expect(page.locator('[data-lab-state][data-state="ok"]')).toHaveCount(0);
   await tabs(page).nth(0).click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
   await expect(current(page)).toHaveText('이번 달');

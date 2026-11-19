@@ -48,7 +48,7 @@ const song = (page, id) => page.evaluate(([k, id]) => JSON.parse(localStorage.ge
 test('score range: the vocal part is preselected (piano excluded), nothing is saved until the owner confirms', async ({page}) => {
   const fake = await cloudSong(page);
   const card = page.getByRole('region', {name:'악보 기준 음역'});
-  await expect(card).toContainText('보컬 연구소에서 녹음 최고음과 비교');
+  await expect(card).toContainText('곡 분석에서 녹음 최고음과 비교');
   await card.getByRole('button', {name:'악보 기준 음역 설정'}).click();
   const sheet = page.getByRole('dialog', {name:'악보 기준 음역'});
   await sheet.getByRole('button', {name:'DG 보컬 악보'}).click();

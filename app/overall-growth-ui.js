@@ -190,7 +190,7 @@ function evidence(report){
   '<div class="growth-evidence-grid"><p><strong>누적 곡 녹음 '+report.recordings+'개</strong><br><small>곡이 지정되고 날짜가 있는 녹음만 포함</small></p>'+
   '<p><strong>신뢰 가능한 분석 '+report.analysisCount+'개</strong><br><small>분석 전이거나 신뢰도 부족한 녹음은 수치에서 제외</small></p>'+
   (report.v1Count?'<p><strong>이전 분석(v1) '+report.v1Count+'개</strong><br><small>결과는 그대로 볼 수 있지만 음역·호흡·고음·파사지오 지표와 v2와의 전후 비교에는 쓰지 않아요</small></p>':'')+
-  (report.detailMissing?'<p><strong>다시 분석하면 좋은 녹음 '+report.detailMissing+'개</strong><br><small>프레이즈·음높이별 세부 측정이 없는 v2 분석 · 보컬 연구소에서 다시 분석할 수 있어요</small></p>':'')+'</div>'+
+  (report.detailMissing?'<p><strong>다시 분석하면 좋은 녹음 '+report.detailMissing+'개</strong><br><small>프레이즈·음높이별 세부 측정이 없는 v2 분석 · 곡 분석에서 다시 분석할 수 있어요</small></p>':'')+'</div>'+
   '<p class="small muted">동일 곡의 서로 다른 날짜에서 측정한 첫·최근 녹음을 비교하고, 가능하면 같은 프레이즈끼리 비교해요. 최고음 하나로 실력 변화를 판단하지 않고, 신뢰도가 낮거나 데이터가 부족하면 판정을 보류해요. 곡별 가중치는 동일하며 녹음 환경, 반주, 컨디션에 따라 결과가 달라질 수 있어요.</p></section>';
 }
 const aiRunLabel=()=>(V.db.overallAiReports||[]).some(x=>x.id==='overall-ai:all')?'전체 코치 다시 분석':'AI 전체 종합 분석하기';
@@ -204,10 +204,10 @@ function coachCard(){
 }
 function recommendations(report){
  const rows=report.recommendations;
- return '<section class="growth-panel"><header class="growth-panel-head"><div><p class="growth-eyebrow">NEXT PRACTICE</p><h2>다음에 연습할 것</h2></div></header>'+
+ return '<section class="growth-panel"><header class="growth-panel-head"><div><p class="growth-eyebrow">NEXT PRACTICE</p><h2>다음 연습</h2></div></header>'+
  (rows.length?rows.map((m,i)=>'<article class="growth-next-item"><span class="growth-next-index">'+String(i+1).padStart(2,'0')+'</span><div><strong>'+esc(m.title)+'</strong><p>'+esc(m.practice)+'</p><small>권장 '+m.minutes+'분 · '+(m.worsened?'변화 재확인':'기초 데이터 축적')+'</small></div>'+
  '<button type="button" class="btn sm ghost" data-overall-goal="'+m.id+'">목표 담기</button></article>').join(''):
- '<p class="small muted">분석된 곡 녹음이 생기면 이곳에 추천 연습을 보여줘요.</p>')+
+ '<p class="small muted">분석된 곡 녹음이 생기면 이곳에 다음 연습을 보여 드려요.</p>')+
  '<a class="btn block ghost" href="#/practice-room">연습실에서 시작하기</a></section>';
 }
 function observationEvidence(){
@@ -320,5 +320,5 @@ function bindChart(host,report){
    variant:'compact'});
  });
 }
-window.VzipOverallGrowthUI={render,bind,aiEvidence,observationEvidence,noteHtml,metricCard};
+window.VzipOverallGrowthUI={render,bind,aiEvidence,observationEvidence,noteHtml,metricCard,evidenceHtml:evidence};
 })();

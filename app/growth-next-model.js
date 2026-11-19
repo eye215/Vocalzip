@@ -139,7 +139,7 @@ function fromMeasures({overall = null, monthly = null, tips = null, songId = ''}
   for (const r of list(month?.recommendations)) {
     const d = byId[r?.key];
     if (!r?.practice) continue;
-    add(r.key, r.practice, '측정 기반 · ' + (r.title || d?.title || '') + (month?.month ? ' · ' + month.month + ' 추천 연습' : ' · 월별 추천 연습') + (r.minutes ? ' · 권장 ' + r.minutes + '분' : ''), r.minutes);
+    add(r.key, r.practice, '측정 기반 · ' + (r.title || d?.title || '') + (month?.month ? ' · ' + month.month + ' 다음 연습' : ' · 월별 다음 연습') + (r.minutes ? ' · 권장 ' + r.minutes + '분' : ''), r.minutes);
   }
   if (tips?.enough) for (const t of list(tips.tips)) {
     if (!t?.name) continue;
@@ -234,7 +234,7 @@ function fromAi(db, {today, days = AI_DAYS} = {}) {
   }
   for (const p of live(db, 'practicePlans')) {
     if (p.period === 'ai-review' && p.status === 'draft' && clean(p.proposal?.action) && fresh(p.date)) {
-      push(p.date, item('ai', {id:p.id, title:p.proposal.action, why:'다음 연습 추천 초안' + (p.proposal.reason ? ' · ' + p.proposal.reason : ''), songId:p.songId || p.proposal.songId || '',
+      push(p.date, item('ai', {id:p.id, title:p.proposal.action, why:'AI 다음 연습 초안' + (p.proposal.reason ? ' · ' + p.proposal.reason : ''), songId:p.songId || p.proposal.songId || '',
         action:{kind:'ai-draft', ref:{kind:'ai-review', id:p.id}, href:'#/practice-review' + (String(p.id).endsWith(':today') ? '?mode=today' : p.songId ? '?song=' + encodeURIComponent(p.songId) : '')},
         links:['plan:' + p.id]}));
     } else if (p.period === 'ai-exercise' && clean(p.tip?.name) && fresh(p.date)) {

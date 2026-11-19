@@ -268,7 +268,7 @@ VZ.route('library', {title:'내 곡', tab:'songs', noSettings:true, actions:() =
   if (await M.fillDurations(drawn.slice(0, 60)) && l.isConnected && !l.querySelector('.media-open:not([hidden])')) draw();
 }});
 
-/* Legacy comparison links now open the same-song comparison in 보컬 연구소. */
+/* Legacy comparison links now open the same-song comparison in 곡 분석. */
 VZ.route('compare', {title:'곡 분석', back:true, tab:'songs', render:()=>'<p class="muted">곡 분석으로 이동하는 중…</p>', async mount(main,r){
   const media=await M.list().catch(()=>M.cached());if(!main.isConnected)return;
   const a=media.find(m=>m.id===r.query.get('a')), b=media.find(m=>m.id===r.query.get('b'));
@@ -279,12 +279,12 @@ VZ.route('compare', {title:'곡 분석', back:true, tab:'songs', render:()=>'<p 
 VZ.anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoeG5idGl5dXloaXl3emVzaGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MDA0ODcsImV4cCI6MjEwOTE3NjQ4N30.65LSQMuaq8MQOpFUjCSyRT4ZITtNxKF3c_xa_ZVEi_E';
 
 /* ---------- 연습 통계 (the first 성장 screen) ---------- */
-// 성장 개편 안 B (phase 2): #/growth leads to 성장 › 이번 달, whose 한 것 shows the entered practice time. This older
-// page (이번 주 · 28일 · 전체 · 월별, 곡별 연습량) keeps working at #/practice-stats; no screen links to it (an orphan,
-// as before — phase 4 decides whether it comes back).
+// 성장 개편 안 B: #/growth leads to 성장 › 이번 달, whose 한 것 shows the entered practice time. This older page
+// (이번 주 · 28일 · 전체 · 월별, 날짜별 막대, 곡별 연습량) is 연습 시간 자세히 at #/practice-stats, opened from 이번 달 › 한 것
+// (phase 4: it shows the per-song amounts and the day chart the six numbers there do not).
 VZ.route('growth', {title:'성장', tab:'growth', render:() => '', mount() { location.replace('#/vocal-growth'); }});
 let period = 'week', growthMonth = VZ.today().slice(0, 7), songMetric = 'minutes', songsOpen = false;
-VZ.route('practice-stats', {title:'성장', tab:'home', render() {
+VZ.route('practice-stats', {title:'연습 시간', back:true, tab:'growth', render() {
   return '<div class="growth-shell"><div class="seg growth-period" role="group" aria-label="통계 기간">' + [['week', '이번 주'], ['28', '최근 28일'], ['all', '전체'], ['month', '월별']].map(([k, v]) => '<button type="button" data-pd="' + k + '" aria-pressed="' + (period === k) + '">' + v + '</button>').join('') + '</div><div data-month-controls class="growth-month"' + (period === 'month' ? '' : ' hidden') + '><button type="button" class="btn sm secondary" data-month-prev aria-label="이전 달 통계">←</button><label class="field"><span>조회 월</span><select aria-label="조회 월" data-growth-month></select></label><button type="button" class="btn sm secondary" data-month-next aria-label="다음 달 통계">→</button></div><div data-g></div></div>';
 }, async mount(main) {
   main.querySelectorAll('[data-pd]').forEach(b => b.onclick = () => { period = b.dataset.pd; VZ.render(); });

@@ -126,8 +126,7 @@ const taskHtml = t => '<article class="gc-line" data-gc-task="' + e(t.key) + '">
 const KIND = {song:'같은 곡', task:'같은 과제', range:'음역'};
 const more = (label, rows) => rows ? '<details class="gc-more"><summary>' + label + '</summary>' + rows + '</details>' : '';
 /** 귀와 숫자: closed, one summary line; opened, a count per measure, the tags it is held against and what was left out. */
-function earHtml(ear) {
-  if (!ear || !ear.total) return '';
+function earBody(ear) {
   const n = x => '<td>' + x + '</td>';
   const table = ear.ready ? '<table class="gc-ear-table" data-gc-ear-table><thead><tr><th scope="col">숫자</th><th scope="col">같은 쪽</th><th scope="col">반대</th><th scope="col">차이 없음</th></tr></thead><tbody>' +
     ear.measures.map(x => '<tr data-gc-ear-measure="' + e(x.id) + '"' + (x.often ? ' data-often' : '') + '><th scope="row"><span>' + e(x.name) + '</span><small>' + e(x.compared ? x.text : '판정 보류라 견주지 못했어요') + '</small></th>' +
@@ -138,11 +137,17 @@ function earHtml(ear) {
   const exList = ex.length ? '<details class="gc-more gc-ear-excluded" data-gc-ear-excluded><summary>견줄 수 없어 뺀 평가 ' + ex.length + '개 · 왜</summary><ul>' +
     ex.map(p => { const [l1, l2] = L.dayLabels(p.verdict.firstDate, p.verdict.secondDate);
       return '<li data-gc-ear-excluded-item="' + e(p.id) + '" data-reason="' + e(p.reason) + '"><strong>' + e((V.songTitle(p.songId) || '삭제된 곡') + ' · ' + l1 + ' → ' + l2) + '</strong><span>' + e(p.text) + '</span>' + (p.reason === 'method-mixed' ? remeasureHtml(p.songId, p.methods, p.remeasure) : '') + '</li>'; }).join('') + '</ul></details>' : '';
+  return '<div class="gc-ear-body"><p class="gc-ear-help">들어 본 평가에서 낫다고 고른 녹음 쪽으로 숫자도 움직였는지 세어 봤어요. 같은 방법·같은 분석 버전으로 잰 두 녹음만 견주고, 판정 보류된 숫자는 세지 않아요. 숫자가 맞거나 틀렸다는 뜻은 아니에요.</p>' +
+    table + tagList + '<p class="gc-ear-note">어느 숫자를 음정·호흡·소리 길 중 어느 항목과 견줄지는 처음 정해 본 것이에요. 평가가 쌓이면 바뀔 수 있어요.</p>' + exList + '</div>';
+}
+function earHtml(ear) {
+  if (!ear || !ear.total) return '';
   return '<section class="growth-panel gc-ear" data-growth-ear aria-label="귀와 숫자"><details class="gc-ear-box" data-gc-ear' + (state?.earOpen ? ' open' : '') + '>' +
     '<summary><span class="gc-ear-title"><i class="ph ph-ear" aria-hidden="true"></i>귀와 숫자</span><span class="gc-ear-sum" data-gc-ear-summary>' + e(ear.summary) + '</span><i class="ph ph-caret-down gc-ear-caret" aria-hidden="true"></i></summary>' +
-    '<div class="gc-ear-body"><p class="gc-ear-help">들어 본 평가에서 낫다고 고른 녹음 쪽으로 숫자도 움직였는지 세어 봤어요. 같은 방법·같은 분석 버전으로 잰 두 녹음만 견주고, 판정 보류된 숫자는 세지 않아요. 숫자가 맞거나 틀렸다는 뜻은 아니에요.</p>' +
-    table + tagList + '<p class="gc-ear-note">어느 숫자를 음정·호흡·소리 길 중 어느 항목과 견줄지는 처음 정해 본 것이에요. 평가가 쌓이면 바뀔 수 있어요.</p>' + exList + '</div></details></section>';
+    earBody(ear) + '</details></section>';
 }
+const excludedList = ex => '<ul>' + ex.map(x => '<li data-gc-excluded-item="' + e(x.kind + ':' + (x.songId || x.key || x.kind)) + '" data-reason="' + e(x.reason) + '"><strong>' + e(KIND[x.kind] + ' · ' + (x.title || '')) + '</strong><span>' + e(x.text) + '</span>' +
+  (x.reason === 'method-mixed' ? remeasureHtml(x.songId, [x.other, x.method], x.remeasure) : '') + '</li>').join('') + '</ul>';
 function html(m, precision, ear = null, ctx = null, opts = {}) {
   const group = (key, icon, title, body) => '<section class="gc-group" data-gc-group="' + key + '"><h3><i class="ph ph-' + icon + '" aria-hidden="true"></i>' + title + '</h3>' + body + '</section>';
   const verdictRow = v => verdictHtml(v, ear, ctx), songRow = s => songHtml(s, ear, ctx);
@@ -161,11 +166,18 @@ function html(m, precision, ear = null, ctx = null, opts = {}) {
     '<div class="gc-groups">' + group('verdicts', 'ear', '들어 본 평가', verdicts) + group('songs', 'music-notes', '같은 곡 같은 방법', songs) +
     (tasks ? group('tasks', 'waveform', '같은 과제', tasks) : '') +
     (m.range ? group('range', 'arrows-vertical', '음역', '<article class="gc-line" data-gc-range><p class="gc-basis">' + e(m.range.basis) + '</p><ul class="gc-obs"><li><span>' + e(m.range.text) + '</span></li></ul></article>') : '') + '</div>' +
-    (ex.length ? '<details class="gc-excluded" data-gc-excluded><summary>비교할 수 없어 뺀 것 ' + ex.length + '개 · 왜</summary><ul>' +
-      ex.map(x => '<li data-gc-excluded-item="' + e(x.kind + ':' + (x.songId || x.key || x.kind)) + '" data-reason="' + e(x.reason) + '"><strong>' + e(KIND[x.kind] + ' · ' + (x.title || '')) + '</strong><span>' + e(x.text) + '</span>' + (x.reason === 'method-mixed' ? remeasureHtml(x.songId, [x.other, x.method], x.remeasure) : '') + '</li>').join('') + '</ul></details>' : '') +
+    (ex.length ? '<details class="gc-excluded" data-gc-excluded><summary>비교할 수 없어 뺀 것 ' + ex.length + '개 · 왜</summary>' + excludedList(ex) + '</details>' : '') +
     '</section>' + earHtml(ear);
 }
 function stopPlayer() { state?.player?.destroy(); if (state) state.player = null; }
+function bindRemeasure(host) {
+  host.querySelectorAll('[data-gc-remr]').forEach(b => b.onclick = () => {
+    if (V.mrReanalyze.running()) { V.toast('다른 분석이 진행 중이에요. 끝난 뒤 다시 눌러 주세요.', 'error'); return; }
+    stopPlayer();
+    // alsoMr: a take trusted as recorded keeps its result and gets a second measurement with the MR removed next to it.
+    V.mrReanalyze.open(V.song(b.dataset.song), {picked:[b.dataset.gcRemr], scope:'picked', alsoMr:true});
+  });
+}
 function paint() {
   const s = state;
   if (!s?.host?.isConnected) return;
@@ -180,12 +192,7 @@ function paint() {
   s.host.querySelector('[data-gc-ear]')?.addEventListener('toggle', ev => { s.earOpen = ev.target.open; });
   // 이 녹음도 MR 빼고 재기: the song's MR re-analysis with only this take picked. A saved result redraws 결과 리포트
   // ('vzip:analysis-saved', app/monthly-growth.js), so the pair shows up as comparable once both are MR 빼고.
-  s.host.querySelectorAll('[data-gc-remr]').forEach(b => b.onclick = () => {
-    if (V.mrReanalyze.running()) { V.toast('다른 분석이 진행 중이에요. 끝난 뒤 다시 눌러 주세요.', 'error'); return; }
-    stopPlayer();
-    // alsoMr: a take trusted as recorded keeps its result and gets a second measurement with the MR removed next to it.
-    V.mrReanalyze.open(V.song(b.dataset.song), {picked:[b.dataset.gcRemr], scope:'picked', alsoMr:true});
-  });
+  bindRemeasure(s.host);
   s.host.querySelectorAll('[data-gc-play]').forEach(b => b.onclick = () => {
     const item = s.items.find(x => x.id === b.dataset.gcPlay);
     if (!item) { V.toast('녹음을 찾을 수 없어요. 지워졌거나 다른 기기에만 있어요.', 'error'); return; }
@@ -220,6 +227,33 @@ window.VzipGrowthChangesUI = {
     paint();
   },
   html:(items, precision = null, opts = {}) => html(model(items, precision, opts), precision, earOf(items, opts), {recordings:recordingsOf(items)}, opts),
+  /** 성장 › 연구소 (app/growth-lab.js): 귀와 숫자 표 전체 and 뺀 것 목록 on their own pages — the same model, the same words,
+   * every period, the 연습 녹음 포함 switch as `practice`. counts: {verdicts, usable, ready, excluded, earExcluded}. */
+  lab:{
+    counts(items, precision = null, opts = {}) {
+      const out = {verdicts:0, usable:0, ready:false, excluded:0, earExcluded:0};
+      try { const ear = earOf(items || [], opts); if (ear) Object.assign(out, {verdicts:ear.total, usable:ear.usable, ready:ear.ready, earExcluded:ear.excluded.length}); } catch (error) { console.error(error); }
+      try { out.excluded = model(items || [], precision, opts).excluded.length; } catch (error) { console.error(error); }
+      return out;
+    },
+    /** The whole 귀와 숫자 table, open. '' when 귀와 숫자 cannot be built; an empty state when there is no verdict yet. */
+    earHtml(items, opts = {}) {
+      let ear = null;
+      try { ear = earOf(items || [], opts); } catch (error) { console.error(error); }
+      if (!ear) return '';
+      if (!ear.total) return '<section class="growth-panel gc-ear gc-ear-page" data-growth-ear-page><p class="gc-empty" data-gc-ear-none>아직 들어 보고 남긴 평가가 없어요. 곡 분석의 두 녹음 비교에서 가리고 들어 보고 평가를 남기면, 그 평가와 숫자가 같은 쪽으로 움직였는지 여기에서 세어 드려요.</p></section>';
+      return '<section class="growth-panel gc-ear gc-ear-page" data-growth-ear-page aria-label="귀와 숫자"><p class="gc-ear-sum" data-gc-ear-summary>' + e(ear.summary) + '</p>' + earBody(ear) + '</section>';
+    },
+    /** 비교할 수 없어 뺀 것, every line with its reason (and 이 녹음도 MR 빼고 재기 where that helps). */
+    excludedHtml(items, precision = null, opts = {}) {
+      let ex = [];
+      try { ex = model(items || [], precision, opts).excluded; } catch (error) { console.error(error); return ''; }
+      return ex.length ? '<div class="gc-excluded gc-excluded-page" data-gc-excluded-page>' + excludedList(ex) + '</div>'
+        : '<p class="gc-empty" data-gc-excluded-none>지금은 비교에서 뺀 것이 없어요.</p>';
+    },
+    bind:host => { if (host) bindRemeasure(host); },
+    precision:readPrecision
+  },
   /** Every song's takes as this card compares them ([{songId, title, takes, reference}], the 연습 녹음 포함 switch as
    * `practice`): what 성장 › 곡 hands to app/growth-song-model.js, so a song's verdict there is this card's. */
   songTakes:(items, practice = false) => songsOf(items || [], practice === true),

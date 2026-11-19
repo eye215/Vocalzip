@@ -127,6 +127,27 @@ test.describe('phone 375', () => {
     expect(page.__errors).toEqual([]);
   });
 
+  test('연구소 › 귀와 숫자 표 전체: the same table, open on its own page, with what was left out', async ({page}) => {
+    await boot(page);
+    await report(page);
+    await page.locator('[data-growth-ear] [data-gc-ear] > summary').click();
+    const folded = {summary:await page.locator('[data-growth-ear] [data-gc-ear-summary]').innerText(), rows:await page.locator('[data-growth-ear] [data-gc-ear-measure]').allInnerTexts(),
+      excluded:await page.locator('[data-growth-ear] [data-gc-ear-excluded-item]').count()};
+    await page.evaluate(() => { location.hash = '#/growth-lab'; });
+    await expect(page.locator('[data-lab-state="ear"]')).toHaveText('평가 ' + (await data(page)).comparisonReports.filter(r => r.kind === 'listen-verdict').length + '개');
+    await page.locator('[data-lab-tool="ear"]').click();
+    await expect(page).toHaveURL(/#\/growth-ear$/);
+    const full = page.locator('[data-growth-ear-page]');
+    await expect(full.locator('[data-gc-ear-table]')).toBeVisible();                           // open, nothing to unfold
+    expect(await full.locator('[data-gc-ear-summary]').innerText()).toBe(folded.summary);
+    expect(await full.locator('[data-gc-ear-measure]').allInnerTexts()).toEqual(folded.rows);   // the same counts as under 달라진 것
+    await expect(full.locator('[data-gc-ear-excluded-item]')).toHaveCount(folded.excluded);
+    await expect(full).not.toContainText(BANNED);
+    await noOverflow(page);
+    await page.locator('[data-back]').click();
+    await expect(page).toHaveURL(/#\/growth-lab$/);
+  });
+
   test('이 평가와 숫자: each measure next to the verdict, and why a pair is not compared', async ({page}) => {
     await boot(page);
     await report(page);

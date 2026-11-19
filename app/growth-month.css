@@ -52,6 +52,11 @@
 .gm-more>summary{display:flex;align-items:center;min-height:44px;padding:0 4px;color:var(--ink-2);font-size:14px;font-weight:600;cursor:pointer}
 .gm-more[open]>summary{margin-bottom:8px}
 .gm-flow .list{margin:0}
+/* A quiet 44px line under a block that leads on: 연습 시간 자세히 (한 것) and 연습은 오늘 탭에서 해요 (다음 연습). */
+.gm-more-link{display:flex;align-items:center;gap:8px;min-height:44px;margin:8px 0 -8px;padding:0 4px;color:var(--vz-color-accent,#7A32F5);font-size:13px;line-height:18px;font-weight:650;text-decoration:none}
+.gm-more-link span{flex:1;min-width:0}
+.gm-more-link i{flex:none;font-size:16px}
+.gm-more-link:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px;border-radius:10px}
 /* 지난 흐름 (#/growth-flow): the 주간 note above 주간 요약. */
 .growth-flow-note{display:flex;gap:8px;align-items:flex-start;margin:0 0 12px;padding:12px 16px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--ink-2);font-size:13px;line-height:20px}
 .growth-flow-note i{flex:none;margin-top:2px;color:var(--vz-color-accent)}
