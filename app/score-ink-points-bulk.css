@@ -1,0 +1,27 @@
+/* 필기를 지적으로 가져오기 (app/score-ink-points-bulk.js). Student light v4 tokens, as app/score-points.css. */
+.vz-bulk{--bulk-ink:#101828;--bulk-muted:#667085;--bulk-soft:#F3ECFF;--bulk-line:#F2EFF7;--bulk-accent:#7A32F5;--bulk-warn:#B26A00;--bulk-warn-soft:#FFF3DC;--bulk-miss:#B42318;
+ display:grid;gap:12px;min-width:0;letter-spacing:-.02em}
+.vz-bulk *{box-sizing:border-box}
+.vz-bulk-status{margin:0;color:var(--bulk-ink);font-size:14px;line-height:20px;overflow-wrap:anywhere}
+.vz-bulk-status:empty{display:none}
+.vz-bulk-progress{width:100%;height:8px;accent-color:var(--bulk-accent)}
+.vz-bulk-section{display:grid;gap:8px;min-width:0}
+.vz-bulk-section h3{margin:0;font-size:15px;line-height:21px;font-weight:700;color:var(--bulk-ink)}
+.vz-bulk-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.vz-bulk-all{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 4px;color:var(--bulk-ink);font-size:14px;cursor:pointer}
+.vz-bulk-all input{width:22px;height:22px;margin:0;accent-color:var(--bulk-accent)}
+.vz-bulk-list{display:grid;gap:8px;min-width:0}
+.vz-bulk-item{display:grid;grid-template-columns:44px 64px minmax(0,1fr);gap:8px;align-items:start;min-width:0;padding:8px;border-radius:16px;background:#fff;box-shadow:0 1px 4px rgba(55,33,85,.06)}
+.vz-bulk-item[data-flag]{background:#FCFBFE}
+.vz-bulk-check{display:grid;place-items:center;width:44px;height:44px;cursor:pointer}
+.vz-bulk-check input{width:22px;height:22px;margin:0;accent-color:var(--bulk-accent)}
+.vz-bulk-thumb{display:block;width:64px;height:48px;object-fit:contain;border-radius:10px;background:#fff;border:1px solid var(--bulk-line)}
+.vz-bulk-icon{display:grid;place-items:center;width:64px;height:48px;border-radius:10px;background:var(--bulk-soft);color:var(--bulk-accent);font-size:22px}
+.vz-bulk-main{display:grid;gap:6px;min-width:0}
+.vz-bulk-main textarea{width:100%;min-height:48px;padding:8px 10px;border:1px solid #E4E0EC;border-radius:12px;font:inherit;font-size:15px;line-height:20px;color:var(--bulk-ink);resize:vertical}
+.vz-bulk-measures{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;color:var(--bulk-muted);font-size:13px}
+.vz-bulk-measures input{width:60px;min-height:44px;padding:0 8px;border:1px solid #E4E0EC;border-radius:12px;font:inherit;font-size:15px;text-align:center;color:var(--bulk-ink)}
+.vz-bulk-flag{justify-self:start;padding:2px 8px;border-radius:999px;background:var(--bulk-warn-soft);color:var(--bulk-warn);font-size:12px;line-height:18px}
+.vz-bulk-row-error{margin:0;color:var(--bulk-miss);font-size:13px;line-height:18px}
+.vz-bulk-row-error:empty{display:none}
+@media(max-width:360px){.vz-bulk-item{grid-template-columns:44px minmax(0,1fr)}.vz-bulk-thumb,.vz-bulk-icon{grid-column:2}.vz-bulk-main{grid-column:1/-1}}

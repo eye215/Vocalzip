@@ -9,7 +9,7 @@
  * A run is saved only with 저장 at the end. A take recorded in the viewer during the run is linked by its id
  * (vzip:score-take-saved from app/score-audio.js); practice time is never counted from a run.
  *   window.VzipScorePoints.viewer(ctx) → {menu(actions), add(measure), destroy()}
- *   VZ.scorePoints = {card(host, songId), lessonEntry(main, lesson), manage(songId), editor(songId, preset), start(songId)} */
+ *   VZ.scorePoints = {card(host, songId), lessonEntry(main, lesson), manage(songId), editor(songId, preset), start(songId), addMany(rows)} */
 (() => {
 'use strict';
 const VZ = window.VZ, P = window.VzipScorePointsModel;
@@ -26,6 +26,8 @@ const put = row => VZ.change(d => { if (!Array.isArray(d.scoreAnnotations)) d.sc
 /** Removes a row: core.js leaves its tombstone, so another device does not bring it back. */
 const drop = id => VZ.change(d => { const list = Array.isArray(d.scoreAnnotations) ? d.scoreAnnotations : []; const i = list.findIndex(r => r?.id === id); if (i >= 0) list.splice(i, 1); }, {silent:true});
 const announce = () => window.dispatchEvent(new CustomEvent('vzip:score-points'));
+/** New points made together (필기를 지적으로 가져오기, app/score-ink-points-bulk.js): one change, one announce. rows: P.point(). */
+const addMany = list => { if (!list.length || !list.every(P.isPoint)) return false; const ok = VZ.change(d => { if (!Array.isArray(d.scoreAnnotations)) d.scoreAnnotations = []; for (const row of list) { const i = d.scoreAnnotations.findIndex(r => r?.id === row.id); if (i >= 0) d.scoreAnnotations[i] = row; else d.scoreAnnotations.push(row); } }, {silent:true}); if (ok) announce(); return ok; };
 
 /** ✓ / ✗ of the last runs, oldest first. */
 function dots(recent) {
@@ -391,5 +393,5 @@ function viewer(ctx) {
   };
 }
 window.VzipScorePoints = {viewer};
-VZ.scorePoints = {card, lessonEntry, manage, editor, start};
+VZ.scorePoints = {card, lessonEntry, manage, editor, start, addMany};
 })();

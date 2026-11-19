@@ -11,7 +11,7 @@
  *   every time the marks are read they are handed to the sync, which gives them their actions.
  * - 마디 선택 (a way of placing 표기, app/score-ink.js): while such a marker is in hand the boxes show lightly even
  *   with 마디 위치 보기 off (peek), and the viewer asks which measure lies under a point and what the mark draws.
- *   window.VzipScoreMeasuresUI.mount(viewer) → {load, shown, changed, ready, peek, measureAt, measuresIn, pieces, count, destroy}
+ *   window.VzipScoreMeasuresUI.mount(viewer) → {load, shown, changed, ready, peek, measureAt, measuresIn, measuresOn, marks, pieces, count, destroy}
  *   — called by app/score-ink.js */
 (() => {
 'use strict';
@@ -103,7 +103,7 @@ function mount(v) {
   async function sizes(rows) {
     for (const n of new Set(rows.map(s => s.page))) if (!aspects.has(n) && Number.isInteger(n) && n >= 1 && n <= v.pages()) { try { aspects.set(n, await v.pageAspect(n)); } catch {} if (!alive) return; }
   }
-  const summarize = rows => M.summary(geometry, rows, {markName, ...(K ? {roleOf:K.roleOf, spanOf:(pg, s, role) => K.span(pg, s, role, layout?.measures), fixedOf:(pg, s) => K.fixed(pg, s, layout?.measures)} : {})});
+  const summarize = (rows, name = markName) => M.summary(geometry, rows, {markName:name, ...(K ? {roleOf:K.roleOf, spanOf:(pg, s, role) => K.span(pg, s, role, layout?.measures), fixedOf:(pg, s) => K.fixed(pg, s, layout?.measures)} : {})});
 
   function paintLayer() {
     const n = v.page(), pg = shownPage === n ? geometry(n) : null, aspect = v.aspect(), H = 1000 * aspect;
@@ -226,6 +226,23 @@ function mount(v) {
     /** Every measure a box {x, y, w, h} (page fractions) of the page now shown overlaps, with its printed numbers
      * (레슨 지적 from handwriting, app/score-ink.js). [] without the conversion. */
     measuresIn(b) { const n = v.page(); if (!layout || shownPage !== n || !b) return []; look(n); return M.measuresIn(geometry(n), b); },
+    /** 필기를 지적으로 가져오기 (app/score-ink-points-bulk.js): the measures a box (page fractions) of page n overlaps —
+     * any page, not only the one shown. [] without the conversion. */
+    async measuresOn(n, b) {
+      if (!layout || !alive || !b || !Number.isInteger(n)) return [];
+      if (n === v.page() && shownPage === n) look(n);
+      else if (!seen.has(n) && !aspects.has(n)) { try { aspects.set(n, await v.pageAspect(n)); } catch { return []; } }
+      const pg = alive && layout ? geometry(n) : null;
+      return pg ? M.measuresIn(pg, b) : [];
+    },
+    /** The 악보 표기 among `rows` as the 표시한 마디 list gathers them (items of kind 'mark'); a text symbol's letters
+     * follow its name. [] without the conversion. */
+    async marks(rows) {
+      if (!layout || !alive) return [];
+      await sizes(rows); if (!alive || !layout) return [];
+      const name = (id, s) => { const n = markName(id, s) || ''; return s?.glyph && !n.includes(s.glyph) ? (n ? n + ' ' : '') + s.glyph : n; };
+      return summarize(rows, name).items.filter(i => i.kind === 'mark');
+    },
     /** What a mark over the measures a..b (file indexes) of the page now shown draws: one shape per line of music. */
     pieces(preset, a, b) { const n = v.page(); return K && layout && shownPage === n ? K.pieces(geometry(n), preset, a, b, v.aspect()) : []; },
     /** How many measure boxes the conversion has (stored with a mark, so a later conversion is told apart). */
