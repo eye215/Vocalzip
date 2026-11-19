@@ -255,7 +255,7 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-custom input[type=color]::-webkit-color-swatch-wrapper{padding:5px}
 .ink-marker-custom input[type=color]::-webkit-color-swatch{border:2px solid #fff;border-radius:50%}
 .ink-marker-custom input[type=color]::-moz-color-swatch{border:2px solid #fff;border-radius:50%}
-.ink-marker-width{font-size:14px;font-weight:600}
+.ink-marker-width,.ink-marker-opacity,.ink-marker-size{font-size:14px;font-weight:600}
 .ink-marker-note{margin:0;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
 /* 기능 (표기의 기능): four choices for a user preset, one fixed line for a built-in one. */
 .ink-marker-set legend small{margin-left:4px;font-size:12px;font-weight:400;color:var(--vz-color-muted,#667085)}
@@ -267,7 +267,6 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-pad-tools button{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:14px;background:#fff;color:var(--vz-color-primary,#344054);font-family:inherit;font-size:14px;line-height:20px;font-weight:600;cursor:pointer}
 .ink-marker-pad-tools button i{font-size:18px}
 .ink-marker-pad-tools button:disabled{opacity:.45;cursor:default}
-.ink-marker-sizes label>span{min-height:52px}
 .ink-marker-choices label>span>i.ph-scribble-loop{font-size:26px;height:36px;display:grid;place-items:center}
 .ink-marker-roles{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ink-marker-roles label>span{min-height:52px}
