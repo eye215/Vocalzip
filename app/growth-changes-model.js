@@ -13,7 +13,9 @@
  *                      result and the earliest result of an earlier day that app/precision-report-model.js compare calls
  *                      comparable. Without any result: an invitation instead.
  *   4. 음역            처음·지금 of app/growth-range-model.js, only when both windows hold enough recordings.
- * Numbers are observations ("흔들림이 줄었어요"), never a verdict on skill. */
+ * Numbers are observations ("흔들림이 줄었어요"), never a verdict on skill.
+ * A period ({from, to}, build/songChange/taskChanges) turns 처음·최근 into 지난 기간·이번 기간: the latest take of the
+ * period against the latest comparable take before it, same song, same method and version; verdicts of the period only. */
 (function (root, factory) {
   const node = typeof module === 'object' && module.exports;
   const api = factory(node ? require('./growth-metrics-model.js') : root.VzipGrowthMetrics,
@@ -77,21 +79,43 @@ function observation(x) {
     basis:x.basis === 'phrases' && x.matched ? '같은 프레이즈 ' + x.matched + '개' : x.basis === 'whole' ? '녹음 전체' : ''};
 }
 /**
+ * A period {from, to} ('YYYY-MM-DD', both included; `to` may be left open) or null when none is given. Without `from`
+ * there is no "before the period", so no period applies.
+ */
+const periodOf = p => p && /^\d{4}-\d{2}-\d{2}$/.test(String(p.from || '')) ? {from:p.from, to:/^\d{4}-\d{2}-\d{2}$/.test(String(p.to || '')) ? p.to : ''} : null;
+const within = (d, p) => !!d && d >= p.from && (!p.to || d <= p.to);
+/** Said where a song has a take in the period but none measured before it. */
+const NO_PREVIOUS = '이 기간 전에 분석한 같은 곡 녹음이 없어요 · 지난 기간 녹음과 견줘요';
+/**
  * One song. takes: the song's analysed takes [{id, a, date, created, ok}] (app/growth-dataset.js take shape, verdict rule).
  * → {item} with the pair and its observations, or {excluded} with the reason. null when nothing was measured.
+ *
+ * period {from, to} (optional): the pair is the latest reliable take IN the period and the latest take BEFORE `from`
+ * (the previous period) measured the same way and with the same analysis version — or, as without a period, one that
+ * pairs through a measurement with the MR removed (viaAlt). null when the song has no measured take in the period.
+ * Without a period: the first and the latest (처음·최근), as it always was.
  */
-function songChange({songId, title = '', takes = [], reference = null}) {
+function songChange({songId, title = '', takes = [], reference = null, period = null}) {
+  const p = periodOf(period);
   const measuredTakes = takes.filter(t => t?.a?.metrics);
+  if (p && !measuredTakes.some(t => within(t.date, p))) return null;
   if (!measuredTakes.length) return null;
-  const list = measuredTakes.filter(t => t.ok && t.date).slice().sort(G.takeOrder);
-  const out = reason => ({excluded:{kind:'song', songId, title, ...reason}});
+  const reliableTakes = measuredTakes.filter(t => t.ok && t.date).slice().sort(G.takeOrder);
+  const list = p ? reliableTakes.filter(t => within(t.date, p)) : reliableTakes;
+  const out = reason => ({excluded:{kind:'song', songId, title, ...reason, ...(p ? {period:p} : {})}});
   if (!list.length) return out({reason:'confidence', text:G.holdText('confidence')});
   const last = list.at(-1), method = methodOf(last.a);
-  const earlier = list.filter(t => t.date < last.date), same = earlier.filter(t => methodOf(t.a) === method);
-  if (!earlier.length) return out({reason:list.length > 1 ? 'same-day' : 'no-pair', text:G.holdText(list.length > 1 ? 'same-day' : 'no-pair')});
+  // Candidates for the earlier take: without a period every earlier day, earliest first (처음); with one, the takes of
+  // the previous period, LATEST first (the take just before the period).
+  const earlier = p ? reliableTakes.filter(t => t.date < p.from).reverse() : list.filter(t => t.date < last.date);
+  const same = earlier.filter(t => methodOf(t.a) === method);
+  if (!earlier.length) {
+    if (p) return out({reason:'no-previous', text:NO_PREVIOUS});
+    return out({reason:list.length > 1 ? 'same-day' : 'no-pair', text:G.holdText(list.length > 1 ? 'same-day' : 'no-pair')});
+  }
   let alt = null;
   if (!same.length) {
-    // The earliest earlier take that pairs with the latest through a measurement with the MR removed kept next to one.
+    // The first candidate that pairs with the latest through a measurement with the MR removed kept next to one.
     for (const t of earlier) if ((alt = viaAlt(t, last))) break;
   }
   if (!same.length && !alt) {
@@ -108,8 +132,16 @@ function songChange({songId, title = '', takes = [], reference = null}) {
     const held = SHOWN.map(id => report[id]).find(x => x?.state === 'hold');
     return out({reason:'held', text:G.holdText(held?.reason)});
   }
-  const count = alt ? 2 : list.filter(t => methodOf(t.a) === method && t.a.v === last.a.v).length;
   const [from, to] = L.dayLabels(first.date, last.date);
+  if (p) {
+    // How many takes of the period were measured this way (with this version): the latest of them is compared.
+    const count = alt ? 1 : list.filter(t => methodOf(t.a) === method && t.a.v === last.a.v).length;
+    return {item:{kind:'song', songId, title, method:pairMethod, count, firstId:first.id, lastId:last.id, firstDate:first.date, lastDate:last.date, changes,
+      period:p, ...(alt ? {viaAlt:alt[2]} : {}),
+      basis:'같은 곡 ' + title + ' · ' + measured(pairMethod) + ' 녹음 · 지난 기간 마지막 녹음과 이번 기간 ' + (count > 1 ? '녹음 ' + count + '개 중 ' : '') + '마지막 녹음' +
+        (alt ? ' ' + VIA_ALT : '') + ' · ' + from + ARROW + to}};
+  }
+  const count = alt ? 2 : list.filter(t => methodOf(t.a) === method && t.a.v === last.a.v).length;
   return {item:{kind:'song', songId, title, method:pairMethod, count, firstId:first.id, lastId:last.id, firstDate:first.date, lastDate:last.date, changes,
     ...(alt ? {viaAlt:alt[2]} : {}),
     basis:'같은 곡 ' + title + ' · ' + measured(pairMethod) + ' 녹음 ' + (count > 2 ? count + '개 중 처음·최근' : '2개') + (alt ? ' ' + VIA_ALT : '') + ' · ' + from + ARROW + to}};
@@ -130,9 +162,12 @@ const round = v => Number(Number(v).toPrecision(3));
 /**
  * results: 발성 정밀 측정 result objects (record.result). compare: VzipPrecisionReport.compare; labels: its LABELS;
  * groups: VzipPrecisionSession.GROUPS (task titles). → {items, excluded}.
+ * period {from, to} (optional): the latest result IN the period against the latest comparable result before `from`;
+ * a task not measured in the period is left out without a word. Without a period: the earliest comparable of an
+ * earlier day against the latest, as it always was.
  */
-function taskChanges(results, {compare, labels = {}, groups = []} = {}) {
-  const items = [], excluded = [];
+function taskChanges(results, {compare, labels = {}, groups = []} = {}, period = null) {
+  const items = [], excluded = [], p = periodOf(period);
   if (typeof compare !== 'function') return {items, excluded};
   const byKey = new Map();
   for (const r of results || []) {
@@ -144,9 +179,11 @@ function taskChanges(results, {compare, labels = {}, groups = []} = {}) {
   for (const [key, rows] of byKey) {
     const [task, vowel, loudness] = key.split('|'), g = groups.find(x => x.task === task);
     const title = (g?.title || task) + (task === 'vowel' && NAMES[vowel] ? ' · ' + NAMES[vowel] : '') + (task === 'level' && NAMES[loudness] ? ' · ' + NAMES[loudness] : '');
-    const sorted = rows.slice().sort((x, y) => pdate(x).localeCompare(pdate(y)) || String(x.analyzedAt || '').localeCompare(String(y.analyzedAt || '')));
-    const last = sorted.at(-1), earlier = sorted.filter(r => pdate(r) < pdate(last));
-    if (!earlier.length) { excluded.push({kind:'task', key, title, reason:'one-day', text:'다른 날 잰 같은 과제가 아직 없어요'}); continue; }
+    const all = rows.slice().sort((x, y) => pdate(x).localeCompare(pdate(y)) || String(x.analyzedAt || '').localeCompare(String(y.analyzedAt || '')));
+    const sorted = p ? all.filter(r => within(pdate(r), p)) : all;
+    if (!sorted.length) continue;
+    const last = sorted.at(-1), earlier = p ? all.filter(r => pdate(r) < p.from).reverse() : sorted.filter(r => pdate(r) < pdate(last));
+    if (!earlier.length) { excluded.push({kind:'task', key, title, reason:p ? 'no-previous' : 'one-day', text:p ? '이 기간 전에 잰 같은 과제가 없어요' : '다른 날 잰 같은 과제가 아직 없어요'}); continue; }
     const first = earlier.find(r => compare(r, last).state === 'comparable');
     if (!first) {
       const why = [...new Set(compare(earlier[0], last).reasons || [])].map(x => PRECISION_REASON[x]).filter(Boolean);
@@ -177,22 +214,35 @@ function rangeChange(compare, text = () => '') {
 
 /* ---------- the card ---------- */
 /**
+ * A listening verdict belongs to a period when it was made in it (judgedDate) or its later take is from it
+ * (secondDate). Every verdict belongs when there is no period.
+ */
+function verdictInPeriod(v, period) {
+  const p = periodOf(period);
+  return !p || within(String(v?.judgedDate || '').slice(0, 10), p) || within(String(v?.secondDate || '').slice(0, 10), p);
+}
+/**
  * verdicts: VzipListenVerdict.list(db); songs: [{songId, title, takes, reference}]; precision: null (not read) or the
  * result objects; range: {compare, text}. → {verdicts, songs, tasks, invite, range, excluded}.
+ * period {from, to} (optional): songs and tasks compare the latest of the period with the previous period (songChange,
+ * taskChanges) and only the verdicts of the period are listed (verdictInPeriod). 음역 (range) is not narrowed: it is
+ * always 처음·지금. Without a period everything is as it always was.
  */
-function build({verdicts = [], songs = [], precision = null, precisionApi = {}, range = null, titleOf = () => ''} = {}) {
-  const excluded = [];
+function build({verdicts = [], songs = [], precision = null, precisionApi = {}, range = null, titleOf = () => '', period = null} = {}) {
+  const excluded = [], p = periodOf(period);
   const songItems = [];
-  for (const s of songs) { const r = songChange(s); if (!r) continue; if (r.item) songItems.push(r.item); else excluded.push(r.excluded); }
+  for (const s of songs) { const r = songChange(p ? {...s, period:p} : s); if (!r) continue; if (r.item) songItems.push(r.item); else excluded.push(r.excluded); }
   // Most recently sung first.
   songItems.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.title.localeCompare(b.title));
-  const t = Array.isArray(precision) ? taskChanges(precision, precisionApi) : {items:[], excluded:[]};
+  const t = Array.isArray(precision) ? taskChanges(precision, precisionApi, p) : {items:[], excluded:[]};
   excluded.push(...t.excluded);
   const r = range ? rangeChange(range.compare, range.text) : {item:null, excluded:null};
   if (r.excluded) excluded.push(r.excluded);
-  const verdictItems = verdicts.map(v => ({kind:'verdict', id:v.id, songId:v.songId, title:titleOf(v.songId) || '삭제된 곡', who:L.who(v), judge:v.judge,
+  const verdictItems = verdicts.filter(v => verdictInPeriod(v, p)).map(v => ({kind:'verdict', id:v.id, songId:v.songId, title:titleOf(v.songId) || '삭제된 곡', who:L.who(v), judge:v.judge,
     overall:L.overallText(v), tags:L.tagsText(v), memo:v.memo || '', firstId:v.firstId || '', secondId:v.secondId || '', firstDate:v.firstDate, secondDate:v.secondDate, verdict:v}));
-  return {verdicts:verdictItems, songs:songItems, tasks:t.items, invite:Array.isArray(precision) && !precision.length, range:r.item, excluded};
+  return {verdicts:verdictItems, songs:songItems, tasks:t.items, invite:Array.isArray(precision) && !precision.length, range:r.item, excluded,
+    ...(p ? {period:p} : {})};
 }
-return {METHOD, METHOD_HELP, VIA_ALT, remeasure, viaAlt, OBS, NAME, PRECISION_REASON, methodOf, observation, songChange, taskChanges, rangeChange, build};
+return {METHOD, METHOD_HELP, VIA_ALT, NO_PREVIOUS, remeasure, viaAlt, OBS, NAME, PRECISION_REASON, methodOf, observation, periodOf, verdictInPeriod,
+  songChange, taskChanges, rangeChange, build};
 });

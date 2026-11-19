@@ -10,6 +10,8 @@
  *   ds.bySong(rule)         Map songId → rows of that song, oldest first (G.takeOrder)
  *   ds.takes(rule, songId)  that song's analysed takes, oldest first
  *   ds.forRange()           the selection for the range timeline (step 2), each take with its group
+ *   ds.verdict({practice})  the rows every "늘었나" verdict counts: rule VzipGrowthDataset.verdictRule({practice}) —
+ *                           practice false (default) = rule 'verdict', true = 연습실 · 트레이닝 연습 takes included
  *
  * A take is always {id, songId, a, date, created, ok} (VzipGrowthDataset.take). `ok` is the one reliability rule of the
  * growth screens: an analysis version the growth rules read (v1 or v2) that the analyser's own check trusts —
@@ -58,6 +60,8 @@ else{
   V.growthDataset.take=m=>api.take(m,m.analysis,api.dateOf(m),api.reliable(m?.analysis,env().reliable));
   /** The day of a recording on every growth screen (recorded date, else the Korea day it was made). */
   V.growthDataset.dateOf=api.dateOf;
+  /** The rule name of the "늘었나" take filter with the 연습 녹음 포함 switch ({practice:true}); default 'verdict'. */
+  V.growthDataset.verdictRule=api.verdictRule;
  }
 }
 })(typeof self!=='undefined'?self:globalThis,metrics=>{
@@ -103,8 +107,15 @@ const RULES={
  // leave them out) and videos (as the verdict screens count them; shown with a 영상 label).
  songList:{room:true,training:true,video:true},
  // 곡별 "보컬 측정 변화" 카드: every recording handed in for the song; videos only when they are in the cloud.
- songCard:{room:true,training:true,video:'cloud',unknownSong:true,unassigned:true}
+ songCard:{room:true,training:true,video:'cloud',unknownSong:true,unassigned:true},
+ // 판정 지표 with the "연습 녹음 포함" switch ON (안 B, 2026-11-19): rule 'verdict' plus 연습실 submissions and 트레이닝
+ // practices. Today this picks what 'songList' picks (보컬 연구소 counts practice takes); it is its own name so the two
+ // can part later without moving a verdict. Reach it through verdictRule({practice:true}), never by name in a screen.
+ verdictWithPractice:{room:true,training:true,video:true}
 };
+/** THE take filter of every "늘었나" verdict (결과 리포트 and, from phase 3, 보컬 연구소): practice false (the default) =
+ * today's 결과 리포트 rule 'verdict' (연습실 · 트레이닝 연습 left out); practice true = the same with those takes in. */
+const verdictRule=({practice=false}={})=>practice===true?'verdictWithPractice':'verdict';
 const ruleOf=rule=>typeof rule==='string'?RULES[rule]:rule;
 function decide(r,rule){
  if(r.deleted)return 'deleted';               // every rule: a recording in the deleted list is gone, whatever the media list says
@@ -191,6 +202,8 @@ function build(media,db={},env={}){
    return out;
   },
   takes:(rule,songId)=>(ds.bySong(rule).get(songId)||[]).filter(r=>r.analysed).map(r=>r.take),
+  /** The rows the "늘었나" verdicts count, with the practice switch: pick(verdictRule(opts)). */
+  verdict:(opts)=>ds.pick(verdictRule(opts)),
   /** 음역 변화 (step 2): reliable, dated analyses of song recordings, 매일 보이스 체크, 트레이닝 and lesson recordings.
    * Files that belong nowhere (no song, not a lesson, training or voice check), 연습실 submissions and recordings in
    * the deleted list stay out. Oldest first; each take carries its group. `left` names the recordings that do belong
@@ -213,5 +226,5 @@ function build(media,db={},env={}){
  };
  return ds;
 }
-return {VERSION:2,VERSIONS,RULES,REASONS,build,take,reliable,day,decide,dateOf,koreaDay};
+return {VERSION:2,VERSIONS,RULES,REASONS,build,take,reliable,day,decide,dateOf,koreaDay,verdictRule};
 });
