@@ -12,7 +12,7 @@
  *   same measures) are skipped and counted. 선택한 n개 지적으로 저장 adds the points in one change. The handwriting and
  *   the marks always stay on the score.
  *   window.VzipScoreInkBulk.attach(viewer) — called by app/score-ink.js with {el, menu, songId, score, signal, closed,
- *   current, outside, say, ready, vision, rows(page?), page, pageAspect(n), crop(rows, aspect), measuresOn(n, box),
+ *   current, outside, say, ready, settle, why, visionAsked, vision, rows(page?), page, pageAspect(n), crop(rows, aspect), measuresOn(n, box),
  *   marks(rows), hasMeasures}. */
 (() => {
 'use strict';
@@ -33,7 +33,7 @@ function attach(v) {
   b.innerHTML = '<i class="ph ph-list-checks" aria-hidden="true"></i><span class="score-ink-menu-label">' + TITLE + '</span>';
   v.menu.append(b);
   let running = false;
-  b.onclick = async () => { if (running) return; running = true; try { await begin(v); } catch (e) { v.say('지적으로 가져오지 못했어요: ' + e.message, true); } finally { running = false; } };
+  b.onclick = async () => { if (running) return; running = true; try { await begin(v); } catch (e) { v.say('지적으로 가져오지 못했어요: ' + e.message, true); VZ.toast('지적으로 가져오지 못했어요: ' + e.message, 'error'); } finally { running = false; } };
 }
 
 /** Which pages: this one or all of them. Resolves 'page' | 'all' | null. */
@@ -51,7 +51,9 @@ function chooseScope(v, here, pages, counts) {
 }
 
 async function begin(v) {
-  if (!v.ready()) { v.say('악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.', true); return; }
+  // Right after the viewer opens (or the iPad turns) the page is still being drawn: wait for it, then say why if not.
+  await v.settle?.(); if (v.closed()) return;
+  if (!v.ready()) { const why = v.why?.() || '악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.'; v.say(why, true); VZ.toast(why, 'error'); return; }
   v.current();
   const here = v.page(), all = v.rows(), aspects = new Map();
   for (const n of new Set(all.map(s => s.page))) { try { aspects.set(n, await v.pageAspect(n)); } catch {} if (v.closed()) return; }
@@ -75,6 +77,8 @@ async function begin(v) {
   // Notes read in an earlier run come first only if their answer is gone; new ones are sent first, up to LIMIT.
   const fresh = chosen.filter(c => !cache.has(c.key)), known = chosen.filter(c => cache.has(c.key));
   const send = fresh.slice(0, T.LIMIT), later = fresh.length - send.length;
+  // Whether recognition can be used is asked when the score opens; a quick press may come before the answer.
+  if (send.length) { await Promise.race([v.visionAsked?.(), new Promise(r => setTimeout(r, 5000))]); if (v.closed()) return; }
   const canSend = v.vision() && navigator.onLine !== false;
   let consent = false;
   if (send.length && canSend) {

@@ -245,6 +245,17 @@ test('멈추기 mid-way keeps the finished results; the rest is not sent',async(
  expect(await points(page)).toMatchObject([{measures:{from:1,to:1},text:TEXTS.A}]);
 });
 
+test('pressed while the page is being drawn again (or the score just opened): it waits, then asks',async({page})=>{
+ const count=await setup(page);const dialog=await open(page,count);
+ await dialog.locator('[data-ink-more]').click();
+ await expect(dialog.locator('[data-ink-bulk-points]')).toBeVisible();
+ // The zoom changes (as when the iPad turns) and the item is pressed in the same moment the redraw starts.
+ await dialog.evaluate(el=>{const zoom=el.querySelector('[data-ink-zoom]');zoom.value='2';zoom.dispatchEvent(new Event('change'));el.querySelector('[data-ink-bulk-points]').click();});
+ await page.locator('[data-bulk-scope=page]').click();
+ await consent(page,'인식하기');
+ await expect(notes(page)).toHaveCount(4);
+});
+
 test('recognition fails: it says so and nothing is saved',async({page})=>{
  const count=await setup(page,{vision:'fail'});const dialog=await open(page,count);
  await bulk(page,dialog);await consent(page,'인식하기');

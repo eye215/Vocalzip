@@ -90,6 +90,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
  const identity=()=>window.vzipCloudSignedIn?.()&&!scope?.leaving&&(!scope||scope.owner===owner)?{owner:window.vzipCloudUserId?.(),session:window.vzipCloudSessionId?.()||'legacy'}:null;
  const current=()=>{const i=identity(),s=VZ.song(songId)?.scores?.find(s=>s.id===scoreId&&!s.deleted);if(i?.owner!==owner||i.session!==initialSession||!s||s.r2Key!==score.r2Key)throw Error('계정이나 악보가 바뀌어 필기를 중단했어요.');};
  let store,prefs,profiles,imported=[];
+ let visionAsked=null; // the owner-only AI check (scoreVisionAvailable) once it was asked: 필기를 지적으로 가져오기 waits for it
  try{store=Ink.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true})});if(!store.restore())VZ.toast('기기 저장 공간이 부족해 일부 필기를 아직 앱 기록에 넣지 못했어요. 필기는 이 기기에 보관돼 있고, 공간이 생기면 다음에 열 때 다시 넣어요.','error');prefs=Settings.create({storage:scope?.storage||localStorage,identity,getData:()=>VZ.db,change:fn=>VZ.change(fn,{silent:true}),defaultPenOnly:/iPad/.test(navigator.userAgent||'')||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1});prefs.migrate();profiles=prefs.read();}
  catch(e){VZ.toast(e.message,'error');return;}
  /* Handwriting imported with the PDF (an attached vocalzip-ink.json, e.g. from GoodNotes) is part of the score file
@@ -767,12 +768,14 @@ VZ.openScoreInk=(songId,scoreId)=>{
    }catch(e){VZ.toast('지적은 저장했고 손글씨는 그대로 두었어요. '+e.message,'error');}
   });
  }
+ /** Waits (up to 5 s) while the page is being drawn, or the score is still opening. */
+ async function settle(){for(let i=0;(busy||!ready)&&!closed&&i<100;i++)await new Promise(r=>setTimeout(r,50));}
  /** 지적으로 (selection bar): recognition, when it can be used, then the form; without it the form with an empty field. */
  async function toPoint(){
   const rows=selection?.rows?.map(s=>({...s})),page=pageNo,button=el.querySelector('[data-ink-to-point]');
   if(!rows?.length||!VZ.scorePoints?.editor)return;
   // The page is being drawn again (the iPad turned, the window or zoom changed): wait for it instead of doing nothing.
-  for(let i=0;busy&&!closed&&i<100;i++)await new Promise(r=>setTimeout(r,50));
+  await settle();
   if(closed)return;
   if(visionBusy||!ready||busy||pending||performance){say('악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.',true);return;}
   let text='',note='';
@@ -1486,7 +1489,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
    go:async n=>{if(closed||!doc||!viewReady&&!busy||!Number.isInteger(n)||n<1||n>doc.numPages)return false;if(n!==pageNo){pageNo=n;closeThumbnails();await renderPage();}return !closed&&pageNo===n;}})||null;}catch{measures=null;}
   // 더보기 › 필기를 지적으로 가져오기 (app/score-ink-points-bulk.js): reads the strokes and marks, never changes them.
   try{window.VzipScoreInkBulk?.attach({el,menu:el.querySelector('.score-ink-actions'),songId,score,signal:controller.signal,closed:()=>closed,current,outside,say,
-   ready:()=>ready&&!busy&&!pending&&!performance&&!visionBusy&&!!binding&&!!doc,vision:()=>visionAvailable,rows:n=>binding?store.list(binding,n):[],page:()=>pageNo,pages:()=>doc?.numPages||0,
+   ready:()=>ready&&!busy&&!pending&&!performance&&!visionBusy&&!!binding&&!!doc,settle,visionAsked:()=>visionAsked,vision:()=>visionAvailable,
+   why:()=>pending?'필기 저장이 끝나지 않았어요. 완료를 눌러 다시 저장한 뒤 해 주세요.':performance?'무대용 보기에서는 쓸 수 없어요. 편집으로 돌아가 주세요.':visionBusy?'글자 인식이 끝난 뒤 다시 눌러 주세요.':'악보를 아직 그리고 있어요. 잠시 뒤 다시 눌러 주세요.',rows:n=>binding?store.list(binding,n):[],page:()=>pageNo,pages:()=>doc?.numPages||0,
    pageAspect:async n=>{const v=(await doc.getPage(n)).getViewport({scale:1});return v.height/v.width;},crop:(rows,a)=>cropHandwriting(rows,a).image,
    measuresOn:(n,b)=>measures?.measuresOn?.(n,b)||[],marks:rows=>measures?.marks?.(rows)||[],hasMeasures:()=>!!measures?.ready?.()});}catch{}
   // 악보 표기 palette: its own row under the tools (inside the one-line tool row it squeezed the tools away).
@@ -1881,7 +1885,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    ready=true;stage.dataset.viewOnly='false';rememberView();saveState('필기 준비됨','local');svg.style.pointerEvents=performance?'none':'';svg.dataset.tool=tool;
    // Memo text is measured to wrap it: once the app font is in, lay it out again with the real widths.
    document.fonts?.load?.('400 16px Pretendard').then(()=>{if(!closed)paint();}).catch(()=>{});
-   window.VzipR2.scoreVisionAvailable?.().then(result=>{if(closed)return;visionAvailable=!!result.available;syncVisionTools();paint();}).catch(()=>{if(!closed)syncVisionTools();});
+   visionAsked=window.VzipR2.scoreVisionAvailable?.().then(result=>{if(closed)return;visionAvailable=!!result.available;syncVisionTools();paint();}).catch(()=>{if(!closed)syncVisionTools();});
    el.querySelector('[data-ink-prev]').disabled=pageNo<=1;el.querySelector('[data-ink-next]').disabled=pageNo>=doc.numPages;
    el.querySelector('[data-ink-first]').disabled=pageNo<=1;el.querySelector('[data-ink-last]').disabled=pageNo>=doc.numPages;
    paint();
