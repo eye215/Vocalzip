@@ -218,36 +218,38 @@ test('전체 · 곡별 ▾ narrows 달라진 것 and 지표 자세히 to one son
   await expect(page.locator('[data-gm-song-fallback]')).toHaveText('Memory 녹음이 이 기간에는 없어 전체를 보여 드려요.');
 });
 
+/** To 오늘 without a document load: WebKit reloads on goto() to the URL it is already on, and the in-page fixtures would be gone. */
+const toHome = async page => { await page.evaluate(() => { if (location.hash !== '#/home') location.hash = '#/home'; }); await expect(page).toHaveURL(/#\/home$/); };
 test('older addresses lead into the new tabs, and 뒤로 is what it was', async ({page}) => {
   await boot(page, {hash:''});
   for (const [from, to] of [['#/vocal-growth?mode=monthly', /#\/growth-flow\?period=month$/], ['#/weekly-summary?week=2026-11-02', /#\/growth-flow\?period=week&week=2026-11-02$/],
     ['#/weekly-summary', /#\/growth-flow\?period=week$/], ['#/growth', /#\/vocal-growth$/], ['#/vocal-training', /#\/growth-lab$/], ['#/vocal-growth/training', /#\/growth-lab$/],
     ['#/vocal-growth/analysis', /#\/vocal-analysis$/], ['#/vocal-growth?gc=s2', /#\/growth-flow\?period=all$/]]) {
-    await page.goto('/#/home');
+    await toHome(page);
     await page.evaluate(h => { location.hash = h; }, from);
     await expect(page, from).toHaveURL(to);
     await page.goBack();                                              // replaced: 뒤로 does not bounce back into it
     await expect(page, from).toHaveURL(/#\/home$/);
   }
-  await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/weekly-summary?week=2026-11-02'; });
+  await toHome(page); await page.evaluate(() => { location.hash = '#/weekly-summary?week=2026-11-02'; });
   await expect(page.locator('[data-weekly-summary] [data-ws-range]')).toHaveText('2026년 11월 2일 – 8일');
-  await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/vocal-growth?gc=s2'; });
+  await toHome(page); await page.evaluate(() => { location.hash = '#/vocal-growth?gc=s2'; });
   try { await expect(page.locator('[data-gc-song="s2"]').first()).toBeInViewport({timeout:15000}); }
   catch (e) { // say what the screen showed instead (CI artifacts cannot be read)
     const seen = await page.evaluate(() => ({hash:location.hash, songs:[...document.querySelectorAll('[data-gc-song]')].map(x => x.dataset.gcSong), top:scrollY, main:(document.querySelector('main')?.innerText || '').replace(/\s+/g, ' ').slice(0, 700)}));
     throw Error('gc line not in view: ' + JSON.stringify(seen) + ' · page errors: ' + JSON.stringify(page.__errors || []));
   }
   // #/lab-reports keeps its screen (리포트 보관함) and is listed in 연구소.
-  await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/growth-lab'; });
+  await toHome(page); await page.evaluate(() => { location.hash = '#/growth-lab'; });
   await page.locator('[data-lab-tool="reports"]').click();
   await expect(page.locator('#top h1')).toHaveText('리포트 보관함');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/growth-lab$/);
   // The old practice-time page is still there for anyone who kept its address.
-  await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/practice-stats'; });
+  await toHome(page); await page.evaluate(() => { location.hash = '#/practice-stats'; });
   await expect(page.locator('[data-pd="week"]')).toBeVisible();
   // Tabs replace the address; 이번 달 → 지난 흐름 → 뒤로 → 이번 달 → 뒤로 leaves 성장.
-  await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+  await toHome(page); await page.evaluate(() => { location.hash = '#/vocal-growth'; });
   await page.locator('.growth-top-tabs a').nth(1).click();
   await expect(page).toHaveURL(/#\/vocal-analysis$/);
   await page.locator('.growth-top-tabs a').nth(0).click();
