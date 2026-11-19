@@ -51,7 +51,7 @@ async function boot(page, db, takes = TAKES) {
     await VZ.media.list(true);
   }, takes);
 }
-const report = async page => { await page.evaluate(() => { location.hash = '#/vocal-growth'; }); await expect(page.locator('[data-growth-changes-card]')).toBeVisible(); };
+const report = async page => { await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; }); await expect(page.locator('[data-growth-changes-card]')).toBeVisible(); };
 const data = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 // Names what runs off the screen (the deepest elements past the right edge), so a failure on an engine that cannot be
 // run locally still says where to look.

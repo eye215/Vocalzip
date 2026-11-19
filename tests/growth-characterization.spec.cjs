@@ -23,6 +23,11 @@
 // gained `methods`. No number or verdict moved.
 // 지표 목표 (2026-11-17) only added text: 월별 측정 흐름 gained a target row (목표를 정하면… · 목표 정하기). No number
 // or verdict moved.
+// 월별 분석 › 전체 · 곡별 (2026-11-19) only added text: the two scope chips (전체 · 곡별) under the month picker. No
+// number or verdict of the whole month moved.
+// 성장 개편 안 B, phase 2 (2026-11-19) moved screens only, no text: 전체 · 월별 분석 and 주간 요약 are the sub-page 지난
+// 흐름 (#/growth-flow?period=all|month|week) under the new 이번 달 tab, 보컬 트레이닝 is part of 연구소 (#/growth-lab). This
+// spec reads them at their new addresses; the snapshot file is byte-for-byte what it was.
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
@@ -58,7 +63,7 @@ async function collect(page) {
   const out = {};
   await boot(page);
   // 전체 분석: the screen, and the model the 보컬 분석 tab shares.
-  await go(page, '#/vocal-growth', '[data-overall-body]');
+  await go(page, '#/growth-flow?period=all', '[data-overall-body]');
   out.overallScreen = await page.locator('[data-growth]').evaluate(texts());
   out.overallModel = await page.evaluate(async () => JSON.parse(JSON.stringify(VZ.growthModel(await VZ.media.list()).overall)));
   out.songTakeIds = await page.evaluate(async () => VZ.growthModel(await VZ.media.list()).songItems.map(m => m.id));
@@ -80,7 +85,7 @@ async function collect(page) {
   // 주간 요약: six weeks, and the 홈 row.
   out.weekly = {};
   for (const week of ['2026-11-09', '2026-11-02', '2026-10-26', '2026-10-19', '2026-09-28', '2026-08-10']) {
-    await go(page, '#/weekly-summary?week=' + week, '[data-weekly-summary] .ws-week');
+    await go(page, '#/growth-flow?period=week&week=' + week, '[data-weekly-summary] .ws-week');
     await expect(page.locator('[data-weekly-summary]')).toHaveAttribute('data-week', week);
     out.weekly[week] = await page.locator('[data-weekly-summary]').evaluate(texts());
   }
@@ -90,7 +95,7 @@ async function collect(page) {
   out.analysisTab = await page.locator('[data-growth-analysis]').evaluate(texts());
   out.analysisRows = await page.locator('[data-hub-song]').evaluateAll(els => els.map(e => [e.dataset.hubSong, e.dataset.hubState, e.querySelector('.item-sub').textContent]));
   out.analysisRecent = await page.locator('[data-hub-take]').evaluateAll(els => els.map(e => e.dataset.hubTake));
-  await go(page, '#/vocal-training', '[data-hub-training-take]');
+  await go(page, '#/growth-lab', '[data-hub-training-take]');
   out.trainingTab = await page.locator('[data-growth-training]').evaluate(texts());
   // 곡별 "보컬 측정 변화" card, for every song (and the deleted one), from that song's recordings.
   out.songCards = {};

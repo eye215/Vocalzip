@@ -68,7 +68,7 @@ async function boot(page, {mr = true} = {}) {
     };
   }, [TAKES, v2({into:24, wob:20})]);
 }
-const report = async page => { await page.evaluate(() => { location.hash = '#/vocal-growth'; }); await expect(page.locator('[data-growth-changes-card]')).toBeVisible(); };
+const report = async page => { await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; }); await expect(page.locator('[data-growth-changes-card]')).toBeVisible(); };
 const sheet = page => page.getByRole('dialog', {name:'MR로 다시 분석', exact:true});
 const stored = (page, id) => page.evaluate(async id => (await window.vzipReadMedia()).find(x => x.id === id).analysis, id);
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));

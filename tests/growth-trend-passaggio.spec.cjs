@@ -28,7 +28,7 @@ const MEDIA = [
 const DB = {categories:[], assignments:[], comparisonReports:[], performances:[], vocalPlanReports:[], monthlyGrowthReports:[], monthlyAiReports:[], overallAiReports:[], lessons:[], practices:[], practicePlans:[], dailyGoals:[],
   songs:[{id:'s1', title:'Defying Gravity', created:kst('2026-05-01')}, {id:'s2', title:'On My Own', created:kst('2026-05-01')}, {id:'s3', title:'Memory', created:kst('2026-05-01')}], deleted:{}};
 test.use({timezoneId:'Asia/Seoul', locale:'ko-KR'});
-async function boot(page, hash = '#/vocal-growth', mark = '[data-overall-trend]') {
+async function boot(page, hash = '#/growth-flow?period=all', mark = '[data-overall-trend]') {
   page.__errors = [];
   page.on('pageerror', e => page.__errors.push(e.message));
   await page.clock.setFixedTime(new Date(NOW));

@@ -61,7 +61,7 @@ test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 test('성장 tab · 전체 분석: six separated measures, same-phrase basis, holds with reasons, highest note never judged (320px)', async ({page}) => {
   await page.setViewportSize({width:320, height:740});
   await boot(page);
-  await page.goto('/#/vocal-growth');
+  await page.goto('/#/growth-flow?period=all');
   const cards = page.locator('[data-growth-metric]');
   await expect(cards).toHaveCount(6);
   await expect(cards.locator('.growth-stat-top>span:first-child')).toHaveText(['음정 정확도', '음정 안정성', '음역 확장', '호흡 유지', '고음 안정성', '파사지오(전환 구간)']);
@@ -98,7 +98,7 @@ test('성장 tab · 전체 분석: six separated measures, same-phrase basis, ho
 test('성장 tab · 월별 분석 compares last month with this month per song and fits 320px', async ({page}) => {
   await page.setViewportSize({width:320, height:740});
   await boot(page);
-  await page.goto('/#/vocal-growth');
+  await page.goto('/#/growth-flow?period=all');
   await page.locator('[data-growth-mode="monthly"]').click();
   await expect(page.locator('[data-growth-select]')).toHaveValue(thisMonth);
   const cards = page.locator('[data-month-section="results"] .growth-metric');

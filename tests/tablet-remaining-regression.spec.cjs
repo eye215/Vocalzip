@@ -19,7 +19,7 @@ async function boot(page,{seed=initial(),remote=null}={}){
  await expect(page.getByRole('link',{name:'나의 공연',exact:true})).toBeVisible();
 }
 // Compare the rendered phone geometry before and after removing only the tablet override.
-for(const [route,marker] of [['song/song1','.vz-song-detail-hero'],['lessons','.lesson-tabs'],['lesson/lesson1','[data-del-lesson]'],['growth','.growth-shell'],['settings','.vz-settings']]){
+for(const [route,marker] of [['song/song1','.vz-song-detail-hero'],['lessons','.lesson-tabs'],['lesson/lesson1','[data-del-lesson]'],['practice-stats','.growth-shell'],['settings','.vz-settings']]){
  test(route+' phone layout is unchanged by tablet rules',async({page})=>{
   await page.setViewportSize({width:390,height:844});await boot(page);await page.goto('/#/'+route);await expect(page.locator(marker)).toBeVisible();
   const snapshot=()=>page.evaluate(()=>[...document.querySelectorAll('#top, #view, #view *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.height&&getComputedStyle(e).visibility==='visible'&&!e.closest('details:not([open])')}).map(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return [e.tagName,e.className.toString(),...['x','y','width','height'].map(k=>Math.round(r[k]*10)/10),s.display,s.fontSize,s.lineHeight,s.padding,s.gridTemplateColumns]}));
@@ -54,7 +54,7 @@ test('screen content and alternate tabs stay within tablet and phone viewports',
   for(const tab of ['media','lyrics','scores','timeline','ar']){await page.locator('[data-tab="'+tab+'"]').click();await check()}
   await page.goto('/#/lessons');for(const tab of ['upcoming','past','cancelled']){await page.locator('[data-lt="'+tab+'"]').click();await check()}
   await page.goto('/#/lesson/lesson1');await expect(page.locator('[data-del-lesson]')).toBeVisible();await check();
-  await page.goto('/#/growth');for(const period of ['week','28','month','all']){await page.locator('[data-pd="'+period+'"]').click();await check()}
+  await page.goto('/#/practice-stats');for(const period of ['week','28','month','all']){await page.locator('[data-pd="'+period+'"]').click();await check()}
   await page.goto('/#/settings');await expect(page.locator('.vz-settings')).toBeVisible();await check();
  }
 });

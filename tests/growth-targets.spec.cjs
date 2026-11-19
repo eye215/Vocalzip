@@ -19,7 +19,7 @@ async function boot(page) {
   await page.goto('/#/home');
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   await page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); }, MEDIA);
-  await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+  await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; });
   await expect(page.locator('[data-overall-trend]')).toBeVisible();
 }
 const stored = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)).settings?.growthTargets || {}, KEY);
@@ -65,7 +65,7 @@ test('each trend measure keeps its own target; a reload keeps it', async ({page}
   await page.reload();
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   await page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); location.hash = '#/home'; }, MEDIA);
-  await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+  await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; });
   await page.locator('[data-overall-metric="stability"]').click();
   await expect(page.locator('[data-overall-trend] [data-growth-target-row]')).toContainText('목표 ±9');
 });

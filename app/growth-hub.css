@@ -38,3 +38,6 @@
 .growth-hub-caption{margin:0 4px}
 .growth-hub-hint{display:none;gap:10px;align-items:flex-start;margin:8px 0 0;padding:14px 16px;border-radius:16px;background:var(--vz-color-accent-soft);color:var(--ink-2);font-size:13px;line-height:20px}
 .growth-hub-hint i{flex:none;margin-top:1px;color:var(--vz-color-accent);font-size:18px}
+/* 연구소 (성장 개편 안 B, phase 2): the deep tools above the former 보컬 트레이닝 content. */
+.growth-hub-inner{display:grid;gap:12px;min-width:0}
+.growth-hub-note i{color:var(--vz-color-accent)}

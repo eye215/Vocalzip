@@ -11,10 +11,11 @@ const e=V.esc;
 let request=0;
 /** Plain copies of the recordings with only what the week model reads. Category, whether a recording is a song take
  * (rule 'verdict') and whether its analysis is reliable come from app/growth-dataset.js, like every growth screen. */
-const plain=items=>{
- const ds=V.growthDataset(items||[]);
+// practice: the 연습 녹음 포함 switch of 성장 › 이번 달 — the song takes are those of verdictRule({practice:true}).
+const plain=(items,practice=false)=>{
+ const ds=V.growthDataset(items||[]),rule=practice===true&&V.growthDataset.verdictRule?V.growthDataset.verdictRule({practice:true}):'verdict';
  return ds.rows.map(r=>({id:r.id,recordedDate:r.m.recordedDate,created:r.m.created,category:r.category,
-  songId:r.songId,songTake:!ds.why(r,'verdict'),analysis:r.m.analysis||null,ok:r.ok,voiceCheck:r.m.voiceCheck||null,raw:r.m}));
+  songId:r.songId,songTake:!ds.why(r,rule),analysis:r.m.analysis||null,ok:r.ok,voiceCheck:r.m.voiceCheck||null,raw:r.m}));
 };
 /** 매일 보이스 체크 (built in parallel): use its own summary when the API exists; tolerate any shape or absence. */
 function voiceCheckLines(items){
@@ -32,7 +33,7 @@ const store=()=>{try{return window.VzipAccountScope?.storage||window.localStorag
 const seenKey=()=>'vzip_weekly_summary_seen:'+owner();
 const seen=()=>{try{return store()?.getItem(seenKey())||'';}catch{return '';}};
 const markSeen=week=>{try{if(seen()<week)store()?.setItem(seenKey(),week);}catch{}};
-const build=(items,weekStart,extra={})=>W.build(V.db,plain(items),{weekStart,voiceCheckLines,...extra});
+const build=(items,weekStart,{practice=false,...extra}={})=>W.build(V.db,plain(items,practice),{weekStart,voiceCheckLines,...extra});
 
 /* ---------- home row ---------- */
 /** "지난주 요약" in the home summary rows: Monday to Wednesday (Korea time) after a week with any record, until opened. */
@@ -45,7 +46,7 @@ V.weeklySummaryHomeRow=()=>{
   const s=build(M.cached?.()||[],last,{today,growth:false});
   if(s.empty||s.start!==last)return null;
   return {key:'weekly',icon:'',label:'지난주 요약',value:'연습 '+W.minutesLabel(s.practice.minutes)+' · '+s.practice.days+'일',
-   aria:'지난주 요약 보기, 연습 '+W.minutesLabel(s.practice.minutes)+', '+s.practice.days+'일',action:()=>V.nav('#/weekly-summary?week='+last)};
+   aria:'지난주 요약 보기, 연습 '+W.minutesLabel(s.practice.minutes)+', '+s.practice.days+'일',action:()=>V.nav('#/growth-flow?period=week&week='+last)};
  }catch{return null;}
 };
 
@@ -91,7 +92,7 @@ function growthCard(s){
  const items=g.items.map(x=>'<li class="ws-growth"><strong>'+e(x.title)+'</strong>'+
   (x.lines.length?x.lines.map(l=>'<p><span class="ws-state '+(STATE_CLASS[l.state]||'neutral')+'">'+e(l.title+' · '+l.label)+'</span><small>'+e(l.text)+'</small>'+(l.basis?'<small class="ws-basis">'+e(l.basis)+'</small>':'')+'</p>').join('')
    :'<p><span class="ws-state hold">판정 보류</span><small>'+e(x.holdText)+'</small></p>')+'</li>').join('');
- return card('growth','성장','<ul class="ws-growth-list">'+items+'</ul>'+(g.more?'<p class="ws-note">분석한 곡 '+g.more+'곡 더 · <a href="#/vocal-growth">성장 분석 보기</a></p>':'')+
+ return card('growth','성장','<ul class="ws-growth-list">'+items+'</ul>'+(g.more?'<p class="ws-note">분석한 곡 '+g.more+'곡 더 · <a href="#/growth-flow?period=all" data-growth-replace>성장 분석 보기</a></p>':'')+
   '<p class="ws-note">이번 주 녹음과 그 전에 부른 같은 곡을 비교해요. 최고음이나 파사지오로는 판단하지 않아요.</p>');
 }
 function lessonsCard(s){
@@ -111,7 +112,7 @@ function optionalCards(s){
 function page(s){
  const b=badge(s);
  return '<div class="growth-view-tabs growth-range ws-tabs" role="group" aria-label="성장 분석 범위"><span class="growth-range-label" aria-hidden="true">기간</span>'+
-   '<button type="button" data-ws-tab="#/vocal-growth">전체 분석</button><button type="button" data-ws-tab="#/vocal-growth?mode=monthly">월별 분석</button>'+
+   '<button type="button" data-ws-tab="#/growth-flow?period=all">전체 분석</button><button type="button" data-ws-tab="#/growth-flow?period=month">월별 분석</button>'+
    '<button type="button" class="active" aria-pressed="true">주간 요약</button></div>'+
   '<nav class="ws-week" aria-label="주 선택"><button type="button" class="ws-nav" data-ws-move="-1" aria-label="이전 주"'+(s.canPrevious?'':' disabled')+'><i class="ph ph-caret-left" aria-hidden="true"></i></button>'+
    '<div class="ws-week-label"><strong data-ws-range>'+e(weekTitle(s))+'</strong><small>'+e(b||'월–일 · 한국 시간')+'</small></div>'+
@@ -198,7 +199,7 @@ async function mount(host,query){
   host.querySelectorAll('[data-ws-move]').forEach(b=>b.onclick=()=>{
    if(b.disabled)return;
    weekStart=W.shift(s.start,7*Number(b.dataset.wsMove));
-   try{history.replaceState(null,'','#/weekly-summary?week='+weekStart);}catch{}
+   try{history.replaceState(null,'','#/growth-flow?period=week&week='+weekStart);}catch{}
    paint();host.querySelector('[data-ws-move="'+b.dataset.wsMove+'"]:not([disabled])')?.focus();
   });
   const state=host.querySelector('[data-ws-share-state]');
@@ -221,9 +222,12 @@ async function mount(host,query){
  try{const fresh=await M.list();if(my!==request||!host.isConnected)return;items=fresh;paint();}
  catch(err){if(my===request&&host.isConnected&&!items.length)host.insertAdjacentHTML('afterbegin','<p class="ws-note" role="status">녹음 목록을 불러오지 못해 녹음·성장 항목은 빠졌을 수 있어요.</p>');}
 }
+/* 성장 개편 안 B (phase 2): 주간 요약 is the 주간 page of 지난 흐름 (#/growth-flow?period=week, app/monthly-growth.js),
+ * under 성장 › 이번 달. Its old address moves there, keeping the week. Shared with 이번 달 (app/growth-month.js):
+ * build (with the 연습 녹음 포함 switch) and the 성장 card. */
+V.weeklySummary={mount,leave:()=>{request++;},build,growthHtml:s=>growthCard(s)};
 V.route('weekly-summary',{title:'성장',tab:'growth',noAutoRefresh:true,
- render:()=>(V.growthTabs?.('report')||'')+'<div class="ws-page" data-weekly-summary></div>',
- mount(main,r){mount(main.querySelector('[data-weekly-summary]'),r?.query);},
- leave(){request++;}
+ render:()=>'',
+ mount(main,r){const week=r?.query?.get('week')||'';location.replace('#/growth-flow?period=week'+(week?'&week='+encodeURIComponent(week):''));}
 });
 })();

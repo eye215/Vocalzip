@@ -7,22 +7,29 @@
  * line whose measure went with the ear at least 3 times and never against it. Derived on the fly; nothing is stored.
  * Under each song pair and each verdict, 그 사이에 한 것 (app/growth-between-model.js): closed, what was recorded between
  * the two takes' days — lessons, practice days with the minutes the person entered, goals done, recordings of the song.
- *   VzipGrowthChangesUI.mount(host, items) — host: an element inside 결과 리포트; items: the whole media list. */
+ *   VzipGrowthChangesUI.mount(host, items, opts) — host: an element inside 결과 리포트; items: the whole media list.
+ * opts (성장 › 이번 달, app/growth-month.js; all optional — without them the card is what it always was):
+ *   period {from, to}  지난 기간 vs 이번 기간 (app/growth-changes-model.js build period), verdicts of the period only;
+ *   practice true      the 연습 녹음 포함 switch: the takes of VzipGrowthDataset.verdictRule({practice:true});
+ *   songId             전체 · 곡별: that song's lines and verdicts only (같은 과제 and 음역 are not per song: left out);
+ *   head false         no card heading (the screen has its own); empty: {verdicts, songs} words for an empty group. */
 (() => {
 'use strict';
 const V = window.VZ, M = V?.media, C = window.VzipGrowthChanges, L = window.VzipListenVerdict, E = window.VzipEarAgreement, B = window.VzipGrowthBetween;
 if (!V || !M || !C || !L || !V.growthDataset) return;
 const e = V.esc;
 const SHOWN_VERDICTS = 3, SHOWN_SONGS = 4;
-let state = null;   // {host, items, precision: undefined (reading) | null (no store) | results, player, serial}
+let state = null;   // {host, items, opts, precision: undefined (reading) | null (no store) | results, player, serial}
 const owner = () => window.vzipCloudUserId?.() || window.VzipAccountScope?.owner || 'local';
 const referenceOf = songId => { const r = V.song(songId)?.vocalRange; return r && Number.isFinite(r.highMidi) ? r : null; };
 const today = () => window.VzipGrowthDataset?.koreaDay?.(Date.now()) || V.today();
 /** A take with its second measurement with the MR removed (analysis.mrAlt) as `alt`, when the growth `ok` rule trusts it. */
 const withAlt = t => { const alt = t?.a?.mrAlt; return alt && V.growthDataset.ok?.({analysis:alt}) ? {...t, alt} : t; };
-function songsOf(items) {
-  // 결과 리포트's own selection (app/growth-dataset.js rule 'verdict'): the song's recordings without 연습실 · 트레이닝 연습.
-  return [...V.growthDataset(items).bySong('verdict')].filter(([id]) => id && V.song(id))
+function songsOf(items, practice = false) {
+  // 결과 리포트's own selection (app/growth-dataset.js rule 'verdict'): the song's recordings without 연습실 · 트레이닝 연습;
+  // with the 연습 녹음 포함 switch, the one "늘었나" rule with those takes in (verdictRule({practice:true})).
+  const rule = practice === true && V.growthDataset.verdictRule ? V.growthDataset.verdictRule({practice:true}) : 'verdict';
+  return [...V.growthDataset(items).bySong(rule)].filter(([id]) => id && V.song(id))
     .map(([songId, rows]) => ({songId, title:V.songTitle(songId), takes:rows.filter(r => r.analysed).map(r => withAlt(r.take)), reference:referenceOf(songId)}));
 }
 function rangeOf(items) {
@@ -32,8 +39,14 @@ function rangeOf(items) {
 }
 const precisionApi = () => ({compare:window.VzipPrecisionReport?.compare, labels:window.VzipPrecisionReport?.LABELS || {}, groups:window.VzipPrecisionSession?.GROUPS || []});
 const hasPrecision = () => !!(window.VzipPrecisionStore && window.VzipPrecisionReport && window.VzipPrecisionSession);
-const model = (items, precision) => C.build({verdicts:L.list(V.db), songs:songsOf(items), precision:Array.isArray(precision) ? precision : null,
-  precisionApi:precisionApi(), range:rangeOf(items), titleOf:V.songTitle});
+/** The model, narrowed by opts (see the head of this file): a period, the practice switch, one song. */
+function model(items, precision, opts = {}) {
+  const song = opts.songId || '';
+  const m = C.build({verdicts:L.list(V.db).filter(v => !song || v.songId === song), songs:songsOf(items, opts.practice).filter(s => !song || s.songId === song),
+    precision:!song && Array.isArray(precision) ? precision : null, precisionApi:precisionApi(), range:song ? null : rangeOf(items), titleOf:V.songTitle, period:opts.period || null});
+  if (song) m.excluded = m.excluded.filter(x => x.songId === song);
+  return m;
+}
 /** The song's recordings for 그 사이에 한 것: every recording of a song not in the deleted list, with its day. */
 const recordingsOf = items => V.growthDataset(items).rows.filter(r => !r.deleted && r.songId).map(r => ({id:r.id, songId:r.songId, date:r.date}));
 /** 그 사이에 한 것 — closed; plain observations, never a cause. '' when the two takes have no day between them. */
@@ -48,11 +61,11 @@ function betweenHtml(ctx, kind, id, songId, from, to, ids) {
       : '<ul class="gc-between-rows">' + t.rows.map(r => '<li data-gc-between-row="' + e(r.key) + '">' + e(r.text) + '</li>').join('') + '</ul>') + '</details>';
 }
 /** 귀와 숫자 for the verdicts: each take as the growth screens read it (the same `ok` rule), null when it is gone. */
-function earOf(items) {
+function earOf(items, opts = {}) {
   if (!E) return null;
   const ds = V.growthDataset(items);
   const takeOf = id => { const row = ds.row(id); return row && !row.deleted ? withAlt(row.take) : null; };
-  return E.build({verdicts:L.list(V.db), takeOf, reference:referenceOf});
+  return E.build({verdicts:L.list(V.db).filter(v => !opts.songId || v.songId === opts.songId), takeOf, reference:referenceOf, period:opts.period || null});
 }
 
 /**
@@ -129,21 +142,21 @@ function earHtml(ear) {
     '<div class="gc-ear-body"><p class="gc-ear-help">들어 본 평가에서 낫다고 고른 녹음 쪽으로 숫자도 움직였는지 세어 봤어요. 같은 방법·같은 분석 버전으로 잰 두 녹음만 견주고, 판정 보류된 숫자는 세지 않아요. 숫자가 맞거나 틀렸다는 뜻은 아니에요.</p>' +
     table + tagList + '<p class="gc-ear-note">어느 숫자를 음정·호흡·소리 길 중 어느 항목과 견줄지는 처음 정해 본 것이에요. 평가가 쌓이면 바뀔 수 있어요.</p>' + exList + '</div></details></section>';
 }
-function html(m, precision, ear = null, ctx = null) {
+function html(m, precision, ear = null, ctx = null, opts = {}) {
   const group = (key, icon, title, body) => '<section class="gc-group" data-gc-group="' + key + '"><h3><i class="ph ph-' + icon + '" aria-hidden="true"></i>' + title + '</h3>' + body + '</section>';
   const verdictRow = v => verdictHtml(v, ear, ctx), songRow = s => songHtml(s, ear, ctx);
   const verdicts = m.verdicts.length ? m.verdicts.slice(0, SHOWN_VERDICTS).map(verdictRow).join('') + more('남긴 평가 모두 보기 (' + m.verdicts.length + ')', m.verdicts.slice(SHOWN_VERDICTS).map(verdictRow).join(''))
-    : '<p class="gc-empty" data-gc-empty="verdicts">아직 들어 보고 남긴 평가가 없어요. 아래 곡의 <b>들어 보고 평가</b>나 보컬 연구소에서 두 녹음을 가리고 들어 보고 남길 수 있어요.</p>';
+    : '<p class="gc-empty" data-gc-empty="verdicts">' + (opts.empty?.verdicts ? e(opts.empty.verdicts) : '아직 들어 보고 남긴 평가가 없어요. 아래 곡의 <b>들어 보고 평가</b>나 보컬 연구소에서 두 녹음을 가리고 들어 보고 남길 수 있어요.') + '</p>';
   const songs = m.songs.length ? m.songs.slice(0, SHOWN_SONGS).map(songRow).join('') + more('곡 더 보기 (' + (m.songs.length - SHOWN_SONGS) + ')', m.songs.slice(SHOWN_SONGS).map(songRow).join(''))
-    : '<p class="gc-empty" data-gc-empty="songs">같은 방법으로 잰 같은 곡 녹음이 다른 날 두 개 이상 모이면 여기에 보여 드려요.</p>';
+    : '<p class="gc-empty" data-gc-empty="songs">' + e(opts.empty?.songs || '같은 방법으로 잰 같은 곡 녹음이 다른 날 두 개 이상 모이면 여기에 보여 드려요.') + '</p>';
   let tasks = '';
   if (m.tasks.length) tasks = m.tasks.map(taskHtml).join('');
   else if (precision === undefined && hasPrecision()) tasks = '<p class="gc-empty" data-gc-loading>발성 정밀 측정 결과를 읽는 중…</p>';
-  else if (m.invite && V.precisionMeasurement) tasks = '<p class="gc-empty" data-gc-invite>아직 발성 정밀 측정이 없어요. 표준 과제 8가지를 녹음해 두면 같은 과제·모음·음량끼리 비교해 드려요.</p>' +
+  else if (m.invite && V.precisionMeasurement && !opts.songId) tasks = '<p class="gc-empty" data-gc-invite>아직 발성 정밀 측정이 없어요. 표준 과제 8가지를 녹음해 두면 같은 과제·모음·음량끼리 비교해 드려요.</p>' +
     '<a class="gc-chip" href="#/precision-measurement" data-gc-precision-entry><i class="ph ph-microphone" aria-hidden="true"></i><span>표준 과제 녹음하기</span></a>';
   const ex = m.excluded;
   return '<section class="growth-panel gc-card" data-growth-changes-card aria-label="무엇이 달라졌나">' +
-    '<header class="gc-head"><h2>무엇이 달라졌나</h2><p>같은 조건으로 잰 것끼리만 비교했어요. 숫자는 관찰이고, 더 나아졌는지는 들어 본 사람의 판단으로만 적어요.</p></header>' +
+    (opts.head === false ? '' : '<header class="gc-head"><h2>무엇이 달라졌나</h2><p>같은 조건으로 잰 것끼리만 비교했어요. 숫자는 관찰이고, 더 나아졌는지는 들어 본 사람의 판단으로만 적어요.</p></header>') +
     '<div class="gc-groups">' + group('verdicts', 'ear', '들어 본 평가', verdicts) + group('songs', 'music-notes', '같은 곡 같은 방법', songs) +
     (tasks ? group('tasks', 'waveform', '같은 과제', tasks) : '') +
     (m.range ? group('range', 'arrows-vertical', '음역', '<article class="gc-line" data-gc-range><p class="gc-basis">' + e(m.range.basis) + '</p><ul class="gc-obs"><li><span>' + e(m.range.text) + '</span></li></ul></article>') : '') + '</div>' +
@@ -157,11 +170,11 @@ function paint() {
   if (!s?.host?.isConnected) return;
   stopPlayer();
   let m, ear = null;
-  try { m = model(s.items, s.precision); } catch (error) { console.error(error); s.host.innerHTML = ''; return; }
-  try { ear = earOf(s.items); } catch (error) { console.error(error); }   // 귀와 숫자 is extra: the card stands without it
+  try { m = model(s.items, s.precision, s.opts); } catch (error) { console.error(error); s.host.innerHTML = ''; return; }
+  try { ear = earOf(s.items, s.opts); } catch (error) { console.error(error); }   // 귀와 숫자 is extra: the card stands without it
   let ctx = null;
   try { ctx = {recordings:recordingsOf(s.items)}; } catch (error) { console.error(error); }   // so is 그 사이에 한 것
-  s.host.innerHTML = html(m, s.precision, ear, ctx);
+  s.host.innerHTML = html(m, s.precision, ear, ctx, s.opts);
   // A redraw (a verdict saved, the late precision read) keeps 귀와 숫자 open when it was.
   s.host.querySelector('[data-gc-ear]')?.addEventListener('toggle', ev => { s.earOpen = ev.target.open; });
   // 이 녹음도 MR 빼고 재기: the song's MR re-analysis with only this take picked. A saved result redraws 결과 리포트
@@ -189,11 +202,11 @@ async function readPrecision() {
 window.VzipGrowthChangesUI = {
   /** Drawn once the device store has answered (it is quick); a slow store is waited for 600 ms, then the card shows
    * "읽는 중" for that group and is drawn again when the answer comes — never redrawn under a finger otherwise. */
-  async mount(host, items) {
+  async mount(host, items, opts = {}) {
     if (!host) return;
     const serial = (state?.serial || 0) + 1;
     stopPlayer();
-    state = {host, items:items || [], precision:hasPrecision() ? undefined : null, player:null, serial};
+    state = {host, items:items || [], opts:opts || {}, precision:hasPrecision() ? undefined : null, player:null, serial};
     const read = readPrecision();
     const first = await Promise.race([read, new Promise(r => setTimeout(() => r(undefined), 600))]);
     if (state?.serial !== serial) return;
@@ -205,7 +218,21 @@ window.VzipGrowthChangesUI = {
     state.precision = late;
     paint();
   },
-  html:(items, precision = null) => html(model(items, precision), precision, earOf(items), {recordings:recordingsOf(items)})
+  html:(items, precision = null, opts = {}) => html(model(items, precision, opts), precision, earOf(items, opts), {recordings:recordingsOf(items)}, opts),
+  /** The songs that have a 같은 곡 같은 방법 line (월별 분석 › 곡별 links to it); [] when the model cannot be built. */
+  songs:(items, opts = {}) => { try { return model(items || [], null, opts).songs.map(s => s.songId); } catch (error) { console.error(error); return []; } },
+  /**
+   * 전체 · 곡별 for one period (opts as mount, without songId): every song with a take in it, the songs with a line first —
+   * [{songId, title, state: 'compare' (a line) | 'new' (nothing before the period) | 'hold' (left out for another reason)}].
+   */
+  songChoices:(items, opts = {}) => {
+    try {
+      const m = model(items || [], null, {...opts, songId:''}), out = new Map();
+      for (const s of m.songs) out.set(s.songId, {songId:s.songId, title:s.title, state:'compare'});
+      for (const x of m.excluded) if (x.kind === 'song' && x.songId && !out.has(x.songId)) out.set(x.songId, {songId:x.songId, title:x.title || V.songTitle(x.songId), state:x.reason === 'no-previous' ? 'new' : 'hold'});
+      return [...out.values()];
+    } catch (error) { console.error(error); return []; }
+  }
 };
 window.addEventListener('vzip:listen-verdicts', () => { if (state?.host?.isConnected) paint(); });
 window.addEventListener('hashchange', stopPlayer);

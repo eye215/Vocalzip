@@ -84,7 +84,7 @@ test('daily check: home card → 30-second check saved as training with its tag,
  expect(saved.entries).toEqual([{training:true,songId:''}]);
  expect(saved.prefs).toMatchObject({voiceType:'tenor',refNote:57,highNote:66,tones:true});
  // 성장 entry says today's check is done; the home card is gone.
- await page.evaluate(()=>window.VZ.nav('#/vocal-growth'));
+ await page.evaluate(()=>window.VZ.nav('#/growth-flow?period=all'));
  await expect(page.locator('.vc-entry')).toContainText('오늘 완료');
  await page.evaluate(()=>window.VZ.nav('#/home'));
  await expect(page.locator('.vz-student-home .vz-today-line')).toBeVisible();

@@ -280,3 +280,18 @@
  .growth-intro{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){.growth-coverage-track i{transition:none}}
+/* 월별 분석 › 전체 · 곡별 (app/monthly-growth.js): one song's month; 44px targets, a long title is cut, never widened. */
+.growth-song-scope{display:flex;align-items:center;gap:6px;min-width:0;max-width:100%}
+.growth-song-scope button{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid #e5d9f1;
+ border-radius:14px;background:#fff;color:var(--ink-2);font-family:inherit;font-size:13px;font-weight:650;line-height:18px}
+.growth-song-scope button[data-mbs-scope="song"]{flex:0 1 auto;min-width:0}
+.growth-song-scope button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.growth-song-scope button[aria-pressed="true"]{border-color:transparent;background:var(--vz-color-accent-soft);color:var(--vz-color-accent)}
+.growth-song-scope button:focus-visible{outline:2px solid var(--vz-color-accent);outline-offset:1px}
+.growth-song-note{margin:0;padding:0 2px;font-size:12px;line-height:1.55}
+.growth-song-links{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.growth-song-links .btn{min-height:44px;display:inline-flex;align-items:center;gap:6px;max-width:100%}
+.growth-song-choice{display:flex;flex-direction:column;gap:2px;min-width:0;text-align:left}
+.growth-song-choice strong{overflow-wrap:anywhere;font-weight:650}
+.growth-song-choice small{font-size:12px;font-weight:500;opacity:.78}
+.growth-song-choices .vz-choice{min-height:56px}
