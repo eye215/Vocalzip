@@ -127,6 +127,37 @@ test('a failed raw reading requests separation once and receives the result with
  await page.evaluate(async()=>{const m=(await VZ.media.list(true)).find(m=>m.id==='m-loud');await VZ.media.update(m,{voicePathSeparation:{...m.voicePathSeparation,state:'PRIVATE-STATE'}},{quiet:true});await VZ.media.list(true);VZ.render();});await done(page);
  const diagnostic=await page.evaluate(()=>VZ.voicePathDiagnosis());expect(JSON.stringify(diagnostic)).not.toContain('PRIVATE-STATE');expect(diagnostic.takes[1].serverSeparation.state).toBe('unknown');
 });
+test('a take refused as recorded with no MR match: says why the server cannot be asked, and offers it once it can',async({page})=>{
+ await boot(page,{takes:[TAKES[0],{...TAKES[2],id:'m-loud',kind:'bass',analysis:stored({voiceOverMrDb:8})}]});
+ // Not in the cloud yet: nothing can be asked, and the screen says so instead of staying silent.
+ await page.evaluate(()=>{window.__serverRequests=0;VZ.voicePathServerRequest=async()=>{window.__serverRequests++;return {state:'queued'};};});
+ await open(page);await page.locator('[data-vp-run]').click();await done(page);
+ const take=page.locator('[data-vp-take="b"]');
+ await expect(take.locator('[data-vp-refused]')).toBeVisible();
+ await expect(take.locator('[data-vp-server-unavailable]')).toContainText('로그인하면 서버에서 AI로 목소리만 분리해 다시 잴 수 있어요');
+ await page.evaluate(()=>{window.vzipCloudSignedIn=()=>true;VZ.render();});await done(page);
+ await expect(take.locator('[data-vp-server-unavailable]')).toContainText('아직 클라우드에 원본이 없어 서버 분리를 쓸 수 없어요');
+ await expect(page.locator('[data-vp-server-start]')).toHaveCount(0);expect(await page.evaluate(()=>window.__serverRequests)).toBe(0);
+ // The recording reached the cloud later (measured result kept on the device): the offer appears, one tap asks.
+ await page.evaluate(async()=>{
+  const P=window.VzipVoicePath;sessionStorage.setItem('fake-separated',JSON.stringify(P.gate(P.analyze(window.vpTake.samples('better',34,16000),16000),false)));
+  const m=(await VZ.media.list(true)).find(x=>x.id==='m-loud');await VZ.media.update(m,{storageProvider:'r2',r2Key:'u/fake-owner/m-loud',size:128},{quiet:true});await VZ.media.list(true);});
+ await page.reload(); // the screen reads the recording's new place; the test helpers are set again
+ await page.evaluate(()=>{
+  window.vzipCloudSignedIn=()=>true;window.__serverRequests=0;const result=JSON.parse(sessionStorage.getItem('fake-separated'));
+  VZ.voicePathServerAvailable=x=>x.id==='m-loud';
+  VZ.voicePathServerRequest=async x=>{window.__serverRequests++;const fresh=(await VZ.media.list(true)).find(y=>y.id===x.id);await VZ.media.update(fresh,{voicePathSeparation:{version:'vp-sep-1',requestId:'fake-request',source:{provider:'r2',key:'u/fake-owner/m-loud',bytes:128},state:'done',requestedAt:100,engine:{model:'htdemucs'},processingMs:10,result}},{quiet:true});await VZ.media.list(true);return {state:'queued'};};
+  VZ.voicePathServerStatus=async x=>({report:(await VZ.media.list(true)).find(y=>y.id===x.id).voicePathSeparation});
+  VZ.render();});
+ await done(page);
+ await expect(page.locator('[data-vp-take="b"] [data-vp-server-offer]')).toContainText('서버에서 AI로 목소리만 분리');
+ const button=page.locator('[data-vp-take="b"] [data-vp-server-start]');expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await button.click();
+ await expect(page.locator('[data-vp-take="b"]')).toHaveAttribute('data-vp-source','ai-separated');
+ expect(await page.evaluate(()=>window.__serverRequests)).toBe(1);
+ await expect(page.locator('[data-vp-server-offer],[data-vp-server-unavailable]')).toHaveCount(0);
+ expect(page.__errors).toEqual([]);
+});
 test('a replaced source cannot reuse the old server report',async({page})=>{
  await boot(page,{takes:[{...TAKES[0],analysis:stored({voiceOverMrDb:8})},TAKES[2]]});await seedServerPitch(page,'m-old');
  await page.evaluate(async()=>{const m=(await VZ.media.list(true)).find(x=>x.id==='m-old');await VZ.media.update(m,{r2Key:'u/fake-owner/replaced'},{quiet:true});await VZ.media.list(true);});
