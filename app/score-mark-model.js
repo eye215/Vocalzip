@@ -108,7 +108,7 @@ function across(pg, s, hits) {
  * - 테두리 상자 frames the box, 밑줄 runs under the bottom staff, 구간 괄호 sits over the top staff. */
 function pieces(pg, look, from, to, aspect = 1) {
   const k = aspect > 0 ? aspect : 1, pen = look.type !== 'highlighter', lo = Math.min(from, to), hi = Math.max(from, to);
-  const base = {tool:pen ? 'pen' : 'highlighter', color:look.color, opacity:pen ? 1 : Ink.MARK_OPACITY, width:look.width};
+  const base = {tool:pen ? 'pen' : 'highlighter', color:look.color, opacity:Ink.markOpacity(look), width:look.width};
   const pad = (pg?.staff || 0) * (pg?.snapped ? .25 : .6), out = [];
   for (const sys of pg?.systems || []) {
     const ms = sys.measures.filter(m => m.index >= lo && m.index <= hi);

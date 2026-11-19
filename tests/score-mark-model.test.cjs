@@ -280,6 +280,8 @@ test('what a mark placed by 마디 선택 draws: one shape per line of music, ex
   const low = {...PAGE, systems:[{...PAGE.systems[0], bottom:.22, staves:[[.2, .22]]}]};
   const flat = K.pieces(low, cover, 1, 1, K14)[0]; assert.equal(flat.points.length, 2); near(flat.width, (.02 + 2 * room) * K14); near(top(flat), .2 - room); near(bottom(flat), .22 + room);
   near(K.pieces(low, {...cover, width:.006}, 1, 1, K14)[0].width, flat.width);
+  // The preset's 투명도 (when it has one) goes onto every piece.
+  assert.equal(K.pieces(low, {...cover, opacity:.3}, 1, 1, K14)[0].opacity, .3);
   // Voice and piano (three staves, y .2–.38) are one box: the band covers all of it, from the top line of the top
   // staff to the bottom line of the bottom staff.
   const grand = {...PAGE, systems:[{...PAGE.systems[0], bottom:.38, staves:[[.2, .25], [.26, .31], [.33, .38]]}]};

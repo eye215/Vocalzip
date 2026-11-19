@@ -255,7 +255,7 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-custom input[type=color]::-webkit-color-swatch-wrapper{padding:5px}
 .ink-marker-custom input[type=color]::-webkit-color-swatch{border:2px solid #fff;border-radius:50%}
 .ink-marker-custom input[type=color]::-moz-color-swatch{border:2px solid #fff;border-radius:50%}
-.ink-marker-width{font-size:14px;font-weight:600}
+.ink-marker-width,.ink-marker-opacity,.ink-marker-size{font-size:14px;font-weight:600}
 .ink-marker-note{margin:0;font-size:12px;line-height:18px;color:var(--vz-color-muted,#667085)}
 /* 기능 (표기의 기능): four choices for a user preset, one fixed line for a built-in one. */
 .ink-marker-set legend small{margin-left:4px;font-size:12px;font-weight:400;color:var(--vz-color-muted,#667085)}
@@ -267,7 +267,6 @@ body .score-ink-sheet.score-ink-fullscreen .sheet-body{padding:calc(6px + env(sa
 .ink-marker-pad-tools button{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:14px;background:#fff;color:var(--vz-color-primary,#344054);font-family:inherit;font-size:14px;line-height:20px;font-weight:600;cursor:pointer}
 .ink-marker-pad-tools button i{font-size:18px}
 .ink-marker-pad-tools button:disabled{opacity:.45;cursor:default}
-.ink-marker-sizes label>span{min-height:52px}
 .ink-marker-choices label>span>i.ph-scribble-loop{font-size:26px;height:36px;display:grid;place-items:center}
 .ink-marker-roles{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ink-marker-roles label>span{min-height:52px}
@@ -469,3 +468,42 @@ body .score-ink-sheet.score-ink-compact .sheet-head [data-ink-other-scores]{flex
 .score-ink-page svg .score-ink-eraser-cursor{fill:#7a32f514;stroke:#7a32f5;stroke-width:1.5px;pointer-events:none}
 .score-ink-page svg .score-ink-eraser-cursor[data-down]{fill:#7a32f526}
 .score-ink-page svg [data-ink-erasing]{opacity:.2}
+
+/* Fullscreen toolbar (2026-11-19), laid out like GoodNotes: row 1 holds the page list, AI, 무대용 보기, 선택 | 필기 모드,
+ * 지우개, ▾ … 내보내기·공유, 더보기; row 2 (the tool row) shows while 필기 모드 is on and not folded (fullBar in
+ * score-ink.js). Outside fullscreen nothing here applies: row 1 is hidden and every button is back in its old place. */
+.score-ink-row-main[hidden],.score-ink-row-main [hidden],.score-ink-sheet.score-ink-fullscreen .score-ink-tools [hidden],.score-ink-sheet.score-ink-fullscreen .score-ink-tools[data-ink-row-hidden]{display:none!important}
+.score-ink-sheet:not(.score-ink-fullscreen) [data-ink-notation]>i{display:none}
+.score-ink-sheet.score-ink-fullscreen .score-ink-bar{flex-direction:column;align-items:stretch;gap:2px;width:100%;min-width:0;box-sizing:border-box;padding:3px;border-radius:18px;background:var(--vz-color-surface,#fff);box-shadow:0 0 0 1px var(--vz-color-border,#e8e4f0),0 6px 18px #23143c12}
+.score-ink-sheet.score-ink-fullscreen .score-ink-row-main{display:flex;align-items:center;gap:4px;min-width:0;border-radius:15px;background:var(--vz-color-accent-soft,#f3ecff)}
+.score-ink-row-left{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+.score-ink-row-left::-webkit-scrollbar,.score-ink-sheet.score-ink-fullscreen .score-ink-tools::-webkit-scrollbar{display:none}
+.score-ink-row-right{display:flex;align-items:center;gap:2px;flex:none}
+.score-ink-row-main button{flex:0 0 44px;width:44px;min-width:44px;height:44px;min-height:44px;display:grid;place-items:center;padding:0;border:0;border-radius:12px;background:transparent;color:var(--vz-color-primary,#344054);font-size:22px;line-height:1}
+.score-ink-row-main button>i{font-size:22px}
+.score-ink-row-main button:disabled{opacity:.35}
+.score-ink-row-main .score-ink-menu-label,.score-ink-row-main [data-ink-tool]>span,.score-ink-row-main [data-ink-notation]>span,.score-ink-sheet.score-ink-fullscreen .score-ink-tools .score-ink-menu-label{display:none}
+.score-ink-row-main button[aria-pressed=true]{background:var(--vz-color-surface,#fff);color:var(--vz-color-accent,#7a32f5);box-shadow:0 1px 3px #23143c1f}
+.score-ink-row-main [data-ink-writing][aria-pressed=true]{background:var(--vz-color-accent,#7a32f5);color:var(--vz-color-accent-ink,#fff)}
+.score-ink-row-main [data-ink-fold]>i{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--vz-color-surface,#fff);color:var(--vz-color-body,#475467);font-size:15px;box-shadow:inset 0 0 0 1px var(--vz-color-border,#e8e4f0)}
+.score-ink-row-divider{flex:0 0 1px;width:1px;height:24px;margin:0 4px;background:var(--vz-color-primary,#344054);opacity:.18}
+.score-ink-row-main .score-ink-full-actions{gap:2px}
+.score-ink-sheet.score-ink-fullscreen .score-ink-row-main .score-ink-full-actions>[data-ink-more]{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border:0;background:transparent;color:var(--vz-color-primary,#344054)}
+.score-ink-sheet.score-ink-fullscreen .score-ink-row-main .score-ink-full-actions>[data-ink-more][aria-expanded=true]{background:var(--vz-color-surface,#fff);color:var(--vz-color-accent,#7a32f5)}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools{display:flex;align-items:center;gap:2px;width:100%;min-width:0;flex:none;box-sizing:border-box;padding:0 2px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>button{flex:0 0 44px;width:44px;min-width:44px;max-width:none;height:44px;min-height:44px;padding:0;border-radius:12px;background:transparent;color:var(--vz-color-primary,#344054)}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>button[aria-pressed=true]{background:var(--vz-color-selected-bg,#ede1ff);color:var(--vz-color-accent,#7a32f5)}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>[data-ink-redo]{margin-right:6px}
+/* 펜 ▾: the settings caret joins the pen (or highlighter) in hand, sharing its tint. */
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>[data-ink-settings]{margin-left:-2px;font-size:15px}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>[data-ink-settings]>i{font-size:15px}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>button[aria-pressed=true]:has(+[data-ink-settings]){border-radius:12px 0 0 12px}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>button[aria-pressed=true]+[data-ink-settings]{border-radius:0 12px 12px 0;background:var(--vz-color-selected-bg,#ede1ff);color:var(--vz-color-accent,#7a32f5)}
+.score-ink-sheet.score-ink-fullscreen .score-ink-tools>[data-ink-settings][aria-expanded=true]{color:var(--vz-color-accent,#7a32f5)}
+/* 굵기 line and colour dot of the tool in hand, at the right end of the tool row. */
+.score-ink-ink-preview{display:flex;align-items:center;gap:2px;flex:none;margin-left:auto;padding-left:6px;border-left:1px solid var(--vz-color-border,#e8e4f0)}
+.score-ink-ink-preview[hidden]{display:none}
+.score-ink-ink-preview button{flex:0 0 44px;width:44px;height:44px;display:grid;place-items:center;padding:0;border:0;border-radius:12px;background:transparent}
+.score-ink-ink-preview button[aria-expanded=true]{background:var(--vz-color-selected-bg,#ede1ff)}
+.score-ink-ink-preview [data-ink-width-quick] span{display:block;width:24px;min-height:2px;border-radius:99px;background:var(--vz-color-primary,#344054)}
+.score-ink-ink-preview [data-ink-color-quick] span{display:block;width:24px;height:24px;border-radius:50%;background:var(--sample-color,#101828);box-shadow:inset 0 0 0 1px #10182826,0 0 0 2px var(--vz-color-surface,#fff),0 0 0 3px var(--vz-color-border,#e8e4f0)}

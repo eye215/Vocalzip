@@ -107,3 +107,61 @@ test('damaged stored markers fall back one by one; another account sees only the
  assert.deepEqual([list[3].color,list[3].changed,list[2].width,list[2].changed],['#7a32f5',false,.02,true]);assert.equal(f.memory.get(key),text);
  f.setIdentity({owner:'bob',session:'two'});assert.deepEqual(create(f.options).read().markers.map(m=>[m.id,m.changed]),[['breath',false],['repeat',false],['cut',false],['start',false]]);
 });
+
+test('a preset\'s 투명도: optional, two decimals; without it marks have what they always had',()=>{
+ const Settings=require('../app/score-ink-settings.js'),Ink=require('../app/score-ink-model.js');
+ const cover={name:'덮기',color:'#7a32f5',width:.04,type:'highlighter',form:'cover'};
+ assert.equal('opacity' in Settings.marker(cover),false);assert.equal(Settings.marker({...cover,opacity:null}).opacity,undefined);
+ assert.equal(Settings.marker({...cover,opacity:.333}).opacity,.33);assert.equal(Settings.marker({...cover,opacity:.05}).opacity,.05);assert.equal(Settings.marker({...cover,opacity:1}).opacity,1);
+ // The usual 투명도 of its type is not stored (a preset saved untouched is as before).
+ assert.equal('opacity' in Settings.marker({...cover,opacity:.25}),false);assert.equal('opacity' in Settings.marker({...cover,type:'pen',opacity:1}),false);
+ for(const opacity of [0,.04,1.01,-1,NaN,Infinity,'0.5'])assert.throws(()=>Settings.marker({...cover,opacity}),/투명도/,String(opacity));
+ // The defaults are what placed marks got before: a highlighter's MARK_OPACITY (.25), a pen's 1.
+ assert.equal(Ink.MARK_OPACITY,.25);assert.equal(Settings.markerOpacity(cover),.25);assert.equal(Settings.markerOpacity(mine('x')),1);
+ assert.equal(Settings.markerOpacity(MARKERS.find(m=>m.id==='cut')),.25);assert.equal(Settings.markerOpacity(MARKERS.find(m=>m.id==='breath')),1);
+ // Placed marks take the preset's 투명도 (every shape and every stroke of a drawing), or the default.
+ assert.equal(Ink.markStroke(cover,[.1,.1,.5],[.3,.1,.5]).opacity,.25);assert.equal(Ink.markStroke({...cover,opacity:.3},[.1,.1,.5],[.3,.1,.5]).opacity,.3);
+ assert.equal(Ink.markStroke({...mine('x'),opacity:.6},[.1,.1,.5],null).opacity,.6);assert.equal(Ink.markStroke(mine('x'),[.1,.1,.5],null).opacity,1);
+ const art=Ink.artFrom([[[100,100],[900,900]],[[100,900],[900,100]]]);
+ assert.deepEqual(Ink.markStamp({...cover,form:'draw',art,opacity:.4},[.5,.5,.5]).map(s=>s.opacity),[.4,.4]);
+ assert.ok(Ink.valid({version:1,id:'s',ownerId:'alice',songId:'song',scoreId:'score',r2Key:'u/alice/score/a.pdf',pdfHash:'a'.repeat(64),page:1,createdAt:1,...Ink.markStroke({...cover,opacity:.3},[.1,.1,.5],[.3,.1,.5])}));
+});
+test('투명도 of a built-in preset: the default is not a change, another value is and 되돌리기 clears it; a user preset keeps its own',()=>{
+ const f=fixture(),cut=()=>create(f.options).read().markers.find(m=>m.id==='cut');
+ f.api.write('marker',{id:'cut',opacity:.25});assert.equal(cut().changed,false);
+ f.api.write('marker',{id:'cut',opacity:.8});assert.deepEqual([cut().opacity,cut().changed],[.8,true]);
+ assert.equal(JSON.parse([...f.memory.values()][0]).markers.builtin.cut.opacity,.8);
+ f.api.write('marker',{id:'cut'},{reset:true});assert.deepEqual([cut().opacity,cut().changed],[undefined,false]);
+ // A pen preset at 100% is as it was; at 40% it is changed.
+ f.api.write('marker',{id:'breath',opacity:1});assert.equal(f.api.read().markers[0].changed,false);
+ f.api.write('marker',{id:'breath',opacity:.4});assert.equal(f.api.read().markers[0].changed,true);
+ f.api.write('marker',mine('m-1',{type:'highlighter',opacity:.3}));assert.equal(create(f.options).read().markers.find(m=>m.id==='m-1').opacity,.3);
+ assert.throws(()=>f.api.write('marker',{id:'m-1',opacity:0}),/투명도/);assert.equal(f.api.read().markers.find(m=>m.id==='m-1').opacity,.3);
+});
+
+test('크기 of a 기호 and a drawing: a factor of the usual size; the old s/m/l still read and older presets are unchanged',()=>{
+ const Settings=require('../app/score-ink-settings.js'),Ink=require('../app/score-ink-model.js');
+ const star=mine('x',{shape:'star'}),art=Ink.artFrom([[[100,100],[900,900]],[[100,900],[900,100]]]),draw={...star,form:'draw',art};delete draw.shape;
+ assert.equal('size' in Settings.marker(star),false);assert.equal('size' in Settings.marker({...star,size:1}),false);
+ assert.equal(Settings.marker({...star,size:2}).size,2);assert.equal(Settings.marker({...star,size:1.26}).size,1.3);
+ assert.equal(Settings.marker({...star,size:9}).size,2.5);assert.equal(Settings.marker({...star,size:.1}).size,.5);
+ assert.equal(Settings.marker({...star,size:'l'}).size,1.6);assert.equal('size' in Settings.marker({...star,size:'huge'}),false);
+ // A drawing keeps the letters older versions know when it is on one of their steps.
+ assert.deepEqual([.6,1,1.6,1.3,'s',undefined].map(size=>Settings.marker({...draw,size}).size),['s','m','l',1.3,'s','m']);
+ // Placed: a star at 200% is twice as large around the same point; 글자 and 점 grow too; lines do not.
+ const box=look=>{const p=Ink.markStroke(look,[.5,.5,.5],null).points,xs=p.map(q=>q[0]),ys=p.map(q=>q[1]);return [Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)];};
+ const [w1,h1]=box(star),[w2,h2]=box({...star,size:2});assert.ok(Math.abs(w2/w1-2)<.01&&Math.abs(h2/h1-2)<.01,[w1,w2,h1,h2].join());
+ assert.equal(Ink.markStroke({...star,shape:'text',text:'mf',size:2},[.5,.5,.5],null).size,.08);
+ assert.equal(Ink.markStroke({...star,shape:'dot',size:2},[.5,.5,.5],null).width,.04);
+ const line={...star,form:'line'};delete line.shape;assert.deepEqual(Ink.markStroke({...line,size:2},[.1,.1,.5],[.3,.1,.5]),Ink.markStroke(line,[.1,.1,.5],[.3,.1,.5]));
+ // Without a size every built-in draws exactly as before (their points are the usual ones).
+ for(const m of MARKERS)assert.deepEqual(Ink.markStroke(m,[.5,.5,.5],[.6,.5,.5]),Ink.markStroke({...m,size:1},[.5,.5,.5],[.6,.5,.5]));
+ assert.deepEqual(Ink.markStroke(MARKERS[0],[.5,.5,.5],null).points.map(p=>p.slice(0,2)),[[.484,.483],[.5,.517],[.516,.483]]);
+ const long=look=>{const all=Ink.markStamp(look,[.5,.5,.5]).flatMap(s=>s.points);return Math.max(...all.map(p=>p[0]))-Math.min(...all.map(p=>p[0]));};
+ assert.ok(Math.abs(long({...draw,size:'l'})-.08)<1e-3);assert.ok(Math.abs(long({...draw,size:1.3})-.065)<1e-3);assert.ok(Math.abs(long({...draw,size:'m'})-.05)<1e-3);
+ // A built-in at its usual size is unchanged; at 200% changed; 되돌리기 clears it. Stored and read back.
+ const f=fixture();f.api.write('marker',{id:'start',size:1});assert.equal(f.api.read().markers[3].changed,false);
+ f.api.write('marker',{id:'start',size:2});assert.deepEqual([create(f.options).read().markers[3].size,f.api.read().markers[3].changed],[2,true]);
+ f.api.write('marker',{id:'start'},{reset:true});assert.deepEqual([f.api.read().markers[3].size,f.api.read().markers[3].changed],[undefined,false]);
+ f.api.write('marker',mine('m-1',{size:2.2}));assert.equal(create(f.options).read().markers.find(m=>m.id==='m-1').size,2.2);
+});
