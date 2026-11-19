@@ -141,7 +141,10 @@ async function route(request, env) {
     const body = await readJson(request);
     if (!ID.test(String(body.mediaId || ''))) fail(400, 'invalid mediaId');
     const archive = body.purpose === 'performance';
-    if (!TYPE.test(String(body.contentType || '')) && !(archive && ARCHIVE_TYPES.has(body.contentType))) fail(400, 'unsupported file type');
+    // A picture pasted on a score page (악보 필기 붙여넣기): PNG only, small, and only under its own id prefix.
+    const picture = String(body.mediaId).startsWith('scorepic-') && body.contentType === 'image/png';
+    if (!TYPE.test(String(body.contentType || '')) && !(archive && ARCHIVE_TYPES.has(body.contentType)) && !picture) fail(400, 'unsupported file type');
+    if (picture && (Number(body.size) > 8 * 1024 ** 2 || String(body.ext || '').toLowerCase() !== 'png')) fail(400, 'invalid score picture');
     if (archive && !String(body.mediaId).startsWith('performance-')) fail(400, 'invalid performance asset id');
     const size = Number(body.size), max = Number(env.MAX_FILE_BYTES) || 2 * 1024 ** 3;
     if (!(size > 0) || size > max) fail(413, 'file is empty or too large');
