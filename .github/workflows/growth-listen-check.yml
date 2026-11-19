@@ -1,6 +1,6 @@
 name: Growth listening checks
 # 들어 보고 남기는 평가, 결과 리포트 › 무엇이 달라졌나 with its 귀와 숫자 and 그 사이에 한 것 on every browser project before merge (chromium-mobile,
-# chromium-desktop and webkit-mobile). New specs that ran only in the long ui job let WebKit-only failures reach the
+# chromium-desktop and webkit-mobile) — also 월별 분석 › 곡별 (tests/growth-monthly-song.spec.cjs). New specs that ran only in the long ui job let WebKit-only failures reach the
 # iPhone before.
 on:
   pull_request:
@@ -32,6 +32,7 @@ on:
       - 'tests/growth-method-fix*'
       - 'tests/growth-between*'
       - 'tests/growth-characterization*'
+      - 'tests/growth-monthly*'
       - '.github/workflows/growth-listen-check.yml'
   workflow_dispatch:
 permissions:
@@ -53,7 +54,7 @@ jobs:
       - run: npm run test:syntax
       - run: node --test tests/growth-listen.test.cjs tests/growth-ear.test.cjs tests/segment-ab.spec.cjs tests/growth-metrics.test.cjs tests/growth-dataset.test.cjs tests/growth-method-fix.test.cjs tests/growth-between.test.cjs
       # Every project of playwright.config.cjs: chromium-mobile, webkit-mobile and chromium-desktop.
-      - run: npx playwright test tests/growth-listen.spec.cjs tests/growth-ear.spec.cjs tests/growth-method-fix.spec.cjs tests/growth-between.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
+      - run: npx playwright test tests/growth-listen.spec.cjs tests/growth-ear.spec.cjs tests/growth-method-fix.spec.cjs tests/growth-between.spec.cjs tests/growth-monthly-song.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
