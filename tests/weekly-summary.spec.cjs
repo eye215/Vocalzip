@@ -107,7 +107,7 @@ test('home shows 지난주 요약 on Monday and opens the seeded week; reading i
   await expect(row).toContainText('연습 1시간 · 3일');
   const before = await page.evaluate(() => ({db:JSON.stringify(VZ.db),writes:window.__serverWrites.length}));
   await row.click();
-  await expect(page).toHaveURL(/#\/weekly-summary\?week=2026-11-09/);
+  await expect(page).toHaveURL(/#\/growth-flow\?period=week&week=2026-11-09$/);   // 지난 흐름 › 주간 (성장 개편 phase 2)
   const s = summary(page);
   await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 9일 – 15일');
   await expect(s.locator('.ws-week-label small')).toHaveText('지난주');
@@ -138,8 +138,10 @@ test('home shows 지난주 요약 on Monday and opens the seeded week; reading i
 });
 
 test('previous / next week, empty week and the 성장 tab entry',async({page})=>{
-  await boot(page,{hash:'#/vocal-growth'});
+  await boot(page,{hash:'#/growth-flow?period=all'});
   await page.locator('.growth-weekly-tab').click();
+  await expect(page).toHaveURL(/#\/growth-flow\?period=week$/);
+  await expect(page.locator('[data-flow-week-ai]')).toContainText('주간 AI 코치는 아직 없어요');
   const s = summary(page);
   await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 16일 – 22일');
   await expect(s.locator('.ws-week-label small')).toHaveText('이번 주');
@@ -158,10 +160,11 @@ test('previous / next week, empty week and the 성장 tab entry',async({page})=>
   await s.locator('[data-ws-move="1"]').click();
   await expect(s.locator('[data-ws-range]')).toHaveText('2026년 11월 16일 – 22일');
   // The current week has one Monday recording only → not empty; a week with nothing is shown as empty.
-  await page.evaluate(() => {location.hash='#/weekly-summary?week=2026-10-26';});
+  await page.evaluate(() => {location.hash='#/weekly-summary?week=2026-10-26';});   // the old address keeps its week
+  await expect(page).toHaveURL(/#\/growth-flow\?period=week&week=2026-10-26$/);
   await expect(s.locator('[data-ws-range]')).toHaveText('2026년 10월 26일 – 11월 1일');
   await expect(s.locator('[data-ws-section=recordings] .ws-chips li').first()).toHaveText('곡1');
-  await page.locator('.ws-tabs [data-ws-tab="#/vocal-growth?mode=monthly"]').click();
+  await page.locator('.ws-tabs [data-ws-tab="#/growth-flow?period=month"]').click();
   await expect(page.locator('[data-growth-mode=monthly]')).toHaveAttribute('aria-pressed','true');
 });
 
@@ -193,11 +196,12 @@ test('320px: no horizontal overflow and 44px controls',async({page})=>{
 test('image and text export work offline and make no network request',async({page,context,browserName})=>{
   test.skip(browserName!=='chromium','clipboard permission is Chromium-only in Playwright');
   await context.grantPermissions(['clipboard-read','clipboard-write']);
-  await boot(page,{hash:'#/weekly-summary?week=2026-11-09'});
+  await boot(page,{hash:'#/growth-flow?period=week&week=2026-11-09'});   // 지난 흐름 › 주간 (the old address only leads here)
   const s = summary(page);
   await expect(s.locator('[data-ws-minutes]')).toHaveText('1시간');
   const requests = [];
-  page.on('request', r => { if (!r.url().startsWith('blob:') && !r.url().startsWith('data:')) requests.push(r.method()+' '+r.url()); });
+  // The browser's own favicon fetch (index.html <link rel="icon">) can land late on a busy machine: not the export's.
+  page.on('request', r => { if (!r.url().startsWith('blob:') && !r.url().startsWith('data:') && !/\/icon\.svg$/.test(r.url())) requests.push(r.method()+' '+r.url()); });
   const writes = await page.evaluate(() => window.__serverWrites.length);
   await context.setOffline(true);
   const [download] = await Promise.all([page.waitForEvent('download'), s.locator('[data-ws-image]').click()]);

@@ -55,7 +55,7 @@ async function boot(page,{recordings=[],plans=[],goals=[],reports=[],practices=[
  },{recordings,plans,goals,reports,practices});
  for(const f of scripts)await page.addScriptTag({path:path.resolve(__dirname,'..',f)});
  await page.evaluate(()=>{
-  const def=window.VZ.routes['vocal-growth'];
+  const def=window.VZ.routes['growth-flow'];
   const el=document.getElementById('test-root');
   el.innerHTML=def.render();
   def.mount(el);
@@ -246,8 +246,8 @@ test('saved overall AI becomes four readable, escaped cards and quick jumps reta
   VZ.db.overallAiReports=[{id:'overall-ai:all',createdDate:'2026-11-11',
    note:'요약: 전반적인 녹음 기록을 정리했어요.\n좋아진 점: 음정 흔들림이 줄었어요.\n보완할 점: <script>alert(1)</script> 같은 곡 비교가 더 필요해요.\n다음 연습: 편한 음역으로 5분 반복해요.'}];
   const el=document.getElementById('test-root');
-  el.innerHTML=VZ.routes['vocal-growth'].render();
-  VZ.routes['vocal-growth'].mount(el);
+  el.innerHTML=VZ.routes['growth-flow'].render();
+  VZ.routes['growth-flow'].mount(el);
  });
  await expect(page.locator('.growth-coach-part')).toHaveCount(4);
  await expect(page.locator('.growth-coach-part.growth-coach-better')).toContainText('음정 흔들림');
@@ -342,7 +342,7 @@ test('plan outcome v2: same-phrase preview, 판정 보류 with the growth reason
  await page.goto('about:blank');
  await boot(page,{recordings:media,plans,reports:[legacy]});
  await page.evaluate(()=>{VZ.db.songs.push({id:'song-2',title:'Second'});});
- await page.evaluate(()=>{const el=document.getElementById('test-root');el.innerHTML=VZ.routes['vocal-growth'].render();VZ.routes['vocal-growth'].mount(el);});
+ await page.evaluate(()=>{const el=document.getElementById('test-root');el.innerHTML=VZ.routes['growth-flow'].render();VZ.routes['growth-flow'].mount(el);});
  await page.locator('[data-growth-mode="monthly"]').click();
  await page.addStyleTag({path:path.resolve(__dirname,'../app/monthly-growth.css')});
  await page.addStyleTag({path:path.resolve(__dirname,'../app/growth-polish.css')});

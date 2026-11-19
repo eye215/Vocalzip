@@ -4,9 +4,13 @@ const fs=require('node:fs');
 const root=require('node:path').join(__dirname,'..');
 const file=p=>fs.readFileSync(require('node:path').join(root,p),'utf8');
 test('new vocal growth route does not replace existing statistics growth',()=>{
- const old=file('app/views-more.js'),added=file('app/monthly-growth.js'),html=file('index.html');
+ // 성장 개편 안 B (phase 2): 성장 › 이번 달 is #/vocal-growth (app/growth-month.js); 전체·월별 분석 moved to 지난 흐름
+ // (#/growth-flow, app/monthly-growth.js). #/growth leads to 이번 달; the old statistics page lives on at #/practice-stats.
+ const old=file('app/views-more.js'),added=file('app/monthly-growth.js'),month=file('app/growth-month.js'),html=file('index.html');
  assert.match(old,/VZ\.route\('growth'/);
- assert.match(added,/V\.route\('vocal-growth'/);
+ assert.match(old,/VZ\.route\('practice-stats'/);
+ assert.match(added,/V\.route\('growth-flow'/);
+ assert.match(month,/V\.route\('vocal-growth'/);
  assert.doesNotMatch(added,/V\.route\('growth'/);
  assert.match(html,/href="#\/vocal-growth" data-nav="growth"/);
 });

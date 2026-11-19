@@ -153,7 +153,7 @@ test('one take, one whole-recording number: other bases are labelled; 추천 연
 
 test('성장 tab: strength and priority never name the same measure; 고음 안정성 shows the hold time; 판정 보류 once', async ({page}) => {
   await boot(page);
-  await page.goto('/#/vocal-growth');
+  await page.goto('/#/growth-flow?period=all');
   const hero = page.locator('.growth-hero');
   await expect(hero.locator('[data-growth-strength]')).toHaveAttribute('data-growth-strength', 'intonation');
   await expect(hero.locator('[data-growth-strength] strong')).toHaveText('음정 정확도');
@@ -185,7 +185,7 @@ test('성장 tab: strength and priority never name the same measure; 고음 안�
 test('small things: AI label after an error, chart at the newest point, 44px taps, button spacing', async ({page}) => {
   await boot(page, {overallAiReports:[{id:'overall-ai:all', note:'요약: 저장된 결과예요.', created:1, createdDate:'2026-11-01', analysisCount:3}]});
   // A saved AI result stays on screen after a failed re-run: the button keeps the "again" label.
-  await page.goto('/#/vocal-growth');
+  await page.goto('/#/growth-flow?period=all');
   await page.evaluate(() => { window.vzipCloudSignedIn = () => true; window.vzipCloudUserId = () => 'u'; window.vzipCloudSessionId = () => 's'; window.vzipCloudCoach = async () => { throw Error('서버 오류'); }; });
   const run = page.locator('[data-overall-ai-run]');
   await expect(run).toHaveText('전체 코치 다시 분석');

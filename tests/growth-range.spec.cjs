@@ -63,7 +63,7 @@ async function boot(page, media, {width, height} = {}) {
   await page.goto('/#/home');
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
   await page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); }, media);
-  await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+  await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; });
   await expect(page.locator('[data-overall-body]')).toBeVisible();
   await expect(page.locator('[data-range-section]')).toBeVisible();
 }
@@ -220,7 +220,7 @@ test.describe('phone 375', () => {
     await page.reload();
     await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
     await page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); location.hash = '#/home'; }, FULL);
-    await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+    await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; });
     await expect(page.locator('[data-range-section] [data-range-group][aria-pressed="true"]')).toHaveCount(4);
     expect(page.__errors).toEqual([]);
   });
@@ -306,7 +306,7 @@ test.describe('phone 375', () => {
     await page.reload();
     await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
     await page.evaluate(rows => { window.vzipCloudSignedIn = () => false; window.vzipReadMedia = async () => rows.map(r => ({...r})); VZ.media.invalidate(); location.hash = '#/home'; }, FULL);
-    await page.evaluate(() => { location.hash = '#/vocal-growth'; });
+    await page.evaluate(() => { location.hash = '#/growth-flow?period=all'; });
     await expect(section()).toHaveAttribute('data-range-view-now', 'compare');
     await expect(section().locator('[data-range-compare-table]')).toBeVisible();
     await section().locator('[data-range-view="flow"]').click();

@@ -31,7 +31,7 @@ const sub = (page, id) => page.locator('[data-hub-song="' + id + '"] .item-sub')
 test('보컬 분석 곡 행: 연습 녹음과 영상을 세고, 몇 개가 연습·영상인지 말한다 — 결과 리포트 숫자는 그대로', async ({page}) => {
   await boot(page);
   // 결과 리포트 first: what it counts does not change (24 song recordings, 20 reliable analyses).
-  await go(page, '#/vocal-growth', '[data-overall-body]');
+  await go(page, '#/growth-flow?period=all', '[data-overall-body]');
   const kpi = await page.locator('.growth-kpi-grid strong').allTextContents();
   expect(kpi).toEqual(['24', '20', '5', '4']);
   const overall = await page.evaluate(async () => { const m = VZ.growthModel(await VZ.media.list()); return {ids:m.songItems.map(x => x.id).sort(), recordings:m.overall.recordings}; });

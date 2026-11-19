@@ -55,7 +55,7 @@ test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 
 test('성장 tab: the evening take is the latest one in 전체 분석 and 월별 분석', async ({page}) => {
   await boot(page);
-  await page.goto('/#/vocal-growth');
+  await page.goto('/#/growth-flow?period=all');
   const into = page.locator('[data-growth-metric="intonation"]');
   await expect(into.locator('.growth-state').first()).toHaveText('좋아진 방향'); // ±20 (first take) → ±11 (evening), not → ±32
   const overall = await page.evaluate(async () => { const items = await VZ.media.list(); return window.VzipOverallGrowth.calculate(items, {getDate:VZ.media.dateOf, valid:m => VZ.analysisReliable(m.analysis)}).metrics.find(m => m.id === 'intonation').pairs[0]; });

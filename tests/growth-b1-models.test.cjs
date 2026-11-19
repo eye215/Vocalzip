@@ -22,8 +22,10 @@ const ids = rows => rows.map(r => r.id).sort();
 
 test('the snapshot of every growth number is byte-for-byte what it was (phase 1 moves no number)', () => {
   // Retaken on purpose only (see tests/growth-characterization.spec.cjs); then this hash changes with it.
+  // 월별 분석 › 전체 · 곡별 (claude/monthly-by-song, merged with 성장 개편 phase 2) added only the two chip labels
+  // (전체 · 곡별) to the 월별 texts; no number moved. Phase 2 itself leaves the file as it is.
   const sha = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'growth-characterization.snapshot.json'))).digest('hex');
-  assert.equal(sha, '46757696278d3d807be975e122c8334ea001f884df43c7f6a1a3c49bb7aad201');
+  assert.equal(sha, '3b373b88022097d47d2a1146ee71b869bd85199d71e136b6121a95b8dde5e678');
 });
 
 test('"늘었나" take filter: switch off = 결과 리포트 rule verdict; on = 연습실 · 트레이닝 연습 takes too', () => {

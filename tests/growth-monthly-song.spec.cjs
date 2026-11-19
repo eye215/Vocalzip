@@ -50,7 +50,7 @@ async function boot(page) {
     window.dispatchEvent(new Event('vzip:media-updated'));
   }, TAKES);
   await page.waitForTimeout(300);
-  await page.goto('/#/vocal-growth?mode=monthly');
+  await page.goto('/#/growth-flow?period=month');   // 지난 흐름 › 월별 분석 (성장 개편 phase 2)
   await expect(page.locator('[data-growth-select]')).toBeVisible();
 }
 const month = (page, key) => page.locator('[data-growth-select]').selectOption(key);
@@ -141,10 +141,10 @@ test('the chosen song is kept across months and reloads; a month without it fall
   await expect(intonation(page)).toHaveText('±13 cent');
   // 무엇이 달라졌나 for this song opens 전체 분석 at that song's line.
   const changes = page.locator('[data-mbs-link="changes"]');
-  await expect(changes).toHaveAttribute('href', '#/vocal-growth?gc=sA');
+  await expect(changes).toHaveAttribute('href', '#/growth-flow?period=all&gc=sA');
   await changes.click();
   await expect(page.locator('[data-gc-song="sA"]').first()).toBeInViewport();
-  await expect(page).toHaveURL(/#\/vocal-growth$/);
+  await expect(page).toHaveURL(/#\/growth-flow\?period=all$/);
 });
 
 test('label of a long song title stays inside 390 px', async ({page}) => {

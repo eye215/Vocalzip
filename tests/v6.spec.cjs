@@ -1168,7 +1168,7 @@ test('Calendar shows lessons, practice and recordings per day and adds lessons f
 
 test('Growth counts practice time once and shows empty state without invented scores', async ({page}) => {
   await boot(page, {seed:{categories:[], songs:[], lessons:[], assignments:[], practices:[]}, media:false});
-  await page.goto('/#/growth');
+  await page.goto('/#/practice-stats');
   await expect(page.getByText('이번 주 연습 기록이 없어요.')).toBeVisible();
   await expect(page.locator('.stat').filter({hasText:'평균 만족도'})).toContainText('–');
   await page.getByRole('button', {name:'전체'}).click();
@@ -1307,7 +1307,7 @@ test('Practice time excludes recording/import lengths while file metadata remain
     await window.vzipStorePracticeMedia({id:'m3', name:'SODA_1', created:Date.now() - day, recordedDate:'', type:'audio/wav', source:'import', songId:'s2', blob:new Blob([window.__wav], {type:'audio/wav'})});
     window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:'m3'}}));
   });
-  await page.goto('/#/growth');
+  await page.goto('/#/practice-stats');
   await page.getByRole('button', {name:'전체'}).click();
   // Only the entered 25 minutes count; standalone files keep duration metadata separately.
   await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
@@ -1320,7 +1320,7 @@ test('Practice time excludes recording/import lengths while file metadata remain
   await expect(page.locator('[data-summary]')).toContainText('연습 25분');
   // Linking m2 into a practice record does not change the entered time.
   await page.evaluate(k => { const d = JSON.parse(localStorage.getItem(k)); d.practices[0].mediaIds.push('m2'); localStorage.setItem(k, JSON.stringify(d)); window.dispatchEvent(new Event('vzip:data-changed')); }, KEY);
-  await page.goto('/#/growth');
+  await page.goto('/#/practice-stats');
   await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
 });
 
@@ -1577,7 +1577,7 @@ test('Growth month filters, file-count units and every-week horizontal chart rem
     window.VZ.media.invalidate();
     await window.VZ.media.list();
   },{pd,current});
-  await page.goto('/#/growth');
+  await page.goto('/#/practice-stats');
   await page.getByRole('button',{name:'월별',exact:true}).click();
   await page.getByRole('combobox',{name:'조회 월'}).selectOption(previous);
   await expect(page.locator('.stat').filter({hasText:'연습 시간'}).first()).toContainText('30분');
@@ -1846,7 +1846,7 @@ test('Growth leads with this period\'s time compared with the same days before, 
   const practices = [{id:'now', date:d(0), minutes:50, songId:'g0', rating:4}, {id:'lastweek', date:d(-7), minutes:20, songId:'g1', rating:2},
     ...songs.slice(1).map((s, i) => ({id:'p' + i, date:d(0), minutes:i + 1, songId:s.id}))];
   await boot(page, {seed:{categories:[], songs, lessons:[], assignments:[], practices, comparisonReports:[]}, media:false});
-  await page.goto('/#/growth');
+  await page.goto('/#/practice-stats');
   await page.getByRole('button', {name:'최근 28일', exact:true}).click();
   const hero = page.locator('.stat-hero');
   await expect(hero).toContainText('최근 28일 연습 시간');
@@ -2672,7 +2672,7 @@ test('Actual practice time excludes recording length across growth, calendar and
   return {total:VZ.sumMinutes(entries),home:VzipStudentHomeModel.build(VZ.db,{today:VZ.today(),timeEntries:entries}).week.actualMinutes};
  });
  expect(values).toEqual({total:25,home:25});
- await page.goto('/#/growth');await page.getByRole('button',{name:'전체',exact:true}).click();
+ await page.goto('/#/practice-stats');await page.getByRole('button',{name:'전체',exact:true}).click();
  await expect(page.locator('.stat').filter({hasText:'전체 연습 시간'})).toContainText('25분');
  await expect(page.locator('[data-file-time]')).toHaveCount(0);
  await page.locator('[data-song-metric="files"]').click();
