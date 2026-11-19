@@ -232,7 +232,11 @@ test('older addresses lead into the new tabs, and 뒤로 is what it was', async 
   await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/weekly-summary?week=2026-11-02'; });
   await expect(page.locator('[data-weekly-summary] [data-ws-range]')).toHaveText('2026년 11월 2일 – 8일');
   await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/vocal-growth?gc=s2'; });
-  await expect(page.locator('[data-gc-song="s2"]').first()).toBeInViewport();
+  try { await expect(page.locator('[data-gc-song="s2"]').first()).toBeInViewport({timeout:15000}); }
+  catch (e) { // say what the screen showed instead (CI artifacts cannot be read)
+    const seen = await page.evaluate(() => ({hash:location.hash, songs:[...document.querySelectorAll('[data-gc-song]')].map(x => x.dataset.gcSong), top:scrollY, main:(document.querySelector('main')?.innerText || '').replace(/\s+/g, ' ').slice(0, 700)}));
+    throw Error('gc line not in view: ' + JSON.stringify(seen) + ' · page errors: ' + JSON.stringify(page.__errors || []));
+  }
   // #/lab-reports keeps its screen (리포트 보관함) and is listed in 연구소.
   await page.goto('/#/home'); await page.evaluate(() => { location.hash = '#/growth-lab'; });
   await page.locator('[data-lab-tool="reports"]').click();
