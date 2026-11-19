@@ -136,7 +136,7 @@ async function consent(page,answer,count=4){
  const ask=page.getByRole('dialog',{name:'선택 영역 인식',exact:true});
  try{await expect(ask).toContainText('손글씨 '+count+'곳의 획만 OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.');}
  catch(e){ // say what the screen showed instead (CI artifacts cannot be read)
-  const seen=await page.evaluate(()=>({dialogs:[...document.querySelectorAll('[role=dialog],dialog[open]')].map(d=>(d.getAttribute('aria-label')||'')+': '+(d.innerText||'').slice(0,300)),review:document.querySelector('[data-bulk-review]')?.innerText?.slice(0,400),status:[...document.querySelectorAll('[role=status],[role=alert],.toast')].map(x=>x.innerText).join(' | '),sent:window.__vision?.length}));
+  const seen=await page.evaluate(()=>({dialogs:[...document.querySelectorAll('[role=dialog],dialog[open]')].map(d=>(d.getAttribute('aria-label')||'')+': '+(d.innerText||'').slice(0,300)),review:document.querySelector('.vz-bulk-sheet')?.innerText?.slice(0,400),status:[...document.querySelectorAll('[role=status],[role=alert],.toast')].map(x=>x.innerText).join(' | '),sent:window.__vision?.length}));
   throw Error('no consent: '+JSON.stringify(seen)+' · page errors: '+JSON.stringify(page.__errors||[]));
  }
  expect(await page.evaluate(()=>window.__vision.length)).toBe(0);
