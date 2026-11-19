@@ -111,7 +111,11 @@ test('녹음별 변화 speaks in each metric\'s unit, and its 판정 보류 reas
   // Low confidence: the same sentence as the report row.
   await openWith(page, 's5', ['e1', 'e2']);
   await expect(page.locator('.vl-change')).toHaveText('최근 변화 · ' + await page.evaluate(() => window.VzipGrowthMetrics.holdLine('confidence')));
-  await expect(page.locator('[data-growth-row="intonation"] p')).toHaveText(await page.evaluate(() => window.VzipGrowthMetrics.holdText('confidence')));
+  // 이 곡의 변화 is the ONE verdict 이번 달 shows too (성장 개편 phase 3): one reliable take of the song → 판정 보류 with
+  // the reason 무엇이 달라졌나 gives, and no measure rows (before: the lab's own rows said "측정 신뢰도가 낮아요").
+  await expect(page.locator('[data-song-verdict]')).toHaveAttribute('data-song-verdict', 'hold');
+  await expect(page.locator('[data-song-basis]')).toHaveText(await page.evaluate(() => window.VzipGrowthMetrics.holdText('no-pair')));
+  await expect(page.locator('[data-growth-report] [data-growth-row]')).toHaveCount(0);
   // No "판정 보류 … 판정 보류" in any one line of the screen.
   for (const line of (await page.locator('#view').innerText()).split('\n')) expect(count(line, '판정 보류'), line).toBeLessThan(2);
   await expect(page.locator('#view')).not.toContainText('신뢰도/분석 버전 확인');
@@ -127,7 +131,8 @@ test('one take, one whole-recording number: other bases are labelled; 추천 연
   const row = page.locator('[data-growth-row="intonation"]');
   await expect(row).toContainText('±30 cent → ±11 cent');
   await expect(row.locator('small')).toHaveText('같은 프레이즈 5개 비교 · 녹음 전체로는 ±33 cent → ±14 cent');
-  await expect(page.locator('.vl-growth-count')).toHaveText('7개 중 처음·최근 비교');   // was "7개 분석 기준"
+  // Counted as 무엇이 달라졌나 counts: the six v2 takes measured the same way (the v1 take is another analysis version).
+  await expect(page.locator('.vl-growth-count')).toHaveText('6개 중 처음·최근 비교');   // was "7개 중 처음·최근 비교"
   // 추천 연습: v1 (±60) is not mixed into the median of the v2 takes, and the number says what it is.
   const tips = await page.evaluate(async () => VZ.practiceTips(await VZ.media.list(), {songId:'s1'}));
   expect(tips.version).toBe(2);
@@ -138,12 +143,13 @@ test('one take, one whole-recording number: other bases are labelled; 추천 연
   const recommend = page.locator('.vl-recommend');
   await expect(row).toHaveClass(/good/);
   await expect(recommend.locator('.vl-tip summary strong')).not.toContainText(['음정 정확도 연습']);
-  await expect(recommend.locator('[data-tip-skipped]')).toHaveText('위 성장 리포트에서 좋아진 방향인 항목(음정 정확도)은 추천에서 뺐어요.');
-  // One take selected (no report on screen): the recommendation is there, with its basis.
+  await expect(recommend.locator('[data-tip-skipped]')).toHaveText('위 ‘이 곡의 변화’에서 좋아진 방향인 항목(음정 정확도)은 추천에서 뺐어요.');
+  // One take open in the player: 이 곡의 변화 does not depend on which takes are open (it is the song's verdict), so
+  // the report is still there and the same measure stays out of the recommendations.
   await openWith(page, 's1', ['a6']);
-  await expect(page.locator('[data-growth-report]')).toHaveCount(0);
-  await expect(page.locator('.vl-tip[data-tip="into"] summary small')).toHaveText('음정 오차 · 최근 6개 중간값 ±23 cent');
-  await expect(page.locator('[data-tip-skipped]')).toHaveCount(0);
+  await expect(page.locator('[data-growth-report] [data-growth-row="intonation"]')).toHaveClass(/good/);
+  await expect(page.locator('.vl-tip[data-tip="into"]')).toHaveCount(0);
+  await expect(page.locator('[data-tip-skipped]')).toHaveCount(1);
   // s2 got worse: the report says so and the recommendation stays.
   await page.goto('/#/home'); await page.goto('/#/vocal-lab/s2');
   await expect(page.locator('[data-growth-row="intonation"]')).toHaveClass(/bad/);

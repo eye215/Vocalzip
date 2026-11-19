@@ -21,6 +21,8 @@ test('precision navigation stays in the analysis hub and lab, outside the saved 
  await expect(page.locator('[data-precision-lab-entry]')).toHaveCount(0);
  await page.evaluate(()=>VZ.nav('#/vocal-lab/s1'));
  await expect(page.locator('[data-lab] [data-precision-lab-entry]')).toHaveCount(1);
+ // 곡 하나 (성장 개편 phase 3): the link is a row of 깊이 보기 (folded until opened).
+ await page.locator('[data-song-section="deep"] > summary').click();
  await page.locator('[data-precision-lab-entry]').click();await expect(page.locator('[data-precision-report]')).toBeVisible();
  await page.evaluate(()=>VZ.nav('#/vocal-analysis'));
  const link=page.locator('[data-precision-report-entry]');await expect(link).toHaveCount(1);await expect(link).toHaveAttribute('href','#/precision-report');

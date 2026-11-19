@@ -238,7 +238,7 @@ function fromAi(db, {today, days = AI_DAYS} = {}) {
         action:{kind:'ai-draft', ref:{kind:'ai-review', id:p.id}, href:'#/practice-review' + (String(p.id).endsWith(':today') ? '?mode=today' : p.songId ? '?song=' + encodeURIComponent(p.songId) : '')},
         links:['plan:' + p.id]}));
     } else if (p.period === 'ai-exercise' && clean(p.tip?.name) && fresh(p.date)) {
-      push(p.date, item('ai', {id:p.id, title:p.tip.name, why:'보컬 연구소 AI 다른 연습' + (p.tip.reason ? ' · ' + p.tip.reason : ''), songId:p.songId || '',
+      push(p.date, item('ai', {id:p.id, title:p.tip.name, why:'곡 분석 AI 다른 연습' + (p.tip.reason ? ' · ' + p.tip.reason : ''), songId:p.songId || '',
         action:{kind:'ai-draft', ref:{kind:'ai-exercise', id:p.id}, href:'#/vocal-lab/' + encodeURIComponent(p.songId || '')}, links:['plan:' + p.id]}));
     }
   }

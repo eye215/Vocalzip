@@ -20,12 +20,19 @@ const dateOf = m => /^\d{4}-\d{2}-\d{2}$/.test(m.recordedDate || '') ? m.recorde
 const build = () => D.build(CH.MEDIA, CH.DB, {reliable, dateOf});
 const ids = rows => rows.map(r => r.id).sort();
 
-test('the snapshot of every growth number is byte-for-byte what it was (phase 1 moves no number)', () => {
+test('the snapshot of every 결과 리포트 number is byte-for-byte what it was (only the 곡 tab entries were retaken, phase 3)', () => {
   // Retaken on purpose only (see tests/growth-characterization.spec.cjs); then this hash changes with it.
   // 월별 분석 › 전체 · 곡별 (claude/monthly-by-song, merged with 성장 개편 phase 2) added only the two chip labels
   // (전체 · 곡별) to the 월별 texts; no number moved. Phase 2 itself leaves the file as it is.
-  const sha = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'growth-characterization.snapshot.json'))).digest('hex');
-  assert.equal(sha, '3b373b88022097d47d2a1146ee71b869bd85199d71e136b6121a95b8dde5e678');
+  // Phase 3 (곡 tab, 2026-11-19) retook ONLY the 곡 tab's two entries (analysisTab, analysisRows: the song rows now say the
+  // shared verdict's word and count the takes of the "늘었나" rule). Everything else — 결과 리포트 전체 · 월별 · 주간, 계획
+  // 결과, 연구소의 트레이닝 목록, 곡별 카드 — is byte-for-byte what it was: `rest` below is the hash of the file without those
+  // two entries, taken from the file as it was before phase 3 (3b373b88…) and unchanged since.
+  const file = fs.readFileSync(path.join(__dirname, 'growth-characterization.snapshot.json'));
+  const SONG_TAB = ['analysisTab', 'analysisRows'];
+  const rest = JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(file)).map(([zone, v]) => [zone, Object.fromEntries(Object.entries(v).filter(([k]) => !SONG_TAB.includes(k)))])), null, 1);
+  assert.equal(crypto.createHash('sha256').update(rest).digest('hex'), 'e0fffcaaf4f8107e322b0c50175f9130a732a39b2cc09b6de1b698f097090aaa');
+  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '5f3a7388ecef9fe49120b2d46d26d34228db677d59db72cc96b3050630039f6d');
 });
 
 test('"늘었나" take filter: switch off = 결과 리포트 rule verdict; on = 연습실 · 트레이닝 연습 takes too', () => {

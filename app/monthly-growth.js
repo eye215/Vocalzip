@@ -311,7 +311,7 @@ async function mount(host){
      '<div class="growth-month-overview"><div><span>곡 녹음</span><strong>'+current.length+'</strong><small>개</small></div>'+
      '<div><span>분석 가능한 녹음</span><strong>'+validCount+'</strong><small>개</small></div>'+
      '<div><span>같은 곡 비교</span><strong>'+rows.filter(r=>r.c).length+'</strong><small>항목</small></div></div>';
-   const songLinks=songOn?'<div class="growth-song-links"><a class="btn sm ghost" href="#/vocal-lab/'+encodeURIComponent(songPick)+'" data-mbs-link="lab"><i class="ph ph-waveform" aria-hidden="true"></i>이 곡 보컬 분석</a>'+
+   const songLinks=songOn?'<div class="growth-song-links"><a class="btn sm ghost" href="#/vocal-lab/'+encodeURIComponent(songPick)+'" data-mbs-link="lab"><i class="ph ph-waveform" aria-hidden="true"></i>이 곡 자세히</a>'+
      (changeIds.includes(songPick)?'<a class="btn sm ghost" href="#/growth-flow?period=all&amp;gc='+encodeURIComponent(songPick)+'" data-growth-replace data-mbs-link="changes"><i class="ph ph-arrows-left-right" aria-hidden="true"></i>무엇이 달라졌나</a>':'')+'</div>'+
      '<p class="small muted growth-song-note" data-mbs-only>곡별 보기는 변화만 보여요. AI 코치·추천·계획·지난 기록은 전체에서 볼 수 있어요.</p>':'';
    host.innerHTML=pageHead+tabs()+

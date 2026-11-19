@@ -28,6 +28,13 @@
 // 성장 개편 안 B, phase 2 (2026-11-19) moved screens only, no text: 전체 · 월별 분석 and 주간 요약 are the sub-page 지난
 // 흐름 (#/growth-flow?period=all|month|week) under the new 이번 달 tab, 보컬 트레이닝 is part of 연구소 (#/growth-lab). This
 // spec reads them at their new addresses; the snapshot file is byte-for-byte what it was.
+// 성장 개편 안 B, phase 3 (2026-11-19) changed the 곡 tab on purpose, and only its two entries moved (analysisTab,
+// analysisRows; tests/growth-b1-models.test.cjs pins the rest of the file by hash): a song row says ONE word from the
+// verdict 이번 달 shows (좋아진 방향 · 아쉬운 방향 · 엇갈림 · 비슷함 · 판정 보류 · 녹음 하나 — before: 비교 가능 / 판정 보류 / 분석 전
+// from the 결과 리포트 model) and counts the analysed takes of the "늘었나" rule ("분석한 녹음 4개 · 연습 2개는 빼고 봐요" —
+// before: every recording, "녹음 6개 (연습 2개 포함) · 분석 6개"); songs with an analysed take come first, by their latest
+// analysed take. Defying Gravity: 비교 가능 → 판정 보류 (its latest take was measured another way than the earlier ones:
+// 무엇이 달라졌나 never pairs those).
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');

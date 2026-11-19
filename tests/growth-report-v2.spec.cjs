@@ -123,7 +123,8 @@ test('vocal lab 성장 리포트: groups by direction, withholds v1/v2 and the A
   await expect(report.locator('[data-growth-row="intonation"]')).toContainText('같은 프레이즈 5개 비교');
   await expect(report.locator('[data-growth-row="range"]')).toHaveClass(/neutral/);
   await expect(report.locator('[data-growth-row="range"]')).toContainText('악보 최고음 D5 대비 +7반음');
-  await expect(report.locator('[data-growth-row="passaggio"]')).toContainText('음정 데이터만으로 판별 불가, 선생님 판단 참고');
+  // 파사지오 참고 sits under 약한 곳 now (곡 하나, 성장 개편 phase 3).
+  await expect(page.locator('[data-song-section="weak"] [data-growth-row="passaggio"]')).toContainText('음정 데이터만으로 판별 불가, 선생님 판단 참고');
   expect(await fits(page)).toMatchObject({width:320, scroll:320, over:[]});
   await shot(page, 'vocal-lab-growth-320');
   await page.locator('[data-growth-ai]').click();
@@ -138,7 +139,10 @@ test('vocal lab 성장 리포트: groups by direction, withholds v1/v2 and the A
   for (const b of await page.locator('.vl-dates button').all()) if (await b.getAttribute('aria-pressed') !== 'true') await b.click();
   const other = page.locator('[data-growth-report]');
   await expect(other.locator('h3.good')).toHaveCount(0);
-  await expect(other.locator('[data-growth-row="intonation"]')).toContainText('분석 버전(v1·v2)이 달라요');
+  // One reason for the whole pair (the shared verdict), not a row per measure.
+  await expect(page.locator('[data-song-verdict]')).toHaveText('판정 보류');
+  await expect(page.locator('[data-song-basis]')).toContainText('분석 버전(v1·v2)이 달라요');
+  await expect(other.locator('[data-growth-row]')).toHaveCount(0);
   await expect(other).toContainText('AI 해석을 요청할 수 있어요');
   await expect(page.locator('[data-growth-ai]')).toHaveCount(0);
   expect(await fits(page)).toMatchObject({width:320, scroll:320, over:[]});

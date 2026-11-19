@@ -3,7 +3,8 @@ name: Growth listening checks
 # "늘었나" take filter, periods, 다음 연습 — tests/growth-b1-models.test.cjs, tests/growth-next.test.cjs) on every browser project before merge (chromium-mobile,
 # chromium-desktop and webkit-mobile) — also 월별 분석 › 곡별 (tests/growth-monthly-song.spec.cjs) and 성장 › 이번 달
 # (phase 2: app/growth-month*.js, tests/growth-month.test.cjs, tests/growth-month.spec.cjs). New specs that ran only in the long ui job let WebKit-only failures reach the
-# iPhone before.
+# iPhone before. Phase 3: the 곡 tab — 곡 목록 and 곡 하나, the former 보컬 연구소 (app/growth-song-model.js, app/growth-hub.js,
+# app/vocal-lab.js; tests/growth-song.test.cjs, tests/growth-song.spec.cjs).
 on:
   pull_request:
     paths:
@@ -20,6 +21,8 @@ on:
       - 'app/growth-dataset.js'
       - 'app/growth-range-*.js'
       - 'app/growth-next-model.js'
+      - 'app/growth-song-model.js'
+      - 'app/vocal-lab.css'
       - 'app/growth-month*'
       - 'app/growth-hub.*'
       - 'app/weekly-summary*'
@@ -47,6 +50,9 @@ on:
       - 'tests/growth-next*'
       - 'tests/growth-monthly*'
       - 'tests/growth-month.*'
+      - 'tests/growth-song*'
+      - 'tests/helpers/song-screen.cjs'
+      - 'tests/lab-clear-selection.cjs'
       - '.github/workflows/growth-listen-check.yml'
   workflow_dispatch:
 permissions:
@@ -66,9 +72,9 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/growth-listen.test.cjs tests/growth-ear.test.cjs tests/segment-ab.spec.cjs tests/growth-metrics.test.cjs tests/growth-dataset.test.cjs tests/growth-method-fix.test.cjs tests/growth-between.test.cjs tests/growth-b1-models.test.cjs tests/growth-next.test.cjs tests/growth-month.test.cjs
+      - run: node --test tests/growth-listen.test.cjs tests/growth-ear.test.cjs tests/segment-ab.spec.cjs tests/growth-metrics.test.cjs tests/growth-dataset.test.cjs tests/growth-method-fix.test.cjs tests/growth-between.test.cjs tests/growth-b1-models.test.cjs tests/growth-next.test.cjs tests/growth-month.test.cjs tests/growth-song.test.cjs
       # Every project of playwright.config.cjs: chromium-mobile, webkit-mobile and chromium-desktop.
-      - run: npx playwright test tests/growth-listen.spec.cjs tests/growth-ear.spec.cjs tests/growth-method-fix.spec.cjs tests/growth-between.spec.cjs tests/growth-monthly-song.spec.cjs tests/growth-month.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
+      - run: npx playwright test tests/growth-listen.spec.cjs tests/growth-ear.spec.cjs tests/growth-method-fix.spec.cjs tests/growth-between.spec.cjs tests/growth-monthly-song.spec.cjs tests/growth-month.spec.cjs tests/growth-song.spec.cjs --project=chromium-mobile --project=chromium-desktop --project=webkit-mobile --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:

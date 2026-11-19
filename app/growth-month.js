@@ -17,6 +17,7 @@
 const V = window.VZ, M = V?.media, GM = window.VzipGrowthMonth;
 if (!V || !M || !GM || !V.growthDataset) return;
 const e = V.esc;
+// PRACTICE_KEY is the ONE 연습 녹음 포함 setting of 성장: 곡 (the list and 곡 하나) reads the same key (VZ.growthSong, app/growth-hub.js).
 const PRACTICE_KEY = 'vzip:growth-practice', SONG_KEY = 'vzip:monthly-growth-song';
 const load = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const save = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch {} };
@@ -82,6 +83,8 @@ function changesHtml(v) {
     '<p class="gm-basis" data-gm-basis="changes">' + e(WORDS[k].changes + ' · 같은 곡을 같은 방법·같은 분석 버전으로 잰 녹음끼리') + '</p></header>' +
     '<div class="gm-tools">' + scope + toggle + '</div><p class="gm-note" data-gm-practice-note>' + e(note) + '</p>' + fallback +
     (C ? '<div class="gc-host" data-growth-changes></div>' : '') +
+    // 곡별: the song's own screen (성장 › 곡 › 곡 하나, app/vocal-lab.js) says the same verdict with the same switch.
+    (songOn ? '<a class="gc-chip gm-song-link" href="#/vocal-lab/' + encodeURIComponent(v.song) + '" data-gm-song-detail><i class="ph ph-waveform" aria-hidden="true"></i><span>이 곡 자세히</span></a>' : '') +
     (detail ? '<details class="growth-secondary gm-detail" data-gm-detail><summary><span><i class="ph ph-chart-bar" aria-hidden="true"></i> 지표 자세히</span><small>' +
       (k === 'month' ? '이달의 변화 · 6가지 지표' : k === 'all' ? '6가지 지표' : '이번 주 성장') + '</small></summary><div class="gm-detail-body">' + detail + '</div></details>' : '') + '</section>';
 }

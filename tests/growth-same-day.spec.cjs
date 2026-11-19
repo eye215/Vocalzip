@@ -4,6 +4,7 @@
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
 require('./legacy-session-mode.cjs')(test);
+const {openFolds} = require('./helpers/song-screen.cjs');
 const FIX = require('./growth-characterization.fixture.cjs');
 const KEY = 'vocal-zip_mvp_v1', NOW = '2026-11-14T03:00:00.000Z';
 const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'ui-test-user',email:'test@example.invalid'}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}),getSession:async()=>({data:{session:{access_token:'t'}}})},
@@ -36,6 +37,8 @@ async function boot(page) {
   await page.addInitScript(([k, s]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, s); sessionStorage.setItem('seeded', '1'); } }, [KEY, JSON.stringify(DB)]);
   await page.goto('/#/home');
   await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
+  // 같은 날 녹음 세기 is under 깊이 보기 and the chart under 자세히 · 녹음별 변화 (곡 하나, 성장 개편 phase 3): both open here.
+  await openFolds(page);
   await openLab(page);
 }
 /** 보컬 연구소 with every recording of the song chosen (as 전체 녹음 › 선택 › 분석 does). */
@@ -69,24 +72,26 @@ test.describe('phone 375', () => {
     expect(await arias(page)).toEqual(['10.01 · 3개 음정 안정성 ±25 cent · 그날 녹음 보기', '11.10 음정 안정성 ±17 cent 상세 보기', '11.13 · 8개 음정 안정성 ±15 cent · 그날 녹음 보기']);
     await expect(page.locator('.vl-trend .vl-plot circle.vl-dot')).toHaveCount(3);
     await expect(page.locator('[data-same-day-note]')).toContainText('하루 평균은 그날 신뢰도 높은 녹음만으로 내요');
-    await expect(page.locator('[data-same-day-note]')).toContainText('결과 리포트·월별·주간 요약은 지금처럼 모든 녹음으로 계산해요');
+    await expect(page.locator('[data-same-day-note]')).toContainText('‘이 곡의 변화’와 이번 달·결과 리포트는 모든 녹음으로 계산해요');
     await expect(page.locator('[data-same-day]')).toBeFocused();
     // The values on the screen are the model's.
     const model = await page.evaluate(rows => { const G = VzipGrowthMetrics, takes = rows.map(m => ({id:m.id, a:m.analysis, date:m.recordedDate, created:m.created, ok:VZ.analysisReliable(m.analysis)}));
       return Object.fromEntries(['average', 'reliable', 'best'].map(mode => [mode, G.days(takes).map(d => G.dayValue(d, mode, {get:t => t.a.metrics.stability.wobbleCents, better:-1}).value)])); }, MEDIA);
     expect(model).toEqual({average:[25, 17, 15], reliable:[25, 17, 15], best:[21, 17, 9]});
-    // 처음↔최근: days are counted, and the comparison says it is between day means.
-    await expect(page.locator('[data-growth-count]')).toHaveText('3일 중 처음·최근 비교');
-    await expect(page.locator('[data-growth-row="stability"] p')).toHaveText('±25 cent → ±15 cent');
-    await expect(page.locator('[data-growth-row="stability"] small')).toHaveText('하루 평균끼리 비교 · 녹음 전체 값 (녹음 3개 → 7개)');
-    await expect(page.locator('.vl-growth-intro')).toContainText('처음과 최근 날을 6가지 지표로 나눠 비교했어요 (같은 날 녹음: 하루 평균)');
+    // 날짜별 처음·최근 (under 자세히, this screen's own): days are counted, and the comparison says it is between day means.
+    await expect(page.locator('[data-day-count]')).toHaveText('3일 중 처음·최근 비교');
+    await expect(page.locator('[data-day-row="stability"] p')).toHaveText('±25 cent → ±15 cent');
+    await expect(page.locator('[data-day-row="stability"] small')).toHaveText('하루 평균끼리 비교 · 녹음 전체 값 (녹음 3개 → 7개)');
+    await expect(page.locator('[data-day-intro]')).toContainText('처음과 최근 날을 지표마다 나눠 비교했어요 (같은 날 녹음: 하루 평균)');
+    // 이 곡의 변화 — the verdict 이번 달 shows too — does not read the choice: still every recording.
+    await expect(page.locator('[data-growth-count]')).toHaveText('11개 중 처음·최근 비교');
     await shot(page, 'phone-375-average.png');
     // 신뢰도 높은 것: the take with the highest pitch confidence of each day.
     await choose(page, 'reliable');
     expect(await arias(page)).toEqual(['10.01 · 3개 음정 안정성 ±25 cent · 그날 녹음 보기', '11.10 음정 안정성 ±17 cent 상세 보기', '11.13 · 8개 음정 안정성 ±15 cent · 그날 녹음 보기']);
     expect(await page.locator('.vl-trend .vl-plot-dates button').evaluateAll(els => els.map(e => e.dataset.point))).toEqual(['a2', 'b1', 'c3']);
     await expect(page.locator('[data-same-day-note]')).toContainText('음높이 인식 신뢰도가 가장 높은 녹음 하나로 봐요');
-    await expect(page.locator('[data-growth-count]')).toHaveText('3일 중 처음·최근 비교');
+    await expect(page.locator('[data-day-count]')).toHaveText('3일 중 처음·최근 비교');
     await shot(page, 'phone-375-reliable.png');
     // 가장 좋은 것: the lowest wobble of each day (never the unreliable ±7), with the honesty note.
     await choose(page, 'best');
@@ -99,10 +104,12 @@ test.describe('phone 375', () => {
     await page.reload();
     await expect(page.locator('#vzip-boot-cover')).toHaveCount(0);
     await openLab(page);
+    await expect(page.locator('[data-song-section="deep"]')).toHaveAttribute('open', '');   // the folds are remembered too
     await expect(page.locator('[data-same-day]')).toHaveValue('best');
     expect(await labels(page)).toEqual(['10.01 · 3개', '11.10', '11.13 · 8개']);
     await choose(page, 'all');
     expect((await labels(page)).length).toBe(12);
+    await expect(page.locator('[data-day-report]')).toHaveCount(0);
     await expect(page.locator('[data-growth-count]')).toHaveText('11개 중 처음·최근 비교');
     expect(page.__errors).toEqual([]);
   });

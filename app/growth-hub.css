@@ -41,3 +41,13 @@
 /* 연구소 (성장 개편 안 B, phase 2): the deep tools above the former 보컬 트레이닝 content. */
 .growth-hub-inner{display:grid;gap:12px;min-width:0}
 .growth-hub-note i{color:var(--vz-color-accent)}
+/* 곡 (성장 개편 안 B, phase 3): one word per song from the shared verdict — a state, never a score. */
+.growth-hub-chip[data-state="better"]{background:#E3F4EC;color:#147D56}
+.growth-hub-chip[data-state="worse"]{background:#FDECEC;color:#B42318}
+.growth-hub-chip[data-state="mixed"]{background:#FFF3DC;color:#8A5A00}
+.growth-hub-chip[data-state="similar"],.growth-hub-chip[data-state="one"]{background:#F2EFF7;color:#475467}
+.growth-hub-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.growth-hub-search{flex:1 1 200px;min-width:0;margin:0}
+.growth-hub-switch{flex:none}
+.growth-hub-list [hidden]{display:none}
+.gm-song-link{margin-top:10px;text-decoration:none}
