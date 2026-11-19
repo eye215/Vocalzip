@@ -205,7 +205,9 @@ window.VzipGrowthChangesUI = {
     state.precision = late;
     paint();
   },
-  html:(items, precision = null) => html(model(items, precision), precision, earOf(items), {recordings:recordingsOf(items)})
+  html:(items, precision = null) => html(model(items, precision), precision, earOf(items), {recordings:recordingsOf(items)}),
+  /** The songs that have a 같은 곡 같은 방법 line (월별 분석 › 곡별 links to it); [] when the model cannot be built. */
+  songs:items => { try { return model(items || [], null).songs.map(s => s.songId); } catch (error) { console.error(error); return []; } }
 };
 window.addEventListener('vzip:listen-verdicts', () => { if (state?.host?.isConnected) paint(); });
 window.addEventListener('hashchange', stopPlayer);

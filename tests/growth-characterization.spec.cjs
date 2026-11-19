@@ -23,6 +23,8 @@
 // gained `methods`. No number or verdict moved.
 // 지표 목표 (2026-11-17) only added text: 월별 측정 흐름 gained a target row (목표를 정하면… · 목표 정하기). No number
 // or verdict moved.
+// 월별 분석 › 전체 · 곡별 (2026-11-19) only added text: the two scope chips (전체 · 곡별) under the month picker. No
+// number or verdict of the whole month moved.
 // To take the snapshot again on purpose: UPDATE_GROWTH_SNAPSHOT=1 npx playwright test tests/growth-characterization.spec.cjs --project=chromium-mobile --workers=1
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), path = require('node:path');
