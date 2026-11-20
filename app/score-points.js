@@ -6,13 +6,18 @@
  *   press-and-hold menu of a measure box. With the MR matched to the score, while the MR plays (app/score-audio.js) a
  *   panel over the score shows the point a measure before it comes, then asks 지켰어요 / 놓쳤어요 once it is over.
  * - Without a matched MR (or from the song page) the points are one big list in measure order.
+ * - 악보 표기 → 지적: 지적으로 on selected marks opens the form filled from them (app/score-ink.js), and a preset with
+ *   부르면서 체크에 넣기 makes the point as the mark is placed (fromMark below, with 되돌리기 in the toast). Such a point
+ *   keeps the mark's id (`fromMark`) and shows the mark's own shape beside its words; erasing the mark never removes
+ *   the point — its row then says 표기가 지워졌어요.
  * A run is saved only with 저장 at the end. A take recorded in the viewer during the run is linked by its id
  * (vzip:score-take-saved from app/score-audio.js); practice time is never counted from a run.
  *   window.VzipScorePoints.viewer(ctx) → {menu(actions), add(measure), destroy()}
- *   VZ.scorePoints = {card(host, songId), lessonEntry(main, lesson), manage(songId), editor(songId, preset), start(songId), addMany(rows)} */
+ *   VZ.scorePoints = {card(host, songId), lessonEntry(main, lesson), manage(songId), editor(songId, preset), start(songId), addMany(rows),
+ *     fromMark(songId, {text, measures, fromMark, scoreId})} */
 (() => {
 'use strict';
-const VZ = window.VZ, P = window.VzipScorePointsModel;
+const VZ = window.VZ, P = window.VzipScorePointsModel, Ink = window.VzipScoreInk;
 if (!VZ || !P) return;
 const esc = VZ.esc, RUNS = ['mr', 'mrrec', 'loop'];
 const pointsOf = songId => P.points(VZ.db, songId);
@@ -26,6 +31,61 @@ const put = row => VZ.change(d => { if (!Array.isArray(d.scoreAnnotations)) d.sc
 /** Removes a row: core.js leaves its tombstone, so another device does not bring it back. */
 const drop = id => VZ.change(d => { const list = Array.isArray(d.scoreAnnotations) ? d.scoreAnnotations : []; const i = list.findIndex(r => r?.id === id); if (i >= 0) list.splice(i, 1); }, {silent:true});
 const announce = () => window.dispatchEvent(new CustomEvent('vzip:score-points'));
+
+// ---------- 악보 표기에서 온 지적 ----------
+/** A small picture of the mark a point was made from, drawn from its stroke(s) as they lie on the score (a text
+ * symbol shows its letters); a plain tag once the mark is gone. '' for a point not made from a mark. */
+function markIcon(p) {
+  if (!p?.fromMark) return '';
+  const all = VZ.db.scoreAnnotations || [], stroke = r => r && r.version === 1 && Array.isArray(r.points) && r.points.length;
+  const s = all.find(r => r?.id === p.fromMark && stroke(r));
+  const tag = '<span class="vz-pts-mark-icon is-plain" role="img" aria-label="악보 표기" data-pts-mark-icon><i class="ph ph-bookmark-simple" aria-hidden="true"></i></span>';
+  if (!s || !Ink) return tag;
+  // A stamped symbol (a drawing of several strokes) is all of them; a mark over several lines of music, its first piece.
+  const parts = s.group !== undefined && s.measures === undefined ? all.filter(r => stroke(r) && r.scoreId === s.scoreId && r.page === s.page && r.group === s.group) : [s];
+  const A = 1.414; // the page's height / width: an A4 page is close enough for a picture this small
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const r of parts) {
+    const half = r.glyph ? (r.size || .04) * 500 : (r.width || .004) * 500;
+    for (const q of r.points) { const x = q[0] * 1000, y = q[1] * A * 1000; x0 = Math.min(x0, x - half); x1 = Math.max(x1, x + half); y0 = Math.min(y0, y - half); y1 = Math.max(y1, y + half); }
+  }
+  const size = Math.max(x1 - x0, y1 - y0, 1), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, f = n => n.toFixed(1);
+  const shapes = parts.map(r => {
+    const color = /^#[0-9a-f]{6}$/i.test(r.color || '') ? r.color : '#7a32f5', alpha = Math.max(.5, Number(Ink.opacity?.(r)) || 1);
+    if (r.glyph) return '<text x="' + f(r.points[0][0] * 1000) + '" y="' + f(r.points[0][1] * A * 1000) + '" font-size="' + f((r.size || .04) * 1000) + '" text-anchor="middle" dominant-baseline="central" font-weight="700" fill="' + color + '" fill-opacity="' + alpha + '">' + esc(r.glyph) + '</text>';
+    return '<path d="' + Ink.path(r, A) + '" fill="none" stroke="' + color + '" stroke-opacity="' + alpha + '" stroke-width="' + f(Math.max((r.width || .004) * 1000, size * .09)) + '" stroke-linecap="round" stroke-linejoin="round"/>';
+  }).join('');
+  const box = size * 1.15;
+  return '<span class="vz-pts-mark-icon" role="img" aria-label="악보 표기" data-pts-mark-icon><svg viewBox="' + [cx - box / 2, cy - box / 2, box, box].map(f).join(' ') + '" aria-hidden="true">' + shapes + '</svg></span>';
+}
+/** The point's words with the picture of its mark before them (points made from a mark). */
+const withMark = (p, text = p.text) => p.fromMark ? markIcon(p) + '<span>' + esc(text) + '</span>' : esc(text);
+/** A toast with 되돌리기 (VZ.toast has no button): it goes after UNDO_MS or once 되돌리기 is pressed. */
+const UNDO_MS = 6000;
+function undoToast(message, undo) {
+  document.querySelector('.toast')?.remove();
+  const el = document.createElement('div');
+  el.className = 'toast vz-pts-undo-toast'; el.setAttribute('role', 'status'); el.dataset.ptsUndoToast = '';
+  el.innerHTML = '<span>' + esc(message) + '</span><button type="button" data-pts-undo>되돌리기</button>';
+  (document.fullscreenElement || document.body).append(el);
+  const timer = setTimeout(() => el.remove(), UNDO_MS);
+  el.querySelector('[data-pts-undo]').onclick = () => { clearTimeout(timer); el.remove(); undo(); };
+}
+/** 부르면서 체크에 넣기 (app/score-ink.js, as a mark of such a preset is placed): the point {text, measures} made from
+ * the mark `fromMark` at once, said to come from the song's latest lesson — unless the song has that point already
+ * (P.duplicate). 되돌리기 in the toast removes the new row (its tombstone keeps it removed on other devices); the mark
+ * stays either way. → 'added' | 'duplicate' | '' (not saved). */
+function fromMark(songId, {text, measures, fromMark: mark, scoreId} = {}) {
+  let row;
+  try {
+    if (P.duplicate(pointsOf(songId), text, measures)) return 'duplicate';
+    const latest = P.latestLesson(VZ.db.lessons, songId, VZ.today());
+    row = P.point({songId, text, measures, fromMark:mark, ...(scoreId ? {scoreId} : {}), ...(latest ? {lessonId:latest.id} : {})}, {uid:VZ.uid()});
+  } catch (e) { VZ.toast('지적으로 넣지 못했어요: ' + e.message, 'error'); return ''; }
+  if (!addMany([row])) return '';
+  undoToast('지적으로 넣었어요', () => { if (pointById(row.id) && drop(row.id)) { announce(); VZ.toast('지적에서 뺐어요. 악보의 표기는 그대로예요.'); } });
+  return 'added';
+}
 /** New points made together (필기를 지적으로 가져오기, app/score-ink-points-bulk.js): one change, one announce. rows: P.point(). */
 const addMany = list => { if (!list.length || !list.every(P.isPoint)) return false; const ok = VZ.change(d => { if (!Array.isArray(d.scoreAnnotations)) d.scoreAnnotations = []; for (const row of list) { const i = d.scoreAnnotations.findIndex(r => r?.id === row.id); if (i >= 0) d.scoreAnnotations[i] = row; else d.scoreAnnotations.push(row); } }, {silent:true}); if (ok) announce(); return ok; };
 
@@ -40,9 +100,10 @@ const meta = p => [p.lessonId ? lessonName(p.lessonId) : '', P.tagName(p.tag)].f
 // ---------- 지적 추가 · 수정 ----------
 /** iPad: Apple Pencil handwriting (Scribble) turns into letters in any text field — the system's own, nothing sent. */
 const iPad = () => /iPad/.test(navigator.userAgent || '') || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-/** preset: {point} to edit, or {from, to, lessonId, scoreId, feedback, text, note, ink} for a new one. note: a line on
+/** preset: {point} to edit, or {from, to, lessonId, scoreId, feedback, text, note, ink, fromMark} for a new one. note: a line on
  * top (what the handwriting recognition did); ink: the point comes from handwriting selected on the score — the form
- * asks whether to keep it (the default) or remove it after 저장, and onDone(row, {removeInk}) does that. */
+ * asks whether to keep it (the default) or remove it after 저장, and onDone(row, {removeInk}) does that. fromMark: the
+ * id of the 악보 표기 the point is made from (kept on the row). */
 function editor(songId, preset = {}, onDone) {
   const old = preset.point ? pointById(preset.point.id) || preset.point : null;
   const lessons = lessonsOf(songId), latest = P.latestLesson(VZ.db.lessons, songId, VZ.today());
@@ -80,7 +141,7 @@ function editor(songId, preset = {}, onDone) {
       let row;
       try {
         if (old) { const cur = pointById(old.id); if (!cur) throw Error('다른 기기에서 지운 지적이에요.'); row = P.edit(cur, raw); }
-        else row = P.point({...raw, ...(preset.scoreId ? {scoreId:preset.scoreId} : {})}, {uid:VZ.uid()});
+        else row = P.point({...raw, ...(preset.scoreId ? {scoreId:preset.scoreId} : {}), ...(preset.fromMark ? {fromMark:preset.fromMark} : {})}, {uid:VZ.uid()});
       } catch (err) { error.textContent = err.message; return; }
       if (put(row)) done(old ? '지적을 고쳤어요.' : '지적을 추가했어요.', row, {removeInk:form.querySelector('[name=ink]:checked')?.value === 'remove'});
     };
@@ -99,7 +160,8 @@ function row(p, runs) {
   const rec = P.record(runs, p.id), suggest = P.suggestRetire(runs, p);
   return '<div class="vz-pts-row" data-pts-row="' + esc(p.id) + '"' + (p.retired ? ' data-retired' : '') + '>' +
     '<button type="button" class="vz-pts-row-main" data-pts-edit aria-label="' + esc(P.label(p.measures) + ' ' + p.text + ' 수정') + '"><span class="vz-pts-where">' + esc(P.label(p.measures)) + '</span>' +
-    '<span class="vz-pts-what"><strong>' + esc(p.text) + '</strong>' + (meta(p) ? '<small>' + esc(meta(p)) + '</small>' : '') + '</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
+    '<span class="vz-pts-what"><strong' + (p.fromMark ? ' class="has-mark"' : '') + '>' + withMark(p) + '</strong>' + (meta(p) ? '<small>' + esc(meta(p)) + '</small>' : '') +
+    (P.markGone(VZ.db.scoreAnnotations, p) ? '<small class="vz-pts-mark-gone" data-pts-mark-gone><i class="ph ph-eraser" aria-hidden="true"></i>표기가 지워졌어요</small>' : '') + '</span><i class="ph ph-caret-right" aria-hidden="true"></i></button>' +
     '<div class="vz-pts-row-foot">' + dots(rec.recent) + '<span class="vz-pts-record">' + esc(P.recordText(rec)) + '</span></div>' +
     (suggest ? '<div class="vz-pts-suggest" data-pts-suggest><span>이제 몸에 붙었어요 · 그만 볼까요?</span><span class="vz-pts-suggest-actions"><button type="button" data-pts-retire>그만 볼래요</button><button type="button" data-pts-stay>계속 볼래요</button></span></div>' : '') +
     (p.retired ? '<div class="vz-pts-row-foot"><button type="button" class="vz-pts-small" data-pts-unretire>다시 체크하기</button></div>' : '') + '</div>';
@@ -268,7 +330,7 @@ function list() {
     (live.ctx ? '<button type="button" class="vz-pts-tool" data-pts-to-panel><i class="ph ph-music-notes" aria-hidden="true"></i>악보로</button>' : '') +
     '<button type="button" class="vz-pts-tool is-strong" data-pts-finish>끝내기</button></header>' +
     '<ol class="vz-pts-list">' + live.list.map(p => '<li class="vz-pts-item" data-pts-item="' + esc(p.id) + '"><div class="vz-pts-item-head"><span class="vz-pts-where">' + esc(P.label(p.measures)) + '</span>' + (p.tag ? '<small>' + esc(P.tagName(p.tag)) + '</small>' : '') + '</div>' +
-      '<p class="vz-pts-text">' + esc(p.text) + '</p>' + markButtons(p.id, P.label(p.measures) + ' ' + p.text) + '</li>').join('') + '</ol>' +
+      '<p class="vz-pts-text' + (p.fromMark ? ' has-mark' : '') + '">' + withMark(p) + '</p>' + markButtons(p.id, P.label(p.measures) + ' ' + p.text) + '</li>').join('') + '</ol>' +
     '<footer class="vz-pts-run-foot"><button type="button" class="vz-pts-done" data-pts-finish>끝내고 결과 보기</button></footer>';
   wireMarks(el, () => { el.querySelector('[data-pts-progress]').textContent = progress(); });
   el.querySelectorAll('[data-pts-finish]').forEach(b => b.onclick = finish);
@@ -288,13 +350,13 @@ function panel() {
   if (on && ln) live.timed = true;
   el.className = 'vz-pts-run is-panel';
   el.setAttribute('role', 'region'); el.removeAttribute('aria-modal'); el.setAttribute('aria-label', '부르면서 체크');
-  const card = (e, kind) => { const p = byId(e.id); return p ? '<div class="vz-pts-cue" data-pts-cue="' + kind + '" data-point="' + esc(p.id) + '"><span class="vz-pts-cue-when">' + (kind === 'now' ? '지금' : '곧') + ' · ' + esc(P.label(p.measures)) + '</span><strong class="vz-pts-cue-text">' + esc(p.text) + '</strong></div>' : ''; };
+  const card = (e, kind) => { const p = byId(e.id); return p ? '<div class="vz-pts-cue" data-pts-cue="' + kind + '" data-point="' + esc(p.id) + '"><span class="vz-pts-cue-when">' + (kind === 'now' ? '지금' : '곧') + ' · ' + esc(P.label(p.measures)) + '</span><strong class="vz-pts-cue-text' + (p.fromMark ? ' has-mark' : '') + '">' + withMark(p) + '</strong></div>' : ''; };
   let body;
   if (!ln) body = '<p class="vz-pts-wait" data-pts-wait="nosync">MR과 맞춘 마디를 아직 찾지 못했어요. 악보의 ⋯ › 마디와 MR 맞추기를 하면 재생할 때 마디에 맞춰 알려줘요. 지금은 목록으로 체크할 수 있어요.</p>';
   else if (!on) body = '<p class="vz-pts-wait" data-pts-wait="idle">재생이나 재생+녹음을 누르면 마디에 맞춰 알려줘요.</p>' + (next ? '<p class="vz-pts-next">' + (Number.isFinite(live.t) ? '다음' : '첫') + ' 지적 · ' + esc(P.label(byId(next.id).measures)) + ' · ' + esc(byId(next.id).text) + '</p>' : '');
   else {
     body = (remind ? card(remind, c.now[0] === remind ? 'now' : 'soon') : next ? '<p class="vz-pts-next" data-pts-next>다음 · ' + esc(P.label(byId(next.id).measures)) + ' · ' + esc(byId(next.id).text) + '</p>' : '<p class="vz-pts-next">남은 지적이 없어요.</p>');
-    if (ask) { const p = byId(ask.id); body += '<div class="vz-pts-ask" data-pts-ask="' + esc(p.id) + '"><span class="vz-pts-ask-when">방금 ' + esc(P.label(p.measures)) + ' · ' + esc(p.text) + '</span>' + markButtons(p.id, P.label(p.measures) + ' ' + p.text) + '</div>'; }
+    if (ask) { const p = byId(ask.id); body += '<div class="vz-pts-ask" data-pts-ask="' + esc(p.id) + '"><span class="vz-pts-ask-when' + (p.fromMark ? ' has-mark' : '') + '">방금 ' + esc(P.label(p.measures)) + ' · ' + withMark(p) + '</span>' + markButtons(p.id, P.label(p.measures) + ' ' + p.text) + '</div>'; }
   }
   el.innerHTML = '<div class="vz-pts-panel"><div class="vz-pts-panel-top"><strong>부르면서 체크</strong><span class="vz-pts-panel-progress" data-pts-progress>' + progress() + '</span>' +
     '<button type="button" class="vz-pts-tool" data-pts-to-list><i class="ph ph-list-checks" aria-hidden="true"></i>목록</button><button type="button" class="vz-pts-tool is-strong" data-pts-finish>끝내기</button></div>' + body + '</div>';
@@ -316,7 +378,7 @@ function summary(again = false) {
   el.innerHTML = '<header class="vz-pts-run-head"><div class="vz-pts-run-title"><strong>이번 체크 결과</strong><small>' + esc(VZ.songTitle?.(live.songId) || '') + '</small></div></header>' +
     '<div class="vz-pts-summary"><div class="vz-pts-counts" data-pts-counts><span class="is-kept"><b>' + s.kept + '</b>지켰어요</span><span class="is-missed"><b>' + s.missed + '</b>놓쳤어요</span><span><b>' + s.skipped + '</b>안 고름</span></div>' + linked + '</div>' +
     '<ol class="vz-pts-list">' + live.list.map(p => { const rec = P.record(runs, p.id); return '<li class="vz-pts-item" data-pts-item="' + esc(p.id) + '"><div class="vz-pts-item-head"><span class="vz-pts-where">' + esc(P.label(p.measures)) + '</span></div>' +
-      '<p class="vz-pts-text">' + esc(p.text) + '</p>' + markButtons(p.id, P.label(p.measures) + ' ' + p.text) +
+      '<p class="vz-pts-text' + (p.fromMark ? ' has-mark' : '') + '">' + withMark(p) + '</p>' + markButtons(p.id, P.label(p.measures) + ' ' + p.text) +
       '<div class="vz-pts-row-foot">' + dots(rec.recent) + '<span class="vz-pts-record">' + esc(P.recordText(rec)) + '</span></div>' +
       (P.suggestRetire(runs, p) ? '<div class="vz-pts-suggest" data-pts-suggest><span>이제 몸에 붙었어요 · 그만 볼까요?</span><span class="vz-pts-suggest-actions"><button type="button" data-pts-retire data-point="' + esc(p.id) + '">그만 볼래요</button></span></div>' : '') + '</li>'; }).join('') + '</ol>' +
     '<footer class="vz-pts-run-foot two"><button type="button" class="vz-pts-tool" data-pts-discard>저장 안 하고 닫기</button><button type="button" class="vz-pts-done" data-pts-save' + (marked() ? '' : ' disabled') + '>저장</button></footer>';
@@ -389,9 +451,13 @@ function viewer(ctx) {
       const from = parseInt(String(measure?.number ?? ''), 10), last = parseInt(String(measure?.last ?? ''), 10);
       Promise.resolve(c.outside?.()).catch(() => {}).then(() => editor(c.songId, {from:Number.isFinite(from) ? from : '', to:Number.isFinite(last) ? last : '', scoreId:c.scoreId}));
     },
+    /** 지적으로 in the menu of a placed 표기 (app/score-sync.js): the form filled from the mark — {text, from, to, fromMark}. */
+    mark(m) {
+      Promise.resolve(c.outside?.()).catch(() => {}).then(() => editor(c.songId, {from:m?.from ?? '', to:m?.to ?? '', text:m?.text || '', fromMark:m?.fromMark || undefined, scoreId:c.scoreId}));
+    },
     destroy() { if (viewerCtx === c) viewerCtx = null; button?.remove(); button = null; if (live?.ctx === c) unbind(); }
   };
 }
 window.VzipScorePoints = {viewer};
-VZ.scorePoints = {card, lessonEntry, manage, editor, start, addMany};
+VZ.scorePoints = {card, lessonEntry, manage, editor, start, addMany, fromMark};
 })();

@@ -114,3 +114,42 @@ test('rows are not strokes, and a deleted point stays deleted when another devic
   const c = Merge.merge({scoreAnnotations:[{...p, text:'A', updatedAt:3000}]}, {scoreAnnotations:[{...p, text:'B', updatedAt:4000}]}).data;
   assert.equal(c.scoreAnnotations[0].text, 'B');
 });
+
+// ---------- 악보 표기 → 지적 ----------
+test('a point made from a mark: name and measures from its 표시한 마디 row, fromMark kept through edits', () => {
+  // The row app/score-measures.js marks() gives: the preset name (a text symbol with its letters), printed numbers.
+  assert.deepEqual(P.fromMarkItem({label:'숨표', from:'3', to:'3'}), {text:'숨표', measures:{from:3, to:3}});
+  assert.deepEqual(P.fromMarkItem({label:' 반복 ', from:'6', to:'5'}), {text:'반복', measures:{from:5, to:6}});
+  assert.deepEqual(P.fromMarkItem({label:'강세 mf', from:'12', to:'12–13'.split('–')[1]}), {text:'강세 mf', measures:{from:12, to:13}});
+  // No conversion: no measures (the form asks for them); a mark without a name is 표기.
+  assert.deepEqual(P.fromMarkItem({label:'숨표'}), {text:'숨표', measures:null});
+  assert.deepEqual(P.fromMarkItem(null), {text:'표기', measures:null});
+  assert.equal(P.markNames(['숨표', ' 숨표', '컷', '', null]), '숨표, 컷');
+  const p = mk({text:'숨표', measures:{from:3, to:3}, fromMark:'stroke-9'});
+  assert.equal(p.fromMark, 'stroke-9');
+  assert.equal(P.edit(p, {text:'숨표 미리'}, {now:2000}).fromMark, 'stroke-9');
+  assert.throws(() => mk({fromMark:'x'.repeat(201)}), /표기를 확인/);
+  assert.equal('fromMark' in mk(), false);
+});
+
+test('the dedupe rule: same song, same words (spaces and case aside), same measures', () => {
+  const data = {scoreAnnotations:[mk({text:'숨표', measures:{from:3, to:3}}), {...mk({text:'Breath', measures:{from:5, to:6}}), id:'point:b'}, {...mk({text:'숨표', measures:{from:3, to:3}}), id:'point:other', songId:'s2'}]};
+  const list = P.points(data, 's1');
+  assert.equal(P.duplicate(list, ' 숨표 ', {from:3, to:3}), true);
+  assert.equal(P.duplicate(list, 'breath', {from:5, to:6}), true);
+  assert.equal(P.duplicate(list, '숨표', {from:3, to:4}), false); // other measures
+  assert.equal(P.duplicate(list, '컷', {from:3, to:3}), false); // other words
+  assert.equal(P.duplicate(P.points(data, 's3'), '숨표', {from:3, to:3}), false); // another song's point does not count
+  assert.equal(P.duplicate(list, '숨표', null), false);
+  assert.equal(P.duplicate(list, '  ', {from:3, to:3}), false);
+});
+
+test('markGone: the point stays when its mark is erased, and says so', () => {
+  const stroke = {version:1, id:'stroke-9', ownerId:'u', points:[[.5, .5, .5]]};
+  const p = mk({fromMark:'stroke-9'});
+  assert.equal(P.markGone([stroke, p], p), false);
+  assert.equal(P.markGone([p], p), true);
+  assert.equal(P.markGone([p], mk()), false); // a point not made from a mark
+  // Another point's row with that id is not the mark.
+  assert.equal(P.markGone([{id:'stroke-9', kind:'score-point'}, p], p), true);
+});
