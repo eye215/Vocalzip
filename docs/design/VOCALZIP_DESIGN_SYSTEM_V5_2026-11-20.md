@@ -1,6 +1,6 @@
 # VOCAL.zip Design System v5.0 (draft)
 
-Status: **proposal. Nothing in this document is built yet.** Each section says which PR will build it. Update the "Built" column only in the PR that ships the change.
+Status: **draft. Only rows marked with a date in the Built column are in the app.** Each section says which PR will build it. Update the "Built" column only in the PR that ships the change.
 
 ## Relation to earlier guides
 
@@ -20,29 +20,30 @@ Status: **proposal. Nothing in this document is built yet.** Each section says w
 
 Bottom dock stays `오늘 | 내 곡 | 기록 | 성장`, with the floating mic above it.
 
-Current routes carry a `tab` key. Several keys are leftovers from the removed 보관함 tab (`keep`, `record`) and the 기록 tab is keyed `calendar`. v5 makes each screen belong to exactly one of the four tabs, or to 설정.
+Each route carries a `tab` key that picks the highlighted dock item (`app/core.js`, `VZ.render`). The dock has `home`, `songs`, `calendar` (기록) and `growth`. A key with no dock item highlights nothing. The key `keep` is a deliberate shared rule: the dock stays on the tab the person came from.
 
-| Route | Today's tab key | v5 owner | Built |
+v5 rule: **a page that is opened from several tabs uses `keep`.** A page that belongs to one tab uses that tab's key. Nothing else may use a key without a dock item, except the dark recorder.
+
+| Route | Before | v5 key | Built |
 |---|---|---|---|
-| `home`, `practice-set`, `practice-room`, `guided-practice`, `vocal-training`, `voice-check`, `levels` | home | 오늘 (unchanged) | — |
-| `songs`, `song`, `library`, `compare`, `recording` | songs | 내 곡 (unchanged) | — |
-| `song-suggest`, `song-transcript` | record | 내 곡 | no |
-| `import-hub` | record | 설정 | no |
-| `record` | record | none: the dark recorder, opened from the mic, keeps no dock highlight | no |
-| `calendar`, `lessons`, `lesson`, `lesson-ai`, `homework`, `practices`, `performances`, `show` | calendar | 기록 (key stays `calendar`) | — |
-| `practice-review` | keep | 기록 | no |
-| `growth`, `growth-flow`, `growth-lab`, `lab-reports`, `analysis`, `practice-stats`, `precision-measurement`, `precision-report`, `vocal-analysis`, `vocal-growth`, `vocal-lab`, `voice-path`, `weekly-summary` | growth | 성장 (unchanged) | — |
-| `settings`, `storage`, `data-export`, `shares`, `upload-check`, `processing-log`, `bt-test` | keep | 설정 (opened from the gear on every tab; no dock highlight) | no |
+| `home`, `practice-set`, `practice-room`, `guided-practice`, `vocal-training`, `voice-check`, `levels` | home | home | already |
+| `songs`, `song`, `library`, `compare`, `recording` | songs | songs | already |
+| `calendar`, `lessons`, `lesson`, `lesson-ai`, `homework`, `practices`, `performances`, `show` | calendar | calendar | already |
+| growth routes (`growth`, `vocal-growth`, `vocal-lab`, `analysis`, `weekly-summary`, …) | growth | growth | already |
+| `settings`, `storage`, `data-export`, `shares`, `upload-check`, `processing-log`, `bt-test`, `practice-review` | keep | keep | already |
+| `import-hub` (opened from 오늘, 내 곡 and 설정) | record (dock went blank) | keep | 2026-11-20 |
+| `song-suggest`, `song-transcript` (opened from 가져오기 and 녹음 분석) | record (dock went blank) | keep | 2026-11-20 |
+| `record` (the dark recorder, from the mic) | record | record, no highlight on purpose | — |
 
-Only the rows marked "no" move. The tab keys `home`, `songs`, `calendar`, `growth` stay as they are so existing code and tests keep working. `record` and `keep` are the leftovers that v5 retires.
+Before this change, opening 기존 자료 가져오기 or 곡 확인 cleared the dock highlight, and every 설정 page opened afterwards stayed blank too, because `keep` copies the last key. Now the dock keeps the tab the person came from.
 
 Rules:
 
-1. A back arrow returns to the screen the person came from. If none exists, it returns to the owning tab.
-2. The dock highlights the owning tab. 설정 screens highlight nothing.
-3. 설정 gets one list in this order: 파일 상태 → 저장 공간 → 공유 중인 링크 → 내 데이터 내보내기 → 기존 자료 가져오기 → 진단 (업로드 상태, 블루투스 시험). The 파일 상태 row from v4 stays at the top.
-4. 기록 stays the only place for lessons, homework and calendar. 내 곡 does not repeat them except as a link on the song.
+1. A back arrow returns to the screen the person came from.
+2. The dock always shows one highlighted tab, except on the dark recorder.
+3. 기록 stays the only place for lessons, homework and calendar. 내 곡 links to them from the song.
 
+Later step (not built): one ordered 설정 list (파일 상태 → 저장 공간 → 공유 중인 링크 → 내 데이터 내보내기 → 기존 자료 가져오기 → 진단). It needs its own PR because existing tests pin the current settings layout.
 ## Component rules added in v5
 
 - **One definition per component.** Cards, chips, tab bars, list rows and buttons are defined once in `design-system/components.css`. Screen CSS may position them but may not restyle colour, radius or type.
@@ -64,4 +65,5 @@ Each step is its own pull request. A step is "done" only after the automated che
 
 ## Change log
 
-- 2026-11-20: v5 draft added. v4 stays in force. Nothing implemented.
+- 2026-11-20: v5 draft added. v4 stays in force.
+- 2026-11-20: screen ownership rule built for 기존 자료 가져오기, 곡 확인, 전사 확인 (keep instead of ecord).
