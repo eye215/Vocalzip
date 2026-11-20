@@ -1,0 +1,107 @@
+/* 단계 (app/levels.js): a viewing screen — light. White cards on the page background (R20, as 성장 › 이번 달), purple
+ * accents, every control a 44px target, nothing wider than the screen. Phones: one column. From 768px: the level card
+ * and the 기본기 tiles side by side. The notice at the end (.lv-news) sits on the completion summary of 오늘의 연습. */
+.lv{display:grid;gap:12px;min-width:0;padding:0 0 46px;overflow-wrap:anywhere;color:var(--vz-color-ink,#101828)}
+.lv-card{min-width:0;padding:18px 16px;border-radius:20px;background:var(--vz-color-surface,#fff);border:1px solid var(--vz-color-border,#eae3f1);box-shadow:0 4px 18px rgba(66,39,99,.035)}
+.lv-card h2{margin:0;font-size:18px;line-height:24px;letter-spacing:-.03em;color:var(--vz-color-ink,#282033)}
+.lv-card h2 small{margin-left:6px;color:var(--vz-color-ink-muted,#667085);font-size:13px;font-weight:600}
+.lv-card h3{margin:0 0 8px;font-size:14px;line-height:20px;color:var(--vz-color-ink,#282033)}
+.lv-eyebrow{margin:0 0 4px;color:var(--vz-color-accent,#7A32F5);font-size:12px;line-height:16px;font-weight:700}
+.lv-basis{margin:4px 0 0;color:var(--vz-color-ink-muted,#667085);font-size:13px;line-height:19px;word-break:keep-all}
+.lv-note{margin:8px 0 0;color:var(--vz-color-ink-muted,#667085);font-size:12px;line-height:18px;word-break:keep-all}
+.lv-empty{margin:8px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface-2,#f6f2fb);color:var(--ink-2,#475467);font-size:13px;line-height:20px;word-break:keep-all}
+/* 큰 단계 */
+.lv-now{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.lv-num{color:var(--vz-color-accent,#7A32F5);font-size:32px;line-height:40px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.lv-name{font-size:20px;line-height:28px;font-weight:700;letter-spacing:-.03em}
+.lv-bar{height:8px;margin:12px 0 0;border-radius:99px;background:var(--vz-color-accent-soft,#F3ECFF);overflow:hidden}
+.lv-bar i{display:block;height:100%;min-width:0;border-radius:99px;background:var(--vz-color-accent,#7A32F5)}
+.lv-sub{margin:8px 0 0;color:var(--ink-2,#475467);font-size:13px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.lv-today,.lv-how{margin-top:16px;padding-top:14px;border-top:1px solid var(--vz-color-border,#eae3f1)}
+.lv-today h3 b{margin-left:6px;color:var(--vz-color-accent,#7A32F5);font-variant-numeric:tabular-nums}
+.lv-parts{display:grid;gap:2px;margin:0;padding:0;list-style:none}
+.lv-parts li{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-height:28px;font-size:13px;line-height:20px;color:var(--ink-2,#475467)}
+.lv-parts li span{min-width:0;word-break:keep-all}
+.lv-parts li b{flex:none;color:var(--vz-color-ink,#282033);font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.lv-today .lv-parts li b{color:var(--vz-color-accent,#7A32F5)}
+/* 기본기 */
+.lv-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.lv-tiles li{display:flex;min-width:0}
+.lv-tile{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;min-height:112px;padding:12px;border-radius:14px;background:var(--surface-2,#f6f2fb);color:inherit;text-decoration:none;-webkit-tap-highlight-color:transparent}
+.lv-tile:focus-visible,.lv-news-link:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:2px}
+.lv-tile-name{display:flex;align-items:center;gap:4px;min-width:0;font-size:13px;line-height:18px;font-weight:700;color:var(--ink-2,#475467)}
+.lv-tile-name small{font-size:11px;font-weight:600;color:var(--vz-color-ink-muted,#667085)}
+.lv-keep{margin-left:auto;color:#23855C;font-size:16px}
+.lv-tile strong{font-size:22px;line-height:28px;letter-spacing:-.03em;color:var(--vz-color-ink,#282033);font-variant-numeric:tabular-nums}
+.lv-tile strong small{margin-left:3px;font-size:12px;font-weight:600;color:var(--vz-color-ink-muted,#667085)}
+.lv-tile strong.is-word{font-size:15px;line-height:28px}
+.lv-tile[data-state=soon] strong,.lv-tile[data-state=ready] strong{color:var(--vz-color-ink-muted,#667085)}
+.lv-tile[data-state=calibrating] strong{color:var(--vz-color-accent,#7A32F5)}
+.lv-tile-sub{margin-top:auto;font-size:11px;line-height:15px;color:var(--vz-color-ink-muted,#667085);word-break:keep-all}
+.lv-tile[data-keeping] .lv-tile-sub{color:#147D56;font-weight:650}
+.lv-pips{display:flex;gap:4px}
+.lv-pips i{flex:1;max-width:28px;height:5px;border-radius:99px;background:#e3dbee}
+.lv-pips i.is-on{background:var(--vz-color-accent,#7A32F5)}
+.lv-pips i.is-ghost{background:repeating-linear-gradient(90deg,#c9b2f7 0 4px,#e3dbee 4px 7px)}
+/* 배지 */
+.lv-badges{display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.lv-badge{display:flex;align-items:center;gap:10px;min-width:0;padding:10px 12px;border-radius:14px;background:var(--surface-2,#f6f2fb)}
+.lv-badge-mark{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#fff;color:var(--vz-color-accent,#7A32F5);font-size:20px}
+.lv-badge-copy{display:grid;gap:2px;min-width:0}
+.lv-badge-copy strong{font-size:14px;line-height:20px}
+.lv-badge-copy small{font-size:12px;line-height:17px;color:var(--vz-color-ink-muted,#667085)}
+.lv-sheet-card .btn{margin-top:12px}
+.lv .btn.block,.lv-sheet+.btn{width:100%}
+/* 영역 */
+.lv-area-head .lv-pips{margin:12px 0 0}
+.lv-area-head .lv-pips i{max-width:none;height:6px}
+.lv-state{margin:12px 0 0;font-size:17px;line-height:24px;letter-spacing:-.02em}
+.lv-state strong{color:var(--vz-color-accent,#7A32F5)}
+.lv-estimate{margin:4px 0 0;font-size:14px;line-height:20px;font-weight:650}
+.lv-keepline{display:flex;align-items:center;gap:6px;margin:6px 0 0;font-size:13px;line-height:19px;color:var(--ink-2,#475467);word-break:keep-all}
+.lv-keepline[data-lv-keeping=yes]{color:#147D56;font-weight:650}
+.lv-keepline i{flex:none;font-size:17px}
+.lv-limit{display:flex;align-items:flex-start;gap:8px;margin:12px 0 0;padding:10px 12px;border-radius:12px;background:var(--surface-2,#f6f2fb);color:var(--ink-2,#475467);font-size:13px;line-height:19px;word-break:keep-all}
+.lv-limit i{flex:none;margin-top:1px;color:var(--vz-color-accent,#7A32F5);font-size:17px}
+.lv-say{margin:0;font-size:16px;line-height:24px;font-weight:650;letter-spacing:-.02em;word-break:keep-all}
+.lv-progress{display:flex;align-items:center;gap:10px;margin:12px 0 0;font-size:14px;line-height:20px;font-weight:700;color:var(--vz-color-accent,#7A32F5)}
+.lv-dots{display:flex;gap:6px}
+.lv-dots i{width:14px;height:14px;border-radius:50%;border:2px solid #c9b2f7;box-sizing:border-box}
+.lv-dots i.is-on{border-color:var(--vz-color-accent,#7A32F5);background:var(--vz-color-accent,#7A32F5)}
+.lv-recent{display:grid;margin:0;padding:0;list-style:none}
+.lv-recent li{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-height:32px;padding:4px 0;border-top:1px solid var(--vz-color-border,#eae3f1);font-size:13px;line-height:20px}
+.lv-recent li:first-child{border-top:0}
+.lv-recent span{flex:none;color:var(--vz-color-ink-muted,#667085);font-variant-numeric:tabular-nums}
+.lv-recent b{min-width:0;text-align:right;font-weight:650;font-variant-numeric:tabular-nums}
+.lv-steps{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.lv-steps li{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.lv-step-n{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--surface-2,#f6f2fb);color:var(--vz-color-ink-muted,#667085);font-size:13px;font-weight:700}
+.lv-steps li[data-state=earned] .lv-step-n{background:var(--vz-color-accent,#7A32F5);color:#fff}
+.lv-steps li[data-state=next] .lv-step-n{background:var(--vz-color-accent-soft,#F3ECFF);color:var(--vz-color-accent,#7A32F5);box-shadow:inset 0 0 0 1.5px var(--vz-color-accent,#7A32F5)}
+.lv-step-copy{display:grid;gap:1px;min-width:0;font-size:13px;line-height:19px;color:var(--ink-2,#475467);word-break:keep-all}
+.lv-step-copy strong{font-size:13px;color:var(--vz-color-ink,#282033)}
+.lv-step-copy small{font-size:11px;line-height:16px;color:var(--vz-color-ink-muted,#667085)}
+.lv-ex{display:grid;gap:8px;margin:0 0 12px;padding:0;list-style:none}
+.lv-ex li{display:flex;align-items:center;gap:10px;min-width:0}
+.lv-ex i{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--vz-color-accent-soft,#F3ECFF);color:var(--vz-color-accent,#7A32F5);font-size:18px}
+.lv-ex span{display:grid;gap:1px;min-width:0}
+.lv-ex strong{font-size:14px;line-height:20px}
+.lv-ex small{font-size:12px;line-height:17px;color:var(--vz-color-ink-muted,#667085)}
+/* 기준표 */
+.lv-sheet{display:grid;gap:10px;min-width:0}
+.lv-sheet-text{margin:0;padding:14px;border-radius:14px;background:var(--surface-2,#f6f2fb);color:var(--vz-color-ink,#282033);font:inherit;font-size:12.5px;line-height:19px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:keep-all;-webkit-user-select:text;user-select:text}
+/* 오늘의 연습 정리: 단계가 올랐을 때 한 번 */
+.lv-news{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;box-sizing:border-box;width:100%;padding:12px 14px;border-radius:16px;background:var(--vz-color-accent-soft,#F3ECFF);text-align:left}
+.lv-news-mark{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#fff;color:var(--vz-color-accent,#7A32F5);font-size:20px}
+.lv-news-copy{flex:1 1 180px;display:grid;gap:2px;min-width:0}
+.lv-news-copy p{margin:0;color:#344054;font-size:14px;line-height:20px;word-break:keep-all}
+.lv-news-copy strong{color:var(--vz-color-accent-strong,#6528CA)}
+.lv-news-link{flex:none;display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border-radius:12px;background:#fff;color:var(--vz-color-accent,#7A32F5);font-size:14px;font-weight:700;text-decoration:none}
+@media (min-width:768px){
+  .lv[data-lv-view=main]{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);align-items:start}
+  .lv[data-lv-view=main]>.lv-level{grid-row:span 3}
+  .lv[data-lv-view=area]{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+  .lv[data-lv-view=area]>.lv-area-head{grid-column:1/-1}
+  .lv-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:1100px){.lv[data-lv-view=main] .lv-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}

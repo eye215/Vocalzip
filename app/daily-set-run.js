@@ -10,7 +10,7 @@
  * Nothing here is analysed later or uploaded: the mic of a hold step is only read on this screen. */
 (()=>{
 'use strict';
-const V=window.VZ,D=window.VzipDailySet;
+const V=window.VZ,D=window.VzipDailySet,L=window.VzipLevels;
 if(!V||!D||typeof document==='undefined')return;
 const esc=V.esc;
 const hz=midi=>440*2**((midi-69)/12);
@@ -55,6 +55,9 @@ async function openMic(){
 }
 /** Cents from the target, folded to the nearest octave: the same note an octave apart counts as that note. */
 const centsFrom=(frequency,midi)=>{if(!frequency)return null;const c=1200*Math.log2(frequency/hz(midi));return Math.round(((c+600)%1200+1200)%1200-600);};
+/** Which octave the note was really sung in (0 = as played, −1 = an octave under): kept with a held note, so 음역 in
+ * 기본기 단계 counts the note that was sung, not the folded one. */
+const octaveFrom=(frequency,midi)=>frequency?Math.round(Math.log2(frequency/hz(midi))):0;
 
 /* ---------- engines: what happens inside one step ---------- */
 const dots=(n,at,done)=>'<ol class="dset-dots" data-run-dots aria-hidden="true">'+Array.from({length:n},(_,i)=>'<li class="'+(i<done?'is-done':i===at?'is-now':'')+'"></li>').join('')+'</ol>';
@@ -134,7 +137,9 @@ const ENGINES={
       result:()=>({mode:'follow',parts:done})};
   },
   /* 발성 롱톤 · 음 따라 부르기: hear a note, then hold it inside the tolerance for `hold` seconds. Without a mic the
-   * same notes run on a timer and nothing is measured (result.timer). */
+   * same notes run on a timer and nothing is measured (result.timer).
+   * With the mic each note keeps {ok, held, accuracy, cents, sd (how much the pitch moved during the hold, cent),
+   * octave?}, and the step's result carries `measures` for 기본기 단계 (VzipLevels.fromHold: 음정 · 지속음 · 음역). */
   hold(r){
     const e=r.e,notes=D.notesFor(e,r.comfort,r.ctx.session.date),need=e.hold,tol=e.tolerance,out=[];
     let i=0,phase='listen',left=LISTEN,h=D.holdStart(),tried=0;
@@ -149,8 +154,9 @@ const ENGINES={
     };
     const result=()=>{
       const sung=out.reduce((n,x)=>n+(x.sung||0),0),inside=out.reduce((n,x)=>n+(x.sung||0)*(x.accuracy||0)/100,0);
+      const measures=mic()&&L?.fromHold?L.fromHold(e,out):[];
       return {mode:'hold',...(mic()?{}:{timer:true}),parts:out.length,notes:out.slice(),...(mic()?{holdSeconds:Math.round(out.reduce((n,x)=>n+Math.min(need,x.held||0),0)*10)/10,
-        accuracy:sung>0?Math.round(inside/sung*100):null}:{})};
+        accuracy:sung>0?Math.round(inside/sung*100):null}:{}),...(measures.length?{measures}:{})};
     };
     const paint=cents=>{
       setDots(r,i,out.length);text(r.q('[data-run-note]'),D.noteName(notes[i]));
@@ -174,8 +180,8 @@ const ENGINES={
         if(phase==='listen'){left-=dt;if(left<=0){phase='sing';left=need+2;}return paint(null);}
         if(phase==='cheer'){left-=dt;if(left<=0)return next();return paint(0);}
         if(!mic()){left-=dt;if(left<=0){phase='cheer';left=CHEER;r.cue(1);}return paint(null);}
-        const cents=centsFrom(r.mic.read(),notes[i]);
-        D.holdTick(h,cents,dt,{tolerance:tol,need});tried+=dt;
+        const heard=r.mic.read(),cents=centsFrom(heard,notes[i]);
+        D.holdTick(h,cents,dt,{tolerance:tol,need,octave:octaveFrom(heard,notes[i])});tried+=dt;
         if(h.ok){phase='cheer';left=CHEER;r.cue(1);return paint(0);}
         if(tried>=TRY_SECONDS)return next();
         paint(cents);

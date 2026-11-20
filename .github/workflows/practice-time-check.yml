@@ -22,7 +22,7 @@ permissions:
 jobs:
   practice:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 25  # the browser install alone often takes longer than 8 minutes, and the job was cancelled before a test ran
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

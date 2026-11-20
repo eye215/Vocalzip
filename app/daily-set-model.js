@@ -20,7 +20,9 @@
  *                   phrase, comfort}                       what 오늘의 연습 고르기 holds
  *   practices      {id:'practice-set:<sessionId>', practiceSetId, practiceTimeSource:'practice-set', dailySet:{v, minutes,
  *                   items, recording}}                     ONE row per finished set: real active minutes and, per item,
- *                                                          done/skipped, seconds, hold seconds and accuracy
+ *                                                          done/skipped, seconds, hold seconds and accuracy, the
+ *                                                          wobble (sd, cent) of each held note, and `measures`
+ *                                                          ([{area, kind, value, unit, …}]) for 기본기 단계
  *   A finished goal step still writes that goal's single row 'goal:<goalId>' and a song section its own song row
  *   (app/practice-set-model.js save), so time is never counted twice and a song keeps its minutes.
  * Time: only seconds the runner was active on a step (or minutes typed for an own step); a recording's length never. */
@@ -53,7 +55,9 @@ const GROUPS=[
  *                                                              "스" length of a later version (null = not measured)
  *      'follow' pattern (semitones from 도), keys, beat, sing   the app plays the pattern, then it is your turn
  *      'hold'   offsets | count (notes from the comfortable range), hold (s), tolerance (cent), syllable
- *                                                              the app plays a note; hold it inside the tolerance */
+ *                                                              the app plays a note; hold it inside the tolerance
+ *               measure:[area…]                                the 기본기 areas its result is a measure of
+ *                                                              (app/levels-model.js fromHold; needs the mic) */
 const CATALOG=[
   {id:'loosen-neck',group:'loosen',title:'목·어깨 풀기',why:'목과 어깨 힘이 풀리면 소리가 훨씬 편하게 나와요',minutes:3,mic:false,mode:'timed',
     steps:[{text:'어깨를 귀까지 올렸다가 툭 떨어뜨려요',seconds:55},{text:'고개를 천천히 좌우로 기울여요',seconds:55},{text:'입을 크게 벌려 하품하듯 목 안을 열어요',seconds:55}]},
@@ -68,11 +72,11 @@ const CATALOG=[
   {id:'voice-liptrill5',group:'voice',title:'립트릴 5음',why:'입술을 떨며 음을 오르내리면 목에 힘이 덜 들어가요',minutes:3,mic:false,mode:'follow',
     pattern:[0,2,4,5,7,5,4,2,0],keys:[0,1,2,3,4,5,4,3,2,1,0],beat:.42,sing:8,text:'들은 다섯 음을 립트릴로 따라 해요'},
   {id:'voice-hum',group:'voice',title:'허밍 롱톤',why:'입을 다문 소리는 음을 맞추는 데만 집중하기 좋아요',minutes:3,mic:true,mode:'hold',
-    offsets:[0,2,4,2,0],hold:4,tolerance:25,syllable:'음~',text:'들린 음을 “음~”으로 4초 동안 이어요'},
+    offsets:[0,2,4,2,0],hold:4,tolerance:25,syllable:'음~',text:'들린 음을 “음~”으로 4초 동안 이어요',measure:['sustain','range']},
   {id:'voice-mum',group:'voice',title:'“멈” 롱톤',why:'“ㅁ”으로 시작하면 소리가 앞으로 모여서 편해져요',minutes:3,mic:true,mode:'hold',
-    offsets:[0,3,5],hold:6,tolerance:25,syllable:'멈~',text:'들린 음을 “멈~”으로 6초 동안 이어요'},
+    offsets:[0,3,5],hold:6,tolerance:25,syllable:'멈~',text:'들린 음을 “멈~”으로 6초 동안 이어요',measure:['sustain','range']},
   {id:'ear-follow',group:'ear',title:'음 따라 부르기',why:'듣고 바로 같은 음을 내는 힘이 음정의 바탕이에요',minutes:3,mic:true,mode:'hold',
-    count:5,hold:4,tolerance:25,syllable:'아~',text:'들린 음을 “아~”로 4초 동안 이어요'}
+    count:5,hold:4,tolerance:25,syllable:'아~',text:'들린 음을 “아~”로 4초 동안 이어요',measure:['pitch','range']}
 ];
 /** 곡: not a rotation of exercises but the automatic end of a set (곡에 적용하기, then the optional 녹음). */
 const SONG={id:'song',title:'곡',line:'오늘 연습을 곡에 적용하고, 원하면 녹음해요'};
@@ -264,22 +268,28 @@ function word(cents,tolerance=25){
 }
 const GRACE=.3;
 /** A fresh hold meter for one note. */
-const holdStart=()=>({held:0,best:0,sung:0,inside:0,gap:0,sum:0,ok:false});
+const holdStart=()=>({held:0,best:0,sung:0,inside:0,gap:0,sum:0,ok:false,run:{t:0,c:0,q:0,o:0},sd:null,octave:0});
 /**
  * Add one reading to a hold meter: dt seconds at `cents` from the target (null = silence). Inside the tolerance the
  * held time grows; a slip shorter than GRACE seconds is forgiven, a longer one starts the hold again.
  * `need` seconds in one go sets ok. accuracy = time inside the tolerance / time sung.
+ * For 기본기 단계 the meter also keeps, for the longest hold, how much the pitch moved in it (sd: the standard
+ * deviation of its readings in cent, a forgiven slip included) and the octave it was sung in (`octave`: 0 = as
+ * played, −1 = an octave under — the reading itself is folded to the nearest octave).
  */
-function holdTick(h,cents,dt,{tolerance=25,need=4}={}){
-  const voiced=cents!=null&&Number.isFinite(cents),inside=voiced&&Math.abs(cents)<=tolerance;
+function holdTick(h,cents,dt,{tolerance=25,need=4,octave=0}={}){
+  const voiced=cents!=null&&Number.isFinite(cents),inside=voiced&&Math.abs(cents)<=tolerance,run=h.run||(h.run={t:0,c:0,q:0,o:0});
   if(voiced){h.sung+=dt;h.sum+=cents*dt;}
   if(inside){h.inside+=dt;h.held+=dt;h.gap=0;}
-  else{h.gap+=dt;if(h.gap>GRACE)h.held=0;}
+  else{h.gap+=dt;if(h.gap>GRACE){h.held=0;run.t=run.c=run.q=run.o=0;}}
+  if(voiced&&(inside||h.held>0)){run.t+=dt;run.c+=cents*dt;run.q+=cents*cents*dt;run.o+=(Number(octave)||0)*dt;}
+  if(h.held>0&&h.held>=h.best&&run.t>0){const mean=run.c/run.t;h.sd=Math.sqrt(Math.max(0,run.q/run.t-mean*mean));h.octave=Math.round(run.o/run.t);}
   h.best=Math.max(h.best,h.held);
   if(h.held>=need)h.ok=true;
   return h;
 }
-const holdResult=h=>({ok:h.ok,held:round3(Math.min(h.best,600)),sung:round3(h.sung),accuracy:h.sung>0?Math.round(h.inside/h.sung*100):null,cents:h.sung>0?Math.round(h.sum/h.sung):null});
+const holdResult=h=>({ok:h.ok,held:round3(Math.min(h.best,600)),sung:round3(h.sung),accuracy:h.sung>0?Math.round(h.inside/h.sung*100):null,cents:h.sung>0?Math.round(h.sum/h.sung):null,
+  ...(h.best>0&&Number.isFinite(h.sd)?{sd:Math.round(h.sd*10)/10}:{}),...(h.best>0&&h.octave?{octave:h.octave}:{})});
 /** Where the comfortable range comes from, in this order: measured (the usual range of the recordings) → the 보이스
  * 체크 reference notes → the answer given once in a set. null: ask. Each: {low, high} (MIDI). */
 function comfort({measured=null,voiceCheck=null,asked=null}={}){
@@ -315,6 +325,9 @@ const noteName=n=>NOTE_NAMES[((n%12)+12)%12]+(Math.floor(n/12)-1);
 const rowId=s=>'practice-set:'+s.id;
 /** A step that keeps its own practice row (a finished goal, a song section): app/practice-set-model.js writes it. */
 const ownRow=(st,done)=>!!(st.goalId&&done)||(['song','record'].includes(st.kind)&&!!st.songId);
+/** What a step measured for 기본기 단계 (app/levels-model.js), as the run row keeps it: [{area, kind?, value, unit, …}].
+ * Generic on purpose: an exercise added later only has to put its measures in its result. */
+const measuresOf=r=>list(r?.measures).filter(m=>m&&typeof m==='object'&&typeof m.area==='string'&&Number.isFinite(m.value)).slice(0,12).map(m=>({...m}));
 /** One item of the run row. */
 function itemOf(st,minutes){
   const r=st.result||{};
@@ -323,7 +336,7 @@ function itemOf(st,minutes){
     title:st.title,state:st.skipped?'skipped':st.done?'done':'left',seconds:Math.round(Number(st.elapsed)||0),minutes,
     ...(r.mode?{mode:r.mode}:{}),...(r.timer?{timer:true}:{}),...(r.parts!=null?{parts:r.parts}:{}),...(r.holdSeconds!=null?{holdSeconds:r.holdSeconds}:{}),
     ...(r.accuracy!=null?{accuracy:r.accuracy}:{}),...(Array.isArray(r.notes)?{notes:r.notes}:{}),...(r.rounds!=null?{rounds:r.rounds}:{}),
-    ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(st.mic?{mic:true}:{}),...(st.apply?{apply:true}:{})};
+    ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(measuresOf(r).length?{measures:measuresOf(r)}:{}),...(st.mic?{mic:true}:{}),...(st.apply?{apply:true}:{})};
 }
 /** Summary lines of a session: every step with its state and seconds (minutes rounded, as typed fields start). */
 function summary(s){
@@ -375,5 +388,5 @@ return {GROUPS,SONG,CATALOG,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_I
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
   ownKey,nextItems,ownSteps,build,isOwn,totalMinutes,modeOf,labelOf,shortTitle,timeline,progress,finishItem,stop,
   word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteName,
-  rowId,summary,save,runsOn};
+  rowId,measuresOf,summary,save,runsOn};
 });

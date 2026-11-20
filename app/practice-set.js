@@ -526,18 +526,23 @@ function bindSummary(host){
   host.querySelector('[data-save]').onclick=()=>{
     const error=host.querySelector('[data-pset-error]'),button=host.querySelector('[data-save]');error.textContent='';
     const rows=read(),category=(db,st)=>V.guidedCategory?V.guidedCategory(db,{title:st.detail||st.title}):null;
-    let result=null;
+    // 단계 (app/levels.js): with the set saved, the steps its measures earned and the level its points reached are kept
+    // in the same change; what is new is told once, on the screen after saving.
+    let result=null,news=null;const levelBefore=V.levels?.beforeSave?.()||0;
     try{
       if(rows.some(r=>!(Number.isFinite(r.minutes)&&r.minutes>=0&&r.minutes<=600)))throw Error('연습 시간은 0~600분으로 적어 주세요.');
       D.save(structuredClone(V.db),session,rows,{category});
       button.disabled=true;
-      if(!V.change(db=>{result=D.save(db,session,rows,{category});},{silent:true}))throw Error('기록을 저장하지 못했어요. 입력은 그대로 있어요. 다시 시도해 주세요.');
+      if(!V.change(db=>{
+        result=D.save(db,session,rows,{category});
+        try{news=V.levels?.afterSave?.(db,levelBefore)||null;}catch(e){console.error(e);news=null;}
+      },{silent:true}))throw Error('기록을 저장하지 못했어요. 입력은 그대로 있어요. 다시 시도해 주세요.');
     }catch(e){error.textContent=e.message;button.disabled=false;return;}
     // Today against the target: the shared popup when it is loaded, else one line with a thin bar on the done screen.
     const date=session.date,items=D.summary(session),minutes=Math.round(result.minutes);let popup=false;
     const run=result.runId?(V.db.practices||[]).find(p=>p.id===result.runId):null,rec=run?.dailySet?.recording;
     if(date===V.today()&&typeof V.todayPracticePopup==='function'){try{V.todayPracticePopup({addedMinutes:minutes,title:'오늘의 연습'});popup=true;}catch(e){console.error(e);}}
-    saved={...result,minutes,date,today:popup?null:todayOf(date),did:items.filter(x=>x.state==='done').length,count:items.length,
+    saved={...result,minutes,date,news,today:popup?null:todayOf(date),did:items.filter(x=>x.state==='done').length,count:items.length,
       pair:rec&&rec.songId&&rec.beforeId&&rec.afterId&&V.song(rec.songId)?{songId:rec.songId,a:rec.beforeId,b:rec.afterId}:null};
     session=null;persist();syncAwake();paint();changed();
     if(!popup)V.toast(minutes?'연습 '+minutes+'분을 기록했어요.':'오늘의 연습을 저장했어요.');
@@ -552,7 +557,7 @@ function doneHtml(){
   const pair=saved.pair?'<div class="pset-pair" data-pset-pair><button type="button" class="btn secondary block" data-listen-open data-song="'+esc(saved.pair.songId)+'" data-a="'+esc(saved.pair.a)+'" data-b="'+esc(saved.pair.b)+'"><i class="ph ph-headphones" aria-hidden="true"></i>가리고 듣기 · 연습 전후 비교</button>'+
     '<p class="pset-note">어느 쪽이 연습 전인지 가려 놓고 들어 봐요.</p></div>':'';
   return '<section class="pset pset-done" aria-labelledby="pset-done-title"><span class="pset-done-mark" aria-hidden="true"><i class="ph ph-check"></i></span>'+
-    '<h2 id="pset-done-title">오늘 연습을 기록했어요</h2><p class="pset-help">연습 '+saved.minutes+'분'+(saved.count?' · '+saved.count+'개 중 '+saved.did+'개':'')+(saved.goals?' · 목표 '+saved.goals+'개 체크':'')+'</p>'+today+pair+
+    '<h2 id="pset-done-title">오늘 연습을 기록했어요</h2><p class="pset-help">연습 '+saved.minutes+'분'+(saved.count?' · '+saved.count+'개 중 '+saved.did+'개':'')+(saved.goals?' · 목표 '+saved.goals+'개 체크':'')+'</p>'+(V.levels?.newsHtml?.(saved.news)||'')+today+pair+
     '<a class="btn block" href="#/home">홈으로</a><a class="btn secondary block" href="#/practices">연습 기록 보기</a></section>';
 }
 
