@@ -1934,6 +1934,40 @@ test('Settings shows one 파일 상태 line from this device and opens 처리 �
   await expect(page.locator('[data-processing-log]')).toContainText('fixture.m4a');
 });
 
+// Named with 'Settings' so ui-checks.yml (--grep 'Settings') runs it; the shared empty box is checked on the 설정 page.
+test('Settings shell: v5 empty state is a white R20 box without a dashed border and a 20px grey icon', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const box = document.createElement('div');
+    box.className = 'empty';
+    box.innerHTML = '<i class="ph ph-music-notes"></i><span>아직 없어요</span>';
+    document.getElementById('view').append(box);
+    const b = getComputedStyle(box), i = getComputedStyle(box.querySelector('i'));
+    const out = {border:b.borderTopStyle, radius:b.borderTopLeftRadius, bg:b.backgroundColor, icon:i.fontSize, iconColor:i.color};
+    box.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({border:'none', radius:'20px', bg:'rgb(255, 255, 255)', icon:'20px', iconColor:'rgb(152, 162, 179)'});
+});
+
+// Named with 'Settings' so ui-checks.yml runs it. The shared button is 52px/R16/600; a small button keeps a 44px target.
+test('Settings shell: v5 shared buttons are 52px R16 weight 600 and small buttons keep a 44px target', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<button type="button" class="btn">저장</button><button type="button" class="btn secondary">취소</button><button type="button" class="btn sm secondary">일정 추가</button>';
+    document.getElementById('view').append(wrap);
+    const [p, sec, sm] = [...wrap.children].map(b => { const c = getComputedStyle(b); return {h:Math.round(b.getBoundingClientRect().height), r:c.borderTopLeftRadius, w:c.fontWeight}; });
+    wrap.remove();
+    return {p, sec, sm};
+  });
+  expect(s, JSON.stringify(s)).toEqual({p:{h:52, r:'16px', w:'600'}, sec:{h:52, r:'16px', w:'600'}, sm:{h:44, r:'12px', w:'600'}});
+});
+
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
   const seed = legacy();
   seed.performances = [{id:'show1',ownerId:'ui-test-user',title:'첫 무대',start:'2025-07-24',status:'completed',sessions:[]}];
