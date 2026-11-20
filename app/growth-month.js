@@ -144,7 +144,7 @@ function actionHtml(it, i) {
     case 'practice-tip': return link('#/guided-practice/' + encodeURIComponent('analysis:' + a.tipKey), '따라 하기');
     case 'route': return link(a.href, '열기');
     case 'goal': case 'routine': return link('#/home', '오늘 목표에서 하기');
-    case 'plan': return link('#/practice-set', '연습 세트로');
+    case 'plan': return link('#/practice-set', '오늘의 연습으로');
     case 'ai-draft': {
       const ref = a.ref?.kind;
       if (ref === 'overall-ai') return link('#/growth-flow?period=all', 'AI 코치 보기');

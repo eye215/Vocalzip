@@ -1,4 +1,4 @@
-// 성장 개편 안 B, phase 4 — the things you DO moved from 성장 to 오늘: ONE 연습하기 section on home (오늘 연습 세트 · 매일
+// 성장 개편 안 B, phase 4 — the things you DO moved from 성장 to 오늘: ONE 연습하기 section on home (오늘의 연습 card · 매일
 // 보이스 체크 · 노래 연습실 · 보컬 트레이닝, each with its state), their screens belong to the 오늘 tab (오늘 lit, 뒤로
 // returns there), the former 보컬 트레이닝 addresses land on that section, and each thing has one name ("다음 연습",
 // "녹음 분석", "곡 분석"). 연구소 itself (rows, states, sub-pages) is in tests/growth-tabs.spec.cjs; 발성 정밀 측정's row in
@@ -62,13 +62,14 @@ const overflow = page => page.evaluate(() => {
 test.use({viewport:{width:390, height:844}});
 test.afterEach(async ({page}) => expect(page.__errors || []).toEqual([]));
 
-test('오늘 › 연습하기: one compact section with the four things you do, each with its state, and no second card for any of them', async ({page}) => {
+test('오늘 › 연습하기: one section with the four things you do — the 오늘의 연습 card, then a row each with its state — and nothing twice', async ({page}) => {
   await boot(page);
   await expect(section(page).locator('h2')).toHaveText('연습하기');
   expect(await section(page).locator('[data-row]').evaluateAll(els => els.map(e => e.dataset.row))).toEqual(['practice-set', 'voice-check', 'practice-room', 'training']);
-  await expect(section(page).locator('[data-row] strong')).toHaveText(['오늘 연습 세트', '매일 보이스 체크', '노래 연습실', '보컬 트레이닝']);
+  await expect(section(page).locator('[data-row] strong')).toHaveText(['오늘의 연습', '매일 보이스 체크', '노래 연습실', '보컬 트레이닝']);
+  // 오늘의 연습 is a card now (timeline · progress · one button: tests/daily-set.spec.cjs); the others are rows.
   // States are what is kept: three checks on the last three days (none today), two 연습실 submissions (none today).
-  await expect(row(page, 'practice-set').locator('small')).toHaveText(/^\d+단계 · 약 \d+분$/);
+  await expect(row(page, 'practice-set').locator('small')).toHaveText(/^\d+개 · 약 \d+분$/);
   await expect(row(page, 'voice-check').locator('small')).toHaveText('오늘 아직 · 30초 · 연속 3일');
   await expect(row(page, 'practice-room').locator('small')).toHaveText('오늘 아직 · 모두 2개 제출');
   await expect(row(page, 'training').locator('small')).toHaveText('오늘 아직 · 따라 하는 발성 연습');
@@ -78,7 +79,9 @@ test('오늘 › 연습하기: one compact section with the four things you do, 
   for (const b of await section(page).locator('[data-row]').evaluateAll(els => els.map(e => { const r = e.getBoundingClientRect(); return {h:r.height, l:r.left, r:r.right, icon:e.querySelector('.vz-ui-icon').textContent.length}; }))) {
     expect(b.h).toBeGreaterThanOrEqual(44); expect(b.l).toBeGreaterThanOrEqual(0); expect(b.r).toBeLessThanOrEqual(390); expect(b.icon).toBe(1);
   }
-  expect((await section(page).boundingBox()).height).toBeLessThanOrEqual(260);
+  // Three rows of 48px under the card; the card itself is a line per step and its button.
+  const cardBox = await row(page, 'practice-set').boundingBox();
+  expect((await section(page).boundingBox()).height - cardBox.height).toBeLessThanOrEqual(210);
   expect(await overflow(page)).toEqual({wide:false, over:0});
   // Under 지금 할 것, above 오늘의 목표.
   const y = await page.evaluate(() => { const r = document.querySelector('.vz-student-home').shadowRoot, t = s => r.querySelector(s).getBoundingClientRect(); return {now:t('.vz-event').bottom, top:t('[data-home-practice]').top, bottom:t('[data-home-practice]').bottom, goals:t('.vz-goals').top}; });
@@ -86,8 +89,8 @@ test('오늘 › 연습하기: one compact section with the four things you do, 
   // Nothing is shown twice: the single 연습 세트 row and the separate 보이스 체크 card are gone; each name appears once on home.
   await expect(page.locator('.vz-student-home .vz-pset-entry')).toHaveCount(0);
   await expect(page.locator('.vz-student-home [data-voice-check-card]')).toHaveCount(0);
-  const names = await page.evaluate(() => { const text = document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText; return ['연습 세트', '보이스 체크', '노래 연습실', '보컬 트레이닝'].map(n => text.split(n).length - 1); });
-  expect(names).toEqual([1, 1, 1, 1]);
+  const names = await page.evaluate(() => { const text = document.querySelector('.vz-student-home').shadowRoot.querySelector('main').innerText; return ['오늘의 연습', '연습 세트', '보이스 체크', '노래 연습실', '보컬 트레이닝'].map(n => text.split(n).length - 1); });
+  expect(names).toEqual([1, 0, 1, 1, 1]);
   // The existing 따라 하기 suggestion and the AI buttons stay where they were, in 오늘의 목표 (not copied into the section).
   await expect(page.locator('.vz-student-home .vz-goals .vz-guided-item')).toHaveCount(1);
   await expect(page.locator('.vz-student-home .vz-goals .vz-ai-plan-actions>button')).toHaveCount(2);
@@ -107,10 +110,10 @@ test('오늘 › 연습하기: one compact section with the four things you do, 
 test('the practice screens belong to 오늘: opened from 연습하기 the 오늘 tab stays lit and 뒤로 returns to 오늘', async ({page}) => {
   await boot(page);
   const back = async () => { await page.locator('[data-back]').click(); await expect(page).toHaveURL(/#\/home$/); await expect(section(page)).toBeVisible(); };
-  // 오늘 연습 세트
-  await row(page, 'practice-set').click();
+  // 오늘의 연습: its list (the address 오늘 연습 세트 had). The card's button goes straight to the doing screen instead.
+  await to(page, '#/practice-set');
   await expect(page).toHaveURL(/#\/practice-set$/);
-  await expect(page.locator('#top h1')).toHaveText('오늘 연습 세트');
+  await expect(page.locator('#top h1')).toHaveText('오늘의 연습');
   await homeLit(page);
   await back();
   // 매일 보이스 체크, not done today: straight into the 30-second check; its intro leads to the earlier results.

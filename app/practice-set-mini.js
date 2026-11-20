@@ -1,4 +1,5 @@
-/* 오늘 연습 세트 — the small timer on other screens. While today's set is in its steps (running or paused) and the
+/* 오늘의 연습 — the small timer on other screens. While one of the person's own steps of today's set is in hand
+ * (running or paused; a built-in exercise is never timed away from its screen) and the
  * singer is anywhere but #/practice-set, a pill above the bottom nav shows step i/N, the step's short name and the same
  * countdown as the set screen, with a pause/resume button; tapping the pill goes back to the set.
  * State and the clock live in app/practice-set.js (V.practiceSetClock); this file only draws. Placement, hiding under
@@ -12,9 +13,9 @@ let el=null,shown='';
 function build(){
   el=document.createElement('div');
   el.className='pset-mini';el.hidden=true;el.dataset.psetMini='';
-  el.setAttribute('role','group');el.setAttribute('aria-label','연습 세트 타이머');
+  el.setAttribute('role','group');el.setAttribute('aria-label','오늘의 연습 타이머');
   el.innerHTML='<a class="pset-mini-body" href="#/practice-set" data-open><i class="pset-mini-icon ph ph-timer" data-icon aria-hidden="true"></i><span class="pset-mini-step" data-step></span><span class="pset-mini-name" data-name></span>'+
-    '<strong class="pset-mini-time" data-time></strong><span class="pset-mini-sr"> 연습 세트로 돌아가기</span></a>'+
+    '<strong class="pset-mini-time" data-time></strong><span class="pset-mini-sr"> 오늘의 연습으로 돌아가기</span></a>'+
     '<button type="button" class="pset-mini-toggle" data-toggle><i class="ph-fill ph-pause" aria-hidden="true"></i></button>';
   el.querySelector('[data-toggle]').addEventListener('click',()=>{C.toggle();paint();});
   document.body.append(el);
@@ -35,7 +36,7 @@ function paint(){
     text(el.querySelector('[data-name]'),s.away?'오래 자리를 비웠어요':s.title);
     const toggle=el.querySelector('[data-toggle]');
     toggle.hidden=s.away;
-    toggle.setAttribute('aria-label',s.running?'연습 세트 일시정지':'연습 세트 계속');
+    toggle.setAttribute('aria-label',s.running?'오늘의 연습 일시정지':'오늘의 연습 계속');
     toggle.firstElementChild.className='ph-fill ph-'+(s.running?'pause':'play');
     el.querySelector('[data-icon]').className='pset-mini-icon ph ph-'+(s.running?'timer':s.away?'clock-countdown':'pause');
   }
