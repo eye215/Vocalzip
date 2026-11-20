@@ -295,7 +295,8 @@ async function autoUploadMedia(id){if(!user||!ready)return;if(window.VZ?.media?.
 // other fields keep what other devices saved. Edits already written to the cloud (cloudDone) are skipped,
 // and an event that does not say what changed sends nothing.
 const mediaNamePatch=(meta,changes)=>window.VzipMediaNaming?.patch(meta,changes,id=>localData()?.songs?.find(song=>song.id===id)?.title)||changes;
-const EDITABLE=['name','nameMode','autoName','normalizeTitle','song','songId','created','recordedDate','dateSource','type','rating','review','recordingCategory'];
+// 녹음 유형 is two stored fields: recordingCategory (the chosen type) and occasion (레슨 / 연습 / 공연). Both travel.
+const EDITABLE=['name','nameMode','autoName','normalizeTitle','song','songId','created','recordedDate','dateSource','type','rating','review','recordingCategory','occasion'];
 window.addEventListener('vzip:media-updated',async e=>{const d=e.detail||{};if(!user||!d.id||d.cloudDone)return;try{const item=(await localMedia()).find(x=>x.id===d.id);if(!item)return;if(!d.changes)return;/* unknown change: never re-send the device copy's older fields */const keys=Object.keys(d.changes).filter(k=>EDITABLE.includes(k));if(!keys.length)return;const pick=Object.fromEntries(keys.map(k=>[k,d.changes[k]]));await patchMedia(item.id,meta=>({...meta,...mediaNamePatch(meta,pick)}),user.id,{requireBase:true,intent:{kind:'device',changes:pick}})}catch(err){say('기기에서 수정 완료 · 클라우드 정보 반영 실패: '+err.message)}});
 window.addEventListener('vzip:media-saved',e=>{if(e.detail?.id)autoUploadMedia(e.detail.id)});
 
@@ -374,7 +375,8 @@ async function importMedia(file,info={},onProgress,options={}){
    created:info.created||file.lastModified||Date.now(),dateTag:info.dateTag||'',recordedDate:info.recordedDate||'',dateSource:info.dateSource||'file-modified',originalMedia:info.originalMedia||null,audioExtraction:info.audioExtraction||null,type,durationSeconds:Number(info.durationSeconds)||0,
    source:info.source||'import',size:file.size,
    // Import facts from the import hub (source, original name, fingerprint) stay with the file.
-   ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]]))};
+   // So does the 녹음 유형 the user chose before the file reached the cloud (recordingCategory) and its 공연 mark (occasion).
+   ...Object.fromEntries(['sourceType','originalFilename','fileHash','importedAt','recordedAtSource','occasion','recordingCategory'].filter(k=>info[k]!=null&&info[k]!=='').map(k=>[k,info[k]]))};
   const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
   // R2 (when the owner has set it up, r2-config.js) replaces the Supabase upload; the record stays in vocal_media.
   if(r2Ready||window.VzipR2?.hasPendingTransfer?.(id)){

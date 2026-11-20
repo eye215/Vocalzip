@@ -482,8 +482,10 @@ M.backupLocal = async () => {
         const type = blob.type || typeOf(item);
         const file = new File([blob], M.label(item) + '.' + extOf(type), {type, lastModified:item.created || Date.now()});
         const meta = await window.vzipCloudImport(file, {...info, id:item.id, name:M.label(item), type, source:item.source || 'practice'});
-        // Fields the importer does not carry (rating, review, waveform) follow in one update.
-        const extra = {}; for (const k of ['rating', 'review', 'waveform', 'importedAt', 'occasion']) if (item[k] != null) extra[k] = item[k];
+        // Fields the importer does not carry (rating, review, waveform) follow in one update. So do the 녹음 유형 fields
+        // (occasion, recordingCategory): the importer carries them on a new row, but when the row was already there
+        // (an upload that was committed and then lost its answer) only this update brings the type chosen on this device.
+        const extra = {}; for (const k of ['rating', 'review', 'waveform', 'importedAt', 'occasion', 'recordingCategory']) if (item[k] != null) extra[k] = item[k];
         if (Object.keys(extra).length) await window.vzipCloudMediaUpdate({...meta, id:item.id}, extra);
         backup.done++;
         const first = firstUp.indexOf(item.id); if (first >= 0) firstUp.splice(first, 1);
