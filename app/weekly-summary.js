@@ -106,7 +106,7 @@ function lessonsCard(s){
 function optionalCards(s){
  let out='';
  if(s.voiceCheck){const v=s.voiceCheck;out+=card('voice-check','매일 보이스 체크','<ul class="ws-rows">'+row('체크한 날',v.days+'일 · '+v.count+'번')+v.lines.map(t=>'<li><span class="ws-row-title">'+e(t)+'</span></li>').join('')+'</ul>');}
- if(s.practiceSet){const p=s.practiceSet;out+=card('practice-set','오늘 연습 세트','<ul class="ws-rows">'+row('완료한 세트',p.sessions+'세트 · '+p.days+'일')+(p.minutes?row('세트 연습 시간',W.minutesLabel(p.minutes)):'')+'</ul><p class="ws-note">위 연습 시간에 이미 포함돼 있어요.</p>');}
+ if(s.practiceSet){const p=s.practiceSet;out+=card('practice-set','오늘의 연습','<ul class="ws-rows">'+row('완료한 세트',p.sessions+'세트 · '+p.days+'일')+(p.minutes?row('세트 연습 시간',W.minutesLabel(p.minutes)):'')+'</ul><p class="ws-note">위 연습 시간에 이미 포함돼 있어요.</p>');}
  return out;
 }
 function page(s){

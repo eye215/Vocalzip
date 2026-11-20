@@ -154,7 +154,7 @@ function saveTemplate(db,slot,steps,base){
 
 /* Session: a plain object kept by the page (and in this device's storage while it runs). */
 function start(steps,{id,date,now=Date.now()}={}){
-  if(!id||!isDate(date))throw Error('연습 세트를 시작할 수 없어요.');
+  if(!id||!isDate(date))throw Error('오늘의 연습을 시작할 수 없어요.');
   const items=finish(steps||[]);
   if(!items.length)throw Error('연습할 항목을 하나 이상 남겨 주세요.');
   return {v:2,id:String(id),date,startedAt:now,index:0,running:false,lastAt:0,phase:'run',savedAt:0,
@@ -230,7 +230,7 @@ const rowId=(s,st)=>'practice-set:'+s.id+':'+st.id;
  * options.category(db,step) → {categoryId,categoryLabel,detail} for training steps (the app passes VZ.guidedCategory).
  * Returns {minutes,goals,rows}. */
 function save(db,s,rows,{now=Date.now(),category=null}={}){
-  if(!s||!Array.isArray(s.steps))throw Error('연습 세트를 찾지 못했어요.');
+  if(!s||!Array.isArray(s.steps))throw Error('오늘의 연습을 찾지 못했어요.');
   const edits=new Map(list(rows).map(r=>[r.id,r]));
   for(const r of edits.values()){const n=Number(r.minutes);if(!(Number.isFinite(n)&&n>=0&&n<=MAX_MINUTES))throw Error('연습 시간은 0~600분으로 적어 주세요.');}
   db.practices||=[];db.dailyGoals||=[];
@@ -259,7 +259,7 @@ function save(db,s,rows,{now=Date.now(),category=null}={}){
     const training=!st.songId,cat=training?(st.categoryId&&list(db.categories).some(c=>c.id===st.categoryId)?
       {categoryId:st.categoryId,categoryLabel:st.categoryLabel||'',detail:st.detail||st.title}:category?.(db,st)||{categoryLabel:st.categoryLabel||'보컬 트레이닝',detail:st.detail||st.title}):{};
     const row={...plain,id:plainId,date:s.date,minutes,manualMinutes:minutes,practiceTimeSource:'practice-set',practiceMode:training?'training':'song',
-      songId:st.songId||'',...cat,technique:minutes>0?[{name:st.title,minutes}]:[],memo:'[오늘 연습 세트] '+st.title,mediaIds:st.mediaIds.slice(),
+      songId:st.songId||'',...cat,technique:minutes>0?[{name:st.title,minutes}]:[],memo:'[오늘의 연습] '+st.title,mediaIds:st.mediaIds.slice(),
       completed:[],assignmentReps:{},assignmentNotes:plain?.assignmentNotes||{},practiceSetId:s.id,practiceSetStep:st.id,
       ...(st.segmentStart!=null?{segmentStart:st.segmentStart,segmentEnd:st.segmentEnd}:{}),created:plain?.created||now};
     if(plainAt<0)db.practices.push(row);else db.practices[plainAt]=row;

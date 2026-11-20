@@ -31,6 +31,8 @@ test('the snapshot of every 결과 리포트 number is byte-for-byte what it was
   // `numbers` below is the file without the 곡 tab entries, without those three sections and without the label strings
   // listed here (old and new spelling alike): its hash is the one the file had BEFORE phase 4 (worked out from the file
   // at 8664d0c4, where the whole-file hash was 5f3a7388…) — so every other value is byte-for-byte what it was.
+  // 오늘의 연습 (2026-11-20) retook ONLY practiceNumbers.practiceSet: the 연습 세트 line became the day's set ("5개 · 약 22분":
+  // the built-in groups plus what the person set up); `numbers` leaves that section out, so its hash did not move.
   const file = fs.readFileSync(path.join(__dirname, 'growth-characterization.snapshot.json'));
   const SONG_TAB = ['analysisTab', 'analysisRows'], PHASE4_SECTIONS = ['trainingTab', 'labStates', 'practiceNumbers'];
   const PHASE4_LABELS = new Set(['다음에 연습할 것', '추천 연습', '추천·계획', '다음 연습',
@@ -44,9 +46,9 @@ test('the snapshot of every 결과 리포트 number is byte-for-byte what it was
   // 보이스 체크 records, the practice set line and the 트레이닝 recordings (newest first) — the same in both time zones.
   for (const zone of Object.keys(parsed)) assert.deepEqual(parsed[zone].practiceNumbers, {
     tips:[['음정 안정성 (롱톤) 연습', '지속음 흔들림 ±11 cent · 최근 8개 중간값 · 권장 8분'], ['음정 정확도 연습', '음정 오차 ±14.5 cent · 최근 8개 중간값 · 권장 10분']],
-    roomSubmissions:1, voiceChecks:3, practiceSet:'3단계 · 약 18분', trainingTakes:['vc3', 'vc2', 'vc1', 't1', 'et', 'ex', 't2']});
+    roomSubmissions:1, voiceChecks:3, practiceSet:'5개 · 약 22분', trainingTakes:['vc3', 'vc2', 'vc1', 't1', 'et', 'ex', 't2']});
   for (const zone of Object.keys(parsed)) assert.equal(JSON.stringify(parsed[zone]).includes('보컬 연구소'), false);
-  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '1d8baf3d28e7aa35eb5857b8142c2953f28c276f1bc5cf93bde1513cb2366bc4');
+  assert.equal(crypto.createHash('sha256').update(file).digest('hex'), '285a0c177ad8f1ce215ec240c1596da7a0e03d7e05a6699ca88e0a7744f735ff');
 });
 
 test('"늘었나" take filter: switch off = 결과 리포트 rule verdict; on = 연습실 · 트레이닝 연습 takes too', () => {

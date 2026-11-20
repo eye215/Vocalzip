@@ -1,6 +1,6 @@
 /* Approved student home: thin adapter over existing VZ records/actions.
  * No auth, upload, analysis, billing or server-policy changes. */
-import {createFloatingHome} from './student-home-html.js?v=gb4-20261119';
+import {createFloatingHome} from './student-home-html.js?v=set-20261119';
 const V=window.VZ,M=window.VzipStudentHomeModel;
 if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  const esc=V.esc,nav=hash=>V.nav(hash),today=()=>V.today();
@@ -26,7 +26,7 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
  function applyTheme(){
   const home=!!document.querySelector('[data-approved-home-host]');
   document.body.classList.toggle('vz-home-mode',home);
-   if(meta)meta.content=home?'#f8f6fd':document.body.classList.contains('vz-record-mode')?'#0b0911':originalTheme;
+   if(meta)meta.content=home?'#f8f6fd':document.body.classList.contains('vz-record-mode')||document.body.classList.contains('vz-set-run')?'#0b0911':originalTheme;
   const route=(location.hash.startsWith('#/')?location.hash.slice(2):location.hash.slice(1)).split('/')[0].split('?')[0];
   if(route==='library'||route==='practices'||route==='growth'){
    document.querySelectorAll('.v-nav [aria-current]').forEach(a=>a.removeAttribute('aria-current'));
@@ -71,14 +71,15 @@ if(V&&M&&window.VZIP_APPROVED_HOME_ENABLED!==false){
   if(s.recent?.song?.id)ids.unshift(s.recent.song.id);
   return [...new Set(ids)].filter(id=>V.song(id)).slice(0,3).map(id=>({id,title:V.song(id).title}));
  }
- /* 연습하기 (성장 개편 안 B, phase 4): the things you do, one row each with its state. 오늘 연습 세트 and 매일 보이스
-  * 체크 were their own row and card on home before; 노래 연습실 and 보컬 트레이닝 came over from 성장. Read-only. */
+ /* 연습하기 (성장 개편 안 B, phase 4): the things you do. First the 오늘의 연습 card (it was the 오늘 연습 세트 row), then
+  * one row each with its state: 매일 보이스 체크 · 노래 연습실 · 보컬 트레이닝. Read-only. */
  const roomRows=()=>(V.db.practices||[]).filter(p=>p?.practiceRoom&&!p.practiceRoom.demo&&!(V.db.deleted?.practices||[]).includes(p.id));
  const guidedToday=()=>(V.db.practices||[]).filter(p=>p?.guidedExerciseKey&&p.date===today()&&!(V.db.deleted?.practices||[]).includes(p.id)).length;
  function practiceRows(){
   const rows=[],set=V.practiceSetEntry?.(),check=V.voiceCheck?.status?.();
-  if(set)rows.push({key:'practice-set',icon:'\ue3d0',title:'오늘 연습 세트',tone:set.state==='new'?'':'live',label:set.label,
-   state:set.state==='new'?set.line:set.state==='live'?'이어서 하기 · '+set.line:'기록 저장하기 · '+set.line,action:()=>nav('#/practice-set')});
+  // 오늘의 연습: a card (timeline · progress · one button), not a row. Its button starts or carries on today's set.
+  if(set)rows.push({key:'practice-set',card:true,title:set.title,state:set.state,line:set.line,label:set.label,items:set.items,button:set.button,
+   action:()=>{if(V.dailySet?.go)V.dailySet.go();else nav('#/practice-set');},onPick:()=>V.dailySet?.pick?.()});
   // Not done yet: straight into the 30-second check, as the home card did. Done: the page with today's result and the last 30 days.
   if(check)rows.push({key:'voice-check',icon:'\ue802',title:'매일 보이스 체크',state:check.line,tone:check.done?'done':'',
    label:'매일 보이스 체크, '+check.line+(check.done?', 결과 보기':', 30초 체크 시작하기'),action:()=>V.voiceCheck.status().done?nav('#/voice-check'):V.voiceCheck.open()});

@@ -1,6 +1,7 @@
-// 오늘 연습 세트: home entry → editable set → timed steps on a fake clock → summary → records and goals;
-// the wall-clock timer (other apps, reload, long gaps) and the small timer on other screens.
-// Fixture-only: no live Supabase, media or account writes.
+// 오늘의 연습 — the part that was 오늘 연습 세트 and still works: the set list (#/practice-set) with the person's own steps
+// edited as before under today's built-in ones, own steps timed on the wall clock (other apps, reload, long gaps), the
+// summary → records and goals, and the small timer on other screens. The built-in exercises, 고르기, the home card and
+// the 30-second takes are in tests/daily-set.spec.cjs. Fixture-only: no live Supabase, media or account writes.
 const {test, expect} = require('@playwright/test');
 require('./legacy-session-mode.cjs')(test,{approvedHome:true});
 const KEY = 'vocal-zip_mvp_v1';
@@ -80,9 +81,28 @@ async function ready(page) {
   await expect(page.locator('.vz-student-home')).toBeVisible();
 }
 const db = page => page.evaluate(() => JSON.parse(JSON.stringify(VZ.db)));
-// The 오늘 연습 세트 row of 오늘 › 연습하기 (one row of the section since 성장 개편 안 B phase 4; it was a row of its own).
+// The 오늘의 연습 card of 오늘 › 연습하기 (it was the 오늘 연습 세트 row) and its one button.
 const entry = page => page.locator('.vz-student-home [data-home-practice] [data-row="practice-set"]');
+const goButton = page => entry(page).locator('[data-set-go]');
+const goText = page => goButton(page).locator('span'); // the words, without the icon glyph
 const rows = page => page.locator('.pset-plan .pset-row');
+// WebKit reloads on goto() to the URL it is already on: addresses change in the page.
+const to = (page, hash) => page.evaluate(h => {location.hash = h;}, hash);
+/** The set list before starting (the old 연습 세트 address). */
+async function openList(page) {await to(page, '#/practice-set');await expect(page.locator('.pset-plan')).toBeVisible();}
+const run = page => page.locator('[data-pset-run]');
+const primary = page => run(page).locator('[data-run-primary]');
+/** 고르기 with one exercise per group, so the built-in steps are the same on any date. */
+const PINNED = {id:'daily-set-prefs',kind:'daily-set-prefs',v:1,off:{'loosen-liptrill':true,'loosen-hum':true,'breath-pulse':true,'voice-liptrill5':true,'voice-mum':true},groupsOff:{},replace:{}};
+/** Only the person's own steps: every built-in group resting and a saved 기본 세트 that keeps the song and its recording —
+ * 숙제 goal, warm-up, personal goal, song section, recording (five steps, as 오늘 연습 세트 had). */
+const ownSeed = () => {
+  const value = seed();
+  value.practicePlans.push({id:'daily-set-prefs',kind:'daily-set-prefs',v:1,off:{},groupsOff:{loosen:true,breath:true,voice:true,ear:true},replace:{}},
+    {id:'practice-set-template:default',kind:'practice-set-template',slot:'default',order:['warmup','goal','song','record'],removed:[],minutes:{},added:[]});
+  return value;
+};
+const pinnedSeed = () => {const value = seed();value.practicePlans.push(PINNED);return value;};
 async function noOverflow(page) {
   expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth,document.body.scrollWidth) - innerWidth)).toBeLessThanOrEqual(1);
 }
@@ -109,150 +129,176 @@ async function away(page, seconds) {
 }
 test.afterEach(async({page}) => expect(page.__errors || []).toEqual([]));
 
-test('one tap from home opens today\'s set; edit, run steps on a clock, save records and goals', async({page}) => {
+test('the set list keeps the person\'s own steps under today\'s built-in ones; edit them, run on the clock, save records and goals', async({page}) => {
+  test.setTimeout(60000);
   await page.setViewportSize({width:390,height:844});
-  await boot(page);
+  await boot(page, pinnedSeed());
   const before = await db(page);
   await expect(entry(page)).toBeVisible();
-  await expect(entry(page)).toContainText('오늘 연습 세트');await expect(entry(page)).toHaveAccessibleName(/^오늘 연습 시작/);
-  await expect(entry(page)).toContainText('5단계');
-  expect((await entry(page).boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await expect(entry(page)).toContainText('오늘의 연습');await expect(entry(page)).toContainText('6개');
   // Reading home writes nothing.
   expect((await db(page)).practicePlans).toEqual(before.practicePlans);
-  await entry(page).click();
-  await expect(page).toHaveURL(/#\/practice-set$/);
-  await expect(rows(page)).toHaveCount(5);
-  await expect(rows(page).locator('strong')).toHaveText(['립트릴','호흡을 길게 유지하기','후렴 연결 연습하기','This Is the Moment','This Is the Moment']);
-  await expect(rows(page).locator('small')).toHaveText(['웜업','숙제','개인','곡 구간','녹음 · 선택']);
+  await openList(page);
+  await expect(page.locator('#top h1')).toHaveText('오늘의 연습');
+  await expect(rows(page)).toHaveCount(6);
+  await expect(rows(page).locator('strong')).toHaveText(['호흡을 길게 유지하기','목·어깨 풀기','“스~” 길게 내쉬기','허밍 롱톤','음 따라 부르기','후렴 연결 연습하기']);
+  await expect(rows(page).locator('small')).toHaveText(['숙제','목 풀기','호흡','발성','음감','개인']);
+  // Built-in steps are fixed here (고르기 decides them): minutes as text, a mic mark, nothing to type or remove.
+  await expect(rows(page).nth(1).locator('input,button')).toHaveCount(0);
+  await expect(rows(page).nth(1).locator('.pset-fixed')).toHaveText('3분');
+  await expect(rows(page).nth(3).locator('.pset-fixed')).toContainText('마이크 사용');
+  await expect(rows(page).nth(0).locator('[data-min]')).toHaveValue('5');
   await targets(page, '.pset-plan button, .pset-min input');
   for (const width of [320, 390, 430]) {await page.setViewportSize({width,height:844});await noOverflow(page);}
-  // Edit: shorter warm-up, no recording this time, reorder the two goals, remember as 기본 세트.
-  await page.getByLabel('웜업 · 립트릴 시간(분)').fill('2');await page.getByLabel('웜업 · 립트릴 시간(분)').blur();
-  await page.getByRole('button',{name:'녹음 · This Is the Moment 빼기'}).click();
+  // Own steps: shorter goal, a warm-up of my own and a song section added, order changed, the warm-up taken out again.
+  await page.getByLabel('후렴 연결 연습하기 시간(분)').fill('2');await page.getByLabel('후렴 연결 연습하기 시간(분)').blur();
+  await page.getByRole('button',{name:'내 연습 추가'}).click();
+  await page.locator('.pset-add-option').filter({hasText:'웜업'}).click();
+  await expect(rows(page)).toHaveCount(7);
+  await page.getByRole('button',{name:'내 연습 추가'}).click();
+  await page.locator('.pset-song-form').getByLabel('곡 구간 시간(분)').fill('4');
+  await page.getByRole('button',{name:'곡 구간 넣기'}).click();
+  await expect(rows(page).locator('strong')).toHaveText(['호흡을 길게 유지하기','목·어깨 풀기','“스~” 길게 내쉬기','허밍 롱톤','음 따라 부르기','후렴 연결 연습하기','립트릴','This Is the Moment']);
   await page.getByRole('button',{name:'순서 바꾸기'}).click();
-  await page.getByRole('button',{name:'후렴 연결 연습하기 위로'}).click();
+  await expect(rows(page).nth(1).locator('button')).toHaveCount(0); // a built-in step does not move
+  await page.getByRole('button',{name:'곡 구간 · This Is the Moment 위로'}).click();
   await page.getByRole('button',{name:'순서 완료'}).click();
-  await expect(rows(page).locator('strong')).toHaveText(['립트릴','후렴 연결 연습하기','호흡을 길게 유지하기','This Is the Moment']);
+  await expect(rows(page).locator('strong')).toHaveText(['호흡을 길게 유지하기','목·어깨 풀기','“스~” 길게 내쉬기','허밍 롱톤','음 따라 부르기','후렴 연결 연습하기','This Is the Moment','립트릴']);
+  await page.getByRole('button',{name:'웜업 · 립트릴 빼기'}).click();
+  await expect(rows(page)).toHaveCount(7);
+  await expect(page.locator('[data-pset-total]')).toHaveText('7개 · 약 23분');
   await expect(page.getByRole('radio',{name:'기본 세트'})).toBeChecked(); // nothing saved yet: the 기본 세트 is remembered
   await page.getByRole('radio',{name:'수요일 세트'}).check();await page.getByRole('radio',{name:'기본 세트'}).check();
   await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
-  const run = page.locator('[data-pset-run]');
-  await expect(run.locator('#pset-step-title')).toHaveText('립트릴');
-  await expect(run.locator('[data-clock]')).toHaveText('2:00');
+  // The tap that starts the set starts its first step: the homework, on the clock.
+  await expect(run(page).locator('#pset-step-title')).toHaveText('호흡을 길게 유지하기');
+  await expect(run(page).locator('[data-run-name] b')).toHaveText('숙제');
+  await expect(run(page).locator('[data-clock]')).toHaveText('5:00');
+  await expect(primary(page)).toHaveText('다 했어요');
   await targets(page, '[data-pset-run] button');
   await noOverflow(page);
+  await elapse(page, 150);
+  await expect(run(page).locator('[data-clock]')).toHaveText('2:30');
+  await primary(page).click();
+  // Built-in steps: skipped here (their own flows are in tests/daily-set.spec.cjs).
+  await expect(run(page).locator('[data-run-last]')).toHaveText('호흡을 길게 유지하기 · 끝');
+  for (let i = 0; i < 4; i++) await run(page).locator('[data-run-skip]').click();
+  await expect(run(page).locator('#pset-step-title')).toHaveText('후렴 연결 연습하기');
+  await expect(primary(page)).toHaveText('시작하기');
+  await elapse(page, 30); // waiting for 시작하기: not counted
+  await primary(page).click();
   await elapse(page, 150); // 2:30 on a 2-minute step: overtime is shown and still counted
-  await expect(run.locator('[data-clock]')).toHaveText('+0:30');
-  await page.getByRole('button',{name:'다음',exact:true}).click();
-  await expect(run.locator('#pset-step-title')).toHaveText('후렴 연결 연습하기');
-  await elapse(page, 60);
-  await page.getByRole('button',{name:'다음',exact:true}).click();
-  await elapse(page, 180);
-  await page.getByRole('button',{name:'다음',exact:true}).click();
-  await expect(run.locator('#pset-step-title')).toHaveText('This Is the Moment');await expect(run.locator('.pset-kicker')).toHaveText('곡 구간');
-  await elapse(page, 120);
+  await expect(run(page).locator('[data-clock]')).toHaveText('+0:30');
   await page.getByRole('button',{name:'일시정지',exact:true}).click();
   await elapse(page, 300); // paused: not counted
   // With the page clock stopped on a paused set, WebKit sometimes never delivers the animation frames Playwright's
-  // click waits for ("visible, enabled and stable" hangs; Chromium is fine, and a do-nothing timer did not help
-  // reliably). The button is checked to be there and enabled, then pressed without that wait.
-  const resume = page.getByRole('button',{name:'계속',exact:true});
-  await expect(resume).toBeVisible();await expect(resume).toBeEnabled();
-  await resume.dispatchEvent('click');
+  // click waits for ("visible, enabled and stable" hangs; Chromium is fine). The button is checked to be there and
+  // enabled, then pressed without that wait.
+  await expect(primary(page)).toHaveText('계속하기');await expect(primary(page)).toBeEnabled();
+  await primary(page).dispatchEvent('click');
   await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible();
-  await elapse(page, 180);
-  await page.getByRole('button',{name:'마치기',exact:true}).click();
-  // Summary: minutes from real running time only; the singer can edit them.
+  await elapse(page, 30);
+  await primary(page).click();
+  await expect(run(page).locator('#pset-step-title')).toHaveText('This Is the Moment');await expect(run(page).locator('[data-run-name] b')).toHaveText('곡 구간');
+  await primary(page).click();
+  await elapse(page, 120);
+  await primary(page).click();
+  // Summary: minutes from real running time only; the person's own steps can be edited, built-in ones are as measured.
   const summary = page.locator('.pset-summary');
-  expect(await summary.locator('[data-min]').evaluateAll(list => list.map(i => i.value))).toEqual(['3','1','3','5']);
-  await page.getByLabel('후렴 연결 연습하기 연습한 시간(분)').fill('2');
-  await expect(summary.locator('[data-sum]')).toHaveText('13분');
+  expect(await summary.locator('[data-min]').evaluateAll(list => list.map(i => i.value))).toEqual(['3','3','2']);
+  await expect(summary.locator('.pset-row[data-measured]')).toHaveCount(4);
+  await expect(summary.locator('.pset-row .pset-state')).toHaveText(['완료','건너뜀','건너뜀','건너뜀','건너뜀','완료','완료']);
+  await page.getByLabel('후렴 연결 연습하기 연습한 시간(분)').fill('4');
+  await expect(summary.locator('[data-sum]')).toHaveText('9분');
   await noOverflow(page);
   await page.getByRole('button',{name:'기록 저장'}).click();
   await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();
-  await expect(page.locator('.pset-done')).toContainText('연습 13분 · 목표 2개 체크');
+  await expect(page.locator('.pset-done')).toContainText('연습 9분 · 7개 중 3개 · 목표 2개 체크');
   const after = await db(page);
   const set = after.practices.filter(p => p.practiceSetId);
-  expect(set.map(p => [p.id.replace(/practice-set:[^:]+:/,'set:'),p.minutes]).sort()).toEqual([['goal:g1',3],['goal:g3',2],['set:song-s1',5],['set:warmup',3]]);
-  const warm = after.practices.find(p => p.id.endsWith(':warmup'));
-  expect(warm).toEqual(expect.objectContaining({practiceMode:'training',categoryId:'c-voice',practiceTimeSource:'practice-set',manualMinutes:3}));
-  expect(after.practices.find(p => p.id.endsWith(':song-s1'))).toEqual(expect.objectContaining({practiceMode:'song',songId:'s1'}));
+  expect(set.map(p => [p.id.replace(/practice-set:[^:]+/,'set'),p.minutes]).sort()).toEqual([['goal:g1',3],['goal:g3',4],['set',0],['set:song-s1',2]]);
+  expect(after.practices.find(p => p.id.endsWith(':song-s1'))).toEqual(expect.objectContaining({practiceMode:'song',songId:'s1',practiceTimeSource:'practice-set',manualMinutes:2}));
   expect(after.practices.find(p => p.id === 'goal:g1')).toEqual(expect.objectContaining({completed:['a1'],assignmentReps:{a1:1},practiceTimeSource:'goal'}));
   expect(after.dailyGoals.filter(g => g.completed).map(g => g.id).sort()).toEqual(['g1','g2','g3']);
   expect(after.assignments.find(t => t.id === 'a1').status).toBe('active'); // homework linked, never completed
   expect(after.practices.find(p => p.id === 'p1')).toEqual(before.practices.find(p => p.id === 'p1'));
   const template = after.practicePlans.find(p => p.id === 'practice-set-template:default');
-  expect(template).toEqual(expect.objectContaining({kind:'practice-set-template',removed:['record']}));
-  expect(template.order).toEqual(['warmup','goal','song']);
-  // Home: actual time includes the set once; the entry offers the remembered set for what is left today.
+  expect(template).toEqual(expect.objectContaining({kind:'practice-set-template',added:[{songId:'s1',minutes:4}]}));
+  expect(template.removed.sort()).toEqual(['record','song','warmup']); // the automatic steps a day's set leaves out
+  // Home: actual time includes the set once; the card says today's set is done.
   await page.clock.resume();
+  await page.locator('.vz-today-popup [data-ok]').click(); // today against the target (app/today-practice.js)
   await page.getByRole('link',{name:'홈으로'}).click();await ready(page);
-  await expect(entry(page)).toContainText('2단계');
+  await expect(entry(page)).toContainText('오늘 연습 끝 · 9분');
   await page.locator('.vz-summary-row[data-row=week]').waitFor();
-  await expect(page.locator('.vz-summary-row[data-row=week]')).toContainText('43분');
+  await expect(page.locator('.vz-summary-row[data-row=week]')).toContainText('39분');
 });
 
-test('the timer follows the clock: another app and a reload count the real time once, pause stops it, the trip to the recorder keeps it', async({page}) => {
+test('an own step follows the clock: another app and a reload count the real time once, pause stops it, the trip to the recorder keeps it', async({page}) => {
   await page.setViewportSize({width:390,height:844});
-  await boot(page);
+  await boot(page, ownSeed());
   const before = await db(page);
-  await entry(page).click();
+  await openList(page);
+  await expect(rows(page).locator('strong')).toHaveText(['호흡을 길게 유지하기','립트릴','후렴 연결 연습하기','This Is the Moment','This Is the Moment']);
+  await expect(rows(page).locator('small')).toHaveText(['숙제','웜업','개인','곡 구간','녹음 · 선택']);
   await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
-  const run = page.locator('[data-pset-run]');
   await elapse(page, 60);
-  await expect(run.locator('[data-clock]')).toHaveText('4:00');
+  await expect(run(page).locator('[data-clock]')).toHaveText('4:00');
   // Another app (or a locked phone) for 90 seconds: the page gets no timer ticks, the time still counts on return.
   await away(page, 90);
-  await expect(run.locator('[data-clock]')).toHaveText('2:30');
-  await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible(); // leaving never pauses
-  await expect(run.locator('[data-over-note]')).toHaveCount(0);
+  await expect(run(page).locator('[data-clock]')).toHaveText('2:30');
+  await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible(); // leaving never pauses an own step
+  await expect(run(page).locator('[data-over-note]')).toHaveCount(0);
   // The pause button stops it, also while away.
   await page.getByRole('button',{name:'일시정지',exact:true}).click();
   await elapse(page, 120);
   await away(page, 180);
-  await expect(run.locator('[data-clock]')).toHaveText('2:30');
-  await page.getByRole('button',{name:'계속',exact:true}).click(); // 12:17:30
+  await expect(run(page).locator('[data-clock]')).toHaveText('2:30');
+  await primary(page).click(); // 계속하기, 12:17:30
   // Reload while running: still running, and the time since is counted once.
   await page.reload();
   await page.clock.resume();
   await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible();
   await page.clock.pauseAt(new Date('2026-11-04T12:22:30.000Z')); // 60 + 90 + 300 s on a five-minute step
-  await expect(run.locator('[data-clock]')).toHaveText('+2:30');
-  await expect(run.locator('[data-clock-sub]')).toHaveText('목표 5분 지남 · 연습 7:30');
+  await expect(run(page).locator('[data-clock]')).toHaveText('+2:30');
+  await expect(run(page).locator('[data-clock-sub]')).toHaveText('목표 5분 지남 · 연습 7:30');
   await page.goto('/#/home');
   await ready(page);
-  await expect(entry(page)).toContainText('이어서 하기');await expect(entry(page)).toHaveAccessibleName(/^연습 세트 이어서 하기/);
-  await expect(entry(page)).toContainText('1/5');
-  await entry(page).click();
-  await expect(run.locator('[data-clock]')).toHaveText('+2:30'); // the visit to home neither paused nor double counted
+  await expect(goText(page)).toHaveText('이어서 하기 · 호흡을 길게 유지하기');await expect(goButton(page)).toHaveAccessibleName(/^오늘의 연습 이어서 하기/);
+  await expect(entry(page).locator('.vz-set-head small')).toContainText('0 / 5');
+  await goButton(page).click();
+  await expect(run(page).locator('[data-clock]')).toHaveText('+2:30'); // the visit to home neither paused nor double counted
   // The planned time runs out while away: said plainly, the step stays, nothing is saved by itself.
-  await page.getByRole('button',{name:'다음',exact:true}).click();
-  await expect(run.locator('#pset-step-title')).toHaveText('호흡을 길게 유지하기');
+  await primary(page).click(); // 다 했어요
+  await expect(run(page).locator('#pset-step-title')).toHaveText('립트릴');
+  await primary(page).click(); // 시작하기
   await away(page, 360);
-  await expect(run.locator('[data-over-note]')).toContainText('다른 곳에 있는 동안 계획한 5분이 지났어요');
-  await expect(run.locator('[data-clock]')).toHaveText('+1:00');
-  await expect(run.locator('.pset-progress span')).toHaveText('2 / 5');
+  await expect(run(page).locator('[data-over-note]')).toContainText('다른 곳에 있는 동안 계획한 5분이 지났어요');
+  await expect(run(page).locator('[data-clock]')).toHaveText('+1:00');
+  await expect(run(page).locator('[data-run-count-all]')).toHaveText('2 / 5');
   await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible();
   for (const key of ['practices','dailyGoals','assignments']) expect((await db(page))[key]).toEqual(before[key]);
-  for (let i = 0; i < 3; i++) await page.getByRole('button',{name:'다음',exact:true}).click();
-  await expect(run.locator('[data-over-note]')).toHaveCount(0);
-  await expect(run.locator('.pset-kicker')).toHaveText('녹음 · 선택');
+  await primary(page).click();
+  await expect(run(page).locator('[data-over-note]')).toHaveCount(0);
+  for (let i = 0; i < 2; i++) await run(page).locator('[data-run-skip]').click();
+  await expect(run(page).locator('[data-run-name]')).toContainText('녹음');await expect(run(page).locator('[data-run-name]')).toContainText('선택');
   await expect(page.getByText('녹음 길이는 연습 시간에 더하지 않아요.')).toBeVisible();
+  await primary(page).click(); // 시작하기: the clock of the recording step
   await page.getByRole('button',{name:'녹음하기'}).click();
   await expect(page).toHaveURL(/#\/record\?song=s1$/);
   await expect(page.locator('[data-song-name]')).toHaveText('This Is the Moment');
   await elapse(page, 60);
   await page.goBack();
-  await expect(run.locator('.pset-kicker')).toHaveText('녹음 · 선택');
+  await expect(run(page).locator('[data-run-name]')).toContainText('녹음');
   await expect(page.getByRole('button',{name:'일시정지',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'마치기',exact:true}).click();
+  await primary(page).click();
   // Wall-clock time minus the pause: 450 s, 360 s and the minute at the recorder.
   const values = await page.locator('.pset-summary [data-min]').evaluateAll(list => list.map(i => i.value));
   expect(values).toEqual(['8','6','0','0','1']);
   await page.getByRole('button',{name:'기록 저장'}).click();
-  await expect(page.locator('.pset-done')).toContainText('연습 15분 · 목표 2개 체크');
+  await expect(page.locator('.pset-done')).toContainText('연습 15분 · 5개 중 3개 · 목표 1개 체크');
   const total = list => list.filter(p => p.practiceSetId).reduce((n,p) => n + p.minutes,0);
   expect(total((await db(page)).practices)).toBe(15);
   // Saved once: a reload brings back neither the set nor more minutes.
@@ -261,48 +307,50 @@ test('the timer follows the clock: another app and a reload count the real time 
   await ready(page);
   await page.reload();
   await ready(page);
-  await expect(entry(page)).toContainText('오늘 연습 세트');await expect(entry(page)).toHaveAccessibleName(/^오늘 연습 시작/);
+  await expect(entry(page)).toContainText('오늘 연습 끝 · 15분');await expect(goText(page)).toHaveText('한 번 더 하기');
   await expect(pill(page)).toBeHidden();
   expect(total((await db(page)).practices)).toBe(15);
 });
 
 test('leaving the summary keeps it; discarding writes nothing', async({page}) => {
   await page.setViewportSize({width:390,height:844});
-  await boot(page);
-  await entry(page).click();
+  await boot(page, ownSeed());
+  await openList(page);
   await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
   await elapse(page, 90);
-  await page.getByRole('button',{name:'여기까지 하고 기록하기'}).click();
+  await page.getByRole('button',{name:'여기까지 하고 마치기'}).click();
+  await expect(page.locator('.pset-summary .pset-row .pset-state').first()).toHaveText('안 함'); // stopping does not call the step done
   await page.clock.resume();
   await page.goto('/#/home');
   await ready(page);
-  await expect(entry(page)).toContainText('기록 저장하기');await expect(entry(page)).toHaveAccessibleName('연습 세트 기록 저장하기');
+  await expect(goText(page)).toHaveText('기록 저장하기');await expect(goButton(page)).toHaveAccessibleName('오늘의 연습 기록 저장하기');
   await expect(pill(page)).toBeHidden(); // the set has ended: no small timer
-  await entry(page).click();
+  await goButton(page).click();
   await expect(page.locator('.pset-summary [data-min]').first()).toHaveValue('2');
   const before = await db(page);
   await page.getByRole('button',{name:'저장하지 않고 끝내기'}).click();
   await page.getByRole('button',{name:'끝내기',exact:true}).click();
   await ready(page);
-  await expect(entry(page)).toContainText('오늘 연습 세트');await expect(entry(page)).toHaveAccessibleName(/^오늘 연습 시작/);
+  await expect(goText(page)).toHaveText(/^시작하기 · /);
   await expect(pill(page)).toBeHidden();
   const after = await db(page);
   for (const key of ['practices','dailyGoals','assignments','practicePlans']) expect(after[key]).toEqual(before[key]);
 });
 
-test('away for more than three hours: the set asks how to count it, and counts nothing by itself', async({page}) => {
+test('away for more than three hours on an own step: the set asks how to count it, and counts nothing by itself', async({page}) => {
   await page.setViewportSize({width:375,height:812});
-  await boot(page);
+  await boot(page, ownSeed());
   const before = await db(page);
-  await entry(page).click();
+  await openList(page);
   await page.clock.pauseAt(new Date('2026-11-04T13:00:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
   await elapse(page, 120);
   await away(page, 4 * 3600 + 600);
   const ask = page.locator('[data-pset-away]');
   await expect(ask.getByRole('heading',{name:'오래 자리를 비웠어요'})).toBeVisible();
-  await expect(ask).toContainText('‘립트릴’ 타이머를 켜 둔 채 4시간 10분이 지났어요');
+  await expect(page.locator('body')).not.toHaveClass(/vz-set-run/); // a question to read: light
+  await expect(ask).toContainText('‘호흡을 길게 유지하기’ 타이머를 켜 둔 채 4시간 10분이 지났어요');
   await expect(ask.locator('[data-away]')).toHaveText([/계획한 시간까지만 세기.*계획한 5분까지 3분만 더해요/,/지금까지 모두 세기.*4시간 10분을 모두 더해요/,/세지 않기/]);
   await targets(page, '[data-pset-away] button');
   await noOverflow(page);
@@ -319,30 +367,29 @@ test('away for more than three hours: the set asks how to count it, and counts n
   await expect(page).toHaveURL(/#\/practice-set$/);
   await page.clock.pauseAt(new Date('2026-11-04T18:00:00.000Z'));
   await ask.locator('[data-away=planned]').click();
-  const run = page.locator('[data-pset-run]');
-  await expect(run.locator('[data-clock]')).toHaveText('0:00');
-  await expect(page.getByRole('button',{name:'계속',exact:true})).toBeVisible(); // stopped until the singer goes on
+  await expect(run(page).locator('[data-clock]')).toHaveText('0:00');
+  await expect(primary(page)).toHaveText('계속하기'); // stopped until the singer goes on
   await elapse(page, 30);
-  await expect(run.locator('[data-clock]')).toHaveText('0:00');
-  await page.getByRole('button',{name:'계속',exact:true}).click();
+  await expect(run(page).locator('[data-clock]')).toHaveText('0:00');
+  await primary(page).click();
   await elapse(page, 60);
-  await page.getByRole('button',{name:'여기까지 하고 기록하기'}).click();
+  await page.getByRole('button',{name:'여기까지 하고 마치기'}).click();
   expect(await page.locator('.pset-summary [data-min]').evaluateAll(list => list.map(i => i.value))).toEqual(['6','0','0','0','0']);
   for (const key of ['practices','dailyGoals']) expect((await db(page))[key]).toEqual(before[key]);
 });
 
 test('a set that comes back on another day is closed under its own day', async({page}) => {
   await page.setViewportSize({width:375,height:812});
-  await boot(page);
-  await entry(page).click();
+  await boot(page, ownSeed());
+  await openList(page);
   await page.clock.pauseAt(new Date('2026-11-04T23:30:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
   await elapse(page, 60);
-  await page.evaluate(() => {location.hash = '#/songs';});
+  await to(page, '#/songs');
   await expect(pill(page)).toBeVisible();
   await away(page, 45 * 60); // back at 00:16 the next day
   await expect(pill(page)).toBeHidden();
-  await page.evaluate(() => {location.hash = '#/practice-set';});
+  await to(page, '#/practice-set');
   await expect(page.locator('.pset-summary .pset-help')).toContainText('연습이에요');
   expect(await page.locator('.pset-summary [data-min]').evaluateAll(list => list.map(i => i.value))).toEqual(['46','0','0','0','0']);
   expect((await db(page)).practices.some(p => p.practiceSetId)).toBe(false);
@@ -353,34 +400,34 @@ test('a set that comes back on another day is closed under its own day', async({
 
 test('a set paused on another day shows no small timer and is closed when it is opened', async({page}) => {
   await page.setViewportSize({width:375,height:812});
-  await boot(page);
-  await entry(page).click();
+  await boot(page, ownSeed());
+  await openList(page);
   await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
   await elapse(page, 120);
   await page.getByRole('button',{name:'일시정지',exact:true}).click();
-  await page.evaluate(() => {location.hash = '#/songs';});
+  await to(page, '#/songs');
   await expect(pill(page)).toBeVisible();
-  await expect(pill(page).locator('[data-toggle]')).toHaveAccessibleName('연습 세트 계속');
+  await expect(pill(page).locator('[data-toggle]')).toHaveAccessibleName('오늘의 연습 계속');
   await page.clock.pauseAt(new Date('2026-11-06T09:00:00.000Z'));
-  await page.evaluate(() => {location.hash = '#/library';});
+  await to(page, '#/library');
   await expect(page.locator('body')).toHaveAttribute('data-vz-route','library');
   await expect(pill(page)).toBeHidden();
-  await page.evaluate(() => {location.hash = '#/practice-set';});
+  await to(page, '#/practice-set');
   await expect(page.locator('.pset-summary .pset-help')).toContainText('연습이에요');
   expect(await page.locator('.pset-summary [data-min]').evaluateAll(list => list.map(i => i.value))).toEqual(['2','0','0','0','0']);
   expect((await db(page)).practices.some(p => p.practiceSetId)).toBe(false);
 });
 
-for (const [width,height] of [[375,812],[320,640]]) test('small timer on other screens at ' + width + 'px: shows the step and time, pauses and resumes, returns to the set, stays clear of the nav and the mic', async({page}) => {
+for (const [width,height] of [[375,812],[320,640]]) test('small timer on other screens at ' + width + 'px: shows the own step and time, pauses and resumes, returns to the set, stays clear of the nav and the mic', async({page}) => {
   await page.setViewportSize({width,height});
-  await boot(page);
-  await entry(page).click();
+  await boot(page, ownSeed());
+  await openList(page);
   await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
   await expect(pill(page)).toBeHidden(); // never on the set's own screen
   await elapse(page, 30);
-  const go = async hash => {await page.evaluate(h => {location.hash = h;}, hash);await expect(page).toHaveURL(new RegExp(hash.replace(/[/?]/g,'\\$&') + '$'));};
+  const go = async hash => {await to(page, hash);await expect(page).toHaveURL(new RegExp(hash.replace(/[/?]/g,'\\$&') + '$'));};
   const time = pill(page).locator('[data-time]'), toggle = pill(page).locator('[data-toggle]');
   const box = async locator => {const b = await locator.boundingBox();return {left:b.x,top:b.y,right:b.x + b.width,bottom:b.y + b.height,width:b.width,height:b.height};};
   const apart = (a,b) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
@@ -397,18 +444,16 @@ for (const [width,height] of [[375,812],[320,640]]) test('small timer on other s
     expect(await page.locator('#view').evaluate(el => el.getBoundingClientRect().top + scrollY)).toBe(viewTop);
     await pill(page).evaluate(el => {el.style.display = '';});
   };
-  // The floating mic on the set screen opens the recorder without pausing the set.
-  await page.locator('.vz-collection-record').click();
-  await elapse(page, 1); // the opening animation
-  await expect(page).toHaveURL(/#\/record/);
-  await expect(time).toHaveText('4:29');
-  await elapse(page, 2);
+  // The recorder opened while an own step runs: the set is not paused.
+  await go('#/record');
+  await expect(time).toHaveText('4:30');
+  await elapse(page, 3);
   await expect(time).toHaveText('4:27');
   // Home: leaving the set did not pause it.
   await go('#/home');await ready(page);
   await expect(pill(page)).toBeVisible();
   await expect(pill(page).locator('[data-step]')).toHaveText('1/5');
-  await expect(pill(page).locator('[data-name]')).toHaveText('립트릴');
+  await expect(pill(page).locator('[data-name]')).toHaveText('호흡을 길게 유지하기');
   await expect(time).toHaveText('4:27');
   await elapse(page, 2);
   await expect(time).toHaveText('4:25');
@@ -422,11 +467,11 @@ for (const [width,height] of [[375,812],[320,640]]) test('small timer on other s
   await clear('.v-nav', '.vz-collection-record');
   // Pause and resume from the pill.
   await toggle.click();
-  await expect(toggle).toHaveAccessibleName('연습 세트 계속');
+  await expect(toggle).toHaveAccessibleName('오늘의 연습 계속');
   await elapse(page, 60);
   await expect(time).toHaveText('4:25');
   await toggle.click();
-  await expect(toggle).toHaveAccessibleName('연습 세트 일시정지');
+  await expect(toggle).toHaveAccessibleName('오늘의 연습 일시정지');
   await elapse(page, 10);
   await expect(time).toHaveText('4:15');
   // Under sheets and menus, out of the way of the recording selection bar, and never on the login screen.
@@ -464,28 +509,35 @@ for (const [width,height] of [[375,812],[320,640]]) test('small timer on other s
   await pill(page).locator('[data-open]').click();
   await expect(page).toHaveURL(/#\/practice-set$/);
   await expect(pill(page)).toBeHidden();
-  await expect(page.locator('[data-pset-run] [data-clock]')).toHaveText('2:00');
-  // Next step shows on the pill; ending the set removes it.
-  await page.getByRole('button',{name:'다음',exact:true}).click();
+  await expect(run(page).locator('[data-clock]')).toHaveText('2:00');
+  // The doing screen has no menu and no floating mic under its one button.
+  await expect(page.locator('.v-nav')).toBeHidden();
+  // The next own step shows on the pill once it is started; ending the set removes it.
+  await primary(page).click();
+  await expect(run(page).locator('#pset-step-title')).toHaveText('립트릴');
+  await go('#/songs');
+  await expect(pill(page)).toBeHidden(); // not started yet: nothing is being timed
+  await go('#/practice-set');
+  await primary(page).click();
   await go('#/songs');
   await expect(pill(page).locator('[data-step]')).toHaveText('2/5');
-  await expect(pill(page).locator('[data-name]')).toHaveText('호흡을 길게 유지하기');
+  await expect(pill(page).locator('[data-name]')).toHaveText('립트릴');
   await elapse(page, 301);
   await expect(time).toHaveText('+0:01');
   await expect(pill(page)).toHaveClass(/is-over/);
   await clear('.v-nav', '.vz-collection-record');
   await go('#/practice-set');
-  await expect(page.locator('[data-pset-run] [data-over-note]')).toContainText('다른 곳에 있는 동안 계획한 5분이 지났어요'); // it ran out on another screen
-  await expect(page.locator('[data-pset-run] .pset-progress span')).toHaveText('2 / 5');
-  await page.getByRole('button',{name:'여기까지 하고 기록하기'}).click();
+  await expect(run(page).locator('[data-over-note]')).toContainText('다른 곳에 있는 동안 계획한 5분이 지났어요'); // it ran out on another screen
+  await expect(run(page).locator('[data-run-count-all]')).toHaveText('2 / 5');
+  await page.getByRole('button',{name:'여기까지 하고 마치기'}).click();
   await go('#/songs');
   await expect(pill(page)).toBeHidden();
 });
 
 for (const [name, target, popup] of [['under the target', 100, true], ['over the target', 30, false], ['no target', null, false], ['helper not loaded', undefined, false]])
-  test('today against the target on the set screens: ' + name, async({page}) => {
+  test('today against the target on the summary and after saving: ' + name, async({page}) => {
     await page.setViewportSize({width:375,height:812});
-    await boot(page);
+    await boot(page, ownSeed());
     // Stubs with the shapes of app/today-practice.js (VZ.todayPractice, VZ.todayPracticeText, VZ.todayPracticePopup).
     // The real file is loaded by the app, so each case replaces or removes its functions.
     await page.evaluate(({target, popup}) => {
@@ -498,26 +550,24 @@ for (const [name, target, popup] of [['under the target', 100, true], ['over the
       VZ.todayPracticeText = x => x.targetMinutes ? '오늘 ' + x.minutes + '분 / 목표 ' + x.targetMinutes + '분 · ' + x.percent + '%' : '오늘 ' + x.minutes + '분 · 목표 없음';
       VZ.todayPracticePopup = popup ? options => {window.__popups.push(options);} : undefined;
     }, {target, popup});
-    await entry(page).click();
+    await openList(page);
     await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
     await page.getByRole('button',{name:'시작하기'}).click();
-    const quiet = page.locator('[data-pset-run] [data-pset-today]'), line = page.locator('[data-sum-today]'), done = page.locator('[data-done-today]');
-    if (target === undefined) await expect(quiet).toHaveCount(0);
-    else await expect(quiet).toHaveText(target ? '오늘 30분 / 목표 ' + target + '분 · 이 세트는 저장하면 더해져요' : '오늘 30분 · 이 세트는 저장하면 더해져요');
+    const line = page.locator('[data-sum-today]'), done = page.locator('[data-done-today]');
     await elapse(page, 180);
-    await page.getByRole('button',{name:'여기까지 하고 기록하기'}).click();
+    await page.getByRole('button',{name:'여기까지 하고 마치기'}).click();
     if (target === undefined) await expect(line).toBeHidden();
-    else await expect(line).toHaveText('이 세트 3분을 저장하면 ' + (target === 100 ? '오늘 33분 / 목표 100분 · 33%' : target === 30 ? '오늘 33분 / 목표 30분 · 110%' : '오늘 33분 · 목표 없음'));
+    else await expect(line).toHaveText('이 연습 3분을 저장하면 ' + (target === 100 ? '오늘 33분 / 목표 100분 · 33%' : target === 30 ? '오늘 33분 / 목표 30분 · 110%' : '오늘 33분 · 목표 없음'));
     if (target === 100) { // edited minutes move the line
-      await page.getByLabel('웜업 · 립트릴 연습한 시간(분)').fill('10');
-      await expect(line).toHaveText('이 세트 10분을 저장하면 오늘 40분 / 목표 100분 · 40%');
+      await page.getByLabel('호흡을 길게 유지하기 연습한 시간(분)').fill('10');
+      await expect(line).toHaveText('이 연습 10분을 저장하면 오늘 40분 / 목표 100분 · 40%');
     }
     await noOverflow(page);
     await page.getByRole('button',{name:'기록 저장'}).click();
     await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();
     const popups = await page.evaluate(() => window.__popups);
     if (popup) { // the shared popup is called once with the saved minutes; no second copy on the screen
-      expect(popups).toEqual([{addedMinutes:10,title:'오늘 연습 세트'}]);
+      expect(popups).toEqual([{addedMinutes:10,title:'오늘의 연습'}]);
       await expect(done).toHaveCount(0);
     } else {
       expect(popups).toEqual([]);
@@ -535,18 +585,17 @@ for (const [name, target, popup] of [['under the target', 100, true], ['over the
     await noOverflow(page);
   });
 
-test('with the real today helper: the set screens show today against the target and saving opens the completion popup once', async({page}) => {
+test('with the real today helper: the summary shows today against the target and saving opens the completion popup once', async({page}) => {
   await page.setViewportSize({width:375,height:812});
-  await boot(page);
+  await boot(page, ownSeed());
   expect(await page.evaluate(() => [typeof VZ.todayPractice, typeof VZ.todayPracticeText, typeof VZ.todayPracticePopup])).toEqual(['function','function','function']);
   const before = await page.evaluate(() => VZ.todayPractice());
-  await entry(page).click();
+  await openList(page);
   await page.clock.pauseAt(new Date('2026-11-04T12:10:00.000Z'));
   await page.getByRole('button',{name:'시작하기'}).click();
-  await expect(page.locator('[data-pset-run] [data-pset-today]')).toContainText('이 세트는 저장하면 더해져요');
   await elapse(page, 180);
-  await page.getByRole('button',{name:'여기까지 하고 기록하기'}).click();
-  await expect(page.locator('[data-sum-today]')).toContainText('이 세트 3분을 저장하면 오늘 ');
+  await page.getByRole('button',{name:'여기까지 하고 마치기'}).click();
+  await expect(page.locator('[data-sum-today]')).toContainText('이 연습 3분을 저장하면 오늘 ');
   await page.getByRole('button',{name:'기록 저장'}).click();
   // The shared popup (not a second copy on the screen): today's total now includes the set's minutes.
   const popup = page.locator('.vz-today-result');
@@ -564,7 +613,7 @@ test('with the real today helper: the set screens show today against the target 
   await expect(popup.locator('[data-today-percent]')).toHaveText(after.percent + '%');
   await expect(popup.locator('[data-today-summary]')).toHaveText('오늘 ' + after.minutes + '분, 목표 ' + after.targetMinutes + '분의 ' + after.percent + '%');
   await expect(popup.locator('.vz-tp-day[data-today]')).toHaveAttribute('data-minutes', String(after.minutes));
-  await expect(page.locator('.sheet.vz-today-popup .sheet-head h2')).toHaveText('오늘 연습 세트');
+  await expect(page.locator('.sheet.vz-today-popup .sheet-head h2')).toHaveText('오늘의 연습');
   await page.locator('[data-ok]').click();
   await expect(popup).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'오늘 연습을 기록했어요'})).toBeVisible();
@@ -572,9 +621,9 @@ test('with the real today helper: the set screens show today against the target 
 
 test('a song section added before starting is remembered for the weekday and comes back next time', async({page}) => {
   await page.setViewportSize({width:320,height:700});
-  await boot(page);
-  await entry(page).click();
-  await page.getByRole('button',{name:'항목 추가'}).click();
+  await boot(page, pinnedSeed());
+  await openList(page);
+  await page.getByRole('button',{name:'내 연습 추가'}).click();
   const sheet = page.locator('.pset-song-form');
   await sheet.getByLabel('구간 시작 (분:초)').fill('1:10');
   await sheet.getByLabel('구간 끝 (분:초)').fill('0:30');
@@ -585,21 +634,22 @@ test('a song section added before starting is remembered for the weekday and com
   await sheet.getByLabel('곡 구간 시간(분)').fill('4');
   await noOverflow(page);
   await page.getByRole('button',{name:'곡 구간 넣기'}).click();
-  await expect(rows(page)).toHaveCount(6);
-  await expect(rows(page).nth(4)).toContainText('This Is the Moment 0:30–1:10');
-  await expect(rows(page).nth(4)).toContainText('구간 0:30–1:10');
-  await expect(rows(page).nth(5)).toContainText('녹음');
+  await expect(rows(page)).toHaveCount(7);
+  await expect(rows(page).nth(6)).toContainText('This Is the Moment 0:30–1:10');
+  await expect(rows(page).nth(6)).toContainText('구간 0:30–1:10');
+  await noOverflow(page);
   await page.getByRole('radio',{name:'수요일 세트'}).check();
   await page.getByRole('button',{name:'시작하기'}).click();
   const template = (await db(page)).practicePlans.find(p => p.id === 'practice-set-template:w3');
   expect(template.added).toEqual([{songId:'s1',minutes:4,segmentStart:30,segmentEnd:70}]);
-  // Discard this run; the remembered Wednesday set offers the section again.
-  await page.getByRole('button',{name:'여기까지 하고 기록하기'}).click();
+  // Discard this run; the remembered Wednesday set offers the section again — on the home card too.
+  await page.getByRole('button',{name:'여기까지 하고 마치기'}).click();
   await page.getByRole('button',{name:'저장하지 않고 끝내기'}).click();
   await page.getByRole('button',{name:'끝내기',exact:true}).click();
   await ready(page);
-  await expect(entry(page)).toContainText('6단계');
-  await entry(page).click();
-  await expect(rows(page).nth(4)).toContainText('구간 0:30–1:10');
+  await expect(entry(page)).toContainText('7개');
+  await expect(entry(page).locator('[data-set-line] li').last()).toContainText('This Is the Moment 0:30–1:10');
+  await openList(page);
+  await expect(rows(page).nth(6)).toContainText('구간 0:30–1:10');
   await expect(page.getByRole('radio',{name:'수요일 세트'})).toBeChecked();
 });

@@ -448,7 +448,7 @@ test('연구소 holds no practice entries; the practice screens open from 성장
   await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');
   await page.locator('[data-back]').click();
   await expect(page).toHaveURL(/#\/vocal-growth$/);
-  for (const [hash, title] of [['#/practice-set', '오늘 연습 세트'], ['#/voice-check', '보이스 체크'], ['#/practice-room', '노래 연습실']]) {
+  for (const [hash, title] of [['#/practice-set', '오늘의 연습'], ['#/voice-check', '보이스 체크'], ['#/practice-room', '노래 연습실']]) {
     await to(page, hash);
     await expect(page.locator('#top h1')).toHaveText(title);
     await expect(page.locator('.v-nav a[data-nav="home"]')).toHaveAttribute('aria-current', 'page');
