@@ -418,3 +418,21 @@ test('missing or unavailable media capability stops revision deletion before roo
   await assert.rejects(d.window.vzipCloudMediaDelete({id:'chosen'}));assert.ok(s.objects.has('chosen'));assert.equal(s.events.length,0);assert.equal(d.window.vzipPendingMediaDeletes().length,0);
  }
 });
+// Storing the merged copy announces vzip:data-changed, which redraws the screen under the user's finger. After this
+// device's own save the merge brings nothing new — at most another text of the same records (key order, the empty
+// `deleted` a merge writes): the device copy is then left as it is, unannounced, and no "before cloud" copy is spent.
+test('a merge that brings nothing new leaves the device copy alone and announces nothing',async()=>{
+ const seed={...base('local'),settings:{dailyMinutes:30}};
+ const s=new Server({payload:{settings:{dailyMinutes:30},practices:[],assignments:[],lessons:[],songs:[{title:'local',id:'local'}],categories:[]},updated_at:'2026-11-01T00:00:00Z'});
+ const d=device(s,seed);let announced=0;d.window.addEventListener('vzip:data-changed',()=>announced++);
+ const text=d.store.getItem(KEY),copies=()=>{let n=0;for(let i=0;i<d.store.length;i++)if(d.store.key(i).startsWith('vzip_before_cloud_'))n++;return n;};
+ await until(()=>d.saved());
+ assert.equal(announced,0);assert.equal(d.store.getItem(KEY),text);assert.equal(copies(),0);
+ // Signed in again later with nothing unsaved (the server copy is taken as it is): still the same records, still quiet.
+ await d.sync();
+ assert.equal(announced,0);assert.equal(d.store.getItem(KEY),text);assert.equal(copies(),0);assert.ok(d.saved());
+ // A record saved on another device is stored, announced, and the copy from before the merge is kept.
+ s.row={payload:{...s.row.payload,lessons:[{id:'elsewhere',memo:'다른 기기'}]},updated_at:'2026-11-02T00:00:00Z'};
+ await d.sync();
+ assert.equal(announced,1);assert.equal(d.data().lessons[0].id,'elsewhere');assert.equal(copies(),1);assert.ok(d.saved());
+});
