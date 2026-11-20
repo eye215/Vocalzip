@@ -1968,6 +1968,32 @@ test('Settings shell: v5 shared buttons are 52px R16 weight 600 and small button
   expect(s, JSON.stringify(s)).toEqual({p:{h:52, r:'16px', w:'600'}, sec:{h:52, r:'16px', w:'600'}, sm:{h:44, r:'12px', w:'600'}});
 });
 
+// Named with 'Settings' so ui-checks.yml runs it. A labelled field outside a sheet matches the sheet field (V4 Input/Textarea).
+test('Settings shell: v5 form fields are borderless #F2EFF7 R15 52px with a 2px #DCC4FF focus outline', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<label class="field"><span>제목</span><input type="text" data-t></label><label class="field"><span>메모</span><textarea data-a></textarea></label><label class="field"><input type="checkbox" data-c></label>';
+    document.getElementById('view').append(wrap);
+    const read = el => { const c = getComputedStyle(el); return {border:c.borderTopStyle, bg:c.backgroundColor, r:c.borderTopLeftRadius, h:Math.round(el.getBoundingClientRect().height)}; };
+    const input = wrap.querySelector('[data-t]'), area = wrap.querySelector('[data-a]'), box = wrap.querySelector('[data-c]');
+    const out = {input:read(input), area:read(area), checkboxBg:getComputedStyle(box).backgroundColor === 'rgb(242, 239, 247)'};
+    input.focus();
+    const f = getComputedStyle(input);
+    out.focus = {style:f.outlineStyle, width:f.outlineWidth, color:f.outlineColor};
+    wrap.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({
+    input:{border:'none', bg:'rgb(242, 239, 247)', r:'15px', h:52},
+    area:{border:'none', bg:'rgb(242, 239, 247)', r:'15px', h:120},
+    checkboxBg:false,
+    focus:{style:'solid', width:'2px', color:'rgb(220, 196, 255)'},
+  });
+});
+
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
   const seed = legacy();
   seed.performances = [{id:'show1',ownerId:'ui-test-user',title:'첫 무대',start:'2025-07-24',status:'completed',sessions:[]}];
