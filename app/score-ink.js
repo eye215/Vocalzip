@@ -757,9 +757,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const hits=page===pageNo&&rows?.length?measures?.measuresIn?.(Ink.bounds(rows,aspect))||[]:[],n=hits.flatMap(h=>[parseInt(h.number,10),parseInt(h.last??h.number,10)]).filter(Number.isFinite);
   return n.length?{from:Math.min(...n),to:Math.max(...n)}:{from:'',to:''};
  }
- async function openPoint(rows,page,text,note){
-  const at=pointMeasures(rows,page),bound=binding?.pdfHash;await outside();if(closed)return;
-  VZ.scorePoints.editor(songId,{...at,scoreId:score.id,text,note,ink:true},(row,choice)=>{
+ async function openPoint(rows,page,text,note,{at=pointMeasures(rows,page),fromMark}={}){
+  const bound=binding?.pdfHash;await outside();if(closed)return;
+  VZ.scorePoints.editor(songId,{...at,scoreId:score.id,text,note,ink:rows.length>0,...(fromMark?{fromMark}:{})},(row,choice)=>{
    if(!choice?.removeInk)return;
    try{
     if(closed||binding?.pdfHash!==bound)throw Error('악보가 바뀌었어요.');
@@ -770,17 +770,60 @@ VZ.openScoreInk=(songId,scoreId)=>{
  }
  /** Waits (up to 5 s) while the page is being drawn, or the score is still opening. */
  async function settle(){for(let i=0;(busy||!ready)&&!closed&&i<100;i++)await new Promise(r=>setTimeout(r,50));}
- /** 지적으로 (selection bar): recognition, when it can be used, then the form; without it the form with an empty field. */
+ /* 악보 표기 → 지적. A selected mark is never sent anywhere: it is named after its preset (a text symbol with its letters)
+  * and stands on the measures the 표시한 마디 list gives it (app/score-measures.js marks; none without the conversion). */
+ const isMark=s=>s.mark!==undefined||s.glyph!==undefined||s.group!==undefined||s.measures!==undefined;
+ const markName=s=>{const n=(s.mark!==undefined&&(profiles.markers.find(m=>m.id===s.mark)?.name||Settings.MARKERS.find(m=>m.id===s.mark)?.name))||window.VzipScoreMarks?.ROLE_NAMES?.[Ink.markRole(s)]||'표기';return s.glyph&&!n.includes(s.glyph)?n+' '+s.glyph:n;};
+ /** The selected marks, one per mark (the strokes of one linked by `group` are one): [{text, measures|null, fromMark}]. */
+ async function markItems(rows){
+  const out=[],seen=new Set();
+  for(const s of rows){
+   const key=s.group!==undefined?'g:'+s.group:'s:'+s.id;if(seen.has(key))continue;seen.add(key);
+   const list=s.group!==undefined?rows.filter(r=>r.group===s.group):[s];
+   let item=null;try{item=(await measures?.marks?.(list))?.[0]||null;}catch{}
+   const m=window.VzipScorePointsModel.fromMarkItem(item||{label:markName(s)});out.push({...m,fromMark:s.id});
+  }
+  return out;
+ }
+ /** Measures {from, to} that take in all of `list` (each {from, to} or null); empty fields when none has any. */
+ const spanOf=list=>{const n=list.filter(Boolean).flatMap(m=>[Number(m.from),Number(m.to)]).filter(Number.isFinite);return n.length?{from:Math.min(...n),to:Math.max(...n)}:{from:'',to:''};};
+ /** 부르면서 체크에 넣기 (a preset with it on): the mark just placed is made a 레슨 지적 at once (app/score-points.js
+  *  fromMark — not when the song has that point already; 되돌리기 in its toast). It needs the measures under the mark. */
+ async function markToPoint(added){
+  if(!added.length||!VZ.scorePoints?.fromMark||!window.VzipScorePointsModel)return;
+  let item=null;try{item=(await measures?.marks?.(added))?.[0]||null;}catch{}
+  if(closed)return;
+  const m=window.VzipScorePointsModel.fromMarkItem(item);
+  if(!item||!m.measures){const why='표기 아래 마디를 알 수 없어 지적으로 넣지 못했어요. 음표로 변환한 악보에서 넣을 수 있어요.';say(why,true);VZ.toast(why,'error');return;}
+  const result=VZ.scorePoints.fromMark(songId,{text:m.text,measures:m.measures,fromMark:added[0].id,scoreId:score.id});
+  if(result==='duplicate'){say('같은 지적이 이미 있어서 새로 넣지 않았어요.');VZ.toast('같은 지적이 이미 있어요.');}
+  else if(result==='added')say(m.text+' 표기를 '+window.VzipScorePointsModel.label(m.measures)+' 지적으로 넣었어요.');
+ }
+ /** Points made from a mark (`fromMark`) follow it when it comes back under a new id — moved or resized (a copy), or
+  *  put back by undo (records are never changed in place). pairs: [old id, new id]. Only that link is changed. */
+ function relinkPoints(pairs){
+  const map=new Map(pairs.filter(([a,b])=>a&&b&&a!==b));
+  if(!map.size||!(VZ.db.scoreAnnotations||[]).some(r=>r?.kind==='score-point'&&map.has(r.fromMark)))return;
+  VZ.change(d=>{for(const r of d.scoreAnnotations||[])if(r?.kind==='score-point'&&map.has(r.fromMark))r.fromMark=map.get(r.fromMark);},{silent:true});
+ }
+ /** 지적으로 (selection bar): recognition of the handwriting, when it can be used, then the form; without it the form
+  *  with an empty field. Selected 악보 표기 add their names after the words and their measures — with marks only,
+  *  nothing is asked or sent: the form opens at once (one mark: the point keeps its id, fromMark). */
  async function toPoint(){
-  const rows=selection?.rows?.map(s=>({...s})),page=pageNo,button=el.querySelector('[data-ink-to-point]');
-  if(!rows?.length||!VZ.scorePoints?.editor)return;
+  const all=selection?.rows?.map(s=>({...s})),page=pageNo,button=el.querySelector('[data-ink-to-point]');
+  if(!all?.length||!VZ.scorePoints?.editor)return;
   // The page is being drawn again (the iPad turned, the window or zoom changed): wait for it instead of doing nothing.
   await settle();
   if(closed)return;
   if(visionBusy||!ready||busy||pending||performance){say('악보 준비나 저장이 끝난 뒤 다시 시도해 주세요.',true);return;}
+  const rows=all.filter(s=>!isMark(s)),marks=all.filter(isMark);
+  const named=marks.length&&window.VzipScorePointsModel?await markItems(marks):[];
+  if(closed)return;
+  const names=named.length?window.VzipScorePointsModel.markNames(named.map(m=>m.text)):'';
+  if(!rows.length){await openPoint([],page,names,'',{at:spanOf(named.map(m=>m.measures)),fromMark:named.length===1?named[0].fromMark:undefined});return;}
   let text='',note='';
   // The same question as 텍스트로 변환 (recognize) before anything is sent; 취소 opens the form to write by hand.
-  const send=visionAvailable&&navigator.onLine!==false&&await VZ.confirm('선택 영역 인식','선택한 손글씨 획만 OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.',{ok:'인식하기'});
+  const send=visionAvailable&&navigator.onLine!==false&&await VZ.confirm('선택 영역 인식','선택한 손글씨 획만 OpenAI API로 보내 인식할까요? 결과는 확인 후 저장할 수 있어요.'+(marks.length?' 악보 표기는 보내지 않아요.':''),{ok:'인식하기'});
   if(closed)return;
   if(send){
    visionBusy=true;visionController=new AbortController();button.dataset.busy='';saveState('인식 중…','pending');say('선택한 손글씨를 글자로 바꾸고 있어요.');paint();
@@ -793,7 +836,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
    finally{visionBusy=false;visionController=null;delete button.dataset.busy;if(!closed){saveState('이 기기에 저장됨','local');say('지적 내용을 확인해 주세요.');paint();}}
   }
   else if(visionAvailable&&navigator.onLine===false)note='인터넷에 연결되지 않아 글자 인식은 건너뛰었어요. 직접 적어 주세요.';
-  if(!closed)await openPoint(rows,page,text,note);
+  if(closed)return;
+  const where=pointMeasures(rows,page);
+  await openPoint(rows,page,[text,names].filter(Boolean).join(', '),note,named.length?{at:spanOf([where.from===''?null:where,...named.map(m=>m.measures)])}:{});
  }
  function invalidateExport(){
   if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=null;exportStamp='';
@@ -901,6 +946,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
    current();
    if(!store.commit({add:action.add,remove:action.remove.map(s=>s.id)}))throw Error('필기 복구 기록은 보존했어요. 저장 공간을 확인하고 다시 저장해 주세요.');
    pending=null;invalidateExport();
+   // A record replaced by its copy (moved, resized, or put back by undo): points made from it follow (relinkPoints).
+   const copies=action.add.length===action.remove.length?action.remove.map((s,i)=>[s.id,action.add[i]?.id]):[];
    if(kind==='normal'){undo.push(action);redo=[];}
    else{
     // Undo/redo put erased records back under new ids (records are never reused). The other steps still on the two
@@ -908,7 +955,9 @@ VZ.openScoreInk=(songId,scoreId)=>{
     const source=kind==='undo'?undo.pop():redo.pop(),fresh=new Map(source.remove.map((s,i)=>[s.id,action.add[i]])),swap=list=>list.map(s=>fresh.get(s.id)||s);
     (kind==='undo'?redo:undo).push(action);
     if(fresh.size)for(const step of [...undo,...redo]){step.add=swap(step.add);step.remove=swap(step.remove);}
+    for(const [id,copy] of fresh)copies.push([id,copy?.id]);
    }
+   try{relinkPoints(copies);}catch{}
    lastSaveMessage=navigator.onLine===false?'이 기기에 저장됨 · 온라인 연결 후 동기화':'이 기기에 저장됨 · 클라우드는 기존 동기화로 저장';saveState('이 기기에 저장됨','local');say(lastSaveMessage);
   }catch(e){saveState('저장 실패 · 다시 시도','error');say('저장하지 못했어요: '+e.message,true);}
   paint();
@@ -1108,7 +1157,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const m=markerNow(),lo=Math.min(from,to),hi=Math.max(from,to),shapes=measures.pieces(m,lo,hi),count=measures.count();
   if(!shapes.length||!count){paint();return;}
   const group=shapes.length>1?VZ.uid():null,now=Date.now();
-  apply({add:shapes.map(shape=>({version:1,id:VZ.uid(),...binding,page:pageNo,...shape,mark:m.id,...(!m.builtin&&m.role?{role:m.role}:{}),measures:[lo,hi,count],...(group?{group}:{}),createdAt:now})),remove:[]});
+  const add=shapes.map(shape=>({version:1,id:VZ.uid(),...binding,page:pageNo,...shape,mark:m.id,...(!m.builtin&&m.role?{role:m.role}:{}),measures:[lo,hi,count],...(group?{group}:{}),createdAt:now}));
+  apply({add,remove:[]});if(m.check&&!pending)markToPoint(add);
  }
  /** A drag shorter than 8px on screen is a tap: the mark then gets its standard length. */
  const markEnd=(start,end)=>Math.hypot((end[0]-start[0])*box.clientWidth,(end[1]-start[1])*box.clientHeight)<8?null:end;
@@ -1125,7 +1175,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
   const first=input==='two'?markerStart:start,last=input==='two'?end:input==='drag'?markEnd(start,end):null;markerStart=null;
   const shapes=Ink.markShapes(m,first,last,aspect);if(!shapes.length)return;
   const group=shapes.length>1?VZ.uid():null,now=Date.now();
-  apply({add:shapes.map(shape=>({version:1,id:VZ.uid(),...binding,page:pageNo,...shape,mark:m.id,...(!m.builtin&&m.role?{role:m.role}:{}),...(group?{group}:{}),createdAt:now})),remove:[]});
+  const add=shapes.map(shape=>({version:1,id:VZ.uid(),...binding,page:pageNo,...shape,mark:m.id,...(!m.builtin&&m.role?{role:m.role}:{}),...(group?{group}:{}),createdAt:now}));
+  apply({add,remove:[]});if(m.check&&!pending)markToPoint(add);
  }
  /** A small drawing of what a marker leaves, for the palette and the editor (viewBox 64×48, in thousandths of a page). */
  function markerSample(m){
@@ -1205,6 +1256,8 @@ VZ.openScoreInk=(songId,scoreId)=>{
    (old?.builtin?'<div class="ink-marker-role-fixed" data-marker-role-fixed><span>기능</span><strong>'+esc(roleName(Settings.markerRole(old)))+'</strong><small>기본 표기의 기능은 바꿀 수 없어요.</small></div>'
     :'<fieldset class="ink-marker-set" data-marker-role><legend>기능 <small>선택</small></legend><div class="ink-marker-choices ink-marker-roles">'+Settings.MARK_ROLES.map(r=>'<label><input type="radio" name="role" value="'+r[0]+'"'+(r[0]===(from.role||'')?' checked':'')+'><span>'+esc(r[1])+(r[0]?'':'<small>기본</small>')+'</span></label>').join('')+'</div>'+
      '<p class="ink-marker-role-note" data-marker-role-note></p></fieldset>')+
+   // 부르면서 체크에 넣기: a mark placed with this preset is also a 레슨 지적 at once (off unless turned on).
+   '<label class="ink-marker-check" data-marker-check><input type="checkbox" name="check"'+(from.check?' checked':'')+'><span><b>부르면서 체크에 넣기</b><small>이 표기를 찍으면 그 마디의 레슨 지적으로 바로 넣어요. 표기를 지워도 지적은 남아요.</small></span></label>'+
    '<p class="ink-marker-note">저장한 뒤에 찍는 표기부터 바뀌어요. 악보에 이미 찍은 표기는 그대로예요.</p>'+
    (old?.builtin?'<button type="button" class="btn ghost block" data-marker-reset'+(old.changed?'':' disabled')+'>기본값으로 되돌리기</button>':old?'<button type="button" class="btn danger block" data-marker-delete>이 표기 삭제</button>':'')+
    '<p class="ink-marker-error" role="alert" data-marker-error></p></form>';
@@ -1294,7 +1347,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    form.onsubmit=event=>{
     event.preventDefault();
     let look;try{look=Settings.marker(read());}catch(e){fail(e.message);return;}
-    try{current();const next=old?.id||'m-'+VZ.uid();profiles=prefs.write('marker',{id:next,...look,...(form.elements.role?{role:look.role||''}:{}),pick:look.pick||''});close();markerEditing=false;if(old)syncMarkers();else pickMarker(next);VZ.toast(old?'표기를 저장했어요.':'표기를 추가했어요.');}
+    try{current();const next=old?.id||'m-'+VZ.uid();profiles=prefs.write('marker',{id:next,...look,...(form.elements.role?{role:look.role||''}:{}),pick:look.pick||'',check:form.elements.check.checked});close();markerEditing=false;if(old)syncMarkers();else pickMarker(next);VZ.toast(old?'표기를 저장했어요.':'표기를 추가했어요.');}
     catch(e){fail('표기를 저장하지 못했어요: '+e.message);}
    };
    node.querySelector('[data-marker-reset]')?.addEventListener('click',async()=>{

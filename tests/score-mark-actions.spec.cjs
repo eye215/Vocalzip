@@ -227,15 +227,15 @@ test('tapping a 시작점 or 반복 mark with the 이동 tool offers 여기서 �
  await setup(page,{sync:EVEN,rows:ALL});const dialog=await openMarked(page);
  await tap(page,dialog,180,112);
  const menu=page.getByRole('dialog',{name:'시작점 · 3마디 메뉴'});
- await expect(menu.locator('.score-sync-menu-title')).toHaveText('시작점 · 3마디');await expect(menu.getByRole('button')).toHaveText([/여기서 재생/]);
- expect((await menu.getByRole('button').boundingBox()).height).toBeGreaterThanOrEqual(44);
+ await expect(menu.locator('.score-sync-menu-title')).toHaveText('시작점 · 3마디');await expect(menu.getByRole('button')).toHaveText([/여기서 재생/,/지적으로/]);
+ for(const b of await menu.getByRole('button').all())expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
  await menu.getByRole('button',{name:'여기서 재생'}).click();
  await expect(bar(dialog).getByRole('group',{name:'MR 재생 중'})).toBeVisible();
  await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(2.95);expect((await mr(page)).time).toBeLessThan(3.9);
  // From the playing MR straight into the repeat mark's range: 6–7 (6–8 s) with measure 5 as the lead-in.
  await tap(page,dialog,150,186);
  const repeat=page.getByRole('dialog',{name:'반복 · 6–7마디 메뉴'});
- await expect(repeat.getByRole('button')).toHaveText([/이 구간 반복/]);await repeat.getByRole('button',{name:'이 구간 반복'}).click();
+ await expect(repeat.getByRole('button')).toHaveText([/이 구간 반복/,/지적으로/]);await repeat.getByRole('button',{name:'이 구간 반복'}).click();
  const loop=bar(dialog).getByRole('group',{name:'마디 반복 재생'});
  await expect(loop.locator('[data-score-audio-loop-label]')).toHaveText('6–7마디 반복 중');await expect(loop).toHaveAttribute('data-score-audio-loop-cuts','');
  await expect.poll(async()=>(await mr(page)).time).toBeGreaterThan(4.95);
@@ -249,8 +249,13 @@ test('tapping a 시작점 or 반복 mark with the 이동 tool offers 여기서 �
  // 컷: what is skipped, and the switch.
  await tap(page,dialog,240,88);
  const cut=page.getByRole('dialog',{name:'컷 · 4마디 메뉴'});
- await expect(cut.locator('[data-mark-cut-text]')).toHaveText('재생할 때 4마디 건너뜀');await expect(cut.getByRole('button')).toHaveText([/컷 건너뛰기 끄기/]);
- await closeMenu(page);await expect(cut).toHaveCount(0);
+ await expect(cut.locator('[data-mark-cut-text]')).toHaveText('재생할 때 4마디 건너뜀');await expect(cut.getByRole('button')).toHaveText([/컷 건너뛰기 끄기/,/지적으로/]);
+ // 지적으로: the 지적 추가 form filled from the mark — its name and measure; nothing is saved before 저장.
+ await cut.getByRole('button',{name:'지적으로'}).click();await expect(cut).toHaveCount(0);
+ const form=page.getByRole('dialog',{name:'지적 추가',exact:true});await expect(form).toBeVisible();
+ await expect(form.locator('textarea[name=text]')).toHaveValue('컷');await expect(form.getByLabel('시작 마디')).toHaveValue('4');await expect(form.getByLabel('끝 마디')).toHaveValue('');
+ expect(await page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(r=>r.kind==='score-point').length)).toBe(0);
+ await page.keyboard.press('Escape');await expect(form).toHaveCount(0);
  // With the pen the same tap writes (a dot) and opens nothing.
  const count=await page.evaluate(()=>window.VZ.db.scoreAnnotations.filter(s=>s.kind!=='marker-preset').length);
  await dialog.getByRole('button',{name:'펜',exact:true}).click();await tap(page,dialog,180,112);
@@ -923,7 +928,7 @@ test('a drawn mark with a 기능 does it; a built-in mark can be drawn too and �
  await expect(opts(dialog)).toBeVisible({timeout:5000});await opts(dialog).click();
  await expect(starts(page)).toHaveText(['처음부터','시작점 3마디에서1쪽']);await closeMenu(page);
  await tap(page,dialog,180,105);
- await expect(page.getByRole('dialog',{name:'내 시작 · 3마디 메뉴'}).getByRole('button')).toHaveText([/여기서 재생/]);await closeMenu(page);
+ await expect(page.getByRole('dialog',{name:'내 시작 · 3마디 메뉴'}).getByRole('button')).toHaveText([/여기서 재생/,/지적으로/]);await closeMenu(page);
  const list=await openList(page,dialog);
  await expect(list.locator('[data-measure-row]')).toHaveText([/^3마디\s*내 시작$/]);await expect(list.getByRole('button',{name:'3마디 여기서 재생',exact:true})).toBeEnabled();
  await list.getByRole('button',{name:'돌아가기',exact:true}).click();

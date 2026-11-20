@@ -26,7 +26,11 @@
  * drawing whose size is not s | m | l at 보통 (they keep the preset; saving it there drops the factor).
  * 투명도 (opacity, optional, 0.05–1): how see-through the marks are. Without it a highlighter preset's marks have
  * Ink.MARK_OPACITY and a pen preset's 1, as before it could be set. Older app versions skip the field (marker() keeps
- * only what it knows): they still show the preset, with the default 투명도, and saving it there drops the field. */
+ * only what it knows): they still show the preset, with the default 투명도, and saving it there drops the field.
+ * 부르면서 체크에 넣기 (check, optional, any preset — built-in ones too; off unless set): placing a mark with the preset
+ * also makes it a 레슨 지적 (app/score-points.js). It is not part of the look: on a synced row it is the row's own
+ * field `check: true` (beside look, so a built-in preset as at first — look null — can have it, and older app versions,
+ * which spread the old row when they write, keep it); in the device entry the ids are listed in markers.check. */
 (function(root,factory){const node=typeof module==='object'&&module.exports,api=factory(node?require('./score-ink-model.js'):root.VzipScoreInk);if(node)module.exports=api;else root.VzipScoreInkSettings=api;})(typeof window==='object'?window:globalThis,function(Ink){
 'use strict';
 const HEX=/^#[0-9a-f]{6}$/i,PREFIX='vzip_score_ink_settings_v1:',MAX_TEXT=600000;
@@ -116,11 +120,16 @@ function markers(stored){
   if(typeof raw?.id!=='string'||!/^[\w:-]{1,64}$/.test(raw.id)||ids.has(raw.id))continue;
   try{list.push({...marker(raw),id:raw.id,builtin:false});ids.add(raw.id);}catch{}
  }
- return list;
+ const check=new Set(Array.isArray(stored?.check)?stored.check:[]);
+ return list.map(m=>check.has(m.id)?{...m,check:true}:m);
 }
-const plainMarker=({builtin,changed,id,...look})=>look;
+const plainMarker=({builtin,changed,id,check,...look})=>look;
 // A changed built-in whose default is 마디 선택 (컷) says its way outright, so "off" is not lost when read with the default.
-const packMarkers=list=>({builtin:Object.fromEntries(list.filter(m=>m.builtin&&m.changed).map(m=>[m.id,{...plainMarker(m),...(MARKERS.find(d=>d.id===m.id)?.pick?{pick:m.pick||''}:{})}])),user:list.filter(m=>!m.builtin).map(m=>({id:m.id,...plainMarker(m)}))});
+const packMarkers=list=>{
+ const out={builtin:Object.fromEntries(list.filter(m=>m.builtin&&m.changed).map(m=>[m.id,{...plainMarker(m),...(MARKERS.find(d=>d.id===m.id)?.pick?{pick:m.pick||''}:{})}])),user:list.filter(m=>!m.builtin).map(m=>({id:m.id,...plainMarker(m)}))};
+ const check=list.filter(m=>m.check).map(m=>m.id);if(check.length)out.check=check;
+ return out;
+};
 const clone=x=>JSON.parse(JSON.stringify(x)),defaults=()=>({pen:{color:'#101828',width:0.004,opacity:1,recent:[],custom:[]},highlighter:{color:'#fef08a',width:0.024,opacity:0.55,recent:[],custom:[]},eraser:{size:0.018},memo:{mode:'text',color:'#fbe88c'},goalTarget:'today',markers:markers(null),penOnly:false});
 /* Synced presets (rows of LIST, see the top). */
 const BUILTIN_IDS=new Set(MARKERS.map(m=>m.id));
@@ -136,14 +145,17 @@ function presetRows(data,owner){
 const removedRows=data=>new Set((Array.isArray(data?.deleted?.[LIST])?data.deleted[LIST]:[]).map(String));
 /** Rows as the device entry stores presets (what markers() reads): user presets in the order they were made. */
 function storedFromRows(rows){
- const builtin={},user=[];
+ const builtin={},user=[],check=[];
  for(const r of rows.values()){
+  if(r.check===true)check.push(r.preset);
   if(!r.look||typeof r.look!=='object'||Array.isArray(r.look))continue;
   if(BUILTIN_IDS.has(r.preset))builtin[r.preset]=r.look;else user.push({...r.look,id:r.preset,made:Number(r.createdAt)||0});
  }
  user.sort((a,b)=>a.made-b.made||(a.id<b.id?-1:a.id>b.id?1:0));
- return {builtin,user:user.map(({made,...u})=>u)};
+ return {builtin,user:user.map(({made,...u})=>u),check};
 }
+/** A preset row with 부르면서 체크에 넣기 as the preset has it (the field is left out when it is off). */
+const withCheck=(row,on)=>{const {check,...rest}=row;return on?{...rest,check:true}:rest;};
 /** The rows to write so the presets in a device entry (`stored`) reach the synced list. at: when this version last
  *  wrote a preset there (markersAt); 0 for older versions, which is older than any synced row. A preset synced already
  *  stays unless the device copy is newer; one deleted on any device stays deleted; at most MARK_USER_MAX user presets. */
@@ -152,8 +164,8 @@ function migration(stored,at,rows,removed,owner,now){
  markers(stored).forEach((m,i)=>{
   const id=ROW_PREFIX+m.id,row=rows.get(m.id),look=rowLook(m);
   if(removed.has(id)||row&&!(at>(Number(row.updatedAt)||0)))return;
-  if(!row){if(!look)return;if(!m.builtin){if(users>=MARK_USER_MAX)return;users++;}}
-  out.push({...row,id,kind:ROW,ownerId:owner,preset:m.id,look,createdAt:Number(row?.createdAt)||now+i});
+  if(!row){if(!look&&!m.check)return;if(!m.builtin){if(users>=MARK_USER_MAX)return;users++;}}
+  out.push(withCheck({...row,id,kind:ROW,ownerId:owner,preset:m.id,look,createdAt:Number(row?.createdAt)||now+i},!!m.check));
  });
  return out;
 }
@@ -223,23 +235,25 @@ function create({storage,identity,defaultPenOnly=false,getData,change}){
    data.goalTarget=patch.target;
   }
   else if(tool==='marker'){
-   // {id, …look}: changes that preset, or adds a user preset under a new id. options.reset puts a built-in one back,
-   // options.remove deletes a user one (marks already placed keep their own look and their `mark` id).
+   // {id, …look, check?}: changes that preset, or adds a user preset under a new id. options.reset puts a built-in
+   // one's look back (부르면서 체크에 넣기 stays as it is), options.remove deletes a user one (marks already placed keep
+   // their own look and their `mark` id). check (true / false) sets 부르면서 체크에 넣기; without it it stays.
    const at=data.markers.findIndex(m=>m.id===patch.id),old=data.markers[at];
+   const check=('check' in patch?patch.check===true:old?.check===true)?{check:true}:{};
    if(options.reset){
     if(!old?.builtin)throw Error('기본 표기만 처음 모양으로 되돌릴 수 있어요.');
-    data.markers[at]={...MARKERS.find(m=>m.id===old.id),builtin:true,changed:false};
+    data.markers[at]={...MARKERS.find(m=>m.id===old.id),builtin:true,changed:false,...check};
    }else if(options.remove){
     if(!old)throw Error('이미 지운 표기예요.');
     if(old.builtin)throw Error('기본 표기는 지울 수 없어요. 모양은 바꿀 수 있어요.');
     data.markers.splice(at,1);
    }else if(old){
     const made=marker({...old,...patch}),next=old.builtin?lookOnly(made):made;
-    data.markers[at]={...next,id:old.id,builtin:old.builtin,...(old.builtin?{changed:!sameMarker(next,MARKERS.find(m=>m.id===old.id))}:{})};
+    data.markers[at]={...next,id:old.id,builtin:old.builtin,...(old.builtin?{changed:!sameMarker(next,MARKERS.find(m=>m.id===old.id))}:{}),...check};
    }else{
     if(typeof patch.id!=='string'||!/^[\w:-]{1,64}$/.test(patch.id))throw Error('표기를 확인해 주세요.');
     if(data.markers.filter(m=>!m.builtin).length>=MARK_USER_MAX)throw Error('직접 만든 표기는 '+MARK_USER_MAX+'개까지예요. 안 쓰는 표기를 먼저 지워 주세요.');
-    data.markers.push({...marker(patch),id:patch.id,builtin:false});
+    data.markers.push({...marker(patch),id:patch.id,builtin:false,...check});
    }
   }
   else if(tool==='eraser'){
@@ -263,7 +277,7 @@ function create({storage,identity,defaultPenOnly=false,getData,change}){
     // The preset's row in the app record (VZ.change stamps updatedAt); then the device entry, kept for older versions.
     const d=getData(),now=data.markers.find(m=>m.id===patch.id),id=ROW_PREFIX+patch.id,old=presetRows(d,owner).get(patch.id);
     if(now&&removedRows(d).has(id))throw Error('다른 기기에서 지운 표기예요.');
-    const row=now?{...old,id,kind:ROW,ownerId:owner,preset:now.id,look:rowLook(now),createdAt:Number(old?.createdAt)||at}:null;
+    const row=now?withCheck({...old,id,kind:ROW,ownerId:owner,preset:now.id,look:rowLook(now),createdAt:Number(old?.createdAt)||at},!!now.check):null;
     current();if(!change(next=>putRows(next,[[id,row]])))throw Error('표기 설정을 저장하지 못했어요. 저장 공간을 확인해 주세요.');
     try{current();storage.setItem(key,JSON.stringify({version:1,owner,...data,markers:packMarkers(data.markers),markersAt:at}));}catch{}
     current();return clone(read());
