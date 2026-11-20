@@ -25,8 +25,37 @@ test('a day with nothing set up: one exercise from each group, 목 풀기 → �
   for(const s of b.steps){assert.ok(s.minutes>=1);assert.equal(typeof s.mic,'boolean');assert.ok(s.why);assert.equal(D.exercise(s.exercise).group,s.group);}
   assert.equal(b.steps.at(-1).mic,true);assert.equal(b.steps[0].mic,false);
   assert.deepEqual(b.own,[]);
-  // The automatic latest-song section and recording of 오늘 연습 세트 are not in a day's set unless a saved set holds them.
-  assert.ok(!D.build(empty(),{today:TODAY,recentSongId:'s1'}).steps.some(s=>s.kind==='song'||s.kind==='record'));
+});
+
+test('곡: the set ends with 곡에 적용하기 for the plan song or the latest song, then the optional 녹음 — as 오늘 연습 세트 did; 고르기 can rest it',()=>{
+  const db=empty(),b=D.build(db,{today:TODAY,recentSongId:'s1'});
+  assert.deepEqual(b.steps.map(s=>s.kind),['exercise','exercise','exercise','exercise','song','record']);
+  const [song,record]=b.steps.slice(-2);
+  assert.deepEqual([song.title,song.apply,song.songId,D.labelOf(song),D.modeOf(song),song.id],['곡에 적용하기 · This Is the Moment',true,'s1','곡','free','song-s1']);
+  assert.deepEqual([record.kind,record.optional,record.songId,D.labelOf(record)],['record',true,'s1','녹음']);
+  assert.deepEqual(b.own.map(s=>s.kind),['song','record']);
+  assert.equal(D.SONG.title,'곡');assert.equal(D.prefs(db).groupsOff.song,undefined); // on by default
+  // The same source rule as before (app/practice-set-model.js): a running monthly plan's song and section first.
+  const plan=empty();plan.songs.push({id:'s2',title:'Defying Gravity'});
+  plan.practicePlans.push({id:'mp1',kind:'monthly-vocal',songId:'s2',metric:'stability',segmentStart:30,segmentEnd:70,minutes:12,days:5,startDate:'2026-11-02',archived:false});
+  const p=D.build(plan,{today:TODAY,recentSongId:'s1'}).steps.slice(-2);
+  assert.deepEqual([p[0].title,p[0].planId,p[0].segmentStart,p[0].minutes,p[1].songId],['곡에 적용하기 · Defying Gravity','mp1',30,12,'s2']);
+  // No song to apply to: no step (and nothing to record).
+  assert.ok(!D.build(empty(),{today:TODAY}).steps.some(s=>s.kind==='song'||s.kind==='record'));
+  // A homework of today's set about a song already covers it.
+  const hw=empty();hw.assignments.push({id:'a9',title:'후렴 고음 연습',status:'active',startDate:'2026-11-01',dueDate:'2026-11-08',songId:'s1'});
+  const covered=D.build(hw,{today:TODAY,recentSongId:'s1'});
+  assert.equal(covered.steps[0].assignmentId,'a9');
+  assert.equal(covered.steps[0].songId,'s1');assert.ok(!covered.steps.some(s=>s.apply));
+  assert.deepEqual(covered.steps.slice(-1).map(s=>[s.kind,s.songId]),[['record','s1']]); // the optional 녹음 of that song still closes the set
+  // 곡 turned off in 고르기: both steps leave; a section the person added stays; 처음대로 brings them back.
+  D.savePrefs(db,D.setGroup(D.prefs(db),'song',false));
+  assert.equal(db.practicePlans.find(x=>x.id===D.PREFS_ID).groupsOff.song,true);
+  assert.deepEqual(D.build(db,{today:TODAY,recentSongId:'s1'}).steps.map(s=>s.kind),['exercise','exercise','exercise','exercise']);
+  const own=[{kind:'song',songId:'s1',title:'곡 구간 · This Is the Moment 0:30–1:10',minutes:8,added:true,segmentStart:30,segmentEnd:70}];
+  assert.deepEqual(D.build(db,{today:TODAY,own}).steps.slice(-1).map(s=>[s.kind,s.added,s.apply]),[['song',true,undefined]]);
+  D.savePrefs(db,D.resetPrefs(D.prefs(db)));
+  assert.deepEqual(D.build(db,{today:TODAY,recentSongId:'s1'}).steps.slice(-2).map(s=>s.kind),['song','record']);
 });
 
 test('the catalogue is data: every exercise has what the runner and later versions need',()=>{
@@ -45,14 +74,15 @@ test('the catalogue is data: every exercise has what the runner and later versio
 
 test('숙제 and a missed lesson point go first, two at most; a homework that is one of today\'s goals is that goal\'s step',()=>{
   const db=seed();db.assignments.pop(); // only a1, which is one of today's goals
-  db.scoreAnnotations=[{id:'pt1',kind:'score-point',songId:'s1',text:'호흡을 끊지 않기',measures:{start:3,end:4},status:'active',created:1},
-    {id:'run1',kind:'score-point-run',songId:'s1',date:'2026-11-03',results:{pt1:'missed'},created:2}];
+  db.scoreAnnotations=[{id:'point:pt1',kind:'score-point',songId:'s1',text:'호흡을 끊지 않기',measures:{from:3,to:4},created:1},
+    {id:'point-run:r1',kind:'score-point-run',songId:'s1',date:'2026-11-03',at:2,results:{'point:pt1':'missed'}}];
   const b=D.build(db,{today:TODAY}),next=D.nextItems(db,TODAY);
   assert.ok(next.length<=D.NEXT_MAX);
   const lead=b.steps.slice(0,next.length);
   // a1 is in today's goals: the goal's own step leads (finishing it checks the goal and links the homework).
   assert.equal(lead[0].kind,'goal');assert.equal(lead[0].goalId,'g1');assert.equal(lead[0].lead,true);assert.equal(D.labelOf(lead[0]),'숙제');
-  if(next.some(x=>x.source==='lesson-point')){assert.equal(lead[1].kind,'next');assert.equal(lead[1].source,'lesson-point');assert.equal(lead[1].pointId,'pt1');assert.equal(D.labelOf(lead[1]),'레슨 지적');}
+  assert.deepEqual(next.map(x=>x.source),['homework','lesson-point']);
+  assert.deepEqual([lead[1].kind,lead[1].source,lead[1].pointId,lead[1].songId,D.labelOf(lead[1])],['next','lesson-point','point:pt1','s1','레슨 지적']);
   assert.deepEqual(groupsOf(b.steps),['loosen','breath','voice','ear']);
   assert.ok(b.steps.findIndex(s=>s.kind==='exercise')>=next.length);
   assert.equal(b.steps.filter(s=>s.goalId==='g1').length,1,'never twice');
@@ -88,7 +118,7 @@ test('the person\'s own steps stay, after the built-in ones',()=>{
   assert.ok(bare.steps.some(s=>s.kind==='warmup'));assert.deepEqual(groupsOf(bare.steps),['ear']);
   // A running monthly plan's section stays even without a saved set.
   const plan=empty();plan.practicePlans.push({id:'mp1',kind:'monthly-vocal',songId:'s1',metric:'stability',segmentStart:30,segmentEnd:70,minutes:12,days:5,startDate:'2026-11-02',archived:false});
-  assert.deepEqual(D.build(plan,{today:TODAY}).own.map(s=>[s.kind,s.planId]),[['song','mp1']]);
+  assert.deepEqual(D.build(plan,{today:TODAY}).own.map(s=>[s.kind,s.planId]),[['song','mp1'],['record',undefined]]);
 });
 
 test('an own step tagged for a group takes that group\'s place',()=>{

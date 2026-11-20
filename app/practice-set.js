@@ -283,6 +283,9 @@ function pickSheet(){
     return '<fieldset class="dset-group" data-group="'+g.id+'"'+(on?'':' data-off')+'><legend><span><strong>'+esc(g.title)+'</strong><small>'+esc(g.line)+'</small></span>'+sw('group',g.id,on,g.title+' 그룹 하기')+'</legend>'+
       '<div class="dset-opts">'+D.exercisesOf(g.id).map(e=>'<label class="dset-opt"><input type="checkbox" name="ex" value="'+e.id+'"'+(pf.off[e.id]?'':' checked')+'><span class="dset-check" aria-hidden="true"></span>'+
         '<span class="dset-opt-copy"><strong>'+esc(e.title)+'</strong><small>'+e.minutes+'분'+(e.mic?' · 마이크':'')+(todayPick?.id===e.id?' · 오늘':'')+'</small></span></label>').join('')+'</div></fieldset>';}).join('');
+  const songOn=!pf.groupsOff[D.SONG.id];
+  const songBox='<fieldset class="dset-group" data-group="'+D.SONG.id+'"'+(songOn?'':' data-off')+'><legend><span><strong>'+esc(D.SONG.title)+'</strong><small>'+esc(D.SONG.line)+'</small></span>'+sw('group',D.SONG.id,songOn,D.SONG.title+' 그룹 하기')+'</legend>'+
+    '<p class="pset-help dset-opts">마지막에 ‘곡에 적용하기’가 들어가요. 진행 중인 곡 계획이 있으면 그 곡, 없으면 가장 최근에 연습한 곡이에요. 이어서 녹음(선택)을 할 수 있어요.</p></fieldset>';
   const mine=taggable.length?'<fieldset class="dset-group dset-mine"><legend><span><strong>내 연습</strong><small>기본 연습 대신 하고 싶으면 자리를 골라요</small></span></legend>'+
     taggable.map((x,i)=>'<label class="field dset-tag"><span>'+esc(shortTitle(x.s))+'</span><select name="tag'+i+'" data-tag="'+esc(x.key)+'" aria-label="'+esc(shortTitle(x.s))+' 자리"><option value="">기본 연습 뒤에 하기</option>'+
       D.GROUPS.map(g=>'<option value="'+g.id+'"'+(pf.replace[x.key]===g.id?' selected':'')+'>'+esc(g.title)+' 대신</option>').join('')+'</select></label>').join('')+'</fieldset>':'';
@@ -293,7 +296,7 @@ function pickSheet(){
         '<p class="pset-help">내 곡에 곡을 먼저 추가하면 쓸 수 있어요.</p>')+
       '<p class="pset-help">녹음은 다른 연습 녹음과 똑같이 보관돼요. 녹음 길이는 연습 시간에 더하지 않아요.</p></div></fieldset>';
   V.sheet({title:'오늘의 연습 고르기',
-    body:'<form id="dset-pick" class="dset-pick" data-dset-pick><p class="pset-help">그룹마다 켜 둔 연습이 하루에 하나씩 돌아가며 나와요. 그룹마다 하나는 켜 두어야 해요.</p>'+groups+mine+record+
+    body:'<form id="dset-pick" class="dset-pick" data-dset-pick><p class="pset-help">그룹마다 켜 둔 연습이 하루에 하나씩 돌아가며 나와요. 그룹마다 하나는 켜 두어야 해요.</p>'+groups+songBox+mine+record+
       '<button type="button" class="pset-chip dset-reset" data-pick-reset><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>처음대로</button>'+
       '<p role="alert" class="pset-error" data-pick-error></p></form>',
     foot:'<button type="submit" form="dset-pick" class="btn block">저장</button>',
@@ -311,7 +314,7 @@ function pickSheet(){
         for(const box of form.querySelectorAll('.dset-group[data-group]')){
           const g=D.groupOf(box.dataset.group),on=box.querySelector('[name=group]').checked,ex=[...box.querySelectorAll('[name=ex]')];
           if(!on)groupsOff[g.id]=true;
-          if(on&&!ex.some(i=>i.checked)){error.textContent=g.title+'에서 연습을 하나는 켜 두세요. 그룹을 쉬려면 그룹 스위치를 꺼 주세요.';ex[0]?.focus();return;}
+          if(on&&ex.length&&!ex.some(i=>i.checked)){error.textContent=g.title+'에서 연습을 하나는 켜 두세요. 그룹을 쉬려면 그룹 스위치를 꺼 주세요.';ex[0]?.focus();return;}
           // A group that is off keeps the choices it had.
           for(const i of ex)if(on?!i.checked:pf.off[i.value])off[i.value]=true;
         }
@@ -382,6 +385,12 @@ function helperHtml(st){
   let html='';
   if(st.kind==='warmup'||st.first)html+=(st.tips?.length?'<ul class="pset-tips">'+st.tips.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>':'')+(st.href?'<a class="pset-chip" href="'+esc(st.href)+'">열기</a>':'');
   if(song&&st.kind!=='next')html+='<p class="pset-song"><i class="ph ph-music-note" aria-hidden="true"></i><strong>'+esc(song.title)+'</strong>'+(seg?'<span>구간 '+esc(seg)+'</span>':'<span>전체</span>')+'</p>';
+  if(song&&st.kind==='song'){
+    // 곡에 적용하기 · 곡 구간: the song's own screen (악보 · MR · 녹음), and its 레슨 지적 when it has some to check while singing.
+    let points=0;try{const M=window.VzipScorePointsModel;points=M?M.active(M.points(V.db,st.songId)).length:0;}catch{}
+    html+='<p class="pset-links"><a class="pset-chip" href="#/song/'+encodeURIComponent(st.songId)+'" data-song-open><i class="ph ph-music-notes" aria-hidden="true"></i>곡 열기</a>'+
+      (points?'<a class="pset-chip" href="#/song/'+encodeURIComponent(st.songId)+'" data-song-points><i class="ph ph-check-square" aria-hidden="true"></i>레슨 지적 '+points+'개 · 부르면서 체크</a>':'')+'</p>';
+  }
   if(st.kind==='next'&&st.href)html+='<a class="pset-chip" href="'+esc(st.href)+'" data-point-open><i class="ph ph-music-notes" aria-hidden="true"></i>곡에서 지적 보기</a>';
   if(st.kind==='record'){
     const n=st.mediaIds.length;
@@ -406,7 +415,7 @@ function whyOf(st){
     const g=(V.db.dailyGoals||[]).find(x=>x.id===st.goalId);
     return g?.recommendation?.reason||(st.source==='homework'?'마치면 오늘의 목표가 체크되고 숙제에 연습이 연결돼요':'마치면 오늘의 목표가 체크돼요');
   }
-  return st.kind==='record'?'오늘 한 것을 한 번 남겨 두면 다음에 들어 볼 수 있어요':st.kind==='song'?'정한 구간을 천천히 반복해요':'';
+  return st.kind==='record'?'오늘 한 것을 한 번 남겨 두면 다음에 들어 볼 수 있어요':st.apply?'방금 푼 목과 숨을 그대로 곡에서 써 봐요':st.kind==='song'?'정한 구간을 천천히 반복해요':'';
 }
 const noteOf=st=>session.overAway===st.id?'<p class="pset-over-note" role="status" data-over-note><i class="ph ph-clock-countdown" aria-hidden="true"></i><span>다른 곳에 있는 동안 계획한 '+st.minutes+'분이 지났어요. 단계는 그대로 두었어요. 더 하거나 다음으로 넘어가요.</span></p>':'';
 function linkRecordings(){

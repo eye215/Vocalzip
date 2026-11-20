@@ -163,10 +163,12 @@ const ENGINES={
     return {say:()=>e.text,
       stage:()=>'<div class="dset-tuner"><div class="dset-target"><small>지금 음</small><strong data-run-note>'+esc(D.noteName(notes[0]))+'</strong><button type="button" class="dset-chip" data-run-again><i class="ph ph-speaker-high" aria-hidden="true"></i>음 다시 듣기</button></div>'+
         '<div class="dset-track" aria-hidden="true"><i class="dset-zone"></i><i class="dset-needle" data-run-needle></i></div><div class="dset-track-labels" aria-hidden="true"><span>낮음</span><span>맞음</span><span>높음</span></div>'+
-        '<div class="dset-holdbar" aria-hidden="true"><i data-run-hold></i></div></div>'+dots(notes.length,0,0),
+        '<div class="dset-holdbar" aria-hidden="true"><i data-run-hold></i></div>'+
+        // A stated rule, not a silent one: the reading is folded to the nearest octave (centsFrom).
+        '<p class="dset-rule" data-run-rule'+(['denied','off'].includes(r.ctx.mic())?' hidden':'')+'>한 옥타브 위나 아래로 불러도 맞은 것으로 쳐요</p></div>'+dots(notes.length,0,0),
       ready(){r.word('준비되면 시작해요','wait');r.sub('음 '+notes.length+'개 · 한 음에 '+need+'초씩'+(r.ctx.mic()==='denied'||r.ctx.mic()==='off'?' · 마이크 없이 타이머로 해요':''));},
       bind(){r.q('[data-run-again]')?.addEventListener('click',()=>{if(r.state==='doing'||r.state==='ready'){r.audio('playback');r.tone(notes[i],.05,LISTEN-.1);}});},
-      start(){i=0;out.length=0;h=D.holdStart();tried=0;phase='listen';left=LISTEN;play();paint(null);},
+      start(){i=0;out.length=0;h=D.holdStart();tried=0;phase='listen';left=LISTEN;const rule=r.q('[data-run-rule]');if(rule)rule.hidden=!mic();play();paint(null);},
       resume(){h=D.holdStart();tried=0;phase='listen';left=LISTEN;play();paint(null);},
       tick(dt){
         if(phase==='listen'){left-=dt;if(left<=0){phase='sing';left=need+2;}return paint(null);}

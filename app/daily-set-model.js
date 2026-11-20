@@ -8,8 +8,11 @@
  *   2. One exercise from each built-in group the person keeps on, in GROUPS order (목 풀기 → 호흡 → 발성 → 음감; a
  *      group is added by adding it to GROUPS and its exercises to CATALOG). Inside a group the exercises left ON
  *      rotate by the date: the same day always gives the same one, and none repeats until the list is through.
- *   3. The person's own steps from 오늘 연습 세트 (today's goals and 반복 목표, song sections of a running plan, what a
- *      saved 요일/기본 세트 holds). One tagged for a group (prefs.replace) takes that group's place instead.
+ *   3. The person's own steps from 오늘 연습 세트 (today's goals and 반복 목표, what a saved 요일/기본 세트 holds). One
+ *      tagged for a group (prefs.replace) takes that group's place instead.
+ *   4. 곡 (the group SONG, on unless turned off in 고르기), as 오늘 연습 세트 always ended: ONE automatic step
+ *      "곡에 적용하기 · <곡>" — the running monthly plan's song, else the latest practised song; left out when a goal or
+ *      a homework of today's set already covers a song — and then the optional 녹음 step.
  *   Optional: a 30-second take before the first and after the last step (prefs.recording).
  *
  * WHERE THINGS ARE KEPT — no new list, only rows of lists that already sync:
@@ -71,8 +74,10 @@ const CATALOG=[
   {id:'ear-follow',group:'ear',title:'음 따라 부르기',why:'듣고 바로 같은 음을 내는 힘이 음정의 바탕이에요',minutes:3,mic:true,mode:'hold',
     count:5,hold:4,tolerance:25,syllable:'아~',text:'들린 음을 “아~”로 4초 동안 이어요'}
 ];
+/** 곡: not a rotation of exercises but the automatic end of a set (곡에 적용하기, then the optional 녹음). */
+const SONG={id:'song',title:'곡',line:'오늘 연습을 곡에 적용하고, 원하면 녹음해요'};
 const groupIds=()=>GROUPS.map(g=>g.id);
-const groupOf=id=>GROUPS.find(g=>g.id===id)||null;
+const groupOf=id=>GROUPS.find(g=>g.id===id)||(id===SONG.id?SONG:null);
 const exercise=id=>CATALOG.find(e=>e.id===id)||null;
 const exercisesOf=group=>CATALOG.filter(e=>e.group===group);
 
@@ -81,7 +86,7 @@ const validComfort=c=>c&&Number.isInteger(c.low)&&Number.isInteger(c.high)&&c.lo
 function cleanPrefs(raw){
   const row=raw&&typeof raw==='object'?raw:{},off={},groupsOff={},replace={};
   for(const e of CATALOG)if(row.off?.[e.id]===true)off[e.id]=true;
-  for(const g of GROUPS)if(row.groupsOff?.[g.id]===true)groupsOff[g.id]=true;
+  for(const g of [...GROUPS,SONG])if(row.groupsOff?.[g.id]===true)groupsOff[g.id]=true;
   // A group always keeps one exercise on (a whole group is turned off with groupsOff).
   for(const g of GROUPS){const ex=exercisesOf(g.id);if(ex.length&&ex.every(e=>off[e.id]))delete off[ex[0].id];}
   for(const [key,group] of Object.entries(row.replace&&typeof row.replace==='object'?row.replace:{}))if(groupIds().includes(group)&&key.length<=200)replace[key]=group;
@@ -144,19 +149,21 @@ function nextItems(db,today){
   for(const x of [...homework.slice(1),...points.slice(1)])if(out.length<NEXT_MAX)out.push(x);
   return out.slice(0,NEXT_MAX);
 }
-/** The person's own steps of 오늘 연습 세트 that stay in 오늘의 연습. Without a saved set the automatic latest-song
- * section and its recording are left out (nobody set them up); the automatic warm-up gives way to the built-in
- * groups; everything a saved 요일/기본 세트 holds stays. */
+const APPLY='곡에 적용하기 · ';
+/** The automatic song step of 오늘 연습 세트 (not a section the person added). */
+const autoSong=s=>s.kind==='song'&&!s.added;
+/** The person's own steps of 오늘 연습 세트 that stay in 오늘의 연습: everything, with two rules. The automatic warm-up
+ * gives way to the built-in groups (it stays when 목 풀기·호흡·발성 all rest). The automatic song step is named
+ * "곡에 적용하기 · <곡>"; it and the 녹음 step leave when 곡 is turned off in 고르기. */
 function ownSteps(set,pf){
-  const warm=['loosen','breath','voice'].some(g=>groupOf(g)&&!pf.groupsOff[g]);
+  const warm=['loosen','breath','voice'].some(g=>!pf.groupsOff[g]);
   return set.steps.filter(s=>{
     if(s.kind==='warmup'&&!s.first)return !warm;
-    if(set.template)return true;
-    if(s.kind==='record')return false;
-    if(s.kind==='song')return !!(s.planId||s.added);
+    if(pf.groupsOff[SONG.id]&&(s.kind==='record'||autoSong(s)))return false;
     return true;
-  });
+  }).map(applyStep);
 }
+const applyStep=s=>autoSong(s)&&String(s.title).startsWith('곡 구간 · ')?{...s,apply:true,title:APPLY+String(s.title).slice(7)}:s;
 /**
  * Today's set. options: {today, recentSongId?, template?}. Returns {steps, own (the person's steps, as the set editor
  * lists them), base (오늘 연습 세트 defaults, for the editor), template, prefs, minutes}.
@@ -177,6 +184,12 @@ function build(db={},options={}){
       const a=x.action;
       lead.push({kind:'next',source:'lesson-point',id:'next-lp-'+a.pointId,pointId:a.pointId,title:x.title,why:x.why,minutes:NEXT_MINUTES,...(a.songId?{songId:a.songId}:{}),...(a.href?{href:a.href}:{})});
     }
+  }
+  // A homework of today's set that is about a song already covers "곡에 적용하기"; a 녹음 step left without its song goes too.
+  if(lead.some(s=>s.source==='homework'&&s.songId)){
+    own=own.filter(s=>!autoSong(s));
+    const songs=new Set([...lead,...own.filter(s=>s.kind!=='record')].map(s=>s.songId).filter(Boolean));
+    own=own.filter(s=>s.kind!=='record'||songs.has(s.songId));
   }
   const groups=[];
   for(const g of GROUPS){
@@ -203,6 +216,7 @@ const KIND={warmup:'웜업',goal:'오늘의 목표',song:'곡 구간',record:'�
 /** The small word in front of a step: its group, where it came from, or its kind. */
 function labelOf(s){
   if(s.kind==='exercise'||s.replaces)return groupOf(s.group)?.title||'연습';
+  if(s.apply)return SONG.title;
   if(s.kind==='next')return SOURCE[s.source]||'다음 연습';
   if(s.first)return '시작 체크';
   if(s.kind==='goal')return s.routine?(s.source==='homework'?'숙제 · 매일 반복':'매일 반복'):SOURCE[s.source]||'목표';
@@ -309,7 +323,7 @@ function itemOf(st,minutes){
     title:st.title,state:st.skipped?'skipped':st.done?'done':'left',seconds:Math.round(Number(st.elapsed)||0),minutes,
     ...(r.mode?{mode:r.mode}:{}),...(r.timer?{timer:true}:{}),...(r.parts!=null?{parts:r.parts}:{}),...(r.holdSeconds!=null?{holdSeconds:r.holdSeconds}:{}),
     ...(r.accuracy!=null?{accuracy:r.accuracy}:{}),...(Array.isArray(r.notes)?{notes:r.notes}:{}),...(r.rounds!=null?{rounds:r.rounds}:{}),
-    ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(st.mic?{mic:true}:{})};
+    ...(r.longestOut!=null?{longestOut:r.longestOut}:{}),...(st.mic?{mic:true}:{}),...(st.apply?{apply:true}:{})};
 }
 /** Summary lines of a session: every step with its state and seconds (minutes rounded, as typed fields start). */
 function summary(s){
@@ -357,7 +371,7 @@ function save(db,s,rows,{now=Date.now(),category=null}={}){
 /** The sets finished on a date (newest last): the run rows. */
 const runsOn=(db,date)=>live(db,'practices').filter(p=>p.dailySet&&p.date===date).sort((a,b)=>(Number(a.created)||0)-(Number(b.created)||0));
 
-return {GROUPS,CATALOG,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
+return {GROUPS,SONG,CATALOG,NEXT_MAX,NEXT_MINUTES,TAKE_SECONDS,MAX_STEPS,PREFS_ID,PREFS_KIND,groupOf,exercise,exercisesOf,
   prefs,cleanPrefs,setExercise,setGroup,savePrefs,resetPrefs,rotation,pick,dayNumber,
   ownKey,nextItems,ownSteps,build,isOwn,totalMinutes,modeOf,labelOf,shortTitle,timeline,progress,finishItem,stop,
   word,holdStart,holdTick,holdResult,comfort,baseNote,notesFor,noteName,

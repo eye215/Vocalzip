@@ -232,7 +232,13 @@ test('a whole set on the doing screen: timer, paced breathing, held notes with w
   await primary(page).click();
   await expect(run(page)).toHaveAttribute('data-state', 'doing');
   await expect(run(page).locator('[data-run-ask]')).toHaveCount(0);
-  for (let i = 0; i < 4; i++) await holdNote(page);
+  // The octave rule is said on the screen, and holds: the same note an octave lower counts.
+  await expect(run(page).locator('[data-run-rule]')).toHaveText('한 옥타브 위나 아래로 불러도 맞은 것으로 쳐요');
+  await elapse(page, 1.3);
+  await sing(page, -1200 + 6); await elapse(page, 1);
+  await expect(word(page)).toHaveText('딱 맞아요'); await expect(sub(page)).toHaveText(/^\+6 cent · /);
+  await elapse(page, 3.2); await sing(page, null); await elapse(page, 1);
+  for (let i = 1; i < 4; i++) await holdNote(page);
   await elapse(page, 1.3); await elapse(page, 21); // the last note is never matched: the set moves on by itself
   // Summary (light again): what was done, measured time only.
   const summary = page.locator('.pset-summary');
@@ -344,6 +350,7 @@ test('mic refused: the steps that listen fall back to a timer and say so, once',
   await elapse(page, 1.3);
   await expect(word(page)).toHaveText('“음~” 이어요');
   await expect(sub(page)).toContainText('마이크 없이 타이머로 해요');
+  await expect(run(page).locator('[data-run-rule]')).toBeHidden(); // nothing is being matched
   await page.evaluate(() => { window.__sing = 300; }); // singing changes nothing: nobody is listening
   await elapse(page, 5 * (1.2 + 6 + .9) + 3);
   // The next listening step does not ask again.
@@ -407,7 +414,7 @@ test('고르기: which exercises take turns, a group resting, 처음대로 — s
   await card(page).locator('[data-set-pick]').click();
   const sheet = page.locator('[data-dset-pick]');
   await expect(page.locator('.sheet-head h2')).toHaveText('오늘의 연습 고르기');
-  await expect(sheet.locator('.dset-group[data-group] legend strong')).toHaveText(['목 풀기', '호흡', '발성', '음감']);
+  await expect(sheet.locator('.dset-group[data-group] legend strong')).toHaveText(['목 풀기', '호흡', '발성', '음감', '곡']);
   await expect(sheet.locator('[name=ex]')).toHaveCount(D.CATALOG.length);
   expect(await sheet.locator('[name=ex]').evaluateAll(els => els.every(e => e.checked))).toBe(true);
   await expect(sheet.locator('[data-group="loosen"] .dset-opt').filter({hasText:today[0]})).toContainText('오늘');
@@ -528,6 +535,63 @@ test('연습 전후 30초 녹음: turned on in 고르기, saved as practice reco
   await expect(lc.locator('[data-lc-blind]')).toBeChecked();
   expect((await lc.locator('[data-lc-take]').evaluateAll(els => els.map(e => e.value))).sort()).toEqual([before.id, after.id].sort());
   await expect(lc.locator('[data-lc-label="A"]')).toHaveText('어느 녹음인지 가려 뒀어요');
+});
+
+test('곡: the set ends with 곡에 적용하기 and an optional 녹음, the doing screen opens the song and its 레슨 지적, 고르기 can rest it', async ({page}) => {
+  await page.setViewportSize({width:390, height:844});
+  await boot(page, seed({practices:[{id:'p0', date:'2026-11-03', minutes:10, manualMinutes:10, songId:'s1', practiceMode:'song'}],
+    scoreAnnotations:[{id:'point:pt1', kind:'score-point', songId:'s1', text:'호흡을 끊지 않기', measures:{from:3, to:4}, created:1}]}));
+  // The latest practised song, as 오늘 연습 세트 ended (a running monthly plan's song comes first: tests/daily-set-model.test.cjs).
+  await expect(line(page)).toHaveCount(6);
+  await expect(line(page).locator('.vz-set-item b')).toHaveText(['목 풀기', '호흡', '발성', '음감', '곡', '녹음']);
+  await expect(line(page).locator('.vz-set-item span').nth(4)).toHaveText('곡에 적용하기 · This Is the Moment');
+  await expect(line(page).nth(4).locator('.vz-set-meta > span:not(.vz-visually-hidden)')).toHaveText('10분');
+  await expect(card(page).locator('.vz-set-head small')).toHaveText('6개 · 약 25분');
+  await noOverflow(page);
+  await start(page);
+  for (let i = 0; i < 4; i++) await run(page).locator('[data-run-skip]').click();
+  // A plain timer step of the person's own kind, with the way to the song.
+  await expect(count(page)).toHaveText('5 / 6');
+  await expect(run(page)).toHaveAttribute('data-mode', 'free');
+  await expect(run(page).locator('[data-run-name] b')).toHaveText('곡');
+  await expect(say(page)).toHaveText('곡에 적용하기 · This Is the Moment');
+  await expect(run(page).locator('[data-song-open]')).toHaveText('곡 열기');
+  await expect(run(page).locator('[data-song-points]')).toHaveText('레슨 지적 1개 · 부르면서 체크');
+  await targets(run(page).locator('.pset-links a'));
+  await noOverflow(page);
+  await primary(page).click();
+  await elapse(page, 30);
+  await expect(run(page).locator('[data-clock]')).toHaveText('9:30');
+  // On the song's screen the step goes on (the small timer shows it); back, it is still running.
+  await run(page).locator('[data-song-points]').click();
+  await expect(page).toHaveURL(/#\/song\/s1$/);
+  await elapse(page, 30);
+  await expect(page.locator('.pset-mini [data-time]')).toHaveText('9:00');
+  await expect(page.locator('.pset-mini [data-name]')).toHaveText('곡에 적용하기 · This Is the Moment');
+  await page.locator('.pset-mini [data-open]').click();
+  await expect(run(page).locator('[data-clock]')).toHaveText('9:00');
+  await primary(page).click(); // 다 했어요
+  await expect(count(page)).toHaveText('6 / 6');
+  await expect(run(page).locator('[data-run-name]')).toContainText('녹음'); await expect(run(page).locator('[data-run-name]')).toContainText('선택');
+  await run(page).locator('[data-run-skip]').click();
+  // The song keeps its own practice row (a minute of song practice), next to the set's row.
+  expect(await page.locator('.pset-summary [data-min]').evaluateAll(list => list.map(i => i.value))).toEqual(['1', '0']);
+  await page.getByRole('button', {name:'기록 저장'}).click();
+  await page.locator('.vz-today-popup [data-ok]').click();
+  const rows = (await db(page)).practices.filter(p => p.practiceSetId);
+  expect(rows.map(p => [p.id.replace(/practice-set:[^:]+/, 'set'), p.minutes, p.practiceMode, p.songId]).sort()).toEqual([['set', 0, 'training', ''], ['set:song-s1', 1, 'song', 's1']]);
+  expect(rows.find(p => p.dailySet).dailySet.items.at(-2)).toEqual(expect.objectContaining({kind:'song', apply:true, state:'done', row:rows.find(p => p.songId).id}));
+  // 고르기 › 곡 off: the next set ends with the built-in groups.
+  await page.clock.resume();
+  await to(page, '#/home'); await ready(page);
+  await card(page).locator('[data-set-pick]').click();
+  const sheet = page.locator('[data-dset-pick]');
+  await expect(sheet.locator('[data-group="song"] [name=group]')).toBeChecked(); // on by default
+  await sheet.locator('[data-group="song"] .dset-switch').click();
+  await page.getByRole('button', {name:'저장'}).click();
+  expect((await db(page)).practicePlans.find(p => p.id === 'daily-set-prefs').groupsOff).toEqual({song:true});
+  await goButton(page).click(); // 한 번 더 하기
+  await expect(count(page)).toHaveText('1 / 4');
 });
 
 test('the doing screen fits phones and tablets, keeps 44px targets and stays still with reduced motion', async ({page}) => {
