@@ -16,8 +16,10 @@ if (!VZ || !M) return;
 const ICONS = {song:'ph-music-notes-simple', lesson:'ph-chalkboard-teacher', training:'ph-barbell', room:'ph-microphone-stage'};
 const name = kind => M.recordingTypeName(kind);
 const T = VZ.recordingType = {};
+T.ALL = ['song', 'lesson', 'training', 'room'];
 
-/** Types the user can give these recordings. 연습실 is made by 노래 연습실 only: it is listed while one of them is one. */
+/** Types the user can give these stored recordings. 연습실 is listed while one of them is one (a new recording — the
+ * recorder, 가져오기 — is offered every type: T.ALL). */
 T.kinds = items => ['song', 'lesson', 'training', 'room'].filter(k => k !== 'room' || items.some(m => M.recordingCategory(m) === 'room'));
 /** The one type all of them have ('' when they differ), and whether all carry the 공연 tag. */
 T.shared = items => { const kinds = new Set(items.map(m => M.recordingCategory(m))); return {kind:kinds.size === 1 ? [...kinds][0] : '', performance:items.length > 0 && items.every(M.isPerformance)}; };
@@ -35,9 +37,24 @@ T.changes = (item, kind, performance = M.isPerformance(item)) => {
   return out;
 };
 
-/** 가져오기: a new file carries only `occasion` to the cloud, so these are the types it can be given there —
- * [occasion, words]. 트레이닝 is chosen after the import (⋯ › 녹음 유형, or the suggestion in 곡 확인). */
-T.importChoices = () => [['practice', name('song')], ['lesson', name('lesson')], ['performance', name('song') + ' · 공연']];
+/** 가져오기: every type, and 공연 as a tag on a 곡 녹음 — [choice, words]. The first two and the last keep the keys the
+ * import always used (they are what `occasion` stores); 트레이닝 · 연습실 are named by their type. */
+T.importChoices = () => [['practice', name('song')], ['lesson', name('lesson')], ['training', name('training')], ['room', name('room')], ['performance', name('song') + ' · 공연']];
+/** Stored fields of a new file for one of those choices. 곡 녹음 · 레슨 녹음 · 공연 write `occasion` only, as before, so
+ * their type is still worked out from the file's links (and 곡 확인 may still suggest another); 트레이닝 · 연습실 are the
+ * user's own choice and are written as `recordingCategory`. A new file carries both to the cloud (cloud-sync.js). */
+T.importFields = choice => choice === 'training' || choice === 'room' ? {occasion:'practice', recordingCategory:choice} : {occasion:['lesson', 'performance'].includes(choice) ? choice : 'practice'};
+
+/** The 녹음 유형 field of a form (정보 수정, the recorder): the types in one segment row and the 공연 녹음 tick under it. */
+T.field = (kinds, kind, performance) => '<fieldset class="field vz-type-field" style="border:0;padding:0"><legend>녹음 유형</legend><div class="seg" role="radiogroup" aria-label="녹음 유형">' +
+  kinds.map(k => '<button type="button" role="radio" data-type="' + k + '" aria-checked="' + (kind === k) + '" aria-pressed="' + (kind === k) + '">' + name(k) + '</button>').join('') +
+  '</div><label class="vz-type-performance"><input type="checkbox" name="performance"' + (performance ? ' checked' : '') + '><span>공연 녹음 <small>공연·오디션에서 부른 녹음이에요</small></span></label></fieldset>';
+/** Make that field work: returns kind() — the type chosen now — and performance() — whether 공연 녹음 is ticked. */
+T.bindField = (el, kind) => {
+  const buttons = [...el.querySelectorAll('.vz-type-field [data-type]')];
+  buttons.forEach(b => b.onclick = () => { kind = b.dataset.type; buttons.forEach(x => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); }); });
+  return {kind:() => kind, performance:() => !!el.querySelector('.vz-type-field [name=performance]')?.checked};
+};
 
 const cancelled = l => l.status === 'cancelled' || l.status === 'canceled';
 const linked = id => (VZ.db.lessons || []).some(l => (l.recordings || []).some(r => r.id === id));
@@ -58,7 +75,9 @@ const save = async (items, changesOf) => {
   for (const m of items) {
     const changes = changesOf(m);
     if (!Object.keys(changes).length) { ok++; continue; }
-    try { await M.update(m, changes, {quiet:true}); Object.assign(m, changes); ok++; window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:m.id, changes}})); }
+    // cloudDone as in VZ.media.update: a file in the cloud was written there by M.update, so the sync layer
+    // (cloud-sync.js) must not send the same change again from the device copy.
+    try { const cloudDone = !!m.cloud; await M.update(m, changes, {quiet:true}); Object.assign(m, changes); ok++; window.dispatchEvent(new CustomEvent('vzip:media-updated', {detail:{id:m.id, changes, cloudDone}})); }
     catch { failed++; }
   }
   M.invalidate?.();

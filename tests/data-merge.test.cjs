@@ -99,3 +99,43 @@ test('core.js records when each tombstone was made and which version it removed'
   assert.equal(stamp({dailyGoals:[{id:'g3'}], settings:{a:1}}, next), JSON.stringify(next));
   assert.ok(next.dailyGoals[0].updatedAt >= t0 && next.dailyGoals[1].updatedAt >= t0);
 });
+
+// Sync asks unchanged(device, merged) before storing a merged copy and redrawing (cloud-sync.js). A merge that only
+// brought nothing new must read as unchanged, whatever text merge() gave it; every real difference must not.
+test('unchanged: a merge that brings nothing new is not a change, whatever its text', () => {
+  const device = {...base(), songs:[{id:'s1', title:'On My Own', updatedAt:5}], performances:[{id:'p1', title:'갈라'}], settings:{dailyMinutes:30}};
+  // The server copy is this device's own earlier save, with its keys in another order.
+  const cloud = {settings:{dailyMinutes:30}, performances:[{title:'갈라', id:'p1'}], practices:[], assignments:[], lessons:[], songs:[{updatedAt:5, title:'On My Own', id:'s1'}], categories:[]};
+  const merged = M.merge(device, cloud).data;
+  assert.equal(M.same(device, merged), false);                  // deleted:{} and songLinks:[] were added, keys moved
+  assert.equal(M.unchanged(device, merged), true);
+  assert.equal(M.unchanged(merged, M.merge(merged, cloud).data), true);
+  // Tombstones: the same ids, kinds in merge()'s own order, numbers as text.
+  const withDeleted = {...device, deleted:{practices:['x'], songs:[7], media:['m1']}, deletedAt:{practices:{x:{at:9, seen:3}}}};
+  const again = M.merge(withDeleted, {...cloud, deleted:{songs:['7']}}).data;
+  assert.deepEqual(Object.keys(again.deleted), ['songs', 'practices', 'media']);
+  assert.equal(M.unchanged(withDeleted, again), true);
+  assert.equal(M.unchanged({...device, deleted:{}, deletedAt:{}}, device), true);
+  assert.equal(M.unchanged({...device, deleted:{songs:[]}}, device), true);
+});
+test('unchanged: every real difference is a change', () => {
+  const device = {...base(), songs:[{id:'s1', title:'On My Own', updatedAt:5}, {id:'s2', title:'Stars', updatedAt:5}], practices:[{id:'p1', minutes:20, mediaIds:['m1']}], performances:[{id:'f1', songLinks:[{songId:'s1'}]}], settings:{dailyMinutes:30}};
+  const differs = (name, cloud) => assert.equal(M.unchanged(device, M.merge(device, cloud).data), false, name);
+  const copy = () => structuredClone(device);
+  let cloud = copy(); cloud.songs.push({id:'s3', title:'다른 기기의 곡'}); differs('a record from another device', cloud);
+  cloud = copy(); cloud.songs[0] = {...cloud.songs[0], title:'바뀐 제목', updatedAt:9}; differs('a newer edit', cloud);
+  cloud = copy(); cloud.deleted = {songs:['s2']}; differs('a deletion', cloud);
+  cloud = copy(); cloud.deleted = {media:['m1']}; differs('a deleted recording unlinked from a practice', cloud);
+  cloud = copy(); cloud.goalSettings = {weekly:3}; differs('a key only the other device has', cloud);
+  cloud = copy(); cloud.deleted = {dailyGoals:['g1']}; differs('a tombstone alone', cloud);
+  // Not merge results, but what the comparison itself must tell apart.
+  assert.equal(M.unchanged(device, {...device, songs:[device.songs[1], device.songs[0]]}), false);            // list order
+  assert.equal(M.unchanged(device, {...device, settings:{dailyMinutes:45}}), false);
+  assert.equal(M.unchanged(device, {...device, practices:[{id:'p1', minutes:20, mediaIds:[]}]}), false);
+  assert.equal(M.unchanged({...device, practices:[{id:'p1', minutes:20}]}, {...device, practices:[{id:'p1', minutes:20, mediaIds:[]}]}), false);   // only merge()'s own empties are ignored
+  assert.equal(M.unchanged({...device, deletedAt:{dailyGoals:{g1:{at:1, seen:1}}}}, device), false);
+  assert.equal(M.unchanged(null, device), false);
+  // A record the merge drops (a row saved twice) is a change to store, not a matter of text.
+  const twice = {...device, songs:[...device.songs, device.songs[0]]};
+  assert.equal(M.unchanged(twice, M.merge(twice, device).data), false);
+});
