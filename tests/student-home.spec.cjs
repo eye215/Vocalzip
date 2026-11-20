@@ -1221,7 +1221,9 @@ test('today line keeps its height and colors the streak only from two days',asyn
  expect(Math.abs((await line.boundingBox()).height-height)).toBeLessThanOrEqual(1);
  const host=page.locator('.vz-student-home'),base=await page.evaluate(()=>VzipStudentHomeModel.build(VZ.db,{today:VZ.today()}).week);
  await host.evaluate((el,week)=>el.updateWeek(week),{...base,streak:0});
- await expect(streak).toHaveCount(0);await expect(line).toHaveText('11월 4일 (수)');
+ // Without a streak the line holds the date and the 큰 단계 (app/levels.js; tests/levels.spec.cjs) — still one line of the same height.
+ await expect(streak).toHaveCount(0);await expect(line.locator('span').first()).toHaveText('11월 4일 (수)');
+ await expect(line).toHaveText('11월 4일 (수)Lv 1 · 첫 소리');
  expect(Math.abs((await line.boundingBox()).height-height)).toBeLessThanOrEqual(1);
 });
 

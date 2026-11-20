@@ -31,6 +31,14 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-today-streak{display:inline-flex;align-items:center;gap:3px;color:var(--vz-color-ink-muted,#667085);}
 #vocalzip-refined-preview .vz-today-streak[data-active="true"]{color:var(--vz-color-flame,#ba7d52);}
 #vocalzip-refined-preview .vz-today-streak .vz-ui-icon{width:16px;height:16px;font-size:16px;}
+/* 큰 단계 (app/levels.js): "Lv 3 · 이름" over a thin bar to the next level, at the end of the date line. A 44px target
+ * that takes no more room than the line (the box reaches 13px over and under it). */
+#vocalzip-refined-preview .vz-today-level{display:inline-flex;flex-direction:column;justify-content:center;align-items:stretch;gap:3px;box-sizing:border-box;min-width:44px;max-width:62%;height:44px;margin:-13px 0 -13px auto;padding:0 2px;border:0;border-radius:10px;background:none;color:var(--vz-color-accent,#7A32F5);font:inherit;font-weight:700;letter-spacing:-.01em;text-align:right;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+#vocalzip-refined-preview .vz-today-level[hidden]{display:none;}
+#vocalzip-refined-preview .vz-today-level:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:-2px;}
+#vocalzip-refined-preview .vz-today-level-text{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#vocalzip-refined-preview .vz-today-level-bar{display:block;height:3px;border-radius:99px;background:#e3d4ff;overflow:hidden;}
+#vocalzip-refined-preview .vz-today-level-bar i{display:block;height:100%;border-radius:99px;background:var(--vz-color-accent,#7A32F5);}
 #vocalzip-refined-preview .vz-summary{display:block;margin:12px 0 0;padding:4px 12px 4px 16px;border-radius:20px;background:#fff;}
 #vocalzip-refined-preview .vz-summary[hidden],#vocalzip-refined-preview .vz-recent[hidden],#vocalzip-refined-preview .vz-schedule[hidden]{display:none;}
 #vocalzip-refined-preview .vz-summary-row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:0;border:0;background:none;color:var(--vz-color-ink,#101828);font:inherit;text-align:left;cursor:pointer;}
@@ -322,6 +330,16 @@ export async function createFloatingHome(opts={}){
  q(".vz-quick-grid")?.remove();const weekCard=q(".vz-week"); // 주간 연습 card: shown on tablets only (CSS)
  const todayLine=el("p",null,"vz-today-line");section.before(todayLine);
  const flame=el("i","","vz-ui-icon");flame.setAttribute("aria-hidden","true");
+ /* 큰 단계 next to the streak ({level, name, percent, label} from the app; null hides it): kept and updated in place. */
+ const levelChip=el("button",null,"vz-today-level"),levelText=el("span",null,"vz-today-level-text"),levelBar=el("span",null,"vz-today-level-bar"),levelFill=el("i");
+ levelChip.type="button";levelChip.dataset.homeLevel="";levelChip.hidden=true;levelBar.setAttribute("aria-hidden","true");levelBar.append(levelFill);levelChip.append(levelText,levelBar);
+ levelChip.onclick=()=>opts.onLevel?.();
+ host.updateLevel=info=>{
+  levelChip.hidden=!info;if(!info)return;
+  levelText.textContent="Lv "+num(info.level)+" · "+(info.name||"");levelFill.style.width=Math.max(0,Math.min(100,num(info.percent)))+"%";
+  levelChip.dataset.level=String(num(info.level));levelChip.setAttribute("aria-label",info.label||"큰 단계 Lv "+num(info.level)+" "+(info.name||"")+", 단계 보기");
+ };
+ host.updateLevel(opts.level||null);
  host.updateNow=item=>{
   section.hidden=!item;if(!item)return;
   now.dataset.kind=item.kind||"";now.querySelector("h2").textContent=item.title||"";
@@ -519,6 +537,7 @@ export async function createFloatingHome(opts={}){
   const streak=num(week.streak),d=opts.today?new Date(opts.today+"T12:00:00"):new Date();
   todayLine.replaceChildren(el("span",(d.getMonth()+1)+"월 "+d.getDate()+"일 ("+"일월화수목금토"[d.getDay()]+")"));
   if(streak){const s=el("span",null,"vz-today-streak");s.dataset.active=String(streak>=2);s.append(flame.cloneNode(true),document.createTextNode(streak+"일 연속"));todayLine.append(s);}
+  todayLine.append(levelChip);
  };
  host.updateWeek(opts.week||{});if(opts.thisWeek)host.updateThisWeek(opts.thisWeek);
  host.updateRecent=(songs,onOpen=opts.onRecentSong)=>{
