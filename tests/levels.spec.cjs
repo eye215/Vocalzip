@@ -54,14 +54,17 @@ test('오늘: "Lv · 이름" with a thin bar next to the streak opens 단계; th
   await expect(homeLine(page).locator('.vz-today-streak')).toContainText('5일 연속');
   for (const [width, height] of SIZES) {
     await page.setViewportSize({width, height});
-    // A 44px target that takes no more room than the line of text it sits on.
-    const box = await chip(page).boundingBox(), line = await homeLine(page).boundingBox(), date = await homeLine(page).locator('span').first().boundingBox();
+    // A 44px target of its own, inside the line it sits on.
+    const box = await chip(page).boundingBox(), line = await homeLine(page).boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(43.9); expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(Math.abs(line.height - date.height)).toBeLessThanOrEqual(1);
+    expect(box.y).toBeGreaterThanOrEqual(line.y - .5); expect(box.y + box.height).toBeLessThanOrEqual(line.y + line.height + .5);
     expect(box.x + box.width).toBeLessThanOrEqual(width);
-    // It does not sit over the bell or the profile button.
-    expect(await page.evaluate(() => { const root = document.querySelector('.vz-student-home').shadowRoot;
-      return ['알림', '프로필'].every(name => { const b = root.querySelector('[aria-label="' + name + '"]'), r = b.getBoundingClientRect(), hit = root.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return hit === b || b.contains(hit); }); })).toBe(true);
+    // No two targets overlap: its box does not intersect the bell, the profile button or any card of the home.
+    const hits = await page.evaluate(() => { const root = document.querySelector('.vz-student-home').shadowRoot, c = root.querySelector('[data-home-level]').getBoundingClientRect();
+      const others = [...root.querySelectorAll('[aria-label="알림"],[aria-label="프로필"],.vz-event,.vz-card,.vz-summary,.vz-schedule')].filter(e => e.getClientRects().length);
+      return {checked:others.length, first:!!root.querySelector('.vz-event')?.getClientRects().length,
+        over:others.filter(e => { const r = e.getBoundingClientRect(); return r.left < c.right - .5 && r.right > c.left + .5 && r.top < c.bottom - .5 && r.bottom > c.top + .5; }).map(e => e.getAttribute('aria-label') || e.className)}; });
+    expect(hits.checked).toBeGreaterThanOrEqual(4); expect(hits.first).toBe(true); expect(hits.over).toEqual([]);
     await noOverflow(page);
   }
   await page.setViewportSize({width:390, height:844});
@@ -192,11 +195,15 @@ test('an area: the next step in plain words, "3번 중 n번 했어요", recent v
   await expect(host(page).locator('[data-lv-next]')).toContainText('기준 맞추는 중에는 세기만 하고 단계는 올리지 않아요.');
   await expect(host(page).locator('[data-lv-recent] li').first()).toHaveText('11.20 (금)흔들림 11 cent · 6초');
   await expect(host(page).locator('[data-lv-exercise] li strong')).toHaveText(['허밍 롱톤', '“멈” 롱톤']);
+  await expect(host(page).locator('[data-lv-limit]')).toHaveCount(0);
   // Not measured yet (음역), with its guardrail said.
   await to(page, '#/levels/range');
   await expect(host(page).locator('[data-lv-area="range"] [data-lv-state]')).toHaveText('아직 재지 않았어요');
   await expect(host(page).locator('[data-lv-next] [data-lv-progress]')).toHaveText('3번 중 0번 했어요');
   await expect(host(page).locator('[data-lv-guard]')).toContainText('가장 높이 낸 한 음이나 큰 소리는 세지 않아요. 편하게 2초 넘게 유지한 음만 세요.');
+  // Said plainly: for now only the start is measured; growth is measured once the 스케일 연습 exists.
+  await expect(host(page).locator('[data-lv-limit]')).toHaveText('지금은 기준만 재요. 처음보다 넓어진 음역은 조를 하나씩 올려 가는 스케일 연습이 생기면 그때부터 재요.');
+  expect(await host(page).locator('[data-lv-steps] li').evaluateAll(els => els.map(e => /재는 연습 준비 중/.test(e.textContent)))).toEqual([false, true, true, true, true]);
   // No exercise yet (호흡): 준비 중, with what the exercise will be.
   await to(page, '#/levels/breath');
   const soon = host(page).locator('[data-lv-area="breath"]');

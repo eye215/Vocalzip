@@ -32,8 +32,10 @@ const adaptations=String.raw`
 #vocalzip-refined-preview .vz-today-streak[data-active="true"]{color:var(--vz-color-flame,#ba7d52);}
 #vocalzip-refined-preview .vz-today-streak .vz-ui-icon{width:16px;height:16px;font-size:16px;}
 /* 큰 단계 (app/levels.js): "Lv 3 · 이름" over a thin bar to the next level, at the end of the date line. A 44px target
- * that takes no more room than the line (the box reaches 13px over and under it). */
-#vocalzip-refined-preview .vz-today-level{display:inline-flex;flex-direction:column;justify-content:center;align-items:stretch;gap:3px;box-sizing:border-box;min-width:44px;max-width:62%;height:44px;margin:-13px 0 -13px auto;padding:0 2px;border:0;border-radius:10px;background:none;color:var(--vz-color-accent,#7A32F5);font:inherit;font-weight:700;letter-spacing:-.01em;text-align:right;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+ * of its own: with it the line is 44px high (and gives up its bottom margin), so the chip's box touches neither the
+ * bell and profile buttons above nor the cards below. */
+#vocalzip-refined-preview .vz-today-line.has-level{min-height:44px;margin-bottom:0;}
+#vocalzip-refined-preview .vz-today-level{display:inline-flex;flex-direction:column;justify-content:center;align-items:stretch;gap:3px;box-sizing:border-box;min-width:44px;max-width:62%;height:44px;margin:0 0 0 auto;padding:0 2px;border:0;border-radius:10px;background:none;color:var(--vz-color-accent,#7A32F5);font:inherit;font-weight:700;letter-spacing:-.01em;text-align:right;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 #vocalzip-refined-preview .vz-today-level[hidden]{display:none;}
 #vocalzip-refined-preview .vz-today-level:focus-visible{outline:2px solid var(--vz-color-accent,#7A32F5);outline-offset:-2px;}
 #vocalzip-refined-preview .vz-today-level-text{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -251,6 +253,7 @@ const adaptations=String.raw`
  #vocalzip-refined-preview .vz-summary-row[data-row="week"]{display:none;}
  #vocalzip-refined-preview .vz-col>.vz-card{margin-bottom:16px;padding:24px;border-radius:24px;}
  #vocalzip-refined-preview .vz-today-line{margin-bottom:12px;font-size:15px;line-height:22px;}
+ #vocalzip-refined-preview .vz-today-line.has-level{margin-bottom:0;}
  #vocalzip-refined-preview .vz-event{min-height:120px;margin-bottom:16px;padding:24px 28px;}
  #vocalzip-refined-preview .vz-event h2{font-size:28px;line-height:36px;}
  #vocalzip-refined-preview .vz-event p{font-size:16px;line-height:24px;}
@@ -335,7 +338,7 @@ export async function createFloatingHome(opts={}){
  levelChip.type="button";levelChip.dataset.homeLevel="";levelChip.hidden=true;levelBar.setAttribute("aria-hidden","true");levelBar.append(levelFill);levelChip.append(levelText,levelBar);
  levelChip.onclick=()=>opts.onLevel?.();
  host.updateLevel=info=>{
-  levelChip.hidden=!info;if(!info)return;
+  levelChip.hidden=!info;todayLine.classList.toggle("has-level",!!info);if(!info)return;
   levelText.textContent="Lv "+num(info.level)+" · "+(info.name||"");levelFill.style.width=Math.max(0,Math.min(100,num(info.percent)))+"%";
   levelChip.dataset.level=String(num(info.level));levelChip.setAttribute("aria-label",info.label||"큰 단계 Lv "+num(info.level)+" "+(info.name||"")+", 단계 보기");
  };

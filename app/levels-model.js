@@ -200,14 +200,17 @@ const SKILLS=[
       {say:'한 옥타브를 소리가 뒤집히지 않게 올라갔다 내려와요',conds:[{field:'value',min:12},{field:'breaks',max:0},{field:'flips',max:0},{field:'both',min:1}]},
       {say:'한 옥타브 반을 끊김도 뒤집힘도 없이 올라갔다 내려와요',conds:[{field:'value',min:18},{field:'breaks',max:0},{field:'flips',max:0},{field:'both',min:1}]}]},
   {id:'range',title:'음역',unit:'반음',line:'편하게 낼 수 있는 음의 폭',by:['voice-hum','voice-mum','ear-follow'],comfort:true,
-    note:'가장 높이 낸 한 음이나 큰 소리는 세지 않아요. 편하게 2초 넘게 유지한 음만 세요. 연습 음은 지금 편한 음역 안에서 골라요.',
+    // The exercises of today stay inside the comfortable range, so for now only the start is measured: growth beyond it
+    // needs the 스케일 연습 (the next exercise type, rising key by key). A wider note that IS held still counts.
+    limit:'지금은 기준만 재요. 처음보다 넓어진 음역은 조를 하나씩 올려 가는 스케일 연습이 생기면 그때부터 재요.',
+    note:'가장 높이 낸 한 음이나 큰 소리는 세지 않아요. 편하게 2초 넘게 유지한 음만 세요.',
     // count: how many different notes were held comfortably in one exercise; gain: semitones beyond the first week's range.
     steps:[
       {say:'편하게 2초 넘게 유지한 음이 한 번에 3개 넘게 있어요 (내 처음 음역을 정해요)',kind:'comfortable',conds:[{field:'count',min:3}]},
-      {say:'처음 잰 음역보다 1반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:1}]},
-      {say:'처음 잰 음역보다 3반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:3}]},
-      {say:'처음 잰 음역보다 5반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:5}]},
-      {say:'처음 잰 음역보다 6반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:6}]}]},
+      {say:'처음 잰 음역보다 1반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:1}],soon:'조를 하나씩 올려 가는 스케일 연습'},
+      {say:'처음 잰 음역보다 3반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:3}],soon:'조를 하나씩 올려 가는 스케일 연습'},
+      {say:'처음 잰 음역보다 5반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:5}],soon:'조를 하나씩 올려 가는 스케일 연습'},
+      {say:'처음 잰 음역보다 6반음 넓은 음을 편하게 2초 넘게 유지해요',kind:'comfortable',conds:[{field:'gain',min:6}],soon:'조를 하나씩 올려 가는 스케일 연습'}]},
   {id:'high',title:'고음',unit:'cent',line:'편한 음역의 맨 위를 힘주지 않고 내는 힘',by:[],comfort:true,soon:'편한 음역의 맨 위 음들을 힘주지 않고 2초씩 유지하는 연습',
     note:'가장 높은 음이나 큰 소리를 세는 것이 아니에요. 목이 불편한 날은 건너뛰어도 돼요.',
     // fromTop: semitones from the top of the comfortable range (0 = the top note); value: wobble in cent; vowels: how many vowels.
@@ -324,7 +327,7 @@ function valueText(a,m){
   return m.value+(m.unit||a.unit?' '+(m.unit||a.unit):'');
 }
 /**
- * One area. {id, title, sub, line, unit, note, by (exercise ids that measure it now), soon,
+ * One area. {id, title, sub, line, unit, note, limit (what cannot be measured yet, said plainly), by (exercise ids that measure it now), soon,
  *   state: 'soon' (no measuring exercise yet) | 'ready' (can be measured, not yet) | 'calibrating' | 'step',
  *   first, day (n일째), daysLeft (of 기준 맞추는 중), estimate (what the draft table gives on the records so far),
  *   step (earned, 0–5), keeping (요즘도 유지 중; null without a step), earned:[{step, date, days}],
@@ -349,7 +352,7 @@ function areaOf(c,a){
   // Recent values, newest first: the last measure of each kind on each day.
   const seen=new Set(),recent=[];
   for(const raw of ms.slice().reverse()){const key=raw.date+'|'+(raw.kind||'');if(seen.has(key))continue;seen.add(key);recent.push({date:raw.date,text:valueText(a,c.fields(raw)),value:raw.value});if(recent.length>=RULES.recent)break;}
-  return {id:a.id,title:a.title,sub:a.sub||'',line:a.line,unit:a.unit,note:a.note||'',by:a.by.slice(),soon:a.soon||'',
+  return {id:a.id,title:a.title,sub:a.sub||'',line:a.line,unit:a.unit,note:a.note||'',limit:a.limit||'',by:a.by.slice(),soon:a.soon||'',
     state:step?'step':first?(calibrating?'calibrating':'step'):a.by.length?'ready':'soon',
     first,day,daysLeft:calibrating?RULES.calibrationDays-day+1:0,estimate,step,keeping,measured:dates.length,
     earned:[...rows.values()].sort((x,y)=>x.step-y.step).map(r=>({step:r.step,date:isDate(r.earned)?r.earned:'',days:list(r.days)})),
@@ -448,6 +451,7 @@ function sheetText(db={},env={}){
     L.push('['+a.title+(a.sub?'('+a.sub+')':'')+'] '+now);
     for(const s of a.steps)L.push('  '+s.step+'단계: '+s.say+(s.state==='earned'?'  ✓'+(s.date?' '+s.date:''):'')+(s.soon?'  (재는 연습 준비 중)':''));
     if(a.next&&a.state!=='soon'&&!a.next.soon)L.push('  다음 '+a.next.step+'단계: '+RULES.days+'번 중 '+a.next.count+'번 했어요');
+    if(a.limit)L.push('  '+a.limit);
     if(a.base)L.push('  처음 음역: '+noteName(a.base.low)+'–'+noteName(a.base.high)+(a.base.closed?'':' (첫 주, 재는 중)'));
     if(a.recent.length)L.push('  내 기록: '+a.recent.map(r=>shortDay(r.date)+' '+r.text).join(' / '));
     L.push('');

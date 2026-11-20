@@ -165,7 +165,7 @@ function areaHtml(a){
       '<p class="lv-say">재는 연습을 준비 중이에요</p><p class="lv-note">'+esc(a.soon)+'</p>')+
     (a.note?'<p class="lv-note" data-lv-guard>'+esc(a.note)+'</p>':'')+'</section>';
   return '<section class="lv-card lv-area-head" data-lv-area="'+a.id+'" data-state="'+a.state+'"><p class="lv-eyebrow">기본기</p><h2>'+esc(a.title)+(a.sub?'<small>'+esc(a.sub)+'</small>':'')+'</h2><p class="lv-basis">'+esc(a.line)+'</p>'+
-    pips(a.step,a.state==='calibrating'?a.estimate:0)+head+'</section>'+next+recent+steps+how;
+    pips(a.step,a.state==='calibrating'?a.estimate:0)+head+(a.limit?'<p class="lv-limit" data-lv-limit><i class="ph ph-info" aria-hidden="true"></i><span>'+esc(a.limit)+'</span></p>':'')+'</section>'+next+recent+steps+how;
 }
 
 let stop=()=>{};

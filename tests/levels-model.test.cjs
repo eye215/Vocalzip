@@ -197,6 +197,10 @@ test('음역: only notes held comfortably count, the first week is the start, st
   assert.deepEqual(later.practicePlans.find(p => p.id === 'level-state').rangeBase, {low:60, high:67, from:day(1), to:day(7)});
   later.deleted.practices = week.map(p => p.id);
   assert.deepEqual(L.skill(later, 'range', env(day(16))).base, {low:60, high:67, closed:true});
+  // Said plainly: with today's exercises only the start is measured (growth needs the 스케일 연습) — a wider note that IS held still counts, as above.
+  assert.match(L.skill(db(), 'range', env()).limit, /^지금은 기준만 재요\./);
+  assert.deepEqual(L.skill(db(), 'range', env()).steps.map(s => !!s.soon), [false, true, true, true, true]);
+  assert.equal(L.skill(later, 'range', env(day(16))).steps[2].soon, '');
   // Guardrails: a single highest note (peak), a note not held for 2 seconds, or a reading without a hold length is not a measure.
   for (const bad of [range(60, 84, {peak:true}), range(60, 84, {seconds:1.2}), (() => { const m = range(60, 84); delete m.seconds; return m; })()]) {
     assert.equal(L.cleanMeasure(bad), null);
