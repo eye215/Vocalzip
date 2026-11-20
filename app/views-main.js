@@ -59,12 +59,12 @@ VZ.editMedia = item => {
   const created = M.dateOf(item), type = M.recordingCategory(item);
   const stars = [1, 2, 3, 4, 5].map(n => '<button type="button" data-star="' + n + '" aria-label="만족도 ' + n + '" aria-pressed="' + (item.rating >= n) + '">★</button>').join('');
   VZ.sheet({title:'녹음 정보 수정', body:'<form id="media-edit"><label class="field"><span>제목</span><input type="text" name="name" readonly value="' + esc(M.label(item)) + '"><span class="small muted">곡과 날짜를 지정하면 제목이 자동으로 바뀌고, 이전 제목은 기존 감상 메모 아래에 추가돼요.</span></label>' + VZ.songSelect('song', item.songId || '') +
-    '<fieldset class="field vz-type-field" style="border:0;padding:0"><legend>녹음 유형</legend><div class="seg" role="radiogroup" aria-label="녹음 유형">' + VZ.recordingType.kinds([item]).map(k => '<button type="button" role="radio" data-type="' + k + '" aria-checked="' + (type === k) + '" aria-pressed="' + (type === k) + '">' + M.recordingTypeName(k) + '</button>').join('') + '</div><label class="vz-type-performance"><input type="checkbox" name="performance"' + (M.isPerformance(item) ? ' checked' : '') + '><span>공연 녹음 <small>공연·오디션에서 부른 녹음이에요</small></span></label></fieldset>' +
+    VZ.recordingType.field(VZ.recordingType.kinds([item]), type, M.isPerformance(item)) +
     '<label class="field"><span>녹음 날짜</span><input type="date" name="date" value="' + created + '"><span class="small muted">' + ({metadata:'파일 속 촬영·녹음 날짜예요.', 'file-modified':'날짜 정보가 없어 파일 수정일을 썼어요.', manual:'직접 지정한 날짜예요.'}[item.dateSource] || '') + '</span></label><fieldset class="field" style="border:0;padding:0;margin:0 0 14px"><legend>만족도</legend><div class="stars">' + stars + '</div></fieldset><label class="field"><span>감상 메모</span><textarea name="review" maxlength="3000" placeholder="잘된 점, 고칠 점">' + esc(item.review || '') + '</textarea></label></form>',
     foot:'<button type="submit" form="media-edit" class="btn block">저장</button>',
     onMount:(el, close) => {
-      let rating = item.rating || null, kind = type;
-      el.querySelectorAll('[data-type]').forEach(b => b.onclick = () => { kind = b.dataset.type; el.querySelectorAll('[data-type]').forEach(x => { x.setAttribute('aria-pressed', String(x === b)); x.setAttribute('aria-checked', String(x === b)); }); });
+      let rating = item.rating || null;
+      const chosen = VZ.recordingType.bindField(el, type);
       el.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { const n = +b.dataset.star; rating = rating === n ? null : n; el.querySelectorAll('[data-star]').forEach(x => x.setAttribute('aria-pressed', String(rating >= +x.dataset.star))); });
       const form = el.querySelector('form');
       let known = M.cached();
@@ -92,7 +92,8 @@ VZ.editMedia = item => {
         if (rating !== (item.rating || null)) changes.rating = rating;
         if (form.review.value !== form.review.defaultValue) changes.review = form.review.value;
         // 녹음 유형 · 공연: written only when changed here (app/recording-kind-menu.js maps them onto the stored fields).
-        Object.assign(changes, VZ.recordingType.changes(item, kind, form.performance.checked));
+        const kind = chosen.kind();
+        Object.assign(changes, VZ.recordingType.changes(item, kind, chosen.performance()));
         if (dateChanged) Object.assign(changes, {created:new Date(d.getFullYear(), d.getMonth(), d.getDate(), keep.getHours(), keep.getMinutes()).getTime(), recordedDate:date, dateSource:'manual'});
         if ((songChanged || dateChanged) && songId && preview) Object.assign(changes, {normalizeTitle:true, name:preview, nameMode:'auto', autoName:preview});
         if (!Object.keys(changes).length) { close(); return; }
@@ -466,18 +467,24 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
     setUI('review'); status.textContent = '미리 듣고 저장하세요.';
     M.drawWave(wave, res.waveform, '#A65CFF');
     review.hidden = false;
-    review.innerHTML = '<div class="card stack"><div data-p></div><label class="field" style="margin:0"><span>제목</span><input type="text" name="name" maxlength="150" value="' + esc(defName) + '"></label><label class="field" style="margin:0"><span>메모 (선택)</span><textarea name="memo" rows="2" maxlength="3000" placeholder="잘된 점, 고칠 점" style="min-height:64px"></textarea></label><div class="btn-row"><button type="button" class="btn ghost" data-redo><i class="ph ph-arrow-counter-clockwise"></i>다시</button><button type="button" class="btn" data-save style="flex:2"><i class="ph ph-check"></i>저장</button></div><div data-fail hidden></div></div>';
+    review.innerHTML = '<div class="card stack"><div data-p></div><label class="field" style="margin:0"><span>제목</span><input type="text" name="name" maxlength="150" value="' + esc(defName) + '"></label>' + VZ.recordingType.field(VZ.recordingType.ALL, lessonId ? 'lesson' : 'song', false) + '<label class="field" style="margin:0"><span>메모 (선택)</span><textarea name="memo" rows="2" maxlength="3000" placeholder="잘된 점, 고칠 점" style="min-height:64px"></textarea></label><div class="btn-row"><button type="button" class="btn ghost" data-redo><i class="ph ph-arrow-counter-clockwise"></i>다시</button><button type="button" class="btn" data-save style="flex:2"><i class="ph ph-check"></i>저장</button></div><div data-fail hidden></div></div>';
     const short = VZ.shortTakeNote?.(res.durationSeconds, state.songId);
     if (short) review.querySelector('[data-p]').insertAdjacentHTML('afterend', short);
     const tmp = {id:'preview', name:defName, type:res.type, blob:res.blob, durationSeconds:res.durationSeconds};
     const pl = M.player(review.querySelector('[data-p]'), tmp, {});
     review.querySelector('[data-redo]').onclick = async () => { if (await VZ.confirm('다시 녹음', '이번 녹음을 버리고 다시 녹음할까요?', {ok:'다시 녹음', danger:true})) { pl.destroy(); reset(); } };
+    // 녹음 유형: every type, the one this recorder makes chosen (곡 녹음, or 레슨 녹음 when opened from a lesson).
+    state.type = VZ.recordingType.bindField(review, lessonId ? 'lesson' : 'song');
     review.querySelector('[data-save]').onclick = () => save(pl);
   }
   async function save(pl) {
     const res = state.result, btn = review.querySelector('[data-save]'), fail = review.querySelector('[data-fail]');
     const id = state.savedId ||= VZ.uid();
     const item = {id, ...(window.VzipAccountScope?{accountOwner:res.accountOwner}:{}), name:review.querySelector('[name=name]').value.trim() || '녹음', created:state.startedAt || Date.now(), recordedDate:VZ.ymd(new Date(state.startedAt || Date.now())), dateSource:'recorded', type:res.type, source:lessonId ? 'lesson' : 'practice', songId:state.songId, song:VZ.songLabel(VZ.song(state.songId)), blob:res.blob, durationSeconds:res.durationSeconds, waveform:res.waveform, review:review.querySelector('[name=memo]').value};
+    // The type chosen here is saved with the take (nothing is written when it is the one this recorder makes anyway),
+    // so it is on the file before the cloud backup and goes up with it.
+    const kind = state.type.kind();
+    Object.assign(item, VZ.recordingType.changes(item, kind, state.type.performance()));
     btn.disabled = true; btn.textContent = '저장 중…'; fail.hidden = true;
     try {
       await M.saveBlob(item, p => { btn.textContent = '클라우드 저장 ' + p + '%'; });
@@ -492,6 +499,8 @@ VZ.route('record', {title:'녹음', tab:'record', back:true, noSettings:true, no
       status.textContent = '';
       // A practice take can belong to one of today's goals (made from its row, or picked now): app/goal-routines.js.
       // When the goal was completed with it, the time is already recorded there, so 연습 기록 gives way to 오늘.
+      // Saved as 레슨 녹음 outside a lesson: the same question as everywhere — link it to that day's lesson? (asked first)
+      if (!lessonId && kind === 'lesson') await VZ.recordingType.offerLessonLink([item]).catch(error => console.error(error));
       if (!lessonId) VZ.goalRecordingSaved?.({mediaId:id, goalId:state.goalId, songId:state.songId, durationSeconds:item.durationSeconds, date:item.recordedDate})
         ?.then(done => { if (done?.completed) review.querySelector('[data-log]')?.replaceWith(Object.assign(document.createElement('a'), {className:'btn secondary', href:'#/home', textContent:'오늘로'})); }).catch(error => console.error(error));
     } catch (e) {
