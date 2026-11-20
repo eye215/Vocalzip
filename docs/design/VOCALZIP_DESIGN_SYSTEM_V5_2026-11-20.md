@@ -58,7 +58,7 @@ Before, 연습 목표 held one row and 관리 held ten mixed rows. On screens 76
 ## Component rules added in v5
 
 - **One definition per component.** Cards, chips, tab bars, list rows and buttons are defined once in `design-system/components.css`. Screen CSS may position them but may not restyle colour, radius or type.
-- **Empty states** use a white R20 card, a 20px Phosphor icon in `#98A2B3`, one 14/20/600 line saying what is missing, and one secondary button when an action exists.
+- **Empty states** (built 2026-11-20 for the shared `.empty` box in `design-system/global-app.css`; before, it had a 1px dashed border and a 32px `#9557FF` icon) use a white R20 card with no border, a 20px Phosphor icon in `#98A2B3`, one 14/20/600 line saying what is missing, and one secondary button when an action exists.
 - **Loading** shows the final layout with `#F2EFF7` blocks (R12). No spinners on list screens.
 - **Errors** use the danger soft background with a plain sentence and a retry button. No technical words.
 - Touch targets stay at 44px or more. No horizontal page scroll at 320, 390, 430, 820 and 1180px.
@@ -79,3 +79,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-20: v5 draft added. v4 stays in force.
 - 2026-11-20: screen ownership rule built for 기존 자료 가져오기, 곡 확인, 전사 확인 (keep instead of ecord).
 - 2026-11-20: 설정 regrouped into 연습 · 분석 · 파일·저장 · 공유·점검 (replaces 연습 목표 · 분석 · 관리). No setting, value or link removed.
+- 2026-11-20: shared empty box: dashed border removed, icon 20px `#98A2B3`. Text and buttons unchanged.

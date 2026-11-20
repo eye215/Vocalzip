@@ -16,6 +16,9 @@ body:not(.vz-home-mode) .vz-section-heading h2 { color:var(--vz-title); font-siz
 body:not(.vz-home-mode) .card,
 body:not(.vz-home-mode) .list,
 body:not(.vz-home-mode) .empty { border-radius:var(--vz-card-radius); background:var(--vz-surface); box-shadow:var(--shadow); }
+/* v5 empty state (VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): white R20 card, no dashed border, 20px grey icon. */
+body:not(.vz-home-mode) .empty { border:0; }
+body:not(.vz-home-mode) .empty > i.ph:first-child { font-size:var(--vz-icon-size); color:var(--vz-color-faint); }
 body:not(.vz-home-mode) .card { padding:var(--vz-card-padding); }
 body:not(.vz-home-mode) .card.flat { box-shadow:none; }
 body:not(.vz-home-mode) .stack { gap:var(--vz-card-gap); }

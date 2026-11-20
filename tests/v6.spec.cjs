@@ -1934,6 +1934,23 @@ test('Settings shows one 파일 상태 line from this device and opens 처리 �
   await expect(page.locator('[data-processing-log]')).toContainText('fixture.m4a');
 });
 
+test('v5 empty state: white R20 box without a dashed border and a 20px grey icon on every light screen', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/settings');
+  await expect(page.locator('.vz-settings')).toBeVisible();
+  const s = await page.evaluate(() => {
+    const box = document.createElement('div');
+    box.className = 'empty';
+    box.innerHTML = '<i class="ph ph-music-notes"></i><span>아직 없어요</span>';
+    document.getElementById('view').append(box);
+    const b = getComputedStyle(box), i = getComputedStyle(box.querySelector('i'));
+    const out = {border:b.borderTopStyle, radius:b.borderTopLeftRadius, bg:b.backgroundColor, icon:i.fontSize, iconColor:i.color};
+    box.remove();
+    return out;
+  });
+  expect(s, JSON.stringify(s)).toEqual({border:'none', radius:'20px', bg:'rgb(255, 255, 255)', icon:'20px', iconColor:'rgb(152, 162, 179)'});
+});
+
 test('Settings puts the account first, keeps manual cloud tools folded, and groups the menu', async ({page}) => {
   const seed = legacy();
   seed.performances = [{id:'show1',ownerId:'ui-test-user',title:'첫 무대',start:'2025-07-24',status:'completed',sessions:[]}];
