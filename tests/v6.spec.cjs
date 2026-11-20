@@ -1934,7 +1934,8 @@ test('Settings shows one 파일 상태 line from this device and opens 처리 �
   await expect(page.locator('[data-processing-log]')).toContainText('fixture.m4a');
 });
 
-test('v5 empty state: white R20 box without a dashed border and a 20px grey icon on every light screen', async ({page}) => {
+// Named with 'Settings' so ui-checks.yml (--grep 'Settings') runs it; the shared empty box is checked on the 설정 page.
+test('Settings shell: v5 empty state is a white R20 box without a dashed border and a 20px grey icon', async ({page}) => {
   await boot(page);
   await page.goto('/#/settings');
   await expect(page.locator('.vz-settings')).toBeVisible();
