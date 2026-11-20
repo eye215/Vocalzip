@@ -43,7 +43,7 @@
   body[data-vz-route="lesson"] #view>.sec :is(button,a){min-height:44px;display:inline-flex;align-items:center}
   body[data-vz-route="practice-stats"] :is([data-month-prev],[data-month-next],[data-chart-prev],[data-chart-next]){min-width:44px;min-height:44px}
   body[data-vz-route="settings"] .vz-settings{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
-  body[data-vz-route="settings"] .vz-settings-section:last-of-type,body[data-vz-route="settings"] .vz-settings-version{grid-column:1/-1}
+  body[data-vz-route="settings"] .vz-settings-version{grid-column:1/-1}
 }
 
 /* 성장 (이번 달 · 곡 · 연구소, and 지난 흐름 = the former 결과 리포트 · 주간 요약): the same 1040px column. The tab box and

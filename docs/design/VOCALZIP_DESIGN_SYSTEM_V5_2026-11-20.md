@@ -43,7 +43,18 @@ Rules:
 2. The dock always shows one highlighted tab, except on the dark recorder.
 3. 기록 stays the only place for lessons, homework and calendar. 내 곡 links to them from the song.
 
-Later step (not built): one ordered 설정 list (파일 상태 → 저장 공간 → 공유 중인 링크 → 내 데이터 내보내기 → 기존 자료 가져오기 → 진단). It needs its own PR because existing tests pin the current settings layout.
+### 설정 groups (built 2026-11-20)
+
+Below the account card and 나의 노래 기록, 설정 has four groups. Each row sits in exactly one group. The look of the rows is unchanged (`app/settings-refresh.css`: white R20 list, rows ≥54px, divider `#F2F0F6`).
+
+| Group (`data-settings-group`) | Heading | Rows, in order |
+|---|---|---|
+| `practice` | 연습 | 하루 연습 목표 시간 · 트레이닝 항목 · 노래 연습실 |
+| `analysis` | 분석 | automatic analysis switches (unchanged) |
+| `files` | 파일·저장 | 처리 내역 (file status line) · 저장 공간 · 녹음 찾기 (이 기기) · 내 데이터 내보내기 · 굿노트에서 가져온 악보 지우기 (only when there are some) · 기록 백업·복원 (folded) |
+| `more` | 공유·점검 | 공유 중인 링크 · 녹음 중 블루투스 시험 |
+
+Before, 연습 목표 held one row and 관리 held ten mixed rows. On screens 768px and wider the four groups sit two by two; only the version line spans both columns (`app/wide-lists.css`). A new 설정 row goes into the group it belongs to; do not add a fifth group without updating this table.
 ## Component rules added in v5
 
 - **One definition per component.** Cards, chips, tab bars, list rows and buttons are defined once in `design-system/components.css`. Screen CSS may position them but may not restyle colour, radius or type.
@@ -67,3 +78,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 
 - 2026-11-20: v5 draft added. v4 stays in force.
 - 2026-11-20: screen ownership rule built for 기존 자료 가져오기, 곡 확인, 전사 확인 (keep instead of ecord).
+- 2026-11-20: 설정 regrouped into 연습 · 분석 · 파일·저장 · 공유·점검 (replaces 연습 목표 · 분석 · 관리). No setting, value or link removed.
