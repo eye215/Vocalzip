@@ -177,7 +177,7 @@ test('optional sections are absent without their data and present with it; set m
  const db=base();db.practices=[{id:'p1',date:'2026-11-10',songId:'s1',minutes:10}];
  let s=W.build(db,[{id:'m',created:kst('2026-11-10','09:00'),category:'training'}],{today:'2026-11-15',weekStart:'2026-11-09'});
  assert.equal(s.voiceCheck,null);assert.equal(s.practiceSet,null);
- assert.ok(!W.toText(s).includes('보이스 체크'));assert.ok(!W.toText(s).includes('연습 세트'));
+ assert.ok(!W.toText(s).includes('보이스 체크'));assert.ok(!W.toText(s).includes('오늘의 연습'));
  db.practices.push({id:'p2',date:'2026-11-11',songId:'s1',minutes:12,practiceSet:{sessionId:'set-1'}},{id:'p3',date:'2026-11-11',minutes:8,practiceMode:'training',practiceSet:{sessionId:'set-1'}},
   {id:'p4',date:'2026-11-12',minutes:5,practiceSetId:'set-2'});
  const media=[{id:'v1',created:kst('2026-11-10','08:00'),category:'training',voiceCheck:true},{id:'v2',created:kst('2026-11-11','08:00'),category:'training',voiceCheck:{v:1}}];

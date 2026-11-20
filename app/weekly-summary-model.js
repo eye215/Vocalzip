@@ -209,7 +209,7 @@ function lines(s){
  }
  if(s.lessons.newHomework.length)out.push({kind:'body',text:'새 숙제: '+s.lessons.newHomework.map(t=>t.title).slice(0,4).join(', ')});
  if(s.voiceCheck){out.push({kind:'head',text:'매일 보이스 체크'});out.push({kind:'body',text:s.voiceCheck.days+'일 · '+s.voiceCheck.count+'번 체크'});for(const t of s.voiceCheck.lines)out.push({kind:'item',text:t});}
- if(s.practiceSet){out.push({kind:'head',text:'오늘 연습 세트'});out.push({kind:'body',text:s.practiceSet.sessions+'세트 · '+s.practiceSet.days+'일'+(s.practiceSet.minutes?' · '+minutesLabel(s.practiceSet.minutes):'')});}
+ if(s.practiceSet){out.push({kind:'head',text:'오늘의 연습'});out.push({kind:'body',text:s.practiceSet.sessions+'세트 · '+s.practiceSet.days+'일'+(s.practiceSet.minutes?' · '+minutesLabel(s.practiceSet.minutes):'')});}
  return out;
 }
 const toText=s=>lines(s).map(l=>l.kind==='head'?'\n['+l.text+']':l.kind==='item'?'· '+l.text:l.text).join('\n').trim();

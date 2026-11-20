@@ -954,8 +954,8 @@ test('no goal step after a take for a lesson recording or while the practice set
  await phoneWidth(page);await boot(page,timeSeed());
  // Lesson recording: it belongs to the lesson, the goals are not asked about (even with ?goal= in the address).
  await page.goto('/#/record?lesson=l1&goal=g1');await takeLength(page,30);await recordTake(page);await noDialog(page);
- // 오늘 연습 세트 is running: it links its own takes when the singer comes back.
- await page.goto('/#/home');await ready(page);await page.locator('[data-home-practice] [data-row="practice-set"]').click();await page.getByRole('button',{name:'시작하기'}).click();
+ // 오늘의 연습 is running one of the person's own steps (the homework goal, first): it links its own takes when the singer comes back.
+ await page.goto('/#/home');await ready(page);await page.locator('[data-home-practice] [data-row="practice-set"] [data-set-go]').click();
  await expect.poll(()=>page.evaluate(()=>!!VZ.practiceSetClock.state())).toBe(true);
  await page.goto('/#/record');await takeLength(page,30);await recordTake(page);await noDialog(page);
  const value=await db(page);

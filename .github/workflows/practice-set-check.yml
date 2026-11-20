@@ -3,19 +3,25 @@ on:
   pull_request:
     paths:
       - 'app/practice-set*'
+      - 'app/daily-set*'
+      - 'app/growth-next-model.js'
+      - 'app/guided-practice.js'
+      - 'app/listen-verdict.js'
+      - 'design-system/shared-nav.css'
       - 'app/goal-routines.js'
       - 'app/practice-time-model.js'
       - 'app/student-home-model.js'
       - 'design-system/student-home-app.js'
       - 'design-system/student-home-html.js'
       - 'tests/practice-set*'
+      - 'tests/daily-set*'
       - '.github/workflows/practice-set-check.yml'
 permissions:
   contents: read
 jobs:
   practice-set:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 25  # two specs on three browsers; the browser install alone can take 8+ minutes on a busy runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,9 +29,10 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts
       - run: npm run test:syntax
-      - run: node --test tests/practice-set-model.test.cjs tests/goal-routines.test.cjs tests/practice-time.test.cjs
+      - run: node --test tests/practice-set-model.test.cjs tests/daily-set-model.test.cjs tests/goal-routines.test.cjs tests/practice-time.test.cjs
       - run: npx playwright install --with-deps chromium webkit
-      - run: npx playwright test tests/practice-set.spec.cjs --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
+      # 오늘의 연습: the set list and the person's own steps (practice-set), the card, the doing screen, 고르기 and the takes (daily-set).
+      - run: npx playwright test tests/practice-set.spec.cjs tests/daily-set.spec.cjs --project=chromium-mobile --project=webkit-mobile --project=chromium-desktop --workers=2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
