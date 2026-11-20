@@ -64,6 +64,32 @@ window.vzipAccountImportBaseline=async()=>{
 const Merge=window.VzipDataMerge;
 let syncAgain=false,syncFailed=false;
 function snapshot(data){if(!data)return;try{localStorage.setItem('vzip_before_cloud_'+Date.now(),JSON.stringify(data));const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^vzip_before_cloud_\d+$/.test(k||''))keys.push(k)}keys.sort().slice(0,-5).forEach(k=>localStorage.removeItem(k))}catch{}}
+/* A redraw replaces the buttons on screen, so a press that began on the old button and ends after the redraw is
+   dropped: on a phone, "I tapped and nothing happened" just after a save. Storing a merged copy that differs redraws
+   (vzip:data-changed → app/core.js and each screen's own listener), so sync holds that step while a finger or a mouse
+   button is down, and until the click that follows its release has been handled. The device copy is read after the
+   wait, so whatever that click saved is merged too. The wait has a limit: a change from another device is shown a
+   moment later, never lost. */
+const PRESS_LIMIT=5000,CLICK_WAIT=350;
+const press=(()=>{
+ const held=new Set(),waiting=[];let settle=null;
+ const free=()=>{clearTimeout(settle);settle=null;if(!held.size)for(const done of waiting.splice(0))done();};
+ const drop=()=>{held.clear();free();};
+ const on=(type,fn)=>document.addEventListener(type,fn,true);
+ // A first touch means no other finger is down: an id whose release was never reported is forgotten here.
+ on('pointerdown',e=>{if(e.isPrimary)held.clear();held.add(e.pointerId);clearTimeout(settle);settle=null;});
+ // The click arrives after pointerup — on a touch screen as a separate event a moment later.
+ on('pointerup',e=>{held.delete(e.pointerId);if(!held.size){clearTimeout(settle);settle=setTimeout(free,CLICK_WAIT);}});
+ on('click',()=>{if(settle!==null){clearTimeout(settle);settle=setTimeout(free,0);}});
+ // Scrolling took the touch over: no click follows.
+ on('pointercancel',e=>{held.delete(e.pointerId);if(!held.size)free();});
+ window.addEventListener('blur',drop);window.addEventListener('pagehide',drop);
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')drop();});
+ return{
+  active:()=>held.size>0||settle!==null,
+  released:limit=>new Promise(resolve=>{const timer=setTimeout(done,limit);function done(){clearTimeout(timer);resolve();}waiting.push(done);})
+ };
+})();
 /* Conditional writes: the server copy is replaced only if nobody saved it since it was read (same
    updated_at). Otherwise it is read again and merged again, so a save from another device in between
    is never dropped. */
@@ -234,19 +260,28 @@ async function sync({silent=false,reload=false}={}){
  busy=true;let local=null,merged=null,changedLocal=false,bridge=null,confirmed=null;
  try{
   bridge=snapshotBridge();if(bridge)await bridge.recover();
+  // The same records in another text (key order, the empty `deleted` a merge writes) are not a change. The revision
+  // bridge compares the stored text itself, so with it the device copy stays character-for-character as before.
+  const settled=bridge?Merge.same:Merge.unchanged;
   for(let attempt=0;;attempt++){
    const row=bridge?await bridge.read():await remoteData();checkOwner();
    if(row&&'payload' in row&&!Merge.valid(row.payload))throw Error('클라우드 기록 형식을 확인하지 못했어요. 동기화를 중단합니다.');
    const remote=row?.payload||null;
+   const mergedWith=current=>remote?(window.VzipAccountScope&&!localStorage.getItem('vzip_account_dirty')?remote:Merge.merge(current||{},remote).data):current;
    // The device copy is read only now, right before it may be rewritten: an edit made while
    // waiting for the server is merged too, never overwritten.
    const prepare=current=>{
     local=current;
     if(!local&&!remote)return;
-    merged=remote?(window.VzipAccountScope&&!localStorage.getItem('vzip_account_dirty')?remote:Merge.merge(local||{},remote).data):local;
+    merged=mergedWith(local);
     if(!Merge.valid(merged))throw Error('기록 형식을 확인하지 못했어요.');
-    if(!local||!Merge.same(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));changedLocal=true;window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}));}
+    // Right after this device's own save the merge brings nothing new: the copy on screen is kept as it is — not
+    // stored again, not announced, so nothing is redrawn (and no vzip_before_cloud_ copy is spent on it).
+    if(!local||!settled(merged,local)){snapshot(local);localStorage.setItem(dataKey,JSON.stringify(merged));changedLocal=true;window.dispatchEvent(new CustomEvent('vzip:data-changed',{detail:{source:'cloud-merge'}}));}
    };
+   // A merge that will redraw waits for a press in progress (see `press`).
+   const redraws=()=>{const current=localData();if(!current&&!remote)return false;const next=mergedWith(current);return Merge.valid(next)&&(!current||!settled(next,current));};
+   if(press.active()&&redraws()){await press.released(PRESS_LIMIT);checkOwner();}
    if(bridge)await bridge.prepare(row,()=>({payload:localData(),dirty:!!localStorage.getItem('vzip_account_dirty')}),prepare);
    else prepare(localData());
    if(!local&&!remote){say('아직 저장된 기록이 없어요.');return}
@@ -269,7 +304,7 @@ async function sync({silent=false,reload=false}={}){
   }
   checkOwner();localStorage.setItem('vzip_cloud_linked_user',user.id);ready=true;syncFailed=false;
   const latest=localData(),comparable=bridge&&window.VzipArchive?window.VzipArchive.forOwner(latest,syncOwner):latest;
-  if(window.VzipAccountScope&&Merge.same(comparable,bridge?confirmed:merged))localStorage.removeItem('vzip_account_dirty');
+  if(window.VzipAccountScope&&settled(comparable,bridge?confirmed:merged))localStorage.removeItem('vzip_account_dirty');
   else if(bridge){localStorage.setItem('vzip_account_dirty','1');syncAgain=true;}
   requestMediaDeleteResume();
   snapshotReviewAvailable=false;refreshSnapshotReview();
