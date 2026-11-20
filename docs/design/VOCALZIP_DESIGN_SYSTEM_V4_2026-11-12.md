@@ -2,6 +2,8 @@
 
 2026-11-12 · **Approved target specification for the upcoming IA redesign, not yet implemented in production.**
 
+> 2026-11-20: v5 draft (`VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md`) adds screen ownership and shared component rules on top of this guide. Every rule below stays in force.
+
 ## Source of truth / inheritance
 
 Existing references: `design-system/tokens.css`, `design-system/global-app.css`, `app/collection-ui.css`, `app/song-detail.css`, `docs/design/VOCALZIP_DESIGN_SYSTEM_2026-11-09.md`. Keep the approved dark recording studio separately themed. This version supersedes the *desired behavior* of inconsistent search and filter active treatments. Do not imply that current CSS is already updated.
