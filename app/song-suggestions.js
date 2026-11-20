@@ -629,7 +629,7 @@ function wireHelp(main){
  window.addEventListener('scroll',()=>{if(!help.hidden)toggle(false)},{passive:true,signal});
  window.addEventListener('resize',()=>{if(!help.hidden)position()},{signal});
 }
-VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
+VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'keep',
  titleAddon:()=>'<button type="button" class="icon-btn" data-song-help aria-label="곡 확인 도움말" aria-expanded="false" aria-controls="song-check-help"><i class="ph ph-info"></i></button>',
  render(){return `<section data-suggest class="vz-song-check">
  <div class="vz-sc-status"><div class="vz-sc-status-head"><div class="vz-sc-status-title"><i class="ph ph-chart-line-up"></i>분석 현황 <small>내 계정 기준</small></div><div class="vz-sc-complete"><i class="ph ph-check"></i><span data-vocal-count>보컬 측정 내역 확인 중</span></div></div>
@@ -676,7 +676,7 @@ VZ.route('song-suggest',{title:'곡 확인',back:true,tab:'record',
  },leave(){helpAbort?.abort();helpAbort=null;destroyPlayers()}
 });
 let transcriptAbort=null;
-VZ.route('song-transcript',{title:'전사 확인',back:true,tab:'record',noAutoRefresh:true,
+VZ.route('song-transcript',{title:'전사 확인',back:true,tab:'keep',noAutoRefresh:true,
  render(){return '<section class="vz-transcript" data-transcript><p class="muted">전사 내용을 불러오는 중…</p></section>'},
  async mount(main,r){
   const host=main.querySelector('[data-transcript]'),id=r.params[0],currentOwner=owner();

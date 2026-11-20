@@ -1945,7 +1945,12 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   await expect(page.locator('.vz-journey')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(page.locator('[data-sync-summary]')).toBeVisible();
   const headings = await page.locator('.vz-settings-section h2').allTextContents();
-  expect(headings.map(h => h.trim())).toEqual(['연습 목표', '분석', '관리']);
+  expect(headings.map(h => h.trim())).toEqual(['연습', '분석', '파일·저장', '공유·점검']);
+  // v5 settings groups: each row sits in the one group it belongs to (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md).
+  const rows = async g => (await page.locator('[data-settings-group="' + g + '"] .item-title').allTextContents()).map(s => s.trim());
+  expect(await rows('practice')).toEqual(['하루 연습 목표 시간', '트레이닝 항목', '노래 연습실']);
+  expect((await rows('files')).filter(s => !s.startsWith('굿노트'))).toEqual(['처리 내역', '저장 공간', '녹음 찾기 (이 기기)', '내 데이터 내보내기', '기록 백업·복원']);
+  expect(await rows('more')).toEqual(['공유 중인 링크', '녹음 중 블루투스 시험']);
   await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();
   await expect(page.locator('#cloud-upload')).toBeHidden();
   await expect(page.locator('#cloud-logout')).toBeVisible(); // 로그아웃 is a plain row, not inside the folded tools
