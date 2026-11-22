@@ -150,6 +150,8 @@ test('Import hub takes you to the next steps after an upload: choose songs, then
 test('Calendar add menu offers 숙제 next to 레슨 일정 and 연습 기록 and opens the homework sheet', async ({page}) => {
   await boot(page);
   await page.goto('/#/calendar');
+  // The day's + says what it opens: the 기록 추가 menu (it was labelled 일정 추가).
+  await expect(page.locator('.vz-calendar-day-head [data-add]')).toHaveAttribute('aria-label', '기록 추가');
   await page.locator('.vz-calendar-day-head [data-add]').click();
   const kinds = await page.locator('[data-calendar-add]').evaluateAll(b => b.map(x => x.dataset.calendarAdd));
   expect(kinds, JSON.stringify(kinds)).toEqual(['stage', 'lesson', 'practice', 'homework']);

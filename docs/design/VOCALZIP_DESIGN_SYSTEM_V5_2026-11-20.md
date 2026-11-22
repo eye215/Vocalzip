@@ -95,7 +95,8 @@ Read from the code, tab by tab. "Built" says what changed on 2026-11-22; everyth
 **기록**
 - 달력 (`#/calendar`), 레슨 (`#/lessons`, `#/lesson/<id>`), 숙제 (`#/homework`), 연습 기록 (`#/practices`), AI 숙제 후보 (`#/lesson-ai/<id>`).
 - Built: 달력 › 날짜 › + (`기록 추가`) offers 숙제 next to 나의 공연 · 레슨 일정 · 연습 기록; before, homework could only be added from 숙제 or a lesson page.
-- Later: the add actions use several words (레슨 일정 추가 / 일정 추가, 연습 기록 / 연습 기록 추가); the lesson page has two feedback buttons (tests still use both).
+- Built: the + next to the chosen day is named `기록 추가`, the title of the menu it opens (it was `일정 추가`). The sheet buttons keep their words: `일정 추가` saves a lesson date, `연습 기록` opens the practice sheet.
+- Kept on purpose: the lesson page shows `피드백 작성` in the section heading and again inside the empty box. That is the shared pattern (heading action + one action in the empty box, see Empty states); once feedback exists only the heading's `수정` remains.
 ## Component rules added in v5
 
 - **One definition per component.** Cards, chips, tab bars, list rows and buttons are defined once in `design-system/components.css`. Screen CSS may position them but may not restyle colour, radius or type.
@@ -132,3 +133,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-22: loading rows on more list screens; empty text split into title + helper; error box with 다시 시도; tap targets under 44px raised.
 - 2026-11-22: feature map; voice check minutes from its own clock; 오늘로 after 따라 하기; 숙제 in 기록 추가.
 - 2026-11-22: 다음 연습 추천 screen title.
+- 2026-11-22: calendar day + is named 기록 추가.
