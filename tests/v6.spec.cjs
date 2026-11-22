@@ -1,6 +1,6 @@
 // VOCAL.zip v6 UI: main user flows, data compatibility with v5 records, and mobile layout.
 const {test, expect} = require('@playwright/test');
-require('./legacy-session-mode.cjs')(test,{approvedHome:info=>info.title==='Bottom navigation reaches the four main screens and the record button without horizontal overflow'});
+require('./legacy-session-mode.cjs')(test,{approvedHome:info=>['Bottom navigation reaches the four main screens and the record button without horizontal overflow','Practice records are grouped by day, say where they were recorded and leave out empty set steps'].includes(info.title)});
 const labClear = require('./lab-clear-selection.cjs');
 const fs = require('node:fs'), path = require('node:path');
 const KEY = 'vocal-zip_mvp_v1';
