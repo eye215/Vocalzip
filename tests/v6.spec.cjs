@@ -1682,6 +1682,14 @@ test('Growth month filters, file-count units and every-week horizontal chart rem
   await page.getByRole('combobox',{name:'조회 월'}).selectOption(previous);
   await expect(page.locator('.stat').filter({hasText:'연습 시간'}).first()).toContainText('30분');
   await expect(page.locator('.stat').filter({hasText:'평균 만족도'})).toContainText('4.0');
+  // ← month → in one row, on a phone too (a .growth-month card rule of 월간 성장 once stacked them).
+  const nav = await page.locator('[data-month-controls]').evaluate(el => ['[data-month-prev]', 'select', '[data-month-next]'].map(q => el.querySelector(q).getBoundingClientRect()).map(r => [Math.round(r.bottom), Math.round(r.left)]));
+  expect(Math.max(...nav.map(n => n[0])) - Math.min(...nav.map(n => n[0]))).toBeLessThanOrEqual(4);
+  expect(nav[0][1]).toBeLessThan(nav[1][1]); expect(nav[1][1]).toBeLessThan(nav[2][1]);
+  // The week chart spans its card (a 12-column .growth-chart rule of 월간 성장 once squeezed it into one column).
+  const weeks = await page.locator('[data-chart-scroll]').evaluate(el => ({card:el.closest('.card').clientWidth, width:el.clientWidth, cols:[...el.firstElementChild.children].map(c => Math.round(c.getBoundingClientRect().width))}));
+  expect(weeks.width).toBeGreaterThan(weeks.card * .8);
+  expect(Math.min(...weeks.cols)).toBeGreaterThanOrEqual(40);
   await expect(page.locator('[data-song-stat="s1"]')).toContainText('30분');
   await page.getByRole('button',{name:'횟수(파일 수)',exact:true}).click();
   await expect(page.locator('[data-song-stat="s1"]')).toContainText('2회');
