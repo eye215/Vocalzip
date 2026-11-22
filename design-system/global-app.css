@@ -22,14 +22,15 @@ body:not(.vz-home-mode) .empty > i.ph:first-child { font-size:var(--vz-icon-size
 /* v5 buttons: one shared size (V4 Primary/Secondary: 52px, R16, weight 600). Kept at class-level specificity with :where()
    so screens that set their own button size (and .btn.sm at 44px) still win. */
 :where(body:not(.vz-home-mode)) .btn { min-height:var(--vz-button-height); border-radius:var(--vz-button-radius); font-weight:600; }
-/* v5 form fields: every labelled field on a light screen looks like the approved sheet field (V4 Input/Textarea):
-   no border, #F2EFF7, R15, 52px (textarea 120px), 2px #DCC4FF focus outline. The dark recorder keeps its own look. */
-:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) {
+/* v5 form fields: every labelled field on a light screen looks like the approved sheet field (V4 Input):
+   no border, #F2EFF7, R15, 52px, 2px #DCC4FF focus outline. The dark recorder keeps its own look.
+   Specificity is held at (0,1,1), the same as the base `input[type=text]` rule it replaces: the type filter sits in
+   :where(), so any screen rule written for its own field (loaded later, or more specific) still wins. */
+:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input, select, textarea):where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])) {
   border:0; border-radius:var(--vz-input-radius); background-color:var(--vz-input-bg); color:var(--vz-color-primary); box-shadow:none;
 }
-:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select) { min-height:var(--vz-input-min-height); }
-:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field textarea { min-height:120px; }
-:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea):focus { outline:var(--vz-focus-width) solid var(--vz-color-input-focus); outline-offset:var(--vz-focus-input-offset); box-shadow:none; }
+:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input, select):where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])) { min-height:var(--vz-input-min-height); }
+:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input, select, textarea):where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])):focus { outline:var(--vz-focus-width) solid var(--vz-color-input-focus); outline-offset:var(--vz-focus-input-offset); box-shadow:none; }
 body:not(.vz-home-mode) .card { padding:var(--vz-card-padding); }
 body:not(.vz-home-mode) .card.flat { box-shadow:none; }
 body:not(.vz-home-mode) .stack { gap:var(--vz-card-gap); }
