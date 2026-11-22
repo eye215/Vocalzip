@@ -109,7 +109,7 @@ test('단계: the level with today\'s points and how to earn them, 기본기 til
   // (b) 기본기: eight tiles, each in its state.
   await expect(host(page).locator('.lv-tile')).toHaveCount(8);
   expect(await host(page).locator('.lv-tile').evaluateAll(els => els.map(e => [e.dataset.area, e.dataset.state]))).toEqual(
-    [['breath', 'ready'], ['pitch', 'step'], ['sustain', 'calibrating'], ['path', 'soon'], ['range', 'ready'], ['high', 'soon'], ['vibrato', 'ready'], ['rhythm', 'ready']]);
+    [['breath', 'ready'], ['pitch', 'step'], ['sustain', 'calibrating'], ['path', 'ready'], ['range', 'ready'], ['high', 'ready'], ['vibrato', 'ready'], ['rhythm', 'ready']]);
   // 단계: step n / 5, the 유지 중 mark, and — the next criterion already met on three days — what the next set will do.
   await expect(tile(page, 'pitch').locator('strong')).toHaveText('1 / 5단계');
   await expect(tile(page, 'pitch')).toHaveAttribute('data-keeping', '');
@@ -122,12 +122,11 @@ test('단계: the level with today\'s points and how to earn them, 기본기 til
   await expect(tile(page, 'sustain').locator('[data-tile-sub]')).toHaveText('9일째 · 지금은 2단계쯤');
   expect(await tile(page, 'sustain').locator('.lv-pips i.is-on').count()).toBe(0);
   expect(await tile(page, 'sustain').locator('.lv-pips i.is-ghost').count()).toBe(2);
-  // Can be measured, not yet; and no exercise yet.
-  await expect(tile(page, 'range').locator('strong')).toHaveText('아직 안 쟀어요');
-  await expect(tile(page, 'path').locator('strong')).toHaveText('준비 중');
-  await expect(tile(page, 'path').locator('[data-tile-sub]')).toHaveText('재는 연습을 준비 중이에요');
-  // 호흡 · 비브라토 · 리듬 have their measuring exercise now: not measured yet, said so.
-  for (const area of ['breath', 'vibrato', 'rhythm']) await expect(tile(page, area).locator('strong')).toHaveText('아직 안 쟀어요');
+  // Can be measured, not yet: every area has its measuring exercise now (소리 길 · 고음 too), said so.
+  for (const area of ['breath', 'path', 'range', 'high', 'vibrato', 'rhythm']) {
+    await expect(tile(page, area).locator('strong')).toHaveText('아직 안 쟀어요');
+    await expect(tile(page, area).locator('[data-tile-sub]')).toHaveText('오늘의 연습에서 재요');
+  }
   await expect(tile(page, 'path').locator('.lv-tile-name')).toHaveText('소리 길연결');
   // (c) 선생님 지적 배지: what was retired as 이제 됐어요, newest first, apart from the numbers.
   await expect(host(page).locator('[data-badge] strong')).toHaveText(['고음에서 턱 내리기', '12마디 숨 미리 마시기']);
@@ -173,19 +172,18 @@ test('an area: the next step in plain words, "3번 중 n번 했어요", recent v
   await expect(host(page).locator('[data-lv-recent] li').first()).toHaveText('11.20 (금)5개 중 5개 유지');
   await expect(host(page).locator('[data-lv-recent] li').nth(1)).toHaveText('11.19 (목)5개 중 4개 유지');
   expect(await host(page).innerText()).not.toMatch(/잘해요|재능|못해요|부족/);
-  // The five steps: done (with its day), next, later — and the ones no exercise measures yet.
+  // The five steps: done (with its day), next, later — every one measured by an exercise now.
   expect(await host(page).locator('[data-lv-steps] li').evaluateAll(els => els.map(e => e.dataset.state))).toEqual(['earned', 'next', 'later', 'later', 'later']);
   await expect(host(page).locator('[data-lv-steps] li').first().locator('strong')).toHaveText('1단계 · 했어요 (11.15 (일))');
-  await expect(host(page).locator('[data-lv-steps] li').nth(2)).toContainText('재는 연습 준비 중');
+  await expect(host(page).locator('[data-lv-steps] li').nth(2)).not.toContainText('재는 연습 준비 중');
   // What measures it, and the way into 오늘의 연습 고르기.
-  await expect(host(page).locator('[data-lv-exercise] li')).toHaveText(['음 따라 부르기음감 · 마이크를 켜고 할 때만 재요']);
+  await expect(host(page).locator('[data-lv-exercise] li')).toHaveText(['음 따라 부르기음감 · 마이크를 켜고 할 때만 재요', '스케일 따라 부르기음감 · 마이크를 켜고 할 때만 재요']);
   for (const [width, height] of SIZES) { await page.setViewportSize({width, height}); await targets(host(page).locator('button')); await noOverflow(page); }
   await page.setViewportSize({width:390, height:844});
-  await host(page).getByRole('button', {name:'오늘의 연습 고르기'}).click();
-  const pick = page.getByRole('dialog', {name:'오늘의 연습 고르기'});
-  await expect(pick).toBeVisible();
-  await expect(pick).toContainText('음 따라 부르기');
-  await pick.locator('[data-close]').click(); await expect(pick).toHaveCount(0);
+  // 오늘의 연습 편집: today's list, where the set is changed.
+  await host(page).getByRole('button', {name:'오늘의 연습 편집'}).click();
+  await expect(page).toHaveURL(/#\/practice-set$/);
+  await expect(page.locator('.pset-plan')).toContainText('음감');
   // 기준 맞추는 중: the day, the draft level, and that no step is given yet.
   await to(page, '#/levels/sustain');
   const cal = host(page).locator('[data-lv-area="sustain"]');
@@ -203,19 +201,20 @@ test('an area: the next step in plain words, "3번 중 n번 했어요", recent v
   await expect(host(page).locator('[data-lv-area="range"] [data-lv-state]')).toHaveText('아직 재지 않았어요');
   await expect(host(page).locator('[data-lv-next] [data-lv-progress]')).toHaveText('3번 중 0번 했어요');
   await expect(host(page).locator('[data-lv-guard]')).toContainText('가장 높이 낸 한 음이나 큰 소리는 세지 않아요. 편하게 2초 넘게 유지한 음만 세요.');
-  // Said plainly: for now only the start is measured; growth is measured once the 스케일 연습 exists.
-  await expect(host(page).locator('[data-lv-limit]')).toHaveText('지금은 기준만 재요. 처음보다 넓어진 음역은 조를 하나씩 올려 가는 스케일 연습이 생기면 그때부터 재요.');
-  expect(await host(page).locator('[data-lv-steps] li').evaluateAll(els => els.map(e => /재는 연습 준비 중/.test(e.textContent)))).toEqual([false, true, true, true, true]);
-  // No exercise yet (소리 길): 준비 중, with what the exercise will be.
+  // Growth beyond the start is measured by the 스케일 연습 now: no limit line, no step 준비 중.
+  await expect(host(page).locator('[data-lv-limit]')).toHaveCount(0);
+  expect(await host(page).locator('[data-lv-steps] li').evaluateAll(els => els.map(e => /재는 연습 준비 중/.test(e.textContent)))).toEqual([false, false, false, false, false]);
+  await expect(host(page).locator('[data-lv-exercise] li strong')).toHaveText(['허밍 롱톤', '“멈” 롱톤', '맨 위 음 유지', '음 따라 부르기', '스케일 따라 부르기']);
+  // 소리 길: measured by 사이렌 (목 풀기), with how it is measured.
   await to(page, '#/levels/path');
-  const soon = host(page).locator('[data-lv-area="path"]');
-  await expect(soon).toHaveAttribute('data-state', 'soon');
-  await expect(soon.locator('[data-lv-state]')).toHaveText('재는 연습을 준비 중이에요');
-  await expect(soon).toContainText('준비 중인 연습 · 낮은 음에서 높은 음으로 미끄러지듯 잇는 사이렌 연습');
-  await expect(host(page).locator('[data-lv-next] [data-lv-soon]')).toContainText('이 단계를 재는 연습을 준비 중이에요');
-  await expect(host(page).locator('[data-lv-next] [data-lv-progress]')).toHaveCount(0);
+  const path = host(page).locator('[data-lv-area="path"]');
+  await expect(path).toHaveAttribute('data-state', 'ready');
+  await expect(path.locator('[data-lv-state]')).toHaveText('아직 재지 않았어요');
+  await expect(host(page).locator('[data-lv-how-to]')).toContainText('사이렌: “우~”로 낮은 음에서 높은 음까지');
+  await expect(host(page).locator('[data-lv-next] [data-lv-soon]')).toHaveCount(0);
+  await expect(host(page).locator('[data-lv-next] [data-lv-progress]')).toHaveText('3번 중 0번 했어요');
   await expect(host(page).locator('[data-lv-steps] li')).toHaveCount(5);
-  await expect(host(page).locator('[data-lv-exercise] [data-lv-pick]')).toHaveCount(0);
+  await expect(host(page).locator('[data-lv-exercise] li strong')).toHaveText(['사이렌']);
   await noOverflow(page);
   // 고음: skipping is fine, the highest note is not what counts.
   await to(page, '#/levels/high');
@@ -234,7 +233,7 @@ test('기준표 보기: the whole table and my numbers as plain text, 복사 cop
   const text = await sheet.locator('[data-lv-sheet-text]').innerText();
   expect(text).toBe(L.sheetText(value, {today:TODAY}));
   for (const part of ['큰 단계', '지금: Lv 3 · ' + L.LEVELS[2].name + ' · 549점 · 다음 단계까지 51점', '하루 최대 60점', '[음정] 1단계 · 요즘도 유지 중', '다음 2단계: 3번 중 3번 했어요',
-    '[지속음] 기준 맞추는 중 · 9일째 · 지금 기록으로는 2단계쯤', '[호흡] 아직 재지 않았어요', '[리듬] 아직 재지 않았어요', '[소리 길(연결)] 재는 연습을 준비 중', '5단계: 빠른 박자(1분에 104번)에서 셋잇단음과 당김음을 0.04초 안으로 맞춰요', '내 기록: 11.20 흔들림 11 cent · 6초'])
+    '[지속음] 기준 맞추는 중 · 9일째 · 지금 기록으로는 2단계쯤', '[호흡] 아직 재지 않았어요', '[리듬] 아직 재지 않았어요', '[소리 길(연결)] 아직 재지 않았어요', '5단계: 빠른 박자(1분에 104번)에서 셋잇단음과 당김음을 0.04초 안으로 맞춰요', '내 기록: 11.20 흔들림 11 cent · 6초'])
     expect(text).toContain(part);
   // Numbers only: no ids, no song titles, no badge words.
   for (const hidden of ['practice-set:', 'point:', 'This Is the Moment', '턱 내리기', 'ui-test-user', 'test@example']) expect(text).not.toContain(hidden);

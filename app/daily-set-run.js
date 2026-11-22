@@ -9,7 +9,8 @@
  * available) · take (연습 전후 30초 녹음, VZ.media.capture) · free (the person's own step on the set's wall clock).
  * The measuring exercises of 기본기 단계 (app/daily-measure-model.js has their numbers): hiss (“스~” 길게: the length of
  * one continuous hiss) · rhythm (“타” 따라 하기: listen to a bar, say it back on the next; the distance from the beat) ·
- * vibrato (롱톤 비브라토: 8 seconds, straight then vibrato on the cue). Each ends on its own result screen (word first,
+ * vibrato (롱톤 비브라토: 8 seconds, straight then vibrato on the cue) · scale (스케일 따라 부르기: hear it, sing it back
+ * to the beat; the key rises a round at a time) · siren (사이렌: a glide up and back down). Each ends on its own result screen (word first,
  * numbers small, 다음으로) and puts its `measures` in its result; without the mic they run on a timer and measure nothing.
  * Nothing here is analysed later or uploaded: the mic is only read live on this screen, and no audio is kept. */
 (()=>{
@@ -24,7 +25,7 @@ const countdown=left=>(left<0?'+':'')+mmss(Math.abs(left<0?Math.floor(-left):Mat
 const text=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
 const TRY_SECONDS=20,LISTEN=1.2,CHEER=.9;
 /** The modes that listen through the mic (asked once, a timer without it). */
-const MIC_MODES=['hold','hiss','rhythm','vibrato'];
+const MIC_MODES=['hold','hiss','rhythm','vibrato','scale','siren'];
 
 /* ---------- sound: reference notes and small cues (created inside the tap, for iPhone Safari) ---------- */
 function tones(){
@@ -83,6 +84,8 @@ const centsFrom=(frequency,midi)=>{if(!frequency)return null;const c=1200*Math.l
 /** Which octave the note was really sung in (0 = as played, −1 = an octave under): kept with a held note, so 음역 in
  * 기본기 단계 counts the note that was sung, not the folded one. */
 const octaveFrom=(frequency,midi)=>frequency?Math.round(Math.log2(frequency/hz(midi))):0;
+/** A frequency as a MIDI number with its fraction (사이렌 · 스케일 keep the pitch as sung, not folded). */
+const midiOf=frequency=>frequency?Math.round((69+12*Math.log2(frequency/440))*100)/100:null;
 
 /* ---------- engines: what happens inside one step ---------- */
 const dots=(n,at,done)=>'<ol class="dset-dots" data-run-dots aria-hidden="true">'+Array.from({length:n},(_,i)=>'<li class="'+(i<done?'is-done':i===at?'is-now':'')+'"></li>').join('')+'</ol>';
@@ -173,7 +176,8 @@ const ENGINES={
     const needle=cents=>{const n=r.q('[data-run-needle]');if(n){n.style.left=(50+Math.max(-45,Math.min(45,(cents||0)*.9)))+'%';n.dataset.on=cents==null?'':'1';}};
     const meter=part=>{const m=r.q('[data-run-hold]');if(m)m.style.width=Math.round(Math.max(0,Math.min(1,part))*100)+'%';};
     const next=()=>{
-      out.push(mic()?{midi:notes[i],...D.holdResult(h)}:{midi:notes[i]});
+      const tags=D.noteTags?.(e,i)||{};
+      out.push(mic()?{midi:notes[i],...tags,...D.holdResult(h)}:{midi:notes[i],...tags});
       if(i>=notes.length-1)return r.complete(result());
       i++;h=D.holdStart();tried=0;phase='listen';left=LISTEN;play();
     };
@@ -185,9 +189,9 @@ const ENGINES={
     };
     const paint=cents=>{
       setDots(r,i,out.length);text(r.q('[data-run-note]'),D.noteName(notes[i]));
-      if(phase==='listen'){needle(null);meter(0);r.word('들어 보세요','wait');r.sub((i+1)+' / '+notes.length+' · '+D.noteName(notes[i]));return;}
+      if(phase==='listen'){needle(null);meter(0);r.word('들어 보세요','wait');r.sub((i+1)+' / '+notes.length+' · '+D.noteName(notes[i])+(e.vowels?' · “'+D.syllableOf(e,i)+'”':''));return;}
       if(phase==='cheer'){needle(0);meter(1);r.word(mic()?'좋아요!':'다음 음으로 가요','exact');return;}
-      if(!mic()){meter(1-left/(need+2));needle(null);r.word('“'+e.syllable+'” 이어요','go');r.sub((i+1)+' / '+notes.length+' · '+Math.max(0,Math.ceil(left))+'초 · 마이크 없이 타이머로 해요');return;}
+      if(!mic()){meter(1-left/(need+2));needle(null);r.word('“'+(D.syllableOf?.(e,i)||e.syllable)+'” 이어요','go');r.sub((i+1)+' / '+notes.length+' · '+Math.max(0,Math.ceil(left))+'초 · 마이크 없이 타이머로 해요');return;}
       const w=D.word(cents,tol);needle(cents);meter(h.held/need);r.word(w.text,w.key);
       r.sub((cents==null?'':(cents>0?'+':'')+cents+' cent · ')+h.held.toFixed(1)+' / '+need+'초');
     };
@@ -430,6 +434,135 @@ Object.assign(ENGINES,{
       },
       result};
   },
+  /* 음정 · 음역 · 스케일 따라 부르기: the app plays the scale (the arpeggio from 음정 4단계), counts in two beats, and
+   * the person sings it back alone while the screen walks the beat. The key rises a semitone a round; it stops at the
+   * first top note not held comfortably above the comfortable range (M.scaleGoOn) or on 여기까지 할게요. */
+  scale(r){
+    const e=r.e,kind=M?M.scaleKind(areaNow('pitch')?.step||0):'scale5',keys=M?M.scaleKeys(kind,r.comfort):[],out=[],mic=()=>!!M&&(!!r.mic||(r.state==='result'&&!!r.wasMic));
+    const pat=M?.SCALE_PATTERNS?.[kind]||{offsets:[0,2,4,5,7,5,4,2,0],top:4,words:'5음 스케일'},beat=M?.SCALE?.beat||.6,COUNT=2,REVIEW=1.5;
+    let k=0,phase='listen',left=0,plan=[],samples=[],t0=0,clock=0,stopped=false;
+    const total=()=>plan.length?plan.at(-1).at+plan.at(-1).dur:0;
+    const now=()=>mic()?r.mic.ctx.currentTime-t0:clock;
+    const keyName=()=>D.noteName(keys[k]);
+    const strip=at=>'<ol class="dset-scale" data-run-scale aria-hidden="true">'+plan.map((n,i)=>'<li class="'+(n.top?'is-top ':'')+(i===at?'is-now':i<at?'is-done':'')+'">'+esc(D.noteName(n.midi).replace(/\d+$/,''))+'</li>').join('')+'</ol>';
+    const needle=cents=>{const n=r.q('[data-run-needle]');if(n){n.style.left=(50+Math.max(-45,Math.min(45,(cents||0)*.9)))+'%';n.dataset.on=cents==null?'':'1';}};
+    const setPlan=()=>{plan=M?M.scalePlan(kind,keys[k]):pat.offsets.map((o,i)=>({at:i*beat,dur:beat,midi:keys[k]+o,top:i===pat.top}));const s=r.q('[data-run-scale]');if(s)s.outerHTML=strip(-1);};
+    const playPlan=()=>{for(const n of plan)r.tone(n.midi,.05+n.at,n.dur*.92);};
+    const at=t=>plan.findIndex(n=>t>=n.at&&t<n.at+n.dur);
+    const mark=i=>r.q('[data-run-scale]')?.querySelectorAll('li').forEach((li,j)=>{li.classList.toggle('is-now',j===i);li.classList.toggle('is-done',i>=0&&j<i);});
+    const startRound=()=>{setPlan();samples=[];clock=0;phase='listen';left=total()+.4;playPlan();r.say(e.text);paint(null);};
+    const paint=cents=>{
+      setDots(r,k,out.length);r.host.dataset.phase=phase;
+      text(r.q('[data-run-note]'),keyName()+' '+(kind==='arpeggio'?'아르페지오':'스케일'));
+      if(phase==='listen'){needle(null);r.word('들어 보세요','wait');r.sub((k+1)+'번째 조 · '+keyName()+'에서 시작해요');return;}
+      if(phase==='count'){needle(null);r.word(left>beat?'하나':'둘','wait');r.sub('다음 박부터 “'+e.syllable+'”로 불러요');return;}
+      if(phase==='review')return;
+      const i=at(now());mark(i);needle(cents);
+      const n=plan[i];
+      if(!n){r.word('잘했어요','exact');return;}
+      r.word(n.top?'맨 위 음, 편하게 이어요':D.noteName(n.midi).replace(/\d+$/,''),n.top?'hold':'go');
+      r.sub((k+1)+'번째 조'+(mic()&&cents!=null?' · '+(cents>0?'+':'')+cents+' cent':'')+(mic()?'':' · 마이크 없이 해요'));
+    };
+    const endRound=()=>{
+      const x=mic()?{key:keys[k],...M.scaleRound(samples,plan)}:{key:keys[k],timer:true,sung:false,n:plan.length,right:0};
+      out.push(x);phase='review';left=REVIEW;r.host.dataset.phase=phase;r.cue(1);mark(-1);
+      if(!mic()){r.word('한 조 했어요','wait');r.sub('');return;}
+      r.word(!x.sung?'소리가 들리지 않았어요':x.right===x.n?'모두 맞았어요':x.right+' / '+x.n+'음 맞았어요',x.sung&&x.right/x.n>=.8?'exact':'wait');
+      r.sub(x.top?.ok?'맨 위 '+D.noteName(x.top.sung)+'을 편하게 2초 넘게 이었어요':x.sung?'맨 위 음은 편할 만큼만 이어요':'');
+    };
+    const goOn=()=>k<keys.length-1&&!stopped&&(!mic()||M.scaleGoOn(out,r.comfort));
+    const finish=()=>{
+      if(!mic())return r.complete(result());
+      // The next 음정 step this exercise measures (1·2단계 are the held notes of 음 따라 부르기).
+      const ms=M.scaleMeasures(out,kind),p=ms.find(m=>m.area==='pitch'),g=ms.find(m=>m.area==='range'),reached=areaNow('pitch')?.step||0;
+      const at=L?.SKILLS?.find(a=>a.id==='pitch')?.steps.findIndex((x,i)=>i>=reached&&x.kind===(kind==='arpeggio'?'arpeggio':'scale5'))??-1;
+      const need=at>=0?{step:at+1,say:L.SKILLS.find(a=>a.id==='pitch').steps[at].say}:null;
+      r.say((kind==='arpeggio'?'아르페지오':'스케일')+'에서 맞게 부른 음');
+      r.word(!p?'소리가 들리지 않았어요':p.value>=90?'아주 정확해요':p.value>=80?'잘 맞췄어요':'조금씩 맞춰 가요',p&&p.value>=80?'exact':'wait');
+      r.sub(p?'':'휴대폰을 입에서 한 뼘쯤 두고 다시 해 봐요');
+      r.showResult(resultHtml({big:p?String(p.value):'0',unit:'%',lines:[...(p?['맞은 음 '+p.right+' / '+p.of+' · '+p.rounds+'개 조']:[]),
+        ...(g?['편하게 2초 넘게 이은 맨 위 음 · '+(g.low===g.high?D.noteName(g.high):D.noteName(g.low)+'–'+D.noteName(g.high))]:[]),
+        ...(stopped?['여기까지 하기로 했어요']:out.length&&!out.at(-1).top?.ok?['맨 위 음이 힘들어진 곳에서 멈췄어요']:[]),
+        ...(need?['다음 '+need.step+'단계 · '+need.say]:[])],
+        note:'음 높이는 박자의 가운데에서 재요. 한 옥타브 위나 아래로 불러도 맞은 것으로 쳐요. 맨 위 음은 2초 넘게 고르게 이었을 때만 음역에 세요. '+stepNote('음정')}));
+    };
+    const result=()=>{const ms=mic()?M.scaleMeasures(out,kind):[];return {mode:'scale',...(mic()?{}:{timer:true}),parts:out.length,kind,...(ms.length?{measures:ms}:{})};};
+    return {fast:true,say:()=>e.text,
+      stage:()=>'<div class="dset-tuner"><div class="dset-target"><small>지금 조</small><strong data-run-note>'+esc(keys.length?D.noteName(keys[0]):'')+'</strong><button type="button" class="dset-chip" data-run-enough><i class="ph ph-hand" aria-hidden="true"></i>여기까지 할게요</button></div>'+
+        strip(-1)+'<div class="dset-track" aria-hidden="true"><i class="dset-zone"></i><i class="dset-needle" data-run-needle></i></div><div class="dset-track-labels" aria-hidden="true"><span>낮음</span><span>맞음</span><span>높음</span></div>'+
+        '<p class="dset-rule">한 조마다 반음씩 올라가요 · 맨 위 음이 힘들면 거기서 멈춰요</p></div>'+dots(keys.length,0,0),
+      micWhy:'스케일의 음 높이를 재려고 소리를 들어요. 이 화면에서만 듣고, 녹음하거나 저장하지 않아요.',
+      ready(){setPlan();r.word('준비되면 시작해요','wait');r.sub(pat.words+' · 최대 '+keys.length+'개 조 · 한 조에 '+Math.round(total()*2+2)+'초쯤'+(['denied','off'].includes(r.ctx.mic())?' · 마이크 없이 해요':''));},
+      bind(){r.q('[data-run-enough]')?.addEventListener('click',()=>{if(r.state!=='doing')return;stopped=true;if(phase==='sing'||phase==='count'){if(phase==='sing')endRound();}finish();});},
+      start(){k=0;out.length=0;stopped=false;startRound();},resume(){startRound();},
+      tick(dt){
+        if(phase==='listen'){left-=dt;if(left<=0){phase='count';left=COUNT*beat;r.cue(0);}return paint(null);}
+        if(phase==='count'){const before=left;left-=dt;if(before>beat&&left<=beat)r.cue(0);if(left<=0){phase='sing';clock=0;if(mic()){r.mic.pitch();t0=r.mic.ctx.currentTime;}}return paint(null);}
+        if(phase==='review'){left-=dt;if(left<=0){if(goOn()){k++;startRound();}else finish();}return;}
+        clock+=dt;let cents=null;
+        if(mic()){
+          const p=r.mic.pitch(),t=p.t-t0,m=midiOf(p.hz);samples.push({t,midi:m});const i=at(t);
+          // The needle forgives a voice a moment late: the nearer of this note and the one before.
+          if(i>=0&&m!=null){const off=j=>Math.round(((m-plan[j].midi)*100%1200+1800)%1200-600),a=off(i),b=i>0?off(i-1):a;cents=Math.abs(b)<Math.abs(a)&&t-plan[i].at<.35?b:a;}
+        }
+        if(now()>=total()+.2)return endRound();
+        paint(cents);
+      },
+      result};
+  },
+  /* 소리 길 · 사이렌: hear the bottom and the top note, then one glide up and back down on “우~” (up to 10 s from the
+   * first sound; over after 0.8 s of silence once it has gone up). Three tries; the best counts (M.sirenMeasure). */
+  siren(r){
+    const e=r.e,tries=e.tries||M?.SIREN?.tries||3,hold=e.hold||M?.SIREN?.hold||10,c=r.comfort||{low:52,high:64},out=[],mic=()=>!!M&&(!!r.mic||(r.state==='result'&&!!r.wasMic));
+    const lowNote=Math.min(c.high-7,c.low+1),highNote=Math.max(lowNote+7,c.high-1),WAIT=6,REVIEW=1.8,END=M?.SIREN?.end||.8;
+    let k=0,phase='listen',left=0,samples=[],v0=null,wait=0,clock=0,quiet=0,lo=null,hi=null;
+    const dot=m=>{const d=r.q('[data-run-glide]');if(!d)return;if(m==null){d.dataset.on='';return;}const a=lowNote-4,b=highNote+4;d.dataset.on='1';d.style.bottom=Math.round(Math.max(0,Math.min(1,(m-a)/(b-a)))*100)+'%';};
+    const tryLine=(x,i)=>(i+1)+'번째 · '+(!x.voiced?'소리가 들리지 않았어요':x.value+'반음'+(x.breaks?' · 끊김 '+x.breaks+'번':' · 끊김 없이')+(x.flips?' · 뒤집힘 '+x.flips+'번':'')+(x.both?' · 올라갔다 내려옴':''));
+    const paint=m=>{
+      setDots(r,k,out.length);r.host.dataset.phase=phase;dot(m);
+      if(phase==='listen'){r.word('들어 보세요','wait');r.sub(D.noteName(lowNote)+'에서 '+D.noteName(highNote)+'까지');return;}
+      if(phase==='wait'){r.word('“'+e.syllable+'” 시작해요','go');r.sub('낮은 음에서 천천히 올라가요');return;}
+      if(phase==='review')return;
+      const t=mic()?(samples.length?samples.at(-1).t:0):clock;
+      if(!mic()){r.word(t<hold/2?'천천히 올라가요':'천천히 내려와요','go');r.sub((k+1)+' / '+tries+'번째 · '+Math.max(0,Math.ceil(hold-t))+'초 · 마이크 없이 해요');return;}
+      r.word(m==null?(quiet>.15?'이어서 내요':'…'):hi!=null&&m<hi-2?'내려오고 있어요':'올라가요',m==null?'wait':'go');
+      r.sub((k+1)+' / '+tries+'번째'+(hi!=null&&lo!=null?' · '+Math.round(hi-lo)+'반음':''));
+    };
+    const startTry=()=>{phase='listen';left=2.8;samples=[];v0=null;wait=0;clock=0;quiet=0;lo=hi=null;r.tone(lowNote,.05,1.1);r.tone(highNote,1.35,1.1);r.say(e.text);paint(null);};
+    const endTry=x=>{
+      out.push(x);phase='review';left=REVIEW;r.host.dataset.phase=phase;r.cue(1);dot(null);
+      r.word(!mic()?'한 번 했어요':!x.voiced?'소리가 들리지 않았어요':!x.breaks&&!x.flips?'끊김 없이 이었어요':!x.breaks?'끊기지 않았어요':'중간에 끊겼어요',mic()&&x.voiced&&!x.breaks?'exact':'wait');
+      r.sub(mic()&&x.voiced?tryLine(x,out.length-1):'');
+    };
+    const finish=()=>{
+      if(!mic())return r.complete(result());
+      const m=M.sirenMeasure(out),need=areaNow('path')?.next;
+      r.say('사이렌으로 끊김 없이 이은 폭');
+      r.word(!m?'소리가 들리지 않았어요':!m.breaks&&!m.flips&&m.both?'끊김 없이 올라갔다 내려왔어요':!m.breaks?'끊기지 않고 이었어요':'조금씩 이어 가요',m&&!m.breaks?'exact':'wait');
+      r.sub(m?'':'휴대폰을 입에서 한 뼘쯤 두고 다시 해 봐요');
+      r.showResult(resultHtml({big:m?String(m.value):'0',unit:'반음',lines:[...out.map(tryLine),...(need?['다음 '+need.step+'단계 · '+need.say]:[])],
+        note:'0.15초 넘게 소리가 끊기면 끊김, 음이 한 번에 크게 튀어 그대로 머물면 뒤집힘으로 세요. 크게 낸 소리나 가장 높은 한 음은 세지 않아요. '+stepNote('소리 길')}));
+    };
+    const result=()=>{const m=mic()?M.sirenMeasure(out):null;return {mode:'siren',...(mic()?{}:{timer:true}),parts:out.length,...(m?{measures:[m]}:{})};};
+    return {fast:true,say:()=>e.text,
+      stage:()=>'<div class="dset-siren"><span class="dset-glide-end dset-glide-top">'+esc(D.noteName(highNote))+'</span><div class="dset-glide" aria-hidden="true"><i class="dset-glide-dot" data-run-glide></i></div><span class="dset-glide-end dset-glide-low">'+esc(D.noteName(lowNote))+'</span>'+
+        '<p class="dset-rule">끊기지 않게 천천히 · 목이 조이면 거기서 돌아와요</p></div>'+dots(tries,0,0),
+      micWhy:'음 높이가 끊김 없이 이어지는지 재려고 소리를 들어요. 이 화면에서만 듣고, 녹음하거나 저장하지 않아요.',
+      ready(){r.word('준비되면 시작해요','wait');r.sub(tries+'번 해요 · 한 번에 '+hold+'초까지'+(['denied','off'].includes(r.ctx.mic())?' · 마이크 없이 해요':''));},
+      start(){k=0;out.length=0;startTry();},resume(){startTry();},
+      tick(dt){
+        if(phase==='listen'){left-=dt;if(left<=0){phase=mic()?'wait':'sing';wait=0;clock=0;r.cue(0);}return paint(null);}
+        if(phase==='review'){left-=dt;if(left<=0){k++;if(k>=tries)return finish();startTry();}return;}
+        if(!mic()){clock+=dt;if(clock>=hold)return endTry({value:0,breaks:0,flips:0,both:0,voiced:0,timer:true});return paint(null);}
+        const p=r.mic.pitch(),m=midiOf(p.hz);
+        if(phase==='wait'){wait+=dt;if(m!=null){phase='sing';v0=p.t;samples=[{t:0,midi:m}];lo=hi=m;}else if(wait>=WAIT)return endTry({value:0,breaks:0,flips:0,both:0,voiced:0});return paint(m);}
+        const t=p.t-v0;if(!samples.length||t>samples.at(-1).t)samples.push({t,midi:m});
+        if(m!=null){quiet=0;lo=Math.min(lo,m);hi=Math.max(hi,m);}else quiet+=dt;
+        if(t>=hold||(quiet>=END&&hi-lo>=3&&t>=2))return endTry(M.sirenTry(samples));
+        paint(m);
+      },
+      result};
+  },
   /* 비브라토 · 롱톤: hear the note, then 8 seconds from the moment the voice starts — straight, and on the cue at 4 s
    * the vibrato. Two pitches. The pitch is read every tick from a short window (M.vibratoRound needs ≥ 9 Hz). */
   vibrato(r){
@@ -444,7 +577,7 @@ Object.assign(ENGINES,{
     const paint=cents=>{
       setDots(r,i,out.length);text(r.q('[data-run-note]'),D.noteName(notes[i]));r.host.dataset.phase=phase;
       if(phase==='listen'){needle(null);meter(0);r.word('들어 보세요','wait');r.sub((i+1)+' / '+notes.length+' · '+D.noteName(notes[i]));return;}
-      if(phase==='wait'){needle(null);meter(0);r.word('“'+e.syllable+'” 시작해요','go');r.sub('소리가 나면 8초를 세요');return;}
+      if(phase==='wait'){needle(null);meter(0);r.word('“'+(D.syllableOf?.(e,i)||e.syllable)+'” 시작해요','go');r.sub('소리가 나면 8초를 세요');return;}
       if(phase==='review')return;
       const t=mic()?samples.length?samples.at(-1).t:0:clock,after=t>=cue;
       meter(t/hold);needle(cents);
@@ -458,7 +591,7 @@ Object.assign(ENGINES,{
       i++;phase='listen';left=LISTEN;samples=[];v0=null;wait=0;clock=0;cued=false;play();paint(null);
     };
     const endRound=x=>{
-      out.push({midi:notes[i],...x});phase='review';left=REVIEW;r.cue(1);
+      out.push({midi:notes[i],...(e.vowels?{vowel:String(D.syllableOf(e,i)).replace(/~$/,'')}:{}),...x});phase='review';left=REVIEW;r.cue(1);
       r.word(mic()?roundWord(x):'다음 음으로 가요',mic()&&(x.cued||x.tail||x.seconds>0)?'exact':'wait');r.sub(mic()?roundLine(out.at(-1)):'');
     };
     const finish=()=>{
@@ -513,7 +646,9 @@ function mount(host,ctx){
   delete host.dataset.phase;delete host.dataset.bar;
   const r={host,ctx,st,mode,e,state:'ready',dead:false,timer:0,last:0,mic:null,tones:null,comfort:null,gate:'',
     reduced:!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,q:sel=>host.querySelector(sel)};
-  const needsRange=mode==='hold'||mode==='follow'||mode==='vibrato';
+  const needsRange=['hold','follow','vibrato','scale','siren'].includes(mode);
+  // The exercise as it is done at the step reached (“멈” 롱톤 8초 · 높은 음, 비브라토 “오~”).
+  if(r.e&&D.adapt)r.e=D.adapt(r.e,area=>areaNow(area)?.step||0);
   r.comfort=needsRange?ctx.comfort():null;
   r.say=value=>text(r.q('[data-run-say]'),value);
   r.word=(value,key)=>{const el=r.q('[data-run-word]');if(el){text(el,value);el.dataset.tone=key||'';}};

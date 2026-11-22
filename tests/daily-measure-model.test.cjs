@@ -201,7 +201,7 @@ test('비브라토: what is not vibrato — straight, too slow, too narrow, too 
   assert.equal(silent.voiced, 0); assert.equal(M.vibratoMeasure([{midi:60, ...silent}]), null);
 });
 
-test('비브라토 steps: appears at the end → 3 s regular → on the cue → at two pitches; step 5 (vowels) is 준비 중', () => {
+test('비브라토 steps: appears at the end → 3 s regular → on the cue → at two pitches → on two vowels (from 4단계 the second round is “오~”)', () => {
   const round = (midi, shape, from) => ({midi, ...M.vibratoRound(track(shape, {from}))});
   const endOnly = M.vibratoMeasure([round(60, sine(5.5, 30), 6), round(64, () => 0, 4)]);
   const early = M.vibratoMeasure([round(60, sine(5.5, 30), 0), round(64, sine(5.5, 30), 0)]);
@@ -211,7 +211,11 @@ test('비브라토 steps: appears at the end → 3 s regular → on the cue → 
   assert.deepEqual([oneCued.variants, twoCued.variants, twoCued.of, twoCued.hold], [1, 2, 2, 8]);
   assert.deepEqual(Object.keys(twoCued).sort(), ['area', 'cued', 'extent', 'hold', 'kind', 'of', 'rate', 'regular', 'regularity', 'straight', 'tail', 'unit', 'value', 'variants']);
   const a = L.skill(db([]), 'vibrato', {today:day(1)});
-  assert.deepEqual([a.state, a.by, a.steps.map(s => !!s.soon)], ['ready', ['voice-vibrato'], [false, false, false, false, true]]);
+  assert.deepEqual([a.state, a.by, a.steps.map(s => !!s.soon)], ['ready', ['voice-vibrato'], [false, false, false, false, false]]);
+  // 5단계: the rounds carry their vowel; a cued, regular vibrato on “아” and on “오” is two vowels.
+  const vowels = M.vibratoMeasure([{...round(60, sine(5.5, 30), 4), vowel:'아'}, {...round(64, sine(6, 25), 4), vowel:'오'}]);
+  assert.deepEqual([vowels.vowels, vowels.variants, stepOf('vibrato', vowels)], [2, 2, 5]);
+  assert.equal(M.vibratoMeasure([{...round(60, sine(5.5, 30), 4), vowel:'아'}, {...round(64, sine(5.5, 8), 4), vowel:'오'}]).vowels, 1);
   // The exercise behind it: two pitches, 8 s, the cue at 4 s.
   assert.deepEqual(D.exercise('voice-vibrato').measure, ['vibrato']);
 });
@@ -251,4 +255,91 @@ test('the words of a finished step (next step\'s line and the summary)', () => {
   assert.equal(v.recent[0].text, '비브라토 3.8초 · 1초에 5.5번 · 폭 28 cent · 신호에 맞춤');
   const r = L.skill(db([setRow(day(2), [{area:'rhythm', kind:'rhythm', value:45, unit:'ms', level:2, bpm:80, hit:95}], 'rhythm-ta')]), 'rhythm', {today:day(2)});
   assert.equal(r.recent[0].text, '8분음표·쉼표 80박 · 박자와 45 ms · 95% 맞춤');
+});
+
+/* ---------- 스케일 (음정 · 음역) ---------- */
+/** A sung round: each note of the plan at `off(i)` semitones from its target (null = silent), arriving `late` s late. */
+const sing = (plan, {off = () => 0, late = .12, wobble = 0, stopTopAt = null} = {}) => {
+  const out = [], end = plan.at(-1).at + plan.at(-1).dur + .2;
+  for (let t = 0; t < end; t += .04) {
+    const i = plan.findIndex(n => t >= n.at + late && t < n.at + n.dur + late), n = plan[i];
+    const o = n ? off(i) : null, top = n?.top && stopTopAt != null && t - n.at > stopTopAt;
+    out.push({t: Math.round(t * 1000) / 1000, midi: n && o != null && !top ? n.midi + o + wobble * Math.sin(t * 31) : null});
+  }
+  return out;
+};
+test('스케일: notes read in the middle of their beat, ±50 cent right (an octave apart too); the top note held 2 s steady is comfortable', () => {
+  const plan = M.scalePlan('scale5', 57);
+  assert.deepEqual(plan.map(n => n.midi), [57, 59, 61, 62, 64, 62, 61, 59, 57]);
+  assert.deepEqual(plan.map(n => n.top), [false, false, false, false, true, false, false, false, false]);
+  assert.equal(plan[4].dur, M.SCALE.top);
+  let r = M.scaleRound(sing(plan), plan);
+  assert.deepEqual([r.right, r.n, r.top.ok, r.top.sung], [9, 9, true, 64]);
+  // Two notes 70 cent off, one an octave under: 7 of 9 right.
+  r = M.scaleRound(sing(plan, {off: i => i === 1 || i === 6 ? .7 : i === 3 ? -12 : 0}), plan);
+  assert.equal(r.right, 7);
+  // A top note that stops after 1.2 s, or wobbles 40 cent, is not comfortable; sung an octave under it counts as that note.
+  assert.equal(M.scaleRound(sing(plan, {stopTopAt: 1.2}), plan).top.ok, false);
+  assert.equal(M.scaleRound(sing(plan, {wobble: .5}), plan).top.ok, false);
+  assert.equal(M.scaleRound(sing(plan, {off: i => i === 4 ? -12 : 0}), plan).top.sung, 52);
+  // Silence: nothing sung.
+  assert.equal(M.scaleRound(sing(plan, {off: () => null}), plan).sung, false);
+});
+test('스케일: keys rise from 3 under the comfortable top, stop at the first top not held above the range; measures for 음정 and 음역', () => {
+  const c = {low: 50, high: 67};
+  assert.deepEqual(M.scaleKeys('scale5', c), [57, 58, 59, 60, 61, 62, 63, 64, 65, 66]);
+  assert.deepEqual(M.scaleKeys('arpeggio', {low: 60, high: 64}), [60], 'a narrow range still gives one key');
+  assert.deepEqual([0, 3, 4, 5].map(M.scaleKind), ['scale5', 'scale5', 'arpeggio', 'arpeggio']);
+  assert.deepEqual(M.scalePlan('arpeggio', 55).map(n => n.midi), [55, 59, 62, 67, 62, 59, 55]);
+  const round = (key, opts) => {const p = M.scalePlan('scale5', key); return {key, ...M.scaleRound(sing(p, opts), p)};};
+  const rs = [round(57), round(58), round(59), round(60, {off: i => i === 2 ? .8 : 0}), round(61, {stopTopAt: 1})];
+  // Tops 64 65 66 67 held; 68 (over the range) not: stop there. Inside the range one miss goes on, two in a row stop.
+  assert.equal(M.scaleGoOn(rs.slice(0, 4), c), true);
+  assert.equal(M.scaleGoOn(rs, c), false);
+  assert.equal(M.scaleGoOn([round(57, {stopTopAt: 1})], c), true);
+  assert.equal(M.scaleGoOn([round(57, {stopTopAt: 1}), round(58, {stopTopAt: 1})], c), false);
+  const ms = M.scaleMeasures(rs, 'scale5');
+  assert.deepEqual(ms, [{area: 'pitch', kind: 'scale5', value: 98, unit: '%', right: 44, of: 45, rounds: 5},
+    {area: 'range', kind: 'comfortable', value: 3, unit: '반음', low: 64, high: 67, seconds: 2, count: 4, from: 'scale'}]);
+  assert.deepEqual(M.scaleMeasures([], 'scale5'), []);
+  assert.equal(M.scaleMeasures(rs, 'arpeggio')[0].kind, 'arpeggio');
+  // In 단계: 98% meets 음정 3·4 (the 5단계 needs the arpeggio); the tops are comfortable notes for 음역.
+  assert.equal(stepOf('pitch', ms[0]), 0, 'pitch 1–2 are the held notes of 음 따라 부르기');
+  const pitch = L.skill(db([1, 2, 3].map(n => setRow(day(n), [{area: 'pitch', kind: 'hold', value: 5, of: 5, unit: '개', hold: 4, tolerance: 25}, ms[0]], 'ear-scale'))), 'pitch', {today: day(3)});
+  assert.equal(pitch.estimate, 4);
+  assert.ok(L.cleanMeasure(ms[1]));
+  assert.equal(M.resultWords({mode: 'scale', measures: ms}), '스케일 98% 맞춤');
+});
+
+/* ---------- 사이렌 (소리 길) ---------- */
+const glide = ({from = 50, span = 12, up = 3, down = 3, gapAt = null, gap = .3, flipAt = null, spikeAt = null} = {}) => {
+  const out = [];
+  for (let t = 0; t <= up + down; t += .04) {
+    let m = t <= up ? from + span * t / up : from + span * (1 - (t - up) / down);
+    if (flipAt != null && t >= flipAt && t < up) m += 5;
+    if (spikeAt != null && Math.abs(t - spikeAt) < .02) m += 12;
+    out.push({t: Math.round(t * 1000) / 1000, midi: gapAt != null && t >= gapAt && t < gapAt + gap ? null : m});
+  }
+  return out;
+};
+test('사이렌: how far it went, breaks over 0.15 s, flips that stay (a one-reading spike is not one), up and back down', () => {
+  let g = M.sirenTry(glide());
+  assert.deepEqual([Math.round(g.value), g.breaks, g.flips, g.both], [12, 0, 0, 1]);
+  assert.equal(M.sirenTry(glide({gapAt: 1.5})).breaks, 1);
+  assert.equal(M.sirenTry(glide({gapAt: 1.5, gap: .08})).breaks, 0, 'a gap of two readings is not a break');
+  assert.equal(M.sirenTry(glide({flipAt: 1.6})).flips, 2, 'into the other register and back: two flips');
+  assert.equal(M.sirenTry(glide({spikeAt: 1.6})).flips, 0, 'one wrong reading is smoothed away');
+  assert.equal(Math.round(M.sirenTry(glide({spikeAt: 1.6})).value), 12);
+  g = M.sirenTry(glide({down: 0}));
+  assert.equal(g.both, 0, 'only up');
+  assert.deepEqual(M.sirenTry([{t: 0, midi: null}, {t: .04, midi: null}]), {value: 0, low: null, high: null, breaks: 0, flips: 0, both: 0, voiced: 0});
+  // The best try: no break first, then no flip, then up and down, then the widest.
+  const m = M.sirenMeasure([M.sirenTry(glide({span: 18, gapAt: 1})), M.sirenTry(glide({span: 9})), M.sirenTry(glide({span: 14, flipAt: 1.2}))]);
+  assert.deepEqual([Math.round(m.value), m.breaks, m.flips, m.both, m.tries, m.kind, m.area], [9, 0, 0, 1, 3, 'siren', 'path']);
+  assert.equal(M.sirenMeasure([]), null);
+  // In 단계: 9 semitones up and down without a break is 2단계 (5도 up and down); an octave and a half without a flip is 5.
+  assert.equal(stepOf('path', m), 2);
+  assert.equal(stepOf('path', M.sirenMeasure([M.sirenTry(glide({span: 19}))])), 5);
+  assert.equal(stepOf('path', M.sirenMeasure([M.sirenTry(glide({span: 13, flipAt: 1.2}))])), 3);
+  assert.match(M.resultWords({mode: 'siren', measures: [m]}), /^사이렌 \d+(\.\d)?반음 · 끊김 없이$/);
 });

@@ -18,7 +18,10 @@ const stub = `window.supabase={createClient:()=>({auth:{getUser:async()=>({data:
 const ONLY = {
   hiss:{off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{loosen:true, voice:true, ear:true, rhythm:true, song:true}},
   rhythm:{off:{}, groupsOff:{loosen:true, breath:true, voice:true, ear:true, song:true}},
-  vibrato:{off:{'voice-liptrill5':true, 'voice-hum':true, 'voice-mum':true}, groupsOff:{loosen:true, breath:true, ear:true, rhythm:true, song:true}}
+  vibrato:{off:{'voice-liptrill5':true, 'voice-hum':true, 'voice-mum':true, 'voice-high':true}, groupsOff:{loosen:true, breath:true, ear:true, rhythm:true, song:true}},
+  scale:{off:{'ear-follow':true}, groupsOff:{loosen:true, breath:true, voice:true, rhythm:true, song:true}},
+  high:{off:{'voice-liptrill5':true, 'voice-hum':true, 'voice-mum':true, 'voice-vibrato':true}, groupsOff:{loosen:true, breath:true, ear:true, rhythm:true, song:true}},
+  siren:{off:{'loosen-neck':true, 'loosen-liptrill':true, 'loosen-hum':true}, groupsOff:{breath:true, voice:true, ear:true, rhythm:true, song:true}}
 };
 const prefs = mode => ({id:'daily-set-prefs', kind:'daily-set-prefs', v:1, replace:{}, ...ONLY[mode]});
 const seed = (extra = {}) => ({categories:[], songs:[{id:'s1', title:'This Is the Moment'}], lessons:[], assignments:[], practices:[], performances:[], comparisonReports:[], dailyGoals:[],
@@ -41,7 +44,10 @@ function installAudio() {
   const fakeMic = async () => { window.__mic.opened++; return {getTracks:() => [{stop() { window.__mic.stopped++; }}]}; };
   Object.defineProperty(MediaDevices.prototype, 'getUserMedia', {value:fakeMic, configurable:true, writable:true});
   Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {value:fakeMic, configurable:true, writable:true});
-  const pitchAt = t => { const v = window.__voice; if (!v || t < v.from || t > v.until) return 0; const s = t - v.from; return v.f0 * 2 ** ((s >= v.cue ? v.ext * Math.sin(2 * Math.PI * v.rate * (s - v.cue)) : 0) / 1200); };
+  const pitchAt = t => {
+    // window.__melody [{from, to, f0, f1}]: a pitch gliding from f0 to f1 over [from, to) on the audio clock (스케일 · 사이렌).
+    for (const m of window.__melody || []) if (t >= m.from && t < m.to) return m.f0 * (m.f1 / m.f0) ** ((t - m.from) / (m.to - m.from));
+    const v = window.__voice; if (!v || t < v.from || t > v.until) return 0; const s = t - v.from; return v.f0 * 2 ** ((s >= v.cue ? v.ext * Math.sin(2 * Math.PI * v.rate * (s - v.cue)) : 0) / 1200); };
   window.AudioContext = window.webkitAudioContext = class {
     sampleRate = 48000; destination = {}; state = 'running';
     get currentTime() { return clock(); }
@@ -135,18 +141,19 @@ test('오늘의 연습: the measuring exercises are in the set when 호흡 · �
   // On the card: 호흡 with only “스~” 길게 on, and 리듬.
   await boot(page, seed({practicePlans:[{id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'breath-s':true, 'breath-pulse':true}, groupsOff:{song:true}, replace:{}}]}));
   const names = card(page).locator('[data-set-line] li .vz-set-item span'), labels = card(page).locator('[data-set-line] li .vz-set-item b');
-  await expect(labels).toHaveText(['목 풀기', '호흡', '발성', '음감', '리듬']);
+  await expect(labels).toHaveText(['목 풀기', '호흡 · 추천', '발성', '음감', '리듬']);
   await expect(names.nth(1)).toHaveText('“스~” 길게');
   await expect(names.nth(4)).toHaveText('“타” 따라 하기');
-  // 고르기 lists them under their group; resting 리듬 takes it out of the set.
+  // 편집 opens today's list; the 리듬 row's sheet lists its exercises, and 리듬 쉬기 takes it out of the set.
   await card(page).locator('[data-set-pick]').click();
-  const sheet = page.locator('[data-dset-pick]');
-  await expect(sheet.locator('[data-group="rhythm"] legend strong')).toHaveText('리듬');
-  await expect(sheet.locator('[data-group="rhythm"] .dset-opt')).toContainText('“타” 따라 하기');
-  await expect(sheet.locator('[data-group="voice"] .dset-opt').filter({hasText:'롱톤 비브라토'})).toHaveCount(1);
-  await sheet.locator('[data-group="rhythm"] .dset-switch').click();
-  await page.getByRole('button', {name:'저장'}).click();
-  await expect(labels).toHaveText(['목 풀기', '호흡', '발성', '음감']);
+  await expect(page.locator('.pset-plan')).toBeVisible();
+  await page.locator('.pset-row[data-step="ex-rhythm-ta"] [data-edit]').click();
+  const sheet = page.locator('[data-group-sheet="rhythm"]');
+  await expect(sheet.locator('.dset-opt')).toContainText('“타” 따라 하기');
+  await sheet.locator('[data-rest]').click();
+  await expect(page.locator('.pset-row[data-step="ex-rhythm-ta"]')).toHaveCount(0);
+  await to(page, '#/home');
+  await expect(labels).toHaveText(['목 풀기', '호흡 · 추천', '발성', '음감']);
 });
 
 test('“스~” 길게: the mic times one continuous hiss (a 0.1 s dip does not end it), the result screen says it, the run row keeps it, 단계 starts counting', async ({page}) => {
@@ -349,14 +356,14 @@ test('단계: 호흡 · 비브라토 · 리듬 show their real state, the area p
     practicePlans:[{id:'skill-step:breath:1', kind:'skill-step', v:1, area:'breath', step:1, earned:day(15), days:[{date:day(1), value:14, unit:'초'}, {date:day(2), value:15, unit:'초'}, {date:day(4), value:17, unit:'초'}], created:1}]});
   await boot(page, value, {hash:'#/levels'});
   expect(await host(page).locator('.lv-tile').evaluateAll(els => els.map(e => [e.dataset.area, e.dataset.state]))).toEqual(
-    [['breath', 'step'], ['pitch', 'ready'], ['sustain', 'ready'], ['path', 'soon'], ['range', 'ready'], ['high', 'soon'], ['vibrato', 'ready'], ['rhythm', 'calibrating']]);
+    [['breath', 'step'], ['pitch', 'ready'], ['sustain', 'ready'], ['path', 'ready'], ['range', 'ready'], ['high', 'ready'], ['vibrato', 'ready'], ['rhythm', 'calibrating']]);
   await expect(tile(page, 'breath').locator('strong')).toHaveText('1 / 5단계');
   await expect(tile(page, 'breath').locator('[data-tile-sub]')).toHaveText('요즘도 유지 중');
   await expect(tile(page, 'rhythm').locator('strong')).toHaveText('기준 맞추는 중');
   await expect(tile(page, 'rhythm').locator('[data-tile-sub]')).toHaveText('6일째 · 지금은 1단계쯤');
   await expect(tile(page, 'vibrato').locator('strong')).toHaveText('아직 안 쟀어요');
   await expect(tile(page, 'vibrato').locator('[data-tile-sub]')).toHaveText('오늘의 연습에서 재요');
-  for (const area of ['breath', 'vibrato', 'rhythm']) await expect(tile(page, area).locator('strong')).not.toHaveText('준비 중');
+  for (const area of ['breath', 'pitch', 'sustain', 'path', 'range', 'high', 'vibrato', 'rhythm']) await expect(tile(page, area).locator('strong')).not.toHaveText('준비 중');
   await noOverflow(page);
   await host(page).locator('[data-lv-skills]').evaluate(e => e.scrollIntoView({block:'start'}));
   await shot(page, '7-levels-390');
@@ -381,6 +388,118 @@ test('단계: 호흡 · 비브라토 · 리듬 show their real state, the area p
     for (const [width, height] of [[390, 844], [820, 1180]]) { await page.setViewportSize({width, height}); await noOverflow(page); }
     await page.setViewportSize({width:390, height:844});
   }
-  // 비브라토 5단계 (모음) still needs its own exercise: said, not counted.
-  expect(await host(page).locator('[data-lv-steps] li').evaluateAll(els => els.map(e => /재는 연습 준비 중/.test(e.textContent)))).toEqual([false, false, false, false, true]);
+  // 비브라토 5단계 (모음) is measured too now (from 4단계 the second round is “오~”): nothing is 준비 중.
+  expect(await host(page).locator('[data-lv-steps] li').evaluateAll(els => els.map(e => /재는 연습 준비 중/.test(e.textContent)))).toEqual([false, false, false, false, false]);
+});
+
+const hzOf = midi => 440 * 2 ** ((midi - 69) / 12);
+/** Step the paused clock until the doing screen is in `phase` (a tick is 40 ms). */
+async function until(page, phase, most = 15) {
+  for (let t = 0; t < most; t += .04) { if (await run(page).getAttribute('data-phase') === phase) return; await elapse(page, .04); }
+  throw Error('never reached ' + phase);
+}
+test('스케일 따라 부르기: hear it, sing it back to the beat; the key rises a round at a time; 여기까지 할게요 ends it; 음정 % and the comfortable tops kept', async ({page}) => {
+  test.setTimeout(120000);
+  await page.setViewportSize({width:390, height:844});
+  await boot(page, seed({practicePlans:[prefs('scale')]}));
+  await startWithMic(page, 'scale');
+  const comfort = D.comfort({voiceCheck:{refNote:60, highNote:69}}), keys = M.scaleKeys('scale5', comfort);
+  expect(keys[0]).toBe(59);
+  await expect(run(page).locator('[data-run-scale] li')).toHaveCount(9);
+  for (let k = 0; k < 3; k++) {
+    await expect(run(page).locator('[data-run-note]')).toHaveText(D.noteName(keys[k]) + ' 스케일');
+    await until(page, 'sing');
+    const at = await audioNow(page), plan = M.scalePlan('scale5', keys[k]);
+    // Every note in tune, 0.1 s late (the top held for its whole 2.8 s); the second round's 미 30 cent sharp (still right).
+    await page.evaluate(m => { window.__melody = m; }, plan.map((n, i) => ({from:at + n.at + .1, to:at + n.at + n.dur + .1, f0:hzOf(n.midi + (k === 1 && i === 2 ? .3 : 0)), f1:hzOf(n.midi + (k === 1 && i === 2 ? .3 : 0))})));
+    await elapse(page, 1.3);
+    await expect(run(page).locator('[data-run-scale] li.is-now')).toHaveCount(1);
+    if (!k) { await noOverflow(page); await shot(page, '9-scale-doing-390'); }
+    await until(page, 'review');
+    await expect(word(page)).toHaveText('모두 맞았어요');
+    await expect(run(page).locator('[data-run-sub]')).toHaveText('맨 위 ' + D.noteName(keys[k] + 7) + '을 편하게 2초 넘게 이었어요');
+    await until(page, 'listen');
+  }
+  // The fourth key: rather not today.
+  await run(page).locator('[data-run-enough]').click();
+  await expect(run(page)).toHaveAttribute('data-state', 'result');
+  await expect(word(page)).toHaveText('아주 정확해요');
+  await expect(run(page).locator('[data-result-big]')).toHaveText('100%');
+  await expect(run(page).locator('[data-result-lines] li')).toHaveText(['맞은 음 27 / 27 · 3개 조', '편하게 2초 넘게 이은 맨 위 음 · F#4–G#4', '여기까지 하기로 했어요', /^다음 3단계 · 5음 스케일을 80% 넘게/]);
+  await noOverflow(page);
+  await shot(page, '10-scale-result-390');
+  await primary(page).click();
+  await saveSet(page);
+  const ms = (await todayItem(page, 'ear-scale')).measures;
+  expect(ms).toEqual([{area:'pitch', kind:'scale5', value:100, unit:'%', right:27, of:27, rounds:3},
+    {area:'range', kind:'comfortable', value:2, unit:'반음', low:66, high:68, seconds:2, count:3, from:'scale'}]);
+  await page.clock.resume();
+  await to(page, '#/levels/pitch');
+  await expect(host(page).locator('[data-lv-recent] li').first()).toContainText('5음 스케일 100% 맞춤 · 27음');
+});
+
+test('사이렌: hear the bottom and the top, glide up and back on “우~”; a break is said; the best glide is kept for 소리 길', async ({page}) => {
+  test.setTimeout(120000);
+  await page.setViewportSize({width:390, height:844});
+  await boot(page, seed({practicePlans:[prefs('siren')]}));
+  await startWithMic(page, 'siren');
+  await expect(run(page).locator('.dset-glide-low')).toHaveText('B3');
+  await expect(run(page).locator('.dset-glide-top')).toHaveText('G#4');
+  const glide = (at, gap) => gap ? [{from:at, to:at + 1.5, f0:hzOf(52), f1:hzOf(58)}, {from:at + 1.8, to:at + 3, f0:hzOf(58), f1:hzOf(64)}, {from:at + 3, to:at + 6, f0:hzOf(64), f1:hzOf(52)}]
+    : [{from:at, to:at + 3, f0:hzOf(52), f1:hzOf(64)}, {from:at + 3, to:at + 6, f0:hzOf(64), f1:hzOf(52)}];
+  for (const [i, gap] of [[0, false], [1, true]]) {
+    await until(page, 'wait');
+    const at = await audioNow(page);
+    await page.evaluate(m => { window.__melody = m; }, glide(at + .2, gap));
+    await elapse(page, 1.6);
+    await expect(word(page)).toHaveText('올라가요');
+    if (!i) { await expect(run(page).locator('[data-run-glide]')).toHaveAttribute('data-on', '1'); await noOverflow(page); await shot(page, '11-siren-doing-390'); }
+    await until(page, 'review');
+    await expect(word(page)).toHaveText(gap ? '중간에 끊겼어요' : '끊김 없이 이었어요');
+    await expect(run(page).locator('[data-run-sub]')).toHaveText(new RegExp('^' + (i + 1) + '번째 · 1[12](\\.\\d)?반음 · ' + (gap ? '끊김 1번' : '끊김 없이') + ' · 올라갔다 내려옴$'));
+  }
+  // The third: silence until it gives up.
+  await page.evaluate(() => { window.__melody = []; });
+  await until(page, 'wait');
+  await elapse(page, 6.2);
+  await expect(word(page)).toHaveText('소리가 들리지 않았어요');
+  await until(page, 'nothing', 3).catch(() => {});
+  await expect(run(page)).toHaveAttribute('data-state', 'result');
+  await expect(word(page)).toHaveText('끊김 없이 올라갔다 내려왔어요');
+  await expect(run(page).locator('[data-result-lines] li').nth(2)).toHaveText('3번째 · 소리가 들리지 않았어요');
+  await noOverflow(page);
+  await shot(page, '12-siren-result-390');
+  await primary(page).click();
+  await saveSet(page);
+  const [m] = (await todayItem(page, 'loosen-siren')).measures;
+  expect(m).toEqual(expect.objectContaining({area:'path', kind:'siren', unit:'반음', breaks:0, flips:0, both:1, tries:3}));
+  expect(m.value).toBeGreaterThanOrEqual(11); expect(m.value).toBeLessThanOrEqual(12.1);
+  await page.clock.resume();
+  await to(page, '#/levels');
+  await expect(tile(page, 'path')).toHaveAttribute('data-state', 'calibrating');
+  await expect(tile(page, 'path').locator('[data-tile-sub]')).toHaveText(/^1일째 · 지금은 [23]단계쯤$/); // 11.x–12 semitones: 2 under an octave, 3 at one
+});
+
+test('맨 위 음 유지: the top of the comfortable range and just under it, 2 s each, the top on 아 · 에 · 이 — kept for 고음 (in the octave played)', async ({page}) => {
+  test.setTimeout(120000);
+  await page.setViewportSize({width:390, height:844});
+  await boot(page, seed({practicePlans:[prefs('high')]}));
+  await startWithMic(page, 'hold');
+  const comfort = D.comfort({voiceCheck:{refNote:60, highNote:69}}), e = D.exercise('voice-high'), notes = D.notesFor(e, comfort, TODAY);
+  expect(notes).toEqual([66, 68, 69, 69, 69]);
+  for (let i = 0; i < notes.length; i++) {
+    await expect(run(page).locator('[data-run-note]')).toHaveText(D.noteName(notes[i]));
+    await expect(run(page).locator('[data-run-sub]')).toContainText('“' + e.vowels[i] + '”');
+    await page.evaluate(f => { window.__sing = f; }, hzOf(notes[i]));
+    for (let t = 0; t < 12 && await word(page).textContent() !== '좋아요!'; t += .2) await elapse(page, .2);
+    await expect(word(page)).toHaveText('좋아요!');
+    await page.evaluate(() => { window.__sing = 0; });
+    if (i < notes.length - 1) for (let t = 0; t < 4 && await run(page).locator('[data-run-note]').textContent() === D.noteName(notes[i]) && notes[i + 1] !== notes[i]; t += .2) await elapse(page, .2);
+    else await elapse(page, 2);
+    if (notes[i + 1] === notes[i]) await expect(run(page).locator('[data-run-sub]')).toContainText('“' + e.vowels[i + 1] + '”', {timeout:8000}).catch(async () => { await elapse(page, 2); });
+  }
+  await saveSet(page);
+  const ms = (await todayItem(page, 'voice-high')).measures;
+  expect(ms.find(m => m.area === 'high')).toEqual({area:'high', kind:'top', fromTop:0, value:0, vowels:3, unit:'cent', seconds:2, of:5});
+  expect(ms.find(m => m.area === 'range')).toEqual(expect.objectContaining({low:66, high:69, count:3}));
 });

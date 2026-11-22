@@ -1,8 +1,8 @@
 /* 오늘의 연습 (#/practice-set; it was 오늘 연습 세트): today's ONE set, step by step.
  * What is in the set and how its result is kept: app/daily-set-model.js (built-in groups by rotation, 숙제 · 놓친 레슨
  * 지적 first, the person's own steps after). The session, its wall clock and the goal rows are still
- * app/practice-set-model.js. Screens here: the list before starting (the person's own steps are edited there), the
- * doing screen for every step (app/daily-set-run.js), the summary and 오늘의 연습 고르기.
+ * app/practice-set-model.js. Screens here: the list before starting — the ONE place the set is changed (a row's
+ * sheet, + 연습 추가; 오늘's 편집 opens it) —, the doing screen for every step (app/daily-set-run.js) and the summary.
  * The running session lives in memory and, while it lasts, in this device's account-scoped storage (a UI draft like
  * the daily goal prompt), so leaving, a reload or a trip to the recorder resumes it; nothing is written to the synced
  * records until the summary is saved.
@@ -20,7 +20,7 @@ const KEY=()=>'vzip_practice_set_live:'+owner();
 const copy=v=>JSON.parse(JSON.stringify(v));
 const MIC_KEY=()=>'vzip_daily_set_mic:'+owner();
 const DAYS='일월화수목금토';
-let session=null,loadedFor='',draft=null,reorder=false,saved=null,timer=null,awake=false,alerted='',runner=null,lastDone='',autostart=false;
+let session=null,loadedFor='',draft=null,saved=null,timer=null,awake=false,alerted='',runner=null,lastDone='',autostart=false;
 const watchers=new Set();
 const routeName=()=>document.body.dataset.vzRoute||'';
 const changed=()=>{for(const fn of watchers){try{fn();}catch(e){console.error(e);}}};
@@ -94,10 +94,15 @@ function recentSongId(){
   return '';
 }
 /** Today's set (app/daily-set-model.js build). own: the person's steps as edited on the list. */
+/** Today's list as last changed on the set screen (this device only; another day starts from the saved set). */
+const OWN_KEY=()=>'vzip_daily_set_own:'+owner();
+function todayOwn(today){try{const v=JSON.parse(store().getItem(OWN_KEY())||'null');return v&&v.date===today&&Array.isArray(v.own)?v.own:null;}catch{return null;}}
+function saveTodayOwn(date,own){try{store().setItem(OWN_KEY(),JSON.stringify({date,own}));}catch{}}
 function fresh(own){
-  const today=V.today(),built=D.build(V.db,{today,recentSongId:recentSongId(),...(own?{own}:{})});
+  const today=V.today();own||=todayOwn(today);
+  const built=D.build(V.db,{today,recentSongId:recentSongId(),...(own?{own}:{})});
   const slot=built.template?.slot||'';
-  return {today,steps:built.steps,own:built.own,base:built.base,slot,remember:slot||'default',prefs:built.prefs};
+  return {today,steps:built.steps,own:built.own,base:built.base,slot,prefs:built.prefs};
 }
 /* Today against the daily target comes from the shared helper (app/today-practice.js: VZ.todayPractice,
  * VZ.todayPracticeText, VZ.todayPracticePopup). Without it nothing extra is shown. Only saved minutes count there. */
@@ -138,7 +143,7 @@ V.practiceSetEntry=()=>{
 };
 /** Start today's set right away (the card's one button) or carry on with the one in hand. */
 function startNow(steps,date){
-  session=P.start(steps,{id:V.uid(),date,now:Date.now()});loadedFor=owner();draft=null;reorder=false;alerted='';saved=null;lastDone='';autostart=true;
+  session=P.start(steps,{id:V.uid(),date,now:Date.now()});loadedFor=owner();draft=null;alerted='';saved=null;lastDone='';autostart=true;
   persist();changed();
 }
 V.dailySet={
@@ -148,7 +153,8 @@ V.dailySet={
     if(!session){try{const f=fresh();if(!f.steps.length)return;startNow(f.steps,f.today);}catch(error){console.error(error);V.toast('오늘의 연습을 시작하지 못했어요.','error');return;}}
     if(routeName()==='practice-set')paint();else V.nav('#/practice-set');
   },
-  pick:()=>pickSheet()
+  /** 편집: the list of today's set is where it is changed. */
+  pick(){V.nav('#/practice-set');}
 };
 /** What the small timer on other screens shows: null unless one of the person's own steps is in hand (running or
  * paused) in today's set — a built-in exercise is never timed away from its screen.
@@ -173,86 +179,177 @@ V.practiceSetClock={
   watch(fn){watchers.add(fn);return ()=>watchers.delete(fn);}
 };
 
-/* ---------- 시작 전: 오늘 할 연습 ---------- */
+/* ---------- 시작 전: 오늘 할 연습 — the ONE place to change the set ----------
+ * Every change is made on this list and kept at once (no 고르기 sheet, no 기억하기 choice):
+ *   a row → its sheet. A built-in exercise: which of its group take turns, or rest the group. One of the person's own
+ *   steps: 시간, 위로/아래로, 기본 연습 대신 (a 그룹 대신 tag), 빼기. 숙제 · 레슨 지적: said, not edited.
+ *   + 연습 추가 → one sheet: a group that rests (다시 넣기), today's goals, 웜업, 녹음, 곡 구간, 연습 전후 30초 녹음.
+ * Kept where it always was: built-in choices in the 고르기 row (app/daily-set-model.js savePrefs); the person's own
+ * steps as the template of the set in use (a 요일 세트 kept from before on its day, else 기본 — P.saveTemplate) for the
+ * days to come, and today's exact list (a removed goal, each step's minutes) as a draft on this device for today. */
 const micBadge='<span class="pset-badge"><i class="ph ph-microphone" aria-hidden="true"></i><span class="pset-sr">마이크 사용</span></span>';
 const movable=()=>draft.own.filter(s=>!s.lead&&!s.replaces);
 function redraw(){const f=fresh(draft.own);draft.steps=f.steps;draft.own=f.own;paint();}
+/** Keep the person's own steps: today's list exactly (this device), the template for the days to come (synced). */
+function keepOwn(own){
+  const slot=draft.slot||'default',base=draft.base;
+  draft.own=P.normalize(own);
+  const same=JSON.stringify(P.templateFrom(draft.own,base))===JSON.stringify(P.templateFrom(draft.ownBase,base));
+  const exists=(V.db.practicePlans||[]).some(p=>p?.id===P.templateId(slot));
+  if((!same||exists)&&!V.change(db=>{P.saveTemplate(db,slot,draft.own,base);},{silent:true})){V.toast('저장하지 못했어요. 다시 시도해 주세요.','error');return false;}
+  saveTodayOwn(draft.today,draft.own);redraw();changed();return true;
+}
+/** Keep the built-in choices (the 고르기 row) and build the list again. */
+function keepPrefs(next,toast=''){
+  if(!V.change(db=>{D.savePrefs(db,next);},{silent:true})){V.toast('저장하지 못했어요. 다시 시도해 주세요.','error');return false;}
+  if(draft)redraw();else paint();
+  changed();if(toast)V.toast(toast);return true;
+}
 function planHtml(){
-  const steps=draft.steps,day=DAYS[P.weekday(draft.today)],own=new Set(draft.own.map(s=>s.id)),canMove=movable();
+  const steps=draft.steps,own=new Set(draft.own.map(s=>s.id)),day=DAYS[P.weekday(draft.today)];
+  const row=s=>{
+    const mine=own.has(s.id),edit=mine||s.kind==='exercise'||s.kind==='take';
+    const copy='<span class="pset-row-copy"><small>'+esc(kindLabel(s))+(s.optional?' · 선택':'')+(s.focus?'<span class="pset-focus-tag">추천</span>':'')+'</small><strong>'+esc(shortTitle(s))+'</strong>'+
+      (s.segmentStart!=null?'<em>구간 '+esc(P.segmentLabel(s.segmentStart,s.segmentEnd))+'</em>':'')+(s.focus?'<em class="pset-why" data-focus-why>'+esc(s.focus.why)+'</em>':'')+'</span>'+
+      '<span class="pset-fixed">'+(s.mic?micBadge:'')+'<b>'+s.minutes+'분</b>'+(edit?'<i class="ph ph-caret-right" aria-hidden="true"></i>':'')+'</span>';
+    return '<li class="pset-row'+(mine?'':' is-fixed')+'" data-step="'+esc(s.id)+'" data-kind="'+esc(s.kind)+'">'+
+      (edit?'<button type="button" class="pset-row-btn" data-edit aria-label="'+esc(shortTitle(s))+', '+s.minutes+'분, 바꾸기">'+copy+'</button>':copy)+'</li>';
+  };
   return '<section class="pset pset-plan" aria-labelledby="pset-plan-title">'+
-    '<div class="pset-plan-head"><p class="pset-help" id="pset-plan-title">위에서부터 차례로 해요. 기본 연습은 날마다 바뀌어요.</p><span class="pset-total" data-pset-total>'+steps.length+'개 · 약 '+total(steps)+'분</span></div>'+
-    (steps.length?'<ol class="pset-list'+(reorder?' is-reorder':'')+'">'+steps.map(s=>{
-      const mine=own.has(s.id),i=canMove.indexOf(draft.own.find(x=>x.id===s.id));
-      return '<li class="pset-row'+(mine?'':' is-fixed')+'" data-step="'+esc(s.id)+'" data-kind="'+esc(s.kind)+'"><span class="pset-row-copy"><small>'+esc(kindLabel(s))+(s.optional?' · 선택':'')+'</small><strong>'+esc(shortTitle(s))+'</strong>'+
-        (s.segmentStart!=null?'<em>구간 '+esc(P.segmentLabel(s.segmentStart,s.segmentEnd))+'</em>':'')+'</span>'+
-      (!mine?'<span class="pset-fixed">'+(s.mic?micBadge:'')+'<b>'+s.minutes+'분</b></span>':
-       reorder?(i<0?'':'<span class="pset-row-tools"><button type="button" class="pset-icon" data-up aria-label="'+esc(s.title)+' 위로"'+(i===0?' disabled':'')+'><i class="ph ph-arrow-up" aria-hidden="true"></i></button>'+
-        '<button type="button" class="pset-icon" data-down aria-label="'+esc(s.title)+' 아래로"'+(i===canMove.length-1?' disabled':'')+'><i class="ph ph-arrow-down" aria-hidden="true"></i></button></span>'):
-       '<label class="pset-min"><input type="number" inputmode="numeric" min="1" max="120" value="'+esc(s.minutes)+'" data-min aria-label="'+esc(s.title)+' 시간(분)"><span>분</span></label>'+
-       '<button type="button" class="pset-icon" data-remove aria-label="'+esc(s.title)+' 빼기"><i class="ph ph-x" aria-hidden="true"></i></button>')+'</li>';}).join('')+'</ol>':
-      '<p class="pset-empty">연습할 항목이 없어요. 고르기에서 그룹을 켜거나 내 연습을 추가해 주세요.</p>')+
-    '<div class="pset-plan-tools"><button type="button" class="pset-chip" data-pick><i class="ph ph-sliders-horizontal" aria-hidden="true"></i>고르기</button>'+
-      '<button type="button" class="pset-chip" data-add><i class="ph ph-plus" aria-hidden="true"></i>내 연습 추가</button>'+
-      (canMove.length>1?'<button type="button" class="pset-chip" data-reorder aria-pressed="'+reorder+'"><i class="ph ph-arrows-down-up" aria-hidden="true"></i>'+(reorder?'순서 완료':'순서 바꾸기')+'</button>':'')+'</div>'+
-    (draft.own.length||draft.ownBase.length||draft.slot?'<fieldset class="pset-remember"><legend>내 연습 구성 기억하기</legend><div class="pset-seg">'+
-      [['w'+P.weekday(draft.today),day+'요일 세트'],['default','기본 세트'],['none','이번만']].map(([v,l])=>
-        '<label><input type="radio" name="pset-remember" value="'+v+'"'+(draft.remember===v?' checked':'')+'><span>'+l+'</span></label>').join('')+'</div></fieldset>':'')+
+    '<div class="pset-plan-head"><p class="pset-help" id="pset-plan-title">위에서부터 차례로 해요. 줄을 누르면 바꾸거나 뺄 수 있어요.</p><span class="pset-total" data-pset-total>'+steps.length+'개 · 약 '+total(steps)+'분</span></div>'+
+    (draft.slot&&draft.slot!=='default'?'<p class="pset-help pset-slot" data-pset-slot>'+day+'요일에 쓰는 구성이에요. 여기서 고치면 '+day+'요일 구성이 바뀌어요.</p>':'')+
+    (steps.length?'<ol class="pset-list">'+steps.map(row).join('')+'</ol>':'<p class="pset-empty">연습할 항목이 없어요. 아래에서 연습을 추가해 주세요.</p>')+
+    '<button type="button" class="pset-add-btn" data-add><i class="ph ph-plus" aria-hidden="true"></i>연습 추가</button>'+
     '<p role="alert" class="pset-error" data-pset-error></p>'+
     '<button type="button" class="btn block pset-start" data-start'+(steps.length?'':' disabled')+'><i class="ph ph-play" aria-hidden="true"></i>시작하기</button></section>';
 }
 function bindPlan(host){
-  const own=draft.own,index=id=>own.findIndex(s=>s.id===id);
-  const move=(row,delta)=>{
-    const list=movable(),k=list.findIndex(s=>s.id===row.dataset.step),other=list[k+delta];if(k<0||!other)return;
-    const a=index(row.dataset.step),b=index(other.id);[own[a],own[b]]=[own[b],own[a]];redraw();
-    document.querySelector('[data-step="'+CSS.escape(row.dataset.step)+'"] '+(delta<0?'[data-up]:not(:disabled),[data-step="'+CSS.escape(row.dataset.step)+'"] [data-down]':'[data-down]:not(:disabled),[data-step="'+CSS.escape(row.dataset.step)+'"] [data-up]'))?.focus();
-  };
-  host.querySelectorAll('.pset-row').forEach(row=>{
-    const i=()=>index(row.dataset.step);
-    row.querySelector('[data-min]')?.addEventListener('change',e=>{const n=Math.round(Number(e.target.value)),st=own[i()];if(n>=1&&n<=120){st.minutes=n;const shown=draft.steps.find(s=>s.id===st.id);if(shown)shown.minutes=n;host.querySelector('[data-pset-total]').textContent=draft.steps.length+'개 · 약 '+total(draft.steps)+'분';}else e.target.value=st.minutes;});
-    row.querySelector('[data-remove]')?.addEventListener('click',()=>{own.splice(i(),1);redraw();});
-    row.querySelector('[data-up]')?.addEventListener('click',()=>move(row,-1));
-    row.querySelector('[data-down]')?.addEventListener('click',()=>move(row,1));
-  });
-  host.querySelector('[data-reorder]')?.addEventListener('click',()=>{reorder=!reorder;paint();host.querySelector('[data-reorder]')?.focus();});
+  host.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>rowSheet(b.closest('.pset-row').dataset.step));
   host.querySelector('[data-add]').onclick=addSheet;
-  host.querySelector('[data-pick]').onclick=()=>pickSheet();
-  host.querySelectorAll('[name=pset-remember]').forEach(r=>r.onchange=()=>{draft.remember=r.value;});
   host.querySelector('[data-start]').onclick=()=>{
     const error=host.querySelector('[data-pset-error]');error.textContent='';
-    try{
-      const steps=draft.steps,date=draft.today,slot=draft.remember;
-      P.start(steps,{id:'check',date,now:Date.now()});
-      // Remember the person's own steps only when they differ from today's defaults or replace a saved set.
-      if(slot!=='none'){
-        const same=JSON.stringify(P.templateFrom(draft.own,draft.base))===JSON.stringify(P.templateFrom(draft.ownBase,draft.base));
-        const exists=(V.db.practicePlans||[]).some(p=>p?.id===P.templateId(slot));
-        const mine=draft.own,base=draft.base;
-        if(!same||exists)V.change(db=>{P.saveTemplate(db,slot,mine,base);},{silent:true});
-      }
-      startNow(steps,date);paint();
-    }catch(e){error.textContent=e.message;}
+    try{const steps=draft.steps,date=draft.today;P.start(steps,{id:'check',date,now:Date.now()});startNow(steps,date);paint();}
+    catch(e){error.textContent=e.message;}
   };
 }
+/** The sheet of one row: what can be changed about that step, nothing else. */
+function rowSheet(id){
+  const st=draft?.steps.find(s=>s.id===id);if(!st)return;
+  if(st.kind==='exercise')return groupSheet(st);
+  if(st.kind==='take')return recordSheet();
+  if(draft.own.some(s=>s.id===id))return ownSheet(st);
+}
+/** A built-in exercise: which exercises of its group take turns (one a day), or rest the whole group. */
+function groupSheet(st){
+  const pf=D.prefs(V.db),g=D.groupOf(st.group);
+  V.sheet({title:g.title,
+    body:'<form id="pset-group" class="pset-group-form" data-group-sheet="'+esc(g.id)+'">'+
+      (st.focus?'<p class="pset-focus" data-focus>추천 · '+esc(st.focus.why)+'<br>오늘은 이 연습으로 '+esc(st.focus.title)+' '+st.focus.step+'단계를 재요.</p>':'')+
+      '<p class="pset-help">켜 둔 연습이 하루에 하나씩 돌아가며 나와요.</p><div class="dset-opts">'+
+      D.exercisesOf(g.id).map(e=>'<label class="dset-opt"><input type="checkbox" name="ex" value="'+e.id+'"'+(pf.off[e.id]?'':' checked')+'><span class="dset-check" aria-hidden="true"></span>'+
+        '<span class="dset-opt-copy"><strong>'+esc(e.title)+'</strong><small>'+e.minutes+'분'+(e.mic?' · 마이크':'')+(e.id===st.exercise?' · 오늘':'')+'</small></span></label>').join('')+'</div>'+
+      '<p role="alert" class="pset-error" data-sheet-error></p>'+
+      '<button type="button" class="pset-chip pset-rest" data-rest><i class="ph ph-moon" aria-hidden="true"></i>'+esc(g.title)+' 쉬기</button></form>',
+    foot:'<button type="submit" form="pset-group" class="btn block">저장</button>',
+    onMount:(el,close)=>{
+      const form=el.querySelector('form'),error=form.querySelector('[data-sheet-error]');
+      form.querySelector('[data-rest]').onclick=()=>{if(keepPrefs({...pf,groupsOff:{...pf.groupsOff,[g.id]:true}},g.title+'을 쉬어요. 연습 추가에서 다시 넣을 수 있어요.'))close();};
+      form.onsubmit=e=>{
+        e.preventDefault();const boxes=[...form.querySelectorAll('[name=ex]')];
+        if(!boxes.some(b=>b.checked)){error.textContent='하나는 켜 두세요. 다 쉬려면 ‘'+g.title+' 쉬기’를 눌러요.';return;}
+        const off={...pf.off};for(const b of boxes){if(b.checked)delete off[b.value];else off[b.value]=true;}
+        if(keepPrefs({...pf,off}))close();
+      };
+    }});
+}
+/** One of the person's own steps: 시간, 위로/아래로, 기본 연습 대신, 빼기. */
+function ownSheet(st){
+  const pf=D.prefs(V.db),key=D.ownKey(V.db,st),list=movable(),k=list.findIndex(s=>s.id===st.id);
+  V.sheet({title:shortTitle(st),
+    body:'<form id="pset-own" class="pset-own-form" data-own-sheet><p class="pset-help">'+esc(kindLabel(st))+(st.segmentStart!=null?' · 구간 '+esc(P.segmentLabel(st.segmentStart,st.segmentEnd)):'')+'</p>'+
+      '<div class="pset-stepper"><button type="button" class="pset-icon" data-less aria-label="1분 줄이기"><i class="ph ph-minus" aria-hidden="true"></i></button>'+
+        '<label class="pset-min"><input type="number" inputmode="numeric" min="1" max="120" value="'+esc(st.minutes)+'" name="minutes" aria-label="시간(분)"><span>분</span></label>'+
+        '<button type="button" class="pset-icon" data-more aria-label="1분 늘리기"><i class="ph ph-plus" aria-hidden="true"></i></button></div>'+
+      (k>=0&&list.length>1?'<div class="pset-move"><button type="button" class="pset-chip" data-up'+(k===0?' disabled':'')+'><i class="ph ph-arrow-up" aria-hidden="true"></i>위로</button>'+
+        '<button type="button" class="pset-chip" data-down'+(k===list.length-1?' disabled':'')+'><i class="ph ph-arrow-down" aria-hidden="true"></i>아래로</button></div>':'')+
+      (key?'<label class="field"><span>기본 연습 대신 하기</span><select name="tag" aria-label="기본 연습 대신 하기"><option value="">기본 연습 뒤에 하기</option>'+
+        D.GROUPS.map(g=>'<option value="'+g.id+'"'+(pf.replace[key]===g.id?' selected':'')+'>'+esc(g.title)+' 대신</option>').join('')+'</select></label>':'')+
+      '<p role="alert" class="pset-error" data-sheet-error></p>'+
+      '<button type="button" class="pset-chip pset-remove" data-remove><i class="ph ph-trash" aria-hidden="true"></i>빼기</button></form>',
+    foot:'<button type="submit" form="pset-own" class="btn block">저장</button>',
+    onMount:(el,close)=>{
+      const form=el.querySelector('form'),input=form.minutes,error=form.querySelector('[data-sheet-error]');
+      const step=n=>{input.value=String(Math.max(1,Math.min(120,(Math.round(Number(input.value))||st.minutes)+n)));};
+      form.querySelector('[data-less]').onclick=()=>step(-1);form.querySelector('[data-more]').onclick=()=>step(1);
+      const at=()=>draft.own.findIndex(s=>s.id===st.id);
+      const move=d=>{const other=list[k+d];if(!other)return;const own=draft.own.slice(),a=at(),b=own.findIndex(s=>s.id===other.id);[own[a],own[b]]=[own[b],own[a]];if(keepOwn(own))close();};
+      form.querySelector('[data-up]')?.addEventListener('click',()=>move(-1));
+      form.querySelector('[data-down]')?.addEventListener('click',()=>move(1));
+      // 곡에 적용하기 takes its song's 녹음 with it (the two came in together).
+      form.querySelector('[data-remove]').onclick=()=>{const own=draft.own.filter(s=>s.id!==st.id&&!(st.apply&&s.kind==='record'&&s.songId===st.songId));if(keepOwn(own)){close();V.toast('뺐어요.');}};
+      form.onsubmit=e=>{
+        e.preventDefault();const n=Math.round(Number(input.value));
+        if(!(n>=1&&n<=120)){error.textContent='시간은 1~120분으로 정해 주세요.';input.focus();return;}
+        const tag=form.tag?.value??null;
+        if(key&&tag!==null&&tag!==(pf.replace[key]||'')){const replace={...pf.replace};if(tag)replace[key]=tag;else delete replace[key];if(!V.change(db=>{D.savePrefs(db,{...pf,replace});},{silent:true})){error.textContent='저장하지 못했어요.';return;}}
+        const own=draft.own.map(s=>s.id===st.id?{...s,minutes:n}:s);
+        if(keepOwn(own))close();
+      };
+    }});
+}
+/** 연습 전후 30초 녹음: on with a song (and where to sing), or off. */
+function recordSheet(){
+  const pf=D.prefs(V.db),songs=(V.db.songs||[]).filter(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id)&&!x.archived);
+  V.sheet({title:'연습 전후 30초 녹음',
+    body:'<form id="pset-rec" class="pset-rec-form" data-rec-sheet><p class="pset-help">같은 구절을 처음과 끝에 불러 두고, 끝나면 가려 놓고 비교해 들어요. 녹음 길이는 연습 시간에 더하지 않아요.</p>'+
+      (songs.length?'<label class="field"><span>부를 곡</span><select name="recordSong" aria-label="부를 곡"><option value="">곡 선택</option>'+songs.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===pf.recordSongId?' selected':'')+'>'+esc(V.songLabel?.(x)||x.title)+'</option>').join('')+'</select></label>'+
+        '<label class="field"><span>부를 곳 <small>선택</small></span><input type="text" name="phrase" maxlength="80" value="'+esc(pf.phrase)+'" placeholder="예: 후렴 첫 두 줄"></label>':
+        '<p class="pset-help">내 곡에 곡을 먼저 추가하면 쓸 수 있어요.</p>')+
+      '<p role="alert" class="pset-error" data-sheet-error></p>'+(pf.recording?'<button type="button" class="pset-chip pset-remove" data-off><i class="ph ph-trash" aria-hidden="true"></i>전후 녹음 빼기</button>':'')+'</form>',
+    foot:songs.length?'<button type="submit" form="pset-rec" class="btn block">'+(pf.recording?'저장':'넣기')+'</button>':'',
+    onMount:(el,close)=>{
+      const form=el.querySelector('form'),error=form.querySelector('[data-sheet-error]');
+      form.querySelector('[data-off]')?.addEventListener('click',()=>{if(keepPrefs({...pf,recording:false}))close();});
+      form.onsubmit=e=>{
+        e.preventDefault();const id=form.recordSong?.value||'';
+        if(!V.song(id)){error.textContent='녹음할 곡을 골라 주세요.';form.recordSong?.focus();return;}
+        if(keepPrefs({...pf,recording:true,recordSongId:id,phrase:form.phrase?.value||''}))close();
+      };
+    }});
+}
 const parseTime=v=>{const t=String(v||'').trim();if(!t)return null;const m=t.match(/^(\d{1,3}):([0-5]\d)$/);const n=m?Number(m[1])*60+Number(m[2]):/^\d{1,4}$/.test(t)?Number(t):NaN;return Number.isFinite(n)?n:NaN;};
+/** + 연습 추가: everything that can come into the set, in one sheet. */
 function addSheet(){
-  const have=new Set(draft.own.map(s=>s.goalId).filter(Boolean)),kinds=new Set(draft.own.map(s=>s.kind));
+  const pf=D.prefs(V.db),have=new Set(draft.own.map(s=>s.goalId).filter(Boolean)),kinds=new Set(draft.own.map(s=>s.kind));
   const goals=draft.base.filter(s=>s.kind==='goal'&&!have.has(s.goalId));
   const lastSong=[...draft.own].reverse().find(s=>s.songId)?.songId||recentSongId();
   const warm=draft.base.find(s=>s.kind==='warmup')||{kind:'warmup',title:'웜업 · 호흡과 발성',detail:'호흡과 발성',categoryLabel:'발성',tips:[]};
-  const options=[...goals.map(s=>({key:'goal:'+s.goalId,label:s.title,meta:kindLabel(s),step:s})),
+  const resting=[...D.GROUPS,D.SONG].filter(g=>pf.groupsOff[g.id]);
+  const options=[...resting.map(g=>({key:'group:'+g.id,label:g.title,meta:'기본 연습 · 다시 넣기',group:g.id})),
+    ...goals.map(s=>({key:'goal:'+s.goalId,label:s.title,meta:kindLabel(s),step:s})),
     ...(!kinds.has('warmup')?[{key:'warmup',label:warm.title,meta:'웜업 · 내 방식대로',step:warm}]:[]),
-    ...(!kinds.has('record')&&lastSong&&V.song(lastSong)?[{key:'record',label:'녹음 · '+songTitle(lastSong),meta:'녹음 · 선택',step:{kind:'record',songId:lastSong,title:'녹음 · '+songTitle(lastSong),optional:true,minutes:3}}]:[])];
-  V.sheet({title:'내 연습 추가',body:'<div class="pset-add-sheet">'+(options.length?'<div class="pset-add-list">'+options.map((o,i)=>
-      '<button type="button" class="pset-add-option" data-option="'+i+'"><span><small>'+esc(o.meta)+'</small><strong>'+esc(o.label)+'</strong></span><i class="ph ph-plus" aria-hidden="true"></i></button>').join('')+'</div>':'')+
-    '<form class="pset-song-form" data-song-form><h3>곡 구간 추가</h3>'+V.songSelect('song',lastSong,{none:'곡 선택'})+
+    ...(!kinds.has('record')&&lastSong&&V.song(lastSong)?[{key:'record',label:'녹음 · '+songTitle(lastSong),meta:'녹음 · 선택',step:{kind:'record',songId:lastSong,title:'녹음 · '+songTitle(lastSong),optional:true,minutes:3}}]:[]),
+    ...(!pf.recording?[{key:'takes',label:'연습 전후 30초 녹음',meta:'처음과 끝에 같은 구절',takes:true}]:[])];
+  V.sheet({title:'연습 추가',body:'<div class="pset-add-sheet">'+(options.length?'<div class="pset-add-list">'+options.map((o,i)=>
+      '<button type="button" class="pset-add-option" data-option="'+i+'" data-key="'+esc(o.key)+'"><span><small>'+esc(o.meta)+'</small><strong>'+esc(o.label)+'</strong></span><i class="ph ph-plus" aria-hidden="true"></i></button>').join('')+'</div>':'')+
+    '<form class="pset-song-form" data-song-form><h3>곡 구간</h3>'+V.songSelect('song',lastSong,{none:'곡 선택'})+
       '<div class="pset-song-grid"><label class="field"><span>시작 <small>분:초</small></span><input name="from" type="text" inputmode="numeric" placeholder="0:30" aria-label="구간 시작 (분:초)"></label>'+
       '<label class="field"><span>끝 <small>분:초</small></span><input name="to" type="text" inputmode="numeric" placeholder="1:10" aria-label="구간 끝 (분:초)"></label></div>'+
       '<label class="field"><span>시간(분)</span><input name="minutes" type="number" min="1" max="120" value="10" inputmode="numeric" aria-label="곡 구간 시간(분)"></label>'+
-      '<p class="pset-help">구간을 비우면 곡 전체를 연습해요. 기본 연습 뒤에 이어서 해요.</p><p role="alert" class="pset-error" data-song-error></p>'+
+      '<p class="pset-help">구간을 비우면 곡 전체를 연습해요.</p><p role="alert" class="pset-error" data-song-error></p>'+
       '<button type="submit" class="btn secondary block">곡 구간 넣기</button></form></div>',
     onMount:(el,close)=>{
-      el.querySelectorAll('[data-option]').forEach(b=>b.onclick=()=>{const o=options[Number(b.dataset.option)];draft.own=P.normalize([...draft.own,{...o.step,id:undefined}]);close();redraw();});
+      el.querySelectorAll('[data-option]').forEach(b=>b.onclick=()=>{
+        const o=options[Number(b.dataset.option)];
+        if(o.group){
+          const groupsOff={...pf.groupsOff};delete groupsOff[o.group];
+          // 곡 comes back as today's defaults give it (곡에 적용하기 and 녹음): today's own list starts again from the saved set.
+          if(o.group===D.SONG.id){saveTodayOwn(draft.today,null);draft=null;}
+          if(keepPrefs({...pf,groupsOff}))close();return;
+        }
+        if(o.takes){close();recordSheet();return;}
+        if(keepOwn([...draft.own,{...o.step,id:undefined}]))close();
+      });
       const form=el.querySelector('[data-song-form]');
       form.onsubmit=e=>{
         e.preventDefault();const error=form.querySelector('[data-song-error]');error.textContent='';
@@ -263,69 +360,8 @@ function addSheet(){
         const seg=a!=null?P.segmentLabel(a,b):'';
         const step={kind:'song',songId:id,title:'곡 구간 · '+songTitle(id)+(seg?' '+seg:''),minutes:m,added:true,...(seg?{segmentStart:a,segmentEnd:b}:{})};
         // A new song section goes before the closing recording.
-        const at=draft.own.findIndex(s=>s.kind==='record');if(at<0)draft.own.push(step);else draft.own.splice(at,0,step);
-        draft.own=P.normalize(draft.own);close();redraw();
-      };
-    }});
-}
-
-/* ---------- 오늘의 연습 고르기 ---------- */
-/** Which built-in exercises are in rotation, a group on or off, a 그룹 대신 tag for the person's own steps, and the
- * 30-second takes around the set. Saved as ONE practicePlans row (app/daily-set-model.js savePrefs). */
-function pickSheet(){
-  let pf=D.prefs(V.db);
-  const today=V.today(),base=(()=>{try{return fresh();}catch{return null;}})();
-  const taggable=(base?.own||[]).map(s=>({s,key:D.ownKey(V.db,s)})).filter(x=>x.key);
-  const songs=(V.db.songs||[]).filter(x=>x&&!(V.db.deleted?.songs||[]).includes(x.id)&&!x.archived);
-  const sw=(name,value,on,label)=>'<label class="dset-switch"><input type="checkbox" name="'+name+'" value="'+esc(value)+'"'+(on?' checked':'')+' aria-label="'+esc(label)+'"><span aria-hidden="true"></span></label>';
-  const groups=D.GROUPS.map(g=>{
-    const on=!pf.groupsOff[g.id],todayPick=on?D.pick(pf,g.id,today):null;
-    return '<fieldset class="dset-group" data-group="'+g.id+'"'+(on?'':' data-off')+'><legend><span><strong>'+esc(g.title)+'</strong><small>'+esc(g.line)+'</small></span>'+sw('group',g.id,on,g.title+' 그룹 하기')+'</legend>'+
-      '<div class="dset-opts">'+D.exercisesOf(g.id).map(e=>'<label class="dset-opt"><input type="checkbox" name="ex" value="'+e.id+'"'+(pf.off[e.id]?'':' checked')+'><span class="dset-check" aria-hidden="true"></span>'+
-        '<span class="dset-opt-copy"><strong>'+esc(e.title)+'</strong><small>'+e.minutes+'분'+(e.mic?' · 마이크':'')+(todayPick?.id===e.id?' · 오늘':'')+'</small></span></label>').join('')+'</div></fieldset>';}).join('');
-  const songOn=!pf.groupsOff[D.SONG.id];
-  const songBox='<fieldset class="dset-group" data-group="'+D.SONG.id+'"'+(songOn?'':' data-off')+'><legend><span><strong>'+esc(D.SONG.title)+'</strong><small>'+esc(D.SONG.line)+'</small></span>'+sw('group',D.SONG.id,songOn,D.SONG.title+' 그룹 하기')+'</legend>'+
-    '<p class="pset-help dset-opts">마지막에 ‘곡에 적용하기’가 들어가요. 진행 중인 곡 계획이 있으면 그 곡, 없으면 가장 최근에 연습한 곡이에요. 이어서 녹음(선택)을 할 수 있어요.</p></fieldset>';
-  const mine=taggable.length?'<fieldset class="dset-group dset-mine"><legend><span><strong>내 연습</strong><small>기본 연습 대신 하고 싶으면 자리를 골라요</small></span></legend>'+
-    taggable.map((x,i)=>'<label class="field dset-tag"><span>'+esc(shortTitle(x.s))+'</span><select name="tag'+i+'" data-tag="'+esc(x.key)+'" aria-label="'+esc(shortTitle(x.s))+' 자리"><option value="">기본 연습 뒤에 하기</option>'+
-      D.GROUPS.map(g=>'<option value="'+g.id+'"'+(pf.replace[x.key]===g.id?' selected':'')+'>'+esc(g.title)+' 대신</option>').join('')+'</select></label>').join('')+'</fieldset>':'';
-  const record='<fieldset class="dset-group dset-rec"><legend><span><strong>연습 전후 30초 녹음</strong><small>같은 구절을 처음과 끝에 불러 두고, 끝나면 가려 놓고 비교해 들어요</small></span>'+sw('recording','1',pf.recording,'연습 전후 30초 녹음 하기')+'</legend>'+
-    '<div class="dset-rec-fields" data-rec-fields'+(pf.recording?'':' hidden')+'>'+
-      (songs.length?'<label class="field"><span>부를 곡</span><select name="recordSong" aria-label="부를 곡"><option value="">곡 선택</option>'+songs.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===pf.recordSongId?' selected':'')+'>'+esc(V.songLabel?.(x)||x.title)+'</option>').join('')+'</select></label>'+
-        '<label class="field"><span>부를 곳 <small>선택</small></span><input type="text" name="phrase" maxlength="80" value="'+esc(pf.phrase)+'" placeholder="예: 후렴 첫 두 줄"></label>':
-        '<p class="pset-help">내 곡에 곡을 먼저 추가하면 쓸 수 있어요.</p>')+
-      '<p class="pset-help">녹음은 다른 연습 녹음과 똑같이 보관돼요. 녹음 길이는 연습 시간에 더하지 않아요.</p></div></fieldset>';
-  V.sheet({title:'오늘의 연습 고르기',
-    body:'<form id="dset-pick" class="dset-pick" data-dset-pick><p class="pset-help">그룹마다 켜 둔 연습이 하루에 하나씩 돌아가며 나와요. 그룹마다 하나는 켜 두어야 해요.</p>'+groups+songBox+mine+record+
-      '<button type="button" class="pset-chip dset-reset" data-pick-reset><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>처음대로</button>'+
-      '<p role="alert" class="pset-error" data-pick-error></p></form>',
-    foot:'<button type="submit" form="dset-pick" class="btn block">저장</button>',
-    onMount:(el,close)=>{
-      const form=el.querySelector('form'),error=form.querySelector('[data-pick-error]');
-      const sync=()=>{
-        form.querySelectorAll('.dset-group[data-group]').forEach(box=>{const on=box.querySelector('[name=group]').checked;box.toggleAttribute('data-off',!on);box.querySelectorAll('[name=ex]').forEach(i=>{i.disabled=!on;});});
-        const fields=form.querySelector('[data-rec-fields]');if(fields)fields.hidden=!form.querySelector('[name=recording]').checked;
-      };
-      form.addEventListener('change',()=>{error.textContent='';sync();});sync();
-      form.querySelector('[data-pick-reset]').onclick=()=>{form.querySelectorAll('[name=group],[name=ex]').forEach(i=>{i.checked=true;});error.textContent='';sync();form.dispatchEvent(new Event('change'));};
-      form.onsubmit=e=>{
-        e.preventDefault();error.textContent='';
-        const off={},groupsOff={},replace={...pf.replace};
-        for(const box of form.querySelectorAll('.dset-group[data-group]')){
-          const g=D.groupOf(box.dataset.group),on=box.querySelector('[name=group]').checked,ex=[...box.querySelectorAll('[name=ex]')];
-          if(!on)groupsOff[g.id]=true;
-          if(on&&ex.length&&!ex.some(i=>i.checked)){error.textContent=g.title+'에서 연습을 하나는 켜 두세요. 그룹을 쉬려면 그룹 스위치를 꺼 주세요.';ex[0]?.focus();return;}
-          // A group that is off keeps the choices it had.
-          for(const i of ex)if(on?!i.checked:pf.off[i.value])off[i.value]=true;
-        }
-        form.querySelectorAll('[data-tag]').forEach(sel=>{if(sel.value)replace[sel.dataset.tag]=sel.value;else delete replace[sel.dataset.tag];});
-        const recording=!!form.querySelector('[name=recording]')?.checked,recordSongId=form.recordSong?.value||'';
-        if(recording&&!V.song(recordSongId)){error.textContent=songs.length?'녹음할 곡을 골라 주세요.':'내 곡에 곡을 먼저 추가해 주세요.';form.recordSong?.focus();return;}
-        const next={...pf,off,groupsOff,replace,recording,recordSongId:recording?recordSongId:pf.recordSongId,phrase:form.phrase?form.phrase.value:pf.phrase};
-        if(!V.change(db=>{D.savePrefs(db,next);},{silent:true})){error.textContent='저장하지 못했어요. 다시 시도해 주세요.';return;}
-        pf=D.prefs(V.db);draft=null;close();
-        V.toast(session||D.runsOn(V.db,today).length?'저장했어요. 다음 연습부터 바뀌어요.':'저장했어요. 오늘 연습에 바로 반영했어요.');
-        if(routeName()==='practice-set')paint();changed();
+        const own=draft.own.slice(),at=own.findIndex(s=>s.kind==='record');if(at<0)own.push(step);else own.splice(at,0,step);
+        if(keepOwn(own))close();
       };
     }});
 }
@@ -581,7 +617,8 @@ function paint(){
     else{host.innerHTML='<section class="dset-run" data-pset-run aria-labelledby="pset-step-title"></section>';mountRun(host);}
   }else if(saved){host.innerHTML=doneHtml();}
   else{
-    if(!draft||draft.today!==V.today()){draft=fresh();draft.ownBase=copy(draft.own);}
+    // ownBase: the steps the saved set gives today, to tell whether a change differs from it (then the set is kept).
+    if(!draft||draft.today!==V.today()){draft=fresh();draft.ownBase=copy(D.build(V.db,{today:draft.today,recentSongId:recentSongId()}).own);}
     host.innerHTML=planHtml();bindPlan(host);
   }
 }

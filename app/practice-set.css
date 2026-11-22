@@ -24,6 +24,25 @@
 .pset-icon:active{background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);}
 .pset-icon:disabled{color:#98A2B3;opacity:.45;}
 .pset-row-tools{display:flex;gap:4px;}
+/* One screen to change the set: a row is one button (its sheet holds what can change); 추천 marks today's 기본기. */
+.pset-row-btn{display:flex;align-items:center;gap:8px;width:100%;min-height:56px;margin:0;padding:4px 0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.pset-row-btn:active{background:#F8F5FD;}
+.pset-row-btn:focus-visible{outline:2px solid #DCC4FF;outline-offset:2px;border-radius:12px;}
+.pset-row-btn .pset-fixed i{color:#98A2B3;font-size:16px;}
+.pset-focus-tag{display:inline-block;margin-left:6px;padding:0 6px;border-radius:99px;background:#7A32F5;color:#fff;font-size:11px;line-height:17px;font-weight:700;vertical-align:1px;}
+.pset-row-copy .pset-why{color:#6E3FD1;white-space:normal;}
+.pset-add-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:48px;margin:12px 0;border:1px dashed #CDB7F5;border-radius:16px;background:#FBF9FF;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:15px;font-weight:600;cursor:pointer;}
+.pset-add-btn i{font-size:18px;}
+.pset-slot{margin:0 0 8px;padding:8px 12px;border-radius:12px;background:#F8F5FD;}
+.pset-focus{margin:0 0 12px;padding:10px 12px;border-radius:12px;background:#F3ECFF;color:#4A2A93;font-size:14px;line-height:20px;}
+.pset-stepper{display:flex;align-items:center;justify-content:center;gap:12px;margin:8px 0 16px;}
+.pset-stepper .pset-icon{background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);}
+.pset-move{display:flex;gap:8px;margin:0 0 16px;}
+.pset-move .pset-chip{flex:1;justify-content:center;}
+.pset-move .pset-chip:disabled{opacity:.4;}
+.pset-chip.pset-remove,.pset-chip.pset-rest{width:100%;justify-content:center;margin-top:16px;background:#FFF1F0;color:#B42318;}
+.pset-chip.pset-rest{background:#F2F4F7;color:#475467;}
+.pset-group-form .dset-opts,.pset-own-form .field{margin-bottom:8px;}
 .pset-plan-tools{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
 .pset-chip{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:0;border-radius:99px;background:#F3ECFF;color:var(--vz-color-accent,#7A32F5);font:inherit;font-size:14px;line-height:20px;font-weight:600;text-decoration:none;cursor:pointer;}
 .pset-chip[aria-pressed="true"]{background:#EDE1FF;}

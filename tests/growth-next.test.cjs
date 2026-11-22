@@ -21,11 +21,11 @@ test('homework ranks first, the one due soonest first; done, past-due and checke
   assert.equal(N.fromHomework(checked, {today:TODAY}).some(x => x.id === 'homework:hw-soon'), false);
 });
 
-test('the order of the sources: 숙제 > 놓친 레슨 지적 > 측정 기반 > 정밀 측정 > 목표·계획 > AI 초안', () => {
+test('the order of the sources: 숙제 > 놓친 레슨 지적 > 기본기 > 측정 기반 > 정밀 측정 > 목표·계획 > AI 초안', () => {
   const m = all({precision:{results:[]}});
   const tiers = m.items.map(x => N.TIER[x.source]);
   assert.deepEqual(tiers, tiers.slice().sort((a, b) => a - b));
-  assert.deepEqual([...new Set(m.items.map(x => x.source))], ['homework', 'lesson-point', 'measure', 'precision', 'goal', 'plan', 'ai']);
+  assert.deepEqual([...new Set(m.items.map(x => x.source))], ['homework', 'lesson-point', 'skill', 'measure', 'precision', 'goal', 'plan', 'ai']);
   for (const x of m.items) {
     assert.ok(N.LABEL[x.source], x.source);
     assert.ok(x.sources.every(s => N.SOURCES.includes(s)));
@@ -69,7 +69,8 @@ test('at most `limit` items (default 5) and how many more', () => {
   assert.equal(m.total, all().total);
   assert.equal(m.more, m.total - 5);
   assert.deepEqual(N.build({db:DB, today:TODAY, limit:2}).items.map(x => x.source), ['homework', 'homework']);
-  assert.deepEqual(N.build({db:{}, today:TODAY}), {items:[], more:0, total:0});
+  // With no records at all, only 기본기 is left: the first area not measured yet, done in 오늘의 연습.
+  assert.deepEqual(N.build({db:{}, today:TODAY}).items.map(x => [x.source, x.title, x.action.kind]), [['skill', '기본기 · “스~” 길게', 'skill']]);
   assert.throws(() => N.build({db:DB}), /오늘 날짜/);
 });
 
@@ -137,4 +138,19 @@ test('reads only: the records are not changed', () => {
   const before = JSON.stringify(DB);
   all({precision:{results:[]}});
   assert.equal(JSON.stringify(DB), before);
+});
+
+test('기본기: today\'s focus area with the exercise 오늘의 연습 puts first — one more day to a step goes before an area not measured yet', () => {
+  const L = require('../app/levels-model.js'), day = n => L.shift('2026-11-01', n - 1);
+  const run = (date, measures, exercise) => ({id:'practice-set:' + date + exercise, date, created:Date.parse(date + 'T10:00:00Z'), dailySet:{v:1, items:[{exercise, state:'done', measures}]}});
+  const pitch = {area:'pitch', kind:'hold', value:4, of:5, unit:'개', hold:4, tolerance:25};
+  const db = {practices:[run(day(1), [pitch], 'ear-follow'), run(day(2), [pitch], 'ear-follow')], practicePlans:[], deleted:{}};
+  const [x] = N.fromSkills(db, {today:day(20)});
+  assert.deepEqual([x.id, x.source, x.title, x.action], ['skill:pitch', 'skill', '기본기 · 음 따라 부르기', {kind:'skill', area:'pitch', step:1, exercise:'ear-follow', href:'#/practice-set'}]);
+  assert.match(x.why, /^음정 1단계까지 1일 남았어요 \(3번 중 2번\) · 1단계: /);
+  // Measured today already: the next area (호흡, not measured yet).
+  assert.equal(N.fromSkills({...db, practices:[...db.practices, run(day(20), [pitch], 'ear-follow')]}, {today:day(20)})[0].id, 'skill:breath');
+  // Turned off in 고르기: passed over.
+  const off = {...db, practicePlans:[{id:'daily-set-prefs', kind:'daily-set-prefs', v:1, off:{'ear-follow':true}, groupsOff:{}, replace:{}}]};
+  assert.equal(N.fromSkills(off, {today:day(20)})[0].id, 'skill:breath');
 });
