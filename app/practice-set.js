@@ -367,6 +367,7 @@ function resultLine(st){
   if(st.skipped)return name+' · 건너뛰었어요';
   if(r.mode==='hold'&&!r.timer&&Array.isArray(r.notes))return name+' · 음 '+r.notes.length+'개 중 '+r.notes.filter(n=>n.ok).length+'개 맞췄어요';
   if(r.mode==='take')return name+' · 저장했어요';
+  const measured=window.VzipDailyMeasure?.resultWords?.(r);if(measured)return name+' · '+measured;
   return name+' · 끝';
 }
 /** A practice recording of the 30-second take: the same path as any practice recording (VZ.media.saveBlob), tagged
@@ -488,7 +489,7 @@ function resultText(r){
   if(x.mode==='hold'&&!x.timer&&Array.isArray(x.notes))return '음 '+x.notes.length+'개 중 '+x.notes.filter(n=>n.ok).length+'개'+(x.accuracy!=null?' · 맞은 시간 '+x.accuracy+'%':'');
   if(x.mode==='hold'&&x.timer)return '타이머로 했어요';
   if(x.mode==='breath'&&x.longestOut)return '가장 길게 '+x.longestOut+'초';
-  return '';
+  return window.VzipDailyMeasure?.resultWords?.(x)||'';
 }
 function summaryHtml(){
   const s=session,rows=D.summary(s),stale=s.date!==V.today(),left=rows.some(r=>r.state==='left');

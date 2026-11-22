@@ -5,7 +5,7 @@
  * Order of a day's set:
  *   1. 숙제 · 놓친 레슨 지적 from 다음 연습 (app/growth-next-model.js), at most NEXT_MAX in total. A homework that is
  *      already one of today's goals is that goal's step moved to the front (so finishing it checks the goal).
- *   2. One exercise from each built-in group the person keeps on, in GROUPS order (목 풀기 → 호흡 → 발성 → 음감; a
+ *   2. One exercise from each built-in group the person keeps on, in GROUPS order (목 풀기 → 호흡 → 발성 → 음감 → 리듬; a
  *      group is added by adding it to GROUPS and its exercises to CATALOG). Inside a group the exercises left ON
  *      rotate by the date: the same day always gives the same one, and none repeats until the list is through.
  *   3. The person's own steps from 오늘 연습 세트 (today's goals and 반복 목표, what a saved 요일/기본 세트 holds). One
@@ -42,12 +42,13 @@ const round3=n=>Math.round(n*1000)/1000;
 const NEXT_MAX=2,NEXT_MINUTES=3,TAKE_SECONDS=30,MAX_STEPS=12;
 const PREFS_ID='daily-set-prefs',PREFS_KIND='daily-set-prefs';
 
-/** Built-in groups, in the order of a set. A later group (리듬) is one more line here plus its exercises below. */
+/** Built-in groups, in the order of a set. A group is one more line here plus its exercises below (리듬 came that way). */
 const GROUPS=[
   {id:'loosen',title:'목 풀기',line:'몸과 목의 힘을 풀어요'},
   {id:'breath',title:'호흡',line:'숨을 고르게 길게 써요'},
   {id:'voice',title:'발성',line:'편한 소리를 길게 이어요'},
-  {id:'ear',title:'음감',line:'들은 음을 그대로 내요'}
+  {id:'ear',title:'음감',line:'들은 음을 그대로 내요'},
+  {id:'rhythm',title:'리듬',line:'박자에 맞춰 소리를 내요'}
 ];
 /** Built-in exercises as data: {id, group, title, why (one line), minutes (planned), mic, mode, …mode fields}.
  * mode 'timed'  steps:[{text, seconds}]                         a line to follow and a countdown
@@ -57,7 +58,12 @@ const GROUPS=[
  *      'hold'   offsets | count (notes from the comfortable range), hold (s), tolerance (cent), syllable
  *                                                              the app plays a note; hold it inside the tolerance
  *               measure:[area…]                                the 기본기 areas its result is a measure of
- *                                                              (app/levels-model.js fromHold; needs the mic) */
+ *                                                              (app/levels-model.js fromHold; needs the mic)
+ * The measuring exercises of 호흡 · 리듬 · 비브라토 (the numbers: app/daily-measure-model.js; needs the mic, a timer
+ * without it, then nothing is measured):
+ *      'hiss'    tries, inhale                                  one “스~” as long as possible, its length and evenness
+ *      'rhythm'  (rounds from the 리듬 step reached)            listen to a bar of “타”, say it back on the next bar
+ *      'vibrato' offsets, hold, cue, syllable                   an 8-second tone: straight, then vibrato on the cue */
 const CATALOG=[
   {id:'loosen-neck',group:'loosen',title:'목·어깨 풀기',why:'목과 어깨 힘이 풀리면 소리가 훨씬 편하게 나와요',minutes:3,mic:false,mode:'timed',
     steps:[{text:'어깨를 귀까지 올렸다가 툭 떨어뜨려요',seconds:55},{text:'고개를 천천히 좌우로 기울여요',seconds:55},{text:'입을 크게 벌려 하품하듯 목 안을 열어요',seconds:55}]},
@@ -76,7 +82,13 @@ const CATALOG=[
   {id:'voice-mum',group:'voice',title:'“멈” 롱톤',why:'“ㅁ”으로 시작하면 소리가 앞으로 모여서 편해져요',minutes:3,mic:true,mode:'hold',
     offsets:[0,3,5],hold:6,tolerance:25,syllable:'멈~',text:'들린 음을 “멈~”으로 6초 동안 이어요',measure:['sustain','range']},
   {id:'ear-follow',group:'ear',title:'음 따라 부르기',why:'듣고 바로 같은 음을 내는 힘이 음정의 바탕이에요',minutes:3,mic:true,mode:'hold',
-    count:5,hold:4,tolerance:25,syllable:'아~',text:'들린 음을 “아~”로 4초 동안 이어요',measure:['pitch','range']}
+    count:5,hold:4,tolerance:25,syllable:'아~',text:'들린 음을 “아~”로 4초 동안 이어요',measure:['pitch','range']},
+  {id:'breath-hiss',group:'breath',title:'“스~” 길게',why:'한 번에 길고 고르게 내쉬는 숨이 긴 소절을 받쳐 줘요',minutes:2,mic:true,mode:'hiss',
+    tries:2,inhale:3,text:'크게 들이쉬고 “스~”를 한 번에 최대한 길게 내쉬어요',measure:['breath']},
+  {id:'voice-vibrato',group:'voice',title:'롱톤 비브라토',why:'곧게 내다가 원할 때 떨 수 있으면 긴 음 끝이 자연스러워져요',minutes:3,mic:true,mode:'vibrato',
+    offsets:[0,4],hold:8,cue:4,syllable:'아~',text:'들린 음을 8초 동안 이어요. 처음엔 곧게, 신호가 울리면 떨어요',measure:['vibrato']},
+  {id:'rhythm-ta',group:'rhythm',title:'“타” 따라 하기',why:'박자를 듣고 제때 소리 내는 힘이 노래의 리듬을 살려요',minutes:3,mic:true,mode:'rhythm',
+    text:'한 마디를 듣고, 다음 마디에 같은 리듬을 “타”로 따라 해요',measure:['rhythm']}
 ];
 /** 곡: not a rotation of exercises but the automatic end of a set (곡에 적용하기, then the optional 녹음). */
 const SONG={id:'song',title:'곡',line:'오늘 연습을 곡에 적용하고, 원하면 녹음해요'};
@@ -308,7 +320,7 @@ const baseNote=c=>Math.round(c.low+(c.high-c.low)*.35);
 function seeded(seed){let x=(seed*2654435761)>>>0||1;return ()=>{x^=x<<13;x>>>=0;x^=x>>>17;x^=x<<5;x>>>=0;return x/4294967296;};}
 /** The target notes (MIDI) of a hold exercise on a date. */
 function notesFor(e,c,date){
-  if(!e||e.mode!=='hold'||!c)return [];
+  if(!e||!['hold','vibrato'].includes(e.mode)||!c)return [];
   if(Array.isArray(e.offsets)){const base=Math.min(baseNote(c),c.high-Math.max(...e.offsets));return e.offsets.map(o=>Math.max(c.low,base)+o);}
   const low=c.low+1,high=Math.max(low+3,c.high-2),rand=seeded(dayNumber(date)+e.id.length),out=[];
   while(out.length<(e.count||5)){
