@@ -93,7 +93,12 @@ test('그림 붙여넣기 keeps the picture on this device at once (offline too)
  // The middle of what is on screen of the page, before the picture's row opens above it.
  const view=await dialog.locator('[data-ink-stage]').boundingBox(),box=await dialog.locator('[data-ink-box]').boundingBox();
  const mid=[((Math.max(box.x,view.x)+Math.min(box.x+box.width,view.x+view.width))/2-box.x)/box.width,((Math.max(box.y,view.y)+Math.min(box.y+box.height,view.y+view.height))/2-box.y)/box.height];
- await context.setOffline(true);
+ // Offline. WebKit's offline emulation in the test browser also blocks reading blobs held in memory (the pasted picture
+ // itself), which an iPhone in 비행기 모드 does not: there the page's own offline signal stands in (navigator.onLine,
+ // the offline/online events), so nothing is sent until it is back.
+ const webkit=browser.browserType().name()==='webkit';
+ const offline=on=>webkit?page.evaluate(on=>{window.__vzOffline=on;Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>!window.__vzOffline});window.dispatchEvent(new Event(on?'offline':'online'));},on):context.setOffline(on);
+ await offline(true);
  await pasteFromMore(dialog);
  // Decoding and shrinking the picture is slow on a busy WebKit runner: wait for it, not a fixed 5 s.
  // On a miss the poll shows what the sheet said instead of a bare 0.
@@ -113,7 +118,7 @@ test('그림 붙여넣기 keeps the picture on this device at once (offline too)
  const aspect=4/3;expect(pic.rect[2]/(pic.rect[3]*aspect)).toBeCloseTo(2,1);
  expect(pic.rect[0]+pic.rect[2]/2).toBeCloseTo(mid[0],2);expect(pic.rect[1]+pic.rect[3]/2).toBeCloseTo(mid[1],2);
  // Back online: uploaded as a PNG (see-through kept) under the owner's folder with the scorepic- id; the list empties.
- await context.setOffline(false);
+ await offline(false);
  await expect.poll(()=>r2.store.has(pic.imageKey)).toBe(true);await expect.poll(()=>queued(page)).toEqual([]);
  const stored=r2.store.get(pic.imageKey);expect(stored.type).toBe('image/png');expect(stored.bytes.subarray(1,4).toString()).toBe('PNG');
  expect(await page.evaluate(b64=>new Promise(r=>{const i=new Image();i.onload=()=>{const c=document.createElement('canvas');c.width=i.width;c.height=i.height;const x=c.getContext('2d');x.drawImage(i,0,0);r(x.getImageData(1,1,1,1).data[3]);};i.src='data:image/png;base64,'+b64;}),stored.bytes.toString('base64'))).toBe(0);

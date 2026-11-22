@@ -763,8 +763,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(file){event.preventDefault();if(pasteReady())pastePicture(file);else pasteSay(NOT_NOW);return;}
   if(items.some(i=>i.kind==='string'))pasteSay(TEXT_ONLY);
  }
- /** The picture decoded: createImageBitmap reads the bytes straight (no address to load, so it also works where a
-  *  blob: load is held back, e.g. offline); an <img> on a blob: address where the browser has no createImageBitmap. */
+ /** The picture decoded: createImageBitmap where the browser has it (no <img> to load), else an <img> on a blob: address. */
  async function loadPicture(blob){
   if(window.createImageBitmap){try{const b=await createImageBitmap(blob);return {img:b,W:b.width,H:b.height,done:()=>b.close?.()};}catch{}}
   return new Promise((resolve,reject)=>{const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);resolve({img,W:img.naturalWidth,H:img.naturalHeight,done:()=>{}});};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('그림을 읽지 못했어요.'));};img.src=url;});
