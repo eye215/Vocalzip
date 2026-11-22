@@ -82,15 +82,18 @@ const pictureCache={
  async get(key){
   const kept=await idb('readonly',s=>s.get(key)).catch(()=>null);
   if(kept instanceof Blob)return kept;
+  if(kept?.bytes)return new Blob([kept.bytes],{type:'image/png'});
   if(!window.caches)return null;
   const r=await (await caches.open(PICTURE_CACHE)).match(pictureAddress(key)).catch(()=>null);if(!r)return null;
   const blob=new Blob([await r.blob()],{type:'image/png'});
-  idb('readwrite',s=>s.put(blob,key)).catch(()=>{}); // a picture kept before: into IndexedDB too
+  blob.arrayBuffer().then(bytes=>idb('readwrite',s=>s.put({type:'image/png',bytes},key))).catch(()=>{}); // a picture kept before: into IndexedDB too
   return blob;
  },
  async put(key,blob){
   const png=new Blob([blob],{type:'image/png'});
-  const [a,b]=await Promise.allSettled([idb('readwrite',s=>s.put(png,key)),
+  // The bytes, not the Blob: WebKit in a private window (and its test build) does not keep Blobs in IndexedDB.
+  const bytes=await png.arrayBuffer();
+  const [a,b]=await Promise.allSettled([idb('readwrite',s=>s.put({type:'image/png',bytes},key)),
    window.caches?caches.open(PICTURE_CACHE).then(c=>c.put(pictureAddress(key),new Response(png,{headers:{'content-type':'image/png'}}))):Promise.reject(Error('no Cache Storage'))]);
   if(a.status!=='fulfilled'&&b.status!=='fulfilled')throw Error('이 브라우저는 그림을 기기에 보관할 수 없어요.');
  }

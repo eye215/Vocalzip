@@ -144,7 +144,7 @@ test('그림 붙여넣기 keeps the picture on this device at once (offline too)
  await page.reload();dialog=await open(page);await expect(dialog.locator('[data-ink-picture] image')).toHaveAttribute('href',/^blob:/);
  // Found on this device after a reload (IndexedDB), in WebKit too: no download.
  expect(reads()).toBe(0);
- expect(await page.evaluate(k=>new Promise(r=>{const q=indexedDB.open('vzip_score_pictures_v1');q.onsuccess=()=>{const g=q.result.transaction('pictures').objectStore('pictures').get(k);g.onsuccess=()=>r(g.result instanceof Blob&&g.result.size>100);};}),pic.imageKey)).toBe(true);
+ expect(await page.evaluate(k=>new Promise(r=>{const q=indexedDB.open('vzip_score_pictures_v1');q.onsuccess=()=>{const g=q.result.transaction('pictures').objectStore('pictures').get(k);g.onsuccess=()=>r(!!g.result&&(g.result.bytes?.byteLength||g.result.size||0)>100);};}),pic.imageKey)).toBe(true);
  const {other,r2:far}=await otherDevice(browser,page,info);
  far.store.set(pic.imageKey,stored);await sync(other,await page.evaluate(()=>window.VZ.db));
  const there=await open(other);await expect(there.locator('[data-ink-picture] image')).toHaveAttribute('href',/^blob:/);
