@@ -21,7 +21,10 @@ async function boot(page){
 }
 test('one-line month totals and a clean song strip rotate the top five',async({page})=>{
  await boot(page);const card=page.locator('.calendar-summary');
- await expect(card.locator('[data-month-minutes]')).toHaveText('45분');
+ // 곡 녹음 → 연습 시간: 'four' (song D, 1 minute, no time entered for D that day) counts as practice; 'free' does not (A has 30 minutes entered).
+ await page.evaluate(()=>VZ.recordingTime?.run());
+ await expect.poll(()=>page.evaluate(()=>VZ.db.practices.filter(p=>p.practiceTimeSource==='recording').map(p=>[p.songId,p.minutes]))).toEqual([['d',1]]);
+ await expect(card.locator('[data-month-minutes]')).toHaveText('46분');
  await expect(card.locator('[data-month-count]')).toHaveText('7회');
  await expect(card.locator('.cs-heading')).toHaveCSS('flex-wrap','nowrap');
  await expect(card.locator('.cs-spotlight')).toHaveAttribute('data-cs-song','a');
@@ -38,7 +41,7 @@ test('one-line month totals and a clean song strip rotate the top five',async({p
  expect((await card.boundingBox()).height).toBeLessThan(230);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.evaluate(date=>VZ.change(d=>{d.songs.push({id:'e',title:'노래 E'});d.practices.push({id:'e1',date,songId:'e',minutes:2});}),day);
- await expect(card.locator('[data-month-minutes]')).toHaveText('47분');
+ await expect(card.locator('[data-month-minutes]')).toHaveText('48분');
  await expect(card.locator('[data-cs-position], [data-cs-metric], .cs-ranking-head')).toHaveCount(0);
  await expect(card.locator('.cs-spotlight')).toHaveAttribute('data-cs-song','a');
  await page.mouse.move(0,0);await page.evaluate(()=>document.activeElement?.blur());
@@ -50,7 +53,7 @@ test('one-line month totals and a clean song strip rotate the top five',async({p
  await expect(card).toContainText('이 달의 노래 연습 기록이 없어요.');
  await page.getByRole('button',{name:'오늘',exact:true}).click();
  await page.evaluate(date=>VZ.change(d=>d.practices.push({id:'added',date,songId:'b',minutes:13})),day);
- await expect(page.locator('[data-month-minutes]')).toHaveText('1시간');
+ await expect(page.locator('[data-month-minutes]')).toHaveText('1시간 1분');
 });
 test('today number stays white on selected purple, and purple when unselected',async({page})=>{
  await boot(page);const today=page.locator('.cal-day.today');
