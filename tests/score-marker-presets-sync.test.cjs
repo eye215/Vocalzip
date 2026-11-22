@@ -156,3 +156,41 @@ test('크기 travels with the preset row, for a user 기호 and a built-in one',
  const list=b.api().read().markers;assert.equal(list.find(m=>m.id==='m-1').size,2);assert.deepEqual([list[0].size,list[0].changed],[.5,true]);
  assert.equal(a.local().read().markers.find(m=>m.id==='m-1').size,2);
 });
+
+test('부르면서 체크에 넣기: off at first, set per preset (built-in ones too), kept beside the look and through older versions',()=>{
+ const a=device('ipad'),b=device('iphone');
+ assert.deepEqual(a.api().read().markers.map(m=>!!m.check),[false,false,false,false]);
+ // A built-in preset as at first: its row has no look, only the option.
+ a.api().write('marker',{id:'breath',check:true});
+ const row=rows(a).find(r=>r.preset==='breath');
+ assert.equal(row.look,null);assert.equal(row.check,true);assert.equal(Ink.valid(row),false);
+ assert.deepEqual(a.api().read().markers.map(m=>!!m.check),[true,false,false,false]);
+ assert.equal(a.api().read().markers[0].changed,false); // not a change of its look
+ // A user preset with it; a later edit that does not say keeps it; saying false turns it off (the field goes).
+ a.api().write('marker',mine('m-1',{check:true}));a.api().write('marker',{id:'m-1',name:'강세 2'});
+ assert.equal(a.api().read().markers[4].check,true);
+ assert.equal('check' in rows(a).find(r=>r.preset==='m-1').look,false);
+ pull(b,a);assert.deepEqual(b.api().read().markers.map(m=>!!m.check),[true,false,false,false,true]);
+ b.api().write('marker',{id:'m-1',check:false});pull(a,b);
+ assert.equal('check' in rows(a).find(r=>r.preset==='m-1'),false);assert.equal(a.api().read().markers[4].check,undefined);
+ // 기본값으로 되돌리기 puts the look back and leaves the option.
+ a.api().write('marker',{id:'breath',color:'#067647'});a.api().write('marker',{id:'breath'},{reset:true});
+ assert.equal(a.api().read().markers[0].check,true);assert.equal(rows(a).find(r=>r.preset==='breath').look,null);
+ // An older version writes the row by spreading the old one: the option survives its save.
+ const old=rows(a).find(r=>r.preset==='breath');
+ a.db.scoreAnnotations=a.db.scoreAnnotations.map(r=>r===old?{...old,look:{name:'숨표',color:'#b42318',width:.006,type:'pen',form:'symbol',shape:'v'}}:r);
+ assert.equal(a.api().read().markers[0].check,true);assert.equal(a.api().read().markers[0].color,'#b42318');
+ // The device entry (what older versions and the unsynced settings read) lists the presets with it.
+ assert.deepEqual(a.entry().markers.check,['breath']);
+ assert.equal(a.local().read().markers[0].check,true);
+});
+
+test('부르면서 체크에 넣기 on a device before sync is copied up with the presets',()=>{
+ const a=device('ipad');
+ a.local().write('marker',{id:'cut',check:true});a.local().write('marker',mine('m-1',{check:true}));
+ assert.deepEqual(a.local().read().markers.filter(m=>m.check).map(m=>m.id),['cut','m-1']);
+ assert.equal(a.api().migrate(),true);
+ assert.deepEqual(rows(a).filter(r=>r.check).map(r=>r.preset).sort(),['cut','m-1']);
+ assert.equal(rows(a).find(r=>r.preset==='cut').look,null);
+ assert.deepEqual(a.api().read().markers.filter(m=>m.check).map(m=>m.id),['cut','m-1']);
+});

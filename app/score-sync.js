@@ -13,6 +13,7 @@
  *   bar gets one button, 재생 옵션: 처음부터 / 시작점 N마디에서 and 컷 건너뛰기 (both kept per score on this
  *   device, app/score-audio.js setPlan); 표시한 마디 rows get ▶ 여기서 재생 / ▶ 이 구간 반복 / 건너뜀; tapping such a mark
  *   where the pointer cannot draw offers the same. Without a usable sync these places say that matching is needed.
+ *   That mark's menu also has 지적으로 (the 지적 추가 form filled from the mark, app/score-points.js).
  * YouTube MRs cannot be matched: the app never learns where a YouTube player is.
  *   window.VzipScoreSync.attach(context) → {refresh, menu, now, list, marked, destroy} — called by app/score-measures.js */
 (() => {
@@ -23,6 +24,7 @@ const esc = VZ.esc, NS = 'http://www.w3.org/2000/svg';
 const node = (tag, attrs = {}) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
 const NEED = 'MR과 맞추면 이 마디만 반복해서 들을 수 있어요.', AGAIN = '다시 맞춰야 해요', MARK_NEED = '시작점·반복·컷 표기는 MR과 맞추면 쓸 수 있어요.';
 const WHY = {measures:'악보를 다시 변환해서 마디 수가 달라졌어요.', length:'MR 파일 길이가 맞출 때와 달라요.', broken:'전에 맞춘 내용을 읽을 수 없어요.', mr:'맞춘 MR이 지워졌어요.'};
+const POINT_CHOICE = '<button type="button" class="vz-choice" data-mark-point><i class="ph ph-chat-circle-text" aria-hidden="true"></i> 지적으로</button>';
 const TAP_GAP = .08, HOLD_MS = 550, HOLD_MOVE = 10, SLOW = .75, BACK = 2, MARK_REACH = 14;
 const seconds = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2) + '초';
 
@@ -237,12 +239,16 @@ function attach(c) {
       const toggle = host.querySelector('[data-mark-cut-pick]'); if (toggle) toggle.onclick = () => { close(); setCuts(!on); };
     }});
   }
-  /** Not matched (yet, or any more): what matching gives, with the way to the 맞추기 screen. */
-  function needMenu(title, anchor) {
+  /** Not matched (yet, or any more): what matching gives, with the way to the 맞추기 screen. toPoint: 지적으로 of a
+   * mark's menu (see markMenu), or null. */
+  function needMenu(title, anchor, toPoint = null) {
     const stale = state.state === 'stale';
     const body = '<p class="score-sync-menu-title">' + esc(title) + '</p><p class="small muted score-sync-menu-text" data-sync-need>' + (stale ? AGAIN + '. ' + esc(WHY[state.why] || '') + ' ' : '') + MARK_NEED + '</p>' +
-      '<div class="vz-choice-list"><button type="button" class="vz-choice" data-sync-open><i class="ph ph-hand-tap" aria-hidden="true"></i> ' + (stale ? '다시 맞추기' : 'MR과 맞추기') + '</button></div>';
-    VZ.menu({title, label:title + ' 메뉴', anchor, body, onMount:(host, close) => { host.classList.add('score-sync-menu'); host.querySelector('[data-sync-open]').onclick = () => { close(); openSheet(); }; }});
+      '<div class="vz-choice-list"><button type="button" class="vz-choice" data-sync-open><i class="ph ph-hand-tap" aria-hidden="true"></i> ' + (stale ? '다시 맞추기' : 'MR과 맞추기') + '</button>' + (toPoint ? POINT_CHOICE : '') + '</div>';
+    VZ.menu({title, label:title + ' 메뉴', anchor, body, onMount:(host, close) => {
+      host.classList.add('score-sync-menu'); host.querySelector('[data-sync-open]').onclick = () => { close(); openSheet(); };
+      const b = host.querySelector('[data-mark-point]'); if (b && toPoint) b.onclick = () => { close(); toPoint(); };
+    }});
   }
   /** The topmost mark with a function under a point of the screen, on the page now shown. */
   function markAt(x, y) {
@@ -271,8 +277,11 @@ function attach(c) {
     const role = K.roleOf(row), ords = K.span(c.geometry(row.page), row, role, c.layout()?.measures).map(h => ordOf.get(h.index)).filter(Number.isInteger);
     if (!ords.length) return;
     const from = Math.min(...ords), to = Math.max(...ords), where = S.label(seq, from, to);
-    const title = ((v.markers() || []).find(m => m.id === row.mark)?.name || K.ROLE_NAMES[role]) + ' · ' + where, anchor = {getBoundingClientRect:() => ({left:x, right:x, top:y, bottom:y, width:0, height:0})};
-    if (state.state !== 'ok' || !model) { needMenu(title, anchor); return; }
+    const name = (v.markers() || []).find(m => m.id === row.mark)?.name || K.ROLE_NAMES[role], title = name + ' · ' + where, anchor = {getBoundingClientRect:() => ({left:x, right:x, top:y, bottom:y, width:0, height:0})};
+    // 지적으로: the 지적 추가 form filled from this mark (its name and printed measures; app/score-points.js).
+    const printed = x => { const n = parseInt(String(x ?? ''), 10); return Number.isFinite(n) ? n : ''; };
+    const toPoint = points?.mark ? () => points.mark({text:name + (row.glyph && !name.includes(row.glyph) ? ' ' + row.glyph : ''), from:printed(seq[from]?.number), to:printed(seq[to]?.last ?? seq[to]?.number), fromMark:row.id}) : null;
+    if (state.state !== 'ok' || !model) { needMenu(title, anchor, toPoint); return; }
     audio()?.prepare?.(track()?.id);
     const choice = (name, icon, text, ok = true, pressed = '') => '<button type="button" class="vz-choice" data-mark-' + name + (ok ? '' : ' disabled') + (pressed === '' ? '' : ' aria-pressed="' + pressed + '"') + '><i class="ph ph-' + icon + '" aria-hidden="true"></i> ' + text + '</button>';
     const lost = '<p class="small muted score-sync-menu-text">이 마디는 MR에서 위치를 알 수 없어요.</p>', cut = cutInfo(), on = K.prefs(stored(), score.id).cut, known = model.timeOf(from) != null;
@@ -280,11 +289,12 @@ function attach(c) {
       role === 'start' ? (known ? '' : lost) + '<div class="vz-choice-list">' + choice('here', 'play', '여기서 재생', known) + '</div>'
       : role === 'repeat' ? (model.rangeOf(from, to) ? '' : lost) + '<div class="vz-choice-list">' + choice('loop', 'repeat', '이 구간 반복', !!model.rangeOf(from, to)) + '</div>'
       : '<p class="small muted score-sync-menu-text" data-mark-cut-text>' + (!model.occurrences(from) ? '이 마디는 MR에서 위치를 알 수 없어서 건너뛰지 못해요.' : on ? '재생할 때 ' + esc(cut.text) + ' 건너뜀' : '컷 건너뛰기가 꺼져 있어요.') + '</p>' +
-        '<div class="vz-choice-list">' + choice('cuts', 'scissors', '컷 건너뛰기 ' + (on ? '끄기' : '켜기'), cut.skips.length > 0) + '</div>');
+        '<div class="vz-choice-list">' + choice('cuts', 'scissors', '컷 건너뛰기 ' + (on ? '끄기' : '켜기'), cut.skips.length > 0) + '</div>') +
+      (toPoint ? '<div class="vz-choice-list">' + POINT_CHOICE + '</div>' : '');
     VZ.menu({title, label:title + ' 메뉴', anchor, body, onMount:(host, close) => {
       host.classList.add('score-sync-menu');
       const act = (name, run) => { const b = host.querySelector('[data-mark-' + name + ']'); if (b) b.onclick = () => { close(); run(); }; };
-      act('here', () => playHere(from)); act('loop', () => startLoop(from, to)); act('cuts', () => setCuts(!on));
+      act('here', () => playHere(from)); act('loop', () => startLoop(from, to)); act('cuts', () => setCuts(!on)); if (toPoint) act('point', toPoint);
     }});
   }
   /** Press-and-hold menu of a measure box (마디 위치 보기 on). */

@@ -141,28 +141,99 @@ test('공연 is a tag: ticking it keeps the recording in its tab, unticking give
   expect(await kindOf(page, 'row-performance')).toBe('song');
 });
 
-test('가져오기 uses the same words: 곡 녹음 · 레슨 녹음, with 공연 as a tag on a 곡 녹음', async ({page}) => {
+test('가져오기 offers every type with the same words, and 공연 as a tag on a 곡 녹음', async ({page}) => {
   await open(page);
   await page.evaluate(() => {
     VZ.media.list = async () => [];
     window.vzipInspectMedia = async () => ({readable:true, duration:40, hasVideo:false, hasAudio:true, metadata:{recordedDate:'2026-11-09', dateSource:'metadata'}});
     window.__sent = [];
-    VZ.media.importFile = async (file, choice) => { window.__sent.push([file.name, choice.extra.occasion]); return {id:choice.id, name:file.name, cloud:true, size:file.size, durationSeconds:40, recordedDate:'2026-11-09'}; };
+    VZ.media.importFile = async (file, choice) => { window.__sent.push([file.name, choice.extra.occasion, choice.extra.recordingCategory ?? null]); return {id:choice.id, name:file.name, cloud:true, size:file.size, durationSeconds:40, recordedDate:'2026-11-09'}; };
     const file = (name, bytes) => new File([new Uint8Array(bytes)], name, {type:'audio/mp4'});
-    VZ.openImportHub({files:[file('a.m4a', [1, 2]), file('b.m4a', [3, 4, 5]), file('c.m4a', [6, 7, 8, 9])], review:true});
+    VZ.openImportHub({files:[file('a.m4a', [1, 2]), file('b.m4a', [3, 4, 5]), file('c.m4a', [6, 7, 8, 9]), file('d.m4a', [1, 3, 5, 7, 9]), file('e.m4a', [2, 4, 6, 8, 10, 12])], review:true});
   });
   const hub = name => page.locator('.hub-row').filter({hasText:name});
   await expect(hub('a.m4a')).toBeVisible();
   await expect(page.locator('[data-hub], main').first()).not.toContainText('종류');
   const select = hub('a.m4a').getByRole('combobox', {name:'a.m4a 녹음 유형'});
-  await expect(select.locator('option')).toHaveText(['곡 녹음', '레슨 녹음', '곡 녹음 · 공연']);
+  await expect(select.locator('option')).toHaveText(['곡 녹음', '레슨 녹음', '트레이닝', '연습실', '곡 녹음 · 공연']);
   await expect(select).toHaveValue('practice');
-  await expect(page.getByLabel('선택한 파일의 녹음 유형 한 번에 지정').locator('option')).toHaveText(['선택…', '곡 녹음', '레슨 녹음', '곡 녹음 · 공연']);
+  await expect(page.getByLabel('선택한 파일의 녹음 유형 한 번에 지정').locator('option')).toHaveText(['선택…', '곡 녹음', '레슨 녹음', '트레이닝', '연습실', '곡 녹음 · 공연']);
   await hub('b.m4a').getByRole('combobox', {name:'b.m4a 녹음 유형'}).selectOption({label:'레슨 녹음'});
   await hub('c.m4a').getByRole('combobox', {name:'c.m4a 녹음 유형'}).selectOption({label:'곡 녹음 · 공연'});
-  await page.getByRole('button', {name:'선택한 3개 가져오기'}).click();
-  // Stored exactly as before (the field the file already carries): practice · lesson · performance.
-  await expect.poll(() => page.evaluate(() => window.__sent.sort())).toEqual([['a.m4a', 'practice'], ['b.m4a', 'lesson'], ['c.m4a', 'performance']]);
+  await hub('d.m4a').getByRole('combobox', {name:'d.m4a 녹음 유형'}).selectOption({label:'트레이닝'});
+  await hub('e.m4a').getByRole('combobox', {name:'e.m4a 녹음 유형'}).selectOption({label:'연습실'});
+  await page.getByRole('button', {name:'선택한 5개 가져오기'}).click();
+  // 곡 녹음 · 레슨 녹음 · 공연 are stored exactly as before (`occasion` only: the type stays worked out from the file);
+  // 트레이닝 · 연습실 are the user's choice and are stored as `recordingCategory`, which a new file now carries to the cloud.
+  await expect.poll(() => page.evaluate(() => window.__sent.sort())).toEqual([['a.m4a', 'practice', null], ['b.m4a', 'lesson', null], ['c.m4a', 'performance', null], ['d.m4a', 'practice', 'training'], ['e.m4a', 'practice', 'room']]);
+  // What the app then shows for a file stored with those fields is the type that was chosen.
+  expect(await page.evaluate(() => window.__sent.sort().map(([, occasion, recordingCategory]) => VZ.media.recordingTypeText({id:'new-import', source:'import', occasion, ...(recordingCategory ? {recordingCategory} : {})}))))
+    .toEqual(['곡 녹음', '레슨 녹음', '곡 녹음 · 공연', '트레이닝', '연습실']);
+});
+
+test('파일 가져오기 sheet: the same four types for all files; 공연 only with 곡 녹음', async ({page}) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.vzipInspectMedia = async () => ({readable:true, duration:40, hasVideo:false, hasAudio:true, metadata:{recordedDate:'2026-11-09', dateSource:'metadata'}});
+    window.__sent = [];
+    VZ.media.importFile = async (file, choice) => { window.__sent.push([choice.extra.occasion, choice.extra.recordingCategory ?? null]); return {id:choice.id, name:file.name, cloud:true, type:'audio/mp4', size:file.size, durationSeconds:40, recordedDate:'2026-11-09', created:Date.now()}; };
+    VZ.importSheet({files:[new File([new Uint8Array([1, 2, 3])], 'one.m4a', {type:'audio/mp4'})]});
+  });
+  const group = page.getByRole('radiogroup', {name:'가져올 파일의 녹음 유형'});
+  await expect(group.getByRole('radio')).toHaveText(Object.values(NAMES));
+  await expect(group.locator('[aria-checked=true]')).toHaveText('곡 녹음');
+  const performance = page.getByRole('checkbox', {name:/공연 녹음/});
+  await performance.check();
+  await group.getByRole('radio', {name:'트레이닝'}).click();
+  await expect(performance).toBeDisabled();
+  await expect(performance).not.toBeChecked();
+  await page.locator('.sheet-foot [data-start]').click();
+  await expect.poll(() => page.evaluate(() => window.__sent)).toEqual([['practice', 'training']]);
+});
+
+test('녹음기: every type is offered; the take is saved with the chosen type and goes up with it', async ({page, browserName}) => {
+  test.skip(browserName === 'webkit', 'the recorder needs the fake microphone, which only the Chromium projects have');
+  await open(page);
+  const take = async (address, choose) => {
+    await page.goto('/#/home'); // a fresh recorder each time (the same address would keep the saved take's card)
+    await page.goto(address);
+    await page.getByRole('button', {name:'녹음 시작', exact:true}).click();
+    await expect(page.getByRole('button', {name:'녹음 종료', exact:true})).toBeVisible();
+    await page.waitForTimeout(700);
+    await page.getByRole('button', {name:'녹음 종료', exact:true}).click();
+    const review = page.locator('[data-review]');
+    await expect(review.locator('[data-p] .player')).toBeVisible();
+    const group = review.getByRole('radiogroup', {name:'녹음 유형'});
+    await expect(group.getByRole('radio')).toHaveText(Object.values(NAMES));
+    await choose(group, review);
+    const before = await page.evaluate(async () => (await window.vzipReadMedia()).map(m => m.id));
+    await review.locator('[data-save]').click();
+    await expect(page.getByText('저장했어요', {exact:true})).toBeVisible();
+    return page.evaluate(async before => (await window.vzipReadMedia()).find(m => !before.includes(m.id)), before);
+  };
+  // Left as it is: 곡 녹음 is chosen, and nothing about the type is written (the take is saved exactly as before).
+  const plain = await take('/#/record', async group => { await expect(group.locator('[aria-checked=true]')).toHaveText('곡 녹음'); });
+  expect(plain).toMatchObject({source:'practice'});
+  expect(plain).not.toHaveProperty('recordingCategory');
+  expect(plain).not.toHaveProperty('occasion');
+  // 트레이닝 chosen before saving.
+  const training = await take('/#/record', group => group.getByRole('radio', {name:'트레이닝'}).click());
+  expect(training.recordingCategory).toBe('training');
+  expect(await kindOf(page, training.id)).toBe('training');
+  // 공연 녹음 ticked on a 곡 녹음: the tag only.
+  const stage = await take('/#/record', (group, review) => review.getByRole('checkbox', {name:/공연 녹음/}).check());
+  expect(stage.occasion).toBe('performance');
+  expect(stage).not.toHaveProperty('recordingCategory');
+  // Opened from a lesson: 레슨 녹음 is chosen and nothing more is written; the take is in the lesson as before.
+  const lesson = await take('/#/record?lesson=l1', async group => { await expect(group.locator('[aria-checked=true]')).toHaveText('레슨 녹음'); });
+  expect(lesson).toMatchObject({source:'lesson'});
+  expect(lesson).not.toHaveProperty('recordingCategory');
+  expect(await page.evaluate(id => VZ.db.lessons.find(l => l.id === 'l1').recordings.some(r => r.id === id), lesson.id)).toBe(true);
+  expect(await kindOf(page, lesson.id)).toBe('lesson');
+  // The backup carries the choice: the cloud rows say what this device shows.
+  await expect.poll(() => page.evaluate(ids => ids.every(id => window.__rows[id]), [plain.id, training.id, stage.id, lesson.id]), {timeout:20000}).toBe(true);
+  expect(await page.evaluate(ids => ids.map(id => [window.__rows[id].recordingCategory ?? null, window.__rows[id].occasion ?? null]), [plain.id, training.id, stage.id, lesson.id]))
+    .toEqual([[null, null], ['training', null], [null, 'performance'], [null, null]]);
 });
 
 test('⋯ › 녹음 유형 lists the same types (✓ on the current one) with the 공연 tag; a mixed selection says 여러 유형', async ({page}) => {

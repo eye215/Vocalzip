@@ -22,6 +22,8 @@ const SOURCES = {
 const KEY = 'vzip_import_hub_conditions_v1';
 const SOURCE_TYPE = {photos:'photos', drive:'icloud-drive', memo:'voice-memo', folder:'computer-folder'};
 let hub = fresh();
+/* A row's `occasion` is its 녹음 유형 choice in the review list (VZ.recordingType.importChoices: practice = 곡 녹음, lesson,
+ * training, room, performance = 곡 녹음 · 공연); importFields() turns it into the stored fields when the file is saved. */
 function fresh() { return {source:null, phase:'source', rows:[], filter:'all', group:false, autoPractice:true, progress:'', cond:null, occasion:'practice', limit:100}; }
 /* ---------- upload queue (kept across reloads) ----------
  * Only identifiers and states are stored (no file data). After Safari closes, the files must be picked again; files the
@@ -256,7 +258,7 @@ async function importRows(rows) {
     }
     try {
       const song = VZ.song(row.song);
-      const extra = {occasion:row.occasion, sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
+      const extra = {...VZ.recordingType.importFields(row.occasion), sourceType:SOURCE_TYPE[hub.source] || 'files', originalFilename:row.name, fileHash:row.hash, importedAt:Date.now(), recordedAtSource:row.dateSource === 'metadata' ? 'metadata' : row.dateSource === 'filename' ? 'filename' : 'user'};
       const saved = await M.importFile(row.file, {id:row.id, songId:song ? song.id : '', song:VZ.songLabel(song), date:row.dateSource === 'metadata' || row.dateSource === 'unconfirmed' ? '' : row.date, extra, direct, durationSeconds:row.duration},
         p => { row.msg = typeof p === 'number' ? '업로드 ' + p + '%' : String(p); drawRow(row); });
       row.busySince = 0; row.state = 'done'; row.doneAt = Date.now(); row.msg = saved.cloud ? '✓ 업로드 완료 (서버 확인)' : '✓ 이 기기에 저장 (로그인하면 업로드)'; row.saved = saved; row.file = null;
@@ -439,6 +441,7 @@ function draw() {
   wireDash(h);
 }
 /* ---------- upload progress / result ---------- */
+/* 곡 정하기 counts only song recordings (곡 녹음, 곡 녹음 · 공연): 레슨·트레이닝·연습실 takes do not need a song. */
 /* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): after an upload the card says what comes next, in order —
  * files still to pick again first, then songs still to choose, practice time still to write, then where the automatic
  * analysis can be followed. Every step only links or retries; nothing is decided or sent for the person here. */
@@ -446,7 +449,7 @@ const nextStep = (tag, attrs, icon, title, sub) => '<' + tag + ' class="item" ' 
 function resultHtml() {
   const q = hub.rows.filter(r => r.queued), c = counts(q);
   const retry = q.filter(r => r.state === 'failed' && r.file).length;
-  const noSong = q.filter(r => r.state === 'done' && r.occasion !== 'lesson' && !r.lessonId && !(r.saved?.songId || r.song)).length;
+  const noSong = q.filter(r => r.state === 'done' && (r.occasion === 'practice' || r.occasion === 'performance') && !r.lessonId && !(r.saved?.songId || r.song)).length;
   const steps = (retry ? nextStep('button', 'type="button" data-retry-failed', 'arrow-clockwise', '다시 올리기', '올리지 못한 파일 ' + retry + '개 · 고른 원본으로 한 번 더 올려요') : '') +
     (noSong ? nextStep('a', 'href="#/song-suggest" data-next="song"', 'music-notes', '곡 정하기', '곡이 정해지지 않은 녹음 ' + noSong + '개 · 들어 보고 곡을 골라요') : '') +
     (hub.made ? nextStep('a', 'href="#/practices" data-next="time"', 'timer', '연습 시간 적기', '연습 기록 ' + hub.made + '개 생성 · 시간은 직접 적어요') : '') +
