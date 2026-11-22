@@ -84,6 +84,37 @@ test('전체 녹음에서 고른 파일은 새 확인 화면을 거쳐 업로드
   await expect(page.locator('[data-dash]')).toHaveCount(0);
 });
 
+// Named 'Import hub takes …' so upload-latency-check.yml runs it whenever app/import-hub.js changes.
+test('Import hub takes you to the next steps after an upload: choose songs, then follow the analysis', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
+  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-imp]').click();
+  await (await chooser).setFiles({name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b});
+  await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
+  await page.evaluate(() => { VZ.media.importFile = async (file, choice) => ({id:choice.id, cloud:true, name:file.name, songId:'', recordedDate:choice.date || '2026-11-01'}); });
+  await page.locator('[data-hub] [data-import]').click();
+  const result = page.locator('[data-result]');
+  await expect(result).toContainText('저장 1개', {timeout:30000});
+  // The file has no song yet: 곡 정하기 comes first, 처리 내역 (where the automatic analysis is followed) last.
+  const steps = result.locator('[data-next-steps] .item-title');
+  const titles = (await steps.allTextContents()).map(s => s.trim());
+  expect(titles, JSON.stringify(titles)).toEqual(['곡 정하기', '처리 내역']);
+  await expect(result.locator('[data-next="song"]')).toHaveAttribute('href', '#/song-suggest');
+  await expect(result.locator('[data-next="song"]')).toContainText('곡이 정해지지 않은 녹음 1개');
+  await expect(result.locator('[data-retry-failed]')).toHaveCount(0); // nothing failed, so no retry step
+  await expect(result).not.toContainText('실패');
+  // Each step is a full-width row with a 44px+ target; the two buttons below keep their names.
+  const h = await result.locator('[data-next="song"]').evaluate(el => Math.round(el.getBoundingClientRect().height));
+  expect(h).toBeGreaterThanOrEqual(44);
+  await expect(result.getByRole('link', {name:'전체 녹음 보기'})).toBeVisible();
+  await expect(result.getByRole('button', {name:'다른 자료 가져오기'})).toBeVisible();
+});
+
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Vocal lab stays a standalone screen and uses selected recordings for reports', async ({page}) => {
@@ -2008,7 +2039,9 @@ test('Settings puts the account first, keeps manual cloud tools folded, and grou
   expect(headings.map(h => h.trim())).toEqual(['연습', '분석', '파일·저장', '공유·점검']);
   // v5 settings groups: each row sits in the one group it belongs to (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md).
   const rows = async g => (await page.locator('[data-settings-group="' + g + '"] .item-title').allTextContents()).map(s => s.trim());
-  expect(await rows('practice')).toEqual(['하루 연습 목표 시간', '트레이닝 항목', '노래 연습실']);
+  // 노래 연습실 opens from 오늘 › 연습하기 only (one door for the things you do), not from 설정 too.
+  expect(await rows('practice')).toEqual(['하루 연습 목표 시간', '트레이닝 항목']);
+  await expect(page.locator('.vz-settings a[href="#/practice-room"]')).toHaveCount(0);
   expect((await rows('files')).filter(s => !s.startsWith('굿노트'))).toEqual(['처리 내역', '저장 공간', '녹음 찾기 (이 기기)', '내 데이터 내보내기', '기록 백업·복원']);
   expect(await rows('more')).toEqual(['공유 중인 링크', '녹음 중 블루투스 시험']);
   await expect(page.locator('.vz-settings-account [data-cloud]')).toBeVisible();

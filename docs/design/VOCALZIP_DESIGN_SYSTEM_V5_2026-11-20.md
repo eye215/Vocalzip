@@ -49,12 +49,33 @@ Below the account card and 나의 노래 기록, 설정 has four groups. Each ro
 
 | Group (`data-settings-group`) | Heading | Rows, in order |
 |---|---|---|
-| `practice` | 연습 | 하루 연습 목표 시간 · 트레이닝 항목 · 노래 연습실 |
+| `practice` | 연습 | 하루 연습 목표 시간 · 트레이닝 항목 (노래 연습실 moved out 2026-11-20, see Flows) |
 | `analysis` | 분석 | automatic analysis switches (unchanged) |
 | `files` | 파일·저장 | 처리 내역 (file status line) · 저장 공간 · 녹음 찾기 (이 기기) · 내 데이터 내보내기 · 굿노트에서 가져온 악보 지우기 (only when there are some) · 기록 백업·복원 (folded) |
 | `more` | 공유·점검 | 공유 중인 링크 · 녹음 중 블루투스 시험 |
 
 Before, 연습 목표 held one row and 관리 held ten mixed rows. On screens 768px and wider the four groups sit two by two; only the version line spans both columns (`app/wide-lists.css`). A new 설정 row goes into the group it belongs to; do not add a fifth group without updating this table.
+## Flows (one door per job)
+
+Checked 2026-11-20 against the code. Each job has one place where it starts; other screens link to that place.
+
+| Job | The one door | State |
+|---|---|---|
+| Do practice (오늘의 연습 · 매일 보이스 체크 · 노래 연습실 · 보컬 트레이닝) | 오늘 › 연습하기 (`design-system/student-home-app.js`) | Already one door since 성장 개편 안 B 4단계. 2026-11-20: the extra 노래 연습실 row in 설정 removed; the screen and its records are unchanged and still open from 오늘, the recording menu and 성장 links. |
+| Look at growth | 성장 with three tabs 이번 달 · 곡 · 연구소 (`app/growth-hub.js`) | Already built in 성장 개편 안 B 2–4단계; old addresses lead to the new tabs. No change. |
+| Bring in old files | 전체 녹음 › + → 기존 자료 가져오기 (`app/import-hub.js`) | Already one door: 처리 내역's "다시 고르기" and the file count rule (more than 20 files) both hand over to the same screen. No change. |
+| After an upload | The result card of 기존 자료 가져오기 | 2026-11-20: the card lists **다음 단계** in order (below). |
+
+**다음 단계 after an upload** (inside the white result card, rows ≥56px with `#F2EFF7` dividers, 20px accent icon, title 15/21/600, line 12/18 muted, trailing caret; no nested card):
+
+1. 다시 올리기: only when some files failed and their originals are still picked; it retries just those (same as 처리 내역's retry).
+2. 곡 정하기 → 곡 확인 (`#/song-suggest`): only when saved song/training recordings have no song yet. That screen asks before any paid recognition.
+3. 연습 시간 적기 → 연습 기록 (`#/practices`): only when practice records were made from the files. Their time is never taken from the recording length; the person writes it.
+4. 처리 내역 (`#/processing-log`): always last, "분석은 자동으로 이어져요".
+
+Below the rows: primary 전체 녹음 보기, secondary 다른 자료 가져오기, and a quiet 44px 결과 보고서 파일로 저장 (it was a third button in the main row). The summary line (저장 · 제외 · 중복 · 실패 counts) and 레슨 녹음 연결 line are unchanged.
+
+**After a new recording** (`#/record`, dark recorder): checked, no change. The steps are already short: 녹음 → 미리 듣기 → 저장, then 새 녹음 · 연습 기록 (or 레슨으로 / 오늘로) · 곡 보기.
 ## Component rules added in v5
 
 - **One definition per component.** Cards, chips, tab bars, list rows and buttons are defined once in `design-system/components.css`. Screen CSS may position them but may not restyle colour, radius or type.
@@ -84,3 +105,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-20: shared empty box: dashed border removed, icon 20px `#98A2B3`. Text and buttons unchanged.
 - 2026-11-20: shared button 48px/R14/650 → 52px/R16/600; 다음 연습 row button 38px → 44px.
 - 2026-11-20: labelled fields outside sheets now match sheet fields (no border, #F2EFF7, R15, 52px).
+- 2026-11-20: Flows section; 설정 no longer repeats 노래 연습실; upload result card lists 다음 단계.

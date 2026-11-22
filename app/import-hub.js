@@ -429,15 +429,25 @@ function draw() {
   wireDash(h);
 }
 /* ---------- upload progress / result ---------- */
+/* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): after an upload the card says what comes next, in order —
+ * files still to pick again first, then songs still to choose, practice time still to write, then where the automatic
+ * analysis can be followed. Every step only links or retries; nothing is decided or sent for the person here. */
+const nextStep = (tag, attrs, icon, title, sub) => '<' + tag + ' class="item" ' + attrs + '><i class="ph ph-' + icon + '" aria-hidden="true"></i><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc(sub) + '</span></span><i class="ph ph-caret-right chev" aria-hidden="true"></i></' + tag + '>';
 function resultHtml() {
   const q = hub.rows.filter(r => r.queued), c = counts(q);
+  const retry = q.filter(r => r.state === 'failed' && r.file).length;
+  const noSong = q.filter(r => r.state === 'done' && r.occasion !== 'lesson' && !r.lessonId && !(r.saved?.songId || r.song)).length;
+  const steps = (retry ? nextStep('button', 'type="button" data-retry-failed', 'arrow-clockwise', '다시 올리기', '올리지 못한 파일 ' + retry + '개 · 고른 원본으로 한 번 더 올려요') : '') +
+    (noSong ? nextStep('a', 'href="#/song-suggest" data-next="song"', 'music-notes', '곡 정하기', '곡이 정해지지 않은 녹음 ' + noSong + '개 · 들어 보고 곡을 골라요') : '') +
+    (hub.made ? nextStep('a', 'href="#/practices" data-next="time"', 'timer', '연습 시간 적기', '연습 기록 ' + hub.made + '개 생성 · 시간은 직접 적어요') : '') +
+    nextStep('a', 'href="#/processing-log" data-next="status"', 'files', '처리 내역', '분석은 자동으로 이어져요 · 진행 상태 보기');
   return '<div class="card stack" data-result><strong>가져오기 완료</strong>' +
     '<p class="small muted" style="margin:0">저장 ' + c.done + '개' + (c.skipped ? ' · 길이 미달/미확인 제외 ' + c.skipped + '개' : '') + (c.dup ? ' · 중복 제외 ' + c.dup + '개' : '') + (c.failed ? ' · 실패 ' + c.failed + '개' : '') + '</p>' +
-    '<div class="btn-row"><a class="btn" href="#/library">전체 녹음 보기</a><a class="btn secondary" href="#/processing-log">처리 내역</a><button type="button" class="btn secondary" data-report>결과 보고서 저장</button></div>' +
-    (hub.made ? '<p class="small muted" style="margin:0">연습 기록 ' + hub.made + '개 생성</p>' : '') +
     (hub.linked ? '<p class="small muted" style="margin:0">레슨 녹음 ' + hub.linked + '개 연결</p>' : '') +
     (hub.later?.length ? '<button type="button" class="btn block" data-later>추가로 고른 파일 ' + hub.later.length + '개 확인하기</button>' : '') +
-    '<button type="button" class="btn ghost block" data-more>다른 자료 가져오기</button></div>';
+    '<h3 class="up-next-title">다음 단계</h3><div class="list icons up-next" data-next-steps>' + steps + '</div>' +
+    '<div class="btn-row"><a class="btn" href="#/library">전체 녹음 보기</a><button type="button" class="btn secondary" data-more>다른 자료 가져오기</button></div>' +
+    '<button type="button" class="btn ghost block up-report" data-report>결과 보고서 파일로 저장</button></div>';
 }
 function dashHtml() {
   const q = hub.rows.filter(r => r.queued), c = counts(q), failed = c.failed, cur = hub.current;
@@ -476,6 +486,7 @@ function wireDash(h) {
   h.querySelector('[data-retry]')?.addEventListener('click', () => runImport(hub.rows.filter(r => r.queued && r.state === 'failed')));
   h.querySelector('[data-report]')?.addEventListener('click', report);
   h.querySelector('[data-more]')?.addEventListener('click', () => { hub = fresh(); draw(); });
+  h.querySelector('[data-retry-failed]')?.addEventListener('click', () => runImport(hub.rows.filter(r => r.queued && r.state === 'failed' && r.file)));
   h.querySelector('[data-later]')?.addEventListener('click', () => startFiles(hub.later, true));
 }
 function drawProgress() { const p = host()?.querySelector('[data-progress]'); if (p) p.textContent = hub.progress; else draw(); }
