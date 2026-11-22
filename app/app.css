@@ -362,7 +362,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 #vz-upload-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + var(--safe-b) + 10px);z-index:40;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;text-decoration:none;box-shadow:var(--shadow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 공연 · 레슨 · 연습 */
 .timeline .t.performance:before{background:var(--vz-category-stage,#DE3E0A)}
-.hub-song{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+.hub-song{grid-template-columns:auto minmax(0,1fr)} /* the 녹음 유형 select keeps its whole label; the song takes the rest */
+/* 가져오기 has its own sticky action button: the floating mic would sit on top of it. */
+body[data-vz-route="import-hub"] .vz-collection-record{display:none!important}
 .hub-song .chip{grid-column:1/-1}
 .dots .s{background:var(--vz-category-stage,#DE3E0A)}
 .legend{flex-wrap:wrap}

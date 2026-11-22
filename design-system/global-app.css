@@ -30,6 +30,8 @@ body:not(.vz-home-mode) .empty > i.ph:first-child { font-size:var(--vz-icon-size
   border:0; border-radius:var(--vz-input-radius); background-color:var(--vz-input-bg); color:var(--vz-color-primary); box-shadow:none;
 }
 :where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input, select):where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])) { min-height:var(--vz-input-min-height); }
+/* The custom picker button (곡 고르기) inside a labelled field looks like the select next to it. */
+:where(body:not(.vz-home-mode):not(.vz-record-mode)) .field .pick-btn { border:0; border-radius:var(--vz-input-radius); background-color:var(--vz-input-bg); min-height:var(--vz-input-min-height); }
 :where(body:not(.vz-home-mode):not(.vz-record-mode)) .field :is(input, select, textarea):where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])):focus { outline:var(--vz-focus-width) solid var(--vz-color-input-focus); outline-offset:var(--vz-focus-input-offset); box-shadow:none; }
 body:not(.vz-home-mode) .card { padding:var(--vz-card-padding); }
 body:not(.vz-home-mode) .card.flat { box-shadow:none; }
