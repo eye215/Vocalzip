@@ -2000,7 +2000,7 @@ test('Settings shell: v5 shared buttons are 52px R16 weight 600 and small button
 });
 
 // Named with 'Settings' so ui-checks.yml runs it. A labelled field outside a sheet matches the sheet field (V4 Input/Textarea).
-test('Settings shell: v5 form fields are borderless #F2EFF7 R15 52px with a 2px #DCC4FF focus outline', async ({page}) => {
+test('Settings shell: v5 form fields are borderless #F2EFF7 R15 52px with a 2px #DCC4FF focus outline, screen rules still win', async ({page}) => {
   await boot(page);
   await page.goto('/#/settings');
   await expect(page.locator('.vz-settings')).toBeVisible();
@@ -2010,16 +2010,22 @@ test('Settings shell: v5 form fields are borderless #F2EFF7 R15 52px with a 2px 
     document.getElementById('view').append(wrap);
     const read = el => { const c = getComputedStyle(el); return {border:c.borderTopStyle, bg:c.backgroundColor, r:c.borderTopLeftRadius, h:Math.round(el.getBoundingClientRect().height)}; };
     const input = wrap.querySelector('[data-t]'), area = wrap.querySelector('[data-a]'), box = wrap.querySelector('[data-c]');
-    const out = {input:read(input), area:read(area), checkboxBg:getComputedStyle(box).backgroundColor === 'rgb(242, 239, 247)'};
+    // A screen's own field rule (same weight, loaded later) still wins over the shared look: here a 44px minutes box.
+    const style = document.createElement('style'); style.textContent = '.vz-own-field input{min-height:44px;height:44px}'; document.head.append(style);
+    const own = document.createElement('label'); own.className = 'field vz-own-field'; own.innerHTML = '<input type="number">'; wrap.append(own);
+    const out = {input:read(input), area:read(area), checkboxBg:getComputedStyle(box).backgroundColor === 'rgb(242, 239, 247)', own:Math.round(own.querySelector('input').getBoundingClientRect().height)};
+    style.remove();
     input.focus();
     const f = getComputedStyle(input);
     out.focus = {style:f.outlineStyle, width:f.outlineWidth, color:f.outlineColor};
     wrap.remove();
     return out;
   });
+  expect(s.own, JSON.stringify(s)).toBe(44);
+  delete s.own;
   expect(s, JSON.stringify(s)).toEqual({
     input:{border:'none', bg:'rgb(242, 239, 247)', r:'15px', h:52},
-    area:{border:'none', bg:'rgb(242, 239, 247)', r:'15px', h:120},
+    area:{border:'none', bg:'rgb(242, 239, 247)', r:'15px', h:s.area.h}, // a textarea keeps the height its screen gives it
     checkboxBg:false,
     focus:{style:'solid', width:'2px', color:'rgb(220, 196, 255)'},
   });
