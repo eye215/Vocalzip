@@ -763,11 +763,17 @@ VZ.openScoreInk=(songId,scoreId)=>{
   if(file){event.preventDefault();if(pasteReady())pastePicture(file);else pasteSay(NOT_NOW);return;}
   if(items.some(i=>i.kind==='string'))pasteSay(TEXT_ONLY);
  }
- const loadPicture=blob=>new Promise((resolve,reject)=>{const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);resolve(img);};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('그림을 읽지 못했어요.'));};img.src=url;});
+ /** The picture decoded: createImageBitmap reads the bytes straight (no address to load, so it also works where a
+  *  blob: load is held back, e.g. offline); an <img> on a blob: address where the browser has no createImageBitmap. */
+ async function loadPicture(blob){
+  if(window.createImageBitmap){try{const b=await createImageBitmap(blob);return {img:b,W:b.width,H:b.height,done:()=>b.close?.()};}catch{}}
+  return new Promise((resolve,reject)=>{const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{URL.revokeObjectURL(url);resolve({img,W:img.naturalWidth,H:img.naturalHeight,done:()=>{}});};img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('그림을 읽지 못했어요.'));};img.src=url;});
+ }
  /** The picture as a PNG at most Ink.PICTURE_SIDE px on its long side and Ink.PICTURE_BYTES long (made smaller step
   *  by step until it fits): {blob, width, height} — the PNG's own pixels. */
  async function pictureData(blob){
-  const img=await loadPicture(blob),W=img.naturalWidth,H=img.naturalHeight;
+  const {img,W,H,done}=await loadPicture(blob);
+  try{
   if(!(W>0&&H>0))throw Error('그림 크기를 확인하지 못했어요.');
   for(let side=Math.min(Ink.PICTURE_SIDE,Math.max(W,H));side>=48;side=Math.floor(side*.8)){
    const k=side/Math.max(W,H),c=document.createElement('canvas');c.width=Math.max(1,Math.round(W*k));c.height=Math.max(1,Math.round(H*k));
@@ -776,6 +782,7 @@ VZ.openScoreInk=(songId,scoreId)=>{
    if(png?.size&&png.size<=Ink.PICTURE_BYTES)return {blob:new Blob([png],{type:'image/png'}),width:size[0],height:size[1]};
   }
   throw Error('그림이 너무 커서 붙여넣지 못했어요. 조금 작게 골라 복사해 주세요.');
+  }finally{done();}
  }
  /** Uploads the pictures pasted on this device that are not in R2 yet (oldest first). Quietly waits for the next open
   *  or for the connection when it cannot; a picture whose copy is gone from this device stays listed. */

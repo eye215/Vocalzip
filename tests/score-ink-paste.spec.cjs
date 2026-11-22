@@ -95,7 +95,9 @@ test('그림 붙여넣기 keeps the picture on this device at once (offline too)
  const mid=[((Math.max(box.x,view.x)+Math.min(box.x+box.width,view.x+view.width))/2-box.x)/box.width,((Math.max(box.y,view.y)+Math.min(box.y+box.height,view.y+view.height))/2-box.y)/box.height];
  await context.setOffline(true);
  await pasteFromMore(dialog);
- await expect.poll(async()=>(await pictures(page)).length).toBe(1);
+ // Decoding and shrinking the picture is slow on a busy WebKit runner: wait for it, not a fixed 5 s.
+ // On a miss the poll shows what the sheet said instead of a bare 0.
+ await expect.poll(async()=>(await pictures(page)).length||[await dialog.locator('[data-ink-save-state]').textContent(),await page.locator('.toast').allTextContents()].join(' | '),{timeout:20000}).toBe(1);
  expect((await records(page)).length).toBe(before+1);
  const [pic]=await pictures(page);
  expect(pic).toMatchObject({tool:'note',mode:'pen',color:'#ffffff',page:1,songId:'s1',scoreId:'score-ink',imageW:400,imageH:200});
@@ -161,7 +163,7 @@ test('⌘V pastes a picture; a clipboard with only text says so; text fields pas
  await setup(page);const dialog=await open(page);
  await fakePng(page,120,300);
  await page.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File([window.__fakePng],'goodnotes.png',{type:'image/png'}));document.querySelector('[data-ink-svg]').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));});
- await expect.poll(async()=>(await pictures(page)).length).toBe(1);
+ await expect.poll(async()=>(await pictures(page)).length,{timeout:20000}).toBe(1);
  const [pic]=await pictures(page);expect(pic.rect[3]*4/3/pic.rect[2]).toBeCloseTo(2.5,1);expect(pic).toMatchObject({imageW:120,imageH:300});
  // Only text on the clipboard: nothing is added and the owner is told what to do.
  await stubClipboard(page,'text');await pasteFromMore(dialog);
