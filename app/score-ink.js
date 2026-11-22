@@ -59,13 +59,44 @@ const pdfCache={
   for(const key of await cache.keys())if(key.url.includes(part))await cache.delete(key);
  }
 };
-/* 그림 붙여넣기: the PNG is kept on this device (Cache Storage, beside the PDF copies, by its R2 key) as soon as it is
- * pasted, so it shows at once and offline; the device that pasted it uploads it to R2 when it can. Other devices fetch
- * it once through a signed address and keep a copy. Nothing here is ever removed from R2 or from this device. */
+/* 그림 붙여넣기: the PNG is kept on this device as soon as it is pasted, so it shows at once and offline; the device
+ * that pasted it uploads it to R2 when it can. Other devices fetch it once through a signed address and keep a copy.
+ * Nothing here is ever removed from R2 or from this device.
+ * Kept in IndexedDB (vzip_score_pictures_v1, by its R2 key) — in the WebKit test build a Cache Storage copy was gone
+ * after a reload (2026-11-22), so Cache Storage is now only a second copy and where pictures kept before are read from
+ * (moved into IndexedDB when found there). */
 const PICTURE_CACHE='vzip-score-picture-v1',pictureAddress=key=>'https://vzip-score.invalid/picture/'+encodeURIComponent(key);
+const PICTURE_DB='vzip_score_pictures_v1',PICTURE_STORE='pictures';
+let pictureDbOpen=null;
+const pictureDb=()=>pictureDbOpen||=new Promise((resolve,reject)=>{
+ if(!window.indexedDB){reject(Error('no IndexedDB'));return;}
+ const req=indexedDB.open(PICTURE_DB,1);
+ req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(PICTURE_STORE))req.result.createObjectStore(PICTURE_STORE);};
+ req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||Error('IndexedDB'));req.onblocked=()=>reject(Error('IndexedDB blocked'));
+}).catch(error=>{pictureDbOpen=null;throw error;});
+const idb=(mode,fn)=>pictureDb().then(db=>new Promise((resolve,reject)=>{
+ const tx=db.transaction(PICTURE_STORE,mode),store=tx.objectStore(PICTURE_STORE),req=fn(store);let out;
+ req.onsuccess=()=>{out=req.result;};tx.oncomplete=()=>resolve(out);tx.onerror=tx.onabort=()=>reject(tx.error||Error('IndexedDB'));
+}));
 const pictureCache={
- async get(key){if(!window.caches)return null;const r=await (await caches.open(PICTURE_CACHE)).match(pictureAddress(key));return r?r.blob():null;},
- async put(key,blob){if(!window.caches)throw Error('이 브라우저는 그림을 기기에 보관할 수 없어요.');await (await caches.open(PICTURE_CACHE)).put(pictureAddress(key),new Response(blob,{headers:{'content-type':'image/png'}}));}
+ async get(key){
+  const kept=await idb('readonly',s=>s.get(key)).catch(()=>null);
+  if(kept instanceof Blob)return kept;
+  if(kept?.bytes)return new Blob([kept.bytes],{type:'image/png'});
+  if(!window.caches)return null;
+  const r=await (await caches.open(PICTURE_CACHE)).match(pictureAddress(key)).catch(()=>null);if(!r)return null;
+  const blob=new Blob([await r.blob()],{type:'image/png'});
+  blob.arrayBuffer().then(bytes=>idb('readwrite',s=>s.put({type:'image/png',bytes},key))).catch(()=>{}); // a picture kept before: into IndexedDB too
+  return blob;
+ },
+ async put(key,blob){
+  const png=new Blob([blob],{type:'image/png'});
+  // The bytes, not the Blob: WebKit in a private window (and its test build) does not keep Blobs in IndexedDB.
+  const bytes=await png.arrayBuffer();
+  const [a,b]=await Promise.allSettled([idb('readwrite',s=>s.put({type:'image/png',bytes},key)),
+   window.caches?caches.open(PICTURE_CACHE).then(c=>c.put(pictureAddress(key),new Response(png,{headers:{'content-type':'image/png'}}))):Promise.reject(Error('no Cache Storage'))]);
+  if(a.status!=='fulfilled'&&b.status!=='fulfilled')throw Error('이 브라우저는 그림을 기기에 보관할 수 없어요.');
+ }
 };
 /** Strokes attached to the PDF (vocalzip-ink.json), bound to this account and this exact PDF. Anything malformed is
  * left out as a whole file rather than shown half; the PDF itself still opens. */

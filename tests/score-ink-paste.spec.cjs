@@ -142,12 +142,9 @@ test('그림 붙여넣기 keeps the picture on this device at once (offline too)
  // Kept on this device (reload, no download), and another device loads it from R2 through a signed address.
  const reads=()=>r2.calls.filter(c=>c==='GET /v1/media/'+pic.imageKey).length;
  await page.reload();dialog=await open(page);await expect(dialog.locator('[data-ink-picture] image')).toHaveAttribute('href',/^blob:/);
- // Chromium finds the device copy after a reload. The WebKit test build read R2 once instead (CI, 2026-11-22): whether the
- // copy is still in Cache Storage there is noted for the log, and the reload-offline case is checked on a real iPhone.
- if(webkit){const kept=await page.evaluate(k=>caches.open('vzip-score-picture-v1').then(c=>c.match('https://vzip-score.invalid/picture/'+encodeURIComponent(k))).then(r=>!!r),pic.imageKey);
-  info.annotations.push({type:'webkit-picture-cache',description:'after reload: kept='+kept+', R2 reads='+reads()});console.log('webkit picture cache after reload: kept='+kept+' reads='+reads());
-  expect(reads()).toBeLessThanOrEqual(1);}
- else expect(reads()).toBe(0);
+ // Found on this device after a reload (IndexedDB), in WebKit too: no download.
+ expect(reads()).toBe(0);
+ expect(await page.evaluate(k=>new Promise(r=>{const q=indexedDB.open('vzip_score_pictures_v1');q.onsuccess=()=>{const g=q.result.transaction('pictures').objectStore('pictures').get(k);g.onsuccess=()=>r(!!g.result&&(g.result.bytes?.byteLength||g.result.size||0)>100);};}),pic.imageKey)).toBe(true);
  const {other,r2:far}=await otherDevice(browser,page,info);
  far.store.set(pic.imageKey,stored);await sync(other,await page.evaluate(()=>window.VZ.db));
  const there=await open(other);await expect(there.locator('[data-ink-picture] image')).toHaveAttribute('href',/^blob:/);
