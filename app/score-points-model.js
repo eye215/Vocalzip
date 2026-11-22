@@ -12,7 +12,9 @@
  *         measures: the measure numbers printed on the score (1-based, both included), so a point reads the same
  *         without the score's conversion. tag: one of TAGS (the listening tags). retired: when 이제 됐어요 was chosen —
  *         the point keeps its history and is left out of runs. stay: when 계속 볼래요 was chosen after 그만 볼까요?
- *         (runs before it no longer count towards the next suggestion).
+ *         (runs before it no longer count towards the next suggestion). fromMark: the id of the 악보 표기 (a stroke row
+ *         of the same list, app/score-ink-model.js) the point was made from. The point never goes with the mark:
+ *         once that stroke is gone (erased) the point stays and its list row says so (markGone).
  *   체크  {id:'point-run:<uid>', kind:'score-point-run', songId, scoreId?, date, at, results:{[point id]:'kept'|'missed'},
  *          mode?:'timed'|'list', recordingId?}
  *         One 부르면서 체크 run. A point left unmarked is not in results. recordingId: the take recorded in the same
@@ -64,6 +66,7 @@ function point(raw, {now = Date.now(), uid = ''} = {}) {
   if (raw.tag) { if (!TAGS.some(t => t[0] === raw.tag)) throw Error('분류를 확인해 주세요.'); out.tag = raw.tag; }
   if (raw.retired) out.retired = time(raw.retired) || now;
   if (raw.stay) out.stay = time(raw.stay) || now;
+  if (raw.fromMark) { if (!validId(raw.fromMark)) throw Error('표기를 확인해 주세요.'); out.fromMark = raw.fromMark; }
   return out;
 }
 /** A stored point with `patch` applied: checked like a new one, with the fields this version does not know kept.
@@ -136,6 +139,24 @@ function latestLesson(lessons, songId, today) {
   return mine.find(l => !today || String(l.date || '') <= today) || mine[0] || null;
 }
 
+// ---------- 악보 표기 → 지적 ----------
+const clean = t => String(t ?? '').trim().replace(/\s+/g, ' ');
+/** The same point is there already: one of `list` (the song's points) has the same words (spaces and case aside) and
+ * the same measures. A point is never made twice from this rule — by a mark, the bulk import or 지적으로. */
+const duplicate = (list, text, m) => !!m && !!clean(text) && (list || []).some(p => p?.measures?.from === m.from && p.measures.to === m.to && clean(p.text).toLowerCase() === clean(text).toLowerCase());
+/** What a point made from one 악보 표기 says: item is its row of the 표시한 마디 list (app/score-measures.js marks():
+ * {label, from, to} — label is the preset's name, with a text symbol's letters). → {text, measures}; measures null
+ * when the mark lies on no measure (no conversion). */
+function fromMarkItem(item) {
+  const text = [...(clean(item?.label) || '표기')].slice(0, TEXT_MAX).join('');
+  const a = parseInt(item?.from, 10), z = parseInt(item?.to ?? item?.from, 10);
+  return {text, measures:whole(a) && whole(z) ? {from:Math.min(a, z), to:Math.max(a, z)} : null};
+}
+/** Names of several marks for one point: each name once, in order, joined with ", ". */
+const markNames = names => [...new Set((names || []).map(clean).filter(Boolean))].join(', ');
+/** A point made from a mark whose stroke is no longer on the score (rows: the list, scoreAnnotations). */
+const markGone = (rows, p) => !!p?.fromMark && !(rows || []).some(r => r && r.id === p.fromMark && r.version === 1 && Array.isArray(r.points));
+
 // ---------- timing with an MR matched to the score ----------
 const printed = v => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) ? n : NaN; };
 /** The first measure box (its place in play order, `ord`) at or after `after` that carries printed number n — a
@@ -178,5 +199,5 @@ function cue(line, t, answered = {}) {
 }
 return {LIST, KIND, RUN, PREFIX, RUN_PREFIX, TEXT_MAX, MEASURE_MAX, RECENT, STREAK, LEAD, ASK, TAGS, RESULTS,
   isPoint, isRun, measures, point, edit, run, points, active, runs, history, record, recordText, streak, suggestRetire,
-  summary, summaryText, label, tagName, latestLesson, ordOf, timeline, cue};
+  summary, summaryText, label, tagName, latestLesson, duplicate, fromMarkItem, markNames, markGone, ordOf, timeline, cue};
 });
