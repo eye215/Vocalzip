@@ -100,6 +100,7 @@ Read from the code, tab by tab. "Built" says what changed on 2026-11-22; everyth
 - Kept on purpose: the lesson page shows `피드백 작성` in the section heading and again inside the empty box. That is the shared pattern (heading action + one action in the empty box, see Empty states); once feedback exists only the heading's `수정` remains.
 ## Component rules added in v5
 
+- **Fallback for new VZ helpers** (owner rule, 2026-11-22): every screen that calls a new shared helper (`VZ.loadingRows`, `VZ.errorBox`, `VZ.practiceHidden` …) also shows something sensible when the helper is missing: a plain `불러오는 중…` line, the plain empty box with the same sentence and `다시 시도`, or the unfiltered list. Call it as `VZ.helper?.()` with a fallback.
 - **One definition per component.** Cards, chips, tab bars, list rows and buttons are defined once in `design-system/components.css`. Screen CSS may position them but may not restyle colour, radius or type.
 - **Empty text** (built 2026-11-22, `VZ.empty`): the first sentence is the line that says what is missing (14/20/600 ink); any further sentences become a quiet helper line (12/18 muted). The words are not changed. 
 - **Empty states** (built 2026-11-20 for the shared `.empty` box in `design-system/global-app.css`; before, it had a 1px dashed border and a 32px `#9557FF` icon) use a white R20 card with no border, a 20px Phosphor icon in `#98A2B3`, one 14/20/600 line saying what is missing, and one secondary button when an action exists.
@@ -136,3 +137,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-22: 다음 연습 추천 screen title.
 - 2026-11-22: calendar day + is named 기록 추가.
 - 2026-11-22: 연습 기록 grouped by day; source label instead of memo tags; empty step rows left out of lists.
+- 2026-11-22: fallback rule for new VZ helpers; loading rows and the share-link error box get fallbacks.

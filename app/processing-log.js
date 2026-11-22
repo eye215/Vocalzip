@@ -29,7 +29,7 @@ const jobLine=(job,review)=>{
 };
 let stop=null;
 VZ.route('processing-log',{title:'처리 내역',back:true,tab:'keep',noAutoRefresh:true,
- render(){return '<div data-processing-log>'+VZ.loadingRows()+'</div>';},
+ render(){return '<div data-processing-log>'+(window.VZ?.loadingRows?.() || '<p class="muted" role="status">불러오는 중…</p>')+'</div>';},
  mount(main){stop?.();let live=true,retrying=false,feedback='';const host=main.querySelector('[data-processing-log]');
   /* The server is asked once when the screen opens and when 새로고침 is pressed (a full recording list each time).
    * After that a journal line (every upload step writes one) only redraws from what is already here, and a media or
