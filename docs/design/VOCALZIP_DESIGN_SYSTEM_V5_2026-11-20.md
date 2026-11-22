@@ -87,6 +87,7 @@ Read from the code, tab by tab. "Built" says what changed on 2026-11-22; everyth
 - Built: 따라 하기's finish screen has `오늘로` next to `연습 기록 보기`, as 오늘의 연습's finish screen already had.
 - Built: the `#/practice-review` screen title is `다음 연습 추천`, its name in the 2026-11-09 guide (보컬 트레이닝 list); it read `다음 연습`, the same as 성장's own 다음 연습 list. Kept on purpose: 보컬 트레이닝 is the group of practice doors and `연습 따라 하기` is the screen inside it (approved in the 2026-11-09 guide), and `따라 하기` is the button verb.
 
+- Built: 연습 기록 (`#/practices`) is grouped by day (newest first, `cal-group` heading with the day's real total on the right) and uses the shared practice row (`VZ.practiceRow`). A row says where it was recorded (`오늘의 연습 · 보이스 체크 · 따라 하기 · 노래 연습실 · 목표 · 추천 연습`) instead of the raw memo tag `[오늘의 연습] …`; the person's own memo is shown, and a memo that only repeats the step name is not. The detail sheet shows `○○에서 기록` and `시간 미입력` where the time was never written. A 오늘의 연습 step whose time moved into its goal's record (0 minutes, no recording) is left out of the list and the calendar day; the stored row and every total are unchanged.
 **내 곡**
 - 곡별 (`#/songs`), 곡 상세 (`#/song/<id>`), 전체 녹음 (`#/library`), 녹음 재생 (`#/recording/<id>`), 가져오기 (`#/import-hub`), 곡 확인 (`#/song-suggest`), 처리 내역 (`#/processing-log`), 나의 공연 (`#/performances`, `#/show/<id>`).
 - The old 보관함 word still appears only in scripts loaded by `legacy.html` (not the app); no change.
@@ -134,3 +135,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-22: feature map; voice check minutes from its own clock; 오늘로 after 따라 하기; 숙제 in 기록 추가.
 - 2026-11-22: 다음 연습 추천 screen title.
 - 2026-11-22: calendar day + is named 기록 추가.
+- 2026-11-22: 연습 기록 grouped by day; source label instead of memo tags; empty step rows left out of lists.
