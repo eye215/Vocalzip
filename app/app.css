@@ -720,3 +720,12 @@ body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a:focus-visible{
 .up-next button.item{width:100%;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .up-next .item>.ph:first-child{color:var(--vz-color-accent);font-size:20px}
 .btn.up-report{min-height:44px;font-size:14px}
+/* v5 import review: the many-file tools behind one fold, drawn as the V4 List filter row (#F3ECFF, R16, 48px, 13/18/600). */
+.hub-bulk{margin:0 0 12px;border-radius:16px;background:var(--vz-color-accent-soft)}
+.hub-bulk>summary{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 14px;list-style:none;cursor:pointer;color:var(--vz-color-ink-secondary);font-size:13px;line-height:18px;font-weight:600}
+.hub-bulk>summary::-webkit-details-marker{display:none}
+.hub-bulk>summary small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--vz-color-accent);font-size:13px;font-weight:600;text-align:right}
+.hub-bulk>summary .ph{flex:none;color:var(--vz-color-accent);transition:transform var(--vz-motion-fast)}
+.hub-bulk[open]>summary .ph{transform:rotate(180deg)}
+.hub-bulk>:not(summary){margin-left:14px;margin-right:14px}
+.hub-bulk>:last-child{padding-bottom:12px}

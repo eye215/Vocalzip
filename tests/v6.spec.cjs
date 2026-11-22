@@ -85,6 +85,37 @@ test('전체 녹음에서 고른 파일은 새 확인 화면을 거쳐 업로드
 });
 
 // Named 'Import hub takes …' so upload-latency-check.yml runs it whenever app/import-hub.js changes.
+test('Import hub takes the many-file tools behind one fold that says what they would do', async ({page}) => {
+  await boot(page, {media:false});
+  const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28);
+  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  await page.goto('/#/library');
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-imp]').click();
+  const b2 = Buffer.from(b); b2[200] = 7; // a different take, so it is not flagged as a duplicate
+  await (await chooser).setFiles([{name:'2026-11-01_10-00-00.wav', mimeType:'audio/wav', buffer:b}, {name:'2026-11-02_10-00-00.wav', mimeType:'audio/wav', buffer:b2}]);
+  await expect(page.locator('[data-hub] [data-import]')).toBeVisible({timeout:30000});
+  const fold = page.locator('[data-hub-bulk]');
+  // Closed at first: the everyday choices stay in sight, the bulk tools wait behind the fold.
+  await expect(fold).not.toHaveAttribute('open', '');
+  await expect(fold.locator('summary')).toContainText('한 번에 정하기');
+  await expect(page.locator('[data-hub] [data-all]')).toBeVisible();
+  await expect(page.locator('[data-hub] [data-none]')).toBeVisible();
+  await expect(page.locator('[data-hub] [data-approve-all]')).toBeHidden();
+  await expect(page.locator('[data-hub] [data-bulk-occ]')).toBeHidden();
+  const tap = await fold.locator('summary').evaluate(el => Math.round(el.getBoundingClientRect().height));
+  expect(tap).toBeGreaterThanOrEqual(44);
+  // Open, use a tool inside: the list redraws and the fold stays open.
+  await fold.locator('summary').click();
+  await expect(page.locator('[data-hub] [data-bulk-occ]')).toBeVisible();
+  await page.locator('[data-hub] [data-group]').click();
+  await expect(page.locator('[data-hub] [data-group]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-hub-bulk]')).toHaveAttribute('open', '');
+  await expect(page.locator('[data-hub] [data-import]')).toContainText('선택한 2개 가져오기');
+});
+
 test('Import hub takes you to the next steps after an upload: choose songs, then follow the analysis', async ({page}) => {
   await boot(page, {media:false});
   const sr = 8000, n = sr * 26, b = Buffer.alloc(44 + n * 2);

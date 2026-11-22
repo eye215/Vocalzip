@@ -75,6 +75,7 @@ Checked 2026-11-20 against the code. Each job has one place where it starts; oth
 
 Below the rows: primary 전체 녹음 보기, secondary 다른 자료 가져오기, and a quiet 44px 결과 보고서 파일로 저장 (it was a third button in the main row). The summary line (저장 · 제외 · 중복 · 실패 counts) and 레슨 녹음 연결 line are unchanged.
 
+**Import review (확인 화면 before 가져오기)** (built 2026-11-22): in sight stay the status filters (전체 · 조건 충족 · 중복 의심 …), 전체 선택 · 선택 해제, the file rows and the sticky `선택한 N개 가져오기`. The tools that act on many files at once (중복 제외 · 추천곡 일괄 승인 · 레슨 연결 일괄 승인 · 곡별 묶어 보기, both "한 번에 지정" selects and the 연습 기록 checkbox) sit behind one fold `한 번에 정하기`, drawn as the V4 List filter row (`#F3ECFF`, R16, 48px, 0 14px, 13/18/600 `#475467`). The closed fold says what its tools would act on in accent 13/600 (e.g. `추천곡 3개 · 같은 날 레슨 2개`; with nothing to suggest, `유형 · 곡 · 연습 기록`). It stays as the person left it when the list redraws. Before, all of these were two rows of 12 chips and two selects above the files. Defaults (연습 기록 on, per-file type and song) are unchanged.
 **After a new recording** (`#/record`, dark recorder): checked, no change. The steps are already short: 녹음 → 미리 듣기 → 저장, then 새 녹음 · 연습 기록 (or 레슨으로 / 오늘로) · 곡 보기.
 ## Component rules added in v5
 
@@ -106,3 +107,4 @@ Each step is its own pull request. A step is "done" only after the automated che
 - 2026-11-20: shared button 48px/R14/650 → 52px/R16/600; 다음 연습 row button 38px → 44px.
 - 2026-11-20: labelled fields outside sheets now match sheet fields (no border, #F2EFF7, R15, 52px).
 - 2026-11-20: Flows section; 설정 no longer repeats 노래 연습실; upload result card lists 다음 단계.
+- 2026-11-22: import review: bulk tools behind one 한 번에 정하기 fold.
