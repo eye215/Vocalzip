@@ -500,7 +500,11 @@ Object.assign(ENGINES,{
         if(phase==='count'){const before=left;left-=dt;if(before>beat&&left<=beat)r.cue(0);if(left<=0){phase='sing';clock=0;if(mic()){r.mic.pitch();t0=r.mic.ctx.currentTime;}}return paint(null);}
         if(phase==='review'){left-=dt;if(left<=0){if(goOn()){k++;startRound();}else finish();}return;}
         clock+=dt;let cents=null;
-        if(mic()){const p=r.mic.pitch(),t=p.t-t0,m=midiOf(p.hz);samples.push({t,midi:m});const i=at(t);if(i>=0&&m!=null)cents=Math.round(((m-plan[i].midi)*100%1200+1800)%1200-600);}
+        if(mic()){
+          const p=r.mic.pitch(),t=p.t-t0,m=midiOf(p.hz);samples.push({t,midi:m});const i=at(t);
+          // The needle forgives a voice a moment late: the nearer of this note and the one before.
+          if(i>=0&&m!=null){const off=j=>Math.round(((m-plan[j].midi)*100%1200+1800)%1200-600),a=off(i),b=i>0?off(i-1):a;cents=Math.abs(b)<Math.abs(a)&&t-plan[i].at<.35?b:a;}
+        }
         if(now()>=total()+.2)return endRound();
         paint(cents);
       },
@@ -541,7 +545,7 @@ Object.assign(ENGINES,{
     };
     const result=()=>{const m=mic()?M.sirenMeasure(out):null;return {mode:'siren',...(mic()?{}:{timer:true}),parts:out.length,...(m?{measures:[m]}:{})};};
     return {fast:true,say:()=>e.text,
-      stage:()=>'<div class="dset-siren"><div class="dset-glide" aria-hidden="true"><span class="dset-glide-top">'+esc(D.noteName(highNote))+'</span><i class="dset-glide-dot" data-run-glide></i><span class="dset-glide-low">'+esc(D.noteName(lowNote))+'</span></div>'+
+      stage:()=>'<div class="dset-siren"><span class="dset-glide-end dset-glide-top">'+esc(D.noteName(highNote))+'</span><div class="dset-glide" aria-hidden="true"><i class="dset-glide-dot" data-run-glide></i></div><span class="dset-glide-end dset-glide-low">'+esc(D.noteName(lowNote))+'</span>'+
         '<p class="dset-rule">끊기지 않게 천천히 · 목이 조이면 거기서 돌아와요</p></div>'+dots(tries,0,0),
       micWhy:'음 높이가 끊김 없이 이어지는지 재려고 소리를 들어요. 이 화면에서만 듣고, 녹음하거나 저장하지 않아요.',
       ready(){r.word('준비되면 시작해요','wait');r.sub(tries+'번 해요 · 한 번에 '+hold+'초까지'+(['denied','off'].includes(r.ctx.mic())?' · 마이크 없이 해요':''));},
