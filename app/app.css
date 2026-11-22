@@ -741,3 +741,8 @@ body:not(.vz-home-mode):not(.vz-record-mode)>.v-nav a:focus-visible{
 .vz-skel-sub{width:36%;height:10px}
 /* v5 (docs/design/VOCALZIP_DESIGN_SYSTEM_V5_2026-11-20.md): every tap target is at least 44px. */
 .score-actions .icon-btn{min-width:44px;min-height:44px;height:44px}
+
+/* 연습 기록 (#/practices): one heading per day with that day's real total on the right. */
+.cal-group.vz-practice-day{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:20px 4px 8px}
+.cal-group.vz-practice-day:first-child{margin-top:4px}
+.vz-practice-day-total{color:var(--vz-color-ink-muted);font-size:12px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}

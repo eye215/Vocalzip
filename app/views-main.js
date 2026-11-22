@@ -311,15 +311,32 @@ VZ.practiceSheet = ({date = VZ.today(), songId = '', mediaIds = [], practice = n
       };
     }});
 };
+/* Practice rows made by a practice screen start their memo with a tag ("[오늘의 연습] 롱톤"). The tag is a source, not the
+ * person's words: show it as "where it was recorded" and keep only the memo the person wrote. Display only; the stored
+ * memo is never changed. */
+const PRACTICE_SOURCES = ['오늘의 연습', '보이스 체크', '따라 하기', '노래 연습실', '목표', '추천 연습'];
+VZ.practiceTitle = p => p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || (p.practiceMode === 'song' ? '곡 연습' : [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '연습');
+VZ.practiceSource = p => {
+  const raw = String(p?.memo || ''), m = raw.match(/^\[([^\]]+)\]\s*/), tag = m && PRACTICE_SOURCES.includes(m[1]) ? m[1] : '';
+  let memo = tag ? raw.slice(m[0].length) : raw;
+  // A screen that wrote only "[tag] <step name>" repeats the title: nothing of the person's own is left.
+  const title = VZ.practiceTitle(p);
+  if (tag && memo && (title.includes(memo.trim()) || memo.trim() === String(p.detail || '').trim())) memo = '';
+  return {label:tag, memo};
+};
+/** A step of 오늘의 연습 whose time moved into its goal's record when the goal was ticked: it holds nothing of its own
+ * (0 minutes, no recording) and only repeats a row shown elsewhere. Lists leave it out; the stored row stays. */
+VZ.practiceHidden = p => !!p?.practiceSetId && !(VZ.practiceMinutes(p) > 0) && !(p.mediaIds || []).length;
 VZ.practiceRow = (p, opts) => {
   const day = !!opts?.day; // inside a day view: no date, recordings are listed underneath
-  const title = p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || (p.practiceMode === 'song' ? '곡 연습' : [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '연습');
-  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-timer"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([day ? '' : VZ.dateLabel(p.date), p.practiceTimeSource === 'unconfirmed' ? '시간 미입력' : VZ.minutes(VZ.practiceMinutes(p)), p.rating ? '★' + p.rating : '', !day && (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', p.memo ? p.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
+  const title = VZ.practiceTitle(p), src = VZ.practiceSource(p);
+  return '<button type="button" class="item" data-practice="' + esc(p.id) + '"><span class="avatar" style="background:var(--ok-soft);color:var(--ok)"><i class="ph ph-timer"></i></span><span class="item-main"><span class="item-title">' + esc(title) + '</span><span class="item-sub">' + esc([day ? '' : VZ.dateLabel(p.date), p.practiceTimeSource === 'unconfirmed' ? '시간 미입력' : VZ.minutes(VZ.practiceMinutes(p)), src.label, p.rating ? '★' + p.rating : '', !day && (p.mediaIds || []).length ? '녹음 ' + p.mediaIds.length : '', src.memo ? src.memo.slice(0, 40) : ''].filter(Boolean).join(' · ')) + '</span></span><i class="ph ph-caret-right chev"></i></button>';
 };
 VZ.practiceDetail = id => {
   const p = VZ.db.practices.find(x => x.id === id); if (!p) return;
   const tasks = (p.completed || []).map(id => { const t = VZ.db.assignments.find(a => a.id === id); return t && [t.title + ' ' + window.VzipPracticeTime.homeworkRepetitions(p, id) + '회', p.assignmentNotes?.[id] || ''].filter(Boolean).join(' — '); }).filter(Boolean);
-  VZ.sheet({title:VZ.dateLabel(p.date) + ' 연습', body:'<div class="stack"><div class="card flat"><div class="row between"><strong>' + esc(p.practiceMode === 'training' ? [p.categoryLabel, p.detail, p.detail2].filter(Boolean).join(' · ') || '보컬 트레이닝' : VZ.songTitle(p.songId) || '곡 연습') + '</strong><span class="badge">' + VZ.minutes(VZ.practiceMinutes(p)) + '</span></div>' + (p.rating ? '<p class="small muted">만족도 ' + '★'.repeat(p.rating) + '</p>' : '') + (p.memo ? '<p style="white-space:pre-wrap;margin:8px 0 0">' + esc(p.memo) + '</p>' : '') + (tasks.length ? '<div class="small" style="margin-top:8px"><strong>한 숙제</strong>' + tasks.map(x => '<div class="muted">· ' + esc(x) + '</div>').join('') + '</div>' : '') + '</div><div class="list" data-list></div></div>',
+  const src = VZ.practiceSource(p);
+  VZ.sheet({title:VZ.dateLabel(p.date) + ' 연습', body:'<div class="stack"><div class="card flat"><div class="row between"><strong>' + esc(VZ.practiceTitle(p)) + '</strong><span class="badge">' + (p.practiceTimeSource === 'unconfirmed' ? '시간 미입력' : VZ.minutes(VZ.practiceMinutes(p))) + '</span></div>' + (src.label ? '<p class="small muted" style="margin:4px 0 0" data-practice-source>' + esc(src.label) + '에서 기록</p>' : '') + (p.rating ? '<p class="small muted">만족도 ' + '★'.repeat(p.rating) + '</p>' : '') + (src.memo ? '<p style="white-space:pre-wrap;margin:8px 0 0">' + esc(src.memo) + '</p>' : '') + (tasks.length ? '<div class="small" style="margin-top:8px"><strong>한 숙제</strong>' + tasks.map(x => '<div class="muted">· ' + esc(x) + '</div>').join('') + '</div>' : '') + '</div><div class="list" data-list></div></div>',
     foot:'<div class="btn-row"><button type="button" class="btn danger" data-del>삭제</button><button type="button" class="btn secondary" data-edit>수정</button></div>',
     onMount:async (el, close) => {
       const wrap = el.parentNode;

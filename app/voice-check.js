@@ -264,6 +264,7 @@ function tick(s){
  if(!s.capture)return;
  if(!s.host.isConnected){abort(s,'');return;}
  const t=Math.min(P.seconds,s.capture.seconds()*speed()),p=P.parts.find(x=>t>=x.start&&t<x.end)||P.parts[P.parts.length-1],q=x=>s.host.querySelector(x);
+ s.ran=t; // the check's own guided clock: practice time is counted from this, never from the saved file's length
  const n=SING.indexOf(p),next=SING.find(x=>x.start>=p.start),setup=s.setupUsed,highish=p.kind==='high'||p.note==='high';
  q('[data-vc-clock]').textContent=String(Math.floor(t));
  q('[data-vc-progress]').style.width=(t/P.seconds*100).toFixed(1)+'%';
@@ -298,7 +299,7 @@ async function save(s){
  s.step='saving';paint(s);
  try{await M.saveBlob(item);res.releaseProtection?.();}
  catch(error){s.step='error';s.message=error.message||'저장하지 못했어요.';paint(s);return;}
- const practiceId=s.practiceId='voice-check:'+id,minutes=Number((Math.min(P.seconds,res.durationSeconds||P.seconds)/60).toFixed(3));
+ const practiceId=s.practiceId='voice-check:'+id,minutes=Number((Math.min(P.seconds,s.ran||P.seconds)/60).toFixed(3));
  V.change(db=>{
   if(db.practices.some(p=>p.id===practiceId))return;
   const category=V.guidedCategory?V.guidedCategory(db,{title:'보이스 체크',tipKey:'wob'}):{};

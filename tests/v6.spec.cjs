@@ -146,6 +146,41 @@ test('Import hub takes you to the next steps after an upload: choose songs, then
   await expect(result.getByRole('button', {name:'다른 자료 가져오기'})).toBeVisible();
 });
 
+// v5 flows: 기록 › 날짜 › + offers every record kind of that tab, homework too (it was only on 숙제 and the lesson page).
+test('Calendar add menu offers 숙제 next to 레슨 일정 and 연습 기록 and opens the homework sheet', async ({page}) => {
+  await boot(page);
+  await page.goto('/#/calendar');
+  // The day's + says what it opens: the 기록 추가 menu (it was labelled 일정 추가).
+  await expect(page.locator('.vz-calendar-day-head [data-add]')).toHaveAttribute('aria-label', '기록 추가');
+  await page.locator('.vz-calendar-day-head [data-add]').click();
+  const kinds = await page.locator('[data-calendar-add]').evaluateAll(b => b.map(x => x.dataset.calendarAdd));
+  expect(kinds, JSON.stringify(kinds)).toEqual(['stage', 'lesson', 'practice', 'homework']);
+  await page.locator('[data-calendar-add="homework"]').click();
+  await expect(sheet(page)).toBeVisible();
+  await expect(sheet(page)).toContainText('숙제');
+});
+
+// 연습 기록: by day, a source label instead of the memo tag, and the empty step rows of 오늘의 연습 left out (data unchanged).
+test('Practice records are grouped by day, say where they were recorded and leave out empty set steps', async ({page}) => {
+  const seed = legacy();
+  seed.practices.push(
+    {id:'ps-a', date:'2026-11-03', minutes:5, manualMinutes:5, practiceTimeSource:'practice-set', practiceMode:'training', songId:'', categoryLabel:'호흡', detail:'롱톤', technique:[{name:'롱톤', minutes:5}], memo:'[오늘의 연습] 롱톤', mediaIds:[], practiceSetId:'s1', practiceSetStep:'a', created:2},
+    {id:'ps-b', date:'2026-11-03', minutes:0, manualMinutes:0, practiceTimeSource:'practice-set', practiceMode:'training', songId:'', categoryLabel:'발성', detail:'립트릴', technique:[], memo:'[오늘의 연습] 립트릴', mediaIds:[], practiceSetId:'s1', practiceSetStep:'b', created:3});
+  await boot(page, {seed, media:false});
+  const before = await page.evaluate(() => JSON.stringify(VZ.db.practices));
+  await page.evaluate(() => { location.hash = '#/practices'; });
+  await expect(page.locator('#view [data-practice="ps-a"]')).toBeVisible();
+  await expect(page.locator('#view [data-practice="ps-b"]')).toHaveCount(0); // its time lives in the goal's record
+  const row = page.locator('#view [data-practice="ps-a"]');
+  await expect(row).toContainText('오늘의 연습');
+  await expect(row).not.toContainText('[오늘의 연습]');
+  await expect(page.locator('#view .vz-practice-day').first()).toBeVisible();
+  await row.click();
+  await expect(sheet(page).locator('[data-practice-source]')).toHaveText('오늘의 연습에서 기록');
+  await expect(sheet(page)).not.toContainText('[오늘의 연습]');
+  expect(await page.evaluate(() => JSON.stringify(VZ.db.practices))).toBe(before); // display only
+});
+
 test.afterEach(async ({page}) => { expect(page.__errors || []).toEqual([]); });
 
 test('Vocal lab stays a standalone screen and uses selected recordings for reports', async ({page}) => {
