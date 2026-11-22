@@ -14,13 +14,15 @@ const seed=()=>({...empty(),
     {id:'g3',date:TODAY,title:'후렴 연결',source:'personal',completed:false,order:2,routineId:'routine:r1',routine:true,sourceId:'routine:r1'}],
   practicePlans:[{id:'routine:r1',kind:'routine',title:'후렴 연결',days:7,startDate:'2026-11-01',endDate:'2026-11-07',archived:false,changes:[]}]});
 const ids=steps=>steps.map(s=>s.id);
+/** The set of four exercises these tests were written for: 리듬 (added later) rests. */
+const four=()=>{const db=empty();D.savePrefs(db,{groupsOff:{rhythm:true}});return db;};
 const groupsOf=steps=>steps.filter(s=>s.kind==='exercise').map(s=>s.group);
 
-test('a day with nothing set up: one exercise from each group, 목 풀기 → 호흡 → 발성 → 음감, about 12 minutes, each with minutes and a mic flag',()=>{
+test('a day with nothing set up: one exercise from each group, 목 풀기 → 호흡 → 발성 → 음감 → 리듬, about 15 minutes, each with minutes and a mic flag',()=>{
   const b=D.build(empty(),{today:TODAY});
-  assert.deepEqual(b.steps.map(s=>s.kind),['exercise','exercise','exercise','exercise']);
-  assert.deepEqual(groupsOf(b.steps),['loosen','breath','voice','ear']);
-  assert.deepEqual(D.GROUPS.map(g=>g.title),['목 풀기','호흡','발성','음감']);
+  assert.deepEqual(b.steps.map(s=>s.kind),['exercise','exercise','exercise','exercise','exercise']);
+  assert.deepEqual(groupsOf(b.steps),['loosen','breath','voice','ear','rhythm']);
+  assert.deepEqual(D.GROUPS.map(g=>g.title),['목 풀기','호흡','발성','음감','리듬']);
   assert.ok(b.minutes>=12&&b.minutes<=18,'total '+b.minutes);
   for(const s of b.steps){assert.ok(s.minutes>=1);assert.equal(typeof s.mic,'boolean');assert.ok(s.why);assert.equal(D.exercise(s.exercise).group,s.group);}
   assert.equal(b.steps.at(-1).mic,true);assert.equal(b.steps[0].mic,false);
@@ -29,7 +31,7 @@ test('a day with nothing set up: one exercise from each group, 목 풀기 → �
 
 test('곡: the set ends with 곡에 적용하기 for the plan song or the latest song, then the optional 녹음 — as 오늘 연습 세트 did; 고르기 can rest it',()=>{
   const db=empty(),b=D.build(db,{today:TODAY,recentSongId:'s1'});
-  assert.deepEqual(b.steps.map(s=>s.kind),['exercise','exercise','exercise','exercise','song','record']);
+  assert.deepEqual(b.steps.map(s=>s.kind),['exercise','exercise','exercise','exercise','exercise','song','record']);
   const [song,record]=b.steps.slice(-2);
   assert.deepEqual([song.title,song.apply,song.songId,D.labelOf(song),D.modeOf(song),song.id],['곡에 적용하기 · This Is the Moment',true,'s1','곡','free','song-s1']);
   assert.deepEqual([record.kind,record.optional,record.songId,D.labelOf(record)],['record',true,'s1','녹음']);
@@ -51,7 +53,7 @@ test('곡: the set ends with 곡에 적용하기 for the plan song or the latest
   // 곡 turned off in 고르기: both steps leave; a section the person added stays; 처음대로 brings them back.
   D.savePrefs(db,D.setGroup(D.prefs(db),'song',false));
   assert.equal(db.practicePlans.find(x=>x.id===D.PREFS_ID).groupsOff.song,true);
-  assert.deepEqual(D.build(db,{today:TODAY,recentSongId:'s1'}).steps.map(s=>s.kind),['exercise','exercise','exercise','exercise']);
+  assert.deepEqual(D.build(db,{today:TODAY,recentSongId:'s1'}).steps.map(s=>s.kind),['exercise','exercise','exercise','exercise','exercise']);
   const own=[{kind:'song',songId:'s1',title:'곡 구간 · This Is the Moment 0:30–1:10',minutes:8,added:true,segmentStart:30,segmentEnd:70}];
   assert.deepEqual(D.build(db,{today:TODAY,own}).steps.slice(-1).map(s=>[s.kind,s.added,s.apply]),[['song',true,undefined]]);
   D.savePrefs(db,D.resetPrefs(D.prefs(db)));
@@ -61,14 +63,20 @@ test('곡: the set ends with 곡에 적용하기 for the plan song or the latest
 test('the catalogue is data: every exercise has what the runner and later versions need',()=>{
   for(const e of D.CATALOG){
     assert.ok(D.groupOf(e.group),e.id);assert.ok(e.title&&e.why&&e.minutes>0,e.id);assert.equal(typeof e.mic,'boolean');
-    assert.ok(['timed','breath','follow','hold'].includes(e.mode),e.id);
+    assert.ok(['timed','breath','follow','hold','hiss','rhythm','vibrato'].includes(e.mode),e.id);
+    // The measuring exercises listen (a timer without the mic) and say which 기본기 area they measure.
+    if(['hiss','rhythm','vibrato'].includes(e.mode))assert.ok(e.mic&&Array.isArray(e.measure)&&e.measure.length===1,e.id);
     if(e.mode==='timed'){assert.ok(e.steps.length>=2);assert.ok(Math.abs(e.steps.reduce((n,s)=>n+s.seconds,0)-e.minutes*60)<=30,e.id);}
     if(e.mode==='hold')assert.ok(e.hold>0&&e.tolerance===25&&e.mic,e.id);
   }
   for(const g of D.GROUPS)assert.ok(D.exercisesOf(g.id).length>=1,g.id);
   assert.equal(new Set(D.CATALOG.map(e=>e.id)).size,D.CATALOG.length);
-  // 호흡 is not measured yet; the measured version hangs on this field.
+  // The paced “스~” is not measured; “스~” 길게 is (호흡), as are “타” 따라 하기 (리듬) and 롱톤 비브라토 (비브라토).
   assert.equal(D.exercise('breath-s').measure,null);
+  assert.deepEqual(['breath-hiss','rhythm-ta','voice-vibrato'].map(id=>[D.exercise(id).group,D.exercise(id).mode,D.exercise(id).measure[0]]),
+    [['breath','hiss','breath'],['rhythm','rhythm','rhythm'],['voice','vibrato','vibrato']]);
+  const vib=D.exercise('voice-vibrato');assert.deepEqual([vib.hold,vib.cue],[8,4]);
+  assert.deepEqual(D.notesFor(vib,{low:55,high:67},TODAY).map(n=>n-D.notesFor(vib,{low:55,high:67},TODAY)[0]),[0,4]); // two pitches
   const ear=D.exercise('ear-follow');assert.equal(ear.count,5);assert.equal(ear.hold,4);
 });
 
@@ -83,7 +91,7 @@ test('숙제 and a missed lesson point go first, two at most; a homework that is
   assert.equal(lead[0].kind,'goal');assert.equal(lead[0].goalId,'g1');assert.equal(lead[0].lead,true);assert.equal(D.labelOf(lead[0]),'숙제');
   assert.deepEqual(next.map(x=>x.source),['homework','lesson-point']);
   assert.deepEqual([lead[1].kind,lead[1].source,lead[1].pointId,lead[1].songId,D.labelOf(lead[1])],['next','lesson-point','point:pt1','s1','레슨 지적']);
-  assert.deepEqual(groupsOf(b.steps),['loosen','breath','voice','ear']);
+  assert.deepEqual(groupsOf(b.steps),['loosen','breath','voice','ear','rhythm']);
   assert.ok(b.steps.findIndex(s=>s.kind==='exercise')>=next.length);
   assert.equal(b.steps.filter(s=>s.goalId==='g1').length,1,'never twice');
   // Without a goal for it, a homework is a plain first step that links the assignment.
@@ -99,7 +107,7 @@ test('숙제 and a missed lesson point go first, two at most; a homework that is
 
 test('the person\'s own steps stay, after the built-in ones',()=>{
   const b=D.build(seed(),{today:TODAY});
-  assert.deepEqual(b.steps.map(s=>s.kind==='exercise'?s.group:s.kind+':'+(s.goalId||s.assignmentId||'')),['next:a2','goal:g1','loosen','breath','voice','ear','goal:g3']);
+  assert.deepEqual(b.steps.map(s=>s.kind==='exercise'?s.group:s.kind+':'+(s.goalId||s.assignmentId||'')),['next:a2','goal:g1','loosen','breath','voice','ear','rhythm','goal:g3']);
   assert.equal(b.steps.at(-1).routine,true);
   assert.deepEqual(b.own.map(s=>s.goalId),['g1','g3']);
   // A saved 기본 세트 keeps what it holds: an added song section, the song and the recording that were left in.
@@ -115,7 +123,7 @@ test('the person\'s own steps stay, after the built-in ones',()=>{
   assert.ok(!kept.steps.some(s=>s.kind==='warmup'));
   D.savePrefs(db,{groupsOff:{loosen:true,breath:true,voice:true}});
   const bare=D.build(db,{today:TODAY,recentSongId:'s1'});
-  assert.ok(bare.steps.some(s=>s.kind==='warmup'));assert.deepEqual(groupsOf(bare.steps),['ear']);
+  assert.ok(bare.steps.some(s=>s.kind==='warmup'));assert.deepEqual(groupsOf(bare.steps),['ear','rhythm']);
   // A running monthly plan's section stays even without a saved set.
   const plan=empty();plan.practicePlans.push({id:'mp1',kind:'monthly-vocal',songId:'s1',metric:'stability',segmentStart:30,segmentEnd:70,minutes:12,days:5,startDate:'2026-11-02',archived:false});
   assert.deepEqual(D.build(plan,{today:TODAY}).own.map(s=>[s.kind,s.planId]),[['song','mp1'],['record',undefined]]);
@@ -127,12 +135,12 @@ test('an own step tagged for a group takes that group\'s place',()=>{
   assert.equal(D.ownKey(db,before.own.find(s=>s.goalId==='g1')),''); // a one-day goal has no lasting name
   D.savePrefs(db,{replace:{[D.ownKey(db,routine)]:'voice'}});
   const b=D.build(db,{today:TODAY});
-  assert.deepEqual(b.steps.map(s=>s.kind==='exercise'?s.group:s.goalId||s.assignmentId),['a2','g1','loosen','breath','g3','ear']);
+  assert.deepEqual(b.steps.map(s=>s.kind==='exercise'?s.group:s.goalId||s.assignmentId),['a2','g1','loosen','breath','g3','ear','rhythm']);
   const tagged=b.steps.find(s=>s.goalId==='g3');
   assert.equal(tagged.replaces,'voice');assert.equal(D.labelOf(tagged),'발성');assert.equal(tagged.kind,'goal');
   // The group turned off: the tagged step is simply one of the person's own again.
   D.savePrefs(db,{replace:{'routine:routine:r1':'voice'},groupsOff:{voice:true}});
-  assert.deepEqual(D.build(db,{today:TODAY}).steps.map(s=>s.kind==='exercise'?s.group:s.goalId||s.assignmentId),['a2','g1','loosen','breath','ear','g3']);
+  assert.deepEqual(D.build(db,{today:TODAY}).steps.map(s=>s.kind==='exercise'?s.group:s.goalId||s.assignmentId),['a2','g1','loosen','breath','ear','rhythm','g3']);
 });
 
 test('inside a group the exercises left on rotate by the date: same day same one, none again until the list is through',()=>{
@@ -162,7 +170,7 @@ test('고르기: one exercise per group stays on, a whole group can rest, 처음
   assert.equal(rows.length,1);assert.equal(rows[0].id,D.PREFS_ID);
   assert.deepEqual(Object.keys(db).sort(),Object.keys(empty()).sort(),'no new list');
   const b=D.build(db,{today:TODAY});
-  assert.deepEqual(groupsOf(b.steps),['loosen','breath','voice']);
+  assert.deepEqual(groupsOf(b.steps),['loosen','breath','voice','rhythm']);
   for(let i=0;i<5;i++)assert.equal(D.build(db,{today:day(i)}).steps[1].exercise,D.exercisesOf('breath')[0].id);
   // A stored row that turned a whole group's exercises off still gives one (the first).
   const broken=empty();broken.practicePlans.push({id:D.PREFS_ID,kind:D.PREFS_KIND,off:Object.fromEntries(D.exercisesOf('voice').map(e=>[e.id,true])),replace:{x:'nope'},comfort:{low:70,high:60}});
@@ -188,7 +196,7 @@ test('연습 전후 30초 녹음 (off by default): a take before the first step 
 });
 
 test('the timeline and the resume state follow the session',()=>{
-  const b=D.build(empty(),{today:TODAY});
+  const b=D.build(four(),{today:TODAY});
   assert.deepEqual(D.timeline(b.steps).map(x=>x.state),['next','left','left','left']);
   assert.deepEqual(D.timeline(b.steps).map(x=>x.label),['목 풀기','호흡','발성','음감']);
   let now=1_000_000;
@@ -212,12 +220,12 @@ test('the timeline and the resume state follow the session',()=>{
   assert.deepEqual([back.phase,back.running,back.steps[2].done,back.steps[2].elapsed],['summary',false,false,20]);
   assert.deepEqual(D.timeline(back.steps,back).map(x=>x.state),['done','skipped','left','left']);
   // The last step done leads to the summary.
-  const t=P.start(D.build(empty(),{today:TODAY}).steps.slice(0,1),{id:'run2',date:TODAY,now});
+  const t=P.start(D.build(four(),{today:TODAY}).steps.slice(0,1),{id:'run2',date:TODAY,now});
   D.finishItem(t,{now});assert.equal(t.phase,'summary');assert.equal(t.steps[0].done,true);
 });
 
 test('saving writes ONE practice row for the set: real active minutes, per-item results, no double counting',()=>{
-  const db=empty();let now=1_000_000;
+  const db=four();let now=1_000_000;
   const s=P.start(D.build(db,{today:TODAY}).steps,{id:'run1',date:TODAY,now});
   const act=(seconds,state,result)=>{P.play(s,now);now+=seconds*1000;D.finishItem(s,{state,result,now});};
   act(150,'done',{mode:'timed',parts:3});
@@ -249,7 +257,7 @@ test('saving writes ONE practice row for the set: real active minutes, per-item 
 });
 
 test('goal steps keep their own goal row, a homework without a goal is linked on the run row, recordings are linked and never add time',()=>{
-  const db=seed();D.savePrefs(db,{recording:true,recordSongId:'s1'});
+  const db=seed();D.savePrefs(db,{recording:true,recordSongId:'s1',groupsOff:{rhythm:true}});
   let now=1_000_000;
   const s=P.start(D.build(db,{today:TODAY}).steps,{id:'run1',date:TODAY,now});
   assert.deepEqual(ids(s.steps).slice(0,3),['take-before','next-hw-a2','g-g1']);

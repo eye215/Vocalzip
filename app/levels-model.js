@@ -159,6 +159,15 @@ function level(db={},env={}){
  * must hold on ONE measure of that day), soon? (the exercise that will measure it, when none does yet)}.
  * Fields are whatever the measure carries; `gain` (음역) is worked out here from the first week's baseline.
  * ==================================================================================================== */
+/** 비브라토 thresholds: the ones of 소리 길 흔적 (app/voice-path-model.js), read from there (never copied), with the
+ * same first guesses when it is not loaded. */
+const VIB=(()=>{
+  let T={};try{T=(typeof module==='object'&&module.exports?require('./voice-path-model.js'):globalThis.VzipVoicePath)?.THRESHOLDS||{};}catch{}
+  const minHz=T.VIBRATO_MIN_HZ??4,maxHz=T.VIBRATO_MAX_HZ??8,extent=T.VIBRATO_MIN_EXTENT_CENTS??15;
+  return {minHz,maxHz,extent,conds:[{field:'rate',min:minHz,max:maxHz},{field:'extent',min:extent}]};
+})();
+/** 리듬: the faster tempo of steps 4–5 (app/daily-measure-model.js RHYTHM.fast plays it). */
+const FAST_BPM=104;
 const RULES={
   days:3,            // a step needs its criterion on this many DIFFERENT days
   keepDays:14,       // 요즘도 유지 중: met at least once in the last this many days
@@ -168,14 +177,16 @@ const RULES={
   recent:5           // how many recent values a screen lists
 };
 const SKILLS=[
-  {id:'breath',title:'호흡',unit:'초',line:'숨을 고르게, 길게 내쉬는 힘',by:[],soon:'“스~” 하고 내쉬는 길이와 고르기를 마이크로 재는 연습',
+  {id:'breath',title:'호흡',unit:'초',line:'숨을 고르게, 길게 내쉬는 힘',by:['breath-hiss'],
+    how:'“스~” 길게: 크게 들이쉰 뒤 소리 없는 “스~”를 한 번에 최대한 길게 내쉬어요. 마이크로 “스~”가 이어진 시간을 재고, 0.25초 넘게 끊기면 거기까지 세요.',
+    // value: seconds of one continuous hiss (the longest try); even: how much its loudness moved over the middle (dB SD,
+    // smaller = steadier). Being louder never helps: no step reads the level itself.
     steps:[
-      {say:'“스~”를 10초 동안 이어요',conds:[{field:'value',min:10}]},
-      {say:'“스~”를 15초 동안 이어요',conds:[{field:'value',min:15}]},
-      {say:'“스~”를 20초 동안 이어요',conds:[{field:'value',min:20}]},
-      {say:'“스~”를 30초 동안 이어요',conds:[{field:'value',min:30}]},
-      // even: how much the loudness moves during the breath (dB, smaller = steadier). Being louder never helps.
-      {say:'“스~”를 30초 동안, 처음부터 끝까지 고르게 이어요',conds:[{field:'value',min:30},{field:'even',max:3}]}]},
+      {say:'“스~”를 한 번에 10초 넘게 이어요',kind:'hiss',conds:[{field:'value',min:10}]},
+      {say:'“스~”를 한 번에 20초 넘게 이어요',kind:'hiss',conds:[{field:'value',min:20}]},
+      {say:'“스~”를 한 번에 30초 넘게 이어요',kind:'hiss',conds:[{field:'value',min:30}]},
+      {say:'“스~”를 30초 넘게, 처음부터 끝까지 고른 세기로 이어요',kind:'hiss',conds:[{field:'value',min:30},{field:'even',max:3}]},
+      {say:'“스~”를 40초 넘게, 고른 세기로 이어요',kind:'hiss',conds:[{field:'value',min:40},{field:'even',max:3}]}]},
   {id:'pitch',title:'음정',unit:'개',line:'들은 음을 그대로 내고 지키는 힘',by:['ear-follow'],
     steps:[
       {say:'들은 음 5개 가운데 3개를 ±25 cent 안에서 4초씩 유지해요',kind:'hold',conds:[{field:'value',min:3},{field:'hold',min:4},{field:'tolerance',max:25}]},
@@ -220,22 +231,28 @@ const SKILLS=[
       {say:'편한 음역의 맨 위 음을 2초, 흔들림 12 cent 안으로 유지해요',conds:[{field:'fromTop',min:0},{field:'value',max:12}]},
       {say:'맨 위 음을 모음 두 가지(아·에)로, 흔들림 12 cent 안으로 유지해요',conds:[{field:'fromTop',min:0},{field:'value',max:12},{field:'vowels',min:2}]},
       {say:'맨 위 음을 모음 세 가지(아·에·이)로, 흔들림 12 cent 안으로 유지해요',conds:[{field:'fromTop',min:0},{field:'value',max:12},{field:'vowels',min:3}]}]},
-  {id:'vibrato',title:'비브라토',unit:'초',line:'긴 음 끝에서 고르게 떨리는 소리',by:[],soon:'8초 롱톤 끝에서 비브라토의 빠르기와 폭을 재는 연습',
-    // value: seconds of vibrato; rate: times a second; extent: width in cent; regular / cued / variants: 1 when shown.
+  {id:'vibrato',title:'비브라토',unit:'초',line:'긴 음 끝에서 고르게 떨리는 소리',by:['voice-vibrato'],
+    how:'롱톤 비브라토: 들은 음을 8초 동안 이어요. 처음 4초는 곧게, 신호가 울리면 떨어요. 두 가지 높이로 한 번씩 해요.',
+    // value: seconds of vibrato in one tone; rate: times a second; extent: width in cent (half of peak-to-peak) —
+    // the thresholds of 소리 길 흔적 (VIB, from app/voice-path-model.js). tail / regular / cued: 1 when shown;
+    // variants: how many different pitches had a cued, regular vibrato.
     steps:[
-      {say:'롱톤 끝 2초에 비브라토가 나타나요 (1초에 4~8번, 폭 15 cent 넘게)',conds:[{field:'value',min:2},{field:'rate',min:4,max:8},{field:'extent',min:15}]},
-      {say:'비브라토를 3초 넘게 고르게 이어요',conds:[{field:'value',min:3},{field:'rate',min:4,max:8},{field:'extent',min:15},{field:'regular',min:1}]},
-      {say:'비브라토를 5초 넘게 고르게 이어요',conds:[{field:'value',min:5},{field:'rate',min:4,max:8},{field:'extent',min:15},{field:'regular',min:1}]},
-      {say:'곧게 내다가 신호에 맞춰 비브라토를 넣어요',conds:[{field:'value',min:3},{field:'rate',min:4,max:8},{field:'extent',min:15},{field:'regular',min:1},{field:'cued',min:1}]},
-      {say:'높이나 모음이 다른 두 가지 음에서 신호에 맞춰 비브라토를 넣어요',conds:[{field:'value',min:3},{field:'rate',min:4,max:8},{field:'extent',min:15},{field:'regular',min:1},{field:'cued',min:1},{field:'variants',min:2}]}]},
-  {id:'rhythm',title:'리듬',unit:'ms',line:'박자에 맞춰 소리를 내는 힘',by:[],soon:'박자에 맞춰 “타”로 따라 하는 연습',
-    // value: how far from the beat on average (ms); level: 1 quarter notes · 2 eighth notes with rests · 3 triplets and syncopation.
+      {say:'롱톤 끝 2초 안에 비브라토가 나타나요 (1초에 '+VIB.minHz+'~'+VIB.maxHz+'번, 폭 '+VIB.extent+' cent 넘게)',kind:'vibrato',conds:[{field:'tail',min:1},...VIB.conds]},
+      {say:'비브라토를 3초 넘게 고르게 이어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},...VIB.conds]},
+      {say:'곧게 내다가 신호에 맞춰 비브라토를 넣고 3초 넘게 이어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},{field:'cued',min:1},...VIB.conds]},
+      {say:'두 가지 높이에서 모두 신호에 맞춰 비브라토를 넣어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},{field:'cued',min:1},{field:'variants',min:2},...VIB.conds]},
+      {say:'모음을 바꿔도(아·오) 신호에 맞춰 비브라토를 넣어요',kind:'vibrato',conds:[{field:'value',min:3},{field:'regular',min:1},{field:'cued',min:1},{field:'vowels',min:2},...VIB.conds],soon:'모음을 바꿔 가며 하는 비브라토 연습'}]},
+  {id:'rhythm',title:'리듬',unit:'ms',line:'박자에 맞춰 소리를 내는 힘',by:['rhythm-ta'],
+    how:'“타” 따라 하기: 박자 소리를 들으며 한 마디를 듣고, 다음 마디에 같은 리듬을 “타”로 따라 해요. 마이크로 “타”가 박자에서 얼마나 떨어졌는지 재요.',
+    // value: the middle distance of the “타” from the beat (ms); level: 1 quarter notes · 2 eighth notes with rests ·
+    // 3 triplets and syncopation; bpm: the tempo; hit: % of the “타” that were heard on a beat. The device's delay is
+    // measured from the count-in (no earphones) or the person's own middle offset is taken off (earphones): `method`.
     steps:[
-      {say:'4분음표를 “타”로, 박자와 0.08초 안으로 맞춰요',conds:[{field:'level',min:1},{field:'value',max:80}]},
-      {say:'4분음표를 “타”로, 박자와 0.06초 안으로 맞춰요',conds:[{field:'level',min:1},{field:'value',max:60}]},
-      {say:'8분음표와 쉼표를 “타”로, 박자와 0.06초 안으로 맞춰요',conds:[{field:'level',min:2},{field:'value',max:60}]},
-      {say:'8분음표와 쉼표를 “타”로, 박자와 0.04초 안으로 맞춰요',conds:[{field:'level',min:2},{field:'value',max:40}]},
-      {say:'셋잇단음과 당김음을 “타”로, 박자와 0.04초 안으로 맞춰요',conds:[{field:'level',min:3},{field:'value',max:40}]}]}
+      {say:'4분음표를 “타”로, 박자와 0.08초 안으로 맞춰요',kind:'rhythm',conds:[{field:'level',min:1},{field:'hit',min:80},{field:'value',max:80}]},
+      {say:'8분음표와 쉼표를 “타”로, 박자와 0.06초 안으로 맞춰요',kind:'rhythm',conds:[{field:'level',min:2},{field:'hit',min:80},{field:'value',max:60}]},
+      {say:'셋잇단음과 당김음을 “타”로, 박자와 0.04초 안으로 맞춰요',kind:'rhythm',conds:[{field:'level',min:3},{field:'hit',min:80},{field:'value',max:40}]},
+      {say:'빠른 박자(1분에 '+FAST_BPM+'번)에서 8분음표와 쉼표를 0.06초 안으로 맞춰요',kind:'rhythm',conds:[{field:'level',min:2},{field:'bpm',min:FAST_BPM},{field:'hit',min:80},{field:'value',max:60}]},
+      {say:'빠른 박자(1분에 '+FAST_BPM+'번)에서 셋잇단음과 당김음을 0.04초 안으로 맞춰요',kind:'rhythm',conds:[{field:'level',min:3},{field:'bpm',min:FAST_BPM},{field:'hit',min:80},{field:'value',max:40}]}]}
 ];
 const STEPS=5;
 const skillOfId=id=>SKILLS.find(a=>a.id===id)||null;
@@ -319,11 +336,15 @@ function context(db={},env={}){
   const stepOf=id=>Math.max(0,...(earned.get(id)?.keys()||[]));
   return {today,state:st,byArea,earned,first,base,fields,meets,daysMet,stepOf};
 }
+const RHYTHM_WORDS={1:'4분음표',2:'8분음표·쉼표',3:'셋잇단·당김음'};
 /** A measure in plain words. */
 function valueText(a,m){
   if(m.area==='pitch'&&m.kind==='hold'&&fin(m.of))return m.of+'개 중 '+m.value+'개 유지';
   if(m.area==='sustain')return '흔들림 '+m.value+' cent'+(m.hold?' · '+m.hold+'초':'');
   if(m.area==='range'&&Number.isInteger(m.low)&&Number.isInteger(m.high))return noteName(m.low)+'–'+noteName(m.high)+' · '+m.count+'개 음'+(m.gain>0?' · 처음보다 +'+m.gain+'반음':'');
+  if(m.area==='breath'&&m.kind==='hiss')return '가장 긴 스 '+m.value+'초'+(fin(m.even)?' · 세기 흔들림 '+m.even+' dB':'');
+  if(m.area==='rhythm'&&m.kind==='rhythm')return (RHYTHM_WORDS[m.level]||'리듬')+(fin(m.bpm)?' '+m.bpm+'박':'')+' · 박자와 '+m.value+' ms'+(fin(m.hit)?' · '+m.hit+'% 맞춤':'');
+  if(m.area==='vibrato'&&m.kind==='vibrato')return m.value>0&&fin(m.rate)?'비브라토 '+m.value+'초 · 1초에 '+m.rate+'번 · 폭 '+m.extent+' cent'+(m.cued?' · 신호에 맞춤':''):'비브라토가 아직 안 보였어요';
   return m.value+(m.unit||a.unit?' '+(m.unit||a.unit):'');
 }
 /**
@@ -352,7 +373,7 @@ function areaOf(c,a){
   // Recent values, newest first: the last measure of each kind on each day.
   const seen=new Set(),recent=[];
   for(const raw of ms.slice().reverse()){const key=raw.date+'|'+(raw.kind||'');if(seen.has(key))continue;seen.add(key);recent.push({date:raw.date,text:valueText(a,c.fields(raw)),value:raw.value});if(recent.length>=RULES.recent)break;}
-  return {id:a.id,title:a.title,sub:a.sub||'',line:a.line,unit:a.unit,note:a.note||'',limit:a.limit||'',by:a.by.slice(),soon:a.soon||'',
+  return {id:a.id,title:a.title,sub:a.sub||'',line:a.line,how:a.how||'',unit:a.unit,note:a.note||'',limit:a.limit||'',by:a.by.slice(),soon:a.soon||'',
     state:step?'step':first?(calibrating?'calibrating':'step'):a.by.length?'ready':'soon',
     first,day,daysLeft:calibrating?RULES.calibrationDays-day+1:0,estimate,step,keeping,measured:dates.length,
     earned:[...rows.values()].sort((x,y)=>x.step-y.step).map(r=>({step:r.step,date:isDate(r.earned)?r.earned:'',days:list(r.days)})),
@@ -460,7 +481,7 @@ function sheetText(db={},env={}){
   return L.join('\n');
 }
 
-return {POINTS,LEVELS,HOW,PART_WORDS,RULES,SKILLS,STEPS,STATE_ID,STATE_KIND,STEP_KIND,STEP_PREFIX,
+return {POINTS,LEVELS,HOW,PART_WORDS,RULES,SKILLS,STEPS,VIB,FAST_BPM,STATE_ID,STATE_KIND,STEP_KIND,STEP_PREFIX,
   levelStart,levelOf,ledger,dayPoints,level,stateRow,nextState,keep,
   tableIsSafe,cleanMeasure,fromHold,measurements,skills,skill,awardable,award,valueText,
   badges,sheetText,noteName,shift,dayNumber};
